@@ -41,3 +41,27 @@ firrtl.circuit "PublicInputOnly" {
   firrtl.module @PublicInputOnly(in %a: !firrtl.uint<8>) {
   }
 }
+
+firrtl.circuit "ModuleWithDontTouch" {
+  // CHECK-LABEL: firrtl.module @ModuleWithDontTouch
+  firrtl.module @ModuleWithDontTouch(in %a: !firrtl.uint<8>) {
+    %child_x = firrtl.instance child @ChildWithNonHardwareOutput(in x: !firrtl.uint<8>)
+    firrtl.matchingconnect %child_x, %a : !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module private @ChildWithNonHardwareOutput
+  // CHECK-NOT: InlineAnnotation
+  firrtl.module private @ChildWithNonHardwareOutput(in %x: !firrtl.uint<8>) attributes {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} {}
+}
+
+firrtl.circuit "Bound" {
+  // CHECK-LABEL: firrtl.module @Bound
+  firrtl.module @Bound(in %a: !firrtl.uint<8>) {
+    %child_x = firrtl.instance child {doNotPrint} @ChildWithNonHardwareOutput(in x: !firrtl.uint<8>)
+    firrtl.matchingconnect %child_x, %a : !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module private @ChildWithNonHardwareOutput
+  // CHECK-NOT: InlineAnnotation
+  firrtl.module private @ChildWithNonHardwareOutput(in %x: !firrtl.uint<8>) attributes {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} {}
+}

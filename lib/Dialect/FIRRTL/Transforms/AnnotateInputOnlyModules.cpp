@@ -34,6 +34,16 @@ struct AnnotateInputOnlyModulesPass
     : public circt::firrtl::impl::AnnotateInputOnlyModulesBase<
           AnnotateInputOnlyModulesPass> {
   void runOnOperation() override;
+
+  LogicalResult initialize(MLIRContext *context) override {
+    // Cache the inline annotation.
+    inlineAnno = DictionaryAttr::getWithSorted(
+        context, {{StringAttr::get(context, "class"),
+                   StringAttr::get(context, inlineAnnoClass)}});
+    return success();
+  }
+
+  mlir::DictionaryAttr inlineAnno;
 };
 
 } // end anonymous namespace
@@ -60,19 +70,14 @@ void AnnotateInputOnlyModulesPass::runOnOperation() {
 
     AnnotationSet annos(module);
 
-    // Check if InlineAnnotation already exists
-    if (annos.hasAnnotation(inlineAnnoClass))
+    // Check if InlineAnnotation or DontTouchAnnotation exists
+    if (annos.hasAnnotation(inlineAnnoClass) || annos.hasDontTouch())
       continue;
 
     LLVM_DEBUG(llvm::dbgs() << "Annotating inline annotation "
                             << module.getModuleName() << "\n");
 
     // Create InlineAnnotation
-    auto inlineAnno = DictionaryAttr::get(
-        module.getContext(),
-        {{StringAttr::get(module.getContext(), "class"),
-          StringAttr::get(module.getContext(), inlineAnnoClass)}});
-
     annos.addAnnotations(ArrayRef<Attribute>{inlineAnno});
     annos.applyToOperation(module);
 
