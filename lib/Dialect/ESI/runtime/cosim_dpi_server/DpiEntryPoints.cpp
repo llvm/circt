@@ -82,32 +82,31 @@ static int findPort() {
 static int validateSvOpenArray(const svOpenArrayHandle data,
                                int expectedElemSize) {
   if (svDimensions(data) != 1) {
-    getLogger().error(
-        "cosim",
-        "passed array argument that doesn't have expected 1D dimensions");
+    getLogger().error("cosim", "DPI-C ERROR: passed array argument that "
+                               "doesn't have expected 1D dimensions");
     return -1;
   }
   if (svGetArrayPtr(data) == NULL) {
-    getLogger().error(
-        "cosim",
-        "passed array argument that doesn't have C layout (ptr==NULL)");
+    getLogger().error("cosim", "DPI-C ERROR: passed array argument that "
+                               "doesn't have C layout (ptr==NULL)");
     return -2;
   }
   int totalBytes = svSizeOfArray(data);
   if (totalBytes == 0) {
-    getLogger().error(
-        "cosim",
-        "passed array argument that doesn't have C layout (total_bytes==0)");
+    getLogger().error("cosim", "DPI-C ERROR: passed array argument that "
+                               "doesn't have C layout (total_bytes==0)");
     return -3;
   }
   int numElems = svSize(data, 1);
   int elemSize = numElems == 0 ? 0 : (totalBytes / numElems);
   if (numElems * expectedElemSize != totalBytes) {
     getLogger().error(
-        "cosim", std::format("passed array argument that doesn't have expected "
-                             "element-size: expected={} actual={} numElems={} "
-                             "totalBytes={}",
-                             expectedElemSize, elemSize, numElems, totalBytes));
+        "cosim",
+        std::format(
+            "DPI-C ERROR: passed array argument that doesn't have expected "
+            "element-size: expected={} actual={} numElems={} "
+            "totalBytes={}",
+            expectedElemSize, elemSize, numElems, totalBytes));
     return -4;
   }
   return 0;
