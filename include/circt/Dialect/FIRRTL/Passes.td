@@ -918,4 +918,21 @@ def LowerDomains : Pass<"firrtl-lower-domains", "firrtl::CircuitOp"> {
   ];
 }
 
+def AnnotateInputOnlyModules : Pass<"firrtl-annotate-input-only-modules",
+                                    "firrtl::CircuitOp"> {
+  let summary = "Annotate input-only modules with InlineAnnotation";
+  let description = [{
+    This pass identifies modules that have only input ports (no output or inout
+    ports) and annotates them with `firrtl.passes.InlineAnnotation`. These
+    modules don't produce any hardware outputs.
+
+    Inlining these modules is necessary because some synthesis tools treat
+    modules without outputs as blackboxes, which can cause synthesis errors.
+  }];
+  let statistics = [
+    Statistic<"numAnnotated", "num-annotated", "Number of modules annotated">
+  ];
+}
+
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
