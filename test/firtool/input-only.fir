@@ -5,7 +5,7 @@
 FIRRTL version 5.0.0
 circuit Top:
   ; INLINE-NOT: module InputOnly
-  ; INLINE: `define ref_Top_probe input_only_input_probe
+  ; INLINE: `define ref_Top_probe input_probe
   ; CHECK: module InputOnly
   ; CHECK:  `define ref_Top_probe input_only.input_probe
   module InputOnly:

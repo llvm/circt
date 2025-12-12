@@ -208,6 +208,8 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       pm.nest<firrtl::CircuitOp>().addPass(
           firrtl::createAnnotateInputOnlyModules());
       pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInliner());
+      pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+          createSimpleCanonicalizerPass());
     }
   }
 
