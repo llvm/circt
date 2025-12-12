@@ -294,6 +294,17 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
     modulePM.addPass(createSimpleCanonicalizerPass());
   }
 
+  if (opt.shouldEnableHWFlattenModules()) {
+    pm.addPass(circt::hw::createFlattenModules(
+        {/*inlineEmpty=*/opt.getHWInlineEmpty(),
+         /*inlineNoOutputs=*/opt.getHWInlineNoOutputs(),
+         /*inlineSingleUse=*/opt.getHWInlineSingleUse(),
+         /*inlineSmall=*/opt.getHWInlineSmall(),
+         /*smallThreshold=*/opt.getHWSmallThreshold(),
+         /*inlineWithState=*/opt.getHWInlineWithState(),
+         /*inlineAll=*/opt.getHWInlineAll()}));
+  }
+
   // Check inner symbols and inner refs.
   pm.addPass(hw::createVerifyInnerRefNamespace());
 
@@ -761,6 +772,54 @@ struct FirtoolCmdOptions {
       llvm::cl::init(false)};
 
   //===----------------------------------------------------------------------===
+  // HW FlattenModules options
+  //===----------------------------------------------------------------------===
+
+  llvm::cl::opt<bool> hwInlineEmpty{
+      "hw-inline-empty",
+      llvm::cl::desc("Inline modules that are empty (only contain hw.output)"),
+      llvm::cl::init(true)};
+
+  llvm::cl::opt<bool> hwInlineNoOutputs{
+      "hw-inline-no-outputs",
+      llvm::cl::desc("Inline modules that have no output ports"),
+      llvm::cl::init(false)};
+
+  llvm::cl::opt<bool> hwInlineSingleUse{
+      "hw-inline-single-use",
+      llvm::cl::desc("Inline modules that have only one use"),
+      llvm::cl::init(false)};
+
+  llvm::cl::opt<bool> hwInlineSmall{
+      "hw-inline-small",
+      llvm::cl::desc("Inline modules that are small (fewer than smallThreshold "
+                     "operations)"),
+      llvm::cl::init(false)};
+
+  llvm::cl::opt<unsigned> hwSmallThreshold{
+      "hw-small-threshold",
+      llvm::cl::desc(
+          "Maximum number of operations for a module to be considered small"),
+      llvm::cl::init(8)};
+
+  llvm::cl::opt<bool> hwInlineWithState{
+      "hw-inline-with-state",
+      llvm::cl::desc("Allow inlining of modules that contain state (seq.firreg "
+                     "operations)"),
+      llvm::cl::init(false)};
+
+  llvm::cl::opt<bool> hwInlineAll{
+      "hw-inline-all",
+      llvm::cl::desc("Inline all private modules regardless of heuristics "
+                     "(default behavior)"),
+      llvm::cl::init(false)};
+
+  llvm::cl::opt<bool> enableHWFlattenModules{
+      "enable-hw-flatten-modules",
+      llvm::cl::desc("Enable the HW flatten modules pass"),
+      llvm::cl::init(false)};
+
+  //===----------------------------------------------------------------------===
   // Lint options
   //===----------------------------------------------------------------------===
 
@@ -811,7 +870,10 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       disableCSEinClasses(false), selectDefaultInstanceChoice(false),
       symbolicValueLowering(verif::SymbolicValueLowering::ExtModule),
       disableWireElimination(false), lintStaticAsserts(true),
-      lintXmrsInDesign(true), emitAllBindFiles(false) {
+      lintXmrsInDesign(true), emitAllBindFiles(false),
+      enableHWFlattenModules(false), hwInlineEmpty(true),
+      hwInlineNoOutputs(false), hwInlineSingleUse(false), hwInlineSmall(false),
+      hwSmallThreshold(8), hwInlineWithState(false), hwInlineAll(false) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
@@ -864,4 +926,12 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   lintStaticAsserts = clOptions->lintStaticAsserts;
   lintXmrsInDesign = clOptions->lintXmrsInDesign;
   emitAllBindFiles = clOptions->emitAllBindFiles;
+  enableHWFlattenModules = clOptions->enableHWFlattenModules;
+  hwInlineEmpty = clOptions->hwInlineEmpty;
+  hwInlineNoOutputs = clOptions->hwInlineNoOutputs;
+  hwInlineSingleUse = clOptions->hwInlineSingleUse;
+  hwInlineSmall = clOptions->hwInlineSmall;
+  hwSmallThreshold = clOptions->hwSmallThreshold;
+  hwInlineWithState = clOptions->hwInlineWithState;
+  hwInlineAll = clOptions->hwInlineAll;
 }
