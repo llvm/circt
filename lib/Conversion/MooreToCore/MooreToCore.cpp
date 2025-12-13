@@ -1949,6 +1949,9 @@ struct FormatIntOpConversion : public OpConversionPattern<FormatIntOp> {
     case IntFormat::Binary:
       rewriter.replaceOpWithNewOp<sim::FormatBinOp>(op, adaptor.getValue());
       return success();
+    case IntFormat::Octal:
+      rewriter.replaceOpWithNewOp<sim::FormatOctOp>(op, adaptor.getValue());
+      return success();
     case IntFormat::HexLower:
     case IntFormat::HexUpper:
       rewriter.replaceOpWithNewOp<sim::FormatHexOp>(op, adaptor.getValue());

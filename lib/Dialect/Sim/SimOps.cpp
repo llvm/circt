@@ -154,6 +154,28 @@ OpFoldResult FormatHexOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+OpFoldResult FormatOctOp::fold(FoldAdaptor adaptor) {
+  if (getValue().getType() == IntegerType::get(getContext(), 0U))
+    return StringAttr::get(getContext(), "");
+
+  if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(adaptor.getValue())) {
+    SmallVector<char, 11> strBuf;
+    intAttr.getValue().toString(strBuf, 8U, /*Signed*/ false,
+                                /*formatAsCLiteral*/ false,
+                                /*UpperCase*/ false);
+
+    unsigned width = intAttr.getType().getIntOrFloatBitWidth();
+    unsigned padWidth = width / 3;
+    if (width % 3 != 0)
+      padWidth++;
+    padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
+
+    SmallVector<char, 11> padding(padWidth, '0');
+    return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
+  }
+  return {};
+}
+
 OpFoldResult FormatBinOp::fold(FoldAdaptor adaptor) {
   if (getValue().getType() == IntegerType::get(getContext(), 0U))
     return StringAttr::get(getContext(), "");

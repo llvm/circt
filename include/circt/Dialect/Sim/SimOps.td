@@ -189,6 +189,26 @@ def FormatHexOp : SimOp<"fmt.hex", [Pure]> {
   let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
 }
 
+def FormatOctOp : SimOp<"fmt.oct", [Pure]> {
+  let summary = "Octal format specifier";
+  let description = [{
+    Format the given integer value as lower-case octal (base eight) string.
+
+    The printed value will be left-padded with '0' up to the
+    length required to print the maximum value of the argument's
+    type. Zero width values will produce the empty string.
+    No further prefix will be added.
+  }];
+
+
+  let arguments = (ins AnyInteger:$value);
+  let results = (outs FormatStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+}
+
 def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
   let summary = "Binary format specifier";
   let description = [{
