@@ -3311,3 +3311,96 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
 
   return failure();
 }
+
+//===----------------------------------------------------------------------===//
+// TruthTableOp
+//===----------------------------------------------------------------------===//
+
+// Canonicalize truth tables by folding to constant when output does not depend
+// on any of the inputs or simplifying when the output depends on only a single
+// input.
+LogicalResult TruthTableOp::canonicalize(TruthTableOp op,
+                                         PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op))
+    return failure();
+
+  const auto inputs = op.getInputs();
+  const auto table = op.getLookupTable();
+  size_t numInputs = inputs.size();
+  size_t tableSize = table.size();
+
+  // A zero-input or single-input truth table is already in canonical form.
+  if (numInputs <= 1)
+    return failure();
+
+  // Check if the table can be folded to just a constant.
+  bool firstValue = cast<BoolAttr>(table[0]).getValue();
+  bool allSame = llvm::all_equal(table);
+  if (allSame) {
+    auto constOp =
+        hw::ConstantOp::create(rewriter, op.getLoc(), APInt(1, firstValue));
+    replaceOpAndCopyNamehint(rewriter, op, constOp);
+    return success();
+  }
+
+  // Detect if the truth table depends only on one of the inputs.
+  // For each input bit, we test whether flipping only that input bit changes
+  // the output value of the truth table at any point. For this, iterate over
+  // all table entries and compute the index of the entry where just that input
+  // bit is inverted.
+  SmallVector<bool> dependsOn(numInputs, false);
+  int dependentInput = -1;
+  unsigned numDependencies = 0;
+
+  for (size_t idx = 0; idx < tableSize; ++idx) {
+    bool currentValue = cast<BoolAttr>(table[idx]).getValue();
+
+    for (size_t bitPos = 0; bitPos < numInputs; ++bitPos) {
+      // Skip if we already know this input matters.
+      if (dependsOn[bitPos])
+        continue;
+
+      // Calculate the index of the entry with the bit in question flipped.
+      size_t bitPositionInTable = numInputs - 1 - bitPos;
+      size_t flippedIdx = idx ^ (1ull << bitPositionInTable);
+      bool flippedValue = cast<BoolAttr>(table[flippedIdx]).getValue();
+
+      // If flipping this bit changes the output, this input is a dependency.
+      if (currentValue != flippedValue) {
+        dependsOn[bitPos] = true;
+        dependentInput = bitPos;
+        numDependencies++;
+
+        // Exit early if we already found more than one dependency.
+        if (numDependencies > 1)
+          break;
+      }
+    }
+
+    // Exit early from outer loop if we found more than one dependency.
+    if (numDependencies > 1)
+      break;
+  }
+
+  if (numDependencies != 1)
+    return failure();
+
+  // Determine if the truth table is identity or inverted by checking the output
+  // when the dependent input is 1 (all other inputs at 0).
+  size_t idxWhen1 = 1ull << (numInputs - 1 - dependentInput);
+  bool isIdentity = cast<BoolAttr>(table[idxWhen1]).getValue();
+
+  // Replace with the input or a simpler truth table for negation.
+  Value input = inputs[dependentInput];
+  if (isIdentity) {
+    // Identity case: just replace with the input directly.
+    replaceOpAndCopyNamehint(rewriter, op, input);
+  } else {
+    // Inverted case: replace with a single-input truth table for negation.
+    // This avoids introducing comb.xor, which is useful for LUT mapping.
+    replaceOpWithNewOpAndCopyNamehint<TruthTableOp>(
+        rewriter, op, ValueRange{input},
+        rewriter.getBoolArrayAttr({true, false}));
+  }
+  return success();
+}
