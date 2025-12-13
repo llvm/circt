@@ -482,8 +482,8 @@ func.func @RealConversion32(%arg0: !moore.f32, %arg1: !moore.i42) {
 func.func @RealConversion64(%arg0: !moore.f64, %arg1: !moore.i42) {
   // CHECK: moore.real_to_int %arg0 : f64 -> i42
   %0 = moore.real_to_int %arg0 : f64 -> i42
-  // CHECK: moore.sint_to_real %arg1 : i42 -> f64
-  %1 = moore.sint_to_real %arg1 : i42 -> f64
+  // CHECK: moore.uint_to_real %arg1 : i42 -> f64
+  %1 = moore.uint_to_real %arg1 : i42 -> f64
   return
 }
 
