@@ -137,6 +137,30 @@ static std::string humanTimeUS(uint64_t us) {
   return oss.str();
 }
 
+// MSVC does not implement std::aligned_malloc, even though it's part of the
+// C++17 standard. Provide a compatibility layer.
+static void *alignedAllocCompat(std::size_t alignment, std::size_t size) {
+#if defined(_MSC_VER)
+  void *ptr = _aligned_malloc(size, alignment);
+  if (!ptr)
+    throw std::bad_alloc();
+  return ptr;
+#else
+  void *ptr = std::aligned_alloc(alignment, size);
+  if (!ptr)
+    throw std::bad_alloc();
+  return ptr;
+#endif
+}
+
+static void alignedFreeCompat(void *ptr) {
+#if defined(_MSC_VER)
+  _aligned_free(ptr);
+#else
+  std::free(ptr);
+#endif
+}
+
 int main(int argc, const char *argv[]) {
   CliParser cli("esitester");
   cli.description("Test an ESI system running the ESI tester image.");
@@ -1469,10 +1493,10 @@ static void streamingAddTranslatedTest(AcceleratorConnection *conn,
   constexpr size_t alignment = alignof(StreamingAddTranslatedArg);
   // aligned_alloc requires size to be a multiple of alignment
   size_t allocSize = ((argSize + alignment - 1) / alignment) * alignment;
-  void *argRaw = std::aligned_alloc(alignment, allocSize);
+  void *argRaw = alignedAllocCompat(alignment, allocSize);
   if (!argRaw)
     throw std::bad_alloc();
-  auto argDeleter = [](void *p) { std::free(p); };
+  auto argDeleter = [](void *p) { alignedFreeCompat(p); };
   std::unique_ptr<void, decltype(argDeleter)> argBuffer(argRaw, argDeleter);
   auto *arg = static_cast<StreamingAddTranslatedArg *>(argRaw);
   arg->inputLength = numItems;
@@ -1661,10 +1685,10 @@ static void coordTranslateTest(AcceleratorConnection *conn, Accelerator *accel,
   constexpr size_t alignment = alignof(CoordTranslateArg);
   // aligned_alloc requires size to be a multiple of alignment
   size_t allocSize = ((argSize + alignment - 1) / alignment) * alignment;
-  void *argRaw = std::aligned_alloc(alignment, allocSize);
+  void *argRaw = alignedAllocCompat(alignment, allocSize);
   if (!argRaw)
     throw std::bad_alloc();
-  auto argDeleter = [](void *p) { std::free(p); };
+  auto argDeleter = [](void *p) { alignedFreeCompat(p); };
   std::unique_ptr<void, decltype(argDeleter)> argBuffer(argRaw, argDeleter);
   auto *arg = static_cast<CoordTranslateArg *>(argRaw);
   arg->coordsLength = numCoords;
