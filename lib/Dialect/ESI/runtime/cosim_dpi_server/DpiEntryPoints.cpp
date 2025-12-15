@@ -31,12 +31,20 @@ using namespace esi::cosim;
 
 /// If non-null, log to this file. Protected by 'serverMutex`.
 static FILE *logFile;
+// Note: possible teardown issue if the context gets destroyed before server
+// attempts to log a message, hence why `context` is placed before `server` -
+// and then let's hope for static object teardown order determinism :).
 static std::unique_ptr<Context> context = nullptr;
 static std::unique_ptr<RpcServer> server = nullptr;
 static std::mutex serverMutex;
+static ConsoleLogger fallbackLogger(Logger::Level::Debug);
 
 /// Get the logger from the context.
-static Logger &getLogger() { return context->getLogger(); }
+static Logger &getLogger() {
+  if (context)
+    return context->getLogger();
+  return fallbackLogger;
+}
 
 // ---- Helper functions ----
 
