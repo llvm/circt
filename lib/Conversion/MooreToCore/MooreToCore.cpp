@@ -34,6 +34,7 @@
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/IR/DerivedTypes.h"
+#include <iostream>
 
 namespace circt {
 #define GEN_PASS_DEF_CONVERTMOORETOCORE
@@ -1606,6 +1607,18 @@ struct UIntToRealOpConversion : public OpConversionPattern<UIntToRealOp> {
   }
 };
 
+struct RealToIntOpConversion : public OpConversionPattern<RealToIntOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(RealToIntOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<arith::FPToSIOp>(
+        op, typeConverter->convertType(op.getType()), adaptor.getInput());
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Statement Conversion
 //===----------------------------------------------------------------------===//
@@ -2271,6 +2284,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     SExtOpConversion,
     SIntToRealOpConversion,
     UIntToRealOpConversion,
+    RealToIntOpConversion,
 
     // Patterns of miscellaneous operations.
     ConstantOpConv,
