@@ -52,6 +52,7 @@ set(PYTHON_BINDINGS_LINK_LIBS
   CIRCTCAPIPipeline
   CIRCTCAPIRTG
   CIRCTCAPISeq
+  CIRCTCAPISim
   CIRCTCAPISV
   CIRCTCAPISupport
   CIRCTCAPIVerif
@@ -276,6 +277,14 @@ declare_mlir_dialect_python_bindings(
   SOURCES
     dialects/ltl.py
   DIALECT_NAME ltl)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/SimOps.td
+  SOURCES
+    dialects/sim.py
+  DIALECT_NAME sim)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects

@@ -434,6 +434,14 @@ class BitsSignal(BitVectorSignal):
       ret.name = f"inv_{self.name}"
     return ret
 
+  def print(self,
+            prefix: str,
+            hex: bool = True,
+            cond: Optional[BitVectorSignal] = None,
+            clk: Optional[ClockSignal] = None):
+    from .dialects import sim
+    pass
+
 
 class IntSignal(BitVectorSignal):
 

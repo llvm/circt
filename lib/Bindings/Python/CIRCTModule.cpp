@@ -32,6 +32,7 @@
 #endif
 #include "circt-c/Dialect/SV.h"
 #include "circt-c/Dialect/Seq.h"
+#include "circt-c/Dialect/Sim.h"
 #include "circt-c/Dialect/Verif.h"
 #include "circt-c/ExportLLVM.h"
 #include "circt-c/ExportVerilog.h"
@@ -151,6 +152,10 @@ NB_MODULE(_circt, m) {
         MlirDialectHandle seq = mlirGetDialectHandle__seq__();
         mlirDialectHandleRegisterDialect(seq, context);
         mlirDialectHandleLoadDialect(seq, context);
+
+        MlirDialectHandle sim = mlirGetDialectHandle__sim__();
+        mlirDialectHandleRegisterDialect(sim, context);
+        mlirDialectHandleLoadDialect(sim, context);
 
         MlirDialectHandle sv = mlirGetDialectHandle__sv__();
         mlirDialectHandleRegisterDialect(sv, context);
