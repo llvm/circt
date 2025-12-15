@@ -44,10 +44,12 @@ hw.module @basic_print2(in %clk : !seq.clock, in %cond : i1) {
 // CHECK-DAG:      %[[LB:.*]] = sim.fmt.literal "Bin: "
 // CHECK-DAG:      %[[LD:.*]] = sim.fmt.literal ", Dec: "
 // CHECK-DAG:      %[[LH:.*]] = sim.fmt.literal ", Hex: "
+// CHECK-DAG:      %[[LO:.*]] = sim.fmt.literal ", Oct: "
 // CHECK-DAG:      %[[FB:.*]] = sim.fmt.bin %[[ARG]] : i32
 // CHECK-DAG:      %[[FD:.*]] = sim.fmt.dec %[[ARG]] : i32
 // CHECK-DAG:      %[[FH:.*]] = sim.fmt.hex %[[ARG]] : i32
-// CHECK-DAG:      %[[CAT:.*]] = sim.fmt.concat (%[[LB]], %[[FB]], %[[LD]], %[[FD]], %[[LH]], %[[FH]])
+// CHECK-DAG:      %[[FO:.*]] = sim.fmt.oct %[[ARG]] : i32
+// CHECK-DAG:      %[[CAT:.*]] = sim.fmt.concat (%[[LB]], %[[FB]], %[[LD]], %[[FD]], %[[LH]], %[[FH]], %[[LO]], %[[FO]])
 // CHECK:          sim.proc.print %[[CAT]]
 // CHECK-NEXT:   }
 
@@ -67,7 +69,11 @@ hw.module @basic_print3(in %clk : !seq.clock, in %val: i32) {
   %hex_val = sim.fmt.hex %val : i32
   %hex_cat = sim.fmt.concat (%hex_lit, %hex_val)
 
-  %str = sim.fmt.concat (%bin_cat, %comma, %dec_cat, %comma, %hex_cat)
+  %oct_lit = sim.fmt.literal "Oct: "
+  %oct_val = sim.fmt.oct %val : i32
+  %oct_cat = sim.fmt.concat (%oct_lit, %oct_val)
+
+  %str = sim.fmt.concat (%bin_cat, %comma, %dec_cat, %comma, %hex_cat, %comma, %oct_cat)
 
   sim.print %str on %clk if %true
 }
@@ -79,11 +85,14 @@ hw.module @basic_print3(in %clk : !seq.clock, in %val: i32) {
 // CHECK-DAG:      %[[COM:.*]] = sim.fmt.literal ", "
 // CHECK-DAG:      %[[B0:.*]] = sim.fmt.bin %[[ARG0]] : i8
 // CHECK-DAG:      %[[H0:.*]] = sim.fmt.hex %[[ARG0]] : i8
+// CHECK-DAG:      %[[O0:.*]] = sim.fmt.oct %[[ARG0]] : i8
 // CHECK-DAG:      %[[B1:.*]] = sim.fmt.bin %[[ARG1]] : i8
 // CHECK-DAG:      %[[H1:.*]] = sim.fmt.hex %[[ARG1]] : i8
+// CHECK-DAG:      %[[O1:.*]] = sim.fmt.oct %[[ARG1]] : i8
 // CHECK-DAG:      %[[B2:.*]] = sim.fmt.bin %[[ARG2]] : i8
 // CHECK-DAG:      %[[H2:.*]] = sim.fmt.hex %[[ARG2]] : i8
-// CHECK-DAG:      %[[CAT:.*]] = sim.fmt.concat (%[[B0]], %[[B1]], %[[B2]], %[[COM]], %[[H0]], %[[H1]], %[[H2]])
+// CHECK-DAG:      %[[O2:.*]] = sim.fmt.oct %[[ARG2]] : i8
+// CHECK-DAG:      %[[CAT:.*]] = sim.fmt.concat (%[[B0]], %[[B1]], %[[B2]], %[[COM]], %[[H0]], %[[H1]], %[[H2]], %[[COM]], %[[O0]], %[[O1]], %[[O2]])
 // CHECK:          sim.proc.print %[[CAT]]
 // CHECK-NEXT:   }
 
@@ -99,7 +108,11 @@ hw.module @multi_args(in %clk : !seq.clock, in %a: i8, in %b: i8, in %c: i8) {
   %hexb = sim.fmt.hex %b : i8
   %hexc = sim.fmt.hex %c : i8
 
-  %cat = sim.fmt.concat (%bina, %binb, %binc, %comma, %hexa, %hexb, %hexc)
+  %octa = sim.fmt.oct %a : i8
+  %octb = sim.fmt.oct %b : i8
+  %octc = sim.fmt.oct %c : i8
+
+  %cat = sim.fmt.concat (%bina, %binb, %binc, %comma, %hexa, %hexb, %hexc, %comma, %octa, %octb, %octc)
 
   sim.print %cat on %clk if %true
 }

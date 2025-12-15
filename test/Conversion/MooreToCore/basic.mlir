@@ -395,6 +395,8 @@ func.func @FormatStrings(%arg0: !moore.i42) {
   moore.fmt.int decimal %arg0, width 42, align right, pad space : i42
   // CHECK: sim.fmt.bin %arg0 : i42
   moore.fmt.int binary %arg0, width 42, align right, pad space : i42
+  // CHECK: sim.fmt.oct %arg0 : i42
+  moore.fmt.int octal %arg0, width 42, align right, pad space : i42
   // CHECK: sim.fmt.hex %arg0 : i42
   moore.fmt.int hex_lower %arg0, width 42, align right, pad space : i42
   // CHECK: sim.fmt.hex %arg0 : i42
