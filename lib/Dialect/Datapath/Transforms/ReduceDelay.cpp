@@ -177,16 +177,16 @@ struct CombICmpOpConversion : public OpRewritePattern<comb::ICmpOp> {
     SmallVector<Value> lhsAddends = {lhs};
     // Detect adder inputs to either side of the comparison and detect overflow
     if (comb::AddOp lhsAdd = lhs.getDefiningOp<comb::AddOp>()) {
-      auto overflow = lhsAdd->getAttrOfType<BoolAttr>("comb.nuw");
-      if (overflow && !overflow.getValue())
+      // Check for no unsigned wrap (i.e. no overflow bits get truncated)
+      if (lhsAdd->getAttrOfType<UnitAttr>("comb.nuw"))
         lhsAddends = lhsAdd.getOperands();
     }
 
     SmallVector<Value> rhsAddends = {rhs};
     // Detect adder inputs to either side of the comparison and detect overflow
     if (comb::AddOp rhsAdd = rhs.getDefiningOp<comb::AddOp>()) {
-      auto overflow = rhsAdd->getAttrOfType<BoolAttr>("comb.nuw");
-      if (overflow && !overflow.getValue())
+      // Check for no unsigned wrap (i.e. no overflow bits get truncated)
+      if (rhsAdd->getAttrOfType<UnitAttr>("comb.nuw"))
         rhsAddends = rhsAdd.getOperands();
     }
 
@@ -214,9 +214,9 @@ struct CombICmpOpConversion : public OpRewritePattern<comb::ICmpOp> {
     SmallVector<Value> allAddends;
     llvm::append_range(allAddends, lhsExtend);
     llvm::append_range(allAddends, rhsExtend);
-    auto add = rewriter.create<comb::AddOp>(op.getLoc(), allAddends, false);
-    auto msb = rewriter.createOrFold<comb::ExtractOp>(
-        op.getLoc(), add.getResult(), width, 1);
+    auto add = comb::AddOp::create(rewriter, op.getLoc(), allAddends, false);
+    auto msb = comb::ExtractOp::create(rewriter, op.getLoc(), add.getResult(),
+                                       width, 1);
 
     if (!invertOut) {
       rewriter.replaceOp(op, msb);
