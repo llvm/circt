@@ -1589,8 +1589,8 @@ struct SIntToRealOpConversion : public OpConversionPattern<SIntToRealOp> {
   matchAndRewrite(SIntToRealOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<arith::SIToFPOp>(
-      op, typeConverter->convertType(op.getType()), adaptor.getInput());
-      return success();
+        op, typeConverter->convertType(op.getType()), adaptor.getInput());
+    return success();
   }
 };
 
@@ -1601,8 +1601,8 @@ struct UIntToRealOpConversion : public OpConversionPattern<UIntToRealOp> {
   matchAndRewrite(UIntToRealOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<arith::UIToFPOp>(
-      op, typeConverter->convertType(op.getType()), adaptor.getInput());
-      return success();
+        op, typeConverter->convertType(op.getType()), adaptor.getInput());
+    return success();
   }
 };
 
