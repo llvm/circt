@@ -23,6 +23,7 @@
 # RUN: esi-cosim.py --source %t -- esitester cosim env streaming_add | FileCheck %s --check-prefix=STREAMING_ADD
 # RUN: esi-cosim.py --source %t -- esitester cosim env streaming_add -t | FileCheck %s --check-prefix=STREAMING_ADD
 # RUN: esi-cosim.py --source %t -- esitester cosim env translate_coords | FileCheck %s --check-prefix=TRANSLATE_COORDS
+# RUN: esi-cosim.py --source %t -- esitester cosim env serial_coords | FileCheck %s --check-prefix=SERIAL_COORDS
 # RUN: ESI_COSIM_MANIFEST_MMIO=1 esi-cosim.py --source %t -- esiquery cosim env info
 # RUN: esi-cosim.py --source %t -- esiquery cosim env telemetry | FileCheck %s --check-prefix=TELEMETRY
 
@@ -39,8 +40,9 @@ import pycde.esi as esi
 from pycde import Clock, Module, Reset, System, generator, modparams
 from pycde.bsp import get_bsp
 from pycde.common import AppID, Constant, InputChannel, Output, OutputChannel
-from pycde.constructs import ControlReg, Counter, NamedWire, Reg, Wire
+from pycde.constructs import ControlReg, Counter, Mux, NamedWire, Reg, Wire
 from pycde.module import Metadata
+from pycde.testing import print_info
 from pycde.types import Bits, Channel, ChannelSignaling, UInt
 
 # CHECK: [CONNECT] connecting to backend
@@ -60,6 +62,14 @@ from pycde.types import Bits, Channel, ChannelSignaling, UInt
 # TRANSLATE_COORDS:   coord[3]=(218516,390276) + (10,20) = (218526,390296)
 # TRANSLATE_COORDS:   coord[4]=(750021,423525) + (10,20) = (750031,423545)
 # TRANSLATE_COORDS: Coord translate test passed
+
+# SERIAL_COORDS: Serial coord translate test results:
+# SERIAL_COORDS:   coord[0]=(222709,894611) + (10,20) = (222719,894631)
+# SERIAL_COORDS:   coord[1]=(772894,429150) + (10,20) = (772904,429170)
+# SERIAL_COORDS:   coord[2]=(629806,138727) + (10,20) = (629816,138747)
+# SERIAL_COORDS:   coord[3]=(218516,390276) + (10,20) = (218526,390296)
+# SERIAL_COORDS:   coord[4]=(750021,423525) + (10,20) = (750031,423545)
+# SERIAL_COORDS: Serial coord translate test passed
 
 # TELEMETRY: ********************************
 # TELEMETRY: * Telemetry
@@ -353,6 +363,201 @@ class CoordTranslator(Module):
         result_window, arg_valid)
     ready.assign(result_ready)
     result_chan.assign(result_chan_internal)
+
+
+class SerialCoordTranslator(Module):
+  """Like CoordTranslator, but uses the serial (bulk-transfer) list encoding.
+
+  Input wire format is a window with two frames:
+    - "header": {x_translation, y_translation, coords_count}
+    - "data":   {coords[1]}  (one coordinate per frame)
+
+  Output wire format is also a window with two frames:
+    - "header": {coords_count}
+    - "data":   {coords[1]}  (one coordinate per frame)
+
+  In bulk-transfer encoding, the sender may transmit multiple header/data
+  sequences to extend a list. A common pattern is to set coords_count=64 and
+  re-send a new header every 64 items; the final header has coords_count=0.
+  This module passes the header count through and translates each coordinate.
+  """
+
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def construct(ports):
+    from pycde.types import List, StructType, Window
+
+    clk = ports.clk
+    rst = ports.rst
+
+    bulk_count_width = 16
+    items_per_frame = 1
+
+    coord_type = StructType([("x", Bits(32)), ("y", Bits(32))])
+
+    # ----- Input window type (serial/bulk transfer) -----
+    arg_struct_type = StructType([
+        ("x_translation", Bits(32)),
+        ("y_translation", Bits(32)),
+        ("coords", List(coord_type)),
+    ])
+    arg_window_type = Window(
+        "serial_coord_args",
+        arg_struct_type,
+        [
+            Window.Frame(
+                "header",
+                [
+                    "x_translation",
+                    "y_translation",
+                    ("coords", 0, bulk_count_width),
+                ],
+            ),
+            Window.Frame(
+                "data",
+                [("coords", items_per_frame, 0)],
+            ),
+        ],
+    )
+
+    # ----- Output window type (serial/bulk transfer) -----
+    result_struct_type = StructType([("coords", List(coord_type))])
+    result_window_type = Window(
+        "serial_coord_result",
+        result_struct_type,
+        [
+            Window.Frame(
+                "header",
+                [("coords", 0, bulk_count_width)],
+            ),
+            Window.Frame(
+                "data",
+                [("coords", items_per_frame, 0)],
+            ),
+        ],
+    )
+
+    result_chan = Wire(Channel(result_window_type))
+    args = esi.FuncService.get_call_chans(
+        AppID("translate_coords_serial"),
+        arg_type=arg_window_type,
+        result=result_chan,
+    )
+
+    # Unwrap the argument channel.
+    in_ready = Wire(Bits(1))
+    in_window, in_valid = args.unwrap(in_ready)
+    in_union = in_window.unwrap()
+
+    hdr_frame = in_union["header"]
+    data_frame = in_union["data"]
+
+    hdr_x = hdr_frame["x_translation"].as_uint(32)
+    hdr_y = hdr_frame["y_translation"].as_uint(32)
+    hdr_count_bits = hdr_frame["coords_count"]
+    hdr_count = hdr_count_bits.as_uint(bulk_count_width)
+
+    out_hdr_struct_ty = result_window_type.lowered_type.header
+    out_data_struct_ty = result_window_type.lowered_type.data
+
+    # Output channel (built below) drives readiness/backpressure.
+    out_ready_wire = Wire(Bits(1))
+    handshake = in_valid & out_ready_wire
+
+    # Track which frame we're currently expecting.
+    in_is_header = Reg(
+        Bits(1),
+        clk=clk,
+        rst=rst,
+        rst_value=1,
+        ce=handshake,
+        name="in_is_header",
+    )
+    remaining = Reg(
+        UInt(bulk_count_width),
+        clk=clk,
+        rst=rst,
+        rst_value=0,
+        ce=handshake,
+        name="remaining",
+    )
+    handshake.when_true(
+        lambda: print_info("Received frame count=%d", hdr_count_bits))
+
+    # Latch the most recent header count for re-use when emitting the output
+    # header (do not rely on union extracts during data frames).
+    hdr_handshake = handshake & in_is_header
+    count_reg = Reg(
+        UInt(bulk_count_width),
+        clk=clk,
+        rst=rst,
+        rst_value=0,
+        ce=hdr_handshake,
+        name="coords_count",
+    )
+    count_reg.assign(hdr_count)
+
+    # Latch translations on each header frame.
+    x_translation_reg = Reg(
+        UInt(32),
+        clk=clk,
+        rst=rst,
+        rst_value=0,
+        ce=hdr_handshake,
+        name="x_translation",
+    )
+    y_translation_reg = Reg(
+        UInt(32),
+        clk=clk,
+        rst=rst,
+        rst_value=0,
+        ce=hdr_handshake,
+        name="y_translation",
+    )
+    x_translation_reg.assign(hdr_x)
+    y_translation_reg.assign(hdr_y)
+
+    # Next-state logic for header/data tracking.
+    hdr_is_zero = hdr_count == UInt(bulk_count_width)(0)
+    rem_is_one = remaining == UInt(bulk_count_width)(1)
+    rem_is_zero = remaining == UInt(bulk_count_width)(0)
+    remaining_minus_one = (remaining -
+                           UInt(bulk_count_width)(1)).as_uint(bulk_count_width)
+    dec_remaining = Mux(rem_is_zero, remaining_minus_one,
+                        UInt(bulk_count_width)(0))
+
+    next_remaining = Mux(in_is_header, dec_remaining, hdr_count)
+    next_is_header = Mux(in_is_header, rem_is_one, hdr_is_zero)
+    remaining.assign(next_remaining)
+    in_is_header.assign(next_is_header)
+
+    # Build output frames.
+    out_hdr_struct = out_hdr_struct_ty(
+        {"coords_count": hdr_count.as_bits(bulk_count_width)})
+
+    in_coord = data_frame["coords"][0]
+    in_x = in_coord["x"].as_uint(32)
+    in_y = in_coord["y"].as_uint(32)
+    translated_x = (x_translation_reg + in_x).as_uint(32)
+    translated_y = (y_translation_reg + in_y).as_uint(32)
+    out_coord = coord_type({
+        "x": translated_x.as_bits(32),
+        "y": translated_y.as_bits(32),
+    })
+    out_data_struct = out_data_struct_ty({"coords": [out_coord]})
+
+    out_union_hdr = result_window_type.lowered_type(("header", out_hdr_struct))
+    out_union_data = result_window_type.lowered_type(("data", out_data_struct))
+    out_union = Mux(in_is_header, out_union_data, out_union_hdr)
+    out_window = result_window_type.wrap(out_union)
+
+    out_chan, out_ready = Channel(result_window_type).wrap(out_window, in_valid)
+    out_ready_wire.assign(out_ready)
+
+    in_ready.assign(out_ready)
+    result_chan.assign(out_chan)
 
 
 @modparams
@@ -1007,85 +1212,91 @@ class EsiTester(Module):
 
   @generator
   def construct(ports):
-    CallbackTest(
+    # CallbackTest(
+    #     clk=ports.clk,
+    #     rst=ports.rst,
+    #     instance_name="cb_test",
+    #     appid=AppID("cb_test"),
+    # )
+    # LoopbackInOutAdd(
+    #     clk=ports.clk,
+    #     rst=ports.rst,
+    #     instance_name="loopback",
+    #     appid=AppID("loopback"),
+    # )
+    # StreamingAdder(1)(
+    #     clk=ports.clk,
+    #     rst=ports.rst,
+    #     instance_name="streaming_adder",
+    #     appid=AppID("streaming_adder"),
+    # )
+    # CoordTranslator(
+    #     clk=ports.clk,
+    #     rst=ports.rst,
+    #     instance_name="coord_translator",
+    #     appid=AppID("coord_translator"),
+    # )
+    SerialCoordTranslator(
         clk=ports.clk,
         rst=ports.rst,
-        instance_name="cb_test",
-        appid=AppID("cb_test"),
-    )
-    LoopbackInOutAdd(
-        clk=ports.clk,
-        rst=ports.rst,
-        instance_name="loopback",
-        appid=AppID("loopback"),
-    )
-    StreamingAdder(1)(
-        clk=ports.clk,
-        rst=ports.rst,
-        instance_name="streaming_adder",
-        appid=AppID("streaming_adder"),
-    )
-    CoordTranslator(
-        clk=ports.clk,
-        rst=ports.rst,
-        instance_name="coord_translator",
-        appid=AppID("coord_translator"),
+        instance_name="coord_translator_serial",
+        appid=AppID("coord_translator_serial"),
     )
 
-    for i in range(4, 18, 5):
-      MMIOAdd(i)(instance_name=f"mmio_add_{i}", appid=AppID("mmio_add", i))
+    # for i in range(4, 18, 5):
+    #   MMIOAdd(i)(instance_name=f"mmio_add_{i}", appid=AppID("mmio_add", i))
 
-    for width in [32, 64, 128, 256, 512, 534]:
-      ReadMem(width)(
-          instance_name=f"readmem_{width}",
-          appid=esi.AppID("readmem", width),
-          clk=ports.clk,
-          rst=ports.rst,
-      )
-      WriteMem(width)(
-          instance_name=f"writemem_{width}",
-          appid=AppID("writemem", width),
-          clk=ports.clk,
-          rst=ports.rst,
-      )
-      ToHostDMATest(width)(
-          instance_name=f"tohostdma_{width}",
-          appid=AppID("tohostdma", width),
-          clk=ports.clk,
-          rst=ports.rst,
-      )
-      FromHostDMATest(width)(
-          instance_name=f"fromhostdma_{width}",
-          appid=AppID("fromhostdma", width),
-          clk=ports.clk,
-          rst=ports.rst,
-      )
+    # for width in [32, 64, 128, 256, 512, 534]:
+    #   ReadMem(width)(
+    #       instance_name=f"readmem_{width}",
+    #       appid=esi.AppID("readmem", width),
+    #       clk=ports.clk,
+    #       rst=ports.rst,
+    #   )
+    #   WriteMem(width)(
+    #       instance_name=f"writemem_{width}",
+    #       appid=AppID("writemem", width),
+    #       clk=ports.clk,
+    #       rst=ports.rst,
+    #   )
+    #   ToHostDMATest(width)(
+    #       instance_name=f"tohostdma_{width}",
+    #       appid=AppID("tohostdma", width),
+    #       clk=ports.clk,
+    #       rst=ports.rst,
+    #   )
+    #   FromHostDMATest(width)(
+    #       instance_name=f"fromhostdma_{width}",
+    #       appid=AppID("fromhostdma", width),
+    #       clk=ports.clk,
+    #       rst=ports.rst,
+    #   )
 
-    for i in range(3):
-      ReadMem(512)(
-          instance_name=f"readmem_{i}",
-          appid=esi.AppID(f"readmem_{i}", 512),
-          clk=ports.clk,
-          rst=ports.rst,
-      )
-      WriteMem(512)(
-          instance_name=f"writemem_{i}",
-          appid=AppID(f"writemem_{i}", 512),
-          clk=ports.clk,
-          rst=ports.rst,
-      )
-      ToHostDMATest(512)(
-          instance_name=f"tohostdma_{i}",
-          appid=AppID(f"tohostdma_{i}", 512),
-          clk=ports.clk,
-          rst=ports.rst,
-      )
-      FromHostDMATest(512)(
-          instance_name=f"fromhostdma_{i}",
-          appid=AppID(f"fromhostdma_{i}", 512),
-          clk=ports.clk,
-          rst=ports.rst,
-      )
+    # for i in range(3):
+    #   ReadMem(512)(
+    #       instance_name=f"readmem_{i}",
+    #       appid=esi.AppID(f"readmem_{i}", 512),
+    #       clk=ports.clk,
+    #       rst=ports.rst,
+    #   )
+    #   WriteMem(512)(
+    #       instance_name=f"writemem_{i}",
+    #       appid=AppID(f"writemem_{i}", 512),
+    #       clk=ports.clk,
+    #       rst=ports.rst,
+    #   )
+    #   ToHostDMATest(512)(
+    #       instance_name=f"tohostdma_{i}",
+    #       appid=AppID(f"tohostdma_{i}", 512),
+    #       clk=ports.clk,
+    #       rst=ports.rst,
+    #   )
+    #   FromHostDMATest(512)(
+    #       instance_name=f"fromhostdma_{i}",
+    #       appid=AppID(f"fromhostdma_{i}", 512),
+    #       clk=ports.clk,
+    #       rst=ports.rst,
+    #   )
 
 
 if __name__ == "__main__":

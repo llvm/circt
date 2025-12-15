@@ -67,6 +67,9 @@ static void streamingAddTranslatedTest(AcceleratorConnection *, Accelerator *,
 static void coordTranslateTest(AcceleratorConnection *, Accelerator *,
                                uint32_t xTrans, uint32_t yTrans,
                                uint32_t numCoords);
+static void serialCoordTranslateTest(AcceleratorConnection *, Accelerator *,
+                                     uint32_t xTrans, uint32_t yTrans,
+                                     uint32_t numCoords, size_t batchSizeLimit);
 
 // Default widths and default widths string for CLI help text.
 constexpr std::array<uint32_t, 5> defaultWidths = {32, 64, 128, 256, 512};
@@ -275,6 +278,22 @@ int main(int argc, const char *argv[]) {
   coordTranslateSub->add_option("-n,--num-coords", coordNumItems,
                                 "Number of random coordinates (default 5)");
 
+  CLI::App *serialCoordTranslateSub = cli.add_subcommand(
+      "serial_coords",
+      "Test SerialCoordTranslator function service with list of coordinates");
+  uint32_t serialBatchSize = 240;
+  serialCoordTranslateSub->add_option("-x,--x-translation", coordXTrans,
+                                      "X translation amount (default 10)");
+  serialCoordTranslateSub->add_option("-y,--y-translation", coordYTrans,
+                                      "Y translation amount (default 20)");
+  serialCoordTranslateSub->add_option(
+      "-n,--num-coords", coordNumItems,
+      "Number of random coordinates (default 5)");
+  serialCoordTranslateSub
+      ->add_option("-b,--batch-size", serialBatchSize,
+                   "Coordinates per header (default 240, max 65535)")
+      ->check(CLI::Range(0u, 0xFFFFu));
+
   if (int rc = cli.esiParse(argc, argv))
     return rc;
   if (!cli.get_help_ptr()->empty())
@@ -315,6 +334,9 @@ int main(int argc, const char *argv[]) {
         streamingAddTest(acc, accel, streamingAddAmt, streamingNumItems);
     } else if (*coordTranslateSub) {
       coordTranslateTest(acc, accel, coordXTrans, coordYTrans, coordNumItems);
+    } else if (*serialCoordTranslateSub) {
+      serialCoordTranslateTest(acc, accel, coordXTrans, coordYTrans,
+                               coordNumItems, serialBatchSize);
     }
 
     acc->disconnect();
@@ -1753,4 +1775,163 @@ static void coordTranslateTest(AcceleratorConnection *conn, Accelerator *accel,
 
   logger.info("esitester", "Coord translate test passed");
   std::cout << "Coord translate test passed" << std::endl;
+}
+
+//
+// SerialCoordTranslator test
+//
+
+#pragma pack(push, 1)
+struct SerialCoordHeader {
+  uint16_t coordsCount;
+  uint32_t yTranslation;
+  uint32_t xTranslation;
+};
+struct SerialCoordData {
+  uint16_t _pad_head;
+  uint32_t y;
+  uint32_t x;
+};
+union SerialCoordInputFrame {
+  SerialCoordHeader header;
+  SerialCoordData data;
+};
+#pragma pack(pop)
+static_assert(sizeof(SerialCoordInputFrame) == 10, "Size mismatch");
+
+#pragma pack(push, 1)
+struct SerialCoordOutputHeader {
+  uint8_t _pad[6];
+  uint16_t coordsCount;
+};
+struct SerialCoordOutputData {
+  uint32_t y;
+  uint32_t x;
+};
+union SerialCoordOutputFrame {
+  SerialCoordOutputHeader header;
+  SerialCoordOutputData data;
+};
+#pragma pack(pop)
+static_assert(sizeof(SerialCoordOutputFrame) == 8, "Size mismatch");
+
+static void serialCoordTranslateTest(AcceleratorConnection *conn,
+                                     Accelerator *accel, uint32_t xTrans,
+                                     uint32_t yTrans, uint32_t numCoords,
+                                     size_t batchSizeLimit) {
+  Logger &logger = conn->getLogger();
+  logger.info("esitester", "Starting serial coord translate test");
+
+  // Generate random coordinates.
+  std::mt19937 rng(0xDEADBEEF);
+  std::uniform_int_distribution<uint32_t> dist(0, 1000000);
+  std::vector<Coord> inputCoords;
+  inputCoords.reserve(numCoords);
+  for (uint32_t i = 0; i < numCoords; ++i) {
+    inputCoords.push_back({dist(rng), dist(rng)});
+  }
+
+  auto child = accel->getChildren().find(AppID("coord_translator_serial"));
+  if (child == accel->getChildren().end())
+    throw std::runtime_error("Serial coord translate test: no "
+                             "'coord_translator_serial' child found");
+
+  auto &ports = child->second->getPorts();
+  auto portIter = ports.find(AppID("translate_coords_serial"));
+  if (portIter == ports.end())
+    throw std::runtime_error(
+        "Serial coord translate test: no 'translate_coords_serial' port found");
+
+  WriteChannelPort &argPort = portIter->second.getRawWrite("arg");
+  ReadChannelPort &resultPort = portIter->second.getRawRead("result");
+
+  argPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
+  resultPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
+
+  size_t sent = 0;
+  while (sent < numCoords) {
+    size_t batchSize = std::min(batchSizeLimit, numCoords - sent);
+
+    // Send Header
+    SerialCoordInputFrame headerFrame;
+    headerFrame.header.coordsCount = (uint16_t)batchSize;
+    headerFrame.header.xTranslation = xTrans;
+    headerFrame.header.yTranslation = yTrans;
+    argPort.write(MessageData(reinterpret_cast<const uint8_t *>(&headerFrame),
+                              sizeof(headerFrame)));
+
+    // Send Data
+    for (size_t i = 0; i < batchSize; ++i) {
+      SerialCoordInputFrame dataFrame;
+      dataFrame.data._pad_head = 0;
+      dataFrame.data.x = inputCoords[sent + i].x;
+      dataFrame.data.y = inputCoords[sent + i].y;
+      argPort.write(MessageData(reinterpret_cast<const uint8_t *>(&dataFrame),
+                                sizeof(dataFrame)));
+    }
+    sent += batchSize;
+  }
+  // Send final header with count=0 to signal end of input
+  SerialCoordHeader footerData{0, 0, 0};
+  auto footer = MessageData::from(footerData);
+  argPort.write(footer);
+
+  // Read results. The hardware echoes headers (with count) followed by
+  // translated data frames, then autonomously sends a footer header with
+  // count=0 to signal end of list.
+  std::vector<Coord> results;
+  while (true) {
+    // Read Header
+    MessageData msg;
+    resultPort.read(msg);
+    if (msg.getSize() != sizeof(SerialCoordOutputFrame))
+      throw std::runtime_error("Unexpected result message size");
+
+    const auto *frame =
+        reinterpret_cast<const SerialCoordOutputFrame *>(msg.getBytes());
+    uint16_t batchCount = frame->header.coordsCount;
+    if (batchCount == 0)
+      break;
+
+    // Read Data
+    for (uint16_t i = 0; i < batchCount; ++i) {
+      resultPort.read(msg);
+      if (msg.getSize() != sizeof(SerialCoordOutputFrame))
+        throw std::runtime_error("Unexpected result message size");
+      const auto *dFrame =
+          reinterpret_cast<const SerialCoordOutputFrame *>(msg.getBytes());
+      results.push_back({dFrame->data.y, dFrame->data.x});
+    }
+  }
+
+  // Verify
+  bool passed = true;
+  std::cout << "Serial coord translate test results:" << std::endl;
+  if (results.size() != inputCoords.size()) {
+    std::cout << "Result size mismatch. Expected " << inputCoords.size()
+              << ", got " << results.size() << std::endl;
+    passed = false;
+  }
+  for (size_t i = 0; i < std::min(inputCoords.size(), results.size()); ++i) {
+    uint32_t expX = inputCoords[i].x + xTrans;
+    uint32_t expY = inputCoords[i].y + yTrans;
+    std::cout << "  coord[" << i << "]=(" << inputCoords[i].x << ","
+              << inputCoords[i].y << ") + (" << xTrans << "," << yTrans
+              << ") = (" << results[i].x << "," << results[i].y
+              << ") (expected (" << expX << "," << expY << "))";
+    if (results[i].x != expX || results[i].y != expY) {
+      std::cout << " MISMATCH!";
+      passed = false;
+    }
+    std::cout << std::endl;
+  }
+
+  argPort.disconnect();
+  resultPort.disconnect();
+
+  if (!passed)
+    throw std::runtime_error("Serial coord translate test failed");
+
+  logger.info("esitester", "Serial coord translate test passed");
+  std::cout << "Serial coord translate test passed" << std::endl;
 }

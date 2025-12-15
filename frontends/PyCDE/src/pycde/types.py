@@ -1046,10 +1046,20 @@ class Window(Type):
 
   Construct with a name (string), an 'into' type (typically a StructType), and
   a list of Window.Frame objects. Each frame spec contains a name and a list of
-  field specifications. A field specification is either a field name string or a
-  tuple (field_name, num_items). 'num_items' is only allowed for fields with
-  array or list types in the underlying struct and indicates how many items are
-  accessible in the frame.
+  field specifications.
+
+  A field specification can be:
+    - A field name string (e.g. "hdr").
+    - A tuple (field_name, num_items) for arrays/lists, indicating how many
+      items are accessible in the frame.
+    - A tuple (field_name, num_items, bulk_count_width) for lists, enabling the
+      serial (bulk-transfer) encoding. In this mode:
+        - bulk_count_width > 0 on a list field in a "header" frame causes the
+          lowered frame struct to include a `<field>_count` field.
+        - The list data itself is transmitted in subsequent "data" frames where
+          `num_items` is set and `bulk_count_width` is 0.
+      Note: `num_items` and `bulk_count_width` are mutually exclusive for a
+      single field instance.
   
   In the case of lists, a 'last' field is added to the frame struct to indicate
   that this is the last frame of the list. If 'numItems' is specified, a field
@@ -1081,8 +1091,11 @@ class Window(Type):
   class Frame:
     """Represents a frame specification within a Window type."""
     name: str | None
-    members: typing.List[typing.Union[str, typing.Tuple[str,
-                                                        typing.Optional[int]]]]
+    members: typing.List[typing.Union[
+        str,
+        typing.Tuple[str, typing.Optional[int]],
+        typing.Tuple[str, typing.Optional[int], typing.Optional[int]],
+    ]]
 
     def __post_init__(self):
       """Validate frame specification after initialization."""
@@ -1099,11 +1112,22 @@ class Window(Type):
       formatted_members = []
       for member in self.members:
         if isinstance(member, tuple):
-          field_name, num_items = member
-          if num_items is not None:
-            formatted_members.append((field_name, num_items))
+          if len(member) == 2:
+            field_name, num_items = member
+            if num_items is not None:
+              formatted_members.append((field_name, num_items))
+            else:
+              formatted_members.append(field_name)
+          elif len(member) == 3:
+            field_name, num_items, bulk_count_width = member
+            if num_items is None:
+              num_items = 0
+            if bulk_count_width is None:
+              bulk_count_width = 0
+            formatted_members.append((field_name, num_items, bulk_count_width))
           else:
-            formatted_members.append(field_name)
+            raise ValueError(
+                "Window.Frame member tuples must have 2 or 3 elements")
         else:
           formatted_members.append(member)
       return f"Frame({name}, {formatted_members})"
@@ -1126,21 +1150,44 @@ class Window(Type):
       field_types = []
       for m in frame_spec.members:
         if isinstance(m, tuple):
-          field_name, num_items = m
+          if len(m) == 2:
+            field_name, num_items = m
+            bulk_count_width = 0
+          elif len(m) == 3:
+            field_name, num_items, bulk_count_width = m
+            if bulk_count_width is None:
+              bulk_count_width = 0
+          else:
+            raise ValueError(
+                "Window.Frame member tuples must have 2 or 3 elements")
+
           # Validate that num_items is only used on array/list fields
           if field_name not in struct_fields:
             raise ValueError(f"Field '{field_name}' not found in struct type")
           field_type = struct_fields[field_name]
-          if num_items is not None:
+          if num_items is not None and num_items != 0:
             # Check if field is an array or list type
             if not isinstance(field_type, (Array, List)):
               raise ValueError(
                   f"num_items can only be specified for array or list fields. "
                   f"Field '{field_name}' has type {field_type}")
+          if bulk_count_width and bulk_count_width != 0:
+            if not isinstance(field_type, List):
+              raise ValueError(
+                  f"bulk_count_width is only valid for list fields. "
+                  f"Field '{field_name}' has type {field_type}")
+            if num_items is not None and num_items != 0:
+              raise ValueError(
+                  f"Cannot specify both num_items and bulk_count_width for '{field_name}'"
+              )
           # Convert field name to StringAttr and keep num_items as optional int
           field_name_attr = ir.StringAttr.get(field_name)
-          field_types.append(esi.WindowFieldType.get(field_name_attr,
-                                                     num_items))
+          field_types.append(
+              esi.WindowFieldType.get(
+                  field_name_attr,
+                  num_items if num_items is not None else 0,
+                  bulk_count_width,
+              ))
         else:
           # Validate field exists in struct
           if m not in struct_fields:
@@ -1183,8 +1230,15 @@ class Window(Type):
       for m in frame.members:
         member = support.type_to_pytype(m)
         num_items = member.num_items
-        members.append(
-            (member.field_name.value, num_items if num_items > 0 else None))
+        bulk_count_width = getattr(member, "bulk_count_width", 0)
+        if bulk_count_width and bulk_count_width > 0:
+          members.append(
+              (member.field_name.value,
+               num_items if num_items > 0 else 0,
+               bulk_count_width))
+        else:
+          members.append(
+              (member.field_name.value, num_items if num_items > 0 else None))
       ret.append(
           Window.Frame(frame.name.value if frame.name.value != "" else None,
                        members))
