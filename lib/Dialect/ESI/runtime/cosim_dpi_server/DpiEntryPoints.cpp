@@ -37,10 +37,10 @@ static FILE *logFile;
 static std::unique_ptr<Context> context = nullptr;
 static std::unique_ptr<RpcServer> server = nullptr;
 static std::mutex serverMutex;
-static ConsoleLogger fallbackLogger(Logger::Level::Debug);
 
 /// Get the logger from the context.
 static Logger &getLogger() {
+  static ConsoleLogger fallbackLogger(Logger::Level::Debug);
   if (context)
     return context->getLogger();
   return fallbackLogger;
