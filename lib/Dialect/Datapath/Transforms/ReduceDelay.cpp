@@ -139,7 +139,7 @@ struct FoldMuxAdd : public OpRewritePattern<comb::AddOp> {
   }
 };
 
-struct CombICmpOpConversion : public OpRewritePattern<comb::ICmpOp> {
+struct ConvertCmpToAdd : public OpRewritePattern<comb::ICmpOp> {
   using OpRewritePattern::OpRewritePattern;
 
   // Applicable to unsigned comparisons without overflow:
@@ -241,7 +241,7 @@ struct DatapathReduceDelayPass
     MLIRContext *ctx = op->getContext();
 
     RewritePatternSet patterns(ctx);
-    patterns.add<FoldAddReplicate, FoldMuxAdd, CombICmpOpConversion>(ctx);
+    patterns.add<FoldAddReplicate, FoldMuxAdd, ConvertCmpToAdd>(ctx);
 
     if (failed(applyPatternsGreedily(op, std::move(patterns))))
       signalPassFailure();
