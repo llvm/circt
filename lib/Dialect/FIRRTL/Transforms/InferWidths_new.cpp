@@ -28,6 +28,8 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
+#include <list>
+#include <stack>
 
 #define DEBUG_TYPE "infer-widths-new"
 
@@ -126,8 +128,6 @@ public:
   }
 };
 
-#include <list>
-#include <stack>
 class Terms {
 private:
   std::list<Term> terms_;
@@ -726,9 +726,10 @@ Valuation floyd(const std::vector<Constraint1> &constraints,
   FieldRef zero = FieldRef();
   var_to_index[zero] = next_index;
 
-  LLVM_DEBUG(llvm::dbgs() << "numberin:\n");
+  LLVM_DEBUG({llvm::dbgs() << "numberin:\n";
   for (const auto &[var, index] : var_to_index)
-    LLVM_DEBUG(llvm::dbgs() << var << " : " << index << "\n");
+    llvm::dbgs() << var << " : " << index << "\n";
+  })
 
   int n = var_to_index.size();
   std::vector<std::vector<int>> graph(n, std::vector<int>(n, INF));
@@ -749,16 +750,18 @@ Valuation floyd(const std::vector<Constraint1> &constraints,
       graph[i][j] = weight;
   }
 
-  LLVM_DEBUG(llvm::dbgs() << "initial matrix:\n");
+  LLVM_DEBUG({
+  lvm::dbgs() << "initial matrix:\n";
   for (int i = 0; i < n; i++) {
     for (int j = 0; j < n; j++) {
       if (graph[i][j] == INF)
-        LLVM_DEBUG(llvm::dbgs() << "  INF  ");
+        llvm::dbgs() << "  INF  ";
       else
-        LLVM_DEBUG(llvm::dbgs() << "  " << graph[i][j] << "  ");
+        llvm::dbgs() << "  " << graph[i][j] << "  ";
     }
-    LLVM_DEBUG(llvm::dbgs() << "\n");
+    llvm::dbgs() << "\n";
   }
+  });
 
   for (int k = 0; k < n; k++) {
     for (int i = 0; i < n; i++) {
@@ -778,16 +781,18 @@ Valuation floyd(const std::vector<Constraint1> &constraints,
     }
   }
 
-  LLVM_DEBUG(llvm::dbgs() << "Shortest path matrix:\n");
+  LLVM_DEBUG({
+  llvm::dbgs() << "Shortest path matrix:\n";
   for (int i = 0; i < n; i++) {
     for (int j = 0; j < n; j++) {
       if (graph[i][j] == INF)
-        LLVM_DEBUG(llvm::dbgs() << "  INF  ");
+        llvm::dbgs() << "  INF  ";
       else
-        LLVM_DEBUG(llvm::dbgs() << "  " << graph[i][j] << "  ");
+        llvm::dbgs() << "  " << graph[i][j] << "  ";
     }
-    LLVM_DEBUG(llvm::dbgs() << "\n");
+    llvm::dbgs() << "\n";
   }
+  });
 
   Valuation valuation;
   for (int i = 0; i < n - 1; i++) {
@@ -802,9 +807,10 @@ Valuation floyd(const std::vector<Constraint1> &constraints,
     valuation[source] = -min_distance;
   }
 
-  LLVM_DEBUG(llvm::dbgs() << "floyd result:\n");
+  LLVM_DEBUG({llvm::dbgs() << "floyd result:\n";
   for (const auto &[var, value] : valuation)
-    LLVM_DEBUG(llvm::dbgs() << var_to_index[var] << " : " << value << "\n");
+    llvm::dbgs() << var_to_index[var] << " : " << value << "\n";
+  })
 
   return valuation;
 }
@@ -813,10 +819,11 @@ LogicalResult ConstraintSolver::solve() {
   for (auto sccIter = llvm::scc_begin(&graph_);
        sccIter != llvm::scc_end(&graph_); ++sccIter) {
     const auto &node_list = *sccIter;
-    LLVM_DEBUG(llvm::dbgs() << "SCC (size " << node_list.size() << "): ");
+    LLVM_DEBUG({llvm::dbgs() << "SCC (size " << node_list.size() << "): ";
     for (Node *node : node_list)
-      LLVM_DEBUG(llvm::dbgs() << node->field << "; ");
-    LLVM_DEBUG(llvm::dbgs() << "\n");
+      lvm::dbgs() << node->field << "; ";
+    llvm::dbgs() << "\n";
+    })
 
     std::vector<FieldRef> component = extractFieldRefs(node_list);
     if (component.empty()) {
@@ -2243,34 +2250,6 @@ std::optional<int> solve_ub_case1(const FieldRef &x, const FieldRef &var,
   std::vector<FieldRef> path1 = extractFieldRefs(node_list1);
   std::vector<FieldRef> path0 = extractFieldRefs(node_list0);
 
-  if (path0.empty()) {
-    LLVM_DEBUG(llvm::dbgs() << "No path found!\n");
-  } else {
-    LLVM_DEBUG(llvm::dbgs() << "Path found: "
-                            << "[" << path0[0].getValue()
-                            << " (fieldID: " << path0[0].getFieldID() << ")]");
-
-    for (size_t i = 1; i < path0.size(); ++i) {
-      LLVM_DEBUG(llvm::dbgs() << " -> "
-                              << "[" << path0[i].getValue() << " (fieldID: "
-                              << path0[i].getFieldID() << ")]");
-    }
-    LLVM_DEBUG(llvm::dbgs() << "\n");
-  }
-  if (path1.empty()) {
-    LLVM_DEBUG(llvm::dbgs() << "No path found!\n");
-  } else {
-    LLVM_DEBUG(llvm::dbgs() << "Path found: "
-                            << "[" << path1[0].getValue()
-                            << " (fieldID: " << path1[0].getFieldID() << ")]");
-    for (size_t i = 1; i < path1.size(); ++i) {
-      LLVM_DEBUG(llvm::dbgs() << " -> "
-                              << "[" << path1[i].getValue() << " (fieldID: "
-                              << path1[i].getFieldID() << ")]");
-    }
-    LLVM_DEBUG(llvm::dbgs() << "\n");
-  }
-
   auto conslist0 = orderConstraints(path0, constraints);
   auto conslist1 = orderConstraints(path1, constraints);
 
@@ -2349,47 +2328,6 @@ std::optional<int> solve_ub_case2(const FieldRef &x, const FieldRef &var1,
   std::vector<FieldRef> path2 = extractFieldRefs(node_list2);
   std::vector<FieldRef> path1 = extractFieldRefs(node_list1);
   std::vector<FieldRef> path0 = extractFieldRefs(node_list0);
-
-  if (path0.empty()) {
-    LLVM_DEBUG(llvm::dbgs() << "No path found!\n");
-  } else {
-    LLVM_DEBUG(llvm::dbgs() << "Path found: "
-                            << "[" << path0[0].getValue()
-                            << " (fieldID: " << path0[0].getFieldID() << ")]");
-
-    for (size_t i = 1; i < path0.size(); ++i) {
-      LLVM_DEBUG(llvm::dbgs() << " -> "
-                              << "[" << path0[i].getValue() << " (fieldID: "
-                              << path0[i].getFieldID() << ")]");
-    }
-    LLVM_DEBUG(llvm::dbgs() << "\n");
-  }
-  if (path1.empty()) {
-    LLVM_DEBUG(llvm::dbgs() << "No path found!\n");
-  } else {
-    LLVM_DEBUG(llvm::dbgs() << "Path found: "
-                            << "[" << path1[0].getValue()
-                            << " (fieldID: " << path1[0].getFieldID() << ")]");
-    for (size_t i = 1; i < path1.size(); ++i) {
-      LLVM_DEBUG(llvm::dbgs() << " -> "
-                              << "[" << path1[i].getValue() << " (fieldID: "
-                              << path1[i].getFieldID() << ")]");
-    }
-    LLVM_DEBUG(llvm::dbgs() << "\n");
-  }
-  if (path2.empty()) {
-    LLVM_DEBUG(llvm::dbgs() << "No path found!\n");
-  } else {
-    LLVM_DEBUG(llvm::dbgs() << "Path found: "
-                            << "[" << path2[0].getValue()
-                            << " (fieldID: " << path2[0].getFieldID() << ")]");
-    for (size_t i = 1; i < path2.size(); ++i) {
-      LLVM_DEBUG(llvm::dbgs() << " -> "
-                              << "[" << path2[i].getValue() << " (fieldID: "
-                              << path2[i].getFieldID() << ")]");
-    }
-    LLVM_DEBUG(llvm::dbgs() << "\n");
-  }
 
   // 按顺序找出约束
   auto conslist0 = orderConstraints(path0, constraints);
