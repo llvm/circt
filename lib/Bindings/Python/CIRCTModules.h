@@ -29,7 +29,6 @@ void populateDialectRTGSubmodule(nanobind::module_ &m);
 void populateDialectRTGTestSubmodule(nanobind::module_ &m);
 #endif
 void populateDialectSeqSubmodule(nanobind::module_ &m);
-void populateDialectSimSubmodule(nanobind::module_ &m);
 void populateDialectSVSubmodule(nanobind::module_ &m);
 void populateDialectSynthSubmodule(nanobind::module_ &m);
 void populateSupportSubmodule(nanobind::module_ &m);
