@@ -151,23 +151,23 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // QUERY-HIER:   * Instance: loopback_inst[0]
 // QUERY-HIER:   * Ports:
 // QUERY-HIER:       loopback_tohw:
-// QUERY-HIER:         recv: chan<bits8>
+// QUERY-HIER:         recv: bits8
 // QUERY-HIER:       loopback_fromhw:
-// QUERY-HIER:         send: chan<bits8>
+// QUERY-HIER:         send: bits8
 // QUERY-HIER:       mysvc_recv:
-// QUERY-HIER:         recv: chan<void>
+// QUERY-HIER:         recv: void
 // QUERY-HIER:       mysvc_send:
-// QUERY-HIER:         send: chan<void>
+// QUERY-HIER:         send: void
 // QUERY-HIER:   * Instance: loopback_inst[1]
 // QUERY-HIER:   * Ports:
 // QUERY-HIER:       loopback_tohw:
-// QUERY-HIER:         recv: chan<bits8>
+// QUERY-HIER:         recv: bits8
 // QUERY-HIER:       loopback_fromhw:
-// QUERY-HIER:         send: chan<bits8>
+// QUERY-HIER:         send: bits8
 // QUERY-HIER:       mysvc_recv:
-// QUERY-HIER:         recv: chan<void>
+// QUERY-HIER:         recv: void
 // QUERY-HIER:       mysvc_send:
-// QUERY-HIER:         send: chan<void>
+// QUERY-HIER:         send: void
 
 
 // LOOPBACK-H:       /// Generated header for esi_system module LoopbackIP.

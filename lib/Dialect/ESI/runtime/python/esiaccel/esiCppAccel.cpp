@@ -341,17 +341,15 @@ NB_MODULE(esiCppAccel, m) {
       .def("write", &MMIO::MMIORegion::write);
 
   nb::class_<FuncService::Function, ServicePort>(m, "Function")
-      .def(
-          "call",
-          [](FuncService::Function &self,
-             nb::bytes msg) -> std::future<MessageData> {
-            std::vector<uint8_t> dataVec((const uint8_t *)msg.c_str(),
-                                         (const uint8_t *)msg.c_str() +
-                                             msg.size());
-            MessageData data(dataVec);
-            return self.call(data);
-          },
-          nb::rv_policy::take_ownership)
+      .def("call",
+           [](FuncService::Function &self,
+              nb::bytearray msg) -> std::future<MessageData> {
+             std::vector<uint8_t> dataVec((const uint8_t *)msg.c_str(),
+                                          (const uint8_t *)msg.c_str() +
+                                              msg.size());
+             MessageData data(dataVec);
+             return self.call(data);
+           })
       .def("connect", &FuncService::Function::connect);
 
   nb::class_<CallService::Callback, ServicePort>(m, "Callback")
