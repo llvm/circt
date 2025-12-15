@@ -185,14 +185,12 @@ ReadChannelPort &Impl::registerReadPort(const std::string &name,
                                         const std::string &type) {
   auto port = new RpcServerReadPort(new Type(type));
   readPorts.emplace(name, port);
-  port->connect();
   return *port;
 }
 WriteChannelPort &Impl::registerWritePort(const std::string &name,
                                           const std::string &type) {
   auto port = new RpcServerWritePort(new Type(type));
   writePorts.emplace(name, port);
-  port->connect();
   return *port;
 }
 

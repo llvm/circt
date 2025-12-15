@@ -153,11 +153,16 @@ DPI int sv2cCosimserverEpRegister(char *endpointId, char *fromHostTypeIdC,
   if (!fromHostTypeId.empty()) {
     ReadChannelPort &port =
         server->registerReadPort(endpointId, fromHostTypeId);
+    // Connect in polling mode.
+    port.connect();
     readPorts.emplace(endpointId, port);
     readFutures.emplace(&port, port.readAsync());
   } else {
-    writePorts.emplace(endpointId,
-                       server->registerWritePort(endpointId, toHostTypeId));
+    WriteChannelPort &wport =
+        server->registerWritePort(endpointId, toHostTypeId);
+    // Connect in default mode.
+    wport.connect();
+    writePorts.emplace(endpointId, wport);
   }
   return 0;
 }
