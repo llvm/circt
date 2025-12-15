@@ -2203,6 +2203,7 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
 
   // Valid target types.
   typeConverter.addConversion([](IntegerType type) { return type; });
+  typeConverter.addConversion([](FloatType type) { return type; });
   typeConverter.addConversion([](llhd::TimeType type) { return type; });
   typeConverter.addConversion([](debug::ArrayType type) { return type; });
   typeConverter.addConversion([](debug::ScopeType type) { return type; });

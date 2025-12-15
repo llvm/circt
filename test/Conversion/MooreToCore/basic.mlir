@@ -1370,3 +1370,12 @@ func.func @IntToRealLowering(%arg0: !moore.i32, %arg1: !moore.i42) {
   %1 = moore.uint_to_real %arg1 : i42 -> f64
   return
 }
+
+// CHECK-LABEL: func.func @RealToIntLowering
+func.func @RealToIntLowering(%arg0: !moore.f32, %arg1: !moore.f64) {
+  // CHECK-NEXT: arith.fptosi %arg0 : f32 to i32
+  // CHECK-NEXT: arith.fptosi %arg1 : f64 to i42
+  %0 = moore.real_to_int %arg0 : f32 -> i32
+  %1 = moore.real_to_int %arg1 : f64 -> i42
+  return
+}
