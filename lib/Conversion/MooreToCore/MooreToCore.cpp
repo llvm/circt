@@ -1582,6 +1582,30 @@ struct SExtOpConversion : public OpConversionPattern<SExtOp> {
   }
 };
 
+struct SIntToRealOpConversion : public OpConversionPattern<SIntToRealOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(SIntToRealOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<arith::SIToFPOp>(
+        op, typeConverter->convertType(op.getType()), adaptor.getInput());
+    return success();
+  }
+};
+
+struct UIntToRealOpConversion : public OpConversionPattern<UIntToRealOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UIntToRealOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<arith::UIToFPOp>(
+        op, typeConverter->convertType(op.getType()), adaptor.getInput());
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Statement Conversion
 //===----------------------------------------------------------------------===//
@@ -2242,6 +2266,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     TruncOpConversion,
     ZExtOpConversion,
     SExtOpConversion,
+    SIntToRealOpConversion,
+    UIntToRealOpConversion,
 
     // Patterns of miscellaneous operations.
     ConstantOpConv,
