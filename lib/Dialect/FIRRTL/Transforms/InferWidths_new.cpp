@@ -1,5 +1,4 @@
-//===- InferWidths_new.cpp - Infer width of types -------------------*- C++
-//-*-===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -230,6 +229,7 @@ public:
   }
 };
 
+// TBD : add some comments here
 class Constraint1 {
 private:
   FieldRef lhs_var1_;
