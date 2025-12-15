@@ -215,8 +215,8 @@ struct CombICmpOpConversion : public OpRewritePattern<comb::ICmpOp> {
     llvm::append_range(allAddends, lhsExtend);
     llvm::append_range(allAddends, rhsExtend);
     auto add = comb::AddOp::create(rewriter, op.getLoc(), allAddends, false);
-    auto msb = comb::ExtractOp::create(rewriter, op.getLoc(), add.getResult(),
-                                       width, 1);
+    auto msb = rewriter.createOrFold<comb::ExtractOp>(
+        op.getLoc(), add.getResult(), width, 1);
 
     if (!invertOut) {
       rewriter.replaceOp(op, msb);
