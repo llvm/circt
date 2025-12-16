@@ -500,7 +500,7 @@ void DriveHoister::hoistDrives() {
         })
         .Case<Type>([&](auto type) {
           // TODO: This should probably create something like a `llhd.dontcare`.
-          unsigned numBits = hw::getBitWidth(type);
+          auto numBits = hw::getBitWidth(type);
           assert(numBits >= 0);
           Value value = hw::ConstantOp::create(
               builder, processOp.getLoc(), builder.getIntegerType(numBits), 0);
