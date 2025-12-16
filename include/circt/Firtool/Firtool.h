@@ -40,10 +40,10 @@ public:
   enum class DomainMode {
     /// Disable domain checking.
     Disable,
-    /// Check domains with inference for private modules.
-    Infer,
     /// Check domains without inference.
     Check,
+    /// Check domains with inference for private modules.
+    Infer,
     /// Check domains with inference for both public and private modules.
     InferAll,
   };
