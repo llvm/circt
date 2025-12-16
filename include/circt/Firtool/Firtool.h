@@ -55,10 +55,10 @@ public:
     switch (mode) {
     case DomainMode::Disable:
       return std::nullopt;
-    case DomainMode::Infer:
-      return firrtl::InferDomainsMode::Infer;
     case DomainMode::Check:
       return firrtl::InferDomainsMode::Check;
+    case DomainMode::Infer:
+      return firrtl::InferDomainsMode::Infer;
     case DomainMode::InferAll:
       return firrtl::InferDomainsMode::InferAll;
     }

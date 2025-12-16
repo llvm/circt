@@ -39,6 +39,8 @@ using namespace firrtl;
 // Helpers.
 //====--------------------------------------------------------------------------
 
+using DomainValue = mlir::TypedValue<DomainType>;
+
 using PortInsertions = SmallVector<std::pair<unsigned, PortInfo>>;
 
 /// From a domain info attribute, get the domain-type of a domain value at
@@ -73,7 +75,7 @@ static bool isPort(Value value) {
 }
 
 /// Returns true if the value is driven by a connect op.
-static bool isDriven(Value port) {
+static bool isDriven(DomainValue port) {
   for (auto *user : port.getUsers())
     if (auto connect = dyn_cast<FConnectLike>(user))
       if (connect.getDest() == port)
@@ -84,8 +86,6 @@ static bool isDriven(Value port) {
 //====--------------------------------------------------------------------------
 // Global State.
 //====--------------------------------------------------------------------------
-
-using DomainValue = mlir::TypedValue<DomainType>;
 
 /// Each domain type declared in the circuit is assigned a type-id, based on the
 /// order of declaration. Domain associations for hardware values are
@@ -317,9 +317,10 @@ static LogicalResult unify(ValueTerm *xv, Term *y) {
     yv->leader = xv;
     return success();
   }
-  if (auto *yv = dyn_cast<ValueTerm>(y)) {
+
+  if (auto *yv = dyn_cast<ValueTerm>(y))
     return success(xv == yv);
-  }
+
   return failure();
 }
 
@@ -402,7 +403,7 @@ private:
       if (!result[i])
         result[i] = alloc<VariableTerm>();
 
-    return ArrayRef(result, elements.size());
+    return ArrayRef(result, size);
   }
 
   llvm::BumpPtrAllocator allocator;
@@ -1288,18 +1289,15 @@ static LogicalResult updateInstance(const DomainInfo &info,
   builder.setInsertionPointAfter(op);
   auto numPorts = op->getNumResults();
   for (size_t i = 0; i < numPorts; ++i) {
-    auto port = op.getResult(i);
-    auto type = port.getType();
+    auto port = dyn_cast<DomainValue>(op.getResult(i));
     auto direction = op.getPortDirection(i);
 
     // If the port is an input domain, we may need to drive the input with
     // a value. If we don't know what value to drive to the port, drive an
     // anonymous domain.
-    if (isa<DomainType>(type) && direction == Direction::In &&
-        !isDriven(port)) {
-      auto domain = cast<DomainValue>(port);
+    if (port && direction == Direction::In && !isDriven(port)) {
       auto loc = port.getLoc();
-      auto *term = getTermForDomain(allocator, table, domain);
+      auto *term = getTermForDomain(allocator, table, port);
       if (auto *var = dyn_cast<VariableTerm>(term)) {
         auto name = getDomainPortTypeName(op.getDomainInfo(), i);
         auto anon = DomainCreateAnonOp::create(builder, loc, name);
@@ -1421,10 +1419,9 @@ static LogicalResult checkModulePorts(const DomainInfo &info,
 static LogicalResult checkModuleDomainPortDrivers(const DomainInfo &info,
                                                   FModuleOp moduleOp) {
   for (size_t i = 0, e = moduleOp.getNumPorts(); i < e; ++i) {
-    auto port = moduleOp.getArgument(i);
-    auto type = port.getType();
-    if (!isa<DomainType>(type) ||
-        moduleOp.getPortDirection(i) != Direction::Out || isDriven(port))
+    auto port = dyn_cast<DomainValue>(moduleOp.getArgument(i));
+    if (!port || moduleOp.getPortDirection(i) != Direction::Out ||
+        isDriven(port))
       continue;
 
     auto name = moduleOp.getPortNameAttr(i);
@@ -1441,7 +1438,7 @@ static LogicalResult checkModuleDomainPortDrivers(const DomainInfo &info,
 template <typename T>
 static LogicalResult checkInstanceDomainPortDrivers(T op) {
   for (size_t i = 0, e = op.getNumResults(); i < e; ++i) {
-    auto port = op.getResult(i);
+    auto port = dyn_cast<DomainValue>(op.getResult(i));
     auto type = port.getType();
     if (!isa<DomainType>(type) || op.getPortDirection(i) != Direction::In ||
         isDriven(port))
