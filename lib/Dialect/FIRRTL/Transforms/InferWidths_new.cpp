@@ -821,7 +821,7 @@ LogicalResult ConstraintSolver::solve() {
     const auto &node_list = *sccIter;
     LLVM_DEBUG({llvm::dbgs() << "SCC (size " << node_list.size() << "): ";
     for (Node *node : node_list)
-      lvm::dbgs() << node->field << "; ";
+      llvm::dbgs() << node->field << "; ";
     llvm::dbgs() << "\n";
     });
 
