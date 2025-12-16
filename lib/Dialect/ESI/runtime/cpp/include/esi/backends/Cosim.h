@@ -29,8 +29,8 @@ namespace esi {
 namespace backends {
 namespace cosim {
 
-class CosimClient;
 class CosimEngine;
+class RpcClient;
 
 /// Connect to an ESI simulation.
 class CosimAccelerator : public esi::AcceleratorConnection {
@@ -62,7 +62,7 @@ protected:
                                  const HWClientDetails &clients) override;
 
 private:
-  CosimClient *rpcClient;
+  RpcClient *rpcClient;
 
   // We own all channels connected to rpcClient since their lifetime is tied to
   // rpcClient.
