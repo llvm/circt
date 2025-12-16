@@ -10,6 +10,7 @@ from pycde.bsp import get_bsp
 from pycde.common import Constant, Input, Output
 from pycde.constructs import ControlReg, Mux, Reg, Wire
 from pycde.esi import ChannelService, FuncService, MMIO, MMIOReadWriteCmdType
+from pycde.testing import print_info
 from pycde.types import (Bits, Channel, ChannelSignaling, StructType, UInt,
                          Window)
 from pycde.handshake import Func
@@ -40,6 +41,10 @@ class LoopbackInOutAdd(Module):
                                           ChannelSignaling.FIFO)
     ready.assign(data_ready)
     loopback.assign(data_chan_buffered)
+
+    xact, snooped_data = data_chan_buffered.snoop_xact()
+    xact.when_true(
+        lambda: print_info("LoopbackInOutAdd received: %p", snooped_data))
 
 
 @modparams
