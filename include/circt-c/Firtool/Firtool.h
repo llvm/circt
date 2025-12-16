@@ -71,8 +71,8 @@ typedef enum CirctFirtoolVerificationFlavor {
 // NOLINTNEXTLINE(modernize-use-using)
 typedef enum CirctFirtoolDomainMode {
   CIRCT_FIRTOOL_DOMAIN_MODE_DISABLE,
-  CIRCT_FIRTOOL_DOMAIN_MODE_INFER,
   CIRCT_FIRTOOL_DOMAIN_MODE_CHECK,
+  CIRCT_FIRTOOL_DOMAIN_MODE_INFER,
   CIRCT_FIRTOOL_DOMAIN_MODE_INFER_ALL,
 } CirctFirtoolDomainMode;
 
