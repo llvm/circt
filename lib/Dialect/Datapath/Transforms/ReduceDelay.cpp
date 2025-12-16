@@ -211,8 +211,7 @@ struct ConvertCmpToAdd : public OpRewritePattern<comb::ICmpOp> {
     rhsExtend.push_back(hw::ConstantOp::create(
         rewriter, op.getLoc(), APInt(width + 1, rhsExtend.size())));
 
-    SmallVector<Value> allAddends;
-    llvm::append_range(allAddends, lhsExtend);
+    SmallVector<Value> allAddends = std::move(lhsExtend);
     llvm::append_range(allAddends, rhsExtend);
     auto add = comb::AddOp::create(rewriter, op.getLoc(), allAddends, false);
     auto msb = rewriter.createOrFold<comb::ExtractOp>(
