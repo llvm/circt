@@ -7,7 +7,8 @@
 //===----------------------------------------------------------------------===//
 //
 // This file contains the gRPC client implementation for ESI cosimulation.
-// It wraps all gRPC/protobuf dependencies so they don't leak into other headers.
+// It wraps all gRPC/protobuf dependencies so they don't leak into other
+// headers.
 //
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file
