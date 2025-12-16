@@ -146,3 +146,59 @@ firrtl.circuit "ConflictingInstanceChoiceDomains" {
     firrtl.connect %inst_in2, %in2 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// Testing the reporting of multiple errors.
+firrtl.circuit "MultipleErrors" {
+  firrtl.domain @ClockDomain
+
+  // We report the first error encountered in M1.
+  firrtl.module @M1(
+    // expected-note @below {{2nd operand has domains: [ClockDomain: A]}}
+    in  %a: !firrtl.uint<1> domains [%A],
+    // expected-note @below {{1st operand has domains: [ClockDomain: B]}}
+    out %b: !firrtl.uint<1> domains [%B],
+    in  %A: !firrtl.domain of @ClockDomain,
+    in  %B: !firrtl.domain of @ClockDomain
+  ) {
+    // expected-error @below {{illegal domain crossing in operation}}
+    firrtl.matchingconnect %b, %a : !firrtl.uint<1>
+  }
+
+  // We report the first error encountered in M2.
+  firrtl.module @M2(
+    // expected-note @below {{2nd operand has domains: [ClockDomain: A]}}
+    in  %a: !firrtl.uint<1> domains [%A],
+    // expected-note @below {{1st operand has domains: [ClockDomain: B]}}
+    out %b: !firrtl.uint<1> domains [%B],
+    in  %A: !firrtl.domain of @ClockDomain,
+    in  %B: !firrtl.domain of @ClockDomain
+  ) {
+    // expected-error @below {{illegal domain crossing in operation}}
+    firrtl.matchingconnect %b, %a : !firrtl.uint<1>
+  }
+
+  firrtl.module @MultipleErrors(
+    in  %a: !firrtl.uint<1> domains [%A],
+    out %b: !firrtl.uint<1> domains [%B],
+    in  %A: !firrtl.domain of @ClockDomain,
+    in  %B: !firrtl.domain of @ClockDomain
+  ) {
+    %inst1_a, %inst1_b, %inst1_A, %inst1_B = firrtl.instance inst1 @M1(
+      in  a: !firrtl.uint<1> domains [A],
+      out b: !firrtl.uint<1> domains [B],
+      in  A: !firrtl.domain of @ClockDomain,
+      in  B: !firrtl.domain of @ClockDomain
+    ) 
+
+    %inst2_a, %inst2_b, %inst2_A, %inst2_B = firrtl.instance inst2 @M2(
+      in  a: !firrtl.uint<1> domains [A],
+      out b: !firrtl.uint<1> domains [B],
+      in  A: !firrtl.domain of @ClockDomain,
+      in  B: !firrtl.domain of @ClockDomain
+    ) 
+
+    // unreported domain crossing here: we skip checking this module because
+    // the child modules M1 and M2 have already reported errors.
+    firrtl.matchingconnect %b, %a : !firrtl.uint<1>
+  }
+}
