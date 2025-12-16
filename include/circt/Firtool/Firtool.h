@@ -173,8 +173,6 @@ public:
 
   bool shouldInlineInputOnlyModules() const { return inlineInputOnlyModules; }
 
-  bool shouldInlineInputOnlyModules() const { return inlineInputOnlyModules; }
-
   DomainMode getDomainMode() const { return domainMode; }
 
   // Setters, used by the CAPI
@@ -431,7 +429,7 @@ public:
     return *this;
   }
 
-  FirtoolOptions &setdomainMode(DomainMode value) {
+  FirtoolOptions &setDomainMode(DomainMode value) {
     domainMode = value;
     return *this;
   }
