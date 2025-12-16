@@ -124,6 +124,7 @@ set(ESICppRuntimeSources
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Design.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Engines.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Logging.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/SimplerManifest.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Manifest.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Services.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/Ports.cpp
@@ -266,7 +267,29 @@ target_link_libraries(esitester PRIVATE
 )
 add_dependencies(ESIRuntime esitester)
 
-# Add the Python bindings.
+##===----------------------------------------------------------------------===//
+## simpler_manifest_test tool is a test driver for the SimplerManifest class.
+##===----------------------------------------------------------------------===//
+
+add_executable(simpler_manifest_test
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/tools/simpler_manifest_test.cpp
+)
+target_link_libraries(simpler_manifest_test PRIVATE
+  ESICppRuntime
+  CosimBackend
+  CLI11::CLI11
+  nlohmann_json::nlohmann_json
+)
+add_dependencies(ESIRuntime simpler_manifest_test)
+install(TARGETS simpler_manifest_test
+  DESTINATION ${ESIRT_INSTALL_BINDIR}
+  COMPONENT ESIRuntime
+)
+
+##===----------------------------------------------------------------------===//
+## Python bindings.
+##===----------------------------------------------------------------------===//
+
 add_subdirectory(python)
 
 ##===----------------------------------------------------------------------===//

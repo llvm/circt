@@ -62,6 +62,9 @@ public:
   /// Get the context.
   Context &getContext() { return *ctxt; }
 
+  const std::string &getBackend() const { return backend; }
+  const std::string &getConnectionString() const { return connStr; }
+
 protected:
   std::unique_ptr<Context> ctxt;
 

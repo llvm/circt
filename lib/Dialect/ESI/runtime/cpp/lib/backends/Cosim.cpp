@@ -692,13 +692,13 @@ CosimEngine::createPort(AppIDPath idPath, const std::string &channelName,
                              channelName + "' in cosimulation");
 
   std::unique_ptr<ChannelPort> port;
-  std::string fullChannelName = idPath.toStr() + "." + channelName;
+  std::string cosimChannelName = cosimChannelNameIter->second;
   if (BundlePort::isWrite(dir))
     port = std::make_unique<WriteCosimChannelPort>(
-        conn, conn.rpcClient->stub.get(), chDesc, type, fullChannelName);
+        conn, conn.rpcClient->stub.get(), chDesc, type, cosimChannelName);
   else
     port = std::make_unique<ReadCosimChannelPort>(
-        conn, conn.rpcClient->stub.get(), chDesc, type, fullChannelName);
+        conn, conn.rpcClient->stub.get(), chDesc, type, cosimChannelName);
   return port;
 }
 
