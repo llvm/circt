@@ -729,7 +729,7 @@ Valuation floyd(const std::vector<Constraint1> &constraints,
   LLVM_DEBUG({llvm::dbgs() << "numberin:\n";
   for (const auto &[var, index] : var_to_index)
     llvm::dbgs() << var << " : " << index << "\n";
-  })
+  });
 
   int n = var_to_index.size();
   std::vector<std::vector<int>> graph(n, std::vector<int>(n, INF));
@@ -810,7 +810,7 @@ Valuation floyd(const std::vector<Constraint1> &constraints,
   LLVM_DEBUG({llvm::dbgs() << "floyd result:\n";
   for (const auto &[var, value] : valuation)
     llvm::dbgs() << var_to_index[var] << " : " << value << "\n";
-  })
+  });
 
   return valuation;
 }
@@ -823,7 +823,7 @@ LogicalResult ConstraintSolver::solve() {
     for (Node *node : node_list)
       lvm::dbgs() << node->field << "; ";
     llvm::dbgs() << "\n";
-    })
+    });
 
     std::vector<FieldRef> component = extractFieldRefs(node_list);
     if (component.empty()) {
