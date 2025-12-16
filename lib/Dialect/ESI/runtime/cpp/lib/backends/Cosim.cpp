@@ -219,12 +219,10 @@ CosimAccelerator::CosimAccelerator(Context &ctxt, std::string hostname,
                                    uint16_t port)
     : AcceleratorConnection(ctxt) {
   // Connect to the simulation.
-  rpcClient = new RpcClient(hostname, port);
+  rpcClient = std::make_unique<RpcClient>(hostname, port);
 }
 CosimAccelerator::~CosimAccelerator() {
   disconnect();
-  if (rpcClient)
-    delete rpcClient;
   channels.clear();
 }
 
@@ -612,13 +610,13 @@ Service *CosimAccelerator::createService(Service::Type svcType,
                                          const ServiceImplDetails &details,
                                          const HWClientDetails &clients) {
   if (svcType == typeid(services::MMIO)) {
-    return new CosimMMIO(*this, getCtxt(), idPath, rpcClient, clients);
+    return new CosimMMIO(*this, getCtxt(), idPath, rpcClient.get(), clients);
   } else if (svcType == typeid(services::HostMem)) {
-    return new CosimHostMem(*this, getCtxt(), rpcClient);
+    return new CosimHostMem(*this, getCtxt(), rpcClient.get());
   } else if (svcType == typeid(SysInfo)) {
     switch (manifestMethod) {
     case ManifestMethod::Cosim:
-      return new CosimSysInfo(*this, rpcClient);
+      return new CosimSysInfo(*this, rpcClient.get());
     case ManifestMethod::MMIO:
       return new MMIOSysInfo(getService<services::MMIO>());
     }

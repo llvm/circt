@@ -62,7 +62,7 @@ protected:
                                  const HWClientDetails &clients) override;
 
 private:
-  RpcClient *rpcClient;
+  std::unique_ptr<RpcClient> rpcClient;
 
   // We own all channels connected to rpcClient since their lifetime is tied to
   // rpcClient.
