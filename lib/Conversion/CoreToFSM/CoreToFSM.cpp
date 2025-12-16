@@ -54,14 +54,20 @@ static void generateConcatenatedValues(
     const llvm::SmallVector<unsigned> &shifts,
     llvm::DenseSet<size_t> &finalPossibleValues);
 
-static void addPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
+/// Internal helper with visited set to detect cycles.
+static void addPossibleValuesImpl(llvm::DenseSet<size_t> &possibleValues,
+                                  Value v, llvm::DenseSet<Value> &visited) {
+  // Detect cycles - if we've seen this value before, skip it.
+  if (!visited.insert(v).second)
+    return;
+
   if (auto c = dyn_cast_or_null<hw::ConstantOp>(v.getDefiningOp())) {
     possibleValues.insert(c.getValueAttr().getValue().getZExtValue());
     return;
   }
   if (auto m = dyn_cast_or_null<MuxOp>(v.getDefiningOp())) {
-    addPossibleValues(possibleValues, m.getTrueValue());
-    addPossibleValues(possibleValues, m.getFalseValue());
+    addPossibleValuesImpl(possibleValues, m.getTrueValue(), visited);
+    addPossibleValuesImpl(possibleValues, m.getFalseValue(), visited);
     return;
   }
 
@@ -71,7 +77,7 @@ static void addPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
 
     for (Value operand : concatOp.getOperands()) {
       llvm::DenseSet<size_t> operandPossibleValues;
-      addPossibleValues(operandPossibleValues, operand);
+      addPossibleValuesImpl(operandPossibleValues, operand, visited);
 
       // It's crucial to handle the case where a sub-computation is too complex.
       // If we can't determine specific values for an operand, we must
@@ -122,9 +128,10 @@ static void addPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
   unsigned bitWidth = addrType.getWidth();
   // Again, use a threshold to avoid trying to enumerate 2^64 values.
   if (bitWidth > 16) {
-    v.getDefiningOp()->emitWarning()
-        << "Bitwidth " << bitWidth
-        << " too large (>16); abandoning analysis for this path";
+    if (v.getDefiningOp())
+      v.getDefiningOp()->emitWarning()
+          << "Bitwidth " << bitWidth
+          << " too large (>16); abandoning analysis for this path";
     return;
   }
 
@@ -132,20 +139,44 @@ static void addPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
   for (size_t i = 0; i < numRegStates; i++) {
     possibleValues.insert(i);
   }
-  return;
-};
+}
+
+static void addPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
+  llvm::DenseSet<Value> visited;
+  addPossibleValuesImpl(possibleValues, v, visited);
+}
 
 /// Checks if a value is a constant or a tree of muxes with constant leaves.
+/// Uses an iterative approach with a visited set to handle cycles.
 static bool isConstantLike(mlir::Value value) {
-  Operation *definingOp = value.getDefiningOp();
-  if (!definingOp)
+  llvm::SmallVector<mlir::Value> worklist;
+  llvm::DenseSet<mlir::Value> visited;
+
+  worklist.push_back(value);
+  while (!worklist.empty()) {
+    mlir::Value current = worklist.pop_back_val();
+
+    // Skip if already visited (handles cycles).
+    if (!visited.insert(current).second)
+      continue;
+
+    Operation *definingOp = current.getDefiningOp();
+    if (!definingOp)
+      return false;
+
+    if (isa<hw::ConstantOp>(definingOp))
+      continue;
+
+    if (auto muxOp = dyn_cast<MuxOp>(definingOp)) {
+      worklist.push_back(muxOp.getTrueValue());
+      worklist.push_back(muxOp.getFalseValue());
+      continue;
+    }
+
+    // Not a constant or mux - not constant-like.
     return false;
-  if (isa<hw::ConstantOp>(definingOp))
-    return true;
-  if (auto muxOp = dyn_cast<MuxOp>(definingOp))
-    return isConstantLike(muxOp.getTrueValue()) &&
-           isConstantLike(muxOp.getFalseValue());
-  return false;
+  }
+  return true;
 }
 
 LogicalResult pushIcmp(ICmpOp op, PatternRewriter &rewriter) {
