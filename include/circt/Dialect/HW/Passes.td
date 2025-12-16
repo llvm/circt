@@ -48,7 +48,26 @@ def FlattenModules : Pass<"hw-flatten-modules", "mlir::ModuleOp"> {
     degenerate into a purely cosmetic construct, at which point it is beneficial
     to fully flatten the module hierarchy to simplify further analysis and
     optimization of state transfer arcs.
+
+    By default, all private modules are inlined. The pass supports heuristics to
+    control which modules are inlined based on their characteristics.
   }];
+  let options = [
+    Option<"inlineEmpty", "hw-inline-empty", "bool", "true",
+           "Inline modules that are empty (only contain hw.output)">,
+    Option<"inlineNoOutputs", "hw-inline-no-outputs", "bool", "true",
+           "Inline modules that have no output ports">,
+    Option<"inlineSingleUse", "hw-inline-single-use", "bool", "true",
+           "Inline modules that have only one use">,
+    Option<"inlineSmall", "hw-inline-small", "bool", "true",
+           "Inline modules that are small (fewer than smallThreshold operations)">,
+    Option<"smallThreshold", "hw-small-threshold", "unsigned", "8",
+           "Maximum number of operations for a module to be considered small">,
+    Option<"inlineWithState", "hw-inline-with-state", "bool", "false",
+           "Allow inlining of modules that contain state (seq.firreg operations)">,
+    Option<"inlineAll", "hw-inline-all", "bool", "true",
+           "Inline all private modules regardless of heuristics (default behavior)">
+  ];
 }
 
 def HWSpecialize : Pass<"hw-specialize", "mlir::ModuleOp"> {
@@ -98,6 +117,43 @@ def HWVectorization : Pass<"hw-vectorization", "hw::HWModuleOp"> {
    This pass performs structural vectorization of hardware modules,
     merging scalar bit-level assignments into vectorized operations.
   }];
+}
+
+def HWParameterizeConstantPorts : Pass<"hw-parameterize-constant-ports",
+                                       "mlir::ModuleOp"> {
+  let summary = "Parametize constant ports on private modules";
+  let description = [{
+    This pass converts input ports on private modules into parameters when all
+    instances pass constant values (or parameter values) to those ports.
+
+    By converting constant ports to parameters, synthesis pipelines can
+    recognize these values as compile-time constants through local analysis
+    alone, without requiring inter-module analysis. This enables more precise
+    timing information and better optimization of each instance independently,
+    since the constant values are immediately visible at the module interface.
+  }];
+}
+
+def HWBypassInnerSymbols : Pass<"hw-bypass-inner-symbols", "hw::HWModuleOp"> {
+  let summary = "Pass through values through inner symbols";
+  let description = [{
+    This pass moves inner symbols from ports to wires, then bypasses wire
+    operations with inner symbols by replacing uses with their inputs while
+    keeping the wire to preserve the symbol. This enables optimizations to
+    cross symbol boundaries while maintaining symbol references.
+
+    Warning: This transformation assumes that values associated with inner
+    symbols are not mutated through inner symbols (e.g. force). This assumption
+    may not hold in simulation, but is safe in synthesis. This pass treats
+    inner symbols differently from the optimization-blocking semantics that
+    other parts of CIRCT use, so it is opt-in and should only be used when
+    the above assumptions hold.
+  }];
+
+  let statistics = [
+    Statistic<"numPortsMoved", "num-ports-moved",
+              "Number of inner symbols moved from ports to wires">
+  ];
 }
 
 #endif // CIRCT_DIALECT_HW_PASSES_TD

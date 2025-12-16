@@ -37,8 +37,7 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotations(
       {/*ignoreAnnotationClassless=*/opt.shouldDisableClasslessAnnotations(),
        /*ignoreAnnotationUnknown=*/opt.shouldDisableUnknownAnnotations(),
-       /*noRefTypePorts=*/opt.shouldLowerNoRefTypePortAnnotations(),
-       /*allowAddingPortsOnPublic=*/opt.shouldAllowAddingPortsOnPublic()}));
+       /*noRefTypePorts=*/opt.shouldLowerNoRefTypePortAnnotations()}));
 
   if (opt.shouldEnableDebugInfo())
     pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
@@ -205,6 +204,13 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
     pm.addPass(firrtl::createIMDeadCodeElim());
+    if (opt.shouldInlineInputOnlyModules()) {
+      pm.nest<firrtl::CircuitOp>().addPass(
+          firrtl::createAnnotateInputOnlyModules());
+      pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInliner());
+      pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+          createSimpleCanonicalizerPass());
+    }
   }
 
   // Always run this, required for legalization.
@@ -261,7 +267,8 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   // Run this after output directories are (otherwise) assigned,
   // so generated interfaces can be appropriately marked.
   pm.addNestedPass<firrtl::CircuitOp>(
-      firrtl::createGrandCentral({/*companionMode=*/opt.getCompanionMode()}));
+      firrtl::createGrandCentral({/*companionMode=*/opt.getCompanionMode(),
+                                  /*noViews*/ opt.getNoViews()}));
 
   // Read black box source files into the IR.
   StringRef blackBoxRoot = opt.getBlackBoxRootPath().empty()
@@ -309,7 +316,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
 LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
                                       const FirtoolOptions &opt) {
   pm.nestAny().addPass(verif::createStripContractsPass());
-  pm.addPass(verif::createLowerFormalToHWPass());
+  pm.addPass(verif::createLowerTestsPass());
   pm.addPass(
       verif::createLowerSymbolicValuesPass({opt.getSymbolicValueLowering()}));
 
@@ -482,11 +489,6 @@ struct FirtoolCmdOptions {
           "wiring problems inside the LowerAnnotations pass"),
       llvm::cl::init(false), llvm::cl::Hidden};
 
-  llvm::cl::opt<bool> allowAddingPortsOnPublic{
-      "allow-adding-ports-on-public-modules",
-      llvm::cl::desc("Allow adding ports to public modules"),
-      llvm::cl::init(false), llvm::cl::Hidden};
-
   llvm::cl::opt<bool> probesToSignals{
       "probes-to-signals",
       llvm::cl::desc("Convert probes to non-probe signals"),
@@ -573,6 +575,13 @@ struct FirtoolCmdOptions {
                      "Remove companions from the design")),
       llvm::cl::init(firrtl::CompanionMode::Bind),
       llvm::cl::Hidden,
+  };
+
+  llvm::cl::opt<bool> noViews{
+      "no-views",
+      llvm::cl::desc(
+          "Disable lowering of FIRRTL view intrinsics (delete them instead)"),
+      llvm::cl::init(false),
   };
 
   llvm::cl::opt<bool> disableAggressiveMergeConnections{
@@ -758,6 +767,10 @@ struct FirtoolCmdOptions {
       llvm::cl::desc("Emit bindfiles for private modules"),
       llvm::cl::init(false)};
 
+  llvm::cl::opt<bool> inlineInputOnlyModules{
+      "inline-input-only-modules", llvm::cl::desc("Inline input-only modules"),
+      llvm::cl::init(false)};
+
   //===----------------------------------------------------------------------===
   // Lint options
   //===----------------------------------------------------------------------===
@@ -787,15 +800,15 @@ void circt::firtool::registerFirtoolCLOptions() {
 circt::firtool::FirtoolOptions::FirtoolOptions()
     : outputFilename("-"), disableAnnotationsUnknown(false),
       disableAnnotationsClassless(false), lowerAnnotationsNoRefTypePorts(false),
-      allowAddingPortsOnPublic(false), probesToSignals(false),
+      probesToSignals(false),
       preserveAggregate(firrtl::PreserveAggregate::None),
       preserveMode(firrtl::PreserveValues::None), enableDebugInfo(false),
       buildMode(BuildModeRelease), disableLayerSink(false),
       disableOptimization(false), vbToBV(false), noDedup(false),
       dedupClasses(true), companionMode(firrtl::CompanionMode::Bind),
-      disableAggressiveMergeConnections(false), lowerMemories(false),
-      blackBoxRootPath(""), replSeqMem(false), replSeqMemFile(""),
-      extractTestCode(false), ignoreReadEnableMem(false),
+      noViews(false), disableAggressiveMergeConnections(false),
+      lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
+      replSeqMemFile(""), extractTestCode(false), ignoreReadEnableMem(false),
       disableRandom(RandomKind::None), outputAnnotationFilename(""),
       enableAnnotationWarning(false), addMuxPragmas(false),
       verificationFlavor(firrtl::VerificationFlavor::None),
@@ -809,14 +822,14 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       disableCSEinClasses(false), selectDefaultInstanceChoice(false),
       symbolicValueLowering(verif::SymbolicValueLowering::ExtModule),
       disableWireElimination(false), lintStaticAsserts(true),
-      lintXmrsInDesign(true), emitAllBindFiles(false) {
+      lintXmrsInDesign(true), emitAllBindFiles(false),
+      inlineInputOnlyModules(false) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
   disableAnnotationsUnknown = clOptions->disableAnnotationsUnknown;
   disableAnnotationsClassless = clOptions->disableAnnotationsClassless;
   lowerAnnotationsNoRefTypePorts = clOptions->lowerAnnotationsNoRefTypePorts;
-  allowAddingPortsOnPublic = clOptions->allowAddingPortsOnPublic;
   probesToSignals = clOptions->probesToSignals;
   preserveAggregate = clOptions->preserveAggregate;
   preserveMode = clOptions->preserveMode;
@@ -828,6 +841,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   noDedup = clOptions->noDedup;
   dedupClasses = clOptions->dedupClasses;
   companionMode = clOptions->companionMode;
+  noViews = clOptions->noViews;
   disableAggressiveMergeConnections =
       clOptions->disableAggressiveMergeConnections;
   lowerMemories = clOptions->lowerMemories;
@@ -862,4 +876,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   lintStaticAsserts = clOptions->lintStaticAsserts;
   lintXmrsInDesign = clOptions->lintXmrsInDesign;
   emitAllBindFiles = clOptions->emitAllBindFiles;
+  inlineInputOnlyModules = clOptions->inlineInputOnlyModules;
 }

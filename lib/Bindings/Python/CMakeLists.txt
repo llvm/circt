@@ -14,11 +14,13 @@ set(LLVM_OPTIONAL_SOURCES
 )
 
 set(PYTHON_BINDINGS_SOURCES
+  ArcModule.cpp
   CIRCTModule.cpp
   ESIModule.cpp
   HWModule.cpp
   MSFTModule.cpp
   OMModule.cpp
+  PipelineModule.cpp
   RTGModule.cpp
   SeqModule.cpp
   SupportModule.cpp
@@ -37,6 +39,7 @@ set(PYTHON_BINDINGS_LINK_LIBS
   CIRCTCAPIDebug
   CIRCTCAPIEmit
   CIRCTCAPIESI
+  CIRCTCAPIExportLLVM
   CIRCTCAPIExportVerilog
   CIRCTCAPIFSM
   CIRCTCAPIHandshake
@@ -49,15 +52,18 @@ set(PYTHON_BINDINGS_LINK_LIBS
   CIRCTCAPIPipeline
   CIRCTCAPIRTG
   CIRCTCAPISeq
+  CIRCTCAPISim
   CIRCTCAPISV
   CIRCTCAPISupport
   CIRCTCAPIVerif
   CIRCTCAPITransforms
   CIRCTCAPISynth
   MLIRCAPIIndex
+  MLIRCAPILLVM
   MLIRCAPISMT
   MLIRCAPIExportSMTLIB
   MLIRCAPISCF
+  MLIRCAPITarget
   # needed for mlirFrozenRewritePatternSetDestroy
   # but not the actual passes
   MLIRCAPITransforms
@@ -112,6 +118,14 @@ file(MAKE_DIRECTORY ${CIRCT_BINARY_DIR}/lib/Bindings/Python/circt/dialects)
 
 declare_mlir_python_sources(CIRCTBindingsPythonSources.Dialects
   ADD_TO_PARENT CIRCTBindingsPythonSources)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/ArcOps.td
+  SOURCES
+    dialects/arc.py
+  DIALECT_NAME arc)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
@@ -201,6 +215,14 @@ declare_mlir_dialect_python_bindings(
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/PipelineOps.td
+  SOURCES
+    dialects/pipeline.py
+  DIALECT_NAME pipeline)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   TD_FILE dialects/RTGOps.td
   SOURCES
     dialects/rtg.py
@@ -259,6 +281,14 @@ declare_mlir_dialect_python_bindings(
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/SimOps.td
+  SOURCES
+    dialects/sim.py
+  DIALECT_NAME sim)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   TD_FILE dialects/VerifOps.td
   SOURCES
     dialects/verif.py
@@ -301,6 +331,7 @@ add_mlir_python_modules(CIRCTPythonModules
   INSTALL_PREFIX "python_packages/circt_core/circt"
   DECLARED_SOURCES
     MLIRPythonSources.Core
+    MLIRPythonSources.Dialects.llvm
     MLIRPythonSources.Dialects.smt
     CIRCTBindingsPythonExtension
     CIRCTBindingsPythonSources

@@ -39,8 +39,6 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
       "Ignore unknown annotations.">,
     Option<"noRefTypePorts", "no-ref-type-ports", "bool", "false",
       "Create normal ports, not ref type ports.">,
-    Option<"allowAddingPortsOnPublic", "allow-adding-ports-on-public-modules", "bool", "false",
-      "Allow public modules to gain additional ports as a result of wiring.">,
   ];
   let dependentDialects = ["hw::HWDialect"];
   let statistics = [
@@ -54,8 +52,6 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
       "Number of unhandled annotations">,
     Statistic<"numReusedHierPathOps", "num-reused-hierpath",
       "Number of reused HierPathOp's">,
-    Statistic<"numPublicPortsWired", "num-public-ports-wired",
-      "Number of ports on public modules added due to wiring">,
   ];
 }
 
@@ -458,7 +454,8 @@ def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
                 "Instantiate companions in the design"),
               clEnumValN(CompanionMode::Drop, "drop",
                 "Remove companions from the design"))
-           }]>
+           }]>,
+    Option<"noViews", "no-views", "bool", "false", "Delete FIRRTL view intrinsics">,
   ];
   let statistics = [
     Statistic<"numViews", "num-views-created",
@@ -920,5 +917,22 @@ def LowerDomains : Pass<"firrtl-lower-domains", "firrtl::CircuitOp"> {
       "Number of domains lowered">
   ];
 }
+
+def AnnotateInputOnlyModules : Pass<"firrtl-annotate-input-only-modules",
+                                    "firrtl::CircuitOp"> {
+  let summary = "Annotate input-only modules with InlineAnnotation";
+  let description = [{
+    This pass identifies modules that have only input ports (no output or inout
+    ports) and annotates them with `firrtl.passes.InlineAnnotation`. These
+    modules don't produce any hardware outputs.
+
+    Inlining these modules is necessary because some synthesis tools treat
+    modules without outputs as blackboxes, which can cause synthesis errors.
+  }];
+  let statistics = [
+    Statistic<"numAnnotated", "num-annotated", "Number of modules annotated">
+  ];
+}
+
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

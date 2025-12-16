@@ -91,6 +91,9 @@ The current set of "tool capability" Lowering Options is:
    like `assert`, `assume`, and `cover` will always be emitted with a label. If
    the statement has no label in the IR, a generic one will be created. Some EDA
    tools require verification statements to be labeled.
+ * `disallowDeclAssignments` (default=`false`). If true, always emit assignments
+   (both continuous and blocking) separately rather than inlining them in net and
+   variable declarations.
 
 The current set of "style" Lowering Options is:
 

@@ -81,10 +81,10 @@ public:
   }
 
   // Dump a textual representation of this type to the provided stream.
-  void dump(std::ostream &os);
+  void dump(std::ostream &os, bool oneLine = false) const;
 
   // Return a textual representation of this type.
-  std::string toString();
+  std::string toString(bool oneLine = false) const;
 
 protected:
   ID id;
@@ -272,6 +272,61 @@ private:
   // serialization/deserialization (to match SystemVerilog/Python ordering
   // expectations).
   bool reverse;
+};
+
+/// Windows represent a fixed-size sliding window over a stream of data.
+/// They define an "into" type (the data structure being windowed) and a
+/// "loweredType" (the hardware representation including control signals).
+class WindowType : public Type {
+public:
+  /// Field information describing a field within a frame.
+  struct Field {
+    std::string name;
+    uint64_t numItems = 0;       // 0 means not specified (use all items)
+    uint64_t bulkCountWidth = 0; // 0 means parallel encoding, >0 means serial
+  };
+
+  /// Frame information describing which fields are included in a particular
+  /// frame.
+  struct Frame {
+    std::string name;
+    std::vector<Field> fields;
+  };
+
+  WindowType(const ID &id, const std::string &name, const Type *intoType,
+             const Type *loweredType, const std::vector<Frame> &frames)
+      : Type(id), name(name), intoType(intoType), loweredType(loweredType),
+        frames(frames) {}
+
+  const std::string &getName() const { return name; }
+  const Type *getIntoType() const { return intoType; }
+  const Type *getLoweredType() const { return loweredType; }
+  const std::vector<Frame> &getFrames() const { return frames; }
+
+  std::ptrdiff_t getBitWidth() const override {
+    return loweredType->getBitWidth();
+  }
+
+private:
+  std::string name;
+  const Type *intoType;
+  const Type *loweredType;
+  std::vector<Frame> frames;
+};
+
+/// Lists represent variable-length sequences of elements of a single type.
+/// Unlike arrays which have a fixed size, lists can have any length.
+class ListType : public Type {
+public:
+  ListType(const ID &id, const Type *elementType)
+      : Type(id), elementType(elementType) {}
+
+  const Type *getElementType() const { return elementType; }
+
+  std::ptrdiff_t getBitWidth() const override { return -1; }
+
+private:
+  const Type *elementType;
 };
 
 } // namespace esi

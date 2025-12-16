@@ -50,6 +50,22 @@ with Context() as ctx:
   # CHECK: "field1"
   print(window_field_type.num_items)
   # CHECK: 5
+  print(window_field_type.bulk_count_width)
+  # CHECK: 0
+  print()
+
+  # Test WindowFieldType with bulk_count_width (bulk transfer mode)
+  bulk_field_name_attr = StringAttr.get("payload")
+  bulk_window_field_type = esi.WindowFieldType.get(bulk_field_name_attr,
+                                                   bulk_count_width=16)
+  print(bulk_window_field_type)
+  # CHECK: !esi.window.field<"payload" countWidth 16>
+  print(bulk_window_field_type.field_name)
+  # CHECK: "payload"
+  print(bulk_window_field_type.num_items)
+  # CHECK: 0
+  print(bulk_window_field_type.bulk_count_width)
+  # CHECK: 16
   print()
 
   # Test WindowFrameType

@@ -1378,10 +1378,10 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
     result.push_back(std::move(value));
   }
 
-  componentState.setDataField(memoryOp.getName(), result);
+  componentState.setDataField(memoryOp.instanceName(), result);
   std::string numType =
       memtype.getElementType().isInteger() ? "bitnum" : "ieee754_float";
-  componentState.setFormat(memoryOp.getName(), numType, isSigned,
+  componentState.setFormat(memoryOp.instanceName(), numType, isSigned,
                            elmTyBitWidth);
 
   return success();

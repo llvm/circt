@@ -21,7 +21,14 @@
 #include <algorithm>
 #include <iostream>
 #include <map>
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcovered-switch-default"
+#endif
 #include <nlohmann/json.hpp>
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 #include <stdexcept>
 #include <string>
 
@@ -118,13 +125,13 @@ void printPort(std::ostream &os, const BundlePort &port, std::string indent,
     return;
   os << indent << "  " << port.getID() << ":";
   if (auto svcPort = dynamic_cast<const services::ServicePort *>(&port))
-    if (auto svcPortStr = svcPort->toString()) {
+    if (auto svcPortStr = svcPort->toString(true)) {
       os << " " << *svcPortStr << std::endl;
       return;
     }
   os << std::endl;
   for (const auto &[name, chan] : port.getChannels())
-    os << indent << "    " << name << ": " << chan.getType()->getID()
+    os << indent << "    " << name << ": " << chan.getType()->toString(true)
        << std::endl;
 }
 

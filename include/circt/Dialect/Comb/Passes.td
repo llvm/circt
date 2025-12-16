@@ -55,4 +55,23 @@ def BalanceMux : Pass<"comb-balance-mux"> {
       "Minimum number of linear mux chains to trigger rebalancing">];
 }
 
+def AssumeTwoValued : Pass<"comb-assume-two-valued"> {
+  let summary = "Simplify under assumption of two-valued logic";
+  let description = [{
+    Performs simplifying transformations that are valid if all integer values
+    are always two-valued (i.e., all bits are either 1 or 0).
+  }];
+}
+
+
+def SimplifyTruthTable : Pass<"comb-simplify-tt"> {
+  let summary = "Simplify truth tables that depend on 1 or less inputs";
+  let description = [{
+    Simplifies truth tables that are constant or depend only on single input.
+    For truth tables that depend on no input, reduce them to hw.constant. For
+    truth tables that depend on single input, reduce to identity of input or
+    negation of input.
+  }];
+}
+
 #endif // CIRCT_DIALECT_COMB_PASSES_TD

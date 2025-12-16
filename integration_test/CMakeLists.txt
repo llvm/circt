@@ -10,6 +10,7 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   circt-rtl-sim
   circt-lec
   circt-bmc
+  circt-synth
   circt-test
   circt-test-runners
   firtool

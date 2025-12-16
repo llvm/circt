@@ -1134,7 +1134,7 @@ LogicalResult HWModuleOp::verify() {
   // Verify the number of block arguments.
   auto numInputs = type.getNumInputs();
   if (body->getNumArguments() != numInputs)
-    return emitOpError("entry block must have")
+    return emitOpError("entry block must have ")
            << numInputs << " arguments to match module signature";
 
   return success();
@@ -1833,7 +1833,9 @@ LogicalResult ArrayCreateOp::verify() {
 }
 
 OpFoldResult ArrayCreateOp::fold(FoldAdaptor adaptor) {
-  if (llvm::any_of(adaptor.getInputs(), [](Attribute attr) { return !attr; }))
+  if (llvm::any_of(adaptor.getInputs(), [](Attribute attr) {
+        return !isa_and_nonnull<IntegerAttr>(attr);
+      }))
     return {};
   return ArrayAttr::get(getContext(), adaptor.getInputs());
 }
@@ -2378,7 +2380,9 @@ OpFoldResult StructCreateOp::fold(FoldAdaptor adaptor) {
       return explodeOp.getInput();
 
   auto inputs = adaptor.getInput();
-  if (llvm::any_of(inputs, [](Attribute attr) { return !attr; }))
+  if (llvm::any_of(inputs, [](Attribute attr) {
+        return !isa_and_nonnull<IntegerAttr>(attr);
+      }))
     return {};
   return ArrayAttr::get(getContext(), inputs);
 }

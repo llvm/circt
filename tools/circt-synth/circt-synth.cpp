@@ -23,7 +23,6 @@
 #include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
-#include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Synth/Analysis/LongestPathAnalysis.h"
@@ -69,7 +68,7 @@ static cl::OptionCategory mainCategory("circt-synth Options");
 enum InputFormatKind { InputUnspecified, InputAIGERFile, InputMLIRFile };
 
 static cl::opt<InputFormatKind> inputFormat(
-    "input-format", cl::desc("Specify the input file format"),
+    "format", cl::desc("Specify the input file format"),
     cl::values(clEnumValN(InputUnspecified, "unspecified",
                           "Unspecified input format"),
                clEnumValN(InputAIGERFile, "aiger", "AIGER input format"),
@@ -222,11 +221,6 @@ nestOrAddToHierarchicalRunner(OpPassManager &pm,
 
 // Add a default synthesis pipeline and analysis.
 static void populateCIRCTSynthPipeline(PassManager &pm) {
-  // ExtractTestCode is used to move verification code from design to
-  // remove registers/logic used only for verification.
-  pm.addPass(sv::createSVExtractTestCodePass(
-      /*disableInstanceExtraction=*/false, /*disableRegisterExtraction=*/false,
-      /*disableModuleInlining=*/false));
   auto pipeline = [](OpPassManager &pm) {
     circt::synth::CombLoweringPipelineOptions loweringOptions;
     loweringOptions.disableDatapath = disableDatapath;

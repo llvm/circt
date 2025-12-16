@@ -1066,8 +1066,7 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
 
   // Use the defname for external modules.
   if (auto externMod = dyn_cast<FExtModuleOp>(moduleLike.getOperation()))
-    if (auto defname = externMod.getDefname())
-      className = defname.value();
+    className = externMod.getExtModuleName();
 
   // If the op is a Module or ExtModule, the OM Class would conflict with the HW
   // Module, so give it a suffix. There is no formal ABI for this yet.
@@ -1410,8 +1409,7 @@ updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
 
   // Use the defname for external modules.
   if (auto externMod = dyn_cast<FExtModuleOp>(referencedModule.getOperation()))
-    if (auto defname = externMod.getDefname())
-      moduleName = defname.value();
+    moduleName = externMod.getExtModuleName();
 
   // Convert the FIRRTL Module name to an OM Class type.
   auto className = FlatSymbolRefAttr::get(

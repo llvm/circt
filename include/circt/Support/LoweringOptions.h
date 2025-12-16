@@ -176,6 +176,10 @@ struct LoweringOptions {
   // block. The same transformation is applied to `assume property` and `cover
   // property`.
   bool disallowClockedAssertions = false;
+
+  // If true, always emit assignments (both continuous and blocking) separately
+  // rather than inlining them in net and variable declarations
+  bool disallowDeclAssignments = false;
 };
 } // namespace circt
 

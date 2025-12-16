@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/backends/RpcServer.h"
+#include "esi/Context.h"
 #include "esi/Utils.h"
 
 #include "cosim.grpc.pb.h"
@@ -49,8 +50,10 @@ class RpcServerWritePort;
 class esi::cosim::RpcServer::Impl
     : public esi::cosim::ChannelServer::CallbackService {
 public:
-  Impl(int port);
+  Impl(Context &ctxt, int port);
   ~Impl();
+
+  Context &getContext() { return ctxt; }
 
   //===--------------------------------------------------------------------===//
   // Internal API
@@ -69,6 +72,8 @@ public:
 
   void stop();
 
+  int getPort() { return port; }
+
   //===--------------------------------------------------------------------===//
   // RPC API implementations. See the .proto file for the API documentation.
   //===--------------------------------------------------------------------===//
@@ -86,11 +91,12 @@ public:
                                    esi::cosim::VoidMessage *response) override;
 
 private:
+  Context &ctxt;
   int esiVersion;
   std::vector<uint8_t> compressedManifest;
   std::map<std::string, std::unique_ptr<RpcServerReadPort>> readPorts;
   std::map<std::string, std::unique_ptr<RpcServerWritePort>> writePorts;
-
+  int port = -1;
   std::unique_ptr<Server> server;
 };
 using Impl = esi::cosim::RpcServer::Impl;
@@ -123,13 +129,15 @@ public:
 class RpcServerWritePort : public WriteChannelPort {
 public:
   RpcServerWritePort(Type *type) : WriteChannelPort(type) {}
-  void write(const MessageData &data) override { writeQueue.push(data); }
-  bool tryWrite(const MessageData &data) override {
+
+  utils::TSQueue<MessageData> writeQueue;
+
+protected:
+  void writeImpl(const MessageData &data) override { writeQueue.push(data); }
+  bool tryWriteImpl(const MessageData &data) override {
     writeQueue.push(data);
     return true;
   }
-
-  utils::TSQueue<MessageData> writeQueue;
 };
 } // namespace
 
@@ -138,7 +146,7 @@ public:
 //===----------------------------------------------------------------------===//
 
 /// Start a server on the given port. -1 means to let the OS pick a port.
-Impl::Impl(int port) : esiVersion(-1) {
+Impl::Impl(Context &ctxt, int port) : ctxt(ctxt), esiVersion(-1) {
   grpc::ServerBuilder builder;
   std::string server_address("127.0.0.1:" + std::to_string(port));
   // TODO: use secure credentials. Not so bad for now since we only accept
@@ -150,7 +158,9 @@ Impl::Impl(int port) : esiVersion(-1) {
   if (!server)
     throw std::runtime_error("Failed to start server on " + server_address);
   writePort(port);
-  std::cout << "Server listening on 127.0.0.1:" << port << std::endl;
+  this->port = port;
+  ctxt.getLogger().info("cosim", "Server listening on 127.0.0.1:" +
+                                     std::to_string(port));
 }
 
 void Impl::stop() {
@@ -175,14 +185,12 @@ ReadChannelPort &Impl::registerReadPort(const std::string &name,
                                         const std::string &type) {
   auto port = new RpcServerReadPort(new Type(type));
   readPorts.emplace(name, port);
-  port->connect();
   return *port;
 }
 WriteChannelPort &Impl::registerWritePort(const std::string &name,
                                           const std::string &type) {
   auto port = new RpcServerWritePort(new Type(type));
   writePorts.emplace(name, port);
-  port->connect();
   return *port;
 }
 
@@ -317,7 +325,7 @@ void RpcServerWriteReactor::threadLoop() {
 ServerWriteReactor<esi::cosim::Message> *
 Impl::ConnectToClientChannel(CallbackServerContext *context,
                              const ChannelDesc *request) {
-  printf("connect to client channel\n");
+  getContext().getLogger().debug("cosim", "connect to client channel");
   auto it = writePorts.find(request->name());
   if (it == writePorts.end()) {
     auto reactor = new RpcServerWriteReactor(nullptr);
@@ -351,24 +359,41 @@ Impl::SendToServer(CallbackServerContext *context,
 //===----------------------------------------------------------------------===//
 // RpcServer pass throughs to the actual implementations above.
 //===----------------------------------------------------------------------===//
-RpcServer::~RpcServer() {
-  if (impl)
-    delete impl;
-}
+RpcServer::RpcServer(Context &ctxt) : ctxt(ctxt) {}
+RpcServer::~RpcServer() = default;
+
 void RpcServer::setManifest(int esiVersion,
                             const std::vector<uint8_t> &compressedManifest) {
+  if (!impl)
+    throw std::runtime_error("Server not running");
+
   impl->setManifest(esiVersion, compressedManifest);
 }
+
 ReadChannelPort &RpcServer::registerReadPort(const std::string &name,
                                              const std::string &type) {
+  if (!impl)
+    throw std::runtime_error("Server not running");
   return impl->registerReadPort(name, type);
 }
+
 WriteChannelPort &RpcServer::registerWritePort(const std::string &name,
                                                const std::string &type) {
   return impl->registerWritePort(name, type);
 }
-void RpcServer::run(int port) { impl = new Impl(port); }
+void RpcServer::run(int port) {
+  if (impl)
+    throw std::runtime_error("Server already running");
+  impl = std::make_unique<Impl>(ctxt, port);
+}
 void RpcServer::stop() {
-  assert(impl && "Server not running");
+  if (!impl)
+    throw std::runtime_error("Server not running");
   impl->stop();
+}
+
+int RpcServer::getPort() {
+  if (!impl)
+    throw std::runtime_error("Server not running");
+  return impl->getPort();
 }

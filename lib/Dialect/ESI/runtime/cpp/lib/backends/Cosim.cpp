@@ -181,15 +181,16 @@ public:
         name(name) {}
   ~WriteCosimChannelPort() = default;
 
-  void connectImpl(std::optional<unsigned> bufferSize) override {
+  void connectImpl(const ChannelPort::ConnectOptions &options) override {
     if (desc.dir() != ChannelDesc::Direction::ChannelDesc_Direction_TO_SERVER)
       throw std::runtime_error("Channel '" + name +
                                "' is not a to server channel");
     assert(desc.name() == name);
   }
 
+protected:
   /// Send a write message to the server.
-  void write(const MessageData &data) override {
+  void writeImpl(const MessageData &data) override {
     // Add trace logging before sending the message.
     conn.getLogger().trace(
         [this,
@@ -216,12 +217,11 @@ public:
                                ". Details: " + sendStatus.error_details());
   }
 
-  bool tryWrite(const MessageData &data) override {
-    write(data);
+  bool tryWriteImpl(const MessageData &data) override {
+    writeImpl(data);
     return true;
   }
 
-protected:
   AcceleratorConnection &conn;
   ChannelServer::Stub *rpcClient;
   /// The channel description as provided by the server.
@@ -245,7 +245,7 @@ public:
         name(name), context(nullptr) {}
   virtual ~ReadCosimChannelPort() { disconnect(); }
 
-  void connectImpl(std::optional<unsigned> bufferSize) override {
+  void connectImpl(const ChannelPort::ConnectOptions &options) override {
     // Sanity checking.
     if (desc.dir() != ChannelDesc::Direction::ChannelDesc_Direction_TO_CLIENT)
       throw std::runtime_error("Channel '" + name +
@@ -393,7 +393,7 @@ public:
 
   // Call the read function and wait for a response.
   uint64_t read(uint32_t addr) const override {
-    MMIOCmd cmd{.offset = addr, .write = false};
+    MMIOCmd cmd{.data = 0, .offset = addr, .write = false};
     auto arg = MessageData::from(cmd);
     std::future<MessageData> result = cmdMMIO->call(arg);
     result.wait();

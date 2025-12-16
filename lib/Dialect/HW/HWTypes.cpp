@@ -108,41 +108,19 @@ bool circt::hw::isHWValueType(Type type) {
 /// value of this type. Returns -1 if the type is not known or cannot be
 /// statically computed.
 int64_t circt::hw::getBitWidth(mlir::Type type) {
+  // Handle built-in types that don't implement the interface. Do this first
+  // since it is faster than downcasting to an interface.
   return llvm::TypeSwitch<::mlir::Type, int64_t>(type)
       .Case<IntegerType>(
           [](IntegerType t) { return t.getIntOrFloatBitWidth(); })
-      .Case<ArrayType, UnpackedArrayType>([](auto a) {
-        int64_t elementBitWidth = getBitWidth(a.getElementType());
-        if (elementBitWidth < 0)
-          return elementBitWidth;
-        int64_t dimBitWidth = a.getNumElements();
-        if (dimBitWidth < 0)
-          return static_cast<int64_t>(-1L);
-        return (int64_t)a.getNumElements() * elementBitWidth;
-      })
-      .Case<StructType>([](StructType s) {
-        int64_t total = 0;
-        for (auto field : s.getElements()) {
-          int64_t fieldSize = getBitWidth(field.type);
-          if (fieldSize < 0)
-            return fieldSize;
-          total += fieldSize;
+      .Default([](Type type) -> int64_t {
+        // If type implements the BitWidthTypeInterface, use it.
+        if (auto iface = dyn_cast<BitWidthTypeInterface>(type)) {
+          std::optional<int64_t> width = iface.getBitWidth();
+          return width.has_value() ? *width : -1;
         }
-        return total;
-      })
-      .Case<UnionType>([](UnionType u) {
-        int64_t maxSize = 0;
-        for (auto field : u.getElements()) {
-          int64_t fieldSize = getBitWidth(field.type) + field.offset;
-          if (fieldSize > maxSize)
-            maxSize = fieldSize;
-        }
-        return maxSize;
-      })
-      .Case<EnumType>([](EnumType e) { return e.getBitWidth(); })
-      .Case<TypeAliasType>(
-          [](TypeAliasType t) { return getBitWidth(t.getCanonicalType()); })
-      .Default([](Type) { return -1; });
+        return -1;
+      });
 }
 
 /// Return true if the specified type contains known marker types like
@@ -180,7 +158,7 @@ static ParseResult parseHWElementType(AsmParser &p, Type &result) {
   if (typeString.starts_with("array<") || typeString.starts_with("inout<") ||
       typeString.starts_with("uarray<") || typeString.starts_with("struct<") ||
       typeString.starts_with("typealias<") || typeString.starts_with("int<") ||
-      typeString.starts_with("enum<")) {
+      typeString.starts_with("enum<") || typeString.starts_with("union<")) {
     llvm::StringRef mnemonic;
     if (auto parseResult = generatedTypeParser(p, &mnemonic, result);
         parseResult.has_value())
@@ -423,6 +401,17 @@ Type hw::StructType::getTypeAtIndex(Attribute index) const {
   return getSubTypeByFieldID(indexAttr.getInt()).first;
 }
 
+std::optional<int64_t> StructType::getBitWidth() const {
+  int64_t total = 0;
+  for (auto field : getElements()) {
+    int64_t fieldSize = hw::getBitWidth(field.type);
+    if (fieldSize < 0)
+      return std::nullopt;
+    total += fieldSize;
+  }
+  return total;
+}
+
 //===----------------------------------------------------------------------===//
 // Union Type
 //===----------------------------------------------------------------------===//
@@ -525,6 +514,19 @@ Type UnionType::getFieldType(mlir::StringRef fieldName) {
   return getFieldInfo(fieldName).type;
 }
 
+std::optional<int64_t> UnionType::getBitWidth() const {
+  int64_t maxSize = 0;
+  for (auto field : getElements()) {
+    int64_t fieldSize = hw::getBitWidth(field.type);
+    if (fieldSize < 0)
+      return std::nullopt;
+    fieldSize += field.offset;
+    if (fieldSize > maxSize)
+      maxSize = fieldSize;
+  }
+  return maxSize;
+}
+
 //===----------------------------------------------------------------------===//
 // Enum Type
 //===----------------------------------------------------------------------===//
@@ -563,10 +565,10 @@ std::optional<size_t> EnumType::indexOf(mlir::StringRef field) {
   return {};
 }
 
-size_t EnumType::getBitWidth() {
+std::optional<int64_t> EnumType::getBitWidth() const {
   auto w = getFields().size();
   if (w > 1)
-    return llvm::Log2_64_Ceil(getFields().size());
+    return llvm::Log2_64_Ceil(w);
   return 1;
 }
 
@@ -670,6 +672,16 @@ Type hw::ArrayType::getTypeAtIndex(Attribute index) const {
   return getElementType();
 }
 
+std::optional<int64_t> hw::ArrayType::getBitWidth() const {
+  auto elementBitWidth = hw::getBitWidth(getElementType());
+  if (elementBitWidth < 0)
+    return std::nullopt;
+  int64_t numElements = getNumElements();
+  if (numElements < 0)
+    return std::nullopt;
+  return numElements * elementBitWidth;
+}
+
 //===----------------------------------------------------------------------===//
 // UnpackedArrayType
 //===----------------------------------------------------------------------===//
@@ -725,6 +737,16 @@ UnpackedArrayType::getIndexAndSubfieldID(uint64_t fieldID) const {
 
 uint64_t UnpackedArrayType::getFieldID(uint64_t index) const {
   return 1 + index * (hw::FieldIdImpl::getMaxFieldID(getElementType()) + 1);
+}
+
+std::optional<int64_t> UnpackedArrayType::getBitWidth() const {
+  auto elementBitWidth = hw::getBitWidth(getElementType());
+  if (elementBitWidth < 0)
+    return std::nullopt;
+  int64_t dimBitWidth = getNumElements();
+  if (dimBitWidth < 0)
+    return std::nullopt;
+  return (int64_t)getNumElements() * elementBitWidth;
 }
 
 //===----------------------------------------------------------------------===//
@@ -793,6 +815,13 @@ TypedeclOp TypeAliasType::getTypeDecl(const HWSymbolCache &cache) {
     return {};
 
   return typeScope.lookupSymbol<TypedeclOp>(ref.getLeafReference());
+}
+
+std::optional<int64_t> TypeAliasType::getBitWidth() const {
+  auto width = hw::getBitWidth(getCanonicalType());
+  if (width < 0)
+    return std::nullopt;
+  return width;
 }
 
 //===----------------------------------------------------------------------===//

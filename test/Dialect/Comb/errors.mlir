@@ -30,3 +30,17 @@ hw.module @err(in %a: i4, out out: i7) {
   %0 = "comb.concat"(%a, %a) : (i4, i4) -> i7
   hw.output %0 : i7
 }
+
+// -----
+
+hw.module @err() {
+  // expected-error @below {{number of operands and types do not match: got 0 operands and 1 types}}
+  comb.concat : i1
+}
+
+// -----
+
+hw.module @err(in %arg0: i1) {
+  // expected-error @below {{number of operands and types do not match: got 1 operands and 0 types}}
+  comb.concat %arg0 :
+}

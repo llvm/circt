@@ -208,9 +208,11 @@ bool circtESITypeIsAWindowFieldType(MlirType type) {
 }
 
 MlirType circtESIWindowFieldTypeGet(MlirContext cctxt, MlirAttribute fieldName,
-                                    uint64_t numItems) {
-  return wrap(WindowFieldType::get(
-      unwrap(cctxt), cast<StringAttr>(unwrap(fieldName)), numItems));
+                                    uint64_t numItems,
+                                    uint64_t bulkCountWidth) {
+  return wrap(WindowFieldType::get(unwrap(cctxt),
+                                   cast<StringAttr>(unwrap(fieldName)),
+                                   numItems, bulkCountWidth));
 }
 
 MlirAttribute circtESIWindowFieldTypeGetFieldName(MlirType field) {
@@ -219,6 +221,10 @@ MlirAttribute circtESIWindowFieldTypeGetFieldName(MlirType field) {
 
 uint64_t circtESIWindowFieldTypeGetNumItems(MlirType field) {
   return cast<WindowFieldType>(unwrap(field)).getNumItems();
+}
+
+uint64_t circtESIWindowFieldTypeGetBulkCountWidth(MlirType field) {
+  return cast<WindowFieldType>(unwrap(field)).getBulkCountWidth();
 }
 
 //===----------------------------------------------------------------------===//

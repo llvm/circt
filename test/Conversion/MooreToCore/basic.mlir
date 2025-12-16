@@ -345,6 +345,20 @@ func.func @ExtractRefArrayElement(%j: !moore.ref<array<1 x array<1 x l3>>>) -> (
   return %0 : !moore.ref<array<1 x l3>>
 }
 
+// CHECK-LABEL: DynExtractArrayElement
+func.func @DynExtractArrayElement(%j: !moore.array<2 x array<1 x l3>>, %idx: !moore.l1) -> (!moore.array<1 x l3>) {
+  // CHECK: hw.array_get
+  %0 = moore.dyn_extract %j from %idx : !moore.array<2 x array<1 x l3>>, !moore.l1 -> !moore.array<1 x l3>
+  return %0 : !moore.array<1 x l3>
+}
+
+// CHECK-LABEL: DynExtractRefArrayElement
+func.func @DynExtractRefArrayElement(%j: !moore.ref<array<2 x array<1 x l3>>>, %idx: !moore.l1) -> (!moore.ref<array<1 x l3>>) {
+  // CHECK: llhd.sig.array_get
+  %0 = moore.dyn_extract_ref %j from %idx : <array<2 x array<1 x l3>>>, !moore.l1 -> <array<1 x l3>>
+  return %0 : !moore.ref<array<1 x l3>>
+}
+
 // CHECK-LABEL: func @AdvancedConversion
 func.func @AdvancedConversion(%arg0: !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>) -> (!moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>, !moore.i320) {
   // CHECK: [[V0:%.+]] = hw.constant 3978585893941511189997889893581765703992223160870725712510875979948892565035285336817671 : i320
@@ -381,6 +395,8 @@ func.func @FormatStrings(%arg0: !moore.i42) {
   moore.fmt.int decimal %arg0, width 42, align right, pad space : i42
   // CHECK: sim.fmt.bin %arg0 : i42
   moore.fmt.int binary %arg0, width 42, align right, pad space : i42
+  // CHECK: sim.fmt.oct %arg0 : i42
+  moore.fmt.int octal %arg0, width 42, align right, pad space : i42
   // CHECK: sim.fmt.hex %arg0 : i42
   moore.fmt.int hex_lower %arg0, width 42, align right, pad space : i42
   // CHECK: sim.fmt.hex %arg0 : i42
@@ -1343,5 +1359,23 @@ func.func @ConstantReals() {
   moore.constant_real 1.234500e+00 : f32
   // CHECK: arith.constant 1.234500e+00 : f64
   moore.constant_real 1.234500e+00 : f64
+  return
+}
+
+// CHECK-LABEL: func.func @IntToRealLowering
+func.func @IntToRealLowering(%arg0: !moore.i32, %arg1: !moore.i42) {
+  // CHECK-NEXT: arith.sitofp {{%.*}} : i32 to f32
+  // CHECK-NEXT: arith.uitofp {{%.*}} : i42 to f64
+  %0 = moore.sint_to_real %arg0 : i32 -> f32
+  %1 = moore.uint_to_real %arg1 : i42 -> f64
+  return
+}
+
+// CHECK-LABEL: func.func @RealToIntLowering
+func.func @RealToIntLowering(%arg0: !moore.f32, %arg1: !moore.f64) {
+  // CHECK-NEXT: arith.fptosi %arg0 : f32 to i42
+  // CHECK-NEXT: arith.fptosi %arg1 : f64 to i42
+  %0 = moore.real_to_int %arg0 : f32 -> i42
+  %1 = moore.real_to_int %arg1 : f64 -> i42
   return
 }

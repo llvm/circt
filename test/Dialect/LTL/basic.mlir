@@ -73,6 +73,10 @@ ltl.repeat %s, 42, 1337 : !ltl.sequence
 // Properties
 //===----------------------------------------------------------------------===//
 
+// CHECK: ltl.boolean_constant true
+%bc = ltl.boolean_constant true
+unrealized_conversion_cast %bc : !ltl.property to index
+
 // CHECK: ltl.not {{%.+}} : i1
 // CHECK: ltl.not {{%.+}} : !ltl.sequence
 // CHECK: ltl.not {{%.+}} : !ltl.property

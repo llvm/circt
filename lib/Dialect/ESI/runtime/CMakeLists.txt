@@ -11,7 +11,7 @@
 ## themselves since it needs to be compiled for each Python version and OS then
 ## packed together. Eventually, we'll just be distributing (lots of) binaries.
 ##
-## We require Python development package and pybind11 to compile the Python API.
+## We require Python development package and nanobind to compile the Python API.
 ##
 ## ESI cosimulation requires Cap'nProto as we use it for our RPC with the
 ## simulator. It must be fetched separately, but is optional if you don't want

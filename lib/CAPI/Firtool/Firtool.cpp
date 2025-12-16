@@ -51,11 +51,6 @@ void circtFirtoolOptionsSetLowerAnnotationsNoRefTypePorts(
   unwrap(options)->setLowerAnnotationsNoRefTypePorts(value);
 }
 
-void circtFirtoolOptionsSetAllowAddingPortsOnPublic(
-    CirctFirtoolFirtoolOptions options, bool value) {
-  unwrap(options)->setAllowAddingPortsOnPublic(value);
-}
-
 void circtFirtoolOptionsSetPreserveAggregate(
     CirctFirtoolFirtoolOptions options,
     CirctFirtoolPreserveAggregateMode value) {
@@ -162,6 +157,11 @@ void circtFirtoolOptionsSetCompanionMode(CirctFirtoolFirtoolOptions options,
   }
 
   unwrap(options)->setCompanionMode(converted);
+}
+
+void circtFirtoolOptionsSetNoViews(CirctFirtoolFirtoolOptions options,
+                                   bool value) {
+  unwrap(options)->setNoViews(value);
 }
 
 void circtFirtoolOptionsSetDisableAggressiveMergeConnections(

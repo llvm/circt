@@ -235,8 +235,8 @@ def ResourceTypeOp : SSPOp<"resource_type",
 }
 
 def OperationOp : SSPOp<"operation",
-    [Symbol, HasParent<"DependenceGraphOp">,
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+    [HasParent<"DependenceGraphOp">,
+     DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Vertex and incoming edges in the dependence graph.";
   let description = [{
     This MLIR operation represents an operation (in the terminology of CIRCT's

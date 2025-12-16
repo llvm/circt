@@ -314,3 +314,11 @@ size_t synthLongestPathObjectBitPos(SynthLongestPathObject rawObject) {
     return object->bitPos;
   return std::get<2>(*dyn_cast<DataflowPath::OutputPort *>(ptr));
 }
+
+MlirValue synthLongestPathObjectGetValue(SynthLongestPathObject rawObject) {
+  auto ptr = unwrap(rawObject);
+  if (auto *object = dyn_cast<Object *>(ptr))
+    return wrap(object->value);
+  // Output ports don't have an associated value
+  return {nullptr};
+}

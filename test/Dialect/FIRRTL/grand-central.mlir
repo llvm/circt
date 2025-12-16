@@ -1199,3 +1199,105 @@ firrtl.circuit "CompanionInTestharness" attributes {
 // CHECK-NOT: output_file
 //
 // CHECK:     firrtl.module public @DUT()
+
+// -----
+
+// Test optional bind file functionality with multiple modules - when no filename is provided,
+// per-module bind files should be generated for each module with companions
+firrtl.circuit "OptionalBindFile" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "GroundView",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          name = "foo",
+          id = 1 : i64
+        }
+      ],
+      id = 0 : i64,
+      name = "GroundView"
+    },
+    {
+      class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+      defName = "VectorView",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          name = "bar",
+          id = 3 : i64
+        }
+      ],
+      id = 2 : i64,
+      name = "VectorView"
+    },
+    {
+      class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+      directory = "gct-dir"
+    }
+  ]
+} {
+  firrtl.module @OptionalBindFile() {
+    %dut_foo = firrtl.instance dut @DUT(out foo: !firrtl.probe<uint<8>>)
+    %mem_bar = firrtl.instance mem @Memory(out bar: !firrtl.probe<uint<16>>)
+  }
+  firrtl.module @DUT(out %foo: !firrtl.probe<uint<8>>) {
+    %c42_ui8 = firrtl.constant 42 : !firrtl.uint<8>
+    %foo_probe = firrtl.ref.send %c42_ui8 : !firrtl.uint<8>
+    firrtl.ref.define %foo, %foo_probe : !firrtl.probe<uint<8>>
+    firrtl.instance ground_companion @GroundView_companion()
+  }
+  firrtl.module @Memory(out %bar: !firrtl.probe<uint<16>>) {
+    %c1234_ui16 = firrtl.constant 1234 : !firrtl.uint<16>
+    %bar_probe = firrtl.ref.send %c1234_ui16 : !firrtl.uint<16>
+    firrtl.ref.define %bar, %bar_probe : !firrtl.probe<uint<16>>
+    firrtl.instance vector_companion @VectorView_companion()
+  }
+  firrtl.module @GroundView_companion() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+        defName = "GroundView",
+        id = 0 : i64,
+        name = "GroundView"
+      }
+    ]
+  } {
+    %c42_ui8 = firrtl.constant 42 : !firrtl.uint<8>
+    %foo_node = firrtl.node %c42_ui8 {
+      annotations = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 1 : i64
+        }
+      ]
+    } : !firrtl.uint<8>
+  }
+  firrtl.module @VectorView_companion() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
+        defName = "VectorView",
+        id = 2 : i64,
+        name = "VectorView"
+      }
+    ]
+  } {
+    %c1234_ui16 = firrtl.constant 1234 : !firrtl.uint<16>
+    %bar_node = firrtl.node %c1234_ui16 {
+      annotations = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          id = 3 : i64
+        }
+      ]
+    } : !firrtl.uint<16>
+  }
+}
+
+// Check that each companion instance gets a separate per-module bind file name
+// based on the module that instantiates it
+// CHECK-LABEL: firrtl.circuit "OptionalBindFile"
+// CHECK: firrtl.instance ground_companion {lowerToBind, output_file = #hw.output_file<"gct-dir{{/|\\\\}}DUT-bind.sv", excludeFromFileList>} @GroundView_companion()
+// CHECK: firrtl.instance vector_companion {lowerToBind, output_file = #hw.output_file<"gct-dir{{/|\\\\}}Memory-bind.sv", excludeFromFileList>} @VectorView_companion()

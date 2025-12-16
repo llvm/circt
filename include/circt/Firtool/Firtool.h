@@ -64,6 +64,8 @@ public:
   }
   firrtl::CompanionMode getCompanionMode() const { return companionMode; }
 
+  bool getNoViews() const { return noViews; }
+
   seq::ExternalizeClockGateOptions getClockGateOptions() const {
     return {ckgModuleName, ckgInputName,      ckgOutputName,
             ckgEnableName, ckgTestEnableName, ckgInstName};
@@ -88,9 +90,6 @@ public:
   }
   bool shouldLowerNoRefTypePortAnnotations() const {
     return lowerAnnotationsNoRefTypePorts;
-  }
-  bool shouldAllowAddingPortsOnPublic() const {
-    return allowAddingPortsOnPublic;
   }
   bool shouldConvertProbesToSignals() const { return probesToSignals; }
   bool shouldReplaceSequentialMemories() const { return replSeqMem; }
@@ -144,6 +143,8 @@ public:
 
   bool getEmitAllBindFiles() const { return emitAllBindFiles; }
 
+  bool shouldInlineInputOnlyModules() const { return inlineInputOnlyModules; }
+
   // Setters, used by the CAPI
   FirtoolOptions &setOutputFilename(StringRef name) {
     outputFilename = name;
@@ -162,11 +163,6 @@ public:
 
   FirtoolOptions &setLowerAnnotationsNoRefTypePorts(bool value) {
     lowerAnnotationsNoRefTypePorts = value;
-    return *this;
-  }
-
-  FirtoolOptions &setAllowAddingPortsOnPublic(bool value) {
-    allowAddingPortsOnPublic = value;
     return *this;
   }
 
@@ -224,6 +220,11 @@ public:
 
   FirtoolOptions &setCompanionMode(firrtl::CompanionMode value) {
     companionMode = value;
+    return *this;
+  }
+
+  FirtoolOptions &setNoViews(bool value) {
+    noViews = value;
     return *this;
   }
 
@@ -393,6 +394,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setInlineInputOnlyModules(bool value) {
+    inlineInputOnlyModules = value;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
 
@@ -400,7 +406,6 @@ private:
   bool disableAnnotationsUnknown;
   bool disableAnnotationsClassless;
   bool lowerAnnotationsNoRefTypePorts;
-  bool allowAddingPortsOnPublic;
 
   bool probesToSignals;
   firrtl::PreserveAggregate::PreserveMode preserveAggregate;
@@ -413,6 +418,7 @@ private:
   bool noDedup;
   bool dedupClasses;
   firrtl::CompanionMode companionMode;
+  bool noViews;
   bool disableAggressiveMergeConnections;
   bool lowerMemories;
   std::string blackBoxRootPath;
@@ -447,6 +453,7 @@ private:
   bool lintStaticAsserts;
   bool lintXmrsInDesign;
   bool emitAllBindFiles;
+  bool inlineInputOnlyModules;
 };
 
 void registerFirtoolCLOptions();

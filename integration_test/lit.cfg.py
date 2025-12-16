@@ -99,6 +99,8 @@ if config.yosys_path != "":
   yosys_abc_path = os.path.join(yosys_dir, "yosys-abc")
   config.substitutions.append(('%yosys-abc', f'"{yosys_abc_path}"'))
   config.available_features.add('yosys')
+  if os.path.exists(yosys_abc_path):
+    config.available_features.add('yosys-abc')
 
 # Enable Icarus Verilog as a fallback if no other ieee-sim was detected.
 if config.iverilog_path != "":

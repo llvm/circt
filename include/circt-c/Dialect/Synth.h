@@ -157,6 +157,9 @@ synthLongestPathObjectName(SynthLongestPathObject object);
 MLIR_CAPI_EXPORTED size_t
 synthLongestPathObjectBitPos(SynthLongestPathObject object);
 
+MLIR_CAPI_EXPORTED MlirValue
+synthLongestPathObjectGetValue(SynthLongestPathObject object);
+
 #ifdef __cplusplus
 }
 #endif

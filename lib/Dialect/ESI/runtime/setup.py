@@ -65,12 +65,25 @@ class CMakeBuild(build_py):
 
     # Configure the build.
     cfg = "Release"
+
     cmake_args = [
         "-GNinja",  # This build only works with Ninja on Windows.
         "-DCMAKE_BUILD_TYPE={}".format(cfg),  # not used on MSVC, but no harm
         "-DPython3_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
         "-DWHEEL_BUILD=ON",
     ]
+
+    # Get the nanobind cmake directory from the isolated build environment.
+    # This is necessary because CMake's execute_process may not properly find
+    # nanobind installed in the isolated build environment.
+    try:
+      import nanobind
+      nanobind_dir = nanobind.cmake_dir()
+      cmake_args.append("-Dnanobind_DIR={}".format(
+          nanobind_dir.replace("\\", "/")))
+    except ImportError:
+      print("Skipping nanobind directory detection, nanobind not found.")
+
     cxx = os.getenv("CXX")
     if cxx is not None:
       cmake_args.append("-DCMAKE_CXX_COMPILER={}".format(cxx))
@@ -143,7 +156,7 @@ setup(name="esiaccel",
       ],
       cmdclass={
           "build": CustomBuild,
-          "built_ext": NoopBuildExtension,
+          "build_ext": NoopBuildExtension,
           "build_py": CMakeBuild,
       },
       zip_safe=False,

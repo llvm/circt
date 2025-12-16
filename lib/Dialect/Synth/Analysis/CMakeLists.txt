@@ -15,6 +15,7 @@ add_circt_dialect_library(CIRCTSynthAnalysis
 
   DEPENDS
   CIRCTSynthTransformsIncGen
+  CIRCTConversionPassIncGen
 
   LINK_COMPONENTS
   Support

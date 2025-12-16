@@ -1214,13 +1214,15 @@ struct DynExtractOpConversion : public OpConversionPattern<DynExtractOp> {
       Value idx = adjustIntegerWidth(rewriter, adaptor.getLowBit(), idxWidth,
                                      op->getLoc());
 
-      if (isa<hw::ArrayType>(resultType)) {
+      bool isSingleElementExtract = arrType.getElementType() == resultType;
+
+      if (isSingleElementExtract)
+        rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(op, adaptor.getInput(),
+                                                    idx);
+      else
         rewriter.replaceOpWithNewOp<hw::ArraySliceOp>(op, resultType,
                                                       adaptor.getInput(), idx);
-        return success();
-      }
 
-      rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(op, adaptor.getInput(), idx);
       return success();
     }
 
@@ -1257,14 +1259,17 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
           rewriter, adaptor.getLowBit(),
           llvm::Log2_64_Ceil(arrType.getNumElements()), op->getLoc());
 
-      if (isa<hw::ArrayType>(cast<llhd::RefType>(resultType).getNestedType())) {
+      auto resultNestedType = cast<llhd::RefType>(resultType).getNestedType();
+      bool isSingleElementExtract =
+          arrType.getElementType() == resultNestedType;
+
+      if (isSingleElementExtract)
+        rewriter.replaceOpWithNewOp<llhd::SigArrayGetOp>(op, adaptor.getInput(),
+                                                         idx);
+      else
         rewriter.replaceOpWithNewOp<llhd::SigArraySliceOp>(
             op, resultType, adaptor.getInput(), idx);
-        return success();
-      }
 
-      rewriter.replaceOpWithNewOp<llhd::SigArrayGetOp>(op, adaptor.getInput(),
-                                                       idx);
       return success();
     }
 
@@ -1573,6 +1578,42 @@ struct SExtOpConversion : public OpConversionPattern<SExtOp> {
     auto value =
         comb::createOrFoldSExt(op.getLoc(), adaptor.getInput(), type, rewriter);
     rewriter.replaceOp(op, value);
+    return success();
+  }
+};
+
+struct SIntToRealOpConversion : public OpConversionPattern<SIntToRealOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(SIntToRealOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<arith::SIToFPOp>(
+        op, typeConverter->convertType(op.getType()), adaptor.getInput());
+    return success();
+  }
+};
+
+struct UIntToRealOpConversion : public OpConversionPattern<UIntToRealOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UIntToRealOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<arith::UIToFPOp>(
+        op, typeConverter->convertType(op.getType()), adaptor.getInput());
+    return success();
+  }
+};
+
+struct RealToIntOpConversion : public OpConversionPattern<RealToIntOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(RealToIntOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<arith::FPToSIOp>(
+        op, typeConverter->convertType(op.getType()), adaptor.getInput());
     return success();
   }
 };
@@ -1944,6 +1985,9 @@ struct FormatIntOpConversion : public OpConversionPattern<FormatIntOp> {
     case IntFormat::Binary:
       rewriter.replaceOpWithNewOp<sim::FormatBinOp>(op, adaptor.getValue());
       return success();
+    case IntFormat::Octal:
+      rewriter.replaceOpWithNewOp<sim::FormatOctOp>(op, adaptor.getValue());
+      return success();
     case IntFormat::HexLower:
     case IntFormat::HexUpper:
       rewriter.replaceOpWithNewOp<sim::FormatHexOp>(op, adaptor.getValue());
@@ -2158,6 +2202,7 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
 
   // Valid target types.
   typeConverter.addConversion([](IntegerType type) { return type; });
+  typeConverter.addConversion([](FloatType type) { return type; });
   typeConverter.addConversion([](llhd::TimeType type) { return type; });
   typeConverter.addConversion([](debug::ArrayType type) { return type; });
   typeConverter.addConversion([](debug::ScopeType type) { return type; });
@@ -2237,6 +2282,9 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     TruncOpConversion,
     ZExtOpConversion,
     SExtOpConversion,
+    SIntToRealOpConversion,
+    UIntToRealOpConversion,
+    RealToIntOpConversion,
 
     // Patterns of miscellaneous operations.
     ConstantOpConv,

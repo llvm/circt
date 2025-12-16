@@ -143,3 +143,21 @@ func.func @CanonicalizeToComb(%arg0: i1, %arg1: i1, %arg2: i1) {
   call @Bool(%2) : (i1) -> ()
   return
 }
+
+// CHECK-LABEL: @ImplicationFolds
+// CHECK-SAME: (%[[A:.+]]: i1)
+func.func @ImplicationFolds(%a: i1) -> (!ltl.property, !ltl.property) {
+  %false = hw.constant false
+  %true = hw.constant true
+
+  // implication(false, x) -> boolean_constant(true)
+  // implication(x, true) -> boolean_constant(true)
+  // Both fold to the same constant, which gets CSE'd
+  // CHECK: %[[PROP:.+]] = ltl.boolean_constant true
+  // CHECK-NOT: ltl.implication
+  %0 = ltl.implication %false, %a : i1, i1
+  %1 = ltl.implication %a, %true : i1, i1
+
+  // CHECK: return %[[PROP]], %[[PROP]]
+  return %0, %1 : !ltl.property, !ltl.property
+}

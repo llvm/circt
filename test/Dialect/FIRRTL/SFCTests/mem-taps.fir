@@ -1,14 +1,10 @@
-; RUN: firtool --verilog -allow-adding-ports-on-public-modules %s | FileCheck %s
-; RUN: firtool --verilog -allow-adding-ports-on-public-modules -preserve-aggregate=1d-vec %s | FileCheck %s --check-prefix=AGGGREGATE
-; RUN: firtool --verilog -allow-adding-ports-on-public-modules -lower-annotations-no-ref-type-ports %s | FileCheck %s --check-prefix=NOREFS
-; RUN: firtool -allow-adding-ports-on-public-modules --parse-only %s | circt-opt --firrtl-probes-to-signals | firtool --verilog --format=mlir | FileCheck %s --check-prefix=PROBESTOSIGNALS
+; RUN: firtool --verilog %s | FileCheck %s
+; RUN: firtool --verilog -preserve-aggregate=1d-vec %s | FileCheck %s --check-prefix=AGGGREGATE
+; RUN: firtool --verilog -lower-annotations-no-ref-type-ports %s | FileCheck %s --check-prefix=NOREFS
+; RUN: firtool --parse-only %s | circt-opt --firrtl-probes-to-signals | firtool --verilog --format=mlir | FileCheck %s --check-prefix=PROBESTOSIGNALS
 
 FIRRTL version 4.0.0
 circuit Top : %[[
-  {
-    "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
-    "target":"~Top|DUTModule"
-  },
   {
     "class":"firrtl.transforms.DontTouchAnnotation",
     "target":"~Top|Top>memTap"
