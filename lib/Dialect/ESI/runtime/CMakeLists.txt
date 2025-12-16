@@ -287,10 +287,40 @@ if(ESI_COSIM)
     find_package(gRPC REQUIRED CONFIG)
   endif()
 
+  set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+
+  # CosimClient library - wraps gRPC/protobuf dependencies
+  add_library(CosimClient SHARED
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/CosimClient.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cosim.proto
+  )
+  set(ESICppRuntimeBackendHeaders
+    ${ESICppRuntimeBackendHeaders}
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/CosimClient.h
+  )
+
+  target_link_libraries(CosimClient PUBLIC
+    ESICppRuntime
+    protobuf::libprotobuf
+    gRPC::grpc++
+  )
+  target_include_directories(CosimClient PUBLIC "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>")
+  protobuf_generate(
+      TARGET CosimClient
+      PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
+  protobuf_generate(
+      TARGET CosimClient
+      LANGUAGE grpc
+      GENERATE_EXTENSIONS .grpc.pb.h .grpc.pb.cc
+      PLUGIN "protoc-gen-grpc=\$<TARGET_FILE:gRPC::grpc_cpp_plugin>"
+      PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
+
+  add_dependencies(ESIRuntime CosimClient)
+
+  # CosimBackend library - the ESI backend plugin
   add_library(CosimBackend SHARED
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/Cosim.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/RpcServer.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/cosim.proto
   )
   set(ESICppRuntimeBackendHeaders
     ${ESICppRuntimeBackendHeaders}
@@ -300,27 +330,16 @@ if(ESI_COSIM)
 
   target_link_libraries(CosimBackend PUBLIC
     ESICppRuntime
-    protobuf::libprotobuf
-    gRPC::grpc++
+    CosimClient
   )
-  set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
   target_include_directories(CosimBackend PUBLIC "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>")
-  protobuf_generate(
-      TARGET CosimBackend
-      PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
-  protobuf_generate(
-      TARGET CosimBackend
-      LANGUAGE grpc
-      GENERATE_EXTENSIONS .grpc.pb.h .grpc.pb.cc
-      PLUGIN "protoc-gen-grpc=\$<TARGET_FILE:gRPC::grpc_cpp_plugin>"
-      PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
 
   add_dependencies(ESIRuntime CosimBackend)
 
   if(WIN32)
     # Windows cosim backend carries a lot of runtime dependencies, mainly
     # transitively through gRPC. Make sure they're installed as well.
-    install(TARGETS CosimBackend
+    install(TARGETS CosimClient CosimBackend
       DESTINATION ${ESIRT_INSTALL_LIBDIR}
       RUNTIME_DEPENDENCIES
         PRE_EXCLUDE_REGEXES "api-ms-" "ext-ms-"
@@ -328,7 +347,7 @@ if(ESI_COSIM)
       COMPONENT ESIRuntime
     )
   else()
-    install(TARGETS CosimBackend
+    install(TARGETS CosimClient CosimBackend
       DESTINATION ${ESIRT_INSTALL_LIBDIR}
       COMPONENT ESIRuntime
     )
