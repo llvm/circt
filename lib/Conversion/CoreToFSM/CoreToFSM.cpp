@@ -83,6 +83,12 @@ static void addPossibleValuesImpl(llvm::DenseSet<size_t> &possibleValues,
       // If we can't determine specific values for an operand, we must
       // pessimistically assume it can be any value its bitwidth allows.
       auto opType = dyn_cast<IntegerType>(operand.getType());
+      if (!opType) {
+        concatOp.emitError(
+            "FSM extraction only supports integer-typed operands "
+            "in concat operations");
+        return;
+      }
       unsigned width = opType.getWidth();
       if (operandPossibleValues.empty()) {
         uint64_t numStates = 1ULL << width;
@@ -148,13 +154,13 @@ static void addPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
 
 /// Checks if a value is a constant or a tree of muxes with constant leaves.
 /// Uses an iterative approach with a visited set to handle cycles.
-static bool isConstantLike(mlir::Value value) {
-  llvm::SmallVector<mlir::Value> worklist;
-  llvm::DenseSet<mlir::Value> visited;
+static bool isConstantLike(Value value) {
+  SmallVector<Value> worklist;
+  llvm::DenseSet<Value> visited;
 
   worklist.push_back(value);
   while (!worklist.empty()) {
-    mlir::Value current = worklist.pop_back_val();
+    Value current = worklist.pop_back_val();
 
     // Skip if already visited (handles cycles).
     if (!visited.insert(current).second)
@@ -179,6 +185,11 @@ static bool isConstantLike(mlir::Value value) {
   return true;
 }
 
+/// Pushes an ICmp equality comparison through a mux operation.
+/// This transforms `icmp eq (mux cond, x, y), b` into
+/// `mux cond, (icmp eq x, b), (icmp eq y, b)`.
+/// This simplification helps expose constant comparisons that can be folded
+/// during FSM extraction, making transition guards easier to analyze.
 LogicalResult pushIcmp(ICmpOp op, PatternRewriter &rewriter) {
   APInt lhs, rhs;
   if (op.getPredicate() == ICmpPredicate::eq &&
@@ -187,9 +198,9 @@ LogicalResult pushIcmp(ICmpOp op, PatternRewriter &rewriter) {
        op.getRhs().getDefiningOp<hw::ConstantOp>())) {
     rewriter.setInsertionPointAfter(op);
     auto mux = op.getLhs().getDefiningOp<MuxOp>();
-    mlir::Value x = mux.getTrueValue();
-    mlir::Value y = mux.getFalseValue();
-    mlir::Value b = op.getRhs();
+    Value x = mux.getTrueValue();
+    Value y = mux.getFalseValue();
+    Value b = op.getRhs();
     Location loc = op.getLoc();
     auto eq1 = rewriter.create<ICmpOp>(loc, ICmpPredicate::eq, x, b);
     auto eq2 = rewriter.create<ICmpOp>(loc, ICmpPredicate::eq, y, b);
@@ -205,9 +216,9 @@ LogicalResult pushIcmp(ICmpOp op, PatternRewriter &rewriter) {
        op.getLhs().getDefiningOp<hw::ConstantOp>())) {
     rewriter.setInsertionPointAfter(op);
     auto mux = op.getRhs().getDefiningOp<MuxOp>();
-    mlir::Value x = mux.getTrueValue();
-    mlir::Value y = mux.getFalseValue();
-    mlir::Value b = op.getLhs();
+    Value x = mux.getTrueValue();
+    Value y = mux.getFalseValue();
+    Value b = op.getLhs();
     Location loc = op.getLoc();
     auto eq1 = rewriter.create<ICmpOp>(loc, ICmpPredicate::eq, x, b);
     auto eq2 = rewriter.create<ICmpOp>(loc, ICmpPredicate::eq, y, b);
@@ -254,9 +265,9 @@ static void generateConcatenatedValues(
   finalPossibleValues = std::move(currentResults);
 }
 
-static llvm::DenseMap<mlir::Value, int>
-intToRegMap(llvm::SmallVector<seq::CompRegOp> v, int i) {
-  llvm::DenseMap<mlir::Value, int> m;
+static llvm::DenseMap<Value, int> intToRegMap(SmallVector<seq::CompRegOp> v,
+                                              int i) {
+  llvm::DenseMap<Value, int> m;
   for (size_t ci = 0; ci < v.size(); ci++) {
     seq::CompRegOp reg = v[ci];
     int bits = reg.getType().getIntOrFloatBitWidth();
@@ -267,8 +278,8 @@ intToRegMap(llvm::SmallVector<seq::CompRegOp> v, int i) {
   return m;
 }
 
-static int regMapToInt(llvm::SmallVector<seq::CompRegOp> v,
-                       llvm::DenseMap<mlir::Value, int> m) {
+static int regMapToInt(SmallVector<seq::CompRegOp> v,
+                       llvm::DenseMap<Value, int> m) {
   int i = 0;
   int width = 0;
   for (size_t ci = 0; ci < v.size(); ci++) {
@@ -345,28 +356,28 @@ static FrozenRewritePatternSet loadPatterns(MLIRContext &context) {
 
 static void getReachableStates(llvm::DenseSet<size_t> &visitableStates,
                                HWModuleOp moduleOp, size_t currentStateIndex,
-                               llvm::SmallVector<seq::CompRegOp> registers,
+                               SmallVector<seq::CompRegOp> registers,
                                OpBuilder opBuilder, bool isInitialState) {
 
   IRMapping mapping;
   auto clonedBody =
       llvm::dyn_cast<HWModuleOp>(opBuilder.clone(*moduleOp, mapping));
 
-  llvm::DenseMap<mlir::Value, int> stateMap =
+  llvm::DenseMap<Value, int> stateMap =
       intToRegMap(registers, currentStateIndex);
   Operation *terminator = clonedBody.getBody().front().getTerminator();
   auto output = dyn_cast<hw::OutputOp>(terminator);
   int i = 0;
-  llvm::SmallVector<mlir::Value> values;
-  llvm::SmallVector<mlir::Type> types;
-  llvm::DenseMap<int, mlir::Value> regMap;
+  SmallVector<Value> values;
+  SmallVector<Type> types;
+  llvm::DenseMap<int, Value> regMap;
 
   for (auto [originalRegValue, constStateValue] : stateMap) {
 
-    mlir::Value clonedRegValue = mapping.lookup(originalRegValue);
+    Value clonedRegValue = mapping.lookup(originalRegValue);
     Operation *clonedRegOp = clonedRegValue.getDefiningOp();
-    auto reg = dyn_cast<seq::CompRegOp>(clonedRegOp);
-    mlir::Type constantType = reg.getType();
+    auto reg = cast<seq::CompRegOp>(clonedRegOp);
+    Type constantType = reg.getType();
     IntegerAttr constantAttr =
         opBuilder.getIntegerAttr(constantType, constStateValue);
     opBuilder.setInsertionPoint(clonedRegOp);
@@ -422,33 +433,32 @@ public:
                       ArrayRef<std::string> stateRegNames)
       : moduleOp(moduleOp), opBuilder(builder), stateRegNames(stateRegNames) {}
   LogicalResult run() {
-    llvm::SmallVector<seq::CompRegOp> stateRegs;
-    llvm::SmallVector<seq::CompRegOp> variableRegs;
-    bool hasNonIntegerReg = false;
-    moduleOp.walk([&](seq::CompRegOp reg) {
+    SmallVector<seq::CompRegOp> stateRegs;
+    SmallVector<seq::CompRegOp> variableRegs;
+    WalkResult walkResult = moduleOp.walk([&](seq::CompRegOp reg) {
       // Check that the register type is an integer.
       if (!isa<IntegerType>(reg.getType())) {
         reg.emitError("FSM extraction only supports integer-typed registers");
-        hasNonIntegerReg = true;
-        return;
+        return WalkResult::interrupt();
       }
       if (isStateRegister(reg)) {
         stateRegs.push_back(reg);
       } else {
         variableRegs.push_back(reg);
       }
+      return WalkResult::advance();
     });
-    if (hasNonIntegerReg)
-      return mlir::failure();
+    if (walkResult.wasInterrupted())
+      return failure();
     if (stateRegs.empty()) {
       emitError(moduleOp.getLoc())
-          << "Cannot find state register in this FSM. Use the --state-regs "
+          << "Cannot find state register in this FSM. Use the state-regs "
              "option to specify which registers are state registers.";
-      return mlir::failure();
+      return failure();
     }
-    llvm::DenseMap<mlir::Value, size_t> regToIndexMap;
+    llvm::DenseMap<Value, size_t> regToIndexMap;
     int regIndex = 0;
-    llvm::SmallVector<seq::CompRegOp> registers;
+    SmallVector<seq::CompRegOp> registers;
     for (seq::CompRegOp c : stateRegs) {
       regToIndexMap[c] = regIndex;
       regIndex++;
@@ -457,11 +467,13 @@ public:
 
     llvm::DenseMap<size_t, StateOp> stateToStateOp;
     llvm::DenseMap<StateOp, size_t> stateOpToState;
-    // gather async reset arguments to delete them from function type
+    // Collect async reset arguments to exclude from the FSM's function type.
+    // FSMs in CIRCT don't have an async reset concept, so these signals are
+    // not passed through. The reset behavior is captured in the initial state.
     llvm::DenseSet<size_t> asyncResetArguments;
     auto regsInGroup = stateRegs;
-    mlir::Location loc = moduleOp.getLoc();
-    SmallVector<mlir::Type> inputTypes = moduleOp.getInputTypes();
+    Location loc = moduleOp.getLoc();
+    SmallVector<Type> inputTypes = moduleOp.getInputTypes();
 
     // Create a new FSM machine with the current state.
     auto resultTypes = moduleOp.getOutputTypes();
@@ -469,9 +481,9 @@ public:
         FunctionType::get(opBuilder.getContext(), inputTypes, resultTypes);
     StringRef machineName = moduleOp.getName();
 
-    llvm::DenseMap<mlir::Value, int> initialStateMap;
+    llvm::DenseMap<Value, int> initialStateMap;
     for (seq::CompRegOp reg : moduleOp.getOps<seq::CompRegOp>()) {
-      mlir::Value resetValue = reg.getResetValue();
+      Value resetValue = reg.getResetValue();
       auto definingConstant = resetValue.getDefiningOp<hw::ConstantOp>();
       if (!definingConstant) {
         reg->emitError(
@@ -503,7 +515,7 @@ public:
     opBuilder.setInsertionPointToStart(&machine.getBody().front());
     llvm::DenseMap<seq::CompRegOp, VariableOp> variableMap;
     for (seq::CompRegOp varReg : variableRegs) {
-      ::mlir::TypedValue<::mlir::Type> initialValue = varReg.getResetValue();
+      TypedValue<Type> initialValue = varReg.getResetValue();
       auto definingConstant = initialValue.getDefiningOp<hw::ConstantOp>();
       if (!definingConstant) {
         varReg->emitError("cannot find defining constant for reset value of "
@@ -516,7 +528,7 @@ public:
       variableMap[varReg] = variableOp;
     }
 
-    // A valid machine needs at least its initial state defined.
+    // Load rewrite patterns used for canonicalizing the generated FSM.
     FrozenRewritePatternSet frozenPatterns =
         loadPatterns(*moduleOp.getContext());
 
@@ -525,12 +537,13 @@ public:
 
     worklist.push_back(initialStateIndex);
     reachableStates.insert(initialStateIndex);
-    unsigned i = 0;
-    while (i < worklist.size()) {
+    // Process states in BFS order. The worklist grows as new reachable states
+    // are discovered, so we use an index-based loop.
+    for (unsigned i = 0; i < worklist.size(); ++i) {
 
-      int currentStateIndex = worklist[i++];
+      int currentStateIndex = worklist[i];
 
-      llvm::DenseMap<mlir::Value, int> stateMap =
+      llvm::DenseMap<Value, int> stateMap =
           intToRegMap(registers, currentStateIndex);
 
       opBuilder.setInsertionPointToEnd(&machine.getBody().front());
@@ -545,8 +558,8 @@ public:
       } else {
         stateOp = stateToStateOp.lookup(currentStateIndex);
       }
-      mlir::Region &outputRegion = stateOp.getOutput();
-      mlir::Block *outputBlock = &outputRegion.front();
+      Region &outputRegion = stateOp.getOutput();
+      Block *outputBlock = &outputRegion.front();
       opBuilder.setInsertionPointToStart(outputBlock);
       IRMapping mapping;
       opBuilder.cloneRegionBefore(moduleOp.getModuleBody(), outputRegion,
@@ -575,7 +588,7 @@ public:
       for (auto &[originalRegValue, variableOp] : variableMap) {
         Value clonedRegValue = mapping.lookup(originalRegValue);
         Operation *clonedRegOp = clonedRegValue.getDefiningOp();
-        auto reg = dyn_cast<seq::CompRegOp>(clonedRegOp);
+        auto reg = cast<seq::CompRegOp>(clonedRegOp);
         const auto res = variableOp.getResult();
         clonedRegValue.replaceAllUsesWith(res);
         reg.erase();
@@ -589,12 +602,10 @@ public:
 
         assert(clonedRegOp && "Cloned value must have a defining op");
         opBuilder.setInsertionPoint(clonedRegOp);
-        auto r = dyn_cast<seq::CompRegOp>(clonedRegOp);
-        assert(r && "Must be a register");
+        auto r = cast<seq::CompRegOp>(clonedRegOp);
         TypedValue<IntegerType> registerReset = r.getReset();
         if (registerReset) {
-          if (BlockArgument blockArg =
-                  mlir::dyn_cast<mlir::BlockArgument>(registerReset)) {
+          if (BlockArgument blockArg = dyn_cast<BlockArgument>(registerReset)) {
             asyncResetArguments.insert(blockArg.getArgNumber());
             auto falseConst = opBuilder.create<hw::ConstantOp>(
                 blockArg.getLoc(), clonedRegValue.getType(), 0);
@@ -602,9 +613,8 @@ public:
           }
           if (auto xorOp = registerReset.getDefiningOp<XorOp>()) {
             if (xorOp.isBinaryNot()) {
-              mlir::Value rhs = xorOp.getOperand(0);
-              if (BlockArgument blockArg =
-                      mlir::dyn_cast<mlir::BlockArgument>(rhs)) {
+              Value rhs = xorOp.getOperand(0);
+              if (BlockArgument blockArg = dyn_cast<BlockArgument>(rhs)) {
                 asyncResetArguments.insert(blockArg.getArgNumber());
                 auto trueConst = opBuilder.create<hw::ConstantOp>(
                     blockArg.getLoc(), blockArg.getType(), 1);
@@ -618,15 +628,14 @@ public:
         clonedRegValue.replaceAllUsesWith(constantOp.getResult());
         clonedRegOp->erase();
       }
-      mlir::GreedyRewriteConfig config;
+      GreedyRewriteConfig config;
       SmallVector<Operation *> opsToProcess;
       outputRegion.walk([&](Operation *op) { opsToProcess.push_back(op); });
       // Replace references to arguments in the output block with
       // arguments at the top level.
       for (auto arg : outputRegion.front().getArguments()) {
         int argIndex = arg.getArgNumber();
-        mlir::BlockArgument topLevelArg =
-            machine.getBody().getArgument(argIndex);
+        BlockArgument topLevelArg = machine.getBody().getArgument(argIndex);
         arg.replaceAllUsesWith(topLevelArg);
       }
       outputRegion.front().eraseArguments(
@@ -635,14 +644,14 @@ public:
       config.setScope(&outputRegion);
 
       bool changed = false;
-      LogicalResult converged = mlir::applyOpPatternsGreedily(
-          opsToProcess, patterns, config, &changed);
+      LogicalResult converged =
+          applyOpPatternsGreedily(opsToProcess, patterns, config, &changed);
       opBuilder.setInsertionPoint(stateOp);
       if (!sortTopologically(&outputRegion.front())) {
         moduleOp.emitError("could not resolve cycles in module");
         return failure();
       }
-      mlir::Region &transitionRegion = stateOp.getTransitions();
+      Region &transitionRegion = stateOp.getTransitions();
       llvm::DenseSet<size_t> visitableStates;
       getReachableStates(visitableStates, moduleOp, currentStateIndex,
                          registers, opBuilder,
@@ -661,28 +670,28 @@ public:
         opBuilder.setInsertionPointToStart(&transitionRegion.front());
         auto transitionOp =
             opBuilder.create<TransitionOp>(loc, "state_" + std::to_string(j));
-        mlir::Region &guardRegion = transitionOp.getGuard();
+        Region &guardRegion = transitionOp.getGuard();
         opBuilder.createBlock(&guardRegion);
 
-        mlir::Block &guardBlock = guardRegion.front();
+        Block &guardBlock = guardRegion.front();
 
         opBuilder.setInsertionPointToStart(&guardBlock);
         IRMapping mapping;
         opBuilder.cloneRegionBefore(moduleOp.getModuleBody(), guardRegion,
                                     guardBlock.getIterator(), mapping);
         guardBlock.erase();
-        mlir::Block &newGuardBlock = guardRegion.front();
+        Block &newGuardBlock = guardRegion.front();
         Operation *terminator = newGuardBlock.getTerminator();
         auto hwOutputOp = dyn_cast<hw::OutputOp>(terminator);
         assert(hwOutputOp && "Expected terminator to be hw.output op");
 
-        llvm::DenseMap<mlir::Value, int> toStateMap = intToRegMap(registers, j);
-        SmallVector<mlir::Value> equalityChecks;
+        llvm::DenseMap<Value, int> toStateMap = intToRegMap(registers, j);
+        SmallVector<Value> equalityChecks;
         for (auto &[originalRegValue, variableOp] : variableMap) {
           opBuilder.setInsertionPointToStart(&newGuardBlock);
           Value clonedRegValue = mapping.lookup(originalRegValue);
           Operation *clonedRegOp = clonedRegValue.getDefiningOp();
-          auto reg = dyn_cast<seq::CompRegOp>(clonedRegOp);
+          auto reg = cast<seq::CompRegOp>(clonedRegOp);
           const auto res = variableOp.getResult();
           clonedRegValue.replaceAllUsesWith(res);
           reg.erase();
@@ -692,22 +701,21 @@ public:
           Value clonedRegValue = mapping.lookup(originalRegValue);
           Operation *clonedRegOp = clonedRegValue.getDefiningOp();
           opBuilder.setInsertionPoint(clonedRegOp);
-          auto r = dyn_cast<seq::CompRegOp>(clonedRegOp);
+          auto r = cast<seq::CompRegOp>(clonedRegOp);
 
-          mlir::Value registerInput = r.getInput();
+          Value registerInput = r.getInput();
           TypedValue<IntegerType> registerReset = r.getReset();
           if (registerReset) {
             if (BlockArgument blockArg =
-                    mlir::dyn_cast<mlir::BlockArgument>(registerReset)) {
+                    dyn_cast<BlockArgument>(registerReset)) {
               auto falseConst = opBuilder.create<hw::ConstantOp>(
                   blockArg.getLoc(), clonedRegValue.getType(), 0);
               blockArg.replaceAllUsesWith(falseConst.getResult());
             }
             if (auto xorOp = registerReset.getDefiningOp<XorOp>()) {
               if (xorOp.isBinaryNot()) {
-                mlir::Value rhs = xorOp.getOperand(0);
-                if (BlockArgument blockArg =
-                        mlir::dyn_cast<mlir::BlockArgument>(rhs)) {
+                Value rhs = xorOp.getOperand(0);
+                if (BlockArgument blockArg = dyn_cast<BlockArgument>(rhs)) {
                   auto trueConst = opBuilder.create<hw::ConstantOp>(
                       blockArg.getLoc(), blockArg.getType(), 1);
                   blockArg.replaceAllUsesWith(trueConst.getResult());
@@ -715,7 +723,7 @@ public:
               }
             }
           }
-          mlir::Type constantType = registerInput.getType();
+          Type constantType = registerInput.getType();
           IntegerAttr constantAttr =
               opBuilder.getIntegerAttr(constantType, constStateValue);
           auto otherStateConstant = opBuilder.create<hw::ConstantOp>(
@@ -734,12 +742,11 @@ public:
         hwOutputOp.erase();
         for (BlockArgument arg : newGuardBlock.getArguments()) {
           int argIndex = arg.getArgNumber();
-          mlir::BlockArgument topLevelArg =
-              machine.getBody().getArgument(argIndex);
+          BlockArgument topLevelArg = machine.getBody().getArgument(argIndex);
           arg.replaceAllUsesWith(topLevelArg);
         }
         newGuardBlock.eraseArguments([](BlockArgument arg) { return true; });
-        llvm::DenseMap<mlir::Value, int> fromStateMap =
+        llvm::DenseMap<Value, int> fromStateMap =
             intToRegMap(registers, currentStateIndex);
         for (auto const &[originalRegValue, constStateValue] : fromStateMap) {
           Value clonedRegValue = mapping.lookup(originalRegValue);
@@ -754,30 +761,29 @@ public:
           clonedRegValue.replaceAllUsesWith(constantOp.getResult());
           clonedRegOp->erase();
         }
-        mlir::Region &actionRegion = transitionOp.getAction();
+        Region &actionRegion = transitionOp.getAction();
         if (!variableRegs.empty()) {
-          mlir::Block *actionBlock = opBuilder.createBlock(&actionRegion);
+          Block *actionBlock = opBuilder.createBlock(&actionRegion);
           opBuilder.setInsertionPointToStart(actionBlock);
           IRMapping mapping;
           opBuilder.cloneRegionBefore(moduleOp.getModuleBody(), actionRegion,
                                       actionBlock->getIterator(), mapping);
           actionBlock->erase();
-          mlir::Block &newActionBlock = actionRegion.front();
+          Block &newActionBlock = actionRegion.front();
           for (BlockArgument arg : newActionBlock.getArguments()) {
             int argIndex = arg.getArgNumber();
-            mlir::BlockArgument topLevelArg =
-                machine.getBody().getArgument(argIndex);
+            BlockArgument topLevelArg = machine.getBody().getArgument(argIndex);
             arg.replaceAllUsesWith(topLevelArg);
           }
           newActionBlock.eraseArguments([](BlockArgument arg) { return true; });
           for (auto &[originalRegValue, variableOp] : variableMap) {
             Value clonedRegValue = mapping.lookup(originalRegValue);
             Operation *clonedRegOp = clonedRegValue.getDefiningOp();
-            auto reg = dyn_cast<seq::CompRegOp>(clonedRegOp);
+            auto reg = cast<seq::CompRegOp>(clonedRegOp);
             opBuilder.setInsertionPointToStart(&newActionBlock);
             auto updateOp = opBuilder.create<UpdateOp>(reg.getLoc(), variableOp,
                                                        reg.getInput());
-            const mlir::Value res = variableOp.getResult();
+            const Value res = variableOp.getResult();
             clonedRegValue.replaceAllUsesWith(res);
             reg.erase();
           }
@@ -798,14 +804,14 @@ public:
           }
 
           FrozenRewritePatternSet patterns(opBuilder.getContext());
-          mlir::GreedyRewriteConfig config;
+          GreedyRewriteConfig config;
           SmallVector<Operation *> opsToProcess;
           actionRegion.walk([&](Operation *op) { opsToProcess.push_back(op); });
           config.setScope(&actionRegion);
 
           bool changed = false;
-          LogicalResult converged = mlir::applyOpPatternsGreedily(
-              opsToProcess, patterns, config, &changed);
+          LogicalResult converged =
+              applyOpPatternsGreedily(opsToProcess, patterns, config, &changed);
 
           if (!sortTopologically(&actionRegion.front())) {
             transitionOp.emitError(
@@ -826,19 +832,19 @@ public:
             [&](Operation *op) { outputOps.push_back(op); });
 
         bool changed = false;
-        mlir::GreedyRewriteConfig config;
+        GreedyRewriteConfig config;
         config.setScope(&stateOp.getOutput());
-        LogicalResult converged = mlir::applyOpPatternsGreedily(
+        LogicalResult converged = applyOpPatternsGreedily(
             outputOps, frozenPatterns, config, &changed);
 
         SmallVector<Operation *> transitionOps;
         stateOp.getTransitions().walk(
             [&](Operation *op) { transitionOps.push_back(op); });
 
-        mlir::GreedyRewriteConfig config2;
+        GreedyRewriteConfig config2;
         config2.setScope(&stateOp.getTransitions());
-        mlir::applyOpPatternsGreedily(transitionOps, frozenPatterns, config2,
-                                      &changed);
+        applyOpPatternsGreedily(transitionOps, frozenPatterns, config2,
+                                &changed);
 
         if (failed(converged)) {
           stateOp.emitError("Failed to canonicalize the generated state op");
@@ -865,16 +871,22 @@ public:
       }
     }
 
+    // Clean up unreachable states. States without an output region are
+    // placeholder states that were created during reachability analysis but
+    // never populated (i.e., they are unreachable from the initial state).
     SmallVector<StateOp> statesToErase;
 
-    // First, collect the states that need to be erased.
+    // Collect unreachable states (those without an output op).
     for (StateOp stateOp : machine.getOps<StateOp>()) {
       if (!stateOp.getOutputOp()) {
         statesToErase.push_back(stateOp);
       }
     }
 
-    // Now, erase them in a separate loop.
+    // Erase states in a separate loop to avoid iterator invalidation. We first
+    // collect all states to erase, then iterate over that list. This is
+    // necessary because erasing a state while iterating over machine.getOps()
+    // would invalidate the iterator.
     for (StateOp stateOp : statesToErase) {
       for (TransitionOp transition : machine.getOps<TransitionOp>()) {
         if (transition.getNextStateOp().getSymName() == stateOp.getSymName()) {
@@ -898,9 +910,9 @@ public:
       return arg.getType() == seq::ClockType::get(arg.getContext());
     });
     FunctionType oldFunctionType = machine.getFunctionType();
-    SmallVector<mlir::Type> inputsWithoutClock;
+    SmallVector<Type> inputsWithoutClock;
     for (unsigned int i = 0; i < oldFunctionType.getNumInputs(); i++) {
-      mlir::Type input = oldFunctionType.getInput(i);
+      Type input = oldFunctionType.getInput(i);
       if (input != seq::ClockType::get(input.getContext()) &&
           !asyncResetArguments.contains(i))
         inputsWithoutClock.push_back(input);
