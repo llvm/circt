@@ -5,13 +5,12 @@ from .module import Module
 import builtins
 import inspect
 from pathlib import Path
-from typing import List
 import subprocess
 import re
 import os
 
 
-def print_info(msg_fmt: str, *args: List[Signal]):
+def print_info(msg_fmt: str, *args: Signal):
   """Emit SystemVerilog info message."""
   from .dialects import sv
   from .circt.ir import StringAttr
