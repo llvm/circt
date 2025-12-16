@@ -751,7 +751,7 @@ Valuation floyd(const std::vector<Constraint1> &constraints,
   }
 
   LLVM_DEBUG({
-  lvm::dbgs() << "initial matrix:\n";
+  llvm::dbgs() << "initial matrix:\n";
   for (int i = 0; i < n; i++) {
     for (int j = 0; j < n; j++) {
       if (graph[i][j] == INF)
