@@ -19,6 +19,7 @@
 #include "circt/Support/ConversionPatternSet.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/ControlFlow/Transforms/StructuralTypeConversions.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -1443,6 +1444,23 @@ struct ICmpOpConversion : public OpConversionPattern<SourceOp> {
   }
 };
 
+template <typename SourceOp, arith::CmpFPredicate pred>
+struct FCmpOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType =
+        ConversionPattern::typeConverter->convertType(op.getResult().getType());
+
+    rewriter.replaceOpWithNewOp<arith::CmpFOp>(
+        op, resultType, pred, adaptor.getLhs(), adaptor.getRhs());
+    return success();
+  }
+};
+
 template <typename SourceOp, bool withoutX>
 struct CaseXZEqOpConversion : public OpConversionPattern<SourceOp> {
   using OpConversionPattern<SourceOp>::OpConversionPattern;
@@ -2344,6 +2362,12 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     ICmpOpConversion<CaseNeOp, ICmpPredicate::cne>,
     ICmpOpConversion<WildcardEqOp, ICmpPredicate::weq>,
     ICmpOpConversion<WildcardNeOp, ICmpPredicate::wne>,
+    FCmpOpConversion<NeRealOp, arith::CmpFPredicate::ONE>,
+    FCmpOpConversion<FltOp, arith::CmpFPredicate::OLT>,
+    FCmpOpConversion<FleOp, arith::CmpFPredicate::OLE>,
+    FCmpOpConversion<FgtOp, arith::CmpFPredicate::OGT>,
+    FCmpOpConversion<FgeOp, arith::CmpFPredicate::OGE>,
+    FCmpOpConversion<EqRealOp, arith::CmpFPredicate::OEQ>,
     CaseXZEqOpConversion<CaseZEqOp, true>,
     CaseXZEqOpConversion<CaseXZEqOp, false>,
 
