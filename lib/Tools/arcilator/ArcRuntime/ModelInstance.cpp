@@ -27,7 +27,8 @@ ModelInstance::ModelInstance(const ArcRuntimeModelInfo *modelInfo,
     : instanceID(instanceIDsGlobal++), modelInfo(modelInfo), state(state) {
   parseArgs(args);
   if (verbose) {
-    std::cout << "[ArcRuntime] " << "Created instance"
+    std::cout << "[ArcRuntime] "
+              << "Created instance"
               << " of model \"" << getModelName() << "\""
               << " with ID " << instanceID << std::endl;
   }
@@ -35,7 +36,8 @@ ModelInstance::ModelInstance(const ArcRuntimeModelInfo *modelInfo,
 
 ModelInstance::~ModelInstance() {
   if (verbose) {
-    std::cout << "[ArcRuntime] " << "Deleting instance"
+    std::cout << "[ArcRuntime] "
+              << "Deleting instance"
               << " of model \"" << getModelName() << "\""
               << " with ID " << instanceID << " after " << stepCounter
               << " step(s)" << std::endl;
