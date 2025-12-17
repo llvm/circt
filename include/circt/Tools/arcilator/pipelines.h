@@ -41,6 +41,11 @@ struct ArcPreprocessingOptions
       *this, "observe-memories",
       llvm::cl::desc("Make all memory contents observable"),
       llvm::cl::init(false)};
+
+  Option<bool> ignoreAsync{
+      *this, "ignore-async",
+      llvm::cl::desc("Treat asynchronous firreg resets as synchronous"),
+      llvm::cl::init(false)};
 };
 void populateArcPreprocessingPipeline(
     mlir::OpPassManager &pm, const ArcPreprocessingOptions &options = {});

@@ -183,6 +183,11 @@ static llvm::cl::opt<unsigned> splitFuncsThreshold(
         "Split large MLIR functions that occur above the given size threshold"),
     llvm::cl::ValueOptional, llvm::cl::cat(mainCategory));
 
+static llvm::cl::opt<bool> ignoreAsync(
+    "ignore-async",
+    llvm::cl::desc("Treat asynchronous firreg resets as synchronous"),
+    llvm::cl::init(false), llvm::cl::cat(mainCategory));
+
 // Options to control early-out from pipeline.
 enum Until {
   UntilPreprocessing,
@@ -263,6 +268,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   preprocessingOpt.observeWires = observeWires;
   preprocessingOpt.observeNamedValues = observeNamedValues;
   preprocessingOpt.observeMemories = observeMemories;
+  preprocessingOpt.ignoreAsync = ignoreAsync;
   populateArcPreprocessingPipeline(pm, preprocessingOpt);
 
   // Restructure the input from a `hw.module` hierarchy to a collection of arcs.

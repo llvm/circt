@@ -30,6 +30,7 @@ using namespace arc;
 
 namespace {
 struct StripSVPass : public arc::impl::StripSVBase<StripSVPass> {
+  explicit StripSVPass(bool ignoreAsync) { this->ignoreAsync = ignoreAsync; }
   void runOnOperation() override;
   SmallVector<Operation *> opsToDelete;
   SmallPtrSet<StringAttr, 4> clockGateModuleNames;
@@ -136,7 +137,7 @@ void StripSVPass::runOnOperation() {
       if (auto reg = dyn_cast<seq::FirRegOp>(&op)) {
         OpBuilder builder(reg);
 
-        if (reg.getIsAsync()) {
+        if (reg.getIsAsync() && !ignoreAsync) {
           reg.emitOpError("only synchronous resets are currently supported");
           return signalPassFailure();
         }
@@ -180,6 +181,6 @@ void StripSVPass::runOnOperation() {
     op->erase();
 }
 
-std::unique_ptr<Pass> arc::createStripSVPass() {
-  return std::make_unique<StripSVPass>();
+std::unique_ptr<Pass> arc::createStripSVPass(bool ignoreAsync) {
+  return std::make_unique<StripSVPass>(ignoreAsync);
 }

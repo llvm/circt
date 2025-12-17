@@ -44,7 +44,7 @@ void circt::populateArcPreprocessingPipeline(
     opts.tapNamedValues = options.observeNamedValues;
     pm.addPass(arc::createAddTapsPass(opts));
   }
-  pm.addPass(arc::createStripSVPass());
+  pm.addPass(arc::createStripSVPass(options.ignoreAsync));
   {
     arc::InferMemoriesOptions opts;
     opts.tapPorts = options.observePorts;
