@@ -17,6 +17,8 @@ using namespace rtg;
 // Reduction patterns
 //===----------------------------------------------------------------------===//
 
+namespace {
+
 /// Replace virtual registers with a constant register.
 struct VirtualRegisterConstantifier : public OpReduction<VirtualRegisterOp> {
   LogicalResult rewrite(VirtualRegisterOp op) override {
@@ -35,6 +37,8 @@ struct VirtualRegisterConstantifier : public OpReduction<VirtualRegisterOp> {
     return "rtg-virtual-register-constantifier";
   }
 };
+
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Reduction Registration
