@@ -1643,11 +1643,11 @@ module realToTimeConversion;
   // CHECK: procedure initial
   // CHECK: [[TIME:%.+]] = moore.builtin.time 
   // CHECK: [[TIME_TO_LOGIC:%.+]] = moore.time_to_logic [[TIME]]
-  // CHECK: [[DIVISOR:%.+]] = moore.constant 100000 : l64 
-  // CHECK: [[QUOTIENT:%.+]] = moore.divu [[TIME_TO_LOGIC]], [[DIVISOR]] : l64 
-  // CHECK: [[INT:%.+]] = moore.logic_to_int [[QUOTIENT]] : l64 
+  // CHECK: [[INT:%.+]] = moore.logic_to_int [[TIME_TO_LOGIC]] : l64 
   // CHECK: [[REAL:%.+]] = moore.uint_to_real [[INT]] : i64 -> f64 
-  // CHECK: [[FMT:%.+]] = moore.fmt.real float [[REAL]], : f64 
+  // CHECK: [[SCALE:%.+]] = moore.constant_real 1.000000e+05 : f64 
+  // CHECK: [[DIV:%.+]] = moore.fdiv [[REAL]], [[SCALE]] : f64 
+  // CHECK: [[FMT:%.+]] = moore.fmt.real float [[DIV]], : f64 
   initial
     $display("%0.3f", $time);
 endmodule
@@ -1657,13 +1657,13 @@ module timeToRealConversion;
   realtime x = 0.3;
 
   // CHECK: procedure initial
-  // CHECK: [[READ_X:%.+]] = moore.read %x : <time> 
+  // CHECK: [[READ_X:%.+]] = moore.read %x : <time>
   // CHECK: [[TIME_TO_LOGIC:%.+]] = moore.time_to_logic [[READ_X]]
-  // CHECK: [[DIVISOR:%.+]] = moore.constant 100000 : l64 
-  // CHECK: [[QUOTIENT:%.+]] = moore.divu [[TIME_TO_LOGIC]], [[DIVISOR]] : l64 
-  // CHECK: [[INT:%.+]] = moore.logic_to_int [[QUOTIENT]] : l64 
-  // CHECK: [[REAL:%.+]] = moore.uint_to_real [[INT]] : i64 -> f64 
-  // CHECK: [[FMT:%.+]] = moore.fmt.real float [[REAL]], : f64
+  // CHECK: [[LOGIC_TO_INT:%.+]] = moore.logic_to_int [[TIME_TO_LOGIC]] : l64
+  // CHECK: [[UINT_TO_REAL:%.+]] = moore.uint_to_real [[LOGIC_TO_INT]] : i64 -> f64
+  // CHECK: [[SCALE:%.+]] = moore.constant_real 1.000000e+05 : f64
+  // CHECK: [[DIV:%.+]] = moore.fdiv [[UINT_TO_REAL]], [[SCALE]] : f64
+  // CHECK: [[FMT:%.+]] = moore.fmt.real float [[DIV]], : f64
   initial begin
     $display("%f", x);
    end

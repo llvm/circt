@@ -2364,23 +2364,38 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
     return builder.createOrFold<moore::UIntToRealOp>(loc, type, twoValInt);
   }
 
+  auto getBuiltinFloatType = [&](moore::RealType type) -> Type {
+    if (type.getWidth() == moore::RealWidth::f32)
+      return mlir::Float32Type::get(builder.getContext());
+
+    return mlir::Float64Type::get(builder.getContext());
+  };
+
   // Handle f64/f32 to time conversion
   if (isa<moore::TimeType>(type) && isa<moore::RealType>(value.getType())) {
     auto intType =
         moore::IntType::get(builder.getContext(), 64, Domain::TwoValued);
-    auto asInt = moore::RealToIntOp::create(builder, loc, intType, value);
+    Type floatType =
+        getBuiltinFloatType(cast<moore::RealType>(value.getType()));
+    auto scale = moore::ConstantRealOp::create(
+        builder, loc, value.getType(),
+        FloatAttr::get(floatType, getTimeScaleInFemtoseconds(*this)));
+    auto scaled = builder.createOrFold<moore::MulRealOp>(loc, value, scale);
+    auto asInt = moore::RealToIntOp::create(builder, loc, intType, scaled);
     auto asLogic = moore::IntToLogicOp::create(builder, loc, asInt);
-    return materializeSBVToPackedConversion(*this, cast<moore::TimeType>(type),
-                                            asLogic, loc);
+    return moore::LogicToTimeOp::create(builder, loc, asLogic);
   }
 
   // Handle time to f64/f32 conversion
   if (isa<moore::RealType>(type) && isa<moore::TimeType>(value.getType())) {
-    auto asLogic = materializePackedToSBVConversion(*this, value, loc);
-    if (!asLogic)
-      return {};
+    auto asLogic = moore::TimeToLogicOp::create(builder, loc, value);
     auto asInt = moore::LogicToIntOp::create(builder, loc, asLogic);
-    return moore::UIntToRealOp::create(builder, loc, type, asInt);
+    auto asReal = moore::UIntToRealOp::create(builder, loc, type, asInt);
+    Type floatType = getBuiltinFloatType(cast<moore::RealType>(type));
+    auto scale = moore::ConstantRealOp::create(
+        builder, loc, type,
+        FloatAttr::get(floatType, getTimeScaleInFemtoseconds(*this)));
+    return moore::DivRealOp::create(builder, loc, asReal, scale);
   }
 
   // Handle Int to String
