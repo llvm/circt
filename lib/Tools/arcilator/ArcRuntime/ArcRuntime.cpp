@@ -19,6 +19,7 @@
 #include "ArcRuntime/ModelInstance.h"
 
 #ifdef ARC_RUNTIME_JIT_BIND
+#define ARC_RUNTIME_JITBIND_FNDECL
 #include "ArcRuntime/JITBind.h"
 #endif
 
