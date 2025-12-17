@@ -176,13 +176,13 @@ public:
   /// machine.
   /// 3. Iterates over all states in the machine
   ///  3.1. Moves all `comb` logic into the body of the HW module
-  ///  3.2. Extend the output logic mux chains with cases for this state
+  ///  3.2. Extends the output logic mux chains with cases for this state
   ///  3.3. Iterates over the transitions of the state
   ///    3.3.1. Moves all `comb` logic in the transition guard/action regions to
   ///            the body of the HW module.
   ///    3.3.2. Extends the next state mux chain with an optionally guarded case
   ///    for this transition.
-  /// 4. Connect the state and variable mux chain outputs to the corresponding
+  /// 4. Connects the state and variable mux chain outputs to the corresponding
   /// register inputs.
   LogicalResult dispatch();
 
