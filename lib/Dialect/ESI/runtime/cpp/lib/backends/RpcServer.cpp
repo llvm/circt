@@ -70,7 +70,7 @@ public:
   WriteChannelPort &registerWritePort(const std::string &name,
                                       const std::string &type);
 
-  void stop();
+  void stop(uint32_t timeoutMS = 0);
 
   int getPort() { return port; }
 
@@ -163,7 +163,7 @@ Impl::Impl(Context &ctxt, int port) : ctxt(ctxt), esiVersion(-1) {
                                      std::to_string(port));
 }
 
-void Impl::stop() {
+void Impl::stop(uint32_t timeoutMS) {
   // Disconnect all the ports.
   for (auto &[name, port] : readPorts)
     port->disconnect();
@@ -171,7 +171,13 @@ void Impl::stop() {
     port->disconnect();
 
   // Shutdown the server and wait for it to finish.
-  server->Shutdown();
+  if (timeoutMS > 0)
+    server->Shutdown(gpr_time_add(
+        gpr_now(GPR_CLOCK_REALTIME),
+        gpr_time_from_millis(static_cast<int>(timeoutMS), GPR_TIMESPAN)));
+  else
+    server->Shutdown();
+
   server->Wait();
   server = nullptr;
 }
@@ -386,10 +392,10 @@ void RpcServer::run(int port) {
     throw std::runtime_error("Server already running");
   impl = std::make_unique<Impl>(ctxt, port);
 }
-void RpcServer::stop() {
+void RpcServer::stop(uint32_t timeoutMS) {
   if (!impl)
     throw std::runtime_error("Server not running");
-  impl->stop();
+  impl->stop(timeoutMS);
 }
 
 int RpcServer::getPort() {
