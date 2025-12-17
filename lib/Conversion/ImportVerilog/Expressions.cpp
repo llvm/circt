@@ -2364,6 +2364,74 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
     return builder.createOrFold<moore::UIntToRealOp>(loc, type, twoValInt);
   }
 
+  auto getBuiltinFloatType = [&](moore::RealType type) -> Type {
+    if (type.getWidth() == moore::RealWidth::f32)
+      return mlir::Float32Type::get(builder.getContext());
+
+    return mlir::Float64Type::get(builder.getContext());
+  };
+
+  // Handle f64/f32 to time conversion
+  if (isa<moore::TimeType>(type) && isa<moore::RealType>(value.getType())) {
+    auto intType =
+        moore::IntType::get(builder.getContext(), 64, Domain::TwoValued);
+    Type floatType =
+        getBuiltinFloatType(cast<moore::RealType>(value.getType()));
+    auto scale = moore::ConstantRealOp::create(
+        builder, loc, value.getType(),
+        FloatAttr::get(floatType, getTimeScaleInFemtoseconds(*this)));
+    auto scaled = builder.createOrFold<moore::MulRealOp>(loc, value, scale);
+    auto asInt = moore::RealToIntOp::create(builder, loc, intType, scaled);
+    auto asLogic = moore::IntToLogicOp::create(builder, loc, asInt);
+    return moore::LogicToTimeOp::create(builder, loc, asLogic);
+  }
+
+  // Handle time to f64/f32 conversion
+  if (isa<moore::RealType>(type) && isa<moore::TimeType>(value.getType())) {
+    auto asLogic = moore::TimeToLogicOp::create(builder, loc, value);
+    auto asInt = moore::LogicToIntOp::create(builder, loc, asLogic);
+    auto asReal = moore::UIntToRealOp::create(builder, loc, type, asInt);
+    Type floatType = getBuiltinFloatType(cast<moore::RealType>(type));
+    auto scale = moore::ConstantRealOp::create(
+        builder, loc, type,
+        FloatAttr::get(floatType, getTimeScaleInFemtoseconds(*this)));
+    return moore::DivRealOp::create(builder, loc, asReal, scale);
+  }
+
+  // Handle Int to String
+  if (isa<moore::StringType>(type)) {
+    if (auto intType = dyn_cast<moore::IntType>(value.getType())) {
+      if (intType.getDomain() == moore::Domain::FourValued)
+        value = moore::LogicToIntOp::create(builder, loc, value);
+      return moore::IntToStringOp::create(builder, loc, value);
+    }
+  }
+
+  // Handle String to Int
+  if (auto intType = dyn_cast<moore::IntType>(type)) {
+    if (isa<moore::StringType>(value.getType())) {
+      value = moore::StringToIntOp::create(builder, loc, intType.getTwoValued(),
+                                           value);
+
+      if (intType.getDomain() == moore::Domain::FourValued)
+        return moore::IntToLogicOp::create(builder, loc, value);
+
+      return value;
+    }
+  }
+
+  // Handle Int to FormatString
+  if (isa<moore::FormatStringType>(type)) {
+    auto asStr = materializeConversion(moore::StringType::get(getContext()),
+                                       value, isSigned, loc);
+    if (!asStr)
+      return {};
+    return moore::FormatStringOp::create(builder, loc, asStr, {}, {}, {});
+  }
+
+  if (isa<moore::RealType>(type) && isa<moore::RealType>(value.getType()))
+    return builder.createOrFold<moore::ConvertRealOp>(loc, type, value);
+
   if (isa<moore::ClassHandleType>(type) &&
       isa<moore::ClassHandleType>(value.getType()))
     return maybeUpcastHandle(*this, value, cast<moore::ClassHandleType>(type));

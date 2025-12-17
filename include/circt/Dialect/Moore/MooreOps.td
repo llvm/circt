@@ -804,6 +804,39 @@ def IntToStringOp : MooreOp<"int_to_string", [
   }];
 }
 
+def StringToIntOp : MooreOp<"string_to_int", [
+  Pure
+]> {
+  let summary = "Convert a string to an integer";
+  let description = [{
+    If the width of the result type is smaller than the input string, it is
+    truncated. If it is larger, it is appended with 0s.
+  }];
+  
+  let arguments = (ins StringType:$input);
+  let results = (outs TwoValuedIntType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($result)
+  }];
+}
+
+def ConvertRealOp : MooreOp<"convert_real", [
+  Pure
+]> {
+  let summary = "Convert a real to a different bitwidth";
+  let description = [{
+    The value is rounded to the nearest value representable by the target type.
+    See IEEE 1800-2023 Section 6.24.1.
+  }];
+  
+  let arguments = (ins RealType:$input);
+  let results = (outs RealType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
+
+  let hasFolder = 1;
+}
 
 //===----------------------------------------------------------------------===//
 // Resizing
