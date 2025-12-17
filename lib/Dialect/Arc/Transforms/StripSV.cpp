@@ -142,9 +142,6 @@ void StripSVPass::runOnOperation() {
           return signalPassFailure();
         }
 
-        Value reset = reg.hasReset() ? reg.getReset() : Value{};
-        Value resetValue = reg.hasReset() ? reg.getResetValue() : Value{};
-
         Value presetValue;
         // Materialize initial value, assume zero initialization as default.
         if (reg.getPreset() && !reg.getPreset()->isZero()) {
@@ -157,8 +154,8 @@ void StripSVPass::runOnOperation() {
 
         Value compReg = seq::CompRegOp::create(
             builder, reg.getLoc(), next.getType(), next, reg.getClk(),
-            reg.getNameAttr(), reset, resetValue, /*initialValue*/ presetValue,
-            reg.getInnerSymAttr());
+            reg.getNameAttr(), reg.getReset(), reg.getResetValue(),
+            /*initialValue*/ presetValue, reg.getInnerSymAttr());
         reg.replaceAllUsesWith(compReg);
         opsToDelete.push_back(reg);
         continue;
