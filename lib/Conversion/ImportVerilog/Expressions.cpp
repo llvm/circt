@@ -2286,22 +2286,24 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
   // allows us to perform resizing and domain casting on that bit vector.
   auto dstPacked = dyn_cast<moore::PackedType>(type);
   auto srcPacked = dyn_cast<moore::PackedType>(value.getType());
-  auto dstInt = dstPacked ? dstPacked.getSimpleBitVector() : moore::IntType();
-  auto srcInt = srcPacked ? srcPacked.getSimpleBitVector() : moore::IntType();
 
-  if (dstInt && srcInt) {
+  if (dstPacked && srcPacked && dstPacked.getBitSize() &&
+      srcPacked.getBitSize()) {
     // Convert the value to a simple bit vector if it isn't one already.
     value = materializePackedToSBVConversion(*this, value, loc);
     if (!value)
       return {};
 
+    unsigned srcSize = *srcPacked.getBitSize();
+    unsigned dstSize = *dstPacked.getBitSize();
+
     // Create truncation or sign/zero extension ops depending on the source and
     // destination width.
-    auto resizedType = moore::IntType::get(
-        value.getContext(), dstInt.getWidth(), srcPacked.getDomain());
-    if (dstInt.getWidth() < srcInt.getWidth()) {
+    auto resizedType =
+        moore::IntType::get(value.getContext(), dstSize, srcPacked.getDomain());
+    if (dstSize < srcSize) {
       value = builder.createOrFold<moore::TruncOp>(loc, resizedType, value);
-    } else if (dstInt.getWidth() > srcInt.getWidth()) {
+    } else if (dstSize > srcSize) {
       if (isSigned)
         value = builder.createOrFold<moore::SExtOp>(loc, resizedType, value);
       else
@@ -2309,10 +2311,10 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
     }
 
     // Convert the domain if needed.
-    if (dstInt.getDomain() != srcInt.getDomain()) {
-      if (dstInt.getDomain() == moore::Domain::TwoValued)
+    if (dstPacked.getDomain() != srcPacked.getDomain()) {
+      if (dstPacked.getDomain() == moore::Domain::TwoValued)
         value = builder.createOrFold<moore::LogicToIntOp>(loc, value);
-      else if (dstInt.getDomain() == moore::Domain::FourValued)
+      else if (dstPacked.getDomain() == moore::Domain::FourValued)
         value = builder.createOrFold<moore::IntToLogicOp>(loc, value);
     }
 
@@ -2363,6 +2365,59 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
       return builder.createOrFold<moore::SIntToRealOp>(loc, type, twoValInt);
     return builder.createOrFold<moore::UIntToRealOp>(loc, type, twoValInt);
   }
+
+  // Handle f64/f32 to time conversion
+  if (isa<moore::TimeType>(type) && isa<moore::RealType>(value.getType())) {
+    auto asInt = moore::RealToIntOp::create(
+        builder, loc,
+        moore::IntType::get(builder.getContext(), 64, Domain::TwoValued),
+        value);
+    return materializeSBVToPackedConversion(*this, cast<moore::TimeType>(type),
+                                            asInt, loc);
+  }
+
+  // Handle time to f64/f32 conversion
+  if (isa<moore::RealType>(type) && isa<moore::TimeType>(value.getType())) {
+    auto asLogic = materializePackedToSBVConversion(*this, value, loc);
+    if (!asLogic)
+      return {};
+    auto asInt = moore::LogicToIntOp::create(builder, loc, asLogic);
+    return moore::UIntToRealOp::create(builder, loc, type, asInt);
+  }
+
+  // Handle Int to String
+  if (isa<moore::StringType>(type)) {
+    if (auto intType = dyn_cast<moore::IntType>(value.getType())) {
+      if (intType.getDomain() == moore::Domain::FourValued)
+        value = moore::LogicToIntOp::create(builder, loc, value);
+      return moore::IntToStringOp::create(builder, loc, value);
+    }
+  }
+
+  // Handle String to Int
+  if (auto intType = dyn_cast<moore::IntType>(type)) {
+    if (isa<moore::StringType>(value.getType())) {
+      value = moore::StringToIntOp::create(builder, loc, intType.getTwoValued(),
+                                           value);
+
+      if (intType.getDomain() == moore::Domain::FourValued)
+        return moore::IntToLogicOp::create(builder, loc, value);
+
+      return value;
+    }
+  }
+
+  // Handle Int to FormatString
+  if (isa<moore::FormatStringType>(type)) {
+    auto asStr = materializeConversion(moore::StringType::get(getContext()),
+                                       value, isSigned, loc);
+    if (!asStr)
+      return {};
+    return moore::FormatStringOp::create(builder, loc, asStr, {}, {}, {});
+  }
+
+  if (isa<moore::RealType>(type) && isa<moore::RealType>(value.getType()))
+    return moore::ConvertRealOp::create(builder, loc, type, value);
 
   if (isa<moore::ClassHandleType>(type) &&
       isa<moore::ClassHandleType>(value.getType()))

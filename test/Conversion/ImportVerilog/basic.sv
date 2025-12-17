@@ -3486,6 +3486,13 @@ function string testStrLiteralReturn;
     return testStrLiteral;
 endfunction // testStrLiteralReturn
 
+// CHECK-LABEL: func.func private @testStrLiteralAsIntReturn()
+// CHECK-SAME: -> !moore.i64 {
+function bit [31:0] testStrLiteralAsIntReturn;
+    // CHECK-NEXT: return [[INT]] : !moore.i32
+    return bit'(testStrLiteralReturn());
+endfunction // testStrLiteralAsIntReturn
+
 // CHECK-LABEL: func.func private @testRealOps()
 function void testRealOps;
     // CHECK-NEXT: [[A:%.+]] = moore.variable : <f64>
