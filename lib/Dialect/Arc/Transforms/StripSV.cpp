@@ -135,7 +135,6 @@ void StripSVPass::runOnOperation() {
       // Canonicalize registers.
       if (auto reg = dyn_cast<seq::FirRegOp>(&op)) {
         OpBuilder builder(reg);
-        Value next = reg.getNext();
 
         if (reg.getIsAsync()) {
           reg.emitOpError("only synchronous resets are currently supported");
@@ -153,7 +152,7 @@ void StripSVPass::runOnOperation() {
         }
 
         Value compReg = seq::CompRegOp::create(
-            builder, reg.getLoc(), next.getType(), next, reg.getClk(),
+            builder, reg.getLoc(), reg.getType(), reg.getNext(), reg.getClk(),
             reg.getNameAttr(), reg.getReset(), reg.getResetValue(),
             /*initialValue*/ presetValue, reg.getInnerSymAttr());
         reg.replaceAllUsesWith(compReg);
