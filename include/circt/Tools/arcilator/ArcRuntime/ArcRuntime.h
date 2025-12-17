@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef ARC_RUNTIME_ARCRUNTIME_H
-#define ARC_RUNTIME_ARCRUNTIME_H
+#ifndef CIRCT_TOOLS_ARCILATOR_ARCRUNTIME_ARCRUNTIME_H
+#define CIRCT_TOOLS_ARCILATOR_ARCRUNTIME_ARCRUNTIME_H
 
 #include "ArcRuntime/Common.h"
 
@@ -74,4 +74,4 @@ ARC_RUNTIME_EXPORT uint64_t arcRuntimeGetAPIVersion();
 ARC_RUNTIME_EXPORT struct ArcState *
 arcRuntimeGetStateFromModelState(uint8_t *modelState, uint64_t offset);
 
-#endif // ARC_RUNTIME_ARCRUNTIME_H
+#endif // CIRCT_TOOLS_ARCILATOR_ARCRUNTIME_ARCRUNTIME_H

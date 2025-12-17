@@ -14,8 +14,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef ARC_RUNTIME_COMMON_H
-#define ARC_RUNTIME_COMMON_H
+#ifndef CIRCT_TOOLS_ARCILATOR_ARCRUNTIME_COMMON_H
+#define CIRCT_TOOLS_ARCILATOR_ARCRUNTIME_COMMON_H
 
 #include <stdint.h>
 
@@ -37,7 +37,7 @@ struct ArcState {
   /// Runtime implementation specific data. Usually points to a custom struct.
   void *impl;
   /// Padding for alignment and reserved for future use.
-  uint32_t _reserved;
+  uint32_t reserved;
   /// Runtime magic number. Must be set to `ARC_RUNTIME_MAGIC`.
   uint32_t magic;
   // The model's state.
@@ -57,4 +57,4 @@ struct ArcRuntimeModelInfo {
 
 #pragma pack(pop)
 
-#endif // ARC_RUNTIME_COMMON_H
+#endif // CIRCT_TOOLS_ARCILATOR_ARCRUNTIME_COMMON_H

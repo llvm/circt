@@ -13,8 +13,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef ARC_RUNTIME_MODELINSTANCE_H
-#define ARC_RUNTIME_MODELINSTANCE_H
+#ifndef CIRCT_TOOLS_ARCILATOR_ARCRUNTIME_MODELINSTANCE_H
+#define CIRCT_TOOLS_ARCILATOR_ARCRUNTIME_MODELINSTANCE_H
 
 #include "ArcRuntime/ArcRuntime.h"
 #include "ArcRuntime/Common.h"
@@ -51,4 +51,4 @@ private:
 } // namespace arc
 } // namespace circt
 
-#endif // ARC_RUNTIME_MODELINSTANCE_H
+#endif // CIRCT_TOOLS_ARCILATOR_ARCRUNTIME_MODELINSTANCE_H
