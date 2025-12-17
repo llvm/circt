@@ -719,6 +719,22 @@ func.func @CmpReal(%arg0: !moore.f32, %arg1: !moore.f32) {
   return
 }
 
+// CHECK-LABEL: func.func @BinaryRealOps
+func.func @BinaryRealOps(%arg0: !moore.f32, %arg1: !moore.f32) {
+  // CHECK: arith.addf %arg0, %arg1 : f32
+  moore.fadd %arg0, %arg1 : f32
+  // CHECK: arith.subf %arg0, %arg1 : f32
+  moore.fsub %arg0, %arg1 : f32
+  // CHECK: arith.divf %arg0, %arg1 : f32
+  moore.fdiv %arg0, %arg1 : f32
+  // CHECK: arith.mulf %arg0, %arg1 : f32
+  moore.fmul %arg0, %arg1 : f32
+  // CHECK: math.powf %arg0, %arg1 : f32
+  moore.fpow %arg0, %arg1 : f32
+
+  return
+}
+
 // CHECK-LABEL: hw.module @Procedures
 moore.module @Procedures() {
   // CHECK: llhd.process {

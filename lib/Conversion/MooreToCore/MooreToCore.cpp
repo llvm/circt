@@ -1427,6 +1427,20 @@ struct BinaryOpConversion : public OpConversionPattern<SourceOp> {
   }
 };
 
+template <typename SourceOp, typename TargetOp>
+struct BinaryRealOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<TargetOp>(op, adaptor.getLhs(),
+                                          adaptor.getRhs());
+    return success();
+  }
+};
+
 template <typename SourceOp, ICmpPredicate pred>
 struct ICmpOpConversion : public OpConversionPattern<SourceOp> {
   using OpConversionPattern<SourceOp>::OpConversionPattern;
@@ -2343,6 +2357,13 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     BinaryOpConversion<AndOp, comb::AndOp>,
     BinaryOpConversion<OrOp, comb::OrOp>,
     BinaryOpConversion<XorOp, comb::XorOp>,
+
+    // Patterns for binary real operations.
+    BinaryRealOpConversion<AddRealOp, arith::AddFOp>,
+    BinaryRealOpConversion<SubRealOp, arith::SubFOp>,
+    BinaryRealOpConversion<DivRealOp, arith::DivFOp>,
+    BinaryRealOpConversion<MulRealOp, arith::MulFOp>,
+    BinaryRealOpConversion<PowRealOp, math::PowFOp>,
 
     // Patterns of power operations.
     PowUOpConversion, PowSOpConversion,
