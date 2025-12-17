@@ -133,10 +133,10 @@ StateEncoding::StateEncoding(OpBuilder &b, MachineOp machine,
     // We already checked that a static cast is valid
     stateType = cast<TypeAttr>(machine->getAttr("stateType")).getValue();
   } else {
-    int numOps = std::distance(machine.getBody().getOps<StateOp>().begin(),
-                               machine.getBody().getOps<StateOp>().end());
+    int numStates = std::distance(machine.getBody().getOps<StateOp>().begin(),
+                                  machine.getBody().getOps<StateOp>().end());
     stateType =
-        IntegerType::get(machine.getContext(), llvm::Log2_64_Ceil(numOps));
+        IntegerType::get(machine.getContext(), llvm::Log2_64_Ceil(numStates));
   }
   int stateValue = 0;
   // And create values for the states
