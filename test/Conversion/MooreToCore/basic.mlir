@@ -701,6 +701,24 @@ func.func @CaseXZ(%arg0: !moore.l8, %arg1: !moore.l8) {
   return
 }
 
+// CHECK-LABEL: func.func @CmpReal
+func.func @CmpReal(%arg0: !moore.f32, %arg1: !moore.f32) {
+  // CHECK: arith.cmpf one, %arg0, %arg1 : f32
+  moore.fne %arg0, %arg1 : f32 -> i1
+  // CHECK: arith.cmpf olt, %arg0, %arg1 : f32
+  moore.flt %arg0, %arg1 : f32 -> i1
+  // CHECK: arith.cmpf ole, %arg0, %arg1 : f32
+  moore.fle %arg0, %arg1 : f32 -> i1
+  // CHECK: arith.cmpf ogt, %arg0, %arg1 : f32
+  moore.fgt %arg0, %arg1 : f32 -> i1
+  // CHECK: arith.cmpf oge, %arg0, %arg1 : f32
+  moore.fge %arg0, %arg1 : f32 -> i1
+  // CHECK: arith.cmpf oeq, %arg0, %arg1 : f32
+  moore.feq %arg0, %arg1 : f32 -> i1
+
+  return
+}
+
 // CHECK-LABEL: hw.module @Procedures
 moore.module @Procedures() {
   // CHECK: llhd.process {
