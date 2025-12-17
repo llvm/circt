@@ -1633,7 +1633,6 @@ module intToFormatStringConversion();
   // CHECK-NEXT: [[LINEBREAK:%.+]] = moore.fmt.literal "\0A"
   // CHECK-NEXT: [[CONCAT:%.+]] = moore.fmt.concat ([[FMT]], [[LINEBREAK]])
   // CHECK-NEXT: moore.builtin.display [[CONCAT]]
-
   initial begin
     $display("%s", a);
   end
@@ -3793,4 +3792,3 @@ package PackageGlobal;
   // CHECK-NEXT: moore.yield [[TMP2]] : i42
   bit [41:0] packageGlobal2 = packageGlobal1;
 endpackage
-
