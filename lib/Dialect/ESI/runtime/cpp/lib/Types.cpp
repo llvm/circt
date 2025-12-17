@@ -223,7 +223,7 @@ void Type::dump(std::ostream &os, bool oneLine) const {
 // nested types) are registered to the provided context. It is expected that
 // the type was serialized via the 'serialize' method.
 // NOLINTNEXTLINE(misc-no-recursion)
-const Type *Type::deserialize(esi::Context &ctx, const std::string &data) {
+const Type *Type::deserializeType(esi::Context &ctx, const std::string &data) {
   nlohmann::json j = nlohmann::json::parse(data);
 
   if (!j.is_object())
@@ -276,19 +276,19 @@ const Type *Type::deserialize(esi::Context &ctx, const std::string &data) {
     esi::StructType::FieldVector fields;
     for (const auto &fieldObj : j.at("fields")) {
       std::string fieldName = fieldObj.at("name").get<std::string>();
-      const esi::Type *fieldType = deserialize(ctx, fieldObj.at("type"));
+      const esi::Type *fieldType = deserializeType(ctx, fieldObj.at("type"));
       fields.emplace_back(fieldName, fieldType);
     }
     std::string typeName = id.empty() ? "struct_auto" : id;
     return createStructType(ctx, typeName, fields);
   }
   if (mnemonic == "array") {
-    const esi::Type *elementType = deserialize(ctx, j.at("element"));
+    const esi::Type *elementType = deserializeType(ctx, j.at("element"));
     uint64_t size = j.at("size").get<uint64_t>();
     return createArrayType(ctx, elementType, size);
   }
   if (mnemonic == "channel") {
-    const esi::Type *innerType = deserialize(ctx, j.at("inner"));
+    const esi::Type *innerType = deserializeType(ctx, j.at("inner"));
     return createChannelType(ctx, innerType);
   }
   if (mnemonic == "bundle") {
@@ -299,7 +299,8 @@ const Type *Type::deserialize(esi::Context &ctx, const std::string &data) {
       esi::BundleType::Direction direction =
           (dirStr == "to") ? esi::BundleType::Direction::To
                            : esi::BundleType::Direction::From;
-      const esi::Type *channelType = deserialize(ctx, channelObj.at("type"));
+      const esi::Type *channelType =
+          deserializeType(ctx, channelObj.at("type"));
       channels.emplace_back(channelName, direction, channelType);
     }
     std::string typeName = id.empty() ? "bundle_auto" : id;
@@ -316,9 +317,9 @@ const Type *Type::deserialize(esi::Context &ctx, const std::string &data) {
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
-std::string Type::serialize(const esi::Type *type) {
+std::string Type::serializeType(const esi::Type *type) {
   if (!type)
-    throw std::runtime_error("Type::serialize: null type provided");
+    throw std::runtime_error("Type::serializeType: null type provided");
 
   nlohmann::json j;
   j["id"] = type->getID();
@@ -344,17 +345,17 @@ std::string Type::serialize(const esi::Type *type) {
     for (const auto &[name, fieldType] : structType->getFields()) {
       nlohmann::json fieldObj;
       fieldObj["name"] = name;
-      fieldObj["type"] = serialize(fieldType);
+      fieldObj["type"] = serializeType(fieldType);
       fieldsArr.push_back(fieldObj);
     }
     j["fields"] = fieldsArr;
   } else if (auto *arrayType = dynamic_cast<const esi::ArrayType *>(type)) {
     j["mnemonic"] = "array";
-    j["element"] = serialize(arrayType->getElementType());
+    j["element"] = serializeType(arrayType->getElementType());
     j["size"] = arrayType->getSize();
   } else if (auto *channelType = dynamic_cast<const esi::ChannelType *>(type)) {
     j["mnemonic"] = "channel";
-    j["inner"] = serialize(channelType->getInner());
+    j["inner"] = serializeType(channelType->getInner());
   } else if (auto *bundleType = dynamic_cast<const esi::BundleType *>(type)) {
     j["mnemonic"] = "bundle";
     nlohmann::json channelsArr = nlohmann::json::array();
@@ -364,7 +365,7 @@ std::string Type::serialize(const esi::Type *type) {
       channelObj["name"] = name;
       channelObj["direction"] =
           (direction == esi::BundleType::Direction::To) ? "to" : "from";
-      channelObj["type"] = serialize(channelType);
+      channelObj["type"] = serializeType(channelType);
       channelsArr.push_back(channelObj);
     }
     j["channels"] = channelsArr;

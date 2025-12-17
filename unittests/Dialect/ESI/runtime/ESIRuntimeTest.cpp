@@ -788,7 +788,7 @@ TEST(ESITypesTest, BitWidthCalculations) {
 }
 
 //===----------------------------------------------------------------------===//
-// Type::serialize / Type::deserialize round-trip tests
+// Type::serializeType / Type::deserializeType round-trip tests
 //===----------------------------------------------------------------------===//
 
 class TypeSerializationTest : public ::testing::Test {
@@ -800,10 +800,10 @@ protected:
 TEST_F(TypeSerializationTest, VoidTypeRoundTrip) {
   VoidType voidType("void");
 
-  std::string serialized = Type::serialize(&voidType);
+  std::string serialized = Type::serializeType(&voidType);
   EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
 
-  const Type *deserialized = Type::deserialize(ctx, serialized);
+  const Type *deserialized = Type::deserializeType(ctx, serialized);
   ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
 
   auto *deserializedVoid = dynamic_cast<const VoidType *>(deserialized);
@@ -817,10 +817,10 @@ TEST_F(TypeSerializationTest, VoidTypeRoundTrip) {
 TEST_F(TypeSerializationTest, BitsTypeRoundTrip) {
   BitsType bitsType("bits32", 32);
 
-  std::string serialized = Type::serialize(&bitsType);
+  std::string serialized = Type::serializeType(&bitsType);
   EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
 
-  const Type *deserialized = Type::deserialize(ctx, serialized);
+  const Type *deserialized = Type::deserializeType(ctx, serialized);
   ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
 
   auto *deserializedBits = dynamic_cast<const BitsType *>(deserialized);
@@ -834,10 +834,10 @@ TEST_F(TypeSerializationTest, BitsTypeRoundTrip) {
 TEST_F(TypeSerializationTest, UIntTypeRoundTrip) {
   UIntType uintType("u64", 64);
 
-  std::string serialized = Type::serialize(&uintType);
+  std::string serialized = Type::serializeType(&uintType);
   EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
 
-  const Type *deserialized = Type::deserialize(ctx, serialized);
+  const Type *deserialized = Type::deserializeType(ctx, serialized);
   ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
 
   auto *deserializedUInt = dynamic_cast<const UIntType *>(deserialized);
@@ -851,10 +851,10 @@ TEST_F(TypeSerializationTest, UIntTypeRoundTrip) {
 TEST_F(TypeSerializationTest, SIntTypeRoundTrip) {
   SIntType sintType("s32", 32);
 
-  std::string serialized = Type::serialize(&sintType);
+  std::string serialized = Type::serializeType(&sintType);
   EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
 
-  const Type *deserialized = Type::deserialize(ctx, serialized);
+  const Type *deserialized = Type::deserializeType(ctx, serialized);
   ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
 
   auto *deserializedSInt = dynamic_cast<const SIntType *>(deserialized);
@@ -868,10 +868,10 @@ TEST_F(TypeSerializationTest, SIntTypeRoundTrip) {
 TEST_F(TypeSerializationTest, AnyTypeRoundTrip) {
   AnyType anyType("any");
 
-  std::string serialized = Type::serialize(&anyType);
+  std::string serialized = Type::serializeType(&anyType);
   EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
 
-  const Type *deserialized = Type::deserialize(ctx, serialized);
+  const Type *deserialized = Type::deserializeType(ctx, serialized);
   ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
 
   auto *deserializedAny = dynamic_cast<const AnyType *>(deserialized);
@@ -891,10 +891,10 @@ TEST_F(TypeSerializationTest, StructTypeRoundTrip) {
   StructType::FieldVector fields = {{"field1", uintType}, {"field2", sintType}};
   StructType structType("myStruct", fields);
 
-  std::string serialized = Type::serialize(&structType);
+  std::string serialized = Type::serializeType(&structType);
   EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
 
-  const Type *deserialized = Type::deserialize(ctx, serialized);
+  const Type *deserialized = Type::deserializeType(ctx, serialized);
   ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
 
   auto *deserializedStruct = dynamic_cast<const StructType *>(deserialized);
@@ -932,10 +932,10 @@ TEST_F(TypeSerializationTest, ArrayTypeRoundTrip) {
 
   ArrayType arrayType("myArray", elementType, 10);
 
-  std::string serialized = Type::serialize(&arrayType);
+  std::string serialized = Type::serializeType(&arrayType);
   EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
 
-  const Type *deserialized = Type::deserialize(ctx, serialized);
+  const Type *deserialized = Type::deserializeType(ctx, serialized);
   ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
 
   auto *deserializedArray = dynamic_cast<const ArrayType *>(deserialized);
@@ -959,10 +959,10 @@ TEST_F(TypeSerializationTest, ChannelTypeRoundTrip) {
 
   ChannelType channelType("myChannel", innerType);
 
-  std::string serialized = Type::serialize(&channelType);
+  std::string serialized = Type::serializeType(&channelType);
   EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
 
-  const Type *deserialized = Type::deserialize(ctx, serialized);
+  const Type *deserialized = Type::deserializeType(ctx, serialized);
   ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
 
   auto *deserializedChannel = dynamic_cast<const ChannelType *>(deserialized);
@@ -989,10 +989,10 @@ TEST_F(TypeSerializationTest, BundleTypeRoundTrip) {
       {"output", BundleType::Direction::From, fromType}};
   BundleType bundleType("myBundle", channels);
 
-  std::string serialized = Type::serialize(&bundleType);
+  std::string serialized = Type::serializeType(&bundleType);
   EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
 
-  const Type *deserialized = Type::deserialize(ctx, serialized);
+  const Type *deserialized = Type::deserializeType(ctx, serialized);
   ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
 
   auto *deserializedBundle = dynamic_cast<const BundleType *>(deserialized);
@@ -1032,10 +1032,10 @@ TEST_F(TypeSerializationTest, NestedStructWithArrayRoundTrip) {
   StructType::FieldVector fields = {{"data", arrayType}, {"count", sintType}};
   StructType structType("nestedStruct", fields);
 
-  std::string serialized = Type::serialize(&structType);
+  std::string serialized = Type::serializeType(&structType);
   EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
 
-  const Type *deserialized = Type::deserialize(ctx, serialized);
+  const Type *deserialized = Type::deserializeType(ctx, serialized);
   ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
 
   auto *deserializedStruct = dynamic_cast<const StructType *>(deserialized);
@@ -1069,10 +1069,10 @@ TEST_F(TypeSerializationTest, NestedStructWithArrayRoundTrip) {
 // Test type caching - deserializing the same type twice should return same ptr
 TEST_F(TypeSerializationTest, TypeCachingBehavior) {
   UIntType uintType("u32", 32);
-  std::string serialized = Type::serialize(&uintType);
+  std::string serialized = Type::serializeType(&uintType);
 
-  const Type *first = Type::deserialize(ctx, serialized);
-  const Type *second = Type::deserialize(ctx, serialized);
+  const Type *first = Type::deserializeType(ctx, serialized);
+  const Type *second = Type::deserializeType(ctx, serialized);
 
   EXPECT_EQ(first, second)
       << "Deserializing same type twice should return same cached instance";
@@ -1080,20 +1080,20 @@ TEST_F(TypeSerializationTest, TypeCachingBehavior) {
 
 // Test error handling for null type
 TEST_F(TypeSerializationTest, SerializeNullTypeThrows) {
-  EXPECT_THROW(Type::serialize(nullptr), std::runtime_error)
+  EXPECT_THROW(Type::serializeType(nullptr), std::runtime_error)
       << "Serializing null type should throw";
 }
 
 // Test error handling for invalid JSON
 TEST_F(TypeSerializationTest, DeserializeInvalidJsonThrows) {
-  EXPECT_THROW(Type::deserialize(ctx, "not valid json"), std::exception)
+  EXPECT_THROW(Type::deserializeType(ctx, "not valid json"), std::exception)
       << "Deserializing invalid JSON should throw";
 }
 
 // Test error handling for unknown mnemonic
 TEST_F(TypeSerializationTest, DeserializeUnknownMnemonicThrows) {
   std::string badJson = R"({"mnemonic": "unknown_type", "id": "bad"})";
-  EXPECT_THROW(Type::deserialize(ctx, badJson), std::runtime_error)
+  EXPECT_THROW(Type::deserializeType(ctx, badJson), std::runtime_error)
       << "Deserializing unknown mnemonic should throw";
 }
 
@@ -1102,11 +1102,11 @@ TEST_F(TypeSerializationTest, VariousBitWidths) {
   // Test small widths
   for (uint64_t width : {1, 4, 7, 8, 12, 16, 24, 32, 48, 64, 128}) {
     UIntType uintType("u" + std::to_string(width), width);
-    std::string serialized = Type::serialize(&uintType);
+    std::string serialized = Type::serializeType(&uintType);
 
     // Create new context to avoid caching
     Context localCtx;
-    const Type *deserialized = Type::deserialize(localCtx, serialized);
+    const Type *deserialized = Type::deserializeType(localCtx, serialized);
     ASSERT_NE(deserialized, nullptr)
         << "Deserialization should succeed for width " << width;
 
