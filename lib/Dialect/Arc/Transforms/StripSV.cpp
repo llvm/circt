@@ -135,13 +135,11 @@ void StripSVPass::runOnOperation() {
       // Canonicalize registers.
       if (auto reg = dyn_cast<seq::FirRegOp>(&op)) {
         OpBuilder builder(reg);
-        Value next;
-        // Note: this register will have an sync reset regardless.
-        if (reg.hasReset())
-          next = comb::MuxOp::create(builder, reg.getLoc(), reg.getReset(),
-                                     reg.getResetValue(), reg.getNext(), false);
-        else
-          next = reg.getNext();
+
+        if (reg.getIsAsync()) {
+          reg.emitOpError("only synchronous resets are currently supported");
+          return signalPassFailure();
+        }
 
         Value presetValue;
         // Materialize initial value, assume zero initialization as default.
@@ -154,9 +152,9 @@ void StripSVPass::runOnOperation() {
         }
 
         Value compReg = seq::CompRegOp::create(
-            builder, reg.getLoc(), next.getType(), next, reg.getClk(),
-            reg.getNameAttr(), Value{}, Value{}, /*initialValue*/ presetValue,
-            reg.getInnerSymAttr());
+            builder, reg.getLoc(), reg.getType(), reg.getNext(), reg.getClk(),
+            reg.getNameAttr(), reg.getReset(), reg.getResetValue(),
+            /*initialValue*/ presetValue, reg.getInnerSymAttr());
         reg.replaceAllUsesWith(compReg);
         opsToDelete.push_back(reg);
         continue;
