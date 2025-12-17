@@ -973,7 +973,7 @@ void Emitter::emitConstant(ConstantOp constantOp) {
   auto type = cast<FloatType>(fltAttr.getType());
   double doubleValue = value.convertToDouble();
   auto floatBits = value.getSizeInBits(type.getFloatSemantics());
-  indent() << constantOp.getName().str() << space() << equals() << space()
+  indent() << constantOp.instanceName() << space() << equals() << space()
            << "std_float_const";
   // Currently defaults to IEEE-754 representation [1].
   // [1]: https://github.com/calyxir/calyx/blob/main/primitives/float.futil

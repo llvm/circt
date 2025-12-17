@@ -2,7 +2,7 @@
 # RUN: %PYTHON% %s
 
 import circt
-from circt.dialects import comb, esi, hw, seq, sv
+from circt.dialects import comb, esi, hw, pipeline, seq, sv
 
 from circt.passmanager import PassManager
 from circt.ir import Context

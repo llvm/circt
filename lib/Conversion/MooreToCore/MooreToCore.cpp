@@ -1582,6 +1582,42 @@ struct SExtOpConversion : public OpConversionPattern<SExtOp> {
   }
 };
 
+struct SIntToRealOpConversion : public OpConversionPattern<SIntToRealOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(SIntToRealOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<arith::SIToFPOp>(
+        op, typeConverter->convertType(op.getType()), adaptor.getInput());
+    return success();
+  }
+};
+
+struct UIntToRealOpConversion : public OpConversionPattern<UIntToRealOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UIntToRealOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<arith::UIToFPOp>(
+        op, typeConverter->convertType(op.getType()), adaptor.getInput());
+    return success();
+  }
+};
+
+struct RealToIntOpConversion : public OpConversionPattern<RealToIntOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(RealToIntOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<arith::FPToSIOp>(
+        op, typeConverter->convertType(op.getType()), adaptor.getInput());
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Statement Conversion
 //===----------------------------------------------------------------------===//
@@ -1949,6 +1985,9 @@ struct FormatIntOpConversion : public OpConversionPattern<FormatIntOp> {
     case IntFormat::Binary:
       rewriter.replaceOpWithNewOp<sim::FormatBinOp>(op, adaptor.getValue());
       return success();
+    case IntFormat::Octal:
+      rewriter.replaceOpWithNewOp<sim::FormatOctOp>(op, adaptor.getValue());
+      return success();
     case IntFormat::HexLower:
     case IntFormat::HexUpper:
       rewriter.replaceOpWithNewOp<sim::FormatHexOp>(op, adaptor.getValue());
@@ -2163,6 +2202,7 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
 
   // Valid target types.
   typeConverter.addConversion([](IntegerType type) { return type; });
+  typeConverter.addConversion([](FloatType type) { return type; });
   typeConverter.addConversion([](llhd::TimeType type) { return type; });
   typeConverter.addConversion([](debug::ArrayType type) { return type; });
   typeConverter.addConversion([](debug::ScopeType type) { return type; });
@@ -2242,6 +2282,9 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     TruncOpConversion,
     ZExtOpConversion,
     SExtOpConversion,
+    SIntToRealOpConversion,
+    UIntToRealOpConversion,
+    RealToIntOpConversion,
 
     // Patterns of miscellaneous operations.
     ConstantOpConv,

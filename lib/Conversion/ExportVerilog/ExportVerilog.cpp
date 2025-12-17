@@ -292,7 +292,7 @@ static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
   if (auto uarray = hw::type_dyn_cast<sv::UnpackedOpenArrayType>(type))
     return getTypeDims(dims, uarray.getElementType(), loc);
 
-  if (hw::type_isa<InterfaceType, StructType, EnumType>(type))
+  if (hw::type_isa<InterfaceType, StructType, EnumType, UnionType>(type))
     return;
 
   mlir::emitError(loc, "value has an unsupported verilog type ") << type;
@@ -1746,9 +1746,11 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                    emitAsTwoStateType);
       })
       .Case<EnumType>([&](EnumType enumType) {
+        assert(enumType.getBitWidth().has_value() &&
+               "enum type must have bitwidth");
         os << "enum ";
         if (enumType.getBitWidth() != 32)
-          os << "bit [" << enumType.getBitWidth() - 1 << ":0] ";
+          os << "bit [" << *enumType.getBitWidth() - 1 << ":0] ";
         os << "{";
         Type enumPrefixType = optionalAliasType ? optionalAliasType : enumType;
         llvm::interleaveComma(
@@ -3576,6 +3578,7 @@ private:
   friend class ltl::Visitor<PropertyEmitter, EmittedProperty>;
 
   EmittedProperty visitUnhandledLTL(Operation *op);
+  EmittedProperty visitLTL(ltl::BooleanConstantOp op);
   EmittedProperty visitLTL(ltl::AndOp op);
   EmittedProperty visitLTL(ltl::OrOp op);
   EmittedProperty visitLTL(ltl::IntersectOp op);
@@ -3713,6 +3716,12 @@ EmittedProperty PropertyEmitter::emitNestedProperty(
 EmittedProperty PropertyEmitter::visitUnhandledLTL(Operation *op) {
   emitOpError(op, "emission as Verilog property or sequence not supported");
   ps << "<<unsupported: " << PPExtString(op->getName().getStringRef()) << ">>";
+  return {PropertyPrecedence::Symbol};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::BooleanConstantOp op) {
+  // Emit the boolean constant value as a literal.
+  ps << (op.getValueAttr().getValue() ? "1'h1" : "1'h0");
   return {PropertyPrecedence::Symbol};
 }
 
@@ -6038,7 +6047,7 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     // Try inlining an assignment into declarations.
     // FIXME: Unpacked array is not inlined since several tools doesn't support
     // that syntax. See Issue 6363.
-    if (isa<sv::WireOp>(op) &&
+    if (!state.options.disallowDeclAssignments && isa<sv::WireOp>(op) &&
         !op->getParentOp()->hasTrait<ProceduralRegion>() &&
         !hasLeadingUnpackedType(op->getResult(0).getType())) {
       // Get a single assignments if any.
@@ -6063,7 +6072,8 @@ LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
     // Try inlining a blocking assignment to logic op declaration.
     // FIXME: Unpacked array is not inlined since several tools doesn't support
     // that syntax. See Issue 6363.
-    if (isa<LogicOp>(op) && op->getParentOp()->hasTrait<ProceduralRegion>() &&
+    if (!state.options.disallowDeclAssignments && isa<LogicOp>(op) &&
+        op->getParentOp()->hasTrait<ProceduralRegion>() &&
         !hasLeadingUnpackedType(op->getResult(0).getType())) {
       // Get a single assignment which might be possible to inline.
       if (auto singleAssign = getSingleAssignAndCheckUsers<BPAssignOp>(op)) {

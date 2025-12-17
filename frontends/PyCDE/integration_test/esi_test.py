@@ -10,7 +10,8 @@ from pycde.bsp import get_bsp
 from pycde.common import Constant, Input, Output
 from pycde.constructs import ControlReg, Mux, Reg, Wire
 from pycde.esi import ChannelService, FuncService, MMIO, MMIOReadWriteCmdType
-from pycde.types import (Bits, Channel, ChannelSignaling, UInt)
+from pycde.types import (Bits, Channel, ChannelSignaling, StructType, UInt,
+                         Window)
 from pycde.handshake import Func
 
 import sys
@@ -137,6 +138,221 @@ class Join(Module):
     ChannelService.to_host(AppID("join_x"), f.x)
 
 
+# Define the struct with four fields
+FourFieldStruct = StructType({
+    "a": Bits(32),
+    "b": Bits(32),
+    "c": Bits(32),
+    "d": Bits(32),
+})
+
+# Create a window that divides the struct into two frames
+windowed_struct = Window(
+    "four_field_window", FourFieldStruct,
+    [Window.Frame("frame1", ["a", "b"]),
+     Window.Frame("frame2", ["c", "d"])])
+
+
+class WindowToStructFunc(Module):
+  """Exposes a function that accepts a windowed struct (four fields split into
+  two frames) and returns the reassembled struct without windowing.
+
+  The input struct has four UInt(32) fields: a, b, c, d.
+  The window divides these into two frames:
+    - Frame 1: fields a and b
+    - Frame 2: fields c and d
+
+  Frames arrive in-order. The function reads both frames, reassembles the
+  complete struct, and outputs it.
+  """
+
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def construct(ports):
+
+    # Result is the complete struct (no windowing)
+    result_chan = Wire(Channel(FourFieldStruct))
+    args = FuncService.get_call_chans(AppID("struct_from_window"),
+                                      arg_type=windowed_struct,
+                                      result=result_chan)
+
+    # State register to track which frame we're expecting (0 = frame1, 1 = frame2)
+    expecting_frame2 = Reg(Bits(1),
+                           name="expecting_frame2",
+                           clk=ports.clk,
+                           rst=ports.rst,
+                           rst_value=0)
+
+    # Registers to hold the values from frame1
+    a_reg = Reg(Bits(32),
+                name="a_reg",
+                clk=ports.clk,
+                rst=ports.rst,
+                rst_value=0)
+    b_reg = Reg(Bits(32),
+                name="b_reg",
+                clk=ports.clk,
+                rst=ports.rst,
+                rst_value=0)
+
+    # Unwrap the incoming channel
+    ready = Wire(Bits(1))
+    window_data, window_valid = args.unwrap(ready)
+
+    # Unwrap the window to get the union of frames
+    frame_union = window_data.unwrap()
+
+    # Extract data from both frames (only one is valid at a time based on state)
+    # Access the frame structs through the union - the data is reinterpreted
+    # based on which frame we're expecting
+    frame1_data = frame_union["frame1"]
+    frame2_data = frame_union["frame2"]
+
+    # When we receive frame1, store a and b
+    got_frame1 = window_valid & ~expecting_frame2
+    a_reg.assign(Mux(got_frame1, a_reg, frame1_data.a))
+    b_reg.assign(Mux(got_frame1, b_reg, frame1_data.b))
+
+    # When we receive frame2, we can output the complete struct
+    got_frame2 = window_valid & expecting_frame2
+
+    # Update state: after receiving frame1, expect frame2; after frame2, expect frame1
+    expecting_frame2.assign(
+        Mux(window_valid, expecting_frame2, ~expecting_frame2))
+
+    # Output the reassembled struct when we have frame2
+    output_struct = FourFieldStruct({
+        "a": a_reg,
+        "b": b_reg,
+        "c": frame2_data["c"],
+        "d": frame2_data["d"]
+    })
+    result_internal, result_ready = Channel(FourFieldStruct).wrap(
+        output_struct, got_frame2)
+
+    # We're ready to accept when either:
+    # - We're waiting for frame1 (always ready)
+    # - We're waiting for frame2 and downstream is ready
+    ready.assign(~expecting_frame2 | result_ready)
+    result_chan.assign(result_internal)
+
+
+class StructToWindowFunc(Module):
+  """Exposes a function that accepts a complete struct and returns it as a
+  windowed struct split into two frames.
+
+  This is the inverse of WindowedStructFunc.
+
+  The input struct has four Bits(32) fields: a, b, c, d.
+  The output window divides these into two frames:
+    - Frame 1: fields a and b
+    - Frame 2: fields c and d
+
+  The function reads the complete struct, then outputs two frames in order.
+  """
+
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def construct(ports):
+    # Result is the windowed struct
+    result_chan = Wire(Channel(windowed_struct))
+    args = FuncService.get_call_chans(AppID("struct_to_window"),
+                                      arg_type=FourFieldStruct,
+                                      result=result_chan)
+
+    # State register to track which frame we're sending (0 = frame1, 1 = frame2)
+    sending_frame2 = Reg(Bits(1),
+                         name="sending_frame2",
+                         clk=ports.clk,
+                         rst=ports.rst,
+                         rst_value=0)
+
+    # Register to indicate we have a valid struct to send
+    have_struct = Reg(Bits(1),
+                      name="have_struct",
+                      clk=ports.clk,
+                      rst=ports.rst,
+                      rst_value=0)
+
+    # Registers to hold the input struct fields
+    a_reg = Reg(Bits(32),
+                name="a_reg",
+                clk=ports.clk,
+                rst=ports.rst,
+                rst_value=0)
+    b_reg = Reg(Bits(32),
+                name="b_reg",
+                clk=ports.clk,
+                rst=ports.rst,
+                rst_value=0)
+    c_reg = Reg(Bits(32),
+                name="c_reg",
+                clk=ports.clk,
+                rst=ports.rst,
+                rst_value=0)
+    d_reg = Reg(Bits(32),
+                name="d_reg",
+                clk=ports.clk,
+                rst=ports.rst,
+                rst_value=0)
+
+    # Unwrap the incoming channel
+    ready = Wire(Bits(1))
+    struct_data, struct_valid = args.unwrap(ready)
+
+    # Get the lowered type (a union of frame structs)
+    lowered_type = windowed_struct.lowered_type
+
+    # Create frame1 and frame2 data
+    frame1_struct = lowered_type.frame1({"a": a_reg, "b": b_reg})
+    frame2_struct = lowered_type.frame2({"c": c_reg, "d": d_reg})
+
+    # Select which frame to output based on state
+    frame1_union = lowered_type(("frame1", frame1_struct))
+    frame2_union = lowered_type(("frame2", frame2_struct))
+
+    # Mux between frames based on state
+    output_union = Mux(sending_frame2, frame1_union, frame2_union)
+    output_window = windowed_struct.wrap(output_union)
+
+    # Output is valid when we have a struct to send
+    output_valid = have_struct
+    result_internal, result_ready = Channel(windowed_struct).wrap(
+        output_window, output_valid)
+
+    # Compute state transitions
+    frame_sent = output_valid & result_ready
+    store_struct = struct_valid & ~have_struct
+    done_sending = frame_sent & sending_frame2
+
+    # Store the incoming struct when we receive it and aren't busy
+    a_reg.assign(Mux(store_struct, a_reg, struct_data["a"]))
+    b_reg.assign(Mux(store_struct, b_reg, struct_data["b"]))
+    c_reg.assign(Mux(store_struct, c_reg, struct_data["c"]))
+    d_reg.assign(Mux(store_struct, d_reg, struct_data["d"]))
+
+    # have_struct: set when storing, clear when done sending both frames
+    have_struct.assign(
+        Mux(store_struct, Mux(done_sending, have_struct,
+                              Bits(1)(0)),
+            Bits(1)(1)))
+
+    # sending_frame2: set after sending frame1, clear after sending frame2
+    sending_frame2.assign(
+        Mux(frame_sent & ~sending_frame2,
+            Mux(done_sending, sending_frame2,
+                Bits(1)(0)),
+            Bits(1)(1)))
+
+    # We're ready to accept a new struct when we don't have one
+    ready.assign(~have_struct)
+    result_chan.assign(result_internal)
+
+
 class Top(Module):
   clk = Clock()
   rst = Reset()
@@ -148,6 +364,8 @@ class Top(Module):
       MMIOClient(i)()
     MMIOReadWriteClient(clk=ports.clk, rst=ports.rst)
     ConstProducer(clk=ports.clk, rst=ports.rst)
+    WindowToStructFunc(clk=ports.clk, rst=ports.rst)
+    StructToWindowFunc(clk=ports.clk, rst=ports.rst)
 
     # Disable broken test.
     # Join(clk=ports.clk, rst=ports.rst)

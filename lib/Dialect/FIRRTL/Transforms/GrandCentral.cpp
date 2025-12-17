@@ -30,6 +30,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/YAMLTraits.h"
 #include <variant>
 
@@ -1845,10 +1846,10 @@ void GrandCentralPass::runOnOperation() {
 
       auto directory = anno.getMember<StringAttr>("directory");
       auto filename = anno.getMember<StringAttr>("filename");
-      if (!directory || !filename) {
+      if (!directory) {
         emitCircuitError()
             << "contained an invalid 'ExtractGrandCentralAnnotation' that does "
-               "not contain 'directory' and 'filename' fields: "
+               "not contain 'directory' field: "
             << anno.getDict();
         removalError = true;
         return false;
@@ -1929,13 +1930,23 @@ void GrandCentralPass::runOnOperation() {
     llvm::dbgs() << "\n";
   });
 
+  bool changed = false;
+  if (noViews && !views.empty()) {
+    changed = true;
+    for (auto &view : views)
+      view.erase();
+    views.clear();
+  }
+
   // Exit immediately if no annotations indicative of interfaces that need to be
   // built exist.  However, still generate the YAML file if the annotation for
   // this was passed in because some flows expect this.
   if (worklist.empty() && views.empty()) {
     for (auto &[yamlPath, intfs] : interfaceYAMLMap)
       emitHierarchyYamlFile(yamlPath.getValue(), intfs);
-    return markAllAnalysesPreserved();
+    if (!changed)
+      markAllAnalysesPreserved();
+    return;
   }
 
   // Setup the builder to create ops _inside the FIRRTL circuit_.  This is
@@ -2122,12 +2133,23 @@ void GrandCentralPass::runOnOperation() {
                   if (companionMode == CompanionMode::Bind)
                     instance->setAttr("lowerToBind", builder.getUnitAttr());
 
-                  instance->setAttr(
-                      "output_file",
-                      hw::OutputFileAttr::getFromFilename(
-                          &getContext(),
-                          maybeExtractInfo->bindFilename.getValue(),
-                          /*excludeFromFileList=*/true));
+                  // Determine the bind file name; use
+                  // <directory>/<module>-bind.sv if not specified.
+                  SmallString<128> bindFilename;
+                  if (maybeExtractInfo->bindFilename) {
+                    bindFilename = maybeExtractInfo->bindFilename.getValue();
+                  } else {
+                    bindFilename = maybeExtractInfo->directory.getValue();
+                    llvm::sys::path::append(
+                        bindFilename,
+                        i->getParent()->getModule().getModuleName().str() +
+                            "-bind" + ".sv");
+                  }
+
+                  instance->setAttr("output_file",
+                                    hw::OutputFileAttr::getFromFilename(
+                                        &getContext(), bindFilename,
+                                        /*excludeFromFileList=*/true));
                 }
               }
 

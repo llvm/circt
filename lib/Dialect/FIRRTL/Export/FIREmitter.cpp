@@ -110,6 +110,7 @@ struct Emitter {
   void emitStatement(RefReleaseInitialOp op);
   void emitStatement(LayerBlockOp op);
   void emitStatement(GenericIntrinsicOp op);
+  void emitStatement(DomainCreateAnonOp op);
 
   template <class T>
   void emitVerifStatement(T op, StringRef mnemonic);
@@ -206,8 +207,7 @@ struct Emitter {
   }
 
   // Domains
-  void emitDomains(Attribute domains,
-                   const DenseMap<size_t, StringRef> &domainMap);
+  void emitDomains(Attribute attr, ArrayRef<PortInfo> ports);
 
   // Locations
   void emitLocation(Location loc);
@@ -615,19 +615,17 @@ void Emitter::emitModule(FIntModuleOp op) {
 /// during expression emission.
 void Emitter::emitModulePorts(ArrayRef<PortInfo> ports,
                               Block::BlockArgListType arguments) {
-  DenseMap<size_t, StringRef> domainMap;
+  // Emit the ports.
   for (unsigned i = 0, e = ports.size(); i < e; ++i) {
     startStatement();
     const auto &port = ports[i];
     ps << (port.direction == Direction::In ? "input " : "output ");
     auto legalName = legalize(port.name);
-    if (isa<DomainType>(port.type))
-      domainMap.insert({i, port.name});
     if (!arguments.empty())
       addValueName(arguments[i], legalName);
     ps << PPExtString(legalName) << " : ";
     emitType(port.type);
-    emitDomains(port.domains, domainMap);
+    emitDomains(port.domains, ports);
     emitLocation(ports[i].loc);
     setPendingNewline();
   }
@@ -755,7 +753,8 @@ void Emitter::emitStatementsInBlock(Block &block) {
               CombMemOp, MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp,
               DomainDefineOp, RefDefineOp, RefForceOp, RefForceInitialOp,
               RefReleaseOp, RefReleaseInitialOp, LayerBlockOp,
-              GenericIntrinsicOp>([&](auto op) { emitStatement(op); })
+              GenericIntrinsicOp, DomainCreateAnonOp>(
+            [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           startStatement();
           ps << "// operation " << PPExtString(op->getName().getStringRef());
@@ -1285,6 +1284,10 @@ void Emitter::emitStatement(MemoryPortAccessOp op) {
 }
 
 void Emitter::emitStatement(DomainDefineOp op) {
+  // If the source is an anonymous domain, then we can skip emitting this op.
+  if (isa_and_nonnull<DomainCreateAnonOp>(op.getSrc().getDefiningOp()))
+    return;
+
   startStatement();
   emitAssignLike([&]() { emitExpression(op.getDest()); },
                  [&]() { emitExpression(op.getSrc()); }, PPExtString("="),
@@ -1390,6 +1393,10 @@ void Emitter::emitStatement(GenericIntrinsicOp op) {
                    [&]() { emitGenericIntrinsic(op); });
   }
   emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(DomainCreateAnonOp op) {
+  // These ops are not emitted.
 }
 
 void Emitter::emitExpression(Value value) {
@@ -1786,8 +1793,7 @@ void Emitter::emitType(Type type, bool includeConst) {
       });
 }
 
-void Emitter::emitDomains(Attribute attr,
-                          const DenseMap<size_t, StringRef> &domainMap) {
+void Emitter::emitDomains(Attribute attr, ArrayRef<PortInfo> ports) {
   if (!attr)
     return;
   if (auto domains = dyn_cast<ArrayAttr>(attr)) {
@@ -1796,9 +1802,8 @@ void Emitter::emitDomains(Attribute attr,
     ps << " domains [";
     ps.scopedBox(PP::ibox0, [&]() {
       interleaveComma(domains, [&](Attribute attr) {
-        auto itr = domainMap.find(cast<IntegerAttr>(attr).getUInt());
-        assert(itr != domainMap.end() && "Unable to find domain");
-        ps.addAsString(itr->second);
+        ps.addAsString(
+            ports[cast<IntegerAttr>(attr).getUInt()].name.getValue());
       });
       ps << "]";
     });

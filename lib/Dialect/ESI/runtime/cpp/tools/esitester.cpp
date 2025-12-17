@@ -26,10 +26,13 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <future>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <random>
+#include <span>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
@@ -57,6 +60,13 @@ static void aggregateHostmemBandwidthTest(AcceleratorConnection *,
                                           Accelerator *, uint32_t width,
                                           uint32_t xferCount, bool read,
                                           bool write);
+static void streamingAddTest(AcceleratorConnection *, Accelerator *,
+                             uint32_t addAmt, uint32_t numItems);
+static void streamingAddTranslatedTest(AcceleratorConnection *, Accelerator *,
+                                       uint32_t addAmt, uint32_t numItems);
+static void coordTranslateTest(AcceleratorConnection *, Accelerator *,
+                               uint32_t xTrans, uint32_t yTrans,
+                               uint32_t numCoords);
 
 // Default widths and default widths string for CLI help text.
 constexpr std::array<uint32_t, 5> defaultWidths = {32, 64, 128, 256, 512};
@@ -125,6 +135,30 @@ static std::string humanTimeUS(uint64_t us) {
   oss.precision(sec < 10.0 ? 3 : 2);
   oss << sec << " s";
   return oss.str();
+}
+
+// MSVC does not implement std::aligned_malloc, even though it's part of the
+// C++17 standard. Provide a compatibility layer.
+static void *alignedAllocCompat(std::size_t alignment, std::size_t size) {
+#if defined(_MSC_VER)
+  void *ptr = _aligned_malloc(size, alignment);
+  if (!ptr)
+    throw std::bad_alloc();
+  return ptr;
+#else
+  void *ptr = std::aligned_alloc(alignment, size);
+  if (!ptr)
+    throw std::bad_alloc();
+  return ptr;
+#endif
+}
+
+static void alignedFreeCompat(void *ptr) {
+#if defined(_MSC_VER)
+  _aligned_free(ptr);
+#else
+  std::free(ptr);
+#endif
 }
 
 int main(int argc, const char *argv[]) {
@@ -216,6 +250,31 @@ int main(int argc, const char *argv[]) {
   aggBwSub->add_flag("-r,--read", aggRead, "Include read units");
   aggBwSub->add_flag("-w,--write", aggWrite, "Include write units");
 
+  CLI::App *streamingAddSub = cli.add_subcommand(
+      "streaming_add", "Test StreamingAdder function service with list input");
+  uint32_t streamingAddAmt = 5;
+  uint32_t streamingNumItems = 5;
+  bool streamingTranslate = false;
+  streamingAddSub->add_option("-a,--add", streamingAddAmt,
+                              "Amount to add to each element (default 5)");
+  streamingAddSub->add_option("-n,--num-items", streamingNumItems,
+                              "Number of random items in the list (default 5)");
+  streamingAddSub->add_flag("-t,--translate", streamingTranslate,
+                            "Use message translation (list translation)");
+
+  CLI::App *coordTranslateSub = cli.add_subcommand(
+      "translate_coords",
+      "Test CoordTranslator function service with list of coordinates");
+  uint32_t coordXTrans = 10;
+  uint32_t coordYTrans = 20;
+  uint32_t coordNumItems = 5;
+  coordTranslateSub->add_option("-x,--x-translation", coordXTrans,
+                                "X translation amount (default 10)");
+  coordTranslateSub->add_option("-y,--y-translation", coordYTrans,
+                                "Y translation amount (default 20)");
+  coordTranslateSub->add_option("-n,--num-coords", coordNumItems,
+                                "Number of random coordinates (default 5)");
+
   if (int rc = cli.esiParse(argc, argv))
     return rc;
   if (!cli.get_help_ptr()->empty())
@@ -248,6 +307,14 @@ int main(int argc, const char *argv[]) {
     } else if (*aggBwSub) {
       aggregateHostmemBandwidthTest(acc, accel, aggWidth, aggCount, aggRead,
                                     aggWrite);
+    } else if (*streamingAddSub) {
+      if (streamingTranslate)
+        streamingAddTranslatedTest(acc, accel, streamingAddAmt,
+                                   streamingNumItems);
+      else
+        streamingAddTest(acc, accel, streamingAddAmt, streamingNumItems);
+    } else if (*coordTranslateSub) {
+      coordTranslateTest(acc, accel, coordXTrans, coordYTrans, coordNumItems);
     }
 
     acc->disconnect();
@@ -1187,4 +1254,503 @@ static void aggregateHostmemBandwidthTest(AcceleratorConnection *conn,
             << " wall_time=" << humanTimeUS(wallUs) << " (" << wallUs << " us)"
             << std::endl;
   logger.info("esitester", "Aggregate hostmem bandwidth test complete");
+}
+
+/// Packed struct representing a parallel window argument for StreamingAdder.
+/// Layout in SystemVerilog (so it must be reversed in C):
+///   { add_amt: UInt(32), input: UInt(32), last: UInt(8) }
+#pragma pack(push, 1)
+struct StreamingAddArg {
+  uint8_t last;
+  uint32_t input;
+  uint32_t addAmt;
+};
+#pragma pack(pop)
+static_assert(sizeof(StreamingAddArg) == 9,
+              "StreamingAddArg must be 9 bytes packed");
+
+/// Packed struct representing a parallel window result for StreamingAdder.
+/// Layout in SystemVerilog (so it must be reversed in C):
+///   { data: UInt(32), last: UInt(8) }
+#pragma pack(push, 1)
+struct StreamingAddResult {
+  uint8_t last;
+  uint32_t data;
+};
+#pragma pack(pop)
+static_assert(sizeof(StreamingAddResult) == 5,
+              "StreamingAddResult must be 5 bytes packed");
+
+/// Test the StreamingAdder module. This module takes a struct containing
+/// an add_amt and a list of uint32s, adds add_amt to each element, and
+/// returns the resulting list. The data is streamed using windowed types.
+static void streamingAddTest(AcceleratorConnection *conn, Accelerator *accel,
+                             uint32_t addAmt, uint32_t numItems) {
+  Logger &logger = conn->getLogger();
+  logger.info("esitester", "Starting streaming add test with add_amt=" +
+                               std::to_string(addAmt) +
+                               ", num_items=" + std::to_string(numItems));
+
+  // Generate random input data.
+  std::mt19937 rng(0xDEADBEEF);
+  std::uniform_int_distribution<uint32_t> dist(0, 1000000);
+  std::vector<uint32_t> inputData;
+  inputData.reserve(numItems);
+  for (uint32_t i = 0; i < numItems; ++i)
+    inputData.push_back(dist(rng));
+
+  // Find the streaming_adder child.
+  auto streamingAdderChild =
+      accel->getChildren().find(AppID("streaming_adder"));
+  if (streamingAdderChild == accel->getChildren().end())
+    throw std::runtime_error(
+        "Streaming add test: no 'streaming_adder' child found");
+
+  auto &ports = streamingAdderChild->second->getPorts();
+  auto addIter = ports.find(AppID("streaming_add"));
+  if (addIter == ports.end())
+    throw std::runtime_error(
+        "Streaming add test: no 'streaming_add' port found");
+
+  // Get the raw read/write channel ports for the windowed function.
+  // The argument channel expects parallel windowed data where each message
+  // contains: struct { add_amt: UInt(32), input: UInt(32), last: bool }
+  WriteChannelPort &argPort = addIter->second.getRawWrite("arg");
+  ReadChannelPort &resultPort = addIter->second.getRawRead("result");
+
+  argPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
+  resultPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
+
+  // Send each list element with add_amt repeated in every message.
+  for (size_t i = 0; i < inputData.size(); ++i) {
+    StreamingAddArg arg;
+    arg.addAmt = addAmt;
+    arg.input = inputData[i];
+    arg.last = (i == inputData.size() - 1) ? 1 : 0;
+    argPort.write(
+        MessageData(reinterpret_cast<const uint8_t *>(&arg), sizeof(arg)));
+    logger.debug("esitester", "Sent {add_amt=" + std::to_string(arg.addAmt) +
+                                  ", input=" + std::to_string(arg.input) +
+                                  ", last=" + (arg.last ? "true" : "false") +
+                                  "}");
+  }
+
+  // Read the result list (also windowed).
+  std::vector<uint32_t> results;
+  bool lastSeen = false;
+  while (!lastSeen) {
+    MessageData resMsg;
+    resultPort.read(resMsg);
+    if (resMsg.getSize() < sizeof(StreamingAddResult))
+      throw std::runtime_error(
+          "Streaming add test: unexpected result message size");
+
+    const auto *res =
+        reinterpret_cast<const StreamingAddResult *>(resMsg.getBytes());
+    lastSeen = res->last != 0;
+    results.push_back(res->data);
+    logger.debug("esitester", "Received result=" + std::to_string(res->data) +
+                                  " (last=" + (lastSeen ? "true" : "false") +
+                                  ")");
+  }
+
+  // Verify results.
+  if (results.size() != inputData.size())
+    throw std::runtime_error(
+        "Streaming add test: result size mismatch. Expected " +
+        std::to_string(inputData.size()) + ", got " +
+        std::to_string(results.size()));
+
+  bool passed = true;
+  std::cout << "Streaming add test results:" << std::endl;
+  for (size_t i = 0; i < inputData.size(); ++i) {
+    uint32_t expected = inputData[i] + addAmt;
+    std::cout << "  input[" << i << "]=" << inputData[i] << " + " << addAmt
+              << " = " << results[i] << " (expected " << expected << ")";
+    if (results[i] != expected) {
+      std::cout << " MISMATCH!";
+      passed = false;
+    }
+    std::cout << std::endl;
+  }
+
+  argPort.disconnect();
+  resultPort.disconnect();
+
+  if (!passed)
+    throw std::runtime_error("Streaming add test failed: result mismatch");
+
+  logger.info("esitester", "Streaming add test passed");
+  std::cout << "Streaming add test passed" << std::endl;
+}
+
+/// Test the StreamingAdder module using message translation.
+/// This version uses the list translation support where the message format is:
+///   Argument: { add_amt (4 bytes), input_length (8 bytes), input_data[] }
+///   Result: { data_length (8 bytes), data[] }
+/// The translation layer automatically converts between this format and the
+/// parallel windowed frames used by the hardware.
+
+/// Translated argument struct for StreamingAdder.
+/// Memory layout (standard C struct ordering, fields in declaration order):
+///   ESI type: struct { add_amt: UInt(32), input: List<UInt(32)> }
+/// becomes host struct:
+///   { input_length (size_t, 8 bytes on 64-bit), add_amt (uint32_t),
+///   input_data[] }
+/// Note: The translation layer handles the conversion between this C struct
+/// layout and the hardware's SystemVerilog frame format.
+/// Note: size_t is used for list lengths, so this format is platform-dependent.
+#pragma pack(push, 1)
+struct StreamingAddTranslatedArg {
+  size_t inputLength;
+  uint32_t addAmt;
+  // Trailing array data follows immediately after the struct in memory.
+  // Use inputData() accessor to access it.
+
+  /// Get pointer to trailing input data array.
+  uint32_t *inputData() { return reinterpret_cast<uint32_t *>(this + 1); }
+  const uint32_t *inputData() const {
+    return reinterpret_cast<const uint32_t *>(this + 1);
+  }
+  /// Get span view of input data (requires inputLength to be set first).
+  std::span<uint32_t> inputDataSpan() { return {inputData(), inputLength}; }
+  std::span<const uint32_t> inputDataSpan() const {
+    return {inputData(), inputLength};
+  }
+
+  static size_t allocSize(size_t numItems) {
+    return sizeof(StreamingAddTranslatedArg) + numItems * sizeof(uint32_t);
+  }
+};
+#pragma pack(pop)
+
+/// Translated result struct for StreamingAdder.
+/// Memory layout:
+///   struct { data: List<UInt(32)> }
+/// becomes:
+///   { data_length (size_t, 8 bytes on 64-bit), data[] }
+#pragma pack(push, 1)
+struct StreamingAddTranslatedResult {
+  size_t dataLength;
+  // Trailing array data follows immediately after the struct in memory.
+
+  /// Get pointer to trailing result data array.
+  uint32_t *data() { return reinterpret_cast<uint32_t *>(this + 1); }
+  const uint32_t *data() const {
+    return reinterpret_cast<const uint32_t *>(this + 1);
+  }
+  /// Get span view of result data (requires dataLength to be set first).
+  std::span<uint32_t> dataSpan() { return {data(), dataLength}; }
+  std::span<const uint32_t> dataSpan() const { return {data(), dataLength}; }
+
+  static size_t allocSize(size_t numItems) {
+    return sizeof(StreamingAddTranslatedResult) + numItems * sizeof(uint32_t);
+  }
+};
+#pragma pack(pop)
+
+static void streamingAddTranslatedTest(AcceleratorConnection *conn,
+                                       Accelerator *accel, uint32_t addAmt,
+                                       uint32_t numItems) {
+  Logger &logger = conn->getLogger();
+  logger.info("esitester",
+              "Starting streaming add test (translated) with add_amt=" +
+                  std::to_string(addAmt) +
+                  ", num_items=" + std::to_string(numItems));
+
+  // Generate random input data.
+  std::mt19937 rng(0xDEADBEEF);
+  std::uniform_int_distribution<uint32_t> dist(0, 1000000);
+  std::vector<uint32_t> inputData;
+  inputData.reserve(numItems);
+  for (uint32_t i = 0; i < numItems; ++i)
+    inputData.push_back(dist(rng));
+
+  // Find the streaming_adder child.
+  auto streamingAdderChild =
+      accel->getChildren().find(AppID("streaming_adder"));
+  if (streamingAdderChild == accel->getChildren().end())
+    throw std::runtime_error(
+        "Streaming add test: no 'streaming_adder' child found");
+
+  auto &ports = streamingAdderChild->second->getPorts();
+  auto addIter = ports.find(AppID("streaming_add"));
+  if (addIter == ports.end())
+    throw std::runtime_error(
+        "Streaming add test: no 'streaming_add' port found");
+
+  // Get the raw read/write channel ports with translation enabled (default).
+  WriteChannelPort &argPort = addIter->second.getRawWrite("arg");
+  ReadChannelPort &resultPort = addIter->second.getRawRead("result");
+
+  // Connect with translation enabled (the default).
+  argPort.connect();
+  resultPort.connect();
+
+  // Allocate the argument struct with proper alignment for the struct members.
+  // We use aligned_alloc to ensure the buffer meets alignment requirements.
+  size_t argSize = StreamingAddTranslatedArg::allocSize(numItems);
+  constexpr size_t alignment = alignof(StreamingAddTranslatedArg);
+  // aligned_alloc requires size to be a multiple of alignment
+  size_t allocSize = ((argSize + alignment - 1) / alignment) * alignment;
+  void *argRaw = alignedAllocCompat(alignment, allocSize);
+  if (!argRaw)
+    throw std::bad_alloc();
+  auto argDeleter = [](void *p) { alignedFreeCompat(p); };
+  std::unique_ptr<void, decltype(argDeleter)> argBuffer(argRaw, argDeleter);
+  auto *arg = static_cast<StreamingAddTranslatedArg *>(argRaw);
+  arg->inputLength = numItems;
+  arg->addAmt = addAmt;
+  for (uint32_t i = 0; i < numItems; ++i)
+    arg->inputData()[i] = inputData[i];
+
+  logger.debug("esitester",
+               "Sending translated argument: " + std::to_string(argSize) +
+                   " bytes, list_length=" + std::to_string(arg->inputLength) +
+                   ", add_amt=" + std::to_string(arg->addAmt));
+
+  // Send the complete message - translation will split it into frames.
+  argPort.write(MessageData(reinterpret_cast<const uint8_t *>(arg), argSize));
+  // argBuffer automatically freed when it goes out of scope
+
+  // Read the translated result.
+  MessageData resMsg;
+  resultPort.read(resMsg);
+
+  logger.debug("esitester", "Received translated result: " +
+                                std::to_string(resMsg.getSize()) + " bytes");
+
+  if (resMsg.getSize() < sizeof(StreamingAddTranslatedResult))
+    throw std::runtime_error(
+        "Streaming add test (translated): result too small");
+
+  const auto *result =
+      reinterpret_cast<const StreamingAddTranslatedResult *>(resMsg.getBytes());
+
+  if (resMsg.getSize() <
+      StreamingAddTranslatedResult::allocSize(result->dataLength))
+    throw std::runtime_error(
+        "Streaming add test (translated): result data truncated");
+
+  // Verify results.
+  if (result->dataLength != inputData.size())
+    throw std::runtime_error(
+        "Streaming add test (translated): result size mismatch. Expected " +
+        std::to_string(inputData.size()) + ", got " +
+        std::to_string(result->dataLength));
+
+  bool passed = true;
+  std::cout << "Streaming add test results:" << std::endl;
+  for (size_t i = 0; i < inputData.size(); ++i) {
+    uint32_t expected = inputData[i] + addAmt;
+    std::cout << "  input[" << i << "]=" << inputData[i] << " + " << addAmt
+              << " = " << result->data()[i] << " (expected " << expected << ")";
+    if (result->data()[i] != expected) {
+      std::cout << " MISMATCH!";
+      passed = false;
+    }
+    std::cout << std::endl;
+  }
+
+  argPort.disconnect();
+  resultPort.disconnect();
+
+  if (!passed)
+    throw std::runtime_error(
+        "Streaming add test (translated) failed: result mismatch");
+
+  logger.info("esitester", "Streaming add test passed (translated)");
+  std::cout << "Streaming add test passed" << std::endl;
+}
+
+/// Test the CoordTranslator module using message translation.
+/// This version uses the list translation support where the message format is:
+///   Argument: { x_translation, y_translation, coords_length, coords[] }
+///   Result: { coords_length, coords[] }
+/// Each coord is a struct { x, y }.
+
+/// Coordinate struct for CoordTranslator.
+/// SV ordering means y comes before x in memory.
+#pragma pack(push, 1)
+struct Coord {
+  uint32_t y; // SV ordering: last declared field first in memory
+  uint32_t x;
+};
+#pragma pack(pop)
+static_assert(sizeof(Coord) == 8, "Coord must be 8 bytes packed");
+
+/// Translated argument struct for CoordTranslator.
+/// Memory layout (standard C struct ordering):
+///   ESI type: struct { x_translation: UInt(32), y_translation: UInt(32),
+///                      coords: List<struct{x, y}> }
+/// becomes host struct:
+///   { coords_length (size_t, 8 bytes on 64-bit), y_translation (uint32_t),
+///     x_translation (uint32_t), coords[] }
+/// Note: Fields are in reverse order due to SV struct ordering.
+/// Note: size_t is used for list lengths, so this format is platform-dependent.
+#pragma pack(push, 1)
+struct CoordTranslateArg {
+  size_t coordsLength;
+  uint32_t yTranslation; // SV ordering: last declared field first in memory
+  uint32_t xTranslation;
+  // Trailing array data follows immediately after the struct in memory.
+
+  /// Get pointer to trailing coords array.
+  Coord *coords() { return reinterpret_cast<Coord *>(this + 1); }
+  const Coord *coords() const {
+    return reinterpret_cast<const Coord *>(this + 1);
+  }
+  /// Get span view of coords (requires coordsLength to be set first).
+  std::span<Coord> coordsSpan() { return {coords(), coordsLength}; }
+  std::span<const Coord> coordsSpan() const { return {coords(), coordsLength}; }
+
+  static size_t allocSize(size_t numCoords) {
+    return sizeof(CoordTranslateArg) + numCoords * sizeof(Coord);
+  }
+};
+#pragma pack(pop)
+
+/// Translated result struct for CoordTranslator.
+/// Memory layout:
+///   ESI type: List<struct{x, y}>
+/// becomes host struct:
+///   { coords_length (size_t, 8 bytes on 64-bit), coords[] }
+#pragma pack(push, 1)
+struct CoordTranslateResult {
+  size_t coordsLength;
+  // Trailing array data follows immediately after the struct in memory.
+
+  /// Get pointer to trailing coords array.
+  Coord *coords() { return reinterpret_cast<Coord *>(this + 1); }
+  const Coord *coords() const {
+    return reinterpret_cast<const Coord *>(this + 1);
+  }
+  /// Get span view of coords (requires coordsLength to be set first).
+  std::span<Coord> coordsSpan() { return {coords(), coordsLength}; }
+  std::span<const Coord> coordsSpan() const { return {coords(), coordsLength}; }
+
+  static size_t allocSize(size_t numCoords) {
+    return sizeof(CoordTranslateResult) + numCoords * sizeof(Coord);
+  }
+};
+#pragma pack(pop)
+
+static void coordTranslateTest(AcceleratorConnection *conn, Accelerator *accel,
+                               uint32_t xTrans, uint32_t yTrans,
+                               uint32_t numCoords) {
+  Logger &logger = conn->getLogger();
+  logger.info("esitester", "Starting coord translate test with x_trans=" +
+                               std::to_string(xTrans) +
+                               ", y_trans=" + std::to_string(yTrans) +
+                               ", num_coords=" + std::to_string(numCoords));
+
+  // Generate random input coordinates.
+  // Note: Coord struct has y before x due to SV ordering, but we generate
+  // and display as (x, y) for human readability.
+  std::mt19937 rng(0xDEADBEEF);
+  std::uniform_int_distribution<uint32_t> dist(0, 1000000);
+  std::vector<Coord> inputCoords;
+  inputCoords.reserve(numCoords);
+  for (uint32_t i = 0; i < numCoords; ++i) {
+    Coord c;
+    c.x = dist(rng);
+    c.y = dist(rng);
+    inputCoords.push_back(c);
+  }
+
+  // Find the coord_translator child.
+  auto coordTranslatorChild =
+      accel->getChildren().find(AppID("coord_translator"));
+  if (coordTranslatorChild == accel->getChildren().end())
+    throw std::runtime_error(
+        "Coord translate test: no 'coord_translator' child found");
+
+  auto &ports = coordTranslatorChild->second->getPorts();
+  auto translateIter = ports.find(AppID("translate_coords"));
+  if (translateIter == ports.end())
+    throw std::runtime_error(
+        "Coord translate test: no 'translate_coords' port found");
+
+  // Use FuncService::Function which handles connection and translation.
+  auto *funcPort =
+      translateIter->second.getAs<services::FuncService::Function>();
+  if (!funcPort)
+    throw std::runtime_error(
+        "Coord translate test: 'translate_coords' port not a "
+        "FuncService::Function");
+  funcPort->connect();
+
+  // Allocate the argument struct with proper alignment for the struct members.
+  size_t argSize = CoordTranslateArg::allocSize(numCoords);
+  constexpr size_t alignment = alignof(CoordTranslateArg);
+  // aligned_alloc requires size to be a multiple of alignment
+  size_t allocSize = ((argSize + alignment - 1) / alignment) * alignment;
+  void *argRaw = alignedAllocCompat(alignment, allocSize);
+  if (!argRaw)
+    throw std::bad_alloc();
+  auto argDeleter = [](void *p) { alignedFreeCompat(p); };
+  std::unique_ptr<void, decltype(argDeleter)> argBuffer(argRaw, argDeleter);
+  auto *arg = static_cast<CoordTranslateArg *>(argRaw);
+  arg->coordsLength = numCoords;
+  arg->xTranslation = xTrans;
+  arg->yTranslation = yTrans;
+  for (uint32_t i = 0; i < numCoords; ++i)
+    arg->coords()[i] = inputCoords[i];
+
+  logger.debug(
+      "esitester",
+      "Sending coord translate argument: " + std::to_string(argSize) +
+          " bytes, coords_length=" + std::to_string(arg->coordsLength) +
+          ", x_trans=" + std::to_string(arg->xTranslation) +
+          ", y_trans=" + std::to_string(arg->yTranslation));
+
+  // Call the function - translation happens automatically.
+  MessageData resMsg =
+      funcPort
+          ->call(MessageData(reinterpret_cast<const uint8_t *>(arg), argSize))
+          .get();
+  // argBuffer automatically freed when it goes out of scope
+
+  logger.debug("esitester", "Received coord translate result: " +
+                                std::to_string(resMsg.getSize()) + " bytes");
+
+  if (resMsg.getSize() < sizeof(CoordTranslateResult))
+    throw std::runtime_error("Coord translate test: result too small");
+
+  const auto *result =
+      reinterpret_cast<const CoordTranslateResult *>(resMsg.getBytes());
+
+  if (resMsg.getSize() < CoordTranslateResult::allocSize(result->coordsLength))
+    throw std::runtime_error("Coord translate test: result data truncated");
+
+  // Verify results.
+  if (result->coordsLength != inputCoords.size())
+    throw std::runtime_error(
+        "Coord translate test: result size mismatch. Expected " +
+        std::to_string(inputCoords.size()) + ", got " +
+        std::to_string(result->coordsLength));
+
+  bool passed = true;
+  std::cout << "Coord translate test results:" << std::endl;
+  for (size_t i = 0; i < inputCoords.size(); ++i) {
+    uint32_t expectedX = inputCoords[i].x + xTrans;
+    uint32_t expectedY = inputCoords[i].y + yTrans;
+    std::cout << "  coord[" << i << "]=(" << inputCoords[i].x << ","
+              << inputCoords[i].y << ") + (" << xTrans << "," << yTrans
+              << ") = (" << result->coords()[i].x << ","
+              << result->coords()[i].y << ")";
+    if (result->coords()[i].x != expectedX ||
+        result->coords()[i].y != expectedY) {
+      std::cout << " MISMATCH! (expected (" << expectedX << "," << expectedY
+                << "))";
+      passed = false;
+    }
+    std::cout << std::endl;
+  }
+
+  if (!passed)
+    throw std::runtime_error("Coord translate test failed: result mismatch");
+
+  logger.info("esitester", "Coord translate test passed");
+  std::cout << "Coord translate test passed" << std::endl;
 }

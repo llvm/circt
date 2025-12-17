@@ -891,3 +891,24 @@ firrtl.circuit "UpdateAttrsAndTypes" {
     %1 = builtin.unrealized_conversion_cast to !firrtl.class<@Bar()> {a = @Bar, b = [@Bar]}
   }
 }
+
+// CHECK-LABEL: firrtl.circuit "DedupModuleSwapIssue"
+// There used to be a bug where swapping the canonical module would update the
+// entries in the dedupMap inappropriately, causing all non-deduped modules to
+// be deduped with the new canonical module, even if completely unrelated.
+// See https://github.com/llvm/circt/issues/9335.
+firrtl.circuit "DedupModuleSwapIssue" {
+  // CHECK: firrtl.module private @Bar
+  firrtl.module private @Bar(in %clock: !firrtl.clock) {}
+  // CHECK: firrtl.module private @Baz
+  firrtl.module private @Baz() {
+    %Bar_clock = firrtl.instance Bar @Bar(in clock: !firrtl.clock)
+  }
+  // CHECK-NOT: firrtl.module private @Qux
+  firrtl.module private @Qux() {}
+  // This public module appearing after the private one above would cause the
+  // dedupMap entries to be swapped such that the public module is now the
+  // canonical one.
+  // CHECK: firrtl.module @DedupModuleSwapIssue
+  firrtl.module @DedupModuleSwapIssue() {}
+}

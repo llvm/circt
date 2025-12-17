@@ -325,6 +325,15 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp, Type type,
                           {"type", json(errorOp, field.type, useTable)}}));
             return Object({{"fields", Value(std::move(fields))}});
           })
+          .Case([&](hw::UnionType t) {
+            m = "union";
+            Array fields;
+            for (auto field : t.getElements())
+              fields.push_back(
+                  Object({{"name", field.name.getValue()},
+                          {"type", json(errorOp, field.type, useTable)}}));
+            return Object({{"fields", Value(std::move(fields))}});
+          })
           .Case([&](hw::TypeAliasType t) {
             m = "alias";
             return Object(
@@ -338,6 +347,29 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp, Type type,
                              : (t.isUnsigned() ? "unsigned" : "signless");
             return Object({{"signedness", signedness}});
           })
+          .Case([&](WindowType t) {
+            m = "window";
+            Array frames;
+            for (auto frame : t.getFrames()) {
+              Array fields;
+              for (auto field : frame.getMembers()) {
+                Object fieldObj{{"name", field.getFieldName().getValue()}};
+                if (field.getNumItems() != 0)
+                  fieldObj["numItems"] = field.getNumItems();
+                if (field.getBulkCountWidth() != 0)
+                  fieldObj["bulkCountWidth"] = field.getBulkCountWidth();
+                fields.push_back(Value(std::move(fieldObj)));
+              }
+              frames.push_back(
+                  Value(Object({{"name", frame.getName().getValue()},
+                                {"fields", Value(std::move(fields))}})));
+            }
+            return Object(
+                {{"name", t.getName().getValue()},
+                 {"into", json(errorOp, t.getInto(), useTable)},
+                 {"frames", Value(std::move(frames))},
+                 {"loweredType", json(errorOp, t.getLoweredType(), useTable)}});
+          })
           .Default([&](Type t) {
             errorOp->emitWarning()
                 << "ESI system manifest: unknown type: " << t;
@@ -349,9 +381,13 @@ llvm::json::Value ESIBuildManifestPass::json(Operation *errorOp, Type type,
   llvm::raw_string_ostream(typeID) << type;
   o["id"] = typeID;
 
-  int64_t width = hw::getBitWidth(type);
+  // Get the hw bitwidth if possible.
+  Type hwType = type;
   if (auto chanType = dyn_cast<ChannelType>(type))
-    width = hw::getBitWidth(chanType.getInner());
+    hwType = chanType.getInner();
+  if (auto winType = dyn_cast<WindowType>(hwType))
+    hwType = winType.getLoweredType();
+  int64_t width = hw::getBitWidth(hwType);
   if (width >= 0)
     o["hwBitwidth"] = width;
 

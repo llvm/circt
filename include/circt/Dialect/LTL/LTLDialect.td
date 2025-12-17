@@ -18,6 +18,8 @@ def LTLDialect : Dialect {
   let cppNamespace = "circt::ltl";
   let useDefaultTypePrinterParser = 1;
   let dependentDialects = ["hw::HWDialect", "comb::CombDialect"];
+
+  let hasConstantMaterializer = 1;
 }
 
 #endif // CIRCT_DIALECT_LTL_LTLDIALECT_TD

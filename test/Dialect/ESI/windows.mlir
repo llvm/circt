@@ -15,10 +15,44 @@
   ]>
 
 
+!ArrayWindow = !hw.array<2x!TypeAwin1>
+!ListOfWindows = !esi.list<!TypeAwin1>
+!AliasStruct = !hw.typealias<@AliasStruct, !hw.struct<aliasField: !TypeAwin1>>
+
 // CHECK-LABEL:   hw.module.extern @TypeAModuleDst(in %windowed : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>)
 hw.module.extern @TypeAModuleDst(in %windowed: !TypeAwin1)
 // CHECK-LABEL:   hw.module.extern @TypeAModuleSrc(out windowed : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>)
 hw.module.extern @TypeAModuleSrc(out windowed: !TypeAwin1)
+
+// CHECK-LABEL: hw.module @ArrayWindowModule
+// CHECK:         %[[C0:.*]] = hw.constant false
+// CHECK:         %[[C1:.*]] = hw.constant true
+// CHECK:         %[[E0:.*]] = hw.array_get %arr[%[[C0]]] : !hw.array<2x!esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>>, i1
+// CHECK:         %[[U0:.*]] = esi.window.unwrap %[[E0]] : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>
+// CHECK:         %[[W0:.*]] = esi.window.wrap %[[U0]] : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>
+// CHECK:         %[[E1:.*]] = hw.array_get %arr[%[[C1]]] : !hw.array<2x!esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>>, i1
+// CHECK:         %[[U1:.*]] = esi.window.unwrap %[[E1]] : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>
+// CHECK:         %[[W1:.*]] = esi.window.wrap %[[U1]] : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>
+// CHECK:         %[[ARR:.*]] = hw.array_create %[[W1]], %[[W0]] : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>
+// LOW-LABEL: hw.module @ArrayWindowModule(
+// LOW-NEXT:    %[[F:.*]] = hw.constant false
+// LOW-NEXT:    %[[T:.*]] = hw.constant true
+// LOW-NEXT:    %[[E0:.*]] = hw.array_get %arr[%[[F]]] : !hw.array<2xunion<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>, i1
+// LOW-NEXT:    %[[E1:.*]] = hw.array_get %arr[%[[T]]] : !hw.array<2xunion<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>, i1
+// LOW-NEXT:    %[[NEW_ARR:.*]] = hw.array_create %[[E1]], %[[E0]] : !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>
+// LOW-NEXT:    hw.output %[[NEW_ARR]] : !hw.array<2xunion<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>
+hw.module @ArrayWindowModule(in %arr: !ArrayWindow, out arr_out: !ArrayWindow) {
+  %c0 = hw.constant 0 : i1
+  %c1 = hw.constant 1 : i1
+  %elem0 = hw.array_get %arr[%c0] : !ArrayWindow, i1
+  %unwrap0 = esi.window.unwrap %elem0 : !TypeAwin1
+  %rewrap0 = esi.window.wrap %unwrap0 : !TypeAwin1
+  %elem1 = hw.array_get %arr[%c1] : !ArrayWindow, i1
+  %unwrap1 = esi.window.unwrap %elem1 : !TypeAwin1
+  %rewrap1 = esi.window.wrap %unwrap1 : !TypeAwin1
+  %newArr = hw.array_create %rewrap1, %rewrap0 : !TypeAwin1
+  hw.output %newArr : !ArrayWindow
+}
 
 !lowered = !hw.union<
   FrameA: !hw.struct<header1: i6, header2: i1>,
@@ -59,6 +93,62 @@ hw.module @TypeAModulePassthrough(in %a: !TypeAwin1, out x: !TypeAwin1) {
   %x = hw.instance "foo" @TypeAModuleUnwrapWrap(a: %a: !TypeAwin1) -> (x: !TypeAwin1)
   hw.output %x : !TypeAwin1
 }
+
+// Test that structs containing windows are lowered correctly.
+!InnerWindowStruct = !hw.struct<intField: i332, winField: !TypeAwin1>
+// LOW-LABEL: hw.module @StructWindowModule(
+// LOW-SAME: in %a : !hw.struct<intField: i332, winField: !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>
+// LOW-SAME: out x : !hw.struct<intField: i332, winField: !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>
+// LOW-NEXT:  %intField = hw.struct_extract %a["intField"] : !hw.struct<intField: i332, winField: !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>
+// LOW-NEXT:  %winField = hw.struct_extract %a["winField"] : !hw.struct<intField: i332, winField: !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>
+// LOW-NEXT:  [[RET:%.+]] = hw.struct_create (%intField, %winField) : !hw.struct<intField: i332, winField: !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>
+// LOW-NEXT:  hw.output [[RET]] : !hw.struct<intField: i332, winField: !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>
+hw.module @StructWindowModule(in %a: !InnerWindowStruct, out x: !InnerWindowStruct) {
+  %structIntField = hw.struct_extract %a[ "intField" ] : !InnerWindowStruct
+  %win = hw.struct_extract %a[ "winField" ] : !InnerWindowStruct
+  %unwrapped = esi.window.unwrap %win : !TypeAwin1
+  %rewrapped = esi.window.wrap %unwrapped : !TypeAwin1
+  %outStruct = hw.struct_create ( %structIntField, %rewrapped ) : !InnerWindowStruct
+  hw.output %outStruct : !InnerWindowStruct
+}
+
+// CHECK-LABEL: hw.module @UnionWindowModule
+// CHECK:         %[[W:.*]] = hw.union_extract %u["frame"] : !hw.union<frame: !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>>
+// CHECK:         %[[U:.*]] = esi.window.unwrap %[[W]] : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>
+// CHECK:         %[[R:.*]] = esi.window.wrap %[[U]] : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>
+// CHECK:         %[[OUT:.*]] = hw.union_create "frame", %[[R]] : !hw.union<frame: !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>>
+// LOW-LABEL: hw.module @UnionWindowModule(
+// LOW-NEXT:    %[[EXTRACT:.*]] = hw.union_extract %u["frame"] : !hw.union<frame: !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>
+// LOW-NEXT:    %[[REPACK:.*]] = hw.union_create "frame", %[[EXTRACT]] : !hw.union<frame: !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>
+// LOW-NEXT:    hw.output %[[REPACK]] : !hw.union<frame: !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>
+hw.module @UnionWindowModule(in %u: !hw.union<frame: !TypeAwin1>, out x: !hw.union<frame: !TypeAwin1>) {
+  %win = hw.union_extract %u["frame"] : !hw.union<frame: !TypeAwin1>
+  %unwrapped = esi.window.unwrap %win : !TypeAwin1
+  %rewrapped = esi.window.wrap %unwrapped : !TypeAwin1
+  %out = hw.union_create "frame", %rewrapped : !hw.union<frame: !TypeAwin1>
+  hw.output %out : !hw.union<frame: !TypeAwin1>
+}
+
+// CHECK-LABEL: hw.module @AliasStructWindowModule
+// CHECK:         %[[FIELD:.*]] = hw.struct_extract %a["aliasField"] : !hw.typealias<@AliasStruct, !hw.struct<aliasField: !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>>>
+// CHECK:         %[[U:.*]] = esi.window.unwrap %[[FIELD]] : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>
+// CHECK:         %[[R:.*]] = esi.window.wrap %[[U]] : !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>
+// CHECK:         %[[STRUCT:.*]] = hw.struct_create (%[[R]]) : !hw.typealias<@AliasStruct, !hw.struct<aliasField: !esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>>>
+// LOW-LABEL: hw.module @AliasStructWindowModule(
+// LOW-NEXT:    %[[FIELD:.*]] = hw.struct_extract %a["aliasField"] : !hw.typealias<@AliasStruct, !hw.struct<aliasField: !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>>
+// LOW-NEXT:    %[[STRUCT:.*]] = hw.struct_create (%[[FIELD]]) : !hw.typealias<@AliasStruct, !hw.struct<aliasField: !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>>
+// LOW-NEXT:    hw.output %[[STRUCT]] : !hw.typealias<@AliasStruct, !hw.struct<aliasField: !hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>>
+hw.module @AliasStructWindowModule(in %a: !AliasStruct, out x: !AliasStruct) {
+  %field = hw.struct_extract %a["aliasField"] : !AliasStruct
+  %unwrapped = esi.window.unwrap %field : !TypeAwin1
+  %rewrapped = esi.window.wrap %unwrapped : !TypeAwin1
+  %struct = hw.struct_create (%rewrapped) : !AliasStruct
+  hw.output %struct : !AliasStruct
+}
+
+// CHECK-LABEL: hw.module.extern @ListWindowModule(in %list : !esi.list<!esi.window<"TypeAwin1", !hw.struct<header1: i6, header2: i1, header3: !hw.array<13xi16>>, [<"FrameA", [<"header1">, <"header2">]>, <"FrameB", [<"header3", 3>]>]>>)
+// LOW-LABEL: hw.module.extern @ListWindowModule(in %list : !esi.list<!hw.union<FrameA: !hw.struct<header1: i6, header2: i1>, FrameB: !hw.struct<header3: !hw.array<3xi16>>, FrameB_leftOver: !hw.struct<header3: !hw.array<1xi16>>>>)
+hw.module.extern @ListWindowModule(in %list: !ListOfWindows)
 
 !ListType = !hw.struct<data: !esi.list<i32>>
 !ListTypeWin_one = !esi.window<"ListTypeWin", !ListType, [
@@ -174,4 +264,53 @@ hw.module @SimpleWindowModule(in %a: !SimpleWindow, out x: !hw.typealias<@pycde:
 hw.module @MultiFrameWindowModule(in %a: !MultiFrameWindow, out x: !hw.typealias<@pycde::@MultiFrameStruct_MultiWin, !hw.union<HeaderFrame: !hw.struct<header: i8>, DataFrame: !hw.struct<data: i16>, TailFrame: !hw.struct<tail: i8>>>) {
   %u = esi.window.unwrap %a : !MultiFrameWindow
   hw.output %u : !hw.typealias<@pycde::@MultiFrameStruct_MultiWin, !hw.union<HeaderFrame: !hw.struct<header: i8>, DataFrame: !hw.struct<data: i16>, TailFrame: !hw.struct<tail: i8>>>
+}
+
+// Test bulk transfer encoding for lists.
+// Bulk transfer uses countWidth to specify the width of a 'count' field in the
+// header frame. This count indicates how many items will be transmitted in
+// subsequent data frames. Unlike streaming mode, no 'last' or '_size' fields
+// are added to the data frames.
+!BulkTransferStruct = !hw.struct<dst: i32, payload: !esi.list<i32>>
+!BulkTransferWindow = !esi.window<"BulkTransfer", !BulkTransferStruct, [
+  <"HeaderFrame", [<"dst">, <"payload" countWidth 16>]>,
+  <"DataFrame", [<"payload", 4>]>
+]>
+
+// CHECK-LABEL: hw.module.extern @BulkTransferSrc(out windowed : !esi.window<"BulkTransfer", !hw.struct<dst: i32, payload: !esi.list<i32>>, [<"HeaderFrame", [<"dst">, <"payload" countWidth 16>]>, <"DataFrame", [<"payload", 4>]>]>)
+hw.module.extern @BulkTransferSrc(out windowed: !BulkTransferWindow)
+
+// CHECK-LABEL: hw.module.extern @BulkTransferDst(in %windowed : !esi.window<"BulkTransfer", !hw.struct<dst: i32, payload: !esi.list<i32>>, [<"HeaderFrame", [<"dst">, <"payload" countWidth 16>]>, <"DataFrame", [<"payload", 4>]>]>)
+hw.module.extern @BulkTransferDst(in %windowed: !BulkTransferWindow)
+
+// The lowered type for bulk transfer should have:
+// - HeaderFrame with dst and payload_count (16-bit from countWidth)
+// - DataFrame with payload array (4 elements) - NO _size or last fields since bulk transfer is used
+// LOW-LABEL: hw.module @BulkTransferPassthrough(in %in : !hw.union<HeaderFrame: !hw.struct<dst: i32, payload_count: i16>, DataFrame: !hw.struct<payload: !hw.array<4xi32>>>, out out : !hw.union<HeaderFrame: !hw.struct<dst: i32, payload_count: i16>, DataFrame: !hw.struct<payload: !hw.array<4xi32>>>)
+// LOW-NEXT:    hw.output %in
+hw.module @BulkTransferPassthrough(in %in: !BulkTransferWindow, out out: !BulkTransferWindow) {
+  %u = esi.window.unwrap %in : !BulkTransferWindow
+  %w = esi.window.wrap %u : !BulkTransferWindow
+  hw.output %w : !BulkTransferWindow
+}
+
+// Bulk transfer with single item per frame (no numItems specified, defaults to 1)
+!BulkTransferSingleStruct = !hw.struct<dst: i32, payload: !esi.list<i32>>
+!BulkTransferSingleWindow = !esi.window<"BulkTransferSingle", !BulkTransferSingleStruct, [
+  <"HeaderFrame", [<"dst">, <"payload" countWidth 16>]>,
+  <"DataFrame", [<"payload">]>
+]>
+
+// CHECK-LABEL: hw.module.extern @BulkTransferSingleSrc(out windowed : !esi.window<"BulkTransferSingle", !hw.struct<dst: i32, payload: !esi.list<i32>>, [<"HeaderFrame", [<"dst">, <"payload" countWidth 16>]>, <"DataFrame", [<"payload">]>]>)
+hw.module.extern @BulkTransferSingleSrc(out windowed: !BulkTransferSingleWindow)
+
+// The lowered type for bulk transfer with single item should have:
+// - HeaderFrame with dst and payload_count (16-bit from countWidth)
+// - DataFrame with just the payload element (i32) - NO _size or last fields
+// LOW-LABEL: hw.module @BulkTransferSinglePassthrough(in %in : !hw.union<HeaderFrame: !hw.struct<dst: i32, payload_count: i16>, DataFrame: !hw.struct<payload: i32>>
+// LOW-NEXT:    hw.output %in
+hw.module @BulkTransferSinglePassthrough(in %in: !BulkTransferSingleWindow, out out: !BulkTransferSingleWindow) {
+  %u = esi.window.unwrap %in : !BulkTransferSingleWindow
+  %w = esi.window.wrap %u : !BulkTransferSingleWindow
+  hw.output %w : !BulkTransferSingleWindow
 }

@@ -253,6 +253,28 @@ def NonConsecutiveRepeatOp : LTLOp<"non_consecutive_repeat", [Pure]> {
 // Properties
 //===----------------------------------------------------------------------===//
 
+def BooleanConstantOp : LTLOp<"boolean_constant", [Pure, ConstantLike]> {
+  let summary = "A constant boolean property value.";
+  let description = [{
+    Represents a constant boolean value as an LTL property. This operation
+    takes a boolean attribute and produces an `!ltl.property` result. This is
+    useful for representing constant property values in canonicalization patterns.
+
+    Example:
+    ```mlir
+    %prop = ltl.boolean_constant true
+    ```
+  }];
+
+  let arguments = (ins BoolAttr:$value);
+  let results = (outs LTLPropertyType:$result);
+  let assemblyFormat = [{
+    $value attr-dict
+  }];
+
+  let hasFolder = 1;
+}
+
 def NotOp : LTLOp<"not", [Pure]> {
   let arguments = (ins LTLAnyPropertyType:$input);
   let results = (outs LTLPropertyType:$result);
@@ -275,6 +297,8 @@ def ImplicationOp : LTLOp<"implication", [Pure]> {
   let assemblyFormat = [{
     operands attr-dict `:` type(operands)
   }];
+
+  let hasFolder = 1;
 
   let summary = "Only check a property after a sequence matched.";
   let description = [{

@@ -153,6 +153,8 @@ struct FormatStringParser {
     Type intTy = {};
     Value val;
     auto rVal = context.convertRvalueExpression(arg);
+    if (!rVal)
+      return failure();
 
     // An IEEE 754 float number is represented using a sign bit s, n mantissa,
     // and m exponent bits, representing (-1)**s * 1.fraction * 2**(E-bias).

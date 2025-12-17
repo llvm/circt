@@ -18,6 +18,7 @@ include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 
+include "circt/Dialect/HW/HWTypeInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Seq/SeqTypes.td"
 
@@ -42,7 +43,9 @@ def ChannelSignaling : I32EnumAttr<
   let cppNamespace = "::circt::esi";
 }
 
-def ChannelTypeImpl : ESI_Type<"Channel"> {
+def ChannelTypeImpl : ESI_Type<"Channel", [
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "An ESI-compatible channel port";
   let description = [{
     An ESI port kind which models a latency-insensitive, unidirectional,
@@ -307,7 +310,9 @@ def ChannelDirection : I32EnumAttr<"ChannelDirection",
 }
 
 
-def ChannelBundleType : ESI_Type<"ChannelBundle"> {
+def ChannelBundleType : ESI_Type<"ChannelBundle", [
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "a bundle of channels";
 
   let description = [{
@@ -397,7 +402,9 @@ def UnpackBundleOp : ESI_Op<"bundle.unpack", [
 // Data windows
 //===----------------------------------------------------------------------===//
 
-def ESIWindowType : ESI_Type<"Window"> {
+def ESIWindowType : ESI_Type<"Window", [
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "a data window";
   let description = [{
     A 'data window' allows designers to break up large messages into multiple
@@ -467,21 +474,37 @@ def WindowFieldType : ESI_Type<"WindowField"> {
     - For arrays, the entire array will appear in the frame.
     - For lists, it is assumed to be 1.
 
-    For lists, a 'last' field to the struct to indicate that the end of the list is this frame.
-    If 'numItems' is specified for a list, a '<fieldName>_size' (representing
-    the number of valid items in the array) field will be added to the struct.
-    When `<fieldName>_size` is less than 'numItems', `last` MUST be true meaning
-    that all frames must be full except for the last one.
+    For lists, there are two possible encodings:
+      - Parallel (default): a 'last' field to the struct to indicate that the
+      end of the list is this frame.  If 'numItems' is specified for a list, a
+      '<fieldName>_size' (representing the number of valid items in the array)
+      field will be added to the struct.  When `<fieldName>_size` is less than
+      'numItems', `last` MUST be true meaning that all frames must be full
+      except for the last one. This format matches typical on-chip hardware
+      streaming interfaces but is terribly inefficient for serial links.
+      - Serial (bulk transfer): in this encoding, there must be a 'header' frame
+      immediately preceding the frame which contains the list field. That frame
+      must include a special 'count' field which indicates how many items of the
+      list will be transmitted next. Once the number of items are transmitted
+      (transmitted frames == ceil(count/numItems)), the header is re-transmitted
+      to set up the next bulk transfer _for the same list_. If the transfer was
+      the last transfer, the header should set the count to zero. This method
+      allows for efficient transfers over serial links (no 'last' or '_size'
+      fields) without requiring knowledge of the total list size up front.
   }];
   let mnemonic = "window.field";
 
   let parameters = (ins
       "StringAttr":$fieldName,
-      OptionalParameter<"uint64_t", "# of items in arrays or lists">:$numItems);
+      OptionalParameter<"uint64_t", "# of items in arrays or lists">:$numItems,
+      OptionalParameter<"uint64_t", "bitwidth of the 'count' field in bulk mode">:$bulkCountWidth
+  );
 
   let assemblyFormat = [{
-    `<` $fieldName (`,` $numItems^)? `>`
+    `<` $fieldName (`,` $numItems^)? ( `countWidth` $bulkCountWidth^ )? `>`
   }];
+
+  let genVerifyDecl = 1;
 }
 
 def WrapWindow : ESI_Physical_Op<"window.wrap", [Pure]> {

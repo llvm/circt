@@ -121,9 +121,14 @@ static Value visitClassProperty(Context &context,
       cast<moore::ClassHandleType>(instRef.getType());
 
   auto targetClassHandle =
-      context.getAncestorClassWithProperty(classTy, expr.name);
+      context.getAncestorClassWithProperty(classTy, expr.name, loc);
+  if (!targetClassHandle)
+    return {};
+
   auto upcastRef = context.materializeConversion(targetClassHandle, instRef,
                                                  false, instRef.getLoc());
+  if (!upcastRef)
+    return {};
 
   Value fieldRef = moore::ClassPropertyRefOp::create(builder, loc, fieldRefTy,
                                                      upcastRef, fieldSym);
@@ -400,17 +405,18 @@ struct ExprVisitor {
 
     // Handle classes.
     if (valueType->isClass()) {
-
       auto valTy = context.convertType(*valueType);
       if (!valTy)
         return {};
-      auto targetTy = dyn_cast<moore::ClassHandleType>(valTy);
+      auto targetTy = cast<moore::ClassHandleType>(valTy);
 
       // We need to pick the closest ancestor that declares a property with the
       // relevant name. System Verilog explicitly enforces lexical shadowing, as
       // shown in IEEE 1800-2023 Section 8.14 "Overridden members".
       auto upcastTargetTy =
-          context.getAncestorClassWithProperty(targetTy, expr.member.name);
+          context.getAncestorClassWithProperty(targetTy, expr.member.name, loc);
+      if (!upcastTargetTy)
+        return {};
 
       // Convert the class handle to the required target type for property
       // shadowing purposes.
@@ -2353,7 +2359,9 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
           dyn_cast<moore::IntType>(value.getType()).getTwoValued(), value, true,
           loc);
 
-    return builder.createOrFold<moore::IntToRealOp>(loc, type, twoValInt);
+    if (isSigned)
+      return builder.createOrFold<moore::SIntToRealOp>(loc, type, twoValInt);
+    return builder.createOrFold<moore::UIntToRealOp>(loc, type, twoValInt);
   }
 
   if (isa<moore::ClassHandleType>(type) &&
@@ -2572,10 +2580,7 @@ bool Context::isClassDerivedFrom(const moore::ClassHandleType &actualTy,
 
 moore::ClassHandleType
 Context::getAncestorClassWithProperty(const moore::ClassHandleType &actualTy,
-                                      llvm::StringRef fieldName) {
-  if (!actualTy || fieldName.empty())
-    return {};
-
+                                      llvm::StringRef fieldName, Location loc) {
   // Start at the actual class symbol.
   mlir::SymbolRefAttr classSym = actualTy.getClassSym();
 
@@ -2604,5 +2609,6 @@ Context::getAncestorClassWithProperty(const moore::ClassHandleType &actualTy,
   }
 
   // No ancestor declares that property.
+  mlir::emitError(loc) << "unknown property `" << fieldName << "`";
   return {};
 }

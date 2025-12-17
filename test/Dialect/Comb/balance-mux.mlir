@@ -114,14 +114,14 @@ hw.module @test_index_comparison(in %index: i4, out output: i32) {
   %mux2 = comb.mux %cmp1, %c1_i32, %mux3 : i32
   %mux1 = comb.mux %cmp0, %c0_i32, %mux2 : i32
   // CHECK:     %[[EXTRACT0:.*]] = comb.extract %index from 0 : (i4) -> i1
-  // CHECK-NET: %[[EXTRACT1:.*]] = comb.extract %index from 1 : (i4) -> i1
-  // CHECK-NET: %[[EXTRACT2:.*]] = comb.extract %index from 2 : (i4) -> i1
-  // CHECK-NET: %[[EXTRACT3:.*]] = comb.extract %index from 3 : (i4) -> i1
-  // CHECK-NET: %[[MUX0:.*]] = comb.mux %[[EXTRACT0]], %c3_i32, %c2_i32 : i32
-  // CHECK-NET: %[[MUX1:.*]] = comb.mux %[[EXTRACT0]], %c1_i32, %c0_i32 : i32
-  // CHECK-NET: %[[MUX2:.*]] = comb.mux %[[EXTRACT1]], %[[MUX0]], %[[MUX1]] : i32
-  // CHECK-NET: %[[OR:.*]] = comb.or bin %[[EXTRACT3]], %[[EXTRACT2]] : i1
-  // CHECK-NET: %[[MUX3:.*]] = comb.mux %[[OR]], %c4_i32, %[[MUX2]] : i32
+  // CHECK-NEXT: %[[EXTRACT1:.*]] = comb.extract %index from 1 : (i4) -> i1
+  // CHECK-NEXT: %[[EXTRACT2:.*]] = comb.extract %index from 2 : (i4) -> i1
+  // CHECK-NEXT: %[[EXTRACT3:.*]] = comb.extract %index from 3 : (i4) -> i1
+  // CHECK-NEXT: %[[MUX0:.*]] = comb.mux %[[EXTRACT0]], %c3_i32, %c2_i32 : i32
+  // CHECK-NEXT: %[[MUX1:.*]] = comb.mux %[[EXTRACT0]], %c1_i32, %c0_i32 : i32
+  // CHECK-NEXT: %[[MUX2:.*]] = comb.mux %[[EXTRACT1]], %[[MUX0]], %[[MUX1]] : i32
+  // CHECK-NEXT: %[[OR:.*]] = comb.or bin %[[EXTRACT3]], %[[EXTRACT2]] : i1
+  // CHECK-NEXT: %[[MUX3:.*]] = comb.mux %[[OR]], %c4_i32, %[[MUX2]] : i32
 
   hw.output %mux1 : i32
 }

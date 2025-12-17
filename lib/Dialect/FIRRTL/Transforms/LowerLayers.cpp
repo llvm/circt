@@ -739,6 +739,18 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     if (layerBlockWalkResult.wasInterrupted())
       return WalkResult::interrupt();
 
+    // If the layer block is empty, erase it instead of creating an empty
+    // module.  Note: empty leaf layer blocks will be erased by canonicalizers.
+    // We don't expect to see these here.  However, this handles the case of
+    // empty intermediary layer blocks which are important in the layer block
+    // representation, but can disappear when lowered to modules.
+    if (llvm::all_of(layerBlock.getRegion().getBlocks(),
+                     [](auto &a) { return a.empty(); })) {
+      assert(verbatims.empty());
+      layerBlock.erase();
+      return WalkResult::advance();
+    }
+
     // Create the new module.  This grabs a lock to modify the circuit.
     FModuleOp newModule = buildNewModule(builder, layerBlock);
     SymbolTable::setSymbolVisibility(newModule,
