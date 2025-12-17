@@ -186,3 +186,25 @@ void circt::arc::serializeModelInfoToJson(llvm::raw_ostream &outputStream,
     }
   });
 }
+
+circt::arc::ModelInfoAnalysis::ModelInfoAnalysis(Operation *container) {
+  assert(container->getNumRegions() == 1 && "Expected single region");
+  assert(container->getRegion(0).getBlocks().size() == 1 &&
+         "Expected single body block");
+
+  for (auto modelOp :
+       container->getRegion(0).getBlocks().front().getOps<ModelOp>()) {
+    auto storageArg = modelOp.getBody().getArgument(0);
+    auto storageType = cast<StorageType>(storageArg.getType());
+
+    SmallVector<StateInfo> states;
+    if (failed(collectStates(storageArg, 0, states))) {
+      assert(false && "Failed to collect model states");
+      continue;
+    }
+    llvm::sort(states, [](auto &a, auto &b) { return a.offset < b.offset; });
+    infoMap.try_emplace(modelOp, std::string(modelOp.getName()),
+                        storageType.getSize(), std::move(states),
+                        modelOp.getInitialFnAttr(), modelOp.getFinalFnAttr());
+  }
+}
