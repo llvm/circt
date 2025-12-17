@@ -30,6 +30,8 @@
 
 namespace esi {
 
+class Context;
+
 /// Root class of the ESI type system.
 class Type {
 public:
@@ -85,6 +87,16 @@ public:
 
   // Return a textual representation of this type.
   std::string toString(bool oneLine = false) const;
+
+  // Recursively serialize the provided type to a textual representation (JSON).
+  // Used together with the type-specific deserialization functions, this can
+  // be used to round-trip types through e.g. a manifest.
+  static std::string serialize(const Type *type);
+
+  // Recursively deserialize the provided string to a type instance. The type
+  // (and any nested types) are registered to the provided context. It is
+  // expected that the type was serialized via the 'serialize' method.
+  static const Type *deserialize(esi::Context &ctx, const std::string &data);
 
 protected:
   ID id;

@@ -6,12 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "esi/Context.h"
 #include "esi/Types.h"
 #include "esi/Values.h"
 #include "gtest/gtest.h"
 #include <any>
 #include <cstdint>
 #include <map>
+#include <string>
 #include <vector>
 
 using namespace esi;
@@ -784,4 +786,336 @@ TEST(ESITypesTest, BitWidthCalculations) {
   EXPECT_EQ(arrayType.getBitWidth(), 40)
       << "ArrayType of 5 uint8 elements should have bit width of 40 (8 * 5)";
 }
+
+//===----------------------------------------------------------------------===//
+// Type::serialize / Type::deserialize round-trip tests
+//===----------------------------------------------------------------------===//
+
+class TypeSerializationTest : public ::testing::Test {
+protected:
+  Context ctx;
+};
+
+// Test VoidType serialization/deserialization round-trip
+TEST_F(TypeSerializationTest, VoidTypeRoundTrip) {
+  VoidType voidType("void");
+
+  std::string serialized = Type::serialize(&voidType);
+  EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
+
+  const Type *deserialized = Type::deserialize(ctx, serialized);
+  ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
+
+  auto *deserializedVoid = dynamic_cast<const VoidType *>(deserialized);
+  ASSERT_NE(deserializedVoid, nullptr)
+      << "Deserialized type should be VoidType";
+  EXPECT_EQ(deserializedVoid->getID(), "void")
+      << "Deserialized VoidType should have correct ID";
+}
+
+// Test BitsType serialization/deserialization round-trip
+TEST_F(TypeSerializationTest, BitsTypeRoundTrip) {
+  BitsType bitsType("bits32", 32);
+
+  std::string serialized = Type::serialize(&bitsType);
+  EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
+
+  const Type *deserialized = Type::deserialize(ctx, serialized);
+  ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
+
+  auto *deserializedBits = dynamic_cast<const BitsType *>(deserialized);
+  ASSERT_NE(deserializedBits, nullptr)
+      << "Deserialized type should be BitsType";
+  EXPECT_EQ(deserializedBits->getWidth(), 32u)
+      << "Deserialized BitsType should have width 32";
+}
+
+// Test UIntType serialization/deserialization round-trip
+TEST_F(TypeSerializationTest, UIntTypeRoundTrip) {
+  UIntType uintType("u64", 64);
+
+  std::string serialized = Type::serialize(&uintType);
+  EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
+
+  const Type *deserialized = Type::deserialize(ctx, serialized);
+  ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
+
+  auto *deserializedUInt = dynamic_cast<const UIntType *>(deserialized);
+  ASSERT_NE(deserializedUInt, nullptr)
+      << "Deserialized type should be UIntType";
+  EXPECT_EQ(deserializedUInt->getWidth(), 64u)
+      << "Deserialized UIntType should have width 64";
+}
+
+// Test SIntType serialization/deserialization round-trip
+TEST_F(TypeSerializationTest, SIntTypeRoundTrip) {
+  SIntType sintType("s32", 32);
+
+  std::string serialized = Type::serialize(&sintType);
+  EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
+
+  const Type *deserialized = Type::deserialize(ctx, serialized);
+  ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
+
+  auto *deserializedSInt = dynamic_cast<const SIntType *>(deserialized);
+  ASSERT_NE(deserializedSInt, nullptr)
+      << "Deserialized type should be SIntType";
+  EXPECT_EQ(deserializedSInt->getWidth(), 32u)
+      << "Deserialized SIntType should have width 32";
+}
+
+// Test AnyType serialization/deserialization round-trip
+TEST_F(TypeSerializationTest, AnyTypeRoundTrip) {
+  AnyType anyType("any");
+
+  std::string serialized = Type::serialize(&anyType);
+  EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
+
+  const Type *deserialized = Type::deserialize(ctx, serialized);
+  ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
+
+  auto *deserializedAny = dynamic_cast<const AnyType *>(deserialized);
+  ASSERT_NE(deserializedAny, nullptr) << "Deserialized type should be AnyType";
+  EXPECT_EQ(deserializedAny->getID(), "any")
+      << "Deserialized AnyType should have correct ID";
+}
+
+// Test StructType serialization/deserialization round-trip
+TEST_F(TypeSerializationTest, StructTypeRoundTrip) {
+  // Create field types and register them with context
+  auto *uintType = new UIntType("u16", 16);
+  auto *sintType = new SIntType("s8", 8);
+  ctx.registerType(uintType);
+  ctx.registerType(sintType);
+
+  StructType::FieldVector fields = {{"field1", uintType}, {"field2", sintType}};
+  StructType structType("myStruct", fields);
+
+  std::string serialized = Type::serialize(&structType);
+  EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
+
+  const Type *deserialized = Type::deserialize(ctx, serialized);
+  ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
+
+  auto *deserializedStruct = dynamic_cast<const StructType *>(deserialized);
+  ASSERT_NE(deserializedStruct, nullptr)
+      << "Deserialized type should be StructType";
+  EXPECT_EQ(deserializedStruct->getID(), "myStruct")
+      << "Deserialized StructType should have correct ID";
+
+  const auto &deserializedFields = deserializedStruct->getFields();
+  ASSERT_EQ(deserializedFields.size(), 2u)
+      << "Deserialized struct should have 2 fields";
+  EXPECT_EQ(deserializedFields[0].first, "field1")
+      << "First field name should be 'field1'";
+  EXPECT_EQ(deserializedFields[1].first, "field2")
+      << "Second field name should be 'field2'";
+
+  // Check field types
+  auto *field1Type =
+      dynamic_cast<const UIntType *>(deserializedFields[0].second);
+  ASSERT_NE(field1Type, nullptr) << "First field should be UIntType";
+  EXPECT_EQ(field1Type->getWidth(), 16u)
+      << "First field type should have width 16";
+
+  auto *field2Type =
+      dynamic_cast<const SIntType *>(deserializedFields[1].second);
+  ASSERT_NE(field2Type, nullptr) << "Second field should be SIntType";
+  EXPECT_EQ(field2Type->getWidth(), 8u)
+      << "Second field type should have width 8";
+}
+
+// Test ArrayType serialization/deserialization round-trip
+TEST_F(TypeSerializationTest, ArrayTypeRoundTrip) {
+  auto *elementType = new UIntType("u8", 8);
+  ctx.registerType(elementType);
+
+  ArrayType arrayType("myArray", elementType, 10);
+
+  std::string serialized = Type::serialize(&arrayType);
+  EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
+
+  const Type *deserialized = Type::deserialize(ctx, serialized);
+  ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
+
+  auto *deserializedArray = dynamic_cast<const ArrayType *>(deserialized);
+  ASSERT_NE(deserializedArray, nullptr)
+      << "Deserialized type should be ArrayType";
+  EXPECT_EQ(deserializedArray->getSize(), 10u)
+      << "Deserialized ArrayType should have size 10";
+
+  auto *deserializedElementType =
+      dynamic_cast<const UIntType *>(deserializedArray->getElementType());
+  ASSERT_NE(deserializedElementType, nullptr)
+      << "Deserialized element type should be UIntType";
+  EXPECT_EQ(deserializedElementType->getWidth(), 8u)
+      << "Deserialized element type should have width 8";
+}
+
+// Test ChannelType serialization/deserialization round-trip
+TEST_F(TypeSerializationTest, ChannelTypeRoundTrip) {
+  auto *innerType = new UIntType("u32", 32);
+  ctx.registerType(innerType);
+
+  ChannelType channelType("myChannel", innerType);
+
+  std::string serialized = Type::serialize(&channelType);
+  EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
+
+  const Type *deserialized = Type::deserialize(ctx, serialized);
+  ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
+
+  auto *deserializedChannel = dynamic_cast<const ChannelType *>(deserialized);
+  ASSERT_NE(deserializedChannel, nullptr)
+      << "Deserialized type should be ChannelType";
+
+  auto *deserializedInner =
+      dynamic_cast<const UIntType *>(deserializedChannel->getInner());
+  ASSERT_NE(deserializedInner, nullptr)
+      << "Deserialized inner type should be UIntType";
+  EXPECT_EQ(deserializedInner->getWidth(), 32u)
+      << "Deserialized inner type should have width 32";
+}
+
+// Test BundleType serialization/deserialization round-trip
+TEST_F(TypeSerializationTest, BundleTypeRoundTrip) {
+  auto *toType = new UIntType("u16", 16);
+  auto *fromType = new SIntType("s32", 32);
+  ctx.registerType(toType);
+  ctx.registerType(fromType);
+
+  BundleType::ChannelVector channels = {
+      {"input", BundleType::Direction::To, toType},
+      {"output", BundleType::Direction::From, fromType}};
+  BundleType bundleType("myBundle", channels);
+
+  std::string serialized = Type::serialize(&bundleType);
+  EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
+
+  const Type *deserialized = Type::deserialize(ctx, serialized);
+  ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
+
+  auto *deserializedBundle = dynamic_cast<const BundleType *>(deserialized);
+  ASSERT_NE(deserializedBundle, nullptr)
+      << "Deserialized type should be BundleType";
+  EXPECT_EQ(deserializedBundle->getID(), "myBundle")
+      << "Deserialized BundleType should have correct ID";
+
+  const auto &deserializedChannels = deserializedBundle->getChannels();
+  ASSERT_EQ(deserializedChannels.size(), 2u)
+      << "Deserialized bundle should have 2 channels";
+
+  // Check first channel (input, To)
+  EXPECT_EQ(std::get<0>(deserializedChannels[0]), "input")
+      << "First channel name should be 'input'";
+  EXPECT_EQ(std::get<1>(deserializedChannels[0]), BundleType::Direction::To)
+      << "First channel direction should be To";
+
+  // Check second channel (output, From)
+  EXPECT_EQ(std::get<0>(deserializedChannels[1]), "output")
+      << "Second channel name should be 'output'";
+  EXPECT_EQ(std::get<1>(deserializedChannels[1]), BundleType::Direction::From)
+      << "Second channel direction should be From";
+}
+
+// Test nested types (struct containing array)
+TEST_F(TypeSerializationTest, NestedStructWithArrayRoundTrip) {
+  auto *elementType = new UIntType("u8", 8);
+  ctx.registerType(elementType);
+
+  auto *arrayType = new ArrayType("u8Array", elementType, 4);
+  ctx.registerType(arrayType);
+
+  auto *sintType = new SIntType("s16", 16);
+  ctx.registerType(sintType);
+
+  StructType::FieldVector fields = {{"data", arrayType}, {"count", sintType}};
+  StructType structType("nestedStruct", fields);
+
+  std::string serialized = Type::serialize(&structType);
+  EXPECT_FALSE(serialized.empty()) << "Serialization should produce output";
+
+  const Type *deserialized = Type::deserialize(ctx, serialized);
+  ASSERT_NE(deserialized, nullptr) << "Deserialization should succeed";
+
+  auto *deserializedStruct = dynamic_cast<const StructType *>(deserialized);
+  ASSERT_NE(deserializedStruct, nullptr)
+      << "Deserialized type should be StructType";
+
+  const auto &deserializedFields = deserializedStruct->getFields();
+  ASSERT_EQ(deserializedFields.size(), 2u)
+      << "Deserialized struct should have 2 fields";
+
+  // Check array field
+  auto *dataField =
+      dynamic_cast<const ArrayType *>(deserializedFields[0].second);
+  ASSERT_NE(dataField, nullptr) << "First field should be ArrayType";
+  EXPECT_EQ(dataField->getSize(), 4u) << "Array should have size 4";
+
+  auto *arrayElementType =
+      dynamic_cast<const UIntType *>(dataField->getElementType());
+  ASSERT_NE(arrayElementType, nullptr)
+      << "Array element type should be UIntType";
+  EXPECT_EQ(arrayElementType->getWidth(), 8u)
+      << "Array element width should be 8";
+
+  // Check sint field
+  auto *countField =
+      dynamic_cast<const SIntType *>(deserializedFields[1].second);
+  ASSERT_NE(countField, nullptr) << "Second field should be SIntType";
+  EXPECT_EQ(countField->getWidth(), 16u) << "Second field width should be 16";
+}
+
+// Test type caching - deserializing the same type twice should return same ptr
+TEST_F(TypeSerializationTest, TypeCachingBehavior) {
+  UIntType uintType("u32", 32);
+  std::string serialized = Type::serialize(&uintType);
+
+  const Type *first = Type::deserialize(ctx, serialized);
+  const Type *second = Type::deserialize(ctx, serialized);
+
+  EXPECT_EQ(first, second)
+      << "Deserializing same type twice should return same cached instance";
+}
+
+// Test error handling for null type
+TEST_F(TypeSerializationTest, SerializeNullTypeThrows) {
+  EXPECT_THROW(Type::serialize(nullptr), std::runtime_error)
+      << "Serializing null type should throw";
+}
+
+// Test error handling for invalid JSON
+TEST_F(TypeSerializationTest, DeserializeInvalidJsonThrows) {
+  EXPECT_THROW(Type::deserialize(ctx, "not valid json"), std::exception)
+      << "Deserializing invalid JSON should throw";
+}
+
+// Test error handling for unknown mnemonic
+TEST_F(TypeSerializationTest, DeserializeUnknownMnemonicThrows) {
+  std::string badJson = R"({"mnemonic": "unknown_type", "id": "bad"})";
+  EXPECT_THROW(Type::deserialize(ctx, badJson), std::runtime_error)
+      << "Deserializing unknown mnemonic should throw";
+}
+
+// Test various bit widths for integer types
+TEST_F(TypeSerializationTest, VariousBitWidths) {
+  // Test small widths
+  for (uint64_t width : {1, 4, 7, 8, 12, 16, 24, 32, 48, 64, 128}) {
+    UIntType uintType("u" + std::to_string(width), width);
+    std::string serialized = Type::serialize(&uintType);
+
+    // Create new context to avoid caching
+    Context localCtx;
+    const Type *deserialized = Type::deserialize(localCtx, serialized);
+    ASSERT_NE(deserialized, nullptr)
+        << "Deserialization should succeed for width " << width;
+
+    auto *deserializedUInt = dynamic_cast<const UIntType *>(deserialized);
+    ASSERT_NE(deserializedUInt, nullptr)
+        << "Deserialized type should be UIntType for width " << width;
+    EXPECT_EQ(deserializedUInt->getWidth(), width)
+        << "Deserialized width should match for width " << width;
+  }
+}
+
 } // namespace

@@ -13,12 +13,134 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/Types.h"
+#include "esi/Context.h"
 #include "esi/Values.h"
 #include <algorithm>
 #include <cstring>
 #include <format>
 #include <span>
 #include <sstream>
+
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcovered-switch-default"
+#endif
+#include <nlohmann/json.hpp>
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+
+//===----------------------------------------------------------------------===//
+// ESI Type Construction Helpers
+//===----------------------------------------------------------------------===//
+
+/// Generic helper to check for existing types in the context and register new
+/// ones.
+template <typename T>
+static const T *getOrCreateType(esi::Context &ctxt, const std::string &typeName,
+                                std::function<T *()> createFunc) {
+  std::optional<const esi::Type *> existing = ctxt.getType(typeName);
+  if (existing) {
+    const auto *existingTyped = dynamic_cast<const T *>(existing.value());
+    if (!existingTyped) {
+      throw std::runtime_error(std::format(
+          "Type ID '{}' already registered with a different type", typeName));
+    }
+    return existingTyped;
+  }
+
+  auto *newType = createFunc();
+  ctxt.registerType(newType);
+  return newType;
+}
+
+static const esi::VoidType *createVoidType(esi::Context &ctxt) {
+  std::string typeName = "void";
+  return getOrCreateType<esi::VoidType>(
+      ctxt, typeName, [&typeName]() { return new esi::VoidType(typeName); });
+}
+
+static const esi::Type *createBitsType(esi::Context &ctxt, size_t bitWidth) {
+  if (bitWidth == 0)
+    return createVoidType(ctxt);
+
+  std::string typeName = "bits" + std::to_string(bitWidth);
+  return getOrCreateType<esi::BitsType>(
+      ctxt, typeName, [&typeName, bitWidth]() {
+        return new esi::BitsType(typeName, bitWidth);
+      });
+}
+
+static const esi::Type *createIntType(esi::Context &ctxt, size_t bitWidth,
+                                      bool isSigned) {
+  if (bitWidth == 0)
+    return createVoidType(ctxt);
+
+  std::string typeName = std::format("{}i{}", isSigned ? "s" : "u", bitWidth);
+
+  if (isSigned) {
+    return getOrCreateType<esi::SIntType>(
+        ctxt, typeName, [&typeName, bitWidth]() {
+          return new esi::SIntType(typeName, bitWidth);
+        });
+  }
+
+  return getOrCreateType<esi::UIntType>(
+      ctxt, typeName, [&typeName, bitWidth]() {
+        return new esi::UIntType(typeName, bitWidth);
+      });
+}
+
+static const esi::Type *createUIntType(esi::Context &ctxt, size_t bitWidth) {
+  return createIntType(ctxt, bitWidth, false);
+}
+
+static const esi::Type *createSIntType(esi::Context &ctxt, size_t bitWidth) {
+  return createIntType(ctxt, bitWidth, true);
+}
+
+static const esi::ArrayType *createArrayType(esi::Context &ctxt,
+                                             const esi::Type *elementType,
+                                             size_t size, bool reverse = true) {
+  std::string typeName =
+      "array_" + std::to_string(size) + "_" + elementType->getID();
+
+  return getOrCreateType<esi::ArrayType>(
+      ctxt, typeName, [&typeName, elementType, size, reverse]() {
+        return new esi::ArrayType(typeName, elementType, size, reverse);
+      });
+}
+
+static const esi::StructType *
+createStructType(esi::Context &ctxt, const std::string &name,
+                 const esi::StructType::FieldVector &fields,
+                 bool reverse = true) {
+  return getOrCreateType<esi::StructType>(
+      ctxt, name, [&name, &fields, reverse]() {
+        return new esi::StructType(name, fields, reverse);
+      });
+}
+
+static const esi::ChannelType *createChannelType(esi::Context &ctxt,
+                                                 const esi::Type *inner) {
+  std::string channelTypeName = "channel_" + inner->getID();
+  return getOrCreateType<esi::ChannelType>(
+      ctxt, channelTypeName, [&channelTypeName, inner]() {
+        return new esi::ChannelType(channelTypeName, inner);
+      });
+}
+
+static const esi::BundleType *
+createFunctionBundleType(esi::Context &ctxt, const std::string &name,
+                         const esi::Type *argType,
+                         const esi::Type *resultType) {
+  esi::BundleType::ChannelVector channels;
+  channels.emplace_back("arg", esi::BundleType::Direction::To, argType);
+  channels.emplace_back("result", esi::BundleType::Direction::From, resultType);
+  auto *bundleType = new esi::BundleType(name, channels);
+  ctxt.registerType(bundleType);
+  return bundleType;
+}
 
 namespace esi {
 
@@ -95,6 +217,163 @@ static void dumpType(std::ostream &os, const esi::Type *type, int level = 0,
 
 void Type::dump(std::ostream &os, bool oneLine) const {
   dumpType(os, this, oneLine ? 0 : 0, oneLine);
+}
+
+// Deserialize the provided string to a type instance. The type (and any
+// nested types) are registered to the provided context. It is expected that
+// the type was serialized via the 'serialize' method.
+// NOLINTNEXTLINE(misc-no-recursion)
+const Type *Type::deserialize(esi::Context &ctx, const std::string &data) {
+  nlohmann::json j = nlohmann::json::parse(data);
+
+  if (!j.is_object())
+    throw std::runtime_error("jsonObjToType: expected JSON object");
+
+  std::string mnemonic = j.at("mnemonic").get<std::string>();
+  std::string id = j.value("id", "");
+
+  // Helper to get bitwidth from either hwBitwidth or width field
+  auto getBitwidth = [&j]() -> uint64_t {
+    if (j.contains("hwBitwidth"))
+      return j.at("hwBitwidth").get<uint64_t>();
+    return j.at("width").get<uint64_t>();
+  };
+
+  // Handle unified "int" mnemonic with signedness field
+  if (mnemonic == "int") {
+    uint64_t width = getBitwidth();
+    std::string signedness = j.value("signedness", "unsigned");
+    return createIntType(ctx, width, signedness == "signed");
+  }
+  if (mnemonic == "uint") {
+    // Legacy format support
+    uint64_t width = getBitwidth();
+    return createUIntType(ctx, width);
+  }
+  if (mnemonic == "sint") {
+    // Legacy format support
+    uint64_t width = getBitwidth();
+    return createSIntType(ctx, width);
+  }
+  if (mnemonic == "bits") {
+    uint64_t width = getBitwidth();
+    return createBitsType(ctx, width);
+  }
+  if (mnemonic == "void") {
+    return createVoidType(ctx);
+  }
+  if (mnemonic == "any") {
+    // AnyType doesn't have a create helper, create directly
+    std::string typeName = id.empty() ? "any" : id;
+    std::optional<const esi::Type *> existing = ctx.getType(typeName);
+    if (existing)
+      return existing.value();
+    auto *anyType = new esi::AnyType(typeName);
+    ctx.registerType(anyType);
+    return anyType;
+  }
+  if (mnemonic == "struct") {
+    esi::StructType::FieldVector fields;
+    for (const auto &fieldObj : j.at("fields")) {
+      std::string fieldName = fieldObj.at("name").get<std::string>();
+      const esi::Type *fieldType = deserialize(ctx, fieldObj.at("type"));
+      fields.emplace_back(fieldName, fieldType);
+    }
+    std::string typeName = id.empty() ? "struct_auto" : id;
+    return createStructType(ctx, typeName, fields);
+  }
+  if (mnemonic == "array") {
+    const esi::Type *elementType = deserialize(ctx, j.at("element"));
+    uint64_t size = j.at("size").get<uint64_t>();
+    return createArrayType(ctx, elementType, size);
+  }
+  if (mnemonic == "channel") {
+    const esi::Type *innerType = deserialize(ctx, j.at("inner"));
+    return createChannelType(ctx, innerType);
+  }
+  if (mnemonic == "bundle") {
+    esi::BundleType::ChannelVector channels;
+    for (const auto &channelObj : j.at("channels")) {
+      std::string channelName = channelObj.at("name").get<std::string>();
+      std::string dirStr = channelObj.at("direction").get<std::string>();
+      esi::BundleType::Direction direction =
+          (dirStr == "to") ? esi::BundleType::Direction::To
+                           : esi::BundleType::Direction::From;
+      const esi::Type *channelType = deserialize(ctx, channelObj.at("type"));
+      channels.emplace_back(channelName, direction, channelType);
+    }
+    std::string typeName = id.empty() ? "bundle_auto" : id;
+    // Check for existing type first
+    std::optional<const esi::Type *> existing = ctx.getType(typeName);
+    if (existing)
+      return existing.value();
+    auto *bundleType = new esi::BundleType(typeName, channels);
+    ctx.registerType(bundleType);
+    return bundleType;
+  }
+  throw std::runtime_error(
+      std::format("jsonObjToType: unknown mnemonic '{}'", mnemonic));
+}
+
+// NOLINTNEXTLINE(misc-no-recursion)
+std::string Type::serialize(const esi::Type *type) {
+  if (!type)
+    throw std::runtime_error("Type::serialize: null type provided");
+
+  nlohmann::json j;
+  j["id"] = type->getID();
+
+  if (auto *uintType = dynamic_cast<const esi::UIntType *>(type)) {
+    j["mnemonic"] = "int";
+    j["hwBitwidth"] = uintType->getWidth();
+    j["signedness"] = "unsigned";
+  } else if (auto *sintType = dynamic_cast<const esi::SIntType *>(type)) {
+    j["mnemonic"] = "int";
+    j["hwBitwidth"] = sintType->getWidth();
+    j["signedness"] = "signed";
+  } else if (auto *bitsType = dynamic_cast<const esi::BitsType *>(type)) {
+    j["mnemonic"] = "bits";
+    j["hwBitwidth"] = bitsType->getWidth();
+  } else if (dynamic_cast<const esi::VoidType *>(type)) {
+    j["mnemonic"] = "void";
+  } else if (dynamic_cast<const esi::AnyType *>(type)) {
+    j["mnemonic"] = "any";
+  } else if (auto *structType = dynamic_cast<const esi::StructType *>(type)) {
+    j["mnemonic"] = "struct";
+    nlohmann::json fieldsArr = nlohmann::json::array();
+    for (const auto &[name, fieldType] : structType->getFields()) {
+      nlohmann::json fieldObj;
+      fieldObj["name"] = name;
+      fieldObj["type"] = serialize(fieldType);
+      fieldsArr.push_back(fieldObj);
+    }
+    j["fields"] = fieldsArr;
+  } else if (auto *arrayType = dynamic_cast<const esi::ArrayType *>(type)) {
+    j["mnemonic"] = "array";
+    j["element"] = serialize(arrayType->getElementType());
+    j["size"] = arrayType->getSize();
+  } else if (auto *channelType = dynamic_cast<const esi::ChannelType *>(type)) {
+    j["mnemonic"] = "channel";
+    j["inner"] = serialize(channelType->getInner());
+  } else if (auto *bundleType = dynamic_cast<const esi::BundleType *>(type)) {
+    j["mnemonic"] = "bundle";
+    nlohmann::json channelsArr = nlohmann::json::array();
+    for (const auto &[name, direction, channelType] :
+         bundleType->getChannels()) {
+      nlohmann::json channelObj;
+      channelObj["name"] = name;
+      channelObj["direction"] =
+          (direction == esi::BundleType::Direction::To) ? "to" : "from";
+      channelObj["type"] = serialize(channelType);
+      channelsArr.push_back(channelObj);
+    }
+    j["channels"] = channelsArr;
+  } else {
+    throw std::runtime_error(
+        std::format("typeToJsonObj: unhandled type '{}'", type->getID()));
+  }
+
+  return j.dump();
 }
 
 // Recurse through an ESI type and print an elaborated version of it.
