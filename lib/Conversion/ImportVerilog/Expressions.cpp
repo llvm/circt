@@ -2286,24 +2286,22 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
   // allows us to perform resizing and domain casting on that bit vector.
   auto dstPacked = dyn_cast<moore::PackedType>(type);
   auto srcPacked = dyn_cast<moore::PackedType>(value.getType());
+  auto dstInt = dstPacked ? dstPacked.getSimpleBitVector() : moore::IntType();
+  auto srcInt = srcPacked ? srcPacked.getSimpleBitVector() : moore::IntType();
 
-  if (dstPacked && srcPacked && dstPacked.getBitSize() &&
-      srcPacked.getBitSize()) {
+  if (dstInt && srcInt) {
     // Convert the value to a simple bit vector if it isn't one already.
     value = materializePackedToSBVConversion(*this, value, loc);
     if (!value)
       return {};
 
-    unsigned srcSize = *srcPacked.getBitSize();
-    unsigned dstSize = *dstPacked.getBitSize();
-
     // Create truncation or sign/zero extension ops depending on the source and
     // destination width.
-    auto resizedType =
-        moore::IntType::get(value.getContext(), dstSize, srcPacked.getDomain());
-    if (dstSize < srcSize) {
+    auto resizedType = moore::IntType::get(
+        value.getContext(), dstInt.getWidth(), srcPacked.getDomain());
+    if (dstInt.getWidth() < srcInt.getWidth()) {
       value = builder.createOrFold<moore::TruncOp>(loc, resizedType, value);
-    } else if (dstSize > srcSize) {
+    } else if (dstInt.getWidth() > srcInt.getWidth()) {
       if (isSigned)
         value = builder.createOrFold<moore::SExtOp>(loc, resizedType, value);
       else
@@ -2311,10 +2309,10 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
     }
 
     // Convert the domain if needed.
-    if (dstPacked.getDomain() != srcPacked.getDomain()) {
-      if (dstPacked.getDomain() == moore::Domain::TwoValued)
+    if (dstInt.getDomain() != srcInt.getDomain()) {
+      if (dstInt.getDomain() == moore::Domain::TwoValued)
         value = builder.createOrFold<moore::LogicToIntOp>(loc, value);
-      else if (dstPacked.getDomain() == moore::Domain::FourValued)
+      else if (dstInt.getDomain() == moore::Domain::FourValued)
         value = builder.createOrFold<moore::IntToLogicOp>(loc, value);
     }
 
@@ -2368,12 +2366,12 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
 
   // Handle f64/f32 to time conversion
   if (isa<moore::TimeType>(type) && isa<moore::RealType>(value.getType())) {
-    auto asInt = moore::RealToIntOp::create(
-        builder, loc,
-        moore::IntType::get(builder.getContext(), 64, Domain::TwoValued),
-        value);
+    auto intType =
+        moore::IntType::get(builder.getContext(), 64, Domain::TwoValued);
+    auto asInt = moore::RealToIntOp::create(builder, loc, intType, value);
+    auto asLogic = moore::IntToLogicOp::create(builder, loc, asInt);
     return materializeSBVToPackedConversion(*this, cast<moore::TimeType>(type),
-                                            asInt, loc);
+                                            asLogic, loc);
   }
 
   // Handle time to f64/f32 conversion
@@ -2417,7 +2415,7 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
   }
 
   if (isa<moore::RealType>(type) && isa<moore::RealType>(value.getType()))
-    return moore::ConvertRealOp::create(builder, loc, type, value);
+    return builder.createOrFold<moore::ConvertRealOp>(loc, type, value);
 
   if (isa<moore::ClassHandleType>(type) &&
       isa<moore::ClassHandleType>(value.getType()))
