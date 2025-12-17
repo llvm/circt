@@ -1,0 +1,94 @@
+#include "gtest/gtest.h"
+
+#define ARC_RUNTIME_JITBIND_FNDECL
+#include "ArcRuntime/ArcRuntime.h"
+#include "ArcRuntime/JITBind.h"
+
+struct TestImpl {
+  uint64_t foo = 0x123456;
+};
+
+TEST(ArcRuntimeTest, InstanceLifecycle) {
+  const uint64_t bogusStateBytes = 2048;
+  auto bogusModel = ArcRuntimeModelInfo();
+  bogusModel.apiVersion = ARC_RUNTIME_API_VERSION;
+  bogusModel.modelName = "bogus";
+  bogusModel.numStateBytes = bogusStateBytes;
+  ArcState *state0 = arcRuntimeAllocateInstance(&bogusModel, nullptr);
+  ArcState *state1 = arcRuntimeAllocateInstance(&bogusModel, "foo;bar");
+  EXPECT_NE(state0, nullptr);
+  EXPECT_NE(state1, nullptr);
+  EXPECT_NE(state0, state1);
+  EXPECT_EQ(state0->magic, ARC_RUNTIME_MAGIC);
+  EXPECT_NE(state0->impl, nullptr);
+  EXPECT_EQ((intptr_t)(state0->modelState) % 16, 0);
+  EXPECT_EQ(state1->magic, ARC_RUNTIME_MAGIC);
+  EXPECT_NE(state1->impl, nullptr);
+  EXPECT_EQ((intptr_t)(state1->modelState) % 16, 0);
+  bool notZero = false;
+  for (uint64_t i = 0; i < bogusStateBytes; ++i)
+    notZero |= (state0->modelState[i] != 0);
+  EXPECT_FALSE(notZero);
+  for (uint64_t i = 0; i < bogusStateBytes; ++i)
+    notZero |= (state1->modelState[i] != 0);
+  EXPECT_FALSE(notZero);
+
+  for (auto i = 0; i < 24; ++i)
+    arcRuntimeOnEval(state0);
+
+  arcRuntimeDeleteInstance(state0);
+  arcRuntimeDeleteInstance(state1);
+}
+
+TEST(ArcRuntimeTest, DieOnWrongAPIVersion) {
+  auto bogusModel = ArcRuntimeModelInfo();
+  bogusModel.apiVersion = ARC_RUNTIME_API_VERSION + 1;
+  bogusModel.modelName = "bogus";
+  bogusModel.numStateBytes = 8;
+  EXPECT_DEATH(arcRuntimeAllocateInstance(&bogusModel, nullptr), "");
+}
+
+TEST(ArcRuntimeTest, GetStateFromModelState) {
+  auto impl = TestImpl();
+  auto state = ArcState();
+  state.impl = static_cast<void *>(&impl);
+  state.magic = ARC_RUNTIME_MAGIC;
+  EXPECT_EQ(arcRuntimeGetStateFromModelState(state.modelState, 0), &state);
+  EXPECT_EQ(arcRuntimeGetStateFromModelState(&state.modelState[123], 123),
+            &state);
+}
+
+TEST(ArcRuntimeTest, DieOnWrongMagic) {
+  auto impl = TestImpl();
+  auto state = ArcState();
+  state.impl = static_cast<void *>(&impl);
+  state.magic = ~ARC_RUNTIME_MAGIC;
+  EXPECT_DEATH(arcRuntimeGetStateFromModelState(state.modelState, 0), "");
+}
+
+TEST(ArcRuntimeTest, GetAPIVersion) {
+  EXPECT_EQ(arcRuntimeGetAPIVersion(), ARC_RUNTIME_API_VERSION);
+}
+
+TEST(ArcRuntimeTest, InstanceLifecycleIR) {
+  auto &api = circt::arc::runtime::getArcRuntimeAPICallbacks();
+  const uint64_t bogusStateBytes = 2048;
+  auto bogusModel = ArcRuntimeModelInfo();
+  bogusModel.apiVersion = ARC_RUNTIME_API_VERSION;
+  bogusModel.modelName = "bogus";
+  bogusModel.numStateBytes = bogusStateBytes;
+  uint8_t *modelState = api.fnAllocInstance(&bogusModel, nullptr);
+  EXPECT_NE(modelState, nullptr);
+  ArcState *state = arcRuntimeGetStateFromModelState(modelState, 0);
+  EXPECT_EQ(state->magic, ARC_RUNTIME_MAGIC);
+  EXPECT_NE(state->impl, nullptr);
+  EXPECT_EQ(&state->modelState[0], modelState);
+  EXPECT_EQ((intptr_t)(state->modelState) % 16, 0);
+  bool notZero = false;
+  for (uint64_t i = 0; i < bogusStateBytes; ++i)
+    notZero |= (state->modelState[i] != 0);
+  EXPECT_FALSE(notZero);
+  for (auto i = 0; i < 128; ++i)
+    api.fnOnEval(modelState);
+  api.fnDeleteInstance(modelState);
+}
