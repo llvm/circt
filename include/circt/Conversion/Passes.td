@@ -491,6 +491,7 @@ def ConvertMooreToCore : Pass<"convert-moore-to-core", "mlir::ModuleOp"> {
     "comb::CombDialect",
     "hw::HWDialect",
     "llhd::LLHDDialect",
+    "mlir::arith::ArithDialect",
     "mlir::cf::ControlFlowDialect",
     "mlir::scf::SCFDialect",
     "mlir::math::MathDialect",
