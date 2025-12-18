@@ -183,8 +183,8 @@ static llvm::cl::opt<unsigned> splitFuncsThreshold(
         "Split large MLIR functions that occur above the given size threshold"),
     llvm::cl::ValueOptional, llvm::cl::cat(mainCategory));
 
-static llvm::cl::opt<bool> ignoreAsync(
-    "ignore-async",
+static llvm::cl::opt<bool> asyncResetsAsSync(
+    "async-resets-as-sync",
     llvm::cl::desc("Treat asynchronous firreg resets as synchronous"),
     llvm::cl::init(false), llvm::cl::cat(mainCategory));
 
@@ -268,7 +268,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   preprocessingOpt.observeWires = observeWires;
   preprocessingOpt.observeNamedValues = observeNamedValues;
   preprocessingOpt.observeMemories = observeMemories;
-  preprocessingOpt.ignoreAsync = ignoreAsync;
+  preprocessingOpt.asyncResetsAsSync = asyncResetsAsSync;
   populateArcPreprocessingPipeline(pm, preprocessingOpt);
 
   // Restructure the input from a `hw.module` hierarchy to a collection of arcs.

@@ -48,7 +48,7 @@ std::unique_ptr<mlir::Pass> createMuxToControlFlowPass();
 std::unique_ptr<mlir::Pass> createPrintCostModelPass();
 std::unique_ptr<mlir::Pass> createSimplifyVariadicOpsPass();
 std::unique_ptr<mlir::Pass> createSplitLoopsPass();
-std::unique_ptr<mlir::Pass> createStripSVPass(bool ignoreAsync = false);
+std::unique_ptr<mlir::Pass> createStripSVPass(bool asyncResetsAsSync = false);
 
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/Arc/ArcPasses.h.inc"

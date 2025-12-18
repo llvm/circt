@@ -42,8 +42,8 @@ struct ArcPreprocessingOptions
       llvm::cl::desc("Make all memory contents observable"),
       llvm::cl::init(false)};
 
-  Option<bool> ignoreAsync{
-      *this, "ignore-async",
+  Option<bool> asyncResetsAsSync{
+      *this, "async-resets-as-sync",
       llvm::cl::desc("Treat asynchronous firreg resets as synchronous"),
       llvm::cl::init(false)};
 };

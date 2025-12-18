@@ -366,7 +366,7 @@ def StripSV : Pass<"arc-strip-sv", "mlir::ModuleOp"> {
   let dependentDialects = ["arc::ArcDialect", "comb::CombDialect",
                            "hw::HWDialect", "seq::SeqDialect"];
   let options = [
-    Option<"ignoreAsync", "ignore-async", "bool", "false",
+    Option<"asyncResetsAsSync", "async-resets-as-sync", "bool", "false",
       "Treat asynchronous resets as synchronous.">
   ];
 }

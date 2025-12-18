@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --arc-strip-sv='ignore-async' | FileCheck %s
+// RUN: circt-opt %s --arc-strip-sv='async-resets-as-sync' | FileCheck %s
 
 // CHECK: hw.module @AsyncReg(in [[CLK:%.+]] : !seq.clock, in [[RST:%.+]] : i1, in [[ARG0:%.+]] : i8) {
 // CHECK:  [[C0_I8:%.+]] = hw.constant 0 : i8
