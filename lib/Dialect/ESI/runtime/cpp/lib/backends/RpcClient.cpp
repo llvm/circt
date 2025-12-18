@@ -24,6 +24,8 @@
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
 
+#include <condition_variable>
+#include <mutex>
 #include <thread>
 
 using namespace esi;
@@ -52,7 +54,7 @@ public:
                             const ::esi::cosim::ChannelDesc &desc,
                             RpcClient::ReadCallback callback)
       : stub(stub), grpcDesc(desc), callback(std::move(callback)),
-        context(nullptr) {}
+        context(nullptr), done(false) {}
 
   ~ReadChannelConnectionImpl() override { disconnect(); }
 
@@ -82,12 +84,26 @@ public:
     StartRead(&incomingMessage);
   }
 
+  // Called by gRPC when the RPC is fully complete (after cancel or error).
+  void OnDone(const grpc::Status & /*status*/) override {
+    std::lock_guard<std::mutex> lock(doneMutex);
+    done = true;
+    doneCV.notify_all();
+  }
+
   void disconnect() override {
     if (!context)
       return;
+
+    // Initiate cancellation.
     context->TryCancel();
-    // Don't delete the context since gRPC still holds a reference to it.
-    // TODO: figure out how to delete it.
+
+    // Wait for gRPC to signal completion via OnDone().
+    std::unique_lock<std::mutex> lock(doneMutex);
+    doneCV.wait(lock, [this]() { return done; });
+
+    // Now it's safe to clean up.
+    delete context;
     context = nullptr;
   }
 
@@ -97,6 +113,11 @@ private:
   RpcClient::ReadCallback callback;
   ClientContext *context;
   ::esi::cosim::Message incomingMessage;
+
+  // Synchronization for waiting on gRPC completion.
+  std::mutex doneMutex;
+  std::condition_variable doneCV;
+  bool done;
 };
 } // namespace
 
