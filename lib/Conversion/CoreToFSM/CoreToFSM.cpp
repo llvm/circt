@@ -399,9 +399,9 @@ static void getReachableStates(llvm::DenseSet<size_t> &visitableStates,
   clonedBody.walk([&](Operation *op) { opsToProcess.push_back(op); });
 
   bool changed = false;
-  mlir::GreedyRewriteConfig config;
-  LogicalResult converged = mlir::applyOpPatternsGreedily(
-      opsToProcess, frozenPatterns, config, &changed);
+  GreedyRewriteConfig config;
+  LogicalResult converged =
+      applyOpPatternsGreedily(opsToProcess, frozenPatterns, config, &changed);
 
   llvm::SmallVector<llvm::DenseSet<size_t>> pv;
   for (size_t j = 0; j < newOutput.getNumOperands(); j++) {
@@ -413,7 +413,7 @@ static void getReachableStates(llvm::DenseSet<size_t> &visitableStates,
   }
   std::set<llvm::SmallVector<size_t>> flipped = calculateCartesianProduct(pv);
   for (llvm::SmallVector<size_t> v : flipped) {
-    llvm::DenseMap<mlir::Value, int> m;
+    llvm::DenseMap<Value, int> m;
     for (size_t k = 0; k < v.size(); k++) {
       seq::CompRegOp r = registers[k];
       m[r] = v[k];
@@ -902,6 +902,17 @@ public:
         asyncResetBlockArguments.insert(arg);
       }
     }
+
+    // Emit a warning if async reset signals were detected and removed.
+    // The FSM dialect does not support async reset, so the reset behavior
+    // is only captured in the initial state. The original async reset
+    // triggering mechanism is not preserved.
+    if (!asyncResetBlockArguments.empty()) {
+      moduleOp.emitWarning()
+          << "async reset signals detected and removed from FSM; "
+             "reset behavior is captured only in the initial state";
+    }
+
     Block &front = machine.getBody().front();
     front.eraseArguments([&](BlockArgument arg) {
       return asyncResetBlockArguments.contains(arg);
