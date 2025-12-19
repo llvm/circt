@@ -414,7 +414,11 @@ struct Node {
 };
 
 struct FieldRefGraph {
-  std::deque<Node> nodes;
+  // use BumpPtrAllocator to distribute nodes
+  llvm::BumpPtrAllocator allocator;
+
+  llvm::SmallVector<Node*, 32> nodes;
+  
   DenseMap<FieldRef, Node *> nodeMap;
 
   Node *addNode_zero() {
@@ -423,9 +427,10 @@ struct FieldRefGraph {
       return it->second;
     }
 
-    nodes.emplace_back(key);
-    Node *newNode = &nodes.back();
-    nodeMap[key] = std::move(newNode);
+    // Create nodes using the allocator.
+    Node* newNode = new (allocator.Allocate<Node>()) Node(key);
+    nodes.push_back(newNode);
+    nodeMap[key] = newNode;
     return newNode;
   }
 
@@ -435,9 +440,10 @@ struct FieldRefGraph {
       return it->second;
     }
 
-    nodes.emplace_back(value, id);
-    Node *newNode = &nodes.back();
-    nodeMap[key] = std::move(newNode);
+    // Create nodes using the allocator.
+    Node* newNode = new (allocator.Allocate<Node>()) Node(value, id);
+    nodes.push_back(newNode);
+    nodeMap[key] = newNode;
 
     Node *root = addNode_zero();
     root->addSuccessor(newNode);
@@ -450,9 +456,10 @@ struct FieldRefGraph {
       return it->second;
     }
 
-    nodes.emplace_back(key);
-    Node *newNode = &nodes.back();
-    nodeMap[key] = std::move(newNode);
+    // Create nodes using the allocator.
+    Node* newNode = new (allocator.Allocate<Node>()) Node(key);
+    nodes.push_back(newNode);
+    nodeMap[key] = newNode;
 
     Node *root = addNode_zero();
     root->addSuccessor(newNode);
@@ -465,9 +472,10 @@ struct FieldRefGraph {
       return it->second;
     }
 
-    nodes.emplace_back(key);
-    Node *newNode = &nodes.back();
-    nodeMap[key] = std::move(newNode);
+    // Create nodes using the allocator.
+    Node* newNode = new (allocator.Allocate<Node>()) Node(key);
+    nodes.push_back(newNode);
+    nodeMap[key] = newNode;
     return newNode;
   }
 
@@ -481,21 +489,30 @@ struct FieldRefGraph {
   FieldRefGraph(const FieldRefGraph &other) {
     DenseMap<const Node *, Node *> oldToNewMap;
 
-    for (const Node &oldNode : other.nodes) {
-      nodes.emplace_back(oldNode.field);
-      Node *newNode = &nodes.back();
-      oldToNewMap[&oldNode] = newNode;
-      nodeMap[newNode->field] = &nodes.back();
+    // copy node (using its own allocator)
+    for (Node *oldNode : other.nodes) {
+      Node* newNode = new (allocator.Allocate<Node>()) Node(oldNode->field);
+      nodes.push_back(newNode);
+      oldToNewMap[oldNode] = newNode;
+      nodeMap[newNode->field] = newNode;
     }
 
-    for (const Node &oldNode : other.nodes) {
-      Node *newNode = oldToNewMap[&oldNode];
-      for (Node *oldSuccessor : oldNode.successors) {
+    // copy edges
+    for (Node *oldNode : other.nodes) {
+      Node *newNode = oldToNewMap[oldNode];
+      for (Node *oldSuccessor : oldNode->successors) {
         auto it = oldToNewMap.find(oldSuccessor);
         if (it != oldToNewMap.end()) {
-          newNode->successors.push_back(it->second);
+          newNode->addSuccessor(it->second);
         }
       }
+    }
+  }
+
+
+  ~FieldRefGraph() {
+    for (Node* node : nodes) {
+      node->~Node();
     }
   }
 };
@@ -517,11 +534,11 @@ struct GraphTraits<FieldRefGraph *> {
   }
 
   static NodeRef nodes_begin(FieldRefGraph *G) {
-    return G->nodes.empty() ? nullptr : &G->nodes[0];
+    return G->nodes.empty() ? nullptr : G->nodes.front();
   }
 
   static NodeRef nodes_end(FieldRefGraph *G) {
-    return G->nodes.empty() ? nullptr : &G->nodes[0] + G->nodes.size();
+    return G->nodes.empty() ? nullptr : G->nodes.back() + 1;
   }
 };
 } // namespace llvm
