@@ -229,7 +229,12 @@ public:
   }
 };
 
-// TBD : add some comments here
+// inequality of form: lhs_var1_ >= rhs_terms1_ + 2^rhs_power_ + rhs_const1_
+// Terms rhs_terms1_ is a list of linear Term: coe_0 * var_0 + coe_1 * var_1 + ...
+//   coe_(s) are natural number according to the specification of width of expression(non-negative)
+//   var_(s) are FieldRef(s)
+// rhs_power_ represents the 2-power term brought about by dshl, 
+//   e.g. z <= dshl(x,y) indicates lhs_var1_(w_z), rhs_const1_(-1), rhs_terms1_(1 * w_x), rhs_power_(w_y)
 class Constraint1 {
 private:
   FieldRef lhs_var1_;
@@ -304,6 +309,11 @@ bool Constraint1::satisfies(const Valuation &v) const {
   return lhs_value >= rhs_total;
 }
 
+// inequality of form: lhs_ >= min(fr1_ + const1_, fr2_ + const2_)
+// This is introduced to indicate the "rem" operation
+//   e.g. z <= rem(x,y) indicates lhs_(w_z), fr1_(w_x), const1_(0), fr2_(w_y), const2_(0)
+// The use of "const" here is to take into account the case where the expression is a constant.
+// However, it is not actually utilized because in MLIR, constants are also declared with variable names.
 class Constraint_Min {
 private:
   FieldRef lhs_;
@@ -358,6 +368,11 @@ public:
   }
 };
 
+// inequality of form: lhs_const2_ >= rhs_terms2_ 
+// Terms rhs_terms2_ is a list of linear Term: coe_0 * var_0 + coe_1 * var_1 + ...(same as the usage in rhs_terms1_)
+// This type of constraint is designed to limit the condition expressions used in when statement or mux expression: 
+//   they should either have a single bit width or be zero-width.
+//   e.g. z <= mux(c,x,y) indicates rhs_const2_(1), rhs_terms2_(1 * w_c)
 class Constraint2 {
 private:
   nat lhs_const2_;
@@ -403,6 +418,7 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const FieldRef &node) {
   return os;
 }
 
+// This is used as vertex type in the dependency graph
 struct Node {
   FieldRef field;
   std::vector<Node *> successors;
@@ -416,9 +432,7 @@ struct Node {
 struct FieldRefGraph {
   // use BumpPtrAllocator to distribute nodes
   llvm::BumpPtrAllocator allocator;
-
   llvm::SmallVector<Node *, 32> nodes;
-
   DenseMap<FieldRef, Node *> nodeMap;
 
   Node *addNode_zero() {
@@ -440,7 +454,6 @@ struct FieldRefGraph {
       return it->second;
     }
 
-    // Create nodes using the allocator.
     Node *newNode = new (allocator.Allocate<Node>()) Node(value, id);
     nodes.push_back(newNode);
     nodeMap[key] = newNode;
@@ -456,7 +469,6 @@ struct FieldRefGraph {
       return it->second;
     }
 
-    // Create nodes using the allocator.
     Node *newNode = new (allocator.Allocate<Node>()) Node(key);
     nodes.push_back(newNode);
     nodeMap[key] = newNode;
@@ -472,7 +484,6 @@ struct FieldRefGraph {
       return it->second;
     }
 
-    // Create nodes using the allocator.
     Node *newNode = new (allocator.Allocate<Node>()) Node(key);
     nodes.push_back(newNode);
     nodeMap[key] = newNode;
@@ -546,6 +557,13 @@ struct GraphTraits<FieldRefGraph *> {
 // Constraint Solver
 //===----------------------------------------------------------------------===//
 
+// constraints_ stores all Constraint1 inequalties according to its left-hand-side FieldRef, 
+//   because last connection semantics is not applied during inferWidths, there could be many inequalties for the same FieldRef.
+// constraints2_ stores all Constraint2 inequalties to constrain the FieldRefs appear in a condition expression. 
+//   This would be checked after constraints_ is solved. Due to the nature of Constraint2, if the least solution cannot satisfy constraints2_ , 
+//   then there is no solution that satisfies both constraints_ and constraints2_.
+// solution_ stores the (current) solution.
+// graph_ is generated according to constraints_.
 class ConstraintSolver {
 private:
   DenseMap<FieldRef, std::vector<Constraint1>> constraints_;
@@ -561,6 +579,8 @@ public:
       std::vector<Constraint2> &constraints2, FieldRefGraph &graph)
       : constraints_(constraints), constraints2_(constraints2), graph_(graph) {}
 
+  // Add c to constraints_ according to its left-hand-side FieldRef, add the dependency relationship implied by the inequality to the graph.
+  // e.g. a >= 2*b + 1*c + 4 indicates two new edges : a -> b and a -> c
   void addConstraint(const Constraint1 &c) {
     auto &vec = constraints_[c.lhs_var1()];
     vec.push_back(c);
@@ -601,6 +621,8 @@ public:
   const Valuation &solution() const { return solution_; }
 };
 
+// inequaliteis in cs are of form : a >= k or a >= 1 * b + k,
+// namely, a trivial inequalies or the length of Terms is 1 and the coeficient is 1.
 bool is_simple_cycle(const std::vector<Constraint1> &cs) {
   return std::all_of(cs.begin(), cs.end(), [](const Constraint1 &c) {
     const auto &terms = c.rhs_terms1();
@@ -621,6 +643,8 @@ bool is_simple_cycle(const std::vector<Constraint1> &cs) {
   });
 }
 
+// Extract the constraints on targetVars(the FieldRef is on the left hand side of the inqualites) from constraints(list)
+// Considering efficiency, this function is no longer being used.
 std::vector<Constraint1>
 filterConstraints(const std::vector<FieldRef> &targetVars,
                   const std::vector<Constraint1> &constraints) {
@@ -634,6 +658,8 @@ filterConstraints(const std::vector<FieldRef> &targetVars,
   return result;
 }
 
+// Extract the constraints on targetVars(the FieldRef is on the left hand side of the inqualites) from constraints(map)
+// Use this instead
 std::vector<Constraint1> filterConstraints(
     const std::vector<FieldRef> &targetVars,
     DenseMap<FieldRef, std::vector<Constraint1>> &constraints_map) {
@@ -645,6 +671,7 @@ std::vector<Constraint1> filterConstraints(
   return result;
 }
 
+// If the variable appears in terms has been evaluated, substitute with its value and integrate the constant term.
 std::pair<Terms, long long> remove_solved(const Valuation &values,
                                           const Terms &terms) {
   Terms new_terms;
@@ -663,6 +690,7 @@ std::pair<Terms, long long> remove_solved(const Valuation &values,
   return {new_terms, total_constant};
 }
 
+// Call function remove_solved for Constraint1 c
 Constraint1 remove_solved_c(const Valuation &values, const Constraint1 &c) {
   auto [new_terms, term_constant] = remove_solved(values, c.rhs_terms1());
   if (c.rhs_power().has_value()) {
@@ -697,6 +725,7 @@ std::vector<Constraint1> remove_solveds(const Valuation &values,
   return result;
 }
 
+// Find the value of variables in tbsolved stored in solution_of_tbsolved and add it to initial Valuation.
 std::optional<Valuation> merge_solution(const std::vector<FieldRef> &tbsolved,
                                         const Valuation &initial,
                                         const Valuation &solution_of_tbsolved) {
@@ -728,7 +757,7 @@ std::vector<FieldRef> extractFieldRefs(const std::vector<Node *> &nodes) {
 }
 
 //===----------------------------------------------------------------------===//
-// floyd
+// floyd-warshall for longest path
 //===----------------------------------------------------------------------===//
 
 const int INF = 1e9;
@@ -743,7 +772,7 @@ Valuation floyd(const std::vector<Constraint1> &constraints,
   var_to_index[zero] = next_index;
 
   LLVM_DEBUG({
-    llvm::dbgs() << "numberin:\n";
+    llvm::dbgs() << "numbering:\n";
     for (const auto &[var, index] : var_to_index)
       llvm::dbgs() << var << " : " << index << "\n";
   });
@@ -834,6 +863,7 @@ Valuation floyd(const std::vector<Constraint1> &constraints,
 }
 
 LogicalResult ConstraintSolver::solve() {
+  // We first compute a topological sort, then calculate the values of the vertices in each SCC in sequence
   for (auto sccIter = llvm::scc_begin(&graph_);
        sccIter != llvm::scc_end(&graph_); ++sccIter) {
     const auto &node_list = *sccIter;
@@ -849,21 +879,28 @@ LogicalResult ConstraintSolver::solve() {
       continue;
     }
     std::vector<Constraint1> tbsolved_cs1;
+    // Extract the inequalities that constrain the FieldRefs in this SCC
     tbsolved_cs1 = filterConstraints(component, constraints_);
+    // Substitute the values of the solved FieldRefs into these to be solved inequalities.
     auto cs1 = remove_solveds(solution_, tbsolved_cs1);
-
+    // ns records the solution for cs1
     Valuation ns;
     if (component.size() == 1) {
+      // The SCC contains single variable, trivial case
       int init = 0;
       for (const auto &c : cs1) {
         init = std::max<int>(init, c.rhs_const1());
       }
       ns = {{component[0], init}};
     } else if (is_simple_cycle(tbsolved_cs1)) {
+      // The SCC only contains simple cycle, then it can be solved by an adapted Floyd–Warshall algorithm.
       ns = floyd(cs1, component);
     } else {
+      // Otherwise, we proved that the value of all to-be-solved variables has an upper-bound, 
+      // first we compute the upper-bound for each variable and solve the inequalities by an adapted branch-and-bound algorithm.
       ns = bab(cs1, component);
     }
+    // Combine the newly solved variable values with the already solved results.
     auto merge_result = merge_solution(component, solution_, ns);
     if (!merge_result) {
       LLVM_DEBUG(llvm::dbgs() << "Merge failed: Variable not found.\n");
@@ -871,7 +908,7 @@ LogicalResult ConstraintSolver::solve() {
     }
     solution_ = *merge_result;
   }
-  // test if all select signal satisfies constraint2
+  // test if all select signal satisfies constraints2_
   for (auto c2 : constraints2_) {
     if (c2.satisfies(solution_))
       continue;
@@ -887,11 +924,18 @@ LogicalResult ConstraintSolver::solve() {
 // Constraint Map
 //===----------------------------------------------------------------------===//
 
+// constraints_ stores all Constraint1 inequalties according to its left-hand-side FieldRef.
+// constraints2_ stores all Constraint2 inequalties to constrain the FieldRefs appear in a condition expression. 
+// constraints_min_ stores all Constraint_Min inequalties according to its left-hand-side FieldRef.
+//   Each Constraint_Min will be expanded into an disjunction of Contraint1, and then combined with constraints_ respectively.
+//   The solutions will be solved separately. The least feasible solution among these disjuntions will be regarded as the final solution.
+// solution_ stores the (current) solution.
+// graph_ is generated according to constraints_.
 class InferenceMapping {
 private:
-  std::vector<Constraint_Min> constraints_min_;
-  std::vector<Constraint2> constraints2_;
   DenseMap<FieldRef, std::vector<Constraint1>> constraints_;
+  std::vector<Constraint2> constraints2_;
+  std::vector<Constraint_Min> constraints_min_;
 
   FieldRefGraph graph_;
 
@@ -1022,6 +1066,7 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
   return success();
 }
 
+// a Constraint_Min will be expanded into an disjunction of Contraint1
 std::vector<Constraint1>
 InferenceMapping::list_Constraint_Min(const Constraint_Min &minc) {
   std::vector<Constraint1> constraints;
@@ -2053,7 +2098,7 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
 }
 
 //===----------------------------------------------------------------------===//
-// upper_bound
+// For the general case of SCC, each variable is proved to have an upper-bound. Compute it like this.
 //===----------------------------------------------------------------------===//
 
 struct StackFrame {
@@ -2061,6 +2106,7 @@ struct StackFrame {
   size_t nextChildIndex;
 };
 
+// Finding a path between two nodes, this is always possible for an SCC.
 std::vector<Node *> findPathBetween(Node *start, Node *end) {
   if (!start || !end)
     return {};
@@ -2109,6 +2155,7 @@ static bool termsContains(const Terms &terms, const FieldRef &var) {
   return false;
 }
 
+// For a given path, find the list of inequalities(in order) that can represent such dependency relationships
 std::vector<Constraint1>
 orderConstraints(const std::vector<FieldRef> &vars,
                  const std::vector<Constraint1> &constraints) {
@@ -2221,6 +2268,8 @@ substitute_cs(const std::vector<Constraint1> &constraints) {
   return substitute_cs(new_tail);
 }
 
+// Compute the upper bound of the left hand side variable according to the inequality.
+// solvable case : The lhs variable appears on the rhs terms and the coe is greater than 1.
 std::optional<int> compute_ub(const Constraint1 &c) {
   const auto &terms = c.rhs_terms1().get_terms();
   const FieldRef &lhs_var = c.lhs_var1();
@@ -2248,12 +2297,13 @@ std::optional<int> compute_ub(const Constraint1 &c) {
   return abs_const / static_cast<int>(divisor);
 }
 
+// Case 1 that the upper bound can be found :
+// There is a Constraint1 c of form : lhs >= coe * var + ... + cst c, where coe > 1
 std::optional<int> solve_ub_case1(const FieldRef &x, const FieldRef &var,
                                   const Constraint1 &c,
                                   const std::vector<Constraint1> &constraints,
                                   FieldRefGraph &graph_) {
-  // c : lhs >= coe * var + ... + cst c
-  // looking for : x >= ? * lhs + ..., var >= ? * x + ...
+  // looking for : x >= ? * lhs + ... and var >= ? * x + ...
   LLVM_DEBUG(llvm::dbgs() << "Solving [" << x.getValue()
                           << " (fieldID: " << x.getFieldID() << ")]\n");
   Node *var_node = graph_.addNode(var);
@@ -2323,12 +2373,12 @@ Valuation solve_ubs_case1(const std::vector<FieldRef> &tbsolved,
   return v;
 }
 
+// Case 2 that the upper bound can be found :
+// There is a Constraint1 c of form : lhs >= coe0 * var0 + coe1 * var1 + ... + cst c, where length of its rhs terms > 1
 std::optional<int> solve_ub_case2(const FieldRef &x, const FieldRef &var1,
                                   const FieldRef &var2, const Constraint1 &c,
                                   const std::vector<Constraint1> &constraints,
-                                  // const DependencyGraphResult &result,
                                   FieldRefGraph &graph_) {
-  // c : lhs >= coe0 * var0 + coe1 * var1 + ... + cst c
   // looking for : x >= ? * lhs + ..., var0 >= ? * x + ..., var1 >= ? * x + ...
   LLVM_DEBUG(llvm::dbgs() << "Solving " << x.getValue()
                           << " (fieldID: " << x.getFieldID() << ")]\n");
@@ -2348,7 +2398,6 @@ std::optional<int> solve_ub_case2(const FieldRef &x, const FieldRef &var1,
   std::vector<FieldRef> path1 = extractFieldRefs(node_list1);
   std::vector<FieldRef> path0 = extractFieldRefs(node_list0);
 
-  // 按顺序找出约束
   auto conslist0 = orderConstraints(path0, constraints);
   auto conslist1 = orderConstraints(path1, constraints);
   auto conslist2 = orderConstraints(path2, constraints);
