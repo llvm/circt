@@ -630,11 +630,17 @@ struct RvalueExprVisitor : public ExprVisitor {
 
   // Helper function to create pre and post increments and decrements.
   Value createRealIncrement(Value arg, bool isInc, bool isPost) {
-    auto preValue = moore::ReadOp::create(builder, loc, arg);
+    Value preValue = moore::ReadOp::create(builder, loc, arg);
     Value postValue;
 
-    auto ty = preValue.getType();
-    moore::RealType realTy = llvm::dyn_cast<moore::RealType>(ty);
+    bool isTime = isa<moore::TimeType>(preValue.getType());
+    if (isTime)
+      preValue = context.materializeConversion(
+          moore::RealType::get(context.getContext(), moore::RealWidth::f64),
+          preValue, false, loc);
+
+    moore::RealType realTy =
+        llvm::dyn_cast<moore::RealType>(preValue.getType());
     if (!realTy)
       return {};
 
@@ -642,7 +648,8 @@ struct RvalueExprVisitor : public ExprVisitor {
     if (realTy.getWidth() == moore::RealWidth::f32) {
       oneAttr = builder.getFloatAttr(builder.getF32Type(), 1.0);
     } else if (realTy.getWidth() == moore::RealWidth::f64) {
-      oneAttr = builder.getFloatAttr(builder.getF64Type(), 1.0);
+      auto oneVal = isTime ? getTimeScaleInFemtoseconds(context) : 1.0;
+      oneAttr = builder.getFloatAttr(builder.getF64Type(), oneVal);
     } else {
       mlir::emitError(loc) << "cannot construct increment for " << realTy;
       return {};
@@ -653,6 +660,11 @@ struct RvalueExprVisitor : public ExprVisitor {
         isInc
             ? moore::AddRealOp::create(builder, loc, preValue, one).getResult()
             : moore::SubRealOp::create(builder, loc, preValue, one).getResult();
+
+    if (isTime)
+      postValue = context.materializeConversion(
+          moore::TimeType::get(context.getContext()), postValue, false, loc);
+
     auto assignOp =
         moore::BlockingAssignOp::create(builder, loc, arg, postValue);
 
@@ -678,6 +690,12 @@ struct RvalueExprVisitor : public ExprVisitor {
       arg = context.convertRvalueExpression(expr.operand(), opFTy);
     if (!arg)
       return {};
+
+    // Only covers expressions in 'else' branch above.
+    if (isa<moore::TimeType>(arg.getType()))
+      arg = context.materializeConversion(
+          moore::RealType::get(context.getContext(), moore::RealWidth::f64),
+          arg, false, loc);
 
     switch (expr.op) {
       // `+a` is simply `a`
@@ -832,6 +850,16 @@ struct RvalueExprVisitor : public ExprVisitor {
     auto rhs = context.convertRvalueExpression(expr.right());
     if (!rhs)
       return {};
+
+    if (isa<moore::TimeType>(lhs.getType()) ||
+        isa<moore::TimeType>(rhs.getType())) {
+      lhs = context.materializeConversion(
+          moore::RealType::get(context.getContext(), moore::RealWidth::f64),
+          lhs, false, loc);
+      rhs = context.materializeConversion(
+          moore::RealType::get(context.getContext(), moore::RealWidth::f64),
+          rhs, false, loc);
+    }
 
     using slang::ast::BinaryOperator;
     switch (expr.op) {

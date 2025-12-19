@@ -3792,3 +3792,31 @@ package PackageGlobal;
   // CHECK-NEXT: moore.yield [[TMP2]] : i42
   bit [41:0] packageGlobal2 = packageGlobal1;
 endpackage
+
+// CHECK-LABEL: moore.module @realtimeOperations
+module realtimeOperations;
+  realtime x;
+  shortreal a = 0.3;
+
+  // CHECK: procedure initial
+  // CHECK: moore.fadd %{{.*}}, %{{.*}} : f64
+  // CHECK: moore.fgt %{{.*}}, %{{.*}} : f64 -> i1
+  initial begin
+    x = x + a;
+    if (x > 1.1001) begin
+      $finish;
+    end
+  end 
+  // CHECK: procedure initial
+  // CHECK: moore.constant_real
+  // CHECK: [[ONE:%.+]] = moore.constant_real 1.000000e+05 : f64
+  // CHECK: moore.fadd %{{.*}}, [[ONE]] : f64
+  initial begin
+    x = ++x;
+  end
+  // CHECK: procedure initial
+  // CHECK: moore.fneg %{{.*}} : f64
+  initial begin
+    x = -x;
+  end
+endmodule
