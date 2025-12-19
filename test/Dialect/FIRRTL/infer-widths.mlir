@@ -436,8 +436,15 @@ firrtl.circuit "Foo" {
     firrtl.connect %ui, %c0_ui5 : !firrtl.uint, !firrtl.uint<5>
   }
 
+  firrtl.domain @ClockDomain
+
   // CHECK-LABEL: @TransparentOps
-  firrtl.module @TransparentOps(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>) {
+  firrtl.module @TransparentOps(
+    in %clk: !firrtl.clock,
+    in %a: !firrtl.uint<1>,
+    in %A: !firrtl.domain of @ClockDomain,
+    out %B: !firrtl.domain of @ClockDomain
+  ) {
     %false = firrtl.constant 0 : !firrtl.uint<1>
     %true = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
@@ -458,6 +465,7 @@ firrtl.circuit "Foo" {
     firrtl.assume %clk, %true, %true, "foo" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.int.unclocked_assume %true, %true, "foo" : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.cover %clk, %true, %true, "foo" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.domain.define %B, %A
   }
 
   // Issue #1088
