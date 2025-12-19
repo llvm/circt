@@ -3820,3 +3820,9 @@ module realtimeOperations;
     x = -x;
   end
 endmodule
+
+// CHECK-LABEL: moore.module @subroutineResultValueCastedToCorrecType
+module subroutineResultValueCastedToCorrecType;
+  // CHECK: moore.xor {{%.+}}, {{.*}} : i32
+	int a = $time && (25'h300a ^ $stime);
+endmodule
