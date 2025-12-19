@@ -1506,8 +1506,11 @@ struct RvalueExprVisitor : public ExprVisitor {
 
     // If we have recognized the system call and got a non-null `Value` result,
     // return that.
-    if (*result)
-      return *result;
+    if (*result) {
+      auto ty = context.convertType(*expr.type);
+      return context.materializeConversion(ty, *result, expr.type->isSigned(),
+                                           loc);
+    }
 
     // Otherwise we didn't recognize the system call.
     mlir::emitError(loc) << "unsupported system call `" << subroutine.name
