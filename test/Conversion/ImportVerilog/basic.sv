@@ -3826,3 +3826,22 @@ module subroutineResultValueCastedToCorrecType;
   // CHECK: moore.xor {{%.+}}, {{.*}} : i32
 	int a = $time && (25'h300a ^ $stime);
 endmodule
+
+// CHECK-LABEL: moore.module @implicitCastsFunctionArguments
+module implicitCastsFunctionArguments;
+  real r, q;
+
+  function void fn(output logic [3:0] o, input logic [3:0] val);
+    o = val;
+  endfunction
+
+  // CHECK: procedure initial
+  initial begin
+    // CHECK: [[TMP1:%.+]] = moore.conversion %q : !moore.ref<f64> -> !moore.ref<l4>
+    // CHECK: [[TMP2:%.+]] = moore.read %r : <f64>
+    // CHECK: [[TMP3:%.+]] = moore.real_to_int [[TMP2]] : f64 -> i4
+    // CHECK: [[TMP4:%.+]] = moore.int_to_logic [[TMP3]] : i4
+    // CHECK: func.call @fn([[TMP1]], [[TMP4]]) : (!moore.ref<l4>, !moore.l4) -> ()
+    fn(q, r);
+  end
+endmodule
