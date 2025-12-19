@@ -1342,10 +1342,18 @@ struct RvalueExprVisitor : public ExprVisitor {
         expr = &assign->left();
 
       Value value;
-      if (declArg->direction == slang::ast::ArgumentDirection::In)
-        value = context.convertRvalueExpression(*expr);
-      else
-        value = context.convertLvalueExpression(*expr);
+      auto type = context.convertType(declArg->getType());
+      if (declArg->direction == slang::ast::ArgumentDirection::In) {
+        value = context.convertRvalueExpression(*expr, type);
+      } else {
+        Value lvalue = context.convertLvalueExpression(*expr);
+        auto unpackedType = dyn_cast<moore::UnpackedType>(type);
+        if (!unpackedType)
+          return {};
+        value =
+            context.materializeConversion(moore::RefType::get(unpackedType),
+                                          lvalue, expr->type->isSigned(), loc);
+      }
       if (!value)
         return {};
       arguments.push_back(value);
