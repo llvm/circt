@@ -1078,6 +1078,33 @@ TEST_F(TypeSerializationTest, TypeCachingBehavior) {
       << "Deserializing same type twice should return same cached instance";
 }
 
+// Test that registering a type with the same ID but different type throws
+TEST_F(TypeSerializationTest, TypeMismatchThrows) {
+  // Register a UIntType with id "test_id"
+  ctx.getOrCreateType<UIntType>("test_id", 32);
+
+  // Try to register a SIntType with the same id - should throw with demangled
+  // type names in error message
+  EXPECT_THROW(
+      {
+        try {
+          ctx.getOrCreateType<SIntType>("test_id", 32);
+        } catch (const std::runtime_error &e) {
+          std::string msg = e.what();
+          // Verify the error message contains meaningful type names
+          EXPECT_NE(msg.find("test_id"), std::string::npos)
+              << "Error should mention the type ID";
+          EXPECT_NE(msg.find("SIntType"), std::string::npos)
+              << "Error should mention expected type (SIntType)";
+          EXPECT_NE(msg.find("UIntType"), std::string::npos)
+              << "Error should mention actual type (UIntType)";
+          throw;
+        }
+      },
+      std::runtime_error)
+      << "Registering same ID with different type should throw";
+}
+
 // Test error handling for null type
 TEST_F(TypeSerializationTest, SerializeNullTypeThrows) {
   EXPECT_THROW(Type::serializeType(nullptr), std::runtime_error)
