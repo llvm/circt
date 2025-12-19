@@ -1508,7 +1508,8 @@ struct RvalueExprVisitor : public ExprVisitor {
     // return that.
     if (*result) {
       auto ty = context.convertType(*expr.type);
-      return context.materializeConversion(ty, *result, false, loc);
+      return context.materializeConversion(ty, *result, expr.type->isSigned(),
+                                           loc);
     }
 
     // Otherwise we didn't recognize the system call.
