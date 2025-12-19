@@ -39,6 +39,8 @@
 #include "circt/Tools/arcilator/ArcRuntime/Common.h"
 #include "circt/Tools/arcilator/ArcRuntime/JITBind.h"
 
+#include <cstdlib>
+
 #define DEBUG_TYPE "lower-arc-to-llvm"
 
 namespace circt {
@@ -470,8 +472,7 @@ struct SimInstantiateOpLowering
     if (useRuntime) {
       LLVM::CallOp::create(rewriter, loc, TypeRange{},
                            runtime::APICallbacks::symNameDeleteInstance,
-                           {allocated})
-          .getResult();
+                           {allocated});
     } else {
       FailureOr<LLVM::LLVMFuncOp> freeFunc =
           LLVM::lookupOrCreateFreeFn(rewriter, moduleOp);
@@ -749,6 +750,8 @@ struct RuntimeModelOpLowering
     auto modelInfoStructType = LLVM::LLVMStructType::getLiteral(
         getContext(), {rewriter.getI64Type(), rewriter.getI64Type(),
                        LLVM::LLVMPointerType::get(getContext())});
+    static_assert(sizeof(ArcRuntimeModelInfo) == 24 &&
+                  "Unexpected size of ArcRuntimeModelInfo struct");
 
     // Construct the Model Name String
     rewriter.setInsertionPoint(op);
@@ -785,13 +788,24 @@ struct RuntimeModelOpLowering
 
     Value initStruct =
         LLVM::PoisonOp::create(rewriter, op.getLoc(), modelInfoStructType);
+
+    // Field: uint64_t apiVersion
     initStruct = LLVM::InsertValueOp::create(
         rewriter, op.getLoc(), initStruct, apiVersionCst, ArrayRef<int64_t>{0});
+    static_assert(offsetof(ArcRuntimeModelInfo, apiVersion) == 0,
+                  "Unexpected offset of field apiVersion");
+    // Field: uint64_t numStateBytes
     initStruct =
         LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
                                     numStateBytesCst, ArrayRef<int64_t>{1});
+    static_assert(offsetof(ArcRuntimeModelInfo, numStateBytes) == 8,
+                  "Unexpected offset of field numStateBytes");
+    // Field: const char *modelName
     initStruct = LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
                                              nameAddr, ArrayRef<int64_t>{2});
+    static_assert(offsetof(ArcRuntimeModelInfo, modelName) == 16,
+                  "Unexpected offset of field modelName");
+
     LLVM::ReturnOp::create(rewriter, op.getLoc(), initStruct);
 
     rewriter.replaceOp(op, modInfoGlobalOp);
