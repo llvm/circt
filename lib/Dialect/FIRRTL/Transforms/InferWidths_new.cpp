@@ -417,8 +417,8 @@ struct FieldRefGraph {
   // use BumpPtrAllocator to distribute nodes
   llvm::BumpPtrAllocator allocator;
 
-  llvm::SmallVector<Node*, 32> nodes;
-  
+  llvm::SmallVector<Node *, 32> nodes;
+
   DenseMap<FieldRef, Node *> nodeMap;
 
   Node *addNode_zero() {
@@ -428,7 +428,7 @@ struct FieldRefGraph {
     }
 
     // Create nodes using the allocator.
-    Node* newNode = new (allocator.Allocate<Node>()) Node(key);
+    Node *newNode = new (allocator.Allocate<Node>()) Node(key);
     nodes.push_back(newNode);
     nodeMap[key] = newNode;
     return newNode;
@@ -441,7 +441,7 @@ struct FieldRefGraph {
     }
 
     // Create nodes using the allocator.
-    Node* newNode = new (allocator.Allocate<Node>()) Node(value, id);
+    Node *newNode = new (allocator.Allocate<Node>()) Node(value, id);
     nodes.push_back(newNode);
     nodeMap[key] = newNode;
 
@@ -457,7 +457,7 @@ struct FieldRefGraph {
     }
 
     // Create nodes using the allocator.
-    Node* newNode = new (allocator.Allocate<Node>()) Node(key);
+    Node *newNode = new (allocator.Allocate<Node>()) Node(key);
     nodes.push_back(newNode);
     nodeMap[key] = newNode;
 
@@ -473,7 +473,7 @@ struct FieldRefGraph {
     }
 
     // Create nodes using the allocator.
-    Node* newNode = new (allocator.Allocate<Node>()) Node(key);
+    Node *newNode = new (allocator.Allocate<Node>()) Node(key);
     nodes.push_back(newNode);
     nodeMap[key] = newNode;
     return newNode;
@@ -491,7 +491,7 @@ struct FieldRefGraph {
 
     // copy node (using its own allocator)
     for (Node *oldNode : other.nodes) {
-      Node* newNode = new (allocator.Allocate<Node>()) Node(oldNode->field);
+      Node *newNode = new (allocator.Allocate<Node>()) Node(oldNode->field);
       nodes.push_back(newNode);
       oldToNewMap[oldNode] = newNode;
       nodeMap[newNode->field] = newNode;
@@ -509,9 +509,8 @@ struct FieldRefGraph {
     }
   }
 
-
   ~FieldRefGraph() {
-    for (Node* node : nodes) {
+    for (Node *node : nodes) {
       node->~Node();
     }
   }
@@ -743,9 +742,10 @@ Valuation floyd(const std::vector<Constraint1> &constraints,
   FieldRef zero = FieldRef();
   var_to_index[zero] = next_index;
 
-  LLVM_DEBUG({llvm::dbgs() << "numberin:\n";
-  for (const auto &[var, index] : var_to_index)
-    llvm::dbgs() << var << " : " << index << "\n";
+  LLVM_DEBUG({
+    llvm::dbgs() << "numberin:\n";
+    for (const auto &[var, index] : var_to_index)
+      llvm::dbgs() << var << " : " << index << "\n";
   });
 
   int n = var_to_index.size();
@@ -768,16 +768,16 @@ Valuation floyd(const std::vector<Constraint1> &constraints,
   }
 
   LLVM_DEBUG({
-  llvm::dbgs() << "initial matrix:\n";
-  for (int i = 0; i < n; i++) {
-    for (int j = 0; j < n; j++) {
-      if (graph[i][j] == INF)
-        llvm::dbgs() << "  INF  ";
-      else
-        llvm::dbgs() << "  " << graph[i][j] << "  ";
+    llvm::dbgs() << "initial matrix:\n";
+    for (int i = 0; i < n; i++) {
+      for (int j = 0; j < n; j++) {
+        if (graph[i][j] == INF)
+          llvm::dbgs() << "  INF  ";
+        else
+          llvm::dbgs() << "  " << graph[i][j] << "  ";
+      }
+      llvm::dbgs() << "\n";
     }
-    llvm::dbgs() << "\n";
-  }
   });
 
   for (int k = 0; k < n; k++) {
@@ -799,16 +799,16 @@ Valuation floyd(const std::vector<Constraint1> &constraints,
   }
 
   LLVM_DEBUG({
-  llvm::dbgs() << "Shortest path matrix:\n";
-  for (int i = 0; i < n; i++) {
-    for (int j = 0; j < n; j++) {
-      if (graph[i][j] == INF)
-        llvm::dbgs() << "  INF  ";
-      else
-        llvm::dbgs() << "  " << graph[i][j] << "  ";
+    llvm::dbgs() << "Shortest path matrix:\n";
+    for (int i = 0; i < n; i++) {
+      for (int j = 0; j < n; j++) {
+        if (graph[i][j] == INF)
+          llvm::dbgs() << "  INF  ";
+        else
+          llvm::dbgs() << "  " << graph[i][j] << "  ";
+      }
+      llvm::dbgs() << "\n";
     }
-    llvm::dbgs() << "\n";
-  }
   });
 
   Valuation valuation;
@@ -824,9 +824,10 @@ Valuation floyd(const std::vector<Constraint1> &constraints,
     valuation[source] = -min_distance;
   }
 
-  LLVM_DEBUG({llvm::dbgs() << "floyd result:\n";
-  for (const auto &[var, value] : valuation)
-    llvm::dbgs() << var_to_index[var] << " : " << value << "\n";
+  LLVM_DEBUG({
+    llvm::dbgs() << "floyd result:\n";
+    for (const auto &[var, value] : valuation)
+      llvm::dbgs() << var_to_index[var] << " : " << value << "\n";
   });
 
   return valuation;
@@ -836,10 +837,11 @@ LogicalResult ConstraintSolver::solve() {
   for (auto sccIter = llvm::scc_begin(&graph_);
        sccIter != llvm::scc_end(&graph_); ++sccIter) {
     const auto &node_list = *sccIter;
-    LLVM_DEBUG({llvm::dbgs() << "SCC (size " << node_list.size() << "): ";
-    for (Node *node : node_list)
-      llvm::dbgs() << node->field << "; ";
-    llvm::dbgs() << "\n";
+    LLVM_DEBUG({
+      llvm::dbgs() << "SCC (size " << node_list.size() << "): ";
+      for (Node *node : node_list)
+        llvm::dbgs() << node->field << "; ";
+      llvm::dbgs() << "\n";
     });
 
     std::vector<FieldRef> component = extractFieldRefs(node_list);
