@@ -3254,10 +3254,10 @@ function void StructCreateConversion (logic [7:0][7:0] array, logic [63:0] immed
    } testStruct;
 
     // CHECK: [[TS:%.+]] = moore.struct_create [[IMM]] : !moore.l64 -> struct<{structField: l64}>
-   testStruct ts = '{structField: immediate};
+   automatic testStruct ts = '{structField: immediate};
     // CHECK: [[CAST:%.+]] = moore.packed_to_sbv [[ARRAY]] : array<8 x l8>
     // CHECK-NEXT: [[TS2:%.+]] = moore.struct_create [[CAST]] : !moore.l64 -> struct<{structField: l64}>
-   testStruct ts2 = '{structField: array};
+   automatic testStruct ts2 = '{structField: array};
 
 endfunction
 
