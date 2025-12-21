@@ -803,11 +803,12 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   auto loc = convertLocation(module->location);
   OpBuilder::InsertionGuard g(builder);
 
-  // We only support modules for now. Extension to interfaces and programs
+  // We only support modules and programs for now. Extension to interfaces
   // should be trivial though, since they are essentially the same thing with
   // only minor differences in semantics.
-  if (module->getDefinition().definitionKind !=
-      slang::ast::DefinitionKind::Module) {
+  auto kind = module->getDefinition().definitionKind;
+  if (kind != slang::ast::DefinitionKind::Module &&
+      kind != slang::ast::DefinitionKind::Program) {
     mlir::emitError(loc) << "unsupported definition: "
                          << module->getDefinition().getKindString();
     return {};
