@@ -3845,3 +3845,7 @@ module implicitCastsFunctionArguments;
     fn(q, r);
   end
 endmodule
+
+// CHECK-LABEL: moore.module @ProgramsAreMostlyModules
+program ProgramsAreMostlyModules;
+endprogram
