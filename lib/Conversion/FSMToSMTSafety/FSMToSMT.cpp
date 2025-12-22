@@ -5,8 +5,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-#include <cassert>
-#include <string>
 #include "circt/Conversion/FSMToSMT.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/FSM/FSMOps.h"
@@ -32,6 +30,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
+#include <cassert>
 #include <circt/Dialect/HW/HWTypes.h>
 #include <cstdlib>
 #include <memory>
@@ -66,7 +65,6 @@ struct LoweringConfig {
   unsigned timeWidth = 5;
 };
 
-
 class MachineOpConverter {
 public:
   MachineOpConverter(OpBuilder &builder, MachineOp machineOp,
@@ -75,7 +73,7 @@ public:
   LogicalResult dispatch();
 
 private:
- // Build the integer constant 2^exp.
+  // Build the integer constant 2^exp.
   Value intPow2(unsigned exp, Location loc) {
     unsigned cstBits = exp + 1;
     llvm::APInt ap(cstBits, 1);
@@ -174,7 +172,7 @@ private:
     auto z = oneConst(/*w*/ 2, loc);
     return b.create<smt::EqOp>(loc, v, z);
   }
-  
+
   // Type width computation for lowering aggregates.
   static unsigned getPackedBitWidth(Type t) {
     if (auto intTy = llvm::dyn_cast<IntegerType>(t))
@@ -222,7 +220,6 @@ private:
     }
     assert(false && "unsupported comparison predicate");
   }
-  
 
   // In int mode, map both signed/unsigned preds to Int preds (best-effort).
   smt::IntPredicate getSmtIntPred(comb::ICmpPredicate p) {
@@ -245,11 +242,11 @@ private:
   }
 
   // Build SMT for a comb op (mode-aware).
-  Value getCombValue(Operation &op, Location &loc,
-                     SmallVector<Value> args) {
+  Value getCombValue(Operation &op, Location &loc, SmallVector<Value> args) {
     auto toBV = [&](Value v) -> Value {
       if (isa<smt::IntType>(v.getType()))
-        return b.create<smt::Int2BVOp>(loc, b.getType<smt::BitVectorType>(64), v);
+        return b.create<smt::Int2BVOp>(loc, b.getType<smt::BitVectorType>(64),
+                                       v);
       if (auto bvTy = llvm::dyn_cast<smt::BitVectorType>(v.getType()))
         return v;
       if (llvm::isa<smt::BoolType>(v.getType()))
@@ -301,16 +298,17 @@ private:
     if (auto addOp = dyn_cast<comb::AddOp>(op)) {
       // bitvec
       if (cfg.useBitVec) {
-        return b.create<smt::BVAddOp>(loc, b.getType<smt::BitVectorType>(widths[0]),
-                                      args);
+        return b.create<smt::BVAddOp>(
+            loc, b.getType<smt::BitVectorType>(widths[0]), args);
       }
-   // int (wraparound: mod 2^w)
-   SmallVector<Value> ops;
-   for (auto v : args) ops.push_back(toInt(v));
-   Value sum = b.create<smt::IntAddOp>(loc, ops);
-   unsigned w = cast<IntegerType>(addOp.getType()).getIntOrFloatBitWidth();
-   Value modulus = intPow2(w, loc); // 2^w as !smt.int
-   return b.create<smt::IntModOp>(loc, sum, modulus);
+      // int (wraparound: mod 2^w)
+      SmallVector<Value> ops;
+      for (auto v : args)
+        ops.push_back(toInt(v));
+      Value sum = b.create<smt::IntAddOp>(loc, ops);
+      unsigned w = cast<IntegerType>(addOp.getType()).getIntOrFloatBitWidth();
+      Value modulus = intPow2(w, loc); // 2^w as !smt.int
+      return b.create<smt::IntModOp>(loc, sum, modulus);
     }
 
     // comb.sub
@@ -320,14 +318,15 @@ private:
         Value rhs = toBV(args[1]);
         auto rhsTy = llvm::cast<smt::BitVectorType>(rhs.getType());
         Value neg = b.create<smt::BVNegOp>(loc, rhsTy, rhs);
-        return b.create<smt::BVAddOp>(loc,
-               b.getType<smt::BitVectorType>(widths[0]), args[0], neg);
+        return b.create<smt::BVAddOp>(
+            loc, b.getType<smt::BitVectorType>(widths[0]), args[0], neg);
       }
       // int ((2^w + a) - b) % 2^w
       SmallVector<Value> ops;
-      for (auto v : args) ops.push_back(toInt(v));
+      for (auto v : args)
+        ops.push_back(toInt(v));
       unsigned w = cast<IntegerType>(subOp.getType()).getIntOrFloatBitWidth();
-      Value modulus = intPow2(w, loc); 
+      Value modulus = intPow2(w, loc);
       Value add = b.create<smt::IntSubOp>(loc, modulus, ops[0]);
       Value sub = b.create<smt::IntSubOp>(loc, add, ops[1]);
       return b.create<smt::IntModOp>(loc, sub, modulus);
@@ -337,15 +336,16 @@ private:
     if (auto mulOp = dyn_cast<comb::MulOp>(op)) {
       // bitvec
       if (cfg.useBitVec) {
-        return b.create<smt::BVMulOp>(loc, b.getType<smt::BitVectorType>(widths[0]),
-                                      args);
+        return b.create<smt::BVMulOp>(
+            loc, b.getType<smt::BitVectorType>(widths[0]), args);
       }
-      // int 
+      // int
       SmallVector<Value> ops;
-      for (auto v : args) ops.push_back(toInt(v));
+      for (auto v : args)
+        ops.push_back(toInt(v));
       auto mul = b.create<smt::IntMulOp>(loc, ops);
       unsigned w = cast<IntegerType>(mulOp.getType()).getIntOrFloatBitWidth();
-      Value modulus = intPow2(w, loc); 
+      Value modulus = intPow2(w, loc);
       return b.create<smt::IntModOp>(loc, mul, modulus);
     }
 
@@ -353,27 +353,29 @@ private:
     if (auto andOp = dyn_cast<comb::AndOp>(op)) {
       if (args.size() == 1)
         return args[0];
-      // bitvec 
+      // bitvec
       if (cfg.useBitVec) {
         Value result = toBV(args[0]);
         for (size_t i = 1; i < args.size(); ++i)
           result = b.create<smt::BVAndOp>(loc, result, toBV(args[i]));
         return result;
       }
-      // int 
+      // int
       int width = op.getOperand(0).getType().getIntOrFloatBitWidth();
-      if (width== 1){
+      if (width == 1) {
         SmallVector<Value> bools;
-        for (auto v : args) bools.push_back(toBool(v));
+        for (auto v : args)
+          bools.push_back(toBool(v));
         Value result = bools[0];
-        for (size_t i = 1; i < bools.size(); ++i) result = b.create<smt::AndOp>(loc, result, bools[i]);
+        for (size_t i = 1; i < bools.size(); ++i)
+          result = b.create<smt::AndOp>(loc, result, bools[i]);
         return result;
-      } 
+      }
       SmallVector<Value> convertedOps;
-      for (auto v : args){
+      for (auto v : args) {
         if ((isa<smt::IntType>(v.getType())))
           convertedOps.push_back(toBV(v));
-        else 
+        else
           llvm::outs() << "\n\nunsupported comb.and op: " << v;
       }
       Value result = convertedOps[0];
@@ -394,19 +396,20 @@ private:
       }
       // int
       int width = op.getOperand(0).getType().getIntOrFloatBitWidth();
-      if (width== 1){
+      if (width == 1) {
         SmallVector<Value> bools;
-        for (auto v : args) bools.push_back(toBool(v));
+        for (auto v : args)
+          bools.push_back(toBool(v));
         Value result = bools[0];
         for (size_t i = 1; i < bools.size(); ++i)
           result = b.create<smt::OrOp>(loc, result, bools[i]);
         return result;
-      } 
+      }
       SmallVector<Value> convertedOps;
-      for (auto v : args){
+      for (auto v : args) {
         if ((isa<smt::IntType>(v.getType())))
           convertedOps.push_back(toBV(v));
-        else 
+        else
           llvm::outs() << "\n\nunsupported comb.and op: " << v;
       }
       Value result = convertedOps[0];
@@ -427,19 +430,20 @@ private:
       }
       // int
       int width = op.getOperand(0).getType().getIntOrFloatBitWidth();
-      if (width== 1){
+      if (width == 1) {
         SmallVector<Value> bools;
-        for (auto v : args) bools.push_back(toBool(v));
+        for (auto v : args)
+          bools.push_back(toBool(v));
         Value result = bools[0];
         for (size_t i = 1; i < bools.size(); ++i)
           result = b.create<smt::XOrOp>(loc, result, bools[i]);
         return result;
-      } 
+      }
       SmallVector<Value> convertedOps;
-      for (auto v : args){
+      for (auto v : args) {
         if ((isa<smt::IntType>(v.getType())))
           convertedOps.push_back(toBV(v));
-        else 
+        else
           llvm::outs() << "\n\nunsupported comb.and op: " << v;
       }
       Value result = convertedOps[0];
@@ -457,7 +461,7 @@ private:
       Type resTy = args[1].getType();
       return b.create<smt::IteOp>(loc, resTy, condBool, args[1], args[2]);
     }
-    
+
     // comb.concat
     if (auto concatOp = dyn_cast<comb::ConcatOp>(op)) {
       // bitvec
@@ -476,7 +480,8 @@ private:
       // int: concatenate by "shift-and-add":
       // If acc encodes the left part and next encodes the right part,
       // concat(acc, next) = acc * 2^(width(next)) + next
-      // We compute 2^width(next) as a constant Int, since widths are known statically.
+      // We compute 2^width(next) as a constant Int, since widths are known
+      // statically.
       SmallVector<unsigned> opWidths;
       opWidths.reserve(concatOp->getNumOperands());
       for (Value orig : concatOp->getOperands())
@@ -492,7 +497,8 @@ private:
         auto powAttr = b.getIntegerAttr(b.getIntegerType(cstBits), twoPow);
         Value powC = b.create<smt::IntConstantOp>(loc, powAttr);
         // acc = acc * 2^nextW + toInt(args[i])
-        Value scaled = b.create<smt::IntMulOp>(loc, SmallVector<Value>{acc, powC});
+        Value scaled =
+            b.create<smt::IntMulOp>(loc, SmallVector<Value>{acc, powC});
         Value nextInt = toInt(args[i]);
         acc = b.create<smt::IntAddOp>(loc, SmallVector<Value>{scaled, nextInt});
       }
@@ -503,7 +509,7 @@ private:
     if (auto extOp = dyn_cast<comb::ExtractOp>(op)) {
       unsigned low = extOp.getLowBit();
       unsigned width = extOp.getType().getIntOrFloatBitWidth();
-      // bitvec 
+      // bitvec
       if (cfg.useBitVec) {
         auto resTy = b.getType<smt::BitVectorType>(width);
         return b.create<smt::ExtractOp>(loc, resTy, low, toBV(args.front()));
@@ -515,8 +521,10 @@ private:
       if (low != 0)
         q = b.create<smt::IntDivOp>(loc, xInt, intPow2(low, loc));
       if (width == 1) {
-        // Return a Bool for i1. Compute the selected bit as Int 0/1 and convert.
-        Value bitInt = b.create<smt::IntModOp>(loc, q, intPow2(1, loc)); // mod 2
+        // Return a Bool for i1. Compute the selected bit as Int 0/1 and
+        // convert.
+        Value bitInt =
+            b.create<smt::IntModOp>(loc, q, intPow2(1, loc)); // mod 2
         return numericToBool(bitInt, loc); // 0 -> false, 1 -> true
       }
       // General case: result is Int in [0, 2^width)
@@ -527,37 +535,42 @@ private:
     // comb.replicate
     if (auto repOp = dyn_cast<comb::ReplicateOp>(op)) {
       // bitvec
-      if (cfg.useBitVec){
+      if (cfg.useBitVec) {
         unsigned count = repOp.getMultiple();
         Value in = toBV(args[0]);
         return b.create<smt::RepeatOp>(loc, count, in);
       }
-      // int: we only support replicate of i1, which is lowered as ite(cond, 2^count-1, 0)
-      if (repOp.getOperand().getType().getIntOrFloatBitWidth() == 1){
+      // int: we only support replicate of i1, which is lowered as ite(cond,
+      // 2^count-1, 0)
+      if (repOp.getOperand().getType().getIntOrFloatBitWidth() == 1) {
         unsigned count = repOp.getMultiple();
-        auto lhs =  b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(2 ^ count - 1));
-        auto rhs =  b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(0));
-        auto cond= toBool(args[0]);
-        return b.create<smt::IteOp>(loc, b.getType<smt::IntType>(), cond, lhs, rhs);
-      } 
-      op.emitError() << "replicate is only unsupported in int mode for width == 1";
+        auto lhs = b.create<smt::IntConstantOp>(
+            loc, b.getI32IntegerAttr(2 ^ count - 1));
+        auto rhs = b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(0));
+        auto cond = toBool(args[0]);
+        return b.create<smt::IteOp>(loc, b.getType<smt::IntType>(), cond, lhs,
+                                    rhs);
+      }
+      op.emitError()
+          << "replicate is only unsupported in int mode for width == 1";
       assert(false && "replicate needs 1-long bit-vector");
     }
 
     // comb.shru
     if (comb::ShrUOp shruOp = dyn_cast<comb::ShrUOp>(op)) {
-      // bitvec 
-      SmallVector<Value> bvArgs; 
-      for (auto a : args) bvArgs.push_back(toBV(a));
+      // bitvec
+      SmallVector<Value> bvArgs;
+      for (auto a : args)
+        bvArgs.push_back(toBV(a));
       auto bvOp = b.create<smt::BVLShrOp>(loc, bvArgs);
       if (cfg.useBitVec) {
         return bvOp;
       }
-      // int 
+      // int
       return b.create<smt::BV2IntOp>(loc, bvOp->getResult(0));
       // return b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(0));
     }
-  
+
     // comb.icmp
     if (auto icmp = dyn_cast<comb::ICmpOp>(op)) {
       auto pred = icmp.getPredicate();
@@ -646,16 +659,17 @@ private:
     return tr;
   }
 
-  static int insertStates(SmallVector<std::string> &states, llvm::StringRef st) {
+  static int insertStates(SmallVector<std::string> &states,
+                          llvm::StringRef st) {
     for (auto [id, s] : llvm::enumerate(states))
       if (s == st)
         return id;
-    states.push_back(st.str());   // materialize once, stored in vector
+    states.push_back(st.str()); // materialize once, stored in vector
     return states.size() - 1;
   }
 
-  Region *getOutputRegion(
-      SmallVector<std::pair<Region *, int>> outputOfStateId, int stateId) {
+  Region *getOutputRegion(SmallVector<std::pair<Region *, int>> outputOfStateId,
+                          int stateId) {
     for (auto oid : outputOfStateId)
       if (stateId == oid.second)
         return oid.first;
@@ -677,7 +691,8 @@ LogicalResult MachineOpConverter::dispatch() {
   auto machineArgs = machineOp.getArguments();
 
   SmallVector<Type> argVarTypes; // The SMT types used to quantify.
-  SmallVector<Value> argVars;    // The original FSM Values in order: args, outs init, vars
+  SmallVector<Value>
+      argVars; // The original FSM Values in order: args, outs init, vars
 
   int numArgs = 0;
   int numOut = 0;
@@ -742,7 +757,8 @@ LogicalResult MachineOpConverter::dispatch() {
 
   // Declare one predicate per state: F_state(args, outs, vars, [time]) -> Bool
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
-    mlir::StringAttr funName = b.getStringAttr(("F_" + stateOp.getName().str()));
+    mlir::StringAttr funName =
+        b.getStringAttr(("F_" + stateOp.getName().str()));
     auto range = b.getType<smt::BoolType>();
     auto funTy = b.getType<smt::SMTFuncType>(argVarTypes, range);
     smt::DeclareFunOp acFun = b.create<smt::DeclareFunOp>(loc, funTy, funName);
@@ -782,9 +798,9 @@ LogicalResult MachineOpConverter::dispatch() {
   auto forallInit = b.create<smt::ForallOp>(
       loc, argVarTypes,
       [&](OpBuilder &b, Location loc, SmallVector<Value> forallArgs) -> Value {
-        SmallVector<Value> initArgs;         // args to F_0
-        SmallVector<Value> outputSmtValues;  // computed outputs at init state
-        SmallVector<Value> initVarValues;    // SMT constants for vars
+        SmallVector<Value> initArgs;        // args to F_0
+        SmallVector<Value> outputSmtValues; // computed outputs at init state
+        SmallVector<Value> initVarValues;   // SMT constants for vars
 
         auto initOutputReg = getOutputRegion(outputOfStateId, 0);
 
@@ -803,8 +819,8 @@ LogicalResult MachineOpConverter::dispatch() {
                      "init width mismatch for variable");
               initVarValues.push_back(b.create<smt::BVConstantOp>(loc, ap));
             } else if (llvm::isa<smt::BoolType>(qt)) {
-              initVarValues.push_back(b.create<smt::BoolConstantOp>(
-                  loc, ap != 0));
+              initVarValues.push_back(
+                  b.create<smt::BoolConstantOp>(loc, ap != 0));
             } else {
               // IntType
               auto attr =
@@ -859,21 +875,22 @@ LogicalResult MachineOpConverter::dispatch() {
           }
         }
 
-        auto inInit = b.create<smt::ApplyFuncOp>(loc, stateFunctions[0],
-                                                 initArgs);
+        auto inInit =
+            b.create<smt::ApplyFuncOp>(loc, stateFunctions[0], initArgs);
 
         if (cfg.withTime) {
           // time is the last forall arg
           Value zeroTime;
-              // cfg.useBitVec ? b.create<smt::BVConstantOp>(loc, 0, cfg.timeWidth)
-              //               : b.create<smt::IntConstantOp>(
-              //                     loc, b.getI32IntegerAttr(0));
+          // cfg.useBitVec ? b.create<smt::BVConstantOp>(loc, 0, cfg.timeWidth)
+          //               : b.create<smt::IntConstantOp>(
+          //                     loc, b.getI32IntegerAttr(0));
           if (cfg.useBitVec) {
             zeroTime = b.create<smt::BVConstantOp>(loc, 0, cfg.timeWidth);
           } else {
-            zeroTime = b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(0));
+            zeroTime =
+                b.create<smt::IntConstantOp>(loc, b.getI32IntegerAttr(0));
           }
-          
+
           Value atZero = b.create<smt::EqOp>(loc, forallArgs.back(), zeroTime);
 
           return b.create<smt::ImpliesOp>(loc, atZero, inInit);
@@ -886,8 +903,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
   // Transition semantics.
   for (auto [id1, t1] : llvm::enumerate(transitions)) {
-    auto action = [&](SmallVector<Value> actionArgs)
-        -> SmallVector<Value> {
+    auto action = [&](SmallVector<Value> actionArgs) -> SmallVector<Value> {
       // actionArgs are the current tuple (args, outs, vars, [time]).
       SmallVector<Value> outputSmtValues;
 
@@ -981,7 +997,8 @@ LogicalResult MachineOpConverter::dispatch() {
     };
 
     // For each transition, assert:
-    // Forall (argsNew,argsOld,others): F_from(argsOld, ...) AND guard(argsOld, ...)
+    // Forall (argsNew,argsOld,others): F_from(argsOld, ...) AND guard(argsOld,
+    // ...)
     //    => F_to(argsNew, outputs/vars updated, [time+1])
     SmallVector<Type> forallTypes;
     for (auto [id, ty] : llvm::enumerate(argVarTypes)) {
@@ -995,7 +1012,8 @@ LogicalResult MachineOpConverter::dispatch() {
 
     auto forall = b.create<smt::ForallOp>(
         loc, forallTypes,
-        [&](OpBuilder &b, Location loc, ValueRange forallDoubleInputs) -> Value {
+        [&](OpBuilder &b, Location loc,
+            ValueRange forallDoubleInputs) -> Value {
           SmallVector<Value> startingStateArgs;
           SmallVector<Value> arrivingStateArgs;
           for (auto [idx, fdi] : llvm::enumerate(forallDoubleInputs)) {
@@ -1017,9 +1035,8 @@ LogicalResult MachineOpConverter::dispatch() {
             if (ida < numArgs)
               actionedArgs[ida] = arrivingStateArgs[ida];
 
-          auto rhs =
-              b.create<smt::ApplyFuncOp>(loc, stateFunctions[t1.to],
-                                         actionedArgs);
+          auto rhs = b.create<smt::ApplyFuncOp>(loc, stateFunctions[t1.to],
+                                                actionedArgs);
           auto guard = guard1(startingStateArgs);
           auto lhs = b.create<smt::AndOp>(loc, inFrom, guard);
           return b.create<smt::ImpliesOp>(loc, lhs, rhs);
@@ -1039,8 +1056,8 @@ LogicalResult MachineOpConverter::dispatch() {
             avToSmt.push_back({av, forallInputs[i]});
 
           Value predVal = getSmtValue(pa.predicateFsm, avToSmt, loc);
-          Value predBool =
-              cfg.useBitVec ? bv1ToBool(b, loc, predVal) : numericToBool(predVal, loc);
+          Value predBool = cfg.useBitVec ? bv1ToBool(b, loc, predVal)
+                                         : numericToBool(predVal, loc);
 
           Value inState = b.create<smt::ApplyFuncOp>(
               loc, stateFunctions[pa.stateId], forallInputs);
@@ -1056,8 +1073,7 @@ LogicalResult MachineOpConverter::dispatch() {
 }
 
 namespace {
-struct FSMToSMTPass
-    : public circt::impl::ConvertFSMToSMTBase<FSMToSMTPass> {
+struct FSMToSMTPass : public circt::impl::ConvertFSMToSMTBase<FSMToSMTPass> {
   void runOnOperation() override;
 };
 
@@ -1083,7 +1099,8 @@ void FSMToSMTPass::runOnOperation() {
   // else
   //   cfg.useBitVec = true; // default
 
-  // Optional: set time width; keep 5 as stable default (can be parameterized later).
+  // Optional: set time width; keep 5 as stable default (can be parameterized
+  // later).
   cfg.timeWidth = 5;
 
   for (auto machine : llvm::make_early_inc_range(module.getOps<MachineOp>())) {

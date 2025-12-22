@@ -1,4 +1,5 @@
-//===- FSMTOSMT.h - FSM to SMT conversions ------------------------*- C++ -*-===//
+//===- FSMTOSMT.h - FSM to SMT conversions ------------------------*- C++
+//-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -19,7 +20,6 @@ namespace circt {
 
 #define GEN_PASS_DECL_CONVERTFSMTOSMT
 #include "circt/Conversion/Passes.h.inc"
-
 
 std::unique_ptr<mlir::Pass> createConvertFSMToSMTPass();
 } // namespace circt
