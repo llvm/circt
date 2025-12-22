@@ -1,4 +1,4 @@
-//===- FSMToSMTSafety.cpp -----------------------------------------------===//
+//===- FSMToSMT.cpp -----------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 #include <cassert>
 #include <string>
-#include "circt/Conversion/FSMToSMTSafety.h"
+#include "circt/Conversion/FSMToSMT.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/FSM/FSMOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -39,7 +39,7 @@
 #include <utility>
 
 namespace circt {
-#define GEN_PASS_DEF_CONVERTFSMTOSMTSAFETY
+#define GEN_PASS_DEF_CONVERTFSMTOSMT
 #include "circt/Conversion/Passes.h.inc"
 } // namespace circt
 
@@ -195,7 +195,7 @@ private:
       return w;
     }
 
-    llvm::errs() << "Unsupported type for bitwidth computation in FSMToSMTSafety: "
+    llvm::errs() << "Unsupported type for bitwidth computation in FSMToSMT: "
                  << t << "\n";
     assert(false && "Unsupported type in getPackedBitWidth");
     return 0;
@@ -1056,12 +1056,12 @@ LogicalResult MachineOpConverter::dispatch() {
 }
 
 namespace {
-struct FSMToSMTSafetyPass
-    : public circt::impl::ConvertFSMToSMTSafetyBase<FSMToSMTSafetyPass> {
+struct FSMToSMTPass
+    : public circt::impl::ConvertFSMToSMTBase<FSMToSMTPass> {
   void runOnOperation() override;
 };
 
-void FSMToSMTSafetyPass::runOnOperation() {
+void FSMToSMTPass::runOnOperation() {
   auto module = getOperation();
   OpBuilder b(module);
 
@@ -1098,6 +1098,6 @@ void FSMToSMTSafetyPass::runOnOperation() {
 }
 } // namespace
 
-std::unique_ptr<mlir::Pass> circt::createConvertFSMToSMTSafetyPass() {
-  return std::make_unique<FSMToSMTSafetyPass>();
+std::unique_ptr<mlir::Pass> circt::createConvertFSMToSMTPass() {
+  return std::make_unique<FSMToSMTPass>();
 }

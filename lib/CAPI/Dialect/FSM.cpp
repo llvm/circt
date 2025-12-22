@@ -19,6 +19,6 @@ using namespace circt::fsm;
 void registerFSMPasses() {
   registerPasses();
   circt::registerConvertFSMToSVPass();
-  circt::registerConvertFSMToSMTSafetyPass();
+  circt::registerConvertFSMToSMTPass();
 }
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(FSM, fsm, FSMDialect)
