@@ -2101,6 +2101,17 @@ static LogicalResult convert(FinishMessageBIOp op,
 }
 
 //===----------------------------------------------------------------------===//
+// Timing Control Conversion
+//===----------------------------------------------------------------------===//
+
+// moore.builtin.time
+static LogicalResult convert(TimeBIOp op, TimeBIOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<llhd::CurrentTimeOp>(op);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Conversion Infrastructure
 //===----------------------------------------------------------------------===//
 
@@ -2442,6 +2453,9 @@ static void populateOpConversion(ConversionPatternSet &patterns,
   patterns.add<SeverityBIOp>(convert);
   patterns.add<FinishBIOp>(convert);
   patterns.add<FinishMessageBIOp>(convert);
+
+  // Timing control
+  patterns.add<TimeBIOp>(convert);
 
   mlir::populateAnyFunctionOpInterfaceTypeConversionPattern(patterns,
                                                             typeConverter);
