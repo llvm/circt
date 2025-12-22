@@ -1477,8 +1477,14 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
           addConstraint(temp_c);
         }
       })
+      .Case<SpecialConstantOp>([&](auto op) {
+        // Nothing required.
+      })
       .Case<InvalidValueOp>(
           [&](auto op) { generateConstraints(op.getResult()); })
+      .Case<WireOp, RegOp>([&](auto op) {
+        // Nothing required.
+      })
       .Case<RegResetOp>([&](auto op) {
         generateConstraints(op.getResult(), op.getResetValue());
       })
@@ -2103,7 +2109,7 @@ LogicalResult InferenceMapping::extractConstraints(Operation *op) {
         generateConstraints(FieldRef(op.getResult(), 0),
                             FieldRef(ref.getValue(), newFID), op.getType());
       })
-      .Case<SpecialConstantOp, WireOp, RegOp>([&](auto op) {
+      .Case<mlir::UnrealizedConversionCastOp>([&](auto op) {
         // Nothing required.
       })
       .Default([&](auto op) {
