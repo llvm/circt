@@ -44,3 +44,17 @@ def ConstantTimeOp : LLHDOp<"constant_time",
 
   let hasFolder = 1;
 }
+
+def CurrentTimeOp : LLHDOp<"current_time", [MemoryEffects<[MemRead]>]> {
+  let summary = "Get the current simulation time";
+  let description = [{
+    Materializes the current simulation time as an SSA value. This is equivalent
+    to the `$time`, `$stime`, and `$realtime` system tasks in SystemVerilog, and
+    the `now` keyword in VHDL.
+
+    This operation has a memory read side effect to avoid motion and CSE across
+    `llhd.wait` operations, and other operations that may suspend execution.
+  }];
+  let results = (outs LLHDTimeType:$result);
+  let assemblyFormat = "attr-dict";
+}
