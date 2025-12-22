@@ -1413,3 +1413,11 @@ func.func @RealToIntLowering(%arg0: !moore.f32, %arg1: !moore.f64) {
   %1 = moore.real_to_int %arg1 : f64 -> i42
   return
 }
+
+// CHECK-LABEL: func.func @CurrentTime
+func.func @CurrentTime() -> !moore.time {
+  // CHECK-NEXT: [[TMP:%.+]] = llhd.current_time
+  %0 = moore.builtin.time
+  // CHECK-NEXT: return [[TMP]] : !llhd.time
+  return %0 : !moore.time
+}
