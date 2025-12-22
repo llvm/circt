@@ -2658,10 +2658,10 @@ void InstanceOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
                    ArrayAttr::get(getContext(), annotations));
 }
 
-ArrayAttr InstanceOp::getPortDomain(unsigned portIdx) {
+Attribute InstanceOp::getPortDomain(unsigned portIdx) {
   assert(portIdx < getNumResults() &&
          "index should be smaller than result number");
-  return cast<ArrayAttr>(getDomainInfo()[portIdx]);
+  return getDomainInfo()[portIdx];
 }
 
 InstanceOp InstanceOp::cloneWithInsertedPorts(
