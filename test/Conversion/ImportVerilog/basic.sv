@@ -3849,3 +3849,21 @@ endmodule
 // CHECK-LABEL: moore.module @ProgramsAreMostlyModules
 program ProgramsAreMostlyModules;
 endprogram
+
+// CHECK-LABEL: moore.module @Events
+module Events;
+  // CHECK: [[EVENT:%.+]] = moore.variable : <i1>
+  event e;
+  // CHECK: moore.procedure initial {
+  // CHECK-NEXT: [[TMP1:%.+]] = moore.read [[EVENT]]
+  // CHECK-NEXT: [[TMP2:%.+]] = moore.not [[TMP1]]
+  // CHECK-NEXT: moore.blocking_assign [[EVENT]], [[TMP2]]
+  initial ->e;
+  // CHECK: moore.procedure initial {
+  // CHECK-NEXT: moore.wait_event {
+  // CHECK-NEXT:   [[TMP1:%.+]] = moore.read [[EVENT]]
+  // CHECK-NEXT:   moore.detect_event any [[TMP1]]
+  // CHECK-NEXT: }
+  // CHECK-NEXT: call @dummyA()
+  initial @(e) dummyA();
+endmodule
