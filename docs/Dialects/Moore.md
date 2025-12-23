@@ -16,9 +16,6 @@ The `moore` and `sv` dialect may eventually converge into a single dialect.
 As we are building out the Verilog frontend capabilities of CIRCT it is valuable to have a separate ingestion dialect, such that we do not have to make disruptive changes to the load-bearing `sv` dialect used in production.
 
 
-## LRM Rules
-
-
 ## Types
 
 ### Simple Bit Vector Type
