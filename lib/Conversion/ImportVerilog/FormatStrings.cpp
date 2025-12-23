@@ -114,20 +114,26 @@ struct FormatStringParser {
     const auto &arg = *arguments[0];
     arguments = arguments.drop_front();
 
+    // If the format specifier starts with %0, we should disable padding
+    bool enablePadding = true;
+    if (fullSpecifier.size() >= 2 && fullSpecifier.substr(0, 2) == "%0") {
+      enablePadding = false;
+    }
     // Handle the different formatting options.
     // See IEEE 1800-2017 § 21.2.1.2 "Format specifications".
     switch (specifierLower) {
     case 'b':
-      return emitInteger(arg, options, IntFormat::Binary);
+      return emitInteger(arg, options, IntFormat::Binary, enablePadding);
     case 'o':
-      return emitInteger(arg, options, IntFormat::Octal);
+      return emitInteger(arg, options, IntFormat::Octal, enablePadding);
     case 'd':
-      return emitInteger(arg, options, IntFormat::Decimal);
+      return emitInteger(arg, options, IntFormat::Decimal, enablePadding);
     case 'h':
     case 'x':
       return emitInteger(arg, options,
                          std::isupper(specifier) ? IntFormat::HexUpper
-                                                 : IntFormat::HexLower);
+                                                 : IntFormat::HexLower,
+                         enablePadding);
 
     case 'e':
     case 'g':
@@ -148,7 +154,8 @@ struct FormatStringParser {
 
   /// Emit an integer value with the given format.
   LogicalResult emitInteger(const slang::ast::Expression &arg,
-                            const FormatOptions &options, IntFormat format) {
+                            const FormatOptions &options, IntFormat format,
+                            bool enablePadding) {
 
     Type intTy = {};
     Value val;
@@ -206,8 +213,8 @@ struct FormatStringParser {
     auto padding =
         format == IntFormat::Decimal ? IntPadding::Space : IntPadding::Zero;
 
-    fragments.push_back(moore::FormatIntOp::create(builder, loc, value, format,
-                                                   width, alignment, padding));
+    fragments.push_back(moore::FormatIntOp::create(
+        builder, loc, value, format, width, alignment, padding, enablePadding));
     return success();
   }
 
@@ -280,7 +287,7 @@ struct FormatStringParser {
   /// Emit an expression argument with the appropriate default formatting.
   LogicalResult emitDefault(const slang::ast::Expression &expr) {
     FormatOptions options;
-    return emitInteger(expr, options, defaultFormat);
+    return emitInteger(expr, options, defaultFormat, true);
   }
 };
 } // namespace

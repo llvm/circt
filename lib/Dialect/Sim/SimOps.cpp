@@ -126,8 +126,12 @@ OpFoldResult FormatDecOp::fold(FoldAdaptor adaptor) {
     unsigned padWidth = FormatDecOp::getDecimalWidth(width, getIsSigned());
     padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
 
-    SmallVector<char, 8> padding(padWidth, ' ');
-    return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
+    if (getEnablePadding()) {
+      return StringAttr::get(getContext(), Twine(strBuf));
+    } else {
+      SmallVector<char, 8> padding(padWidth, ' ');
+      return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
+    }
   }
   return {};
 }
@@ -148,8 +152,12 @@ OpFoldResult FormatHexOp::fold(FoldAdaptor adaptor) {
       padWidth++;
     padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
 
-    SmallVector<char, 8> padding(padWidth, '0');
-    return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
+    if (getEnablePadding()) {
+      return StringAttr::get(getContext(), Twine(strBuf));
+    } else {
+      SmallVector<char, 8> padding(padWidth, '0');
+      return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
+    }
   }
   return {};
 }
@@ -170,8 +178,12 @@ OpFoldResult FormatOctOp::fold(FoldAdaptor adaptor) {
       padWidth++;
     padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
 
-    SmallVector<char, 11> padding(padWidth, '0');
-    return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
+    if (getEnablePadding()) {
+      return StringAttr::get(getContext(), Twine(strBuf));
+    } else {
+      SmallVector<char, 11> padding(padWidth, '0');
+      return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
+    }
   }
   return {};
 }
@@ -187,8 +199,12 @@ OpFoldResult FormatBinOp::fold(FoldAdaptor adaptor) {
     unsigned width = intAttr.getType().getIntOrFloatBitWidth();
     unsigned padWidth = width > strBuf.size() ? width - strBuf.size() : 0;
 
-    SmallVector<char, 32> padding(padWidth, '0');
-    return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
+    if (getEnablePadding()) {
+      return StringAttr::get(getContext(), Twine(strBuf));
+    } else {
+      SmallVector<char, 32> padding(padWidth, '0');
+      return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
+    }
   }
   return {};
 }
