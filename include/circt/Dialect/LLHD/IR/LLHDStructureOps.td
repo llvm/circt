@@ -144,6 +144,7 @@ def WaitOp : LLHDOp<"wait", [
   AttrSizedOperandSegments,
   HasParent<"ProcessOp">,
   Terminator,
+  BranchOpInterface
 ]> {
   let summary = "Suspend execution of a process";
   let description = [{
@@ -175,6 +176,14 @@ def WaitOp : LLHDOp<"wait", [
     attr-dict
   }];
   let hasVerifier = 1;
+  let extraClassDeclaration = [{
+    ::mlir::SuccessorOperands getSuccessorOperands(unsigned index) {
+      return ::mlir::SuccessorOperands(getDestOperandsMutable());
+    }
+    ::mlir::Block* getSuccessorForOperands(::llvm::ArrayRef<::mlir::Attribute> operands) {
+      return getDest();
+    }
+  }];
 }
 
 //===----------------------------------------------------------------------===//

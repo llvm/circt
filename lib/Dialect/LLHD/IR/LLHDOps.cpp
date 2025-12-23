@@ -7,9 +7,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
+
+#include <algorithm>
+#include <cstdint>
+
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Attributes.h"
+#include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
@@ -39,6 +45,15 @@ Type circt::llhd::getLLHDElementType(Type type) {
   if (auto array = dyn_cast<hw::ArrayType>(type))
     return array.getElementType();
   return type;
+}
+
+template <typename... OpTypes>
+static bool hasUserOfKind(Operation *op) {
+  for (auto *user : op->getUsers()) {
+    if (isa<OpTypes...>(user))
+      return true;
+  }
+  return false;
 }
 
 //===----------------------------------------------------------------------===//
@@ -75,6 +90,9 @@ static Value getValueAtIndex(OpBuilder &builder, Location loc, Value val,
             builder.getIntegerType(llvm::Log2_64_Ceil(ty.getNumElements())),
             index);
         return hw::ArrayGetOp::create(builder, loc, val, idx);
+      })
+      .Case<IntegerType>([&](IntegerType ty) -> Value {
+        return comb::ExtractOp::create(builder, loc, val, index, 1);
       });
 }
 
@@ -92,6 +110,12 @@ SmallVector<DestructurableMemorySlot> SignalOp::getDestructurableSlots() {
 
   auto destructuredType = destructurable.getSubelementIndexMap();
   if (!destructuredType)
+    return {};
+
+  // It only makes sense to destructure a SignalOp if it has one or more users
+  // that access the destructured elements.
+  if (!hasUserOfKind<SigExtractOp, SigArrayGetOp, SigStructExtractOp,
+                     SigArraySliceOp>(*this))
     return {};
 
   return {DestructurableMemorySlot{{getResult(), type}, *destructuredType}};
@@ -157,6 +181,98 @@ static OpFoldResult foldSigPtrExtractOp(Op op, ArrayRef<Attribute> operands) {
 
 OpFoldResult llhd::SigExtractOp::fold(FoldAdaptor adaptor) {
   return foldSigPtrExtractOp(*this, adaptor.getOperands());
+}
+
+bool SigExtractOp::canRewire(const DestructurableMemorySlot &slot,
+                             SmallPtrSetImpl<Attribute> &usedIndices,
+                             SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                             const DataLayout &dataLayout) {
+  if (slot.ptr != getInput())
+    return false;
+  APInt idx;
+  Type type = getLLHDElementType(getResult().getType());
+  if (!type.isSignlessInteger())
+    return false;
+  if (!matchPattern(getLowBit(), m_ConstantInt(&idx)))
+    return false;
+
+  // We rewire by pushing subslot values down to users, so we only support
+  // ProbeOp and DriveOp users as these can deal with the naked (non-ref) types
+  // produced by SROA.
+  for (Operation *user : getResult().getUsers()) {
+    if (!isa<ProbeOp, DriveOp>(user))
+      return false;
+  }
+
+  int64_t width = getLLHDTypeWidth(type);
+  for (int64_t i = 0; i < width; ++i) {
+    auto index =
+        IntegerAttr::get(IndexType::get(getContext()), idx.getZExtValue() + i);
+    if (!slot.subelementTypes.contains(index))
+      return false;
+  }
+
+  for (int64_t i = 0; i < width; ++i) {
+    auto index =
+        IntegerAttr::get(IndexType::get(getContext()), idx.getZExtValue() + i);
+    usedIndices.insert(index);
+    mustBeSafelyUsed.emplace_back<MemorySlot>({getResult(), type});
+  }
+  return true;
+}
+
+DeletionKind SigExtractOp::rewire(const DestructurableMemorySlot &slot,
+                                  DenseMap<Attribute, MemorySlot> &subslots,
+                                  OpBuilder &builder,
+                                  const DataLayout &dataLayout) {
+  APInt idx;
+  bool result = matchPattern(getLowBit(), m_ConstantInt(&idx));
+  assert(result);
+  int64_t width = getLLHDTypeWidth(getResult().getType());
+
+  for (Operation *user : llvm::make_early_inc_range(getResult().getUsers())) {
+    builder.setInsertionPoint(user);
+    // Decompose a ProbeOp into a concatenation of ProbeOps, one per subslot.
+    if (auto probeOp = dyn_cast<ProbeOp>(user)) {
+      SmallVector<Value> values;
+      for (int64_t i = 0; i < width; ++i) {
+        auto index = IntegerAttr::get(IndexType::get(getContext()),
+                                      idx.getZExtValue() + i);
+        auto it = subslots.find(index);
+        assert(it != subslots.end());
+        Value value = it->getSecond().ptr;
+        values.push_back(ProbeOp::create(builder, probeOp.getLoc(), value));
+      }
+      std::reverse(values.begin(), values.end());
+      Value value = comb::ConcatOp::create(builder, probeOp.getLoc(), values);
+      probeOp.replaceAllUsesWith(value);
+      probeOp.erase();
+      continue;
+    }
+
+    // Decompose a DriveOp into one DriveOp per subslot.
+    auto driveOp = cast<DriveOp>(user);
+    for (int64_t i = 0; i < width; ++i) {
+      auto index = IntegerAttr::get(IndexType::get(getContext()),
+                                    idx.getZExtValue() + i);
+      auto it = subslots.find(index);
+      assert(it != subslots.end());
+      Value sig = it->getSecond().ptr;
+      Value val = comb::ExtractOp::create(builder, driveOp.getLoc(),
+                                          driveOp.getValue(), i, 1);
+      DriveOp::create(builder, driveOp.getLoc(), sig, val, driveOp.getTime(),
+                      driveOp.getEnable());
+    }
+    driveOp.erase();
+  }
+
+  return DeletionKind::Delete;
+}
+
+LogicalResult SigExtractOp::ensureOnlySafeAccesses(
+    const MemorySlot &slot, SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+    const DataLayout &dataLayout) {
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -337,7 +453,7 @@ bool ProbeOp::canRewire(const DestructurableMemorySlot &slot,
   for (auto [key, _] : slot.subelementTypes)
     usedIndices.insert(key);
 
-  return isa<hw::StructType, hw::ArrayType>(slot.elemType);
+  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.elemType);
 }
 
 DeletionKind ProbeOp::rewire(const DestructurableMemorySlot &slot,
@@ -356,7 +472,12 @@ DeletionKind ProbeOp::rewire(const DestructurableMemorySlot &slot,
                                               probed);
           })
           .Case<hw::ArrayType>([&](auto ty) {
+            std::reverse(probed.begin(), probed.end());
             return hw::ArrayCreateOp::create(builder, getLoc(), probed);
+          })
+          .Case<IntegerType>([&](auto ty) {
+            std::reverse(probed.begin(), probed.end());
+            return comb::ConcatOp::create(builder, getLoc(), probed);
           });
 
   replaceAllUsesWith(repl);
@@ -414,7 +535,7 @@ bool DriveOp::canRewire(const DestructurableMemorySlot &slot,
   for (auto [key, _] : slot.subelementTypes)
     usedIndices.insert(key);
 
-  return isa<hw::StructType, hw::ArrayType>(slot.elemType);
+  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.elemType);
 }
 
 DeletionKind DriveOp::rewire(const DestructurableMemorySlot &slot,
@@ -594,6 +715,37 @@ LogicalResult HaltOp::verify() {
 
 LogicalResult YieldOp::verify() {
   return verifyYieldResults(*this, getYieldOperands());
+}
+
+namespace {
+struct IntegerTypeInterface
+    : public DestructurableTypeInterface::ExternalModel<IntegerTypeInterface,
+                                                        IntegerType> {
+  std::optional<DenseMap<Attribute, Type>>
+  getSubelementIndexMap(Type type) const {
+    if (type.getIntOrFloatBitWidth() <= 1)
+      return {};
+    DenseMap<Attribute, Type> destructured;
+    for (unsigned i = 0; i < type.getIntOrFloatBitWidth(); ++i)
+      destructured.insert(
+          {IntegerAttr::get(IndexType::get(type.getContext()), i),
+           IntegerType::get(type.getContext(), 1)});
+    return destructured;
+  }
+
+  Type getTypeAtIndex(Type type, Attribute index) const {
+    return IntegerType::get(index.getContext(), 1);
+  }
+};
+} // namespace
+
+void llhd::registerDestructableIntegerExternalModel(DialectRegistry &registry) {
+  registry.addExtension(+[](MLIRContext *ctx, BuiltinDialect *dialect) {
+    IntegerType::attachInterface<IntegerTypeInterface>(*ctx);
+    // SROA on the IntegerTypeInterface can cause comb::ExtractOps to be
+    // created.
+    ctx->loadDialect<comb::CombDialect>();
+  });
 }
 
 //===----------------------------------------------------------------------===//
