@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_CONVERSION_FSMTOSMTSAFETY_FSMTOSMT_H
-#define CIRCT_CONVERSION_FSMTOSMTSAFETY_FSMTOSMT_H
+#ifndef CIRCT_CONVERSION_FSMTOSMT_FSMTOSMT_H
+#define CIRCT_CONVERSION_FSMTOSMT_FSMTOSMT_H
 
 #include <memory>
 

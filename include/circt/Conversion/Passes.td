@@ -378,7 +378,7 @@ def ConvertFSMToSV : Pass<"convert-fsm-to-sv", "mlir::ModuleOp"> {
 // FSMToSMT
 //===----------------------------------------------------------------------===//
 
-def ConvertFSMToSMTSafety : Pass<"convert-fsm-to-smt-safety", "mlir::ModuleOp"> {
+def ConvertFSMToSMT : Pass<"convert-fsm-to-smt", "mlir::ModuleOp"> {
   let summary = "Convert FSM to SMT - Safety Properties";
   let constructor = "circt::createConvertFSMToSMTPass()";
   let dependentDialects = [
