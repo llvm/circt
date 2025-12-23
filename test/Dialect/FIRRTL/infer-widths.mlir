@@ -435,15 +435,8 @@ firrtl.circuit "Foo" {
     firrtl.connect %ui, %c0_ui5 : !firrtl.uint, !firrtl.uint<5>
   }
 
-  firrtl.domain @ClockDomain
-
   // CHECK-LABEL: @TransparentOps
-  firrtl.module @TransparentOps(
-    in %clk: !firrtl.clock,
-    in %a: !firrtl.uint<1>,
-    in %A: !firrtl.domain of @ClockDomain,
-    out %B: !firrtl.domain of @ClockDomain
-  ) {
+  firrtl.module @TransparentOps(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>) {
     %false = firrtl.constant 0 : !firrtl.uint<1>
     %true = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
@@ -464,7 +457,6 @@ firrtl.circuit "Foo" {
     firrtl.assume %clk, %true, %true, "foo" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.int.unclocked_assume %true, %true, "foo" : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.cover %clk, %true, %true, "foo" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.domain.define %B, %A
   }
 
   // Issue #1088
@@ -867,7 +859,7 @@ firrtl.circuit "Foo" {
 
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     firrtl.connect %w, %c0_ui2 : !firrtl.uint, !firrtl.uint<2>
-
+    
     %bov_a = firrtl.subfield %bov[a] : !firrtl.bundle<a: vector<uint, 2>, b flip: uint>
     %bov_a_1 = firrtl.subindex %bov_a[1] : !firrtl.vector<uint, 2>
     %bov_b = firrtl.subfield %bov[b] : !firrtl.bundle<a: vector<uint, 2>, b flip: uint>
@@ -922,7 +914,7 @@ firrtl.circuit "Foo" {
     %0 = firrtl.subfield %invalid[a] : !firrtl.bundle<a: vector<uint, 2>>
     %1 = firrtl.subindex %0[0] : !firrtl.vector<uint, 2>
   }
-
+  
   // CHECK-LABEL: @InferConst
   // CHECK-SAME: out %out: !firrtl.const.bundle<a: uint<1>, b: sint<2>, c: analog<3>, d: vector<uint<4>, 2>>
   firrtl.module @InferConst(in %a: !firrtl.const.uint<1>, in %b: !firrtl.const.sint<2>, in %c: !firrtl.const.analog<3>, in %d: !firrtl.const.vector<uint<4>, 2>,
@@ -937,7 +929,7 @@ firrtl.circuit "Foo" {
     firrtl.attach %2, %c : !firrtl.const.analog, !firrtl.const.analog<3>
     firrtl.connect %3, %d : !firrtl.const.vector<uint, 2>, !firrtl.const.vector<uint<4>, 2>
   }
-
+  
   // Should not crash when encountering property types.
   // CHECK: firrtl.module @Property(in %a: !firrtl.string)
   firrtl.module @Property(in %a: !firrtl.string) { }

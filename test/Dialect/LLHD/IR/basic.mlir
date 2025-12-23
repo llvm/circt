@@ -197,10 +197,3 @@ hw.module @CombinationalProcess(in %arg0: i1, in %arg1: i42, in %arg2: i9001, in
     llhd.yield %1, %2 : i42, i9001
   }
 }
-
-// CHECK-LABEL: @CurrentTime
-func.func @CurrentTime() -> !llhd.time {
-  // CHECK: llhd.current_time
-  %0 = llhd.current_time
-  return %0 : !llhd.time
-}

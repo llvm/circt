@@ -3043,17 +3043,6 @@ firrtl.circuit "DomainInfoNotArray" {
 
 // -----
 
-firrtl.circuit "DomainInfoWrongSize" {
-  firrtl.domain @ClockDomain
-  // expected-error @below {{requires 2 port domains, but has 1}}
-  firrtl.module @WrongDomainPortInfo(
-    in %A: !firrtl.domain of @ClockDomain,
-    in %a: !firrtl.uint<1>
-  ) attributes {domainInfo = [@ClockDomain]} {}
-}
-
-// -----
-
 firrtl.circuit "WrongDomainPortInfo" {
   firrtl.domain @ClockDomain
   // expected-error @below {{domain information for domain port 'A' must be a 'FlatSymbolRefAttr'}}
@@ -3064,42 +3053,12 @@ firrtl.circuit "WrongDomainPortInfo" {
 
 // -----
 
-firrtl.circuit "WrongNonDomainPortInfoType" {
-  firrtl.domain @ClockDomain
-  // expected-error @below {{domain information for non-domain port 'a' must be an 'ArrayAttr'}}
-  firrtl.module @WrongNonDomainPortInfoType(
-    in %a: !firrtl.uint<1>
-  ) attributes {domainInfo = ["hello"]} {}
-}
-
-// -----
-
-firrtl.circuit "WrongNonDomainPortInfoElementType" {
+firrtl.circuit "WrongNonDomainPortInfo" {
   firrtl.domain @ClockDomain
   // expected-error @below {{domain information for non-domain port 'a' must be an 'ArrayAttr<IntegerAttr>'}}
-  firrtl.module @WrongNonDomainPortInfoElementType(
+  firrtl.module @WrongNonDomainPortInfo(
     in %a: !firrtl.uint<1>
   ) attributes {domainInfo = [["hello"]]} {}
-}
-
-// -----
-
-firrtl.circuit "DomainAssociationOOB" {
-  firrtl.domain @ClockDomain
-  // expected-error @below {{has domain association 1 for port 'a', but the module only has 1 ports}}
-  firrtl.module @DomainAssociationOOB(
-    in %a: !firrtl.uint<1>
-  ) attributes {domainInfo = [[1 : i32]]} {}
-}
-
-// -----
-
-firrtl.circuit "DomainAssociationOOB" {
-  firrtl.domain @ClockDomain
-  // expected-error @below {{has port 'a' which has a domain association with non-domain port 'a'}}
-  firrtl.module @DomainAssociationOOB(
-    in %a: !firrtl.uint<1>
-  ) attributes {domainInfo = [[0 : i32]]} {}
 }
 
 // -----
