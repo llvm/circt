@@ -2012,17 +2012,21 @@ struct FormatIntOpConversion : public OpConversionPattern<FormatIntOp> {
     // TODO: These should honor the width, alignment, and padding.
     switch (op.getFormat()) {
     case IntFormat::Decimal:
-      rewriter.replaceOpWithNewOp<sim::FormatDecOp>(op, adaptor.getValue());
+      rewriter.replaceOpWithNewOp<sim::FormatDecOp>(op, adaptor.getValue(),
+                                                    adaptor.getEnablePadding());
       return success();
     case IntFormat::Binary:
-      rewriter.replaceOpWithNewOp<sim::FormatBinOp>(op, adaptor.getValue());
+      rewriter.replaceOpWithNewOp<sim::FormatBinOp>(op, adaptor.getValue(),
+                                                    adaptor.getEnablePadding());
       return success();
     case IntFormat::Octal:
-      rewriter.replaceOpWithNewOp<sim::FormatOctOp>(op, adaptor.getValue());
+      rewriter.replaceOpWithNewOp<sim::FormatOctOp>(op, adaptor.getValue(),
+                                                    adaptor.getEnablePadding());
       return success();
     case IntFormat::HexLower:
     case IntFormat::HexUpper:
-      rewriter.replaceOpWithNewOp<sim::FormatHexOp>(op, adaptor.getValue());
+      rewriter.replaceOpWithNewOp<sim::FormatHexOp>(op, adaptor.getValue(),
+                                                    adaptor.getEnablePadding());
       return success();
     default:
       return rewriter.notifyMatchFailure(op, "unsupported int format");

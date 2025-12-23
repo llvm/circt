@@ -1999,7 +1999,8 @@ def FormatIntOp : MooreOp<"fmt.int", [Pure]> {
     IntFormatAttr:$format,
     I32Attr:$width,
     IntAlignAttr:$alignment,
-    IntPaddingAttr:$padding
+    IntPaddingAttr:$padding,
+    BoolAttr:$enablePadding
   );
   let results = (outs FormatStringType:$result);
   let assemblyFormat = [{
