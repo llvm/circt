@@ -114,26 +114,20 @@ struct FormatStringParser {
     const auto &arg = *arguments[0];
     arguments = arguments.drop_front();
 
-    // If the format specifier starts with %0, we should disable padding
-    bool enablePadding = true;
-    if (fullSpecifier.size() >= 2 && fullSpecifier.substr(0, 2) == "%0") {
-      enablePadding = false;
-    }
     // Handle the different formatting options.
     // See IEEE 1800-2017 § 21.2.1.2 "Format specifications".
     switch (specifierLower) {
     case 'b':
-      return emitInteger(arg, options, IntFormat::Binary, enablePadding);
+      return emitInteger(arg, options, IntFormat::Binary);
     case 'o':
-      return emitInteger(arg, options, IntFormat::Octal, enablePadding);
+      return emitInteger(arg, options, IntFormat::Octal);
     case 'd':
-      return emitInteger(arg, options, IntFormat::Decimal, enablePadding);
+      return emitInteger(arg, options, IntFormat::Decimal);
     case 'h':
     case 'x':
       return emitInteger(arg, options,
                          std::isupper(specifier) ? IntFormat::HexUpper
-                                                 : IntFormat::HexLower,
-                         enablePadding);
+                                                 : IntFormat::HexLower);
 
     case 'e':
     case 'g':
@@ -154,12 +148,13 @@ struct FormatStringParser {
 
   /// Emit an integer value with the given format.
   LogicalResult emitInteger(const slang::ast::Expression &arg,
-                            const FormatOptions &options, IntFormat format,
-                            bool enablePadding) {
+                            const FormatOptions &options, IntFormat format) {
 
     Type intTy = {};
     Value val;
     auto rVal = context.convertRvalueExpression(arg);
+    // To infer whether or not the value is signed while printing as a decimal
+    bool isSigned = arg.type->isSigned();
     if (!rVal)
       return failure();
 
@@ -214,7 +209,7 @@ struct FormatStringParser {
         format == IntFormat::Decimal ? IntPadding::Space : IntPadding::Zero;
 
     fragments.push_back(moore::FormatIntOp::create(
-        builder, loc, value, format, width, alignment, padding, enablePadding));
+        builder, loc, value, format, width, alignment, padding, isSigned));
     return success();
   }
 
@@ -287,7 +282,7 @@ struct FormatStringParser {
   /// Emit an expression argument with the appropriate default formatting.
   LogicalResult emitDefault(const slang::ast::Expression &expr) {
     FormatOptions options;
-    return emitInteger(expr, options, defaultFormat, true);
+    return emitInteger(expr, options, defaultFormat);
   }
 };
 } // namespace

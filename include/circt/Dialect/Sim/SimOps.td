@@ -181,7 +181,7 @@ def FormatHexOp : SimOp<"fmt.hex", [Pure]> {
   }];
 
 
-  let arguments = (ins AnyInteger:$value, BoolAttr:$enablePadding);
+  let arguments = (ins AnyInteger:$value, I32Attr:$specifierWidth, BoolAttr:$isHexUppercase);
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
@@ -201,7 +201,7 @@ def FormatOctOp : SimOp<"fmt.oct", [Pure]> {
   }];
 
 
-  let arguments = (ins AnyInteger:$value, BoolAttr:$enablePadding);
+  let arguments = (ins AnyInteger:$value, I32Attr:$specifierWidth);
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
@@ -219,7 +219,7 @@ def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
     the empty string. No further prefix will be added.
   }];
 
-  let arguments = (ins AnyInteger:$value, BoolAttr:$enablePadding);
+  let arguments = (ins AnyInteger:$value, I32Attr:$specifierWidth);
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
@@ -252,7 +252,7 @@ def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
     Backends are recommended to not exceed the required amount of padding.
   }];
 
-  let arguments = (ins AnyInteger:$value, BoolAttr:$enablePadding, UnitAttr:$isSigned);
+  let arguments = (ins AnyInteger:$value, I32Attr:$specifierWidth, BoolAttr:$isSigned);
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
