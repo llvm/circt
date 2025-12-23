@@ -2009,24 +2009,27 @@ struct FormatIntOpConversion : public OpConversionPattern<FormatIntOp> {
   LogicalResult
   matchAndRewrite(FormatIntOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // TODO: These should honor the width, alignment, and padding.
     switch (op.getFormat()) {
     case IntFormat::Decimal:
       rewriter.replaceOpWithNewOp<sim::FormatDecOp>(op, adaptor.getValue(),
-                                                    adaptor.getEnablePadding());
+                                                    adaptor.getSpecifierWidth(),
+                                                    adaptor.getIsSigned());
       return success();
     case IntFormat::Binary:
-      rewriter.replaceOpWithNewOp<sim::FormatBinOp>(op, adaptor.getValue(),
-                                                    adaptor.getEnablePadding());
+      rewriter.replaceOpWithNewOp<sim::FormatBinOp>(
+          op, adaptor.getValue(), adaptor.getSpecifierWidth());
       return success();
     case IntFormat::Octal:
-      rewriter.replaceOpWithNewOp<sim::FormatOctOp>(op, adaptor.getValue(),
-                                                    adaptor.getEnablePadding());
+      rewriter.replaceOpWithNewOp<sim::FormatOctOp>(
+          op, adaptor.getValue(), adaptor.getSpecifierWidth());
       return success();
     case IntFormat::HexLower:
+      rewriter.replaceOpWithNewOp<sim::FormatHexOp>(
+          op, adaptor.getValue(), adaptor.getSpecifierWidth(), false);
+      return success();
     case IntFormat::HexUpper:
-      rewriter.replaceOpWithNewOp<sim::FormatHexOp>(op, adaptor.getValue(),
-                                                    adaptor.getEnablePadding());
+      rewriter.replaceOpWithNewOp<sim::FormatHexOp>(
+          op, adaptor.getValue(), adaptor.getSpecifierWidth(), true);
       return success();
     default:
       return rewriter.notifyMatchFailure(op, "unsupported int format");

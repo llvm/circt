@@ -1997,17 +1997,18 @@ def FormatIntOp : MooreOp<"fmt.int", [Pure]> {
   let arguments = (ins
     IntType:$value,
     IntFormatAttr:$format,
-    I32Attr:$width,
+    I32Attr:$specifierWidth,
     IntAlignAttr:$alignment,
     IntPaddingAttr:$padding,
-    BoolAttr:$enablePadding
+    BoolAttr:$isSigned
   );
   let results = (outs FormatStringType:$result);
   let assemblyFormat = [{
     $format $value `,`
-    `width` $width `,`
+    `width` $specifierWidth `,`
     `align` $alignment `,`
-    `pad` $padding
+    `pad` $padding `,`
+    `signed` $isSigned
     attr-dict `:` type($value)
   }];
 }
