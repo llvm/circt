@@ -324,3 +324,19 @@ firrtl.circuit "NonHWWiresHaveDroppableNames" {
     %w = firrtl.wire interesting_name : !firrtl.openbundle<a: uint<1>, b: probe<uint<1>>>
   }
 }
+
+// -----
+
+// CHECK-LABEL: circuit "DomainInfo"
+firrtl.circuit "DomainInfo" {
+  firrtl.domain @ClockDomain
+  // CHECK:      firrtl.module @DomainInfo
+  // CHECK-SAME:   out %a: !firrtl.bundle<b: uint<1>> domains [%A]
+  // CHECK-SAME:   out %a_c: !firrtl.probe<uint<1>> domains [%A]
+  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  firrtl.module @DomainInfo(
+    out %a: !firrtl.openbundle<b: uint<1>, c: probe<uint<1>>> domains [%A],
+    in %A: !firrtl.domain of @ClockDomain
+  ) {
+  }
+}
