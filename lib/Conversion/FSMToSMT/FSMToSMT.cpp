@@ -1086,8 +1086,6 @@ void FSMToSMTPass::runOnOperation() {
   LoweringConfig cfg;
   cfg.withTime = withTime;
   // Normalize option string.
-  std::string mode = bitVecOrInt;
-  std::transform(mode.begin(), mode.end(), mode.begin(), ::tolower);
   // if (mode == "int" || mode == "ints" || mode == "integer")
   //   cfg.useBitVec = false;
   // else
