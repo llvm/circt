@@ -208,8 +208,13 @@ struct FormatStringParser {
     auto padding =
         format == IntFormat::Decimal ? IntPadding::Space : IntPadding::Zero;
 
-    fragments.push_back(moore::FormatIntOp::create(
-        builder, loc, value, format, width, alignment, padding, isSigned));
+    if (format == IntFormat::Decimal) {
+      fragments.push_back(moore::FormatIntOp::create(
+          builder, loc, value, format, width, alignment, padding, isSigned));
+    } else {
+      fragments.push_back(moore::FormatIntOp::create(
+          builder, loc, value, format, width, alignment, padding));
+    }
     return success();
   }
 

@@ -186,7 +186,12 @@ def FormatHexOp : SimOp<"fmt.hex", [Pure]> {
 
   let hasFolder = true;
 
-  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+  let assemblyFormat = [{
+    $value `,`
+    `width` $specifierWidth `,`
+    `isUpper`  $isHexUppercase
+    attr-dict `:` qualified(type($value))
+  }];
 }
 
 def FormatOctOp : SimOp<"fmt.oct", [Pure]> {
@@ -206,7 +211,11 @@ def FormatOctOp : SimOp<"fmt.oct", [Pure]> {
 
   let hasFolder = true;
 
-  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+  let assemblyFormat = [{
+    $value `,`
+    `width` $specifierWidth
+    attr-dict `:` qualified(type($value))
+  }];
 }
 
 def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
@@ -224,7 +233,11 @@ def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
 
   let hasFolder = true;
 
-  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+  let assemblyFormat = [{
+    $value `,`
+    `width` $specifierWidth
+    attr-dict `:` qualified(type($value))
+  }];
 }
 
 
@@ -252,13 +265,17 @@ def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
     Backends are recommended to not exceed the required amount of padding.
   }];
 
-  let arguments = (ins AnyInteger:$value, I32Attr:$specifierWidth, BoolAttr:$isSigned);
+  let arguments = (ins AnyInteger:$value,
+    I32Attr:$specifierWidth, BoolAttr:$isSigned);
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
 
   let assemblyFormat = [{
-    (`signed` $isSigned^)? $value attr-dict `:` qualified(type($value))
+    $value `,`
+    `width` $specifierWidth `,`
+    `signed` $isSigned
+    attr-dict `:` qualified(type($value))
   }];
 
   let extraClassDeclaration = [{

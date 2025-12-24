@@ -2000,15 +2000,15 @@ def FormatIntOp : MooreOp<"fmt.int", [Pure]> {
     I32Attr:$specifierWidth,
     IntAlignAttr:$alignment,
     IntPaddingAttr:$padding,
-    BoolAttr:$isSigned
+    UnitAttr:$isSigned
   );
   let results = (outs FormatStringType:$result);
   let assemblyFormat = [{
     $format $value `,`
     `width` $specifierWidth `,`
     `align` $alignment `,`
-    `pad` $padding `,`
-    `signed` $isSigned
+    `pad` $padding 
+    (`,` `signed` $isSigned^)?
     attr-dict `:` type($value)
   }];
 }
