@@ -122,7 +122,11 @@ OpFoldResult FormatDecOp::fold(FoldAdaptor adaptor) {
     SmallVector<char, 16> strBuf;
     intAttr.getValue().toString(strBuf, 10U, adaptor.getIsSigned());
 
-    unsigned totalWidth = std::max(strBuf.size(), static_cast<size_t>(adaptor.getSpecifierWidth()));
+    unsigned totalWidth = std::max(
+        strBuf.size(), static_cast<size_t>(adaptor.getSpecifierWidth()));
+    unsigned width = intAttr.getType().getIntOrFloatBitWidth();
+    totalWidth = std::max(
+        totalWidth, FormatDecOp::getDecimalWidth(width, adaptor.getIsSigned()));
     unsigned padWidth =
         totalWidth > strBuf.size() ? totalWidth - strBuf.size() : 0;
 
@@ -142,7 +146,8 @@ OpFoldResult FormatHexOp::fold(FoldAdaptor adaptor) {
                                 /*formatAsCLiteral*/ false,
                                 /*UpperCase*/ adaptor.getIsHexUppercase());
 
-    unsigned totalWidth = std::max(strBuf.size(), static_cast<size_t>(adaptor.getSpecifierWidth()));
+    unsigned totalWidth = std::max(
+        strBuf.size(), static_cast<size_t>(adaptor.getSpecifierWidth()));
     unsigned padWidth =
         totalWidth > strBuf.size() ? totalWidth - strBuf.size() : 0;
 
@@ -162,7 +167,8 @@ OpFoldResult FormatOctOp::fold(FoldAdaptor adaptor) {
                                 /*formatAsCLiteral*/ false,
                                 /*UpperCase*/ false);
 
-    unsigned totalWidth = std::max(strBuf.size(), static_cast<size_t>(adaptor.getSpecifierWidth()));
+    unsigned totalWidth = std::max(
+        strBuf.size(), static_cast<size_t>(adaptor.getSpecifierWidth()));
     unsigned padWidth =
         totalWidth > strBuf.size() ? totalWidth - strBuf.size() : 0;
 
@@ -180,7 +186,8 @@ OpFoldResult FormatBinOp::fold(FoldAdaptor adaptor) {
     SmallVector<char, 32> strBuf;
     intAttr.getValue().toString(strBuf, 2U, false);
 
-    unsigned totalWidth = std::max(strBuf.size(), static_cast<size_t>(adaptor.getSpecifierWidth()));
+    unsigned totalWidth = std::max(
+        strBuf.size(), static_cast<size_t>(adaptor.getSpecifierWidth()));
     unsigned padWidth =
         totalWidth > strBuf.size() ? totalWidth - strBuf.size() : 0;
 
