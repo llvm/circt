@@ -3,7 +3,7 @@
 **circt-verilog** \[_options_] \[_filename_]
 
 A (System) Verilog parser that generates CIRCT code using the core dialects. 
-The `circ-verilog` tool depends on the [slang](https://github.com/MikePopoloski/slang) parser and as such requires a specific build configuration.
+The `circ-verilog` tool depends on the [slang](https://github.com/MikePopoloski/slang) parser and as such requires a specific build configuration. The supported subset of System Verilog is actively growing and can be tracked via the [SV Tests dashboard](https://chipsalliance.github.io/sv-tests-results/).
 
 ### Build
 Add to your circt cmake command:`-DCIRCT_SLANG_FRONTEND_ENABLED=ON`.
