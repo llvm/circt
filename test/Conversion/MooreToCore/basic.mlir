@@ -391,16 +391,18 @@ func.func @FormatStrings(%arg0: !moore.i42) {
   %0 = moore.fmt.literal "hello"
   // CHECK: sim.fmt.concat ([[TMP]], [[TMP]])
   %1 = moore.fmt.concat (%0, %0)
-  // CHECK: sim.fmt.dec %arg0 : i42
-  moore.fmt.int decimal %arg0, width 42, align right, pad space : i42
-  // CHECK: sim.fmt.bin %arg0 : i42
+  // CHECK: sim.fmt.dec %arg0, width 13, signed true : i42
+  moore.fmt.int decimal %arg0, width 13, align right, pad space, signed : i42
+  // CHECK: sim.fmt.dec %arg0, width 13, signed false : i42
+  moore.fmt.int decimal %arg0, width 13, align right, pad space : i42
+  // CHECK: sim.fmt.bin %arg0, width 42 : i42
   moore.fmt.int binary %arg0, width 42, align right, pad space : i42
-  // CHECK: sim.fmt.oct %arg0 : i42
-  moore.fmt.int octal %arg0, width 42, align right, pad space : i42
-  // CHECK: sim.fmt.hex %arg0 : i42
-  moore.fmt.int hex_lower %arg0, width 42, align right, pad space : i42
-  // CHECK: sim.fmt.hex %arg0 : i42
-  moore.fmt.int hex_upper %arg0, width 42, align right, pad space : i42
+  // CHECK: sim.fmt.oct %arg0, width 14 : i42
+  moore.fmt.int octal %arg0, width 14, align right, pad space : i42
+  // CHECK: sim.fmt.hex %arg0, width 11, isUpper false : i42
+  moore.fmt.int hex_lower %arg0, width 11, align right, pad space : i42
+  // CHECK: sim.fmt.hex %arg0, width 11, isUpper true : i42
+  moore.fmt.int hex_upper %arg0, width 11, align right, pad space : i42
   // CHECK: sim.proc.print [[TMP]]
   moore.builtin.display %0
   return

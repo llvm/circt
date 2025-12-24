@@ -411,6 +411,8 @@ func.func @FormatStrings(%arg0: !moore.format_string, %arg1: !moore.i42) {
   moore.fmt.int binary %arg1, width 42, align right, pad space : i42
   // CHECK: moore.fmt.int octal %arg1, width 42, align left, pad zero : i42
   moore.fmt.int octal %arg1, width 42, align left, pad zero : i42
+  // CHECK: moore.fmt.int decimal %arg1, width 42, align left, pad zero, signed : i42
+  moore.fmt.int decimal %arg1, width 42, align left, pad zero, signed : i42
   // CHECK: moore.fmt.int decimal %arg1, width 42, align left, pad zero : i42
   moore.fmt.int decimal %arg1, width 42, align left, pad zero : i42
   // CHECK: moore.fmt.int hex_lower %arg1, width 42, align left, pad zero : i42

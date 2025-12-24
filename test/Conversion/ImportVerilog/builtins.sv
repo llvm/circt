@@ -99,15 +99,15 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   // CHECK: moore.builtin.display [[TMP]]
   $write("%f", x);
 
-  // CHECK: moore.fmt.int decimal [[X]], width 10, align right, pad space : i32
+  // CHECK: moore.fmt.int decimal [[X]], width 10, align right, pad space, signed : i32
   $write("%d", x);
-  // CHECK: moore.fmt.int decimal [[X]], width 10, align right, pad space : i32
+  // CHECK: moore.fmt.int decimal [[X]], width 10, align right, pad space, signed : i32
   $write("%D", x);
-  // CHECK: moore.fmt.int decimal [[X]], width 0, align right, pad space : i32
+  // CHECK: moore.fmt.int decimal [[X]], width 0, align right, pad space, signed : i32
   $write("%0d", x);
-  // CHECK: moore.fmt.int decimal [[X]], width 19, align right, pad space : i32
+  // CHECK: moore.fmt.int decimal [[X]], width 19, align right, pad space, signed : i32
   $write("%19d", x);
-  // CHECK: moore.fmt.int decimal [[X]], width 19, align left, pad space : i32
+  // CHECK: moore.fmt.int decimal [[X]], width 19, align left, pad space, signed : i32
   $write("%-19d", x);
 
   // CHECK: moore.fmt.int hex_lower [[X]], width 8, align right, pad zero : i32
@@ -129,7 +129,7 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   // CHECK: moore.fmt.int hex_lower [[X]], width 19, align left, pad zero : i32
   $write("%-019h", x);
 
-  // CHECK: [[TMP:%.+]] = moore.fmt.int decimal [[X]], width 10, align right, pad space : i32
+  // CHECK: [[TMP:%.+]] = moore.fmt.int decimal [[X]], width 10, align right, pad space, signed : i32
   // CHECK: moore.builtin.display [[TMP]]
   $write(x);
   // CHECK: [[TMP:%.+]] = moore.fmt.int binary [[X]], width 32, align right, pad zero : i32
@@ -142,7 +142,7 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   // CHECK: moore.builtin.display [[TMP]]
   $writeh(x);
 
-  // CHECK: [[TMP1:%.+]] = moore.fmt.int decimal [[X]], width 10, align right, pad space : i32
+  // CHECK: [[TMP1:%.+]] = moore.fmt.int decimal [[X]], width 10, align right, pad space, signed : i32
   // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
   // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
   // CHECK: moore.builtin.display [[TMP3]]
