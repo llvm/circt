@@ -205,16 +205,15 @@ bool SigExtractOp::canRewire(const DestructurableMemorySlot &slot,
   }
 
   int64_t width = getLLHDTypeWidth(type);
+  Type indexType = IndexType::get(getContext());
   for (int64_t i = 0; i < width; ++i) {
-    auto index =
-        IntegerAttr::get(IndexType::get(getContext()), idx.getZExtValue() + i);
+    auto index = IntegerAttr::get(indexType, idx.getZExtValue() + i);
     if (!slot.subelementTypes.contains(index))
       return false;
   }
 
   for (int64_t i = 0; i < width; ++i) {
-    auto index =
-        IntegerAttr::get(IndexType::get(getContext()), idx.getZExtValue() + i);
+    auto index = IntegerAttr::get(indexType, idx.getZExtValue() + i);
     usedIndices.insert(index);
     mustBeSafelyUsed.emplace_back<MemorySlot>({getResult(), type});
   }
@@ -229,6 +228,7 @@ DeletionKind SigExtractOp::rewire(const DestructurableMemorySlot &slot,
   bool result = matchPattern(getLowBit(), m_ConstantInt(&idx));
   assert(result);
   int64_t width = getLLHDTypeWidth(getResult().getType());
+  Type indexType = IndexType::get(getContext());
 
   for (Operation *user : llvm::make_early_inc_range(getResult().getUsers())) {
     builder.setInsertionPoint(user);
@@ -236,8 +236,7 @@ DeletionKind SigExtractOp::rewire(const DestructurableMemorySlot &slot,
     if (auto probeOp = dyn_cast<ProbeOp>(user)) {
       SmallVector<Value> values;
       for (int64_t i = 0; i < width; ++i) {
-        auto index = IntegerAttr::get(IndexType::get(getContext()),
-                                      idx.getZExtValue() + i);
+        auto index = IntegerAttr::get(indexType, idx.getZExtValue() + i);
         auto it = subslots.find(index);
         assert(it != subslots.end());
         Value value = it->getSecond().ptr;
@@ -253,8 +252,7 @@ DeletionKind SigExtractOp::rewire(const DestructurableMemorySlot &slot,
     // Decompose a DriveOp into one DriveOp per subslot.
     auto driveOp = cast<DriveOp>(user);
     for (int64_t i = 0; i < width; ++i) {
-      auto index = IntegerAttr::get(IndexType::get(getContext()),
-                                    idx.getZExtValue() + i);
+      auto index = IntegerAttr::get(indexType, idx.getZExtValue() + i);
       auto it = subslots.find(index);
       assert(it != subslots.end());
       Value sig = it->getSecond().ptr;
