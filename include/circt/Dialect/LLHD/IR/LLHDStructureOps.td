@@ -143,7 +143,7 @@ def CombinationalOp : LLHDOp<"combinational", [
 def WaitOp : LLHDOp<"wait", [
   AttrSizedOperandSegments,
   HasParent<"ProcessOp">,
-  Terminator,
+  Terminator
 ]> {
   let summary = "Suspend execution of a process";
   let description = [{
