@@ -2013,8 +2013,10 @@ struct FormatIntOpConversion : public OpConversionPattern<FormatIntOp> {
     char padChar = adaptor.getPadding() == IntPadding::Space ? 32 : 48;
     mlir::IntegerAttr padCharAttr = rewriter.getI8IntegerAttr(padChar);
     auto widthAttr = adaptor.getSpecifierWidthAttr();
+
     bool isLeftAligned = adaptor.getAlignment() == IntAlign::Left;
     mlir::BoolAttr isLeftAlignedAttr = rewriter.getBoolAttr(isLeftAligned);
+
     switch (op.getFormat()) {
     case IntFormat::Decimal:
       rewriter.replaceOpWithNewOp<sim::FormatDecOp>(
