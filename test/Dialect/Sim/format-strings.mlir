@@ -9,8 +9,8 @@ hw.module @constant_fold0(in %zeroWitdh: i0, out res: !sim.fstring) {
   %nocat = sim.fmt.concat ()
 
   %w0b = sim.fmt.bin %zeroWitdh, width 0 : i0
-  %w0u = sim.fmt.dec %zeroWitdh, width 0, signed false : i0
-  %w0s = sim.fmt.dec %zeroWitdh, width 0, signed true : i0
+  %w0u = sim.fmt.dec %zeroWitdh, width 0 : i0
+  %w0s = sim.fmt.dec %zeroWitdh, width 0, signed : i0
   %w0h = sim.fmt.hex %zeroWitdh, width 0, isUpper false : i0
   %w0H = sim.fmt.hex %zeroWitdh, width 0, isUpper true : i0
   %w0o = sim.fmt.oct %zeroWitdh, width 0 : i0
@@ -18,8 +18,8 @@ hw.module @constant_fold0(in %zeroWitdh: i0, out res: !sim.fstring) {
 
   %cst0_1 = hw.constant 0 : i1
   %w1b0 = sim.fmt.bin %cst0_1, width 1 : i1
-  %w1u0 = sim.fmt.dec %cst0_1, width 1, signed false : i1
-  %w1s0 = sim.fmt.dec %cst0_1, width 1, signed true : i1
+  %w1u0 = sim.fmt.dec %cst0_1, width 1 : i1
+  %w1s0 = sim.fmt.dec %cst0_1, width 1, signed : i1
   %w1h0 = sim.fmt.hex %cst0_1, width 1, isUpper false : i1
   %w1H0 = sim.fmt.hex %cst0_1, width 1, isUpper true : i1
   %w1o0 = sim.fmt.oct %cst0_1, width 1 : i1
@@ -27,8 +27,8 @@ hw.module @constant_fold0(in %zeroWitdh: i0, out res: !sim.fstring) {
 
   %cst1_1 = hw.constant -1 : i1
   %w1b1 = sim.fmt.bin %cst1_1, width 1 : i1
-  %w1u1 = sim.fmt.dec %cst1_1, width 1, signed false : i1
-  %w1s1 = sim.fmt.dec %cst1_1, width 1, signed true : i1
+  %w1u1 = sim.fmt.dec %cst1_1, width 1 : i1
+  %w1s1 = sim.fmt.dec %cst1_1, width 1, signed : i1
   %w1h1 = sim.fmt.hex %cst1_1, width 1, isUpper false : i1
   %w1H1 = sim.fmt.hex %cst1_1, width 1, isUpper true : i1
   %w1o1 = sim.fmt.oct %cst1_1, width 1 : i1
@@ -36,8 +36,8 @@ hw.module @constant_fold0(in %zeroWitdh: i0, out res: !sim.fstring) {
 
   %cst3_4 = hw.constant 3 : i4
   %w4b3 = sim.fmt.bin %cst3_4, width 4 : i4
-  %w4u3 = sim.fmt.dec %cst3_4, width 2, signed false : i4
-  %w4s3 = sim.fmt.dec %cst3_4, width 2, signed true : i4
+  %w4u3 = sim.fmt.dec %cst3_4, width 2 : i4
+  %w4s3 = sim.fmt.dec %cst3_4, width 2, signed : i4
   %w4h3 = sim.fmt.hex %cst3_4, width 1, isUpper false : i4
   %w4H3 = sim.fmt.hex %cst3_4, width 1, isUpper true : i4
   %w4o3 = sim.fmt.oct %cst3_4, width 2 : i4
@@ -45,8 +45,8 @@ hw.module @constant_fold0(in %zeroWitdh: i0, out res: !sim.fstring) {
 
   %cst10_5 = hw.constant 10 : i5
   %w5b10 = sim.fmt.bin %cst10_5, width 5 : i5
-  %w5u10 = sim.fmt.dec %cst10_5, width 2, signed false : i5
-  %w5s10 = sim.fmt.dec %cst10_5, width 2, signed true : i5
+  %w5u10 = sim.fmt.dec %cst10_5, width 2 : i5
+  %w5s10 = sim.fmt.dec %cst10_5, width 2, signed : i5
   %w5h10 = sim.fmt.hex %cst10_5, width 2, isUpper false : i5
   %w5H10 = sim.fmt.hex %cst10_5, width 2, isUpper true : i5
   %w5o10 = sim.fmt.oct %cst10_5, width 2 : i5
@@ -54,8 +54,8 @@ hw.module @constant_fold0(in %zeroWitdh: i0, out res: !sim.fstring) {
 
   %cst128_8 = hw.constant 128 : i8
   %w8b128 = sim.fmt.bin %cst128_8, width 8 : i8
-  %w8u128 = sim.fmt.dec %cst128_8, width 3, signed false : i8
-  %w8s128 = sim.fmt.dec %cst128_8, width 3, signed true : i8
+  %w8u128 = sim.fmt.dec %cst128_8, width 3 : i8
+  %w8s128 = sim.fmt.dec %cst128_8, width 3, signed : i8
   %w8h128 = sim.fmt.hex %cst128_8, width 2, isUpper false : i8
   %w8H128 = sim.fmt.hex %cst128_8, width 2, isUpper true : i8
   %w8o128 = sim.fmt.oct %cst128_8, width 3 : i8
@@ -63,8 +63,8 @@ hw.module @constant_fold0(in %zeroWitdh: i0, out res: !sim.fstring) {
 
   %cstcafe_22 = hw.constant 0xcafe : i22
   %w22bcafe = sim.fmt.bin %cstcafe_22, width 22 : i22
-  %w22ucafe = sim.fmt.dec %cstcafe_22, width 7, signed false : i22
-  %w22scafe = sim.fmt.dec %cstcafe_22, width 7, signed true : i22
+  %w22ucafe = sim.fmt.dec %cstcafe_22, width 7 : i22
+  %w22scafe = sim.fmt.dec %cstcafe_22, width 7, signed : i22
   %w22hcafe = sim.fmt.hex %cstcafe_22, width 6, isUpper false : i22
   %w22Hcafe = sim.fmt.hex %cstcafe_22, width 6, isUpper true : i22
   %w22ocafe = sim.fmt.oct %cstcafe_22, width 8 : i22
@@ -88,8 +88,8 @@ hw.module @constant_fold1(out res: !sim.fstring) {
 
   %cst42_123 = hw.constant -4242424242424242424242 : i123
   %w123b42 = sim.fmt.bin %cst42_123, width 123 : i123
-  %w123u42 = sim.fmt.dec %cst42_123, width 37, signed false : i123
-  %w123s42 = sim.fmt.dec %cst42_123, width 37, signed true : i123
+  %w123u42 = sim.fmt.dec %cst42_123, width 37 : i123
+  %w123s42 = sim.fmt.dec %cst42_123, width 37, signed : i123
   %w123h42 = sim.fmt.hex %cst42_123, width 31, isUpper false : i123
   %w123H42 = sim.fmt.hex %cst42_123, width 31, isUpper true : i123
   %w123o42 = sim.fmt.oct %cst42_123, width 41 : i123
@@ -144,7 +144,7 @@ hw.module @constant_fold3(in %zeroWitdh: i0, out res: !sim.fstring) {
 // CHECK-DAG:   %[[LO:.+]] = sim.fmt.literal "Oct: "
 
 // CHECK-DAG:   %[[FH:.+]] = sim.fmt.hex %val, width 2, isUpper false : i8
-// CHECK-DAG:   %[[FD:.+]] = sim.fmt.dec %val, width 2, signed false : i8
+// CHECK-DAG:   %[[FD:.+]] = sim.fmt.dec %val, width 2 : i8
 // CHECK-DAG:   %[[FB:.+]] = sim.fmt.bin %val, width 8 : i8
 // CHECK-DAG:   %[[FO:.+]] = sim.fmt.oct %val, width 3 : i8
 
@@ -157,7 +157,7 @@ hw.module @flatten_concat1(in %val : i8, out res: !sim.fstring) {
   %binCat = sim.fmt.concat (%binLit, %binVal)
 
   %decLit = sim.fmt.literal "Dec: "
-  %decVal = sim.fmt.dec %val, width 2, signed false : i8
+  %decVal = sim.fmt.dec %val, width 2 : i8
   %decCat = sim.fmt.concat (%decLit, %decVal, %nocat)
 
   %nocat = sim.fmt.concat ()

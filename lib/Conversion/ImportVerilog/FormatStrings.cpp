@@ -110,6 +110,7 @@ struct FormatStringParser {
 
     // Consume the next argument, which will provide the value to be
     // formatted.
+    llvm::errs() << "full format specifier is " << fullSpecifier << '\n';
     assert(!arguments.empty() && "Slang guarantees correct arg count");
     const auto &arg = *arguments[0];
     arguments = arguments.drop_front();
@@ -154,7 +155,9 @@ struct FormatStringParser {
     Value val;
     auto rVal = context.convertRvalueExpression(arg);
     // To infer whether or not the value is signed while printing as a decimal
-    bool isSigned = arg.type->isSigned();
+    // Since it only matters if it's a decimal, we add `format ==
+    // IntFormat::Decimal`
+    bool isSigned = arg.type->isSigned() && format == IntFormat::Decimal;
     if (!rVal)
       return failure();
 
@@ -186,35 +189,17 @@ struct FormatStringParser {
     if (!value)
       return failure();
 
-    // Determine the width to which the formatted integer should be padded.
-    unsigned width;
-    if (options.width) {
-      width = *options.width;
-    } else {
-      width = cast<moore::IntType>(value.getType()).getWidth();
-      if (format == IntFormat::Octal)
-        // 3 bits per octal digit
-        width = (width + 2) / 3;
-      else if (format == IntFormat::HexLower || format == IntFormat::HexUpper)
-        // 4 bits per hex digit
-        width = (width + 3) / 4;
-      else if (format == IntFormat::Decimal)
-        // ca. 3.322 bits per decimal digit (ln(10)/ln(2))
-        width = std::ceil(width * std::log(2) / std::log(10));
-    }
-
     // Determine the alignment and padding.
     auto alignment = options.leftJustify ? IntAlign::Left : IntAlign::Right;
+    llvm::errs() << "alignment left: " << (alignment == IntAlign::Left) << '\n';
     auto padding =
         format == IntFormat::Decimal ? IntPadding::Space : IntPadding::Zero;
-
-    if (format == IntFormat::Decimal) {
-      fragments.push_back(moore::FormatIntOp::create(
-          builder, loc, value, format, width, alignment, padding, isSigned));
-    } else {
-      fragments.push_back(moore::FormatIntOp::create(
-          builder, loc, value, format, width, alignment, padding));
+    mlir::IntegerAttr widthAttr = nullptr;
+    if (options.width) {
+      widthAttr = builder.getI32IntegerAttr(*options.width);
     }
+    fragments.push_back(moore::FormatIntOp::create(
+        builder, loc, value, format, alignment, padding, widthAttr, isSigned));
     return success();
   }
 
