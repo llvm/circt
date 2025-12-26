@@ -296,7 +296,6 @@ def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
     (`,` `left_align` $isLeftAligned^)?
     (`,` `paddingChar` $paddingChar^)?
     (`,` `width` $specifierWidth^)?
-    (`,` `signed` $isSigned^)?
     attr-dict `:` qualified(type($value))
   }];
 
