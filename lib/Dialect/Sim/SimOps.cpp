@@ -131,7 +131,7 @@ OpFoldResult FormatDecOp::fold(FoldAdaptor adaptor) {
 
     padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
 
-    SmallVector<char, 8> padding(padWidth, adaptor.getPaddingChar());
+    SmallVector<char, 10> padding(padWidth, adaptor.getPaddingChar());
     if (adaptor.getIsLeftAligned()) {
       return StringAttr::get(getContext(), Twine(strBuf) + Twine(padding));
     }
@@ -150,23 +150,30 @@ OpFoldResult FormatHexOp::fold(FoldAdaptor adaptor) {
                                 /*formatAsCLiteral*/ false,
                                 /*UpperCase*/ adaptor.getIsHexUppercase());
 
-    unsigned padWidth;
+    unsigned width = intAttr.getType().getIntOrFloatBitWidth();
+    unsigned padWidth = width / 4;
+    if (width % 4 != 0)
+      padWidth++;
+
+    unsigned numSpaces;
     if (adaptor.getSpecifierWidth().has_value()) {
-      padWidth = adaptor.getSpecifierWidth().value();
+      numSpaces = std::max(
+          0U, adaptor.getSpecifierWidth().value() -
+                  std::max(padWidth, static_cast<unsigned>(strBuf.size())));
     } else {
-      unsigned width = intAttr.getType().getIntOrFloatBitWidth();
-      padWidth = width / 4;
-      if (width % 4 != 0)
-        padWidth++;
+      numSpaces = 0;
     }
 
+    SmallVector<char, 1> spacePadding(numSpaces, ' ');
     padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
 
     SmallVector<char, 8> padding(padWidth, adaptor.getPaddingChar());
     if (adaptor.getIsLeftAligned()) {
-      return StringAttr::get(getContext(), Twine(strBuf) + Twine(padding));
+      return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf) +
+                                               Twine(spacePadding));
     }
-    return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
+    return StringAttr::get(getContext(), Twine(spacePadding) + Twine(padding) +
+                                             Twine(strBuf));
   }
   return {};
 }
@@ -181,23 +188,30 @@ OpFoldResult FormatOctOp::fold(FoldAdaptor adaptor) {
                                 /*formatAsCLiteral*/ false,
                                 /*UpperCase*/ false);
 
-    unsigned padWidth;
+    unsigned width = intAttr.getType().getIntOrFloatBitWidth();
+    unsigned padWidth = width / 3;
+    if (width % 3 != 0)
+      padWidth++;
+
+    unsigned numSpaces;
     if (adaptor.getSpecifierWidth().has_value()) {
-      padWidth = adaptor.getSpecifierWidth().value();
+      numSpaces = std::max(
+          0U, adaptor.getSpecifierWidth().value() -
+                  std::max(padWidth, static_cast<unsigned>(strBuf.size())));
     } else {
-      unsigned width = intAttr.getType().getIntOrFloatBitWidth();
-      padWidth = width / 3;
-      if (width % 3 != 0)
-        padWidth++;
+      numSpaces = 0;
     }
 
+    SmallVector<char, 1> spacePadding(numSpaces, ' ');
     padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
 
     SmallVector<char, 11> padding(padWidth, adaptor.getPaddingChar());
     if (adaptor.getIsLeftAligned()) {
-      return StringAttr::get(getContext(), Twine(strBuf) + Twine(padding));
+      return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf) +
+                                               Twine(spacePadding));
     }
-    return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
+    return StringAttr::get(getContext(), Twine(spacePadding) + Twine(padding) +
+                                             Twine(strBuf));
   }
   return {};
 }
@@ -209,20 +223,28 @@ OpFoldResult FormatBinOp::fold(FoldAdaptor adaptor) {
   if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(adaptor.getValue())) {
     SmallVector<char, 32> strBuf;
     intAttr.getValue().toString(strBuf, 2U, false);
-    unsigned padWidth;
+    unsigned padWidth = intAttr.getType().getIntOrFloatBitWidth();
+
+    unsigned numSpaces;
     if (adaptor.getSpecifierWidth().has_value()) {
-      padWidth = adaptor.getSpecifierWidth().value();
+      numSpaces = std::max(
+          0U, adaptor.getSpecifierWidth().value() -
+                  std::max(padWidth, static_cast<unsigned>(strBuf.size())));
     } else {
-      padWidth = intAttr.getType().getIntOrFloatBitWidth();
+      numSpaces = 0;
     }
+
+    SmallVector<char, 1> spacePadding(numSpaces, ' ');
 
     padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
 
     SmallVector<char, 32> padding(padWidth, adaptor.getPaddingChar());
     if (adaptor.getIsLeftAligned()) {
-      return StringAttr::get(getContext(), Twine(strBuf) + Twine(padding));
+      return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf) +
+                                               Twine(spacePadding));
     }
-    return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
+    return StringAttr::get(getContext(), Twine(spacePadding) + Twine(padding) +
+                                             Twine(strBuf));
   }
   return {};
 }

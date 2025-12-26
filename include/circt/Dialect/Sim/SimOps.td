@@ -193,9 +193,6 @@ def FormatHexOp : SimOp<"fmt.hex", [Pure]> {
   let assemblyFormat = [{
     $value `,`
     `isUpper`  $isHexUppercase
-    (`,` `left_align` $isLeftAligned^)?
-    (`,` `paddingChar` $paddingChar^)?
-    (`,` `width` $specifierWidth^)?
     attr-dict `:` qualified(type($value))
   }];
 }
@@ -223,9 +220,6 @@ def FormatOctOp : SimOp<"fmt.oct", [Pure]> {
 
   let assemblyFormat = [{
     $value 
-    (`,` `left_align` $isLeftAligned^)?
-    (`,` `paddingChar` $paddingChar^)?
-    (`,` `width` $specifierWidth^)?
     attr-dict `:` qualified(type($value))
   }];
 }
@@ -250,9 +244,6 @@ def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
 
   let assemblyFormat = [{
     $value
-    (`,` `left_align` $isLeftAligned^)?
-    (`,` `paddingChar` $paddingChar^)?
-    (`,` `width` $specifierWidth^)?
     attr-dict `:` qualified(type($value))
   }];
 }
@@ -293,9 +284,6 @@ def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
 
   let assemblyFormat = [{
     $value
-    (`,` `left_align` $isLeftAligned^)?
-    (`,` `paddingChar` $paddingChar^)?
-    (`,` `width` $specifierWidth^)?
     attr-dict `:` qualified(type($value))
   }];
 
