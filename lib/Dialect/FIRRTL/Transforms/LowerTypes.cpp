@@ -322,6 +322,78 @@ struct AttrCache {
   ArrayAttr aEmpty;
 };
 
+/// Helper class to handle domain lowering consistently across modules,
+/// extmodules, and instances. This class tracks domain port indices and
+/// provides methods to rewrite domain associations after port lowering.
+class DomainLoweringHelper {
+public:
+  /// Construct a helper by scanning the original port types for domain types.
+  /// For modules/extmodules, pass the port types attribute array.
+  /// For instances, pass the result types directly.
+  DomainLoweringHelper(MLIRContext *context, ArrayRef<Attribute> portTypes)
+      : context(context) {
+    for (auto [index, typeAttr] : llvm::enumerate(portTypes))
+      if (type_isa<DomainType>(cast<TypeAttr>(typeAttr).getValue()))
+        domainIndexByOrdinal.push_back(index);
+  }
+
+  /// Construct a helper by scanning instance result types for domain types.
+  DomainLoweringHelper(MLIRContext *context, TypeRange resultTypes)
+      : context(context) {
+    for (auto [index, type] : llvm::enumerate(resultTypes))
+      if (type_isa<DomainType>(type))
+        domainIndexByOrdinal.push_back(index);
+  }
+
+  /// Compute the mapping from old domain port indices to new port indices after
+  /// type lowering.  Call this after ports have been lowered but before
+  /// rewriting domain associations.  This overload takes a range of types
+  /// directly (e.g., from instances).
+  void computeDomainMap(TypeRange types) {
+    size_t i = 0, ord = 0;
+    for (auto type : types) {
+      if (type_isa<DomainType>(type))
+        domainMap[domainIndexByOrdinal[ord++]] = i;
+      ++i;
+    }
+  }
+
+  /// Compute the mapping from old domain port indices to new port indices after
+  /// type lowering.  Call this after ports have been lowered but before
+  /// rewriting domain associations.  This overload takes a range of PortInfo
+  /// and extracts types from them (e.g., from modules/extmodules).
+  void computeDomainMap(ArrayRef<PortInfo> ports) {
+    size_t i = 0, ord = 0;
+    for (const auto &port : ports) {
+      if (type_isa<DomainType>(port.type))
+        domainMap[domainIndexByOrdinal[ord++]] = i;
+      ++i;
+    }
+  }
+
+  /// Rewrite a domain attribute to use new port indices. The domain attribute
+  /// contains an array of port indices that need to be updated to reflect the
+  /// new port numbering after type lowering.
+  void rewriteDomain(Attribute &domain) {
+    auto oldAssociations = dyn_cast<ArrayAttr>(domain);
+    if (!oldAssociations)
+      return;
+    SmallVector<Attribute> newAssociations;
+    for (auto oldAttr : oldAssociations)
+      newAssociations.push_back(IntegerAttr::get(
+          IntegerType::get(context, 32, IntegerType::Unsigned),
+          domainMap[cast<IntegerAttr>(oldAttr).getValue().getZExtValue()]));
+    domain = ArrayAttr::get(context, newAssociations);
+  }
+
+private:
+  MLIRContext *context;
+  /// Maps ordinal position of domain ports to their original indices.
+  SmallVector<unsigned> domainIndexByOrdinal;
+  /// Maps old port indices to new port indices after lowering.
+  DenseMap<unsigned, unsigned> domainMap;
+};
+
 // The visitors all return true if the operation should be deleted, false if
 // not.
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
@@ -1041,6 +1113,8 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   SmallVector<unsigned> argsToRemove;
   auto newArgs = extModule.getPorts();
 
+  DomainLoweringHelper domainHelper(context, extModule.getPortTypes());
+
   for (size_t argIndex = 0, argsRemoved = 0; argIndex < newArgs.size();
        ++argIndex) {
     SmallVector<Value> lowering;
@@ -1054,6 +1128,8 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   // Remove block args that have been lowered
   for (auto toRemove : llvm::reverse(argsToRemove))
     newArgs.erase(newArgs.begin() + toRemove);
+
+  domainHelper.computeDomainMap(newArgs);
 
   SmallVector<NamedAttribute, 8> newModuleAttrs;
 
@@ -1081,10 +1157,12 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     newArgSyms.push_back(port.sym);
     newArgLocations.push_back(port.loc);
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
-    if (auto domains = port.domains)
-      newArgDomains.push_back(domains);
-    else
-      newArgDomains.push_back(cache.aEmpty);
+    if (auto &domains = port.domains) {
+      domainHelper.rewriteDomain(port.domains);
+    } else {
+      port.domains = cache.aEmpty;
+    }
+    newArgDomains.push_back(port.domains);
   }
 
   newModuleAttrs.push_back(
@@ -1127,6 +1205,8 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   llvm::BitVector argsToRemove;
   auto newArgs = module.getPorts();
 
+  DomainLoweringHelper domainHelper(context, module.getPortTypes());
+
   size_t argsRemoved = 0;
   for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
     SmallVector<Value> lowerings;
@@ -1153,6 +1233,8 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
     newArgs.erase(newArgs.end() - argsRemoved, newArgs.end());
   }
 
+  domainHelper.computeDomainMap(newArgs);
+
   SmallVector<NamedAttribute, 8> newModuleAttrs;
 
   // Copy over any attributes that weren't original argument attributes.
@@ -1178,10 +1260,12 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
     newArgSyms.push_back(port.sym);
     newArgLocations.push_back(port.loc);
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
-    if (auto domains = port.domains)
-      newPortDomains.push_back(domains);
-    else
-      newPortDomains.push_back(cache.aEmpty);
+    if (auto domains = port.domains) {
+      domainHelper.rewriteDomain(port.domains);
+    } else {
+      port.domains = cache.aEmpty;
+    }
+    newPortDomains.push_back(port.domains);
   }
 
   newModuleAttrs.push_back(
@@ -1450,11 +1534,13 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   auto oldPortAnno = op.getPortAnnotations();
   SmallVector<Direction> newDirs;
   SmallVector<Attribute> newNames;
-  // TODO: Properly lower `newDomains`.
   SmallVector<Attribute> newDomains;
   SmallVector<Attribute> newPortAnno;
   PreserveAggregate::PreserveMode mode = getPreservationModeForPorts(
       cast<FModuleLike>(op.getReferencedOperation(symTbl)));
+
+  // Create domain helper to track domain port indices.
+  DomainLoweringHelper domainHelper(context, op.getResultTypes());
 
   endFields.push_back(0);
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
@@ -1465,7 +1551,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
     if (!peelType(srcType, fieldTypes, mode)) {
       newDirs.push_back(op.getPortDirection(i));
       newNames.push_back(op.getPortNameAttr(i));
-      newDomains.push_back(builder->getArrayAttr({}));
+      newDomains.push_back(op.getPortDomain(i));
       resultTypes.push_back(srcType);
       newPortAnno.push_back(oldPortAnno[i]);
     } else {
@@ -1476,7 +1562,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       for (const auto &field : fieldTypes) {
         newDirs.push_back(direction::get((unsigned)oldDir ^ field.isOutput));
         newNames.push_back(builder->getStringAttr(oldName + field.suffix));
-        newDomains.push_back(builder->getArrayAttr({}));
+        newDomains.push_back(op.getPortDomain(i));
         resultTypes.push_back(mapLoweredType(srcType, field.type));
         auto annos = filterAnnotations(
             context, dyn_cast_or_null<ArrayAttr>(oldPortAnno[i]), srcType,
@@ -1492,6 +1578,13 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   if (skip) {
     return false;
   }
+
+  // Compute the mapping from old domain indices to new domain indices.
+  domainHelper.computeDomainMap(resultTypes);
+
+  // Rewrite domain associations to use the new port numbers.
+  for (auto &domain : newDomains)
+    domainHelper.rewriteDomain(domain);
 
   // FIXME: annotation update
   auto newInstance = InstanceOp::create(
