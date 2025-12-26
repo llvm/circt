@@ -110,7 +110,6 @@ struct FormatStringParser {
 
     // Consume the next argument, which will provide the value to be
     // formatted.
-    llvm::errs() << "full format specifier is " << fullSpecifier << '\n';
     assert(!arguments.empty() && "Slang guarantees correct arg count");
     const auto &arg = *arguments[0];
     arguments = arguments.drop_front();
@@ -191,13 +190,13 @@ struct FormatStringParser {
 
     // Determine the alignment and padding.
     auto alignment = options.leftJustify ? IntAlign::Left : IntAlign::Right;
-    llvm::errs() << "alignment left: " << (alignment == IntAlign::Left) << '\n';
     auto padding =
         format == IntFormat::Decimal ? IntPadding::Space : IntPadding::Zero;
     mlir::IntegerAttr widthAttr = nullptr;
     if (options.width) {
       widthAttr = builder.getI32IntegerAttr(*options.width);
     }
+
     fragments.push_back(moore::FormatIntOp::create(
         builder, loc, value, format, alignment, padding, widthAttr, isSigned));
     return success();
