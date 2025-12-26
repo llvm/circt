@@ -3208,7 +3208,7 @@ firrtl.circuit "WrongInstanceDomainInfo" {
     in %a : !firrtl.uint<1> domains [%A]
   ) {}
   firrtl.module @WrongInstanceDomainInfo() {
-  // expected-error @below {{op domain info for "a" must be [0 : ui32], but got [1 : ui32]}}
+  // expected-error @below {{op domain info for "a" must be '[0 : ui32]', but got '[1 : ui32]'}}
     %foo_A, %foo_B, %foo_a = firrtl.instance foo @Foo(
       in A : !firrtl.domain of @ClockDomain,
       in B : !firrtl.domain of @ClockDomain,
@@ -3231,7 +3231,7 @@ firrtl.circuit "WrongInstanceChoiceDomainInfo" {
     in %a : !firrtl.uint<1> domains [%A]
   ) {}
   firrtl.module @WrongInstanceChoiceDomainInfo() {
-    // expected-error @below {{op domain info for "a" must be [0 : ui32], but got [1 : ui32]}}
+    // expected-error @below {{op domain info for "a" must be '[0 : ui32]', but got '[1 : ui32]'}}
     %foo_A, %foo_B, %foo_a = firrtl.instance_choice foo @Foo alternatives @Platform { @FPGA -> @Foo } (
       in A : !firrtl.domain of @ClockDomain,
       in B : !firrtl.domain of @ClockDomain,
