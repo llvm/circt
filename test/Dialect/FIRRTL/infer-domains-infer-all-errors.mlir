@@ -140,7 +140,7 @@ firrtl.circuit "ConflictingInstanceChoiceDomains" {
   }
 
   firrtl.module @ConflictingInstanceChoiceDomains(in %in1: !firrtl.uint<1>, in %in2: !firrtl.uint<1>) {
-    // expected-error @below {{'firrtl.instance_choice' op domain info for "out" must be [2 : ui32], but got [0 : ui32]}}
+    // expected-error @below {{'firrtl.instance_choice' op domain info for "out" must be '[2 : ui32]', but got '[0 : ui32]'}}
     %inst_in1, %inst_in2, %inst_out = firrtl.instance_choice inst @Foo alternatives @Option { @X -> @Foo, @Y -> @Bar } (in in1: !firrtl.uint<1>, in in2: !firrtl.uint<1>, out out: !firrtl.uint<1>)
     firrtl.connect %inst_in1, %in1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %inst_in2, %in2 : !firrtl.uint<1>, !firrtl.uint<1>
