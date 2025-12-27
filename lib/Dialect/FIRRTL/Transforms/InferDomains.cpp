@@ -55,7 +55,6 @@ static StringAttr getDomainPortTypeName(ArrayAttr info, size_t i) {
 /// From a domain info attribute, get the row of associated domains for a
 /// hardware value at index i.
 static auto getPortDomainAssociation(ArrayAttr info, size_t i) {
-  llvm::errs() << "getPortDomainAssociation info = " << info << "\n";
   if (info.empty())
     return info.getAsRange<IntegerAttr>();
   return cast<ArrayAttr>(info[i]).getAsRange<IntegerAttr>();
@@ -1125,21 +1124,9 @@ static void applyUpdatesToModule(const DomainInfo &info,
                                  TermAllocator &allocator, ExportTable &exports,
                                  DomainTable &table, FModuleOp moduleOp,
                                  const PendingUpdates &pending) {
-  llvm::errs() << "applyUpdatesToModule 1 domain info = "
-               << moduleOp.getDomainInfoAttr() << "\n";
-
-  for (auto [i, ix] : pending.insertions) {
-    llvm::errs() << "  ip = " << i << " : " << ix.domains << "\n";
-  }
 
   // Put the domain ports in place.
   moduleOp.insertPorts(pending.insertions);
-
-  llvm::errs() << "applyUpdatesToModule 2 domain info = "
-               << moduleOp.getDomainInfoAttr() << "\n";
-
-  llvm::errs() << "applyUpdatesToModule 2 domain info = "
-               << moduleOp.getDomainInfoAttr() << "\n";
 
   // Solve any variables and record them as "self-exporting".
   for (auto [var, portIndex] : pending.solutions) {
@@ -1218,8 +1205,6 @@ static LogicalResult updateModuleDomainInfo(const DomainInfo &info,
   auto *context = moduleOp.getContext();
   auto numDomains = info.getNumDomains();
   auto oldModuleDomainInfo = moduleOp.getDomainInfoAttr();
-  llvm::errs() << "updateModuleDomainInfo oldModuleDomainInfo = "
-               << oldModuleDomainInfo << "\n";
   auto numPorts = moduleOp.getNumPorts();
   SmallVector<Attribute> newModuleDomainInfo(numPorts);
 
@@ -1363,7 +1348,6 @@ static LogicalResult updateModule(const DomainInfo &info,
   if (failed(updateModuleBody(info, allocator, table, op)))
     return failure();
 
-  llvm::errs() << "after update = " << op << "\n";
   return success();
 }
 
@@ -1479,7 +1463,6 @@ static LogicalResult inferModule(const DomainInfo &info,
                                  FModuleOp moduleOp) {
   TermAllocator allocator;
   DomainTable table;
-  llvm::errs() << "before process = " << moduleOp << "\n";
 
   if (failed(processModule(info, allocator, table, updates, moduleOp)))
     return failure();
