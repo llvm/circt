@@ -35,6 +35,19 @@ def VerifyClockedAssertLikePass : Pass<"verify-clocked-assert-like",
   }];
 }
 
+def InferContractsPass : Pass<"infer-contracts", "mlir::ModuleOp"> {
+  let summary = "Infers contracts for HW Modules and Verif Formals";
+  let description = [{
+    Naively infers contracts for each `hw.module` and `verif.formal` in the 
+    top-level `module`. The inference is based on the assertions and assumptions 
+    already present in the regions, and conjoins them into a contract. This then 
+    allows existing formal tests to benefit from the modularity enabled by contracts.
+    The behavior of this pass can be seen as an imperfect inverse of the 
+    `lower-contracts` pass.
+  }];
+
+}
+
 def LowerTestsPass : Pass<"verif-lower-tests", "mlir::ModuleOp"> {
   let summary = "Convert Verif tests into HW modules";
   let description = [{
