@@ -20,7 +20,7 @@ class SigPtrIndexBitWidthConstraint<string index, string input>
   : TypesMatchWith<"Index width should be exactly clog2 (size of array)",
                    input, index,
                    [{
-                      IntegerType::get($_self.getContext(), 
+                      IntegerType::get($_self.getContext(),
                         llvm::Log2_64_Ceil(llhd::getLLHDTypeWidth($_self)))
                    }]>;
 
@@ -46,9 +46,11 @@ class SmallerOrEqualResultTypeWidthConstraint<string result, string input>
 
 def SigExtractOp : LLHDOp<"sig.extract", [
   Pure,
-   SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
-   SigPtrIndexBitWidthConstraint<"lowBit", "input">,
- ]> {
+  SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
+  SigPtrIndexBitWidthConstraint<"lowBit", "input">,
+  DeclareOpInterfaceMethods<DestructurableAccessorOpInterface>,
+  DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
+]> {
   let summary = "Extract a range of bits from an integer signal";
   let description = [{
     The `llhd.sig.extract` operation allows to access a range of bits
