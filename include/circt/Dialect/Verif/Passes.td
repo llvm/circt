@@ -41,11 +41,11 @@ def InferContractsPass : Pass<"infer-contracts", "mlir::ModuleOp"> {
     Naively infers contracts for each `hw.module` and `verif.formal` in the 
     top-level `module`. The inference is based on the assertions and assumptions 
     already present in the regions, and conjoins them into a contract. This then 
-    allows existing formal tests to benefit from the modularity enabled by contracts.
-    The behavior of this pass can be seen as an imperfect inverse of the 
-    `lower-contracts` pass.
-  }];
-
+    allows existing formal tests to benefit from the modularity enabled by
+                        contracts.The behavior of this pass can be seen as an
+                            imperfect inverse of the 
+    `lower - contracts` pass.
+}];
 }
 
 def LowerTestsPass : Pass<"verif-lower-tests", "mlir::ModuleOp"> {
@@ -113,9 +113,9 @@ def SimplifyAssumeEqPass : Pass<"simplify-assume-eq", "hw::HWModuleOp"> {
   }];
 }
 
-def StripContractsPass : Pass<"strip-contracts"> {
-  let summary = "Remove contracts from the IR";
-  let description = [{
+      def StripContractsPass : Pass<"strip-contracts"> {
+    let summary = "Remove contracts from the IR";
+    let description = [{
     Replaces all `verif.contract` ops in the IR with their operands, making them
     act as simple passthroughs.
   }];

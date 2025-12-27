@@ -32,24 +32,24 @@ struct InferContractsPass
 
   /// For all modules (hw::HWModuleOp and verif::FormalOp)
   /// that don't already define a contract:
-  /// 1. Accumulate all of the conditions from the assertions found in the region
-  /// into a single conjuction, this will become the postcondition of the contract-
-  /// 2. Accumulate all of the conditions from the assumptions found in the region
-  /// that condition over the inputs of the module (block arguments for hw::HWModuleOp, 
-  /// verif.symbolic_value for the verif::FromalOp), this conjunction will become the 
-  /// preconditions of the contract.
+  /// 1. Accumulate all of the conditions from the assertions found in the
+  /// region into a single conjuction, this will become the postcondition of the
+  /// contract-
+  /// 2. Accumulate all of the conditions from the assumptions found in the
+  /// region that condition over the inputs of the module (block arguments for
+  /// hw::HWModuleOp, verif.symbolic_value for the verif::FromalOp), this
+  /// conjunction will become the preconditions of the contract.
   void runOnOperation() override;
 };
-
 
 template <typename T>
 /// Generic runner, only supports `hw::HWModuleOp` and `verif::FormalOp`.
 LogicalResult run(T op, ModuleOp mlirModuleOp) {
-    // Sanity check: Only support HwModules and Formal Ops
-    if(!(isa<hw::HWModuleOp>(op) || isa<verif::FormalOp>(op)))
-        return failure();
-    
-    return success();
+  // Sanity check: Only support HwModules and Formal Ops
+  if (!(isa<hw::HWModuleOp>(op) || isa<verif::FormalOp>(op)))
+    return failure();
+
+  return success();
 }
 
 } // namespace
@@ -63,7 +63,6 @@ void InferContractsPass::runOnOperation() {
       signalPassFailure();
 
   for (auto formal : mlirModule.getOps<verif::FormalOp>())
-    if(failed(run<verif::FormalOp>(formal, mlirModule)))
-        signalPassFailure();
+    if (failed(run<verif::FormalOp>(formal, mlirModule)))
+      signalPassFailure();
 }
-
