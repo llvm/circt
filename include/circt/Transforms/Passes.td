@@ -66,7 +66,13 @@ def MapArithToCombPass : Pass<"map-arith-to-comb"> {
     Rather, it provides a simple way (mostly for testing purposes) to map
     `arith` operations.
   }];
-  let constructor = "circt::createMapArithToCombPass()";
+    let options = [
+    Option<"enableBestEffortLowering", "enable-best-effort-lowering",
+           "bool", /*default=*/"false",
+           "Enable best effort lowering of operations (for example, existing arith operations that have no lowering stay as is)">
+  ];
+  
+  let constructor = "circt::createMapArithToCombPass(/*enableBestEffortLowering=*/false)";
   let dependentDialects = ["circt::hw::HWDialect, mlir::arith::ArithDialect, circt::comb::CombDialect"];
 }
 
