@@ -6,6 +6,7 @@
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-reg-randomization})" %s | FileCheck %s --check-prefix COMMON --check-prefix NO-RAND-REG
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{disable-mem-randomization disable-reg-randomization})" %s | FileCheck %s --check-prefixes NO-RAND-MEM,NO-RAND-REG
 // RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{add-vivado-ram-address-conflict-synthesis-bug-workaround})" %s | FileCheck %s --check-prefixes=CHECK,COMMON,VIVADO
+// RUN: circt-opt -pass-pipeline="builtin.module(hw-memory-sim{repl-seq-mem})" %s | FileCheck %s --check-prefix REPL-SEQ-MEM
 
 hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "readUnderWrite", "writeUnderWrite", "writeClockIDs", "initFilename", "initIsBinary", "initIsInline"]
 
@@ -180,11 +181,17 @@ hw.module.generated @FIRRTLMem_1_1_1_16_1_0_1_0_0, @FIRRTLMem(in %ro_addr_0: i4,
 // COMMON-LABEL: @FIRRTLMem_1_1_1_16_1_0_1_0_0
 // CHECK-NOT: infer_mux_override
 
+// COM: Check repl-seq-mem for readLatency = 0, writeLatency = 1
+// REPL-SEQ-MEM-NOT: hw.module.extern @FIRRTLMem_1_1_1_16_1_0_1_0_0
+
 hw.module.generated @FIRRTLMemOneAlways, @FIRRTLMem( in %wo_addr_0: i4, in %wo_en_0: i1, in %wo_clock_0: i1, in %wo_data_0: i8, in %wo_addr_1: i4, in %wo_en_1: i1, in %wo_clock_1: i1, in %wo_data_1: i8) attributes {depth = 16 : i64, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : i32, width = 8 : ui32, writeClockIDs = [0 : i32, 0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
 
 //COMMON-LABEL: @FIRRTLMemOneAlways
 //CHECK-COUNT-1:  sv.always
 //CHECK-NOT:      sv.always
+
+// COM: Check repl-seq-mem for readLatency = 1, writeLatency = 1
+// REPL-SEQ-MEM: hw.module.extern @FIRRTLMemOneAlways
 
 hw.module.generated @FIRRTLMemTwoAlways, @FIRRTLMem( in %wo_addr_0: i4, in %wo_en_0: i1, in %wo_clock_0: i1, in %wo_data_0: i8, in %wo_addr_1: i4,  in %wo_en_1: i1, in %wo_clock_1: i1, in %wo_data_1: i8) attributes {depth = 16 : i64, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : i32, width = 8 : ui32, writeClockIDs = [0 : i32, 1 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32, initFilename = "", initIsBinary = false, initIsInline = false}
 
@@ -394,6 +401,9 @@ hw.module.generated @ReadWriteWithHighReadLatency, @FIRRTLMem(in %rw_addr: i4, i
 // CHECK: sv.always
 // CHECK: [[WCOND:%.+]] comb.and [[EN_1R]], [[WMODE_1R]]
 // CHECK: [[WPTR:%.+]] = sv.array_index_inout [[MEM]][[[ADDR_1R]]]
+
+// COM: Check repl-seq-mem for readLatency = 4, writeLatency = 3
+// REPL-SEQ-MEM: hw.module.extern @ReadWriteWithHighReadLatency
 
 // COMMON-LABEL: hw.module private @ReadWriteWithHighWriteLatency
 hw.module.generated @ReadWriteWithHighWriteLatency, @FIRRTLMem(in %rw_addr: i4, in %rw_en: i1,  in %rw_clock: i1, in %rw_wmode: i1, in %rw_wdata: i16, out rw_rdata: i16) attributes {depth = 16 : i64, numReadPorts = 0 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 0 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : i32, width = 16 : ui32, writeClockIDs = [], writeLatency = 5 : ui32, writeUnderWrite = 0 : i32, initFilename = "", initIsBinary = false, initIsInline = false}

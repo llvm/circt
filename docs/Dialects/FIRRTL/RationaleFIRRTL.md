@@ -691,8 +691,8 @@ external module for macro replacement or a register of vector type. The
 conditions for macro replacement are as follows:
 
 1. `–replSeqMem` option is passed and
-2. `readLatency == 1`  and
-3. `writeLatency == 1` and
+2. `readLatency >= 1`  and
+3. `writeLatency >= 1` and
 4. `width(data) > 0`
 
 Any `MemOp` not satisfying the above conditions is lowered to Register vector.
