@@ -21,6 +21,10 @@ def valueTail : NativeCodeCall<"$0.drop_front()">;
 def concatValues : NativeCodeCall<
   "concatValues(ValueRange{$0}, ValueRange{$1})">;
 
+// Ensure that outer and inner delays use the same clock and edge before
+// merging. Accepts (outerClock, innerClock, outerEdge, innerEdge).
+def SameClockAndEdge : Constraint<CPred<"$0 == $1 && $2 == $3">>;
+
 //===----------------------------------------------------------------------===//
 // DelayOp
 //===----------------------------------------------------------------------===//
@@ -36,14 +40,15 @@ def mergedLengths : NativeCodeCall<[{
            : IntegerAttr{}
 }]>;
 def NestedDelays : Pat<
-  (DelayOp (DelayOp $input, $delay1, $length1), $delay2, $length2),
-  (DelayOp $input, (mergedDelays $delay1, $delay2),
-                   (mergedLengths $length1, $length2))>;
+  (DelayOp $clock0, $edge0, (DelayOp $clock1, $edge1, $input, $delay1, $length1), $delay2, $length2),
+  (DelayOp $clock0, $edge0, $input, (mergedDelays $delay1, $delay2),
+                   (mergedLengths $length1, $length2)),
+  [(SameClockAndEdge $clock0, $clock1, $edge0, $edge1)]>;
 
 // delay(concat(s, ...), N, M) -> concat(delay(s, N, M), ...)
 def MoveDelayIntoConcat : Pat<
-  (DelayOp (ConcatOp $inputs), $delay, $length),
-  (ConcatOp (concatValues (DelayOp (valueHead $inputs), $delay, $length),
+  (DelayOp $clock, $edge, (ConcatOp $inputs), $delay, $length),
+  (ConcatOp (concatValues (DelayOp $clock, $edge, (valueHead $inputs), $delay, $length),
                           (valueTail $inputs)))>;
 
 //===----------------------------------------------------------------------===//

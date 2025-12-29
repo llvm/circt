@@ -80,7 +80,7 @@ LogicalResult IntersectOp::canonicalize(IntersectOp op,
 //===----------------------------------------------------------------------===//
 
 OpFoldResult DelayOp::fold(FoldAdaptor adaptor) {
-  // delay(s, 0, 0) -> s
+  // delay(posedge, clock, s, 0, 0) -> s
   if (adaptor.getDelay() == 0 && adaptor.getLength() == 0 &&
       isa<SequenceType>(getInput().getType()))
     return getInput();
