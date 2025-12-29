@@ -9,8 +9,8 @@ add_circt_conversion_library(CIRCTFSMToCore
 
     LINK_LIBS PUBLIC
     CIRCTComb
-    CIRCTHW
     CIRCTFSM
+    CIRCTHW
     CIRCTSeq
     CIRCTSupport
     MLIRTransforms
