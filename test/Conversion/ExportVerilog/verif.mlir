@@ -67,22 +67,22 @@ hw.module @BasicEmissionTemporal(in %a: i1) {
 // CHECK-LABEL: module Sequences
 hw.module @Sequences(in %clk: i1, in %a: i1, in %b: i1) {
   // CHECK: assert property (##0 a);
-  %d0 = ltl.delay %a, 0, 0 : i1
+  %d0 = ltl.delay %clk, posedge, %a, 0, 0 : i1
   sv.assert_property %d0 : !ltl.sequence
   // CHECK: assert property (##4 a);
-  %d1 = ltl.delay %a, 4, 0 : i1
+  %d1 = ltl.delay %clk, posedge, %a, 4, 0 : i1
   sv.assert_property %d1 : !ltl.sequence
   // CHECK: assert property (##[5:6] a);
-  %d2 = ltl.delay %a, 5, 1 : i1
+  %d2 = ltl.delay %clk, posedge, %a, 5, 1 : i1
   sv.assert_property %d2 : !ltl.sequence
   // CHECK: assert property (##[7:$] a);
-  %d3 = ltl.delay %a, 7 : i1
+  %d3 = ltl.delay %clk, posedge, %a, 7 : i1
   sv.assert_property %d3 : !ltl.sequence
   // CHECK: assert property (##[*] a);
-  %d4 = ltl.delay %a, 0 : i1
+  %d4 = ltl.delay %clk, posedge, %a, 0 : i1
   sv.assert_property %d4 : !ltl.sequence
   // CHECK: assert property (##[+] a);
-  %d5 = ltl.delay %a, 1 : i1
+  %d5 = ltl.delay %clk, posedge, %a, 1 : i1
   sv.assert_property %d5 : !ltl.sequence
 
   // CHECK: assert property (a ##0 a);
@@ -180,11 +180,11 @@ hw.module @Properties(in %clk: i1, in %a: i1, in %b: i1) {
   // CHECK: assert property (a ##1 b |=> not a);
   %i0 = ltl.implication %a, %b : i1, i1
   sv.assert_property %i0 : !ltl.property
-  %i1 = ltl.delay %b, 1, 0 : i1
+  %i1 = ltl.delay %clk, posedge, %b, 1, 0 : i1
   %i2 = ltl.concat %a, %i1 : i1, !ltl.sequence
   %i3 = ltl.implication %i2, %n0 : !ltl.sequence, !ltl.property
   sv.assert_property %i3 : !ltl.property
-  %i4 = ltl.delay %true, 1, 0 : i1
+  %i4 = ltl.delay %clk, posedge, %true, 1, 0 : i1
   %i5 = ltl.concat %a, %i1, %i4 : i1, !ltl.sequence, !ltl.sequence
   %i6 = ltl.implication %i5, %n0 : !ltl.sequence, !ltl.property
   sv.assert_property %i6 : !ltl.property
@@ -211,14 +211,15 @@ hw.module @Properties(in %clk: i1, in %a: i1, in %b: i1) {
 
 // CHECK-LABEL: module Precedence
 hw.module @Precedence(in %a: i1, in %b: i1) {
+  %true = hw.constant true
   // CHECK: assert property ((a or ##0 b) and b);
-  %a0 = ltl.delay %b, 0, 0 : i1
+  %a0 = ltl.delay %true, posedge, %b, 0, 0 : i1
   %a1 = ltl.or %a, %a0 : i1, !ltl.sequence
   %a2 = ltl.and %a1, %b : !ltl.sequence, i1
   sv.assert_property %a2 : !ltl.sequence
 
   // CHECK: assert property (##1 (a or ##0 b));
-  %d0 = ltl.delay %a1, 1, 0 : !ltl.sequence
+  %d0 = ltl.delay %true, posedge, %a1, 1, 0 : !ltl.sequence
   sv.assert_property %d0 : !ltl.sequence
 
   // CHECK: assert property (not (a or ##0 b));
@@ -249,8 +250,8 @@ hw.module @SystemVerilogSpecExamples(in %clk: i1, in %a: i1, in %b: i1, in %c: i
   // Section 16.7 "Sequences"
 
   // CHECK: assert property (a ##1 b ##0 c ##1 d);
-  %a0 = ltl.delay %b, 1, 0 : i1
-  %a1 = ltl.delay %d, 1, 0 : i1
+  %a0 = ltl.delay %clk, posedge, %b, 1, 0 : i1
+  %a1 = ltl.delay %clk, posedge, %d, 1, 0 : i1
   %a2 = ltl.concat %a, %a0 : i1, !ltl.sequence
   %a3 = ltl.concat %c, %a1 : i1, !ltl.sequence
   %a4 = ltl.concat %a2, %a3 : !ltl.sequence, !ltl.sequence
@@ -259,7 +260,7 @@ hw.module @SystemVerilogSpecExamples(in %clk: i1, in %a: i1, in %b: i1, in %c: i
   // Section 16.12.20 "Property examples"
 
   // CHECK: assert property (@(posedge clk) a |-> b ##1 c ##1 d);
-  %b0 = ltl.delay %c, 1, 0 : i1
+  %b0 = ltl.delay %clk, posedge, %c, 1, 0 : i1
   %b1 = ltl.concat %b, %b0, %a1 : i1, !ltl.sequence, !ltl.sequence
   %b2 = ltl.implication %a, %b1 : i1, !ltl.sequence
   %b3 = ltl.clock %b2, posedge %clk : !ltl.property
@@ -272,7 +273,7 @@ hw.module @SystemVerilogSpecExamples(in %clk: i1, in %a: i1, in %b: i1, in %c: i
   sv.assert_property %c3 disable_iff %e : !ltl.property
 
   // CHECK: assert property (##1 a |-> b);
-  %d0 = ltl.delay %a, 1, 0 : i1
+  %d0 = ltl.delay %clk, posedge, %a, 1, 0 : i1
   %d1 = ltl.implication %d0, %b : !ltl.sequence, i1
   sv.assert_property %d1 : !ltl.property
 }
@@ -295,7 +296,7 @@ hw.module @LivenessExample(in %clock: i1, in %reset: i1, in %isLive: i1) {
 
   // CHECK: assert property (disable iff (reset) @(posedge clock) isLive ##1 _GEN |-> (s_eventually isLive));
   // CHECK-NEXT: assume property (disable iff (reset) @(posedge clock) isLive ##1 _GEN |-> (s_eventually isLive));
-  %4 = ltl.delay %not_isLive, 1, 0 : i1
+  %4 = ltl.delay %clock, posedge, %not_isLive, 1, 0 : i1
   %5 = ltl.concat %isLive, %4 : i1, !ltl.sequence
   %6 = ltl.implication %5, %1 : !ltl.sequence, !ltl.property
   %liveness_after_fall = ltl.clock %6, posedge %clock : !ltl.property

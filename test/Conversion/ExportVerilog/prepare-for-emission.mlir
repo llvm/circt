@@ -258,13 +258,13 @@ module attributes { circt.loweringOptions = "disallowPackedStructAssignments"} {
 // wires, where they crash the PrepareForEmission pass. They are always emitted
 // inline, so no need to restructure the IR.
 // CHECK-LABEL: hw.module @Issue5613
-hw.module @Issue5613(in %a: i1, in %b: i1) {
+hw.module @Issue5613(in %a: i1, in %b: i1, in %clk: i1) {
   verif.assert %2 : !ltl.sequence
   %0 = ltl.implication %2, %1 : !ltl.sequence, !ltl.property
   %1 = ltl.or %b, %3 : i1, !ltl.property
   %2 = ltl.and %b, %4 : i1, !ltl.sequence
   %3 = ltl.not %b : i1
-  %4 = ltl.delay %a, 42 : i1
+  %4 = ltl.delay %clk, posedge, %a, 42 : i1
   hw.output
 }
 
