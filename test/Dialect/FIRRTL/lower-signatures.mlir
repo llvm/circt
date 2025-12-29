@@ -45,7 +45,7 @@ firrtl.circuit "Prop" {
   firrtl.module private @Foo() attributes {convention = #firrtl<convention scalarized>} {
     %bar_in1, %bar_in2, %bar_out = firrtl.instance bar interesting_name @Bar(out in1: !firrtl.bundle<a flip: uint<1>, b flip: uint<1>>, in in2: !firrtl.bundle<c: uint<1>>, in out: !firrtl.bundle<d flip: uint<1>, e flip: uint<1>>)
     // CHECK: %bar.in1 = firrtl.wire
-    // CHECK: %bar.in2 = firrtl.wire 
+    // CHECK: %bar.in2 = firrtl.wire
     // CHECK: %bar.out = firrtl.wire
   }
 
