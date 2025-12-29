@@ -64,3 +64,40 @@ firrtl.circuit "PreserveLocation" {
 // CHECK-LOC: [[LOC]] = loc("someLoc":9001:1)
 #moduleLoc = loc("wrongLoc":42:1)
 #instLoc = loc("someLoc":9001:1)
+
+//CHECK-LABEL: firrtl.circuit "Domains"
+firrtl.circuit "Domains" {
+  firrtl.domain @ClockDomain
+  // CHECK:      firrtl.module @Foo
+  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  // CHECK-SAME:   in %a_b: !firrtl.uint<1> domains [%A]
+  // CHECK-SAME:   in %a_c: !firrtl.uint<1> domains [%A]
+  // CHECK-SAME:   in %d_0: !firrtl.uint<1> domains [%D]
+  // CHECK-SAME:   in %d_1: !firrtl.uint<1> domains [%D]
+  // CHECK-SAME:   in %D: !firrtl.domain of @ClockDomain
+  firrtl.module @Foo(
+    in %A: !firrtl.domain of @ClockDomain,
+    in %a: !firrtl.bundle<b: uint<1>, c: uint<1>> domains [%A],
+    in %d: !firrtl.vector<uint<1>, 2> domains [%D],
+    in %D: !firrtl.domain of @ClockDomain
+  ) attributes {
+    convention = #firrtl<convention scalarized>
+  } {
+  }
+  // CHECK: firrtl.module @Domains
+  firrtl.module @Domains() {
+    // CHECK:      firrtl.instance foo @Foo
+    // CHECK-SAME:   in A: !firrtl.domain of @ClockDomain
+    // CHECK-SAME:   in a_b: !firrtl.uint<1> domains [A]
+    // CHECK-SAME:   in a_c: !firrtl.uint<1> domains [A]
+    // CHECK-SAME:   in d_0: !firrtl.uint<1> domains [D]
+    // CHECK-SAME:   in d_1: !firrtl.uint<1> domains [D]
+    // CHECK-SAME:   in D: !firrtl.domain of @ClockDomain
+    firrtl.instance foo @Foo(
+      in A: !firrtl.domain of @ClockDomain,
+      in a: !firrtl.bundle<b: uint<1>, c: uint<1>> domains [A],
+      in d: !firrtl.vector<uint<1>, 2> domains [D],
+      in D: !firrtl.domain of @ClockDomain
+    )
+  }
+}
