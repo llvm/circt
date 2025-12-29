@@ -4411,7 +4411,15 @@ LogicalResult FIRRTLLowering::visitExpr(LTLIntersectIntrinsicOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(LTLDelayIntrinsicOp op) {
-  return setLoweringToLTL<ltl::DelayOp>(op, getLoweredValue(op.getInput()),
+  // The FIRRTL intrinsic doesn't carry an explicit clock; synthesize a
+  // default 1-bit clock value (true) and use the positive edge by default.
+  // Backends or later passes may replace this with a real clock wire when
+  // composing larger clocked sequences.
+  auto clock = getOrCreateIntConstant(1, 1);
+  auto edgeAttr =
+      ltl::ClockEdgeAttr::get(builder.getContext(), ltl::ClockEdge::Pos);
+  return setLoweringToLTL<ltl::DelayOp>(op, clock, edgeAttr,
+                                        getLoweredValue(op.getInput()),
                                         op.getDelayAttr(), op.getLengthAttr());
 }
 
