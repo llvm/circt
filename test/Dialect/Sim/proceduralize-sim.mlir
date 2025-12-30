@@ -78,6 +78,36 @@ hw.module @basic_print3(in %clk : !seq.clock, in %val: i32) {
   sim.print %str on %clk if %true
 }
 
+// CHECK-LABEL: @basic_real_print
+// CHECK-NEXT:  %[[TRG:.*]] = seq.from_clock %clk
+// CHECK-NEXT:  hw.triggered posedge %[[TRG]](%val) : f64 {
+// CHECK-NEXT:  ^bb0(%[[ARG:.*]]: f64):
+// CHECK-DAG:      %[[L1:.*]] = sim.fmt.literal "F: "
+// CHECK-DAG:      %[[L2:.*]] = sim.fmt.literal ", E: "
+// CHECK-DAG:      %[[L3:.*]] = sim.fmt.literal ", G: "
+// CHECK-DAG:      %[[F:.*]] = sim.fmt.flt %[[ARG]] {fracDigits = 2 : i32} : f64
+// CHECK-DAG:      %[[E:.*]] = sim.fmt.exp %[[ARG]] {fracDigits = 1 : i32} : f64
+// CHECK-DAG:      %[[G:.*]] = sim.fmt.gen %[[ARG]] {fracDigits = 3 : i32} : f64
+// CHECK-DAG:      %[[CAT:.*]] = sim.fmt.concat (%[[L1]], %[[F]], %[[L2]], %[[E]], %[[L3]], %[[G]])
+// CHECK:          sim.proc.print %[[CAT]]
+// CHECK-NEXT:   }
+
+hw.module @basic_real_print(in %clk : !seq.clock, in %val : f64) {
+  %true = hw.constant true
+
+  %lf = sim.fmt.literal "F: "
+  %le = sim.fmt.literal ", E: "
+  %lg = sim.fmt.literal ", G: "
+
+  %f = sim.fmt.flt %val {fracDigits = 2 : i32} : f64
+  %e = sim.fmt.exp %val {fracDigits = 1 : i32} : f64
+  %g = sim.fmt.gen %val {fracDigits = 3 : i32} : f64
+
+  %cat = sim.fmt.concat (%lf, %f, %le, %e, %lg, %g)
+  sim.print %cat on %clk if %true
+}
+
+
 // CHECK-LABEL: @multi_args
 // CHECK-NEXT:  %[[TRG:.*]] = seq.from_clock %clk
 // CHECK-NEXT:  hw.triggered posedge %0(%a, %b, %c) : i8, i8, i8 {
@@ -167,15 +197,16 @@ hw.module @multi_clock(in %clka : !seq.clock, in %clkb : !seq.clock, in %clkc : 
 
 // CHECK-LABEL: @sequence
 // CHECK-NEXT:  %[[TRG:.*]] = seq.from_clock %clk
-// CHECK-NEXT:  hw.triggered posedge %[[TRG]](%conda, %condb, %val) : i1, i1, i32 {
-// CHECK-NEXT:  ^bb0(%[[ARG0:.*]]: i1, %[[ARG1:.*]]: i1, %[[ARG2:.*]]: i32):
+// CHECK-NEXT: hw.triggered posedge %[[TRG]](%conda, %condb, %val, %rval) : i1, i1, i32, f64 {
+// CHECK-NEXT: ^bb0(%[[ARG0:.*]]: i1, %[[ARG1:.*]]: i1, %[[ARG2:.*]]: i32, %[[ARG3:.*]]: f64):
 // CHECK-DAG:      %[[L1:.*]] = sim.fmt.literal "#1"
 // CHECK-DAG:      %[[L2:.*]] = sim.fmt.literal "#2"
 // CHECK-DAG:      %[[L3:.*]] = sim.fmt.literal "#3"
 // CHECK-DAG:      %[[L4:.*]] = sim.fmt.literal "#4"
 // CHECK-DAG:      %[[L5:.*]] = sim.fmt.literal "#5"
 // CHECK-DAG:      %[[L6:.*]] = sim.fmt.literal "#6"
-// CHECK-DAG:      %[[BIN:.*]] = sim.fmt.bin %[[ARG2]] specifierWidth 32 : i32
+// CHECK-DAG:      %[[BIN:.*]] = sim.fmt.bin %[[ARG2]] {specifierWidth = 32 : i32} : i32
+// CHECK-DAG:      %[[REALFMT:.*]] = sim.fmt.gen %[[ARG3]] {fracDigits = 3 : i32} : f64
 // CHECK:          scf.if %[[ARG0]] {
 // CHECK-NEXT:       sim.proc.print %[[L1]]
 // CHECK-NEXT:     }
@@ -190,10 +221,12 @@ hw.module @multi_clock(in %clka : !seq.clock, in %clkb : !seq.clock, in %clkc : 
 // CHECK-NEXT:     sim.proc.print %[[BIN]]
 // CHECK-NEXT:     scf.if %[[ARG0]] {
 // CHECK-NEXT:       sim.proc.print %[[L6]]
+// CHECK-NEXT:       sim.proc.print %[[REALFMT]]
 // CHECK-NEXT:     }
 // CHECK-NEXT:   }
 
-hw.module @sequence(in %clk: !seq.clock, in %conda: i1, in %condb: i1, in %val : i32) {
+
+hw.module @sequence(in %clk: !seq.clock, in %conda: i1, in %condb: i1, in %val : i32, in %rval : f64) {
   %true = hw.constant true
   %false = hw.constant false
 
@@ -213,6 +246,8 @@ hw.module @sequence(in %clk: !seq.clock, in %conda: i1, in %condb: i1, in %val :
   sim.print %cen on %clk if %true
   %6 = sim.fmt.literal "#6"
   sim.print %6 on %clk if %conda
+  %rfmt = sim.fmt.gen %rval {fracDigits = 3 : i32} : f64
+  sim.print %rfmt on %clk if %conda
 }
 
 // CHECK-LABEL: @condition_as_val
