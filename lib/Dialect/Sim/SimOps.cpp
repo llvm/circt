@@ -219,6 +219,75 @@ OpFoldResult FormatBinOp::fold(FoldAdaptor adaptor) {
       adaptor.getPaddingChar(), adaptor.getSpecifierWidth());
 }
 
+OpFoldResult FormatScientificOp::fold(FoldAdaptor adaptor) {
+
+  if (auto floatAttr = llvm::dyn_cast_or_null<FloatAttr>(adaptor.getValue())) {
+    int bufferSize = 2 + adaptor.getFracDigits();
+    std::string widthString = getIsLeftAligned() ? "-" : "";
+    if (adaptor.getFieldWidth().has_value()) {
+      widthString = std::to_string(adaptor.getFieldWidth().value());
+      bufferSize += adaptor.getFieldWidth().value();
+    }
+    std::string fmtSpecifier =
+        "%" + widthString + "." + std::to_string(adaptor.getFracDigits()) + "e";
+    char *floatFmtBuffer = (char *)malloc(bufferSize);
+
+    while (snprintf(floatFmtBuffer, bufferSize, fmtSpecifier.c_str(),
+                    floatAttr.getValue().convertToDouble()) >= bufferSize) {
+      bufferSize *= 2;
+      floatFmtBuffer = (char *)realloc(floatFmtBuffer, bufferSize);
+    }
+    return StringAttr::get(getContext(), floatFmtBuffer);
+  }
+  return {};
+}
+
+OpFoldResult FormatFloatOp::fold(FoldAdaptor adaptor) {
+
+  if (auto floatAttr = llvm::dyn_cast_or_null<FloatAttr>(adaptor.getValue())) {
+    int bufferSize = 2 + adaptor.getFracDigits();
+    std::string widthString = getIsLeftAligned() ? "-" : "";
+    if (adaptor.getFieldWidth().has_value()) {
+      widthString = std::to_string(adaptor.getFieldWidth().value());
+      bufferSize += adaptor.getFieldWidth().value();
+    }
+    std::string fmtSpecifier =
+        "%" + widthString + "." + std::to_string(adaptor.getFracDigits()) + "f";
+    char *floatFmtBuffer = (char *)malloc(bufferSize);
+
+    while (snprintf(floatFmtBuffer, bufferSize, fmtSpecifier.c_str(),
+                    floatAttr.getValue().convertToDouble()) >= bufferSize) {
+      bufferSize *= 2;
+      floatFmtBuffer = (char *)realloc(floatFmtBuffer, bufferSize);
+    }
+    return StringAttr::get(getContext(), floatFmtBuffer);
+  }
+  return {};
+}
+
+OpFoldResult FormatGeneralOp::fold(FoldAdaptor adaptor) {
+
+  if (auto floatAttr = llvm::dyn_cast_or_null<FloatAttr>(adaptor.getValue())) {
+    int bufferSize = 2 + adaptor.getFracDigits();
+    std::string widthString = getIsLeftAligned() ? "-" : "";
+    if (adaptor.getFieldWidth().has_value()) {
+      widthString = std::to_string(adaptor.getFieldWidth().value());
+      bufferSize += adaptor.getFieldWidth().value();
+    }
+    std::string fmtSpecifier =
+        "%" + widthString + "." + std::to_string(adaptor.getFracDigits()) + "g";
+    char *floatFmtBuffer = (char *)malloc(bufferSize);
+
+    while (snprintf(floatFmtBuffer, bufferSize, fmtSpecifier.c_str(),
+                    floatAttr.getValue().convertToDouble()) >= bufferSize) {
+      bufferSize *= 2;
+      floatFmtBuffer = (char *)realloc(floatFmtBuffer, bufferSize);
+    }
+    return StringAttr::get(getContext(), floatFmtBuffer);
+  }
+  return {};
+}
+
 OpFoldResult FormatCharOp::fold(FoldAdaptor adaptor) {
   auto width = getValue().getType().getIntOrFloatBitWidth();
   if (width > 8)
