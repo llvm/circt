@@ -222,21 +222,20 @@ OpFoldResult FormatBinOp::fold(FoldAdaptor adaptor) {
 OpFoldResult FormatScientificOp::fold(FoldAdaptor adaptor) {
 
   if (auto floatAttr = llvm::dyn_cast_or_null<FloatAttr>(adaptor.getValue())) {
-    int bufferSize = 2 + adaptor.getFracDigits();
     std::string widthString = getIsLeftAligned() ? "-" : "";
     if (adaptor.getFieldWidth().has_value()) {
-      widthString = std::to_string(adaptor.getFieldWidth().value());
-      bufferSize += adaptor.getFieldWidth().value();
+      widthString += std::to_string(adaptor.getFieldWidth().value());
     }
     std::string fmtSpecifier =
         "%" + widthString + "." + std::to_string(adaptor.getFracDigits()) + "e";
-    char *floatFmtBuffer = (char *)malloc(bufferSize);
 
-    while (snprintf(floatFmtBuffer, bufferSize, fmtSpecifier.c_str(),
-                    floatAttr.getValue().convertToDouble()) >= bufferSize) {
-      bufferSize *= 2;
-      floatFmtBuffer = (char *)realloc(floatFmtBuffer, bufferSize);
-    }
+    // Calculates number of bytes needed to store the format string
+    // excluding the null terminator
+    int bufferSize = std::snprintf(nullptr, 0, fmtSpecifier.c_str(),
+                                   floatAttr.getValue().convertToDouble());
+    std::string floatFmtBuffer(bufferSize, '\0');
+    snprintf(floatFmtBuffer.data(), bufferSize + 1, fmtSpecifier.c_str(),
+             floatAttr.getValue().convertToDouble());
     return StringAttr::get(getContext(), floatFmtBuffer);
   }
   return {};
@@ -245,21 +244,20 @@ OpFoldResult FormatScientificOp::fold(FoldAdaptor adaptor) {
 OpFoldResult FormatFloatOp::fold(FoldAdaptor adaptor) {
 
   if (auto floatAttr = llvm::dyn_cast_or_null<FloatAttr>(adaptor.getValue())) {
-    int bufferSize = 2 + adaptor.getFracDigits();
     std::string widthString = getIsLeftAligned() ? "-" : "";
     if (adaptor.getFieldWidth().has_value()) {
-      widthString = std::to_string(adaptor.getFieldWidth().value());
-      bufferSize += adaptor.getFieldWidth().value();
+      widthString += std::to_string(adaptor.getFieldWidth().value());
     }
     std::string fmtSpecifier =
         "%" + widthString + "." + std::to_string(adaptor.getFracDigits()) + "f";
-    char *floatFmtBuffer = (char *)malloc(bufferSize);
 
-    while (snprintf(floatFmtBuffer, bufferSize, fmtSpecifier.c_str(),
-                    floatAttr.getValue().convertToDouble()) >= bufferSize) {
-      bufferSize *= 2;
-      floatFmtBuffer = (char *)realloc(floatFmtBuffer, bufferSize);
-    }
+    // Calculates number of bytes needed to store the format string
+    // excluding the null terminator
+    int bufferSize = std::snprintf(nullptr, 0, fmtSpecifier.c_str(),
+                                   floatAttr.getValue().convertToDouble());
+    std::string floatFmtBuffer(bufferSize, '\0');
+    snprintf(floatFmtBuffer.data(), bufferSize + 1, fmtSpecifier.c_str(),
+             floatAttr.getValue().convertToDouble());
     return StringAttr::get(getContext(), floatFmtBuffer);
   }
   return {};
@@ -268,21 +266,20 @@ OpFoldResult FormatFloatOp::fold(FoldAdaptor adaptor) {
 OpFoldResult FormatGeneralOp::fold(FoldAdaptor adaptor) {
 
   if (auto floatAttr = llvm::dyn_cast_or_null<FloatAttr>(adaptor.getValue())) {
-    int bufferSize = 2 + adaptor.getFracDigits();
     std::string widthString = getIsLeftAligned() ? "-" : "";
     if (adaptor.getFieldWidth().has_value()) {
-      widthString = std::to_string(adaptor.getFieldWidth().value());
-      bufferSize += adaptor.getFieldWidth().value();
+      widthString += std::to_string(adaptor.getFieldWidth().value());
     }
     std::string fmtSpecifier =
         "%" + widthString + "." + std::to_string(adaptor.getFracDigits()) + "g";
-    char *floatFmtBuffer = (char *)malloc(bufferSize);
 
-    while (snprintf(floatFmtBuffer, bufferSize, fmtSpecifier.c_str(),
-                    floatAttr.getValue().convertToDouble()) >= bufferSize) {
-      bufferSize *= 2;
-      floatFmtBuffer = (char *)realloc(floatFmtBuffer, bufferSize);
-    }
+    // Calculates number of bytes needed to store the format string
+    // excluding the null terminator
+    int bufferSize = std::snprintf(nullptr, 0, fmtSpecifier.c_str(),
+                                   floatAttr.getValue().convertToDouble());
+    std::string floatFmtBuffer(bufferSize, '\0');
+    snprintf(floatFmtBuffer.data(), bufferSize + 1, fmtSpecifier.c_str(),
+             floatAttr.getValue().convertToDouble());
     return StringAttr::get(getContext(), floatFmtBuffer);
   }
   return {};
