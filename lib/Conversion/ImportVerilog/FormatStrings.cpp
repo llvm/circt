@@ -130,7 +130,9 @@ struct FormatStringParser {
                                                  : IntFormat::HexLower);
 
     case 'e':
+      return emitReal(arg, options, RealFormat::Exponential);
     case 'g':
+      return emitReal(arg, options, RealFormat::General);
     case 'f':
       return emitReal(arg, options, RealFormat::Float);
 
@@ -213,10 +215,8 @@ struct FormatStringParser {
     if (!value)
       return failure();
 
-    // TODO add support for specifics such as width etc
-
-    fragments.push_back(
-        moore::FormatRealOp::create(builder, loc, value, format));
+    fragments.push_back(moore::FormatRealOp::create(
+        builder, loc, value, format, alignment, widthAttr, precisionAttr));
 
     return success();
   }

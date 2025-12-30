@@ -2031,7 +2031,10 @@ def FormatRealOp : MooreOp<"fmt.real", [Pure]> {
   }];
   let arguments = (ins
   RealType:$value,
-  RealFormatAttr:$format
+  RealFormatAttr:$format,
+  IntAlignAttr:$alignment,
+  OptionalAttr<I32Attr>:$fieldWidth,
+  OptionalAttr<I32Attr>:$fracDigits
   );
   let results = (outs FormatStringType:$result);
   let assemblyFormat = [{
