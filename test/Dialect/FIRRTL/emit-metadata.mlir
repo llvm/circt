@@ -806,7 +806,7 @@ firrtl.circuit "Foo" {
 // -----
 
 // Test that a memory that is not readLatency=1 and writeLatency=1 produces OM
-// metadata, but not Memory JSON or Configuration File metadata.
+// metadata, Memory JSON and Configuration File metadata.
 
 firrtl.circuit "Foo" {
   firrtl.module private @m() {
@@ -858,11 +858,14 @@ firrtl.circuit "Foo" {
 
 // (2) Memory JSON -------------------------------------------------------------
 // CHECK-LABEL:         emit.file "metadata{{/|\\\\}}seq_mems.json"
-// CHECK-NEXT:            sv.verbatim "[]"
+// CHECK-NEXT:            sv.verbatim
+// CHECK-SAME:              \22read\22: 1
+// CHECK-SAME:              \22write\22: 0
+// CHECK-SAME:              \22readwrite\22: 0
 
 // (3) Configuration File ------------------------------------------------------
 // CHECK-LABEL:         emit.file "mems.conf"
-// CHECK-NEXT{LITERAL}:   sv.verbatim ""
+// CHECK-NEXT{LITERAL}:   sv.verbatim "name {{0}} depth 16 width 8 ports read\0A"
 
 // -----
 
