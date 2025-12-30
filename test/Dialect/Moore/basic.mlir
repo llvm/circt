@@ -394,7 +394,7 @@ func.func @WaitDelay(%arg0: !moore.time) {
 
 // CHECK-LABEL: func.func @FormatStrings
 // CHECK-SAME: %arg0: !moore.format_string
-func.func @FormatStrings(%arg0: !moore.format_string, %arg1: !moore.i42) {
+func.func @FormatStrings(%arg0: !moore.format_string, %arg1: !moore.i42, %arg2: !moore.f32, %arg3: !moore.f64) {
   // CHECK: moore.fmt.literal "hello"
   moore.fmt.literal "hello"
   // CHECK: moore.fmt.concat ()
@@ -421,6 +421,17 @@ func.func @FormatStrings(%arg0: !moore.format_string, %arg1: !moore.i42) {
   moore.fmt.int hex_lower %arg1, align left, pad zero width 42 : i42
   // CHECK: moore.fmt.int hex_upper %arg1, align left, pad zero width 42 : i42
   moore.fmt.int hex_upper %arg1, align left, pad zero width 42 : i42
+
+  // CHECK: moore.fmt.real float %arg2, align left : f32
+  moore.fmt.real float %arg2, align left : f32
+  // CHECK: moore.fmt.real exponential %arg3, align left : f64
+  moore.fmt.real exponential %arg3, align left : f64
+  // CHECK: moore.fmt.real general %arg3, align right {fieldWidth = 9 : i32, fracDigits = 8 : i32} : f64
+  moore.fmt.real general %arg3, align right {fieldWidth = 9 : i32, fracDigits = 8 : i32} : f64
+  // CHECK: moore.fmt.real float %arg2, align right {fieldWidth = 12 : i32} : f32
+  moore.fmt.real float %arg2, align right {fieldWidth = 12 : i32} : f32
+  // CHECK: moore.fmt.real exponential %arg3, align right {fracDigits = 5 : i32} : f64
+  moore.fmt.real exponential %arg3, align right {fracDigits = 5 : i32} : f64
   return
 }
 
