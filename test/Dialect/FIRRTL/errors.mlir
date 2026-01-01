@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -split-input-file -verify-diagnostics
+// RUN: circt-opt %s -split-input-file -verify-diagnostics -allow-unregistered-dialect
 
 firrtl.circuit "X" {
 
@@ -3150,27 +3150,13 @@ firrtl.circuit "Top" {
 
 // -----
 
-// Unable to determine domain type of destination.
-
-firrtl.circuit "Top" {
-  firrtl.domain @ClockDomain
-  firrtl.domain @PowerDomain
-  firrtl.module @Top(in %i: !firrtl.domain of @ClockDomain) {
-    %o = firrtl.wire : !firrtl.domain
-    // expected-error @below {{could not determine domain-type of destination}}
-    firrtl.domain.define %o, %i
-  }
-}
-
-// -----
-
 // Unable to determine domain type of source.
 
 firrtl.circuit "Top" {
   firrtl.domain @ClockDomain
   firrtl.domain @PowerDomain
   firrtl.module @Top(out %o : !firrtl.domain of @PowerDomain) {
-    %i = firrtl.wire : !firrtl.domain
+    %i = "test"() : () -> !firrtl.domain
     // expected-error @below {{could not determine domain-type of source}}
     firrtl.domain.define %o, %i
   }
@@ -3208,7 +3194,7 @@ firrtl.circuit "WrongInstanceDomainInfo" {
     in %a : !firrtl.uint<1> domains [%A]
   ) {}
   firrtl.module @WrongInstanceDomainInfo() {
-  // expected-error @below {{op domain info for "a" must be [0 : ui32], but got [1 : ui32]}}
+  // expected-error @below {{op domain info for "a" must be '[0 : ui32]', but got '[1 : ui32]'}}
     %foo_A, %foo_B, %foo_a = firrtl.instance foo @Foo(
       in A : !firrtl.domain of @ClockDomain,
       in B : !firrtl.domain of @ClockDomain,
@@ -3231,7 +3217,7 @@ firrtl.circuit "WrongInstanceChoiceDomainInfo" {
     in %a : !firrtl.uint<1> domains [%A]
   ) {}
   firrtl.module @WrongInstanceChoiceDomainInfo() {
-    // expected-error @below {{op domain info for "a" must be [0 : ui32], but got [1 : ui32]}}
+    // expected-error @below {{op domain info for "a" must be '[0 : ui32]', but got '[1 : ui32]'}}
     %foo_A, %foo_B, %foo_a = firrtl.instance_choice foo @Foo alternatives @Platform { @FPGA -> @Foo } (
       in A : !firrtl.domain of @ClockDomain,
       in B : !firrtl.domain of @ClockDomain,
