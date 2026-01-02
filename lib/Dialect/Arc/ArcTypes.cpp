@@ -30,8 +30,14 @@ static std::optional<uint64_t> computeLLVMBitWidth(Type type) {
   if (isa<seq::ClockType>(type))
     return 1;
 
-  if (auto intType = dyn_cast<IntegerType>(type))
-    return intType.getWidth();
+  if (auto intType = dyn_cast<IntegerType>(type)) {
+    // 1. Get the logical width.
+    uint64_t width = intType.getWidth();
+    // 2. Ensure it occupies at least one byte (e.g., i1 becomes 8 bits).
+    width = std::max<uint64_t>(width, 8);
+    // 3. Align to the next power of 2 to match LLVM's storage layout.
+    return llvm::bit_ceil(width);
+  }
 
   if (auto arrayType = dyn_cast<hw::ArrayType>(type)) {
     // Compute element width.
