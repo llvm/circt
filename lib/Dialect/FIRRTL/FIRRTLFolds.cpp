@@ -959,8 +959,19 @@ OpFoldResult IntegerMulOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult IntegerShrOp::fold(FoldAdaptor adaptor) {
-  // TODO: implement constant folding, etc.
-  // Tracked in https://github.com/llvm/circt/issues/6725.
+  if (auto rhsCst = getConstant(adaptor.getRhs())) {
+    if (auto lhsCst = getConstant(adaptor.getLhs())) {
+
+      return IntegerAttr::get(
+          IntegerType::get(getContext(), lhsCst->getBitWidth()),
+          lhsCst->ashr(*rhsCst));
+    }
+
+    if (rhsCst->isZero()) {
+      return getLhs();
+    }
+  }
+
   return {};
 }
 
