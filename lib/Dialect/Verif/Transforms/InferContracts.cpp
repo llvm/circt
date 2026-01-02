@@ -42,6 +42,27 @@ struct InferContractsPass
   void runOnOperation() override;
 };
 
+/// Given an assert or an assume operation, convert them into a contract
+static Operation *convertAssertLike(OpBuilder &builder, RequireLike op,
+                                    IRMapping &mapping) {
+  StringAttr labelAttr = op.getLabelAttr();
+
+  Value enableValue;
+  if (auto enable = op.getEnable())
+    enable = mapping.lookup(enable);
+
+  auto loc = op.getLoc();
+  auto property = mapping.lookup(op.getProperty());
+
+  if ((isa<EnsureOp>(op) && !assumeContract) ||
+      (isa<RequireOp>(op) && assumeContract))
+    return AssertOp::create(builder, loc, property, enableValue, labelAttr);
+  if ((isa<EnsureOp>(op) && assumeContract) ||
+      (isa<RequireOp>(op) && !assumeContract))
+    return AssumeOp::create(builder, loc, property, enableValue, labelAttr);
+  return nullptr;
+}
+
 template <typename T>
 /// Generic runner, only supports `hw::HWModuleOp` and `verif::FormalOp`.
 LogicalResult run(T op, ModuleOp mlirModuleOp) {
