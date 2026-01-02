@@ -3,12 +3,12 @@
 // CHECK-LABEL: arc.model @test
 arc.model @test io !hw.modty<input x : i1, output y : i1> {
 ^bb0(%arg0: !arc.storage):
-  // CHECK-NEXT: ([[PTR:%.+]]: !arc.storage<5780>):
+  // CHECK-NEXT: ([[PTR:%.+]]: !arc.storage<6708>):
 
-  // CHECK-NEXT: arc.alloc_storage [[PTR]][0] : (!arc.storage<5780>) -> !arc.storage<1159>
+  // CHECK-NEXT: arc.alloc_storage [[PTR]][0] : (!arc.storage<6708>) -> !arc.storage<2081>
   // CHECK-NEXT: arc.initial {
   arc.initial {
-    // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][0] : !arc.storage<5780> -> !arc.storage<1159>
+    // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][0] : !arc.storage<6708> -> !arc.storage<2081>
     %0 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i1>
     arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i8>
     arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i16>
@@ -24,15 +24,15 @@ arc.model @test io !hw.modty<input x : i1, output y : i1> {
     // CHECK-NEXT: arc.alloc_state [[SUBPTR]] {offset = 8 : i32}
     // CHECK-NEXT: arc.alloc_state [[SUBPTR]] {offset = 16 : i32}
     // CHECK-NEXT: arc.alloc_state [[SUBPTR]] {offset = 32 : i32}
-    // CHECK-NEXT: arc.alloc_state [[SUBPTR]] {offset = 1158 : i32}
+    // CHECK-NEXT: arc.alloc_state [[SUBPTR]] {offset = 2080 : i32}
     // CHECK-NEXT: scf.execute_region {
     scf.execute_region {
       arc.state_read %0 : <i1>
-      // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][0] : !arc.storage<5780> -> !arc.storage<1159>
-      // CHECK-NEXT: [[STATE:%.+]] = arc.storage.get [[SUBPTR]][0] : !arc.storage<1159> -> !arc.state<i1>
+      // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][0] : !arc.storage<6708> -> !arc.storage<2081>
+      // CHECK-NEXT: [[STATE:%.+]] = arc.storage.get [[SUBPTR]][0] : !arc.storage<2081> -> !arc.state<i1>
       // CHECK-NEXT: arc.state_read [[STATE]] : <i1>
       arc.state_read %1 : <i1>
-      // CHECK-NEXT: [[STATE:%.+]] = arc.storage.get [[SUBPTR]][1158] : !arc.storage<1159> -> !arc.state<i1>
+      // CHECK-NEXT: [[STATE:%.+]] = arc.storage.get [[SUBPTR]][2080] : !arc.storage<2081> -> !arc.state<i1>
       // CHECK-NEXT: arc.state_read [[STATE]] : <i1>
       scf.yield
       // CHECK-NEXT: scf.yield
@@ -41,10 +41,10 @@ arc.model @test io !hw.modty<input x : i1, output y : i1> {
   }
   // CHECK-NEXT: }
 
-  // CHECK-NEXT: arc.alloc_storage [[PTR]][1168] : (!arc.storage<5780>) -> !arc.storage<4609>
+  // CHECK-NEXT: arc.alloc_storage [[PTR]][2096] : (!arc.storage<6708>) -> !arc.storage<4609>
   // CHECK-NEXT: arc.initial {
   arc.initial {
-    // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][1168] : !arc.storage<5780> -> !arc.storage<4609>
+    // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][2096] : !arc.storage<6708> -> !arc.storage<4609>
     arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i1, i1>
     arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i8, i1>
     arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i16, i1>
@@ -68,12 +68,12 @@ arc.model @test io !hw.modty<input x : i1, output y : i1> {
   }
   // CHECK-NEXT: }
 
-  // CHECK-NEXT: arc.alloc_storage [[PTR]][5778] : (!arc.storage<5780>) -> !arc.storage<2>
+  // CHECK-NEXT: arc.alloc_storage [[PTR]][6706] : (!arc.storage<6708>) -> !arc.storage<2>
   // CHECK-NEXT: arc.initial {
   arc.initial {
     arc.root_input "x", %arg0 : (!arc.storage) -> !arc.state<i1>
     arc.root_output "y", %arg0 : (!arc.storage) -> !arc.state<i1>
-    // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][5778] : !arc.storage<5780> -> !arc.storage<2>
+    // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][6706] : !arc.storage<6708> -> !arc.storage<2>
     // CHECK-NEXT: arc.root_input "x", [[SUBPTR]] {offset = 0 : i32}
     // CHECK-NEXT: arc.root_output "y", [[SUBPTR]] {offset = 1 : i32}
   }
