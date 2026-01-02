@@ -71,3 +71,69 @@ hw.module @AssertAssume(in %a: i8, in %b: i8, out z: i8) {
   verif.assert %8 : i1
   hw.output %5 : i8
 }
+
+//------
+
+// CHECK-LABEL: hw.module @AssumeOnly
+// CHECK-NEXT:   [[TMP0:%.+]] = comb.add bin %a, %b : i42
+// CHECK-NEXT:   [[CONT:%.+]] = verif.contract [[TMP0]] : i42 {
+// CHECK-NEXT:     %c0_i42 = hw.constant 0 : i42
+// CHECK-NEXT:     [[TMP1:%.+]] = comb.icmp bin uge %a, %c0_i42 : i1
+// CHECK-NEXT:     verif.require [[TMP1]] : i1
+// CHECK-NEXT:   }
+// CHECK-NEXT:   hw.output [[CONT]] : i42
+// CHECK-NEXT: }
+
+hw.module @AssumeOnly(in %a: i42, in %b: i42, out z: i42) {
+  %0 = comb.add bin %a, %b : i42
+  %c0_i42 = hw.constant 0 : i42
+  %1 = comb.icmp bin uge %a, %c0_i42 : i1
+  verif.assume %1 : i1
+  hw.output %0 : i42
+}
+
+//------
+
+// CHECK-LABEL: hw.module @ManyAssumes
+// CHECK-NEXT:   [[TMP0:%.+]] = comb.add bin %a, %b : i42
+// CHECK-NEXT:   [[CONT:%.+]] = verif.contract [[TMP0]] : i42 {
+// CHECK-NEXT:     %c0_i42 = hw.constant 0 : i42
+// CHECK-NEXT:     [[TMP1:%.+]] = comb.icmp bin uge %a, %c0_i42 : i1
+// CHECK-NEXT:     [[TMP2:%.+]] = comb.icmp bin uge %b, %c0_i42 : i1
+// CHECK-NEXT:     [[TMP3:%.+]] = comb.and bin [[TMP1]], [[TMP2]] : i1
+// CHECK-NEXT:     verif.require [[TMP3]] : i1
+// CHECK-NEXT:   }
+// CHECK-NEXT:   hw.output [[CONT]] : i42
+// CHECK-NEXT: }
+
+hw.module @ManyAssumes(in %a: i42, in %b: i42, out z: i42) {
+  %0 = comb.add bin %a, %b : i42
+  %c0_i42 = hw.constant 0 : i42
+  %1 = comb.icmp bin uge %a, %c0_i42 : i1
+  verif.assume %1 : i1
+  %2 = comb.icmp bin uge %b, %c0_i42 : i1
+  verif.assume %2 : i1
+  hw.output %0 : i42
+}
+
+//------
+
+hw.module @ManyAssertsAndAssumes(in %a: i42, out z: i42) {
+  %c1_i42 = hw.constant 1 : i42
+  %0 = comb.shl %a, %c1_i42 : i42
+  %1 = verif.contract %0 : i42 {
+    %c2_i42 = hw.constant 2 : i42
+    %req = comb.icmp ult %a, %c2_i42 : i42
+    verif.require %req : i1
+    %c0_i42 = hw.constant 0 : i42
+    %req1 = comb.icmp uge %a, %c0_i42 : i1
+    verif.require %req1
+    %2 = comb.mul %a, %c2_i42 : i42
+    %3 = comb.icmp eq %1, %2 : i42
+    verif.ensure %3 : i1
+    %5 = comb.add %a, %a : i42
+    %6 = comb.icmp eq %1, %5 : i42
+    verif.ensure %6 : i1
+  }
+  hw.output %1 : i42
+}
