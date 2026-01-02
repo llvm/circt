@@ -32,7 +32,7 @@ arc.model @Bar io !hw.modty<> {
 
   // CHECK:      "name": "y"
   // CHECK-NEXT: "offset": 48
-  // CHECK-NEXT: "numBits": 32
+  // CHECK-NEXT: "numBits": 17
   // CHECK-NEXT: "type": "memory"
   // CHECK-NEXT: "stride": 3
   // CHECK-NEXT: "depth": 5
