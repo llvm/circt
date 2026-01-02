@@ -15,7 +15,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def CombineAssertLike : Pass<"combine-assert-like", "hw::HWModuleOp"> {
+def CombineAssertLikePass : Pass<"combine-assert-like", "hw::HWModuleOp"> {
   let summary = "Combines all assertions and assumptions into single operations";
   let description = [{
     Combines all assertions and assumptions by conjoining their conditions into a
@@ -42,7 +42,6 @@ def CombineAssertLike : Pass<"combine-assert-like", "hw::HWModuleOp"> {
     such as contract inference.
   }];
 }
-
 
 def PrepareForFormalPass : Pass<"prepare-for-formal", "hw::HWModuleOp"> {
   let summary = "Prepares a given top-level circuit for formal verification";
