@@ -155,12 +155,40 @@ public:
 struct MapArithToCombPass
     : public circt::impl::MapArithToCombPassBase<MapArithToCombPass> {
 public:
+  MapArithToCombPass(bool enableBestEffortLowering) {
+    this->enableBestEffortLowering = enableBestEffortLowering;
+  }
+
   void runOnOperation() override {
     auto *ctx = &getContext();
 
     ConversionTarget target(*ctx);
     target.addLegalDialect<comb::CombDialect, hw::HWDialect>();
-    target.addIllegalDialect<arith::ArithDialect>();
+    if (!enableBestEffortLowering) {
+      target.addIllegalDialect<arith::ArithDialect>();
+    } else {
+      // We make all arith operations with a potential lowering here (as
+      // specified in circt::populateArithToCombPatterns) illegal
+      target.addIllegalOp<arith::AddIOp>();
+      target.addIllegalOp<arith::SubIOp>();
+      target.addIllegalOp<arith::MulIOp>();
+      target.addIllegalOp<arith::DivSIOp>();
+      target.addIllegalOp<arith::DivUIOp>();
+      target.addIllegalOp<arith::RemSIOp>();
+      target.addIllegalOp<arith::RemUIOp>();
+      target.addIllegalOp<arith::AndIOp>();
+      target.addIllegalOp<arith::OrIOp>();
+      target.addIllegalOp<arith::XOrIOp>();
+      target.addIllegalOp<arith::ShLIOp>();
+      target.addIllegalOp<arith::ShRSIOp>();
+      target.addIllegalOp<arith::ShRUIOp>();
+      target.addIllegalOp<arith::ConstantOp>();
+      target.addIllegalOp<arith::SelectOp>();
+      target.addIllegalOp<arith::ExtSIOp>();
+      target.addIllegalOp<arith::ExtUIOp>();
+      target.addIllegalOp<arith::TruncIOp>();
+      target.addIllegalOp<arith::CmpIOp>();
+    }
     MapArithTypeConverter typeConverter;
     RewritePatternSet patterns(ctx);
     populateArithToCombPatterns(patterns, typeConverter);
@@ -195,6 +223,7 @@ void circt::populateArithToCombPatterns(mlir::RewritePatternSet &patterns,
       typeConverter, patterns.getContext());
 }
 
-std::unique_ptr<mlir::Pass> circt::createMapArithToCombPass() {
-  return std::make_unique<MapArithToCombPass>();
+std::unique_ptr<mlir::Pass>
+circt::createMapArithToCombPass(bool enableBestEffortLowering) {
+  return std::make_unique<MapArithToCombPass>(enableBestEffortLowering);
 }
