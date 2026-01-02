@@ -31,11 +31,11 @@ static std::optional<uint64_t> computeLLVMBitWidth(Type type) {
     return 1;
 
   if (auto intType = dyn_cast<IntegerType>(type)) {
-    // 1. Get the logical width.
+    // Get the logical width.
     uint64_t width = intType.getWidth();
-    // 2. Ensure it occupies at least one byte (e.g., i1 becomes 8 bits).
+    // Ensure it occupies at least one byte.
     width = std::max<uint64_t>(width, 8);
-    // 3. Align to the next power of 2 to match LLVM's storage layout.
+    // Align to the next power of 2 to match LLVM's storage layout.
     return llvm::bit_ceil(width);
   }
 
