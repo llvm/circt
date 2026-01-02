@@ -6,13 +6,13 @@ arc.model @Foo io !hw.modty<input a : i19, output b : i42> {
 ^bb0(%arg0: !arc.storage<5724>):
   // CHECK:      "name": "a"
   // CHECK-NEXT: "offset": 0
-  // CHECK-NEXT: "numBits": 19
+  // CHECK-NEXT: "numBits": 32
   // CHECK-NEXT: "type": "input"
   arc.root_input "a", %arg0 {offset = 0} : (!arc.storage<5724>) -> !arc.state<i19>
 
   // CHECK:      "name": "b"
   // CHECK-NEXT: "offset": 16
-  // CHECK-NEXT: "numBits": 42
+  // CHECK-NEXT: "numBits": 64
   // CHECK-NEXT: "type": "output"
   arc.root_output "b", %arg0 {offset = 16} : (!arc.storage<5724>) -> !arc.state<i42>
 }
@@ -26,13 +26,13 @@ arc.model @Bar io !hw.modty<> {
 
   // CHECK:      "name": "x"
   // CHECK-NEXT: "offset": 24
-  // CHECK-NEXT: "numBits": 63
+  // CHECK-NEXT: "numBits": 64
   // CHECK-NEXT: "type": "register"
   arc.alloc_state %arg0 {name = "x", offset = 24} : (!arc.storage<9001>) -> !arc.state<i63>
 
   // CHECK:      "name": "y"
   // CHECK-NEXT: "offset": 48
-  // CHECK-NEXT: "numBits": 17
+  // CHECK-NEXT: "numBits": 32
   // CHECK-NEXT: "type": "memory"
   // CHECK-NEXT: "stride": 3
   // CHECK-NEXT: "depth": 5
@@ -40,7 +40,7 @@ arc.model @Bar io !hw.modty<> {
 
   // CHECK:      "name": "z"
   // CHECK-NEXT: "offset": 92
-  // CHECK-NEXT: "numBits": 1337
+  // CHECK-NEXT: "numBits": 2048
   // CHECK-NEXT: "type": "wire"
   arc.alloc_state %arg0 tap {name = "z", offset = 92} : (!arc.storage<9001>) -> !arc.state<i1337>
 }
