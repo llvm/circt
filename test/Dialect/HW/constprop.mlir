@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --hw-constprop --split-input-file | FileCheck %s
+// RUN: circt-opt %s --hw-imconstprop --split-input-file | FileCheck %s
 
 // Test basic constant propagation within a single module
 // CHECK-LABEL: hw.module @BasicConstProp

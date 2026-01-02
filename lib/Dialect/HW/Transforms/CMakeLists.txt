@@ -2,7 +2,7 @@ add_circt_dialect_library(CIRCTHWTransforms
   HWAggregateToComb.cpp
   HWBypassInnerSymbols.cpp
   HWParameterizeConstantPorts.cpp
-  HWConstProp.cpp
+  HWIMConstProp.cpp
   HWPrintInstanceGraph.cpp
   HWSpecialize.cpp
   PrintHWModuleGraph.cpp
