@@ -130,7 +130,9 @@ struct FormatStringParser {
                                                  : IntFormat::HexLower);
 
     case 'e':
+      return emitReal(arg, options, RealFormat::Exponential);
     case 'g':
+      return emitReal(arg, options, RealFormat::General);
     case 'f':
       return emitReal(arg, options, RealFormat::Float);
 
@@ -153,6 +155,10 @@ struct FormatStringParser {
     Type intTy = {};
     Value val;
     auto rVal = context.convertRvalueExpression(arg);
+    // To infer whether or not the value is signed while printing as a decimal
+    // Since it only matters if it's a decimal, we add `format ==
+    // IntFormat::Decimal`
+    bool isSigned = arg.type->isSigned() && format == IntFormat::Decimal;
     if (!rVal)
       return failure();
 
@@ -184,30 +190,17 @@ struct FormatStringParser {
     if (!value)
       return failure();
 
-    // Determine the width to which the formatted integer should be padded.
-    unsigned width;
-    if (options.width) {
-      width = *options.width;
-    } else {
-      width = cast<moore::IntType>(value.getType()).getWidth();
-      if (format == IntFormat::Octal)
-        // 3 bits per octal digit
-        width = (width + 2) / 3;
-      else if (format == IntFormat::HexLower || format == IntFormat::HexUpper)
-        // 4 bits per hex digit
-        width = (width + 3) / 4;
-      else if (format == IntFormat::Decimal)
-        // ca. 3.322 bits per decimal digit (ln(10)/ln(2))
-        width = std::ceil(width * std::log(2) / std::log(10));
-    }
-
     // Determine the alignment and padding.
     auto alignment = options.leftJustify ? IntAlign::Left : IntAlign::Right;
     auto padding =
         format == IntFormat::Decimal ? IntPadding::Space : IntPadding::Zero;
+    mlir::IntegerAttr widthAttr = nullptr;
+    if (options.width) {
+      widthAttr = builder.getI32IntegerAttr(*options.width);
+    }
 
-    fragments.push_back(moore::FormatIntOp::create(builder, loc, value, format,
-                                                   width, alignment, padding));
+    fragments.push_back(moore::FormatIntOp::create(
+        builder, loc, value, format, alignment, padding, widthAttr, isSigned));
     return success();
   }
 
@@ -219,13 +212,26 @@ struct FormatStringParser {
     auto value = context.convertRvalueExpression(
         arg, moore::RealType::get(context.getContext(), moore::RealWidth::f64));
 
+    mlir::IntegerAttr widthAttr = nullptr;
+    if (options.width) {
+      widthAttr = builder.getI32IntegerAttr(*options.width);
+    }
+
+    mlir::IntegerAttr precisionAttr = nullptr;
+    if (options.precision) {
+      if (*options.precision)
+        precisionAttr = builder.getI32IntegerAttr(*options.precision);
+      else
+        // If precision is 0, we set it to 1 instead
+        precisionAttr = builder.getI32IntegerAttr(1);
+    }
+
+    auto alignment = options.leftJustify ? IntAlign::Left : IntAlign::Right;
     if (!value)
       return failure();
 
-    // TODO add support for specifics such as width etc
-
-    fragments.push_back(
-        moore::FormatRealOp::create(builder, loc, value, format));
+    fragments.push_back(moore::FormatRealOp::create(
+        builder, loc, value, format, alignment, widthAttr, precisionAttr));
 
     return success();
   }

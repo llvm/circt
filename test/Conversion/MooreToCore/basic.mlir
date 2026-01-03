@@ -386,21 +386,44 @@ func.func @Statements(%arg0: !moore.i42) {
 }
 
 // CHECK-LABEL: func @FormatStrings
-func.func @FormatStrings(%arg0: !moore.i42) {
+func.func @FormatStrings(%arg0: !moore.i42, %arg1: !moore.f32, %arg2: !moore.f64) {
   // CHECK: [[TMP:%.+]] = sim.fmt.literal "hello"
   %0 = moore.fmt.literal "hello"
   // CHECK: sim.fmt.concat ([[TMP]], [[TMP]])
   %1 = moore.fmt.concat (%0, %0)
-  // CHECK: sim.fmt.dec %arg0 : i42
-  moore.fmt.int decimal %arg0, width 42, align right, pad space : i42
-  // CHECK: sim.fmt.bin %arg0 : i42
-  moore.fmt.int binary %arg0, width 42, align right, pad space : i42
-  // CHECK: sim.fmt.oct %arg0 : i42
-  moore.fmt.int octal %arg0, width 42, align right, pad space : i42
-  // CHECK: sim.fmt.hex %arg0 : i42
-  moore.fmt.int hex_lower %arg0, width 42, align right, pad space : i42
-  // CHECK: sim.fmt.hex %arg0 : i42
-  moore.fmt.int hex_upper %arg0, width 42, align right, pad space : i42
+  // CHECK: sim.fmt.dec %arg0 {specifierWidth = 42 : i32} : i42
+  moore.fmt.int decimal %arg0, align right, pad space, width 42 : i42
+  // CHECK: sim.fmt.dec %arg0 {isLeftAligned = true, paddingChar = 48 : i8} : i42
+  moore.fmt.int decimal %arg0, align left, pad zero : i42
+  // CHECK: sim.fmt.bin %arg0 {paddingChar = 32 : i8, specifierWidth = 42 : i32} : i42
+  moore.fmt.int binary %arg0, align right, pad space, width 42 : i42
+  // CHECK: sim.fmt.bin %arg0 {isLeftAligned = true} : i42
+  moore.fmt.int binary %arg0, align left, pad zero : i42
+  // CHECK: sim.fmt.oct %arg0 {paddingChar = 32 : i8, specifierWidth = 42 : i32} : i42
+  moore.fmt.int octal %arg0, align right, pad space, width 42 : i42
+  // CHECK: sim.fmt.oct %arg0 {specifierWidth = 42 : i32}  : i42
+  moore.fmt.int octal %arg0, align right, pad zero, width 42 : i42
+  // CHECK: sim.fmt.hex %arg0, isUpper false {paddingChar = 32 : i8, specifierWidth = 42 : i32} : i42
+  moore.fmt.int hex_lower %arg0, align right, pad space, width 42 : i42
+  // CHECK: sim.fmt.hex %arg0, isUpper false : i42
+  moore.fmt.int hex_lower %arg0, align right, pad zero : i42
+  // CHECK: sim.fmt.hex %arg0, isUpper true {paddingChar = 32 : i8, specifierWidth = 42 : i32} : i42
+  moore.fmt.int hex_upper %arg0, align right, pad space, width 42 : i42
+
+  // CHECK: sim.fmt.flt %arg1 {isLeftAligned = true} : f32
+  moore.fmt.real float %arg1, align left : f32
+  // CHECK: sim.fmt.exp %arg2 {isLeftAligned = true} : f64
+  moore.fmt.real exponential %arg2, align left : f64
+  // CHECK: sim.fmt.gen %arg1 {isLeftAligned = true} : f32
+  moore.fmt.real general %arg1, align left {fracDigits = 6 : i32}: f32
+  // CHECK: sim.fmt.flt %arg2 {fracDigits = 10 : i32, isLeftAligned = true} : f64
+  moore.fmt.real float %arg2, align left {fracDigits = 10 : i32}: f64
+  // CHECK: sim.fmt.exp %arg1 {fieldWidth = 9 : i32, fracDigits = 8 : i32} : f32
+  moore.fmt.real exponential %arg1, align right {fieldWidth = 9 : i32, fracDigits = 8 : i32}: f32
+  // CHECK: sim.fmt.gen %arg2 : f64
+  moore.fmt.real general %arg2, align right : f64
+  // CHECK: sim.fmt.flt %arg1 {fieldWidth = 15 : i32} : f32
+  moore.fmt.real float %arg1, align right {fieldWidth = 15 : i32}: f32
   // CHECK: sim.proc.print [[TMP]]
   moore.builtin.display %0
   return

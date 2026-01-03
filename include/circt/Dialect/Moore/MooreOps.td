@@ -1997,16 +1997,18 @@ def FormatIntOp : MooreOp<"fmt.int", [Pure]> {
   let arguments = (ins
     IntType:$value,
     IntFormatAttr:$format,
-    I32Attr:$width,
     IntAlignAttr:$alignment,
-    IntPaddingAttr:$padding
+    IntPaddingAttr:$padding,
+    OptionalAttr<I32Attr>:$specifierWidth,
+    UnitAttr:$isSigned
   );
   let results = (outs FormatStringType:$result);
   let assemblyFormat = [{
-    $format $value `,`
-    `width` $width `,`
+    $format $value `,` 
     `align` $alignment `,`
     `pad` $padding
+    (`,` `width` $specifierWidth^)? 
+    (`,` `signed` $isSigned^)?
     attr-dict `:` type($value)
   }];
 }
@@ -2028,13 +2030,17 @@ def FormatRealOp : MooreOp<"fmt.real", [Pure]> {
   See IEEE 1800-2017 § 21.2.1.2 "Format specifications".
   }];
   let arguments = (ins
-  RealType:$value,
-  RealFormatAttr:$format
+    RealType:$value,
+    RealFormatAttr:$format,
+    IntAlignAttr:$alignment,
+    OptionalAttr<I32Attr>:$fieldWidth,
+    OptionalAttr<I32Attr>:$fracDigits
   );
   let results = (outs FormatStringType:$result);
   let assemblyFormat = [{
-      $format $value `,`
-      attr-dict `:` type($value)
+    $format $value `,`
+    `align` $alignment
+    attr-dict `:` type($value)
   }];
 }
 
