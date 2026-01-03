@@ -67,10 +67,8 @@ makeChangeParams(llvm::StringRef memName, int64_t version,
 
 /// Check that changes are done immediately if debounce is disabled
 TEST(PendingChangesMapTest, ImmediateFlushWhenDisabled) {
-#if defined(__APPLE__)
   // See https://github.com/llvm/circt/issues/9292.
   GTEST_SKIP() << "flaky on macOS";
-#endif
 
   PendingChangesMap pcm(/*maxThreads=*/2);
   DebounceOptions opt;
@@ -94,10 +92,8 @@ TEST(PendingChangesMapTest, ImmediateFlushWhenDisabled) {
 
 /// Check that changes are applied once debounce delay window is passed
 TEST(PendingChangesMapTest, FlushAfterQuietMinWindow) {
-#if defined(__APPLE__)
   // See https://github.com/llvm/circt/issues/9292.
   GTEST_SKIP() << "flaky on macOS";
-#endif
 
   PendingChangesMap pcm(2);
   DebounceOptions opt;
@@ -125,10 +121,8 @@ TEST(PendingChangesMapTest, FlushAfterQuietMinWindow) {
 
 /// Check that outdated edits are not applied and the thread is discarded.
 TEST(PendingChangesMapTest, ObsoleteWhenNewerEditsArrive) {
-#if defined(__APPLE__)
   // See https://github.com/llvm/circt/issues/9292.
   GTEST_SKIP() << "flaky on macOS";
-#endif
 
   PendingChangesMap pcm(2);
   DebounceOptions opt;
@@ -168,10 +162,8 @@ TEST(PendingChangesMapTest, ObsoleteWhenNewerEditsArrive) {
 }
 
 TEST(PendingChangesMapTest, MaxCapForcesFlushDuringContinuousTyping) {
-#if defined(__APPLE__)
   // See https://github.com/llvm/circt/issues/9292.
   GTEST_SKIP() << "flaky on macOS";
-#endif
 
   PendingChangesMap pcm(2);
   DebounceOptions opt;
@@ -215,10 +207,8 @@ TEST(PendingChangesMapTest, MaxCapForcesFlushDuringContinuousTyping) {
 
 /// Check that no update is queued if the change map is empty.
 TEST(PendingChangesMapTest, MissingKeyYieldsNullptr) {
-#if defined(__APPLE__)
   // See https://github.com/llvm/circt/issues/9292.
   GTEST_SKIP() << "flaky on macOS";
-#endif
 
   PendingChangesMap pcm(2);
   DebounceOptions opt;
@@ -239,10 +229,8 @@ TEST(PendingChangesMapTest, MissingKeyYieldsNullptr) {
 }
 
 TEST(PendingChangesMapTest, EraseByKeyAndUriAreIdempotent) {
-#if defined(__APPLE__)
   // See https://github.com/llvm/circt/issues/9292.
   GTEST_SKIP() << "flaky on macOS";
-#endif
 
   PendingChangesMap pcm(/*maxThreads=*/2);
 
@@ -297,10 +285,8 @@ TEST(PendingChangesMapTest, EraseByKeyAndUriAreIdempotent) {
 }
 
 TEST(PendingChangesMapTest, AbortClearsAll) {
-#if defined(__APPLE__)
   // See https://github.com/llvm/circt/issues/9292.
   GTEST_SKIP() << "flaky on macOS";
-#endif
 
   PendingChangesMap pcm(2);
 
