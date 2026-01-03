@@ -623,29 +623,28 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
   LLVM_DEBUG(llvm::dbgs() << "Prune ports of module: " << module.getName()
                           << "\n");
 
-  auto replaceInstanceResultWithWire = [&](ImplicitLocOpBuilder &builder,
-                                           unsigned index,
-                                           InstanceOp instance) {
-    auto result = instance.getResult(index);
-    if (isAssumedDead(result)) {
-      // If the result is dead, replace the result with an unrealized conversion
-      // cast which works as a dummy placeholder.
-      auto wire =
-          mlir::UnrealizedConversionCastOp::create(
-              builder, ArrayRef<Type>{result.getType()}, ArrayRef<Value>{})
-              ->getResult(0);
-      result.replaceAllUsesWith(wire);
-      return;
-    }
+  auto replaceInstanceResultWithWire =
+      [&](ImplicitLocOpBuilder &builder, unsigned index, InstanceOp instance) {
+        auto result = instance.getResult(index);
+        if (isAssumedDead(result)) {
+          // If the result is dead, replace the result with an unrealized
+          // conversion cast which works as a dummy placeholder.
+          auto wire =
+              mlir::UnrealizedConversionCastOp::create(
+                  builder, ArrayRef<Type>{result.getType()}, ArrayRef<Value>{})
+                  ->getResult(0);
+          result.replaceAllUsesWith(wire);
+          return;
+        }
 
-    Value wire = WireOp::create(builder, result.getType()).getResult();
-    result.replaceAllUsesWith(wire);
-    // If a module port is dead but its instance result is alive, the port
-    // is used as a temporary wire so make sure that a replaced wire is
-    // putted into `liveSet`.
-    liveElements.erase(result);
-    liveElements.insert(wire);
-  };
+        Value wire = WireOp::create(builder, result.getType()).getResult();
+        result.replaceAllUsesWith(wire);
+        // If a module port is dead but its instance result is alive, the port
+        // is used as a temporary wire so make sure that a replaced wire is
+        // putted into `liveSet`.
+        liveElements.erase(result);
+        liveElements.insert(wire);
+      };
 
   // First, delete dead instances.
   for (auto *use : llvm::make_early_inc_range(instanceGraphNode->uses())) {

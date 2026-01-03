@@ -1440,3 +1440,46 @@ firrtl.circuit "RemoveNonLocalFromLocal" {
     firrtl.instance bar sym @sym {annotations = [{circt.nonlocal = @dutNLA, class = "circt.tracker", id = distinct[0]<>}]} @Bar()
   }
 }
+
+// -----
+
+// Test that domain info is preserved when inlining a module with domain-type ports.
+firrtl.circuit "InlineDomainTypePorts" {
+  firrtl.domain @ClockDomain
+  // CHECK-LABEL: firrtl.module @InlineDomainTypePorts
+  firrtl.module @InlineDomainTypePorts(
+    in %A: !firrtl.domain of @ClockDomain
+  ) {
+    // CHECK: %child_A = firrtl.wire {domainInfo = [@ClockDomain]} : !firrtl.domain
+    // CHECK: firrtl.domain.define %child_A, %A
+    %child_A = firrtl.instance child @Child(in A: !firrtl.domain of @ClockDomain)
+    firrtl.domain.define %child_A, %A
+  }
+  firrtl.module private @Child(
+    in %A: !firrtl.domain of @ClockDomain
+  ) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+  }
+}
+
+// -----
+
+// Test that domain associations are preserved when inlining a module with non-domain ports that have domain associations.
+firrtl.circuit "InlineDomainAssociations" {
+  firrtl.domain @ClockDomain
+  // CHECK-LABEL: firrtl.module @InlineDomainAssociations
+  firrtl.module @InlineDomainAssociations(
+    in %A: !firrtl.domain of @ClockDomain,
+    in %clock: !firrtl.clock domains [%A]
+  ) {
+    // CHECK: %child_A = firrtl.wire {domainInfo = [@ClockDomain]} : !firrtl.domain
+    // CHECK: %child_clock = firrtl.wire {domainInfo = {{\[}}[0 : ui32]]} : !firrtl.clock
+    %child_A, %child_clock = firrtl.instance child @Child(in A: !firrtl.domain of @ClockDomain, in clock: !firrtl.clock domains [A])
+    firrtl.domain.define %child_A, %A
+    firrtl.matchingconnect %child_clock, %clock : !firrtl.clock
+  }
+  firrtl.module private @Child(
+    in %A: !firrtl.domain of @ClockDomain,
+    in %clock: !firrtl.clock domains [%A]
+  ) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+  }
+}
