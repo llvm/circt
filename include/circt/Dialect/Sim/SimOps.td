@@ -181,12 +181,20 @@ def FormatHexOp : SimOp<"fmt.hex", [Pure]> {
   }];
 
 
-  let arguments = (ins AnyInteger:$value);
+  let arguments = (ins AnyInteger:$value, 
+    BoolAttr:$isHexUppercase,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    DefaultValuedAttr<I8Attr,"48">:$paddingChar,
+    OptionalAttr<I32Attr>:$specifierWidth);
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
 
-  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+  let assemblyFormat = [{
+    $value `,`
+    `isUpper`  $isHexUppercase
+    attr-dict `:` qualified(type($value))
+  }];
 }
 
 def FormatOctOp : SimOp<"fmt.oct", [Pure]> {
@@ -201,12 +209,19 @@ def FormatOctOp : SimOp<"fmt.oct", [Pure]> {
   }];
 
 
-  let arguments = (ins AnyInteger:$value);
+  let arguments = (ins AnyInteger:$value,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    DefaultValuedAttr<I8Attr,"48">:$paddingChar,
+    OptionalAttr<I32Attr>:$specifierWidth);
+
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
 
-  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+  let assemblyFormat = [{
+    $value 
+    attr-dict `:` qualified(type($value))
+  }];
 }
 
 def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
@@ -219,12 +234,18 @@ def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
     the empty string. No further prefix will be added.
   }];
 
-  let arguments = (ins AnyInteger:$value);
+  let arguments = (ins AnyInteger:$value,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    DefaultValuedAttr<I8Attr,"48">:$paddingChar,
+    OptionalAttr<I32Attr>:$specifierWidth);
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
 
-  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+  let assemblyFormat = [{
+    $value
+    attr-dict `:` qualified(type($value))
+  }];
 }
 
 
@@ -252,13 +273,18 @@ def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
     Backends are recommended to not exceed the required amount of padding.
   }];
 
-  let arguments = (ins AnyInteger:$value, UnitAttr:$isSigned);
+  let arguments = (ins AnyInteger:$value,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    DefaultValuedAttr<I8Attr,"32">:$paddingChar,
+    OptionalAttr<I32Attr>:$specifierWidth,
+    UnitAttr:$isSigned);
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
 
   let assemblyFormat = [{
-    (`signed` $isSigned^)? $value attr-dict `:` qualified(type($value))
+    $value
+    attr-dict `:` qualified(type($value))
   }];
 
   let extraClassDeclaration = [{
