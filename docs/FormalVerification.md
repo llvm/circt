@@ -232,7 +232,7 @@ hw.module @mod(in %clk: !seq.clock, in %arg0: i32, in %rst: i1,
   %3 = comb.icmp eq, %2, %c0_i32 : i32
   verif.assume %3 : i1
   %4 = comb.xor %rst, %true : i1
-  %5 = ltl.delay %4, 2 : i1
+  %5 = ltl.delay %clk, posedge, %4, 2 : i1
   %6 = ltl.concat %rst, %5 : i1, !ltl.sequence
   %7 = ltl.clock %6, posedge %clk : !ltl.sequence
   verif.assume %7 : !ltl.sequence
@@ -265,7 +265,7 @@ verif.bmc bound 10 {
   %3 = comb.icmp eq, %2, %c0_i32 : i32
   verif.assume %3 : i1
   %4 = comb.xor %rst, %true : i1
-  %5 = ltl.delay %4, 2 : i1
+  %5 = ltl.delay %clk, posedge, %4, 2 : i1
   %6 = ltl.concat %rst, %5 : i1, !ltl.sequence
   %7 = ltl.clock %6, posedge %clk : !ltl.sequence
   verif.assume %7 : !ltl.sequence
