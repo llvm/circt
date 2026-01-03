@@ -497,7 +497,7 @@ option(CIRCT_BINDINGS_PYTHON_ENABLED "Enables CIRCT Python bindings." OFF)
 if(CIRCT_BINDINGS_PYTHON_ENABLED)
   message(STATUS "CIRCT Python bindings are enabled.")
   set(MLIR_DISABLE_CONFIGURE_PYTHON_DEV_PACKAGES 0)
-  mlir_detect_nanobind_install()
+  mlir_configure_python_dev_packages()
   # Prime the search like mlir_configure_python_dev_modules
   find_package(Python3 3.8 COMPONENTS Interpreter Development)
   find_package(Python3 3.8 COMPONENTS Interpreter Development.Module)
