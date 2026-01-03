@@ -4290,6 +4290,12 @@ static FlatSymbolRefAttr getDomainTypeName(Value value) {
       return getDomainTypeNameOfResult(instance, result.getResultNumber());
     if (auto anonDomain = dyn_cast<DomainCreateAnonOp>(op))
       return anonDomain.getDomainAttr();
+    if (auto wireOp = dyn_cast<WireOp>(op)){
+      auto info = wireOp.getDomainInfo();
+      if (!info || info->empty())
+        return {};
+      return dyn_cast<FlatSymbolRefAttr>((*info)[0]);
+    }
     return {};
   }
 
@@ -4305,19 +4311,6 @@ LogicalResult DomainDefineOp::verify() {
 
   auto dst = getDest();
   auto src = getSrc();
-
-  // As wires cannot have domain information, don't do any checking when a wire
-  // is involved.  This weakens the verification.
-  //
-  // TOOD: Remove this by adding Domain Info to wires [1].
-  //
-  // [1] https://github.com/llvm/circt/issues/9398
-  if (auto *srcDefOp = src.getDefiningOp())
-    if (isa<WireOp>(srcDefOp))
-      return success();
-  if (auto *dstDefOp = dst.getDefiningOp())
-    if (isa<WireOp>(dstDefOp))
-      return success();
 
   auto dstDomain = getDomainTypeName(dst);
   if (!dstDomain)

@@ -632,7 +632,8 @@ def WireOp : HardwareDeclOp<"wire", [
   let arguments = (ins StrAttr:$name, NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym,
-                       UnitAttr:$forceable); // ReferenceKinds
+                       UnitAttr:$forceable,
+                       OptionalAttr<DomainInfoAttr>:$domainInfo); // ReferenceKinds
   let results = (outs AnyType:$result, Optional<RefType>:$ref);
 
   let hasCanonicalizer = true;
@@ -652,12 +653,17 @@ def WireOp : HardwareDeclOp<"wire", [
                    "::circt::firrtl::NameKindEnumAttr":$nameKind,
                    "::mlir::ArrayAttr":$annotations,
                    "::circt::hw::InnerSymAttr":$innerSym,
-                   "::mlir::UnitAttr":$forceable), [{
+                   "::mlir::UnitAttr":$forceable,
+                   "::mlir::FlatSymbolRefAttr":$domain), [{
       $_state.addAttribute(getNameAttrName($_state.name), name);
       $_state.addAttribute(getNameKindAttrName($_state.name), nameKind);
       $_state.addAttribute(getAnnotationsAttrName($_state.name), annotations);
       if (innerSym) {
         $_state.addAttribute(getInnerSymAttrName($_state.name), innerSym);
+      }
+      if (domain) {
+        $_state.addAttribute(getDomainInfoAttrName($_state.name),
+                            $_builder.getArrayAttr({domain}));
       }
       $_state.addTypes(elementType);
       if (forceable) {
@@ -671,33 +677,38 @@ def WireOp : HardwareDeclOp<"wire", [
                    "::circt::firrtl::NameKindEnum":$nameKind,
                    "::mlir::ArrayAttr":$annotations,
                    "::circt::hw::InnerSymAttr":$innerSym,
-                   "bool":$forceable), [{
+                   "bool":$forceable,
+                   "::mlir::FlatSymbolRefAttr":$domain), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name),
                    ::circt::firrtl::NameKindEnumAttr::get(odsBuilder.getContext(), nameKind),
                    annotations, innerSym,
-                   forceable ? $_builder.getUnitAttr() : nullptr);
+                   forceable ? $_builder.getUnitAttr() : nullptr, domain);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType,
                       CArg<"StringRef", "{}">:$name,
                       CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                       CArg<"ArrayRef<Attribute>","{}">:$annotations,
                       CArg<"StringAttr", "StringAttr()">:$innerSym,
-                      CArg<"bool", "false">:$forceable), [{
+                      CArg<"bool", "false">:$forceable,
+                      CArg<"FlatSymbolRefAttr", "FlatSymbolRefAttr()">:$domain), [{
       return build($_builder, $_state, elementType,
                    name, nameKind,
                    $_builder.getArrayAttr(annotations),
                    innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
-                   forceable);
+                   forceable,
+                   domain);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "StringRef":$name,
                    "NameKindEnum":$nameKind, "::mlir::ArrayAttr":$annotations,
                    CArg<"StringAttr", "StringAttr()">:$innerSym,
-                   CArg<"bool", "false">:$forceable), [{
+                   CArg<"bool", "false">:$forceable,
+                   CArg<"FlatSymbolRefAttr", "FlatSymbolRefAttr()">:$domain), [{
       return build($_builder, $_state, elementType,
                    name, nameKind, annotations,
                    innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
-                   forceable);
+                   forceable,
+                   domain);
     }]>
   ];
 
