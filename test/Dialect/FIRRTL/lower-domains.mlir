@@ -272,6 +272,30 @@ firrtl.circuit "Foo" {
 
 // -----
 
+// Test an anonymous domain.
+firrtl.circuit "Foo" {
+  firrtl.domain @ClockDomain
+  firrtl.extmodule @Bar(
+    in A: !firrtl.domain of @ClockDomain,
+    in a: !firrtl.uint<1> domains [A]
+  )
+  // CHECK-LABEL: firrtl.module @Foo()
+  firrtl.module @Foo() {
+    // CHECK-NEXT: %bar_A, %bar_A_out, %bar_a = firrtl.instance bar @Bar
+    %bar_A, %bar_a = firrtl.instance bar @Bar(
+      in A: !firrtl.domain of @ClockDomain,
+      in a: !firrtl.uint<1> domains [A]
+    )
+    %anon = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+    firrtl.domain.define %bar_A, %anon
+    // CHECK-NOT: firrtl.object
+    // CHECK-NOT: firrtl.domain.anon
+    // CHECK-NOT: firrtl.domain.define
+  }
+}
+
+// -----
+
 // Check that unconnected output domains work.
 //
 // TODO: If there was stronger verification that ExpandWhens ensures
@@ -451,18 +475,29 @@ firrtl.circuit "Foo" {
 
 // -----
 
-// Check that dead/unused wires are deleted.
-firrtl.circuit "DeadWires" {
+// Check that dead/unused operations inolving domains are deleted.
+firrtl.circuit "DeadDomainOps" {
   firrtl.domain @ClockDomain
-  // CHECK-LABEL: firrtl.module @DeadWires
+  // CHECK-LABEL: firrtl.module @DeadDomainOps
   // CHECK-NOT: firrtl.wire
   // CHECK-NOT: firrtl.domain.define
-  firrtl.module @DeadWires(
+  // CHECK-NOT: firrtl.domain.anon : !firrtl.domain of @ClockDomain
+  firrtl.module @DeadDomainOps(
   ) {
+    // A lone, undriven wire.
     %a = firrtl.wire : !firrtl.domain
 
+    // One wire that drives another.
     %b = firrtl.wire : !firrtl.domain
     %c = firrtl.wire : !firrtl.domain
     firrtl.domain.define %b, %c
+
+    // A lone anonymous domain.
+    %d = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+
+    // A wire driven by an anonymous domain.
+    %e = firrtl.wire : !firrtl.domain
+    %f = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+    firrtl.domain.define %e, %f
   }
 }

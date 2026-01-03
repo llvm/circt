@@ -518,6 +518,12 @@ LogicalResult LowerModule::lowerModule() {
         return WalkResult::advance();
       }
 
+      // Track anonymous domains for later traversal and erasure.
+      if (auto anonDomain = dyn_cast<DomainCreateAnonOp>(walkOp)) {
+        conversionsToErase.insert(anonDomain);
+        return WalkResult::advance();
+      }
+
       // If we see a WireOp of a domain type, then we want to erase it.  To do
       // this, find what is driving it and what it is driving and then replace
       // that triplet of operations with a single domain define inserted before
@@ -576,23 +582,33 @@ LogicalResult LowerModule::lowerModule() {
       if (!defineOp)
         return WalkResult::advance();
 
-      // Only visit domain define ops which have conversioncast source and
-      // destination.
-      auto src = dyn_cast<UnrealizedConversionCastOp>(
-          defineOp.getSrc().getDefiningOp());
+      // There are only two possibilities for kinds of `DomainDefineOp`s that we
+      // can see a this point: the destination is always a conversion cast and
+      // the source is _either_ (1) a conversion cast if the source is a module
+      // or instance port or (2) an anonymous domain op.  This relies on the
+      // earlier "canonicalization" that erased `WireOp`s to leave only
+      // `DomainDefineOp`s.
+      auto *src = defineOp.getSrc().getDefiningOp();
       auto dest = dyn_cast<UnrealizedConversionCastOp>(
           defineOp.getDest().getDefiningOp());
       if (!src || !dest)
         return WalkResult::advance();
-      assert(src.getNumOperands() == 1 && src.getNumResults() == 1);
-      assert(dest.getNumOperands() == 1 && dest.getNumResults() == 1);
 
       conversionsToErase.insert(src);
       conversionsToErase.insert(dest);
 
-      OpBuilder builder(defineOp);
-      PropAssignOp::create(builder, defineOp.getLoc(), dest.getOperand(0),
-                           src.getOperand(0));
+      if (auto srcCast = dyn_cast<UnrealizedConversionCastOp>(src)) {
+        assert(srcCast.getNumOperands() == 1 && srcCast.getNumResults() == 1);
+        OpBuilder builder(defineOp);
+        PropAssignOp::create(builder, defineOp.getLoc(), dest.getOperand(0),
+                             srcCast.getOperand(0));
+      } else if (!isa<DomainCreateAnonOp>(src)) {
+        auto diag = defineOp.emitOpError()
+                    << "has a source which cannot be lowered by 'LowerDomains'";
+        diag.attachNote(src->getLoc()) << "unsupported source is here";
+        return WalkResult::interrupt();
+      }
+
       defineOp->erase();
       return WalkResult::advance();
     });
