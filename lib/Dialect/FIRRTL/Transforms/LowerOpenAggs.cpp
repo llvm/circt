@@ -665,12 +665,16 @@ LogicalResult Visitor::visitDecl(WireOp op) {
     return mlir::emitError(op.getLoc())
            << "annotations on open aggregates not handled yet";
 
+  ArrayAttr domainAttr;
+  if (auto domainInfo = op.getDomainInfo())
+    domainAttr = *domainInfo;
+
   // Create the new HW wire.
   if (mappings.hwType)
     hwOnlyAggMap[op.getResult()] =
         WireOp::create(builder, mappings.hwType, op.getName(), op.getNameKind(),
                        op.getAnnotations(), mappings.newSym, op.getForceable(),
-                       /*domain=*/FlatSymbolRefAttr())
+                       domainAttr)
             .getResult();
 
   // Create the non-HW wires.  Non-HW wire names are always droppable.
@@ -678,7 +682,10 @@ LogicalResult Visitor::visitDecl(WireOp op) {
     nonHWValues[FieldRef(op.getResult(), fieldID)] =
         WireOp::create(builder, type,
                        builder.getStringAttr(Twine(op.getName()) + suffix),
-                       NameKindEnum::DroppableName)
+                       NameKindEnum::DroppableName,
+                       /*annotations=*/ArrayRef<Attribute>{},
+                       /*innerSym=*/StringAttr(),
+                       /*forceable=*/false, domainAttr)
             .getResult();
 
   for (auto fieldID : mappings.mapToNullInteriors)

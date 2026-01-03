@@ -1000,9 +1000,7 @@ static ExprSolution solveExpr(Expr *expr, SmallPtrSetImpl<Expr *> &seenVars,
           worklist.emplace_back(expr->lhs(), indent + 1);
           worklist.emplace_back(expr->rhs(), indent + 1);
         })
-        .Default([&](auto) {
-          setSolution(ExprSolution{std::nullopt, false});
-        });
+        .Default([&](auto) { setSolution(ExprSolution{std::nullopt, false}); });
   }
 
   return solvedExprs[expr];

@@ -4300,7 +4300,7 @@ static FlatSymbolRefAttr getDomainTypeName(Value value) {
       if (domainInfo->size() != 1) {
         return {};
       }
-          return dyn_cast<FlatSymbolRefAttr>((*domainInfo)[0]);
+      return dyn_cast<FlatSymbolRefAttr>((*domainInfo)[0]);
     }
     return {};
   }

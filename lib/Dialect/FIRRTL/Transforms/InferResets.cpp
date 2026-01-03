@@ -1771,8 +1771,7 @@ LogicalResult InferResetsPass::implementFullReset(FModuleOp module,
         auto wireOp = WireOp::create(
             builder, nodeOp.getResult().getType(), nodeOp.getNameAttr(),
             nodeOp.getNameKindAttr(), nodeOp.getAnnotationsAttr(),
-            nodeOp.getInnerSymAttr(), nodeOp.getForceableAttr(),
-            /*domain=*/FlatSymbolRefAttr());
+            nodeOp.getInnerSymAttr(), nodeOp.getForceableAttr(), ArrayAttr());
         // Don't delete the node, since it might be in use in worklists.
         nodeOp->replaceAllUsesWith(wireOp);
         nodeOp->removeAttr(nodeOp.getInnerSymAttrName());
