@@ -148,4 +148,20 @@ def HWBypassInnerSymbols : Pass<"hw-bypass-inner-symbols", "hw::HWModuleOp"> {
   ];
 }
 
+def HWIMConstProp : Pass<"hw-imconstprop", "mlir::ModuleOp"> {
+  let summary = "Inter-module constant propagation";
+  let description = [{
+    This pass performs inter-module constant propagation for HW modules.
+    It propagates constant values across module boundaries through instances,
+    and folds operations with constant operands.
+  }];
+  let dependentDialects = ["comb::CombDialect", "hw::HWDialect"];
+  let statistics = [
+    Statistic<"numValuesFolded", "num-values-folded",
+              "Number of values folded to a constant">,
+    Statistic<"numOpsErased", "num-ops-erased",
+              "Number of dead ops erased">
+  ];
+}
+
 #endif // CIRCT_DIALECT_HW_PASSES_TD
