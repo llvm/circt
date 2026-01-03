@@ -180,6 +180,12 @@ struct TypeVisitor {
     return moore::ClassHandleType::get(context.getContext(), symRef);
   }
 
+  Type visit(const slang::ast::EventType &type) {
+    // Treat `event` types as simple `i1` values where an event is signaled by
+    // toggling the value.
+    return moore::IntType::getInt(context.getContext(), 1);
+  }
+
   /// Emit an error for all other types.
   template <typename T>
   Type visit(T &&node) {

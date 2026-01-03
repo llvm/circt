@@ -934,6 +934,31 @@ struct StmtVisitor {
     moore::FinishMessageBIOp::create(builder, loc, verbosity > 1);
   }
 
+  // Handle event trigger statements.
+  LogicalResult visit(const slang::ast::EventTriggerStatement &stmt) {
+    if (stmt.timing) {
+      mlir::emitError(loc) << "unsupported delayed event trigger";
+      return failure();
+    }
+
+    // Events are lowered to `i1` signals. Get an lvalue ref to the signal such
+    // that we can assign to it.
+    auto target = context.convertLvalueExpression(stmt.target);
+    if (!target)
+      return failure();
+
+    // Read and invert the current value of the signal. Writing this inverted
+    // value to the signal is our event signaling mechanism.
+    Value inverted = moore::ReadOp::create(builder, loc, target);
+    inverted = moore::NotOp::create(builder, loc, inverted);
+
+    if (stmt.isNonBlocking)
+      moore::NonBlockingAssignOp::create(builder, loc, target, inverted);
+    else
+      moore::BlockingAssignOp::create(builder, loc, target, inverted);
+    return success();
+  }
+
   /// Emit an error for all other statements.
   template <typename T>
   LogicalResult visit(T &&stmt) {

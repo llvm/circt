@@ -163,3 +163,9 @@ endmodule
 // CHECK-LABEL: func.func private @takesCHandle(%arg0: !moore.chandle) {
 function automatic void takesCHandle(chandle test);
 endfunction
+
+// CHECK-LABEL: moore.module @Event
+module Event;
+  // CHECK: %e = moore.variable : <i1>
+  event e;
+endmodule

@@ -34,6 +34,13 @@ The `moore.iN` and `moore.lN` types represent a two-valued or four-valued simple
 | `longint`  | `!moore.i64`  |
 | `time`     | `!moore.l64`  |
 
+### Event Type
+
+The SystemVerilog `event` type is represented as a `!moore.i1` value.
+A variable `event e` is lowered to the equivalent of `bit b`.
+Triggering an event through `-> e` is lowered to the equivalent of `b = ~b`.
+Waiting on an event through `@(e)` is lowered to the equivalent of `@(b)`.
+
 ### Default Values
 
 Behavior of unconnected ports:
