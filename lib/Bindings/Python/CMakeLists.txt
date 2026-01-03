@@ -82,8 +82,6 @@ declare_mlir_python_extension(CIRCTBindingsPythonExtension
     ${PYTHON_BINDINGS_LINK_LIBS}
   PRIVATE_LINK_LIBS
     LLVMSupport
-  PYTHON_BINDINGS_LIBRARY
-    nanobind
 )
 
 if (CIRCT_INCLUDE_TESTS)
