@@ -4291,10 +4291,16 @@ static FlatSymbolRefAttr getDomainTypeName(Value value) {
     if (auto anonDomain = dyn_cast<DomainCreateAnonOp>(op))
       return anonDomain.getDomainAttr();
     if (auto wireOp = dyn_cast<WireOp>(op)) {
-      auto info = wireOp.getDomainInfo();
-      if (!info || info->empty())
+      std::optional<ArrayAttr> domainInfo = wireOp.getDomainInfo();
+
+      if (!domainInfo || domainInfo->empty()) {
         return {};
-      return dyn_cast<FlatSymbolRefAttr>((*info)[0]);
+      }
+
+      if (domainInfo->size() != 1) {
+        return {};
+      }
+          return dyn_cast<FlatSymbolRefAttr>((*domainInfo)[0]);
     }
     return {};
   }
