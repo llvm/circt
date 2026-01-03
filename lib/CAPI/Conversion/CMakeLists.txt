@@ -21,6 +21,7 @@ add_circt_public_c_api_library(CIRCTCAPIConversion
   CIRCTExportVerilog
   CIRCTFIRRTLToHW
   CIRCTFSMToSV
+  CIRCTFSMToCore
   CIRCTHandshakeToDC
   CIRCTHandshakeToHW
   CIRCTHWArithToHW

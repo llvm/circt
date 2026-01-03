@@ -359,6 +359,17 @@ def CalyxRemoveGroupsFromFSM : Pass<"calyx-remove-groups-fsm", "calyx::Component
 }
 
 //===----------------------------------------------------------------------===//
+// FSMToCore
+//===----------------------------------------------------------------------===//
+
+def ConvertFSMToCore : Pass<"convert-fsm-to-core", "mlir::ModuleOp"> {
+  let summary = "Convert FSM to Core";
+  let constructor = "circt::createConvertFSMToCorePass()";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect",
+                           "circt::seq::SeqDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // FSMToSV
 //===----------------------------------------------------------------------===//
 
