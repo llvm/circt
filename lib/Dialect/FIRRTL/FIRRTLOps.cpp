@@ -4290,7 +4290,7 @@ static FlatSymbolRefAttr getDomainTypeName(Value value) {
       return getDomainTypeNameOfResult(instance, result.getResultNumber());
     if (auto anonDomain = dyn_cast<DomainCreateAnonOp>(op))
       return anonDomain.getDomainAttr();
-    if (auto wireOp = dyn_cast<WireOp>(op)){
+    if (auto wireOp = dyn_cast<WireOp>(op)) {
       auto info = wireOp.getDomainInfo();
       if (!info || info->empty())
         return {};
