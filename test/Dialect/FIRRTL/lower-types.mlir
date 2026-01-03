@@ -1549,3 +1549,17 @@ firrtl.circuit "Domains" {
     )
   }
 }
+
+// -----
+
+// Test that wire domain info is preserved when lowering aggregate wires.
+// CHECK-LABEL: firrtl.circuit "WireDomainPreservation"
+firrtl.circuit "WireDomainPreservation" {
+  firrtl.domain @ClockDomain
+  // CHECK-LABEL: firrtl.module @WireDomainPreservation
+  firrtl.module @WireDomainPreservation(in %A: !firrtl.domain of @ClockDomain) {
+    // CHECK: %w_a = firrtl.wire {domainInfo = {{\[\[}}0 : ui32{{\]\]}}} : !firrtl.uint<1>
+    // CHECK: %w_b = firrtl.wire {domainInfo = {{\[\[}}0 : ui32{{\]\]}}} : !firrtl.uint<1>
+    %w = firrtl.wire {domainInfo = [[0 : ui32]]} : !firrtl.bundle<a: uint<1>, b: uint<1>>
+  }
+}

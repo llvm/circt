@@ -1299,11 +1299,16 @@ bool TypeLoweringVisitor::visitDecl(WireOp op) {
   if (op.isForceable())
     return false;
 
+  // Get the domain info from the original wire.
+  auto domain = op.getDomainInfoAttr();
+
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     return WireOp::create(*builder,
                           mapLoweredType(op.getDataRaw().getType(), field.type),
-                          "", NameKindEnum::DroppableName, attrs, StringAttr{})
+                          "", NameKindEnum::DroppableName, attrs,
+                          /*innerSym=*/StringAttr{}, /*forceable=*/false,
+                          /*domainInfo=*/domain)
         .getResult();
   };
   return lowerProducer(op, clone);

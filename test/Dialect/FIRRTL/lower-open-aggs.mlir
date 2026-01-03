@@ -340,3 +340,17 @@ firrtl.circuit "DomainInfo" {
   ) {
   }
 }
+
+// -----
+
+// Test that wire domain info is preserved when lowering open aggregates.
+// CHECK-LABEL: circuit "WireDomainInfo"
+firrtl.circuit "WireDomainInfo" {
+  firrtl.domain @ClockDomain
+  // CHECK-LABEL: module @WireDomainInfo
+  firrtl.module @WireDomainInfo(in %A: !firrtl.domain of @ClockDomain) {
+    // CHECK:      %w = firrtl.wire {domainInfo = {{\[}}[0 : ui32]]} : !firrtl.bundle<a: uint<1>>
+    // CHECK-NEXT: %w_b = firrtl.wire {domainInfo = {{\[}}[0 : ui32]]} : !firrtl.probe<uint<1>>
+    %w = firrtl.wire {domainInfo = [[0 : ui32]]} : !firrtl.openbundle<a: uint<1>, b: probe<uint<1>>>
+  }
+}

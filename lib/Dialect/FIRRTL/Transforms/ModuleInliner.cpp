@@ -864,13 +864,23 @@ void Inliner::mapPortsToWires(StringRef prefix, InliningLevel &il,
       newAnnotations.push_back(anno.getAttr());
     }
 
+    ArrayAttr domainAttr;
+    if (auto domains = portInfo[i].domains) {
+      if (auto symRef = dyn_cast<FlatSymbolRefAttr>(domains))
+        // Domain-type ports: FlatSymbolRefAttr -> [@DomainName]
+        domainAttr = ArrayAttr::get(context, {symRef});
+      else if (auto array = dyn_cast<ArrayAttr>(domains))
+        // Non-domain ports with domain associations: [0] -> [[0]]
+        domainAttr = ArrayAttr::get(context, {array});
+    }
+
     Value wire =
         WireOp::create(
             il.mic.b, target.getLoc(), type,
             StringAttr::get(context, (prefix + portInfo[i].getName())),
             NameKindEnumAttr::get(context, NameKindEnum::DroppableName),
             ArrayAttr::get(context, newAnnotations), newSymAttr,
-            /*forceable=*/UnitAttr{}, /*domain=*/FlatSymbolRefAttr())
+            /*forceable=*/UnitAttr{}, domainAttr)
             .getResult();
     il.wires.push_back(wire);
     mapper.map(arg, wire);
