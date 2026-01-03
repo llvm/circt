@@ -3244,3 +3244,54 @@ firrtl.circuit "UndefinedDomainInAnonDomain" {
     %0 = firrtl.domain.anon : !firrtl.domain of @Foo
   }
 }
+
+// -----
+
+// Unable to determine domain type of wire without domain info.
+firrtl.circuit "WireWithoutDomainInfo" {
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
+  firrtl.module @WireWithoutDomainInfo(
+    in %in: !firrtl.domain of @ClockDomain,
+    out %out: !firrtl.domain of @PowerDomain
+  ) {
+    %w = firrtl.wire : !firrtl.domain
+    // expected-error @below {{could not determine domain-type of destination}}
+    firrtl.domain.define %w, %in
+    firrtl.domain.define %out, %w
+  }
+}
+
+// -----
+
+// Wire with domainInfo should fail when source has mismatched domain type.
+firrtl.circuit "WireWithMismatchedDomainInfo" {
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
+  firrtl.module @WireWithMismatchedDomainInfo(
+    in %in: !firrtl.domain of @ClockDomain,
+    out %out: !firrtl.domain of @PowerDomain
+  ) {
+    %w = firrtl.wire {domainInfo = [@PowerDomain]} : !firrtl.domain
+    // expected-error @below {{source domain type @ClockDomain does not match destination domain type @PowerDomain}}
+    firrtl.domain.define %w, %in
+    firrtl.domain.define %out, %w
+  }
+}
+
+// ----
+
+// Wire with domainInfo should fail when source has mismatched domain type.
+firrtl.circuit "WireWithMismatchedDomainInfo" {
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
+  firrtl.module @WireWithMismatchedDomainInfo(
+    in %in: !firrtl.domain of @PowerDomain,
+    out %out: !firrtl.domain of @PowerDomain
+  ) {
+    %w = firrtl.wire {domainInfo = [@ClockDomain]} : !firrtl.domain
+    // expected-error @below {{source domain type @PowerDomain does not match destination domain type @ClockDomain}}
+    firrtl.domain.define %w, %in
+    firrtl.domain.define %out, %w
+  }
+}
