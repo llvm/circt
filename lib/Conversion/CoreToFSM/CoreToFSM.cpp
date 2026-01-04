@@ -836,7 +836,10 @@ public:
         config.setScope(&stateOp.getOutput());
         LogicalResult converged = applyOpPatternsGreedily(
             outputOps, frozenPatterns, config, &changed);
-
+        if (failed(converged)) {
+          stateOp.emitError("Failed to canonicalize the generated state op");
+          return failure();
+        }    
         SmallVector<Operation *> transitionOps;
         stateOp.getTransitions().walk(
             [&](Operation *op) { transitionOps.push_back(op); });
@@ -846,10 +849,7 @@ public:
         applyOpPatternsGreedily(transitionOps, frozenPatterns, config2,
                                 &changed);
 
-        if (failed(converged)) {
-          stateOp.emitError("Failed to canonicalize the generated state op");
-          return failure();
-        }
+        
 
         for (TransitionOp transition :
              stateOp.getTransitions().getOps<TransitionOp>()) {
