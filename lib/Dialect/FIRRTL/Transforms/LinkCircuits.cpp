@@ -156,33 +156,62 @@ static LogicalResult mangleCircuitSymbols(CircuitOp circuit) {
 }
 
 /// return if the incomingOp has been erased
-static FailureOr<bool> linkExtmodule(SymbolOpInterface collidingOp,
-                                     SymbolOpInterface incomingOp) {
-  if (!((isa<FExtModuleOp>(collidingOp) && isa<FModuleOp>(incomingOp)) ||
-        (isa<FExtModuleOp>(incomingOp) && isa<FModuleOp>(collidingOp))))
-    return failure();
-  auto definition = collidingOp;
-  auto declaration = incomingOp;
-  if (!isa<FModuleOp>(collidingOp)) {
-    definition = incomingOp;
-    declaration = collidingOp;
+static FailureOr<bool> handleCollidingOps(SymbolOpInterface collidingOp,
+                                          SymbolOpInterface incomingOp) {
+  if (!collidingOp.isPublic())
+    return collidingOp->emitOpError("should be a public symbol");
+  if (!incomingOp.isPublic())
+    return incomingOp->emitOpError("should be a public symbol");
+
+  if ((isa<FExtModuleOp>(collidingOp) && isa<FModuleOp>(incomingOp)) ||
+      (isa<FExtModuleOp>(incomingOp) && isa<FModuleOp>(collidingOp))) {
+    auto definition = collidingOp;
+    auto declaration = incomingOp;
+    if (!isa<FModuleOp>(collidingOp)) {
+      definition = incomingOp;
+      declaration = collidingOp;
+    }
+
+    constexpr const StringRef attrsToCompare[] = {
+        "portDirections", "portSymbols", "portNames", "portTypes", "layers"};
+    if (!all_of(attrsToCompare, [&](StringRef attr) {
+          return definition->getAttr(attr) == declaration->getAttr(attr);
+        }))
+      return failure();
+
+    declaration->erase();
+    return declaration == incomingOp;
   }
-  if (!definition.isPublic())
-    return definition->emitOpError("should be a public symbol");
-  if (!declaration.isPublic())
-    return declaration->emitOpError("should be a public symbol");
 
-  constexpr const StringRef attrsToCompare[] = {
-      "portDirections", "portSymbols", "portNames", "portTypes", "layers"};
-  auto allAttrsMatch = all_of(attrsToCompare, [&](StringRef attr) {
-    return definition->getAttr(attr) == declaration->getAttr(attr);
-  });
+  if (isa<FExtModuleOp>(collidingOp) && isa<FExtModuleOp>(incomingOp)) {
+    constexpr const StringRef attrsToCompare[] = {
+        "portDirections", "portSymbols", "portNames",
+        "portTypes",      "knownLayers", "layers",
+    };
+    if (!all_of(attrsToCompare, [&](StringRef attr) {
+          return collidingOp->getAttr(attr) == incomingOp->getAttr(attr);
+        }))
+      return failure();
 
-  if (!allAttrsMatch)
-    return false;
+    auto collidingParams = collidingOp->getAttrOfType<ArrayAttr>("parameters");
+    auto incomingParams = incomingOp->getAttrOfType<ArrayAttr>("parameters");
+    if (collidingParams == incomingParams) {
+      if (collidingOp->getAttr("defname") != incomingOp->getAttr("defname"))
+        return failure();
+      incomingOp->erase();
+      return true;
+    }
 
-  declaration->erase();
-  return declaration == incomingOp;
+    // definition and declaration may have different defname and decalration has
+    // no parameters
+    if (collidingParams.empty() || incomingParams.empty()) {
+      auto declaration = collidingParams.empty() ? collidingOp : incomingOp;
+      declaration->erase();
+      return declaration == incomingOp;
+    }
+  }
+
+  return failure();
 }
 
 LogicalResult LinkCircuitsPass::mergeCircuits() {
@@ -225,7 +254,7 @@ LogicalResult LinkCircuitsPass::mergeCircuits() {
       if (auto symbolOp = dyn_cast<SymbolOpInterface>(op))
         if (auto collidingOp = cast_if_present<SymbolOpInterface>(
                 mergedSymbolTable.lookup(symbolOp.getNameAttr()))) {
-          auto opErased = linkExtmodule(collidingOp, symbolOp);
+          auto opErased = handleCollidingOps(collidingOp, symbolOp);
           if (failed(opErased))
             return mergedCircuit->emitError("has colliding symbol " +
                                             symbolOp.getName() +
