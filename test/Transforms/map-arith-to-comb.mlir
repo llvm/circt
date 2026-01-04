@@ -41,9 +41,16 @@ func.func @basics(%arg0: i32, %arg1: i32, %arg2: i1) {
   arith.trunci %arg1 : i32 to i16
   // CHECK: comb.icmp slt %arg0, %arg1 : i32
   arith.cmpi slt, %arg0, %arg1 : i32
+  // CHECK: return
+  return
+}
+
+// CHECK-LABEL: func @constants
+func.func @constants() {
   // CHECK: hw.constant 0 : i32
   arith.constant 0 : i32
-  // CHECK: return
+  // CHECK: arith.constant 0.000000e+00 : f32
+  arith.constant 0.000000e+00 : f32
   return
 }
 

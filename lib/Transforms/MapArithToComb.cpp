@@ -152,6 +152,23 @@ public:
   }
 };
 
+struct ConstantConversionPattern
+    : public OpConversionPattern<arith::ConstantOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(arith::ConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // `hw.constant` only supports integers.
+    if (!isa<IntegerType>(op.getType()))
+      return failure();
+
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(
+        op, cast<IntegerAttr>(adaptor.getValue()));
+    return success();
+  }
+};
+
 struct MapArithToCombPass
     : public circt::impl::MapArithToCombPassBase<MapArithToCombPass> {
 public:
@@ -182,12 +199,16 @@ public:
       target.addIllegalOp<arith::ShLIOp>();
       target.addIllegalOp<arith::ShRSIOp>();
       target.addIllegalOp<arith::ShRUIOp>();
-      target.addIllegalOp<arith::ConstantOp>();
       target.addIllegalOp<arith::SelectOp>();
       target.addIllegalOp<arith::ExtSIOp>();
       target.addIllegalOp<arith::ExtUIOp>();
       target.addIllegalOp<arith::TruncIOp>();
       target.addIllegalOp<arith::CmpIOp>();
+
+      // Force integer constants to be mapped to `hw.constant`.
+      target.addDynamicallyLegalOp<arith::ConstantOp>([](Operation *op) {
+        return !isa<IntegerType>(op->getResult(0).getType());
+      });
     }
     MapArithTypeConverter typeConverter;
     RewritePatternSet patterns(ctx);
@@ -216,11 +237,11 @@ void circt::populateArithToCombPatterns(mlir::RewritePatternSet &patterns,
                   OneToOnePattern<arith::ShLIOp, comb::ShlOp>,
                   OneToOnePattern<arith::ShRSIOp, comb::ShrSOp>,
                   OneToOnePattern<arith::ShRUIOp, comb::ShrUOp>,
-                  OneToOnePattern<arith::ConstantOp, hw::ConstantOp, true>,
                   OneToOnePattern<arith::SelectOp, comb::MuxOp>,
                   ExtSConversionPattern, ExtZConversionPattern,
-                  TruncateConversionPattern, CompConversionPattern>(
-      typeConverter, patterns.getContext());
+                  TruncateConversionPattern, CompConversionPattern,
+                  ConstantConversionPattern>(typeConverter,
+                                             patterns.getContext());
 }
 
 std::unique_ptr<mlir::Pass>
