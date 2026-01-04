@@ -3222,26 +3222,21 @@ function automatic int unsigned returnParameterArrayElement (int idx);
 endfunction
 
 // CHECK-LABEL: func.func private @TimeFormat(
-function void TimeFormat();
-  // CHECK: [[TIME:%.+]] = moore.constant_time 100000000 fs
-  localparam time TestTime = 100ns;
-  // CHECK-NEXT: [[FMT:%.+]] = moore.fmt.time [[TIME]]
-  // CHECK-NEXT: [[LINEBREAK:%.+]] = moore.fmt.literal "\0A"
-  // CHECK-NEXT: [[CONCAT:%.+]] = moore.fmt.concat ([[FMT]], [[LINEBREAK]])
-  // CHECK-NEXT: moore.builtin.display [[CONCAT]]
-  $display("%t", TestTime);
-  // CHECK: [[SIMTIME:%.+]] = moore.builtin.time
-  // CHECK-NEXT: [[FMT2:%.+]] = moore.fmt.time [[SIMTIME]]
-  // CHECK-NEXT: [[LINEBREAK2:%.+]] = moore.fmt.literal "\0A"
-  // CHECK-NEXT: [[CONCAT2:%.+]] = moore.fmt.concat ([[FMT2]], [[LINEBREAK2]])
-  // CHECK-NEXT: moore.builtin.display [[CONCAT2]]
-  $display("%t", $time());
-  // CHECK: [[SIMTIME3:%.+]] = moore.builtin.time
-  // CHECK-NEXT: [[FMT3:%.+]] = moore.fmt.time [[SIMTIME3]], width 4
-  // CHECK-NEXT: [[LINEBREAK3:%.+]] = moore.fmt.literal "\0A"
-  // CHECK-NEXT: [[CONCAT3:%.+]] = moore.fmt.concat ([[FMT3]], [[LINEBREAK3]])
-  // CHECK-NEXT: moore.builtin.display [[CONCAT3]]
-  $display("%4t", $time());
+function void TimeFormat(time x);
+  // CHECK: [[TMP1:%.+]] = moore.time_to_logic
+  // CHECK: [[TMP2:%.+]] = moore.constant
+  // CHECK: [[TMP3:%.+]] = moore.divu [[TMP1]], [[TMP2]]
+  // CHECK: [[TMP4:%.+]] = moore.logic_to_int [[TMP3]]
+  // CHECK: moore.fmt.int decimal [[TMP4]], width 20, align right, pad space
+  $display("%t", x);
+  // CHECK: moore.fmt.int decimal {{%.+}}, width 42, align right, pad space
+  $display("%42t", x);
+  // CHECK: moore.fmt.int decimal {{%.+}}, width 42, align left, pad space
+  $display("%-42t", x);
+  // CHECK: moore.fmt.int decimal {{%.+}}, width 20, align right, pad zero
+  $display("%0t", x);
+  // CHECK: moore.fmt.int decimal {{%.+}}, width 0, align right, pad zero
+  $display("%00t", x);
 endfunction
 
 // CHECK-LABEL: func.func private @StructCreateConversion(
