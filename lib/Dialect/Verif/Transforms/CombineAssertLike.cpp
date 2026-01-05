@@ -17,6 +17,8 @@
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 
+#include <iostream>
+
 using namespace circt;
 
 namespace circt {
@@ -59,14 +61,14 @@ private:
   // for assertions and assumption found during our walk.
   // This is then used to create a large conjunction of
   // all of them in the end to be used as the only assert/assume.
-  llvm::SmallVector<Operation *> assertConditions;
-  llvm::SmallVector<Operation *> assumeConditions;
+  llvm::SmallVector<Value> assertConditions;
+  llvm::SmallVector<Value> assumeConditions;
 
   // Accumulates conditions of assertions and assumptions.
   // Note that this only considers cases where the conditions are
   // of type `i1`, and will not merge LTL properties.
   template <typename T>
-  LogicalResult accumulateCondition(T op, llvm::SmallVector<Operation *> &conds,
+  LogicalResult accumulateCondition(T op, llvm::SmallVector<Value> &conds,
                                     OpBuilder &builder) {
     auto condition = op.getProperty();
     // Check that our condition isn't an ltl property, if so ignore
@@ -77,54 +79,57 @@ private:
       if (enable) {
         // For i1 conditions, the enable signal can be folded
         // directly into the condition
-        builder.setInsertionPointAfter(condition);
+        builder.setInsertionPointAfter(condition.getDefiningOp());
         auto andop =
-            comb::AndOp::create(builder, condition.getLoc(),
-                                condition.getType(), op.getEnable(), condition);
+            comb::AndOp::create(builder, condition.getLoc(), op.getEnable(), condition);
         // Sanity Check: Make sure the op was created
         if (!andop)
           return failure();
 
         // We then only need to store the conjunction not the condition
-        conds.push_back(andop.getDefiningOp());
+        conds.push_back(andop);
       } else {
         // If no enble is present, we can directly accumulate the condition
-        conds.push_back(condition.getDefiningOp());
+        conds.push_back(condition);
       }
 
       // We no longer need the existing assert/assume
       op.erase();
-    }
+    } 
     return success();
   }
 
   // Combines all of the conditions in a given list into
   // a single large conjunction
   template <typename AT>
-  LogicalResult conjoinConditions(llvm::SmallVector<Operation *> &conds,
+  LogicalResult conjoinConditions(llvm::SmallVector<Value> &conds,
                                   OpBuilder builder) {
+
+    // Check that we actually accumulated conditions, otherwise exit
+    if(conds.empty())
+      return success();
+
     // Combine accumulated conditions into a single op
-    Operation *acc = conds[0];
+    Value acc = conds[0];
 
     // Hopefully these can be merged into a variadic comb.and
     // by the canonicalizer.
     for (size_t i = 1; i < conds.size(); ++i) {
       auto condition = conds[i];
-      builder.setInsertionPointAfter(acc);
+      builder.setInsertionPointAfter(condition.getDefiningOp());
 
-      auto andop = comb::AndOp::create(builder, condition->getLoc(),
-                                       condition->getType(), acc, condition);
+      auto andop = comb::AndOp::create(builder, condition.getLoc(), acc, condition);
 
       // Sanity Check: Make sure the op was created
       if (!andop)
         return failure();
 
       // Accumulate
-      acc = andop.getDefiningOp();
+      acc = andop;
     }
 
     // Create the final assert/assume using the accumulated condition
-    AT::create(builder, acc->getLoc(), acc->getType(), acc);
+    AT::create(builder, acc.getLoc(), acc, /*enable=*/nullptr, /*label=*/nullptr);
 
     return success();
   }
