@@ -2011,11 +2011,11 @@ struct FormatIntOpConversion : public OpConversionPattern<FormatIntOp> {
                   ConversionPatternRewriter &rewriter) const override {
 
     char padChar = adaptor.getPadding() == IntPadding::Space ? 32 : 48;
-    mlir::IntegerAttr padCharAttr = rewriter.getI8IntegerAttr(padChar);
+    IntegerAttr padCharAttr = rewriter.getI8IntegerAttr(padChar);
     auto widthAttr = adaptor.getSpecifierWidthAttr();
 
     bool isLeftAligned = adaptor.getAlignment() == IntAlign::Left;
-    mlir::BoolAttr isLeftAlignedAttr = rewriter.getBoolAttr(isLeftAligned);
+    BoolAttr isLeftAlignedAttr = rewriter.getBoolAttr(isLeftAligned);
 
     switch (op.getFormat()) {
     case IntFormat::Decimal:

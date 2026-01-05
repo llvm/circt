@@ -193,6 +193,9 @@ def FormatHexOp : SimOp<"fmt.hex", [Pure]> {
   let assemblyFormat = [{
     $value `,`
     `isUpper`  $isHexUppercase
+    (`isLeftAligned` $isLeftAligned^)?
+    (`paddingChar` $paddingChar^)?
+    (`specifierWidth` $specifierWidth^)?
     attr-dict `:` qualified(type($value))
   }];
 }
@@ -219,7 +222,10 @@ def FormatOctOp : SimOp<"fmt.oct", [Pure]> {
   let hasFolder = true;
 
   let assemblyFormat = [{
-    $value 
+    $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`paddingChar` $paddingChar^)?
+    (`specifierWidth` $specifierWidth^)?
     attr-dict `:` qualified(type($value))
   }];
 }
@@ -244,6 +250,9 @@ def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
 
   let assemblyFormat = [{
     $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`paddingChar` $paddingChar^)?
+    (`specifierWidth` $specifierWidth^)?
     attr-dict `:` qualified(type($value))
   }];
 }
@@ -284,6 +293,10 @@ def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
 
   let assemblyFormat = [{
     $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`paddingChar` $paddingChar^)?
+    (`specifierWidth` $specifierWidth^)?
+    (`signed` $isSigned^)?
     attr-dict `:` qualified(type($value))
   }];
 

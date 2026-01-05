@@ -192,7 +192,7 @@ struct FormatStringParser {
     auto alignment = options.leftJustify ? IntAlign::Left : IntAlign::Right;
     auto padding =
         format == IntFormat::Decimal ? IntPadding::Space : IntPadding::Zero;
-    mlir::IntegerAttr widthAttr = nullptr;
+    IntegerAttr widthAttr = nullptr;
     if (options.width) {
       widthAttr = builder.getI32IntegerAttr(*options.width);
     }
