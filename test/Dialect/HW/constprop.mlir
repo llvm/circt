@@ -126,14 +126,26 @@ hw.module @MultipleInstances(out out1: i4, out out2: i4, out out3: i4) {
 
 // -----
 
-// Test that wires are marked as overdefined (not propagated)
-// CHECK-LABEL: hw.module @WireTest
-hw.module @WireTest(out out: i8) {
+// Test that wires without inner symbols can be constant propagated
+// CHECK-LABEL: hw.module @WireWithoutSymbol
+hw.module @WireWithoutSymbol(out out: i8) {
   // CHECK-NEXT: %c42_i8 = hw.constant 42 : i8
-  // CHECK-NEXT: %wire = hw.wire %c42_i8 : i8
-  // CHECK-NEXT: hw.output %wire : i8
+  // CHECK-NEXT: hw.output %c42_i8 : i8
   %c42_i8 = hw.constant 42 : i8
   %wire = hw.wire %c42_i8 : i8
+  hw.output %wire : i8
+}
+
+// -----
+
+// Test that wires with inner symbols are NOT constant propagated
+// CHECK-LABEL: hw.module @WireWithSymbol
+hw.module @WireWithSymbol(out out: i8) {
+  // CHECK-NEXT: %c42_i8 = hw.constant 42 : i8
+  // CHECK-NEXT: %wire = hw.wire %c42_i8 sym @myWire : i8
+  // CHECK-NEXT: hw.output %wire : i8
+  %c42_i8 = hw.constant 42 : i8
+  %wire = hw.wire %c42_i8 sym @myWire : i8
   hw.output %wire : i8
 }
 

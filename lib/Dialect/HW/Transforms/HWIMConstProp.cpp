@@ -32,12 +32,29 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 
-#define DEBUG_TYPE                                                             \
-  impl::HWIMConstPropBase<HWIMConstPropPass>::getArgumentName().data()
+//===----------------------------------------------------------------------===//
+// Pass Infrastructure
+//===----------------------------------------------------------------------===//
+
+namespace circt {
+namespace hw {
+#define GEN_PASS_DEF_HWIMCONSTPROP
+#include "circt/Dialect/HW/Passes.h.inc"
+} // namespace hw
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
 using namespace hw;
+
+class HWIMConstPropPass
+    : public circt::hw::impl::HWIMConstPropBase<HWIMConstPropPass> {
+  using Base::Base;
+  void runOnOperation() override;
+};
+
+#define DEBUG_TYPE                                                             \
+  impl::HWIMConstPropBase<HWIMConstPropPass>::getArgumentName().data()
 
 //===----------------------------------------------------------------------===//
 // Constant propagation helper
@@ -134,8 +151,10 @@ void ConstantPropagation::initialize(HWModuleOp module) {
           }
         })
         .Case<hw::WireOp>([&](auto wire) {
-          // Mark wires as overdefined since they can be targeted by force.
-          markOverdefined(wire.getResult());
+          // Mark wires with inner symbols as overdefined. Wires without symbols
+          // are not marked here, allowing them to be constant propagated.
+          if (wire.getInnerSymAttr())
+            markOverdefined(wire.getResult());
         })
         .Default([&](auto op) {
           if (op->getNumResults() == 0)
@@ -255,6 +274,23 @@ void ConstantPropagation::propagate(Operation *op) {
     return;
   }
 
+  // Handle wires specially: they can be constant propagated even if they have
+  // a name attribute, as long as they don't have a symbol.
+  if (auto wire = dyn_cast<hw::WireOp>(op)) {
+    // If the wire has a symbol, it can't be constant propagated.
+    if (wire.getInnerSymAttr()) {
+      setLattice(wire.getResult(), {});
+      return;
+    }
+    // Propagate the lattice value from the input to the output.
+    if (auto lattice = getLattice(wire.getInput())) {
+      setLattice(wire.getResult(), *lattice);
+      return;
+    }
+    // Input is unknown, defer processing.
+    return;
+  }
+
   // For other operations, try to fold using constant operands.
   // If any operand is unknown, defer processing.
   SmallVector<Attribute> operands;
@@ -330,8 +366,16 @@ std::pair<unsigned, unsigned> ConstantPropagation::fold() {
     ++numFolded;
 
     if (auto *defOp = value.getDefiningOp()) {
-      if (defOp->use_empty() && mlir::isMemoryEffectFree(defOp))
-        toDelete.insert(defOp);
+      if (defOp->use_empty()) {
+        // Delete memory-effect-free operations, or wires without symbols.
+        bool canDelete = mlir::isMemoryEffectFree(defOp);
+        if (!canDelete) {
+          if (auto wire = dyn_cast<hw::WireOp>(defOp))
+            canDelete = !wire.getInnerSymAttr();
+        }
+        if (canDelete)
+          toDelete.insert(defOp);
+      }
     }
   }
 
@@ -340,25 +384,6 @@ std::pair<unsigned, unsigned> ConstantPropagation::fold() {
 
   return {numFolded, (unsigned)toDelete.size()};
 }
-
-//===----------------------------------------------------------------------===//
-// Pass Infrastructure
-//===----------------------------------------------------------------------===//
-
-namespace circt {
-namespace hw {
-#define GEN_PASS_DEF_HWIMCONSTPROP
-#include "circt/Dialect/HW/Passes.h.inc"
-} // namespace hw
-} // namespace circt
-
-namespace {
-class HWIMConstPropPass
-    : public circt::hw::impl::HWIMConstPropBase<HWIMConstPropPass> {
-  using Base::Base;
-  void runOnOperation() override;
-};
-} // namespace
 
 void HWIMConstPropPass::runOnOperation() {
   // Create the constant propagation helper using the instance graph.
