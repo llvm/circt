@@ -879,6 +879,8 @@ void HWToLLVMLoweringPass::runOnOperation() {
 
   LLVMConversionTarget target(getContext());
   target.addIllegalDialect<hw::HWDialect>();
+  // Don't touch non-HW operations
+  target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
 
   // Setup the conversion.
   populateHWToLLVMConversionPatterns(converter, patterns, globals,
