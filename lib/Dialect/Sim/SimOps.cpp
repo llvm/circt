@@ -27,7 +27,7 @@ static StringAttr formatIntegersByRadix(MLIRContext *ctx, unsigned radix,
                                         const Attribute &value,
                                         bool isUpperCase, bool isLeftAligned,
                                         char paddingChar,
-                                        std::optional<int> specifierWidth,
+                                        std::optional<unsigned> specifierWidth,
                                         bool isSigned = false) {
 
   if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(value)) {

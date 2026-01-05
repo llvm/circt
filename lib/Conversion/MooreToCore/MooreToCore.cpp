@@ -2041,9 +2041,8 @@ struct FormatIntOpConversion : public OpConversionPattern<FormatIntOp> {
           op, adaptor.getValue(), rewriter.getBoolAttr(true), isLeftAlignedAttr,
           padCharAttr, widthAttr);
       return success();
-    default:
-      return rewriter.notifyMatchFailure(op, "unsupported int format");
     }
+    return rewriter.notifyMatchFailure(op, "unsupported int format");
   }
 };
 
