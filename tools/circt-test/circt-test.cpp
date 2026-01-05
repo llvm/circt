@@ -53,10 +53,13 @@ using namespace circt;
 //===----------------------------------------------------------------------===//
 
 namespace {
+/// Which test kinds to execute.
+enum class KindFilter { All, Formal, Simulation };
 
 /// The tool's command line options.
 struct Options {
-  cl::OptionCategory cat{"circt-test Options"};
+  cl::OptionCategory cat{"Basic Options"};
+  cl::OptionCategory testCat{"Test Options"};
 
   cl::opt<std::string> inputFilename{cl::Positional, cl::desc("<input file>"),
                                      cl::init("-"), cl::cat(cat)};
@@ -66,16 +69,24 @@ struct Options {
       cl::value_desc("filename"), cl::init("-"), cl::cat(cat)};
 
   cl::opt<bool> listTests{"l", cl::desc("List tests in the input and exit"),
-                          cl::init(false), cl::cat(cat)};
+                          cl::init(false), cl::cat(testCat)};
+
+  cl::opt<KindFilter> kindFilter{
+      cl::desc("Filter which kinds of tests to run:"),
+      cl::values(clEnumValN(KindFilter::Formal, "only-formal",
+                            "Only run formal tests"),
+                 clEnumValN(KindFilter::Simulation, "only-sim",
+                            "Only run simulation tests")),
+      cl::init(KindFilter::All), cl::cat(testCat)};
 
   cl::opt<bool> listRunners{"list-runners", cl::desc("List test runners"),
                             cl::init(false), cl::cat(cat)};
 
   cl::opt<bool> json{"json", cl::desc("Emit test list as JSON array"),
-                     cl::init(false), cl::cat(cat)};
+                     cl::init(false), cl::cat(testCat)};
 
   cl::opt<bool> listIgnored{"list-ignored", cl::desc("List ignored tests"),
-                            cl::init(false), cl::cat(cat)};
+                            cl::init(false), cl::cat(testCat)};
 
   cl::opt<std::string> resultDir{
       "d", cl::desc("Result directory (default `.circt-test`)"),
@@ -343,6 +354,16 @@ LogicalResult TestSuite::discoverTest(Test &&test, Operation *op) {
       failed(collectRunnerFilters(test.attrs, "exclude_runners",
                                   test.excludedRunners, test.loc, test.name)))
     return failure();
+
+  // If the user specified a test kind filter, ignore the test if the kind does
+  // not match.
+  if (opts.kindFilter != KindFilter::All) {
+    if ((opts.kindFilter == KindFilter::Formal &&
+         test.kind != TestKind::Formal) ||
+        (opts.kindFilter == KindFilter::Simulation &&
+         test.kind != TestKind::Simulation))
+      test.ignore = true;
+  }
 
   tests.push_back(std::move(test));
   return success();
@@ -720,7 +741,8 @@ int main(int argc, char **argv) {
 
   // Hide default LLVM options, other than for this tool.
   // MLIR options are added below.
-  cl::HideUnrelatedOptions({&opts.cat, &llvm::getColorCategory()});
+  cl::HideUnrelatedOptions(
+      {&opts.cat, &opts.testCat, &llvm::getColorCategory()});
   cl::ParseCommandLineOptions(argc, argv, "Hardware unit testing tool\n");
 
   MLIRContext context(registry);
