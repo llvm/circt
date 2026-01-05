@@ -166,9 +166,13 @@ jobs:
           fetch-depth: 2
           submodules: "true"
 
+      - name: Setup Python
+        uses: actions/setup-python@v3
+        run:
+          python3 -m pip install psutil
+
       - name: Set git safe
         run: |
-          pip install psutil
           git config --global --add safe.directory $PWD
 
       # --------
