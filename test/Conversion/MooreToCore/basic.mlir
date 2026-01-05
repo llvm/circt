@@ -392,23 +392,25 @@ func.func @FormatStrings(%arg0: !moore.i42) {
   // CHECK: sim.fmt.concat ([[TMP]], [[TMP]])
   %1 = moore.fmt.concat (%0, %0)
   // CHECK:  sim.fmt.dec %arg0 specifierWidth 42 : i42
-  moore.fmt.int decimal %arg0, align right, pad space, width 42 : i42
+  moore.fmt.int decimal %arg0, align right, pad space width 42 : i42
   // CHECK: sim.fmt.dec %arg0 isLeftAligned true paddingChar 48 : i42
   moore.fmt.int decimal %arg0, align left, pad zero : i42
+  // CHECK: sim.fmt.dec %arg0 signed : i42
+  moore.fmt.int decimal %arg0, align right, pad space signed : i42
   // CHECK: sim.fmt.bin %arg0 paddingChar 32 specifierWidth 42 : i42
-  moore.fmt.int binary %arg0, align right, pad space, width 42 : i42
+  moore.fmt.int binary %arg0, align right, pad space width 42 : i42
   // CHECK: sim.fmt.bin %arg0 isLeftAligned true : i42
   moore.fmt.int binary %arg0, align left, pad zero : i42
   // CHECK: sim.fmt.oct %arg0 paddingChar 32 specifierWidth 42 : i42
-  moore.fmt.int octal %arg0, align right, pad space, width 42 : i42
+  moore.fmt.int octal %arg0, align right, pad space width 42 : i42
   // CHECK: sim.fmt.oct %arg0 specifierWidth 42 : i42
-  moore.fmt.int octal %arg0, align right, pad zero, width 42 : i42
+  moore.fmt.int octal %arg0, align right, pad zero width 42 : i42
   // CHECK: sim.fmt.hex %arg0, isUpper false paddingChar 32 specifierWidth 42 : i42
-  moore.fmt.int hex_lower %arg0, align right, pad space, width 42 : i42
+  moore.fmt.int hex_lower %arg0, align right, pad space width 42 : i42
   // CHECK: sim.fmt.hex %arg0, isUpper false : i42
   moore.fmt.int hex_lower %arg0, align right, pad zero : i42
   // CHECK: sim.fmt.hex %arg0, isUpper true paddingChar 32 specifierWidth 42 : i42
-  moore.fmt.int hex_upper %arg0, align right, pad space, width 42 : i42
+  moore.fmt.int hex_upper %arg0, align right, pad space width 42 : i42
   // CHECK: sim.proc.print [[TMP]]
   moore.builtin.display %0
   return

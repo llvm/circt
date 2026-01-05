@@ -2007,8 +2007,8 @@ def FormatIntOp : MooreOp<"fmt.int", [Pure]> {
     $format $value `,` 
     `align` $alignment `,`
     `pad` $padding
-    (`,` `width` $specifierWidth^)? 
-    (`,` `signed` $isSigned^)?
+    (`width` $specifierWidth^)? 
+    (`signed` $isSigned^)?
     attr-dict `:` type($value)
   }];
 }

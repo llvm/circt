@@ -74,22 +74,22 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   $write("%b", x);
   // CHECK: moore.fmt.int binary [[X]], align right, pad zero : i32
   $write("%B", x);
-  // CHECK: moore.fmt.int binary [[X]], align right, pad zero, width 0 : i32
+  // CHECK: moore.fmt.int binary [[X]], align right, pad zero width 0 : i32
   $write("%0b", x);
-  // CHECK: moore.fmt.int binary [[X]], align right, pad zero, width 42 : i32
+  // CHECK: moore.fmt.int binary [[X]], align right, pad zero width 42 : i32
   $write("%42b", x);
-  // CHECK: moore.fmt.int binary [[X]], align left, pad zero, width 42 : i32
+  // CHECK: moore.fmt.int binary [[X]], align left, pad zero width 42 : i32
   $write("%-42b", x);
 
   // CHECK: moore.fmt.int octal [[X]], align right, pad zero : i32
   $write("%o", x);
   // CHECK: moore.fmt.int octal [[X]], align right, pad zero : i32
   $write("%O", x);
-  // CHECK: moore.fmt.int octal [[X]], align right, pad zero, width 0 : i32
+  // CHECK: moore.fmt.int octal [[X]], align right, pad zero width 0 : i32
   $write("%0o", x);
-  // CHECK: moore.fmt.int octal [[X]], align right, pad zero, width 19 : i32
+  // CHECK: moore.fmt.int octal [[X]], align right, pad zero width 19 : i32
   $write("%19o", x);
-  // CHECK: moore.fmt.int octal [[X]], align left, pad zero, width 19 : i32
+  // CHECK: moore.fmt.int octal [[X]], align left, pad zero width 19 : i32
   $write("%-19o", x);
 
   // CHECK: moore.fmt.real float [[R]]
@@ -99,15 +99,15 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   // CHECK: moore.builtin.display [[TMP]]
   $write("%f", x);
 
-  // CHECK: moore.fmt.int decimal [[X]], align right, pad space, signed : i32
+  // CHECK: moore.fmt.int decimal [[X]], align right, pad space signed : i32
   $write("%d", x);
-  // CHECK: moore.fmt.int decimal [[X]], align right, pad space, signed : i32
+  // CHECK: moore.fmt.int decimal [[X]], align right, pad space signed : i32
   $write("%D", x);
-  // CHECK: moore.fmt.int decimal [[X]], align right, pad space, width 0, signed : i32
+  // CHECK: moore.fmt.int decimal [[X]], align right, pad space width 0 signed : i32
   $write("%0d", x);
-  // CHECK: moore.fmt.int decimal [[X]], align right, pad space, width 19, signed : i32
+  // CHECK: moore.fmt.int decimal [[X]], align right, pad space width 19 signed : i32
   $write("%19d", x);
-  // CHECK: moore.fmt.int decimal [[X]], align left, pad space, width 19, signed : i32
+  // CHECK: moore.fmt.int decimal [[X]], align left, pad space width 19 signed : i32
   $write("%-19d", x);
 
   // CHECK: moore.fmt.int hex_lower [[X]], align right, pad zero : i32
@@ -118,18 +118,18 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   $write("%H", x);
   // CHECK: moore.fmt.int hex_upper [[X]], align right, pad zero : i32
   $write("%X", x);
-  // CHECK: moore.fmt.int hex_lower [[X]], align right, pad zero, width 0 : i32
+  // CHECK: moore.fmt.int hex_lower [[X]], align right, pad zero width 0 : i32
   $write("%0h", x);
-  // CHECK: moore.fmt.int hex_lower [[X]], align right, pad zero, width 19 : i32
+  // CHECK: moore.fmt.int hex_lower [[X]], align right, pad zero width 19 : i32
   $write("%19h", x);
-  // CHECK: moore.fmt.int hex_lower [[X]], align right, pad zero, width 19 : i32
+  // CHECK: moore.fmt.int hex_lower [[X]], align right, pad zero width 19 : i32
   $write("%019h", x);
-  // CHECK: moore.fmt.int hex_lower [[X]], align left, pad zero, width 19 : i32
+  // CHECK: moore.fmt.int hex_lower [[X]], align left, pad zero width 19 : i32
   $write("%-19h", x);
-  // CHECK: moore.fmt.int hex_lower [[X]], align left, pad zero, width 19 : i32
+  // CHECK: moore.fmt.int hex_lower [[X]], align left, pad zero width 19 : i32
   $write("%-019h", x);
 
-  // CHECK: [[TMP:%.+]] = moore.fmt.int decimal [[X]], align right, pad space, signed : i32
+  // CHECK: [[TMP:%.+]] = moore.fmt.int decimal [[X]], align right, pad space signed : i32
   // CHECK: moore.builtin.display [[TMP]]
   $write(x);
   // CHECK: [[TMP:%.+]] = moore.fmt.int binary [[X]], align right, pad zero : i32
@@ -142,7 +142,7 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   // CHECK: moore.builtin.display [[TMP]]
   $writeh(x);
 
-  // CHECK: [[TMP1:%.+]] = moore.fmt.int decimal [[X]], align right, pad space, signed : i32
+  // CHECK: [[TMP1:%.+]] = moore.fmt.int decimal [[X]], align right, pad space signed : i32
   // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
   // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
   // CHECK: moore.builtin.display [[TMP3]]
