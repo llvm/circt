@@ -225,7 +225,7 @@ DeletionKind SigExtractOp::rewire(const DestructurableMemorySlot &slot,
                                   OpBuilder &builder,
                                   const DataLayout &dataLayout) {
   APInt idx;
-  bool result = matchPattern(getLowBit(), m_ConstantInt(&idx));
+  [[maybe_unused]] bool result = matchPattern(getLowBit(), m_ConstantInt(&idx));
   assert(result);
   int64_t width = getLLHDTypeWidth(getResult().getType());
   Type indexType = IndexType::get(getContext());
