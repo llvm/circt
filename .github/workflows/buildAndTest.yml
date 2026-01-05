@@ -222,7 +222,7 @@ jobs:
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DLLVM_LIT_ARGS="-v" \
             -DCIRCT_SLANG_FRONTEND_ENABLED=ON
-          CIRCT_OPT_CHECK_IR_ROUNDTRIP=1 ninja check-circt check-circt-unit -j$(nproc)
+          LIT_OPTS="--timeout 60" CIRCT_OPT_CHECK_IR_ROUNDTRIP=1 ninja check-circt check-circt-unit -j$(nproc)
           ninja circt-doc
 
       # --------
