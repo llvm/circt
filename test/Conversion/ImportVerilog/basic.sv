@@ -3227,15 +3227,15 @@ function void TimeFormat(time x);
   // CHECK: [[TMP2:%.+]] = moore.constant
   // CHECK: [[TMP3:%.+]] = moore.divu [[TMP1]], [[TMP2]]
   // CHECK: [[TMP4:%.+]] = moore.logic_to_int [[TMP3]]
-  // CHECK: moore.fmt.int decimal [[TMP4]], width 20, align right, pad space
+  // CHECK: moore.fmt.int decimal [[TMP4]], align right, pad space width 20
   $display("%t", x);
-  // CHECK: moore.fmt.int decimal {{%.+}}, width 42, align right, pad space
+  // CHECK: moore.fmt.int decimal {{%.+}}, align right, pad space width 42
   $display("%42t", x);
-  // CHECK: moore.fmt.int decimal {{%.+}}, width 42, align left, pad space
+  // CHECK: moore.fmt.int decimal {{%.+}}, align left, pad space width 42
   $display("%-42t", x);
-  // CHECK: moore.fmt.int decimal {{%.+}}, width 20, align right, pad zero
+  // CHECK: moore.fmt.int decimal {{%.+}}, align right, pad zero width 20
   $display("%0t", x);
-  // CHECK: moore.fmt.int decimal {{%.+}}, width 0, align right, pad zero
+  // CHECK: moore.fmt.int decimal {{%.+}}, align right, pad zero width 0
   $display("%00t", x);
 endfunction
 
