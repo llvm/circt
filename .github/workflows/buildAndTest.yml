@@ -168,8 +168,7 @@ jobs:
 
       - name: Setup Python
         uses: actions/setup-python@v3
-        run:
-          python3 -m pip install psutil
+        run: python3 -m pip install psutil
 
       - name: Set git safe
         run: |
