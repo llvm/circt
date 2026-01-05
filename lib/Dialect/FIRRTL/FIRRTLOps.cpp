@@ -955,7 +955,7 @@ static ArrayAttr fixDomainInfoDeletions(MLIRContext *context,
       // If the new index is the same, do nothing.
       auto newIdx = indexMap[oldIdx];
       if (oldIdx == newIdx) {
-        newDomainInfo.push_back(attr);
+        newDomains.push_back(domain);
         continue;
       }
       // Update the index.
