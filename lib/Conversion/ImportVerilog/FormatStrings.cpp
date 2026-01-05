@@ -231,32 +231,26 @@ struct FormatStringParser {
   }
 
   // Format an integer with the %t specifier according to IEEE 1800-2023
-  // § 20.4.3 "$timeformat"
+  // § 20.4.3 "$timeformat". We currently don't support user-defined time
+  // formats. Instead, we just convert the time to an integer and print it. This
+  // applies the local timeunit/timescale and seem to be inline with what
+  // Verilator does.
   LogicalResult emitTime(const slang::ast::Expression &arg,
                          const FormatOptions &options) {
-
-    // Only handle `TimeType` values.
+    // Handle the time argument and convert it to a 64 bit integer.
     auto value = context.convertRvalueExpression(
-        arg, moore::TimeType::get(context.getContext()));
+        arg, moore::IntType::getInt(context.getContext(), 64));
     if (!value)
       return failure();
 
-    mlir::IntegerAttr width = nullptr;
-    if (options.width) {
-      mlir::Type i32Ty =
-          mlir::IntegerType::get(context.getContext(), /*width=*/32);
-      width = mlir::IntegerAttr::get(i32Ty, options.width.value());
-    }
-
-    // Delegate actual formatting to `moore.fmt.time`, annotate width if
-    // provided
-    if (width) {
-      fragments.push_back(
-          moore::FormatTimeOp::create(builder, loc, value, width));
-    } else {
-      fragments.push_back(moore::FormatTimeOp::create(builder, loc, value));
-    }
-
+    // Create an integer formatting fragment.
+    uint32_t width = 20; // default $timeformat field width
+    if (options.width)
+      width = *options.width;
+    auto alignment = options.leftJustify ? IntAlign::Left : IntAlign::Right;
+    auto padding = options.zeroPad ? IntPadding::Zero : IntPadding::Space;
+    fragments.push_back(moore::FormatIntOp::create(
+        builder, loc, value, IntFormat::Decimal, width, alignment, padding));
     return success();
   }
 
