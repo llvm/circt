@@ -58,3 +58,21 @@ def CurrentTimeOp : LLHDOp<"current_time", [MemoryEffects<[MemRead]>]> {
   let results = (outs LLHDTimeType:$result);
   let assemblyFormat = "attr-dict";
 }
+
+def TimeToIntOp : LLHDOp<"time_to_int", [Pure]> {
+  let summary = "Convert a time to an integer number of femtoseconds";
+  let description = [{
+    If the time value converted to femtoseconds does not fit into an `i64`, the
+    result is undefined.
+  }];
+  let arguments = (ins LLHDTimeType:$input);
+  let results = (outs I64:$result);
+  let assemblyFormat = "$input attr-dict";
+}
+
+def IntToTimeOp : LLHDOp<"int_to_time", [Pure]> {
+  let summary = "Convert an integer number of femtoseconds to a time";
+  let arguments = (ins I64:$input);
+  let results = (outs LLHDTimeType:$result);
+  let assemblyFormat = "$input attr-dict";
+}

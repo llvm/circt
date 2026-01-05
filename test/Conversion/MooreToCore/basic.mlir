@@ -1421,3 +1421,13 @@ func.func @CurrentTime() -> !moore.time {
   // CHECK-NEXT: return [[TMP]] : !llhd.time
   return %0 : !moore.time
 }
+
+// CHECK-LABEL: func.func @TimeConversion
+func.func @TimeConversion(%arg0: !moore.l64, %arg1: !moore.time) -> (!moore.time, !moore.l64) {
+  // CHECK-NEXT: [[TMP0:%.+]] = llhd.int_to_time %arg0
+  %0 = moore.logic_to_time %arg0
+  // CHECK-NEXT: [[TMP1:%.+]] = llhd.time_to_int %arg1
+  %1 = moore.time_to_logic %arg1
+  // CHECK-NEXT: return [[TMP0]], [[TMP1]]
+  return %0, %1 : !moore.time, !moore.l64
+}

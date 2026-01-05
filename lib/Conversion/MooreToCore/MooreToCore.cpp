@@ -2111,6 +2111,20 @@ static LogicalResult convert(TimeBIOp op, TimeBIOp::Adaptor adaptor,
   return success();
 }
 
+// moore.logic_to_time
+static LogicalResult convert(LogicToTimeOp op, LogicToTimeOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<llhd::IntToTimeOp>(op, adaptor.getInput());
+  return success();
+}
+
+// moore.time_to_logic
+static LogicalResult convert(TimeToLogicOp op, TimeToLogicOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<llhd::TimeToIntOp>(op, adaptor.getInput());
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Conversion Infrastructure
 //===----------------------------------------------------------------------===//
@@ -2456,6 +2470,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
 
   // Timing control
   patterns.add<TimeBIOp>(convert);
+  patterns.add<LogicToTimeOp>(convert);
+  patterns.add<TimeToLogicOp>(convert);
 
   mlir::populateAnyFunctionOpInterfaceTypeConversionPattern(patterns,
                                                             typeConverter);
