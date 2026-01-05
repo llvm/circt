@@ -241,7 +241,8 @@ struct FormatStringParser {
     auto alignment = options.leftJustify ? IntAlign::Left : IntAlign::Right;
     auto padding = options.zeroPad ? IntPadding::Zero : IntPadding::Space;
     fragments.push_back(moore::FormatIntOp::create(
-        builder, loc, value, IntFormat::Decimal, width, alignment, padding));
+        builder, loc, value, IntFormat::Decimal, alignment, padding,
+        builder.getI32IntegerAttr(width)));
     return success();
   }
 
