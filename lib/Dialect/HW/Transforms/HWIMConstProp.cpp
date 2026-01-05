@@ -54,7 +54,8 @@ class HWIMConstPropPass
 };
 
 #define DEBUG_TYPE                                                             \
-  impl::HWIMConstPropBase<HWIMConstPropPass>::getArgumentName().data()
+  circt::hw::impl::HWIMConstPropBase<HWIMConstPropPass>::getArgumentName()     \
+      .data()
 
 //===----------------------------------------------------------------------===//
 // Constant propagation helper
