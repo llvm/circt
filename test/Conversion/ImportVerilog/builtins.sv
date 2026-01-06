@@ -110,7 +110,6 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   $write("%10.e", r);
   // CHECK: moore.fmt.real general [[R]], align right {fieldWidth = 9 : i32, fracDigits = 8 : i32} : f64
   $write("%9.8g", r);
-  
 
   // CHECK: [[XR:%.+]] = moore.sint_to_real [[X]] : i32 -> f64
   // CHECK: [[TMP:%.+]] = moore.fmt.real float [[XR]]

@@ -107,7 +107,6 @@ hw.module @basic_real_print(in %clk : !seq.clock, in %val : f64) {
   sim.print %cat on %clk if %true
 }
 
-
 // CHECK-LABEL: @multi_args
 // CHECK-NEXT:  %[[TRG:.*]] = seq.from_clock %clk
 // CHECK-NEXT:  hw.triggered posedge %0(%a, %b, %c) : i8, i8, i8 {
@@ -224,7 +223,6 @@ hw.module @multi_clock(in %clka : !seq.clock, in %clkb : !seq.clock, in %clkc : 
 // CHECK-NEXT:       sim.proc.print %[[REALFMT]]
 // CHECK-NEXT:     }
 // CHECK-NEXT:   }
-
 
 hw.module @sequence(in %clk: !seq.clock, in %conda: i1, in %condb: i1, in %val : i32, in %rval : f64) {
   %true = hw.constant true
