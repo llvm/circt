@@ -72,3 +72,24 @@ hw.module @async_reset_warning(in %clk : !seq.clock, in %rst : i1, in %inp : i1,
     %is_2 = comb.icmp eq %state, %c2_i2 : i2
     hw.output %is_2 : i1
 }
+
+// -----
+
+// Test: Module instantiated in the same file should produce an error.
+// The pass does not support converting instances alongside their referenced modules.
+hw.module @instantiated_fsm(in %clk : !seq.clock, in %rst : i1, in %inp : i1, out output : i1) {
+    %c0_i2 = hw.constant 0 : i2
+    %c2_i2 = hw.constant 2 : i2
+    %state = seq.compreg name "state" %next_state, %clk reset %rst, %c0_i2 : i2
+    %c0_i1 = hw.constant 0 : i1
+    %add = comb.concat %c0_i1, %inp : i1, i1
+    %next_state = comb.add %state, %add : i2
+    %is_2 = comb.icmp eq %state, %c2_i2 : i2
+    hw.output %is_2 : i1
+}
+
+hw.module @top_module(in %clk : !seq.clock, in %rst : i1, in %inp : i1, out output : i1) {
+    // expected-error @+1 {{module 'instantiated_fsm' is instantiated but will be converted to FSM; instance conversion is not yet supported}}
+    %out = hw.instance "child" @instantiated_fsm(clk: %clk: !seq.clock, rst: %rst: i1, inp: %inp: i1) -> (output: i1)
+    hw.output %out : i1
+}

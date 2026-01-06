@@ -969,8 +969,27 @@ struct CoreToFSMPass : public circt::impl::ConvertCoreToFSMBase<CoreToFSMPass> {
     OpBuilder builder(module);
 
     SmallVector<HWModuleOp> modules;
+    llvm::DenseSet<StringRef> moduleNames;
     for (auto hwModule : module.getOps<HWModuleOp>()) {
       modules.push_back(hwModule);
+      moduleNames.insert(hwModule.getName());
+    }
+
+    // Check if any modules being converted are instantiated in the same file.
+    // The pass does not currently support converting instances, so we error
+    // out.
+    for (auto hwModule : module.getOps<HWModuleOp>()) {
+      for (auto instance : hwModule.getOps<hw::InstanceOp>()) {
+        StringRef referencedModule = instance.getReferencedModuleName();
+        if (moduleNames.contains(referencedModule)) {
+          instance.emitError()
+              << "module '" << referencedModule
+              << "' is instantiated but will be converted to FSM; "
+              << "instance conversion is not yet supported";
+          signalPassFailure();
+          return;
+        }
+      }
     }
 
     for (auto hwModule : modules) {
