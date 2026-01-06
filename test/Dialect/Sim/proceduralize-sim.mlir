@@ -205,7 +205,7 @@ hw.module @multi_clock(in %clka : !seq.clock, in %clkb : !seq.clock, in %clkc : 
 // CHECK-DAG:      %[[L4:.*]] = sim.fmt.literal "#4"
 // CHECK-DAG:      %[[L5:.*]] = sim.fmt.literal "#5"
 // CHECK-DAG:      %[[L6:.*]] = sim.fmt.literal "#6"
-// CHECK-DAG:      %[[BIN:.*]] = sim.fmt.bin %[[ARG2]] {specifierWidth = 32 : i32} : i32
+// CHECK-DAG:      %[[BIN:.*]] = sim.fmt.bin %[[ARG2]] specifierWidth 32 : i32
 // CHECK-DAG:      %[[REALFMT:.*]] = sim.fmt.gen %[[ARG3]] {fracDigits = 3 : i32} : f64
 // CHECK:          scf.if %[[ARG0]] {
 // CHECK-NEXT:       sim.proc.print %[[L1]]
