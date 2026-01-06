@@ -51,6 +51,21 @@ using namespace chirrtl;
 // Utilities
 //===----------------------------------------------------------------------===//
 
+/// Helper to print domain kind: " of @Symbol"
+static void printDomainKind(OpAsmPrinter &p, FlatSymbolRefAttr domainKind) {
+  p << " of " << domainKind;
+}
+
+/// Helper to parse domain kind: "of @Symbol"
+static ParseResult parseDomainKind(OpAsmParser &parser,
+                                   FlatSymbolRefAttr &domainKind) {
+  StringAttr domainName;
+  if (parser.parseKeyword("of") || parser.parseSymbolName(domainName))
+    return failure();
+  domainKind = FlatSymbolRefAttr::get(domainName);
+  return success();
+}
+
 /// Remove elements from the input array corresponding to set bits in
 /// `indicesToDrop`, returning the elements not mentioned.
 template <typename T>
@@ -786,6 +801,15 @@ static void insertPorts(FModuleLike op,
   unsigned oldNumArgs = op.getNumPorts();
   unsigned newNumArgs = oldNumArgs + ports.size();
 
+  // Build a map from old port indices to new indices.
+  SmallVector<unsigned> indexMap(oldNumArgs);
+  size_t inserted = 0;
+  for (size_t i = 0; i < oldNumArgs; ++i) {
+    while (inserted < ports.size() && ports[inserted].first == i)
+      ++inserted;
+    indexMap[i] = i + inserted;
+  }
+
   // Add direction markers and names for new ports.
   auto existingDirections = op.getPortDirectionsAttr();
   ArrayRef<Attribute> existingNames = op.getPortNames();
@@ -807,12 +831,9 @@ static void insertPorts(FModuleLike op,
   newSyms.reserve(newNumArgs);
   newLocs.reserve(newNumArgs);
 
-  SmallVector<unsigned> indexMap(oldNumArgs);
-
   auto emptyArray = ArrayAttr::get(op.getContext(), {});
 
   unsigned oldIdx = 0;
-  unsigned inserted = 0;
   auto migrateOldPorts = [&](unsigned untilOldIdx) {
     while (oldIdx < oldNumArgs && oldIdx < untilOldIdx) {
       newDirections.push_back(existingDirections[oldIdx]);
@@ -823,8 +844,6 @@ static void insertPorts(FModuleLike op,
       newAnnos.push_back(op.getAnnotationsAttrForPort(oldIdx));
       newSyms.push_back(op.getPortSymbolAttr(oldIdx));
       newLocs.push_back(existingLocs[oldIdx]);
-
-      indexMap[oldIdx] = oldIdx + inserted;
       ++oldIdx;
     }
   };
@@ -890,24 +909,13 @@ static ArrayAttr fixDomainInfoDeletions(MLIRContext *context,
   if (supportsEmptyAttr && domainInfoAttr.empty())
     return domainInfoAttr;
 
-  // Compute an array where each entry is the number of ports before that
-  // index that have been deleted.  This is used to update domain information.
-  SmallVector<unsigned> numDeleted;
-  numDeleted.resize(portIndices.size());
-  size_t deletionIndex = portIndices.find_first();
+  // Build a map from old port indices to new indices.
+  SmallVector<unsigned> indexMap(portIndices.size());
+  size_t deleted = 0;
   for (size_t i = 0, e = portIndices.size(); i != e; ++i) {
-    if (i == deletionIndex) {
-      if (i == 0)
-        numDeleted[i] = 1;
-      else
-        numDeleted[i] = numDeleted[i - 1] + 1;
-      deletionIndex = portIndices.find_next(i);
-      continue;
-    }
-    if (i == 0)
-      numDeleted[i] = 0;
-    else
-      numDeleted[i] = numDeleted[i - 1];
+    indexMap[i] = i - deleted;
+    if (portIndices[i])
+      ++deleted;
   }
 
   // Return a cached empty ArrayAttr.
@@ -945,9 +953,9 @@ static ArrayAttr fixDomainInfoDeletions(MLIRContext *context,
       if (portIndices.test(oldIdx))
         continue;
       // If the new index is the same, do nothing.
-      auto newIdx = oldIdx - numDeleted[oldIdx];
+      auto newIdx = indexMap[oldIdx];
       if (oldIdx == newIdx) {
-        newDomainInfo.push_back(attr);
+        newDomains.push_back(domain);
         continue;
       }
       // Update the index.
@@ -1230,10 +1238,34 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
 
   mlir::OpPrintingFlags flags;
 
+  // Return an SSA name for an argument.
+  DenseMap<unsigned, std::string> ssaNames;
+  auto getSsaName = [&](unsigned idx) -> StringRef {
+    // We already computed this name.  Return it.
+    auto itr = ssaNames.find(idx);
+    if (itr != ssaNames.end())
+      return itr->getSecond();
+
+    // Compute the name, insert it, and return it.
+    if (block) {
+      SmallString<32> resultNameStr;
+      // Get the printed format for the argument name.
+      llvm::raw_svector_ostream tmpStream(resultNameStr);
+      p.printOperand(block->getArgument(idx), tmpStream);
+      // If the name wasn't printable in a way that agreed with portName, make
+      // sure to print out an explicit portNames attribute.
+      auto portName = cast<StringAttr>(portNames[idx]).getValue();
+      if (tmpStream.str().drop_front() != portName)
+        printedNamesDontMatch = true;
+      return ssaNames.insert({idx, tmpStream.str().str()}).first->getSecond();
+    }
+
+    auto name = cast<StringAttr>(portNames[idx]).getValue();
+    return ssaNames.insert({idx, name.str()}).first->getSecond();
+  };
+
   // If we are printing the ports as block arguments the op must have a first
   // block.
-  SmallString<32> resultNameStr;
-  DenseMap<unsigned, std::string> domainPortNames;
   p << '(';
   for (unsigned i = 0, e = portTypes.size(); i < e; ++i) {
     if (i > 0)
@@ -1246,23 +1278,9 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
     // argument.
     auto portType = cast<TypeAttr>(portTypes[i]).getValue();
     if (block) {
-      // Get the printed format for the argument name.
-      resultNameStr.clear();
-      llvm::raw_svector_ostream tmpStream(resultNameStr);
-      p.printOperand(block->getArgument(i), tmpStream);
-      // If the name wasn't printable in a way that agreed with portName, make
-      // sure to print out an explicit portNames attribute.
-      auto portName = cast<StringAttr>(portNames[i]).getValue();
-      if (tmpStream.str().drop_front() != portName)
-        printedNamesDontMatch = true;
-      p << tmpStream.str();
-      if (isa<DomainType>(portType))
-        domainPortNames[i] = tmpStream.str();
+      p << getSsaName(i);
     } else {
-      auto name = cast<StringAttr>(portNames[i]).getValue();
-      p.printKeywordOrString(name);
-      if (isa<DomainType>(portType))
-        domainPortNames[i] = name.str();
+      p.printKeywordOrString(getSsaName(i));
     }
 
     // Print the port type.
@@ -1280,13 +1298,13 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
     // Print domain information.
     if (!domainInfo.empty()) {
       if (auto domainKind = dyn_cast<FlatSymbolRefAttr>(domainInfo[i])) {
-        p << " of " << domainKind;
+        printDomainKind(p, domainKind);
       } else {
         auto domains = cast<ArrayAttr>(domainInfo[i]);
         if (!domains.empty()) {
           p << " domains [";
           llvm::interleaveComma(domains, p, [&](Attribute attr) {
-            p << domainPortNames[cast<IntegerAttr>(attr).getUInt()];
+            p << getSsaName(cast<IntegerAttr>(attr).getUInt());
           });
           p << "]";
         }
@@ -1329,6 +1347,10 @@ static ParseResult parseModulePorts(
   // Mapping of domain name to port index.
   DenseMap<Attribute, size_t> domainIndex;
 
+  // Mapping of port index to domain names and source locators.
+  using DomainAndLoc = std::pair<Attribute, llvm::SMLoc>;
+  DenseMap<size_t, SmallVector<DomainAndLoc>> domainStrings;
+
   auto parseArgument = [&]() -> ParseResult {
     // Parse port direction.
     if (succeeded(parser.parseOptionalKeyword("out")))
@@ -1341,6 +1363,7 @@ static ParseResult parseModulePorts(
     // This is the location or the port declaration in the IR.  If there is no
     // other location information, we use this to point to the MLIR.
     llvm::SMLoc irLoc;
+    auto portIdx = portNames.size();
 
     if (hasSSAIdentifiers) {
       OpAsmParser::Argument arg;
@@ -1376,7 +1399,7 @@ static ParseResult parseModulePorts(
       return failure();
     portTypes.push_back(TypeAttr::get(portType));
     if (isa<DomainType>(portType))
-      domainIndex[portNames.back()] = portNames.size() - 1;
+      domainIndex[portNames.back()] = portIdx;
 
     if (hasSSAIdentifiers)
       entryArgs.back().type = portType;
@@ -1395,17 +1418,18 @@ static ParseResult parseModulePorts(
       portSyms.push_back(innerSymAttr);
     }
 
-    // Parse optional port domain information if it exists.
-    Attribute domainsAttr;
-    SmallVector<Attribute> portDomains;
+    // Parse optional port domain information if it exists.  At this point, this
+    // will be something if this is a domain port or null if domain associations
+    // could exist.  We don't know how to resolve the names of the domains at
+    // this point, so this is only building up the information necessary to add
+    // the domain information later.
+    Attribute domainInfo;
     if (supportsDomains) {
       if (isa<DomainType>(portType)) {
-        if (parser.parseKeyword("of"))
+        FlatSymbolRefAttr domainKind;
+        if (parseDomainKind(parser, domainKind))
           return failure();
-        StringAttr domainKind;
-        if (parser.parseSymbolName(domainKind))
-          return failure();
-        domainsAttr = FlatSymbolRefAttr::get(context, domainKind);
+        domainInfo = domainKind;
       } else if (succeeded(parser.parseOptionalKeyword("domains"))) {
         auto result = parser.parseCommaSeparatedList(
             OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
@@ -1422,26 +1446,14 @@ static ParseResult parseModulePorts(
                   return failure();
                 argName = StringAttr::get(context, portName);
               }
-
-              auto index = domainIndex.find(argName);
-              if (index == domainIndex.end()) {
-                parser.emitError(irLoc)
-                    << "domain name '" << argName << "' not found";
-                return failure();
-              }
-              portDomains.push_back(IntegerAttr::get(
-                  IntegerType::get(context, 32, IntegerType::Unsigned),
-                  index->second));
+              domainStrings[portIdx].push_back({argName, irLoc});
               return success();
             });
         if (failed(result))
           return failure();
-        domainsAttr = parser.getBuilder().getArrayAttr(portDomains);
       }
     }
-    if (!domainsAttr)
-      domainsAttr = parser.getBuilder().getArrayAttr({});
-    domains.push_back(domainsAttr);
+    domains.push_back(domainInfo);
 
     // Parse the port annotations.
     ArrayAttr annos;
@@ -1464,9 +1476,35 @@ static ParseResult parseModulePorts(
     return success();
   };
 
-  // Parse all ports.
-  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
-                                        parseArgument);
+  // Parse all ports, in two phases.  First, parse all the ports and build up
+  // the information about what domains exist and the _names_ of domains
+  // associated with ports.  After this, the domain information is only
+  // populated for domain ports.  All associations are null.
+  if (failed(parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                            parseArgument)))
+    return failure();
+
+  // Second, for non-domain ports, convert the domain names to domain indices
+  // and update the domain information.
+  for (auto [portIdx, domainInfo] : llvm::enumerate(domains)) {
+    // Domain ports _already_ have domain info.  Skip them.
+    if (domainInfo)
+      continue;
+    // Convert domain names to domain indices for non-domain ports.
+    SmallVector<Attribute> portDomains;
+    for (auto [domainName, loc] : domainStrings[portIdx]) {
+      auto index = domainIndex.find(domainName);
+      if (index == domainIndex.end()) {
+        parser.emitError(loc) << "domain name '" << domainName << "' not found";
+        return failure();
+      }
+      portDomains.push_back(IntegerAttr::get(
+          IntegerType::get(context, 32, IntegerType::Unsigned), index->second));
+    }
+    domains[portIdx] = parser.getBuilder().getArrayAttr(portDomains);
+  }
+
+  return success();
 }
 
 /// Print a paramter list for a module or instance.
@@ -2613,10 +2651,10 @@ void InstanceOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
                    ArrayAttr::get(getContext(), annotations));
 }
 
-ArrayAttr InstanceOp::getPortDomain(unsigned portIdx) {
+Attribute InstanceOp::getPortDomain(unsigned portIdx) {
   assert(portIdx < getNumResults() &&
          "index should be smaller than result number");
-  return cast<ArrayAttr>(getDomainInfo()[portIdx]);
+  return getDomainInfo()[portIdx];
 }
 
 InstanceOp InstanceOp::cloneWithInsertedPorts(
@@ -4250,6 +4288,8 @@ static FlatSymbolRefAttr getDomainTypeName(Value value) {
       return getDomainTypeNameOfResult(instance, result.getResultNumber());
     if (auto instance = dyn_cast<InstanceChoiceOp>(op))
       return getDomainTypeNameOfResult(instance, result.getResultNumber());
+    if (auto anonDomain = dyn_cast<DomainCreateAnonOp>(op))
+      return anonDomain.getDomainAttr();
     return {};
   }
 
@@ -4265,6 +4305,19 @@ LogicalResult DomainDefineOp::verify() {
 
   auto dst = getDest();
   auto src = getSrc();
+
+  // As wires cannot have domain information, don't do any checking when a wire
+  // is involved.  This weakens the verification.
+  //
+  // TOOD: Remove this by adding Domain Info to wires [1].
+  //
+  // [1] https://github.com/llvm/circt/issues/9398
+  if (auto *srcDefOp = src.getDefiningOp())
+    if (isa<WireOp>(srcDefOp))
+      return success();
+  if (auto *dstDefOp = dst.getDefiningOp())
+    if (isa<WireOp>(dstDefOp))
+      return success();
 
   auto dstDomain = getDomainTypeName(dst);
   if (!dstDomain)
@@ -7020,6 +7073,20 @@ LogicalResult BindOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 
   if (!instance.getDoNotPrint())
     return emitError() << "target " << ref << " is not marked doNotPrint";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Domain operations
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+DomainCreateAnonOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
+  auto domain = getDomainAttr();
+  if (!symbolTable.lookupSymbolIn<DomainOp>(circuitOp, domain))
+    return emitOpError() << "references undefined domain '" << domain << "'";
 
   return success();
 }

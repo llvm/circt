@@ -39,6 +39,8 @@ static inline mlir::Value getFormattedValue(mlir::Operation *fmtOp) {
     return fmt.getValue();
   if (auto fmt = llvm::dyn_cast_or_null<circt::sim::FormatDecOp>(fmtOp))
     return fmt.getValue();
+  if (auto fmt = llvm::dyn_cast_or_null<circt::sim::FormatOctOp>(fmtOp))
+    return fmt.getValue();
   if (auto fmt = llvm::dyn_cast_or_null<circt::sim::FormatHexOp>(fmtOp))
     return fmt.getValue();
   if (auto fmt = llvm::dyn_cast_or_null<circt::sim::FormatCharOp>(fmtOp))

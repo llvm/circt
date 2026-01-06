@@ -148,7 +148,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
 
     /// Hooks for domain information.
-    ArrayAttr getPortDomain(unsigned portIdx);
+    Attribute getPortDomain(unsigned portIdx);
 
     /// Clone this instance with inserted ports.
     InstanceOp cloneWithInsertedPorts(
@@ -775,6 +775,20 @@ def ObjectOp :  FIRRTLOp<"object", [
   let assemblyFormat = [{
     `` custom<ImplicitSSAName>(attr-dict) custom<ClassInterface>(type($result))
   }];
+}
+
+def DomainCreateAnonOp
+    : FIRRTLOp<"domain.anon",
+               [ParentOneOf<["firrtl::ContractOp", "firrtl::FModuleOp",
+                             "firrtl::LayerBlockOp", "firrtl::MatchOp",
+                             "firrtl::WhenOp", "sv::IfDefOp"]>,
+                DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+                DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "Create an anonymous domain, without parameters set";
+  let arguments = (ins FlatSymbolRefAttr:$domain);
+  let results = (outs DomainType:$result);
+  let assemblyFormat = [{ attr-dict `:` type($result) `of` $domain }];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLDECLARATIONS_TD

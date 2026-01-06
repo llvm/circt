@@ -365,6 +365,10 @@ def StripSV : Pass<"arc-strip-sv", "mlir::ModuleOp"> {
   let constructor = "circt::arc::createStripSVPass()";
   let dependentDialects = ["arc::ArcDialect", "comb::CombDialect",
                            "hw::HWDialect", "seq::SeqDialect"];
+  let options = [
+    Option<"asyncResetsAsSync", "async-resets-as-sync", "bool", "false",
+      "Treat asynchronous resets as synchronous.">
+  ];
 }
 
 #endif // CIRCT_DIALECT_ARC_ARCPASSES_TD

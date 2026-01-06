@@ -494,13 +494,19 @@ void DriveHoister::hoistDrives() {
         .Case<TimeAttr>([&](auto attr) {
           auto &slot = materializedConstants[attr];
           if (!slot)
-            slot =
-                llhd::ConstantTimeOp::create(builder, processOp.getLoc(), attr);
+            slot = ConstantTimeOp::create(builder, processOp.getLoc(), attr);
           return slot;
         })
         .Case<Type>([&](auto type) {
           // TODO: This should probably create something like a `llhd.dontcare`.
-          unsigned numBits = hw::getBitWidth(type);
+          if (isa<TimeType>(type)) {
+            auto attr = TimeAttr::get(builder.getContext(), 0, "ns", 0, 0);
+            auto &slot = materializedConstants[attr];
+            if (!slot)
+              slot = ConstantTimeOp::create(builder, processOp.getLoc(), attr);
+            return slot;
+          }
+          auto numBits = hw::getBitWidth(type);
           assert(numBits >= 0);
           Value value = hw::ConstantOp::create(
               builder, processOp.getLoc(), builder.getIntegerType(numBits), 0);

@@ -32,11 +32,13 @@
 #endif
 #include "circt-c/Dialect/SV.h"
 #include "circt-c/Dialect/Seq.h"
+#include "circt-c/Dialect/Sim.h"
 #include "circt-c/Dialect/Verif.h"
 #include "circt-c/ExportLLVM.h"
 #include "circt-c/ExportVerilog.h"
 #include "mlir-c/Bindings/Python/Interop.h"
 #include "mlir-c/Dialect/Index.h"
+#include "mlir-c/Dialect/LLVM.h"
 #include "mlir-c/Dialect/SCF.h"
 #include "mlir-c/Dialect/SMT.h"
 #include "mlir-c/IR.h"
@@ -121,6 +123,10 @@ NB_MODULE(_circt, m) {
         mlirDialectHandleRegisterDialect(index, context);
         mlirDialectHandleLoadDialect(index, context);
 
+        MlirDialectHandle llvm = mlirGetDialectHandle__llvm__();
+        mlirDialectHandleRegisterDialect(llvm, context);
+        mlirDialectHandleLoadDialect(llvm, context);
+
         MlirDialectHandle scf = mlirGetDialectHandle__scf__();
         mlirDialectHandleRegisterDialect(scf, context);
         mlirDialectHandleLoadDialect(scf, context);
@@ -146,6 +152,10 @@ NB_MODULE(_circt, m) {
         MlirDialectHandle seq = mlirGetDialectHandle__seq__();
         mlirDialectHandleRegisterDialect(seq, context);
         mlirDialectHandleLoadDialect(seq, context);
+
+        MlirDialectHandle sim = mlirGetDialectHandle__sim__();
+        mlirDialectHandleRegisterDialect(sim, context);
+        mlirDialectHandleLoadDialect(sim, context);
 
         MlirDialectHandle sv = mlirGetDialectHandle__sv__();
         mlirDialectHandleRegisterDialect(sv, context);

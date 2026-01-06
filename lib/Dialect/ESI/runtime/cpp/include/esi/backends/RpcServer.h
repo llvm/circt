@@ -16,6 +16,7 @@
 #ifndef ESI_COSIM_RPCSERVER_H
 #define ESI_COSIM_RPCSERVER_H
 
+#include "esi/Context.h"
 #include "esi/Ports.h"
 
 namespace esi {
@@ -24,7 +25,11 @@ namespace cosim {
 /// TODO: make this a proper backend (as much as possible).
 class RpcServer {
 public:
+  RpcServer(Context &ctxt);
   ~RpcServer();
+
+  /// Get the context.
+  Context &getContext() { return ctxt; }
 
   /// Set the manifest and version. There is a race condition here in that the
   /// RPC server can be started and a connection from the client could happen
@@ -39,14 +44,27 @@ public:
   WriteChannelPort &registerWritePort(const std::string &name,
                                       const std::string &type);
 
-  void stop();
-  void run(int port);
+  // Stop the RPC server.
+  // If a millisecond timeout is provided, will forcefully stop the underlying
+  // RPC server once the timeout expires. If not, the RPC server will attempt to
+  // stop gracefully, implying that any outstanding RPC calls must be served
+  // before the server actually stops (see grpc::ServerInterface::Shutdown for
+  // more).
+  void stop(uint32_t timeoutMS = 0);
+
+  // Start the RPC server. If no port is provided, the RPC server will let the
+  // OS pick a port.
+  void run(int port = -1);
+
+  // Return which port the RPC server is executing on.
+  int getPort();
 
   /// Hide the implementation details from this header file.
   class Impl;
 
 private:
-  Impl *impl = nullptr;
+  Context &ctxt;
+  std::unique_ptr<Impl> impl;
 };
 
 } // namespace cosim

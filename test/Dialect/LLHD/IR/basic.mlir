@@ -197,3 +197,19 @@ hw.module @CombinationalProcess(in %arg0: i1, in %arg1: i42, in %arg2: i9001, in
     llhd.yield %1, %2 : i42, i9001
   }
 }
+
+// CHECK-LABEL: @CurrentTime
+func.func @CurrentTime() -> !llhd.time {
+  // CHECK: llhd.current_time
+  %0 = llhd.current_time
+  return %0 : !llhd.time
+}
+
+// CHECK-LABEL: @TimeConversion
+func.func @TimeConversion(%arg0: i64, %arg1: !llhd.time) -> (!llhd.time, i64) {
+  // CHECK: llhd.int_to_time %arg0
+  %0 = llhd.int_to_time %arg0
+  // CHECK: llhd.time_to_int %arg1
+  %1 = llhd.time_to_int %arg1
+  return %0, %1 : !llhd.time, i64
+}

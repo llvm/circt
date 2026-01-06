@@ -391,14 +391,26 @@ func.func @FormatStrings(%arg0: !moore.i42) {
   %0 = moore.fmt.literal "hello"
   // CHECK: sim.fmt.concat ([[TMP]], [[TMP]])
   %1 = moore.fmt.concat (%0, %0)
-  // CHECK: sim.fmt.dec %arg0 : i42
-  moore.fmt.int decimal %arg0, width 42, align right, pad space : i42
-  // CHECK: sim.fmt.bin %arg0 : i42
-  moore.fmt.int binary %arg0, width 42, align right, pad space : i42
-  // CHECK: sim.fmt.hex %arg0 : i42
-  moore.fmt.int hex_lower %arg0, width 42, align right, pad space : i42
-  // CHECK: sim.fmt.hex %arg0 : i42
-  moore.fmt.int hex_upper %arg0, width 42, align right, pad space : i42
+  // CHECK:  sim.fmt.dec %arg0 specifierWidth 42 : i42
+  moore.fmt.int decimal %arg0, align right, pad space width 42 : i42
+  // CHECK: sim.fmt.dec %arg0 isLeftAligned true paddingChar 48 : i42
+  moore.fmt.int decimal %arg0, align left, pad zero : i42
+  // CHECK: sim.fmt.dec %arg0 signed : i42
+  moore.fmt.int decimal %arg0, align right, pad space signed : i42
+  // CHECK: sim.fmt.bin %arg0 paddingChar 32 specifierWidth 42 : i42
+  moore.fmt.int binary %arg0, align right, pad space width 42 : i42
+  // CHECK: sim.fmt.bin %arg0 isLeftAligned true : i42
+  moore.fmt.int binary %arg0, align left, pad zero : i42
+  // CHECK: sim.fmt.oct %arg0 paddingChar 32 specifierWidth 42 : i42
+  moore.fmt.int octal %arg0, align right, pad space width 42 : i42
+  // CHECK: sim.fmt.oct %arg0 specifierWidth 42 : i42
+  moore.fmt.int octal %arg0, align right, pad zero width 42 : i42
+  // CHECK: sim.fmt.hex %arg0, isUpper false paddingChar 32 specifierWidth 42 : i42
+  moore.fmt.int hex_lower %arg0, align right, pad space width 42 : i42
+  // CHECK: sim.fmt.hex %arg0, isUpper false : i42
+  moore.fmt.int hex_lower %arg0, align right, pad zero : i42
+  // CHECK: sim.fmt.hex %arg0, isUpper true paddingChar 32 specifierWidth 42 : i42
+  moore.fmt.int hex_upper %arg0, align right, pad space width 42 : i42
   // CHECK: sim.proc.print [[TMP]]
   moore.builtin.display %0
   return
@@ -695,6 +707,40 @@ func.func @CaseXZ(%arg0: !moore.l8, %arg1: !moore.l8) {
   // CHECK: [[TMP2:%.+]] = hw.constant -120 : i8
   // CHECK: comb.icmp ceq [[TMP1]], [[TMP2]] : i8
   moore.casexz_eq %0, %1 : l8
+
+  return
+}
+
+// CHECK-LABEL: func.func @CmpReal
+func.func @CmpReal(%arg0: !moore.f32, %arg1: !moore.f32) {
+  // CHECK: arith.cmpf one, %arg0, %arg1 : f32
+  moore.fne %arg0, %arg1 : f32 -> i1
+  // CHECK: arith.cmpf olt, %arg0, %arg1 : f32
+  moore.flt %arg0, %arg1 : f32 -> i1
+  // CHECK: arith.cmpf ole, %arg0, %arg1 : f32
+  moore.fle %arg0, %arg1 : f32 -> i1
+  // CHECK: arith.cmpf ogt, %arg0, %arg1 : f32
+  moore.fgt %arg0, %arg1 : f32 -> i1
+  // CHECK: arith.cmpf oge, %arg0, %arg1 : f32
+  moore.fge %arg0, %arg1 : f32 -> i1
+  // CHECK: arith.cmpf oeq, %arg0, %arg1 : f32
+  moore.feq %arg0, %arg1 : f32 -> i1
+
+  return
+}
+
+// CHECK-LABEL: func.func @BinaryRealOps
+func.func @BinaryRealOps(%arg0: !moore.f32, %arg1: !moore.f32) {
+  // CHECK: arith.addf %arg0, %arg1 : f32
+  moore.fadd %arg0, %arg1 : f32
+  // CHECK: arith.subf %arg0, %arg1 : f32
+  moore.fsub %arg0, %arg1 : f32
+  // CHECK: arith.divf %arg0, %arg1 : f32
+  moore.fdiv %arg0, %arg1 : f32
+  // CHECK: arith.mulf %arg0, %arg1 : f32
+  moore.fmul %arg0, %arg1 : f32
+  // CHECK: math.powf %arg0, %arg1 : f32
+  moore.fpow %arg0, %arg1 : f32
 
   return
 }
@@ -1358,4 +1404,40 @@ func.func @ConstantReals() {
   // CHECK: arith.constant 1.234500e+00 : f64
   moore.constant_real 1.234500e+00 : f64
   return
+}
+
+// CHECK-LABEL: func.func @IntToRealLowering
+func.func @IntToRealLowering(%arg0: !moore.i32, %arg1: !moore.i42) {
+  // CHECK-NEXT: arith.sitofp {{%.*}} : i32 to f32
+  // CHECK-NEXT: arith.uitofp {{%.*}} : i42 to f64
+  %0 = moore.sint_to_real %arg0 : i32 -> f32
+  %1 = moore.uint_to_real %arg1 : i42 -> f64
+  return
+}
+
+// CHECK-LABEL: func.func @RealToIntLowering
+func.func @RealToIntLowering(%arg0: !moore.f32, %arg1: !moore.f64) {
+  // CHECK-NEXT: arith.fptosi %arg0 : f32 to i42
+  // CHECK-NEXT: arith.fptosi %arg1 : f64 to i42
+  %0 = moore.real_to_int %arg0 : f32 -> i42
+  %1 = moore.real_to_int %arg1 : f64 -> i42
+  return
+}
+
+// CHECK-LABEL: func.func @CurrentTime
+func.func @CurrentTime() -> !moore.time {
+  // CHECK-NEXT: [[TMP:%.+]] = llhd.current_time
+  %0 = moore.builtin.time
+  // CHECK-NEXT: return [[TMP]] : !llhd.time
+  return %0 : !moore.time
+}
+
+// CHECK-LABEL: func.func @TimeConversion
+func.func @TimeConversion(%arg0: !moore.l64, %arg1: !moore.time) -> (!moore.time, !moore.l64) {
+  // CHECK-NEXT: [[TMP0:%.+]] = llhd.int_to_time %arg0
+  %0 = moore.logic_to_time %arg0
+  // CHECK-NEXT: [[TMP1:%.+]] = llhd.time_to_int %arg1
+  %1 = moore.time_to_logic %arg1
+  // CHECK-NEXT: return [[TMP0]], [[TMP1]]
+  return %0, %1 : !moore.time, !moore.l64
 }

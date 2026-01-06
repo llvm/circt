@@ -306,7 +306,7 @@ LogicalResult Visitor::visit(FModuleLike mod) {
           auto orientation =
               (Direction)((unsigned)port.direction ^ field.isFlip);
           PortInfo pi(name, field.type, orientation, /*symName=*/StringAttr{},
-                      port.loc, std::nullopt);
+                      port.loc, std::nullopt, port.domains);
           newPorts.emplace_back(idxOfInsertPoint, pi);
         }
         return success();

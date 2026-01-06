@@ -1,3 +1,4 @@
+from .signals import Signal
 from .system import System
 from .module import Module
 
@@ -7,6 +8,14 @@ from pathlib import Path
 import subprocess
 import re
 import os
+
+
+def print_info(msg_fmt: str, *args: Signal):
+  """Emit SystemVerilog info message."""
+  from .dialects import sv
+  from .circt.ir import StringAttr
+  subs = [arg.value for arg in args]
+  sv.InfoOp(subs, message=StringAttr.get(msg_fmt))
 
 
 def unittestmodule(generate=True,

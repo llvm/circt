@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/LTL/LTLTypes.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
@@ -57,40 +58,164 @@ OpFoldResult HasBeenResetOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
-// AssertLikeOps Canonicalizations
+// AssertLikeOps Canonicalization Patterns
 //===----------------------------------------------------------------------===//
 
-namespace AssertLikeOp {
-// assertlike(ltl.clock(prop, clk), en) -> clocked_assertlike(prop, en, clk)
-template <typename TargetOp, typename Op>
-static LogicalResult canonicalize(Op op, PatternRewriter &rewriter) {
-  // If the property is a block argument, then no canonicalization is possible
-  Value property = op.getProperty();
-  auto clockOp = property.getDefiningOp<ltl::ClockOp>();
-  if (!clockOp)
+namespace {
+/// Remove `if %true` enable condition from an operation.
+template <typename Op>
+struct RemoveEnableTrue : public OpRewritePattern<Op> {
+  using OpRewritePattern<Op>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(Op op,
+                                PatternRewriter &rewriter) const override {
+    Value enable = op.getEnable();
+    if (!enable)
+      return failure();
+    auto enableConst = enable.getDefiningOp<hw::ConstantOp>();
+    if (!enableConst || !enableConst.getValue().isOne())
+      return failure();
+
+    rewriter.modifyOpInPlace(op, [&]() { op.getEnableMutable().clear(); });
+    return success();
+  }
+};
+
+/// Delete operation if enable is `false`.
+template <typename Op>
+struct EraseIfEnableFalse : public OpRewritePattern<Op> {
+  using OpRewritePattern<Op>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(Op op,
+                                PatternRewriter &rewriter) const override {
+    Value enable = op.getEnable();
+    if (!enable)
+      return failure();
+    auto enableConst = enable.getDefiningOp<hw::ConstantOp>();
+    if (!enableConst || !enableConst.getValue().isZero())
+      return failure();
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+/// Delete operation if property is `ltl.boolean_constant true` or
+/// `hw.constant true`.
+template <typename Op>
+struct EraseIfPropertyTrue : public OpRewritePattern<Op> {
+  using OpRewritePattern<Op>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(Op op,
+                                PatternRewriter &rewriter) const override {
+    Value property = op.getProperty();
+
+    // Check for ltl.boolean_constant true
+    if (auto boolConst =
+            property.template getDefiningOp<ltl::BooleanConstantOp>()) {
+      if (boolConst.getValueAttr().getValue()) {
+        rewriter.eraseOp(op);
+        return success();
+      }
+    }
+
+    // Check for hw.constant true (for i1 properties)
+    if (auto hwConst = property.template getDefiningOp<hw::ConstantOp>()) {
+      if (hwConst.getValue().isOne()) {
+        rewriter.eraseOp(op);
+        return success();
+      }
+    }
+
     return failure();
+  }
+};
 
-  // Check for clock operand
-  // If it exists, fold it into a clocked assertlike
-  rewriter.replaceOpWithNewOp<TargetOp>(
-      op, clockOp.getInput(), ltlToVerifClockEdge(clockOp.getEdge()),
-      clockOp.getClock(), op.getEnable(), op.getLabelAttr());
+/// Convert `op(ltl.clock(prop, clk), en)` to `clocked_op(prop, en, clk)`.
+template <typename TargetOp, typename Op>
+struct LowerToClocked : public OpRewritePattern<Op> {
+  using OpRewritePattern<Op>::OpRewritePattern;
 
-  return success();
+  LogicalResult matchAndRewrite(Op op,
+                                PatternRewriter &rewriter) const override {
+    auto clockOp = op.getProperty().template getDefiningOp<ltl::ClockOp>();
+    if (!clockOp)
+      return failure();
+
+    rewriter.replaceOpWithNewOp<TargetOp>(
+        op, clockOp.getInput(), ltlToVerifClockEdge(clockOp.getEdge()),
+        clockOp.getClock(), op.getEnable(), op.getLabelAttr());
+    return success();
+  }
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// AssertOp
+//===----------------------------------------------------------------------===//
+
+void AssertOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.add<EraseIfEnableFalse<AssertOp>, EraseIfPropertyTrue<AssertOp>,
+              RemoveEnableTrue<AssertOp>,
+              LowerToClocked<ClockedAssertOp, AssertOp>>(context);
 }
 
-} // namespace AssertLikeOp
+//===----------------------------------------------------------------------===//
+// AssumeOp
+//===----------------------------------------------------------------------===//
 
-LogicalResult AssertOp::canonicalize(AssertOp op, PatternRewriter &rewriter) {
-  return AssertLikeOp::canonicalize<ClockedAssertOp>(op, rewriter);
+void AssumeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.add<EraseIfEnableFalse<AssumeOp>, EraseIfPropertyTrue<AssumeOp>,
+              RemoveEnableTrue<AssumeOp>,
+              LowerToClocked<ClockedAssumeOp, AssumeOp>>(context);
 }
 
-LogicalResult AssumeOp::canonicalize(AssumeOp op, PatternRewriter &rewriter) {
-  return AssertLikeOp::canonicalize<ClockedAssumeOp>(op, rewriter);
+//===----------------------------------------------------------------------===//
+// CoverOp
+//===----------------------------------------------------------------------===//
+
+void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                          MLIRContext *context) {
+  // Covers are NOT canonicalized to remove trivially true properties or
+  // constant false enables. See the comment in the test file for details.
+  results
+      .add<RemoveEnableTrue<CoverOp>, LowerToClocked<ClockedCoverOp, CoverOp>>(
+          context);
 }
 
-LogicalResult CoverOp::canonicalize(CoverOp op, PatternRewriter &rewriter) {
-  return AssertLikeOp::canonicalize<ClockedCoverOp>(op, rewriter);
+//===----------------------------------------------------------------------===//
+// ClockedAssertOp
+//===----------------------------------------------------------------------===//
+
+void ClockedAssertOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                  MLIRContext *context) {
+  results.add<RemoveEnableTrue<ClockedAssertOp>,
+              EraseIfEnableFalse<ClockedAssertOp>,
+              EraseIfPropertyTrue<ClockedAssertOp>>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// ClockedAssumeOp
+//===----------------------------------------------------------------------===//
+
+void ClockedAssumeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                  MLIRContext *context) {
+  results.add<RemoveEnableTrue<ClockedAssumeOp>,
+              EraseIfEnableFalse<ClockedAssumeOp>,
+              EraseIfPropertyTrue<ClockedAssumeOp>>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// ClockedCoverOp
+//===----------------------------------------------------------------------===//
+
+void ClockedCoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                 MLIRContext *context) {
+  // Covers are NOT canonicalized to remove trivially true properties or
+  // constant false enables. See the comment in the test file for details.
+  results.add<RemoveEnableTrue<ClockedCoverOp>>(context);
 }
 
 //===----------------------------------------------------------------------===//

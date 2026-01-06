@@ -803,11 +803,12 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   auto loc = convertLocation(module->location);
   OpBuilder::InsertionGuard g(builder);
 
-  // We only support modules for now. Extension to interfaces and programs
+  // We only support modules and programs for now. Extension to interfaces
   // should be trivial though, since they are essentially the same thing with
   // only minor differences in semantics.
-  if (module->getDefinition().definitionKind !=
-      slang::ast::DefinitionKind::Module) {
+  auto kind = module->getDefinition().definitionKind;
+  if (kind != slang::ast::DefinitionKind::Module &&
+      kind != slang::ast::DefinitionKind::Program) {
     mlir::emitError(loc) << "unsupported definition: "
                          << module->getDefinition().getKindString();
     return {};
@@ -1086,8 +1087,9 @@ getFunctionSignature(Context &context,
     }
   }
 
-  if (!subroutine.getReturnType().isVoid()) {
-    auto type = context.convertType(subroutine.getReturnType());
+  const auto &returnType = subroutine.getReturnType();
+  if (!returnType.isVoid()) {
+    auto type = context.convertType(returnType);
     if (!type)
       return {};
     outputTypes.push_back(type);
@@ -1120,6 +1122,8 @@ Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
     builder.setInsertionPoint(it->second);
 
   auto funcTy = getFunctionSignature(*this, subroutine, extraParams);
+  if (!funcTy)
+    return nullptr;
   auto funcOp = mlir::func::FuncOp::create(builder, loc, qualifiedName, funcTy);
 
   SymbolTable::setSymbolVisibility(funcOp, SymbolTable::Visibility::Private);
@@ -1682,12 +1686,8 @@ private:
 ClassLowering *Context::declareClass(const slang::ast::ClassType &cls) {
   // Check if there already is a declaration for this class.
   auto &lowering = classes[&cls];
-  if (lowering) {
-    if (!lowering->op)
-      return {};
+  if (lowering)
     return lowering.get();
-  }
-
   lowering = std::make_unique<ClassLowering>();
   auto loc = convertLocation(cls.location);
 

@@ -403,20 +403,24 @@ func.func @FormatStrings(%arg0: !moore.format_string, %arg1: !moore.i42) {
   moore.fmt.concat (%arg0)
   // CHECK: moore.fmt.concat (%arg0, %arg0)
   moore.fmt.concat (%arg0, %arg0)
-  // CHECK: moore.fmt.int binary %arg1, width 42, align left, pad zero : i42
-  moore.fmt.int binary %arg1, width 42, align left, pad zero : i42
-  // CHECK: moore.fmt.int binary %arg1, width 42, align right, pad zero : i42
-  moore.fmt.int binary %arg1, width 42, align right, pad zero : i42
-  // CHECK: moore.fmt.int binary %arg1, width 42, align right, pad space : i42
-  moore.fmt.int binary %arg1, width 42, align right, pad space : i42
-  // CHECK: moore.fmt.int octal %arg1, width 42, align left, pad zero : i42
-  moore.fmt.int octal %arg1, width 42, align left, pad zero : i42
-  // CHECK: moore.fmt.int decimal %arg1, width 42, align left, pad zero : i42
-  moore.fmt.int decimal %arg1, width 42, align left, pad zero : i42
-  // CHECK: moore.fmt.int hex_lower %arg1, width 42, align left, pad zero : i42
-  moore.fmt.int hex_lower %arg1, width 42, align left, pad zero : i42
-  // CHECK: moore.fmt.int hex_upper %arg1, width 42, align left, pad zero : i42
-  moore.fmt.int hex_upper %arg1, width 42, align left, pad zero : i42
+  // CHECK: moore.fmt.int binary %arg1, align left, pad zero width 42 : i42
+  moore.fmt.int binary %arg1, align left, pad zero width 42 : i42
+  // CHECK: moore.fmt.int binary %arg1, align right, pad zero width 42 : i42
+  moore.fmt.int binary %arg1, align right, pad zero width 42 : i42
+  // CHECK: moore.fmt.int binary %arg1, align right, pad space width 42 : i42
+  moore.fmt.int binary %arg1, align right, pad space width 42 : i42
+  // CHECK: moore.fmt.int octal %arg1, align left, pad zero width 42 : i42
+  moore.fmt.int octal %arg1, align left, pad zero width 42 : i42
+  // CHECK: moore.fmt.int decimal %arg1, align left, pad zero width 42 signed : i42
+  moore.fmt.int decimal %arg1, align left, pad zero width 42 signed : i42
+  // CHECK: moore.fmt.int decimal %arg1, align left, pad zero signed : i42
+  moore.fmt.int decimal %arg1, align left, pad zero signed : i42
+  // CHECK: moore.fmt.int decimal %arg1, align left, pad zero width 42 : i42
+  moore.fmt.int decimal %arg1, align left, pad zero width 42 : i42
+  // CHECK: moore.fmt.int hex_lower %arg1, align left, pad zero width 42 : i42
+  moore.fmt.int hex_lower %arg1, align left, pad zero width 42 : i42
+  // CHECK: moore.fmt.int hex_upper %arg1, align left, pad zero width 42 : i42
+  moore.fmt.int hex_upper %arg1, align left, pad zero width 42 : i42
   return
 }
 
@@ -469,12 +473,16 @@ func.func @TimeConversion(%arg0: !moore.time, %arg1: !moore.l64) {
   return
 }
 
-// CHECK-LABEL: func.func @RealConversion32(%arg0: !moore.f32, %arg1: !moore.i42)
-func.func @RealConversion32(%arg0: !moore.f32, %arg1: !moore.i42) {
+// CHECK-LABEL: func.func @RealConversion32(%arg0: !moore.f32, %arg1: !moore.i42, %arg2: !moore.f64)
+func.func @RealConversion32(%arg0: !moore.f32, %arg1: !moore.i42, %arg2: !moore.f64) {
   // CHECK: moore.real_to_int %arg0 : f32 -> i42
   %0 = moore.real_to_int %arg0 : f32 -> i42
-  // CHECK: moore.int_to_real %arg1 : i42 -> f32
-  %1 = moore.int_to_real %arg1 : i42 -> f32
+  // CHECK: moore.sint_to_real %arg1 : i42 -> f32
+  %1 = moore.sint_to_real %arg1 : i42 -> f32
+  // CHECK: moore.convert_real %arg0 : f32 -> f64
+  %2 = moore.convert_real %arg0 : f32 -> f64
+  // CHECK: moore.convert_real %arg2 : f64 -> f32
+  %3 = moore.convert_real %arg2 : f64 -> f32
   return
 }
 
@@ -482,8 +490,8 @@ func.func @RealConversion32(%arg0: !moore.f32, %arg1: !moore.i42) {
 func.func @RealConversion64(%arg0: !moore.f64, %arg1: !moore.i42) {
   // CHECK: moore.real_to_int %arg0 : f64 -> i42
   %0 = moore.real_to_int %arg0 : f64 -> i42
-  // CHECK: moore.int_to_real %arg1 : i42 -> f64
-  %1 = moore.int_to_real %arg1 : i42 -> f64
+  // CHECK: moore.uint_to_real %arg1 : i42 -> f64
+  %1 = moore.uint_to_real %arg1 : i42 -> f64
   return
 }
 
@@ -503,3 +511,14 @@ moore.global_variable @GlobalVar2 : !moore.i42 init {
 
 // CHECK: moore.get_global_variable @GlobalVar2 : <i42>
 moore.get_global_variable @GlobalVar2 : <i42>
+
+// CHECK-LABEL: func.func @StringConversion
+// CHECK-SAME: [[A:%.+]]: !moore.i32
+// CHECK-SAME: [[B:%.+]]: !moore.string
+func.func @StringConversion(%a: !moore.i32, %b: !moore.string) { 
+  // CHECK: moore.int_to_string [[A]] : i32
+  moore.int_to_string %a : i32
+  // CHECK: moore.string_to_int [[B]] : i32
+  moore.string_to_int %b : i32
+  return
+}

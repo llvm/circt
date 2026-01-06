@@ -266,6 +266,27 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
   ImplicitLocOpBuilder theBuilder(module.getLoc(), module.getContext());
   if (computeLowering(module, conv, newPorts).failed())
     return failure();
+
+  // Update domain information now that all port expansions are fixed.
+  DenseMap<size_t, size_t> domainMap;
+  for (auto &newPort : newPorts) {
+    if (!type_isa<DomainType>(newPort.type))
+      continue;
+    domainMap[newPort.portID] = newPort.resultID;
+  }
+  for (auto &newPort : newPorts) {
+    if (type_isa<DomainType>(newPort.type))
+      continue;
+    auto oldAssociations = dyn_cast_or_null<ArrayAttr>(newPort.domains);
+    if (!oldAssociations)
+      continue;
+    SmallVector<Attribute> newAssociations;
+    for (auto oldAttr : oldAssociations)
+      newAssociations.push_back(theBuilder.getUI32IntegerAttr(
+          domainMap[cast<IntegerAttr>(oldAttr).getValue().getZExtValue()]));
+    newPort.domains = theBuilder.getArrayAttr(newAssociations);
+  }
+
   if (auto mod = dyn_cast<FModuleOp>(module.getOperation())) {
     Block *body = mod.getBodyBlock();
     theBuilder.setInsertionPointToStart(body);

@@ -230,11 +230,11 @@ Value MemoryInterface::done() {
 
 std::string MemoryInterface::memName() {
   if (auto *memOp = std::get_if<calyx::MemoryOp>(&impl); memOp) {
-    return memOp->getName().str();
+    return memOp->instanceName().str();
   }
 
   if (auto *memOp = std::get_if<calyx::SeqMemoryOp>(&impl); memOp) {
-    return memOp->getName().str();
+    return memOp->instanceName().str();
   }
   return std::get<MemoryPortsImpl>(impl).memName;
 }

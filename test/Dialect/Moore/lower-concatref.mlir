@@ -31,7 +31,7 @@
 
       %4 = moore.constant 1 : i32
       %5 = moore.bool_cast %4 : i32 -> i1
-      %6 = moore.conversion %5 : !moore.i1 -> i1
+      %6 = moore.to_builtin_bool %5 : !moore.i1
       scf.if %6 {
         // CHECK: moore.concat_ref %u, %v
         %7 = moore.concat_ref %u, %v : (!moore.ref<l8960>, !moore.ref<l42>) -> <l9002>
@@ -56,10 +56,8 @@ moore.module @Nested() {
   moore.procedure always {
     // CHECK: %[[Z_READ:.+]] = moore.read %z
     %4 = moore.read %z : <i32>
-    // CHECK: %[[TMP1:.+]] = moore.conversion %[[Z_READ]] : !moore.i32 -> !moore.i96
-    %5 = moore.conversion %4 : !moore.i32 -> !moore.i96
-    // CHECK: %[[TMP2:.+]] = moore.conversion %[[TMP1]] : !moore.i96 -> !moore.i96
-    %6 = moore.conversion %5 : !moore.i96 -> !moore.i96
+    // CHECK: %[[TMP2:.+]] = moore.zext %[[Z_READ]] : i32 -> i96
+    %6 = moore.zext %4 : !moore.i32 -> !moore.i96
     
     // CHECK: moore.concat_ref %x, %x
     %0 = moore.concat_ref %x, %x : (!moore.ref<i32>, !moore.ref<i32>) -> <i64>

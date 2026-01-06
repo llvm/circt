@@ -775,7 +775,7 @@ def RealToIntOp : MooreOp<"real_to_int", [
   }];
 }
 
-def IntToRealOp : MooreOp<"int_to_real", [
+class IntToRealOpBase<string name> : MooreOp<name, [
   Pure
 ]> {
   let summary = "Convert an integer value to a real";
@@ -790,6 +790,9 @@ def IntToRealOp : MooreOp<"int_to_real", [
   }];
 }
 
+def SIntToRealOp : IntToRealOpBase<"sint_to_real">;
+def UIntToRealOp : IntToRealOpBase<"uint_to_real">;
+
 def IntToStringOp : MooreOp<"int_to_string", [
   Pure
 ]> {
@@ -801,6 +804,39 @@ def IntToStringOp : MooreOp<"int_to_string", [
   }];
 }
 
+def StringToIntOp : MooreOp<"string_to_int", [
+  Pure
+]> {
+  let summary = "Convert a string to an integer";
+  let description = [{
+    If the width of the result type is smaller than the input string, it is
+    truncated. If it is larger, it is appended with 0s.
+  }];
+  
+  let arguments = (ins StringType:$input);
+  let results = (outs TwoValuedIntType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($result)
+  }];
+}
+
+def ConvertRealOp : MooreOp<"convert_real", [
+  Pure
+]> {
+  let summary = "Convert a real to a different bitwidth";
+  let description = [{
+    The value is rounded to the nearest value representable by the target type.
+    See IEEE 1800-2023 Section 6.24.1.
+  }];
+  
+  let arguments = (ins RealType:$input);
+  let results = (outs RealType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
+
+  let hasFolder = 1;
+}
 
 //===----------------------------------------------------------------------===//
 // Resizing
@@ -1961,16 +1997,18 @@ def FormatIntOp : MooreOp<"fmt.int", [Pure]> {
   let arguments = (ins
     IntType:$value,
     IntFormatAttr:$format,
-    I32Attr:$width,
     IntAlignAttr:$alignment,
-    IntPaddingAttr:$padding
+    IntPaddingAttr:$padding,
+    OptionalAttr<I32Attr>:$specifierWidth,
+    UnitAttr:$isSigned
   );
   let results = (outs FormatStringType:$result);
   let assemblyFormat = [{
-    $format $value `,`
-    `width` $width `,`
+    $format $value `,` 
     `align` $alignment `,`
     `pad` $padding
+    (`width` $specifierWidth^)? 
+    (`signed` $isSigned^)?
     attr-dict `:` type($value)
   }];
 }
@@ -1999,27 +2037,6 @@ def FormatRealOp : MooreOp<"fmt.real", [Pure]> {
   let assemblyFormat = [{
       $format $value `,`
       attr-dict `:` type($value)
-  }];
-}
-
-def FormatTimeOp : MooreOp<"fmt.time", [Pure]> {
-  let summary = "Format a time value";
-  let description = [{
-  Format a time value as a string according to the format specified by the most recent
-  invocation of `$timeformat`.
-
-  See IEEE 1800-2023 § 21.2.1.1 "Format specifications" and
-  IEEE 1800-2023 § 20.4.3 "$timeformat".
-  }];
-  let arguments = (ins
-  TimeType:$value,
-  OptionalAttr<I32Attr>:$width
-  );
-  let results = (outs FormatStringType:$result);
-  let assemblyFormat = [{
-      $value
-      (`,` `width` $width^)?
-      attr-dict
   }];
 }
 
