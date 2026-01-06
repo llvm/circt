@@ -403,20 +403,24 @@ func.func @FormatStrings(%arg0: !moore.format_string, %arg1: !moore.i42) {
   moore.fmt.concat (%arg0)
   // CHECK: moore.fmt.concat (%arg0, %arg0)
   moore.fmt.concat (%arg0, %arg0)
-  // CHECK: moore.fmt.int binary %arg1, width 42, align left, pad zero : i42
-  moore.fmt.int binary %arg1, width 42, align left, pad zero : i42
-  // CHECK: moore.fmt.int binary %arg1, width 42, align right, pad zero : i42
-  moore.fmt.int binary %arg1, width 42, align right, pad zero : i42
-  // CHECK: moore.fmt.int binary %arg1, width 42, align right, pad space : i42
-  moore.fmt.int binary %arg1, width 42, align right, pad space : i42
-  // CHECK: moore.fmt.int octal %arg1, width 42, align left, pad zero : i42
-  moore.fmt.int octal %arg1, width 42, align left, pad zero : i42
-  // CHECK: moore.fmt.int decimal %arg1, width 42, align left, pad zero : i42
-  moore.fmt.int decimal %arg1, width 42, align left, pad zero : i42
-  // CHECK: moore.fmt.int hex_lower %arg1, width 42, align left, pad zero : i42
-  moore.fmt.int hex_lower %arg1, width 42, align left, pad zero : i42
-  // CHECK: moore.fmt.int hex_upper %arg1, width 42, align left, pad zero : i42
-  moore.fmt.int hex_upper %arg1, width 42, align left, pad zero : i42
+  // CHECK: moore.fmt.int binary %arg1, align left, pad zero width 42 : i42
+  moore.fmt.int binary %arg1, align left, pad zero width 42 : i42
+  // CHECK: moore.fmt.int binary %arg1, align right, pad zero width 42 : i42
+  moore.fmt.int binary %arg1, align right, pad zero width 42 : i42
+  // CHECK: moore.fmt.int binary %arg1, align right, pad space width 42 : i42
+  moore.fmt.int binary %arg1, align right, pad space width 42 : i42
+  // CHECK: moore.fmt.int octal %arg1, align left, pad zero width 42 : i42
+  moore.fmt.int octal %arg1, align left, pad zero width 42 : i42
+  // CHECK: moore.fmt.int decimal %arg1, align left, pad zero width 42 signed : i42
+  moore.fmt.int decimal %arg1, align left, pad zero width 42 signed : i42
+  // CHECK: moore.fmt.int decimal %arg1, align left, pad zero signed : i42
+  moore.fmt.int decimal %arg1, align left, pad zero signed : i42
+  // CHECK: moore.fmt.int decimal %arg1, align left, pad zero width 42 : i42
+  moore.fmt.int decimal %arg1, align left, pad zero width 42 : i42
+  // CHECK: moore.fmt.int hex_lower %arg1, align left, pad zero width 42 : i42
+  moore.fmt.int hex_lower %arg1, align left, pad zero width 42 : i42
+  // CHECK: moore.fmt.int hex_upper %arg1, align left, pad zero width 42 : i42
+  moore.fmt.int hex_upper %arg1, align left, pad zero width 42 : i42
   return
 }
 

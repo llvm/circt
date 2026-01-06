@@ -70,26 +70,26 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   // CHECK: moore.builtin.display [[TMP3]]
   $write("foo %s", "bar");
 
-  // CHECK: moore.fmt.int binary [[X]], width 32, align right, pad zero : i32
+  // CHECK: moore.fmt.int binary [[X]], align right, pad zero : i32
   $write("%b", x);
-  // CHECK: moore.fmt.int binary [[X]], width 32, align right, pad zero : i32
+  // CHECK: moore.fmt.int binary [[X]], align right, pad zero : i32
   $write("%B", x);
-  // CHECK: moore.fmt.int binary [[X]], width 0, align right, pad zero : i32
+  // CHECK: moore.fmt.int binary [[X]], align right, pad zero width 0 : i32
   $write("%0b", x);
-  // CHECK: moore.fmt.int binary [[X]], width 42, align right, pad zero : i32
+  // CHECK: moore.fmt.int binary [[X]], align right, pad zero width 42 : i32
   $write("%42b", x);
-  // CHECK: moore.fmt.int binary [[X]], width 42, align left, pad zero : i32
+  // CHECK: moore.fmt.int binary [[X]], align left, pad zero width 42 : i32
   $write("%-42b", x);
 
-  // CHECK: moore.fmt.int octal [[X]], width 11, align right, pad zero : i32
+  // CHECK: moore.fmt.int octal [[X]], align right, pad zero : i32
   $write("%o", x);
-  // CHECK: moore.fmt.int octal [[X]], width 11, align right, pad zero : i32
+  // CHECK: moore.fmt.int octal [[X]], align right, pad zero : i32
   $write("%O", x);
-  // CHECK: moore.fmt.int octal [[X]], width 0, align right, pad zero : i32
+  // CHECK: moore.fmt.int octal [[X]], align right, pad zero width 0 : i32
   $write("%0o", x);
-  // CHECK: moore.fmt.int octal [[X]], width 19, align right, pad zero : i32
+  // CHECK: moore.fmt.int octal [[X]], align right, pad zero width 19 : i32
   $write("%19o", x);
-  // CHECK: moore.fmt.int octal [[X]], width 19, align left, pad zero : i32
+  // CHECK: moore.fmt.int octal [[X]], align left, pad zero width 19 : i32
   $write("%-19o", x);
 
   // CHECK: moore.fmt.real float [[R]]
@@ -99,65 +99,65 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   // CHECK: moore.builtin.display [[TMP]]
   $write("%f", x);
 
-  // CHECK: moore.fmt.int decimal [[X]], width 10, align right, pad space : i32
+  // CHECK: moore.fmt.int decimal [[X]], align right, pad space signed : i32
   $write("%d", x);
-  // CHECK: moore.fmt.int decimal [[X]], width 10, align right, pad space : i32
+  // CHECK: moore.fmt.int decimal [[X]], align right, pad space signed : i32
   $write("%D", x);
-  // CHECK: moore.fmt.int decimal [[X]], width 0, align right, pad space : i32
+  // CHECK: moore.fmt.int decimal [[X]], align right, pad space width 0 signed : i32
   $write("%0d", x);
-  // CHECK: moore.fmt.int decimal [[X]], width 19, align right, pad space : i32
+  // CHECK: moore.fmt.int decimal [[X]], align right, pad space width 19 signed : i32
   $write("%19d", x);
-  // CHECK: moore.fmt.int decimal [[X]], width 19, align left, pad space : i32
+  // CHECK: moore.fmt.int decimal [[X]], align left, pad space width 19 signed : i32
   $write("%-19d", x);
 
-  // CHECK: moore.fmt.int hex_lower [[X]], width 8, align right, pad zero : i32
+  // CHECK: moore.fmt.int hex_lower [[X]], align right, pad zero : i32
   $write("%h", x);
-  // CHECK: moore.fmt.int hex_lower [[X]], width 8, align right, pad zero : i32
+  // CHECK: moore.fmt.int hex_lower [[X]], align right, pad zero : i32
   $write("%x", x);
-  // CHECK: moore.fmt.int hex_upper [[X]], width 8, align right, pad zero : i32
+  // CHECK: moore.fmt.int hex_upper [[X]], align right, pad zero : i32
   $write("%H", x);
-  // CHECK: moore.fmt.int hex_upper [[X]], width 8, align right, pad zero : i32
+  // CHECK: moore.fmt.int hex_upper [[X]], align right, pad zero : i32
   $write("%X", x);
-  // CHECK: moore.fmt.int hex_lower [[X]], width 0, align right, pad zero : i32
+  // CHECK: moore.fmt.int hex_lower [[X]], align right, pad zero width 0 : i32
   $write("%0h", x);
-  // CHECK: moore.fmt.int hex_lower [[X]], width 19, align right, pad zero : i32
+  // CHECK: moore.fmt.int hex_lower [[X]], align right, pad zero width 19 : i32
   $write("%19h", x);
-  // CHECK: moore.fmt.int hex_lower [[X]], width 19, align right, pad zero : i32
+  // CHECK: moore.fmt.int hex_lower [[X]], align right, pad zero width 19 : i32
   $write("%019h", x);
-  // CHECK: moore.fmt.int hex_lower [[X]], width 19, align left, pad zero : i32
+  // CHECK: moore.fmt.int hex_lower [[X]], align left, pad zero width 19 : i32
   $write("%-19h", x);
-  // CHECK: moore.fmt.int hex_lower [[X]], width 19, align left, pad zero : i32
+  // CHECK: moore.fmt.int hex_lower [[X]], align left, pad zero width 19 : i32
   $write("%-019h", x);
 
-  // CHECK: [[TMP:%.+]] = moore.fmt.int decimal [[X]], width 10, align right, pad space : i32
+  // CHECK: [[TMP:%.+]] = moore.fmt.int decimal [[X]], align right, pad space signed : i32
   // CHECK: moore.builtin.display [[TMP]]
   $write(x);
-  // CHECK: [[TMP:%.+]] = moore.fmt.int binary [[X]], width 32, align right, pad zero : i32
+  // CHECK: [[TMP:%.+]] = moore.fmt.int binary [[X]], align right, pad zero : i32
   // CHECK: moore.builtin.display [[TMP]]
   $writeb(x);
-  // CHECK: [[TMP:%.+]] = moore.fmt.int octal [[X]], width 11, align right, pad zero : i32
+  // CHECK: [[TMP:%.+]] = moore.fmt.int octal [[X]], align right, pad zero : i32
   // CHECK: moore.builtin.display [[TMP]]
   $writeo(x);
-  // CHECK: [[TMP:%.+]] = moore.fmt.int hex_lower [[X]], width 8, align right, pad zero : i32
+  // CHECK: [[TMP:%.+]] = moore.fmt.int hex_lower [[X]], align right, pad zero : i32
   // CHECK: moore.builtin.display [[TMP]]
   $writeh(x);
 
-  // CHECK: [[TMP1:%.+]] = moore.fmt.int decimal [[X]], width 10, align right, pad space : i32
+  // CHECK: [[TMP1:%.+]] = moore.fmt.int decimal [[X]], align right, pad space signed : i32
   // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
   // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
   // CHECK: moore.builtin.display [[TMP3]]
   $display(x);
-  // CHECK: [[TMP1:%.+]] = moore.fmt.int binary [[X]], width 32, align right, pad zero : i32
+  // CHECK: [[TMP1:%.+]] = moore.fmt.int binary [[X]], align right, pad zero : i32
   // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
   // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
   // CHECK: moore.builtin.display [[TMP3]]
   $displayb(x);
-  // CHECK: [[TMP1:%.+]] = moore.fmt.int octal [[X]], width 11, align right, pad zero : i32
+  // CHECK: [[TMP1:%.+]] = moore.fmt.int octal [[X]], align right, pad zero : i32
   // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
   // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
   // CHECK: moore.builtin.display [[TMP3]]
   $displayo(x);
-  // CHECK: [[TMP1:%.+]] = moore.fmt.int hex_lower [[X]], width 8, align right, pad zero : i32
+  // CHECK: [[TMP1:%.+]] = moore.fmt.int hex_lower [[X]], align right, pad zero : i32
   // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
   // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
   // CHECK: moore.builtin.display [[TMP3]]
@@ -321,19 +321,19 @@ function void SeverityBuiltinEdgeCase(string testStr);
   // CHECK-NEXT: [[INTVAR:%.+]] = moore.variable [[CONST]] : <i32>
   int val = 1234;
   // CHECK-NEXT: [[INTVAL1:%.+]] = moore.read [[INTVAR]] : <i32>
-  // CHECK-NEXT: [[FMTINT1:%.+]] = moore.fmt.int binary [[INTVAL1]], width 32, align right, pad zero : i32
+  // CHECK-NEXT: [[FMTINT1:%.+]] = moore.fmt.int binary [[INTVAL1]], align right, pad zero : i32
   // CHECK-NEXT: [[LINE1:%.+]] = moore.fmt.literal "\0A"
   // CHECK-NEXT: [[CONCAT1:%.+]] = moore.fmt.concat ([[FMTINT1]], [[LINE1]])
   // CHECK-NEXT: moore.builtin.display [[CONCAT1]]
   $displayb(val);
   // CHECK-NEXT: [[INTVAL2:%.+]] = moore.read [[INTVAR]] : <i32>
-  // CHECK-NEXT: [[FMTINT2:%.+]] = moore.fmt.int octal [[INTVAL2]], width 11, align right, pad zero : i32
+  // CHECK-NEXT: [[FMTINT2:%.+]] = moore.fmt.int octal [[INTVAL2]], align right, pad zero : i32
   // CHECK-NEXT: [[LINE2:%.+]] = moore.fmt.literal "\0A"
   // CHECK-NEXT: [[CONCAT2:%.+]] = moore.fmt.concat ([[FMTINT2]], [[LINE2]])
   // CHECK-NEXT: moore.builtin.display [[CONCAT2]]
   $displayo(val);
   // CHECK-NEXT: [[INTVAL3:%.+]] = moore.read [[INTVAR]] : <i32>
-  // CHECK-NEXT: [[FMTINT3:%.+]] = moore.fmt.int hex_lower [[INTVAL3]], width 8, align right, pad zero : i32
+  // CHECK-NEXT: [[FMTINT3:%.+]] = moore.fmt.int hex_lower [[INTVAL3]], align right, pad zero : i32
   // CHECK-NEXT: [[LINE3:%.+]] = moore.fmt.literal "\0A"
   // CHECK-NEXT: [[CONCAT3:%.+]] = moore.fmt.concat ([[FMTINT3]], [[LINE3]])
   // CHECK-NEXT: moore.builtin.display [[CONCAT3]]

@@ -2009,24 +2009,40 @@ struct FormatIntOpConversion : public OpConversionPattern<FormatIntOp> {
   LogicalResult
   matchAndRewrite(FormatIntOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // TODO: These should honor the width, alignment, and padding.
+
+    char padChar = adaptor.getPadding() == IntPadding::Space ? 32 : 48;
+    IntegerAttr padCharAttr = rewriter.getI8IntegerAttr(padChar);
+    auto widthAttr = adaptor.getSpecifierWidthAttr();
+
+    bool isLeftAligned = adaptor.getAlignment() == IntAlign::Left;
+    BoolAttr isLeftAlignedAttr = rewriter.getBoolAttr(isLeftAligned);
+
     switch (op.getFormat()) {
     case IntFormat::Decimal:
-      rewriter.replaceOpWithNewOp<sim::FormatDecOp>(op, adaptor.getValue());
+      rewriter.replaceOpWithNewOp<sim::FormatDecOp>(
+          op, adaptor.getValue(), isLeftAlignedAttr, padCharAttr, widthAttr,
+          adaptor.getIsSignedAttr());
       return success();
     case IntFormat::Binary:
-      rewriter.replaceOpWithNewOp<sim::FormatBinOp>(op, adaptor.getValue());
+      rewriter.replaceOpWithNewOp<sim::FormatBinOp>(
+          op, adaptor.getValue(), isLeftAlignedAttr, padCharAttr, widthAttr);
       return success();
     case IntFormat::Octal:
-      rewriter.replaceOpWithNewOp<sim::FormatOctOp>(op, adaptor.getValue());
+      rewriter.replaceOpWithNewOp<sim::FormatOctOp>(
+          op, adaptor.getValue(), isLeftAlignedAttr, padCharAttr, widthAttr);
       return success();
     case IntFormat::HexLower:
-    case IntFormat::HexUpper:
-      rewriter.replaceOpWithNewOp<sim::FormatHexOp>(op, adaptor.getValue());
+      rewriter.replaceOpWithNewOp<sim::FormatHexOp>(
+          op, adaptor.getValue(), rewriter.getBoolAttr(false),
+          isLeftAlignedAttr, padCharAttr, widthAttr);
       return success();
-    default:
-      return rewriter.notifyMatchFailure(op, "unsupported int format");
+    case IntFormat::HexUpper:
+      rewriter.replaceOpWithNewOp<sim::FormatHexOp>(
+          op, adaptor.getValue(), rewriter.getBoolAttr(true), isLeftAlignedAttr,
+          padCharAttr, widthAttr);
+      return success();
     }
+    return rewriter.notifyMatchFailure(op, "unsupported int format");
   }
 };
 
@@ -2108,6 +2124,20 @@ static LogicalResult convert(FinishMessageBIOp op,
 static LogicalResult convert(TimeBIOp op, TimeBIOp::Adaptor adaptor,
                              ConversionPatternRewriter &rewriter) {
   rewriter.replaceOpWithNewOp<llhd::CurrentTimeOp>(op);
+  return success();
+}
+
+// moore.logic_to_time
+static LogicalResult convert(LogicToTimeOp op, LogicToTimeOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<llhd::IntToTimeOp>(op, adaptor.getInput());
+  return success();
+}
+
+// moore.time_to_logic
+static LogicalResult convert(TimeToLogicOp op, TimeToLogicOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<llhd::TimeToIntOp>(op, adaptor.getInput());
   return success();
 }
 
@@ -2456,6 +2486,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
 
   // Timing control
   patterns.add<TimeBIOp>(convert);
+  patterns.add<LogicToTimeOp>(convert);
+  patterns.add<TimeToLogicOp>(convert);
 
   mlir::populateAnyFunctionOpInterfaceTypeConversionPattern(patterns,
                                                             typeConverter);

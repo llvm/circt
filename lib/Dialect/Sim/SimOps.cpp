@@ -23,6 +23,57 @@ using namespace mlir;
 using namespace circt;
 using namespace sim;
 
+static StringAttr formatIntegersByRadix(MLIRContext *ctx, unsigned radix,
+                                        const Attribute &value,
+                                        bool isUpperCase, bool isLeftAligned,
+                                        char paddingChar,
+                                        std::optional<unsigned> specifierWidth,
+                                        bool isSigned = false) {
+
+  if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(value)) {
+    SmallVector<char, 32> strBuf;
+    intAttr.getValue().toString(strBuf, radix, isSigned, false, isUpperCase);
+    unsigned width = intAttr.getType().getIntOrFloatBitWidth();
+    unsigned padWidth;
+    switch (radix) {
+    case 2:
+      padWidth = width;
+      break;
+    case 8:
+      padWidth = (width + 2) / 3;
+      break;
+    case 16:
+      padWidth = (width + 3) / 4;
+      break;
+    default:
+      padWidth = width;
+      break;
+    }
+
+    unsigned numSpaces = 0;
+    if (specifierWidth.has_value() &&
+        (specifierWidth.value() >
+         std::max(padWidth, static_cast<unsigned>(strBuf.size())))) {
+      numSpaces = std::max(
+          0U, specifierWidth.value() -
+                  std::max(padWidth, static_cast<unsigned>(strBuf.size())));
+    }
+
+    SmallVector<char, 1> spacePadding(numSpaces, ' ');
+
+    padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
+
+    SmallVector<char, 32> padding(padWidth, paddingChar);
+    if (isLeftAligned) {
+      return StringAttr::get(ctx, Twine(padding) + Twine(strBuf) +
+                                      Twine(spacePadding));
+    }
+    return StringAttr::get(ctx, Twine(spacePadding) + Twine(padding) +
+                                    Twine(strBuf));
+  }
+  return {};
+}
+
 ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
   auto builder = parser.getBuilder();
   // Parse visibility.
@@ -120,13 +171,21 @@ OpFoldResult FormatDecOp::fold(FoldAdaptor adaptor) {
 
   if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(adaptor.getValue())) {
     SmallVector<char, 16> strBuf;
-    intAttr.getValue().toString(strBuf, 10U, getIsSigned());
+    intAttr.getValue().toString(strBuf, 10U, adaptor.getIsSigned());
+    unsigned padWidth;
+    if (adaptor.getSpecifierWidth().has_value()) {
+      padWidth = adaptor.getSpecifierWidth().value();
+    } else {
+      unsigned width = intAttr.getType().getIntOrFloatBitWidth();
+      padWidth = FormatDecOp::getDecimalWidth(width, adaptor.getIsSigned());
+    }
 
-    unsigned width = intAttr.getType().getIntOrFloatBitWidth();
-    unsigned padWidth = FormatDecOp::getDecimalWidth(width, getIsSigned());
     padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
 
-    SmallVector<char, 8> padding(padWidth, ' ');
+    SmallVector<char, 10> padding(padWidth, adaptor.getPaddingChar());
+    if (adaptor.getIsLeftAligned()) {
+      return StringAttr::get(getContext(), Twine(strBuf) + Twine(padding));
+    }
     return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
   }
   return {};
@@ -136,61 +195,28 @@ OpFoldResult FormatHexOp::fold(FoldAdaptor adaptor) {
   if (getValue().getType() == IntegerType::get(getContext(), 0U))
     return StringAttr::get(getContext(), "");
 
-  if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(adaptor.getValue())) {
-    SmallVector<char, 8> strBuf;
-    intAttr.getValue().toString(strBuf, 16U, /*Signed*/ false,
-                                /*formatAsCLiteral*/ false,
-                                /*UpperCase*/ false);
-
-    unsigned width = intAttr.getType().getIntOrFloatBitWidth();
-    unsigned padWidth = width / 4;
-    if (width % 4 != 0)
-      padWidth++;
-    padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
-
-    SmallVector<char, 8> padding(padWidth, '0');
-    return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
-  }
-  return {};
+  return formatIntegersByRadix(
+      getContext(), 16U, adaptor.getValue(), adaptor.getIsHexUppercase(),
+      adaptor.getIsLeftAligned(), adaptor.getPaddingChar(),
+      adaptor.getSpecifierWidth());
 }
 
 OpFoldResult FormatOctOp::fold(FoldAdaptor adaptor) {
   if (getValue().getType() == IntegerType::get(getContext(), 0U))
     return StringAttr::get(getContext(), "");
 
-  if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(adaptor.getValue())) {
-    SmallVector<char, 11> strBuf;
-    intAttr.getValue().toString(strBuf, 8U, /*Signed*/ false,
-                                /*formatAsCLiteral*/ false,
-                                /*UpperCase*/ false);
-
-    unsigned width = intAttr.getType().getIntOrFloatBitWidth();
-    unsigned padWidth = width / 3;
-    if (width % 3 != 0)
-      padWidth++;
-    padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
-
-    SmallVector<char, 11> padding(padWidth, '0');
-    return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
-  }
-  return {};
+  return formatIntegersByRadix(
+      getContext(), 8U, adaptor.getValue(), false, adaptor.getIsLeftAligned(),
+      adaptor.getPaddingChar(), adaptor.getSpecifierWidth());
 }
 
 OpFoldResult FormatBinOp::fold(FoldAdaptor adaptor) {
   if (getValue().getType() == IntegerType::get(getContext(), 0U))
     return StringAttr::get(getContext(), "");
 
-  if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(adaptor.getValue())) {
-    SmallVector<char, 32> strBuf;
-    intAttr.getValue().toString(strBuf, 2U, false);
-
-    unsigned width = intAttr.getType().getIntOrFloatBitWidth();
-    unsigned padWidth = width > strBuf.size() ? width - strBuf.size() : 0;
-
-    SmallVector<char, 32> padding(padWidth, '0');
-    return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
-  }
-  return {};
+  return formatIntegersByRadix(
+      getContext(), 2U, adaptor.getValue(), false, adaptor.getIsLeftAligned(),
+      adaptor.getPaddingChar(), adaptor.getSpecifierWidth());
 }
 
 OpFoldResult FormatCharOp::fold(FoldAdaptor adaptor) {

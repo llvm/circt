@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -split-input-file -verify-diagnostics
+// RUN: circt-opt %s -split-input-file -verify-diagnostics -allow-unregistered-dialect
 
 firrtl.circuit "X" {
 
@@ -3043,6 +3043,17 @@ firrtl.circuit "DomainInfoNotArray" {
 
 // -----
 
+firrtl.circuit "DomainInfoWrongSize" {
+  firrtl.domain @ClockDomain
+  // expected-error @below {{requires 2 port domains, but has 1}}
+  firrtl.module @WrongDomainPortInfo(
+    in %A: !firrtl.domain of @ClockDomain,
+    in %a: !firrtl.uint<1>
+  ) attributes {domainInfo = [@ClockDomain]} {}
+}
+
+// -----
+
 firrtl.circuit "WrongDomainPortInfo" {
   firrtl.domain @ClockDomain
   // expected-error @below {{domain information for domain port 'A' must be a 'FlatSymbolRefAttr'}}
@@ -3053,12 +3064,42 @@ firrtl.circuit "WrongDomainPortInfo" {
 
 // -----
 
-firrtl.circuit "WrongNonDomainPortInfo" {
+firrtl.circuit "WrongNonDomainPortInfoType" {
+  firrtl.domain @ClockDomain
+  // expected-error @below {{domain information for non-domain port 'a' must be an 'ArrayAttr'}}
+  firrtl.module @WrongNonDomainPortInfoType(
+    in %a: !firrtl.uint<1>
+  ) attributes {domainInfo = ["hello"]} {}
+}
+
+// -----
+
+firrtl.circuit "WrongNonDomainPortInfoElementType" {
   firrtl.domain @ClockDomain
   // expected-error @below {{domain information for non-domain port 'a' must be an 'ArrayAttr<IntegerAttr>'}}
-  firrtl.module @WrongNonDomainPortInfo(
+  firrtl.module @WrongNonDomainPortInfoElementType(
     in %a: !firrtl.uint<1>
   ) attributes {domainInfo = [["hello"]]} {}
+}
+
+// -----
+
+firrtl.circuit "DomainAssociationOOB" {
+  firrtl.domain @ClockDomain
+  // expected-error @below {{has domain association 1 for port 'a', but the module only has 1 ports}}
+  firrtl.module @DomainAssociationOOB(
+    in %a: !firrtl.uint<1>
+  ) attributes {domainInfo = [[1 : i32]]} {}
+}
+
+// -----
+
+firrtl.circuit "DomainAssociationOOB" {
+  firrtl.domain @ClockDomain
+  // expected-error @below {{has port 'a' which has a domain association with non-domain port 'a'}}
+  firrtl.module @DomainAssociationOOB(
+    in %a: !firrtl.uint<1>
+  ) attributes {domainInfo = [[0 : i32]]} {}
 }
 
 // -----
@@ -3109,27 +3150,13 @@ firrtl.circuit "Top" {
 
 // -----
 
-// Unable to determine domain type of destination.
-
-firrtl.circuit "Top" {
-  firrtl.domain @ClockDomain
-  firrtl.domain @PowerDomain
-  firrtl.module @Top(in %i: !firrtl.domain of @ClockDomain) {
-    %o = firrtl.wire : !firrtl.domain
-    // expected-error @below {{could not determine domain-type of destination}}
-    firrtl.domain.define %o, %i
-  }
-}
-
-// -----
-
 // Unable to determine domain type of source.
 
 firrtl.circuit "Top" {
   firrtl.domain @ClockDomain
   firrtl.domain @PowerDomain
   firrtl.module @Top(out %o : !firrtl.domain of @PowerDomain) {
-    %i = firrtl.wire : !firrtl.domain
+    %i = "test"() : () -> !firrtl.domain
     // expected-error @below {{could not determine domain-type of source}}
     firrtl.domain.define %o, %i
   }
@@ -3167,7 +3194,7 @@ firrtl.circuit "WrongInstanceDomainInfo" {
     in %a : !firrtl.uint<1> domains [%A]
   ) {}
   firrtl.module @WrongInstanceDomainInfo() {
-  // expected-error @below {{op domain info for "a" must be [0 : ui32], but got [1 : ui32]}}
+  // expected-error @below {{op domain info for "a" must be '[0 : ui32]', but got '[1 : ui32]'}}
     %foo_A, %foo_B, %foo_a = firrtl.instance foo @Foo(
       in A : !firrtl.domain of @ClockDomain,
       in B : !firrtl.domain of @ClockDomain,
@@ -3190,7 +3217,7 @@ firrtl.circuit "WrongInstanceChoiceDomainInfo" {
     in %a : !firrtl.uint<1> domains [%A]
   ) {}
   firrtl.module @WrongInstanceChoiceDomainInfo() {
-    // expected-error @below {{op domain info for "a" must be [0 : ui32], but got [1 : ui32]}}
+    // expected-error @below {{op domain info for "a" must be '[0 : ui32]', but got '[1 : ui32]'}}
     %foo_A, %foo_B, %foo_a = firrtl.instance_choice foo @Foo alternatives @Platform { @FPGA -> @Foo } (
       in A : !firrtl.domain of @ClockDomain,
       in B : !firrtl.domain of @ClockDomain,

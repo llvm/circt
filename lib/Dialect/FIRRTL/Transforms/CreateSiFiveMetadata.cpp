@@ -568,7 +568,7 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
     auto width = mem.getDataWidth();
     // Metadata needs to be printed for memories which are candidates for
     // macro replacement.
-    if (mem.getReadLatency() != 1 || mem.getWriteLatency() != 1 || width <= 0)
+    if (mem.getReadLatency() < 1 || mem.getWriteLatency() < 1 || width <= 0)
       return;
     auto memExtSym = FlatSymbolRefAttr::get(SymbolTable::getSymbolName(mem));
     auto symId = seqMemSymbols.size();
