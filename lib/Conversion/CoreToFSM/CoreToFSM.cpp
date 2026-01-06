@@ -839,7 +839,7 @@ public:
         if (failed(converged)) {
           stateOp.emitError("Failed to canonicalize the generated state op");
           return failure();
-        }    
+        }
         SmallVector<Operation *> transitionOps;
         stateOp.getTransitions().walk(
             [&](Operation *op) { transitionOps.push_back(op); });
@@ -848,8 +848,6 @@ public:
         config2.setScope(&stateOp.getTransitions());
         applyOpPatternsGreedily(transitionOps, frozenPatterns, config2,
                                 &changed);
-
-        
 
         for (TransitionOp transition :
              stateOp.getTransitions().getOps<TransitionOp>()) {
