@@ -36,7 +36,7 @@ mlir_check_all_link_libraries(circt-test)
 add_custom_target(circt-test-runners)
 add_custom_target(install-circt-test-runners)
 
-foreach(runner sby circt-bmc)
+foreach(runner sby circt-bmc verilator)
   set(name circt-test-runner-${runner})
 
   # Copy the test runner script to the tools build directory.

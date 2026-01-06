@@ -202,6 +202,14 @@ void RunnerSuite::addDefaultRunners() {
     runner.readsMLIR = true;
     runners.push_back(std::move(runner));
   }
+  {
+    // Verilator
+    Runner runner;
+    runner.name = StringAttr::get(context, "verilator");
+    runner.kind = TestKind::Simulation;
+    runner.binary = "circt-test-runner-verilator.py";
+    runners.push_back(std::move(runner));
+  }
 }
 
 /// Resolve the `binary` field of each runner to a full `binaryPath`, and set
@@ -676,8 +684,13 @@ static LogicalResult executeWithHandler(MLIRContext *context,
     } else if (result > 0) {
       auto d = mlir::emitError(test.loc)
                << "test " << test.name.getValue() << " failed";
-      d.attachNote() << "see `" << logPath << "`";
       d.attachNote() << "executed with " << runner->name.getValue();
+      // Reproduce the output log. We should really come up with a better way to
+      // report test progress and failures. But this will do for the time being.
+      auto &note = d.attachNote() << "see `" << logPath << "`";
+      auto logBuffer = llvm::MemoryBuffer::getFile(logPath, /*IsText=*/true);
+      if (logBuffer)
+        note << ":\n" << logBuffer.get()->getBuffer();
     } else {
       ++numPassed;
     }
