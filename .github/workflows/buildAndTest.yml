@@ -222,7 +222,8 @@ jobs:
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DLLVM_LIT_ARGS="-v" \
             -DCIRCT_SLANG_FRONTEND_ENABLED=ON
-          CIRCT_OPT_CHECK_IR_ROUNDTRIP=1 ninja check-circt check-circt-unit -j$(nproc)
+          # FIXME: Add CIRCT_OPT_CHECK_IR_ROUNDTRIP=1 back once #9415 is fixed.
+          ninja check-circt check-circt-unit -j$(nproc)
           ninja circt-doc
 
       # --------
