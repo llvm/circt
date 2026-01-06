@@ -85,9 +85,9 @@ hw.module @basic_print3(in %clk : !seq.clock, in %val: i32) {
 // CHECK-DAG:      %[[L1:.*]] = sim.fmt.literal "F: "
 // CHECK-DAG:      %[[L2:.*]] = sim.fmt.literal ", E: "
 // CHECK-DAG:      %[[L3:.*]] = sim.fmt.literal ", G: "
-// CHECK-DAG:      %[[F:.*]] = sim.fmt.flt %[[ARG]] {fracDigits = 2 : i32} : f64
-// CHECK-DAG:      %[[E:.*]] = sim.fmt.exp %[[ARG]] {fracDigits = 1 : i32} : f64
-// CHECK-DAG:      %[[G:.*]] = sim.fmt.gen %[[ARG]] {fracDigits = 3 : i32} : f64
+// CHECK-DAG:      %[[F:.*]] = sim.fmt.flt %[[ARG]] fracDigits 2 : f64
+// CHECK-DAG:      %[[E:.*]] = sim.fmt.exp %[[ARG]] fracDigits 1 : f64
+// CHECK-DAG:      %[[G:.*]] = sim.fmt.gen %[[ARG]] fracDigits 3 : f64
 // CHECK-DAG:      %[[CAT:.*]] = sim.fmt.concat (%[[L1]], %[[F]], %[[L2]], %[[E]], %[[L3]], %[[G]])
 // CHECK:          sim.proc.print %[[CAT]]
 // CHECK-NEXT:   }
@@ -99,9 +99,9 @@ hw.module @basic_real_print(in %clk : !seq.clock, in %val : f64) {
   %le = sim.fmt.literal ", E: "
   %lg = sim.fmt.literal ", G: "
 
-  %f = sim.fmt.flt %val {fracDigits = 2 : i32} : f64
-  %e = sim.fmt.exp %val {fracDigits = 1 : i32} : f64
-  %g = sim.fmt.gen %val {fracDigits = 3 : i32} : f64
+  %f = sim.fmt.flt %val fracDigits 2 : f64
+  %e = sim.fmt.exp %val fracDigits 1 : f64
+  %g = sim.fmt.gen %val fracDigits 3 : f64
 
   %cat = sim.fmt.concat (%lf, %f, %le, %e, %lg, %g)
   sim.print %cat on %clk if %true
@@ -205,7 +205,7 @@ hw.module @multi_clock(in %clka : !seq.clock, in %clkb : !seq.clock, in %clkc : 
 // CHECK-DAG:      %[[L5:.*]] = sim.fmt.literal "#5"
 // CHECK-DAG:      %[[L6:.*]] = sim.fmt.literal "#6"
 // CHECK-DAG:      %[[BIN:.*]] = sim.fmt.bin %[[ARG2]] specifierWidth 32 : i32
-// CHECK-DAG:      %[[REALFMT:.*]] = sim.fmt.gen %[[ARG3]] {fracDigits = 3 : i32} : f64
+// CHECK-DAG:      %[[REALFMT:.*]] = sim.fmt.gen %[[ARG3]] fracDigits 3 : f64
 // CHECK:          scf.if %[[ARG0]] {
 // CHECK-NEXT:       sim.proc.print %[[L1]]
 // CHECK-NEXT:     }
@@ -244,7 +244,7 @@ hw.module @sequence(in %clk: !seq.clock, in %conda: i1, in %condb: i1, in %val :
   sim.print %cen on %clk if %true
   %6 = sim.fmt.literal "#6"
   sim.print %6 on %clk if %conda
-  %rfmt = sim.fmt.gen %rval {fracDigits = 3 : i32} : f64
+  %rfmt = sim.fmt.gen %rval fracDigits 3 : f64
   sim.print %rfmt on %clk if %conda
 }
 

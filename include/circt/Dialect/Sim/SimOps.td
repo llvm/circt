@@ -274,6 +274,9 @@ def FormatScientificOp : SimOp<"fmt.exp", [Pure]> {
 
   let assemblyFormat = [{
     $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`fieldWidth` $fieldWidth^)?
+    (`fracDigits` $fracDigits^)?
     attr-dict `:` qualified(type($value))
   }];
 }
@@ -295,6 +298,9 @@ def FormatFloatOp : SimOp<"fmt.flt", [Pure]> {
 
   let assemblyFormat = [{
     $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`fieldWidth` $fieldWidth^)?
+    (`fracDigits` $fracDigits^)?
     attr-dict `:` qualified(type($value))
   }];
 }
@@ -325,6 +331,9 @@ def FormatGeneralOp : SimOp<"fmt.gen", [Pure]> {
 
   let assemblyFormat = [{
     $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`fieldWidth` $fieldWidth^)?
+    (`fracDigits` $fracDigits^)?
     attr-dict `:` qualified(type($value))
   }];
 }

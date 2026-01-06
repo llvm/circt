@@ -426,12 +426,12 @@ func.func @FormatStrings(%arg0: !moore.format_string, %arg1: !moore.i42, %arg2: 
   moore.fmt.real float %arg2, align left : f32
   // CHECK: moore.fmt.real exponential %arg3, align left : f64
   moore.fmt.real exponential %arg3, align left : f64
-  // CHECK: moore.fmt.real general %arg3, align right {fieldWidth = 9 : i32, fracDigits = 8 : i32} : f64
-  moore.fmt.real general %arg3, align right {fieldWidth = 9 : i32, fracDigits = 8 : i32} : f64
-  // CHECK: moore.fmt.real float %arg2, align right {fieldWidth = 12 : i32} : f32
-  moore.fmt.real float %arg2, align right {fieldWidth = 12 : i32} : f32
-  // CHECK: moore.fmt.real exponential %arg3, align right {fracDigits = 5 : i32} : f64
-  moore.fmt.real exponential %arg3, align right {fracDigits = 5 : i32} : f64
+  // CHECK: moore.fmt.real general %arg3, align right fieldWidth 9 fracDigits 8 : f64
+  moore.fmt.real general %arg3, align right fieldWidth 9 fracDigits 8 : f64
+  // CHECK: moore.fmt.real float %arg2, align right fieldWidth 12 : f32
+  moore.fmt.real float %arg2, align right fieldWidth 12 : f32
+  // CHECK: moore.fmt.real exponential %arg3, align right fracDigits 5 : f64
+  moore.fmt.real exponential %arg3, align right fracDigits 5 : f64
   return
 }
 

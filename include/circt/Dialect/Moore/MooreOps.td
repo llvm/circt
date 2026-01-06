@@ -2040,6 +2040,8 @@ def FormatRealOp : MooreOp<"fmt.real", [Pure]> {
   let assemblyFormat = [{
     $format $value `,`
     `align` $alignment
+    (`fieldWidth` $fieldWidth^)?
+    (`fracDigits` $fracDigits^)?
     attr-dict `:` type($value)
   }];
 }

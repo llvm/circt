@@ -212,12 +212,12 @@ struct FormatStringParser {
     auto value = context.convertRvalueExpression(
         arg, moore::RealType::get(context.getContext(), moore::RealWidth::f64));
 
-    mlir::IntegerAttr widthAttr = nullptr;
+    IntegerAttr widthAttr = nullptr;
     if (options.width) {
       widthAttr = builder.getI32IntegerAttr(*options.width);
     }
 
-    mlir::IntegerAttr precisionAttr = nullptr;
+    IntegerAttr precisionAttr = nullptr;
     if (options.precision) {
       if (*options.precision)
         precisionAttr = builder.getI32IntegerAttr(*options.precision);
