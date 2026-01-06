@@ -1647,7 +1647,7 @@ module realToTimeConversion;
   // CHECK: [[REAL:%.+]] = moore.uint_to_real [[INT]] : i64 -> f64 
   // CHECK: [[SCALE:%.+]] = moore.constant_real 1.000000e+05 : f64 
   // CHECK: [[DIV:%.+]] = moore.fdiv [[REAL]], [[SCALE]] : f64 
-  // CHECK: [[FMT:%.+]] = moore.fmt.real float [[DIV]], : f64 
+  // CHECK: [[FMT:%.+]] = moore.fmt.real float [[DIV]], align right fracDigits 3 : f64 
   initial
     $display("%0.3f", $time);
 endmodule
@@ -1663,7 +1663,7 @@ module timeToRealConversion;
   // CHECK: [[UINT_TO_REAL:%.+]] = moore.uint_to_real [[LOGIC_TO_INT]] : i64 -> f64
   // CHECK: [[SCALE:%.+]] = moore.constant_real 1.000000e+05 : f64
   // CHECK: [[DIV:%.+]] = moore.fdiv [[UINT_TO_REAL]], [[SCALE]] : f64
-  // CHECK: [[FMT:%.+]] = moore.fmt.real float [[DIV]], : f64
+  // CHECK: [[FMT:%.+]] = moore.fmt.real float [[DIV]], align right : f64
   initial begin
     $display("%f", x);
    end

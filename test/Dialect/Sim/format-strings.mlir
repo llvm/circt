@@ -192,6 +192,77 @@ hw.module @constant_fold5(out res: !sim.fstring) {
   hw.output %cat : !sim.fstring
 }
 
+// CHECK-LABEL: hw.module @constant_fold_real_formats
+// CHECK: sim.fmt.literal "5.0e-01             ,0.500000,       0.5;1.6e+00,                           1.6,2;9.999990e+05,999999.000000,999999;1.000000e+126,999999999999999924867761618992882042544670869834838461439225972225294199975793026603163493762817653751530058413655532282839040.000000,1e+126"
+hw.module @constant_fold_real_formats(out res: !sim.fstring) {
+  %comma = sim.fmt.literal ","
+  %semicolon = sim.fmt.literal ";"
+  %cst_05 = arith.constant 5.000000e-01 : f64
+  %e0 = sim.fmt.exp %cst_05 isLeftAligned true fieldWidth 20 fracDigits 1 : f64
+  %f0 = sim.fmt.flt %cst_05 : f64
+  %g0 = sim.fmt.gen %cst_05 fieldWidth 10 fracDigits 9 : f64
+  %cst_05_comma = sim.fmt.concat(%e0, %comma, %f0, %comma, %g0)
+  %cst_165 = arith.constant 1.650000e+00 : f64
+  %e1 = sim.fmt.exp %cst_165 fracDigits 1 : f64
+  %f1 = sim.fmt.flt %cst_165 fieldWidth 30 fracDigits 1 : f64
+  %g1 = sim.fmt.gen %cst_165 fracDigits 1 : f64
+  %cst_165_comma = sim.fmt.concat(%e1, %comma, %f1, %comma, %g1)
+  %cst_999999 = arith.constant 9.999990e+05 : f64
+  %e2 = sim.fmt.exp %cst_999999 : f64
+  %f2 = sim.fmt.flt %cst_999999 : f64
+  %g2 = sim.fmt.gen %cst_999999 : f64
+  %cst_999999_comma = sim.fmt.concat(%e2, %comma, %f2, %comma, %g2)
+  %cst_big = arith.constant 1.000000e+126 : f64
+  %e3 = sim.fmt.exp %cst_big : f64
+  %f3 = sim.fmt.flt %cst_big : f64
+  %g3 = sim.fmt.gen %cst_big : f64
+  %cst_big_comma = sim.fmt.concat(%e3, %comma, %f3, %comma, %g3)
+  %res = sim.fmt.concat(%cst_05_comma, %semicolon, %cst_165_comma, %semicolon, %cst_999999_comma, %semicolon, %cst_big_comma)
+  hw.output %res : !sim.fstring
+}
+
+// CHECK-LABEL: hw.module @constant_fold_real_gen_precision
+// CHECK: sim.fmt.literal "0.001,0.001,0.0012,0.00123,0.001235,0.001235,0.001235,0.001235;1e-07,1e-07,1.2e-07,1.23e-07,1.235e-07,1.235e-07,1.235e-07,1.235e-07;1e+06,1e+06,1.2e+06,1.24e+06,1.235e+06,1.235e+06,1.235e+06,1235000"
+hw.module @constant_fold_real_gen_precision(out res : !sim.fstring) {
+  %comma     = sim.fmt.literal ","
+  %semicolon = sim.fmt.literal ";"
+  %cst_a = arith.constant 1.235000e-03 : f64
+  %a0 = sim.fmt.gen %cst_a fracDigits 0 : f64
+  %a1 = sim.fmt.gen %cst_a fracDigits 1 : f64
+  %a2 = sim.fmt.gen %cst_a fracDigits 2 : f64
+  %a3 = sim.fmt.gen %cst_a fracDigits 3 : f64
+  %a4 = sim.fmt.gen %cst_a fracDigits 4 : f64
+  %a5 = sim.fmt.gen %cst_a fracDigits 5 : f64
+  %a6 = sim.fmt.gen %cst_a fracDigits 6 : f64
+  %a7 = sim.fmt.gen %cst_a fracDigits 7 : f64
+  %grp_a = sim.fmt.concat(%a0, %comma, %a1, %comma, %a2, %comma, %a3, %comma, %a4, %comma, %a5, %comma, %a6, %comma, %a7)
+
+  %cst_b = arith.constant 1.235000e-07 : f64
+  %b0 = sim.fmt.gen %cst_b fracDigits 0 : f64
+  %b1 = sim.fmt.gen %cst_b fracDigits 1 : f64
+  %b2 = sim.fmt.gen %cst_b fracDigits 2 : f64
+  %b3 = sim.fmt.gen %cst_b fracDigits 3 : f64
+  %b4 = sim.fmt.gen %cst_b fracDigits 4 : f64
+  %b5 = sim.fmt.gen %cst_b fracDigits 5 : f64
+  %b6 = sim.fmt.gen %cst_b fracDigits 6 : f64
+  %b7 = sim.fmt.gen %cst_b fracDigits 7 : f64
+  %grp_b = sim.fmt.concat(%b0, %comma, %b1, %comma, %b2, %comma, %b3, %comma, %b4, %comma, %b5, %comma, %b6, %comma, %b7)
+
+  %cst_c = arith.constant 1.235000e+06 : f64
+  %c0 = sim.fmt.gen %cst_c fracDigits 0 : f64
+  %c1 = sim.fmt.gen %cst_c fracDigits 1 : f64
+  %c2 = sim.fmt.gen %cst_c fracDigits 2 : f64
+  %c3 = sim.fmt.gen %cst_c fracDigits 3 : f64
+  %c4 = sim.fmt.gen %cst_c fracDigits 4 : f64
+  %c5 = sim.fmt.gen %cst_c fracDigits 5 : f64
+  %c6 = sim.fmt.gen %cst_c fracDigits 6 : f64
+  %c7 = sim.fmt.gen %cst_c fracDigits 7 : f64
+  %grp_c = sim.fmt.concat(%c0, %comma, %c1, %comma, %c2, %comma, %c3, %comma, %c4, %comma, %c5, %comma, %c6, %comma, %c7)
+
+  %res = sim.fmt.concat(%grp_a, %semicolon, %grp_b, %semicolon, %grp_c)
+  hw.output %res : !sim.fstring
+}
+
 // CHECK-LABEL: hw.module @flatten_concat1
 // CHECK-DAG:   %[[LHL:.+]] = sim.fmt.literal "HexLower: "
 // CHECK-DAG:   %[[LHU:.+]] = sim.fmt.literal "HexUpper: "

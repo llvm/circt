@@ -2046,6 +2046,40 @@ struct FormatIntOpConversion : public OpConversionPattern<FormatIntOp> {
   }
 };
 
+struct FormatRealOpConversion : public OpConversionPattern<FormatRealOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FormatRealOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto fracDigitsAttr = adaptor.getFracDigitsAttr();
+
+    auto fieldWidthAttr = adaptor.getFieldWidthAttr();
+    bool isLeftAligned = adaptor.getAlignment() == IntAlign::Left;
+    mlir::BoolAttr isLeftAlignedAttr = rewriter.getBoolAttr(isLeftAligned);
+
+    switch (op.getFormat()) {
+    case RealFormat::General:
+      rewriter.replaceOpWithNewOp<sim::FormatGeneralOp>(
+          op, adaptor.getValue(), isLeftAlignedAttr, fieldWidthAttr,
+          fracDigitsAttr);
+      return success();
+    case RealFormat::Float:
+      rewriter.replaceOpWithNewOp<sim::FormatFloatOp>(
+          op, adaptor.getValue(), isLeftAlignedAttr, fieldWidthAttr,
+          fracDigitsAttr);
+      return success();
+    case RealFormat::Exponential:
+      rewriter.replaceOpWithNewOp<sim::FormatScientificOp>(
+          op, adaptor.getValue(), isLeftAlignedAttr, fieldWidthAttr,
+          fracDigitsAttr);
+      return success();
+    default:
+      return rewriter.notifyMatchFailure(op, "unsupported real format");
+    }
+  }
+};
+
 struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -2470,6 +2504,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FormatLiteralOpConversion,
     FormatConcatOpConversion,
     FormatIntOpConversion,
+    FormatRealOpConversion,
     DisplayBIOpConversion
   >(typeConverter, patterns.getContext());
   // clang-format on

@@ -386,7 +386,7 @@ func.func @Statements(%arg0: !moore.i42) {
 }
 
 // CHECK-LABEL: func @FormatStrings
-func.func @FormatStrings(%arg0: !moore.i42) {
+func.func @FormatStrings(%arg0: !moore.i42, %arg1: !moore.f32, %arg2: !moore.f64) {
   // CHECK: [[TMP:%.+]] = sim.fmt.literal "hello"
   %0 = moore.fmt.literal "hello"
   // CHECK: sim.fmt.concat ([[TMP]], [[TMP]])
@@ -411,6 +411,21 @@ func.func @FormatStrings(%arg0: !moore.i42) {
   moore.fmt.int hex_lower %arg0, align right, pad zero : i42
   // CHECK: sim.fmt.hex %arg0, isUpper true paddingChar 32 specifierWidth 42 : i42
   moore.fmt.int hex_upper %arg0, align right, pad space width 42 : i42
+
+  // CHECK: sim.fmt.flt %arg1 isLeftAligned true : f32
+  moore.fmt.real float %arg1, align left : f32
+  // CHECK: sim.fmt.exp %arg2 isLeftAligned true : f64
+  moore.fmt.real exponential %arg2, align left : f64
+  // CHECK: sim.fmt.gen %arg1 isLeftAligned true : f32
+  moore.fmt.real general %arg1, align left fracDigits 6 : f32
+  // CHECK: sim.fmt.flt %arg2 isLeftAligned true fracDigits 10 : f64
+  moore.fmt.real float %arg2, align left fracDigits 10 : f64
+  // CHECK: sim.fmt.exp %arg1 fieldWidth 9 fracDigits 8 : f32
+  moore.fmt.real exponential %arg1, align right fieldWidth 9 fracDigits 8 : f32
+  // CHECK: sim.fmt.gen %arg2 : f64
+  moore.fmt.real general %arg2, align right : f64
+  // CHECK: sim.fmt.flt %arg1 fieldWidth 15 : f32
+  moore.fmt.real float %arg1, align right fieldWidth 15 : f32
   // CHECK: sim.proc.print [[TMP]]
   moore.builtin.display %0
   return

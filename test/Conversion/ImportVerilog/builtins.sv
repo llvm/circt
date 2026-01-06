@@ -92,8 +92,25 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   // CHECK: moore.fmt.int octal [[X]], align left, pad zero width 19 : i32
   $write("%-19o", x);
 
-  // CHECK: moore.fmt.real float [[R]]
+  // CHECK: moore.fmt.real float [[R]], align right : f64
   $write("%f", r);
+  // CHECK: moore.fmt.real exponential [[R]], align right : f64
+  $write("%e", r);
+  // CHECK: moore.fmt.real general [[R]], align right : f64
+  $write("%g", r);
+  // CHECK: moore.fmt.real float [[R]], align left fracDigits 1 : f64
+  $write("%-.f", r);
+  // CHECK: moore.fmt.real exponential [[R]], align right fieldWidth 10 : f64
+  $write("%10e", r);
+  // CHECK: moore.fmt.real general [[R]], align right fracDigits 5 : f64
+  $write("%0.5g", r);
+  // CHECK: moore.fmt.real float [[R]], align left fieldWidth 20 fracDigits 5 : f64
+  $write("%-20.5f", r);
+  // CHECK: moore.fmt.real exponential [[R]], align right fieldWidth 10 fracDigits 1 : f64
+  $write("%10.e", r);
+  // CHECK: moore.fmt.real general [[R]], align right fieldWidth 9 fracDigits 8 : f64
+  $write("%9.8g", r);
+
   // CHECK: [[XR:%.+]] = moore.sint_to_real [[X]] : i32 -> f64
   // CHECK: [[TMP:%.+]] = moore.fmt.real float [[XR]]
   // CHECK: moore.builtin.display [[TMP]]

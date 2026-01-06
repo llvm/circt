@@ -130,7 +130,9 @@ struct FormatStringParser {
                                                  : IntFormat::HexLower);
 
     case 'e':
+      return emitReal(arg, options, RealFormat::Exponential);
     case 'g':
+      return emitReal(arg, options, RealFormat::General);
     case 'f':
       return emitReal(arg, options, RealFormat::Float);
 
@@ -210,13 +212,26 @@ struct FormatStringParser {
     auto value = context.convertRvalueExpression(
         arg, moore::RealType::get(context.getContext(), moore::RealWidth::f64));
 
+    IntegerAttr widthAttr = nullptr;
+    if (options.width) {
+      widthAttr = builder.getI32IntegerAttr(*options.width);
+    }
+
+    IntegerAttr precisionAttr = nullptr;
+    if (options.precision) {
+      if (*options.precision)
+        precisionAttr = builder.getI32IntegerAttr(*options.precision);
+      else
+        // If precision is 0, we set it to 1 instead
+        precisionAttr = builder.getI32IntegerAttr(1);
+    }
+
+    auto alignment = options.leftJustify ? IntAlign::Left : IntAlign::Right;
     if (!value)
       return failure();
 
-    // TODO add support for specifics such as width etc
-
-    fragments.push_back(
-        moore::FormatRealOp::create(builder, loc, value, format));
+    fragments.push_back(moore::FormatRealOp::create(
+        builder, loc, value, format, alignment, widthAttr, precisionAttr));
 
     return success();
   }

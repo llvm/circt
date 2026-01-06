@@ -74,6 +74,32 @@ static StringAttr formatIntegersByRadix(MLIRContext *ctx, unsigned radix,
   return {};
 }
 
+static StringAttr formatFloatsBySpecifier(MLIRContext *ctx, Attribute value,
+                                          bool isLeftAligned,
+                                          std::optional<unsigned> fieldWidth,
+                                          std::optional<unsigned> fracDigits,
+                                          std::string formatSpecifier) {
+  if (auto floatAttr = llvm::dyn_cast_or_null<FloatAttr>(value)) {
+    std::string widthString = isLeftAligned ? "-" : "";
+    if (fieldWidth.has_value()) {
+      widthString += std::to_string(fieldWidth.value());
+    }
+    std::string fmtSpecifier = "%" + widthString + "." +
+                               std::to_string(fracDigits.value()) +
+                               formatSpecifier;
+
+    // Calculates number of bytes needed to store the format string
+    // excluding the null terminator
+    int bufferSize = std::snprintf(nullptr, 0, fmtSpecifier.c_str(),
+                                   floatAttr.getValue().convertToDouble());
+    std::string floatFmtBuffer(bufferSize, '\0');
+    snprintf(floatFmtBuffer.data(), bufferSize + 1, fmtSpecifier.c_str(),
+             floatAttr.getValue().convertToDouble());
+    return StringAttr::get(ctx, floatFmtBuffer);
+  }
+  return {};
+}
+
 ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
   auto builder = parser.getBuilder();
   // Parse visibility.
@@ -217,6 +243,24 @@ OpFoldResult FormatBinOp::fold(FoldAdaptor adaptor) {
   return formatIntegersByRadix(
       getContext(), 2U, adaptor.getValue(), false, adaptor.getIsLeftAligned(),
       adaptor.getPaddingChar(), adaptor.getSpecifierWidth());
+}
+
+OpFoldResult FormatScientificOp::fold(FoldAdaptor adaptor) {
+  return formatFloatsBySpecifier(
+      getContext(), adaptor.getValue(), adaptor.getIsLeftAligned(),
+      adaptor.getFieldWidth(), adaptor.getFracDigits(), "e");
+}
+
+OpFoldResult FormatFloatOp::fold(FoldAdaptor adaptor) {
+  return formatFloatsBySpecifier(
+      getContext(), adaptor.getValue(), adaptor.getIsLeftAligned(),
+      adaptor.getFieldWidth(), adaptor.getFracDigits(), "f");
+}
+
+OpFoldResult FormatGeneralOp::fold(FoldAdaptor adaptor) {
+  return formatFloatsBySpecifier(
+      getContext(), adaptor.getValue(), adaptor.getIsLeftAligned(),
+      adaptor.getFieldWidth(), adaptor.getFracDigits(), "g");
 }
 
 OpFoldResult FormatCharOp::fold(FoldAdaptor adaptor) {

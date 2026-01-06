@@ -2030,13 +2030,19 @@ def FormatRealOp : MooreOp<"fmt.real", [Pure]> {
   See IEEE 1800-2017 § 21.2.1.2 "Format specifications".
   }];
   let arguments = (ins
-  RealType:$value,
-  RealFormatAttr:$format
+    RealType:$value,
+    RealFormatAttr:$format,
+    IntAlignAttr:$alignment,
+    OptionalAttr<I32Attr>:$fieldWidth,
+    OptionalAttr<I32Attr>:$fracDigits
   );
   let results = (outs FormatStringType:$result);
   let assemblyFormat = [{
-      $format $value `,`
-      attr-dict `:` type($value)
+    $format $value `,`
+    `align` $alignment
+    (`fieldWidth` $fieldWidth^)?
+    (`fracDigits` $fracDigits^)?
+    attr-dict `:` type($value)
   }];
 }
 
