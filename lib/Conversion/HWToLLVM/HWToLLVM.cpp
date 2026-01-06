@@ -489,18 +489,202 @@ namespace {
 /// Pattern: hw.bitcast(input) ==> load(bitcast_ptr(store(input, alloca)))
 /// This is necessary because we cannot bitcast aggregate types directly in
 /// LLVMIR.
-struct BitcastOpConversion : public ConvertOpToLLVMPattern<hw::BitcastOp> {
-  using ConvertOpToLLVMPattern<hw::BitcastOp>::ConvertOpToLLVMPattern;
+struct BitcastOpConversion : public HWArrayOpToLLVMPattern<hw::BitcastOp> {
+  using HWArrayOpToLLVMPattern<hw::BitcastOp>::HWArrayOpToLLVMPattern;
 
   LogicalResult
   matchAndRewrite(hw::BitcastOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    Type resultTy = typeConverter->convertType(op.getResult());
 
-    Type resultTy = typeConverter->convertType(op.getResult().getType());
-    auto ptr = spillValueOnStack(rewriter, op.getLoc(), adaptor.getInput());
-    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, resultTy, ptr);
+    if (!isSupportedType(adaptor.getInput().getType()))
+      return rewriter.notifyMatchFailure(op.getLoc(),
+                                         "unsupported cast input type");
+    if (!isSupportedType(resultTy))
+      return rewriter.notifyMatchFailure(op.getLoc(),
+                                         "unsupported cast output type");
+
+    auto bitWidth = hw::getBitWidth(op.getInput().getType());
+    if (bitWidth < 0)
+      return rewriter.notifyMatchFailure(
+          op.getLoc(), "unable to determine required number of bits");
+
+    // Convert input to a packed integer (if necessary)
+    Value packedInteger;
+    if (isa<IntegerType>(adaptor.getInput().getType()))
+      packedInteger = adaptor.getInput();
+    else
+      packedInteger = packIntoInt(rewriter, loc, adaptor.getInput(),
+                                  op.getInput().getType(), bitWidth);
+
+    // Unpack integer representation into target type
+    auto unpacked =
+        unpackFromInt(rewriter, loc, packedInteger, resultTy, op.getType());
+    rewriter.replaceOp(op, unpacked);
+
+    if (spillCacheOpt.has_value() && isa<LLVM::LLVMArrayType>(resultTy)) {
+      rewriter.setInsertionPointAfter(unpacked.getDefiningOp());
+      auto ptr = spillValueOnStack(rewriter, loc, unpacked);
+      spillCacheOpt->map(unpacked, ptr);
+    }
 
     return success();
+  }
+
+private:
+  // NOLINTNEXTLINE(misc-no-recursion)
+  static bool isSupportedType(Type ty) {
+    if (isa<IntegerType>(ty))
+      return true;
+    if (auto arrayTy = dyn_cast<LLVM::LLVMArrayType>(ty))
+      return isSupportedType(arrayTy.getElementType());
+    if (auto structTy = dyn_cast<LLVM::LLVMStructType>(ty))
+      return llvm::all_of(structTy.getBody(),
+                          [](Type ty) { return isSupportedType(ty); });
+    // TODO: Union Type
+    return false;
+  }
+
+  static Value packIntoInt(ConversionPatternRewriter &rewriter, Location loc,
+                           Value aggregate, Type hwType, unsigned numBits) {
+    assert(isa<IntegerType>(hwType) ||
+           isa_and_nonnull<hw::HWDialect>(hwType.getDialect()));
+    if (hw::type_isa<IntegerType>(aggregate.getType()))
+      return aggregate;
+    auto intType = rewriter.getIntegerType(numBits);
+    auto intVal = LLVM::ZeroOp::create(rewriter, loc, intType);
+    unsigned bitOffset = 0;
+    auto res = packIntoIntAtOffset(rewriter, loc, aggregate, hwType, intVal,
+                                   bitOffset);
+    assert(bitOffset == numBits &&
+           "Packed number of bits does not match target type");
+    return res;
+  }
+
+  // NOLINTNEXTLINE(misc-no-recursion)
+  static Value packIntoIntAtOffset(ConversionPatternRewriter &rewriter,
+                                   Location loc, Value aggregate, Type hwType,
+                                   Value accumulator, unsigned &offset) {
+    if (isa<IntegerType>(aggregate.getType())) {
+      Value result;
+      if (accumulator.getType() == aggregate.getType()) {
+        assert(offset == 0);
+        result = LLVM::OrOp::create(rewriter, loc, aggregate, accumulator);
+      } else {
+        auto zext = LLVM::ZExtOp::create(rewriter, loc, accumulator.getType(),
+                                         aggregate);
+        auto shamt = LLVM::ConstantOp::create(
+            rewriter, loc, rewriter.getIntegerAttr(zext.getType(), offset));
+        auto shl = LLVM::ShlOp::create(rewriter, loc, zext, shamt,
+                                       (LLVM::IntegerOverflowFlags::nsw |
+                                        LLVM::IntegerOverflowFlags::nuw));
+        result = LLVM::OrOp::create(rewriter, loc, shl, accumulator);
+      }
+      offset += aggregate.getType().getIntOrFloatBitWidth();
+      return result;
+    }
+
+    if (auto arrayTy = dyn_cast<LLVM::LLVMArrayType>(aggregate.getType())) {
+      unsigned numElements = arrayTy.getNumElements();
+      auto eltTy = hw::type_cast<hw::ArrayType>(hwType).getElementType();
+      for (unsigned i = 0; i < numElements; ++i) {
+        auto llvmIndex =
+            HWToLLVMEndianessConverter::convertToLLVMEndianess(hwType, i);
+        auto extract = LLVM::ExtractValueOp::create(
+            rewriter, loc, aggregate, ArrayRef(int64_t{llvmIndex}));
+        accumulator = packIntoIntAtOffset(rewriter, loc, extract, eltTy,
+                                          accumulator, offset);
+      }
+    } else if (auto structTy =
+                   dyn_cast<LLVM::LLVMStructType>(aggregate.getType())) {
+      unsigned numElements = structTy.getBody().size();
+      for (unsigned i = 0; i < numElements; ++i) {
+        auto eltTy =
+            hw::type_cast<hw::StructType>(hwType).getElements()[i].type;
+        auto llvmIndex =
+            HWToLLVMEndianessConverter::convertToLLVMEndianess(hwType, i);
+        auto extract = LLVM::ExtractValueOp::create(
+            rewriter, loc, aggregate, ArrayRef(int64_t{llvmIndex}));
+        accumulator = packIntoIntAtOffset(rewriter, loc, extract, eltTy,
+                                          accumulator, offset);
+      }
+    } else {
+      assert(false && "Unsupported Type");
+    }
+    return accumulator;
+  }
+
+  static Value getIntSlice(ConversionPatternRewriter &rewriter, Location loc,
+                           Value packedInt, unsigned sliceWidth,
+                           unsigned sliceOffset) {
+    assert(packedInt.getType().getIntOrFloatBitWidth() >=
+           sliceWidth + sliceOffset);
+    if (sliceOffset == 0 &&
+        sliceWidth == packedInt.getType().getIntOrFloatBitWidth())
+      return packedInt;
+    if (sliceOffset > 0) {
+      auto shamt = LLVM::ConstantOp::create(
+          rewriter, loc,
+          rewriter.getIntegerAttr(packedInt.getType(), sliceOffset));
+      packedInt = LLVM::LShrOp::create(rewriter, loc, packedInt, shamt);
+    }
+    return LLVM::TruncOp::create(
+        rewriter, loc, rewriter.getIntegerType(sliceWidth), packedInt);
+  }
+
+  // NOLINTNEXTLINE(misc-no-recursion)
+  static Value unpackFromInt(ConversionPatternRewriter &rewriter, Location loc,
+                             Value packedInt, Type llvmTargetType,
+                             Type hwTargetType) {
+    if (isa<IntegerType>(llvmTargetType)) {
+      assert(llvmTargetType == packedInt.getType());
+      return packedInt;
+    }
+
+    if (auto arrayTy = dyn_cast<LLVM::LLVMArrayType>(llvmTargetType)) {
+      auto hwArrayTy = hw::type_cast<hw::ArrayType>(hwTargetType);
+      assert(arrayTy.getNumElements() == hwArrayTy.getNumElements());
+      auto elementBits = hw::getBitWidth(hwArrayTy.getElementType());
+      assert(elementBits >= 0);
+      Value result = LLVM::PoisonOp::create(rewriter, loc, arrayTy);
+      for (unsigned i = 0; i < hwArrayTy.getNumElements(); ++i) {
+        auto llvmIdx =
+            HWToLLVMEndianessConverter::convertToLLVMEndianess(hwArrayTy, i);
+        auto slice =
+            getIntSlice(rewriter, loc, packedInt, elementBits, i * elementBits);
+        auto unpackedElt =
+            unpackFromInt(rewriter, loc, slice, arrayTy.getElementType(),
+                          hwArrayTy.getElementType());
+        result = LLVM::InsertValueOp::create(rewriter, loc, result, unpackedElt,
+                                             llvmIdx);
+      }
+      return result;
+    }
+
+    if (auto structTy = dyn_cast<LLVM::LLVMStructType>(llvmTargetType)) {
+      auto hwStructTy = hw::type_cast<hw::StructType>(hwTargetType);
+      assert(structTy.getBody().size() == hwStructTy.getElements().size());
+      Value result = LLVM::PoisonOp::create(rewriter, loc, structTy);
+      unsigned bitOffset = 0;
+      for (unsigned i = 0; i < structTy.getBody().size(); ++i) {
+        auto llvmIdx =
+            HWToLLVMEndianessConverter::convertToLLVMEndianess(hwStructTy, i);
+        auto elementBits = hw::getBitWidth(hwStructTy.getElements()[i].type);
+        auto slice =
+            getIntSlice(rewriter, loc, packedInt, elementBits, bitOffset);
+        auto unpackedElt =
+            unpackFromInt(rewriter, loc, slice, structTy.getBody()[llvmIdx],
+                          hwStructTy.getElements()[i].type);
+        result = LLVM::InsertValueOp::create(rewriter, loc, result, unpackedElt,
+                                             llvmIdx);
+        bitOffset += elementBits;
+      }
+      return result;
+    }
+
+    assert(false && "Unsupported Type");
+    return {};
   }
 };
 } // namespace
@@ -841,7 +1025,7 @@ void circt::populateHWToLLVMConversionPatterns(
       converter, constAggregateGlobalsMap, globals, spillCacheOpt);
 
   // Bitwise conversion patterns.
-  patterns.add<BitcastOpConversion>(converter);
+  patterns.add<BitcastOpConversion>(converter, spillCacheOpt);
 
   // Extraction operation conversion patterns.
   patterns.add<StructExplodeOpConversion, StructExtractOpConversion,
