@@ -58,10 +58,10 @@ hw.module @register_non_constant_reset(in %clk : !seq.clock, in %rst : i1, in %i
 
 // -----
 
-// Test: Async reset warning is emitted when reset signals are removed from FSM.
-// The FSM dialect does not support async reset, so these signals are excluded
+// Test: Reset warning is emitted when reset signals are removed from FSM.
+// The FSM dialect does not support reset signals, so these signals are excluded
 // and a warning is emitted.
-// expected-warning @+1 {{async reset signals detected and removed from FSM}}
+// expected-warning @+1 {{reset signals detected and removed from FSM}}
 hw.module @async_reset_warning(in %clk : !seq.clock, in %rst : i1, in %inp : i1, out output : i1) {
     %c0_i2 = hw.constant 0 : i2
     %c2_i2 = hw.constant 2 : i2

@@ -154,7 +154,7 @@ static void addPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
 
 /// Checks if a value is a constant or a tree of muxes with constant leaves.
 /// Uses an iterative approach with a visited set to handle cycles.
-static bool isConstantLike(Value value) {
+static bool isConstantOrConstantTree(Value value) {
   SmallVector<Value> worklist;
   llvm::DenseSet<Value> visited;
 
@@ -194,7 +194,7 @@ LogicalResult pushIcmp(ICmpOp op, PatternRewriter &rewriter) {
   APInt lhs, rhs;
   if (op.getPredicate() == ICmpPredicate::eq &&
       op.getLhs().getDefiningOp<MuxOp>() &&
-      (isConstantLike(op.getLhs()) ||
+      (isConstantOrConstantTree(op.getLhs()) ||
        op.getRhs().getDefiningOp<hw::ConstantOp>())) {
     rewriter.setInsertionPointAfter(op);
     auto mux = op.getLhs().getDefiningOp<MuxOp>();
@@ -204,15 +204,13 @@ LogicalResult pushIcmp(ICmpOp op, PatternRewriter &rewriter) {
     Location loc = op.getLoc();
     auto eq1 = rewriter.create<ICmpOp>(loc, ICmpPredicate::eq, x, b);
     auto eq2 = rewriter.create<ICmpOp>(loc, ICmpPredicate::eq, y, b);
-    auto newMux = rewriter.create<MuxOp>(loc, mux.getCond(), eq1.getResult(),
-                                         eq2.getResult());
-    op.replaceAllUsesWith(newMux.getOperation());
-    op.erase();
+    rewriter.replaceOpWithNewOp<MuxOp>(op, mux.getCond(), eq1.getResult(),
+                                       eq2.getResult());
     return llvm::success();
   }
   if (op.getPredicate() == ICmpPredicate::eq &&
       op.getRhs().getDefiningOp<MuxOp>() &&
-      (isConstantLike(op.getRhs()) ||
+      (isConstantOrConstantTree(op.getRhs()) ||
        op.getLhs().getDefiningOp<hw::ConstantOp>())) {
     rewriter.setInsertionPointAfter(op);
     auto mux = op.getRhs().getDefiningOp<MuxOp>();
@@ -222,10 +220,8 @@ LogicalResult pushIcmp(ICmpOp op, PatternRewriter &rewriter) {
     Location loc = op.getLoc();
     auto eq1 = rewriter.create<ICmpOp>(loc, ICmpPredicate::eq, x, b);
     auto eq2 = rewriter.create<ICmpOp>(loc, ICmpPredicate::eq, y, b);
-    auto newMux = rewriter.create<MuxOp>(loc, mux.getCond(), eq1.getResult(),
-                                         eq2.getResult());
-    op.replaceAllUsesWith(newMux.getOperation());
-    op.erase();
+    rewriter.replaceOpWithNewOp<MuxOp>(op, mux.getCond(), eq1.getResult(),
+                                       eq2.getResult());
     return llvm::success();
   }
   return llvm::failure();
@@ -467,9 +463,10 @@ public:
 
     llvm::DenseMap<size_t, StateOp> stateToStateOp;
     llvm::DenseMap<StateOp, size_t> stateOpToState;
-    // Collect async reset arguments to exclude from the FSM's function type.
-    // FSMs in CIRCT don't have an async reset concept, so these signals are
-    // not passed through. The reset behavior is captured in the initial state.
+    // Collect reset arguments to exclude from the FSM's function type.
+    // All CompReg reset signals are ignored during FSM extraction since the
+    // FSM dialect does not have an explicit reset concept. The reset behavior
+    // is only captured in the initial state value.
     llvm::DenseSet<size_t> asyncResetArguments;
     auto regsInGroup = stateRegs;
     Location loc = moduleOp.getLoc();
@@ -901,13 +898,13 @@ public:
       }
     }
 
-    // Emit a warning if async reset signals were detected and removed.
-    // The FSM dialect does not support async reset, so the reset behavior
-    // is only captured in the initial state. The original async reset
-    // triggering mechanism is not preserved.
+    // Emit a warning if reset signals were detected and removed.
+    // The FSM dialect does not support reset signals, so the reset behavior
+    // is only captured in the initial state. The original reset triggering
+    // mechanism is not preserved.
     if (!asyncResetBlockArguments.empty()) {
       moduleOp.emitWarning()
-          << "async reset signals detected and removed from FSM; "
+          << "reset signals detected and removed from FSM; "
              "reset behavior is captured only in the initial state";
     }
 
