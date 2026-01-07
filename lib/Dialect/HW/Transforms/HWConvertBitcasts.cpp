@@ -41,6 +41,7 @@ struct HWConvertBitcastsPass
 // Array conversion:  Lower bits correspond to lower array index
 // Struct conversion: Higher bits correspond to lower field index
 
+// NOLINTNEXTLINE(misc-no-recursion)
 bool HWConvertBitcastsPass::isTypeSupported(Type ty) {
   if (isa<IntegerType>(ty))
     return true;
@@ -169,7 +170,6 @@ static Value constructAggregateRecursively(OpBuilder builder, Location loc,
 
 LogicalResult HWConvertBitcastsPass::convertBitcastOp(OpBuilder builder,
                                                       BitcastOp bitcastOp) {
-
   bool inputSupported = isTypeSupported(bitcastOp.getInput().getType());
   bool outputSupported = isTypeSupported(bitcastOp.getType());
   if (!allowPartialConversion) {
@@ -222,6 +222,4 @@ void HWConvertBitcastsPass::runOnOperation() {
 
   if (anyFailed && !allowPartialConversion)
     signalPassFailure();
-
-  return;
 }
