@@ -648,6 +648,8 @@ LogicalResult MachineOpConverter::dispatch() {
 
   // Transition semantics.
   for (auto [id1, t1] : llvm::enumerate(transitions)) {
+    
+    
     auto action = [&](SmallVector<Value> actionArgs)
         -> SmallVector<Value> {
       // actionArgs are the current tuple (args, outs, vars, [time]).
@@ -736,20 +738,11 @@ LogicalResult MachineOpConverter::dispatch() {
     };
 
     // For each transition, assert:
-    // Forall (argsNew,argsOld,others): F_from(argsOld, ...) AND guard(argsOld, ...)
-    //    => F_to(argsNew, outputs/vars updated, [time+1])
-    SmallVector<Type> forallTypes;
-    for (auto [id, ty] : llvm::enumerate(argsOutsVarsTypes)) {
-      if (id < numArgs) {
-        forallTypes.push_back(ty);
-        forallTypes.push_back(ty);
-      } else {
-        forallTypes.push_back(ty);
-      }
-    }
-
+    // Forall (argsNew,argsOld,others): 
+    // F_from(out_old, vars_old, [time]) AND guard(args_old, out_old, vars_old)
+    //    => F_to(out_new, vars_new, [time+1])
     auto forall = b.create<smt::ForallOp>(
-        loc, forallTypes,
+        loc, argsOutsVarsTypes,
         [&](OpBuilder &b, Location loc, ValueRange outVarsInputs) -> Value {
           SmallVector<Value> startingStateArgs;
           SmallVector<Value> arrivingStateArgs;
@@ -757,7 +750,7 @@ LogicalResult MachineOpConverter::dispatch() {
               startingStateArgs.push_back(fdi);
               arrivingStateArgs.push_back(fdi);
           }
-
+          
           auto inFrom = b.create<smt::ApplyFuncOp>(loc, stateFunctions[t1.from],
                                                    startingStateArgs);
           auto actionedArgs = action(startingStateArgs);
