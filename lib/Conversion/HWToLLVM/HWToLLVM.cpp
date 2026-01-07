@@ -577,8 +577,7 @@ private:
         auto shamt = LLVM::ConstantOp::create(
             rewriter, loc, rewriter.getIntegerAttr(zext.getType(), offset));
         auto shl = LLVM::ShlOp::create(rewriter, loc, zext, shamt,
-                                       (LLVM::IntegerOverflowFlags::nsw |
-                                        LLVM::IntegerOverflowFlags::nuw));
+                                       (LLVM::IntegerOverflowFlags::nuw));
         result = LLVM::OrOp::create(rewriter, loc, shl, accumulator);
       }
       offset += aggregate.getType().getIntOrFloatBitWidth();
@@ -589,10 +588,8 @@ private:
       unsigned numElements = arrayTy.getNumElements();
       auto eltTy = hw::type_cast<hw::ArrayType>(hwType).getElementType();
       for (unsigned i = 0; i < numElements; ++i) {
-        auto llvmIndex =
-            HWToLLVMEndianessConverter::convertToLLVMEndianess(hwType, i);
-        auto extract = LLVM::ExtractValueOp::create(
-            rewriter, loc, aggregate, ArrayRef(int64_t{llvmIndex}));
+        auto extract = LLVM::ExtractValueOp::create(rewriter, loc, aggregate,
+                                                    ArrayRef(int64_t{i}));
         accumulator = packIntoIntAtOffset(rewriter, loc, extract, eltTy,
                                           accumulator, offset);
       }
@@ -600,10 +597,11 @@ private:
                    dyn_cast<LLVM::LLVMStructType>(aggregate.getType())) {
       unsigned numElements = structTy.getBody().size();
       for (unsigned i = 0; i < numElements; ++i) {
+        auto hwIdx = numElements - i - 1;
         auto eltTy =
-            hw::type_cast<hw::StructType>(hwType).getElements()[i].type;
+            hw::type_cast<hw::StructType>(hwType).getElements()[hwIdx].type;
         auto llvmIndex =
-            HWToLLVMEndianessConverter::convertToLLVMEndianess(hwType, i);
+            HWToLLVMEndianessConverter::convertToLLVMEndianess(hwType, hwIdx);
         auto extract = LLVM::ExtractValueOp::create(
             rewriter, loc, aggregate, ArrayRef(int64_t{llvmIndex}));
         accumulator = packIntoIntAtOffset(rewriter, loc, extract, eltTy,
@@ -649,15 +647,13 @@ private:
       assert(elementBits >= 0);
       Value result = LLVM::PoisonOp::create(rewriter, loc, arrayTy);
       for (unsigned i = 0; i < hwArrayTy.getNumElements(); ++i) {
-        auto llvmIdx =
-            HWToLLVMEndianessConverter::convertToLLVMEndianess(hwArrayTy, i);
         auto slice =
             getIntSlice(rewriter, loc, packedInt, elementBits, i * elementBits);
         auto unpackedElt =
             unpackFromInt(rewriter, loc, slice, arrayTy.getElementType(),
                           hwArrayTy.getElementType());
-        result = LLVM::InsertValueOp::create(rewriter, loc, result, unpackedElt,
-                                             llvmIdx);
+        result =
+            LLVM::InsertValueOp::create(rewriter, loc, result, unpackedElt, i);
       }
       return result;
     }
@@ -667,10 +663,13 @@ private:
       assert(structTy.getBody().size() == hwStructTy.getElements().size());
       Value result = LLVM::PoisonOp::create(rewriter, loc, structTy);
       unsigned bitOffset = 0;
-      for (unsigned i = 0; i < structTy.getBody().size(); ++i) {
-        auto llvmIdx =
-            HWToLLVMEndianessConverter::convertToLLVMEndianess(hwStructTy, i);
-        auto elementBits = hw::getBitWidth(hwStructTy.getElements()[i].type);
+      unsigned numElements = structTy.getBody().size();
+      for (unsigned i = 0; i < numElements; ++i) {
+        auto hwIdx = numElements - i - 1;
+        auto llvmIdx = HWToLLVMEndianessConverter::convertToLLVMEndianess(
+            hwStructTy, hwIdx);
+        auto elementBits =
+            hw::getBitWidth(hwStructTy.getElements()[hwIdx].type);
         auto slice =
             getIntSlice(rewriter, loc, packedInt, elementBits, bitOffset);
         auto unpackedElt =
