@@ -1,5 +1,5 @@
-// RUN: circt-opt %s --hw-convert-bitcasts=allow-partial-conversion=true                | FileCheck %s --check-prefixes=NOCANON
-// RUN: circt-opt %s --hw-convert-bitcasts=allow-partial-conversion=true --canonicalize | FileCheck %s --check-prefixes=CANON
+// RUN: circt-opt %s --hw-convert-bitcasts=allow-partial-conversion=true                | FileCheck %s --check-prefixes=CHECK,NOCANON
+// RUN: circt-opt %s --hw-convert-bitcasts=allow-partial-conversion=true --canonicalize | FileCheck %s --check-prefixes=CHECK,CANON
 
 // NOCANON-LABEL: hw.module @intToArray
 hw.module @intToArray(in %i: i18, out o : !hw.array<3xi6>) {
@@ -74,24 +74,27 @@ hw.module @zeroWidth(in %i: i0, out o : i0) {
   hw.output %3 : i0
 }
 
-// CANON-LABEL: hw.module @arrayRoundtrip
+// CHECK-LABEL: hw.module @arrayRoundtrip
 hw.module @arrayRoundtrip(in %raw: i32, out o : i32) {
+  // CHECK-NOT: hw.bitcast
   %a = hw.bitcast %raw : (i32) -> !hw.array<4x!hw.array<2xi4>>
   %o = hw.bitcast %a : (!hw.array<4x!hw.array<2xi4>>) -> i32
   // CANON: hw.output %raw : i32
   hw.output %o : i32
 }
 
-// CANON-LABEL: hw.module @structRoundtrip
+// CHECK-LABEL: hw.module @structRoundtrip
 hw.module @structRoundtrip(in %raw: i32, out o : i32) {
+  // CHECK-NOT: hw.bitcast
   %a = hw.bitcast %raw : (i32) -> !hw.struct<a: i8, b: i8, c: i16>
   %o = hw.bitcast %a : (!hw.struct<a: i8, b: i8, c: i16>) -> i32
   // CANON: hw.output %raw : i32
   hw.output %o : i32
 }
 
-// CANON-LABEL: hw.module @mixedRoundtrip
+// CHECK-LABEL: hw.module @mixedRoundtrip
 hw.module @mixedRoundtrip(in %raw: i32, out o : i32) {
+  // CHECK-NOT: hw.bitcast
   %0 = hw.bitcast %raw : (i32) -> !hw.struct<a: !hw.array<2xi8>, b: i0, c: i16>
   %1 = hw.bitcast %0 : (!hw.struct<a: !hw.array<2xi8>, b: i0, c: i16>) -> !hw.array<32x!hw.struct<a: i1>>
   %2 = hw.bitcast %1 : (!hw.array<32x!hw.struct<a: i1>>) -> i32
