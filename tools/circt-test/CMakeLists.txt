@@ -4,6 +4,7 @@ set(libs
   ${dialect_libs}
 
   CIRCTExportVerilog
+  CIRCTFirtool
   CIRCTSeqToSV
   CIRCTSimToSV
   CIRCTSVTransforms
