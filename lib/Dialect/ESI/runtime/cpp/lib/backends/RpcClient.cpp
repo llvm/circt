@@ -135,14 +135,14 @@ public:
 
   ::esi::cosim::ChannelServer::Stub *getStub() const { return stub.get(); }
 
-  ::esi::cosim::Manifest getManifest() const {
-    ::esi::cosim::Manifest response;
+  ::esi::cosim::SysInfo getSysInfo() const {
+    ::esi::cosim::SysInfo response;
     // To get around the a race condition where the manifest may not be set yet,
     // loop until it is. TODO: fix this with the DPI API change.
     do {
       ClientContext context;
       ::esi::cosim::VoidMessage arg;
-      Status s = stub->GetManifest(&context, arg, &response);
+      Status s = stub->GetSysInfo(&context, arg, &response);
       checkStatus(s, "Failed to get manifest");
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
     } while (response.esi_version() < 0);
@@ -228,11 +228,23 @@ RpcClient::RpcClient(const std::string &hostname, uint16_t port)
 RpcClient::~RpcClient() = default;
 
 uint32_t RpcClient::getEsiVersion() const {
-  return impl->getManifest().esi_version();
+  return impl->getSysInfo().esi_version();
+}
+std::optional<uint64_t> RpcClient::getCycleCount() const {
+  ::esi::cosim::SysInfo response = impl->getSysInfo();
+  if (response.has_cycle_count())
+    return response.cycle_count();
+  return std::nullopt;
+}
+std::optional<uint64_t> RpcClient::getCoreClockFrequency() const {
+  ::esi::cosim::SysInfo response = impl->getSysInfo();
+  if (response.has_core_clock_frequency_hz())
+    return response.core_clock_frequency_hz();
+  return std::nullopt;
 }
 
 std::vector<uint8_t> RpcClient::getCompressedManifest() const {
-  ::esi::cosim::Manifest response = impl->getManifest();
+  ::esi::cosim::SysInfo response = impl->getSysInfo();
   std::string compressedManifestStr = response.compressed_manifest();
   return std::vector<uint8_t>(compressedManifestStr.begin(),
                               compressedManifestStr.end());

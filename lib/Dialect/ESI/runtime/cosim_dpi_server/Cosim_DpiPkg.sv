@@ -82,4 +82,14 @@ import "DPI-C" sv2cCosimserverSetManifest =
     input byte unsigned compressed_manifest[]
   );
 
+// --------------------- Cycle Count -------------------------------------------
+
+// Set the cycle count callback and core clock frequency. This allows the
+// runtime to query the current simulation cycle and know the clock frequency.
+import "DPI-C" sv2cCosimserverSetCycleCountCallback =
+  function void cosim_set_cycle_count_callback(
+    // The core clock frequency in Hz.
+    input longint unsigned clock_frequency_hz
+  );
+
 endpackage // Cosim_DpiPkg

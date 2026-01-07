@@ -47,6 +47,10 @@ public:
 
   /// Get the compressed manifest from the server.
   std::vector<uint8_t> getCompressedManifest() const;
+  /// Get the current cycle count of the accelerator system.
+  std::optional<uint64_t> getCycleCount() const;
+  /// Get the "core" clock frequency of the accelerator system in Hz.
+  std::optional<uint64_t> getCoreClockFrequency() const;
 
   /// Channel direction as reported by the server.
   enum class ChannelDirection { ToServer, ToClient };

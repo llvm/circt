@@ -771,6 +771,63 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
   hw::InstanceOp::create(rewriter, loc, manifestMod, "__manifest",
                          ArrayRef<Value>({}));
 
+  // Create and instantiate the cycle counter module for cosim.
+  // Declare external Cosim_CycleCount module.
+  Attribute cycleCountParams[] = {
+      ParamDeclAttr::get("CORE_CLOCK_FREQUENCY_HZ", rewriter.getI64Type())};
+  PortInfo cycleCountPorts[] = {
+      {{rewriter.getStringAttr("clk"),
+        seq::ClockType::get(ctxt),
+        ModulePort::Direction::Input},
+       0},
+      {{rewriter.getStringAttr("rst"),
+        rewriter.getI1Type(),
+        ModulePort::Direction::Input},
+       1},
+  };
+  rewriter.setInsertionPointToEnd(
+      op->getParentOfType<mlir::ModuleOp>().getBody());
+  auto cosimCycleCountExternModule = HWModuleExternOp::create(
+      rewriter, loc, rewriter.getStringAttr("Cosim_CycleCount"),
+      cycleCountPorts, "Cosim_CycleCount",
+      ArrayAttr::get(ctxt, cycleCountParams));
+
+  // Create a wrapper module that will be instantiated in the top module.
+  // This module needs to have clock and reset inputs.
+  PortInfo cycleCountWrapperPorts[] = {
+      {{rewriter.getStringAttr("clk"),
+        seq::ClockType::get(ctxt),
+        ModulePort::Direction::Input},
+       0},
+      {{rewriter.getStringAttr("rst"),
+        rewriter.getI1Type(),
+        ModulePort::Direction::Input},
+       1},
+  };
+  hw::ModulePortInfo cycleCountPortInfo(cycleCountWrapperPorts);
+  (void)hw::HWModuleOp::create(
+      rewriter, loc, rewriter.getStringAttr("__ESICycleCounter"),
+      cycleCountPortInfo,
+      [&](OpBuilder &rewriter, const hw::HWModulePortAccessor &accessor) {
+        // Get clock and reset from the module arguments.
+        auto bodyBlock = rewriter.getInsertionBlock();
+        auto clk = bodyBlock->getArgument(0);
+        auto rst = bodyBlock->getArgument(1);
+
+        // Instantiate the external Cosim_CycleCount module.
+        // Use a default frequency of 100 MHz.
+        hw::InstanceOp::create(
+            rewriter, loc, cosimCycleCountExternModule, "__cycle_counter",
+            ArrayRef<Value>({clk, rst}),
+            rewriter.getArrayAttr({ParamDeclAttr::get(
+                "CORE_CLOCK_FREQUENCY_HZ",
+                rewriter.getI64IntegerAttr(100000000))}));
+      });
+
+  // Note: The instantiation of __ESICycleCounter will need to be done in the
+  // top module where clock and reset signals are available. This is left for a
+  // separate pattern or manual integration in designs that need cycle counting.
+
   rewriter.eraseOp(op);
   return success();
 }

@@ -149,6 +149,9 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 // HW-LABEL:    hw.module.extern @Cosim_Manifest<COMPRESSED_MANIFEST_SIZE: i32>(in %compressed_manifest : !hw.array<#hw.param.decl.ref<"COMPRESSED_MANIFEST_SIZE">xi8>) attributes {verilogName = "Cosim_Manifest"}
 // HW-LABEL:    hw.module @__ESIManifest()
 // HW:            hw.instance "__manifest" @Cosim_Manifest<COMPRESSED_MANIFEST_SIZE: i32 = {{.+}}>(compressed_manifest: %{{.+}}: !hw.array<{{.+}}xi8>) -> ()
+// HW-LABEL:    hw.module.extern @Cosim_CycleCount<CORE_CLOCK_FREQUENCY_HZ: i64>(in %clk : !seq.clock, in %rst : i1) attributes {verilogName = "Cosim_CycleCount"}
+// HW-LABEL:    hw.module @__ESICycleCounter(in %clk : !seq.clock, in %rst : i1)
+// HW:            hw.instance "__cycle_counter" @Cosim_CycleCount<CORE_CLOCK_FREQUENCY_HZ: i64 = 100000000>(clk: %clk: !seq.clock, rst: %rst: i1) -> ()
 
 // CHECK-LABEL: {
 // CHECK-LABEL:   "apiVersion": 0,

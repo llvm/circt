@@ -60,10 +60,14 @@ public:
   // Internal API
   //===--------------------------------------------------------------------===//
 
-  void setManifest(int esiVersion,
-                   const std::vector<uint8_t> &compressedManifest) {
+  void setSysInfo(int esiVersion,
+                  std::optional<GetCycleCountFunc> getCycleCount,
+                  std::optional<uint64_t> coreClockFrequencyHz,
+                  const std::vector<uint8_t> &compressedManifest) {
     this->compressedManifest = compressedManifest;
     this->esiVersion = esiVersion;
+    this->getCycleCount = getCycleCount;
+    this->coreClockFrequencyHz = coreClockFrequencyHz;
   }
 
   ReadChannelPort &registerReadPort(const std::string &name,
@@ -79,9 +83,9 @@ public:
   // RPC API implementations. See the .proto file for the API documentation.
   //===--------------------------------------------------------------------===//
 
-  ServerUnaryReactor *GetManifest(CallbackServerContext *context,
-                                  const VoidMessage *,
-                                  Manifest *response) override;
+  ServerUnaryReactor *GetSysInfo(CallbackServerContext *context,
+                                 const VoidMessage *,
+                                 SysInfo *response) override;
   ServerUnaryReactor *ListChannels(CallbackServerContext *, const VoidMessage *,
                                    ListOfChannels *channelsOut) override;
   ServerWriteReactor<esi::cosim::Message> *
@@ -94,6 +98,8 @@ public:
 private:
   Context &ctxt;
   int esiVersion;
+  std::optional<GetCycleCountFunc> getCycleCount;
+  std::optional<uint64_t> coreClockFrequencyHz;
   std::vector<uint8_t> compressedManifest;
   std::map<std::string, std::unique_ptr<RpcServerReadPort>> readPorts;
   std::map<std::string, std::unique_ptr<RpcServerWritePort>> writePorts;
@@ -201,9 +207,13 @@ WriteChannelPort &Impl::registerWritePort(const std::string &name,
   return *port;
 }
 
-ServerUnaryReactor *Impl::GetManifest(CallbackServerContext *context,
-                                      const VoidMessage *, Manifest *response) {
+ServerUnaryReactor *Impl::GetSysInfo(CallbackServerContext *context,
+                                     const VoidMessage *, SysInfo *response) {
   response->set_esi_version(esiVersion);
+  if (getCycleCount)
+    response->set_cycle_count((*getCycleCount)());
+  if (coreClockFrequencyHz)
+    response->set_core_clock_frequency_hz(*coreClockFrequencyHz);
   response->set_compressed_manifest(compressedManifest.data(),
                                     compressedManifest.size());
   ServerUnaryReactor *reactor = context->DefaultReactor();
@@ -401,12 +411,15 @@ Impl::SendToServer(CallbackServerContext *context,
 RpcServer::RpcServer(Context &ctxt) : ctxt(ctxt) {}
 RpcServer::~RpcServer() = default;
 
-void RpcServer::setManifest(int esiVersion,
-                            const std::vector<uint8_t> &compressedManifest) {
+void RpcServer::setSysInfo(int esiVersion,
+                           std::optional<GetCycleCountFunc> getCycleCount,
+                           std::optional<uint64_t> coreClockFrequencyHz,
+                           const std::vector<uint8_t> &compressedManifest) {
   if (!impl)
     throw std::runtime_error("Server not running");
 
-  impl->setManifest(esiVersion, compressedManifest);
+  impl->setSysInfo(esiVersion, getCycleCount, coreClockFrequencyHz,
+                   compressedManifest);
 }
 
 ReadChannelPort &RpcServer::registerReadPort(const std::string &name,

@@ -233,6 +233,12 @@ public:
       : SysInfo(conn), rpcClient(rpcClient) {}
 
   uint32_t getEsiVersion() const override { return rpcClient->getEsiVersion(); }
+  std::optional<uint64_t> getCycleCount() const override {
+    return rpcClient->getCycleCount();
+  }
+  std::optional<uint64_t> getCoreClockFrequency() const override {
+    return rpcClient->getCoreClockFrequency();
+  }
 
   std::vector<uint8_t> getCompressedManifest() const override {
     return rpcClient->getCompressedManifest();

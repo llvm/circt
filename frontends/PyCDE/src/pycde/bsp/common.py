@@ -77,12 +77,21 @@ def HeaderMMIO(manifest_loc: int) -> Module:
       address, address_valid = address_chan.unwrap(address_ready)
       address_words = address.as_bits()[3:]  # Lop off the lower three bits.
 
+      cycles = Counter(64)(clk=ports.clk,
+                           rst=ports.rst,
+                           clear=Bits(1)(0),
+                           increment=Bits(1)(1),
+                           instance_name="cycle_counter")
+
       # Layout the header as an array.
-      header = Array(Bits(64), 4)([0, MagicNumber, VersionNumber, manifest_loc])
+      header = Array(Bits(64), 8)([
+          0, MagicNumber, VersionNumber, manifest_loc,
+          cycles.out.as_bits(), 0, 0, 0
+      ])
       header.name = "header"
       header_response_valid = address_valid  # Zero latency read.
       # Select the approptiate header index.
-      header_out = header[address_words[:2]]
+      header_out = header[address_words[:3]]
       header_out.name = "header_out"
       # Wrap the response.
       data_chan, data_chan_ready = Channel(esi.MMIODataType).wrap(

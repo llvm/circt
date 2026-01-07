@@ -145,9 +145,20 @@ MMIOSysInfo::MMIOSysInfo(const MMIO *mmio)
 
 uint32_t MMIOSysInfo::getEsiVersion() const {
   uint64_t reg;
-  if ((reg = mmio->read(MetadataOffset)) != MagicNumber)
+  if ((reg = mmio->read(MetadataOffset + MagicNumberOffset)) != MagicNumber)
     throw std::runtime_error("Invalid magic number: " + toHex(reg));
-  return mmio->read(MetadataOffset + 8);
+  return mmio->read(MetadataOffset + VersionNumberOffset);
+}
+
+std::optional<uint64_t> MMIOSysInfo::getCycleCount() const {
+  return mmio->read(MetadataOffset + CycleCountOffset);
+}
+
+std::optional<uint64_t> MMIOSysInfo::getCoreClockFrequency() const {
+  uint64_t freq = mmio->read(MetadataOffset + CoreFreqOffset);
+  if (freq == 0)
+    return std::nullopt;
+  return freq;
 }
 
 std::vector<uint8_t> MMIOSysInfo::getCompressedManifest() const {
@@ -155,7 +166,7 @@ std::vector<uint8_t> MMIOSysInfo::getCompressedManifest() const {
   if (version != 0)
     throw std::runtime_error("Unsupported ESI header version: " +
                              std::to_string(version));
-  uint64_t manifestPtr = mmio->read(MetadataOffset + 0x10);
+  uint64_t manifestPtr = mmio->read(MetadataOffset + ManifestPtrOffset);
   uint64_t size = mmio->read(manifestPtr);
   uint64_t numWords = (size + 7) / 8;
   std::vector<uint64_t> manifestWords(numWords);

@@ -325,7 +325,12 @@ DPI int sv2cCosimserverInit() {
   return 0;
 }
 
-// ---- Manifest DPI entry points ----
+// ---- System info DPI entry points ----
+
+static std::optional<int> esiVersion;
+static std::optional<GetCycleCountFunc> getCycleCount;
+static std::optional<uint64_t> coreClockFrequencyHz;
+static std::vector<uint8_t> compressedManifest;
 
 DPI void
 sv2cCosimserverSetManifest(int esiVersion,
@@ -340,16 +345,43 @@ sv2cCosimserverSetManifest(int esiVersion,
     return;
   }
 
+  // Set the global esiVersion.
+  ::esiVersion = esiVersion;
+
   // Copy the message data into 'blob'.
   int size = svSizeOfArray(compressedManifest);
-  std::vector<uint8_t> blob(size);
+  ::compressedManifest.resize(size);
   for (int i = 0; i < size; ++i) {
-    blob[size - i - 1] = *(char *)svGetArrElemPtr1(compressedManifest, i);
+    ::compressedManifest[size - i - 1] =
+        *(char *)svGetArrElemPtr1(compressedManifest, i);
   }
   getLogger().info("cosim",
                    std::format("Setting manifest (esiVersion={}, size={})",
                                esiVersion, size));
-  server->setManifest(esiVersion, blob);
+  server->setSysInfo(esiVersion, getCycleCount, coreClockFrequencyHz,
+                     ::compressedManifest);
+}
+
+DPI void
+sv2cCosimserverSetCycleCountCallback(unsigned long long clockFrequencyHz) {
+  if (server == nullptr)
+    sv2cCosimserverInit();
+
+  // Store the clock frequency.
+  ::coreClockFrequencyHz = clockFrequencyHz;
+
+  // Create a wrapper that calls the DPI export function.
+  ::getCycleCount = []() -> uint64_t { return c2svCosimserverGetCycleCount(); };
+  getLogger().info(
+      "cosim",
+      std::format("Setting cycle count callback (clockFrequencyHz={} Hz)",
+                  clockFrequencyHz));
+
+  // Update the server's sys info if the manifest has already been set.
+  if (::esiVersion.has_value()) {
+    server->setSysInfo(*::esiVersion, getCycleCount, coreClockFrequencyHz,
+                       ::compressedManifest);
+  }
 }
 
 // ---- Low-level cosim DPI entry points ----
