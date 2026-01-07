@@ -97,7 +97,7 @@ jobs:
             -DLLVM_USE_SPLIT_DWARF=ON \
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
-            -DLLVM_LIT_ARGS="-v --show-unsupported" \
+            -DLLVM_LIT_ARGS="-v --show-unsupported --timeout 300" \
             -DCIRCT_SLANG_FRONTEND_ENABLED=ON
 
             # Temporarily disable ESI runtime builds until we work out the Abseil conflict (#7236).
