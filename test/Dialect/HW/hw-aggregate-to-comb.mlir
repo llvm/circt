@@ -91,3 +91,14 @@ hw.module private @struct_array(in %data_0 : !hw.struct<i: i2>, in %data_1 : !hw
   // CHECK-NEXT: hw.output %[[RESULT]]
   hw.output %0 : !hw.array<2x!hw.struct<i: i2>>
 }
+
+// CHECK-LABEL: @mux_array(
+hw.module private @mux_array(in %cond: i1, in %true_val: !hw.array<2xi2>, in %false_val: !hw.array<2xi2>, out out: !hw.array<2xi2>) {
+  // CHECK-NEXT: %[[FALSE_BITCAST:.+]] = hw.bitcast %false_val : (!hw.array<2xi2>) -> i4
+  // CHECK-NEXT: %[[TRUE_BITCAST:.+]] = hw.bitcast %true_val : (!hw.array<2xi2>) -> i4
+  // CHECK-NEXT: %[[MUX:.+]] = comb.mux %cond, %[[TRUE_BITCAST]], %[[FALSE_BITCAST]] : i4
+  // CHECK-NEXT: %[[RESULT:.+]] = hw.bitcast %[[MUX]] : (i4) -> !hw.array<2xi2>
+  // CHECK-NEXT: hw.output %[[RESULT]]
+  %0 = comb.mux %cond, %true_val, %false_val : !hw.array<2xi2>
+  hw.output %0 : !hw.array<2xi2>
+}
