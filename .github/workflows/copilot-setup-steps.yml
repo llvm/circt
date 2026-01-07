@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Pre-pull integration docker image
         env:
-          CIRCT_INTEGRATION_IMAGE: ghcr.io/circt/images/circt-integration-test:v19.2
+          CIRCT_INTEGRATION_IMAGE: ghcr.io/circt/images/circt-integration-test:v20
         run: |
           echo "CIRCT_INTEGRATION_IMAGE=$CIRCT_INTEGRATION_IMAGE" >> $GITHUB_ENV
           docker pull "$CIRCT_INTEGRATION_IMAGE"
