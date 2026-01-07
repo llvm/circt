@@ -18,6 +18,7 @@
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
+#include "circt/Firtool/Firtool.h"
 #include "circt/InitAllDialects.h"
 #include "circt/Support/JSON.h"
 #include "circt/Support/LoweringOptionsParser.h"
@@ -478,6 +479,10 @@ static LogicalResult executeWithHandler(MLIRContext *context,
   if (!module)
     return failure();
 
+  // Since some tools insist on treating empty modules as black boxes, we need
+  // to fix those up explicitly.
+  opts.loweringOptions.fixUpEmptyModules = true;
+
   // Load the emitter options from the command line. Command line options if
   // specified will override any module options.
   if (opts.loweringOptions.toString() != LoweringOptions().toString())
@@ -542,31 +547,21 @@ static LogicalResult executeWithHandler(MLIRContext *context,
   mlirFile->os().flush();
   mlirFile->keep();
 
-  // Open the Verilog file for writing.
-  SmallString<128> verilogPath(opts.resultDir);
-  llvm::sys::path::append(verilogPath, "design.sv");
-  auto verilogFile = openOutputFile(verilogPath, &errorMessage);
-  if (!verilogFile) {
-    WithColor::error() << errorMessage << "\n";
-    return failure();
-  }
-
   // Generate Verilog output.
+  firtool::FirtoolOptions firtoolOptions;
+  SmallString<128> verilogPath(opts.resultDir);
+  llvm::sys::path::append(verilogPath, "design");
+  firtoolOptions.setOutputFilename(verilogPath);
+
   PassManager pm(context);
   pm.enableVerifier(opts.verifyPasses);
-  pm.addPass(verif::createLowerTestsPass());
-  pm.addPass(
-      verif::createLowerSymbolicValuesPass({opts.symbolicValueLowering}));
-  pm.addPass(createLowerSimToSVPass());
-  pm.addPass(createLowerSeqToSVPass());
-  pm.addNestedPass<hw::HWModuleOp>(createLowerVerifToSVPass());
-  pm.addNestedPass<hw::HWModuleOp>(sv::createHWLegalizeModulesPass());
-  pm.addNestedPass<hw::HWModuleOp>(sv::createPrettifyVerilogPass());
-  pm.addPass(createExportVerilogPass(verilogFile->os()));
+  if (failed(firtool::populateHWToSV(pm, firtoolOptions)))
+    return failure();
+  if (failed(
+          firtool::populateExportSplitVerilog(pm, firtoolOptions, verilogPath)))
+    return failure();
   if (failed(pm.run(*module)))
     return failure();
-  verilogFile->os().flush();
-  verilogFile->keep();
 
   // Disable multi-threading if we are only doing a dry run. This ensures the
   // print output is in order and lines don't get jumbled.
