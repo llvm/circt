@@ -136,6 +136,11 @@ void circt::populateArcStateAllocationPipeline(
 }
 
 void circt::populateArcToLLVMPipeline(OpPassManager &pm) {
+  {
+    hw::HWConvertBitcastsOptions options;
+    options.allowPartialConversion = false;
+    pm.addPass(hw::createHWConvertBitcasts(options));
+  }
   pm.addPass(createLowerArcToLLVMPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
