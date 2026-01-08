@@ -161,12 +161,6 @@ constexpr const char *loadMemoryFromFileAnnoClass =
 constexpr const char *loadMemoryFromFileInlineAnnoClass =
     "firrtl.annotations.MemoryFileInlineAnnotation";
 
-// WiringTransform Annotations
-constexpr const char *wiringSinkAnnoClass =
-    "firrtl.passes.wiring.SinkAnnotation";
-constexpr const char *wiringSourceAnnoClass =
-    "firrtl.passes.wiring.SourceAnnotation";
-
 // Attribute annotations.
 constexpr const char *attributeAnnoClass = "firrtl.AttributeAnnotation";
 
