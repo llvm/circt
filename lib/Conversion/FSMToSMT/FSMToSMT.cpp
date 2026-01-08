@@ -72,6 +72,18 @@ public:
 
 private:
 
+  struct PendingAssertion {
+    int stateId;
+    Value predicateFsm; 
+  };
+  
+  struct Transition {
+    int from;
+    int to;
+    bool hasGuard = false, hasAction = false, hasOutput = false;
+    Region *guard = nullptr, *action = nullptr, *output = nullptr;
+  };
+  
   static Value bvToBool(OpBuilder &b, Location loc, Value v) {
     if (auto bvTy = llvm::dyn_cast<smt::BitVectorType>(v.getType())) {
       if (bvTy.getWidth() == 1) {
@@ -290,7 +302,7 @@ private:
       return smt::BVCmpOp::create(b, loc, p, toBv(args[0], loc), toBv(args[1], loc));
     }
 
-    llvm::outs() << "\n\nunsupported comb op: " << op;
+    llvm::errs() << "\n\nunsupported comb op: " << op;
     assert(false && "unsupported comb operation");
     return Value();
   }
@@ -316,14 +328,9 @@ private:
       auto ap = cst.getValue();
       return smt::BVConstantOp::create(b, loc, ap);
     }
-    llvm::outs() << "\n\nunsupported getSmtValue op: " << v;
-    return v;
+    llvm::errs() << "\n\nunsupported getSmtValue op: " << v;
+    assert(false && "unsupported getSmtValue operation");
   }
-
-  struct PendingAssertion {
-    int stateId;
-    Value predicateFsm; 
-  };
 
   SmallVector<Value> parseOutputRegion(Region *outputRegion, SmallVector<PendingAssertion> &assertions,
                          const SmallVector<std::pair<Value, Value>> &valToSmt, Location &loc, int stateId) {
@@ -345,14 +352,9 @@ private:
     }
 
     return outputSmtValues; 
-}
+  }
 
-  struct Transition {
-    int from;
-    int to;
-    bool hasGuard = false, hasAction = false, hasOutput = false;
-    Region *guard = nullptr, *action = nullptr, *output = nullptr;
-  };
+
 
   Transition parseTransition(fsm::TransitionOp t, int from,
                              SmallVector<std::string> &states, Location &loc) {
@@ -754,8 +756,6 @@ LogicalResult MachineOpConverter::dispatch() {
                          actionedStateFuncArgsForFunc);
                                          
           auto guardVal = guard(startingArgsOutsVars);
-          llvm::outs() << guardVal;
-          llvm::outs() << "\n\n";
           auto lhs = smt::AndOp::create(b, loc, startingStateFun, guardVal);
           return smt::ImpliesOp::create(b, loc, lhs, rhs);
           
@@ -763,11 +763,6 @@ LogicalResult MachineOpConverter::dispatch() {
 
     smt::AssertOp::create(b, loc, forall);
   }
-  
-  // Print lowered so far 
-  llvm::outs() << "\n\nLowered SMT so far:\n";
-  solver.print(llvm::outs());
-  llvm::outs() << "\n\n";
   
   // Lower each captured verif.assert as a safety clause:
   // Forall x. F_state(x) => predicate(x)
