@@ -2,7 +2,7 @@ if(ARCILATOR_JIT_ENABLED)
   add_compile_definitions(ARCILATOR_ENABLE_JIT)
   set(ARCILATOR_JIT_LLVM_COMPONENTS native)
   set(ARCILATOR_JIT_DEPS
-    ArcJITRuntime
+    CIRCTArcJITRuntime
     LLVMOrcJIT
     MLIRExecutionEngine
   )
