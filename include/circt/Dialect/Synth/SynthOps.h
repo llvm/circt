@@ -82,9 +82,8 @@ public:
   /// have higher priority. When arrival times are equal, use value numbering
   /// for determinism.
   bool operator>(const ValueWithArrivalTime &other) const {
-    return arrivalTime > other.arrivalTime ||
-           (arrivalTime == other.arrivalTime &&
-            valueNumbering > other.valueNumbering);
+    return std::tie(arrivalTime, valueNumbering) >
+           std::tie(other.arrivalTime, other.valueNumbering);
   }
 };
 
@@ -94,13 +93,12 @@ public:
 ///
 /// Template parameters:
 ///   T - The element type (must have operator> defined)
-///   Combine - Function to combine two elements into one
 ///
 /// The algorithm uses a min-heap to repeatedly combine the two elements with
 /// the earliest arrival times, which is optimal for minimizing maximum delay.
-template <typename T, typename Combine>
+template <typename T>
 T buildBalancedTreeWithArrivalTimes(llvm::ArrayRef<T> elements,
-                                    Combine combine) {
+                                    llvm::function_ref<T(T, T)> combine) {
   assert(!elements.empty() && "Cannot build tree from empty elements");
 
   if (elements.size() == 1)
@@ -109,11 +107,8 @@ T buildBalancedTreeWithArrivalTimes(llvm::ArrayRef<T> elements,
     return combine(elements[0], elements[1]);
 
   // Min-heap priority queue ordered by operator>
-  llvm::PriorityQueue<T, std::vector<T>, std::greater<T>> pq;
-
-  // Initialize with all elements
-  for (const auto &elem : elements)
-    pq.push(elem);
+  llvm::PriorityQueue<T, std::vector<T>, std::greater<T>> pq(elements.begin(),
+                                                             elements.end());
 
   // Greedily pair the two earliest-arriving elements
   while (pq.size() > 1) {
