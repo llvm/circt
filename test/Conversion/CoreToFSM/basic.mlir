@@ -44,3 +44,24 @@ hw.module @counter(in %clk : !seq.clock, in %rst : i1, in %inp : i1, out output 
 // CHECK: } transitions {
 // Transitions from state_2: to state_3 (inp=1), stay at state_2 (inp=0)
 // CHECK:   fsm.transition @state_{{[0-3]}} guard {
+
+// Test self-referential register: a register whose input is its own output.
+// This represents an FSM that always stays in the same state.
+// This used to crash - verify it now produces valid output.
+// CHECK-LABEL: fsm.machine @self_referential
+// CHECK-SAME: () -> i1
+// CHECK-SAME: attributes {initialState = "state_0"}
+// CHECK: fsm.state @state_0 output {
+// CHECK:   %[[FALSE:.*]] = hw.constant false
+// CHECK:   fsm.output %[[FALSE]] : i1
+// CHECK: } transitions {
+// CHECK:   fsm.transition @state_0 guard {
+// CHECK:     %[[TRUE:.*]] = hw.constant true
+// CHECK:     fsm.return %[[TRUE]]
+// CHECK:   }
+// CHECK: }
+hw.module @self_referential(in %clk : !seq.clock, in %rst : i1, out output : i1) {
+    %c0_i1 = hw.constant 0 : i1
+    %state = seq.compreg name "state" %state, %clk reset %rst, %c0_i1 : i1
+    hw.output %c0_i1 : i1
+}

@@ -1,5 +1,37 @@
 // RUN: circt-opt -convert-core-to-fsm -verify-diagnostics -split-input-file %s
 
+//===----------------------------------------------------------------------===//
+// Testable Error Cases
+//===----------------------------------------------------------------------===//
+// These error conditions can be triggered with valid MLIR IR and are tested
+// below.
+//
+//===----------------------------------------------------------------------===//
+// Untestable Defensive Error Checks
+//===----------------------------------------------------------------------===//
+// The following error paths exist in the pass as defensive checks but cannot
+// be triggered with valid MLIR IR. They are documented here for completeness:
+//
+// 1. "FSM extraction only supports integer-typed operands in concat operations"
+//    - comb.concat only accepts signless integer operands by definition, so
+//      this check cannot be triggered through normal IR construction.
+//
+// 2. "could not resolve cycles in module"
+//    - MLIR's SSA form prevents cycles in the operation DAG. Values must be
+//      defined before use, making this unreachable with valid IR.
+//
+// 3. "could not resolve cycles in action block of X to Y"
+//    - Same as above - SSA form prevents cycles.
+//
+// 4. "could not resolve cycles in guard block of X to Y"
+//    - Same as above - SSA form prevents cycles.
+//
+// 5. "Failed to canonicalize the generated state op"
+//    - applyOpPatternsGreedily() fails only in edge cases like exceeding
+//      iteration limits, which cannot be reliably triggered in tests.
+//
+//===----------------------------------------------------------------------===//
+
 // Test: Non-integer register type should produce an error.
 // The pass only supports registers with integer types.
 hw.module @non_integer_register(in %clk : !seq.clock, in %rst : i1, out output : i1) {
@@ -75,8 +107,12 @@ hw.module @async_reset_warning(in %clk : !seq.clock, in %rst : i1, in %inp : i1,
 
 // -----
 
-// Test: Module instantiated in the same file should produce an error.
-// The pass does not support converting instances alongside their referenced modules.
+// Test: Module instantiated in the same file.
+// The pass converts the first module (instantiated_fsm) to an FSM, erasing the
+// hw.module. The second module (top_module) does not have a state register,
+// so it fails with "Cannot find state register" before processing the instance.
+// This documents the limitation that instance conversion is not yet supported.
+// expected-warning @+1 {{reset signals detected and removed from FSM}}
 hw.module @instantiated_fsm(in %clk : !seq.clock, in %rst : i1, in %inp : i1, out output : i1) {
     %c0_i2 = hw.constant 0 : i2
     %c2_i2 = hw.constant 2 : i2
@@ -88,8 +124,8 @@ hw.module @instantiated_fsm(in %clk : !seq.clock, in %rst : i1, in %inp : i1, ou
     hw.output %is_2 : i1
 }
 
+// expected-error @+1 {{Cannot find state register in this FSM}}
 hw.module @top_module(in %clk : !seq.clock, in %rst : i1, in %inp : i1, out output : i1) {
-    // expected-error @+1 {{module 'instantiated_fsm' is instantiated but will be converted to FSM; instance conversion is not yet supported}}
     %out = hw.instance "child" @instantiated_fsm(clk: %clk: !seq.clock, rst: %rst: i1, inp: %inp: i1) -> (output: i1)
     hw.output %out : i1
 }

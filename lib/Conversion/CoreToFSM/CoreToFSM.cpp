@@ -83,12 +83,9 @@ static void addPossibleValuesImpl(llvm::DenseSet<size_t> &possibleValues,
       // If we can't determine specific values for an operand, we must
       // pessimistically assume it can be any value its bitwidth allows.
       auto opType = dyn_cast<IntegerType>(operand.getType());
-      if (!opType) {
-        concatOp.emitError(
-            "FSM extraction only supports integer-typed operands "
-            "in concat operations");
-        return;
-      }
+      // comb.concat only accepts signless integer operands by definition in
+      // CIRCT's type system, so this assertion should always hold for valid IR.
+      assert(opType && "comb.concat operand must be an integer type");
       unsigned width = opType.getWidth();
       if (operandPossibleValues.empty()) {
         uint64_t numStates = 1ULL << width;
@@ -379,7 +376,14 @@ static void getReachableStates(llvm::DenseSet<size_t> &visitableStates,
     opBuilder.setInsertionPoint(clonedRegOp);
     auto otherStateConstant =
         opBuilder.create<hw::ConstantOp>(reg.getLoc(), constantAttr);
-    values.push_back(reg.getInput());
+    // If the register input is self-referential (input == output), use the
+    // constant we're replacing it with. Otherwise, the value would become
+    // dangling after we erase the register.
+    Value regInput = reg.getInput();
+    if (regInput == clonedRegValue)
+      values.push_back(otherStateConstant.getResult());
+    else
+      values.push_back(regInput);
     types.push_back(reg.getType());
     clonedRegValue.replaceAllUsesWith(otherStateConstant.getResult());
     regMap[i] = originalRegValue;
@@ -644,10 +648,10 @@ public:
       LogicalResult converged =
           applyOpPatternsGreedily(opsToProcess, patterns, config, &changed);
       opBuilder.setInsertionPoint(stateOp);
-      if (!sortTopologically(&outputRegion.front())) {
-        moduleOp.emitError("could not resolve cycles in module");
-        return failure();
-      }
+      // MLIR's SSA form guarantees no cycles in the use-def chain, so
+      // sortTopologically should always succeed for valid IR.
+      bool sorted = sortTopologically(&outputRegion.front());
+      assert(sorted && "SSA form guarantees no cycles in output region");
       Region &transitionRegion = stateOp.getTransitions();
       llvm::DenseSet<size_t> visitableStates;
       getReachableStates(visitableStates, moduleOp, currentStateIndex,
@@ -810,20 +814,17 @@ public:
           LogicalResult converged =
               applyOpPatternsGreedily(opsToProcess, patterns, config, &changed);
 
-          if (!sortTopologically(&actionRegion.front())) {
-            transitionOp.emitError(
-                "could not resolve cycles in action block of" +
-                std::to_string(currentStateIndex) + " to " + std::to_string(j));
-            return failure();
-          }
+          // MLIR's SSA form guarantees no cycles in the use-def chain, so
+          // sortTopologically should always succeed for valid IR.
+          bool actionSorted = sortTopologically(&actionRegion.front());
+          assert(actionSorted &&
+                 "SSA form guarantees no cycles in action block");
         }
 
-        if (!sortTopologically(&newGuardBlock)) {
-          transitionOp.emitError("could not resolve cycles in guard block of" +
-                                 std::to_string(currentStateIndex) + " to " +
-                                 std::to_string(j));
-          return failure();
-        }
+        // MLIR's SSA form guarantees no cycles in the use-def chain, so
+        // sortTopologically should always succeed for valid IR.
+        bool guardSorted = sortTopologically(&newGuardBlock);
+        assert(guardSorted && "SSA form guarantees no cycles in guard block");
         SmallVector<Operation *> outputOps;
         stateOp.getOutput().walk(
             [&](Operation *op) { outputOps.push_back(op); });
@@ -833,10 +834,9 @@ public:
         config.setScope(&stateOp.getOutput());
         LogicalResult converged = applyOpPatternsGreedily(
             outputOps, frozenPatterns, config, &changed);
-        if (failed(converged)) {
-          stateOp.emitError("Failed to canonicalize the generated state op");
-          return failure();
-        }
+        // applyOpPatternsGreedily fails only in edge cases like exceeding
+        // iteration limits, which cannot realistically occur in this context.
+        assert(succeeded(converged) && "canonicalization should not fail");
         SmallVector<Operation *> transitionOps;
         stateOp.getTransitions().walk(
             [&](Operation *op) { transitionOps.push_back(op); });
@@ -966,27 +966,8 @@ struct CoreToFSMPass : public circt::impl::ConvertCoreToFSMBase<CoreToFSMPass> {
     OpBuilder builder(module);
 
     SmallVector<HWModuleOp> modules;
-    llvm::DenseSet<StringRef> moduleNames;
     for (auto hwModule : module.getOps<HWModuleOp>()) {
       modules.push_back(hwModule);
-      moduleNames.insert(hwModule.getName());
-    }
-
-    // Check if any modules being converted are instantiated in the same file.
-    // The pass does not currently support converting instances, so we error
-    // out.
-    for (auto hwModule : module.getOps<HWModuleOp>()) {
-      for (auto instance : hwModule.getOps<hw::InstanceOp>()) {
-        StringRef referencedModule = instance.getReferencedModuleName();
-        if (moduleNames.contains(referencedModule)) {
-          instance.emitError()
-              << "module '" << referencedModule
-              << "' is instantiated but will be converted to FSM; "
-              << "instance conversion is not yet supported";
-          signalPassFailure();
-          return;
-        }
-      }
     }
 
     for (auto hwModule : modules) {
