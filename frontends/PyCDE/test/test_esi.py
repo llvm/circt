@@ -245,22 +245,31 @@ class ListTest(Module):
     self.lst_out = self.lst_in
 
 
-# CHECK-LABEL:  hw.module @ChannelTransform(in %s1_in : !esi.channel<i32>, out s2_out : !esi.channel<i8>)
+# CHECK-LABEL:  hw.module @ChannelTransform(in %clk : !seq.clock, in %s1_in : !esi.channel<i32>, out s2_out : !esi.channel<i8>)
 # CHECK-NEXT:     %valid, %ready, %data = esi.snoop.vr %s1_in : !esi.channel<i32>
-# CHECK-NEXT:     %transaction, %{{.+}} = esi.snoop.xact %s1_in : !esi.channel<i32>
+# CHECK-NEXT:     %transaction, [[SNOOP_DATA:%.+]] = esi.snoop.xact %s1_in : !esi.channel<i32>
+# CHECK-NEXT:     [[CLK_I1:%.+]] = seq.from_clock %clk
+# CHECK-NEXT:     sv.alwaysff(posedge [[CLK_I1]]) {
+# CHECK-NEXT:       sv.if %transaction {
+# CHECK-NEXT:         sv.info "Pre-transform: %p"([[SNOOP_DATA]]) : i32
+# CHECK-NEXT:       }
+# CHECK-NEXT:     }
 # CHECK-NEXT:     %rawOutput, [[VALID2:%.+]] = esi.unwrap.vr %s1_in, [[READY2:%.+]] : i32
 # CHECK-NEXT:     [[R0:%.+]] = comb.extract %rawOutput from 0 : (i32) -> i8
 # CHECK-NEXT:     %chanOutput, [[READY2]] = esi.wrap.vr [[R0]], [[VALID2]] : i8
 # CHECK-NEXT:     hw.output %chanOutput : !esi.channel<i8>
 @unittestmodule()
 class ChannelTransform(Module):
+  clk = Clock()
   s1_in = InputChannel(Bits(32))
   s2_out = OutputChannel(Bits(8))
 
   @generator
   def build(self):
+    from pycde.testing import print_info
     valid, ready, data = self.s1_in.snoop()
-    xact, _ = self.s1_in.snoop_xact()
+    xact, snooped_data = self.s1_in.snoop_xact()
+    xact.when_true(lambda: print_info("Pre-transform: %p", snooped_data))
     self.s2_out = self.s1_in.transform(lambda x: x[0:8])
 
 

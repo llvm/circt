@@ -52,15 +52,18 @@ set(PYTHON_BINDINGS_LINK_LIBS
   CIRCTCAPIPipeline
   CIRCTCAPIRTG
   CIRCTCAPISeq
+  CIRCTCAPISim
   CIRCTCAPISV
   CIRCTCAPISupport
   CIRCTCAPIVerif
   CIRCTCAPITransforms
   CIRCTCAPISynth
   MLIRCAPIIndex
+  MLIRCAPILLVM
   MLIRCAPISMT
   MLIRCAPIExportSMTLIB
   MLIRCAPISCF
+  MLIRCAPITarget
   # needed for mlirFrozenRewritePatternSetDestroy
   # but not the actual passes
   MLIRCAPITransforms
@@ -278,6 +281,14 @@ declare_mlir_dialect_python_bindings(
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/SimOps.td
+  SOURCES
+    dialects/sim.py
+  DIALECT_NAME sim)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   TD_FILE dialects/VerifOps.td
   SOURCES
     dialects/verif.py
@@ -320,6 +331,7 @@ add_mlir_python_modules(CIRCTPythonModules
   INSTALL_PREFIX "python_packages/circt_core/circt"
   DECLARED_SOURCES
     MLIRPythonSources.Core
+    MLIRPythonSources.Dialects.llvm
     MLIRPythonSources.Dialects.smt
     CIRCTBindingsPythonExtension
     CIRCTBindingsPythonSources

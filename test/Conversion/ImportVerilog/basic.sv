@@ -169,15 +169,15 @@ module Basic;
   MyEnum ev2 = VariantB;
 
   // CHECK: [[STR_WELCOME:%.+]] = moore.constant_string "Welcome to Moore" : i128
-  // CHECK: [[CONV_WELCOME:%.+]] = moore.conversion [[STR_WELCOME]] : !moore.i128 -> !moore.string
+  // CHECK: [[CONV_WELCOME:%.+]] = moore.int_to_string [[STR_WELCOME]] : i128
   // CHECK: [[VAR_S:%.+]] = moore.variable [[CONV_WELCOME]] : <string>
   string s = "Welcome to Moore";
 
   // CHECK: [[VAR_S1:%.+]] = moore.variable : <string>
   // CHECK: [[STR_HELLO:%.+]] = moore.constant_string "Hello World" : i88
-  // CHECK: [[CONV_HELLO:%.+]] = moore.conversion [[STR_HELLO]] : !moore.i88 -> !moore.string
+  // CHECK: [[CONV_HELLO:%.+]] = moore.int_to_string [[STR_HELLO]] : i88
   // CHECK: moore.assign [[VAR_S1]], [[CONV_HELLO]] : string
-  string s1; 
+  string s1;
   assign s1 = "Hello World";
 
   typedef struct packed { bit x; bit y; } MyStruct;
@@ -756,11 +756,11 @@ module Expressions;
   // CHECK: %m = moore.variable : <l4>
   logic [3:0] m;
   // CHECK: [[STR_HELLO:%.+]] = moore.constant_string "Hello" : i40
-  // CHECK: [[CONV_HELLO:%.+]] = moore.conversion [[STR_HELLO]] : !moore.i40 -> !moore.string
+  // CHECK: [[CONV_HELLO:%.+]] = moore.int_to_string [[STR_HELLO]] : i40
   // CHECK: [[VAR_S:%.+]] = moore.variable [[CONV_HELLO]] : <string>
   string s = "Hello";
   // CHECK: [[STR_WORLD:%.+]] = moore.constant_string "World" : i40
-  // CHECK: [[CONV_WORLD:%.+]] = moore.conversion [[STR_WORLD]] : !moore.i40 -> !moore.string
+  // CHECK: [[CONV_WORLD:%.+]] = moore.int_to_string [[STR_WORLD]] : i40
   // CHECK: [[VAR_S1:%.+]] = moore.variable [[CONV_WORLD]] : <string>
   string s1 = "World";
 
@@ -1620,6 +1620,53 @@ module Conversion;
   // CHECK: [[TMP2:%.+]] = moore.sbv_to_packed [[TMP1]] : struct<{a: i32, b: i32}>
   // CHECK: %f = moore.variable [[TMP2]]
   struct packed { int a; int b; } f = '0;
+endmodule
+
+// CHECK-LABEL: moore.module @intToFormatStringConversion
+module intToFormatStringConversion();
+  bit [8*14:1] a = "Test";
+
+  // CHECK: procedure initial
+  // CHECK-NEXT: [[READ:%.+]] = moore.read %a : <i112>
+  // CHECK-NEXT: [[STR:%.+]] = moore.int_to_string [[READ]] : i112
+  // CHECK-NEXT: [[FMT:%.+]] = moore.fmt.string [[STR]]
+  // CHECK-NEXT: [[LINEBREAK:%.+]] = moore.fmt.literal "\0A"
+  // CHECK-NEXT: [[CONCAT:%.+]] = moore.fmt.concat ([[FMT]], [[LINEBREAK]])
+  // CHECK-NEXT: moore.builtin.display [[CONCAT]]
+  initial begin
+    $display("%s", a);
+  end
+endmodule
+
+// CHECK-LABEL: moore.module @realToTimeConversion
+module realToTimeConversion;
+  // CHECK: procedure initial
+  // CHECK: [[TIME:%.+]] = moore.builtin.time 
+  // CHECK: [[TIME_TO_LOGIC:%.+]] = moore.time_to_logic [[TIME]]
+  // CHECK: [[INT:%.+]] = moore.logic_to_int [[TIME_TO_LOGIC]] : l64 
+  // CHECK: [[REAL:%.+]] = moore.uint_to_real [[INT]] : i64 -> f64 
+  // CHECK: [[SCALE:%.+]] = moore.constant_real 1.000000e+05 : f64 
+  // CHECK: [[DIV:%.+]] = moore.fdiv [[REAL]], [[SCALE]] : f64 
+  // CHECK: [[FMT:%.+]] = moore.fmt.real float [[DIV]], : f64 
+  initial
+    $display("%0.3f", $time);
+endmodule
+
+// CHECK-LABEL: moore.module @timeToRealConversion
+module timeToRealConversion;
+  realtime x = 0.3;
+
+  // CHECK: procedure initial
+  // CHECK: [[READ_X:%.+]] = moore.read %x : <time>
+  // CHECK: [[TIME_TO_LOGIC:%.+]] = moore.time_to_logic [[READ_X]]
+  // CHECK: [[LOGIC_TO_INT:%.+]] = moore.logic_to_int [[TIME_TO_LOGIC]] : l64
+  // CHECK: [[UINT_TO_REAL:%.+]] = moore.uint_to_real [[LOGIC_TO_INT]] : i64 -> f64
+  // CHECK: [[SCALE:%.+]] = moore.constant_real 1.000000e+05 : f64
+  // CHECK: [[DIV:%.+]] = moore.fdiv [[UINT_TO_REAL]], [[SCALE]] : f64
+  // CHECK: [[FMT:%.+]] = moore.fmt.real float [[DIV]], : f64
+  initial begin
+    $display("%f", x);
+   end
 endmodule
 
 // CHECK-LABEL: moore.module @TimeConversion1
@@ -3175,26 +3222,21 @@ function automatic int unsigned returnParameterArrayElement (int idx);
 endfunction
 
 // CHECK-LABEL: func.func private @TimeFormat(
-function void TimeFormat();
-  // CHECK: [[TIME:%.+]] = moore.constant_time 100000000 fs
-  localparam time TestTime = 100ns;
-  // CHECK-NEXT: [[FMT:%.+]] = moore.fmt.time [[TIME]]
-  // CHECK-NEXT: [[LINEBREAK:%.+]] = moore.fmt.literal "\0A"
-  // CHECK-NEXT: [[CONCAT:%.+]] = moore.fmt.concat ([[FMT]], [[LINEBREAK]])
-  // CHECK-NEXT: moore.builtin.display [[CONCAT]]
-  $display("%t", TestTime);
-  // CHECK: [[SIMTIME:%.+]] = moore.builtin.time
-  // CHECK-NEXT: [[FMT2:%.+]] = moore.fmt.time [[SIMTIME]]
-  // CHECK-NEXT: [[LINEBREAK2:%.+]] = moore.fmt.literal "\0A"
-  // CHECK-NEXT: [[CONCAT2:%.+]] = moore.fmt.concat ([[FMT2]], [[LINEBREAK2]])
-  // CHECK-NEXT: moore.builtin.display [[CONCAT2]]
-  $display("%t", $time());
-  // CHECK: [[SIMTIME3:%.+]] = moore.builtin.time
-  // CHECK-NEXT: [[FMT3:%.+]] = moore.fmt.time [[SIMTIME3]], width 4
-  // CHECK-NEXT: [[LINEBREAK3:%.+]] = moore.fmt.literal "\0A"
-  // CHECK-NEXT: [[CONCAT3:%.+]] = moore.fmt.concat ([[FMT3]], [[LINEBREAK3]])
-  // CHECK-NEXT: moore.builtin.display [[CONCAT3]]
-  $display("%4t", $time());
+function void TimeFormat(time x);
+  // CHECK: [[TMP1:%.+]] = moore.time_to_logic
+  // CHECK: [[TMP2:%.+]] = moore.constant
+  // CHECK: [[TMP3:%.+]] = moore.divu [[TMP1]], [[TMP2]]
+  // CHECK: [[TMP4:%.+]] = moore.logic_to_int [[TMP3]]
+  // CHECK: moore.fmt.int decimal [[TMP4]], align right, pad space width 20
+  $display("%t", x);
+  // CHECK: moore.fmt.int decimal {{%.+}}, align right, pad space width 42
+  $display("%42t", x);
+  // CHECK: moore.fmt.int decimal {{%.+}}, align left, pad space width 42
+  $display("%-42t", x);
+  // CHECK: moore.fmt.int decimal {{%.+}}, align right, pad zero width 20
+  $display("%0t", x);
+  // CHECK: moore.fmt.int decimal {{%.+}}, align right, pad zero width 0
+  $display("%00t", x);
 endfunction
 
 // CHECK-LABEL: func.func private @StructCreateConversion(
@@ -3207,10 +3249,10 @@ function void StructCreateConversion (logic [7:0][7:0] array, logic [63:0] immed
    } testStruct;
 
     // CHECK: [[TS:%.+]] = moore.struct_create [[IMM]] : !moore.l64 -> struct<{structField: l64}>
-   testStruct ts = '{structField: immediate};
+   automatic testStruct ts = '{structField: immediate};
     // CHECK: [[CAST:%.+]] = moore.packed_to_sbv [[ARRAY]] : array<8 x l8>
     // CHECK-NEXT: [[TS2:%.+]] = moore.struct_create [[CAST]] : !moore.l64 -> struct<{structField: l64}>
-   testStruct ts2 = '{structField: array};
+   automatic testStruct ts2 = '{structField: array};
 
 endfunction
 
@@ -3241,7 +3283,8 @@ function automatic void ConcatSformatf(string testStr, string otherString, ref s
    // CHECK-NEXT: [[FMTSTR6:%.+]] = moore.fmt.string [[STR2]]
    // CHECK-NEXT: [[CONCAT3:%.+]] = moore.fmt.concat ([[FMTSTR5]], [[SPC3]], [[FMTSTR6]])
    // CHECK-NEXT: [[STROUT3:%.+]] = moore.fstring_to_string [[CONCAT3]]
-   // CHECK-NEXT: [[CONV:%.+]] = moore.conversion [[STROUT3]] : !moore.string -> !moore.l64
+   // CHECK-NEXT: [[CONV0:%.+]] = moore.string_to_int [[STROUT3]] : i64
+   // CHECK-NEXT: [[CONV:%.+]] = moore.int_to_logic [[CONV0]] : i64
    // CHECK-NEXT: moore.blocking_assign [[LV]], [[CONV]] : l64
    $sformat(logicVector, "%s %s", testStr, otherString);
 endfunction
@@ -3325,13 +3368,13 @@ function automatic void RealConversion(shortreal sr, real r, bit[41:0] i, longin
    longint longIntTest2 = longint'(r);
 
 
-   // CHECK: [[SRTEST:%.+]] = moore.int_to_real [[INT]] : i42 -> f32
+   // CHECK: [[SRTEST:%.+]] = moore.uint_to_real [[INT]] : i42 -> f32
    shortreal srTest = shortreal'(i);
-   // CHECK: [[SRTEST2:%.+]] = moore.int_to_real [[LINT]] : i64 -> f32
+   // CHECK: [[SRTEST2:%.+]] = moore.sint_to_real [[LINT]] : i64 -> f32
    shortreal srTest2 = shortreal'(longi);
-   // CHECK: [[RTEST:%.+]] = moore.int_to_real [[INT]] : i42 -> f64
+   // CHECK: [[RTEST:%.+]] = moore.uint_to_real [[INT]] : i42 -> f64
    real rTest = real'(i);
-   // CHECK: [[RTEST2:%.+]] = moore.int_to_real [[LINT]] : i64 -> f64
+   // CHECK: [[RTEST2:%.+]] = moore.sint_to_real [[LINT]] : i64 -> f64
    real rTest2 = real'(longi);
 
    // CHECK: [[IMM:%.+]] = moore.real_to_int [[LR]] : f64 -> i32
@@ -3341,7 +3384,7 @@ function automatic void RealConversion(shortreal sr, real r, bit[41:0] i, longin
 
    // CHECK: [[R:%.+]] = moore.read [[logicTest]] : <l32>
    // CHECK-NEXT: [[IMM2:%.+]] = moore.logic_to_int [[R]] : l32
-   // CHECK-NEXT: [[F2:%.+]] = moore.int_to_real [[IMM2]] : i32 -> f64
+   // CHECK-NEXT: [[F2:%.+]] = moore.uint_to_real [[IMM2]] : i32 -> f64
    real realTest = real'(logicTest);
 endfunction
 
@@ -3439,7 +3482,7 @@ module RealLiteral();
    // CHECK-NEXT: [[A:%.+]] = moore.variable [[REALCONSTANT]] : <f64>
    real a = 0.5;
    // CHECK-NEXT: [[REALCONSTANT:%.+]] = moore.constant_real 5.000000e-01 : f64
-   // CHECK-NEXT: [[SHORTREALCONSTANT:%.+]] = moore.conversion [[REALCONSTANT]] : !moore.f64 -> !moore.f32
+   // CHECK-NEXT: [[SHORTREALCONSTANT:%.+]] = moore.convert_real [[REALCONSTANT]] : f64 -> f32
    // CHECK-NEXT: [[B:%.+]] = moore.variable [[SHORTREALCONSTANT]] : <f32>
    shortreal b = 0.5;
 
@@ -3485,6 +3528,17 @@ function string testStrLiteralReturn;
     // CHECK-NEXT: return [[STR]] : !moore.string
     return testStrLiteral;
 endfunction // testStrLiteralReturn
+
+// CHECK-LABEL: func.func private @testStrLiteralAsIntReturn()
+// CHECK-SAME: -> !moore.i1 {
+function bit testStrLiteralAsIntReturn;
+    // CHECK-NEXT: [[CONST:%.+]] = moore.constant_string "\22A string literal\22" : i127 
+    // CHECK-NEXT: [[STR:%.+]] = moore.int_to_string [[CONST]] : i127 
+    // CHECK-NEXT: [[INT:%.+]] = moore.string_to_int [[STR]] : i1 
+    // CHECK-NEXT: return [[INT]] : !moore.i1
+    parameter string testStrLiteral = "A string literal";
+    return bit'(testStrLiteral);
+endfunction // testStrLiteralAsIntReturn
 
 // CHECK-LABEL: func.func private @testRealOps()
 function void testRealOps;
@@ -3733,3 +3787,78 @@ package PackageGlobal;
   // CHECK-NEXT: moore.yield [[TMP2]] : i42
   bit [41:0] packageGlobal2 = packageGlobal1;
 endpackage
+
+// CHECK-LABEL: moore.module @realtimeOperations
+module realtimeOperations;
+  realtime x;
+  shortreal a = 0.3;
+
+  // CHECK: procedure initial
+  // CHECK: moore.fadd %{{.*}}, %{{.*}} : f64
+  // CHECK: moore.fgt %{{.*}}, %{{.*}} : f64 -> i1
+  initial begin
+    x = x + a;
+    if (x > 1.1001) begin
+      $finish;
+    end
+  end 
+  // CHECK: procedure initial
+  // CHECK: moore.constant_real
+  // CHECK: [[ONE:%.+]] = moore.constant_real 1.000000e+05 : f64
+  // CHECK: moore.fadd %{{.*}}, [[ONE]] : f64
+  initial begin
+    x = ++x;
+  end
+  // CHECK: procedure initial
+  // CHECK: moore.fneg %{{.*}} : f64
+  initial begin
+    x = -x;
+  end
+endmodule
+
+// CHECK-LABEL: moore.module @subroutineResultValueCastedToCorrecType
+module subroutineResultValueCastedToCorrecType;
+  // CHECK: moore.xor {{%.+}}, {{.*}} : i32
+	int a = $time && (25'h300a ^ $stime);
+endmodule
+
+// CHECK-LABEL: moore.module @implicitCastsFunctionArguments
+module implicitCastsFunctionArguments;
+  real r, q;
+
+  function void fn(output logic [3:0] o, input logic [3:0] val);
+    o = val;
+  endfunction
+
+  // CHECK: procedure initial
+  initial begin
+    // CHECK: [[TMP1:%.+]] = moore.conversion %q : !moore.ref<f64> -> !moore.ref<l4>
+    // CHECK: [[TMP2:%.+]] = moore.read %r : <f64>
+    // CHECK: [[TMP3:%.+]] = moore.real_to_int [[TMP2]] : f64 -> i4
+    // CHECK: [[TMP4:%.+]] = moore.int_to_logic [[TMP3]] : i4
+    // CHECK: func.call @fn([[TMP1]], [[TMP4]]) : (!moore.ref<l4>, !moore.l4) -> ()
+    fn(q, r);
+  end
+endmodule
+
+// CHECK-LABEL: moore.module @ProgramsAreMostlyModules
+program ProgramsAreMostlyModules;
+endprogram
+
+// CHECK-LABEL: moore.module @Events
+module Events;
+  // CHECK: [[EVENT:%.+]] = moore.variable : <i1>
+  event e;
+  // CHECK: moore.procedure initial {
+  // CHECK-NEXT: [[TMP1:%.+]] = moore.read [[EVENT]]
+  // CHECK-NEXT: [[TMP2:%.+]] = moore.not [[TMP1]]
+  // CHECK-NEXT: moore.blocking_assign [[EVENT]], [[TMP2]]
+  initial ->e;
+  // CHECK: moore.procedure initial {
+  // CHECK-NEXT: moore.wait_event {
+  // CHECK-NEXT:   [[TMP1:%.+]] = moore.read [[EVENT]]
+  // CHECK-NEXT:   moore.detect_event any [[TMP1]]
+  // CHECK-NEXT: }
+  // CHECK-NEXT: call @dummyA()
+  initial @(e) dummyA();
+endmodule

@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/backends/RpcServer.h"
+#include "esi/Context.h"
 #include "esi/Utils.h"
 
 #include "cosim.grpc.pb.h"
@@ -20,6 +21,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
+#include <format>
 
 using namespace esi;
 using namespace esi::cosim;
@@ -49,8 +51,10 @@ class RpcServerWritePort;
 class esi::cosim::RpcServer::Impl
     : public esi::cosim::ChannelServer::CallbackService {
 public:
-  Impl(int port);
+  Impl(Context &ctxt, int port);
   ~Impl();
+
+  Context &getContext() { return ctxt; }
 
   //===--------------------------------------------------------------------===//
   // Internal API
@@ -67,7 +71,9 @@ public:
   WriteChannelPort &registerWritePort(const std::string &name,
                                       const std::string &type);
 
-  void stop();
+  void stop(uint32_t timeoutMS = 0);
+
+  int getPort() { return port; }
 
   //===--------------------------------------------------------------------===//
   // RPC API implementations. See the .proto file for the API documentation.
@@ -86,11 +92,12 @@ public:
                                    esi::cosim::VoidMessage *response) override;
 
 private:
+  Context &ctxt;
   int esiVersion;
   std::vector<uint8_t> compressedManifest;
   std::map<std::string, std::unique_ptr<RpcServerReadPort>> readPorts;
   std::map<std::string, std::unique_ptr<RpcServerWritePort>> writePorts;
-
+  int port = -1;
   std::unique_ptr<Server> server;
 };
 using Impl = esi::cosim::RpcServer::Impl;
@@ -123,13 +130,15 @@ public:
 class RpcServerWritePort : public WriteChannelPort {
 public:
   RpcServerWritePort(Type *type) : WriteChannelPort(type) {}
-  void write(const MessageData &data) override { writeQueue.push(data); }
-  bool tryWrite(const MessageData &data) override {
+
+  utils::TSQueue<MessageData> writeQueue;
+
+protected:
+  void writeImpl(const MessageData &data) override { writeQueue.push(data); }
+  bool tryWriteImpl(const MessageData &data) override {
     writeQueue.push(data);
     return true;
   }
-
-  utils::TSQueue<MessageData> writeQueue;
 };
 } // namespace
 
@@ -138,7 +147,7 @@ public:
 //===----------------------------------------------------------------------===//
 
 /// Start a server on the given port. -1 means to let the OS pick a port.
-Impl::Impl(int port) : esiVersion(-1) {
+Impl::Impl(Context &ctxt, int port) : ctxt(ctxt), esiVersion(-1) {
   grpc::ServerBuilder builder;
   std::string server_address("127.0.0.1:" + std::to_string(port));
   // TODO: use secure credentials. Not so bad for now since we only accept
@@ -150,10 +159,12 @@ Impl::Impl(int port) : esiVersion(-1) {
   if (!server)
     throw std::runtime_error("Failed to start server on " + server_address);
   writePort(port);
-  std::cout << "Server listening on 127.0.0.1:" << port << std::endl;
+  this->port = port;
+  ctxt.getLogger().info("cosim", "Server listening on 127.0.0.1:" +
+                                     std::to_string(port));
 }
 
-void Impl::stop() {
+void Impl::stop(uint32_t timeoutMS) {
   // Disconnect all the ports.
   for (auto &[name, port] : readPorts)
     port->disconnect();
@@ -161,7 +172,13 @@ void Impl::stop() {
     port->disconnect();
 
   // Shutdown the server and wait for it to finish.
-  server->Shutdown();
+  if (timeoutMS > 0)
+    server->Shutdown(gpr_time_add(
+        gpr_now(GPR_CLOCK_REALTIME),
+        gpr_time_from_millis(static_cast<int>(timeoutMS), GPR_TIMESPAN)));
+  else
+    server->Shutdown();
+
   server->Wait();
   server = nullptr;
 }
@@ -175,14 +192,12 @@ ReadChannelPort &Impl::registerReadPort(const std::string &name,
                                         const std::string &type) {
   auto port = new RpcServerReadPort(new Type(type));
   readPorts.emplace(name, port);
-  port->connect();
   return *port;
 }
 WriteChannelPort &Impl::registerWritePort(const std::string &name,
                                           const std::string &type) {
   auto port = new RpcServerWritePort(new Type(type));
   writePorts.emplace(name, port);
-  port->connect();
   return *port;
 }
 
@@ -228,34 +243,40 @@ class RpcServerWriteReactor : public ServerWriteReactor<esi::cosim::Message> {
 public:
   RpcServerWriteReactor(RpcServerWritePort *writePort)
       : writePort(writePort), sentSuccessfully(SendStatus::UnknownStatus),
-        shutdown(false) {
+        shutdown(false), onDoneCalled(false) {
     myThread = std::thread(&RpcServerWriteReactor::threadLoop, this);
   }
-  ~RpcServerWriteReactor() {
-    shutdown = true;
-    // Wake up the potentially sleeping thread.
+
+  // gRPC manages the lifecycle of this object. OnDone() is called when gRPC is
+  // completely done with this reactor. We must wait for our thread to finish
+  // before deleting. See:
+  // https://github.com/grpc/grpc/blob/4795c5e69b25e8c767b498bea784da0ef8c96fd5/examples/cpp/route_guide/route_guide_callback_server.cc#L120
+  void OnDone() override {
+    // Signal shutdown and wake up any waiting threads.
+    {
+      std::scoped_lock<std::mutex> lock(sentMutex);
+      shutdown = true;
+      onDoneCalled = true;
+    }
     sentSuccessfullyCV.notify_one();
-    myThread.join();
+    onDoneCV.notify_one();
+
+    // Wait for the thread to finish before self-deleting.
+    if (myThread.joinable())
+      myThread.join();
+
+    delete this;
   }
 
-  // Deleting 'this' from within a callback is safe since this is how gRPC tells
-  // us that it's released the reference. This pattern lets gRPC manage this
-  // object. (Though a shared pointer would be better.) It was actually copied
-  // from one of the gRPC examples:
-  // https://github.com/grpc/grpc/blob/4795c5e69b25e8c767b498bea784da0ef8c96fd5/examples/cpp/route_guide/route_guide_callback_server.cc#L120
-  // The alternative is to have something else (e.g. Impl) manage this object
-  // and have this method tell it that gRPC is done with it and it should be
-  // deleted. As of now, there's no specific need for that and it adds
-  // additional complexity. If there is at some point in the future, change
-  // this.
-  void OnDone() override { delete this; }
   void OnWriteDone(bool ok) override {
     std::scoped_lock<std::mutex> lock(sentMutex);
     sentSuccessfully = ok ? SendStatus::Success : SendStatus::Failure;
     sentSuccessfullyCV.notify_one();
   }
+
   void OnCancel() override {
     std::scoped_lock<std::mutex> lock(sentMutex);
+    shutdown = true;
     sentSuccessfully = SendStatus::Disconnect;
     sentSuccessfullyCV.notify_one();
   }
@@ -269,13 +290,17 @@ private:
   /// Assoicated write port on this side. (Read port on the client side.)
   RpcServerWritePort *writePort;
 
-  /// Mutex to protect the sentSuccessfully flag.
+  /// Mutex to protect the sentSuccessfully flag and shutdown state.
   std::mutex sentMutex;
   enum SendStatus { UnknownStatus, Success, Failure, Disconnect };
   volatile SendStatus sentSuccessfully;
   std::condition_variable sentSuccessfullyCV;
 
   std::atomic<bool> shutdown;
+
+  /// Condition variable to wait for OnDone to be called.
+  bool onDoneCalled;
+  std::condition_variable onDoneCV;
 };
 
 } // namespace
@@ -283,8 +308,10 @@ private:
 void RpcServerWriteReactor::threadLoop() {
   while (!shutdown && sentSuccessfully != SendStatus::Disconnect) {
     // TODO: adapt this to a new notification mechanism which is forthcoming.
-    if (writePort->writeQueue.empty())
+    if (!writePort || writePort->writeQueue.empty()) {
       std::this_thread::sleep_for(std::chrono::microseconds(100));
+      continue;
+    }
 
     // This lambda will get called with the message at the front of the queue.
     // If the send is successful, return true to pop it. We don't know, however,
@@ -292,6 +319,9 @@ void RpcServerWriteReactor::threadLoop() {
     // `OnWriteDone` method is called by gRPC that we know. Use locking and
     // condition variables to orchestrate this confirmation.
     writePort->writeQueue.pop([this](const MessageData &data) -> bool {
+      if (shutdown)
+        return false;
+
       esi::cosim::Message msg;
       msg.set_data(reinterpret_cast<const char *>(data.getBytes()),
                    data.getSize());
@@ -309,6 +339,8 @@ void RpcServerWriteReactor::threadLoop() {
       return ret;
     });
   }
+
+  // Call Finish to signal gRPC that we're done. gRPC will then call OnDone().
   Finish(Status::OK);
 }
 
@@ -317,7 +349,7 @@ void RpcServerWriteReactor::threadLoop() {
 ServerWriteReactor<esi::cosim::Message> *
 Impl::ConnectToClientChannel(CallbackServerContext *context,
                              const ChannelDesc *request) {
-  printf("connect to client channel\n");
+  getContext().getLogger().debug("cosim", "connect to client channel");
   auto it = writePorts.find(request->name());
   if (it == writePorts.end()) {
     auto reactor = new RpcServerWriteReactor(nullptr);
@@ -343,7 +375,22 @@ Impl::SendToServer(CallbackServerContext *context,
   std::string msgDataString = request->message().data();
   MessageData data(reinterpret_cast<const uint8_t *>(msgDataString.data()),
                    msgDataString.size());
-  it->second->push(data);
+  try {
+    ctxt.getLogger().debug(
+        "cosim",
+        std::format("Channel '{}': Received message; pushing data to read port",
+                    request->channel_name()));
+    it->second->push(data);
+  } catch (const std::exception &e) {
+    ctxt.getLogger().error(
+        "cosim",
+        std::format("Channel '{}': Error pushing message to read port: {}",
+                    request->channel_name(), e.what()));
+    reactor->Finish(
+        Status(StatusCode::INTERNAL, "Error pushing message to port"));
+    return reactor;
+  }
+
   reactor->Finish(Status::OK);
   return reactor;
 }
@@ -351,24 +398,41 @@ Impl::SendToServer(CallbackServerContext *context,
 //===----------------------------------------------------------------------===//
 // RpcServer pass throughs to the actual implementations above.
 //===----------------------------------------------------------------------===//
-RpcServer::~RpcServer() {
-  if (impl)
-    delete impl;
-}
+RpcServer::RpcServer(Context &ctxt) : ctxt(ctxt) {}
+RpcServer::~RpcServer() = default;
+
 void RpcServer::setManifest(int esiVersion,
                             const std::vector<uint8_t> &compressedManifest) {
+  if (!impl)
+    throw std::runtime_error("Server not running");
+
   impl->setManifest(esiVersion, compressedManifest);
 }
+
 ReadChannelPort &RpcServer::registerReadPort(const std::string &name,
                                              const std::string &type) {
+  if (!impl)
+    throw std::runtime_error("Server not running");
   return impl->registerReadPort(name, type);
 }
+
 WriteChannelPort &RpcServer::registerWritePort(const std::string &name,
                                                const std::string &type) {
   return impl->registerWritePort(name, type);
 }
-void RpcServer::run(int port) { impl = new Impl(port); }
-void RpcServer::stop() {
-  assert(impl && "Server not running");
-  impl->stop();
+void RpcServer::run(int port) {
+  if (impl)
+    throw std::runtime_error("Server already running");
+  impl = std::make_unique<Impl>(ctxt, port);
+}
+void RpcServer::stop(uint32_t timeoutMS) {
+  if (!impl)
+    throw std::runtime_error("Server not running");
+  impl->stop(timeoutMS);
+}
+
+int RpcServer::getPort() {
+  if (!impl)
+    throw std::runtime_error("Server not running");
+  return impl->getPort();
 }

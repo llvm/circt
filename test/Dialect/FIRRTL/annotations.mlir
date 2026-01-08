@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-annotations{allow-adding-ports-on-public-modules=true}))'  --verify-diagnostics --split-input-file %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lower-annotations))'  --verify-diagnostics --split-input-file %s | FileCheck %s
 
 // circt.test copies the annotation to the target
 // circt.testNT puts the targetless annotation on the circuit
@@ -1439,11 +1439,11 @@ firrtl.circuit "GrandCentralViewsBundle"  attributes {
     }
   ]
 } {
-  // CHECK:      firrtl.module @Companion
+  // CHECK:      firrtl.module private @Companion
   // CHECK-SAME:   in %[[port_0:[a-zA-Z0-9_]+]]: !firrtl.uint<1>
   // CHECK-SAME:   in %[[port_1:[a-zA-Z0-9_]+]]: !firrtl.uint<2>
   // CHECK-SAME:   {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion", id = 0 : i64, name = "View"}
-  firrtl.module @Companion() {
+  firrtl.module private @Companion() {
     // CHECK-NEXT: firrtl.node %[[port_0]]
     // CHECK-SAME:   {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1 : i64}]}
     // CHECK-SAME:   !firrtl.uint<1>
@@ -1451,10 +1451,10 @@ firrtl.circuit "GrandCentralViewsBundle"  attributes {
     // CHECK-SAME:   {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 2 : i64}]}
     // CHECK-SAME:   !firrtl.uint<2>
   }
-  // CHECK:      firrtl.module @Bar
+  // CHECK:      firrtl.module private @Bar
   // CHECK-SAME:   out %[[refPort_0:[a-zA-Z0-9_]+]]: !firrtl.probe<uint<1>>
   // CHECK-SAME:   out %[[refPort_1:[a-zA-Z0-9_]+]]: !firrtl.probe<uint<2>>
-  firrtl.module @Bar() {
+  firrtl.module private @Bar() {
     %a = firrtl.wire interesting_name  : !firrtl.bundle<a: uint<1>, b: uint<2>>
     // CHECK:      %[[a_0:[a-zA-Z0-9_]+]] = firrtl.subfield %a[a]
     // CHECK-NEXT: %[[a_1:[a-zA-Z0-9_]+]] = firrtl.subfield %a[b]
@@ -1537,15 +1537,15 @@ firrtl.circuit "GrandCentralParentIsNotLCA"  attributes {
     }
   ]
 } {
-  // CHECK:        firrtl.module @Bar
+  // CHECK:        firrtl.module private @Bar
   // CHECK-SAME:     out %[[a_refPort:[a-zA-Z0-9_]+]]: !firrtl.probe<uint<1>>
-  firrtl.module @Bar() {
+  firrtl.module private @Bar() {
     %a = firrtl.wire : !firrtl.uint<1>
     // CHECK:        %[[a_ref:[a-zA-Z0-9_]+]] = firrtl.ref.send %a
     // CHECK-NEXT:   firrtl.ref.define %[[a_refPort]], %[[a_ref]]
   }
-  // CHECK:        firrtl.module @Companion()
-  firrtl.module @Companion() {
+  // CHECK:        firrtl.module private @Companion()
+  firrtl.module private @Companion() {
     firrtl.instance bar @Bar()
     // CHECK-NEXT:   %[[bar_a_refPort:[a-zA-Z0-9_]+]] = firrtl.instance bar
     // CHECK-NEXT:   %[[b_refResolve:[a-zA-Z0-9_]+]] = firrtl.ref.resolve %[[bar_a_refPort]]

@@ -1059,6 +1059,14 @@ hw.module @unionExtractFromTemporary(in %cond: i1, in %a: !hw.union<c: i1>, in %
     hw.output %1 : i1
 }
 
+// CHECK-LABEL: module unionBitcast(
+hw.module @unionBitcast(in %a: !hw.union<a: i1>, out b: i1) {
+  // CHECK: assign b = a;
+  %0 = hw.bitcast %a : (!hw.union<a: i1>) -> i1
+  hw.output %0 : i1
+}
+
+
 // CHECK-LABEL: structExplodeLowering
 hw.module @structExplodeLowering(in %a: !hw.struct<a: i1, b: i1>, out outA: i1, out outB: i1) {
   // CHECK: assign outA = a.a;

@@ -16,7 +16,14 @@
 #include "esi/Accelerator.h"
 #include "esi/Services.h"
 
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcovered-switch-default"
+#endif
 #include <nlohmann/json.hpp>
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 #include <sstream>
 
 using namespace ::esi;
@@ -299,7 +306,8 @@ Manifest::Impl::buildAccelerator(AcceleratorConnection &acc) const {
 
   return std::make_unique<Accelerator>(
       getModInfo(designJson),
-      getChildInstances({}, acc, activeSvcs, designJson), services, ports);
+      getChildInstances({}, acc, activeSvcs, designJson), services,
+      std::move(ports));
 }
 
 std::optional<ModuleInfo>
@@ -371,7 +379,7 @@ Manifest::Impl::getChildInstance(AppIDPath idPath, AcceleratorConnection &acc,
   auto ports = getBundlePorts(acc, idPath, activeServices, child);
   return std::make_unique<Instance>(parseIDChecked(child.at("appID")),
                                     getModInfo(child), std::move(children),
-                                    services, ports);
+                                    services, std::move(ports));
 }
 
 services::Service *Manifest::Impl::getService(AppIDPath idPath,
@@ -585,8 +593,15 @@ WindowType *parseWindow(const nlohmann::json &typeJson, Context &cache) {
   for (auto &frameJson : typeJson.at("frames")) {
     WindowType::Frame frame;
     frame.name = frameJson.at("name");
-    for (auto &fieldName : frameJson.at("fields"))
-      frame.fields.push_back(fieldName.at("name"));
+    for (auto &fieldJson : frameJson.at("fields")) {
+      WindowType::Field field;
+      field.name = fieldJson.at("name");
+      if (fieldJson.contains("numItems"))
+        field.numItems = fieldJson.at("numItems");
+      if (fieldJson.contains("bulkCountWidth"))
+        field.bulkCountWidth = fieldJson.at("bulkCountWidth");
+      frame.fields.push_back(field);
+    }
     frames.push_back(frame);
   }
 

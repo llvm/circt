@@ -7,8 +7,8 @@
 //===----------------------------------------------------------------------===//
 //
 // This is a specialization of the ESI C++ API (backend) for connection into a
-// simulation of an ESI system. Currently uses Cap'nProto RPC, but that could
-// change. Requires Cap'nProto C++ library.
+// simulation of an ESI system. Currently uses gRPC, but that could change.
+// Requires gRPC C++ library.
 //
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file
@@ -26,13 +26,11 @@
 #include <set>
 
 namespace esi {
-namespace cosim {
-class ChannelDesc;
-}
-
 namespace backends {
 namespace cosim {
+
 class CosimEngine;
+class RpcClient;
 
 /// Connect to an ESI simulation.
 class CosimAccelerator : public esi::AcceleratorConnection {
@@ -53,11 +51,6 @@ public:
   // Set the way this connection will retrieve the manifest.
   void setManifestMethod(ManifestMethod method);
 
-  // C++ doesn't have a mechanism to forward declare a nested class and we don't
-  // want to include the generated header here. So we have to wrap it in a
-  // forward-declared struct we write ourselves.
-  struct StubContainer;
-
   void createEngine(const std::string &engineTypeName, AppIDPath idPath,
                     const ServiceImplDetails &details,
                     const HWClientDetails &clients) override;
@@ -69,7 +62,7 @@ protected:
                                  const HWClientDetails &clients) override;
 
 private:
-  StubContainer *rpcClient;
+  std::unique_ptr<RpcClient> rpcClient;
 
   // We own all channels connected to rpcClient since their lifetime is tied to
   // rpcClient.

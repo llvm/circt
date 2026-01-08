@@ -840,3 +840,53 @@ firrtl.circuit "Top" {
     firrtl.instance component @Component()
   }
 }
+
+// -----
+
+// Test that empty layer blocks do not create empty modules.
+//
+// See: https://github.com/llvm/circt/issues/9331
+firrtl.circuit "EmptyLayerBlocks" {
+  firrtl.layer @A bind {
+    firrtl.layer @B bind {}
+  }
+  firrtl.layer @D inline {
+    firrtl.layer @E bind {}
+  }
+  firrtl.module @EmptyLayerBlocks() {}
+
+  // CHECK:     emit.file "layers-EmptyLeaf-A.sv"
+  // CHECK:     emit.file "layers-EmptyLeaf-D-E.sv"
+  // CHECK-NOT: @EmptyLeaf_A(
+  // CHECK-NOT: @EmptyLeaf_D_E(
+  firrtl.module @EmptyLeaf() {
+    firrtl.layerblock @A {}
+    firrtl.layerblock @D {
+      %c = firrtl.wire : !firrtl.uint<1>
+      firrtl.layerblock @D::@E {
+      }
+    }
+  }
+
+  // CHECK:     emit.file "layers-EmptyIntermediary-A.sv"
+  // CHECK:     emit.file "layers-EmptyIntermediary-A-B.sv"
+  // CHECK-NOT: @EmptyIntermediary_A(
+  firrtl.module @EmptyIntermediary() {
+    firrtl.layerblock @A {
+      firrtl.layerblock @A::@B {
+        %a_b = firrtl.wire : !firrtl.uint<1>
+      }
+    }
+  }
+
+  // CHECK:     emit.file "layers-EmptyAll-A.sv"
+  // CHECK:     emit.file "layers-EmptyAll-A-B.sv"
+  // CHECK-NOT: @EmptyAll_A(
+  // CHECK-NOT: @EmptyAll_A_B(
+  firrtl.module @EmptyAll() {
+    firrtl.layerblock @A {
+      firrtl.layerblock @A::@B {
+      }
+    }
+  }
+}

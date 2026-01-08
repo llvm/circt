@@ -169,12 +169,21 @@ struct TypeVisitor {
   Type visit(const slang::ast::ClassType &type) {
     if (failed(context.convertClassDeclaration(type)))
       return {};
-    if (auto *lowering = context.declareClass(type)) {
-      mlir::StringAttr symName = lowering->op.getSymNameAttr();
-      mlir::FlatSymbolRefAttr symRef = mlir::FlatSymbolRefAttr::get(symName);
-      return moore::ClassHandleType::get(context.getContext(), symRef);
+    auto *lowering = context.declareClass(type);
+    if (!lowering) {
+      mlir::emitError(loc) << "no lowering generated for class type `"
+                           << type.toString() << "`";
+      return {};
     }
-    return {};
+    mlir::StringAttr symName = lowering->op.getSymNameAttr();
+    mlir::FlatSymbolRefAttr symRef = mlir::FlatSymbolRefAttr::get(symName);
+    return moore::ClassHandleType::get(context.getContext(), symRef);
+  }
+
+  Type visit(const slang::ast::EventType &type) {
+    // Treat `event` types as simple `i1` values where an event is signaled by
+    // toggling the value.
+    return moore::IntType::getInt(context.getContext(), 1);
   }
 
   /// Emit an error for all other types.

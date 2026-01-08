@@ -984,12 +984,16 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: output O : Domain of PowerDomain
     // CHECK-NEXT: input a : UInt<1> domains [A]
     // CHECK-NEXT: input ab : UInt<1> domains [A, B]
+    // CHECK-NEXT: input c : UInt<1> domains [C]
+    // CHECK-NEXT: input C : Domain of ClockDomain
     in %A: !firrtl.domain of @ClockDomain,
     in %B: !firrtl.domain of @ClockDomain,
     in %I: !firrtl.domain of @PowerDomain,
     out %O: !firrtl.domain of @PowerDomain,
     in %a: !firrtl.uint<1> domains [%A],
-    in %ab: !firrtl.uint<1> domains [%A, %B]
+    in %ab: !firrtl.uint<1> domains [%A, %B],
+    in %c: !firrtl.uint<1> domains [%C],
+    in %C: !firrtl.domain of @ClockDomain
   ) {
     // CHECK: node noDomains = unsafe_domain_cast(a)
     %0 = firrtl.unsafe_domain_cast %a : !firrtl.uint<1>
@@ -1007,6 +1011,22 @@ firrtl.circuit "Foo" {
     firrtl.domain.define %ext_I, %I
     // CHECK-NEXT: domain_define O = ext.O
     firrtl.domain.define %O, %ext_O
+  }
+
+  // Test that anonymous domain create ops and their defines are elided.
+  firrtl.extmodule @AnonymousDomains_Foo(
+    in A: !firrtl.domain of @ClockDomain
+  )
+  // CHECK-LABEL: module AnonymousDomains :
+  firrtl.module @AnonymousDomains() {
+    // CHECK-NEXT: inst foo of AnonymousDomains_Foo
+    %0 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+    %foo_A = firrtl.instance foo @AnonymousDomains_Foo(
+      in A: !firrtl.domain of @ClockDomain
+    )
+    firrtl.domain.define %foo_A, %0
+    // CHECK-NEXT: wire end : UInt<1>
+    %end = firrtl.wire : !firrtl.uint<1>
   }
 
 }

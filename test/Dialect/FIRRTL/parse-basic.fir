@@ -2211,12 +2211,17 @@ circuit Domains:
   ; CHECK-SAME:    in %B: !firrtl.domain of @ClockDomain
   ; CHECK-SAME:    in %a: !firrtl.uint<1> domains [%A]
   ; CHECK-SAME:    in %ab: !firrtl.uint<1> domains [%A, %B]
+  ; CHECK-SAME:    in %d: !firrtl.uint<1> domains [%D]
+  ; CHECK-SAME:    in %D: !firrtl.domain of @ClockDomain
   public module Domains:
     input A: Domain of ClockDomain
     input B: Domain of ClockDomain
     input a: UInt<1> domains [A]
     input ab: UInt<1> domains [A, B]
     output C: Domain of ClockDomain
+    ; Test that domains can be used in associations before they are parsed.
+    input d: UInt<1> domains [D]
+    input D: Domain of ClockDomain
 
     ; CHECK: %{{.*}} = firrtl.unsafe_domain_cast %a : !firrtl.uint<1>
     node noDomains = unsafe_domain_cast(a)
@@ -2227,7 +2232,7 @@ circuit Domains:
 
     ; CHECK %foo_A, %foo_a = firrtl.instance foo @Foo(in A: !firrtl.domain of @ClockDomain, in a: !firrtl.uint<1> domains [A])
     inst foo of Foo
-  
+
     ; CHECK: firrtl.domain.define %foo_A, %A
     domain_define foo.A = A
 

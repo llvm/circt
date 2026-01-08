@@ -129,11 +129,11 @@ struct Context {
   bool isClassDerivedFrom(const moore::ClassHandleType &actualTy,
                           const moore::ClassHandleType &baseTy);
 
-  /// Tries to find the closest base class of actualTy that carries
-  /// a property with name fieldName.
+  /// Tries to find the closest base class of actualTy that carries a property
+  /// with name fieldName. The location is used for error reporting.
   moore::ClassHandleType
   getAncestorClassWithProperty(const moore::ClassHandleType &actualTy,
-                               StringRef fieldName);
+                               StringRef fieldName, Location loc);
 
   Value getImplicitThisRef() const {
     return currentThisRef; // block arg added in declareFunction

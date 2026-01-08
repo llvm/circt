@@ -135,7 +135,9 @@ void VoidType::ensureValid(const std::any &obj) const {
     return;
   } catch (const std::bad_any_cast &) {
     throw std::runtime_error(
-        "void type must be represented by empty std::any or nullptr");
+        std::format("void type must be represented by empty std::any or "
+                    "nullptr, but got {}",
+                    obj.type().name()));
   }
 }
 
@@ -145,7 +147,8 @@ std::any VoidType::deserialize(BitVector &data) const {
   // Extract one byte and return the rest. Check that the byte is 0.
   BitVector value = data.lsb(8);
   if (std::ranges::any_of(value, [](auto b) { return b; }))
-    throw std::runtime_error("void type byte must be 0");
+    throw std::runtime_error(std::format("void type byte must be 0, got {:b}",
+                                         value.getSpan().front()));
 
   data >>= 8;
   return std::any{};
@@ -168,7 +171,8 @@ void BitsType::ensureValid(const std::any &obj) const {
                                std::to_string(data.size()));
     }
   } catch (const std::bad_any_cast &) {
-    throw std::runtime_error("must be std::vector<uint8_t>");
+    throw std::runtime_error(std::format(
+        "must be std::vector<uint8_t>, but got {}", obj.type().name()));
   }
 }
 
@@ -243,7 +247,10 @@ void SIntType::ensureValid(const std::any &obj) const {
 MutableBitVector SIntType::serialize(const std::any &obj) const {
   Int ival = getIntLikeFromAny(obj, getWidth());
   if (static_cast<uint64_t>(ival.width()) != getWidth())
-    throw std::runtime_error("Int width mismatch for SIntType serialize");
+    throw std::runtime_error(
+        std::format("Int width mismatch for SIntType serialize. Expected {} "
+                    "bits, got {} bits",
+                    getWidth(), ival.width()));
   // Move bits into MutableBitVector.
   return MutableBitVector(std::move(ival));
 }
@@ -251,7 +258,9 @@ MutableBitVector SIntType::serialize(const std::any &obj) const {
 std::any SIntType::deserialize(BitVector &data) const {
   uint64_t w = getWidth();
   if (data.width() < w)
-    throw std::runtime_error("Insufficient data for sint type");
+    throw std::runtime_error(std::format(
+        "Insufficient data for sint type. Expected {} bits, got {} bits", w,
+        data.width()));
   Int val(data.slice(0, w));
   data >>= w;
   return std::any(val);
@@ -270,14 +279,19 @@ void UIntType::ensureValid(const std::any &obj) const {
 MutableBitVector UIntType::serialize(const std::any &obj) const {
   UInt uval = getUIntLikeFromAny(obj, getWidth());
   if (static_cast<uint64_t>(uval.width()) != getWidth())
-    throw std::runtime_error("UInt width mismatch for UIntType serialize");
+    throw std::runtime_error(std::format(
+        "UInt width mismatch for UIntType serialize. Expected {} bits, got {} "
+        "bits",
+        getWidth(), uval.width()));
   return MutableBitVector(std::move(uval));
 }
 
 std::any UIntType::deserialize(BitVector &data) const {
   uint64_t w = getWidth();
   if (data.width() < w)
-    throw std::runtime_error("Insufficient data for uint type");
+    throw std::runtime_error(std::format(
+        "Insufficient data for uint type. Expected {} bits, got {} bits", w,
+        data.width()));
   UInt val(data.slice(0, w));
   data >>= w;
   return std::any(val);
@@ -305,7 +319,9 @@ void StructType::ensureValid(const std::any &obj) const {
       }
     }
   } catch (const std::bad_any_cast &) {
-    throw std::runtime_error("must be std::map<std::string, std::any>");
+    throw std::runtime_error(
+        std::format("must be std::map<std::string, std::any>, but got {}",
+                    obj.type().name()));
   }
 }
 
@@ -365,7 +381,8 @@ void ArrayType::ensureValid(const std::any &obj) const {
       }
     }
   } catch (const std::bad_any_cast &) {
-    throw std::runtime_error("must be std::vector<std::any>");
+    throw std::runtime_error(std::format(
+        "must be std::vector<std::any>, but got {}", obj.type().name()));
   }
 }
 

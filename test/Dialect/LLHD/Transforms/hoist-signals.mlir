@@ -254,6 +254,25 @@ hw.module @HoistProbesOutOfIf(in %u: i42, in %v: i1) {
   }
 }
 
+// See https://github.com/llvm/circt/issues/9348.
+// CHECK-LABEL: @NonUniformDelayValues
+hw.module @NonUniformDelayValues(in %b : i42) {
+  %0 = llhd.constant_time <1ns, 0d, 0e>
+  %1 = llhd.constant_time <2ns, 0d, 0e>
+  %a = llhd.sig %b : i42
+  // CHECK: [[RES:%.+]]:3 = llhd.process -> i42, !llhd.time, i1
+  // CHECK: llhd.drv %a, [[RES]]#0 after [[RES]]#1 if [[RES]]#2 : i42
+  llhd.process {
+    llhd.drv %a, %b after %0 : i42
+    llhd.wait delay %0, ^bb1
+  ^bb1:
+    llhd.drv %a, %b after %1 : i42
+    llhd.wait delay %1, ^bb2
+  ^bb2:
+    llhd.halt
+  }
+}
+
 func.func private @use_i42(%arg0: i42)
 func.func private @use_inout_i42(%arg0: !llhd.ref<i42>)
 func.func private @maybe_side_effecting()

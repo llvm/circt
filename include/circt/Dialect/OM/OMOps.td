@@ -184,15 +184,16 @@ def ClassExternOp : OMClassLike<"class.extern", [NoTerminator]> {
 // Object instantiations and fields
 //===----------------------------------------------------------------------===//
 
-def ObjectOp : OMOp<"object",
-    [DeclareOpInterfaceMethods<SymbolUserOpInterface>, Pure]> {
+def ObjectOp : OMOp<"object", [
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+]> {
   let arguments = (ins
     SymbolNameAttr:$className,
     Variadic<AnyType>:$actualParams
   );
 
   let results = (outs
-    ClassType:$result
+    Res<ClassType, "", [MemAlloc]>:$result
   );
 
   let builders = [

@@ -121,9 +121,14 @@ static Value visitClassProperty(Context &context,
       cast<moore::ClassHandleType>(instRef.getType());
 
   auto targetClassHandle =
-      context.getAncestorClassWithProperty(classTy, expr.name);
+      context.getAncestorClassWithProperty(classTy, expr.name, loc);
+  if (!targetClassHandle)
+    return {};
+
   auto upcastRef = context.materializeConversion(targetClassHandle, instRef,
                                                  false, instRef.getLoc());
+  if (!upcastRef)
+    return {};
 
   Value fieldRef = moore::ClassPropertyRefOp::create(builder, loc, fieldRefTy,
                                                      upcastRef, fieldSym);
@@ -400,17 +405,18 @@ struct ExprVisitor {
 
     // Handle classes.
     if (valueType->isClass()) {
-
       auto valTy = context.convertType(*valueType);
       if (!valTy)
         return {};
-      auto targetTy = dyn_cast<moore::ClassHandleType>(valTy);
+      auto targetTy = cast<moore::ClassHandleType>(valTy);
 
       // We need to pick the closest ancestor that declares a property with the
       // relevant name. System Verilog explicitly enforces lexical shadowing, as
       // shown in IEEE 1800-2023 Section 8.14 "Overridden members".
       auto upcastTargetTy =
-          context.getAncestorClassWithProperty(targetTy, expr.member.name);
+          context.getAncestorClassWithProperty(targetTy, expr.member.name, loc);
+      if (!upcastTargetTy)
+        return {};
 
       // Convert the class handle to the required target type for property
       // shadowing purposes.
@@ -624,11 +630,17 @@ struct RvalueExprVisitor : public ExprVisitor {
 
   // Helper function to create pre and post increments and decrements.
   Value createRealIncrement(Value arg, bool isInc, bool isPost) {
-    auto preValue = moore::ReadOp::create(builder, loc, arg);
+    Value preValue = moore::ReadOp::create(builder, loc, arg);
     Value postValue;
 
-    auto ty = preValue.getType();
-    moore::RealType realTy = llvm::dyn_cast<moore::RealType>(ty);
+    bool isTime = isa<moore::TimeType>(preValue.getType());
+    if (isTime)
+      preValue = context.materializeConversion(
+          moore::RealType::get(context.getContext(), moore::RealWidth::f64),
+          preValue, false, loc);
+
+    moore::RealType realTy =
+        llvm::dyn_cast<moore::RealType>(preValue.getType());
     if (!realTy)
       return {};
 
@@ -636,7 +648,8 @@ struct RvalueExprVisitor : public ExprVisitor {
     if (realTy.getWidth() == moore::RealWidth::f32) {
       oneAttr = builder.getFloatAttr(builder.getF32Type(), 1.0);
     } else if (realTy.getWidth() == moore::RealWidth::f64) {
-      oneAttr = builder.getFloatAttr(builder.getF64Type(), 1.0);
+      auto oneVal = isTime ? getTimeScaleInFemtoseconds(context) : 1.0;
+      oneAttr = builder.getFloatAttr(builder.getF64Type(), oneVal);
     } else {
       mlir::emitError(loc) << "cannot construct increment for " << realTy;
       return {};
@@ -647,6 +660,11 @@ struct RvalueExprVisitor : public ExprVisitor {
         isInc
             ? moore::AddRealOp::create(builder, loc, preValue, one).getResult()
             : moore::SubRealOp::create(builder, loc, preValue, one).getResult();
+
+    if (isTime)
+      postValue = context.materializeConversion(
+          moore::TimeType::get(context.getContext()), postValue, false, loc);
+
     auto assignOp =
         moore::BlockingAssignOp::create(builder, loc, arg, postValue);
 
@@ -672,6 +690,12 @@ struct RvalueExprVisitor : public ExprVisitor {
       arg = context.convertRvalueExpression(expr.operand(), opFTy);
     if (!arg)
       return {};
+
+    // Only covers expressions in 'else' branch above.
+    if (isa<moore::TimeType>(arg.getType()))
+      arg = context.materializeConversion(
+          moore::RealType::get(context.getContext(), moore::RealWidth::f64),
+          arg, false, loc);
 
     switch (expr.op) {
       // `+a` is simply `a`
@@ -826,6 +850,16 @@ struct RvalueExprVisitor : public ExprVisitor {
     auto rhs = context.convertRvalueExpression(expr.right());
     if (!rhs)
       return {};
+
+    if (isa<moore::TimeType>(lhs.getType()) ||
+        isa<moore::TimeType>(rhs.getType())) {
+      lhs = context.materializeConversion(
+          moore::RealType::get(context.getContext(), moore::RealWidth::f64),
+          lhs, false, loc);
+      rhs = context.materializeConversion(
+          moore::RealType::get(context.getContext(), moore::RealWidth::f64),
+          rhs, false, loc);
+    }
 
     using slang::ast::BinaryOperator;
     switch (expr.op) {
@@ -1308,10 +1342,18 @@ struct RvalueExprVisitor : public ExprVisitor {
         expr = &assign->left();
 
       Value value;
-      if (declArg->direction == slang::ast::ArgumentDirection::In)
-        value = context.convertRvalueExpression(*expr);
-      else
-        value = context.convertLvalueExpression(*expr);
+      auto type = context.convertType(declArg->getType());
+      if (declArg->direction == slang::ast::ArgumentDirection::In) {
+        value = context.convertRvalueExpression(*expr, type);
+      } else {
+        Value lvalue = context.convertLvalueExpression(*expr);
+        auto unpackedType = dyn_cast<moore::UnpackedType>(type);
+        if (!unpackedType)
+          return {};
+        value =
+            context.materializeConversion(moore::RefType::get(unpackedType),
+                                          lvalue, expr->type->isSigned(), loc);
+      }
       if (!value)
         return {};
       arguments.push_back(value);
@@ -1472,8 +1514,11 @@ struct RvalueExprVisitor : public ExprVisitor {
 
     // If we have recognized the system call and got a non-null `Value` result,
     // return that.
-    if (*result)
-      return *result;
+    if (*result) {
+      auto ty = context.convertType(*expr.type);
+      return context.materializeConversion(ty, *result, expr.type->isSigned(),
+                                           loc);
+    }
 
     // Otherwise we didn't recognize the system call.
     mlir::emitError(loc) << "unsupported system call `" << subroutine.name
@@ -2353,8 +2398,78 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
           dyn_cast<moore::IntType>(value.getType()).getTwoValued(), value, true,
           loc);
 
-    return builder.createOrFold<moore::IntToRealOp>(loc, type, twoValInt);
+    if (isSigned)
+      return builder.createOrFold<moore::SIntToRealOp>(loc, type, twoValInt);
+    return builder.createOrFold<moore::UIntToRealOp>(loc, type, twoValInt);
   }
+
+  auto getBuiltinFloatType = [&](moore::RealType type) -> Type {
+    if (type.getWidth() == moore::RealWidth::f32)
+      return mlir::Float32Type::get(builder.getContext());
+
+    return mlir::Float64Type::get(builder.getContext());
+  };
+
+  // Handle f64/f32 to time conversion
+  if (isa<moore::TimeType>(type) && isa<moore::RealType>(value.getType())) {
+    auto intType =
+        moore::IntType::get(builder.getContext(), 64, Domain::TwoValued);
+    Type floatType =
+        getBuiltinFloatType(cast<moore::RealType>(value.getType()));
+    auto scale = moore::ConstantRealOp::create(
+        builder, loc, value.getType(),
+        FloatAttr::get(floatType, getTimeScaleInFemtoseconds(*this)));
+    auto scaled = builder.createOrFold<moore::MulRealOp>(loc, value, scale);
+    auto asInt = moore::RealToIntOp::create(builder, loc, intType, scaled);
+    auto asLogic = moore::IntToLogicOp::create(builder, loc, asInt);
+    return moore::LogicToTimeOp::create(builder, loc, asLogic);
+  }
+
+  // Handle time to f64/f32 conversion
+  if (isa<moore::RealType>(type) && isa<moore::TimeType>(value.getType())) {
+    auto asLogic = moore::TimeToLogicOp::create(builder, loc, value);
+    auto asInt = moore::LogicToIntOp::create(builder, loc, asLogic);
+    auto asReal = moore::UIntToRealOp::create(builder, loc, type, asInt);
+    Type floatType = getBuiltinFloatType(cast<moore::RealType>(type));
+    auto scale = moore::ConstantRealOp::create(
+        builder, loc, type,
+        FloatAttr::get(floatType, getTimeScaleInFemtoseconds(*this)));
+    return moore::DivRealOp::create(builder, loc, asReal, scale);
+  }
+
+  // Handle Int to String
+  if (isa<moore::StringType>(type)) {
+    if (auto intType = dyn_cast<moore::IntType>(value.getType())) {
+      if (intType.getDomain() == moore::Domain::FourValued)
+        value = moore::LogicToIntOp::create(builder, loc, value);
+      return moore::IntToStringOp::create(builder, loc, value);
+    }
+  }
+
+  // Handle String to Int
+  if (auto intType = dyn_cast<moore::IntType>(type)) {
+    if (isa<moore::StringType>(value.getType())) {
+      value = moore::StringToIntOp::create(builder, loc, intType.getTwoValued(),
+                                           value);
+
+      if (intType.getDomain() == moore::Domain::FourValued)
+        return moore::IntToLogicOp::create(builder, loc, value);
+
+      return value;
+    }
+  }
+
+  // Handle Int to FormatString
+  if (isa<moore::FormatStringType>(type)) {
+    auto asStr = materializeConversion(moore::StringType::get(getContext()),
+                                       value, isSigned, loc);
+    if (!asStr)
+      return {};
+    return moore::FormatStringOp::create(builder, loc, asStr, {}, {}, {});
+  }
+
+  if (isa<moore::RealType>(type) && isa<moore::RealType>(value.getType()))
+    return builder.createOrFold<moore::ConvertRealOp>(loc, type, value);
 
   if (isa<moore::ClassHandleType>(type) &&
       isa<moore::ClassHandleType>(value.getType()))
@@ -2572,10 +2687,7 @@ bool Context::isClassDerivedFrom(const moore::ClassHandleType &actualTy,
 
 moore::ClassHandleType
 Context::getAncestorClassWithProperty(const moore::ClassHandleType &actualTy,
-                                      llvm::StringRef fieldName) {
-  if (!actualTy || fieldName.empty())
-    return {};
-
+                                      llvm::StringRef fieldName, Location loc) {
   // Start at the actual class symbol.
   mlir::SymbolRefAttr classSym = actualTy.getClassSym();
 
@@ -2604,5 +2716,6 @@ Context::getAncestorClassWithProperty(const moore::ClassHandleType &actualTy,
   }
 
   // No ancestor declares that property.
+  mlir::emitError(loc) << "unknown property `" << fieldName << "`";
   return {};
 }

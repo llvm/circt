@@ -126,4 +126,26 @@ def HWParameterizeConstantPorts : Pass<"hw-parameterize-constant-ports",
   }];
 }
 
+def HWBypassInnerSymbols : Pass<"hw-bypass-inner-symbols", "hw::HWModuleOp"> {
+  let summary = "Pass through values through inner symbols";
+  let description = [{
+    This pass moves inner symbols from ports to wires, then bypasses wire
+    operations with inner symbols by replacing uses with their inputs while
+    keeping the wire to preserve the symbol. This enables optimizations to
+    cross symbol boundaries while maintaining symbol references.
+
+    Warning: This transformation assumes that values associated with inner
+    symbols are not mutated through inner symbols (e.g. force). This assumption
+    may not hold in simulation, but is safe in synthesis. This pass treats
+    inner symbols differently from the optimization-blocking semantics that
+    other parts of CIRCT use, so it is opt-in and should only be used when
+    the above assumptions hold.
+  }];
+
+  let statistics = [
+    Statistic<"numPortsMoved", "num-ports-moved",
+              "Number of inner symbols moved from ports to wires">
+  ];
+}
+
 #endif // CIRCT_DIALECT_HW_PASSES_TD

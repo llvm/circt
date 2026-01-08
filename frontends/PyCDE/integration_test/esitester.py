@@ -21,6 +21,8 @@
 # RUN: %PYTHON% %s %t cosim 2>&1
 # RUN: esi-cosim.py --source %t -- esitester -v cosim env callback -i 5 | FileCheck %s
 # RUN: esi-cosim.py --source %t -- esitester cosim env streaming_add | FileCheck %s --check-prefix=STREAMING_ADD
+# RUN: esi-cosim.py --source %t -- esitester cosim env streaming_add -t | FileCheck %s --check-prefix=STREAMING_ADD
+# RUN: esi-cosim.py --source %t -- esitester cosim env translate_coords | FileCheck %s --check-prefix=TRANSLATE_COORDS
 # RUN: ESI_COSIM_MANIFEST_MMIO=1 esi-cosim.py --source %t -- esiquery cosim env info
 # RUN: esi-cosim.py --source %t -- esiquery cosim env telemetry | FileCheck %s --check-prefix=TELEMETRY
 
@@ -50,6 +52,14 @@ from pycde.types import Bits, Channel, ChannelSignaling, UInt
 # STREAMING_ADD:   input[3]=429150 + 5 = 429155 (expected 429155)
 # STREAMING_ADD:   input[4]=629806 + 5 = 629811 (expected 629811)
 # STREAMING_ADD: Streaming add test passed
+
+# TRANSLATE_COORDS: Coord translate test results:
+# TRANSLATE_COORDS:   coord[0]=(222709,894611) + (10,20) = (222719,894631)
+# TRANSLATE_COORDS:   coord[1]=(772894,429150) + (10,20) = (772904,429170)
+# TRANSLATE_COORDS:   coord[2]=(629806,138727) + (10,20) = (629816,138747)
+# TRANSLATE_COORDS:   coord[3]=(218516,390276) + (10,20) = (218526,390296)
+# TRANSLATE_COORDS:   coord[4]=(750021,423525) + (10,20) = (750031,423545)
+# TRANSLATE_COORDS: Coord translate test passed
 
 # TELEMETRY: ********************************
 # TELEMETRY: * Telemetry
@@ -209,9 +219,81 @@ class LoopbackInOutAdd(Module):
     loopback.assign(data_chan_buffered)
 
 
-class StreamingAdder(Module):
-  """Exposes a function which has an argument of struct {add_amt, list<uint32>}.
-  It then adds add_amt to each element of list and returns the resulting list.
+@modparams
+def StreamingAdder(numItems: int):
+  """Creates a StreamingAdder module parameterized by the number of items per
+  window frame. The module exposes a function which has an argument of struct
+  {add_amt, list<uint32>}. It then adds add_amt to each element of the list in
+  parallel (numItems at a time) and returns the resulting list.
+  """
+
+  class StreamingAdder(Module):
+    clk = Clock()
+    rst = Reset()
+
+    @generator
+    def construct(ports):
+      from pycde.types import StructType, List, Window
+
+      # Define the argument type: struct { add_amt: UInt(32), list: List<UInt(32)> }
+      arg_struct_type = StructType([("add_amt", UInt(32)),
+                                    ("input", List(UInt(32)))])
+
+      # Create a windowed version with numItems parallel elements
+      arg_window_type = Window(
+          "arg_window", arg_struct_type,
+          [Window.Frame(None, ["add_amt", ("input", numItems)])])
+
+      # Result is also a List with numItems parallel elements
+      result_struct_type = StructType([("data", List(UInt(32)))])
+      result_window_type = Window("result_window", result_struct_type,
+                                  [Window.Frame(None, [("data", numItems)])])
+
+      result_chan = Wire(Channel(result_window_type))
+      args = esi.FuncService.get_call_chans(AppID("streaming_add"),
+                                            arg_type=arg_window_type,
+                                            result=result_chan)
+
+      # Unwrap the argument channel
+      ready = Wire(Bits(1))
+      arg_data, arg_valid = args.unwrap(ready)
+
+      # Unwrap the window to get the lowered struct
+      # Lowered type: struct { add_amt, input: array[numItems], input_size, last }
+      arg_unwrapped = arg_data.unwrap()
+
+      # Extract add_amt and input array from the struct
+      add_amt = arg_unwrapped["add_amt"]
+      input_arr = arg_unwrapped["input"]
+
+      # Perform all additions in parallel
+      result_arr = [
+          (add_amt + input_arr[i]).as_uint(32) for i in range(numItems)
+      ]
+
+      # Build the result lowered type
+      # Lowered type: struct { data: array[numItems], data_size, last }
+      lowered_val = result_window_type.lowered_type({
+          "data": result_arr,
+          "data_size": arg_unwrapped["input_size"],
+          "last": arg_unwrapped["last"]
+      })
+
+      result_window = result_window_type.wrap(lowered_val)
+
+      # Wrap the result into a channel
+      result_chan_internal, result_ready = Channel(result_window_type).wrap(
+          result_window, arg_valid)
+      ready.assign(result_ready)
+      result_chan.assign(result_chan_internal)
+
+  return StreamingAdder
+
+
+class CoordTranslator(Module):
+  """Exposes a function which takes a struct of {x_translation, y_translation,
+  coords: list<struct{x, y}>} and adds the translation to each coordinate,
+  returning the translated list of coordinates.
   """
 
   clk = Clock()
@@ -221,19 +303,23 @@ class StreamingAdder(Module):
   def construct(ports):
     from pycde.types import StructType, List, Window
 
-    # Define the argument type: struct { add_amt: UInt(32), list: List<UInt(32)> }
-    arg_struct_type = StructType([("add_amt", UInt(32)),
-                                  ("input", List(UInt(32)))])
+    # Define the coordinate type: struct { x: UInt(32), y: UInt(32) }
+    coord_type = StructType([("x", UInt(32)), ("y", UInt(32))])
+
+    # Define the argument type: struct { x_translation, y_translation, coords }
+    arg_struct_type = StructType([("x_translation", UInt(32)),
+                                  ("y_translation", UInt(32)),
+                                  ("coords", List(coord_type))])
 
     # Create a windowed version of the argument struct for streaming
     arg_window_type = Window.default_of(arg_struct_type)
 
-    # Result is also a List
-    result_type = List(UInt(32))
+    # Result is also a List of coordinates
+    result_type = List(coord_type)
     result_window_type = Window.default_of(result_type)
 
     result_chan = Wire(Channel(result_window_type))
-    args = esi.FuncService.get_call_chans(AppID("streaming_add"),
+    args = esi.FuncService.get_call_chans(AppID("translate_coords"),
                                           arg_type=arg_window_type,
                                           result=result_chan)
 
@@ -244,14 +330,21 @@ class StreamingAdder(Module):
     # Unwrap the window to get the struct/union
     arg_unwrapped = arg_data.unwrap()
 
-    # Extract add_amt and list from the struct
-    add_amt = arg_unwrapped["add_amt"]
-    input_int = arg_unwrapped["input"]
+    # Extract translations and coordinates from the struct
+    x_translation = arg_unwrapped["x_translation"]
+    y_translation = arg_unwrapped["y_translation"]
+    input_coord = arg_unwrapped["coords"]
 
-    result_int = (add_amt + input_int).as_uint(32)
+    # Add translations to each coordinate
+    result_x = (x_translation + input_coord["x"]).as_uint(32)
+    result_y = (y_translation + input_coord["y"]).as_uint(32)
+
+    # Create the result coordinate struct
+    result_coord = coord_type({"x": result_x, "y": result_y})
+
     result_window = result_window_type.wrap(
         result_window_type.lowered_type({
-            "data": result_int,
+            "data": result_coord,
             "last": arg_unwrapped.last
         }))
 
@@ -926,11 +1019,17 @@ class EsiTester(Module):
         instance_name="loopback",
         appid=AppID("loopback"),
     )
-    StreamingAdder(
+    StreamingAdder(1)(
         clk=ports.clk,
         rst=ports.rst,
         instance_name="streaming_adder",
         appid=AppID("streaming_adder"),
+    )
+    CoordTranslator(
+        clk=ports.clk,
+        rst=ports.rst,
+        instance_name="coord_translator",
+        appid=AppID("coord_translator"),
     )
 
     for i in range(4, 18, 5):

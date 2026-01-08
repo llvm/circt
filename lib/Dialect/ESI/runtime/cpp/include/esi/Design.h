@@ -45,11 +45,15 @@ class Service;
 
 /// Represents either the top level or an instance of a hardware module.
 class HWModule {
+public:
+  HWModule(const HWModule &) = delete;
+  HWModule &operator=(const HWModule &) = delete;
+
 protected:
   HWModule(std::optional<ModuleInfo> info,
            std::vector<std::unique_ptr<Instance>> children,
            std::vector<services::Service *> services,
-           std::vector<std::unique_ptr<BundlePort>> &ports);
+           std::vector<std::unique_ptr<BundlePort>> &&ports);
 
 public:
   virtual ~HWModule() = default;
@@ -112,11 +116,12 @@ public:
   Instance(AppID id, std::optional<ModuleInfo> info,
            std::vector<std::unique_ptr<Instance>> children,
            std::vector<services::Service *> services,
-           std::vector<std::unique_ptr<BundlePort>> &ports)
-      : HWModule(info, std::move(children), services, ports), id(id) {}
+           std::vector<std::unique_ptr<BundlePort>> &&ports)
+      : HWModule(info, std::move(children), services, std::move(ports)),
+        id(id) {}
 
   /// Get the instance's ID, which it will always have.
-  const AppID getID() const { return id; }
+  AppID getID() const { return id; }
 
 protected:
   const AppID id;

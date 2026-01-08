@@ -21,7 +21,14 @@
 #include <algorithm>
 #include <iostream>
 #include <map>
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcovered-switch-default"
+#endif
 #include <nlohmann/json.hpp>
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 #include <stdexcept>
 #include <string>
 

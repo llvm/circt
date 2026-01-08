@@ -401,13 +401,13 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
-  // expected-note@below {{module port 'a' types don't match, first type is '!firrtl.uint<1>'}}
-  firrtl.module private @Test0(in %a : !firrtl.uint<1>) { }
+  // expected-note@below {{module port 'a' -> bundle element 'b' types don't match, first type is '!firrtl.uint<1>'}}
+  firrtl.module private @Test0(in %a : !firrtl.bundle<b: uint<1>>) { }
   // expected-note@below {{second type is '!firrtl.uint<2>'}}
-  firrtl.module private @Test1(in %a : !firrtl.uint<2>) { }
+  firrtl.module private @Test1(in %a : !firrtl.bundle<b: uint<2>>) { }
   firrtl.module @MustDedup() {
-    firrtl.instance test0 @Test0(in a : !firrtl.uint<1>)
-    firrtl.instance test1 @Test1(in a : !firrtl.uint<2>)
+    firrtl.instance test0 @Test0(in a : !firrtl.bundle<b: uint<1>>)
+    firrtl.instance test1 @Test1(in a : !firrtl.bundle<b: uint<2>>)
   }
 }
 

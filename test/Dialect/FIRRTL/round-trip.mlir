@@ -220,11 +220,15 @@ firrtl.module @DomainsSubmodule(
 // CHECK-SAME:    in %B: !firrtl.domain
 // CHECK-SAME:    in %a: !firrtl.uint<1> domains [%A]
 // CHECK-SAME:    out %b: !firrtl.uint<1> domains [%B]
+// CHECK-SAME:    in %c: !firrtl.uint<1> domains [%C]
+// CHECK-SAME:    in %C: !firrtl.domain
 firrtl.module @Domains(
   in %A: !firrtl.domain of @ClockDomain,
   in %B: !firrtl.domain of @ClockDomain,
   in %a: !firrtl.uint<1> domains [%A],
-  out %b: !firrtl.uint<1> domains [%B]
+  out %b: !firrtl.uint<1> domains [%B],
+  in %c: !firrtl.uint<1> domains [%C],
+  in %C: !firrtl.domain of @ClockDomain
 ) {
   // CHECK: %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>
   %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>
@@ -274,6 +278,18 @@ firrtl.module @InstanceChoiceWithDomain(in %A: !firrtl.domain of @ClockDomain, i
     { @FPGA -> @FPGATargetWithDomain, @ASIC -> @ASICTargetWithDomain } (in A: !firrtl.domain of @ClockDomain, in clock: !firrtl.clock domains [A])
   firrtl.matchingconnect %inst_clock, %clock : !firrtl.clock
   firrtl.domain.define %inst_A, %A
+}
+
+// CHECK-LABEL: firrtl.module @CreateAnonDomain
+firrtl.extmodule @CreateAnonDomainChild(in A: !firrtl.domain of @ClockDomain)
+firrtl.module @CreateAnonDomain() {
+  // CHECK-NEXT: %0 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+  %0 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+  %child_A = firrtl.instance child @CreateAnonDomainChild(
+    in A: !firrtl.domain of @ClockDomain
+  )
+  // CHECK: firrtl.domain.define %child_A, %0
+  firrtl.domain.define %child_A, %0
 }
 
 }
