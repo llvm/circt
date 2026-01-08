@@ -135,9 +135,10 @@ instance_like_impl::verifyReferencedModule(Operation *instanceOp,
     auto modulePortDomainInfo = referencedModule.getDomainInfoAttrForPort(i);
     if (portDomainInfo != modulePortDomainInfo)
       return emitNote(instanceOp->emitOpError()
-                      << "domain info for " << portNames[i] << " must be "
-                      << modulePortDomainInfo << ", but got "
-                      << portDomainInfo);
+                      << "domain info for " << portNames[i] << " must be '"
+                      << modulePortDomainInfo << "', but got '"
+                      << portDomainInfo)
+             << "'";
   }
 
   // Check that the instance op lists the correct layer requirements.

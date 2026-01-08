@@ -328,7 +328,13 @@ void ConvertCombToArithPass::runOnOperation() {
   // would result in undesirably complex logic, therefore, we mark it legal
   // here.
   target.addLegalOp<comb::ParityOp>();
-
+  // Arith does not have bitreverse, so we leave it for the CombToLLVM pass.
+  target.addLegalOp<comb::ReverseOp>();
+  // This pass is intended to rewrite Comb ops into Arith ops. Other dialects
+  // (e.g. LLVM) may legitimately be present when this pass is used in custom
+  // pipelines. Treat all unknown operations as legal so we don't attempt to
+  // fold/legalize unrelated ops.
+  target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
   RewritePatternSet patterns(&getContext());
   TypeConverter converter;
   converter.addConversion([](Type type) { return type; });

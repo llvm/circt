@@ -45,7 +45,7 @@ firrtl.circuit "Prop" {
   firrtl.module private @Foo() attributes {convention = #firrtl<convention scalarized>} {
     %bar_in1, %bar_in2, %bar_out = firrtl.instance bar interesting_name @Bar(out in1: !firrtl.bundle<a flip: uint<1>, b flip: uint<1>>, in in2: !firrtl.bundle<c: uint<1>>, in out: !firrtl.bundle<d flip: uint<1>, e flip: uint<1>>)
     // CHECK: %bar.in1 = firrtl.wire
-    // CHECK: %bar.in2 = firrtl.wire 
+    // CHECK: %bar.in2 = firrtl.wire
     // CHECK: %bar.out = firrtl.wire
   }
 
@@ -64,3 +64,40 @@ firrtl.circuit "PreserveLocation" {
 // CHECK-LOC: [[LOC]] = loc("someLoc":9001:1)
 #moduleLoc = loc("wrongLoc":42:1)
 #instLoc = loc("someLoc":9001:1)
+
+//CHECK-LABEL: firrtl.circuit "Domains"
+firrtl.circuit "Domains" {
+  firrtl.domain @ClockDomain
+  // CHECK:      firrtl.module @Foo
+  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  // CHECK-SAME:   in %a_b: !firrtl.uint<1> domains [%A]
+  // CHECK-SAME:   in %a_c: !firrtl.uint<1> domains [%A]
+  // CHECK-SAME:   in %d_0: !firrtl.uint<1> domains [%D]
+  // CHECK-SAME:   in %d_1: !firrtl.uint<1> domains [%D]
+  // CHECK-SAME:   in %D: !firrtl.domain of @ClockDomain
+  firrtl.module @Foo(
+    in %A: !firrtl.domain of @ClockDomain,
+    in %a: !firrtl.bundle<b: uint<1>, c: uint<1>> domains [%A],
+    in %d: !firrtl.vector<uint<1>, 2> domains [%D],
+    in %D: !firrtl.domain of @ClockDomain
+  ) attributes {
+    convention = #firrtl<convention scalarized>
+  } {
+  }
+  // CHECK: firrtl.module @Domains
+  firrtl.module @Domains() {
+    // CHECK:      firrtl.instance foo @Foo
+    // CHECK-SAME:   in A: !firrtl.domain of @ClockDomain
+    // CHECK-SAME:   in a_b: !firrtl.uint<1> domains [A]
+    // CHECK-SAME:   in a_c: !firrtl.uint<1> domains [A]
+    // CHECK-SAME:   in d_0: !firrtl.uint<1> domains [D]
+    // CHECK-SAME:   in d_1: !firrtl.uint<1> domains [D]
+    // CHECK-SAME:   in D: !firrtl.domain of @ClockDomain
+    firrtl.instance foo @Foo(
+      in A: !firrtl.domain of @ClockDomain,
+      in a: !firrtl.bundle<b: uint<1>, c: uint<1>> domains [A],
+      in d: !firrtl.vector<uint<1>, 2> domains [D],
+      in D: !firrtl.domain of @ClockDomain
+    )
+  }
+}

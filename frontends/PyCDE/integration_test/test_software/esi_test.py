@@ -1,3 +1,4 @@
+from typing import Optional
 import esiaccel as esi
 from esiaccel.types import MMIORegion
 
@@ -29,7 +30,7 @@ for svc in d.services:
 for id, region in mmio_svc.regions.items():
   print(f"Region {id}: {region.base} - {region.base + region.size}")
 
-assert len(mmio_svc.regions) == 4
+assert len(mmio_svc.regions) == 5
 
 ################################################################################
 # MMIOClient tests
@@ -95,6 +96,30 @@ for mod_info in m.module_infos:
     break
 assert loopback_info is not None
 add_amt = mod_info.constants["add_amt"].value
+
+################################################################################
+# Callback tests
+################################################################################
+
+callback = d.children[esi.AppID("callback")]
+cb_port = callback.ports[esi.AppID("cb")]
+cb_mmio = callback.ports[esi.AppID("cmd")]
+
+recv_data: Optional[int] = None
+
+
+def my_callback(data: int) -> int:
+  global recv_data
+  recv_data = data
+  print(f"Callback received data: {data}")
+  return data + 7
+
+
+cb_port.connect(my_callback)
+cb_mmio.write(0x10, 5)
+while recv_data is None:
+  time.sleep(0.25)
+assert recv_data == 5
 
 ################################################################################
 # Loopback add 7 tests

@@ -22,9 +22,11 @@
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -502,17 +504,19 @@ int main(int argc, char **argv) {
   // clang-format off
   DialectRegistry registry;
   registry.insert<
+    arith::ArithDialect,
     cf::ControlFlowDialect,
     comb::CombDialect,
     debug::DebugDialect,
     func::FuncDialect,
     hw::HWDialect,
     llhd::LLHDDialect,
+    LLVM::LLVMDialect,
     moore::MooreDialect,
     scf::SCFDialect,
     seq::SeqDialect,
-    verif::VerifDialect,
-    mlir::LLVM::LLVMDialect
+    sim::SimDialect,
+    verif::VerifDialect
   >();
   // clang-format on
 

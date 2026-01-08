@@ -20,5 +20,6 @@ void registerFSMPasses() {
   registerPasses();
   circt::registerConvertFSMToSVPass();
   circt::registerConvertFSMToSMTPass();
+  circt::registerConvertFSMToCorePass();
 }
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(FSM, fsm, FSMDialect)

@@ -186,6 +186,59 @@ firrtl.circuit "Foo" {
 
 // -----
 
+// Test an "upwards" U-turn involving wires.
+firrtl.circuit "Foo" {
+  firrtl.domain @ClockDomain
+  // CHECK-LABEL: firrtl.module @Foo(
+  // CHECK-SAME:    in %A: !firrtl.class<@ClockDomain()>,
+  // CHECK-SAME:    out %A_out: !firrtl.class<@ClockDomain_out(
+  // CHECK-SAME:    out %B_out: !firrtl.class<@ClockDomain_out(
+  // CHECK-SAME:    in %a: !firrtl.uint<1>
+  // CHECK-SAME:      id = distinct[0]
+  // CHECK-SAME:    out %b: !firrtl.uint<1>
+  // CHECK-SAME:      id = distinct[1]
+  firrtl.module @Foo(
+    in %A: !firrtl.domain of @ClockDomain,
+    out %B: !firrtl.domain of @ClockDomain,
+    in %a: !firrtl.uint<1> domains [%A],
+    out %b: !firrtl.uint<1> domains [%B]
+  ) {
+    // CHECK-NEXT: %A_object = firrtl.object @ClockDomain_out
+    // CHECK-NEXT: %[[domainInfo_in:.+]] = firrtl.object.subfield %A_object[domainInfo_in]
+    // CHECK-NEXT: firrtl.propassign %[[domainInfo_in]], %A :
+    // CHECK-NEXT: %[[associations_in:.+]] = firrtl.object.subfield %A_object[associations_in]
+    // CHECK-NEXT: %[[path:.+]] = firrtl.path reference distinct[0]<>
+    // CHECK-NEXT: %[[list:.+]] = firrtl.list.create %[[path]] :
+    // CHECK-NEXT: firrtl.propassign %[[associations_in]], %[[list]]
+    // CHECK-NEXT: firrtl.propassign %A_out, %A_object :
+    //
+    // CHECK-NOT: firrtl.wire
+    //
+    // CHECK:      %B_object = firrtl.object @ClockDomain_out
+    // CHECK-NEXT: %[[domainInfo_in:.+]] = firrtl.object.subfield %B_object[domainInfo_in]
+    // CHECK-NEXT: %[[associations_in:.+]] = firrtl.object.subfield %B_object[associations_in]
+    // CHECK-NEXT: %[[path:.+]] = firrtl.path reference distinct[1]<>
+    // CHECK-NEXT: %[[list:.+]] = firrtl.list.create %[[path]] :
+    // CHECK-NEXT: firrtl.propassign %[[associations_in]], %[[list]]
+    // CHECK-NEXT: firrtl.propassign %B_out, %B_object :
+    //
+    // CHECK-NEXT: firrtl.propassign %[[domainInfo_in]], %A :
+    %w0 = firrtl.wire : !firrtl.domain
+    %w1 = firrtl.wire : !firrtl.domain
+    %w2 = firrtl.wire : !firrtl.domain
+    firrtl.domain.define %w0, %A
+    firrtl.domain.define %w1, %w0
+    firrtl.domain.define %w2, %w1
+    firrtl.domain.define %B, %w2
+    // CHECK-NEXT: firrtl.matchingconnect %b, %a
+    %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
+    // CHECK-NOT: firrtl.wire
+  }
+}
+
+// -----
+
 // Test a "downards" U-turn.
 firrtl.circuit "Foo" {
   firrtl.domain @ClockDomain
@@ -214,6 +267,30 @@ firrtl.circuit "Foo" {
     firrtl.domain.define %bar_A, %baz_A
     // CHECK-NEXT: firrtl.matchingconnect %bar_a, %baz_a :
     firrtl.matchingconnect %bar_a, %baz_a : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Test an anonymous domain.
+firrtl.circuit "Foo" {
+  firrtl.domain @ClockDomain
+  firrtl.extmodule @Bar(
+    in A: !firrtl.domain of @ClockDomain,
+    in a: !firrtl.uint<1> domains [A]
+  )
+  // CHECK-LABEL: firrtl.module @Foo()
+  firrtl.module @Foo() {
+    // CHECK-NEXT: %bar_A, %bar_A_out, %bar_a = firrtl.instance bar @Bar
+    %bar_A, %bar_a = firrtl.instance bar @Bar(
+      in A: !firrtl.domain of @ClockDomain,
+      in a: !firrtl.uint<1> domains [A]
+    )
+    %anon = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+    firrtl.domain.define %bar_A, %anon
+    // CHECK-NOT: firrtl.object
+    // CHECK-NOT: firrtl.domain.anon
+    // CHECK-NOT: firrtl.domain.define
   }
 }
 
@@ -393,5 +470,34 @@ firrtl.circuit "Foo" {
     // CHECK-NOT: firrtl.unsafe_domain_cast
     %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>
     firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Check that dead/unused operations inolving domains are deleted.
+firrtl.circuit "DeadDomainOps" {
+  firrtl.domain @ClockDomain
+  // CHECK-LABEL: firrtl.module @DeadDomainOps
+  // CHECK-NOT: firrtl.wire
+  // CHECK-NOT: firrtl.domain.define
+  // CHECK-NOT: firrtl.domain.anon : !firrtl.domain of @ClockDomain
+  firrtl.module @DeadDomainOps(
+  ) {
+    // A lone, undriven wire.
+    %a = firrtl.wire : !firrtl.domain
+
+    // One wire that drives another.
+    %b = firrtl.wire : !firrtl.domain
+    %c = firrtl.wire : !firrtl.domain
+    firrtl.domain.define %b, %c
+
+    // A lone anonymous domain.
+    %d = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+
+    // A wire driven by an anonymous domain.
+    %e = firrtl.wire : !firrtl.domain
+    %f = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+    firrtl.domain.define %e, %f
   }
 }

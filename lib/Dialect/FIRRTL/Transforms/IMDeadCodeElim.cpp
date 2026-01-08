@@ -491,7 +491,6 @@ void IMDeadCodeElimPass::visitValue(Value value) {
   for (Operation *user : value.getUsers())
     visitUser(user);
 
-  // Requiring an input port propagates the liveness to each instance.
   if (auto blockArg = dyn_cast<BlockArgument>(value)) {
     if (auto module =
             dyn_cast<FModuleOp>(blockArg.getParentBlock()->getParentOp())) {
@@ -506,6 +505,13 @@ void IMDeadCodeElimPass::visitValue(Value value) {
             markAlive(instance.getResult(blockArg.getArgNumber()));
         }
       }
+
+      // Any domain ports associated with non-domain ports are also alive.
+      if (!type_isa<DomainType>(blockArg.getType()))
+        for (auto domain : cast<ArrayAttr>(
+                 module.getDomainInfoAttrForPort(blockArg.getArgNumber())))
+          markAlive(module.getArgument(
+              cast<IntegerAttr>(domain).getValue().getZExtValue()));
       return;
     }
   }
