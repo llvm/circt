@@ -362,11 +362,11 @@ private:
   Value getSmtValue(Value v,
                     const SmallVector<std::pair<Value, Value>> &fsmArgVals,
                     Location &loc) {
+    // if an SMT value is already mapped, return it
     for (auto fav : fsmArgVals)
       if (v == fav.first)
         return fav.second;
-                        
-    
+    // if it's already an SMT value, retrieve it from the corresponding comb operation
     if (v.getDefiningOp()->getName().getDialect()->getNamespace() == "comb") {
       SmallVector<Value> combArgs;
       for (auto arg : v.getDefiningOp()->getOperands()) {
@@ -375,17 +375,14 @@ private:
       }
       return getCombValue(*v.getDefiningOp(), loc, combArgs);
     }
-
+    // if it's a constant, lower it to an SMT constant
     if (auto cst = dyn_cast<hw::ConstantOp>(v.getDefiningOp())) {
-      // Lower constants based on mode and bitwidth.
       auto ap = cst.getValue();
       return b.create<smt::BVConstantOp>(loc, ap);
     }
-
     llvm::outs() << "\n\nunsupported getSmtValue op: " << v;
     return v;
   }
-  
 
   // Collect `verif.assert` properties, to be lowered subsequently.
   struct PendingAssertion {
@@ -674,19 +671,7 @@ LogicalResult MachineOpConverter::dispatch() {
     // variables and outputs after evaluating the action and output regions
     auto action = [&](SmallVector<Value> actionArgsOutsVarsVals)
         -> SmallVector<Value> {
-      
-      SmallVector<Value> outputSmtValues;
-      // if the transition ends in a state with an output region, evaluate the output region too
-      if (transition.hasOutput) {
-        // map each FSM variable to a corresponding SMT value.
-        SmallVector<std::pair<Value, Value>> valToSmt;
-        // initialize the map with the quantified arguments 
-        for (auto [id, val] : llvm::enumerate(argsOutsVarsVals))
-          valToSmt.push_back({val, actionArgsOutsVarsVals[id]});
-        // retrieve the output SMT values and assertions from the output region
-        outputSmtValues = parseOutputRegion(transition.output, assertions, valToSmt, loc, transition.to);
-      }
-      
+
       // map each FSM variable to a corresponding SMT value.
       SmallVector<std::pair<Value, Value>> valToSmt;
       // initialize the map with the quantified arguments 
@@ -719,11 +704,6 @@ LogicalResult MachineOpConverter::dispatch() {
         for (auto [j, pairMap] : llvm::enumerate(valToSmt))
           updatedSmtValues.push_back(pairMap.second);
       }
-
-      // Overwrite outputs with the result of the output region
-      for (auto [i, ov] : llvm::enumerate(outputSmtValues))
-        updatedSmtValues[numArgs + i] = ov;
-
       // Time update (if present).
       if (cfg.withTime) {
         Value nextTime;
@@ -762,7 +742,19 @@ LogicalResult MachineOpConverter::dispatch() {
       return b.create<smt::BoolConstantOp>(loc, true);
     };
     
-    
+    auto output = [&](SmallVector<Value> outputArgsOutsVarsVals) -> SmallVector<Value> {
+      SmallVector<Value> outputSmtValues;
+      if (transition.hasOutput) {
+        // map each FSM variable to a corresponding SMT value.
+        SmallVector<std::pair<Value, Value>> valToSmt;
+        // initialize the map with the quantified arguments 
+        for (auto [id, val] : llvm::enumerate(argsOutsVarsVals))
+          valToSmt.push_back({val, outputArgsOutsVarsVals[id]});
+        // retrieve the output SMT values and assertions from the output region
+        outputSmtValues = parseOutputRegion(transition.output, assertions, valToSmt, loc, transition.to);
+      } 
+      return outputSmtValues;
+    };
 
     // For each transition, assert:
     // Forall (argsNew,argsOld,...): 
@@ -781,15 +773,17 @@ LogicalResult MachineOpConverter::dispatch() {
     auto forall = b.create<smt::ForallOp>(
         loc, doubleArgsOutsVarsTypes,
         [&](OpBuilder &b, Location loc, ValueRange forallDoubledArgsOutputVarsInputs) -> Value {
-          SmallVector<Value> startingArgs;
-          SmallVector<Value> arrivingArgs;
+          SmallVector<Value> startingArgsOutsVars;
+          SmallVector<Value> arrivingArgsOutsVars;
+          
+
           
           for (size_t i = 0; i < 2 * numArgs; i++) {
             llvm::outs() << "Arg " << i << ": " << forallDoubledArgsOutputVarsInputs[i] << "\n";
             if (i % 2 == 1)
-              startingArgs.push_back(forallDoubledArgsOutputVarsInputs[i]);
+              startingArgsOutsVars.push_back(forallDoubledArgsOutputVarsInputs[i]);
             else
-              arrivingArgs.push_back(forallDoubledArgsOutputVarsInputs[i]);
+              arrivingArgsOutsVars.push_back(forallDoubledArgsOutputVarsInputs[i]);
           }
           
           // Initialize state function arguments (outs, vars, [time])
@@ -798,29 +792,39 @@ LogicalResult MachineOpConverter::dispatch() {
             stateFuncArgs.push_back(forallDoubledArgsOutputVarsInputs[i]);
           }
           
-          auto inFrom = b.create<smt::ApplyFuncOp>(loc, stateFunctions[transition.from],
+          // the state function only takes outputs and variables (and optionally time) as arguments
+          auto startingStateFun = b.create<smt::ApplyFuncOp>(loc, stateFunctions[transition.from],
                                                    stateFuncArgs);
     
-          for (auto funcArg : stateFuncArgs)
-            startingArgs.push_back(funcArg);                       
+          for (auto funcArg : stateFuncArgs){
+            startingArgsOutsVars.push_back(funcArg); 
+            arrivingArgsOutsVars.push_back(funcArg);    
+          }    
           
-          SmallVector<Value> actionedStateFuncArgs = action(startingArgs);
+          SmallVector<Value> actionedStateFuncArgs = action(startingArgsOutsVars);
+          SmallVector<Value> outputStateFuncArgs = output(arrivingArgsOutsVars);
           
           SmallVector<Value> actionedStateFuncArgsForFunc;
+          
           // only outs, vars, [time] are arguments of the state function
           for (auto i = numArgs; i < actionedStateFuncArgs.size(); ++i) {
-            llvm::outs() << "Arg " << i - numArgs << ": " << actionedStateFuncArgs[i] << "\n";  
-            actionedStateFuncArgsForFunc.push_back(actionedStateFuncArgs[i]);
+            if (i < numOut + numArgs) {
+              // outputs are the ones computed from the output region
+              actionedStateFuncArgsForFunc.push_back(outputStateFuncArgs[i - numArgs]);
+            } else {
+              // variables and time result from the update in the action region
+              actionedStateFuncArgsForFunc.push_back(actionedStateFuncArgs[i]);
+            }
           }
 
           auto rhs =
               b.create<smt::ApplyFuncOp>(loc, stateFunctions[transition.to],
                                          actionedStateFuncArgsForFunc);
                                          
-          auto guardVal = guard(startingArgs);
+          auto guardVal = guard(startingArgsOutsVars);
           llvm::outs() << guardVal;
           llvm::outs() << "\n\n";
-          auto lhs = b.create<smt::AndOp>(loc, inFrom, guardVal);
+          auto lhs = b.create<smt::AndOp>(loc, startingStateFun, guardVal);
           return b.create<smt::ImpliesOp>(loc, lhs, rhs);
           
         });
@@ -874,17 +878,9 @@ void FSMToSMTPass::runOnOperation() {
     return;
   }
 
-  // Read options from the generated base. Defaults:
-  // withTime (false), bitVecOrInt ("bitVec").
+  // Read options from the generated base
   LoweringConfig cfg;
-  cfg.withTime = withTime;
-  // Normalize option string.
-  // if (mode == "int" || mode == "ints" || mode == "integer")
-  //   cfg.useBitVec = false;
-  // else
-  //   cfg.useBitVec = true; // default
-
-  // Optional: set time width; keep 5 as stable default (can be parameterized later).
+  cfg.withTime = withTime; // default false
   cfg.timeWidth = 5;
 
   for (auto machine : llvm::make_early_inc_range(module.getOps<MachineOp>())) {
@@ -893,7 +889,6 @@ void FSMToSMTPass::runOnOperation() {
       signalPassFailure();
       return;
     }
-    // Clean up dangling HW constants left around.
     module.walk([&](circt::hw::ConstantOp cst) { cst.erase(); });
   }
 }
