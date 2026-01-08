@@ -14,8 +14,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_TOOLS_ARCILATOR_ARCRUNTIME_JITBIND_H
-#define CIRCT_TOOLS_ARCILATOR_ARCRUNTIME_JITBIND_H
+#ifndef CIRCT_DIALECT_ARC_ARCRUNTIME_JITBIND_H
+#define CIRCT_DIALECT_ARC_ARCRUNTIME_JITBIND_H
 
 namespace circt {
 namespace arc {
@@ -40,4 +40,4 @@ const APICallbacks &getArcRuntimeAPICallbacks();
 } // namespace arc
 } // namespace circt
 
-#endif // CIRCT_TOOLS_ARCILATOR_ARCRUNTIME_JITBIND_H
+#endif // CIRCT_DIALECT_ARC_ARCRUNTIME_JITBIND_H

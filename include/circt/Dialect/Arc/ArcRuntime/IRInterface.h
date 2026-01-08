@@ -13,8 +13,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_TOOLS_ARCILATOR_ARCRUNTIME_IRINTERFACE_H
-#define CIRCT_TOOLS_ARCILATOR_ARCRUNTIME_IRINTERFACE_H
+#ifndef CIRCT_DIALECT_ARC_ARCRUNTIME_IRINTERFACE_H
+#define CIRCT_DIALECT_ARC_ARCRUNTIME_IRINTERFACE_H
 
 // NOLINTBEGIN(readability-identifier-naming)
 
@@ -77,4 +77,4 @@ ARC_IR_EXPORT void arcRuntimeIR_deleteInstance(uint8_t *modelState);
 ARC_IR_EXPORT void arcRuntimeIR_onEval(uint8_t *modelState);
 
 // NOLINTEND(readability-identifier-naming)
-#endif // CIRCT_TOOLS_ARCILATOR_ARCRUNTIME_IRINTERFACE_H
+#endif // CIRCT_DIALECT_ARC_ARCRUNTIME_IRINTERFACE_H
