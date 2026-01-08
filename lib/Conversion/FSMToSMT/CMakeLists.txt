@@ -1,21 +1,11 @@
-add_circt_conversion_library(CIRCTFSMToSMT
-    FSMToSMT.cpp
+add_circt_conversion_library(CIRCTFSMToSMT FSMToSMT.cpp
 
-    DEPENDS
-    CIRCTConversionPassIncGen
+                                 DEPENDS CIRCTConversionPassIncGen
 
-    LINK_COMPONENTS
-    Core
+                                     LINK_COMPONENTS Core
 
+                                         LINK_LIBS PUBLIC MLIRSMT
 
-    LINK_LIBS PUBLIC
-    MLIRSMT
-
-    CIRCTComb
-    CIRCTVerif
-    CIRCTHW
-    CIRCTEmit
-    CIRCTFSM
-    CIRCTSupport
-    MLIRTransforms
-)
+                                             CIRCTComb CIRCTVerif CIRCTHW
+                                                 CIRCTEmit CIRCTFSM CIRCTSupport
+                                                     MLIRTransforms)
