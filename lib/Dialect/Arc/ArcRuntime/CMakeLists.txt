@@ -7,14 +7,15 @@ set(ArcRuntimeLibSources
 if (WIN32)
 # Ship a DLL for Windows to avoid trouble with Debug/Release builds of
 # the C runtime.
-  add_library(ArcRuntime SHARED ${ArcRuntimeLibSources})
+  add_circt_library(CIRCTArcRuntime SHARED EXCLUDE_FROM_LIBMLIR ${ArcRuntimeLibSources})
 else()
-  add_library(ArcRuntime STATIC ${ArcRuntimeLibSources})
+  add_circt_library(CIRCTArcRuntime EXCLUDE_FROM_LIBMLIR ${ArcRuntimeLibSources})
 endif()
-target_include_directories(ArcRuntime PUBLIC ${ARC_RUNTIME_INCLUDE})
-
 
 # JIT runtime statically linked into the arcilator tool
-add_library(ArcJITRuntime STATIC ${ArcRuntimeLibSources})
-target_include_directories(ArcJITRuntime PUBLIC ${ARC_RUNTIME_INCLUDE})
-target_compile_definitions(ArcJITRuntime PUBLIC ARC_RUNTIME_JIT_BIND)
+add_circt_library(CIRCTArcJITRuntime
+  EXCLUDE_FROM_LIBMLIR
+  OBJECT
+  ${ArcRuntimeLibSources}
+)
+target_compile_definitions(obj.CIRCTArcJITRuntime PUBLIC ARC_RUNTIME_JIT_BIND)

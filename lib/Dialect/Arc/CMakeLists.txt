@@ -61,14 +61,14 @@ add_subdirectory(Transforms)
 set(ARC_RUNTIME_INCLUDE ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Arc)
 add_subdirectory(ArcRuntime)
 
-install(TARGETS ArcRuntime
-  DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  COMPONENT ArcRuntime
-)
+#install(TARGETS ArcRuntime
+#  DESTINATION ${CMAKE_INSTALL_LIBDIR}
+#  COMPONENT ArcRuntime
+#)
 
-install(FILES
-  ${ARC_RUNTIME_INCLUDE}/ArcRuntime/ArcRuntime.h
-  ${ARC_RUNTIME_INCLUDE}/ArcRuntime/Common.h
-  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ArcRuntime
-  COMPONENT ArcRuntime
-)
+#install(FILES
+#  ${ARC_RUNTIME_INCLUDE}/ArcRuntime/ArcRuntime.h
+#  ${ARC_RUNTIME_INCLUDE}/ArcRuntime/Common.h
+#  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ArcRuntime
+#  COMPONENT ArcRuntime
+#)

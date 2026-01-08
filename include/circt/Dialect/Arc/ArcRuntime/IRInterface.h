@@ -47,7 +47,7 @@
 #endif // #ifndef ARC_RUNTIME_JIT_BIND
 #endif // #ifndef ARC_IR_EXPORT
 
-#include "ArcRuntime/Common.h"
+#include "circt/Dialect/Arc/ArcRuntime/Common.h"
 
 #include <stdint.h>
 

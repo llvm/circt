@@ -13,7 +13,7 @@
 #ifndef CIRCT_DIALECT_ARC_ARCRUNTIME_ARCRUNTIME_H
 #define CIRCT_DIALECT_ARC_ARCRUNTIME_ARCRUNTIME_H
 
-#include "ArcRuntime/Common.h"
+#include "circt/Dialect/Arc/ArcRuntime/Common.h"
 
 // `ARC_RUNTIME_ENABLE_EXPORT` must be set when compiling the runtime.
 // Do not set when using (i.e., linking against) it.

@@ -16,8 +16,8 @@
 #ifndef CIRCT_DIALECT_ARC_ARCRUNTIME_MODELINSTANCE_H
 #define CIRCT_DIALECT_ARC_ARCRUNTIME_MODELINSTANCE_H
 
-#include "ArcRuntime/ArcRuntime.h"
-#include "ArcRuntime/Common.h"
+#include "circt/Dialect/Arc/ArcRuntime/ArcRuntime.h"
+#include "circt/Dialect/Arc/ArcRuntime/Common.h"
 
 namespace circt {
 namespace arc {

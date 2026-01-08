@@ -4,5 +4,5 @@ add_circt_unittest(CIRCTArcRuntimeUnitTests
 
 target_link_libraries(CIRCTArcRuntimeUnitTests
   PRIVATE
-  ArcJITRuntime
+  CIRCTArcJITRuntime
 )
