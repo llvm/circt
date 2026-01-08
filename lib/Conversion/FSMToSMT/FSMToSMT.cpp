@@ -761,26 +761,35 @@ LogicalResult MachineOpConverter::dispatch() {
       // return true if the transition has no guard
       return b.create<smt::BoolConstantOp>(loc, true);
     };
+    
+    
 
     // For each transition, assert:
-    // Forall (argsNew,argsOld,others): 
-    // F_from(out_old, vars_old, [time]) AND guard(args_old, out_old, vars_old)
-    //    => F_to(out_new, vars_new, [time+1])
+    // Forall (argsNew,argsOld,...): 
+    // F_from(outOld, varsOld, [time]) AND guard(argsOld, outOld, varsOld)
+    //    => F_to(outNew, varsNew, [time+1])
+    // we need two copies of each args: argsOld, argsNew
+    SmallVector<Type> doubleArgsOutsVarsTypes;
+    for (auto [id, ty] : llvm::enumerate(argsOutsVarsTypes)) {
+      if (id < numArgs) {
+        doubleArgsOutsVarsTypes.push_back(ty);
+        doubleArgsOutsVarsTypes.push_back(ty);
+      } else {
+        doubleArgsOutsVarsTypes.push_back(ty);
+      }
+    }
     auto forall = b.create<smt::ForallOp>(
-        loc, argsOutsVarsTypes,
+        loc, doubleArgsOutsVarsTypes,
         [&](OpBuilder &b, Location loc, ValueRange forallDoubledArgsOutputVarsInputs) -> Value {
           SmallVector<Value> startingArgs;
           SmallVector<Value> arrivingArgs;
           
-          
-          // we have two copies of each args args_old, args_new
-          for (auto [idx, fdi] : llvm::enumerate(forallDoubledArgsOutputVarsInputs)) {
-            if (idx < static_cast<size_t>(numArgs * 2)) {
-              if (idx % 2 == 1)
-                startingArgs.push_back(fdi);
-              else
-                arrivingArgs.push_back(fdi);
-            }
+          for (size_t i = 0; i < 2 * numArgs; i++) {
+            llvm::outs() << "Arg " << i << ": " << forallDoubledArgsOutputVarsInputs[i] << "\n";
+            if (i % 2 == 1)
+              startingArgs.push_back(forallDoubledArgsOutputVarsInputs[i]);
+            else
+              arrivingArgs.push_back(forallDoubledArgsOutputVarsInputs[i]);
           }
           
           // Initialize state function arguments (outs, vars, [time])
@@ -799,14 +808,18 @@ LogicalResult MachineOpConverter::dispatch() {
           
           SmallVector<Value> actionedStateFuncArgsForFunc;
           // only outs, vars, [time] are arguments of the state function
-          for (auto i = numArgs; i < actionedStateFuncArgs.size(); ++i) 
+          for (auto i = numArgs; i < actionedStateFuncArgs.size(); ++i) {
+            llvm::outs() << "Arg " << i - numArgs << ": " << actionedStateFuncArgs[i] << "\n";  
             actionedStateFuncArgsForFunc.push_back(actionedStateFuncArgs[i]);
+          }
 
           auto rhs =
               b.create<smt::ApplyFuncOp>(loc, stateFunctions[transition.to],
                                          actionedStateFuncArgsForFunc);
                                          
           auto guardVal = guard(startingArgs);
+          llvm::outs() << guardVal;
+          llvm::outs() << "\n\n";
           auto lhs = b.create<smt::AndOp>(loc, inFrom, guardVal);
           return b.create<smt::ImpliesOp>(loc, lhs, rhs);
           
@@ -814,7 +827,12 @@ LogicalResult MachineOpConverter::dispatch() {
 
     b.create<smt::AssertOp>(loc, forall);
   }
-
+  
+  // Print lowered so far 
+  llvm::outs() << "\n\nLowered SMT so far:\n";
+  solver.print(llvm::outs());
+  llvm::outs() << "\n\n";
+  
   // Lower each captured verif.assert as a safety clause:
   // Forall x. F_state(x) => predicate(x)
   for (auto &pa : assertions) {
@@ -859,7 +877,7 @@ void FSMToSMTPass::runOnOperation() {
   // Read options from the generated base. Defaults:
   // withTime (false), bitVecOrInt ("bitVec").
   LoweringConfig cfg;
-  cfg.withTime = 1;
+  cfg.withTime = withTime;
   // Normalize option string.
   // if (mode == "int" || mode == "ints" || mode == "integer")
   //   cfg.useBitVec = false;
