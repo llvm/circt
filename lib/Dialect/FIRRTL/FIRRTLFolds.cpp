@@ -962,14 +962,11 @@ OpFoldResult IntegerShrOp::fold(FoldAdaptor adaptor) {
   if (auto rhsCst = getConstant(adaptor.getRhs())) {
     if (auto lhsCst = getConstant(adaptor.getLhs())) {
 
-      return IntegerAttr::get(
-          IntegerType::get(getContext(), lhsCst->getBitWidth()),
-          lhsCst->ashr(*rhsCst));
+      return IntegerAttr::get(getType(), lhsCst->ashr(*rhsCst));
     }
 
-    if (rhsCst->isZero()) {
+    if (rhsCst->isZero())
       return getLhs();
-    }
   }
 
   return {};
