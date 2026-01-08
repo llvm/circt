@@ -50,16 +50,6 @@ DPI void sv2cCosimserverFinish();
 DPI void sv2cCosimserverSetManifest(int esiVersion,
                                     const svOpenArrayHandle compressedManifest);
 
-/// DPI export function implemented in SystemVerilog - returns the current
-/// cycle count from the simulation. This is called by the C++ side.
-extern unsigned long long c2svCosimserverGetCycleCount();
-
-/// Set the core clock frequency and enable cycle count queries. After calling
-/// this, the runtime can query the current simulation cycle via the exported
-/// c2svCosimserverGetCycleCount function.
-DPI void
-sv2cCosimserverSetCycleCountCallback(unsigned long long clockFrequencyHz);
-
 /// Register an MMIO module. Just checks that there is only one instantiated.
 DPI int sv2cCosimserverMMIORegister();
 

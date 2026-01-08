@@ -21,7 +21,6 @@
 
 namespace esi {
 namespace cosim {
-using GetCycleCountFunc = std::function<uint64_t()>;
 
 /// TODO: make this a proper backend (as much as possible).
 class RpcServer {
@@ -36,10 +35,8 @@ public:
   /// RPC server can be started and a connection from the client could happen
   /// before the manifest is set. TODO: rework the DPI API to require that the
   /// manifest gets set first.
-  void setSysInfo(int esiVersion,
-                  std::optional<GetCycleCountFunc> getCycleCount,
-                  std::optional<uint64_t> coreClockFrequencyHz,
-                  const std::vector<uint8_t> &compressedManifest);
+  void setManifest(int esiVersion,
+                   const std::vector<uint8_t> &compressedManifest);
 
   /// Register a read or write port which communicates over RPC.
   ReadChannelPort &registerReadPort(const std::string &name,

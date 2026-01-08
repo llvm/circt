@@ -25,14 +25,14 @@ cycle_count = sysinfo.cycle_count()
 if cycle_count is not None:
   print(f"Cycle count: {cycle_count}")
   assert cycle_count > 0, f"Cycle count should be positive, got {cycle_count}"
-  
+
   # Test that cycle count is monotonically increasing
   time.sleep(0.01)  # Small delay to let simulation advance
   cycle_count2 = sysinfo.cycle_count()
   print(f"Cycle count after delay: {cycle_count2}")
   assert cycle_count2 > cycle_count, \
       f"Cycle count should be monotonically increasing: {cycle_count2} <= {cycle_count}"
-  
+
   # Test again to ensure consistency
   time.sleep(0.01)
   cycle_count3 = sysinfo.cycle_count()

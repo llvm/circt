@@ -234,10 +234,10 @@ public:
 
   uint32_t getEsiVersion() const override { return rpcClient->getEsiVersion(); }
   std::optional<uint64_t> getCycleCount() const override {
-    return rpcClient->getCycleCount();
+    return std::nullopt;
   }
   std::optional<uint64_t> getCoreClockFrequency() const override {
-    return rpcClient->getCoreClockFrequency();
+    return std::nullopt;
   }
 
   std::vector<uint8_t> getCompressedManifest() const override {

@@ -269,10 +269,3 @@ int svIsDisabledState(void) {
 void svAckDisabledState(void) {
   assert(false && "Linking error: should not ever execute.");
 }
-
-// DPI export stub for cycle count function.
-// This is exported from SystemVerilog and will be provided by the simulator.
-extern "C" unsigned long long c2svCosimserverGetCycleCount() {
-  assert(false && "Linking error: should not ever execute.");
-  return 0;
-}

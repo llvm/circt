@@ -36,11 +36,9 @@ message ListOfChannels { repeated ChannelDesc channels = 1; }
 // Empty message since gRPC only supports exactly one argument and return.
 message VoidMessage {}
 
-// System information message.
-message SysInfo {
+// The manifest package.
+message Manifest {
   int32 esi_version = 1;
-  optional uint64 cycle_count = 3;
-  optional uint64 core_clock_frequency_hz = 4;
   bytes compressed_manifest = 2;
 }
 
@@ -55,8 +53,8 @@ message AddressedMessage {
 
 // The server interface provided by the ESI cosim server.
 service ChannelServer {
-  // Get the system information embedded in the accelerator.
-  rpc GetSysInfo(VoidMessage) returns (SysInfo) {}
+  // Get the manifest embedded in the accelertor.
+  rpc GetManifest(VoidMessage) returns (Manifest) {}
 
   // List the channels that the client can connect to.
   rpc ListChannels(VoidMessage) returns (ListOfChannels) {}

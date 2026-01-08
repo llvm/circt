@@ -776,12 +776,10 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
   Attribute cycleCountParams[] = {
       ParamDeclAttr::get("CORE_CLOCK_FREQUENCY_HZ", rewriter.getI64Type())};
   PortInfo cycleCountPorts[] = {
-      {{rewriter.getStringAttr("clk"),
-        seq::ClockType::get(ctxt),
+      {{rewriter.getStringAttr("clk"), seq::ClockType::get(ctxt),
         ModulePort::Direction::Input},
        0},
-      {{rewriter.getStringAttr("rst"),
-        rewriter.getI1Type(),
+      {{rewriter.getStringAttr("rst"), rewriter.getI1Type(),
         ModulePort::Direction::Input},
        1},
   };
@@ -795,12 +793,10 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
   // Create a wrapper module that will be instantiated in the top module.
   // This module needs to have clock and reset inputs.
   PortInfo cycleCountWrapperPorts[] = {
-      {{rewriter.getStringAttr("clk"),
-        seq::ClockType::get(ctxt),
+      {{rewriter.getStringAttr("clk"), seq::ClockType::get(ctxt),
         ModulePort::Direction::Input},
        0},
-      {{rewriter.getStringAttr("rst"),
-        rewriter.getI1Type(),
+      {{rewriter.getStringAttr("rst"), rewriter.getI1Type(),
         ModulePort::Direction::Input},
        1},
   };
@@ -816,12 +812,11 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
 
         // Instantiate the external Cosim_CycleCount module.
         // Use a default frequency of 100 MHz.
-        hw::InstanceOp::create(
-            rewriter, loc, cosimCycleCountExternModule, "__cycle_counter",
-            ArrayRef<Value>({clk, rst}),
-            rewriter.getArrayAttr({ParamDeclAttr::get(
-                "CORE_CLOCK_FREQUENCY_HZ",
-                rewriter.getI64IntegerAttr(100000000))}));
+        hw::InstanceOp::create(rewriter, loc, cosimCycleCountExternModule,
+                               "__cycle_counter", ArrayRef<Value>({clk, rst}),
+                               rewriter.getArrayAttr({ParamDeclAttr::get(
+                                   "CORE_CLOCK_FREQUENCY_HZ",
+                                   rewriter.getI64IntegerAttr(100000000))}));
       });
 
   // Note: The instantiation of __ESICycleCounter will need to be done in the
