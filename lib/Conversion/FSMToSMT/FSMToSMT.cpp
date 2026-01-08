@@ -504,7 +504,6 @@ LogicalResult MachineOpConverter::dispatch() {
   SmallVector<Type> outsVarsTypes;
   for (auto i = numArgs; i < argsOutsVarsTypes.size(); ++i) {
     // only outputs and variables
-    llvm::outs()<<"Adding to outsVarsTypes type: "<< argsOutsVarsTypes[i] << "\n";
     outsVarsTypes.push_back(argsOutsVarsTypes[i]);
   }
 
@@ -543,6 +542,7 @@ LogicalResult MachineOpConverter::dispatch() {
     }
   }
 
+
   // Collect `verif.assert` properties, to be lowered subsequently.
   struct PendingAssertion {
     int stateId;
@@ -577,8 +577,8 @@ LogicalResult MachineOpConverter::dispatch() {
                 b.getIntegerAttr(b.getIntegerType(val.getBitWidth()), val);
             retrievedInitVarVals.push_back(b.create<smt::IntConstantOp>(loc, attr));
           }
-          
         }
+          
         // store the SMT values corresponding to the output values
         SmallVector<Value> outputSmtValues;
         // Evaluate output region at init to compute outputs (if present).
@@ -589,10 +589,10 @@ LogicalResult MachineOpConverter::dispatch() {
           SmallVector<std::pair<Value, Value>> valToSmt;
           for (auto [i, a] : llvm::enumerate(argsOutsVarsVals)) {
             if (i >= numOut + numArgs && i < numOut + numArgs + numVars) {
-              // Store initial values for variables 
+              // store initial values for variables 
               valToSmt.push_back({a, retrievedInitVarVals[i - numOut - numArgs]});
             } else {
-              // Push a fake value for arguments and outputs 
+              // store SMT quantified variables for arguments and outputs
               valToSmt.push_back({a, forallArgsOutsVars[i]});
             }
           }
@@ -604,9 +604,9 @@ LogicalResult MachineOpConverter::dispatch() {
               for (auto outputOperand : outOp->getOperands()) {
                 bool found = false;
                 // search for the SMT value in valToSmt
-                for (auto [i, valToSmt] : llvm::enumerate(valToSmt)) {
-                  // if the operand is an input, retrieve the value from forallArgsOutsVars
-                  if (outputOperand == valToSmt.first && i < numArgs) {
+                for (auto [i, valSmtPair] : llvm::enumerate(valToSmt)) {
+                  // if the operand is an input, store SMT quantified variable
+                  if (outputOperand == valSmtPair.first && i < numArgs) {
                     outputSmtValues.push_back(forallArgsOutsVars[i]);
                     found = true;
                   }
@@ -633,6 +633,8 @@ LogicalResult MachineOpConverter::dispatch() {
           // variables are initialized to their initial values
           else if (i >= numOut + numArgs && i < numOut + numArgs + numVars) {
             initStateArgs.push_back(retrievedInitVarVals[i - (numOut + numArgs)]); // vars
+          } else if (i >= numArgs) {
+            initStateArgs.push_back(forallArgsOutsVars[i]); // arguments (and time)
           }
         }
 
@@ -651,34 +653,63 @@ LogicalResult MachineOpConverter::dispatch() {
 
   b.create<smt::AssertOp>(loc, initState);
 
-
-  // Transition semantics.
-  // for (auto [id1, t1] : llvm::enumerate(transitions)) {
-    
-    
-  //   auto action = [&](SmallVector<Value> actionArgs)
+  // Dump all the content lowered so far 
+  llvm::outs() << "\n\n--- SMT so far ---\n";
+  solver.print(llvm::outs());
+  llvm::outs() << "\n\n------------------\n";  
+  
+  // For each transition 
+  // F_state0(vars, outs, [time]) &&& guard (args, vars) -> F_state1(updatedVars, updatedOuts, [time + 1]), 
+  // build a corresponding implication.
+  // for (auto [transId, transition] : llvm::enumerate(transitions)) {
+  //   auto action = [&](SmallVector<Value> actionArgsOutsVarsVals)
   //       -> SmallVector<Value> {
-  //     // actionArgs are the current tuple (args, outs, vars, [time]).
-  //     SmallVector<Value> outputSmtValues;
-
-  //     if (t1.hasOutput) {
-  //       SmallVector<std::pair<Value, Value>> avToSmt;
-  //       for (auto [id, av] : llvm::enumerate(argsOutsVarsVals))
-  //         avToSmt.push_back({av, actionArgs[id]});
-  //       for (auto &op : t1.output->getOps()) {
+      
+  //     // if the transition ends in a state with an output region, evaluate the output region too
+  //     if (transition.hasOutput) {
+  //       // map each FSM variable to a corresponding SMT value.
+  //       SmallVector<std::pair<Value, Value>> valToSmt;
+        
+  //       // initialize the map with the quantified arguments 
+  //       for (auto [id, val] : llvm::enumerate(argsOutsVarsVals))
+  //         valToSmt.push_back({val, actionArgsOutsVarsVals[id]});
+        
+  //       // store the SMT values corresponding to the output values
+  //       SmallVector<Value> outputSmtValues;
+  //       // for each operation in the output region, retrieve the output values
+  //       for (auto &op : transition.output->getOps()) {
   //         if (auto outOp = dyn_cast<fsm::OutputOp>(op)) {
   //           for (auto outs : outOp->getOperands()) {
-  //             auto v = getSmtValue(outs, avToSmt, loc);
+  //             auto v = getSmtValue(outs, valToSmt, loc);
   //             outputSmtValues.push_back(v);
   //           }
   //         }
   //         if (auto a = dyn_cast<verif::AssertOp>(op)) {
   //           // Store original FSM value; defer lowering.
-  //           assertions.push_back({t1.to, a.getOperand(0)});
+  //           assertions.push_back({transition.to, a.getOperand(0)});
   //         }
   //       }
   //     }
 
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
   //     SmallVector<std::pair<Value, Value>> avToSmt;
   //     SmallVector<Value> updatedSmtValues;
 
@@ -838,7 +869,7 @@ void FSMToSMTPass::runOnOperation() {
   // Read options from the generated base. Defaults:
   // withTime (false), bitVecOrInt ("bitVec").
   LoweringConfig cfg;
-  cfg.withTime = withTime;
+  cfg.withTime = 1;
   // Normalize option string.
   // if (mode == "int" || mode == "ints" || mode == "integer")
   //   cfg.useBitVec = false;
