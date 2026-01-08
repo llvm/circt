@@ -16,5 +16,5 @@ target_include_directories(ArcRuntime PUBLIC ${ARC_RUNTIME_INCLUDE})
 
 # JIT runtime statically linked into the arcilator tool
 add_library(ArcJITRuntime STATIC ${ArcRuntimeLibSources})
-target_include_directories(ArcJITRuntime PRIVATE ${ARC_RUNTIME_INCLUDE})
+target_include_directories(ArcJITRuntime PUBLIC ${ARC_RUNTIME_INCLUDE})
 target_compile_definitions(ArcJITRuntime PUBLIC ARC_RUNTIME_JIT_BIND)
