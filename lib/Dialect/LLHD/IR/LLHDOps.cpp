@@ -114,9 +114,8 @@ getIntegerSubelementIndexMap(Type type, Value value) {
     return {};
 
   // Calculate the intervals of bits demanded by users. If a user's interval
-  // is unknown, `bitBlastingRequired` is set to true.
+  // is unknown, we return nullopt.
   SmallVector<bool> startIndices(width, false);
-  bool bitBlastingRequired = false;
   for (Operation *user : value.getUsers()) {
     if (auto extract = dyn_cast<SigExtractOp>(user)) {
       APInt lowBit;
@@ -134,22 +133,11 @@ getIntegerSubelementIndexMap(Type type, Value value) {
       continue;
     }
     // Potentially dynamic start index.
-    bitBlastingRequired = true;
-    break;
+    return {};
   }
 
-  // Bit-blasting creates a subelement slot per bit.
+  // Create subelements for each interval.
   DenseMap<Attribute, Type> destructured;
-  if (bitBlastingRequired) {
-    for (int i = 0; i < width; ++i) {
-      destructured.insert(
-          {IntegerAttr::get(IndexType::get(type.getContext()), i),
-           IntegerType::get(type.getContext(), 1)});
-    }
-    return destructured;
-  }
-
-  // Otherwise, we can create subelements for each interval.
   for (int start = 0; start < width;) {
     int end = start + 1;
     while (end < width && !startIndices[end])
