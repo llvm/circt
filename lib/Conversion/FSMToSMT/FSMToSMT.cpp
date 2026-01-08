@@ -82,21 +82,7 @@ public:
 
 private:
 
-  // Helpers (mode-aware).
-  Type numTypeForWidth(unsigned w) {
-    return b.getType<smt::BitVectorType>(w);
-  }
-
-  Value zeroConst(unsigned w, Location loc) {
-    return b.create<smt::BVConstantOp>(loc, 0, w);
-  }
-
-  Value oneConst(unsigned w, Location loc) {
-    return b.create<smt::BVConstantOp>(loc, 1, w);
-  }
-
-  // BV-only: (!smt.bv<1> -> !smt.bool). If already Bool, return as-is.
-  static Value bv1ToBool(OpBuilder &b, Location loc, Value v) {
+  static Value bvToBool(OpBuilder &b, Location loc, Value v) {
     if (auto bvTy = llvm::dyn_cast<smt::BitVectorType>(v.getType())) {
       if (bvTy.getWidth() == 1) {
         auto one = b.create<smt::BVConstantOp>(loc, 1, 1);
@@ -106,13 +92,13 @@ private:
     if (llvm::isa<smt::BoolType>(v.getType()))
       return v;
     v.getDefiningOp()->emitError()
-        << "bv1ToBool expected !smt.bv<1> or !smt.bool, got " << v;
-    assert(false && "bv1ToBool type mismatch");
+        << "bvToBool expected !smt.bv<1> or !smt.bool, got " << v;
+    assert(false && "bvToBool type mismatch");
     return v;
   }
 
-  // BV-only: (!smt.bool -> !smt.bv<1>). If already BV<1>, return as-is.
-  static Value boolToBV1(OpBuilder &b, Location loc, Value pred) {
+  static Value boolToBv(OpBuilder &b, Location loc, Value pred) {
+    
     if (llvm::isa<smt::BoolType>(pred.getType())) {
       auto one = b.create<smt::BVConstantOp>(loc, 1, 1);
       auto zero = b.create<smt::BVConstantOp>(loc, 0, 1);
@@ -123,55 +109,17 @@ private:
       if (bvTy.getWidth() == 1)
         return pred;
     pred.getDefiningOp()->emitError()
-        << "boolToBV1 expected !smt.bool or !smt.bv<1>, got " << pred;
-    assert(false && "boolToBV1 type mismatch");
+        << "boolToBv expected !smt.bool or !smt.bv<1>, got " << pred;
+    assert(false && "boolToBv type mismatch");
     return pred;
   }
 
-  // Mode-aware: !smt.bool -> numeric (BV<1> or Int(0/1))
-  Value boolToNumeric(Value v, Location loc) {
-    if (!llvm::isa<smt::BoolType>(v.getType()))
-      return v;
-    return boolToBV1(b, loc, v);
-  }
-
-  // Mode-aware: numeric (BV<1> or Int) -> Bool
-  Value numericToBool(Value v, Location loc) {
-    if (llvm::isa<smt::BoolType>(v.getType()))
-      return v;
-    if (auto bvTy = llvm::dyn_cast<smt::BitVectorType>(v.getType())) {
-      if (bvTy.getWidth() == 1) {
-        auto one = b.create<smt::BVConstantOp>(loc, 1, 1);
-        return b.create<smt::EqOp>(loc, v, one);
-      }
-      v.getDefiningOp()->emitError()
-          << "expected !smt.bv<1> for numericToBool, got " << v;
-      assert(false && "non-1-width BV to bool");
-    }
-    // int mode: v != 0
-    auto z = oneConst(/*w*/ 2, loc);
-    return b.create<smt::EqOp>(loc, v, z);
-  }
-  
-  // Type width computation for lowering aggregates.
   static unsigned getPackedBitWidth(Type t) {
     if (auto intTy = llvm::dyn_cast<IntegerType>(t))
       return intTy.getIntOrFloatBitWidth();
 
     if (auto bvTy = llvm::dyn_cast<smt::BitVectorType>(t))
       return bvTy.getWidth();
-
-    if (auto arrTy = llvm::dyn_cast<hw::ArrayType>(t)) {
-      unsigned elemW = getPackedBitWidth(arrTy.getElementType());
-      return elemW * arrTy.getNumElements();
-    }
-
-    if (auto structTy = llvm::dyn_cast<hw::StructType>(t)) {
-      unsigned w = 0;
-      for (auto elem : structTy.getElements())
-        w += getPackedBitWidth(elem.type);
-      return w;
-    }
 
     llvm::errs() << "Unsupported type for bitwidth computation in FSMToSMT: "
                  << t << "\n";
@@ -201,6 +149,22 @@ private:
     assert(false && "unsupported comparison predicate");
   }
   
+  Value numericToBool(Value v, Location loc) {
+    if (llvm::isa<smt::BoolType>(v.getType()))
+      return v;
+    if (auto bvTy = llvm::dyn_cast<smt::BitVectorType>(v.getType())) {
+      if (bvTy.getWidth() == 1) {
+        auto one = b.create<smt::BVConstantOp>(loc, 1, 1);
+        return b.create<smt::EqOp>(loc, v, one);
+      }
+      v.getDefiningOp()->emitError()
+          << "expected !smt.bv<1> for numericToBool, got " << v;
+      assert(false && "non-1-width BV to bool");
+    }
+    // int mode: v != 0
+    return b.create<smt::EqOp>(loc, v,b.create<smt::BVConstantOp>(loc, 1, 2));
+  }
+  
   // Build SMT for a comb op (mode-aware).
   Value getCombValue(Operation &op, Location &loc,
                      SmallVector<Value> args) {
@@ -210,9 +174,8 @@ private:
       if (auto bvTy = llvm::dyn_cast<smt::BitVectorType>(v.getType()))
         return v;
       if (llvm::isa<smt::BoolType>(v.getType()))
-        return boolToBV1(b, loc, v);
+        return boolToBv(b, loc, v);
     };
-
 
     auto toBool = [&](Value v) -> Value {
       if (llvm::isa<smt::BoolType>(v.getType()))
@@ -343,11 +306,11 @@ private:
       if (pred == comb::ICmpPredicate::eq) {
         // Generic eq works for both Int/BV; result Bool.
         Value eq = b.create<smt::EqOp>(loc, args);
-        return boolToBV1(b, icmp.getLoc(), eq);
+        return boolToBv(b, icmp.getLoc(), eq);
       }
       if (pred == comb::ICmpPredicate::ne) {
         auto dis = b.create<smt::DistinctOp>(loc, args);
-        return boolToBV1(b, icmp.getLoc(), dis);
+        return boolToBv(b, icmp.getLoc(), dis);
       }
       // ordered comparisons
       auto p = getSmtBVPred(pred);
@@ -384,7 +347,6 @@ private:
     return v;
   }
 
-  // Collect `verif.assert` properties, to be lowered subsequently.
   struct PendingAssertion {
     int stateId;
     Value predicateFsm; 
@@ -475,7 +437,7 @@ LogicalResult MachineOpConverter::dispatch() {
   // Collect arguments and their types
   for (auto a : machineArgs) {
     unsigned w = getPackedBitWidth(a.getType());
-    argsOutsVarsTypes.push_back(numTypeForWidth(w));
+    argsOutsVarsTypes.push_back(b.getType<smt::BitVectorType>(w));
     argsOutsVarsVals.push_back(a);
   }
   size_t numArgs = argsOutsVarsTypes.size();
@@ -484,9 +446,9 @@ LogicalResult MachineOpConverter::dispatch() {
   if (!machineOp.getResultTypes().empty()) {
     for (auto o : machineOp.getResultTypes()) {
       unsigned w = getPackedBitWidth(o);
-      argsOutsVarsTypes.push_back(numTypeForWidth(w));
+      argsOutsVarsTypes.push_back(b.getType<smt::BitVectorType>(w));
       // zero-initialize outputs
-      auto ov = zeroConst(w, loc);
+      auto ov = b.create<smt::BVConstantOp>(loc, 0, w);
       argsOutsVarsVals.push_back(ov);
     }
   }
@@ -496,7 +458,7 @@ LogicalResult MachineOpConverter::dispatch() {
   SmallVector<llvm::APInt> varInitValues;
   for (auto variableOp : machineOp.front().getOps<fsm::VariableOp>()) {
     unsigned w = getPackedBitWidth(variableOp.getType());
-    argsOutsVarsTypes.push_back(numTypeForWidth(w));
+    argsOutsVarsTypes.push_back(b.getType<smt::BitVectorType>(w));
     // retrieve initial value if available, set to 0#w otherwise
     if (auto intAttr = dyn_cast<IntegerAttr>(variableOp.getInitValueAttr()))
       varInitValues.push_back(intAttr.getValue());
@@ -779,7 +741,6 @@ LogicalResult MachineOpConverter::dispatch() {
 
           
           for (size_t i = 0; i < 2 * numArgs; i++) {
-            llvm::outs() << "Arg " << i << ": " << forallDoubledArgsOutputVarsInputs[i] << "\n";
             if (i % 2 == 1)
               startingArgsOutsVars.push_back(forallDoubledArgsOutputVarsInputs[i]);
             else
@@ -848,7 +809,7 @@ LogicalResult MachineOpConverter::dispatch() {
             avToSmt.push_back({av, forallInputs[i]});
 
           Value predVal = getSmtValue(pa.predicateFsm, avToSmt, loc);
-          Value predBool =  bv1ToBool(b, loc, predVal);
+          Value predBool =  bvToBool(b, loc, predVal);
 
           Value inState = b.create<smt::ApplyFuncOp>(
               loc, stateFunctions[pa.stateId], forallInputs);
