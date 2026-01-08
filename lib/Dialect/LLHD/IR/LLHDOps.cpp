@@ -8,9 +8,6 @@
 
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 
-#include <algorithm>
-#include <cstdint>
-
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
