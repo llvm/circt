@@ -28,6 +28,8 @@
 #define GET_OP_CLASSES
 #include "circt/Dialect/Synth/Synth.h.inc"
 
+#include "llvm/ADT/PriorityQueue.h"
+
 namespace circt {
 namespace synth {
 struct AndInverterVariadicOpConversion
@@ -46,6 +48,87 @@ struct AndInverterVariadicOpConversion
 LogicalResult topologicallySortGraphRegionBlocks(
     mlir::Operation *op,
     llvm::function_ref<bool(mlir::Value, mlir::Operation *)> isOperandReady);
+
+//===----------------------------------------------------------------------===//
+// Delay-Aware Tree Building Utilities
+//===----------------------------------------------------------------------===//
+
+/// Helper class for delay-aware tree building.
+/// Stores a value along with its arrival time and inversion flag.
+class ValueWithArrivalTime {
+  /// The value and an optional inversion flag packed together.
+  /// The inversion flag is used for AndInverterOp lowering.
+  llvm::PointerIntPair<mlir::Value, 1, bool> value;
+
+  /// The arrival time (delay) of this value in the circuit.
+  int64_t arrivalTime;
+
+  /// Value numbering for deterministic ordering when arrival times are equal.
+  /// This ensures consistent results across runs when multiple values have
+  /// the same delay.
+  size_t valueNumbering = 0;
+
+public:
+  ValueWithArrivalTime(mlir::Value value, int64_t arrivalTime, bool invert,
+                       size_t valueNumbering = 0)
+      : value(value, invert), arrivalTime(arrivalTime),
+        valueNumbering(valueNumbering) {}
+
+  mlir::Value getValue() const { return value.getPointer(); }
+  bool isInverted() const { return value.getInt(); }
+  int64_t getArrivalTime() const { return arrivalTime; }
+
+  /// Comparison operator for priority queue. Values with earlier arrival times
+  /// have higher priority. When arrival times are equal, use value numbering
+  /// for determinism.
+  bool operator>(const ValueWithArrivalTime &other) const {
+    return arrivalTime > other.arrivalTime ||
+           (arrivalTime == other.arrivalTime &&
+            valueNumbering > other.valueNumbering);
+  }
+};
+
+/// Build a balanced binary tree using a priority queue to greedily pair
+/// elements with earliest arrival times. This minimizes the critical path
+/// delay.
+///
+/// Template parameters:
+///   T - The element type (must have operator> defined)
+///   Combine - Function to combine two elements into one
+///
+/// The algorithm uses a min-heap to repeatedly combine the two elements with
+/// the earliest arrival times, which is optimal for minimizing maximum delay.
+template <typename T, typename Combine>
+T buildBalancedTreeWithArrivalTimes(llvm::ArrayRef<T> elements,
+                                    Combine combine) {
+  assert(!elements.empty() && "Cannot build tree from empty elements");
+
+  if (elements.size() == 1)
+    return elements[0];
+  if (elements.size() == 2)
+    return combine(elements[0], elements[1]);
+
+  // Min-heap priority queue ordered by operator>
+  llvm::PriorityQueue<T, std::vector<T>, std::greater<T>> pq;
+
+  // Initialize with all elements
+  for (const auto &elem : elements)
+    pq.push(elem);
+
+  // Greedily pair the two earliest-arriving elements
+  while (pq.size() > 1) {
+    T e1 = pq.top();
+    pq.pop();
+    T e2 = pq.top();
+    pq.pop();
+
+    // Combine the two elements
+    T combined = combine(e1, e2);
+    pq.push(combined);
+  }
+
+  return pq.top();
+}
 
 } // namespace synth
 } // namespace circt
