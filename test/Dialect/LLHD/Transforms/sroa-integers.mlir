@@ -6,31 +6,25 @@ hw.module @integers(in %in : i4, in %v2 : i2, out out : i4) {
 
   // CHECK-NOT: llhd.sig{{.*}} : i4
   // CHECK: %[[SIG0:.*]] = llhd.sig {{.*}} : i1
-  // CHECK: %[[SIG1:.*]] = llhd.sig {{.*}} : i1
-  // CHECK: %[[SIG2:.*]] = llhd.sig {{.*}} : i1
+  // CHECK: %[[SIG1:.*]] = llhd.sig {{.*}} : i2
   // CHECK: %[[SIG3:.*]] = llhd.sig {{.*}} : i1
   %sig = llhd.sig name "test_sig" %in : i4
 
   // CHECK-NOT: llhd.prb %{{.*}} : i4
   // CHECK: %[[PRB0:.*]] = llhd.prb %[[SIG0]]
   // CHECK: %[[PRB1:.*]] = llhd.prb %[[SIG1]]
-  // CHECK: %[[PRB2:.*]] = llhd.prb %[[SIG2]]
   // CHECK: %[[PRB3:.*]] = llhd.prb %[[SIG3]]
-  // CHECK: %[[CONCAT:.*]] = comb.concat %[[PRB3]], %[[PRB2]], %[[PRB1]], %[[PRB0]]
+  // CHECK: %[[CONCAT:.*]] = comb.concat %[[PRB3]], %[[PRB1]], %[[PRB0]]
   %prb = llhd.prb %sig : i4
 
   // CHECK: %[[EXT0:.*]] = comb.extract %in from 0
   // CHECK: llhd.drv %[[SIG0]], %[[EXT0]]
   // CHECK: %[[EXT1:.*]] = comb.extract %in from 1
   // CHECK: llhd.drv %[[SIG1]], %[[EXT1]]
-  // CHECK: %[[EXT2:.*]] = comb.extract %in from 2
-  // CHECK: llhd.drv %[[SIG2]], %[[EXT2]]
   // CHECK: %[[EXT3:.*]] = comb.extract %in from 3
   // CHECK: llhd.drv %[[SIG3]], %[[EXT3]]
   llhd.drv %sig, %in after %time : i4
 
-  // Slice extract (middle 2 bits: 1 and 2)
-  // CHECK-NOT: llhd.sig.extract
   // Slice extract (middle 2 bits: 1 and 2)
   // CHECK-NOT: llhd.sig.extract
   %c1 = hw.constant 1 : i2
@@ -39,14 +33,10 @@ hw.module @integers(in %in : i4, in %v2 : i2, out out : i4) {
   // Writing to slice
   // CHECK: %[[V2_0:.*]] = comb.extract %v2 from 0
   // CHECK: llhd.drv %[[SIG1]], %[[V2_0]]
-  // CHECK: %[[V2_1:.*]] = comb.extract %v2 from 1
-  // CHECK: llhd.drv %[[SIG2]], %[[V2_1]]
   llhd.drv %slice, %v2 after %time : i2
 
   // Reading from slice
   // CHECK: %[[SLICE_PRB0:.*]] = llhd.prb %[[SIG1]]
-  // CHECK: %[[SLICE_PRB1:.*]] = llhd.prb %[[SIG2]]
-  // CHECK: comb.concat %[[SLICE_PRB1]], %[[SLICE_PRB0]]
   %slice_prb = llhd.prb %slice : i2
 
   hw.output %prb : i4
