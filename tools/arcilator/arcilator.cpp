@@ -77,8 +77,8 @@
 
 #ifdef ARCILATOR_ENABLE_JIT
 #define ARC_RUNTIME_JITBIND_FNDECL
-#include "circt/Dialect/Arc/ArcRuntime/Common.h"
-#include "circt/Dialect/Arc/ArcRuntime/JITBind.h"
+#include "circt/Dialect/Arc/Runtime/Common.h"
+#include "circt/Dialect/Arc/Runtime/JITBind.h"
 #endif
 
 #include <optional>
