@@ -276,9 +276,9 @@ static bool untilReached(Until until) {
 // Manually bind the IR API of the ArcRuntime to the JIT execution engine
 
 template <typename PtrTy>
-static void bindEESymbol(llvm::orc::SymbolMap &symbolMap,
-                         llvm::orc::MangleAndInterner &interner,
-                         StringRef symName, PtrTy symTarget) {
+static void bindExecutionEngineSymbol(llvm::orc::SymbolMap &symbolMap,
+                                      llvm::orc::MangleAndInterner &interner,
+                                      StringRef symName, PtrTy symTarget) {
   symbolMap[interner(symName)] = {llvm::orc::ExecutorAddr::fromPtr(symTarget),
                                   llvm::JITSymbolFlags::Exported};
 }
@@ -287,12 +287,15 @@ static void bindArcRuntimeSymbols(ExecutionEngine &executionEngine) {
   auto &runtimeCallbacks = runtime::getArcRuntimeAPICallbacks();
   executionEngine.registerSymbols([&](llvm::orc::MangleAndInterner interner) {
     llvm::orc::SymbolMap symbolMap;
-    bindEESymbol(symbolMap, interner, runtimeCallbacks.symNameAllocInstance,
-                 runtimeCallbacks.fnAllocInstance);
-    bindEESymbol(symbolMap, interner, runtimeCallbacks.symNameDeleteInstance,
-                 runtimeCallbacks.fnDeleteInstance);
-    bindEESymbol(symbolMap, interner, runtimeCallbacks.symNameOnEval,
-                 runtimeCallbacks.fnOnEval);
+    bindExecutionEngineSymbol(symbolMap, interner,
+                              runtimeCallbacks.symNameAllocInstance,
+                              runtimeCallbacks.fnAllocInstance);
+    bindExecutionEngineSymbol(symbolMap, interner,
+                              runtimeCallbacks.symNameDeleteInstance,
+                              runtimeCallbacks.fnDeleteInstance);
+    bindExecutionEngineSymbol(symbolMap, interner,
+                              runtimeCallbacks.symNameOnEval,
+                              runtimeCallbacks.fnOnEval);
     return symbolMap;
   });
 }
