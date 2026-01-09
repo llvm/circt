@@ -377,6 +377,8 @@ struct SimInstantiateOpLowering
             .getValue());
     ModelInfoMap &model = modelIt->second;
 
+    bool useRuntime = op.getRuntimeModel().has_value();
+
     ModuleOp moduleOp = op->getParentOfType<ModuleOp>();
     if (!moduleOp)
       return failure();
@@ -386,27 +388,67 @@ struct SimInstantiateOpLowering
     // FIXME: like the rest of MLIR, this assumes sizeof(intptr_t) ==
     // sizeof(size_t) on the target architecture.
     Type convertedIndex = typeConverter->convertType(rewriter.getIndexType());
-
-    FailureOr<LLVM::LLVMFuncOp> mallocFunc =
-        LLVM::lookupOrCreateMallocFn(rewriter, moduleOp, convertedIndex);
-    if (failed(mallocFunc))
-      return mallocFunc;
-
-    FailureOr<LLVM::LLVMFuncOp> freeFunc =
-        LLVM::lookupOrCreateFreeFn(rewriter, moduleOp);
-    if (failed(freeFunc))
-      return freeFunc;
-
     Location loc = op.getLoc();
-    Value numStateBytes = LLVM::ConstantOp::create(
-        rewriter, loc, convertedIndex, model.numStateBytes);
-    Value allocated = LLVM::CallOp::create(rewriter, loc, mallocFunc.value(),
-                                           ValueRange{numStateBytes})
-                          .getResult();
-    Value zero =
-        LLVM::ConstantOp::create(rewriter, loc, rewriter.getI8Type(), 0);
-    LLVM::MemsetOp::create(rewriter, loc, allocated, zero, numStateBytes,
-                           false);
+    Value allocated;
+
+    if (useRuntime) {
+      // The instance is using the runtime library
+      auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+
+      Value runtimeArgs;
+      // If present, materialize the runtime argument string on the stack
+      if (op.getRuntimeArgs().has_value()) {
+        SmallVector<int8_t> argStringVec(op.getRuntimeArgsAttr().begin(),
+                                         op.getRuntimeArgsAttr().end());
+        argStringVec.push_back('\0');
+        auto strAttr = mlir::DenseElementsAttr::get(
+            mlir::RankedTensorType::get({(int64_t)argStringVec.size()},
+                                        rewriter.getI8Type()),
+            llvm::ArrayRef(argStringVec));
+
+        auto arrayCst = LLVM::ConstantOp::create(
+            rewriter, loc,
+            LLVM::LLVMArrayType::get(rewriter.getI8Type(), argStringVec.size()),
+            strAttr);
+        auto cst1 = LLVM::ConstantOp::create(rewriter, loc,
+                                             rewriter.getI32IntegerAttr(1));
+        runtimeArgs = LLVM::AllocaOp::create(rewriter, loc, ptrTy,
+                                             arrayCst.getType(), cst1);
+        LLVM::LifetimeStartOp::create(rewriter, loc, runtimeArgs);
+        LLVM::StoreOp::create(rewriter, loc, arrayCst, runtimeArgs);
+      } else {
+        runtimeArgs = LLVM::ZeroOp::create(rewriter, loc, ptrTy).getResult();
+      }
+      // Call the state allocation function
+      auto rtModelPtr = LLVM::AddressOfOp::create(rewriter, loc, ptrTy,
+                                                  op.getRuntimeModelAttr())
+                            .getResult();
+      allocated =
+          LLVM::CallOp::create(rewriter, loc, {ptrTy},
+                               runtime::APICallbacks::symNameAllocInstance,
+                               {rtModelPtr, runtimeArgs})
+              .getResult();
+
+      if (op.getRuntimeArgs().has_value())
+        LLVM::LifetimeEndOp::create(rewriter, loc, runtimeArgs);
+
+    } else {
+      // The instance is not using the runtime library
+      FailureOr<LLVM::LLVMFuncOp> mallocFunc =
+          LLVM::lookupOrCreateMallocFn(rewriter, moduleOp, convertedIndex);
+      if (failed(mallocFunc))
+        return mallocFunc;
+
+      Value numStateBytes = LLVM::ConstantOp::create(
+          rewriter, loc, convertedIndex, model.numStateBytes);
+      allocated = LLVM::CallOp::create(rewriter, loc, mallocFunc.value(),
+                                       ValueRange{numStateBytes})
+                      .getResult();
+      Value zero =
+          LLVM::ConstantOp::create(rewriter, loc, rewriter.getI8Type(), 0);
+      LLVM::MemsetOp::create(rewriter, loc, allocated, zero, numStateBytes,
+                             false);
+    }
 
     // Call the model's 'initial' function if present.
     if (model.initialFnSymbol) {
@@ -430,10 +472,21 @@ struct SimInstantiateOpLowering
                            ValueRange{allocated});
     }
 
-    LLVM::CallOp::create(rewriter, loc, freeFunc.value(),
-                         ValueRange{allocated});
-    rewriter.eraseOp(op);
+    if (useRuntime) {
+      LLVM::CallOp::create(rewriter, loc, TypeRange{},
+                           runtime::APICallbacks::symNameDeleteInstance,
+                           {allocated});
+    } else {
+      FailureOr<LLVM::LLVMFuncOp> freeFunc =
+          LLVM::lookupOrCreateFreeFn(rewriter, moduleOp);
+      if (failed(freeFunc))
+        return freeFunc;
 
+      LLVM::CallOp::create(rewriter, loc, freeFunc.value(),
+                           ValueRange{allocated});
+    }
+
+    rewriter.eraseOp(op);
     return success();
   }
 };
@@ -885,14 +938,9 @@ void LowerArcToLLVMPass::runOnOperation() {
   // clang-format on
   patterns.add<ExecuteOp>(convert);
 
-  SmallVector<ModelInfo> models;
-  if (failed(collectModels(getOperation(), models))) {
-    signalPassFailure();
-    return;
-  }
-
-  llvm::DenseMap<StringRef, ModelInfoMap> modelMap(models.size());
-  for (ModelInfo &modelInfo : models) {
+  auto &modelInfo = getAnalysis<ModelInfoAnalysis>();
+  llvm::DenseMap<StringRef, ModelInfoMap> modelMap(modelInfo.infoMap.size());
+  for (auto &[_, modelInfo] : modelInfo.infoMap) {
     llvm::DenseMap<StringRef, StateInfo> states(modelInfo.states.size());
     for (StateInfo &stateInfo : modelInfo.states)
       states.insert({stateInfo.name, stateInfo});
