@@ -21,6 +21,7 @@
 
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/SymbolTable.h"
 
 #include <memory>
 #include <utility>
@@ -169,11 +170,23 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
        1},
   };
   auto ip = b.saveInsertionPoint();
-  b.setInsertionPointToEnd(
-      implReq->getParentOfType<mlir::ModuleOp>().getBody());
-  auto cosimCycleCountExternModule = hw::HWModuleExternOp::create(
-      b, reqLoc, b.getStringAttr("Cosim_CycleCount"), cycleCountPorts,
-      "Cosim_CycleCount", ArrayAttr::get(ctxt, cycleCountParams));
+  auto parentModule = implReq->getParentOfType<mlir::ModuleOp>();
+  b.setInsertionPointToEnd(parentModule.getBody());
+  auto cosimCycleCountExternModule =
+      parentModule.lookupSymbol<hw::HWModuleExternOp>("Cosim_CycleCount");
+  if (!cosimCycleCountExternModule) {
+    if (auto existingSym = parentModule.lookupSymbol("Cosim_CycleCount")) {
+      return implReq
+                 .emitOpError(
+                     "symbol 'Cosim_CycleCount' already exists but is not a "
+                     "hw.module.extern")
+                 .attachNote(existingSym->getLoc())
+             << "existing symbol here";
+    }
+    cosimCycleCountExternModule = hw::HWModuleExternOp::create(
+        b, reqLoc, b.getStringAttr("Cosim_CycleCount"), cycleCountPorts,
+        "Cosim_CycleCount", ArrayAttr::get(ctxt, cycleCountParams));
+  }
   b.restoreInsertionPoint(ip);
 
   // Instantiate the external Cosim_CycleCount module.

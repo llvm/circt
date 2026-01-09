@@ -18,7 +18,6 @@ from .dma import OneItemBuffersFromHost, OneItemBuffersToHost
 import glob
 import pathlib
 import shutil
-from typing import Optional
 
 __dir__ = pathlib.Path(__file__).parent
 
@@ -262,7 +261,6 @@ def XrtBSP(user_module):
     @generator
     def construct(ports):
       System.current().platform = "fpga"
-
       clk = ports.ap_clk
       rst = ~ports.ap_resetn
 
