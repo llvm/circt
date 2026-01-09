@@ -357,6 +357,21 @@ func.func @with_attr() {
   return
 }
 
+arc.runtime.model @rtFooModel "FooModel" numStateBytes 123
+
+// CHECK-LABEL: func.func @with_rt
+func.func @with_rt() {
+  // CHECK: arc.sim.instantiate @sim_test as %{{.*}} runtime @rtFooModel("args") {
+  // CHECK: arc.sim.instantiate @sim_test as %{{.*}} runtime @rtFooModel("args") attributes {foo = "foo"} {
+  // CHECK: arc.sim.instantiate @sim_test as %{{.*}} runtime @rtFooModel() {
+  // CHECK: arc.sim.instantiate @sim_test as %{{.*}} runtime ("args") {
+  arc.sim.instantiate @sim_test as %model runtime @rtFooModel("args") {}
+  arc.sim.instantiate @sim_test as %model runtime @rtFooModel("args") attributes {foo = "foo"} {}
+  arc.sim.instantiate @sim_test as %model runtime @rtFooModel() {}
+  arc.sim.instantiate @sim_test as %model runtime ("args") {}
+  return
+}
+
 // CHECK-LABEL: func.func @ReadsWrites(
 // CHECK-SAME: %arg0: !arc.state<i42>
 // CHECK-SAME: %arg1: i42

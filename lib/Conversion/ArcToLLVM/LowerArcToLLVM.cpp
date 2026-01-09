@@ -12,6 +12,8 @@
 #include "circt/Conversion/HWToLLVM.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ModelInfo.h"
+#include "circt/Dialect/Arc/Runtime/Common.h"
+#include "circt/Dialect/Arc/Runtime/JITBind.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/ConversionPatternSet.h"
@@ -35,6 +37,8 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormatVariadic.h"
+
+#include <cstddef>
 
 #define DEBUG_TYPE "lower-arc-to-llvm"
 
@@ -680,6 +684,88 @@ static LogicalResult convert(arc::ExecuteOp op, arc::ExecuteOp::Adaptor adaptor,
 }
 
 //===----------------------------------------------------------------------===//
+// Runtime Implementation
+//===----------------------------------------------------------------------===//
+
+struct RuntimeModelOpLowering
+    : public OpConversionPattern<arc::RuntimeModelOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  static constexpr uint64_t runtimeApiVersion = ARC_RUNTIME_API_VERSION;
+
+  // Create a global LLVM struct containing the RuntimeModel metadata
+  LogicalResult
+  matchAndRewrite(arc::RuntimeModelOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+
+    auto modelInfoStructType = LLVM::LLVMStructType::getLiteral(
+        getContext(), {rewriter.getI64Type(), rewriter.getI64Type(),
+                       LLVM::LLVMPointerType::get(getContext())});
+    static_assert(sizeof(ArcRuntimeModelInfo) == 24 &&
+                  "Unexpected size of ArcRuntimeModelInfo struct");
+
+    // Construct the Model Name String GlobalOp
+    rewriter.setInsertionPoint(op);
+    SmallVector<char, 16> modNameArray(op.getName().begin(),
+                                       op.getName().end());
+    modNameArray.push_back('\0');
+    auto nameGlobalType =
+        LLVM::LLVMArrayType::get(rewriter.getI8Type(), modNameArray.size());
+    SmallString<16> globalSymName{"_arc_mod_name_"};
+    globalSymName.append(op.getName());
+    auto nameGlobal = LLVM::GlobalOp::create(
+        rewriter, op.getLoc(), nameGlobalType, /*isConstant=*/true,
+        LLVM::Linkage::Internal,
+        /*name=*/globalSymName, rewriter.getStringAttr(modNameArray),
+        /*alignment=*/0);
+
+    // Construct the Model Info Struct GlobalOp
+    // Note: The struct is supposed to be constant at runtime, but contains the
+    // relocatable address of another symbol, so it should not be placed in the
+    // "rodata" section.
+    auto modInfoGlobalOp =
+        LLVM::GlobalOp::create(rewriter, op.getLoc(), modelInfoStructType,
+                               /*isConstant=*/false, LLVM::Linkage::External,
+                               op.getSymName(), Attribute{});
+
+    // Struct Initializer
+    Region &initRegion = modInfoGlobalOp.getInitializerRegion();
+    Block *initBlock = rewriter.createBlock(&initRegion);
+    rewriter.setInsertionPointToStart(initBlock);
+    auto apiVersionCst = LLVM::ConstantOp::create(
+        rewriter, op.getLoc(), rewriter.getI64IntegerAttr(runtimeApiVersion));
+    auto numStateBytesCst = LLVM::ConstantOp::create(rewriter, op.getLoc(),
+                                                     op.getNumStateBytesAttr());
+    auto nameAddr =
+        LLVM::AddressOfOp::create(rewriter, op.getLoc(), nameGlobal);
+    Value initStruct =
+        LLVM::PoisonOp::create(rewriter, op.getLoc(), modelInfoStructType);
+
+    // Field: uint64_t apiVersion
+    initStruct = LLVM::InsertValueOp::create(
+        rewriter, op.getLoc(), initStruct, apiVersionCst, ArrayRef<int64_t>{0});
+    static_assert(offsetof(ArcRuntimeModelInfo, apiVersion) == 0,
+                  "Unexpected offset of field apiVersion");
+    // Field: uint64_t numStateBytes
+    initStruct =
+        LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
+                                    numStateBytesCst, ArrayRef<int64_t>{1});
+    static_assert(offsetof(ArcRuntimeModelInfo, numStateBytes) == 8,
+                  "Unexpected offset of field numStateBytes");
+    // Field: const char *modelName
+    initStruct = LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
+                                             nameAddr, ArrayRef<int64_t>{2});
+    static_assert(offsetof(ArcRuntimeModelInfo, modelName) == 16,
+                  "Unexpected offset of field modelName");
+
+    LLVM::ReturnOp::create(rewriter, op.getLoc(), initStruct);
+
+    rewriter.replaceOp(op, modInfoGlobalOp);
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // Pass Implementation
 //===----------------------------------------------------------------------===//
 
@@ -788,6 +874,7 @@ void LowerArcToLLVMPass::runOnOperation() {
     ModelOpLowering,
     ReplaceOpWithInputPattern<seq::ToClockOp>,
     ReplaceOpWithInputPattern<seq::FromClockOp>,
+    RuntimeModelOpLowering,
     SeqConstClockLowering,
     SimEmitValueOpLowering,
     StateReadOpLowering,
