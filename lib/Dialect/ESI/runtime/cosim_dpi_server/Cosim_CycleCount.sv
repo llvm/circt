@@ -8,7 +8,7 @@
 //
 // A cosimulated design should instantiate this ONCE to provide cycle count
 // information to the ESI runtime. The module maintains a 64-bit cycle counter
-// and exports a DPI function that the C++ runtime can call to query it.
+// and uses request/response channels to provide the count to the runtime.
 //
 //===----------------------------------------------------------------------===//
 
@@ -26,13 +26,6 @@ module Cosim_CycleCount
   // 64-bit cycle counter.
   longint unsigned cycle_count;
 
-  // DPI export function - allows C++ to call into SV to get the cycle count.
-  export "DPI-C" function c2svCosimserverGetCycleCount;
-  function automatic longint unsigned c2svCosimserverGetCycleCount();
-    return cycle_count;
-  endfunction
-
-  // Cycle counter logic.
   always_ff @(posedge clk) begin
     if (rst)
       cycle_count <= 0;
@@ -40,11 +33,52 @@ module Cosim_CycleCount
       cycle_count <= cycle_count + 1;
   end
 
-  // Register the cycle count callback with the cosim server at initialization.
-  initial begin
-    // Small delay to ensure the server is initialized.
-    #1;
-    cosim_set_cycle_count_callback(CORE_CLOCK_FREQUENCY_HZ);
-  end
+  // Request channel (From Host)
+  // 0-bit message used as a trigger.
+  wire req_valid;
+  wire req_ready;
+
+  Cosim_Endpoint_FromHost #(
+    .ENDPOINT_ID("__cosim_cycle_count.arg"),
+    .FROM_HOST_TYPE_ID("void"),
+    .FROM_HOST_SIZE_BITS(0)
+  ) req_ep (
+    .clk(clk),
+    .rst(rst),
+    .DataOutValid(req_valid),
+    .DataOutReady(req_ready),
+    .DataOut()
+  );
+
+  // Response channel (To Host)
+  typedef struct packed {
+    longint unsigned cycle;
+    longint unsigned freq;
+  } RespStruct;
+
+  wire resp_ready;
+  wire resp_valid;
+  RespStruct resp_data;
+
+  assign resp_data.cycle = cycle_count;
+  assign resp_data.freq = CORE_CLOCK_FREQUENCY_HZ;
+
+  // Handshake logic:
+  // When request arrives (req_valid), we are ready to send response (resp_valid).
+  // We consume request only when response is accepted.
+  assign resp_valid = req_valid;
+  assign req_ready = resp_ready;
+
+  Cosim_Endpoint_ToHost #(
+    .ENDPOINT_ID("__cosim_cycle_count.result"),
+    .TO_HOST_TYPE_ID("struct{cycle:int<64>,freq:int<64>}"),
+    .TO_HOST_SIZE_BITS(128)
+  ) resp_ep (
+    .clk(clk),
+    .rst(rst),
+    .DataInValid(resp_valid),
+    .DataInReady(resp_ready),
+    .DataIn(resp_data)
+  );
 
 endmodule

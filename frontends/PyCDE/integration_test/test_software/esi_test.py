@@ -43,11 +43,15 @@ else:
   print("Cycle count: not available")
 
 clock_freq = sysinfo.core_clock_frequency()
-if clock_freq is not None:
-  print(f"Core clock frequency: {clock_freq} Hz")
-  assert clock_freq > 0, f"Clock frequency should be positive, got {clock_freq}"
+if platform == "cosim":
+  assert clock_freq == 20_000_000, \
+      f"Expected clock frequency 20_000_000 Hz for cosim, got {clock_freq}"
 else:
-  print("Core clock frequency: not available")
+  if clock_freq is not None:
+    print(f"Core clock frequency: {clock_freq} Hz")
+    assert clock_freq > 0, f"Clock frequency should be positive, got {clock_freq}"
+  else:
+    print("Core clock frequency: not available")
 
 d = acc.build_accelerator()
 

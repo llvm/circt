@@ -228,16 +228,51 @@ CosimAccelerator::~CosimAccelerator() {
 
 namespace {
 class CosimSysInfo : public SysInfo {
+  struct CycleInfo {
+    uint64_t freq;
+    uint64_t cycle;
+  };
+
 public:
   CosimSysInfo(CosimAccelerator &conn, RpcClient *rpcClient)
-      : SysInfo(conn), rpcClient(rpcClient) {}
+      : SysInfo(conn), rpcClient(rpcClient) {
+    // This is an optional interface; if the channels aren't present, we simply
+    // report no cycle/frequency information.
+    RpcClient::ChannelDesc argDesc, resultDesc;
+    if (!rpcClient->getChannelDesc("__cosim_cycle_count.arg", argDesc) ||
+        !rpcClient->getChannelDesc("__cosim_cycle_count.result", resultDesc))
+      return;
+
+    Context &ctxt = conn.getCtxt();
+    const esi::Type *voidType = getType(ctxt, new VoidType(argDesc.type));
+    const esi::Type *i64Type = getType(ctxt, new SIntType("i64", 64));
+    const esi::Type *resultType =
+        getType(ctxt, new StructType(resultDesc.type,
+                                     {{"cycle", i64Type}, {"freq", i64Type}}));
+
+    reqPort = std::make_unique<WriteCosimChannelPort>(
+        conn, *rpcClient, argDesc, voidType, "__cosim_cycle_count.arg");
+    respPort = std::make_unique<ReadCosimChannelPort>(
+        conn, *rpcClient, resultDesc, resultType, "__cosim_cycle_count.result");
+    auto *bundleType =
+        new BundleType("cosimCycleCount",
+                       {{"arg", BundleType::Direction::To, voidType},
+                        {"result", BundleType::Direction::From, resultType}});
+    func.reset(FuncService::Function::get(AppID("__cosim_cycle_count"),
+                                          bundleType, *reqPort, *respPort));
+    func->connect();
+  }
 
   uint32_t getEsiVersion() const override { return rpcClient->getEsiVersion(); }
   std::optional<uint64_t> getCycleCount() const override {
-    return std::nullopt;
+    if (!func)
+      return std::nullopt;
+    return getCycleInfo().cycle;
   }
   std::optional<uint64_t> getCoreClockFrequency() const override {
-    return std::nullopt;
+    if (!func)
+      return std::nullopt;
+    return getCycleInfo().freq;
   }
 
   std::vector<uint8_t> getCompressedManifest() const override {
@@ -245,7 +280,27 @@ public:
   }
 
 private:
+  const esi::Type *getType(Context &ctxt, esi::Type *type) {
+    if (auto t = ctxt.getType(type->getID())) {
+      delete type;
+      return *t;
+    }
+    ctxt.registerType(type);
+    return type;
+  }
+
   RpcClient *rpcClient;
+  std::unique_ptr<WriteCosimChannelPort> reqPort;
+  std::unique_ptr<ReadCosimChannelPort> respPort;
+  std::unique_ptr<FuncService::Function> func;
+
+  CycleInfo getCycleInfo() const {
+    MessageData arg;
+    std::future<MessageData> result = func->call(arg);
+    result.wait();
+    MessageData respMsg = result.get();
+    return *respMsg.as<CycleInfo>();
+  }
 };
 } // namespace
 

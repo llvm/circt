@@ -48,6 +48,7 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
   OpBuilder b(implReq);
   Value clk = implReq.getOperand(0);
   Value rst = implReq.getOperand(1);
+  Location reqLoc = implReq.getLoc();
 
   if (implReq.getImplOpts()) {
     auto opts = implReq.getImplOpts()->getValue();
@@ -155,6 +156,37 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
         b.getDictionaryAttr(channelAssignments), DictionaryAttr());
   }
 
+  // Create and instantiate the cycle counter module for cosim.
+  // Declare external Cosim_CycleCount module.
+  Attribute cycleCountParams[] = {
+      hw::ParamDeclAttr::get("CORE_CLOCK_FREQUENCY_HZ", b.getI64Type())};
+  hw::PortInfo cycleCountPorts[] = {
+      {{b.getStringAttr("clk"), seq::ClockType::get(ctxt),
+        hw::ModulePort::Direction::Input},
+       0},
+      {{b.getStringAttr("rst"), b.getI1Type(),
+        hw::ModulePort::Direction::Input},
+       1},
+  };
+  auto ip = b.saveInsertionPoint();
+  b.setInsertionPointToEnd(
+      implReq->getParentOfType<mlir::ModuleOp>().getBody());
+  auto cosimCycleCountExternModule = hw::HWModuleExternOp::create(
+      b, reqLoc, b.getStringAttr("Cosim_CycleCount"), cycleCountPorts,
+      "Cosim_CycleCount", ArrayAttr::get(ctxt, cycleCountParams));
+  b.restoreInsertionPoint(ip);
+
+  // Instantiate the external Cosim_CycleCount module.
+  // Use a default frequency of 100 MHz.
+  uint64_t coreClockFreq = 100000000;
+  if (auto coreClockFreqAttr = dyn_cast_or_null<IntegerAttr>(
+          implReq->getAttr("esi.core_clock_frequency_hz")))
+    coreClockFreq = coreClockFreqAttr.getUInt();
+  hw::InstanceOp::create(
+      b, reqLoc, cosimCycleCountExternModule, "__cycle_counter",
+      ArrayRef<Value>({clk, rst}),
+      b.getArrayAttr({hw::ParamDeclAttr::get(
+          "CORE_CLOCK_FREQUENCY_HZ", b.getI64IntegerAttr(coreClockFreq))}));
   // Erase the generation request.
   implReq.erase();
   return success();

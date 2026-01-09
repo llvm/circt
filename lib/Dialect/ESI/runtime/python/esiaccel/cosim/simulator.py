@@ -35,6 +35,7 @@ class SourceFiles:
     self.dpi_sv: List[Path] = [
         CosimCollateralDir / "Cosim_DpiPkg.sv",
         CosimCollateralDir / "Cosim_Endpoint.sv",
+        CosimCollateralDir / "Cosim_CycleCount.sv",
         CosimCollateralDir / "Cosim_Manifest.sv",
     ]
     # Name of the top module.

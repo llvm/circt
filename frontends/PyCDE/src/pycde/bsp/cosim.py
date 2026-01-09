@@ -21,11 +21,14 @@ from ..circt import ir
 from ..circt.dialects import esi as raw_esi
 
 from pathlib import Path
+from typing import Optional
 
 __root_dir__ = Path(__file__).parent.parent
 
 
-def CosimBSP(user_module: Type[Module], emulate_dma: bool = False) -> Module:
+def CosimBSP(user_module: Type[Module],
+             emulate_dma: bool = False,
+             core_freq: Optional[int] = None) -> Module:
   """Wrap and return a cosimulation 'board support package' containing
   'user_module'"""
 
@@ -87,6 +90,8 @@ def CosimBSP(user_module: Type[Module], emulate_dma: bool = False) -> Module:
     @generator
     def build(ports):
       System.current().platform = "cosim"
+      if core_freq is not None:
+        System.current().core_freq = core_freq
 
       mmio_read_write = esi.FuncService.get(
           esi.AppID("__cosim_mmio_read_write"), esi.MMIO.read_write.type)
@@ -109,15 +114,22 @@ def CosimBSP(user_module: Type[Module], emulate_dma: bool = False) -> Module:
                                      write_req, UInt(8))
       ack_wire.assign(ack_tag)
 
-      raw_esi.ServiceInstanceOp(result=[],
-                                appID=AppID("cosim")._appid,
-                                service_symbol=None,
-                                impl_type=ir.StringAttr.get("cosim"),
-                                inputs=[ports.clk.value, ports.rst.value],
-                                loc=get_user_loc())
+      cosim_svc = raw_esi.ServiceInstanceOp(
+          result=[],
+          appID=AppID("cosim")._appid,
+          service_symbol=None,
+          impl_type=ir.StringAttr.get("cosim"),
+          inputs=[ports.clk.value, ports.rst.value],
+          loc=get_user_loc())
+      core_freq = System.current().core_freq
+      if core_freq is not None:
+        cosim_svc.operation.setAttr(
+            "esi.core_clock_frequency_hz",
+            ir.IntegerAttr.get(ir.IntegerType.get_signless(64), core_freq))
 
   return ESI_Cosim_Top
 
 
-def CosimBSP_DMA(user_module: Type[Module]) -> Module:
-  return CosimBSP(user_module, emulate_dma=True)
+def CosimBSP_DMA(user_module: Type[Module],
+                 core_freq: Optional[int] = None) -> Module:
+  return CosimBSP(user_module, emulate_dma=True, core_freq=core_freq)
