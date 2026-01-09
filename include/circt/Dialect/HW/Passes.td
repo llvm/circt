@@ -148,4 +148,19 @@ def HWBypassInnerSymbols : Pass<"hw-bypass-inner-symbols", "hw::HWModuleOp"> {
   ];
 }
 
+def HWConvertBitcasts : Pass<"hw-convert-bitcasts", "mlir::ModuleOp"> {
+  let summary = "Convert hw.bitcast operations to bit extracts and concats";
+  let description = [{
+    This passes attempts to convert `hw.bitcast` operations on HW aggregates to
+    functionally identical sequences of explicit aggregate and bit-access
+    operations. It currently supports `!hw.array` and `!hw.struct` types.
+  }];
+  let options = [
+    Option<"allowPartialConversion", "allow-partial-conversion", "bool",
+           "false", "Ignore bitcasts involving unsupported types">
+  ];
+  let dependentDialects = ["comb::CombDialect"];
+}
+
+
 #endif // CIRCT_DIALECT_HW_PASSES_TD

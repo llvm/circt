@@ -208,11 +208,11 @@ struct FirMemory {
    * Check whether the memory is a seq mem.
    *
    * The following conditions must hold:
-   *   1. read latency and write latency of one.
+   *   1. read latency and write latency of at least one.
    *   2. undefined read-under-write behavior.
    */
   bool isSeqMem() const {
-    if (readLatency != 1 || writeLatency != 1)
+    if (readLatency < 1 || writeLatency < 1)
       return false;
     return dataWidth > 0;
   }

@@ -311,6 +311,24 @@ firrtl.module @MemoryInLayer() {
 }
 }
 
+// CHECK-LABEL: "HighLatencyMemory"
+firrtl.circuit "HighLatencyMemory" {
+// CHECK: firrtl.memmodule private @mem_ext
+// CHECK-SAME: readLatency = 2
+// CHECK-SAME: writeLatency = 3
+firrtl.module @HighLatencyMemory() {
+  %mem_r, %mem_w = firrtl.mem Undefined {
+    depth = 16 : i64,
+    name = "mem",
+    portNames = ["r", "w"],
+    readLatency = 2 : i32,
+    writeLatency = 3 : i32
+  } : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>,
+      !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+  // CHECK: firrtl.instance mem @mem
+}
+}
+
 // Check that the read under write behavior annotation is preserved
 
 // CHECK-LABEL: "RUWNew"

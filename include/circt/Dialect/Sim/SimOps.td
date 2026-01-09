@@ -181,12 +181,23 @@ def FormatHexOp : SimOp<"fmt.hex", [Pure]> {
   }];
 
 
-  let arguments = (ins AnyInteger:$value);
+  let arguments = (ins AnyInteger:$value, 
+    BoolAttr:$isHexUppercase,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    DefaultValuedAttr<I8Attr,"48">:$paddingChar,
+    OptionalAttr<I32Attr>:$specifierWidth);
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
 
-  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+  let assemblyFormat = [{
+    $value `,`
+    `isUpper`  $isHexUppercase
+    (`isLeftAligned` $isLeftAligned^)?
+    (`paddingChar` $paddingChar^)?
+    (`specifierWidth` $specifierWidth^)?
+    attr-dict `:` qualified(type($value))
+  }];
 }
 
 def FormatOctOp : SimOp<"fmt.oct", [Pure]> {
@@ -201,12 +212,22 @@ def FormatOctOp : SimOp<"fmt.oct", [Pure]> {
   }];
 
 
-  let arguments = (ins AnyInteger:$value);
+  let arguments = (ins AnyInteger:$value,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    DefaultValuedAttr<I8Attr,"48">:$paddingChar,
+    OptionalAttr<I32Attr>:$specifierWidth);
+
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
 
-  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+  let assemblyFormat = [{
+    $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`paddingChar` $paddingChar^)?
+    (`specifierWidth` $specifierWidth^)?
+    attr-dict `:` qualified(type($value))
+  }];
 }
 
 def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
@@ -219,14 +240,103 @@ def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
     the empty string. No further prefix will be added.
   }];
 
-  let arguments = (ins AnyInteger:$value);
+  let arguments = (ins AnyInteger:$value,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    DefaultValuedAttr<I8Attr,"48">:$paddingChar,
+    OptionalAttr<I32Attr>:$specifierWidth);
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
 
-  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+  let assemblyFormat = [{
+    $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`paddingChar` $paddingChar^)?
+    (`specifierWidth` $specifierWidth^)?
+    attr-dict `:` qualified(type($value))
+  }];
 }
 
+def FormatScientificOp : SimOp<"fmt.exp", [Pure]> {
+  let summary = "Real format specifier";
+  let description = [{
+    Format the given real value in scientific (exponential) notation
+  }];
+
+  let arguments = (ins AnyFloat:$value,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    OptionalAttr<I32Attr>:$fieldWidth,
+    DefaultValuedAttr<I32Attr,"6">:$fracDigits
+  );
+  let results = (outs FormatStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = [{
+    $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`fieldWidth` $fieldWidth^)?
+    (`fracDigits` $fracDigits^)?
+    attr-dict `:` qualified(type($value))
+  }];
+}
+
+def FormatFloatOp : SimOp<"fmt.flt", [Pure]> {
+  let summary = "Real format specifier";
+  let description = [{
+    Format the given real value in floating point (decimal) notation  
+  }];
+
+  let arguments = (ins AnyFloat:$value,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    OptionalAttr<I32Attr>:$fieldWidth,
+    DefaultValuedAttr<I32Attr,"6">:$fracDigits
+  );
+  let results = (outs FormatStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = [{
+    $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`fieldWidth` $fieldWidth^)?
+    (`fracDigits` $fracDigits^)?
+    attr-dict `:` qualified(type($value))
+  }];
+}
+
+def FormatGeneralOp : SimOp<"fmt.gen", [Pure]> {
+  let summary = "Real format specifier";
+  let description = [{
+    Format floating-point numbers using either decimal or scientific notation
+    based on the exponent and precision parameter fracDigits (default: 6)
+
+    For exp ≥ 0: 
+    Uses decimal notation if exp + 1 ≤ max(1, fracDigits), otherwise switches
+    to scientific notation with max(0, fracDigits - 1) fractional digits
+    
+    For exp < 0:
+    If exp ≥ -4: Uses decimal notation with max(b - 1, 0) + |exp| fractional digits
+    If exp < -4: Uses scientific notation with max(b - 1, 0) fractional digits
+  }];
+
+  let arguments = (ins AnyFloat:$value,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    OptionalAttr<I32Attr>:$fieldWidth,
+    DefaultValuedAttr<I32Attr,"6">:$fracDigits
+  );
+  let results = (outs FormatStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = [{
+    $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`fieldWidth` $fieldWidth^)?
+    (`fracDigits` $fracDigits^)?
+    attr-dict `:` qualified(type($value))
+  }];
+}
 
 def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
   let summary = "Decimal format specifier";
@@ -252,13 +362,22 @@ def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
     Backends are recommended to not exceed the required amount of padding.
   }];
 
-  let arguments = (ins AnyInteger:$value, UnitAttr:$isSigned);
+  let arguments = (ins AnyInteger:$value,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    DefaultValuedAttr<I8Attr,"32">:$paddingChar,
+    OptionalAttr<I32Attr>:$specifierWidth,
+    UnitAttr:$isSigned);
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
 
   let assemblyFormat = [{
-    (`signed` $isSigned^)? $value attr-dict `:` qualified(type($value))
+    $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`paddingChar` $paddingChar^)?
+    (`specifierWidth` $specifierWidth^)?
+    (`signed` $isSigned^)?
+    attr-dict `:` qualified(type($value))
   }];
 
   let extraClassDeclaration = [{

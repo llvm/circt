@@ -20,8 +20,6 @@
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/OpDefinition.h"
-#include "llvm/ADT/PointerIntPair.h"
-#include "llvm/ADT/PriorityQueue.h"
 
 #define DEBUG_TYPE "synth-lower-variadic"
 
@@ -41,40 +39,6 @@ using namespace synth;
 
 namespace {
 
-/// Helper class for delay-aware variadic operation lowering.
-/// Stores a value along with its arrival time for priority queue ordering.
-class ValueWithArrivalTime {
-  /// The value and an optional inversion flag packed together.
-  /// The inversion flag is used for AndInverterOp lowering.
-  llvm::PointerIntPair<Value, 1, bool> value;
-
-  /// The arrival time (delay) of this value in the circuit.
-  int64_t arrivalTime;
-
-  /// Value numbering for deterministic ordering when arrival times are equal.
-  /// This ensures consistent results across runs when multiple values have
-  /// the same delay.
-  size_t valueNumbering = 0;
-
-public:
-  ValueWithArrivalTime(Value value, int64_t arrivalTime, bool invert,
-                       size_t valueNumbering)
-      : value(value, invert), arrivalTime(arrivalTime),
-        valueNumbering(valueNumbering) {}
-
-  Value getValue() const { return value.getPointer(); }
-  bool isInverted() const { return value.getInt(); }
-
-  /// Comparison operator for priority queue. Values with earlier arrival times
-  /// have higher priority. When arrival times are equal, use value numbering
-  /// for determinism.
-  bool operator>(const ValueWithArrivalTime &other) const {
-    return arrivalTime > other.arrivalTime ||
-           (arrivalTime == other.arrivalTime &&
-            valueNumbering > other.valueNumbering);
-  }
-};
-
 struct LowerVariadicPass : public impl::LowerVariadicBase<LowerVariadicPass> {
   using LowerVariadicBase::LowerVariadicBase;
   void runOnOperation() override;
@@ -91,50 +55,41 @@ static LogicalResult replaceWithBalancedTree(
     Operation *op, llvm::function_ref<bool(OpOperand &)> isInverted,
     llvm::function_ref<Value(ValueWithArrivalTime, ValueWithArrivalTime)>
         createBinaryOp) {
-  // Min-heap priority queue ordered by arrival time.
-  // Values with earlier arrival times are processed first.
-  llvm::PriorityQueue<ValueWithArrivalTime, std::vector<ValueWithArrivalTime>,
-                      std::greater<ValueWithArrivalTime>>
-      queue;
-
-  // Counter for deterministic ordering when arrival times are equal.
+  // Collect all operands with their arrival times and inversion flags
+  SmallVector<ValueWithArrivalTime> operands;
   size_t valueNumber = 0;
 
-  auto push = [&](Value value, bool invert) {
+  for (size_t i = 0, e = op->getNumOperands(); i < e; ++i) {
     int64_t delay = 0;
     // If analysis is available, use it to compute the delay.
     // If not available, use zero delay and `valueNumber` will be used instead.
     if (analysis) {
-      auto result = analysis->getMaxDelay(value);
+      auto result = analysis->getMaxDelay(op->getOperand(i));
       if (failed(result))
         return failure();
       delay = *result;
     }
-    ValueWithArrivalTime entry(value, delay, invert, valueNumber++);
-    queue.push(entry);
-    return success();
-  };
-
-  // Enqueue all operands with their arrival times and inversion flags.
-  for (size_t i = 0, e = op->getNumOperands(); i < e; ++i)
-    if (failed(push(op->getOperand(i), isInverted(op->getOpOperand(i)))))
-      return failure();
-
-  // Build balanced tree by repeatedly combining the two earliest values.
-  // This greedy approach minimizes the maximum depth of late-arriving signals.
-  while (queue.size() >= 2) {
-    auto lhs = queue.top();
-    queue.pop();
-    auto rhs = queue.top();
-    queue.pop();
-    // Create and enqueue the combined value.
-    if (failed(push(createBinaryOp(lhs, rhs), /*inverted=*/false)))
-      return failure();
+    operands.push_back(ValueWithArrivalTime(op->getOperand(i), delay,
+                                            isInverted(op->getOpOperand(i)),
+                                            valueNumber++));
   }
 
-  // Get the final result and replace the original operation.
-  auto result = queue.top().getValue();
-  rewriter.replaceOp(op, result);
+  // Use shared tree building utility
+  auto result = buildBalancedTreeWithArrivalTimes<ValueWithArrivalTime>(
+      operands,
+      // Combine: create binary operation and compute new arrival time
+      [&](const ValueWithArrivalTime &lhs, const ValueWithArrivalTime &rhs) {
+        Value combined = createBinaryOp(lhs, rhs);
+        int64_t newDelay = 0;
+        if (analysis) {
+          auto delayResult = analysis->getMaxDelay(combined);
+          if (succeeded(delayResult))
+            newDelay = *delayResult;
+        }
+        return ValueWithArrivalTime(combined, newDelay, false, valueNumber++);
+      });
+
+  rewriter.replaceOp(op, result.getValue());
   return success();
 }
 

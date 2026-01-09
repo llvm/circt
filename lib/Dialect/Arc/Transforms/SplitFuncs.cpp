@@ -47,9 +47,13 @@ struct SplitFuncsPass : public arc::impl::SplitFuncsBase<SplitFuncsPass> {
 
 void SplitFuncsPass::runOnOperation() {
   symbolTable = &getAnalysis<SymbolTable>();
-  for (auto op : llvm::make_early_inc_range(getOperation().getOps<FuncOp>()))
+  for (auto op : llvm::make_early_inc_range(getOperation().getOps<FuncOp>())) {
+    // Ignore extern functions
+    if (op.isExternal())
+      continue;
     if (failed(lowerFunc(op)))
       return signalPassFailure();
+  }
 }
 
 LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {

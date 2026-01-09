@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
+#include <format>
 
 using namespace esi;
 using namespace esi::cosim;
@@ -374,7 +375,22 @@ Impl::SendToServer(CallbackServerContext *context,
   std::string msgDataString = request->message().data();
   MessageData data(reinterpret_cast<const uint8_t *>(msgDataString.data()),
                    msgDataString.size());
-  it->second->push(data);
+  try {
+    ctxt.getLogger().debug(
+        "cosim",
+        std::format("Channel '{}': Received message; pushing data to read port",
+                    request->channel_name()));
+    it->second->push(data);
+  } catch (const std::exception &e) {
+    ctxt.getLogger().error(
+        "cosim",
+        std::format("Channel '{}': Error pushing message to read port: {}",
+                    request->channel_name(), e.what()));
+    reactor->Finish(
+        Status(StatusCode::INTERNAL, "Error pushing message to port"));
+    return reactor;
+  }
+
   reactor->Finish(Status::OK);
   return reactor;
 }

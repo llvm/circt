@@ -59,6 +59,10 @@ void LLHDDialect::initialize() {
       >();
 
   addInterfaces<LLHDInlinerInterface>();
+
+  mlir::DialectRegistry registry;
+  registerDestructableIntegerExternalModel(registry);
+  getContext()->appendDialectRegistry(registry);
 }
 
 Operation *LLHDDialect::materializeConstant(OpBuilder &builder, Attribute value,

@@ -29,7 +29,6 @@ namespace {
 //===----------------------------------------------------------------------===//
 
 /// Convert a comb::ParityOp to the LLVM dialect.
-/// This is the only Comb operation that doesn't have a Comb-to-Arith pattern.
 struct CombParityOpConversion : public ConvertToLLVMPattern {
   explicit CombParityOpConversion(MLIRContext *ctx,
                                   LLVMTypeConverter &typeConverter)
@@ -50,6 +49,20 @@ struct CombParityOpConversion : public ConvertToLLVMPattern {
   }
 };
 
+/// Convert a comb::ReverseOp to the LLVM dialect.
+struct CombReverseOpConversion
+    : public ConvertOpToLLVMPattern<comb::ReverseOp> {
+  using ConvertOpToLLVMPattern<comb::ReverseOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(comb::ReverseOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<LLVM::BitReverseOp>(
+        op, adaptor.getInput().getType(), adaptor.getInput());
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -62,4 +75,5 @@ void circt::populateCombToLLVMConversionPatterns(LLVMTypeConverter &converter,
   // Most Comb operations are handled by the Comb-to-Arith + Arith-to-LLVM
   // pipeline
   patterns.add<CombParityOpConversion>(patterns.getContext(), converter);
+  patterns.add<CombReverseOpConversion>(converter);
 }

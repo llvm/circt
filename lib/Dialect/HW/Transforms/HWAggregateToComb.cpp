@@ -175,6 +175,19 @@ struct HWArrayInjectOpConversion : OpConversionPattern<hw::ArrayInjectOp> {
   }
 };
 
+struct MuxOpConversion : OpConversionPattern<comb::MuxOp> {
+  using OpConversionPattern<comb::MuxOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(comb::MuxOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Re-create Mux with legalized types.
+    rewriter.replaceOpWithNewOp<comb::MuxOp>(
+        op, adaptor.getCond(), adaptor.getTrueValue(), adaptor.getFalseValue());
+    return success();
+  }
+};
+
 /// A type converter is needed to perform the in-flight materialization of
 /// aggregate types to integer types.
 class AggregateTypeConverter : public TypeConverter {
@@ -215,8 +228,8 @@ static void populateHWAggregateToCombOpConversionPatterns(
   patterns.add<HWArrayGetOpConversion,
                HWArrayCreateLikeOpConversion<hw::ArrayCreateOp>,
                HWArrayCreateLikeOpConversion<hw::ArrayConcatOp>,
-               HWAggregateConstantOpConversion, HWArrayInjectOpConversion>(
-      typeConverter, patterns.getContext());
+               HWAggregateConstantOpConversion, HWArrayInjectOpConversion,
+               MuxOpConversion>(typeConverter, patterns.getContext());
 }
 
 namespace {
@@ -233,7 +246,8 @@ void HWAggregateToCombPass::runOnOperation() {
   // TODO: Add ArraySliceOp and struct operatons as well.
   target.addIllegalOp<hw::ArrayGetOp, hw::ArrayCreateOp, hw::ArrayConcatOp,
                       hw::AggregateConstantOp, hw::ArrayInjectOp>();
-
+  target.addDynamicallyLegalOp<comb::MuxOp>(
+      [](comb::MuxOp op) { return hw::type_isa<IntegerType>(op.getType()); });
   target.addLegalDialect<hw::HWDialect, comb::CombDialect>();
 
   RewritePatternSet patterns(&getContext());
