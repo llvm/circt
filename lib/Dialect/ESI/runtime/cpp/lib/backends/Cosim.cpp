@@ -228,10 +228,12 @@ CosimAccelerator::~CosimAccelerator() {
 
 namespace {
 class CosimSysInfo : public SysInfo {
+#pragma pack(push, 1)
   struct CycleInfo {
     uint64_t freq;
     uint64_t cycle;
   };
+#pragma pack(pop)
 
 public:
   CosimSysInfo(CosimAccelerator &conn, RpcClient *rpcClient)
@@ -244,19 +246,19 @@ public:
       return;
 
     Context &ctxt = conn.getCtxt();
-    const esi::Type *voidType = getType(ctxt, new VoidType(argDesc.type));
-    const esi::Type *i64Type = getType(ctxt, new SIntType("i64", 64));
+    const esi::Type *i1Type = getType(ctxt, new BitsType("i1", 1));
+    const esi::Type *i64Type = getType(ctxt, new BitsType("i64", 64));
     const esi::Type *resultType =
         getType(ctxt, new StructType(resultDesc.type,
                                      {{"cycle", i64Type}, {"freq", i64Type}}));
 
     reqPort = std::make_unique<WriteCosimChannelPort>(
-        conn, *rpcClient, argDesc, voidType, "__cosim_cycle_count.arg");
+        conn, *rpcClient, argDesc, i1Type, "__cosim_cycle_count.arg");
     respPort = std::make_unique<ReadCosimChannelPort>(
         conn, *rpcClient, resultDesc, resultType, "__cosim_cycle_count.result");
     auto *bundleType =
         new BundleType("cosimCycleCount",
-                       {{"arg", BundleType::Direction::To, voidType},
+                       {{"arg", BundleType::Direction::To, i1Type},
                         {"result", BundleType::Direction::From, resultType}});
     func.reset(FuncService::Function::get(AppID("__cosim_cycle_count"),
                                           bundleType, *reqPort, *respPort));
@@ -295,7 +297,7 @@ private:
   std::unique_ptr<FuncService::Function> func;
 
   CycleInfo getCycleInfo() const {
-    MessageData arg;
+    MessageData arg({1}); // 1-bit trigger message
     std::future<MessageData> result = func->call(arg);
     result.wait();
     MessageData respMsg = result.get();

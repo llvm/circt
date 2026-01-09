@@ -21,7 +21,6 @@ from ..circt import ir
 from ..circt.dialects import esi as raw_esi
 
 from pathlib import Path
-from typing import Optional
 
 __root_dir__ = Path(__file__).parent.parent
 

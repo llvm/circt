@@ -196,7 +196,7 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
     if (coreClockFreqAttr.getType().isUnsignedInteger(64))
       coreClockFreq = coreClockFreqAttr.getUInt();
   hw::InstanceOp::create(
-      b, reqLoc, cosimCycleCountExternModule, "__cosim_cycle_counter",
+      b, reqLoc, cosimCycleCountExternModule, "__cycle_counter",
       ArrayRef<Value>({clk, rst}),
       b.getArrayAttr({hw::ParamDeclAttr::get(
           "CORE_CLOCK_FREQUENCY_HZ", b.getI64IntegerAttr(coreClockFreq))}));

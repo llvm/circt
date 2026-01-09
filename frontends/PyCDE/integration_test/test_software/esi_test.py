@@ -43,6 +43,7 @@ else:
   print("Cycle count: not available")
 
 clock_freq = sysinfo.core_clock_frequency()
+print(f"Clock frequency: {clock_freq} Hz")
 if platform == "cosim":
   assert clock_freq == 20_000_000, \
       f"Expected clock frequency 20_000_000 Hz for cosim, got {clock_freq}"

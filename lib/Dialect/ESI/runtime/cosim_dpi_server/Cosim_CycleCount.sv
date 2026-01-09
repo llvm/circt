@@ -40,7 +40,7 @@ module Cosim_CycleCount
 
   Cosim_Endpoint_FromHost #(
     .ENDPOINT_ID("__cosim_cycle_count.arg"),
-    .FROM_HOST_TYPE_ID("i1"),
+    .FROM_HOST_TYPE_ID("!esi.channel<i1>"),
     .FROM_HOST_SIZE_BITS(1)
   ) req_ep (
     .clk(clk),
