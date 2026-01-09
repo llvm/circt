@@ -38,7 +38,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FormatVariadic.h"
 
-#include <cstdlib>
+#include <cstddef>
 
 #define DEBUG_TYPE "lower-arc-to-llvm"
 
@@ -392,9 +392,11 @@ struct SimInstantiateOpLowering
     Value allocated;
 
     if (useRuntime) {
+      // The instance is using the runtime library
       auto ptrTy = LLVM::LLVMPointerType::get(getContext());
 
       Value runtimeArgs;
+      // If present, materialize the runtime argument string on the stack
       if (op.getRuntimeArgs().has_value()) {
         SmallVector<int8_t> argStringVec(op.getRuntimeArgsAttr().begin(),
                                          op.getRuntimeArgsAttr().end());
@@ -417,6 +419,7 @@ struct SimInstantiateOpLowering
       } else {
         runtimeArgs = LLVM::ZeroOp::create(rewriter, loc, ptrTy).getResult();
       }
+      // Call the state allocation function
       auto rtModelPtr = LLVM::AddressOfOp::create(rewriter, loc, ptrTy,
                                                   op.getRuntimeModelAttr())
                             .getResult();
@@ -430,6 +433,7 @@ struct SimInstantiateOpLowering
         LLVM::LifetimeEndOp::create(rewriter, loc, runtimeArgs);
 
     } else {
+      // The instance is not using the runtime library
       FailureOr<LLVM::LLVMFuncOp> mallocFunc =
           LLVM::lookupOrCreateMallocFn(rewriter, moduleOp, convertedIndex);
       if (failed(mallocFunc))

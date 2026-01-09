@@ -145,7 +145,7 @@ def InferStateProperties : Pass<"arc-infer-state-properties",
 }
 
 def InsertRuntime : Pass<"arc-insert-runtime", "mlir::ModuleOp"> {
-  let summary = "TODO";
+  let summary = "Insert structs and function calls for the ArcRuntime library";
   let dependentDialects = ["mlir::LLVM::LLVMDialect"];
   let options = [
     Option<"extraArgs", "extra-args", "std::string", "",
