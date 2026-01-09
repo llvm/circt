@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/Arc/ArcRuntime/ModelInstance.h"
+#include "circt/Dialect/Arc/Runtime/ModelInstance.h"
 
 #include <cassert>
 #include <iostream>

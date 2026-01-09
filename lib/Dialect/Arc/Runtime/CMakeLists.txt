@@ -21,8 +21,8 @@ endif()
 
 # Install required header files
 install(FILES
-  ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Arc/ArcRuntime/ArcRuntime.h
-  ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Arc/ArcRuntime/Common.h
+  ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Arc/Runtime/ArcRuntime.h
+  ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Arc/Runtime/Common.h
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/circt/Dialect/Arc/ArcRuntime
   COMPONENT CIRCTArcRuntime
 )

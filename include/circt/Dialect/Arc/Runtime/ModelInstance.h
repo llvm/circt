@@ -13,11 +13,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ARC_ARCRUNTIME_MODELINSTANCE_H
-#define CIRCT_DIALECT_ARC_ARCRUNTIME_MODELINSTANCE_H
+#ifndef CIRCT_DIALECT_ARC_RUNTIME_MODELINSTANCE_H
+#define CIRCT_DIALECT_ARC_RUNTIME_MODELINSTANCE_H
 
-#include "circt/Dialect/Arc/ArcRuntime/ArcRuntime.h"
-#include "circt/Dialect/Arc/ArcRuntime/Common.h"
+#include "circt/Dialect/Arc/Runtime/ArcRuntime.h"
+#include "circt/Dialect/Arc/Runtime/Common.h"
 
 namespace circt {
 namespace arc {
@@ -51,4 +51,4 @@ private:
 } // namespace arc
 } // namespace circt
 
-#endif // CIRCT_DIALECT_ARC_ARCRUNTIME_MODELINSTANCE_H
+#endif // CIRCT_DIALECT_ARC_RUNTIME_MODELINSTANCE_H

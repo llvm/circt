@@ -14,8 +14,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ARC_ARCRUNTIME_COMMON_H
-#define CIRCT_DIALECT_ARC_ARCRUNTIME_COMMON_H
+#ifndef CIRCT_DIALECT_ARC_RUNTIME_COMMON_H
+#define CIRCT_DIALECT_ARC_RUNTIME_COMMON_H
 
 #include <stdint.h>
 
@@ -66,4 +66,4 @@ struct ArcRuntimeModelInfo {
 
 #pragma pack(pop)
 
-#endif // CIRCT_DIALECT_ARC_ARCRUNTIME_COMMON_H
+#endif // CIRCT_DIALECT_ARC_RUNTIME_COMMON_H

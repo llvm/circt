@@ -1,1 +1,1 @@
-add_subdirectory(ArcRuntime)
+add_subdirectory(Runtime)

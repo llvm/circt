@@ -1,8 +1,8 @@
 #include "gtest/gtest.h"
 
 #define ARC_RUNTIME_JITBIND_FNDECL
-#include "circt/Dialect/Arc/ArcRuntime/ArcRuntime.h"
-#include "circt/Dialect/Arc/ArcRuntime/JITBind.h"
+#include "circt/Dialect/Arc/Runtime/ArcRuntime.h"
+#include "circt/Dialect/Arc/Runtime/JITBind.h"
 
 struct TestImpl {
   uint64_t foo = 0x123456;

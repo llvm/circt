@@ -58,4 +58,4 @@ add_subdirectory(Interfaces)
 add_subdirectory(Transforms)
 
 # Arcilator Runtime Library
-add_subdirectory(ArcRuntime)
+add_subdirectory(Runtime)

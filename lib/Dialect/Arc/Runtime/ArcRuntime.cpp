@@ -13,14 +13,14 @@
 
 #define ARC_RUNTIME_ENABLE_EXPORT
 
-#include "circt/Dialect/Arc/ArcRuntime/ArcRuntime.h"
-#include "circt/Dialect/Arc/ArcRuntime/Common.h"
-#include "circt/Dialect/Arc/ArcRuntime/IRInterface.h"
-#include "circt/Dialect/Arc/ArcRuntime/ModelInstance.h"
+#include "circt/Dialect/Arc/Runtime/ArcRuntime.h"
+#include "circt/Dialect/Arc/Runtime/Common.h"
+#include "circt/Dialect/Arc/Runtime/IRInterface.h"
+#include "circt/Dialect/Arc/Runtime/ModelInstance.h"
 
 #ifdef ARC_RUNTIME_JIT_BIND
 #define ARC_RUNTIME_JITBIND_FNDECL
-#include "circt/Dialect/Arc/ArcRuntime/JITBind.h"
+#include "circt/Dialect/Arc/Runtime/JITBind.h"
 #endif
 
 #include <cassert>

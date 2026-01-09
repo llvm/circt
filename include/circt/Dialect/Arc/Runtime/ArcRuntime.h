@@ -10,10 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_ARC_ARCRUNTIME_ARCRUNTIME_H
-#define CIRCT_DIALECT_ARC_ARCRUNTIME_ARCRUNTIME_H
+#ifndef CIRCT_DIALECT_ARC_RUNTIME_ARCRUNTIME_H
+#define CIRCT_DIALECT_ARC_RUNTIME_ARCRUNTIME_H
 
-#include "circt/Dialect/Arc/ArcRuntime/Common.h"
+#include "circt/Dialect/Arc/Runtime/Common.h"
 
 // `ARC_RUNTIME_ENABLE_EXPORT` must be set when compiling the runtime.
 // Do not set when using (i.e., linking against) it.
@@ -74,4 +74,4 @@ ARC_RUNTIME_EXPORT uint64_t arcRuntimeGetAPIVersion();
 ARC_RUNTIME_EXPORT struct ArcState *
 arcRuntimeGetStateFromModelState(uint8_t *modelState, uint64_t offset);
 
-#endif // CIRCT_DIALECT_ARC_ARCRUNTIME_ARCRUNTIME_H
+#endif // CIRCT_DIALECT_ARC_RUNTIME_ARCRUNTIME_H
