@@ -7,9 +7,15 @@ from enum import Enum
 from typing import *
 from jinja2 import Environment, DictLoader, select_autoescape
 
-header_cpp_template = """// Enable this option when linking against libArcRuntime
+header_cpp_template = """// Enable this option when linking against libCIRCTArcRuntime
 // #define ARC_USE_COMPILED_RUNTIME_LIB
+
+#ifdef ARC_USE_COMPILED_RUNTIME_LIB
+#include "circt/Dialect/Arc/Runtime/ArcRuntime.h"
+#include "circt/Dialect/Arc/Runtime/Common.h"
+#endif
 #include "arcilator-runtime.h"
+
 {% for model in models %}
 extern "C" {
 {% if model.initialFnSym %}
@@ -64,7 +70,7 @@ public:
   std::vector<uint8_t> storage;
 #else
   ArcState *runtimeInstance;
-  uint8_t* storage;
+  uint8_t *storage;
 #endif
 
   {{ model.name }}View view;

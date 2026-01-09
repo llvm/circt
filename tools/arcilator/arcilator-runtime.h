@@ -7,11 +7,6 @@
 #include <ostream>
 #include <vector>
 
-#ifdef ARC_USE_COMPILED_RUNTIME_LIB
-#include "ArcRuntime/ArcRuntime.h"
-#include "ArcRuntime/Common.h"
-#endif
-
 struct Signal {
   const char *name;
   unsigned offset;
