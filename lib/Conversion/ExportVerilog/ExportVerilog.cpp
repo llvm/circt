@@ -2643,7 +2643,7 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
   unsigned subExprStartIndex = buffer.tokens.size();
   if (op)
     ps.addCallback({op, true});
-  auto done = llvm::make_scope_exit([&]() {
+  llvm::scope_exit done([&]() {
     if (op)
       ps.addCallback({op, false});
   });

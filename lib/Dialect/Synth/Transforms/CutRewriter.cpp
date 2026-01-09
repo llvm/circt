@@ -700,7 +700,7 @@ LogicalResult CutEnumerator::visitLogicOp(Operation *logicOp) {
   resultCutSet->addCut(primaryInputCut);
 
   // Schedule cut set finalization when exiting this scope
-  auto prune = llvm::make_scope_exit([&]() {
+  llvm::scope_exit prune([&]() {
     // Finalize cut set: remove duplicates, limit size, and match patterns
     resultCutSet->finalize(options, matchCut);
   });

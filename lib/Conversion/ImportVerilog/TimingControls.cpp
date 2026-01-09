@@ -222,8 +222,7 @@ Context::convertTimingControl(const slang::ast::TimingControl &ctrl,
   moore::WaitEventOp implicitWaitOp;
   {
     auto previousCallback = rvalueReadCallback;
-    auto done =
-        llvm::make_scope_exit([&] { rvalueReadCallback = previousCallback; });
+    llvm::scope_exit done([&] { rvalueReadCallback = previousCallback; });
     // Reads happening as part of the event control should not be added to a
     // surrounding implicit event control's list of implicitly observed
     // variables.
@@ -239,8 +238,7 @@ Context::convertTimingControl(const slang::ast::TimingControl &ctrl,
   llvm::SmallSetVector<Value, 8> readValues;
   {
     auto previousCallback = rvalueReadCallback;
-    auto done =
-        llvm::make_scope_exit([&] { rvalueReadCallback = previousCallback; });
+    llvm::scope_exit done([&] { rvalueReadCallback = previousCallback; });
     if (implicitWaitOp) {
       rvalueReadCallback = [&](moore::ReadOp readOp) {
         readValues.insert(readOp.getInput());
