@@ -17,7 +17,7 @@
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 
-#include <iostream>
+#include "circt/Dialect/LTL/LTLTypes.h"
 
 using namespace circt;
 
@@ -64,6 +64,9 @@ private:
   llvm::SmallVector<Value> assertConditions;
   llvm::SmallVector<Value> assumeConditions;
 
+  // Keep track of valid asserts/assumes and 
+  llvm::SmallVector<Operation*> opsToErase;
+
   // Accumulates conditions of assertions and assumptions.
   // Note that this only considers cases where the conditions are
   // of type `i1`, and will not merge LTL properties.
@@ -72,7 +75,7 @@ private:
                                     OpBuilder &builder) {
     auto condition = op.getProperty();
     // Check that our condition isn't an ltl property, if so ignore
-    if (condition.getType().isSignlessInteger(1)) {
+    if (!isa<ltl::PropertyType, ltl::SequenceType>(condition.getType())) {
 
       // Check for an optional enable signal
       auto enable = op.getEnable();
@@ -93,8 +96,8 @@ private:
         conds.push_back(condition);
       }
 
-      // We no longer need the existing assert/assume
-      op.erase();
+      // We no longer need the existing assert/assume so request a removal
+      opsToErase.push_back(op.getOperation());
     } 
     return success();
   }
@@ -153,14 +156,22 @@ void CombineAssertLikePass::runOnOperation() {
         signalPassFailure();
   });
 
-  // Conjoin the conditions into an assert and an assume respectively
-  if (failed(conjoinConditions<verif::AssertOp>(assertConditions, builder)))
-    signalPassFailure();
+  // Only conjoin assertions if there was more than one valid assert-like
+  if (opsToErase.size() > 1) {
+    // Conjoin the conditions into an assert and an assume respectively
+    if (failed(conjoinConditions<verif::AssertOp>(assertConditions, builder)))
+      signalPassFailure();
+  
+    if (failed(conjoinConditions<verif::AssumeOp>(assumeConditions, builder)))
+      signalPassFailure();
 
-  if (failed(conjoinConditions<verif::AssumeOp>(assumeConditions, builder)))
-    signalPassFailure();
+    // Erase the ops
+    for (auto op : opsToErase)
+      op->erase();
+  }
 
   // Clear the data structures for pass reuse
   assertConditions.clear();
   assumeConditions.clear();
+  opsToErase.clear();
 }
