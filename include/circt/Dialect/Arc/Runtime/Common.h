@@ -36,7 +36,6 @@
 #pragma clang diagnostic ignored "-Wc99-extensions"
 #endif
 
-
 /// Combined runtime and model state for a hardware model instance.
 struct ArcState {
   /// Runtime implementation specific data. Usually points to a custom struct.
