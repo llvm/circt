@@ -169,12 +169,12 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
         hw::ModulePort::Direction::Input},
        1},
   };
-  auto ip = b.saveInsertionPoint();
   auto parentModule = implReq->getParentOfType<mlir::ModuleOp>();
-  b.setInsertionPointToEnd(parentModule.getBody());
   auto cosimCycleCountExternModule =
       parentModule.lookupSymbol<hw::HWModuleExternOp>("Cosim_CycleCount");
   if (!cosimCycleCountExternModule) {
+    auto ip = b.saveInsertionPoint();
+    b.setInsertionPointToEnd(parentModule.getBody());
     if (auto existingSym = parentModule.lookupSymbol("Cosim_CycleCount")) {
       return implReq
                  .emitOpError(
@@ -186,8 +186,8 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
     cosimCycleCountExternModule = hw::HWModuleExternOp::create(
         b, reqLoc, b.getStringAttr("Cosim_CycleCount"), cycleCountPorts,
         "Cosim_CycleCount", ArrayAttr::get(ctxt, cycleCountParams));
+    b.restoreInsertionPoint(ip);
   }
-  b.restoreInsertionPoint(ip);
 
   // Instantiate the external Cosim_CycleCount module.
   uint64_t coreClockFreq = 0;
@@ -196,10 +196,11 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
     if (coreClockFreqAttr.getType().isUnsignedInteger(64))
       coreClockFreq = coreClockFreqAttr.getUInt();
   hw::InstanceOp::create(
-      b, reqLoc, cosimCycleCountExternModule, "__cycle_counter",
+      b, reqLoc, cosimCycleCountExternModule, "__cosim_cycle_counter",
       ArrayRef<Value>({clk, rst}),
       b.getArrayAttr({hw::ParamDeclAttr::get(
           "CORE_CLOCK_FREQUENCY_HZ", b.getI64IntegerAttr(coreClockFreq))}));
+
   // Erase the generation request.
   implReq.erase();
   return success();

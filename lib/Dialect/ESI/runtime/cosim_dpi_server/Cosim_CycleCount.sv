@@ -17,7 +17,7 @@ import Cosim_DpiPkg::*;
 module Cosim_CycleCount
 #(
   // Core clock frequency in Hz. Used by the runtime to convert cycles to time.
-  parameter longint unsigned CORE_CLOCK_FREQUENCY_HZ = 100_000_000
+  parameter longint unsigned CORE_CLOCK_FREQUENCY_HZ = 0
 )(
   input logic clk,
   input logic rst
@@ -40,8 +40,8 @@ module Cosim_CycleCount
 
   Cosim_Endpoint_FromHost #(
     .ENDPOINT_ID("__cosim_cycle_count.arg"),
-    .FROM_HOST_TYPE_ID("void"),
-    .FROM_HOST_SIZE_BITS(0)
+    .FROM_HOST_TYPE_ID("i1"),
+    .FROM_HOST_SIZE_BITS(1)
   ) req_ep (
     .clk(clk),
     .rst(rst),
