@@ -7,12 +7,27 @@ set(ArcRuntimeLibSources
 if (WIN32)
 # Ship a DLL for Windows to avoid trouble with Debug/Release builds of
 # the C runtime.
-  add_circt_library(CIRCTArcRuntime SHARED EXCLUDE_FROM_LIBMLIR ${ArcRuntimeLibSources})
+  add_circt_library(CIRCTArcRuntime
+    SHARED
+    EXCLUDE_FROM_LIBMLIR
+    ${ArcRuntimeLibSources}
+  )
 else()
-  add_circt_library(CIRCTArcRuntime EXCLUDE_FROM_LIBMLIR ${ArcRuntimeLibSources})
+  add_circt_library(CIRCTArcRuntime
+    EXCLUDE_FROM_LIBMLIR
+    ${ArcRuntimeLibSources}
+   )
 endif()
 
-# JIT runtime statically linked into the arcilator tool
+# Install required header files
+install(FILES
+  ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Arc/ArcRuntime/ArcRuntime.h
+  ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Arc/ArcRuntime/Common.h
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/circt/Dialect/Arc/ArcRuntime
+  COMPONENT CIRCTArcRuntime
+)
+
+# JIT runtime linked into the arcilator tool
 add_circt_library(CIRCTArcJITRuntime
   EXCLUDE_FROM_LIBMLIR
   OBJECT
