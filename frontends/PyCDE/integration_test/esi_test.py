@@ -412,8 +412,9 @@ class Top(Module):
 
 if __name__ == "__main__":
   bsp = get_bsp(sys.argv[2] if len(sys.argv) > 2 else None)
-  s = pycde.System(bsp(Top, core_freq=20_000_000),
+  s = pycde.System(bsp(Top),
                    name="ESILoopback",
-                   output_directory=sys.argv[1])
+                   output_directory=sys.argv[1],
+                   core_clock_frequency_hz=20_000_000)
   s.compile()
   s.package()

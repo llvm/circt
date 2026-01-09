@@ -160,7 +160,7 @@ class MMIOAxiReadWriteDemux(Module):
     data_sel_ready.assign(read_ready & write_resp_ready)
 
 
-def XrtBSP(user_module, core_clock_frequency_hz: Optional[int] = None):
+def XrtBSP(user_module):
   """Use the Xilinx RunTime (XRT) shell to implement ESI services and build an
   image or emulation package.
   How to use this BSP:
@@ -262,8 +262,6 @@ def XrtBSP(user_module, core_clock_frequency_hz: Optional[int] = None):
     @generator
     def construct(ports):
       System.current().platform = "fpga"
-      if core_clock_frequency_hz is not None:
-        System.current().core_freq = core_clock_frequency_hz
 
       clk = ports.ap_clk
       rst = ~ports.ap_resetn

@@ -177,11 +177,11 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
   b.restoreInsertionPoint(ip);
 
   // Instantiate the external Cosim_CycleCount module.
-  // Use a default frequency of 100 MHz.
-  uint64_t coreClockFreq = 100000000;
+  uint64_t coreClockFreq = 0;
   if (auto coreClockFreqAttr = dyn_cast_or_null<IntegerAttr>(
           implReq->getAttr("esi.core_clock_frequency_hz")))
-    coreClockFreq = coreClockFreqAttr.getUInt();
+    if (coreClockFreqAttr.getType().isUnsignedInteger(64))
+      coreClockFreq = coreClockFreqAttr.getUInt();
   hw::InstanceOp::create(
       b, reqLoc, cosimCycleCountExternModule, "__cycle_counter",
       ArrayRef<Value>({clk, rst}),

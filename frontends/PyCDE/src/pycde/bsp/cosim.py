@@ -26,9 +26,7 @@ from typing import Optional
 __root_dir__ = Path(__file__).parent.parent
 
 
-def CosimBSP(user_module: Type[Module],
-             emulate_dma: bool = False,
-             core_freq: Optional[int] = None) -> Module:
+def CosimBSP(user_module: Type[Module], emulate_dma: bool = False) -> Module:
   """Wrap and return a cosimulation 'board support package' containing
   'user_module'"""
 
@@ -90,8 +88,6 @@ def CosimBSP(user_module: Type[Module],
     @generator
     def build(ports):
       System.current().platform = "cosim"
-      if core_freq is not None:
-        System.current().core_freq = core_freq
 
       mmio_read_write = esi.FuncService.get(
           esi.AppID("__cosim_mmio_read_write"), esi.MMIO.read_write.type)
@@ -123,13 +119,12 @@ def CosimBSP(user_module: Type[Module],
           loc=get_user_loc())
       core_freq = System.current().core_freq
       if core_freq is not None:
-        cosim_svc.operation.setAttr(
-            "esi.core_clock_frequency_hz",
-            ir.IntegerAttr.get(ir.IntegerType.get_signless(64), core_freq))
+        cosim_svc.operation.attributes[
+            "esi.core_clock_frequency_hz"] = ir.IntegerAttr.get(
+                ir.IntegerType.get_unsigned(64), core_freq)
 
   return ESI_Cosim_Top
 
 
-def CosimBSP_DMA(user_module: Type[Module],
-                 core_freq: Optional[int] = None) -> Module:
-  return CosimBSP(user_module, emulate_dma=True, core_freq=core_freq)
+def CosimBSP_DMA(user_module: Type[Module]) -> Module:
+  return CosimBSP(user_module, emulate_dma=True)
