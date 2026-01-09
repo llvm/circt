@@ -64,8 +64,8 @@ private:
   llvm::SmallVector<Value> assertConditions;
   llvm::SmallVector<Value> assumeConditions;
 
-  // Keep track of valid asserts/assumes and 
-  llvm::SmallVector<Operation*> opsToErase;
+  // Keep track of valid asserts/assumes and
+  llvm::SmallVector<Operation *> opsToErase;
 
   // Accumulates conditions of assertions and assumptions.
   // Note that this only considers cases where the conditions are
@@ -83,8 +83,8 @@ private:
         // For i1 conditions, the enable signal can be folded
         // directly into the condition
         builder.setInsertionPointAfter(condition.getDefiningOp());
-        auto andop =
-            comb::AndOp::create(builder, condition.getLoc(), condition, op.getEnable());
+        auto andop = comb::AndOp::create(builder, condition.getLoc(), condition,
+                                         op.getEnable());
         // Sanity Check: Make sure the op was created
         if (!andop)
           return failure();
@@ -98,7 +98,7 @@ private:
 
       // We no longer need the existing assert/assume so request a removal
       opsToErase.push_back(op.getOperation());
-    } 
+    }
     return success();
   }
 
@@ -109,7 +109,7 @@ private:
                                   OpBuilder builder) {
 
     // Check that we actually accumulated conditions, otherwise exit
-    if(conds.empty())
+    if (conds.empty())
       return success();
 
     // Combine accumulated conditions into a single op
@@ -121,7 +121,8 @@ private:
       auto condition = conds[i];
       builder.setInsertionPointAfter(condition.getDefiningOp());
 
-      auto andop = comb::AndOp::create(builder, condition.getLoc(), acc, condition);
+      auto andop =
+          comb::AndOp::create(builder, condition.getLoc(), acc, condition);
 
       // Sanity Check: Make sure the op was created
       if (!andop)
@@ -132,7 +133,8 @@ private:
     }
 
     // Create the final assert/assume using the accumulated condition
-    AT::create(builder, acc.getLoc(), acc, /*enable=*/nullptr, /*label=*/nullptr);
+    AT::create(builder, acc.getLoc(), acc, /*enable=*/nullptr,
+               /*label=*/nullptr);
 
     return success();
   }
@@ -146,7 +148,7 @@ void CombineAssertLikePass::runOnOperation() {
   // Walk over all assert-like ops and accumulate their conditions
   // then create a new comb.and op or two for assertions and
   // assumptions to conjoin their respective accumulated conditions.
-  hwModule.walk([&](Operation* op) {
+  hwModule.walk([&](Operation *op) {
     // Only consider assertions and assumptions, not cover ops
     if (auto aop = dyn_cast<verif::AssertOp>(op))
       if (failed(accumulateCondition(aop, assertConditions, builder)))
@@ -161,7 +163,7 @@ void CombineAssertLikePass::runOnOperation() {
     // Conjoin the conditions into an assert and an assume respectively
     if (failed(conjoinConditions<verif::AssertOp>(assertConditions, builder)))
       signalPassFailure();
-  
+
     if (failed(conjoinConditions<verif::AssumeOp>(assumeConditions, builder)))
       signalPassFailure();
 
