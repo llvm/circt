@@ -2074,8 +2074,6 @@ struct FormatRealOpConversion : public OpConversionPattern<FormatRealOp> {
           op, adaptor.getValue(), isLeftAlignedAttr, fieldWidthAttr,
           fracDigitsAttr);
       return success();
-    default:
-      return rewriter.notifyMatchFailure(op, "unsupported real format");
     }
   }
 };
