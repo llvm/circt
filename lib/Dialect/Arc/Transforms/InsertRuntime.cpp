@@ -83,22 +83,31 @@ struct RuntimeModelContext; // Forward declaration
 
 struct GlobalRuntimeContext {
   GlobalRuntimeContext() = delete;
+
+  /// Constructs a global context and adds the available runtime API function
+  /// declarations to the MLIR module
   explicit GlobalRuntimeContext(ModuleOp moduleOp)
       : mlirModuleOp(moduleOp), globalBuilder(createBuilder(moduleOp)),
         allocInstanceFn(globalBuilder), deleteInstanceFn(globalBuilder),
         onEvalFn(globalBuilder) {}
 
+  /// Delete all API functions that are never called
   void deleteUnusedFunctions() {
     for (auto *fn : apiFunctions)
       if (!fn->used)
         fn->llvmFuncOp->erase();
   }
 
+  /// Add an Arc model to the global runtime context
   void addModel(ModelOp &modelOp, const ModelInfo &modelInfo);
+  /// Build a RuntimeModelOp for each registered model
   LogicalResult buildRuntimeModelOps();
+  /// Find and assign instances of the registered models within the root module
   LogicalResult collectInstances();
 
+  /// The root module
   ModuleOp mlirModuleOp;
+  /// Builder for global operations
   ImplicitLocOpBuilder globalBuilder;
 
   // API Functions
@@ -121,10 +130,12 @@ private:
 
 struct RuntimeModelContext {
   RuntimeModelContext() = delete;
+  /// Construct the local context for an Arc model within the global context
   RuntimeModelContext(GlobalRuntimeContext &globalContext, ModelOp &modelOp,
                       const ModelInfo &modelInfo)
       : globalContext(globalContext), modelOp(modelOp), modelInfo(modelInfo) {}
 
+  /// Register an MLIR defined instance of our model
   void addInstance(SimInstantiateOp &instantiateOp) {
     assert(!instantiateOp.getRuntimeModelAttr());
     assert(!!runtimeModelOp);
@@ -133,12 +144,18 @@ struct RuntimeModelContext {
     instances.push_back(instantiateOp);
   }
 
+  /// Insert runtime calls to the model and its instances
   LogicalResult lower();
 
+  /// The global runtime context
   GlobalRuntimeContext &globalContext;
+  /// This context's model
   ModelOp modelOp;
+  /// Model metadata
   const ModelInfo &modelInfo;
+  /// List of registered instances
   SmallVector<SimInstantiateOp> instances;
+  /// The model's corresponding RuntimeModelOp
   RuntimeModelOp runtimeModelOp;
 
 private:
