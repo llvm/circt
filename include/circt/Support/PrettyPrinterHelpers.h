@@ -339,7 +339,7 @@ public:
   auto invokeWithStringOS(Callable &&c) {
     SmallString<BufferLen> ss;
     llvm::raw_svector_ostream ssos(ss);
-    = llvm::scope_exit flush([&]() {
+    llvm::scope_exit flush([&]() {
       if (!ss.empty())
         *this << ss;
     });
