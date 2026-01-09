@@ -87,18 +87,19 @@ static llvm::FailureOr<NPNClass> getNPNClassFromModule(hw::HWModuleOp module) {
 /// Simple technology library encoded as a HWModuleOp.
 struct TechLibraryPattern : public CutRewritePattern {
   TechLibraryPattern(hw::HWModuleOp module, double area,
-                     SmallVector<SmallVector<DelayType, 2>, 4> delay,
-                     NPNClass npnClass)
+                     SmallVector<DelayType> delay, NPNClass npnClass)
       : CutRewritePattern(module->getContext()), area(area),
         delay(std::move(delay)), module(module), npnClass(std::move(npnClass)) {
 
     LLVM_DEBUG({
       llvm::dbgs() << "Created Tech Library Pattern for module: "
                    << module.getModuleName() << "\n"
-                   << "NPN Class: " << npnClass.truthTable.table << "\n"
-                   << "Inputs: " << npnClass.inputPermutation.size() << "\n"
-                   << "Input Negation: " << npnClass.inputNegation << "\n"
-                   << "Output Negation: " << npnClass.outputNegation << "\n";
+                   << "NPN Class: " << this->npnClass.truthTable.table << "\n"
+                   << "Inputs: " << this->npnClass.inputPermutation.size()
+                   << "\n"
+                   << "Input Negation: " << this->npnClass.inputNegation << "\n"
+                   << "Output Negation: " << this->npnClass.outputNegation
+                   << "\n";
     });
   }
 
@@ -108,8 +109,12 @@ struct TechLibraryPattern : public CutRewritePattern {
   }
 
   /// Match the cut set against this library primitive
-  bool match(const Cut &cut) const override {
-    return cut.getNPNClass().equivalentOtherThanPermutation(npnClass);
+  std::optional<MatchResult> match(CutEnumerator &enumerator,
+                                   const Cut &cut) const override {
+    if (!cut.getNPNClass().equivalentOtherThanPermutation(npnClass))
+      return std::nullopt;
+
+    return MatchResult(area, delay);
   }
 
   /// Enable truth table matching for this pattern
@@ -121,7 +126,8 @@ struct TechLibraryPattern : public CutRewritePattern {
 
   /// Rewrite the cut set using this library primitive
   llvm::FailureOr<Operation *> rewrite(mlir::OpBuilder &builder,
-                                       Cut &cut) const override {
+                                       CutEnumerator &enumerator,
+                                       const Cut &cut) const override {
     // Create a new instance of the module
     SmallVector<Value> inputs;
     cut.getPermutatedInputs(npnClass, inputs);
@@ -131,12 +137,6 @@ struct TechLibraryPattern : public CutRewritePattern {
         hw::InstanceOp::create(builder, cut.getRoot()->getLoc(), module,
                                "mapped", ArrayRef<Value>(inputs));
     return instanceOp.getOperation();
-  }
-
-  double getArea() const override { return area; }
-
-  DelayType getDelay(unsigned inputIndex, unsigned outputIndex) const override {
-    return delay[inputIndex][outputIndex];
   }
 
   unsigned getNumInputs() const {
@@ -154,7 +154,7 @@ struct TechLibraryPattern : public CutRewritePattern {
 
 private:
   const double area;
-  const SmallVector<SmallVector<DelayType, 2>, 4> delay;
+  const SmallVector<DelayType> delay;
   hw::HWModuleOp module;
   NPNClass npnClass;
 };
@@ -200,18 +200,16 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
 
       double area = areaAttr.getValue().convertToDouble();
 
-      SmallVector<SmallVector<DelayType, 2>, 4> delay;
+      SmallVector<DelayType> delay;
       for (auto delayValue : delayAttr) {
         auto delayArray = cast<ArrayAttr>(delayValue);
-        SmallVector<DelayType, 2> delayRow;
         for (auto delayElement : delayArray) {
           // FIXME: Currently we assume delay is given as integer attributes,
           // this should be replaced once we have a proper cell op with
           // dedicated timing attributes with units.
-          delayRow.push_back(
+          delay.push_back(
               cast<mlir::IntegerAttr>(delayElement).getValue().getZExtValue());
         }
-        delay.push_back(std::move(delayRow));
       }
       // Compute NPN Class for the module.
       auto npnClass = getNPNClassFromModule(hwModule);
