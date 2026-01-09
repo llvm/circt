@@ -137,17 +137,17 @@ void circt::populateArcStateAllocationPipeline(
 
 void circt::populateArcToLLVMPipeline(OpPassManager &pm, bool insertRuntime,
                                       StringRef extraRuntimeArgs) {
+  {
+    hw::HWConvertBitcastsOptions options;
+    options.allowPartialConversion = false;
+    pm.addPass(hw::createHWConvertBitcasts(options));
+  }
   if (insertRuntime) {
     InsertRuntimeOptions opts;
     if (!extraRuntimeArgs.empty())
       opts.extraArgs =
           std::string(extraRuntimeArgs.begin(), extraRuntimeArgs.end());
     pm.addPass(createInsertRuntime(opts));
-  }
-  {
-    hw::HWConvertBitcastsOptions options;
-    options.allowPartialConversion = false;
-    pm.addPass(hw::createHWConvertBitcasts(options));
   }
   pm.addPass(createLowerArcToLLVMPass());
   pm.addPass(createCSEPass());
