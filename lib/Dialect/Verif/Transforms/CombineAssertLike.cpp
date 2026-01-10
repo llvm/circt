@@ -52,28 +52,51 @@ namespace {
 /// %cond = comb.and bin %cond0, %cond1 : i1
 /// verif.assert %cond : i1
 /// ```
+/// The accumulation will happen on a per-block basis.
+/// Most of the logic here will be to handle splitting things into blocks
 struct CombineAssertLikePass
     : verif::impl::CombineAssertLikePassBase<CombineAssertLikePass> {
   void runOnOperation() override;
 
 private:
-  // Vectors that store all of the accumulated conditions
+  // Maps that store all of the accumulated conditions per block
   // for assertions and assumption found during our walk.
   // This is then used to create a large conjunction of
   // all of them in the end to be used as the only assert/assume.
-  llvm::SmallVector<Value> assertConditions;
-  llvm::SmallVector<Value> assumeConditions;
+  llvm::DenseMap<Operation*, llvm::SmallVector<Value>> assertConditions;
+  llvm::DenseMap<Operation*, llvm::SmallVector<Value>> assumeConditions;
 
   // Keep track of valid asserts/assumes and
-  llvm::SmallVector<Operation *> opsToErase;
+  llvm::DenseMap<Operation*, llvm::SmallVector<Operation*>> opsToErase;
+
+  // Pushes an entry found inside a block into its coresponding map
+  // Creates a new vector for that block if none has been made before
+  template <typename T, typename TOp>
+  void pushBackMap(
+    llvm::DenseMap<Operation*, llvm::SmallVector<T>> &map,
+    Operation* block, TOp op
+  ) {
+    // Check if the map already initialized a slot for this parent
+    // If not initialize the entry before we update the map
+    if (auto it = map.find(block); it == map.end()) 
+      map[block] = llvm::SmallVector<T>();
+
+    // Update the map
+    map[block].push_back(op);
+  } 
 
   // Accumulates conditions of assertions and assumptions.
   // Note that this only considers cases where the conditions are
   // of type `i1`, and will not merge LTL properties.
   template <typename T>
-  LogicalResult accumulateCondition(T op, llvm::SmallVector<Value> &conds,
-                                    OpBuilder &builder) {
+  LogicalResult accumulateCondition(
+    T &op, llvm::DenseMap<Operation*, llvm::SmallVector<Value>> &conds,
+    OpBuilder &builder
+  ) {
+    // Extract the condition and parent block the assertlike belongs to
     auto condition = op.getProperty();
+    auto parent = op.getOperation()->getParentOp();
+
     // Check that our condition isn't an ltl property, if so ignore
     if (!isa<ltl::PropertyType, ltl::SequenceType>(condition.getType())) {
 
@@ -90,14 +113,14 @@ private:
           return failure();
 
         // We then only need to store the conjunction not the condition
-        conds.push_back(andop);
+        pushBackMap(conds, parent, andop);
       } else {
         // If no enble is present, we can directly accumulate the condition
-        conds.push_back(condition);
+        pushBackMap(conds, parent, condition);
       }
 
       // We no longer need the existing assert/assume so request a removal
-      opsToErase.push_back(op.getOperation());
+      pushBackMap(opsToErase, parent, op.getOperation());
     }
     return success();
   }
@@ -106,34 +129,22 @@ private:
   // a single large conjunction
   template <typename AT>
   LogicalResult conjoinConditions(llvm::SmallVector<Value> &conds,
-                                  OpBuilder builder) {
+    OpBuilder &builder) {
 
     // Check that we actually accumulated conditions, otherwise exit
     if (conds.empty())
       return success();
 
-    // Combine accumulated conditions into a single op
-    Value acc = conds[0];
+    // Set insertion 
+    size_t last_cond = conds.size() - 1;
+    builder.setInsertionPointAfter(conds[last_cond].getDefiningOp());
 
-    // Hopefully these can be merged into a variadic comb.and
-    // by the canonicalizer.
-    for (size_t i = 1; i < conds.size(); ++i) {
-      auto condition = conds[i];
-      builder.setInsertionPointAfter(condition.getDefiningOp());
-
-      auto andop =
-          comb::AndOp::create(builder, condition.getLoc(), acc, condition);
-
-      // Sanity Check: Make sure the op was created
-      if (!andop)
-        return failure();
-
-      // Accumulate
-      acc = andop;
-    }
+    // Creata a variadic conjunction
+    auto andop =
+          comb::AndOp::create(builder, conds[last_cond].getLoc(), conds, /*two_state=*/false);
 
     // Create the final assert/assume using the accumulated condition
-    AT::create(builder, acc.getLoc(), acc, /*enable=*/nullptr,
+    AT::create(builder, andop.getLoc(), andop, /*enable=*/nullptr,
                /*label=*/nullptr);
 
     return success();
@@ -158,18 +169,25 @@ void CombineAssertLikePass::runOnOperation() {
         signalPassFailure();
   });
 
-  // Only conjoin assertions if there was more than one valid assert-like
-  if (opsToErase.size() > 1) {
-    // Conjoin the conditions into an assert and an assume respectively
-    if (failed(conjoinConditions<verif::AssertOp>(assertConditions, builder)))
-      signalPassFailure();
+  // For each block, conjoin the accumulated conditions
+  for (auto [parent, ops] : opsToErase) {
+    // Only conjoin assertions if there was more than one valid assert-like
+    if(ops.size() > 1) {
+      // Check that some assertions were found
+      if (auto it = assertConditions.find(parent); it != assertConditions.end()) 
+        // Conjoin the conditions into an assert and an assume respectively
+        if (failed(conjoinConditions<verif::AssertOp>(assertConditions[parent], builder)))
+          signalPassFailure();
+      
+      // Same for assumptions
+      if (auto it = assumeConditions.find(parent); it != assumeConditions.end()) 
+        if (failed(conjoinConditions<verif::AssumeOp>(assumeConditions[parent], builder)))
+          signalPassFailure();
 
-    if (failed(conjoinConditions<verif::AssumeOp>(assumeConditions, builder)))
-      signalPassFailure();
-
-    // Erase the ops
-    for (auto op : opsToErase)
-      op->erase();
+      // Erase the ops
+      for (auto op : ops) 
+        op->erase();
+    }
   }
 
   // Clear the data structures for pass reuse
