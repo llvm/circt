@@ -492,6 +492,42 @@ LogicalResult PrintFormattedProcOp::canonicalize(PrintFormattedProcOp op,
   return failure();
 }
 
+OpFoldResult StringConstantOp::fold(FoldAdaptor adaptor) {
+  return adaptor.getLiteralAttr();
+}
+
+OpFoldResult StringConcatOp::fold(FoldAdaptor adaptor) {
+  auto operands = adaptor.getInputs();
+  if (operands.empty())
+    return StringAttr::get(getContext(), "");
+
+  SmallString<128> result;
+  for (auto &operand : operands) {
+    if (auto strAttr = llvm::dyn_cast_or_null<StringAttr>(operand)) {
+      result += strAttr.getValue();
+    } else {
+      return {};
+    }
+  }
+
+  return StringAttr::get(getContext(), result);
+}
+
+OpFoldResult StringLengthOp::fold(FoldAdaptor adaptor) {
+  auto inputAttr = adaptor.getInput();
+  if (!inputAttr) {
+    return {};
+  }
+
+  if (auto strAttr = dyn_cast<StringAttr>(inputAttr)) {
+    auto i64Type = IntegerType::get(getContext(), 64);
+    auto result = IntegerAttr::get(i64Type, strAttr.getValue().size());
+    return result;
+  }
+
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//

@@ -26,4 +26,13 @@ def FormatStringType : SimTypeDef<"FormatString"> {
   }];
 }
 
+def DynamicStringType : SimTypeDef<"DynamicString"> {
+  let mnemonic = "dstring";
+
+  let summary = "Dynamic String Type"; 
+  let description = [{
+    A dynamic string type represents a string type with value semantics
+  }];
+}
+
 #endif // CIRCT_DIALECT_SIM_SIMTYPES_TD

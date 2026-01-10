@@ -501,6 +501,52 @@ def PrintFormattedProcOp : SimOp<"proc.print"> {
 }
 
 //===----------------------------------------------------------------------===//
+// Dynamic Strings
+//===----------------------------------------------------------------------===//
+
+def StringConstantOp : SimOp<"string.literal", [Pure, ConstantLike]> {
+  let summary = "Literal string fragment";
+  let description = [{
+    Creates a constant, raw ASCII string literal
+  }];
+
+  let arguments = (ins StrAttr:$literal);
+  let results = (outs DynamicStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$literal attr-dict";
+}
+
+def StringLengthOp : SimOp<"string.length", [Pure]> {
+  let summary = "Length of a string";
+  let description = [{
+    Returns the length of a Dynamic String instance's value
+  }];
+
+  let arguments = (ins DynamicStringType:$input);
+  let results = (outs I64:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$input attr-dict";
+}
+
+def StringConcatOp : SimOp<"string.concat", [Pure]> {
+  let summary = "Concatenates a variadic list of dynamic strings together";
+  let description = [{
+    Returns the length of a Dynamic String instance
+  }];
+
+  let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
+
+  let arguments = (ins Variadic<DynamicStringType>:$inputs);
+  let results = (outs DynamicStringType:$result);
+
+  let hasFolder = true;
+}
+
+//===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//
 
