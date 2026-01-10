@@ -63,36 +63,33 @@ private:
   // for assertions and assumption found during our walk.
   // This is then used to create a large conjunction of
   // all of them in the end to be used as the only assert/assume.
-  llvm::DenseMap<Operation*, llvm::SmallVector<Value>> assertConditions;
-  llvm::DenseMap<Operation*, llvm::SmallVector<Value>> assumeConditions;
+  llvm::DenseMap<Operation *, llvm::SmallVector<Value>> assertConditions;
+  llvm::DenseMap<Operation *, llvm::SmallVector<Value>> assumeConditions;
 
   // Keep track of valid asserts/assumes and
-  llvm::DenseMap<Operation*, llvm::SmallVector<Operation*>> opsToErase;
+  llvm::DenseMap<Operation *, llvm::SmallVector<Operation *>> opsToErase;
 
   // Pushes an entry found inside a block into its coresponding map
   // Creates a new vector for that block if none has been made before
   template <typename T, typename TOp>
-  void pushBackMap(
-    llvm::DenseMap<Operation*, llvm::SmallVector<T>> &map,
-    Operation* block, TOp op
-  ) {
+  void pushBackMap(llvm::DenseMap<Operation *, llvm::SmallVector<T>> &map,
+                   Operation *block, TOp op) {
     // Check if the map already initialized a slot for this parent
     // If not initialize the entry before we update the map
-    if (auto it = map.find(block); it == map.end()) 
+    if (auto it = map.find(block); it == map.end())
       map[block] = llvm::SmallVector<T>();
 
     // Update the map
     map[block].push_back(op);
-  } 
+  }
 
   // Accumulates conditions of assertions and assumptions.
   // Note that this only considers cases where the conditions are
   // of type `i1`, and will not merge LTL properties.
   template <typename T>
   LogicalResult accumulateCondition(
-    T &op, llvm::DenseMap<Operation*, llvm::SmallVector<Value>> &conds,
-    OpBuilder &builder
-  ) {
+      T &op, llvm::DenseMap<Operation *, llvm::SmallVector<Value>> &conds,
+      OpBuilder &builder) {
     // Extract the condition and parent block the assertlike belongs to
     auto condition = op.getProperty();
     auto parent = op.getOperation()->getParentOp();
@@ -129,19 +126,19 @@ private:
   // a single large conjunction
   template <typename AT>
   LogicalResult conjoinConditions(llvm::SmallVector<Value> &conds,
-    OpBuilder &builder) {
+                                  OpBuilder &builder) {
 
     // Check that we actually accumulated conditions, otherwise exit
     if (conds.empty())
       return success();
 
-    // Set insertion 
+    // Set insertion
     size_t last_cond = conds.size() - 1;
     builder.setInsertionPointAfter(conds[last_cond].getDefiningOp());
 
     // Creata a variadic conjunction
-    auto andop =
-          comb::AndOp::create(builder, conds[last_cond].getLoc(), conds, /*two_state=*/false);
+    auto andop = comb::AndOp::create(builder, conds[last_cond].getLoc(), conds,
+                                     /*two_state=*/false);
 
     // Create the final assert/assume using the accumulated condition
     AT::create(builder, andop.getLoc(), andop, /*enable=*/nullptr,
@@ -172,20 +169,22 @@ void CombineAssertLikePass::runOnOperation() {
   // For each block, conjoin the accumulated conditions
   for (auto [parent, ops] : opsToErase) {
     // Only conjoin assertions if there was more than one valid assert-like
-    if(ops.size() > 1) {
+    if (ops.size() > 1) {
       // Check that some assertions were found
-      if (auto it = assertConditions.find(parent); it != assertConditions.end()) 
+      if (auto it = assertConditions.find(parent); it != assertConditions.end())
         // Conjoin the conditions into an assert and an assume respectively
-        if (failed(conjoinConditions<verif::AssertOp>(assertConditions[parent], builder)))
+        if (failed(conjoinConditions<verif::AssertOp>(assertConditions[parent],
+                                                      builder)))
           signalPassFailure();
-      
+
       // Same for assumptions
-      if (auto it = assumeConditions.find(parent); it != assumeConditions.end()) 
-        if (failed(conjoinConditions<verif::AssumeOp>(assumeConditions[parent], builder)))
+      if (auto it = assumeConditions.find(parent); it != assumeConditions.end())
+        if (failed(conjoinConditions<verif::AssumeOp>(assumeConditions[parent],
+                                                      builder)))
           signalPassFailure();
 
       // Erase the ops
-      for (auto op : ops) 
+      for (auto op : ops)
         op->erase();
     }
   }
