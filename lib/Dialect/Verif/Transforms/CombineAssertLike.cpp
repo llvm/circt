@@ -105,9 +105,6 @@ private:
         builder.setInsertionPointAfter(condition.getDefiningOp());
         auto andop = comb::AndOp::create(builder, condition.getLoc(), condition,
                                          op.getEnable());
-        // Sanity Check: Make sure the op was created
-        if (!andop)
-          return failure();
 
         // We then only need to store the conjunction not the condition
         pushBackMap(conds, parent, andop);
