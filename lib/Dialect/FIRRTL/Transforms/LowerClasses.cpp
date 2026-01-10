@@ -211,7 +211,8 @@ private:
   LogicalResult processPaths(InstanceGraph &instanceGraph,
                              hw::InnerSymbolNamespaceCollection &namespaces,
                              HierPathCache &cache, PathInfoTable &pathInfoTable,
-                             SymbolTable &symbolTable);
+                             SymbolTable &symbolTable,
+                             const hw::InnerRefNamespace &innerRefNamespace);
 
   // Predicate to check if a module-like needs a Class to be created.
   bool shouldCreateClass(StringAttr modName);
@@ -258,15 +259,20 @@ struct PathTracker {
   run(CircuitOp circuit, InstanceGraph &instanceGraph,
       hw::InnerSymbolNamespaceCollection &namespaces, HierPathCache &cache,
       PathInfoTable &pathInfoTable, const SymbolTable &symbolTable,
-      const DenseMap<DistinctAttr, FModuleOp> &owningModules);
+      const DenseMap<DistinctAttr, FModuleOp> &owningModules,
+      const hw::InnerRefNamespace &innerRefNamespace);
 
   PathTracker(FModuleLike module,
               hw::InnerSymbolNamespaceCollection &namespaces,
               InstanceGraph &instanceGraph, const SymbolTable &symbolTable,
-              const DenseMap<DistinctAttr, FModuleOp> &owningModules)
+              const DenseMap<DistinctAttr, FModuleOp> &owningModules,
+              const hw::InnerRefNamespace &innerRefNamespace)
       : module(module), moduleNamespace(namespaces[module]),
-        namespaces(namespaces), instanceGraph(instanceGraph),
-        symbolTable(symbolTable), owningModules(owningModules) {}
+        namespaces(namespaces),
+        innerSymbolTable(innerRefNamespace.innerSymTables.getInnerSymbolTable(
+            module.getOperation())),
+        instanceGraph(instanceGraph), symbolTable(symbolTable),
+        owningModules(owningModules), innerRefNamespace(innerRefNamespace) {}
 
 private:
   struct PathInfoTableEntry {
@@ -292,17 +298,25 @@ private:
                                                StringAttr moduleName,
                                                FModuleOp owningModule,
                                                bool isNonLocal);
+
+  // Helper to compare if two path attributes are the same. This uses the
+  // InnerRefNamespace to resolve InnerRef attributes to InnerSymbolTargets and
+  // compares by InnerSymbolTarget equality.
+  bool isSamePath(ArrayAttr lhsPath, ArrayAttr rhsPath) const;
+
   FModuleLike module;
 
   // Local data structures.
   hw::InnerSymbolNamespace &moduleNamespace;
   hw::InnerSymbolNamespaceCollection &namespaces;
+  hw::InnerSymbolTable &innerSymbolTable;
   DenseMap<std::pair<StringAttr, FModuleOp>, bool> needsAltBasePathCache;
 
   // Thread-unsafe global data structure. Don't mutate.
   InstanceGraph &instanceGraph;
   const SymbolTable &symbolTable;
   const DenseMap<DistinctAttr, FModuleOp> &owningModules;
+  const hw::InnerRefNamespace &innerRefNamespace;
 
   // Result.
   SmallVector<PathInfoTableEntry> entries;
@@ -426,7 +440,8 @@ PathTracker::run(CircuitOp circuit, InstanceGraph &instanceGraph,
                  hw::InnerSymbolNamespaceCollection &namespaces,
                  HierPathCache &cache, PathInfoTable &pathInfoTable,
                  const SymbolTable &symbolTable,
-                 const DenseMap<DistinctAttr, FModuleOp> &owningModules) {
+                 const DenseMap<DistinctAttr, FModuleOp> &owningModules,
+                 const hw::InnerRefNamespace &innerRefNamespace) {
   // First allocate module namespaces. Don't capture a namespace reference at
   // this point since they could be invalidated when DenseMap grows.
   for (auto *node : instanceGraph)
@@ -439,7 +454,7 @@ PathTracker::run(CircuitOp circuit, InstanceGraph &instanceGraph,
       if (isa<firrtl::ClassOp, firrtl::ExtClassOp>(module))
         continue;
       PathTracker tracker(module, namespaces, instanceGraph, symbolTable,
-                          owningModules);
+                          owningModules, innerRefNamespace);
       if (failed(tracker.runOnModule()))
         return failure();
       if (failed(tracker.updatePathInfoTable(pathInfoTable, cache)))
@@ -527,6 +542,53 @@ PathTracker::getOrComputeNeedsAltBasePath(Location loc, StringAttr moduleName,
   return needsAltBasePath;
 }
 
+// Helper to compare if two path attributes are the same. This uses the
+// InnerRefNamespace to resolve InnerRef attributes to InnerSymbolTargets and
+// compares by InnerSymbolTarget equality.
+bool PathTracker::isSamePath(ArrayAttr lhsPath, ArrayAttr rhsPath) const {
+  // If the paths aren't even the same length, they're definitely not the same.
+  if (lhsPath.size() != rhsPath.size())
+    return false;
+
+  // For each element, compare.
+  for (auto [lhsAttr, rhsAttr] : llvm::zip(lhsPath, rhsPath)) {
+    // If they are InnerRefAttr, check if they refer to the same InnerSymTarget.
+    if (auto lhsInnerRef = dyn_cast<hw::InnerRefAttr>(lhsAttr)) {
+      auto rhsInnerRef = dyn_cast<hw::InnerRefAttr>(rhsAttr);
+      if (!rhsInnerRef)
+        return false;
+
+      hw::InnerSymTarget lhsTarget = innerRefNamespace.lookup(lhsInnerRef);
+      hw::InnerSymTarget rhsTarget = innerRefNamespace.lookup(rhsInnerRef);
+      if (!lhsTarget || !rhsTarget)
+        return false;
+
+      if (lhsTarget != rhsTarget) {
+        return false;
+      }
+
+      continue;
+    }
+
+    // If they are StringAttr, check if they refer to the same symbol.
+    if (auto lhsSymbol = dyn_cast<FlatSymbolRefAttr>(lhsAttr)) {
+      auto rhsSymbol = dyn_cast<FlatSymbolRefAttr>(rhsAttr);
+      if (!rhsSymbol)
+        return false;
+
+      if (lhsSymbol != rhsSymbol)
+        return false;
+
+      continue;
+    }
+
+    return false;
+  }
+
+  // If we've checked the whole path, they are the same.
+  return true;
+}
+
 FailureOr<AnnotationSet>
 PathTracker::processPathTrackers(const AnnoTarget &target) {
   auto error = false;
@@ -552,23 +614,62 @@ PathTracker::processPathTrackers(const AnnoTarget &target) {
     // Get the fieldID.  If there is none, it is assumed to be 0.
     uint64_t fieldID = anno.getFieldID();
 
-    // Attach an inner sym to the operation.
-    Attribute targetSym;
-    if (auto portTarget = dyn_cast<PortAnnoTarget>(target)) {
-      targetSym =
-          getInnerRefTo({portTarget.getPortNo(), portTarget.getOp(), fieldID},
+    // Get a fresh inner ref from an inner sym target, updating the inner symbol
+    // table if necessary and returning the attribute, or failing.
+    auto getInnerRefAndUpdate =
+        [&](hw::InnerSymTarget innerSymTarget) -> FailureOr<Attribute> {
+      // Get or add the inner ref.
+      hw::InnerRefAttr innerRef =
+          getInnerRefTo(innerSymTarget,
                         [&](FModuleLike module) -> hw::InnerSymbolNamespace & {
                           return moduleNamespace;
                         });
+
+      // If this inner ref is already in the inner sym table, confirm it is for
+      // the same target and return it.
+      if (auto existingInnerSymTarget =
+              innerSymbolTable.lookup(innerRef.getName())) {
+        assert(existingInnerSymTarget == innerSymTarget &&
+               "expected same target for ref");
+        return cast<Attribute>(innerRef);
+      }
+
+      // Otherwise, add this name for this target, or fail.
+      auto result = innerSymbolTable.add(innerRef.getName(), innerSymTarget);
+      if (failed(result)) {
+        auto diag =
+            op->emitError("failed to update inner symbol table with target ")
+            << innerSymTarget;
+        error = true;
+        return diag;
+      }
+
+      // Finally, return the inner ref.
+      return cast<Attribute>(innerRef);
+    };
+
+    // Attach an inner sym to the operation.
+    Attribute targetSym;
+    if (auto portTarget = dyn_cast<PortAnnoTarget>(target)) {
+      hw::InnerSymTarget innerSymTarget = {portTarget.getPortNo(),
+                                           portTarget.getOp(), fieldID};
+
+      FailureOr<Attribute> innerRef = getInnerRefAndUpdate(innerSymTarget);
+      if (failed(innerRef))
+        return false;
+
+      targetSym = innerRef.value();
     } else if (auto module = dyn_cast<FModuleLike>(op)) {
       assert(!fieldID && "field not valid for modules");
       targetSym = FlatSymbolRefAttr::get(module.getModuleNameAttr());
     } else {
-      targetSym =
-          getInnerRefTo({target.getOp(), fieldID},
-                        [&](FModuleLike module) -> hw::InnerSymbolNamespace & {
-                          return moduleNamespace;
-                        });
+      hw::InnerSymTarget innerSymTarget = {target.getOp(), fieldID};
+
+      FailureOr<Attribute> innerRef = getInnerRefAndUpdate(innerSymTarget);
+      if (failed(innerRef))
+        return false;
+
+      targetSym = innerRef.value();
     }
 
     // Create the hierarchical path.
@@ -722,14 +823,18 @@ LogicalResult PathTracker::updatePathInfoTable(PathInfoTable &pathInfoTable,
       auto existingHierpath =
           symbolTable.lookup<hw::HierPathOp>(pathInfo.symRef.getValue());
       auto existingPathAttr = existingHierpath.getNamepath();
-      if (existingPathAttr == entry.pathAttr)
+      if (isSamePath(existingPathAttr, entry.pathAttr))
         continue;
 
       assert(pathInfo.loc.has_value() && "all PathInfo should have a Location");
       auto diag = emitError(pathInfo.loc.value(),
                             "path identifier already found, paths must resolve "
                             "to a unique target");
+      diag.attachNote(pathInfo.loc.value())
+          << "existing path: " << existingPathAttr << '\n';
       diag.attachNote(entry.op->getLoc()) << "other path identifier here";
+      diag.attachNote(entry.op->getLoc())
+          << "other path: " << entry.pathAttr << '\n';
       return failure();
     }
 
@@ -752,7 +857,8 @@ LogicalResult PathTracker::updatePathInfoTable(PathInfoTable &pathInfoTable,
 LogicalResult LowerClassesPass::processPaths(
     InstanceGraph &instanceGraph,
     hw::InnerSymbolNamespaceCollection &namespaces, HierPathCache &cache,
-    PathInfoTable &pathInfoTable, SymbolTable &symbolTable) {
+    PathInfoTable &pathInfoTable, SymbolTable &symbolTable,
+    const hw::InnerRefNamespace &innerRefNamespace) {
   auto circuit = getOperation();
 
   // Collect the path declarations and owning modules.
@@ -787,7 +893,8 @@ LogicalResult LowerClassesPass::processPaths(
     return failure();
 
   if (failed(PathTracker::run(circuit, instanceGraph, namespaces, cache,
-                              pathInfoTable, symbolTable, owningModules)))
+                              pathInfoTable, symbolTable, owningModules,
+                              innerRefNamespace)))
     return failure();
 
   // For each module that will be passing through a base path, compute its
@@ -842,9 +949,13 @@ void LowerClassesPass::runOnOperation() {
   // Get the InstanceGraph and SymbolTable.
   InstanceGraph &instanceGraph = getAnalysis<InstanceGraph>();
   SymbolTable &symbolTable = getAnalysis<SymbolTable>();
+  hw::InnerSymbolTableCollection &istc =
+      getAnalysis<hw::InnerSymbolTableCollection>();
 
   hw::InnerSymbolNamespaceCollection namespaces;
   HierPathCache cache(circuit, symbolTable);
+  hw::InnerRefNamespace innerRefNamespace =
+      hw::InnerRefNamespace{symbolTable, istc};
 
   // Fill `shouldCreateClassMemo`.
   for (auto *node : instanceGraph)
@@ -861,7 +972,7 @@ void LowerClassesPass::runOnOperation() {
   // Rewrite all path annotations into inner symbol targets.
   PathInfoTable pathInfoTable;
   if (failed(processPaths(instanceGraph, namespaces, cache, pathInfoTable,
-                          symbolTable))) {
+                          symbolTable, innerRefNamespace))) {
     signalPassFailure();
     return;
   }
@@ -954,7 +1065,7 @@ void LowerClassesPass::runOnOperation() {
     return signalPassFailure();
 
   // We keep the instance graph up to date, so mark that analysis preserved.
-  markAnalysesPreserved<InstanceGraph>();
+  markAnalysesPreserved<InstanceGraph, hw::InnerSymbolTableCollection>();
 
   // Reset pass state.
   rtlPortsToCreate.clear();

@@ -574,15 +574,37 @@ firrtl.circuit "RTLPorts" {
 
 }
 
-// CHECK-LABEL: firrtl.circuit "DuplicateButEqualTrackers"
-firrtl.circuit "DuplicateButEqualTrackers" {
-  // CHECK: hw.hierpath private [[NLA:@.+]] [@DuplicateButEqualTrackers]
-  firrtl.module @DuplicateButEqualTrackers() attributes {
+// CHECK-LABEL: firrtl.circuit "DuplicateButEqualTrackersPort"
+firrtl.circuit "DuplicateButEqualTrackersPort" {
+  // CHECK: hw.hierpath private [[NLA:@.+]] [@DuplicateButEqualTrackersPort::@{{.+}}]
+  firrtl.module @DuplicateButEqualTrackersPort(
+      in %input1 : !firrtl.uint<1> [{class = "circt.tracker", id = distinct[0]<>}, {class = "circt.tracker", id = distinct[0]<>}]
+  ) {
+    // CHECK: om.path_create reference %basepath [[NLA]]
+    %path = firrtl.path reference distinct[0]<>
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "DuplicateButEqualTrackersModule"
+firrtl.circuit "DuplicateButEqualTrackersModule" {
+  // CHECK: hw.hierpath private [[NLA:@.+]] [@DuplicateButEqualTrackersModule]
+  firrtl.module @DuplicateButEqualTrackersModule() attributes {
     annotations = [
       {class = "circt.tracker", id = distinct[0]<>},
       {class = "circt.tracker", id = distinct[0]<>}
     ]
   } {
+    // CHECK: om.path_create reference %basepath [[NLA]]
+    firrtl.path reference distinct[0]<>
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "DuplicateButEqualTrackersOp"
+firrtl.circuit "DuplicateButEqualTrackersOp" {
+  // CHECK: hw.hierpath private [[NLA:@.+]] [@DuplicateButEqualTrackersOp::@{{.+}}]
+  firrtl.module @DuplicateButEqualTrackersOp() {
+    %a = firrtl.wire {annotations = [{class = "circt.tracker", id = distinct[0]<>}, {class = "circt.tracker", id = distinct[0]<>}]} : !firrtl.uint<8>
+
     // CHECK: om.path_create reference %basepath [[NLA]]
     firrtl.path reference distinct[0]<>
   }

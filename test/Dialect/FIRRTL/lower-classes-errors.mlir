@@ -30,14 +30,56 @@ firrtl.circuit "PathIllegalHierpath" {
 
 // -----
 
-firrtl.circuit "PathDuplicateID" {
-  firrtl.module @PathDuplicateID() {
+firrtl.circuit "PathDuplicateIDPort" {
+  // expected-error @below {{path identifier already found, paths must resolve to a unique target}}
+  // expected-note @below {{existing path: [#hw.innerNameRef<@PathDuplicateIDPort::@sym>]}}
+  // expected-note @below {{other path identifier here}}
+  // expected-note @below {{other path: [#hw.innerNameRef<@PathDuplicateIDPort::@sym_0>]}}
+  firrtl.module @PathDuplicateIDPort(
+      in %input1 : !firrtl.uint<1> [{class = "circt.tracker", id = distinct[0]<>}],
+      in %input2 : !firrtl.uint<1> [{class = "circt.tracker", id = distinct[0]<>}]
+  ) {
+    // Duplicate ID is only an error if something actually refers to that ID. Dedup can create dead, duplicate IDs.
+    %path = firrtl.path reference distinct[0]<>
+  }
+}
+
+// -----
+
+firrtl.circuit "PathDuplicateIDModule" {
+  // expected-error @below {{path identifier already found, paths must resolve to a unique target}}
+  // expected-note @below {{existing path: [@PathDuplicateIDModule]}}
+  firrtl.module @PathDuplicateIDModule() attributes {
+    annotations = [
+      {class = "circt.tracker", id = distinct[0]<>}
+    ]
+  } {
+    // Duplicate ID is only an error if something actually refers to that ID. Dedup can create dead, duplicate IDs.
+    %path = firrtl.path reference distinct[0]<>
+  }
+
+  // expected-note @below {{other path identifier here}}
+  // expected-note @below {{other path: [@PathDuplicateIDOtherModule]}}
+  firrtl.module @PathDuplicateIDOtherModule() attributes {
+    annotations = [
+      {class = "circt.tracker", id = distinct[0]<>}
+    ]
+  } {
+  }
+}
+
+// -----
+
+firrtl.circuit "PathDuplicateIDOp" {
+  firrtl.module @PathDuplicateIDOp() {
     // Duplicate ID is only an error if something actually refers to that ID. Dedup can create dead, duplicate IDs.
     %path = firrtl.path reference distinct[0]<>
 
     // expected-error @below {{path identifier already found, paths must resolve to a unique target}}
+    // expected-note @below {{existing path: [#hw.innerNameRef<@PathDuplicateIDOp::@sym>]}}
     %a = firrtl.wire {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} : !firrtl.uint<8>
     // expected-note @below {{other path identifier here}}
+    // expected-note @below {{other path: [#hw.innerNameRef<@PathDuplicateIDOp::@sym_0>]}}
     %b = firrtl.wire {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} : !firrtl.uint<8>
   }
 }
