@@ -63,17 +63,17 @@ private:
   // for assertions and assumption found during our walk.
   // This is then used to create a large conjunction of
   // all of them in the end to be used as the only assert/assume.
-  llvm::DenseMap<Operation *, llvm::SmallVector<Value>> assertConditions;
-  llvm::DenseMap<Operation *, llvm::SmallVector<Value>> assumeConditions;
+  llvm::DenseMap<Block *, llvm::SmallVector<Value>> assertConditions;
+  llvm::DenseMap<Block *, llvm::SmallVector<Value>> assumeConditions;
 
   // Keep track of valid asserts/assumes and
-  llvm::DenseMap<Operation *, llvm::SmallVector<Operation *>> opsToErase;
+  llvm::DenseMap<Block *, llvm::SmallVector<Operation *>> opsToErase;
 
   // Pushes an entry found inside a block into its coresponding map
   // Creates a new vector for that block if none has been made before
   template <typename T, typename TOp>
-  void pushBackMap(llvm::DenseMap<Operation *, llvm::SmallVector<T>> &map,
-                   Operation *block, TOp op) {
+  void pushBackMap(llvm::DenseMap<Block *, llvm::SmallVector<T>> &map,
+                   Block *block, TOp op) {
     // Check if the map already initialized a slot for this parent
     // If not initialize the entry before we update the map
     if (auto it = map.find(block); it == map.end())
@@ -87,12 +87,13 @@ private:
   // Note that this only considers cases where the conditions are
   // of type `i1`, and will not merge LTL properties.
   template <typename T>
-  LogicalResult accumulateCondition(
-      T &op, llvm::DenseMap<Operation *, llvm::SmallVector<Value>> &conds,
-      OpBuilder &builder) {
+  LogicalResult
+  accumulateCondition(T &op,
+                      llvm::DenseMap<Block *, llvm::SmallVector<Value>> &conds,
+                      OpBuilder &builder) {
     // Extract the condition and parent block the assertlike belongs to
     auto condition = op.getProperty();
-    auto parent = op.getOperation()->getParentOp();
+    Block *parent = op.getOperation()->getBlock();
 
     // Check that our condition isn't an ltl property, if so ignore
     if (!isa<ltl::PropertyType, ltl::SequenceType>(condition.getType())) {

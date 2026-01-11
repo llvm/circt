@@ -129,20 +129,26 @@ sv.macro.decl @SYNTHESIS
 // CHECK-NEXT:     sv.ifdef.procedural @SYNTHESIS {
 // CHECK-NEXT:     } else {
 // CHECK-NEXT:       %c2_i42 = hw.constant 2 : i42
+// CHECK-NEXT:       [[TMP1:%.+]] = comb.icmp ult %a, %c2_i42 : i42
+// CHECK-NEXT:       %c0_i42 = hw.constant 0 : i42
+// CHECK-NEXT:       [[TMP2:%.+]] = comb.icmp uge %a, %c0_i42 : i42
 // CHECK-NEXT:       sv.if %en_assume {
-// CHECK-NEXT:         [[TMP1:%.+]] = comb.icmp ult %a, %c2_i42 : i42
-// CHECK-NEXT:         %c0_i42 = hw.constant 0 : i42
-// CHECK-NEXT:         [[TMP2:%.+]] = comb.icmp uge %a, %c0_i42 : i42
 // CHECK-NEXT:         [[REQ:%.+]] = comb.and [[TMP1]], [[TMP2]] : i1
 // CHECK-NEXT:         verif.assume [[REQ]] : i1
+// CHECK-NEXT:       } else {
+// CHECK-NEXT:         [[REQ1:%.+]] = comb.and [[TMP1]], [[TMP2]] : i1
+// CHECK-NEXT:         verif.assert [[REQ1]] : i1
 // CHECK-NEXT:       }
+// CHECK-NEXT:       [[TMP3:%.+]] = comb.mul %a, %c2_i42 : i42
+// CHECK-NEXT:       [[TMP4:%.+]] = comb.icmp eq [[TMP0]], [[TMP3]] : i42
+// CHECK-NEXT:       [[TMP5:%.+]] = comb.add %a, %a : i42
+// CHECK-NEXT:       [[TMP6:%.+]] = comb.icmp eq [[TMP0]], [[TMP5]] : i42
 // CHECK-NEXT:       sv.if %en_assert {
-// CHECK-NEXT:         [[TMP3:%.+]] = comb.mul %a, %c2_i42 : i42
-// CHECK-NEXT:         [[TMP4:%.+]] = comb.icmp eq [[TMP0]], [[TMP3]] : i42
-// CHECK-NEXT:         [[TMP5:%.+]] = comb.add %a, %a : i42
-// CHECK-NEXT:         [[TMP6:%.+]] = comb.icmp eq [[TMP0]], [[TMP5]] : i42
 // CHECK-NEXT:         [[ENS:%.+]] = comb.and [[TMP4]], [[TMP6]] : i1
 // CHECK-NEXT:         verif.assert [[ENS]] : i1
+// CHECK-NEXT:       } else {
+// CHECK-NEXT:         [[ENS1:%.+]] = comb.and [[TMP4]], [[TMP6]] : i1
+// CHECK-NEXT:         verif.assume [[ENS1]] : i1
 // CHECK-NEXT:       }
 // CHECK-NEXT:       [[COND:%.+]] = comb.or %en_assert, %en_assume : i1
 // CHECK-NEXT:       verif.assert [[COND]] : i1
@@ -158,20 +164,26 @@ hw.module @ManyBlocks(in %clk: i1, in %a: i42, in %en_assume: i1, in %en_assert:
     sv.ifdef.procedural @SYNTHESIS {
     } else {
       %c2_i42 = hw.constant 2 : i42
+      %1 = comb.icmp ult %a, %c2_i42 : i42
+      %c0_i42 = hw.constant 0 : i42
+      %2 = comb.icmp uge %a, %c0_i42 : i42
       sv.if %en_assume {
-        %1 = comb.icmp ult %a, %c2_i42 : i42
-        %c0_i42 = hw.constant 0 : i42
-        %2 = comb.icmp uge %a, %c0_i42 : i42
         verif.assume %1 : i1
         verif.assume %2 : i1
-      } 
+      } else {
+        verif.assert %1 : i1
+        verif.assert %2 : i1
+      }
+      %3 = comb.mul %a, %c2_i42 : i42
+      %4 = comb.icmp eq %0, %3 : i42
+      %5 = comb.add %a, %a : i42
+      %6 = comb.icmp eq %0, %5 : i42
       sv.if %en_assert {
-        %3 = comb.mul %a, %c2_i42 : i42
-        %4 = comb.icmp eq %0, %3 : i42
-        %5 = comb.add %a, %a : i42
-        %6 = comb.icmp eq %0, %5 : i42
         verif.assert %4 : i1
         verif.assert %6 : i1
+      } else {
+        verif.assume %4 : i1
+        verif.assume %6 : i1
       }
       %cond = comb.or %en_assert, %en_assume : i1
       verif.assert %cond : i1
