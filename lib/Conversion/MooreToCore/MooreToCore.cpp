@@ -697,6 +697,10 @@ static Value createZeroValue(Type type, Location loc,
     return mlir::arith::ConstantOp::create(rewriter, loc, floatAttr);
   }
 
+  // Handle dynamic strings
+  if (auto strType = dyn_cast<sim::DynamicStringType>(type))
+    return sim::StringConstantOp::create(rewriter, loc, strType, "");
+
   // Otherwise try to create a zero integer and bitcast it to the result type.
   int64_t width = hw::getBitWidth(type);
   if (width == -1)
@@ -2246,6 +2250,10 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
 
   typeConverter.addConversion([&](FormatStringType type) {
     return sim::FormatStringType::get(type.getContext());
+  });
+
+  typeConverter.addConversion([&](StringType type) {
+    return sim::DynamicStringType::get(type.getContext());
   });
 
   typeConverter.addConversion([&](ArrayType type) -> std::optional<Type> {
