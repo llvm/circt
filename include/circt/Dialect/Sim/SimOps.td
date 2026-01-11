@@ -541,6 +541,7 @@ def StringConcatOp : SimOp<"string.concat", [Pure]> {
     operand. If the operation has a single operand, its result is equal to that
     operand. If the operation has zero operands, it returns an empty string.
     The length of the result is the sum of each operand's length.
+    
     Example:
     
     ```mlir
