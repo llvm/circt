@@ -28,7 +28,13 @@ void circt::python::populateDialectArcSubmodule(nb::module_ &m) {
           },
           nb::arg("cls"), nb::arg("inner_type"))
       .def_property_readonly(
-          "type", [](MlirType self) { return arcStateTypeGetType(self); });
+          "type", [](MlirType self) { return arcStateTypeGetType(self); })
+      .def_property_readonly(
+          "bit_width",
+          [](MlirType self) { return arcStateTypeGetBitWidth(self); })
+      .def_property_readonly("byte_width", [](MlirType self) {
+        return arcStateTypeGetByteWidth(self);
+      });
 
   mlir_type_subclass(m, "MemoryType", arcTypeIsAMemory)
       .def_classmethod(
@@ -38,7 +44,18 @@ void circt::python::populateDialectArcSubmodule(nb::module_ &m) {
             return cls(arcMemoryTypeGet(numWords, wordType, addressType));
           },
           nb::arg("cls"), nb::arg("num_words"), nb::arg("word_type"),
-          nb::arg("address_type"));
+          nb::arg("address_type"))
+      .def_property_readonly(
+          "num_words",
+          [](MlirType self) { return arcMemoryTypeGetNumWords(self); })
+      .def_property_readonly(
+          "word_type",
+          [](MlirType self) { return arcMemoryTypeGetWordType(self); })
+      .def_property_readonly(
+          "address_type",
+          [](MlirType self) { return arcMemoryTypeGetAddressType(self); })
+      .def_property_readonly(
+          "stride", [](MlirType self) { return arcMemoryTypeGetStride(self); });
 
   mlir_type_subclass(m, "StorageType", arcTypeIsAStorage)
       .def_classmethod(
@@ -50,7 +67,9 @@ void circt::python::populateDialectArcSubmodule(nb::module_ &m) {
                 arcStorageTypeGetWithSize(ctx, nb::cast<unsigned>(size)));
           },
           nb::arg("cls"), nb::arg("context") = nb::none(),
-          nb::arg("size") = nb::none());
+          nb::arg("size") = nb::none())
+      .def_property_readonly(
+          "size", [](MlirType self) { return arcStorageTypeGetSize(self); });
 
   mlir_type_subclass(m, "SimModelInstanceType", arcTypeIsASimModelInstance)
       .def_classmethod(
@@ -58,5 +77,8 @@ void circt::python::populateDialectArcSubmodule(nb::module_ &m) {
           [](nb::object cls, MlirAttribute model) {
             return cls(arcSimModelInstanceTypeGet(model));
           },
-          nb::arg("cls"), nb::arg("model"));
+          nb::arg("cls"), nb::arg("model"))
+      .def_property_readonly("model", [](MlirType self) {
+        return arcSimModelInstanceTypeGetModel(self);
+      });
 }
