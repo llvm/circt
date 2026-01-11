@@ -29,9 +29,17 @@ def FormatStringType : SimTypeDef<"FormatString"> {
 def DynamicStringType : SimTypeDef<"DynamicString"> {
   let mnemonic = "dstring";
 
-  let summary = "Dynamic String Type"; 
+  let summary = "String type with variable length"; 
   let description = [{
-    A dynamic string type represents a string type with value semantics
+    The dynamic string type represents a string with a variable length that is 
+    only known at runtime. The contents of the string are held as an array of
+    `i8` bytes. The interpretation of these bytes as a concrete character 
+    encoding is undefined, but treating the bytes as a UTF-8 string is 
+    recommended. A string's length must fit into an `i64`.
+    Even though practical lowerings of this type likely have to hold the string
+    contents in dynamically-allocated heap memory, *this type has value
+    semantics*. If the same string SSA value is passed to multiple users, any
+    mutation performed by one user is not visible to other users.
   }];
 }
 

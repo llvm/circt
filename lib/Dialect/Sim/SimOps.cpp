@@ -503,9 +503,9 @@ OpFoldResult StringConcatOp::fold(FoldAdaptor adaptor) {
 
   SmallString<128> result;
   for (auto &operand : operands) {
-    if (auto strAttr = llvm::dyn_cast_or_null<StringAttr>(operand)) {
+    if (auto strAttr = cast<StringAttr>(operand))
       result += strAttr.getValue();
-    } else
+    else
       return {};
   }
 
@@ -517,11 +517,8 @@ OpFoldResult StringLengthOp::fold(FoldAdaptor adaptor) {
   if (!inputAttr)
     return {};
 
-  if (auto strAttr = dyn_cast<StringAttr>(inputAttr)) {
-    auto i64Type = IntegerType::get(getContext(), 64);
-    auto result = IntegerAttr::get(i64Type, strAttr.getValue().size());
-    return result;
-  }
+  if (auto strAttr = cast<StringAttr>(inputAttr))
+    return IntegerAttr::get(getType(), strAttr.getValue().size());
 
   return {};
 }

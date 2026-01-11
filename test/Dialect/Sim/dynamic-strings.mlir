@@ -33,7 +33,7 @@ hw.module @string_length_empty_fold(out res: i64) {
 // CHECK-LABEL: hw.module @string_concat_empty_operands
 // CHECK: sim.string.literal ""
 hw.module @string_concat_empty_operands(out res: !sim.dstring) {
-  %concat = sim.string.concat()
+  %concat = sim.string.concat ()
   hw.output %concat : !sim.dstring
 }
 
@@ -41,7 +41,7 @@ hw.module @string_concat_empty_operands(out res: !sim.dstring) {
 // CHECK: sim.string.literal "Single"
 hw.module @string_concat_single_operand(out res: !sim.dstring) {
   %str = sim.string.literal "Single"
-  %concat = sim.string.concat(%str)
+  %concat = sim.string.concat (%str)
   hw.output %concat : !sim.dstring
 }
 
@@ -51,6 +51,6 @@ hw.module @string_concat_multiple_literals(out res: !sim.dstring) {
   %str1 = sim.string.literal "One"
   %str2 = sim.string.literal "Two"
   %str3 = sim.string.literal "Three"
-  %concat = sim.string.concat(%str1, %str2, %str3)
+  %concat = sim.string.concat (%str1, %str2, %str3)
   hw.output %concat : !sim.dstring
 }
