@@ -1,5 +1,4 @@
-//===- FSMTOSMT.h - FSM to SMT conversions ------------------------*- C++
-//-*-===//
+//===- FSMToSMT.h - FSM to SMT-LIB conversions ------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
