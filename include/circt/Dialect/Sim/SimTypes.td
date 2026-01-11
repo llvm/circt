@@ -36,6 +36,7 @@ def DynamicStringType : SimTypeDef<"DynamicString"> {
     `i8` bytes. The interpretation of these bytes as a concrete character 
     encoding is undefined, but treating the bytes as a UTF-8 string is 
     recommended. A string's length must fit into an `i64`.
+    
     Even though practical lowerings of this type likely have to hold the string
     contents in dynamically-allocated heap memory, *this type has value
     semantics*. If the same string SSA value is passed to multiple users, any
