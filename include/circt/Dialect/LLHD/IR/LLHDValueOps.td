@@ -44,3 +44,35 @@ def ConstantTimeOp : LLHDOp<"constant_time",
 
   let hasFolder = 1;
 }
+
+def CurrentTimeOp : LLHDOp<"current_time", [MemoryEffects<[MemRead]>]> {
+  let summary = "Get the current simulation time";
+  let description = [{
+    Materializes the current simulation time as an SSA value. This is equivalent
+    to the `$time`, `$stime`, and `$realtime` system tasks in SystemVerilog, and
+    the `now` keyword in VHDL.
+
+    This operation has a memory read side effect to avoid motion and CSE across
+    `llhd.wait` operations, and other operations that may suspend execution.
+  }];
+  let results = (outs LLHDTimeType:$result);
+  let assemblyFormat = "attr-dict";
+}
+
+def TimeToIntOp : LLHDOp<"time_to_int", [Pure]> {
+  let summary = "Convert a time to an integer number of femtoseconds";
+  let description = [{
+    If the time value converted to femtoseconds does not fit into an `i64`, the
+    result is undefined.
+  }];
+  let arguments = (ins LLHDTimeType:$input);
+  let results = (outs I64:$result);
+  let assemblyFormat = "$input attr-dict";
+}
+
+def IntToTimeOp : LLHDOp<"int_to_time", [Pure]> {
+  let summary = "Convert an integer number of femtoseconds to a time";
+  let arguments = (ins I64:$input);
+  let results = (outs LLHDTimeType:$result);
+  let assemblyFormat = "$input attr-dict";
+}

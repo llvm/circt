@@ -317,6 +317,26 @@ void circtFirtoolOptionsSetSelectDefaultInstanceChoice(
   unwrap(options)->setSelectDefaultInstanceChoice(value);
 }
 
+void circtFirtoolOptionsSetDomainMode(CirctFirtoolFirtoolOptions options,
+                                      CirctFirtoolDomainMode value) {
+  firtool::FirtoolOptions::DomainMode converted;
+  switch (value) {
+  case CIRCT_FIRTOOL_DOMAIN_MODE_DISABLE:
+    converted = firtool::FirtoolOptions::DomainMode::Disable;
+    break;
+  case CIRCT_FIRTOOL_DOMAIN_MODE_CHECK:
+    converted = firtool::FirtoolOptions::DomainMode::Check;
+    break;
+  case CIRCT_FIRTOOL_DOMAIN_MODE_INFER:
+    converted = firtool::FirtoolOptions::DomainMode::Infer;
+    break;
+  case CIRCT_FIRTOOL_DOMAIN_MODE_INFER_ALL:
+    converted = firtool::FirtoolOptions::DomainMode::InferAll;
+    break;
+  }
+  unwrap(options)->setDomainMode(converted);
+}
+
 //===----------------------------------------------------------------------===//
 // Populate API.
 //===----------------------------------------------------------------------===//

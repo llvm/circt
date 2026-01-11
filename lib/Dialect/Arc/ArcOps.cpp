@@ -500,7 +500,19 @@ void SimInstantiateOp::print(OpAsmPrinter &p) {
   p << " " << modelType.getModel() << " as ";
   p.printRegionArgument(modelArg, {}, true);
 
-  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs());
+  if (getRuntimeModel() || getRuntimeArgs()) {
+    p << " runtime ";
+    if (getRuntimeModel())
+      p << getRuntimeModelAttr();
+    p << "(";
+    if (getRuntimeArgs())
+      p << getRuntimeArgsAttr();
+    p << ")";
+  }
+
+  p.printOptionalAttrDictWithKeyword(
+      getOperation()->getAttrs(),
+      {getRuntimeModelAttrName(), getRuntimeArgsAttrName()});
 
   p << " ";
 
@@ -519,6 +531,24 @@ ParseResult SimInstantiateOp::parse(OpAsmParser &parser,
   OpAsmParser::Argument modelArg;
   if (failed(parser.parseArgument(modelArg, false, false)))
     return failure();
+
+  if (succeeded(parser.parseOptionalKeyword("runtime"))) {
+    StringAttr runtimeSym;
+    StringAttr runtimeArgs;
+    auto symOpt = parser.parseOptionalSymbolName(runtimeSym);
+    if (parser.parseLParen())
+      return failure();
+    auto nameOpt = parser.parseOptionalAttribute(runtimeArgs);
+    if (parser.parseRParen())
+      return failure();
+    if (succeeded(symOpt))
+      result.addAttribute(
+          SimInstantiateOp::getRuntimeModelAttrName(result.name),
+          FlatSymbolRefAttr::get(runtimeSym));
+    if (nameOpt.has_value())
+      result.addAttribute(SimInstantiateOp::getRuntimeArgsAttrName(result.name),
+                          runtimeArgs);
+  }
 
   if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
     return failure();
@@ -547,15 +577,28 @@ LogicalResult SimInstantiateOp::verifyRegions() {
 
 LogicalResult
 SimInstantiateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  bool failed = false;
   Operation *moduleOp = getSupportedModuleOp(
       symbolTable, getOperation(),
       llvm::cast<SimModelInstanceType>(getBody().getArgument(0).getType())
           .getModel()
           .getAttr());
   if (!moduleOp)
-    return failure();
+    failed = true;
 
-  return success();
+  if (getRuntimeModel().has_value()) {
+    Operation *runtimeModelOp = symbolTable.lookupNearestSymbolFrom(
+        getOperation(), getRuntimeModelAttr());
+    if (!runtimeModelOp) {
+      emitOpError("runtime model not found");
+      failed = true;
+    } else if (!isa<RuntimeModelOp>(runtimeModelOp)) {
+      emitOpError("referenced runtime model is not a RuntimeModelOp");
+      failed = true;
+    }
+  }
+
+  return success(!failed);
 }
 
 //===----------------------------------------------------------------------===//

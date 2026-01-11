@@ -98,6 +98,11 @@ bool Lowering::matchControlFlow() {
                             << ": wait op has destination operands\n");
     return false;
   }
+  if (waitOp.getDelay()) {
+    LLVM_DEBUG(llvm::dbgs() << "Skipping process " << processOp.getLoc()
+                            << ": wait op has delay\n");
+    return false;
+  }
 
   // Helper function to skip across empty blocks with only a single successor.
   auto skipToMergePoint = [&](Block *block) -> std::pair<Block *, ValueRange> {

@@ -327,7 +327,8 @@ SmallVector<MemorySlot> VariableOp::getPromotableSlots() {
 
   // Ensure that `getDefaultValue` can conjure up a default value for the
   // variable's type.
-  if (!isa<PackedType>(getType().getNestedType()))
+  auto nestedType = dyn_cast<PackedType>(getType().getNestedType());
+  if (!nestedType || !nestedType.getBitSize())
     return {};
 
   return {MemorySlot{getResult(), getType().getNestedType()}};
@@ -347,7 +348,7 @@ Value VariableOp::getDefaultValue(const MemorySlot &slot, OpBuilder &builder) {
       builder, getLoc(),
       IntType::get(getContext(), *bitWidth, packedType.getDomain()), fvint);
   if (value.getType() != packedType)
-    ConversionOp::create(builder, getLoc(), packedType, value);
+    SBVToPackedOp::create(builder, getLoc(), packedType, value);
   return value;
 }
 
@@ -1183,6 +1184,17 @@ OpFoldResult LogicToTimeOp::fold(FoldAdaptor adaptor) {
   if (auto attr = dyn_cast_or_null<FVIntegerAttr>(adaptor.getInput()))
     return IntegerAttr::get(getContext(), APSInt(attr.getValue().toAPInt(false),
                                                  /*isUnsigned=*/true));
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// ConvertRealOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ConvertRealOp::fold(FoldAdaptor adaptor) {
+  if (getInput().getType() == getResult().getType())
+    return getInput();
 
   return {};
 }

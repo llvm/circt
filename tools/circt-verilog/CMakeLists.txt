@@ -10,19 +10,21 @@ set(libs
   CIRCTMooreTransforms
   CIRCTSeq
   CIRCTSeqTransforms
+  CIRCTSim
   CIRCTSupport
   CIRCTTransforms
   CIRCTVerif
+  MLIRArithDialect
   MLIRBytecodeReader
   MLIRControlFlowDialect
   MLIRFuncDialect
   MLIRFuncInlinerExtension
   MLIRIR
+  MLIRLLVMDialect
+  MLIRLLVMIRTransforms
   MLIRParser
   MLIRSCFDialect
-  MLIRSCFDialect
   MLIRSupport
-  MLIRLLVMIRTransforms
 )
 
 add_circt_tool(circt-verilog circt-verilog.cpp DEPENDS ${libs})

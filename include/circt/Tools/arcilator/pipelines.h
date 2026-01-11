@@ -41,6 +41,11 @@ struct ArcPreprocessingOptions
       *this, "observe-memories",
       llvm::cl::desc("Make all memory contents observable"),
       llvm::cl::init(false)};
+
+  Option<bool> asyncResetsAsSync{
+      *this, "async-resets-as-sync",
+      llvm::cl::desc("Treat asynchronous firreg resets as synchronous"),
+      llvm::cl::init(false)};
 };
 void populateArcPreprocessingPipeline(
     mlir::OpPassManager &pm, const ArcPreprocessingOptions &options = {});
@@ -104,7 +109,8 @@ void populateArcStateAllocationPipeline(
 
 // Lower the arcs and update functions to LLVM. This pipeline lowers modules to
 // LLVM IR.
-void populateArcToLLVMPipeline(mlir::OpPassManager &pm);
+void populateArcToLLVMPipeline(mlir::OpPassManager &pm, bool insertRuntime,
+                               mlir::StringRef extraRuntimeArgs = {});
 
 } // namespace circt
 

@@ -151,31 +151,38 @@ verif.formal @ALUFailure {depth = 3} {
 }
 
 verif.formal @RunnerRequireEither {require_runners = ["sby", "circt-bmc"]} {
-  %0 = hw.constant true
+  %0 = hw.instance "dummy" @DummyModule() -> (z: i1)
   verif.assert %0 : i1
 }
 
 verif.formal @RunnerRequireSby {require_runners = ["sby"]} {
-  %0 = hw.constant true
+  %0 = hw.instance "dummy" @DummyModule() -> (z: i1)
   verif.assert %0 : i1
 }
 
 verif.formal @RunnerRequireCirctBmc {require_runners = ["circt-bmc"]} {
-  %0 = hw.constant true
+  %0 = hw.instance "dummy" @DummyModule() -> (z: i1)
   verif.assert %0 : i1
 }
 
 verif.formal @RunnerExcludeEither {exclude_runners = ["sby", "circt-bmc"]} {
-  %0 = hw.constant true
+  %0 = hw.instance "dummy" @DummyModule() -> (z: i1)
   verif.assert %0 : i1
 }
 
 verif.formal @RunnerExcludeSby {exclude_runners = ["sby"]} {
-  %0 = hw.constant true
+  %0 = hw.instance "dummy" @DummyModule() -> (z: i1)
   verif.assert %0 : i1
 }
 
 verif.formal @RunnerExcludeCirctBmc {exclude_runners = ["circt-bmc"]} {
-  %0 = hw.constant true
+  %0 = hw.instance "dummy" @DummyModule() -> (z: i1)
   verif.assert %0 : i1
+}
+
+// A dummy module to ensure that the trivially true `verif.assert` above don't
+// get optimized away, which makes circt-bmc unhappy at the moment.
+hw.module @DummyModule(out z: i1) {
+  %true = hw.constant true
+  hw.output %true : i1
 }

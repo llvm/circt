@@ -9,7 +9,8 @@ from pycde import (AppID, Clock, Module, Reset, modparams, generator)
 from pycde.bsp import get_bsp
 from pycde.common import Constant, Input, Output
 from pycde.constructs import ControlReg, Mux, Reg, Wire
-from pycde.esi import ChannelService, FuncService, MMIO, MMIOReadWriteCmdType
+from pycde.esi import (ChannelService, CallService, FuncService, MMIO,
+                       MMIOReadWriteCmdType)
 from pycde.testing import print_info
 from pycde.types import (Bits, Channel, ChannelSignaling, StructType, UInt,
                          Window)
@@ -45,6 +46,38 @@ class LoopbackInOutAdd(Module):
     xact, snooped_data = data_chan_buffered.snoop_xact()
     xact.when_true(
         lambda: print_info("LoopbackInOutAdd received: %p", snooped_data))
+
+
+class CallbackTest(Module):
+  """Call a function on the host when an MMIO write is received at offset
+    0x10."""
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def construct(ports):
+    clk = ports.clk
+    rst = ports.rst
+
+    mmio_bundle = MMIO.read_write(appid=AppID("cmd"))
+    data_resp_chan = Wire(Channel(Bits(64)))
+    mmio_cmd_chan = mmio_bundle.unpack(data=data_resp_chan)["cmd"]
+    cb_trigger, mmio_cmd_chan_fork = mmio_cmd_chan.fork(clk=clk, rst=rst)
+
+    data_resp_chan.assign(mmio_cmd_chan_fork.transform(lambda cmd: cmd.data))
+
+    cb_trigger_ready = Wire(Bits(1))
+    cb_trigger_cmd, cb_trigger_valid = cb_trigger.unwrap(cb_trigger_ready)
+    trigger = cb_trigger_valid & (cb_trigger_cmd.offset == UInt(32)(0x10))
+    data_reg = cb_trigger_cmd.data.reg(clk, rst, ce=trigger)
+    cb_chan, cb_trigger_ready_sig = Channel(UInt(64)).wrap(
+        data_reg.as_uint(), trigger.reg(clk, rst))
+    cb_trigger_ready.assign(cb_trigger_ready_sig)
+    resp_chan = CallService.call(AppID("cb"), cb_chan, UInt(64))
+    # TODO: Fix snoop_xact to work with unconumed channels.
+    _, _ = resp_chan.unwrap(Bits(1)(1))
+    xact, snooped_data = resp_chan.snoop_xact()
+    xact.when_true(lambda: print_info("Callback received: %p", snooped_data))
 
 
 @modparams
@@ -364,6 +397,7 @@ class Top(Module):
 
   @generator
   def construct(ports):
+    CallbackTest(clk=ports.clk, rst=ports.rst, appid=AppID("callback"))
     LoopbackInOutAdd(clk=ports.clk, rst=ports.rst, appid=AppID("loopback"))
     for i in range(4, 18, 5):
       MMIOClient(i)()

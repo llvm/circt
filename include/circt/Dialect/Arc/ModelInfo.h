@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_ARC_MODELINFO_H
 #define CIRCT_DIALECT_ARC_MODELINFO_H
 
+#include "circt/Dialect/Arc/ArcOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/raw_ostream.h"
@@ -46,6 +47,11 @@ struct ModelInfo {
       : name(std::move(name)), numStateBytes(numStateBytes),
         states(std::move(states)), initialFnSym(initialFnSym),
         finalFnSym(finalFnSym) {}
+};
+
+struct ModelInfoAnalysis {
+  explicit ModelInfoAnalysis(Operation *container);
+  llvm::DenseMap<ModelOp, ModelInfo> infoMap;
 };
 
 /// Collects information about states within the provided Arc model storage

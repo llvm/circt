@@ -271,7 +271,9 @@ public:
             interval.low.min);
         read = builder.createOrFold<hw::BitcastOp>(
             loc, interval.value.getType(), read);
-        interval.value.replaceAllUsesWith(read);
+        if (read != interval.value) {
+          interval.value.replaceAllUsesWith(read);
+        }
         continue;
       }
 
@@ -282,7 +284,9 @@ public:
           loc, builder.getIntegerType(interval.bitwidth), read, 0);
       read = builder.createOrFold<hw::BitcastOp>(loc, interval.value.getType(),
                                                  read);
-      interval.value.replaceAllUsesWith(read);
+      if (read != interval.value) {
+        interval.value.replaceAllUsesWith(read);
+      }
     }
 
     // Delete all operations operating on signal values.

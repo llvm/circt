@@ -155,7 +155,7 @@ def ClassOp : OMClassLike<"class", [
 
 def ClassFieldsOp : OMOp<"class.fields", [Terminator, ReturnLike, Pure,
       HasParent<"ClassOp">]> {
-  let arguments = (ins Variadic<AnyType>:$fields, 
+  let arguments = (ins Variadic<AnyType>:$fields,
                        OptionalAttr<LocationArrayAttr>:$field_locs);
   let assemblyFormat = [{
     attr-dict ($fields^ `:` qualified(type($fields)))?

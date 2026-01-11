@@ -94,6 +94,15 @@ func.func @test_comb_parity(%arg0: i32) -> i1 {
   return %0 : i1
 }
 
+// CHECK-LABEL: llvm.func @test_comb_reverse
+func.func @test_comb_reverse(%arg0: i32) -> i32 {
+  // Reverse should use llvm.intr.bitreverse (no Comb->Arith pattern exists)
+  // CHECK: %{{.*}} = llvm.intr.bitreverse(%arg0) : (i32) -> i32
+  // CHECK: llvm.return
+  %0 = comb.reverse %arg0 : i32
+  return %0 : i32
+}
+
 // CHECK-LABEL: llvm.func @test_comb_shifts
 func.func @test_comb_shifts(%arg0: i32, %arg1: i32) -> (i32, i32, i32) {
   // Test shift operations (converted via Comb->Arith->LLVM)

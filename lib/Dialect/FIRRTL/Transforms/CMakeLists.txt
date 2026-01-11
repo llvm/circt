@@ -18,6 +18,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   GrandCentral.cpp
   IMConstProp.cpp
   IMDeadCodeElim.cpp
+  InferDomains.cpp
   InferReadWrite.cpp
   InferResets.cpp
   InferWidths.cpp

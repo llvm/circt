@@ -125,31 +125,66 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   //   2. An ArrayAttr, one entry-per-port, of:
   //      a. SymbolRefAttrs if the port is a domain type
   //      b. IntegerAttrs if the port is a non-domain type
+  //
+  // Note: error handling here intentionally does _not_ use port info locations.
+  // This is because if any of these fail, this is almost always a
+  // CIRCT-internal bug.  These code paths are essoentially inaccessible from
+  // FIRRTL text.
   auto domains = module.getDomainInfoAttr();
+  // Domain info cannot be null.
   if (!domains)
     return module.emitOpError("requires valid port domains");
+  // If non-empty, the one-entry-per-port.
   if (!domains.empty() && domains.size() != numPorts)
     return module.emitOpError("requires ")
            << numPorts << " port domains, but has " << domains.size();
-  for (auto [index, domain] : llvm::enumerate(domains)) {
+
+  for (auto [index, port] : llvm::enumerate(module.getPorts())) {
     auto type = cast<TypeAttr>(portTypes[index]).getValue();
+    // If this is a domain type port, then it _must_ refer to a domain.  This
+    // cannot be empty.
     if (isa<DomainType>(type)) {
-      if (!isa<FlatSymbolRefAttr>(domain))
+      if (domains.empty())
+        return module.emitOpError() << "has domain port '" << port.getName()
+                                    << "', but no domain information";
+      if (!isa<FlatSymbolRefAttr>(domains[index]))
         return module.emitOpError() << "domain information for domain port '"
                                     << module.getPortName(index)
                                     << "' must be a 'FlatSymbolRefAttr'";
       continue;
     }
+
+    // Non-domain type ports can have no domain information.
+    if (domains.empty())
+      continue;
+
+    // If they do have domain information, then the domain info must be an array
+    // of integers and each integer must point to a domain type port.
+    auto domain = domains[index];
     auto arrayAttr = dyn_cast<ArrayAttr>(domain);
     if (!arrayAttr)
       return module.emitOpError()
              << "domain information for non-domain port '"
              << module.getPortName(index) << "' must be an 'ArrayAttr'";
-    if (llvm::any_of(arrayAttr,
-                     [](Attribute attr) { return !isa<IntegerAttr>(attr); }))
-      return module.emitOpError() << "domain information for non-domain port '"
-                                  << module.getPortName(index)
-                                  << "' must be an 'ArrayAttr<IntegerAttr>'";
+    for (auto attr : arrayAttr) {
+      auto association = dyn_cast<IntegerAttr>(attr);
+      if (!association)
+        return module.emitOpError()
+               << "domain information for non-domain port '"
+               << module.getPortName(index)
+               << "' must be an 'ArrayAttr<IntegerAttr>'";
+      auto associationIdx = association.getValue().getZExtValue();
+      if (associationIdx >= numPorts)
+        return module.emitOpError()
+               << "has domain association " << associationIdx << " for port '"
+               << module.getPortName(index) << "', but the module only has "
+               << numPorts << " ports";
+      if (!type_isa<DomainType>(module.getPortType(associationIdx)))
+        return module.emitOpError()
+               << "has port '" << module.getPortName(index)
+               << "' which has a domain association with non-domain port '"
+               << module.getPortName(associationIdx) << "'";
+    }
   }
 
   // Verify the body.

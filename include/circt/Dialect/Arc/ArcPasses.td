@@ -144,6 +144,15 @@ def InferStateProperties : Pass<"arc-infer-state-properties",
   ];
 }
 
+def InsertRuntime : Pass<"arc-insert-runtime", "mlir::ModuleOp"> {
+  let summary = "Insert structs and function calls for the ArcRuntime library";
+  let dependentDialects = ["mlir::LLVM::LLVMDialect"];
+  let options = [
+    Option<"extraArgs", "extra-args", "std::string", "",
+     "Extra arguments passed to the runtime when creating simulation instances">
+  ];
+}
+
 def IsolateClocks : Pass<"arc-isolate-clocks", "mlir::ModuleOp"> {
   let summary = "Group clocked operations into clock domains";
   let constructor = "circt::arc::createIsolateClocksPass()";
@@ -365,6 +374,10 @@ def StripSV : Pass<"arc-strip-sv", "mlir::ModuleOp"> {
   let constructor = "circt::arc::createStripSVPass()";
   let dependentDialects = ["arc::ArcDialect", "comb::CombDialect",
                            "hw::HWDialect", "seq::SeqDialect"];
+  let options = [
+    Option<"asyncResetsAsSync", "async-resets-as-sync", "bool", "false",
+      "Treat asynchronous resets as synchronous.">
+  ];
 }
 
 #endif // CIRCT_DIALECT_ARC_ARCPASSES_TD

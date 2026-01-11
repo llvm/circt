@@ -18,6 +18,7 @@
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
+#include "circt/Firtool/Firtool.h"
 #include "circt/InitAllDialects.h"
 #include "circt/Support/JSON.h"
 #include "circt/Support/LoweringOptionsParser.h"
@@ -53,10 +54,13 @@ using namespace circt;
 //===----------------------------------------------------------------------===//
 
 namespace {
+/// Which test kinds to execute.
+enum class KindFilter { All, Formal, Simulation };
 
 /// The tool's command line options.
 struct Options {
-  cl::OptionCategory cat{"circt-test Options"};
+  cl::OptionCategory cat{"Basic Options"};
+  cl::OptionCategory testCat{"Test Options"};
 
   cl::opt<std::string> inputFilename{cl::Positional, cl::desc("<input file>"),
                                      cl::init("-"), cl::cat(cat)};
@@ -66,16 +70,24 @@ struct Options {
       cl::value_desc("filename"), cl::init("-"), cl::cat(cat)};
 
   cl::opt<bool> listTests{"l", cl::desc("List tests in the input and exit"),
-                          cl::init(false), cl::cat(cat)};
+                          cl::init(false), cl::cat(testCat)};
+
+  cl::opt<KindFilter> kindFilter{
+      cl::desc("Filter which kinds of tests to run:"),
+      cl::values(clEnumValN(KindFilter::Formal, "only-formal",
+                            "Only run formal tests"),
+                 clEnumValN(KindFilter::Simulation, "only-sim",
+                            "Only run simulation tests")),
+      cl::init(KindFilter::All), cl::cat(testCat)};
 
   cl::opt<bool> listRunners{"list-runners", cl::desc("List test runners"),
                             cl::init(false), cl::cat(cat)};
 
   cl::opt<bool> json{"json", cl::desc("Emit test list as JSON array"),
-                     cl::init(false), cl::cat(cat)};
+                     cl::init(false), cl::cat(testCat)};
 
   cl::opt<bool> listIgnored{"list-ignored", cl::desc("List ignored tests"),
-                            cl::init(false), cl::cat(cat)};
+                            cl::init(false), cl::cat(testCat)};
 
   cl::opt<std::string> resultDir{
       "d", cl::desc("Result directory (default `.circt-test`)"),
@@ -84,6 +96,11 @@ struct Options {
   cl::list<std::string> runners{"r", cl::desc("Use a specific set of runners"),
                                 cl::value_desc("name"),
                                 cl::MiscFlags::CommaSeparated, cl::cat(cat)};
+
+  cl::opt<bool> dryRun{
+      "dry-run",
+      cl::desc("Print command for each test instead of executing it"),
+      cl::init(false), cl::cat(cat)};
 
   cl::opt<bool> ignoreContracts{
       "ignore-contracts",
@@ -126,6 +143,9 @@ Options opts;
 //===----------------------------------------------------------------------===//
 
 namespace {
+/// The various kinds of test that can be executed.
+enum class TestKind { Formal, Simulation };
+
 /// A program that can run tests.
 class Runner {
 public:
@@ -136,6 +156,8 @@ public:
   /// The runner binary. The value of this field is resolved using
   /// `findProgramByName` and stored in `binaryPath`.
   std::string binary;
+  /// The kind of test this runner can execute.
+  TestKind kind;
   /// The full path to the runner.
   std::string binaryPath;
   /// Whether this runner operates on Verilog or MLIR input.
@@ -168,6 +190,7 @@ void RunnerSuite::addDefaultRunners() {
     // SymbiYosys
     Runner runner;
     runner.name = StringAttr::get(context, "sby");
+    runner.kind = TestKind::Formal;
     runner.binary = "circt-test-runner-sby.py";
     runners.push_back(std::move(runner));
   }
@@ -175,8 +198,17 @@ void RunnerSuite::addDefaultRunners() {
     // circt-bmc
     Runner runner;
     runner.name = StringAttr::get(context, "circt-bmc");
+    runner.kind = TestKind::Formal;
     runner.binary = "circt-test-runner-circt-bmc.py";
     runner.readsMLIR = true;
+    runners.push_back(std::move(runner));
+  }
+  {
+    // Verilator
+    Runner runner;
+    runner.name = StringAttr::get(context, "verilator");
+    runner.kind = TestKind::Simulation;
+    runner.binary = "circt-test-runner-verilator.py";
     runners.push_back(std::move(runner));
   }
 }
@@ -221,9 +253,6 @@ LogicalResult RunnerSuite::resolve() {
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// The various kinds of test that can be executed.
-enum class TestKind { Formal, Simulation };
-
 /// A single discovered test.
 class Test {
 public:
@@ -344,6 +373,16 @@ LogicalResult TestSuite::discoverTest(Test &&test, Operation *op) {
                                   test.excludedRunners, test.loc, test.name)))
     return failure();
 
+  // If the user specified a test kind filter, ignore the test if the kind does
+  // not match.
+  if (opts.kindFilter != KindFilter::All) {
+    if ((opts.kindFilter == KindFilter::Formal &&
+         test.kind != TestKind::Formal) ||
+        (opts.kindFilter == KindFilter::Simulation &&
+         test.kind != TestKind::Simulation))
+      test.ignore = true;
+  }
+
   tests.push_back(std::move(test));
   return success();
 }
@@ -365,6 +404,7 @@ static LogicalResult listRunners(RunnerSuite &suite) {
   for (auto &runner : suite.runners) {
     auto &os = output->os();
     os << runner.name.getValue();
+    os << "  " << toString(runner.kind);
     if (runner.ignore)
       os << "  ignored";
     else if (runner.available)
@@ -439,6 +479,10 @@ static LogicalResult executeWithHandler(MLIRContext *context,
   if (!module)
     return failure();
 
+  // Since some tools insist on treating empty modules as black boxes, we need
+  // to fix those up explicitly.
+  opts.loweringOptions.fixUpEmptyModules = true;
+
   // Load the emitter options from the command line. Command line options if
   // specified will override any module options.
   if (opts.loweringOptions.toString() != LoweringOptions().toString())
@@ -503,31 +547,26 @@ static LogicalResult executeWithHandler(MLIRContext *context,
   mlirFile->os().flush();
   mlirFile->keep();
 
-  // Open the Verilog file for writing.
-  SmallString<128> verilogPath(opts.resultDir);
-  llvm::sys::path::append(verilogPath, "design.sv");
-  auto verilogFile = openOutputFile(verilogPath, &errorMessage);
-  if (!verilogFile) {
-    WithColor::error() << errorMessage << "\n";
-    return failure();
-  }
-
   // Generate Verilog output.
+  firtool::FirtoolOptions firtoolOptions;
+  SmallString<128> verilogPath(opts.resultDir);
+  llvm::sys::path::append(verilogPath, "design");
+  firtoolOptions.setOutputFilename(verilogPath);
+
   PassManager pm(context);
   pm.enableVerifier(opts.verifyPasses);
-  pm.addPass(verif::createLowerTestsPass());
-  pm.addPass(
-      verif::createLowerSymbolicValuesPass({opts.symbolicValueLowering}));
-  pm.addPass(createLowerSimToSVPass());
-  pm.addPass(createLowerSeqToSVPass());
-  pm.addNestedPass<hw::HWModuleOp>(createLowerVerifToSVPass());
-  pm.addNestedPass<hw::HWModuleOp>(sv::createHWLegalizeModulesPass());
-  pm.addNestedPass<hw::HWModuleOp>(sv::createPrettifyVerilogPass());
-  pm.addPass(createExportVerilogPass(verilogFile->os()));
+  if (failed(firtool::populateHWToSV(pm, firtoolOptions)))
+    return failure();
+  if (failed(
+          firtool::populateExportSplitVerilog(pm, firtoolOptions, verilogPath)))
+    return failure();
   if (failed(pm.run(*module)))
     return failure();
-  verilogFile->os().flush();
-  verilogFile->keep();
+
+  // Disable multi-threading if we are only doing a dry run. This ensures the
+  // print output is in order and lines don't get jumbled.
+  if (opts.dryRun)
+    context->disableMultithreading();
 
   // Run the tests.
   std::atomic<unsigned> numPassed(0);
@@ -546,6 +585,8 @@ static LogicalResult executeWithHandler(MLIRContext *context,
     Runner *runner = nullptr;
     for (auto &candidate : runnerSuite.runners) {
       if (candidate.ignore || !candidate.available)
+        continue;
+      if (test.kind != candidate.kind)
         continue;
       if (!test.requiredRunners.empty() &&
           !test.requiredRunners.contains(candidate.name))
@@ -611,6 +652,21 @@ static LogicalResult executeWithHandler(MLIRContext *context,
       args.push_back(std::string(str.begin(), str.end()));
     }
 
+    // If we are doing a dry run, print the command and skip actually executing
+    // the test runner.
+    if (opts.dryRun) {
+      auto &os = llvm::outs();
+      WithColor(os) << test.name.getValue();
+      os << ": ";
+      llvm::sys::printArg(os, runner->binaryPath, false);
+      for (auto &arg : llvm::drop_begin(args)) {
+        os << " ";
+        llvm::sys::printArg(os, arg, false);
+      }
+      os << "\n";
+      return;
+    }
+
     // Execute the test runner.
     std::string errorMessage;
     auto result = llvm::sys::ExecuteAndWait(
@@ -623,12 +679,21 @@ static LogicalResult executeWithHandler(MLIRContext *context,
     } else if (result > 0) {
       auto d = mlir::emitError(test.loc)
                << "test " << test.name.getValue() << " failed";
-      d.attachNote() << "see `" << logPath << "`";
       d.attachNote() << "executed with " << runner->name.getValue();
+      // Reproduce the output log. We should really come up with a better way to
+      // report test progress and failures. But this will do for the time being.
+      auto &note = d.attachNote() << "see `" << logPath << "`";
+      auto logBuffer = llvm::MemoryBuffer::getFile(logPath, /*IsText=*/true);
+      if (logBuffer)
+        note << ":\n" << logBuffer.get()->getBuffer();
     } else {
       ++numPassed;
     }
   });
+
+  // Stop here if we are doing a dry run.
+  if (opts.dryRun)
+    return success();
 
   // Print statistics about how many tests passed and failed.
   unsigned numNonFailed = numPassed + numIgnored + numUnsupported;
@@ -720,7 +785,8 @@ int main(int argc, char **argv) {
 
   // Hide default LLVM options, other than for this tool.
   // MLIR options are added below.
-  cl::HideUnrelatedOptions({&opts.cat, &llvm::getColorCategory()});
+  cl::HideUnrelatedOptions(
+      {&opts.cat, &opts.testCat, &llvm::getColorCategory()});
   cl::ParseCommandLineOptions(argc, argv, "Hardware unit testing tool\n");
 
   MLIRContext context(registry);

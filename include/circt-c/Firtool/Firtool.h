@@ -68,6 +68,14 @@ typedef enum CirctFirtoolVerificationFlavor {
   CIRCT_FIRTOOL_VERIFICATION_FLAVOR_SVA,
 } CirctFirtoolVerificationFlavor;
 
+// NOLINTNEXTLINE(modernize-use-using)
+typedef enum CirctFirtoolDomainMode {
+  CIRCT_FIRTOOL_DOMAIN_MODE_DISABLE,
+  CIRCT_FIRTOOL_DOMAIN_MODE_CHECK,
+  CIRCT_FIRTOOL_DOMAIN_MODE_INFER,
+  CIRCT_FIRTOOL_DOMAIN_MODE_INFER_ALL,
+} CirctFirtoolDomainMode;
+
 MLIR_CAPI_EXPORTED CirctFirtoolFirtoolOptions
 circtFirtoolOptionsCreateDefault(void);
 MLIR_CAPI_EXPORTED void
@@ -220,6 +228,10 @@ circtFirtoolOptionsSetDisableCSEinClasses(CirctFirtoolFirtoolOptions options,
 
 MLIR_CAPI_EXPORTED void circtFirtoolOptionsSetSelectDefaultInstanceChoice(
     CirctFirtoolFirtoolOptions options, bool value);
+
+MLIR_CAPI_EXPORTED void
+circtFirtoolOptionsSetDomainMode(CirctFirtoolFirtoolOptions options,
+                                 CirctFirtoolDomainMode);
 
 //===----------------------------------------------------------------------===//
 // Populate API.

@@ -166,6 +166,11 @@ struct LlhdToCorePipelineOptions
       *this, "detect-memories",
       llvm::cl::desc("Detect memories and lower them to `seq.firmem`"),
       llvm::cl::init(true)};
+  Option<bool> sroa{
+      *this, "sroa",
+      llvm::cl::desc("Destructure arrays and structs into individual signals. "
+                     "See https://github.com/llvm/circt/issues/8804."),
+      llvm::cl::init(false)};
 };
 void populateLlhdToCorePipeline(mlir::OpPassManager &pm,
                                 const LlhdToCorePipelineOptions &options);

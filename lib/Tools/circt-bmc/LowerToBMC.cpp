@@ -55,10 +55,12 @@ void LowerToBMCPass::runOnOperation() {
   }
 
   // TODO: Check whether instances contain properties to check
+  bool noProperties = false;
   if (hwModule.getOps<verif::AssertOp>().empty() &&
       hwModule.getOps<hw::InstanceOp>().empty()) {
-    hwModule.emitError("no property provided to check in module");
-    return signalPassFailure();
+    hwModule.emitWarning("no property provided to check in module - will "
+                         "trivially find no assertions.");
+    noProperties = true;
   }
 
   if (!sortTopologically(&hwModule.getBodyRegion().front())) {
@@ -216,19 +218,31 @@ void LowerToBMCPass::runOnOperation() {
         LLVM::AddressOfOp::create(builder, loc, global)->getResult(0));
   };
 
-  auto successStrAddr =
-      createUniqueStringGlobal("Bound reached with no violations!\n");
-  auto failureStrAddr =
-      createUniqueStringGlobal("Assertion can be violated!\n");
+  Value formatString;
+  if (noProperties) {
+    auto messageString = createUniqueStringGlobal(
+        "No properties provided - trivially no violations.\n");
+    if (failed(messageString)) {
+      moduleOp->emitOpError("could not create result message string");
+      return signalPassFailure();
+    }
+    formatString = messageString.value();
+  } else {
+    auto successStrAddr =
+        createUniqueStringGlobal("Bound reached with no violations!\n");
+    auto failureStrAddr =
+        createUniqueStringGlobal("Assertion can be violated!\n");
 
-  if (failed(successStrAddr) || failed(failureStrAddr)) {
-    moduleOp->emitOpError("could not create result message strings");
-    return signalPassFailure();
+    if (failed(successStrAddr) || failed(failureStrAddr)) {
+      moduleOp->emitOpError("could not create result message strings");
+      return signalPassFailure();
+    }
+
+    formatString =
+        LLVM::SelectOp::create(builder, loc, bmcOp.getResult(),
+                               successStrAddr.value(), failureStrAddr.value());
   }
 
-  auto formatString =
-      LLVM::SelectOp::create(builder, loc, bmcOp.getResult(),
-                             successStrAddr.value(), failureStrAddr.value());
   LLVM::CallOp::create(builder, loc, printfFunc.value(),
                        ValueRange{formatString});
   func::ReturnOp::create(builder, loc);

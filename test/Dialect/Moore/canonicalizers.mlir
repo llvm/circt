@@ -493,3 +493,10 @@ func.func @sub(%arg0: !moore.i32) -> !moore.i32 {
   // CHECK: return %arg0 :
   return %1 : !moore.i32
 }
+
+// CHECK-LABEL: @convertReal
+func.func @convertReal(%arg0: !moore.f32) -> !moore.f32 {
+  // CHECK-NOT: moore.convert_real
+  %0 = moore.convert_real %arg0 : !moore.f32 -> !moore.f32
+  return %0 : !moore.f32
+}

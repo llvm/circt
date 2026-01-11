@@ -28,8 +28,7 @@ hw.module @Top() {
   %c0_i7 = hw.constant 0 : i7
   // CHECK: %subsystem_pbus.clock, %subsystem_pbus.reset = hw.instance "subsystem_pbus" @PeripheryBus() -> (clock: !seq.clock, reset: i1)
   %subsystem_pbus.clock, %subsystem_pbus.reset = hw.instance "subsystem_pbus" @PeripheryBus() -> (clock: !seq.clock, reset: i1)
-  // CHECK: [[RST:%.+]] = comb.mux %subsystem_pbus.reset, %c0_i7, %int_rtc_tick_value : i7
-  // CHECK: %int_rtc_tick_value = seq.compreg [[RST]], %subsystem_pbus.clock : i7
+  // CHECK: %int_rtc_tick_value = seq.compreg %int_rtc_tick_value, %subsystem_pbus.clock reset %subsystem_pbus.reset, %c0_i7 : i7
   %int_rtc_tick_value = seq.firreg %int_rtc_tick_value clock %subsystem_pbus.clock reset sync %subsystem_pbus.reset, %c0_i7 : i7
 }
 

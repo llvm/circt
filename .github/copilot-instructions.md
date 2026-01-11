@@ -1,6 +1,6 @@
 # Copilot build & test guidance
 
-- Default to the integration docker image in `CIRCT_INTEGRATION_IMAGE` (set by the Copilot setup workflow and the `utils/run-docker.sh` default; currently `ghcr.io/circt/images/circt-integration-test:v19.2`) when compiling or testing.
+- Default to the integration docker image in `CIRCT_INTEGRATION_IMAGE` (set by the Copilot setup workflow and the `utils/run-docker.sh` default; currently `ghcr.io/circt/images/circt-integration-test:v20`) when compiling or testing.
 - Run inside that image via `./utils/run-docker.sh ./utils/run-tests-docker.sh "$CIRCT_INTEGRATION_IMAGE"` or `docker run` with the repo root bind-mounted.
 - When cloning or checking out, ensure submodules are present (`git submodule update --init --recursive` if needed).
 - Configure builds from the repo root with Ninja, matching the README:

@@ -148,7 +148,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
 
     /// Hooks for domain information.
-    ArrayAttr getPortDomain(unsigned portIdx);
+    Attribute getPortDomain(unsigned portIdx);
 
     /// Clone this instance with inserted ports.
     InstanceOp cloneWithInsertedPorts(

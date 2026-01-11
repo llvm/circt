@@ -56,3 +56,6 @@ add_dependencies(circt-headers
 add_subdirectory(Export)
 add_subdirectory(Interfaces)
 add_subdirectory(Transforms)
+
+# Arcilator Runtime Library
+add_subdirectory(Runtime)

@@ -152,15 +152,64 @@ public:
   }
 };
 
+struct ConstantConversionPattern
+    : public OpConversionPattern<arith::ConstantOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(arith::ConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // `hw.constant` only supports integers.
+    if (!isa<IntegerType>(op.getType()))
+      return failure();
+
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(
+        op, cast<IntegerAttr>(adaptor.getValue()));
+    return success();
+  }
+};
+
 struct MapArithToCombPass
     : public circt::impl::MapArithToCombPassBase<MapArithToCombPass> {
 public:
+  MapArithToCombPass(bool enableBestEffortLowering) {
+    this->enableBestEffortLowering = enableBestEffortLowering;
+  }
+
   void runOnOperation() override {
     auto *ctx = &getContext();
 
     ConversionTarget target(*ctx);
     target.addLegalDialect<comb::CombDialect, hw::HWDialect>();
-    target.addIllegalDialect<arith::ArithDialect>();
+    if (!enableBestEffortLowering) {
+      target.addIllegalDialect<arith::ArithDialect>();
+    } else {
+      // We make all arith operations with a potential lowering here (as
+      // specified in circt::populateArithToCombPatterns) illegal
+      target.addIllegalOp<arith::AddIOp>();
+      target.addIllegalOp<arith::SubIOp>();
+      target.addIllegalOp<arith::MulIOp>();
+      target.addIllegalOp<arith::DivSIOp>();
+      target.addIllegalOp<arith::DivUIOp>();
+      target.addIllegalOp<arith::RemSIOp>();
+      target.addIllegalOp<arith::RemUIOp>();
+      target.addIllegalOp<arith::AndIOp>();
+      target.addIllegalOp<arith::OrIOp>();
+      target.addIllegalOp<arith::XOrIOp>();
+      target.addIllegalOp<arith::ShLIOp>();
+      target.addIllegalOp<arith::ShRSIOp>();
+      target.addIllegalOp<arith::ShRUIOp>();
+      target.addIllegalOp<arith::SelectOp>();
+      target.addIllegalOp<arith::ExtSIOp>();
+      target.addIllegalOp<arith::ExtUIOp>();
+      target.addIllegalOp<arith::TruncIOp>();
+      target.addIllegalOp<arith::CmpIOp>();
+
+      // Force integer constants to be mapped to `hw.constant`.
+      target.addDynamicallyLegalOp<arith::ConstantOp>([](Operation *op) {
+        return !isa<IntegerType>(op->getResult(0).getType());
+      });
+    }
     MapArithTypeConverter typeConverter;
     RewritePatternSet patterns(ctx);
     populateArithToCombPatterns(patterns, typeConverter);
@@ -188,13 +237,14 @@ void circt::populateArithToCombPatterns(mlir::RewritePatternSet &patterns,
                   OneToOnePattern<arith::ShLIOp, comb::ShlOp>,
                   OneToOnePattern<arith::ShRSIOp, comb::ShrSOp>,
                   OneToOnePattern<arith::ShRUIOp, comb::ShrUOp>,
-                  OneToOnePattern<arith::ConstantOp, hw::ConstantOp, true>,
                   OneToOnePattern<arith::SelectOp, comb::MuxOp>,
                   ExtSConversionPattern, ExtZConversionPattern,
-                  TruncateConversionPattern, CompConversionPattern>(
-      typeConverter, patterns.getContext());
+                  TruncateConversionPattern, CompConversionPattern,
+                  ConstantConversionPattern>(typeConverter,
+                                             patterns.getContext());
 }
 
-std::unique_ptr<mlir::Pass> circt::createMapArithToCombPass() {
-  return std::make_unique<MapArithToCombPass>();
+std::unique_ptr<mlir::Pass>
+circt::createMapArithToCombPass(bool enableBestEffortLowering) {
+  return std::make_unique<MapArithToCombPass>(enableBestEffortLowering);
 }

@@ -495,7 +495,16 @@ LogicalResult LowerModule::lowerModule() {
     // leaves conversions that are cleaned up by LowerToHW.  (This is likely
     // wrong, but it doesn't cost us anything to do it this way.)
     DenseSet<Operation *> conversionsToErase;
-    auto walkResult = op.walk([&conversionsToErase](Operation *walkOp) {
+    DenseSet<Operation *> operationsToErase;
+    auto walkResult = op.walk([&](Operation *walkOp) {
+      // This is an operation that we have previously determined can be deleted
+      // when examining an earlier operation.  Delete it now as it is only safe
+      // to do so when visiting it.
+      if (operationsToErase.contains(walkOp)) {
+        walkOp->erase();
+        return WalkResult::advance();
+      }
+
       // Handle UnsafeDomainCastOp.
       if (auto castOp = dyn_cast<UnsafeDomainCastOp>(walkOp)) {
         for (auto value : castOp.getDomains()) {
@@ -509,35 +518,103 @@ LogicalResult LowerModule::lowerModule() {
         return WalkResult::advance();
       }
 
+      // Track anonymous domains for later traversal and erasure.
+      if (auto anonDomain = dyn_cast<DomainCreateAnonOp>(walkOp)) {
+        conversionsToErase.insert(anonDomain);
+        return WalkResult::advance();
+      }
+
+      // If we see a WireOp of a domain type, then we want to erase it.  To do
+      // this, find what is driving it and what it is driving and then replace
+      // that triplet of operations with a single domain define inserted before
+      // the latest define.  If the wire is undriven or if the wire drives
+      // nothing, then everything will be deleted.
+      //
+      // Before:
+      //
+      //     %a = firrtl.wire : !firrtl.domain // <- operation being visited
+      //     firrtl.domain.define %a, %src
+      //     firrtl.domain.define %dst, %a
+      //
+      // After:
+      //     %a = firrtl.wire : !firrtl.domain // <- to-be-deleted after walk
+      //     firrtl.domain.define %a, %src     // <- to-be-deleted when visited
+      //     firrtl.domain.define %dst, %src   // <- added
+      //     firrtl.domain.define %dst, %a     // <- to-be-deleted when visited
+      if (auto wireOp = dyn_cast<WireOp>(walkOp)) {
+        if (type_isa<DomainType>(wireOp.getResult().getType())) {
+          Value src, dst;
+          DomainDefineOp lastDefineOp;
+          for (auto *user : llvm::make_early_inc_range(wireOp->getUsers())) {
+            if (src && dst)
+              break;
+            auto domainDefineOp = dyn_cast<DomainDefineOp>(user);
+            if (!domainDefineOp) {
+              auto diag = wireOp.emitOpError()
+                          << "cannot be lowered by `LowerDomains` because it "
+                             "has a user that is not a domain define op";
+              diag.attachNote(user->getLoc()) << "is one such user";
+              return WalkResult::interrupt();
+            }
+            if (!lastDefineOp || lastDefineOp->isBeforeInBlock(domainDefineOp))
+              lastDefineOp = domainDefineOp;
+            if (wireOp == domainDefineOp.getSrc().getDefiningOp())
+              dst = domainDefineOp.getDest();
+            else
+              src = domainDefineOp.getSrc();
+            operationsToErase.insert(domainDefineOp);
+          }
+          conversionsToErase.insert(wireOp);
+          // If this wire is dead or undriven, then there's nothing to do.
+          if (!src || !dst)
+            return WalkResult::advance();
+          // Insert a domain define that removes the need for the wire.  This is
+          // inserted just before the latest domain define involving the wire.
+          // This is done to prevent unnecessary permutations of the IR.
+          OpBuilder builder(lastDefineOp);
+          DomainDefineOp::create(builder, builder.getUnknownLoc(), dst, src);
+        }
+        return WalkResult::advance();
+      }
+
       // Handle DomainDefineOp.  Skip all other operations.
       auto defineOp = dyn_cast<DomainDefineOp>(walkOp);
       if (!defineOp)
         return WalkResult::advance();
 
-      // Only visit domain define ops which have conversioncast source and
-      // destination.
-      auto src = dyn_cast<UnrealizedConversionCastOp>(
-          defineOp.getSrc().getDefiningOp());
+      // There are only two possibilities for kinds of `DomainDefineOp`s that we
+      // can see a this point: the destination is always a conversion cast and
+      // the source is _either_ (1) a conversion cast if the source is a module
+      // or instance port or (2) an anonymous domain op.  This relies on the
+      // earlier "canonicalization" that erased `WireOp`s to leave only
+      // `DomainDefineOp`s.
+      auto *src = defineOp.getSrc().getDefiningOp();
       auto dest = dyn_cast<UnrealizedConversionCastOp>(
           defineOp.getDest().getDefiningOp());
       if (!src || !dest)
         return WalkResult::advance();
-      assert(src.getNumOperands() == 1 && src.getNumResults() == 1);
-      assert(dest.getNumOperands() == 1 && dest.getNumResults() == 1);
 
       conversionsToErase.insert(src);
       conversionsToErase.insert(dest);
 
-      OpBuilder builder(defineOp);
-      PropAssignOp::create(builder, defineOp.getLoc(), dest.getOperand(0),
-                           src.getOperand(0));
+      if (auto srcCast = dyn_cast<UnrealizedConversionCastOp>(src)) {
+        assert(srcCast.getNumOperands() == 1 && srcCast.getNumResults() == 1);
+        OpBuilder builder(defineOp);
+        PropAssignOp::create(builder, defineOp.getLoc(), dest.getOperand(0),
+                             srcCast.getOperand(0));
+      } else if (!isa<DomainCreateAnonOp>(src)) {
+        auto diag = defineOp.emitOpError()
+                    << "has a source which cannot be lowered by 'LowerDomains'";
+        diag.attachNote(src->getLoc()) << "unsupported source is here";
+        return WalkResult::interrupt();
+      }
+
       defineOp->erase();
       return WalkResult::advance();
     });
 
-    // The walk, as written cannot fail.  Defensively check in assert-enabled
-    // builds that this assumption isn't violated.
-    assert(!walkResult.wasInterrupted());
+    if (walkResult.wasInterrupted())
+      return failure();
 
     // Erase all the conversions.
     for (auto *op : conversionsToErase)

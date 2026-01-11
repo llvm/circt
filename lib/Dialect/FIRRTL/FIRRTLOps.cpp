@@ -801,6 +801,15 @@ static void insertPorts(FModuleLike op,
   unsigned oldNumArgs = op.getNumPorts();
   unsigned newNumArgs = oldNumArgs + ports.size();
 
+  // Build a map from old port indices to new indices.
+  SmallVector<unsigned> indexMap(oldNumArgs);
+  size_t inserted = 0;
+  for (size_t i = 0; i < oldNumArgs; ++i) {
+    while (inserted < ports.size() && ports[inserted].first == i)
+      ++inserted;
+    indexMap[i] = i + inserted;
+  }
+
   // Add direction markers and names for new ports.
   auto existingDirections = op.getPortDirectionsAttr();
   ArrayRef<Attribute> existingNames = op.getPortNames();
@@ -822,12 +831,9 @@ static void insertPorts(FModuleLike op,
   newSyms.reserve(newNumArgs);
   newLocs.reserve(newNumArgs);
 
-  SmallVector<unsigned> indexMap(oldNumArgs);
-
   auto emptyArray = ArrayAttr::get(op.getContext(), {});
 
   unsigned oldIdx = 0;
-  unsigned inserted = 0;
   auto migrateOldPorts = [&](unsigned untilOldIdx) {
     while (oldIdx < oldNumArgs && oldIdx < untilOldIdx) {
       newDirections.push_back(existingDirections[oldIdx]);
@@ -838,8 +844,6 @@ static void insertPorts(FModuleLike op,
       newAnnos.push_back(op.getAnnotationsAttrForPort(oldIdx));
       newSyms.push_back(op.getPortSymbolAttr(oldIdx));
       newLocs.push_back(existingLocs[oldIdx]);
-
-      indexMap[oldIdx] = oldIdx + inserted;
       ++oldIdx;
     }
   };
@@ -905,24 +909,13 @@ static ArrayAttr fixDomainInfoDeletions(MLIRContext *context,
   if (supportsEmptyAttr && domainInfoAttr.empty())
     return domainInfoAttr;
 
-  // Compute an array where each entry is the number of ports before that
-  // index that have been deleted.  This is used to update domain information.
-  SmallVector<unsigned> numDeleted;
-  numDeleted.resize(portIndices.size());
-  size_t deletionIndex = portIndices.find_first();
+  // Build a map from old port indices to new indices.
+  SmallVector<unsigned> indexMap(portIndices.size());
+  size_t deleted = 0;
   for (size_t i = 0, e = portIndices.size(); i != e; ++i) {
-    if (i == deletionIndex) {
-      if (i == 0)
-        numDeleted[i] = 1;
-      else
-        numDeleted[i] = numDeleted[i - 1] + 1;
-      deletionIndex = portIndices.find_next(i);
-      continue;
-    }
-    if (i == 0)
-      numDeleted[i] = 0;
-    else
-      numDeleted[i] = numDeleted[i - 1];
+    indexMap[i] = i - deleted;
+    if (portIndices[i])
+      ++deleted;
   }
 
   // Return a cached empty ArrayAttr.
@@ -960,9 +953,9 @@ static ArrayAttr fixDomainInfoDeletions(MLIRContext *context,
       if (portIndices.test(oldIdx))
         continue;
       // If the new index is the same, do nothing.
-      auto newIdx = oldIdx - numDeleted[oldIdx];
+      auto newIdx = indexMap[oldIdx];
       if (oldIdx == newIdx) {
-        newDomainInfo.push_back(attr);
+        newDomains.push_back(domain);
         continue;
       }
       // Update the index.
@@ -2658,10 +2651,10 @@ void InstanceOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
                    ArrayAttr::get(getContext(), annotations));
 }
 
-ArrayAttr InstanceOp::getPortDomain(unsigned portIdx) {
+Attribute InstanceOp::getPortDomain(unsigned portIdx) {
   assert(portIdx < getNumResults() &&
          "index should be smaller than result number");
-  return cast<ArrayAttr>(getDomainInfo()[portIdx]);
+  return getDomainInfo()[portIdx];
 }
 
 InstanceOp InstanceOp::cloneWithInsertedPorts(
@@ -4312,6 +4305,19 @@ LogicalResult DomainDefineOp::verify() {
 
   auto dst = getDest();
   auto src = getSrc();
+
+  // As wires cannot have domain information, don't do any checking when a wire
+  // is involved.  This weakens the verification.
+  //
+  // TOOD: Remove this by adding Domain Info to wires [1].
+  //
+  // [1] https://github.com/llvm/circt/issues/9398
+  if (auto *srcDefOp = src.getDefiningOp())
+    if (isa<WireOp>(srcDefOp))
+      return success();
+  if (auto *dstDefOp = dst.getDefiningOp())
+    if (isa<WireOp>(dstDefOp))
+      return success();
 
   auto dstDomain = getDomainTypeName(dst);
   if (!dstDomain)

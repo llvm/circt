@@ -19,6 +19,7 @@
 #include "circt/Support/ConversionPatternSet.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/ControlFlow/Transforms/StructuralTypeConversions.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -1426,6 +1427,20 @@ struct BinaryOpConversion : public OpConversionPattern<SourceOp> {
   }
 };
 
+template <typename SourceOp, typename TargetOp>
+struct BinaryRealOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<TargetOp>(op, adaptor.getLhs(),
+                                          adaptor.getRhs());
+    return success();
+  }
+};
+
 template <typename SourceOp, ICmpPredicate pred>
 struct ICmpOpConversion : public OpConversionPattern<SourceOp> {
   using OpConversionPattern<SourceOp>::OpConversionPattern;
@@ -1438,6 +1453,23 @@ struct ICmpOpConversion : public OpConversionPattern<SourceOp> {
         ConversionPattern::typeConverter->convertType(op.getResult().getType());
 
     rewriter.replaceOpWithNewOp<comb::ICmpOp>(
+        op, resultType, pred, adaptor.getLhs(), adaptor.getRhs());
+    return success();
+  }
+};
+
+template <typename SourceOp, arith::CmpFPredicate pred>
+struct FCmpOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType =
+        ConversionPattern::typeConverter->convertType(op.getResult().getType());
+
+    rewriter.replaceOpWithNewOp<arith::CmpFOp>(
         op, resultType, pred, adaptor.getLhs(), adaptor.getRhs());
     return success();
   }
@@ -1977,23 +2009,71 @@ struct FormatIntOpConversion : public OpConversionPattern<FormatIntOp> {
   LogicalResult
   matchAndRewrite(FormatIntOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // TODO: These should honor the width, alignment, and padding.
+
+    char padChar = adaptor.getPadding() == IntPadding::Space ? 32 : 48;
+    IntegerAttr padCharAttr = rewriter.getI8IntegerAttr(padChar);
+    auto widthAttr = adaptor.getSpecifierWidthAttr();
+
+    bool isLeftAligned = adaptor.getAlignment() == IntAlign::Left;
+    BoolAttr isLeftAlignedAttr = rewriter.getBoolAttr(isLeftAligned);
+
     switch (op.getFormat()) {
     case IntFormat::Decimal:
-      rewriter.replaceOpWithNewOp<sim::FormatDecOp>(op, adaptor.getValue());
+      rewriter.replaceOpWithNewOp<sim::FormatDecOp>(
+          op, adaptor.getValue(), isLeftAlignedAttr, padCharAttr, widthAttr,
+          adaptor.getIsSignedAttr());
       return success();
     case IntFormat::Binary:
-      rewriter.replaceOpWithNewOp<sim::FormatBinOp>(op, adaptor.getValue());
+      rewriter.replaceOpWithNewOp<sim::FormatBinOp>(
+          op, adaptor.getValue(), isLeftAlignedAttr, padCharAttr, widthAttr);
       return success();
     case IntFormat::Octal:
-      rewriter.replaceOpWithNewOp<sim::FormatOctOp>(op, adaptor.getValue());
+      rewriter.replaceOpWithNewOp<sim::FormatOctOp>(
+          op, adaptor.getValue(), isLeftAlignedAttr, padCharAttr, widthAttr);
       return success();
     case IntFormat::HexLower:
-    case IntFormat::HexUpper:
-      rewriter.replaceOpWithNewOp<sim::FormatHexOp>(op, adaptor.getValue());
+      rewriter.replaceOpWithNewOp<sim::FormatHexOp>(
+          op, adaptor.getValue(), rewriter.getBoolAttr(false),
+          isLeftAlignedAttr, padCharAttr, widthAttr);
       return success();
-    default:
-      return rewriter.notifyMatchFailure(op, "unsupported int format");
+    case IntFormat::HexUpper:
+      rewriter.replaceOpWithNewOp<sim::FormatHexOp>(
+          op, adaptor.getValue(), rewriter.getBoolAttr(true), isLeftAlignedAttr,
+          padCharAttr, widthAttr);
+      return success();
+    }
+    return rewriter.notifyMatchFailure(op, "unsupported int format");
+  }
+};
+
+struct FormatRealOpConversion : public OpConversionPattern<FormatRealOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FormatRealOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto fracDigitsAttr = adaptor.getFracDigitsAttr();
+
+    auto fieldWidthAttr = adaptor.getFieldWidthAttr();
+    bool isLeftAligned = adaptor.getAlignment() == IntAlign::Left;
+    mlir::BoolAttr isLeftAlignedAttr = rewriter.getBoolAttr(isLeftAligned);
+
+    switch (op.getFormat()) {
+    case RealFormat::General:
+      rewriter.replaceOpWithNewOp<sim::FormatGeneralOp>(
+          op, adaptor.getValue(), isLeftAlignedAttr, fieldWidthAttr,
+          fracDigitsAttr);
+      return success();
+    case RealFormat::Float:
+      rewriter.replaceOpWithNewOp<sim::FormatFloatOp>(
+          op, adaptor.getValue(), isLeftAlignedAttr, fieldWidthAttr,
+          fracDigitsAttr);
+      return success();
+    case RealFormat::Exponential:
+      rewriter.replaceOpWithNewOp<sim::FormatScientificOp>(
+          op, adaptor.getValue(), isLeftAlignedAttr, fieldWidthAttr,
+          fracDigitsAttr);
+      return success();
     }
   }
 };
@@ -2065,6 +2145,31 @@ static LogicalResult convert(FinishMessageBIOp op,
                              ConversionPatternRewriter &rewriter) {
   // We don't support printing termination/pause messages yet.
   rewriter.eraseOp(op);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Timing Control Conversion
+//===----------------------------------------------------------------------===//
+
+// moore.builtin.time
+static LogicalResult convert(TimeBIOp op, TimeBIOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<llhd::CurrentTimeOp>(op);
+  return success();
+}
+
+// moore.logic_to_time
+static LogicalResult convert(LogicToTimeOp op, LogicToTimeOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<llhd::IntToTimeOp>(op, adaptor.getInput());
+  return success();
+}
+
+// moore.time_to_logic
+static LogicalResult convert(TimeToLogicOp op, TimeToLogicOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<llhd::TimeToIntOp>(op, adaptor.getInput());
   return success();
 }
 
@@ -2326,6 +2431,13 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     BinaryOpConversion<OrOp, comb::OrOp>,
     BinaryOpConversion<XorOp, comb::XorOp>,
 
+    // Patterns for binary real operations.
+    BinaryRealOpConversion<AddRealOp, arith::AddFOp>,
+    BinaryRealOpConversion<SubRealOp, arith::SubFOp>,
+    BinaryRealOpConversion<DivRealOp, arith::DivFOp>,
+    BinaryRealOpConversion<MulRealOp, arith::MulFOp>,
+    BinaryRealOpConversion<PowRealOp, math::PowFOp>,
+
     // Patterns of power operations.
     PowUOpConversion, PowSOpConversion,
 
@@ -2344,6 +2456,12 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     ICmpOpConversion<CaseNeOp, ICmpPredicate::cne>,
     ICmpOpConversion<WildcardEqOp, ICmpPredicate::weq>,
     ICmpOpConversion<WildcardNeOp, ICmpPredicate::wne>,
+    FCmpOpConversion<NeRealOp, arith::CmpFPredicate::ONE>,
+    FCmpOpConversion<FltOp, arith::CmpFPredicate::OLT>,
+    FCmpOpConversion<FleOp, arith::CmpFPredicate::OLE>,
+    FCmpOpConversion<FgtOp, arith::CmpFPredicate::OGT>,
+    FCmpOpConversion<FgeOp, arith::CmpFPredicate::OGE>,
+    FCmpOpConversion<EqRealOp, arith::CmpFPredicate::OEQ>,
     CaseXZEqOpConversion<CaseZEqOp, true>,
     CaseXZEqOpConversion<CaseXZEqOp, false>,
 
@@ -2384,6 +2502,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FormatLiteralOpConversion,
     FormatConcatOpConversion,
     FormatIntOpConversion,
+    FormatRealOpConversion,
     DisplayBIOpConversion
   >(typeConverter, patterns.getContext());
   // clang-format on
@@ -2397,6 +2516,11 @@ static void populateOpConversion(ConversionPatternSet &patterns,
   patterns.add<SeverityBIOp>(convert);
   patterns.add<FinishBIOp>(convert);
   patterns.add<FinishMessageBIOp>(convert);
+
+  // Timing control
+  patterns.add<TimeBIOp>(convert);
+  patterns.add<LogicToTimeOp>(convert);
+  patterns.add<TimeToLogicOp>(convert);
 
   mlir::populateAnyFunctionOpInterfaceTypeConversionPattern(patterns,
                                                             typeConverter);

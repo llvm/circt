@@ -14,7 +14,7 @@ jobs:
     name: Sanity Check
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-ci-build:20250515145637
+      image: ghcr.io/circt/images/circt-ci-build:20260107030736
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -134,7 +134,7 @@ jobs:
     # John and re-run the job.
     runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds", "linux"]
     container:
-      image: ghcr.io/circt/images/circt-ci-build:20250515145637
+      image: ghcr.io/circt/images/circt-ci-build:20260107030736
       volumes:
         - /mnt:/__w/circt
     strategy:
@@ -220,7 +220,7 @@ jobs:
             -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} \
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DLLVM_LIT_ARGS="-v" \
+            -DLLVM_LIT_ARGS="-v --timeout 300" \
             -DCIRCT_SLANG_FRONTEND_ENABLED=ON
           CIRCT_OPT_CHECK_IR_ROUNDTRIP=1 ninja check-circt check-circt-unit -j$(nproc)
           ninja circt-doc

@@ -44,7 +44,13 @@ public:
   WriteChannelPort &registerWritePort(const std::string &name,
                                       const std::string &type);
 
-  void stop();
+  // Stop the RPC server.
+  // If a millisecond timeout is provided, will forcefully stop the underlying
+  // RPC server once the timeout expires. If not, the RPC server will attempt to
+  // stop gracefully, implying that any outstanding RPC calls must be served
+  // before the server actually stops (see grpc::ServerInterface::Shutdown for
+  // more).
+  void stop(uint32_t timeoutMS = 0);
 
   // Start the RPC server. If no port is provided, the RPC server will let the
   // OS pick a port.

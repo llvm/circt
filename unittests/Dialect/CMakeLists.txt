@@ -1,3 +1,4 @@
+add_subdirectory(Arc)
 add_subdirectory(Comb)
 add_subdirectory(Moore)
 add_subdirectory(FIRRTL)

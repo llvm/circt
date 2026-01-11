@@ -69,6 +69,16 @@ enum class CompanionMode {
   Drop,
 };
 
+/// The mode for the InferDomains pass.
+enum class InferDomainsMode {
+  /// Check domains without inference.
+  Check,
+  /// Check domains with inference for private modules.
+  Infer,
+  /// Check domains with inference for both public and private modules.
+  InferAll,
+};
+
 #define GEN_PASS_DECL
 #include "circt/Dialect/FIRRTL/Passes.h.inc"
 
