@@ -501,6 +501,68 @@ def PrintFormattedProcOp : SimOp<"proc.print"> {
 }
 
 //===----------------------------------------------------------------------===//
+// Dynamic Strings
+//===----------------------------------------------------------------------===//
+
+def StringConstantOp : SimOp<"string.literal", [Pure, ConstantLike]> {
+  let summary = "Literal string fragment";
+  let description = [{
+    Creates a dynamic string from a constant string literal.
+  }];
+
+  let arguments = (ins StrAttr:$literal);
+  let results = (outs DynamicStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$literal attr-dict";
+}
+
+def StringLengthOp : SimOp<"string.length", [Pure]> {
+  let summary = "Length of a string";
+  let description = [{
+    Returns the length of a dynamic string as an `i64` value.
+  }];
+
+  let arguments = (ins DynamicStringType:$input);
+  let results = (outs I64:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$input attr-dict";
+}
+
+def StringConcatOp : SimOp<"string.concat", [Pure]> {
+  let summary = "Concatenate strings";
+  let description = [{
+    Concatenates multiple strings into a single, longer string. The first
+    operand appears first in the output string. The last character of the first 
+    operand is immediately followed by the first character of the second 
+    operand. If the operation has a single operand, its result is equal to that
+    operand. If the operation has zero operands, it returns an empty string.
+    The length of the result is the sum of each operand's length.
+    
+    Example:
+    
+    ```mlir
+    %0 = sim.string.literal "abc"
+    %1 = sim.string.literal "def"
+    %2 = sim.string.literal "ghj"
+    %3 = sim.string.concat (%0, %1, %2)  // %3 is "abcdefghj"
+    %4 = sim.string.concat (%0)          // %4 is "abc"
+    %5 = sim.string.concat ()            // %5 is ""
+    ```
+  }];
+
+  let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
+
+  let arguments = (ins Variadic<DynamicStringType>:$inputs);
+  let results = (outs DynamicStringType:$result);
+
+  let hasFolder = true;
+}
+
+//===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//
 
