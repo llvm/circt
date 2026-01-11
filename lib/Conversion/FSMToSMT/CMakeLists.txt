@@ -9,3 +9,4 @@ add_circt_conversion_library(CIRCTFSMToSMT FSMToSMT.cpp
                                              CIRCTComb CIRCTVerif CIRCTHW
                                                  CIRCTEmit CIRCTFSM CIRCTSupport
                                                      MLIRTransforms)
+                                                     
