@@ -220,7 +220,11 @@ NB_MODULE(esiCppAccel, m) {
 
   nb::class_<SysInfo, services::Service>(m, "SysInfo")
       .def("esi_version", &SysInfo::getEsiVersion)
-      .def("json_manifest", &SysInfo::getJsonManifest);
+      .def("json_manifest", &SysInfo::getJsonManifest)
+      .def("cycle_count", &SysInfo::getCycleCount,
+           "Get the current cycle count of the accelerator system")
+      .def("core_clock_frequency", &SysInfo::getCoreClockFrequency,
+           "Get the core clock frequency of the accelerator system in Hz");
 
   nb::class_<MMIO::RegionDescriptor>(m, "MMIORegionDescriptor")
       .def_prop_ro("base", [](MMIO::RegionDescriptor &r) { return r.base; })
