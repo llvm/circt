@@ -65,9 +65,24 @@ public:
     StartRead(&incomingMessage);
   }
 
+  // Utility to check if we are disconnecting. If so, mark done and notify.
+  bool isDisconnecting() {
+    std::lock_guard<std::mutex> lock(doneMutex);
+    if (disconnecting) {
+      done = true;
+      doneCV.notify_all();
+      return true;
+    }
+    return false;
+  }
+
   void OnReadDone(bool ok) override {
     if (!ok)
       // This happens when we are disconnecting since we are canceling the call.
+      return;
+
+    // Check if we're disconnecting before processing.
+    if (isDisconnecting())
       return;
 
     // Read the delivered message and push it onto the queue.
@@ -75,10 +90,16 @@ public:
     MessageData data(reinterpret_cast<const uint8_t *>(messageString.data()),
                      messageString.size());
 
-    while (!callback(data))
-      // Blocking here could cause deadlocks in specific situations.
-      // TODO: Implement a way to handle this better.
+    // Process the callback. Check disconnecting to avoid blocking forever.
+    while (!callback(data)) {
+      if (isDisconnecting())
+        return;
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    // Check again before starting new read.
+    if (isDisconnecting())
+      return;
 
     // Initiate the next read.
     StartRead(&incomingMessage);
@@ -92,17 +113,34 @@ public:
   }
 
   void disconnect() override {
-    if (!context)
-      return;
+    {
+      std::lock_guard<std::mutex> lock(doneMutex);
 
-    // Initiate cancellation.
+      // Mark disconnecting first to prevent OnReadDone from starting new reads.
+      if (disconnecting)
+        return;
+      disconnecting = true;
+
+      if (!context)
+        return;
+
+      // If already done, just clean up.
+      if (done) {
+        delete context;
+        context = nullptr;
+        return;
+      }
+    }
+
+    // Try to cancel the RPC.
     context->TryCancel();
 
-    // Wait for gRPC to signal completion via OnDone().
+    // Wait briefly for OnDone. Use timeout as TryCancel may not immediately
+    // interrupt pending reads.
     std::unique_lock<std::mutex> lock(doneMutex);
-    doneCV.wait(lock, [this]() { return done; });
+    doneCV.wait_for(lock, std::chrono::milliseconds(1000),
+                    [this]() { return done; });
 
-    // Now it's safe to clean up.
     delete context;
     context = nullptr;
   }
@@ -118,6 +156,7 @@ private:
   std::mutex doneMutex;
   std::condition_variable doneCV;
   bool done;
+  bool disconnecting = false;
 };
 } // namespace
 
