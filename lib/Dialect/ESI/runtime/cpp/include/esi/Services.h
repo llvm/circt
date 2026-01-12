@@ -211,7 +211,7 @@ public:
   /// Get the ESI version number to check version compatibility.
   uint32_t getEsiVersion() const override;
 
-  /// Get the current cycle count of the accelerator system.
+  /// Get the current cycle count of the accelerator system's core clock.
   std::optional<uint64_t> getCycleCount() const override;
   /// Get the "core" clock frequency of the accelerator system in Hz. Returns
   /// nullopt if the accelerator does not provide this information.

@@ -45,6 +45,8 @@ static LogicalResult
 instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
                             ServiceDeclOpInterface,
                             ServiceImplRecordOp implRecord) {
+  constexpr StringLiteral cosimCycleCountName = "Cosim_CycleCount";
+
   auto *ctxt = implReq.getContext();
   OpBuilder b(implReq);
   Value clk = implReq.getOperand(0);
@@ -171,11 +173,11 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
   };
   auto parentModule = implReq->getParentOfType<mlir::ModuleOp>();
   auto cosimCycleCountExternModule =
-      parentModule.lookupSymbol<hw::HWModuleExternOp>("Cosim_CycleCount");
+      parentModule.lookupSymbol<hw::HWModuleExternOp>(cosimCycleCountName);
   if (!cosimCycleCountExternModule) {
     auto ip = b.saveInsertionPoint();
     b.setInsertionPointToEnd(parentModule.getBody());
-    if (auto existingSym = parentModule.lookupSymbol("Cosim_CycleCount")) {
+    if (auto existingSym = parentModule.lookupSymbol(cosimCycleCountName)) {
       return implReq
                  .emitOpError(
                      "symbol 'Cosim_CycleCount' already exists but is not a "
@@ -184,8 +186,8 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
              << "existing symbol here";
     }
     cosimCycleCountExternModule = hw::HWModuleExternOp::create(
-        b, reqLoc, b.getStringAttr("Cosim_CycleCount"), cycleCountPorts,
-        "Cosim_CycleCount", ArrayAttr::get(ctxt, cycleCountParams));
+        b, reqLoc, b.getStringAttr(cosimCycleCountName), cycleCountPorts,
+        cosimCycleCountName, ArrayAttr::get(ctxt, cycleCountParams));
     b.restoreInsertionPoint(ip);
   }
 

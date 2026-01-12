@@ -19,7 +19,7 @@ m = acc.manifest()
 assert m.api_version == 0
 print(m.type_table)
 
-# Test the new cycle count and clock frequency APIs
+# Test the cycle count and clock frequency APIs
 sysinfo = acc.sysinfo()
 cycle_count = sysinfo.cycle_count()
 if cycle_count is not None:
