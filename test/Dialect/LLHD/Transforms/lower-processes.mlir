@@ -237,3 +237,29 @@ hw.module @SkipIfEntryAndWaitConvergeWithSideEffectingOps(in %a : i42) {
     llhd.wait yield (%a : i42), (%a : i42), ^bb1
   }
 }
+
+hw.module @DelayedWaitsAreNotCombinational(in %v0: i1, in %v1: i1, in %v2: i1) {
+  %0 = llhd.constant_time <1ns, 0d, 0e>
+  %false = hw.constant false
+  %a = llhd.sig %false : i1
+
+  // CHECK: llhd.process
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    // CHECK: llhd.drv
+    llhd.drv %a, %false after %0 : i1
+    // CHECK-NEXT: llhd.wait delay
+    llhd.wait delay %0, ^bb1
+  }
+
+  // CHECK: llhd.process
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    // CHECK: call @dummy
+    func.call @dummy() : () -> ()
+    // CHECK-NEXT: llhd.wait delay
+    llhd.wait delay %0, ^bb1
+  }
+}

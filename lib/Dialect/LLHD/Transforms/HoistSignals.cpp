@@ -342,6 +342,9 @@ void DriveHoister::findHoistableSlots() {
 /// terminator, the drive set will not contain an entry for that terminator.
 /// Also populates `suspendOps` with all `llhd.wait` and `llhd.halt` ops.
 void DriveHoister::collectDriveSets() {
+  SmallPtrSet<Value, 8> unhoistableSlots;
+  SmallDenseMap<Value, DriveOp, 8> laterDrives;
+
   auto trueAttr = BoolAttr::get(processOp.getContext(), true);
   for (auto &block : processOp.getBody()) {
     // We can only hoist drives before wait or halt terminators.
@@ -350,7 +353,9 @@ void DriveHoister::collectDriveSets() {
       continue;
     suspendOps.push_back(terminator);
 
-    SmallPtrSet<Value, 8> drivenSlots;
+    bool beyondSideEffect = false;
+    laterDrives.clear();
+
     for (auto &op : llvm::make_early_inc_range(
              llvm::reverse(block.without_terminator()))) {
       auto driveOp = dyn_cast<DriveOp>(op);
@@ -359,25 +364,50 @@ void DriveHoister::collectDriveSets() {
       // themselves and the terminator of the block. If we see a side-effecting
       // op, give up on this block.
       if (!driveOp) {
-        if (isMemoryEffectFree(&op))
-          continue;
-        else
-          break;
+        if (!isMemoryEffectFree(&op))
+          beyondSideEffect = true;
+        continue;
       }
 
       // Check if we can hoist drives to this signal.
-      if (!slots.contains(driveOp.getSignal())) {
+      if (!slots.contains(driveOp.getSignal()) ||
+          unhoistableSlots.contains(driveOp.getSignal())) {
         LLVM_DEBUG(llvm::dbgs()
-                   << "- Skipping (slot unhoistable) " << driveOp << "\n");
+                   << "- Skipping (slot unhoistable): " << driveOp << "\n");
         continue;
       }
 
-      // Skip this drive if we have already seen a later drive for this slot.
-      if (!drivenSlots.insert(driveOp.getSignal()).second) {
+      // If this drive is beyond a side-effecting op, mark the slot as
+      // unhoistable.
+      if (beyondSideEffect) {
         LLVM_DEBUG(llvm::dbgs()
-                   << "- Skipping (driven later) " << driveOp << "\n");
+                   << "- Aborting slot (drive across side-effect): " << driveOp
+                   << "\n");
+        unhoistableSlots.insert(driveOp.getSignal());
         continue;
       }
+
+      // Handle the case where we've seen a later drive to this slot.
+      auto &laterDrive = laterDrives[driveOp.getSignal()];
+      if (laterDrive) {
+        // If there is a later drive with the same delay and enable condition,
+        // we can simply ignore this drive.
+        if (laterDrive.getTime() == driveOp.getTime() &&
+            laterDrive.getEnable() == driveOp.getEnable()) {
+          LLVM_DEBUG(llvm::dbgs()
+                     << "- Skipping (driven later): " << driveOp << "\n");
+          continue;
+        }
+
+        // Otherwise mark the slot as unhoistable since we cannot merge multiple
+        // drives with different delays or enable conditions into a single
+        // drive.
+        LLVM_DEBUG(llvm::dbgs()
+                   << "- Aborting slot (multiple drives): " << driveOp << "\n");
+        unhoistableSlots.insert(driveOp.getSignal());
+        continue;
+      }
+      laterDrive = driveOp;
 
       // Add the operands of this drive to the drive set for the driven slot.
       auto operands = DriveOperands{
@@ -391,6 +421,15 @@ void DriveHoister::collectDriveSets() {
       driveSet.operands.insert({terminator, operands});
     }
   }
+
+  // Remove slots we've found to be unhoistable.
+  slots.remove_if([&](auto slot) {
+    if (unhoistableSlots.contains(slot)) {
+      driveSets.erase(slot);
+      return true;
+    }
+    return false;
+  });
 }
 
 /// Make sure all drive sets specify a drive value for each terminator. If a

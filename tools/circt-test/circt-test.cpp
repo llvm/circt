@@ -18,6 +18,7 @@
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
+#include "circt/Firtool/Firtool.h"
 #include "circt/InitAllDialects.h"
 #include "circt/Support/JSON.h"
 #include "circt/Support/LoweringOptionsParser.h"
@@ -200,6 +201,14 @@ void RunnerSuite::addDefaultRunners() {
     runner.kind = TestKind::Formal;
     runner.binary = "circt-test-runner-circt-bmc.py";
     runner.readsMLIR = true;
+    runners.push_back(std::move(runner));
+  }
+  {
+    // Verilator
+    Runner runner;
+    runner.name = StringAttr::get(context, "verilator");
+    runner.kind = TestKind::Simulation;
+    runner.binary = "circt-test-runner-verilator.py";
     runners.push_back(std::move(runner));
   }
 }
@@ -470,6 +479,10 @@ static LogicalResult executeWithHandler(MLIRContext *context,
   if (!module)
     return failure();
 
+  // Since some tools insist on treating empty modules as black boxes, we need
+  // to fix those up explicitly.
+  opts.loweringOptions.fixUpEmptyModules = true;
+
   // Load the emitter options from the command line. Command line options if
   // specified will override any module options.
   if (opts.loweringOptions.toString() != LoweringOptions().toString())
@@ -534,31 +547,21 @@ static LogicalResult executeWithHandler(MLIRContext *context,
   mlirFile->os().flush();
   mlirFile->keep();
 
-  // Open the Verilog file for writing.
-  SmallString<128> verilogPath(opts.resultDir);
-  llvm::sys::path::append(verilogPath, "design.sv");
-  auto verilogFile = openOutputFile(verilogPath, &errorMessage);
-  if (!verilogFile) {
-    WithColor::error() << errorMessage << "\n";
-    return failure();
-  }
-
   // Generate Verilog output.
+  firtool::FirtoolOptions firtoolOptions;
+  SmallString<128> verilogPath(opts.resultDir);
+  llvm::sys::path::append(verilogPath, "design");
+  firtoolOptions.setOutputFilename(verilogPath);
+
   PassManager pm(context);
   pm.enableVerifier(opts.verifyPasses);
-  pm.addPass(verif::createLowerTestsPass());
-  pm.addPass(
-      verif::createLowerSymbolicValuesPass({opts.symbolicValueLowering}));
-  pm.addPass(createLowerSimToSVPass());
-  pm.addPass(createLowerSeqToSVPass());
-  pm.addNestedPass<hw::HWModuleOp>(createLowerVerifToSVPass());
-  pm.addNestedPass<hw::HWModuleOp>(sv::createHWLegalizeModulesPass());
-  pm.addNestedPass<hw::HWModuleOp>(sv::createPrettifyVerilogPass());
-  pm.addPass(createExportVerilogPass(verilogFile->os()));
+  if (failed(firtool::populateHWToSV(pm, firtoolOptions)))
+    return failure();
+  if (failed(
+          firtool::populateExportSplitVerilog(pm, firtoolOptions, verilogPath)))
+    return failure();
   if (failed(pm.run(*module)))
     return failure();
-  verilogFile->os().flush();
-  verilogFile->keep();
 
   // Disable multi-threading if we are only doing a dry run. This ensures the
   // print output is in order and lines don't get jumbled.
@@ -676,8 +679,13 @@ static LogicalResult executeWithHandler(MLIRContext *context,
     } else if (result > 0) {
       auto d = mlir::emitError(test.loc)
                << "test " << test.name.getValue() << " failed";
-      d.attachNote() << "see `" << logPath << "`";
       d.attachNote() << "executed with " << runner->name.getValue();
+      // Reproduce the output log. We should really come up with a better way to
+      // report test progress and failures. But this will do for the time being.
+      auto &note = d.attachNote() << "see `" << logPath << "`";
+      auto logBuffer = llvm::MemoryBuffer::getFile(logPath, /*IsText=*/true);
+      if (logBuffer)
+        note << ":\n" << logBuffer.get()->getBuffer();
     } else {
       ++numPassed;
     }

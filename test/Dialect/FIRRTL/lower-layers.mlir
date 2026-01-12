@@ -11,6 +11,8 @@ firrtl.circuit "Test" {
   }
   firrtl.layer @B bind {}
 
+  firrtl.domain @ClockDomain
+
   firrtl.extmodule @Foo(out o : !firrtl.probe<uint<1>, @A>) attributes {knownLayers=[@A]}
 
   //===--------------------------------------------------------------------===//
@@ -333,6 +335,149 @@ firrtl.circuit "Test" {
     firrtl.layerblock @A {
       %a = firrtl.node %ext_a : !firrtl.uint<1>
       %b = firrtl.node %ext_b : !firrtl.uint<1>
+    }
+  }
+
+  // Test that a single domain type capture works.
+  //
+  // CHECK:      firrtl.module private @DomainCapture_A(
+  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %a = firrtl.wire
+  // CHECK-NEXT:   firrtl.domain.define %a, %A
+  //
+  // CHECK:      firrtl.module @DomainCapture(
+  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %a_A = firrtl.instance a {{.*}} @DomainCapture_A(
+  // CHECK-NEXT:   firrtl.domain.define %a_A, %A
+  firrtl.module @DomainCapture(
+    in %A: !firrtl.domain of @ClockDomain
+  ) {
+    firrtl.layerblock @A {
+      %a = firrtl.wire : !firrtl.domain
+      firrtl.domain.define %a, %A
+    }
+  }
+
+  // Test that a layer capture from a nested layer works.  This is specifically
+  // checking that an unnuecessary intermediary module/instance with squiggled
+  // ports isn't created.
+  //
+  // CHECK:      firrtl.module private @DomainCaptureTwoLevels_A_B(
+  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %a = firrtl.wire
+  // CHECK-NEXT:   firrtl.domain.define %a, %A
+  //
+  // CHECK-NOT:  firrtl.module private @DomainCaptureTwoLevels_A(
+  //
+  // CHECK:      firrtl.module @DomainCaptureTwoLevels(
+  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %a_b_A = firrtl.instance a_b {{.*}} @DomainCaptureTwoLevels_A_B(
+  // CHECK-NEXT:   firrtl.domain.define %a_b_A, %A
+  firrtl.module @DomainCaptureTwoLevels(
+    in %A: !firrtl.domain of @ClockDomain
+  ) {
+    firrtl.layerblock @A {
+      firrtl.layerblock @A::@B {
+        %a = firrtl.wire : !firrtl.domain
+        firrtl.domain.define %a, %A
+      }
+    }
+  }
+
+  // CHECK:      firrtl.module private @DomainCaptureChildCapturesParent_A_B(
+  // CHECK-SAME:   in %anonDomain: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %a = firrtl.wire
+  // CHECK-NEXT:   firrtl.domain.define %a, %anonDomain
+  //
+  // CHECK:      firrtl.module private @DomainCaptureChildCapturesParent_A(
+  // CHECK-SAME:   out %anonDomain: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %0 = firrtl.domain.anon
+  // CHECK-NEXT:   firrtl.domain.define %anonDomain, %0
+  //
+  // CHECK:      firrtl.module @DomainCaptureChildCapturesParent(
+  //
+  // CHECK-NEXT:   %a_b_anonDomain = firrtl.instance a_b {{.*}} @DomainCaptureChildCapturesParent_A_B
+  // CHECK-NEXT:   %a_anonDomain = firrtl.instance a {{.*}} @DomainCaptureChildCapturesParent_A
+  // CHECK-NEXT:   firrtl.domain.define %a_b_anonDomain, %a_anonDomain
+  firrtl.module @DomainCaptureChildCapturesParent(
+    in %A: !firrtl.domain of @ClockDomain
+  ) {
+    firrtl.layerblock @A {
+      %0 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+      firrtl.layerblock @A::@B {
+        %a = firrtl.wire : !firrtl.domain
+        firrtl.domain.define %a, %0
+      }
+    }
+  }
+
+  // CHECK:      firrtl.module private @DomainCaptureInterleaved_A_B(
+  // CHECK-SAME:   in %b: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %a = firrtl.wire : !firrtl.domain
+  // CHECK-NEXT:   firrtl.domain.define %a, %b
+  //
+  // CHECK:      firrtl.module private @DomainCaptureInterleaved_A(
+  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  // CHECK-SAME:   out %b: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %b_0 = firrtl.wire {name = "b"} : !firrtl.domain
+  // CHECK-NEXT:   firrtl.domain.define %b_0, %A
+  // CHECK-NEXT:   firrtl.domain.define %b, %b_0
+  //
+  // CHECK:      firrtl.module @DomainCaptureInterleaved(
+  //
+  // CHECK-NEXT:   %a_b_b = firrtl.instance a_b {{.*}} @DomainCaptureInterleaved_A_B
+  // CHECK-NEXT:   %a_A, %a_b = firrtl.instance a {{.*}} @DomainCaptureInterleaved_A
+  // CHECK-NEXT:   firrtl.domain.define %a_A, %A
+  // CHECK-NEXT:   firrtl.domain.define %a_b_b, %a_b
+  firrtl.module @DomainCaptureInterleaved(
+    in %A: !firrtl.domain of @ClockDomain
+  ) {
+    firrtl.layerblock @A {
+      %b = firrtl.wire : !firrtl.domain
+      firrtl.domain.define %b, %A
+      firrtl.layerblock @A::@B {
+        %a = firrtl.wire : !firrtl.domain
+        firrtl.domain.define %a, %b
+      }
+    }
+  }
+
+  // CHECK:      firrtl.module private @DomainCaptureInterleaved2_A_B(
+  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %wire = firrtl.wire : !firrtl.domain
+  // CHECK-NEXT:   firrtl.domain.define %wire, %A
+  //
+  // CHECK:      firrtl.module private @DomainCaptureInterleaved2_A(
+  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %b = firrtl.wire : !firrtl.domain
+  // CHECK-NEXT:   firrtl.domain.define %b, %A
+  //
+  // CHECK:      firrtl.module @DomainCaptureInterleaved2(
+  //
+  // CHECK-NEXT:   %a_b_A = firrtl.instance a_b {{.*}} @DomainCaptureInterleaved2_A_B
+  // CHECK-NEXT:   firrtl.domain.define %a_b_A, %A
+  // CHECK-NEXT:   %a_A = firrtl.instance a {{.*}} @DomainCaptureInterleaved2_A
+  // CHECK-NEXT:   firrtl.domain.define %a_A, %A
+  firrtl.module @DomainCaptureInterleaved2(
+    in %A: !firrtl.domain of @ClockDomain
+  ) {
+    firrtl.layerblock @A {
+      %b = firrtl.wire : !firrtl.domain
+      firrtl.domain.define %b, %A
+      firrtl.layerblock @A::@B {
+        %wire = firrtl.wire : !firrtl.domain
+        firrtl.domain.define %wire, %A
+      }
     }
   }
 

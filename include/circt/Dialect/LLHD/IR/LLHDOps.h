@@ -26,6 +26,10 @@
 #include "mlir/Interfaces/MemorySlotInterfaces.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+namespace mlir {
+class DialectRegistry;
+} // namespace mlir
+
 namespace circt {
 namespace llhd {
 
@@ -40,6 +44,8 @@ class ProceduralRegion
     return mlir::OpTrait::impl::verifyNRegions(op, 1);
   }
 };
+
+void registerDestructableIntegerExternalModel(mlir::DialectRegistry &registry);
 
 } // namespace llhd
 } // namespace circt

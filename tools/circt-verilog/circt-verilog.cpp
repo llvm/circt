@@ -134,6 +134,11 @@ struct CLOptions {
       cl::desc("Detect memories and lower them to `seq.firmem`"),
       cl::init(true), cl::cat(cat)};
 
+  cl::opt<bool> sroa{
+      "sroa",
+      cl::desc("Destructure arrays and structs into individual signals."),
+      cl::init(false), cl::cat(cat)};
+
   //===--------------------------------------------------------------------===//
   // Include paths
   //===--------------------------------------------------------------------===//
@@ -289,6 +294,7 @@ static void populatePasses(PassManager &pm) {
     return;
   LlhdToCorePipelineOptions options;
   options.detectMemories = opts.detectMemories;
+  options.sroa = opts.sroa;
   populateLlhdToCorePipeline(pm, options);
 }
 

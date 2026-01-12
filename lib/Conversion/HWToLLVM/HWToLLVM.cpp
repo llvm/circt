@@ -481,31 +481,6 @@ struct ArrayConcatOpConversion
 } // namespace
 
 //===----------------------------------------------------------------------===//
-// Bitwise conversions
-//===----------------------------------------------------------------------===//
-
-namespace {
-/// Lower an ArrayConcatOp operation to the LLVM dialect.
-/// Pattern: hw.bitcast(input) ==> load(bitcast_ptr(store(input, alloca)))
-/// This is necessary because we cannot bitcast aggregate types directly in
-/// LLVMIR.
-struct BitcastOpConversion : public ConvertOpToLLVMPattern<hw::BitcastOp> {
-  using ConvertOpToLLVMPattern<hw::BitcastOp>::ConvertOpToLLVMPattern;
-
-  LogicalResult
-  matchAndRewrite(hw::BitcastOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-
-    Type resultTy = typeConverter->convertType(op.getResult().getType());
-    auto ptr = spillValueOnStack(rewriter, op.getLoc(), adaptor.getInput());
-    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, resultTy, ptr);
-
-    return success();
-  }
-};
-} // namespace
-
-//===----------------------------------------------------------------------===//
 // Value creation conversions
 //===----------------------------------------------------------------------===//
 
@@ -839,9 +814,6 @@ void circt::populateHWToLLVMConversionPatterns(
       converter);
   patterns.add<AggregateConstantOpConversion>(
       converter, constAggregateGlobalsMap, globals, spillCacheOpt);
-
-  // Bitwise conversion patterns.
-  patterns.add<BitcastOpConversion>(converter);
 
   // Extraction operation conversion patterns.
   patterns.add<StructExplodeOpConversion, StructExtractOpConversion,

@@ -20,6 +20,7 @@
 #include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
@@ -196,6 +197,16 @@ static cl::opt<TargetIR>
                         clEnumValN(TargetIR::MIG, "mig", "MIG operation")),
              cl::init(TargetIR::AIG), cl::cat(mainCategory));
 
+// Opt-in to enable the parameterize constant ports pass.
+// NOTE: This is always beneficial for middle-end optimizations but currently
+// it's opt-in since it's necessary to run monomorphization (currently not
+// exist) before targeting actual synthesis.
+static cl::opt<bool>
+    enableParameterizeConstantPorts("enable-parameterize-constant-ports",
+                                    cl::desc("Enable parameterize constant "
+                                             "ports pass"),
+                                    cl::init(false), cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -221,6 +232,15 @@ nestOrAddToHierarchicalRunner(OpPassManager &pm,
 
 // Add a default synthesis pipeline and analysis.
 static void populateCIRCTSynthPipeline(PassManager &pm) {
+  // Pre-synthesis optimization.
+  pm.nest<hw::HWModuleOp>().addPass(hw::createHWBypassInnerSymbols());
+  pm.nest<hw::HWModuleOp>().addPass(circt::createSimpleCanonicalizerPass());
+  if (enableParameterizeConstantPorts) {
+    pm.addPass(hw::createHWParameterizeConstantPorts());
+    pm.nest<hw::HWModuleOp>().addPass(circt::createSimpleCanonicalizerPass());
+  }
+  pm.nest<hw::HWModuleOp>().addPass(mlir::createCSEPass());
+
   auto pipeline = [](OpPassManager &pm) {
     circt::synth::CombLoweringPipelineOptions loweringOptions;
     loweringOptions.disableDatapath = disableDatapath;
