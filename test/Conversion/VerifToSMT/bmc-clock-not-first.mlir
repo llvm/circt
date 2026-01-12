@@ -22,6 +22,9 @@ func.func @test_bmc_clock_not_first() -> (i1) {
   }
   circuit {
   ^bb0(%arg0: i32, %clk: !seq.clock, %state0: i32):
+    // dummy property
+    %true = hw.constant true
+    verif.assert %true : i1
     %c-1_i32 = hw.constant -1 : i32
     %0 = comb.add %arg0, %state0 : i32
     // %state0 is the result of a seq.compreg taking %0 as input
