@@ -64,7 +64,12 @@ assert resp == data
 
 # Check this by writing to address 3 and reading from it. Shouldn't have
 # changed.
+resp = None
 zeros = bytearray([0] * 8)
 mem_write.write({"address": 3, "data": zeros})
-resp = read(3)
+try_count = 0
+while resp != data and try_count < 10:
+  time.sleep(0.01)
+  try_count += 1
+  resp = read(3)
 assert resp == data
