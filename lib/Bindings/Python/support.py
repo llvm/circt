@@ -89,63 +89,63 @@ def type_to_pytype(t) -> ir.Type:
     return t
 
   from .dialects import esi, hw, seq, rtg, rtgtest
-  if ir.IntegerType.isinstance(t):
+  if isinstance(t, ir.IntegerType):
     return ir.IntegerType(t)
-  if ir.NoneType.isinstance(t):
+  if isinstance(t, ir.NoneType):
     return ir.NoneType(t)
-  if ir.TupleType.isinstance(t):
+  if isinstance(t, ir.TupleType):
     return ir.TupleType(t)
-  if hw.ArrayType.isinstance(t):
+  if isinstance(t, hw.ArrayType):
     return hw.ArrayType(t)
-  if hw.StructType.isinstance(t):
+  if isinstance(t, hw.StructType):
     return hw.StructType(t)
-  if hw.UnionType.isinstance(t):
+  if isinstance(t, hw.UnionType):
     return hw.UnionType(t)
-  if hw.TypeAliasType.isinstance(t):
+  if isinstance(t, hw.TypeAliasType):
     return hw.TypeAliasType(t)
-  if hw.InOutType.isinstance(t):
+  if isinstance(t, hw.InOutType):
     return hw.InOutType(t)
-  if seq.ClockType.isinstance(t):
+  if isinstance(t, seq.ClockType):
     return seq.ClockType(t)
-  if esi.ChannelType.isinstance(t):
+  if isinstance(t, esi.ChannelType):
     return esi.ChannelType(t)
-  if esi.AnyType.isinstance(t):
+  if isinstance(t, esi.AnyType):
     return esi.AnyType(t)
-  if esi.BundleType.isinstance(t):
+  if isinstance(t, esi.BundleType):
     return esi.BundleType(t)
-  if esi.ListType.isinstance(t):
+  if isinstance(t, esi.ListType):
     return esi.ListType(t)
-  if esi.WindowType.isinstance(t):
+  if isinstance(t, esi.WindowType):
     return esi.WindowType(t)
-  if esi.WindowFrameType.isinstance(t):
+  if isinstance(t, esi.WindowFrameType):
     return esi.WindowFrameType(t)
-  if esi.WindowFieldType.isinstance(t):
+  if isinstance(t, esi.WindowFieldType):
     return esi.WindowFieldType(t)
-  if rtg.LabelType.isinstance(t):
+  if isinstance(t, rtg.LabelType):
     return rtg.LabelType(t)
-  if rtg.SetType.isinstance(t):
+  if isinstance(t, rtg.SetType):
     return rtg.SetType(t)
-  if rtg.BagType.isinstance(t):
+  if isinstance(t, rtg.BagType):
     return rtg.BagType(t)
-  if rtg.SequenceType.isinstance(t):
+  if isinstance(t, rtg.SequenceType):
     return rtg.SequenceType(t)
-  if rtg.RandomizedSequenceType.isinstance(t):
+  if isinstance(t, rtg.RandomizedSequenceType):
     return rtg.RandomizedSequenceType(t)
-  if rtg.DictType.isinstance(t):
+  if isinstance(t, rtg.DictType):
     return rtg.DictType(t)
-  if rtg.ImmediateType.isinstance(t):
+  if isinstance(t, rtg.ImmediateType):
     return rtg.ImmediateType(t)
-  if rtg.ArrayType.isinstance(t):
+  if isinstance(t, rtg.ArrayType):
     return rtg.ArrayType(t)
-  if rtg.MemoryType.isinstance(t):
+  if isinstance(t, rtg.MemoryType):
     return rtg.MemoryType(t)
-  if rtg.MemoryBlockType.isinstance(t):
+  if isinstance(t, rtg.MemoryBlockType):
     return rtg.MemoryBlockType(t)
-  if rtg.TupleType.isinstance(t):
+  if isinstance(t, rtg.TupleType):
     return rtg.TupleType(t)
-  if rtgtest.IntegerRegisterType.isinstance(t):
+  if isinstance(t, rtgtest.IntegerRegisterType):
     return rtgtest.IntegerRegisterType(t)
-  if rtgtest.CPUType.isinstance(t):
+  if isinstance(t, rtgtest.CPUType):
     return rtgtest.CPUType(t)
 
   raise TypeError(f"Cannot convert {repr(t)} to python type")
@@ -167,34 +167,34 @@ def attribute_to_var(attr):
     return attr.value
 
   from .dialects import hw, om
-  if ir.BoolAttr.isinstance(attr):
+  if isinstance(attr, ir.BoolAttr):
     return ir.BoolAttr(attr).value
-  if ir.IntegerAttr.isinstance(attr):
+  if isinstance(attr, ir.IntegerAttr):
     return ir.IntegerAttr(attr).value
-  if hw.InnerSymAttr.isinstance(attr):
+  if isinstance(attr, hw.InnerSymAttr):
     return ir.StringAttr(hw.InnerSymAttr(attr).symName).value
-  if ir.StringAttr.isinstance(attr):
+  if isinstance(attr, ir.StringAttr):
     return ir.StringAttr(attr).value
-  if ir.FlatSymbolRefAttr.isinstance(attr):
+  if isinstance(attr, ir.FlatSymbolRefAttr):
     return ir.FlatSymbolRefAttr(attr).value
-  if ir.TypeAttr.isinstance(attr):
+  if isinstance(attr, ir.TypeAttr):
     return ir.TypeAttr(attr).value
-  if ir.ArrayAttr.isinstance(attr):
+  if isinstance(attr, ir.ArrayAttr):
     arr = ir.ArrayAttr(attr)
     return [attribute_to_var(x) for x in arr]
-  if ir.DictAttr.isinstance(attr):
+  if isinstance(attr, ir.DictAttr):
     dict = ir.DictAttr(attr)
     return {i.name: attribute_to_var(i.attr) for i in dict}
-  if om.ReferenceAttr.isinstance(attr):
+  if isinstance(attr, om.ReferenceAttr):
     return attribute_to_var(om.ReferenceAttr(attr).inner_ref)
-  if hw.InnerRefAttr.isinstance(attr):
+  if isinstance(attr, hw.InnerRefAttr):
     ref = hw.InnerRefAttr(attr)
     return (ir.StringAttr(ref.module).value, ir.StringAttr(ref.name).value)
-  if om.ListAttr.isinstance(attr):
+  if isinstance(attr, om.ListAttr):
     return list(map(attribute_to_var, om.ListAttr(attr)))
-  if om.OMIntegerAttr.isinstance(attr):
+  if isinstance(attr, om.OMIntegerAttr):
     return int(str(om.OMIntegerAttr(attr)))
-  if om.PathAttr.isinstance(attr):
+  if isinstance(attr, om.PathAttr):
     return om.PathAttr(attr).value
 
   raise TypeError(f"Cannot convert {repr(attr)} to python value")
