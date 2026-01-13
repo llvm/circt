@@ -3906,8 +3906,6 @@ void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
         StringAttr::get(builder.getContext(), name));
 }
 
-LogicalResult ObjectOp::verify() { return success(); }
-
 LogicalResult ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
   auto classType = getType();

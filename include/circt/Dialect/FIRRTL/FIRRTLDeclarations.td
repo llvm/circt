@@ -760,7 +760,6 @@ def ObjectOp :  FIRRTLOp<"object", [
   }];
   let arguments = (ins StrAttr:$name);
   let results = (outs ClassType:$result);
-  let hasVerifier = 1;
   let builders = [
     OpBuilder<(ins "ClassLike":$klass, "StringRef":$name)>
   ];
