@@ -36,6 +36,21 @@ InnerSymbolTable::InnerSymbolTable(Operation *op) {
   });
 }
 
+template <typename TableTy>
+static LogicalResult tryAddSymbol(TableTy &table, StringAttr name,
+                                  const InnerSymTarget &target) {
+
+  auto it = table.try_emplace(name, target);
+  if (it.second)
+    return success();
+  auto existing = it.first->second;
+  return target.getOp()
+      ->emitError()
+      .append("redefinition of inner symbol named '", name.strref(), "'")
+      .attachNote(existing.getOp()->getLoc())
+      .append("see existing inner symbol definition here");
+}
+
 FailureOr<InnerSymbolTable> InnerSymbolTable::get(Operation *op) {
   assert(op);
   if (!op->hasTrait<OpTrait::InnerSymbolTable>())
@@ -44,19 +59,16 @@ FailureOr<InnerSymbolTable> InnerSymbolTable::get(Operation *op) {
   TableTy table;
   auto result = walkSymbols(
       op, [&](StringAttr name, const InnerSymTarget &target) -> LogicalResult {
-        auto it = table.try_emplace(name, target);
-        if (it.second)
-          return success();
-        auto existing = it.first->second;
-        return target.getOp()
-            ->emitError()
-            .append("redefinition of inner symbol named '", name.strref(), "'")
-            .attachNote(existing.getOp()->getLoc())
-            .append("see existing inner symbol definition here");
+        return tryAddSymbol<TableTy>(table, name, target);
       });
   if (failed(result))
     return failure();
   return InnerSymbolTable(op, std::move(table));
+}
+
+LogicalResult InnerSymbolTable::add(StringAttr name,
+                                    const InnerSymTarget &target) {
+  return tryAddSymbol<TableTy>(symbolTable, name, target);
 }
 
 LogicalResult InnerSymbolTable::walkSymbols(Operation *op,
