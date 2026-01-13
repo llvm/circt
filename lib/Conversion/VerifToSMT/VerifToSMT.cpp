@@ -708,16 +708,13 @@ void ConvertVerifToSMTPass::runOnOperation() {
               if (!isa<IntegerType>(regType)) {
                 op->emitError("initial values are currently only supported for "
                               "registers with integer types");
-                signalPassFailure();
                 return WalkResult::interrupt();
-              } else {
-                auto tyAttr = dyn_cast<TypedAttr>(initVal);
-                if (!tyAttr || tyAttr.getType() != regType) {
-                  op->emitError("type of initial value does not match type of "
-                                "initialized register");
-                  signalPassFailure();
-                  return WalkResult::interrupt();
-                }
+              }
+              auto tyAttr = dyn_cast<TypedAttr>(initVal);
+              if (!tyAttr || tyAttr.getType() != regType) {
+                op->emitError("type of initial value does not match type of "
+                              "initialized register");
+                return WalkResult::interrupt();
               }
             }
           }
