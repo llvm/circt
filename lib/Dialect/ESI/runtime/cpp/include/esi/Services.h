@@ -120,6 +120,14 @@ public:
   /// Get the ESI version number to check version compatibility.
   virtual uint32_t getEsiVersion() const = 0;
 
+  /// Get the current cycle count of the accelerator system.
+  virtual std::optional<uint64_t> getCycleCount() const { return std::nullopt; }
+  /// Get the "core" clock frequency of the accelerator system in Hz. Returns
+  /// nullopt if the accelerator does not provide this information.
+  virtual std::optional<uint64_t> getCoreClockFrequency() const {
+    return std::nullopt;
+  }
+
   /// Return the JSON-formatted system manifest.
   virtual std::string getJsonManifest() const;
 
@@ -202,6 +210,12 @@ public:
 
   /// Get the ESI version number to check version compatibility.
   uint32_t getEsiVersion() const override;
+
+  /// Get the current cycle count of the accelerator system's core clock.
+  std::optional<uint64_t> getCycleCount() const override;
+  /// Get the "core" clock frequency of the accelerator system in Hz. Returns
+  /// nullopt if the accelerator does not provide this information.
+  std::optional<uint64_t> getCoreClockFrequency() const override;
 
   /// Return the zlib compressed JSON system manifest.
   virtual std::vector<uint8_t> getCompressedManifest() const override;

@@ -59,6 +59,47 @@ hw.module @OneAssertion(in %x: i1) {
 
 // -----
 
+func.func @no_assertions() -> (i1) {
+  // expected-warning @below {{no property provided to check in module - will trivially find no violations.}}
+  %bmc = verif.bmc bound 10 num_regs 0 initial_values []
+  init {}
+  loop {}
+  circuit {
+  ^bb0(%arg0: i32):
+    hw.instance "" @empty() -> ()
+    %sum = comb.add %arg0, %arg0 : i32
+    verif.yield %sum : i32
+  }
+  func.return %bmc : i1
+}
+
+hw.module @empty() {
+}
+
+// -----
+
+// Check that we don't see an error when there's one nested assertion
+
+func.func @one_nested_assertion() -> (i1) {
+  %bmc = verif.bmc bound 10 num_regs 0 initial_values []
+  init {}
+  loop {}
+  circuit {
+  ^bb0(%arg0: i32, %arg1: i1):
+    hw.instance "" @OneAssertion(x: %arg1: i1) -> ()
+    %sum = comb.add %arg0, %arg0 : i32
+    verif.yield %sum : i32
+  }
+  func.return %bmc : i1
+}
+
+hw.module @OneAssertion(in %x: i1) {
+  verif.assert %x : i1
+}
+
+
+// -----
+
 func.func @two_separated_assertions() -> (i1) {
   // expected-error @below {{bounded model checking problems with multiple assertions are not yet correctly handled - instead, you can assert the conjunction of your assertions}}
   %bmc = verif.bmc bound 10 num_regs 0 initial_values []

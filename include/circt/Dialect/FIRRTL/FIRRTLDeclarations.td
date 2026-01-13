@@ -760,7 +760,6 @@ def ObjectOp :  FIRRTLOp<"object", [
   }];
   let arguments = (ins StrAttr:$name);
   let results = (outs ClassType:$result);
-  let hasVerifier = 1;
   let builders = [
     OpBuilder<(ins "ClassLike":$klass, "StringRef":$name)>
   ];
@@ -787,7 +786,7 @@ def DomainCreateAnonOp
 ]> {
   let summary = "Create an anonymous domain, without parameters set";
   let arguments = (ins FlatSymbolRefAttr:$domain);
-  let results = (outs DomainType:$result);
+  let results = (outs Res<DomainType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{ attr-dict `:` type($result) `of` $domain }];
 }
 

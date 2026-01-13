@@ -273,6 +273,42 @@ hw.module @NonUniformDelayValues(in %b : i42) {
   }
 }
 
+// See https://github.com/llvm/circt/issues/9420.
+// CHECK-LABEL: @DontHoistMultipleDrivesWithDifferentDelays
+hw.module @DontHoistMultipleDrivesWithDifferentDelays(in %v0: i42, in %v1: i42, in %v2: i42) {
+  %0 = llhd.constant_time <5ns, 0d, 0e>
+  %1 = llhd.constant_time <10ns, 0d, 0e>
+  %a = llhd.sig %v0 : i42
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK-NEXT: llhd.drv %a, %v1
+    // CHECK-NEXT: llhd.drv %a, %v2
+    llhd.drv %a, %v1 after %0 : i42
+    llhd.drv %a, %v2 after %1 : i42
+    llhd.halt
+  }
+}
+
+// See https://github.com/llvm/circt/issues/9420.
+// CHECK-LABEL: @DontHoistAcrossSideEffects
+hw.module @DontHoistAcrossSideEffects(in %v0: i42, in %v1: i42, in %v2: i42) {
+  %0 = llhd.constant_time <1ns, 0d, 0e>
+  %a = llhd.sig %v0 : i42
+  llhd.process {
+    // CHECK: llhd.drv %a, %v1
+    llhd.drv %a, %v1 after %0 : i42
+    // CHECK-NEXT: call @maybe_side_effecting
+    func.call @maybe_side_effecting() : () -> ()
+    // CHECK-NEXT: llhd.wait
+    llhd.wait ^bb1
+  ^bb1:
+    // CHECK: llhd.drv %a, %v2
+    llhd.drv %a, %v2 after %0 : i42
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
 func.func private @use_i42(%arg0: i42)
 func.func private @use_inout_i42(%arg0: !llhd.ref<i42>)
 func.func private @maybe_side_effecting()

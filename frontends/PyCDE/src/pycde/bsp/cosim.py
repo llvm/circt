@@ -109,12 +109,18 @@ def CosimBSP(user_module: Type[Module], emulate_dma: bool = False) -> Module:
                                      write_req, UInt(8))
       ack_wire.assign(ack_tag)
 
-      raw_esi.ServiceInstanceOp(result=[],
-                                appID=AppID("cosim")._appid,
-                                service_symbol=None,
-                                impl_type=ir.StringAttr.get("cosim"),
-                                inputs=[ports.clk.value, ports.rst.value],
-                                loc=get_user_loc())
+      cosim_svc = raw_esi.ServiceInstanceOp(
+          result=[],
+          appID=AppID("cosim")._appid,
+          service_symbol=None,
+          impl_type=ir.StringAttr.get("cosim"),
+          inputs=[ports.clk.value, ports.rst.value],
+          loc=get_user_loc())
+      core_freq = System.current().core_freq
+      if core_freq is not None:
+        cosim_svc.operation.attributes[
+            "esi.core_clock_frequency_hz"] = ir.IntegerAttr.get(
+                ir.IntegerType.get_unsigned(64), core_freq)
 
   return ESI_Cosim_Top
 
