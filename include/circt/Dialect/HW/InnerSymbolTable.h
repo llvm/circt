@@ -91,6 +91,7 @@ public:
   bool operator==(const InnerSymTarget &rhs) const {
     return asTuple() == rhs.asTuple();
   }
+  bool operator!=(const InnerSymTarget &rhs) const { return !(*this == rhs); }
 
   // Assignment operators:
   InnerSymTarget &operator=(InnerSymTarget &&) = default;

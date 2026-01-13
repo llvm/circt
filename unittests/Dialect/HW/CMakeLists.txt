@@ -1,6 +1,7 @@
 add_circt_unittest(CIRCTHWTests
   GraphFixture.cpp
   HWModuleTest.cpp
+  InnerSymTargetTest.cpp
   InnerSymbolTableTest.cpp
   InstanceGraphTest.cpp
   InstancePathTest.cpp
