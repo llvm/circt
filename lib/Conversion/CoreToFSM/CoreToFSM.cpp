@@ -648,10 +648,12 @@ public:
       LogicalResult converged =
           applyOpPatternsGreedily(opsToProcess, patterns, config, &changed);
       opBuilder.setInsertionPoint(stateOp);
-      // MLIR's SSA form guarantees no cycles in the use-def chain, so
-      // sortTopologically should always succeed for valid IR.
+      // hw.module uses graph regions that allow cycles (e.g., registers feeding
+      // back into themselves). However, by this point we've replaced all
+      // registers with constants, eliminating any cycles in the use-def chain.
       bool sorted = sortTopologically(&outputRegion.front());
-      assert(sorted && "SSA form guarantees no cycles in output region");
+      assert(sorted && "unexpected cycle in output region after register "
+                       "replacement");
       Region &transitionRegion = stateOp.getTransitions();
       llvm::DenseSet<size_t> visitableStates;
       getReachableStates(visitableStates, moduleOp, currentStateIndex,
@@ -814,17 +816,18 @@ public:
           LogicalResult converged =
               applyOpPatternsGreedily(opsToProcess, patterns, config, &changed);
 
-          // MLIR's SSA form guarantees no cycles in the use-def chain, so
-          // sortTopologically should always succeed for valid IR.
+          // hw.module uses graph regions that allow cycles. By this point
+          // we've replaced all registers with constants, eliminating cycles.
           bool actionSorted = sortTopologically(&actionRegion.front());
-          assert(actionSorted &&
-                 "SSA form guarantees no cycles in action block");
+          assert(actionSorted && "unexpected cycle in action block after "
+                                 "register replacement");
         }
 
-        // MLIR's SSA form guarantees no cycles in the use-def chain, so
-        // sortTopologically should always succeed for valid IR.
+        // hw.module uses graph regions that allow cycles. By this point
+        // we've replaced all registers with constants, eliminating cycles.
         bool guardSorted = sortTopologically(&newGuardBlock);
-        assert(guardSorted && "SSA form guarantees no cycles in guard block");
+        assert(guardSorted && "unexpected cycle in guard block after register "
+                              "replacement");
         SmallVector<Operation *> outputOps;
         stateOp.getOutput().walk(
             [&](Operation *op) { outputOps.push_back(op); });
@@ -834,9 +837,7 @@ public:
         config.setScope(&stateOp.getOutput());
         LogicalResult converged = applyOpPatternsGreedily(
             outputOps, frozenPatterns, config, &changed);
-        // applyOpPatternsGreedily fails only in edge cases like exceeding
-        // iteration limits, which cannot realistically occur in this context.
-        assert(succeeded(converged) && "canonicalization should not fail");
+        assert(succeeded(converged) && "canonicalization failed to converge");
         SmallVector<Operation *> transitionOps;
         stateOp.getTransitions().walk(
             [&](Operation *op) { transitionOps.push_back(op); });
@@ -968,6 +969,15 @@ struct CoreToFSMPass : public circt::impl::ConvertCoreToFSMBase<CoreToFSMPass> {
     SmallVector<HWModuleOp> modules;
     for (auto hwModule : module.getOps<HWModuleOp>()) {
       modules.push_back(hwModule);
+    }
+
+    // Check for hw.instance operations - instance conversion is not supported.
+    for (auto hwModule : modules) {
+      for (auto instance : hwModule.getOps<hw::InstanceOp>()) {
+        instance.emitError() << "instance conversion is not yet supported";
+        signalPassFailure();
+        return;
+      }
     }
 
     for (auto hwModule : modules) {
