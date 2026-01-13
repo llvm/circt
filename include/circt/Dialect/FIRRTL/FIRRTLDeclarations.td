@@ -787,7 +787,7 @@ def DomainCreateAnonOp
 ]> {
   let summary = "Create an anonymous domain, without parameters set";
   let arguments = (ins FlatSymbolRefAttr:$domain);
-  let results = (outs DomainType:$result);
+  let results = (outs Res<DomainType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{ attr-dict `:` type($result) `of` $domain }];
 }
 
