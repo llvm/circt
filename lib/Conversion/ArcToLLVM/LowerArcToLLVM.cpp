@@ -574,8 +574,8 @@ struct SimStepOpLowering : public ModelAwarePattern<arc::SimStepOp> {
 };
 
 class FormatStringCache {
- public:
-  Value getOrCreate(OpBuilder& b, StringRef formatStr) {
+public:
+  Value getOrCreate(OpBuilder &b, StringRef formatStr) {
     auto it = cache.find(formatStr);
     if (it != cache.end()) {
       return LLVM::AddressOfOp::create(b, b.getUnknownLoc(), it->second);
@@ -585,37 +585,39 @@ class FormatStringCache {
     LLVM::GlobalOp global;
     {
       OpBuilder::InsertionGuard guard(b);
-      ModuleOp m = b.getInsertionBlock()->getParent()->getParentOfType<ModuleOp>();
+      ModuleOp m =
+          b.getInsertionBlock()->getParent()->getParentOfType<ModuleOp>();
       b.setInsertionPointToStart(m.getBody());
 
-    SmallVector<char> strVec(formatStr.begin(), formatStr.end());
-    strVec.push_back(0);
+      SmallVector<char> strVec(formatStr.begin(), formatStr.end());
+      strVec.push_back(0);
 
-    auto name = llvm::formatv("_arc_format_str_{0}", cache.size()).str();
-    auto globalType =
-        LLVM::LLVMArrayType::get(b.getI8Type(), strVec.size());
-    global = LLVM::GlobalOp::create(
-        b, loc, globalType, /*isConstant=*/true,
-        LLVM::Linkage::Internal,
-        /*name=*/name, b.getStringAttr(strVec),
-        /*alignment=*/0);
+      auto name = llvm::formatv("_arc_format_str_{0}", cache.size()).str();
+      auto globalType = LLVM::LLVMArrayType::get(b.getI8Type(), strVec.size());
+      global = LLVM::GlobalOp::create(b, loc, globalType, /*isConstant=*/true,
+                                      LLVM::Linkage::Internal,
+                                      /*name=*/name, b.getStringAttr(strVec),
+                                      /*alignment=*/0);
     }
 
     cache[formatStr] = global;
     return LLVM::AddressOfOp::create(b, loc, global);
   }
 
- private:
+private:
   llvm::StringMap<LLVM::GlobalOp> cache;
 };
 
-FailureOr<LLVM::CallOp> emitPrintfCall(OpBuilder &builder, Location loc, FormatStringCache& cache, StringRef formatStr, ValueRange args) {
-  ModuleOp moduleOp = builder.getInsertionBlock()->getParent()->getParentOfType<ModuleOp>();
+FailureOr<LLVM::CallOp> emitPrintfCall(OpBuilder &builder, Location loc,
+                                       FormatStringCache &cache,
+                                       StringRef formatStr, ValueRange args) {
+  ModuleOp moduleOp =
+      builder.getInsertionBlock()->getParent()->getParentOfType<ModuleOp>();
   // Lookup or create printf function symbol.
-  MLIRContext* ctx = builder.getContext();
-  auto printfFunc = LLVM::lookupOrCreateFn(
-      builder, moduleOp, "printf", LLVM::LLVMPointerType::get(ctx),
-      LLVM::LLVMVoidType::get(ctx), true);
+  MLIRContext *ctx = builder.getContext();
+  auto printfFunc = LLVM::lookupOrCreateFn(builder, moduleOp, "printf",
+                                           LLVM::LLVMPointerType::get(ctx),
+                                           LLVM::LLVMVoidType::get(ctx), true);
   if (failed(printfFunc))
     return printfFunc;
 
@@ -630,9 +632,11 @@ FailureOr<LLVM::CallOp> emitPrintfCall(OpBuilder &builder, Location loc, FormatS
 /// This pattern will mutate the global module.
 struct SimEmitValueOpLowering
     : public OpConversionPattern<arc::SimEmitValueOp> {
-  SimEmitValueOpLowering(const TypeConverter &typeConverter, MLIRContext *context, FormatStringCache& formatStringCache) :
-    OpConversionPattern(typeConverter, context), formatStringCache(formatStringCache) {
-    }
+  SimEmitValueOpLowering(const TypeConverter &typeConverter,
+                         MLIRContext *context,
+                         FormatStringCache &formatStringCache)
+      : OpConversionPattern(typeConverter, context),
+        formatStringCache(formatStringCache) {}
 
   LogicalResult
   matchAndRewrite(arc::SimEmitValueOp op, OpAdaptor adaptor,
@@ -702,7 +706,8 @@ struct SimEmitValueOpLowering
     formatStr.append(printfFormatStr);
     formatStr.append("\n");
 
-    auto callOp = emitPrintfCall(rewriter, op->getLoc(), formatStringCache, formatStr, printfVariadicArgs);
+    auto callOp = emitPrintfCall(rewriter, op->getLoc(), formatStringCache,
+                                 formatStr, printfVariadicArgs);
     if (failed(callOp))
       return failure();
     rewriter.replaceOp(op, *callOp);
@@ -710,7 +715,7 @@ struct SimEmitValueOpLowering
     return success();
   }
 
-  FormatStringCache& formatStringCache;
+  FormatStringCache &formatStringCache;
 };
 
 //===----------------------------------------------------------------------===//
@@ -724,7 +729,9 @@ struct FormatInfo {
 };
 
 // Assembles a printf format string from format specifier parts.
-std::string createFormatString(bool isLeftAligned, std::optional<int> specifierWidth, char specifier) {
+std::string createFormatString(bool isLeftAligned,
+                               std::optional<int> specifierWidth,
+                               char specifier) {
   // FIXME: Handle paddingChar?
   std::string fmt = "%";
   if (isLeftAligned) {
@@ -738,52 +745,72 @@ std::string createFormatString(bool isLeftAligned, std::optional<int> specifierW
 }
 
 // Statically folds a value of type sim::FormatStringType to a FormatInfo.
-static FailureOr<FormatInfo> foldFormatString(ConversionPatternRewriter &rewriter, Value fstringValue) {
-  Operation* op = fstringValue.getDefiningOp();
+static FailureOr<FormatInfo>
+foldFormatString(ConversionPatternRewriter &rewriter, Value fstringValue) {
+  Operation *op = fstringValue.getDefiningOp();
   return llvm::TypeSwitch<Operation *, FailureOr<FormatInfo>>(op)
-    .Case<sim::FormatCharOp>([&](sim::FormatCharOp op) -> FailureOr<FormatInfo> {
-      return FormatInfo{"%c", {op.getValue()}};
-    })
-    .Case<sim::FormatDecOp>([&](sim::FormatDecOp op) -> FailureOr<FormatInfo> {
-      return FormatInfo{createFormatString(op.getIsLeftAligned(), op.getSpecifierWidth(), op.getIsSigned() ? 'd' : 'u'), {op.getValue()}};
-    })
-    .Case<sim::FormatHexOp>([&](sim::FormatHexOp op) -> FailureOr<FormatInfo> {
-      return FormatInfo{createFormatString(op.getIsLeftAligned(), op.getSpecifierWidth(), op.getIsHexUppercase() ? 'X' : 'x'), {op.getValue()}};
-    })
-    .Case<sim::FormatOctOp>([&](sim::FormatOctOp op) -> FailureOr<FormatInfo> {
-      return FormatInfo{createFormatString(op.getIsLeftAligned(), op.getSpecifierWidth(), 'o'), {op.getValue()}};
-    })
-    .Case<sim::FormatLiteralOp>([&](sim::FormatLiteralOp op) -> FailureOr<FormatInfo> {
-      return FormatInfo{op.getLiteral().str(), {}};
-    })
-    .Case<sim::FormatStringConcatOp>([&](sim::FormatStringConcatOp op) -> FailureOr<FormatInfo> {
-      auto fmt = foldFormatString(rewriter, op.getInputs()[0]);
-      if (failed(fmt))
-        return failure();
-      for (auto input : op.getInputs().drop_front()) {
-        auto next = foldFormatString(rewriter, input);
-        if (failed(next))
-          return failure();
-        fmt->format.append(next->format);
-        fmt->args.append(next->args);
-      }
-      return fmt;
-    })
-    .Default([](Operation *op) -> FailureOr<FormatInfo> {
-      return failure();
-    });
+      .Case<sim::FormatCharOp>(
+          [&](sim::FormatCharOp op) -> FailureOr<FormatInfo> {
+            return FormatInfo{"%c", {op.getValue()}};
+          })
+      .Case<sim::FormatDecOp>(
+          [&](sim::FormatDecOp op) -> FailureOr<FormatInfo> {
+            return FormatInfo{createFormatString(op.getIsLeftAligned(),
+                                                 op.getSpecifierWidth(),
+                                                 op.getIsSigned() ? 'd' : 'u'),
+                              {op.getValue()}};
+          })
+      .Case<sim::FormatHexOp>(
+          [&](sim::FormatHexOp op) -> FailureOr<FormatInfo> {
+            return FormatInfo{createFormatString(
+                                  op.getIsLeftAligned(), op.getSpecifierWidth(),
+                                  op.getIsHexUppercase() ? 'X' : 'x'),
+                              {op.getValue()}};
+          })
+      .Case<sim::FormatOctOp>(
+          [&](sim::FormatOctOp op) -> FailureOr<FormatInfo> {
+            return FormatInfo{createFormatString(op.getIsLeftAligned(),
+                                                 op.getSpecifierWidth(), 'o'),
+                              {op.getValue()}};
+          })
+      .Case<sim::FormatLiteralOp>(
+          [&](sim::FormatLiteralOp op) -> FailureOr<FormatInfo> {
+            return FormatInfo{op.getLiteral().str(), {}};
+          })
+      .Case<sim::FormatStringConcatOp>(
+          [&](sim::FormatStringConcatOp op) -> FailureOr<FormatInfo> {
+            auto fmt = foldFormatString(rewriter, op.getInputs()[0]);
+            if (failed(fmt))
+              return failure();
+            for (auto input : op.getInputs().drop_front()) {
+              auto next = foldFormatString(rewriter, input);
+              if (failed(next))
+                return failure();
+              fmt->format.append(next->format);
+              fmt->args.append(next->args);
+            }
+            return fmt;
+          })
+      .Default(
+          [](Operation *op) -> FailureOr<FormatInfo> { return failure(); });
 }
 
-struct SimPrintFormattedProcOpLowering : public OpConversionPattern<sim::PrintFormattedProcOp> {
-  SimPrintFormattedProcOpLowering(const TypeConverter &typeConverter, MLIRContext *context, FormatStringCache &formatStringCache)
-      : OpConversionPattern<sim::PrintFormattedProcOp>(typeConverter, context), formatStringCache(formatStringCache) {}
+struct SimPrintFormattedProcOpLowering
+    : public OpConversionPattern<sim::PrintFormattedProcOp> {
+  SimPrintFormattedProcOpLowering(const TypeConverter &typeConverter,
+                                  MLIRContext *context,
+                                  FormatStringCache &formatStringCache)
+      : OpConversionPattern<sim::PrintFormattedProcOp>(typeConverter, context),
+        formatStringCache(formatStringCache) {}
 
-  LogicalResult matchAndRewrite(sim::PrintFormattedProcOp op,
-                              OpAdaptor adaptor, ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(sim::PrintFormattedProcOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     auto formatStr = foldFormatString(rewriter, op.getInput());
     if (failed(formatStr))
       return rewriter.notifyMatchFailure(op, "unsupported format string");
-    auto result = emitPrintfCall(rewriter, op.getLoc(), formatStringCache, formatStr->format, formatStr->args);
+    auto result = emitPrintfCall(rewriter, op.getLoc(), formatStringCache,
+                                 formatStr->format, formatStr->args);
     if (failed(result))
       return failure();
     rewriter.replaceOp(op, result.value());
@@ -979,7 +1006,8 @@ void LowerArcToLLVMPass::runOnOperation() {
   // lowering of sim::PrintFormattedOp walks them to build up its format string.
   // They are all marked Pure so are removed after the conversion.
   target.addLegalOp<sim::FormatLiteralOp, sim::FormatDecOp, sim::FormatHexOp,
-                    sim::FormatBinOp, sim::FormatOctOp, sim::FormatStringConcatOp>();
+                    sim::FormatBinOp, sim::FormatOctOp,
+                    sim::FormatStringConcatOp>();
 
   // Setup the arc dialect type conversion.
   LLVMTypeConverter converter(&getContext());
@@ -1054,8 +1082,8 @@ void LowerArcToLLVMPass::runOnOperation() {
   patterns.add<ExecuteOp>(convert);
 
   FormatStringCache formatStringCache;
-  patterns.add<SimEmitValueOpLowering, SimPrintFormattedProcOpLowering>(converter, &getContext(),
-                                           formatStringCache);
+  patterns.add<SimEmitValueOpLowering, SimPrintFormattedProcOpLowering>(
+      converter, &getContext(), formatStringCache);
 
   auto &modelInfo = getAnalysis<ModelInfoAnalysis>();
   llvm::DenseMap<StringRef, ModelInfoMap> modelMap(modelInfo.infoMap.size());
