@@ -542,6 +542,24 @@ firrtl.circuit "CombMemPerFieldSym" {
 
 // -----
 
+firrtl.circuit "InstMultipleSyms" {
+  firrtl.module @Empty() {}
+  firrtl.module @InstMultipleSyms() {
+    // expected-error @below {{op has more than one symbol defined: 'x', 'y'}}
+    firrtl.instance empty sym [<@x,0,public>,<@y,0,public>] @Empty()
+  }
+}
+
+// -----
+
+firrtl.circuit "PortMultSymbol" {
+   // expected-error @below {{verification of inner symbols failed on port 0 with name "x": cannot assign multiple symbol names to the field id 0}}
+  firrtl.module @PortMultSymbol(in %x : !firrtl.uint<5>) attributes { portSymbols = [#hw<innerSym[<@foo,0,public>,<@bar,0,public>]>] } {
+  }
+}
+
+// -----
+
 firrtl.circuit "SeqMemInvalidReturnType" {
   firrtl.module @SeqMemInvalidReturnType() {
     // expected-error @+1 {{'chirrtl.seqmem' op result #0 must be a behavioral memory, but got '!firrtl.uint<1>'}}
@@ -562,7 +580,7 @@ firrtl.circuit "SeqMemNonPassiveReturnType" {
 
 firrtl.circuit "SeqMemPerFieldSym" {
   firrtl.module @SeqMemPerFieldSym() {
-    // expected-error @below {{op does not support per-field inner symbols}}
+    // expected-error @below {{does not support per-field inner symbols, but has inner symbol 'x' with non-zero field id 1}}
     %mem = chirrtl.seqmem sym [<@x,1,public>] Undefined : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
   }
 }
@@ -1009,7 +1027,7 @@ firrtl.circuit "EnumNonExaustive" {
 
 firrtl.circuit "InnerSymAttr" {
   firrtl.module @InnerSymAttr() {
-    // expected-error @+1 {{cannot assign multiple symbol names to the field id:'2'}}
+    // expected-error @+1 {{cannot assign multiple symbol names to the field id 2}}
     %w3 = firrtl.wire sym [<@w3,2,public>,<@x2,2,private>,<@syh2,0,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
   }
 }
@@ -1018,7 +1036,7 @@ firrtl.circuit "InnerSymAttr" {
 
 firrtl.circuit "InnerSymAttr2" {
   firrtl.module @InnerSymAttr2() {
-    // expected-error @+1 {{cannot reuse symbol name:'w3'}}
+    // expected-error @+1 {{cannot reuse symbol name 'w3'}}
     %w4 = firrtl.wire sym [<@w3,1,public>,<@w3,2,private>,<@syh2,0,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
   }
 }
@@ -2299,7 +2317,7 @@ firrtl.circuit "InvalidDouble" {
 
 firrtl.circuit "InvalidInnerSymTooHigh" {
   firrtl.module @InvalidInnerSymTooHigh () {
-    // expected-error @below {{field id:'1' is greater than the maximum field id:'0'}}
+    // expected-error @below {{field id 1 is greater than the maximum field id 0}}
     %w = firrtl.wire sym [<@"test",1,public>] : !firrtl.uint<5>
   }
 }
@@ -2308,7 +2326,7 @@ firrtl.circuit "InvalidInnerSymTooHigh" {
 
 firrtl.circuit "InvalidInnerSymDupe" {
   firrtl.module @InvalidInnerSymDupe() {
-    // expected-error @below {{op cannot assign multiple symbol names to the field id:'0'}}
+    // expected-error @below {{op cannot assign multiple symbol names to the field id 0}}
     %w = firrtl.wire sym [<@"foo",0,public>,<@"bar",0,public>] : !firrtl.uint<5>
   }
 }
