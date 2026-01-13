@@ -95,57 +95,57 @@ def type_to_pytype(t) -> ir.Type:
     return ir.NoneType(t)
   if isinstance(t, ir.TupleType):
     return ir.TupleType(t)
-  if isinstance(t, hw.ArrayType):
+  if hw.ArrayType.isinstance(t):
     return hw.ArrayType(t)
-  if isinstance(t, hw.StructType):
+  if hw.StructType.isinstance(t):
     return hw.StructType(t)
-  if isinstance(t, hw.UnionType):
+  if hw.UnionType.isinstance(t):
     return hw.UnionType(t)
-  if isinstance(t, hw.TypeAliasType):
+  if hw.TypeAliasType.isinstance(t):
     return hw.TypeAliasType(t)
-  if isinstance(t, hw.InOutType):
+  if hw.InOutType.isinstance(t):
     return hw.InOutType(t)
-  if isinstance(t, seq.ClockType):
+  if seq.ClockType.isinstance(t):
     return seq.ClockType(t)
-  if isinstance(t, esi.ChannelType):
+  if esi.ChannelType.isinstance(t):
     return esi.ChannelType(t)
-  if isinstance(t, esi.AnyType):
+  if esi.AnyType.isinstance(t):
     return esi.AnyType(t)
-  if isinstance(t, esi.BundleType):
+  if esi.BundleType.isinstance(t):
     return esi.BundleType(t)
-  if isinstance(t, esi.ListType):
+  if esi.ListType.isinstance(t):
     return esi.ListType(t)
-  if isinstance(t, esi.WindowType):
+  if esi.WindowType.isinstance(t):
     return esi.WindowType(t)
-  if isinstance(t, esi.WindowFrameType):
+  if esi.WindowFrameType.isinstance(t):
     return esi.WindowFrameType(t)
-  if isinstance(t, esi.WindowFieldType):
+  if esi.WindowFieldType.isinstance(t):
     return esi.WindowFieldType(t)
-  if isinstance(t, rtg.LabelType):
+  if rtg.LabelType.isinstance(t):
     return rtg.LabelType(t)
-  if isinstance(t, rtg.SetType):
+  if rtg.SetType.isinstance(t):
     return rtg.SetType(t)
-  if isinstance(t, rtg.BagType):
+  if rtg.BagType.isinstance(t):
     return rtg.BagType(t)
-  if isinstance(t, rtg.SequenceType):
+  if rtg.SequenceType.isinstance(t):
     return rtg.SequenceType(t)
-  if isinstance(t, rtg.RandomizedSequenceType):
+  if rtg.RandomizedSequenceType.isinstance(t):
     return rtg.RandomizedSequenceType(t)
-  if isinstance(t, rtg.DictType):
+  if rtg.DictType.isinstance(t):
     return rtg.DictType(t)
-  if isinstance(t, rtg.ImmediateType):
+  if rtg.ImmediateType.isinstance(t):
     return rtg.ImmediateType(t)
-  if isinstance(t, rtg.ArrayType):
+  if rtg.ArrayType.isinstance(t):
     return rtg.ArrayType(t)
-  if isinstance(t, rtg.MemoryType):
+  if rtg.MemoryType.isinstance(t):
     return rtg.MemoryType(t)
-  if isinstance(t, rtg.MemoryBlockType):
+  if rtg.MemoryBlockType.isinstance(t):
     return rtg.MemoryBlockType(t)
-  if isinstance(t, rtg.TupleType):
+  if rtg.TupleType.isinstance(t):
     return rtg.TupleType(t)
-  if isinstance(t, rtgtest.IntegerRegisterType):
+  if rtgtest.IntegerRegisterType.isinstance(t):
     return rtgtest.IntegerRegisterType(t)
-  if isinstance(t, rtgtest.CPUType):
+  if rtgtest.CPUType.isinstance(t):
     return rtgtest.CPUType(t)
 
   raise TypeError(f"Cannot convert {repr(t)} to python type")
@@ -171,7 +171,7 @@ def attribute_to_var(attr):
     return ir.BoolAttr(attr).value
   if isinstance(attr, ir.IntegerAttr):
     return ir.IntegerAttr(attr).value
-  if isinstance(attr, hw.InnerSymAttr):
+  if hw.InnerSymAttr.isinstance(attr):
     return ir.StringAttr(hw.InnerSymAttr(attr).symName).value
   if isinstance(attr, ir.StringAttr):
     return ir.StringAttr(attr).value
@@ -185,16 +185,16 @@ def attribute_to_var(attr):
   if isinstance(attr, ir.DictAttr):
     dict = ir.DictAttr(attr)
     return {i.name: attribute_to_var(i.attr) for i in dict}
-  if isinstance(attr, om.ReferenceAttr):
+  if om.ReferenceAttr.isinstance(attr):
     return attribute_to_var(om.ReferenceAttr(attr).inner_ref)
-  if isinstance(attr, hw.InnerRefAttr):
+  if hw.InnerRefAttr.isinstance(attr):
     ref = hw.InnerRefAttr(attr)
     return (ir.StringAttr(ref.module).value, ir.StringAttr(ref.name).value)
-  if isinstance(attr, om.ListAttr):
+  if om.ListAttr.isinstance(attr):
     return list(map(attribute_to_var, om.ListAttr(attr)))
-  if isinstance(attr, om.OMIntegerAttr):
+  if om.OMIntegerAttr.isinstance(attr):
     return int(str(om.OMIntegerAttr(attr)))
-  if isinstance(attr, om.PathAttr):
+  if om.PathAttr.isinstance(attr):
     return om.PathAttr(attr).value
 
   raise TypeError(f"Cannot convert {repr(attr)} to python value")
