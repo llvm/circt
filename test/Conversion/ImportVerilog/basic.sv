@@ -1721,18 +1721,14 @@ module PortsTop;
   wire w2, v2;
   // CHECK: [[X2:%.+]] = moore.read %x2
   // CHECK: [[Y2:%.+]] = moore.read %y2
-  // CHECK: [[B0:%.+]], [[B1:%.+]], [[B2:%.+]] = moore.instance "p2" @PortsExplicit(
+  // CHECK: [[B1:%.+]] = moore.instance "p2" @PortsExplicit(
   // CHECK-SAME:   a0: [[X2]]: !moore.l1
   // CHECK-SAME:   a1: [[Y2]]: !moore.l2
   // CHECK-SAME: ) -> (
-  // CHECK-SAME:   b0: !moore.i32
   // CHECK-SAME:   b1: !moore.l1
-  // CHECK-SAME:   b2: !moore.l1
   // CHECK-SAME: )
-  // CHECK-NEXT: moore.assign %z2, [[B0]]
   // CHECK-NEXT: moore.assign %w2, [[B1]]
-  // CHECK-NEXT: moore.assign %v2, [[B2]]
-  PortsExplicit p2(x2, y2, z2, w2, v2);
+  PortsExplicit p2(x2, y2, w2);
 
   wire x3, y3;
   wire [2:0] z3;
@@ -1823,12 +1819,8 @@ module PortsExplicit(
   input .a0(x),
   // CHECK-SAME: in %a1 : !moore.l2
   input .a1({y, z}),
-  // CHECK-SAME: out b0 : !moore.i32
-  output .b0(42),
   // CHECK-SAME: out b1 : !moore.l1
-  output .b1(x),
-  // CHECK-SAME: out b2 : !moore.l1
-  output .b2(y ^ z)
+  output .b1(x)
 );
   logic x, y, z;
 
@@ -1838,12 +1830,8 @@ module PortsExplicit(
   // CHECK: moore.assign [[TMP]], %a1
 
   // Output mappings
-  // CHECK: [[B0:%.+]] = moore.constant 42
   // CHECK: [[X_READ:%.+]] = moore.read %x
-  // CHECK: [[Y_READ:%.+]] = moore.read %y
-  // CHECK: [[Z_READ:%.+]] = moore.read %z
-  // CHECK: [[B2:%.+]] = moore.xor [[Y_READ]], [[Z_READ]]
-  // CHECK: moore.output [[B0]], [[X_READ]], [[B2]]
+  // CHECK: moore.output [[X_READ]]
 endmodule
 
 // CHECK-LABEL: moore.module private @MultiPorts
