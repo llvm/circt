@@ -343,7 +343,7 @@ firrtl.circuit "Test" {
   // CHECK:      firrtl.module private @DomainCapture_A(
   // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
   //
-  // CHECK-NEXT:   %a = firrtl.wire
+  // CHECK-NEXT:   %a = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
   // CHECK-NEXT:   firrtl.domain.define %a, %A
   //
   // CHECK:      firrtl.module @DomainCapture(
@@ -355,7 +355,7 @@ firrtl.circuit "Test" {
     in %A: !firrtl.domain of @ClockDomain
   ) {
     firrtl.layerblock @A {
-      %a = firrtl.wire : !firrtl.domain
+      %a = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
       firrtl.domain.define %a, %A
     }
   }
@@ -367,7 +367,7 @@ firrtl.circuit "Test" {
   // CHECK:      firrtl.module private @DomainCaptureTwoLevels_A_B(
   // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
   //
-  // CHECK-NEXT:   %a = firrtl.wire
+  // CHECK-NEXT:   %a = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
   // CHECK-NEXT:   firrtl.domain.define %a, %A
   //
   // CHECK-NOT:  firrtl.module private @DomainCaptureTwoLevels_A(
@@ -382,7 +382,7 @@ firrtl.circuit "Test" {
   ) {
     firrtl.layerblock @A {
       firrtl.layerblock @A::@B {
-        %a = firrtl.wire : !firrtl.domain
+        %a = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
         firrtl.domain.define %a, %A
       }
     }
@@ -391,7 +391,7 @@ firrtl.circuit "Test" {
   // CHECK:      firrtl.module private @DomainCaptureChildCapturesParent_A_B(
   // CHECK-SAME:   in %anonDomain: !firrtl.domain of @ClockDomain
   //
-  // CHECK-NEXT:   %a = firrtl.wire
+  // CHECK-NEXT:   %a = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
   // CHECK-NEXT:   firrtl.domain.define %a, %anonDomain
   //
   // CHECK:      firrtl.module private @DomainCaptureChildCapturesParent_A(
@@ -411,7 +411,7 @@ firrtl.circuit "Test" {
     firrtl.layerblock @A {
       %0 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
       firrtl.layerblock @A::@B {
-        %a = firrtl.wire : !firrtl.domain
+        %a = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
         firrtl.domain.define %a, %0
       }
     }
@@ -420,14 +420,14 @@ firrtl.circuit "Test" {
   // CHECK:      firrtl.module private @DomainCaptureInterleaved_A_B(
   // CHECK-SAME:   in %b: !firrtl.domain of @ClockDomain
   //
-  // CHECK-NEXT:   %a = firrtl.wire : !firrtl.domain
+  // CHECK-NEXT:   %a = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
   // CHECK-NEXT:   firrtl.domain.define %a, %b
   //
   // CHECK:      firrtl.module private @DomainCaptureInterleaved_A(
   // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
   // CHECK-SAME:   out %b: !firrtl.domain of @ClockDomain
   //
-  // CHECK-NEXT:   %b_0 = firrtl.wire {name = "b"} : !firrtl.domain
+  // CHECK-NEXT:   %b_0 = firrtl.wire {domainKind = @ClockDomain, name = "b"} : !firrtl.domain
   // CHECK-NEXT:   firrtl.domain.define %b_0, %A
   // CHECK-NEXT:   firrtl.domain.define %b, %b_0
   //
@@ -441,10 +441,10 @@ firrtl.circuit "Test" {
     in %A: !firrtl.domain of @ClockDomain
   ) {
     firrtl.layerblock @A {
-      %b = firrtl.wire : !firrtl.domain
+      %b = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
       firrtl.domain.define %b, %A
       firrtl.layerblock @A::@B {
-        %a = firrtl.wire : !firrtl.domain
+        %a = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
         firrtl.domain.define %a, %b
       }
     }
@@ -453,13 +453,13 @@ firrtl.circuit "Test" {
   // CHECK:      firrtl.module private @DomainCaptureInterleaved2_A_B(
   // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
   //
-  // CHECK-NEXT:   %wire = firrtl.wire : !firrtl.domain
+  // CHECK-NEXT:   %wire = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
   // CHECK-NEXT:   firrtl.domain.define %wire, %A
   //
   // CHECK:      firrtl.module private @DomainCaptureInterleaved2_A(
   // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
   //
-  // CHECK-NEXT:   %b = firrtl.wire : !firrtl.domain
+  // CHECK-NEXT:   %b = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
   // CHECK-NEXT:   firrtl.domain.define %b, %A
   //
   // CHECK:      firrtl.module @DomainCaptureInterleaved2(
@@ -472,10 +472,10 @@ firrtl.circuit "Test" {
     in %A: !firrtl.domain of @ClockDomain
   ) {
     firrtl.layerblock @A {
-      %b = firrtl.wire : !firrtl.domain
+      %b = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
       firrtl.domain.define %b, %A
       firrtl.layerblock @A::@B {
-        %wire = firrtl.wire : !firrtl.domain
+        %wire = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
         firrtl.domain.define %wire, %A
       }
     }

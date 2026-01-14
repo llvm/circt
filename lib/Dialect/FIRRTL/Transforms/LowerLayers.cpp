@@ -542,78 +542,32 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     return success();
   };
 
-  // Utility to determine the domain type of some value.  This looks backwards
-  // through connections to find the source driver in the module and gets the
-  // domain type of that.  This is necessary as intermediary wires do not track
-  // domain information.
-  //
-  // This cannot use `getModuleScopedDriver` because this can be called while
-  // `LayerBlockOp`s have temporarily gained block arguments while they are
-  // being migrated to modules.  This is worked around by caching the known
-  // domain kinds of earlier-visited `WireOp`s to avoid needing to look through
-  // these non-`ModuleOp` block arguments.
-  //
-  // TODO: Simplify this once wires have domain kind information [1].
-  //
-  // [1]: https://github.com/llvm/circt/issues/9398
-  DenseMap<Operation *, Attribute> domainMap;
-  auto getDomain = [&domainMap](Value value,
-                                Attribute &domain) -> LogicalResult {
-    SmallVector<Operation *> wires;
-
-    // Use iteration as this is recursive over the IR.  `value` is changed for
-    // each iteration.
-    while (!domain) {
-      if (auto arg = dyn_cast<BlockArgument>(value)) {
-        domain = cast<FModuleLike>(arg.getOwner()->getParentOp())
-                     .getDomainInfoAttrForPort(arg.getArgNumber());
-        continue;
-      }
-
-      auto result =
-          TypeSwitch<Operation *, LogicalResult>(value.getDefiningOp())
-              .Case<WireOp>([&](WireOp op) {
-                auto it = domainMap.find(op);
-                if (it != domainMap.end()) {
-                  domain = it->getSecond();
-                  return success();
-                }
-                for (auto *user : op->getUsers()) {
-                  auto connect = dyn_cast<FConnectLike>(user);
-                  if (!connect || connect.getDest() != value)
-                    continue;
-                  value = connect.getSrc();
-                  wires.push_back(op);
-                  return success();
-                }
-                emitError(value.getLoc())
-                    << "unable to determine domain kind for source likely "
-                       "indicating a "
-                       "violation of static-single-connect";
-                return failure();
-              })
-              .Case<InstanceOp>([&](auto op) {
-                domain =
-                    op.getPortDomain(cast<OpResult>(value).getResultNumber());
-                return success();
-              })
-              .Case<DomainCreateAnonOp>([&](auto op) {
-                domain = op.getDomainAttr();
-                return success();
-              })
-              .Default([&](auto op) {
-                op->emitOpError() << "unhandled domain source in 'LowerLayers";
-                return failure();
-              });
-      if (failed(result))
-        return failure();
+  // Utility to determine the domain type of some value.  If the value is a
+  // wire with an explicit domainKind attribute, use that directly.
+  auto getDomain = [](Value value, Attribute &domain) -> LogicalResult {
+    if (auto arg = dyn_cast<BlockArgument>(value)) {
+      domain = cast<FModuleLike>(arg.getOwner()->getParentOp())
+                   .getDomainInfoAttrForPort(arg.getArgNumber());
+      return success();
     }
 
-    // Update the `domainMap` with wire/domain information.
-    for (auto *wire : wires)
-      domainMap[wire] = domain;
-
-    return success();
+    return TypeSwitch<Operation *, LogicalResult>(value.getDefiningOp())
+        .Case<WireOp>([&](WireOp op) {
+          domain = op.getDomainKindAttr();
+          return success();
+        })
+        .Case<InstanceOp>([&](auto op) {
+          domain = op.getPortDomain(cast<OpResult>(value).getResultNumber());
+          return success();
+        })
+        .Case<DomainCreateAnonOp>([&](auto op) {
+          domain = op.getDomainAttr();
+          return success();
+        })
+        .Default([&](auto op) {
+          op->emitOpError() << "unhandled domain source in 'LowerLayers";
+          return failure();
+        });
   };
 
   // Post-order traversal that expands a layer block into its parent. Because of

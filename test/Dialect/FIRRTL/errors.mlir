@@ -3278,3 +3278,17 @@ firrtl.circuit "UndefinedDomainInAnonDomain" {
     %0 = firrtl.domain.anon : !firrtl.domain of @Foo
   }
 }
+
+// -----
+
+// Unable to determine domain type of domain wire without domainKind attribute.
+firrtl.circuit "WireWithoutDomainKind" {
+  firrtl.domain @ClockDomain
+  firrtl.module @WireWithoutDomainKind(
+    in %in: !firrtl.domain of @ClockDomain
+  ) {
+    %w = firrtl.wire : !firrtl.domain
+    // expected-error @below {{could not determine domain-type of destination}}
+    firrtl.domain.define %w, %in
+  }
+}
