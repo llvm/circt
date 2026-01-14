@@ -1846,8 +1846,8 @@ struct RvalueExprVisitor : public ExprVisitor {
         // Pass the newObj as the implicit this argument of the ctor.
         auto savedThis = context.currentThisRef;
         context.currentThisRef = newObj;
-        auto restoreThis =
-            llvm::make_scope_exit([&] { context.currentThisRef = savedThis; });
+        llvm::scope_exit restoreThis(
+            [&] { context.currentThisRef = savedThis; });
         // Emit a call to ctor
         if (!visitCall(*callConstructor, *subroutine))
           return {};

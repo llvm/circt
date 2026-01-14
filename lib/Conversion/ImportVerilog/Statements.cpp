@@ -48,7 +48,7 @@ struct StmtVisitor {
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&stepBlock, &exitBlock});
-    auto done = llvm::make_scope_exit([&] { context.loopStack.pop_back(); });
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
     const auto &iter = loopDim.loopVar;
     auto type = context.convertType(*iter->getDeclaredType());
@@ -460,7 +460,7 @@ struct StmtVisitor {
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&stepBlock, &exitBlock});
-    auto done = llvm::make_scope_exit([&] { context.loopStack.pop_back(); });
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
     // Generate the loop condition check.
     builder.setInsertionPointToEnd(&checkBlock);
@@ -521,7 +521,7 @@ struct StmtVisitor {
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&stepBlock, &exitBlock});
-    auto done = llvm::make_scope_exit([&] { context.loopStack.pop_back(); });
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
     // Generate the loop condition check.
     builder.setInsertionPointToEnd(&checkBlock);
@@ -569,7 +569,7 @@ struct StmtVisitor {
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&checkBlock, &exitBlock});
-    auto done = llvm::make_scope_exit([&] { context.loopStack.pop_back(); });
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
     // Generate the loop condition check.
     builder.setInsertionPointToEnd(&checkBlock);
@@ -615,7 +615,7 @@ struct StmtVisitor {
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&bodyBlock, &exitBlock});
-    auto done = llvm::make_scope_exit([&] { context.loopStack.pop_back(); });
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
     // Generate the loop body.
     builder.setInsertionPointToEnd(&bodyBlock);

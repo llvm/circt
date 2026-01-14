@@ -679,8 +679,7 @@ LogicalResult Context::convertCompilation() {
   // through parent scopes to find the time scale effective locally.
   auto prevTimeScale = timeScale;
   timeScale = root.getTimeScale().value_or(slang::TimeScale());
-  auto timeScaleGuard =
-      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+  llvm::scope_exit timeScaleGuard([&] { timeScale = prevTimeScale; });
 
   // First only to visit the whole AST to collect the hierarchical names without
   // any operation creating.
@@ -746,8 +745,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   // through parent scopes to find the time scale effective locally.
   auto prevTimeScale = timeScale;
   timeScale = module->getTimeScale().value_or(slang::TimeScale());
-  auto timeScaleGuard =
-      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+  llvm::scope_exit timeScaleGuard([&] { timeScale = prevTimeScale; });
 
   auto parameters = module->getParameters();
   bool hasModuleSame = false;
@@ -926,8 +924,7 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
   // through parent scopes to find the time scale effective locally.
   auto prevTimeScale = timeScale;
   timeScale = module->getTimeScale().value_or(slang::TimeScale());
-  auto timeScaleGuard =
-      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+  llvm::scope_exit timeScaleGuard([&] { timeScale = prevTimeScale; });
 
   // Collect downward hierarchical names. Such as,
   // module SubA; int x = Top.y; endmodule. The "Top" module is the parent of
@@ -996,8 +993,7 @@ Context::convertPackage(const slang::ast::PackageSymbol &package) {
   // through parent scopes to find the time scale effective locally.
   auto prevTimeScale = timeScale;
   timeScale = package.getTimeScale().value_or(slang::TimeScale());
-  auto timeScaleGuard =
-      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+  llvm::scope_exit timeScaleGuard([&] { timeScale = prevTimeScale; });
 
   OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToEnd(intoModuleOp.getBody());
@@ -1208,8 +1204,7 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
   // through parent scopes to find the time scale effective locally.
   auto prevTimeScale = timeScale;
   timeScale = subroutine.getTimeScale().value_or(slang::TimeScale());
-  auto timeScaleGuard =
-      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+  llvm::scope_exit timeScaleGuard([&] { timeScale = prevTimeScale; });
 
   // First get or create the function declaration.
   auto *lowering = declareFunction(subroutine);
@@ -1282,7 +1277,7 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
   // Save previous callbacks
   auto prevRCb = rvalueReadCallback;
   auto prevWCb = variableAssignCallback;
-  auto prevRCbGuard = llvm::make_scope_exit([&] {
+  llvm::scope_exit prevRCbGuard([&] {
     rvalueReadCallback = prevRCb;
     variableAssignCallback = prevWCb;
   });
@@ -1351,11 +1346,10 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
 
   auto savedThis = currentThisRef;
   currentThisRef = valueSymbols.lookup(subroutine.thisVar);
-  auto restoreThis = llvm::make_scope_exit([&] { currentThisRef = savedThis; });
+  llvm::scope_exit restoreThis([&] { currentThisRef = savedThis; });
 
   lowering->isConverting = true;
-  auto convertingGuard =
-      llvm::make_scope_exit([&] { lowering->isConverting = false; });
+  llvm::scope_exit convertingGuard([&] { lowering->isConverting = false; });
 
   if (failed(convertStatement(subroutine.getBody())))
     return failure();
@@ -1733,8 +1727,7 @@ Context::convertClassDeclaration(const slang::ast::ClassType &classdecl) {
   // Keep track of local time scale.
   auto prevTimeScale = timeScale;
   timeScale = classdecl.getTimeScale().value_or(slang::TimeScale());
-  auto timeScaleGuard =
-      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+  llvm::scope_exit timeScaleGuard([&] { timeScale = prevTimeScale; });
 
   // Check if there already is a declaration for this class.
   if (classes.contains(&classdecl))
