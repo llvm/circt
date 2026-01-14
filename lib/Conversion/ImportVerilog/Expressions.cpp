@@ -590,7 +590,8 @@ struct RvalueExprVisitor : public ExprVisitor {
 
   // Helper function to convert an argument to a simple bit vector type, pass it
   // to a reduction op, and optionally invert the result.
-  template <class ConcreteOp> Value createReduction(Value arg, bool invert) {
+  template <class ConcreteOp>
+  Value createReduction(Value arg, bool invert) {
     arg = context.convertToSimpleBitVector(arg);
     if (!arg)
       return {};
@@ -903,7 +904,8 @@ struct RvalueExprVisitor : public ExprVisitor {
 
   // Helper function to convert two arguments to a simple bit vector type and
   // pass them into a binary op.
-  template <class ConcreteOp> Value createBinary(Value lhs, Value rhs) {
+  template <class ConcreteOp>
+  Value createBinary(Value lhs, Value rhs) {
     lhs = context.convertToSimpleBitVector(lhs);
     if (!lhs)
       return {};
@@ -1856,7 +1858,8 @@ struct RvalueExprVisitor : public ExprVisitor {
   }
 
   /// Emit an error for all other expressions.
-  template <typename T> Value visit(T &&node) {
+  template <typename T>
+  Value visit(T &&node) {
     mlir::emitError(loc, "unsupported expression: ")
         << slang::ast::toString(node.kind);
     return {};
@@ -1990,7 +1993,8 @@ struct LvalueExprVisitor : public ExprVisitor {
   }
 
   /// Emit an error for all other expressions.
-  template <typename T> Value visit(T &&node) {
+  template <typename T>
+  Value visit(T &&node) {
     return context.convertRvalueExpression(node);
   }
 
