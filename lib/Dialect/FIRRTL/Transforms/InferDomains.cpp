@@ -18,10 +18,11 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/Debug.h"
 #include "circt/Support/Namespace.h"
+#include "mlir/IR/Iterators.h"
+#include "mlir/IR/Threading.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/TinyPtrVector.h"
-#include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-infer-domains"
 
@@ -34,6 +35,8 @@ namespace firrtl {
 
 using namespace circt;
 using namespace firrtl;
+
+using mlir::ReverseIterator;
 
 //====--------------------------------------------------------------------------
 // Helpers.
@@ -1451,6 +1454,53 @@ static LogicalResult checkModuleBody(FModuleOp moduleOp) {
 }
 
 //===---------------------------------------------------------------------------
+// Domain Stripping.
+//===---------------------------------------------------------------------------
+
+static void stripModule(FModuleLike op) {
+  op->walk<mlir::WalkOrder::PostOrder, ReverseIterator>([=](Operation *op) {
+    TypeSwitch<Operation *>(op)
+        .Case<FModuleLike>([](FModuleLike op) {
+          auto n = op.getNumPorts();
+          BitVector erasures(n);
+          for (size_t i = 0; i < n; ++i)
+            if (isa<DomainType>(op.getPortType(i)))
+              erasures.set(i);
+          op.erasePorts(erasures);
+        })
+        .Case<DomainDefineOp>([](DomainDefineOp op) { op->erase(); })
+        .Case<UnsafeDomainCastOp>([](UnsafeDomainCastOp op) {
+          op.replaceAllUsesWith(op.getInput());
+          op.erase();
+        })
+        .Case<InstanceOp, InstanceChoiceOp>([](auto op) {
+          auto n = op.getNumPorts();
+          BitVector erasures(n);
+          for (size_t i = 0; i < n; ++i)
+            if (isa<DomainType>(op->getResult(i).getType()))
+              erasures.set(i);
+          op.cloneWithErasedPortsAndReplaceUses(erasures);
+          op.erase();
+        })
+        .Default([](Operation *op) {
+          for (auto result : op->getResults())
+            if (isa<DomainType>(result.getType()))
+              op->erase();
+        });
+  });
+}
+
+static void stripCircuit(MLIRContext *context, CircuitOp circuit) {
+  llvm::SmallVector<FModuleLike> modules;
+  for (Operation &op : make_early_inc_range(*circuit.getBodyBlock())) {
+    TypeSwitch<Operation *, void>(&op)
+        .Case<FModuleLike>([&](FModuleLike op) { modules.push_back(op); })
+        .Case<DomainOp>([](DomainOp op) { op.erase(); });
+  }
+  parallelForEach(context, modules, stripModule);
+}
+
+//===---------------------------------------------------------------------------
 // InferDomainsPass: Top-level pass implementation.
 //===---------------------------------------------------------------------------
 
@@ -1515,6 +1565,8 @@ static LogicalResult runOnModuleLike(InferDomainsMode mode,
                                      const DomainInfo &info,
                                      ModuleUpdateTable &updateTable,
                                      Operation *op) {
+  assert(mode != InferDomainsMode::Strip);
+
   if (auto moduleOp = dyn_cast<FModuleOp>(op)) {
     if (mode == InferDomainsMode::Check)
       return checkModule(info, moduleOp);
@@ -1538,6 +1590,10 @@ struct InferDomainsPass
   void runOnOperation() override {
     CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
     auto circuit = getOperation();
+
+    if (mode == InferDomainsMode::Strip)
+      return stripCircuit(&getContext(), circuit);
+
     auto &instanceGraph = getAnalysis<InstanceGraph>();
     DomainInfo info(circuit);
     ModuleUpdateTable updateTable;
