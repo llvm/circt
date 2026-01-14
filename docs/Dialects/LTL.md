@@ -48,11 +48,11 @@ a ##1 b ##1 c      // 1 cycle delay between a, b, and c
 
 In the simplest form, a cycle delay can appear as a prefix of another sequence, e.g., `##1 a`. This is essentially a concatenation with only one sequence, `a`, and an initial cycle delay of the concatenation of `1`. The prefix delays map to the LTL dialect as follows:
 
-- `##N seq`. **Fixed delay.** Sequence `seq` has to match exactly `N` cycles in the future. Equivalent to `ltl.delay %seq, N, 0`.
-- `##[N:M] seq`. **Bounded range delay.** Sequence `seq` has to match anywhere between `N` and `M` cycles in the future, inclusive. Equivalent to `ltl.delay %seq, N, (M-N)`
-- `##[N:$] seq`. **Unbounded range delay.** Sequence `seq` has to match anywhere at or beyond `N` cycles in the future, after a finite amount of cycles. Equivalent to `ltl.delay %seq, N`.
-- `##[*] seq`. Shorthand for `##[0:$]`. Equivalent to `ltl.delay %seq, 0`.
-- `##[+] seq`. Shorthand for `##[1:$]`. Equivalent to `ltl.delay %seq, 1`.
+- `##N seq`. **Fixed delay.** Sequence `seq` has to match exactly `N` cycles in the future. Equivalent to `ltl.delay %clk, posedge, %seq, N, 0`.
+- `##[N:M] seq`. **Bounded range delay.** Sequence `seq` has to match anywhere between `N` and `M` cycles in the future, inclusive. Equivalent to `ltl.delay %clk, posedge, %seq, N, (M-N)`
+- `##[N:$] seq`. **Unbounded range delay.** Sequence `seq` has to match anywhere at or beyond `N` cycles in the future, after a finite amount of cycles. Equivalent to `ltl.delay %clk, posedge, %seq, N`.
+- `##[*] seq`. Shorthand for `##[0:$]`. Equivalent to `ltl.delay %clk, posedge, %seq, 0`.
+- `##[+] seq`. Shorthand for `##[1:$]`. Equivalent to `ltl.delay %clk, posedge, %seq, 1`.
 
 Concatenation of two sequences always involves a cycle delay specification in between them, e.g., `a ##1 b` where sequence `b` starts in the cycle after `a` ends. Zero-cycle delays can be specified, e.g., `a ##0 b` where `b` starts in the same cycle as `a` ends. If `a` and `b` are booleans, `a ##0 b` is equivalent to `a && b`.
 
@@ -60,42 +60,42 @@ The dialect separates concatenation and cycle delay into two orthogonal operatio
 
 - `seqA ##N seqB`. **Binary concatenation.** Sequence `seqB` follows `N` cycles after `seqA`. This can be represented as `seqA ##0 (##N seqB)`, which is equivalent to
   ```
-  %0 = ltl.delay %seqB, N, 0
+  %0 = ltl.delay %clk, posedge, %seqB, N, 0
   ltl.concat %seqA, %0
   ```
 
 - `seqA ##N seqB ##M seqC`. **Variadic concatenation.** Sequence `seqC` follows `M` cycles after `seqB`, which itself follows `N` cycles after `seqA`. This can be represented as `seqA ##0 (##N seqB) ##0 (##M seqC)`, which is equivalent to
   ```
-  %0 = ltl.delay %seqB, N, 0
-  %1 = ltl.delay %seqC, M, 0
+  %0 = ltl.delay %clk, posedge, %seqB, N, 0
+  %1 = ltl.delay %clk, posedge, %seqC, M, 0
   ltl.concat %seqA, %0, %1
   ```
   Since concatenation is associative, this is also equivalent to `seqA ##N (seqB ##M seqC)`:
   ```
-  %0 = ltl.delay %seqC, M, 0
+  %0 = ltl.delay %clk, posedge, %seqC, M, 0
   %1 = ltl.concat %seqB, %0
-  %2 = ltl.delay %1, N, 0
+  %2 = ltl.delay %clk, posedge, %1, N, 0
   ltl.concat %seqA, %2
   ```
   And also `(seqA ##N seqB) ##M seqC`:
   ```
-  %0 = ltl.delay %seqB, N, 0
+  %0 = ltl.delay %clk, posedge, %seqB, N, 0
   %1 = ltl.concat %seqA, %0
-  %2 = ltl.delay %seqC, M, 0
+  %2 = ltl.delay %clk, posedge, %seqC, M, 0
   ltl.concat %1, %2
   ```
 
 - `##N seqA ##M seqB`. **Initial delay.** Sequence `seqB` follows `M` cycles afer `seqA`, which itself starts `N` cycles in the future. This is equivalent to a delay on `seqA` within the concatenation:
   ```
-  %0 = ltl.delay %seqA, N, 0
-  %1 = ltl.delay %seqB, M, 0
+  %0 = ltl.delay %clk, posedge, %seqA, N, 0
+  %1 = ltl.delay %clk, posedge, %seqB, M, 0
   ltl.concat %0, %1
   ```
   Alternatively, the delay can also be placed on the entire concatenation:
   ```
-  %0 = ltl.delay %seqB, M, 0
+  %0 = ltl.delay %clk, posedge, %seqB, M, 0
   %1 = ltl.concat %seqA, %0
-  ltl.delay %1, N, 0
+  ltl.delay %clk, posedge, %1, N, 0
   ```
 
 - Only the fixed delay `##N` is shown here for simplicity, but the examples extend to the other delay flavors `##[N:M]`, `##[N:$]`, `##[*]`, and `##[+]`.
@@ -160,6 +160,25 @@ Sequence and property expressions in SVAs can specify a clock with respect to wh
 - `@(negedge clk) seqOrProp`. **Trigger on high-to-low clock edge.** Equivalent to `ltl.clock %seqOrProp, negedge %clk`.
 - `@(edge clk) seqOrProp`. **Trigger on any clock edge.** Equivalent to `ltl.clock %seqOrProp, edge %clk`.
 
+#### Delay clocking (concise)
+
+`ltl.delay` takes a clock `Value` and a `ClockEdgeAttr` as its first two
+operands:
+
+```
+ltl.delay %clock, <edge>, %input, <delay>[, <length>]
+```
+
+`%clock` is an `i1` value (e.g. a module clock); `<edge>` is `posedge`,
+`negedge`, or `edge`. The `delay`/`length` are counted on the specified
+clock/edge (for example `ltl.delay %clk, posedge, %s, 3` means `%s` must hold
+3 cycles later on `%clk` rising edges). `ltl.clock` globally associates a
+sequence/property with a clock/edge; using the same pair in `ltl.delay`
+keeps expressions in the same clocking domain.
+
+Note: lowering may insert an explicit clock value (e.g. `hw.constant` or
+`seq.from_clock`) when a direct `Value` for the clock is not available.
+
 
 ### Disable Iff
 
@@ -220,13 +239,13 @@ Knowing how to map SVA constructs to CIRCT is important to allow these to expres
   
 - **`a ##n b`**:   
 ```mlir
-%a_n = ltl.delay %a, n, 0 : i1
+%a_n = ltl.delay %clk, posedge, %a, n, 0 : i1
 %anb = ltl.concat %a_n, %b : !ltl.sequence 
 ```
 
 - **`a ##[n:m] b`**:
 ```mlir
-%a_n = ltl.delay %a, n, (m-n) : i1
+%a_n = ltl.delay %clk, posedge, %a, n, (m-n) : i1
 %anb = ltl.concat %a_n, %b : !ltl.sequence   
 ```
 
@@ -257,15 +276,15 @@ Knowing how to map SVA constructs to CIRCT is important to allow these to expres
 
 - **`s1 ##[+] s2`**:   
 ```mlir
-%ds1 = ltl.delay %s1, 1
+%ds1 = ltl.delay %clk, posedge, %s1, 1
 %s1s2 = ltl.concat %ds1, %s2 : !ltl.sequence  
-```  
+```
 
 - **`s1 ##[*] s2`**:   
 ```mlir
-%ds1 = ltl.delay %s1, 0
+%ds1 = ltl.delay %clk, posedge, %s1, 0
 %s1s2 = ltl.concat %ds1, %s2 : !ltl.sequence  
-```  
+```
 
 - **`s1 and s2`**:   
 ```mlir
@@ -299,8 +318,8 @@ ltl.not %s1 : !ltl.sequence
 ```mlir
 %c1 = hw.constant 1 : i1
 %rep1 = ltl.repeat %c1, 0 : !ltl.sequence
-%drep1 = ltl.delay %rep1, 1, 0 : !ltl.sequence
-%ds1 = ltl.delay %s1, 1, 0 : !ltl.sequence
+%drep1 = ltl.delay %clk, posedge, %rep1, 1, 0 : !ltl.sequence
+%ds1 = ltl.delay %clk, posedge, %s1, 1, 0 : !ltl.sequence
 %evs1 = ltl.concat %drep1, %ds1, %c1 : !ltl.sequence
 %res = ltl.intersect %evs1, %s2 : !ltl.sequence  
 ```
@@ -313,7 +332,7 @@ ltl.not %s1 : !ltl.sequence
 - **`s |=> p`**:  
 ```mlir
 %c1 = hw.constant 1 : i1
-%ds = ltl.delay %s, 1, 0 : i1
+%ds = ltl.delay %clk, posedge, %s, 1, 0 : i1
 %antecedent = ltl.concat %ds, %c1 : !ltl.sequence
 %impl = ltl.implication %antecedent, %p : !ltl.property  
 ```
@@ -342,7 +361,7 @@ ltl.not %s1 : !ltl.sequence
 - **`s #=# p`**:  
 ```mlir
 %np = ltl.not %p : !ltl.property	
-%ds = ltl.delay %s, 1, 0 : !ltl.sequence
+%ds = ltl.delay %clk, posedge, %s, 1, 0 : !ltl.sequence
 %c1 = hw.constant 1 : i1
 %ant = ltl.concat %ds, c1 : !ltl.sequence 
 %impl = ltl.implication %ant, %np : !ltl.property
@@ -354,13 +373,13 @@ ltl.not %s1 : !ltl.sequence
 
 - **`nexttime p`**:   
 ```mlir
-ltl.delay %p, 1, 0 : !ltl.sequence   
-```  
+ltl.delay %clk, posedge, %p, 1, 0 : !ltl.sequence   
+```
 
 - **`nexttime[n] p`**:  
 ```mlir
-ltl.delay %p, n, 0 : !ltl.sequence   
-```  
+ltl.delay %clk, posedge, %p, n, 0 : !ltl.sequence   
+```
 
 - **`s_nexttime p`**: not really distinguishable from the weak version in CIRCT.
 - **`s_nexttime[n] p`**: not really distinguishable from the weak version in CIRCT.
@@ -418,13 +437,13 @@ The `ltl.delay` sequence operation represents various shorthands for the *next*/
 
 | Operation            | LTL Formula                 |
 |----------------------|-----------------------------|
-| `ltl.delay %a, 0, 0` | a                           |
-| `ltl.delay %a, 1, 0` | **X**a                      |
-| `ltl.delay %a, 3, 0` | **XXX**a                    |
-| `ltl.delay %a, 0, 2` | a ∨ **X**a ∨ **XX**a        |
-| `ltl.delay %a, 1, 2` | **X**(a ∨ **X**a ∨ **XX**a) |
-| `ltl.delay %a, 0`    | **F**a                      |
-| `ltl.delay %a, 2`    | **XXF**a                    |
+| `ltl.delay %clk, posedge, %a, 0, 0` | a                           |
+| `ltl.delay %clk, posedge, %a, 1, 0` | **X**a                      |
+| `ltl.delay %clk, posedge, %a, 3, 0` | **XXX**a                    |
+| `ltl.delay %clk, posedge, %a, 0, 2` | a ∨ **X**a ∨ **XX**a        |
+| `ltl.delay %clk, posedge, %a, 1, 2` | **X**(a ∨ **X**a ∨ **XX**a) |
+| `ltl.delay %clk, posedge, %a, 0`    | **F**a                      |
+| `ltl.delay %clk, posedge, %a, 2`    | **XXF**a                    |
 
 
 ### Until and Eventually

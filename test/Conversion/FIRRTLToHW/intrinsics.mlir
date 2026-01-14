@@ -62,9 +62,10 @@ firrtl.circuit "Intrinsics" {
   // CHECK-LABEL: hw.module @LTLAndVerif
   firrtl.module @LTLAndVerif(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>) {
     // CHECK-NEXT: [[CLK:%.+]] = seq.from_clock %clk
-    // CHECK-NEXT: [[D0:%.+]] = ltl.delay %a, 42 : i1
+    // CHECK-NEXT: {{%.*}} = hw.constant true
+    // CHECK-NEXT: [[D0:%.+]] = ltl.delay {{%.*}}, posedge, %a, 42 : i1
     %d0 = firrtl.int.ltl.delay %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK-NEXT: [[D1:%.+]] = ltl.delay %b, 42, 1337 : i1
+    // CHECK-NEXT: [[D1:%.+]] = ltl.delay {{%.*}}, posedge, %b, 42, 1337 : i1
     %d1 = firrtl.int.ltl.delay %b, 42, 1337 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[L0:%.+]] = ltl.and [[D0]], [[D1]] : !ltl.sequence, !ltl.sequence
@@ -149,6 +150,7 @@ firrtl.circuit "Intrinsics" {
     %f = firrtl.wire : !firrtl.uint<1>
     %g = firrtl.wire : !firrtl.uint<1>
 
+    // CHECK-NEXT: {{%.*}} = hw.constant true
     // CHECK-NEXT: verif.assert [[E:%.+]] : !ltl.sequence
     // CHECK-NEXT: verif.assert [[F:%.+]] : !ltl.property
     // CHECK-NEXT: verif.assert [[G:%.+]] : !ltl.property
@@ -177,7 +179,7 @@ firrtl.circuit "Intrinsics" {
     firrtl.matchingconnect %d, %1 : !firrtl.uint<1>
 
     // !ltl.sequence
-    // CHECK-NEXT: [[C]] = ltl.delay %a, 42 : i1
+    // CHECK-NEXT: [[C]] = ltl.delay {{%.*}}, posedge, %a, 42 : i1
     %0 = firrtl.int.ltl.delay %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.matchingconnect %c, %0 : !firrtl.uint<1>
   }

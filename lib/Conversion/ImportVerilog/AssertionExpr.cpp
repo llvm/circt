@@ -121,8 +121,14 @@ struct AssertionExprVisitor {
 
       auto [delayMin, delayRange] =
           convertRangeToAttrs(concatElement.delay.min, concatElement.delay.max);
-      auto delayedSequence = ltl::DelayOp::create(builder, loc, sequenceValue,
-                                                  delayMin, delayRange);
+      auto delayedClock =
+          hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1)
+              .getResult();
+      auto delayedEdge =
+          ltl::ClockEdgeAttr::get(builder.getContext(), ltl::ClockEdge::Pos);
+      auto delayedSequence =
+          ltl::DelayOp::create(builder, loc, delayedClock, delayedEdge,
+                               sequenceValue, delayMin, delayRange);
       sequenceElements.push_back(delayedSequence);
     }
 
@@ -159,8 +165,12 @@ struct AssertionExprVisitor {
       if (expr.range.has_value()) {
         minRepetitions = builder.getI64IntegerAttr(expr.range.value().min);
       }
-      return ltl::DelayOp::create(builder, loc, value, minRepetitions,
-                                  builder.getI64IntegerAttr(0));
+      auto clock = hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1)
+                       .getResult();
+      auto edge =
+          ltl::ClockEdgeAttr::get(builder.getContext(), ltl::ClockEdge::Pos);
+      return ltl::DelayOp::create(builder, loc, clock, edge, value,
+                                  minRepetitions, builder.getI64IntegerAttr(0));
     }
     case UnaryAssertionOperator::Eventually:
     case UnaryAssertionOperator::SNextTime:
@@ -198,12 +208,22 @@ struct AssertionExprVisitor {
       auto oneRepeat = ltl::RepeatOp::create(builder, loc, constOne,
                                              builder.getI64IntegerAttr(0),
                                              mlir::IntegerAttr{});
-      auto repeatDelay = ltl::DelayOp::create(builder, loc, oneRepeat,
-                                              builder.getI64IntegerAttr(1),
-                                              builder.getI64IntegerAttr(0));
-      auto lhsDelay =
-          ltl::DelayOp::create(builder, loc, lhs, builder.getI64IntegerAttr(1),
-                               builder.getI64IntegerAttr(0));
+      auto repeatClock =
+          hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1)
+              .getResult();
+      auto repeatEdge =
+          ltl::ClockEdgeAttr::get(builder.getContext(), ltl::ClockEdge::Pos);
+      auto repeatDelay = ltl::DelayOp::create(
+          builder, loc, repeatClock, repeatEdge, oneRepeat,
+          builder.getI64IntegerAttr(1), builder.getI64IntegerAttr(0));
+      auto lhsClock =
+          hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1)
+              .getResult();
+      auto lhsEdge =
+          ltl::ClockEdgeAttr::get(builder.getContext(), ltl::ClockEdge::Pos);
+      auto lhsDelay = ltl::DelayOp::create(builder, loc, lhsClock, lhsEdge, lhs,
+                                           builder.getI64IntegerAttr(1),
+                                           builder.getI64IntegerAttr(0));
       auto combined = ltl::ConcatOp::create(
           builder, loc, SmallVector<Value, 3>{repeatDelay, lhsDelay, constOne});
       return ltl::IntersectOp::create(builder, loc,
@@ -235,9 +255,14 @@ struct AssertionExprVisitor {
     case BinaryAssertionOperator::NonOverlappedImplication: {
       auto constOne =
           hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1);
-      auto lhsDelay =
-          ltl::DelayOp::create(builder, loc, lhs, builder.getI64IntegerAttr(1),
-                               builder.getI64IntegerAttr(0));
+      auto lhsClock =
+          hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1)
+              .getResult();
+      auto lhsEdge =
+          ltl::ClockEdgeAttr::get(builder.getContext(), ltl::ClockEdge::Pos);
+      auto lhsDelay = ltl::DelayOp::create(builder, loc, lhsClock, lhsEdge, lhs,
+                                           builder.getI64IntegerAttr(1),
+                                           builder.getI64IntegerAttr(0));
       auto antecedent = ltl::ConcatOp::create(
           builder, loc, SmallVector<Value, 2>{lhsDelay, constOne});
       return ltl::ImplicationOp::create(builder, loc,
@@ -253,9 +278,14 @@ struct AssertionExprVisitor {
       auto constOne =
           hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1);
       auto notRhs = ltl::NotOp::create(builder, loc, rhs);
-      auto lhsDelay =
-          ltl::DelayOp::create(builder, loc, lhs, builder.getI64IntegerAttr(1),
-                               builder.getI64IntegerAttr(0));
+      auto lhsClock =
+          hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1)
+              .getResult();
+      auto lhsEdge =
+          ltl::ClockEdgeAttr::get(builder.getContext(), ltl::ClockEdge::Pos);
+      auto lhsDelay = ltl::DelayOp::create(builder, loc, lhsClock, lhsEdge, lhs,
+                                           builder.getI64IntegerAttr(1),
+                                           builder.getI64IntegerAttr(0));
       auto antecedent = ltl::ConcatOp::create(
           builder, loc, SmallVector<Value, 2>{lhsDelay, constOne});
       auto implication = ltl::ImplicationOp::create(
