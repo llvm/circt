@@ -921,6 +921,8 @@ def InferDomains : Pass<"firrtl-infer-domains", "firrtl::CircuitOp"> {
                         "InferDomainsMode::Infer", "infer, check, infer-all.",
                         [{
                  llvm::cl::values(
+                   clEnumValN(InferDomainsMode::Strip, "strip",
+                    "Erase domains from the circuit without checking"),
                    clEnumValN(InferDomainsMode::Infer, "infer",
                      "Check domains with inference for private modules"),
                    clEnumValN(InferDomainsMode::Check, "check",
