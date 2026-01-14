@@ -553,6 +553,8 @@ struct ModuleVisitor : public BaseVisitor {
   // Handle procedures.
   LogicalResult convertProcedure(moore::ProcedureKind kind,
                                  const slang::ast::Statement &body) {
+    if (body.as_if<slang::ast::ConcurrentAssertionStatement>())
+      return context.convertStatement(body);
     auto procOp = moore::ProcedureOp::create(builder, loc, kind);
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToEnd(&procOp.getBody().emplaceBlock());

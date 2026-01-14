@@ -2430,375 +2430,315 @@ module ConcurrentAssert(input clk);
   logic b;
 
   // Simple
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: verif.assert [[CONV_A]] : i1
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: verif.assert [[CONV_A]] : i1
   assert property (a);
 
   // Sequence Concat
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[REPEAT_OP:%.+]] = ltl.repeat [[CONV_A]], 1 : i1
-    // CHECK: verif.assert [[REPEAT_OP]] : !ltl.sequence
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[REPEAT_OP:%.+]] = ltl.repeat [[CONV_A]], 1 : i1
+  // CHECK: verif.assert [[REPEAT_OP]] : !ltl.sequence
   assert property (a [+]);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[NONCONCATREPEAT_OP:%.+]] = ltl.non_consecutive_repeat [[CONV_A]], 2, 0 : i1
-    // CHECK: verif.assert [[NONCONCATREPEAT_OP]] : !ltl.sequence
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[NONCONCATREPEAT_OP:%.+]] = ltl.non_consecutive_repeat [[CONV_A]], 2, 0 : i1
+  // CHECK: verif.assert [[NONCONCATREPEAT_OP]] : !ltl.sequence
   assert property (a [= 2]);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[GOTO_OP:%.+]] = ltl.goto_repeat [[CONV_A]], 2, 2 : i1
-    // CHECK: verif.assert [[GOTO_OP]] : !ltl.sequence
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[GOTO_OP:%.+]] = ltl.goto_repeat [[CONV_A]], 2, 2 : i1
+  // CHECK: verif.assert [[GOTO_OP]] : !ltl.sequence
   assert property (a [-> 2:4]);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[DELAY_A:%.+]] = ltl.delay [[CONV_A]], 0, 0 : i1
-    // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
-    // CHECK: [[DELAY_B:%.+]] = ltl.delay [[CONV_B]], 0, 0 : i1
-    // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_A]], [[DELAY_B]] : !ltl.sequence, !ltl.sequence
-    // CHECK: verif.assert [[CONCAT_OP]] : !ltl.sequence
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[DELAY_A:%.+]] = ltl.delay [[CONV_A]], 0, 0 : i1
+  // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
+  // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
+  // CHECK: [[DELAY_B:%.+]] = ltl.delay [[CONV_B]], 0, 0 : i1
+  // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_A]], [[DELAY_B]] : !ltl.sequence, !ltl.sequence
+  // CHECK: verif.assert [[CONCAT_OP]] : !ltl.sequence
   assert property (a ##0 b);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[DELAY_A:%.+]] = ltl.delay [[CONV_A]], 0, 0 : i1
-    // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
-    // CHECK: [[DELAY_B:%.+]] = ltl.delay [[CONV_B]], 1 : i1
-    // CHECK: [[READ_A2:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A2:%.+]] = moore.to_builtin_bool [[READ_A2]] : i1
-    // CHECK: [[DELAY_A2:%.+]] = ltl.delay [[CONV_A2]], 3, 2 : i1
-    // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_A]], [[DELAY_B]], [[DELAY_A2]] : !ltl.sequence, !ltl.sequence, !ltl.sequence
-    // CHECK: verif.assert [[CONCAT_OP]] : !ltl.sequence
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[DELAY_A:%.+]] = ltl.delay [[CONV_A]], 0, 0 : i1
+  // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
+  // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
+  // CHECK: [[DELAY_B:%.+]] = ltl.delay [[CONV_B]], 1 : i1
+  // CHECK: [[READ_A2:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A2:%.+]] = moore.to_builtin_bool [[READ_A2]] : i1
+  // CHECK: [[DELAY_A2:%.+]] = ltl.delay [[CONV_A2]], 3, 2 : i1
+  // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_A]], [[DELAY_B]], [[DELAY_A2]] : !ltl.sequence, !ltl.sequence, !ltl.sequence
+  // CHECK: verif.assert [[CONCAT_OP]] : !ltl.sequence
   assert property (a ##[+] b ##[3:5] a);
 
   // Unary
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[NOT_OP:%.+]] = ltl.not [[CONV_A]] : i1
-    // CHECK: verif.assert [[NOT_OP]] : !ltl.property
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[NOT_OP:%.+]] = ltl.not [[CONV_A]] : i1
+  // CHECK: verif.assert [[NOT_OP]] : !ltl.property
   assert property (not a);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[EVEN_OP:%.+]] = ltl.eventually [[CONV_A]] : i1
-    // CHECK: verif.assert [[EVEN_OP]] : !ltl.property
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[EVEN_OP:%.+]] = ltl.eventually [[CONV_A]] : i1
+  // CHECK: verif.assert [[EVEN_OP]] : !ltl.property
   assert property (s_eventually a);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[REPEAT_OP:%.+]] = ltl.repeat [[CONV_A]], 0 : i1
-    // CHECK: verif.assert [[REPEAT_OP]] : !ltl.sequence
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[REPEAT_OP:%.+]] = ltl.repeat [[CONV_A]], 0 : i1
+  // CHECK: verif.assert [[REPEAT_OP]] : !ltl.sequence
   assert property (always a);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[REPEAT_OP:%.+]] = ltl.repeat [[CONV_A]], 2, 1 : i1
-    // CHECK: verif.assert [[REPEAT_OP]] : !ltl.sequence
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[REPEAT_OP:%.+]] = ltl.repeat [[CONV_A]], 2, 1 : i1
+  // CHECK: verif.assert [[REPEAT_OP]] : !ltl.sequence
   assert property (always [2:3] a);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
-    // CHECK: verif.assert [[DELAY_OP]] : !ltl.sequence
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
+  // CHECK: verif.assert [[DELAY_OP]] : !ltl.sequence
   assert property (nexttime a);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 5, 0 : i1
-    // CHECK: verif.assert [[DELAY_OP]] : !ltl.sequence
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 5, 0 : i1
+  // CHECK: verif.assert [[DELAY_OP]] : !ltl.sequence
   assert property (nexttime [5] a);
 
   // Binary
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
-    // CHECK: [[AND_OP:%.+]] = ltl.and [[CONV_A]], [[CONV_B]] : i1, i1
-    // CHECK: verif.assert [[AND_OP]] : i1
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
+  // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
+  // CHECK: [[AND_OP:%.+]] = ltl.and [[CONV_A]], [[CONV_B]] : i1, i1
+  // CHECK: verif.assert [[AND_OP]] : i1
   assert property (a and b);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
-    // CHECK: [[OR_OP:%.+]] = ltl.or [[CONV_A]], [[CONV_B]] : i1, i1
-    // CHECK: verif.assert [[OR_OP]] : i1
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
+  // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
+  // CHECK: [[OR_OP:%.+]] = ltl.or [[CONV_A]], [[CONV_B]] : i1, i1
+  // CHECK: verif.assert [[OR_OP]] : i1
   assert property (a or b);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
-    // CHECK: [[INTER_OP:%.+]] = ltl.intersect [[CONV_A]], [[CONV_B]] : i1, i1
-    // CHECK: verif.assert [[INTER_OP]] : i1
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
+  // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
+  // CHECK: [[INTER_OP:%.+]] = ltl.intersect [[CONV_A]], [[CONV_B]] : i1, i1
+  // CHECK: verif.assert [[INTER_OP]] : i1
   assert property (a intersect b);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
-    // CHECK: [[REPEAT_A:%.+]] = ltl.repeat [[CONV_A]], 0 : i1
-    // CHECK: [[INTER_OP:%.+]] = ltl.intersect [[REPEAT_A]], [[CONV_B]] : !ltl.sequence, i1
-    // CHECK: verif.assert [[INTER_OP]] : !ltl.sequence
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
+  // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
+  // CHECK: [[REPEAT_A:%.+]] = ltl.repeat [[CONV_A]], 0 : i1
+  // CHECK: [[INTER_OP:%.+]] = ltl.intersect [[REPEAT_A]], [[CONV_B]] : !ltl.sequence, i1
+  // CHECK: verif.assert [[INTER_OP]] : !ltl.sequence
   assert property (a throughout b);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
-    // CHECK: [[CONST_T:%.+]] = hw.constant true
-    // CHECK: [[REPEAT_T:%.+]] = ltl.repeat [[CONST_T]], 0 : i1
-    // CHECK: [[DELAY_RT:%.+]] = ltl.delay [[REPEAT_T]], 1, 0 : !ltl.sequence
-    // CHECK: [[DELAY_A:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
-    // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_RT]], [[DELAY_A]], [[CONST_T]] : !ltl.sequence, !ltl.sequence, i1
-    // CHECK: [[INTER_OP:%.+]] = ltl.intersect [[CONCAT_OP]], [[CONV_B]] : !ltl.sequence, i1
-    // CHECK: verif.assert [[INTER_OP]] : !ltl.sequence
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
+  // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
+  // CHECK: [[CONST_T:%.+]] = hw.constant true
+  // CHECK: [[REPEAT_T:%.+]] = ltl.repeat [[CONST_T]], 0 : i1
+  // CHECK: [[DELAY_RT:%.+]] = ltl.delay [[REPEAT_T]], 1, 0 : !ltl.sequence
+  // CHECK: [[DELAY_A:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
+  // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_RT]], [[DELAY_A]], [[CONST_T]] : !ltl.sequence, !ltl.sequence, i1
+  // CHECK: [[INTER_OP:%.+]] = ltl.intersect [[CONCAT_OP]], [[CONV_B]] : !ltl.sequence, i1
+  // CHECK: verif.assert [[INTER_OP]] : !ltl.sequence
   assert property (a within b);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
-    // CHECK: [[OR_OP:%.+]] = ltl.or [[CONV_A]], [[CONV_B]] : i1, i1
-    // CHECK: [[NOT_OP:%.+]] = ltl.not [[OR_OP]] : i1
-    // CHECK: [[AND_OP:%.+]] = ltl.and [[CONV_A]], [[CONV_B]] : i1, i1
-    // CHECK: [[IFF:%.+]] = ltl.or [[NOT_OP]], [[AND_OP]] : !ltl.property, i1
-    // CHECK: verif.assert [[IFF]] : !ltl.property
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
+  // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
+  // CHECK: [[OR_OP:%.+]] = ltl.or [[CONV_A]], [[CONV_B]] : i1, i1
+  // CHECK: [[NOT_OP:%.+]] = ltl.not [[OR_OP]] : i1
+  // CHECK: [[AND_OP:%.+]] = ltl.and [[CONV_A]], [[CONV_B]] : i1, i1
+  // CHECK: [[IFF:%.+]] = ltl.or [[NOT_OP]], [[AND_OP]] : !ltl.property, i1
+  // CHECK: verif.assert [[IFF]] : !ltl.property
   assert property (a iff b);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
-    // CHECK: [[UNTIL_OP:%.+]] = ltl.until [[CONV_A]], [[CONV_B]] : i1, i1
-    // CHECK: verif.assert [[UNTIL_OP]] : !ltl.property
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
+  // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
+  // CHECK: [[UNTIL_OP:%.+]] = ltl.until [[CONV_A]], [[CONV_B]] : i1, i1
+  // CHECK: verif.assert [[UNTIL_OP]] : !ltl.property
   assert property (a until b);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
-    // CHECK: [[UNTIL_OP:%.+]] = ltl.until [[CONV_A]], [[CONV_B]] : i1, i1
-    // CHECK: [[AND_OP:%.+]] = ltl.and [[CONV_A]], [[CONV_B]] : i1, i1
-    // CHECK: [[NOT_OP:%.+]] = ltl.not [[UNTIL_OP]] : !ltl.property
-    // CHECK: [[OR_OP:%.+]] = ltl.or [[NOT_OP]], [[AND_OP]] : !ltl.property, i1
-    // CHECK: verif.assert [[OR_OP]] : !ltl.property
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
+  // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
+  // CHECK: [[UNTIL_OP:%.+]] = ltl.until [[CONV_A]], [[CONV_B]] : i1, i1
+  // CHECK: [[AND_OP:%.+]] = ltl.and [[CONV_A]], [[CONV_B]] : i1, i1
+  // CHECK: [[NOT_OP:%.+]] = ltl.not [[UNTIL_OP]] : !ltl.property
+  // CHECK: [[OR_OP:%.+]] = ltl.or [[NOT_OP]], [[AND_OP]] : !ltl.property, i1
+  // CHECK: verif.assert [[OR_OP]] : !ltl.property
   assert property (a until_with b);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
-    // CHECK: [[NOT_OP:%.+]] = ltl.not [[CONV_A]] : i1
-    // CHECK: [[OR_OP:%.+]] = ltl.or [[NOT_OP]], [[CONV_B]] : !ltl.property, i1
-    // CHECK: verif.assert [[OR_OP]] : !ltl.property
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
+  // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
+  // CHECK: [[NOT_OP:%.+]] = ltl.not [[CONV_A]] : i1
+  // CHECK: [[OR_OP:%.+]] = ltl.or [[NOT_OP]], [[CONV_B]] : !ltl.property, i1
+  // CHECK: verif.assert [[OR_OP]] : !ltl.property
   assert property (a implies b);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
-    // CHECK: [[IMPLICATION_OP:%.+]] = ltl.implication [[CONV_A]], [[CONV_B]] : i1, i1
-    // CHECK: verif.assert [[IMPLICATION_OP]] : !ltl.property
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
+  // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
+  // CHECK: [[IMPLICATION_OP:%.+]] = ltl.implication [[CONV_A]], [[CONV_B]] : i1, i1
+  // CHECK: verif.assert [[IMPLICATION_OP]] : !ltl.property
   assert property (a |-> b);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
-    // CHECK: [[CONST_T:%.+]] = hw.constant true
-    // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
-    // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_OP]], [[CONST_T]] : !ltl.sequence, i1
-    // CHECK: [[IMPLICATION_OP:%.+]] = ltl.implication [[CONCAT_OP]], [[CONV_B]] : !ltl.sequence, i1
-    // CHECK: verif.assert [[IMPLICATION_OP]] : !ltl.property
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
+  // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
+  // CHECK: [[CONST_T:%.+]] = hw.constant true
+  // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
+  // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_OP]], [[CONST_T]] : !ltl.sequence, i1
+  // CHECK: [[IMPLICATION_OP:%.+]] = ltl.implication [[CONCAT_OP]], [[CONV_B]] : !ltl.sequence, i1
+  // CHECK: verif.assert [[IMPLICATION_OP]] : !ltl.property
   assert property (a |=> b);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
-    // CHECK: [[NOT_OP:%.+]] = ltl.not [[CONV_B]] : i1
-    // CHECK: [[IMPLICATION_OP:%.+]] = ltl.implication [[CONV_A]], [[NOT_OP]] : i1, !ltl.property
-    // CHECK: [[NOT_IMPLI_OP:%.+]] = ltl.not [[IMPLICATION_OP]] : !ltl.property
-    // CHECK: verif.assert [[NOT_IMPLI_OP]] : !ltl.property
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
+  // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
+  // CHECK: [[NOT_OP:%.+]] = ltl.not [[CONV_B]] : i1
+  // CHECK: [[IMPLICATION_OP:%.+]] = ltl.implication [[CONV_A]], [[NOT_OP]] : i1, !ltl.property
+  // CHECK: [[NOT_IMPLI_OP:%.+]] = ltl.not [[IMPLICATION_OP]] : !ltl.property
+  // CHECK: verif.assert [[NOT_IMPLI_OP]] : !ltl.property
   assert property (a #-# b);
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
-    // CHECK: [[CONST_T:%.+]] = hw.constant true
-    // CHECK: [[NOT_OP:%.+]] = ltl.not [[CONV_B]] : i1
-    // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
-    // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_OP]], [[CONST_T]] : !ltl.sequence, i1
-    // CHECK: [[IMPLICATION_OP:%.+]] = ltl.implication [[CONCAT_OP]], [[NOT_OP]] : !ltl.sequence, !ltl.property
-    // CHECK: [[NOT_IMPLI_OP:%.+]] = ltl.not [[IMPLICATION_OP]] : !ltl.property
-    // CHECK: verif.assert [[NOT_IMPLI_OP]] : !ltl.property
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[READ_B:%.+]] = moore.read [[B]] : <l1>
+  // CHECK: [[CONV_B:%.+]] = moore.to_builtin_bool [[READ_B]] : l1
+  // CHECK: [[CONST_T:%.+]] = hw.constant true
+  // CHECK: [[NOT_OP:%.+]] = ltl.not [[CONV_B]] : i1
+  // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
+  // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_OP]], [[CONST_T]] : !ltl.sequence, i1
+  // CHECK: [[IMPLICATION_OP:%.+]] = ltl.implication [[CONCAT_OP]], [[NOT_OP]] : !ltl.sequence, !ltl.property
+  // CHECK: [[NOT_IMPLI_OP:%.+]] = ltl.not [[IMPLICATION_OP]] : !ltl.property
+  // CHECK: verif.assert [[NOT_IMPLI_OP]] : !ltl.property
   assert property (a #=# b);
 
   // Clocking
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
-    // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
-    // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_bool [[READ_CLK]] : l1
-    // CHECK: [[CLK_OP:%.+]] = ltl.clock [[CONV_A]], posedge [[CONV_CLK]] : i1
-    // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_bool [[READ_A]] : i1
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_bool [[READ_CLK]] : l1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[CONV_A]], posedge [[CONV_CLK]] : i1
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
   assert property (@(posedge clk) a);
 
   // Sequence declaration
-  // CHECK: moore.procedure always {
-    // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
-    // CHECK: [[A:%.+]] = moore.to_builtin_bool [[TMP]] : i1
-    // CHECK: [[DA:%.+]] = ltl.delay [[A]], 0, 0 : i1
-    // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
-    // CHECK: [[B:%.+]] = moore.to_builtin_bool [[TMP]] : l1
-    // CHECK: [[DB:%.+]] = ltl.delay [[B]], 1, 0 : i1
-    // CHECK: [[RES:%.+]] = ltl.concat %6, %9 : !ltl.sequence, !ltl.sequence
-    // CHECK: verif.assert [[RES]] : !ltl.sequence
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always {
+  // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
+  // CHECK: [[A:%.+]] = moore.to_builtin_bool [[TMP]] : i1
+  // CHECK: [[DA:%.+]] = ltl.delay [[A]], 0, 0 : i1
+  // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
+  // CHECK: [[B:%.+]] = moore.to_builtin_bool [[TMP]] : l1
+  // CHECK: [[DB:%.+]] = ltl.delay [[B]], 1, 0 : i1
+  // CHECK: [[RES:%.+]] = ltl.concat [[DA]], [[DB]] : !ltl.sequence, !ltl.sequence
+  // CHECK: verif.assert [[RES]] : !ltl.sequence
   sequence s1;
     a ##1 b;
   endsequence
   assert property (s1);
 
-  // CHECK: moore.procedure always {
-    // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
-    // CHECK: [[B:%.+]] = moore.to_builtin_bool [[TMP]] : l1
-    // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
-    // CHECK: [[A:%.+]] = moore.to_builtin_bool [[TMP]] : i1
-    // CHECK: [[TRUE:%.+]] = hw.constant true
-    // CHECK: [[OP1:%.+]] = ltl.repeat [[TRUE]], 0 : i1
-    // CHECK: [[OP2:%.+]] = ltl.delay [[OP1]], 1, 0 : !ltl.sequence
-    // CHECK: [[OP3:%.+]] = ltl.delay [[B]], 1, 0 : i1
-    // CHECK: [[OP4:%.+]] = ltl.concat [[OP2]], [[OP3]], [[TRUE]] : !ltl.sequence, !ltl.sequence, i1
-    // CHECK: [[RES:%.+]] = ltl.intersect [[OP4]], [[A]] : !ltl.sequence, i1
-    // CHECK: verif.assert [[RES]] : !ltl.sequence
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always {
+  // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
+  // CHECK: [[B:%.+]] = moore.to_builtin_bool [[TMP]] : l1
+  // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
+  // CHECK: [[A:%.+]] = moore.to_builtin_bool [[TMP]] : i1
+  // CHECK: [[TRUE:%.+]] = hw.constant true
+  // CHECK: [[OP1:%.+]] = ltl.repeat [[TRUE]], 0 : i1
+  // CHECK: [[OP2:%.+]] = ltl.delay [[OP1]], 1, 0 : !ltl.sequence
+  // CHECK: [[OP3:%.+]] = ltl.delay [[B]], 1, 0 : i1
+  // CHECK: [[OP4:%.+]] = ltl.concat [[OP2]], [[OP3]], [[TRUE]] : !ltl.sequence, !ltl.sequence, i1
+  // CHECK: [[RES:%.+]] = ltl.intersect [[OP4]], [[A]] : !ltl.sequence, i1
+  // CHECK: verif.assert [[RES]] : !ltl.sequence
   sequence s2(x, y);
     x within y;
   endsequence
   assert property (s2(b, a));
 
-  // CHECK: moore.procedure always {
-    // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
-    // CHECK: [[A:%.+]] = moore.to_builtin_bool [[TMP]] : i1
-    // CHECK: [[DA:%.+]] = ltl.delay [[A]], 0, 0 : i1
-    // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
-    // CHECK: [[B:%.+]] = moore.to_builtin_bool [[TMP]] : l1
-    // CHECK: [[DB:%.+]] = ltl.delay [[B]], 1, 0 : i1
-    // CHECK: [[OP1:%.+]] = ltl.concat [[DA]], [[DB]] : !ltl.sequence, !ltl.sequence
-    // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
-    // CHECK: [[B2:%.+]] = moore.to_builtin_bool [[TMP]] : l1
-    // CHECK: [[RES:%.+]] = ltl.implication [[OP1]], [[B2]] : !ltl.sequence, i1
-    // CHECK: verif.assert [[RES]] : !ltl.property
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always {
+  // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
+  // CHECK: [[A:%.+]] = moore.to_builtin_bool [[TMP]] : i1
+  // CHECK: [[DA:%.+]] = ltl.delay [[A]], 0, 0 : i1
+  // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
+  // CHECK: [[B:%.+]] = moore.to_builtin_bool [[TMP]] : l1
+  // CHECK: [[DB:%.+]] = ltl.delay [[B]], 1, 0 : i1
+  // CHECK: [[OP1:%.+]] = ltl.concat [[DA]], [[DB]] : !ltl.sequence, !ltl.sequence
+  // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
+  // CHECK: [[B2:%.+]] = moore.to_builtin_bool [[TMP]] : l1
+  // CHECK: [[RES:%.+]] = ltl.implication [[OP1]], [[B2]] : !ltl.sequence, i1
+  // CHECK: verif.assert [[RES]] : !ltl.property
   property p1;
     s1 |-> b;
   endproperty
   assert property (p1);
 
-  // CHECK: moore.procedure always {
-    // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
-    // CHECK: [[A1:%.+]] = moore.to_builtin_bool [[TMP]] : i1
-    // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
-    // CHECK: [[A2:%.+]] = moore.to_builtin_bool [[TMP]] : i1
-    // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
-    // CHECK: [[B1:%.+]] = moore.to_builtin_bool [[TMP]] : l1
-    // CHECK: [[TRUE:%.+]] = hw.constant true
-    // CHECK: [[OP1:%.+]] = ltl.repeat [[TRUE]], 0 : i1
-    // CHECK: [[OP2:%.+]] = ltl.delay [[OP1]], 1, 0 : !ltl.sequence
-    // CHECK: [[OP3:%.+]] = ltl.delay [[A2]], 1, 0 : i1
-    // CHECK: [[OP4:%.+]] = ltl.concat [[OP2]], [[OP3]], [[TRUE]] : !ltl.sequence, !ltl.sequence, i1
-    // CHECK: [[OP5:%.+]] = ltl.intersect [[OP4]], [[B1]] : !ltl.sequence, i1
-    // CHECK: [[TRUE1:%.+]] = hw.constant true
-    // CHECK: [[OP6:%.+]] = ltl.repeat [[TRUE1]], 0 : i1
-    // CHECK: [[OP7:%.+]] = ltl.delay [[OP6]], 1, 0 : !ltl.sequence
-    // CHECK: [[OP8:%.+]] = ltl.delay [[A1]], 1, 0 : i1
-    // CHECK: [[OP9:%.+]] = ltl.concat [[OP7]], [[OP8]], [[TRUE1]] : !ltl.sequence, !ltl.sequence, i1
-    // CHECK: [[OP10:%.+]] = ltl.intersect [[OP9]], [[OP5]] : !ltl.sequence, !ltl.sequence
-    // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
-    // CHECK: [[A3:%.+]] = moore.to_builtin_bool [[TMP]] : i1
-    // CHECK: [[DA3:%.+]] = ltl.delay [[A3]], 0, 0 : i1
-    // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
-    // CHECK: [[B2:%.+]] = moore.to_builtin_bool [[TMP]] : l1
-    // CHECK: [[DB2:%.+]] = ltl.delay [[B2]], 1, 0 : i1
-    // CHECK: [[OP11:%.+]] = ltl.concat [[DA3]], [[DB2]] : !ltl.sequence, !ltl.sequence
-    // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
-    // CHECK: [[B3:%.+]] = moore.to_builtin_bool [[TMP]] : l1
-    // CHECK: [[OP12:%.+]] = ltl.implication [[OP11]], [[B3]] : !ltl.sequence, i1
-    // CHECK: [[TRUE2:%.+]] = hw.constant true
-    // CHECK: [[OP13:%.+]] = ltl.delay [[OP10]], 1, 0 : !ltl.sequence
-    // CHECK: [[OP14:%.+]] = ltl.concat [[OP13]], [[TRUE2]] : !ltl.sequence, i1
-    // CHECK: [[RES:%.+]] = ltl.implication [[OP14]], [[OP12]] : !ltl.sequence, !ltl.property
-    // CHECK: verif.assert [[RES]] : !ltl.property
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always {
+  // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
+  // CHECK: [[A1:%.+]] = moore.to_builtin_bool [[TMP]] : i1
+  // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
+  // CHECK: [[A2:%.+]] = moore.to_builtin_bool [[TMP]] : i1
+  // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
+  // CHECK: [[B1:%.+]] = moore.to_builtin_bool [[TMP]] : l1
+  // CHECK: [[TRUE:%.+]] = hw.constant true
+  // CHECK: [[OP1:%.+]] = ltl.repeat [[TRUE]], 0 : i1
+  // CHECK: [[OP2:%.+]] = ltl.delay [[OP1]], 1, 0 : !ltl.sequence
+  // CHECK: [[OP3:%.+]] = ltl.delay [[A2]], 1, 0 : i1
+  // CHECK: [[OP4:%.+]] = ltl.concat [[OP2]], [[OP3]], [[TRUE]] : !ltl.sequence, !ltl.sequence, i1
+  // CHECK: [[OP5:%.+]] = ltl.intersect [[OP4]], [[B1]] : !ltl.sequence, i1
+  // CHECK: [[TRUE1:%.+]] = hw.constant true
+  // CHECK: [[OP6:%.+]] = ltl.repeat [[TRUE1]], 0 : i1
+  // CHECK: [[OP7:%.+]] = ltl.delay [[OP6]], 1, 0 : !ltl.sequence
+  // CHECK: [[OP8:%.+]] = ltl.delay [[A1]], 1, 0 : i1
+  // CHECK: [[OP9:%.+]] = ltl.concat [[OP7]], [[OP8]], [[TRUE1]] : !ltl.sequence, !ltl.sequence, i1
+  // CHECK: [[OP10:%.+]] = ltl.intersect [[OP9]], [[OP5]] : !ltl.sequence, !ltl.sequence
+  // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
+  // CHECK: [[A3:%.+]] = moore.to_builtin_bool [[TMP]] : i1
+  // CHECK: [[DA3:%.+]] = ltl.delay [[A3]], 0, 0 : i1
+  // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
+  // CHECK: [[B2:%.+]] = moore.to_builtin_bool [[TMP]] : l1
+  // CHECK: [[DB2:%.+]] = ltl.delay [[B2]], 1, 0 : i1
+  // CHECK: [[OP11:%.+]] = ltl.concat [[DA3]], [[DB2]] : !ltl.sequence, !ltl.sequence
+  // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
+  // CHECK: [[B3:%.+]] = moore.to_builtin_bool [[TMP]] : l1
+  // CHECK: [[OP12:%.+]] = ltl.implication [[OP11]], [[B3]] : !ltl.sequence, i1
+  // CHECK: [[TRUE2:%.+]] = hw.constant true
+  // CHECK: [[OP13:%.+]] = ltl.delay [[OP10]], 1, 0 : !ltl.sequence
+  // CHECK: [[OP14:%.+]] = ltl.concat [[OP13]], [[TRUE2]] : !ltl.sequence, i1
+  // CHECK: [[RES:%.+]] = ltl.implication [[OP14]], [[OP12]] : !ltl.sequence, !ltl.property
+  // CHECK: verif.assert [[RES]] : !ltl.property
   property p2(x, y);
     s2(x, y) |=> p1;
   endproperty
