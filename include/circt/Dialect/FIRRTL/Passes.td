@@ -215,7 +215,7 @@ def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "mlir::ModuleOp"> {
 def FlattenMemory : Pass<"firrtl-flatten-memory", "firrtl::FModuleOp"> {
   let summary = "Flatten aggregate memory data to a UInt";
   let description = [{
-    This pass flattens the aggregate data of memory into a UInt, and inserts
+    This pass converts the data type of memories into a flat UInt, and inserts
     appropriate bitcasts to access the data.
   }];
   let statistics = [
