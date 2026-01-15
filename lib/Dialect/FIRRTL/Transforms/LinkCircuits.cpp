@@ -155,7 +155,34 @@ static LogicalResult mangleCircuitSymbols(CircuitOp circuit) {
   return success();
 }
 
-/// return if the incomingOp has been erased
+/// Handles colliding symbols when merging circuits.
+///
+/// This function resolves symbol collisions between operations in different
+/// circuits during the linking process. It handles three specific cases:
+///
+/// 1. Identical extmodules: When two extmodules have identical attributes, the
+///    incoming one is removed as they are duplicates.
+///
+/// 2. Extmodule declaration + module definition: When an extmodule
+///    (declaration) collides with a module (definition), the declaration is
+///    removed in favor of the definition if their attributes match.
+///
+/// 3. Extmodule with empty parameters (Zaozi workaround): When two extmodules
+///    collide and one has empty parameters, the one without parameters
+///    (placeholder declaration) is removed. This handles a limitation in
+///    Zaozi's module generation where placeholder extmodule declarations are
+///    created from instance ops without knowing the actual parameters or
+///    defname.
+///
+/// \param collidingOp The operation already present in the merged circuit
+/// \param incomingOp The operation being added from another circuit
+/// \return FailureOr<bool> Returns success with true if incomingOp was erased,
+///         success with false if collidingOp was erased, or failure if the
+///         collision cannot be resolved
+///
+/// \note This workaround for empty parameters should ultimately be
+///       removed once ODS is updated to properly support placeholder
+///       declarations.
 static FailureOr<bool> handleCollidingOps(SymbolOpInterface collidingOp,
                                           SymbolOpInterface incomingOp) {
   if (!collidingOp.isPublic())
@@ -202,8 +229,8 @@ static FailureOr<bool> handleCollidingOps(SymbolOpInterface collidingOp,
       return true;
     }
 
-    // definition and declaration may have different defname and decalration has
-    // no parameters
+    // FIXME: definition and declaration may have different defname and
+    // decalration has no parameters
     if (collidingParams.empty() || incomingParams.empty()) {
       auto declaration = collidingParams.empty() ? collidingOp : incomingOp;
       declaration->erase();
