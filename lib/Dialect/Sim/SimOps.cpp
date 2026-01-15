@@ -58,7 +58,7 @@ static StringAttr formatIntegersByRadix(MLIRContext *ctx, unsigned radix,
   unsigned numSpaces = 0;
   if (specifierWidth.has_value() &&
       (specifierWidth.value() >
-        std::max(padWidth, static_cast<unsigned>(strBuf.size())))) {
+       std::max(padWidth, static_cast<unsigned>(strBuf.size())))) {
     numSpaces = std::max(
         0U, specifierWidth.value() -
                 std::max(padWidth, static_cast<unsigned>(strBuf.size())));
@@ -73,8 +73,8 @@ static StringAttr formatIntegersByRadix(MLIRContext *ctx, unsigned radix,
     return StringAttr::get(ctx, Twine(padding) + Twine(strBuf) +
                                     Twine(spacePadding));
   }
-  return StringAttr::get(ctx, Twine(spacePadding) + Twine(padding) +
-                                  Twine(strBuf));
+  return StringAttr::get(ctx,
+                         Twine(spacePadding) + Twine(padding) + Twine(strBuf));
 }
 
 static StringAttr formatFloatsBySpecifier(MLIRContext *ctx, Attribute value,
