@@ -17,6 +17,9 @@
 #include "circt/Dialect/Arc/Runtime/Common.h"
 #include "circt/Dialect/Arc/Runtime/IRInterface.h"
 #include "circt/Dialect/Arc/Runtime/ModelInstance.h"
+#include "llvm/ADT/APInt.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/Support/raw_ostream.h"
 
 #ifdef ARC_RUNTIME_JIT_BIND
 #define ARC_RUNTIME_JITBIND_FNDECL
@@ -24,6 +27,8 @@
 #endif
 
 #include <cassert>
+#include <cstdarg>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 
@@ -97,12 +102,47 @@ void arcRuntimeIR_deleteInstance(uint8_t *modelState) {
   arcRuntimeDeleteInstance(arcRuntimeGetStateFromModelState(modelState, 0));
 }
 
+void arcRuntimeIR_format(const FmtDescriptor *fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+
+  llvm::raw_ostream &os = llvm::outs();
+  while (fmt->action != FmtDescriptor::Action_End) {
+    switch (fmt->action) {
+    case FmtDescriptor::Action_Literal: {
+      llvm::StringRef s(va_arg(args, const char *), fmt->literal.width);
+      os << s;
+      break;
+    }
+    case FmtDescriptor::Action_Int: {
+      uint8_t *bytes = va_arg(args, uint8_t *);
+      int64_t numWords = llvm::divideCeil(fmt->intFmt.bitwidth, 64);
+      std::vector<uint64_t> words(numWords, 0);
+      std::memcpy(words.data(), bytes,
+                  llvm::divideCeil(fmt->intFmt.bitwidth, 8));
+      llvm::APInt apInt(fmt->intFmt.bitwidth, words);
+
+      os << apInt;
+      break;
+    }
+    case FmtDescriptor::Action_Char:
+      os << static_cast<char>(va_arg(args, int));
+      break;
+    case FmtDescriptor::Action_End:
+      break;
+    }
+    fmt++;
+  }
+
+  va_end(args);
+}
+
 #ifdef ARC_RUNTIME_JIT_BIND
 namespace circt::arc::runtime {
 
-static const APICallbacks apiCallbacksGlobal{&arcRuntimeIR_allocInstance,
-                                             &arcRuntimeIR_deleteInstance,
-                                             &arcRuntimeIR_onEval};
+static const APICallbacks apiCallbacksGlobal{
+    &arcRuntimeIR_allocInstance, &arcRuntimeIR_deleteInstance,
+    &arcRuntimeIR_onEval, &arcRuntimeIR_format};
 
 const APICallbacks &getArcRuntimeAPICallbacks() { return apiCallbacksGlobal; }
 
