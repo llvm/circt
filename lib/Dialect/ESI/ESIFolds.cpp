@@ -15,16 +15,24 @@
 using namespace circt;
 using namespace circt::esi;
 
-LogicalResult WrapValidReadyOp::fold(FoldAdaptor,
-                                     SmallVectorImpl<OpFoldResult> &results) {
-  if (!getChanOutput().getUsers().empty())
-    return failure();
-  OpBuilder builder(getContext());
-  results.push_back(
-      NullSourceOp::create(builder, getLoc(), getChanOutput().getType())
-          .getOut());
-  results.push_back(IntegerAttr::get(IntegerType::get(getContext(), 1), 1));
-  return success();
+LogicalResult WrapValidReadyOp::canonicalize(WrapValidReadyOp op,
+                                             PatternRewriter &rewriter) {
+  // If the channel has no consumers but the ready signal does, replace ready
+  // with a constant true (always ready to accept data).
+  if (op.getChanOutput().use_empty() && !op.getReady().use_empty()) {
+    auto trueConst =
+        hw::ConstantOp::create(rewriter, op.getLoc(), rewriter.getI1Type(), 1);
+    rewriter.replaceAllUsesWith(op.getReady(), trueConst);
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  // If the wrap has no users at all, just erase it.
+  if (op->use_empty()) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+  return failure();
 }
 
 LogicalResult UnwrapFIFOOp::mergeAndErase(UnwrapFIFOOp unwrap, WrapFIFOOp wrap,
@@ -44,23 +52,25 @@ LogicalResult UnwrapFIFOOp::canonicalize(UnwrapFIFOOp op,
   return failure();
 }
 
-LogicalResult WrapFIFOOp::fold(FoldAdaptor,
-                               SmallVectorImpl<OpFoldResult> &results) {
-  if (!getChanOutput().getUsers().empty())
-    return failure();
-
-  OpBuilder builder(getContext());
-  results.push_back(
-      NullSourceOp::create(builder, getLoc(), getChanOutput().getType())
-          .getOut());
-  results.push_back(IntegerAttr::get(
-      IntegerType::get(getContext(), 1, IntegerType::Signless), 0));
-  return success();
-}
-
 LogicalResult WrapFIFOOp::canonicalize(WrapFIFOOp op,
                                        PatternRewriter &rewriter) {
+  // If the channel has no consumers but the rden signal does, replace rden
+  // with a constant false (not reading since there's no consumer).
+  if (op.getChanOutput().use_empty() && !op.getRden().use_empty()) {
+    auto falseConst =
+        hw::ConstantOp::create(rewriter, op.getLoc(), rewriter.getI1Type(), 0);
+    rewriter.replaceAllUsesWith(op.getRden(), falseConst);
+    rewriter.eraseOp(op);
+    return success();
+  }
 
+  // If the wrap has no users at all, just erase it.
+  if (op->use_empty()) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  // Existing wrap-unwrap canonicalization logic
   if (!op.getChanOutput().hasOneUse())
     return rewriter.notifyMatchFailure(
         op, "channel output doesn't have exactly one use");
