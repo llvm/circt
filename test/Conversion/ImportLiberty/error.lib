@@ -97,3 +97,11 @@ library(test) {
     }
   }
 }
+
+// -----
+
+library(test) {
+  // expected-error@+2 {{multiple decimal points in number}}
+  // expected-error@+1 {{expected attribute value}}
+  capacitance: 1.0.0
+}

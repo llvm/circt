@@ -154,9 +154,7 @@ private:
 ///   OrExpr    -> XorExpr { ('+'|'|') XorExpr }
 ///   XorExpr   -> AndExpr { '^' AndExpr }
 ///   AndExpr   -> UnaryExpr { ('*'|'&') UnaryExpr }
-///   UnaryExpr -> ('!'|'\'') UnaryExpr
-///              | '(' OrExpr ')' ['\'']
-///              | ID ['\'']
+///   UnaryExpr -> '!' UnaryExpr | '(' OrExpr ')' ['\''] | ID ['\']
 class ExpressionParser {
 public:
   ExpressionParser(LibertyLexer &lexer, OpBuilder &builder, StringRef expr,
