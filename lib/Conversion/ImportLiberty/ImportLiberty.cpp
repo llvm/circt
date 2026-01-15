@@ -14,6 +14,7 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -185,11 +186,6 @@ private:
         continue;
       }
 
-      // Calculate location relative to baseLoc
-      // baseLoc points to the opening quote of the string attribute
-      // ptr points into the StringAttr value
-      // We assume the StringAttr value content matches the source content
-      // (escapes etc.)
       SMLoc loc = getLoc(ptr);
 
       // Identifier
@@ -359,14 +355,21 @@ struct LibertyGroup {
   StringRef name;
   SMLoc loc;
   SmallVector<Attribute> args;
-  SmallVector<std::tuple<StringRef, Attribute, SMLoc>> attrs;
+  struct AttrEntry {
+    StringRef name;
+    Attribute value;
+    SMLoc loc;
+    AttrEntry(StringRef name, Attribute value, SMLoc loc)
+        : name(name), value(value), loc(loc) {}
+  };
+  SmallVector<AttrEntry> attrs;
   SmallVector<std::unique_ptr<LibertyGroup>> subGroups;
 
   // Helper to find an attribute by name
   std::pair<Attribute, SMLoc> getAttribute(StringRef name) const {
     for (const auto &attr : attrs)
-      if (std::get<0>(attr) == name)
-        return {std::get<1>(attr), std::get<2>(attr)};
+      if (attr.name == name)
+        return {attr.value, attr.loc};
     return {};
   }
 
@@ -375,6 +378,17 @@ struct LibertyGroup {
         std::remove_if(subGroups.begin(), subGroups.end(),
                        [pred](const auto &group) { return pred(*group); }),
         subGroups.end());
+  }
+
+  LogicalResult checkArgs(
+      size_t n,
+      llvm::function_ref<LogicalResult(size_t idx, Attribute)> pred) const {
+    if (args.size() != n)
+      return failure();
+    for (size_t i = 0; i < n; ++i)
+      if (failed(pred(i, args[i])))
+        return failure();
+    return success();
   }
 };
 
@@ -398,7 +412,7 @@ private:
   ParseResult parseStatement(LibertyGroup &parent);
 
   // Lowering methods
-  ParseResult lowerCell(const LibertyGroup &group);
+  ParseResult lowerCell(const LibertyGroup &group, StringAttr &cellNameAttr);
 
   //===--------------------------------------------------------------------===//
   // Parser for Subgroup of "cell" group.
@@ -411,7 +425,6 @@ private:
   static ParseResult parseAttribute(Attribute &result, OpBuilder &builder,
                                     StringRef attr);
 
-  // Expression parsing
   // Expression parsing
   ParseResult parseExpression(Value &result, StringRef expr,
                               const llvm::StringMap<Value> &values, SMLoc loc);
@@ -530,7 +543,12 @@ LibertyToken LibertyLexer::lexNumber() {
   while (curPtr < curBuffer.end()) {
     if (isdigit(*curPtr)) {
       ++curPtr;
-    } else if (*curPtr == '.' && !seenDot) {
+    } else if (*curPtr == '.') {
+      if (seenDot) {
+        mlir::emitError(translateLocation(SMLoc::getFromPointer(curPtr)),
+                        "multiple decimal points in number");
+        return makeToken(LibertyTokenKind::Error, start);
+      }
       seenDot = true;
       ++curPtr;
     } else {
@@ -603,7 +621,7 @@ ParseResult LibertyParser::parse() {
     // Skip any stray tokens that aren't valid group starts
     if (token.kind != LibertyTokenKind::Identifier ||
         token.spelling != "library") {
-      return emitError(token.location, "expected liberty");
+      return emitError(token.location, "expected `library` keyword");
     }
     lexer.nextToken();
     if (parseLibrary())
@@ -617,10 +635,16 @@ ParseResult LibertyParser::parseLibrary() {
   if (parseGroupBody(libertyLib))
     return failure();
 
+  DenseSet<StringAttr> seenCells;
   for (auto &stmt : libertyLib.subGroups) {
+    // TODO: Support more group types
     if (stmt->name == "cell") {
-      if (lowerCell(*stmt))
+      StringAttr cellNameAttr;
+      if (lowerCell(*stmt, cellNameAttr))
         return failure();
+      if (!seenCells.insert(cellNameAttr).second)
+        return emitError(stmt->loc, "redefinition of cell '" +
+                                        cellNameAttr.getValue() + "'");
       continue;
     }
   }
@@ -641,7 +665,7 @@ Attribute LibertyParser::convertGroupToAttr(const LibertyGroup &group) {
         builder.getNamedAttr("args", builder.getArrayAttr(group.args)));
 
   for (const auto &attr : group.attrs)
-    attrs.push_back(builder.getNamedAttr(std::get<0>(attr), std::get<1>(attr)));
+    attrs.push_back(builder.getNamedAttr(attr.name, attr.value));
 
   llvm::StringMap<SmallVector<Attribute>> subGroups;
   for (const auto &sub : group.subGroups)
@@ -654,18 +678,18 @@ Attribute LibertyParser::convertGroupToAttr(const LibertyGroup &group) {
   return builder.getDictionaryAttr(attrs);
 }
 
-ParseResult LibertyParser::lowerCell(const LibertyGroup &group) {
+ParseResult LibertyParser::lowerCell(const LibertyGroup &group,
+                                     StringAttr &cellNameAttr) {
   if (group.args.empty())
     return emitError(group.loc, "cell missing name");
 
-  StringRef cellName;
-  if (auto strAttr = dyn_cast<StringAttr>(group.args[0]))
-    cellName = strAttr.getValue();
-  else
+  cellNameAttr = dyn_cast<StringAttr>(group.args[0]);
+  if (!cellNameAttr)
     return emitError(group.loc, "cell name must be a string");
 
   SmallVector<hw::PortInfo> ports;
   SmallVector<const LibertyGroup *> pinGroups;
+  llvm::DenseSet<StringAttr> seenPins;
 
   // First pass: gather ports
   for (const auto &sub : group.subGroups) {
@@ -676,18 +700,17 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group) {
     if (sub->args.empty())
       return emitError(sub->loc, "pin missing name");
 
-    StringRef pinName;
-    if (auto strAttr = dyn_cast<StringAttr>(sub->args[0]))
-      pinName = strAttr.getValue();
-    else
-      return emitError(sub->loc, "pin name must be a string");
+    StringAttr pinName = dyn_cast<StringAttr>(sub->args[0]);
+    if (!seenPins.insert(pinName).second)
+      return emitError(sub->loc,
+                       "redefinition of pin '" + pinName.getValue() + "'");
 
     std::optional<hw::ModulePort::Direction> dir;
     SmallVector<NamedAttribute> pinAttrs;
 
     for (const auto &attr : sub->attrs) {
-      if (std::get<0>(attr) == "direction") {
-        if (auto val = dyn_cast<StringAttr>(std::get<1>(attr))) {
+      if (attr.name == "direction") {
+        if (auto val = dyn_cast<StringAttr>(attr.value)) {
           if (val.getValue() == "input")
             dir = hw::ModulePort::Direction::Input;
           else if (val.getValue() == "output")
@@ -697,11 +720,13 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group) {
           else
             return emitError(sub->loc,
                              "pin direction must be input, output, or inout");
+        } else {
+          return emitError(sub->loc,
+                           "pin direction must be a string attribute");
         }
         continue;
       }
-      pinAttrs.push_back(
-          builder.getNamedAttr(std::get<0>(attr), std::get<1>(attr)));
+      pinAttrs.push_back(builder.getNamedAttr(attr.name, attr.value));
     }
 
     if (!dir)
@@ -722,7 +747,7 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group) {
         builder.getNamedAttr("synth.liberty.pin", libertyAttrs));
 
     hw::PortInfo port;
-    port.name = builder.getStringAttr(pinName);
+    port.name = pinName;
     port.type = builder.getI1Type();
     port.dir = *dir;
     port.attrs = attrs;
@@ -739,8 +764,7 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group) {
   }
 
   auto loc = lexer.translateLocation(group.loc);
-  auto moduleOp = hw::HWModuleOp::create(
-      builder, loc, builder.getStringAttr(cellName), ports);
+  auto moduleOp = hw::HWModuleOp::create(builder, loc, cellNameAttr, ports);
 
   OpBuilder::InsertionGuard guard(builder);
   builder.setInsertionPointToStart(moduleOp.getBodyBlock());
@@ -759,7 +783,7 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group) {
     auto *it = llvm::find_if(pinGroups, [&](const LibertyGroup *g) {
       assert(g->name == "pin" && "expected pin group");
       // First arg is the pin name
-      return cast<StringAttr>(g->args[0]).getValue() == port.name.getValue();
+      return cast<StringAttr>(g->args[0]) == port.name;
     });
 
     if (!it)

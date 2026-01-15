@@ -63,3 +63,25 @@ library(test) {
     }
   }
 }
+
+// -----
+
+library(test) {
+  cell(C) {
+    pin(A) { direction: input; }
+  }
+  cell(C) { // expected-error {{redefinition of cell 'C'}}
+    pin(B) { direction: input; }
+  }
+}
+
+// -----
+
+library(test) {
+  cell(C) {
+    pin(A) { direction: input; }
+    pin(A) { // expected-error {{redefinition of pin 'A'}}
+      direction: output;
+    }
+  }
+}
