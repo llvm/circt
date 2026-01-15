@@ -71,6 +71,15 @@ with Context() as ctx, Location.unknown():
                            clk=module.clk,
                            sym_name="reg1")
 
+      # Test that registers with explicit names get proper SSA names
+      # This is a regression test - empty string names should not be set
+      # CHECK: %named_reg = seq.compreg sym @named_reg
+      named_reg = seq.CompRegOp.create(i32,
+                                       input=reg_input,
+                                       clk=module.clk,
+                                       name="named_reg",
+                                       sym_name="named_reg")
+
       # CHECK: hw.output %[[DATA_VAL]]
       hw.OutputOp([reg.data])
 

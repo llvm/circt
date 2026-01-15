@@ -129,7 +129,9 @@ class Signal:
 
   @property
   def _namehint_attrname(self):
-    if self.value.owner.name == "seq.compreg":
+    # seq.compreg and seq.compreg.ce use "name" attribute, others use "sv.namehint"
+    op_name = self.value.owner.operation.name
+    if op_name in ("seq.compreg", "seq.compreg.ce"):
       return "name"
     return "sv.namehint"
 
@@ -138,7 +140,10 @@ class Signal:
     owner = self.value.owner
     if hasattr(owner,
                "attributes") and self._namehint_attrname in owner.attributes:
-      return ir.StringAttr(owner.attributes[self._namehint_attrname]).value
+      attr_value = ir.StringAttr(
+          owner.attributes[self._namehint_attrname]).value
+      # Treat empty string names as None
+      return attr_value if attr_value else None
     from .circt.dialects import hw
     if isinstance(owner, ir.Block) and isinstance(owner.owner, hw.HWModuleOp):
       block_arg = ir.BlockArgument(self.value)
