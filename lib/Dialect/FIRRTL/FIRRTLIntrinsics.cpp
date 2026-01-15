@@ -958,10 +958,11 @@ public:
 // FIRRTL intrinsic lowering dialect interface
 //===----------------------------------------------------------------------===//
 
+#include "FIRRTLIntrinsics.cpp.inc"
+
 void FIRRTLIntrinsicLoweringDialectInterface::populateIntrinsicLowerings(
     IntrinsicLowerings &lowering) const {
-  lowering.add<CirctSizeofConverter>("circt.sizeof", "circt_sizeof");
-  lowering.add<CirctIsXConverter>("circt.isX", "circt_isX");
+  populateLowerings(lowering);
   lowering.add<CirctPlusArgTestConverter>("circt.plusargs.test",
                                           "circt_plusargs_test");
   lowering.add<CirctPlusArgValueConverter>("circt.plusargs.value",
