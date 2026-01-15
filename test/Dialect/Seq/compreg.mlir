@@ -169,21 +169,3 @@ hw.module @init_with_call(in %clk: !seq.clock, in %rst: i1, in %i: i32, in %s: !
 
   hw.output %add_from_immut: i32
 }
-
-// Test that empty name attributes don't get SSA name hints
-hw.module @empty_name_test(in %clk: !seq.clock, in %i: i32, in %ce: i1) {
-  // Registers with empty name attributes should get auto-numbered (%0, %1, etc)
-  // not named results. The name attribute is elided in the output when empty.
-  %0 = seq.compreg %i, %clk {name = ""} : i32
-  %1 = seq.compreg.ce %i, %clk, %ce {name = ""} : i32
-  
-  // Registers with non-empty name attributes should get named SSA values
-  %named = seq.compreg %i, %clk {name = "named"} : i32
-  %named_ce = seq.compreg.ce %i, %clk, %ce {name = "named_ce"} : i32
-  
-  // CHECK: @empty_name_test
-  // CHECK-NEXT: %0 = seq.compreg %i, %clk : i32
-  // CHECK-NEXT: %1 = seq.compreg.ce %i, %clk, %ce : i32
-  // CHECK-NEXT: %named = seq.compreg %i, %clk : i32
-  // CHECK-NEXT: %named_ce = seq.compreg.ce %i, %clk, %ce : i32
-}

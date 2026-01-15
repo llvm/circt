@@ -114,7 +114,9 @@ class CompRegLike:
     else:
       operands.append(None)
       operand_segment_sizes.append(0)
-    if name is not None and name != "":
+    if name is None:
+      attributes["name"] = StringAttr.get("")
+    else:
       attributes["name"] = StringAttr.get(name)
     if sym_name is not None:
       attributes["inner_sym"] = hw.InnerSymAttr.get(StringAttr.get(sym_name))
