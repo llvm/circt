@@ -1,7 +1,5 @@
 // RUN: true
 
-// CHECK: 3 tests FAILED, 3 passed
-
 hw.module @FullAdder(in %a: i1, in %b: i1, in %ci: i1, out s: i1, out co: i1) {
   %0 = comb.xor %a, %b : i1
   %1 = comb.xor %0, %ci : i1
@@ -31,6 +29,7 @@ hw.module @Add4C(in %a: i4, in %b: i4, in %ci: i1, out z: i4, out co: i1) {
 hw.module @Adder4(in %a: i4, in %b: i4, out z: i4) {
   %false = hw.constant false
   %z, %co = hw.instance "adder" @Add4C(a: %a: i4, b: %b: i4, ci: %false: i1) -> (z: i4, co: i1)
+  // CHECK: test Adder4{{.*}} ... passed
   %0 = verif.contract %z :i4 {
     %1 = comb.add %a, %b : i4
     %2 = comb.icmp eq %0, %1 : i4
@@ -42,6 +41,7 @@ hw.module @Adder4(in %a: i4, in %b: i4, out z: i4) {
 hw.module @Adder4Failed(in %a: i4, in %b: i4, out z: i4) {
   %false = hw.constant false
   %z, %co = hw.instance "adder" @Add4C(a: %a: i4, b: %b: i4, ci: %false: i1) -> (z: i4, co: i1)
+  // CHECK: test Adder4Failed{{.*}} ... FAILED
   %0 = verif.contract %z :i4 {
     // BUG: adding a to itself is incorrect
     %1 = comb.add %a, %a : i4
@@ -69,6 +69,7 @@ hw.module @Mul3(in %a: i2, in %b: i2, out z: i4) {
   %x = comb.concat %false, %a1b1, %a0b1, %false : i1, i1, i1, i1
   %y = hw.instance "adder" @Adder4(a: %w : i4, b: %x: i4) -> (z: i4)
 
+  // CHECK: test Mul3{{.*}} ... passed
   %z = verif.contract %y : i4 {
     %c = comb.concat %false, %false, %a : i1, i1, i2
     %d = comb.concat %false, %false, %b : i1, i1, i2
@@ -97,6 +98,7 @@ hw.module @Mul3Failed(in %a: i2, in %b: i2, out z: i4) {
   %x = comb.concat %false, %a1b1, %a0b1, %false : i1, i1, i1, i1
   %y = hw.instance "adder" @Adder4(a: %w : i4, b: %x: i4) -> (z: i4)
 
+  // CHECK: test Mul3Failed{{.*}} ... FAILED
   %z = verif.contract %y : i4 {
     %true = hw.constant true
     // BUG: Wrong concat value
@@ -114,7 +116,6 @@ hw.module @HalfAdder(in %a: i1, in %b: i1, out s: i1, out co: i1) {
   %1 = comb.and %a, %b : i1
   hw.output %0, %1 : i1, i1
 }
-
 
 hw.module @BoothMul(in %a: i4, in %b: i4, out z: i8) {
   %a0 = comb.extract %a from 0 : (i4) -> i1
@@ -163,6 +164,7 @@ hw.module @BoothMul(in %a: i4, in %b: i4, out z: i8) {
   %z_6, %z_7 = hw.instance "f7" @FullAdder(a: %c_10: i1, b: %c_8: i1, ci: %p3_3: i1) -> (s: i1, co: i1)
 
   %y = comb.concat %z_7, %z_6, %z_5, %z_4, %z_3, %z_2, %z_1, %p0_0: i1, i1, i1, i1, i1, i1, i1, i1 
+  // CHECK: test BoothMul{{.*}} ... passed
   %z = verif.contract %y :i8 {
     %false = hw.constant false
     %0 = comb.concat %false, %false, %false, %false, %a : i1, i1, i1, i1, i4
@@ -221,6 +223,7 @@ hw.module @BoothMulFailed(in %a: i4, in %b: i4, out z: i8) {
   %z_6, %z_7 = hw.instance "f7" @FullAdder(a: %c_10: i1, b: %c_8: i1, ci: %p3_3: i1) -> (s: i1, co: i1)
 
   %y = comb.concat %z_7, %z_6, %z_5, %z_4, %z_3, %z_2, %z_1, %p0_0: i1, i1, i1, i1, i1, i1, i1, i1 
+  // CHECK: test BoothMulFailed{{.*}} ... FAILED
   %z = verif.contract %y :i8 {
     %false = hw.constant false
     %true = hw.constant true
@@ -233,3 +236,5 @@ hw.module @BoothMulFailed(in %a: i4, in %b: i4, out z: i8) {
   }
   hw.output %z : i8
 }
+
+// CHECK: 3 of 6 tests FAILED; 3 passed

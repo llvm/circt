@@ -1,4 +1,4 @@
-//===- circt-test.cpp - Hardware unit test discovery and execution tool ---===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -40,6 +40,7 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/Process.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
@@ -89,6 +90,18 @@ struct Options {
   cl::opt<bool> listIgnored{"list-ignored", cl::desc("List ignored tests"),
                             cl::init(false), cl::cat(testCat)};
 
+  cl::opt<bool> dryRun{
+      "dry-run",
+      cl::desc("Print command for each test to stdout instead of executing it"),
+      cl::init(false), cl::cat(testCat)};
+
+  cl::opt<unsigned> numThreads{
+      "j", cl::value_desc("N"),
+      cl::desc("Number of tests to run in parallel\n"
+               "- specify 0 to run all tests in parallel\n"
+               "- uses the available hardware concurrency by default"),
+      cl::cat(testCat)};
+
   cl::opt<std::string> resultDir{
       "d", cl::desc("Result directory (default `.circt-test`)"),
       cl::value_desc("dir"), cl::init(".circt-test"), cl::cat(cat)};
@@ -96,11 +109,6 @@ struct Options {
   cl::list<std::string> runners{"r", cl::desc("Use a specific set of runners"),
                                 cl::value_desc("name"),
                                 cl::MiscFlags::CommaSeparated, cl::cat(cat)};
-
-  cl::opt<bool> dryRun{
-      "dry-run",
-      cl::desc("Print command for each test instead of executing it"),
-      cl::init(false), cl::cat(cat)};
 
   cl::opt<bool> ignoreContracts{
       "ignore-contracts",
@@ -139,6 +147,36 @@ Options opts;
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// Time Utilities
+//===----------------------------------------------------------------------===//
+
+/// A reasonable clock to use to display test runtimes to the user.
+using Clock = std::chrono::steady_clock;
+
+/// Format a duration as `SS s`, `MM:SS`, or `HH:MM:SS`.
+void formatDuration(raw_ostream &os, Clock::duration duration) {
+  auto seconds = std::chrono::duration_cast<std::chrono::seconds>(duration);
+  auto hours = std::chrono::duration_cast<std::chrono::hours>(duration);
+  seconds -= hours;
+  auto minutes = std::chrono::duration_cast<std::chrono::minutes>(duration);
+  seconds -= minutes;
+
+  if (hours.count() != 0) {
+    os << hours.count();
+    os << ":";
+    llvm::write_integer(os, minutes.count(), 2, llvm::IntegerStyle::Integer);
+    os << ":";
+    llvm::write_integer(os, seconds.count(), 2, llvm::IntegerStyle::Integer);
+  } else if (minutes.count() != 0) {
+    os << minutes.count();
+    os << ":";
+    llvm::write_integer(os, seconds.count(), 2, llvm::IntegerStyle::Integer);
+  } else {
+    os << seconds.count() << " s";
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // Runners
 //===----------------------------------------------------------------------===//
 
@@ -160,6 +198,10 @@ public:
   TestKind kind;
   /// The full path to the runner.
   std::string binaryPath;
+  /// Whether the full path to the runner was found by searching for `binary` in
+  /// the current PATH. In that case we may chose to display `binary` back to
+  /// the user instead of `binaryPath`.
+  bool implicitBinaryPath = false;
   /// Whether this runner operates on Verilog or MLIR input.
   bool readsMLIR = false;
   /// Whether this runner should be ignored.
@@ -167,6 +209,13 @@ public:
   /// Whether this runner is available or not. This is set to false if the
   /// runner `binary` cannot be found.
   bool available = false;
+
+  /// Get the human-friendly binary. This is either the full binary path, or if
+  /// the path was simply expanded from the binary name by looking for the
+  /// program in the path, just the binary name.
+  StringRef getFriendlyBinary() const {
+    return implicitBinaryPath ? binary : binaryPath;
+  }
 };
 
 /// A collection of test runners.
@@ -239,11 +288,17 @@ LogicalResult RunnerSuite::resolve() {
     if (runner.ignore)
       return;
 
-    auto findResult = llvm::sys::findProgramByName(runner.binary);
-    if (!findResult)
-      return;
-    runner.available = true;
-    runner.binaryPath = findResult.get();
+    // Determine the runner's binary path if it only provides a binary name.
+    if (runner.binaryPath.empty()) {
+      auto findResult = llvm::sys::findProgramByName(runner.binary);
+      if (!findResult)
+        return;
+      runner.binaryPath = findResult.get();
+      runner.implicitBinaryPath = true;
+    }
+
+    // Check if the program actually exists at that path.
+    runner.available = llvm::sys::fs::can_execute(runner.binaryPath);
   });
   return success();
 }
@@ -253,6 +308,26 @@ LogicalResult RunnerSuite::resolve() {
 //===----------------------------------------------------------------------===//
 
 namespace {
+enum class TestStatus {
+  /// The test has not been started yet.
+  Pending, // this needs to be first
+  /// The test is currently running.
+  Running, // this needs to be second
+  /// The test was ignored.
+  Ignored,
+  /// No runner was available to run the test.
+  Unsupported,
+  /// The test finished and reported a pass.
+  Passed,
+  /// The test finished and reported a failure.
+  Failed,
+  /// The test could not be run. This is distinct from the test running but
+  /// reporting a failure. For example, this occurs if the result directory
+  /// cannot be created, the runner cannot be started, the test metadata is
+  /// malformed, or some other reason why the test itself cannot be executed.
+  Aborted,
+};
+
 /// A single discovered test.
 class Test {
 public:
@@ -274,6 +349,17 @@ public:
   /// The set of runners that should be skipped for this test, specified by the
   /// "exclude_runners" array attribute in `attrs`.
   SmallPtrSet<StringAttr, 1> excludedRunners;
+
+  /// Execution status.
+  TestStatus status = TestStatus::Pending;
+  /// An error message if status is `Aborted`.
+  std::string message;
+  /// When this test was started.
+  Clock::time_point startTime;
+  /// When this test finished.
+  Clock::time_point finishTime;
+  /// Path to the log file where test output is captured.
+  std::string logPath;
 };
 
 /// A collection of tests discovered in some MLIR input.
@@ -388,6 +474,253 @@ LogicalResult TestSuite::discoverTest(Test &&test, Operation *op) {
 }
 
 //===----------------------------------------------------------------------===//
+// Progress Display
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// A helper to print and maintain a nice interactive progress display as the
+/// tests execute across multiple threads. This assumes that the tests are
+/// roughly executed in order.
+struct ProgressDisplay {
+  ProgressDisplay(ArrayRef<Test> tests) : tests(tests) {}
+
+  /// Update the progress display. Use a mutex to ensure that only one thread
+  /// executes this function, and that none of the `status` fields of the tests
+  /// change.
+  void update();
+  /// Print the status of the given test.
+  void printTestStatus(const Test &test, bool final);
+
+  /// Where to print the display.
+  llvm::raw_ostream &os = llvm::errs();
+  /// Whether to use ANSI escape codes to have a more dynamic display.
+  bool isDynamic = llvm::sys::Process::StandardErrIsDisplayed();
+  /// When testing started. This is used to compute overall execution time.
+  Clock::time_point startTime = Clock::now();
+  /// The tests being executed.
+  ArrayRef<Test> tests;
+  /// The index past the last finished test that was reported.
+  unsigned doneIndex = 0;
+  /// The index past the last running test that was considered.
+  unsigned runningIndex = 0;
+  /// The number of dynamic lines that we want to overwrite with updated
+  /// information on the next update.
+  unsigned dynamicLines = 0;
+};
+} // namespace
+
+void ProgressDisplay::update() {
+  // Erase the dynamic lines we have already printed.
+  if (dynamicLines > 0 && isDynamic) {
+    for (unsigned i = 0; i < dynamicLines; ++i)
+      os << "\x1b[1A"; // move up one line
+    os << "\x1b[G";    // move to beginning of line
+    os << "\x1b[J";    // clear to end of screen
+  }
+  dynamicLines = 0;
+
+  // Print the tests that have finished since the last update call.
+  while (doneIndex < tests.size() &&
+         tests[doneIndex].status > TestStatus::Running) {
+    printTestStatus(tests[doneIndex], true);
+    ++doneIndex;
+  }
+
+  // Find the first pending test such that we roughly know in which range of
+  // tests we should look for the printing.
+  while (runningIndex < tests.size() &&
+         tests[runningIndex].status > TestStatus::Pending)
+    ++runningIndex;
+
+  // Only print progress bar and other dynamic content if there are any tests
+  // left and we are writing to a terminal that appreciates ANSI escape codes.
+  if (!isDynamic || doneIndex == tests.size())
+    return;
+  auto activeTests = tests.slice(doneIndex, runningIndex - doneIndex);
+
+  // Print the status of tests currently running. This will get erased and
+  // overwritten on the next call to this function.
+  for (auto &test : activeTests) {
+    printTestStatus(test, false);
+    ++dynamicLines; // erase this line on the next update
+  }
+
+  // Count how many tests are already done.
+  unsigned doneCount = doneIndex;
+  unsigned runningCount = 0;
+  for (auto &test : activeTests) {
+    if (test.status == TestStatus::Running)
+      ++runningCount;
+    if (test.status > TestStatus::Running)
+      ++doneCount;
+  }
+
+  // Print a final interactive progress bar.
+  os << "\n";
+  unsigned columnsUsed = 0;
+  columnsUsed -= os.tell(); // count printed chars from here
+  os << "running ";
+  formatDuration(os, Clock::now() - startTime);
+  os << " [";
+  columnsUsed += os.tell(); // to here
+
+  // Compute the number of blocks to fill in for the done tests, the fractional
+  // block since we can use unicode blocks to draw 1/8 to 7/8 full blocks, and
+  // the blocks to fill differently for the running tests.
+  unsigned barLength = 10;
+  auto computeBarPosition = [&](unsigned testProgress) {
+    // Compute round(8 * testProgress / numTests * barLength) with integers.
+    return (8 * testProgress * barLength + tests.size() / 2) / tests.size();
+  };
+  unsigned barDone = computeBarPosition(doneCount);
+  unsigned barDonePartial = barDone % 8;
+  barDone /= 8;
+  unsigned barRunning = computeBarPosition(doneCount + runningCount) / 8;
+  unsigned barIdx = 0;
+
+  // Actually write out the progress bar.
+  {
+    WithColor bar(os, raw_ostream::CYAN, true);
+    for (; barIdx < barDone; ++barIdx)
+      bar << "\u2588";
+    if (barDonePartial > 0) {
+      // Partially full horizontal blocks are U+2589 (7/8) to U+258F (1/8).
+      // UTF-8 encoding is e.g. 0xE2 0x96 0x89.
+      bar << "\xE2\x96";
+      bar << static_cast<char>(0x90 - barDonePartial);
+      ++barIdx;
+    }
+    for (; barIdx < barRunning; ++barIdx)
+      bar << "\u00b7";
+    for (; barIdx < barLength; ++barIdx)
+      bar << ' ';
+  }
+  columnsUsed += barLength;
+
+  // Add a tally of the tests that have at least started running.
+  columnsUsed -= os.tell();
+  os << "] " << (doneCount + runningCount) << "/" << tests.size();
+  columnsUsed += os.tell();
+
+  // Print out the currently running tests. We want to truncate this in case it
+  // would spill onto another line of the screen, because this is just some
+  // pretty info for the user.
+  unsigned columnsMax = llvm::sys::Process::StandardErrColumns();
+  if (columnsMax > 0)
+    columnsMax -= 1; // don't cause the cursor to wrap around
+  bool isFirst = true;
+  for (auto &test : activeTests) {
+    if (test.status != TestStatus::Running)
+      continue;
+    auto name = test.name.getValue();
+    columnsUsed += name.size() + 2;
+    if (columnsUsed + 3 > columnsMax) {
+      if (!isFirst)
+        os << ", …";
+      break;
+    }
+    os << (isFirst ? ": " : ", ");
+    os << name;
+    isFirst = false;
+  }
+
+  os << "\n";
+  dynamicLines += 2; // erase the progress bar on the next update
+}
+
+void ProgressDisplay::printTestStatus(const Test &test, bool final) {
+  // Special handling for dry runs.
+  if (opts.dryRun) {
+    auto &os = llvm::outs(); // dry run goes to stdout
+    WithColor(os, raw_ostream::SAVEDCOLOR) << test.name.getValue();
+    os << ": " << test.message << "\n";
+    return;
+  }
+
+  os << "test " << test.name.getValue() << " ... ";
+
+  bool hasColors = WithColor(os).colorsEnabled();
+  const char *ansiDim = hasColors ? "\x1b[2m" : "";
+  const char *ansiReset = hasColors ? "\x1b[0m" : "";
+  bool shouldAddTime = false;
+  auto untilTime = test.finishTime;
+
+  switch (test.status) {
+  case TestStatus::Pending:
+    break;
+  case TestStatus::Running:
+    WithColor(os, raw_ostream::CYAN) << "running";
+    shouldAddTime = true;
+    untilTime = Clock::now();
+    break;
+  case TestStatus::Ignored:
+    os << ansiDim << "ignored" << ansiReset;
+    break;
+  case TestStatus::Unsupported:
+    os << ansiDim << "unsupported" << ansiReset;
+    break;
+  case TestStatus::Passed:
+    WithColor(os, raw_ostream::GREEN) << "passed";
+    shouldAddTime = true;
+    break;
+  case TestStatus::Failed:
+    WithColor(os, raw_ostream::RED) << "FAILED";
+    shouldAddTime = true;
+    break;
+  case TestStatus::Aborted:
+    WithColor(os, raw_ostream::RED) << "ABORTED";
+    shouldAddTime = true;
+    break;
+  }
+
+  // Print the time duration if requested.
+  if (shouldAddTime) {
+    os << "  " << ansiDim;
+    formatDuration(os, untilTime - test.startTime);
+    os << ansiReset;
+  }
+
+  os << "\n";
+
+  // If this isn't the final print of the test status, stop here.
+  if (!final)
+    return;
+
+  // Print the error message if the test aborted, which means that we weren't
+  // even able to run the test.
+  if (test.status == TestStatus::Aborted) {
+    mlir::emitError(test.loc) << test.message;
+    return;
+  }
+
+  // If the test failed, print part of the failure log.
+  if (test.status == TestStatus::Failed) {
+    mlir::emitError(test.loc) << "failing test defined here";
+    if (auto log = llvm::MemoryBuffer::getFile(test.logPath, /*isText=*/true)) {
+      os << "----- 8< ----- " << test.logPath << " ----- 8< -----\n";
+      auto logStr = log.get()->getBuffer();
+      constexpr size_t truncAbove = 10000;  // truncate above this log size
+      constexpr size_t newlineRange = 1000; // bytes to scan for a newline
+      if (logStr.size() > truncAbove) {
+        size_t pos = logStr.size() - truncAbove;
+        size_t minPos = pos > newlineRange ? pos - newlineRange : 0;
+        while (pos > minPos && logStr[pos] != '\n')
+          --pos;
+        if (pos > 0 && logStr[pos - 1] == '\r')
+          --pos;
+        os << "[" << pos << " bytes truncated]";
+        logStr = logStr.substr(pos);
+      }
+      os << logStr;
+      os << "----- 8< ----- " << test.logPath << " ----- 8< -----\n";
+    } else {
+      os << "see " << test.logPath << "\n";
+    }
+    return;
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // Tool Implementation
 //===----------------------------------------------------------------------===//
 
@@ -408,7 +741,7 @@ static LogicalResult listRunners(RunnerSuite &suite) {
     if (runner.ignore)
       os << "  ignored";
     else if (runner.available)
-      os << "  " << runner.binaryPath;
+      os << "  " << runner.getFriendlyBinary();
     else
       os << "  unavailable";
     os << "\n";
@@ -436,17 +769,17 @@ static LogicalResult listTests(TestSuite &suite) {
   if (opts.json) {
     json::OStream json(output->os(), 2);
     json.arrayBegin();
-    auto guard = make_scope_exit([&] { json.arrayEnd(); });
+    auto guard = scope_exit([&] { json.arrayEnd(); });
     for (auto &test : suite.tests) {
       if (ignoreTestListing(test, suite))
         continue;
       json.objectBegin();
-      auto guard = make_scope_exit([&] { json.objectEnd(); });
+      auto guard = scope_exit([&] { json.objectEnd(); });
       json.attribute("name", test.name.getValue());
       json.attribute("kind", toString(test.kind));
       if (!test.attrs.empty()) {
         json.attributeBegin("attrs");
-        auto guard = make_scope_exit([&] { json.attributeEnd(); });
+        auto guard = scope_exit([&] { json.attributeEnd(); });
         if (failed(convertAttributeToJSON(json, test.attrs)))
           return mlir::emitError(test.loc)
                  << "unsupported attributes: `" << test.attrs
@@ -466,6 +799,121 @@ static LogicalResult listTests(TestSuite &suite) {
   }
   output->keep();
   return success();
+}
+
+/// Execute a single test. This function is called for each test in the test
+/// suite, distributed across multiple threads.
+///
+/// CAUTION: Do not mutate `test.status` directly. Instead, return the result
+/// status of the test. The caller will update `test.status` with the progress
+/// display mutex locked, to ensure terminal output is consistent.
+static TestStatus executeTest(Test &test, RunnerSuite &runnerSuite,
+                              StringRef mlirPath, StringRef verilogPath) {
+  if (test.ignore)
+    return TestStatus::Ignored;
+
+  // Pick a runner for this test. In the future we'll want to filter this
+  // based on the test's and runner's metadata, and potentially use a
+  // prioritized list of runners.
+  Runner *runner = nullptr;
+  for (auto &candidate : runnerSuite.runners) {
+    if (candidate.ignore || !candidate.available)
+      continue;
+    if (test.kind != candidate.kind)
+      continue;
+    if (!test.requiredRunners.empty() &&
+        !test.requiredRunners.contains(candidate.name))
+      continue;
+    if (test.excludedRunners.contains(candidate.name))
+      continue;
+    runner = &candidate;
+    break;
+  }
+  if (!runner)
+    return TestStatus::Unsupported;
+
+  // Create the directory in which we are going to run the test.
+  raw_string_ostream msg(test.message);
+  SmallString<128> testDir(opts.resultDir);
+  llvm::sys::path::append(testDir, test.name.getValue());
+  if (auto error = llvm::sys::fs::create_directory(testDir)) {
+    msg << "cannot create test directory `" << testDir
+        << "`: " << error.message();
+    return TestStatus::Aborted;
+  }
+
+  // Assemble a path for the test runner log file and truncate it.
+  SmallString<128> logPath = testDir;
+  llvm::sys::path::append(logPath, "run.log");
+  test.logPath = logPath.str();
+  {
+    std::error_code ec;
+    raw_fd_ostream trunc(logPath, ec);
+  }
+
+  // Assemble the runner arguments.
+  BumpPtrAllocator argsAlloc;
+  StringSaver argsSaver(argsAlloc);
+  SmallVector<StringRef> args;
+  args.push_back(runner->binary);
+  if (runner->readsMLIR)
+    args.push_back(mlirPath);
+  else
+    args.push_back(verilogPath);
+  args.push_back("-t");
+  args.push_back(test.name.getValue());
+  args.push_back("-d");
+  args.push_back(testDir);
+
+  if (auto mode = test.attrs.get("mode")) {
+    args.push_back("-m");
+    auto modeStr = dyn_cast<StringAttr>(mode);
+    if (!modeStr) {
+      msg << "invalid `mode` attribute " << mode;
+      return TestStatus::Aborted;
+    }
+    args.push_back(modeStr.getValue());
+  }
+
+  if (auto depth = test.attrs.get("depth")) {
+    args.push_back("-k");
+    auto depthInt = dyn_cast<IntegerAttr>(depth);
+    if (!depthInt) {
+      msg << "invalid `depth` attribute " << depth;
+      return TestStatus::Aborted;
+    }
+    SmallString<8> str;
+    depthInt.getValue().toStringUnsigned(str);
+    args.push_back(argsSaver.save(str.str()));
+  }
+
+  // If we are doing a dry run, store the command we would run in the test's
+  // `message` and skip actually executing the test runner. The progress display
+  // will then print the message.
+  if (opts.dryRun) {
+    llvm::sys::printArg(msg, runner->getFriendlyBinary(), false);
+    for (auto &arg : llvm::drop_begin(args)) {
+      msg << " ";
+      llvm::sys::printArg(msg, arg, false);
+    }
+    return TestStatus::Passed;
+  }
+
+  // Execute the test runner.
+  std::string errorMessage;
+  auto result =
+      llvm::sys::ExecuteAndWait(runner->binaryPath, args, /*Env=*/std::nullopt,
+                                /*Redirects=*/{"", test.logPath, test.logPath},
+                                /*SecondsToWait=*/0,
+                                /*MemoryLimit=*/0, &errorMessage);
+  if (result < 0) {
+    msg << "cannot execute runner: " << errorMessage;
+    return TestStatus::Aborted;
+  } else if (result > 0) {
+    return TestStatus::Failed;
+  } else {
+    return TestStatus::Passed;
+  }
 }
 
 /// Called once the suite of available runners has been determined and a module
@@ -527,6 +975,7 @@ static LogicalResult executeWithHandler(MLIRContext *context,
   // List all tests in the input and exit if requested.
   if (opts.listTests)
     return listTests(suite);
+  llvm::errs() << "running " << suite.tests.size() << " tests\n";
 
   // Create the output directory where we keep all the run data.
   if (auto error = llvm::sys::fs::create_directory(opts.resultDir)) {
@@ -563,157 +1012,131 @@ static LogicalResult executeWithHandler(MLIRContext *context,
   if (failed(pm.run(*module)))
     return failure();
 
-  // Disable multi-threading if we are only doing a dry run. This ensures the
-  // print output is in order and lines don't get jumbled.
-  if (opts.dryRun)
-    context->disableMultithreading();
-
-  // Run the tests.
-  std::atomic<unsigned> numPassed(0);
-  std::atomic<unsigned> numIgnored(0);
-  std::atomic<unsigned> numUnsupported(0);
-
-  mlir::parallelForEach(context, suite.tests, [&](auto &test) {
-    if (test.ignore) {
-      ++numIgnored;
-      return;
-    }
-
-    // Pick a runner for this test. In the future we'll want to filter this
-    // based on the test's and runner's metadata, and potentially use a
-    // prioritized list of runners.
-    Runner *runner = nullptr;
-    for (auto &candidate : runnerSuite.runners) {
-      if (candidate.ignore || !candidate.available)
-        continue;
-      if (test.kind != candidate.kind)
-        continue;
-      if (!test.requiredRunners.empty() &&
-          !test.requiredRunners.contains(candidate.name))
-        continue;
-      if (test.excludedRunners.contains(candidate.name))
-        continue;
-      runner = &candidate;
-      break;
-    }
-    if (!runner) {
-      ++numUnsupported;
-      return;
-    }
-
-    // Create the directory in which we are going to run the test.
-    SmallString<128> testDir(opts.resultDir);
-    llvm::sys::path::append(testDir, test.name.getValue());
-    if (auto error = llvm::sys::fs::create_directory(testDir)) {
-      mlir::emitError(test.loc) << "cannot create test directory `" << testDir
-                                << "`: " << error.message();
-      return;
-    }
-
-    // Assemble a path for the test runner log file and truncate it.
-    SmallString<128> logPath(testDir);
-    llvm::sys::path::append(logPath, "run.log");
-    {
-      std::error_code ec;
-      raw_fd_ostream trunc(logPath, ec);
-    }
-
-    // Assemble the runner arguments.
-    SmallVector<StringRef> args;
-    args.push_back(runner->binary);
-    if (runner->readsMLIR)
-      args.push_back(mlirPath);
-    else
-      args.push_back(verilogPath);
-    args.push_back("-t");
-    args.push_back(test.name.getValue());
-    args.push_back("-d");
-    args.push_back(testDir);
-
-    if (auto mode = test.attrs.get("mode")) {
-      args.push_back("-m");
-      auto modeStr = dyn_cast<StringAttr>(mode);
-      if (!modeStr) {
-        mlir::emitError(test.loc) << "invalid mode for test " << test.name;
-        return;
-      }
-      args.push_back(cast<StringAttr>(mode).getValue());
-    }
-
-    if (auto depth = test.attrs.get("depth")) {
-      args.push_back("-k");
-      auto depthInt = dyn_cast<IntegerAttr>(depth);
-      if (!depthInt) {
-        mlir::emitError(test.loc) << "invalid depth for test " << test.name;
-        return;
-      }
-      SmallVector<char> str;
-      depthInt.getValue().toStringUnsigned(str);
-      args.push_back(std::string(str.begin(), str.end()));
-    }
-
-    // If we are doing a dry run, print the command and skip actually executing
-    // the test runner.
-    if (opts.dryRun) {
-      auto &os = llvm::outs();
-      WithColor(os) << test.name.getValue();
-      os << ": ";
-      llvm::sys::printArg(os, runner->binaryPath, false);
-      for (auto &arg : llvm::drop_begin(args)) {
-        os << " ";
-        llvm::sys::printArg(os, arg, false);
-      }
-      os << "\n";
-      return;
-    }
-
-    // Execute the test runner.
-    std::string errorMessage;
-    auto result = llvm::sys::ExecuteAndWait(
-        runner->binaryPath, args, /*Env=*/std::nullopt,
-        /*Redirects=*/{"", logPath, logPath},
-        /*SecondsToWait=*/0,
-        /*MemoryLimit=*/0, &errorMessage);
-    if (result < 0) {
-      mlir::emitError(test.loc) << "cannot execute runner: " << errorMessage;
-    } else if (result > 0) {
-      auto d = mlir::emitError(test.loc)
-               << "test " << test.name.getValue() << " failed";
-      d.attachNote() << "executed with " << runner->name.getValue();
-      // Reproduce the output log. We should really come up with a better way to
-      // report test progress and failures. But this will do for the time being.
-      auto &note = d.attachNote() << "see `" << logPath << "`";
-      auto logBuffer = llvm::MemoryBuffer::getFile(logPath, /*IsText=*/true);
-      if (logBuffer)
-        note << ":\n" << logBuffer.get()->getBuffer();
+  // Determine how many threads to use for running tests.
+  unsigned numThreads = 1;
+  if (!opts.dryRun && context->isMultithreadingEnabled()) {
+    // If the user specified the `-j` option, use that as the number of threads.
+    // If they specified 0, create a thread for each test. If `-j` was not
+    // specified, default to the hardware concurrency.
+    if (opts.numThreads.getNumOccurrences()) {
+      numThreads = opts.numThreads;
+      if (numThreads == 0)
+        numThreads = suite.tests.size();
     } else {
-      ++numPassed;
+      numThreads = std::thread::hardware_concurrency();
+    }
+  }
+  if (numThreads > suite.tests.size())
+    numThreads = suite.tests.size();
+
+  // Setup a helper to dynamically display progress.
+  ProgressDisplay pd(suite.tests);
+  std::mutex pdMutex;
+  std::condition_variable pdWake;
+
+  // Spawn a separate thread that updates the progress display every second. We
+  // use a condition variable to wait for 1s or until the variables is triggered
+  // at the end of the run.
+  auto timerThread = std::thread([&] {
+    while (true) {
+      std::unique_lock<std::mutex> lock(pdMutex);
+      if (pd.doneIndex == pd.tests.size())
+        return;
+      pd.update();
+      pdWake.wait_for(lock, std::chrono::seconds(1));
     }
   });
+
+  // Run the tests. We spin up our own threads here instead of using
+  // `mlir::parallelForEach`, since we want more explicit control over the
+  // number of threads and we want to not create a `ParallelDiagnosticHandler`,
+  // giving us more precise control over the error messages we print.
+  auto runTest = [&](auto &test) {
+    {
+      std::lock_guard<std::mutex> lock(pdMutex);
+      test.status = TestStatus::Running;
+      test.startTime = Clock::now();
+      pd.update();
+    }
+    auto status = executeTest(test, runnerSuite, mlirPath, verilogPath);
+    assert(status != TestStatus::Pending && status != TestStatus::Running);
+    {
+      std::lock_guard<std::mutex> lock(pdMutex);
+      test.status = status;
+      test.finishTime = Clock::now();
+      pd.update();
+    }
+  };
+
+  std::atomic<unsigned> globalIndex = 0;
+  auto runTests = [&] {
+    while (true) {
+      unsigned threadIndex = globalIndex++;
+      if (threadIndex >= suite.tests.size())
+        return;
+      runTest(suite.tests[threadIndex]);
+    }
+  };
+
+  std::vector<std::thread> threads;
+  threads.resize(numThreads);
+  for (auto &thread : threads)
+    thread = std::thread(runTests);
+  for (auto &thread : threads)
+    thread.join();
+
+  // Signal the timer thread to stop updating the progress display.
+  pdWake.notify_all();
+  timerThread.join();
 
   // Stop here if we are doing a dry run.
   if (opts.dryRun)
     return success();
 
   // Print statistics about how many tests passed and failed.
-  unsigned numNonFailed = numPassed + numIgnored + numUnsupported;
-  assert(numNonFailed <= suite.tests.size());
-  unsigned numFailed = suite.tests.size() - numNonFailed;
+  unsigned numIgnored = 0;
+  unsigned numUnsupported = 0;
+  unsigned numPassed = 0;
+  unsigned numFailed = 0;
+  for (auto &test : suite.tests) {
+    switch (test.status) {
+    case TestStatus::Pending:
+    case TestStatus::Running:
+      llvm_unreachable("all tests executed");
+      break;
+    case TestStatus::Ignored:
+      ++numIgnored;
+      break;
+    case TestStatus::Unsupported:
+      ++numUnsupported;
+      break;
+    case TestStatus::Passed:
+      ++numPassed;
+      break;
+    case TestStatus::Failed:
+    case TestStatus::Aborted:
+      ++numFailed;
+      break;
+    }
+  }
+
+  auto &os = llvm::errs();
+  os << "\n  ";
   if (numFailed > 0) {
-    WithColor(llvm::errs(), raw_ostream::SAVEDCOLOR, true).get()
-        << numFailed << " tests ";
-    WithColor(llvm::errs(), raw_ostream::RED, true).get() << "FAILED";
-    llvm::errs() << ", " << numPassed << " passed";
+    os << numFailed << " of " << (numPassed + numFailed) << " tests ";
+    WithColor(os, raw_ostream::RED, true) << "FAILED";
+    os << "; " << numPassed << " passed";
   } else {
-    WithColor(llvm::errs(), raw_ostream::SAVEDCOLOR, true).get()
-        << numPassed << " tests ";
-    WithColor(llvm::errs(), raw_ostream::GREEN, true).get() << "passed";
+    os << "all " << numPassed << " tests ";
+    WithColor(os, raw_ostream::GREEN, true) << "passed";
   }
   if (numIgnored > 0)
-    llvm::errs() << ", " << numIgnored << " ignored";
+    os << "; " << numIgnored << " ignored";
   if (numUnsupported > 0)
-    llvm::errs() << ", " << numUnsupported << " unsupported";
-  llvm::errs() << "\n";
+    os << "; " << numUnsupported << " unsupported";
+  os << "; finished in ";
+  formatDuration(os, Clock::now() - pd.startTime);
+  os << "\n\n";
   return success(numFailed == 0);
 }
 
@@ -787,7 +1210,8 @@ int main(int argc, char **argv) {
   // MLIR options are added below.
   cl::HideUnrelatedOptions(
       {&opts.cat, &opts.testCat, &llvm::getColorCategory()});
-  cl::ParseCommandLineOptions(argc, argv, "Hardware unit testing tool\n");
+  cl::ParseCommandLineOptions(
+      argc, argv, "Hardware unit test discovery and execution tool\n");
 
   MLIRContext context(registry);
   exit(failed(execute(&context)));
