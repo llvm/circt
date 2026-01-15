@@ -47,7 +47,7 @@ void FoldValueFormattersPass::runOnOperation() {
     if (!valFmtOp)
       return;
     auto fmtValue = getFormattedValue(op);
-    auto valDefOp = fmtValue.getDefiningOp();
+    auto *valDefOp = fmtValue.getDefiningOp();
     if (!valDefOp || !valDefOp->hasTrait<OpTrait::ConstantLike>())
       return;
     // Call the defining op's fold method to get the constant attribute.

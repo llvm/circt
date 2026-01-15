@@ -201,7 +201,7 @@ StringAttr FormatDecOp::formatConstant(Attribute constVal) {
   if (!intAttr)
     return {};
   SmallVector<char, 16> strBuf;
-  intAttr.getValue().toString(strBuf, 10U, getIsSigned());
+  intAttr.getValue().toString(strBuf, 10, getIsSigned());
   unsigned padWidth;
   if (getSpecifierWidth().has_value()) {
     padWidth = getSpecifierWidth().value();
@@ -243,7 +243,7 @@ OpFoldResult FormatHexOp::fold(FoldAdaptor adaptor) {
 // --- FormatOctOp ---
 
 StringAttr FormatOctOp::formatConstant(Attribute constVal) {
-  return formatIntegersByRadix(constVal.getContext(), 8U, constVal, false,
+  return formatIntegersByRadix(constVal.getContext(), 8, constVal, false,
                                getIsLeftAligned(), getPaddingChar(),
                                getSpecifierWidth());
 }
