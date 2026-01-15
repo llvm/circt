@@ -29,49 +29,52 @@ static StringAttr formatIntegersByRadix(MLIRContext *ctx, unsigned radix,
                                         char paddingChar,
                                         std::optional<unsigned> specifierWidth,
                                         bool isSigned = false) {
+  auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(value);
+  if (!intAttr)
+    return {};
+  if (intAttr.getType().getIntOrFloatBitWidth() == 0)
+    return StringAttr::get(ctx, "");
 
-  if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(value)) {
-    SmallVector<char, 32> strBuf;
-    intAttr.getValue().toString(strBuf, radix, isSigned, false, isUpperCase);
-    unsigned width = intAttr.getType().getIntOrFloatBitWidth();
-    unsigned padWidth;
-    switch (radix) {
-    case 2:
-      padWidth = width;
-      break;
-    case 8:
-      padWidth = (width + 2) / 3;
-      break;
-    case 16:
-      padWidth = (width + 3) / 4;
-      break;
-    default:
-      padWidth = width;
-      break;
-    }
+  SmallVector<char, 32> strBuf;
+  intAttr.getValue().toString(strBuf, radix, isSigned, false, isUpperCase);
+  unsigned width = intAttr.getType().getIntOrFloatBitWidth();
 
-    unsigned numSpaces = 0;
-    if (specifierWidth.has_value() &&
-        (specifierWidth.value() >
-         std::max(padWidth, static_cast<unsigned>(strBuf.size())))) {
-      numSpaces = std::max(
-          0U, specifierWidth.value() -
-                  std::max(padWidth, static_cast<unsigned>(strBuf.size())));
-    }
-
-    SmallVector<char, 1> spacePadding(numSpaces, ' ');
-
-    padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
-
-    SmallVector<char, 32> padding(padWidth, paddingChar);
-    if (isLeftAligned) {
-      return StringAttr::get(ctx, Twine(padding) + Twine(strBuf) +
-                                      Twine(spacePadding));
-    }
-    return StringAttr::get(ctx, Twine(spacePadding) + Twine(padding) +
-                                    Twine(strBuf));
+  unsigned padWidth;
+  switch (radix) {
+  case 2:
+    padWidth = width;
+    break;
+  case 8:
+    padWidth = (width + 2) / 3;
+    break;
+  case 16:
+    padWidth = (width + 3) / 4;
+    break;
+  default:
+    padWidth = width;
+    break;
   }
-  return {};
+
+  unsigned numSpaces = 0;
+  if (specifierWidth.has_value() &&
+      (specifierWidth.value() >
+       std::max(padWidth, static_cast<unsigned>(strBuf.size())))) {
+    numSpaces = std::max(
+        0U, specifierWidth.value() -
+                std::max(padWidth, static_cast<unsigned>(strBuf.size())));
+  }
+
+  SmallVector<char, 1> spacePadding(numSpaces, ' ');
+
+  padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
+
+  SmallVector<char, 32> padding(padWidth, paddingChar);
+  if (isLeftAligned) {
+    return StringAttr::get(ctx, Twine(padding) + Twine(strBuf) +
+                                    Twine(spacePadding));
+  }
+  return StringAttr::get(ctx,
+                         Twine(spacePadding) + Twine(padding) + Twine(strBuf));
 }
 
 static StringAttr formatFloatsBySpecifier(MLIRContext *ctx, Attribute value,
@@ -191,90 +194,122 @@ OpFoldResult FormatLiteralOp::fold(FoldAdaptor adaptor) {
   return getLiteralAttr();
 }
 
-OpFoldResult FormatDecOp::fold(FoldAdaptor adaptor) {
-  if (getValue().getType() == IntegerType::get(getContext(), 0U))
-    return StringAttr::get(getContext(), "0");
+// --- FormatDecOp ---
 
-  if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(adaptor.getValue())) {
-    SmallVector<char, 16> strBuf;
-    intAttr.getValue().toString(strBuf, 10U, adaptor.getIsSigned());
-    unsigned padWidth;
-    if (adaptor.getSpecifierWidth().has_value()) {
-      padWidth = adaptor.getSpecifierWidth().value();
-    } else {
-      unsigned width = intAttr.getType().getIntOrFloatBitWidth();
-      padWidth = FormatDecOp::getDecimalWidth(width, adaptor.getIsSigned());
-    }
-
-    padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
-
-    SmallVector<char, 10> padding(padWidth, adaptor.getPaddingChar());
-    if (adaptor.getIsLeftAligned()) {
-      return StringAttr::get(getContext(), Twine(strBuf) + Twine(padding));
-    }
-    return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
+StringAttr FormatDecOp::formatConstant(Attribute constVal) {
+  auto intAttr = llvm::dyn_cast<IntegerAttr>(constVal);
+  if (!intAttr)
+    return {};
+  SmallVector<char, 16> strBuf;
+  intAttr.getValue().toString(strBuf, 10, getIsSigned());
+  unsigned padWidth;
+  if (getSpecifierWidth().has_value()) {
+    padWidth = getSpecifierWidth().value();
+  } else {
+    unsigned width = intAttr.getType().getIntOrFloatBitWidth();
+    padWidth = FormatDecOp::getDecimalWidth(width, getIsSigned());
   }
+
+  padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
+
+  SmallVector<char, 10> padding(padWidth, getPaddingChar());
+  if (getIsLeftAligned())
+    return StringAttr::get(getContext(), Twine(strBuf) + Twine(padding));
+  return StringAttr::get(getContext(), Twine(padding) + Twine(strBuf));
+}
+
+OpFoldResult FormatDecOp::fold(FoldAdaptor adaptor) {
+  if (getValue().getType().getIntOrFloatBitWidth() == 0)
+    return StringAttr::get(getContext(), "0");
   return {};
 }
 
-OpFoldResult FormatHexOp::fold(FoldAdaptor adaptor) {
-  if (getValue().getType() == IntegerType::get(getContext(), 0U))
-    return StringAttr::get(getContext(), "");
+// --- FormatHexOp ---
 
-  return formatIntegersByRadix(
-      getContext(), 16U, adaptor.getValue(), adaptor.getIsHexUppercase(),
-      adaptor.getIsLeftAligned(), adaptor.getPaddingChar(),
-      adaptor.getSpecifierWidth());
+StringAttr FormatHexOp::formatConstant(Attribute constVal) {
+  return formatIntegersByRadix(constVal.getContext(), 16, constVal,
+                               getIsHexUppercase(), getIsLeftAligned(),
+                               getPaddingChar(), getSpecifierWidth());
+}
+
+OpFoldResult FormatHexOp::fold(FoldAdaptor adaptor) {
+  if (getValue().getType().getIntOrFloatBitWidth() == 0)
+    return formatIntegersByRadix(
+        getContext(), 16, IntegerAttr::get(getValue().getType(), 0), false,
+        getIsLeftAligned(), getPaddingChar(), getSpecifierWidth());
+  return {};
+}
+
+// --- FormatOctOp ---
+
+StringAttr FormatOctOp::formatConstant(Attribute constVal) {
+  return formatIntegersByRadix(constVal.getContext(), 8, constVal, false,
+                               getIsLeftAligned(), getPaddingChar(),
+                               getSpecifierWidth());
 }
 
 OpFoldResult FormatOctOp::fold(FoldAdaptor adaptor) {
-  if (getValue().getType() == IntegerType::get(getContext(), 0U))
-    return StringAttr::get(getContext(), "");
+  if (getValue().getType().getIntOrFloatBitWidth() == 0)
+    return formatIntegersByRadix(
+        getContext(), 8, IntegerAttr::get(getValue().getType(), 0), false,
+        getIsLeftAligned(), getPaddingChar(), getSpecifierWidth());
+  return {};
+}
 
-  return formatIntegersByRadix(
-      getContext(), 8U, adaptor.getValue(), false, adaptor.getIsLeftAligned(),
-      adaptor.getPaddingChar(), adaptor.getSpecifierWidth());
+// --- FormatBinOp ---
+
+StringAttr FormatBinOp::formatConstant(Attribute constVal) {
+  return formatIntegersByRadix(constVal.getContext(), 2, constVal, false,
+                               getIsLeftAligned(), getPaddingChar(),
+                               getSpecifierWidth());
 }
 
 OpFoldResult FormatBinOp::fold(FoldAdaptor adaptor) {
-  if (getValue().getType() == IntegerType::get(getContext(), 0U))
-    return StringAttr::get(getContext(), "");
-
-  return formatIntegersByRadix(
-      getContext(), 2U, adaptor.getValue(), false, adaptor.getIsLeftAligned(),
-      adaptor.getPaddingChar(), adaptor.getSpecifierWidth());
+  if (getValue().getType().getIntOrFloatBitWidth() == 0)
+    return formatIntegersByRadix(
+        getContext(), 2, IntegerAttr::get(getValue().getType(), 0), false,
+        getIsLeftAligned(), getPaddingChar(), getSpecifierWidth());
+  return {};
 }
 
-OpFoldResult FormatScientificOp::fold(FoldAdaptor adaptor) {
-  return formatFloatsBySpecifier(
-      getContext(), adaptor.getValue(), adaptor.getIsLeftAligned(),
-      adaptor.getFieldWidth(), adaptor.getFracDigits(), "e");
+// --- FormatScientificOp ---
+
+StringAttr FormatScientificOp::formatConstant(Attribute constVal) {
+  return formatFloatsBySpecifier(getContext(), constVal, getIsLeftAligned(),
+                                 getFieldWidth(), getFracDigits(), "e");
 }
 
-OpFoldResult FormatFloatOp::fold(FoldAdaptor adaptor) {
-  return formatFloatsBySpecifier(
-      getContext(), adaptor.getValue(), adaptor.getIsLeftAligned(),
-      adaptor.getFieldWidth(), adaptor.getFracDigits(), "f");
+// --- FormatFloatOp ---
+
+StringAttr FormatFloatOp::formatConstant(Attribute constVal) {
+  return formatFloatsBySpecifier(getContext(), constVal, getIsLeftAligned(),
+                                 getFieldWidth(), getFracDigits(), "f");
 }
 
-OpFoldResult FormatGeneralOp::fold(FoldAdaptor adaptor) {
-  return formatFloatsBySpecifier(
-      getContext(), adaptor.getValue(), adaptor.getIsLeftAligned(),
-      adaptor.getFieldWidth(), adaptor.getFracDigits(), "g");
+// --- FormatGeneralOp ---
+
+StringAttr FormatGeneralOp::formatConstant(Attribute constVal) {
+  return formatFloatsBySpecifier(getContext(), constVal, getIsLeftAligned(),
+                                 getFieldWidth(), getFracDigits(), "g");
+}
+
+// --- FormatCharOp ---
+
+StringAttr FormatCharOp::formatConstant(Attribute constVal) {
+  auto intCst = dyn_cast<IntegerAttr>(constVal);
+  if (!intCst)
+    return {};
+  if (intCst.getType().getIntOrFloatBitWidth() == 0)
+    return StringAttr::get(getContext(), Twine(static_cast<char>(0)));
+  if (intCst.getType().getIntOrFloatBitWidth() > 8)
+    return {};
+  auto intValue = intCst.getValue().getZExtValue();
+  return StringAttr::get(getContext(), Twine(static_cast<char>(intValue)));
 }
 
 OpFoldResult FormatCharOp::fold(FoldAdaptor adaptor) {
-  auto width = getValue().getType().getIntOrFloatBitWidth();
-  if (width > 8)
-    return {};
-  if (width == 0)
+  if (getValue().getType().getIntOrFloatBitWidth() == 0)
     return StringAttr::get(getContext(), Twine(static_cast<char>(0)));
-
-  if (auto intAttr = llvm::dyn_cast_or_null<IntegerAttr>(adaptor.getValue())) {
-    auto intValue = intAttr.getValue().getZExtValue();
-    return StringAttr::get(getContext(), Twine(static_cast<char>(intValue)));
-  }
-
   return {};
 }
 
@@ -526,6 +561,8 @@ OpFoldResult StringLengthOp::fold(FoldAdaptor adaptor) {
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
+
+#include "circt/Dialect/Sim/SimOpInterfaces.cpp.inc"
 
 // Provide the autogenerated implementation guts for the Op classes.
 #define GET_OP_CLASSES
