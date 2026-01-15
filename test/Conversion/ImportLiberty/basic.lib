@@ -18,11 +18,15 @@ library(test) {
   // CHECK-SAME: out Z : i1 {synth.liberty.pin = {function = "A * !B + C"}}
   // CHECK-SAME: out PRECEDENCE : i1 {synth.liberty.pin = {function = "A * B ^ C"}}
   // CHECK-SAME: out COMPLEX : i1 {synth.liberty.pin = {function = "(A + B) * (C + !A)"}}
+  // CHECK-SAME: out POSTFIX_NOT : i1 {synth.liberty.pin = {function = "C'"}}
+  // CHECK-SAME: out PAREN_POSTFIX : i1 {synth.liberty.pin = {function = "(C + B)'"}}
   // CHECK-SAME: inout %IO : i1 {synth.liberty.pin = {}})
   // VERILOG-LABEL: module Basic(
   // VERILOG:      assign Z = A & ~B | C;
   // VERILOG-NEXT: assign PRECEDENCE = A & B ^ C;
   // VERILOG-NEXT: assign COMPLEX = (A | B) & (C | ~A);
+  // VERILOG-NEXT: assign POSTFIX_NOT = ~C;
+  // VERILOG-NEXT: assign PAREN_POSTFIX = ~(C | B);
   cell(Basic) {
     pin(A) {
       direction: input;
@@ -48,6 +52,16 @@ library(test) {
     pin(COMPLEX) {
       direction: output;
       function: "(A + B) * (C + !A)";
+    }
+    // Check postfix NOT
+    pin(POSTFIX_NOT) {
+      direction: output;
+      function: "C'";
+    }
+    // Check postfix NOT on parenthesized expression
+    pin(PAREN_POSTFIX) {
+      direction: output;
+      function: "(C + B)'";
     }
     // Check inout
     pin(IO) {

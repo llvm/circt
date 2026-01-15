@@ -141,20 +141,41 @@ private:
   LibertyToken makeToken(LibertyTokenKind kind, const char *start);
 };
 
-// Helper class to parse boolean expressions from Liberty function attributes
+/// Helper class to parse boolean expressions from Liberty function attributes.
+///
+/// This parser implements a recursive-descent parser for Liberty boolean
+/// expressions with the following operator precedence (highest to lowest):
+///   1. NOT (!, ')      - Unary negation (prefix or postfix)
+///   2. AND (*, &)      - Conjunction
+///   3. XOR (^)         - Exclusive OR
+///   4. OR  (+, |)      - Disjunction
+///
+/// Parentheses can be used to override precedence. The grammar is:
+///   OrExpr    -> XorExpr { ('+'|'|') XorExpr }
+///   XorExpr   -> AndExpr { '^' AndExpr }
+///   AndExpr   -> UnaryExpr { ('*'|'&') UnaryExpr }
+///   UnaryExpr -> ('!'|'\'') UnaryExpr
+///              | '(' OrExpr ')' ['\'']
+///              | ID ['\'']
 class ExpressionParser {
 public:
   ExpressionParser(LibertyLexer &lexer, OpBuilder &builder, StringRef expr,
-                   const llvm::StringMap<Value> &values, SMLoc baseLoc)
-      : lexer(lexer), builder(builder), values(values), baseLoc(baseLoc),
-        exprStart(expr.begin()) {
-    tokenize(expr);
-  }
+                   const llvm::StringMap<Value> &values, SMLoc baseLoc);
 
-  ParseResult parse(Value &result) { return parseOrExpr(result); }
+  ParseResult parse(Value &result);
 
 private:
-  enum class TokenKind { ID, AND, OR, XOR, NOT, LPAREN, RPAREN, END };
+  enum class TokenKind {
+    ID,
+    AND,
+    OR,
+    XOR,
+    PREFIX_NOT,  // !
+    POSTFIX_NOT, // '
+    LPAREN,
+    RPAREN,
+    END
+  };
 
   struct Token {
     TokenKind kind;
@@ -169,186 +190,227 @@ private:
   const char *exprStart;
   SmallVector<Token> tokens;
   size_t pos = 0;
-
-  SMLoc getLoc(const char *ptr) {
-    size_t offset = ptr - exprStart;
-    return SMLoc::getFromPointer(baseLoc.getPointer() + 1 + offset);
-  }
-
-  void tokenize(StringRef expr) {
-    const char *ptr = expr.begin();
-    const char *end = expr.end();
-
-    while (ptr < end) {
-      // Skip whitespace
-      if (isspace(*ptr)) {
-        ++ptr;
-        continue;
-      }
-
-      SMLoc loc = getLoc(ptr);
-
-      // Identifier
-      if (isalnum(*ptr) || *ptr == '_') {
-        const char *start = ptr;
-        while (ptr < end && (isalnum(*ptr) || *ptr == '_'))
-          ++ptr;
-        tokens.push_back({TokenKind::ID, StringRef(start, ptr - start), loc});
-        continue;
-      }
-
-      // Operators and punctuation
-      switch (*ptr) {
-      case '*':
-      case '&':
-        tokens.push_back({TokenKind::AND, StringRef(ptr, 1), loc});
-        break;
-      case '+':
-      case '|':
-        tokens.push_back({TokenKind::OR, StringRef(ptr, 1), loc});
-        break;
-      case '^':
-        tokens.push_back({TokenKind::XOR, StringRef(ptr, 1), loc});
-        break;
-      case '!':
-      case '\'':
-        tokens.push_back({TokenKind::NOT, StringRef(ptr, 1), loc});
-        break;
-      case '(':
-        tokens.push_back({TokenKind::LPAREN, StringRef(ptr, 1), loc});
-        break;
-      case ')':
-        tokens.push_back({TokenKind::RPAREN, StringRef(ptr, 1), loc});
-        break;
-      }
-      ++ptr;
-    }
-
-    tokens.push_back({TokenKind::END, "", getLoc(ptr)});
-  }
-
-  Token peek() const { return tokens[pos]; }
-  Token consume() { return tokens[pos++]; }
-
   Value trueVal = nullptr;
 
-  Value createNot(Value val, SMLoc loc) {
-    if (!trueVal)
-      trueVal = hw::ConstantOp::create(builder, lexer.translateLocation(loc),
-                                       builder.getI1Type(), 1);
-    return comb::XorOp::create(builder, lexer.translateLocation(loc), val,
-                               trueVal);
-  }
+  SMLoc getLoc(const char *ptr);
+  void tokenize(StringRef expr);
+  Token peek() const;
+  Token consume();
+  Value createNot(Value val, SMLoc loc);
 
-  // Parse: OrExpr -> XorExpr { ('+'|'|') XorExpr }
-  ParseResult parseOrExpr(Value &result) {
-    Value lhs;
-    if (parseXorExpr(lhs))
-      return failure();
-    while (peek().kind == TokenKind::OR) {
-      auto loc = consume().loc;
-      Value rhs;
-      if (parseXorExpr(rhs))
-        return failure();
-      lhs = comb::OrOp::create(builder, lexer.translateLocation(loc), lhs, rhs);
-    }
-    result = lhs;
-    return success();
-  }
+  ParseResult parseOrExpr(Value &result);
+  ParseResult parseXorExpr(Value &result);
+  ParseResult parseAndExpr(Value &result);
+  ParseResult parseUnaryExpr(Value &result);
 
-  // Parse: XorExpr -> AndExpr { '^' AndExpr }
-  ParseResult parseXorExpr(Value &result) {
-    Value lhs;
-    if (parseAndExpr(lhs))
-      return failure();
-    while (peek().kind == TokenKind::XOR) {
-      auto loc = consume().loc;
-      Value rhs;
-      if (parseAndExpr(rhs))
-        return failure();
-      lhs =
-          comb::XorOp::create(builder, lexer.translateLocation(loc), lhs, rhs);
-    }
-    result = lhs;
-    return success();
-  }
+  InFlightDiagnostic emitError(llvm::SMLoc loc, const Twine &message) const;
+  InFlightDiagnostic emitWarning(llvm::SMLoc loc, const Twine &message) const;
+};
 
-  // Parse: AndExpr -> UnaryExpr { ('*'|'&') UnaryExpr }
-  ParseResult parseAndExpr(Value &result) {
-    Value lhs;
-    if (parseUnaryExpr(lhs))
-      return failure();
-    while (peek().kind == TokenKind::AND) {
-      auto loc = consume().loc;
-      Value rhs;
-      if (parseUnaryExpr(rhs))
-        return failure();
-      lhs =
-          comb::AndOp::create(builder, lexer.translateLocation(loc), lhs, rhs);
-    }
-    result = lhs;
-    return success();
-  }
+//===----------------------------------------------------------------------===//
+// ExpressionParser Implementation
+//===----------------------------------------------------------------------===//
 
-  InFlightDiagnostic emitError(llvm::SMLoc loc, const Twine &message) const {
-    return mlir::emitError(lexer.translateLocation(loc), message);
-  }
+ExpressionParser::ExpressionParser(LibertyLexer &lexer, OpBuilder &builder,
+                                   StringRef expr,
+                                   const llvm::StringMap<Value> &values,
+                                   SMLoc baseLoc)
+    : lexer(lexer), builder(builder), values(values), baseLoc(baseLoc),
+      exprStart(expr.begin()) {
+  tokenize(expr);
+}
 
-  InFlightDiagnostic emitWarning(llvm::SMLoc loc, const Twine &message) const {
-    return mlir::emitWarning(lexer.translateLocation(loc), message);
-  }
+ParseResult ExpressionParser::parse(Value &result) {
+  return parseOrExpr(result);
+}
 
-  // Parse: UnaryExpr -> ('!'|'\'') UnaryExpr | '(' OrExpr ')' ['\''] | ID
-  // ['\'']
-  ParseResult parseUnaryExpr(Value &result) {
-    // Prefix NOT
-    if (peek().kind == TokenKind::NOT) {
-      auto loc = consume().loc;
-      Value val;
-      if (parseUnaryExpr(val))
-        return failure();
-      result = createNot(val, loc);
-      return success();
+SMLoc ExpressionParser::getLoc(const char *ptr) {
+  size_t offset = ptr - exprStart;
+  return SMLoc::getFromPointer(baseLoc.getPointer() + 1 + offset);
+}
+
+void ExpressionParser::tokenize(StringRef expr) {
+  const char *ptr = expr.begin();
+  const char *end = expr.end();
+
+  while (ptr < end) {
+    // Skip whitespace
+    if (isspace(*ptr)) {
+      ++ptr;
+      continue;
     }
 
-    // Parenthesized expression
-    if (peek().kind == TokenKind::LPAREN) {
-      consume();
-      Value val;
-      if (parseOrExpr(val))
-        return failure();
-      if (peek().kind != TokenKind::RPAREN)
-        return failure();
-      consume();
-      // Postfix NOT
-      if (peek().kind == TokenKind::NOT) {
-        auto loc = consume().loc;
-        val = createNot(val, loc);
-      }
-      result = val;
-      return success();
-    }
+    SMLoc loc = getLoc(ptr);
 
     // Identifier
-    if (peek().kind == TokenKind::ID) {
-      auto tok = consume();
-      StringRef name = tok.spelling;
-      auto it = values.find(name);
-      if (it == values.end())
-        return emitError(tok.loc, "variable not found");
-      Value val = it->second;
-      // Postfix NOT
-      if (peek().kind == TokenKind::NOT) {
-        auto loc = consume().loc;
-        val = createNot(val, loc);
-      }
-      result = val;
-      return success();
+    if (isalnum(*ptr) || *ptr == '_') {
+      const char *start = ptr;
+      while (ptr < end && (isalnum(*ptr) || *ptr == '_'))
+        ++ptr;
+      tokens.push_back({TokenKind::ID, StringRef(start, ptr - start), loc});
+      continue;
     }
 
-    return emitError(peek().loc, "expected expression");
+    // Operators and punctuation
+    switch (*ptr) {
+    case '*':
+    case '&':
+      tokens.push_back({TokenKind::AND, StringRef(ptr, 1), loc});
+      break;
+    case '+':
+    case '|':
+      tokens.push_back({TokenKind::OR, StringRef(ptr, 1), loc});
+      break;
+    case '^':
+      tokens.push_back({TokenKind::XOR, StringRef(ptr, 1), loc});
+      break;
+    case '!':
+      tokens.push_back({TokenKind::PREFIX_NOT, StringRef(ptr, 1), loc});
+      break;
+    case '\'':
+      tokens.push_back({TokenKind::POSTFIX_NOT, StringRef(ptr, 1), loc});
+      break;
+    case '(':
+      tokens.push_back({TokenKind::LPAREN, StringRef(ptr, 1), loc});
+      break;
+    case ')':
+      tokens.push_back({TokenKind::RPAREN, StringRef(ptr, 1), loc});
+      break;
+    }
+    ++ptr;
   }
-};
+
+  tokens.push_back({TokenKind::END, "", getLoc(ptr)});
+}
+
+ExpressionParser::Token ExpressionParser::peek() const { return tokens[pos]; }
+
+ExpressionParser::Token ExpressionParser::consume() { return tokens[pos++]; }
+
+Value ExpressionParser::createNot(Value val, SMLoc loc) {
+  if (!trueVal)
+    trueVal = hw::ConstantOp::create(builder, lexer.translateLocation(loc),
+                                     builder.getI1Type(), 1);
+  return comb::XorOp::create(builder, lexer.translateLocation(loc), val,
+                             trueVal);
+}
+
+/// Parse OR expressions with lowest precedence.
+/// OrExpr -> XorExpr { ('+'|'|') XorExpr }
+/// This implements left-associative parsing: A + B + C becomes (A + B) + C
+ParseResult ExpressionParser::parseOrExpr(Value &result) {
+  Value lhs;
+  if (parseXorExpr(lhs))
+    return failure();
+  while (peek().kind == TokenKind::OR) {
+    auto loc = consume().loc;
+    Value rhs;
+    if (parseXorExpr(rhs))
+      return failure();
+    lhs = comb::OrOp::create(builder, lexer.translateLocation(loc), lhs, rhs);
+  }
+  result = lhs;
+  return success();
+}
+
+/// Parse XOR expressions with medium precedence.
+/// XorExpr -> AndExpr { '^' AndExpr }
+/// This implements left-associative parsing: A ^ B ^ C becomes (A ^ B) ^ C
+ParseResult ExpressionParser::parseXorExpr(Value &result) {
+  Value lhs;
+  if (parseAndExpr(lhs))
+    return failure();
+  while (peek().kind == TokenKind::XOR) {
+    auto loc = consume().loc;
+    Value rhs;
+    if (parseAndExpr(rhs))
+      return failure();
+    lhs = comb::XorOp::create(builder, lexer.translateLocation(loc), lhs, rhs);
+  }
+  result = lhs;
+  return success();
+}
+
+/// Parse AND expressions with highest precedence.
+/// AndExpr -> UnaryExpr { ('*'|'&') UnaryExpr }
+/// This implements left-associative parsing: A * B * C becomes (A * B) * C
+ParseResult ExpressionParser::parseAndExpr(Value &result) {
+  Value lhs;
+  if (parseUnaryExpr(lhs))
+    return failure();
+  while (peek().kind == TokenKind::AND) {
+    auto loc = consume().loc;
+    Value rhs;
+    if (parseUnaryExpr(rhs))
+      return failure();
+    lhs = comb::AndOp::create(builder, lexer.translateLocation(loc), lhs, rhs);
+  }
+  result = lhs;
+  return success();
+}
+
+/// Parse unary expressions and primary expressions.
+/// UnaryExpr -> '!' UnaryExpr | '(' OrExpr ')' ['\''] | ID ['\']
+/// Handles prefix NOT (!), parenthesized expressions, and identifiers.
+/// Postfix NOT (') is only allowed after expressions and identifiers.
+ParseResult ExpressionParser::parseUnaryExpr(Value &result) {
+  // Prefix NOT (!)
+  if (peek().kind == TokenKind::PREFIX_NOT) {
+    auto loc = consume().loc;
+    Value val;
+    if (parseUnaryExpr(val))
+      return failure();
+    result = createNot(val, loc);
+    return success();
+  }
+
+  // Parenthesized expression
+  if (peek().kind == TokenKind::LPAREN) {
+    consume();
+    Value val;
+    if (parseOrExpr(val))
+      return failure();
+    if (peek().kind != TokenKind::RPAREN)
+      return failure();
+    consume();
+    // Postfix NOT (')
+    if (peek().kind == TokenKind::POSTFIX_NOT) {
+      auto loc = consume().loc;
+      val = createNot(val, loc);
+    }
+    result = val;
+    return success();
+  }
+
+  // Identifier
+  if (peek().kind == TokenKind::ID) {
+    auto tok = consume();
+    StringRef name = tok.spelling;
+    auto it = values.find(name);
+    if (it == values.end())
+      return emitError(tok.loc, "variable not found");
+    Value val = it->second;
+    // Postfix NOT (')
+    if (peek().kind == TokenKind::POSTFIX_NOT) {
+      auto loc = consume().loc;
+      val = createNot(val, loc);
+    }
+    result = val;
+    return success();
+  }
+
+  return emitError(peek().loc, "expected expression");
+}
+
+InFlightDiagnostic ExpressionParser::emitError(llvm::SMLoc loc,
+                                               const Twine &message) const {
+  return mlir::emitError(lexer.translateLocation(loc), message);
+}
+
+InFlightDiagnostic ExpressionParser::emitWarning(llvm::SMLoc loc,
+                                                 const Twine &message) const {
+  return mlir::emitWarning(lexer.translateLocation(loc), message);
+}
 
 // Parsed result of a Liberty group
 struct LibertyGroup {

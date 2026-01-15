@@ -85,3 +85,15 @@ library(test) {
     }
   }
 }
+
+// -----
+
+library(test) {
+  cell(C) {
+    pin(A) { direction: input; }
+    pin(Z) {
+      direction: output;
+      function: "'A"; // expected-error {{expected expression}}
+    }
+  }
+}
