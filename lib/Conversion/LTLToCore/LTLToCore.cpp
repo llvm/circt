@@ -141,7 +141,12 @@ void LowerLTLToCorePass::runOnOperation() {
   target.addLegalDialect<verif::VerifDialect>();
   target.addIllegalOp<verif::HasBeenResetOp>();
   target.addDynamicallyLegalOp<ltl::ImplicationOp>([](ltl::ImplicationOp op) {
-    // Illegal if operands are i1
+    // Any implication with a non-assert user is legal since we can't change the
+    // result to an i1
+    for (auto *user : op->getUsers())
+      if (!isa<verif::AssertOp, verif::ClockedAssertOp>(user))
+        return true;
+    // Otherwise illegal if operands are i1
     return !isa<IntegerType>(op.getAntecedent().getType()) ||
            !isa<IntegerType>(op.getConsequent().getType());
   });
@@ -187,6 +192,16 @@ void LowerLTLToCorePass::runOnOperation() {
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     return signalPassFailure();
+
+  // Clean up remaining unrealized casts by changing assert argument types
+  getOperation().walk([&](Operation *op) {
+    if (!isa<verif::AssertOp, verif::ClockedAssertOp>(op))
+      return;
+    Value prop = op->getOperand(0);
+    if (auto cast = prop.getDefiningOp<UnrealizedConversionCastOp>()) {
+      op->setOperand(0, cast.getInputs()[0]);
+    }
+  });
 }
 
 // Basic default constructor
