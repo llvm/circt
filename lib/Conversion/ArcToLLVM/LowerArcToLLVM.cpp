@@ -789,8 +789,7 @@ foldFormatString(ConversionPatternRewriter &rewriter, Value fstringValue,
                                   -> FailureOr<FormatInfo> {
         FmtDescriptor d = FmtDescriptor::createInt(
             op.getValue().getType().getWidth(), 16, op.getIsLeftAligned(),
-            op.getSpecifierWidth().value_or(-1), op.getIsHexUppercase(),
-            false);
+            op.getSpecifierWidth().value_or(-1), op.getIsHexUppercase(), false);
         return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
       })
       .Case<sim::FormatOctOp>([&](sim::FormatOctOp op)
@@ -802,18 +801,18 @@ foldFormatString(ConversionPatternRewriter &rewriter, Value fstringValue,
       })
       .Case<sim::FormatLiteralOp>(
           [&](sim::FormatLiteralOp op) -> FailureOr<FormatInfo> {
-        if (op.getLiteral().size() < 8 &&
-            op.getLiteral().find('\0') == StringRef::npos) {
-          // We can use the small string optimization.
-          FmtDescriptor d =
-              FmtDescriptor::createSmallLiteral(op.getLiteral());
-          return FormatInfo{{d}, {}};
-        }
-        FmtDescriptor d =
-            FmtDescriptor::createLiteral(op.getLiteral().size());
-        Value value = cache.getOrCreate(rewriter, op.getLiteral());
-        return FormatInfo{{d}, {value}};
-      })
+            if (op.getLiteral().size() < 8 &&
+                op.getLiteral().find('\0') == StringRef::npos) {
+              // We can use the small string optimization.
+              FmtDescriptor d =
+                  FmtDescriptor::createSmallLiteral(op.getLiteral());
+              return FormatInfo{{d}, {}};
+            }
+            FmtDescriptor d =
+                FmtDescriptor::createLiteral(op.getLiteral().size());
+            Value value = cache.getOrCreate(rewriter, op.getLiteral());
+            return FormatInfo{{d}, {value}};
+          })
       .Case<sim::FormatStringConcatOp>(
           [&](sim::FormatStringConcatOp op) -> FailureOr<FormatInfo> {
             auto fmt = foldFormatString(rewriter, op.getInputs()[0], cache);
