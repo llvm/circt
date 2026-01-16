@@ -2754,7 +2754,7 @@ firrtl.circuit "SimulationTargetInvalid" {
 
 firrtl.circuit "SimulationPortCount" {
   firrtl.extmodule @SimulationPortCount()
-  // expected-error @below {{op target @Foo must have 4 ports, got 0 instead}}
+  // expected-error @below {{op target @Foo must have at least 4 ports, got 0 instead}}
   firrtl.simulation @foo, @Foo {}
   // expected-note @below {{target defined here}}
   firrtl.extmodule @Foo()
@@ -2937,6 +2937,22 @@ firrtl.circuit "SimulationPortType3" {
     in init: !firrtl.uint<1>,
     out done: !firrtl.uint<1>,
     out success: !firrtl.reset
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationExtraHardwarePort" {
+  firrtl.extmodule @SimulationExtraHardwarePort()
+  // expected-error @below {{op target @Foo port 4 may only be a property type, got '!firrtl.uint<8>' instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>,
+    in extra: !firrtl.uint<8>
   )
 }
 
