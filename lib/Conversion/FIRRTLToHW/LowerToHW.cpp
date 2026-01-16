@@ -5294,7 +5294,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
 
   if (!isCover && opMessageAttr && !opMessageAttr.getValue().empty()) {
     // Resolve format string to handle special substitutions like
-    // {{HierarchicalModuleName}} which should be replaced with %m
+    // {{HierarchicalModuleName}} which should be replaced with %m.
     if (failed(resolveFormatString(op->getLoc(), opMessageAttr.getValue(),
                                    opOperands, message)))
       return failure();
