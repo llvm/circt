@@ -236,7 +236,8 @@ public:
 
     // For ready: check if there's an unwrap consumer
     Value ready;
-    auto *unwrapOpOperand = ChannelType::getSingleConsumer(wrap.getChanOutput());
+    auto *unwrapOpOperand =
+        ChannelType::getSingleConsumer(wrap.getChanOutput());
 
     if (unwrapOpOperand &&
         isa<UnwrapValidReadyOp>(unwrapOpOperand->getOwner())) {
@@ -246,6 +247,8 @@ public:
     } else {
       // No consumer: synthesize a constant false ready signal
       // (nothing is ready to consume this channel)
+      assert(!unwrapOpOperand &&
+             "Expected no consumer or consumer should be an unwrap");
       ready = hw::ConstantOp::create(rewriter, op.getLoc(),
                                      rewriter.getI1Type(), 0);
     }
@@ -290,6 +293,8 @@ public:
         ready = unwrapVR.getReady();
       } else {
         // No consumer: transaction never happens (valid && false)
+        assert(!unwrapOpOperand &&
+               "Expected no consumer or consumer should be an unwrap");
         ready = hw::ConstantOp::create(rewriter, op.getLoc(),
                                        rewriter.getI1Type(), 0);
       }
@@ -318,6 +323,8 @@ public:
         rden = unwrapFIFO.getRden();
       } else {
         // No consumer: never reading
+        assert(!unwrapOpOperand &&
+               "Expected no consumer or consumer should be an unwrap");
         rden = hw::ConstantOp::create(rewriter, op.getLoc(),
                                       rewriter.getI1Type(), 0);
       }

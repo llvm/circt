@@ -305,3 +305,39 @@ hw.module @testSnoopTx(in %clk: !seq.clock, in %rst:i1, in %input: !esi.channel<
 // HW:         %pipelineStage.a_ready, %pipelineStage.x, %pipelineStage.x_valid = hw.instance "pipelineStage" @ESI_PipelineStage2<WIDTH: ui32 = 32>(clk: %clk: !seq.clock, rst: %rst: i1, a: %input: i32, a_valid: %3: i1, x_ready: %output_ready: i1) -> (a_ready: i1, x: i32, x_valid: i1)
 // HW:         [[VR_XACT:%.+]] = comb.and %pipelineStage.x_valid, %output_ready : i1
 // HW:         hw.output [[R2]], %pipelineStage.x, %pipelineStage.x_valid, [[FIFO_XACT]], [[VR_XACT]] : i1, i32, i1, i1, i1
+
+// Test snoop on a channel passed through a module (tests channels at module boundaries)
+hw.module @SnoopPassthrough(in %chan_in: !esi.channel<i32>, out chan_out: !esi.channel<i32>) {
+  %valid, %ready, %data = esi.snoop.vr %chan_in : !esi.channel<i32>
+  hw.output %chan_in : !esi.channel<i32>
+}
+// HW-LABEL: hw.module @SnoopPassthrough(in %chan_in : i32, in %chan_in_valid : i1, in %chan_out_ready : i1, out chan_in_ready : i1, out chan_out : i32, out chan_out_valid : i1) {
+// HW:         hw.output %chan_out_ready, %chan_in, %chan_in_valid : i1, i32, i1
+
+hw.module @SnoopWithInstanceConsumer(in %in_data: i32, in %in_valid: i1, out out: !esi.channel<i32>) {
+  %chan, %ready_out = esi.wrap.vr %in_data, %in_valid : i32
+  %valid, %ready_snoop, %data = esi.snoop.vr %chan : !esi.channel<i32>
+  %out = hw.instance "passthrough" @SnoopPassthrough(chan_in: %chan: !esi.channel<i32>) -> (chan_out: !esi.channel<i32>)
+  hw.output %out : !esi.channel<i32>
+}
+// HW-LABEL: hw.module @SnoopWithInstanceConsumer(in %in_data : i32, in %in_valid : i1, in %out_ready : i1, out out : i32, out out_valid : i1) {
+// HW:         %passthrough.chan_in_ready, %passthrough.chan_out, %passthrough.chan_out_valid = hw.instance "passthrough" @SnoopPassthrough(chan_in: %in_data: i32, chan_in_valid: %in_valid: i1, chan_out_ready: %out_ready: i1) -> (chan_in_ready: i1, chan_out: i32, chan_out_valid: i1)
+// HW:         hw.output %passthrough.chan_out, %passthrough.chan_out_valid : i32, i1
+
+// Test snoop transaction on FIFO channels at module boundaries
+hw.module @SnoopFIFOPassthrough(in %chan_in: !esi.channel<i32, FIFO>, out chan_out: !esi.channel<i32, FIFO>) {
+  %transaction, %data = esi.snoop.xact %chan_in : !esi.channel<i32, FIFO>
+  hw.output %chan_in : !esi.channel<i32, FIFO>
+}
+// HW-LABEL: hw.module @SnoopFIFOPassthrough(in %chan_in : i32, in %chan_in_empty : i1, in %chan_out_rden : i1, out chan_in_rden : i1, out chan_out : i32, out chan_out_empty : i1) {
+// HW:         hw.output %chan_out_rden, %chan_in, %chan_in_empty : i1, i32, i1
+
+hw.module @SnoopFIFOWithInstanceConsumer(in %in_data: i32, in %in_empty: i1, out out: !esi.channel<i32, FIFO>) {
+  %chan, %rden_out = esi.wrap.fifo %in_data, %in_empty : !esi.channel<i32, FIFO>
+  %transaction, %data = esi.snoop.xact %chan : !esi.channel<i32, FIFO>
+  %out = hw.instance "fifo_passthrough" @SnoopFIFOPassthrough(chan_in: %chan: !esi.channel<i32, FIFO>) -> (chan_out: !esi.channel<i32, FIFO>)
+  hw.output %out : !esi.channel<i32, FIFO>
+}
+// HW-LABEL: hw.module @SnoopFIFOWithInstanceConsumer(in %in_data : i32, in %in_empty : i1, in %out_rden : i1, out out : i32, out out_empty : i1) {
+// HW:         %fifo_passthrough.chan_in_rden, %fifo_passthrough.chan_out, %fifo_passthrough.chan_out_empty = hw.instance "fifo_passthrough" @SnoopFIFOPassthrough(chan_in: %in_data: i32, chan_in_empty: %in_empty: i1, chan_out_rden: %out_rden: i1) -> (chan_in_rden: i1, chan_out: i32, chan_out_empty: i1)
+// HW:         hw.output %fifo_passthrough.chan_out, %fifo_passthrough.chan_out_empty : i32, i1
