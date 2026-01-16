@@ -56,8 +56,60 @@ FailureOr<BinaryTruthTable> getTruthTable(ValueRange values, Block *block);
 // Forward declarations
 class CutRewritePatternSet;
 class CutRewriter;
+class CutEnumerator;
 struct CutRewritePattern;
 struct CutRewriterOptions;
+
+/// Result of matching a cut against a pattern.
+///
+/// This structure contains the area and per-input delay information
+/// computed during pattern matching.
+///
+/// The delays can be stored in two ways:
+/// 1. As a reference to static/cached data (e.g., tech library delays)
+///    - Use setDelayRef() for zero-cost reference (no allocation)
+/// 2. As owned dynamic data (e.g., computed SOP delays)
+///    - Use setOwnedDelays() to transfer ownership
+///
+struct MatchResult {
+  /// Area cost of implementing this cut with the pattern.
+  double area = 0.0;
+
+  /// Default constructor.
+  MatchResult() = default;
+
+  /// Constructor with area and delays (by reference).
+  MatchResult(double area, ArrayRef<DelayType> delays)
+      : area(area), borrowedDelays(delays) {}
+
+  /// Set delays by reference (zero-cost for static/cached delays).
+  /// The caller must ensure the referenced data remains valid.
+  void setDelayRef(ArrayRef<DelayType> delays) { borrowedDelays = delays; }
+
+  /// Set delays by transferring ownership (for dynamically computed delays).
+  /// This moves the data into internal storage.
+  void setOwnedDelays(SmallVector<DelayType, 6> delays) {
+    ownedDelays.emplace(std::move(delays));
+    borrowedDelays = {};
+  }
+
+  /// Get all delays as an ArrayRef.
+  ArrayRef<DelayType> getDelays() const {
+    return ownedDelays.has_value() ? ArrayRef<DelayType>(*ownedDelays)
+                                   : borrowedDelays;
+  }
+
+private:
+  /// Borrowed delays (used when ownedDelays is empty).
+  /// Points to external data provided via setDelayRef().
+  ArrayRef<DelayType> borrowedDelays;
+
+  /// Owned delays (used when present).
+  /// Only allocated when setOwnedDelays() is called. When empty (std::nullopt),
+  /// moving this MatchResult avoids constructing/moving the SmallVector,
+  /// achieving zero-cost abstraction for the common case (borrowed delays).
+  std::optional<SmallVector<DelayType, 6>> ownedDelays;
+};
 
 /// Represents a cut that has been successfully matched to a rewriting pattern.
 ///
@@ -68,7 +120,8 @@ class MatchedPattern {
 private:
   const CutRewritePattern *pattern = nullptr; ///< The matched library pattern
   SmallVector<DelayType, 1>
-      arrivalTimes; ///< Arrival times of outputs from this pattern
+      arrivalTimes;  ///< Arrival times of outputs from this pattern
+  double area = 0.0; ///< Area cost of this pattern
 
 public:
   /// Default constructor creates an invalid matched pattern.
@@ -76,8 +129,8 @@ public:
 
   /// Constructor for a valid matched pattern.
   MatchedPattern(const CutRewritePattern *pattern,
-                 SmallVector<DelayType, 1> arrivalTimes)
-      : pattern(pattern), arrivalTimes(std::move(arrivalTimes)) {}
+                 SmallVector<DelayType, 1> arrivalTimes, double area)
+      : pattern(pattern), arrivalTimes(std::move(arrivalTimes)), area(area) {}
 
   /// Get the arrival time of signals through this pattern.
   DelayType getArrivalTime(unsigned outputIndex) const;
@@ -89,9 +142,6 @@ public:
 
   /// Get the area cost of using this pattern.
   double getArea() const;
-
-  /// Get the delay between specific input and output pins.
-  DelayType getDelay(unsigned inputIndex, unsigned outputIndex) const;
 };
 
 /// Represents a cut in the combinational logic network.
@@ -296,6 +346,9 @@ public:
   void clear();
 
   void dump() const;
+  const llvm::MapVector<Value, std::unique_ptr<CutSet>> &getCutSets() const {
+    return cutSets;
+  }
 
 private:
   /// Visit a single operation and generate cuts for it.
@@ -323,9 +376,8 @@ private:
 /// A CutRewritePattern represents a library component or optimization pattern
 /// that can replace cuts in the combinational logic network. Each pattern
 /// defines:
-/// - How to recognize matching cuts
+/// - How to recognize matching cuts and compute area/delay metrics
 /// - How to transform/replace the matched cuts
-/// - Area and timing characteristics
 ///
 /// Patterns can use truth table matching for efficient recognition or
 /// implement custom matching logic for more complex cases.
@@ -334,12 +386,16 @@ struct CutRewritePattern {
   /// Virtual destructor for base class.
   virtual ~CutRewritePattern() = default;
 
-  /// Check if a cut matches this pattern.
+  /// Check if a cut matches this pattern and compute area/delay metrics.
   ///
   /// This method is called to determine if a cut can be replaced by this
-  /// pattern. If useTruthTableMatcher() returns true, this method is only
+  /// pattern. If the cut matches, it should return a MatchResult containing
+  /// the area and per-input delays for this specific cut.
+  ///
+  /// If useTruthTableMatcher() returns true, this method is only
   /// called for cuts with matching truth tables.
-  virtual bool match(const Cut &cut) const = 0;
+  virtual std::optional<MatchResult> match(CutEnumerator &enumerator,
+                                           const Cut &cut) const = 0;
 
   /// Specify truth tables that this pattern can match.
   ///
@@ -361,16 +417,8 @@ struct CutRewritePattern {
   /// the circuit, making it safe to only replace the root operation of each
   /// cut while preserving all other operations unchanged.
   virtual FailureOr<Operation *> rewrite(mlir::OpBuilder &builder,
-                                         Cut &cut) const = 0;
-
-  /// Get the area cost of this pattern.
-  virtual double getArea() const = 0;
-
-  /// Get the delay between specific input and output.
-  /// NOTE: The input index is already permuted according to the pattern's
-  /// input permutation, so it's not necessary to account for it here.
-  virtual DelayType getDelay(unsigned inputIndex,
-                             unsigned outputIndex) const = 0;
+                                         CutEnumerator &enumerator,
+                                         const Cut &cut) const = 0;
 
   /// Get the number of outputs this pattern produces.
   virtual unsigned getNumOutputs() const = 0;
@@ -418,9 +466,9 @@ private:
            SmallVector<std::pair<NPNClass, const CutRewritePattern *>>>
       npnToPatternMap;
 
-  /// Patterns that use custom matching logic instead of truth tables.
+  /// Patterns that use custom matching logic instead of NPN lookup.
   /// These patterns are checked against every cut.
-  SmallVector<const CutRewritePattern *, 4> nonTruthTablePatterns;
+  SmallVector<const CutRewritePattern *, 4> nonNPNPatterns;
 
   /// CutRewriter needs access to internal data structures for pattern matching.
   friend class CutRewriter;
