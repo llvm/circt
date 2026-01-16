@@ -773,21 +773,21 @@ foldFormatString(ConversionPatternRewriter &rewriter, Value fstringValue,
                  StringCache &cache) {
   Operation *op = fstringValue.getDefiningOp();
   return llvm::TypeSwitch<Operation *, FailureOr<FormatInfo>>(op)
-      .Case<sim::FormatCharOp>(
-          [&](sim::FormatCharOp op) -> FailureOr<FormatInfo> {
+      .Case<sim::FormatCharOp>([&](sim::FormatCharOp op)
+                                   -> FailureOr<FormatInfo> {
             FmtDescriptor d = FmtDescriptor::createChar();
             return FormatInfo{{d}, {op.getValue()}};
           })
-      .Case<sim::FormatDecOp>(
-          [&](sim::FormatDecOp op) -> FailureOr<FormatInfo> {
+      .Case<sim::FormatDecOp>([&](sim::FormatDecOp op)
+                                  -> FailureOr<FormatInfo> {
             FmtDescriptor d = FmtDescriptor::createInt(
                 op.getValue().getType().getWidth(), 10, op.getIsLeftAligned(),
                 op.getSpecifierWidth().value_or(-1), false, op.getIsSigned());
             return FormatInfo{{d},
                               {reg2mem(rewriter, op.getLoc(), op.getValue())}};
           })
-      .Case<sim::FormatHexOp>(
-          [&](sim::FormatHexOp op) -> FailureOr<FormatInfo> {
+      .Case<sim::FormatHexOp>([&](sim::FormatHexOp op)
+                                  -> FailureOr<FormatInfo> {
             FmtDescriptor d = FmtDescriptor::createInt(
                 op.getValue().getType().getWidth(), 16, op.getIsLeftAligned(),
                 op.getSpecifierWidth().value_or(-1), op.getIsHexUppercase(),
@@ -795,16 +795,16 @@ foldFormatString(ConversionPatternRewriter &rewriter, Value fstringValue,
             return FormatInfo{{d},
                               {reg2mem(rewriter, op.getLoc(), op.getValue())}};
           })
-      .Case<sim::FormatOctOp>(
-          [&](sim::FormatOctOp op) -> FailureOr<FormatInfo> {
+      .Case<sim::FormatOctOp>([&](sim::FormatOctOp op)
+                                  -> FailureOr<FormatInfo> {
             FmtDescriptor d = FmtDescriptor::createInt(
                 op.getValue().getType().getWidth(), 8, op.getIsLeftAligned(),
                 op.getSpecifierWidth().value_or(-1), false, false);
             return FormatInfo{{d},
                               {reg2mem(rewriter, op.getLoc(), op.getValue())}};
           })
-      .Case<sim::FormatLiteralOp>(
-          [&](sim::FormatLiteralOp op) -> FailureOr<FormatInfo> {
+      .Case<sim::FormatLiteralOp>([&](sim::FormatLiteralOp op)
+                                      -> FailureOr<FormatInfo> {
             if (op.getLiteral().size() < 8 &&
                 op.getLiteral().find('\0') == StringRef::npos) {
               // We can use the small string optimization.

@@ -43,7 +43,8 @@ module {
     sim.proc.print %ch0
     sim.proc.print %endl
 
-    // CHECK: val={{ *}}123,
+    // CHECK: val=
+    // CHECK-LITERAL-SAME: 123,
     // CHECK-LITERAL-SAME: hex=7b
     %cat0 = sim.fmt.concat (%l0, %d0, %h1)
     %l_val = sim.fmt.literal "val="
