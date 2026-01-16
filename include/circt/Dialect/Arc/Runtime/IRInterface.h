@@ -52,7 +52,13 @@
 #include <stdint.h>
 
 // Forward-declare.
+namespace circt {
+namespace arc {
+namespace runtime {
 struct FmtDescriptor;
+} // namespace runtime
+} // namespace arc
+} // namespace circt
 
 /// Allocate and initialize the state for a new instance of the given hardware
 /// model.
@@ -85,7 +91,8 @@ ARC_IR_EXPORT void arcRuntimeIR_onEval(uint8_t *modelState);
 /// action `Action_End`.
 ///
 /// The values to format are passed as variadic arguments.
-ARC_IR_EXPORT void arcRuntimeIR_format(const FmtDescriptor *fmt, ...);
+ARC_IR_EXPORT void
+arcRuntimeIR_format(const circt::arc::runtime::FmtDescriptor *fmt, ...);
 
 // NOLINTEND(readability-identifier-naming)
 #endif // CIRCT_DIALECT_ARC_RUNTIME_IRINTERFACE_H

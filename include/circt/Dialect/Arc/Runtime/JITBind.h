@@ -21,6 +21,9 @@ namespace circt {
 namespace arc {
 namespace runtime {
 
+// Forward-declare.
+struct FmtDescriptor;
+
 struct APICallbacks {
   uint8_t *(*fnAllocInstance)(const ArcRuntimeModelInfo *model,
                               const char *args);

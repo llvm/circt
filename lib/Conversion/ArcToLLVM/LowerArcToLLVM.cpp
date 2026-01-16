@@ -13,6 +13,7 @@
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ModelInfo.h"
 #include "circt/Dialect/Arc/Runtime/Common.h"
+#include "circt/Dialect/Arc/Runtime/FmtDescriptor.h"
 #include "circt/Dialect/Arc/Runtime/JITBind.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -52,6 +53,7 @@ using namespace mlir;
 using namespace circt;
 using namespace arc;
 using namespace hw;
+using namespace runtime;
 
 //===----------------------------------------------------------------------===//
 // Lowering Patterns
@@ -728,19 +730,39 @@ struct FormatInfo {
   SmallVector<Value> args;
 };
 
-// Creates an alloca for the given type, copies `value` into it, and returns it
-// as a pointer.
+// Copies the given integer value into an alloca, returning a pointer to it.
+//
+// The alloca is rounded up to a 64-bit boundary and is written as little-endian
+// words of size 64-bits, to be compatible with the constructor of APInt.
 static Value reg2mem(ConversionPatternRewriter &rewriter, Location loc,
                      Value value) {
-  // Create an alloca for the given type.
+  // Round up the type size to a 64-bit boundary.
+  int64_t origBitwidth = cast<IntegerType>(value.getType()).getWidth();
+  int64_t bitwidth = llvm::divideCeil(origBitwidth, 64) * 64;
+  int64_t numWords = bitwidth / 64;
+
+  // Create an alloca for the rounded up type.
   LLVM::ConstantOp alloca_size =
-      LLVM::ConstantOp::create(rewriter, loc, rewriter.getI32Type(), 1);
+      LLVM::ConstantOp::create(rewriter, loc, rewriter.getI32Type(), numWords);
   auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
   auto allocaOp = LLVM::AllocaOp::create(rewriter, loc, ptrType,
-                                         value.getType(), alloca_size);
+                                         rewriter.getI64Type(), alloca_size);
 
-  // Copy `value` into the alloca.
-  LLVM::StoreOp::create(rewriter, loc, value, allocaOp);
+  // Copy `value` into the alloca, 64-bits at a time from the least significant
+  // bits first.
+  for (int64_t wordIdx = 0; wordIdx < numWords; ++wordIdx) {
+    Value cst = LLVM::ConstantOp::create(
+        rewriter, loc, rewriter.getIntegerType(origBitwidth), wordIdx * 64);
+    Value v = LLVM::LShrOp::create(rewriter, loc, value, cst);
+    if (origBitwidth > 64) {
+      v = LLVM::TruncOp::create(rewriter, loc, rewriter.getI64Type(), v);
+    } else if (origBitwidth < 64) {
+      v = LLVM::ZExtOp::create(rewriter, loc, rewriter.getI64Type(), v);
+    }
+    Value gep = LLVM::GEPOp::create(rewriter, loc, ptrType,
+                                    rewriter.getI64Type(), allocaOp, {wordIdx});
+    LLVM::StoreOp::create(rewriter, loc, v, gep);
+  }
 
   return allocaOp;
 }
@@ -760,7 +782,7 @@ foldFormatString(ConversionPatternRewriter &rewriter, Value fstringValue,
           [&](sim::FormatDecOp op) -> FailureOr<FormatInfo> {
             FmtDescriptor d = FmtDescriptor::createInt(
                 op.getValue().getType().getWidth(), 10, op.getIsLeftAligned(),
-                op.getSpecifierWidth().value_or(-1), op.getIsSigned());
+                op.getSpecifierWidth().value_or(-1), false, op.getIsSigned());
             return FormatInfo{{d},
                               {reg2mem(rewriter, op.getLoc(), op.getValue())}};
           })
@@ -768,7 +790,8 @@ foldFormatString(ConversionPatternRewriter &rewriter, Value fstringValue,
           [&](sim::FormatHexOp op) -> FailureOr<FormatInfo> {
             FmtDescriptor d = FmtDescriptor::createInt(
                 op.getValue().getType().getWidth(), 16, op.getIsLeftAligned(),
-                op.getSpecifierWidth().value_or(-1), op.getIsHexUppercase());
+                op.getSpecifierWidth().value_or(-1), op.getIsHexUppercase(),
+                false);
             return FormatInfo{{d},
                               {reg2mem(rewriter, op.getLoc(), op.getValue())}};
           })
@@ -776,12 +799,19 @@ foldFormatString(ConversionPatternRewriter &rewriter, Value fstringValue,
           [&](sim::FormatOctOp op) -> FailureOr<FormatInfo> {
             FmtDescriptor d = FmtDescriptor::createInt(
                 op.getValue().getType().getWidth(), 8, op.getIsLeftAligned(),
-                op.getSpecifierWidth().value_or(-1), false);
+                op.getSpecifierWidth().value_or(-1), false, false);
             return FormatInfo{{d},
                               {reg2mem(rewriter, op.getLoc(), op.getValue())}};
           })
       .Case<sim::FormatLiteralOp>(
           [&](sim::FormatLiteralOp op) -> FailureOr<FormatInfo> {
+            if (op.getLiteral().size() < 8 &&
+                op.getLiteral().find('\0') == StringRef::npos) {
+              // We can use the small string optimization.
+              FmtDescriptor d =
+                  FmtDescriptor::createSmallLiteral(op.getLiteral());
+              return FormatInfo{{d}, {}};
+            }
             FmtDescriptor d =
                 FmtDescriptor::createLiteral(op.getLiteral().size());
             Value value = cache.getOrCreate(rewriter, op.getLiteral());
@@ -1042,7 +1072,7 @@ void LowerArcToLLVMPass::runOnOperation() {
   // lowering of sim::PrintFormattedOp walks them to build up its format string.
   // They are all marked Pure so are removed after the conversion.
   target.addLegalOp<sim::FormatLiteralOp, sim::FormatDecOp, sim::FormatHexOp,
-                    sim::FormatBinOp, sim::FormatOctOp,
+                    sim::FormatBinOp, sim::FormatOctOp, sim::FormatCharOp,
                     sim::FormatStringConcatOp>();
 
   // Setup the arc dialect type conversion.
