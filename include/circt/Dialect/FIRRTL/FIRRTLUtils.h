@@ -282,6 +282,23 @@ std::pair<bool, std::optional<mlir::LocationAttr>> maybeStringToLocation(
     StringRef spelling, bool skipParsing, StringAttr &locatorFilenameCache,
     FileLineColLoc &fileLineColLocCache, MLIRContext *context);
 
+// Parse a format string and build operations for FIRRTL "special"
+// substitutions.
+//
+// This function handles:
+// - percent format strings (%b, %d, %x, %c, %%)
+// - special format strings ({{SimulationTime}}, {{HierarchicalModuleName}})
+//
+// The formatStringResult output parameter is set to the validated format
+// string. The operands output parameter is set to the list of actual operands
+// (including special ops created for {{...}} substitutions).
+mlir::ParseResult
+parseFormatString(mlir::OpBuilder &builder, mlir::Location loc,
+                  llvm::StringRef formatString,
+                  llvm::ArrayRef<mlir::Value> specOperands,
+                  mlir::StringAttr &formatStringResult,
+                  llvm::SmallVectorImpl<mlir::Value> &operands);
+
 //===----------------------------------------------------------------------===//
 // File utilities
 //===----------------------------------------------------------------------===//
