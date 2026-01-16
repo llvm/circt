@@ -593,7 +593,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
                 return failure();
               })
               .Case<InstanceOp>([&](auto op) {
-                domain = domain =
+                domain =
                     op.getPortDomain(cast<OpResult>(value).getResultNumber());
                 return success();
               })
