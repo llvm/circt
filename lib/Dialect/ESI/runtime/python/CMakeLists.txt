@@ -57,6 +57,16 @@ if(Python3_FOUND)
       LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/esiaccel"
     )
 
+    # For wheel builds on Linux, force static linking of libstdc++ to avoid
+    # undefined symbols when ESICppRuntime's static libstdc++ symbols aren't
+    # exported in its dynamic symbol table.
+    if(WHEEL_BUILD AND NOT MSVC)
+      target_link_options(esiCppAccel PRIVATE
+        -static-libstdc++
+        -static-libgcc
+      )
+    endif()
+
     # Use nanobind's built-in stubgen for stub generation.
     if(WIN32)
       # I just wasted all day trying to figure out the DLL search path on
