@@ -2093,6 +2093,28 @@ struct FormatRealOpConversion : public OpConversionPattern<FormatRealOp> {
   }
 };
 
+struct StringLenOpConversion : public OpConversionPattern<StringLenOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StringLenOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::StringLengthOp>(op, adaptor.getStr());
+    return success();
+  }
+};
+
+struct StringConcatOpConversion : public OpConversionPattern<StringConcatOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StringConcatOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::StringConcatOp>(op, adaptor.getInputs());
+    return success();
+  }
+};
+
 struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -2523,7 +2545,11 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FormatConcatOpConversion,
     FormatIntOpConversion,
     FormatRealOpConversion,
-    DisplayBIOpConversion
+    DisplayBIOpConversion,
+
+    // Dynamic string operations
+    StringLenOpConversion,
+    StringConcatOpConversion
   >(typeConverter, patterns.getContext());
   // clang-format on
 

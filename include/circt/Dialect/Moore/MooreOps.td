@@ -2626,4 +2626,18 @@ def StringGetCOp : StringBuiltin<"getc"> {
   let assemblyFormat = "$str `[` $index `]` attr-dict";
 }
 
+def StringConcatOp : StringBuiltin<"concat"> {
+  let summary = "Concatenate dynamic string literals";
+  let description = [{
+    Concatenates an arbitrary number of dynamic strings into one larger
+    dynamic string. The strings are concatenated from left to right, with
+    the first operand appearing at the left start of the result string,
+    and the last operand appearing at the right end. Produces an empty
+    string if no inputs are provided.
+  }];
+  let arguments = (ins Variadic<StringType>:$inputs);
+  let results = (outs StringType:$result);
+  let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
+}
+
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS
