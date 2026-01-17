@@ -52,10 +52,6 @@ if(Python3_FOUND)
     # Compile nanobind module and copy to the correct python directory.
     nanobind_add_module(esiCppAccel
       ${CMAKE_CURRENT_SOURCE_DIR}/esiaccel/esiCppAccel.cpp)
-    target_link_libraries(esiCppAccel PRIVATE ESICppRuntime)
-    set_target_properties(esiCppAccel PROPERTIES
-      LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/esiaccel"
-    )
 
     # For wheel builds on Linux, force static linking of libstdc++ to avoid
     # undefined symbols when ESICppRuntime's static libstdc++ symbols aren't
@@ -66,6 +62,11 @@ if(Python3_FOUND)
         -static-libgcc
       )
     endif()
+
+    target_link_libraries(esiCppAccel PRIVATE ESICppRuntime)
+    set_target_properties(esiCppAccel PROPERTIES
+      LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/esiaccel"
+    )
 
     # Use nanobind's built-in stubgen for stub generation.
     if(WIN32)
