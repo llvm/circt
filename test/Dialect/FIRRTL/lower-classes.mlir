@@ -200,7 +200,7 @@ firrtl.circuit "PathModule" {
   // CHECK:   om.object @PathTest
   // CHECK: om.class @PathTest(%basepath: !om.basepath)
   firrtl.class @PathTest() {
-    
+
     // CHECK: om.path_create reference %basepath [[PORT_PATH]]
     %port_path = firrtl.path reference distinct[0]<>
 
