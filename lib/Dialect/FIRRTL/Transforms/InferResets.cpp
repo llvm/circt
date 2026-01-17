@@ -1481,13 +1481,14 @@ LogicalResult InferResetsPass::buildDomains(CircuitOp circuit) {
 
   // Gather the domains.
   auto &instGraph = getAnalysis<InstanceGraph>();
-  auto module = dyn_cast<FModuleOp>(*instGraph.getTopLevelNode()->getModule());
-  if (!module) {
-    LLVM_DEBUG(llvm::dbgs()
-               << "Skipping circuit because main module is no `firrtl.module`");
-    return success();
-  }
-  buildDomains(module, InstancePath{}, Value{}, instGraph);
+  // Walk all top-level modules.
+  instGraph.walkPostOrder([&](igraph::InstanceGraphNode &node) {
+    if (!node.noUses())
+      return;
+    if (auto module =
+            dyn_cast_or_null<FModuleOp>(node.getModule().getOperation()))
+      buildDomains(module, InstancePath{}, Value{}, instGraph);
+  });
 
   // Report any domain conflicts among the modules.
   bool anyFailed = false;
