@@ -77,15 +77,12 @@ struct GenericLUT : public CutRewritePattern {
     for (uint32_t i = 0; i < truthTable.table.getBitWidth(); ++i)
       lutTable.push_back(truthTable.table[i]);
 
-    auto arrayAttr = rewriter.getBoolArrayAttr(
-        lutTable); // Create a boolean array attribute.
-
     // Reverse the inputs to match the LUT input order
     SmallVector<Value> lutInputs(cut.inputs.rbegin(), cut.inputs.rend());
 
     // Generate comb.truth table operation.
     auto truthTableOp = comb::TruthTableOp::create(
-        rewriter, cut.getRoot()->getLoc(), lutInputs, arrayAttr);
+        rewriter, cut.getRoot()->getLoc(), lutInputs, lutTable);
 
     // Replace the root operation with the truth table operation
     return truthTableOp.getOperation();
