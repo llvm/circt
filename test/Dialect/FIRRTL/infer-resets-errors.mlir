@@ -300,17 +300,17 @@ firrtl.circuit "Top" {
 // -----
 // Issue 9396
 firrtl.circuit "Foo" {
-  firrtl.module @Baz(in %reset: !firrtl.asyncreset) attributes {convention = #firrtl<convention scalarized>} {
+  firrtl.module @Baz(in %reset: !firrtl.asyncreset) {
     // expected-note @+1 {{instance 'bar' is in no reset domain}}
-    firrtl.instance bar interesting_name @Bar()
+    firrtl.instance bar @Bar()
   }
   // expected-error @+1 {{module 'Bar' instantiated in different reset domains}}
   firrtl.module private @Bar() {
   }
 
   // expected-note @+1 {{reset domain 'reset' of module 'Foo' declared here:}}
-  firrtl.module @Foo(in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}]) attributes {convention = #firrtl<convention scalarized>} {
+  firrtl.module @Foo(in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}]) {
     // expected-note @+1 {{instance 'bar' is in reset domain rooted at 'reset' of module 'Foo'}}
-    firrtl.instance bar interesting_name @Bar()
+    firrtl.instance bar @Bar()
   }
 }

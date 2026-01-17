@@ -1250,16 +1250,16 @@ firrtl.circuit "top" {
 // Issue 9396
 firrtl.circuit "Foo" {
   // CHECK-LABEL: firrtl.module @Baz
-  firrtl.module @Baz(in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}]) attributes {convention = #firrtl<convention scalarized>} {
-    firrtl.instance bar interesting_name @Bar()
+  firrtl.module @Baz(in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}]) {
+    firrtl.instance bar @Bar()
     // CHECK: firrtl.matchingconnect %bar_reset, %reset : !firrtl.asyncreset
   }
   // CHECK-LABEL: firrtl.module private @Bar(in %reset: !firrtl.asyncreset)
   firrtl.module private @Bar() {
   }
   // CHECK-LABEL: firrtl.module @Foo(in %reset: !firrtl.asyncreset
-  firrtl.module @Foo(in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}]) attributes {convention = #firrtl<convention scalarized>} {
-    firrtl.instance bar interesting_name @Bar()
+  firrtl.module @Foo(in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}]) {
+    firrtl.instance bar @Bar()
     // CHECK: firrtl.matchingconnect %bar_reset, %reset : !firrtl.asyncreset
   }
 }
