@@ -49,9 +49,7 @@ public:
   LogicalResult matchAndRewrite(TruthTableOp op, OpAdaptor adaptor,
                                 ConversionPatternRewriter &b) const override {
     Location loc = op.getLoc();
-    SmallVector<bool> table(
-        llvm::map_range(op.getLookupTableAttr().getAsValueRange<IntegerAttr>(),
-                        [](const APInt &a) { return !a.isZero(); }));
+    auto table = op.getLookupTableAttr().asArrayRef();
     Value t =
         hw::ConstantOp::create(b, loc, b.getIntegerAttr(b.getI1Type(), 1));
     Value f =
