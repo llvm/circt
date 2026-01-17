@@ -60,7 +60,7 @@ if(Python3_FOUND)
     # For wheel builds on Linux, force static linking of libstdc++ to avoid
     # undefined symbols when ESICppRuntime's static libstdc++ symbols aren't
     # exported in its dynamic symbol table.
-    if(WHEEL_BUILD AND NOT MSVC)
+    if(WHEEL_BUILD AND UNIX AND NOT APPLE)
       target_link_options(esiCppAccel PRIVATE
         -static-libstdc++
         -static-libgcc
