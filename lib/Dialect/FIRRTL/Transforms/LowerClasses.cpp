@@ -249,6 +249,13 @@ private:
 
   // State used while creating the optional 'ports' list of RtlPort objects.
   SmallVector<RtlPortsInfo> rtlPortsToCreate;
+
+  // Store of already created external classes.  External modules are not
+  // modules, but specific instantiations of a module with a given
+  // parameterization.  When this is happening, two external modules will have
+  // the same `defname`.  This is a mechanism to ensure we don't create the same
+  // external class twice.
+  DenseMap<StringRef, om::ClassLike> externalClassMap;
 };
 
 struct PathTracker {
@@ -868,8 +875,10 @@ void LowerClassesPass::runOnOperation() {
 
   LoweringState loweringState;
 
-  // Create new OM Class ops serially.
+  // Create new OM Class ops serially while tracking modules that need port
+  // erasure.
   DenseMap<StringAttr, firrtl::ClassType> classTypeTable;
+  SmallVector<FModuleLike> modulesToErasePortsFrom;
   for (auto *node : instanceGraph) {
     auto moduleLike = node->getModule<firrtl::FModuleLike>();
     if (!moduleLike)
@@ -878,7 +887,14 @@ void LowerClassesPass::runOnOperation() {
     if (shouldCreateClass(moduleLike.getModuleNameAttr())) {
       auto omClass = createClass(moduleLike, pathInfoTable, intraPassMutex);
       auto &classLoweringState = loweringState.classLoweringStateTable[omClass];
-      classLoweringState.moduleLike = moduleLike;
+      // For external modules with the same defname, the same omClass is reused.
+      // Only set moduleLike if not already set, to avoid overwriting.
+      if (!classLoweringState.moduleLike)
+        classLoweringState.moduleLike = moduleLike;
+
+      // Track this module for port erasure if it's not a ClassLike.
+      if (!isa<firrtl::ClassLike>(moduleLike.getOperation()))
+        modulesToErasePortsFrom.push_back(moduleLike);
 
       // Find the module instances under the current module with metadata. These
       // ops will be converted to om objects by this pass. Create a hierarchical
@@ -916,6 +932,19 @@ void LowerClassesPass::runOnOperation() {
                           lowerClassLike(state.moduleLike, classLike,
                                          pathInfoTable);
                         });
+
+  // Erase property ports from all modules that had classes created.  This must
+  // be done separately because multiple modules can share the same class (e.g.,
+  // external modules with the same defname).
+  for (auto moduleLike : modulesToErasePortsFrom) {
+    BitVector portsToErase(moduleLike.getNumPorts());
+    for (unsigned i = 0, e = moduleLike.getNumPorts(); i < e; ++i) {
+      auto type = moduleLike.getPortType(i);
+      if (isa<PropertyType>(type))
+        portsToErase.set(i);
+    }
+    moduleLike.erasePorts(portsToErase);
+  }
 
   // Completely erase Class module-likes, and remove from the InstanceGraph.
   for (auto &[omClass, state] : loweringState.classLoweringStateTable) {
@@ -1077,8 +1106,16 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
   om::ClassLike loweredClassOp;
   if (isa<firrtl::ExtClassOp, firrtl::FExtModuleOp>(
           moduleLike.getOperation())) {
-    loweredClassOp = convertExtClass(moduleLike, builder, className + suffix,
-                                     formalParamNames, hasContainingModule);
+    // External modules are "deduplicated" via their defname.  Don't create a
+    // new external class if we've already created one for this defname.
+    auto it = externalClassMap.find(className);
+    if (it == externalClassMap.end())
+      it = externalClassMap
+               .insert({className,
+                        convertExtClass(moduleLike, builder, className + suffix,
+                                        formalParamNames, hasContainingModule)})
+               .first;
+    loweredClassOp = it->getSecond();
   } else {
     loweredClassOp = convertClass(moduleLike, builder, className + suffix,
                                   formalParamNames, hasContainingModule);
@@ -1190,12 +1227,7 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
   OpBuilder builder = OpBuilder::atBlockEnd(classOp.getBodyBlock());
   classOp.addNewFieldsOp(builder, fieldLocs, fieldValues);
 
-  // If the module-like is a Class, it will be completely erased later.
-  // Otherwise, erase just the property ports and ops.
-  if (!isa<firrtl::ClassLike>(moduleLike.getOperation())) {
-    // Erase property typed ports.
-    moduleLike.erasePorts(portsToErase);
-  }
+  // Port erasure for the `moduleLike` is handled centrally in `runOnOperation`.
 }
 
 void LowerClassesPass::lowerClassExtern(ClassExternOp classExternOp,
@@ -1203,7 +1235,6 @@ void LowerClassesPass::lowerClassExtern(ClassExternOp classExternOp,
   // Construct the OM Class body.
   // Add a block arguments for each input property.
   // Add a class.extern.field op for each output.
-  BitVector portsToErase(moduleLike.getNumPorts());
   Block *classBody = &classExternOp.getRegion().emplaceBlock();
 
   // Every class gets a base path as its first parameter.
@@ -1219,17 +1250,9 @@ void LowerClassesPass::lowerClassExtern(ClassExternOp classExternOp,
     auto direction = moduleLike.getPortDirection(i);
     if (direction == Direction::In)
       classBody->addArgument(type, loc);
-
-    // In case this is a Module, remember to erase this port.
-    portsToErase.set(i);
   }
 
-  // If the module-like is a Class, it will be completely erased later.
-  // Otherwise, erase just the property ports and ops.
-  if (!isa<firrtl::ClassLike>(moduleLike.getOperation())) {
-    // Erase property typed ports.
-    moduleLike.erasePorts(portsToErase);
-  }
+  // Port erasure for the `moduleLike` is handled centrally in `runOnOperation`.
 }
 
 // Helper to update an Object instantiation. FIRRTL Object instances are
