@@ -330,14 +330,19 @@ ParseResult ExpressionParser::parseXorExpr(Value &result) {
 }
 
 /// Parse AND expressions with highest precedence.
-/// AndExpr -> UnaryExpr { ('*'|'&') UnaryExpr }
+/// AndExpr -> UnaryExpr { ('*'|'&'|implicit) UnaryExpr }
 /// This implements left-associative parsing: A * B * C becomes (A * B) * C
+/// Space between expressions is treated as implicit AND.
 ParseResult ExpressionParser::parseAndExpr(Value &result) {
   Value lhs;
   if (parseUnaryExpr(lhs))
     return failure();
-  while (peek().kind == TokenKind::AND) {
-    auto loc = consume().loc;
+  while (peek().kind == TokenKind::AND ||
+         (peek().kind == TokenKind::ID || peek().kind == TokenKind::LPAREN ||
+          peek().kind == TokenKind::PREFIX_NOT)) {
+    auto loc = peek().loc;
+    if (peek().kind == TokenKind::AND)
+      consume();
     Value rhs;
     if (parseUnaryExpr(rhs))
       return failure();
