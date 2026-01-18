@@ -672,8 +672,6 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
     {loadMemoryFromFileAnnoClass, {stdResolve, applyLoadMemoryAnno<false>}},
     {loadMemoryFromFileInlineAnnoClass,
      {stdResolve, applyLoadMemoryAnno<true>}},
-    {wiringSinkAnnoClass, {stdResolve, applyWiring}},
-    {wiringSourceAnnoClass, {stdResolve, applyWiring}},
     {attributeAnnoClass, {stdResolve, applyAttributeAnnotation}}}};
 
 LogicalResult
@@ -713,7 +711,6 @@ struct LowerAnnotationsPass
 
   void runOnOperation() override;
   LogicalResult applyAnnotation(DictionaryAttr anno, ApplyState &state);
-  LogicalResult legacyToWiringProblems(ApplyState &state);
   LogicalResult solveWiringProblems(ApplyState &state);
 
   SmallVector<DictionaryAttr> worklistAttrs;
@@ -755,26 +752,6 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
   if (record->applier(*target, anno, state).failed())
     return mlir::emitError(state.circuit.getLoc())
            << "Unable to apply annotation: " << anno;
-  return success();
-}
-
-/// Convert consumed SourceAnnotation and SinkAnnotation into WiringProblems,
-/// using the pin attribute as newNameHint
-LogicalResult LowerAnnotationsPass::legacyToWiringProblems(ApplyState &state) {
-  for (const auto &[name, problem] : state.legacyWiringProblems) {
-    if (!problem.source)
-      return mlir::emitError(state.circuit.getLoc())
-             << "Unable to resolve source for pin: " << name;
-
-    if (problem.sinks.empty())
-      return mlir::emitError(state.circuit.getLoc())
-             << "Unable to resolve sink(s) for pin: " << name;
-
-    for (const auto &sink : problem.sinks) {
-      state.wiringProblems.push_back(
-          {problem.source, sink, {}, WiringProblem::RefTypeUsage::Never});
-    }
-  }
   return success();
 }
 
@@ -1228,9 +1205,6 @@ void LowerAnnotationsPass::runOnOperation() {
     if (applyAnnotation(attr, state).failed())
       ++numFailures;
   }
-
-  if (failed(legacyToWiringProblems(state)))
-    ++numFailures;
 
   if (failed(solveWiringProblems(state)))
     ++numFailures;
