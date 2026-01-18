@@ -386,6 +386,27 @@ def ConvertFSMToSV : Pass<"convert-fsm-to-sv", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// CoreToFSM
+//===----------------------------------------------------------------------===//
+
+
+def ConvertCoreToFSM : Pass<"convert-core-to-fsm", "mlir::ModuleOp"> {
+  let summary = "Convert Core to FSM";
+  let description = [{
+    This pass extracts FSM structure from an RTL netlist. State registers
+    can be specified explicitly via the `state-regs` option, or they will
+    be inferred as registers whose names contain "state".
+  }];
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect",
+                           "circt::seq::SeqDialect", "circt::fsm::FSMDialect"];
+  let options = [
+    ListOption<"stateRegs", "state-regs", "std::string",
+               "Names of registers to use as state registers. If not "
+               "specified, registers with names containing 'state' are used.">
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTLToHW
 //===----------------------------------------------------------------------===//
 
