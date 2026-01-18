@@ -1,3 +1,7 @@
+set(LLVM_TARGET_DEFINITIONS FIRRTLIntrinsics.td)
+circt_tablegen(CIRCT FIRRTLIntrinsics.cpp.inc --firrtl-intrinsics TARGETS MLIRFIRRTLIncGen)
+circt_tablegen(CIRCT ${CIRCT_BINARY_DIR}/docs/Dialects/FIRRTLIntrinsics.md.inc --firrtl-intrinsics-doc TARGETS circt-doc)
+
 set(CIRCT_FIRRTL_Sources
   CHIRRTLDialect.cpp
   CHIRRTLTypes.cpp
@@ -23,7 +27,9 @@ set(LLVM_OPTIONAL_SOURCES
   FIRRTLReductions.cpp
 )
 
-include_directories(.)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
 add_circt_dialect_library(CIRCTFIRRTL
   ${CIRCT_FIRRTL_Sources}
 

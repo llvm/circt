@@ -20,6 +20,8 @@ add_subdirectory(kanagawatool)
 add_subdirectory(om-linker)
 add_subdirectory(py-split-input-file)
 
+# NOTE: circt-tblgen is included in the root CMakeLists.txt
+
 if(CIRCT_SLANG_FRONTEND_ENABLED)
   add_subdirectory(circt-verilog)
   add_subdirectory(circt-verilog-lsp-server)

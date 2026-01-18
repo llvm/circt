@@ -1,5 +1,46 @@
 include_guard()
 
+function(circt_tablegen project ofn)
+  cmake_parse_arguments(ARG "" "" "TARGETS" ${ARGN})
+
+  # The LLVM tablegen function struggles with absolute output file names. If the
+  # path *is* absolute, cook up a relative output file, tablegen to that, and
+  # then move the result to the desired location.
+  set(fixed_ofn ${ofn})
+  if(IS_ABSOLUTE ${ofn})
+    string(MAKE_C_IDENTIFIER ${ofn} fixed_ofn)
+  endif()
+
+  # Tablegen to the relative output file.
+  tablegen(${project} ${fixed_ofn} ${ARG_UNPARSED_ARGUMENTS})
+
+  # If we had to use a relative output file, move it to the desired absolute
+  # location.
+  if(NOT ${fixed_ofn} STREQUAL ${ofn})
+    add_custom_command(
+      OUTPUT ${ofn}
+      COMMAND ${CMAKE_COMMAND} -E copy
+        ${CMAKE_CURRENT_BINARY_DIR}/${fixed_ofn}
+        ${ofn}
+      DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${fixed_ofn}
+    )
+  endif()
+
+  # If the user specified targets, make them depend on the generated file.
+  if (ARG_TARGETS)
+    string(MAKE_C_IDENTIFIER ${ofn}DocGen ofn_target)
+    add_custom_target(${ofn_target} DEPENDS ${ofn})
+    foreach(target IN LISTS ARG_TARGETS)
+      add_dependencies(${target} ${ofn_target})
+    endforeach()
+  endif()
+
+  # Add the output file name to the `TABLEGEN_OUTPUT` variable in the parent
+  # such that it can get picked up by a later call to
+  # `add_public_tablegen_target`.
+  set(TABLEGEN_OUTPUT ${TABLEGEN_OUTPUT} ${ofn} PARENT_SCOPE)
+endfunction()
+
 function(add_circt_dialect dialect dialect_namespace)
   add_mlir_dialect(${ARGV})
   add_dependencies(circt-headers MLIR${dialect}IncGen)
