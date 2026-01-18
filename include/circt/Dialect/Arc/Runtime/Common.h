@@ -17,6 +17,7 @@
 #ifndef CIRCT_DIALECT_ARC_RUNTIME_COMMON_H
 #define CIRCT_DIALECT_ARC_RUNTIME_COMMON_H
 
+#include <cstring>
 #include <stdint.h>
 
 /// Version of the combined public and internal API.

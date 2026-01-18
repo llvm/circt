@@ -296,6 +296,9 @@ static void bindArcRuntimeSymbols(ExecutionEngine &executionEngine) {
     bindExecutionEngineSymbol(symbolMap, interner,
                               runtimeCallbacks.symNameOnEval,
                               runtimeCallbacks.fnOnEval);
+    bindExecutionEngineSymbol(symbolMap, interner,
+                              runtimeCallbacks.symNameFormat,
+                              runtimeCallbacks.fnFormat);
     return symbolMap;
   });
 }
