@@ -3787,8 +3787,9 @@ firrtl.module private @Issue7562(in %sel : !firrtl.uint<1>, in %a : !firrtl.cons
 }
 
 // CHECK-LABEL: firrtl.class @PropertyArithmetic
-firrtl.class @PropertyArithmetic(in %in: !firrtl.integer, out %out0: !firrtl.integer, out %out1: !firrtl.integer) {
+firrtl.class @PropertyArithmetic(in %in: !firrtl.integer, out %out0: !firrtl.integer, out %out1: !firrtl.integer, out %out2: !firrtl.integer, out %out3: !firrtl.integer) {
   // CHECK: [[C4:%.+]] = firrtl.integer 4
+  // CHECK: [[C1:%.+]] = firrtl.integer 1
   %0 = firrtl.integer 0
   %1 = firrtl.integer 1
   %2 = firrtl.integer 2
@@ -3796,10 +3797,17 @@ firrtl.class @PropertyArithmetic(in %in: !firrtl.integer, out %out0: !firrtl.int
   %3 = firrtl.integer.shl %1, %2 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
   %4 = firrtl.integer.shl %in, %0 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
 
+  %5 = firrtl.integer.shr %2, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  %6 = firrtl.integer.shr %in, %0 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
   // CHECK: firrtl.propassign %out0, [[C4]]
   // CHECK: firrtl.propassign %out1, %in
+  // CHECK: firrtl.propassign %out2, [[C1]]
+  // CHECK: firrtl.propassign %out3, %in
   firrtl.propassign %out0, %3 : !firrtl.integer
   firrtl.propassign %out1, %4 : !firrtl.integer
+  firrtl.propassign %out2, %5 : !firrtl.integer
+  firrtl.propassign %out3, %6 : !firrtl.integer
 }
 
 // CHECK-LABEL: firrtl.module private @LayerBlocks
