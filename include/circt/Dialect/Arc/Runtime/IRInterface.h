@@ -51,6 +51,15 @@
 
 #include <stdint.h>
 
+// Forward-declare.
+namespace circt {
+namespace arc {
+namespace runtime {
+struct FmtDescriptor;
+} // namespace runtime
+} // namespace arc
+} // namespace circt
+
 /// Allocate and initialize the state for a new instance of the given hardware
 /// model.
 ///
@@ -75,6 +84,15 @@ ARC_IR_EXPORT void arcRuntimeIR_deleteInstance(uint8_t *modelState);
 /// Simulation drivers must call this once before every invocation of the
 /// model's `eval` function.
 ARC_IR_EXPORT void arcRuntimeIR_onEval(uint8_t *modelState);
+
+/// Prints a formatted string to stdout.
+///
+/// `fmt` is an array of `FmtDescriptor` objects, ending in a descriptor with
+/// action `Action_End`.
+///
+/// The values to format are passed as variadic arguments.
+ARC_IR_EXPORT void
+arcRuntimeIR_format(const circt::arc::runtime::FmtDescriptor *fmt, ...);
 
 // NOLINTEND(readability-identifier-naming)
 #endif // CIRCT_DIALECT_ARC_RUNTIME_IRINTERFACE_H

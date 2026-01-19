@@ -21,15 +21,20 @@ namespace circt {
 namespace arc {
 namespace runtime {
 
+// Forward-declare.
+struct FmtDescriptor;
+
 struct APICallbacks {
   uint8_t *(*fnAllocInstance)(const ArcRuntimeModelInfo *model,
                               const char *args);
   void (*fnDeleteInstance)(uint8_t *simState);
   void (*fnOnEval)(uint8_t *simState);
+  void (*fnFormat)(const FmtDescriptor *fmt, ...);
 
   static constexpr char symNameAllocInstance[] = "arcRuntimeIR_allocInstance";
   static constexpr char symNameDeleteInstance[] = "arcRuntimeIR_deleteInstance";
   static constexpr char symNameOnEval[] = "arcRuntimeIR_onEval";
+  static constexpr char symNameFormat[] = "arcRuntimeIR_format";
 };
 
 #ifdef ARC_RUNTIME_JITBIND_FNDECL
