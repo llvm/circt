@@ -199,7 +199,11 @@ void LowerLTLToCorePass::runOnOperation() {
       return;
     Value prop = op->getOperand(0);
     if (auto cast = prop.getDefiningOp<UnrealizedConversionCastOp>()) {
-      op->setOperand(0, cast.getInputs()[0]);
+      // Make sure that the cast is from an i1, not something random that was in
+      // the input
+      if (auto intType = dyn_cast<IntegerType>(cast.getOperandTypes()[0]);
+          intType && intType.getWidth() == 1)
+        op->setOperand(0, cast.getInputs()[0]);
     }
   });
 }
