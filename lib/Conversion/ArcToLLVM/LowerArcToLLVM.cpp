@@ -747,6 +747,7 @@ static Value reg2mem(ConversionPatternRewriter &rewriter, Location loc,
   auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
   auto allocaOp = LLVM::AllocaOp::create(rewriter, loc, ptrType,
                                          rewriter.getI64Type(), alloca_size);
+  LLVM::LifetimeStartOp::create(rewriter, loc, allocaOp);
 
   // Copy `value` into the alloca, 64-bits at a time from the least significant
   // bits first.
@@ -848,9 +849,19 @@ FailureOr<LLVM::CallOp> emitFmtCall(OpBuilder &builder, Location loc,
   StringRef rawDescriptors(reinterpret_cast<const char *>(descriptors.data()),
                            descriptors.size() * sizeof(FmtDescriptor));
   Value fmtPtr = stringCache.getOrCreate(builder, rawDescriptors);
+
   SmallVector<Value> argsVec(1, fmtPtr);
   argsVec.append(args.begin(), args.end());
-  return LLVM::CallOp::create(builder, loc, func.value(), argsVec);
+  auto result = LLVM::CallOp::create(builder, loc, func.value(), argsVec);
+
+  for (Value arg : args) {
+    Operation* definingOp = arg.getDefiningOp();
+    if (auto alloca = dyn_cast_if_present<LLVM::AllocaOp>(definingOp)) {
+      LLVM::LifetimeEndOp::create(builder, loc, arg);
+    }
+  }
+
+  return result;
 }
 
 struct SimPrintFormattedProcOpLowering
