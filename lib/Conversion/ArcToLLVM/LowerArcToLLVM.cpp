@@ -855,7 +855,7 @@ FailureOr<LLVM::CallOp> emitFmtCall(OpBuilder &builder, Location loc,
   auto result = LLVM::CallOp::create(builder, loc, func.value(), argsVec);
 
   for (Value arg : args) {
-    Operation* definingOp = arg.getDefiningOp();
+    Operation *definingOp = arg.getDefiningOp();
     if (auto alloca = dyn_cast_if_present<LLVM::AllocaOp>(definingOp)) {
       LLVM::LifetimeEndOp::create(builder, loc, arg);
     }
