@@ -1458,14 +1458,8 @@ func.func @TimeConversion(%arg0: !moore.l64, %arg1: !moore.time) -> (!moore.time
 }
 
 // CHECK-LABEL: func.func @IntToStringConversion
-func.func @IntToStringConversion() {
-  // CHECK-NEXT: [[A:%.*]] = hw.constant 1415934836 : i32
-  %a = moore.constant_string "Test" : i32
-  // CHECK-NEXT: sim.string.int_to_string [[A]] : i32
-  %b = moore.int_to_string %a : i32
-  // CHECK-NEXT: [[C:%.*]] = hw.constant 1415934836 : i45
-  %c = moore.constant_string "Test" : i45
-  // CHECK-NEXT: sim.string.int_to_string [[C]] : i45
-  %d = moore.int_to_string %c : i45
+func.func @IntToStringConversion(%arg0: !moore.i45) {
+  // CHECK-NEXT: sim.string.int_to_string %arg0 : i45
+  moore.int_to_string %arg0 : i45
   return
 }

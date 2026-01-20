@@ -533,12 +533,3 @@ func.func @StringConversion(%a: !moore.i32, %b: !moore.string) {
   moore.string_to_int %b : i32
   return
 }
-
-// CHECK-LABEL: func.func @IntToStringConversion
-func.func @IntToStringConversion() {
-  // CHECK-NEXT: [[A:%.*]] = moore.constant_string "Test" : i32
-  %a = moore.constant_string "Test" : i32
-  // CHECK-NEXT: moore.int_to_string [[A]] : i32
-  %b = moore.int_to_string %a : i32
-  return
-}

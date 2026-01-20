@@ -581,10 +581,12 @@ def IntToStringOp: SimOp<"string.int_to_string", [Pure]> {
     
     The operation reads the integer byte-by-byte, interpreting each non-zero
     byte as an ASCII character. Zero-valued bytes are skipped and
-    not included in the output string.
+    not included in the output string. See Sec 6.16 of the standard saying
+    "A string variable shall not contain the special character "\0". 
+    Assigning the value 0 to a string character shall be ignored"
     
     Example:
-      The decimal value 309237673071 corresponds to hex 0x00_00_00_48_00_00_6C_6F.
+      Consider the hex value 0x00_00_00_48_00_00_6C_6F
       Reading from MSB to LSB and filtering out null bytes:
         - 0x48 = 'H'
         - 0x6C = 'l'
