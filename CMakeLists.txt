@@ -652,7 +652,7 @@ if (CIRCT_INCLUDE_DOCS)
 endif()
 
 install(DIRECTORY include/circt include/circt-c
-  DESTINATION include
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
   COMPONENT circt-headers
   FILES_MATCHING
   PATTERN "*.def"
@@ -664,7 +664,7 @@ install(DIRECTORY include/circt include/circt-c
   )
 
 install(DIRECTORY ${CIRCT_INCLUDE_DIR}/circt ${CIRCT_INCLUDE_DIR}/circt-c
-  DESTINATION include
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
   COMPONENT circt-headers
   FILES_MATCHING
   PATTERN "*.def"
