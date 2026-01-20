@@ -558,6 +558,24 @@ OpFoldResult StringLengthOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+OpFoldResult IntToStringOp::fold(FoldAdaptor adaptor) {
+  auto inputAttr = adaptor.getInput();
+  if (!inputAttr)
+    return {};
+  if (auto intAttr = cast<IntegerAttr>(inputAttr)) {
+    std::string result{};
+    auto width = intAttr.getType().getIntOrFloatBitWidth();
+    result.reserve((width + 7) / 8);
+    for (unsigned int i = 0; i < width; i += 8) {
+      auto byte = intAttr.getValue().extractBitsAsZExtValue(std::min(width - i, 8U), i);
+      result.push_back(static_cast<char>(byte));
+    }
+    std::reverse(result.begin(), result.end());
+    return StringAttr::get(getContext(), result);
+  }
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//

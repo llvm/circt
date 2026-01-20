@@ -573,6 +573,25 @@ def StringConcatOp : SimOp<"string.concat", [Pure]> {
   let hasFolder = true;
 }
 
+def IntToStringOp: SimOp<"string.int_to_string", [Pure]> {
+  let summary = "Convert an integer into a string";
+  let description = [{
+    In Verilog's semantics, string literals are treated as bitvectors.
+    This Op treats them as right aligned bitvectors and converts them to
+    a string, reading byte by byte starting from the LSB. It also ignores
+    all 0-valued bytes and chooses not to add them to the string
+
+    // TODO: give an example here
+  }];
+
+  let arguments = (ins AnyInteger:$input);
+  let results = (outs DynamicStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
+}
+
 //===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//
