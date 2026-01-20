@@ -1109,13 +1109,10 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
           moduleLike.getOperation())) {
     // External modules are "deduplicated" via their defname.  Don't create a
     // new external class if we've already created one for this defname.
-    auto it = externalClassMap.find(baseClassNameAttr);
-    if (it == externalClassMap.end())
-      it = externalClassMap
-               .insert({baseClassNameAttr,
-                        convertExtClass(moduleLike, builder, className + suffix,
-                                        formalParamNames, hasContainingModule)})
-               .first;
+    auto [it, inserted] = externalClassMap.insert({baseClassNameAttr, {}});
+    if (inserted)
+      it->getSecond() = convertExtClass(moduleLike, builder, className + suffix,
+                                        formalParamNames, hasContainingModule);
     loweredClassOp = it->getSecond();
   } else {
     loweredClassOp = convertClass(moduleLike, builder, className + suffix,
