@@ -1977,6 +1977,12 @@ void FExtModuleOp::getAsmBlockArgumentNames(
   getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
 }
 
+StringAttr FExtModuleOp::getExtModuleNameAttr() {
+  if (auto defnameAttr = getDefnameAttr(); defnameAttr && !defnameAttr.empty())
+    return defnameAttr;
+  return getNameAttr();
+}
+
 StringRef FExtModuleOp::getExtModuleName() {
   if (auto defname = getDefname(); defname && !defname->empty())
     return *defname;

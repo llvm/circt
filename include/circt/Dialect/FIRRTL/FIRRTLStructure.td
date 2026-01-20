@@ -216,6 +216,7 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
   let extraModuleClassDeclaration = [{
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
+    StringAttr getExtModuleNameAttr();
     StringRef getExtModuleName();
   }];
 
