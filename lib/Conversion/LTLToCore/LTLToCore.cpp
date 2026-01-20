@@ -113,6 +113,59 @@ struct LTLImplicationConversion
   }
 };
 
+struct LTLNotConversion : public OpConversionPattern<ltl::NotOp> {
+  using OpConversionPattern<ltl::NotOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ltl::NotOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Can only lower boolean nots to comb ops
+    if (!isa<IntegerType>(op.getInput().getType()))
+      return failure();
+    auto loc = op.getLoc();
+    auto inverted = comb::createOrFoldNot(loc, adaptor.getInput(), rewriter);
+    rewriter.replaceOp(op, inverted);
+    return success();
+  }
+};
+
+struct LTLAndOpConversion : public OpConversionPattern<ltl::AndOp> {
+  using OpConversionPattern<ltl::AndOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ltl::AndOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Can only lower boolean ands to comb ops
+    if (!isa<IntegerType>(op->getOperandTypes()[0]) ||
+        !isa<IntegerType>(op->getOperandTypes()[1]))
+      return failure();
+    auto loc = op.getLoc();
+    // Explicit twoState value to disambiguate builders
+    auto andOp =
+        comb::AndOp::create(rewriter, loc, adaptor.getOperands(), false);
+    rewriter.replaceOp(op, andOp);
+    return success();
+  }
+};
+
+struct LTLOrOpConversion : public OpConversionPattern<ltl::OrOp> {
+  using OpConversionPattern<ltl::OrOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ltl::OrOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Can only lower boolean ors to comb ops
+    if (!isa<IntegerType>(op->getOperandTypes()[0]) ||
+        !isa<IntegerType>(op->getOperandTypes()[1]))
+      return failure();
+    auto loc = op.getLoc();
+    // Explicit twoState value to disambiguate builders
+    auto orOp = comb::OrOp::create(rewriter, loc, adaptor.getOperands(), false);
+    rewriter.replaceOp(op, orOp);
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -140,16 +193,29 @@ void LowerLTLToCorePass::runOnOperation() {
   target.addLegalDialect<ltl::LTLDialect>();
   target.addLegalDialect<verif::VerifDialect>();
   target.addIllegalOp<verif::HasBeenResetOp>();
-  target.addDynamicallyLegalOp<ltl::ImplicationOp>([](ltl::ImplicationOp op) {
-    // Any implication with a non-assert user is legal since we can't change the
-    // result to an i1
-    for (auto *user : op->getUsers())
-      if (!isa<verif::AssertOp, verif::ClockedAssertOp>(user))
-        return true;
+
+  auto isLegal = [](Operation *op) {
+    auto hasNonAssertUsers = std::any_of(
+        op->getUsers().begin(), op->getUsers().end(), [](Operation *user) {
+          return !isa<verif::AssertOp, verif::ClockedAssertOp>(user);
+        });
+    auto hasIntegerResultTypes =
+        std::all_of(op->getResultTypes().begin(), op->getResultTypes().end(),
+                    [](Type type) { return isa<IntegerType>(type); });
+    // If there are users other than asserts, we can't map it to comb (unless
+    // the return type is already integer anyway)
+    if (hasNonAssertUsers && !hasIntegerResultTypes)
+      return true;
+
     // Otherwise illegal if operands are i1
-    return !isa<IntegerType>(op.getAntecedent().getType()) ||
-           !isa<IntegerType>(op.getConsequent().getType());
-  });
+    return std::any_of(
+        op->getOperands().begin(), op->getOperands().end(),
+        [](Value operand) { return !isa<IntegerType>(operand.getType()); });
+  };
+  target.addDynamicallyLegalOp<ltl::ImplicationOp>(isLegal);
+  target.addDynamicallyLegalOp<ltl::NotOp>(isLegal);
+  target.addDynamicallyLegalOp<ltl::AndOp>(isLegal);
+  target.addDynamicallyLegalOp<ltl::OrOp>(isLegal);
 
   // Create type converters, mostly just to convert an ltl property to a bool
   mlir::TypeConverter converter;
@@ -186,7 +252,8 @@ void LowerLTLToCorePass::runOnOperation() {
 
   // Create the operation rewrite patters
   RewritePatternSet patterns(&getContext());
-  patterns.add<HasBeenResetOpConversion, LTLImplicationConversion>(
+  patterns.add<HasBeenResetOpConversion, LTLImplicationConversion,
+               LTLNotConversion, LTLAndOpConversion, LTLOrOpConversion>(
       converter, patterns.getContext());
   // Apply the conversions
   if (failed(
