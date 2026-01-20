@@ -407,13 +407,15 @@ LogicalResult LowerModule::lowerModule() {
     ++iDel;
     ++iIns;
 
-    // If this port has domain associations, then we need to add port annotation
-    // trackers.  These will be hooked up to the Object's associations later.
-    // However, if there is no domain information, then annotations do not need
-    // to be modified.  Early continue first, adding trackers otherwise.  Only
-    // create one tracker for all associations.
+    // If this port has domain associations and is not zero width, then we need
+    // to add port annotation trackers.  These will be hooked up to the Object's
+    // associations later.  However, if there is no domain information or the
+    // port is zero width, then annotations do not need to be modified.  Early
+    // continue first, adding trackers otherwise.  Only create one tracker for
+    // all associations.
     ArrayAttr domainAttr = cast_or_null<ArrayAttr>(port.domains);
-    if (!domainAttr || domainAttr.empty()) {
+    if (!domainAttr || domainAttr.empty() ||
+        hasZeroBitWidth(type_cast<FIRRTLType>(port.type))) {
       portAnnotations.push_back(port.annotations.getArrayAttr());
       continue;
     }
