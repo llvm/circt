@@ -558,6 +558,28 @@ OpFoldResult StringLengthOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+OpFoldResult IntToStringOp::fold(FoldAdaptor adaptor) {
+  auto intAttr = cast_or_null<IntegerAttr>(adaptor.getInput());
+  if (!intAttr)
+    return {};
+
+  SmallString<128> result;
+  auto width = intAttr.getType().getIntOrFloatBitWidth();
+  // Starting from the LSB, we extract the values byte-by-byte,
+  // and convert each non-null byte to a char
+
+  // For example 0x00_00_00_48_00_00_6C_6F would look like "Hlo"
+  for (unsigned int i = 0; i < width; i += 8) {
+    auto byte =
+        intAttr.getValue().extractBitsAsZExtValue(std::min(width - i, 8U), i);
+    if (byte)
+      result.push_back(static_cast<char>(byte));
+  }
+  std::reverse(result.begin(), result.end());
+  return StringAttr::get(getContext(), result);
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//

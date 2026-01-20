@@ -54,3 +54,44 @@ hw.module @string_concat_multiple_literals(out res: !sim.dstring) {
   %concat = sim.string.concat (%str1, %str2, %str3)
   hw.output %concat : !sim.dstring
 }
+
+// CHECK-LABEL: hw.module @convert_int_to_string_0
+// CHECK: sim.string.literal "Test"
+hw.module @convert_int_to_string_0(out res: !sim.dstring) {
+  %a = hw.constant 1415934836 : i32
+  %str = sim.string.int_to_string %a : i32
+  hw.output %str : !sim.dstring
+}
+
+// CHECK-LABEL: hw.module @convert_int_to_string_1
+// CHECK: sim.string.literal "Hlo"
+hw.module @convert_int_to_string_1(out res: !sim.dstring) {
+  %a0 = hw.constant 310939249775 : i40
+  %a1 = hw.constant 1095233437695 : i40
+  %a2 = hw.constant 1099494916095 : i40
+  %a3 = comb.and %a0, %a1 : i40
+  %a4 = comb.and %a3, %a2 : i40
+  %str = sim.string.int_to_string %a4 : i40
+  hw.output %str : !sim.dstring
+}
+
+// CHECK-LABEL: hw.module @convert_int_to_string_3
+// CHECK: hw.constant 3 : i64
+hw.module @convert_int_to_string_3(out res: i64) {
+  %a0 = hw.constant 310939249775 : i40
+  %a1 = hw.constant 1095233437695 : i40
+  %a2 = hw.constant 1099494916095 : i40
+  %a3 = comb.and %a0, %a1 : i40
+  %a4 = comb.and %a3, %a2 : i40
+  %str = sim.string.int_to_string %a4 : i40
+  %len = sim.string.length %str
+  hw.output %len : i64
+}
+
+// CHECK-LABEL: hw.module @convert_int_to_string_4
+// CHECK: sim.string.literal ""
+hw.module @convert_int_to_string_4(out res: !sim.dstring) {
+  %a0 = hw.constant 0 : i40
+  %str = sim.string.int_to_string %a0 : i40
+  hw.output %str : !sim.dstring
+}
