@@ -559,9 +559,6 @@ OpFoldResult StringLengthOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult IntToStringOp::fold(FoldAdaptor adaptor) {
-  auto inputAttr = adaptor.getInput();
-  if (!inputAttr)
-    return {};
   auto intAttr = cast_or_null<IntegerAttr>(adaptor.getInput());
   if (!intAttr)
     return {};
