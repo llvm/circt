@@ -501,3 +501,23 @@ firrtl.circuit "DeadDomainOps" {
     firrtl.domain.define %e, %f
   }
 }
+
+// -----
+
+// Test that zero width ports that have domain associations do not have these
+// associations propagated to the lowered class for that domain port.  If these
+// did, then this would create symbols on zero-width ports which is not allowed
+// by the LowerToHW conversion.
+firrtl.circuit "ZeroWidthPort" {
+  firrtl.domain @ClockDomain
+  // CHECK-LABEL: firrtl.module @ZeroWidthPort(
+  firrtl.module @ZeroWidthPort(
+    in %A: !firrtl.domain of @ClockDomain,
+    in %a: !firrtl.uint<0> domains [%A]
+  ) {
+    // CHECK:      %[[associations_in:.+]] = firrtl.object.subfield %A_object[associations_in]
+    // CHECK-NEXT: %[[list:.+]] = firrtl.list.create :
+    // CHECK-NEXT: firrtl.propassign %[[associations_in]], %[[list]]
+    // CHECK-NEXT: firrtl.propassign %A_out, %A_object :
+  }
+}
