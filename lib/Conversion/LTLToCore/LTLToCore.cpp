@@ -25,6 +25,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/MathExtras.h"
@@ -91,6 +92,27 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
   }
 };
 
+struct LTLImplicationConversion
+    : public OpConversionPattern<ltl::ImplicationOp> {
+  using OpConversionPattern<ltl::ImplicationOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ltl::ImplicationOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Can only lower boolean implications to comb ops
+    if (!isa<IntegerType>(op.getAntecedent().getType()) ||
+        !isa<IntegerType>(op.getConsequent().getType()))
+      return failure();
+    /// A -> B = !A || B
+    auto loc = op.getLoc();
+    auto notA = comb::createOrFoldNot(loc, adaptor.getAntecedent(), rewriter);
+    auto orOp =
+        comb::OrOp::create(rewriter, loc, notA, adaptor.getConsequent());
+    rewriter.replaceOp(op, orOp);
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -118,6 +140,16 @@ void LowerLTLToCorePass::runOnOperation() {
   target.addLegalDialect<ltl::LTLDialect>();
   target.addLegalDialect<verif::VerifDialect>();
   target.addIllegalOp<verif::HasBeenResetOp>();
+  target.addDynamicallyLegalOp<ltl::ImplicationOp>([](ltl::ImplicationOp op) {
+    // Any implication with a non-assert user is legal since we can't change the
+    // result to an i1
+    for (auto *user : op->getUsers())
+      if (!isa<verif::AssertOp, verif::ClockedAssertOp>(user))
+        return true;
+    // Otherwise illegal if operands are i1
+    return !isa<IntegerType>(op.getAntecedent().getType()) ||
+           !isa<IntegerType>(op.getConsequent().getType());
+  });
 
   // Create type converters, mostly just to convert an ltl property to a bool
   mlir::TypeConverter converter;
@@ -154,12 +186,26 @@ void LowerLTLToCorePass::runOnOperation() {
 
   // Create the operation rewrite patters
   RewritePatternSet patterns(&getContext());
-  patterns.add<HasBeenResetOpConversion>(converter, patterns.getContext());
-
+  patterns.add<HasBeenResetOpConversion, LTLImplicationConversion>(
+      converter, patterns.getContext());
   // Apply the conversions
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     return signalPassFailure();
+
+  // Clean up remaining unrealized casts by changing assert argument types
+  getOperation().walk([&](Operation *op) {
+    if (!isa<verif::AssertOp, verif::ClockedAssertOp>(op))
+      return;
+    Value prop = op->getOperand(0);
+    if (auto cast = prop.getDefiningOp<UnrealizedConversionCastOp>()) {
+      // Make sure that the cast is from an i1, not something random that was in
+      // the input
+      if (auto intType = dyn_cast<IntegerType>(cast.getOperandTypes()[0]);
+          intType && intType.getWidth() == 1)
+        op->setOperand(0, cast.getInputs()[0]);
+    }
+  });
 }
 
 // Basic default constructor
