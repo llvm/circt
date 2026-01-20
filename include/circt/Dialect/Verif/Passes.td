@@ -40,6 +40,9 @@ def CombineAssertLikePass : Pass<"combine-assert-like", "hw::HWModuleOp"> {
     This is already implicitly done in many of down stream tools, and being 
     able to simplify assertions early can help will other verification tasks 
     such as contract inference.
+
+    The conjunctions are created on a per-block basis, so asserlike ops in 
+    separate blocks will not be merged.
   }];
 }
 
