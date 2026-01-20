@@ -60,7 +60,7 @@ hw.module @ManyAssertsAndAssumes(in %a: i42, out z: i42) {
 
 //------
 
-// CHECK-LABEL: hw.module @ManyAssertsAndAssumes
+// CHECK-LABEL: hw.module @ManyAssertsAndAssumesWithEnable
 // CHECK-NEXT:   %c1_i42 = hw.constant 1 : i42
 // CHECK-NEXT:   [[TMP0:%.+]] = comb.shl %a, %c1_i42 : i42
 // CHECK-NEXT:   %c2_i42 = hw.constant 2 : i42
