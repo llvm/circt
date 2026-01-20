@@ -515,7 +515,7 @@ firrtl.circuit "ZeroWidthPort" {
     in %A: !firrtl.domain of @ClockDomain,
     in %a: !firrtl.uint<0> domains [%A]
   ) {
-    // CHECK:       %[[associations_in:.+]] = firrtl.object.subfield %A_object[associations_in]
+    // CHECK:      %[[associations_in:.+]] = firrtl.object.subfield %A_object[associations_in]
     // CHECK-NEXT: %[[list:.+]] = firrtl.list.create :
     // CHECK-NEXT: firrtl.propassign %[[associations_in]], %[[list]]
     // CHECK-NEXT: firrtl.propassign %A_out, %A_object :
