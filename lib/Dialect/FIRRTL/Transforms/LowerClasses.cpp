@@ -938,11 +938,9 @@ void LowerClassesPass::runOnOperation() {
   // external modules with the same defname).
   for (auto moduleLike : modulesToErasePortsFrom) {
     BitVector portsToErase(moduleLike.getNumPorts());
-    for (unsigned i = 0, e = moduleLike.getNumPorts(); i < e; ++i) {
-      auto type = moduleLike.getPortType(i);
-      if (isa<PropertyType>(type))
+    for (unsigned i = 0, e = moduleLike.getNumPorts(); i < e; ++i)
+      if (isa<PropertyType>(moduleLike.getPortType(i)))
         portsToErase.set(i);
-    }
     moduleLike.erasePorts(portsToErase);
   }
 
