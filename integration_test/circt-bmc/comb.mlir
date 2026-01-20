@@ -34,3 +34,16 @@ hw.module @demorgan(in %i0: i1, in %i1: i1) {
 
 hw.module @Empty() {
 }
+
+// Test assert merging
+//  RUN: circt-bmc %s -b 10 --module TwoAsserts --shared-libs=%libz3 | FileCheck %s --check-prefix=TWOASSERTS
+//  TWOASSERTS: Assertion can be violated!
+
+hw.module @TwoAsserts(in %i0: i1, in %i1: i1) {
+  %or0 = comb.or bin %i0, %i1 : i1
+  %or1 = comb.or bin %i1, %i0 : i1
+  // Condition
+  %cond = comb.icmp bin eq %or0, %or1 : i1
+  verif.assert %cond : i1
+  verif.assert %or0 : i1
+}
