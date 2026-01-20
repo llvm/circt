@@ -653,8 +653,8 @@ struct Promoter {
   Value resolveSlot(Value projectionOrSlot);
 
   void captureAcrossWait();
-  void captureAcrossWait(ProbeOp probeOp, ArrayRef<WaitOp> waitOps,
-                         Liveness &liveness, DominanceInfo &dominance);
+  void captureValueAcrossWait(Value value, ArrayRef<WaitOp> waitOps,
+                              Liveness &liveness, DominanceInfo &dominance);
 
   void constructLattice();
   void propagateBackward();
@@ -847,7 +847,9 @@ Value Promoter::resolveSlot(Value projectionOrSlot) {
 /// Explicitly capture any probes that are live across an `llhd.wait` as block
 /// arguments and destination operand of that wait. This ensures that replacing
 /// the probe with a reaching definition later on will capture the value of the
-/// reaching definition before the wait.
+/// reaching definition before the wait. Also capture any extract ops of probes
+/// that are live across wait, to allow the extract result (e.g., i1) to be
+/// captured instead of the full probe result (e.g., i8).
 void Promoter::captureAcrossWait() {
   if (region.hasOneBlock())
     return;
@@ -861,53 +863,82 @@ void Promoter::captureAcrossWait() {
   Liveness liveness(region.getParentOp());
 
   SmallVector<WaitOp> crossingWaitOps;
+
+  // Capture probes that are live across wait ops.
   for (auto &block : region) {
     for (auto probeOp : block.getOps<ProbeOp>()) {
       for (auto waitOp : waitOps)
         if (liveness.getLiveness(waitOp->getBlock())->isLiveOut(probeOp))
           crossingWaitOps.push_back(waitOp);
       if (!crossingWaitOps.empty()) {
-        captureAcrossWait(probeOp, crossingWaitOps, liveness, dominance);
+        captureValueAcrossWait(probeOp, crossingWaitOps, liveness, dominance);
+        crossingWaitOps.clear();
+      }
+    }
+  }
+
+  // Capture extract ops of probes that are live across wait ops. This handles
+  // cases like `@(posedge data[0])` where the extract result (i1) should be
+  // captured instead of the probe result (i8), enabling the probe to be
+  // hoisted.
+  for (auto &block : region) {
+    for (auto extractOp : block.getOps<comb::ExtractOp>()) {
+      // Only handle extracts of probe results.
+      if (!extractOp.getInput().getDefiningOp<ProbeOp>())
+        continue;
+      for (auto waitOp : waitOps)
+        if (liveness.getLiveness(waitOp->getBlock())->isLiveOut(extractOp))
+          crossingWaitOps.push_back(waitOp);
+      if (!crossingWaitOps.empty()) {
+        captureValueAcrossWait(extractOp, crossingWaitOps, liveness, dominance);
         crossingWaitOps.clear();
       }
     }
   }
 }
 
-/// Add a probe as block argument to a list of wait ops and update uses of the
-/// probe to use the added block arguments as appropriate. This may insert
-/// additional block arguments in case the probe and added block arguments both
+/// Add a value as block argument to a list of wait ops and update uses of the
+/// value to use the added block arguments as appropriate. This may insert
+/// additional block arguments in case the value and added block arguments both
 /// reach the same block.
-void Promoter::captureAcrossWait(ProbeOp probeOp, ArrayRef<WaitOp> waitOps,
-                                 Liveness &liveness, DominanceInfo &dominance) {
+void Promoter::captureValueAcrossWait(Value value, ArrayRef<WaitOp> waitOps,
+                                      Liveness &liveness,
+                                      DominanceInfo &dominance) {
   LLVM_DEBUG({
-    llvm::dbgs() << "Capture " << probeOp << "\n";
+    llvm::dbgs() << "Capture " << value << "\n";
     for (auto waitOp : waitOps)
       llvm::dbgs() << "- Across " << waitOp << "\n";
   });
 
-  // Calculate the merge points for this probe once it gets promoted to block
+  // Get the block where the value is defined.
+  Block *defBlock = nullptr;
+  if (auto *defOp = value.getDefiningOp())
+    defBlock = defOp->getBlock();
+  else
+    defBlock = cast<BlockArgument>(value).getOwner();
+
+  // Calculate the merge points for this value once it gets promoted to block
   // arguments across the wait ops.
   auto &domTree = dominance.getDomTree(&region);
   llvm::IDFCalculatorBase<Block, false> idfCalculator(domTree);
 
-  // Calculate the set of blocks which will define this probe as a distinct
+  // Calculate the set of blocks which will define this value as a distinct
   // value.
   SmallPtrSet<Block *, 4> definingBlocks;
-  definingBlocks.insert(probeOp->getBlock());
+  definingBlocks.insert(defBlock);
   for (auto waitOp : waitOps)
     definingBlocks.insert(waitOp.getDest());
   idfCalculator.setDefiningBlocks(definingBlocks);
 
-  // Calculate where the probe is live.
+  // Calculate where the value is live.
   SmallPtrSet<Block *, 16> liveInBlocks;
   for (auto &block : region)
-    if (liveness.getLiveness(&block)->isLiveIn(probeOp))
+    if (liveness.getLiveness(&block)->isLiveIn(value))
       liveInBlocks.insert(&block);
   idfCalculator.setLiveInBlocks(liveInBlocks);
 
   // Calculate the merge points where we will have to insert block arguments for
-  // this probe.
+  // this value.
   SmallVector<Block *> mergePointsVec;
   idfCalculator.calculate(mergePointsVec);
   SmallPtrSet<Block *, 16> mergePoints(mergePointsVec.begin(),
@@ -916,7 +947,7 @@ void Promoter::captureAcrossWait(ProbeOp probeOp, ArrayRef<WaitOp> waitOps,
     mergePoints.insert(waitOp.getDest());
   LLVM_DEBUG(llvm::dbgs() << "- " << mergePoints.size() << " merge points\n");
 
-  // Perform a depth-first search starting at the block containing the probe,
+  // Perform a depth-first search starting at the block containing the value,
   // which dominates all its uses. When we encounter a block that is a merge
   // point, insert a block argument.
   struct WorklistItem {
@@ -924,21 +955,20 @@ void Promoter::captureAcrossWait(ProbeOp probeOp, ArrayRef<WaitOp> waitOps,
     Value reachingDef;
   };
   SmallVector<WorklistItem> worklist;
-  worklist.push_back({domTree.getNode(probeOp->getBlock()), probeOp});
+  worklist.push_back({domTree.getNode(defBlock), value});
 
   while (!worklist.empty()) {
     auto item = worklist.pop_back_val();
     auto *block = item.domNode->getBlock();
 
-    // If this block is a merge point, insert a block argument for the probe.
+    // If this block is a merge point, insert a block argument for the value.
     if (mergePoints.contains(block))
-      item.reachingDef =
-          block->addArgument(probeOp.getType(), probeOp.getLoc());
+      item.reachingDef = block->addArgument(value.getType(), value.getLoc());
 
-    // Replace any uses of the probe in this block with the current reaching
+    // Replace any uses of the value in this block with the current reaching
     // definition.
     for (auto &op : *block)
-      op.replaceUsesOfWith(probeOp, item.reachingDef);
+      op.replaceUsesOfWith(value, item.reachingDef);
 
     // If the terminator of this block branches to a merge point, add the
     // current reaching definition as a destination operand.

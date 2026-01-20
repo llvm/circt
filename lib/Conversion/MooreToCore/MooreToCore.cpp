@@ -532,6 +532,21 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
     // Determine the values used during event detection that are defined outside
     // the `wait_event`'s body region. We want to wait for a change on these
     // signals before we check if any interesting event happened.
+    //
+    // For bit-select sensitivity lists like `@(posedge data[0])`, we need to
+    // observe the extracted i1 trigger value, not the full multi-bit signal.
+    // The extract op's input is a `moore.read` which is defined inside the
+    // body, so we need to trace back to the signal reference that the read
+    // operates on.
+    SmallDenseMap<Value, Value> signalRefToTrigger;
+    for (Value trigger : valuesBefore) {
+      if (auto extractOp = trigger.getDefiningOp<ExtractOp>()) {
+        // The extract input is the read result, trace back to the signal ref
+        if (auto readOp = extractOp.getInput().getDefiningOp<ReadOp>())
+          signalRefToTrigger[readOp.getInput()] = trigger;
+      }
+    }
+
     SmallVector<Value> observeValues;
     auto setInsertionPointAfterDef = [&](Value value) {
       if (auto *op = value.getDefiningOp())
@@ -542,6 +557,33 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
 
     getValuesToObserve(&clonedOp.getBody(), setInsertionPointAfterDef,
                        typeConverter, rewriter, observeValues);
+
+    // Replace multi-bit observed values with their corresponding i1 trigger
+    // values if they came from signals that have bit-select triggers.
+    for (Value &observed : observeValues) {
+      if (observed.getType().isSignlessInteger(1))
+        continue;
+      // Check if this observed value is a probe of a signal that has a
+      // bit-select trigger. The observed value is `llhd.prb %sig` where %sig
+      // is the remapped signal ref.
+      auto probeOp = observed.getDefiningOp<llhd::ProbeOp>();
+      if (!probeOp)
+        continue;
+      // Find the original Moore signal ref that maps to this signal
+      for (auto [signalRef, trigger] : signalRefToTrigger) {
+        auto remappedRef = rewriter.getRemappedValue(signalRef);
+        if (remappedRef == probeOp.getSignal()) {
+          // Replace the multi-bit probe with the converted i1 trigger.
+          OpBuilder::InsertionGuard g(rewriter);
+          if (auto *defOp = trigger.getDefiningOp())
+            rewriter.setInsertionPointAfter(defOp);
+          auto i1Type = rewriter.getI1Type();
+          observed = typeConverter->materializeTargetConversion(
+              rewriter, loc, i1Type, trigger);
+          break;
+        }
+      }
+    }
 
     // Create the `llhd.wait` op that suspends the current process and waits for
     // a change in the interesting values listed in `observeValues`. When a
