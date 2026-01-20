@@ -576,12 +576,20 @@ def StringConcatOp : SimOp<"string.concat", [Pure]> {
 def IntToStringOp: SimOp<"string.int_to_string", [Pure]> {
   let summary = "Convert an integer into a string";
   let description = [{
-    In Verilog's semantics, string literals are treated as bitvectors.
-    This Op treats them as right aligned bitvectors and converts them to
-    a string, reading byte by byte starting from the LSB. It also ignores
-    all 0-valued bytes and chooses not to add them to the string
-
-    // TODO: give an example here
+    Converts an integer value to a string following Verilog semantics, where
+    string literals are represented as right-aligned bitvectors.
+    
+    The operation reads the integer byte-by-byte, interpreting each non-zero
+    byte as an ASCII character. Zero-valued bytes are skipped and
+    not included in the output string.
+    
+    Example:
+      The decimal value 309237673071 corresponds to hex 0x00_00_00_48_00_00_6C_6F.
+      Reading from MSB to LSB and filtering out null bytes:
+        - 0x48 = 'H'
+        - 0x6C = 'l'
+        - 0x6F = 'o'
+      This produces the string "Hlo", not "\0\0\0H\0\0lo".
   }];
 
   let arguments = (ins AnyInteger:$input);
