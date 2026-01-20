@@ -684,6 +684,36 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: }
   }
 
+  // CHECK-LABEL: hw.module private @VerificationSpecialFormatString
+  firrtl.module private @VerificationSpecialFormatString(
+    in %clock: !firrtl.clock,
+    in %cond: !firrtl.uint<1>,
+    in %enable: !firrtl.uint<1>,
+    in %value: !firrtl.uint<42>,
+    in %value2: !firrtl.sint<24>,
+    in %i0: !firrtl.uint<0>
+  ) {
+    // Test special substitutions
+    // CHECK:      %[[TIME:.+]] = sv.system.time
+    // CHECK-NEXT: %[[TIME_SAMPLED:.+]] = sv.system.sampled %[[TIME]]
+    // CHECK:      sv.assert.concurrent posedge
+    // CHECK-SAME: message "Time: %0t"(%[[TIME_SAMPLED]]) : i64
+    %time = firrtl.fstring.time : !firrtl.fstring
+    firrtl.assert %clock, %cond, %enable, "Time: {{}}"(%time) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.fstring {isConcurrent = true}
+
+    // CHECK:      sv.assume %cond, immediate message "Module: %m"
+    %hier = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
+    firrtl.assume %clock, %cond, %enable, "Module: {{}}"(%hier) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.fstring
+
+
+    // CHECK: %[[TIME:.+]] = sv.system.time
+    // CHECK:      sv.if %ASSERT_VERBOSE_COND_ {
+    // CHECK-NEXT:   sv.error "In %m at %0t, value = %d"(%[[TIME]], %value) : i64, i42
+    %time2 = firrtl.fstring.time : !firrtl.fstring
+    %hier2 = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
+    firrtl.assert %clock, %cond, %enable, "In {{}} at {{}}, value = %d"(%hier2, %time2, %value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.fstring, !firrtl.fstring, !firrtl.uint<42> {format = "ifElseFatal", isConcurrent = true}
+  }
+
   firrtl.module private @bar(in %io_cpu_flush: !firrtl.uint<1>) { }
 
   // CHECK-LABEL: hw.module private @foo

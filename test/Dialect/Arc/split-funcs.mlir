@@ -49,3 +49,7 @@ func.func @LongReuse(%arg1: i4, %arg2: i4) -> (i4) {
     %4 = comb.add %0, %1 : i4
     return %4 : i4
 }
+
+// Ignore extern functions
+// CHECK-LABEL: func.func private @extern()
+func.func private @extern()

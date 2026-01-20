@@ -354,15 +354,28 @@ struct VerifBoundedModelCheckingOpConversion
     : OpConversionPattern<verif::BoundedModelCheckingOp> {
   using OpConversionPattern<verif::BoundedModelCheckingOp>::OpConversionPattern;
 
-  VerifBoundedModelCheckingOpConversion(TypeConverter &converter,
-                                        MLIRContext *context, Namespace &names,
-                                        bool risingClocksOnly)
+  VerifBoundedModelCheckingOpConversion(
+      TypeConverter &converter, MLIRContext *context, Namespace &names,
+      bool risingClocksOnly, SmallVectorImpl<Operation *> &propertylessBMCOps)
       : OpConversionPattern(converter, context), names(names),
-        risingClocksOnly(risingClocksOnly) {}
+        risingClocksOnly(risingClocksOnly),
+        propertylessBMCOps(propertylessBMCOps) {}
   LogicalResult
   matchAndRewrite(verif::BoundedModelCheckingOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Location loc = op.getLoc();
+
+    if (std::find(propertylessBMCOps.begin(), propertylessBMCOps.end(), op) !=
+        propertylessBMCOps.end()) {
+      // No properties to check, so we don't bother solving, we just return true
+      // (without this we would incorrectly find violations, since the solver
+      // will always return SAT)
+      Value trueVal =
+          arith::ConstantOp::create(rewriter, loc, rewriter.getBoolAttr(true));
+      rewriter.replaceOp(op, trueVal);
+      return success();
+    }
+
     SmallVector<Type> oldLoopInputTy(op.getLoop().getArgumentTypes());
     SmallVector<Type> oldCircuitInputTy(op.getCircuit().getArgumentTypes());
     // TODO: the init and loop regions should be able to be concrete instead of
@@ -642,6 +655,7 @@ struct VerifBoundedModelCheckingOpConversion
 
   Namespace &names;
   bool risingClocksOnly;
+  SmallVectorImpl<Operation *> &propertylessBMCOps;
 };
 
 } // namespace
@@ -658,16 +672,16 @@ struct ConvertVerifToSMTPass
 };
 } // namespace
 
-void circt::populateVerifToSMTConversionPatterns(TypeConverter &converter,
-                                                 RewritePatternSet &patterns,
-                                                 Namespace &names,
-                                                 bool risingClocksOnly) {
+void circt::populateVerifToSMTConversionPatterns(
+    TypeConverter &converter, RewritePatternSet &patterns, Namespace &names,
+    bool risingClocksOnly, SmallVectorImpl<Operation *> &propertylessBMCOps) {
   patterns.add<VerifAssertOpConversion, VerifAssumeOpConversion,
                LogicEquivalenceCheckingOpConversion,
                RefinementCheckingOpConversion>(converter,
                                                patterns.getContext());
   patterns.add<VerifBoundedModelCheckingOpConversion>(
-      converter, patterns.getContext(), names, risingClocksOnly);
+      converter, patterns.getContext(), names, risingClocksOnly,
+      propertylessBMCOps);
 }
 
 void ConvertVerifToSMTPass::runOnOperation() {
@@ -680,6 +694,7 @@ void ConvertVerifToSMTPass::runOnOperation() {
   // Check BMC ops contain only one assertion (done outside pattern to avoid
   // issues with whether assertions are/aren't lowered yet)
   SymbolTable symbolTable(getOperation());
+  SmallVector<Operation *> propertylessBMCOps;
   WalkResult assertionCheck = getOperation().walk(
       [&](Operation *op) { // Check there is exactly one assertion and clock
         if (auto bmcOp = dyn_cast<verif::BoundedModelCheckingOp>(op)) {
@@ -693,16 +708,13 @@ void ConvertVerifToSMTPass::runOnOperation() {
               if (!isa<IntegerType>(regType)) {
                 op->emitError("initial values are currently only supported for "
                               "registers with integer types");
-                signalPassFailure();
                 return WalkResult::interrupt();
-              } else {
-                auto tyAttr = dyn_cast<TypedAttr>(initVal);
-                if (!tyAttr || tyAttr.getType() != regType) {
-                  op->emitError("type of initial value does not match type of "
-                                "initialized register");
-                  signalPassFailure();
-                  return WalkResult::interrupt();
-                }
+              }
+              auto tyAttr = dyn_cast<TypedAttr>(initVal);
+              if (!tyAttr || tyAttr.getType() != regType) {
+                op->emitError("type of initial value does not match type of "
+                              "initialized register");
+                return WalkResult::interrupt();
               }
             }
           }
@@ -739,6 +751,11 @@ void ConvertVerifToSMTPass::runOnOperation() {
             if (numAssertions > 1)
               break;
           }
+          if (numAssertions == 0) {
+            op->emitWarning("no property provided to check in module - will "
+                            "trivially find no violations.");
+            propertylessBMCOps.push_back(bmcOp);
+          }
           if (numAssertions > 1) {
             op->emitError(
                 "bounded model checking problems with multiple assertions are "
@@ -762,7 +779,7 @@ void ConvertVerifToSMTPass::runOnOperation() {
   names.add(symCache);
 
   populateVerifToSMTConversionPatterns(converter, patterns, names,
-                                       risingClocksOnly);
+                                       risingClocksOnly, propertylessBMCOps);
 
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))

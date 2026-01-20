@@ -43,5 +43,30 @@ firrtl.module @Invalid(in %cond: !firrtl.uint<1>,
 
 }
 
+firrtl.domain @ClockDomain
+firrtl.extmodule @Domains_Bar(
+  in A: !firrtl.domain of @ClockDomain,
+  in B: !firrtl.domain of @ClockDomain
+)
+// Anonymous domains are DCE'd, but not CSE'd.
+// CHECK-LABEL: firrtl.module @Domains_Foo(
+firrtl.module @Domains_Foo() {
+  // CHECK-NEXT: %0 = firrtl.domain.anon
+  %0 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+  // CHECK-NEXT: %1 = firrtl.domain.anon
+  %1 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+  %bar_A, %bar_B = firrtl.instance bar @Domains_Bar(
+    in A: !firrtl.domain of @ClockDomain,
+    in B: !firrtl.domain of @ClockDomain
+  )
+  // CHECK: firrtl.domain.define %bar_A, %0
+  firrtl.domain.define %bar_A, %0
+  // CHECK-NEXT: firrtl.domain.define %bar_B, %1
+  firrtl.domain.define %bar_B, %1
+
+  // CHECK-NOT: firrtl.domain.define
+  %2 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+}
+
 
 }

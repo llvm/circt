@@ -1,3 +1,4 @@
+from typing import Optional
 import esiaccel as esi
 from esiaccel.types import MMIORegion
 
@@ -18,6 +19,41 @@ m = acc.manifest()
 assert m.api_version == 0
 print(m.type_table)
 
+# Test the cycle count and clock frequency APIs
+sysinfo = acc.sysinfo()
+cycle_count = sysinfo.cycle_count()
+if cycle_count is not None:
+  print(f"Cycle count: {cycle_count}")
+  assert cycle_count > 0, f"Cycle count should be positive, got {cycle_count}"
+
+  # Test that cycle count is monotonically increasing
+  time.sleep(0.01)  # Small delay to let simulation advance
+  cycle_count2 = sysinfo.cycle_count()
+  print(f"Cycle count after delay: {cycle_count2}")
+  assert cycle_count2 > cycle_count, \
+      f"Cycle count should be monotonically increasing: {cycle_count2} <= {cycle_count}"
+
+  # Test again to ensure consistency
+  time.sleep(0.01)
+  cycle_count3 = sysinfo.cycle_count()
+  print(f"Cycle count after second delay: {cycle_count3}")
+  assert cycle_count3 > cycle_count2, \
+      f"Cycle count should be monotonically increasing: {cycle_count3} <= {cycle_count2}"
+else:
+  print("Cycle count: not available")
+
+clock_freq = sysinfo.core_clock_frequency()
+print(f"Clock frequency: {clock_freq} Hz")
+if platform == "cosim":
+  assert clock_freq == 20_000_000, \
+      f"Expected clock frequency 20_000_000 Hz for cosim, got {clock_freq}"
+else:
+  if clock_freq is not None:
+    print(f"Core clock frequency: {clock_freq} Hz")
+    assert clock_freq > 0, f"Clock frequency should be positive, got {clock_freq}"
+  else:
+    print("Core clock frequency: not available")
+
 d = acc.build_accelerator()
 
 mmio_svc: esi.accelerator.MMIO
@@ -29,7 +65,7 @@ for svc in d.services:
 for id, region in mmio_svc.regions.items():
   print(f"Region {id}: {region.base} - {region.base + region.size}")
 
-assert len(mmio_svc.regions) == 4
+assert len(mmio_svc.regions) == 5
 
 ################################################################################
 # MMIOClient tests
@@ -95,6 +131,30 @@ for mod_info in m.module_infos:
     break
 assert loopback_info is not None
 add_amt = mod_info.constants["add_amt"].value
+
+################################################################################
+# Callback tests
+################################################################################
+
+callback = d.children[esi.AppID("callback")]
+cb_port = callback.ports[esi.AppID("cb")]
+cb_mmio = callback.ports[esi.AppID("cmd")]
+
+recv_data: Optional[int] = None
+
+
+def my_callback(data: int) -> int:
+  global recv_data
+  recv_data = data
+  print(f"Callback received data: {data}")
+  return data + 7
+
+
+cb_port.connect(my_callback)
+cb_mmio.write(0x10, 5)
+while recv_data is None:
+  time.sleep(0.25)
+assert recv_data == 5
 
 ################################################################################
 # Loopback add 7 tests

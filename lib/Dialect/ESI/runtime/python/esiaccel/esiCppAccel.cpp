@@ -109,6 +109,10 @@ nb::object getPyType(std::optional<const Type *> t) {
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 NB_MODULE(esiCppAccel, m) {
+  // TODO: Fix leaks! The one I know of is in the callback code -- if one
+  // registers a python callback it creates a leak.
+  nb::set_leak_warnings(false);
+
   nb::class_<Type>(m, "Type")
       .def(nb::init<const Type::ID &>(), nb::arg("id"))
       .def_prop_ro("id", &Type::getID)
@@ -216,7 +220,11 @@ NB_MODULE(esiCppAccel, m) {
 
   nb::class_<SysInfo, services::Service>(m, "SysInfo")
       .def("esi_version", &SysInfo::getEsiVersion)
-      .def("json_manifest", &SysInfo::getJsonManifest);
+      .def("json_manifest", &SysInfo::getJsonManifest)
+      .def("cycle_count", &SysInfo::getCycleCount,
+           "Get the current cycle count of the accelerator system")
+      .def("core_clock_frequency", &SysInfo::getCoreClockFrequency,
+           "Get the core clock frequency of the accelerator system in Hz");
 
   nb::class_<MMIO::RegionDescriptor>(m, "MMIORegionDescriptor")
       .def_prop_ro("base", [](MMIO::RegionDescriptor &r) { return r.base; })
@@ -366,7 +374,7 @@ NB_MODULE(esiCppAccel, m) {
           auto ret = pyCallback(argObj);
           if (ret.is_none())
             return MessageData();
-          nb::bytes retBytes = nb::cast<nb::bytes>(ret);
+          nb::bytearray retBytes = nb::cast<nb::bytearray>(ret);
           std::vector<uint8_t> dataVec((const uint8_t *)retBytes.c_str(),
                                        (const uint8_t *)retBytes.c_str() +
                                            retBytes.size());

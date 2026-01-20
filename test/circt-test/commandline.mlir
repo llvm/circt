@@ -1,3 +1,3 @@
 // RUN: circt-test --help | FileCheck %s
 
-// CHECK: OVERVIEW: Hardware unit testing tool
+// CHECK: OVERVIEW: Hardware unit test discovery and execution tool

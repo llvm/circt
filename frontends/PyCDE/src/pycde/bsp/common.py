@@ -12,6 +12,7 @@ from .. import esi
 from ..module import Module, generator, modparams
 from ..signals import BitsSignal, ChannelSignal, StructSignal
 from ..support import clog2
+from ..system import System
 from ..types import (Array, Bits, Bundle, BundledChannel, Channel,
                      ChannelDirection, StructType, Type, UInt, Window)
 
@@ -77,12 +78,30 @@ def HeaderMMIO(manifest_loc: int) -> Module:
       address, address_valid = address_chan.unwrap(address_ready)
       address_words = address.as_bits()[3:]  # Lop off the lower three bits.
 
+      cycles = Counter(64)(clk=ports.clk,
+                           rst=ports.rst,
+                           clear=Bits(1)(0),
+                           increment=Bits(1)(1),
+                           instance_name="cycle_counter")
+
       # Layout the header as an array.
-      header = Array(Bits(64), 4)([0, MagicNumber, VersionNumber, manifest_loc])
+      core_freq = System.current().core_freq
+      if core_freq is None:
+        core_freq = 0
+      header = Array(Bits(64), 8)([
+          0,  # Generally a good idea to not use address 0.
+          MagicNumber,  # ESI magic number.
+          VersionNumber,  # ESI version number.
+          manifest_loc,  # Absolute address of the manifest ROM.
+          0,  # Reserved for future use.
+          cycles.out.as_bits(),  # Cycle counter.
+          core_freq,  # Core frequency, if known.
+          0,
+      ])
       header.name = "header"
       header_response_valid = address_valid  # Zero latency read.
-      # Select the approptiate header index.
-      header_out = header[address_words[:2]]
+      # Select the appropriate header index.
+      header_out = header[address_words[:3]]
       header_out.name = "header_out"
       # Wrap the response.
       data_chan, data_chan_ready = Channel(esi.MMIODataType).wrap(

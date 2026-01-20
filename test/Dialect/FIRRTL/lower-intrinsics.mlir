@@ -153,6 +153,30 @@ firrtl.circuit "Foo" {
     firrtl.int.generic "circt.unclocked_assume" <format: none = "text: %d", label: none = "label for unr", guards: none = "MACRO_GUARD;ASDF"> %cond, %enable, %enable : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> ()
   }
 
+  // CHECK-LABEL: firrtl.module @ChiselVerifSpecialSubstitutions(
+  firrtl.module @ChiselVerifSpecialSubstitutions(in %clock: !firrtl.clock,
+                                                 in %cond: !firrtl.uint<1>,
+                                                 in %enable: !firrtl.uint<1>) {
+    // CHECK: %[[TIME:.+]] = firrtl.fstring.time
+    // CHECK: firrtl.assert
+    // CHECK-SAME{LITERAL}: "Time: {{}}"
+    // CHECK-SAME: (%[[TIME]])
+    firrtl.int.generic "circt_chisel_assert" <format: none = "Time: {{SimulationTime}}"> %clock, %cond, %enable : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> ()
+
+    // CHECK: %[[HIER:.+]] = firrtl.fstring.hierarchicalmodulename
+    // CHECK: firrtl.assume
+    // CHECK-SAME{LITERAL}: "Module: {{}}"
+    // CHECK-SAME: (%[[HIER]])
+    firrtl.int.generic "circt_chisel_assume" <format: none = "Module: {{HierarchicalModuleName}}"> %clock, %cond, %enable : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> ()
+
+    // CHECK: %[[HIER2:.+]] = firrtl.fstring.hierarchicalmodulename
+    // CHECK: %[[TIME2:.+]] = firrtl.fstring.time
+    // CHECK: firrtl.assert
+    // CHECK-SAME{LITERAL}: "In {{}} at {{}}, value = %d"
+    // CHECK-SAME: (%[[HIER2]], %[[TIME2]], %{{.+}})
+    firrtl.int.generic "circt_chisel_ifelsefatal" <format: none = "In {{HierarchicalModuleName}} at {{SimulationTime}}, value = %d"> %clock, %cond, %enable, %cond : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> ()
+  }
+
   // CHECK-LABEL: firrtl.module private @ProbeIntrinsicTest
   firrtl.module private @ProbeIntrinsicTest(in %clock : !firrtl.clock, in %data : !firrtl.uint<32>) {
     // CHECK-NEXT: firrtl.int.fpga_probe %clock, %data : !firrtl.uint<32>

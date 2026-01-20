@@ -58,7 +58,7 @@ struct SimplifyTruthTable : public OpRewritePattern<TruthTableOp> {
     // Check if all table entries are the same (constant output)
     bool allSame = llvm::all_equal(table);
     if (allSame) {
-      bool firstValue = cast<BoolAttr>(table[0]).getValue();
+      bool firstValue = table[0];
       auto constOp =
           hw::ConstantOp::create(rewriter, op.getLoc(), APInt(1, firstValue));
       replaceOpAndCopyNamehint(rewriter, op, constOp);
@@ -73,7 +73,7 @@ struct SimplifyTruthTable : public OpRewritePattern<TruthTableOp> {
     unsigned numDependencies = 0;
 
     for (size_t idx = 0; idx < tableSize; ++idx) {
-      bool currentValue = cast<BoolAttr>(table[idx]).getValue();
+      bool currentValue = table[idx];
 
       for (size_t bitPos = 0; bitPos < numInputs; ++bitPos) {
         // Skip if we already know this input matters
@@ -83,7 +83,7 @@ struct SimplifyTruthTable : public OpRewritePattern<TruthTableOp> {
         // Calculate the index of the entry with the bit in question flipped
         size_t bitPositionInTable = numInputs - 1 - bitPos;
         size_t flippedIdx = idx ^ (1ull << bitPositionInTable);
-        bool flippedValue = cast<BoolAttr>(table[flippedIdx]).getValue();
+        bool flippedValue = table[flippedIdx];
 
         // If flipping this bit changes the output, this input is a dependency
         if (currentValue != flippedValue) {
@@ -110,7 +110,7 @@ struct SimplifyTruthTable : public OpRewritePattern<TruthTableOp> {
     // output when the dependent input is 1 (all other inputs at 0)
     size_t bitPositionInTable = numInputs - 1 - dependentInput;
     size_t idxWhen1 = 1ull << bitPositionInTable;
-    bool isIdentity = cast<BoolAttr>(table[idxWhen1]).getValue();
+    bool isIdentity = table[idxWhen1];
 
     // Replace with the input or a simpler truth table for negation
     Value input = inputs[dependentInput];
@@ -121,8 +121,7 @@ struct SimplifyTruthTable : public OpRewritePattern<TruthTableOp> {
       // Inverted case: replace with a single-input truth table for negation
       // This avoids introducing comb.xor, which is useful for LUT mapping
       replaceOpWithNewOpAndCopyNamehint<TruthTableOp>(
-          rewriter, op, ValueRange{input},
-          rewriter.getBoolArrayAttr({true, false}));
+          rewriter, op, ValueRange{input}, ArrayRef<bool>{true, false});
     }
     return success();
   }

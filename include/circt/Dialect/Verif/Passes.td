@@ -15,6 +15,37 @@
 
 include "mlir/Pass/PassBase.td"
 
+def CombineAssertLikePass : Pass<"combine-assert-like", "hw::HWModuleOp"> {
+  let summary = "Combines all assertions and assumptions into single operations";
+  let description = [{
+    Combines all assertions and assumptions by conjoining their conditions into a
+    single assertion and assumption respectively, e.g.
+    ```mlir
+    // [...]
+    verif.assume %pred0 : i1
+    verif.assume %pred1 : i1
+    // [...]
+    verif.assert %cond0 : i1
+    verif.assert %cond1 : i1
+    ```
+    will be converted into  
+    ```
+    // [...]
+    %pred = comb.and bin %pred0, %pred1 : i1
+    verif.assume %pred : i1
+    // [...]
+    %cond = comb.and bin %cond0, %cond1 : i1
+    verif.assert %cond : i1
+    ```
+    This is already implicitly done in many of down stream tools, and being 
+    able to simplify assertions early can help will other verification tasks 
+    such as contract inference.
+
+    The conjunctions are created on a per-block basis, so asserlike ops in 
+    separate blocks will not be merged.
+  }];
+}
+
 def PrepareForFormalPass : Pass<"prepare-for-formal", "hw::HWModuleOp"> {
   let summary = "Prepares a given top-level circuit for formal verification";
   let description = [{

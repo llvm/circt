@@ -13,6 +13,7 @@ include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Seq/SeqTypes.td"
 include "circt/Dialect/Sim/SimDialect.td"
+include "circt/Dialect/Sim/SimOpInterfaces.td"
 include "circt/Dialect/Sim/SimTypes.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
@@ -169,7 +170,9 @@ def FormatLiteralOp : SimOp<"fmt.literal", [Pure, ConstantLike]> {
   let hasFolder = true;
 }
 
-def FormatHexOp : SimOp<"fmt.hex", [Pure]> {
+def FormatHexOp : SimOp<"fmt.hex",
+  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Hexadecimal format specifier";
   let description = [{
     Format the given integer value as lower-case hexadecimal string.
@@ -181,15 +184,28 @@ def FormatHexOp : SimOp<"fmt.hex", [Pure]> {
   }];
 
 
-  let arguments = (ins AnyInteger:$value);
+  let arguments = (ins AnyInteger:$value,
+    BoolAttr:$isHexUppercase,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    DefaultValuedAttr<I8Attr,"48">:$paddingChar,
+    OptionalAttr<I32Attr>:$specifierWidth);
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
 
-  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+  let assemblyFormat = [{
+    $value `,`
+    `isUpper`  $isHexUppercase
+    (`isLeftAligned` $isLeftAligned^)?
+    (`paddingChar` $paddingChar^)?
+    (`specifierWidth` $specifierWidth^)?
+    attr-dict `:` qualified(type($value))
+  }];
 }
 
-def FormatOctOp : SimOp<"fmt.oct", [Pure]> {
+def FormatOctOp : SimOp<"fmt.oct",
+  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Octal format specifier";
   let description = [{
     Format the given integer value as lower-case octal (base eight) string.
@@ -201,15 +217,27 @@ def FormatOctOp : SimOp<"fmt.oct", [Pure]> {
   }];
 
 
-  let arguments = (ins AnyInteger:$value);
+  let arguments = (ins AnyInteger:$value,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    DefaultValuedAttr<I8Attr,"48">:$paddingChar,
+    OptionalAttr<I32Attr>:$specifierWidth);
+
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
 
-  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+  let assemblyFormat = [{
+    $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`paddingChar` $paddingChar^)?
+    (`specifierWidth` $specifierWidth^)?
+    attr-dict `:` qualified(type($value))
+  }];
 }
 
-def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
+def FormatBinOp : SimOp<"fmt.bin",
+    [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Binary format specifier";
   let description = [{
     Format the given integer value as binary (base two) string.
@@ -219,16 +247,107 @@ def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
     the empty string. No further prefix will be added.
   }];
 
-  let arguments = (ins AnyInteger:$value);
+  let arguments = (ins AnyInteger:$value,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    DefaultValuedAttr<I8Attr,"48">:$paddingChar,
+    OptionalAttr<I32Attr>:$specifierWidth);
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
 
-  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+  let assemblyFormat = [{
+    $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`paddingChar` $paddingChar^)?
+    (`specifierWidth` $specifierWidth^)?
+    attr-dict `:` qualified(type($value))
+  }];
 }
 
+def FormatScientificOp : SimOp<"fmt.exp",
+  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
+  let summary = "Real format specifier";
+  let description = [{
+    Format the given real value in scientific (exponential) notation
+  }];
 
-def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
+  let arguments = (ins AnyFloat:$value,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    OptionalAttr<I32Attr>:$fieldWidth,
+    DefaultValuedAttr<I32Attr,"6">:$fracDigits
+  );
+  let results = (outs FormatStringType:$result);
+
+  let assemblyFormat = [{
+    $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`fieldWidth` $fieldWidth^)?
+    (`fracDigits` $fracDigits^)?
+    attr-dict `:` qualified(type($value))
+  }];
+}
+
+def FormatFloatOp : SimOp<"fmt.flt",
+  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>
+]> {
+  let summary = "Real format specifier";
+  let description = [{
+    Format the given real value in floating point (decimal) notation
+  }];
+
+  let arguments = (ins AnyFloat:$value,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    OptionalAttr<I32Attr>:$fieldWidth,
+    DefaultValuedAttr<I32Attr,"6">:$fracDigits
+  );
+  let results = (outs FormatStringType:$result);
+
+  let assemblyFormat = [{
+    $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`fieldWidth` $fieldWidth^)?
+    (`fracDigits` $fracDigits^)?
+    attr-dict `:` qualified(type($value))
+  }];
+}
+
+def FormatGeneralOp : SimOp<"fmt.gen",
+  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
+  let summary = "Real format specifier";
+  let description = [{
+    Format floating-point numbers using either decimal or scientific notation
+    based on the exponent and precision parameter fracDigits (default: 6)
+
+    For exp ≥ 0:
+    Uses decimal notation if exp + 1 ≤ max(1, fracDigits), otherwise switches
+    to scientific notation with max(0, fracDigits - 1) fractional digits
+
+    For exp < 0:
+    If exp ≥ -4: Uses decimal notation with max(b - 1, 0) + |exp| fractional digits
+    If exp < -4: Uses scientific notation with max(b - 1, 0) fractional digits
+  }];
+
+  let arguments = (ins AnyFloat:$value,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    OptionalAttr<I32Attr>:$fieldWidth,
+    DefaultValuedAttr<I32Attr,"6">:$fracDigits
+  );
+  let results = (outs FormatStringType:$result);
+
+  let assemblyFormat = [{
+    $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`fieldWidth` $fieldWidth^)?
+    (`fracDigits` $fracDigits^)?
+    attr-dict `:` qualified(type($value))
+  }];
+}
+
+def FormatDecOp : SimOp<"fmt.dec",
+    [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Decimal format specifier";
   let description = [{
     Format the given integer value as signed or unsigned decimal string.
@@ -252,13 +371,22 @@ def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
     Backends are recommended to not exceed the required amount of padding.
   }];
 
-  let arguments = (ins AnyInteger:$value, UnitAttr:$isSigned);
+  let arguments = (ins AnyInteger:$value,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    DefaultValuedAttr<I8Attr,"32">:$paddingChar,
+    OptionalAttr<I32Attr>:$specifierWidth,
+    UnitAttr:$isSigned);
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
 
   let assemblyFormat = [{
-    (`signed` $isSigned^)? $value attr-dict `:` qualified(type($value))
+    $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`paddingChar` $paddingChar^)?
+    (`specifierWidth` $specifierWidth^)?
+    (`signed` $isSigned^)?
+    attr-dict `:` qualified(type($value))
   }];
 
   let extraClassDeclaration = [{
@@ -281,7 +409,9 @@ def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
   }];
 }
 
-def FormatCharOp : SimOp<"fmt.char", [Pure]> {
+def FormatCharOp : SimOp<"fmt.char",
+  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Character format specifier";
   let description = [{
     Format the given integer value as a single character.
@@ -379,6 +509,68 @@ def PrintFormattedProcOp : SimOp<"proc.print"> {
   let hasVerifier = true;
   let hasCanonicalizeMethod = true;
   let assemblyFormat = "$input attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// Dynamic Strings
+//===----------------------------------------------------------------------===//
+
+def StringConstantOp : SimOp<"string.literal", [Pure, ConstantLike]> {
+  let summary = "Literal string fragment";
+  let description = [{
+    Creates a dynamic string from a constant string literal.
+  }];
+
+  let arguments = (ins StrAttr:$literal);
+  let results = (outs DynamicStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$literal attr-dict";
+}
+
+def StringLengthOp : SimOp<"string.length", [Pure]> {
+  let summary = "Length of a string";
+  let description = [{
+    Returns the length of a dynamic string as an `i64` value.
+  }];
+
+  let arguments = (ins DynamicStringType:$input);
+  let results = (outs I64:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$input attr-dict";
+}
+
+def StringConcatOp : SimOp<"string.concat", [Pure]> {
+  let summary = "Concatenate strings";
+  let description = [{
+    Concatenates multiple strings into a single, longer string. The first
+    operand appears first in the output string. The last character of the first
+    operand is immediately followed by the first character of the second
+    operand. If the operation has a single operand, its result is equal to that
+    operand. If the operation has zero operands, it returns an empty string.
+    The length of the result is the sum of each operand's length.
+
+    Example:
+
+    ```mlir
+    %0 = sim.string.literal "abc"
+    %1 = sim.string.literal "def"
+    %2 = sim.string.literal "ghj"
+    %3 = sim.string.concat (%0, %1, %2)  // %3 is "abcdefghj"
+    %4 = sim.string.concat (%0)          // %4 is "abc"
+    %5 = sim.string.concat ()            // %5 is ""
+    ```
+  }];
+
+  let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
+
+  let arguments = (ins Variadic<DynamicStringType>:$inputs);
+  let results = (outs DynamicStringType:$result);
+
+  let hasFolder = true;
 }
 
 //===----------------------------------------------------------------------===//

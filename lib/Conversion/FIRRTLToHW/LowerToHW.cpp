@@ -5023,7 +5023,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
 // Replace FIRRTL "special" substitutions {{..}} with verilog equivalents.
 static LogicalResult resolveFormatString(Location loc,
                                          StringRef originalFormatString,
-                                         mlir::OperandRange operands,
+                                         ValueRange operands,
                                          StringAttr &result) {
   // Update the format string to replace "special" substitutions based on
   // substitution type and lower normal substitusion.
@@ -5293,7 +5293,12 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
   }
 
   if (!isCover && opMessageAttr && !opMessageAttr.getValue().empty()) {
-    message = opMessageAttr;
+    // Resolve format string to handle special substitutions like
+    // {{HierarchicalModuleName}} which should be replaced with %m.
+    if (failed(resolveFormatString(op->getLoc(), opMessageAttr.getValue(),
+                                   opOperands, message)))
+      return failure();
+
     if (failed(loweredFmtOperands(opOperands, messageOps)))
       return failure();
 

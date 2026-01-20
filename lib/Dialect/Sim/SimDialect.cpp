@@ -43,5 +43,10 @@ Operation *SimDialect::materializeConstant(::mlir::OpBuilder &builder,
   if (auto fmtStrType = llvm::dyn_cast<FormatStringType>(type))
     return FormatLiteralOp::create(builder, loc, fmtStrType,
                                    llvm::cast<StringAttr>(value));
+  if (auto dynStrType = llvm::dyn_cast<DynamicStringType>(type))
+    return StringConstantOp::create(builder, loc, dynStrType,
+                                    llvm::cast<StringAttr>(value));
+  if (auto intAttr = dyn_cast<IntegerAttr>(value))
+    return hw::ConstantOp::create(builder, loc, type, intAttr);
   return nullptr;
 }

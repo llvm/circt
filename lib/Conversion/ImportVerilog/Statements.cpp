@@ -48,7 +48,7 @@ struct StmtVisitor {
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&stepBlock, &exitBlock});
-    auto done = llvm::make_scope_exit([&] { context.loopStack.pop_back(); });
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
     const auto &iter = loopDim.loopVar;
     auto type = context.convertType(*iter->getDeclaredType());
@@ -460,7 +460,7 @@ struct StmtVisitor {
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&stepBlock, &exitBlock});
-    auto done = llvm::make_scope_exit([&] { context.loopStack.pop_back(); });
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
     // Generate the loop condition check.
     builder.setInsertionPointToEnd(&checkBlock);
@@ -521,7 +521,7 @@ struct StmtVisitor {
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&stepBlock, &exitBlock});
-    auto done = llvm::make_scope_exit([&] { context.loopStack.pop_back(); });
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
     // Generate the loop condition check.
     builder.setInsertionPointToEnd(&checkBlock);
@@ -569,7 +569,7 @@ struct StmtVisitor {
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&checkBlock, &exitBlock});
-    auto done = llvm::make_scope_exit([&] { context.loopStack.pop_back(); });
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
     // Generate the loop condition check.
     builder.setInsertionPointToEnd(&checkBlock);
@@ -615,7 +615,7 @@ struct StmtVisitor {
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&bodyBlock, &exitBlock});
-    auto done = llvm::make_scope_exit([&] { context.loopStack.pop_back(); });
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
     // Generate the loop body.
     builder.setInsertionPointToEnd(&bodyBlock);
@@ -932,6 +932,31 @@ struct StmtVisitor {
     if (verbosity == 0)
       return;
     moore::FinishMessageBIOp::create(builder, loc, verbosity > 1);
+  }
+
+  // Handle event trigger statements.
+  LogicalResult visit(const slang::ast::EventTriggerStatement &stmt) {
+    if (stmt.timing) {
+      mlir::emitError(loc) << "unsupported delayed event trigger";
+      return failure();
+    }
+
+    // Events are lowered to `i1` signals. Get an lvalue ref to the signal such
+    // that we can assign to it.
+    auto target = context.convertLvalueExpression(stmt.target);
+    if (!target)
+      return failure();
+
+    // Read and invert the current value of the signal. Writing this inverted
+    // value to the signal is our event signaling mechanism.
+    Value inverted = moore::ReadOp::create(builder, loc, target);
+    inverted = moore::NotOp::create(builder, loc, inverted);
+
+    if (stmt.isNonBlocking)
+      moore::NonBlockingAssignOp::create(builder, loc, target, inverted);
+    else
+      moore::BlockingAssignOp::create(builder, loc, target, inverted);
+    return success();
   }
 
   /// Emit an error for all other statements.

@@ -621,3 +621,40 @@ firrtl.circuit "NonModuleBlockArgsMustNotCrash" {
     firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Test that domain associations are not incorrectly dropped.  I.e., a usage of
+// a port marks its associated domain ports as alive.
+//
+// See: https://github.com/llvm/circt/issues/9408
+//
+// CHECK-LABEL: firrtl.circuit "DomainInfo"
+firrtl.circuit "DomainInfo" {
+  firrtl.domain @ClockDomain
+  // CHECK: firrtl.module private @Bar
+  // CHECK-NOT: in %A
+  // CHECK-NOT: in %a
+  // CHECK-SAME: in %B
+  // CHECK-SAME: out %b
+  firrtl.module private @Bar(
+    in %A: !firrtl.domain of @ClockDomain,
+    in %a: !firrtl.uint<1> domains [%A],
+    in %B: !firrtl.domain of @ClockDomain,
+    out %b: !firrtl.uint<1> domains [%B]
+  ) {
+    %w = firrtl.wire: !firrtl.uint<1>
+    firrtl.matchingconnect %b, %w: !firrtl.uint<1>
+  }
+  firrtl.module @DomainInfo(
+    out %b: !firrtl.uint<1>
+  ) {
+    %bar_A, %bar_a, %bar_B, %bar_b = firrtl.instance bar @Bar(
+      in A: !firrtl.domain of @ClockDomain,
+      in a: !firrtl.uint<1> domains [A],
+      in B: !firrtl.domain of @ClockDomain,
+      out b: !firrtl.uint<1> domains [B]
+    )
+    firrtl.matchingconnect %b, %bar_b: !firrtl.uint<1>
+  }
+}

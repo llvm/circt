@@ -26,3 +26,11 @@ hw.module @demorgan(in %i0: i1, in %i1: i1) {
   %cond = comb.icmp bin eq %or, %nand : i1
   verif.assert %cond : i1
 }
+
+// Check that no violations are found with no assertions
+
+//  RUN: circt-bmc %s -b 10 --module Empty --shared-libs=%libz3 | FileCheck %s --check-prefix=NOASSERTS
+//  NOASSERTS: Bound reached with no violations!
+
+hw.module @Empty() {
+}
