@@ -255,7 +255,7 @@ private:
   // parameterization.  When this is happening, two external modules will have
   // the same `defname`.  This is a mechanism to ensure we don't create the same
   // external class twice.
-  DenseMap<StringRef, om::ClassLike> externalClassMap;
+  DenseMap<StringAttr, om::ClassLike> externalClassMap;
 };
 
 struct PathTracker {
@@ -1092,10 +1092,13 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
 
   // Take the name from the FIRRTL Class or Module to create the OM Class name.
   StringRef className = moduleLike.getName();
+  StringAttr baseClassNameAttr = moduleLike.getNameAttr();
 
   // Use the defname for external modules.
-  if (auto externMod = dyn_cast<FExtModuleOp>(moduleLike.getOperation()))
+  if (auto externMod = dyn_cast<FExtModuleOp>(moduleLike.getOperation())) {
     className = externMod.getExtModuleName();
+    baseClassNameAttr = externMod.getExtModuleNameAttr();
+  }
 
   // If the op is a Module or ExtModule, the OM Class would conflict with the HW
   // Module, so give it a suffix. There is no formal ABI for this yet.
@@ -1108,10 +1111,10 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
           moduleLike.getOperation())) {
     // External modules are "deduplicated" via their defname.  Don't create a
     // new external class if we've already created one for this defname.
-    auto it = externalClassMap.find(className);
+    auto it = externalClassMap.find(baseClassNameAttr);
     if (it == externalClassMap.end())
       it = externalClassMap
-               .insert({className,
+               .insert({baseClassNameAttr,
                         convertExtClass(moduleLike, builder, className + suffix,
                                         formalParamNames, hasContainingModule)})
                .first;
