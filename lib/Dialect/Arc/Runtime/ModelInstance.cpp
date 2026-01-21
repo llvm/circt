@@ -17,7 +17,9 @@
 #include <string_view>
 #include <vector>
 
-namespace circt::arc::runtime {
+using namespace circt::arc::runtime;
+
+namespace circt::arc::runtime::impl {
 
 // Global counter for instances
 static uint64_t instanceIDsGlobal = 0;
@@ -72,4 +74,4 @@ void ModelInstance::parseArgs(const char *args) {
   }
 }
 
-} // namespace circt::arc::runtime
+} // namespace circt::arc::runtime::impl
