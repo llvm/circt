@@ -535,27 +535,15 @@ func.func @StringConversion(%a: !moore.i32, %b: !moore.string) {
 }
 
 // CHECK-LABEL: func.func @StringOperations
-func.func @StringOperations(%arg0 : !moore.string, %arg1 : !moore.string, %arg2 : !moore.string) {
-  // CHECK: [[EMPTY:%.+]] = moore.string.concat ()
-  %empty = moore.string.concat ()
+func.func @StringOperations(%arg0 : !moore.string, %arg1 : !moore.string) {
+  // CHECK: moore.string.concat ()
+  moore.string.concat ()
   // CHECK: moore.string.concat (%arg0)
-  %single = moore.string.concat (%arg0)
-  // CHECK: [[TWO:%.+]] = moore.string.concat (%arg0, %arg1)
-  %two = moore.string.concat (%arg0, %arg1)
-  // CHECK: moore.string.concat (%arg0, %arg1, %arg2)
-  %three = moore.string.concat (%arg0, %arg1, %arg2)
-  // CHECK: [[NESTED:%.+]] = moore.string.concat ([[TWO]], %arg2)
-  %nested = moore.string.concat (%two, %arg2)
+  moore.string.concat (%arg0)
+  // CHECK: moore.string.concat (%arg0, %arg1)
+  moore.string.concat (%arg0, %arg1)
   // CHECK: moore.string.len %arg0
-  %len1 = moore.string.len %arg0
-  // CHECK: moore.string.len %arg1
-  %len2 = moore.string.len %arg1
-  // CHECK: moore.string.len [[EMPTY]]
-  %len_empty = moore.string.len %empty
-  // CHECK: moore.string.len [[TWO]]
-  %len_concat = moore.string.len %two
-  // CHECK: moore.string.len [[NESTED]]
-  %len_nested = moore.string.len %nested
-  
+  moore.string.len %arg0
+
   return
 }

@@ -763,6 +763,10 @@ module Expressions;
   // CHECK: [[CONV_WORLD:%.+]] = moore.int_to_string [[STR_WORLD]] : i40
   // CHECK: [[VAR_S1:%.+]] = moore.variable [[CONV_WORLD]] : <string>
   string s1 = "World";
+  // CHECK: [[STR_CONCAT:%.+]] = moore.constant_string "Concat" : i48
+  // CHECK: [[CONV_CONCAT:%.+]] = moore.int_to_string [[STR_CONCAT]] : i48
+  // CHECK: [[VAR_SCON:%.+]] = moore.variable [[CONV_CONCAT]] : <string>
+  string concatstr = "Concat";
 
   initial begin
     // CHECK: moore.constant 0 : i32
@@ -788,6 +792,10 @@ module Expressions;
     // CHECK: [[TMP3:%.+]] = moore.read %c
     // CHECK: moore.concat [[TMP1]], [[TMP2]], [[TMP3]] : (!moore.i32, !moore.i32, !moore.i32) -> i96
     a = {a, b, c};
+    // CHECK: [[TMP1:%.+]] = moore.read %s
+    // CHECK: [[TMP2:%.+]] = moore.read %s1
+    // CHECK: moore.string.concat ([[TMP1]], [[TMP2]])
+    concatstr = {s, s1};
     // CHECK: [[TMP1:%.+]] = moore.read %d
     // CHECK: [[TMP2:%.+]] = moore.read %e
     // CHECK: moore.concat [[TMP1]], [[TMP2]] : (!moore.l32, !moore.l32) -> l64

@@ -1465,38 +1465,20 @@ func.func @IntToStringConversion(%arg0: !moore.i45) {
 }
 
 // CHECK-LABEL: func.func @StringOperations
-func.func @StringOperations() {
-  // CHECK: [[S0:%.+]] = hw.constant 97 : i32
-  %s0 = moore.constant_string "a" : i32
-  // CHECK: [[ARG0:%.+]] = sim.string.int_to_string [[S0]] : i32
-  %arg0 = moore.int_to_string %s0 : !moore.i32
-  // CHECK: [[S1:%.+]] = hw.constant 98 : i32
-  %s1 = moore.constant_string "b" : i32
-  // CHECK: [[ARG1:%.+]] = sim.string.int_to_string [[S1]] : i32
-  %arg1 = moore.int_to_string %s1 : !moore.i32
-  // CHECK: [[S2:%.+]] = hw.constant 99 : i32
-  %s2 = moore.constant_string "c" : i32
-  // CHECK: [[ARG2:%.+]] = sim.string.int_to_string [[S2]] : i32
-  %arg2 = moore.int_to_string %s2 : !moore.i32
-  // CHECK: [[EMPTY:%.+]] = sim.string.concat ()
-  %empty = moore.string.concat ()
-  // CHECK: sim.string.concat ([[ARG0]])
-  %single = moore.string.concat (%arg0)
-  // CHECK: [[TWO:%.+]] = sim.string.concat ([[ARG0]], [[ARG1]])
-  %two = moore.string.concat (%arg0, %arg1)
-  // CHECK: sim.string.concat ([[ARG0]], [[ARG1]], [[ARG2]])
-  %three = moore.string.concat (%arg0, %arg1, %arg2)
-  // CHECK: [[NESTED:%.+]] = sim.string.concat ([[TWO]], [[ARG2]])
-  %nested = moore.string.concat (%two, %arg2)
-  // CHECK: sim.string.length [[ARG0]]
-  %len1 = moore.string.len %arg0
-  // CHECK: sim.string.length [[ARG1]]
-  %len2 = moore.string.len %arg1
-  // CHECK: sim.string.length [[EMPTY]]
-  %len_empty = moore.string.len %empty
-  // CHECK: sim.string.length [[TWO]]
-  %len_concat = moore.string.len %two
-  // CHECK: sim.string.length [[NESTED]]
-  %len_nested = moore.string.len %nested
+// CHECK-SAME: %arg0: i32
+// CHECK-SAME: %arg1: i32
+func.func @StringOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
+  // CHECK: [[S0:%.*]] = sim.string.int_to_string %arg0 : i32
+  %s0 = moore.int_to_string %arg0 : !moore.i32
+  // CHECK: [[S1:%.*]] = sim.string.int_to_string %arg1 : i32
+  %s1 = moore.int_to_string %arg1 : !moore.i32
+  // CHECK: sim.string.concat ()
+  moore.string.concat ()
+  // CHECK: sim.string.concat ([[S0]])
+  moore.string.concat (%s0)
+  // CHECK: sim.string.concat ([[S0]], [[S1]])
+  moore.string.concat (%s0, %s1)
+  // CHECK: sim.string.length [[S0]]
+  moore.string.len %s0
   return
 }

@@ -2627,13 +2627,13 @@ def StringGetCOp : StringBuiltin<"getc"> {
 }
 
 def StringConcatOp : StringBuiltin<"concat"> {
-  let summary = "Concatenate dynamic string literals";
+  let summary = "Concatenate strings";
   let description = [{
-    Concatenates an arbitrary number of dynamic strings into one larger
-    dynamic string. The strings are concatenated from left to right, with
-    the first operand appearing at the left start of the result string,
-    and the last operand appearing at the right end. Produces an empty
-    string if no inputs are provided.
+    Concatenates an arbitrary number of strings into one larger string. The 
+    strings are concatenated from left to right, with the first operand 
+    appearing at the left start of the result string, and the last operand 
+    appearing at the right end. Produces an empty string if no inputs are 
+    provided.
   }];
   let arguments = (ins Variadic<StringType>:$inputs);
   let results = (outs StringType:$result);

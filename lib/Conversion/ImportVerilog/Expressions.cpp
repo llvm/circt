@@ -341,8 +341,9 @@ struct ExprVisitor {
   /// Handle concatenations.
   Value visit(const slang::ast::ConcatenationExpression &expr) {
     SmallVector<Value> operands;
-    if (isa<moore::StringType>(context.convertType(*expr.type))) {
+    if (expr.type->isString()) {
       for (auto *operand : expr.operands()) {
+        assert(!isLvalue && "checked by Slang");
         auto value = convertLvalueOrRvalueExpression(*operand);
         if (!value)
           return {};
