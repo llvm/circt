@@ -22,6 +22,7 @@
 namespace circt {
 namespace arc {
 namespace runtime {
+namespace impl {
 
 class ModelInstance {
 public:
@@ -47,6 +48,7 @@ private:
   uint64_t stepCounter = 0;
 };
 
+} // namespace impl
 } // namespace runtime
 } // namespace arc
 } // namespace circt
