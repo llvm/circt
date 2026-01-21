@@ -77,7 +77,7 @@ firrtl.circuit "Layers" {
 
   // CHECK-LABEL: @Layers()
   firrtl.module @Layers() attributes {layers = [@A]} {
-    // CHECK: firrtl.instance enabledLayers @EnabledLayers()
+    // CHECK: firrtl.instance enabledLayers {layers = [@A]} @EnabledLayers()
     firrtl.instance enabledLayers {layers = [@A]} @EnabledLayers()
   }
 }
