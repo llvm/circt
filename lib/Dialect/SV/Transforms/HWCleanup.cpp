@@ -240,6 +240,20 @@ void HWCleanupPass::runOnProceduralRegion(Region &region) {
     // Keep track of the last side effecting operation we've seen.
     if (!mlir::isMemoryEffectFree(&op))
       lastSideEffectingOp = &op;
+
+    if (auto caseZOp = dyn_cast<sv::CaseZOp>(op)) {
+      auto caseZInfos = caseZOp.getCases();
+      if (caseZInfos.end() ==
+          llvm::find_if_not(caseZInfos, [](sv::CaseZInfo info) {
+            return info.pattern.isDefault() || info.pattern.isConstant();
+          })) {
+        // can converse to CaseOp
+        OpBuilder builder(&op);
+        builder.create<sv::CaseOp>(caseZOp->getLoc(), caseZOp);
+        caseZOp.erase();
+        anythingChanged = true;
+      }
+    }
   }
 
   for (Operation &op : llvm::make_early_inc_range(body)) {
