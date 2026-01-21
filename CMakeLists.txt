@@ -629,6 +629,12 @@ if (CIRCT_INCLUDE_TESTS)
   add_definitions(-DCIRCT_INCLUDE_TESTS)
 endif()
 
+# Add circt-tblgen early, since it sets a few variables needed by other parts of
+# the project.
+add_subdirectory(tools/circt-tblgen)
+set(CIRCT_TABLEGEN_EXE "${CIRCT_TABLEGEN_EXE}" CACHE INTERNAL "")
+set(CIRCT_TABLEGEN_TARGET "${CIRCT_TABLEGEN_TARGET}" CACHE INTERNAL "")
+
 add_subdirectory(include/circt)
 add_subdirectory(lib)
 if(CIRCT_INCLUDE_TOOLS)

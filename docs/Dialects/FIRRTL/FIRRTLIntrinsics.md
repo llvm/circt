@@ -14,32 +14,7 @@ and type checking.
 
 ## Supported Intrinsics
 
-### circt_sizeof
-
-Returns the size of a type.  The input port is not read from and may be any 
-type, including uninferred types.
-
-| Argument | Type | Description                                |
-| -------- | ---- | ------------------------------------------ |
-| i        | Any  | value whose type's size is to be returned  |
-
-| Result | Type     | Description       |
-| ------ | -------- | ----------------- |
-| size   | UInt<32> | Size of type of i |
-
-### circt_isX
-
-Tests if the value is a literal `x`.  FIRRTL doesn't have a notion of 'x per-se, 
-but x can come in to the system from external modules and from SV constructs.  
-Verification constructs need to explicitly test for 'x.
-
-| Argument | Type | Description   |
-| -------- | ---- | ------------- |
-| i        | Any  | value to test |
-
-| Result | Type    | Description |
-| ------ | ------- | ----------- |
-| found  | UInt<1> | i is `x`    |
+[include "Dialects/FIRRTLIntrinsics.md.inc"]
 
 ### circt_plusargs_value
 
