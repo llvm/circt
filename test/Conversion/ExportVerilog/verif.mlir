@@ -210,16 +210,15 @@ hw.module @Properties(in %clk: i1, in %a: i1, in %b: i1) {
 }
 
 // CHECK-LABEL: module Precedence
-hw.module @Precedence(in %a: i1, in %b: i1) {
-  %true = hw.constant true
+hw.module @Precedence(in %clk: i1, in %a: i1, in %b: i1) {
   // CHECK: assert property ((a or ##0 b) and b);
-  %a0 = ltl.delay %true, posedge, %b, 0, 0 : i1
+  %a0 = ltl.delay %clk, posedge, %b, 0, 0 : i1
   %a1 = ltl.or %a, %a0 : i1, !ltl.sequence
   %a2 = ltl.and %a1, %b : !ltl.sequence, i1
   sv.assert_property %a2 : !ltl.sequence
 
   // CHECK: assert property (##1 (a or ##0 b));
-  %d0 = ltl.delay %true, posedge, %a1, 1, 0 : !ltl.sequence
+  %d0 = ltl.delay %clk, posedge, %a1, 1, 0 : !ltl.sequence
   sv.assert_property %d0 : !ltl.sequence
 
   // CHECK: assert property (not (a or ##0 b));
