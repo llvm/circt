@@ -68,7 +68,7 @@ firrtl.circuit "Bound" {
 
 firrtl.circuit "Layers" {
   firrtl.layer @A bind {}
-  // CHECK-LABEL: firrtl.module @EnabledLayers
+  // CHECK-LABEL: firrtl.module private @EnabledLayers
   // CHECK-NOT: InlineAnnotation
   firrtl.module private @EnabledLayers() attributes {layers = [@A]} {
     %0 = firrtl.constant 0 : !firrtl.uint<32>
