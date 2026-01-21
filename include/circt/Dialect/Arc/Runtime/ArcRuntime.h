@@ -66,6 +66,10 @@ ARC_RUNTIME_EXPORT void arcRuntimeDeleteInstance(struct ArcState *instance);
 /// Pre-Eval hook. Must be called by the driver once before every `eval` step.
 ARC_RUNTIME_EXPORT void arcRuntimeOnEval(struct ArcState *instance);
 
+/// Must be called by the driver after the model's `initial` function and
+/// before the first `onEval` call.
+ARC_RUNTIME_EXPORT void arcRuntimeOnInitialized(struct ArcState *instance);
+
 /// Return the API version of the runtime library.
 ARC_RUNTIME_EXPORT uint64_t arcRuntimeGetAPIVersion();
 

@@ -35,6 +35,7 @@ public:
     return !!modelInfo->modelName ? modelInfo->modelName : "<NULL>";
   }
 
+  void onInitialized();
   void onEval() { ++stepCounter; }
 
 private:

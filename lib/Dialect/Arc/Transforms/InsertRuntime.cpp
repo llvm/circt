@@ -77,6 +77,19 @@ struct OnEvalFunction : public RuntimeFunction {
   }
 };
 
+struct OnInitializedFunction : public RuntimeFunction {
+  explicit OnInitializedFunction(ImplicitLocOpBuilder &builder) {
+    /*
+     void arcRuntimeIR_onInitialized(uint8_t *modelState);
+    */
+    auto ptrTy = LLVM::LLVMPointerType::get(builder.getContext());
+    auto voidTy = LLVM::LLVMVoidType::get(builder.getContext());
+    llvmFuncOp = LLVM::LLVMFuncOp::create(
+        builder, runtime::APICallbacks::symNameOnInitialized,
+        LLVM::LLVMFunctionType::get(voidTy, {ptrTy}));
+  }
+};
+
 // Lowering Helpers
 
 struct RuntimeModelContext; // Forward declaration
@@ -89,7 +102,7 @@ struct GlobalRuntimeContext {
   explicit GlobalRuntimeContext(ModuleOp moduleOp)
       : mlirModuleOp(moduleOp), globalBuilder(createBuilder(moduleOp)),
         allocInstanceFn(globalBuilder), deleteInstanceFn(globalBuilder),
-        onEvalFn(globalBuilder) {}
+        onEvalFn(globalBuilder), onInitializedFn(globalBuilder) {}
 
   /// Delete all API functions that are never called
   void deleteUnusedFunctions() {
@@ -114,8 +127,9 @@ struct GlobalRuntimeContext {
   AllocInstanceFunction allocInstanceFn;
   DeleteInstanceFunction deleteInstanceFn;
   OnEvalFunction onEvalFn;
-  const std::array<RuntimeFunction *, 3> apiFunctions = {
-      &allocInstanceFn, &deleteInstanceFn, &onEvalFn};
+  OnInitializedFunction onInitializedFn;
+  const std::array<RuntimeFunction *, 4> apiFunctions = {
+      &allocInstanceFn, &deleteInstanceFn, &onEvalFn, &onInitializedFn};
 
   // Maps model symbol name to model context
   SmallDenseMap<StringAttr, std::unique_ptr<RuntimeModelContext>> models;
@@ -234,6 +248,7 @@ LogicalResult RuntimeModelContext::lower() {
 LogicalResult RuntimeModelContext::lowerInstance(SimInstantiateOp &instance) {
   // For now, these get invoked by the lowering of SimInstantiateOp
   globalContext.allocInstanceFn.used = true;
+  globalContext.onInitializedFn.used = true;
   globalContext.deleteInstanceFn.used = true;
 
   // Insert onEval call for every step call

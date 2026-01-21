@@ -33,6 +33,9 @@ TEST(ArcRuntimeTest, InstanceLifecycle) {
     notZero |= (state1->modelState[i] != 0);
   EXPECT_FALSE(notZero);
 
+  arcRuntimeOnInitialized(state1);
+  arcRuntimeOnInitialized(state0);
+
   for (auto i = 0; i < 24; ++i)
     arcRuntimeOnEval(state0);
 
@@ -88,6 +91,7 @@ TEST(ArcRuntimeTest, InstanceLifecycleIR) {
   for (uint64_t i = 0; i < bogusStateBytes; ++i)
     notZero |= (state->modelState[i] != 0);
   EXPECT_FALSE(notZero);
+  api.fnOnInitialized(modelState);
   for (auto i = 0; i < 128; ++i)
     api.fnOnEval(modelState);
   api.fnDeleteInstance(modelState);
