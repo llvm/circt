@@ -40,6 +40,9 @@ namespace hw {
 const int INDEX_SENTINEL_VALUE = -1;
 const int TOMBSTONE_SENTINEL_VALUE = -1;
 
+/// Represents a specific bit from a source SSA Value.
+/// This structure tracks the original value and the specific bit index
+/// to facilitate the analysis of bit permutations and slices.
 struct Bit {
   mlir::Value source;
   int index;
@@ -109,6 +112,9 @@ using namespace circt;
 using namespace comb;
 using namespace hw;
 
+/// Maintains a mapping of bit indices to their source origins.
+/// This helper class is used to detect vectorization patterns such as
+/// contiguous sequences (linear), reversed sequences, or permutations.
 struct BitArray {
   llvm::DenseMap<int, Bit> bits;
 
@@ -116,66 +122,120 @@ struct BitArray {
   BitArray(const BitArray &other);
   BitArray();
 
+  /// Returns the Bit info for a specific index in the array.
   Bit getBit(int index);
 
+  /// Checks if all bits in the array originate from the same source Value.
   bool allBitsHaveSameSource() const;
+
+  /// Checks if the bits form a contiguous, linear sequence from the source
+  /// input. Example: output[0] comes from source[0], output[1] from source[1],
+  /// etc.
   bool isLinear(int size, mlir::Value sourceInput);
+
+  /// Checks if the bits form a perfect reverse sequence from the source input.
+  /// Example: output[0] comes from source[N], output[1] from source[N-1], etc.
   bool isReverse(int size, mlir::Value sourceInput);
 
+  /// If all bits come from the same source, returns that Value. Otherwise
+  /// returns null.
   mlir::Value getSingleSourceValue() const;
   size_t size() const;
 };
 
+/// This class analyzes the HW module to identify scalar operations that can be
+/// merged into vector operations (structural vectorization) or rewritten
+/// as vector shuffles/extracts (bit-level vectorization).
 class Vectorizer {
 public:
   Vectorizer(hw::HWModuleOp module);
 
   hw::HWModuleOp module;
+
+  /// Maps values to their decomposed bit provenance.
   llvm::DenseMap<mlir::Value, BitArray> bitArrays;
 
   bool isBitConstant(mlir::Value val, unsigned bitIndex, bool expectedVal);
 
+  /// Recursively traces back the definition of a bit to find its original
+  /// source. Handles operations like Extract, Concat, And, Or to find the
+  /// underlying bit.
   mlir::Value findBitSource(mlir::Value vectorVal, unsigned bitIndex,
                             int depth = 0);
+
+  /// Recursively creates a vectorized version of a scalar subgraph.
+  /// Used when structural equivalence is detected across bit slices.
   mlir::Value
   vectorizeSubgraph(OpBuilder &builder, mlir::Value slice0Val,
                     unsigned vectorWidth,
                     llvm::DenseMap<mlir::Value, mlir::Value> &vectorizedMap);
 
+  /// Checks if the logic cone producing 'output' is composed of structurally
+  /// equivalent slices that can be merged into a vector operation.
   bool canVectorizeStructurally(mlir::Value output);
+
+  /// Compares two subgraphs (slices) to determine if they are isomorphic
+  /// with respect to a constant stride in their input extractions.
   bool areSubgraphsEquivalent(
       mlir::Value slice0Val, mlir::Value sliceNVal, unsigned sliceIndex,
       int stride, llvm::DenseMap<mlir::Value, mlir::Value> &slice0ToNMap);
+
+  /// Verifies if a permutation map is valid (bijective mapping for the given
+  /// width).
   bool isValidPermutation(const llvm::SmallVector<unsigned> &perm,
                           unsigned bitWidth);
+
+  /// Checks if partial vectorization (grouping subsets of bits) is possible
+  /// when full vectorization fails
   bool canApplyPartialVectorization(Value oldOutputVal);
 
+  /// Detects cross-bit dependencies that would prevent safe vectorization.
+  /// Ensures that vectorizing doesn't introduce cycles or hazard dependencies.
   bool hasCrossBitDependencies(mlir::Value outputVal);
+
   void collectLogicCone(mlir::Value val, llvm::DenseSet<mlir::Value> &cone);
   bool isSafeSharedValue(mlir::Value val,
                          llvm::SmallPtrSetImpl<mlir::Value> &visited);
   bool isSafeSharedValue(mlir::Value val);
 
+  /// Analyses ExtractOps to seed the bit provenance map.
   void processExtractOps();
+
+  /// Analyses ConcatOps to merge bit provenance from operands.
   void processConcatOps();
 
   void processOrOp(comb::OrOp op);
   void processAndOp(comb::AndOp op);
+
+  /// Processes logical operations to propagate bit information where
+  /// applicable.
   void processLogicalOps();
   void processXorOp(comb::XorOp op);
 
+  /// Entry point for the vectorization process.
   void vectorize();
 
+  /// Replaces the output with the direct source input (Identity transform).
   void applyLinearVectorization(mlir::Value oldOutputVal,
                                 mlir::Value sourceInput);
+
+  /// Inserts a comb.reverse operation to handle reversed bit sequences.
   void applyReverseVectorization(mlir::OpBuilder &builder,
                                  mlir::Value oldOutputVal,
                                  mlir::Value sourceInput);
+
+  /// Handles arbitrary permutations by extracting and concatenating chunks.
   void applyMixVectorization(mlir::OpBuilder &builder, mlir::Value oldOutputVal,
                              mlir::Value sourceInput,
                              const llvm::SmallVector<unsigned> &map);
+
+  /// Generates vectorized logic (e.g., AND, OR, XOR) replacing scalar
+  /// instances.
   void applyStructuralVectorization(OpBuilder &builder,
                                     mlir::Value oldOutputVal);
+
+  /// Attempts to vectorize contiguous chunks of bits if full vectorization
+  /// isn't possible.
   void applyPartialVectorization(OpBuilder &builder, mlir::Value oldOutputVal);
 };
 
