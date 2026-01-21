@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_HW_HWSTRUCTURE_TD
 
 include "circt/Dialect/HW/HWAttributes.td"
+include "circt/Dialect/HW/HWAttributesNaming.td"
 include "circt/Dialect/HW/HWDialect.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
@@ -653,6 +654,24 @@ def HierPathOp : HWOp<"hierpath",
     /// to a module or an instance of a module);
     bool isComponent();
     }];
+}
+
+def DontTouchOp : HWOp<"donttouch",
+                       [DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
+                        HasParent<"ModuleOp">]> {
+  let summary = "A user of an inner ref that blocks removal";
+  let description = [{
+    An operation that marks an InnerRef as having external users.  The operation
+    with the InnerRef should not be optimized in any way and may be used
+    externally by name.
+
+    This operation roughly implements the notion of "don't touch" that many
+    Verilog tools understand.
+  }];
+  let arguments = (ins InnerRefAttr:$ref);
+  let assemblyFormat = [{
+    $ref attr-dict
+  }];
 }
 
 // Edge behavior for trigger blocks. Currently these map 1:1 to SV event
