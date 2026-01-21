@@ -31,6 +31,9 @@ namespace ImportVerilog {
 
 using moore::Domain;
 
+/// Convert Slang edge kind to LTL dialect clock edge.
+ltl::ClockEdge convertEdgeKindLTL(const slang::ast::EdgeKind edge);
+
 /// Port lowering information.
 struct PortLowering {
   const slang::ast::PortSymbol &ast;
