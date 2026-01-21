@@ -737,6 +737,8 @@ void ConvertVerifToSMTPass::runOnOperation() {
               numAssertions++;
             if (auto inst = dyn_cast<InstanceOp>(curOp))
               worklist.push_back(symbolTable.lookup(inst.getModuleName()));
+            if (auto func = dyn_cast<func::CallOp>(curOp))
+              worklist.push_back(symbolTable.lookup(func.getCallee()));
           });
           // TODO: probably negligible compared to actual model checking time
           // but cacheing the assertion count of modules would speed this up
@@ -747,6 +749,8 @@ void ConvertVerifToSMTPass::runOnOperation() {
                 numAssertions++;
               if (auto inst = dyn_cast<InstanceOp>(curOp))
                 worklist.push_back(symbolTable.lookup(inst.getModuleName()));
+              if (auto func = dyn_cast<func::CallOp>(curOp))
+                worklist.push_back(symbolTable.lookup(func.getCallee()));
             });
             if (numAssertions > 1)
               break;
