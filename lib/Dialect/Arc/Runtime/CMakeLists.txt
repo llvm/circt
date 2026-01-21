@@ -23,7 +23,7 @@ endif()
 install(FILES
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Arc/Runtime/ArcRuntime.h
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Arc/Runtime/Common.h
-  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/circt/Dialect/Arc/ArcRuntime
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/circt/Dialect/Arc/Runtime
   COMPONENT CIRCTArcRuntime
 )
 

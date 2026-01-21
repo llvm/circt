@@ -1456,3 +1456,10 @@ func.func @TimeConversion(%arg0: !moore.l64, %arg1: !moore.time) -> (!moore.time
   // CHECK-NEXT: return [[TMP0]], [[TMP1]]
   return %0, %1 : !moore.time, !moore.l64
 }
+
+// CHECK-LABEL: func.func @IntToStringConversion
+func.func @IntToStringConversion(%arg0: !moore.i45) {
+  // CHECK-NEXT: sim.string.int_to_string %arg0 : i45
+  moore.int_to_string %arg0 : i45
+  return
+}

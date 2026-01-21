@@ -573,6 +573,35 @@ def StringConcatOp : SimOp<"string.concat", [Pure]> {
   let hasFolder = true;
 }
 
+def IntToStringOp: SimOp<"string.int_to_string", [Pure]> {
+  let summary = "Convert an integer into a string";
+  let description = [{
+    Converts an integer value to a string following Verilog semantics, where
+    string literals are represented as right-aligned bitvectors.
+    
+    The operation reads the integer byte-by-byte, interpreting each non-zero
+    byte as an ASCII character. Zero-valued bytes are skipped and
+    not included in the output string. See Sec 6.16 of the standard saying
+    "A string variable shall not contain the special character "\0". 
+    Assigning the value 0 to a string character shall be ignored"
+    
+    Example:
+      Consider the hex value 0x00_00_00_48_00_00_6C_6F
+      Reading from MSB to LSB and filtering out null bytes:
+        - 0x48 = 'H'
+        - 0x6C = 'l'
+        - 0x6F = 'o'
+      This produces the string "Hlo", not "\0\0\0H\0\0lo".
+  }];
+
+  let arguments = (ins AnyInteger:$input);
+  let results = (outs DynamicStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
+}
+
 //===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//

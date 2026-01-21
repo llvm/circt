@@ -42,9 +42,9 @@ using namespace circt::arc::runtime;
   abort();
 }
 
-static inline ModelInstance *getModelInstance(ArcState *instance) {
+static inline impl::ModelInstance *getModelInstance(ArcState *instance) {
   assert(instance->impl != nullptr && "Instance is null");
-  return reinterpret_cast<ModelInstance *>(instance->impl);
+  return reinterpret_cast<impl::ModelInstance *>(instance->impl);
 }
 
 ArcState *arcRuntimeAllocateInstance(const ArcRuntimeModelInfo *model,
@@ -60,14 +60,14 @@ ArcState *arcRuntimeAllocateInstance(const ArcRuntimeModelInfo *model,
       calloc(1, sizeof(ArcState) + model->numStateBytes));
   assert(reinterpret_cast<intptr_t>(&statePtr->modelState[0]) % 16 == 0 &&
          "Simulation state must be 16 byte aligned");
-  statePtr->impl = new ModelInstance(model, args, statePtr);
+  statePtr->impl = new impl::ModelInstance(model, args, statePtr);
   statePtr->magic = ARC_RUNTIME_MAGIC;
   return statePtr;
 }
 
 void arcRuntimeDeleteInstance(ArcState *instance) {
   if (instance->impl)
-    delete reinterpret_cast<ModelInstance *>(instance->impl);
+    delete reinterpret_cast<impl::ModelInstance *>(instance->impl);
   free(instance);
 }
 

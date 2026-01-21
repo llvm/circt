@@ -418,6 +418,15 @@ LogicalResult LowerModule::lowerModule() {
       continue;
     }
 
+    // If the port is zero-width, then we don't need annotation trackers.
+    // LowerToHW removes zero-width ports and it will error if there are inner
+    // symbols on zero-width things it is trying to remove.
+    if (auto firrtlType = type_dyn_cast<FIRRTLType>(port.type))
+      if (hasZeroBitWidth(firrtlType)) {
+        portAnnotations.push_back(port.annotations.getArrayAttr());
+        continue;
+      }
+
     SmallVector<Annotation> newAnnotations;
     DistinctAttr id;
     for (auto indexAttr : domainAttr.getAsRange<IntegerAttr>()) {

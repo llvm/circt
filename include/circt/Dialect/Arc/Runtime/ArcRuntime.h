@@ -27,7 +27,7 @@
 #define ARC_RUNTIME_EXPORT extern "C" __attribute__((visibility("default")))
 #endif
 
-#else // #ifndef ARC_RUNTIME_EXPORT
+#else // #ifdef ARC_RUNTIME_ENABLE_EXPORT
 
 #ifdef _WIN32
 #define ARC_RUNTIME_EXPORT extern "C" __declspec(dllimport)

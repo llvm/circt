@@ -211,7 +211,7 @@ install(TARGETS ESICppRuntime
 )
 
 install(FILES ${ESICppRuntimeHeaders}
-  DESTINATION include/esi
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/esi
   COMPONENT ESIRuntime
 )
 
@@ -393,6 +393,6 @@ if (XRT_PATH)
 endif()
 
 install(FILES ${ESICppRuntimeBackendHeaders}
-  DESTINATION include/esi/backends
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/esi/backends
   COMPONENT ESIRuntime
 )

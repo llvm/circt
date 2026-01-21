@@ -17,6 +17,8 @@
 #ifndef CIRCT_DIALECT_ARC_RUNTIME_JITBIND_H
 #define CIRCT_DIALECT_ARC_RUNTIME_JITBIND_H
 
+#include "circt/Dialect/Arc/Runtime/Common.h"
+
 namespace circt {
 namespace arc {
 namespace runtime {
