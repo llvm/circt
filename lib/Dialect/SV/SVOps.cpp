@@ -108,6 +108,28 @@ verifyMacroIdentSymbolUses(Operation *op, FlatSymbolRefAttr attr,
 }
 
 //===----------------------------------------------------------------------===//
+// VerbatimOp
+//===----------------------------------------------------------------------===//
+
+/// Helper function to verify inner refs in symbols array for verbatim ops.
+static LogicalResult verifyVerbatimSymbols(Operation *op, ArrayAttr symbols,
+                                           hw::InnerRefNamespace &ns) {
+  // Verify each symbol reference in the symbols array
+  for (auto symbol : symbols) {
+    if (auto innerRef = dyn_cast<hw::InnerRefAttr>(symbol)) {
+      if (!ns.lookup(innerRef))
+        return op->emitError() << "inner symbol reference " << innerRef
+                               << " could not be found";
+    }
+  }
+  return success();
+}
+
+LogicalResult VerbatimOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  return verifyVerbatimSymbols(getOperation(), getSymbols(), ns);
+}
+
+//===----------------------------------------------------------------------===//
 // VerbatimExprOp
 //===----------------------------------------------------------------------===//
 
@@ -133,9 +155,17 @@ void VerbatimExprOp::getAsmResultNames(
   getVerbatimExprAsmResultNames(getOperation(), std::move(setNameFn));
 }
 
+LogicalResult VerbatimExprOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  return verifyVerbatimSymbols(getOperation(), getSymbols(), ns);
+}
+
 void VerbatimExprSEOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
   getVerbatimExprAsmResultNames(getOperation(), std::move(setNameFn));
+}
+
+LogicalResult VerbatimExprSEOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  return verifyVerbatimSymbols(getOperation(), getSymbols(), ns);
 }
 
 //===----------------------------------------------------------------------===//
