@@ -18,7 +18,7 @@
 
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Support/LLVM.h"
-#include "circt/Support/NPNClass.h"
+#include "circt/Support/TruthTable.h"
 #include "mlir/IR/Operation.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SetVector.h"

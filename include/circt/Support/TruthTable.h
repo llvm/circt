@@ -6,14 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This header file defines NPN (Negation-Permutation-Negation) canonical forms
-// and binary truth tables for boolean function representation and equivalence
-// checking in combinational logic optimization.
+// This header file defines truth table utilities.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_SUPPORT_NPNCLASS_H
-#define CIRCT_SUPPORT_NPNCLASS_H
+#ifndef CIRCT_SUPPORT_TRUTHTABLE_H
+#define CIRCT_SUPPORT_TRUTHTABLE_H
 
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/APInt.h"
@@ -35,6 +33,9 @@ namespace circt {
 /// - Input 10 -> Output 0
 /// - Input 11 -> Output 1
 /// This would be stored as the bit pattern 0001 in the truth table.
+///
+/// TODO: Rename this to MultiOutputTruthTable since for single-output functions
+///       we can just use llvm::APInt directly.
 struct BinaryTruthTable {
   unsigned numInputs;  ///< Number of inputs for this boolean function
   unsigned numOutputs; ///< Number of outputs for this boolean function
@@ -161,6 +162,50 @@ struct NPNClass {
   void dump(llvm::raw_ostream &os = llvm::errs()) const;
 };
 
+//===----------------------------------------------------------------------===//
+// Truth Table Utilities
+//===----------------------------------------------------------------------===//
+
+/// Create a mask for a variable in the truth table.
+///
+/// This function generates a bitmask that identifies which minterms have a
+/// particular value for a given variable in a truth table representation.
+///
+/// For positive=true: mask has 1s where var=1 in the truth table encoding
+/// For positive=false: mask has 1s where var=0 in the truth table encoding
+///
+/// For example, with 3 variables (a,b,c) where c is LSB:
+/// - createVarMask(3, 0, true) creates mask for c=1: 0b10101010
+/// - createVarMask(3, 1, true) creates mask for b=1: 0b11001100
+/// - createVarMask(3, 2, true) creates mask for a=1: 0b11110000
+///
+/// Parameters:
+///   numVars: Number of variables in the truth table
+///   var: Variable index (0 = LSB)
+///   positive: true for var=1 mask, false for var=0 mask
+///
+/// Returns: APInt mask with numBits = 2^numVars
+llvm::APInt createVarMask(unsigned numVars, unsigned varIndex, bool positive);
+
+/// Compute cofactor of a Boolean function for a given variable.
+///
+/// A cofactor of a function f with respect to variable x is the function
+/// obtained by fixing x to a constant value:
+///   - Negative cofactor f|x=0 : f with variable x set to 0
+///   - Positive cofactor f|x=1 : f with variable x set to 1
+///
+/// Cofactors are fundamental in Boolean function decomposition and the
+/// Shannon expansion: f = x'*f|x=0 + x*f|x=1
+///
+/// In truth table representation, cofactors are computed by selecting the
+/// subset of minterms where the variable has the specified value, then
+/// replicating that pattern across the full truth table width.
+///
+/// This function returns a pair of cofactors (negative, positive) for the
+/// specified variable index.
+std::pair<llvm::APInt, llvm::APInt>
+computeCofactors(const llvm::APInt &f, unsigned numVars, unsigned varIndex);
+
 } // namespace circt
 
-#endif // CIRCT_SUPPORT_NPNCLASS_H
+#endif // CIRCT_SUPPORT_TRUTHTABLE_H

@@ -24,7 +24,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Support/LLVM.h"
-#include "circt/Support/NPNClass.h"
+#include "circt/Support/TruthTable.h"
 #include "circt/Support/UnusedOpPruner.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/Builders.h"
@@ -157,24 +157,10 @@ FailureOr<BinaryTruthTable> static computeTruthTable(
   // Create a truth table with the given number of inputs and outputs
   BinaryTruthTable truthTable(numInputs, numOutputs);
   // The truth table size is 2^numInputs
-  uint32_t tableSize = 1 << numInputs;
   // Create a map to evaluate the operation
   DenseMap<Value, APInt> eval;
-  for (uint32_t i = 0; i < numInputs; ++i) {
-    // Create alternating bit pattern for input i
-    // For input i, bits alternate every 2^i positions
-    uint32_t blockSize = 1 << i;
-    // Create the repeating pattern: blockSize zeros followed by blockSize ones
-    uint32_t patternWidth = 2 * blockSize;
-    APInt pattern(patternWidth, 0);
-    assert(patternWidth <= tableSize && "Pattern width exceeds table size");
-    // Set the upper half of the pattern to 1s
-    pattern = APInt::getHighBitsSet(patternWidth, blockSize);
-    // Use getSplat to repeat this pattern across the full
-    // table size
-
-    eval[inputArgs[i]] = APInt::getSplat(tableSize, pattern);
-  }
+  for (uint32_t i = 0; i < numInputs; ++i)
+    eval[inputArgs[i]] = circt::createVarMask(numInputs, i, true);
   // Simulate the operation
   for (auto *op : ops) {
     if (op->getNumResults() == 0)
