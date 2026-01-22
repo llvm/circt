@@ -1,4 +1,4 @@
-//  RUN: not circt-bmc %s -b 10 --module ModuleAsserts --shared-libs=%libz3 2>&1 | FileCheck %s
+//  RUN: not circt-bmc %s -b 10 --module ModuleAsserts --shared-libs=%libz3 --flatten-modules=false 2>&1 | FileCheck %s
 //  CHECK: error: bounded model checking problems with multiple assertions are not yet correctly handled - instead, you can assert the conjunction of your assertions
 
 hw.module @OneAssert(in %in: i1) {

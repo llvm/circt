@@ -18,6 +18,7 @@ target_link_libraries(circt-bmc
   CIRCTEmitTransforms
   CIRCTHW
   CIRCTHWToSMT
+  CIRCTHWTransforms
   CIRCTOMTransforms
   CIRCTSeq
   CIRCTSMTToZ3LLVM
