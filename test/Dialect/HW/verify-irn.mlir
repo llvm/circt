@@ -49,3 +49,19 @@ sv.verbatim "// {{0}}" {symbols = [#hw.innerNameRef<@VerbatimInnerRef::@nonexist
 hw.module @VerbatimInnerRef() {
   hw.output
 }
+
+// -----
+
+// expected-error @below {{inner symbol reference #hw.innerNameRef<@VerbatimExprInnerRef::@nonexistent> could not be found}}
+%0 = sv.verbatim.expr "MACRO" : () -> i32 {symbols = [#hw.innerNameRef<@VerbatimExprInnerRef::@nonexistent>]}
+hw.module @VerbatimExprInnerRef() {
+  hw.output
+}
+
+// -----
+
+// expected-error @below {{inner symbol reference #hw.innerNameRef<@VerbatimExprSEInnerRef::@nonexistent> could not be found}}
+%0 = sv.verbatim.expr.se "MACRO" : () -> i32 {symbols = [#hw.innerNameRef<@VerbatimExprSEInnerRef::@nonexistent>]}
+hw.module @VerbatimExprSEInnerRef() {
+  hw.output
+}
