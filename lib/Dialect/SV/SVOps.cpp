@@ -108,6 +108,23 @@ verifyMacroIdentSymbolUses(Operation *op, FlatSymbolRefAttr attr,
 }
 
 //===----------------------------------------------------------------------===//
+// VerbatimOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult VerbatimOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  // Verify each symbol reference in the symbols array
+  for (auto symbol : getSymbols()) {
+    if (auto innerRef = dyn_cast<hw::InnerRefAttr>(symbol)) {
+      auto target = ns.lookup(innerRef);
+      if (!target)
+        return emitError() << "inner symbol reference " << innerRef
+                           << " could not be found";
+    }
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // VerbatimExprOp
 //===----------------------------------------------------------------------===//
 

@@ -41,3 +41,11 @@ hw.module @XMRRefD() {
 hw.module @XMRRefOp() {
   hw.instance_choice "foo" sym @foo option "bar" @XMRRefA or @XMRRefB if "B" or @XMRRefC if "C"() -> ()
 }
+
+// -----
+
+// expected-error @below {{inner symbol reference #hw.innerNameRef<@VerbatimInnerRef::@nonexistent> could not be found}}
+sv.verbatim "// {{0}}" {symbols = [#hw.innerNameRef<@VerbatimInnerRef::@nonexistent>]}
+hw.module @VerbatimInnerRef() {
+  hw.output
+}
