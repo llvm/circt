@@ -341,6 +341,21 @@ struct ExprVisitor {
   /// Handle concatenations.
   Value visit(const slang::ast::ConcatenationExpression &expr) {
     SmallVector<Value> operands;
+    if (expr.type->isString()) {
+      for (auto *operand : expr.operands()) {
+        assert(!isLvalue && "checked by Slang");
+        auto value = convertLvalueOrRvalueExpression(*operand);
+        if (!value)
+          return {};
+        value = context.materializeConversion(
+            moore::StringType::get(context.getContext()), value, false,
+            value.getLoc());
+        if (!value)
+          return {};
+        operands.push_back(value);
+      }
+      return moore::StringConcatOp::create(builder, loc, operands);
+    }
     for (auto *operand : expr.operands()) {
       // Handle empty replications like `{0{...}}` which may occur within
       // concatenations. Slang assigns them a `void` type which we can check for
