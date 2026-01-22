@@ -1163,7 +1163,8 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ConventionAttr convention,
                          ArrayRef<PortInfo> ports, ArrayAttr knownLayers,
                          StringRef defnameAttr, ArrayAttr annotations,
-                         ArrayAttr parameters, ArrayAttr layers) {
+                         ArrayAttr parameters, ArrayAttr layers,
+                         ArrayAttr externalRequirements) {
   buildModule<FExtModuleOp>(builder, result, name, ports, annotations, layers);
   auto &properties = result.getOrAddProperties<Properties>();
   properties.setConvention(convention);
@@ -1175,6 +1176,8 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
   if (!parameters)
     parameters = builder.getArrayAttr({});
   properties.setParameters(parameters);
+  if (externalRequirements)
+    properties.setExternalRequirements(externalRequirements);
 }
 
 void FIntModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -1576,6 +1579,11 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   if (auto layers = op->getAttrOfType<ArrayAttr>("layers"))
     if (layers.empty())
       omittedAttrs.push_back("layers");
+
+  // If there are no external requirements, then omit the empty array.
+  if (auto extReqs = op->getAttrOfType<ArrayAttr>("externalRequirements"))
+    if (extReqs.empty())
+      omittedAttrs.push_back("externalRequirements");
 
   p.printOptionalAttrDictWithKeyword(op->getAttrs(), omittedAttrs);
 }
