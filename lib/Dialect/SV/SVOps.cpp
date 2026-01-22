@@ -117,8 +117,7 @@ static LogicalResult verifyVerbatimSymbols(Operation *op, ArrayAttr symbols,
   // Verify each symbol reference in the symbols array
   for (auto symbol : symbols) {
     if (auto innerRef = dyn_cast<hw::InnerRefAttr>(symbol)) {
-      auto target = ns.lookup(innerRef);
-      if (!target)
+      if (!ns.lookup(innerRef))
         return op->emitError() << "inner symbol reference " << innerRef
                                << " could not be found";
     }
