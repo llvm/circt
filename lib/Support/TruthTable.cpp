@@ -369,7 +369,7 @@ circt::computeCofactors(const APInt &f, unsigned numVars, unsigned var) {
   APInt selected0 = f & mask0;
   APInt selected1 = f & mask1;
 
-  // Replicate the selected bits across the full truth table using getSplat
+  // Replicate the selected bits across the full truth table
   APInt cof0 = selected0 | selected0.shl(shift);
   APInt cof1 = selected1 | selected1.lshr(shift);
 

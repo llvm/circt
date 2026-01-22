@@ -35,8 +35,7 @@ namespace circt {
 /// This would be stored as the bit pattern 0001 in the truth table.
 ///
 /// TODO: Rename this to MultiOutputTruthTable since for single-output functions
-/// we
-///       can just use llvm::APInt directly.
+///       we can just use llvm::APInt directly.
 struct BinaryTruthTable {
   unsigned numInputs;  ///< Number of inputs for this boolean function
   unsigned numOutputs; ///< Number of outputs for this boolean function
