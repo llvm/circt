@@ -41,9 +41,7 @@ struct AllocateStatePass
   void runOnOperation() override;
   void allocateBlock(Block *block);
   void allocateOps(Value storage, Block *block, ArrayRef<Operation *> ops);
-
-  void tapNamedState(AllocStateOp allocOp, mlir::Type valueType,
-                     IntegerAttr offset);
+  void tapNamedState(AllocStateOp allocOp, IntegerAttr offset);
 
   SmallVector<Attribute> traceTaps;
 };
@@ -64,11 +62,15 @@ void AllocateStatePass::runOnOperation() {
     modelOp.setTraceTapsAttr(ArrayAttr::get(modelOp.getContext(), traceTaps));
 }
 
+/// Create a TraceTap attribute for the given `allocOp` if it carries one or
+/// more names. Annotates all StateWriteOp users of the allocated state to
+/// preserve the association between the write operations and the signal.
 void AllocateStatePass::tapNamedState(AllocStateOp allocOp,
-                                      mlir::Type valueType,
                                       IntegerAttr offset) {
   TraceTapAttr tapAttr;
+  auto valueType = cast<StateType>(allocOp.getType()).getType();
   auto typeAttr = TypeAttr::get(valueType);
+  // Check for "name" or "names" attribute
   if (auto namesAttr = allocOp->getAttrOfType<ArrayAttr>("names")) {
     if (!namesAttr.empty()) {
       tapAttr = TraceTapAttr::get(allocOp.getContext(), typeAttr,
@@ -81,17 +83,21 @@ void AllocateStatePass::tapNamedState(AllocStateOp allocOp,
   }
   if (!tapAttr)
     return;
-
+  traceTaps.push_back(tapAttr);
+  // Annotate the StateWrite users with the current ModelOp and the newly
+  // created tap's index in the array.
   auto indexAttr = IntegerAttr::get(
       IntegerType::get(allocOp.getContext(), 64,
                        IntegerType::SignednessSemantics::Unsigned),
-      traceTaps.size());
-  traceTaps.push_back(tapAttr);
+      traceTaps.size() - 1);
+  auto modelSymAttr = FlatSymbolRefAttr::get(getOperation().getSymNameAttr());
+
   for (auto user : allocOp.getResult().getUsers()) {
     if (auto writeUser = dyn_cast<StateWriteOp>(user)) {
+      // TODO: Can a StateWriteOp be shared across models?
+      assert(!(writeUser.getTraceTapIndex() || writeUser.getTraceTapModel()));
       writeUser.setTraceTapIndexAttr(indexAttr);
-      writeUser.setTraceTapModelAttr(
-          FlatSymbolRefAttr::get(getOperation().getSymNameAttr()));
+      writeUser.setTraceTapModelAttr(modelSymAttr);
     }
   }
 }
@@ -141,8 +147,7 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
       gettersToCreate.emplace_back(result, storage, offset);
       if (insertTraceTaps)
         if (auto allocStateOp = dyn_cast<AllocStateOp>(op))
-          tapNamedState(allocStateOp,
-                        cast<StateType>(result.getType()).getType(), offset);
+          tapNamedState(allocStateOp, offset);
       continue;
     }
 

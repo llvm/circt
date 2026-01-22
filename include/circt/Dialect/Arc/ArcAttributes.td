@@ -15,7 +15,9 @@ include "mlir/IR/BuiltinAttributeInterfaces.td"
 def TraceTapAttr : AttrDef<ArcDialect, "TraceTap"> {
   let mnemonic = "trace_tap";
   let summary = "Metadata of a signal with trace instrumentation";
-  let parameters = (ins "mlir::TypeAttr":$sigType, "uint64_t":$stateOffset,
+  let parameters = (ins
+      "mlir::TypeAttr":$sigType,
+      "uint64_t":$stateOffset,
       "mlir::ArrayAttr":$names);
   let assemblyFormat = "`<` $sigType `,` $stateOffset `,` $names `>`";
 }
