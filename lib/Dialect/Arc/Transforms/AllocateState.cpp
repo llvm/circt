@@ -92,7 +92,7 @@ void AllocateStatePass::tapNamedState(AllocStateOp allocOp,
       traceTaps.size() - 1);
   auto modelSymAttr = FlatSymbolRefAttr::get(getOperation().getSymNameAttr());
 
-  for (auto user : allocOp.getResult().getUsers()) {
+  for (auto *user : allocOp.getResult().getUsers()) {
     if (auto writeUser = dyn_cast<StateWriteOp>(user)) {
       // TODO: Can a StateWriteOp be shared across models?
       assert(!(writeUser.getTraceTapIndex() || writeUser.getTraceTapModel()));
