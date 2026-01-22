@@ -5335,9 +5335,11 @@ private:
   ParseResult parseLayerList(SmallVectorImpl<Attribute> &result);
   ParseResult parseEnableLayerSpec(SmallVectorImpl<Attribute> &result);
   ParseResult parseKnownLayerSpec(SmallVectorImpl<Attribute> &result);
+  ParseResult parseRequiresSpec(SmallVectorImpl<Attribute> &result);
   ParseResult parseModuleLayerSpec(ArrayAttr &enabledLayers);
-  ParseResult parseExtModuleLayerSpec(ArrayAttr &enabledLayers,
-                                      ArrayAttr &knownLayers);
+  ParseResult parseExtModuleAttributesSpec(ArrayAttr &enabledLayers,
+                                           ArrayAttr &knownLayers,
+                                           ArrayAttr &externalRequirements);
 
   ParseResult parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                             SmallVectorImpl<SMLoc> &resultPortLocs,
@@ -5452,10 +5454,12 @@ ParseResult FIRCircuitParser::parseModuleLayerSpec(ArrayAttr &enabledLayers) {
   return success();
 }
 
-ParseResult FIRCircuitParser::parseExtModuleLayerSpec(ArrayAttr &enabledLayers,
-                                                      ArrayAttr &knownLayers) {
+ParseResult FIRCircuitParser::parseExtModuleAttributesSpec(
+    ArrayAttr &enabledLayers, ArrayAttr &knownLayers,
+    ArrayAttr &externalRequirements) {
   SmallVector<Attribute> enabledLayersBuffer;
   SmallVector<Attribute> knownLayersBuffer;
+  SmallVector<Attribute> requirementsBuffer;
   while (true) {
     auto tokenKind = getToken().getKind();
     // Parse an enablelayer spec.
@@ -5470,7 +5474,13 @@ ParseResult FIRCircuitParser::parseExtModuleLayerSpec(ArrayAttr &enabledLayers,
         return failure();
       continue;
     }
-    // Didn't parse a layer spec.
+    // Parse a requires spec.
+    if (tokenKind == FIRToken::kw_requires) {
+      if (parseRequiresSpec(requirementsBuffer))
+        return failure();
+      continue;
+    }
+    // Didn't parse a layer spec or requires.
     break;
   }
 
@@ -5484,6 +5494,7 @@ ParseResult FIRCircuitParser::parseExtModuleLayerSpec(ArrayAttr &enabledLayers,
 
   enabledLayers = ArrayAttr::get(getContext(), enabledLayersBuffer);
   knownLayers = ArrayAttr::get(getContext(), knownLayersBuffer);
+  externalRequirements = ArrayAttr::get(getContext(), requirementsBuffer);
   return success();
 }
 
@@ -5508,6 +5519,21 @@ ParseResult
 FIRCircuitParser::parseKnownLayerSpec(SmallVectorImpl<Attribute> &result) {
   consumeToken(FIRToken::kw_knownlayer);
   return parseLayerList(result);
+}
+
+ParseResult
+FIRCircuitParser::parseRequiresSpec(SmallVectorImpl<Attribute> &result) {
+  consumeToken(FIRToken::kw_requires);
+  do {
+    StringRef requireStr;
+    if (parseGetSpelling(requireStr) ||
+        parseToken(FIRToken::string, "expected string after 'requires'"))
+      return failure();
+    // Remove the surrounding quotes from the string.
+    result.push_back(
+        StringAttr::get(getContext(), requireStr.drop_front().drop_back()));
+  } while (consumeIf(FIRToken::comma));
+  return success();
 }
 
 /// portlist ::= port*
@@ -5784,20 +5810,23 @@ ParseResult FIRCircuitParser::parseExtClass(CircuitOp circuit,
 }
 
 /// extmodule ::=
-///        'extmodule' id ':' info?
-///        INDENT portlist defname? parameter-list ref-list DEDENT
+///        'extmodule' id requires? ':' info?
+///        INDENT portlist defname? parameter-list DEDENT
 /// defname   ::= 'defname' '=' id NEWLINE
+/// requires  ::= 'requires' string (',' string)*
 ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
                                              unsigned indent) {
   StringAttr name;
   ArrayAttr enabledLayers;
   ArrayAttr knownLayers;
+  ArrayAttr externalRequirements;
   SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_extmodule);
   if (parseId(name, "expected extmodule name") ||
-      parseExtModuleLayerSpec(enabledLayers, knownLayers) ||
+      parseExtModuleAttributesSpec(enabledLayers, knownLayers,
+                                   externalRequirements) ||
       parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
       info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
     return failure();
@@ -5833,7 +5862,7 @@ ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
   auto annotations = ArrayAttr::get(getContext(), {});
   auto extModuleOp = FExtModuleOp::create(
       builder, info.getLoc(), name, conventionAttr, portList, knownLayers,
-      defName, annotations, parameters, enabledLayers);
+      defName, annotations, parameters, enabledLayers, externalRequirements);
   auto visibility = isMainModule ? SymbolTable::Visibility::Public
                                  : SymbolTable::Visibility::Private;
   SymbolTable::setSymbolVisibility(extModuleOp, visibility);
