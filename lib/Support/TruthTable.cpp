@@ -6,19 +6,19 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements NPN (Negation-Permutation-Negation) canonical forms
-// and binary truth tables for boolean function representation and equivalence
-// checking in combinational logic optimization.
+// This file implements truth table utilities.
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Support/NPNClass.h"
+#include "circt/Support/TruthTable.h"
 
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/MathExtras.h"
 #include <algorithm>
 #include <cassert>
 
 using namespace circt;
+using llvm::APInt;
 
 //===----------------------------------------------------------------------===//
 // BinaryTruthTable
@@ -271,4 +271,107 @@ void NPNClass::dump(llvm::raw_ostream &os) const {
   os << "\n";
   os << "  Canonical truth table:\n";
   truthTable.dump(os);
+}
+
+/// Precomputed masks for variables in truth tables up to 6 variables (64 bits).
+///
+/// In a truth table, bit position i represents minterm i, where the binary
+/// representation of i gives the variable values. For example, with 3 variables
+/// (a,b,c), bit 5 (binary 101) represents minterm a=1, b=0, c=1.
+///
+/// These masks identify which minterms have a particular variable value:
+/// - Masks[0][var] = minterms where var=0 (for negative literal !var)
+/// - Masks[1][var] = minterms where var=1 (for positive literal var)
+static constexpr uint64_t kVarMasks[2][6] = {
+    {0x5555555555555555ULL, 0x3333333333333333ULL, 0x0F0F0F0F0F0F0F0FULL,
+     0x00FF00FF00FF00FFULL, 0x0000FFFF0000FFFFULL,
+     0x00000000FFFFFFFFULL}, // var=0 masks
+    {0xAAAAAAAAAAAAAAAAULL, 0xCCCCCCCCCCCCCCCCULL, 0xF0F0F0F0F0F0F0F0ULL,
+     0xFF00FF00FF00FF00ULL, 0xFFFF0000FFFF0000ULL,
+     0xFFFFFFFF00000000ULL}, // var=1 masks
+};
+
+/// Create a mask for a variable in the truth table.
+/// For positive=true: mask has 1s where var=1 in the truth table encoding
+/// For positive=false: mask has 1s where var=0 in the truth table encoding
+template <bool positive>
+static APInt createVarMaskImpl(unsigned numVars, unsigned varIndex) {
+  assert(numVars <= 64 && "Number of variables too large");
+  assert(varIndex < numVars && "Variable index out of bounds");
+  uint64_t numBits = 1u << numVars;
+
+  // Use precomputed table for small cases (up to 6 variables = 64 bits)
+  if (numVars <= 6) {
+    assert(varIndex < 6);
+    uint64_t maskValue = kVarMasks[positive][varIndex];
+    // Mask off bits beyond numBits
+    if (numBits < 64)
+      maskValue &= (1ULL << numBits) - 1;
+    return APInt(numBits, maskValue);
+  }
+
+  // For larger cases, use getSplat to create repeating pattern
+  // Pattern width is 2^(var+1) bits
+  uint64_t patternWidth = 1u << (varIndex + 1);
+  APInt pattern(patternWidth, 0);
+
+  // Fill the appropriate half of the pattern
+  uint64_t shift = 1u << varIndex;
+  if constexpr (positive) {
+    // Set upper half: bits [shift, patternWidth)
+    pattern.setBits(shift, patternWidth);
+  } else {
+    // Set lower half: bits [0, shift)
+    pattern.setBits(0, shift);
+  }
+
+  return APInt::getSplat(numBits, pattern);
+}
+
+APInt circt::createVarMask(unsigned numVars, unsigned varIndex, bool positive) {
+  if (positive)
+    return createVarMaskImpl<true>(numVars, varIndex);
+  return createVarMaskImpl<false>(numVars, varIndex);
+}
+
+/// Compute cofactor of a Boolean function for a given variable.
+///
+/// A cofactor of a function f with respect to variable x is the function
+/// obtained by fixing x to a constant value:
+///   - Negative cofactor f|x=0 : f with variable x set to 0
+///   - Positive cofactor f|x=1 : f with variable x set to 1
+///
+/// Cofactors are fundamental in Boolean function decomposition and the
+/// Shannon expansion: f = x'*f|x=0 + x*f|x=1
+///
+/// In truth table representation, cofactors are computed by selecting the
+/// subset of minterms where the variable has the specified value, then
+/// replicating that pattern across the full truth table width.
+///
+/// Returns: (negative cofactor, positive cofactor)
+std::pair<APInt, APInt>
+circt::computeCofactors(const APInt &f, unsigned numVars, unsigned var) {
+  assert(numVars <= 64 && "Number of variables too large");
+  assert(var < numVars && "Variable index out of bounds");
+  assert(f.getBitWidth() == (1u << numVars) && "Truth table size mismatch");
+  uint64_t numBits = 1u << numVars;
+  uint64_t shift = 1u << var;
+
+  // Build masks using getSplat to replicate bit patterns
+  // For var at position k, we need blocks of size 2^k where:
+  // - mask0 selects lower 2^k bits of each 2^(k+1)-bit block (var=0)
+  // - mask1 selects upper 2^k bits of each 2^(k+1)-bit block (var=1)
+  APInt blockPattern = APInt::getLowBitsSet(2 * shift, shift);
+  APInt mask0 = APInt::getSplat(numBits, blockPattern);
+  APInt mask1 = mask0.shl(shift);
+
+  // Extract bits for each cofactor
+  APInt selected0 = f & mask0;
+  APInt selected1 = f & mask1;
+
+  // Replicate the selected bits across the full truth table using getSplat
+  APInt cof0 = selected0 | selected0.shl(shift);
+  APInt cof1 = selected1 | selected1.lshr(shift);
+
+  return {cof0, cof1};
 }
