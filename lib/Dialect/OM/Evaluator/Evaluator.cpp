@@ -161,6 +161,8 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                 .Case<ObjectOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), op.getLoc());
                 })
+                .Case<UnknownValueOp>(
+                    [&](auto op) { return evaluateUnknownValue(op, loc); })
                 .Default([&](Operation *op) {
                   auto error = op->emitError("unable to evaluate value");
                   error.attachNote() << "value: " << value;
@@ -365,6 +367,9 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
             })
             .Case([&](FrozenEmptyPathOp op) {
               return evaluateEmptyPath(op, actualParams, loc);
+            })
+            .Case<UnknownValueOp>([&](UnknownValueOp op) {
+              return evaluateUnknownValue(op, loc);
             })
             .Default([&](Operation *op) {
               auto error = op->emitError("unable to evaluate value");
@@ -676,6 +681,12 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateEmptyPath(
     FrozenEmptyPathOp op, ActualParameters actualParams, Location loc) {
   auto valueResult = getOrCreateValue(op, actualParams, loc).value();
   return valueResult;
+}
+
+FailureOr<evaluator::EvaluatorValuePtr>
+circt::om::Evaluator::evaluateUnknownValue(UnknownValueOp op, Location loc) {
+  return success(std::make_shared<evaluator::UnknownValue>(
+      evaluator::UnknownValue(op.getContext(), loc)));
 }
 
 //===----------------------------------------------------------------------===//

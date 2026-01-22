@@ -1474,7 +1474,8 @@ om.class @Foo(
   d: !om.list<!om.integer>,
   e: !om.frozenbasepath,
   f: !om.frozenpath,
-  g: !om.integer
+  g: !om.integer,
+  h: !om.integer
 ) {
   %0 = om.constant #om.integer<1 : i4> : !om.integer
   %1 = om.integer.add %0, %unknown_int : !om.integer
@@ -1483,7 +1484,8 @@ om.class @Foo(
   %4 = om.frozenbasepath_create %unknown_frozenbasepath "Foo/bar"
   %5 = om.frozenpath_create reference %unknown_frozenbasepath "Foo/bar:Bar>w.a"
   %6 = om.object.field %unknown_class, [@b] : (!om.class.type<@Bar>) -> !om.integer
-  om.class.fields %unknown_int, %1, %2, %3, %4, %5, %6 : !om.integer, !om.integer, !om.list<!om.integer>, !om.list<!om.integer>, !om.frozenbasepath, !om.frozenpath, !om.integer
+  %7 = om.unknown : !om.integer
+  om.class.fields %unknown_int, %1, %2, %3, %4, %5, %6, %7 : !om.integer, !om.integer, !om.list<!om.integer>, !om.list<!om.integer>, !om.frozenbasepath, !om.frozenpath, !om.integer, !om.integer
 }
 )MLIR";
 
@@ -1509,7 +1511,7 @@ om.class @Foo(
 
   auto *object = llvm::cast<evaluator::ObjectValue>(result.value().get());
 
-  ASSERT_EQ(object->getFieldNames().size(), 7ul);
+  ASSERT_EQ(object->getFieldNames().size(), 8ul);
 
   for (auto fieldName : object->getFieldNames()) {
     auto field = object->getField(cast<StringAttr>(fieldName));
