@@ -830,7 +830,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL:  hw.module private @SimpleEnum(in %source : i2, out sink : i2) {
   // CHECK-NEXT:    %valid = sv.localparam {value = 0 : i2} : i2
-  // CHECK-NEXT:    %0 = comb.icmp bin eq %source, %valid : i2 
+  // CHECK-NEXT:    %0 = comb.icmp bin eq %source, %valid : i2
   // CHECK-NEXT:    hw.output %source : i2
   // CHECK-NEXT:  }
   firrtl.module private @SimpleEnum(in %source: !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>,
@@ -1898,5 +1898,20 @@ firrtl.circuit "Foo" {
     // CHECK: dbg.variable "d", [[TMP]]#1 : i1337
     dbg.variable "c", %c : !firrtl.uint<42>
     dbg.variable "d", %d : !firrtl.uint<1337>
+  }
+}
+
+// -----
+
+// Test that externalRequirements is transferred from
+// firrtl.extmodule to hw.module.extern during lowering.
+firrtl.circuit "ExternalRequirements" {
+  // CHECK-LABEL: hw.module.extern @ExtMod()
+  // CHECK-SAME: circt.external_requirements = ["lib1", "lib2"]
+  firrtl.extmodule @ExtMod() attributes {
+    externalRequirements = ["lib1", "lib2"]
+  }
+  firrtl.module @ExternalRequirements() {
+    firrtl.instance ext @ExtMod()
   }
 }

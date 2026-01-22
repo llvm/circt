@@ -771,6 +771,20 @@ firrtl.circuit "Foo" {
     ]
   }
 
+  // CHECK:      extmodule ExtModuleWithRequirements requires "libdv", "vcs>=202505" :
+  // CHECK-NEXT:   input clk : Clock
+  firrtl.extmodule @ExtModuleWithRequirements(in clk: !firrtl.clock) attributes {
+    externalRequirements = ["libdv", "vcs>=202505"]
+  }
+
+  // CHECK:      extmodule ExtModuleWithKnownLayersAndRequires
+  // CHECK-NEXT:     knownlayer GroupA
+  // CHECK-NEXT:     requires "libfoo", "libbar" :
+  firrtl.extmodule @ExtModuleWithKnownLayersAndRequires() attributes {
+    knownLayers = [@GroupA],
+    externalRequirements = ["libfoo", "libbar"]
+  }
+
   // CHECK:      module ModuleWithLargeEnabledLayers
   // CHECK-NEXT:     enablelayer Group1234567890.Group1234567890
   // CHECK-NEXT:     enablelayer
