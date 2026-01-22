@@ -1466,19 +1466,18 @@ func.func @IntToStringConversion(%arg0: !moore.i45) {
 
 // CHECK-LABEL: func.func @StringOperations
 // CHECK-SAME: %arg0: i32
-// CHECK-SAME: %arg1: i32
-func.func @StringOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
-  // CHECK: [[S0:%.*]] = sim.string.int_to_string %arg0 : i32
-  %s0 = moore.int_to_string %arg0 : !moore.i32
-  // CHECK: [[S1:%.*]] = sim.string.int_to_string %arg1 : i32
-  %s1 = moore.int_to_string %arg1 : !moore.i32
+// CHECK-SAME: %arg1: !sim.dstring
+// CHECK-SAME: %arg2: !sim.dstring
+func.func @StringOperations(%arg0: !moore.i32, %arg1: !moore.string, %arg2: !moore.string) {
+  // CHECK: sim.string.int_to_string %arg0 : i32
+  moore.int_to_string %arg0 : i32
   // CHECK: sim.string.concat ()
   moore.string.concat ()
-  // CHECK: sim.string.concat ([[S0]])
-  moore.string.concat (%s0)
-  // CHECK: sim.string.concat ([[S0]], [[S1]])
-  moore.string.concat (%s0, %s1)
-  // CHECK: sim.string.length [[S0]]
-  moore.string.len %s0
+  // CHECK: sim.string.concat (%arg1)
+  moore.string.concat (%arg1)
+  // CHECK: sim.string.concat (%arg1, %arg2)
+  moore.string.concat (%arg1, %arg2)
+  // CHECK: sim.string.length %arg1
+  moore.string.len %arg1
   return
 }
