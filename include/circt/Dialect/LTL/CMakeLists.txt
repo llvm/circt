@@ -11,3 +11,8 @@ add_dependencies(circt-headers CIRCTLTLEnumsIncGen)
 mlir_tablegen(LTLFolds.cpp.inc -gen-rewriters)
 add_public_tablegen_target(CIRCTLTLFoldsIncGen)
 add_dependencies(circt-headers CIRCTLTLFoldsIncGen)
+
+set(LLVM_TARGET_DEFINITIONS LTLPasses.td)
+mlir_tablegen(LTLPasses.h.inc -gen-pass-decls)
+add_public_tablegen_target(CIRCTLTLTransformsIncGen)
+add_dependencies(circt-headers CIRCTLTLTransformsIncGen)

@@ -29,6 +29,7 @@
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Dialect/Kanagawa/KanagawaPasses.h"
 #include "circt/Dialect/LLHD/LLHDPasses.h"
+#include "circt/Dialect/LTL/LTLPasses.h"
 #include "circt/Dialect/MSFT/MSFTPasses.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Dialect/OM/OMPasses.h"
@@ -76,6 +77,7 @@ inline void registerAllPasses() {
   hw::registerPasses();
   kanagawa::registerPasses();
   llhd::registerPasses();
+  ltl::registerPasses();
   moore::registerPasses();
   msft::registerPasses();
   om::registerPasses();
