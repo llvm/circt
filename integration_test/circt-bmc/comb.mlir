@@ -60,3 +60,16 @@ hw.module @ModuleAsserts(in %i0: i1, in %i1: i1) {
   hw.instance "a" @OneAssert(in: %i0: i1) -> ()
   hw.instance "b" @OneAssert(in: %i1: i1) -> ()
 }
+
+// Test assert merging across *public* module boundaries
+//  RUN: circt-bmc %s -b 10 --module PublicModuleAsserts --shared-libs=%libz3 | FileCheck %s --check-prefix=PUBMODASSERTS
+//  PUBMODASSERTS: Assertion can be violated!
+
+hw.module @PublicOneAssert(in %in: i1) {
+  verif.assert %in : i1
+}
+
+hw.module @PublicModuleAsserts(in %i0: i1, in %i1: i1) {
+  hw.instance "a" @PublicOneAssert(in: %i0: i1) -> ()
+  hw.instance "b" @OneAssert(in: %i1: i1) -> ()
+}
