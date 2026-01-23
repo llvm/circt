@@ -84,6 +84,7 @@ public:
 {% if model.initialFnSym %}
     {{ model.initialFnSym }}(&storage[0]);
 {% endif %}
+    arcRuntimeOnInitialized(runtimeInstance);
   }
 
   ~{{ model.name }}() {

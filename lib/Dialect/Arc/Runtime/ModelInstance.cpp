@@ -48,6 +48,14 @@ ModelInstance::~ModelInstance() {
   state->impl = nullptr;
 }
 
+void ModelInstance::onInitialized() {
+  if (verbose) {
+    std::cout << "[ArcRuntime] "
+              << "Instance with ID " << instanceID << " initialized"
+              << std::endl;
+  }
+}
+
 void ModelInstance::parseArgs(const char *args) {
   if (!args)
     return;

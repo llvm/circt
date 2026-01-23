@@ -462,6 +462,12 @@ struct SimInstantiateOpLowering
                            ValueRange{allocated});
     }
 
+    // Call the runtime's 'onInitialized' function if present.
+    if (useRuntime)
+      LLVM::CallOp::create(rewriter, loc, TypeRange{},
+                           runtime::APICallbacks::symNameOnInitialized,
+                           {allocated});
+
     // Execute the body.
     rewriter.inlineBlockBefore(&adaptor.getBody().getBlocks().front(), op,
                                {allocated});

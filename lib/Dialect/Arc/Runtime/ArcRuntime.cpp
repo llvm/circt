@@ -77,6 +77,10 @@ void arcRuntimeOnEval(ArcState *instance) {
   getModelInstance(instance)->onEval();
 }
 
+void arcRuntimeOnInitialized(ArcState *instance) {
+  getModelInstance(instance)->onInitialized();
+}
+
 ArcState *arcRuntimeGetStateFromModelState(uint8_t *modelState,
                                            uint64_t offset) {
   if (!modelState)
@@ -98,6 +102,10 @@ uint8_t *arcRuntimeIR_allocInstance(const ArcRuntimeModelInfo *model,
 
 void arcRuntimeIR_onEval(uint8_t *modelState) {
   arcRuntimeOnEval(arcRuntimeGetStateFromModelState(modelState, 0));
+}
+
+void arcRuntimeIR_onInitialized(uint8_t *modelState) {
+  arcRuntimeOnInitialized(arcRuntimeGetStateFromModelState(modelState, 0));
 }
 
 void arcRuntimeIR_deleteInstance(uint8_t *modelState) {
@@ -194,7 +202,7 @@ namespace circt::arc::runtime {
 
 static const APICallbacks apiCallbacksGlobal{
     &arcRuntimeIR_allocInstance, &arcRuntimeIR_deleteInstance,
-    &arcRuntimeIR_onEval, &arcRuntimeIR_format};
+    &arcRuntimeIR_onEval, &arcRuntimeIR_onInitialized, &arcRuntimeIR_format};
 
 const APICallbacks &getArcRuntimeAPICallbacks() { return apiCallbacksGlobal; }
 
