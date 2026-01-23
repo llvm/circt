@@ -88,7 +88,7 @@ arc.model @test io !hw.modty<input x : i1, output y : i1> {
     %cstCAFE = hw.constant 0xCAFE: i16
     %cstTrue = hw.constant 1 : i1
     %0 = arc.alloc_state %arg0 {names = ["foo", "bar"]} : (!arc.storage) -> !arc.state<i16>
-    %1 = arc.alloc_state %arg0 {names = ["baz"]} : (!arc.storage) -> !arc.state<i1>
+    %1 = arc.alloc_state %arg0 {name = "baz"} : (!arc.storage) -> !arc.state<i1>
     // TAPS:   arc.state_write %{{.+}} = %{{.+}} tap @test[0] : <i16>
     // NOTAPS: arc.state_write %{{.+}} = %{{.+}} : <i16>
     arc.state_write %0 = %cstCAFE : !arc.state<i16>
