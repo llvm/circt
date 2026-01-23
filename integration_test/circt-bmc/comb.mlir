@@ -47,3 +47,16 @@ hw.module @TwoAsserts(in %i0: i1, in %i1: i1) {
   verif.assert %cond : i1
   verif.assert %or0 : i1
 }
+
+// Test assert merging across module boundaries
+//  RUN: circt-bmc %s -b 10 --module ModuleAsserts --shared-libs=%libz3 | FileCheck %s --check-prefix=MODASSERTS
+//  MODASSERTS: Assertion can be violated!
+
+hw.module private @OneAssert(in %in: i1) {
+  verif.assert %in : i1
+}
+
+hw.module @ModuleAsserts(in %i0: i1, in %i1: i1) {
+  hw.instance "a" @OneAssert(in: %i0: i1) -> ()
+  hw.instance "b" @OneAssert(in: %i1: i1) -> ()
+}
