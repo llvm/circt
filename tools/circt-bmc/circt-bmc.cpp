@@ -200,8 +200,13 @@ static LogicalResult executeBMC(MLIRContext &context) {
   pm.addPass(om::createStripOMPass());
   pm.addPass(emit::createStripEmitPass());
   pm.addPass(verif::createLowerTestsPass());
-  if (flattenModules)
-    pm.addPass(hw::createFlattenModules());
+  if (flattenModules) {
+    hw::FlattenModulesOptions options;
+    // We can inline public hw.modules since we're only operating over one
+    // builtin.module
+    options.inlinePublic = true;
+    pm.addPass(hw::createFlattenModules(options));
+  }
   pm.addNestedPass<hw::HWModuleOp>(verif::createCombineAssertLikePass());
   pm.addPass(createExternalizeRegisters());
   LowerToBMCOptions lowerToBMCOptions;
