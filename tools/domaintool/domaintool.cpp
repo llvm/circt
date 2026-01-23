@@ -268,10 +268,17 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
     // like an actual ABI that relies on dedicated class names to figure out
     // what an output domain is.
 
+    bool hasDomainInfo = false, hasAssociations = false;
+    for (auto attr : domain->getFieldNames()) {
+      auto name = cast<StringAttr>(attr);
+      hasDomainInfo |= name == "domainInfo_out";
+      hasAssociations |= name == "associations_out";
+    }
+    if (!hasDomainInfo || !hasAssociations)
+      continue;
+
     // Get "domainInfo_out".
     auto domainInfoValue = domain->getField("domainInfo_out");
-    if (failed(domainInfoValue))
-      continue;
     auto *domainInfoObject =
         dyn_cast<om::evaluator::ObjectValue>(domainInfoValue->get());
     if (!domainInfoObject)
@@ -279,8 +286,6 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
 
     // Get "associations_out".
     auto associationsValue = domain->getField("associations_out");
-    if (failed(associationsValue))
-      continue;
     auto *associationsList =
         dyn_cast<om::evaluator::ListValue>(associationsValue->get());
     if (!associationsList)
