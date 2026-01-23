@@ -830,7 +830,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL:  hw.module private @SimpleEnum(in %source : i2, out sink : i2) {
   // CHECK-NEXT:    %valid = sv.localparam {value = 0 : i2} : i2
-  // CHECK-NEXT:    %0 = comb.icmp bin eq %source, %valid : i2
+  // CHECK-NEXT:    %0 = comb.icmp bin eq %source, %valid : i2 
   // CHECK-NEXT:    hw.output %source : i2
   // CHECK-NEXT:  }
   firrtl.module private @SimpleEnum(in %source: !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>,
