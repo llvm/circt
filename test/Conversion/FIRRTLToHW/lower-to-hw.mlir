@@ -1930,3 +1930,18 @@ firrtl.circuit "Foo" {
     dbg.variable "d", %d : !firrtl.uint<1337>
   }
 }
+
+// -----
+
+// Test that externalRequirements is transferred from
+// firrtl.extmodule to hw.module.extern during lowering.
+firrtl.circuit "ExternalRequirements" {
+  // CHECK-LABEL: hw.module.extern @ExtMod()
+  // CHECK-SAME: circt.external_requirements = ["lib1", "lib2"]
+  firrtl.extmodule @ExtMod() attributes {
+    externalRequirements = ["lib1", "lib2"]
+  }
+  firrtl.module @ExternalRequirements() {
+    firrtl.instance ext @ExtMod()
+  }
+}

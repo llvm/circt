@@ -201,7 +201,8 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
       LayerArrayAttr:$knownLayers,
       DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
       DefaultValuedAttr<LayerArrayAttr, "{}">:$layers,
-      DefaultValuedAttr<ArrayRefAttr, "{}">:$domainInfo);
+      DefaultValuedAttr<ArrayRefAttr, "{}">:$domainInfo,
+      DefaultValuedAttr<ArrayAttr, "{}">:$externalRequirements);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -211,7 +212,8 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
       "ArrayAttr":$knownLayers, CArg<"StringRef", "StringRef()">:$defnamAttr,
       CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
       CArg<"ArrayAttr", "ArrayAttr()">:$parameters,
-      CArg<"ArrayAttr", "ArrayAttr()">:$layers)>];
+      CArg<"ArrayAttr", "ArrayAttr()">:$layers,
+      CArg<"ArrayAttr", "ArrayAttr()">:$externalRequirements)>];
 
   let extraModuleClassDeclaration = [{
     void getAsmBlockArgumentNames(mlir::Region &region,

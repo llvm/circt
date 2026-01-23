@@ -1336,6 +1336,11 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
       loweringState.isInDUT(oldModule))
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
 
+  // Transfer external requirements
+  if (auto extReqs = oldModule.getExternalRequirements();
+      extReqs && !extReqs.empty())
+    newModule->setAttr("circt.external_requirements", extReqs);
+
   if (handleForceNameAnnos(oldModule, annos, loweringState))
     return {};
 
@@ -1386,6 +1391,11 @@ sv::SVVerbatimModuleOp FIRRTLModuleLowering::lowerVerbatimExtModule(
       AnnotationSet::removeAnnotations(oldModule, verifBlackBoxAnnoClass) &&
       loweringState.isInDUT(oldModule))
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
+
+  // Transfer external requirements
+  if (auto extReqs = oldModule.getExternalRequirements();
+      extReqs && !extReqs.empty())
+    newModule->setAttr("circt.external_requirements", extReqs);
 
   if (handleForceNameAnnos(oldModule, annos, loweringState))
     return {};

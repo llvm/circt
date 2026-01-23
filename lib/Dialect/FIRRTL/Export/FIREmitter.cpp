@@ -67,6 +67,7 @@ struct Emitter {
                       StringAttr moduleName, DictionaryAttr params);
   void emitEnabledLayers(ArrayRef<Attribute> layers);
   void emitKnownLayers(ArrayRef<Attribute> layers);
+  void emitRequirements(ArrayRef<Attribute> requirements);
   void emitParamAssign(ParamDeclAttr param, Operation *op,
                        std::optional<PPExtString> wordBeforeLHS = std::nullopt);
   void emitParamValue(Attribute value, Operation *op);
@@ -456,6 +457,18 @@ void Emitter::emitKnownLayers(ArrayRef<Attribute> layers) {
   }
 }
 
+void Emitter::emitRequirements(ArrayRef<Attribute> requirements) {
+  if (requirements.empty())
+    return;
+  ps << PP::space;
+  ps.cbox(2, IndentStyle::Block);
+  ps << "requires" << PP::space;
+  llvm::interleaveComma(requirements, ps, [&](Attribute req) {
+    ps.writeQuotedEscaped(cast<StringAttr>(req).getValue());
+  });
+  ps << PP::end;
+}
+
 void Emitter::emitParamAssign(ParamDeclAttr param, Operation *op,
                               std::optional<PPExtString> wordBeforeLHS) {
   if (wordBeforeLHS) {
@@ -563,6 +576,8 @@ void Emitter::emitModule(FExtModuleOp op) {
   ps << "extmodule " << PPExtString(legalize(op.getNameAttr()));
   emitKnownLayers(op.getKnownLayers());
   emitEnabledLayers(op.getLayers());
+  if (auto reqs = op.getExternalRequirements())
+    emitRequirements(reqs.getValue());
   ps << PP::nbsp << ":" << PP::end;
   emitLocation(op);
 
