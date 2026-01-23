@@ -202,7 +202,7 @@ static LogicalResult executeBMC(MLIRContext &context) {
   pm.addPass(verif::createLowerTestsPass());
   if (flattenModules) {
     hw::FlattenModulesOptions options;
-    // We can inline public modules since we're only operating over one
+    // We can inline public hw.modules since we're only operating over one
     // builtin.module
     options.inlinePublic = true;
     pm.addPass(hw::createFlattenModules(options));
