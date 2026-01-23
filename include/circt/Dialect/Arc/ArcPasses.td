@@ -26,8 +26,10 @@ def AddTaps : Pass<"arc-add-taps", "mlir::ModuleOp"> {
 
 def AllocateState : Pass<"arc-allocate-state", "arc::ModelOp"> {
   let summary = "Allocate and layout the global simulation state";
-  let constructor = "circt::arc::createAllocateStatePass()";
   let dependentDialects = ["arc::ArcDialect"];
+  let options = [Option<"insertTraceTaps", "trace-taps", "bool", "false",
+                        "Insert TraceTap attributes for signal tracing">,
+  ];
 }
 
 def ArcCanonicalizer : Pass<"arc-canonicalizer", "mlir::ModuleOp"> {

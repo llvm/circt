@@ -32,15 +32,24 @@ using llvm::SmallMapVector;
 //===----------------------------------------------------------------------===//
 
 namespace {
+
 struct AllocateStatePass
     : public arc::impl::AllocateStateBase<AllocateStatePass> {
+
+  using AllocateStateBase::AllocateStateBase;
+
   void runOnOperation() override;
   void allocateBlock(Block *block);
   void allocateOps(Value storage, Block *block, ArrayRef<Operation *> ops);
+  void tapNamedState(AllocStateOp allocOp, IntegerAttr offset);
+
+  SmallVector<Attribute> traceTaps;
 };
 } // namespace
 
 void AllocateStatePass::runOnOperation() {
+  traceTaps.clear();
+
   ModelOp modelOp = getOperation();
   LLVM_DEBUG(llvm::dbgs() << "Allocating state in `" << modelOp.getName()
                           << "`\n");
@@ -48,6 +57,49 @@ void AllocateStatePass::runOnOperation() {
   // Walk the blocks from innermost to outermost and group all state allocations
   // in that block in one larger allocation.
   modelOp.walk([&](Block *block) { allocateBlock(block); });
+
+  if (!traceTaps.empty())
+    modelOp.setTraceTapsAttr(ArrayAttr::get(modelOp.getContext(), traceTaps));
+}
+
+/// Create a TraceTap attribute for the given `allocOp` if it carries one or
+/// more names. Annotates all StateWriteOp users of the allocated state to
+/// preserve the association between the write operations and the signal.
+void AllocateStatePass::tapNamedState(AllocStateOp allocOp,
+                                      IntegerAttr offset) {
+  TraceTapAttr tapAttr;
+  auto valueType = cast<StateType>(allocOp.getType()).getType();
+  auto typeAttr = TypeAttr::get(valueType);
+  // Check for "name" or "names" attribute
+  if (auto namesAttr = allocOp->getAttrOfType<ArrayAttr>("names")) {
+    if (!namesAttr.empty()) {
+      tapAttr = TraceTapAttr::get(allocOp.getContext(), typeAttr,
+                                  offset.getValue().getZExtValue(), namesAttr);
+    }
+  } else if (auto nameAttr = allocOp->getAttrOfType<StringAttr>("name")) {
+    auto arrayAttr = ArrayAttr::get(nameAttr.getContext(), {nameAttr});
+    tapAttr = TraceTapAttr::get(allocOp.getContext(), typeAttr,
+                                offset.getValue().getZExtValue(), arrayAttr);
+  }
+  if (!tapAttr)
+    return;
+  traceTaps.push_back(tapAttr);
+  // Annotate the StateWrite users with the current ModelOp and the newly
+  // created tap's index in the array.
+  auto indexAttr = IntegerAttr::get(
+      IntegerType::get(allocOp.getContext(), 64,
+                       IntegerType::SignednessSemantics::Unsigned),
+      traceTaps.size() - 1);
+  auto modelSymAttr = FlatSymbolRefAttr::get(getOperation().getSymNameAttr());
+
+  for (auto *user : allocOp.getResult().getUsers()) {
+    if (auto writeUser = dyn_cast<StateWriteOp>(user)) {
+      // TODO: Can a StateWriteOp be shared across models?
+      assert(!(writeUser.getTraceTapIndex() || writeUser.getTraceTapModel()));
+      writeUser.setTraceTapIndexAttr(indexAttr);
+      writeUser.setTraceTapModelAttr(modelSymAttr);
+    }
+  }
 }
 
 void AllocateStatePass::allocateBlock(Block *block) {
@@ -93,6 +145,9 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
       auto offset = builder.getI32IntegerAttr(allocBytes(numBytes));
       op->setAttr("offset", offset);
       gettersToCreate.emplace_back(result, storage, offset);
+      if (insertTraceTaps)
+        if (auto allocStateOp = dyn_cast<AllocStateOp>(op))
+          tapNamedState(allocStateOp, offset);
       continue;
     }
 
@@ -162,8 +217,4 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
   } else {
     storage.setType(StorageType::get(&getContext(), currentByte));
   }
-}
-
-std::unique_ptr<Pass> arc::createAllocateStatePass() {
-  return std::make_unique<AllocateStatePass>();
 }
