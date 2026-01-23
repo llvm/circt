@@ -630,3 +630,35 @@ endclass
 class realFunctionClass implements virtualFunctionClass;
 virtual function void subroutine; endfunction
 endclass
+
+/// Check that elaboration-time parameter accesses evaluate to constants
+
+// CHECK-LABEL: moore.class.classdecl @parameterAccessClass
+
+class parameterAccessClass #(int testParam = 1);
+   extern function int testFunction();
+endclass
+
+// CHECK-LABEL: func.func private @"parameterAccessClass::testFunction
+// CHECK-SAME: (%arg0: !moore.class<@parameterAccessClass>)
+// CHECK: [[C0:%.*]] = moore.constant 7 : i32
+// CHECK: [[C1:%.*]] = moore.constant 7 : i32
+// CHECK: [[SUM:%.*]] = moore.add [[C0]], [[C1]] : i32
+// CHECK: [[C3:%.*]] = moore.constant 7 : i32
+// CHECK: [[SUM2:%.*]] = moore.add [[SUM]], [[C3]] : i32
+// CHECK: return [[SUM2]] : !moore.i32
+
+function int parameterAccessClass::testFunction();
+   return this.testParam + testParam + parameterAccessClass::testParam;
+endfunction
+
+// CHECK-LABEL: func.func private @testFun() -> !moore.i32 {
+// CHECK: [[VC:%.+]] = moore.variable : <class<@parameterAccessClass>>
+// CHECK: [[READ:%.+]] = moore.read [[VC]] : <class<@parameterAccessClass>>
+// CHECK: [[CALL:%.+]] = call @"parameterAccessClass::testFunction"([[READ]]) : (!moore.class<@parameterAccessClass>) -> !moore.i32
+// CHECK: return [[CALL]] : !moore.i32
+
+function int testFun;
+   parameterAccessClass#(7) c;
+   return c.testFunction();
+endfunction

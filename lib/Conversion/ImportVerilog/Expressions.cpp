@@ -425,33 +425,60 @@ struct ExprVisitor {
         return {};
       auto targetTy = cast<moore::ClassHandleType>(valTy);
 
-      // We need to pick the closest ancestor that declares a property with the
-      // relevant name. System Verilog explicitly enforces lexical shadowing, as
-      // shown in IEEE 1800-2023 Section 8.14 "Overridden members".
-      auto upcastTargetTy =
-          context.getAncestorClassWithProperty(targetTy, expr.member.name, loc);
-      if (!upcastTargetTy)
-        return {};
+      // `MemberAccessExpression`s may refer to either variables that may or may
+      // not be compile time constants, or to class parameters which are always
+      // elaboration-time constant.
+      //
+      // We distinguish these cases, and materialize a runtime member access
+      // for variables, but force constant conversion for parameter accesses.
+      //
+      // Also see this discussion:
+      // https://github.com/MikePopoloski/slang/issues/1641
 
-      // Convert the class handle to the required target type for property
-      // shadowing purposes.
-      Value baseVal =
-          context.convertRvalueExpression(expr.value(), upcastTargetTy);
-      if (!baseVal)
-        return {};
+      if (expr.member.kind != slang::ast::SymbolKind::Parameter) {
 
-      // @field and result type !moore.ref<T>.
-      auto fieldSym =
-          mlir::FlatSymbolRefAttr::get(builder.getContext(), expr.member.name);
-      auto fieldRefTy = moore::RefType::get(cast<moore::UnpackedType>(type));
+        // We need to pick the closest ancestor that declares a property with
+        // the relevant name. System Verilog explicitly enforces lexical
+        // shadowing, as shown in IEEE 1800-2023 Section 8.14 "Overridden
+        // members".
+        moore::ClassHandleType upcastTargetTy =
+            context.getAncestorClassWithProperty(targetTy, expr.member.name,
+                                                 loc);
+        if (!upcastTargetTy)
+          return {};
 
-      // Produce a ref to the class property from the (possibly upcast) handle.
-      Value fieldRef = moore::ClassPropertyRefOp::create(
-          builder, loc, fieldRefTy, baseVal, fieldSym);
+        // Convert the class handle to the required target type for property
+        // shadowing purposes.
+        Value baseVal =
+            context.convertRvalueExpression(expr.value(), upcastTargetTy);
+        if (!baseVal)
+          return {};
 
-      // If we need an RValue, read the reference, otherwise return
-      return isLvalue ? fieldRef
-                      : moore::ReadOp::create(builder, loc, fieldRef);
+        // @field and result type !moore.ref<T>.
+        auto fieldSym = mlir::FlatSymbolRefAttr::get(builder.getContext(),
+                                                     expr.member.name);
+        auto fieldRefTy = moore::RefType::get(cast<moore::UnpackedType>(type));
+
+        // Produce a ref to the class property from the (possibly upcast)
+        // handle.
+        Value fieldRef = moore::ClassPropertyRefOp::create(
+            builder, loc, fieldRefTy, baseVal, fieldSym);
+
+        // If we need an RValue, read the reference, otherwise return
+        return isLvalue ? fieldRef
+                        : moore::ReadOp::create(builder, loc, fieldRef);
+      }
+
+      slang::ConstantValue constVal;
+      if (auto param = expr.member.as_if<slang::ast::ParameterSymbol>()) {
+        constVal = param->getValue();
+        if (auto value = context.materializeConstant(constVal, *expr.type, loc))
+          return value;
+      }
+
+      mlir::emitError(loc) << "Parameter " << expr.member.name
+                           << " has no constant value";
+      return {};
     }
 
     mlir::emitError(loc, "expression of type ")
