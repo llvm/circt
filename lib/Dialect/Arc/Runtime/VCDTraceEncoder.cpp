@@ -41,7 +41,7 @@ struct SignalNameRef {
 // Note: This is the encoder's hot spot.
 static inline void dumpSignal(const VCDSignalTableEntry &signal, char *dest,
                               const uint8_t *data) {
-  auto sigStr = signal.id.cStr();
+  const auto *sigStr = signal.id.cStr();
   if (signal.numBits > 1)
     *(dest++) = 'b';
   for (unsigned n = signal.numBits; n > 0; --n)
@@ -94,8 +94,8 @@ void VCDTraceEncoder::initSignalTable() {
   const auto *info = modelInfo->traceInfo;
   signalTable.reserve(info->numTraceTaps);
   for (uint64_t i = 0; i < info->numTraceTaps; ++i)
-    signalTable.emplace_back(VCDSignalTableEntry(
-        i, info->traceTaps[i].stateOffset, info->traceTaps[i].typeBits));
+    signalTable.emplace_back(i, info->traceTaps[i].stateOffset,
+                             info->traceTaps[i].typeBits);
 }
 
 static void appendLegalizedName(std::string &buffer,

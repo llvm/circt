@@ -74,11 +74,11 @@ public:
                   const std::filesystem::path &outFilePath, bool debug);
 
 protected:
-  virtual bool initialize(const ArcState *state) override;
-  virtual void startUpWorker() override;
-  virtual void encode(TraceBuffer &work) override;
-  virtual void windDownWorker() override;
-  virtual void finalize(const ArcState *state) override;
+  bool initialize(const ArcState *state) override;
+  void startUpWorker() override;
+  void encode(TraceBuffer &work) override;
+  void windDownWorker() override;
+  void finalize(const ArcState *state) override;
 
 private:
   /// Create the table of signals
