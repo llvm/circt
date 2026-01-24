@@ -174,10 +174,10 @@ public:
   DummyTraceEncoder(const ArcRuntimeModelInfo *modelInfo, ArcState *state)
       : TraceEncoder(modelInfo, state, 1, false){};
 
-  virtual ~DummyTraceEncoder() = default;
+  ~DummyTraceEncoder() override = default;
 
 protected:
-  virtual bool initialize(const ArcState *state) override { return false; }
+  bool initialize(const ArcState *state) override { return false; }
 };
 
 } // namespace circt::arc::runtime::impl

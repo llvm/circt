@@ -46,7 +46,7 @@ static_assert(sizeof(ArcModelTraceInfo) == 4 * 8);
 
 namespace circt::arc::runtime {
 static constexpr uint32_t defaultTraceBufferCapacity = 256 * 1024;
-}
+} // namespace circt::arc::runtime
 
 #pragma pack(pop)
 

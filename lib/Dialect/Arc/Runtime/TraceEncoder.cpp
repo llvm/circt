@@ -116,7 +116,7 @@ void TraceEncoder::step(const ArcState *state) {
       offsets.back().numSteps++;
     } else {
       // Store the current offset
-      offsets.emplace_back(TraceBufferMarker(state->traceBufferSize));
+      offsets.emplace_back(state->traceBufferSize);
     }
   } else {
     // Untouched buffer: Adjust the first step value.
