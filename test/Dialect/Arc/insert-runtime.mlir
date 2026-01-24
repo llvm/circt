@@ -1,9 +1,9 @@
 // RUN: circt-opt %s --arc-insert-runtime --split-input-file | FileCheck %s --check-prefixes=CHECK,NOARGS
 // RUN: circt-opt %s --arc-insert-runtime='extra-args="debug;bar"' --split-input-file | FileCheck %s --check-prefixes=CHECK,RTARGS
 
-// CHECK-DAG: llvm.func @arcRuntimeIR_allocInstance(!llvm.ptr, !llvm.ptr) -> !llvm.ptr
+// CHECK-DAG: llvm.func @arcRuntimeIR_allocInstance(!llvm.ptr, !llvm.ptr) -> (!llvm.ptr {llvm.align = 16 : i64, llvm.noalias, llvm.nonnull, llvm.noundef})
 // CHECK-DAG: llvm.func @arcRuntimeIR_deleteInstance(!llvm.ptr)
-// CHECK-DAG: llvm.func @arcRuntimeIR_onEval(!llvm.ptr)
+// CHECK-DAG: llvm.func @arcRuntimeIR_onEval(!llvm.ptr {llvm.noalias, llvm.nocapture, llvm.nofree})
 // CHECK-DAG: arc.runtime.model @arcRuntimeModel_counter "counter" numStateBytes 4
 
 arc.runtime.model @noTouchy "dontTouch" numStateBytes 4
