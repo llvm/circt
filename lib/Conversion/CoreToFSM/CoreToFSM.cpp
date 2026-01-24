@@ -649,11 +649,15 @@ public:
           applyOpPatternsGreedily(opsToProcess, patterns, config, &changed);
       opBuilder.setInsertionPoint(stateOp);
       // hw.module uses graph regions that allow cycles (e.g., registers feeding
-      // back into themselves). However, by this point we've replaced all
-      // registers with constants, eliminating any cycles in the use-def chain.
+      // back into themselves). By this point we've replaced all registers with
+      // constants, but cycles in purely combinational logic (e.g., cyclic
+      // muxes) may still exist. Such cycles cannot be converted to FSM.
       bool sorted = sortTopologically(&outputRegion.front());
-      assert(sorted && "unexpected cycle in output region after register "
-                       "replacement");
+      if (!sorted) {
+        moduleOp.emitError()
+            << "cannot convert module with combinational cycles to FSM";
+        return failure();
+      }
       Region &transitionRegion = stateOp.getTransitions();
       llvm::DenseSet<size_t> visitableStates;
       getReachableStates(visitableStates, moduleOp, currentStateIndex,
@@ -817,17 +821,25 @@ public:
               applyOpPatternsGreedily(opsToProcess, patterns, config, &changed);
 
           // hw.module uses graph regions that allow cycles. By this point
-          // we've replaced all registers with constants, eliminating cycles.
+          // we've replaced all registers with constants, but cycles in purely
+          // combinational logic may still exist.
           bool actionSorted = sortTopologically(&actionRegion.front());
-          assert(actionSorted && "unexpected cycle in action block after "
-                                 "register replacement");
+          if (!actionSorted) {
+            moduleOp.emitError()
+                << "cannot convert module with combinational cycles to FSM";
+            return failure();
+          }
         }
 
         // hw.module uses graph regions that allow cycles. By this point
-        // we've replaced all registers with constants, eliminating cycles.
+        // we've replaced all registers with constants, but cycles in purely
+        // combinational logic may still exist.
         bool guardSorted = sortTopologically(&newGuardBlock);
-        assert(guardSorted && "unexpected cycle in guard block after register "
-                              "replacement");
+        if (!guardSorted) {
+          moduleOp.emitError()
+              << "cannot convert module with combinational cycles to FSM";
+          return failure();
+        }
         SmallVector<Operation *> outputOps;
         stateOp.getOutput().walk(
             [&](Operation *op) { outputOps.push_back(op); });

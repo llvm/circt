@@ -87,3 +87,18 @@ hw.module @top_module(in %clk : !seq.clock, in %rst : i1, in %inp : i1, out outp
     %out = hw.instance "child" @instantiated_module(clk: %clk: !seq.clock, rst: %rst: i1, inp: %inp: i1) -> (output: i1)
     hw.output %out : i1
 }
+
+// -----
+
+// Test: Cyclic combinational logic should produce an error.
+// The pass cannot convert modules with cycles in purely combinational logic
+// (e.g., cyclic muxes that don't involve registers).
+// expected-error @+1 {{cannot convert module with combinational cycles to FSM}}
+hw.module @cyclic_muxes(in %clk : !seq.clock, in %rst : i1, out output : i1) {
+    %c0_i1 = hw.constant 0 : i1
+    %state = seq.compreg name "state" %state, %clk reset %rst, %c0_i1 : i1
+    // These two muxes form a combinational cycle
+    %mux1 = comb.mux %rst, %mux2, %state : i1
+    %mux2 = comb.mux %state, %mux1, %rst : i1
+    hw.output %c0_i1 : i1
+}
