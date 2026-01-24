@@ -559,3 +559,96 @@ TEST(CofactorTest, ShannonExpansionProperty) {
     }
   }
 }
+
+//===----------------------------------------------------------------------===//
+// ISOP Extraction Tests
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+/// Helper function to verify ISOP extraction correctness and irredundancy.
+/// Returns the SOPForm for additional verification.
+SOPForm verifyISOP(const llvm::APInt &truthTable, unsigned numVars,
+                   const char *testName = nullptr) {
+  SOPForm sop = extractISOP(truthTable, numVars);
+
+  // Verify correctness: computed truth table matches original
+  EXPECT_EQ(sop.computeTruthTable(), truthTable)
+      << (testName ? testName : "ISOP") << " truth table doesn't match";
+
+  // Verify irredundancy
+  EXPECT_TRUE(sop.isIrredundant())
+      << (testName ? testName : "ISOP") << " is not irredundant";
+
+  return sop;
+}
+
+} // namespace
+
+TEST(ISOPTest, SimpleAND) {
+  // AND function: f(a,b) = a * b
+  SOPForm sop = verifyISOP(llvm::APInt(4, 0b0001), 2);
+
+  EXPECT_EQ(sop.cubes.size(), 1u);
+  EXPECT_EQ(sop.cubes[0].size(), 2u); // (a * b)
+}
+
+TEST(ISOPTest, SimpleOR) {
+  // OR function: f(a,b) = a + b
+  SOPForm sop = verifyISOP(llvm::APInt(4, 0b0111), 2);
+  EXPECT_EQ(sop.cubes.size(), 2u); // (a) + (b)
+}
+
+TEST(ISOPTest, SimpleXOR) {
+  // XOR function: f(a,b) = a ^ b
+  SOPForm sop = verifyISOP(llvm::APInt(4, 0b0110), 2);
+
+  EXPECT_EQ(sop.cubes.size(), 2u); // (a * !b) + (!a * b)
+  for (const auto &cube : sop.cubes)
+    EXPECT_EQ(cube.size(), 2u);
+}
+
+TEST(ISOPTest, Majority3) {
+  // MAJ3 function: f(a,b,c) = (a*b) + (a*c) + (b*c)
+  SOPForm sop = verifyISOP(llvm::APInt(8, 0b11101000), 3);
+
+  EXPECT_EQ(sop.cubes.size(), 3u);
+  for (const auto &cube : sop.cubes)
+    EXPECT_EQ(cube.size(), 2u); // Each cube has 2 literals
+}
+
+TEST(ISOPTest, ConstantZero) {
+  SOPForm sop = verifyISOP(llvm::APInt(4, 0), 2);
+  EXPECT_EQ(sop.cubes.size(), 0u); // No cubes
+}
+
+TEST(ISOPTest, ConstantOne) {
+  // Constant 1: one empty cube
+  SOPForm sop = verifyISOP(llvm::APInt(4, 0b1111), 2);
+
+  EXPECT_EQ(sop.cubes.size(), 1u);
+  EXPECT_EQ(sop.cubes[0].size(), 0u); // Empty cube
+}
+
+TEST(ISOPTest, ComplexFunction) {
+  // Complex 3-input function: f(a,b,c) = a*b + !a*c
+  verifyISOP(llvm::APInt(8, 0b00111101), 3);
+}
+
+TEST(ISOPTest, LargeInputsFunction) {
+  uint64_t testCases[10][2] = {{0x0000000000000000, 0x0000000000000000},
+                               {0xFFFFFFFFFFFFFFFF, 0x0000000000000000},
+                               {0xAAAAAAAAAAAAAAAA, 0x5555555555555555},
+                               {0x5555555555555555, 0xAAAAAAAAAAAAAAAA},
+                               {0xF0F0F0F0F0F0F0F0, 0x0F0F0F0F0F0F0F0F},
+                               {0x0F0F0F0F0F0F0F0F, 0xF0F0F0F0F0F0F0F0},
+                               {0xCCCCCCCCCCCCCCCC, 0x3333333333333333},
+                               {0x3333333333333333, 0xCCCCCCCCCCCCCCCC},
+                               {0x123456789ABCDEF0, 0xFEDCBA9876543210},
+                               {0xFEDCBA9876543210, 0x123456789ABCDEF0}};
+
+  for (unsigned i = 0; i < 10; ++i) {
+    llvm::APInt tt(128, testCases[i]);
+    verifyISOP(tt, 7, ("LargeInput_" + std::to_string(i)).c_str());
+  }
+}
