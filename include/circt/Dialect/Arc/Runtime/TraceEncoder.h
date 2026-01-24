@@ -18,12 +18,14 @@
 #include "circt/Dialect/Arc/Runtime/Common.h"
 #include "circt/Dialect/Arc/Runtime/Internal.h"
 
+#include <atomic>
 #include <cassert>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
 #include <queue>
+#include <optional>
 #include <thread>
 #include <vector>
 
