@@ -103,6 +103,10 @@ struct ArcStateAllocationOptions
       llvm::cl::desc("Split large MLIR functions that occur above the given "
                      "size threshold"),
       llvm::cl::ValueOptional};
+  Option<bool> insertTraceTaps{
+      *this, "trace-taps",
+      llvm::cl::desc("Insert trace instrumentation for observed values"),
+      llvm::cl::init(false)};
 };
 void populateArcStateAllocationPipeline(
     mlir::OpPassManager &pm, const ArcStateAllocationOptions &options = {});

@@ -11,9 +11,10 @@
 #include "circt/Dialect/Arc/ModelInfo.h"
 #include "circt/Dialect/Arc/Runtime/Common.h"
 #include "circt/Dialect/Arc/Runtime/JITBind.h"
+#include "circt/Dialect/Arc/Runtime/TraceTaps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
-
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Pass/Pass.h"
 
 #define DEBUG_TYPE "arc-insert-runtime"
@@ -35,6 +36,20 @@ namespace {
 struct RuntimeFunction {
   LLVM::LLVMFuncOp llvmFuncOp = {};
   bool used = false;
+
+protected:
+  void setModelStateArgAttrs(OpBuilder &builder, unsigned argIndex,
+                             bool isMutable) {
+    llvmFuncOp.setArgAttr(0, LLVM::LLVMDialect::getNoCaptureAttrName(),
+                          builder.getUnitAttr());
+    llvmFuncOp.setArgAttr(0, LLVM::LLVMDialect::getNoFreeAttrName(),
+                          builder.getUnitAttr());
+    llvmFuncOp.setArgAttr(0, LLVM::LLVMDialect::getNoAliasAttrName(),
+                          builder.getUnitAttr());
+    if (!isMutable)
+      llvmFuncOp.setArgAttr(0, LLVM::LLVMDialect::getReadonlyAttrName(),
+                            builder.getUnitAttr());
+  }
 };
 
 struct AllocInstanceFunction : public RuntimeFunction {
@@ -48,6 +63,14 @@ struct AllocInstanceFunction : public RuntimeFunction {
     llvmFuncOp = LLVM::LLVMFuncOp::create(
         builder, runtime::APICallbacks::symNameAllocInstance,
         LLVM::LLVMFunctionType::get(ptrTy, {ptrTy, ptrTy}));
+    llvmFuncOp.setResultAttr(0, LLVM::LLVMDialect::getNoAliasAttrName(),
+                             builder.getUnitAttr());
+    llvmFuncOp.setResultAttr(0, LLVM::LLVMDialect::getNoUndefAttrName(),
+                             builder.getUnitAttr());
+    llvmFuncOp.setResultAttr(0, LLVM::LLVMDialect::getNonNullAttrName(),
+                             builder.getUnitAttr());
+    llvmFuncOp.setResultAttr(0, LLVM::LLVMDialect::getAlignAttrName(),
+                             builder.getI64IntegerAttr(16));
   }
 };
 
@@ -74,6 +97,7 @@ struct OnEvalFunction : public RuntimeFunction {
     llvmFuncOp =
         LLVM::LLVMFuncOp::create(builder, runtime::APICallbacks::symNameOnEval,
                                  LLVM::LLVMFunctionType::get(voidTy, {ptrTy}));
+    setModelStateArgAttrs(builder, 0, true);
   }
 };
 
@@ -87,6 +111,28 @@ struct OnInitializedFunction : public RuntimeFunction {
     llvmFuncOp = LLVM::LLVMFuncOp::create(
         builder, runtime::APICallbacks::symNameOnInitialized,
         LLVM::LLVMFunctionType::get(voidTy, {ptrTy}));
+    setModelStateArgAttrs(builder, 0, true);
+  }
+};
+
+struct SwapTraceBufferFunction : public RuntimeFunction {
+  explicit SwapTraceBufferFunction(ImplicitLocOpBuilder &builder) {
+    /*
+     uint64_t *arcRuntimeIR_swapTraceBuffer(const uint8_t *modelState);
+    */
+    auto ptrTy = LLVM::LLVMPointerType::get(builder.getContext());
+    llvmFuncOp = LLVM::LLVMFuncOp::create(
+        builder, runtime::APICallbacks::symNameSwapTraceBuffer,
+        LLVM::LLVMFunctionType::get(ptrTy, {ptrTy}));
+    llvmFuncOp.setResultAttr(0, LLVM::LLVMDialect::getNoAliasAttrName(),
+                             builder.getUnitAttr());
+    llvmFuncOp.setResultAttr(0, LLVM::LLVMDialect::getNoUndefAttrName(),
+                             builder.getUnitAttr());
+    llvmFuncOp.setResultAttr(0, LLVM::LLVMDialect::getNonNullAttrName(),
+                             builder.getUnitAttr());
+    llvmFuncOp.setResultAttr(0, LLVM::LLVMDialect::getAlignAttrName(),
+                             builder.getI64IntegerAttr(8));
+    setModelStateArgAttrs(builder, 0, false);
   }
 };
 
@@ -102,7 +148,8 @@ struct GlobalRuntimeContext {
   explicit GlobalRuntimeContext(ModuleOp moduleOp)
       : mlirModuleOp(moduleOp), globalBuilder(createBuilder(moduleOp)),
         allocInstanceFn(globalBuilder), deleteInstanceFn(globalBuilder),
-        onEvalFn(globalBuilder), onInitializedFn(globalBuilder) {}
+        onEvalFn(globalBuilder), onInitializedFn(globalBuilder),
+        swapTraceBufferFn(globalBuilder) {}
 
   /// Delete all API functions that are never called
   void deleteUnusedFunctions() {
@@ -111,12 +158,26 @@ struct GlobalRuntimeContext {
         fn->llvmFuncOp->erase();
   }
 
+  static Type getTraceExtendedType(Type stateType) {
+    auto numBits = stateType.getIntOrFloatBitWidth();
+    auto numQWords = std::max((numBits + 63) / 64, 1U);
+    return IntegerType::get(stateType.getContext(), numQWords * 64);
+  }
+
   /// Add an Arc model to the global runtime context
   void addModel(ModelOp &modelOp, const ModelInfo &modelInfo);
   /// Build a RuntimeModelOp for each registered model
   LogicalResult buildRuntimeModelOps();
   /// Find and assign instances of the registered models within the root module
   LogicalResult collectInstances();
+  LogicalResult buildTraceInstrumentation();
+
+  LLVM::LLVMFuncOp getTraceInstrumentFn(Type ty) const {
+    assert(ty.getIntOrFloatBitWidth() % 64 == 0);
+    auto fn = traceInstrumentationFns.find(ty);
+    assert(fn != traceInstrumentationFns.end());
+    return fn->second;
+  }
 
   /// The root module
   ModuleOp mlirModuleOp;
@@ -128,8 +189,10 @@ struct GlobalRuntimeContext {
   DeleteInstanceFunction deleteInstanceFn;
   OnEvalFunction onEvalFn;
   OnInitializedFunction onInitializedFn;
-  const std::array<RuntimeFunction *, 4> apiFunctions = {
-      &allocInstanceFn, &deleteInstanceFn, &onEvalFn, &onInitializedFn};
+  SwapTraceBufferFunction swapTraceBufferFn;
+  const std::array<RuntimeFunction *, 5> apiFunctions = {
+      &allocInstanceFn, &deleteInstanceFn, &onEvalFn, &onInitializedFn,
+      &swapTraceBufferFn};
 
   // Maps model symbol name to model context
   SmallDenseMap<StringAttr, std::unique_ptr<RuntimeModelContext>> models;
@@ -140,6 +203,9 @@ private:
     builder.setInsertionPointToStart(moduleOp.getBody());
     return builder;
   }
+  void buildTraceInstrumentationFn(Type ty);
+
+  SmallDenseMap<Type, LLVM::LLVMFuncOp> traceInstrumentationFns;
 };
 
 struct RuntimeModelContext {
@@ -158,6 +224,18 @@ struct RuntimeModelContext {
     instances.push_back(instantiateOp);
   }
 
+  void addTappedStateWrite(StateWriteOp &writeOp) {
+    assert(writeOp.getTraceTapModel().has_value() &&
+           writeOp.getTraceTapIndex().has_value());
+    assert(modelOp.getSymNameAttr() ==
+           writeOp.getTraceTapModelAttr().getAttr());
+    tappedWrites.push_back(writeOp);
+  }
+
+  bool hasTraceTaps() { return runtimeModelOp.getTraceTaps().has_value(); }
+
+  LogicalResult insertTraceInstrumentation();
+
   /// Insert runtime calls to the model and its instances
   LogicalResult lower();
 
@@ -171,6 +249,7 @@ struct RuntimeModelContext {
   SmallVector<SimInstantiateOp> instances;
   /// The model's corresponding RuntimeModelOp
   RuntimeModelOp runtimeModelOp;
+  SmallVector<StateWriteOp> tappedWrites;
 
 private:
   LogicalResult lowerInstance(SimInstantiateOp &instance);
@@ -220,6 +299,135 @@ LogicalResult GlobalRuntimeContext::collectInstances() {
   return success(!hasFailed);
 }
 
+LogicalResult GlobalRuntimeContext::buildTraceInstrumentation() {
+  if (llvm::none_of(
+          models, [](auto &modelIt) { return modelIt.second->hasTraceTaps(); }))
+    return success();
+
+  swapTraceBufferFn.used = true;
+  SetVector<Type> tappedTypes;
+
+  mlirModuleOp.getBody()->walk([&](StateWriteOp writeOp) {
+    if (!writeOp.getTraceTapModel().has_value())
+      return;
+    auto modelCtxt = models.find(writeOp.getTraceTapModelAttr().getAttr());
+    assert(modelCtxt != models.end() && "Unknown referenced model");
+    modelCtxt->second->addTappedStateWrite(writeOp);
+    if (isa<IntegerType>(writeOp.getValue().getType()))
+      buildTraceInstrumentationFn(writeOp.getValue().getType());
+    else
+      writeOp->emitWarning("Tracing of non-integer type is not supported");
+  });
+
+  return success();
+}
+
+void GlobalRuntimeContext::buildTraceInstrumentationFn(Type ty) {
+  assert(isa<IntegerType>(ty));
+  auto traceTy = getTraceExtendedType(ty);
+  if (traceInstrumentationFns.contains(traceTy))
+    return;
+
+  auto typeQWords = traceTy.getIntOrFloatBitWidth() / 64;
+  assert(traceTy.getIntOrFloatBitWidth() % 64 == 0);
+
+  auto *ctx = ty.getContext();
+  auto i64Ty = IntegerType::get(ctx, 64);
+  auto i32Ty = IntegerType::get(ctx, 32);
+  auto llvmPtrTy = LLVM::LLVMPointerType::get(ctx);
+  // void _arc_trace_instrument_ixyz(uint8_t* stateBase, uint64_t tapId,
+  // BitInt(xyz) newValue)
+  auto llvmFnTy = LLVM::LLVMFunctionType::get(LLVM::LLVMVoidType::get(ctx),
+                                              {llvmPtrTy, i64Ty, traceTy});
+  auto symName = StringAttr::get(
+      ctx, "_arc_trace_instrument_i" + Twine(traceTy.getIntOrFloatBitWidth()));
+  auto funcOp = LLVM::LLVMFuncOp::create(globalBuilder, symName, llvmFnTy,
+                                         LLVM::Linkage::Private);
+  funcOp.setNoInline(true);
+  traceInstrumentationFns.insert({traceTy, funcOp});
+
+  OpBuilder::InsertionGuard g(globalBuilder);
+
+  auto *capcaityCheckBlock = funcOp.addEntryBlock(globalBuilder);
+  auto *swapBufferBlock = &funcOp.getRegion().emplaceBlock();
+  auto *bufferStoreBlock = &funcOp.getRegion().emplaceBlock();
+  bufferStoreBlock->addArgument(llvmPtrTy, globalBuilder.getLoc());
+  bufferStoreBlock->addArgument(i32Ty, globalBuilder.getLoc());
+  auto *exitBlock = &funcOp.getRegion().emplaceBlock();
+
+  globalBuilder.setInsertionPointToStart(capcaityCheckBlock);
+
+  // Check if we are running out of space.
+  auto statePtr = capcaityCheckBlock->getArgument(0);
+  auto bufferPtrPtr = LLVM::GEPOp::create(
+      globalBuilder, llvmPtrTy, globalBuilder.getI8Type(), statePtr,
+      {LLVM::GEPArg(static_cast<int>(offsetof(ArcState, traceBuffer)) -
+                    static_cast<int>(sizeof(ArcState)))});
+  auto bufferSizePtr = LLVM::GEPOp::create(
+      globalBuilder, llvmPtrTy, globalBuilder.getI8Type(), statePtr,
+      {LLVM::GEPArg(static_cast<int>(offsetof(ArcState, traceBufferSize)) -
+                    static_cast<int>(sizeof(ArcState)))});
+  auto bufferPtrVal =
+      LLVM::LoadOp::create(globalBuilder, llvmPtrTy, bufferPtrPtr);
+  auto bufferSizeVal =
+      LLVM::LoadOp::create(globalBuilder, i32Ty, bufferSizePtr);
+  auto capacityConstant = LLVM::ConstantOp::create(
+      globalBuilder,
+      globalBuilder.getI32IntegerAttr(runtime::defaultTraceBufferCapacity));
+  auto requiredCapacity = typeQWords + 1;
+  auto resizeCst = LLVM::ConstantOp::create(
+      globalBuilder, globalBuilder.getI32IntegerAttr(requiredCapacity));
+  auto newSizeVal =
+      LLVM::AddOp::create(globalBuilder, bufferSizeVal, resizeCst);
+  auto storeOffset =
+      LLVM::GEPOp::create(globalBuilder, llvmPtrTy, i64Ty, bufferPtrVal,
+                          {LLVM::GEPArg(bufferSizeVal)});
+  auto needsSwap = LLVM::ICmpOp::create(globalBuilder, LLVM::ICmpPredicate::ugt,
+                                        newSizeVal, capacityConstant);
+  LLVM::CondBrOp::create(
+      globalBuilder, needsSwap, swapBufferBlock, {}, bufferStoreBlock,
+      {storeOffset, newSizeVal},
+      /*weights*/
+      std::pair<int32_t, int32_t>(0, std::numeric_limits<int32_t>::max()));
+
+  // Too bad, we need a new buffer. Call the library.
+  globalBuilder.setInsertionPointToStart(swapBufferBlock);
+  auto swapCall = LLVM::CallOp::create(
+      globalBuilder, swapTraceBufferFn.llvmFuncOp, {statePtr});
+  LLVM::StoreOp::create(globalBuilder, swapCall.getResult(), bufferPtrPtr);
+  LLVM::BrOp::create(globalBuilder, {swapCall.getResult(), resizeCst},
+                     bufferStoreBlock);
+
+  // Store the tap index and new value in the buffer and update the size.
+  globalBuilder.setInsertionPointToStart(bufferStoreBlock);
+  LLVM::StoreOp::create(globalBuilder, capcaityCheckBlock->getArgument(1),
+                        bufferStoreBlock->getArgument(0));
+
+  for (unsigned qWord = 0; qWord < typeQWords; ++qWord) {
+    auto dataStorePtr = LLVM::GEPOp::create(globalBuilder, llvmPtrTy, i64Ty,
+                                            bufferStoreBlock->getArgument(0),
+                                            {LLVM::GEPArg(1 + qWord)});
+    Value storeVal = capcaityCheckBlock->getArgument(2);
+    if (qWord > 0) {
+      auto shiftCst = LLVM::ConstantOp::create(
+          globalBuilder,
+          globalBuilder.getIntegerAttr(storeVal.getType(), qWord * 64));
+      storeVal = LLVM::LShrOp::create(globalBuilder, storeVal, shiftCst);
+    }
+    if (storeVal.getType() != i64Ty)
+      storeVal = LLVM::TruncOp::create(globalBuilder, i64Ty, storeVal);
+    LLVM::StoreOp::create(globalBuilder, storeVal, dataStorePtr);
+  }
+
+  LLVM::StoreOp::create(globalBuilder, bufferStoreBlock->getArgument(1),
+                        bufferSizePtr);
+  LLVM::BrOp::create(globalBuilder, exitBlock);
+
+  // And we're done
+  globalBuilder.setInsertionPointToStart(exitBlock);
+  LLVM::ReturnOp::create(globalBuilder, Value{});
+}
+
 // Build the global RuntimeModelOp for each model
 LogicalResult GlobalRuntimeContext::buildRuntimeModelOps() {
   auto savedLoc = globalBuilder.getLoc();
@@ -230,7 +438,9 @@ LogicalResult GlobalRuntimeContext::buildRuntimeModelOps() {
     model->runtimeModelOp = RuntimeModelOp::create(
         globalBuilder, symName,
         globalBuilder.getStringAttr(model->modelInfo.name),
-        static_cast<uint64_t>(model->modelInfo.numStateBytes));
+        static_cast<uint64_t>(model->modelInfo.numStateBytes),
+        model->modelOp.getTraceTapsAttr());
+    model->modelOp.setTraceTapsAttr({});
   }
   globalBuilder.setLoc(savedLoc);
   return success();
@@ -242,6 +452,56 @@ LogicalResult RuntimeModelContext::lower() {
   for (auto &instance : instances)
     if (failed(lowerInstance(instance)))
       hasFailed = true;
+  if (failed(insertTraceInstrumentation()))
+    hasFailed = true;
+  return success(!hasFailed);
+}
+
+LogicalResult RuntimeModelContext::insertTraceInstrumentation() {
+  if (!hasTraceTaps() || tappedWrites.empty())
+    return success();
+  bool hasFailed = false;
+  ImplicitLocOpBuilder builder(runtimeModelOp.getLoc(),
+                               runtimeModelOp.getContext());
+  auto ptrTy = LLVM::LLVMPointerType::get(builder.getContext());
+  for (auto writeOp : tappedWrites) {
+    builder.setInsertionPoint(writeOp);
+    builder.setLoc(writeOp.getLoc());
+    auto tapId = *writeOp.getTraceTapIndex();
+    assert(tapId < runtimeModelOp.getTraceTapsAttr().size());
+    auto tapAttr = cast<TraceTapAttr>(runtimeModelOp.getTraceTapsAttr()[tapId]);
+    auto traceTy = GlobalRuntimeContext::getTraceExtendedType(
+        writeOp.getValue().getType());
+    auto instrumentFn = globalContext.getTraceInstrumentFn(traceTy);
+    auto oldRead = StateReadOp::create(builder, writeOp.getState());
+    auto hasChanged = LLVM::ICmpOp::create(builder, LLVM::ICmpPredicate::ne,
+                                           writeOp.getValue(), oldRead);
+    writeOp.setTraceTapIndex(std::nullopt);
+    writeOp.setTraceTapModel(std::nullopt);
+
+    scf::IfOp::create(
+        builder, hasChanged, [&](OpBuilder scfBuilder, Location loc) {
+          scfBuilder.clone(*writeOp.getOperation());
+          auto statePtrCast = UnrealizedConversionCastOp::create(
+              scfBuilder, loc, ptrTy, writeOp.getState());
+          auto baseStatePtr = LLVM::GEPOp::create(
+              scfBuilder, loc, ptrTy, scfBuilder.getI8Type(),
+              statePtrCast.getResult(0),
+              {LLVM::GEPArg(-1 *
+                            static_cast<int32_t>(tapAttr.getStateOffset()))});
+          auto tapIdxCst = LLVM::ConstantOp::create(
+              scfBuilder, loc, scfBuilder.getI64IntegerAttr(tapId));
+          Value storeVal = writeOp.getValue();
+          if (traceTy != storeVal.getType())
+            storeVal = LLVM::ZExtOp::create(scfBuilder, loc, traceTy, storeVal)
+                           .getResult();
+          LLVM::CallOp::create(scfBuilder, loc, instrumentFn,
+                               {baseStatePtr, tapIdxCst, storeVal});
+          scf::YieldOp::create(builder, loc);
+        });
+    writeOp.erase();
+  }
+  tappedWrites.clear();
   return success(!hasFailed);
 }
 
@@ -280,6 +540,7 @@ void InsertRuntimePass::runOnOperation() {
   for (auto &[mOp, mInfo] : modelInfo.infoMap)
     globalContext->addModel(mOp, mInfo);
   if (failed(globalContext->buildRuntimeModelOps()) ||
+      failed(globalContext->buildTraceInstrumentation()) ||
       failed(globalContext->collectInstances())) {
     signalPassFailure();
     return;
