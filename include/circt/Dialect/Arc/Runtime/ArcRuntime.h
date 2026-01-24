@@ -44,8 +44,8 @@
 #endif
 
 static_assert(sizeof(void *) == 8, "Unsupported architecture");
-static_assert(sizeof(struct ArcState) == 16, "Unexpected ArcState size");
-static_assert(sizeof(struct ArcRuntimeModelInfo) == 24,
+static_assert(sizeof(struct ArcState) == 32, "Unexpected ArcState size");
+static_assert(sizeof(struct ArcRuntimeModelInfo) == 32,
               "Unexpected ArcRuntimeModelInfo size");
 
 /// Allocate and initialize the state for a new instance of the given

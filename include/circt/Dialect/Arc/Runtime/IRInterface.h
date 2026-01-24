@@ -94,5 +94,7 @@ ARC_IR_EXPORT void arcRuntimeIR_onEval(uint8_t *modelState);
 ARC_IR_EXPORT void
 arcRuntimeIR_format(const circt::arc::runtime::FmtDescriptor *fmt, ...);
 
+ARC_IR_EXPORT uint64_t *arcRuntimeIR_swapTraceBuffer(const uint8_t *modelState);
+
 // NOLINTEND(readability-identifier-naming)
 #endif // CIRCT_DIALECT_ARC_RUNTIME_IRINTERFACE_H

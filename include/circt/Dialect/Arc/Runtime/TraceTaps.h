@@ -1,0 +1,40 @@
+#ifndef CIRCT_DIALECT_ARC_RUNTIME_TRACETAPS_H
+#define CIRCT_DIALECT_ARC_RUNTIME_TRACETAPS_H
+
+#include <cstdint>
+#include <type_traits>
+
+#pragma pack(push, 1)
+
+struct alignas(8) ArcTraceTap {
+  /// Byte offset of the traced value within the model state
+  uint64_t stateOffset;
+  /// Byte offset to the zero terminator of this signals last alias in the names
+  /// array
+  uint64_t nameOffset;
+  /// Bit width of the traced signal
+  uint32_t typeBits;
+  /// Padding and reserved for future use
+  uint32_t reserved;
+};
+static_assert(sizeof(ArcTraceTap) == 3 * 8);
+
+struct alignas(8) ArcModelTraceInfo {
+  /// Number if trace taps in the array
+  uint64_t numTraceTaps;
+  /// Array of race tap information
+  struct ArcTraceTap *traceTaps;
+  /// Combined list of names and aliases of the trace taps
+  const char *traceTapNames;
+  /// Required capcity in 8 byte increments of the trace buffer
+  uint64_t traceBufferCapacity;
+};
+static_assert(sizeof(ArcModelTraceInfo) == 4 * 8);
+
+namespace circt::arc::runtime {
+static constexpr uint32_t defaultTraceBufferCapacity = 256 * 1024;
+}
+
+#pragma pack(pop)
+
+#endif // CIRCT_DIALECT_ARC_RUNTIME_TRACETAPS_H
