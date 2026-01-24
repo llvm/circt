@@ -2,6 +2,7 @@ set(ArcRuntimeLibSources
   ArcRuntime.cpp
   ModelInstance.cpp
   TraceEncoder.cpp
+  VCDTraceEncoder.cpp
 )
 
 # Shipped version of the runtime for ahead-of-time compiled models

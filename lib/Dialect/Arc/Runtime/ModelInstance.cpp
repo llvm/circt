@@ -13,6 +13,7 @@
 #include "circt/Dialect/Arc/Runtime/ModelInstance.h"
 
 #include "circt/Dialect/Arc/Runtime/TraceTaps.h"
+#include "circt/Dialect/Arc/Runtime/VCDTraceEncoder.h"
 
 #include <cassert>
 #include <iostream>
@@ -61,6 +62,10 @@ ModelInstance::ModelInstance(const ArcRuntimeModelInfo *modelInfo,
       traceEncoder =
           std::make_unique<DummyTraceEncoder>(modelInfo, mutableState);
       break;
+    case TraceMode::VCD:
+      traceEncoder = std::make_unique<VCDTraceEncoder>(
+          modelInfo, mutableState, getTraceFilePath(".vcd"), verbose);
+      break;
     }
   } else {
     traceEncoder = {};
@@ -78,6 +83,21 @@ ModelInstance::~ModelInstance() {
   assert(state->impl == static_cast<void *>(this) && "Inconsistent ArcState");
   if (traceEncoder)
     traceEncoder->finish(state);
+}
+
+std::filesystem::path
+ModelInstance::getTraceFilePath(const std::string &suffix) {
+  std::string saneName;
+  if (modelInfo->modelName)
+    saneName = std::string(modelInfo->modelName);
+  for (auto &c : saneName) {
+    if (c == ' ' || c == '/' || c == '\\')
+      c = '_';
+  }
+  saneName += '_';
+  saneName += std::to_string(instanceID);
+  saneName += suffix;
+  return std::filesystem::current_path() / std::filesystem::path(saneName);
 }
 
 void ModelInstance::onEval(ArcState *mutableState) {
@@ -133,6 +153,8 @@ void ModelInstance::parseArgs(const char *args) {
   for (auto &option : options) {
     if (option == "debug")
       verbose = true;
+    else if (option == "vcd")
+      traceMode = TraceMode::VCD;
   }
 }
 
