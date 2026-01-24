@@ -1,3 +1,17 @@
+//===- TraceEncoder.cpp - Shared trace buffer handling logic --------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// Provides an abstract TraceEncoder class implementing the trace buffer
+// management and communication between the simulation thread and the trace
+// encoder thread.
+//
+//===----------------------------------------------------------------------===//
+
 #include "circt/Dialect/Arc/Runtime/TraceEncoder.h"
 
 #include "circt/Dialect/Arc/Runtime/TraceTaps.h"
