@@ -239,6 +239,33 @@ firrtl.circuit "Foo" {
 
 // -----
 
+// Test that wires with multiple destination users works.  This avoids a
+// potential coding bug that assumes wires only have one destination.
+firrtl.circuit "Foo" {
+  firrtl.domain @ClockDomain
+  firrtl.extmodule @Bar(
+    in a: !firrtl.domain of @ClockDomain,
+    in b: !firrtl.domain of @ClockDomain
+  )
+  // CHECK-LABEL: firrtl.module @Foo
+  firrtl.module @Foo(
+    in %a: !firrtl.domain of @ClockDomain
+  ) {
+    %bar_a, %bar_b = firrtl.instance bar @Bar(
+      in a: !firrtl.domain of @ClockDomain,
+      in b: !firrtl.domain of @ClockDomain
+    )
+    %wire = firrtl.wire : !firrtl.domain
+    firrtl.domain.define %wire, %a
+    // CHECK:      firrtl.propassign %bar_a, %a
+    // CHECK-NEXT: firrtl.propassign %bar_b, %a
+    firrtl.domain.define %bar_a, %wire
+    firrtl.domain.define %bar_b, %wire
+  }
+}
+
+// -----
+
 // Test a "downards" U-turn.
 firrtl.circuit "Foo" {
   firrtl.domain @ClockDomain
