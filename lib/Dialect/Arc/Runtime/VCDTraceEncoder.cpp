@@ -17,6 +17,7 @@
 #include <cassert>
 #include <iostream>
 #include <ostream>
+#include <string>
 #include <string_view>
 
 using namespace circt::arc::runtime::impl;
