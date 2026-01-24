@@ -24,8 +24,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
-#include <queue>
 #include <optional>
+#include <queue>
 #include <thread>
 #include <vector>
 
