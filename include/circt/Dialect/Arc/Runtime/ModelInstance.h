@@ -49,6 +49,7 @@ private:
   const uint64_t instanceID;
   const ArcRuntimeModelInfo *const modelInfo;
   const ArcState *const state;
+  enum class TraceMode { DUMMY };
   TraceMode traceMode;
   std::unique_ptr<TraceEncoder> traceEncoder;
   bool verbose = false;

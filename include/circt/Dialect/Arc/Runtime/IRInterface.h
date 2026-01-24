@@ -94,6 +94,15 @@ ARC_IR_EXPORT void arcRuntimeIR_onEval(uint8_t *modelState);
 ARC_IR_EXPORT void
 arcRuntimeIR_format(const circt::arc::runtime::FmtDescriptor *fmt, ...);
 
+/// Release the active trace buffer and request an empty new buffer.
+///
+/// Invoked by the model to signal that the currently active trace buffer,
+/// referenced by `modelState->traceBuffer` is ready for processing and
+/// contains `modelState->traceBufferSize` valid uint64_t words.
+///
+/// The runtime must return a pointer to a valid storage of at least
+/// `traceBufferCapacity` x uint64_t size, which will become the new active
+/// trace buffer.
 ARC_IR_EXPORT uint64_t *arcRuntimeIR_swapTraceBuffer(const uint8_t *modelState);
 
 // NOLINTEND(readability-identifier-naming)

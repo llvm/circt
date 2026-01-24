@@ -15,12 +15,15 @@ TraceEncoder::TraceEncoder(const ArcRuntimeModelInfo *modelInfo,
   assert(!!modelInfo->traceInfo && modelInfo->traceInfo->numTraceTaps > 0);
   timeStep = 0;
   isFinished = false;
-  state->traceBuffer = activeBuffer.getData();
   worker = {};
+  // Put the first buffer in place
+  state->traceBuffer = activeBuffer.getData();
+  // Prime the buffer return stack with additional buffers
   for (unsigned i = 1; i < numBuffers; ++i)
     availableBuffers.emplace_back(modelInfo->traceInfo->traceBufferCapacity);
 }
 
+// Enqueue a trace buffer for processing by the worker thread.
 void TraceEncoder::enqueueBuffer(TraceBuffer &&buffer) {
   assert(worker.has_value());
   std::unique_lock<std::mutex> lock(bufferQueueMutex);
@@ -29,6 +32,7 @@ void TraceEncoder::enqueueBuffer(TraceBuffer &&buffer) {
   bufferQueueCv.notify_one();
 }
 
+// Retrieve a buffer from the stack of processed buffers.
 TraceBuffer TraceEncoder::getBuffer() {
   assert(worker.has_value());
   std::unique_lock<std::mutex> lock(availableBuffersMutex);
@@ -42,6 +46,7 @@ void TraceEncoder::run(ArcState const *state) {
   if (worker.has_value() || !initialize(state))
     return;
   activeBuffer.firstStep = timeStep;
+  // Start the worker thread
   if (debug)
     std::cout << "[ArcRuntime] Starting trace worker thread." << std::endl;
   std::thread newWorker([this]() { this->workLoop(); });
@@ -58,14 +63,16 @@ void TraceEncoder::workLoop() {
       bufferQueueCv.wait(
           lock, [this]() { return isFinished || !bufferQueue.empty(); });
 
+      // Still work to do?
       if (bufferQueue.empty() && isFinished)
-        break;
+        break; // Release bufferQueueMutex
 
       assert(!bufferQueue.empty());
       work = std::move(bufferQueue.front());
       bufferQueue.pop();
     } // Release bufferQueueMutex
 
+    // Process the taken buffer
     assert(work->size > 0);
     encode(*work);
     work->clear();
@@ -88,17 +95,18 @@ void TraceEncoder::step(const ArcState *state) {
     return;
   assert(activeBuffer.getData() == state->traceBuffer);
   if (state->traceBufferSize > 0) {
-    auto &offsets = activeBuffer.stepOffsets;
+    // Mark the beginning of the new step in the active trace buffer
+    auto &offsets = activeBuffer.stepMarkers;
     if (!offsets.empty() && offsets.back().offset == state->traceBufferSize) {
       // No new data produced since last time: Bump the existing last step.
       offsets.back().numSteps++;
     } else {
-      // Insert new offset for the current step.
-      offsets.emplace_back(TraceBufferOffset(state->traceBufferSize));
+      // Store the current offset
+      offsets.emplace_back(TraceBufferMarker(state->traceBufferSize));
     }
   } else {
     // Untouched buffer: Adjust the first step value.
-    assert(activeBuffer.stepOffsets.empty());
+    assert(activeBuffer.stepMarkers.empty());
     activeBuffer.firstStep = timeStep;
   }
 }
@@ -106,6 +114,7 @@ void TraceEncoder::step(const ArcState *state) {
 void TraceEncoder::finish(const ArcState *state) {
   activeBuffer.assertSentinel();
   if (worker.has_value()) {
+    // Dispatch the final buffer and request the worker to finish.
     if (state->traceBufferSize > 0)
       dispatch(state->traceBufferSize);
     isFinished = true;
@@ -113,6 +122,7 @@ void TraceEncoder::finish(const ArcState *state) {
       std::lock_guard<std::mutex> lock(bufferQueueMutex);
       bufferQueueCv.notify_one();
     }
+    // Wait for the worker to finish.
     worker->join();
     worker.reset();
     if (debug)

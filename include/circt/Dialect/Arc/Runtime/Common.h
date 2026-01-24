@@ -20,7 +20,6 @@
 #include <stdint.h>
 #include <string.h>
 #if !defined(__cplusplus)
-
 #include <stdalign.h>
 #endif
 
@@ -42,10 +41,14 @@
 #endif
 
 /// Combined runtime and model state for a hardware model instance.
-struct ArcState {
+struct alignas(16) ArcState {
   /// Runtime implementation specific data. Usually points to a custom struct.
-  alignas(16) void *impl;
+  void *impl;
+  /// Pointer to the active trace buffer's storage.
+  /// May be null iff the model has no trace instrumentation. Otherwise must
+  /// point to buffer of at least `traceBufferCapacity` size.
   uint64_t *traceBuffer;
+  /// Number of valid elements in the active trace buffer.
   uint32_t traceBufferSize;
   /// Runtime magic number. Must be set to `ARC_RUNTIME_MAGIC`.
   uint32_t magic;
@@ -71,7 +74,7 @@ struct ArcRuntimeModelInfo {
   uint64_t numStateBytes;
   /// Name of the compiled model.
   const char *modelName;
-  /// Signal tracing information. May be NULL.
+  /// Signal tracing information. NULL iff the model is not trace instrumented.
   struct ArcModelTraceInfo *traceInfo;
 };
 
