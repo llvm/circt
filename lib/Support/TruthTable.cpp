@@ -394,26 +394,7 @@ APInt SOPForm::computeTruthTable() const {
   return tt;
 }
 
-bool SOPForm::isIrredundant() {
-  APInt tt = computeTruthTable();
-  for (auto &cube : cubes) {
-    auto temporary = cube;
-    // Try removing each literal from the cube
-    for (unsigned i = 0; i < numVars; ++i) {
-      if (cube.hasLiteral(i)) {
-        cube.removeLiteral(i);
-        // Recompute truth table without this literal and check if it still
-        // matches. If it does, the SOP is redundant.
-        if (tt == computeTruthTable())
-          return false;
-        // Restore the literal
-        cube = temporary;
-      }
-    }
-  }
-  return true;
-}
-
+#ifndef NDEBUG
 void SOPForm::dump(llvm::raw_ostream &os) const {
   os << "SOPForm: " << numVars << " vars, " << cubes.size() << " cubes\n";
   for (const auto &cube : cubes) {
@@ -427,6 +408,7 @@ void SOPForm::dump(llvm::raw_ostream &os) const {
     os << ")\n";
   }
 }
+#endif
 //===----------------------------------------------------------------------===//
 // ISOP Extraction
 //===----------------------------------------------------------------------===//
@@ -464,6 +446,11 @@ namespace {
 ///   result: Output SOP form (cubes are accumulated here)
 ///
 /// Returns: The actual cover computed (subset of dc that covers tt)
+///
+/// The maximum recursion depth is equal to the number of variables (one level
+/// per variable). For typical use cases with TruthTable (up to 6-8 variables),
+/// this is not a concern. Since truth tables require 2^numVars bits, the
+/// recursion depth is not a limiting factor.
 APInt isopImpl(const APInt &tt, const APInt &dc, unsigned numVars,
                unsigned varIndex, SOPForm &result) {
   assert((tt & ~dc).isZero() && "tt must be subset of dc");

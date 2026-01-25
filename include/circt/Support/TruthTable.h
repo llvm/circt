@@ -256,13 +256,10 @@ struct SOPForm {
   /// Compute the truth table represented by this SOP form
   llvm::APInt computeTruthTable() const;
 
-  /// Check if this SOP form is irredundant. An SOP is irredundant if no literal
-  /// can be removed from any cube without changing the function. This is a
-  /// naive implementation with O(n^2) complexity for testing purposes.
-  bool isIrredundant();
-
+#ifndef NDEBUG
   /// Debug dump method for SOP forms
   void dump(llvm::raw_ostream &os = llvm::errs()) const;
+#endif
 };
 
 /// Extract ISOP (Irredundant Sum-of-Products) from a truth table.

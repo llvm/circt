@@ -566,6 +566,29 @@ TEST(CofactorTest, ShannonExpansionProperty) {
 
 namespace {
 
+/// Check if an SOP form is irredundant. An SOP is irredundant if no literal
+/// can be removed from any cube without changing the function.
+/// This is a naive O(n^2) implementation for testing purposes.
+bool isIrredundant(SOPForm &sop) {
+  llvm::APInt tt = sop.computeTruthTable();
+  for (auto &cube : sop.cubes) {
+    auto temporary = cube;
+    // Try removing each literal from the cube
+    for (unsigned i = 0; i < sop.numVars; ++i) {
+      if (cube.hasLiteral(i)) {
+        cube.removeLiteral(i);
+        // Recompute truth table without this literal and check if it still
+        // matches. If it does, the SOP is redundant.
+        if (tt == sop.computeTruthTable())
+          return false;
+        // Restore the literal
+        cube = temporary;
+      }
+    }
+  }
+  return true;
+}
+
 /// Helper function to verify ISOP extraction correctness and irredundancy.
 /// Returns the SOPForm for additional verification.
 SOPForm verifyISOP(const llvm::APInt &truthTable, unsigned numVars,
@@ -577,7 +600,7 @@ SOPForm verifyISOP(const llvm::APInt &truthTable, unsigned numVars,
       << (testName ? testName : "ISOP") << " truth table doesn't match";
 
   // Verify irredundancy
-  EXPECT_TRUE(sop.isIrredundant())
+  EXPECT_TRUE(isIrredundant(sop))
       << (testName ? testName : "ISOP") << " is not irredundant";
 
   return sop;
