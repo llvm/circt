@@ -174,6 +174,10 @@ static cl::opt<bool>
                        cl::desc("Disable datapath optimization passes"),
                        cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool> enableSOPBalancing("enable-sop-balancing",
+                                        cl::desc("Enable SOP balancing"),
+                                        cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<int> maxCutSizePerRoot("max-cut-size-per-root",
                                       cl::desc("Maximum cut size per root"),
                                       cl::init(6), cl::cat(mainCategory));
@@ -257,6 +261,7 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
     optimizationOptions.ignoreAbcFailures.setValue(ignoreAbcFailures);
     optimizationOptions.disableWordToBits.setValue(disableWordToBits);
     optimizationOptions.timingAware.setValue(!disableTimingAware);
+    optimizationOptions.disableSOPBalancing.setValue(!enableSOPBalancing);
 
     circt::synth::buildSynthOptimizationPipeline(pm, optimizationOptions);
     if (untilReached(UntilMapping))

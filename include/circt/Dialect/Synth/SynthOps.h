@@ -78,6 +78,11 @@ public:
   bool isInverted() const { return value.getInt(); }
   int64_t getArrivalTime() const { return arrivalTime; }
 
+  ValueWithArrivalTime &flipInversion() {
+    value.setInt(!value.getInt());
+    return *this;
+  }
+
   /// Comparison operator for priority queue. Values with earlier arrival times
   /// have higher priority. When arrival times are equal, use value numbering
   /// for determinism.
