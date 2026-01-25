@@ -204,6 +204,18 @@ struct ExprVisitor {
                                          lowBit);
   }
 
+  /// Handle null assignments to variables.
+  /// Compare with IEEE 1800-2023 Table 6-7 - Default variable initial values
+  Value visit(const slang::ast::NullLiteral &expr) {
+    auto type = context.convertType(*expr.type);
+    if (isa<moore::ClassHandleType, moore::ChandleType, moore::EventType,
+            moore::NullType>(type))
+      return moore::NullOp::create(builder, loc);
+    mlir::emitError(loc) << "No null value definition found for value of type "
+                         << type;
+    return {};
+  }
+
   /// Handle range bit selections.
   Value visit(const slang::ast::RangeSelectExpression &expr) {
     auto type = context.convertType(*expr.type);

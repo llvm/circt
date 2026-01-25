@@ -644,6 +644,28 @@ def ConstantRealOp : MooreOp<"constant_real", [
   let assemblyFormat = "$value attr-dict";
 }
 
+
+//===----------------------------------------------------------------------===//
+// Null Op
+//===----------------------------------------------------------------------===//
+
+def NullOp : MooreOp<"null", [Pure]> {
+  let summary = "SystemVerilog literal constant `null`";
+  let description = [{
+    Represents the SystemVerilog literal constant `null`, which is a valid
+    primary and constant_primary in IEEE 1800-2023.
+
+    The result type must be a null-able handle-like type (e.g. class handle,
+    virtual interface, event, chandle). Verification enforces this to prevent
+    mis-modeling `null` as a numeric constant.
+  }];
+
+  let results = (outs NullType:$result);
+  let assemblyFormat = [{
+     attr-dict
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Casting
 //===----------------------------------------------------------------------===//
