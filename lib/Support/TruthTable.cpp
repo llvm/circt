@@ -466,11 +466,11 @@ APInt isopImpl(const APInt &tt, const APInt &dc, unsigned numVars,
   }
 
   // Find highest variable in support (top-down from varIndex).
-  // NOTE: It's well known that the order of variable selection largerly
-  // affects the size of the resulting ISOP. There are a number of research for
-  // implementing heuristics for variable selection could improve results with a
-  // trade off of runtime. We may consider implementing such heuristics in the
-  // future.
+  // NOTE: It is well known that the order of variable selection largely
+  // affects the size of the resulting ISOP. There are numerous studies on
+  // implementing heuristics for variable selection that could improve results,
+  // albeit at the cost of runtime. We may consider implementing such
+  // heuristics in the future.
   int var = -1;
   APInt negCof, posCof, negDC, posDC;
   for (int i = varIndex - 1; i >= 0; --i) {
