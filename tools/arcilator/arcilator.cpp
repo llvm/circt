@@ -268,6 +268,12 @@ static llvm::cl::opt<std::string> extraRuntimeArgs(
         "Extra arguments passed to the runtime library for JIT runs."),
     llvm::cl::init(""), llvm::cl::cat(mainCategory));
 
+static llvm::cl::opt<std::string> jitVcdFile(
+    "jit-vcd-file",
+    llvm::cl::desc(
+        "Create a VCD trace for JIT runs and output it to the specified file"),
+    llvm::cl::init(""), llvm::cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -330,9 +336,10 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
     return;
 
   ArcPreprocessingOptions preprocessingOpt;
-  preprocessingOpt.observePorts = observePorts;
-  preprocessingOpt.observeWires = observeWires;
-  preprocessingOpt.observeNamedValues = observeNamedValues;
+  preprocessingOpt.observePorts = observePorts || !jitVcdFile.empty();
+  preprocessingOpt.observeWires = observeWires || !jitVcdFile.empty();
+  preprocessingOpt.observeNamedValues =
+      observeNamedValues || !jitVcdFile.empty();
   preprocessingOpt.observeMemories = observeMemories;
   preprocessingOpt.asyncResetsAsSync = asyncResetsAsSync;
   populateArcPreprocessingPipeline(pm, preprocessingOpt);
@@ -342,7 +349,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
     return;
 
   ArcConversionOptions conversionOpt;
-  conversionOpt.observeRegisters = observeRegisters;
+  conversionOpt.observeRegisters = observeRegisters || !jitVcdFile.empty();
   conversionOpt.shouldDedup = shouldDedup;
   populateArcConversionPipeline(pm, conversionOpt);
 
@@ -371,7 +378,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
 
   ArcStateAllocationOptions allocationOpt;
   allocationOpt.splitFuncsThreshold = splitFuncsThreshold;
-  allocationOpt.insertTraceTaps = traceTaps;
+  allocationOpt.insertTraceTaps = traceTaps || !jitVcdFile.empty();
   populateArcStateAllocationPipeline(pm, allocationOpt);
 }
 
@@ -426,7 +433,21 @@ static LogicalResult processBuffer(
             "arcilator"));
 
   if (!untilReached(UntilLLVMLowering)) {
-    populateArcToLLVMPipeline(pmLlvm, !noRuntime, extraRuntimeArgs);
+    ArcToLLVMOptions opts;
+    opts.noRuntime = noRuntime;
+    std::string runtimeArgs;
+    if (!jitVcdFile.empty()) {
+      runtimeArgs += "vcd";
+      if (!extraRuntimeArgs.empty()) {
+        runtimeArgs += ';';
+        runtimeArgs += extraRuntimeArgs;
+      }
+    } else {
+      runtimeArgs = extraRuntimeArgs;
+    }
+    opts.extraRuntimeArgs = runtimeArgs;
+    opts.traceFileName = jitVcdFile;
+    populateArcToLLVMPipeline(pmLlvm, opts);
   }
 
   if (printDebugInfo && outputFormat == OutputLLVM)

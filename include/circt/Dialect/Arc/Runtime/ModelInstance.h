@@ -53,6 +53,7 @@ private:
   const ArcState *const state;
   enum class TraceMode { DUMMY, VCD };
   TraceMode traceMode;
+  std::optional<std::string> traceFileArg;
   std::unique_ptr<TraceEncoder> traceEncoder;
   bool verbose = false;
   uint64_t stepCounter = 0;

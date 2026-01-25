@@ -266,6 +266,39 @@ struct InsertRuntimePass
   using InsertRuntimeBase::InsertRuntimeBase;
 
   void runOnOperation() override;
+
+private:
+  SmallString<32> buildArgString(unsigned instIdx, StringAttr existingArgs) {
+    SmallString<32> str;
+    if (existingArgs)
+      str.append(existingArgs);
+    if (!traceFileName.empty()) {
+      if (!str.empty())
+        str += ';';
+      str += "traceFile=";
+      if (instIdx == 0) {
+        str += traceFileName;
+      } else {
+        auto maybeExtension = traceFileName.substr(traceFileName.size() - 4);
+        if (maybeExtension == ".vcd") {
+          str += traceFileName.substr(0, traceFileName.size() - 4);
+          str += '_';
+          str += std::to_string(instIdx);
+          str += ".vcd";
+        } else {
+          str += traceFileName;
+          str += '_';
+          str += std::to_string(instIdx);
+        }
+      }
+    }
+    if (!extraArgs.empty()) {
+      if (!str.empty())
+        str += ';';
+      str.append(extraArgs);
+    }
+    return str;
+  }
 };
 
 } // namespace
@@ -596,17 +629,11 @@ void InsertRuntimePass::runOnOperation() {
   // Lower all models
   for (auto &[_, model] : globalContext->models) {
     // If provided, append extra instance arguments
-    if (!extraArgs.empty()) {
-      for (auto &instance : model->instances) {
-        StringAttr newArgs;
-        if (!instance.getRuntimeArgsAttr() ||
-            instance.getRuntimeArgsAttr().getValue().empty())
-          newArgs = StringAttr::get(&getContext(), Twine(extraArgs));
-        else
-          newArgs = StringAttr::get(&getContext(),
-                                    Twine(instance.getRuntimeArgsAttr()) +
-                                        Twine(";") + Twine(extraArgs));
-        instance.setRuntimeArgsAttr(newArgs);
+    if (!extraArgs.empty() || !traceFileName.empty()) {
+      for (auto [idx, instance] : llvm::enumerate(model->instances)) {
+        auto newArgs = buildArgString(idx, instance.getRuntimeArgsAttr());
+        auto newArgAttr = StringAttr::get(&getContext(), newArgs);
+        instance.setRuntimeArgsAttr(newArgAttr);
       }
     }
 
