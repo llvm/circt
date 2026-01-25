@@ -56,10 +56,15 @@ TraceBuffer TraceEncoder::getBuffer() {
   return buffer;
 }
 
-void TraceEncoder::run(ArcState const *state) {
+void TraceEncoder::run(ArcState *state) {
   if (worker.has_value() || !initialize(state))
     return;
-  activeBuffer.firstStep = timeStep;
+  // Flush the trace buffer which may contain data from the init function
+  state->traceBufferSize = 0;
+  timeStep = 0;
+  activeBuffer.firstStep = 0;
+  assert(activeBuffer.stepMarkers.empty());
+  assert(bufferQueue.empty());
   // Start the worker thread
   if (debug)
     std::cout << "[ArcRuntime] Starting trace worker thread." << std::endl;

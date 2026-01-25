@@ -90,7 +90,7 @@ void ModelInstance::onEval(ArcState *mutableState) {
 void ModelInstance::onInitialized(ArcState *mutableState) {
   assert(mutableState == state);
   if (traceEncoder)
-    traceEncoder->run(state);
+    traceEncoder->run(mutableState);
 
   if (verbose) {
     std::cout << "[ArcRuntime] "

@@ -101,7 +101,7 @@ public:
   virtual ~TraceEncoder() = default;
 
   /// Begin tracing
-  void run(ArcState const *state);
+  void run(ArcState *state);
   /// Dispatch the currently active trace buffer containing `oldBufferSize`
   /// valid entries to the encoder thread and return the storage of the
   /// new active buffer.
