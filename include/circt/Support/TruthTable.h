@@ -206,6 +206,77 @@ llvm::APInt createVarMask(unsigned numVars, unsigned varIndex, bool positive);
 std::pair<llvm::APInt, llvm::APInt>
 computeCofactors(const llvm::APInt &f, unsigned numVars, unsigned varIndex);
 
+//===----------------------------------------------------------------------===//
+// ISOP (Irredundant Sum-of-Products) Utilities
+//===----------------------------------------------------------------------===//
+
+/// Represents a product term (cube) in a sum-of-products expression.
+/// Each cube is a conjunction of literals (variables or their negations).
+/// Assumes number of variables is less than 64.
+struct Cube {
+  /// Bitmask indicating which variables appear in this cube
+  uint64_t mask = 0;
+  /// Bitmask indicating which variables are negated
+  uint64_t inverted = 0;
+
+  Cube() = default;
+
+  /// Get number of literals in this cube
+  unsigned size() const { return llvm::popcount(mask); }
+
+  /// Has literal for variable at index varIndex
+  inline bool hasLiteral(unsigned varIndex) const {
+    return mask & (1ULL << varIndex);
+  }
+
+  inline void setLiteral(unsigned varIndex, bool isInverted) {
+    uint64_t varMask = 1ULL << varIndex;
+    mask |= varMask;
+    if (isInverted)
+      inverted |= varMask;
+  }
+  inline void removeLiteral(unsigned varIndex) {
+    uint64_t varMask = 1ULL << varIndex;
+    mask &= ~varMask;
+    inverted &= ~varMask;
+  }
+
+  inline bool isLiteralInverted(unsigned varIndex) const {
+    return inverted & (1ULL << varIndex);
+  }
+};
+
+/// Represents a sum-of-products expression.
+struct SOPForm {
+  llvm::SmallVector<Cube> cubes;
+  unsigned numVars;
+
+  SOPForm(unsigned numVars) : numVars(numVars) {}
+
+  /// Compute the truth table represented by this SOP form
+  llvm::APInt computeTruthTable() const;
+
+#ifndef NDEBUG
+  /// Debug dump method for SOP forms
+  void dump(llvm::raw_ostream &os = llvm::errs()) const;
+#endif
+};
+
+/// Extract ISOP (Irredundant Sum-of-Products) from a truth table.
+///
+/// Computes an ISOP cover for a Boolean function using the Minato-Morreale
+/// algorithm. An ISOP is a sum-of-products where:
+///   1. No cube can be removed without changing the function
+///   2. The cubes are pairwise disjoint (no minterm is covered by multiple
+///   cubes)
+///
+/// Parameters:
+///   truthTable: Single-output truth table represented as APInt
+///   numVars: Number of variables (truthTable must have 2^numVars bits)
+///
+/// Returns: SOPForm representing the ISOP cover
+SOPForm extractISOP(const llvm::APInt &truthTable, unsigned numVars);
+
 } // namespace circt
 
 #endif // CIRCT_SUPPORT_TRUTHTABLE_H

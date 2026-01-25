@@ -12,6 +12,7 @@
 
 #include "circt/Support/TruthTable.h"
 
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/MathExtras.h"
 #include <algorithm>
@@ -374,4 +375,152 @@ circt::computeCofactors(const APInt &f, unsigned numVars, unsigned var) {
   APInt cof1 = selected1 | selected1.lshr(shift);
 
   return {cof0, cof1};
+}
+
+//===----------------------------------------------------------------------===//
+// SOPForm
+//===----------------------------------------------------------------------===//
+
+APInt SOPForm::computeTruthTable() const {
+  APInt tt(1 << numVars, 0);
+  for (const auto &cube : cubes) {
+    APInt cubeTT = ~APInt(1 << numVars, 0);
+    for (unsigned i = 0; i < numVars; ++i) {
+      if (cube.hasLiteral(i))
+        cubeTT &= createVarMask(numVars, i, !cube.isLiteralInverted(i));
+    }
+    tt |= cubeTT;
+  }
+  return tt;
+}
+
+#ifndef NDEBUG
+void SOPForm::dump(llvm::raw_ostream &os) const {
+  os << "SOPForm: " << numVars << " vars, " << cubes.size() << " cubes\n";
+  for (const auto &cube : cubes) {
+    os << "  (";
+    for (unsigned i = 0; i < numVars; ++i) {
+      if (cube.mask & (1ULL << i)) {
+        os << ((cube.inverted & (1ULL << i)) ? "!" : "");
+        os << "x" << i << " ";
+      }
+    }
+    os << ")\n";
+  }
+}
+#endif
+//===----------------------------------------------------------------------===//
+// ISOP Extraction
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+/// Minato-Morreale ISOP algorithm.
+///
+/// Computes an Irredundant Sum-of-Products (ISOP) cover for a Boolean function.
+///
+/// References:
+/// - Minato, "Fast Generation of Irredundant Sum-of-Products Forms from Binary
+///   Decision Diagrams", SASIMI 1992.
+/// - Morreale, "Recursive Operators for Prime Implicant and Irredundant Normal
+///   Form Determination", IEEE TC 1970.
+///
+/// Implementation inspired by lsils/kitty library:
+/// https://github.com/lsils/kitty/blob/master/include/kitty/isop.hpp
+/// distributed under MIT License.
+///
+/// The algorithm recursively decomposes the function using Shannon expansion:
+///   f = !x * f|x=0 + x * f|x=1
+///
+/// For ISOP, we partition minterms into three groups:
+/// - Minterms only in negative cofactor: must use !x literal
+/// - Minterms only in positive cofactor: must use x literal
+/// - Minterms in both cofactors: can omit x from the cube
+///
+/// Parameters:
+///   tt: The ON-set (minterms that must be covered)
+///   dc: The don't-care set (minterms that can optionally be covered)
+///       Invariant: tt is a subset of dc (ON-set is subset of care set)
+///   numVars: Total number of variables in the function
+///   varIndex: Current variable index to start search from (counts down)
+///   result: Output SOP form (cubes are accumulated here)
+///
+/// Returns: The actual cover computed (subset of dc that covers tt)
+///
+/// The maximum recursion depth is equal to the number of variables (one level
+/// per variable). For typical use cases with TruthTable (up to 6-8 variables),
+/// this is not a concern. Since truth tables require 2^numVars bits, the
+/// recursion depth is not a limiting factor.
+APInt isopImpl(const APInt &tt, const APInt &dc, unsigned numVars,
+               unsigned varIndex, SOPForm &result) {
+  assert((tt & ~dc).isZero() && "tt must be subset of dc");
+
+  // Base case: nothing to cover
+  if (tt.isZero())
+    return tt;
+
+  // Base case: function is tautology (all don't-cares)
+  if (dc.isAllOnes()) {
+    result.cubes.emplace_back();
+    return dc;
+  }
+
+  // Find highest variable in support (top-down from varIndex).
+  // NOTE: It is well known that the order of variable selection largely
+  // affects the size of the resulting ISOP. There are numerous studies on
+  // implementing heuristics for variable selection that could improve results,
+  // albeit at the cost of runtime. We may consider implementing such
+  // heuristics in the future.
+  int var = -1;
+  APInt negCof, posCof, negDC, posDC;
+  for (int i = varIndex - 1; i >= 0; --i) {
+    std::tie(negCof, posCof) = computeCofactors(tt, numVars, i);
+    std::tie(negDC, posDC) = computeCofactors(dc, numVars, i);
+    if (negCof != posCof || negDC != posDC) {
+      var = i;
+      break;
+    }
+  }
+  assert(var >= 0 && "No variable found in support");
+
+  // Recurse on minterms unique to negative cofactor (will get !var literal)
+  size_t negBegin = result.cubes.size();
+  APInt negCover = isopImpl(negCof & ~posDC, negDC, numVars, var, result);
+  size_t negEnd = result.cubes.size();
+
+  // Recurse on minterms unique to positive cofactor (will get var literal)
+  APInt posCover = isopImpl(posCof & ~negDC, posDC, numVars, var, result);
+  size_t posEnd = result.cubes.size();
+
+  // Recurse on shared minterms (no literal for this variable)
+  APInt remaining = (negCof & ~negCover) | (posCof & ~posCover);
+  APInt sharedCover = isopImpl(remaining, negDC & posDC, numVars, var, result);
+
+  // Compute total cover by restricting each sub-cover to its domain
+  APInt negMask = createVarMaskImpl<false>(numVars, var);
+  APInt totalCover = sharedCover | (negCover & negMask) | (posCover & ~negMask);
+
+  // Add literals to cubes from recursions
+  for (size_t i = negBegin; i < negEnd; ++i)
+    result.cubes[i].setLiteral(var, true);
+
+  for (size_t i = negEnd; i < posEnd; ++i)
+    result.cubes[i].setLiteral(var, false);
+
+  return totalCover;
+}
+
+} // namespace
+
+SOPForm circt::extractISOP(const APInt &truthTable, unsigned numVars) {
+  assert((1u << numVars) == truthTable.getBitWidth() &&
+         "Truth table size must match 2^numVars");
+  SOPForm sop(numVars);
+
+  if (numVars == 0 || truthTable.isZero())
+    return sop;
+
+  (void)isopImpl(truthTable, truthTable, numVars, numVars, sop);
+
+  return sop;
 }
