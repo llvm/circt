@@ -288,79 +288,6 @@ bool Deseq::analyzeProcess() {
   for (auto [index, trigger] : llvm::enumerate(triggers))
     booleanLattice.insert({trigger, getPresentTrigger(index)});
 
-  // For triggers that are extracts, find other extracts from the same signal
-  // at the same bit position and seed them as equivalent. This handles cases
-  // like `@(posedge data[0])` where the trigger extracts from a block argument
-  // that carries the old signal value, but the "present" value in the edge
-  // detection logic extracts from a hoisted probe of the same signal.
-  for (unsigned triggerIndex = 0; triggerIndex < triggers.size();
-       ++triggerIndex) {
-    Value trigger = triggers[triggerIndex];
-    auto extractOp = trigger.getDefiningOp<comb::ExtractOp>();
-    if (!extractOp)
-      continue;
-
-    // Find the signal being probed by tracing through block arguments.
-    auto traceToProbe = [&](Value value) -> Value {
-      SmallPtrSet<Value, 8> seen;
-      SmallVector<Value> worklist;
-      worklist.push_back(value);
-      while (!worklist.empty()) {
-        auto v = worklist.pop_back_val();
-        if (!seen.insert(v).second)
-          continue;
-        if (auto probeOp = v.getDefiningOp<ProbeOp>())
-          return probeOp.getSignal();
-        if (auto arg = dyn_cast<BlockArgument>(v)) {
-          for (auto *pred : arg.getOwner()->getPredecessors()) {
-            auto *term = pred->getTerminator();
-            if (auto br = dyn_cast<cf::BranchOp>(term)) {
-              worklist.push_back(br.getDestOperands()[arg.getArgNumber()]);
-            } else if (auto condBr = dyn_cast<cf::CondBranchOp>(term)) {
-              if (condBr.getTrueDest() == arg.getOwner())
-                worklist.push_back(
-                    condBr.getTrueDestOperands()[arg.getArgNumber()]);
-              if (condBr.getFalseDest() == arg.getOwner())
-                worklist.push_back(
-                    condBr.getFalseDestOperands()[arg.getArgNumber()]);
-            } else if (auto waitOp = dyn_cast<WaitOp>(term)) {
-              if (waitOp.getDest() == arg.getOwner())
-                worklist.push_back(
-                    waitOp.getDestOperands()[arg.getArgNumber()]);
-            }
-          }
-        }
-      }
-      return {};
-    };
-
-    Value triggerSignal = traceToProbe(extractOp.getInput());
-    if (!triggerSignal)
-      continue;
-    unsigned triggerLowBit = extractOp.getLowBit();
-
-    // Find other extracts at the same bit position from probes of the same
-    // signal and seed them as equivalent to this trigger.
-    process.getBody().walk([&](comb::ExtractOp otherExtract) {
-      if (otherExtract == extractOp)
-        return;
-      if (otherExtract.getLowBit() != triggerLowBit)
-        return;
-      if (otherExtract.getType() != extractOp.getType())
-        return;
-      Value otherSignal = traceToProbe(otherExtract.getInput());
-      if (otherSignal != triggerSignal)
-        return;
-      // This extract is equivalent to the trigger - seed it as present trigger.
-      if (!booleanLattice.contains(otherExtract.getResult())) {
-        LLVM_DEBUG(llvm::dbgs() << "- Equivalent extract: " << otherExtract
-                                << " for trigger " << trigger << "\n");
-        booleanLattice.insert(
-            {otherExtract.getResult(), getPresentTrigger(triggerIndex)});
-      }
-    });
-  }
-
   // Ensure the wait op destination operands, i.e. the values passed from the
   // past into the present, are the observed values.
   for (auto [operand, blockArg] :
@@ -1088,57 +1015,11 @@ void Deseq::implementRegister(DriveInfo &drive) {
   OpBuilder builder(drive.op);
   auto loc = drive.op.getLoc();
 
-  // If the clock trigger is an extract op inside the process, we need to
-  // create an equivalent extract outside the process. This happens when the
-  // sensitivity list is a bit-select like `@(posedge data[0])`.
-  Value clockValue = drive.clock.clock;
-  if (auto extractOp = clockValue.getDefiningOp<comb::ExtractOp>()) {
-    if (!clockValue.getParentRegion()->isProperAncestor(&process.getBody())) {
-      // The extract is inside the process. Find the underlying probe by
-      // tracing through block arguments.
-      Value input = extractOp.getInput();
-      while (auto arg = dyn_cast<BlockArgument>(input)) {
-        // Find a branch that feeds this block argument
-        Value tracedValue;
-        for (auto *pred : arg.getOwner()->getPredecessors()) {
-          auto *term = pred->getTerminator();
-          if (auto br = dyn_cast<cf::BranchOp>(term)) {
-            tracedValue = br.getDestOperands()[arg.getArgNumber()];
-            break;
-          } else if (auto condBr = dyn_cast<cf::CondBranchOp>(term)) {
-            if (condBr.getTrueDest() == arg.getOwner()) {
-              tracedValue = condBr.getTrueDestOperands()[arg.getArgNumber()];
-              break;
-            }
-            if (condBr.getFalseDest() == arg.getOwner()) {
-              tracedValue = condBr.getFalseDestOperands()[arg.getArgNumber()];
-              break;
-            }
-          } else if (auto waitOp = dyn_cast<WaitOp>(term)) {
-            if (waitOp.getDest() == arg.getOwner()) {
-              tracedValue = waitOp.getDestOperands()[arg.getArgNumber()];
-              break;
-            }
-          }
-        }
-        if (!tracedValue)
-          break;
-        input = tracedValue;
-      }
-      // If we traced to a value outside the process, create an extract there.
-      if (input.getParentRegion()->isProperAncestor(&process.getBody())) {
-        builder.setInsertionPoint(process);
-        clockValue = comb::ExtractOp::create(builder, loc, extractOp.getType(),
-                                             input, extractOp.getLowBit());
-      }
-    }
-  }
-
   // Materialize the clock as a `!seq.clock` value. Insert an inverter for
   // negedge clocks.
-  auto &clockCast = materializedClockCasts[clockValue];
+  auto &clockCast = materializedClockCasts[drive.clock.clock];
   if (!clockCast)
-    clockCast = seq::ToClockOp::create(builder, loc, clockValue);
+    clockCast = seq::ToClockOp::create(builder, loc, drive.clock.clock);
   auto clock = clockCast;
   if (!drive.clock.risingEdge) {
     auto &clockInv = materializedClockInverters[clock];
