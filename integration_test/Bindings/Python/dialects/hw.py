@@ -60,7 +60,8 @@ with Context() as ctx, Location.unknown():
       hw.StructExtractOp.create(struct1, 'a')
 
       # CHECK: !hw.struct<>
-      print(hw.StructType.get([]))
+      with Context():
+        print(hw.StructType.get([]))
 
     hw.HWModuleOp(name="test", body_builder=build)
 

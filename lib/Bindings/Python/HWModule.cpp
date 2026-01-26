@@ -147,6 +147,10 @@ void circt::python::populateDialectHWSubmodule(nb::module_ &m) {
               mlirFieldInfos.push_back(HWStructFieldInfo{
                   mlirIdentifierGet(ctx, nameStringRef), type});
             }
+            if (mlirContextIsNull(ctx)) {
+              throw std::invalid_argument(
+                  "StructType requires a context if no fields provided.");
+            }
             return cls(hwStructTypeGet(ctx, mlirFieldInfos.size(),
                                        mlirFieldInfos.data()));
           },
