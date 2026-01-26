@@ -103,8 +103,18 @@ static Value visitClassProperty(Context &context,
                                 const slang::ast::ClassPropertySymbol &expr) {
   auto loc = context.convertLocation(expr.location);
   auto builder = context.builder;
-
   auto type = context.convertType(expr.getType());
+  auto fieldTy = cast<moore::UnpackedType>(type);
+  auto fieldRefTy = moore::RefType::get(fieldTy);
+
+  if (expr.lifetime == slang::ast::VariableLifetime::Static) {
+    if (auto globalOp = context.globalVariables.lookup(&expr))
+      return moore::GetGlobalVariableOp::create(builder, loc, globalOp);
+    mlir::emitError(loc) << "Failed to access static member variable "
+                         << expr.name << " as global variable";
+    return {};
+  }
+
   // Get the scope's implicit this variable
   mlir::Value instRef = context.getImplicitThisRef();
   if (!instRef) {
@@ -114,8 +124,6 @@ static Value visitClassProperty(Context &context,
   }
 
   auto fieldSym = mlir::FlatSymbolRefAttr::get(builder.getContext(), expr.name);
-  auto fieldTy = cast<moore::UnpackedType>(type);
-  auto fieldRefTy = moore::RefType::get(fieldTy);
 
   moore::ClassHandleType classTy =
       cast<moore::ClassHandleType>(instRef.getType());

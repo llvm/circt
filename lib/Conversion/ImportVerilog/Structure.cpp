@@ -1553,8 +1553,14 @@ struct ClassDeclVisitor {
     if (!ty)
       return failure();
 
-    moore::ClassPropertyDeclOp::create(builder, loc, prop.name, ty);
-    return success();
+    if (prop.lifetime == slang::ast::VariableLifetime::Automatic) {
+      moore::ClassPropertyDeclOp::create(builder, loc, prop.name, ty);
+      return success();
+    }
+
+    // Static variables should be accessed like globals, and not emit any
+    // property declaration.
+    return context.convertGlobalVariable(prop);
   }
 
   // Parameters in specialized classes hold no further information; slang
@@ -1773,8 +1779,31 @@ Context::convertGlobalVariable(const slang::ast::VariableSymbol &var) {
   // Prefix the variable name with the surrounding namespace to create somewhat
   // sane names in the IR.
   SmallString<64> symName;
-  guessNamespacePrefix(var.getParentScope()->asSymbol(), symName);
-  symName += var.name;
+
+  // If the variable is a class property, the symbol name needs to be fully
+  // qualified with the hierarchical class name
+  if (const auto *classVar = var.as_if<slang::ast::ClassPropertySymbol>()) {
+    if (const auto *parentScope = classVar->getParentScope()) {
+      if (const auto *parentClass =
+              parentScope->asSymbol().as_if<slang::ast::ClassType>())
+        symName = fullyQualifiedClassName(*this, *parentClass);
+      else {
+        mlir::emitError(loc)
+            << "Could not access parent class of class property "
+            << classVar->name;
+        return failure();
+      }
+    } else {
+      mlir::emitError(loc) << "Could not get parent scope of class property "
+                           << classVar->name;
+      return failure();
+    }
+    symName += "::";
+    symName += var.name;
+  } else {
+    guessNamespacePrefix(var.getParentScope()->asSymbol(), symName);
+    symName += var.name;
+  }
 
   // Determine the type of the variable.
   auto type = convertType(var.getType());
