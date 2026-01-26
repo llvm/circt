@@ -136,11 +136,11 @@ void TraceEncoder::finish(const ArcState *state) {
     // Dispatch the final buffer and request the worker to finish.
     if (state->traceBufferSize > 0)
       dispatch(state->traceBufferSize);
-    isFinished = true;
     {
       std::lock_guard<std::mutex> lock(bufferQueueMutex);
-      bufferQueueCv.notify_one();
-    }
+      isFinished = true;
+    } // Release bufferQueueMutex
+    bufferQueueCv.notify_one();
     // Wait for the worker to finish.
     worker->join();
     worker.reset();
