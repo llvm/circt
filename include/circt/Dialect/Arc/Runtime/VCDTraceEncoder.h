@@ -95,7 +95,7 @@ private:
   /// Internal buffer of the output stream.
   /// Do not access directly. Do not release until outFile is closed.
   std::unique_ptr<char[]> fileBuffer;
-  /// Concatenation buffer of the output stream
+  /// Concatenation buffer of the worker thread
   std::vector<char> workerOutBuffer;
   /// Current time step of the worker thread
   int64_t workerStep;
