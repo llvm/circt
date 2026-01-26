@@ -21,9 +21,11 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Region.h"
+#include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
 #include "mlir/Parser/Parser.h"
@@ -31,9 +33,11 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <cassert>
@@ -318,26 +322,26 @@ private:
                     const SmallVector<std::pair<Value, Value>> &combArgVals,
                     const SmallVector<std::pair<Value, Value>> &constantsMap,
                     Location &loc) {
-    llvm::outs()<< "Looking for "<<v<<"\n"; 
+    // llvm::outs()<< "Looking for "<<v<<"\n"; 
     // if a Comb value is already mapped, return it
     for (auto fav : combArgVals)
       {
-        llvm::outs()<<"Comparing "<< fav.first << " with "<< fav.second<<"\n";
+        // llvm::outs()<<"Comparing "<< fav.first << " with "<< fav.second<<"\n";
         if (v == fav.first){
-          llvm::outs() << "Returning "<<fav.second <<"\n";
+          // llvm::outs() << "Returning "<<fav.second <<"\n";
           return fav.second;
         }
       }
     // if it's already a  value, retrieve it from the corresponding comb
     // operation
     if (v.getDefiningOp()->getName().getDialect()->getNamespace() == "comb") {
-      llvm::outs()<<"Returning from comb op " << v<<"\n"; 
+      // llvm::outs()<<"Returning from comb op " << v<<"\n"; 
       return v; 
     }
     // if it's a constant, return its clone living in the SMT instance
     for (auto cst : constantsMap){
       if (v == cst.first){
-        llvm::outs()<<"Returning from cst "<<cst.second;
+        // llvm::outs()<<"Returning from cst "<<cst.second;
         return cst.second;
       } 
     }
@@ -363,7 +367,7 @@ private:
           auto v = getCombValues(outputOperand, valToComb, constantsMap, loc);
           auto convCast = mlir::UnrealizedConversionCastOp::create(
                   b, loc, b.getType<smt::BitVectorType>(outputOperand.getType().getIntOrFloatBitWidth()), v); 
-          llvm::outs()<<"\noutput value will be "<<outputOperand<<"\n";
+          // llvm::outs()<<"\noutput value will be "<<outputOperand<<"\n";
           // convert to output 
           outputCombValues.push_back(convCast.getResult(0));
         }
@@ -392,6 +396,7 @@ private:
     return tr;
   }
 
+  
   static int insertStates(SmallVector<std::string> &states,
                           llvm::StringRef st) {
     for (auto [id, s] : llvm::enumerate(states))
@@ -420,9 +425,11 @@ LogicalResult MachineOpConverter::dispatch() {
   auto loc = machineOp.getLoc();
   auto machineArgs = machineOp.getArguments();
 
-  // Store the FSM arguments, outputs, variables types and values
-  SmallVector<Type> smtArgsOutsVarsTypes;
-  SmallVector<Value> fsmArgsOutsVarsVals;
+  // Map the FSM's arguments, variables, outputs to an unrealized conversion cast to an SMT type
+  
+  mlir::SmallVector<mlir::Value> fsmVars; 
+  mlir::SmallVector<mlir::Value> fsmArgs; 
+  mlir::SmallVector<mlir::Type> quantifiableTypes; 
 
   TypeRange typeRange;
   ValueRange valueRange;
@@ -432,61 +439,37 @@ LogicalResult MachineOpConverter::dispatch() {
   b.setInsertionPointToStart(solver.getBody());
 
   // Collect arguments and their types
-  for (auto a : machineArgs) {
-    smtArgsOutsVarsTypes.push_back(b.getType<smt::BitVectorType>(a.getType().getIntOrFloatBitWidth()));
-    fsmArgsOutsVarsVals.push_back(a);
+  for (auto t : machineArgs) {
+    fsmArgs.push_back(t);
+    quantifiableTypes.push_back(b.getType<smt::BitVectorType>(t.getType().getIntOrFloatBitWidth()));
   }
-  size_t numArgs = fsmArgsOutsVarsVals.size();
+  size_t numArgs = fsmArgs.size();
   
-  llvm::outs()<<"\ncollected args. ";
-  
-  // Collect output variables and their types
+  // Collect output types
   if (!machineOp.getResultTypes().empty()) {
-    for (auto o : machineOp.getResultTypes()) {
-      smtArgsOutsVarsTypes.push_back(b.getType<smt::BitVectorType>(o.getIntOrFloatBitWidth()));
-      // zero-initialized outputs
-      auto ov = hw::ConstantOp::create(b, loc,
-                               APInt(o.getIntOrFloatBitWidth(), 0));
-      fsmArgsOutsVarsVals.push_back(ov);
+    for (auto t : machineOp.getResultTypes()) {
+      quantifiableTypes.push_back(b.getType<smt::BitVectorType>(t.getIntOrFloatBitWidth()));
     }
   }
   
-  size_t numOut = fsmArgsOutsVarsVals.size() - numArgs;
-  llvm::outs()<<"\ncollected "<<numOut<<" outputs. ";
-  
+  size_t numOut = quantifiableTypes.size() - numArgs;
   
   // Collect FSM variables, their types, and initial values
   SmallVector<llvm::APInt> varInitValues;
-  for (auto variableOp : machineOp.front().getOps<fsm::VariableOp>()) {
-    smtArgsOutsVarsTypes.push_back(b.getType<smt::BitVectorType>(variableOp.getType().getIntOrFloatBitWidth()));
-    fsmArgsOutsVarsVals.push_back(variableOp->getOpResult(0));
-    // retrieve initial value if available, set to 0#w otherwise
-    auto intAttr = dyn_cast<IntegerAttr>(variableOp.getInitValueAttr());
+  for (auto t : machineOp.front().getOps<fsm::VariableOp>()) {
+    auto intAttr = dyn_cast<IntegerAttr>(t.getInitValueAttr());
     varInitValues.push_back(intAttr.getValue());
+    quantifiableTypes.push_back(b.getType<smt::BitVectorType>(t.getType().getIntOrFloatBitWidth()));
+    fsmVars.push_back(t.getResult());
   }
-  
-  llvm::outs()<<"\ncollected variables. ";
-  
+  size_t numVars = fsmVars.size();
   
   // Create a map constant operations to SMT constants equivalents. 
-  llvm::DenseMap<mlir::Value, mlir::Value> constantsHwToSmt;
-  SmallVector<std::pair<mlir::Value, mlir::Value>> constantsMap;
+  IRMapping constMapper; 
   for (auto constOp : machineOp.front().getOps<hw::ConstantOp>()) {
-    auto smtConst = smt::BVConstantOp::create(b, loc, constOp
-    .getValue());
-    constantsMap.push_back({constOp, smtConst});
+    b.clone(*constOp, constMapper);
   }
   
-  llvm::outs()<<"\ncollected constants. ";
-  
-  
-  size_t numVars = varInitValues.size();
-
-  // Add an extra `time` parameter, if enabled.
-  if (cfg.withTime) {
-    smtArgsOutsVarsTypes.push_back(b.getType<smt::BitVectorType>(cfg.timeWidth));
-  }
-
   // Store all the transitions state0 -> state1 in the FSM
   SmallVector<MachineOpConverter::Transition> transitions;
   // Store all the functions F_state(outs, vars, [time]) -> Bool describing the
@@ -504,11 +487,9 @@ LogicalResult MachineOpConverter::dispatch() {
   // We retrieve the types of outputs and variables only, since the arguments
   // are universally quantified outside the state functions. These will be the
   // arguments of each state-activation function F_state.
-  SmallVector<Type> outsVarsTypes;
-  for (auto i = numArgs; i < smtArgsOutsVarsTypes.size(); ++i) {
-    // only outputs and variables
-    outsVarsTypes.push_back(smtArgsOutsVarsTypes[i]);
-  }
+  SmallVector<Type> stateFunDomain;
+  for (auto i = numArgs; i < quantifiableTypes.size(); i++)
+      stateFunDomain.push_back(quantifiableTypes[i]);
   
   // For each state, declare one SMT function: F_state(outs, vars, [time]) ->
   // Bool, returning `true`  when `state` is activated.
@@ -518,14 +499,14 @@ LogicalResult MachineOpConverter::dispatch() {
     auto range = b.getType<smt::BoolType>();
     // Only the variables and output are arguments of the state function, since
     // the FSM arguments are universally quantified outside the state functions.
-    auto funTy = b.getType<smt::SMTFuncType>(outsVarsTypes, range);
+    auto funTy = b.getType<smt::SMTFuncType>(stateFunDomain, range);
     auto acFun = smt::DeclareFunOp::create(b, loc, funTy, funName);
     stateFunctions.push_back(acFun);
     auto fromState = insertStates(states, stateOp.getName().str());
     outputOfStateId.push_back({&stateOp.getOutput(), fromState});
   }
   
-  llvm::outs()<<"\nstates added.\n";
+  // llvm::outs()<<"\nstates added.\n";
 
   // For each transition `state0 &&& guard01 -> state1`, we construct an
   // implication `F_state_0(outs, vars, [time]) &&& guard01(outs, vars) ->
@@ -549,174 +530,372 @@ LogicalResult MachineOpConverter::dispatch() {
     }
   }
   
-  llvm::outs()<<"transitions added.\n";
 
   SmallVector<PendingAssertion> assertions;
+  
+
   
   // In the initial assertion we set variables to their initial values, time ==
   // 0 (if present), initialize the arguments to `0` and compute the output
   // values of the initial state accordingly.
-  auto initState = smt::ForallOp::create(
-      b, loc, smtArgsOutsVarsTypes,
-      [&](OpBuilder &b, Location loc,
-          const SmallVector<Value> &forallArgsOutsVars) -> Value {
-        // Retrieve output region of the initial state
-        auto *initOutputReg = getOutputRegion(outputOfStateId, 0);
-        // store the initial variables' values
-        SmallVector<Value> retrievedInitVarVals;
-        // retrieve the initial value for all the quantified variables (exclude
-        // time)
-        for (size_t i = numOut + numArgs; i < numOut + numArgs + numVars; i++) {
-          // create the appropriate constant
-          retrievedInitVarVals.push_back(smt::BVConstantOp::create(b, loc, varInitValues[i - (numOut + numArgs)]));
+  auto initialAssertion = smt::ForallOp::create(
+    b, loc, quantifiableTypes, 
+    [&](OpBuilder &b, Location loc, const SmallVector<Value> &forallQuantified) -> Value {
+    
+      
+    // map each SMT-quantified variable to a corresponding FSM variable or argument
+    SmallVector<std::pair<mlir::Value, mlir::Value>> fsmToCast; 
+    for (auto [idx, fq] : llvm::enumerate(forallQuantified)) {
+      if (idx < numArgs) { // arguments
+        auto convCast = UnrealizedConversionCastOp::create(b, loc, fsmArgs[idx].getType(), fq);  
+        fsmToCast.push_back({fsmArgs[idx], convCast->getResult(0)});
+      } else if (numArgs + numOut <= idx) { // variables
+        auto convCast = UnrealizedConversionCastOp::create(b, loc, fsmVars[idx - numArgs - numOut].getType(), fq);  
+        fsmToCast.push_back({fsmVars[idx - numArgs - numOut], convCast->getResult(0)});
+      }
+    }
+    
+
+    // retrieve output region 
+    auto *initOutputReg = getOutputRegion(outputOfStateId, 0); 
+    SmallVector<Value> castOutValues; 
+    if (initOutputReg->empty()) {
+      for (auto i = numArgs; i < numArgs + numOut; i++)
+        castOutValues.push_back(forallQuantified[i]);
+    } else {
+      // clone output region, replace FSM variables and arguments with the results of 
+      // unrealized conversion casts, replace constants with their new clone
+      IRMapping mapping;
+      for (auto [id, couple] : llvm::enumerate(fsmToCast)){
+        if (id < numArgs){ //arguments are mapped directly
+          mapping.map(couple.first, couple.second); 
+        } else { // variables are mapped to tvar);
+          mapping.map(couple.first, hw::ConstantOp::create(b, loc, varInitValues[id - numArgs])); 
         }
-
-        // convert all the quantified arguments to be used in the comb region 
-        SmallVector<Value> quantifiedConv; 
-        for (auto [id, a] : llvm::enumerate(forallArgsOutsVars)){
-          auto convCast = mlir::UnrealizedConversionCastOp::create(
-                  b, loc, fsmArgsOutsVarsVals[id].getType(), a);  
-          quantifiedConv.push_back(convCast.getResult(0)); 
+      }
+      for (auto &pair : constMapper.getValueMap()) {
+        mapping.map(pair.first, pair.second);
+      }
+      
+      
+      SmallVector<mlir::Value> combOutputValues; 
+      
+      for (auto &op: initOutputReg->front()) {
+        auto *newOp = b.clone(op, mapping);
+        // retrieve the operands of the output operation
+        if (isa<fsm::OutputOp>(newOp)) {
+          for (auto out : newOp->getOperands())
+            combOutputValues.push_back(out);
+          newOp->erase();
         }
-        
-        // store the SMT values corresponding to the output values
-        SmallVector<Value> outputCombValues;
-        // push the quantified SMT values for the arguments
-
-        // Evaluate output region at init to compute outputs (if present).
-        // The evaluation of the output could depend on the FSM arguments, which
-        // are initialized to 0 at the first iteration.
-        if (!initOutputReg->empty()) {
-          // Map each FSM variable to a corresponding SMT value.
-          SmallVector<std::pair<Value, Value>> valToComb;
-
-          // First initialize the map with the quantified arguments
-          for (auto [id, val] : llvm::enumerate(fsmArgsOutsVarsVals)){
-            valToComb.push_back({val, quantifiedConv[id]});
-          }
-
-          for (auto rv : retrievedInitVarVals)
-              llvm::outs()<<"\nretrieved value: "<<rv;
-            
-          
-          // Replace variables with their initial value
-          for (auto [i, a] : llvm::enumerate(fsmArgsOutsVarsVals)) {
-            if (i >= numOut + numArgs && i < numOut + numArgs + numVars) {
-              valToComb.push_back({a, retrievedInitVarVals[i - numOut - numArgs]});
-            }
-            llvm::outs() << "\nvalToComb[" << i << "] = {" << valToComb[i].first << ", " << valToComb[i].second <<"}\n";
-          }
-          
-          llvm::outs()<<"\nreplaced variables with their initial value.\n";
-          
-          
-          // retrieve the output SMT values and assertions from the output
-          // region
-          outputCombValues =
-              parseOutputRegion(initOutputReg, assertions, valToComb, constantsMap, loc, 0);
-        }
-        
-        solver->dump();
-
-        // Store the variables and output (and optionally time) at the initial
-        // state.
-        SmallVector<Value> initStateArgs;
-
-        for (auto i = numArgs; i < forallArgsOutsVars.size(); ++i) {
-          // output values are the ones computed from the output region
-          if (i < numArgs) {
-            // outputs
-            forallArgsOutsVars[i];
-          } else if (i < numOut + numArgs){
-            initStateArgs.push_back(outputCombValues[i - numArgs]);
-          } else if (i < numOut + numArgs + numVars) {
-            // variables
-            initStateArgs.push_back(
-                retrievedInitVarVals[i - (numOut + numArgs)]);
-          } else {
-            initStateArgs.push_back(forallArgsOutsVars[i]); // time
-          }
-        }
-
-        auto inInit =
-            smt::ApplyFuncOp::create(b, loc, stateFunctions[0], initStateArgs);
-
-        if (cfg.withTime) {
-          // time is the last forall arg
-          Value zeroTime = hw::ConstantOp::create(b, loc, 0);
-          Value atZero =
-              comb::ICmpOp::create(b, loc, comb::ICmpPredicate::eq,
-                                   forallArgsOutsVars.back(), zeroTime);
-          return smt::ImpliesOp::create(b, loc, atZero, inInit);
-        }
-
-        return inInit;
-      });
-
-  // smt::AssertOp::create(b, loc, initState);
-
+      }
+      
+      // cast the (comb) results of the output region to SMT types, such that they can be used as 
+      // arguments of the state function
+      for (auto [idx, out] : llvm::enumerate(combOutputValues)) {
+        auto convCast = UnrealizedConversionCastOp::create(b, loc, forallQuantified[numArgs + idx].getType(), out);  
+        castOutValues.push_back(convCast->getResult(0)); 
+      }
+    }
+    
+    // assign the initial value to each argument of the initial function (outputs and variables)
+    SmallVector<mlir::Value> initialCondition; 
+    for (auto [idx, q] : llvm::enumerate(forallQuantified)){
+      if (numArgs + numOut <= idx){ // FSM variables are assigned their initial value as an SMT constant
+        initialCondition.push_back(smt::BVConstantOp::create(b, loc, varInitValues[idx - numArgs - numOut])); 
+      } else if (numArgs <= idx) { // FSM outputs are assigned the value computed in the output region
+        initialCondition.push_back(castOutValues[idx - numArgs]);
+      }
+    }
+    
+    return smt::ApplyFuncOp::create(b, loc, stateFunctions[0], initialCondition);
+    }
+  ); 
   
-  llvm::outs()<< "\nconverted so far: "; 
-  solver.dump();
-  
-  
+  // assert initial conditions
+  smt::AssertOp::create(b, loc, initialAssertion);  
   
   // For each transition
   // F_state0(vars, outs, [time]) &&& guard (args, vars) ->
   // F_state1(updatedVars, updatedOuts, [time + 1]), build a corresponding
   // implication.
+  
+  for (auto [transId, transition] : llvm::enumerate(transitions)) {
+    
+    // return a SmallVector of updated SMT values for the arriving state function
+    auto action =
+    [&](SmallVector<Value> actionArgsOutsVarsVals) -> SmallVector<Value> {
+      // map each SME-quantified variable to a corresponding FSM variable or argument
+      SmallVector<std::pair<mlir::Value, mlir::Value>> fsmToCast; 
+      for (auto [idx, fq] : llvm::enumerate(actionArgsOutsVarsVals)) {
+        if (idx < numArgs) { // arguments
+          auto convCast = UnrealizedConversionCastOp::create(b, loc, fsmArgs[idx].getType(), fq);  
+          fsmToCast.push_back({fsmArgs[idx], convCast->getResult(0)});
+        } else if (numArgs + numOut <= idx) { // variables
+          auto convCast = UnrealizedConversionCastOp::create(b, loc, fsmVars[idx - numArgs - numOut].getType(), fq);  
+          fsmToCast.push_back({fsmVars[idx - numArgs - numOut], convCast->getResult(0)});
+        }
+      }
+      // retrieve action region 
+      SmallVector<Value> castUpdatedVars; 
+      // initialize to not update
+      for (size_t i = 0; i < numVars; i++) {
+        castUpdatedVars.push_back(actionArgsOutsVarsVals[numArgs + numOut + i]); 
+      }
+      
+      llvm::outs()<<"\nhere4";
+      
+      if (transition.hasAction) {
+        
+        auto *actionReg = transition.action; 
+      llvm::outs()<<"\nhere5";
+        
+        // clone action region, replace FSM variables and arguments with the results of 
+        // unrealized conversion casts, replace constants with their new clone
+        IRMapping mapping;
+        for (auto couple : fsmToCast){
+          mapping.map(couple.first, couple.second); 
+        }
+        for (auto &pair : constMapper.getValueMap()) {
+          mapping.map(pair.first, pair.second);
+        }
+      llvm::outs()<<"\nhere6\n";
+        
+        SmallVector<std::pair<mlir::Value, mlir::Value>> combActionValues; 
+        // we initialize all the non-updated values to the corresponding quantified variable 
+        // assuming no action 
+        for (auto &op : actionReg->front()) {
+          auto *newOp = b.clone(op, mapping);
+          
+          newOp->dump();
+          llvm::outs()<<"\n";
+          // retrieve the updated values and update the corresponding value in the map
+          if (isa<fsm::UpdateOp>(newOp)) {
+            auto varToUpdate = newOp->getOperand(0); 
+            auto updatedValue = newOp->getOperand(1);
+            
+            llvm::outs()<<"\nvarToUpdate = "<< varToUpdate;
+            llvm::outs()<<"\nupdatedValue = "<< updatedValue;
+      
+            for (auto [id, castVar] : llvm::enumerate(castUpdatedVars)){
+              llvm::outs()<<"\n castUpdatedVar ["<<id<<"] = "<< castVar;
+            }
+      
+            for (auto [id, pair] : llvm::enumerate(fsmToCast)){
+              llvm::outs()<<"\n fsmToCast ["<<id<<"] = {"<<pair.first<<", "<<pair.second<<"}";
+            }
+      
+      
+            for (auto [id, var] : llvm::enumerate(fsmToCast)){
+              if (var.second == varToUpdate) {
+                // convert 
+                llvm::outs()<<"\nupdate "<<varToUpdate<<" with "<<updatedValue;
+                auto convCast = UnrealizedConversionCastOp::create(b, loc, actionArgsOutsVarsVals[numOut + 
+                  id].getType(), updatedValue);  
+                llvm::outs()<<"\nupdating at "<<id<<" - "<< numArgs;
+                
+                castUpdatedVars[id - numArgs] = convCast->getResult(0);
+                
+                llvm::outs()<<"\nupdated!!!";
+                
+              }
+            }
+            newOp->erase();
+          }
+        }
+      } 
+      return castUpdatedVars;
+    }; 
+    
+    // return an SMT value for the transition's guard
+    auto guard = [&](SmallVector<Value> actionArgsOutsVarsVals) -> Value {
+      if (transition.hasGuard) {
+        // map each SME-quantified variable to a corresponding FSM variable or argument
+        SmallVector<std::pair<mlir::Value, mlir::Value>> fsmToCast; 
+        for (auto [idx, fq] : llvm::enumerate(actionArgsOutsVarsVals)) {
+          if (idx < numArgs) { // arguments
+            auto convCast = UnrealizedConversionCastOp::create(b, loc, fsmArgs[idx].getType(), fq);  
+            fsmToCast.push_back({fsmArgs[idx], convCast->getResult(0)});
+          } else if (numArgs + numOut <= idx) { // variables
+            auto convCast = UnrealizedConversionCastOp::create(b, loc, fsmVars[idx - numArgs - numOut].getType(), fq);  
+            fsmToCast.push_back({fsmVars[idx - numArgs - numOut], convCast->getResult(0)});
+          }
+        }
+        llvm::outs()<<"\n\nhereAgain";
+        IRMapping mapping;
+        for (auto couple : fsmToCast){
+          mapping.map(couple.first, couple.second); 
+        }
+        for (auto &pair : constMapper.getValueMap()) {
+          mapping.map(pair.first, pair.second);
+        }
+        llvm::outs()<<"\n\nhereAgain2";
+        
+        Value guardVal;
+        
+        llvm::outs()<<"\n\nhereAgain3";
+        
+        for (auto &op: transition.guard->front()) {
+          auto *newOp = b.clone(op, mapping);
+          // retrieve the operands of the output operation
+          if (isa<fsm::ReturnOp>(newOp)) {
+            llvm::outs()<<"\n\nhereAgain4";
+            guardVal = UnrealizedConversionCastOp::create(b, loc, b.getType<smt::BoolType>(), newOp->getOperand(0))->getResult(0);  
+            llvm::outs()<<"\n\nguardVal = "<< guardVal;
+            newOp->erase();
+            
+          }
+        }
+        return guardVal;
+        
+      }
+      // return true if the transition has no guard
+      return smt::BoolConstantOp::create(b, loc, true);
+    };
+    
+    // return a SmallVector of output SMT values for the arriving state 
+    auto output =
+    [&](SmallVector<Value> outputArgsOutsVarsVals) -> SmallVector<Value> {
+      // map each SME-quantified variable to a corresponding FSM variable or argument
+      SmallVector<std::pair<mlir::Value, mlir::Value>> fsmToCast; 
+      for (auto [idx, fq] : llvm::enumerate(outputArgsOutsVarsVals)) {
+        llvm::outs()<<"\n\nhere2";
+        
+        if (idx < numArgs) { // arguments
+          auto convCast = UnrealizedConversionCastOp::create(b, loc, fsmArgs[idx].getType(), fq);  
+          fsmToCast.push_back({fsmArgs[idx], convCast->getResult(0)});
+        } else if (numArgs + numOut <= idx) { // variables
+          auto convCast = UnrealizedConversionCastOp::create(b, loc, fsmVars[idx - numArgs - numOut].getType(), fq);  
+          fsmToCast.push_back({fsmVars[idx - numArgs - numOut], convCast->getResult(0)});
+        }
+        
+      }
+        llvm::outs()<<"\n\nhere1";
+      
+      // retrieve action region 
+      SmallVector<Value> castOutputVars; 
+      
+      if (transition.hasOutput) {
+        
+        auto *outputReg = transition.output; 
+        
+        // clone action region, replace FSM variables and arguments with the results of 
+        // unrealized conversion casts, replace constants with their new clone
+        IRMapping mapping;
+        for (auto couple : fsmToCast){
+          mapping.map(couple.first, couple.second); 
+        }
+        for (auto &pair : constMapper.getValueMap()) {
+          mapping.map(pair.first, pair.second);
+        }
+        
+        llvm::outs()<<"\n\nhere";
+        // we initialize all the non-updated values to the corresponding quantified variable 
+        // assuming no action 
+        for (auto &op : outputReg->front()) {
+          auto *newOp = b.clone(op, mapping);
+          // retrieve the updated values and update the corresponding value in the map
+          if (isa<fsm::OutputOp>(newOp)) {
+            for (auto [id, operand] : llvm::enumerate(newOp->getOperands())){
+                // convert 
+              llvm::outs()<<"\noutputOp operand = "<<operand;
+                
+              auto convCast = UnrealizedConversionCastOp::create(b, loc, outputArgsOutsVarsVals[numArgs + id].getType(), operand);  
+              
+              
+              castOutputVars.push_back(convCast->getResult(0));
+                
+            }
+            newOp->erase();
+            
+            
+          }
+        }
+      } 
+      
+      return castOutputVars;
+    }; 
+    
+    
+    // douple quantified arguments to consider both the initial and arriving state
+    SmallVector<Type> transitionQuantified;
+    for (auto [id, ty] : llvm::enumerate(quantifiableTypes)) {
+      if (id < numArgs) {
+        transitionQuantified.push_back(ty);
+        transitionQuantified.push_back(ty);
+      } else {
+        transitionQuantified.push_back(ty);
+      }
+    }
+    
+    auto forall = smt::ForallOp::create(
+        b, loc, transitionQuantified,
+        [&](OpBuilder &b, Location loc,
+            ValueRange forallDoubledArgsOutputVarsInputs) -> Value {
+              
+          SmallVector<Value> startingArgsOutsVars;
+          SmallVector<Value> startingFunArgs;
+          SmallVector<Value> arrivingArgsOutsVars;
+          SmallVector<Value> arrivingFunArgs;
+          
+          for (size_t i = 0; i < 2 * numArgs; i++) {
+            if (i % 2 == 1)
+              arrivingArgsOutsVars.push_back(
+                  forallDoubledArgsOutputVarsInputs[i]);
+            else
+              startingArgsOutsVars.push_back(
+                  forallDoubledArgsOutputVarsInputs[i]);
+          }
+          for (auto i = 2 * numArgs; i < forallDoubledArgsOutputVarsInputs.size(); ++i) {\
+            startingArgsOutsVars.push_back(forallDoubledArgsOutputVarsInputs[i]);
+            arrivingArgsOutsVars.push_back(forallDoubledArgsOutputVarsInputs[i]);
+            startingFunArgs.push_back(forallDoubledArgsOutputVarsInputs[i]);
+          }
 
-  // for (auto [transId, transition] : llvm::enumerate(transitions)) {
+          // the state function only takes outputs and variables as arguments
+          auto lhs = smt::ApplyFuncOp::create(
+              b, loc, stateFunctions[transition.from], startingFunArgs);
+              
+          llvm::outs()<<"\n\nhere3";
+          
+          auto updatedCastVals = action(startingArgsOutsVars); 
+          llvm::outs()<<"\n\nhere4";
+          
+          auto guardVal = guard(startingArgsOutsVars);
+          
+          for (size_t i = 0; i < numVars; i++){
+            llvm::outs()<<"\nhereeee";
+            arrivingArgsOutsVars[numArgs + numOut + i] = updatedCastVals[i]; 
+          }
+          
+          llvm::outs()<<"\n\nhere2";
+          
+            
+          auto outputCastVals = output(arrivingArgsOutsVars); 
+          
+          for (auto o : outputCastVals){
+            llvm::outs()<<"\noutput value: "<<o;
+            arrivingFunArgs.push_back(o); 
+          }
+          for(auto u : updatedCastVals)
+            arrivingFunArgs.push_back(u); 
+          
+          auto rhs =
+              smt::ApplyFuncOp::create(b, loc, stateFunctions[transition.to],
+                                       arrivingFunArgs);
 
-  //   // return a SmallVector of updated SMT values for arguments (unchanged),
-  //   // variables and outputs after evaluating the action and output regions
-  //   auto action =
-  //       [&](SmallVector<Value> actionArgsOutsVarsVals) -> SmallVector<Value> {
-  //     // map each FSM variable to a corresponding SMT value.
-  //     SmallVector<std::pair<Value, Value>> valToComb;
-  //     // initialize the map with the quantified arguments
-  //     for (auto [id, av] : llvm::enumerate(argsOutsVarsVals))
-  //       valToComb.push_back({av, actionArgsOutsVarsVals[id]});
-  //     // store the updated SMT values for each variable
-  //     SmallVector<Value> updatedCombValues;
+          auto guardedlhs = smt::AndOp::create(b, loc, lhs, guardVal); 
+                                       
+          return smt::ImpliesOp::create(b, loc, guardedlhs, rhs);
+        });
 
-  //     // if the transition has an action, evaluate it and update the variables
-  //     // accordingly
-  //     if (transition.hasAction) {
-  //       for (auto [j, pairMap] : llvm::enumerate(valToComb)) {
-  //         bool found = false;
-  //         for (auto &op : transition.action->getOps()) {
-  //           if (auto updateOp = dyn_cast<fsm::UpdateOp>(op)) {
-  //             // if the return operand of the update operation correponds to the
-  //             // variable being updated pairMap.first retrieve its SMT value
-  //             if (updateOp->getOperand(0) == pairMap.first) {
-  //               auto nv = getCombValues(updateOp->getOperand(1), valToComb, loc);
-  //               updatedCombValues.push_back(nv);
-  //               found = true;
-  //             }
-  //           }
-  //         }
-  //         // if the variable is not updated, keep the quantified value
-  //         if (!found)
-  //           updatedCombValues.push_back(pairMap.second);
-  //       }
-  //     } else {
-  //       // if there is no action, variables remain unchanged
-  //       for (auto [j, pairMap] : llvm::enumerate(valToComb))
-  //         updatedCombValues.push_back(pairMap.second);
-  //     }
-  //     // Time update (if present).
-  //     if (cfg.withTime) {
-  //       Value nextTime;
-  //       auto oneT = smt::BVConstantOp::create(b, loc, 1, cfg.timeWidth);
-  //       auto resTy = b.getType<smt::BitVectorType>(cfg.timeWidth);
-  //       nextTime = smt::BVAddOp::create(
-  //           b, loc, resTy,
-  //           SmallVector<Value>{actionArgsOutsVarsVals.back(), oneT});
-  //       updatedCombValues.push_back(nextTime);
-  //     }
-  //     return updatedCombValues;
-  //   };
+    smt::AssertOp::create(b, loc, forall);
+  }
+
+        
+        
+
+
 
   //   // return an SMT Bool value for the guard condition of the transition,
   //   auto guard = [&](SmallVector<Value> guardArgsOutsVarsVals) -> Value {
@@ -765,78 +944,8 @@ LogicalResult MachineOpConverter::dispatch() {
   //   // F_from(outOld, varsOld, [time]) AND guard(argsOld, outOld, varsOld)
   //   //    => F_to(outNew, varsNew, [time+1])
   //   // we need two copies of each args: argsOld, argsNew
-  //   SmallVector<Type> doubleArgsOutsVarsTypes;
-  //   for (auto [id, ty] : llvm::enumerate(argsOutsVarsTypes)) {
-  //     if (id < numArgs) {
-  //       doubleArgsOutsVarsTypes.push_back(ty);
-  //       doubleArgsOutsVarsTypes.push_back(ty);
-  //     } else {
-  //       doubleArgsOutsVarsTypes.push_back(ty);
-  //     }
-  //   }
-  //   auto forall = smt::ForallOp::create(
-  //       b, loc, doubleArgsOutsVarsTypes,
-  //       [&](OpBuilder &b, Location loc,
-  //           ValueRange forallDoubledArgsOutputVarsInputs) -> Value {
-  //         SmallVector<Value> startingArgsOutsVars;
-  //         SmallVector<Value> arrivingArgsOutsVars;
 
-  //         for (size_t i = 0; i < 2 * numArgs; i++) {
-  //           if (i % 2 == 1)
-  //             startingArgsOutsVars.push_back(
-  //                 forallDoubledArgsOutputVarsInputs[i]);
-  //           else
-  //             arrivingArgsOutsVars.push_back(
-  //                 forallDoubledArgsOutputVarsInputs[i]);
-  //         }
-
-  //         // Initialize state function arguments (outs, vars, [time])
-  //         SmallVector<Value> stateFuncArgs;
-  //         for (auto i = 2 * numArgs;
-  //              i < forallDoubledArgsOutputVarsInputs.size(); ++i) {
-  //           stateFuncArgs.push_back(forallDoubledArgsOutputVarsInputs[i]);
-  //         }
-
-  //         // the state function only takes outputs and variables (and optionally
-  //         // time) as arguments
-  //         auto startingStateFun = smt::ApplyFuncOp::create(
-  //             b, loc, stateFunctions[transition.from], stateFuncArgs);
-
-  //         for (auto funcArg : stateFuncArgs) {
-  //           startingArgsOutsVars.push_back(funcArg);
-  //           arrivingArgsOutsVars.push_back(funcArg);
-  //         }
-
-  //         SmallVector<Value> actionedStateFuncArgs =
-  //             action(startingArgsOutsVars);
-  //         SmallVector<Value> outputStateFuncArgs = output(arrivingArgsOutsVars);
-
-  //         SmallVector<Value> actionedStateFuncArgsForFunc;
-
-  //         // only outs, vars, [time] are arguments of the state function
-  //         for (auto i = numArgs; i < actionedStateFuncArgs.size(); ++i) {
-  //           if (i < numOut + numArgs) {
-  //             // outputs are the ones computed from the output region
-  //             actionedStateFuncArgsForFunc.push_back(
-  //                 outputStateFuncArgs[i - numArgs]);
-  //           } else {
-  //             // variables and time result from the update in the action region
-  //             actionedStateFuncArgsForFunc.push_back(actionedStateFuncArgs[i]);
-  //           }
-  //         }
-
-  //         auto rhs =
-  //             smt::ApplyFuncOp::create(b, loc, stateFunctions[transition.to],
-  //                                      actionedStateFuncArgsForFunc);
-
-  //         auto guardVal = guard(startingArgsOutsVars);
-  //         auto lhs = smt::AndOp::create(b, loc, startingStateFun, guardVal);
-  //         return smt::ImpliesOp::create(b, loc, lhs, rhs);
-  //       });
-
-  //   smt::AssertOp::create(b, loc, forall);
-  // }
-
+  
   // Lower each captured verif.assert as a safety clause:
   // Forall x. F_state(x) => predicate(x)
   // for (auto &pa : assertions) {
