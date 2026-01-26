@@ -59,9 +59,6 @@ with Context() as ctx, Location.unknown():
       # CHECK: hw.struct_extract [[STRUCT1]]["a"] : !hw.struct<a: i32, b: i1>
       hw.StructExtractOp.create(struct1, 'a')
 
-      # CHECK: !hw.struct<>
-      with Context():
-        print(hw.StructType.get([]))
 
     hw.HWModuleOp(name="test", body_builder=build)
 
@@ -139,6 +136,10 @@ with Context() as ctx, Location.unknown():
   print(module_type.input_names)
   # CHECK-NEXT:  ['out']
   print(module_type.output_names)
+
+  # Test StructType
+  # CHECK: !hw.struct<>
+  print(hw.StructType.get([]))
 
   # Test UnionType
   union_type = hw.UnionType.get([('a', i32, 0), ('b', i1, 4), ('c', i2, 0)])
