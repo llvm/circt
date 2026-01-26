@@ -59,7 +59,6 @@ with Context() as ctx, Location.unknown():
       # CHECK: hw.struct_extract [[STRUCT1]]["a"] : !hw.struct<a: i32, b: i1>
       hw.StructExtractOp.create(struct1, 'a')
 
-
     hw.HWModuleOp(name="test", body_builder=build)
 
   print(m)
