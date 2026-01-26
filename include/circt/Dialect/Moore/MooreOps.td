@@ -655,7 +655,7 @@ def NullOp : MooreOp<"null", [Pure]> {
     Represents the SystemVerilog literal constant `null`, which is a valid
     primary and constant_primary in IEEE 1800-2023.
 
-    The result type must be a null-able handle-like type (e.g. class handle,
+    The result type must be a null-able handle-like type (e.g., a class handle,
     virtual interface, event, chandle). Verification enforces this to prevent
     mis-modeling `null` as a numeric constant.
   }];
