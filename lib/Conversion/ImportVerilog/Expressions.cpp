@@ -108,10 +108,19 @@ static Value visitClassProperty(Context &context,
   auto fieldRefTy = moore::RefType::get(fieldTy);
 
   if (expr.lifetime == slang::ast::VariableLifetime::Static) {
+
+    // Variable may or may not have been hoisted already. Hoist if not.
+    if (!context.globalVariables.lookup(&expr)) {
+      if (failed(context.convertGlobalVariable(expr))) {
+        return {};
+      }
+    }
+    // Try the static variable after it has been hoisted.
     if (auto globalOp = context.globalVariables.lookup(&expr))
       return moore::GetGlobalVariableOp::create(builder, loc, globalOp);
+
     mlir::emitError(loc) << "Failed to access static member variable "
-                         << expr.name << " as global variable";
+                         << expr.name << " as a global variable";
     return {};
   }
 

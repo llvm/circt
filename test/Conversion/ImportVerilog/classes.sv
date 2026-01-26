@@ -710,3 +710,32 @@ class staticMemberClass;
         return member;
     endfunction
 endclass
+
+// Check that accesses to static members of forward-declared classes without
+// an object instance are valid.
+
+typedef class staticClass;
+
+// CHECK-LABEL:  moore.class.classdecl @otherClass {
+// CHECK:  }
+
+// CHECK-LABEL:  func.func private @"otherClass::otherMemberAccess"
+// CHECK-SAME: (%arg0: !moore.class<@otherClass>) -> !moore.i32 {
+// CHECK:    [[VAR0:%.+]] = moore.get_global_variable @"staticClass::member" : <i32>
+// CHECK:    [[VAR1:%.+]] = moore.read [[VAR0]] : <i32>
+// CHECK:    return [[VAR1]] : !moore.i32
+// CHECK:  }
+
+// CHECK-LABEL:  moore.class.classdecl @staticClass {
+// CHECK:  }
+// CHECK-LABEL: moore.global_variable @"staticClass::member" : !moore.i32
+
+class otherClass;
+    function int otherMemberAccess();
+        return staticClass::member;
+    endfunction
+endclass
+
+class staticClass;
+    static int member;
+endclass

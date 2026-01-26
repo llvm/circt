@@ -1559,8 +1559,12 @@ struct ClassDeclVisitor {
     }
 
     // Static variables should be accessed like globals, and not emit any
-    // property declaration.
-    return context.convertGlobalVariable(prop);
+    // property declaration. Static variables might get hoisted elsewhere
+    // so check first whether they have been declared already.
+
+    if (!context.globalVariables.lookup(&prop))
+      return context.convertGlobalVariable(prop);
+    return success();
   }
 
   // Parameters in specialized classes hold no further information; slang
