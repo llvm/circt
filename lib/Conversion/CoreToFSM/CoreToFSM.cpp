@@ -348,10 +348,11 @@ static FrozenRewritePatternSet loadPatterns(MLIRContext &context) {
   return frozenPatterns;
 }
 
-static void getReachableStates(llvm::SetVector<size_t> &visitableStates,
-                               HWModuleOp moduleOp, size_t currentStateIndex,
-                               SmallVector<seq::CompRegOp> registers,
-                               OpBuilder opBuilder, bool isInitialState) {
+static LogicalResult
+getReachableStates(llvm::SetVector<size_t> &visitableStates,
+                   HWModuleOp moduleOp, size_t currentStateIndex,
+                   SmallVector<seq::CompRegOp> registers, OpBuilder opBuilder,
+                   bool isInitialState) {
 
   IRMapping mapping;
   auto clonedBody =
@@ -401,8 +402,9 @@ static void getReachableStates(llvm::SetVector<size_t> &visitableStates,
 
   bool changed = false;
   GreedyRewriteConfig config;
-  LogicalResult converged =
-      applyOpPatternsGreedily(opsToProcess, frozenPatterns, config, &changed);
+  if (failed(applyOpPatternsGreedily(opsToProcess, frozenPatterns, config,
+                                     &changed)))
+    return failure();
 
   llvm::SmallVector<llvm::SetVector<size_t>> pv;
   for (size_t j = 0; j < newOutput.getNumOperands(); j++) {
@@ -425,6 +427,7 @@ static void getReachableStates(llvm::SetVector<size_t> &visitableStates,
   }
 
   clonedBody.erase();
+  return success();
 };
 
 // A converter class to handle the logic of converting a single hw.module.
@@ -646,8 +649,9 @@ public:
       config.setScope(&outputRegion);
 
       bool changed = false;
-      LogicalResult converged =
-          applyOpPatternsGreedily(opsToProcess, patterns, config, &changed);
+      if (failed(applyOpPatternsGreedily(opsToProcess, patterns, config,
+                                         &changed)))
+        return failure();
       opBuilder.setInsertionPoint(stateOp);
       // hw.module uses graph regions that allow cycles (e.g., registers feeding
       // back into themselves). By this point we've replaced all registers with
@@ -661,9 +665,10 @@ public:
       }
       Region &transitionRegion = stateOp.getTransitions();
       llvm::SetVector<size_t> visitableStates;
-      getReachableStates(visitableStates, moduleOp, currentStateIndex,
-                         registers, opBuilder,
-                         currentStateIndex == initialStateIndex);
+      if (failed(getReachableStates(visitableStates, moduleOp,
+                                    currentStateIndex, registers, opBuilder,
+                                    currentStateIndex == initialStateIndex)))
+        return failure();
       for (size_t j : visitableStates) {
         StateOp toState;
         if (!stateToStateOp.contains(j)) {
@@ -818,8 +823,9 @@ public:
           config.setScope(&actionRegion);
 
           bool changed = false;
-          LogicalResult converged =
-              applyOpPatternsGreedily(opsToProcess, patterns, config, &changed);
+          if (failed(applyOpPatternsGreedily(opsToProcess, patterns, config,
+                                             &changed)))
+            return failure();
 
           // hw.module uses graph regions that allow cycles. By this point
           // we've replaced all registers with constants, but cycles in purely
@@ -857,8 +863,10 @@ public:
 
         GreedyRewriteConfig config2;
         config2.setScope(&stateOp.getTransitions());
-        applyOpPatternsGreedily(transitionOps, frozenPatterns, config2,
-                                &changed);
+        if (failed(applyOpPatternsGreedily(transitionOps, frozenPatterns,
+                                           config2, &changed))) {
+          return failure();
+        }
 
         for (TransitionOp transition :
              stateOp.getTransitions().getOps<TransitionOp>()) {
