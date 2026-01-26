@@ -16,10 +16,10 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include "NanobindUtils.h"
-#include "mlir/Bindings/Python/IRCore.h"
-#include "mlir/Bindings/Python/NanobindAdaptors.h"
 #include "mlir-c/IR.h"
 #include "mlir-c/Support.h"
+#include "mlir/Bindings/Python/IRCore.h"
+#include "mlir/Bindings/Python/NanobindAdaptors.h"
 #include <nanobind/nanobind.h>
 namespace nb = nanobind;
 
@@ -157,7 +157,7 @@ void circt::python::populateDialectHWSubmodule(nb::module_ &m) {
                  self, mlirStringRefCreateFromCString(fieldName.c_str()));
            })
       .def("get_field_index",
-           [](MlirType self, const std::string& fieldName) {
+           [](MlirType self, const std::string &fieldName) {
              return hwStructTypeGetFieldIndex(
                  self, mlirStringRefCreateFromCString(fieldName.c_str()));
            })
