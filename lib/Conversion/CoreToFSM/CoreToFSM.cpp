@@ -363,8 +363,6 @@ static void getReachableStates(llvm::SetVector<size_t> &visitableStates,
   auto output = dyn_cast<hw::OutputOp>(terminator);
   int i = 0;
   SmallVector<Value> values;
-  SmallVector<Type> types;
-  llvm::DenseMap<int, Value> regMap;
 
   for (auto [originalRegValue, constStateValue] : stateMap) {
 
@@ -385,9 +383,7 @@ static void getReachableStates(llvm::SetVector<size_t> &visitableStates,
       values.push_back(otherStateConstant.getResult());
     else
       values.push_back(regInput);
-    types.push_back(reg.getType());
     clonedRegValue.replaceAllUsesWith(otherStateConstant.getResult());
-    regMap[i] = originalRegValue;
     reg.erase();
     i++;
   }
@@ -457,12 +453,8 @@ public:
              "option to specify which registers are state registers.";
       return failure();
     }
-    llvm::DenseMap<Value, size_t> regToIndexMap;
-    int regIndex = 0;
     SmallVector<seq::CompRegOp> registers;
     for (seq::CompRegOp c : stateRegs) {
-      regToIndexMap[c] = regIndex;
-      regIndex++;
       registers.push_back(c);
     }
 
@@ -473,7 +465,6 @@ public:
     // FSM dialect does not have an explicit reset concept. The reset behavior
     // is only captured in the initial state value.
     llvm::DenseSet<size_t> asyncResetArguments;
-    auto regsInGroup = stateRegs;
     Location loc = moduleOp.getLoc();
     SmallVector<Type> inputTypes = moduleOp.getInputTypes();
 
