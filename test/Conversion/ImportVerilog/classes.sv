@@ -82,9 +82,10 @@ endclass
 
 // CHECK-LABEL: moore.class.classdecl @PropertyCombo {
 // CHECK:   moore.class.propertydecl @pubAutoI32 : !moore.i32
-// CHECK-NEXT:   moore.class.propertydecl @protStatL18 : !moore.l18
 // CHECK-NEXT:   moore.class.propertydecl @localAutoI32 : !moore.i32
 // CHECK: }
+// CHECK-LABEL: moore.global_variable @"PropertyCombo::protStatL18" : !moore.l18
+
 class PropertyCombo;
   // public automatic int
   int pubAutoI32;
@@ -684,3 +685,28 @@ endclass
 function int methodProtoClass::testFunction();
    return mytestvar;
 endfunction
+
+
+// Check static member declarations are emitted as global variables
+// Also check that name resolution properly prefixes them
+
+// CHECK-LABEL: moore.global_variable @member : !moore.i32
+static int member;
+
+// CHECK-LABEL: moore.class.classdecl @staticMemberClass {
+// CHECK-NEXT: }
+class staticMemberClass;
+
+// CHECK-LABEL:   moore.global_variable @"staticMemberClass::member" : !moore.i32
+   static int member;
+
+// CHECK-LABEL:  func.func private @next_member() -> !moore.i32 {
+// CHECK:    [[MEMVAR:%.+]] = moore.get_global_variable @"staticMemberClass::member" : <i32>
+// CHECK:    [[RVAR:%.+]] = moore.read [[MEMVAR]] : <i32>
+// CHECK:    return [[RVAR]] : !moore.i32
+// CHECK:  }
+
+    static function int next_member();
+        return member;
+    endfunction
+endclass
