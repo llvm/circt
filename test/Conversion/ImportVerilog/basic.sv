@@ -3798,3 +3798,28 @@ module Events;
   // CHECK-NEXT: call @dummyA()
   initial @(e) dummyA();
 endmodule
+
+// CHECK-LABEL:   moore.class.classdecl @nullableClass {
+// CHECK:  }
+
+class nullableClass;
+endclass
+
+// CHECK-LABEL: moore.module @NullableTest() {
+// CHECK:         [[N0:%.*]] = moore.null
+// CHECK:         [[C0:%.*]] = moore.conversion [[N0]] : !moore.null -> !moore.chandle
+// CHECK:         [[T:%.*]] = moore.variable [[C0]] : <chandle>
+// CHECK:         [[N1:%.*]] = moore.null
+// CHECK:         [[C1:%.*]] = moore.conversion [[N1]] : !moore.null -> !moore.class<@nullableClass>
+// CHECK:         [[CVAR:%.*]] = moore.variable [[C1]] : <class<@nullableClass>>
+// CHECK:         [[N2:%.*]] = moore.null
+// CHECK:         [[C2:%.*]] = moore.conversion [[N2]] : !moore.null -> !moore.i1
+// CHECK:         [[E:%.*]] = moore.variable [[C2]] : <i1>
+// CHECK:         moore.output
+// CHECK:       }
+
+module NullableTest;
+   chandle t = null;
+   nullableClass c = null;
+   event e = null;
+endmodule
