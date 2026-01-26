@@ -626,16 +626,14 @@ public:
     return constraints_;
   }
 
-  std::vector<Constraint1> filterConstraints(const std::vector<FieldRef> &targetVars) {
+  std::vector<Constraint1>
+  filterConstraints(const std::vector<FieldRef> &targetVars) {
     std::vector<Constraint1> result;
     for (const auto &var : targetVars) {
-        if (auto it = constraints_.find(var); it != constraints_.end()) 
-        {
-            result.insert(result.end(), 
-                         it->second.begin(), 
-                         it->second.end());
-            constraints_.erase(it);
-        }
+      if (auto it = constraints_.find(var); it != constraints_.end()) {
+        result.insert(result.end(), it->second.begin(), it->second.end());
+        constraints_.erase(it);
+      }
     }
     return result;
   }
@@ -712,8 +710,8 @@ std::pair<Terms, long long> remove_solved(const Valuation &values,
       new_terms.push_back(term);
     }
   }
-  
-  return {std::move(new_terms), total_constant}; 
+
+  return {std::move(new_terms), total_constant};
 }
 
 // Call function remove_solved for Constraint1 c
@@ -723,43 +721,38 @@ Constraint1 remove_solved_c(const Valuation &values, const Constraint1 &c) {
 
   if (c.rhs_power().has_value()) {
     if (auto it = values.find(c.rhs_power().value()); it != values.end()) {
-      return Constraint1(c.lhs_var1(), 
+      return Constraint1(c.lhs_var1(),
                          base_const + static_cast<int>(c.power_value(values)),
-                         std::move(new_terms), 
-                         std::nullopt); 
+                         std::move(new_terms), std::nullopt);
     }
   }
-  return Constraint1(c.lhs_var1(), base_const, 
-                     std::move(new_terms), c.rhs_power());
+  return Constraint1(c.lhs_var1(), base_const, std::move(new_terms),
+                     c.rhs_power());
 }
 
 std::vector<Constraint1> remove_solveds(const Valuation &values,
                                         const std::vector<Constraint1> &cs) {
   std::vector<Constraint1> result;
   result.reserve(cs.size());
-  
-  std::transform(cs.begin(), cs.end(), std::back_inserter(result),
-                [&](const Constraint1& c) { 
-                  return remove_solved_c(values, c); 
-                });
+
+  std::transform(
+      cs.begin(), cs.end(), std::back_inserter(result),
+      [&](const Constraint1 &c) { return remove_solved_c(values, c); });
   return result;
 }
 
 // Find the value of variables in tbsolved stored in solution_of_tbsolved and
 // add it to initial Valuation.
-bool merge_solution(
-    const std::vector<FieldRef> &tbsolved,
-    Valuation &initial, 
-    const Valuation &solution_of_tbsolved
-) {
-    for (const FieldRef &var : tbsolved) {
-        auto it = solution_of_tbsolved.find(var);
-        if (it == solution_of_tbsolved.end()) {
-            return false; 
-        }
-        initial[var] = it->second; 
+bool merge_solution(const std::vector<FieldRef> &tbsolved, Valuation &initial,
+                    const Valuation &solution_of_tbsolved) {
+  for (const FieldRef &var : tbsolved) {
+    auto it = solution_of_tbsolved.find(var);
+    if (it == solution_of_tbsolved.end()) {
+      return false;
     }
-    return true; 
+    initial[var] = it->second;
+  }
+  return true;
 }
 
 Valuation bab(const std::vector<Constraint1> &constraints,
