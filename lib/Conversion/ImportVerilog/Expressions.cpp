@@ -904,6 +904,35 @@ struct RvalueExprVisitor : public ExprVisitor {
     }
   }
 
+  Value visitHandleBOp(const slang::ast::BinaryExpression &expr) {
+    // Convert operands to the chosen target type.
+    auto lhs = context.convertRvalueExpression(expr.left());
+    if (!lhs)
+      return {};
+    auto rhs = context.convertRvalueExpression(expr.right());
+    if (!rhs)
+      return {};
+
+    using slang::ast::BinaryOperator;
+    switch (expr.op) {
+
+    case BinaryOperator::Equality:
+      return moore::HandleEqOp::create(builder, loc, lhs, rhs);
+    case BinaryOperator::Inequality:
+      return moore::HandleNeOp::create(builder, loc, lhs, rhs);
+    case BinaryOperator::CaseEquality:
+      return moore::HandleCaseEqOp::create(builder, loc, lhs, rhs);
+    case BinaryOperator::CaseInequality:
+      return moore::HandleCaseNeOp::create(builder, loc, lhs, rhs);
+
+    default:
+      mlir::emitError(loc)
+          << "Binary operator " << slang::ast::toString(expr.op)
+          << " not supported with class handle valued operands!\n";
+      return {};
+    }
+  }
+
   Value visitRealBOp(const slang::ast::BinaryExpression &expr) {
     // Convert operands to the chosen target type.
     auto lhs = context.convertRvalueExpression(expr.left());
@@ -988,6 +1017,18 @@ struct RvalueExprVisitor : public ExprVisitor {
     // If either arg is real-typed, treat as real BOp.
     if (rhsFloatType || lhsFloatType)
       return visitRealBOp(expr);
+
+    // Check whether we are comparing against a Class Handle
+    const auto *rhsClassType =
+        expr.right().type->as_if<slang::ast::ClassType>();
+    const auto *lhsClassType = expr.left().type->as_if<slang::ast::ClassType>();
+    const auto *rhsChandleType =
+        expr.right().type->as_if<slang::ast::CHandleType>();
+    const auto *lhsChandleType =
+        expr.left().type->as_if<slang::ast::CHandleType>();
+    // If either arg is class handle-typed, treat as class handle BOp.
+    if (rhsClassType || lhsClassType || rhsChandleType || lhsChandleType)
+      return visitHandleBOp(expr);
 
     auto lhs = context.convertRvalueExpression(expr.left());
     if (!lhs)

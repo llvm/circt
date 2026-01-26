@@ -667,6 +667,65 @@ def NullOp : MooreOp<"null", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Handle Comparison Ops
+//===----------------------------------------------------------------------===//
+
+class HandleEqOpBase<string mnemonic> : MooreOp<mnemonic, [
+  Pure,
+  Commutative
+]> {
+  let description = [{
+    Compares two handle-typed (ChandleType, ClassHandleType) operands and
+    returns a single bit 0 or 1 result. If both operands correspond to the same
+    memory address, the two operands are considered equal (`eq` returns 1, `ne`
+    returns 0). If the handles are not identical, or both null, the two operands
+    are considered not equal (`eq` returns 0, `ne` returns 1). 
+
+    See IEEE 1800-2023 § 8.4 "Objects (class instances)".
+  }];
+  let arguments = (ins NullableType:$lhs, NullableType:$rhs);
+  let results = (outs BitType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` type($lhs) `:` type($rhs) `->` type($result)
+  }];
+}
+
+def HandleEqOp : HandleEqOpBase<"handle_eq"> {
+  let summary = "Handle equality";
+}
+def HandleNeOp : HandleEqOpBase<"handle_ne"> {
+  let summary = "Handle inequality";
+}
+
+class HandleCaseEqOpBase<string mnemonic> : MooreOp<mnemonic, [
+  Pure,
+  Commutative
+]> {
+  let description = [{
+    Compares two handle-typed (ChandleType, ClassHandleType) operands and
+    returns a single bit 0 or 1 result. `case_eq` corresponds to the `===`
+    operator and `case_ne` to the `!==` operator. If the handles are not
+    identical, or both null, the two operands are considered not equal (`eq`
+    returns 0, `ne` returns 1). 
+
+    See IEEE 1800-2023 § 8.4 "Objects (class instances)".
+  }];
+  let arguments = (ins NullableType:$lhs, NullableType:$rhs);
+  let results = (outs BitType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)
+  }];
+}
+
+def HandleCaseEqOp : HandleCaseEqOpBase<"handle_case_eq"> {
+  let summary = "Case equality for handle types";
+}
+def HandleCaseNeOp : HandleCaseEqOpBase<"handle_case_ne"> {
+  let summary = "Case inequality for handle types";
+}
+
+
+//===----------------------------------------------------------------------===//
 // Casting
 //===----------------------------------------------------------------------===//
 

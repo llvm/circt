@@ -3843,3 +3843,57 @@ module QueueSizeTest;
         qsize = q.size();
     end
 endmodule
+
+// CHECK-LABEL: moore.module @testHandleComparison() {
+// CHECK:           [[NULL0:%.+]] = moore.null
+// CHECK:           [[A_INIT:%.+]] = moore.conversion [[NULL0]] : !moore.null -> !moore.chandle
+// CHECK:           [[A:%.+]] = moore.variable [[A_INIT]] : <chandle>
+// CHECK:           [[NULL1:%.+]] = moore.null
+// CHECK:           [[B_INIT:%.+]] = moore.conversion [[NULL1]] : !moore.null -> !moore.class<@nullableClass>
+// CHECK:           [[B:%.+]] = moore.variable [[B_INIT]] : <class<@nullableClass>>
+// CHECK:           [[C:%.+]] = moore.variable : <i1>
+// CHECK:           [[D:%.+]] = moore.variable : <i1>
+// CHECK:           [[A_R0:%.+]] = moore.read [[A]] : <chandle>
+// CHECK:           [[NULL2:%.+]] = moore.null
+// CHECK:           [[EQ0:%.+]] = moore.handle_eq [[A_R0]], [[NULL2]] : !moore.chandle : !moore.null -> i1
+// CHECK:           [[A_R1:%.+]] = moore.read [[A]] : <chandle>
+// CHECK:           [[NULL3:%.+]] = moore.null
+// CHECK:           [[NE0:%.+]] = moore.handle_ne [[A_R1]], [[NULL3]] : !moore.chandle : !moore.null -> i1
+// CHECK:           [[OR0:%.+]] = moore.or [[EQ0]], [[NE0]] : i1
+// CHECK:           [[A_R2:%.+]] = moore.read [[A]] : <chandle>
+// CHECK:           [[NULL4:%.+]] = moore.null
+// CHECK:           [[CEQ0:%.+]] = moore.handle_case_eq [[A_R2]], [[NULL4]] : !moore.chandle, !moore.null
+// CHECK:           [[OR1:%.+]] = moore.or [[OR0]], [[CEQ0]] : i1
+// CHECK:           [[A_R3:%.+]] = moore.read [[A]] : <chandle>
+// CHECK:           [[NULL5:%.+]] = moore.null
+// CHECK:           [[CNE0:%.+]] = moore.handle_case_ne [[A_R3]], [[NULL5]] : !moore.chandle, !moore.null
+// CHECK:           [[OR2:%.+]] = moore.or [[OR1]], [[CNE0]] : i1
+// CHECK:           moore.assign [[C]], [[OR2]] : i1
+// CHECK:           [[B_R0:%.+]] = moore.read [[B]] : <class<@nullableClass>>
+// CHECK:           [[NULL6:%.+]] = moore.null
+// CHECK:           [[EQ1:%.+]] = moore.handle_eq [[B_R0]], [[NULL6]] : !moore.class<@nullableClass> : !moore.null -> i1
+// CHECK:           [[B_R1:%.+]] = moore.read [[B]] : <class<@nullableClass>>
+// CHECK:           [[NULL7:%.+]] = moore.null
+// CHECK:           [[NE1:%.+]] = moore.handle_ne [[B_R1]], [[NULL7]] : !moore.class<@nullableClass> : !moore.null -> i1
+// CHECK:           [[OR3:%.+]] = moore.or [[EQ1]], [[NE1]] : i1
+// CHECK:           [[B_R2:%.+]] = moore.read [[B]] : <class<@nullableClass>>
+// CHECK:           [[NULL8:%.+]] = moore.null
+// CHECK:           [[CEQ1:%.+]] = moore.handle_case_eq [[B_R2]], [[NULL8]] : !moore.class<@nullableClass>, !moore.null
+// CHECK:           [[OR4:%.+]] = moore.or [[OR3]], [[CEQ1]] : i1
+// CHECK:           [[B_R3:%.+]] = moore.read [[B]] : <class<@nullableClass>>
+// CHECK:           [[NULL9:%.+]] = moore.null
+// CHECK:           [[CNE1:%.+]] = moore.handle_case_ne [[B_R3]], [[NULL9]] : !moore.class<@nullableClass>, !moore.null
+// CHECK:           [[OR5:%.+]] = moore.or [[OR4]], [[CNE1]] : i1
+// CHECK:           moore.assign [[D]], [[OR5]] : i1
+// CHECK:           moore.output
+// CHECK:         }
+
+module testHandleComparison #()();
+   chandle a = null;
+   nullableClass b = null;
+   bit c,d;
+
+   assign c = (a == null) | (a != null) | (a === null) | (a !== null);
+   assign d = (b == null) | (b != null) | (b === null) | (b !== null);
+
+endmodule
