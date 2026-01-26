@@ -3823,3 +3823,23 @@ module NullableTest;
    nullableClass c = null;
    event e = null;
 endmodule
+
+// CHECK-LABEL: moore.module @QueueSizeTest() {
+// CHECK:    [[Q:%.+]] = moore.variable : <queue<i32, 0>>
+// CHECK:    [[QSIZE:%.+]] = moore.variable : <i32>
+// CHECK:    moore.procedure initial {
+// CHECK:      [[QVAR:%.+]] = moore.read [[Q]] : <queue<i32, 0>>
+// CHECK:      [[SIZE:%.+]] = moore.builtin.size [[QVAR]] : <i32, 0>
+// CHECK:      moore.blocking_assign [[QSIZE]], [[SIZE]] : i32
+// CHECK:      moore.return
+// CHECK:    }
+// CHECK:    moore.output
+// CHECK:  }
+
+module QueueSizeTest;
+    int q[$];
+    int qsize;
+    initial begin
+        qsize = q.size();
+    end
+endmodule
