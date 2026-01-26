@@ -136,6 +136,10 @@ with Context() as ctx, Location.unknown():
   # CHECK-NEXT:  ['out']
   print(module_type.output_names)
 
+  # Test StructType
+  # CHECK: !hw.struct<>
+  print(hw.StructType.get([]))
+
   # Test UnionType
   union_type = hw.UnionType.get([('a', i32, 0), ('b', i1, 4), ('c', i2, 0)])
   # CHECK: !hw.union<a: i32, b: i1 offset 4, c: i2>
