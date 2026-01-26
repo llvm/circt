@@ -663,7 +663,7 @@ function int testFun;
    return c.testFunction();
 endfunction
 
-// Check method forward declarations seeing all class properties
+// Check method forward declarations seeing all class properties.
 
 // CHECK-LABEL:  moore.class.classdecl @methodProtoClass {
 // CHECK: moore.class.propertydecl @mytestvar : !moore.i32
