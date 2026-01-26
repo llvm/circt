@@ -1523,9 +1523,25 @@ struct ClassDeclVisitor {
     Block *body = &classLowering.op.getBody().emplaceBlock();
     builder.setInsertionPointToEnd(body);
 
-    for (const auto &mem : classAST.members())
+    llvm::SmallVector<const slang::ast::MethodPrototypeSymbol *, 8>
+        delayedProtos;
+
+    // Pass 1: visit everything except method prototypes.
+    for (const auto &mem : classAST.members()) {
+      if (const auto *proto = mem.as_if<slang::ast::MethodPrototypeSymbol>()) {
+        delayedProtos.push_back(proto);
+        continue;
+      }
       if (failed(mem.visit(*this)))
         return failure();
+    }
+
+    // Pass 2: now resolve/convert method prototypes (which may trigger
+    // conversion of the implementation) after member variables are declared.
+    for (const auto *proto : delayedProtos) {
+      if (failed(visit(*proto)))
+        return failure();
+    }
 
     return success();
   }

@@ -662,3 +662,25 @@ function int testFun;
    parameterAccessClass#(7) c;
    return c.testFunction();
 endfunction
+
+// Check method forward declarations seeing all class properties.
+
+// CHECK-LABEL:  moore.class.classdecl @methodProtoClass {
+// CHECK: moore.class.propertydecl @mytestvar : !moore.i32
+// CHECK: }
+
+class methodProtoClass;
+   extern function int testFunction;
+   int mytestvar;
+endclass
+
+// CHECK-LABEL: func.func private @"methodProtoClass::testFunction"(
+// CHECK-SAME: %arg0: !moore.class<@methodProtoClass>) -> !moore.i32 {
+// CHECK: [[PREF:%.+]] = moore.class.property_ref %arg0[@mytestvar] : <@methodProtoClass> -> <i32>
+// CHECK: [[RREF:%.+]] = moore.read [[PREF]] : <i32>
+// CHECK: return [[RREF]] : !moore.i32
+// CHECK: }
+
+function int methodProtoClass::testFunction();
+   return mytestvar;
+endfunction
