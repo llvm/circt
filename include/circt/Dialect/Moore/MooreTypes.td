@@ -570,6 +570,12 @@ def AnyUnionType : MooreType<
   "packed or unpacked union type",
   "moore::UnpackedType">;
 
+/// A nullable handle or NullType type
+def NullableType : MooreType<
+  Or<[ChandleType.predicate, ClassHandleType.predicate, NullType.predicate]>,
+  "Nullable handle type",
+  "mlir::Type">;
+
 /// A ref type with the specified constraints on the nested type.
 class SpecificRefType<Type type> : ConfinedType<RefType,
   [SubstLeaves<"$_self", "llvm::cast<moore::RefType>($_self).getNestedType()",
