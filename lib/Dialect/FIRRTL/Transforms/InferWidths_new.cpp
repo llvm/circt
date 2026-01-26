@@ -626,6 +626,20 @@ public:
     return constraints_;
   }
 
+  std::vector<Constraint1> filterConstraints(const std::vector<FieldRef> &targetVars) {
+    std::vector<Constraint1> result;
+    for (const auto &var : targetVars) {
+        if (auto it = constraints_.find(var); it != constraints_.end()) 
+        {
+            result.insert(result.end(), 
+                         it->second.begin(), 
+                         it->second.end());
+            constraints_.erase(it);
+        }
+    }
+    return result;
+  }
+
   LogicalResult solve();
 
   const Valuation &solution() const { return solution_; }
@@ -671,7 +685,8 @@ filterConstraints(const std::vector<FieldRef> &targetVars,
 }
 
 // Extract the constraints on targetVars(the FieldRef is on the left hand side
-// of the inqualites) from constraints(map) Use this instead
+// of the inqualites) from constraints(map) Considering efficiency, this
+// function is no longer being used.
 std::vector<Constraint1> filterConstraints(
     const std::vector<FieldRef> &targetVars,
     DenseMap<FieldRef, std::vector<Constraint1>> &constraints_map) {
@@ -691,70 +706,60 @@ std::pair<Terms, long long> remove_solved(const Valuation &values,
   long long total_constant = 0;
 
   for (const Term &term : terms.get_terms()) {
-    auto it = values.find(term.var());
-    if (it != values.end()) {
-      unsigned int val = it->second;
-      total_constant += static_cast<long long>(term.coe()) * val;
+    if (auto it = values.find(term.var()); it != values.end()) {
+      total_constant += static_cast<long long>(term.coe()) * it->second;
     } else {
       new_terms.push_back(term);
     }
   }
-
-  return {new_terms, total_constant};
+  
+  return {std::move(new_terms), total_constant}; 
 }
 
 // Call function remove_solved for Constraint1 c
 Constraint1 remove_solved_c(const Valuation &values, const Constraint1 &c) {
   auto [new_terms, term_constant] = remove_solved(values, c.rhs_terms1());
+  const int base_const = c.rhs_const1() + static_cast<int>(term_constant);
+
   if (c.rhs_power().has_value()) {
-    auto it = values.find(c.rhs_power().value());
-    if (it != values.end()) {
-      long long power_value = c.power_value(values);
-      return Constraint1(c.lhs_var1(),
-                         c.rhs_const1() +
-                             static_cast<int>(term_constant + power_value),
-                         new_terms, std::nullopt);
-    } else {
-      return Constraint1(c.lhs_var1(),
-                         c.rhs_const1() + static_cast<int>(term_constant),
-                         new_terms, c.rhs_power());
+    if (auto it = values.find(c.rhs_power().value()); it != values.end()) {
+      return Constraint1(c.lhs_var1(), 
+                         base_const + static_cast<int>(c.power_value(values)),
+                         std::move(new_terms), 
+                         std::nullopt); 
     }
-  } else {
-    return Constraint1(c.lhs_var1(),
-                       c.rhs_const1() + static_cast<int>(term_constant),
-                       new_terms, c.rhs_power());
   }
+  return Constraint1(c.lhs_var1(), base_const, 
+                     std::move(new_terms), c.rhs_power());
 }
 
 std::vector<Constraint1> remove_solveds(const Valuation &values,
                                         const std::vector<Constraint1> &cs) {
   std::vector<Constraint1> result;
   result.reserve(cs.size());
-
-  for (const Constraint1 &c : cs) {
-    result.push_back(remove_solved_c(values, c));
-  }
-
+  
+  std::transform(cs.begin(), cs.end(), std::back_inserter(result),
+                [&](const Constraint1& c) { 
+                  return remove_solved_c(values, c); 
+                });
   return result;
 }
 
 // Find the value of variables in tbsolved stored in solution_of_tbsolved and
 // add it to initial Valuation.
-std::optional<Valuation> merge_solution(const std::vector<FieldRef> &tbsolved,
-                                        const Valuation &initial,
-                                        const Valuation &solution_of_tbsolved) {
-  Valuation result = initial;
-
-  for (const FieldRef &var : tbsolved) {
-    auto it = solution_of_tbsolved.find(var);
-    if (it == solution_of_tbsolved.end()) {
-      return std::nullopt;
+bool merge_solution(
+    const std::vector<FieldRef> &tbsolved,
+    Valuation &initial, 
+    const Valuation &solution_of_tbsolved
+) {
+    for (const FieldRef &var : tbsolved) {
+        auto it = solution_of_tbsolved.find(var);
+        if (it == solution_of_tbsolved.end()) {
+            return false; 
+        }
+        initial[var] = it->second; 
     }
-
-    result[var] = it->second;
-  }
-
-  return result;
+    return true; 
 }
 
 Valuation bab(const std::vector<Constraint1> &constraints,
@@ -895,7 +900,7 @@ LogicalResult ConstraintSolver::solve() {
     }
     std::vector<Constraint1> tbsolved_cs1;
     // Extract the inequalities that constrain the FieldRefs in this SCC
-    tbsolved_cs1 = filterConstraints(component, constraints_);
+    tbsolved_cs1 = filterConstraints(component);
     // Substitute the values of the solved FieldRefs into these to be solved
     // inequalities.
     auto cs1 = remove_solveds(solution_, tbsolved_cs1);
@@ -919,12 +924,10 @@ LogicalResult ConstraintSolver::solve() {
       ns = bab(cs1, component);
     }
     // Combine the newly solved variable values with the already solved results.
-    auto merge_result = merge_solution(component, solution_, ns);
-    if (!merge_result) {
+    if (!merge_solution(component, solution_, ns)) {
       LLVM_DEBUG(llvm::dbgs() << "Merge failed: Variable not found.\n");
       return failure();
     }
-    solution_ = *merge_result;
   }
   // test if all select signal satisfies constraints2_
   for (auto c2 : constraints2_) {
