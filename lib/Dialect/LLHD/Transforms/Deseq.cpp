@@ -1273,15 +1273,16 @@ bool Deseq::implementRegister(DriveInfo &drive) {
   if (auto mux = value.getDefiningOp<comb::MuxOp>()) {
     if (auto andOp = mux.getCond().getDefiningOp<comb::AndOp>()) {
       auto inputs = andOp.getInputs();
-      auto isClock = [&](Value v) { return v == clockValue || v == drive.clock.clock; };
+      auto isClock = [&](Value v) {
+        return v == clockValue || v == drive.clock.clock;
+      };
       if (isClock(inputs[0]) || isClock(inputs[1])) {
         Value newCond = isClock(inputs[0]) ? inputs[1] : inputs[0];
         OpBuilder::InsertionGuard guard(builder);
         builder.setInsertionPoint(mux);
-        auto newMux =
-            comb::MuxOp::create(builder, mux.getLoc(), newCond,
-                                mux.getTrueValue(), mux.getFalseValue(),
-                                mux.getTwoState());
+        auto newMux = comb::MuxOp::create(
+            builder, mux.getLoc(), newCond, mux.getTrueValue(),
+            mux.getFalseValue(), mux.getTwoState());
         mux->replaceAllUsesWith(newMux);
         mux.erase();
         value = newMux;

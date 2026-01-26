@@ -967,7 +967,7 @@ void Promoter::captureAcrossWait(Value capturedValue, ArrayRef<WaitOp> waitOps,
     if (mergePoints.contains(block))
       item.reachingDef =
           block->addArgument(capturedValue.getType(), defOp->getLoc());
-          
+
     // Replace any uses of the probe in this block with the current reaching
     // definition.
     for (auto &op : *block)
