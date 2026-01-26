@@ -200,8 +200,8 @@ LogicalResult pushIcmp(ICmpOp op, PatternRewriter &rewriter) {
     Value y = mux.getFalseValue();
     Value b = op.getRhs();
     Location loc = op.getLoc();
-    auto eq1 = rewriter.create<ICmpOp>(loc, ICmpPredicate::eq, x, b);
-    auto eq2 = rewriter.create<ICmpOp>(loc, ICmpPredicate::eq, y, b);
+    auto eq1 = ICmpOp::create(rewriter, loc, ICmpPredicate::eq, x, b);
+    auto eq2 = ICmpOp::create(rewriter, loc, ICmpPredicate::eq, y, b);
     rewriter.replaceOpWithNewOp<MuxOp>(op, mux.getCond(), eq1.getResult(),
                                        eq2.getResult());
     return llvm::success();
@@ -216,8 +216,8 @@ LogicalResult pushIcmp(ICmpOp op, PatternRewriter &rewriter) {
     Value y = mux.getFalseValue();
     Value b = op.getLhs();
     Location loc = op.getLoc();
-    auto eq1 = rewriter.create<ICmpOp>(loc, ICmpPredicate::eq, x, b);
-    auto eq2 = rewriter.create<ICmpOp>(loc, ICmpPredicate::eq, y, b);
+    auto eq1 = ICmpOp::create(rewriter, loc, ICmpPredicate::eq, x, b);
+    auto eq2 = ICmpOp::create(rewriter, loc, ICmpPredicate::eq, y, b);
     rewriter.replaceOpWithNewOp<MuxOp>(op, mux.getCond(), eq1.getResult(),
                                        eq2.getResult());
     return llvm::success();
@@ -376,7 +376,7 @@ static void getReachableStates(llvm::SetVector<size_t> &visitableStates,
         opBuilder.getIntegerAttr(constantType, constStateValue);
     opBuilder.setInsertionPoint(clonedRegOp);
     auto otherStateConstant =
-        opBuilder.create<hw::ConstantOp>(reg.getLoc(), constantAttr);
+        hw::ConstantOp::create(opBuilder, reg.getLoc(), constantAttr);
     // If the register input is self-referential (input == output), use the
     // constant we're replacing it with. Otherwise, the value would become
     // dangling after we erase the register.
@@ -392,7 +392,7 @@ static void getReachableStates(llvm::SetVector<size_t> &visitableStates,
     i++;
   }
   opBuilder.setInsertionPointToEnd(clonedBody.front().getBlock());
-  auto newOutput = opBuilder.create<hw::OutputOp>(output.getLoc(), values);
+  auto newOutput = hw::OutputOp::create(opBuilder, output.getLoc(), values);
   output.erase();
   FrozenRewritePatternSet frozenPatterns = loadPatterns(*moduleOp.getContext());
 
@@ -510,8 +510,9 @@ public:
     // The builder for fsm.MachineOp will create the body region and block
     // arguments.
     opBuilder.setInsertionPoint(moduleOp);
-    auto machine = opBuilder.create<MachineOp>(
-        loc, machineName, initialStateName, machineType, machineAttrs);
+    auto machine =
+        MachineOp::create(opBuilder, loc, machineName, initialStateName,
+                          machineType, machineAttrs);
 
     OpBuilder::InsertionGuard guard(opBuilder);
     opBuilder.setInsertionPointToStart(&machine.getBody().front());
@@ -524,8 +525,8 @@ public:
                           "variable register");
         return failure();
       }
-      auto variableOp = opBuilder.create<VariableOp>(
-          varReg->getLoc(), varReg.getInput().getType(),
+      auto variableOp = VariableOp::create(
+          opBuilder, varReg->getLoc(), varReg.getInput().getType(),
           definingConstant.getValueAttr(), varReg.getName().value_or("var"));
       variableMap[varReg] = variableOp;
     }
@@ -553,8 +554,8 @@ public:
       StateOp stateOp;
 
       if (!stateToStateOp.contains(currentStateIndex)) {
-        stateOp = opBuilder.create<StateOp>(
-            loc, "state_" + std::to_string(currentStateIndex));
+        stateOp = StateOp::create(opBuilder, loc,
+                                  "state_" + std::to_string(currentStateIndex));
         stateToStateOp.insert({currentStateIndex, stateOp});
         stateOpToState.insert({stateOp, currentStateIndex});
       } else {
@@ -579,8 +580,8 @@ public:
 
       // Create the new fsm.OutputOp with the same operands.
 
-      opBuilder.create<fsm::OutputOp>(hwOutputOp.getLoc(),
-                                      hwOutputOp.getOperands());
+      fsm::OutputOp::create(opBuilder, hwOutputOp.getLoc(),
+                            hwOutputOp.getOperands());
 
       // Erase the old terminator.
       hwOutputOp.erase();
@@ -609,8 +610,8 @@ public:
         if (registerReset) {
           if (BlockArgument blockArg = dyn_cast<BlockArgument>(registerReset)) {
             asyncResetArguments.insert(blockArg.getArgNumber());
-            auto falseConst = opBuilder.create<hw::ConstantOp>(
-                blockArg.getLoc(), clonedRegValue.getType(), 0);
+            auto falseConst = hw::ConstantOp::create(
+                opBuilder, blockArg.getLoc(), clonedRegValue.getType(), 0);
             blockArg.replaceAllUsesWith(falseConst.getResult());
           }
           if (auto xorOp = registerReset.getDefiningOp<XorOp>()) {
@@ -618,15 +619,16 @@ public:
               Value rhs = xorOp.getOperand(0);
               if (BlockArgument blockArg = dyn_cast<BlockArgument>(rhs)) {
                 asyncResetArguments.insert(blockArg.getArgNumber());
-                auto trueConst = opBuilder.create<hw::ConstantOp>(
-                    blockArg.getLoc(), blockArg.getType(), 1);
+                auto trueConst = hw::ConstantOp::create(
+                    opBuilder, blockArg.getLoc(), blockArg.getType(), 1);
                 blockArg.replaceAllUsesWith(trueConst.getResult());
               }
             }
           }
         }
-        auto constantOp = opBuilder.create<hw::ConstantOp>(
-            clonedRegValue.getLoc(), clonedRegValue.getType(), constStateValue);
+        auto constantOp =
+            hw::ConstantOp::create(opBuilder, clonedRegValue.getLoc(),
+                                   clonedRegValue.getType(), constStateValue);
         clonedRegValue.replaceAllUsesWith(constantOp.getResult());
         clonedRegOp->erase();
       }
@@ -669,7 +671,7 @@ public:
         if (!stateToStateOp.contains(j)) {
           opBuilder.setInsertionPointToEnd(&machine.getBody().front());
           toState =
-              opBuilder.create<StateOp>(loc, "state_" + std::to_string(j));
+              StateOp::create(opBuilder, loc, "state_" + std::to_string(j));
           stateToStateOp.insert({j, toState});
           stateOpToState.insert({toState, j});
         } else {
@@ -677,7 +679,7 @@ public:
         }
         opBuilder.setInsertionPointToStart(&transitionRegion.front());
         auto transitionOp =
-            opBuilder.create<TransitionOp>(loc, "state_" + std::to_string(j));
+            TransitionOp::create(opBuilder, loc, "state_" + std::to_string(j));
         Region &guardRegion = transitionOp.getGuard();
         opBuilder.createBlock(&guardRegion);
 
@@ -716,16 +718,16 @@ public:
           if (registerReset) {
             if (BlockArgument blockArg =
                     dyn_cast<BlockArgument>(registerReset)) {
-              auto falseConst = opBuilder.create<hw::ConstantOp>(
-                  blockArg.getLoc(), clonedRegValue.getType(), 0);
+              auto falseConst = hw::ConstantOp::create(
+                  opBuilder, blockArg.getLoc(), clonedRegValue.getType(), 0);
               blockArg.replaceAllUsesWith(falseConst.getResult());
             }
             if (auto xorOp = registerReset.getDefiningOp<XorOp>()) {
               if (xorOp.isBinaryNot()) {
                 Value rhs = xorOp.getOperand(0);
                 if (BlockArgument blockArg = dyn_cast<BlockArgument>(rhs)) {
-                  auto trueConst = opBuilder.create<hw::ConstantOp>(
-                      blockArg.getLoc(), blockArg.getType(), 1);
+                  auto trueConst = hw::ConstantOp::create(
+                      opBuilder, blockArg.getLoc(), blockArg.getType(), 1);
                   blockArg.replaceAllUsesWith(trueConst.getResult());
                 }
               }
@@ -734,19 +736,19 @@ public:
           Type constantType = registerInput.getType();
           IntegerAttr constantAttr =
               opBuilder.getIntegerAttr(constantType, constStateValue);
-          auto otherStateConstant = opBuilder.create<hw::ConstantOp>(
-              hwOutputOp.getLoc(), constantAttr);
+          auto otherStateConstant = hw::ConstantOp::create(
+              opBuilder, hwOutputOp.getLoc(), constantAttr);
 
-          auto doesEqual = opBuilder.create<ICmpOp>(
-              hwOutputOp.getLoc(), ICmpPredicate::eq, registerInput,
-              otherStateConstant.getResult());
+          auto doesEqual =
+              ICmpOp::create(opBuilder, hwOutputOp.getLoc(), ICmpPredicate::eq,
+                             registerInput, otherStateConstant.getResult());
           equalityChecks.push_back(doesEqual.getResult());
         }
         opBuilder.setInsertionPoint(hwOutputOp);
-        auto allEqualCheck =
-            opBuilder.create<AndOp>(hwOutputOp.getLoc(), equalityChecks, false);
-        opBuilder.create<fsm::ReturnOp>(hwOutputOp.getLoc(),
-                                        allEqualCheck.getResult());
+        auto allEqualCheck = AndOp::create(opBuilder, hwOutputOp.getLoc(),
+                                           equalityChecks, false);
+        fsm::ReturnOp::create(opBuilder, hwOutputOp.getLoc(),
+                              allEqualCheck.getResult());
         hwOutputOp.erase();
         for (BlockArgument arg : newGuardBlock.getArguments()) {
           int argIndex = arg.getArgNumber();
@@ -763,9 +765,9 @@ public:
           Operation *clonedRegOp = clonedRegValue.getDefiningOp();
           assert(clonedRegOp && "Cloned value must have a defining op");
           opBuilder.setInsertionPoint(clonedRegOp);
-          auto constantOp = opBuilder.create<hw::ConstantOp>(
-              clonedRegValue.getLoc(), clonedRegValue.getType(),
-              constStateValue);
+          auto constantOp =
+              hw::ConstantOp::create(opBuilder, clonedRegValue.getLoc(),
+                                     clonedRegValue.getType(), constStateValue);
           clonedRegValue.replaceAllUsesWith(constantOp.getResult());
           clonedRegOp->erase();
         }
@@ -789,8 +791,8 @@ public:
             Operation *clonedRegOp = clonedRegValue.getDefiningOp();
             auto reg = cast<seq::CompRegOp>(clonedRegOp);
             opBuilder.setInsertionPointToStart(&newActionBlock);
-            auto updateOp = opBuilder.create<UpdateOp>(reg.getLoc(), variableOp,
-                                                       reg.getInput());
+            UpdateOp::create(opBuilder, reg.getLoc(), variableOp,
+                             reg.getInput());
             const Value res = variableOp.getResult();
             clonedRegValue.replaceAllUsesWith(res);
             reg.erase();
@@ -804,8 +806,8 @@ public:
             Value clonedRegValue = mapping.lookup(originalRegValue);
             Operation *clonedRegOp = clonedRegValue.getDefiningOp();
             opBuilder.setInsertionPoint(clonedRegOp);
-            auto constantOp = opBuilder.create<hw::ConstantOp>(
-                clonedRegValue.getLoc(), clonedRegValue.getType(),
+            auto constantOp = hw::ConstantOp::create(
+                opBuilder, clonedRegValue.getLoc(), clonedRegValue.getType(),
                 constStateValue);
             clonedRegValue.replaceAllUsesWith(constantOp.getResult());
             clonedRegOp->erase();
