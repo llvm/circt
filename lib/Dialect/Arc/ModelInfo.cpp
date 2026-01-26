@@ -129,7 +129,8 @@ LogicalResult circt::arc::collectModels(mlir::ModuleOp module,
     SmallVector<StateInfo> states;
     if (failed(collectStates(storageArg, 0, states)))
       return failure();
-    llvm::sort(states, [](auto &a, auto &b) { return a.offset < b.offset; });
+    llvm::stable_sort(states,
+                      [](auto &a, auto &b) { return a.offset < b.offset; });
 
     models.emplace_back(std::string(modelOp.getName()), storageType.getSize(),
                         std::move(states), modelOp.getInitialFnAttr(),
@@ -202,7 +203,8 @@ circt::arc::ModelInfoAnalysis::ModelInfoAnalysis(Operation *container) {
       assert(false && "Failed to collect model states");
       continue;
     }
-    llvm::sort(states, [](auto &a, auto &b) { return a.offset < b.offset; });
+    llvm::stable_sort(states,
+                      [](auto &a, auto &b) { return a.offset < b.offset; });
     infoMap.try_emplace(modelOp, std::string(modelOp.getName()),
                         storageType.getSize(), std::move(states),
                         modelOp.getInitialFnAttr(), modelOp.getFinalFnAttr());
