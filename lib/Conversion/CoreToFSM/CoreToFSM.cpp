@@ -50,12 +50,12 @@ namespace {
 
 // Forward declaration for our helper function
 static void generateConcatenatedValues(
-    const llvm::SmallVector<llvm::DenseSet<size_t>> &allOperandValues,
+    const llvm::SmallVector<llvm::SetVector<size_t>> &allOperandValues,
     const llvm::SmallVector<unsigned> &shifts,
-    llvm::DenseSet<size_t> &finalPossibleValues);
+    llvm::SetVector<size_t> &finalPossibleValues);
 
 /// Internal helper with visited set to detect cycles.
-static void addPossibleValuesImpl(llvm::DenseSet<size_t> &possibleValues,
+static void addPossibleValuesImpl(llvm::SetVector<size_t> &possibleValues,
                                   Value v, llvm::DenseSet<Value> &visited) {
   // Detect cycles - if we've seen this value before, skip it.
   if (!visited.insert(v).second)
@@ -72,11 +72,11 @@ static void addPossibleValuesImpl(llvm::DenseSet<size_t> &possibleValues,
   }
 
   if (auto concatOp = dyn_cast_or_null<ConcatOp>(v.getDefiningOp())) {
-    llvm::SmallVector<llvm::DenseSet<size_t>> allOperandValues;
+    llvm::SmallVector<llvm::SetVector<size_t>> allOperandValues;
     llvm::SmallVector<unsigned> operandWidths;
 
     for (Value operand : concatOp.getOperands()) {
-      llvm::DenseSet<size_t> operandPossibleValues;
+      llvm::SetVector<size_t> operandPossibleValues;
       addPossibleValuesImpl(operandPossibleValues, operand, visited);
 
       // It's crucial to handle the case where a sub-computation is too complex.
@@ -144,7 +144,8 @@ static void addPossibleValuesImpl(llvm::DenseSet<size_t> &possibleValues,
   }
 }
 
-static void addPossibleValues(llvm::DenseSet<size_t> &possibleValues, Value v) {
+static void addPossibleValues(llvm::SetVector<size_t> &possibleValues,
+                              Value v) {
   llvm::DenseSet<Value> visited;
   addPossibleValuesImpl(possibleValues, v, visited);
 }
@@ -227,9 +228,9 @@ LogicalResult pushIcmp(ICmpOp op, PatternRewriter &rewriter) {
 /// Iteratively builds all possible concatenated integer values from the
 /// Cartesian product of value sets.
 static void generateConcatenatedValues(
-    const llvm::SmallVector<llvm::DenseSet<size_t>> &allOperandValues,
+    const llvm::SmallVector<llvm::SetVector<size_t>> &allOperandValues,
     const llvm::SmallVector<unsigned> &shifts,
-    llvm::DenseSet<size_t> &finalPossibleValues) {
+    llvm::SetVector<size_t> &finalPossibleValues) {
 
   if (allOperandValues.empty()) {
     finalPossibleValues.insert(0);
@@ -237,14 +238,14 @@ static void generateConcatenatedValues(
   }
 
   // Start with the values of the first operand, shifted appropriately.
-  llvm::DenseSet<size_t> currentResults;
+  llvm::SetVector<size_t> currentResults;
   for (size_t val : allOperandValues[0])
     currentResults.insert(val << shifts[0]);
 
   // For each subsequent operand, combine with all existing partial results.
   for (size_t operandIdx = 1; operandIdx < allOperandValues.size();
        ++operandIdx) {
-    llvm::DenseSet<size_t> nextResults;
+    llvm::SetVector<size_t> nextResults;
     unsigned shift = shifts[operandIdx];
 
     for (size_t partialValue : currentResults) {
@@ -258,9 +259,9 @@ static void generateConcatenatedValues(
   finalPossibleValues = std::move(currentResults);
 }
 
-static llvm::DenseMap<Value, int> intToRegMap(SmallVector<seq::CompRegOp> v,
-                                              int i) {
-  llvm::DenseMap<Value, int> m;
+static llvm::MapVector<Value, int> intToRegMap(SmallVector<seq::CompRegOp> v,
+                                               int i) {
+  llvm::MapVector<Value, int> m;
   for (size_t ci = 0; ci < v.size(); ci++) {
     seq::CompRegOp reg = v[ci];
     int bits = reg.getType().getIntOrFloatBitWidth();
@@ -285,7 +286,7 @@ static int regMapToInt(SmallVector<seq::CompRegOp> v,
 
 /// Computes the Cartesian product of a list of sets.
 static std::set<llvm::SmallVector<size_t>> calculateCartesianProduct(
-    const llvm::SmallVector<llvm::DenseSet<size_t>> &valueSets) {
+    const llvm::SmallVector<llvm::SetVector<size_t>> &valueSets) {
   std::set<llvm::SmallVector<size_t>> product;
   if (valueSets.empty()) {
     // The Cartesian product of zero sets is a set containing one element:
@@ -347,7 +348,7 @@ static FrozenRewritePatternSet loadPatterns(MLIRContext &context) {
   return frozenPatterns;
 }
 
-static void getReachableStates(llvm::DenseSet<size_t> &visitableStates,
+static void getReachableStates(llvm::SetVector<size_t> &visitableStates,
                                HWModuleOp moduleOp, size_t currentStateIndex,
                                SmallVector<seq::CompRegOp> registers,
                                OpBuilder opBuilder, bool isInitialState) {
@@ -356,7 +357,7 @@ static void getReachableStates(llvm::DenseSet<size_t> &visitableStates,
   auto clonedBody =
       llvm::dyn_cast<HWModuleOp>(opBuilder.clone(*moduleOp, mapping));
 
-  llvm::DenseMap<Value, int> stateMap =
+  llvm::MapVector<Value, int> stateMap =
       intToRegMap(registers, currentStateIndex);
   Operation *terminator = clonedBody.getBody().front().getTerminator();
   auto output = dyn_cast<hw::OutputOp>(terminator);
@@ -403,9 +404,9 @@ static void getReachableStates(llvm::DenseSet<size_t> &visitableStates,
   LogicalResult converged =
       applyOpPatternsGreedily(opsToProcess, frozenPatterns, config, &changed);
 
-  llvm::SmallVector<llvm::DenseSet<size_t>> pv;
+  llvm::SmallVector<llvm::SetVector<size_t>> pv;
   for (size_t j = 0; j < newOutput.getNumOperands(); j++) {
-    llvm::DenseSet<size_t> possibleValues;
+    llvm::SetVector<size_t> possibleValues;
 
     Value v = newOutput.getOperand(j);
     addPossibleValues(possibleValues, v);
@@ -514,7 +515,7 @@ public:
 
     OpBuilder::InsertionGuard guard(opBuilder);
     opBuilder.setInsertionPointToStart(&machine.getBody().front());
-    llvm::DenseMap<seq::CompRegOp, VariableOp> variableMap;
+    llvm::MapVector<seq::CompRegOp, VariableOp> variableMap;
     for (seq::CompRegOp varReg : variableRegs) {
       TypedValue<Type> initialValue = varReg.getResetValue();
       auto definingConstant = initialValue.getDefiningOp<hw::ConstantOp>();
@@ -544,7 +545,7 @@ public:
 
       int currentStateIndex = worklist[i];
 
-      llvm::DenseMap<Value, int> stateMap =
+      llvm::MapVector<Value, int> stateMap =
           intToRegMap(registers, currentStateIndex);
 
       opBuilder.setInsertionPointToEnd(&machine.getBody().front());
@@ -659,7 +660,7 @@ public:
         return failure();
       }
       Region &transitionRegion = stateOp.getTransitions();
-      llvm::DenseSet<size_t> visitableStates;
+      llvm::SetVector<size_t> visitableStates;
       getReachableStates(visitableStates, moduleOp, currentStateIndex,
                          registers, opBuilder,
                          currentStateIndex == initialStateIndex);
@@ -692,7 +693,7 @@ public:
         auto hwOutputOp = dyn_cast<hw::OutputOp>(terminator);
         assert(hwOutputOp && "Expected terminator to be hw.output op");
 
-        llvm::DenseMap<Value, int> toStateMap = intToRegMap(registers, j);
+        llvm::MapVector<Value, int> toStateMap = intToRegMap(registers, j);
         SmallVector<Value> equalityChecks;
         for (auto &[originalRegValue, variableOp] : variableMap) {
           opBuilder.setInsertionPointToStart(&newGuardBlock);
@@ -753,7 +754,7 @@ public:
           arg.replaceAllUsesWith(topLevelArg);
         }
         newGuardBlock.eraseArguments([](BlockArgument arg) { return true; });
-        llvm::DenseMap<Value, int> fromStateMap =
+        llvm::MapVector<Value, int> fromStateMap =
             intToRegMap(registers, currentStateIndex);
         for (auto const &[originalRegValue, constStateValue] : fromStateMap) {
           Value clonedRegValue = mapping.lookup(originalRegValue);
