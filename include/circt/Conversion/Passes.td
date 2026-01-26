@@ -401,8 +401,9 @@ def ConvertCoreToFSM : Pass<"convert-core-to-fsm", "mlir::ModuleOp"> {
                            "circt::seq::SeqDialect", "circt::fsm::FSMDialect"];
   let options = [
     ListOption<"stateRegs", "state-regs", "std::string",
-               "Names of registers to use as state registers. If not "
-               "specified, registers with names containing 'state' are used.">
+               "Comma-separated list of names of registers to use as state"
+               "registers. If not specified, registers with names containing"
+               "'state' are used.">
   ];
 }
 
