@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
@@ -639,6 +640,25 @@ static Value packProjections(OpBuilder &builder, Value value,
   return value;
 }
 
+/// Return true if `value` is defined by a probe or by a chain of simple
+/// projections whose root operand is a probe. This allows us to treat things
+/// like `comb.extract(probe %sig)` the same as the probe itself when deciding
+/// whether a value crosses a wait.
+static bool isProjectionFromProbe(Value value) {
+  if (value.getDefiningOp<ProbeOp>())
+    return true;
+
+  Operation *op = value.getDefiningOp();
+  if (!op || op->getNumOperands() != 1)
+    return false;
+
+  if (!isa<comb::ExtractOp, hw::StructExtractOp, hw::ArrayGetOp,
+           hw::ArraySliceOp, hw::BitcastOp>(op))
+    return false;
+
+  return isProjectionFromProbe(op->getOperand(0));
+}
+
 //===----------------------------------------------------------------------===//
 // Drive/Probe to SSA Value Promotion
 //===----------------------------------------------------------------------===//
@@ -653,8 +673,8 @@ struct Promoter {
   Value resolveSlot(Value projectionOrSlot);
 
   void captureAcrossWait();
-  void captureAcrossWait(ArrayRef<WaitOp> waitOps,
-                          Liveness &liveness, DominanceInfo &dominance);
+  void captureAcrossWait(Value capturedValue, ArrayRef<WaitOp> waitOps,
+                         Liveness &liveness, DominanceInfo &dominance);
 
   void constructLattice();
   void propagateBackward();
@@ -844,10 +864,10 @@ Value Promoter::resolveSlot(Value projectionOrSlot) {
   return projectionOrSlot;
 }
 
-/// Explicitly capture any probes that are live across an `llhd.wait` as block
-/// arguments and destination operand of that wait. This ensures that replacing
-/// the probe with a reaching definition later on will capture the value of the
-/// probe before the wait.
+/// Explicitly capture any values rooted at probes that are live across an
+/// `llhd.wait` as block arguments and destination operands of that wait. This
+/// ensures that replacing the probe with a reaching definition later on will
+/// capture the value of the reaching definition before the wait.
 void Promoter::captureAcrossWait() {
   if (region.hasOneBlock())
     return;
@@ -860,15 +880,22 @@ void Promoter::captureAcrossWait() {
   DominanceInfo dominance(region.getParentOp());
   Liveness liveness(region.getParentOp());
 
+  SmallPtrSet<Value, 8> captured;
   SmallVector<WaitOp> crossingWaitOps;
   for (auto &block : region) {
-    for (auto probeOp : block.getOps<ProbeOp>()) {
-      for (auto waitOp : waitOps)
-        if (liveness.getLiveness(waitOp->getBlock())->isLiveOut(probeOp))
-          crossingWaitOps.push_back(waitOp);
-      if (!crossingWaitOps.empty()) {
-        captureAcrossWait(probeOp, crossingWaitOps, liveness, dominance);
-        crossingWaitOps.clear();
+    for (Operation &op : block) {
+      for (Value result : op.getResults()) {
+        if (!isProjectionFromProbe(result))
+          continue;
+        if (!captured.insert(result).second)
+          continue;
+        for (auto waitOp : waitOps)
+          if (liveness.getLiveness(waitOp->getBlock())->isLiveOut(result))
+            crossingWaitOps.push_back(waitOp);
+        if (!crossingWaitOps.empty()) {
+          captureAcrossWait(result, crossingWaitOps, liveness, dominance);
+          crossingWaitOps.clear();
+        }
       }
     }
   }
@@ -878,24 +905,29 @@ void Promoter::captureAcrossWait() {
 /// probe to use the added block arguments as appropriate. This may insert
 /// additional block arguments in case the probe and added block arguments both
 /// reach the same block.
-void Promoter::captureValueAcrossWait(Value value, ArrayRef<WaitOp> waitOps,
-                                      Liveness &liveness,
-                                      DominanceInfo &dominance) {
+void Promoter::captureAcrossWait(Value capturedValue, ArrayRef<WaitOp> waitOps,
+                                 Liveness &liveness, DominanceInfo &dominance) {
   LLVM_DEBUG({
-    llvm::dbgs() << "Capture " << probeOp << "\n";
+    llvm::dbgs() << "Capture ";
+    capturedValue.print(llvm::dbgs());
+    llvm::dbgs() << "\n";
     for (auto waitOp : waitOps)
       llvm::dbgs() << "- Across " << waitOp << "\n";
   });
+
+  auto *defOp = capturedValue.getDefiningOp();
+  if (!defOp)
+    return;
 
   // Calculate the merge points for this probe once it gets promoted to block
   // arguments across the wait ops.
   auto &domTree = dominance.getDomTree(&region);
   llvm::IDFCalculatorBase<Block, false> idfCalculator(domTree);
 
-  // Calculate the set of blocks which will define this value as a distinct
+  // Calculate the set of blocks which will define this probe as a distinct
   // value.
   SmallPtrSet<Block *, 4> definingBlocks;
-  definingBlocks.insert(probeOp->getBlock());
+  definingBlocks.insert(defOp->getBlock());
   for (auto waitOp : waitOps)
     definingBlocks.insert(waitOp.getDest());
   idfCalculator.setDefiningBlocks(definingBlocks);
@@ -903,7 +935,7 @@ void Promoter::captureValueAcrossWait(Value value, ArrayRef<WaitOp> waitOps,
   // Calculate where the probe is live.
   SmallPtrSet<Block *, 16> liveInBlocks;
   for (auto &block : region)
-    if (liveness.getLiveness(&block)->isLiveIn(probeOp))
+    if (liveness.getLiveness(&block)->isLiveIn(capturedValue))
       liveInBlocks.insert(&block);
   idfCalculator.setLiveInBlocks(liveInBlocks);
 
@@ -925,7 +957,7 @@ void Promoter::captureValueAcrossWait(Value value, ArrayRef<WaitOp> waitOps,
     Value reachingDef;
   };
   SmallVector<WorklistItem> worklist;
-  worklist.push_back({probeOp->getBlock()), probeOp});
+  worklist.push_back({domTree.getNode(defOp->getBlock()), capturedValue});
 
   while (!worklist.empty()) {
     auto item = worklist.pop_back_val();
@@ -934,11 +966,12 @@ void Promoter::captureValueAcrossWait(Value value, ArrayRef<WaitOp> waitOps,
     // If this block is a merge point, insert a block argument for the probe.
     if (mergePoints.contains(block))
       item.reachingDef =
-          block->addArgument(probeOp.getType(), probeOp.getLoc());
+          block->addArgument(capturedValue.getType(), defOp->getLoc());
+          
     // Replace any uses of the probe in this block with the current reaching
     // definition.
     for (auto &op : *block)
-      op.replaceUsesOfWith(probeOp, item.reachingDef);
+      op.replaceUsesOfWith(capturedValue, item.reachingDef);
 
     // If the terminator of this block branches to a merge point, add the
     // current reaching definition as a destination operand.
