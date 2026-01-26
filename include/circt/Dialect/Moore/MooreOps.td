@@ -2437,6 +2437,25 @@ def AtanhBIOp : RealMathFunc<"atanh"> {
 }
 
 //===----------------------------------------------------------------------===//
+// Size
+//===----------------------------------------------------------------------===//
+
+def QueueSizeBIOp : Builtin<"size"> {
+  let summary = "Return the number of elements in a queue";
+  let description = [{
+    Corresponds to the `size` system function. Returns the number of items in a queue.
+    According to spec the returned size fits an `int`.
+
+    See IEEE 1800-2023 § 7.10.2.1 "Size()".
+  }];
+
+  // Optional positional attribute for the seed
+  let arguments = (ins QueueType:$queue);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = "$queue `:` type($queue) attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
 // Classes
 //===----------------------------------------------------------------------===//
 
