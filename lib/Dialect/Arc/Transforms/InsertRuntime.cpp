@@ -279,7 +279,9 @@ private:
       if (instIdx == 0) {
         str += traceFileName;
       } else {
-        auto maybeExtension = traceFileName.substr(traceFileName.size() - 4);
+        std::string maybeExtension = "";
+        if (traceFileName.size() >= 4)
+          maybeExtension = traceFileName.substr(traceFileName.size() - 4);
         if (maybeExtension == ".vcd") {
           str += traceFileName.substr(0, traceFileName.size() - 4);
           str += '_';
