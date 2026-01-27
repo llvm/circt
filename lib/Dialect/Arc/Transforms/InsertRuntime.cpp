@@ -17,6 +17,8 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Pass/Pass.h"
 
+#include <filesystem>
+
 #define DEBUG_TYPE "arc-insert-runtime"
 
 namespace circt {
@@ -279,19 +281,14 @@ private:
       if (instIdx == 0) {
         str += traceFileName;
       } else {
-        std::string maybeExtension = "";
-        if (traceFileName.size() >= 4)
-          maybeExtension = traceFileName.substr(traceFileName.size() - 4);
-        if (maybeExtension == ".vcd") {
-          str += traceFileName.substr(0, traceFileName.size() - 4);
-          str += '_';
-          str += std::to_string(instIdx);
-          str += ".vcd";
-        } else {
-          str += traceFileName;
-          str += '_';
-          str += std::to_string(instIdx);
-        }
+        auto extension =
+            std::filesystem::path(static_cast<std::string>(traceFileName))
+                .extension()
+                .string();
+        str += traceFileName.substr(0, traceFileName.size() - extension.size());
+        str += '_';
+        str += std::to_string(instIdx);
+        str += extension;
       }
     }
     if (!extraArgs.empty()) {
