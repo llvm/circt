@@ -149,6 +149,7 @@ LogicalResult MachineOpConverter::dispatch() {
   // Collect arguments and their types
   for (auto t : machineArgs) {
     fsmArgs.push_back(t);
+    // i1 is a boolean argument 
     quantifiableTypes.push_back(b.getType<smt::BitVectorType>(t.getType().getIntOrFloatBitWidth()));
   }
   size_t numArgs = fsmArgs.size();
@@ -183,10 +184,6 @@ LogicalResult MachineOpConverter::dispatch() {
   }
   
   size_t numVars = varInitValues.size();
-  
-  llvm::outs() << "\nnumArgs = " << numArgs << "\n";
-  llvm::outs() << "\nnumOut = " << numOut << "\n";
-  llvm::outs() << "\nnumVars = " << numVars << "\n";
   
   // Store all the transitions state0 -> state1 in the FSM
   SmallVector<MachineOpConverter::Transition> transitions;
@@ -264,9 +261,12 @@ LogicalResult MachineOpConverter::dispatch() {
     SmallVector<std::pair<mlir::Value, mlir::Value>> fsmToCast; 
     for (auto [idx, fq] : llvm::enumerate(forallQuantified)) {
       if (idx < numArgs) { // arguments
+        // if boolean, convert to smt::bool 
         auto convCast = UnrealizedConversionCastOp::create(b, loc, fsmArgs[idx].getType(), fq);  
         fsmToCast.push_back({fsmArgs[idx], convCast->getResult(0)});
-      } else if (numArgs + numOut <= idx && idx < forallQuantified.size() - 1) { // variables without time 
+      } else if (numArgs + numOut <= idx) { // variables without time 
+        if (cfg.withTime && idx == forallQuantified.size() - 1)
+          break;
         auto convCast = UnrealizedConversionCastOp::create(b, loc, fsmVars[idx - numArgs - numOut].getType(), fq);  
         fsmToCast.push_back({fsmVars[idx - numArgs - numOut], convCast->getResult(0)});
       }
@@ -323,13 +323,21 @@ LogicalResult MachineOpConverter::dispatch() {
     // assign the initial value to each argument of the initial function (outputs and variables)
     SmallVector<mlir::Value> initialCondition; 
     for (auto [idx, q] : llvm::enumerate(forallQuantified)){
-      if (numArgs + numOut <= idx && idx < forallQuantified.size() - 1){ // FSM variables are assigned their initial value as an SMT constant
-        initialCondition.push_back(smt::BVConstantOp::create(b, loc, varInitValues[idx - numArgs - numOut])); 
-      } else if (numArgs <= idx && idx < forallQuantified.size() - 1) { // FSM outputs are assigned the value computed in the output region
-        initialCondition.push_back(castOutValues[idx - numArgs]);
-      } else if (cfg.withTime && idx == forallQuantified.size() - 1) { // time variable is 0 at the beginning
-        initialCondition.push_back(smt::BVConstantOp::create(b, loc, 0, cfg.timeWidth)); 
+      if (cfg.withTime){
+        if (numArgs + numOut <= idx && idx < forallQuantified.size() - 1){ // FSM variables are assigned their initial value as an SMT constant
+          initialCondition.push_back(smt::BVConstantOp::create(b, loc, varInitValues[idx - numArgs - numOut])); 
+        } else if (numArgs <= idx && idx < forallQuantified.size() - 1) { // FSM outputs are assigned the value computed in the output region
+            initialCondition.push_back(castOutValues[idx - numArgs]);
+        } else if (idx == forallQuantified.size() - 1)
+            initialCondition.push_back(smt::BVConstantOp::create(b, loc, 0, cfg.timeWidth));
+      } else {
+        if (numArgs + numOut <= idx){ // FSM variables are assigned their initial value as an SMT constant
+          initialCondition.push_back(smt::BVConstantOp::create(b, loc, varInitValues[idx - numArgs - numOut])); 
+        } else if (numArgs <= idx) { // FSM outputs are assigned the value computed in the output region
+            initialCondition.push_back(castOutValues[idx - numArgs]);
+        }
       }
+
     }
     
     
@@ -357,7 +365,9 @@ LogicalResult MachineOpConverter::dispatch() {
         if (idx < numArgs) { // arguments
           auto convCast = UnrealizedConversionCastOp::create(b, loc, fsmArgs[idx].getType(), fq);  
           fsmToCast.push_back({fsmArgs[idx], convCast->getResult(0)});
-        } else if (numArgs + numOut <= idx && idx < numArgs + numOut + numVars) { // variables
+        } else if (numArgs + numOut <= idx) { // variables
+          if (cfg.withTime && idx == actionArgsOutsVarsVals.size() -1)
+            break;
           auto convCast = UnrealizedConversionCastOp::create(b, loc, fsmVars[idx - numArgs - numOut].getType(), fq);  
           fsmToCast.push_back({fsmVars[idx - numArgs - numOut], convCast->getResult(0)});
         }
@@ -394,7 +404,6 @@ LogicalResult MachineOpConverter::dispatch() {
             auto varToUpdate = newOp->getOperand(0); 
             auto updatedValue = newOp->getOperand(1);
             
-      
             for (auto [id, var] : llvm::enumerate(fsmToCast)){
               if (var.second == varToUpdate) {
                 // convert 
@@ -422,7 +431,9 @@ LogicalResult MachineOpConverter::dispatch() {
           if (idx < numArgs) { // arguments
             auto convCast = UnrealizedConversionCastOp::create(b, loc, fsmArgs[idx].getType(), fq);  
             fsmToCast.push_back({fsmArgs[idx], convCast->getResult(0)});
-          } else if (numArgs + numOut <= idx && idx < numArgs + numOut + numVars) { // variables
+          } else if (numArgs + numOut <= idx) { // variables
+            if (cfg.withTime && idx == actionArgsOutsVarsVals.size() -1)
+              break;
             auto convCast = UnrealizedConversionCastOp::create(b, loc, fsmVars[idx - numArgs - numOut].getType(), fq);  
             fsmToCast.push_back({fsmVars[idx - numArgs - numOut], convCast->getResult(0)});
           }
@@ -462,7 +473,9 @@ LogicalResult MachineOpConverter::dispatch() {
         if (idx < numArgs) { // arguments
           auto convCast = UnrealizedConversionCastOp::create(b, loc, fsmArgs[idx].getType(), fq);  
           fsmToCast.push_back({fsmArgs[idx], convCast->getResult(0)});
-        } else if (numArgs + numOut <= idx && idx < numArgs + numOut + numVars) { // variables
+        } else if (numArgs + numOut <= idx) { // variables
+          if (cfg.withTime && idx == outputArgsOutsVarsVals.size() -1)
+            break;
           auto convCast = UnrealizedConversionCastOp::create(b, loc, fsmVars[idx - numArgs - numOut].getType(), fq);  
           fsmToCast.push_back({fsmVars[idx - numArgs - numOut], convCast->getResult(0)});
         }
@@ -540,10 +553,10 @@ LogicalResult MachineOpConverter::dispatch() {
               startingArgsOutsVars.push_back(
                   forallDoubledArgsOutputVarsInputs[i]);
           }
-          for (auto i = 2 * numArgs; i < forallDoubledArgsOutputVarsInputs.size(); ++i) {\
-            startingArgsOutsVars.push_back(forallDoubledArgsOutputVarsInputs[i]);
-            arrivingArgsOutsVars.push_back(forallDoubledArgsOutputVarsInputs[i]);
-            startingFunArgs.push_back(forallDoubledArgsOutputVarsInputs[i]);
+          for (auto i = 2 * numArgs; i < forallDoubledArgsOutputVarsInputs.size(); ++i) {
+              startingArgsOutsVars.push_back(forallDoubledArgsOutputVarsInputs[i]);
+              arrivingArgsOutsVars.push_back(forallDoubledArgsOutputVarsInputs[i]);
+              startingFunArgs.push_back(forallDoubledArgsOutputVarsInputs[i]);
           }
 
           // the state function only takes outputs and variables as arguments
@@ -554,10 +567,10 @@ LogicalResult MachineOpConverter::dispatch() {
           
           auto guardVal = guard(startingArgsOutsVars);
           
+          // copy all updated variables, ignoring time (if present)
           for (size_t i = 0; i < numVars; i++){
             arrivingArgsOutsVars[numArgs + numOut + i] = updatedCastVals[i]; 
           }
-          
           
           auto outputCastVals = output(arrivingArgsOutsVars); 
           
@@ -567,17 +580,17 @@ LogicalResult MachineOpConverter::dispatch() {
           for(auto u : updatedCastVals)
             arrivingFunArgs.push_back(u); 
           
+          // increment time variable if necessary 
           if (cfg.withTime) {
-            // increment time variable
             auto timeVal = forallDoubledArgsOutputVarsInputs.back(); 
             auto oneConst = smt::BVConstantOp::create(b, loc, 1, cfg.timeWidth); 
             auto incrementedTime = smt::BVAddOp::create(b, loc, timeVal.getType(), timeVal, oneConst); 
             arrivingFunArgs.push_back(incrementedTime); 
           }
-            
+          
           auto rhs =
               smt::ApplyFuncOp::create(b, loc, stateFunctions[transition.to],
-                                       arrivingFunArgs);
+                                       arrivingFunArgs); 
 
           auto guardedlhs = smt::AndOp::create(b, loc, lhs, guardVal); 
                                        
@@ -610,7 +623,7 @@ void FSMToSMTPass::runOnOperation() {
 
   // Read options from the generated base
   LoweringConfig cfg;
-  cfg.withTime = true; // default false
+  cfg.withTime = withTime; // default false
   cfg.timeWidth = 5;
 
   for (auto machine : llvm::make_early_inc_range(module.getOps<MachineOp>())) {
@@ -619,7 +632,6 @@ void FSMToSMTPass::runOnOperation() {
       signalPassFailure();
       return;
     }
-    // module.walk([&](circt::hw::ConstantOp cst) { cst.erase(); });
   }
 }
 
