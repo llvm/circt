@@ -8,6 +8,7 @@
 
 #include "slang/ast/expressions/AssertionExpr.h"
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Support/LLVM.h"
@@ -87,7 +88,8 @@ struct AssertionExprVisitor {
     auto valueType = value.getType();
     // For assertion instances the value is already the expected type, convert
     // boolean value
-    if (!mlir::isa<ltl::SequenceType, ltl::PropertyType>(valueType)) {
+    if (!mlir::isa<ltl::SequenceType, ltl::PropertyType, mlir::IntegerType>(
+            valueType)) {
       value = context.convertToI1(value);
     }
     if (!value)
@@ -316,8 +318,7 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                 [&]() -> Value {
                   auto past =
                       ltl::PastOp::create(builder, loc, value, 1).getResult();
-                  auto notPast =
-                      ltl::NotOp::create(builder, loc, past).getResult();
+                  auto notPast = comb::createOrFoldNot(loc, past, builder);
                   auto current = value;
                   auto notPastAndCurrent =
                       ltl::AndOp::create(builder, loc, {current, notPast})
