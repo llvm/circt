@@ -375,7 +375,7 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
   // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_bool [[C2]] : l1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 : i1
-  // CHECK-NEXT: [[NOTPAST:%.+]] = ltl.not [[PAST]] : !ltl.sequence
+  // CHECK-NEXT: [[NOTPAST:%.+]] = ltl.not [[PAST]] : i1
   // CHECK-NEXT: [[NOTPASTANDCURRENT:%.+]] = ltl.and [[CURRENT]], [[NOTPAST]] : i1, !ltl.property
   rising_clk: assert property (@(posedge clk_i) clk_i |=> $rose(clk_i));
   // CHECK: moore.procedure always {
@@ -385,7 +385,7 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_bool [[C2]] : l1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 : i1
   // CHECK-NEXT: [[NOTCURRENT:%.+]] = ltl.not [[CURRENT]] : i1
-  // CHECK-NEXT: [[PASTANDNOTCURRENT:%.+]] = ltl.and [[NOTCURRENT]], [[PAST]] : !ltl.property, !ltl.sequence
+  // CHECK-NEXT: [[PASTANDNOTCURRENT:%.+]] = ltl.and [[NOTCURRENT]], [[PAST]] : !ltl.property, i1
   falling_clk: assert property (@(posedge clk_i) clk_i |=> $fell(clk_i));
   // CHECK: moore.procedure always {
   // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
@@ -393,11 +393,11 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
   // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_bool [[C2]] : l1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 : i1
-  // CHECK-NEXT: [[NOTPAST:%.+]] = ltl.not [[PAST]] : !ltl.sequence
+  // CHECK-NEXT: [[NOTPAST:%.+]] = ltl.not [[PAST]] : i1
   // CHECK-NEXT: [[NOTCURRENT:%.+]] = ltl.not [[CURRENT]] : i1
-  // CHECK-NEXT: [[PASTANDCURRENT:%.+]] = ltl.and [[CURRENT]], [[PAST]] : i1, !ltl.sequence
+  // CHECK-NEXT: [[PASTANDCURRENT:%.+]] = ltl.and [[CURRENT]], [[PAST]] : i1, i1
   // CHECK-NEXT: [[NOTPASTANDNOTCURRENT:%.+]] = ltl.and [[NOTCURRENT]], [[NOTPAST]] : !ltl.property, !ltl.property
-  // CHECK-NEXT: [[STABLE:%.+]] = ltl.or [[PASTANDCURRENT]], [[NOTPASTANDNOTCURRENT]] : !ltl.sequence, !ltl.property
+  // CHECK-NEXT: [[STABLE:%.+]] = ltl.or [[PASTANDCURRENT]], [[NOTPASTANDNOTCURRENT]] : i1, !ltl.property
   stable_clk: assert property (@(posedge clk_i) clk_i |=> $stable(clk_i));
 
 endmodule
