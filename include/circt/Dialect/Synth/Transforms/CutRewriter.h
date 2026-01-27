@@ -213,6 +213,11 @@ public:
   void getPermutatedInputs(const NPNClass &patternNPN,
                            SmallVectorImpl<Value> &permutedInputs) const;
 
+  /// Get arrival times for each input of this cut.
+  /// Returns failure if any input doesn't have a valid matched pattern.
+  LogicalResult getInputArrivalTimes(CutEnumerator &enumerator,
+                                     SmallVectorImpl<DelayType> &results) const;
+
   /// Matched pattern for this cut.
   void setMatchedPattern(MatchedPattern pattern) {
     matchedPattern = std::move(pattern);

@@ -201,4 +201,20 @@ def MaximumAndCover : Pass<"synth-maximum-and-cover", "hw::HWModuleOp"> {
   }];
 }
 
+def SOPBalancing : CutRewriterPassBase<"synth-sop-balancing", "hw::HWModuleOp"> {
+  let summary = "SOP (Sum-of-Products) balancing for delay optimization";
+  let description = [{
+    This pass optimizes delay by restructuring the logic network using balanced
+    sum-of-products expressions. It enumerates cuts, derives their SOP
+    representation, and selects the best cut based on delay and area.
+
+    The algorithm is based on "Delay Optimization Using SOP Balancing" by
+    Mishchenko et al. (ICCAD 2011).
+  }];
+  let options =
+      baseOptions#[Option<"maxCutInputSize", "max-cut-input-size", "unsigned",
+                          /*default=*/"6", "Maximum number of inputs per cut">];
+  let dependentDialects = ["synth::SynthDialect", "comb::CombDialect"];
+}
+
 #endif // CIRCT_DIALECT_SYNTH_TRANSFORMS_PASSES_TD
