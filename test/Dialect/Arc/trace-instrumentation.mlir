@@ -46,8 +46,6 @@ arc.model @foo io !hw.modty<> traceTaps [#arc.trace_tap<i32, 0, ["sig32"]>, #arc
 // CHECK-NEXT:     %21 = llvm.trunc %20 : i192 to i64
 // CHECK-NEXT:     llvm.store %21, %19 : i64, !llvm.ptr
 // CHECK-NEXT:     llvm.store %13, %5 : i32, !llvm.ptr
-// CHECK-NEXT:     llvm.br ^bb3
-// CHECK-NEXT:   ^bb3:  // pred: ^bb2
 // CHECK-NEXT:     llvm.return
 // CHECK-NEXT:   }
 
@@ -72,8 +70,6 @@ arc.model @foo io !hw.modty<> traceTaps [#arc.trace_tap<i32, 0, ["sig32"]>, #arc
 // CHECK-NEXT:    %12 = llvm.getelementptr %10[1] : (!llvm.ptr) -> !llvm.ptr, i64
 // CHECK-NEXT:    llvm.store %arg2, %12 : i64, !llvm.ptr
 // CHECK-NEXT:    llvm.store %11, %3 : i32, !llvm.ptr
-// CHECK-NEXT:    llvm.br ^bb3
-// CHECK-NEXT:  ^bb3:  // pred: ^bb2
 // CHECK-NEXT:    llvm.return
 // CHECK-NEXT:  }
 

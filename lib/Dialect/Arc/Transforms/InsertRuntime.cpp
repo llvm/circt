@@ -324,7 +324,8 @@ LogicalResult GlobalRuntimeContext::buildTraceInstrumentation() {
 }
 
 // Build a trace instrumentation function recording the change of a state
-// value to the trace buffer.
+// value to the trace buffer. Calls the runtime library if the current buffer
+// is running out of space.
 // Pseudocode of the constructed function:
 //
 //
@@ -333,9 +334,10 @@ LogicalResult GlobalRuntimeContext::buildTraceInstrumentation() {
 //   // BB: "capcaityCheckBlock"
 //   const uint32_t reqSize = {BW} / 64 + 1;
 //   ArcState *runtimeState = (ArcState*)(simState - sizeof(ArcState));
+//   uint64_t *oldBuffer = runtimeState->traceBuffer;
 //   const uint32_t oldSize = runtimeState->traceBufferSize;
-//   uint64_t *storePtr = &runtimeState->traceBuffer[oldSize];
 //   uint32_t newSize = oldSize + reqSize;
+//   uint64_t *storePtr = &oldBuffer[oldSize];
 //   if (newSize >= runtime::defaultTraceBufferCapacity) [[unlikely]] {
 //     // BB: "swapBufferBlock"
 //     storePtr = arcRuntimeIR_swapBuffer(simState);
@@ -352,13 +354,14 @@ LogicalResult GlobalRuntimeContext::buildTraceInstrumentation() {
 
 void GlobalRuntimeContext::buildTraceInstrumentationFn(Type ty) {
   assert(isa<IntegerType>(ty));
+  // Check if we've already built the function
   auto traceTy = getTraceExtendedType(ty);
   if (traceInstrumentationFns.contains(traceTy))
     return;
 
+  // Build the function signature
   auto typeQWords = traceTy.getIntOrFloatBitWidth() / 64;
   assert(traceTy.getIntOrFloatBitWidth() % 64 == 0);
-
   auto *ctx = ty.getContext();
   auto i64Ty = IntegerType::get(ctx, 64);
   auto i32Ty = IntegerType::get(ctx, 32);
@@ -372,8 +375,8 @@ void GlobalRuntimeContext::buildTraceInstrumentationFn(Type ty) {
   funcOp.setNoInline(true);
   traceInstrumentationFns.insert({traceTy, funcOp});
 
+  // Build the body of the function
   OpBuilder::InsertionGuard g(globalBuilder);
-
   auto *capcaityCheckBlock = funcOp.addEntryBlock(globalBuilder);
   auto *swapBufferBlock = &funcOp.getRegion().emplaceBlock();
   auto *bufferStoreBlock = &funcOp.getRegion().emplaceBlock();
@@ -381,11 +384,9 @@ void GlobalRuntimeContext::buildTraceInstrumentationFn(Type ty) {
   bufferStoreBlock->addArgument(llvmPtrTy, globalBuilder.getLoc());
   // newSize
   bufferStoreBlock->addArgument(i32Ty, globalBuilder.getLoc());
-  auto *exitBlock = &funcOp.getRegion().emplaceBlock();
 
   globalBuilder.setInsertionPointToStart(capcaityCheckBlock);
 
-  // Check if we are running out of space.
   auto statePtr = capcaityCheckBlock->getArgument(0);
   auto bufferPtrPtr = LLVM::GEPOp::create(
       globalBuilder, llvmPtrTy, globalBuilder.getI8Type(), statePtr,
@@ -395,46 +396,55 @@ void GlobalRuntimeContext::buildTraceInstrumentationFn(Type ty) {
       globalBuilder, llvmPtrTy, globalBuilder.getI8Type(), statePtr,
       {LLVM::GEPArg(static_cast<int>(offsetof(ArcState, traceBufferSize)) -
                     static_cast<int>(sizeof(ArcState)))});
+  // > const uint32_t reqSize = {BW} / 64 + 1;
+  auto requiredSize = typeQWords + 1;
+  auto reqSizeCst = LLVM::ConstantOp::create(
+      globalBuilder, globalBuilder.getI32IntegerAttr(requiredSize));
+  // > uint64_t *oldBuffer = runtimeState->traceBuffer;
   auto bufferPtrVal =
       LLVM::LoadOp::create(globalBuilder, llvmPtrTy, bufferPtrPtr);
+  // > const uint32_t oldSize = runtimeState->traceBufferSize;
   auto bufferSizeVal =
       LLVM::LoadOp::create(globalBuilder, i32Ty, bufferSizePtr);
   auto capacityConstant = LLVM::ConstantOp::create(
       globalBuilder,
       globalBuilder.getI32IntegerAttr(runtime::defaultTraceBufferCapacity));
-  auto requiredCapacity = typeQWords + 1;
-  auto resizeCst = LLVM::ConstantOp::create(
-      globalBuilder, globalBuilder.getI32IntegerAttr(requiredCapacity));
+  // > uint32_t newSize = oldSize + reqSize;
   auto newSizeVal =
-      LLVM::AddOp::create(globalBuilder, bufferSizeVal, resizeCst);
-  auto storeOffset =
+      LLVM::AddOp::create(globalBuilder, bufferSizeVal, reqSizeCst);
+  // > uint64_t *storePtr = &oldBuffer[oldSize];
+  auto storePtr =
       LLVM::GEPOp::create(globalBuilder, llvmPtrTy, i64Ty, bufferPtrVal,
                           {LLVM::GEPArg(bufferSizeVal)});
+  // > if (newSize >= runtime::defaultTraceBufferCapacity) [[unlikely]]
   auto needsSwap = LLVM::ICmpOp::create(globalBuilder, LLVM::ICmpPredicate::ugt,
                                         newSizeVal, capacityConstant);
   LLVM::CondBrOp::create(
       globalBuilder, needsSwap, swapBufferBlock, {}, bufferStoreBlock,
-      {storeOffset, newSizeVal},
+      {storePtr, newSizeVal},
       /*weights*/
       std::pair<int32_t, int32_t>(0, std::numeric_limits<int32_t>::max()));
 
-  // Too bad, we need a new buffer. Call the library.
   globalBuilder.setInsertionPointToStart(swapBufferBlock);
+  // > storePtr = arcRuntimeIR_swapBuffer(simState);
   auto swapCall = LLVM::CallOp::create(
       globalBuilder, swapTraceBufferFn.llvmFuncOp, {statePtr});
+  // > runtimeState->traceBuffer = storePtr;
   LLVM::StoreOp::create(globalBuilder, swapCall.getResult(), bufferPtrPtr);
-  LLVM::BrOp::create(globalBuilder, {swapCall.getResult(), resizeCst},
+  LLVM::BrOp::create(globalBuilder, {swapCall.getResult(), reqSizeCst},
                      bufferStoreBlock);
 
-  // Store the tap index and new value in the buffer and update the size.
   globalBuilder.setInsertionPointToStart(bufferStoreBlock);
+  // > storePtr[0] = traceTapId;
   LLVM::StoreOp::create(globalBuilder, capcaityCheckBlock->getArgument(1),
                         bufferStoreBlock->getArgument(0));
 
+  // > for (unsigned qword = 0; qword < {BW} / 64; ++qword) // Unrolled
   for (unsigned qWord = 0; qWord < typeQWords; ++qWord) {
+    // > storePtr[qword + 1] = (uint64_t)(newValue >> (64 * qword));
     auto dataStorePtr = LLVM::GEPOp::create(globalBuilder, llvmPtrTy, i64Ty,
                                             bufferStoreBlock->getArgument(0),
-                                            {LLVM::GEPArg(1 + qWord)});
+                                            {LLVM::GEPArg(qWord + 1)});
     Value storeVal = capcaityCheckBlock->getArgument(2);
     if (qWord > 0) {
       auto shiftCst = LLVM::ConstantOp::create(
@@ -446,13 +456,9 @@ void GlobalRuntimeContext::buildTraceInstrumentationFn(Type ty) {
       storeVal = LLVM::TruncOp::create(globalBuilder, i64Ty, storeVal);
     LLVM::StoreOp::create(globalBuilder, storeVal, dataStorePtr);
   }
-
+  // > runtimeState->traceBufferSize = newSize;
   LLVM::StoreOp::create(globalBuilder, bufferStoreBlock->getArgument(1),
                         bufferSizePtr);
-  LLVM::BrOp::create(globalBuilder, exitBlock);
-
-  // And we're done
-  globalBuilder.setInsertionPointToStart(exitBlock);
   LLVM::ReturnOp::create(globalBuilder, Value{});
 }
 
@@ -485,6 +491,7 @@ LogicalResult RuntimeModelContext::lower() {
   return success(!hasFailed);
 }
 
+// Insert call to the trace instrumentation function to each tapped write
 LogicalResult RuntimeModelContext::insertTraceInstrumentation() {
   if (!hasTraceTaps() || tappedWrites.empty())
     return success();
@@ -495,21 +502,25 @@ LogicalResult RuntimeModelContext::insertTraceInstrumentation() {
   for (auto writeOp : tappedWrites) {
     builder.setInsertionPoint(writeOp);
     builder.setLoc(writeOp.getLoc());
+    // Lookup the instrumentation function for the state's type
     auto tapId = *writeOp.getTraceTapIndex();
     assert(tapId < runtimeModelOp.getTraceTapsAttr().size());
     auto tapAttr = cast<TraceTapAttr>(runtimeModelOp.getTraceTapsAttr()[tapId]);
     auto traceTy = GlobalRuntimeContext::getTraceExtendedType(
         writeOp.getValue().getType());
     auto instrumentFn = globalContext.getTraceInstrumentFn(traceTy);
+    // Strip the tap annotation
+    writeOp.setTraceTapIndex(std::nullopt);
+    writeOp.setTraceTapModel(std::nullopt);
+    // Test if the new value differs from the old value
     auto oldRead = StateReadOp::create(builder, writeOp.getState());
     auto hasChanged = LLVM::ICmpOp::create(builder, LLVM::ICmpPredicate::ne,
                                            writeOp.getValue(), oldRead);
-    writeOp.setTraceTapIndex(std::nullopt);
-    writeOp.setTraceTapModel(std::nullopt);
-
     scf::IfOp::create(
         builder, hasChanged, [&](OpBuilder scfBuilder, Location loc) {
+          // Pull the state write itself under the condition
           scfBuilder.clone(*writeOp.getOperation());
+          // Invoke the instrumentation function
           auto statePtrCast = UnrealizedConversionCastOp::create(
               scfBuilder, loc, ptrTy, writeOp.getState());
           auto baseStatePtr = LLVM::GEPOp::create(
