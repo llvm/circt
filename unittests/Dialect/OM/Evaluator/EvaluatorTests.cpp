@@ -1455,6 +1455,8 @@ om.class @ConcatListAttribute() -> (result: !om.list<!om.string>) {
 
 TEST(EvaluatorTests, UnknownValuesBasic) {
   StringRef mod = R"MLIR(
+om.class.extern @Baz() -> (a: !om.integer) {}
+
 om.class @Bar(
   %a: !om.integer
 ) -> (
@@ -1475,7 +1477,9 @@ om.class @Foo(
   e: !om.frozenbasepath,
   f: !om.frozenpath,
   g: !om.integer,
-  h: !om.integer
+  h: !om.integer,
+  i: !om.class.type<@Baz>,
+  j: !om.integer
 ) {
   %0 = om.constant #om.integer<1 : i4> : !om.integer
   %1 = om.integer.add %0, %unknown_int : !om.integer
@@ -1485,7 +1489,9 @@ om.class @Foo(
   %5 = om.frozenpath_create reference %unknown_frozenbasepath "Foo/bar:Bar>w.a"
   %6 = om.object.field %unknown_class, [@b] : (!om.class.type<@Bar>) -> !om.integer
   %7 = om.unknown : !om.integer
-  om.class.fields %unknown_int, %1, %2, %3, %4, %5, %6, %7 : !om.integer, !om.integer, !om.list<!om.integer>, !om.list<!om.integer>, !om.frozenbasepath, !om.frozenpath, !om.integer, !om.integer
+  %8 = om.object @Baz() : () -> !om.class.type<@Baz>
+  %9 = om.object.field %8, [@a] : (!om.class.type<@Baz>) -> !om.integer
+  om.class.fields %unknown_int, %1, %2, %3, %4, %5, %6, %7, %8, %9 : !om.integer, !om.integer, !om.list<!om.integer>, !om.list<!om.integer>, !om.frozenbasepath, !om.frozenpath, !om.integer, !om.integer, !om.class.type<@Baz>, !om.integer
 }
 )MLIR";
 
@@ -1511,7 +1517,7 @@ om.class @Foo(
 
   auto *object = llvm::cast<evaluator::ObjectValue>(result.value().get());
 
-  ASSERT_EQ(object->getFieldNames().size(), 8ul);
+  ASSERT_EQ(object->getFieldNames().size(), 10ul);
 
   for (auto fieldName : object->getFieldNames()) {
     auto field = object->getField(cast<StringAttr>(fieldName));
