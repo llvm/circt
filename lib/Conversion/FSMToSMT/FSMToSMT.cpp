@@ -485,10 +485,17 @@ LogicalResult MachineOpConverter::dispatch() {
           auto *newOp = b.clone(op, mapping);
           // retrieve the operands of the output operation
           if (isa<fsm::ReturnOp>(newOp)) {
-            guardVal =
+            if (isa<mlir::UnrealizedConversionCastOp>(newOp->getOperand(0).getDefiningOp())) {
+              guardVal =
+                UnrealizedConversionCastOp::create(
+                    b, loc, b.getType<smt::BoolType>(), newOp->getOperand(0).getDefiningOp()->getOperand(0))
+                    ->getResult(0);
+            } else {
+                guardVal =
                 UnrealizedConversionCastOp::create(
                     b, loc, b.getType<smt::BoolType>(), newOp->getOperand(0))
                     ->getResult(0);
+                }
             newOp->erase();
           }
         }
