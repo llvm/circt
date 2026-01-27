@@ -1061,7 +1061,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
           if (op->use_empty() &&
               (wouldOpBeTriviallyDead(op) || isDeletableWireOrRegOrNode(op))) {
             LLVM_DEBUG(
-                { logger.getOStream() << debugPrefix << " : " << op << "\n"; });
+                { logger.getOStream() << debugPrefix << " : " << *op << "\n"; });
             ++numErasedOp;
             op->erase();
             return true;
