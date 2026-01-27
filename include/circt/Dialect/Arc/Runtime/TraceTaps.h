@@ -32,14 +32,14 @@ struct alignas(8) ArcTraceTap {
 static_assert(sizeof(ArcTraceTap) == 3 * 8);
 
 struct alignas(8) ArcModelTraceInfo {
-  /// Number if trace taps in the array
+  /// Number of trace taps in the array
   uint64_t numTraceTaps;
-  /// Array of race tap information
+  /// Array of trace tap information
   struct ArcTraceTap *traceTaps;
   /// Combined list of names and aliases of the trace taps separated by
   /// null terminators
   const char *traceTapNames;
-  /// Required capcity in 8 byte increments of the trace buffer
+  /// Required capacity in 8 byte increments of the trace buffer
   uint64_t traceBufferCapacity;
 };
 static_assert(sizeof(ArcModelTraceInfo) == 4 * 8);
