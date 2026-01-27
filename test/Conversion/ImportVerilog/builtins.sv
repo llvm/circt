@@ -375,8 +375,9 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
   // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_bool [[C2]] : l1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 : i1
-  // CHECK-NEXT: [[NOTPAST:%.+]] = ltl.not [[PAST]] : i1
-  // CHECK-NEXT: [[NOTPASTANDCURRENT:%.+]] = ltl.and [[CURRENT]], [[NOTPAST]] : i1, !ltl.property
+  // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+  // CHECK-NEXT: [[NOTPAST:%.+]] = comb.xor [[PAST]], [[TRUE]] : i1
+  // CHECK-NEXT: [[NOTPASTANDCURRENT:%.+]] = ltl.and [[CURRENT]], [[NOTPAST]] : i1, i1
   rising_clk: assert property (@(posedge clk_i) clk_i |=> $rose(clk_i));
   // CHECK: moore.procedure always {
   // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
