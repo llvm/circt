@@ -362,7 +362,6 @@ getReachableStates(llvm::SetVector<size_t> &visitableStates,
       intToRegMap(registers, currentStateIndex);
   Operation *terminator = clonedBody.getBody().front().getTerminator();
   auto output = dyn_cast<hw::OutputOp>(terminator);
-  int i = 0;
   SmallVector<Value> values;
 
   for (auto [originalRegValue, constStateValue] : stateMap) {
@@ -386,7 +385,6 @@ getReachableStates(llvm::SetVector<size_t> &visitableStates,
       values.push_back(regInput);
     clonedRegValue.replaceAllUsesWith(otherStateConstant.getResult());
     reg.erase();
-    i++;
   }
   opBuilder.setInsertionPointToEnd(clonedBody.front().getBlock());
   auto newOutput = hw::OutputOp::create(opBuilder, output.getLoc(), values);
@@ -424,7 +422,7 @@ getReachableStates(llvm::SetVector<size_t> &visitableStates,
 
   clonedBody.erase();
   return success();
-};
+}
 
 // A converter class to handle the logic of converting a single hw.module.
 class HWModuleOpConverter {
