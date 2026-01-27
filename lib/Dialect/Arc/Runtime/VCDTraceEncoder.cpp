@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cctype>
 #include <iostream>
 #include <ostream>
 #include <string>
@@ -61,7 +62,8 @@ static inline void dumpSignalToString(const VCDSignalTableEntry &signal,
 }
 
 static void writeVCDHeader(std::basic_ostream<char> &os) {
-  os << "$date\n    October 21, 2015\n$end\n";
+  // TODO: Add the current date to the header. For now, keep the output
+  // stable to facilitate comparisons.
   os << "$version\n    Some cryptic ArcRuntime magic\n$end\n";
   os << "$timescale 1ns $end\n";
 }
@@ -107,8 +109,8 @@ static void appendLegalizedName(std::string &buffer,
   for (auto c : name) {
     // TODO: Escape illegal characters
     if (c == ' ')
-      buffer.push_back(' ');
-    else
+      buffer.push_back('_');
+    else if (std::isprint(c))
       buffer.push_back(c);
   }
 }

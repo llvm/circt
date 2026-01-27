@@ -29,7 +29,6 @@ namespace circt::arc::runtime::impl {
 /// String identifier for a signal in a VCD file consisting of characters in
 /// the ASCII range from '!' to '~'.
 struct VCDSignalId {
-public:
   VCDSignalId() = delete;
   /// Create the string ID from an integer ID
   explicit VCDSignalId(uint64_t index);
