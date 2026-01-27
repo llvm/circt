@@ -308,6 +308,9 @@ LogicalResult MachineOpConverter::dispatch() {
             combOutputValues.push_back(out);
           newOp->erase();
         }
+        if (isa<verif::AssertOp>(newOp)) {
+          assertions.push_back({0, newOp->getOperand(0)});
+        }
       }
       
       // cast the (comb) results of the output region to SMT types, such that they can be used as 
@@ -348,6 +351,17 @@ LogicalResult MachineOpConverter::dispatch() {
   
   // assert initial conditions
   smt::AssertOp::create(b, loc, initialAssertion);  
+  
+  // douple quantified arguments to consider both the initial and arriving state
+  SmallVector<Type> transitionQuantified;
+  for (auto [id, ty] : llvm::enumerate(quantifiableTypes)) {
+    if (id < numArgs) {
+      transitionQuantified.push_back(ty);
+      transitionQuantified.push_back(ty);
+    } else {
+      transitionQuantified.push_back(ty);
+    }
+  }
   
   // For each transition
   // F_state0(vars, outs, [time]) &&& guard (args, vars) ->
@@ -516,7 +530,7 @@ LogicalResult MachineOpConverter::dispatch() {
             newOp->erase();
             
             
-          }
+          } 
         }
       } 
       
@@ -524,16 +538,7 @@ LogicalResult MachineOpConverter::dispatch() {
     }; 
     
     
-    // douple quantified arguments to consider both the initial and arriving state
-    SmallVector<Type> transitionQuantified;
-    for (auto [id, ty] : llvm::enumerate(quantifiableTypes)) {
-      if (id < numArgs) {
-        transitionQuantified.push_back(ty);
-        transitionQuantified.push_back(ty);
-      } else {
-        transitionQuantified.push_back(ty);
-      }
-    }
+    
     
     auto forall = smt::ForallOp::create(
         b, loc, transitionQuantified,
@@ -600,7 +605,49 @@ LogicalResult MachineOpConverter::dispatch() {
     smt::AssertOp::create(b, loc, forall);
   }
 
+  
+  for (auto &pa : assertions) {
+    auto forall = smt::ForallOp::create(
+        b, loc, quantifiableTypes,
+        [&](OpBuilder &b, Location loc,
+            ValueRange forallArgsOutputVarsInput) -> Value {
+              
+          // remove arguments from function domain 
+          for (size_t i = 0; i < numArgs; i++) {
+            forallArgsOutputVarsInput = forallArgsOutputVarsInput.drop_front();
+          }
+          
+          // insert cast for all the smt quantified values, excluding time 
+          SmallVector<std::pair<mlir::Value, mlir::Value>> fsmToCast; 
+          for (auto [idx, fq] : llvm::enumerate(forallArgsOutputVarsInput)) {
+            if (idx < numArgs) { // arguments
+              auto convCast = UnrealizedConversionCastOp::create(b, loc, fsmArgs[idx].getType(), fq);  
+              fsmToCast.push_back({fsmArgs[idx], convCast->getResult(0)});
+            } else if (numArgs + numOut <= idx) { // variables
+              if (cfg.withTime && idx == forallArgsOutputVarsInput.size() -1)
+                break;
+              auto convCast = UnrealizedConversionCastOp::create(b, loc, fsmVars[idx - numArgs - numOut].getType(), fq);  
+              fsmToCast.push_back({fsmVars[idx - numArgs - numOut], convCast->getResult(0)});
+            }
+          }
+          
+          
+          
+          SmallVector<Value> forallInputs; 
+          for(auto [idx, fq] : llvm::enumerate(fsmToCast)) {
+            forallInputs.push_back(fq.second);
+          }
+
+          Value inState = smt::ApplyFuncOp::create(
+              b, loc, stateFunctions[pa.stateId], forallInputs);
+              
+          auto castAssertion = mlir::UnrealizedConversionCastOp::create(b, loc, b.getType<smt::BoolType>(), pa.predicateFsm);
+          
+          return smt::ImpliesOp::create(b, loc, inState, castAssertion->getResult(0));
+        });
         
+    smt::AssertOp::create(b, loc, forall);
+  }
         
   smt::YieldOp::create(b, loc, typeRange, valueRange);
   machineOp.erase();
