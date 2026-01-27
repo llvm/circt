@@ -505,6 +505,11 @@ TruthTable Deseq::computeBoolean(OpResult value) {
     return result;
   }
 
+  if (auto instanceOp = dyn_cast<hw::InstanceOp>(op)) {
+    // TODO: Should we delve into hw.module itself?
+    return getUnknownBoolean();
+  }
+
   // Otherwise check if the operation depends on any of the triggers. If it
   // does, create a poison value since we don't really know how the trigger
   // affects this boolean. If it doesn't, create an unknown value.
