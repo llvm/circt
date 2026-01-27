@@ -108,7 +108,7 @@ def PastOp : LTLOp<"past", [Pure]> {
   let arguments = (ins
     I1:$input,
     I64Attr:$delay);
-  let results = (outs LTLSequenceType:$result);
+  let results = (outs I1:$result);
   let assemblyFormat = [{
     $input `,` $delay attr-dict `:` type($input)
   }];
