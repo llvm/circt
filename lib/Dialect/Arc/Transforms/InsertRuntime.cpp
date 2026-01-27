@@ -38,6 +38,7 @@ struct RuntimeFunction {
   bool used = false;
 
 protected:
+  // Add attributes for passing the model state pointer to the runtime library
   void setModelStateArgAttrs(OpBuilder &builder, unsigned argIndex,
                              bool isMutable) {
     llvmFuncOp.setArgAttr(0, LLVM::LLVMDialect::getNoCaptureAttrName(),
@@ -322,6 +323,33 @@ LogicalResult GlobalRuntimeContext::buildTraceInstrumentation() {
   return success();
 }
 
+// Build a trace instrumentation function recording the change of a state
+// value to the trace buffer.
+// Pseudocode of the constructed function:
+//
+//
+// void _arc_trace_instrument_i{BW}(uint8_t *simState, uint64_t traceTapId,
+//                                   uint{BW}_t newValue) {
+//   // BB: "capcaityCheckBlock"
+//   const uint32_t reqSize = {BW} / 64 + 1;
+//   ArcState *runtimeState = (ArcState*)(simState - sizeof(ArcState));
+//   const uint32_t oldSize = runtimeState->traceBufferSize;
+//   uint64_t *storePtr = &runtimeState->traceBuffer[oldSize];
+//   uint32_t newSize = oldSize + reqSize;
+//   if (newSize >= runtime::defaultTraceBufferCapacity) [[unlikely]] {
+//     // BB: "swapBufferBlock"
+//     storePtr = arcRuntimeIR_swapBuffer(simState);
+//     runtimeState->traceBuffer = storePtr;
+//     newSize = reqSize;
+//   }
+//   // BB: "bufferStoreBlock"
+//   storePtr[0] = traceTapId;
+//   for (unsigned qword = 0; qword < {BW} / 64; ++qword) // Unrolled
+//     storePtr[qword + 1] = (uint64_t)(newValue >> (64 * qword));
+//   runtimeState->traceBufferSize = newSize;
+// }
+//
+
 void GlobalRuntimeContext::buildTraceInstrumentationFn(Type ty) {
   assert(isa<IntegerType>(ty));
   auto traceTy = getTraceExtendedType(ty);
@@ -335,8 +363,6 @@ void GlobalRuntimeContext::buildTraceInstrumentationFn(Type ty) {
   auto i64Ty = IntegerType::get(ctx, 64);
   auto i32Ty = IntegerType::get(ctx, 32);
   auto llvmPtrTy = LLVM::LLVMPointerType::get(ctx);
-  // void _arc_trace_instrument_ixyz(uint8_t* stateBase, uint64_t tapId,
-  // BitInt(xyz) newValue)
   auto llvmFnTy = LLVM::LLVMFunctionType::get(LLVM::LLVMVoidType::get(ctx),
                                               {llvmPtrTy, i64Ty, traceTy});
   auto symName = StringAttr::get(
@@ -351,7 +377,9 @@ void GlobalRuntimeContext::buildTraceInstrumentationFn(Type ty) {
   auto *capcaityCheckBlock = funcOp.addEntryBlock(globalBuilder);
   auto *swapBufferBlock = &funcOp.getRegion().emplaceBlock();
   auto *bufferStoreBlock = &funcOp.getRegion().emplaceBlock();
+  // storePtr
   bufferStoreBlock->addArgument(llvmPtrTy, globalBuilder.getLoc());
+  // newSize
   bufferStoreBlock->addArgument(i32Ty, globalBuilder.getLoc());
   auto *exitBlock = &funcOp.getRegion().emplaceBlock();
 
