@@ -74,6 +74,13 @@ void LowerIntmodulesPass::runOnOperation() {
 
     for (auto *use : llvm::make_early_inc_range(node->uses())) {
       auto inst = use->getInstance<InstanceOp>();
+      if (!inst) {
+        mlir::emitError(use->getInstance()->getLoc())
+            << "intmodule must be instantiated with instance op, not via '"
+            << use->getInstance().getOperation()->getName() << "'";
+        return signalPassFailure();
+      }
+
       if (failed(checkInstForAnnotations(inst, op.getIntrinsic())))
         return signalPassFailure();
 

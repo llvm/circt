@@ -185,7 +185,10 @@ def InstanceOp : HardwareDeclOp<"instance", [
 }
 
 def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
+      "getInstanceName", "getInstanceNameAttr", "getReferencedModuleNamesAttr"
+    ]>
   ]> {
   let summary = "Creates an instance of a module based on a option";
 
