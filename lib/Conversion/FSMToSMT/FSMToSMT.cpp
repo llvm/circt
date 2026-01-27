@@ -361,7 +361,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
   // assert initial conditions
   smt::AssertOp::create(b, loc, initialAssertion);
-
+  
   // douple quantified arguments to consider both the initial and arriving state
   SmallVector<Type> transitionQuantified;
   for (auto [id, ty] : llvm::enumerate(quantifiableTypes)) {
@@ -485,17 +485,10 @@ LogicalResult MachineOpConverter::dispatch() {
           auto *newOp = b.clone(op, mapping);
           // retrieve the operands of the output operation
           if (isa<fsm::ReturnOp>(newOp)) {
-            if (isa<mlir::UnrealizedConversionCastOp>(newOp->getOperand(0).getDefiningOp())) {
-              guardVal =
-                UnrealizedConversionCastOp::create(
-                    b, loc, b.getType<smt::BoolType>(), newOp->getOperand(0).getDefiningOp()->getOperand(0))
-                    ->getResult(0);
-            } else {
-                guardVal =
-                UnrealizedConversionCastOp::create(
-                    b, loc, b.getType<smt::BoolType>(), newOp->getOperand(0))
-                    ->getResult(0);
-                }
+            auto castVal = mlir::UnrealizedConversionCastOp::create(
+              b, loc, b.getType<smt::BitVectorType>(1), newOp->getOperand(0));
+
+            guardVal = smt::EqOp::create(b, loc, castVal->getResult(0), smt::BVConstantOp::create(b, loc, 1, 1));
             newOp->erase();
           }
         }
@@ -630,51 +623,6 @@ LogicalResult MachineOpConverter::dispatch() {
           auto guardedlhs = smt::AndOp::create(b, loc, lhs, guardVal);
 
           return smt::ImpliesOp::create(b, loc, guardedlhs, rhs);
-        });
-
-    smt::AssertOp::create(b, loc, forall);
-  }
-
-  for (auto &pa : assertions) {
-    auto forall = smt::ForallOp::create(
-        b, loc, quantifiableTypes,
-        [&](OpBuilder &b, Location loc,
-            ValueRange forallArgsOutputVarsInput) -> Value {
-          // remove arguments from function domain
-          for (size_t i = 0; i < numArgs; i++) {
-            forallArgsOutputVarsInput = forallArgsOutputVarsInput.drop_front();
-          }
-
-          // insert cast for all the smt quantified values, excluding time
-          SmallVector<std::pair<mlir::Value, mlir::Value>> fsmToCast;
-          for (auto [idx, fq] : llvm::enumerate(forallArgsOutputVarsInput)) {
-            if (idx < numArgs) { // arguments
-              auto convCast = UnrealizedConversionCastOp::create(
-                  b, loc, fsmArgs[idx].getType(), fq);
-              fsmToCast.push_back({fsmArgs[idx], convCast->getResult(0)});
-            } else if (numArgs + numOut <= idx) { // variables
-              if (cfg.withTime && idx == forallArgsOutputVarsInput.size() - 1)
-                break;
-              auto convCast = UnrealizedConversionCastOp::create(
-                  b, loc, fsmVars[idx - numArgs - numOut].getType(), fq);
-              fsmToCast.push_back(
-                  {fsmVars[idx - numArgs - numOut], convCast->getResult(0)});
-            }
-          }
-
-          SmallVector<Value> forallInputs;
-          for (auto [idx, fq] : llvm::enumerate(fsmToCast)) {
-            forallInputs.push_back(fq.second);
-          }
-
-          Value inState = smt::ApplyFuncOp::create(
-              b, loc, stateFunctions[pa.stateId], forallInputs);
-
-          auto castAssertion = mlir::UnrealizedConversionCastOp::create(
-              b, loc, b.getType<smt::BoolType>(), pa.predicateFsm);
-
-          return smt::ImpliesOp::create(b, loc, inState,
-                                        castAssertion->getResult(0));
         });
 
     smt::AssertOp::create(b, loc, forall);
