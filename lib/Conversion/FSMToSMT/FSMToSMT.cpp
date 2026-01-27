@@ -650,6 +650,8 @@ LogicalResult MachineOpConverter::dispatch() {
   }
         
   smt::YieldOp::create(b, loc, typeRange, valueRange);
+  
+  
   machineOp.erase();
   return success();
 }
