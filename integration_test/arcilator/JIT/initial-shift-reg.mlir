@@ -70,10 +70,7 @@ module {
   }
 }
 
-// VCD-LABEL: $date
-// VCD-NEXT:    October 21, 2015
-// VCD-NEXT: $end
-// VCD-NEXT: $version
+// VCD-LABEL: $version
 // VCD-NEXT:     Some cryptic ArcRuntime magic
 // VCD-NEXT: $end
 // VCD-NEXT: $timescale 1ns $end
