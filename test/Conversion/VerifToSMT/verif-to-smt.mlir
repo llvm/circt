@@ -211,6 +211,8 @@ func.func @test_bmc() -> (i1) {
   }
   circuit {
   ^bb0(%clk: !seq.clock, %arg0: i32, %state0: i32, %state1: i32, %state2: !hw.array<2xi32>):
+    %true = hw.constant true
+    verif.assert %true : i1
     %c-1_i32 = hw.constant -1 : i32
     %0 = comb.add %arg0, %state0 : i32
     // %state0 is the result of a seq.compreg taking %0 as input

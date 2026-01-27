@@ -170,6 +170,18 @@ firrtl.extmodule @SimulationTop(
   out success: !firrtl.uint<1>
 )
 
+// Simulation targets may have additional property ports
+firrtl.simulation @mySimulationTestWithProps, @SimulationTopWithProps {}
+
+firrtl.extmodule @SimulationTopWithProps(
+  in clock: !firrtl.clock,
+  in init: !firrtl.uint<1>,
+  out done: !firrtl.uint<1>,
+  out success: !firrtl.uint<1>,
+  in someProp: !firrtl.string,
+  out anotherProp: !firrtl.integer
+)
+
 firrtl.module @Contracts(in %a: !firrtl.uint<42>, in %b: !firrtl.bundle<x: uint<1337>>) {
   firrtl.contract {}
   firrtl.contract %a, %b : !firrtl.uint<42>, !firrtl.bundle<x: uint<1337>> {

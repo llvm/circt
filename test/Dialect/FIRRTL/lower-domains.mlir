@@ -239,6 +239,33 @@ firrtl.circuit "Foo" {
 
 // -----
 
+// Test that wires with multiple destination users works.  This avoids a
+// potential coding bug that assumes wires only have one destination.
+firrtl.circuit "Foo" {
+  firrtl.domain @ClockDomain
+  firrtl.extmodule @Bar(
+    in a: !firrtl.domain of @ClockDomain,
+    in b: !firrtl.domain of @ClockDomain
+  )
+  // CHECK-LABEL: firrtl.module @Foo
+  firrtl.module @Foo(
+    in %a: !firrtl.domain of @ClockDomain
+  ) {
+    %bar_a, %bar_b = firrtl.instance bar @Bar(
+      in a: !firrtl.domain of @ClockDomain,
+      in b: !firrtl.domain of @ClockDomain
+    )
+    %wire = firrtl.wire : !firrtl.domain
+    firrtl.domain.define %wire, %a
+    // CHECK:      firrtl.propassign %bar_a, %a
+    // CHECK-NEXT: firrtl.propassign %bar_b, %a
+    firrtl.domain.define %bar_a, %wire
+    firrtl.domain.define %bar_b, %wire
+  }
+}
+
+// -----
+
 // Test a "downards" U-turn.
 firrtl.circuit "Foo" {
   firrtl.domain @ClockDomain
@@ -499,5 +526,25 @@ firrtl.circuit "DeadDomainOps" {
     %e = firrtl.wire : !firrtl.domain
     %f = firrtl.domain.anon : !firrtl.domain of @ClockDomain
     firrtl.domain.define %e, %f
+  }
+}
+
+// -----
+
+// Test that zero width ports that have domain associations do not have these
+// associations propagated to the lowered class for that domain port.  If these
+// did, then this would create symbols on zero-width ports which is not allowed
+// by the LowerToHW conversion.
+firrtl.circuit "ZeroWidthPort" {
+  firrtl.domain @ClockDomain
+  // CHECK-LABEL: firrtl.module @ZeroWidthPort(
+  firrtl.module @ZeroWidthPort(
+    in %A: !firrtl.domain of @ClockDomain,
+    in %a: !firrtl.uint<0> domains [%A]
+  ) {
+    // CHECK:      %[[associations_in:.+]] = firrtl.object.subfield %A_object[associations_in]
+    // CHECK-NEXT: %[[list:.+]] = firrtl.list.create :
+    // CHECK-NEXT: firrtl.propassign %[[associations_in]], %[[list]]
+    // CHECK-NEXT: firrtl.propassign %A_out, %A_object :
   }
 }

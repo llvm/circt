@@ -109,7 +109,8 @@ void populateArcStateAllocationPipeline(
 
 // Lower the arcs and update functions to LLVM. This pipeline lowers modules to
 // LLVM IR.
-void populateArcToLLVMPipeline(mlir::OpPassManager &pm);
+void populateArcToLLVMPipeline(mlir::OpPassManager &pm, bool insertRuntime,
+                               mlir::StringRef extraRuntimeArgs = {});
 
 } // namespace circt
 

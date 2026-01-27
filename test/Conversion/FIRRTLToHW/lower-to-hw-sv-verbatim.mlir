@@ -315,4 +315,27 @@ firrtl.circuit "SVVerbatimTest" {
     }
 
   firrtl.module @SVVerbatimTest() {}
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Check that externalRequirements property is transferred from
+  // firrtl.extmodule to sv.verbatim.module during lowering.
+  //
+  // CHECK:       sv.verbatim.module @VerbatimWithRequirements
+  // CHECK-SAME:    circt.external_requirements = ["dpi_lib", "sv_header"]
+  firrtl.extmodule @VerbatimWithRequirements(
+    in clk: !firrtl.clock
+  ) attributes {
+    annotations = [
+      {
+        class = "circt.VerbatimBlackBoxAnno",
+        files = [
+          {
+            content = "module VerbatimWithRequirements(input clk); endmodule",
+            output_file = "VerbatimWithRequirements.v"
+          }
+        ]
+      }
+    ],
+    externalRequirements = ["dpi_lib", "sv_header"]
+  }
 }

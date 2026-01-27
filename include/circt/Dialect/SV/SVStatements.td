@@ -17,6 +17,7 @@ include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "circt/Dialect/Emit/EmitOpInterfaces.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
@@ -544,7 +545,9 @@ def FFlushOp : SVOp<"fflush", [ProceduralOp]> {
   }];
 }
 
-def VerbatimOp : SVOp<"verbatim"> {
+def VerbatimOp : SVOp<"verbatim", [
+    DeclareOpInterfaceMethods<InnerRefUserOpInterface>
+]> {
   let summary = "Verbatim opaque text emitted inline.";
   let description = [{
     This operation produces opaque text inline in the SystemVerilog output.

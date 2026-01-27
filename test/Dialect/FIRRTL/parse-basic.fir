@@ -1766,6 +1766,22 @@ circuit KnownLayers:
   ; CHECK-SAME: layers = [@A, @B]
   extmodule ExtModuleWithKnownLayerAndEnabledLayers enablelayer A knownlayer A enablelayer B knownlayer B.C:
 
+  ; CHECK: firrtl.extmodule private @ExtModuleWithRequirements(in clk: !firrtl.clock)
+  ; CHECK-SAME: externalRequirements = ["libdv", "vcs>=202505"]
+  extmodule ExtModuleWithRequirements requires "libdv", "vcs>=202505":
+    input clk: Clock
+
+  ; Test multiple requires keywords (like knownlayer)
+  ; CHECK: firrtl.extmodule private @ExtModuleWithMultipleRequires()
+  ; CHECK-SAME: externalRequirements = ["lib1", "lib2", "lib3"]
+  extmodule ExtModuleWithMultipleRequires requires "lib1" requires "lib2", "lib3":
+
+  ; Test intermixed knownlayer and requires
+  ; CHECK: firrtl.extmodule private @ExtModuleWithKnownLayersAndRequires()
+  ; CHECK-SAME: externalRequirements = ["libfoo", "libbar"]
+  ; CHECK-SAME: knownLayers = [@A, @B]
+  extmodule ExtModuleWithKnownLayersAndRequires knownlayer A requires "libfoo" knownlayer B requires "libbar":
+
   public module KnownLayers enablelayer A enablelayer B.C:
     ; CHECK: firrtl.instance ext1 interesting_name @ExtModuleWithKnownLayers()
     inst ext1 of ExtModuleWithKnownLayers

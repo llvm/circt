@@ -3130,107 +3130,20 @@ ParseResult FIRStmtParser::parseFormatString(SMLoc formatStringLoc,
                                              ArrayRef<Value> specOperands,
                                              StringAttr &formatStringResult,
                                              SmallVectorImpl<Value> &operands) {
-  // Validate the format string and remove any "special" substitutions.  Only do
-  // this for FIRRTL versions > 5.0.0.  If at a different FIRRTL version, then
-  // just parse this as if it was a string.
-  SmallVector<Attribute, 4> specialSubstitutions;
-  SmallString<64> validatedFormatString;
+  // For FIRRTL versions < 5.0.0, don't process special substitutions
   if (version < FIRVersion(5, 0, 0)) {
-    validatedFormatString = formatString;
     operands.append(specOperands.begin(), specOperands.end());
-  } else {
-    for (size_t i = 0, e = formatString.size(), opIdx = 0; i != e; ++i) {
-      auto c = formatString[i];
-      switch (c) {
-      // FIRRTL percent format strings.  If this is actually a format string,
-      // then grab one of the "spec" operands.
-      case '%': {
-        validatedFormatString.push_back(c);
-
-        // Parse the width specifier.
-        SmallString<6> width;
-        c = formatString[++i];
-        while (isdigit(c)) {
-          width.push_back(c);
-          c = formatString[++i];
-        }
-
-        // Parse the radix.
-        switch (c) {
-        case 'c':
-          if (!width.empty()) {
-            emitError(formatStringLoc) << "ASCII character format specifiers "
-                                          "('%c') may not specify a width";
-            return failure();
-          }
-          [[fallthrough]];
-        case 'b':
-        case 'd':
-        case 'x':
-          if (!width.empty())
-            validatedFormatString.append(width);
-          operands.push_back(specOperands[opIdx++]);
-          break;
-        case '%':
-          if (!width.empty()) {
-            emitError(formatStringLoc)
-                << "literal percents ('%%') may not specify a width";
-            return failure();
-          }
-          break;
-        // Anything else is illegal.
-        default:
-          emitError(formatStringLoc)
-              << "unknown printf substitution '%" << width << c << "'";
-          return failure();
-        }
-        validatedFormatString.push_back(c);
-        break;
-      }
-      // FIRRTL special format strings.  If this is a special format string,
-      // then create an operation for it and put its result in the operand list.
-      // This will cause the operands to interleave with the spec operands.
-      // Replace any special format string with the generic '{{}}' placeholder.
-      case '{': {
-        if (formatString[i + 1] != '{') {
-          validatedFormatString.push_back(c);
-          break;
-        }
-        // Handle a special substitution.
-        i += 2;
-        size_t start = i;
-        while (formatString[i] != '}')
-          ++i;
-        if (formatString[i] != '}') {
-          llvm::errs() << "expected '}' to terminate special substitution";
-          return failure();
-        }
-
-        auto specialString = formatString.slice(start, i);
-        if (specialString == "SimulationTime") {
-          operands.push_back(TimeOp::create(builder));
-        } else if (specialString == "HierarchicalModuleName") {
-          operands.push_back(HierarchicalModuleNameOp::create(builder));
-        } else {
-          emitError(formatStringLoc)
-              << "unknown printf substitution '" << specialString
-              << "' (did you misspell it?)";
-          return failure();
-        }
-
-        validatedFormatString.append("{{}}");
-        ++i;
-        break;
-      }
-      default:
-        validatedFormatString.push_back(c);
-      }
-    }
+    formatStringResult =
+        builder.getStringAttr(FIRToken::getStringValue(formatString));
+    return success();
   }
 
-  formatStringResult =
-      builder.getStringAttr(FIRToken::getStringValue(validatedFormatString));
-  return success();
+  // Use the utility function to parse the format string
+  auto loc = translateLocation(formatStringLoc);
+  auto result = circt::firrtl::parseFormatString(
+      builder, loc, FIRToken::getStringValue(formatString), specOperands,
+      formatStringResult, operands);
+  return result;
 }
 
 /// printf ::= 'printf(' exp exp StringLit exp* ')' name? info?
@@ -5335,9 +5248,11 @@ private:
   ParseResult parseLayerList(SmallVectorImpl<Attribute> &result);
   ParseResult parseEnableLayerSpec(SmallVectorImpl<Attribute> &result);
   ParseResult parseKnownLayerSpec(SmallVectorImpl<Attribute> &result);
+  ParseResult parseRequiresSpec(SmallVectorImpl<Attribute> &result);
   ParseResult parseModuleLayerSpec(ArrayAttr &enabledLayers);
-  ParseResult parseExtModuleLayerSpec(ArrayAttr &enabledLayers,
-                                      ArrayAttr &knownLayers);
+  ParseResult parseExtModuleAttributesSpec(ArrayAttr &enabledLayers,
+                                           ArrayAttr &knownLayers,
+                                           ArrayAttr &externalRequirements);
 
   ParseResult parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                             SmallVectorImpl<SMLoc> &resultPortLocs,
@@ -5452,10 +5367,12 @@ ParseResult FIRCircuitParser::parseModuleLayerSpec(ArrayAttr &enabledLayers) {
   return success();
 }
 
-ParseResult FIRCircuitParser::parseExtModuleLayerSpec(ArrayAttr &enabledLayers,
-                                                      ArrayAttr &knownLayers) {
+ParseResult FIRCircuitParser::parseExtModuleAttributesSpec(
+    ArrayAttr &enabledLayers, ArrayAttr &knownLayers,
+    ArrayAttr &externalRequirements) {
   SmallVector<Attribute> enabledLayersBuffer;
   SmallVector<Attribute> knownLayersBuffer;
+  SmallVector<Attribute> requirementsBuffer;
   while (true) {
     auto tokenKind = getToken().getKind();
     // Parse an enablelayer spec.
@@ -5470,7 +5387,13 @@ ParseResult FIRCircuitParser::parseExtModuleLayerSpec(ArrayAttr &enabledLayers,
         return failure();
       continue;
     }
-    // Didn't parse a layer spec.
+    // Parse a requires spec.
+    if (tokenKind == FIRToken::kw_requires) {
+      if (parseRequiresSpec(requirementsBuffer))
+        return failure();
+      continue;
+    }
+    // Didn't parse a layer spec or requires.
     break;
   }
 
@@ -5484,6 +5407,7 @@ ParseResult FIRCircuitParser::parseExtModuleLayerSpec(ArrayAttr &enabledLayers,
 
   enabledLayers = ArrayAttr::get(getContext(), enabledLayersBuffer);
   knownLayers = ArrayAttr::get(getContext(), knownLayersBuffer);
+  externalRequirements = ArrayAttr::get(getContext(), requirementsBuffer);
   return success();
 }
 
@@ -5508,6 +5432,21 @@ ParseResult
 FIRCircuitParser::parseKnownLayerSpec(SmallVectorImpl<Attribute> &result) {
   consumeToken(FIRToken::kw_knownlayer);
   return parseLayerList(result);
+}
+
+ParseResult
+FIRCircuitParser::parseRequiresSpec(SmallVectorImpl<Attribute> &result) {
+  consumeToken(FIRToken::kw_requires);
+  do {
+    StringRef requireStr;
+    if (parseGetSpelling(requireStr) ||
+        parseToken(FIRToken::string, "expected string after 'requires'"))
+      return failure();
+    // Remove the surrounding quotes from the string.
+    result.push_back(
+        StringAttr::get(getContext(), requireStr.drop_front().drop_back()));
+  } while (consumeIf(FIRToken::comma));
+  return success();
 }
 
 /// portlist ::= port*
@@ -5784,20 +5723,23 @@ ParseResult FIRCircuitParser::parseExtClass(CircuitOp circuit,
 }
 
 /// extmodule ::=
-///        'extmodule' id ':' info?
-///        INDENT portlist defname? parameter-list ref-list DEDENT
+///        'extmodule' id requires? ':' info?
+///        INDENT portlist defname? parameter-list DEDENT
 /// defname   ::= 'defname' '=' id NEWLINE
+/// requires  ::= 'requires' string (',' string)*
 ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
                                              unsigned indent) {
   StringAttr name;
   ArrayAttr enabledLayers;
   ArrayAttr knownLayers;
+  ArrayAttr externalRequirements;
   SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
   LocWithInfo info(getToken().getLoc(), this);
   consumeToken(FIRToken::kw_extmodule);
   if (parseId(name, "expected extmodule name") ||
-      parseExtModuleLayerSpec(enabledLayers, knownLayers) ||
+      parseExtModuleAttributesSpec(enabledLayers, knownLayers,
+                                   externalRequirements) ||
       parseToken(FIRToken::colon, "expected ':' in extmodule definition") ||
       info.parseOptionalInfo() || parsePortList(portList, portLocs, indent))
     return failure();
@@ -5833,7 +5775,7 @@ ParseResult FIRCircuitParser::parseExtModule(CircuitOp circuit,
   auto annotations = ArrayAttr::get(getContext(), {});
   auto extModuleOp = FExtModuleOp::create(
       builder, info.getLoc(), name, conventionAttr, portList, knownLayers,
-      defName, annotations, parameters, enabledLayers);
+      defName, annotations, parameters, enabledLayers, externalRequirements);
   auto visibility = isMainModule ? SymbolTable::Visibility::Public
                                  : SymbolTable::Visibility::Private;
   SymbolTable::setSymbolVisibility(extModuleOp, visibility);

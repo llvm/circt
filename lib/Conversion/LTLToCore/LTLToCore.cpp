@@ -25,6 +25,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/MathExtras.h"
@@ -91,6 +92,80 @@ struct HasBeenResetOpConversion : OpConversionPattern<verif::HasBeenResetOp> {
   }
 };
 
+struct LTLImplicationConversion
+    : public OpConversionPattern<ltl::ImplicationOp> {
+  using OpConversionPattern<ltl::ImplicationOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ltl::ImplicationOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Can only lower boolean implications to comb ops
+    if (!isa<IntegerType>(op.getAntecedent().getType()) ||
+        !isa<IntegerType>(op.getConsequent().getType()))
+      return failure();
+    /// A -> B = !A || B
+    auto loc = op.getLoc();
+    auto notA = comb::createOrFoldNot(loc, adaptor.getAntecedent(), rewriter);
+    auto orOp =
+        comb::OrOp::create(rewriter, loc, notA, adaptor.getConsequent());
+    rewriter.replaceOp(op, orOp);
+    return success();
+  }
+};
+
+struct LTLNotConversion : public OpConversionPattern<ltl::NotOp> {
+  using OpConversionPattern<ltl::NotOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ltl::NotOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Can only lower boolean nots to comb ops
+    if (!isa<IntegerType>(op.getInput().getType()))
+      return failure();
+    auto loc = op.getLoc();
+    auto inverted = comb::createOrFoldNot(loc, adaptor.getInput(), rewriter);
+    rewriter.replaceOp(op, inverted);
+    return success();
+  }
+};
+
+struct LTLAndOpConversion : public OpConversionPattern<ltl::AndOp> {
+  using OpConversionPattern<ltl::AndOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ltl::AndOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Can only lower boolean ands to comb ops
+    if (!isa<IntegerType>(op->getOperandTypes()[0]) ||
+        !isa<IntegerType>(op->getOperandTypes()[1]))
+      return failure();
+    auto loc = op.getLoc();
+    // Explicit twoState value to disambiguate builders
+    auto andOp =
+        comb::AndOp::create(rewriter, loc, adaptor.getOperands(), false);
+    rewriter.replaceOp(op, andOp);
+    return success();
+  }
+};
+
+struct LTLOrOpConversion : public OpConversionPattern<ltl::OrOp> {
+  using OpConversionPattern<ltl::OrOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ltl::OrOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Can only lower boolean ors to comb ops
+    if (!isa<IntegerType>(op->getOperandTypes()[0]) ||
+        !isa<IntegerType>(op->getOperandTypes()[1]))
+      return failure();
+    auto loc = op.getLoc();
+    // Explicit twoState value to disambiguate builders
+    auto orOp = comb::OrOp::create(rewriter, loc, adaptor.getOperands(), false);
+    rewriter.replaceOp(op, orOp);
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -118,6 +193,29 @@ void LowerLTLToCorePass::runOnOperation() {
   target.addLegalDialect<ltl::LTLDialect>();
   target.addLegalDialect<verif::VerifDialect>();
   target.addIllegalOp<verif::HasBeenResetOp>();
+
+  auto isLegal = [](Operation *op) {
+    auto hasNonAssertUsers = std::any_of(
+        op->getUsers().begin(), op->getUsers().end(), [](Operation *user) {
+          return !isa<verif::AssertOp, verif::ClockedAssertOp>(user);
+        });
+    auto hasIntegerResultTypes =
+        std::all_of(op->getResultTypes().begin(), op->getResultTypes().end(),
+                    [](Type type) { return isa<IntegerType>(type); });
+    // If there are users other than asserts, we can't map it to comb (unless
+    // the return type is already integer anyway)
+    if (hasNonAssertUsers && !hasIntegerResultTypes)
+      return true;
+
+    // Otherwise illegal if operands are i1
+    return std::any_of(
+        op->getOperands().begin(), op->getOperands().end(),
+        [](Value operand) { return !isa<IntegerType>(operand.getType()); });
+  };
+  target.addDynamicallyLegalOp<ltl::ImplicationOp>(isLegal);
+  target.addDynamicallyLegalOp<ltl::NotOp>(isLegal);
+  target.addDynamicallyLegalOp<ltl::AndOp>(isLegal);
+  target.addDynamicallyLegalOp<ltl::OrOp>(isLegal);
 
   // Create type converters, mostly just to convert an ltl property to a bool
   mlir::TypeConverter converter;
@@ -154,12 +252,27 @@ void LowerLTLToCorePass::runOnOperation() {
 
   // Create the operation rewrite patters
   RewritePatternSet patterns(&getContext());
-  patterns.add<HasBeenResetOpConversion>(converter, patterns.getContext());
-
+  patterns.add<HasBeenResetOpConversion, LTLImplicationConversion,
+               LTLNotConversion, LTLAndOpConversion, LTLOrOpConversion>(
+      converter, patterns.getContext());
   // Apply the conversions
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     return signalPassFailure();
+
+  // Clean up remaining unrealized casts by changing assert argument types
+  getOperation().walk([&](Operation *op) {
+    if (!isa<verif::AssertOp, verif::ClockedAssertOp>(op))
+      return;
+    Value prop = op->getOperand(0);
+    if (auto cast = prop.getDefiningOp<UnrealizedConversionCastOp>()) {
+      // Make sure that the cast is from an i1, not something random that was in
+      // the input
+      if (auto intType = dyn_cast<IntegerType>(cast.getOperandTypes()[0]);
+          intType && intType.getWidth() == 1)
+        op->setOperand(0, cast.getInputs()[0]);
+    }
+  });
 }
 
 // Basic default constructor

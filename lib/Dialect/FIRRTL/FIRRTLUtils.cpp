@@ -16,6 +16,7 @@
 #include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Support/Naming.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Path.h"
 
@@ -1090,4 +1091,103 @@ PathOp circt::firrtl::createPathRef(Operation *op, hw::HierPathOp nla,
 
   // Create the path operation.
   return PathOp::create(builderOM, kind, id);
+}
+
+//===----------------------------------------------------------------------===//
+// Format string utilities
+//===----------------------------------------------------------------------===//
+
+mlir::ParseResult
+circt::firrtl::parseFormatString(mlir::OpBuilder &builder, mlir::Location loc,
+                                 llvm::StringRef formatString,
+                                 llvm::ArrayRef<mlir::Value> specOperands,
+                                 mlir::StringAttr &formatStringResult,
+                                 llvm::SmallVectorImpl<mlir::Value> &operands) {
+
+  // Validate the format string and process any "special" substitutions.
+  llvm::SmallString<64> validatedFormatString;
+
+  for (size_t i = 0, e = formatString.size(), opIdx = 0; i != e; ++i) {
+    auto c = formatString[i];
+    switch (c) {
+    // FIRRTL percent format strings.  If this is actually a format string,
+    // then grab one of the "spec" operands.
+    case '%': {
+      validatedFormatString.push_back(c);
+
+      // Parse the width specifier.
+      llvm::SmallString<6> width;
+      c = formatString[++i];
+      while (isdigit(c)) {
+        width.push_back(c);
+        c = formatString[++i];
+      }
+
+      // Parse the radix.
+      switch (c) {
+      case 'c':
+        if (!width.empty())
+          return mlir::emitError(loc) << "ASCII character format specifiers "
+                                         "('%c') may not specify a width";
+        [[fallthrough]];
+      case 'b':
+      case 'd':
+      case 'x':
+        if (!width.empty())
+          validatedFormatString.append(width);
+        operands.push_back(specOperands[opIdx++]);
+        break;
+      case '%':
+        if (!width.empty())
+          return mlir::emitError(loc)
+                 << "literal percents ('%%') may not specify a width";
+        break;
+      // Anything else is illegal.
+      default:
+        return mlir::emitError(loc)
+               << "unknown printf substitution '%" << width << c << "'";
+      }
+      validatedFormatString.push_back(c);
+      break;
+    }
+    // FIRRTL special format strings.  If this is a special format string,
+    // then create an operation for it and put its result in the operand list.
+    // This will cause the operands to interleave with the spec operands.
+    // Replace any special format string with the generic '{{}}' placeholder.
+    case '{': {
+      if (formatString[i + 1] != '{') {
+        validatedFormatString.push_back(c);
+        break;
+      }
+      // Handle a special substitution.
+      i += 2;
+      size_t start = i;
+      while (formatString[i] != '}')
+        ++i;
+      if (formatString[i] != '}')
+        return mlir::emitError(loc)
+               << "expected '}' to terminate special substitution";
+
+      auto specialString = formatString.slice(start, i);
+      if (specialString == "SimulationTime") {
+        operands.push_back(TimeOp::create(builder, loc));
+      } else if (specialString == "HierarchicalModuleName") {
+        operands.push_back(HierarchicalModuleNameOp::create(builder, loc));
+      } else {
+        return mlir::emitError(loc)
+               << "unknown printf substitution '" << specialString
+               << "' (did you misspell it?)";
+      }
+
+      validatedFormatString.append("{{}}");
+      ++i;
+      break;
+    }
+    default:
+      validatedFormatString.push_back(c);
+    }
+  }
+
+  formatStringResult = builder.getStringAttr(validatedFormatString);
+  return mlir::success();
 }

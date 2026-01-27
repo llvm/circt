@@ -1,4 +1,5 @@
 set(CIRCT_Arc_Sources
+  ArcAttributes.cpp
   ArcDialect.cpp
   ArcFolds.cpp
   ArcOps.cpp
@@ -19,6 +20,7 @@ add_circt_dialect_library(CIRCTArc
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Arc
 
   DEPENDS
+  CIRCTArcAttributesIncGen
   CIRCTArcEnumsIncGen
   CIRCTArcInterfacesIncGen
   MLIRArcIncGen
@@ -56,3 +58,6 @@ add_dependencies(circt-headers
 add_subdirectory(Export)
 add_subdirectory(Interfaces)
 add_subdirectory(Transforms)
+
+# Arcilator Runtime Library
+add_subdirectory(Runtime)

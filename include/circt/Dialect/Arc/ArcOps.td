@@ -587,16 +587,28 @@ def StateReadOp : ArcOp<"state_read", [
 def StateWriteOp : ArcOp<"state_write", [
   MemoryEffects<[MemWrite]>,
   StateAndValueTypesMatch<"state", "value">,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "Update a state's value";
   let arguments = (ins
     StateType:$state,
     AnyType:$value,
-    Optional<I1>:$condition
-  );
+    Optional<I1>:$condition,
+    OptionalAttr<FlatSymbolRefAttr>:$traceTapModel,
+    OptionalAttr<UI64Attr>:$traceTapIndex);
   let assemblyFormat = [{
-    $state `=` $value (`if` $condition^)? attr-dict `:` type($state)
+    $state `=` $value (`if` $condition^)?
+    (`tap` $traceTapModel`[`$traceTapIndex^`]` )? attr-dict `:` type($state)
   }];
+  let hasVerifier = true;
+  let builders = [
+    OpBuilder<(ins  "mlir::Value":$state,
+                    "mlir::Value":$value,
+                    "mlir::Value":$condition), [{
+      build($_builder, $_state, state, value, condition,
+              mlir::FlatSymbolRefAttr{}, mlir::IntegerAttr{});
+    }]>
+  ];
 }
 
 //===----------------------------------------------------------------------===//
@@ -643,8 +655,13 @@ def SimInstantiateOp : ArcOp<"sim.instantiate",
   }];
   let regions = (region SizedRegion<1>:$body);
 
+  let arguments = (ins OptionalAttr<FlatSymbolRefAttr>:$runtimeModel,
+                       OptionalAttr<StrAttr>:$runtimeArgs);
   let hasRegionVerifier = 1;
   let hasCustomAssemblyFormat = 1;
+  let builders = [OpBuilder<(ins), [{
+      build($_builder, $_state, FlatSymbolRefAttr{}, StringAttr{});
+    }]>];
 }
 
 def SimSetInputOp : ArcOp<"sim.set_input",
@@ -729,13 +746,15 @@ def ModelOp : ArcOp<"model", [
   let arguments = (ins SymbolNameAttr:$sym_name,
                        TypeAttrOf<ModuleType>:$io,
                        OptionalAttr<FlatSymbolRefAttr>:$initialFn,
-                       OptionalAttr<FlatSymbolRefAttr>:$finalFn);
+                       OptionalAttr<FlatSymbolRefAttr>:$finalFn,
+                       OptionalAttr<TraceTapArrayAttr>:$traceTaps);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{
     $sym_name `io` $io
     (`initializer` $initialFn^)?
     (`finalizer` $finalFn^)?
+    (`traceTaps` $traceTaps^)?
     attr-dict-with-keyword $body
   }];
 
@@ -947,6 +966,25 @@ def VectorizeReturnOp : ArcOp<"vectorize.return", [
   let summary = "arc.vectorized terminator";
   let arguments = (ins AnyType:$value);
   let assemblyFormat = "operands attr-dict `:` qualified(type(operands))";
+}
+
+def RuntimeModelOp : ArcOp<"runtime.model", [
+  HasParent<"::mlir::ModuleOp">, Pure, Symbol
+]> {
+  let summary = "Provides static metadata of an Arc model used by the runtime";
+  let description = [{
+    Collection of static metadata for a specific Arc model accessed by the
+    arcilator runtime library:
+    - name: Name of the model
+    - numStateBytes: Number of bytes required to store the model's internal
+        state
+  }];
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       StrAttr:$name,
+                       I64Attr:$numStateBytes);
+  let assemblyFormat = [{
+    $sym_name $name `numStateBytes` $numStateBytes attr-dict
+  }];
 }
 
 #endif // CIRCT_DIALECT_ARC_ARCOPS_TD

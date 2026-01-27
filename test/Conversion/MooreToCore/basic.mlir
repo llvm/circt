@@ -1456,3 +1456,28 @@ func.func @TimeConversion(%arg0: !moore.l64, %arg1: !moore.time) -> (!moore.time
   // CHECK-NEXT: return [[TMP0]], [[TMP1]]
   return %0, %1 : !moore.time, !moore.l64
 }
+
+// CHECK-LABEL: func.func @IntToStringConversion
+func.func @IntToStringConversion(%arg0: !moore.i45) {
+  // CHECK-NEXT: sim.string.int_to_string %arg0 : i45
+  moore.int_to_string %arg0 : i45
+  return
+}
+
+// CHECK-LABEL: func.func @StringOperations
+// CHECK-SAME: %arg0: i32
+// CHECK-SAME: %arg1: !sim.dstring
+// CHECK-SAME: %arg2: !sim.dstring
+func.func @StringOperations(%arg0: !moore.i32, %arg1: !moore.string, %arg2: !moore.string) {
+  // CHECK: sim.string.int_to_string %arg0 : i32
+  moore.int_to_string %arg0 : i32
+  // CHECK: sim.string.concat ()
+  moore.string.concat ()
+  // CHECK: sim.string.concat (%arg1)
+  moore.string.concat (%arg1)
+  // CHECK: sim.string.concat (%arg1, %arg2)
+  moore.string.concat (%arg1, %arg2)
+  // CHECK: sim.string.length %arg1
+  moore.string.len %arg1
+  return
+}

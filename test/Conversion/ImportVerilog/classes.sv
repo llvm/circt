@@ -82,9 +82,10 @@ endclass
 
 // CHECK-LABEL: moore.class.classdecl @PropertyCombo {
 // CHECK:   moore.class.propertydecl @pubAutoI32 : !moore.i32
-// CHECK-NEXT:   moore.class.propertydecl @protStatL18 : !moore.l18
 // CHECK-NEXT:   moore.class.propertydecl @localAutoI32 : !moore.i32
 // CHECK: }
+// CHECK-LABEL: moore.global_variable @"PropertyCombo::protStatL18" : !moore.l18
+
 class PropertyCombo;
   // public automatic int
   int pubAutoI32;
@@ -629,4 +630,83 @@ endclass
 
 class realFunctionClass implements virtualFunctionClass;
 virtual function void subroutine; endfunction
+endclass
+
+/// Check that elaboration-time parameter accesses evaluate to constants
+
+// CHECK-LABEL: moore.class.classdecl @parameterAccessClass
+
+class parameterAccessClass #(int testParam = 1);
+   extern function int testFunction();
+endclass
+
+// CHECK-LABEL: func.func private @"parameterAccessClass::testFunction
+// CHECK-SAME: (%arg0: !moore.class<@parameterAccessClass>)
+// CHECK: [[C0:%.*]] = moore.constant 7 : i32
+// CHECK: [[C1:%.*]] = moore.constant 7 : i32
+// CHECK: [[SUM:%.*]] = moore.add [[C0]], [[C1]] : i32
+// CHECK: [[C3:%.*]] = moore.constant 7 : i32
+// CHECK: [[SUM2:%.*]] = moore.add [[SUM]], [[C3]] : i32
+// CHECK: return [[SUM2]] : !moore.i32
+
+function int parameterAccessClass::testFunction();
+   return this.testParam + testParam + parameterAccessClass::testParam;
+endfunction
+
+// CHECK-LABEL: func.func private @testFun() -> !moore.i32 {
+// CHECK: [[VC:%.+]] = moore.variable : <class<@parameterAccessClass>>
+// CHECK: [[READ:%.+]] = moore.read [[VC]] : <class<@parameterAccessClass>>
+// CHECK: [[CALL:%.+]] = call @"parameterAccessClass::testFunction"([[READ]]) : (!moore.class<@parameterAccessClass>) -> !moore.i32
+// CHECK: return [[CALL]] : !moore.i32
+
+function int testFun;
+   parameterAccessClass#(7) c;
+   return c.testFunction();
+endfunction
+
+// Check method forward declarations seeing all class properties.
+
+// CHECK-LABEL:  moore.class.classdecl @methodProtoClass {
+// CHECK: moore.class.propertydecl @mytestvar : !moore.i32
+// CHECK: }
+
+class methodProtoClass;
+   extern function int testFunction;
+   int mytestvar;
+endclass
+
+// CHECK-LABEL: func.func private @"methodProtoClass::testFunction"(
+// CHECK-SAME: %arg0: !moore.class<@methodProtoClass>) -> !moore.i32 {
+// CHECK: [[PREF:%.+]] = moore.class.property_ref %arg0[@mytestvar] : <@methodProtoClass> -> <i32>
+// CHECK: [[RREF:%.+]] = moore.read [[PREF]] : <i32>
+// CHECK: return [[RREF]] : !moore.i32
+// CHECK: }
+
+function int methodProtoClass::testFunction();
+   return mytestvar;
+endfunction
+
+
+// Check static member declarations are emitted as global variables
+// Also check that name resolution properly prefixes them
+
+// CHECK-LABEL: moore.global_variable @member : !moore.i32
+static int member;
+
+// CHECK-LABEL: moore.class.classdecl @staticMemberClass {
+// CHECK-NEXT: }
+class staticMemberClass;
+
+// CHECK-LABEL:   moore.global_variable @"staticMemberClass::member" : !moore.i32
+   static int member;
+
+// CHECK-LABEL:  func.func private @next_member() -> !moore.i32 {
+// CHECK:    [[MEMVAR:%.+]] = moore.get_global_variable @"staticMemberClass::member" : <i32>
+// CHECK:    [[RVAR:%.+]] = moore.read [[MEMVAR]] : <i32>
+// CHECK:    return [[RVAR]] : !moore.i32
+// CHECK:  }
+
+    static function int next_member();
+        return member;
+    endfunction
 endclass

@@ -17,7 +17,7 @@
 #include "circt/Dialect/Synth/Transforms/CutRewriter.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Support/LLVM.h"
-#include "circt/Support/NPNClass.h"
+#include "circt/Support/TruthTable.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
@@ -42,17 +42,25 @@ namespace synth {
 /// with up to K inputs using a lookup table.
 struct GenericLUT : public CutRewritePattern {
   unsigned k; // Maximum number of inputs for this LUT
+  SmallVector<DelayType, 8> cachedDelays; // Pre-computed unit delays
 
   GenericLUT(mlir::MLIRContext *context, unsigned k)
-      : CutRewritePattern(context), k(k) {}
+      : CutRewritePattern(context), k(k), cachedDelays(k, 1) {}
 
-  bool match(const Cut &cut) const override {
+  std::optional<MatchResult> match(CutEnumerator &enumerator,
+                                   const Cut &cut) const override {
     // This pattern can implement any cut with at most k inputs
-    return cut.getInputSize() <= k && cut.getOutputSize() == 1;
+    if (cut.getInputSize() > k || cut.getOutputSize() != 1)
+      return std::nullopt;
+
+    // Create match result with a reference to cached delays
+    return MatchResult(
+        1.0, ArrayRef<DelayType>(cachedDelays).take_front(cut.getInputSize()));
   }
 
   llvm::FailureOr<Operation *> rewrite(mlir::OpBuilder &rewriter,
-                                       Cut &cut) const override {
+                                       CutEnumerator &enumerator,
+                                       const Cut &cut) const override {
     // NOTE: Don't use NPN since it's unnecessary.
     auto truthTable = cut.getTruthTable();
     LLVM_DEBUG({
@@ -69,28 +77,15 @@ struct GenericLUT : public CutRewritePattern {
     for (uint32_t i = 0; i < truthTable.table.getBitWidth(); ++i)
       lutTable.push_back(truthTable.table[i]);
 
-    auto arrayAttr = rewriter.getBoolArrayAttr(
-        lutTable); // Create a boolean array attribute.
-
     // Reverse the inputs to match the LUT input order
     SmallVector<Value> lutInputs(cut.inputs.rbegin(), cut.inputs.rend());
 
     // Generate comb.truth table operation.
     auto truthTableOp = comb::TruthTableOp::create(
-        rewriter, cut.getRoot()->getLoc(), lutInputs, arrayAttr);
+        rewriter, cut.getRoot()->getLoc(), lutInputs, lutTable);
 
     // Replace the root operation with the truth table operation
     return truthTableOp.getOperation();
-  }
-
-  double getArea() const override {
-    // Each LUT has unit area regardless of the function it implements
-    return 1.0;
-  }
-
-  DelayType getDelay(unsigned inputIndex, unsigned outputIndex) const override {
-    // All LUTs have unit delay from any input to any output
-    return 1;
   }
 
   unsigned getNumOutputs() const override { return 1; }

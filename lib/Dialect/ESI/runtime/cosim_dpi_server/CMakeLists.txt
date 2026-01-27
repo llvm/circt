@@ -47,6 +47,7 @@ set(cosim_collateral
   Cosim_DpiPkg.sv
   Cosim_Endpoint.sv
   Cosim_Manifest.sv
+  Cosim_CycleCount.sv
 
   driver.sv
   driver.cpp

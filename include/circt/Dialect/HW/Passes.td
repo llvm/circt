@@ -65,6 +65,8 @@ def FlattenModules : Pass<"hw-flatten-modules", "mlir::ModuleOp"> {
            "Maximum number of operations for a module to be considered small">,
     Option<"inlineWithState", "hw-inline-with-state", "bool", "false",
            "Allow inlining of modules that contain state (seq.firreg operations)">,
+    Option<"inlinePublic", "hw-inline-public", "bool", "false",
+           "Inline public modules as well as private ones">,
     Option<"inlineAll", "hw-inline-all", "bool", "true",
            "Inline all private modules regardless of heuristics (default behavior)">
   ];

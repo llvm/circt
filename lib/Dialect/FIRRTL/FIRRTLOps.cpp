@@ -1163,7 +1163,8 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ConventionAttr convention,
                          ArrayRef<PortInfo> ports, ArrayAttr knownLayers,
                          StringRef defnameAttr, ArrayAttr annotations,
-                         ArrayAttr parameters, ArrayAttr layers) {
+                         ArrayAttr parameters, ArrayAttr layers,
+                         ArrayAttr externalRequirements) {
   buildModule<FExtModuleOp>(builder, result, name, ports, annotations, layers);
   auto &properties = result.getOrAddProperties<Properties>();
   properties.setConvention(convention);
@@ -1175,6 +1176,8 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
   if (!parameters)
     parameters = builder.getArrayAttr({});
   properties.setParameters(parameters);
+  if (externalRequirements)
+    properties.setExternalRequirements(externalRequirements);
 }
 
 void FIntModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -1577,6 +1580,11 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
     if (layers.empty())
       omittedAttrs.push_back("layers");
 
+  // If there are no external requirements, then omit the empty array.
+  if (auto extReqs = op->getAttrOfType<ArrayAttr>("externalRequirements"))
+    if (extReqs.empty())
+      omittedAttrs.push_back("externalRequirements");
+
   p.printOptionalAttrDictWithKeyword(op->getAttrs(), omittedAttrs);
 }
 
@@ -1975,6 +1983,12 @@ void FModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
 void FExtModuleOp::getAsmBlockArgumentNames(
     mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
+}
+
+StringAttr FExtModuleOp::getExtModuleNameAttr() {
+  if (auto defnameAttr = getDefnameAttr(); defnameAttr && !defnameAttr.empty())
+    return defnameAttr;
+  return getNameAttr();
 }
 
 StringRef FExtModuleOp::getExtModuleName() {
@@ -3819,10 +3833,12 @@ SimulationOp::verifySymbolUses(mlir::SymbolTableCollection &symbolTable) {
   if (!module)
     return complain() << "is not a module";
 
-  auto numPorts = module.getPortDirections().size();
-  if (numPorts != 4)
-    return complain() << "must have 4 ports, got " << numPorts << " instead";
+  auto numPorts = module.getNumPorts();
+  if (numPorts < 4)
+    return complain() << "must have at least 4 ports, got " << numPorts
+                      << " instead";
 
+  // Check ports 0-3 for expected hardware ports: clock, init, done, success.
   auto checkPort = [&](unsigned idx, StringRef expName, Direction expDir,
                        llvm::function_ref<bool(Type)> checkType,
                        StringRef expType) {
@@ -3854,10 +3870,22 @@ SimulationOp::verifySymbolUses(mlir::SymbolTableCollection &symbolTable) {
       return uintType.getWidth() == 1;
     return false;
   };
-  return success(checkPort(0, "clock", Direction::In, isClock, "clock") &&
-                 checkPort(1, "init", Direction::In, isBool, "uint<1>") &&
-                 checkPort(2, "done", Direction::Out, isBool, "uint<1>") &&
-                 checkPort(3, "success", Direction::Out, isBool, "uint<1>"));
+
+  if (!checkPort(0, "clock", Direction::In, isClock, "clock") ||
+      !checkPort(1, "init", Direction::In, isBool, "uint<1>") ||
+      !checkPort(2, "done", Direction::Out, isBool, "uint<1>") ||
+      !checkPort(3, "success", Direction::Out, isBool, "uint<1>"))
+    return failure();
+
+  // Additional non-hardware ports are allowed.
+  for (unsigned i = 4; i < numPorts; ++i) {
+    auto type = module.getPortType(i);
+    if (!isa<PropertyType>(type))
+      return complain() << "port " << i << " may only be a property type, got "
+                        << type << " instead";
+  }
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -3905,8 +3933,6 @@ void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
   build(builder, state, klass.getInstanceType(),
         StringAttr::get(builder.getContext(), name));
 }
-
-LogicalResult ObjectOp::verify() { return success(); }
 
 LogicalResult ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto circuitOp = getOperation()->getParentOfType<CircuitOp>();

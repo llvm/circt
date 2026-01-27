@@ -644,6 +644,28 @@ def ConstantRealOp : MooreOp<"constant_real", [
   let assemblyFormat = "$value attr-dict";
 }
 
+
+//===----------------------------------------------------------------------===//
+// Null Op
+//===----------------------------------------------------------------------===//
+
+def NullOp : MooreOp<"null", [Pure]> {
+  let summary = "SystemVerilog literal constant `null`";
+  let description = [{
+    Represents the SystemVerilog literal constant `null`, which is a valid
+    primary and constant_primary in IEEE 1800-2023.
+
+    The result type must be a null-able handle-like type (e.g., a class handle,
+    virtual interface, event, chandle). Verification enforces this to prevent
+    mis-modeling `null` as a numeric constant.
+  }];
+
+  let results = (outs NullType:$result);
+  let assemblyFormat = [{
+     attr-dict
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Casting
 //===----------------------------------------------------------------------===//
@@ -2624,6 +2646,20 @@ def StringGetCOp : StringBuiltin<"getc"> {
   let arguments = (ins StringType:$str, TwoValuedI32:$index);
   let results = (outs TwoValuedI8:$result);
   let assemblyFormat = "$str `[` $index `]` attr-dict";
+}
+
+def StringConcatOp : StringBuiltin<"concat"> {
+  let summary = "Concatenate strings";
+  let description = [{
+    Concatenates an arbitrary number of strings into one larger string. The 
+    strings are concatenated from left to right, with the first operand 
+    appearing at the left start of the result string, and the last operand 
+    appearing at the right end. Produces an empty string if no inputs are 
+    provided.
+  }];
+  let arguments = (ins Variadic<StringType>:$inputs);
+  let results = (outs StringType:$result);
+  let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

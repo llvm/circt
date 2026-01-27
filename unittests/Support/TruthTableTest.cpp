@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Support/NPNClass.h"
+#include "circt/Support/TruthTable.h"
 #include "llvm/ADT/APInt.h"
 #include "gtest/gtest.h"
 
@@ -411,4 +411,267 @@ TEST(NPNClassTest, MultiBitOutputLexicographical) {
   // 0x12 < 0x34, so npn1 should be lexicographically smaller
   EXPECT_TRUE(npn1.isLexicographicallySmaller(npn2));
   EXPECT_FALSE(npn2.isLexicographicallySmaller(npn1));
+}
+
+//===----------------------------------------------------------------------===//
+// Variable Mask Tests
+//===----------------------------------------------------------------------===//
+
+TEST(VarMaskTest, TwoVariables) {
+  // Test masks for 2 variables (4-bit truth table)
+  // Variable ordering: a is MSB (var 1), b is LSB (var 0)
+
+  // Mask for b=0 (LSB): positions where b=0 are 00,10 -> 0b0101
+  APInt maskB0 = createVarMask(2, 0, false);
+  EXPECT_EQ(maskB0, APInt(4, 0b0101));
+
+  // Mask for b=1 (LSB): positions where b=1 are 01,11 -> 0b1010
+  APInt maskB1 = createVarMask(2, 0, true);
+  EXPECT_EQ(maskB1, APInt(4, 0b1010));
+
+  // Mask for a=0 (MSB): positions where a=0 are 00,01 -> 0b0011
+  APInt maskA0 = createVarMask(2, 1, false);
+  EXPECT_EQ(maskA0, APInt(4, 0b0011));
+  // Mask for a=1 (MSB): positions where a=1 are 10,11 -> 0b1100
+  APInt maskA1 = createVarMask(2, 1, true);
+  EXPECT_EQ(maskA1, APInt(4, 0b1100));
+}
+
+TEST(VarMaskTest, ThreeVariables) {
+  // Test masks for 3 variables (8-bit truth table)
+  // Variable ordering: a is bit 2, b is bit 1, c is bit 0 (LSB)
+
+  // Mask for c=1: 0b10101010
+  APInt maskC1 = createVarMask(3, 0, true);
+  EXPECT_EQ(maskC1, APInt(8, 0b10101010));
+
+  // Mask for b=1: 0b11001100
+  APInt maskB1 = createVarMask(3, 1, true);
+  EXPECT_EQ(maskB1, APInt(8, 0b11001100));
+
+  // Mask for a=1: 0b11110000
+  APInt maskA1 = createVarMask(3, 2, true);
+  EXPECT_EQ(maskA1, APInt(8, 0b11110000));
+
+  // Verify complementary property: mask0 | mask1 should be all 1s
+  APInt maskC0 = createVarMask(3, 0, false);
+  EXPECT_EQ(maskC0 | maskC1, APInt(8, 0b11111111));
+}
+
+TEST(VarMaskTest, MaskProperties) {
+  // Test that positive and negative masks are complementary
+  for (unsigned numVars : {2, 3, 5, 8}) {
+    for (unsigned var = 0; var < numVars; ++var) {
+      APInt mask0 = createVarMask(numVars, var, false);
+      APInt mask1 = createVarMask(numVars, var, true);
+
+      // Masks should be disjoint
+      EXPECT_TRUE((mask0 & mask1).isZero());
+
+      // Masks should cover all bits
+      APInt allOnes = APInt::getAllOnes(1u << numVars);
+      EXPECT_EQ(mask0 | mask1, allOnes);
+    }
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// Cofactor Tests
+//===----------------------------------------------------------------------===//
+
+TEST(CofactorTest, BasicIdentity) {
+  // Test f(a,b) = a (truth table: 0b1100)
+  APInt tt(4, 0b1100);
+
+  // Cofactor with respect to b (var 0): should not affect result
+  auto [cofB0, cofB1] = computeCofactors(tt, 2, 0);
+  EXPECT_EQ(cofB0, cofB1); // Function doesn't depend on b
+  EXPECT_EQ(cofB0, tt);    // Should match original
+
+  // Cofactor with respect to a (var 1): should differ
+  auto [cofA0, cofA1] = computeCofactors(tt, 2, 1);
+  // When a=0, all outputs are 0. When a=1, all outputs are 1
+  EXPECT_EQ(cofA0, APInt(4, 0b0000)); // All zeros
+  EXPECT_EQ(cofA1, APInt(4, 0b1111)); // All ones
+}
+
+TEST(CofactorTest, AndFunction) {
+  // Test f(a,b) = a & b (truth table: 0b1000)
+  APInt tt(4, 0b1000);
+
+  auto [cofA0, cofA1] = computeCofactors(tt, 2, 1);
+  // f|a=0 = 0, f|a=1 = b
+  EXPECT_EQ(cofA0, APInt(4, 0));
+  EXPECT_EQ(cofA1, createVarMask(2, 0, true)); // Equals b
+}
+
+TEST(CofactorTest, XorFunction) {
+  // Test f(a,b) = a XOR b (truth table: 0b0110)
+  APInt tt(4, 0b0110);
+
+  auto [cofA0, cofA1] = computeCofactors(tt, 2, 1);
+  // f|a=0 = b, f|a=1 = !b
+  EXPECT_EQ(cofA0, createVarMask(2, 0, true));  // Equals b
+  EXPECT_EQ(cofA1, createVarMask(2, 0, false)); // Equals !b
+}
+
+TEST(CofactorTest, ShannonExpansionProperty) {
+  // Test Shannon expansion property: f = !x * f|x=0 + x * f|x=1
+  // for various fixed truth tables
+
+  struct TestCase {
+    unsigned numVars;
+    std::vector<uint64_t> ttData;
+  };
+
+  std::vector<TestCase> testCases = {
+      // 4 variables: f = a & b & c & d (all inputs AND)
+      {4, {0x8000}},
+
+      // 5 variables: f = parity function (XOR of all inputs)
+      {5, {0x69969669}},
+
+      // 6 variables: majority function (at least 4 inputs are 1)
+      {6, {0xFFFFFFFE80000000ULL}},
+
+      // 7 variables: f = x0 | x6 (LSB OR MSB)
+      {7, {0xAAAAAAAAAAAAAAAAULL, 0xFFFFFFFFFFFFFFFFULL}},
+
+      // 8 variables: f = (x0 & x7) | (x1 & x6)
+      {8,
+       {0x8080808080808080ULL, 0x8080808080808080ULL, 0x8080808080808080ULL,
+        0x8080808080808080ULL}}};
+
+  for (const auto &tc : testCases) {
+    unsigned ttSize = 1u << tc.numVars;
+    APInt tt(ttSize, ArrayRef<uint64_t>(tc.ttData));
+
+    // Test all variables
+    for (unsigned varToTest = 0; varToTest < tc.numVars; ++varToTest) {
+      auto [cof0, cof1] = computeCofactors(tt, tc.numVars, varToTest);
+      APInt mask0 = createVarMask(tc.numVars, varToTest, false);
+      APInt mask1 = createVarMask(tc.numVars, varToTest, true);
+
+      // Verify Shannon expansion
+      APInt reconstructed = (mask0 & cof0) | (mask1 & cof1);
+      EXPECT_EQ(reconstructed, tt)
+          << "Failed for " << tc.numVars << " vars, var " << varToTest;
+    }
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// ISOP Extraction Tests
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+/// Check if an SOP form is irredundant. An SOP is irredundant if no literal
+/// can be removed from any cube without changing the function.
+/// This is a naive O(n^2) implementation for testing purposes.
+bool isIrredundant(SOPForm &sop) {
+  llvm::APInt tt = sop.computeTruthTable();
+  for (auto &cube : sop.cubes) {
+    auto temporary = cube;
+    // Try removing each literal from the cube
+    for (unsigned i = 0; i < sop.numVars; ++i) {
+      if (cube.hasLiteral(i)) {
+        cube.removeLiteral(i);
+        // Recompute truth table without this literal and check if it still
+        // matches. If it does, the SOP is redundant.
+        if (tt == sop.computeTruthTable())
+          return false;
+        // Restore the literal
+        cube = temporary;
+      }
+    }
+  }
+  return true;
+}
+
+/// Helper function to verify ISOP extraction correctness and irredundancy.
+/// Returns the SOPForm for additional verification.
+SOPForm verifyISOP(const llvm::APInt &truthTable, unsigned numVars,
+                   const char *testName = nullptr) {
+  SOPForm sop = extractISOP(truthTable, numVars);
+
+  // Verify correctness: computed truth table matches original
+  EXPECT_EQ(sop.computeTruthTable(), truthTable)
+      << (testName ? testName : "ISOP") << " truth table doesn't match";
+
+  // Verify irredundancy
+  EXPECT_TRUE(isIrredundant(sop))
+      << (testName ? testName : "ISOP") << " is not irredundant";
+
+  return sop;
+}
+
+} // namespace
+
+TEST(ISOPTest, SimpleAND) {
+  // AND function: f(a,b) = a * b
+  SOPForm sop = verifyISOP(llvm::APInt(4, 0b0001), 2);
+
+  EXPECT_EQ(sop.cubes.size(), 1u);
+  EXPECT_EQ(sop.cubes[0].size(), 2u); // (a * b)
+}
+
+TEST(ISOPTest, SimpleOR) {
+  // OR function: f(a,b) = a + b
+  SOPForm sop = verifyISOP(llvm::APInt(4, 0b0111), 2);
+  EXPECT_EQ(sop.cubes.size(), 2u); // (a) + (b)
+}
+
+TEST(ISOPTest, SimpleXOR) {
+  // XOR function: f(a,b) = a ^ b
+  SOPForm sop = verifyISOP(llvm::APInt(4, 0b0110), 2);
+
+  EXPECT_EQ(sop.cubes.size(), 2u); // (a * !b) + (!a * b)
+  for (const auto &cube : sop.cubes)
+    EXPECT_EQ(cube.size(), 2u);
+}
+
+TEST(ISOPTest, Majority3) {
+  // MAJ3 function: f(a,b,c) = (a*b) + (a*c) + (b*c)
+  SOPForm sop = verifyISOP(llvm::APInt(8, 0b11101000), 3);
+
+  EXPECT_EQ(sop.cubes.size(), 3u);
+  for (const auto &cube : sop.cubes)
+    EXPECT_EQ(cube.size(), 2u); // Each cube has 2 literals
+}
+
+TEST(ISOPTest, ConstantZero) {
+  SOPForm sop = verifyISOP(llvm::APInt(4, 0), 2);
+  EXPECT_EQ(sop.cubes.size(), 0u); // No cubes
+}
+
+TEST(ISOPTest, ConstantOne) {
+  // Constant 1: one empty cube
+  SOPForm sop = verifyISOP(llvm::APInt(4, 0b1111), 2);
+
+  EXPECT_EQ(sop.cubes.size(), 1u);
+  EXPECT_EQ(sop.cubes[0].size(), 0u); // Empty cube
+}
+
+TEST(ISOPTest, ComplexFunction) {
+  // Complex 3-input function: f(a,b,c) = a*b + !a*c
+  verifyISOP(llvm::APInt(8, 0b00111101), 3);
+}
+
+TEST(ISOPTest, LargeInputsFunction) {
+  uint64_t testCases[10][2] = {{0x0000000000000000, 0x0000000000000000},
+                               {0xFFFFFFFFFFFFFFFF, 0x0000000000000000},
+                               {0xAAAAAAAAAAAAAAAA, 0x5555555555555555},
+                               {0x5555555555555555, 0xAAAAAAAAAAAAAAAA},
+                               {0xF0F0F0F0F0F0F0F0, 0x0F0F0F0F0F0F0F0F},
+                               {0x0F0F0F0F0F0F0F0F, 0xF0F0F0F0F0F0F0F0},
+                               {0xCCCCCCCCCCCCCCCC, 0x3333333333333333},
+                               {0x3333333333333333, 0xCCCCCCCCCCCCCCCC},
+                               {0x123456789ABCDEF0, 0xFEDCBA9876543210},
+                               {0xFEDCBA9876543210, 0x123456789ABCDEF0}};
+
+  for (unsigned i = 0; i < 10; ++i) {
+    llvm::APInt tt(128, testCases[i]);
+    verifyISOP(tt, 7, ("LargeInput_" + std::to_string(i)).c_str());
+  }
 }

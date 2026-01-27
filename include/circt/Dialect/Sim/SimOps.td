@@ -13,6 +13,7 @@ include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Seq/SeqTypes.td"
 include "circt/Dialect/Sim/SimDialect.td"
+include "circt/Dialect/Sim/SimOpInterfaces.td"
 include "circt/Dialect/Sim/SimTypes.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
@@ -169,7 +170,9 @@ def FormatLiteralOp : SimOp<"fmt.literal", [Pure, ConstantLike]> {
   let hasFolder = true;
 }
 
-def FormatHexOp : SimOp<"fmt.hex", [Pure]> {
+def FormatHexOp : SimOp<"fmt.hex",
+  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Hexadecimal format specifier";
   let description = [{
     Format the given integer value as lower-case hexadecimal string.
@@ -181,7 +184,7 @@ def FormatHexOp : SimOp<"fmt.hex", [Pure]> {
   }];
 
 
-  let arguments = (ins AnyInteger:$value, 
+  let arguments = (ins AnyInteger:$value,
     BoolAttr:$isHexUppercase,
     DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
     DefaultValuedAttr<I8Attr,"48">:$paddingChar,
@@ -200,7 +203,9 @@ def FormatHexOp : SimOp<"fmt.hex", [Pure]> {
   }];
 }
 
-def FormatOctOp : SimOp<"fmt.oct", [Pure]> {
+def FormatOctOp : SimOp<"fmt.oct",
+  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Octal format specifier";
   let description = [{
     Format the given integer value as lower-case octal (base eight) string.
@@ -230,7 +235,9 @@ def FormatOctOp : SimOp<"fmt.oct", [Pure]> {
   }];
 }
 
-def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
+def FormatBinOp : SimOp<"fmt.bin",
+    [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Binary format specifier";
   let description = [{
     Format the given integer value as binary (base two) string.
@@ -257,7 +264,9 @@ def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
   }];
 }
 
-def FormatScientificOp : SimOp<"fmt.exp", [Pure]> {
+def FormatScientificOp : SimOp<"fmt.exp",
+  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Real format specifier";
   let description = [{
     Format the given real value in scientific (exponential) notation
@@ -270,8 +279,6 @@ def FormatScientificOp : SimOp<"fmt.exp", [Pure]> {
   );
   let results = (outs FormatStringType:$result);
 
-  let hasFolder = true;
-
   let assemblyFormat = [{
     $value
     (`isLeftAligned` $isLeftAligned^)?
@@ -281,10 +288,12 @@ def FormatScientificOp : SimOp<"fmt.exp", [Pure]> {
   }];
 }
 
-def FormatFloatOp : SimOp<"fmt.flt", [Pure]> {
+def FormatFloatOp : SimOp<"fmt.flt",
+  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>
+]> {
   let summary = "Real format specifier";
   let description = [{
-    Format the given real value in floating point (decimal) notation  
+    Format the given real value in floating point (decimal) notation
   }];
 
   let arguments = (ins AnyFloat:$value,
@@ -294,8 +303,6 @@ def FormatFloatOp : SimOp<"fmt.flt", [Pure]> {
   );
   let results = (outs FormatStringType:$result);
 
-  let hasFolder = true;
-
   let assemblyFormat = [{
     $value
     (`isLeftAligned` $isLeftAligned^)?
@@ -305,16 +312,18 @@ def FormatFloatOp : SimOp<"fmt.flt", [Pure]> {
   }];
 }
 
-def FormatGeneralOp : SimOp<"fmt.gen", [Pure]> {
+def FormatGeneralOp : SimOp<"fmt.gen",
+  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Real format specifier";
   let description = [{
     Format floating-point numbers using either decimal or scientific notation
     based on the exponent and precision parameter fracDigits (default: 6)
 
-    For exp ≥ 0: 
+    For exp ≥ 0:
     Uses decimal notation if exp + 1 ≤ max(1, fracDigits), otherwise switches
     to scientific notation with max(0, fracDigits - 1) fractional digits
-    
+
     For exp < 0:
     If exp ≥ -4: Uses decimal notation with max(b - 1, 0) + |exp| fractional digits
     If exp < -4: Uses scientific notation with max(b - 1, 0) fractional digits
@@ -327,8 +336,6 @@ def FormatGeneralOp : SimOp<"fmt.gen", [Pure]> {
   );
   let results = (outs FormatStringType:$result);
 
-  let hasFolder = true;
-
   let assemblyFormat = [{
     $value
     (`isLeftAligned` $isLeftAligned^)?
@@ -338,7 +345,9 @@ def FormatGeneralOp : SimOp<"fmt.gen", [Pure]> {
   }];
 }
 
-def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
+def FormatDecOp : SimOp<"fmt.dec",
+    [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Decimal format specifier";
   let description = [{
     Format the given integer value as signed or unsigned decimal string.
@@ -400,7 +409,9 @@ def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
   }];
 }
 
-def FormatCharOp : SimOp<"fmt.char", [Pure]> {
+def FormatCharOp : SimOp<"fmt.char",
+  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Character format specifier";
   let description = [{
     Format the given integer value as a single character.
@@ -498,6 +509,97 @@ def PrintFormattedProcOp : SimOp<"proc.print"> {
   let hasVerifier = true;
   let hasCanonicalizeMethod = true;
   let assemblyFormat = "$input attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// Dynamic Strings
+//===----------------------------------------------------------------------===//
+
+def StringConstantOp : SimOp<"string.literal", [Pure, ConstantLike]> {
+  let summary = "Literal string fragment";
+  let description = [{
+    Creates a dynamic string from a constant string literal.
+  }];
+
+  let arguments = (ins StrAttr:$literal);
+  let results = (outs DynamicStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$literal attr-dict";
+}
+
+def StringLengthOp : SimOp<"string.length", [Pure]> {
+  let summary = "Length of a string";
+  let description = [{
+    Returns the length of a dynamic string as an `i64` value.
+  }];
+
+  let arguments = (ins DynamicStringType:$input);
+  let results = (outs I64:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$input attr-dict";
+}
+
+def StringConcatOp : SimOp<"string.concat", [Pure]> {
+  let summary = "Concatenate strings";
+  let description = [{
+    Concatenates multiple strings into a single, longer string. The first
+    operand appears first in the output string. The last character of the first
+    operand is immediately followed by the first character of the second
+    operand. If the operation has a single operand, its result is equal to that
+    operand. If the operation has zero operands, it returns an empty string.
+    The length of the result is the sum of each operand's length.
+
+    Example:
+
+    ```mlir
+    %0 = sim.string.literal "abc"
+    %1 = sim.string.literal "def"
+    %2 = sim.string.literal "ghj"
+    %3 = sim.string.concat (%0, %1, %2)  // %3 is "abcdefghj"
+    %4 = sim.string.concat (%0)          // %4 is "abc"
+    %5 = sim.string.concat ()            // %5 is ""
+    ```
+  }];
+
+  let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
+
+  let arguments = (ins Variadic<DynamicStringType>:$inputs);
+  let results = (outs DynamicStringType:$result);
+
+  let hasFolder = true;
+}
+
+def IntToStringOp: SimOp<"string.int_to_string", [Pure]> {
+  let summary = "Convert an integer into a string";
+  let description = [{
+    Converts an integer value to a string following Verilog semantics, where
+    string literals are represented as right-aligned bitvectors.
+    
+    The operation reads the integer byte-by-byte, interpreting each non-zero
+    byte as an ASCII character. Zero-valued bytes are skipped and
+    not included in the output string. See Sec 6.16 of the standard saying
+    "A string variable shall not contain the special character "\0". 
+    Assigning the value 0 to a string character shall be ignored"
+    
+    Example:
+      Consider the hex value 0x00_00_00_48_00_00_6C_6F
+      Reading from MSB to LSB and filtering out null bytes:
+        - 0x48 = 'H'
+        - 0x6C = 'l'
+        - 0x6F = 'o'
+      This produces the string "Hlo", not "\0\0\0H\0\0lo".
+  }];
+
+  let arguments = (ins AnyInteger:$input);
+  let results = (outs DynamicStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
 }
 
 //===----------------------------------------------------------------------===//

@@ -7,9 +7,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
+
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Attributes.h"
+#include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
@@ -41,6 +44,15 @@ Type circt::llhd::getLLHDElementType(Type type) {
   return type;
 }
 
+template <typename... OpTypes>
+static bool hasUserOfKind(Operation *op) {
+  for (auto *user : op->getUsers()) {
+    if (isa<OpTypes...>(user))
+      return true;
+  }
+  return false;
+}
+
 //===----------------------------------------------------------------------===//
 // ConstantTimeOp
 //===----------------------------------------------------------------------===//
@@ -63,7 +75,7 @@ void llhd::ConstantTimeOp::build(OpBuilder &builder, OperationState &result,
 //===----------------------------------------------------------------------===//
 
 static Value getValueAtIndex(OpBuilder &builder, Location loc, Value val,
-                             unsigned index) {
+                             unsigned index, Type resultType) {
   return TypeSwitch<Type, Value>(val.getType())
       .Case<hw::StructType>([&](hw::StructType ty) -> Value {
         return hw::StructExtractOp::create(builder, loc, val,
@@ -75,6 +87,10 @@ static Value getValueAtIndex(OpBuilder &builder, Location loc, Value val,
             builder.getIntegerType(llvm::Log2_64_Ceil(ty.getNumElements())),
             index);
         return hw::ArrayGetOp::create(builder, loc, val, idx);
+      })
+      .Case<IntegerType>([&](IntegerType ty) -> Value {
+        return comb::ExtractOp::create(builder, loc, val, index,
+                                       resultType.getIntOrFloatBitWidth());
       });
 }
 
@@ -83,17 +99,85 @@ void SignalOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), *getName());
 }
 
+// Calculates the destructured subelements for an integer type.
+//
+// Typically, subelements are determined by only looking at the type. For an
+// IntegerType this would mean bit-blasting every bit of the type, so we instead
+// take the value that we're destructuring into account by looking at its users.
+static std::optional<DenseMap<Attribute, Type>>
+getIntegerSubelementIndexMap(Type type, Value value) {
+  int width = type.getIntOrFloatBitWidth();
+  if (width <= 1)
+    return {};
+
+  // Calculate the intervals of bits demanded by users. If a user's interval
+  // is unknown, we return nullopt.
+  SmallVector<bool> startIndices(width, false);
+  for (Operation *user : value.getUsers()) {
+    if (auto extract = dyn_cast<SigExtractOp>(user)) {
+      APInt lowBit;
+      if (matchPattern(extract.getLowBit(), m_ConstantInt(&lowBit))) {
+        startIndices[lowBit.getZExtValue()] = true;
+        int64_t highBit = lowBit.getZExtValue() + extract.getResultWidth();
+        if (highBit < width)
+          startIndices[highBit] = true;
+        continue;
+      }
+    }
+    if (isa<ProbeOp, DriveOp>(user)) {
+      // Probe and Drive require the entire interval but don't need to be
+      // bit-blasted.
+      continue;
+    }
+    // Potentially dynamic start index.
+    return {};
+  }
+
+  // Create subelements for each interval.
+  DenseMap<Attribute, Type> destructured;
+  for (int start = 0; start < width;) {
+    int end = start + 1;
+    while (end < width && !startIndices[end])
+      ++end;
+
+    int runLength = end - start;
+
+    destructured.insert(
+        {IntegerAttr::get(IndexType::get(type.getContext()), start),
+         IntegerType::get(type.getContext(), runLength)});
+    start = end;
+  }
+
+  return destructured;
+}
+
+static std::optional<DenseMap<Attribute, Type>>
+getSubelementIndexMap(Type type, Value value) {
+  // Handle IntegerType specially; destructuring integers into individual
+  // bits can create an explosion of ops, so instead we determine the subelement
+  // map dynamically.
+  if (auto intType = dyn_cast<IntegerType>(type)) {
+    return getIntegerSubelementIndexMap(intType, value);
+  } else {
+    auto destructurable = llvm::dyn_cast<DestructurableTypeInterface>(type);
+    if (!destructurable)
+      return {};
+    return destructurable.getSubelementIndexMap();
+  }
+}
+
 SmallVector<DestructurableMemorySlot> SignalOp::getDestructurableSlots() {
   auto type = getType().getNestedType();
 
-  auto destructurable = llvm::dyn_cast<DestructurableTypeInterface>(type);
-  if (!destructurable)
+  // It only makes sense to destructure a SignalOp if it has one or more users
+  // that access the destructured elements.
+  if (!hasUserOfKind<SigExtractOp, SigArrayGetOp, SigStructExtractOp,
+                     SigArraySliceOp>(*this))
     return {};
 
-  auto destructuredType = destructurable.getSubelementIndexMap();
+  auto destructuredType = getSubelementIndexMap(type, getResult());
   if (!destructuredType)
     return {};
-
   return {DestructurableMemorySlot{{getResult(), type}, *destructuredType}};
 }
 
@@ -104,13 +188,12 @@ DenseMap<Attribute, MemorySlot> SignalOp::destructure(
   assert(slot.ptr == getResult());
   builder.setInsertionPointAfter(*this);
 
-  auto destructurableType =
-      cast<DestructurableTypeInterface>(getType().getNestedType());
+  DenseMap<Attribute, Type> subelementTypes = slot.subelementTypes;
   DenseMap<Attribute, MemorySlot> slotMap;
   SmallVector<std::pair<unsigned, Type>> indices;
   for (auto attr : usedIndices) {
     assert(isa<IntegerAttr>(attr));
-    auto elemType = destructurableType.getTypeAtIndex(attr);
+    auto elemType = subelementTypes.at(attr);
     assert(elemType && "used index must exist");
     indices.push_back({cast<IntegerAttr>(attr).getInt(), elemType});
   }
@@ -118,7 +201,7 @@ DenseMap<Attribute, MemorySlot> SignalOp::destructure(
   llvm::sort(indices, [](auto a, auto b) { return a.first < b.first; });
 
   for (auto [index, type] : indices) {
-    Value init = getValueAtIndex(builder, getLoc(), getInit(), index);
+    Value init = getValueAtIndex(builder, getLoc(), getInit(), index, type);
     auto sigOp = SignalOp::create(builder, getLoc(), getNameAttr(), init);
     newAllocators.push_back(sigOp);
     slotMap.try_emplace<MemorySlot>(
@@ -157,6 +240,137 @@ static OpFoldResult foldSigPtrExtractOp(Op op, ArrayRef<Attribute> operands) {
 
 OpFoldResult llhd::SigExtractOp::fold(FoldAdaptor adaptor) {
   return foldSigPtrExtractOp(*this, adaptor.getOperands());
+}
+
+// Returns the number of elements that overlap between [a1, a2) and [b1, b2).
+static int64_t intervalOverlap(int64_t a1, int64_t a2, int64_t b1, int64_t b2) {
+  return std::max<int64_t>(0, std::min(a2, b2) - std::max(a1, b1));
+}
+
+static void getSortedPtrs(DenseMap<Attribute, MemorySlot> &subslots,
+                          SmallVectorImpl<std::pair<unsigned, Value>> &sorted) {
+  for (auto [attr, mem] : subslots) {
+    assert(isa<IntegerAttr>(attr));
+    sorted.push_back({cast<IntegerAttr>(attr).getInt(), mem.ptr});
+  }
+
+  llvm::sort(sorted, [](auto a, auto b) { return a.first < b.first; });
+}
+
+static void getSortedPtrs(const DenseMap<Attribute, Type> &subslots,
+                          SmallVectorImpl<std::pair<unsigned, Type>> &sorted) {
+  for (auto [attr, mem] : subslots) {
+    assert(isa<IntegerAttr>(attr));
+    sorted.push_back({cast<IntegerAttr>(attr).getInt(), mem});
+  }
+
+  llvm::sort(sorted, [](auto a, auto b) { return a.first < b.first; });
+}
+
+bool SigExtractOp::canRewire(const DestructurableMemorySlot &slot,
+                             SmallPtrSetImpl<Attribute> &usedIndices,
+                             SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+                             const DataLayout &dataLayout) {
+  if (slot.ptr != getInput())
+    return false;
+  APInt idx;
+  Type type = getLLHDElementType(getResult().getType());
+  if (!type.isSignlessInteger())
+    return false;
+  if (!matchPattern(getLowBit(), m_ConstantInt(&idx)))
+    return false;
+
+  // We rewire by pushing subslot values down to users, so we only support
+  // ProbeOp and DriveOp users as these can deal with the naked (non-ref) types
+  // produced by SROA.
+  for (Operation *user : getResult().getUsers()) {
+    if (!isa<ProbeOp, DriveOp>(user))
+      return false;
+  }
+
+  SmallVector<std::pair<unsigned, Type>> elements;
+  getSortedPtrs(slot.subelementTypes, elements);
+
+  int64_t index = idx.getZExtValue();
+  int64_t width = getLLHDTypeWidth(type);
+  int64_t coveredBits = 0;
+  for (auto [start, type] : elements) {
+    int64_t subslotWidth = type.getIntOrFloatBitWidth();
+    int64_t overlap =
+        intervalOverlap(index, index + width, start, start + subslotWidth);
+    if (overlap == 0)
+      continue;
+    usedIndices.insert(IntegerAttr::get(IndexType::get(getContext()), start));
+    coveredBits += overlap;
+  }
+
+  if (coveredBits != width)
+    return false;
+
+  mustBeSafelyUsed.emplace_back<MemorySlot>({getResult(), type});
+  return true;
+}
+
+DeletionKind SigExtractOp::rewire(const DestructurableMemorySlot &slot,
+                                  DenseMap<Attribute, MemorySlot> &subslots,
+                                  OpBuilder &builder,
+                                  const DataLayout &dataLayout) {
+  APInt idx;
+  [[maybe_unused]] bool result = matchPattern(getLowBit(), m_ConstantInt(&idx));
+  assert(result);
+  int64_t width = getLLHDTypeWidth(getResult().getType());
+  int64_t idxVal = idx.getZExtValue();
+
+  SmallVector<std::pair<unsigned, Value>> elements;
+  getSortedPtrs(subslots, elements);
+
+  for (Operation *user : llvm::make_early_inc_range(getResult().getUsers())) {
+    builder.setInsertionPoint(user);
+    // Decompose a ProbeOp into a concatenation of ProbeOps, one per subslot.
+    if (auto probeOp = dyn_cast<ProbeOp>(user)) {
+      SmallVector<Value> values;
+      for (auto [start, value] : elements) {
+        int64_t subslotWidth = cast<RefType>(value.getType())
+                                   .getNestedType()
+                                   .getIntOrFloatBitWidth();
+        int64_t overlap = intervalOverlap(idxVal, idxVal + width, start,
+                                          start + subslotWidth);
+        if (overlap == 0)
+          continue;
+        values.push_back(ProbeOp::create(builder, probeOp.getLoc(), value));
+      }
+      std::reverse(values.begin(), values.end());
+      Value value = comb::ConcatOp::create(builder, probeOp.getLoc(), values);
+      probeOp.replaceAllUsesWith(value);
+      probeOp.erase();
+      continue;
+    }
+
+    // Decompose a DriveOp into one DriveOp per subslot.
+    auto driveOp = cast<DriveOp>(user);
+    for (auto [start, sig] : elements) {
+      int64_t subslotWidth =
+          cast<RefType>(sig.getType()).getNestedType().getIntOrFloatBitWidth();
+      int64_t overlap =
+          intervalOverlap(idxVal, idxVal + width, start, start + subslotWidth);
+      if (overlap == 0)
+        continue;
+      Value val =
+          comb::ExtractOp::create(builder, driveOp.getLoc(), driveOp.getValue(),
+                                  start - idxVal, subslotWidth);
+      DriveOp::create(builder, driveOp.getLoc(), sig, val, driveOp.getTime(),
+                      driveOp.getEnable());
+    }
+    driveOp.erase();
+  }
+
+  return DeletionKind::Delete;
+}
+
+LogicalResult SigExtractOp::ensureOnlySafeAccesses(
+    const MemorySlot &slot, SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+    const DataLayout &dataLayout) {
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -320,16 +534,6 @@ LogicalResult SigStructExtractOp::ensureOnlySafeAccesses(
 // ProbeOp
 //===----------------------------------------------------------------------===//
 
-static void getSortedPtrs(DenseMap<Attribute, MemorySlot> &subslots,
-                          SmallVectorImpl<std::pair<unsigned, Value>> &sorted) {
-  for (auto [attr, mem] : subslots) {
-    assert(isa<IntegerAttr>(attr));
-    sorted.push_back({cast<IntegerAttr>(attr).getInt(), mem.ptr});
-  }
-
-  llvm::sort(sorted, [](auto a, auto b) { return a.first < b.first; });
-}
-
 bool ProbeOp::canRewire(const DestructurableMemorySlot &slot,
                         SmallPtrSetImpl<Attribute> &usedIndices,
                         SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
@@ -337,7 +541,7 @@ bool ProbeOp::canRewire(const DestructurableMemorySlot &slot,
   for (auto [key, _] : slot.subelementTypes)
     usedIndices.insert(key);
 
-  return isa<hw::StructType, hw::ArrayType>(slot.elemType);
+  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.elemType);
 }
 
 DeletionKind ProbeOp::rewire(const DestructurableMemorySlot &slot,
@@ -356,7 +560,12 @@ DeletionKind ProbeOp::rewire(const DestructurableMemorySlot &slot,
                                               probed);
           })
           .Case<hw::ArrayType>([&](auto ty) {
+            std::reverse(probed.begin(), probed.end());
             return hw::ArrayCreateOp::create(builder, getLoc(), probed);
+          })
+          .Case<IntegerType>([&](auto ty) {
+            std::reverse(probed.begin(), probed.end());
+            return comb::ConcatOp::create(builder, getLoc(), probed);
           });
 
   replaceAllUsesWith(repl);
@@ -414,7 +623,7 @@ bool DriveOp::canRewire(const DestructurableMemorySlot &slot,
   for (auto [key, _] : slot.subelementTypes)
     usedIndices.insert(key);
 
-  return isa<hw::StructType, hw::ArrayType>(slot.elemType);
+  return isa<hw::StructType, hw::ArrayType, IntegerType>(slot.elemType);
 }
 
 DeletionKind DriveOp::rewire(const DestructurableMemorySlot &slot,
@@ -423,10 +632,13 @@ DeletionKind DriveOp::rewire(const DestructurableMemorySlot &slot,
   SmallVector<std::pair<unsigned, Value>> driven;
   getSortedPtrs(subslots, driven);
 
-  for (auto [idx, sig] : driven)
-    DriveOp::create(builder, getLoc(), sig,
-                    getValueAtIndex(builder, getLoc(), getValue(), idx),
-                    getTime(), getEnable());
+  for (auto [idx, sig] : driven) {
+    Type nestedType = cast<RefType>(sig.getType()).getNestedType();
+    DriveOp::create(
+        builder, getLoc(), sig,
+        getValueAtIndex(builder, getLoc(), getValue(), idx, nestedType),
+        getTime(), getEnable());
+  }
 
   return DeletionKind::Delete;
 }
@@ -594,6 +806,40 @@ LogicalResult HaltOp::verify() {
 
 LogicalResult YieldOp::verify() {
   return verifyYieldResults(*this, getYieldOperands());
+}
+
+namespace {
+struct IntegerTypeInterface
+    : public DestructurableTypeInterface::ExternalModel<IntegerTypeInterface,
+                                                        IntegerType> {
+  std::optional<DenseMap<Attribute, Type>>
+  getSubelementIndexMap(Type type) const {
+    // We always return the empty map, indicating that IntegerType is not
+    // destructurable.
+    //
+    // It is not always profitable to SROA an integer, so an extra cost model
+    // is used by SignalOp::getDestructurableSlots() to determine the best
+    // slot configuration for a given integer SignalOp.
+    //
+    // SROA demands that any destructured type must implement
+    // DestructurableTypeInterface so we do nothing here.
+    return {};
+  }
+
+  Type getTypeAtIndex(Type type, Attribute index) const {
+    // As above, we never expect this to be called.
+    llvm_unreachable("Not implemented");
+  }
+};
+} // namespace
+
+void llhd::registerDestructableIntegerExternalModel(DialectRegistry &registry) {
+  registry.addExtension(+[](MLIRContext *ctx, BuiltinDialect *dialect) {
+    IntegerType::attachInterface<IntegerTypeInterface>(*ctx);
+    // SROA on the IntegerTypeInterface can cause comb::ExtractOps to be
+    // created.
+    ctx->loadDialect<comb::CombDialect>();
+  });
 }
 
 //===----------------------------------------------------------------------===//

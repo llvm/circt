@@ -14,32 +14,7 @@ and type checking.
 
 ## Supported Intrinsics
 
-### circt_sizeof
-
-Returns the size of a type.  The input port is not read from and may be any 
-type, including uninferred types.
-
-| Argument | Type | Description                                |
-| -------- | ---- | ------------------------------------------ |
-| i        | Any  | value whose type's size is to be returned  |
-
-| Result | Type     | Description       |
-| ------ | -------- | ----------------- |
-| size   | UInt<32> | Size of type of i |
-
-### circt_isX
-
-Tests if the value is a literal `x`.  FIRRTL doesn't have a notion of 'x per-se, 
-but x can come in to the system from external modules and from SV constructs.  
-Verification constructs need to explicitly test for 'x.
-
-| Argument | Type | Description   |
-| -------- | ---- | ------------- |
-| i        | Any  | value to test |
-
-| Result | Type    | Description |
-| ------ | ------- | ----------- |
-| found  | UInt<1> | i is `x`    |
+[include "Dialects/FIRRTLIntrinsics.md.inc"]
 
 ### circt_plusargs_value
 
@@ -92,7 +67,7 @@ Generate a clocked SV assert statement, with optional formatted error message.
 
 | Parameter | Type   | Description                                                                         |
 | --------- | ------ | ----------------------------------------------------------------------------------- |
-| format    | string | Format string per SV 20.10, 21.2.1.  Optional.                                      |
+| format    | string | FIRRTL format string.  Optional.                                                    |
 | label     | string | Label for assert/assume.  Optional.                                                 |
 | guards    | string | Semicolon-delimited list of pre-processor tokens to use as ifdef guards.  Optional. |
 
@@ -115,9 +90,9 @@ Generate a particular Verilog sequence that's similar to an assertion.
 
 Has legacy special behavior and should not be used by new code.
 
-| Parameter | Type   | Description                                    |
-| --------- | ------ | ---------------------------------------------- |
-| format    | string | Format string per SV 20.10, 21.2.1.  Optional. |
+| Parameter | Type   | Description                      |
+| --------- | ------ | -------------------------------- |
+| format    | string | FIRRTL format string.  Optional. |
 
 This intrinsic also accepts the `label` and `guard` parameters which
 are recorded but not used in the normal emission.
@@ -150,7 +125,7 @@ Generate a clocked SV assume statement, with optional formatted error message.
 
 | Parameter | Type   | Description                                                                         |
 | --------- | ------ | ----------------------------------------------------------------------------------- |
-| format    | string | Format string per SV 20.10, 21.2.1.  Optional.                                      |
+| format    | string | FIRRTL format string.  Optional.                                                    |
 | label     | string | Label for assume statement.  Optional.                                              |
 | guards    | string | Semicolon-delimited list of pre-processor tokens to use as ifdef guards.  Optional. |
 
@@ -192,7 +167,7 @@ Generate a SV assume statement whose predicate is used in a sensitivity list of 
 
 | Parameter | Type   | Description                                                                         |
 | --------- | ------ | ----------------------------------------------------------------------------------- |
-| format    | string | Format string per SV 20.10, 21.2.1.  Optional.                                      |
+| format    | string | FIRRTL format string.  Optional.                                                    |
 | label     | string | Label for assume statement.  Optional.                                              |
 | guards    | string | Semicolon-delimited list of pre-processor tokens to use as ifdef guards.  Optional. |
 

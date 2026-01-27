@@ -19,6 +19,41 @@ m = acc.manifest()
 assert m.api_version == 0
 print(m.type_table)
 
+# Test the cycle count and clock frequency APIs
+sysinfo = acc.sysinfo()
+cycle_count = sysinfo.cycle_count()
+if cycle_count is not None:
+  print(f"Cycle count: {cycle_count}")
+  assert cycle_count > 0, f"Cycle count should be positive, got {cycle_count}"
+
+  # Test that cycle count is monotonically increasing
+  time.sleep(0.01)  # Small delay to let simulation advance
+  cycle_count2 = sysinfo.cycle_count()
+  print(f"Cycle count after delay: {cycle_count2}")
+  assert cycle_count2 > cycle_count, \
+      f"Cycle count should be monotonically increasing: {cycle_count2} <= {cycle_count}"
+
+  # Test again to ensure consistency
+  time.sleep(0.01)
+  cycle_count3 = sysinfo.cycle_count()
+  print(f"Cycle count after second delay: {cycle_count3}")
+  assert cycle_count3 > cycle_count2, \
+      f"Cycle count should be monotonically increasing: {cycle_count3} <= {cycle_count2}"
+else:
+  print("Cycle count: not available")
+
+clock_freq = sysinfo.core_clock_frequency()
+print(f"Clock frequency: {clock_freq} Hz")
+if platform == "cosim":
+  assert clock_freq == 20_000_000, \
+      f"Expected clock frequency 20_000_000 Hz for cosim, got {clock_freq}"
+else:
+  if clock_freq is not None:
+    print(f"Core clock frequency: {clock_freq} Hz")
+    assert clock_freq > 0, f"Clock frequency should be positive, got {clock_freq}"
+  else:
+    print("Core clock frequency: not available")
+
 d = acc.build_accelerator()
 
 mmio_svc: esi.accelerator.MMIO

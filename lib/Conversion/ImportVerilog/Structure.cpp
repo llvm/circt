@@ -553,6 +553,8 @@ struct ModuleVisitor : public BaseVisitor {
   // Handle procedures.
   LogicalResult convertProcedure(moore::ProcedureKind kind,
                                  const slang::ast::Statement &body) {
+    if (body.as_if<slang::ast::ConcurrentAssertionStatement>())
+      return context.convertStatement(body);
     auto procOp = moore::ProcedureOp::create(builder, loc, kind);
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToEnd(&procOp.getBody().emplaceBlock());
@@ -677,8 +679,7 @@ LogicalResult Context::convertCompilation() {
   // through parent scopes to find the time scale effective locally.
   auto prevTimeScale = timeScale;
   timeScale = root.getTimeScale().value_or(slang::TimeScale());
-  auto timeScaleGuard =
-      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+  llvm::scope_exit timeScaleGuard([&] { timeScale = prevTimeScale; });
 
   // First only to visit the whole AST to collect the hierarchical names without
   // any operation creating.
@@ -744,8 +745,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   // through parent scopes to find the time scale effective locally.
   auto prevTimeScale = timeScale;
   timeScale = module->getTimeScale().value_or(slang::TimeScale());
-  auto timeScaleGuard =
-      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+  llvm::scope_exit timeScaleGuard([&] { timeScale = prevTimeScale; });
 
   auto parameters = module->getParameters();
   bool hasModuleSame = false;
@@ -924,8 +924,7 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
   // through parent scopes to find the time scale effective locally.
   auto prevTimeScale = timeScale;
   timeScale = module->getTimeScale().value_or(slang::TimeScale());
-  auto timeScaleGuard =
-      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+  llvm::scope_exit timeScaleGuard([&] { timeScale = prevTimeScale; });
 
   // Collect downward hierarchical names. Such as,
   // module SubA; int x = Top.y; endmodule. The "Top" module is the parent of
@@ -994,8 +993,7 @@ Context::convertPackage(const slang::ast::PackageSymbol &package) {
   // through parent scopes to find the time scale effective locally.
   auto prevTimeScale = timeScale;
   timeScale = package.getTimeScale().value_or(slang::TimeScale());
-  auto timeScaleGuard =
-      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+  llvm::scope_exit timeScaleGuard([&] { timeScale = prevTimeScale; });
 
   OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToEnd(intoModuleOp.getBody());
@@ -1206,8 +1204,7 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
   // through parent scopes to find the time scale effective locally.
   auto prevTimeScale = timeScale;
   timeScale = subroutine.getTimeScale().value_or(slang::TimeScale());
-  auto timeScaleGuard =
-      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+  llvm::scope_exit timeScaleGuard([&] { timeScale = prevTimeScale; });
 
   // First get or create the function declaration.
   auto *lowering = declareFunction(subroutine);
@@ -1280,7 +1277,7 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
   // Save previous callbacks
   auto prevRCb = rvalueReadCallback;
   auto prevWCb = variableAssignCallback;
-  auto prevRCbGuard = llvm::make_scope_exit([&] {
+  llvm::scope_exit prevRCbGuard([&] {
     rvalueReadCallback = prevRCb;
     variableAssignCallback = prevWCb;
   });
@@ -1349,11 +1346,10 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
 
   auto savedThis = currentThisRef;
   currentThisRef = valueSymbols.lookup(subroutine.thisVar);
-  auto restoreThis = llvm::make_scope_exit([&] { currentThisRef = savedThis; });
+  llvm::scope_exit restoreThis([&] { currentThisRef = savedThis; });
 
   lowering->isConverting = true;
-  auto convertingGuard =
-      llvm::make_scope_exit([&] { lowering->isConverting = false; });
+  llvm::scope_exit convertingGuard([&] { lowering->isConverting = false; });
 
   if (failed(convertStatement(subroutine.getBody())))
     return failure();
@@ -1527,9 +1523,25 @@ struct ClassDeclVisitor {
     Block *body = &classLowering.op.getBody().emplaceBlock();
     builder.setInsertionPointToEnd(body);
 
-    for (const auto &mem : classAST.members())
+    llvm::SmallVector<const slang::ast::MethodPrototypeSymbol *, 8>
+        delayedProtos;
+
+    // Pass 1: visit everything except method prototypes.
+    for (const auto &mem : classAST.members()) {
+      if (const auto *proto = mem.as_if<slang::ast::MethodPrototypeSymbol>()) {
+        delayedProtos.push_back(proto);
+        continue;
+      }
       if (failed(mem.visit(*this)))
         return failure();
+    }
+
+    // Pass 2: now resolve/convert method prototypes (which may trigger
+    // conversion of the implementation) after member variables are declared.
+    for (const auto *proto : delayedProtos) {
+      if (failed(visit(*proto)))
+        return failure();
+    }
 
     return success();
   }
@@ -1541,8 +1553,14 @@ struct ClassDeclVisitor {
     if (!ty)
       return failure();
 
-    moore::ClassPropertyDeclOp::create(builder, loc, prop.name, ty);
-    return success();
+    if (prop.lifetime == slang::ast::VariableLifetime::Automatic) {
+      moore::ClassPropertyDeclOp::create(builder, loc, prop.name, ty);
+      return success();
+    }
+
+    // Static variables should be accessed like globals, and not emit any
+    // property declaration.
+    return context.convertGlobalVariable(prop);
   }
 
   // Parameters in specialized classes hold no further information; slang
@@ -1731,8 +1749,7 @@ Context::convertClassDeclaration(const slang::ast::ClassType &classdecl) {
   // Keep track of local time scale.
   auto prevTimeScale = timeScale;
   timeScale = classdecl.getTimeScale().value_or(slang::TimeScale());
-  auto timeScaleGuard =
-      llvm::make_scope_exit([&] { timeScale = prevTimeScale; });
+  llvm::scope_exit timeScaleGuard([&] { timeScale = prevTimeScale; });
 
   // Check if there already is a declaration for this class.
   if (classes.contains(&classdecl))
@@ -1762,8 +1779,31 @@ Context::convertGlobalVariable(const slang::ast::VariableSymbol &var) {
   // Prefix the variable name with the surrounding namespace to create somewhat
   // sane names in the IR.
   SmallString<64> symName;
-  guessNamespacePrefix(var.getParentScope()->asSymbol(), symName);
-  symName += var.name;
+
+  // If the variable is a class property, the symbol name needs to be fully
+  // qualified with the hierarchical class name
+  if (const auto *classVar = var.as_if<slang::ast::ClassPropertySymbol>()) {
+    if (const auto *parentScope = classVar->getParentScope()) {
+      if (const auto *parentClass =
+              parentScope->asSymbol().as_if<slang::ast::ClassType>())
+        symName = fullyQualifiedClassName(*this, *parentClass);
+      else {
+        mlir::emitError(loc)
+            << "Could not access parent class of class property "
+            << classVar->name;
+        return failure();
+      }
+    } else {
+      mlir::emitError(loc) << "Could not get parent scope of class property "
+                           << classVar->name;
+      return failure();
+    }
+    symName += "::";
+    symName += var.name;
+  } else {
+    guessNamespacePrefix(var.getParentScope()->asSymbol(), symName);
+    symName += var.name;
+  }
 
   // Determine the type of the variable.
   auto type = convertType(var.getType());

@@ -3,6 +3,7 @@
 # RUN: mkdir %t && cd %t
 # RUN: %PYTHON% %s %t 2>&1
 # RUN: esi-cosim.py --source %t -- %PYTHON% %S/test_software/esi_test.py cosim env
+# RUN: ESI_COSIM_MANIFEST_MMIO=1 esi-cosim.py --source %t -- %PYTHON% %S/test_software/esi_test.py cosim env
 
 import pycde
 from pycde import (AppID, Clock, Module, Reset, modparams, generator)
@@ -412,6 +413,9 @@ class Top(Module):
 
 if __name__ == "__main__":
   bsp = get_bsp(sys.argv[2] if len(sys.argv) > 2 else None)
-  s = pycde.System(bsp(Top), name="ESILoopback", output_directory=sys.argv[1])
+  s = pycde.System(bsp(Top),
+                   name="ESILoopback",
+                   output_directory=sys.argv[1],
+                   core_clock_frequency_hz=20_000_000)
   s.compile()
   s.package()

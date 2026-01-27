@@ -192,7 +192,7 @@ LogicalResult ModuleLowering::run() {
   auto modelOp =
       ModelOp::create(builder, moduleOp.getLoc(), moduleOp.getModuleNameAttr(),
                       TypeAttr::get(moduleOp.getModuleType()),
-                      FlatSymbolRefAttr{}, FlatSymbolRefAttr{});
+                      FlatSymbolRefAttr{}, FlatSymbolRefAttr{}, ArrayAttr{});
   auto &modelBlock = modelOp.getBody().emplaceBlock();
   storageArg = modelBlock.addArgument(
       StorageType::get(builder.getContext(), {}), modelOp.getLoc());

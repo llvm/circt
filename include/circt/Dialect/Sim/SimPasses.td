@@ -15,6 +15,10 @@
 
 include "mlir/Pass/PassBase.td"
 
+def FoldValueFormatters : Pass<"sim-fold-value-formatters", "mlir::ModuleOp"> {
+  let summary = "Convert constant formatted values to literals.";
+}
+
 def ProceduralizeSim : Pass<"sim-proceduralize", "hw::HWModuleOp"> {
   let summary = "Transform non-procedural to procedural operations.";
   let description = [{Transform non-procedural simulation operations with clock

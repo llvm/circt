@@ -31,7 +31,7 @@ namespace circt {
 namespace om {
 
 namespace evaluator {
-struct EvaluatorValue;
+class EvaluatorValue;
 
 /// A value of an object in memory. It is either a composite Object, or a
 /// primitive Attribute. Further refinement is expected.
@@ -45,7 +45,8 @@ using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
 /// Enables the shared_from_this functionality so Evaluator Value pointers can
 /// be passed through the CAPI and unwrapped back into C++ smart pointers with
 /// the appropriate reference count.
-struct EvaluatorValue : std::enable_shared_from_this<EvaluatorValue> {
+class EvaluatorValue : public std::enable_shared_from_this<EvaluatorValue> {
+public:
   // Implement LLVM RTTI.
   enum class Kind { Attr, Object, List, Reference, BasePath, Path, Unknown };
   EvaluatorValue(MLIRContext *ctx, Kind kind, Location loc)
@@ -90,7 +91,8 @@ private:
 /// Values which can be used as pointers to different values.
 /// ReferenceValue is replaced with its element and erased at the end of
 /// evaluation.
-struct ReferenceValue : EvaluatorValue {
+class ReferenceValue : public EvaluatorValue {
+public:
   ReferenceValue(Type type, Location loc)
       : EvaluatorValue(type.getContext(), Kind::Reference, loc), value(nullptr),
         type(type) {}
@@ -129,7 +131,8 @@ private:
 };
 
 /// Values which can be directly representable by MLIR attributes.
-struct AttributeValue : EvaluatorValue {
+class AttributeValue : public EvaluatorValue {
+public:
   Attribute getAttr() const { return attr; }
   template <typename AttrTy>
   AttrTy getAs() const {
@@ -189,7 +192,8 @@ static inline LogicalResult finalizeEvaluatorValue(EvaluatorValuePtr &value) {
 }
 
 /// A List which contains variadic length of elements with the same type.
-struct ListValue : EvaluatorValue {
+class ListValue : public EvaluatorValue {
+public:
   ListValue(om::ListType type, SmallVector<EvaluatorValuePtr> elements,
             Location loc)
       : EvaluatorValue(type.getContext(), Kind::List, loc), type(type),
@@ -225,7 +229,8 @@ private:
 };
 
 /// A composite Object, which has a type and fields.
-struct ObjectValue : EvaluatorValue {
+class ObjectValue : public EvaluatorValue {
+public:
   ObjectValue(om::ClassOp cls, ObjectFields fields, Location loc)
       : EvaluatorValue(cls.getContext(), Kind::Object, loc), cls(cls),
         fields(std::move(fields)) {
@@ -276,7 +281,8 @@ private:
 };
 
 /// A Basepath value.
-struct BasePathValue : EvaluatorValue {
+class BasePathValue : public EvaluatorValue {
+public:
   BasePathValue(MLIRContext *context);
 
   /// Create a path value representing a basepath.
@@ -300,7 +306,8 @@ private:
 };
 
 /// A Path value.
-struct PathValue : EvaluatorValue {
+class PathValue : public EvaluatorValue {
+public:
   /// Create a path value representing a regular path.
   PathValue(om::TargetKindAttr targetKind, om::PathAttr path, StringAttr module,
             StringAttr ref, StringAttr field, Location loc);
@@ -342,7 +349,7 @@ private:
 /// out to.  Pratically, a user is expected to set the parameters they care
 /// about to non-unknown values and the ones they don't to unknown.  The results
 /// that are computable given this configuration will then be non-unknown.
-struct UnknownValue : EvaluatorValue {
+struct UnknownValue : public EvaluatorValue {
   /// Create a value representing unknown information.  This value is _always_
   /// fully evaluated and finalized.  There is no further processing required.
   UnknownValue(MLIRContext *ctx, Location loc)
@@ -369,7 +376,8 @@ getEvaluatorValuesFromAttributes(MLIRContext *context,
 
 /// An Evaluator, which is constructed with an IR module and can instantiate
 /// Objects. Further refinement is expected.
-struct Evaluator {
+class Evaluator {
+public:
   /// Construct an Evaluator with an IR module.
   Evaluator(ModuleOp mod);
 

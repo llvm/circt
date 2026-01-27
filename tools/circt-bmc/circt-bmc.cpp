@@ -18,6 +18,8 @@
 #include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/Emit/EmitPasses.h"
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
@@ -29,6 +31,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/Transforms/InlinerInterfaceImpl.h"
 #include "mlir/Dialect/LLVMIR/Transforms/Passes.h"
 #include "mlir/Dialect/SMT/IR/SMTDialect.h"
 #include "mlir/IR/BuiltinDialect.h"
@@ -117,6 +120,13 @@ static cl::opt<bool> risingClocksOnly(
     cl::desc("Only consider the circuit and property on rising clock edges"),
     cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool> flattenModules(
+    "flatten-modules",
+    cl::desc("Flatten all module instances before processing (which will "
+             "increase code size but allows multiple assertions across module "
+             "boundaries to be supported)"),
+    cl::init(true), cl::cat(mainCategory));
+
 #ifdef CIRCT_BMC_ENABLE_JIT
 
 enum OutputFormat { OutputMLIR, OutputLLVM, OutputSMTLIB, OutputRunJIT };
@@ -190,6 +200,14 @@ static LogicalResult executeBMC(MLIRContext &context) {
   pm.addPass(om::createStripOMPass());
   pm.addPass(emit::createStripEmitPass());
   pm.addPass(verif::createLowerTestsPass());
+  if (flattenModules) {
+    hw::FlattenModulesOptions options;
+    // We can inline public hw.modules since we're only operating over one
+    // builtin.module
+    options.inlinePublic = true;
+    pm.addPass(hw::createFlattenModules(options));
+  }
+  pm.addNestedPass<hw::HWModuleOp>(verif::createCombineAssertLikePass());
   pm.addPass(createExternalizeRegisters());
   LowerToBMCOptions lowerToBMCOptions;
   lowerToBMCOptions.bound = clockBound;
@@ -351,6 +369,7 @@ int main(int argc, char **argv) {
   >();
   // clang-format on
   mlir::func::registerInlinerExtension(registry);
+  mlir::LLVM::registerInlinerInterface(registry);
   mlir::registerBuiltinDialectTranslation(registry);
   mlir::registerLLVMDialectTranslation(registry);
   MLIRContext context(registry);

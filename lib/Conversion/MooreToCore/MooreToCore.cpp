@@ -697,6 +697,10 @@ static Value createZeroValue(Type type, Location loc,
     return mlir::arith::ConstantOp::create(rewriter, loc, floatAttr);
   }
 
+  // Handle dynamic strings
+  if (auto strType = dyn_cast<sim::DynamicStringType>(type))
+    return sim::StringConstantOp::create(rewriter, loc, strType, "");
+
   // Otherwise try to create a zero integer and bitcast it to the result type.
   int64_t width = hw::getBitWidth(type);
   if (width == -1)
@@ -1638,6 +1642,17 @@ struct UIntToRealOpConversion : public OpConversionPattern<UIntToRealOp> {
   }
 };
 
+struct IntToStringOpConversion : public OpConversionPattern<IntToStringOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(IntToStringOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::IntToStringOp>(op, adaptor.getInput());
+    return success();
+  }
+};
+
 struct RealToIntOpConversion : public OpConversionPattern<RealToIntOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -2074,9 +2089,29 @@ struct FormatRealOpConversion : public OpConversionPattern<FormatRealOp> {
           op, adaptor.getValue(), isLeftAlignedAttr, fieldWidthAttr,
           fracDigitsAttr);
       return success();
-    default:
-      return rewriter.notifyMatchFailure(op, "unsupported real format");
     }
+  }
+};
+
+struct StringLenOpConversion : public OpConversionPattern<StringLenOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StringLenOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::StringLengthOp>(op, adaptor.getStr());
+    return success();
+  }
+};
+
+struct StringConcatOpConversion : public OpConversionPattern<StringConcatOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StringConcatOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::StringConcatOp>(op, adaptor.getInputs());
+    return success();
   }
 };
 
@@ -2239,6 +2274,10 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return sim::FormatStringType::get(type.getContext());
   });
 
+  typeConverter.addConversion([&](StringType type) {
+    return sim::DynamicStringType::get(type.getContext());
+  });
+
   typeConverter.addConversion([&](ArrayType type) -> std::optional<Type> {
     if (auto elementType = typeConverter.convertType(type.getElementType()))
       return hw::ArrayType::get(elementType, type.getSize());
@@ -2310,6 +2349,7 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   // Valid target types.
   typeConverter.addConversion([](IntegerType type) { return type; });
   typeConverter.addConversion([](FloatType type) { return type; });
+  typeConverter.addConversion([](sim::DynamicStringType type) { return type; });
   typeConverter.addConversion([](llhd::TimeType type) { return type; });
   typeConverter.addConversion([](debug::ArrayType type) { return type; });
   typeConverter.addConversion([](debug::ScopeType type) { return type; });
@@ -2391,6 +2431,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     SExtOpConversion,
     SIntToRealOpConversion,
     UIntToRealOpConversion,
+    IntToStringOpConversion,
     RealToIntOpConversion,
 
     // Patterns of miscellaneous operations.
@@ -2505,7 +2546,11 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FormatConcatOpConversion,
     FormatIntOpConversion,
     FormatRealOpConversion,
-    DisplayBIOpConversion
+    DisplayBIOpConversion,
+
+    // Dynamic string operations
+    StringLenOpConversion,
+    StringConcatOpConversion
   >(typeConverter, patterns.getContext());
   // clang-format on
 

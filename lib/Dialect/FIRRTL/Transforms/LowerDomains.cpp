@@ -418,6 +418,15 @@ LogicalResult LowerModule::lowerModule() {
       continue;
     }
 
+    // If the port is zero-width, then we don't need annotation trackers.
+    // LowerToHW removes zero-width ports and it will error if there are inner
+    // symbols on zero-width things it is trying to remove.
+    if (auto firrtlType = type_dyn_cast<FIRRTLType>(port.type))
+      if (hasZeroBitWidth(firrtlType)) {
+        portAnnotations.push_back(port.annotations.getArrayAttr());
+        continue;
+      }
+
     SmallVector<Annotation> newAnnotations;
     DistinctAttr id;
     for (auto indexAttr : domainAttr.getAsRange<IntegerAttr>()) {
@@ -543,12 +552,13 @@ LogicalResult LowerModule::lowerModule() {
       //     firrtl.domain.define %dst, %a     // <- to-be-deleted when visited
       if (auto wireOp = dyn_cast<WireOp>(walkOp)) {
         if (type_isa<DomainType>(wireOp.getResult().getType())) {
-          Value src, dst;
+          Value src;
+          SmallVector<Value> dsts;
           DomainDefineOp lastDefineOp;
           for (auto *user : llvm::make_early_inc_range(wireOp->getUsers())) {
-            if (src && dst)
-              break;
             auto domainDefineOp = dyn_cast<DomainDefineOp>(user);
+            if (operationsToErase.contains(domainDefineOp))
+              continue;
             if (!domainDefineOp) {
               auto diag = wireOp.emitOpError()
                           << "cannot be lowered by `LowerDomains` because it "
@@ -559,20 +569,22 @@ LogicalResult LowerModule::lowerModule() {
             if (!lastDefineOp || lastDefineOp->isBeforeInBlock(domainDefineOp))
               lastDefineOp = domainDefineOp;
             if (wireOp == domainDefineOp.getSrc().getDefiningOp())
-              dst = domainDefineOp.getDest();
+              dsts.push_back(domainDefineOp.getDest());
             else
               src = domainDefineOp.getSrc();
             operationsToErase.insert(domainDefineOp);
           }
           conversionsToErase.insert(wireOp);
+
           // If this wire is dead or undriven, then there's nothing to do.
-          if (!src || !dst)
+          if (!src || dsts.empty())
             return WalkResult::advance();
           // Insert a domain define that removes the need for the wire.  This is
           // inserted just before the latest domain define involving the wire.
           // This is done to prevent unnecessary permutations of the IR.
           OpBuilder builder(lastDefineOp);
-          DomainDefineOp::create(builder, builder.getUnknownLoc(), dst, src);
+          for (auto dst : llvm::reverse(dsts))
+            DomainDefineOp::create(builder, builder.getUnknownLoc(), dst, src);
         }
         return WalkResult::advance();
       }

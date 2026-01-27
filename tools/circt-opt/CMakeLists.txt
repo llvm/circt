@@ -23,6 +23,7 @@ target_link_libraries(circt-opt
   CIRCTBMCTransforms
   CIRCTExportVerilog
   CIRCTLECTransforms
+  CIRCTCoreToFSM
   CIRCTTransforms
 
   MLIRIR

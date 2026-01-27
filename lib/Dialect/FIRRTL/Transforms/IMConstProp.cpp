@@ -203,7 +203,7 @@ struct IMConstPropPass
   void markOverdefined(Value value) {
     FieldRef fieldRef = getOrCacheFieldRefFromValue(value);
     auto firrtlType = type_dyn_cast<FIRRTLType>(value.getType());
-    if (!firrtlType || type_isa<PropertyType>(firrtlType)) {
+    if (!firrtlType || type_isa<PropertyType, DomainType>(firrtlType)) {
       markOverdefined(fieldRef);
       return;
     }
@@ -263,7 +263,7 @@ struct IMConstPropPass
     if (!type_isa<FIRRTLType>(result.getType()))
       return mergeLatticeValue(fieldRefResult, fieldRefFrom);
     // Special-handle PropertyType's, walkGroundType's doesn't support.
-    if (type_isa<PropertyType>(result.getType()))
+    if (type_isa<PropertyType, DomainType>(result.getType()))
       return mergeLatticeValue(fieldRefResult, fieldRefFrom);
     walkGroundTypes(type_cast<FIRRTLType>(result.getType()),
                     [&](uint64_t fieldID, auto, auto) {
@@ -452,7 +452,7 @@ LatticeValue IMConstPropPass::getExtendedLatticeValue(FieldRef value,
     return result;
 
   // No extOrTrunc for property types.  Return what we have.
-  if (isa<PropertyType>(destType))
+  if (isa<PropertyType, DomainType>(destType))
     return result;
 
   auto constant = result.getConstant();
@@ -560,7 +560,7 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
         if (!firrtlType)
           continue;
         // Special-handle PropertyType's, walkGroundTypes doesn't support.
-        if (type_isa<PropertyType>(firrtlType)) {
+        if (type_isa<PropertyType, DomainType>(firrtlType)) {
           fieldRefToUsers[fieldRef].push_back(&op);
           continue;
         }
@@ -1061,7 +1061,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
           if (op->use_empty() &&
               (wouldOpBeTriviallyDead(op) || isDeletableWireOrRegOrNode(op))) {
             LLVM_DEBUG(
-                { logger.getOStream() << debugPrefix << " : " << op << "\n"; });
+                { logger.getOStream() << debugPrefix << " : " << *op << "\n"; });
             ++numErasedOp;
             op->erase();
             return true;

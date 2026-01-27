@@ -125,7 +125,7 @@ void circt::populateArcStateLoweringPipeline(
 void circt::populateArcStateAllocationPipeline(
     OpPassManager &pm, const ArcStateAllocationOptions &options) {
   pm.addPass(arc::createLowerArcsToFuncsPass());
-  pm.nest<arc::ModelOp>().addPass(arc::createAllocateStatePass());
+  pm.nest<arc::ModelOp>().addPass(arc::createAllocateState());
   pm.addPass(arc::createLowerClocksToFuncsPass()); // no CSE between state alloc
                                                    // and clock func lowering
   if (options.splitFuncsThreshold.getNumOccurrences()) {
@@ -135,11 +135,19 @@ void circt::populateArcStateAllocationPipeline(
   pm.addPass(arc::createArcCanonicalizerPass());
 }
 
-void circt::populateArcToLLVMPipeline(OpPassManager &pm) {
+void circt::populateArcToLLVMPipeline(OpPassManager &pm, bool insertRuntime,
+                                      StringRef extraRuntimeArgs) {
   {
     hw::HWConvertBitcastsOptions options;
     options.allowPartialConversion = false;
     pm.addPass(hw::createHWConvertBitcasts(options));
+  }
+  if (insertRuntime) {
+    InsertRuntimeOptions opts;
+    if (!extraRuntimeArgs.empty())
+      opts.extraArgs =
+          std::string(extraRuntimeArgs.begin(), extraRuntimeArgs.end());
+    pm.addPass(createInsertRuntime(opts));
   }
   pm.addPass(createLowerArcToLLVMPass());
   pm.addPass(createCSEPass());

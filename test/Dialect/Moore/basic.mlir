@@ -533,3 +533,17 @@ func.func @StringConversion(%a: !moore.i32, %b: !moore.string) {
   moore.string_to_int %b : i32
   return
 }
+
+// CHECK-LABEL: func.func @StringOperations
+func.func @StringOperations(%arg0 : !moore.string, %arg1 : !moore.string) {
+  // CHECK: moore.string.concat ()
+  moore.string.concat ()
+  // CHECK: moore.string.concat (%arg0)
+  moore.string.concat (%arg0)
+  // CHECK: moore.string.concat (%arg0, %arg1)
+  moore.string.concat (%arg0, %arg1)
+  // CHECK: moore.string.len %arg0
+  moore.string.len %arg0
+
+  return
+}

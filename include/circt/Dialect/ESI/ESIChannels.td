@@ -181,7 +181,7 @@ def WrapValidReadyOp : ESI_Op<"wrap.vr", [
   let arguments = (ins AnyType:$rawInput, I1:$valid);
   let results = (outs ChannelType:$chanOutput, I1:$ready);
   let hasCustomAssemblyFormat = 1;
-  let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
   let hasVerifier = 1;
 
   let builders = [
@@ -217,7 +217,6 @@ def WrapFIFOOp : ESI_Op<"wrap.fifo", [
   let arguments = (ins AnyType:$data, I1:$empty);
   let results = (outs ChannelType:$chanOutput, I1:$rden);
   let hasCanonicalizeMethod = true;
-  let hasFolder = true;
   let hasVerifier = 1;
 
   let assemblyFormat = [{

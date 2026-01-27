@@ -543,17 +543,18 @@ class CirctAssertConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
 
-  bool check(GenericIntrinsic gi) override {
-    return gi.typedInput<ClockType>(0) || gi.sizedInput<UIntType>(1, 1) ||
-           gi.sizedInput<UIntType>(2, 1) ||
-           gi.namedParam("format", /*optional=*/true) ||
-           gi.namedParam("label", /*optional=*/true) ||
-           gi.namedParam("guards", /*optional=*/true) || gi.hasNParam(0, 3) ||
-           gi.hasNoOutput();
-  }
+  LogicalResult checkAndConvert(GenericIntrinsic gi,
+                                GenericIntrinsicOpAdaptor adaptor,
+                                PatternRewriter &rewriter) override {
+    // Check structure of the intrinsic.
+    if (gi.typedInput<ClockType>(0) || gi.sizedInput<UIntType>(1, 1) ||
+        gi.sizedInput<UIntType>(2, 1) ||
+        gi.namedParam("format", /*optional=*/true) ||
+        gi.namedParam("label", /*optional=*/true) ||
+        gi.namedParam("guards", /*optional=*/true) || gi.hasNParam(0, 3) ||
+        gi.hasNoOutput())
+      return failure();
 
-  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
-               PatternRewriter &rewriter) override {
     auto format = gi.getParamValue<StringAttr>("format");
     auto label = gi.getParamValue<StringAttr>("label");
     auto guards = gi.getParamValue<StringAttr>("guards");
@@ -564,10 +565,25 @@ public:
 
     auto substitutions = adaptor.getOperands().drop_front(3);
     auto name = label ? label.strref() : "";
-    // Message is not optional, so provide empty string if not present.
-    auto message = format ? format : rewriter.getStringAttr("");
+
+    // Parse the format string to handle special substitutions like
+    // {{SimulationTime}} and {{HierarchicalModuleName}}
+    StringAttr message;
+    SmallVector<Value> allOperands;
+    if (format) {
+      SmallVector<Value> substitutionVec(substitutions.begin(),
+                                         substitutions.end());
+      if (failed(parseFormatString(rewriter, gi.op->getLoc(), format.getValue(),
+                                   substitutionVec, message, allOperands)))
+        return failure();
+    } else {
+      // Message is not optional, so provide empty string if not present.
+      message = rewriter.getStringAttr("");
+      allOperands.append(substitutions.begin(), substitutions.end());
+    }
+
     auto op = rewriter.template replaceOpWithNewOp<OpTy>(
-        gi.op, clock, predicate, enable, message, substitutions, name,
+        gi.op, clock, predicate, enable, message, allOperands, name,
         /*isConcurrent=*/true);
     if (guards) {
       SmallVector<StringRef> guardStrings;
@@ -583,6 +599,8 @@ public:
       op->setAttr("format", rewriter.getStringAttr("ifElseFatal"));
       rewriter.finalizeOpModification(op);
     }
+
+    return success();
   }
 };
 
@@ -958,10 +976,11 @@ public:
 // FIRRTL intrinsic lowering dialect interface
 //===----------------------------------------------------------------------===//
 
+#include "FIRRTLIntrinsics.cpp.inc"
+
 void FIRRTLIntrinsicLoweringDialectInterface::populateIntrinsicLowerings(
     IntrinsicLowerings &lowering) const {
-  lowering.add<CirctSizeofConverter>("circt.sizeof", "circt_sizeof");
-  lowering.add<CirctIsXConverter>("circt.isX", "circt_isX");
+  populateLowerings(lowering);
   lowering.add<CirctPlusArgTestConverter>("circt.plusargs.test",
                                           "circt_plusargs_test");
   lowering.add<CirctPlusArgValueConverter>("circt.plusargs.value",

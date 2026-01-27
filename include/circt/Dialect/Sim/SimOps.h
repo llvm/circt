@@ -26,6 +26,8 @@
 #include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 
+#include "circt/Dialect/Sim/SimOpInterfaces.h.inc"
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/Sim/Sim.h.inc"
 

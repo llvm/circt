@@ -53,6 +53,16 @@ def EventType : MooreTypeDef<"Event", [], "moore::UnpackedType"> {
 }
 
 //===----------------------------------------------------------------------===//
+// Null Type
+//===----------------------------------------------------------------------===//
+
+def NullType : MooreTypeDef<"Null", [], "moore::UnpackedType"> {
+  let mnemonic = "null";
+  let summary = [{A type that represents null literals for chandles, classhandles,
+  and virtual interfaces}];
+}
+
+//===----------------------------------------------------------------------===//
 // ClassHandleType
 //===----------------------------------------------------------------------===//
 
