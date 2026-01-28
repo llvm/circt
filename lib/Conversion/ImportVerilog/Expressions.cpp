@@ -7,8 +7,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Moore/MooreTypes.h"
+#include "mlir/IR/Operation.h"
+#include "mlir/IR/Value.h"
 #include "slang/ast/EvalContext.h"
 #include "slang/ast/SystemSubroutine.h"
+#include "slang/ast/types/AllTypes.h"
 #include "slang/syntax/AllSyntax.h"
 #include "llvm/ADT/ScopeExit.h"
 
@@ -185,8 +189,9 @@ struct ExprVisitor {
     auto derefType = value.getType();
     if (isLvalue)
       derefType = cast<moore::RefType>(derefType).getNestedType();
-    if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType>(
-            derefType)) {
+
+    if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
+             moore::QueueType>(derefType)) {
       mlir::emitError(loc) << "unsupported expression: element select into "
                            << expr.value().type->toString() << "\n";
       return {};
@@ -202,11 +207,28 @@ struct ExprVisitor {
 
       auto lowBit = constValue->integer().as<uint32_t>().value();
       if (isLvalue)
-        return moore::ExtractRefOp::create(builder, loc, resultType, value,
-                                           range.translateIndex(lowBit));
+        return llvm::TypeSwitch<Type, Value>(derefType)
+            .Case<moore::QueueType>([&](moore::QueueType) {
+              mlir::emitError(loc)
+                  << "Unexpected LValue extract on Queue Type!";
+              return Value();
+            })
+            .Default([&](Type) {
+              return moore::ExtractRefOp::create(builder, loc, resultType,
+                                                 value,
+                                                 range.translateIndex(lowBit));
+            });
       else
-        return moore::ExtractOp::create(builder, loc, resultType, value,
-                                        range.translateIndex(lowBit));
+        return llvm::TypeSwitch<Type, Value>(derefType)
+            .Case<moore::QueueType>([&](moore::QueueType) {
+              mlir::emitError(loc)
+                  << "Unexpected RValue extract on Queue Type!";
+              return Value();
+            })
+            .Default([&](Type) {
+              return moore::ExtractOp::create(builder, loc, resultType, value,
+                                              range.translateIndex(lowBit));
+            });
     }
 
     auto lowBit = context.convertRvalueExpression(expr.selector());
@@ -214,11 +236,26 @@ struct ExprVisitor {
       return {};
     lowBit = getSelectIndex(context, loc, lowBit, range);
     if (isLvalue)
-      return moore::DynExtractRefOp::create(builder, loc, resultType, value,
-                                            lowBit);
+      return llvm::TypeSwitch<Type, Value>(derefType)
+          .Case<moore::QueueType>([&](moore::QueueType) {
+            return moore::DynQueueExtractRefOp::create(builder, loc, resultType,
+                                                       value, lowBit);
+          })
+          .Default([&](Type) {
+            return moore::DynExtractRefOp::create(builder, loc, resultType,
+                                                  value, lowBit);
+          });
+
     else
-      return moore::DynExtractOp::create(builder, loc, resultType, value,
-                                         lowBit);
+      return llvm::TypeSwitch<Type, Value>(derefType)
+          .Case<moore::QueueType>([&](moore::QueueType) {
+            return moore::DynQueueExtractOp::create(builder, loc, resultType,
+                                                    value, lowBit);
+          })
+          .Default([&](Type) {
+            return moore::DynExtractOp::create(builder, loc, resultType, value,
+                                               lowBit);
+          });
   }
 
   /// Handle null assignments to variables.

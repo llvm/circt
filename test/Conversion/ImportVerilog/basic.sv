@@ -3927,3 +3927,29 @@ module QueueManipulationTest;
        q.pop_front();
     end
 endmodule
+
+// CHECK-LABEL: moore.module @QueueExtractTest() {
+// CHECK:           [[Q:%.+]] = moore.variable : <queue<l32, 0>>
+// CHECK:           [[QE:%.+]] = moore.variable : <l32>
+// CHECK:           moore.procedure initial {
+// CHECK:             [[QR:%.+]] = moore.read [[Q]] : <queue<l32, 0>>
+// CHECK:             [[C0A:%.+]] = moore.constant 0 : i32
+// CHECK:             [[E0:%.+]] = moore.dyn_queue_extract [[QR]] from [[C0A]] : <l32, 0>, i32 -> l32
+// CHECK:             moore.blocking_assign [[QE]], [[E0]] : l32
+// CHECK:             [[C0B:%.+]] = moore.constant 0 : i32
+// CHECK:             [[R0:%.+]] = moore.dyn_queue_extract_ref [[Q]] from [[C0B]] : <queue<l32, 0>>, i32 -> <l32>
+// CHECK:             [[QER:%.+]] = moore.read [[QE]] : <l32>
+// CHECK:             moore.blocking_assign [[R0]], [[QER]] : l32
+// CHECK:             moore.return
+// CHECK:           }
+// CHECK:           moore.output
+// CHECK:         }
+
+module QueueExtractTest;
+    logic [31:0] q[$];
+    logic [31:0]  qe;
+    initial begin
+        qe = q[0];
+        q[0] = qe;
+    end
+endmodule
