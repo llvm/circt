@@ -1086,13 +1086,13 @@ struct RuntimeModelOpLowering
         LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
                                     tapNameArrayAddr, ArrayRef<int64_t>{2});
     static_assert(offsetof(ArcModelTraceInfo, traceTapNames) == 16,
-                  "Unexpected offset of field modelName");
+                  "Unexpected offset of field traceTapNames");
     // Field: uint64_t traceBufferCapacity
     initStruct =
         LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
                                     bufferCapacityCst, ArrayRef<int64_t>{3});
-    static_assert(offsetof(ArcModelTraceInfo, traceTapNames) == 16,
-                  "Unexpected offset of field traceTapNames");
+    static_assert(offsetof(ArcModelTraceInfo, traceBufferCapacity) == 24,
+                  "Unexpected offset of field traceBufferCapacity");
     LLVM::ReturnOp::create(rewriter, op.getLoc(), initStruct);
 
     return traceInfoGlobalOp;
