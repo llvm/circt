@@ -1,4 +1,5 @@
 // RUN: circt-opt -convert-fsm-to-smt %s | FileCheck %s
+
 // CHECK: module {
 // CHECK-NEXT:  smt.solver() : () -> () {
 // CHECK-NEXT:    %c0_i8 = hw.constant 0 : i8

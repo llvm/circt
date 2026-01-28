@@ -350,6 +350,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
           // cast the (comb) results of the output region to SMT types, such
           // that they can be used as arguments of the state function
+          
           for (auto [idx, out] : llvm::enumerate(combOutputValues)) {
             auto convCast = UnrealizedConversionCastOp::create(
                 b, loc, forallQuantified[numArgs + idx].getType(), out);
