@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_LTL_LTLOPS_TD
 #define CIRCT_DIALECT_LTL_LTLOPS_TD
 
+include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/LTL/LTLDialect.td"
 include "circt/Dialect/LTL/LTLTypes.td"
 include "mlir/IR/EnumAttr.td"
@@ -104,11 +105,11 @@ def DelayOp : LTLOp<"delay", [Pure]> {
   }];
 }
 
-def PastOp : LTLOp<"past", [Pure]> {
+def PastOp : LTLOp<"past", [SameOperandsAndResultType, Pure]> {
   let arguments = (ins
-    I1:$input,
+    HWIntegerType:$input,
     I64Attr:$delay);
-  let results = (outs I1:$result);
+  let results = (outs HWIntegerType:$result);
   let assemblyFormat = [{
     $input `,` $delay attr-dict `:` type($input)
   }];
