@@ -151,7 +151,9 @@ def InsertRuntime : Pass<"arc-insert-runtime", "mlir::ModuleOp"> {
   let dependentDialects = ["mlir::LLVM::LLVMDialect",  "mlir::scf::SCFDialect"];
   let options = [
     Option<"extraArgs", "extra-args", "std::string", "",
-     "Extra arguments passed to the runtime when creating simulation instances">
+     "Extra arguments passed to the runtime when creating simulation instances">,
+    Option<"traceFileName", "trace-file", "std::string", "",
+     "Output file name for signal trace">
   ];
 }
 
