@@ -784,3 +784,38 @@ endclass
 module testMod;
    mainDeclClass#(3) t;
 endmodule
+
+// Check that all class properties are registered before function are elaborated
+
+// CHECK:      moore.class.classdecl @methodDeclTestClass {
+// CHECK:        moore.class.propertydecl @testString : !moore.string
+// CHECK:      }
+
+// CHECK:      func.func private @test() -> !moore.class<@methodDeclTestClass> {
+// CHECK:        [[OBJ:%.+]] = moore.class.new : <@methodDeclTestClass>
+// CHECK:        call @"methodDeclTestClass::new"([[OBJ]]) : (!moore.class<@methodDeclTestClass>) -> ()
+// CHECK:        [[VOIDC:%.+]] = builtin.unrealized_conversion_cast to !moore.void
+// CHECK:        return [[OBJ]] : !moore.class<@methodDeclTestClass>
+// CHECK:      }
+
+// CHECK:      func.func private @"methodDeclTestClass::new"([[THIS:%.+]]: !moore.class<@methodDeclTestClass>) {
+// CHECK:        [[REF:%.+]] = moore.class.property_ref [[THIS]][@testString] : <@methodDeclTestClass> -> <string>
+// CHECK:        [[STR:%.+]] = moore.read [[REF]] : <string>
+// CHECK:        [[FMT0:%.+]] = moore.fmt.string [[STR]]
+// CHECK:        [[LIT:%.+]] = moore.fmt.literal "\0A"
+// CHECK:        [[CAT:%.+]] = moore.fmt.concat ([[FMT0]], [[LIT]])
+// CHECK:        moore.builtin.display [[CAT]]
+// CHECK:        return
+// CHECK:      }
+
+class methodDeclTestClass;
+   static function methodDeclTestClass test();
+      return new();
+   endfunction // test
+   protected string testString;
+
+   function new();
+      $display("%s", testString);
+   endfunction
+
+endclass
