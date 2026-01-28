@@ -913,12 +913,14 @@ ParseResult FIRParser::parseEnumType(FIRRTLType &result) {
 
 ParseResult FIRParser::parsePropertyType(PropertyType &result,
                                          const Twine &message) {
+  auto loc = getToken().getLoc();
+
   FIRRTLType type;
   if (parseType(type, message))
     return failure();
   auto prop = type_dyn_cast<PropertyType>(type);
   if (!prop)
-    return emitError("expected property type");
+    return emitError(loc, "expected property type");
   result = prop;
   return success();
 }
