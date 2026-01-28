@@ -1760,6 +1760,33 @@ def DynExtractRefOp : MooreOp<"dyn_extract_ref", [Pure]> {
 // Queue Manipulation
 //===----------------------------------------------------------------------===//
 
+def DynQueueExtractOp : MooreOp<"dyn_queue_extract", [Pure,
+    TypesMatchWith<"input and result types must match",
+    "input", "result", "cast<QueueType>($_self).getElementType()">]> {
+  let description = [{
+    It's similar to extract, but it's used to select from a value
+    with a dynamic lower index.
+  }];
+  let arguments = (ins QueueType:$input, UnpackedType:$lowerIdx);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $input `from` $lowerIdx attr-dict `:`
+    type($input) `,` type($lowerIdx) `->` type($result)
+  }];
+}
+
+def DynQueueExtractRefOp : MooreOp<"dyn_queue_extract_ref", [Pure]> {
+  let description = [{
+  The copy of dyn_extract that explicitly works on the ref type.
+  }];
+  let arguments = (ins RefType:$input, UnpackedType:$lowerIdx);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $input `from` $lowerIdx attr-dict `:`
+    type($input) `,` type($lowerIdx) `->` type($result)
+  }];
+}
+
 def QueuePushBackOp : MooreOp<"push_back", [
     TypesMatchWith<"queue and element types must match",
     "queue", "element", "cast<QueueType>($_self).getElementType()">]> {
