@@ -833,7 +833,7 @@ def ToBuiltinIntOp : MooreOp<"to_builtin_int", [Pure,
   let description = [{
     Maps `X` and `Z` bits to 0, and passes through 1 and 0 bits unchanged.
   }];
-  let arguments = (ins IntType:$input);
+  let arguments = (ins TwoValuedIntType:$input);
   let results = (outs AnyInteger:$result);
   let assemblyFormat = [{
     $input attr-dict `:` type($input)
