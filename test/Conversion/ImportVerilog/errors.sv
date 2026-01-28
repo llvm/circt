@@ -190,3 +190,10 @@ function void foo;
   // expected-error @below {{contains a time type}}
   a = b;
 endfunction
+
+// -----
+module Foo;
+  logic [1:0] a;
+  // expected-error @below {{$past is currently only supported for 1-wide bitvectors}}
+  assert property ($past(a) == 2'b10);
+endmodule
