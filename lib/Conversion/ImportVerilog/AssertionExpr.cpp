@@ -347,6 +347,12 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                           .getResult();
                   return stable;
                 })
+          .Case("$past",
+                [&]() -> Value {
+                  auto past =
+                      ltl::PastOp::create(builder, loc, value, 1).getResult();
+                  return past;
+                })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
 }

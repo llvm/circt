@@ -400,6 +400,13 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[NOTPASTANDNOTCURRENT:%.+]] = ltl.and [[NOTCURRENT]], [[NOTPAST]] : !ltl.property, !ltl.property
   // CHECK-NEXT: [[STABLE:%.+]] = ltl.or [[PASTANDCURRENT]], [[NOTPASTANDNOTCURRENT]] : i1, !ltl.property
   stable_clk: assert property (@(posedge clk_i) clk_i |=> $stable(clk_i));
+  // CHECK: moore.procedure always {
+  // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CB:%.+]] = moore.to_builtin_bool [[C]] : l1
+  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_bool [[C2]] : l1
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 : i1
+  past_clk: assert property (@(posedge clk_i) clk_i |=> $past(clk_i));
 
 endmodule
 
