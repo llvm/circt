@@ -1615,6 +1615,11 @@ struct ClassDeclVisitor {
       extraParams.push_back(handleTy);
 
       auto funcTy = getFunctionSignature(context, fn, extraParams);
+      if (!funcTy) {
+        mlir::emitError(loc) << "Invalid function signature for " << fn.name;
+        return failure();
+      }
+
       moore::ClassMethodDeclOp::create(builder, loc, fn.name, funcTy, nullptr);
       return success();
     }
@@ -1758,6 +1763,14 @@ Context::convertClassDeclaration(const slang::ast::ClassType &classdecl) {
   // Check if there already is a declaration for this class.
   if (classes.contains(&classdecl))
     return success();
+
+  if (classdecl.getBaseClass()) {
+    if (const auto *baseClassDecl =
+            classdecl.getBaseClass()->as_if<slang::ast::ClassType>()) {
+      if (failed(convertClassDeclaration(*baseClassDecl)))
+        return failure();
+    }
+  }
 
   auto *lowering = declareClass(classdecl);
   if (failed(ClassDeclVisitor(*this, *lowering).run(classdecl)))
