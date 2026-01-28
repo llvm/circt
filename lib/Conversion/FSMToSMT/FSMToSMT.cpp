@@ -541,8 +541,7 @@ LogicalResult MachineOpConverter::dispatch() {
           }
         } else {
           // Store the assertion operations, with a copy of the region
-          assertions.push_back(
-              {.stateId = transition.to, .outputRegion = outputReg});
+          assertions.push_back({transition.to, outputReg});
           newOp->erase();
         }
       }
