@@ -854,8 +854,7 @@ BuildCallInstance::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
       // External function calls (functions without a body/definition) are not
       // supported. Emit a proper error message instead of crashing.
       callOp.emitOpError()
-          << "cannot lower call to external function '"
-          << callOp.getCallee()
+          << "cannot lower call to external function '" << callOp.getCallee()
           << "'. SCFToCalyx only supports calls to functions defined within "
              "the same module";
       result = failure();
