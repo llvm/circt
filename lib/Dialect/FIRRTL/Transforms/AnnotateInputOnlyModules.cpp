@@ -56,7 +56,7 @@ void AnnotateInputOnlyModulesPass::runOnOperation() {
     // Inline input only modules in design.
     // Don't inline if the module is public or has a layer enabled.
     if (!instanceInfo.anyInstanceInEffectiveDesign(module) ||
-        module.isPublic() || module.getLayers().size() != 0)
+        module.isPublic() || !module.getLayers().empty())
       continue;
 
     // Check if the module has only input ports (no output ports)
