@@ -93,7 +93,7 @@ private:
   Transition parseTransition(fsm::TransitionOp t, int from,
                              SmallVector<std::string> &states, Location &loc) {
     std::string nextState = t.getNextState().str();
-    Transition tr = {.from = from, .to = insertStates(states, nextState)};
+    Transition tr = {from, insertStates(states, nextState)};
     if (!t.getGuard().empty()) {
       tr.hasGuard = true;
       tr.guard = &t.getGuard();
@@ -342,8 +342,7 @@ LogicalResult MachineOpConverter::dispatch() {
                 newOp->erase();
               }
             } else {
-              assertions.push_back(
-                  {.stateId = 0, .outputRegion = initOutputReg});
+              assertions.push_back({0, initOutputReg});
               newOp->erase();
             }
           }
