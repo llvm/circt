@@ -19,6 +19,7 @@
 #include "circt/Dialect/Arc/Runtime/IRInterface.h"
 #include "circt/Dialect/Arc/Runtime/Internal.h"
 #include "circt/Dialect/Arc/Runtime/ModelInstance.h"
+#include "circt/Dialect/Arc/Runtime/String.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
@@ -201,13 +202,35 @@ uint64_t *arcRuntimeIR_swapTraceBuffer(const uint8_t *modelState) {
   return getModelInstance(statePtr)->swapTraceBuffer();
 }
 
+void arcRuntimeIR_stringInit(DynamicString *str, const char *initialValue) {
+  if (!str || !initialValue) {
+    internalError("Invalid string or initial value");
+  }
+  auto strSize = std::strlen(initialValue);
+  str->size = strSize;
+  str->data = new char[strSize + 1];
+  std::strcpy(str->data, initialValue);
+}
+
+void arcRuntimeIR_stringConcat(DynamicString *outStr,
+                               const DynamicString *strList) {
+  if (!outStr || !strList) {
+    internalError("Invalid output string or string list");
+  }
+
+  while (strList != nullptr) {
+    *outStr = *outStr + *strList;
+    strList++;
+  }
+}
+
 #ifdef ARC_RUNTIME_JIT_BIND
 namespace circt::arc::runtime {
 
 static const APICallbacks apiCallbacksGlobal{
     &arcRuntimeIR_allocInstance, &arcRuntimeIR_deleteInstance,
     &arcRuntimeIR_onEval,        &arcRuntimeIR_onInitialized,
-    &arcRuntimeIR_format,        &arcRuntimeIR_swapTraceBuffer};
+    &arcRuntimeIR_format,        &arcRuntimeIR_swapTraceBuffer, &arcRuntimeIR_stringInit};
 
 const APICallbacks &getArcRuntimeAPICallbacks() { return apiCallbacksGlobal; }
 

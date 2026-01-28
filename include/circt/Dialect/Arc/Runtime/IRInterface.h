@@ -56,6 +56,7 @@ namespace circt {
 namespace arc {
 namespace runtime {
 struct FmtDescriptor;
+struct DynamicString;
 } // namespace runtime
 } // namespace arc
 } // namespace circt
@@ -104,6 +105,9 @@ arcRuntimeIR_format(const circt::arc::runtime::FmtDescriptor *fmt, ...);
 /// `traceBufferCapacity` x uint64_t size, which will become the new active
 /// trace buffer.
 ARC_IR_EXPORT uint64_t *arcRuntimeIR_swapTraceBuffer(const uint8_t *modelState);
+ARC_IR_EXPORT void
+arcRuntimeIR_stringInit(circt::arc::runtime::DynamicString *str,
+                        const char *initialValue);
 
 // NOLINTEND(readability-identifier-naming)
 #endif // CIRCT_DIALECT_ARC_RUNTIME_IRINTERFACE_H

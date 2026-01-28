@@ -25,6 +25,7 @@ namespace runtime {
 
 // Forward-declare.
 struct FmtDescriptor;
+struct DynamicString;
 
 struct APICallbacks {
   uint8_t *(*fnAllocInstance)(const ArcRuntimeModelInfo *model,
@@ -34,6 +35,7 @@ struct APICallbacks {
   void (*fnOnInitialized)(uint8_t *simState);
   void (*fnFormat)(const FmtDescriptor *fmt, ...);
   uint64_t *(*fnSwapTraceBuffer)(const uint8_t *simState);
+  void (*fnStringInit)(DynamicString *str, const char *initialValue);
 
   static constexpr char symNameAllocInstance[] = "arcRuntimeIR_allocInstance";
   static constexpr char symNameDeleteInstance[] = "arcRuntimeIR_deleteInstance";
@@ -42,6 +44,7 @@ struct APICallbacks {
   static constexpr char symNameFormat[] = "arcRuntimeIR_format";
   static constexpr char symNameSwapTraceBuffer[] =
       "arcRuntimeIR_swapTraceBuffer";
+  static constexpr char symStringInit[] = "arcRuntimeIR_stringInit";
 };
 
 #ifdef ARC_RUNTIME_JITBIND_FNDECL
