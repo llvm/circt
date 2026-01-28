@@ -371,6 +371,16 @@ Value Context::convertAssertionCallExpression(
   switch (args.size()) {
   case (1):
     value = this->convertRvalueExpression(*args[0]);
+    if (subroutine.name == "$past") {
+      // For now, catch unsupported non-i1 $past case before we try and cast to
+      // a bool and get an unhelpful error
+      if (auto ty = dyn_cast<moore::IntType>(value.getType());
+          !ty || ty.getBitSize() != 1) {
+        mlir::emitError(loc, "$past is currently only supported for 1-wide "
+                             "bitvectors");
+        return {};
+      }
+    }
     boolVal = builder.createOrFold<moore::ToBuiltinBoolOp>(loc, value);
     if (!boolVal)
       return {};
