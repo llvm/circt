@@ -231,11 +231,10 @@ LogicalResult MachineOpConverter::dispatch() {
   for (auto &op : machineOp.front().getOperations()) {
     // if the operation is in comb dialect
     if (isa<comb::CombDialect>(op.getDialect()))
-      mlir::emitError(loc,
-                      "Comb operations are not supported outside FSM output, guard, and action regions.");
+      mlir::emitError(loc, "Comb operations are not supported outside FSM "
+                           "output, guard, and action regions.");
   }
 
-  
   // Add a time variable if necessary
   if (cfg.withTime) {
     quantifiableTypes.push_back(b.getType<smt::BitVectorType>(cfg.timeWidth));
