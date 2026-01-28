@@ -26,6 +26,11 @@ include "mlir/Interfaces/CallInterfaces.td"
 class MooreOp<string mnemonic, list<Trait> traits = []> :
   Op<MooreDialect, mnemonic, traits>;
 
+def HWIntegerType : DialectType<MooreDialect,
+    CPred<"::circt::hw::isHWIntegerType($_self)">,
+    "a signless integer bitvector",
+    "::circt::hw::TypeVariant<::mlir::IntegerType, ::circt::hw::IntType>">;
+
 //===----------------------------------------------------------------------===//
 // Constraints
 //===----------------------------------------------------------------------===//
@@ -819,6 +824,19 @@ def ToBuiltinBoolOp : MooreOp<"to_builtin_bool", [Pure]> {
   }];
   let arguments = (ins AnySingleBitType:$input);
   let results = (outs I1:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input)
+  }];
+}
+
+def ToBuiltinIntOp : MooreOp<"to_builtin_int", [Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>]> {
+  let summary = "Convert a `!moore.i<n>` to a builtin `i<n>`";
+  let description = [{
+    Maps `X` and `Z` bits to 0, and passes through 1 and 0 bits unchanged.
+  }];
+  let arguments = (ins IntType:$input);
+  let results = (outs HWIntegerType:$result);
   let assemblyFormat = [{
     $input attr-dict `:` type($input)
   }];

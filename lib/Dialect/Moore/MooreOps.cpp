@@ -1189,6 +1189,20 @@ OpFoldResult LogicToTimeOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// ToBuiltinIntOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ToBuiltinIntOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  auto inputType = operands.front().getType();
+  auto width = cast<IntType>(inputType).getWidth();
+  results.push_back(IntegerType::get(context, width));
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ConvertRealOp
 //===----------------------------------------------------------------------===//
 
