@@ -81,6 +81,7 @@ private:
   struct PendingAssertion {
     int stateId;
     Value predicateFsm;
+    Region *outputRegion;
   };
 
   struct Transition {
@@ -299,19 +300,21 @@ LogicalResult MachineOpConverter::dispatch() {
           for (auto &pair : constMapper.getValueMap()) {
             mapping.map(pair.first, pair.second);
           }
-
           SmallVector<mlir::Value> combOutputValues;
 
           for (auto &op : initOutputReg->front()) {
-            auto *newOp = b.clone(op, mapping);
-            // retrieve the operands of the output operation
-            if (isa<fsm::OutputOp>(newOp)) {
-              for (auto out : newOp->getOperands())
-                combOutputValues.push_back(out);
-              newOp->erase();
-            }
-            if (isa<verif::AssertOp>(newOp)) {
-              assertions.push_back({0, newOp->getOperand(0)});
+            if (!isa<verif::AssertOp>(op)) {
+              auto *newOp = b.clone(op, mapping);
+              // retrieve the operands of the output operation
+              if (isa<fsm::OutputOp>(newOp)) {
+                for (auto out : newOp->getOperands())
+                  combOutputValues.push_back(out);
+                newOp->erase();
+              }
+            } else {
+              assertions.push_back({.stateId = 0,
+                  .predicateFsm = op.getOperand(0),
+                  .outputRegion = initOutputReg});
             }
           }
 
@@ -427,25 +430,30 @@ LogicalResult MachineOpConverter::dispatch() {
         // we initialize all the non-updated values to the corresponding
         // quantified variable assuming no action
         for (auto &op : actionReg->front()) {
-          auto *newOp = b.clone(op, mapping);
+          if (!isa<verif::AssertOp>(op)) {
+            auto *newOp = b.clone(op, mapping);
+            // retrieve the updated values and update the corresponding value in
+            // the map
+            if (isa<fsm::UpdateOp>(newOp)) {
+              auto varToUpdate = newOp->getOperand(0);
+              auto updatedValue = newOp->getOperand(1);
 
-          // retrieve the updated values and update the corresponding value in
-          // the map
-          if (isa<fsm::UpdateOp>(newOp)) {
-            auto varToUpdate = newOp->getOperand(0);
-            auto updatedValue = newOp->getOperand(1);
+              for (auto [id, var] : llvm::enumerate(fsmToCast)) {
+                if (var.second == varToUpdate) {
+                  // convert
+                  auto convCast = UnrealizedConversionCastOp::create(
+                      b, loc, actionArgsOutsVarsVals[numOut + id].getType(),
+                      updatedValue);
 
-            for (auto [id, var] : llvm::enumerate(fsmToCast)) {
-              if (var.second == varToUpdate) {
-                // convert
-                auto convCast = UnrealizedConversionCastOp::create(
-                    b, loc, actionArgsOutsVarsVals[numOut + id].getType(),
-                    updatedValue);
-
-                castUpdatedVars[id - numArgs] = convCast->getResult(0);
+                  castUpdatedVars[id - numArgs] = convCast->getResult(0);
+                }
               }
+              newOp->erase();
             }
-            newOp->erase();
+          } else {
+            assertions.push_back({.stateId = transition.to,
+                .predicateFsm = op.getOperand(0),
+                .outputRegion = actionReg});  
           }
         }
       }
@@ -482,14 +490,20 @@ LogicalResult MachineOpConverter::dispatch() {
         Value guardVal;
 
         for (auto &op : transition.guard->front()) {
-          auto *newOp = b.clone(op, mapping);
-          // retrieve the operands of the output operation
-          if (isa<fsm::ReturnOp>(newOp)) {
-            auto castVal = mlir::UnrealizedConversionCastOp::create(
-              b, loc, b.getType<smt::BitVectorType>(1), newOp->getOperand(0));
+          if (!isa<verif::AssertOp>(op)) {
+            auto *newOp = b.clone(op, mapping);
+            // retrieve the operands of the output operation
+            if (isa<fsm::ReturnOp>(newOp)) {
+              auto castVal = mlir::UnrealizedConversionCastOp::create(
+                b, loc, b.getType<smt::BitVectorType>(1), newOp->getOperand(0));
 
-            guardVal = smt::EqOp::create(b, loc, castVal->getResult(0), smt::BVConstantOp::create(b, loc, 1, 1));
-            newOp->erase();
+              guardVal = smt::EqOp::create(b, loc, castVal->getResult(0), smt::BVConstantOp::create(b, loc, 1, 1));
+              newOp->erase();
+            }
+          } else {
+            assertions.push_back({.stateId = transition.from,
+                .predicateFsm = op.getOperand(0),
+                .outputRegion = transition.guard});
           }
         }
         return guardVal;
@@ -540,20 +554,26 @@ LogicalResult MachineOpConverter::dispatch() {
         // we initialize all the non-updated values to the corresponding
         // quantified variable assuming no action
         for (auto &op : outputReg->front()) {
-          auto *newOp = b.clone(op, mapping);
           // retrieve the updated values and update the corresponding value in
           // the map
-          if (isa<fsm::OutputOp>(newOp)) {
-            for (auto [id, operand] : llvm::enumerate(newOp->getOperands())) {
-              // convert
+          if (!isa<verif::AssertOp>(op)) {
+            auto *newOp = b.clone(op, mapping);
+            if (isa<fsm::OutputOp>(newOp)) {
+              for (auto [id, operand] : llvm::enumerate(newOp->getOperands())) {
+                // convert
 
-              auto convCast = UnrealizedConversionCastOp::create(
-                  b, loc, outputArgsOutsVarsVals[numArgs + id].getType(),
-                  operand);
+                auto convCast = UnrealizedConversionCastOp::create(
+                    b, loc, outputArgsOutsVarsVals[numArgs + id].getType(),
+                    operand);
 
-              castOutputVars.push_back(convCast->getResult(0));
+                castOutputVars.push_back(convCast->getResult(0));
+              }
+              newOp->erase();
             }
-            newOp->erase();
+          } else {
+            assertions.push_back({.stateId = transition.to,
+                .predicateFsm = op.getOperand(0),
+                .outputRegion = outputReg});
           }
         }
       }
@@ -564,7 +584,7 @@ LogicalResult MachineOpConverter::dispatch() {
     auto forall = smt::ForallOp::create(
         b, loc, transitionQuantified,
         [&](OpBuilder &b, Location loc,
-            ValueRange forallDoubledArgsOutputVarsInputs) -> Value {
+            ValueRange doubledQuantifiedVars) -> Value {
           SmallVector<Value> startingArgsOutsVars;
           SmallVector<Value> startingFunArgs;
           SmallVector<Value> arrivingArgsOutsVars;
@@ -573,18 +593,18 @@ LogicalResult MachineOpConverter::dispatch() {
           for (size_t i = 0; i < 2 * numArgs; i++) {
             if (i % 2 == 1)
               arrivingArgsOutsVars.push_back(
-                  forallDoubledArgsOutputVarsInputs[i]);
+                  doubledQuantifiedVars[i]);
             else
               startingArgsOutsVars.push_back(
-                  forallDoubledArgsOutputVarsInputs[i]);
+                  doubledQuantifiedVars[i]);
           }
           for (auto i = 2 * numArgs;
-               i < forallDoubledArgsOutputVarsInputs.size(); ++i) {
+               i < doubledQuantifiedVars.size(); ++i) {
             startingArgsOutsVars.push_back(
-                forallDoubledArgsOutputVarsInputs[i]);
+                doubledQuantifiedVars[i]);
             arrivingArgsOutsVars.push_back(
-                forallDoubledArgsOutputVarsInputs[i]);
-            startingFunArgs.push_back(forallDoubledArgsOutputVarsInputs[i]);
+                doubledQuantifiedVars[i]);
+            startingFunArgs.push_back(doubledQuantifiedVars[i]);
           }
 
           // the state function only takes outputs and variables as arguments
@@ -610,7 +630,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
           // increment time variable if necessary
           if (cfg.withTime) {
-            auto timeVal = forallDoubledArgsOutputVarsInputs.back();
+            auto timeVal = doubledQuantifiedVars.back();
             auto oneConst = smt::BVConstantOp::create(b, loc, 1, cfg.timeWidth);
             auto incrementedTime = smt::BVAddOp::create(
                 b, loc, timeVal.getType(), timeVal, oneConst);
@@ -628,6 +648,69 @@ LogicalResult MachineOpConverter::dispatch() {
     smt::AssertOp::create(b, loc, forall);
   }
 
+  for (auto pa : assertions) {
+    
+    auto forall = smt::ForallOp::create(
+        b, loc, quantifiableTypes,
+        [&](OpBuilder &b, Location loc,
+            ValueRange forallQuantified) -> Value {
+              
+        // map each SMT-quantified variable to a corresponding FSM variable or argument 
+        SmallVector<std::pair<mlir::Value, mlir::Value>> fsmToCast;
+        for (auto [idx, fq] : llvm::enumerate(forallQuantified)) {
+          if (idx < numArgs) { // arguments
+            auto convCast = UnrealizedConversionCastOp::create(
+                b, loc, fsmArgs[idx].getType(), fq);
+            fsmToCast.push_back({fsmArgs[idx], convCast->getResult(0)});
+          } else if (numArgs + numOut <= idx) { // variables, ignoring time
+            if (cfg.withTime && idx == forallQuantified.size() - 1)
+              break;
+            auto convCast = UnrealizedConversionCastOp::create(
+                b, loc, fsmVars[idx - numArgs - numOut].getType(), fq);
+            fsmToCast.push_back(
+                {fsmVars[idx - numArgs - numOut], convCast->getResult(0)});
+          }
+        }
+
+        // clone action region, replace FSM variables and arguments with the
+        // results of unrealized conversion casts, replace constants with their
+        // new clone
+        IRMapping mapping;
+        for (auto couple : fsmToCast) {
+          mapping.map(couple.first, couple.second);
+        }
+        for (auto &pair : constMapper.getValueMap()) {
+          mapping.map(pair.first, pair.second);
+        }
+
+        // we initialize all the non-updated values to the corresponding
+        // quantified variable assuming no action
+        for (auto &op : pa.outputRegion->front()) {
+          if (!isa<fsm::OutputOp>(op) && !isa<fsm::UpdateOp>(op) && !isa<fsm::ReturnOp>(op)) {
+            auto *newOp = b.clone(op, mapping);
+            // retrieve the updated values and update the corresponding value in
+            // the map
+            if (isa<verif::AssertOp>(newOp)) {
+              auto assertedVal = newOp->getOperand(0);
+              auto castVal = mlir::UnrealizedConversionCastOp::create(
+                b, loc, b.getType<smt::BitVectorType>(1), assertedVal);
+              // convert to SMT bool
+              auto toBool = smt::EqOp::create(b, loc, castVal.getResult(0), smt::BVConstantOp::create(b, loc, 1, 1));
+              auto inState = smt::ApplyFuncOp::create(
+                  b, loc, stateFunctions[pa.stateId], forallQuantified.drop_front(numArgs));
+              auto returnVal = smt::ImpliesOp::create(b, loc, inState, toBool);
+              newOp->erase();
+              return returnVal;
+              
+            }
+          }
+        }
+      }
+    );
+    smt::AssertOp::create(b, loc, forall);
+
+  }
+  
   smt::YieldOp::create(b, loc, typeRange, valueRange);
 
   machineOp.erase();
