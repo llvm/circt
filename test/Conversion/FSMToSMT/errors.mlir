@@ -42,3 +42,15 @@ fsm.machine @missing_init(%arg0: i8) -> (i8) attributes {initialState = "S0"} {
   }
 }
 
+
+// -----
+
+fsm.machine @comb_out(%arg0: i8) -> (i8) attributes {initialState = "S0"} {
+  %c0_i8 = hw.constant 0 : i8
+  // expected-error @below {{Operations other than constants are not supported outside FSM output, guard, and action regions.}}
+  %add = comb.add %arg0, %c0_i8 : i8
+  fsm.state @S0 output {
+    fsm.output %arg0 : i8
+  }
+}
+

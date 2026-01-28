@@ -8,6 +8,7 @@
 #include "circt/Conversion/FSMToSMT.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/FSM/FSMDialect.h"
 #include "circt/Dialect/FSM/FSMOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
@@ -230,9 +231,13 @@ LogicalResult MachineOpConverter::dispatch() {
 
   for (auto &op : machineOp.front().getOperations()) {
     // if the operation is in comb dialect
-    if (isa<comb::CombDialect>(op.getDialect()))
-      mlir::emitError(loc, "Comb operations are not supported outside FSM "
-                           "output, guard, and action regions.");
+    if (!isa<fsm::FSMDialect>(op.getDialect()) &&
+        !isa<hw::HWDialect>(op.getDialect())) {
+      op.emitError(
+          "Operations other than constants are not supported outside FSM "
+          "output, guard, and action regions.");
+      return failure();
+    }
   }
 
   // Add a time variable if necessary
