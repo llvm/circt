@@ -2254,3 +2254,25 @@ circuit Domains:
 
     ; CHECK: firrtl.domain.define %C, %foo_A
     domain_define C = foo.A
+
+;// -----
+FIRRTL version 6.0.0
+circuit UnknownProperties:
+  class Foo:
+    skip
+
+  ; CHECK-LABEL: firrtl.module @UnknownProperties
+  public module UnknownProperties:
+    output a: Integer
+    output b: String
+    output c: Inst<Foo>
+
+    ; CHECK:      %[[#INTEGER:]] = firrtl.unknown : !firrtl.integer
+    ; CHECK-NEXT: firrtl.propassign %a, %[[#INTEGER]] : !firrtl.integer
+    propassign a, Unknown: Integer
+    ; CHECK:      %[[#STRING:]] = firrtl.unknown : !firrtl.string
+    ; CHECK-NEXT: firrtl.propassign %b, %[[#STRING]] : !firrtl.string
+    propassign b, Unknown: String
+    ; CHECK:      %[[#INSTANCE:]] = firrtl.unknown : !firrtl.class<@Foo()>
+    ; CHECK-NEXT: firrtl.propassign %c, %[[#INSTANCE]] : !firrtl.class<@Foo()>
+    propassign c, Unknown: Inst<Foo>
