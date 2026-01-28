@@ -1806,6 +1806,10 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   std::string instanceName = calyx::getInstanceName(callOp);
   calyx::InstanceOp instanceOp =
       getState<ComponentLoweringState>().getInstance(instanceName);
+  // No instance found - this happens when calling an external function (which
+  // was already reported by BuildCallInstance). Just return failure silently.
+  if (!instanceOp)
+    return failure();
   SmallVector<Value, 4> outputPorts;
   auto portInfos = instanceOp.getReferencedComponent().getPortInfo();
   for (auto [idx, portInfo] : enumerate(portInfos)) {
@@ -1890,6 +1894,11 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
   LogicalResult
   partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
+    // Skip external function declarations (functions without a body).
+    // These cannot be lowered to Calyx components.
+    if (funcOp.isExternal())
+      return success();
+
     /// Maintain a mapping between funcOp input arguments and the port index
     /// which the argument will eventually map to.
     DenseMap<Value, unsigned> funcOpArgRewrites;
@@ -2666,10 +2675,15 @@ public:
       topLevelFunction = topLevelFunctionOpt;
     } else {
       /// No top level function set; infer top level if the module only contains
-      /// a single function, else, throw error.
+      /// a single non-external function, else, throw error.
       auto funcOps = moduleOp.getOps<FuncOp>();
-      if (std::distance(funcOps.begin(), funcOps.end()) == 1)
-        topLevelFunction = (*funcOps.begin()).getSymName().str();
+      SmallVector<FuncOp> definedFuncs;
+      for (auto funcOp : funcOps) {
+        if (!funcOp.isExternal())
+          definedFuncs.push_back(funcOp);
+      }
+      if (definedFuncs.size() == 1)
+        topLevelFunction = definedFuncs.front().getSymName().str();
       else {
         moduleOp.emitError()
             << "Module contains multiple functions, but no top level "

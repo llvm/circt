@@ -520,6 +520,10 @@ FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern(
 LogicalResult
 FuncOpPartialLoweringPattern::partiallyLower(mlir::func::FuncOp funcOp,
                                              PatternRewriter &rewriter) const {
+  // Skip external function declarations - they have no body to lower.
+  if (funcOp.isExternal())
+    return success();
+
   // Initialize the component op references if a calyx::ComponentOp has been
   // created for the matched funcOp.
   if (auto it = functionMapping.find(funcOp); it != functionMapping.end()) {
@@ -843,8 +847,20 @@ BuildReturnRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
 LogicalResult
 BuildCallInstance::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
                                             PatternRewriter &rewriter) const {
+  LogicalResult result = success();
   funcOp.walk([&](mlir::func::CallOp callOp) {
     ComponentOp componentOp = getCallComponent(callOp);
+    if (!componentOp) {
+      // External function calls (functions without a body/definition) are not
+      // supported. Emit a proper error message instead of crashing.
+      callOp.emitOpError()
+          << "cannot lower call to external function '"
+          << callOp.getCallee()
+          << "'. SCFToCalyx only supports calls to functions defined within "
+             "the same module";
+      result = failure();
+      return WalkResult::interrupt();
+    }
     SmallVector<Type, 8> resultTypes;
     for (auto type : componentOp.getArgumentTypes())
       resultTypes.push_back(type);
@@ -861,9 +877,9 @@ BuildCallInstance::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
                          instanceName, componentOp.getName());
       getState().addInstance(instanceName, instanceOp);
     }
-    WalkResult::advance();
+    return WalkResult::advance();
   });
-  return success();
+  return result;
 }
 
 ComponentOp
