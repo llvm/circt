@@ -964,10 +964,11 @@ struct RuntimeModelOpLowering
   matchAndRewrite(arc::RuntimeModelOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
 
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto modelInfoStructType = LLVM::LLVMStructType::getLiteral(
-        getContext(), {rewriter.getI64Type(), rewriter.getI64Type(),
-                       LLVM::LLVMPointerType::get(getContext())});
-    static_assert(sizeof(ArcRuntimeModelInfo) == 24 &&
+        getContext(),
+        {rewriter.getI64Type(), rewriter.getI64Type(), ptrTy, ptrTy});
+    static_assert(sizeof(ArcRuntimeModelInfo) == 32 &&
                   "Unexpected size of ArcRuntimeModelInfo struct");
 
     // Construct the Model Name String GlobalOp
@@ -1004,6 +1005,8 @@ struct RuntimeModelOpLowering
                                                      op.getNumStateBytesAttr());
     auto nameAddr =
         LLVM::AddressOfOp::create(rewriter, op.getLoc(), nameGlobal);
+    // TODO: Implement lowering
+    Value traceInfoPtr = LLVM::ZeroOp::create(rewriter, op.getLoc(), ptrTy);
     Value initStruct =
         LLVM::PoisonOp::create(rewriter, op.getLoc(), modelInfoStructType);
 
@@ -1023,6 +1026,11 @@ struct RuntimeModelOpLowering
                                              nameAddr, ArrayRef<int64_t>{2});
     static_assert(offsetof(ArcRuntimeModelInfo, modelName) == 16,
                   "Unexpected offset of field modelName");
+    // Field: struct ArcModelTraceInfo *traceInfo
+    initStruct = LLVM::InsertValueOp::create(
+        rewriter, op.getLoc(), initStruct, traceInfoPtr, ArrayRef<int64_t>{3});
+    static_assert(offsetof(ArcRuntimeModelInfo, traceInfo) == 24,
+                  "Unexpected offset of field traceInfo");
 
     LLVM::ReturnOp::create(rewriter, op.getLoc(), initStruct);
 

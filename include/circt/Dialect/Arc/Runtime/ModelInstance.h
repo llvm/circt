@@ -18,6 +18,10 @@
 
 #include "circt/Dialect/Arc/Runtime/ArcRuntime.h"
 #include "circt/Dialect/Arc/Runtime/Common.h"
+#include "circt/Dialect/Arc/Runtime/TraceEncoder.h"
+
+#include <memory>
+#include <string>
 
 namespace circt {
 namespace arc {
@@ -35,17 +39,20 @@ public:
     return !!modelInfo->modelName ? modelInfo->modelName : "<NULL>";
   }
 
-  void onInitialized();
-  void onEval() { ++stepCounter; }
+  void onInitialized(ArcState *mutableState);
+  void onEval(ArcState *mutableState);
+  uint64_t *swapTraceBuffer();
 
 private:
   void parseArgs(const char *args);
 
   const uint64_t instanceID;
   const ArcRuntimeModelInfo *const modelInfo;
-  ArcState *const state;
+  const ArcState *const state;
+  enum class TraceMode { DUMMY };
+  TraceMode traceMode;
+  std::unique_ptr<TraceEncoder> traceEncoder;
   bool verbose = false;
-
   uint64_t stepCounter = 0;
 };
 
