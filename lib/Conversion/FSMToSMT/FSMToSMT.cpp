@@ -461,7 +461,6 @@ LogicalResult MachineOpConverter::dispatch() {
 
     // return an SMT value for the transition's guard
     auto guard = [&](SmallVector<Value> actionArgsOutsVarsVals) -> Value {
-      if (transition.hasGuard) {
         // map each SME-quantified variable to a corresponding FSM variable or
         // argument
         SmallVector<std::pair<mlir::Value, mlir::Value>> fsmToCast;
@@ -509,9 +508,6 @@ LogicalResult MachineOpConverter::dispatch() {
           }
         }
         return guardVal;
-      }
-      // return true if the transition has no guard
-      return smt::BoolConstantOp::create(b, loc, true);
     };
 
     // return a SmallVector of output SMT values for the arriving state
@@ -537,8 +533,8 @@ LogicalResult MachineOpConverter::dispatch() {
       }
       // retrieve action region
       SmallVector<Value> castOutputVars;
+      
 
-      if (transition.hasOutput) {
 
         auto *outputReg = transition.output;
 
@@ -580,9 +576,9 @@ LogicalResult MachineOpConverter::dispatch() {
             newOp->erase();
           }
         }
-      }
-
+        
       return castOutputVars;
+        
     };
 
     auto forall = smt::ForallOp::create(
@@ -611,18 +607,21 @@ LogicalResult MachineOpConverter::dispatch() {
               b, loc, stateFunctions[transition.from], startingFunArgs);
 
           auto updatedCastVals = action(startingArgsOutsVars);
+          
 
-          auto guardVal = guard(startingArgsOutsVars);
+
+          
 
           // copy all updated variables, ignoring time (if present)
           for (size_t i = 0; i < numVars; i++) {
             arrivingArgsOutsVars[numArgs + numOut + i] = updatedCastVals[i];
           }
           
-          auto outputCastVals = output(arrivingArgsOutsVars);
-          
-          for (auto o : outputCastVals) {
-            arrivingFunArgs.push_back(o);
+          if (transition.hasOutput) {
+            auto outputCastVals = output(arrivingArgsOutsVars);
+            for (auto o : outputCastVals) {
+              arrivingFunArgs.push_back(o);
+          }
           }
           
           for (auto u : updatedCastVals)
@@ -639,10 +638,14 @@ LogicalResult MachineOpConverter::dispatch() {
 
           auto rhs = smt::ApplyFuncOp::create(
               b, loc, stateFunctions[transition.to], arrivingFunArgs);
-
-          auto guardedlhs = smt::AndOp::create(b, loc, lhs, guardVal);
-
-          return smt::ImpliesOp::create(b, loc, guardedlhs, rhs);
+              
+          if (transition.hasGuard) {
+            auto guardVal = guard(startingArgsOutsVars);
+            auto guardedlhs = smt::AndOp::create(b, loc, lhs, guardVal);
+            return smt::ImpliesOp::create(b, loc, guardedlhs, rhs);
+            
+          }
+          return smt::ImpliesOp::create(b, loc, lhs, rhs);
         });
 
     smt::AssertOp::create(b, loc, forall);
