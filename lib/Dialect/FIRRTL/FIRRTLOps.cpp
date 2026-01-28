@@ -4890,6 +4890,28 @@ LogicalResult VectorCreateOp::verify() {
   return success();
 }
 
+LogicalResult
+UnknownValueOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Unknown values of non-class type don't need to be verified.
+  auto classType = dyn_cast<ClassType>(getType());
+  if (!classType)
+    return success();
+
+  auto className = classType.getNameAttr();
+  // Verify that the symbol exists.
+  Operation *op = symbolTable.lookupNearestSymbolFrom(*this, className);
+  if (!op)
+    return emitOpError() << "refers to non-existent class ("
+                         << className.getAttr() << ")";
+
+  // Verify that the symbol is on a classlike.
+  if (!isa<ClassLike>(op))
+    return emitOpError() << "refers to a non-class type ("
+                         << className.getAttr() << ")";
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // FEnumCreateOp
 //===----------------------------------------------------------------------===//

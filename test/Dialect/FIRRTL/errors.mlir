@@ -3278,3 +3278,23 @@ firrtl.circuit "UndefinedDomainInAnonDomain" {
     %0 = firrtl.domain.anon : !firrtl.domain of @Foo
   }
 }
+
+
+// -----
+
+firrtl.circuit "UnknownValueReferencesUnknownClass" {
+  firrtl.module @UnknownValueReferencesUnknownClass() {
+    // expected-error @below {{refers to non-existent class ("Missing")}}
+    %0 = firrtl.unknown : !firrtl.class<@Missing()>
+  }
+}
+
+// -----
+
+firrtl.circuit "UnknownValueReferencesNonClass" {
+  firrtl.extmodule @Foo()
+  firrtl.module @UnknownValueReferencesNonClass() {
+    // expected-error @below {{refers to a non-class type ("Foo")}}
+    %0 = firrtl.unknown : !firrtl.class<@Foo()>
+  }
+}

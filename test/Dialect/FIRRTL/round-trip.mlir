@@ -155,6 +155,17 @@ firrtl.module @PropertyListOps() {
   %concat = firrtl.list.concat %l0, %l1 : !firrtl.list<integer>
 }
 
+firrtl.class @UnknownValueChild() {}
+// CHECK-LABEL: firrtl.module @UnknownValueOp
+firrtl.module @UnknownValueOp() {
+  // CHECK-NEXT: %0 = firrtl.unknown : !firrtl.integer
+  %0 = firrtl.unknown : !firrtl.integer
+  // CHECK-NEXT: %1 = firrtl.unknown : !firrtl.string
+  %1 = firrtl.unknown : !firrtl.string
+  // CHECK-NEXT: %2 = firrtl.unknown : !firrtl.class<@UnknownValueChild()>
+  %2 = firrtl.unknown : !firrtl.class<@UnknownValueChild()>
+}
+
 firrtl.formal @myFormalTestA, @Top {}
 firrtl.formal @myFormalTestB, @Top {bound = 42 : i19}
 firrtl.formal @myFormalTestC, @Top {} attributes {foo}
