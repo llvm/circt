@@ -159,6 +159,7 @@ struct GlobalRuntimeContext {
         fn->llvmFuncOp->erase();
   }
 
+  /// Map a type to its corresponding data type in the trace buffer
   static Type getTraceExtendedType(Type stateType) {
     auto numBits = stateType.getIntOrFloatBitWidth();
     auto numQWords = std::max((numBits + 63) / 64, 1U);
@@ -171,8 +172,11 @@ struct GlobalRuntimeContext {
   LogicalResult buildRuntimeModelOps();
   /// Find and assign instances of the registered models within the root module
   LogicalResult collectInstances();
+  /// Collect tapped StateWriteOps, assign them to their model, and build the
+  /// trace instrumentation functions for the required types
   LogicalResult buildTraceInstrumentation();
 
+  /// Lookup the trace instrumentation function for the given (extended) type
   LLVM::LLVMFuncOp getTraceInstrumentFn(Type ty) const {
     assert(ty.getIntOrFloatBitWidth() % 64 == 0);
     auto fn = traceInstrumentationFns.find(ty);
@@ -235,8 +239,9 @@ struct RuntimeModelContext {
 
   bool hasTraceTaps() { return runtimeModelOp.getTraceTaps().has_value(); }
 
+  /// Insert calls to the trace instrumentation functions for tapped state
+  /// writes
   LogicalResult insertTraceInstrumentation();
-
   /// Insert runtime calls to the model and its instances
   LogicalResult lower();
 
@@ -250,6 +255,7 @@ struct RuntimeModelContext {
   SmallVector<SimInstantiateOp> instances;
   /// The model's corresponding RuntimeModelOp
   RuntimeModelOp runtimeModelOp;
+  // StateWrite ops referring to one of this model's trace taps
   SmallVector<StateWriteOp> tappedWrites;
 
 private:
@@ -329,18 +335,18 @@ LogicalResult GlobalRuntimeContext::buildTraceInstrumentation() {
 // Pseudocode of the constructed function:
 //
 //
-// void _arc_trace_instrument_i{BW}(uint8_t *simState, uint64_t traceTapId,
+// void _arc_trace_instrument_i{BW}(uint8_t *modelState, uint64_t traceTapId,
 //                                   uint{BW}_t newValue) {
 //   // BB: "capcaityCheckBlock"
 //   const uint32_t reqSize = {BW} / 64 + 1;
-//   ArcState *runtimeState = (ArcState*)(simState - sizeof(ArcState));
+//   ArcState *runtimeState = (ArcState*)(modelState - sizeof(ArcState));
 //   uint64_t *oldBuffer = runtimeState->traceBuffer;
 //   const uint32_t oldSize = runtimeState->traceBufferSize;
 //   uint32_t newSize = oldSize + reqSize;
 //   uint64_t *storePtr = &oldBuffer[oldSize];
 //   if (newSize >= runtime::defaultTraceBufferCapacity) [[unlikely]] {
 //     // BB: "swapBufferBlock"
-//     storePtr = arcRuntimeIR_swapBuffer(simState);
+//     storePtr = arcRuntimeIR_swapTraceBuffer(modelState);
 //     runtimeState->traceBuffer = storePtr;
 //     newSize = reqSize;
 //   }
@@ -385,15 +391,15 @@ void GlobalRuntimeContext::buildTraceInstrumentationFn(Type ty) {
   // newSize
   bufferStoreBlock->addArgument(i32Ty, globalBuilder.getLoc());
 
+  // --- capcaityCheckBlock ---
   globalBuilder.setInsertionPointToStart(capcaityCheckBlock);
-
-  auto statePtr = capcaityCheckBlock->getArgument(0);
+  auto modelStatePtr = capcaityCheckBlock->getArgument(0);
   auto bufferPtrPtr = LLVM::GEPOp::create(
-      globalBuilder, llvmPtrTy, globalBuilder.getI8Type(), statePtr,
+      globalBuilder, llvmPtrTy, globalBuilder.getI8Type(), modelStatePtr,
       {LLVM::GEPArg(static_cast<int>(offsetof(ArcState, traceBuffer)) -
                     static_cast<int>(sizeof(ArcState)))});
   auto bufferSizePtr = LLVM::GEPOp::create(
-      globalBuilder, llvmPtrTy, globalBuilder.getI8Type(), statePtr,
+      globalBuilder, llvmPtrTy, globalBuilder.getI8Type(), modelStatePtr,
       {LLVM::GEPArg(static_cast<int>(offsetof(ArcState, traceBufferSize)) -
                     static_cast<int>(sizeof(ArcState)))});
   // > const uint32_t reqSize = {BW} / 64 + 1;
@@ -425,15 +431,17 @@ void GlobalRuntimeContext::buildTraceInstrumentationFn(Type ty) {
       /*weights*/
       std::pair<int32_t, int32_t>(0, std::numeric_limits<int32_t>::max()));
 
+  // --- swapBufferBlock ---
   globalBuilder.setInsertionPointToStart(swapBufferBlock);
-  // > storePtr = arcRuntimeIR_swapBuffer(simState);
+  // > storePtr = arcRuntimeIR_swapTraceBuffer(modelState);
   auto swapCall = LLVM::CallOp::create(
-      globalBuilder, swapTraceBufferFn.llvmFuncOp, {statePtr});
+      globalBuilder, swapTraceBufferFn.llvmFuncOp, {modelStatePtr});
   // > runtimeState->traceBuffer = storePtr;
   LLVM::StoreOp::create(globalBuilder, swapCall.getResult(), bufferPtrPtr);
   LLVM::BrOp::create(globalBuilder, {swapCall.getResult(), reqSizeCst},
                      bufferStoreBlock);
 
+  // --- bufferStoreBlock ---
   globalBuilder.setInsertionPointToStart(bufferStoreBlock);
   // > storePtr[0] = traceTapId;
   LLVM::StoreOp::create(globalBuilder, capcaityCheckBlock->getArgument(1),

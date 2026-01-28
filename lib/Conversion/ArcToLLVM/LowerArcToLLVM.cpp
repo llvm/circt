@@ -971,6 +971,7 @@ buildGlobalConstantIntArray(OpBuilder &builder, Location loc, Twine symName,
   return globalOp;
 }
 
+// Construct a raw constant byte array from a vector of struct values
 template <typename T>
 static LLVM::GlobalOp
 buildGlobalConstantRuntimeStructArray(OpBuilder &builder, Location loc,
@@ -996,6 +997,7 @@ struct RuntimeModelOpLowering
 
   static constexpr uint64_t runtimeApiVersion = ARC_RUNTIME_API_VERSION;
 
+  // Build the constant ArcModelTraceInfo struct and its members
   LLVM::GlobalOp
   buildTraceInfoStruct(arc::RuntimeModelOp &op,
                        ConversionPatternRewriter &rewriter) const {
@@ -1021,13 +1023,20 @@ struct RuntimeModelOpLowering
       tapStruct.reserved = 0;
       tapArray.emplace_back(tapStruct);
     }
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto namesGlobal = buildGlobalConstantIntArray(
         rewriter, op.getLoc(), "_arc_tap_names_" + op.getName(), namesArray);
     auto traceTapsArrayGlobal = buildGlobalConstantRuntimeStructArray(
         rewriter, op.getLoc(), "_arc_trace_taps_" + op.getName(), tapArray);
 
-    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
-    // struct ArcModelTraceInfo
+    //
+    //  struct ArcModelTraceInfo {
+    //    uint64_t numTraceTaps;
+    //    struct ArcTraceTap *traceTaps;
+    //    const char *traceTapNames;
+    //    uint64_t traceBufferCapacity;
+    //  };
+    //
     auto traceInfoStructType = LLVM::LLVMStructType::getLiteral(
         getContext(),
         {rewriter.getI64Type(), ptrTy, ptrTy, rewriter.getI64Type()});
