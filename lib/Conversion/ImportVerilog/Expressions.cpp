@@ -195,12 +195,12 @@ struct ExprVisitor {
     auto resultType =
         isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type)) : type;
     auto range = expr.value().type->getFixedRange();
-    if (auto *constValue = expr.selector().getConstant();
-        constValue && constValue->isInteger()) {
-      assert(!constValue->hasUnknown());
-      assert(constValue->size() <= 32);
+    auto constValue = context.evaluateConstant(expr.selector());
+    if (constValue.isInteger()) {
+      assert(!constValue.hasUnknown());
+      assert(constValue.size() <= 32);
 
-      auto lowBit = constValue->integer().as<uint32_t>().value();
+      auto lowBit = constValue.integer().as<uint32_t>().value();
       if (isLvalue)
         return moore::ExtractRefOp::create(builder, loc, resultType, value,
                                            range.translateIndex(lowBit));
@@ -242,10 +242,12 @@ struct ExprVisitor {
 
     std::optional<int32_t> constLeft;
     std::optional<int32_t> constRight;
-    if (auto *constant = expr.left().getConstant())
-      constLeft = constant->integer().as<int32_t>();
-    if (auto *constant = expr.right().getConstant())
-      constRight = constant->integer().as<int32_t>();
+    auto leftConst = context.evaluateConstant(expr.left());
+    if (leftConst.isInteger())
+      constLeft = leftConst.integer().as<int32_t>();
+    auto rightConst = context.evaluateConstant(expr.right());
+    if (rightConst.isInteger())
+      constRight = rightConst.integer().as<int32_t>();
 
     // We currently require the right-hand-side of the range to be constant.
     // This catches things like `[42:$]` which we don't support at the moment.
