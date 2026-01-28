@@ -39,7 +39,6 @@ namespace firrtl {
 using namespace mlir;
 using namespace circt;
 using namespace circt::firrtl;
-using namespace circt::om;
 
 namespace {
 
@@ -226,7 +225,8 @@ private:
                       const PathInfoTable &pathInfoTable);
   void lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
                   const PathInfoTable &pathInfoTable);
-  void lowerClassExtern(ClassExternOp classExternOp, FModuleLike moduleLike);
+  void lowerClassExtern(om::ClassExternOp classExternOp,
+                        FModuleLike moduleLike);
 
   // Update Object instantiations in a FIRRTL Module or OM Class.
   LogicalResult updateInstances(Operation *op, InstanceGraph &instanceGraph,
@@ -1165,7 +1165,7 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
   Block *moduleBody = &moduleLike->getRegion(0).front();
   Block *classBody = &classOp->getRegion(0).emplaceBlock();
   // Every class created from a module gets a base path as its first parameter.
-  auto basePathType = BasePathType::get(&getContext());
+  auto basePathType = om::BasePathType::get(&getContext());
   auto unknownLoc = UnknownLoc::get(&getContext());
   classBody->addArgument(basePathType, unknownLoc);
 
@@ -1228,7 +1228,7 @@ void LowerClassesPass::lowerClass(om::ClassOp classOp, FModuleLike moduleLike,
   // Port erasure for the `moduleLike` is handled centrally in `runOnOperation`.
 }
 
-void LowerClassesPass::lowerClassExtern(ClassExternOp classExternOp,
+void LowerClassesPass::lowerClassExtern(om::ClassExternOp classExternOp,
                                         FModuleLike moduleLike) {
   // Construct the OM Class body.
   // Add a block arguments for each input property.
@@ -1236,7 +1236,7 @@ void LowerClassesPass::lowerClassExtern(ClassExternOp classExternOp,
   Block *classBody = &classExternOp.getRegion().emplaceBlock();
 
   // Every class gets a base path as its first parameter.
-  classBody->addArgument(BasePathType::get(&getContext()),
+  classBody->addArgument(om::BasePathType::get(&getContext()),
                          UnknownLoc::get(&getContext()));
 
   for (unsigned i = 0, e = moduleLike.getNumPorts(); i < e; ++i) {
@@ -1461,7 +1461,7 @@ updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
         firrtlInstance.getPortNameAttr(result.getResultNumber()))});
 
     // Create the field access.
-    auto objectField = ObjectFieldOp::create(
+    auto objectField = om::ObjectFieldOp::create(
         builder, object.getLoc(), result.getType(), object, objectFieldPath);
 
     result.replaceAllUsesWith(objectField);
@@ -1881,7 +1881,7 @@ struct AnyCastOpConversion : public OpConversionPattern<ObjectAnyRefCastOp> {
   LogicalResult
   matchAndRewrite(ObjectAnyRefCastOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<AnyCastOp>(op, adaptor.getInput());
+    rewriter.replaceOpWithNewOp<om::AnyCastOp>(op, adaptor.getInput());
     return success();
   }
 };
@@ -1926,14 +1926,14 @@ struct ObjectSubfieldOpConversion
   const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable;
 };
 
-struct ClassFieldsOpConversion : public OpConversionPattern<ClassFieldsOp> {
+struct ClassFieldsOpConversion : public OpConversionPattern<om::ClassFieldsOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(ClassFieldsOp op, OpAdaptor adaptor,
+  matchAndRewrite(om::ClassFieldsOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<ClassFieldsOp>(op, adaptor.getOperands(),
-                                               adaptor.getFieldLocsAttr());
+    rewriter.replaceOpWithNewOp<om::ClassFieldsOp>(op, adaptor.getOperands(),
+                                                   adaptor.getFieldLocsAttr());
     return success();
   }
 };
@@ -2002,11 +2002,11 @@ struct ClassExternOpSignatureConversion
   }
 };
 
-struct ObjectFieldOpConversion : public OpConversionPattern<ObjectFieldOp> {
+struct ObjectFieldOpConversion : public OpConversionPattern<om::ObjectFieldOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(ObjectFieldOp op, OpAdaptor adaptor,
+  matchAndRewrite(om::ObjectFieldOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Replace the object field with a new object field of the appropriate
     // result type based on the type converter.
@@ -2014,8 +2014,8 @@ struct ObjectFieldOpConversion : public OpConversionPattern<ObjectFieldOp> {
     if (!type)
       return failure();
 
-    rewriter.replaceOpWithNewOp<ObjectFieldOp>(op, type, adaptor.getObject(),
-                                               adaptor.getFieldPathAttr());
+    rewriter.replaceOpWithNewOp<om::ObjectFieldOp>(
+        op, type, adaptor.getObject(), adaptor.getFieldPathAttr());
 
     return success();
   }
@@ -2052,7 +2052,7 @@ static void populateConversionTarget(ConversionTarget &target) {
       [](Operation *op) { return !op->getParentOfType<om::ClassLike>(); });
 
   // OM dialect operations are legal if they don't use FIRRTL types.
-  target.addDynamicallyLegalDialect<OMDialect>([](Operation *op) {
+  target.addDynamicallyLegalDialect<om::OMDialect>([](Operation *op) {
     auto containsFIRRTLType = [](Type type) {
       return type
           .walk([](Type type) {
@@ -2093,13 +2093,14 @@ static void populateConversionTarget(ConversionTarget &target) {
 
 static void populateTypeConverter(TypeConverter &converter) {
   // Convert FIntegerType to IntegerType.
-  converter.addConversion(
-      [](IntegerType type) { return OMIntegerType::get(type.getContext()); });
+  converter.addConversion([](IntegerType type) {
+    return om::OMIntegerType::get(type.getContext());
+  });
   converter.addConversion([](FIntegerType type) {
     // The actual width of the IntegerType doesn't actually get used; it will be
     // folded away by the dialect conversion infrastructure to the type of the
     // APSIntAttr used in the FIntegerConstantOp.
-    return OMIntegerType::get(type.getContext());
+    return om::OMIntegerType::get(type.getContext());
   });
 
   // Convert FIRRTL StringType to OM StringType.
