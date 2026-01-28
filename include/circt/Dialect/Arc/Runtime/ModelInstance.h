@@ -20,6 +20,7 @@
 #include "circt/Dialect/Arc/Runtime/Common.h"
 #include "circt/Dialect/Arc/Runtime/TraceEncoder.h"
 
+#include <filesystem>
 #include <memory>
 #include <string>
 
@@ -45,11 +46,12 @@ public:
 
 private:
   void parseArgs(const char *args);
+  std::filesystem::path getTraceFilePath(const std::string &suffix);
 
   const uint64_t instanceID;
   const ArcRuntimeModelInfo *const modelInfo;
   const ArcState *const state;
-  enum class TraceMode { DUMMY };
+  enum class TraceMode { DUMMY, VCD };
   TraceMode traceMode;
   std::unique_ptr<TraceEncoder> traceEncoder;
   bool verbose = false;
