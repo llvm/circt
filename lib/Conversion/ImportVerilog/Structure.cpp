@@ -1767,9 +1767,8 @@ Context::convertClassDeclaration(const slang::ast::ClassType &classdecl) {
   if (classdecl.getBaseClass()) {
     if (const auto *baseClassDecl =
             classdecl.getBaseClass()->as_if<slang::ast::ClassType>()) {
-      if (failed(convertClassDeclaration(*baseClassDecl))) {
+      if (failed(convertClassDeclaration(*baseClassDecl)))
         return failure();
-      }
     }
   }
 
