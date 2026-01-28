@@ -131,11 +131,11 @@ private:
     // argument
     SmallVector<std::pair<mlir::Value, mlir::Value>> fsmToCast;
     for (auto [idx, fq] : llvm::enumerate(smtValues)) {
-      if (idx < numArgs) { // arguments
+      if (int(idx) < numArgs) { // arguments
         auto convCast = UnrealizedConversionCastOp::create(
             b, loc, fsmArgs[idx].getType(), fq);
         fsmToCast.push_back({fsmArgs[idx], convCast->getResult(0)});
-      } else if (numArgs + numOut <= idx) { // variables
+      } else if (numArgs + numOut <= int(idx)) { // variables
         if (cfg.withTime && idx == smtValues.size() - 1)
           break;
         auto convCast = UnrealizedConversionCastOp::create(
