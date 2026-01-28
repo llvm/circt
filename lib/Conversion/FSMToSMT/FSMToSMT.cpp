@@ -21,6 +21,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Operation.h"
@@ -39,6 +40,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TableGen/Error.h"
 
 #include <cassert>
 #include <cstdlib>
@@ -464,8 +466,7 @@ LogicalResult MachineOpConverter::dispatch() {
               newOp->erase();
             }
           } else {
-            assertions.push_back(
-                {.stateId = transition.to, .outputRegion = actionReg});
+            mlir::emitWarning(loc, "Assertions in action regions are ignored.");
             newOp->erase();
           }
         }
@@ -496,8 +497,7 @@ LogicalResult MachineOpConverter::dispatch() {
             newOp->erase();
           }
         } else {
-          assertions.push_back(
-              {.stateId = transition.from, .outputRegion = transition.guard});
+          mlir::emitWarning(loc, "Assertions in guard regions are ignored.");
           newOp->erase();
         }
       }
