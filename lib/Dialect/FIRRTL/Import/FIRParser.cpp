@@ -1964,6 +1964,7 @@ private:
   ParseResult parseListConcatExp(Value &result);
   ParseResult parseCatExp(Value &result);
   ParseResult parseUnsafeDomainCast(Value &result);
+  ParseResult parseUnknownProperty(Value &result);
 
   template <typename T, size_t M, size_t N, size_t... Ms, size_t... Ns>
   ParseResult parsePrim(std::index_sequence<Ms...>, std::index_sequence<Ns...>,
@@ -2345,6 +2346,11 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
   case FIRToken::lp_unsafe_domain_cast:
     if (requireFeature(nextFIRVersion, "unsafe_domain_cast") ||
         parseUnsafeDomainCast(result))
+      return failure();
+    break;
+  case FIRToken::kw_Unknown:
+    if (requireFeature(nextFIRVersion, "unknown property expressions") ||
+        parseUnknownProperty(result))
       return failure();
     break;
 
@@ -2773,6 +2779,20 @@ ParseResult FIRStmtParser::parseUnsafeDomainCast(Value &result) {
 
   locationProcessor.setLoc(loc);
   result = UnsafeDomainCastOp::create(builder, input, domains);
+  return success();
+}
+
+ParseResult FIRStmtParser::parseUnknownProperty(Value &result) {
+  consumeToken(FIRToken::kw_Unknown);
+
+  auto loc = getToken().getLoc();
+  PropertyType type;
+  if (parseToken(FIRToken::colon, "expected ':' in unknown property") ||
+      parsePropertyType(type, "expected property type"))
+    return failure();
+
+  locationProcessor.setLoc(loc);
+  result = UnknownValueOp::create(builder, type);
   return success();
 }
 
