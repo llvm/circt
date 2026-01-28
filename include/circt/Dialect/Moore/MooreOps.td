@@ -825,8 +825,11 @@ def ToBuiltinBoolOp : MooreOp<"to_builtin_bool", [Pure]> {
 }
 
 def ToBuiltinIntOp : MooreOp<"to_builtin_int", [Pure,
-  DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>]> {
-  let summary = "Convert a `!moore.i<n>` to a builtin `i<n>`";
+  TypesMatchWith<"result is builtin integer matching input type",
+    "input", "result", [{
+    IntegerType::get($_self.getContext(), cast<IntType>($_self).getWidth())
+  }]>
+]> {  let summary = "Convert a `!moore.i<n>` to a builtin `i<n>`";
   let description = [{
     Maps `X` and `Z` bits to 0, and passes through 1 and 0 bits unchanged.
   }];
