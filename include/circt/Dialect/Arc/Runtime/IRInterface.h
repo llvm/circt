@@ -105,10 +105,18 @@ arcRuntimeIR_format(const circt::arc::runtime::FmtDescriptor *fmt, ...);
 /// `traceBufferCapacity` x uint64_t size, which will become the new active
 /// trace buffer.
 ARC_IR_EXPORT uint64_t *arcRuntimeIR_swapTraceBuffer(const uint8_t *modelState);
+
+//// Initializes a DynamicString.
+// Makes a heap-allocated copy of `initialValue` and stores the buffer pointer
+// and length in `str`.
 ARC_IR_EXPORT void
 arcRuntimeIR_stringInit(circt::arc::runtime::DynamicString *str,
                         const char *initialValue);
 
+// Concatenates multiple strings into a DynamicString.
+// Allocates a new heap buffer containing the concatenation of all provided
+// string pointers (terminated by a null pointer) passed as the variadic
+// arguments and stores the result’s buffer pointer and length in `outStr`.
 ARC_IR_EXPORT void
 arcRuntimeIR_stringConcat(circt::arc::runtime::DynamicString *outStr, ...);
 

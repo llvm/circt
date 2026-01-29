@@ -247,9 +247,9 @@ namespace circt::arc::runtime {
 
 static const APICallbacks apiCallbacksGlobal{
     &arcRuntimeIR_allocInstance, &arcRuntimeIR_deleteInstance,
-    &arcRuntimeIR_onEval,               &arcRuntimeIR_onInitialized,
-    &arcRuntimeIR_format,
-           &arcRuntimeIR_swapTraceBuffer, &arcRuntimeIR_stringInit,    &arcRuntimeIR_stringConcat};
+    &arcRuntimeIR_onEval,        &arcRuntimeIR_onInitialized,
+    &arcRuntimeIR_format,        &arcRuntimeIR_swapTraceBuffer,
+    &arcRuntimeIR_stringInit,    &arcRuntimeIR_stringConcat};
 
 const APICallbacks &getArcRuntimeAPICallbacks() { return apiCallbacksGlobal; }
 
