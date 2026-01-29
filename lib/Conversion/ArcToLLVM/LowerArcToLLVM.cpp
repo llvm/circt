@@ -15,6 +15,7 @@
 #include "circt/Dialect/Arc/Runtime/Common.h"
 #include "circt/Dialect/Arc/Runtime/FmtDescriptor.h"
 #include "circt/Dialect/Arc/Runtime/JITBind.h"
+#include "circt/Dialect/Arc/Runtime/TraceTaps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
@@ -953,11 +954,149 @@ static LogicalResult convert(arc::ExecuteOp op, arc::ExecuteOp::Adaptor adaptor,
 // Runtime Implementation
 //===----------------------------------------------------------------------===//
 
+template <typename T, typename = std::enable_if_t<std::is_integral<T>::value>>
+static LLVM::GlobalOp
+buildGlobalConstantIntArray(OpBuilder &builder, Location loc, Twine symName,
+                            SmallVectorImpl<T> &data,
+                            unsigned alignment = alignof(T)) {
+  auto intType = builder.getIntegerType(8 * sizeof(T));
+  Attribute denseAttr = mlir::DenseElementsAttr::get(
+      mlir::RankedTensorType::get({(int64_t)data.size()}, intType),
+      llvm::ArrayRef(data));
+  auto globalOp = LLVM::GlobalOp::create(
+      builder, loc, LLVM::LLVMArrayType::get(intType, data.size()),
+      /*isConstant=*/true, LLVM::Linkage::Internal,
+      builder.getStringAttr(symName), denseAttr);
+  globalOp.setAlignmentAttr(builder.getI64IntegerAttr(alignment));
+  return globalOp;
+}
+
+// Construct a raw constant byte array from a vector of struct values
+template <typename T>
+static LLVM::GlobalOp
+buildGlobalConstantRuntimeStructArray(OpBuilder &builder, Location loc,
+                                      Twine symName,
+                                      SmallVectorImpl<T> &array) {
+  assert(!array.empty());
+  static_assert(std::is_standard_layout<T>(),
+                "Runtime struct must have standard layout");
+  int64_t numBytes = sizeof(T) * array.size();
+  Attribute denseAttr = mlir::DenseElementsAttr::get(
+      mlir::RankedTensorType::get({numBytes}, builder.getI8Type()),
+      llvm::ArrayRef(reinterpret_cast<uint8_t *>(array.data()), numBytes));
+  auto globalOp = LLVM::GlobalOp::create(
+      builder, loc, LLVM::LLVMArrayType::get(builder.getI8Type(), numBytes),
+      /*isConstant=*/true, LLVM::Linkage::Internal,
+      builder.getStringAttr(symName), denseAttr, alignof(T));
+  return globalOp;
+}
+
 struct RuntimeModelOpLowering
     : public OpConversionPattern<arc::RuntimeModelOp> {
   using OpConversionPattern::OpConversionPattern;
 
   static constexpr uint64_t runtimeApiVersion = ARC_RUNTIME_API_VERSION;
+
+  // Build the constant ArcModelTraceInfo struct and its members
+  LLVM::GlobalOp
+  buildTraceInfoStruct(arc::RuntimeModelOp &op,
+                       ConversionPatternRewriter &rewriter) const {
+    if (!op.getTraceTaps().has_value() || op.getTraceTaps()->empty())
+      return {};
+    // Construct the array of tap names/aliases
+    SmallVector<char> namesArray;
+    SmallVector<ArcTraceTap> tapArray;
+    tapArray.reserve(op.getTraceTaps()->size());
+    for (auto attr : op.getTraceTapsAttr()) {
+      auto tap = cast<TraceTapAttr>(attr);
+      assert(!tap.getNames().empty() &&
+             "Expected trace tap to have at least one name");
+      for (auto alias : tap.getNames()) {
+        auto aliasStr = cast<StringAttr>(alias);
+        namesArray.append(aliasStr.begin(), aliasStr.end());
+        namesArray.push_back('\0');
+      }
+      ArcTraceTap tapStruct;
+      tapStruct.stateOffset = tap.getStateOffset();
+      tapStruct.nameOffset = namesArray.size() - 1;
+      tapStruct.typeBits = tap.getSigType().getValue().getIntOrFloatBitWidth();
+      tapStruct.reserved = 0;
+      tapArray.emplace_back(tapStruct);
+    }
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    auto namesGlobal = buildGlobalConstantIntArray(
+        rewriter, op.getLoc(), "_arc_tap_names_" + op.getName(), namesArray);
+    auto traceTapsArrayGlobal = buildGlobalConstantRuntimeStructArray(
+        rewriter, op.getLoc(), "_arc_trace_taps_" + op.getName(), tapArray);
+
+    //
+    //  struct ArcModelTraceInfo {
+    //    uint64_t numTraceTaps;
+    //    struct ArcTraceTap *traceTaps;
+    //    const char *traceTapNames;
+    //    uint64_t traceBufferCapacity;
+    //  };
+    //
+    auto traceInfoStructType = LLVM::LLVMStructType::getLiteral(
+        getContext(),
+        {rewriter.getI64Type(), ptrTy, ptrTy, rewriter.getI64Type()});
+    static_assert(sizeof(ArcModelTraceInfo) == 32 &&
+                  "Unexpected size of ArcModelTraceInfo struct");
+
+    auto globalSymName =
+        rewriter.getStringAttr("_arc_trace_info_" + op.getName());
+    auto traceInfoGlobalOp = LLVM::GlobalOp::create(
+        rewriter, op.getLoc(), traceInfoStructType,
+        /*isConstant=*/false, LLVM::Linkage::Internal, globalSymName,
+        Attribute{}, alignof(ArcModelTraceInfo));
+    OpBuilder::InsertionGuard g(rewriter);
+
+    // Struct Initializer
+    Region &initRegion = traceInfoGlobalOp.getInitializerRegion();
+    Block *initBlock = rewriter.createBlock(&initRegion);
+    rewriter.setInsertionPointToStart(initBlock);
+
+    auto numTraceTapsCst = LLVM::ConstantOp::create(
+        rewriter, op.getLoc(), rewriter.getI64IntegerAttr(tapArray.size()));
+    auto traceTapArrayAddr =
+        LLVM::AddressOfOp::create(rewriter, op.getLoc(), traceTapsArrayGlobal);
+    auto tapNameArrayAddr =
+        LLVM::AddressOfOp::create(rewriter, op.getLoc(), namesGlobal);
+    auto bufferCapacityCst = LLVM::ConstantOp::create(
+        rewriter, op.getLoc(),
+        rewriter.getI64IntegerAttr(runtime::defaultTraceBufferCapacity));
+
+    Value initStruct =
+        LLVM::PoisonOp::create(rewriter, op.getLoc(), traceInfoStructType);
+
+    // Field: uint64_t numTraceTaps
+    initStruct =
+        LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
+                                    numTraceTapsCst, ArrayRef<int64_t>{0});
+    static_assert(offsetof(ArcModelTraceInfo, numTraceTaps) == 0,
+                  "Unexpected offset of field numTraceTaps");
+    // Field: struct ArcTraceTap *traceTaps
+    initStruct =
+        LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
+                                    traceTapArrayAddr, ArrayRef<int64_t>{1});
+    static_assert(offsetof(ArcModelTraceInfo, traceTaps) == 8,
+                  "Unexpected offset of field traceTaps");
+    // Field: const char *traceTapNames
+    initStruct =
+        LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
+                                    tapNameArrayAddr, ArrayRef<int64_t>{2});
+    static_assert(offsetof(ArcModelTraceInfo, traceTapNames) == 16,
+                  "Unexpected offset of field traceTapNames");
+    // Field: uint64_t traceBufferCapacity
+    initStruct =
+        LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
+                                    bufferCapacityCst, ArrayRef<int64_t>{3});
+    static_assert(offsetof(ArcModelTraceInfo, traceBufferCapacity) == 24,
+                  "Unexpected offset of field traceBufferCapacity");
+    LLVM::ReturnOp::create(rewriter, op.getLoc(), initStruct);
+
+    return traceInfoGlobalOp;
+  }
 
   // Create a global LLVM struct containing the RuntimeModel metadata
   LogicalResult
@@ -971,15 +1110,17 @@ struct RuntimeModelOpLowering
     static_assert(sizeof(ArcRuntimeModelInfo) == 32 &&
                   "Unexpected size of ArcRuntimeModelInfo struct");
 
-    // Construct the Model Name String GlobalOp
     rewriter.setInsertionPoint(op);
+    auto traceInfoGlobal = buildTraceInfoStruct(op, rewriter);
+
+    // Construct the Model Name String GlobalOp
     SmallVector<char, 16> modNameArray(op.getName().begin(),
                                        op.getName().end());
     modNameArray.push_back('\0');
     auto nameGlobalType =
         LLVM::LLVMArrayType::get(rewriter.getI8Type(), modNameArray.size());
-    SmallString<16> globalSymName{"_arc_mod_name_"};
-    globalSymName.append(op.getName());
+    auto globalSymName =
+        rewriter.getStringAttr("_arc_mod_name_" + op.getName());
     auto nameGlobal = LLVM::GlobalOp::create(
         rewriter, op.getLoc(), nameGlobalType, /*isConstant=*/true,
         LLVM::Linkage::Internal,
@@ -1005,8 +1146,13 @@ struct RuntimeModelOpLowering
                                                      op.getNumStateBytesAttr());
     auto nameAddr =
         LLVM::AddressOfOp::create(rewriter, op.getLoc(), nameGlobal);
-    // TODO: Implement lowering
-    Value traceInfoPtr = LLVM::ZeroOp::create(rewriter, op.getLoc(), ptrTy);
+    Value traceInfoPtr;
+    if (traceInfoGlobal)
+      traceInfoPtr =
+          LLVM::AddressOfOp::create(rewriter, op.getLoc(), traceInfoGlobal);
+    else
+      traceInfoPtr = LLVM::ZeroOp::create(rewriter, op.getLoc(), ptrTy);
+
     Value initStruct =
         LLVM::PoisonOp::create(rewriter, op.getLoc(), modelInfoStructType);
 

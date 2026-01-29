@@ -125,6 +125,11 @@ void circt::populateArcStateLoweringPipeline(
 void circt::populateArcStateAllocationPipeline(
     OpPassManager &pm, const ArcStateAllocationOptions &options) {
   pm.addPass(arc::createLowerArcsToFuncsPass());
+  {
+    AllocateStateOptions allocStateOpts;
+    allocStateOpts.insertTraceTaps = options.insertTraceTaps;
+    pm.nest<arc::ModelOp>().addPass(arc::createAllocateState(allocStateOpts));
+  }
   pm.nest<arc::ModelOp>().addPass(arc::createAllocateState());
   pm.addPass(arc::createLowerClocksToFuncsPass()); // no CSE between state alloc
                                                    // and clock func lowering

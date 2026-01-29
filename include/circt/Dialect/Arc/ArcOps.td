@@ -978,12 +978,15 @@ def RuntimeModelOp : ArcOp<"runtime.model", [
     - name: Name of the model
     - numStateBytes: Number of bytes required to store the model's internal
         state
+    - traceTaps: Traced signal metadata
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
                        StrAttr:$name,
-                       I64Attr:$numStateBytes);
+                       I64Attr:$numStateBytes,
+                       OptionalAttr<TraceTapArrayAttr>:$traceTaps);
   let assemblyFormat = [{
-    $sym_name $name `numStateBytes` $numStateBytes attr-dict
+    $sym_name $name `numStateBytes` $numStateBytes
+    (`traceTaps` $traceTaps^)? attr-dict
   }];
 }
 
