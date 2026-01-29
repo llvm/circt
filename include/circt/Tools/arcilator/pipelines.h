@@ -124,8 +124,8 @@ struct ArcToLLVMOptions : mlir::PassPipelineOptions<ArcToLLVMOptions> {
           "Extra arguments passed to the runtime library for JIT runs."),
       llvm::cl::init("")};
   Option<std::string> traceFileName{
-      *this, "trace-file-name",
-      llvm::cl::desc("Output file for signal traces."), llvm::cl::init("")};
+      *this, "trace-file", llvm::cl::desc("Output file for signal traces."),
+      llvm::cl::init("")};
 };
 void populateArcToLLVMPipeline(mlir::OpPassManager &pm,
                                const ArcToLLVMOptions &options = {});

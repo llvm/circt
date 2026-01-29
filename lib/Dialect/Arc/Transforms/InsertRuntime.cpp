@@ -270,14 +270,18 @@ struct InsertRuntimePass
   void runOnOperation() override;
 
 private:
+  // Construct the runtime argument string for an instance
   SmallString<32> buildArgString(unsigned instIdx, StringAttr existingArgs) {
     SmallString<32> str;
     if (existingArgs)
       str.append(existingArgs);
+    // If requested, append the trace file name
     if (!traceFileName.empty()) {
       if (!str.empty())
         str += ';';
       str += "traceFile=";
+      // Create a unique per-instance file name by adding a suffix before the
+      // the file extension
       if (instIdx == 0) {
         str += traceFileName;
       } else {
@@ -291,6 +295,7 @@ private:
         str += extension;
       }
     }
+    // Append extra arguments from pass option
     if (!extraArgs.empty()) {
       if (!str.empty())
         str += ';';

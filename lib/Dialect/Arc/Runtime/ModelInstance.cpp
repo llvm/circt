@@ -133,6 +133,7 @@ uint64_t *ModelInstance::swapTraceBuffer() {
   return traceEncoder->dispatch(state->traceBufferSize);
 }
 
+// Try to parse argument with "`key`=`value`" syntax
 static bool parseKeyValueArg(const std::string_view &input, std::string &key,
                              std::string &value) {
   key.clear();
@@ -175,9 +176,8 @@ void ModelInstance::parseArgs(const char *args) {
     } else if (option == "vcd") {
       traceMode = TraceMode::VCD;
     } else if (parseKeyValueArg(option, key, value) && !value.empty()) {
-      if (key == "traceFile") {
+      if (key == "traceFile")
         traceFileArg = value;
-      }
     }
   }
 }
