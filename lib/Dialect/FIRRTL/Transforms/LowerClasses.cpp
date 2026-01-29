@@ -2039,6 +2039,20 @@ struct UnrealizedConversionCastOpConversion
   }
 };
 
+struct UnknownValueOpConversion : public OpConversionPattern<UnknownValueOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UnknownValueOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto convertedType = typeConverter->convertType(op.getType());
+    if (!convertedType)
+      return failure();
+    rewriter.replaceOpWithNewOp<om::UnknownValueOp>(op, convertedType);
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -2208,6 +2222,7 @@ static void populateRewritePatterns(
   patterns.add<IntegerShlOpConversion>(converter, patterns.getContext());
   patterns.add<UnrealizedConversionCastOpConversion>(converter,
                                                      patterns.getContext());
+  patterns.add<UnknownValueOpConversion>(converter, patterns.getContext());
 }
 
 // Convert to OM ops and types in Classes or Modules.
