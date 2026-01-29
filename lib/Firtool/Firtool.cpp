@@ -48,9 +48,6 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLowerIntrinsics());
 
-  if (auto mode = FirtoolOptions::toInferDomainsPassMode(opt.getDomainMode()))
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferDomains({*mode}));
-
   return success();
 }
 
@@ -131,6 +128,9 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     modulePM.addPass(firrtl::createExpandWhens());
     modulePM.addPass(firrtl::createSFCCompat());
   }
+
+  if (auto mode = FirtoolOptions::toInferDomainsPassMode(opt.getDomainMode()))
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferDomains({*mode}));
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createCheckCombLoops());
 
