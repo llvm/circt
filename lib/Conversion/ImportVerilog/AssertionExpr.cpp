@@ -366,11 +366,18 @@ Value Context::convertAssertionCallExpression(
 
   FailureOr<Value> result;
   Value value;
-  Value boolVal;
+  Value intVal;
+  moore::IntType valTy;
 
   switch (args.size()) {
   case (1):
     value = this->convertRvalueExpression(*args[0]);
+    valTy = dyn_cast<moore::IntType>(value.getType());
+    if (!valTy) {
+      mlir::emitError(loc) << "expected integer argument for system call `"
+                           << subroutine.name << "`";
+      return {};
+    }
     if (subroutine.name == "$past") {
       // For now, catch unsupported non-i1 $past case before we try and cast to
       // a bool and get an unhelpful error
@@ -381,10 +388,15 @@ Value Context::convertAssertionCallExpression(
         return {};
       }
     }
-    boolVal = builder.createOrFold<moore::ToBuiltinBoolOp>(loc, value);
-    if (!boolVal)
+    // If the value is four-valued, we need to map it to two-valued before we
+    // cast it to a builtin int
+    if (valTy.getDomain() == Domain::FourValued) {
+      value = builder.createOrFold<moore::LogicToIntOp>(loc, value);
+    }
+    intVal = builder.createOrFold<moore::ToBuiltinIntOp>(loc, value);
+    if (!intVal)
       return {};
-    result = this->convertAssertionSystemCallArity1(subroutine, loc, boolVal);
+    result = this->convertAssertionSystemCallArity1(subroutine, loc, intVal);
     break;
 
   default:

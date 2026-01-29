@@ -373,7 +373,8 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
   // CHECK-NEXT: [[CB:%.+]] = moore.to_builtin_bool [[C]] : l1
   // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
-  // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_bool [[C2]] : l1
+  // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
+  // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 : i1
   // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
   // CHECK-NEXT: [[NOTPAST:%.+]] = comb.xor [[PAST]], [[TRUE]] : i1
@@ -383,7 +384,8 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
   // CHECK-NEXT: [[CB:%.+]] = moore.to_builtin_bool [[C]] : l1
   // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
-  // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_bool [[C2]] : l1
+  // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
+  // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 : i1
   // CHECK-NEXT: [[NOTCURRENT:%.+]] = ltl.not [[CURRENT]] : i1
   // CHECK-NEXT: [[PASTANDNOTCURRENT:%.+]] = ltl.and [[NOTCURRENT]], [[PAST]] : !ltl.property, i1
@@ -392,7 +394,8 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
   // CHECK-NEXT: [[CB:%.+]] = moore.to_builtin_bool [[C]] : l1
   // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
-  // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_bool [[C2]] : l1
+  // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
+  // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 : i1
   // CHECK-NEXT: [[NOTPAST:%.+]] = ltl.not [[PAST]] : i1
   // CHECK-NEXT: [[NOTCURRENT:%.+]] = ltl.not [[CURRENT]] : i1
@@ -404,7 +407,8 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
   // CHECK-NEXT: [[CB:%.+]] = moore.to_builtin_bool [[C]] : l1
   // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
-  // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_bool [[C2]] : l1
+  // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
+  // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 : i1
   past_clk: assert property (@(posedge clk_i) clk_i |=> $past(clk_i));
 
