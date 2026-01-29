@@ -194,6 +194,11 @@ static llvm::cl::opt<bool> asyncResetsAsSync(
     llvm::cl::desc("Treat asynchronous firreg resets as synchronous"),
     llvm::cl::init(false), llvm::cl::cat(mainCategory));
 
+static llvm::cl::opt<bool> traceTaps(
+    "trace-taps",
+    llvm::cl::desc("Insert trace instrumentation for observed values"),
+    llvm::cl::init(false), llvm::cl::cat(mainCategory));
+
 // Options to control early-out from pipeline.
 enum Until {
   UntilPreprocessing,
@@ -302,6 +307,9 @@ static void bindArcRuntimeSymbols(ExecutionEngine &executionEngine) {
     bindExecutionEngineSymbol(symbolMap, interner,
                               runtimeCallbacks.symNameFormat,
                               runtimeCallbacks.fnFormat);
+    bindExecutionEngineSymbol(symbolMap, interner,
+                              runtimeCallbacks.symNameSwapTraceBuffer,
+                              runtimeCallbacks.fnSwapTraceBuffer);
     return symbolMap;
   });
 }
@@ -363,6 +371,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
 
   ArcStateAllocationOptions allocationOpt;
   allocationOpt.splitFuncsThreshold = splitFuncsThreshold;
+  allocationOpt.insertTraceTaps = traceTaps;
   populateArcStateAllocationPipeline(pm, allocationOpt);
 }
 
