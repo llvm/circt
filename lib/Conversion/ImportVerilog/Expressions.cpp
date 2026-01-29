@@ -1064,16 +1064,13 @@ struct RvalueExprVisitor : public ExprVisitor {
     if (rhsFloatType || lhsFloatType)
       return visitRealBOp(expr);
 
-    // Check whether we are comparing against a Class Handle
-    const auto *rhsClassType =
-        expr.right().type->as_if<slang::ast::ClassType>();
-    const auto *lhsClassType = expr.left().type->as_if<slang::ast::ClassType>();
-    const auto *rhsChandleType =
-        expr.right().type->as_if<slang::ast::CHandleType>();
-    const auto *lhsChandleType =
-        expr.left().type->as_if<slang::ast::CHandleType>();
+    // Check whether we are comparing against a Class Handle or CHandle
+    const auto rhsIsClass = expr.right().type->isClass();
+    const auto lhsIsClass = expr.left().type->isClass();
+    const auto rhsIsChandle = expr.right().type->isCHandle();
+    const auto lhsIsChandle = expr.left().type->isCHandle();
     // If either arg is class handle-typed, treat as class handle BOp.
-    if (rhsClassType || lhsClassType || rhsChandleType || lhsChandleType)
+    if (rhsIsClass || lhsIsClass || rhsIsChandle || lhsIsChandle)
       return visitHandleBOp(expr);
 
     auto lhs = context.convertRvalueExpression(expr.left());

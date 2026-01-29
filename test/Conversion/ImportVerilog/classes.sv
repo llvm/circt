@@ -739,3 +739,48 @@ endclass
 class staticClass;
     static int member;
 endclass
+
+// Check that non-monomorphized classtype comparisons emit a class handle BOp
+
+// CHECK:      moore.class.classdecl @forwardDeclClass {
+// CHECK:      }
+// CHECK:      moore.class.classdecl @mainDeclClass {
+// CHECK:      }
+
+// CHECK:      func.func private @get() -> !moore.class<@forwardDeclClass> {
+// CHECK:        [[M_INST:%.+]] = moore.variable : <class<@forwardDeclClass>>
+// CHECK:        [[R0:%.+]] = moore.read [[M_INST]] : <class<@forwardDeclClass>>
+// CHECK:        [[NULL:%.+]] = moore.null
+// CHECK:        [[EQ:%.+]] = moore.handle_eq [[R0]], [[NULL]] : !moore.class<@forwardDeclClass> : !moore.null -> i1
+// CHECK:        [[B:%.+]] = moore.to_builtin_bool [[EQ]] : i1
+// CHECK:        cf.cond_br [[B]], ^bb1, ^bb2
+// CHECK:      ^bb1:
+// CHECK:        [[NEW:%.+]] = moore.class.new : <@forwardDeclClass>
+// CHECK:        moore.blocking_assign [[M_INST]], [[NEW]] : class<@forwardDeclClass>
+// CHECK:        cf.br ^bb2
+// CHECK:      ^bb2:
+// CHECK:        [[R1:%.+]] = moore.read [[M_INST]] : <class<@forwardDeclClass>>
+// CHECK:        return [[R1]] : !moore.class<@forwardDeclClass>
+// CHECK:      }
+
+// CHECK-LABEL: moore.module @testMod() {
+// CHECK:        [[T:%.+]] = moore.variable : <class<@mainDeclClass>>
+// CHECK:        moore.output
+// CHECK:      }
+
+class forwardDeclClass #(parameter int testParam);
+endclass
+
+class mainDeclClass #(parameter int otherTestParam);
+   typedef forwardDeclClass#(otherTestParam) this_type;
+   static function this_type get();
+      static this_type m_inst;
+      if (m_inst == null)
+        m_inst = new;
+      return m_inst;
+   endfunction
+endclass
+
+module testMod;
+   mainDeclClass#(3) t;
+endmodule
