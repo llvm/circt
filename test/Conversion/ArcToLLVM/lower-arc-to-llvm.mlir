@@ -325,3 +325,29 @@ func.func @issue9171(%arg0: !arc.state<!hw.array<4xi1>>, %idx: i2) -> (i1) {
 arc.runtime.model @arcRuntimeModel_fooModelSym "fooModelName" numStateBytes 1234567
 
 func.func private @Dummy(%arg0: i42, %arg1: !hw.array<4xi19>, %arg2: !arc.storage)
+
+// CHECK-LABEL: llvm.func @dyn_string
+// CHECK:    %0 = llvm.mlir.addressof @_arc_str_0 : !llvm.ptr
+// CHECK:    %1 = llvm.mlir.constant(16 : i64) : i64
+// CHECK:    %2 = llvm.alloca %1 x !llvm.struct<packed (i64, ptr)> : (i64) -> !llvm.ptr
+// CHECK:    llvm.call @arcRuntimeIR_stringInit(%2, %0) vararg(!llvm.func<void (ptr, ...)>) : (!llvm.ptr, !llvm.ptr) -> ()
+// CHECK:    %3 = llvm.getelementptr %2[0] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(i64, ptr)>
+// CHECK:    %4 = llvm.load %3 : !llvm.ptr -> i64
+// CHECK:    %5 = llvm.mlir.addressof @_arc_str_1 : !llvm.ptr
+// CHECK:    %6 = llvm.mlir.constant(16 : i64) : i64
+// CHECK:    %7 = llvm.alloca %6 x !llvm.struct<packed (i64, ptr)> : (i64) -> !llvm.ptr
+// CHECK:    llvm.call @arcRuntimeIR_stringInit(%7, %5) vararg(!llvm.func<void (ptr, ...)>) : (!llvm.ptr, !llvm.ptr) -> ()
+// CHECK:    %8 = llvm.mlir.constant(16 : i64) : i64
+// CHECK:    %9 = llvm.alloca %8 x !llvm.struct<packed (i64, ptr)> : (i64) -> !llvm.ptr
+// CHECK:    %10 = llvm.mlir.constant(0 : i64) : i64
+// CHECK:    %11 = llvm.inttoptr %10 : i64 to !llvm.ptr
+// CHECK:    llvm.call @arcRuntimeIR_stringConcat(%9, %2, %7, %11) vararg(!llvm.func<void (ptr, ...)>) : (!llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr) -> ()
+// CHECK:    llvm.return
+func.func @dyn_string() {
+  %s1 = sim.string.literal "Hello"
+  %l1 = sim.string.length %s1
+  %s2 = sim.string.literal "World"
+  %s3 = sim.string.concat (%s1, %s2)
+  return
+}
+
