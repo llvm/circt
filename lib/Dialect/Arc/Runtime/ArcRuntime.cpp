@@ -204,9 +204,8 @@ uint64_t *arcRuntimeIR_swapTraceBuffer(const uint8_t *modelState) {
 
 void arcRuntimeIR_stringInit(DynamicString *str, const char *initialValue,
                              int64_t initialSize) {
-  if (!str || !initialValue) {
+  if (!str || !initialValue)
     impl::fatalError("Invalid string or initial value");
-  }
   str->size = initialSize;
   str->data = new char[initialSize];
   std::memcpy(str->data, initialValue, initialSize);
