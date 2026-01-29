@@ -1236,8 +1236,8 @@ LogicalResult LocalVisitor::initializeAndRun(hw::InstanceOp instance) {
               fromInputPortToEndPoint[{newPort, result.startPoint.bitPos}]);
         } else {
           endPointResults[{newPath, endPoint, endPointBitPos}].emplace_back(
-              newPath, result.startPoint.value, result.startPoint.bitPos,
-              result.delay + delay,
+              result.startPoint.instancePath, result.startPoint.value,
+              result.startPoint.bitPos, result.delay + delay,
               ctx->doTraceDebugPoints() ? concatList(debugPointFactory.get(),
                                                      newHistory, result.history)
                                         : debugPointFactory->getEmptyList());
