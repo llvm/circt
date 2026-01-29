@@ -2868,7 +2868,7 @@ Context::getAncestorClassWithProperty(const moore::ClassHandleType &actualTy,
                                       llvm::StringRef fieldName, Location loc) {
   // Start at the actual class symbol.
   mlir::SymbolRefAttr classSym = actualTy.getClassSym();
-  llvm::errs() << "classsym is " << classSym << "\n";
+  
   while (classSym) {
     // Resolve the class declaration from the root symbol table owner.
     auto *op = resolve(*this, classSym);
