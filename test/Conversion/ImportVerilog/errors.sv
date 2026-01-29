@@ -197,3 +197,10 @@ module Foo;
   // expected-error @below {{$past is currently only supported for 1-wide bitvectors}}
   assert property ($past(a) == 2'b10);
 endmodule
+
+// -----
+module Foo;
+  string b;
+  // expected-error @below {{expected integer argument for system call `$past`}}
+  assert property ($past(b));
+endmodule
