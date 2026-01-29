@@ -265,7 +265,7 @@ static llvm::cl::opt<bool> noJitRuntime(
 static llvm::cl::opt<std::string> extraRuntimeArgs(
     "extra-runtime-args",
     llvm::cl::desc(
-        "Extra arguments passed to the runtime library for JIT runs."),
+        "Extra arguments passed to the runtime library for JIT runs"),
     llvm::cl::init(""), llvm::cl::cat(mainCategory));
 
 static llvm::cl::opt<std::string> jitVcdFile(
