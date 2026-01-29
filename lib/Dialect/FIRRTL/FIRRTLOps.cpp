@@ -2931,6 +2931,21 @@ std::optional<size_t> InstanceChoiceOp::getTargetResultIndex() {
   return std::nullopt;
 }
 
+StringRef InstanceChoiceOp::getInstanceName() { return getName(); }
+
+StringAttr InstanceChoiceOp::getInstanceNameAttr() { return getNameAttr(); }
+
+ArrayAttr InstanceChoiceOp::getReferencedModuleNamesAttr() {
+  // Convert FlatSymbolRefAttr array to StringAttr array
+  SmallVector<Attribute> moduleNameStrings;
+  for (auto moduleName : getModuleNamesAttr()) {
+    auto symRef = cast<FlatSymbolRefAttr>(moduleName);
+    moduleNameStrings.push_back(symRef.getAttr());
+  }
+
+  return ArrayAttr::get(getContext(), moduleNameStrings);
+}
+
 void InstanceChoiceOp::print(OpAsmPrinter &p) {
   // Print the instance name.
   p << " ";

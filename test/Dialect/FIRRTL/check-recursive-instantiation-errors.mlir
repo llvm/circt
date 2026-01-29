@@ -87,3 +87,20 @@ firrtl.circuit "A" {
     firrtl.instance b @B()
   }
 }
+
+// -----
+
+firrtl.circuit "SelfLoop" {
+  firrtl.option @Opt {
+      firrtl.option_case @A
+  }
+  firrtl.module @Mod() {}
+
+  // expected-error @below {{recursive instantiation}}
+  firrtl.module @SelfLoop() {
+    // expected-note @below {{SelfLoop instantiates SelfLoop here}}
+    firrtl.instance_choice inst interesting_name @SelfLoop alternatives @Opt { @A -> @Mod }()
+    // expected-note @below {{SelfLoop instantiates SelfLoop here}}
+    firrtl.instance_choice inst interesting_name @Mod alternatives @Opt { @A -> @SelfLoop }()
+  }
+}
