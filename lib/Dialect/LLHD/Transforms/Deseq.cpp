@@ -872,38 +872,6 @@ bool Deseq::matchDriveClock(
     return false;
   }
 
-  // Build a small set of candidate conditions. Besides the original condition
-  // we also consider a relaxed form where an unknown term is interpreted as
-  // the present value of the (sole) trigger. This helps with cases where the
-  // current clock value flows through operations the boolean analysis cannot
-  // fully model (e.g. probing a multi-bit signal), which would otherwise leave
-  // the present trigger bit absent from the DNF term.
-  SmallVector<std::pair<DNFTerm, bool>, 2> candidates;
-  candidates.push_back({valueTable[0].first, /*allowEnable=*/true});
-  auto maybeRelaxed = [&]() -> std::optional<DNFTerm> {
-    constexpr uint32_t unknownMask = 0b11; // term index 0 (unknown) bits
-    // For a single trigger, the present term occupies index 2.
-    constexpr uint32_t presentPosBit = 1u << 4;
-    constexpr uint32_t presentNegBit = 1u << 5;
-    constexpr uint32_t presentMask = presentPosBit | presentNegBit;
-
-    DNFTerm term = valueTable[0].first;
-    bool hasUnknownPos = term.andTerms & 0b01;
-    bool hasUnknownNeg = term.andTerms & 0b10;
-    // Only attempt the relaxation if the present bit is missing but we do
-    // have an unknown requirement.
-    if ((term.andTerms & presentMask) || !(term.andTerms & unknownMask))
-      return std::nullopt;
-    term.andTerms &= ~unknownMask;
-    if (hasUnknownPos)
-      term.andTerms |= presentPosBit;
-    else if (hasUnknownNeg)
-      term.andTerms |= presentNegBit;
-    return term;
-  }();
-  if (maybeRelaxed)
-    candidates.push_back({*maybeRelaxed, /*allowEnable=*/false});
-
   // Try the posedge and negedge variants of clocking.
   for (unsigned variant = 0; variant < (1 << 1); ++variant) {
     bool negClock = (variant >> 0) & 1;
@@ -918,39 +886,25 @@ bool Deseq::matchDriveClock(
     auto clockWithoutEnable = DNFTerm{clockEdge};
     auto clockWithEnable = DNFTerm{clockEdge | 0b01};
 
-    // Check if any of the candidate conditions match this clock.
-    std::optional<ValueEntry> matchedValue;
-    bool matchedWithEnable = false;
-    for (auto [term, allowEnable] : candidates) {
-      if (term == clockWithoutEnable) {
-        matchedValue = valueTable[0].second;
-        matchedWithEnable = false;
-        break;
-      }
-      if (allowEnable && term == clockWithEnable) {
-        matchedValue = valueTable[0].second;
-        matchedWithEnable = true;
-        break;
-      }
-    }
-    if (!matchedValue)
+    // Check if the single value table entry matches this clock.
+    if (valueTable[0].first == clockWithEnable)
+      drive.clock.enable = drive.op.getEnable();
+    else if (valueTable[0].first != clockWithoutEnable)
       continue;
 
     // Populate the clock info and return.
     drive.clock.clock = triggers[0];
     drive.clock.risingEdge = !negClock;
     drive.clock.value = drive.op.getValue();
-    if (!matchedValue->isUnknown())
-      drive.clock.value = matchedValue->value;
-    if (matchedWithEnable)
-      drive.clock.enable = drive.op.getEnable();
+    if (!valueTable[0].second.isUnknown())
+      drive.clock.value = valueTable[0].second.value;
 
     LLVM_DEBUG({
       llvm::dbgs() << "  - Matched " << (negClock ? "neg" : "pos")
                    << "edge clock ";
       drive.clock.clock.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-      llvm::dbgs() << " -> " << *matchedValue;
-      if (drive.clock.enable && matchedWithEnable)
+      llvm::dbgs() << " -> " << valueTable[0].second;
+      if (drive.clock.enable)
         llvm::dbgs() << " (with enable)";
       llvm::dbgs() << "\n";
     });
