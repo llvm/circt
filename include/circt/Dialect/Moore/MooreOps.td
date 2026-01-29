@@ -824,6 +824,22 @@ def ToBuiltinBoolOp : MooreOp<"to_builtin_bool", [Pure]> {
   }];
 }
 
+def ToBuiltinIntOp : MooreOp<"to_builtin_int", [Pure,
+  TypesMatchWith<"result is builtin integer matching input type",
+    "input", "result", [{
+    IntegerType::get($_self.getContext(), cast<IntType>($_self).getWidth())
+  }]>
+]> {  let summary = "Convert a `!moore.i<n>` to a builtin `i<n>`";
+  let description = [{
+    Casts from a two-valued Moore integer to a builtin integer.
+  }];
+  let arguments = (ins TwoValuedIntType:$input);
+  let results = (outs AnyInteger:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input)
+  }];
+}
+
 def TimeToLogicOp : MooreOp<"time_to_logic", [Pure]> {
   let summary = "Convert a time type to an integer number of femtoseconds";
   let arguments = (ins TimeType:$input);
