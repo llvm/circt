@@ -278,6 +278,19 @@ firrtl.module @DomainDefine(
   firrtl.domain.define %y, %x
 }
 
+// CHECK-LABEL: firrtl.module @WireWithDomainKind
+firrtl.module @WireWithDomainKind(
+  in  %in : !firrtl.domain of @ClockDomain,
+  out %out : !firrtl.domain of @ClockDomain
+) {
+  // CHECK: %w = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
+  %w = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
+  // CHECK: firrtl.domain.define %w, %in
+  firrtl.domain.define %w, %in
+  // CHECK: firrtl.domain.define %out, %w
+  firrtl.domain.define %out, %w
+}
+
 firrtl.module private @DefaultTargetWithDomain(in %A: !firrtl.domain of @ClockDomain, in %clock: !firrtl.clock domains [%A]) {}
 firrtl.module private @FPGATargetWithDomain(in %A: !firrtl.domain of @ClockDomain, in %clock: !firrtl.clock domains [%A]) {}
 firrtl.module private @ASICTargetWithDomain(in %A: !firrtl.domain of @ClockDomain, in %clock: !firrtl.clock domains [%A]) {}

@@ -223,9 +223,9 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: firrtl.propassign %B_out, %B_object :
     //
     // CHECK-NEXT: firrtl.propassign %[[domainInfo_in]], %A :
-    %w0 = firrtl.wire : !firrtl.domain
-    %w1 = firrtl.wire : !firrtl.domain
-    %w2 = firrtl.wire : !firrtl.domain
+    %w0 = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
+    %w1 = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
+    %w2 = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
     firrtl.domain.define %w0, %A
     firrtl.domain.define %w1, %w0
     firrtl.domain.define %w2, %w1
@@ -515,15 +515,15 @@ firrtl.circuit "DeadDomainOps" {
     %a = firrtl.wire : !firrtl.domain
 
     // One wire that drives another.
-    %b = firrtl.wire : !firrtl.domain
-    %c = firrtl.wire : !firrtl.domain
+    %b = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
+    %c = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
     firrtl.domain.define %b, %c
 
     // A lone anonymous domain.
     %d = firrtl.domain.anon : !firrtl.domain of @ClockDomain
 
     // A wire driven by an anonymous domain.
-    %e = firrtl.wire : !firrtl.domain
+    %e = firrtl.wire {domainKind = @ClockDomain} : !firrtl.domain
     %f = firrtl.domain.anon : !firrtl.domain of @ClockDomain
     firrtl.domain.define %e, %f
   }
