@@ -144,6 +144,7 @@ struct Emitter {
   void emitExpression(GenericIntrinsicOp op);
   void emitExpression(CatPrimOp op);
   void emitExpression(UnsafeDomainCastOp op);
+  void emitExpression(UnknownValueOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -1442,6 +1443,7 @@ void Emitter::emitExpression(Value value) {
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
           UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
+          UnknownValueOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions
@@ -1687,6 +1689,11 @@ void Emitter::emitExpression(UnsafeDomainCastOp op) {
   interleaveComma(op.getOperands(),
                   [&](Value operand) { emitExpression(operand); });
   ps << ")" << PP::end;
+}
+
+void Emitter::emitExpression(UnknownValueOp op) {
+  ps << "Unknown";
+  emitTypeWithColon(op.getType());
 }
 
 void Emitter::emitAttribute(MemDirAttr attr) {
