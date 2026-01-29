@@ -161,21 +161,21 @@ circuit TestHarness:
 ; MLIR_OUT-DAG: om.list_create
 ; MLIR_OUT-DAG: [[OBJ1:%.+]] = om.object @MemorySchema
 ; MLIR_OUT-DAG: om.constant "foo_m_ext" : !om.string
-; MLIR_OUT-DAG: om.constant #om.integer<1 : ui64> : !om.integer
-; MLIR_OUT-DAG: om.constant #om.integer<8 : ui32> : !om.integer
-; MLIR_OUT-DAG: om.constant #om.integer<1 : ui32> : !om.integer
-; MLIR_OUT-DAG: om.constant #om.integer<0 : ui32> : !om.integer
+; MLIR_OUT-DAG: om.constant #om.integer<1 : si64> : !om.integer
+; MLIR_OUT-DAG: om.constant #om.integer<8 : si32> : !om.integer
+; MLIR_OUT-DAG: om.constant #om.integer<1 : si32> : !om.integer
+; MLIR_OUT-DAG: om.constant #om.integer<0 : si32> : !om.integer
 ; MLIR_OUT-DAG: om.path_create instance %basepath @memNLA_0
 ; MLIR_OUT-DAG: om.list_create
 ; MLIR_OUT-DAG: [[OBJ2:%.+]] = om.object @MemorySchema
 ; MLIR_OUT-DAG: om.constant "bar_m_ext" : !om.string
-; MLIR_OUT-DAG: om.constant #om.integer<2 : ui64> : !om.integer
+; MLIR_OUT-DAG: om.constant #om.integer<2 : si64> : !om.integer
 ; MLIR_OUT-DAG: om.path_create instance %basepath @memNLA_1
 ; MLIR_OUT-DAG: om.path_create instance %basepath @memNLA_2
 ; MLIR_OUT-DAG: om.list_create
 ; MLIR_OUT-DAG: [[OBJ3:%.+]] = om.object @MemorySchema
 ; MLIR_OUT-DAG: om.constant "baz_m_ext" : !om.string
-; MLIR_OUT-DAG: om.constant #om.integer<3 : ui64> : !om.integer
+; MLIR_OUT-DAG: om.constant #om.integer<3 : si64> : !om.integer
 ; MLIR_OUT:     om.class.fields [[OBJ1]], [[OBJ2]], [[OBJ3]] : !om.class.type<@MemorySchema>, !om.class.type<@MemorySchema>, !om.class.type<@MemorySchema>
 
 ; SITEST_NODUT:     FILE "design.sitest.json"

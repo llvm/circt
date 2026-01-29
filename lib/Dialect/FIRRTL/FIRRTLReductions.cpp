@@ -717,7 +717,7 @@ struct Constantifier : public Reduction {
 
     // Handle property integer types.
     if (isa<FIntegerType>(type)) {
-      auto attr = builder.getIntegerAttr(builder.getI64Type(), 0);
+      auto attr = builder.getIntegerAttr(builder.getIntegerType(64, true), 0);
       auto newOp = FIntegerConstantOp::create(builder, op->getLoc(), attr);
       op->replaceAllUsesWith(newOp);
       reduce::pruneUnusedOps(op, *this);
