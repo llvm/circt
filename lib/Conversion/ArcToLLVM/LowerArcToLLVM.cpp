@@ -956,7 +956,7 @@ struct SimStringLengthOpLowering
     MLIRContext *ctx = rewriter.getContext();
     auto ptrType = LLVM::LLVMPointerType::get(ctx);
 
-    // Use GEP offset with sizeof(char*) to get the string data pointer.
+    // Use GEP with offset 0 with the string data pointer to get the size
     auto dynStringType =
         LLVM::LLVMStructType::getLiteral(ctx, {rewriter.getI64Type(), ptrType});
 
@@ -967,6 +967,59 @@ struct SimStringLengthOpLowering
     auto size = LLVM::LoadOp::create(rewriter, loc, rewriter.getI64Type(),
                                      sizeFieldPtr.getResult());
     rewriter.replaceOp(op, size);
+    return success();
+  }
+};
+
+struct SimStringConcatOpLowering
+    : public OpConversionPattern<sim::StringConcatOp> {
+  using OpConversionPattern::OpConversionPattern;
+  SimStringConcatOpLowering(const TypeConverter &typeConverter,
+                            MLIRContext *context, StringCache &stringCache)
+      : OpConversionPattern<sim::StringConcatOp>(typeConverter, context) {}
+
+  LogicalResult
+  matchAndRewrite(sim::StringConcatOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    ModuleOp moduleOp = op->getParentOfType<ModuleOp>();
+    if (!moduleOp)
+      return failure();
+
+    auto ptrTy = LLVM::LLVMPointerType::get(rewriter.getContext());
+
+    auto structTy = LLVM::LLVMStructType::getLiteral(
+        getContext(), {rewriter.getI64Type(), ptrTy}, true);
+    LLVM::ConstantOp alloca_size =
+        LLVM::ConstantOp::create(rewriter, op.getLoc(), rewriter.getI64Type(),
+                                 sizeof(circt::arc::runtime::DynamicString));
+    auto allocaOp = LLVM::AllocaOp::create(rewriter, op.getLoc(), ptrTy,
+                                           structTy, alloca_size);
+    SmallVector<Value> args = {allocaOp.getResult()};
+
+    auto func = LLVM::lookupOrCreateFn(
+        rewriter, moduleOp, runtime::APICallbacks::symStringConcat,
+        LLVM::LLVMPointerType::get(op.getContext()),
+        LLVM::LLVMVoidType::get(op.getContext()), true);
+
+    for (auto input : adaptor.getInputs()) {
+      auto allocaOpInput =
+          dyn_cast_or_null<LLVM::AllocaOp>(input.getDefiningOp());
+      if (!allocaOpInput)
+        return rewriter.notifyMatchFailure(
+            op, "expected alloca op, constant strings are folded");
+
+      args.push_back(allocaOpInput.getResult());
+    }
+
+    // add nullptr to the end to signify termination of concatenation
+    LLVM::ConstantOp integerZero = LLVM::ConstantOp::create(
+        rewriter, op.getLoc(), rewriter.getI64Type(), 0);
+    LLVM::IntToPtrOp nullPtr = LLVM::IntToPtrOp::create(
+        rewriter, op.getLoc(), ptrTy, integerZero.getResult());
+    args.push_back(nullPtr.getResult());
+
+    auto call = LLVM::CallOp::create(rewriter, op.getLoc(), func.value(), args);
+    rewriter.replaceOp(op, allocaOp.getResult());
     return success();
   }
 };
@@ -1389,7 +1442,8 @@ void LowerArcToLLVMPass::runOnOperation() {
   patterns.add<SimEmitValueOpLowering, SimPrintFormattedProcOpLowering,
                SimStringConstantOpLowering>(converter, &getContext(),
                                             stringCache);
-  patterns.add<SimStringLengthOpLowering>(converter, &getContext());
+  patterns.add<SimStringLengthOpLowering, SimStringConcatOpLowering>(
+      converter, &getContext());
 
   auto &modelInfo = getAnalysis<ModelInfoAnalysis>();
   llvm::DenseMap<StringRef, ModelInfoMap> modelMap(modelInfo.infoMap.size());

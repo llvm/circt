@@ -2,7 +2,9 @@
 
 #define ARC_RUNTIME_JITBIND_FNDECL
 #include "circt/Dialect/Arc/Runtime/ArcRuntime.h"
+#include "circt/Dialect/Arc/Runtime/IRInterface.h"
 #include "circt/Dialect/Arc/Runtime/JITBind.h"
+#include "circt/Dialect/Arc/Runtime/String.h"
 
 struct TestImpl {
   uint64_t foo = 0x123456;
@@ -95,4 +97,27 @@ TEST(ArcRuntimeTest, InstanceLifecycleIR) {
   for (auto i = 0; i < 128; ++i)
     api.fnOnEval(modelState);
   api.fnDeleteInstance(modelState);
+}
+
+TEST(ArcRuntimeTest, DynamicStringOperations) {
+  using namespace circt::arc::runtime;
+  auto makeAndVerifyString = [](const char *text, size_t expectedSize) {
+    DynamicString str{};
+    arcRuntimeIR_stringInit(&str, text);
+    EXPECT_STREQ(str.data, text);
+    EXPECT_EQ(str.size, expectedSize);
+    return str;
+  };
+
+  auto str1 = makeAndVerifyString("Hello", 5);
+  auto str2 = makeAndVerifyString("World!", 6);
+
+  DynamicString outStr{};
+  arcRuntimeIR_stringConcat(&outStr, &str1, &str2, nullptr);
+  EXPECT_STREQ(outStr.data, "HelloWorld!");
+  EXPECT_EQ(outStr.size, 11);
+
+  delete[] str1.data;
+  delete[] str2.data;
+  delete[] outStr.data;
 }

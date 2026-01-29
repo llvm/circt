@@ -212,16 +212,34 @@ void arcRuntimeIR_stringInit(DynamicString *str, const char *initialValue) {
   std::strcpy(str->data, initialValue);
 }
 
-void arcRuntimeIR_stringConcat(DynamicString *outStr,
-                               const DynamicString *strList) {
-  if (!outStr || !strList) {
+void arcRuntimeIR_stringConcat(DynamicString *outStr, ...) {
+  if (!outStr) {
     internalError("Invalid output string or string list");
   }
-
-  while (strList != nullptr) {
-    *outStr = *outStr + *strList;
-    strList++;
+  va_list args;
+  va_start(args, outStr);
+  uint64_t totalSize = 0;
+  while (true) {
+    auto strPtr = va_arg(args, const DynamicString *);
+    if ((!strPtr || (!strPtr->data)))
+      break;
+    totalSize += strPtr->size;
   }
+  va_end(args);
+
+  outStr->size = totalSize;
+  outStr->data = new char[totalSize + 1];
+  char *current = outStr->data;
+
+  while (true) {
+    auto strPtr = va_arg(args, const DynamicString *);
+    if ((!strPtr || (!strPtr->data)))
+      break;
+    std::memcpy(current, strPtr->data, strPtr->size);
+    current += strPtr->size;
+  }
+  va_end(args);
+  *current = '\0';
 }
 
 #ifdef ARC_RUNTIME_JIT_BIND
@@ -229,8 +247,9 @@ namespace circt::arc::runtime {
 
 static const APICallbacks apiCallbacksGlobal{
     &arcRuntimeIR_allocInstance, &arcRuntimeIR_deleteInstance,
-    &arcRuntimeIR_onEval,        &arcRuntimeIR_onInitialized,
-    &arcRuntimeIR_format,        &arcRuntimeIR_swapTraceBuffer, &arcRuntimeIR_stringInit};
+    &arcRuntimeIR_onEval,               &arcRuntimeIR_onInitialized,
+    &arcRuntimeIR_format,
+           &arcRuntimeIR_swapTraceBuffer, &arcRuntimeIR_stringInit,    &arcRuntimeIR_stringConcat};
 
 const APICallbacks &getArcRuntimeAPICallbacks() { return apiCallbacksGlobal; }
 

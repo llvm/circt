@@ -109,5 +109,8 @@ ARC_IR_EXPORT void
 arcRuntimeIR_stringInit(circt::arc::runtime::DynamicString *str,
                         const char *initialValue);
 
+ARC_IR_EXPORT void
+arcRuntimeIR_stringConcat(circt::arc::runtime::DynamicString *outStr, ...);
+
 // NOLINTEND(readability-identifier-naming)
 #endif // CIRCT_DIALECT_ARC_RUNTIME_IRINTERFACE_H
