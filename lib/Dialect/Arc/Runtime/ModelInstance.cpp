@@ -87,6 +87,9 @@ ModelInstance::~ModelInstance() {
 
 std::filesystem::path
 ModelInstance::getTraceFilePath(const std::string &suffix) {
+  if (traceFileArg.has_value())
+    return std::filesystem::path(*traceFileArg);
+
   std::string saneName;
   if (modelInfo->modelName)
     saneName = std::string(modelInfo->modelName);
@@ -130,6 +133,19 @@ uint64_t *ModelInstance::swapTraceBuffer() {
   return traceEncoder->dispatch(state->traceBufferSize);
 }
 
+// Try to parse argument with "`key`=`value`" syntax
+static bool parseKeyValueArg(const std::string_view &input, std::string &key,
+                             std::string &value) {
+  key.clear();
+  value.clear();
+  auto eqPos = input.find('=');
+  if (eqPos == std::string_view::npos || eqPos == 0)
+    return false;
+  key = input.substr(0, eqPos);
+  value = input.substr(eqPos + 1);
+  return true;
+}
+
 void ModelInstance::parseArgs(const char *args) {
   if (!args)
     return;
@@ -149,12 +165,20 @@ void ModelInstance::parseArgs(const char *args) {
   if (start <= argStr.size())
     options.push_back(argStr.substr(start));
 
+  std::string key;
+  std::string value;
+
   // Parse the individual options
   for (auto &option : options) {
-    if (option == "debug")
+
+    if (option == "debug") {
       verbose = true;
-    else if (option == "vcd")
+    } else if (option == "vcd") {
       traceMode = TraceMode::VCD;
+    } else if (parseKeyValueArg(option, key, value) && !value.empty()) {
+      if (key == "traceFile")
+        traceFileArg = value;
+    }
   }
 }
 

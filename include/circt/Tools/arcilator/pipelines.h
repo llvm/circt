@@ -113,8 +113,22 @@ void populateArcStateAllocationPipeline(
 
 // Lower the arcs and update functions to LLVM. This pipeline lowers modules to
 // LLVM IR.
-void populateArcToLLVMPipeline(mlir::OpPassManager &pm, bool insertRuntime,
-                               mlir::StringRef extraRuntimeArgs = {});
+struct ArcToLLVMOptions : mlir::PassPipelineOptions<ArcToLLVMOptions> {
+  Option<bool> noRuntime{
+      *this, "no-runtime",
+      llvm::cl::desc("Don't emit calls to the runtime library"),
+      llvm::cl::init(false)};
+  Option<std::string> extraRuntimeArgs{
+      *this, "extra-runtime-args",
+      llvm::cl::desc(
+          "Extra arguments passed to the runtime library for JIT runs"),
+      llvm::cl::init("")};
+  Option<std::string> traceFileName{
+      *this, "trace-file", llvm::cl::desc("Output file for signal traces"),
+      llvm::cl::init("")};
+};
+void populateArcToLLVMPipeline(mlir::OpPassManager &pm,
+                               const ArcToLLVMOptions &options = {});
 
 } // namespace circt
 

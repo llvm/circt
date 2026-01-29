@@ -1,5 +1,5 @@
 // RUN: circt-opt %s --arc-insert-runtime --split-input-file | FileCheck %s --check-prefixes=CHECK,NOARGS
-// RUN: circt-opt %s --arc-insert-runtime='extra-args="debug;bar"' --split-input-file | FileCheck %s --check-prefixes=CHECK,RTARGS
+// RUN: circt-opt %s --arc-insert-runtime="trace-file=tcf.abc extra-args='debug;bar'" --split-input-file | FileCheck %s --check-prefixes=CHECK,RTARGS
 
 // CHECK-DAG: llvm.func @arcRuntimeIR_allocInstance(!llvm.ptr, !llvm.ptr) -> (!llvm.ptr {llvm.align = 16 : i64, llvm.noalias, llvm.nonnull, llvm.noundef})
 // CHECK-DAG: llvm.func @arcRuntimeIR_deleteInstance(!llvm.ptr)
@@ -42,7 +42,7 @@ func.func @main() {
   %step = arith.constant 1 : index
 
   // NOARGS-LABEL: arc.sim.instantiate @counter as %arg0 runtime @arcRuntimeModel_counter()
-  // RTARGS-LABEL: arc.sim.instantiate @counter as %arg0 runtime @arcRuntimeModel_counter("debug;bar")
+  // RTARGS-LABEL: arc.sim.instantiate @counter as %arg0 runtime @arcRuntimeModel_counter("traceFile=tcf.abc;debug;bar")
   arc.sim.instantiate @counter as %model {
     // CHECK: [[RTINST:%.*]] = builtin.unrealized_conversion_cast %arg0 : !arc.sim.instance<@counter> to !llvm.ptr
     scf.for %i = %lb to %ub step %step {
@@ -61,7 +61,7 @@ func.func @main() {
   }
 
   // NOARGS-LABEL: arc.sim.instantiate @counter as %arg0 runtime @arcRuntimeModel_counter("foo")
-  // RTARGS-LABEL: arc.sim.instantiate @counter as %arg0 runtime @arcRuntimeModel_counter("foo;debug;bar")
+  // RTARGS-LABEL: arc.sim.instantiate @counter as %arg0 runtime @arcRuntimeModel_counter("foo;traceFile=tcf_1.abc;debug;bar")
   arc.sim.instantiate @counter as %model runtime ("foo") {
     // CHECK: [[RTINST:%.*]] = builtin.unrealized_conversion_cast %arg0 : !arc.sim.instance<@counter> to !llvm.ptr
     // CHECK-NEXT: llvm.call @arcRuntimeIR_onEval([[RTINST]])
