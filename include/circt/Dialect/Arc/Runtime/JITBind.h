@@ -35,7 +35,8 @@ struct APICallbacks {
   void (*fnOnInitialized)(uint8_t *simState);
   void (*fnFormat)(const FmtDescriptor *fmt, ...);
   uint64_t *(*fnSwapTraceBuffer)(const uint8_t *simState);
-  void (*fnStringInit)(DynamicString *str, const char *initialValue);
+  void (*fnStringInit)(DynamicString *str, const char *initialValue,
+                       int64_t initialSize);
   void (*fnStringConcat)(DynamicString *outStr, ...);
 
   static constexpr char symNameAllocInstance[] = "arcRuntimeIR_allocInstance";

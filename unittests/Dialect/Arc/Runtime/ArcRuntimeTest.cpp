@@ -103,7 +103,7 @@ TEST(ArcRuntimeTest, DynamicStringOperations) {
   using namespace circt::arc::runtime;
   auto makeAndVerifyString = [](const char *text, size_t expectedSize) {
     DynamicString str{};
-    arcRuntimeIR_stringInit(&str, text);
+    arcRuntimeIR_stringInit(&str, text, expectedSize);
     EXPECT_STREQ(str.data, text);
     EXPECT_EQ(str.size, expectedSize);
     return str;

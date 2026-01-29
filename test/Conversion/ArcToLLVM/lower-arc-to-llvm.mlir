@@ -328,20 +328,22 @@ func.func private @Dummy(%arg0: i42, %arg1: !hw.array<4xi19>, %arg2: !arc.storag
 
 // CHECK-LABEL: llvm.func @dyn_string
 // CHECK:    %0 = llvm.mlir.addressof @_arc_str_0 : !llvm.ptr
-// CHECK:    %1 = llvm.mlir.constant(16 : i64) : i64
-// CHECK:    %2 = llvm.alloca %1 x !llvm.struct<packed (i64, ptr)> : (i64) -> !llvm.ptr
-// CHECK:    llvm.call @arcRuntimeIR_stringInit(%2, %0) vararg(!llvm.func<void (ptr, ...)>) : (!llvm.ptr, !llvm.ptr) -> ()
-// CHECK:    %3 = llvm.getelementptr %2[0] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(i64, ptr)>
-// CHECK:    %4 = llvm.load %3 : !llvm.ptr -> i64
-// CHECK:    %5 = llvm.mlir.addressof @_arc_str_1 : !llvm.ptr
-// CHECK:    %6 = llvm.mlir.constant(16 : i64) : i64
-// CHECK:    %7 = llvm.alloca %6 x !llvm.struct<packed (i64, ptr)> : (i64) -> !llvm.ptr
-// CHECK:    llvm.call @arcRuntimeIR_stringInit(%7, %5) vararg(!llvm.func<void (ptr, ...)>) : (!llvm.ptr, !llvm.ptr) -> ()
+// CHECK:    %1 = llvm.mlir.constant(5 : i64) : i64
+// CHECK:    %2 = llvm.mlir.constant(16 : i64) : i64
+// CHECK:    %3 = llvm.alloca %2 x !llvm.struct<packed (i64, ptr)> : (i64) -> !llvm.ptr
+// CHECK:    llvm.call @arcRuntimeIR_stringInit(%3, %0, %1) vararg(!llvm.func<void (ptr, ...)>) : (!llvm.ptr, !llvm.ptr, i64) -> ()
+// CHECK:    %4 = llvm.getelementptr %3[0] : (!llvm.ptr) -> !llvm.ptr, !llvm.struct<(i64, ptr)>
+// CHECK:    %5 = llvm.load %4 : !llvm.ptr -> i64
+// CHECK:    %6 = llvm.mlir.addressof @_arc_str_1 : !llvm.ptr
+// CHECK:    %7 = llvm.mlir.constant(5 : i64) : i64
 // CHECK:    %8 = llvm.mlir.constant(16 : i64) : i64
 // CHECK:    %9 = llvm.alloca %8 x !llvm.struct<packed (i64, ptr)> : (i64) -> !llvm.ptr
-// CHECK:    %10 = llvm.mlir.constant(0 : i64) : i64
-// CHECK:    %11 = llvm.inttoptr %10 : i64 to !llvm.ptr
-// CHECK:    llvm.call @arcRuntimeIR_stringConcat(%9, %2, %7, %11) vararg(!llvm.func<void (ptr, ...)>) : (!llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr) -> ()
+// CHECK:    llvm.call @arcRuntimeIR_stringInit(%9, %6, %7) vararg(!llvm.func<void (ptr, ...)>) : (!llvm.ptr, !llvm.ptr, i64) -> ()
+// CHECK:    %10 = llvm.mlir.constant(16 : i64) : i64
+// CHECK:    %11 = llvm.alloca %10 x !llvm.struct<packed (i64, ptr)> : (i64) -> !llvm.ptr
+// CHECK:    %12 = llvm.mlir.constant(0 : i64) : i64
+// CHECK:    %13 = llvm.inttoptr %12 : i64 to !llvm.ptr
+// CHECK:    llvm.call @arcRuntimeIR_stringConcat(%11, %3, %9, %13) vararg(!llvm.func<void (ptr, ...)>) : (!llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr) -> ()
 // CHECK:    llvm.return
 func.func @dyn_string() {
   %s1 = sim.string.literal "Hello"

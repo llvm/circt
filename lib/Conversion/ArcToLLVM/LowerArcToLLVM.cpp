@@ -916,7 +916,12 @@ struct SimStringConstantOpLowering
     ModuleOp moduleOp = op->getParentOfType<ModuleOp>();
     if (!moduleOp)
       return failure();
+
     Value strValue = stringCache.getOrCreate(rewriter, op.getLiteral());
+    int64_t strSize = op.getLiteral().size();
+    LLVM::ConstantOp sizeCst = LLVM::ConstantOp::create(
+        rewriter, op.getLoc(), rewriter.getI64Type(), strSize);
+
     auto ptrTy = LLVM::LLVMPointerType::get(rewriter.getContext());
     auto structTy = LLVM::LLVMStructType::getLiteral(
         getContext(), {rewriter.getI64Type(), ptrTy}, true);
@@ -929,8 +934,11 @@ struct SimStringConstantOpLowering
         rewriter, moduleOp, runtime::APICallbacks::symStringInit,
         LLVM::LLVMPointerType::get(op.getContext()),
         LLVM::LLVMVoidType::get(op.getContext()), true);
+
     SmallVector<Value> args = {allocaOp.getResult()};
     args.push_back(strValue);
+    args.push_back(sizeCst.getResult());
+
     auto call = LLVM::CallOp::create(rewriter, op.getLoc(), func.value(), args);
     rewriter.replaceOp(op, allocaOp);
     return success();

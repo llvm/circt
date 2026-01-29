@@ -202,14 +202,14 @@ uint64_t *arcRuntimeIR_swapTraceBuffer(const uint8_t *modelState) {
   return getModelInstance(statePtr)->swapTraceBuffer();
 }
 
-void arcRuntimeIR_stringInit(DynamicString *str, const char *initialValue) {
+void arcRuntimeIR_stringInit(DynamicString *str, const char *initialValue,
+                             int64_t initialSize) {
   if (!str || !initialValue) {
     impl::fatalError("Invalid string or initial value");
   }
-  auto strSize = std::strlen(initialValue);
-  str->size = strSize;
-  str->data = new char[strSize + 1];
-  std::strcpy(str->data, initialValue);
+  str->size = initialSize;
+  str->data = new char[initialSize];
+  std::memcpy(str->data, initialValue, initialSize);
 }
 
 void arcRuntimeIR_stringConcat(DynamicString *outStr, ...) {
@@ -227,9 +227,10 @@ void arcRuntimeIR_stringConcat(DynamicString *outStr, ...) {
   va_end(args);
 
   outStr->size = totalSize;
-  outStr->data = new char[totalSize + 1];
+  outStr->data = new char[totalSize];
   char *current = outStr->data;
 
+  va_start(args, outStr);
   while (true) {
     auto strPtr = va_arg(args, const DynamicString *);
     if ((!strPtr || (!strPtr->data)))
@@ -238,7 +239,6 @@ void arcRuntimeIR_stringConcat(DynamicString *outStr, ...) {
     current += strPtr->size;
   }
   va_end(args);
-  *current = '\0';
 }
 
 #ifdef ARC_RUNTIME_JIT_BIND
