@@ -2755,6 +2755,18 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                 [&]() -> Value {
                   return moore::StringToLowerOp::create(builder, loc, value);
                 })
+          .Case("pop_back",
+                [&]() -> Value {
+                  if (isa<moore::QueueType>(value.getType()))
+                    return moore::QueuePopBackOp::create(builder, loc, value);
+                  return {};
+                })
+          .Case("pop_front",
+                [&]() -> Value {
+                  if (isa<moore::QueueType>(value.getType()))
+                    return moore::QueuePopFrontOp::create(builder, loc, value);
+                  return {};
+                })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
 }
@@ -2768,6 +2780,20 @@ Context::convertSystemCallArity2(const slang::ast::SystemSubroutine &subroutine,
                 [&]() -> Value {
                   return moore::StringGetCOp::create(builder, loc, value1,
                                                      value2);
+                })
+          .Case("push_back",
+                [&]() -> Value {
+                  if (isa<moore::QueueType>(value1.getType()))
+                    return moore::QueuePushBackOp::create(builder, loc, value1,
+                                                          value2);
+                  return {};
+                })
+          .Case("push_front",
+                [&]() -> Value {
+                  if (isa<moore::QueueType>(value1.getType()))
+                    return moore::QueuePushFrontOp::create(builder, loc, value1,
+                                                           value2);
+                  return {};
                 })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();

@@ -1741,6 +1741,64 @@ def DynExtractRefOp : MooreOp<"dyn_extract_ref", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Queue Manipulation
+//===----------------------------------------------------------------------===//
+
+def QueuePushBackOp : MooreOp<"push_back", [TypesMatchWith<"queue and element types match",
+    "input", "element", "cast<QueueType>($_self).getElementType()">]> {
+  let summary = "Push an element to the back of a queue";
+  let description = [{
+    See IEEE 1800-2023 § 7.10.2.7 "Push_back()"
+  }];
+  let arguments = (ins QueueType:$input, UnpackedType:$element);
+  let results = (outs VoidType:$out);
+  let assemblyFormat = [{
+    $element `into` $input attr-dict `:` type($input)
+  }];
+}
+
+def QueuePushFrontOp : MooreOp<"push_front", [TypesMatchWith<"queue and element types match",
+    "input", "element", "cast<QueueType>($_self).getElementType()">]> {
+  let summary = "Push an element to the front of a queue";
+  let description = [{
+    See IEEE 1800-2023 § 7.10.2.6 "Push_front()"
+  }];
+  let arguments = (ins QueueType:$input, UnpackedType:$element);
+  let results = (outs VoidType:$out);
+  let assemblyFormat = [{
+    $element `into` $input attr-dict `:` type($input)
+  }];
+}
+
+
+def QueuePopBackOp : MooreOp<"pop_back", [TypesMatchWith<"queue and element types match",
+    "input", "result", "cast<QueueType>($_self).getElementType()">]> {
+  let summary = "Return and remove an element from the back of a queue";
+  let description = [{
+    See IEEE 1800-2023 § 7.10.2.4 "Pop_back()"
+  }];
+  let arguments = (ins QueueType:$input);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    `from` $input attr-dict `:` type($input)
+  }];
+}
+
+def QueuePopFrontOp : MooreOp<"pop_front", [TypesMatchWith<"queue and element types match",
+    "input", "result", "cast<QueueType>($_self).getElementType()">]> {
+  let summary = "Return and remove an element from the front of a queue";
+  let description = [{
+    See IEEE 1800-2023 § 7.10.2.5 "Pop_front()"
+  }];
+  let arguments = (ins QueueType:$input);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    `from` $input attr-dict `:` type($input)
+  }];
+}
+
+
+//===----------------------------------------------------------------------===//
 // Array Manipulation
 //===----------------------------------------------------------------------===//
 
