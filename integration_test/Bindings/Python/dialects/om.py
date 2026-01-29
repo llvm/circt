@@ -36,13 +36,13 @@ with Context() as ctx, Location.unknown():
     om.class @Test(%param: !om.integer) -> (field: !om.integer, child: !om.class.type<@Child>, reference: !om.ref, list: !om.list<!om.string>, nest: !om.class.type<@Nest>, true: i1, false: i1) {
       %sym = om.constant #om.ref<<@Root::@x>> : !om.ref
 
-      %c_14 = om.constant #om.integer<14> : !om.integer
+      %c_14 = om.constant #om.integer<14 : si32> : !om.integer
       %0 = om.object @Child(%c_14) : (!om.integer) -> !om.class.type<@Child>
 
 
       %list = om.constant #om.list<!om.string, ["X" : !om.string, "Y" : !om.string]> : !om.list<!om.string>
 
-      %c_15 = om.constant #om.integer<15> : !om.integer
+      %c_15 = om.constant #om.integer<15 : si32> : !om.integer
       %1 = om.object @Child(%c_15) : (!om.integer) -> !om.class.type<@Child>
       %list_child = om.list_create %0, %1: !om.class.type<@Child>
       %2 = om.object @Nest(%list_child) : (!om.list<!om.class.type<@Child>>) -> !om.class.type<@Nest>
@@ -232,17 +232,6 @@ except TypeError as e:
 with Context() as ctx:
   circt.register_dialects(ctx)
 
-  # Signless
-  int_attr1 = om.OMIntegerAttr.get(
-      IntegerAttr.get(IntegerType.get_signless(64), 42))
-  # CHECK: 42
-  print(str(int_attr1))
-
-  int_attr2 = om.OMIntegerAttr.get(
-      IntegerAttr.get(IntegerType.get_signless(64), -42))
-  # CHECK: 18446744073709551574
-  print(str(int_attr2))
-
   # Signed
   int_attr3 = om.OMIntegerAttr.get(
       IntegerAttr.get(IntegerType.get_signed(64), 42))
@@ -253,17 +242,6 @@ with Context() as ctx:
       IntegerAttr.get(IntegerType.get_signed(64), -42))
   # CHECK: -42
   print(str(int_attr4))
-
-  # Unsigned
-  int_attr5 = om.OMIntegerAttr.get(
-      IntegerAttr.get(IntegerType.get_unsigned(64), 42))
-  # CHECK: 42
-  print(str(int_attr5))
-
-  int_attr6 = om.OMIntegerAttr.get(
-      IntegerAttr.get(IntegerType.get_unsigned(64), -42))
-  # CHECK: 18446744073709551574
-  print(str(int_attr6))
 
   # Test AnyType
   any_type = Type.parse("!om.any")

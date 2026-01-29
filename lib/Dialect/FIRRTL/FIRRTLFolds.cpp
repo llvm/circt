@@ -962,9 +962,10 @@ OpFoldResult IntegerShrOp::fold(FoldAdaptor adaptor) {
   if (auto rhsCst = getConstant(adaptor.getRhs())) {
     if (auto lhsCst = getConstant(adaptor.getLhs())) {
 
-      return IntegerAttr::get(
-          IntegerType::get(getContext(), lhsCst->getBitWidth()),
-          lhsCst->ashr(*rhsCst));
+      return IntegerAttr::get(IntegerType::get(getContext(),
+                                               lhsCst->getBitWidth(),
+                                               IntegerType::Signed),
+                              lhsCst->ashr(*rhsCst));
     }
 
     if (rhsCst->isZero())
@@ -979,9 +980,10 @@ OpFoldResult IntegerShlOp::fold(FoldAdaptor adaptor) {
     // Constant folding
     if (auto lhsCst = getConstant(adaptor.getLhs()))
 
-      return IntegerAttr::get(
-          IntegerType::get(getContext(), lhsCst->getBitWidth()),
-          lhsCst->shl(*rhsCst));
+      return IntegerAttr::get(IntegerType::get(getContext(),
+                                               lhsCst->getBitWidth(),
+                                               IntegerType::Signed),
+                              lhsCst->shl(*rhsCst));
 
     // integer.shl(x, 0) -> x
     if (rhsCst->isZero())

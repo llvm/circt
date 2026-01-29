@@ -4873,6 +4873,13 @@ Attribute AggregateConstantOp::getAttributeFromFieldID(uint64_t fieldID) {
   return value;
 }
 
+LogicalResult FIntegerConstantOp::verify() {
+  auto i = getValueAttr();
+  if (!i.getType().isSignedInteger())
+    return emitOpError("value must be signed");
+  return success();
+}
+
 void FIntegerConstantOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printAttributeWithoutType(getValueAttr());
