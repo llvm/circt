@@ -213,9 +213,8 @@ void arcRuntimeIR_stringInit(DynamicString *str, const char *initialValue) {
 }
 
 void arcRuntimeIR_stringConcat(DynamicString *outStr, ...) {
-  if (!outStr) {
+  if (!outStr)
     impl::fatalError("Invalid output string or string list");
-  }
   va_list args;
   va_start(args, outStr);
   uint64_t totalSize = 0;
