@@ -831,7 +831,7 @@ def ToBuiltinIntOp : MooreOp<"to_builtin_int", [Pure,
   }]>
 ]> {  let summary = "Convert a `!moore.i<n>` to a builtin `i<n>`";
   let description = [{
-    Maps `X` and `Z` bits to 0, and passes through 1 and 0 bits unchanged.
+    Casts from a two-valued Moore integer to a builtin integer.
   }];
   let arguments = (ins TwoValuedIntType:$input);
   let results = (outs AnyInteger:$result);
