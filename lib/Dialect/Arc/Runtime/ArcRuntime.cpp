@@ -204,7 +204,7 @@ uint64_t *arcRuntimeIR_swapTraceBuffer(const uint8_t *modelState) {
 
 void arcRuntimeIR_stringInit(DynamicString *str, const char *initialValue) {
   if (!str || !initialValue) {
-    internalError("Invalid string or initial value");
+    impl::fatalError("Invalid string or initial value");
   }
   auto strSize = std::strlen(initialValue);
   str->size = strSize;
@@ -214,7 +214,7 @@ void arcRuntimeIR_stringInit(DynamicString *str, const char *initialValue) {
 
 void arcRuntimeIR_stringConcat(DynamicString *outStr, ...) {
   if (!outStr) {
-    internalError("Invalid output string or string list");
+    impl::fatalError("Invalid output string or string list");
   }
   va_list args;
   va_start(args, outStr);
