@@ -1894,7 +1894,7 @@ struct FuncOpConversion : public calyx::FuncOpPartialLoweringPattern {
   LogicalResult
   partiallyLowerFuncToComp(FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
-    // Skip external function declarations (functions without a body).
+    // Skip external function declarations.
     // These cannot be lowered to Calyx components.
     if (funcOp.isExternal())
       return success();
