@@ -112,6 +112,9 @@ public:
   /// Stop tracing
   void finish(const ArcState *state);
 
+  /// Return the value of the internal step counter
+  int64_t getTimeStep() const { return timeStep; }
+
   /// Number of trace buffers in rotation
   const unsigned numBuffers;
 
