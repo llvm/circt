@@ -362,12 +362,12 @@ def AndOfPad : Pat <
 def AndOfAsSIntL : Pat<
   (AndPrimOp:$old (AsSIntPrimOp $x), $y),
   (MoveNameHint $old, (AndPrimOp $x, (AsUIntPrimOp $y))),
-  [(KnownWidth $x), (EqualIntSize $x, $y)]>;
+  [(IntTypes $x), (KnownWidth $x), (EqualIntSize $x, $y)]>;
 
 def AndOfAsSIntR : Pat<
   (AndPrimOp:$old $x, (AsSIntPrimOp $y)),
   (MoveNameHint $old, (AndPrimOp (AsUIntPrimOp $x), $y)),
-  [(KnownWidth $x), (EqualIntSize $x, $y)]>;
+  [(IntTypes $y), (KnownWidth $x), (EqualIntSize $x, $y)]>;
 
 // or(x, 0) -> x, fold can't handle all cases
 def OrOfZero : Pat <
@@ -538,7 +538,7 @@ def BitsOfAsUInt : Pat<
   (MoveNameHint $old, (BitsPrimOp $x, $oHigh, $oLow)),
   [(KnownWidth $x)]>;
 
-// bits(asUInt) -> bits
+// bits(and(x, y)) -> and(bits(x), bits(y))
 def BitsOfAnd : Pat<
   (BitsPrimOp:$old (AndPrimOp $x, $y), I32Attr:$oHigh, I32Attr:$oLow),
   (MoveNameHint $old, (AndPrimOp (BitsPrimOp $x, $oHigh, $oLow), (BitsPrimOp $y, $oHigh, $oLow))),
@@ -647,7 +647,7 @@ def CatDoubleConst : Pat <
 def CatCast : Pat <
   (CatPrimOp:$old (variadic (AsUIntPrimOp $x), (AsUIntPrimOp $y))),
   (MoveNameHint $old, (CatPrimOp (variadic $x, $y))),
-  [(EqualSigns $x, $y)]>;
+  [(IntTypes $x), (IntTypes $y), (EqualSigns $x, $y)]>;
 
 // cat(bits a:b x, bits b+1:c x) -> bits( a:c x)
 def CatBitsBits : Pat <

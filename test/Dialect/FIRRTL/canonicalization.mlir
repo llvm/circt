@@ -198,6 +198,39 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
   firrtl.matchingconnect %out5, %11 : !firrtl.uint<5>
 }
 
+// AndOfAsSInt patterns should not crash on non-IntType inputs
+// CHECK-LABEL: firrtl.module @AndOfAsSIntNoCrash
+firrtl.module @AndOfAsSIntNoCrash(
+  in %clock: !firrtl.clock,
+  in %asyncreset: !firrtl.asyncreset,
+  in %sint: !firrtl.sint<4>,
+  in %y: !firrtl.sint<1>,
+  out %out1: !firrtl.uint<1>,
+  out %out2: !firrtl.uint<1>,
+  out %out3: !firrtl.uint<4>
+) {
+  // AndOfAsSIntL pattern should not crash on clock type
+  // CHECK: %[[ASSINT1:.+]] = firrtl.asSInt %clock
+  // CHECK: firrtl.and %[[ASSINT1]], %y
+  %0 = firrtl.asSInt %clock : (!firrtl.clock) -> !firrtl.sint<1>
+  %1 = firrtl.and %0, %y : (!firrtl.sint<1>, !firrtl.sint<1>) -> !firrtl.uint<1>
+  firrtl.matchingconnect %out1, %1 : !firrtl.uint<1>
+
+  // AndOfAsSIntR pattern should not crash on asyncreset type
+  // CHECK: %[[ASSINT2:.+]] = firrtl.asSInt %asyncreset
+  // CHECK: firrtl.and %y, %[[ASSINT2]]
+  %2 = firrtl.asSInt %asyncreset : (!firrtl.asyncreset) -> !firrtl.sint<1>
+  %3 = firrtl.and %y, %2 : (!firrtl.sint<1>, !firrtl.sint<1>) -> !firrtl.uint<1>
+  firrtl.matchingconnect %out2, %3 : !firrtl.uint<1>
+
+  // AndOfAsSIntL/R patterns should match on SInt.
+  // CHECK: %[[ASUINT:.+]] = firrtl.asUInt %sint
+  // CHECK: firrtl.matchingconnect %out3, %[[ASUINT]]
+  %4 = firrtl.asSInt %sint : (!firrtl.sint<4>) -> !firrtl.sint<4>
+  %5 = firrtl.and %4, %sint : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %out3, %5 : !firrtl.uint<4>
+}
+
 // CHECK-LABEL: firrtl.module @Or
 firrtl.module @Or(in %in: !firrtl.uint<4>,
                   in %in6: !firrtl.uint<6>,
@@ -499,6 +532,42 @@ firrtl.module @Cat(in %in4: !firrtl.uint<4>,
   %tcast = firrtl.asUInt %sin4 : (!firrtl.sint<4>) -> !firrtl.uint<4>
   %11 = firrtl.cat %tcast, %tcast : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
   firrtl.matchingconnect %outu8, %11 : !firrtl.uint<8>
+}
+
+// Regression test: CatCast pattern should not crash on non-IntType inputs
+// CHECK-LABEL: firrtl.module @CatCastNoCrash
+firrtl.module @CatCastNoCrash(
+  in %clock: !firrtl.clock,
+  in %asyncreset: !firrtl.asyncreset,
+  in %sint: !firrtl.sint<4>,
+  out %out1: !firrtl.uint<2>,
+  out %out2: !firrtl.uint<2>,
+  out %out3: !firrtl.uint<8>
+) {
+  // CatCast pattern should not crash on clock type
+  // CHECK: %[[ASUINT1:.+]] = firrtl.asUInt %clock
+  // CHECK: %[[ASUINT2:.+]] = firrtl.asUInt %clock
+  // CHECK: firrtl.cat %[[ASUINT1]], %[[ASUINT2]]
+  %0 = firrtl.asUInt %clock : (!firrtl.clock) -> !firrtl.uint<1>
+  %1 = firrtl.asUInt %clock : (!firrtl.clock) -> !firrtl.uint<1>
+  %2 = firrtl.cat %0, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  firrtl.matchingconnect %out1, %2 : !firrtl.uint<2>
+
+  // CatCast pattern should not crash on asyncreset type
+  // CHECK: %[[ASUINT3:.+]] = firrtl.asUInt %asyncreset
+  // CHECK: %[[ASUINT4:.+]] = firrtl.asUInt %asyncreset
+  // CHECK: firrtl.cat %[[ASUINT3]], %[[ASUINT4]]
+  %3 = firrtl.asUInt %asyncreset : (!firrtl.asyncreset) -> !firrtl.uint<1>
+  %4 = firrtl.asUInt %asyncreset : (!firrtl.asyncreset) -> !firrtl.uint<1>
+  %5 = firrtl.cat %3, %4 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  firrtl.matchingconnect %out2, %5 : !firrtl.uint<2>
+
+  // CatCast pattern should match on SInt.
+  // CHECK: firrtl.cat %sint, %sint
+  %6 = firrtl.asUInt %sint : (!firrtl.sint<4>) -> !firrtl.uint<4>
+  %7 = firrtl.asUInt %sint : (!firrtl.sint<4>) -> !firrtl.uint<4>
+  %8 = firrtl.cat %6, %7 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
+  firrtl.matchingconnect %out3, %8 : !firrtl.uint<8>
 }
 
 // CHECK-LABEL: firrtl.module @Bits
