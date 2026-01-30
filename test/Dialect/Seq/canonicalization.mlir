@@ -430,3 +430,13 @@ hw.module @FirRegMuxConstantWithReset(in %clk : !seq.clock, in %cond : i1, in %r
   hw.instance "reg4" @Observe(x: %reg4: i32) -> ()
   // CHECK: hw.instance "reg4" @Observe(x: %c0_i32: i32) -> ()
 }
+
+// CHECK-LABEL: @clock_div
+hw.module @clock_div(in %clock : !seq.clock, out div_combined: !seq.clock) {
+  // Nested clock dividers should be combined: clock_div(clock_div(clock, 2), 1) -> clock_div(clock, 3)
+  %div1 = seq.clock_div %clock by 2
+  %div2 = seq.clock_div %div1 by 1
+  // CHECK: %[[DIV3:.+]] = seq.clock_div %clock by 3
+  // CHECK: hw.output %[[DIV3]]
+  hw.output %div2 : !seq.clock
+}
