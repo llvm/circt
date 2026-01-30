@@ -716,10 +716,14 @@ LogicalResult Promoter::promote() {
     return success();
 
   findPromotableSlots();
+  captureAcrossWait();
+
+  // If there are no promotable slots we can still return after ensuring any
+  // values live across waits were captured as block arguments above. This
+  // keeps the pass semantics while allowing wait capturing to run
+  // independently of slot promotion.
   if (slots.empty())
     return success();
-
-  captureAcrossWait();
 
   constructLattice();
   LLVM_DEBUG({
