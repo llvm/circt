@@ -856,6 +856,25 @@ OpFoldResult ClockMuxOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// ClockDividerOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ClockDividerOp::canonicalize(ClockDividerOp op,
+                                           PatternRewriter &rewriter) {
+  // clock_div(clock_div(clock, a), b) -> clock_div(clock, a + b)
+  if (auto innerDiv = op.getInput().getDefiningOp<ClockDividerOp>()) {
+    auto outerPow2 = op.getPow2();
+    auto innerPow2 = innerDiv.getPow2();
+    auto combinedPow2 = outerPow2 + innerPow2;
+
+    rewriter.replaceOpWithNewOp<ClockDividerOp>(op, innerDiv.getInput(),
+                                                combinedPow2);
+    return success();
+  }
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // FirMemOp
 //===----------------------------------------------------------------------===//
 
