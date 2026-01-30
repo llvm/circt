@@ -213,3 +213,20 @@ func.func @TimeConversion(%arg0: i64, %arg1: !llhd.time) -> (!llhd.time, i64) {
   %1 = llhd.time_to_int %arg1
   return %0, %1 : !llhd.time, i64
 }
+
+// CHECK-LABEL: llhd.global_signal @GlobalSig1 : i42
+llhd.global_signal @GlobalSig1 : i42
+
+// CHECK: llhd.get_global_signal @GlobalSig1 : <i42>
+llhd.get_global_signal @GlobalSig1 : <i42>
+
+// CHECK-LABEL: llhd.global_signal @GlobalSig2 : i42
+llhd.global_signal @GlobalSig2 : i42 init {
+  // CHECK-NEXT: hw.constant
+  %c9001_i42 = hw.constant 9001 : i42
+  // CHECK-NEXT: llhd.yield
+  llhd.yield %c9001_i42 : i42
+}
+
+// CHECK: llhd.get_global_signal @GlobalSig2 : <i42>
+llhd.get_global_signal @GlobalSig2 : <i42>

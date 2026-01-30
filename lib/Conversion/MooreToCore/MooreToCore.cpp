@@ -929,6 +929,30 @@ struct NetOpConversion : public OpConversionPattern<NetOp> {
   }
 };
 
+// moore.global_variable -> llhd.global_signal
+static LogicalResult convert(GlobalVariableOp op,
+                             GlobalVariableOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter,
+                             const TypeConverter &typeConverter) {
+  auto type = typeConverter.convertType(op.getType());
+  auto sig = llhd::GlobalSignalOp::create(rewriter, op.getLoc(),
+                                          op.getSymNameAttr(), type);
+  sig.getInitRegion().takeBody(op.getInitRegion());
+  rewriter.eraseOp(op);
+  return success();
+}
+
+// moore.get_global_variable -> llhd.get_global_signal
+static LogicalResult convert(GetGlobalVariableOp op,
+                             GetGlobalVariableOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter,
+                             const TypeConverter &typeConverter) {
+  auto type = typeConverter.convertType(op.getType());
+  rewriter.replaceOpWithNewOp<llhd::GetGlobalSignalOp>(op, type,
+                                                       op.getGlobalNameAttr());
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Expression Conversion
 //===----------------------------------------------------------------------===//
@@ -1954,7 +1978,10 @@ struct YieldOpConversion : public OpConversionPattern<YieldOp> {
   LogicalResult
   matchAndRewrite(YieldOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<scf::YieldOp>(op, adaptor.getResult());
+    if (isa<llhd::GlobalSignalOp>(op->getParentOp()))
+      rewriter.replaceOpWithNewOp<llhd::YieldOp>(op, adaptor.getResult());
+    else
+      rewriter.replaceOpWithNewOp<scf::YieldOp>(op, adaptor.getResult());
     return success();
   }
 };
@@ -2557,6 +2584,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
   // Structural operations
   patterns.add<WaitDelayOp>(convert);
   patterns.add<UnreachableOp>(convert);
+  patterns.add<GlobalVariableOp>(convert);
+  patterns.add<GetGlobalVariableOp>(convert);
 
   // Simulation control
   patterns.add<StopBIOp>(convert);
