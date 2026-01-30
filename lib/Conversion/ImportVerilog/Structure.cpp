@@ -57,7 +57,9 @@ struct BaseVisitor {
 
   // Handle classes without parameters or specialized generic classes
   LogicalResult visit(const slang::ast::ClassType &classdecl) {
-    return context.convertClassDeclaration(classdecl);
+    if (failed(context.buildClassProperties(classdecl)))
+      return failure();
+    return context.materializeClassMethods(classdecl);
   }
 
   // GenericClassDefSymbol represents parameterized (template) classes, which
@@ -709,6 +711,18 @@ LogicalResult Context::convertCompilation() {
     auto *module = moduleWorklist.front();
     moduleWorklist.pop();
     if (failed(convertModuleBody(module)))
+      return failure();
+  }
+
+  // It's possible that after converting modules, we haven't converted all
+  // methods yet, especially if they are unused. Do that in this pass.
+  SmallVector<const slang::ast::ClassType *, 16> classMethodWorklist;
+  classMethodWorklist.reserve(classes.size());
+  for (auto &kv : classes)
+    classMethodWorklist.push_back(kv.first);
+
+  for (auto *inst : classMethodWorklist) {
+    if (failed(materializeClassMethods(*inst)))
       return failure();
   }
 
@@ -1504,16 +1518,28 @@ buildBaseAndImplementsAttrs(Context &context,
   return {base, implArr};
 }
 
-/// Visit a slang::ast::ClassType and populate the body of an existing
-/// moore::ClassDeclOp with field/method decls.
-struct ClassDeclVisitor {
+/// Base class for visiting slang::ast::ClassType members.
+/// Contains common state and utility methods.
+struct ClassDeclVisitorBase {
   Context &context;
   OpBuilder &builder;
   ClassLowering &classLowering;
 
-  ClassDeclVisitor(Context &ctx, ClassLowering &lowering)
+  ClassDeclVisitorBase(Context &ctx, ClassLowering &lowering)
       : context(ctx), builder(ctx.builder), classLowering(lowering) {}
 
+protected:
+  Location convertLocation(const slang::SourceLocation &sloc) {
+    return context.convertLocation(sloc);
+  }
+};
+
+/// Visitor for class property declarations.
+/// Populates the ClassDeclOp body with PropertyDeclOps.
+struct ClassPropertyVisitor : ClassDeclVisitorBase {
+  using ClassDeclVisitorBase::ClassDeclVisitorBase;
+
+  /// Build the ClassDeclOp body and populate it with property declarations.
   LogicalResult run(const slang::ast::ClassType &classAST) {
     if (!classLowering.op.getBody().empty())
       return success();
@@ -1523,24 +1549,12 @@ struct ClassDeclVisitor {
     Block *body = &classLowering.op.getBody().emplaceBlock();
     builder.setInsertionPointToEnd(body);
 
-    llvm::SmallVector<const slang::ast::Symbol *, 8> delayedSymbols;
-
-    // Pass 1: visit only ClassPropertySymbols
+    // Visit only ClassPropertySymbols
     for (const auto &mem : classAST.members()) {
-      if (const auto *proto = mem.as_if<slang::ast::ClassPropertySymbol>()) {
-        if (failed(proto->visit(*this)))
+      if (const auto *prop = mem.as_if<slang::ast::ClassPropertySymbol>()) {
+        if (failed(prop->visit(*this)))
           return failure();
-
-      } else {
-        delayedSymbols.push_back(&mem);
       }
-    }
-
-    // Pass 2: now resolve/convert everything else after member variables are
-    // declared.
-    for (const auto *sym : delayedSymbols) {
-      if (failed(sym->visit(*this)))
-        return failure();
     }
 
     return success();
@@ -1567,6 +1581,49 @@ struct ClassDeclVisitor {
     return success();
   }
 
+  // Nested class definition, convert
+  LogicalResult visit(const slang::ast::ClassType &cls) {
+    return context.buildClassProperties(cls);
+  }
+
+  // Catch-all: ignore everything else during property pass
+  template <typename T>
+  LogicalResult visit(T &&) {
+    return success();
+  }
+};
+
+/// Visitor for class method declarations.
+/// Materializes methods and nested class definitions.
+struct ClassMethodVisitor : ClassDeclVisitorBase {
+  using ClassDeclVisitorBase::ClassDeclVisitorBase;
+
+  /// Materialize class methods. The body must already exist from property pass.
+  LogicalResult run(const slang::ast::ClassType &classAST) {
+    if (classLowering.methodsFinalized)
+      return success();
+
+    if (classLowering.op.getBody().empty())
+      return failure();
+
+    OpBuilder::InsertionGuard ig(builder);
+    builder.setInsertionPointToEnd(&classLowering.op.getBody().front());
+
+    // Visit everything except ClassPropertySymbols
+    for (const auto &mem : classAST.members()) {
+      if (failed(mem.visit(*this)))
+        return failure();
+    }
+
+    classLowering.methodsFinalized = true;
+    return success();
+  }
+
+  // Skip properties during method pass
+  LogicalResult visit(const slang::ast::ClassPropertySymbol &) {
+    return success();
+  }
+
   // Parameters in specialized classes hold no further information; slang
   // already elaborates them in all relevant places.
   LogicalResult visit(const slang::ast::ParameterSymbol &) { return success(); }
@@ -1580,6 +1637,21 @@ struct ClassDeclVisitor {
   // Type aliases in specialized classes hold no further information; slang
   // already elaborates them in all relevant places.
   LogicalResult visit(const slang::ast::TypeAliasType &) { return success(); }
+
+  // Nested class definition, skip
+  LogicalResult visit(const slang::ast::GenericClassDefSymbol &) {
+    return success();
+  }
+
+  // Transparent members: ignore (inherited names pulled in by slang)
+  LogicalResult visit(const slang::ast::TransparentMemberSymbol &) {
+    return success();
+  }
+
+  // Empty members: ignore
+  LogicalResult visit(const slang::ast::EmptyMemberSymbol &) {
+    return success();
+  }
 
   // Fully-fledged functions - SubroutineSymbol
   LogicalResult visit(const slang::ast::SubroutineSymbol &fn) {
@@ -1672,24 +1744,11 @@ struct ClassDeclVisitor {
     return visit(*externImpl);
   }
 
-  // Nested class definition, skip
-  LogicalResult visit(const slang::ast::GenericClassDefSymbol &) {
-    return success();
-  }
-
   // Nested class definition, convert
   LogicalResult visit(const slang::ast::ClassType &cls) {
-    return context.convertClassDeclaration(cls);
-  }
-
-  // Transparent members: ignore (inherited names pulled in by slang)
-  LogicalResult visit(const slang::ast::TransparentMemberSymbol &) {
-    return success();
-  }
-
-  // Empty members: ignore
-  LogicalResult visit(const slang::ast::EmptyMemberSymbol &) {
-    return success();
+    if (failed(context.buildClassProperties(cls)))
+      return failure();
+    return context.materializeClassMethods(cls);
   }
 
   // Emit an error for all other members.
@@ -1701,11 +1760,6 @@ struct ClassDeclVisitor {
     mlir::emitError(loc) << "unsupported construct in ClassType members: "
                          << slang::ast::toString(node.kind);
     return failure();
-  }
-
-private:
-  Location convertLocation(const slang::SourceLocation &sloc) {
-    return context.convertLocation(sloc);
   }
 };
 } // namespace
@@ -1729,16 +1783,6 @@ ClassLowering *Context::declareClass(const slang::ast::ClassType &cls) {
 
   auto symName = fullyQualifiedClassName(*this, cls);
 
-  // Force build of base here.
-  if (const auto *maybeBaseClass = cls.getBaseClass())
-    if (const auto *baseClass = maybeBaseClass->as_if<slang::ast::ClassType>())
-      if (!classes.contains(baseClass) &&
-          failed(convertClassDeclaration(*baseClass))) {
-        mlir::emitError(loc) << "Failed to convert base class "
-                             << baseClass->name << " of class " << cls.name;
-        return {};
-      }
-
   auto [base, impls] = buildBaseAndImplementsAttrs(*this, cls);
   auto classDeclOp =
       moore::ClassDeclOp::create(builder, loc, symName, base, impls);
@@ -1753,30 +1797,55 @@ ClassLowering *Context::declareClass(const slang::ast::ClassType &cls) {
 }
 
 LogicalResult
-Context::convertClassDeclaration(const slang::ast::ClassType &classdecl) {
-
+Context::buildClassProperties(const slang::ast::ClassType &classdecl) {
   // Keep track of local time scale.
   auto prevTimeScale = timeScale;
   timeScale = classdecl.getTimeScale().value_or(slang::TimeScale());
   llvm::scope_exit timeScaleGuard([&] { timeScale = prevTimeScale; });
 
-  // Check if there already is a declaration for this class.
-  if (classes.contains(&classdecl))
+  // Skip if classdecl is already built
+  if (classes[&classdecl])
     return success();
 
+  // Build base class properties first.
   if (classdecl.getBaseClass()) {
     if (const auto *baseClassDecl =
             classdecl.getBaseClass()->as_if<slang::ast::ClassType>()) {
-      if (failed(convertClassDeclaration(*baseClassDecl)))
+      if (failed(buildClassProperties(*baseClassDecl)))
         return failure();
     }
   }
 
+  // Declare the class and build the ClassDeclOp with property declarations.
   auto *lowering = declareClass(classdecl);
-  if (failed(ClassDeclVisitor(*this, *lowering).run(classdecl)))
+  if (!lowering)
     return failure();
 
-  return success();
+  return ClassPropertyVisitor(*this, *lowering).run(classdecl);
+}
+
+LogicalResult
+Context::materializeClassMethods(const slang::ast::ClassType &classdecl) {
+  // Keep track of local time scale.
+  auto prevTimeScale = timeScale;
+  timeScale = classdecl.getTimeScale().value_or(slang::TimeScale());
+  llvm::scope_exit timeScaleGuard([&] { timeScale = prevTimeScale; });
+
+  // The class must have been declared already via buildClassProperties.
+  auto it = classes.find(&classdecl);
+  if (it == classes.end() || !it->second)
+    return failure();
+
+  // Materialize base class methods first.
+  if (classdecl.getBaseClass()) {
+    if (const auto *baseClassDecl =
+            classdecl.getBaseClass()->as_if<slang::ast::ClassType>()) {
+      if (failed(materializeClassMethods(*baseClassDecl)))
+        return failure();
+    }
+  }
+
+  return ClassMethodVisitor(*this, *it->second).run(classdecl);
 }
 
 /// Convert a variable to a `moore.global_variable` operation.

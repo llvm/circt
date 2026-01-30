@@ -58,6 +58,7 @@ struct FunctionLowering {
 // Class lowering information.
 struct ClassLowering {
   circt::moore::ClassDeclOp op;
+  bool methodsFinalized = false;
 };
 
 /// Information about a loops continuation and exit blocks relevant while
@@ -120,8 +121,9 @@ struct Context {
   declareFunction(const slang::ast::SubroutineSymbol &subroutine);
   LogicalResult convertFunction(const slang::ast::SubroutineSymbol &subroutine);
   LogicalResult finalizeFunctionBodyCaptures(FunctionLowering &lowering);
-  LogicalResult convertClassDeclaration(const slang::ast::ClassType &classdecl);
   ClassLowering *declareClass(const slang::ast::ClassType &cls);
+  LogicalResult buildClassProperties(const slang::ast::ClassType &classdecl);
+  LogicalResult materializeClassMethods(const slang::ast::ClassType &classdecl);
   LogicalResult convertGlobalVariable(const slang::ast::VariableSymbol &var);
 
   /// Checks whether one class (actualTy) is derived from another class
