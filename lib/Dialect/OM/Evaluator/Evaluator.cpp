@@ -79,12 +79,21 @@ circt::om::Evaluator::getPartiallyEvaluatedValue(Type type, Location loc) {
       })
       .Case([&](circt::om::ClassType type)
                 -> FailureOr<evaluator::EvaluatorValuePtr> {
-        ClassOp cls =
-            symbolTable.lookup<ClassOp>(type.getClassName().getValue());
-        if (!cls)
+        auto classDef =
+            symbolTable.lookup<ClassLike>(type.getClassName().getValue());
+        if (!classDef)
           return symbolTable.getOp()->emitError("unknown class name ")
                  << type.getClassName();
 
+        // If this is an external class, return an unknown value
+        if (isa<ClassExternOp>(classDef)) {
+          evaluator::EvaluatorValuePtr result =
+              std::make_shared<evaluator::UnknownValue>(type.getContext(), loc);
+          return success(result);
+        }
+
+        // Otherwise, it's a regular class, proceed normally
+        ClassOp cls = cast<ClassOp>(classDef);
         evaluator::EvaluatorValuePtr result =
             std::make_shared<evaluator::ObjectValue>(cls, loc);
 
@@ -181,9 +190,19 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
                                              ActualParameters actualParams,
                                              Location loc,
                                              ObjectKey instanceKey) {
-  ClassOp cls = symbolTable.lookup<ClassOp>(className);
-  if (!cls)
+  auto classDef = symbolTable.lookup<ClassLike>(className);
+  if (!classDef)
     return symbolTable.getOp()->emitError("unknown class name ") << className;
+
+  // If this is an external class, return an unknown value
+  if (isa<ClassExternOp>(classDef)) {
+    evaluator::EvaluatorValuePtr result =
+        std::make_shared<evaluator::UnknownValue>(classDef.getContext(), loc);
+    return result;
+  }
+
+  // Otherwise, it's a regular class, proceed normally
+  ClassOp cls = cast<ClassOp>(classDef);
 
   auto formalParamNames = cls.getFormalParamNames().getAsRange<StringAttr>();
   auto formalParamTypes = cls.getBodyBlock()->getArgumentTypes();
@@ -280,9 +299,20 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
 FailureOr<std::shared_ptr<evaluator::EvaluatorValue>>
 circt::om::Evaluator::instantiate(
     StringAttr className, ArrayRef<evaluator::EvaluatorValuePtr> actualParams) {
-  ClassOp cls = symbolTable.lookup<ClassOp>(className);
-  if (!cls)
+  auto classDef = symbolTable.lookup<ClassLike>(className);
+  if (!classDef)
     return symbolTable.getOp()->emitError("unknown class name ") << className;
+
+  // If this is an external class, return an unknown value
+  if (isa<ClassExternOp>(classDef)) {
+    evaluator::EvaluatorValuePtr result =
+        std::make_shared<evaluator::UnknownValue>(
+            classDef.getContext(), UnknownLoc::get(classDef.getContext()));
+    return result;
+  }
+
+  // Otherwise, it's a regular class, proceed normally
+  ClassOp cls = cast<ClassOp>(classDef);
 
   auto parameters =
       std::make_unique<SmallVector<std::shared_ptr<evaluator::EvaluatorValue>>>(
