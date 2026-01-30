@@ -69,8 +69,8 @@ struct Deseq {
   matchDriveClockAndReset(DriveInfo &drive,
                           ArrayRef<std::pair<DNFTerm, ValueEntry>> valueTable);
 
-  void implementRegisters();
-  void implementRegister(DriveInfo &drive);
+  bool implementRegisters();
+  bool implementRegister(DriveInfo &drive);
 
   Value specializeValue(Value value, FixedValues fixedValues);
   ValueRange specializeProcess(FixedValues fixedValues);
@@ -86,6 +86,9 @@ struct Deseq {
   /// of the wait op. These values are guaranteed to also be contained in
   /// `triggers`.
   SmallVector<Value, 2> pastValues;
+  /// Map the raw observed values of the wait op to their trigger index. This
+  /// helps recognize derived forms (e.g., bit extracts) of the observed clock.
+  DenseMap<Value, unsigned> observedIndex;
   /// The conditional drive operations fed by this process.
   SmallVector<DriveInfo> driveInfos;
   /// Specializations of the process for different trigger values.
@@ -183,7 +186,8 @@ void Deseq::deseq() {
 
   // Make the drives unconditional and capture the conditional behavior as
   // register operations.
-  implementRegisters();
+  if (!implementRegisters())
+    return;
 
   // At this point the process has been replaced with specialized versions of it
   // for the different triggers and can be removed.
@@ -267,13 +271,23 @@ bool Deseq::analyzeProcess() {
   }
 
   // Ensure the observed values are all booleans.
-  for (auto value : wait.getObserved()) {
-    if (!value.getType().isSignlessInteger(1)) {
+  for (auto [idx, value] : llvm::enumerate(wait.getObserved())) {
+    Value triggerValue = value;
+    if (!triggerValue.getType().isSignlessInteger(1)) {
+      // If the observed value isn't an `i1`, try to use the corresponding
+      // destination operand (which often carries the extracted bit value) as
+      // the trigger instead.
+      if (idx < wait.getDestOperands().size() &&
+          wait.getDestOperands()[idx].getType().isSignlessInteger(1))
+        triggerValue = wait.getDestOperands()[idx];
+    }
+    if (!triggerValue.getType().isSignlessInteger(1)) {
       LLVM_DEBUG(llvm::dbgs() << "Skipping " << process.getLoc()
                               << ": observes non-i1 value\n");
       return false;
     }
-    triggers.insert(value);
+    observedIndex[value] = idx;
+    triggers.insert(triggerValue);
   }
 
   // We only support 1 or 2 observed values, since we map to registers with a
@@ -474,6 +488,15 @@ TruthTable Deseq::computeBoolean(OpResult value) {
   // Handle constants.
   if (auto constOp = dyn_cast<hw::ConstantOp>(op))
     return getConstBoolean(constOp.getValue().isOne());
+
+  // Handle `comb.extract` of observed values.
+  if (auto extractOp = dyn_cast<comb::ExtractOp>(op)) {
+    if (value.getType().isSignlessInteger(1) && extractOp.getLowBit() == 0) {
+      if (auto it = observedIndex.find(extractOp.getInput());
+          it != observedIndex.end())
+        return getPresentTrigger(it->second);
+    }
+  }
 
   // Handle `comb.or`.
   if (auto orOp = dyn_cast<comb::OrOp>(op)) {
@@ -999,9 +1022,11 @@ bool Deseq::matchDriveClockAndReset(
 
 /// Make all drives unconditional and implement the conditional behavior with
 /// register ops.
-void Deseq::implementRegisters() {
+bool Deseq::implementRegisters() {
   for (auto &drive : driveInfos)
-    implementRegister(drive);
+    if (!implementRegister(drive))
+      return false;
+  return true;
 }
 
 /// Implement the conditional behavior of a drive with a `seq.firreg` op and
@@ -1010,16 +1035,108 @@ void Deseq::implementRegisters() {
 /// process represent the behavior as a register. It also calls
 /// `specializeValue` and `specializeProcess` to convert the sequential
 /// `llhd.process` into a purely combinational `llhd.combinational` that is
-/// simplified by assuming that the clock edge occurs.
-void Deseq::implementRegister(DriveInfo &drive) {
+/// simplified by assuming that the clock edge occurs. Returns `false` if the
+/// register cannot be materialized.
+bool Deseq::implementRegister(DriveInfo &drive) {
   OpBuilder builder(drive.op);
   auto loc = drive.op.getLoc();
 
+  // Materialize a value that is available outside of the process for the
+  // clock/reset/enable/value operands. We may have matched a trigger that is
+  // only available inside the process (e.g., because the current clock value
+  // was computed from an extracted bit). Clone the defining operations as long
+  // as they are side-effect free and ultimately depend on values visible
+  // outside the process.
+  DenseMap<Value, Value> materialized;
+  std::function<Value(Value)> materialize = [&](Value v) -> Value {
+    if (v.getParentRegion()->isProperAncestor(&process.getBody()))
+      return v;
+    if (auto it = materialized.find(v); it != materialized.end())
+      return it->second;
+
+    // Guard against recursion.
+    materialized[v] = Value{};
+
+    // Try to resolve block arguments by looking at the unique incoming value
+    // along all predecessors.
+    if (auto arg = dyn_cast<BlockArgument>(v)) {
+      Value incoming;
+      bool first = true;
+      unsigned argIdx = arg.getArgNumber();
+      SmallPtrSet<Block *, 4> predSeen;
+      SmallSetVector<BlockOperand *, 4> blockOps;
+      for (auto *pred : arg.getOwner()->getPredecessors())
+        if (predSeen.insert(pred).second)
+          for (auto &operand : pred->getTerminator()->getBlockOperands())
+            if (operand.get() == arg.getOwner())
+              blockOps.insert(&operand);
+
+      for (auto *blockOp : blockOps) {
+        auto *term = blockOp->getOwner();
+        Value operand;
+        if (auto br = dyn_cast<cf::BranchOp>(term)) {
+          operand = br.getDestOperands()[argIdx];
+        } else if (auto cbr = dyn_cast<cf::CondBranchOp>(term)) {
+          unsigned destIdx = blockOp->getOperandNumber();
+          operand = destIdx == 0 ? cbr.getTrueDestOperands()[argIdx]
+                                 : cbr.getFalseDestOperands()[argIdx];
+        } else {
+          materialized[v] = Value{};
+          return Value{};
+        }
+        if (first) {
+          incoming = operand;
+          first = false;
+        } else if (incoming != operand) {
+          materialized[v] = Value{};
+          return Value{};
+        }
+      }
+
+      if (first) {
+        materialized[v] = Value{};
+        return Value{};
+      }
+      return materialized[v] = materialize(incoming);
+    }
+
+    auto *defOp = v.getDefiningOp();
+    if (!defOp || !isMemoryEffectFree(defOp)) {
+      materialized[v] = Value{};
+      return Value{};
+    }
+
+    IRMapping mapping;
+    for (auto operand : defOp->getOperands()) {
+      auto mapped = materialize(operand);
+      if (!mapped) {
+        materialized[v] = Value{};
+        return Value{};
+      }
+      mapping.map(operand, mapped);
+    }
+
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPoint(drive.op);
+    auto *clonedOp = builder.clone(*defOp, mapping);
+    auto result = clonedOp->getResult(cast<OpResult>(v).getResultNumber());
+    materialized[v] = result;
+    return result;
+  };
+
   // Materialize the clock as a `!seq.clock` value. Insert an inverter for
   // negedge clocks.
-  auto &clockCast = materializedClockCasts[drive.clock.clock];
+  auto internalClock = drive.clock.clock;
+  auto clockValue = materialize(internalClock);
+  if (!clockValue) {
+    LLVM_DEBUG(llvm::dbgs()
+               << "- Aborting: failed to materialize clock outside process\n");
+    return false;
+  }
+  booleanLattice.try_emplace(clockValue, getPresentTrigger(0));
+  auto &clockCast = materializedClockCasts[clockValue];
   if (!clockCast)
-    clockCast = seq::ToClockOp::create(builder, loc, drive.clock.clock);
+    clockCast = seq::ToClockOp::create(builder, loc, clockValue);
   auto clock = clockCast;
   if (!drive.clock.risingEdge) {
     auto &clockInv = materializedClockInverters[clock];
@@ -1088,13 +1205,44 @@ void Deseq::implementRegister(DriveInfo &drive) {
   FixedValues fixedValues;
   fixedValues.push_back(
       {drive.clock.clock, !drive.clock.risingEdge, drive.clock.risingEdge});
+  if (clockValue != drive.clock.clock)
+    fixedValues.push_back(
+        {clockValue, !drive.clock.risingEdge, drive.clock.risingEdge});
   if (drive.reset)
     fixedValues.push_back(
         {drive.reset.reset, !drive.reset.activeHigh, !drive.reset.activeHigh});
 
+  // Make the fixed assignments available to the boolean lattice so that
+  // specialization can fold dependent conditions more aggressively.
+  for (auto fixed : fixedValues)
+    booleanLattice[fixed.value] = getConstBoolean(fixed.present);
+
   value = specializeValue(value, fixedValues);
   if (enable)
     enable = specializeValue(enable, fixedValues);
+
+  // If the specialized value still carries a spurious dependency on the clock
+  // (e.g., a `reset & clock` mux guard), drop the clock factor since the
+  // register already triggers on the clock edge.
+  if (auto mux = value.getDefiningOp<comb::MuxOp>()) {
+    if (auto andOp = mux.getCond().getDefiningOp<comb::AndOp>()) {
+      auto inputs = andOp.getInputs();
+      auto isClock = [&](Value v) {
+        return v == clockValue || v == drive.clock.clock;
+      };
+      if (isClock(inputs[0]) || isClock(inputs[1])) {
+        Value newCond = isClock(inputs[0]) ? inputs[1] : inputs[0];
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPoint(mux);
+        auto newMux = comb::MuxOp::create(
+            builder, mux.getLoc(), newCond, mux.getTrueValue(),
+            mux.getFalseValue(), mux.getTwoState());
+        mux->replaceAllUsesWith(newMux);
+        mux.erase();
+        value = newMux;
+      }
+    }
+  }
 
   // Try to guess a name for the register.
   StringAttr name;
@@ -1134,6 +1282,8 @@ void Deseq::implementRegister(DriveInfo &drive) {
           ConstantTimeOp::create(builder, process.getLoc(), 0, "ns", 0, 1);
     drive.op.getTimeMutable().assign(epsilonDelay);
   }
+
+  return true;
 }
 
 //===----------------------------------------------------------------------===//
