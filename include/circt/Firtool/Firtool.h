@@ -34,6 +34,18 @@ public:
   FirtoolOptions();
 
   // Helper Types
+
+  /// Verification mode for the firtool pipeline.
+  enum class VerificationMode {
+    /// Run verification after every pass (using built-in pass manager
+    /// verification).
+    All,
+    /// Run verification only when required.
+    Default,
+    /// Do not run verification.
+    None
+  };
+
   enum BuildMode { BuildModeDefault, BuildModeDebug, BuildModeRelease };
   enum class RandomKind { None, Mem, Reg, All };
 
@@ -178,6 +190,20 @@ public:
   bool shouldInlineInputOnlyModules() const { return inlineInputOnlyModules; }
 
   DomainMode getDomainMode() const { return domainMode; }
+
+  VerificationMode getVerificationMode() const { return verificationMode; }
+
+  bool isVerificationModeAll() const {
+    return verificationMode == VerificationMode::All;
+  }
+
+  bool isVerificationModeDefault() const {
+    return verificationMode == VerificationMode::Default;
+  }
+
+  bool isVerificationModeNone() const {
+    return verificationMode == VerificationMode::None;
+  }
 
   // Setters, used by the CAPI
   FirtoolOptions &setOutputFilename(StringRef name) {
@@ -438,6 +464,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setVerificationMode(VerificationMode value) {
+    verificationMode = value;
+    return *this;
+  }
+
 private:
   std::string outputFilename;
 
@@ -494,6 +525,7 @@ private:
   bool emitAllBindFiles;
   bool inlineInputOnlyModules;
   DomainMode domainMode;
+  VerificationMode verificationMode;
 };
 
 void registerFirtoolCLOptions();

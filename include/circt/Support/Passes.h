@@ -59,6 +59,13 @@ public:
 /// Create a simple canonicalizer pass.
 std::unique_ptr<Pass> createSimpleCanonicalizerPass();
 
+/// Create a verifier pass that always runs verification. Unlike the built-in
+/// pass manager verification (enabled via pm.enableVerifier()), this pass
+/// always runs verification regardless of whether the previous pass preserved
+/// all analyses. This is useful for strategic verification points in the
+/// pipeline when using verify=default mode.
+std::unique_ptr<Pass> createVerifierPass();
+
 } // namespace circt
 
 #endif // CIRCT_SUPPORT_PASSES_H
