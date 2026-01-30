@@ -1,17 +1,13 @@
-//===-- Passes.td - LLHD pass definition file --------------*- tablegen -*-===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-//
-// This file contains definitions for passes that work on the LLHD dialect.
-//
-//===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES
-#define CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES
+#ifndef CIRCT_DIALECT_LLHD_LLHDPASSES_TD
+#define CIRCT_DIALECT_LLHD_LLHDPASSES_TD
 
 include "mlir/Pass/PassBase.td"
 
@@ -125,4 +121,4 @@ def UnrollLoopsPass : Pass<"llhd-unroll-loops", "hw::HWModuleOp"> {
   }];
 }
 
-#endif // CIRCT_DIALECT_LLHD_TRANSFORMS_PASSES
+#endif // CIRCT_DIALECT_LLHD_LLHDPASSES_TD

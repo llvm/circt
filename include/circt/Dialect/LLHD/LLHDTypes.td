@@ -1,20 +1,16 @@
-//===- LLHDTypesImpl.td - LLHD data type definitions -------*- tablegen -*-===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
-//
-// Basic data type implementations for the LLHD dialect.
-//
-//===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_LLHD_IR_LLHDTYPES_TD
-#define CIRCT_DIALECT_LLHD_IR_LLHDTYPES_TD
+#ifndef CIRCT_DIALECT_LLHD_LLHDTYPES_TD
+#define CIRCT_DIALECT_LLHD_LLHDTYPES_TD
 
-include "circt/Dialect/LLHD/IR/LLHDDialect.td"
 include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/LLHD/LLHDDialect.td"
 include "mlir/IR/AttrTypeBase.td"
 
 // Base class for other typedefs. Provides dialact-specific defaults.
@@ -109,4 +105,4 @@ def LLHDTimeAttr : AttrDef<LLHDDialect, "Time", []> {
   }]>];
 }
 
-#endif // CIRCT_DIALECT_LLHD_IR_LLHDTYPES_TD
+#endif // CIRCT_DIALECT_LLHD_LLHDTYPES_TD

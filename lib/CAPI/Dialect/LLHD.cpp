@@ -7,8 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/LLHD.h"
-#include "circt/Dialect/LLHD/IR/LLHDDialect.h"
-#include "circt/Dialect/LLHD/IR/LLHDTypes.h"
+#include "circt/Dialect/LLHD/LLHDDialect.h"
+#include "circt/Dialect/LLHD/LLHDTypes.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
