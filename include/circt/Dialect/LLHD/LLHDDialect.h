@@ -6,12 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_LLHD_IR_LLHDOPS_TD
-#define CIRCT_DIALECT_LLHD_IR_LLHDOPS_TD
+#ifndef CIRCT_DIALECT_LLHD_LLHDDIALECT_H
+#define CIRCT_DIALECT_LLHD_LLHDDIALECT_H
 
-include "circt/Dialect/LLHD/IR/LLHDValueOps.td"
-include "circt/Dialect/LLHD/IR/LLHDSignalOps.td"
-include "circt/Dialect/LLHD/IR/LLHDExtractOps.td"
-include "circt/Dialect/LLHD/IR/LLHDStructureOps.td"
+#include "circt/Support/LLVM.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Dialect.h"
 
-#endif // CIRCT_DIALECT_LLHD_IR_LLHDOPS_TD
+#include "circt/Dialect/LLHD/LLHDDialect.h.inc"
+
+#endif // CIRCT_DIALECT_LLHD_LLHDDIALECT_H

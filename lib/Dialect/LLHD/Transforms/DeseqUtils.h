@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/LLHD/IR/LLHDOps.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Value.h"
 #include "llvm/ADT/APInt.h"

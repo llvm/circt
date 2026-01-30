@@ -7,8 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
+#include "circt/Dialect/LLHD/LLHDPasses.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Threading.h"
@@ -24,7 +24,7 @@
 namespace circt {
 namespace llhd {
 #define GEN_PASS_DEF_INLINECALLSPASS
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h.inc"
+#include "circt/Dialect/LLHD/LLHDPasses.h.inc"
 } // namespace llhd
 } // namespace circt
 

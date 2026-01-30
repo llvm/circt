@@ -8,8 +8,8 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
-#include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
+#include "circt/Dialect/LLHD/LLHDPasses.h"
 #include "circt/Support/UnusedOpPruner.h"
 #include "mlir/Analysis/Liveness.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
@@ -22,7 +22,7 @@
 namespace circt {
 namespace llhd {
 #define GEN_PASS_DEF_MEM2REGPASS
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h.inc"
+#include "circt/Dialect/LLHD/LLHDPasses.h.inc"
 } // namespace llhd
 } // namespace circt
 

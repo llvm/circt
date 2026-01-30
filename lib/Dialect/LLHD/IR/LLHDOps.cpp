@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/LLHD/IR/LLHDOps.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -847,5 +847,5 @@ void llhd::registerDestructableIntegerExternalModel(DialectRegistry &registry) {
 //===----------------------------------------------------------------------===//
 
 #define GET_OP_CLASSES
-#include "circt/Dialect/LLHD/IR/LLHD.cpp.inc"
-#include "circt/Dialect/LLHD/IR/LLHDEnums.cpp.inc"
+#include "circt/Dialect/LLHD/LLHD.cpp.inc"
+#include "circt/Dialect/LLHD/LLHDEnums.cpp.inc"

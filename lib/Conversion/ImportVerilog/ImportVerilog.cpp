@@ -12,7 +12,7 @@
 
 #include "ImportVerilogInternals.h"
 #include "circt/Conversion/MooreToCore.h"
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
+#include "circt/Dialect/LLHD/LLHDPasses.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Transforms/Passes.h"
