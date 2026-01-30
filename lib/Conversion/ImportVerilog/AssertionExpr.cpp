@@ -423,11 +423,14 @@ Value Context::convertAssertionExpression(const slang::ast::AssertionExpr &expr,
 Value Context::convertToI1(Value value) {
   if (!value)
     return {};
+  auto loc = value.getLoc();
   auto type = dyn_cast<moore::IntType>(value.getType());
   if (!type || type.getBitSize() != 1) {
-    mlir::emitError(value.getLoc(), "expected a 1-bit integer");
+    mlir::emitError(loc, "expected a 1-bit integer");
     return {};
   }
-
-  return moore::ToBuiltinBoolOp::create(builder, value.getLoc(), value);
+  if (type.getDomain() == Domain::FourValued) {
+    value = moore::LogicToIntOp::create(builder, loc, value);
+  }
+  return moore::ToBuiltinIntOp::create(builder, loc, value);
 }
