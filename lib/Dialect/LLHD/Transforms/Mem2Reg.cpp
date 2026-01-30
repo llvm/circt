@@ -863,8 +863,6 @@ void Promoter::captureAcrossWait() {
   llvm::DenseSet<Value> alreadyCaptured;
 
   auto isDefinedInRegion = [&](Value v) {
-    if (Operation *defOp = v.getDefiningOp())
-      return defOp->getParentRegion() == &region;
     return v.getParentRegion() == &region;
   };
 
