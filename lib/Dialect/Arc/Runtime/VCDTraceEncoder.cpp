@@ -287,17 +287,16 @@ void VCDTraceEncoder::encode(TraceBuffer &work) {
 
 void VCDTraceEncoder::windDownWorker() {
   assert(workerOutBuffer.empty());
-  // Terminate and flush the file
-  workerStep++;
-  writeTimestepToBuffer(workerStep, workerOutBuffer);
-  outFile.write(workerOutBuffer.data(), workerOutBuffer.size());
   outFile.flush();
-  workerOutBuffer.clear();
 }
 
 void VCDTraceEncoder::finalize(const ArcState *state) {
-  if (outFile.is_open())
+  if (outFile.is_open()) {
+    // Finalize the trace file
+    assert(workerStep <= getTimeStep());
+    outFile << '#' << getTimeStep() + 1 << '\n';
     outFile.close();
+  }
 }
 
 } // namespace circt::arc::runtime::impl
