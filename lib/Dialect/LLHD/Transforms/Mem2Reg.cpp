@@ -653,7 +653,7 @@ struct Promoter {
   Value resolveSlot(Value projectionOrSlot);
 
   void captureAcrossWait();
-  void captureAcrossWait(ProbeOp probeOp, ArrayRef<WaitOp> waitOps,
+  void captureAcrossWait(Value value, ArrayRef<WaitOp> waitOps,
                          Liveness &liveness, DominanceInfo &dominance);
 
   void constructLattice();
@@ -716,10 +716,14 @@ LogicalResult Promoter::promote() {
     return success();
 
   findPromotableSlots();
+  captureAcrossWait();
+
+  // If there are no promotable slots we can still return after ensuring any
+  // values live across waits were captured as block arguments above. This
+  // keeps the pass semantics while allowing wait capturing to run
+  // independently of slot promotion.
   if (slots.empty())
     return success();
-
-  captureAcrossWait();
 
   constructLattice();
   LLVM_DEBUG({
@@ -860,16 +864,24 @@ void Promoter::captureAcrossWait() {
   DominanceInfo dominance(region.getParentOp());
   Liveness liveness(region.getParentOp());
 
-  SmallVector<WaitOp> crossingWaitOps;
-  for (auto &block : region) {
-    for (auto probeOp : block.getOps<ProbeOp>()) {
-      for (auto waitOp : waitOps)
-        if (liveness.getLiveness(waitOp->getBlock())->isLiveOut(probeOp))
-          crossingWaitOps.push_back(waitOp);
-      if (!crossingWaitOps.empty()) {
-        captureAcrossWait(probeOp, crossingWaitOps, liveness, dominance);
-        crossingWaitOps.clear();
-      }
+  llvm::DenseSet<Value> alreadyCaptured;
+
+  auto isDefinedInRegion = [&](Value v) {
+    return v.getParentRegion() == &region;
+  };
+
+  for (auto waitOp : waitOps) {
+    Block *waitBlock = waitOp->getBlock();
+    const auto &liveOutValues = liveness.getLiveOut(waitBlock);
+
+    for (Value v : liveOutValues) {
+      if (!isDefinedInRegion(v))
+        continue;
+
+      if (!alreadyCaptured.insert(v).second)
+        continue;
+
+      captureAcrossWait(v, waitOps, liveness, dominance);
     }
   }
 }
@@ -878,10 +890,10 @@ void Promoter::captureAcrossWait() {
 /// probe to use the added block arguments as appropriate. This may insert
 /// additional block arguments in case the probe and added block arguments both
 /// reach the same block.
-void Promoter::captureAcrossWait(ProbeOp probeOp, ArrayRef<WaitOp> waitOps,
+void Promoter::captureAcrossWait(Value value, ArrayRef<WaitOp> waitOps,
                                  Liveness &liveness, DominanceInfo &dominance) {
   LLVM_DEBUG({
-    llvm::dbgs() << "Capture " << probeOp << "\n";
+    llvm::dbgs() << "Capture " << value << "\n";
     for (auto waitOp : waitOps)
       llvm::dbgs() << "- Across " << waitOp << "\n";
   });
@@ -894,7 +906,7 @@ void Promoter::captureAcrossWait(ProbeOp probeOp, ArrayRef<WaitOp> waitOps,
   // Calculate the set of blocks which will define this probe as a distinct
   // value.
   SmallPtrSet<Block *, 4> definingBlocks;
-  definingBlocks.insert(probeOp->getBlock());
+  definingBlocks.insert(value.getParentBlock());
   for (auto waitOp : waitOps)
     definingBlocks.insert(waitOp.getDest());
   idfCalculator.setDefiningBlocks(definingBlocks);
@@ -902,7 +914,7 @@ void Promoter::captureAcrossWait(ProbeOp probeOp, ArrayRef<WaitOp> waitOps,
   // Calculate where the probe is live.
   SmallPtrSet<Block *, 16> liveInBlocks;
   for (auto &block : region)
-    if (liveness.getLiveness(&block)->isLiveIn(probeOp))
+    if (liveness.getLiveness(&block)->isLiveIn(value))
       liveInBlocks.insert(&block);
   idfCalculator.setLiveInBlocks(liveInBlocks);
 
@@ -924,7 +936,7 @@ void Promoter::captureAcrossWait(ProbeOp probeOp, ArrayRef<WaitOp> waitOps,
     Value reachingDef;
   };
   SmallVector<WorklistItem> worklist;
-  worklist.push_back({domTree.getNode(probeOp->getBlock()), probeOp});
+  worklist.push_back({domTree.getNode(value.getParentBlock()), value});
 
   while (!worklist.empty()) {
     auto item = worklist.pop_back_val();
@@ -932,13 +944,12 @@ void Promoter::captureAcrossWait(ProbeOp probeOp, ArrayRef<WaitOp> waitOps,
 
     // If this block is a merge point, insert a block argument for the probe.
     if (mergePoints.contains(block))
-      item.reachingDef =
-          block->addArgument(probeOp.getType(), probeOp.getLoc());
+      item.reachingDef = block->addArgument(value.getType(), value.getLoc());
 
     // Replace any uses of the probe in this block with the current reaching
     // definition.
     for (auto &op : *block)
-      op.replaceUsesOfWith(probeOp, item.reachingDef);
+      op.replaceUsesOfWith(value, item.reachingDef);
 
     // If the terminator of this block branches to a merge point, add the
     // current reaching definition as a destination operand.

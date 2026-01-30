@@ -1137,3 +1137,22 @@ hw.module @LocalSignals(in %u: i42, in %v: i42) {
     llhd.halt
   }
 }
+
+// Make sure all values live across wait terminators are captured as block
+// arguments on the wait. This allows us to more generally handle projections
+// into probes, and values computed from probes.
+// See https://github.com/llvm/circt/pull/9481
+// CHECK-LABEL: @CaptureNonProbeValuesAcrossWait
+hw.module @CaptureNonProbeValuesAcrossWait(in %a: i42, in %b: i42) {
+  llhd.process {
+    // CHECK: [[TMP1:%.+]] = comb.and %b, %b
+    %0 = comb.and %b, %b : i42
+    // CHECK: llhd.wait (%a : i42), ^bb1([[TMP1]] : i42)
+    llhd.wait (%a : i42), ^bb1
+    // CHECK: ^bb1([[TMP2:%.+]]: i42):
+  ^bb1:
+    // CHECK: comb.or [[TMP2]], [[TMP2]]
+    comb.or %0, %0 : i42
+    llhd.halt
+  }
+}
