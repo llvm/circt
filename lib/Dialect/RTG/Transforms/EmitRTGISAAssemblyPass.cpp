@@ -62,7 +62,7 @@ public:
       auto res =
           TypeSwitch<Operation *, LogicalResult>(&op)
               .Case<InstructionOpInterface, LabelDeclOp, LabelOp, CommentOp,
-                    SpaceOp>([&](auto op) { return emit(op); })
+                    SpaceOp, StringDataOp>([&](auto op) { return emit(op); })
               .Default([](auto op) {
                 return op->emitError("emitter unknown RTG operation");
               });
@@ -144,6 +144,33 @@ private:
   LogicalResult emit(SpaceOp op) {
     os << llvm::indent(4) << ".space "
        << cast<IntegerAttr>(state[op.getSize()]).getValue() << "\n";
+    return success();
+  }
+
+  LogicalResult emit(StringDataOp op) {
+    os << llvm::indent(4) << ".asciz \"";
+    // NOTE: llvm::printEscapedString does not work because assemblers do not
+    // support the hex escapes (e.g., \0a instead of \n)
+    for (auto c : op.getData()) {
+      switch (c) {
+      case '\n':
+        os << "\\n";
+        break;
+      case '\t':
+        os << "\\t";
+        break;
+      case '\\':
+        os << "\\\\";
+        break;
+      case '"':
+        os << "\\\"";
+        break;
+      default:
+        os << c;
+        break;
+      }
+    }
+    os << "\"\n";
     return success();
   }
 

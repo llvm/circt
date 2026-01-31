@@ -1018,3 +1018,14 @@ def SpaceOp : RTGISAOp<"space", []> {
 
   let assemblyFormat = "$size attr-dict";
 }
+
+def StringDataOp : RTGISAOp<"string_data", []> {
+  let summary = "reserve a string";
+  let description = [{
+    Always appends a zero character (\00).
+  }];
+
+  let arguments = (ins StrAttr:$data);
+
+  let assemblyFormat = "$data attr-dict";
+}
