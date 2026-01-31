@@ -33,3 +33,14 @@ rtg.test @labels() {
   %1 = rtg.label_unique_decl "label{{0}}", %idx0
   func.call @dummy(%1) : (!rtg.isa.label) -> ()
 }
+
+// CHECK-LABEL: @constraints
+rtg.test @constraints() {
+  // CHECK: [[V0:%.+]] = rtg.constant false
+  // CHECK: rtg.constraint [[V0]]
+  %false = rtg.constant false
+  rtg.constraint %false
+  // CHECK-NOT: rtg.constraint
+  %true = rtg.constant true
+  rtg.constraint %true
+}

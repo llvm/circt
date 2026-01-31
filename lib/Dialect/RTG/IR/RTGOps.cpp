@@ -15,6 +15,8 @@
 #include "circt/Support/ParsingUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/Matchers.h"
+#include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SmallString.h"
 
 using namespace mlir;
@@ -422,6 +424,20 @@ LogicalResult TupleExtractOp::inferReturnTypes(
 
   inferredReturnTypes.push_back(tupleTy.getFieldTypes()[idx]);
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ConstraintOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ConstraintOp::canonicalize(ConstraintOp op,
+                                         PatternRewriter &rewriter) {
+  if (mlir::matchPattern(op.getCondition(), mlir::m_One())) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//

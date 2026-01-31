@@ -675,6 +675,8 @@ def ConstraintOp : RTGOp<"constraint", []> {
   let arguments = (ins I1:$condition);
 
   let assemblyFormat = "$condition attr-dict";
+
+  let hasCanonicalizeMethod = 1;
 }
 
 //===- ISA Register Handling Operations -----------------------------------===//
