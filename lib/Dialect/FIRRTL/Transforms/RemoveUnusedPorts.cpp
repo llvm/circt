@@ -193,8 +193,18 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
       Value value;
       if (portConstant)
         value = ConstantOp::create(builder, *portConstant);
-      else
-        value = InvalidValueOp::create(builder, result.getType());
+      else {
+        // Only create InvalidValueOp for FIRRTLBaseType. Ref types (probes) are
+        // not base types and cannot be invalidated.
+        if (auto baseType =
+                dyn_cast<firrtl::FIRRTLBaseType>(result.getType())) {
+          value = InvalidValueOp::create(builder, baseType);
+        } else {
+          // For non-base types like ref types, we cannot create an invalid
+          // value. Skip replacing uses for these types.
+          continue;
+        }
+      }
 
       result.replaceAllUsesWith(value);
     }
