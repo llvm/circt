@@ -1026,6 +1026,7 @@ struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
                                       symbols.getNearestSymbolTable(instOp)))
             .getPorts();
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
+    TieOffCache tieOffCache(builder);
     SmallVector<Value> replacementWires;
     for (firrtl::PortInfo info : portInfo) {
       auto wire = firrtl::WireOp::create(
@@ -1033,8 +1034,14 @@ struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
                       (Twine(instOp.getName()) + "_" + info.getName()).str())
                       .getResult();
       if (info.isOutput()) {
-        auto inv = firrtl::InvalidValueOp::create(builder, info.type);
-        firrtl::ConnectOp::create(builder, wire, inv);
+        // Tie off output ports using TieOffCache.
+        if (auto baseType = dyn_cast<firrtl::FIRRTLBaseType>(info.type)) {
+          auto inv = tieOffCache.getInvalid(baseType);
+          firrtl::ConnectOp::create(builder, wire, inv);
+        } else if (auto propType = dyn_cast<firrtl::PropertyType>(info.type)) {
+          auto unknown = tieOffCache.getUnknown(propType);
+          builder.create<firrtl::PropAssignOp>(wire, unknown);
+        }
       }
       replacementWires.push_back(wire);
     }
