@@ -92,3 +92,27 @@ hw.module @HaltYieldTypes(in %arg0: i42) {
     llhd.yield %arg0, %arg0 : i42, i42
   }
 }
+
+// -----
+
+// expected-error @below {{references unknown symbol @doesNotExist}}
+llhd.get_global_signal @doesNotExist : <i42>
+
+// -----
+
+// expected-error @below {{must reference a 'llhd.global_signal', but @Foo is a 'func.func'}}
+llhd.get_global_signal @Foo : <i42>
+func.func @Foo() { return }
+
+// -----
+
+// expected-error @below {{returns a 'i42' reference, but @Foo is of type 'i9001'}}
+llhd.get_global_signal @Foo : <i42>
+llhd.global_signal @Foo : i9001
+
+// -----
+
+// expected-error @below {{must have a 'llhd.yield' terminator}}
+llhd.global_signal @Foo : i42 init {
+  llvm.unreachable
+}

@@ -363,7 +363,7 @@ func.func @DynExtractRefArrayElement(%j: !moore.ref<array<2 x array<1 x l3>>>, %
 func.func @AdvancedConversion(%arg0: !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>) -> (!moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>, !moore.i320) {
   // CHECK: [[V0:%.+]] = hw.constant 3978585893941511189997889893581765703992223160870725712510875979948892565035285336817671 : i320
   %0 = moore.constant 3978585893941511189997889893581765703992223160870725712510875979948892565035285336817671 : i320
-  // CHECK: [[V1:%.+]] = hw.bitcast [[V0]] : (i320) -> !hw.array<5xstruct<exp_bits: i32, man_bits: i32>> 
+  // CHECK: [[V1:%.+]] = hw.bitcast [[V0]] : (i320) -> !hw.array<5xstruct<exp_bits: i32, man_bits: i32>>
   %1 = moore.sbv_to_packed %0 : array<5 x struct<{exp_bits: i32, man_bits: i32}>>
   // CHECK: [[V2:%.+]] = hw.bitcast %arg0 : (!hw.array<5xstruct<exp_bits: i32, man_bits: i32>>) -> i320
   %2 = moore.packed_to_sbv %arg0 : array<5 x struct<{exp_bits: i32, man_bits: i32}>>
@@ -518,7 +518,7 @@ moore.module @Variable() {
 
   // CHECK: [[TMP2:%.+]] = hw.constant 10 : i32
   %3 = moore.constant 10 : i32
-  
+
   // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
   // CHECK: llhd.drv %a, [[TMP2]] after [[TIME]] : i32
   moore.assign %a, %3 : i32
@@ -605,7 +605,7 @@ moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.s
   // CHECK: llhd.sig.struct_extract %arg1["exp_bits"] : <!hw.struct<exp_bits: i32, man_bits: i32>>
   %ref = moore.struct_extract_ref %arg1, "exp_bits" : <!moore.struct<{exp_bits: i32, man_bits: i32}>> -> <i32>
   moore.assign %ref, %0 : !moore.i32
-  
+
   // CHECK: [[C0:%.+]] = hw.constant 0 : i64
   // CHECK: [[INIT:%.+]] = hw.bitcast [[C0]] : (i64) -> !hw.struct<exp_bits: i32, man_bits: i32>
   // CHECK: llhd.sig [[INIT]] : !hw.struct<exp_bits: i32, man_bits: i32>
@@ -625,7 +625,7 @@ moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.s
 // CHECK-LABEL: func @ArrayCreate
 // CHECK-SAME: () ->  !hw.array<2xi8>
 func.func @ArrayCreate() -> !moore.array<2x!moore.i8> {
-  // CHECK-NEXT: %c42_i8 = hw.constant 42 : i8 
+  // CHECK-NEXT: %c42_i8 = hw.constant 42 : i8
   %c0 = moore.constant 42 : !moore.i8
   // CHECK-NEXT: [[ARR:%.*]] = hw.array_create %c42_i8, %c42_i8 : i8
   %arr = moore.array_create %c0, %c0 : !moore.i8, !moore.i8 -> !moore.array<2x!moore.i8>
@@ -636,7 +636,7 @@ func.func @ArrayCreate() -> !moore.array<2x!moore.i8> {
 // CHECK-LABEL: func @UnpackedArrayCreate
 // CHECK-SAME: () ->  !hw.array<2xi8>
 func.func @UnpackedArrayCreate() -> !moore.uarray<2x!moore.i8> {
-  // CHECK-NEXT: %c7_i8 = hw.constant 7 : i8 
+  // CHECK-NEXT: %c7_i8 = hw.constant 7 : i8
   %a = moore.constant 7 : !moore.i8
   // CHECK-NEXT: [[ARR:%.*]] = hw.array_create %c7_i8, %c7_i8 : i8
   %arr = moore.array_create %a, %a : !moore.i8, !moore.i8 -> !moore.uarray<2x!moore.i8>
@@ -1480,4 +1480,27 @@ func.func @StringOperations(%arg0: !moore.i32, %arg1: !moore.string, %arg2: !moo
   // CHECK: sim.string.length %arg1
   moore.string.len %arg1
   return
+}
+
+// CHECK-LABEL: llhd.global_signal @GlobalFoo
+// CHECK-SAME: : i42 init {
+moore.global_variable @GlobalFoo : !moore.i42 init {
+  // CHECK: [[TMP:%.+]] = hw.constant 1337 : i42
+  %0 = moore.constant 1337 : i42
+  // CHECK: llhd.yield [[TMP]] : i42
+  moore.yield %0 : i42
+}
+
+// CHECK-LABEL: @GlobalFooUse
+moore.module @GlobalFooUse() {
+  // CHECK: llhd.process
+  moore.procedure initial {
+    // CHECK: [[REF:%.+]] = llhd.get_global_signal @GlobalFoo : <i42>
+    %0 = moore.get_global_variable @GlobalFoo : <i42>
+    // CHECK: [[TMP:%.+]] = llhd.prb [[REF]]
+    %1 = moore.read %0 : <i42>
+    // CHECK: llhd.drv [[REF]], [[TMP]]
+    moore.blocking_assign %0, %1 : i42
+    moore.return
+  }
 }

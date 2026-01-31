@@ -13,6 +13,7 @@ include "circt/Dialect/LLHD/LLHDDialect.td"
 include "circt/Dialect/LLHD/LLHDTypes.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/MemorySlotInterfaces.td"
@@ -287,6 +288,50 @@ def DelayOp : LLHDOp<"delay", [Pure, SameOperandsAndResultType]> {
   let results = (outs HWNonInOutType:$result);
 
   let assemblyFormat = "$input `by` $delay attr-dict `:` type($result)";
+}
+
+def GlobalSignalOp : LLHDOp<"global_signal", [
+  IsolatedFromAbove,
+  NoRegionArguments,
+  SingleBlock,
+  Symbol,
+]> {
+  let summary = "A global signal declaration";
+  let description = [{
+    Define a global signal identified by a symbol name. The corresponding
+    `llhd.get_global_signal` operation can be used to get a `!llhd.ref` to it.
+    Global signals behave just like normal signals.
+  }];
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttrOf<AnyType>:$type
+  );
+  let regions = (region MaxSizedRegion<1>:$initRegion);
+  let assemblyFormat = [{
+    $sym_name attr-dict `:` $type (`init` $initRegion^)?
+  }];
+  let hasRegionVerifier = 1;
+  let extraClassDeclaration = [{
+    Block *getInitBlock();
+  }];
+}
+
+def GetGlobalSignalOp : LLHDOp<"get_global_signal", [
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  Pure,
+]> {
+  let summary = "Get a reference to a global signal";
+  let arguments = (ins FlatSymbolRefAttr:$global_name);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $global_name attr-dict `:` type($result)
+  }];
+  let builders = [
+    OpBuilder<(ins "llhd::GlobalSignalOp":$global), [{
+      build($_builder, $_state,
+        RefType::get(global.getType()), global.getSymName());
+    }]>,
+  ];
 }
 
 //===----------------------------------------------------------------------===//
@@ -645,7 +690,7 @@ def HaltOp : LLHDOp<"halt", [
 }
 
 def YieldOp : LLHDOp<"yield", [
-  HasParent<"CombinationalOp">,
+  ParentOneOf<["CombinationalOp", "GlobalSignalOp"]>,
   Pure,
   ReturnLike,
   Terminator,

@@ -764,10 +764,15 @@ static LogicalResult verifyYieldResults(Operation *op,
                                         ValueRange yieldOperands) {
   // Determine the result values of the parent.
   auto *parentOp = op->getParentOp();
-  TypeRange resultTypes = TypeSwitch<Operation *, TypeRange>(parentOp)
-                              .Case<ProcessOp, CombinationalOp>(
-                                  [](auto op) { return op.getResultTypes(); })
-                              .Case<FinalOp>([](auto) { return TypeRange{}; });
+  SmallVector<Type> resultTypes;
+  TypeSwitch<Operation *>(parentOp)
+      .Case<ProcessOp, CombinationalOp>([&](auto op) {
+        resultTypes.append(op.getResultTypes().begin(),
+                           op.getResultTypes().end());
+      })
+      .Case<FinalOp>([](auto) {})
+      .Case<GlobalSignalOp>(
+          [&](auto op) { resultTypes.push_back(op.getType()); });
 
   // Check that the number of yield operands matches the process.
   if (yieldOperands.size() != resultTypes.size())
@@ -840,6 +845,54 @@ void llhd::registerDestructableIntegerExternalModel(DialectRegistry &registry) {
     // created.
     ctx->loadDialect<comb::CombDialect>();
   });
+}
+
+//===----------------------------------------------------------------------===//
+// GlobalSignalOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult GlobalSignalOp::verifyRegions() {
+  if (auto *block = getInitBlock()) {
+    auto &terminator = block->back();
+    if (!isa<YieldOp>(terminator))
+      return emitOpError() << "must have a 'llhd.yield' terminator";
+  }
+  return success();
+}
+
+Block *GlobalSignalOp::getInitBlock() {
+  if (getInitRegion().empty())
+    return nullptr;
+  return &getInitRegion().front();
+}
+
+//===----------------------------------------------------------------------===//
+// GetGlobalSignalOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+GetGlobalSignalOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Resolve the target symbol.
+  auto *symbol =
+      symbolTable.lookupNearestSymbolFrom(*this, getGlobalNameAttr());
+  if (!symbol)
+    return emitOpError() << "references unknown symbol " << getGlobalNameAttr();
+
+  // Check that the symbol is a global signal.
+  auto signal = dyn_cast<GlobalSignalOp>(symbol);
+  if (!signal)
+    return emitOpError() << "must reference a 'llhd.global_signal', but "
+                         << getGlobalNameAttr() << " is a '"
+                         << symbol->getName() << "'";
+
+  // Check that the types match.
+  auto expType = signal.getType();
+  auto actType = getType().getNestedType();
+  if (expType != actType)
+    return emitOpError() << "returns a " << actType << " reference, but "
+                         << getGlobalNameAttr() << " is of type " << expType;
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
