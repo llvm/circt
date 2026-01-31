@@ -252,22 +252,76 @@ struct FIRRTLModuleExternalizer : public OpReduction<FModuleOp> {
 };
 
 /// Invalidate all the leaf fields of a value with a given flippedness by
-/// connecting an invalid value to them. This is useful for ensuring that all
-/// output ports of an instance or memory (including those nested in bundles)
-/// are properly invalidated.
+/// connecting an invalid value to them. This function handles different FIRRTL
+/// types appropriately:
+/// - Ref types (probes): Creates wire infrastructure with ref.send/ref.define
+///   and invalidates the underlying wire.
+/// - Bundle/Vector types: Recursively descends into elements.
+/// - Base types: Creates InvalidValueOp and connects it.
+/// - Property types: Creates UnknownValueOp and assigns it.
+///
+/// This is useful for ensuring that all output ports of an instance or memory
+/// (including those nested in bundles) are properly invalidated.
 static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
-                              SmallDenseMap<Type, Value, 8> &invalidCache,
+                              SmallDenseMap<Type, Value, 8> &tieOffCache,
                               bool flip = false) {
-  auto type = dyn_cast<firrtl::FIRRTLType>(value.getType());
+  auto type = type_dyn_cast<FIRRTLType>(value.getType());
   if (!type)
     return;
 
+  // Handle ref types (probes) by creating wires and defining them properly.
+  if (auto refType = type_dyn_cast<RefType>(type)) {
+    // Input probes are illegal in FIRRTL.
+    assert(!flip && "input probes are not allowed");
+
+    auto underlyingType = refType.getType();
+
+    if (!refType.getForceable()) {
+      // For probe types: create underlying wire, ref.send, ref.define, and
+      // invalidate.
+      auto targetWire = WireOp::create(builder, underlyingType);
+      auto refSend = builder.create<RefSendOp>(targetWire.getResult());
+      builder.create<RefDefineOp>(value, refSend.getResult());
+
+      // Invalidate the underlying wire.
+      Value invalid = tieOffCache.lookup(underlyingType);
+      if (!invalid) {
+        invalid = InvalidValueOp::create(builder, underlyingType);
+        tieOffCache.insert({underlyingType, invalid});
+      }
+      MatchingConnectOp::create(builder, targetWire.getResult(), invalid);
+      return;
+    }
+
+    // For rwprobe types: create forceable wire, ref.define, and invalidate.
+    auto forceableWire =
+        WireOp::create(builder, underlyingType,
+                       /*name=*/"", NameKindEnum::DroppableName,
+                       /*annotations=*/ArrayRef<Attribute>{},
+                       /*innerSym=*/StringAttr{},
+                       /*forceable=*/true);
+
+    // The forceable wire returns both the wire and the rwprobe.
+    auto targetWire = forceableWire.getResult();
+    auto forceableRef = forceableWire.getDataRef();
+
+    builder.create<RefDefineOp>(value, forceableRef);
+
+    // Invalidate the underlying wire.
+    Value invalid = tieOffCache.lookup(underlyingType);
+    if (!invalid) {
+      invalid = InvalidValueOp::create(builder, underlyingType);
+      tieOffCache.insert({underlyingType, invalid});
+    }
+    MatchingConnectOp::create(builder, targetWire, invalid);
+    return;
+  }
+
   // Descend into bundles by creating subfield ops.
-  if (auto bundleType = dyn_cast<firrtl::BundleType>(type)) {
+  if (auto bundleType = type_dyn_cast<BundleType>(type)) {
     for (auto element : llvm::enumerate(bundleType.getElements())) {
-      auto subfield =
-          builder.createOrFold<firrtl::SubfieldOp>(value, element.index());
-      invalidateOutputs(builder, subfield, invalidCache,
+      auto subfield = builder.createOrFold<SubfieldOp>(value, element.index());
+      invalidateOutputs(builder, subfield, tieOffCache,
                         flip ^ element.value().isFlip);
       if (subfield.use_empty())
         subfield.getDefiningOp()->erase();
@@ -276,10 +330,10 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
   }
 
   // Descend into vectors by creating subindex ops.
-  if (auto vectorType = dyn_cast<firrtl::FVectorType>(type)) {
+  if (auto vectorType = type_dyn_cast<FVectorType>(type)) {
     for (unsigned i = 0, e = vectorType.getNumElements(); i != e; ++i) {
-      auto subindex = builder.createOrFold<firrtl::SubindexOp>(value, i);
-      invalidateOutputs(builder, subindex, invalidCache, flip);
+      auto subindex = builder.createOrFold<SubindexOp>(value, i);
+      invalidateOutputs(builder, subindex, tieOffCache, flip);
       if (subindex.use_empty())
         subindex.getDefiningOp()->erase();
     }
@@ -289,12 +343,27 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
   // Only drive outputs.
   if (flip)
     return;
-  Value invalid = invalidCache.lookup(type);
-  if (!invalid) {
-    invalid = firrtl::InvalidValueOp::create(builder, type);
-    invalidCache.insert({type, invalid});
+
+  // Create InvalidValueOp for FIRRTLBaseType.
+  if (auto baseType = type_dyn_cast<FIRRTLBaseType>(type)) {
+    Value invalid = tieOffCache.lookup(type);
+    if (!invalid) {
+      invalid = InvalidValueOp::create(builder, baseType);
+      tieOffCache.insert({type, invalid});
+    }
+    ConnectOp::create(builder, value, invalid);
+    return;
   }
-  firrtl::ConnectOp::create(builder, value, invalid);
+
+  // For property types, use UnknownValueOp to tie off the connection.
+  if (auto propType = type_dyn_cast<PropertyType>(type)) {
+    Value unknown = tieOffCache.lookup(type);
+    if (!unknown) {
+      unknown = builder.create<UnknownValueOp>(propType);
+      tieOffCache.insert({type, unknown});
+    }
+    builder.create<PropAssignOp>(value, unknown);
+  }
 }
 
 /// Connect a value to every leave of a destination value.
@@ -412,7 +481,7 @@ struct InstanceStubber : public OpReduction<firrtl::InstanceOp> {
     LLVM_DEBUG(llvm::dbgs()
                << "Stubbing instance `" << instOp.getName() << "`\n");
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
-    SmallDenseMap<Type, Value, 8> invalidCache;
+    SmallDenseMap<Type, Value, 8> tieOffCache;
     for (unsigned i = 0, e = instOp.getNumResults(); i != e; ++i) {
       auto result = instOp.getResult(i);
       auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
@@ -422,7 +491,7 @@ struct InstanceStubber : public OpReduction<firrtl::InstanceOp> {
                                  firrtl::NameKindEnum::DroppableName,
                                  instOp.getPortAnnotation(i), StringAttr{})
               .getResult();
-      invalidateOutputs(builder, wire, invalidCache,
+      invalidateOutputs(builder, wire, tieOffCache,
                         instOp.getPortDirection(i) == firrtl::Direction::In);
       result.replaceAllUsesWith(wire);
     }
@@ -459,7 +528,7 @@ struct MemoryStubber : public OpReduction<firrtl::MemOp> {
   LogicalResult rewrite(firrtl::MemOp memOp) override {
     LLVM_DEBUG(llvm::dbgs() << "Stubbing memory `" << memOp.getName() << "`\n");
     ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
-    SmallDenseMap<Type, Value, 8> invalidCache;
+    SmallDenseMap<Type, Value, 8> tieOffCache;
     Value xorInputs;
     SmallVector<Value> outputs;
     for (unsigned i = 0, e = memOp.getNumResults(); i != e; ++i) {
@@ -471,7 +540,7 @@ struct MemoryStubber : public OpReduction<firrtl::MemOp> {
                                  firrtl::NameKindEnum::DroppableName,
                                  memOp.getPortAnnotation(i), StringAttr{})
               .getResult();
-      invalidateOutputs(builder, wire, invalidCache, true);
+      invalidateOutputs(builder, wire, tieOffCache, true);
       result.replaceAllUsesWith(wire);
 
       // Isolate the input and output data fields of the port.
