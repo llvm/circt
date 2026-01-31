@@ -331,6 +331,20 @@ static void connectToLeafs(ImplicitLocOpBuilder &builder, Value dest,
   firrtl::ConnectOp::create(builder, dest, value);
 }
 
+/// Return true if `a` happens before `b`, i.e., `a` or one of its ancestors
+/// properly dominates `b` and `b` is not inside `a`. This handles cross-block
+/// cases where operations might be in different blocks (e.g., layerblocks).
+static bool happensBefore(Operation *a, Operation *b) {
+  do {
+    if (a->isProperAncestor(b))
+      return false;
+    if (Operation *bAncestor = a->getBlock()->findAncestorOpInBlock(*b)) {
+      return a->isBeforeInBlock(bAncestor);
+    }
+  } while ((a = a->getParentOp()));
+  return false;
+}
+
 /// Reduce all leaf fields of a value through an XOR tree.
 static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
   auto type = dyn_cast<firrtl::FIRRTLType>(value.getType());
@@ -997,7 +1011,8 @@ struct ConnectForwarder : public Reduction {
           return 0;
         continue;
       }
-      if (srcOp && !srcOp->isBeforeInBlock(op))
+      // Check if srcOp happens before op, handling cross-block cases
+      if (srcOp && !happensBefore(srcOp, op))
         return 0;
     }
 
