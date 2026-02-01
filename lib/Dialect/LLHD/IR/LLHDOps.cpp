@@ -475,16 +475,28 @@ LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   typename SigStructExtractOp::Adaptor adaptor(operands, attrs, properties,
                                                regions);
-  Type type = cast<hw::StructType>(
-                  cast<RefType>(adaptor.getInput().getType()).getNestedType())
-                  .getFieldType(adaptor.getField());
-  if (!type) {
+  auto nestedType = cast<RefType>(adaptor.getInput().getType()).getNestedType();
+  Type fieldType;
+
+  // Support both StructType and UnionType
+  if (auto structType = dyn_cast<hw::StructType>(nestedType)) {
+    fieldType = structType.getFieldType(adaptor.getField());
+  } else if (auto unionType = dyn_cast<hw::UnionType>(nestedType)) {
+    fieldType = unionType.getFieldType(adaptor.getField());
+  } else {
+    context->getDiagEngine().emit(loc.value_or(UnknownLoc()),
+                                  DiagnosticSeverity::Error)
+        << "expected struct or union type";
+    return failure();
+  }
+
+  if (!fieldType) {
     context->getDiagEngine().emit(loc.value_or(UnknownLoc()),
                                   DiagnosticSeverity::Error)
         << "invalid field name specified";
     return failure();
   }
-  results.push_back(RefType::get(type));
+  results.push_back(RefType::get(fieldType));
   return success();
 }
 
@@ -495,9 +507,19 @@ bool SigStructExtractOp::canRewire(
     const DataLayout &dataLayout) {
   if (slot.ptr != getInput())
     return false;
-  auto index =
-      cast<hw::StructType>(cast<RefType>(getInput().getType()).getNestedType())
-          .getFieldIndex(getFieldAttr());
+
+  auto nestedType = cast<RefType>(getInput().getType()).getNestedType();
+  std::optional<uint32_t> index;
+
+  // Support both StructType and UnionType
+  if (auto structType = dyn_cast<hw::StructType>(nestedType)) {
+    index = structType.getFieldIndex(getFieldAttr());
+  } else if (auto unionType = dyn_cast<hw::UnionType>(nestedType)) {
+    index = unionType.getFieldIndex(getFieldAttr());
+  } else {
+    return false;
+  }
+
   if (!index)
     return false;
   auto indexAttr = IntegerAttr::get(IndexType::get(getContext()), *index);

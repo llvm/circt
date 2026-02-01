@@ -622,6 +622,21 @@ moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.s
   moore.output %0, %3, %4 : !moore.i32, !moore.struct<{exp_bits: i32, man_bits: i32}>, !moore.struct<{exp_bits: i32, man_bits: i32}>
 }
 
+// CHECK-LABEL: hw.module @Union
+moore.module @Union(in %a : !moore.i32, in %arg0 : !moore.union<{x: !moore.i32, y: !moore.i32}>, in %arg1 : !moore.ref<!moore.union<{x: !moore.i32, y: !moore.i32}>>, out o : !moore.i32, out p : !moore.union<{x: !moore.i32, y: !moore.i32}>) {
+  // CHECK: hw.union_extract %arg0["x"] : !hw.union<x: i32, y: i32>
+  %0 = moore.union_extract %arg0, "x" : !moore.union<{x: !moore.i32, y: !moore.i32}> -> !moore.i32
+
+  // CHECK: llhd.sig.struct_extract %arg1["x"] : <!hw.union<x: i32, y: i32>>
+  %ref = moore.union_extract_ref %arg1, "x" : <!moore.union<{x: !moore.i32, y: !moore.i32}>> -> <!moore.i32>
+  moore.assign %ref, %0 : !moore.i32
+
+  // CHECK: hw.union_create "x", %a : !hw.union<x: i32, y: i32>
+  %1 = moore.union_create %a {fieldName = "x"} : !moore.i32 -> !moore.union<{x: !moore.i32, y: !moore.i32}>
+
+  moore.output %0, %1 : !moore.i32, !moore.union<{x: !moore.i32, y: !moore.i32}>
+}
+
 // CHECK-LABEL: func @ArrayCreate
 // CHECK-SAME: () ->  !hw.array<2xi8>
 func.func @ArrayCreate() -> !moore.array<2x!moore.i8> {

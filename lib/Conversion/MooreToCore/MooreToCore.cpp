@@ -241,6 +241,9 @@ static hw::ModulePortInfo getModulePortInfo(const TypeConverter &typeConverter,
 
   for (auto port : moduleTy.getPorts()) {
     Type portTy = typeConverter.convertType(port.type);
+    if (!portTy) {
+      return hw::ModulePortInfo({});
+    }
     if (port.dir == hw::ModulePort::Direction::Output) {
       ports.push_back(
           hw::PortInfo({{port.name, portTy, port.dir}, resultNum++, {}}));
@@ -271,17 +274,18 @@ struct SVModuleOpConversion : public OpConversionPattern<SVModuleOp> {
     rewriter.setInsertionPoint(op);
 
     // Create the hw.module to replace moore.module
-    auto hwModuleOp =
-        hw::HWModuleOp::create(rewriter, op.getLoc(), op.getSymNameAttr(),
-                               getModulePortInfo(*typeConverter, op));
+    auto portInfo = getModulePortInfo(*typeConverter, op);
+    auto hwModuleOp = hw::HWModuleOp::create(rewriter, op.getLoc(),
+                                             op.getSymNameAttr(), portInfo);
     // Make hw.module have the same visibility as the moore.module.
     // The entry/top level module is public, otherwise is private.
     SymbolTable::setSymbolVisibility(hwModuleOp,
                                      SymbolTable::getSymbolVisibility(op));
     rewriter.eraseBlock(hwModuleOp.getBodyBlock());
     if (failed(
-            rewriter.convertRegionTypes(&op.getBodyRegion(), *typeConverter)))
+            rewriter.convertRegionTypes(&op.getBodyRegion(), *typeConverter))) {
       return failure();
+    }
     rewriter.inlineRegionBefore(op.getBodyRegion(), hwModuleOp.getBodyRegion(),
                                 hwModuleOp.getBodyRegion().end());
 
@@ -1357,6 +1361,44 @@ struct StructExtractRefOpConversion
   }
 };
 
+struct UnionCreateOpConversion : public OpConversionPattern<UnionCreateOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UnionCreateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    rewriter.replaceOpWithNewOp<hw::UnionCreateOp>(
+        op, resultType, adaptor.getFieldNameAttr(), adaptor.getInput());
+    return success();
+  }
+};
+
+struct UnionExtractOpConversion : public OpConversionPattern<UnionExtractOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UnionExtractOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<hw::UnionExtractOp>(op, adaptor.getInput(),
+                                                    adaptor.getFieldNameAttr());
+    return success();
+  }
+};
+
+struct UnionExtractRefOpConversion
+    : public OpConversionPattern<UnionExtractRefOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UnionExtractRefOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<llhd::SigStructExtractOp>(
+        op, adaptor.getInput(), adaptor.getFieldNameAttr());
+    return success();
+  }
+};
+
 struct ReduceAndOpConversion : public OpConversionPattern<ReduceAndOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -2353,6 +2395,39 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
         return hw::StructType::get(type.getContext(), fields);
       });
 
+  // UnionType -> hw::UnionType
+  typeConverter.addConversion([&](UnionType type) -> std::optional<Type> {
+    SmallVector<hw::UnionType::FieldInfo> fields;
+    for (auto field : type.getMembers()) {
+      hw::UnionType::FieldInfo info;
+      info.type = typeConverter.convertType(field.type);
+      if (!info.type) {
+        return {};
+      }
+      info.name = field.name;
+      info.offset = 0; // packed union, all fields start at bit 0
+      fields.push_back(info);
+    }
+    auto result = hw::UnionType::get(type.getContext(), fields);
+    return result;
+  });
+
+  // UnpackedUnionType -> hw::UnionType
+  typeConverter.addConversion(
+      [&](UnpackedUnionType type) -> std::optional<Type> {
+        SmallVector<hw::UnionType::FieldInfo> fields;
+        for (auto field : type.getMembers()) {
+          hw::UnionType::FieldInfo info;
+          info.type = typeConverter.convertType(field.type);
+          if (!info.type)
+            return {};
+          info.name = field.name;
+          info.offset = 0;
+          fields.push_back(info);
+        }
+        return hw::UnionType::get(type.getContext(), fields);
+      });
+
   // Conversion of CHandle to LLVMPointerType
   typeConverter.addConversion([&](ChandleType type) -> std::optional<Type> {
     return LLVM::LLVMPointerType::get(type.getContext());
@@ -2371,6 +2446,20 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     if (auto innerType = typeConverter.convertType(type.getNestedType()))
       return llhd::RefType::get(innerType);
     return {};
+  });
+
+  // hw::ModuleType conversion to handle module signatures
+  typeConverter.addConversion([&](hw::ModuleType type) -> std::optional<Type> {
+    SmallVector<hw::ModulePort> newPorts;
+    for (auto port : type.getPorts()) {
+      auto convertedType = typeConverter.convertType(port.type);
+      if (!convertedType) {
+        return {};
+      }
+      newPorts.push_back({port.name, convertedType, port.dir});
+    }
+    auto result = hw::ModuleType::get(type.getContext(), newPorts);
+    return result;
   });
 
   // Valid target types.
@@ -2405,6 +2494,20 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
       fields.push_back(info);
     }
     return hw::StructType::get(type.getContext(), fields);
+  });
+
+  typeConverter.addConversion([&](hw::UnionType type) -> std::optional<Type> {
+    SmallVector<hw::UnionType::FieldInfo> fields;
+    for (auto field : type.getElements()) {
+      hw::UnionType::FieldInfo info;
+      info.type = typeConverter.convertType(field.type);
+      if (!info.type)
+        return {};
+      info.name = field.name;
+      info.offset = field.offset;
+      fields.push_back(info);
+    }
+    return hw::UnionType::get(type.getContext(), fields);
   });
 
   typeConverter.addTargetMaterialization(
@@ -2475,6 +2578,9 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     StructExtractRefOpConversion,
     ExtractRefOpConversion,
     StructCreateOpConversion,
+    UnionCreateOpConversion,
+    UnionExtractOpConversion,
+    UnionExtractRefOpConversion,
     ConditionalOpConversion,
     ArrayCreateOpConversion,
     YieldOpConversion,

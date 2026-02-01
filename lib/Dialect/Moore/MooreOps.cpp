@@ -1010,10 +1010,10 @@ LogicalResult UnionCreateOp::verify() {
   return TypeSwitch<Type, LogicalResult>(getType())
       .Case<UnionType, UnpackedUnionType>([this](auto &type) {
         auto members = type.getMembers();
-        auto resultType = getType();
+        auto inputType = getInput().getType();
         auto fieldName = getFieldName();
         for (const auto &member : members)
-          if (member.name == fieldName && member.type == resultType)
+          if (member.name == fieldName && member.type == inputType)
             return success();
         emitOpError("input type must match the union field type");
         return failure();
