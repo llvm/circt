@@ -2450,9 +2450,8 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     SmallVector<hw::ModulePort> newPorts;
     for (auto port : type.getPorts()) {
       auto convertedType = typeConverter.convertType(port.type);
-      if (!convertedType) {
+      if (!convertedType)
         return {};
-      }
       newPorts.push_back({port.name, convertedType, port.dir});
     }
     auto result = hw::ModuleType::get(type.getContext(), newPorts);
