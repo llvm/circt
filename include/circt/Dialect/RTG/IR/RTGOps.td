@@ -675,6 +675,8 @@ def ConstraintOp : RTGOp<"constraint", []> {
   let arguments = (ins I1:$condition);
 
   let assemblyFormat = "$condition attr-dict";
+
+  let hasCanonicalizeMethod = 1;
 }
 
 //===- ISA Register Handling Operations -----------------------------------===//
@@ -1017,4 +1019,15 @@ def SpaceOp : RTGISAOp<"space", []> {
   let arguments = (ins Index:$size);
 
   let assemblyFormat = "$size attr-dict";
+}
+
+def StringDataOp : RTGISAOp<"string_data", []> {
+  let summary = "reserve a string";
+  let description = [{
+    Always appends a zero character (\00).
+  }];
+
+  let arguments = (ins StrAttr:$data);
+
+  let assemblyFormat = "$data attr-dict";
 }

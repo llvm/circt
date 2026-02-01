@@ -16,6 +16,9 @@ rtg.test @constants() {
   // CHECK-NEXT: rtg.isa.space [[V0]]
   rtg.isa.space %1
 
+  // CHECK-NEXT: rtg.isa.string_data "hello world"
+  rtg.isa.string_data "hello world"
+
   // CHECK-NEXT: rtg.constant #rtg.set<> : !rtg.set<i32>
   rtg.constant #rtg.set<> : !rtg.set<i32>
 

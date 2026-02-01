@@ -12,6 +12,10 @@ emit.file "" {
   // CHECK-NEXT:    .space 8
   rtg.isa.space %idx8
 
+  // CHECK-ALLOWED-NEXT:    .asciz "hello world\n\t\\\""
+  // CHECK-NEXT:    .asciz "hello world\n\t\\\""
+  rtg.isa.string_data "hello world\n\t\\\""
+
   %rd = rtg.constant #rtgtest.ra
   %rs = rtg.constant #rtgtest.s0
   %imm = rtg.constant #rtg.isa.immediate<12, 0>
