@@ -43,7 +43,13 @@ public:
       : os(os), unsupportedInstr(unsupportedInstr) {}
 
   LogicalResult emitFile(emit::FileOp fileOp) {
-    for (auto &op : *fileOp.getBody()) {
+    auto res = emitBlock(fileOp.getBody());
+    state.clear();
+    return res;
+  }
+
+  LogicalResult emitBlock(Block *block) {
+    for (auto &op : *block) {
       if (op.hasTrait<OpTrait::ConstantLike>()) {
         SmallVector<OpFoldResult> results;
         if (failed(op.fold(results)))
@@ -66,19 +72,18 @@ public:
           return op.emitError("implicit constraint not materialized");
       }
 
-      auto res =
-          TypeSwitch<Operation *, LogicalResult>(&op)
-              .Case<InstructionOpInterface, LabelDeclOp, LabelOp, CommentOp,
-                    SpaceOp, StringDataOp>([&](auto op) { return emit(op); })
-              .Default([](auto op) {
-                return op->emitError("emitter unknown RTG operation");
-              });
+      auto res = TypeSwitch<Operation *, LogicalResult>(&op)
+                     .Case<InstructionOpInterface, LabelDeclOp, LabelOp,
+                           CommentOp, SpaceOp, StringDataOp, SegmentOp>(
+                         [&](auto op) { return emit(op); })
+                     .Default([](auto op) {
+                       return op->emitError("emitter unknown RTG operation");
+                     });
 
       if (failed(res))
         return failure();
     }
 
-    state.clear();
     return success();
   }
 
@@ -179,6 +184,11 @@ private:
     }
     os << "\"\n";
     return success();
+  }
+
+  LogicalResult emit(SegmentOp op) {
+    os << "." << op.getKind() << "\n";
+    return emitBlock(op.getBody());
   }
 
 private:
