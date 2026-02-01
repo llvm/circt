@@ -905,66 +905,6 @@ OpFoldResult SliceImmediateOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
-// LabelUniqueDeclOp and LabelDeclOp
-//===----------------------------------------------------------------------===//
-
-static StringAttr substituteFormatString(StringAttr formatString,
-                                         ArrayRef<Attribute> substitutes) {
-  if (substitutes.empty() || formatString.empty())
-    return formatString;
-
-  auto original = formatString.getValue().str();
-  size_t curr = 0;
-  for (auto [i, subst] : llvm::enumerate(substitutes)) {
-    auto substInt = dyn_cast_or_null<IntegerAttr>(subst);
-    std::string substString;
-    if (!substInt && curr == i) {
-      ++curr;
-      continue;
-    }
-    if (!substInt)
-      substString = "{{" + std::to_string(curr++) + "}}";
-    else
-      substString = std::to_string(substInt.getValue().getZExtValue());
-
-    size_t startPos = 0;
-    std::string from = "{{" + std::to_string(i) + "}}";
-    while ((startPos = original.find(from, startPos)) != std::string::npos) {
-      original.replace(startPos, from.length(), substString);
-    }
-  }
-
-  return StringAttr::get(formatString.getContext(), original);
-}
-
-template <typename OpTy>
-OpFoldResult labelDeclFolder(OpTy op, typename OpTy::FoldAdaptor adaptor) {
-  auto newFormatString =
-      substituteFormatString(op.getFormatStringAttr(), adaptor.getArgs());
-  if (newFormatString == op.getFormatStringAttr())
-    return {};
-
-  op.setFormatStringAttr(newFormatString);
-
-  SmallVector<Value> newArgs;
-  for (auto [arg, attr] : llvm::zip(op.getArgs(), adaptor.getArgs())) {
-    if (!attr)
-      newArgs.push_back(arg);
-  }
-  op.getArgsMutable().assign(newArgs);
-
-  return op.getLabel();
-}
-
-OpFoldResult LabelUniqueDeclOp::fold(FoldAdaptor adaptor) {
-  return labelDeclFolder(*this, adaptor);
-}
-
-OpFoldResult LabelDeclOp::fold(FoldAdaptor adaptor) {
-  return labelDeclFolder(*this, adaptor);
-}
-
-//===----------------------------------------------------------------------===//
 // StringConcatOp
 //===----------------------------------------------------------------------===//
 
@@ -993,6 +933,17 @@ OpFoldResult IntFormatOp::fold(FoldAdaptor adaptor) {
     return {};
   return StringAttr::get(Twine(intAttr.getValue().getZExtValue()),
                          StringType::get(getContext()));
+}
+
+//===----------------------------------------------------------------------===//
+// StringToLabelOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult StringToLabelOp::fold(FoldAdaptor adaptor) {
+  if (auto stringAttr = dyn_cast_or_null<StringAttr>(adaptor.getString()))
+    return LabelAttr::get(getContext(), stringAttr.getValue());
+
+  return {};
 }
 
 //===----------------------------------------------------------------------===//

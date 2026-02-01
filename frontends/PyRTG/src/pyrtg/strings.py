@@ -24,6 +24,13 @@ class String(Value):
     else:
       self._value = value
 
+  def __add__(self, other: String) -> String:
+    """
+    String concatenation.
+    """
+
+    return rtg.StringConcatOp([self, other])
+
   def get_type(self) -> Type:
     return StringType()
 

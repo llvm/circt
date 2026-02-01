@@ -8,6 +8,7 @@ from .base import ir
 from .core import Value, Type
 from .rtg import rtg
 from .integers import Integer
+from .strings import String
 
 from typing import Union
 
@@ -25,17 +26,18 @@ class Label(Value):
   def __init__(self, value: ir.Value):
     self._value = value
 
-  def declare(string: str, *args: Union[Integer, int]) -> Label:
+  def declare(string: Union[str, String]) -> Label:
     """
     Declares a label with a fixed name. Labels returned by different calls to
     this function but with the same arguments refer to the same label.
     """
 
-    return rtg.LabelDeclOp(
-        string,
-        [(arg if isinstance(arg, Integer) else Integer(arg)) for arg in args])
+    if isinstance(string, str):
+      return rtg.ConstantOp(rtg.LabelAttr.get(string))
 
-  def declare_unique(string: str, *args: Union[Integer, int]) -> Label:
+    return rtg.StringToLabelOp(string)
+
+  def declare_unique(string: Union[str, String]) -> Label:
     """
     Declares a unique label. This means, all usages of the value returned by this
     function will refer to the same label, but no other label declarations can
@@ -43,9 +45,10 @@ class Label(Value):
     function or fixed labels declared with 'declare_label'.
     """
 
-    return rtg.LabelUniqueDeclOp(
-        string,
-        [(arg if isinstance(arg, Integer) else Integer(arg)) for arg in args])
+    if isinstance(string, str):
+      string = String(string)
+
+    return rtg.LabelUniqueDeclOp(string)
 
   def place(
       self,

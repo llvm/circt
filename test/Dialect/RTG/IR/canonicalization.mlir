@@ -25,14 +25,11 @@ rtg.target @immediates : !rtg.dict<imm0: !rtg.isa.immediate<64>, imm1: !rtg.isa.
 
 // CHECK-LABEL: @labels
 rtg.test @labels() {
-  %idx0 = index.constant 0
-  // CHECK: rtg.label_decl "label0"
-  %0 = rtg.label_decl "label{{0}}", %idx0
+  %str = rtg.constant "label" : !rtg.string
+  %0 = rtg.string_to_label %str 
+  // CHECK: [[V0:%.+]] = rtg.constant #rtg.isa.label<"label">
+  // CHECK: func.call @dummy([[V0]])
   func.call @dummy(%0) : (!rtg.isa.label) -> ()
-
-  // CHECK: rtg.label_unique_decl "label0"
-  %1 = rtg.label_unique_decl "label{{0}}", %idx0
-  func.call @dummy(%1) : (!rtg.isa.label) -> ()
 }
 
 // CHECK-LABEL: @constraints

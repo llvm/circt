@@ -255,4 +255,18 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
           regs.push_back(rtgVirtualRegisterConfigAttrGetRegister(self, i));
         return regs;
       });
+
+  mlir_attribute_subclass(m, "LabelAttr", rtgAttrIsALabel)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, const std::string &name, MlirContext ctxt) {
+            MlirStringRef nameRef =
+                mlirStringRefCreate(name.data(), name.size());
+            return cls(rtgLabelAttrGet(ctxt, nameRef));
+          },
+          nb::arg("self"), nb::arg("name"), nb::arg("ctxt") = nullptr)
+      .def_property_readonly("name", [](MlirAttribute self) {
+        MlirStringRef name = rtgLabelAttrGetName(self);
+        return nb::str(name.data, name.length);
+      });
 }

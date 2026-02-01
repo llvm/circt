@@ -133,4 +133,14 @@ def VirtualRegisterConfigAttr : RTGISAAttrDef<"VirtualRegisterConfig", [
   let genVerifyDecl = true;
 }
 
+def LabelAttr : RTGISAAttrDef<"Label", [
+  DeclareAttrInterfaceMethods<TypedAttrInterface>,
+]> {
+  let summary = "an assembly label";
+
+  let parameters = (ins StringRefParameter<"">:$name);
+
+  let assemblyFormat = "`<` $name `>`";
+}
+
 #endif // CIRCT_DIALECT_RTG_IR_RTGATTRIBUTES_TD

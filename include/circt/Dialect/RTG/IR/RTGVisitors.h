@@ -40,7 +40,7 @@ public:
             // Contexts
             OnContextOp, ContextSwitchOp,
             // Labels
-            LabelDeclOp, LabelUniqueDeclOp, LabelOp,
+            StringToLabelOp, LabelUniqueDeclOp, LabelOp,
             // Registers
             VirtualRegisterOp,
             // RTG tests
@@ -131,7 +131,6 @@ public:
   HANDLE(TupleExtractOp, Unhandled);
   HANDLE(CommentOp, Unhandled);
   HANDLE(ConstraintOp, Unhandled);
-  HANDLE(LabelDeclOp, Unhandled);
   HANDLE(LabelUniqueDeclOp, Unhandled);
   HANDLE(LabelOp, Unhandled);
   HANDLE(TestOp, Unhandled);
@@ -153,6 +152,7 @@ public:
   HANDLE(SegmentOp, Unhandled);
   HANDLE(StringConcatOp, Unhandled);
   HANDLE(IntFormatOp, Unhandled);
+  HANDLE(StringToLabelOp, Unhandled);
 #undef HANDLE
 };
 

@@ -208,6 +208,16 @@ rtgVirtualRegisterConfigAttrGetNumRegisters(MlirAttribute attr);
 MLIR_CAPI_EXPORTED MlirAttribute
 rtgVirtualRegisterConfigAttrGetRegister(MlirAttribute attr, intptr_t index);
 
+/// Checks if the attribute is an RTG label attribute.
+MLIR_CAPI_EXPORTED bool rtgAttrIsALabel(MlirAttribute attr);
+
+/// Creates an RTG label attribute in the context with the given name.
+MLIR_CAPI_EXPORTED MlirAttribute rtgLabelAttrGet(MlirContext ctx,
+                                                 MlirStringRef name);
+
+/// Returns the name of the RTG label attribute.
+MLIR_CAPI_EXPORTED MlirStringRef rtgLabelAttrGetName(MlirAttribute attr);
+
 #ifdef __cplusplus
 }
 #endif

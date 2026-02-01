@@ -238,6 +238,21 @@ static void testMemories(MlirContext ctx) {
   mlirTypeDump(memoryTy);
 }
 
+static void testLabelAttr(MlirContext ctx) {
+  MlirStringRef labelName = mlirStringRefCreateFromCString("my_label");
+  MlirAttribute labelAttr = rtgLabelAttrGet(ctx, labelName);
+
+  // CHECK: is_label_attr
+  fprintf(stderr, rtgAttrIsALabel(labelAttr) ? "is_label_attr\n"
+                                             : "isnot_label_attr\n");
+  // CHECK: #rtg.isa.label<"my_label">
+  mlirAttributeDump(labelAttr);
+
+  MlirStringRef retrievedName = rtgLabelAttrGetName(labelAttr);
+  // CHECK: name=my_label
+  fprintf(stderr, "name=%.*s\n", (int)retrievedName.length, retrievedName.data);
+}
+
 int main(int argc, char **argv) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__rtg__(), ctx);
@@ -257,6 +272,7 @@ int main(int argc, char **argv) {
   testContextAttrs(ctx);
   testImmediate(ctx);
   testMemories(ctx);
+  testLabelAttr(ctx);
 
   mlirContextDestroy(ctx);
 
