@@ -282,9 +282,8 @@ struct SVModuleOpConversion : public OpConversionPattern<SVModuleOp> {
                                      SymbolTable::getSymbolVisibility(op));
     rewriter.eraseBlock(hwModuleOp.getBodyBlock());
     if (failed(
-            rewriter.convertRegionTypes(&op.getBodyRegion(), *typeConverter))) {
-      return failure();
-    }
+            rewriter.convertRegionTypes(&op.getBodyRegion(), *typeConverter)))
+return failure();
     rewriter.inlineRegionBefore(op.getBodyRegion(), hwModuleOp.getBodyRegion(),
                                 hwModuleOp.getBodyRegion().end());
 
