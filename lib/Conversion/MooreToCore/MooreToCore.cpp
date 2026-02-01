@@ -283,7 +283,7 @@ struct SVModuleOpConversion : public OpConversionPattern<SVModuleOp> {
     rewriter.eraseBlock(hwModuleOp.getBodyBlock());
     if (failed(
             rewriter.convertRegionTypes(&op.getBodyRegion(), *typeConverter)))
-return failure();
+      return failure();
     rewriter.inlineRegionBefore(op.getBodyRegion(), hwModuleOp.getBodyRegion(),
                                 hwModuleOp.getBodyRegion().end());
 
