@@ -512,13 +512,12 @@ bool SigStructExtractOp::canRewire(
   std::optional<uint32_t> index;
 
   // Support both StructType and UnionType
-  if (auto structType = dyn_cast<hw::StructType>(nestedType)) {
+  if (auto structType = dyn_cast<hw::StructType>(nestedType))
     index = structType.getFieldIndex(getFieldAttr());
-  } else if (auto unionType = dyn_cast<hw::UnionType>(nestedType)) {
+  else if (auto unionType = dyn_cast<hw::UnionType>(nestedType))
     index = unionType.getFieldIndex(getFieldAttr());
-  } else {
+  else
     return false;
-  }
 
   if (!index)
     return false;
