@@ -231,8 +231,8 @@ static Value adjustIntegerWidth(OpBuilder &builder, Value value,
 }
 
 /// Get the ModulePortInfo from a SVModuleOp.
-static hw::ModulePortInfo getModulePortInfo(const TypeConverter &typeConverter,
-                                            SVModuleOp op) {
+static FailureOr<hw::ModulePortInfo>
+getModulePortInfo(const TypeConverter &typeConverter, SVModuleOp op) {
   size_t inputNum = 0;
   size_t resultNum = 0;
   auto moduleTy = op.getModuleType();
@@ -241,6 +241,11 @@ static hw::ModulePortInfo getModulePortInfo(const TypeConverter &typeConverter,
 
   for (auto port : moduleTy.getPorts()) {
     Type portTy = typeConverter.convertType(port.type);
+    if (!portTy) {
+      return op.emitOpError("port '")
+             << port.name << "' has unsupported type " << port.type
+             << " that cannot be converted to hardware type";
+    }
     if (port.dir == hw::ModulePort::Direction::Output) {
       ports.push_back(
           hw::PortInfo({{port.name, portTy, port.dir}, resultNum++, {}}));
@@ -271,9 +276,12 @@ struct SVModuleOpConversion : public OpConversionPattern<SVModuleOp> {
     rewriter.setInsertionPoint(op);
 
     // Create the hw.module to replace moore.module
-    auto hwModuleOp =
-        hw::HWModuleOp::create(rewriter, op.getLoc(), op.getSymNameAttr(),
-                               getModulePortInfo(*typeConverter, op));
+    auto portInfo = getModulePortInfo(*typeConverter, op);
+    if (failed(portInfo))
+      return failure();
+
+    auto hwModuleOp = hw::HWModuleOp::create(rewriter, op.getLoc(),
+                                             op.getSymNameAttr(), *portInfo);
     // Make hw.module have the same visibility as the moore.module.
     // The entry/top level module is public, otherwise is private.
     SymbolTable::setSymbolVisibility(hwModuleOp,
