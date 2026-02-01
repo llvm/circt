@@ -2399,9 +2399,8 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     for (auto field : type.getMembers()) {
       hw::UnionType::FieldInfo info;
       info.type = typeConverter.convertType(field.type);
-      if (!info.type) {
+      if (!info.type)
         return {};
-      }
       info.name = field.name;
       info.offset = 0; // packed union, all fields start at bit 0
       fields.push_back(info);
