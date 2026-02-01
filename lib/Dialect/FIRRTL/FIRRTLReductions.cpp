@@ -251,6 +251,34 @@ struct FIRRTLModuleExternalizer : public OpReduction<FModuleOp> {
   ModuleSizeCache moduleSizes;
 };
 
+/// Helper class to cache tie-off values for different FIRRTL types.
+/// This avoids creating duplicate InvalidValueOp or UnknownValueOp for the
+/// same type.
+class TieOffCache {
+public:
+  TieOffCache(ImplicitLocOpBuilder &builder) : builder(builder) {}
+
+  /// Get or create an InvalidValueOp for the given base type.
+  Value getInvalid(FIRRTLBaseType type) {
+    Value &cached = cache[type];
+    if (!cached)
+      cached = InvalidValueOp::create(builder, type);
+    return cached;
+  }
+
+  /// Get or create an UnknownValueOp for the given property type.
+  Value getUnknown(PropertyType type) {
+    Value &cached = cache[type];
+    if (!cached)
+      cached = builder.create<UnknownValueOp>(type);
+    return cached;
+  }
+
+private:
+  ImplicitLocOpBuilder &builder;
+  SmallDenseMap<Type, Value, 8> cache;
+};
+
 /// Invalidate all the leaf fields of a value with a given flippedness by
 /// connecting an invalid value to them. This function handles different FIRRTL
 /// types appropriately:
@@ -263,8 +291,7 @@ struct FIRRTLModuleExternalizer : public OpReduction<FModuleOp> {
 /// This is useful for ensuring that all output ports of an instance or memory
 /// (including those nested in bundles) are properly invalidated.
 static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
-                              SmallDenseMap<Type, Value, 8> &tieOffCache,
-                              bool flip = false) {
+                              TieOffCache &tieOffCache, bool flip = false) {
   auto type = type_dyn_cast<FIRRTLType>(value.getType());
   if (!type)
     return;
@@ -284,11 +311,7 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
       builder.create<RefDefineOp>(value, refSend.getResult());
 
       // Invalidate the underlying wire.
-      Value invalid = tieOffCache.lookup(underlyingType);
-      if (!invalid) {
-        invalid = InvalidValueOp::create(builder, underlyingType);
-        tieOffCache.insert({underlyingType, invalid});
-      }
+      auto invalid = tieOffCache.getInvalid(underlyingType);
       MatchingConnectOp::create(builder, targetWire.getResult(), invalid);
       return;
     }
@@ -308,11 +331,7 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
     builder.create<RefDefineOp>(value, forceableRef);
 
     // Invalidate the underlying wire.
-    Value invalid = tieOffCache.lookup(underlyingType);
-    if (!invalid) {
-      invalid = InvalidValueOp::create(builder, underlyingType);
-      tieOffCache.insert({underlyingType, invalid});
-    }
+    auto invalid = tieOffCache.getInvalid(underlyingType);
     MatchingConnectOp::create(builder, targetWire, invalid);
     return;
   }
@@ -346,22 +365,14 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
 
   // Create InvalidValueOp for FIRRTLBaseType.
   if (auto baseType = type_dyn_cast<FIRRTLBaseType>(type)) {
-    Value invalid = tieOffCache.lookup(type);
-    if (!invalid) {
-      invalid = InvalidValueOp::create(builder, baseType);
-      tieOffCache.insert({type, invalid});
-    }
+    auto invalid = tieOffCache.getInvalid(baseType);
     ConnectOp::create(builder, value, invalid);
     return;
   }
 
   // For property types, use UnknownValueOp to tie off the connection.
   if (auto propType = type_dyn_cast<PropertyType>(type)) {
-    Value unknown = tieOffCache.lookup(type);
-    if (!unknown) {
-      unknown = builder.create<UnknownValueOp>(propType);
-      tieOffCache.insert({type, unknown});
-    }
+    auto unknown = tieOffCache.getUnknown(propType);
     builder.create<PropAssignOp>(value, unknown);
   }
 }
@@ -481,7 +492,7 @@ struct InstanceStubber : public OpReduction<firrtl::InstanceOp> {
     LLVM_DEBUG(llvm::dbgs()
                << "Stubbing instance `" << instOp.getName() << "`\n");
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
-    SmallDenseMap<Type, Value, 8> tieOffCache;
+    TieOffCache tieOffCache(builder);
     for (unsigned i = 0, e = instOp.getNumResults(); i != e; ++i) {
       auto result = instOp.getResult(i);
       auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
@@ -528,7 +539,7 @@ struct MemoryStubber : public OpReduction<firrtl::MemOp> {
   LogicalResult rewrite(firrtl::MemOp memOp) override {
     LLVM_DEBUG(llvm::dbgs() << "Stubbing memory `" << memOp.getName() << "`\n");
     ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
-    SmallDenseMap<Type, Value, 8> tieOffCache;
+    TieOffCache tieOffCache(builder);
     Value xorInputs;
     SmallVector<Value> outputs;
     for (unsigned i = 0, e = memOp.getNumResults(); i != e; ++i) {
