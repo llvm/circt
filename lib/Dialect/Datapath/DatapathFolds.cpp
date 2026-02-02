@@ -412,7 +412,7 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
                                     lhsBaseWidth + rhsBaseWidth);
 
     // Constant correction from the signCorrection rows (e.g. 3-bit case):
-    // {2'b11, a[2]&b[1:0], 2'b11} + 1'b1 + {2'b11, a[2]&b[1:0], 2'b11} + 1'b1
+    // {2'b11, a[2]*b[1:0], 2'b11} + 1'b1 + {2'b11, a[2]*b[1:0], 2'b11} + 1'b1
     // ==
     // 2 * (2'b11 << 4 + 3'b100) + {a[2]&b[1:0], 2'b00} + {b[2]&a[1:0], 2'b00}
     // Note constant correction will depend on lhs and rhs widths - so general
