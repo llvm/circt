@@ -260,8 +260,8 @@ LogicalResult MachineOpConverter::dispatch() {
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
     mlir::StringAttr funName =
         b.getStringAttr(("F_" + stateOp.getName().str()));
-    auto range = b.getType<smt::BoolType>();
-    auto funTy = b.getType<smt::SMTFuncType>(stateFunDomain, range);
+    auto rangeTy = b.getType<smt::BoolType>();
+    auto funTy = b.getType<smt::SMTFuncType>(stateFunDomain, rangeTy);
     auto acFun = smt::DeclareFunOp::create(b, loc, funTy, funName);
     stateFunctions.push_back(acFun);
     auto fromState = insertStates(states, stateOp.getName().str());
@@ -310,27 +310,23 @@ LogicalResult MachineOpConverter::dispatch() {
           for (auto i = numArgs; i < numArgs + numOut; i++)
             castOutValues.push_back(forallQuantified[i]);
         } else {
+          
+          // replace initial values in fsmToCast to create the IR mapping 
+          
+          for (auto [id, couple] : llvm::enumerate(fsmToCast)) {
+            if (numArgs <= id && id < numArgs + numVars) 
+              fsmToCast[id] = {couple.first,
+                               hw::ConstantOp::create(b, loc, varInitValues[id - numArgs])};
+          }
+
+          IRMapping mapping = createIRMapping(fsmToCast, constMapper);
+
+          SmallVector<mlir::Value> combOutputValues;
+          
           // Clone all the operations in the output region except `OutputOp` and
           // `AssertOp`, replacing FSM variables and arguments with the results
           // of unrealized conversion casts and replacing constants with their
           // new clones
-          IRMapping mapping;
-          for (auto [id, couple] : llvm::enumerate(fsmToCast)) {
-            if (id < numArgs) { // arguments are mapped directly
-              mapping.map(couple.first, couple.second);
-            } else { // variables are mapped to their initial values
-              mapping.map(
-                  couple.first,
-                  hw::ConstantOp::create(b, loc, varInitValues[id - numArgs]));
-            }
-          }
-
-          for (auto &pair : constMapper.getValueMap()) {
-            mapping.map(pair.first, pair.second);
-          }
-
-          SmallVector<mlir::Value> combOutputValues;
-
           for (auto &op : initOutputReg->front()) {
             auto *newOp = b.clone(op, mapping);
             if (!isa<verif::AssertOp>(newOp)) {
