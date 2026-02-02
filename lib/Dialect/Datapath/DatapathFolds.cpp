@@ -41,6 +41,62 @@ static FailureOr<size_t> calculateNonZeroBits(Value operand,
   return nonZeroBits;
 }
 
+// Check if the operand matches and return the unextended operand:
+// sign = comb.extract(operand, width-1, 1)
+// ext = comb.replicate(sign, ???)
+// sext = comb.concat(ext, ???)
+static FailureOr<Value> isSext(Value operand) {
+  // Check if operand is a concat operation
+  auto concatOp = operand.getDefiningOp<comb::ConcatOp>();
+  if (!concatOp)
+    return failure();
+
+  auto operands = concatOp.getOperands();
+  // ConcatOp must have exactly 2 operands: (sign_bits, original_value)
+  if (operands.size() != 2)
+    return failure();
+
+  Value signBits = operands[0];
+  Value originalValue = operands[1];
+  auto originalWidth = originalValue.getType().getIntOrFloatBitWidth();
+
+  // Check if signBits is a replicate operation
+  auto replicateOp = signBits.getDefiningOp<comb::ReplicateOp>();
+  if (!replicateOp)
+    return failure();
+
+  Value signBit = replicateOp.getInput();
+
+  // Check if signBit is extracted from originalValue at position width-1 with
+  // length 1
+  auto extractOp = signBit.getDefiningOp<comb::ExtractOp>();
+  if (!extractOp)
+    return failure();
+
+  if (extractOp.getInput() != originalValue)
+    return failure();
+
+  if (extractOp.getLowBit() != originalWidth - 1)
+    return failure();
+
+  // Extract width should be 1
+  if (extractOp.getType().getIntOrFloatBitWidth() != 1)
+    return failure();
+
+  // All checks passed - return the original unextended value
+  return originalValue;
+}
+
+static Value zeroPad(PatternRewriter &rewriter, Location loc, Value input,
+                     size_t targetWidth, size_t trailingZeros) {
+  assert(trailingZeros > 0 && "zeroPad called with zero trailing zeros");
+  auto trailingZerosValue =
+      hw::ConstantOp::create(rewriter, loc, APInt::getZero(trailingZeros));
+  auto padTrailing = comb::ConcatOp::create(
+      rewriter, loc, ValueRange{input, trailingZerosValue});
+  return comb::createZExt(rewriter, loc, padTrailing, targetWidth);
+}
+
 //===----------------------------------------------------------------------===//
 // Compress Operation
 //===----------------------------------------------------------------------===//
@@ -229,7 +285,6 @@ struct ConstantFoldCompress : public OpRewritePattern<CompressOp> {
 
 void CompressOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-
   results
       .add<FoldCompressIntoCompress, FoldAddIntoCompress, ConstantFoldCompress>(
           context);
@@ -275,6 +330,129 @@ struct ReduceNumPartialProducts : public OpRewritePattern<PartialProductOp> {
   }
 };
 
+struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  // pp(sext(a), sext(b)) -> pp(a,b) - sign(a)*b - sign(b)*a + sign(a)*sign(b)
+  // Consider a 3x3 signed multiplier - producing a 6-bit result:
+  // sext(a)*sext(b) = a[1:0]*b[1:0] -  4*a[2]*b[1:0]
+  //                                 -  4*b[2]*a[1:0]
+  //                                 + 16*a[2]*b[2]
+  //
+  //                 = a[1:0]*b[1:0] + {2'b11, a[2] & b[1:0], 2'b11} + 1'b1
+  //                                 + {2'b11, a[2] & b[1:0], 2'b11} + 1'b1
+  //                                 + {a[2]&b[2], 4'b0000}
+  // Then can constant fold the different constants
+  LogicalResult matchAndRewrite(PartialProductOp op,
+                                PatternRewriter &rewriter) const override {
+    auto inputWidth = op.getOperand(0).getType().getIntOrFloatBitWidth();
+    auto lhs = isSext(op.getOperand(0));
+    auto rhs = isSext(op.getOperand(1));
+    if (failed(lhs) || failed(rhs))
+      return failure();
+
+    size_t lhsWidth = (*lhs).getType().getIntOrFloatBitWidth();
+    size_t rhsWidth = (*rhs).getType().getIntOrFloatBitWidth();
+    // Subtract 1 as will handle sign-bit separately
+    size_t maxRows = std::max(lhsWidth, rhsWidth) - 1;
+
+    // TODO: add support for different width inputs
+    // Need to have a sign bit in both inputs
+    if (lhsWidth != rhsWidth | lhsWidth <= 1 | rhsWidth <= 1)
+      return failure();
+
+    // No further reduction possible
+    if (maxRows >= op.getNumResults())
+      return failure();
+
+    // Pull off the sign bits
+    auto lhsBaseWidth = lhsWidth - 1;
+    auto rhsBaseWidth = rhsWidth - 1;
+    auto lhsSignBit =
+        comb::ExtractOp::create(rewriter, op.getLoc(), *lhs, lhsBaseWidth, 1);
+    auto rhsSignBit =
+        comb::ExtractOp::create(rewriter, op.getLoc(), *rhs, rhsBaseWidth, 1);
+    auto lhsBase =
+        comb::ExtractOp::create(rewriter, op.getLoc(), *lhs, 0, lhsBaseWidth);
+    auto rhsBase =
+        comb::ExtractOp::create(rewriter, op.getLoc(), *rhs, 0, rhsBaseWidth);
+
+    // Create the unsigned partial product of the unextended inputs
+    auto lhsBaseZext =
+        comb::createZExt(rewriter, op.getLoc(), lhsBase, inputWidth);
+    auto rhsBaseZext =
+        comb::createZExt(rewriter, op.getLoc(), rhsBase, inputWidth);
+    auto newPP = datapath::PartialProductOp::create(
+        rewriter, op.getLoc(), ValueRange{lhsBaseZext, rhsBaseZext}, maxRows);
+
+    // Create ~(sign(lhs) & rhsWithoutSign)
+    auto lhsSignReplicate = comb::ReplicateOp::create(rewriter, op.getLoc(),
+                                                      lhsSignBit, rhsBaseWidth);
+    auto lhsSignAndRhs =
+        comb::AndOp::create(rewriter, op.getLoc(), lhsSignReplicate, rhsBase);
+    auto lhsSignCorrection =
+        comb::createOrFoldNot(op.getLoc(), lhsSignAndRhs, rewriter, true);
+
+    // zext({lhsSignCorrection, lhsBaseWidth{1'b0}})
+    auto alignLhsSignCorrection = zeroPad(
+        rewriter, op.getLoc(), lhsSignCorrection, inputWidth, lhsBaseWidth);
+
+    // Create ~(sign(rhs) & lhsWithoutSign)
+    auto rhsSignReplicate = comb::ReplicateOp::create(rewriter, op.getLoc(),
+                                                      rhsSignBit, lhsBaseWidth);
+    auto rhsSignAndLhs =
+        comb::AndOp::create(rewriter, op.getLoc(), rhsSignReplicate, lhsBase);
+    auto rhsSignCorrection =
+        comb::createOrFoldNot(op.getLoc(), rhsSignAndLhs, rewriter, true);
+
+    // zext({rhsSignCorrection, rhsBaseWidth{1'b0}})
+    auto alignRhsSignCorrection = zeroPad(
+        rewriter, op.getLoc(), rhsSignCorrection, inputWidth, rhsBaseWidth);
+
+    // Create sign(lhs) & sign(rhs)
+    auto signAnd =
+        comb::AndOp::create(rewriter, op.getLoc(), lhsSignBit, rhsSignBit);
+    // zext({sign(lhs) & sign(rhs), lhsBaseWidth+rhsBaseWidth{1'b0}})
+    auto alignSignAndZext = zeroPad(rewriter, op.getLoc(), signAnd, inputWidth,
+                                    lhsBaseWidth + rhsBaseWidth);
+
+    // Constant correction from the signCorrection rows (e.g. 3-bit case):
+    // {2'b11, a[2]&b[1:0], 2'b11} + 1'b1 + {2'b11, a[2]&b[1:0], 2'b11} + 1'b1
+    // ==
+    // 2 * (2'b11 << 4 + 3'b100) + {a[2]&b[1:0], 2'b00} + {b[2]&a[1:0], 2'b00}
+    // Note constant correction will depend on lhs and rhs widths - so general
+    // case is not twice the correction for one side.
+    auto ones = APInt::getAllOnes(inputWidth);
+    auto lowerLhs = APInt(inputWidth, (1 << lhsBaseWidth));
+    auto correctionLhs = lowerLhs + (ones << (lhsBaseWidth + rhsBaseWidth));
+    auto lowerRhs = APInt(inputWidth, (1 << rhsBaseWidth));
+    auto correctionRhs = lowerRhs + (ones << (lhsBaseWidth + rhsBaseWidth));
+
+    auto constantCorrection = hw::ConstantOp::create(
+        rewriter, op.getLoc(), correctionLhs + correctionRhs);
+
+    auto zero = hw::ConstantOp::create(rewriter, op.getLoc(),
+                                       APInt::getZero(inputWidth));
+    // Collect newPP results and pad with zeros if needed
+    SmallVector<Value> newResults(newPP.getResults().begin(),
+                                  newPP.getResults().end());
+
+    // (~(sign(lhs)*rhs[1:0])) << 2
+    newResults.push_back(alignLhsSignCorrection);
+    // (~(sign(rhs)*lhs[1:0])) << 2
+    newResults.push_back(alignRhsSignCorrection);
+    // sign(lhs)*sign(rhs) << 4
+    newResults.push_back(alignSignAndZext);
+    // Constant correction = 2 * (2'b11 << 4 + 3'b100)
+    newResults.push_back(constantCorrection);
+    // Zero pad if necessary
+    newResults.append(op.getNumResults() - newResults.size(), zero);
+
+    rewriter.replaceOp(op, newResults);
+    return success();
+  }
+};
+
 struct PosPartialProducts : public OpRewritePattern<PartialProductOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -307,8 +485,9 @@ struct PosPartialProducts : public OpRewritePattern<PartialProductOp> {
 
 void PartialProductOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                    MLIRContext *context) {
-
-  results.add<ReduceNumPartialProducts, PosPartialProducts>(context);
+  results
+      .add<ReduceNumPartialProducts, SignedPartialProducts, PosPartialProducts>(
+          context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -355,6 +534,5 @@ struct ReduceNumPosPartialProducts
 
 void PosPartialProductOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
-
   results.add<ReduceNumPosPartialProducts>(context);
 }
