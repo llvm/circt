@@ -67,23 +67,17 @@ static FailureOr<Value> isSext(Value operand) {
 
   Value signBit = replicateOp.getInput();
 
-  // Check if signBit is extracted from originalValue at position width-1 with
-  // length 1
+  // Check if signBit is the msb of originalValue
   auto extractOp = signBit.getDefiningOp<comb::ExtractOp>();
   if (!extractOp)
     return failure();
 
-  if (extractOp.getInput() != originalValue)
+  if (extractOp.getInput() != originalValue |
+      extractOp.getLowBit() != originalWidth - 1 |
+      extractOp.getType().getIntOrFloatBitWidth() != 1)
     return failure();
 
-  if (extractOp.getLowBit() != originalWidth - 1)
-    return failure();
-
-  // Extract width should be 1
-  if (extractOp.getType().getIntOrFloatBitWidth() != 1)
-    return failure();
-
-  // All checks passed - return the original unextended value
+  // Return the original unextended value
   return originalValue;
 }
 
