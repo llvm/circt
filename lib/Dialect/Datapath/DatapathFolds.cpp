@@ -380,7 +380,7 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
     auto newPP = datapath::PartialProductOp::create(
         rewriter, op.getLoc(), ValueRange{lhsBaseZext, rhsBaseZext}, maxRows);
 
-    // Create ~(sign(lhs) & rhsWithoutSign)
+    // Create ~(sign(lhs) & rhsBase)
     auto lhsSignReplicate = comb::ReplicateOp::create(rewriter, op.getLoc(),
                                                       lhsSignBit, rhsBaseWidth);
     auto lhsSignAndRhs =
@@ -392,7 +392,7 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
     auto alignLhsSignCorrection = zeroPad(
         rewriter, op.getLoc(), lhsSignCorrection, inputWidth, lhsBaseWidth);
 
-    // Create ~(sign(rhs) & lhsWithoutSign)
+    // Create ~(sign(rhs) & lhsBase)
     auto rhsSignReplicate = comb::ReplicateOp::create(rewriter, op.getLoc(),
                                                       rhsSignBit, lhsBaseWidth);
     auto rhsSignAndLhs =
