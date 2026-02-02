@@ -1,4 +1,5 @@
 // RUN: circt-opt -convert-fsm-to-smt %s | FileCheck %s
+// RUN: circt-opt -convert-fsm-to-smt %s | FileCheck %s --check-prefix="with-time=true"
 
 // CHECK: module {
 // CHECK-NEXT:  smt.solver() : () -> () {
