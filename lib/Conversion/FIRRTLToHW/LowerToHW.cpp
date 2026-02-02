@@ -2039,6 +2039,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(LTLUntilIntrinsicOp op);
   LogicalResult visitExpr(LTLEventuallyIntrinsicOp op);
   LogicalResult visitExpr(LTLClockIntrinsicOp op);
+  LogicalResult visitExpr(ReadDesignConfigIntIntrinsicOp op);
 
   template <typename TargetOp, typename IntrinsicOp>
   LogicalResult lowerVerifIntrinsicOp(IntrinsicOp op);
@@ -4522,6 +4523,35 @@ LogicalResult FIRRTLLowering::visitExpr(HasBeenResetIntrinsicOp op) {
     return failure();
   }
   return setLoweringTo<verif::HasBeenResetOp>(op, clock, reset, isAsync);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(ReadDesignConfigIntIntrinsicOp op) {
+  // Lower the ReadDesignConfigInt intrinsic to sv.localparam that
+  // references the configuration from DesignConfigPackage.
+  //
+  // Example:
+  //   %value = firrtl.int.read_design_config_int "buffer_type", 3, "comment"
+  //     : !firrtl.uint<8>
+  //
+  // Lowers to:
+  //   %value = sv.localparam : i8 {
+  //     value = #hw.param.verbatim<"DesignConfigPackage::buffer_type"> : i8
+  //   }
+
+  auto resultType = lowerType(op.getResult().getType());
+  if (!resultType)
+    return failure();
+
+  // Create a verbatim reference to the configuration in DesignConfigPackage
+  std::string paramRef = "DesignConfigPackage::" + op.getParamName().str();
+  auto paramVerbatim =
+      hw::ParamVerbatimAttr::get(builder.getStringAttr(paramRef), resultType);
+
+  // Create sv.localparam operation with the configuration reference
+  auto localParam = builder.create<sv::LocalParamOp>(
+      op.getLoc(), resultType, paramVerbatim, op.getParamNameAttr());
+
+  return setLowering(op, localParam);
 }
 
 //===----------------------------------------------------------------------===//

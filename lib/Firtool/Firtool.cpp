@@ -238,6 +238,10 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   if (!opt.shouldDisableLayerSink() && !opt.shouldDisableOptimization())
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLayerSink());
 
+  // Generate design configuration package for post-Verilog configuration
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createCreateDesignConfigPackage());
+
   // Lower the ref.resolve and ref.send ops and remove the RefType ports.
   // LowerToHW cannot handle RefType so, this pass must be run to remove all
   // RefType ports and ops.

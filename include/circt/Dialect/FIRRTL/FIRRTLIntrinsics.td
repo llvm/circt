@@ -243,4 +243,39 @@ def ViewIntrinsicOp : FIRRTLOp<"view", []> {
   let assemblyFormat = "$name `,` (`yaml` $yamlFile^ `,`)? $augmentedType (`,` $inputs^)? attr-dict (`:` type($inputs)^)?";
 }
 
+def ReadDesignConfigIntIntrinsicOp : FIRRTLOp<"int.read_design_config_int",
+    [HasCustomSSAName, Pure]> {
+  let summary = "Read an integer design configuration value";
+  let description = [{
+    The `int.read_design_config_int` intrinsic reads an integer design
+    configuration value that will be defined in a generated configuration package
+    (DesignConfigPackage). This enables post-Verilog configuration where
+    configuration values can be set after Verilog generation.
+
+    The intrinsic takes a parameter name, default value, comment, and
+    a result type. It returns the default value, but the actual value can be
+    changed via the generated configuration package.
+
+    Example usage in FIRRTL:
+    ```
+    %value = firrtl.int.read_design_config_int "mode", 3, "Mode selection" : !firrtl.uint<8>
+    ```
+
+    This generates Verilog like:
+    ```verilog
+    localparam mode = DesignConfigPackage::mode;
+    ```
+  }];
+
+  let arguments = (ins
+    StrAttr:$paramName,
+    I64Attr:$defaultValue,
+    StrAttr:$comment
+  );
+  let results = (outs IntType:$result);
+  let assemblyFormat = [{
+    $paramName `,` $defaultValue `,` $comment attr-dict `:` type($result)
+  }];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD

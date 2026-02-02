@@ -961,5 +961,31 @@ def AnnotateInputOnlyModules : Pass<"firrtl-annotate-input-only-modules",
   ];
 }
 
+def CreateDesignConfigPackage : Pass<"firrtl-create-design-config-package",
+                                     "firrtl::CircuitOp"> {
+  let summary = "Create design configuration package for post-Verilog configuration";
+  let description = [{
+    This pass accumulates all ReadDesignConfigInt intrinsics in the design
+    and generates a SystemVerilog package (DesignConfigPackage) containing
+    all the configuration values. It also creates an OM class with metadata
+    about the configurations.
+
+    The pass only generates the package for the effective DUT (Design Under Test).
+    Configuration values are collected from all modules instantiated under the DUT.
+
+    The generated package can be used for post-Verilog configuration by
+    modifying the configuration values without regenerating the Verilog.
+  }];
+  let dependentDialects = [
+    "emit::EmitDialect",
+    "hw::HWDialect",
+    "sv::SVDialect",
+    "om::OMDialect"
+  ];
+  let statistics = [
+    Statistic<"numConfigs", "num-configs", "Number of configurations collected">
+  ];
+}
+
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

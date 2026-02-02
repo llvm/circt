@@ -881,6 +881,48 @@ parseAugmentedType(MLIRContext *context, Location loc,
   return std::nullopt;
 }
 
+class CirctReadDesignConfigIntConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    // Check that we have no inputs, an integer output type, and 3 parameters
+    if (gi.hasNInputs(0))
+      return true;
+
+    if (!type_isa<IntType>(gi.op.getResult().getType())) {
+      gi.emitError() << "result must be an integer type";
+      return true;
+    }
+
+    if (gi.namedParam("name") || gi.namedIntParam("defaultValue") ||
+        gi.namedParam("comment"))
+      return true;
+
+    if (gi.hasNParam(3))
+      return true;
+
+    return false;
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto paramName = gi.getParamValue<StringAttr>("name");
+    auto defaultValueAttr = gi.getParamValue<IntegerAttr>("defaultValue");
+
+    // Convert the defaultValue to i64
+    auto defaultValue =
+        rewriter.getI64IntegerAttr(defaultValueAttr.getValue().getSExtValue());
+
+    auto comment = gi.getParamValue<StringAttr>("comment");
+
+    auto resultType = gi.op.getResult().getType();
+
+    rewriter.replaceOpWithNewOp<ReadDesignConfigIntIntrinsicOp>(
+        gi.op, resultType, paramName, defaultValue, comment);
+  }
+};
+
 class ViewConverter : public IntrinsicConverter {
 public:
   LogicalResult checkAndConvert(GenericIntrinsic gi,
