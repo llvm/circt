@@ -311,9 +311,9 @@ LogicalResult MachineOpConverter::dispatch() {
         // replace variables with initial values to create the IR mapping
         for (auto [id, couple] : llvm::enumerate(fsmToCast)) {
           if (numArgs + numOut <= id && id < numArgs + numOut + numVars) {
-            fsmToCast[id] = {couple.first,
-                             hw::ConstantOp::create(
-                                 b, loc, varInitValues[id - numArgs - numOut])};
+            fsmToCast[id] = {
+                couple.first,
+                hw::ConstantOp::create(b, loc, varInitValues[id - numArgs])};
           }
         }
 
