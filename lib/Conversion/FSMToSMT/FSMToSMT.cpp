@@ -625,8 +625,7 @@ LogicalResult MachineOpConverter::dispatch() {
           // clone
           for (auto &op : pa.outputRegion->front()) {
             // only clone comb, hardware and verif::assert operations
-            if (isa<comb::CombDialect>(op.getDialect()) ||
-                isa<hw::HWDialect>(op.getDialect()) ||
+            if (isa<comb::CombDialect, hw::HWDialect>(op.getDialect()) ||
                 isa<verif::AssertOp>(op)) {
               auto *newOp = b.clone(op, mapping);
 
