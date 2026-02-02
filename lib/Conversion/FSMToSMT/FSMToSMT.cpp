@@ -36,12 +36,6 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
-#include <cassert>
-#include <cstdlib>
-#include <memory>
-#include <string>
-#include <utility>
-
 namespace circt {
 #define GEN_PASS_DEF_CONVERTFSMTOSMT
 #include "circt/Conversion/Passes.h.inc"
@@ -221,7 +215,7 @@ LogicalResult MachineOpConverter::dispatch() {
   // Do not allow any operations other than constants outside of FSM regions
   for (auto &op : machineOp.front().getOperations()) {
     if (!isa<fsm::FSMDialect>(op.getDialect()) &&
-        !isa<hw::HWDialect>(op.getDialect())) {
+        !isa<hw::ConstantOp>(op)) {
       op.emitError(
           "Operations other than constants are not supported outside FSM "
           "output, guard, and action regions.");
