@@ -77,6 +77,13 @@ def UIntTypes : Constraint<CPred<"type_isa<UIntType>($0.getType())">>;
 // Constraint that enforces types mismatches
 def mismatchTypes : Constraint<CPred<"!areAnonymousTypesEquivalent($0.getType(), $1.getType())">>;
 
+// Constraint that enforces types mismatches, ignoring const qualifiers
+def mismatchTypesIgnoringConst : Constraint<CPred<[{
+  !areAnonymousTypesEquivalent(
+    type_cast<FIRRTLBaseType>($0.getType()).getAllConstDroppedType(),
+    type_cast<FIRRTLBaseType>($1.getType()).getAllConstDroppedType())
+  }]>>;
+
 // Constraint that enforces types of known width
 def KnownWidth : Constraint<CPred<[{
   type_isa<FIRRTLBaseType>($0.getType()) &&
@@ -237,19 +244,19 @@ def extendAnd : Pat <
   (AndPrimOp:$old $lhs, $rhs),
   (MoveNameHint $old, (AndPrimOp (PadPrimOp $lhs, (TypeWidth32 $old)),
                                  (PadPrimOp $rhs, (TypeWidth32 $old)))),
-  [(KnownWidth $lhs), (KnownWidth $rhs), (mismatchTypes $lhs, $rhs)]>;
+  [(KnownWidth $lhs), (KnownWidth $rhs), (mismatchTypesIgnoringConst $lhs, $rhs)]>;
 
 def extendOr : Pat <
   (OrPrimOp:$old $lhs, $rhs),
   (MoveNameHint $old, (OrPrimOp (PadPrimOp $lhs, (TypeWidth32 $old)),
                                 (PadPrimOp $rhs, (TypeWidth32 $old)))),
-  [(KnownWidth $lhs), (KnownWidth $rhs), (mismatchTypes $lhs, $rhs)]>;
+  [(KnownWidth $lhs), (KnownWidth $rhs), (mismatchTypesIgnoringConst $lhs, $rhs)]>;
 
 def extendXor : Pat <
   (XorPrimOp:$old $lhs, $rhs),
   (MoveNameHint $old, (XorPrimOp (PadPrimOp $lhs, (TypeWidth32 $old)),
                                  (PadPrimOp $rhs, (TypeWidth32 $old)))),
-  [(KnownWidth $lhs), (KnownWidth $rhs), (mismatchTypes $lhs, $rhs)]>;
+  [(KnownWidth $lhs), (KnownWidth $rhs), (mismatchTypesIgnoringConst $lhs, $rhs)]>;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Move constants to the right
