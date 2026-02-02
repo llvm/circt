@@ -214,10 +214,9 @@ LogicalResult MachineOpConverter::dispatch() {
 
   // Do not allow any operations other than constants outside of FSM regions
   for (auto &op : machineOp.front().getOperations()) {
-    if (!isa<fsm::FSMDialect>(op.getDialect()) &&
-        !isa<hw::ConstantOp>(op)) {
+    if (!isa<fsm::FSMDialect>(op.getDialect()) && !isa<hw::ConstantOp>(op)) {
       op.emitError(
-          "Operations other than constants are not supported outside FSM "
+          "Operations other than hw.constants are not supported outside FSM "
           "output, guard, and action regions.");
       return failure();
     }
@@ -677,7 +676,7 @@ void FSMToSMTPass::runOnOperation() {
   LoweringConfig cfg;
   cfg.withTime = withTime;   // default false
   cfg.timeWidth = timeWidth; // default 5
-  
+
   // Throw an error if the module contains an operation used inside the FSM
   for (auto &op : module.getOps()) {
     if (!isa<fsm::MachineOp>(op)) {
@@ -689,12 +688,12 @@ void FSMToSMTPass::runOnOperation() {
                       "Operation " + op.getName().getStringRef() +
                           " is declared outside of any FSM MachineOp");
             signalPassFailure();
-            return;}
+            return;
+          }
         }
       }
     }
   }
-  
 
   for (auto machine : llvm::make_early_inc_range(module.getOps<MachineOp>())) {
     MachineOpConverter converter(b, machine, cfg);

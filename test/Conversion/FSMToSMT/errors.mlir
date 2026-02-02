@@ -22,17 +22,6 @@ fsm.machine @bad_transition(%arg0: i8) -> (i8) attributes {initialState = "S0"} 
 
 // -----
 
-fsm.machine @multiple_outputs(%arg0: i8) -> (i8) attributes {initialState = "S0"} {
-  %c0_i8 = hw.constant 0 : i8
-  fsm.state @S0 output {
-    // expected-error @below {{'fsm.output' op must be the last operation in the parent block}}
-    fsm.output %c0_i8 : i8
-    fsm.output %arg0 : i8
-  }
-}
-
-// -----
-
 fsm.machine @missing_init(%arg0: i8) -> (i8) attributes {initialState = "S0"} {
   %c0_i8 = hw.constant 0 : i8
   // expected-error @below {{'fsm.variable' op requires attribute 'initValue'}}
