@@ -13,7 +13,6 @@
 // CHECK-NEXT:     ^bb0(%arg0: !smt.bv<8>, %arg1: !smt.bv<8>, %arg2: !smt.bv<32>):
 // CHECK-NEXT:       %5 = builtin.unrealized_conversion_cast %arg0 : !smt.bv<8> to i8
 // CHECK-NEXT:       %6 = builtin.unrealized_conversion_cast %arg2 : !smt.bv<32> to i32
-// CHECK-NEXT:       %c0_i32 = hw.constant 0 : i32
 // CHECK-NEXT:       %7 = builtin.unrealized_conversion_cast %5 : i8 to !smt.bv<8>
 // CHECK-NEXT:       %c0_bv32 = smt.bv.constant #smt.bv<0> : !smt.bv<32>
 // CHECK-NEXT:       %8 = smt.apply_func %F_S0(%7, %c0_bv32) : !smt.func<(!smt.bv<8>, !smt.bv<32>) !smt.bool>
