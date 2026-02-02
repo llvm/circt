@@ -22,6 +22,7 @@
 #include "circt/Reduce/ReductionUtils.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
+#include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Matchers.h"
 #include "llvm/ADT/APSInt.h"
@@ -971,6 +972,10 @@ struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
 
 /// A sample reduction pattern that pushes connected values through wires.
 struct ConnectForwarder : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override {
+    domInfo = std::make_unique<DominanceInfo>(op);
+  }
+
   uint64_t match(Operation *op) override {
     if (!isa<firrtl::FConnectLike>(op))
       return 0;
@@ -997,7 +1002,10 @@ struct ConnectForwarder : public Reduction {
           return 0;
         continue;
       }
-      if (srcOp && !srcOp->isBeforeInBlock(op))
+      // Check if srcOp properly dominates op, but op is not enclosed in srcOp.
+      // This handles cross-block cases (e.g., layerblocks).
+      if (srcOp &&
+          !domInfo->properlyDominates(srcOp, op, /*enclosingOpOk=*/false))
         return 0;
     }
 
@@ -1017,6 +1025,9 @@ struct ConnectForwarder : public Reduction {
   }
 
   std::string getName() const override { return "connect-forwarder"; }
+
+private:
+  std::unique_ptr<DominanceInfo> domInfo;
 };
 
 /// A sample reduction pattern that replaces a single-use wire and register with
