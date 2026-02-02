@@ -152,7 +152,7 @@ private:
     for (auto &pair : constMapper.getValueMap()) {
       mapping.map(pair.first, pair.second);
     }
-    
+
     return mapping;
   }
 
@@ -307,19 +307,20 @@ LogicalResult MachineOpConverter::dispatch() {
                         fsmVars);
         auto *initOutputReg = getOutputRegion(outputOfStateId, 0);
         SmallVector<Value> castOutValues;
-        
-        // replace variables with initial values to create the IR mapping 
+
+        // replace variables with initial values to create the IR mapping
         for (auto [id, couple] : llvm::enumerate(fsmToCast)) {
           if (numArgs + numOut <= id && id < numArgs + numOut + numVars) {
             fsmToCast[id] = {couple.first,
-                              hw::ConstantOp::create(b, loc, varInitValues[id - numArgs - numOut])};
+                             hw::ConstantOp::create(
+                                 b, loc, varInitValues[id - numArgs - numOut])};
           }
         }
 
         IRMapping mapping = createIRMapping(fsmToCast, constMapper);
-        
+
         SmallVector<mlir::Value> combOutputValues;
-        
+
         if (!initOutputReg->empty()) {
           // Clone all the operations in the output region except `OutputOp` and
           // `AssertOp`, replacing FSM variables and arguments with the results
@@ -327,7 +328,7 @@ LogicalResult MachineOpConverter::dispatch() {
           // new clones
           for (auto &op : initOutputReg->front()) {
             auto *newOp = b.clone(op, mapping);
-            
+
             // Retrieve all the operands of the output operation
             if (isa<fsm::OutputOp>(newOp)) {
               for (auto out : newOp->getOperands())
@@ -338,7 +339,7 @@ LogicalResult MachineOpConverter::dispatch() {
               assertions.push_back({0, initOutputReg});
               newOp->erase();
             }
-            
+
             // Cast the (comb) results obtained from the output region to SMT
             // types, to pass them as arguments of the state function
 
@@ -349,7 +350,7 @@ LogicalResult MachineOpConverter::dispatch() {
             }
           }
         }
-        
+
         // Assign variables and output values their initial value
         SmallVector<mlir::Value> initialCondition;
         for (auto [idx, q] : llvm::enumerate(forallQuantified)) {
@@ -440,21 +441,21 @@ LogicalResult MachineOpConverter::dispatch() {
           auto *newOp = b.clone(op, mapping);
           // Retrieve the updated values and their operands
           if (isa<fsm::UpdateOp>(newOp)) {
-              auto varToUpdate = newOp->getOperand(0);
-              auto updatedValue = newOp->getOperand(1);
+            auto varToUpdate = newOp->getOperand(0);
+            auto updatedValue = newOp->getOperand(1);
 
-              for (auto [id, var] : llvm::enumerate(fsmToCast)) {
-                if (var.second == varToUpdate) {
+            for (auto [id, var] : llvm::enumerate(fsmToCast)) {
+              if (var.second == varToUpdate) {
 
-                  // Cast the updated value to the appropriate SMT type
-                  auto convCast = UnrealizedConversionCastOp::create(
-                      b, loc, actionArgsOutsVarsVals[numOut + id].getType(),
-                      updatedValue);
+                // Cast the updated value to the appropriate SMT type
+                auto convCast = UnrealizedConversionCastOp::create(
+                    b, loc, actionArgsOutsVarsVals[numOut + id].getType(),
+                    updatedValue);
 
-                  castUpdatedVars[id - numArgs] = convCast->getResult(0);
-                }
+                castUpdatedVars[id - numArgs] = convCast->getResult(0);
               }
-              newOp->erase();
+            }
+            newOp->erase();
           } else if (isa<verif::AssertOp>(newOp)) {
             // Ignore assertions in action regions
             newOp->emitWarning("Assertions in action regions are ignored.");
@@ -681,7 +682,7 @@ void FSMToSMTPass::runOnOperation() {
 
   // Read options from the generated base
   LoweringConfig cfg;
-  cfg.withTime = withTime; // default false
+  cfg.withTime = withTime;   // default false
   cfg.timeWidth = timeWidth; // default 5
 
   for (auto machine : llvm::make_early_inc_range(module.getOps<MachineOp>())) {
