@@ -22,6 +22,7 @@
 #include "circt/Reduce/ReductionUtils.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
+#include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Matchers.h"
 #include "llvm/ADT/APSInt.h"
@@ -329,20 +330,6 @@ static void connectToLeafs(ImplicitLocOpBuilder &builder, Value dest,
       return;
   }
   firrtl::ConnectOp::create(builder, dest, value);
-}
-
-/// Return true if `a` happens before `b`, i.e., `a` or one of its ancestors
-/// properly dominates `b` and `b` is not inside `a`. This handles cross-block
-/// cases where operations might be in different blocks (e.g., layerblocks).
-static bool happensBefore(Operation *a, Operation *b) {
-  do {
-    if (a->isProperAncestor(b))
-      return false;
-    if (Operation *bAncestor = a->getBlock()->findAncestorOpInBlock(*b)) {
-      return a->isBeforeInBlock(bAncestor);
-    }
-  } while ((a = a->getParentOp()));
-  return false;
 }
 
 /// Reduce all leaf fields of a value through an XOR tree.
@@ -985,6 +972,10 @@ struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
 
 /// A sample reduction pattern that pushes connected values through wires.
 struct ConnectForwarder : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override {
+    domInfo = std::make_unique<DominanceInfo>(op);
+  }
+
   uint64_t match(Operation *op) override {
     if (!isa<firrtl::FConnectLike>(op))
       return 0;
@@ -1011,8 +1002,10 @@ struct ConnectForwarder : public Reduction {
           return 0;
         continue;
       }
-      // Check if srcOp happens before op, handling cross-block cases
-      if (srcOp && !happensBefore(srcOp, op))
+      // Check if srcOp properly dominates op, but op is not enclosed in srcOp.
+      // This handles cross-block cases (e.g., layerblocks).
+      if (srcOp &&
+          !domInfo->properlyDominates(srcOp, op, /*enclosingOpOk=*/false))
         return 0;
     }
 
@@ -1032,6 +1025,9 @@ struct ConnectForwarder : public Reduction {
   }
 
   std::string getName() const override { return "connect-forwarder"; }
+
+private:
+  std::unique_ptr<DominanceInfo> domInfo;
 };
 
 /// A sample reduction pattern that replaces a single-use wire and register with
