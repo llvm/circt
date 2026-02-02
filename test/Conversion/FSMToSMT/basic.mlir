@@ -18,7 +18,6 @@ fsm.machine @alternating() -> (i8) attributes {initialState = "A"} {
   }
 }
 
-
 // NO-TIME: module {
 // NO-TIME:  smt.solver() : () -> () {
 // NO-TIME:    %c0_i8 = hw.constant 0 : i8

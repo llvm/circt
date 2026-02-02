@@ -155,7 +155,7 @@ private:
     return mapping;
   }
 
-  Value toSmtBool(OpBuilder &b, Location loc, Value i1Value) {
+  Value bv1toSmtBool(OpBuilder &b, Location loc, Value i1Value) {
     auto castVal = UnrealizedConversionCastOp::create(
         b, loc, b.getType<smt::BitVectorType>(1), i1Value);
     return smt::EqOp::create(b, loc, castVal->getResult(0),
@@ -184,10 +184,10 @@ LogicalResult MachineOpConverter::dispatch() {
   b.setInsertionPointToStart(solver.getBody());
 
   // Collect arguments and their types
-  for (auto t : machineArgs) {
-    fsmArgs.push_back(t);
+  for (auto a : machineArgs) {
+    fsmArgs.push_back(a);
     quantifiableTypes.push_back(
-        b.getType<smt::BitVectorType>(t.getType().getIntOrFloatBitWidth()));
+        b.getType<smt::BitVectorType>(a.getType().getIntOrFloatBitWidth()));
   }
   size_t numArgs = fsmArgs.size();
 
@@ -496,7 +496,7 @@ LogicalResult MachineOpConverter::dispatch() {
             auto castVal = mlir::UnrealizedConversionCastOp::create(
                 b, loc, b.getType<smt::BitVectorType>(1), newOp->getOperand(0));
 
-            guardVal = toSmtBool(b, loc, castVal.getResult(0));
+            guardVal = bv1toSmtBool(b, loc, castVal.getResult(0));
             newOp->erase();
           }
         } else {
@@ -655,7 +655,7 @@ LogicalResult MachineOpConverter::dispatch() {
                     b, loc, b.getType<smt::BitVectorType>(1), assertedVal);
 
                 //  Convert to SMT boolean type
-                auto toBool = toSmtBool(b, loc, castVal.getResult(0));
+                auto toBool = bv1toSmtBool(b, loc, castVal.getResult(0));
                 auto inState = smt::ApplyFuncOp::create(
                     b, loc, stateFunctions[pa.stateId],
                     forallQuantified.drop_front(numArgs));
@@ -695,7 +695,7 @@ void FSMToSMTPass::runOnOperation() {
   // Read options from the generated base
   LoweringConfig cfg;
   cfg.withTime = withTime; // default false
-  cfg.timeWidth = 5;
+  cfg.timeWidth = timeWidth; // default 5
 
   for (auto machine : llvm::make_early_inc_range(module.getOps<MachineOp>())) {
     MachineOpConverter converter(b, machine, cfg);
