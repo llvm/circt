@@ -1,4 +1,4 @@
-// RUN: circt-opt --rtg-inline-sequences --split-input-file --verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt --rtg-inline-sequences=fail-on-remaining=true --split-input-file --verify-diagnostics %s | FileCheck %s
 
 rtg.sequence @seq0() {
   rtgtest.rv32i.ebreak
@@ -114,7 +114,23 @@ rtg.test @substitutions() {
   rtg.embed_sequence %4
 }
 
+// CHECK-LABEL: @nestedRegion
+rtg.test @nestedRegion() {
+  // CHECK-NEXT: scf.execute_region {
+  scf.execute_region {
+    // CHECK-NEXT: rtgtest.rv32i.ebreak
+    // CHECK-NEXT: rtgtest.rv32i.ebreak
+    // CHECK-NEXT: scf.yield
+    %0 = rtg.get_sequence @seq0 : !rtg.sequence
+    %1 = rtg.randomize_sequence %0
+    rtg.embed_sequence %1
+    scf.yield
+  }
+}
+
 // -----
+
+rtg.sequence @seq() {}
 
 rtg.test @test0(seq = %seq : !rtg.randomized_sequence) {
   // expected-error @below {{sequence operand could not be resolved; it was likely produced by an op or block argument not supported by this pass}}
@@ -122,6 +138,8 @@ rtg.test @test0(seq = %seq : !rtg.randomized_sequence) {
 }
 
 // -----
+
+rtg.sequence @seq() {}
 
 rtg.test @test0(seq = %seq : !rtg.sequence) {
   // expected-error @below {{sequence operand could not be resolved; it was likely produced by an op or block argument not supported by this pass}}
@@ -131,8 +149,10 @@ rtg.test @test0(seq = %seq : !rtg.sequence) {
 
 // -----
 
+rtg.sequence @seq() {}
+
 rtg.test @test0(seq0 = %seq0 : !rtg.randomized_sequence, seq1 = %seq1 : !rtg.randomized_sequence) {
-  // expected-error @below {{sequence operand #0 could not be resolved; it was likely produced by an op or block argument not supported by this pass}}
+  // expected-error @below {{sequence operand could not be resolved; it was likely produced by an op or block argument not supported by this pass}}
   %0 = rtg.interleave_sequences %seq0, %seq1
   rtg.embed_sequence %0
 }
