@@ -684,6 +684,24 @@ void FSMToSMTPass::runOnOperation() {
   LoweringConfig cfg;
   cfg.withTime = withTime;   // default false
   cfg.timeWidth = timeWidth; // default 5
+  
+  // Throw an error if the module contains an operation used inside the FSM
+  for (auto &op : module.getOps()) {
+    if (!isa<fsm::MachineOp>(op)) {
+      // check if the operation is used inside any MachineOp
+      for (auto machine : module.getOps<MachineOp>()) {
+        for (auto &use : op.getUses()) {
+          if (machine->isAncestor(use.getOwner())) {
+            emitError(op.getLoc(),
+                      "Operation " + op.getName().getStringRef() +
+                          " is declared outside of any FSM MachineOp");
+            signalPassFailure();
+            return;}
+        }
+      }
+    }
+  }
+  
 
   for (auto machine : llvm::make_early_inc_range(module.getOps<MachineOp>())) {
     MachineOpConverter converter(b, machine, cfg);
