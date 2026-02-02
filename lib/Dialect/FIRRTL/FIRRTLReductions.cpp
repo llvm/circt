@@ -1553,12 +1553,23 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
       auto newName = StringAttr::get(circuitOp.getContext(), getName());
       module.setName(newName);
       for (auto *use : node->uses()) {
-        auto instanceOp = dyn_cast<firrtl::InstanceOp>(*use->getInstance());
-        instanceOp.setModuleName(newName);
-        instanceOp.setName(newName);
-        if (shouldReplacePorts)
-          instanceOp.setPortNamesAttr(
-              ArrayAttr::get(circuitOp.getContext(), newNames));
+        auto useOp = use->getInstance();
+        if (auto instanceOp = dyn_cast<firrtl::InstanceOp>(*useOp)) {
+          instanceOp.setModuleName(newName);
+          instanceOp.setName(newName);
+          if (shouldReplacePorts)
+            instanceOp.setPortNamesAttr(
+                ArrayAttr::get(circuitOp.getContext(), newNames));
+        } else if (auto objectOp = dyn_cast<firrtl::ObjectOp>(*useOp)) {
+          // ObjectOp stores the class name in its result type, so we need to
+          // create a new ClassType with the new name and set it on the result.
+          auto oldClassType = objectOp.getType();
+          auto newClassType = firrtl::ClassType::get(
+              circuitOp.getContext(), FlatSymbolRefAttr::get(newName),
+              oldClassType.getElements());
+          objectOp.getResult().setType(newClassType);
+          objectOp.setName(newName);
+        }
       }
     }
 
