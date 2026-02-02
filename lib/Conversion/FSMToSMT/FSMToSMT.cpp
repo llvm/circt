@@ -490,7 +490,7 @@ LogicalResult MachineOpConverter::dispatch() {
           newOp->erase();
         } else if (isa<verif::AssertOp>(newOp)) {
           // Ignore assertions in guard regions
-          mlir::emitWarning(loc, "Assertions in guard regions are ignored.");
+          newOp->emitWarning("Assertions in guard regions are ignored.");
           newOp->erase();
         }
       }
