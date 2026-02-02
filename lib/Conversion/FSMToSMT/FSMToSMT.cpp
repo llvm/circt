@@ -152,6 +152,7 @@ private:
     for (auto &pair : constMapper.getValueMap()) {
       mapping.map(pair.first, pair.second);
     }
+    
     return mapping;
   }
 
@@ -306,47 +307,49 @@ LogicalResult MachineOpConverter::dispatch() {
                         fsmVars);
         auto *initOutputReg = getOutputRegion(outputOfStateId, 0);
         SmallVector<Value> castOutValues;
-          
-        // replace initial values with variables in fsmToCast to create the IR mapping 
+        
+        // replace variables with initial values to create the IR mapping 
         for (auto [id, couple] : llvm::enumerate(fsmToCast)) {
-          if (numArgs <= id && id < numArgs + numVars) 
+          if (numArgs + numOut <= id && id < numArgs + numOut + numVars) {
             fsmToCast[id] = {couple.first,
-                              hw::ConstantOp::create(b, loc, varInitValues[id - numArgs])};
+                              hw::ConstantOp::create(b, loc, varInitValues[id - numArgs - numOut])};
+          }
         }
 
         IRMapping mapping = createIRMapping(fsmToCast, constMapper);
-
+        
         SmallVector<mlir::Value> combOutputValues;
         
-        // Clone all the operations in the output region except `OutputOp` and
-        // `AssertOp`, replacing FSM variables and arguments with the results
-        // of unrealized conversion casts and replacing constants with their
-        // new clones
-        for (auto &op : initOutputReg->front()) {
-          auto *newOp = b.clone(op, mapping);
-          if (!isa<verif::AssertOp>(newOp)) {
+        if (!initOutputReg->empty()) {
+          // Clone all the operations in the output region except `OutputOp` and
+          // `AssertOp`, replacing FSM variables and arguments with the results
+          // of unrealized conversion casts and replacing constants with their
+          // new clones
+          for (auto &op : initOutputReg->front()) {
+            auto *newOp = b.clone(op, mapping);
+            
             // Retrieve all the operands of the output operation
             if (isa<fsm::OutputOp>(newOp)) {
               for (auto out : newOp->getOperands())
                 combOutputValues.push_back(out);
               newOp->erase();
+            } else if (isa<verif::AssertOp>(newOp)) {
+              // Store the assertion operations, with a copy of the region
+              assertions.push_back({0, initOutputReg});
+              newOp->erase();
             }
-          } else {
-            // Store the assertion operations, with a copy of the region
-            assertions.push_back({0, initOutputReg});
-            newOp->erase();
-          }
+            
+            // Cast the (comb) results obtained from the output region to SMT
+            // types, to pass them as arguments of the state function
 
-          // Cast the (comb) results obtained from the output region to SMT
-          // types, to pass them as arguments of the state function
-
-          for (auto [idx, out] : llvm::enumerate(combOutputValues)) {
-            auto convCast = UnrealizedConversionCastOp::create(
-                b, loc, forallQuantified[numArgs + idx].getType(), out);
-            castOutValues.push_back(convCast->getResult(0));
+            for (auto [idx, out] : llvm::enumerate(combOutputValues)) {
+              auto convCast = UnrealizedConversionCastOp::create(
+                  b, loc, forallQuantified[numArgs + idx].getType(), out);
+              castOutValues.push_back(convCast->getResult(0));
+            }
           }
         }
-
+        
         // Assign variables and output values their initial value
         SmallVector<mlir::Value> initialCondition;
         for (auto [idx, q] : llvm::enumerate(forallQuantified)) {
@@ -435,9 +438,8 @@ LogicalResult MachineOpConverter::dispatch() {
         // their new clone
         for (auto &op : actionReg->front()) {
           auto *newOp = b.clone(op, mapping);
-          if (!isa<verif::AssertOp>(newOp)) {
-            // Retrieve the updated values and their operands
-            if (isa<fsm::UpdateOp>(newOp)) {
+          // Retrieve the updated values and their operands
+          if (isa<fsm::UpdateOp>(newOp)) {
               auto varToUpdate = newOp->getOperand(0);
               auto updatedValue = newOp->getOperand(1);
 
@@ -453,10 +455,9 @@ LogicalResult MachineOpConverter::dispatch() {
                 }
               }
               newOp->erase();
-            }
-          } else {
+          } else if (isa<verif::AssertOp>(newOp)) {
             // Ignore assertions in action regions
-            mlir::emitWarning(loc, "Assertions in action regions are ignored.");
+            newOp->emitWarning("Assertions in action regions are ignored.");
             newOp->erase();
           }
         }
@@ -479,19 +480,16 @@ LogicalResult MachineOpConverter::dispatch() {
       // `AssertOp,
       for (auto &op : transition.guard->front()) {
         auto *newOp = b.clone(op, mapping);
-        if (!isa<verif::AssertOp>(newOp)) {
-          // Retrieve the guard value
-          if (isa<fsm::ReturnOp>(newOp)) {
-            // Cast the guard value to an SMT boolean type
-            auto castVal = mlir::UnrealizedConversionCastOp::create(
-                b, loc, b.getType<smt::BitVectorType>(1), newOp->getOperand(0));
+        // Retrieve the guard value
+        if (isa<fsm::ReturnOp>(newOp)) {
+          // Cast the guard value to an SMT boolean type
+          auto castVal = mlir::UnrealizedConversionCastOp::create(
+              b, loc, b.getType<smt::BitVectorType>(1), newOp->getOperand(0));
 
-            guardVal = bv1toSmtBool(b, loc, castVal.getResult(0));
-            newOp->erase();
-          }
-        } else {
+          guardVal = bv1toSmtBool(b, loc, castVal.getResult(0));
+          newOp->erase();
+        } else if (isa<verif::AssertOp>(newOp)) {
           // Ignore assertions in guard regions
-
           mlir::emitWarning(loc, "Assertions in guard regions are ignored.");
           newOp->erase();
         }
@@ -515,21 +513,18 @@ LogicalResult MachineOpConverter::dispatch() {
       // conversion casts and replacing constants with their new clone
       for (auto &op : outputReg->front()) {
         auto *newOp = b.clone(op, mapping);
-        if (!isa<verif::AssertOp>(newOp)) {
+        // Retrieve all the operands of the output operation
+        if (isa<fsm::OutputOp>(newOp)) {
+          for (auto [id, operand] : llvm::enumerate(newOp->getOperands())) {
 
-          // Retrieve all the operands of the output operation
-          if (isa<fsm::OutputOp>(newOp)) {
-            for (auto [id, operand] : llvm::enumerate(newOp->getOperands())) {
-
-              // Cast the output value to the appropriate SMT type
-              auto convCast = UnrealizedConversionCastOp::create(
-                  b, loc, outputArgsOutsVarsVals[numArgs + id].getType(),
-                  operand);
-              castOutputVars.push_back(convCast->getResult(0));
-            }
-            newOp->erase();
+            // Cast the output value to the appropriate SMT type
+            auto convCast = UnrealizedConversionCastOp::create(
+                b, loc, outputArgsOutsVarsVals[numArgs + id].getType(),
+                operand);
+            castOutputVars.push_back(convCast->getResult(0));
           }
-        } else {
+          newOp->erase();
+        } else if (isa<verif::AssertOp>(newOp)) {
           // Store the assertion operations, with a copy of the region
           assertions.push_back({transition.to, outputReg});
           newOp->erase();
@@ -634,8 +629,10 @@ LogicalResult MachineOpConverter::dispatch() {
           // unrealized conversion casts and replacing constants with their new
           // clone
           for (auto &op : pa.outputRegion->front()) {
-            if (!isa<fsm::OutputOp>(op) && !isa<fsm::UpdateOp>(op) &&
-                !isa<fsm::ReturnOp>(op)) {
+            // only clone comb, hardware and verif::assert operations
+            if (isa<comb::CombDialect>(op.getDialect()) ||
+                isa<hw::HWDialect>(op.getDialect()) ||
+                isa<verif::AssertOp>(op)) {
               auto *newOp = b.clone(op, mapping);
 
               // Retrieve the assertion values

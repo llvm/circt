@@ -12,7 +12,7 @@
 // CHECK-NEXT:      %c0_bv2 = smt.bv.constant #smt.bv<0> : !smt.bv<2>
 // CHECK-NEXT:      %5 = smt.apply_func %F_A(%c0_bv2) : !smt.func<(!smt.bv<2>) !smt.bool>
 // CHECK-NEXT:      smt.yield %5 : !smt.bool
-// CHECK-NEXT:    }
+// CHECK-NEXT:    } 
 // CHECK-NEXT:    smt.assert %0
 // CHECK-NEXT:    %1 = smt.forall {
 // CHECK-NEXT:    ^bb0(%arg0: !smt.bv<1>, %arg1: !smt.bv<1>, %arg2: !smt.bv<2>):
