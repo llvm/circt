@@ -262,7 +262,7 @@ endmodule
 // CHECK-SAME: %arg0: !moore.i1
 // CHECK-SAME: %arg1: !moore.i1
 function void ConditionalStatements(bit x, bit y);
-  // CHECK: [[COND:%.+]] = moore.to_builtin_bool %arg0 : i1
+  // CHECK: [[COND:%.+]] = moore.to_builtin_int %arg0 : i1
   // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: call @dummyA()
@@ -271,7 +271,7 @@ function void ConditionalStatements(bit x, bit y);
   if (x) dummyA();
 
   // CHECK: [[COND1:%.+]] = moore.and %arg0, %arg1
-  // CHECK: [[COND2:%.+]] = moore.to_builtin_bool [[COND1]] : i1
+  // CHECK: [[COND2:%.+]] = moore.to_builtin_int [[COND1]] : i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: call @dummyA()
@@ -279,7 +279,7 @@ function void ConditionalStatements(bit x, bit y);
   // CHECK: ^[[BB2]]:
   if (x &&& y) dummyA();
 
-  // CHECK: [[COND:%.+]] = moore.to_builtin_bool %arg0 : i1
+  // CHECK: [[COND:%.+]] = moore.to_builtin_int %arg0 : i1
   // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: call @dummyA()
@@ -293,13 +293,13 @@ function void ConditionalStatements(bit x, bit y);
   else
     dummyB();
 
-  // CHECK: [[COND:%.+]] = moore.to_builtin_bool %arg0 : i1
+  // CHECK: [[COND:%.+]] = moore.to_builtin_int %arg0 : i1
   // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: call @dummyA()
   // CHECK: cf.br ^[[BB6:.+]]
   // CHECK: ^[[BB2]]:
-  // CHECK: [[COND:%.+]] = moore.to_builtin_bool %arg1 : i1
+  // CHECK: [[COND:%.+]] = moore.to_builtin_int %arg1 : i1
   // CHECK: cf.cond_br [[COND]], ^[[BB3:.+]], ^[[BB4:.+]]
   // CHECK: ^[[BB3]]:
   // CHECK: call @dummyB()
@@ -317,7 +317,7 @@ function void ConditionalStatements(bit x, bit y);
   else
     dummyC();
 
-  // CHECK: [[COND:%.+]] = moore.to_builtin_bool %arg0 : i1
+  // CHECK: [[COND:%.+]] = moore.to_builtin_int %arg0 : i1
   // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: return
@@ -334,7 +334,7 @@ function void CaseStatements(int x, int a, int b, int c);
   // CHECK: [[FLAG:%.+]] = moore.add %arg0, %arg0
   case (x + x)
     // CHECK: [[COND1:%.+]] = moore.case_eq [[FLAG]], %arg1
-    // CHECK: [[COND2:%.+]] = moore.to_builtin_bool [[COND1]] : i1
+    // CHECK: [[COND2:%.+]] = moore.to_builtin_int [[COND1]] : i1
     // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
     // CHECK: ^[[BB1]]:
     // CHECK: call @dummyA()
@@ -348,12 +348,12 @@ function void CaseStatements(int x, int a, int b, int c);
   endcase
 
   // CHECK: [[COND1:%.+]] = moore.case_eq %arg0, %arg1
-  // CHECK: [[COND2:%.+]] = moore.to_builtin_bool [[COND1]] : i1
+  // CHECK: [[COND2:%.+]] = moore.to_builtin_int [[COND1]] : i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB_MATCH:.+]], ^[[BB1:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: [[TMP:%.+]] = moore.add %arg2, %arg3
   // CHECK: [[COND1:%.+]] = moore.case_eq %arg0, [[TMP]]
-  // CHECK: [[COND2:%.+]] = moore.to_builtin_bool [[COND1]] : i1
+  // CHECK: [[COND2:%.+]] = moore.to_builtin_int [[COND1]] : i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB_MATCH:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB_MATCH]]:
   // CHECK: call @dummyA()
@@ -368,7 +368,7 @@ function void CaseStatements(int x, int a, int b, int c);
   endcase
 
   // CHECK: [[COND1:%.+]] = moore.casez_eq %arg0, %arg1
-  // CHECK: [[COND2:%.+]] = moore.to_builtin_bool [[COND1]] : i1
+  // CHECK: [[COND2:%.+]] = moore.to_builtin_int [[COND1]] : i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: call @dummyA()
@@ -381,7 +381,7 @@ function void CaseStatements(int x, int a, int b, int c);
   endcase
 
   // CHECK: [[COND1:%.+]] = moore.casexz_eq %arg0, %arg1
-  // CHECK: [[COND2:%.+]] = moore.to_builtin_bool [[COND1]] : i1
+  // CHECK: [[COND2:%.+]] = moore.to_builtin_int [[COND1]] : i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
   // CHECK: call @dummyA()
@@ -406,7 +406,7 @@ function void ForLoopStatements(int a, int b, bit c);
   // CHECK: ^[[BB_CHECK]]:
   // CHECK: [[TMP1:%.+]] = moore.read %x
   // CHECK: [[TMP2:%.+]] = moore.slt [[TMP1]], %arg1
-  // CHECK: [[TMP3:%.+]] = moore.to_builtin_bool [[TMP2]] : i1
+  // CHECK: [[TMP3:%.+]] = moore.to_builtin_int [[TMP2]] : i1
   // CHECK: cf.cond_br [[TMP3]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_BODY]]:
   // CHECK: call @dummyA()
@@ -422,7 +422,7 @@ function void ForLoopStatements(int a, int b, bit c);
   // CHECK: ^[[BB_CHECK]]:
   // CHECK: [[TMP1:%.+]] = moore.read %y
   // CHECK: [[TMP2:%.+]] = moore.slt [[TMP1]], %arg1
-  // CHECK: [[TMP3:%.+]] = moore.to_builtin_bool [[TMP2]] : i1
+  // CHECK: [[TMP3:%.+]] = moore.to_builtin_int [[TMP2]] : i1
   // CHECK: cf.cond_br [[TMP3]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_BODY]]:
   // CHECK: call @dummyA()
@@ -435,10 +435,10 @@ function void ForLoopStatements(int a, int b, bit c);
 
   // CHECK: cf.br ^[[BB_CHECK:.+]]
   // CHECK: ^[[BB_CHECK]]:
-  // CHECK: [[TMP:%.+]] = moore.to_builtin_bool %arg2 : i1
+  // CHECK: [[TMP:%.+]] = moore.to_builtin_int %arg2 : i1
   // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_BODY]]:
-  // CHECK: [[TMP:%.+]] = moore.to_builtin_bool %arg2 : i1
+  // CHECK: [[TMP:%.+]] = moore.to_builtin_int %arg2 : i1
   // CHECK: cf.cond_br [[TMP]], ^[[BB_TRUE:.+]], ^[[BB_FALSE:.+]]
   // CHECK: ^[[BB_TRUE]]:
   // CHECK: cf.br ^[[BB_STEP:.+]]
@@ -494,7 +494,7 @@ function void ForeachStatements(int x, bit y);
 // CHECK: %[[C4:.*]] = moore.constant 4 : i32
 // CHECK: %[[I_VAL:.*]] = moore.read %[[I]] : <i32>
 // CHECK: %[[CMP1:.*]] = moore.sle %[[I_VAL]], %[[C4]] : i32 -> i1
-// CHECK: %[[CONV1:.*]] = moore.to_builtin_bool %[[CMP1]] : i1
+// CHECK: %[[CONV1:.*]] = moore.to_builtin_int %[[CMP1]] : i1
 // CHECK: cf.cond_br %[[CONV1]], ^[[BB2:.*]], ^[[BB10:.*]]
 // CHECK: ^[[BB2]]:
 // CHECK: %[[CM1:.*]] = moore.constant -1 : i32
@@ -504,11 +504,11 @@ function void ForeachStatements(int x, bit y);
 // CHECK: %[[C6:.*]] = moore.constant 6 : i32
 // CHECK: %[[J_VAL:.*]] = moore.read %[[J]] : <i32>
 // CHECK: %[[CMP2:.*]] = moore.sle %[[J_VAL]], %[[C6]] : i32 -> i1
-// CHECK: %[[CONV2:.*]] = moore.to_builtin_bool %[[CMP2]] : i1
+// CHECK: %[[CONV2:.*]] = moore.to_builtin_int %[[CMP2]] : i1
 // CHECK: cf.cond_br %[[CONV2]], ^[[BB4:.*]], ^[[BB8:.*]]
   foreach (array[, i, ,j]) begin
 // CHECK: ^[[BB4]]:
-// CHECK: %[[CONV3:.*]] = moore.to_builtin_bool %[[ARG1]] : i1
+// CHECK: %[[CONV3:.*]] = moore.to_builtin_int %[[ARG1]] : i1
 // CHECK: cf.cond_br %[[CONV3]], ^[[BB5:.*]], ^[[BB6:.*]]
     if (y) begin
 // CHECK: ^[[BB5]]:
@@ -549,7 +549,7 @@ endfunction
 function void WhileLoopStatements(bit x, bit y);
   // CHECK: cf.br ^[[BB_CHECK:.+]]
   // CHECK: ^[[BB_CHECK]]:
-  // CHECK: [[TMP:%.+]] = moore.to_builtin_bool %arg0 : i1
+  // CHECK: [[TMP:%.+]] = moore.to_builtin_int %arg0 : i1
   // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_BODY]]:
   // CHECK: call @dummyA()
@@ -562,14 +562,14 @@ function void WhileLoopStatements(bit x, bit y);
   // CHECK: call @dummyA()
   // CHECK: cf.br ^[[BB_CHECK:.+]]
   // CHECK: ^[[BB_CHECK]]:
-  // CHECK: [[TMP:%.+]] = moore.to_builtin_bool %arg0 : i1
+  // CHECK: [[TMP:%.+]] = moore.to_builtin_int %arg0 : i1
   // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_EXIT]]:
   do dummyA(); while (x);
 
   // CHECK: cf.br ^[[BB_CHECK:.+]]
   // CHECK: ^[[BB_CHECK]]:
-  // CHECK: [[TMP:%.+]] = moore.to_builtin_bool %arg0 : i1
+  // CHECK: [[TMP:%.+]] = moore.to_builtin_int %arg0 : i1
   // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_BODY]]:
   while (x) begin
@@ -596,7 +596,7 @@ function void RepeatLoopStatements(int x, bit y);
   repeat (x) begin
     // CHECK: ^[[BB_CHECK]]([[COUNT:%.+]]: !moore.i32):
     // CHECK: [[TMP1:%.+]] = moore.bool_cast [[COUNT]] : i32 -> i1
-    // CHECK: [[TMP2:%.+]] = moore.to_builtin_bool [[TMP1]] : i1
+    // CHECK: [[TMP2:%.+]] = moore.to_builtin_int [[TMP1]] : i1
     // CHECK: cf.cond_br [[TMP2]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
     // CHECK: ^[[BB_BODY]]:
     if (y) begin
@@ -2373,7 +2373,8 @@ module ImmediateAssertiWithActionBlock;
   int a;
 // CHECK: moore.procedure always {
   // CHECK: [[READ_X:%.+]] = moore.read %x : <l1>
-  // CHECK: [[CONV_X:%.+]] = moore.to_builtin_bool [[READ_X]] : l1
+  // CHECK: [[X_INT:%.+]] = moore.logic_to_int [[READ_X]] : l1
+  // CHECK: [[CONV_X:%.+]] = moore.to_builtin_int [[X_INT]] : i1
   // CHECK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
 // CHECK: ^bb1:  // pred: ^bb0
   // CHECK: [[C1:%.+]] = moore.constant 1 : i32
@@ -2386,7 +2387,8 @@ module ImmediateAssertiWithActionBlock;
 
 // CHECK: moore.procedure always {
   // CHECK: [[READ_X:%.+]] = moore.read %x : <l1>
-  // CHECK: [[CONV_X:%.+]] = moore.to_builtin_bool [[READ_X]] : l1
+  // CHECK: [[X_INT:%.+]] = moore.logic_to_int [[READ_X]] : l1
+  // CHECK: [[CONV_X:%.+]] = moore.to_builtin_int [[X_INT]] : i1
   // CHECK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
 // CHECK: ^bb1:  // pred: ^bb0
   // CHECK: cf.br ^bb3
@@ -2401,7 +2403,8 @@ module ImmediateAssertiWithActionBlock;
 
 // CHECK: moore.procedure always {
   // CHECK: [[READ_X:%.+]] = moore.read %x : <l1>
-  // CHECK: [[CONV_X:%.+]] = moore.to_builtin_bool [[READ_X]] : l1
+  // CHECK: [[X_INT:%.+]] = moore.logic_to_int [[READ_X]] : l1
+  // CHECK: [[CONV_X:%.+]] = moore.to_builtin_int [[X_INT]] : i1
   // CHECK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
 // CHECK: ^bb1:  // pred: ^bb0
   // CHECK: [[C1:%.+]] = moore.constant 1 : i32

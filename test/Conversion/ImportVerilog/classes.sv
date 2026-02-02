@@ -752,7 +752,7 @@ endclass
 // CHECK:        [[R0:%.+]] = moore.read [[M_INST]] : <class<@forwardDeclClass>>
 // CHECK:        [[NULL:%.+]] = moore.null
 // CHECK:        [[EQ:%.+]] = moore.handle_eq [[R0]], [[NULL]] : !moore.class<@forwardDeclClass> : !moore.null -> i1
-// CHECK:        [[B:%.+]] = moore.to_builtin_bool [[EQ]] : i1
+// CHECK:        [[B:%.+]] = moore.to_builtin_int [[EQ]] : i1
 // CHECK:        cf.cond_br [[B]], ^bb1, ^bb2
 // CHECK:      ^bb1:
 // CHECK:        [[NEW:%.+]] = moore.class.new : <@forwardDeclClass>
