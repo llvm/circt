@@ -306,41 +306,35 @@ LogicalResult MachineOpConverter::dispatch() {
                         fsmVars);
         auto *initOutputReg = getOutputRegion(outputOfStateId, 0);
         SmallVector<Value> castOutValues;
-        if (initOutputReg->empty()) {
-          for (auto i = numArgs; i < numArgs + numOut; i++)
-            castOutValues.push_back(forallQuantified[i]);
-        } else {
           
-          // replace initial values in fsmToCast to create the IR mapping 
-          
-          for (auto [id, couple] : llvm::enumerate(fsmToCast)) {
-            if (numArgs <= id && id < numArgs + numVars) 
-              fsmToCast[id] = {couple.first,
-                               hw::ConstantOp::create(b, loc, varInitValues[id - numArgs])};
-          }
+        // replace initial values with variables in fsmToCast to create the IR mapping 
+        for (auto [id, couple] : llvm::enumerate(fsmToCast)) {
+          if (numArgs <= id && id < numArgs + numVars) 
+            fsmToCast[id] = {couple.first,
+                              hw::ConstantOp::create(b, loc, varInitValues[id - numArgs])};
+        }
 
-          IRMapping mapping = createIRMapping(fsmToCast, constMapper);
+        IRMapping mapping = createIRMapping(fsmToCast, constMapper);
 
-          SmallVector<mlir::Value> combOutputValues;
-          
-          // Clone all the operations in the output region except `OutputOp` and
-          // `AssertOp`, replacing FSM variables and arguments with the results
-          // of unrealized conversion casts and replacing constants with their
-          // new clones
-          for (auto &op : initOutputReg->front()) {
-            auto *newOp = b.clone(op, mapping);
-            if (!isa<verif::AssertOp>(newOp)) {
-              // Retrieve all the operands of the output operation
-              if (isa<fsm::OutputOp>(newOp)) {
-                for (auto out : newOp->getOperands())
-                  combOutputValues.push_back(out);
-                newOp->erase();
-              }
-            } else {
-              // Store the assertion operations, with a copy of the region
-              assertions.push_back({0, initOutputReg});
+        SmallVector<mlir::Value> combOutputValues;
+        
+        // Clone all the operations in the output region except `OutputOp` and
+        // `AssertOp`, replacing FSM variables and arguments with the results
+        // of unrealized conversion casts and replacing constants with their
+        // new clones
+        for (auto &op : initOutputReg->front()) {
+          auto *newOp = b.clone(op, mapping);
+          if (!isa<verif::AssertOp>(newOp)) {
+            // Retrieve all the operands of the output operation
+            if (isa<fsm::OutputOp>(newOp)) {
+              for (auto out : newOp->getOperands())
+                combOutputValues.push_back(out);
               newOp->erase();
             }
+          } else {
+            // Store the assertion operations, with a copy of the region
+            assertions.push_back({0, initOutputReg});
+            newOp->erase();
           }
 
           // Cast the (comb) results obtained from the output region to SMT
