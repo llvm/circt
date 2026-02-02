@@ -1266,6 +1266,11 @@ func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16, %arg2: !moore.l1) {
   %5 = moore.to_builtin_bool %arg2 : l1
   dbg.variable "builtin_bool", %5 : i1
 
+  // CHECK: dbg.variable "builtin_bool", %arg1 : i16
+  %6 = moore.logic_to_int %arg1 : l16
+  %7 = moore.to_builtin_int %6 : i16
+  dbg.variable "builtin_bool", %7 : i16
+
   return
 }
 
