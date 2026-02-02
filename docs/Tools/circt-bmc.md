@@ -38,11 +38,11 @@ For completeness, this section describes how a BMC (bounded model checking)
 compilation flow could look like using this intrastructure.
 **Note:** this is just a preliminary draft for now
 
-The flow for model checking is very similar to the LEC flow above, just using
-`verif.bmc` instead of `verif.lec`. Obviously, the `seq` dialect is treated
-vastly different, but `comb` and `hw` are handled the same way. Custom SMT
-encodings can take advantage of this to implement both a LEC and BMC tool with
-only one SMT encoding or provide separate lowering passes if necessary (or
+The flow for model checking is very similar to the [LEC flow](circt-lec.md), 
+just using `verif.bmc` instead of `verif.lec`. Obviously, the `seq` dialect is
+treated vastly different, but `comb` and `hw` are handled the same way. Custom 
+SMT encodings can take advantage of this to implement both a LEC and BMC tool 
+with only one SMT encoding or provide separate lowering passes if necessary (or
 preferred).
 
 Let's consider the following hardware module that implements an accumulator

@@ -30,7 +30,7 @@ of verification tools.
 The overall flow will insert an explicit operation to specify the verification
 problem (e.g., `verif.lec`, `verif.bmc`). This operation could then be lowered
 to an encoding in SMT, an interactive theorem prover, a BDD, or potentially
-being exported to existing tools (currently only SMT is supported). Each of
+be exported to existing tools (currently only SMT is supported). Each of
 those might have their own different backend paths as well. E.g., an encoding in
 SMT can be exported to SMT-LIB or lowered to LLVM IR that calls the Z3 solver.
 
