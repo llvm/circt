@@ -38,6 +38,19 @@ class Immediate(Value):
 
     return rtg.ConcatImmediateOp([self, *others])
 
+  def replicate(self, count: int) -> Immediate:
+    """
+    Replicates this immediate the provided number of times. The result is an
+    immediate of a width equal to the width of this immediate multiplied by
+    `count` and containing this immediate concatenated with itself `count`
+    times.
+    """
+
+    if count < 0:
+      raise ValueError("replicate count must be non-negative")
+
+    return Immediate.concat(*([self] * count))
+
   def __getitem__(self, slice_range) -> Immediate:
     """
     Extracts bits from the immediate using Python slice notation.
@@ -70,6 +83,24 @@ class Immediate(Value):
     """
 
     return Immediate(width, 2**width - 1)
+
+  @staticmethod
+  def smax(width: int) -> Immediate:
+    """
+    An immediate of the provided width with the maximum signed value it can
+    hold.
+    """
+
+    return Immediate(width, 2**(width - 1) - 1)
+
+  @staticmethod
+  def smin(width: int) -> Immediate:
+    """
+    An immediate of the provided width with the minimum signed value it can
+    hold.
+    """
+
+    return Immediate(width, 1 << (width - 1))
 
   def __repr__(self) -> str:
     return f"Immediate<{self._width}, {self._value}>"

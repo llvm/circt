@@ -131,8 +131,6 @@ def test1_args(config):
 
 
 # MLIR-LABEL: rtg.test @test2_labels
-# MLIR-NEXT: index.constant 5
-# MLIR-NEXT: index.constant 3
 # MLIR-NEXT: index.constant 2
 # MLIR-NEXT: index.constant 1
 # MLIR-NEXT: [[L0:%.+]] = rtg.label_decl "l0"
@@ -153,9 +151,9 @@ def test1_args(config):
 # MLIR-NEXT: [[RL1:%.+]] = rtg.set_select_random [[SET2_MINUS_SET0]] : !rtg.set<!rtg.isa.label>
 # MLIR-NEXT: rtg.label local [[RL1]]
 
-# MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", %idx5
+# MLIR-NEXT: rtg.label_decl "L_5"
 # MLIR-NEXT: rtg.label local
-# MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", %idx3
+# MLIR-NEXT: rtg.label_decl "L_3"
 # MLIR-NEXT: rtg.label local
 
 # MLIR-NEXT: [[BAG0:%.+]] = rtg.bag_create (%idx2 x [[L0:%.+]], %idx1 x [[L1:%.+]]) : !rtg.isa.label
@@ -293,6 +291,9 @@ def test2_labels(config):
 
 
 # MLIR-LABEL: rtg.test @test3_registers_and_immediates()
+# MLIR-NEXT: [[V0:%.+]] = rtg.constant #rtg.isa.immediate<32, 286331153> : !rtg.isa.immediate<32>
+# MLIR-NEXT: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<32, -2147483648> : !rtg.isa.immediate<32>
+# MLIR-NEXT: [[V2:%.+]] = rtg.constant #rtg.isa.immediate<32, 2147483647> : !rtg.isa.immediate<32>
 # MLIR-NEXT: %idx2097151 = index.constant 2097151
 # MLIR-NEXT: %idx0 = index.constant 0
 # MLIR-NEXT: [[IMM32:%.+]] = rtg.constant #rtg.isa.immediate<32, 32>
@@ -312,6 +313,9 @@ def test2_labels(config):
 # MLIR-NEXT: [[RND:%.+]] = rtg.random_number_in_range [%idx0, %idx2097151]
 # MLIR-NEXT: [[RND_IMM:%.+]] = rtg.isa.int_to_immediate [[RND]]
 # MLIR-NEXT: rtgtest.rv32i.jal [[VREG]], [[RND_IMM]] : !rtg.isa.immediate<21>
+# MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[V0]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[V2]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[V1]] : !rtg.isa.immediate<32>
 # MLIR-NEXT: }
 
 
@@ -325,6 +329,10 @@ def test3_registers_and_immediates(config):
   rtgtest.JAL(vreg, Immediate(21, 16))
   rtgtest.AUIPC(vreg, Immediate(32, 32))
   rtgtest.JAL(vreg, Immediate.random(21))
+  imm4 = Immediate(4, 1)
+  rtgtest.AUIPC(vreg, imm4.replicate(8))
+  rtgtest.AUIPC(vreg, Immediate.smax(32))
+  rtgtest.AUIPC(vreg, Immediate.smin(32))
 
 
 # MLIR-LABEL: rtg.test @test4_integer_to_immediate()
