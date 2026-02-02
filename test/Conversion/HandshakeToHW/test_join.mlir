@@ -1,6 +1,6 @@
 // RUN: circt-opt -lower-handshake-to-hw -split-input-file %s | FileCheck %s
 
-// CHECK:   hw.module @handshake_join_2ins_1outs_ctrl(in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !esi.channel<i0>, out out0 : !esi.channel<i0>) {
+// CHECK:   hw.module @handshake_join_in_none_none_out_none_2ins_1outs_ctrl(in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !esi.channel<i0>, out out0 : !esi.channel<i0>) {
 // CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_4:.*]] : i0
 // CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_4]] : i0
 // CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = esi.wrap.vr %[[VAL_9:.*]], %[[VAL_10:.*]] : i0
@@ -17,7 +17,7 @@ handshake.func @test_join(%arg0: none, %arg1: none, %arg2: none, ...) -> (none, 
 
 // -----
 
-// CHECK:   hw.module @handshake_join_in_ui32_ui1_3ins_1outs_ctrl(in %[[VAL_0:.*]] : !esi.channel<i32>, in %[[VAL_1:.*]] : !esi.channel<i1>, in %[[VAL_2:.*]] : !esi.channel<i0>, out out0 : !esi.channel<i0>) {
+// CHECK:   hw.module @handshake_join_in_ui32_ui1_none_out_none_3ins_1outs_ctrl(in %[[VAL_0:.*]] : !esi.channel<i32>, in %[[VAL_1:.*]] : !esi.channel<i1>, in %[[VAL_2:.*]] : !esi.channel<i0>, out out0 : !esi.channel<i0>) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i32
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_5]] : i1
 // CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = esi.unwrap.vr %[[VAL_2]], %[[VAL_5]] : i0

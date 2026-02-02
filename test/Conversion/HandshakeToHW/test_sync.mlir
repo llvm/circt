@@ -1,6 +1,6 @@
 // RUN: circt-opt -lower-handshake-to-hw -split-input-file %s | FileCheck %s
 
-// CHECK:   hw.module @handshake_sync_in_ui32_out_ui32(in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !esi.channel<i32>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_3:.*]] : i1, out out0 : !esi.channel<i0>, out out1 : !esi.channel<i32>) {
+// CHECK:   hw.module @handshake_sync_in_none_ui32_out_none_ui32(in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !esi.channel<i32>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_3:.*]] : i1, out out0 : !esi.channel<i0>, out out1 : !esi.channel<i32>) {
 // CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_6:.*]] : i0
 // CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_6]] : i32
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = esi.wrap.vr %[[VAL_4]], %[[VAL_11:.*]] : i0
@@ -27,7 +27,18 @@
 // CHECK:           hw.output %[[VAL_9]], %[[VAL_12]] : !esi.channel<i0>, !esi.channel<i32>
 // CHECK:         }
 
-handshake.func @main(%arg0: none, %arg1: i32) -> (none, i32) {
+handshake.func @test_sync(%arg0: none, %arg1: i32) -> (none, i32) {
   %res:2 = sync %arg0, %arg1 : none, i32
   return %res#0, %res#1 : none, i32
+}
+
+// -----
+
+// CHECK:   hw.module @handshake_sync_in_none_ui32_out_none_ui32(in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !esi.channel<i32>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_3:.*]] : i1, out out0 : !esi.channel<i0>, out out1 : !esi.channel<i32>) {
+// CHECK:   hw.module @handshake_sync_in_none_none_ui32_out_none_none_ui32(in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !esi.channel<i0>, in %[[VAL_2:.*]] : !esi.channel<i32>, in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_3:.*]] : i1, out out0 : !esi.channel<i0>, out out1 : !esi.channel<i0>, out out2 : !esi.channel<i32>) {
+
+handshake.func @test_sync_naming(%arg0: none, %arg1: none, %arg2: i32) -> (none, none, i32) {
+  %res:2 = sync %arg0, %arg2 : none, i32
+  %a, %b, %c = sync %arg1, %res#0, %res#1 : none, none, i32
+  return %a, %b, %c : none, none, i32
 }

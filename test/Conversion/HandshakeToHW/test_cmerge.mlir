@@ -2,7 +2,7 @@
 
 // Test a control merge that is control only.
 
-// CHECK-LABEL:   hw.module @handshake_control_merge_out_ui64_2ins_2outs_ctrl(in 
+// CHECK-LABEL:   hw.module @handshake_control_merge_in_none_none_out_none_ui64_2ins_2outs_ctrl(in 
 // CHECK-SAME:             %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !esi.channel<i0>, in %[[VAL_2:.*]] : !seq.clock, in %[[VAL_3:.*]] : i1, out dataOut : !esi.channel<i0>, out index : !esi.channel<i64>) {
 // CHECK:           %[[VAL_4:.*]], %[[VAL_5:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_6:.*]] : i0
 // CHECK:           %[[VAL_7:.*]], %[[VAL_8:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_9:.*]] : i0
