@@ -9,6 +9,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/Debug.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -30,6 +31,7 @@ using namespace circt;
 using namespace firrtl;
 
 namespace {
+
 struct RemoveUnusedPortsPass
     : public circt::firrtl::impl::RemoveUnusedPortsBase<RemoveUnusedPortsPass> {
   using Base::Base;
@@ -153,6 +155,7 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
   for (auto *use : instanceGraphNode->uses()) {
     auto instance = ::cast<InstanceOp>(*use->getInstance());
     ImplicitLocOpBuilder builder(instance.getLoc(), instance);
+    TieOffCache tieOffCache(builder);
     unsigned outputPortIndex = 0;
     for (auto index : removalPortIndexes.set_bits()) {
       auto result = instance.getResult(index);
@@ -194,11 +197,10 @@ void RemoveUnusedPortsPass::removeUnusedModulePorts(
       if (portConstant)
         value = ConstantOp::create(builder, *portConstant);
       else {
-        // Only create InvalidValueOp for FIRRTLBaseType. Ref types (probes) are
-        // not base types and cannot be invalidated.
+        // Use TieOffCache to create tie-off values for output ports.
         if (auto baseType =
                 dyn_cast<firrtl::FIRRTLBaseType>(result.getType())) {
-          value = InvalidValueOp::create(builder, baseType);
+          value = tieOffCache.getInvalid(baseType);
         } else {
           // For non-base types like ref types, we cannot create an invalid
           // value. Skip replacing uses for these types.

@@ -251,34 +251,6 @@ struct FIRRTLModuleExternalizer : public OpReduction<FModuleOp> {
   ModuleSizeCache moduleSizes;
 };
 
-/// Helper class to cache tie-off values for different FIRRTL types.
-/// This avoids creating duplicate InvalidValueOp or UnknownValueOp for the
-/// same type.
-class TieOffCache {
-public:
-  TieOffCache(ImplicitLocOpBuilder &builder) : builder(builder) {}
-
-  /// Get or create an InvalidValueOp for the given base type.
-  Value getInvalid(FIRRTLBaseType type) {
-    Value &cached = cache[type];
-    if (!cached)
-      cached = InvalidValueOp::create(builder, type);
-    return cached;
-  }
-
-  /// Get or create an UnknownValueOp for the given property type.
-  Value getUnknown(PropertyType type) {
-    Value &cached = cache[type];
-    if (!cached)
-      cached = builder.create<UnknownValueOp>(type);
-    return cached;
-  }
-
-private:
-  ImplicitLocOpBuilder &builder;
-  SmallDenseMap<Type, Value, 8> cache;
-};
-
 /// Invalidate all the leaf fields of a value with a given flippedness by
 /// connecting an invalid value to them. This function handles different FIRRTL
 /// types appropriately:
