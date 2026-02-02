@@ -89,11 +89,11 @@ private:
                              SmallVector<std::string> &states, Location &loc) {
     std::string nextState = t.getNextState().str();
     Transition tr = {from, insertStates(states, nextState)};
-    if (!t.getGuard().empty()) {
+    if (t.hasGuard()) {
       tr.hasGuard = true;
       tr.guard = &t.getGuard();
     }
-    if (!t.getAction().empty()) {
+    if (t.hasAction()) {
       tr.hasAction = true;
       tr.action = &t.getAction();
     }
