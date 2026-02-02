@@ -41,10 +41,10 @@ static FailureOr<size_t> calculateNonZeroBits(Value operand,
   return nonZeroBits;
 }
 
-// Check if the operand matches and return the unextended operand:
-// sign = comb.extract(operand, width-1, 1)
-// ext = comb.replicate(sign, ???)
-// sext = comb.concat(ext, ???)
+// Check if the operand is sext() and return the unextended operand:
+// signBit = comb.extract(baseValue, width-1, 1)
+// ext = comb.replicate(signBit, width-baseWidth)
+// sext = comb.concat(ext, baseValue)
 static FailureOr<Value> isSext(Value operand) {
   // Check if operand is a concat operation
   auto concatOp = operand.getDefiningOp<comb::ConcatOp>();
@@ -87,6 +87,7 @@ static FailureOr<Value> isSext(Value operand) {
   return originalValue;
 }
 
+// zext(input<<trailingZeros) to targetWidth
 static Value zeroPad(PatternRewriter &rewriter, Location loc, Value input,
                      size_t targetWidth, size_t trailingZeros) {
   assert(trailingZeros > 0 && "zeroPad called with zero trailing zeros");
