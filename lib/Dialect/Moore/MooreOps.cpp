@@ -1015,7 +1015,15 @@ LogicalResult UnionCreateOp::verify() {
         for (const auto &member : members)
           if (member.name == fieldName && member.type == inputType)
             return success();
-        emitOpError("input type must match the union field type");
+        for (const auto &member : members) {
+          if (member.name == fieldName) {
+            emitOpError() << "input type " << inputType
+                          << " does not match union field '" << fieldName
+                          << "' type " << member.type;
+            return failure();
+          }
+        }
+        emitOpError() << "field '" << fieldName << "' not found in union type";
         return failure();
       })
       .Default([this](auto &) {

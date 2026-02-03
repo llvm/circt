@@ -2445,19 +2445,6 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return {};
   });
 
-  // hw::ModuleType conversion to handle module signatures
-  typeConverter.addConversion([&](hw::ModuleType type) -> std::optional<Type> {
-    SmallVector<hw::ModulePort> newPorts;
-    for (auto port : type.getPorts()) {
-      auto convertedType = typeConverter.convertType(port.type);
-      if (!convertedType)
-        return {};
-      newPorts.push_back({port.name, convertedType, port.dir});
-    }
-    auto result = hw::ModuleType::get(type.getContext(), newPorts);
-    return result;
-  });
-
   // Valid target types.
   typeConverter.addConversion([](IntegerType type) { return type; });
   typeConverter.addConversion([](FloatType type) { return type; });
