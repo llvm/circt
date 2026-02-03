@@ -211,6 +211,15 @@ LogicalResult ModuleLowering::run() {
   // initial op.
   allocBuilder.setInsertionPoint(initialOp);
 
+  // Check for unsupported inout ports before attempting to allocate storage.
+  for (auto arg : moduleOp.getBodyBlock()->getArguments()) {
+    if (isa<hw::InOutType, llhd::RefType>(arg.getType())) {
+      auto name = moduleOp.getArgName(arg.getArgNumber()).getValue();
+      return moduleOp.emitOpError("inout port '")
+             << name << "' is not supported in Arc lowering";
+    }
+  }
+
   // Allocate storage for the inputs.
   for (auto arg : moduleOp.getBodyBlock()->getArguments()) {
     auto name = moduleOp.getArgName(arg.getArgNumber());
