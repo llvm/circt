@@ -235,21 +235,21 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
       // CHECK-NEXT: $error;
       // CHECK-NEXT: $error("foo");
       // CHECK-NEXT: $error("foo", val);
-      sv.error
-      sv.error "foo"
-      sv.error "foo"(%val) : i8
+      sv.error.procedural
+      sv.error.procedural "foo"
+      sv.error.procedural "foo"(%val) : i8
       // CHECK-NEXT: $warning;
       // CHECK-NEXT: $warning("foo");
       // CHECK-NEXT: $warning("foo", val);
-      sv.warning
-      sv.warning "foo"
-      sv.warning "foo"(%val) : i8
+      sv.warning.procedural
+      sv.warning.procedural "foo"
+      sv.warning.procedural "foo"(%val) : i8
       // CHECK-NEXT: $info;
       // CHECK-NEXT: $info("foo");
       // CHECK-NEXT: $info("foo", val);
-      sv.info
-      sv.info "foo"
-      sv.info "foo"(%val) : i8
+      sv.info.procedural
+      sv.info.procedural "foo"
+      sv.info.procedural "foo"(%val) : i8
 
       // CHECK-NEXT: Emit some stuff in verilog
       // CHECK-NEXT: Great power and responsibility!
@@ -280,6 +280,26 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
     }// CHECK-NEXT:   {{end$}}
   } {sv.attributes = [#sv.attribute<"sv attr">]}
   // CHECK-NEXT:  end // initial
+
+  // Elaboration-time Severity Message Tasks
+  // CHECK-NEXT: $error;
+  // CHECK-NEXT: $error("elaboration error");
+  // CHECK-NEXT: $error("elaboration error", val);
+  sv.error
+  sv.error "elaboration error"
+  sv.error "elaboration error"(%val) : i8
+  // CHECK-NEXT: $warning;
+  // CHECK-NEXT: $warning("elaboration warning");
+  // CHECK-NEXT: $warning("elaboration warning", val);
+  sv.warning
+  sv.warning "elaboration warning"
+  sv.warning "elaboration warning"(%val) : i8
+  // CHECK-NEXT: $info;
+  // CHECK-NEXT: $info("elaboration info");
+  // CHECK-NEXT: $info("elaboration info", val);
+  sv.info
+  sv.info "elaboration info"
+  sv.info "elaboration info"(%val) : i8
 
   // CHECK-NEXT: assert property (@(posedge clock) cond);
   sv.assert.concurrent posedge %clock, %cond

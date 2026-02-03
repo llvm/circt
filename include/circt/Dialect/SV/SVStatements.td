@@ -735,7 +735,7 @@ def FatalOp : SVOp<"fatal", [ProceduralOp]> {
 
 /// Commonalities between `ErrorOp`, `WarningOp`, and `InfoOp`.
 class NonfatalMessageOp<string mnemonic, list<Trait> traits = []> :
-    SVOp<mnemonic, [ProceduralOp] # traits> {
+    SVOp<mnemonic, traits> {
   string messageDescription = [{
     If present, the optional message is printed with any additional operands
     interpolated into the message string.
@@ -754,25 +754,28 @@ class NonfatalMessageOp<string mnemonic, list<Trait> traits = []> :
   ];
 }
 
-def ErrorOp : NonfatalMessageOp<"error"> {
-  let summary = "`$error` severity message task";
-  let description = [{
-    This system task indicates a run-time error.
-  }] # messageDescription;
-}
+foreach severity = ["Error", "Warning", "Info"] in
+{
+  defvar severityLower = !tolower(severity);
 
-def WarningOp : NonfatalMessageOp<"warning"> {
-  let summary = "`$warning` severity message task";
-  let description = [{
-    This system task indicates a run-time warning.
-  }] # messageDescription;
-}
+  // Define procedural (run-time) severity message operations
+  def severity # "ProceduralOp" : NonfatalMessageOp<
+      severityLower # ".procedural", [ProceduralOp]> {
+    let summary = "`$" # severityLower # "` severity message task (run-time)";
+    let description = [{
+      This system task indicates a run-time }] # severityLower # [{. It must be
+      used within a procedural region (e.g., `initial`, `always` blocks).
+    }] # messageDescription;
+  }
 
-def InfoOp : NonfatalMessageOp<"info"> {
-  let summary = "`$info` severity message task";
-  let description = [{
-    This system task indicates a message with no specific severity.
-  }] # messageDescription;
+  // Define non-procedural (elaboration-time) severity message operations
+  def severity # "Op" : NonfatalMessageOp<severityLower, [NonProceduralOp]> {
+    let summary = "`$" # severityLower # "` severity message task (elaboration-time)";
+    let description = [{
+      This system task indicates an elaboration-time }] # severityLower # [{. It must
+      be used outside of procedural regions and will be executed during elaboration.
+    }] # messageDescription;
+  }
 }
 
 def DepositOp : SVOp<"nonstandard.deposit",

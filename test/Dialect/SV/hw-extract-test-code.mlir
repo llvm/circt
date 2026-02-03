@@ -12,10 +12,10 @@
 // CHECK-NOT: attributes
 // CHECK: hw.module private @issue1246_assert(in %clock : i1) attributes {comment = "VCS coverage exclude_file", emit.fragments = [@some_fragment], output_file = #hw.output_file<"dir3{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>}
 // CHECK: sv.assert
-// CHECK: sv.error "Assertion failed"
-// CHECK: sv.error "assert:"
-// CHECK: sv.error "assertNotX:"
-// CHECK: sv.error "check [verif-library-assert] is included"
+// CHECK: sv.error.procedural "Assertion failed"
+// CHECK: sv.error.procedural "assert:"
+// CHECK: sv.error.procedural "assertNotX:"
+// CHECK: sv.error.procedural "check [verif-library-assert] is included"
 // CHECK: sv.func.call.procedural @fn
 // CHECK: sv.fwrite
 // CHECK: sv.fflush
@@ -59,10 +59,10 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
       } else  {
         sv.if %2937  {
           sv.assert %clock, immediate
-          sv.error "Assertion failed"
-          sv.error "assert:"
-          sv.error "assertNotX:"
-          sv.error "check [verif-library-assert] is included"
+          sv.error.procedural "Assertion failed"
+          sv.error.procedural "assert:"
+          sv.error.procedural "assertNotX:"
+          sv.error.procedural "check [verif-library-assert] is included"
           %out = sv.func.call.procedural @fn () : () -> (i32)
           sv.fwrite %out, "foo"
           sv.fflush fd %out

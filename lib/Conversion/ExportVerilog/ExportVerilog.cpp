@@ -4089,6 +4089,9 @@ private:
                                         StringAttr message,
                                         ValueRange operands);
   LogicalResult visitSV(FatalOp op);
+  LogicalResult visitSV(ErrorProceduralOp op);
+  LogicalResult visitSV(WarningProceduralOp op);
+  LogicalResult visitSV(InfoProceduralOp op);
   LogicalResult visitSV(ErrorOp op);
   LogicalResult visitSV(WarningOp op);
   LogicalResult visitSV(InfoOp op);
@@ -4772,6 +4775,21 @@ StmtEmitter::emitSeverityMessageTask(Operation *op, PPExtString taskName,
 
 LogicalResult StmtEmitter::visitSV(FatalOp op) {
   return emitSeverityMessageTask(op, PPExtString("$fatal"), op.getVerbosity(),
+                                 op.getMessageAttr(), op.getSubstitutions());
+}
+
+LogicalResult StmtEmitter::visitSV(ErrorProceduralOp op) {
+  return emitSeverityMessageTask(op, PPExtString("$error"), {},
+                                 op.getMessageAttr(), op.getSubstitutions());
+}
+
+LogicalResult StmtEmitter::visitSV(WarningProceduralOp op) {
+  return emitSeverityMessageTask(op, PPExtString("$warning"), {},
+                                 op.getMessageAttr(), op.getSubstitutions());
+}
+
+LogicalResult StmtEmitter::visitSV(InfoProceduralOp op) {
+  return emitSeverityMessageTask(op, PPExtString("$info"), {},
                                  op.getMessageAttr(), op.getSubstitutions());
 }
 

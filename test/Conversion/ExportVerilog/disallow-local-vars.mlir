@@ -188,7 +188,7 @@ hw.module @DefinedInDifferentBlock(in %a: i1, in %b: i1) {
     %0 = comb.icmp eq %a, %b : i1
     sv.initial {
       sv.if %0 {
-        sv.error "error"
+        sv.error.procedural "error"
       }
     }
   }
@@ -208,7 +208,7 @@ hw.module @TemporaryWireAtDifferentBlock(in %a: i1, out b: i1) {
   %1 = comb.add %0, %0 : i1
   sv.initial {
     sv.if %0 {
-      sv.error "error"
+      sv.error.procedural "error"
     }
   }
   %0 = comb.shl %a, %a : i1

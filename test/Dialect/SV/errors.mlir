@@ -89,6 +89,48 @@ hw.module @Finish() {
 }
 
 // -----
+hw.module @ErrorProcedural() {
+  // expected-error @+1 {{sv.error.procedural should be in a procedural region}}
+  sv.error.procedural
+}
+
+// -----
+hw.module @WarningProcedural() {
+  // expected-error @+1 {{sv.warning.procedural should be in a procedural region}}
+  sv.warning.procedural
+}
+
+// -----
+hw.module @InfoProcedural() {
+  // expected-error @+1 {{sv.info.procedural should be in a procedural region}}
+  sv.info.procedural
+}
+
+// -----
+hw.module @ErrorInProcedural() {
+  sv.initial {
+    // expected-error @+1 {{sv.error should be in a non-procedural region}}
+    sv.error
+  }
+}
+
+// -----
+hw.module @WarningInProcedural() {
+  sv.initial {
+    // expected-error @+1 {{sv.warning should be in a non-procedural region}}
+    sv.warning
+  }
+}
+
+// -----
+hw.module @InfoInProcedural() {
+  sv.initial {
+    // expected-error @+1 {{sv.info should be in a non-procedural region}}
+    sv.info
+  }
+}
+
+// -----
 hw.module @CaseZ(in %arg8: i8) {
   %fd = hw.constant 0x80000002 : i32
   // expected-error @+1 {{sv.case should be in a procedural region}}
