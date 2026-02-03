@@ -72,9 +72,9 @@ static FailureOr<Value> isSext(Value operand) {
   if (!extractOp)
     return failure();
 
-  if (extractOp.getInput() != originalValue |
-      extractOp.getLowBit() != originalWidth - 1 |
-      extractOp.getType().getIntOrFloatBitWidth() != 1)
+  if ((extractOp.getInput() != originalValue) ||
+      (extractOp.getLowBit() != originalWidth - 1) ||
+      (extractOp.getType().getIntOrFloatBitWidth() != 1))
     return failure();
 
   // Return the original unextended value
