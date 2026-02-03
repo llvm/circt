@@ -2204,6 +2204,10 @@ struct LayerDisable : public OpReduction<CircuitOp> {
 
   void beforeReduction(mlir::ModuleOp op) override { symbolRefAttrMap.clear(); }
 
+  void afterReduction(mlir::ModuleOp op) override {
+    (void)pm->run(op);
+  };
+
   void matches(CircuitOp circuitOp,
                llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
     uint64_t matchId = 0;
@@ -2243,8 +2247,7 @@ struct LayerDisable : public OpReduction<CircuitOp> {
     circuitOp.setDisableLayersAttr(
         ArrayAttr::get(circuitOp.getContext(), disableLayers));
 
-    auto moduleOp = circuitOp->getParentOfType<mlir::ModuleOp>();
-    return pm->run(moduleOp);
+    return success();
   }
 
   std::string getName() const override { return "firrtl-layer-disable"; }
