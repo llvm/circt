@@ -2209,22 +2209,22 @@ struct LayerDisable : public OpReduction<CircuitOp> {
     uint64_t matchId = 0;
 
     SmallVector<FlatSymbolRefAttr> nestedRefs;
-    std::function<void(StringAttr, LayerOp)> addLayer =
-        [&](StringAttr rootRef, LayerOp layerOp) {
-          if (!rootRef)
-            rootRef = layerOp.getSymNameAttr();
-          else
-            nestedRefs.push_back(FlatSymbolRefAttr::get(layerOp));
+    std::function<void(StringAttr, LayerOp)> addLayer = [&](StringAttr rootRef,
+                                                            LayerOp layerOp) {
+      if (!rootRef)
+        rootRef = layerOp.getSymNameAttr();
+      else
+        nestedRefs.push_back(FlatSymbolRefAttr::get(layerOp));
 
-          symbolRefAttrMap[matchId] = SymbolRefAttr::get(rootRef, nestedRefs);
-          addMatch(1, matchId++);
+      symbolRefAttrMap[matchId] = SymbolRefAttr::get(rootRef, nestedRefs);
+      addMatch(1, matchId++);
 
-          for (auto nestedLayerOp : layerOp.getOps<LayerOp>())
-            addLayer(rootRef, nestedLayerOp);
+      for (auto nestedLayerOp : layerOp.getOps<LayerOp>())
+        addLayer(rootRef, nestedLayerOp);
 
-          if (!nestedRefs.empty())
-            nestedRefs.pop_back();
-        };
+      if (!nestedRefs.empty())
+        nestedRefs.pop_back();
+    };
 
     for (auto layerOp : circuitOp.getOps<LayerOp>())
       addLayer({}, layerOp);
