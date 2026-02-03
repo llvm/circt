@@ -188,6 +188,7 @@ struct Emitter {
   HANDLE(AsSIntPrimOp, "asSInt");
   HANDLE(AsUIntPrimOp, "asUInt");
   HANDLE(AsAsyncResetPrimOp, "asAsyncReset");
+  HANDLE(AsResetPrimOp, "asReset");
   HANDLE(AsClockPrimOp, "asClock");
   HANDLE(CvtPrimOp, "cvt");
   HANDLE(NegPrimOp, "neg");
@@ -1436,8 +1437,9 @@ void Emitter::emitExpression(Value value) {
           OrPrimOp, XorPrimOp, LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp,
           EQPrimOp, NEQPrimOp, DShlPrimOp, DShlwPrimOp, DShrPrimOp,
           // Unary
-          AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsClockPrimOp,
-          CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
+          AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsResetPrimOp,
+          AsClockPrimOp, CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp,
+          XorRPrimOp,
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,

@@ -1946,3 +1946,12 @@ circuit Foo:
     output a: Integer
     ; expected-error @below {{expected property type}}
     propassign a, Unknown: UInt<1>
+
+;// -----
+
+FIRRTL version 5.0.0
+circuit AsResetVersion:
+  public module AsResetVersion:
+    input in: UInt<1>
+    ; expected-error @below {{reset casts are a FIRRTL 5.1.0+ feature}}
+    node x = asReset(in)
