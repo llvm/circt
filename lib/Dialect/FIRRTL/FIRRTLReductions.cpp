@@ -2195,6 +2195,65 @@ private:
   NLARemover nlaRemover;
 };
 
+struct LayerDisable : public OpReduction<CircuitOp> {
+  LayerDisable(MLIRContext *context) {
+    pm = std::make_unique<mlir::PassManager>(
+        context, "builtin.module", mlir::OpPassManager::Nesting::Explicit);
+    pm->nest<firrtl::CircuitOp>().addPass(firrtl::createSpecializeLayers());
+  };
+
+  void beforeReduction(mlir::ModuleOp op) override { symbolRefAttrMap.clear(); }
+
+  void afterReduction(mlir::ModuleOp op) override { (void)pm->run(op); };
+
+  void matches(CircuitOp circuitOp,
+               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
+    uint64_t matchId = 0;
+
+    SmallVector<FlatSymbolRefAttr> nestedRefs;
+    std::function<void(StringAttr, LayerOp)> addLayer = [&](StringAttr rootRef,
+                                                            LayerOp layerOp) {
+      if (!rootRef)
+        rootRef = layerOp.getSymNameAttr();
+      else
+        nestedRefs.push_back(FlatSymbolRefAttr::get(layerOp));
+
+      symbolRefAttrMap[matchId] = SymbolRefAttr::get(rootRef, nestedRefs);
+      addMatch(1, matchId++);
+
+      for (auto nestedLayerOp : layerOp.getOps<LayerOp>())
+        addLayer(rootRef, nestedLayerOp);
+
+      if (!nestedRefs.empty())
+        nestedRefs.pop_back();
+    };
+
+    for (auto layerOp : circuitOp.getOps<LayerOp>())
+      addLayer({}, layerOp);
+  }
+
+  LogicalResult rewriteMatches(CircuitOp circuitOp,
+                               ArrayRef<uint64_t> matches) override {
+    SmallVector<Attribute> disableLayers;
+    if (auto existingDisables = circuitOp.getDisableLayersAttr()) {
+      auto disableRange = existingDisables.getAsRange<Attribute>();
+      disableLayers.append(disableRange.begin(), disableRange.end());
+    }
+    for (auto match : matches)
+      disableLayers.push_back(symbolRefAttrMap.at(match));
+
+    circuitOp.setDisableLayersAttr(
+        ArrayAttr::get(circuitOp.getContext(), disableLayers));
+
+    return success();
+  }
+
+  std::string getName() const override { return "firrtl-layer-disable"; }
+
+  std::unique_ptr<mlir::PassManager> pm;
+  DenseMap<uint64_t, SymbolRefAttr> symbolRefAttrMap;
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -2208,11 +2267,12 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   // prioritized). For example, things that can knock out entire modules while
   // being cheap should be tried first (and thus have higher benefit), before
   // trying to tweak operands of individual arithmetic ops.
-  patterns.add<SimplifyResets, 34>();
-  patterns.add<ForceDedup, 33>();
-  patterns.add<MustDedupChildren, 32>();
-  patterns.add<AnnotationRemover, 31>();
-  patterns.add<ModuleSwapper, 30>();
+  patterns.add<SimplifyResets, 35>();
+  patterns.add<ForceDedup, 34>();
+  patterns.add<MustDedupChildren, 33>();
+  patterns.add<AnnotationRemover, 32>();
+  patterns.add<ModuleSwapper, 31>();
+  patterns.add<LayerDisable, 30>(getContext());
   patterns.add<PassReduction, 29>(
       getContext(),
       firrtl::createDropName({/*preserveMode=*/PreserveValues::None}), false,
