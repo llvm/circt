@@ -81,6 +81,40 @@ static FailureOr<Value> isSext(Value operand) {
   return originalValue;
 }
 
+// This pattern commonly arrises when inverting zext: ~zext(x) = {1,...1, ~x}
+// Check if the operand is {ones, base} and return the unextended operand:
+static FailureOr<Value> isOneExt(Value operand) {
+  // Check if operand is a concat operation
+  auto concatOp = operand.getDefiningOp<comb::ConcatOp>();
+  if (!concatOp)
+    return failure();
+
+  auto operands = concatOp.getOperands();
+  // ConcatOp must have exactly 2 operands
+  if (operands.size() != 2)
+    return failure();
+
+  APInt value;
+  if (matchPattern(operands[0], m_ConstantInt(&value)) && value.isAllOnes())
+    // Return the original unextended value
+    return success(operands[1]);
+
+  return failure();
+}
+
+// Check if the operand is an inversion and return the uninverted operand:
+// inverted = comb.xor(-1, baseValue)
+static FailureOr<Value> isNot(Value operand) {
+  // Check if operand is a concat operation
+  auto xorOp = operand.getDefiningOp<comb::XorOp>();
+  if (!xorOp)
+    return failure();
+  if (!xorOp.isBinaryNot())
+    return failure();
+
+  return success(xorOp.getInputs().front());
+}
+
 // zext(input<<trailingZeros) to targetWidth
 static Value zeroPad(PatternRewriter &rewriter, Location loc, Value input,
                      size_t targetWidth, size_t trailingZeros) {
@@ -303,6 +337,90 @@ struct SignedCompress : public OpRewritePattern<CompressOp> {
   }
 };
 
+// Extend inputs of the form {ones, base} into zext(base) + (ones << baseWidth)
+struct OnesExtCompress : public OpRewritePattern<CompressOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(CompressOp op,
+                                PatternRewriter &rewriter) const override {
+    auto inputs = op.getInputs();
+    auto opType = inputs[0].getType();
+    auto opSize = opType.getIntOrFloatBitWidth();
+
+    SmallVector<Value> newInputs;
+    for (auto input : inputs) {
+      // Check for replication of ones leading
+      auto baseInput = isOneExt(input);
+      if (failed(baseInput)) {
+        newInputs.push_back(input);
+        continue;
+      }
+
+      // Separate {ones, base} -> zext(base) + (ones << baseWidth)
+      auto newOp = comb::createZExt(rewriter, op.getLoc(), *baseInput, opSize);
+      newInputs.push_back(newOp);
+
+      APInt ones = APInt::getAllOnes(opSize);
+      auto baseWidth = baseInput->getType().getIntOrFloatBitWidth();
+      auto correction =
+          hw::ConstantOp::create(rewriter, op.getLoc(), ones << baseWidth);
+      newInputs.push_back(correction);
+    }
+
+    if (newInputs.size() == inputs.size())
+      return failure();
+
+    auto newCompress = datapath::CompressOp::create(
+        rewriter, op.getLoc(), newInputs, op.getNumResults());
+    rewriter.replaceOp(op, newCompress.getResults());
+    return success();
+  }
+};
+
+struct NegatedSextCompress : public OpRewritePattern<CompressOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(CompressOp op,
+                                PatternRewriter &rewriter) const override {
+    auto inputs = op.getInputs();
+    auto opType = inputs[0].getType();
+
+    SmallVector<Value> newInputs;
+    bool modified = false;
+    for (auto input : inputs) {
+      // Check for inversion operation
+      auto invertedInput = isNot(input);
+      if (failed(invertedInput)) {
+        newInputs.push_back(input);
+        continue;
+      }
+
+      // Check for sext of the inverted value
+      auto baseInput = isSext(*invertedInput);
+      if (failed(baseInput)) {
+        newInputs.push_back(input);
+        continue;
+      }
+
+      modified = true;
+      // Create negated sext: ~sext(x) = sext(~x)
+      auto negateBase =
+          comb::createOrFoldNot(op.getLoc(), *baseInput, rewriter, true);
+      auto newOp =
+          comb::createOrFoldSExt(op.getLoc(), negateBase, opType, rewriter);
+      newInputs.push_back(newOp);
+    }
+
+    if (!modified)
+      return failure();
+
+    auto newCompress = datapath::CompressOp::create(
+        rewriter, op.getLoc(), newInputs, op.getNumResults());
+    rewriter.replaceOp(op, newCompress.getResults());
+    return success();
+  }
+};
+
 struct ConstantFoldCompress : public OpRewritePattern<CompressOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -357,8 +475,9 @@ struct ConstantFoldCompress : public OpRewritePattern<CompressOp> {
 
 void CompressOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.add<FoldCompressIntoCompress, FoldAddIntoCompress,
-              ConstantFoldCompress, SignedCompress>(context);
+  results
+      .add<FoldCompressIntoCompress, FoldAddIntoCompress, ConstantFoldCompress,
+           SignedCompress, NegatedSextCompress, OnesExtCompress>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -422,8 +541,8 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
     if (failed(lhs) || failed(rhs))
       return failure();
 
-    size_t lhsWidth = (*lhs).getType().getIntOrFloatBitWidth();
-    size_t rhsWidth = (*rhs).getType().getIntOrFloatBitWidth();
+    size_t lhsWidth = lhs->getType().getIntOrFloatBitWidth();
+    size_t rhsWidth = rhs->getType().getIntOrFloatBitWidth();
     // Subtract 1 as will handle sign-bit separately
     size_t maxRows = std::max(lhsWidth, rhsWidth) - 1;
 
