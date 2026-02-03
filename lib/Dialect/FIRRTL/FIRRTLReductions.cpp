@@ -2204,9 +2204,7 @@ struct LayerDisable : public OpReduction<CircuitOp> {
 
   void beforeReduction(mlir::ModuleOp op) override { symbolRefAttrMap.clear(); }
 
-  void afterReduction(mlir::ModuleOp op) override {
-    (void)pm->run(op);
-  };
+  void afterReduction(mlir::ModuleOp op) override { (void)pm->run(op); };
 
   void matches(CircuitOp circuitOp,
                llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
