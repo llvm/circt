@@ -328,6 +328,29 @@ struct ConstantFoldCompress : public OpRewritePattern<CompressOp> {
       return success();
     }
 
+    APInt value1, value2;
+    // compress(...c1, c2) -> compress(..., c1+c2)
+    SmallVector<Value> newInputs(inputs.begin(), inputs.end());
+    if (matchPattern(inputs.back(), m_ConstantInt(&value1)) &&
+        matchPattern(inputs[size - 2], m_ConstantInt(&value2))) {
+
+      auto summedValue = value1 + value2;
+      auto constOp = hw::ConstantOp::create(rewriter, op.getLoc(), summedValue);
+      newInputs.pop_back();
+      newInputs.pop_back();
+      newInputs.push_back(constOp);
+      // If only reducing by one row and contains zero - pass through operands
+      if (size - 1 == op.getNumResults()) {
+        rewriter.replaceOp(op, newInputs);
+        return success();
+      }
+
+      // Default create a compressor with fewer arguments
+      rewriter.replaceOpWithNewOp<CompressOp>(op, newInputs,
+                                              op.getNumResults());
+      return success();
+    }
+
     return failure();
   }
 };
