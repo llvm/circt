@@ -3943,4 +3943,21 @@ firrtl.module @Domains(
   firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
 
 }
+
+// CHECK-LABEL: firrtl.module @ResetCast
+firrtl.module @ResetCast(out %a0: !firrtl.reset, out %a1: !firrtl.reset) {
+  // CHECK-DAG: [[R0:%.+]] = firrtl.specialconstant 0 : !firrtl.reset
+  // CHECK-DAG: [[R1:%.+]] = firrtl.specialconstant 1 : !firrtl.reset
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+
+  // CHECK: firrtl.matchingconnect %a0, [[R0]]
+  %0 = firrtl.asReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.reset
+  firrtl.matchingconnect %a0, %0 : !firrtl.reset
+
+  // CHECK: firrtl.matchingconnect %a1, [[R1]]
+  %1 = firrtl.asReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.reset
+  firrtl.matchingconnect %a1, %1 : !firrtl.reset
+}
+
 }

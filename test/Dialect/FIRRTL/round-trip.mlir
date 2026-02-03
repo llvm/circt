@@ -20,6 +20,9 @@ firrtl.module @Intrinsics(in %ui : !firrtl.uint, in %clock: !firrtl.clock, in %u
   // CHECK-NEXT: firrtl.int.isX %ui : !firrtl.uint
   %isx = firrtl.int.isX %ui : !firrtl.uint
 
+  // CHECK-NEXT: firrtl.asReset %ui1 : (!firrtl.uint<1>) -> !firrtl.reset
+  %reset = firrtl.asReset %ui1 : (!firrtl.uint<1>) -> !firrtl.reset
+
   // CHECK-NEXT: firrtl.int.plusargs.test "foo"
   // CHECK-NEXT: firrtl.int.plusargs.value "bar" : !firrtl.uint<5>
   %foo_found = firrtl.int.plusargs.test "foo"

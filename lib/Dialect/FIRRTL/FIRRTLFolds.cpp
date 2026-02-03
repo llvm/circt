@@ -1062,6 +1062,12 @@ OpFoldResult AsAsyncResetPrimOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+OpFoldResult AsResetPrimOp::fold(FoldAdaptor adaptor) {
+  if (auto cst = getConstant(adaptor.getInput()))
+    return BoolAttr::get(getContext(), cst->getBoolValue());
+  return {};
+}
+
 OpFoldResult AsClockPrimOp::fold(FoldAdaptor adaptor) {
   // No effect.
   if (getInput().getType() == getType())
