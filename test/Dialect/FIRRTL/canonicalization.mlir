@@ -119,6 +119,7 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
                    in %sin: !firrtl.sint<4>,
                    in %zin1: !firrtl.uint<0>,
                    in %zin2: !firrtl.uint<0>,
+                   in %cin: !firrtl.const.uint<4>,
                    out %out: !firrtl.uint<4>,
                    out %out6: !firrtl.uint<6>,
                    out %out5: !firrtl.uint<5>,
@@ -196,6 +197,10 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
   %10 = firrtl.cvt %in : (!firrtl.uint<4>) -> !firrtl.sint<5>
   %11 = firrtl.and %10, %c3_si5 : (!firrtl.sint<5>, !firrtl.sint<5>) -> !firrtl.uint<5>
   firrtl.matchingconnect %out5, %11 : !firrtl.uint<5>
+
+  // Test that this doesn't loop infinitely.
+  %12 = firrtl.and %in, %cin : (!firrtl.uint<4>, !firrtl.const.uint<4>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %out, %12 : !firrtl.uint<4>
 }
 
 // AndOfAsSInt patterns should not crash on non-IntType inputs
@@ -237,6 +242,7 @@ firrtl.module @Or(in %in: !firrtl.uint<4>,
                   in %sin: !firrtl.sint<4>,
                   in %zin1: !firrtl.uint<0>,
                   in %zin2: !firrtl.uint<0>,
+                  in %cin: !firrtl.const.uint<4>,
                   out %out: !firrtl.uint<4>,
                   out %out6: !firrtl.uint<6>,
                   out %outz: !firrtl.uint<0>) {
@@ -296,6 +302,9 @@ firrtl.module @Or(in %in: !firrtl.uint<4>,
   %9 = firrtl.or %in6, %8  : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<6>
   firrtl.connect %out6, %9 : !firrtl.uint<6>, !firrtl.uint<6>
 
+  // Test that this doesn't loop infinitely.
+  %10 = firrtl.or %in, %cin : (!firrtl.uint<4>, !firrtl.const.uint<4>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %out, %10 : !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @Xor
@@ -304,6 +313,7 @@ firrtl.module @Xor(in %in: !firrtl.uint<4>,
                    in %sin: !firrtl.sint<4>,
                    in %zin1: !firrtl.uint<0>,
                    in %zin2: !firrtl.uint<0>,
+                   in %cin: !firrtl.const.uint<4>,
                    out %out: !firrtl.uint<4>,
                    out %out6: !firrtl.uint<6>,
                    out %outz: !firrtl.uint<0>) {
@@ -349,6 +359,9 @@ firrtl.module @Xor(in %in: !firrtl.uint<4>,
   %9 = firrtl.xor %in6, %8  : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<6>
   firrtl.connect %out6, %9 : !firrtl.uint<6>, !firrtl.uint<6>
 
+  // Test that this doesn't loop infinitely.
+  %10 = firrtl.xor %in, %cin : (!firrtl.uint<4>, !firrtl.const.uint<4>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %out, %10 : !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @Not
