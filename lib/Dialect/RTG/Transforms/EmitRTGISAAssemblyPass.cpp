@@ -17,6 +17,7 @@
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
 #include "circt/Support/Path.h"
 #include "mlir/Support/FileUtilities.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/ToolOutputFile.h"

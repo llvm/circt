@@ -49,6 +49,7 @@ class Test(CodeGenRoot):
 
     with ir.InsertionPoint(block):
       self.test_func(SimpleNamespace(new_config))
+      report_success()
 
 
 def test(config):

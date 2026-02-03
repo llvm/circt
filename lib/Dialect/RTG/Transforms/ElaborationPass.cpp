@@ -22,11 +22,11 @@
 #include "mlir/Dialect/Index/IR/IndexDialect.h"
 #include "mlir/Dialect/Index/IR/IndexOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/DenseMapInfoVariant.h"
 #include "llvm/Support/Debug.h"
 #include <random>
+#include "pcg_random.hpp"
 
 namespace circt {
 namespace rtg {
@@ -42,43 +42,69 @@ using llvm::MapVector;
 
 #define DEBUG_TYPE "rtg-elaboration"
 
-//===----------------------------------------------------------------------===//
-// Uniform Distribution Helper
-//
-// Simplified version of
-// https://github.com/llvm/llvm-project/blob/main/libcxx/include/__random/uniform_int_distribution.h
-// We use our custom version here to get the same results when compiled with
-// different compiler versions and standard libraries.
-//===----------------------------------------------------------------------===//
+namespace {
+struct RtgRng {
+  // TODO: seed with more than 32 bits
+  RtgRng(uint32_t seed, bool fast = false) : rng(seed), fast(fast) {}
 
-static uint32_t computeMask(size_t w) {
-  size_t n = w / 32 + (w % 32 != 0);
-  size_t w0 = w / n;
-  return w0 > 0 ? uint32_t(~0) >> (32 - w0) : 0;
-}
+  uint32_t getInRange(uint32_t a, uint32_t b) {
+    ++queryCount;
+    if (fast)
+      return rng() % (b - a + 1) + a; // introduces bias due to modulo
+    return getUniformlyInRange(a, b);
+  }
 
-/// Get a number uniformly at random in the in specified range.
-static uint32_t getUniformlyInRange(std::mt19937 &rng, uint32_t a, uint32_t b) {
-  const uint32_t diff = b - a + 1;
-  if (diff == 1)
-    return a;
+  bool isFastMode() {
+    return fast;
+  }
 
-  const uint32_t digits = std::numeric_limits<uint32_t>::digits;
-  if (diff == 0)
-    return rng();
+private:
+  //===--------------------------------------------------------------------===//
+  // Uniform Distribution Helper
+  //
+  // Simplified version of
+  // https://github.com/llvm/llvm-project/blob/main/libcxx/include/__random/uniform_int_distribution.h
+  // We use our custom version here to get the same results when compiled with
+  // different compiler versions and standard libraries.
+  //===--------------------------------------------------------------------===//
 
-  uint32_t width = digits - llvm::countl_zero(diff) - 1;
-  if ((diff & (std::numeric_limits<uint32_t>::max() >> (digits - width))) != 0)
-    ++width;
+  static uint32_t computeMask(size_t w) {
+    size_t n = w / 32 + (w % 32 != 0);
+    size_t w0 = w / n;
+    return w0 > 0 ? uint32_t(~0) >> (32 - w0) : 0;
+  }
 
-  uint32_t mask = computeMask(diff);
-  uint32_t u;
-  do {
-    u = rng() & mask;
-  } while (u >= diff);
+  /// Get a number uniformly at random in the in specified range.
+  uint32_t getUniformlyInRange(uint32_t a, uint32_t b) {
+    const uint32_t diff = b - a + 1;
+    if (diff == 1)
+      return a;
 
-  return u + a;
-}
+    const uint32_t digits = std::numeric_limits<uint32_t>::digits;
+    if (diff == 0)
+      return rng();
+
+    uint32_t width = digits - llvm::countl_zero(diff) - 1;
+    if ((diff & (std::numeric_limits<uint32_t>::max() >> (digits - width))) != 0)
+      ++width;
+
+    uint32_t mask = computeMask(diff);
+    uint32_t u;
+    do {
+      u = rng() & mask;
+    } while (u >= diff);
+
+    return u + a;
+  }
+  
+  //===--------------------------------------------------------------------===//
+
+private:
+  std::mt19937 rng;
+  bool fast;
+  uint64_t queryCount = 0;
+};
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Elaborator Value
@@ -763,7 +789,7 @@ struct SharedState {
   SharedState(SymbolTable &table, unsigned seed) : table(table), rng(seed) {}
 
   SymbolTable &table;
-  std::mt19937 rng;
+  RtgRng rng;
   Namespace names;
   Internalizer internalizer;
 };
@@ -1157,7 +1183,7 @@ private:
 
       operands.push_back(materialized);
     }
-
+    
     OperationState state(loc, val->name);
     state.addTypes(val->resultTypes);
     state.attributes = val->attributes;
@@ -1354,12 +1380,12 @@ public:
       return op->emitError("cannot select from an empty set");
 
     size_t selected;
-    if (auto intAttr =
-            op->getAttrOfType<IntegerAttr>("rtg.elaboration_custom_seed")) {
-      std::mt19937 customRng(intAttr.getInt());
-      selected = getUniformlyInRange(customRng, 0, set.size() - 1);
+      if (auto intAttr =
+              op->getAttrOfType<IntegerAttr>("rtg.elaboration_custom_seed")) {
+      RtgRng customRng(intAttr.getInt(), sharedState.rng.isFastMode());
+      selected = customRng.getInRange(0, set.size() - 1);
     } else {
-      selected = getUniformlyInRange(sharedState.rng, 0, set.size() - 1);
+      selected = sharedState.rng.getInRange(0, set.size() - 1);
     }
 
     state[op.getResult()] = set[selected];
@@ -1398,7 +1424,7 @@ public:
   // (a1,b1)} -> {(a0,b0,c0), (a0,b0,c1), (a0,b1,c0), (a0,b1,c1), (a1,b0,c0),
   // (a1,b0,c1), (a1,b1,c0), (a1,b1,c1)}
   FailureOr<DeletionKind> visitOp(SetCartesianProductOp op) {
-    SetVector<ElaboratorValue> result;
+        SetVector<ElaboratorValue> result;
     SmallVector<SmallVector<ElaboratorValue>> tuples;
     tuples.push_back({});
 
@@ -1472,10 +1498,10 @@ public:
     auto customRng = sharedState.rng;
     if (auto intAttr =
             op->getAttrOfType<IntegerAttr>("rtg.elaboration_custom_seed")) {
-      customRng = std::mt19937(intAttr.getInt());
+      customRng = RtgRng(intAttr.getInt(), sharedState.rng.isFastMode());
     }
 
-    auto idx = getUniformlyInRange(customRng, 0, accumulator - 1);
+    auto idx = customRng.getInRange(0, accumulator - 1);
     auto *iter = llvm::upper_bound(
         prefixSum, idx,
         [](uint32_t a, const std::pair<ElaboratorValue, uint32_t> &b) {
@@ -1622,12 +1648,12 @@ public:
 
     if (auto intAttr =
             op->getAttrOfType<IntegerAttr>("rtg.elaboration_custom_seed")) {
-      std::mt19937 customRng(intAttr.getInt());
+      RtgRng customRng(intAttr.getInt(), sharedState.rng.isFastMode());
       state[op.getResult()] =
-          size_t(getUniformlyInRange(customRng, lower, upper));
+          size_t(customRng.getInRange(lower, upper));
     } else {
       state[op.getResult()] =
-          size_t(getUniformlyInRange(sharedState.rng, lower, upper));
+          size_t(sharedState.rng.getInRange(lower, upper));
     }
 
     return DeletionKind::Delete;
@@ -1891,6 +1917,13 @@ public:
     return DeletionKind::Delete;
   }
 
+  FailureOr<DeletionKind> visitOp(index::AndOp op) {
+    size_t lhs = get<size_t>(op.getLhs());
+    size_t rhs = get<size_t>(op.getRhs());
+    state[op.getResult()] = lhs & rhs;
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(index::CmpOp op) {
     size_t lhs = get<size_t>(op.getLhs());
     size_t rhs = get<size_t>(op.getRhs());
@@ -2048,7 +2081,7 @@ public:
             arith::AddIOp, arith::XOrIOp, arith::AndIOp, arith::OrIOp,
             arith::SelectOp,
             // Index ops
-            index::AddOp, index::CmpOp,
+            index::AddOp, index::AndOp, index::CmpOp,
             // SCF ops
             scf::IfOp, scf::ForOp, scf::YieldOp>(
             [&](auto op) { return visitOp(op); })

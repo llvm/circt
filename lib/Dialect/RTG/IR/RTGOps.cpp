@@ -14,10 +14,12 @@
 #include "circt/Dialect/RTG/IR/RTGAttributes.h"
 #include "circt/Support/ParsingUtils.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SmallString.h"
+#include "mlir/IR/PatternMatch.h"
 
 using namespace mlir;
 using namespace circt;

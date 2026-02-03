@@ -253,6 +253,10 @@ void InlineSequencesPass::runOnOperation() {
   if (moduleOp.getOps<SequenceOp>().empty())
     return;
 
+  // Fast-path: no sequences are defined.
+  if (moduleOp.getOps<SequenceOp>().empty())
+    return;
+
   // Inline all sequences and remove the operations that place the sequences.
   for (auto testOp : moduleOp.getOps<TestOp>()) {
     auto res = inliner.inlineSequences(*testOp.getBody());

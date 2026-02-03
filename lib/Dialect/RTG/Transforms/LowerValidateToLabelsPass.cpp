@@ -68,5 +68,9 @@ void LowerValidateToLabelsPass::runOnOperation() {
   if (result.wasInterrupted())
     return signalPassFailure();
 
-  pruner.eraseNow();
+  // FIXME: for some reason this call scales very poorly. I guess because the
+  // basic blocks contain a huge number of operations and erasing one of them
+  // results in iterating over all of them?
+  // Commenting out for now. The emitted assembly should still be the same.
+  // pruner.eraseNow();
 }

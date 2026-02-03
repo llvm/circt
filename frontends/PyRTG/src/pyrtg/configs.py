@@ -101,6 +101,46 @@ class Param(ParamBase):
     return self._name
 
 
+class AbstractPythonParam(ParamBase):
+  """
+  This class represents an abstract configuration parameter of a Python type.
+  """
+
+  def __init__(self, type, **kwargs):
+    self._type = type
+    if "name" in kwargs:
+      self._name = kwargs["name"]
+
+    if "uniquification_tag" in kwargs:
+      self._uniquification_tag = kwargs["uniquification_tag"]
+
+  def get_type(self):
+    return TupleType([])
+
+  def get_value(self):
+    assert False, "AbstractPythonParam cannot be used directly"
+
+  def load_and_get_value(self):
+    return Tuple.create()
+
+  def get_name(self) -> str:
+    if hasattr(self, "_uniquification_tag"):
+      return self._uniquification_tag
+
+    if not hasattr(self, "_name"):
+      raise AttributeError(
+          "name inference failed, must provide name explicitly")
+
+    return self._name + "_" + str(self._value)
+
+  def get_original_name(self) -> str:
+    if not hasattr(self, "_name"):
+      raise AttributeError(
+          "name inference failed, must provide name explicitly")
+
+    return self._name
+
+
 class PythonParam(ParamBase):
   """
   This class represents a configuration parameter of a Python type.
