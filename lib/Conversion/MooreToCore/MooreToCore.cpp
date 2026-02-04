@@ -1597,6 +1597,25 @@ struct BitcastConversion : public OpConversionPattern<SourceOp> {
   }
 };
 
+/// For casts that are automatically resolved by type conversion
+template <typename SourceOp>
+struct NoOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+  using ConversionPattern::typeConverter;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto type = typeConverter->convertType(op.getResult().getType());
+    if (type == adaptor.getInput().getType())
+      rewriter.replaceOp(op, adaptor.getInput());
+    else
+      return failure();
+    return success();
+  }
+};
+
 struct TruncOpConversion : public OpConversionPattern<TruncOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -2450,9 +2469,9 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     ConversionOpConversion,
     BitcastConversion<PackedToSBVOp>,
     BitcastConversion<SBVToPackedOp>,
-    BitcastConversion<LogicToIntOp>,
-    BitcastConversion<IntToLogicOp>,
-    BitcastConversion<ToBuiltinIntOp>,
+    NoOpConversion<LogicToIntOp>,
+    NoOpConversion<IntToLogicOp>,
+    NoOpConversion<ToBuiltinIntOp>,
     TruncOpConversion,
     ZExtOpConversion,
     SExtOpConversion,
