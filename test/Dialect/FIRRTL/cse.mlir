@@ -68,5 +68,16 @@ firrtl.module @Domains_Foo() {
   %2 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
 }
 
+// UnknownValueOp should CSE
+// CHECK-LABEL: firrtl.module @UnknownValue(
+firrtl.module @UnknownValue(out %a: !firrtl.integer, out %b: !firrtl.integer) {
+  // CHECK: %0 = firrtl.unknown : !firrtl.integer
+  %0 = firrtl.unknown : !firrtl.integer
+  // CHECK-NEXT: firrtl.propassign %a, %0
+  firrtl.propassign %a, %0 : !firrtl.integer
+  // CHECK-NEXT: firrtl.propassign %b, %0
+  %1 = firrtl.unknown : !firrtl.integer
+  firrtl.propassign %b, %1 : !firrtl.integer
+}
 
 }
