@@ -734,7 +734,8 @@ def FatalProceduralOp : FatalMessageOp<"fatal.procedural", [ProceduralOp]> {
     Generates a run-time fatal error which terminates the simulation with an
     error code. Makes an implicit call to `$finish`, forwarding the `verbosity`
     operand. See IEEE 1800-2023 section 20.10 for more information.
-
+    If present, the optional message is printed with any additional
+    operands interpolated into the message string.
   }];
 }
 
@@ -744,6 +745,8 @@ def FatalOp : FatalMessageOp<"fatal", [NonProceduralOp]> {
     Generates an elaboration-time fatal error which terminates the elaboration
     with an error code. Makes an implicit call to `$finish`, forwarding the
     `verbosity` operand. See IEEE 1800-2023 section 20.11 for more information.
+    If present, the optional message is printed with any additional
+    operands interpolated into the message string.
   }];
 }
 
