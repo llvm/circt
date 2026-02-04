@@ -1451,6 +1451,7 @@ def IntegerShlOp : IntegerBinaryPrimOp<"integer.shl"> {
 }
 
 def UnknownValueOp : FIRRTLOp<"unknown", [
+  Pure,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
 ]> {
   let summary = "A property with an unknown value used to tie-off connections";
@@ -1461,7 +1462,7 @@ def UnknownValueOp : FIRRTLOp<"unknown", [
     This lowers to an `om::UnknownOp`.
   }];
   let arguments = (ins);
-  let results = (outs Res<PropertyType, "", [MemAlloc]>:$result);
+  let results = (outs PropertyType:$result);
   let assemblyFormat = "attr-dict `:` type($result)";
 }
 
