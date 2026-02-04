@@ -2256,6 +2256,46 @@ struct LayerDisable : public OpReduction<CircuitOp> {
 
 } // namespace
 
+/// A reduction pattern that removes elements from FIRRTL list create
+/// operations. This generates one match per element in each list, allowing
+/// selective removal of individual elements.
+struct ListCreateElementRemover : public OpReduction<ListCreateOp> {
+  void matches(ListCreateOp listOp,
+               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
+    // Create one match for each element in the list
+    auto elements = listOp.getElements();
+    for (size_t i = 0; i < elements.size(); ++i)
+      addMatch(1, i);
+  }
+
+  LogicalResult rewriteMatches(ListCreateOp listOp,
+                               ArrayRef<uint64_t> matches) override {
+    // Convert matches to a set for fast lookup
+    llvm::SmallDenseSet<uint64_t, 4> matchesSet(matches.begin(), matches.end());
+
+    // Collect elements that should be kept (not in matches)
+    SmallVector<Value> newElements;
+    auto elements = listOp.getElements();
+    for (size_t i = 0; i < elements.size(); ++i) {
+      if (!matchesSet.contains(i))
+        newElements.push_back(elements[i]);
+    }
+
+    // Create a new list with the remaining elements
+    OpBuilder builder(listOp);
+    auto newListOp = ListCreateOp::create(builder, listOp.getLoc(),
+                                          listOp.getType(), newElements);
+    listOp.getResult().replaceAllUsesWith(newListOp.getResult());
+    listOp.erase();
+
+    return success();
+  }
+
+  std::string getName() const override {
+    return "firrtl-list-create-element-remover";
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Reduction Registration
 //===----------------------------------------------------------------------===//
@@ -2304,6 +2344,7 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   patterns.add<FIRRTLOperandForwarder<0>, 11>();
   patterns.add<FIRRTLOperandForwarder<1>, 10>();
   patterns.add<FIRRTLOperandForwarder<2>, 9>();
+  patterns.add<ListCreateElementRemover, 8>();
   patterns.add<DetachSubaccesses, 7>();
   patterns.add<RootPortPruner, 5>();
   patterns.add<ExtmoduleInstanceRemover, 4>();
