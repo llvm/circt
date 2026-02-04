@@ -271,9 +271,9 @@ struct SVModuleOpConversion : public OpConversionPattern<SVModuleOp> {
     rewriter.setInsertionPoint(op);
 
     // Create the hw.module to replace moore.module
-    auto hwModuleOp = 
-      hw::HWModuleOp::create(rewriter, op.getLoc(), op.getSymNameAttr(), 
-                             getModulePortInfo(*typeConverter, op));
+    auto hwModuleOp =
+        hw::HWModuleOp::create(rewriter, op.getLoc(), op.getSymNameAttr(),
+                               getModulePortInfo(*typeConverter, op));
     // Make hw.module have the same visibility as the moore.module.
     // The entry/top level module is public, otherwise is private.
     SymbolTable::setSymbolVisibility(hwModuleOp,
