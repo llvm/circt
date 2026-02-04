@@ -1607,11 +1607,7 @@ struct NoOpConversion : public OpConversionPattern<SourceOp> {
   LogicalResult
   matchAndRewrite(SourceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto type = typeConverter->convertType(op.getResult().getType());
-    if (type == adaptor.getInput().getType())
-      rewriter.replaceOp(op, adaptor.getInput());
-    else
-      return failure();
+    rewriter.replaceOp(op, adaptor.getInput());
     return success();
   }
 };
