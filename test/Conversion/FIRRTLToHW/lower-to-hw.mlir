@@ -667,7 +667,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:       }
     // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref.expr @STOP_COND_
     // CHECK-NEXT:       sv.if [[STOP_COND]] {
-    // CHECK-NEXT:         sv.fatal
+    // CHECK-NEXT:         sv.fatal.procedural
     // CHECK-NEXT:       }
     // CHECK-NEXT:     }
     // CHECK-NEXT:     sv.if [[TMP4]] {
@@ -677,7 +677,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:       }
     // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref.expr @STOP_COND_
     // CHECK-NEXT:       sv.if [[STOP_COND]] {
-    // CHECK-NEXT:         sv.fatal
+    // CHECK-NEXT:         sv.fatal.procedural
     // CHECK-NEXT:       }
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }

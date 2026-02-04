@@ -708,14 +708,9 @@ def ExitOp : SVOp<"exit", [ProceduralOp]> {
 // Severity Message Tasks
 //===----------------------------------------------------------------------===//
 
-def FatalOp : SVOp<"fatal", [ProceduralOp]> {
-  let summary = "`$fatal` severity message task";
-  let description = [{
-    Generates a run-time fatal error which terminates the simulation with an
-    error code. Makes an implicit call to `$finish`, forwarding the `verbosity`
-    operand. If present, the optional message is printed with any additional
-    operands interpolated into the message string.
-  }];
+/// Base class for fatal message operations
+class FatalMessageOp<string mnemonic, list<Trait> traits = []> :
+    SVOp<mnemonic, traits> {
   let arguments = (ins
     VerbosityIntAttr:$verbosity,
     OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$substitutions);
@@ -731,6 +726,25 @@ def FatalOp : SVOp<"fatal", [ProceduralOp]> {
       "mlir::StringAttr":$message),
       "build(odsBuilder, odsState, verbosity, message, ValueRange{});">,
   ];
+}
+
+def FatalProceduralOp : FatalMessageOp<"fatal.procedural", [ProceduralOp]> {
+  let summary = "`$fatal` severity message task (run-time)";
+  let description = [{
+    Generates a run-time fatal error which terminates the simulation with an
+    error code. Makes an implicit call to `$finish`, forwarding the `verbosity`
+    operand. See IEEE 1800-2023 section 20.10 for more information.
+
+  }];
+}
+
+def FatalOp : FatalMessageOp<"fatal", [NonProceduralOp]> {
+  let summary = "`$fatal` severity message task (elaboration-time)";
+  let description = [{
+    Generates an elaboration-time fatal error which terminates the elaboration
+    with an error code. Makes an implicit call to `$finish`, forwarding the
+    `verbosity` operand. See IEEE 1800-2023 section 20.11 for more information.
+  }];
 }
 
 /// Commonalities between `ErrorOp`, `WarningOp`, and `InfoOp`.
@@ -754,8 +768,7 @@ class NonfatalMessageOp<string mnemonic, list<Trait> traits = []> :
   ];
 }
 
-foreach severity = ["Error", "Warning", "Info"] in
-{
+foreach severity = ["Error", "Warning", "Info"] in {
   defvar severityLower = !tolower(severity);
 
   // Define procedural (run-time) severity message operations
@@ -765,6 +778,7 @@ foreach severity = ["Error", "Warning", "Info"] in
     let description = [{
       This system task indicates a run-time }] # severityLower # [{. It must be
       used within a procedural region (e.g., `initial`, `always` blocks).
+      See IEEE 1800-2023 section 20.10 for more information.
     }] # messageDescription;
   }
 
@@ -774,6 +788,7 @@ foreach severity = ["Error", "Warning", "Info"] in
     let description = [{
       This system task indicates an elaboration-time }] # severityLower # [{. It must
       be used outside of procedural regions and will be executed during elaboration.
+      See IEEE 1800-2023 section 20.11 for more information.
     }] # messageDescription;
   }
 }

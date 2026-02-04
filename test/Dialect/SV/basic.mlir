@@ -243,9 +243,9 @@ hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
 
   // Severity Message Tasks (run-time)
   // CHECK-NEXT: sv.initial {
-  // CHECK-NEXT: sv.fatal 1
-  // CHECK-NEXT: sv.fatal 1, "hello"
-  // CHECK-NEXT: sv.fatal 1, "hello %d"(%arg0) : i1
+  // CHECK-NEXT: sv.fatal.procedural 1
+  // CHECK-NEXT: sv.fatal.procedural 1, "hello"
+  // CHECK-NEXT: sv.fatal.procedural 1, "hello %d"(%arg0) : i1
   // CHECK-NEXT: sv.error.procedural
   // CHECK-NEXT: sv.error.procedural "hello"
   // CHECK-NEXT: sv.error.procedural "hello %d"(%arg0) : i1
@@ -257,9 +257,9 @@ hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
   // CHECK-NEXT: sv.info.procedural "hello %d"(%arg0) : i1
   // CHECK-NEXT: }
   sv.initial {
-    sv.fatal 1
-    sv.fatal 1, "hello"
-    sv.fatal 1, "hello %d"(%arg0) : i1
+    sv.fatal.procedural 1
+    sv.fatal.procedural 1, "hello"
+    sv.fatal.procedural 1, "hello %d"(%arg0) : i1
     sv.error.procedural
     sv.error.procedural "hello"
     sv.error.procedural "hello %d"(%arg0) : i1
@@ -272,6 +272,9 @@ hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
   }
 
   // Elaboration-time Severity Message Tasks
+  // CHECK-NEXT: sv.fatal 1
+  // CHECK-NEXT: sv.fatal 1, "elaboration fatal"
+  // CHECK-NEXT: sv.fatal 1, "elaboration fatal %d"(%arg0) : i1
   // CHECK-NEXT: sv.error
   // CHECK-NEXT: sv.error "elaboration error"
   // CHECK-NEXT: sv.error "elaboration error %d"(%arg0) : i1
@@ -281,6 +284,9 @@ hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
   // CHECK-NEXT: sv.info
   // CHECK-NEXT: sv.info "elaboration info"
   // CHECK-NEXT: sv.info "elaboration info %d"(%arg0) : i1
+  sv.fatal 1
+  sv.fatal 1, "elaboration fatal"
+  sv.fatal 1, "elaboration fatal %d"(%arg0) : i1
   sv.error
   sv.error "elaboration error"
   sv.error "elaboration error %d"(%arg0) : i1

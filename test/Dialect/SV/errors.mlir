@@ -77,9 +77,9 @@ hw.module @IfOp(in %arg0: i1) {
 }
 
 // -----
-hw.module @Fatal() {
-  // expected-error @+1 {{sv.fatal should be in a procedural region}}
-  sv.fatal 1
+hw.module @FatalProcedural() {
+  // expected-error @+1 {{sv.fatal.procedural should be in a procedural region}}
+  sv.fatal.procedural 1
 }
 
 // -----

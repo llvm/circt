@@ -563,7 +563,8 @@ static bool isAssertOp(hw::HWSymbolCache &symCache, Operation *op) {
   }
 
   return isa<AssertOp, FinishOp, FWriteOp, FFlushOp, AssertConcurrentOp,
-             FatalOp, verif::AssertOp, verif::ClockedAssertOp>(op);
+             FatalProceduralOp, FatalOp, verif::AssertOp,
+             verif::ClockedAssertOp>(op);
 }
 
 static bool isCoverOp(hw::HWSymbolCache &symCache, Operation *op) {

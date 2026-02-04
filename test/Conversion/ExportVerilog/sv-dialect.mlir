@@ -226,12 +226,12 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
       // CHECK-NEXT: $fatal(0);
       // CHECK-NEXT: $fatal(0, "foo");
       // CHECK-NEXT: $fatal(0, "foo", val);
-      sv.fatal 1
-      sv.fatal 1, "foo"
-      sv.fatal 1, "foo"(%val) : i8
-      sv.fatal 0
-      sv.fatal 0, "foo"
-      sv.fatal 0, "foo"(%val) : i8
+      sv.fatal.procedural 1
+      sv.fatal.procedural 1, "foo"
+      sv.fatal.procedural 1, "foo"(%val) : i8
+      sv.fatal.procedural 0
+      sv.fatal.procedural 0, "foo"
+      sv.fatal.procedural 0, "foo"(%val) : i8
       // CHECK-NEXT: $error;
       // CHECK-NEXT: $error("foo");
       // CHECK-NEXT: $error("foo", val);
@@ -325,7 +325,7 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
   // CHECK-NOT: begin
   sv.initial {
     // CHECK-NEXT: $fatal
-    sv.fatal 1
+    sv.fatal.procedural 1
   }
 
   // CHECK-NEXT: initial begin
@@ -828,7 +828,7 @@ hw.module @issue720(in %clock: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1) {
     // CHECK:   if (arg1)
     // CHECK:     $fatal;
     sv.if %arg1  {
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
 
     // CHECK:   if (_GEN)
@@ -838,13 +838,13 @@ hw.module @issue720(in %clock: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1) {
     %610 = comb.and %arg1, %arg2 : i1
     %611 = comb.and %arg3, %610 : i1
     sv.if %610  {
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
 
     // CHECK:   if (arg3 & _GEN)
     // CHECK:     $fatal;
     sv.if %611  {
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
   } // CHECK: end // always @(posedge)
 
@@ -864,7 +864,7 @@ hw.module @issue720ifdef(in %clock: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1
     // CHECK:    if (arg1)
     // CHECK:      $fatal;
     sv.if %arg1  {
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
 
     // CHECK:    `ifdef FUN_AND_GAMES
@@ -875,13 +875,13 @@ hw.module @issue720ifdef(in %clock: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1
       // CHECK:        $fatal;
       %610 = comb.and %arg1, %arg2 : i1
       sv.if %610  {
-        sv.fatal 1
+        sv.fatal.procedural 1
       }
       // CHECK:      if (arg3 & _GEN)
       // CHECK:        $fatal;
       %611 = comb.and %arg3, %610 : i1
      sv.if %611  {
-        sv.fatal 1
+        sv.fatal.procedural 1
       }
       // CHECK:    `endif
       // CHECK:  end // always @(posedge)

@@ -19,7 +19,7 @@
 // CHECK: sv.func.call.procedural @fn
 // CHECK: sv.fwrite
 // CHECK: sv.fflush
-// CHECK: sv.fatal 1
+// CHECK: sv.fatal.procedural 1
 // CHECK: foo_assert
 // CHECK: hw.module private @issue1246_assume(in %clock : i1) attributes {
 // CHECK-SAME: comment = "VCS coverage exclude_file"
@@ -66,7 +66,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
           %out = sv.func.call.procedural @fn () : () -> (i32)
           sv.fwrite %out, "foo"
           sv.fflush fd %out
-          sv.fatal 1
+          sv.fatal.procedural 1
           sv.assume %clock, immediate
           sv.cover %clock, immediate
         }

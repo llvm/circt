@@ -56,8 +56,8 @@ public:
             // Simulator control tasks
             StopOp, FinishOp, ExitOp,
             // Severity message tasks
-            FatalOp, ErrorProceduralOp, WarningProceduralOp, InfoProceduralOp,
-            ErrorOp, WarningOp, InfoOp,
+            FatalProceduralOp, FatalOp, ErrorProceduralOp, WarningProceduralOp,
+            InfoProceduralOp, ErrorOp, WarningOp, InfoOp,
             // Memory loading tasks
             ReadMemOp,
             // Generate statements
@@ -180,6 +180,7 @@ public:
   HANDLE(ExitOp, Unhandled);
 
   // Severity message tasks
+  HANDLE(FatalProceduralOp, Unhandled);
   HANDLE(FatalOp, Unhandled);
   HANDLE(ErrorProceduralOp, Unhandled);
   HANDLE(WarningProceduralOp, Unhandled);

@@ -4088,6 +4088,22 @@ private:
                                         std::optional<unsigned> verbosity,
                                         StringAttr message,
                                         ValueRange operands);
+
+  // Helper template for nonfatal message operations
+  template <typename OpTy>
+  LogicalResult emitNonfatalMessageOp(OpTy op, const char *taskName) {
+    return emitSeverityMessageTask(op, PPExtString(taskName), {},
+                                   op.getMessageAttr(), op.getSubstitutions());
+  }
+
+  // Helper template for fatal message operations
+  template <typename OpTy>
+  LogicalResult emitFatalMessageOp(OpTy op) {
+    return emitSeverityMessageTask(op, PPExtString("$fatal"), op.getVerbosity(),
+                                   op.getMessageAttr(), op.getSubstitutions());
+  }
+
+  LogicalResult visitSV(FatalProceduralOp op);
   LogicalResult visitSV(FatalOp op);
   LogicalResult visitSV(ErrorProceduralOp op);
   LogicalResult visitSV(WarningProceduralOp op);
@@ -4773,39 +4789,36 @@ StmtEmitter::emitSeverityMessageTask(Operation *op, PPExtString taskName,
   return success();
 }
 
+LogicalResult StmtEmitter::visitSV(FatalProceduralOp op) {
+  return emitFatalMessageOp(op);
+}
+
 LogicalResult StmtEmitter::visitSV(FatalOp op) {
-  return emitSeverityMessageTask(op, PPExtString("$fatal"), op.getVerbosity(),
-                                 op.getMessageAttr(), op.getSubstitutions());
+  return emitFatalMessageOp(op);
 }
 
 LogicalResult StmtEmitter::visitSV(ErrorProceduralOp op) {
-  return emitSeverityMessageTask(op, PPExtString("$error"), {},
-                                 op.getMessageAttr(), op.getSubstitutions());
+  return emitNonfatalMessageOp(op, "$error");
 }
 
 LogicalResult StmtEmitter::visitSV(WarningProceduralOp op) {
-  return emitSeverityMessageTask(op, PPExtString("$warning"), {},
-                                 op.getMessageAttr(), op.getSubstitutions());
+  return emitNonfatalMessageOp(op, "$warning");
 }
 
 LogicalResult StmtEmitter::visitSV(InfoProceduralOp op) {
-  return emitSeverityMessageTask(op, PPExtString("$info"), {},
-                                 op.getMessageAttr(), op.getSubstitutions());
+  return emitNonfatalMessageOp(op, "$info");
 }
 
 LogicalResult StmtEmitter::visitSV(ErrorOp op) {
-  return emitSeverityMessageTask(op, PPExtString("$error"), {},
-                                 op.getMessageAttr(), op.getSubstitutions());
+  return emitNonfatalMessageOp(op, "$error");
 }
 
 LogicalResult StmtEmitter::visitSV(WarningOp op) {
-  return emitSeverityMessageTask(op, PPExtString("$warning"), {},
-                                 op.getMessageAttr(), op.getSubstitutions());
+  return emitNonfatalMessageOp(op, "$warning");
 }
 
 LogicalResult StmtEmitter::visitSV(InfoOp op) {
-  return emitSeverityMessageTask(op, PPExtString("$info"), {},
-                                 op.getMessageAttr(), op.getSubstitutions());
+  return emitNonfatalMessageOp(op, "$info");
 }
 
 LogicalResult StmtEmitter::visitSV(ReadMemOp op) {

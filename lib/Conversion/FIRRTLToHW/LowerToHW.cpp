@@ -5362,7 +5362,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
                 });
             addIfProceduralBlock(
                 sv::MacroRefExprOp::create(builder, boolType, "STOP_COND_"),
-                [&]() { sv::FatalOp::create(builder); });
+                [&]() { sv::FatalProceduralOp::create(builder); });
           });
         });
       });
