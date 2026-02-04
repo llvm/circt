@@ -226,30 +226,30 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
       // CHECK-NEXT: $fatal(0);
       // CHECK-NEXT: $fatal(0, "foo");
       // CHECK-NEXT: $fatal(0, "foo", val);
-      sv.fatal 1
-      sv.fatal 1, "foo"
-      sv.fatal 1, "foo"(%val) : i8
-      sv.fatal 0
-      sv.fatal 0, "foo"
-      sv.fatal 0, "foo"(%val) : i8
+      sv.fatal.procedural 1
+      sv.fatal.procedural 1, "foo"
+      sv.fatal.procedural 1, "foo"(%val) : i8
+      sv.fatal.procedural 0
+      sv.fatal.procedural 0, "foo"
+      sv.fatal.procedural 0, "foo"(%val) : i8
       // CHECK-NEXT: $error;
       // CHECK-NEXT: $error("foo");
       // CHECK-NEXT: $error("foo", val);
-      sv.error
-      sv.error "foo"
-      sv.error "foo"(%val) : i8
+      sv.error.procedural
+      sv.error.procedural "foo"
+      sv.error.procedural "foo"(%val) : i8
       // CHECK-NEXT: $warning;
       // CHECK-NEXT: $warning("foo");
       // CHECK-NEXT: $warning("foo", val);
-      sv.warning
-      sv.warning "foo"
-      sv.warning "foo"(%val) : i8
+      sv.warning.procedural
+      sv.warning.procedural "foo"
+      sv.warning.procedural "foo"(%val) : i8
       // CHECK-NEXT: $info;
       // CHECK-NEXT: $info("foo");
       // CHECK-NEXT: $info("foo", val);
-      sv.info
-      sv.info "foo"
-      sv.info "foo"(%val) : i8
+      sv.info.procedural
+      sv.info.procedural "foo"
+      sv.info.procedural "foo"(%val) : i8
 
       // CHECK-NEXT: Emit some stuff in verilog
       // CHECK-NEXT: Great power and responsibility!
@@ -281,6 +281,26 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
   } {sv.attributes = [#sv.attribute<"sv attr">]}
   // CHECK-NEXT:  end // initial
 
+  // Elaboration-time Severity Message Tasks
+  // CHECK-NEXT: $error;
+  // CHECK-NEXT: $error("elaboration error");
+  // CHECK-NEXT: $error("elaboration error", val);
+  sv.error
+  sv.error "elaboration error"
+  sv.error "elaboration error"(%val) : i8
+  // CHECK-NEXT: $warning;
+  // CHECK-NEXT: $warning("elaboration warning");
+  // CHECK-NEXT: $warning("elaboration warning", val);
+  sv.warning
+  sv.warning "elaboration warning"
+  sv.warning "elaboration warning"(%val) : i8
+  // CHECK-NEXT: $info;
+  // CHECK-NEXT: $info("elaboration info");
+  // CHECK-NEXT: $info("elaboration info", val);
+  sv.info
+  sv.info "elaboration info"
+  sv.info "elaboration info"(%val) : i8
+
   // CHECK-NEXT: assert property (@(posedge clock) cond);
   sv.assert.concurrent posedge %clock, %cond
   // CHECK-NEXT: assert_1: assert property (@(posedge clock) cond);
@@ -305,7 +325,7 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
   // CHECK-NOT: begin
   sv.initial {
     // CHECK-NEXT: $fatal
-    sv.fatal 1
+    sv.fatal.procedural 1
   }
 
   // CHECK-NEXT: initial begin
@@ -808,7 +828,7 @@ hw.module @issue720(in %clock: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1) {
     // CHECK:   if (arg1)
     // CHECK:     $fatal;
     sv.if %arg1  {
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
 
     // CHECK:   if (_GEN)
@@ -818,13 +838,13 @@ hw.module @issue720(in %clock: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1) {
     %610 = comb.and %arg1, %arg2 : i1
     %611 = comb.and %arg3, %610 : i1
     sv.if %610  {
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
 
     // CHECK:   if (arg3 & _GEN)
     // CHECK:     $fatal;
     sv.if %611  {
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
   } // CHECK: end // always @(posedge)
 
@@ -844,7 +864,7 @@ hw.module @issue720ifdef(in %clock: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1
     // CHECK:    if (arg1)
     // CHECK:      $fatal;
     sv.if %arg1  {
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
 
     // CHECK:    `ifdef FUN_AND_GAMES
@@ -855,13 +875,13 @@ hw.module @issue720ifdef(in %clock: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1
       // CHECK:        $fatal;
       %610 = comb.and %arg1, %arg2 : i1
       sv.if %610  {
-        sv.fatal 1
+        sv.fatal.procedural 1
       }
       // CHECK:      if (arg3 & _GEN)
       // CHECK:        $fatal;
       %611 = comb.and %arg3, %610 : i1
      sv.if %611  {
-        sv.fatal 1
+        sv.fatal.procedural 1
       }
       // CHECK:    `endif
       // CHECK:  end // always @(posedge)

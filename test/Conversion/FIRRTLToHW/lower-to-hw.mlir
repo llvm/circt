@@ -663,21 +663,21 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     sv.if [[TMP2]] {
     // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.macro.ref.expr @ASSERT_VERBOSE_COND_
     // CHECK-NEXT:       sv.if [[ASSERT_VERBOSE_COND]] {
-    // CHECK-NEXT:         sv.error "assert1 %d, %d"(%value, %false) : i42, i1
+    // CHECK-NEXT:         sv.error.procedural "assert1 %d, %d"(%value, %false) : i42, i1
     // CHECK-NEXT:       }
     // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref.expr @STOP_COND_
     // CHECK-NEXT:       sv.if [[STOP_COND]] {
-    // CHECK-NEXT:         sv.fatal
+    // CHECK-NEXT:         sv.fatal.procedural
     // CHECK-NEXT:       }
     // CHECK-NEXT:     }
     // CHECK-NEXT:     sv.if [[TMP4]] {
     // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.macro.ref.expr @ASSERT_VERBOSE_COND_
     // CHECK-NEXT:       sv.if [[ASSERT_VERBOSE_COND]] {
-    // CHECK-NEXT:         sv.error "assert2 %d"([[SIGNEDVAL]]) : i24
+    // CHECK-NEXT:         sv.error.procedural "assert2 %d"([[SIGNEDVAL]]) : i24
     // CHECK-NEXT:       }
     // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref.expr @STOP_COND_
     // CHECK-NEXT:       sv.if [[STOP_COND]] {
-    // CHECK-NEXT:         sv.fatal
+    // CHECK-NEXT:         sv.fatal.procedural
     // CHECK-NEXT:       }
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
@@ -708,7 +708,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK: %[[TIME:.+]] = sv.system.time
     // CHECK:      sv.if %ASSERT_VERBOSE_COND_ {
-    // CHECK-NEXT:   sv.error "In %m at %0t, value = %d"(%[[TIME]], %value) : i64, i42
+    // CHECK-NEXT:   sv.error.procedural "In %m at %0t, value = %d"(%[[TIME]], %value) : i64, i42
     %time2 = firrtl.fstring.time : !firrtl.fstring
     %hier2 = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
     firrtl.assert %clock, %cond, %enable, "In {{}} at {{}}, value = %d"(%hier2, %time2, %value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.fstring, !firrtl.fstring, !firrtl.uint<42> {format = "ifElseFatal", isConcurrent = true}

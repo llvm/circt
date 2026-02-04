@@ -5357,10 +5357,12 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
             addIfProceduralBlock(
                 sv::MacroRefExprOp::create(builder, boolType,
                                            "ASSERT_VERBOSE_COND_"),
-                [&]() { sv::ErrorOp::create(builder, message, messageOps); });
+                [&]() {
+                  sv::ErrorProceduralOp::create(builder, message, messageOps);
+                });
             addIfProceduralBlock(
                 sv::MacroRefExprOp::create(builder, boolType, "STOP_COND_"),
-                [&]() { sv::FatalOp::create(builder); });
+                [&]() { sv::FatalProceduralOp::create(builder); });
           });
         });
       });
