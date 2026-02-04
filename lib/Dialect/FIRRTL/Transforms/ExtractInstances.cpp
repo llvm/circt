@@ -260,7 +260,7 @@ void ExtractInstancesPass::collectAnnos() {
   StringRef clkgateFileName;
   StringRef clkgateWrapperModule;
   AnnotationSet::removeAnnotations(circuit, [&](Annotation anno) {
-    if (!anno.isClass(extractClockGatesAnnoClass))
+    if (!anno.isClass(extractClockGatesFileAnnoClass))
       return false;
     LLVM_DEBUG(llvm::dbgs()
                << "Clock gate extraction config: " << anno.getDict() << "\n");
@@ -290,7 +290,7 @@ void ExtractInstancesPass::collectAnnos() {
   StringRef memoryFileName;
   StringRef memoryWrapperModule;
   AnnotationSet::removeAnnotations(circuit, [&](Annotation anno) {
-    if (!anno.isClass(extractSeqMemsAnnoClass))
+    if (!anno.isClass(extractSeqMemsFileAnnoClass))
       return false;
     LLVM_DEBUG(llvm::dbgs()
                << "Memory extraction config: " << anno.getDict() << "\n");

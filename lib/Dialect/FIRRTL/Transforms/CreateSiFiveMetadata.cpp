@@ -700,7 +700,7 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
   auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
                                                   circuitOp.getBodyBlock());
   AnnotationSet annos(circuitOp);
-  auto dirAnno = annos.getAnnotation(metadataDirectoryAttrName);
+  auto dirAnno = annos.getAnnotation(metadataDirAnnoClass);
   StringRef metadataDir = "metadata";
   if (dirAnno)
     if (auto dir = dirAnno.getMember<StringAttr>("dirname"))
@@ -788,7 +788,7 @@ CreateSiFiveMetadataPass::emitRetimeModulesMetadata(ObjectModelIR &omir) {
 
   // Get the filename, removing the annotation from the circuit.
   StringRef filename;
-  if (failed(removeAnnotationWithFilename(circuitOp, retimeModulesFileAnnoClass,
+  if (failed(removeAnnotationWithFilename(circuitOp, retimeModulesAnnoClass,
                                           filename)))
     return failure();
 

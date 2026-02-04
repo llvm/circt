@@ -635,7 +635,7 @@ LogicalResult CircuitOp::verifyRegions() {
   for (auto &op : *getBodyBlock()) {
     // Verify modules.
     if (auto moduleOp = dyn_cast<FModuleOp>(op)) {
-      if (AnnotationSet(moduleOp).hasAnnotation(dutAnnoClass))
+      if (AnnotationSet(moduleOp).hasAnnotation(markDUTAnnoClass))
         dutModules.push_back(moduleOp);
       continue;
     }
