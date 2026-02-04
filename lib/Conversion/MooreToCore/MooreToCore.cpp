@@ -241,8 +241,6 @@ static hw::ModulePortInfo getModulePortInfo(const TypeConverter &typeConverter,
 
   for (auto port : moduleTy.getPorts()) {
     Type portTy = typeConverter.convertType(port.type);
-    if (!portTy)
-      return hw::ModulePortInfo({});
     if (port.dir == hw::ModulePort::Direction::Output) {
       ports.push_back(
           hw::PortInfo({{port.name, portTy, port.dir}, resultNum++, {}}));
@@ -273,9 +271,9 @@ struct SVModuleOpConversion : public OpConversionPattern<SVModuleOp> {
     rewriter.setInsertionPoint(op);
 
     // Create the hw.module to replace moore.module
-    auto portInfo = getModulePortInfo(*typeConverter, op);
-    auto hwModuleOp = hw::HWModuleOp::create(rewriter, op.getLoc(),
-                                             op.getSymNameAttr(), portInfo);
+    auto hwModuleOp = 
+      hw::HWModuleOp::create(rewriter, op.getLoc(), op.getSymNameAttr(), 
+                             getModulePortInfo(*typeConverter, op));
     // Make hw.module have the same visibility as the moore.module.
     // The entry/top level module is public, otherwise is private.
     SymbolTable::setSymbolVisibility(hwModuleOp,
