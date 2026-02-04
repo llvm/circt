@@ -1,5 +1,5 @@
-// RUN: circt-reduce %s --test /usr/bin/env --test-arg grep --test-arg -q --test-arg "list.create.*%%s1" --include list-create-element-remover --keep-best=0 | FileCheck %s --check-prefixes=CHECK,CHECK-S1
-// RUN: circt-reduce %s --test /usr/bin/env --test-arg grep --test-arg -q --test-arg "list.create.*%%s2" --include list-create-element-remover --keep-best=0 | FileCheck %s --check-prefixes=CHECK,CHECK-S2
+// RUN: circt-reduce %s --test /usr/bin/env --test-arg grep --test-arg -q --test-arg "list.create.*%%s1" --include firrtl-list-create-element-remover --keep-best=0 | FileCheck %s --check-prefixes=CHECK,CHECK-S1
+// RUN: circt-reduce %s --test /usr/bin/env --test-arg grep --test-arg -q --test-arg "list.create.*%%s2" --include firrtl-list-create-element-remover --keep-best=0 | FileCheck %s --check-prefixes=CHECK,CHECK-S2
 
 // UNSUPPORTED: system-windows
 //   See https://github.com/llvm/circt/issues/4129
@@ -41,4 +41,3 @@ firrtl.circuit "ListCreateElementRemover" {
     firrtl.propassign %out_objs, %1 : !firrtl.list<class<@ClassTest()>>
   }
 }
-
