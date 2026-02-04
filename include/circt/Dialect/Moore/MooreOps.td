@@ -812,18 +812,6 @@ def IntToLogicOp : MooreOp<"int_to_logic", [
   let hasFolder = 1;
 }
 
-def ToBuiltinBoolOp : MooreOp<"to_builtin_bool", [Pure]> {
-  let summary = "Convert a `!moore.l1` or `!moore.i1` to a builtin `i1`";
-  let description = [{
-    Maps `X` and `Z` to 0, and passes through 1 and 0 unchanged.
-  }];
-  let arguments = (ins AnySingleBitType:$input);
-  let results = (outs I1:$result);
-  let assemblyFormat = [{
-    $input attr-dict `:` type($input)
-  }];
-}
-
 def ToBuiltinIntOp : MooreOp<"to_builtin_int", [Pure,
   TypesMatchWith<"result is builtin integer matching input type",
     "input", "result", [{
