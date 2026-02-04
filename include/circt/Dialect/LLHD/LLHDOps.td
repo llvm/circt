@@ -491,7 +491,7 @@ def SigStructExtractOp : LLHDOp<"sig.struct_extract", [
     ```
   }];
 
-  let arguments = (ins RefTypeOf<StructType>:$input, StrAttr:$field);
+  let arguments = (ins RefTypeOf<AnyTypeOf<[StructType, UnionType]>>:$input, StrAttr:$field);
   let results = (outs RefTypeOf<AnyType>:$result);
 
   let assemblyFormat = [{
