@@ -195,8 +195,6 @@ moore.module @Expressions(
   moore.logic_to_int %c : l32
   // CHECK: moore.int_to_logic [[A]] : i32
   moore.int_to_logic %a : i32
-  // CHECK: moore.to_builtin_bool [[X]] : i1
-  moore.to_builtin_bool %x : i1
   // CHECK: moore.to_builtin_int [[X]] : i1
   moore.to_builtin_int %x : i1
   // CHECK: moore.to_builtin_int [[A]] : i32

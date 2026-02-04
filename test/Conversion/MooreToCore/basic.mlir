@@ -1235,7 +1235,7 @@ func.func @RecurciveConditional(%arg0 : !moore.l1, %arg1 : !moore.l1) {
 }
 
 // CHECK-LABEL: func.func @Conversions
-func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16, %arg2: !moore.l1) {
+func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16) {
   // CHECK: [[TMP:%.+]] = comb.extract %arg0 from 0 : (i16) -> i8
   // CHECK: dbg.variable "trunc", [[TMP]]
   %0 = moore.trunc %arg0 : i16 -> i8
@@ -1262,14 +1262,10 @@ func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16, %arg2: !moore.l1) {
   %4 = moore.logic_to_int %arg1 : l16
   dbg.variable "l2i", %4 : !moore.i16
 
-  // CHECK: dbg.variable "builtin_bool", %arg2 : i1
-  %5 = moore.to_builtin_bool %arg2 : l1
-  dbg.variable "builtin_bool", %5 : i1
-
   // CHECK: dbg.variable "builtin_bool", %arg1 : i16
-  %6 = moore.logic_to_int %arg1 : l16
-  %7 = moore.to_builtin_int %6 : i16
-  dbg.variable "builtin_bool", %7 : i16
+  %5 = moore.logic_to_int %arg1 : l16
+  %6 = moore.to_builtin_int %5 : i16
+  dbg.variable "builtin_bool", %6 : i16
 
   return
 }
