@@ -2291,7 +2291,9 @@ struct ListCreateElementRemover : public OpReduction<ListCreateOp> {
     return success();
   }
 
-  std::string getName() const override { return "firrtl-list-create-element-remover"; }
+  std::string getName() const override {
+    return "firrtl-list-create-element-remover";
+  }
 };
 
 //===----------------------------------------------------------------------===//
