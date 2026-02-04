@@ -1632,8 +1632,6 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
       }
     }
 
-    circuitOp->dump();
-
     return success();
   }
 
