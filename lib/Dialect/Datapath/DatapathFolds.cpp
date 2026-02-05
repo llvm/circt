@@ -283,6 +283,16 @@ struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
   }
 };
 
+// compress(..., sext(x),...) ->
+// compress(..., zext({~x[msb-1], x[msb-2:0]}), (-1) << (width(x)-1), ...)
+// Justification:
+// sext(x) = {x[msb-1], x[msb-1], ...,  x[msb-1], x[msb-2], ..., x[0]} =
+//         = {       0,        0, ..., ~x[msb-1], x[msb-2], ..., x[0]} +
+//           {       1,        1, ...,         1,        0, ...,    0} =
+//         = zext({~x[msb-1], x[msb-2], ..., x[0]}) + ((-1) << (width(x)-1))
+//
+// Note that we are adding arguments to the compressor, but we are reducing the
+// number of unknown bits in the compressor array
 struct SignedCompress : public OpRewritePattern<CompressOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -302,31 +312,38 @@ struct SignedCompress : public OpRewritePattern<CompressOp> {
         continue;
       }
 
-      auto baseWidth = (*sextInput).getType().getIntOrFloatBitWidth();
-      // Need a separate sign-bit that gets extended by at least two bits
-      if (baseWidth <= 1 && opSize - baseWidth > 1) {
+      auto baseWidth = sextInput->getType().getIntOrFloatBitWidth();
+      // Need a separate sign-bit that gets extended by at least two bits to be
+      // beneficial
+      if (baseWidth <= 1 && (opSize - baseWidth) > 1) {
         newInputs.push_back(input);
         continue;
       }
 
+      // x[msb-2:0]
       auto base = comb::ExtractOp::create(rewriter, op.getLoc(), *sextInput, 0,
                                           baseWidth - 1);
+      // x[msb-1]
       auto signBit = comb::ExtractOp::create(rewriter, op.getLoc(), *sextInput,
                                              baseWidth - 1, 1);
       auto invSign =
           comb::createOrFoldNot(op.getLoc(), signBit, rewriter, true);
+      // {~x[msb-1], x[msb-2:0]}
       auto newOp = comb::ConcatOp::create(rewriter, op.getLoc(),
                                           ValueRange{invSign, base});
       auto newOpZExt = comb::createZExt(rewriter, op.getLoc(), newOp, opSize);
 
       newInputs.push_back(newOpZExt);
 
+      // (-1) << (width(x)-1)
       auto ones = APInt::getAllOnes(opSize);
-      auto correction =
-          hw::ConstantOp::create(rewriter, op.getLoc(), ones << baseWidth - 1);
+      auto correction = hw::ConstantOp::create(rewriter, op.getLoc(),
+                                               ones << (baseWidth - 1));
 
       newInputs.push_back(correction);
     }
+
+    // If no sext inputs have not updated any arguments
     if (newInputs.size() == size)
       return failure();
 
