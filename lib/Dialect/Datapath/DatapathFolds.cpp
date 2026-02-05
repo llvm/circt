@@ -328,16 +328,19 @@ struct ReduceNumPartialProducts : public OpRewritePattern<PartialProductOp> {
 struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
   using OpRewritePattern::OpRewritePattern;
 
-  // pp(sext(a), sext(b)) -> pp(a,b) - sign(a)*b - sign(b)*a + sign(a)*sign(b)
-  // Consider a 3x3 signed multiplier - producing a 6-bit result:
-  // sext(a)*sext(b) = a[1:0]*b[1:0] -  4*a[2]*b[1:0]
-  //                                 -  4*b[2]*a[1:0]
-  //                                 + 16*a[2]*b[2]
+  // Based on the classical Baugh-Wooley algorithm for signed mulitplication.
+  // Paper: A Two's Complement Parallel Array Multiplication Algorithm
   //
-  //                 = a[1:0]*b[1:0] + {2'b11, a[2] & b[1:0], 2'b11} + 1'b1
-  //                                 + {2'b11, a[2] & b[1:0], 2'b11} + 1'b1
-  //                                 + {a[2]&b[2], 4'b0000}
-  // Then can constant fold the different constants
+  // Consider a p-bit by q-bit signed multiplier - producing a (p+q)-bit result:
+  // a_sign = a[p-1], a_mag = a[p-2:0],
+  // b_sign = b[q-1], b_mag = b[q-2:0]
+  // sext(a) * sext(b) = a_mag * b_mag                    [unsigned product]
+  //                     - 2^(p-1) * a_sign * b_mag       [sign correction]
+  //                     - 2^(q-1) * b_sign * a_mag       [sign correction]
+  //                     + 2^(p+q-2) * a_sign * b_sign    [sign * sign]
+  //
+  // We implement optimizations to turn the subtractions into bitwise negations
+  // with constant corrections that can be folded together.
   LogicalResult matchAndRewrite(PartialProductOp op,
                                 PatternRewriter &rewriter) const override {
     auto inputWidth = op.getOperand(0).getType().getIntOrFloatBitWidth();
@@ -353,7 +356,7 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
 
     // TODO: add support for different width inputs
     // Need to have a sign bit in both inputs
-    if (lhsWidth != rhsWidth | lhsWidth <= 1 | rhsWidth <= 1)
+    if (lhsWidth != rhsWidth || lhsWidth <= 1 || rhsWidth <= 1)
       return failure();
 
     // No further reduction possible
@@ -380,7 +383,13 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
     auto newPP = datapath::PartialProductOp::create(
         rewriter, op.getLoc(), ValueRange{lhsBaseZext, rhsBaseZext}, maxRows);
 
-    // Create ~(sign(lhs) & rhsBase)
+    // Optimization (similar for second sign correction), ext to (p+q)-bits:
+    // -2^(p-1)*sign(lhs)*rhsBase = ~((sign(lhs) * rhsBase) << (p-1)) + 1
+    //                            = (~(replicate(sign(lhs)) & rhsBase)) << (p-1)
+    //                            + (-1) << (p+q-2)      [msb correction]
+    //                            + (1<<(p-1)) - 1 + 1   [lsb correction]
+
+    // Create ~(replicate(sign(lhs)) & rhsBase)
     auto lhsSignReplicate = comb::ReplicateOp::create(rewriter, op.getLoc(),
                                                       lhsSignBit, rhsBaseWidth);
     auto lhsSignAndRhs =
@@ -392,7 +401,7 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
     auto alignLhsSignCorrection = zeroPad(
         rewriter, op.getLoc(), lhsSignCorrection, inputWidth, lhsBaseWidth);
 
-    // Create ~(sign(rhs) & lhsBase)
+    // Create ~(replicate(sign(rhs)) & lhsBase)
     auto rhsSignReplicate = comb::ReplicateOp::create(rewriter, op.getLoc(),
                                                       rhsSignBit, lhsBaseWidth);
     auto rhsSignAndLhs =
@@ -404,6 +413,7 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
     auto alignRhsSignCorrection = zeroPad(
         rewriter, op.getLoc(), rhsSignCorrection, inputWidth, rhsBaseWidth);
 
+    // 2^(p+q-2) * sign(lhs) * sign(rhs) = (sign(lhs) & sign(rhs)) << (p+q-2)
     // Create sign(lhs) & sign(rhs)
     auto signAnd =
         comb::AndOp::create(rewriter, op.getLoc(), lhsSignBit, rhsSignBit);
@@ -411,20 +421,16 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
     auto alignSignAndZext = zeroPad(rewriter, op.getLoc(), signAnd, inputWidth,
                                     lhsBaseWidth + rhsBaseWidth);
 
-    // Constant correction from the signCorrection rows (e.g. 3-bit case):
-    // {2'b11, a[2]*b[1:0], 2'b11} + 1'b1 + {2'b11, a[2]*b[1:0], 2'b11} + 1'b1
-    // ==
-    // 2 * (2'b11 << 4 + 3'b100) + {a[2]&b[1:0], 2'b00} + {b[2]&a[1:0], 2'b00}
-    // Note constant correction will depend on lhs and rhs widths - so general
-    // case is not twice the correction for one side.
+    // Gather constant corrections together (once for each sign correction):
+    // (-1) << (p+q-2) + (1<<(p-1)) - 1 + 1
     auto ones = APInt::getAllOnes(inputWidth);
-    auto lowerLhs = APInt(inputWidth, (1 << lhsBaseWidth));
-    auto correctionLhs = lowerLhs + (ones << (lhsBaseWidth + rhsBaseWidth));
-    auto lowerRhs = APInt(inputWidth, (1 << rhsBaseWidth));
-    auto correctionRhs = lowerRhs + (ones << (lhsBaseWidth + rhsBaseWidth));
+    auto lowerLhs = APInt::getOneBitSet(inputWidth, lhsBaseWidth);
+    auto lowerRhs = APInt::getOneBitSet(inputWidth, rhsBaseWidth);
+    auto msbCorrection = ones << (lhsBaseWidth + rhsBaseWidth);
+    auto correction = lowerLhs + lowerRhs + 2 * msbCorrection;
 
-    auto constantCorrection = hw::ConstantOp::create(
-        rewriter, op.getLoc(), correctionLhs + correctionRhs);
+    auto constantCorrection =
+        hw::ConstantOp::create(rewriter, op.getLoc(), correction);
 
     auto zero = hw::ConstantOp::create(rewriter, op.getLoc(),
                                        APInt::getZero(inputWidth));
@@ -432,13 +438,13 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
     SmallVector<Value> newResults(newPP.getResults().begin(),
                                   newPP.getResults().end());
 
-    // (~(sign(lhs)*rhs[1:0])) << 2
+    // ~(replicate(sign(lhs)) & rhsBase) * 2^(p-1)
     newResults.push_back(alignLhsSignCorrection);
-    // (~(sign(rhs)*lhs[1:0])) << 2
+    // ~(replicate(sign(rhs)) & lhsBase) * 2^(q-1)
     newResults.push_back(alignRhsSignCorrection);
-    // sign(lhs)*sign(rhs) << 4
+    // sign(lhs)*sign(rhs) * 2^(p+q-2)
     newResults.push_back(alignSignAndZext);
-    // Constant correction = 2 * (2'b11 << 4 + 3'b100)
+    // Constant correction
     newResults.push_back(constantCorrection);
     // Zero pad if necessary
     newResults.append(op.getNumResults() - newResults.size(), zero);
