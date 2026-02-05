@@ -2621,6 +2621,15 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
       isa<moore::ClassHandleType>(value.getType()))
     return maybeUpcastHandle(*this, value, cast<moore::ClassHandleType>(type));
 
+  // Handle builtin int to Moore int
+  if (auto intType = dyn_cast<moore::IntType>(type);
+      intType && isa<mlir::IntegerType>(value.getType())) {
+    auto mooreInt = builder.createOrFold<moore::FromBuiltinIntOp>(loc, value);
+    return intType.getDomain() == moore::Domain::FourValued
+               ? builder.createOrFold<moore::IntToLogicOp>(loc, mooreInt)
+               : mooreInt;
+  }
+
   // TODO: Handle other conversions with dedicated ops.
   if (value.getType() != type)
     value = moore::ConversionOp::create(builder, loc, type, value);
