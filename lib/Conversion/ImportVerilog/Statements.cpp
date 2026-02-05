@@ -774,7 +774,28 @@ struct StmtVisitor {
   // Handle concurrent assertion statements.
   LogicalResult visit(const slang::ast::ConcurrentAssertionStatement &stmt) {
     auto loc = context.convertLocation(stmt.sourceRange);
-    auto property = context.convertAssertionExpression(stmt.propertySpec, loc);
+
+    // Check for a `disable iff` expression:
+    // The DisableIff construct can only occcur at the top level of an assertion
+    // and cannot be nested within properties.
+    // Hence we only need to detect if the top level assertion expression
+    // has type DisableIff, negate the `disable` expression, then pass it to
+    // the `enable` parameter of AssertOp/AssumeOp.
+    Value enable;
+    Value property;
+    if (stmt.propertySpec.kind == slang::ast::AssertionExprKind::DisableIff) {
+      auto disableIff =
+          static_cast<const slang::ast::DisableIffAssertionExpr &>(
+              stmt.propertySpec);
+      auto disableCond = context.convertRvalueExpression(disableIff.condition);
+      auto enableCond = moore::NotOp::create(builder, loc, disableCond);
+
+      enable = context.convertToI1(enableCond);
+      property = context.convertAssertionExpression(disableIff.expr, loc);
+    } else {
+      property = context.convertAssertionExpression(stmt.propertySpec, loc);
+    }
+
     if (!property)
       return failure();
 
@@ -782,10 +803,10 @@ struct StmtVisitor {
     if (stmt.ifTrue && stmt.ifTrue->as_if<slang::ast::EmptyStatement>()) {
       switch (stmt.assertionKind) {
       case slang::ast::AssertionKind::Assert:
-        verif::AssertOp::create(builder, loc, property, Value(), StringAttr{});
+        verif::AssertOp::create(builder, loc, property, enable, StringAttr{});
         return success();
       case slang::ast::AssertionKind::Assume:
-        verif::AssumeOp::create(builder, loc, property, Value(), StringAttr{});
+        verif::AssumeOp::create(builder, loc, property, enable, StringAttr{});
         return success();
       default:
         break;

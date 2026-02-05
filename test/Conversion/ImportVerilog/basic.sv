@@ -2766,6 +2766,26 @@ module ConcurrentAssert(input clk);
   endproperty
   assert property (p2(a, s2(a, b)));
 
+  // CHECK-NOT: moore.procedure always {
+  // CHECK: [[READ_B:%.+]] = moore.read %b : <l1>
+  // CHECK: [[ENABLE:%.+]] = moore.not [[READ_B]]
+  // CHECK: [[CONV_1_ENABLE:%.+]] = moore.logic_to_int [[ENABLE]] : l1
+  // CHECK: [[CONV_2_ENABLE:%.+]] = moore.to_builtin_int [[CONV_1_ENABLE]] : i1
+  // CHECK: [[READ_A:%.+]] = moore.read %a : <i1>
+  // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
+  // CHECK: verif.assert [[CONV_A]] if [[CONV_2_ENABLE]] : i1
+  assert property (disable iff (b) a);
+
+  // CHECK-NOT: moore.procedure always {
+  // CHECK: [[READ_A:%.+]] = moore.read %a : <i1>
+  // CHECK: [[ENABLE:%.+]] = moore.not [[READ_A]]
+  // CHECK: [[ENABLE_CONV:%.+]] = moore.to_builtin_int [[ENABLE]] : i1
+  // CHECK: [[READ_B:%.+]] = moore.read %b : <l1>
+  // CHECK: [[CONV_1_B:%.+]] = moore.logic_to_int [[READ_B]] : l1
+  // CHECK: [[CONV_2_B:%.+]] = moore.to_builtin_int [[CONV_1_B]] : i1
+  // CHECK: verif.assert [[CONV_2_B]] if [[ENABLE_CONV]] : i1
+  assert property (disable iff (a) b);
+
 endmodule
 
 // CHECK: [[TMP:%.+]] = moore.constant 42 : i32
