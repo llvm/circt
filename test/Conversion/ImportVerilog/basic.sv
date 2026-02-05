@@ -2786,6 +2786,16 @@ module ConcurrentAssert(input clk);
   // CHECK: verif.assert [[CONV_2_B]] if [[ENABLE_CONV]] : i1
   assert property (disable iff (a) b);
 
+  // CHECK-NOT: moore.procedure always {
+  // CHECK: [[READ_A:%.+]] = moore.read %a : <i1>
+  // CHECK: [[ENABLE:%.+]] = moore.not [[READ_A]]
+  // CHECK: [[ENABLE_CONV:%.+]] = moore.to_builtin_int [[ENABLE]] : i1
+  // CHECK: [[READ_B:%.+]] = moore.read %b : <l1>
+  // CHECK: [[CONV_1_B:%.+]] = moore.logic_to_int [[READ_B]] : l1
+  // CHECK: [[CONV_2_B:%.+]] = moore.to_builtin_int [[CONV_1_B]] : i1
+  // CHECK: verif.assume [[CONV_2_B]] if [[ENABLE_CONV]] : i1
+  assume property (disable iff (a) b);
+
 endmodule
 
 // CHECK: [[TMP:%.+]] = moore.constant 42 : i32
