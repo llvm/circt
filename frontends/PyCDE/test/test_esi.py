@@ -251,7 +251,7 @@ class ListTest(Module):
 # CHECK-NEXT:     [[CLK_I1:%.+]] = seq.from_clock %clk
 # CHECK-NEXT:     sv.alwaysff(posedge [[CLK_I1]]) {
 # CHECK-NEXT:       sv.if %transaction {
-# CHECK-NEXT:         sv.info "Pre-transform: %p"([[SNOOP_DATA]]) : i32
+# CHECK-NEXT:         sv.info.procedural "Pre-transform: %p"([[SNOOP_DATA]]) : i32
 # CHECK-NEXT:       }
 # CHECK-NEXT:     }
 # CHECK-NEXT:     %rawOutput, [[VALID2:%.+]] = esi.unwrap.vr %s1_in, [[READY2:%.+]] : i32
