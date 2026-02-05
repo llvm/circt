@@ -599,7 +599,7 @@ static llvm::StringMap<AnnoRecord> annotationRecords{{
 
 // Auto-generated annotation records from FIRRTLAnnotations.td
 #define GET_ANNOTATION_RECORD_LIST
-#include "circt/Dialect/FIRRTL/FIRRTLAnnotationRecords.inc"
+#include "circt/Dialect/FIRRTL/FIRRTLAnnotationRecords.h.inc"
 }};
 
 LogicalResult

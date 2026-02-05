@@ -45,20 +45,13 @@ def SeqMem : TargetType<"SeqMemOp">;
 def ins;
 
 // Base class for annotation parameter types.
-class ParamType<string typeName> {
-  string type = typeName;
+class ParamType;
 
-  // Default values for fields that may be accessed by wrappers. Subclasses can
-  // override these as needed.
-  dag objectFields = (ins);
-  list<string> allowedValues = [];
-}
+def StringParam : ParamType;
 
-def StringParam : ParamType<"string">;
+def IntegerParam : ParamType;
 
-def IntegerParam : ParamType<"integer">;
-
-def BooleanParam : ParamType<"boolean">;
+def BooleanParam : ParamType;
 
 // Object parameter type (nested JSON object)
 // Can be used in two ways:
@@ -66,44 +59,40 @@ def BooleanParam : ParamType<"boolean">;
 //    This creates a structured object with named, typed fields
 // 2. As a base class for reusable object types:
 //    def MyObjectType : ObjectParam<(ins StringParam:$x, IntegerParam:$y)>;
-class ObjectParam<dag fields = (ins)> : ParamType<"object"> {
-  // Override the objectFields from base class
-  let objectFields = fields;
+class ObjectParam<dag fields = (ins)> : ParamType {
+  dag objectFields = fields;
+  code description = "";
 }
 
 // Array parameter type.
-def ArrayParam : ParamType<"array">;
+def ArrayParam : ParamType;
 
 // Target parameter type (FIRRTL reference target)
-def TargetParam : ParamType<"target">;
+def TargetParam : ParamType;
 
 // Enum parameter (string with allowed values)
-class EnumParam<list<string> values> : ParamType<"string"> {
-  // Override the allowedValues from base class
-  let allowedValues = values;
+class EnumParam<list<string> values> : ParamType {
+  list<string> allowedValues = values;
+}
+
+// Union parameter (one of several allowed types)
+// Used to specify that a field can be one of multiple specific types.
+// Example: UnionParam<[AugmentedGroundType, AugmentedVectorType, AugmentedBundleType]>
+class UnionParam<list<ObjectParam> types> : ParamType {
+  list<ObjectParam> allowedTypes = types;
 }
 
 // Decorates a parameter as optional with an optional default value.
-class Optional<ParamType paramType, string defaultVal = ""> : ParamType<""> {
+class Optional<ParamType paramType, string defaultVal = ""> : ParamType {
   ParamType baseType = paramType;
   string defaultValue = defaultVal;
-  bit isRequired = 0;
-
-  let type = paramType.type;
-  let objectFields = paramType.objectFields;
-  let allowedValues = paramType.allowedValues;
 }
 
-// Helper class to attach documentation to a parameter type.
-// Usage: Doc<ParamType, "description text">:$paramName
-class Doc<ParamType paramType, string desc> : ParamType<""> {
+// Helper class to attach documentation to a parameter type. This can ONLY be
+// used at the outermost layer of annotation members and ObjectParam fields.
+class Doc<ParamType paramType, string desc> {
+  ParamType baseType = paramType;
   string documentation = desc;
-
-  // Explicitly copy all fields from the base type
-  // Note: this must be kept in sync with ParamType fields
-  let type = paramType.type;
-  let objectFields = paramType.objectFields;
-  let allowedValues = paramType.allowedValues;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1049,21 +1038,58 @@ def ReferenceTarget : ObjectParam<(ins
   Doc<ArrayParam, "Path of instances from circuit to module">:$path,
   Doc<StringParam, "Reference name">:$ref,
   Doc<ArrayParam, "Component path (field/index selections)">:$component
-)>;
+)> {
+  let description = [{
+    Represents a reference to a specific component in the FIRRTL circuit hierarchy.
+    Used in Grand Central annotations to specify targets for interface connections.
+  }];
+}
 
-// AugmentedField object - represents a field in an AugmentedBundleType
-def AugmentedField : ObjectParam<(ins
-  Doc<StringParam, "Field name">:$name,
-  Optional<Doc<StringParam, "Field description">>:$description,
-  Doc<ObjectParam<(ins)>, "Field type (AugmentedGroundType, AugmentedVectorType, or AugmentedBundleType)">:$tpe
-)>;
+// AugmentedGroundTypeObject - represents a ground type in Grand Central
+def AugmentedGroundTypeObject : ObjectParam<(ins
+  Doc<StringParam, "Class name (always 'sifive.enterprise.grandcentral.AugmentedGroundType')">:$class,
+  Doc<ReferenceTarget, "ReferenceTarget of the target component">:$ref
+)> {
+  let description = [{
+    Represents a ground (scalar) type in a Grand Central interface.
+    Maps to a SystemVerilog logic type.
+  }];
+}
 
-// AugmentedBundleType object - represents a SystemVerilog interface definition
+// AugmentedVectorTypeObject - represents a vector type in Grand Central
+def AugmentedVectorTypeObject : ObjectParam<(ins
+  Doc<StringParam, "Class name (always 'sifive.enterprise.grandcentral.AugmentedVectorType')">:$class,
+  Doc<ArrayParam, "List of augmented types">:$elements
+)> {
+  let description = [{
+    Represents a vector (array) type in a Grand Central interface.
+    Maps to a SystemVerilog unpacked array.
+  }];
+}
+
+// AugmentedBundleType object - represents a bundle type in Grand Central
 def AugmentedBundleType : ObjectParam<(ins
   Doc<StringParam, "Class name (always 'sifive.enterprise.grandcentral.AugmentedBundleType')">:$class,
   Doc<StringParam, "SystemVerilog interface name">:$defName,
   Doc<ArrayParam, "List of interface fields">:$elements
-)>;
+)> {
+  let description = [{
+    Represents a SystemVerilog interface definition for Grand Central views.
+    Defines the structure of a bundle type that will be emitted as a SystemVerilog interface.
+  }];
+}
+
+// AugmentedField object - represents a field in an AugmentedBundleType
+def AugmentedField : ObjectParam<(ins
+  Doc<StringParam, "Field name">:$name,
+  Doc<Optional<StringParam>, "Field description">:$description,
+  Doc<UnionParam<[AugmentedGroundTypeObject, AugmentedVectorTypeObject, AugmentedBundleType]>, "Field type">:$tpe
+)> {
+  let description = [{
+    Represents a single field in a Grand Central SystemVerilog interface.
+    Each field has a name, optional description, and a type (which can be a ground type, vector, or nested bundle).
+  }];
+}
 
 // Grand Central Annotation Definitions
 

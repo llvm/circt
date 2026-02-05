@@ -45,7 +45,7 @@ add_circt_doc(FIRRTLOpInterfaces Dialects/FIRRTLOpInterfaces -gen-op-interface-d
 # Generate FIRRTL Annotations classes and documentation.
 set(LLVM_TARGET_DEFINITIONS FIRRTLAnnotations.td)
 circt_tablegen(CIRCT FIRRTLAnnotationDetails.h.inc --firrtl-annotations-details TARGETS MLIRFIRRTLIncGen)
-circt_tablegen(CIRCT FIRRTLAnnotationRecords.inc --firrtl-annotation-records TARGETS MLIRFIRRTLIncGen)
+circt_tablegen(CIRCT FIRRTLAnnotationRecords.h.inc --firrtl-annotation-records TARGETS MLIRFIRRTLIncGen)
 circt_tablegen(CIRCT ${CIRCT_BINARY_DIR}/docs/Dialects/FIRRTLAnnotations.md --firrtl-annotations-doc TARGETS circt-doc)
 
 # Generate Pass documentation.
