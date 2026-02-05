@@ -163,19 +163,18 @@ Sequence and property expressions in SVAs can specify a clock with respect to wh
 
 ### Disable Iff
 
-Properties in SVA can have a disable condition attached, which allows for preemptive resets to be expressed. If the disable condition is true at any time during the evaluation of a property, the property is considered disabled. (See IEEE 1800-2017 end of section 16.12 "Declaring properties".) This maps to the `ltl.disable` operation.
+Properties in SVA can have a disable condition attached, which allows for preemptive resets to be expressed. If the disable condition is true at any time during the evaluation of a property, the property is considered disabled. (See IEEE 1800-2017 end of section 16.12 "Declaring properties".)
 
-- `disable iff (expr) prop`. **Disable condition.** Equivalent to `ltl.disable %prop if %expr`.
+Since disable conditions cannot be nested (in fact, it is illegal to have a disable condition on any property which is instantiated in the definition of another), disable conditions can be implemented using the `enable` argument of the `verif.assert` and `verif.assume` operations. (See [Verif](./Verif.md#operations) dialect.)
 
-Note that SVAs only allow for entire properties to be disabled, at the point at which they are passed to an assert, assume, or cover statement. It is explicitly forbidden to define a property with a `disable iff` clause and then using it within another property. For example, the following is forbidden:
+- `assert property (disable iff (expr) prop);`. **Assertion with disable condition.** Equivalent to:
+```mlir
+%1 = moore.not %cond : <l1>
+%2 = moore.logic_to_int %1 : <i1>
+%cond_neg = moore.to_builtin_int %2 : i1
+verif.assert %prop if %cond_neg : i1
 ```
-property p0; disable iff (cond) a |-> b; endproperty
-property p1; eventually p0; endproperty
-```
-In this example, `p1` refers to property `p0`, which is illegal in SVA since `p0` itself defines a disable condition.
-
-In contrast, the LTL dialect explicitly allows for properties to be disabled at arbitrary points, and disabled properties to be used in other properties. Since a disabled nested property also disables the parent property, the IR can always be rewritten into a form where there is only one `disable iff` condition at the root of a property expression.  
-  
+where the `logic_to_int` conversion is only necessary if `%cond` is 4-valued.
 ## Mapping SVA to CIRCT dialects  
   
 Knowing how to map SVA constructs to CIRCT is important to allow these to expressed correctly in any front-end. Here you will find a non-exhaustive list of conversions from SVA to CIRCT dialects.  
@@ -183,7 +182,16 @@ Knowing how to map SVA constructs to CIRCT is important to allow these to expres
 - **properties**: `!ltl.property`.    
 - **sequences**: `!ltl.sequence`.  
   
-- **`disable iff (cond)`**:  `ltl.disable %prop if %cond`
+- **`assert property (disable iff (cond) expr);`**: 
+```mlir
+%1 = moore.not %cond : <l1>
+%2 = moore.logic_to_int %1 : <i1>
+%cond_neg = moore.to_builtin_int %2 : i1
+verif.assert %expr if %cond_neg : i1
+```
+
+where the `logic_to_int` conversion is only necessary if `%cond` is 4-valued.
+
 - **local variables**: Not currently possible to encode.  
 
 - **`$rose(a)`**: 
