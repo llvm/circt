@@ -33,7 +33,7 @@ MLIR_CAPI_EXPORTED MlirType seqImmutableTypeGet(MlirType type);
 /// Creates a seq immutable type
 MLIR_CAPI_EXPORTED MlirType seqImmutableTypeGetInnerType(MlirType type);
 
-/// If the type is an HLMemType
+/// If the type is a HLMemType
 MLIR_CAPI_EXPORTED bool seqTypeIsAHLMem(MlirType type);
 
 /// Creates a seq HLMem type
