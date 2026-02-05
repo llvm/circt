@@ -279,16 +279,6 @@ struct WiringProblem {
   RefTypeUsage refTypeUsage;
 };
 
-/// A representation of a legacy Wiring problem consisting of a signal source
-/// that should be connected to one or many sinks.
-struct LegacyWiringProblem {
-  /// A source to wire from.
-  Value source;
-
-  /// Sink(s) to wire to.
-  SmallVector<Value> sinks;
-};
-
 /// A store of pending modifications to a FIRRTL module associated with solving
 /// one or more WiringProblems.
 struct ModuleModifications {
@@ -356,7 +346,6 @@ struct ApplyState {
   bool noRefTypePorts;
 
   DenseSet<InstanceOp> wiringProblemInstRefs;
-  DenseMap<StringAttr, LegacyWiringProblem> legacyWiringProblems;
   SmallVector<WiringProblem> wiringProblems;
 
   hw::InnerSymbolNamespace &getNamespace(FModuleLike module) {
