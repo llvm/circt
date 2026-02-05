@@ -783,15 +783,13 @@ struct StmtVisitor {
     // the `enable` parameter of AssertOp/AssumeOp.
     Value enable;
     Value property;
-    if (stmt.propertySpec.kind == slang::ast::AssertionExprKind::DisableIff) {
-      auto disableIff =
-          static_cast<const slang::ast::DisableIffAssertionExpr &>(
-              stmt.propertySpec);
-      auto disableCond = context.convertRvalueExpression(disableIff.condition);
+    if (auto *disableIff =
+            stmt.propertySpec.as_if<slang::ast::DisableIffAssertionExpr>()) {
+      auto disableCond = context.convertRvalueExpression(disableIff->condition);
       auto enableCond = moore::NotOp::create(builder, loc, disableCond);
 
       enable = context.convertToI1(enableCond);
-      property = context.convertAssertionExpression(disableIff.expr, loc);
+      property = context.convertAssertionExpression(disableIff->expr, loc);
     } else {
       property = context.convertAssertionExpression(stmt.propertySpec, loc);
     }
