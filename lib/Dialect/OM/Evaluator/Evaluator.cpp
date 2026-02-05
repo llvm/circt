@@ -560,13 +560,19 @@ circt::om::Evaluator::evaluateObjectField(ObjectFieldOp op,
 
   auto result = currentObjectResult.value();
 
-  // If the field is an unknown value, return that.
-  if (isa<evaluator::UnknownValue>(result.get()))
-    return result;
+  auto objectFieldValue = getOrCreateValue(op, actualParams, loc).value();
+
+  // If the object is an unknown value, set the field reference to an unknown
+  // value and return it.
+  if (isa<evaluator::UnknownValue>(result.get())) {
+    auto unknownValue =
+        std::make_shared<evaluator::UnknownValue>(op.getContext(), loc);
+    llvm::cast<evaluator::ReferenceValue>(objectFieldValue.get())
+        ->setValue(unknownValue);
+    return objectFieldValue;
+  }
 
   auto *currentObject = llvm::cast<evaluator::ObjectValue>(result.get());
-
-  auto objectFieldValue = getOrCreateValue(op, actualParams, loc).value();
 
   // Iteratively access nested fields through the path until we reach the final
   // field in the path.

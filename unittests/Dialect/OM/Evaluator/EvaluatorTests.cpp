@@ -1479,7 +1479,8 @@ om.class @Foo(
   g: !om.integer,
   h: !om.integer,
   i: !om.class.type<@Baz>,
-  j: !om.integer
+  j: !om.integer,
+  k: !om.class.type<@Bar>
 ) {
   %0 = om.constant #om.integer<1 : i4> : !om.integer
   %1 = om.integer.add %0, %unknown_int : !om.integer
@@ -1491,7 +1492,10 @@ om.class @Foo(
   %7 = om.unknown : !om.integer
   %8 = om.object @Baz() : () -> !om.class.type<@Baz>
   %9 = om.object.field %8, [@a] : (!om.class.type<@Baz>) -> !om.integer
-  om.class.fields %unknown_int, %1, %2, %3, %4, %5, %6, %7, %8, %9 : !om.integer, !om.integer, !om.list<!om.integer>, !om.list<!om.integer>, !om.frozenbasepath, !om.frozenpath, !om.integer, !om.integer, !om.class.type<@Baz>, !om.integer
+  %10 = om.unknown : !om.class.type<@Baz>
+  %11 = om.object.field %10, [@a] : (!om.class.type<@Baz>) -> !om.integer
+  %12 = om.object @Bar(%11) : (!om.integer) -> !om.class.type<@Bar>
+  om.class.fields %unknown_int, %1, %2, %3, %4, %5, %6, %7, %8, %9, %12 : !om.integer, !om.integer, !om.list<!om.integer>, !om.list<!om.integer>, !om.frozenbasepath, !om.frozenpath, !om.integer, !om.integer, !om.class.type<@Baz>, !om.integer, !om.class.type<@Bar>
 }
 )MLIR";
 
@@ -1517,11 +1521,20 @@ om.class @Foo(
 
   auto *object = llvm::cast<evaluator::ObjectValue>(result.value().get());
 
-  ASSERT_EQ(object->getFieldNames().size(), 10ul);
+  ASSERT_EQ(object->getFieldNames().size(), 11ul);
 
   for (auto fieldName : object->getFieldNames()) {
     auto field = object->getField(cast<StringAttr>(fieldName));
-    ASSERT_TRUE(isa<circt::om::evaluator::UnknownValue>(field->get()));
+    // Field 'k' is a Bar object (created from an unknown field access)
+    if (cast<StringAttr>(fieldName).getValue() == "k") {
+      ASSERT_TRUE(isa<circt::om::evaluator::ObjectValue>(field->get()));
+      auto *barObject = llvm::cast<evaluator::ObjectValue>(field->get());
+      auto barField = barObject->getField("b");
+      ASSERT_TRUE(succeeded(barField));
+      ASSERT_TRUE(isa<circt::om::evaluator::UnknownValue>(barField->get()));
+    } else {
+      ASSERT_TRUE(isa<circt::om::evaluator::UnknownValue>(field->get()));
+    }
   }
 }
 
