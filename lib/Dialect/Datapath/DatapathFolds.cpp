@@ -315,7 +315,7 @@ struct SextCompress : public OpRewritePattern<CompressOp> {
       auto baseWidth = sextInput->getType().getIntOrFloatBitWidth();
       // Need a separate sign-bit that gets extended by at least two bits to be
       // beneficial
-      if (baseWidth <= 1 && (opSize - baseWidth) > 1) {
+      if (baseWidth <= 1 || (opSize - baseWidth) <= 1) {
         newInputs.push_back(input);
         continue;
       }
