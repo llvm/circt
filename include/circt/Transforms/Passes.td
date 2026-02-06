@@ -57,7 +57,7 @@ def MapArithToCombPass : Pass<"map-arith-to-comb"> {
   let summary = "Map arith ops to combinational logic";
   let description = [{
     A pass which does a simple `arith` to `comb` mapping wherever possible.
-    This pass will not convert:  
+    This pass will not convert:
     * floating point operations
     * operations using `vector`-typed values
 
@@ -72,7 +72,7 @@ def MapArithToCombPass : Pass<"map-arith-to-comb"> {
            "Enable best effort lowering of operations"
            "(eg, existing arith operations that have no lowering stay as is)">
   ];
-  
+
   let constructor = "circt::createMapArithToCombPass(/*enableBestEffortLowering=*/false)";
   let dependentDialects = ["circt::hw::HWDialect, mlir::arith::ArithDialect, circt::comb::CombDialect"];
 }
@@ -216,6 +216,30 @@ def HierarchicalRunner : Pass<"hierarchical-runner", "::mlir::ModuleOp"> {
     Option<"includeBoundInstances", "include-bound-instances", "bool", "false",
            "Whether to include bound instances in the hierarchy">
   ];
+}
+
+def EnsureDivisionIsSpeculatable : Pass<"ensure-division-is-speculatable", "::mlir::ModuleOp"> {
+  let summary = "Ensure division is speculatable";
+  let description = [{
+    This pass ensures that division operations (comb::DivUOp, comb::DivSOp, etc)
+    are speculatable by ensuring that the divisor is never zero.
+
+    DivUOp/DivSOp/ModUOp/ModSOp define a division by zero (or signed overflow)
+    as undefined behavior. When converting to LLVM, this will naturally result
+    in a LLVM UDiv or SDiv instruction, which also define division by zero as
+    undefined behavior. On X86, this may result in a SIGFPE at runtime.
+
+    On X86, division by zero is maskable in software using fenv.h, but signed
+    overflow is not maskable.
+
+    This pass rewrites DivUOp/DivSOp/ModUOp/ModSOp so that their divisor is never
+    zero, and so that (INT_MIN / -1) never happens. The result in both cases is
+    fixed to zero by use of a select.
+
+    This avoids a trap when running via LLVM's JIT.
+  }];
+  let constructor = "circt::createEnsureDivisionIsSpeculatablePass()";
+  let dependentDialects = ["circt::comb::CombDialect", "circt::hw::HWDialect"];
 }
 
 #endif // CIRCT_TRANSFORMS_PASSES
