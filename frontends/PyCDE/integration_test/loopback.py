@@ -14,13 +14,13 @@
 
 # Test C++ header generation against the manifest file
 # RUN: %PYTHON% -m esiaccel.codegen --file %t/esi_system_manifest.json --output-dir %t/include/loopback/
-# RUN: c++ -I %t/include %S/test_software/loopback.cpp -o %t/test
+# RUN: %cxx -I %t/include %S/test_software/loopback.cpp -o %t/test
 # RUN: %t/test | FileCheck %s --check-prefix=CPP-TEST
 # RUN: FileCheck %s --check-prefix=LOOPBACK-H --input-file %t/include/loopback/LoopbackIP.h
 
 # Test C++ header generation from the live accelerator.
 # RUN: esi-cosim.py --source %t -- %PYTHON% -m esiaccel.codegen --platform cosim --connection env --output-dir %t/include/loopback/
-# RUN: c++ -I %t/include %S/test_software/loopback.cpp -o %t/test
+# RUN: %cxx -I %t/include %S/test_software/loopback.cpp -o %t/test
 # RUN: %t/test | FileCheck %s --check-prefix=CPP-TEST
 
 import sys
