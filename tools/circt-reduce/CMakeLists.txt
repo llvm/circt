@@ -13,6 +13,7 @@ set(LIBS
   CIRCTEmitReductions
   CIRCTHWReductions
   CIRCTFIRRTLReductions
+  CIRCTOMReductions
   CIRCTRTGReductions
   CIRCTReduceLib
   MLIRIR
