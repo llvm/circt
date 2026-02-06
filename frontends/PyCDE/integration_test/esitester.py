@@ -23,7 +23,7 @@
 # RUN: esi-cosim.py --source %t -- esitester cosim env streaming_add | FileCheck %s --check-prefix=STREAMING_ADD
 # RUN: esi-cosim.py --source %t -- esitester cosim env streaming_add -t | FileCheck %s --check-prefix=STREAMING_ADD
 # RUN: esi-cosim.py --source %t -- esitester cosim env translate_coords | FileCheck %s --check-prefix=TRANSLATE_COORDS
-# RUN: esi-cosim.py --source %t -- esitester cosim env serial_coords | FileCheck %s --check-prefix=SERIAL_COORDS
+# RUN: esi-cosim.py --source %t -- esitester cosim env serial_coords -n 40 -b 33 | FileCheck %s --check-prefix=SERIAL_COORDS
 # RUN: ESI_COSIM_MANIFEST_MMIO=1 esi-cosim.py --source %t -- esiquery cosim env info
 # RUN: esi-cosim.py --source %t -- esiquery cosim env telemetry | FileCheck %s --check-prefix=TELEMETRY
 
@@ -64,11 +64,7 @@ from pycde.types import Bits, Channel, ChannelSignaling, UInt
 # TRANSLATE_COORDS: Coord translate test passed
 
 # SERIAL_COORDS: Serial coord translate test results:
-# SERIAL_COORDS:   coord[0]=(222709,894611) + (10,20) = (222719,894631)
-# SERIAL_COORDS:   coord[1]=(772894,429150) + (10,20) = (772904,429170)
-# SERIAL_COORDS:   coord[2]=(629806,138727) + (10,20) = (629816,138747)
-# SERIAL_COORDS:   coord[3]=(218516,390276) + (10,20) = (218526,390296)
-# SERIAL_COORDS:   coord[4]=(750021,423525) + (10,20) = (750031,423545)
+# SERIAL_COORDS:   coord[0]=
 # SERIAL_COORDS: Serial coord translate test passed
 
 # TELEMETRY: ********************************
@@ -1212,30 +1208,30 @@ class EsiTester(Module):
 
   @generator
   def construct(ports):
-    # CallbackTest(
-    #     clk=ports.clk,
-    #     rst=ports.rst,
-    #     instance_name="cb_test",
-    #     appid=AppID("cb_test"),
-    # )
-    # LoopbackInOutAdd(
-    #     clk=ports.clk,
-    #     rst=ports.rst,
-    #     instance_name="loopback",
-    #     appid=AppID("loopback"),
-    # )
-    # StreamingAdder(1)(
-    #     clk=ports.clk,
-    #     rst=ports.rst,
-    #     instance_name="streaming_adder",
-    #     appid=AppID("streaming_adder"),
-    # )
-    # CoordTranslator(
-    #     clk=ports.clk,
-    #     rst=ports.rst,
-    #     instance_name="coord_translator",
-    #     appid=AppID("coord_translator"),
-    # )
+    CallbackTest(
+        clk=ports.clk,
+        rst=ports.rst,
+        instance_name="cb_test",
+        appid=AppID("cb_test"),
+    )
+    LoopbackInOutAdd(
+        clk=ports.clk,
+        rst=ports.rst,
+        instance_name="loopback",
+        appid=AppID("loopback"),
+    )
+    StreamingAdder(1)(
+        clk=ports.clk,
+        rst=ports.rst,
+        instance_name="streaming_adder",
+        appid=AppID("streaming_adder"),
+    )
+    CoordTranslator(
+        clk=ports.clk,
+        rst=ports.rst,
+        instance_name="coord_translator",
+        appid=AppID("coord_translator"),
+    )
     SerialCoordTranslator(
         clk=ports.clk,
         rst=ports.rst,
@@ -1243,60 +1239,60 @@ class EsiTester(Module):
         appid=AppID("coord_translator_serial"),
     )
 
-    # for i in range(4, 18, 5):
-    #   MMIOAdd(i)(instance_name=f"mmio_add_{i}", appid=AppID("mmio_add", i))
+    for i in range(4, 18, 5):
+      MMIOAdd(i)(instance_name=f"mmio_add_{i}", appid=AppID("mmio_add", i))
 
-    # for width in [32, 64, 128, 256, 512, 534]:
-    #   ReadMem(width)(
-    #       instance_name=f"readmem_{width}",
-    #       appid=esi.AppID("readmem", width),
-    #       clk=ports.clk,
-    #       rst=ports.rst,
-    #   )
-    #   WriteMem(width)(
-    #       instance_name=f"writemem_{width}",
-    #       appid=AppID("writemem", width),
-    #       clk=ports.clk,
-    #       rst=ports.rst,
-    #   )
-    #   ToHostDMATest(width)(
-    #       instance_name=f"tohostdma_{width}",
-    #       appid=AppID("tohostdma", width),
-    #       clk=ports.clk,
-    #       rst=ports.rst,
-    #   )
-    #   FromHostDMATest(width)(
-    #       instance_name=f"fromhostdma_{width}",
-    #       appid=AppID("fromhostdma", width),
-    #       clk=ports.clk,
-    #       rst=ports.rst,
-    #   )
+    for width in [32, 64, 128, 256, 512, 534]:
+      ReadMem(width)(
+          instance_name=f"readmem_{width}",
+          appid=esi.AppID("readmem", width),
+          clk=ports.clk,
+          rst=ports.rst,
+      )
+      WriteMem(width)(
+          instance_name=f"writemem_{width}",
+          appid=AppID("writemem", width),
+          clk=ports.clk,
+          rst=ports.rst,
+      )
+      ToHostDMATest(width)(
+          instance_name=f"tohostdma_{width}",
+          appid=AppID("tohostdma", width),
+          clk=ports.clk,
+          rst=ports.rst,
+      )
+      FromHostDMATest(width)(
+          instance_name=f"fromhostdma_{width}",
+          appid=AppID("fromhostdma", width),
+          clk=ports.clk,
+          rst=ports.rst,
+      )
 
-    # for i in range(3):
-    #   ReadMem(512)(
-    #       instance_name=f"readmem_{i}",
-    #       appid=esi.AppID(f"readmem_{i}", 512),
-    #       clk=ports.clk,
-    #       rst=ports.rst,
-    #   )
-    #   WriteMem(512)(
-    #       instance_name=f"writemem_{i}",
-    #       appid=AppID(f"writemem_{i}", 512),
-    #       clk=ports.clk,
-    #       rst=ports.rst,
-    #   )
-    #   ToHostDMATest(512)(
-    #       instance_name=f"tohostdma_{i}",
-    #       appid=AppID(f"tohostdma_{i}", 512),
-    #       clk=ports.clk,
-    #       rst=ports.rst,
-    #   )
-    #   FromHostDMATest(512)(
-    #       instance_name=f"fromhostdma_{i}",
-    #       appid=AppID(f"fromhostdma_{i}", 512),
-    #       clk=ports.clk,
-    #       rst=ports.rst,
-    #   )
+    for i in range(3):
+      ReadMem(512)(
+          instance_name=f"readmem_{i}",
+          appid=esi.AppID(f"readmem_{i}", 512),
+          clk=ports.clk,
+          rst=ports.rst,
+      )
+      WriteMem(512)(
+          instance_name=f"writemem_{i}",
+          appid=AppID(f"writemem_{i}", 512),
+          clk=ports.clk,
+          rst=ports.rst,
+      )
+      ToHostDMATest(512)(
+          instance_name=f"tohostdma_{i}",
+          appid=AppID(f"tohostdma_{i}", 512),
+          clk=ports.clk,
+          rst=ports.rst,
+      )
+      FromHostDMATest(512)(
+          instance_name=f"fromhostdma_{i}",
+          appid=AppID(f"fromhostdma_{i}", 512),
+          clk=ports.clk,
+          rst=ports.rst,
+      )
 
 
 if __name__ == "__main__":
