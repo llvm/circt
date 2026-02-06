@@ -471,12 +471,13 @@ class SerialCoordTranslator(Module):
         ce=handshake,
         name="in_is_header",
     )
-    handshake.when_true(
+    # Only log the frame count when the handshake is for a header frame.
+    hdr_handshake = handshake & in_is_header
+    hdr_handshake.when_true(
         lambda: print_info("Received frame count=%d", hdr_count_bits))
 
     # Latch the most recent header count for re-use when emitting the output
     # header (do not rely on union extracts during data frames).
-    hdr_handshake = handshake & in_is_header
     hdr_is_zero = hdr_count == UInt(bulk_count_width)(0)
     footer_handshake = hdr_handshake & hdr_is_zero
     start_handshake = hdr_handshake & ~hdr_is_zero

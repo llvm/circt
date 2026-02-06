@@ -1180,6 +1180,26 @@ class Window(Type):
               raise ValueError(
                   f"Cannot specify both num_items and bulk_count_width for '{field_name}'"
               )
+
+          # Validate that num_items and bulk_count_width are integers and non-negative
+          if num_items is not None:
+            if not isinstance(num_items, int):
+              raise ValueError(
+                  f"num_items for field '{field_name}' must be an integer, "
+                  f"got {type(num_items).__name__}")
+            if num_items < 0:
+              raise ValueError(
+                  f"num_items for field '{field_name}' must be non-negative, "
+                  f"got {num_items}")
+          if bulk_count_width is not None:
+            if not isinstance(bulk_count_width, int):
+              raise ValueError(
+                  f"bulk_count_width for field '{field_name}' must be an integer, "
+                  f"got {type(bulk_count_width).__name__}")
+            if bulk_count_width < 0:
+              raise ValueError(
+                  f"bulk_count_width for field '{field_name}' must be non-negative, "
+                  f"got {bulk_count_width}")
           # Convert field name to StringAttr and keep num_items as optional int
           field_name_attr = ir.StringAttr.get(field_name)
           field_types.append(
