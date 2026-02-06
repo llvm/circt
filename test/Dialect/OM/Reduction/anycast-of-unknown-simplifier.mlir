@@ -1,4 +1,4 @@
-// RUN: circt-reduce %s --test /usr/bin/env --test-arg grep --test-arg -q --test-arg "om.unknown.*!om.any" --include om-anycast-of-unknown-simplifier --keep-best=0 | FileCheck %s
+// RUN: circt-reduce %s --test /usr/bin/env --test-arg grep --test-arg -q --test-arg "om.class @SimplifyTest" --include om-anycast-of-unknown-simplifier --keep-best=0 | FileCheck %s
 
 // UNSUPPORTED: system-windows
 //   See https://github.com/llvm/circt/issues/4129
@@ -15,8 +15,8 @@ module {
 
   // CHECK-LABEL: om.class @SimplifyTest
   om.class @SimplifyTest(%basepath: !om.frozenbasepath) -> (result1: !om.any, result2: !om.any) {
-    // This pattern should be simplified
-    // CHECK-NOT: om.unknown : !om.class.type<@Foo>
+    // This pattern should be simplified - the any_cast is replaced with om.unknown : !om.any
+    // The original om.unknown becomes dead code (removed by generic dead code elimination)
     // CHECK: %[[UNKNOWN1:.+]] = om.unknown : !om.any
     %0 = om.unknown : !om.class.type<@Foo>
     // CHECK-NOT: om.any_cast

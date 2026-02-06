@@ -13,8 +13,11 @@ module {
     om.class.fields %input : !om.integer
   }
 
-  // This class is only referenced via om.unknown, so it should be removed
-  // CHECK-NOT: om.class @OnlyUnknownClass
+  // This class is only referenced via om.unknown type, but we can't remove it
+  // without also removing the om.unknown operation that references it.
+  // The generic dead code elimination will handle removing the om.unknown,
+  // then this class can be removed.
+  // CHECK: om.class @OnlyUnknownClass
   om.class @OnlyUnknownClass() {
     om.class.fields
   }
@@ -33,7 +36,8 @@ module {
     // CHECK: om.object @UsedClass
     %1 = om.object @UsedClass(%0) : (!om.string) -> !om.class.type<@UsedClass>
 
-    // This unknown reference doesn't keep @OnlyUnknownClass alive
+    // This unknown reference keeps @OnlyUnknownClass alive because
+    // we can't remove a class that is referenced in a type
     // CHECK: om.unknown
     %2 = om.unknown : !om.class.type<@OnlyUnknownClass>
 

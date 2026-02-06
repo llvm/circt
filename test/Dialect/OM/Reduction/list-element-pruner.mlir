@@ -1,5 +1,5 @@
-// RUN: circt-reduce %s --test /usr/bin/env --test-arg grep --test-arg -q --test-arg "list_create.*%%elem1" --include om-list-element-pruner --keep-best=0 | FileCheck %s --check-prefixes=CHECK,CHECK-ELEM1
-// RUN: circt-reduce %s --test /usr/bin/env --test-arg grep --test-arg -q --test-arg "list_create.*%%elem2" --include om-list-element-pruner --keep-best=0 | FileCheck %s --check-prefixes=CHECK,CHECK-ELEM2
+// RUN: circt-reduce %s --test /usr/bin/env --test-arg grep --test-arg -q --test-arg "list_create.*%%3.*:" --include om-list-element-pruner --keep-best=0 | FileCheck %s --check-prefixes=CHECK,CHECK-ELEM1
+// RUN: circt-reduce %s --test /usr/bin/env --test-arg grep --test-arg -q --test-arg "list_create.*%%4.*:" --include om-list-element-pruner --keep-best=0 | FileCheck %s --check-prefixes=CHECK,CHECK-ELEM2
 
 // UNSUPPORTED: system-windows
 //   See https://github.com/llvm/circt/issues/4129
@@ -25,12 +25,12 @@ module {
 
     // When looking for elem1, should keep elem1 and remove elem2, elem3
     // CHECK: %[[LIST:.+]] = om.list_create
-    // CHECK-ELEM1-SAME: %0
-    // CHECK-ELEM1-NOT: %1
-    // CHECK-ELEM1-NOT: %2
-    // CHECK-ELEM2-SAME: %1
-    // CHECK-ELEM2-NOT: %0
-    // CHECK-ELEM2-NOT: %2
+    // CHECK-ELEM1-SAME: %3
+    // CHECK-ELEM1-NOT: %4
+    // CHECK-ELEM1-NOT: %5
+    // CHECK-ELEM2-SAME: %4
+    // CHECK-ELEM2-NOT: %3
+    // CHECK-ELEM2-NOT: %5
     %3 = om.list_create %0, %1, %2 : !om.any
 
     om.class.fields %3 : !om.list<!om.any>
@@ -43,9 +43,9 @@ module {
     %2 = om.object @Foo() : () -> !om.class.type<@Foo>
 
     // CHECK: %[[OBJLIST:.+]] = om.list_create
-    %3 = om.list_create %0, %1, %2 : !om.class.type<@Foo>
+    %4 = om.list_create %0, %1, %2 : !om.class.type<@Foo>
 
-    om.class.fields %3 : !om.list<!om.class.type<@Foo>>
+    om.class.fields %4 : !om.list<!om.class.type<@Foo>>
   }
 }
 

@@ -298,18 +298,33 @@ struct OMUnusedClassRemover : public OpReduction<ClassOp> {
   void matches(ClassOp classOp,
                llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
     // Check if this class is ever instantiated via om.object
-    auto &symbolUserMap = symbols.getNearestSymbolUserMap(classOp);
+    // We need to walk all operations because SymbolUserMap doesn't find
+    // nested symbol uses inside IsolatedFromAbove operations like om.class
+    auto moduleOp = classOp->getParentOfType<mlir::ModuleOp>();
+    auto className = classOp.getSymNameAttr();
     bool hasObjectInstantiation = false;
+    bool containsObjectInstantiation = false;
 
-    for (auto *user : symbolUserMap.getUsers(classOp)) {
-      if (isa<ObjectOp>(user)) {
+    // Check if this class is instantiated via om.object anywhere
+    moduleOp.walk([&](ObjectOp objectOp) {
+      if (objectOp.getClassNameAttr() == className) {
         hasObjectInstantiation = true;
-        break;
+        return WalkResult::interrupt();
       }
-    }
+      return WalkResult::advance();
+    });
 
-    // If the class is never instantiated, we can remove it
-    if (!hasObjectInstantiation)
+    // Check if this class contains any om.object instantiations
+    // (classes that instantiate other classes should be kept as they might be entry points)
+    classOp.walk([&](ObjectOp objectOp) {
+      containsObjectInstantiation = true;
+      return WalkResult::interrupt();
+    });
+
+    // Remove the class if:
+    // 1. It's never instantiated via om.object, AND
+    // 2. It doesn't contain any om.object instantiations (not an entry point)
+    if (!hasObjectInstantiation && !containsObjectInstantiation)
       addMatch(10, 0);
   }
 
