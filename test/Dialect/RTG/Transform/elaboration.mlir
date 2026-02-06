@@ -475,6 +475,11 @@ rtg.test @labels(singleton = %none: index) {
   rtg.label local %l0
   rtg.label local %l1
   rtg.label local %l2
+
+  // CHECK-NEXT: rtg.label local [[L1]]
+  %set = rtg.set_create %l1 : !rtg.isa.label
+  %l4 = rtg.set_select_random %set : !rtg.set<!rtg.isa.label>
+  rtg.label local %l4
 }
 
 // CHECK-LABEL: rtg.test @randomIntegers
@@ -823,6 +828,66 @@ rtg.test @setEquivalence(singleton = %none: index) {
   func.call @dummy11(%set2) : (!rtg.set<index>) -> ()
 }
 
+// CHECK-LABEL: rtg.test @untypedAttributes
+rtg.test @untypedAttributes(singleton = %none: index) {
+  // CHECK-NEXT: [[V0:%.+]] = rtgtest.constant_test index {value = "str"}
+  // CHECK-NEXT: func.call @dummy2([[V0]]) : (index) -> ()
+  %0 = rtgtest.constant_test index {value = "str"}
+  func.call @dummy2(%0) : (index) -> ()
+
+  // CHECK-NEXT: [[V1:%.+]] = rtgtest.constant_test index {value = [10 : index]}
+  // CHECK-NEXT: func.call @dummy2([[V1]]) : (index) -> ()
+  %1 = rtgtest.constant_test index {value = [10 : index]}
+  func.call @dummy2(%1) : (index) -> ()
+}
+
+// CHECK-LABEL: rtg.target @arith
+rtg.target @arith : !rtg.dict<a: i32, b: i32, c: i32, d: i32> {
+  %0 = arith.constant 3 : i32
+  %1 = arith.addi %0, %0 : i32
+  %2 = arith.andi %0, %0 : i32
+  %3 = arith.xori %0, %0 : i32
+  %4 = arith.ori %0, %0 : i32
+  // CHECK: [[V1:%.+]] = rtg.constant 6 : i32 
+  // CHECK: [[V2:%.+]] = rtg.constant 3 : i32 
+  // CHECK: [[V3:%.+]] = rtg.constant 0 : i32 
+  // CHECK: rtg.yield [[V1]], [[V2]], [[V3]], [[V2]]
+  rtg.yield %1, %2, %3, %4 : i32, i32, i32, i32
+}
+
+// CHECK-LABEL: rtg.test @opsHandlingSymbolicOperands
+rtg.test @opsHandlingSymbolicOperands(singleton = %none: index) {
+  // CHECK-NEXT: [[REG:%.+]] = rtg.constant #rtgtest.t0
+  // CHECK-NEXT: [[INIT:%.+]] = rtg.constant #rtg.isa.immediate<32, 0>
+  %reg = rtg.constant #rtgtest.t0
+  %i1 = index.bool.constant false
+  %idx = index.constant 0
+  %init = rtg.constant #rtg.isa.immediate<32, 0>
+  
+  // CHECK-NEXT: [[VAL:%.+]] = rtg.validate [[REG]], [[INIT]], "symbolic_idx" : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  %val = rtg.validate %reg, %init, "symbolic_idx" : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  
+  // CHECK-NEXT: func.call @dummy15([[VAL]])
+  %arr = rtg.array_create %val, %init : !rtg.isa.immediate<32>
+  %ext1 = rtg.array_extract %arr[%idx] : !rtg.array<!rtg.isa.immediate<32>>
+  func.call @dummy15(%ext1) : (!rtg.isa.immediate<32>) -> ()
+  
+  // CHECK-NEXT: func.call @dummy15([[VAL]])
+  %tuple = rtg.tuple_create %val, %init : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>
+  %ext2 = rtg.tuple_extract %tuple at 0 : !rtg.tuple<!rtg.isa.immediate<32>, !rtg.isa.immediate<32>>
+  func.call @dummy15(%ext2) : (!rtg.isa.immediate<32>) -> ()
+  
+  // CHECK-NEXT: func.call @dummy15([[VAL]])
+  %selected = arith.select %i1, %init, %val : !rtg.isa.immediate<32>
+  func.call @dummy15(%selected) : (!rtg.isa.immediate<32>) -> ()
+  
+  // CHECK-NEXT: func.call @dummy15([[VAL]])
+  %arr2 = rtg.array_create %init, %init : !rtg.isa.immediate<32>
+  %arr3 = rtg.array_inject %arr2[%idx], %val : !rtg.array<!rtg.isa.immediate<32>>
+  %ext3 = rtg.array_extract %arr3[%idx] : !rtg.array<!rtg.isa.immediate<32>>
+  func.call @dummy15(%ext3) : (!rtg.isa.immediate<32>) -> ()
+}
+
 // -----
 
 rtg.target @singletonTarget : !rtg.dict<singleton: index> {
@@ -833,34 +898,6 @@ rtg.target @singletonTarget : !rtg.dict<singleton: index> {
 rtg.test @nestedRegionsNotSupported(singleton = %none: index) {
   // expected-error @below {{ops with nested regions must be elaborated away}}
   scf.execute_region { scf.yield }
-}
-
-// -----
-
-rtg.target @singletonTarget : !rtg.dict<singleton: index> {
-  %0 = index.constant 0
-  rtg.yield %0 : index
-}
-
-rtg.test @untypedAttributes(singleton = %none: index) {
-  // expected-error @below {{only typed attributes supported for constant-like operations}}
-  %0 = rtgtest.constant_test index {value = [10 : index]}
-}
-
-// -----
-
-rtg.target @singletonTarget : !rtg.dict<singleton: index> {
-  %0 = index.constant 0
-  rtg.yield %0 : index
-}
-
-func.func @dummy(%arg0: index) {return}
-
-rtg.test @untypedAttributes(singleton = %none: index) {
-  %0 = rtgtest.constant_test index {value = "str"}
-  // expected-error @below {{materializer of dialect 'builtin' unable to materialize value for attribute '"str"'}}
-  // expected-note @below {{while materializing value for operand#0}}
-  func.call @dummy(%0) : (index) -> ()
 }
 
 // -----
@@ -998,56 +1035,4 @@ rtg.test @oobArrayAccess(singleton = %none: index) {
   // expected-error @below {{invalid to access index 0 of an array with 0 elements}}
   %2 = rtg.array_inject %1[%0], %0 : !rtg.array<index>
   func.call @dummy6(%2) : (!rtg.array<index>) -> ()
-}
-
-// -----
-
-rtg.target @singletonTarget : !rtg.dict<singleton: index> {
-  %0 = index.constant 0
-  rtg.yield %0 : index
-}
-
-rtg.test @arith_invalid_type(singleton = %none: index) {
-  %0 = arith.constant 3 : i32
-  // expected-error @below {{only index operands supported}}
-  %1 = arith.addi %0, %0 : i32
-}
-
-// -----
-
-rtg.target @singletonTarget : !rtg.dict<singleton: index> {
-  %0 = index.constant 0
-  rtg.yield %0 : index
-}
-
-rtg.test @arith_invalid_type(singleton = %none: index) {
-  %0 = arith.constant 3 : i32
-  // expected-error @below {{only 'i1' operands supported}}
-  %1 = arith.andi %0, %0 : i32
-}
-
-// -----
-
-rtg.target @singletonTarget : !rtg.dict<singleton: index> {
-  %0 = index.constant 0
-  rtg.yield %0 : index
-}
-
-rtg.test @arith_invalid_type(singleton = %none: index) {
-  %0 = arith.constant 3 : i32
-  // expected-error @below {{only 'i1' operands supported}}
-  %1 = arith.xori %0, %0 : i32
-}
-
-// -----
-
-rtg.target @singletonTarget : !rtg.dict<singleton: index> {
-  %0 = index.constant 0
-  rtg.yield %0 : index
-}
-
-rtg.test @arith_invalid_type(singleton = %none: index) {
-  %0 = arith.constant 3 : i32
-  // expected-error @below {{only 'i1' operands supported}}
-  %1 = arith.ori %0, %0 : i32
 }

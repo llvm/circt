@@ -761,6 +761,7 @@ let hasCanonicalizer=1 in {
 }
 def AsAsyncResetPrimOp
   : UnaryPrimOp<"asAsyncReset", OneBitCastableType, AsyncResetType>;
+def AsResetPrimOp : UnaryPrimOp<"asReset", UInt1Type, ResetType>;
 def AsClockPrimOp : UnaryPrimOp<"asClock", OneBitCastableType, ClockType>;
 def NegPrimOp : UnaryPrimOp<"neg", IntType, SIntType>;
 let hasCanonicalizer = true in
@@ -1450,6 +1451,7 @@ def IntegerShlOp : IntegerBinaryPrimOp<"integer.shl"> {
 }
 
 def UnknownValueOp : FIRRTLOp<"unknown", [
+  Pure,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
 ]> {
   let summary = "A property with an unknown value used to tie-off connections";
@@ -1460,7 +1462,7 @@ def UnknownValueOp : FIRRTLOp<"unknown", [
     This lowers to an `om::UnknownOp`.
   }];
   let arguments = (ins);
-  let results = (outs Res<PropertyType, "", [MemAlloc]>:$result);
+  let results = (outs PropertyType:$result);
   let assemblyFormat = "attr-dict `:` type($result)";
 }
 

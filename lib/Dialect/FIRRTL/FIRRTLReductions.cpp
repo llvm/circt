@@ -22,6 +22,7 @@
 #include "circt/Reduce/ReductionUtils.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
+#include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Matchers.h"
 #include "llvm/ADT/APSInt.h"
@@ -251,22 +252,67 @@ struct FIRRTLModuleExternalizer : public OpReduction<FModuleOp> {
 };
 
 /// Invalidate all the leaf fields of a value with a given flippedness by
-/// connecting an invalid value to them. This is useful for ensuring that all
-/// output ports of an instance or memory (including those nested in bundles)
-/// are properly invalidated.
+/// connecting an invalid value to them. This function handles different FIRRTL
+/// types appropriately:
+/// - Ref types (probes): Creates wire infrastructure with ref.send/ref.define
+///   and invalidates the underlying wire.
+/// - Bundle/Vector types: Recursively descends into elements.
+/// - Base types: Creates InvalidValueOp and connects it.
+/// - Property types: Creates UnknownValueOp and assigns it.
+///
+/// This is useful for ensuring that all output ports of an instance or memory
+/// (including those nested in bundles) are properly invalidated.
 static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
-                              SmallDenseMap<Type, Value, 8> &invalidCache,
-                              bool flip = false) {
-  auto type = dyn_cast<firrtl::FIRRTLType>(value.getType());
+                              TieOffCache &tieOffCache, bool flip = false) {
+  auto type = type_dyn_cast<FIRRTLType>(value.getType());
   if (!type)
     return;
 
+  // Handle ref types (probes) by creating wires and defining them properly.
+  if (auto refType = type_dyn_cast<RefType>(type)) {
+    // Input probes are illegal in FIRRTL.
+    assert(!flip && "input probes are not allowed");
+
+    auto underlyingType = refType.getType();
+
+    if (!refType.getForceable()) {
+      // For probe types: create underlying wire, ref.send, ref.define, and
+      // invalidate.
+      auto targetWire = WireOp::create(builder, underlyingType);
+      auto refSend = builder.create<RefSendOp>(targetWire.getResult());
+      builder.create<RefDefineOp>(value, refSend.getResult());
+
+      // Invalidate the underlying wire.
+      auto invalid = tieOffCache.getInvalid(underlyingType);
+      MatchingConnectOp::create(builder, targetWire.getResult(), invalid);
+      return;
+    }
+
+    // For rwprobe types: create forceable wire, ref.define, and invalidate.
+    auto forceableWire =
+        WireOp::create(builder, underlyingType,
+                       /*name=*/"", NameKindEnum::DroppableName,
+                       /*annotations=*/ArrayRef<Attribute>{},
+                       /*innerSym=*/StringAttr{},
+                       /*forceable=*/true);
+
+    // The forceable wire returns both the wire and the rwprobe.
+    auto targetWire = forceableWire.getResult();
+    auto forceableRef = forceableWire.getDataRef();
+
+    builder.create<RefDefineOp>(value, forceableRef);
+
+    // Invalidate the underlying wire.
+    auto invalid = tieOffCache.getInvalid(underlyingType);
+    MatchingConnectOp::create(builder, targetWire, invalid);
+    return;
+  }
+
   // Descend into bundles by creating subfield ops.
-  if (auto bundleType = dyn_cast<firrtl::BundleType>(type)) {
+  if (auto bundleType = type_dyn_cast<BundleType>(type)) {
     for (auto element : llvm::enumerate(bundleType.getElements())) {
-      auto subfield =
-          builder.createOrFold<firrtl::SubfieldOp>(value, element.index());
-      invalidateOutputs(builder, subfield, invalidCache,
+      auto subfield = builder.createOrFold<SubfieldOp>(value, element.index());
+      invalidateOutputs(builder, subfield, tieOffCache,
                         flip ^ element.value().isFlip);
       if (subfield.use_empty())
         subfield.getDefiningOp()->erase();
@@ -275,10 +321,10 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
   }
 
   // Descend into vectors by creating subindex ops.
-  if (auto vectorType = dyn_cast<firrtl::FVectorType>(type)) {
+  if (auto vectorType = type_dyn_cast<FVectorType>(type)) {
     for (unsigned i = 0, e = vectorType.getNumElements(); i != e; ++i) {
-      auto subindex = builder.createOrFold<firrtl::SubindexOp>(value, i);
-      invalidateOutputs(builder, subindex, invalidCache, flip);
+      auto subindex = builder.createOrFold<SubindexOp>(value, i);
+      invalidateOutputs(builder, subindex, tieOffCache, flip);
       if (subindex.use_empty())
         subindex.getDefiningOp()->erase();
     }
@@ -288,12 +334,19 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
   // Only drive outputs.
   if (flip)
     return;
-  Value invalid = invalidCache.lookup(type);
-  if (!invalid) {
-    invalid = firrtl::InvalidValueOp::create(builder, type);
-    invalidCache.insert({type, invalid});
+
+  // Create InvalidValueOp for FIRRTLBaseType.
+  if (auto baseType = type_dyn_cast<FIRRTLBaseType>(type)) {
+    auto invalid = tieOffCache.getInvalid(baseType);
+    ConnectOp::create(builder, value, invalid);
+    return;
   }
-  firrtl::ConnectOp::create(builder, value, invalid);
+
+  // For property types, use UnknownValueOp to tie off the connection.
+  if (auto propType = type_dyn_cast<PropertyType>(type)) {
+    auto unknown = tieOffCache.getUnknown(propType);
+    builder.create<PropAssignOp>(value, unknown);
+  }
 }
 
 /// Connect a value to every leave of a destination value.
@@ -411,7 +464,7 @@ struct InstanceStubber : public OpReduction<firrtl::InstanceOp> {
     LLVM_DEBUG(llvm::dbgs()
                << "Stubbing instance `" << instOp.getName() << "`\n");
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
-    SmallDenseMap<Type, Value, 8> invalidCache;
+    TieOffCache tieOffCache(builder);
     for (unsigned i = 0, e = instOp.getNumResults(); i != e; ++i) {
       auto result = instOp.getResult(i);
       auto name = builder.getStringAttr(Twine(instOp.getName()) + "_" +
@@ -421,7 +474,7 @@ struct InstanceStubber : public OpReduction<firrtl::InstanceOp> {
                                  firrtl::NameKindEnum::DroppableName,
                                  instOp.getPortAnnotation(i), StringAttr{})
               .getResult();
-      invalidateOutputs(builder, wire, invalidCache,
+      invalidateOutputs(builder, wire, tieOffCache,
                         instOp.getPortDirection(i) == firrtl::Direction::In);
       result.replaceAllUsesWith(wire);
     }
@@ -458,7 +511,7 @@ struct MemoryStubber : public OpReduction<firrtl::MemOp> {
   LogicalResult rewrite(firrtl::MemOp memOp) override {
     LLVM_DEBUG(llvm::dbgs() << "Stubbing memory `" << memOp.getName() << "`\n");
     ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
-    SmallDenseMap<Type, Value, 8> invalidCache;
+    TieOffCache tieOffCache(builder);
     Value xorInputs;
     SmallVector<Value> outputs;
     for (unsigned i = 0, e = memOp.getNumResults(); i != e; ++i) {
@@ -470,7 +523,7 @@ struct MemoryStubber : public OpReduction<firrtl::MemOp> {
                                  firrtl::NameKindEnum::DroppableName,
                                  memOp.getPortAnnotation(i), StringAttr{})
               .getResult();
-      invalidateOutputs(builder, wire, invalidCache, true);
+      invalidateOutputs(builder, wire, tieOffCache, true);
       result.replaceAllUsesWith(wire);
 
       // Isolate the input and output data fields of the port.
@@ -945,6 +998,7 @@ struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
                                       symbols.getNearestSymbolTable(instOp)))
             .getPorts();
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
+    TieOffCache tieOffCache(builder);
     SmallVector<Value> replacementWires;
     for (firrtl::PortInfo info : portInfo) {
       auto wire = firrtl::WireOp::create(
@@ -952,8 +1006,14 @@ struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
                       (Twine(instOp.getName()) + "_" + info.getName()).str())
                       .getResult();
       if (info.isOutput()) {
-        auto inv = firrtl::InvalidValueOp::create(builder, info.type);
-        firrtl::ConnectOp::create(builder, wire, inv);
+        // Tie off output ports using TieOffCache.
+        if (auto baseType = dyn_cast<firrtl::FIRRTLBaseType>(info.type)) {
+          auto inv = tieOffCache.getInvalid(baseType);
+          firrtl::ConnectOp::create(builder, wire, inv);
+        } else if (auto propType = dyn_cast<firrtl::PropertyType>(info.type)) {
+          auto unknown = tieOffCache.getUnknown(propType);
+          builder.create<firrtl::PropAssignOp>(wire, unknown);
+        }
       }
       replacementWires.push_back(wire);
     }
@@ -971,6 +1031,10 @@ struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
 
 /// A sample reduction pattern that pushes connected values through wires.
 struct ConnectForwarder : public Reduction {
+  void beforeReduction(mlir::ModuleOp op) override {
+    domInfo = std::make_unique<DominanceInfo>(op);
+  }
+
   uint64_t match(Operation *op) override {
     if (!isa<firrtl::FConnectLike>(op))
       return 0;
@@ -997,7 +1061,10 @@ struct ConnectForwarder : public Reduction {
           return 0;
         continue;
       }
-      if (srcOp && !srcOp->isBeforeInBlock(op))
+      // Check if srcOp properly dominates op, but op is not enclosed in srcOp.
+      // This handles cross-block cases (e.g., layerblocks).
+      if (srcOp &&
+          !domInfo->properlyDominates(srcOp, op, /*enclosingOpOk=*/false))
         return 0;
     }
 
@@ -1017,6 +1084,9 @@ struct ConnectForwarder : public Reduction {
   }
 
   std::string getName() const override { return "connect-forwarder"; }
+
+private:
+  std::unique_ptr<DominanceInfo> domInfo;
 };
 
 /// A sample reduction pattern that replaces a single-use wire and register with
@@ -1542,16 +1612,25 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
       auto newName = StringAttr::get(circuitOp.getContext(), getName());
       module.setName(newName);
       for (auto *use : node->uses()) {
-        auto instanceOp = dyn_cast<firrtl::InstanceOp>(*use->getInstance());
-        instanceOp.setModuleName(newName);
-        instanceOp.setName(newName);
-        if (shouldReplacePorts)
-          instanceOp.setPortNamesAttr(
-              ArrayAttr::get(circuitOp.getContext(), newNames));
+        auto useOp = use->getInstance();
+        if (auto instanceOp = dyn_cast<firrtl::InstanceOp>(*useOp)) {
+          instanceOp.setModuleName(newName);
+          instanceOp.setName(newName);
+          if (shouldReplacePorts)
+            instanceOp.setPortNamesAttr(
+                ArrayAttr::get(circuitOp.getContext(), newNames));
+        } else if (auto objectOp = dyn_cast<firrtl::ObjectOp>(*useOp)) {
+          // ObjectOp stores the class name in its result type, so we need to
+          // create a new ClassType with the new name and set it on the result.
+          auto oldClassType = objectOp.getType();
+          auto newClassType = firrtl::ClassType::get(
+              circuitOp.getContext(), FlatSymbolRefAttr::get(newName),
+              oldClassType.getElements());
+          objectOp.getResult().setType(newClassType);
+          objectOp.setName(newName);
+        }
       }
     }
-
-    circuitOp->dump();
 
     return success();
   }
@@ -1741,7 +1820,7 @@ struct ForceDedup : public OpReduction<CircuitOp> {
     auto &symbolTable = symbols.getNearestSymbolTable(circuitOp);
     auto annotations = AnnotationSet(circuitOp);
     for (auto [annoIdx, anno] : llvm::enumerate(annotations)) {
-      if (!anno.isClass(mustDedupAnnoClass))
+      if (!anno.isClass(mustDeduplicateAnnoClass))
         continue;
 
       auto modulesAttr = anno.getMember<ArrayAttr>("modules");
@@ -1800,7 +1879,7 @@ struct ForceDedup : public OpReduction<CircuitOp> {
         continue;
       }
       auto modulesAttr = anno.getMember<ArrayAttr>("modules");
-      assert(anno.isClass(mustDedupAnnoClass) && modulesAttr &&
+      assert(anno.isClass(mustDeduplicateAnnoClass) && modulesAttr &&
              modulesAttr.size() >= 2);
 
       // Extract module names from the dedup group.
@@ -1959,14 +2038,14 @@ struct MustDedupChildren : public OpReduction<CircuitOp> {
 
     DenseSet<StringRef> modulesAlreadyInMustDedup;
     for (auto [annoIdx, anno] : llvm::enumerate(annotations))
-      if (anno.isClass(mustDedupAnnoClass))
+      if (anno.isClass(mustDeduplicateAnnoClass))
         if (auto modulesAttr = anno.getMember<ArrayAttr>("modules"))
           for (auto moduleRef : modulesAttr.getAsRange<StringAttr>())
             if (auto target = tokenizePath(moduleRef))
               modulesAlreadyInMustDedup.insert(target->module);
 
     for (auto [annoIdx, anno] : llvm::enumerate(annotations)) {
-      if (!anno.isClass(mustDedupAnnoClass))
+      if (!anno.isClass(mustDeduplicateAnnoClass))
         continue;
 
       auto modulesAttr = anno.getMember<ArrayAttr>("modules");
@@ -2006,7 +2085,7 @@ struct MustDedupChildren : public OpReduction<CircuitOp> {
     uint64_t matchId = 0;
 
     for (auto [annoIdx, anno] : llvm::enumerate(annotations)) {
-      if (!anno.isClass(mustDedupAnnoClass)) {
+      if (!anno.isClass(mustDeduplicateAnnoClass)) {
         newAnnotations.push_back(anno);
         continue;
       }
@@ -2036,7 +2115,7 @@ struct MustDedupChildren : public OpReduction<CircuitOp> {
             SmallVector<NamedAttribute> newAnnoAttrs;
             newAnnoAttrs.emplace_back(
                 StringAttr::get(context, "class"),
-                StringAttr::get(context, mustDedupAnnoClass));
+                StringAttr::get(context, mustDeduplicateAnnoClass));
             newAnnoAttrs.emplace_back(
                 StringAttr::get(context, "modules"),
                 ArrayAttr::get(context,
@@ -2114,7 +2193,106 @@ private:
   NLARemover nlaRemover;
 };
 
+struct LayerDisable : public OpReduction<CircuitOp> {
+  LayerDisable(MLIRContext *context) {
+    pm = std::make_unique<mlir::PassManager>(
+        context, "builtin.module", mlir::OpPassManager::Nesting::Explicit);
+    pm->nest<firrtl::CircuitOp>().addPass(firrtl::createSpecializeLayers());
+  };
+
+  void beforeReduction(mlir::ModuleOp op) override { symbolRefAttrMap.clear(); }
+
+  void afterReduction(mlir::ModuleOp op) override { (void)pm->run(op); };
+
+  void matches(CircuitOp circuitOp,
+               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
+    uint64_t matchId = 0;
+
+    SmallVector<FlatSymbolRefAttr> nestedRefs;
+    std::function<void(StringAttr, LayerOp)> addLayer = [&](StringAttr rootRef,
+                                                            LayerOp layerOp) {
+      if (!rootRef)
+        rootRef = layerOp.getSymNameAttr();
+      else
+        nestedRefs.push_back(FlatSymbolRefAttr::get(layerOp));
+
+      symbolRefAttrMap[matchId] = SymbolRefAttr::get(rootRef, nestedRefs);
+      addMatch(1, matchId++);
+
+      for (auto nestedLayerOp : layerOp.getOps<LayerOp>())
+        addLayer(rootRef, nestedLayerOp);
+
+      if (!nestedRefs.empty())
+        nestedRefs.pop_back();
+    };
+
+    for (auto layerOp : circuitOp.getOps<LayerOp>())
+      addLayer({}, layerOp);
+  }
+
+  LogicalResult rewriteMatches(CircuitOp circuitOp,
+                               ArrayRef<uint64_t> matches) override {
+    SmallVector<Attribute> disableLayers;
+    if (auto existingDisables = circuitOp.getDisableLayersAttr()) {
+      auto disableRange = existingDisables.getAsRange<Attribute>();
+      disableLayers.append(disableRange.begin(), disableRange.end());
+    }
+    for (auto match : matches)
+      disableLayers.push_back(symbolRefAttrMap.at(match));
+
+    circuitOp.setDisableLayersAttr(
+        ArrayAttr::get(circuitOp.getContext(), disableLayers));
+
+    return success();
+  }
+
+  std::string getName() const override { return "firrtl-layer-disable"; }
+
+  std::unique_ptr<mlir::PassManager> pm;
+  DenseMap<uint64_t, SymbolRefAttr> symbolRefAttrMap;
+};
+
 } // namespace
+
+/// A reduction pattern that removes elements from FIRRTL list create
+/// operations. This generates one match per element in each list, allowing
+/// selective removal of individual elements.
+struct ListCreateElementRemover : public OpReduction<ListCreateOp> {
+  void matches(ListCreateOp listOp,
+               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
+    // Create one match for each element in the list
+    auto elements = listOp.getElements();
+    for (size_t i = 0; i < elements.size(); ++i)
+      addMatch(1, i);
+  }
+
+  LogicalResult rewriteMatches(ListCreateOp listOp,
+                               ArrayRef<uint64_t> matches) override {
+    // Convert matches to a set for fast lookup
+    llvm::SmallDenseSet<uint64_t, 4> matchesSet(matches.begin(), matches.end());
+
+    // Collect elements that should be kept (not in matches)
+    SmallVector<Value> newElements;
+    auto elements = listOp.getElements();
+    for (size_t i = 0; i < elements.size(); ++i) {
+      if (!matchesSet.contains(i))
+        newElements.push_back(elements[i]);
+    }
+
+    // Create a new list with the remaining elements
+    OpBuilder builder(listOp);
+    auto newListOp = ListCreateOp::create(builder, listOp.getLoc(),
+                                          listOp.getType(), newElements);
+    listOp.getResult().replaceAllUsesWith(newListOp.getResult());
+    listOp.erase();
+
+    return success();
+  }
+
+  std::string getName() const override {
+    return "firrtl-list-create-element-remover";
+  }
+};
 
 //===----------------------------------------------------------------------===//
 // Reduction Registration
@@ -2127,11 +2305,12 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   // prioritized). For example, things that can knock out entire modules while
   // being cheap should be tried first (and thus have higher benefit), before
   // trying to tweak operands of individual arithmetic ops.
-  patterns.add<SimplifyResets, 34>();
-  patterns.add<ForceDedup, 33>();
-  patterns.add<MustDedupChildren, 32>();
-  patterns.add<AnnotationRemover, 31>();
-  patterns.add<ModuleSwapper, 30>();
+  patterns.add<SimplifyResets, 35>();
+  patterns.add<ForceDedup, 34>();
+  patterns.add<MustDedupChildren, 33>();
+  patterns.add<AnnotationRemover, 32>();
+  patterns.add<ModuleSwapper, 31>();
+  patterns.add<LayerDisable, 30>(getContext());
   patterns.add<PassReduction, 29>(
       getContext(),
       firrtl::createDropName({/*preserveMode=*/PreserveValues::None}), false,
@@ -2163,6 +2342,7 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   patterns.add<FIRRTLOperandForwarder<0>, 11>();
   patterns.add<FIRRTLOperandForwarder<1>, 10>();
   patterns.add<FIRRTLOperandForwarder<2>, 9>();
+  patterns.add<ListCreateElementRemover, 8>();
   patterns.add<DetachSubaccesses, 7>();
   patterns.add<RootPortPruner, 5>();
   patterns.add<ExtmoduleInstanceRemover, 4>();

@@ -635,7 +635,7 @@ LogicalResult CircuitOp::verifyRegions() {
   for (auto &op : *getBodyBlock()) {
     // Verify modules.
     if (auto moduleOp = dyn_cast<FModuleOp>(op)) {
-      if (AnnotationSet(moduleOp).hasAnnotation(dutAnnoClass))
+      if (AnnotationSet(moduleOp).hasAnnotation(markDUTAnnoClass))
         dutModules.push_back(moduleOp);
       continue;
     }
@@ -5734,6 +5734,14 @@ FIRRTLType AsAsyncResetPrimOp::inferReturnType(FIRRTLType input,
   return AsyncResetType::get(input.getContext(), base.isConst());
 }
 
+FIRRTLType AsResetPrimOp::inferReturnType(FIRRTLType input,
+                                          std::optional<Location> loc) {
+  auto base = type_dyn_cast<FIRRTLBaseType>(input);
+  if (!base)
+    return emitInferRetTypeError(loc, "operand must be a scalar base type");
+  return ResetType::get(input.getContext(), base.isConst());
+}
+
 FIRRTLType AsClockPrimOp::inferReturnType(FIRRTLType input,
                                           std::optional<Location> loc) {
   return ClockType::get(input.getContext(), isConst(input));
@@ -6463,6 +6471,9 @@ void SizeOfIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void AsAsyncResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void AsResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void AsClockPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

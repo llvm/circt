@@ -16,3 +16,10 @@ emit.file "-" {
   // expected-error @below {{label arguments must be elaborated before emission}}
   %label = rtg.label_decl "label_name_{{0}}", %0
 }
+
+// -----
+
+emit.file "-" {
+  // expected-error @below {{implicit constraint not materialized}}
+  rtgtest.implicit_constraint_op implicit_constraint
+}

@@ -45,8 +45,9 @@ public:
             // Misc Binary Primitives.
             CatPrimOp, DShlPrimOp, DShlwPrimOp, DShrPrimOp,
             // Unary operators.
-            AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsClockPrimOp,
-            CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
+            AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsResetPrimOp,
+            AsClockPrimOp, CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp,
+            OrRPrimOp, XorRPrimOp,
             // Intrinsic Expressions.
             IsXIntrinsicOp, PlusArgsValueIntrinsicOp, PlusArgsTestIntrinsicOp,
             SizeOfIntrinsicOp, ClockGateIntrinsicOp, ClockInverterIntrinsicOp,
@@ -154,6 +155,7 @@ public:
   HANDLE(AsSIntPrimOp, Unary);
   HANDLE(AsUIntPrimOp, Unary);
   HANDLE(AsAsyncResetPrimOp, Unary);
+  HANDLE(AsResetPrimOp, Unary);
   HANDLE(AsClockPrimOp, Unary);
   HANDLE(CvtPrimOp, Unary);
   HANDLE(NegPrimOp, Unary);

@@ -37,6 +37,14 @@ hw.module @sigStructExtract(in %arg0 : !llhd.ref<!hw.struct<foo: i1, bar: i2, ba
   %1 = llhd.sig.struct_extract %arg0["baz"] : <!hw.struct<foo: i1, bar: i2, baz: i3>>
 }
 
+// CHECK-LABEL: @sigUnionExtract
+hw.module @sigUnionExtract(in %arg0 : !llhd.ref<!hw.union<foo: i1, bar: i2, baz: i3>>) {
+  // CHECK-NEXT: %{{.*}} = llhd.sig.struct_extract %arg0["foo"] : <!hw.union<foo: i1, bar: i2, baz: i3>>
+  %0 = llhd.sig.struct_extract %arg0["foo"] : <!hw.union<foo: i1, bar: i2, baz: i3>>
+  // CHECK-NEXT: %{{.*}} = llhd.sig.struct_extract %arg0["baz"] : <!hw.union<foo: i1, bar: i2, baz: i3>>
+  %1 = llhd.sig.struct_extract %arg0["baz"] : <!hw.union<foo: i1, bar: i2, baz: i3>>
+}
+
 // CHECK-LABEL: @checkSigInst
 hw.module @checkSigInst() {
   // CHECK: %[[CI1:.*]] = hw.constant

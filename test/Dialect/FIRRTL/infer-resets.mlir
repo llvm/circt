@@ -1263,3 +1263,68 @@ firrtl.circuit "Foo" {
     // CHECK: firrtl.matchingconnect %bar_reset, %reset : !firrtl.asyncreset
   }
 }
+
+// -----
+firrtl.circuit "AsResetInferSync" {
+  // CHECK-LABEL: firrtl.module @AsResetInferSync
+  firrtl.module @AsResetInferSync() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %syncReset = firrtl.wire : !firrtl.uint<1>
+    %reset = firrtl.wire : !firrtl.reset
+    // CHECK-NOT: firrtl.asReset
+    // CHECK: firrtl.connect %reset, %c0_ui1
+    %0 = firrtl.asReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.reset
+    firrtl.connect %reset, %0 : !firrtl.reset, !firrtl.reset
+    firrtl.connect %reset, %syncReset : !firrtl.reset, !firrtl.uint<1>
+  }
+}
+
+// -----
+firrtl.circuit "AsResetInferAsync" {
+  // CHECK-LABEL: firrtl.module @AsResetInferAsync
+  firrtl.module @AsResetInferAsync() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %asyncReset = firrtl.wire : !firrtl.asyncreset
+    %reset = firrtl.wire : !firrtl.reset
+    // CHECK-NOT: firrtl.asReset
+    // CHECK: [[ASYNC:%.+]] = firrtl.asAsyncReset %c0_ui1
+    // CHECK: firrtl.connect %reset, [[ASYNC]]
+    %0 = firrtl.asReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.reset
+    firrtl.connect %reset, %0 : !firrtl.reset, !firrtl.reset
+    firrtl.connect %reset, %asyncReset : !firrtl.reset, !firrtl.asyncreset
+  }
+}
+
+// -----
+// A module instantiated in two contexts, one forcing a specific reset kind and
+// the other adapting to that choice using an `asReset` cast should work.
+firrtl.circuit "TopA" {
+  // CHECK: firrtl.module private @ChildA({{.+}}: !firrtl.asyncreset)
+  // CHECK: firrtl.module private @ChildB({{.+}}: !firrtl.uint<1>)
+  firrtl.module private @ChildA(in %reset: !firrtl.reset) {}
+  firrtl.module private @ChildB(in %reset: !firrtl.reset) {}
+
+  // CHECK-LABEL: firrtl.module @TopA
+  firrtl.module @TopA(in %asyncReset: !firrtl.asyncreset, in %syncReset: !firrtl.uint<1>) {
+    %a_reset = firrtl.instance a @ChildA(in reset: !firrtl.reset)
+    %b_reset = firrtl.instance b @ChildB(in reset: !firrtl.reset)
+    firrtl.connect %a_reset, %asyncReset : !firrtl.reset, !firrtl.asyncreset
+    firrtl.connect %b_reset, %syncReset : !firrtl.reset, !firrtl.uint<1>
+  }
+
+  // CHECK-LABEL: firrtl.module @TopB
+  firrtl.module @TopB(in %x: !firrtl.uint<1>, in %y: !firrtl.uint<1>) {
+    // CHECK-NEXT: [[A:%.+]] = firrtl.instance a @ChildA
+    // CHECK-NEXT: [[B:%.+]] = firrtl.instance b @ChildB
+    %a_reset = firrtl.instance a @ChildA(in reset: !firrtl.reset)
+    %b_reset = firrtl.instance b @ChildB(in reset: !firrtl.reset)
+    // CHECK-NEXT: [[ASYNC:%.+]] = firrtl.asAsyncReset %x
+    // CHECK-NOT: firrtl.asReset %y
+    %0 = firrtl.asReset %x : (!firrtl.uint<1>) -> !firrtl.reset
+    %1 = firrtl.asReset %y : (!firrtl.uint<1>) -> !firrtl.reset
+    // CHECK-NEXT: firrtl.connect [[A]], [[ASYNC]]
+    // CHECK-NEXT: firrtl.connect [[B]], %y
+    firrtl.connect %a_reset, %0 : !firrtl.reset, !firrtl.reset
+    firrtl.connect %b_reset, %1 : !firrtl.reset, !firrtl.reset
+  }
+}

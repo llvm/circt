@@ -622,6 +622,21 @@ moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.s
   moore.output %0, %3, %4 : !moore.i32, !moore.struct<{exp_bits: i32, man_bits: i32}>, !moore.struct<{exp_bits: i32, man_bits: i32}>
 }
 
+// CHECK-LABEL: hw.module @Union
+moore.module @Union(in %a : !moore.i32, in %arg0 : !moore.union<{x: i32, y: i32}>, in %arg1 : !moore.ref<union<{x: i32, y: i32}>>, out o : !moore.i32, out p : !moore.union<{x: i32, y: i32}>) {
+  // CHECK: hw.union_extract %arg0["x"] : !hw.union<x: i32, y: i32>
+  %0 = moore.union_extract %arg0, "x" : !moore.union<{x: i32, y: i32}> -> !moore.i32
+
+  // CHECK: llhd.sig.struct_extract %arg1["x"] : <!hw.union<x: i32, y: i32>>
+  %ref = moore.union_extract_ref %arg1, "x" : <union<{x: i32, y: i32}>> -> <i32>
+  moore.assign %ref, %0 : !moore.i32
+
+  // CHECK: hw.union_create "x", %a : !hw.union<x: i32, y: i32>
+  %1 = moore.union_create %a {fieldName = "x"} : !moore.i32 -> union<{x: i32, y: i32}>
+
+  moore.output %0, %1 : !moore.i32, !moore.union<{x: i32, y: i32}>
+}
+
 // CHECK-LABEL: func @ArrayCreate
 // CHECK-SAME: () ->  !hw.array<2xi8>
 func.func @ArrayCreate() -> !moore.array<2x!moore.i8> {
@@ -1235,7 +1250,7 @@ func.func @RecurciveConditional(%arg0 : !moore.l1, %arg1 : !moore.l1) {
 }
 
 // CHECK-LABEL: func.func @Conversions
-func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16, %arg2: !moore.l1) {
+func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16) {
   // CHECK: [[TMP:%.+]] = comb.extract %arg0 from 0 : (i16) -> i8
   // CHECK: dbg.variable "trunc", [[TMP]]
   %0 = moore.trunc %arg0 : i16 -> i8
@@ -1262,9 +1277,10 @@ func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16, %arg2: !moore.l1) {
   %4 = moore.logic_to_int %arg1 : l16
   dbg.variable "l2i", %4 : !moore.i16
 
-  // CHECK: dbg.variable "builtin_bool", %arg2 : i1
-  %5 = moore.to_builtin_bool %arg2 : l1
-  dbg.variable "builtin_bool", %5 : i1
+  // CHECK: dbg.variable "builtin_bool", %arg1 : i16
+  %5 = moore.logic_to_int %arg1 : l16
+  %6 = moore.to_builtin_int %5 : i16
+  dbg.variable "builtin_bool", %6 : i16
 
   return
 }

@@ -1150,7 +1150,7 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
     if (!isa<BlockArgument>(value) &&
         !isa_and_nonnull<WireOp, RegOp, RegResetOp, InstanceOp, InvalidValueOp,
                          ConstCastOp, RefCastOp, UninferredResetCastOp,
-                         RWProbeOp>(value.getDefiningOp()))
+                         RWProbeOp, AsResetPrimOp>(value.getDefiningOp()))
       continue;
     if (updateReset(signal.field, resetType)) {
       for (auto user : value.getUsers())
@@ -1164,6 +1164,16 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
       } else if (auto uncast = value.getDefiningOp<UninferredResetCastOp>()) {
         uncast.replaceAllUsesWith(uncast.getInput());
         uncast.erase();
+      } else if (auto asResetOp = value.getDefiningOp<AsResetPrimOp>()) {
+        // Remove `asReset` casts for sync resets, or replace them with an
+        // `asAsyncReset` cast for async resets.
+        Value result = asResetOp.getInput();
+        if (type_isa<AsyncResetType>(resetType)) {
+          ImplicitLocOpBuilder builder(asResetOp.getLoc(), asResetOp);
+          result = AsAsyncResetPrimOp::create(builder, asResetOp.getInput());
+        }
+        asResetOp.replaceAllUsesWith(result);
+        asResetOp.erase();
       }
     }
   }

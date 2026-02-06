@@ -178,6 +178,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     ; CHECK: firrtl.asAsyncReset %reset_async : (!firrtl.asyncreset) -> !firrtl.asyncreset
     node check_ar5 = asAsyncReset(reset_async)
 
+    ; CHECK: firrtl.asReset %reset : (!firrtl.uint<1>) -> !firrtl.reset
+    node check_r0 = asReset(reset)
+
     ; CHECK: firrtl.asClock %clock : (!firrtl.clock) -> !firrtl.clock
     node check_c0 = asClock(clock)
     ; CHECK: firrtl.asClock %reset : (!firrtl.uint<1>) -> !firrtl.clock

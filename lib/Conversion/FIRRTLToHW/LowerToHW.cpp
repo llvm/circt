@@ -267,7 +267,7 @@ struct CircuitLoweringState {
 
     for (auto &op : *circuitOp.getBodyBlock()) {
       if (auto module = dyn_cast<FModuleLike>(op))
-        if (AnnotationSet::removeAnnotations(module, dutAnnoClass))
+        if (AnnotationSet::removeAnnotations(module, markDUTAnnoClass))
           dut = module;
     }
 
@@ -590,21 +590,21 @@ void CircuitLoweringState::processRemainingAnnotations(
             // The following are inspected (but not consumed) by FIRRTL/GCT
             // passes that have all run by now. Since no one is responsible for
             // consuming these, they will linger around and can be ignored.
-            dutAnnoClass, metadataDirectoryAttrName,
+            markDUTAnnoClass, metadataDirAnnoClass,
             elaborationArtefactsDirectoryAnnoClass, testBenchDirAnnoClass,
             // This annotation is used to mark which external modules are
             // imported blackboxes from the BlackBoxReader pass.
             blackBoxAnnoClass,
             // This annotation is used by several GrandCentral passes.
-            extractGrandCentralClass,
+            extractGrandCentralAnnoClass,
             // The following will be handled while lowering the verification
             // ops.
-            extractAssertAnnoClass, extractAssumeAnnoClass,
+            extractAssertionsAnnoClass, extractAssumptionsAnnoClass,
             extractCoverageAnnoClass,
             // The following will be handled after lowering FModule ops, since
             // they are still needed on the circuit until after lowering
             // FModules.
-            moduleHierAnnoClass, testHarnessHierAnnoClass,
+            moduleHierarchyAnnoClass, testHarnessHierarchyAnnoClass,
             blackBoxTargetDirAnnoClass))
       continue;
 
@@ -700,14 +700,15 @@ void FIRRTLModuleLowering::runOnOperation() {
   SmallVector<Operation *, 32> opsToProcess;
 
   AnnotationSet circuitAnno(circuit);
-  moveVerifAnno(getOperation(), circuitAnno, extractAssertAnnoClass,
+  moveVerifAnno(getOperation(), circuitAnno, extractAssertionsAnnoClass,
                 "firrtl.extract.assert");
-  moveVerifAnno(getOperation(), circuitAnno, extractAssumeAnnoClass,
+  moveVerifAnno(getOperation(), circuitAnno, extractAssumptionsAnnoClass,
                 "firrtl.extract.assume");
   moveVerifAnno(getOperation(), circuitAnno, extractCoverageAnnoClass,
                 "firrtl.extract.cover");
-  circuitAnno.removeAnnotationsWithClass(
-      extractAssertAnnoClass, extractAssumeAnnoClass, extractCoverageAnnoClass);
+  circuitAnno.removeAnnotationsWithClass(extractAssertionsAnnoClass,
+                                         extractAssumptionsAnnoClass,
+                                         extractCoverageAnnoClass);
 
   state.processRemainingAnnotations(circuit, circuitAnno);
   // Iterate through each operation in the circuit body, transforming any
@@ -797,7 +798,7 @@ void FIRRTLModuleLowering::runOnOperation() {
   SmallVector<Attribute> dutHierarchyFiles;
   SmallVector<Attribute> testHarnessHierarchyFiles;
   circuitAnno.removeAnnotations([&](Annotation annotation) {
-    if (annotation.isClass(moduleHierAnnoClass)) {
+    if (annotation.isClass(moduleHierarchyAnnoClass)) {
       auto file = hw::OutputFileAttr::getFromFilename(
           &getContext(),
           annotation.getMember<StringAttr>("filename").getValue(),
@@ -805,7 +806,7 @@ void FIRRTLModuleLowering::runOnOperation() {
       dutHierarchyFiles.push_back(file);
       return true;
     }
-    if (annotation.isClass(testHarnessHierAnnoClass)) {
+    if (annotation.isClass(testHarnessHierarchyAnnoClass)) {
       auto file = hw::OutputFileAttr::getFromFilename(
           &getContext(),
           annotation.getMember<StringAttr>("filename").getValue(),
@@ -1332,7 +1333,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   bool hasOutputPort =
       llvm::any_of(firrtlPorts, [&](auto p) { return p.isOutput(); });
   if (!hasOutputPort &&
-      AnnotationSet::removeAnnotations(oldModule, verifBlackBoxAnnoClass) &&
+      AnnotationSet::removeAnnotations(oldModule,
+                                       internalVerifBlackBoxAnnoClass) &&
       loweringState.isInDUT(oldModule))
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
 
@@ -1388,7 +1390,8 @@ sv::SVVerbatimModuleOp FIRRTLModuleLowering::lowerVerbatimExtModule(
   bool hasOutputPort =
       llvm::any_of(firrtlPorts, [&](auto p) { return p.isOutput(); });
   if (!hasOutputPort &&
-      AnnotationSet::removeAnnotations(oldModule, verifBlackBoxAnnoClass) &&
+      AnnotationSet::removeAnnotations(oldModule,
+                                       internalVerifBlackBoxAnnoClass) &&
       loweringState.isInDUT(oldModule))
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
 
@@ -1472,7 +1475,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   // Transform module annotations
   AnnotationSet annos(oldModule);
 
-  if (annos.removeAnnotation(verifBlackBoxAnnoClass))
+  if (annos.removeAnnotation(internalVerifBlackBoxAnnoClass))
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
 
   // If this is in the test harness, make sure it goes to the test directory.
@@ -5357,10 +5360,12 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
             addIfProceduralBlock(
                 sv::MacroRefExprOp::create(builder, boolType,
                                            "ASSERT_VERBOSE_COND_"),
-                [&]() { sv::ErrorOp::create(builder, message, messageOps); });
+                [&]() {
+                  sv::ErrorProceduralOp::create(builder, message, messageOps);
+                });
             addIfProceduralBlock(
                 sv::MacroRefExprOp::create(builder, boolType, "STOP_COND_"),
-                [&]() { sv::FatalOp::create(builder); });
+                [&]() { sv::FatalProceduralOp::create(builder); });
           });
         });
       });

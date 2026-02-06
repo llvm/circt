@@ -12,6 +12,22 @@ emit.file "" {
   // CHECK-NEXT:    .space 8
   rtg.isa.space %idx8
 
+  // CHECK-ALLOWED-NEXT:.data
+  // CHECK-NEXT:.data
+  rtg.isa.segment data {
+    // CHECK-ALLOWED-NEXT:    # data segment
+    // CHECK-NEXT:    # data segment
+    rtg.comment "data segment"
+  }
+
+  // CHECK-ALLOWED-NEXT:.text
+  // CHECK-NEXT:.text
+  rtg.isa.segment text {
+    // CHECK-ALLOWED-NEXT:    # text segment
+    // CHECK-NEXT:    # text segment
+    rtg.comment "text segment"
+  }
+
   // CHECK-ALLOWED-NEXT:    .asciz "hello world\n\t\\\""
   // CHECK-NEXT:    .asciz "hello world\n\t\\\""
   rtg.isa.string_data "hello world\n\t\\\""

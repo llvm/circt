@@ -77,7 +77,11 @@ struct StmtVisitor {
     if (!cond)
       return failure();
     cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
-    cond = moore::ToBuiltinBoolOp::create(builder, loc, cond);
+    if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+        ty && ty.getDomain() == Domain::FourValued) {
+      cond = moore::LogicToIntOp::create(builder, loc, cond);
+    }
+    cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
     cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
 
     builder.setInsertionPointToEnd(&bodyBlock);
@@ -259,7 +263,11 @@ struct StmtVisitor {
         allConds = cond;
     }
     assert(allConds && "slang guarantees at least one condition");
-    allConds = moore::ToBuiltinBoolOp::create(builder, loc, allConds);
+    if (auto ty = dyn_cast<moore::IntType>(allConds.getType());
+        ty && ty.getDomain() == Domain::FourValued) {
+      allConds = moore::LogicToIntOp::create(builder, loc, allConds);
+    }
+    allConds = moore::ToBuiltinIntOp::create(builder, loc, allConds);
 
     // Create the blocks for the true and false branches, and the exit block.
     Block &exitBlock = createBlock();
@@ -349,7 +357,11 @@ struct StmtVisitor {
           mlir::emitError(loc, "unsupported set membership case statement");
           return failure();
         }
-        cond = moore::ToBuiltinBoolOp::create(builder, itemLoc, cond);
+        if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+            ty && ty.getDomain() == Domain::FourValued) {
+          cond = moore::LogicToIntOp::create(builder, loc, cond);
+        }
+        cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
 
         // If the condition matches, branch to the match block. Otherwise
         // continue checking the next expression in a new block.
@@ -468,7 +480,11 @@ struct StmtVisitor {
     if (!cond)
       return failure();
     cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
-    cond = moore::ToBuiltinBoolOp::create(builder, loc, cond);
+    if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+        ty && ty.getDomain() == Domain::FourValued) {
+      cond = moore::LogicToIntOp::create(builder, loc, cond);
+    }
+    cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
     cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
 
     // Generate the loop body.
@@ -526,7 +542,11 @@ struct StmtVisitor {
     // Generate the loop condition check.
     builder.setInsertionPointToEnd(&checkBlock);
     auto cond = builder.createOrFold<moore::BoolCastOp>(loc, currentCount);
-    cond = moore::ToBuiltinBoolOp::create(builder, loc, cond);
+    if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+        ty && ty.getDomain() == Domain::FourValued) {
+      cond = moore::LogicToIntOp::create(builder, loc, cond);
+    }
+    cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
     cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
 
     // Generate the loop body.
@@ -577,7 +597,11 @@ struct StmtVisitor {
     if (!cond)
       return failure();
     cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
-    cond = moore::ToBuiltinBoolOp::create(builder, loc, cond);
+    if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+        ty && ty.getDomain() == Domain::FourValued) {
+      cond = moore::LogicToIntOp::create(builder, loc, cond);
+    }
+    cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
     cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
 
     // Generate the loop body.
@@ -707,7 +731,11 @@ struct StmtVisitor {
     }
 
     // Regard assertion statements with an action block as the "if-else".
-    cond = moore::ToBuiltinBoolOp::create(builder, loc, cond);
+    if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+        ty && ty.getDomain() == Domain::FourValued) {
+      cond = moore::LogicToIntOp::create(builder, loc, cond);
+    }
+    cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
 
     // Create the blocks for the true and false branches, and the exit block.
     Block &exitBlock = createBlock();
@@ -746,7 +774,26 @@ struct StmtVisitor {
   // Handle concurrent assertion statements.
   LogicalResult visit(const slang::ast::ConcurrentAssertionStatement &stmt) {
     auto loc = context.convertLocation(stmt.sourceRange);
-    auto property = context.convertAssertionExpression(stmt.propertySpec, loc);
+
+    // Check for a `disable iff` expression:
+    // The DisableIff construct can only occcur at the top level of an assertion
+    // and cannot be nested within properties.
+    // Hence we only need to detect if the top level assertion expression
+    // has type DisableIff, negate the `disable` expression, then pass it to
+    // the `enable` parameter of AssertOp/AssumeOp.
+    Value enable;
+    Value property;
+    if (auto *disableIff =
+            stmt.propertySpec.as_if<slang::ast::DisableIffAssertionExpr>()) {
+      auto disableCond = context.convertRvalueExpression(disableIff->condition);
+      auto enableCond = moore::NotOp::create(builder, loc, disableCond);
+
+      enable = context.convertToI1(enableCond);
+      property = context.convertAssertionExpression(disableIff->expr, loc);
+    } else {
+      property = context.convertAssertionExpression(stmt.propertySpec, loc);
+    }
+
     if (!property)
       return failure();
 
@@ -754,10 +801,10 @@ struct StmtVisitor {
     if (stmt.ifTrue && stmt.ifTrue->as_if<slang::ast::EmptyStatement>()) {
       switch (stmt.assertionKind) {
       case slang::ast::AssertionKind::Assert:
-        verif::AssertOp::create(builder, loc, property, Value(), StringAttr{});
+        verif::AssertOp::create(builder, loc, property, enable, StringAttr{});
         return success();
       case slang::ast::AssertionKind::Assume:
-        verif::AssumeOp::create(builder, loc, property, Value(), StringAttr{});
+        verif::AssumeOp::create(builder, loc, property, enable, StringAttr{});
         return success();
       default:
         break;

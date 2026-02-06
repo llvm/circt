@@ -77,15 +77,57 @@ hw.module @IfOp(in %arg0: i1) {
 }
 
 // -----
-hw.module @Fatal() {
-  // expected-error @+1 {{sv.fatal should be in a procedural region}}
-  sv.fatal 1
+hw.module @FatalProcedural() {
+  // expected-error @+1 {{sv.fatal.procedural should be in a procedural region}}
+  sv.fatal.procedural 1
 }
 
 // -----
 hw.module @Finish() {
   // expected-error @+1 {{sv.finish should be in a procedural region}}
   sv.finish 1
+}
+
+// -----
+hw.module @ErrorProcedural() {
+  // expected-error @+1 {{sv.error.procedural should be in a procedural region}}
+  sv.error.procedural
+}
+
+// -----
+hw.module @WarningProcedural() {
+  // expected-error @+1 {{sv.warning.procedural should be in a procedural region}}
+  sv.warning.procedural
+}
+
+// -----
+hw.module @InfoProcedural() {
+  // expected-error @+1 {{sv.info.procedural should be in a procedural region}}
+  sv.info.procedural
+}
+
+// -----
+hw.module @ErrorInProcedural() {
+  sv.initial {
+    // expected-error @+1 {{sv.error should be in a non-procedural region}}
+    sv.error
+  }
+}
+
+// -----
+hw.module @WarningInProcedural() {
+  sv.initial {
+    // expected-error @+1 {{sv.warning should be in a non-procedural region}}
+    sv.warning
+  }
+}
+
+// -----
+hw.module @InfoInProcedural() {
+  sv.initial {
+    // expected-error @+1 {{sv.info should be in a non-procedural region}}
+    sv.info
+  }
 }
 
 // -----

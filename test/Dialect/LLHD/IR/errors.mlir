@@ -28,6 +28,13 @@ hw.module @extract_element_tuple_index_out_of_bounds(in %tup : !llhd.ref<!hw.str
 
 // -----
 
+hw.module @extract_element_union_index_out_of_bounds(in %union : !llhd.ref<!hw.union<foo: i1, bar: i2, baz: i3>>) {
+  // expected-error @+1 {{invalid field name specified}}
+  %0 = llhd.sig.struct_extract %union["foobar"] : <!hw.union<foo: i1, bar: i2, baz: i3>>
+}
+
+// -----
+
 hw.module @YieldFromFinal(in %arg0: i42) {
   llhd.final {
     // expected-error @below {{'llhd.halt' op has 1 yield operands, but enclosing 'llhd.final' returns 0}}

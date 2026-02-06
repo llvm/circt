@@ -31,9 +31,9 @@ LogicalResult circt::firrtl::applyWiring(const AnnoPathValue &target,
   if (auto portTarget = dyn_cast<PortAnnoTarget>(target.ref)) {
     auto portNum = portTarget.getImpl().getPortNo();
     if (auto module = dyn_cast<FModuleOp>(portTarget.getOp())) {
-      if (clazz == wiringSourceAnnoClass) {
+      if (clazz == sourceAnnoClass) {
         builder.setInsertionPointToStart(module.getBodyBlock());
-      } else if (clazz == wiringSinkAnnoClass) {
+      } else if (clazz == sinkAnnoClass) {
         builder.setInsertionPointToEnd(module.getBodyBlock());
       }
       targetValue = getValueByFieldID(builder, module.getArgument(portNum),
@@ -84,18 +84,18 @@ LogicalResult circt::firrtl::applyWiring(const AnnoPathValue &target,
   }
 
   // Handle difference between sinks and sources
-  if (clazz == wiringSourceAnnoClass) {
+  if (clazz == sourceAnnoClass) {
     if (state.legacyWiringProblems.find(pin) !=
         state.legacyWiringProblems.end()) {
       // Check if existing problem can be updated
       if (state.legacyWiringProblems[pin].source) {
         return mlir::emitError(state.circuit.getLoc())
-               << "More than one " << wiringSourceAnnoClass
-               << " defined for pin " << pin;
+               << "More than one " << sourceAnnoClass << " defined for pin "
+               << pin;
       }
     }
     state.legacyWiringProblems[pin].source = targetValue;
-  } else if (clazz == wiringSinkAnnoClass) {
+  } else if (clazz == sinkAnnoClass) {
     state.legacyWiringProblems[pin].sinks.push_back(targetValue);
   }
 

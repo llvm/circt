@@ -135,6 +135,10 @@ moore.module @Expressions(
   in %d: !moore.l32,
   // CHECK-SAME: in [[X:%[^:]+]] : !moore.i1
   in %x: !moore.i1,
+  // CHECK-SAME: in [[BA:%[^:]+]] : i1
+  in %ba : i1,
+  // CHECK-SAME: in [[BB:%[^:]+]] : i32
+  in %bb : i32,
 
   // CHECK-SAME: in [[ARRAY1:%[^:]+]] : !moore.uarray<4 x i8>
   in %array1: !moore.uarray<4 x i8>,
@@ -195,12 +199,14 @@ moore.module @Expressions(
   moore.logic_to_int %c : l32
   // CHECK: moore.int_to_logic [[A]] : i32
   moore.int_to_logic %a : i32
-  // CHECK: moore.to_builtin_bool [[X]] : i1
-  moore.to_builtin_bool %x : i1
   // CHECK: moore.to_builtin_int [[X]] : i1
   moore.to_builtin_int %x : i1
   // CHECK: moore.to_builtin_int [[A]] : i32
   moore.to_builtin_int %a : i32
+  // CHECK: moore.from_builtin_int [[BA]] : i1
+  moore.from_builtin_int %ba : i1
+  // CHECK: moore.from_builtin_int [[BB]] : i32
+  moore.from_builtin_int %bb : i32
 
   // CHECK: moore.neg [[A]] : i32
   moore.neg %a : i32

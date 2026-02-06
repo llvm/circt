@@ -192,6 +192,16 @@ MlirType firrtlTypeGetRef(MlirType target, bool forceable) {
   return wrap(RefType::get(baseType, forceable));
 }
 
+MlirType firrtlTypeGetColoredRef(MlirType target, bool forceable,
+                                 MlirAttribute layer) {
+  auto baseType = dyn_cast<FIRRTLBaseType>(unwrap(target));
+  assert(baseType && "target must be base type");
+  auto layerAttr = dyn_cast<SymbolRefAttr>(unwrap(layer));
+  assert(layerAttr && "layer must be symbol ref attribute");
+
+  return wrap(RefType::get(baseType, forceable, layerAttr));
+}
+
 bool firrtlTypeIsAAnyRef(MlirType type) {
   return isa<AnyRefType>(unwrap(type));
 }

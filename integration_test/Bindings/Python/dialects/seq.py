@@ -17,6 +17,34 @@ with Context() as ctx, Location.unknown():
   i1 = IntegerType.get_signless(1)
   i32 = IntegerType.get_signless(32)
 
+  # CHECK-LABEL: === HLMemType ===
+  print("=== HLMemType ===")
+  hlmem = seq.HLMemType.get([10, 20], i32)
+  # CHECK: rank=2
+  # CHECK: shape=[10, 20]
+  # CHECK: element_type=i32
+  print(f"rank={hlmem.rank}")
+  print(f"shape={hlmem.shape}")
+  print(f"element_type={hlmem.element_type}")
+
+  # CHECK-LABEL: === FirMemType ===
+  print("=== FirMemType ===")
+  firmem_no_mask = seq.FirMemType.get(1024, 32)
+  # CHECK: depth=1024
+  # CHECK: width=32
+  # CHECK: mask=None
+  print(f"depth={firmem_no_mask.depth}")
+  print(f"width={firmem_no_mask.width}")
+  print(f"mask={firmem_no_mask.mask_width}")
+
+  firmem_with_mask = seq.FirMemType.get(512, 16, mask_width=4)
+  # CHECK: depth=512
+  # CHECK: width=16
+  # CHECK: mask=4
+  print(f"depth={firmem_with_mask.depth}")
+  print(f"width={firmem_with_mask.width}")
+  print(f"mask={firmem_with_mask.mask_width}")
+
   # CHECK-LABEL: === MLIR ===
   m = Module.create()
   with InsertionPoint(m.body):

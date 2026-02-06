@@ -1031,3 +1031,23 @@ def StringDataOp : RTGISAOp<"string_data", []> {
 
   let assemblyFormat = "$data attr-dict";
 }
+
+def SegmentKindAttr : I32EnumAttr<"SegmentKind", "kind of segment", [
+  I32EnumAttrCase<"Data", 0, "data">,
+  I32EnumAttrCase<"Text", 1, "text">
+]> {
+  let cppNamespace = "::circt::rtg";
+}
+
+def SegmentOp : RTGISAOp<"segment", [
+  SingleBlock,
+  NoTerminator,
+  NoRegionArguments,
+]> {
+  let summary = "defines a new segment";
+
+  let arguments = (ins SegmentKindAttr:$kind);
+  let regions = (region SizedRegion<1>:$bodyRegion);
+
+  let assemblyFormat = "$kind attr-dict-with-keyword $bodyRegion";
+}

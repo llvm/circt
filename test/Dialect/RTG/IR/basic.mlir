@@ -19,6 +19,13 @@ rtg.test @constants() {
   // CHECK-NEXT: rtg.isa.string_data "hello world"
   rtg.isa.string_data "hello world"
 
+  // CHECK-NEXT: rtg.isa.segment data {
+  // CHECK-NEXT: }
+  rtg.isa.segment data { }
+  // CHECK-NEXT: rtg.isa.segment text {
+  // CHECK-NEXT: }
+  rtg.isa.segment text { }
+
   // CHECK-NEXT: rtg.constant #rtg.set<> : !rtg.set<i32>
   rtg.constant #rtg.set<> : !rtg.set<i32>
 

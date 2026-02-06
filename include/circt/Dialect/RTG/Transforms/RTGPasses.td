@@ -71,6 +71,11 @@ def InlineSequencesPass : Pass<"rtg-inline-sequences", "mlir::ModuleOp"> {
     ('interleave_sequences' operation).
   }];
 
+  let options = [
+    Option<"failOnRemaining", "fail-on-remaining", "bool", /*default=*/"false",
+      "Fail if there are remaining 'rtg.sequence' operations after inlining.">,
+  ];
+
   let statistics = [
     Statistic<"numSequencesInlined", "num-sequences-inlined",
       "Number of sequences inlined into another sequence or test.">,

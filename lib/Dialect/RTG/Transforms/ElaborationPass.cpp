@@ -26,7 +26,6 @@
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/DenseMapInfoVariant.h"
 #include "llvm/Support/Debug.h"
-#include <queue>
 #include <random>
 
 namespace circt {
@@ -97,10 +96,9 @@ struct UniqueLabelStorage;
 struct TupleStorage;
 struct MemoryStorage;
 struct MemoryBlockStorage;
-struct ValidationValue;
-struct ValidationMuxedValue;
-struct ImmediateConcatStorage;
-struct ImmediateSliceStorage;
+struct SymbolicComputationWithIdentityStorage;
+struct SymbolicComputationWithIdentityValue;
+struct SymbolicComputationStorage;
 
 /// Simple wrapper around a 'StringAttr' such that we know to materialize it as
 /// a label declaration instead of calling the builtin dialect constant
@@ -115,12 +113,14 @@ struct LabelValue {
 };
 
 /// The abstract base class for elaborated values.
-using ElaboratorValue = std::variant<
-    TypedAttr, BagStorage *, bool, size_t, SequenceStorage *,
-    RandomizedSequenceStorage *, InterleavedSequenceStorage *, SetStorage *,
-    VirtualRegisterStorage *, UniqueLabelStorage *, LabelValue, ArrayStorage *,
-    TupleStorage *, MemoryStorage *, MemoryBlockStorage *, ValidationValue *,
-    ValidationMuxedValue *, ImmediateConcatStorage *, ImmediateSliceStorage *>;
+using ElaboratorValue =
+    std::variant<TypedAttr, BagStorage *, bool, size_t, SequenceStorage *,
+                 RandomizedSequenceStorage *, InterleavedSequenceStorage *,
+                 SetStorage *, VirtualRegisterStorage *, UniqueLabelStorage *,
+                 LabelValue, ArrayStorage *, TupleStorage *, MemoryStorage *,
+                 MemoryBlockStorage *, SymbolicComputationWithIdentityStorage *,
+                 SymbolicComputationWithIdentityValue *,
+                 SymbolicComputationStorage *>;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const LabelValue &val) {
@@ -381,37 +381,30 @@ struct TupleStorage {
   const SmallVector<ElaboratorValue> values;
 };
 
-/// Storage object for immediate concatenation operations.
-/// FIXME: opaque values should be handled generically
-struct ImmediateConcatStorage {
-  ImmediateConcatStorage(SmallVector<ElaboratorValue> &&operands)
-      : hashcode(llvm::hash_combine_range(operands.begin(), operands.end())),
-        operands(std::move(operands)) {}
+struct SymbolicComputationStorage {
+  SymbolicComputationStorage(const DenseMap<Value, ElaboratorValue> &state,
+                             Operation *op)
+      : name(op->getName()), resultTypes(op->getResultTypes()),
+        operands(llvm::map_range(op->getOperands(),
+                                 [&](Value v) { return state.lookup(v); })),
+        attributes(op->getAttrDictionary()),
+        properties(op->getPropertiesAsAttribute()),
+        hashcode(llvm::hash_combine(name, llvm::hash_combine_range(resultTypes),
+                                    llvm::hash_combine_range(operands),
+                                    attributes, op->hashProperties())) {}
 
-  bool isEqual(const ImmediateConcatStorage *other) const {
-    return hashcode == other->hashcode && operands == other->operands;
+  bool isEqual(const SymbolicComputationStorage *other) const {
+    return hashcode == other->hashcode && name == other->name &&
+           resultTypes == other->resultTypes && operands == other->operands &&
+           attributes == other->attributes && properties == other->properties;
   }
 
-  const unsigned hashcode;
+  const OperationName name;
+  const SmallVector<Type> resultTypes;
   const SmallVector<ElaboratorValue> operands;
-};
-
-/// Storage object for immediate slice operations.
-/// FIXME: opaque values should be handled generically
-struct ImmediateSliceStorage {
-  ImmediateSliceStorage(ElaboratorValue input, unsigned lowBit, Type type)
-      : hashcode(llvm::hash_combine(input, lowBit, type)), input(input),
-        lowBit(lowBit), type(type) {}
-
-  bool isEqual(const ImmediateSliceStorage *other) const {
-    return hashcode == other->hashcode && input == other->input &&
-           lowBit == other->lowBit && type == other->type;
-  }
-
+  const DictionaryAttr attributes;
+  const Attribute properties;
   const unsigned hashcode;
-  const ElaboratorValue input;
-  const unsigned lowBit;
-  const Type type;
 };
 
 // Values with identity not intended to be internalized.
@@ -509,29 +502,35 @@ struct RandomizedSequenceStorage : IdentityValue {
   const SequenceStorage *sequence;
 };
 
-/// Storage object for an '!rtg.validate' result.
-struct ValidationValue : IdentityValue {
-  ValidationValue(Type type, const ElaboratorValue &ref,
-                  const ElaboratorValue &defaultValue, StringAttr id,
-                  SmallVector<ElaboratorValue> &&defaultUsedValues,
-                  SmallVector<ElaboratorValue> &&elseValues)
-      : IdentityValue(type), ref(ref), defaultValue(defaultValue), id(id),
-        defaultUsedValues(std::move(defaultUsedValues)),
-        elseValues(std::move(elseValues)) {}
+/// Operation must have at least 1 result.
+struct SymbolicComputationWithIdentityStorage : IdentityValue {
+  SymbolicComputationWithIdentityStorage(
+      const DenseMap<Value, ElaboratorValue> &state, Operation *op)
+      : IdentityValue(op->getResult(0).getType()), name(op->getName()),
+        resultTypes(op->getResultTypes()),
+        operands(llvm::map_range(op->getOperands(),
+                                 [&](Value v) { return state.lookup(v); })),
+        attributes(op->getAttrDictionary()),
+        properties(op->getPropertiesAsAttribute()) {}
 
-  const ElaboratorValue ref;
-  const ElaboratorValue defaultValue;
-  const StringAttr id;
-  const SmallVector<ElaboratorValue> defaultUsedValues;
-  const SmallVector<ElaboratorValue> elseValues;
+  const OperationName name;
+  const SmallVector<Type> resultTypes;
+  const SmallVector<ElaboratorValue> operands;
+  const DictionaryAttr attributes;
+  const Attribute properties;
 };
 
-/// Storage object for the 'values' results of 'rtg.validate'.
-struct ValidationMuxedValue : IdentityValue {
-  ValidationMuxedValue(Type type, const ValidationValue *value, unsigned idx)
-      : IdentityValue(type), value(value), idx(idx) {}
+struct SymbolicComputationWithIdentityValue : IdentityValue {
+  SymbolicComputationWithIdentityValue(
+      Type type, const SymbolicComputationWithIdentityStorage *storage,
+      unsigned idx)
+      : IdentityValue(type), storage(storage), idx(idx) {
+    assert(
+        idx != 0 &&
+        "Use SymbolicComputationWithIdentityStorage for result with index 0.");
+  }
 
-  const ValidationValue *value;
+  const SymbolicComputationWithIdentityStorage *storage;
   const unsigned idx;
 };
 
@@ -589,10 +588,8 @@ private:
       return internedInterleavedSequences;
     else if constexpr (std::is_same_v<StorageTy, TupleStorage>)
       return internedTuples;
-    else if constexpr (std::is_same_v<StorageTy, ImmediateConcatStorage>)
-      return internedImmediateConcatValues;
-    else if constexpr (std::is_same_v<StorageTy, ImmediateSliceStorage>)
-      return internedImmediateSliceValues;
+    else if constexpr (std::is_same_v<StorageTy, SymbolicComputationStorage>)
+      return internedSymbolicComputationWithIdentityValues;
     else
       static_assert(!sizeof(StorageTy),
                     "no intern set available for this storage type.");
@@ -619,12 +616,9 @@ private:
       internedInterleavedSequences;
   DenseSet<HashedStorage<TupleStorage>, StorageKeyInfo<TupleStorage>>
       internedTuples;
-  DenseSet<HashedStorage<ImmediateConcatStorage>,
-           StorageKeyInfo<ImmediateConcatStorage>>
-      internedImmediateConcatValues;
-  DenseSet<HashedStorage<ImmediateSliceStorage>,
-           StorageKeyInfo<ImmediateSliceStorage>>
-      internedImmediateSliceValues;
+  DenseSet<HashedStorage<SymbolicComputationStorage>,
+           StorageKeyInfo<SymbolicComputationStorage>>
+      internedSymbolicComputationWithIdentityValues;
 };
 
 } // namespace
@@ -723,24 +717,30 @@ static void print(const MemoryBlockStorage *val, llvm::raw_ostream &os) {
      << ", end-address=" << val->endAddress << "}>";
 }
 
-static void print(const ValidationValue *val, llvm::raw_ostream &os) {
-  os << "<validation-value {type=" << val->type << ", ref=" << val->ref
-     << ", defaultValue=" << val->defaultValue << "}>";
+static void print(const SymbolicComputationWithIdentityValue *val,
+                  llvm::raw_ostream &os) {
+  os << "<symbolic-computation-with-identity-value (" << val->storage << ") at "
+     << val->idx << ">";
 }
 
-static void print(const ValidationMuxedValue *val, llvm::raw_ostream &os) {
-  os << "<validation-muxed-value (" << val->value << ") at " << val->idx << ">";
-}
-
-static void print(const ImmediateConcatStorage *val, llvm::raw_ostream &os) {
-  os << "<immediate-concat [";
+static void print(const SymbolicComputationWithIdentityStorage *val,
+                  llvm::raw_ostream &os) {
+  os << "<symbolic-computation-with-identity " << val->name << "(";
   llvm::interleaveComma(val->operands, os,
                         [&](const ElaboratorValue &val) { os << val; });
-  os << "]>";
+  os << ") -> " << val->resultTypes << " with attributes " << val->attributes
+     << " and properties " << val->properties;
+  os << ">";
 }
 
-static void print(const ImmediateSliceStorage *val, llvm::raw_ostream &os) {
-  os << "<immediate-slice " << val->input << " from " << val->lowBit << ">";
+static void print(const SymbolicComputationStorage *val,
+                  llvm::raw_ostream &os) {
+  os << "<symbolic-computation " << val->name << "(";
+  llvm::interleaveComma(val->operands, os,
+                        [&](const ElaboratorValue &val) { os << val; });
+  os << ") -> " << val->resultTypes << " with attributes " << val->attributes
+     << " and properties " << val->properties;
+  os << ">";
 }
 
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
@@ -851,7 +851,7 @@ public:
     // replaced with freshly materialized values from the ElaborationValue. But
     // then, why can't we delete the value defining op?
     for (auto res : op->getResults())
-      if (!res.use_empty() && !isa<ValidateOp>(op))
+      if (!res.use_empty())
         return op->emitOpError(
             "ops with results that have uses are not supported");
 
@@ -935,28 +935,7 @@ private:
 
   Value visit(TypedAttr val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    // For index attributes (and arithmetic operations on them) we use the
-    // index dialect.
-    if (auto intAttr = dyn_cast<IntegerAttr>(val);
-        intAttr && isa<IndexType>(val.getType())) {
-      Value res = index::ConstantOp::create(builder, loc, intAttr);
-      materializedValues[val] = res;
-      return res;
-    }
-
-    // For any other attribute, we just call the materializer of the dialect
-    // defining that attribute.
-    auto *op =
-        val.getDialect().materializeConstant(builder, val, val.getType(), loc);
-    if (!op) {
-      emitError() << "materializer of dialect '"
-                  << val.getDialect().getNamespace()
-                  << "' unable to materialize value for attribute '" << val
-                  << "'";
-      return Value();
-    }
-
-    Value res = op->getResult(0);
+    Value res = ConstantOp::create(builder, loc, val);
     materializedValues[val] = res;
     return res;
   }
@@ -1067,6 +1046,8 @@ private:
     // We need to get back the sequence to reference, and the list of elaborated
     // values to pass as arguments.
     SmallVector<ElaboratorValue> elabArgs;
+    // NOTE: we wouldn't need to elaborate the sequence if it doesn't contain
+    // randomness to be elaborated.
     SequenceOp seqOp = elaborateSequence(val, elabArgs);
     if (!seqOp)
       return {};
@@ -1152,47 +1133,21 @@ private:
     return res;
   }
 
-  Value visit(ValidationValue *val, Location loc,
+  Value visit(SymbolicComputationWithIdentityValue *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    SmallVector<Value> usedDefaultValues, elseValues;
-    for (auto [dfltVal, elseVal] :
-         llvm::zip(val->defaultUsedValues, val->elseValues)) {
-      auto dfltMat = materialize(dfltVal, loc, emitError);
-      auto elseMat = materialize(elseVal, loc, emitError);
-      if (!dfltMat || !elseMat)
-        return {};
+    auto *noConstStorage =
+        const_cast<SymbolicComputationWithIdentityStorage *>(val->storage);
+    auto res0 = materialize(noConstStorage, loc, emitError);
+    if (!res0)
+      return {};
 
-      usedDefaultValues.push_back(dfltMat);
-      usedDefaultValues.push_back(elseMat);
-    }
-
-    auto validateOp = ValidateOp::create(
-        builder, loc, val->type, materialize(val->ref, loc, emitError),
-        materialize(val->defaultValue, loc, emitError), val->id,
-        usedDefaultValues, elseValues);
-    materializedValues[val] = validateOp.getValue();
-    return validateOp.getValue();
+    auto *op = res0.getDefiningOp();
+    auto res = op->getResults()[val->idx];
+    materializedValues[val] = res;
+    return res;
   }
 
-  Value visit(ValidationMuxedValue *val, Location loc,
-              function_ref<InFlightDiagnostic()> emitError) {
-    Value validateValue =
-        materialize(const_cast<ValidationValue *>(val->value), loc, emitError);
-    if (!validateValue)
-      return {};
-    auto validateOp = validateValue.getDefiningOp<ValidateOp>();
-    if (!validateOp) {
-      auto *defOp = validateValue.getDefiningOp();
-      emitError()
-          << "expected validate op for validation muxed value, but found "
-          << (defOp ? defOp->getName().getStringRef() : "block argument");
-      return {};
-    }
-    materializedValues[val] = validateOp.getValues()[val->idx];
-    return validateOp.getValues()[val->idx];
-  }
-
-  Value visit(ImmediateConcatStorage *val, Location loc,
+  Value visit(SymbolicComputationWithIdentityStorage *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
     SmallVector<Value> operands;
     for (auto operand : val->operands) {
@@ -1203,21 +1158,39 @@ private:
       operands.push_back(materialized);
     }
 
-    Value res = ConcatImmediateOp::create(builder, loc, operands);
-    materializedValues[val] = res;
-    return res;
+    OperationState state(loc, val->name);
+    state.addTypes(val->resultTypes);
+    state.attributes = val->attributes;
+    state.propertiesAttr = val->properties;
+    state.addOperands(operands);
+    auto *op = builder.create(state);
+
+    materializedValues[val] = op->getResult(0);
+    return op->getResult(0);
   }
 
-  Value visit(ImmediateSliceStorage *val, Location loc,
+  Value visit(SymbolicComputationStorage *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value input = materialize(val->input, loc, emitError);
-    if (!input)
-      return {};
+    SmallVector<Value> operands;
+    for (auto operand : val->operands) {
+      auto materialized = materialize(operand, loc, emitError);
+      if (!materialized)
+        return {};
 
-    Value res =
-        SliceImmediateOp::create(builder, loc, val->type, input, val->lowBit);
-    materializedValues[val] = res;
-    return res;
+      operands.push_back(materialized);
+    }
+
+    OperationState state(loc, val->name);
+    state.addTypes(val->resultTypes);
+    state.attributes = val->attributes;
+    state.propertiesAttr = val->properties;
+    state.addOperands(operands);
+    auto *op = builder.create(state);
+
+    for (auto res : op->getResults())
+      materializedValues[val] = res;
+
+    return op->getResult(0);
   }
 
 private:
@@ -1274,62 +1247,14 @@ public:
     return std::get<ValueTy>(state.at(val));
   }
 
-  FailureOr<DeletionKind> visitPureOp(Operation *op) {
-    SmallVector<Attribute> operands;
-    for (auto operand : op->getOperands()) {
-      auto evalValue = state[operand];
-      if (std::holds_alternative<TypedAttr>(evalValue))
-        operands.push_back(std::get<TypedAttr>(evalValue));
-      else
-        return visitUnhandledOp(op);
-    }
-
-    SmallVector<OpFoldResult> results;
-    if (failed(op->fold(operands, results)))
-      return visitUnhandledOp(op);
-
-    // We don't support in-place folders.
-    if (results.size() != op->getNumResults())
-      return visitUnhandledOp(op);
-
-    for (auto [res, val] : llvm::zip(results, op->getResults())) {
-      auto attr = llvm::dyn_cast_or_null<TypedAttr>(res.dyn_cast<Attribute>());
-      if (!attr)
-        return op->emitError(
-            "only typed attributes supported for constant-like operations");
-
-      auto intAttr = dyn_cast<IntegerAttr>(attr);
-      if (intAttr && isa<IndexType>(attr.getType()))
-        state[op->getResult(0)] = size_t(intAttr.getInt());
-      else if (intAttr && intAttr.getType().isSignlessInteger(1))
-        state[op->getResult(0)] = bool(intAttr.getInt());
-      else
-        state[op->getResult(0)] = attr;
-    }
-
-    return DeletionKind::Delete;
-  }
-
   /// Print a nice error message for operations we don't support yet.
   FailureOr<DeletionKind> visitUnhandledOp(Operation *op) {
-    return op->emitOpError("elaboration not supported");
+    return visitOpGeneric(op);
   }
 
   FailureOr<DeletionKind> visitExternalOp(Operation *op) {
-    auto memOp = dyn_cast<MemoryEffectOpInterface>(op);
-    if (op->hasTrait<OpTrait::ConstantLike>() || (memOp && memOp.hasNoEffect()))
-      return visitPureOp(op);
-
-    // TODO: we only have this to be able to write tests for this pass without
-    // having to add support for more operations for now, so it should be
-    // removed once it is not necessary anymore for writing tests
-    if (op->use_empty())
-      return DeletionKind::Keep;
-
-    return visitUnhandledOp(op);
+    return visitOpGeneric(op);
   }
-
-  FailureOr<DeletionKind> visitOp(ConstantOp op) { return visitPureOp(op); }
 
   FailureOr<DeletionKind> visitOp(GetSequenceOp op) {
     SmallVector<ElaboratorValue> replacements;
@@ -1340,6 +1265,9 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(SubstituteSequenceOp op) {
+    if (isSymbolic(state.at(op.getSequence())))
+      return visitOpGeneric(op);
+
     auto *seq = get<SequenceStorage *>(op.getSequence());
 
     SmallVector<ElaboratorValue> replacements(seq->args);
@@ -1368,7 +1296,7 @@ public:
   FailureOr<DeletionKind> visitOp(InterleaveSequencesOp op) {
     SmallVector<ElaboratorValue> sequences;
     for (auto seq : op.getSequences())
-      sequences.push_back(get<InterleavedSequenceStorage *>(seq));
+      sequences.push_back(state.at(seq));
 
     state[op.getResult()] =
         sharedState.internalizer.internalize<InterleavedSequenceStorage>(
@@ -1621,24 +1549,6 @@ public:
     return DeletionKind::Delete;
   }
 
-  StringAttr substituteFormatString(StringAttr formatString,
-                                    ValueRange substitutes) const {
-    if (substitutes.empty() || formatString.empty())
-      return formatString;
-
-    auto original = formatString.getValue().str();
-    for (auto [i, subst] : llvm::enumerate(substitutes)) {
-      size_t startPos = 0;
-      std::string from = "{{" + std::to_string(i) + "}}";
-      while ((startPos = original.find(from, startPos)) != std::string::npos) {
-        auto substString = std::to_string(get<size_t>(subst));
-        original.replace(startPos, from.length(), substString);
-      }
-    }
-
-    return StringAttr::get(formatString.getContext(), original);
-  }
-
   FailureOr<DeletionKind> visitOp(ArrayCreateOp op) {
     SmallVector<ElaboratorValue> array;
     array.reserve(op.getElements().size());
@@ -1663,14 +1573,19 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(ArrayInjectOp op) {
-    auto array = get<ArrayStorage *>(op.getArray())->array;
-    size_t idx = get<size_t>(op.getIndex());
+    auto arrayOpaque = state.at(op.getArray());
+    auto idxOpaque = state.at(op.getIndex());
+    if (isSymbolic(arrayOpaque) || isSymbolic(idxOpaque))
+      return visitOpGeneric(op);
+
+    auto array = std::get<ArrayStorage *>(arrayOpaque)->array;
+    size_t idx = std::get<size_t>(idxOpaque);
 
     if (array.size() <= idx)
       return op->emitError("invalid to access index ")
              << idx << " of an array with " << array.size() << " elements";
 
-    array[idx] = state[op.getValue()];
+    array[idx] = state.at(op.getValue());
     state[op.getResult()] = sharedState.internalizer.internalize<ArrayStorage>(
         op.getResult().getType(), std::move(array));
     return DeletionKind::Delete;
@@ -1683,28 +1598,20 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(LabelDeclOp op) {
-    auto substituted =
-        substituteFormatString(op.getFormatStringAttr(), op.getArgs());
-    state[op.getLabel()] = LabelValue(substituted);
+    // Call the folder to fold the format string.
+    attemptConcreteCase(op);
+    state[op.getLabel()] = LabelValue(op.getFormatStringAttr());
     return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(LabelUniqueDeclOp op) {
+    // Call the folder to fold the format string.
+    attemptConcreteCase(op);
     auto *val = sharedState.internalizer.create<UniqueLabelStorage>(
-        substituteFormatString(op.getFormatStringAttr(), op.getArgs()));
+        op.getFormatStringAttr());
     state[op.getLabel()] = val;
     materializer.registerIdentityValue(val);
     return DeletionKind::Delete;
-  }
-
-  FailureOr<DeletionKind> visitOp(LabelOp op) { return DeletionKind::Keep; }
-
-  FailureOr<DeletionKind> visitOp(TestSuccessOp op) {
-    return DeletionKind::Keep;
-  }
-
-  FailureOr<DeletionKind> visitOp(TestFailureOp op) {
-    return DeletionKind::Keep;
   }
 
   FailureOr<DeletionKind> visitOp(RandomNumberInRangeOp op) {
@@ -1845,7 +1752,7 @@ public:
     SmallVector<ElaboratorValue> values;
     values.reserve(op.getElements().size());
     for (auto el : op.getElements())
-      values.push_back(state[el]);
+      values.push_back(state.at(el));
 
     state[op.getResult()] =
         sharedState.internalizer.internalize<TupleStorage>(std::move(values));
@@ -1856,39 +1763,6 @@ public:
     auto *tuple = get<TupleStorage *>(op.getTuple());
     state[op.getResult()] = tuple->values[op.getIndex().getZExtValue()];
     return DeletionKind::Delete;
-  }
-
-  FailureOr<DeletionKind> visitOp(CommentOp op) { return DeletionKind::Keep; }
-
-  FailureOr<DeletionKind> visitOp(rtg::YieldOp op) {
-    return DeletionKind::Keep;
-  }
-
-  FailureOr<DeletionKind> visitOp(ValidateOp op) {
-    SmallVector<ElaboratorValue> defaultUsedValues, elseValues;
-    for (auto v : op.getDefaultUsedValues())
-      defaultUsedValues.push_back(state.at(v));
-
-    for (auto v : op.getElseValues())
-      elseValues.push_back(state.at(v));
-
-    auto *validationVal = sharedState.internalizer.create<ValidationValue>(
-        op.getValue().getType(), state[op.getRef()],
-        state[op.getDefaultValue()], op.getIdAttr(),
-        std::move(defaultUsedValues), std::move(elseValues));
-    state[op.getValue()] = validationVal;
-    materializer.registerIdentityValue(validationVal);
-    materializer.map(validationVal, op.getValue());
-
-    for (auto [i, val] : llvm::enumerate(op.getValues())) {
-      auto *muxVal = sharedState.internalizer.create<ValidationMuxedValue>(
-          val.getType(), validationVal, i);
-      state[val] = muxVal;
-      materializer.registerIdentityValue(muxVal);
-      materializer.map(muxVal, val);
-    }
-
-    return DeletionKind::Keep;
   }
 
   FailureOr<DeletionKind> visitOp(scf::IfOp op) {
@@ -1960,7 +1834,7 @@ public:
 
   FailureOr<DeletionKind> visitOp(arith::AddIOp op) {
     if (!isa<IndexType>(op.getType()))
-      return op->emitError("only index operands supported");
+      return visitOpGeneric(op);
 
     size_t lhs = get<size_t>(op.getLhs());
     size_t rhs = get<size_t>(op.getRhs());
@@ -1970,7 +1844,7 @@ public:
 
   FailureOr<DeletionKind> visitOp(arith::AndIOp op) {
     if (!op.getType().isSignlessInteger(1))
-      return op->emitError("only 'i1' operands supported");
+      return visitOpGeneric(op);
 
     bool lhs = get<bool>(op.getLhs());
     bool rhs = get<bool>(op.getRhs());
@@ -1980,7 +1854,7 @@ public:
 
   FailureOr<DeletionKind> visitOp(arith::XOrIOp op) {
     if (!op.getType().isSignlessInteger(1))
-      return op->emitError("only 'i1' operands supported");
+      return visitOpGeneric(op);
 
     bool lhs = get<bool>(op.getLhs());
     bool rhs = get<bool>(op.getRhs());
@@ -1990,7 +1864,7 @@ public:
 
   FailureOr<DeletionKind> visitOp(arith::OrIOp op) {
     if (!op.getType().isSignlessInteger(1))
-      return op->emitError("only 'i1' operands supported");
+      return visitOpGeneric(op);
 
     bool lhs = get<bool>(op.getLhs());
     bool rhs = get<bool>(op.getRhs());
@@ -1999,9 +1873,13 @@ public:
   }
 
   FailureOr<DeletionKind> visitOp(arith::SelectOp op) {
-    bool cond = get<bool>(op.getCondition());
-    auto trueVal = state[op.getTrueValue()];
-    auto falseVal = state[op.getFalseValue()];
+    auto condOpaque = state.at(op.getCondition());
+    if (isSymbolic(condOpaque))
+      return visitOpGeneric(op);
+
+    bool cond = std::get<bool>(condOpaque);
+    auto trueVal = state.at(op.getTrueValue());
+    auto falseVal = state.at(op.getFalseValue());
     state[op.getResult()] = cond ? trueVal : falseVal;
     return DeletionKind::Delete;
   }
@@ -2043,52 +1921,127 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind> visitOp(ConcatImmediateOp op) {
-    bool anyValidationValues =
-        llvm::any_of(op.getOperands(), [&](auto operand) {
-          return std::holds_alternative<ValidationValue *>(state[operand]);
-        });
-
-    // FIXME: this is a hack and this case should be handled generically for all
-    // operations
-    if (anyValidationValues) {
-      SmallVector<ElaboratorValue> operands;
-      for (auto operand : op.getOperands())
-        operands.push_back(state[operand]);
-      state[op.getResult()] =
-          sharedState.internalizer.internalize<ImmediateConcatStorage>(
-              std::move(operands));
-      return DeletionKind::Delete;
-    }
-
-    auto result = APInt::getZeroWidth();
-    for (auto operand : op.getOperands())
-      result = result.concat(
-          cast<ImmediateAttr>(get<TypedAttr>(operand)).getValue());
-
-    state[op.getResult()] = ImmediateAttr::get(op.getContext(), result);
-    return DeletionKind::Delete;
+  bool isSymbolic(ElaboratorValue val) {
+    return std::holds_alternative<SymbolicComputationWithIdentityValue *>(
+               val) ||
+           std::holds_alternative<SymbolicComputationWithIdentityStorage *>(
+               val) ||
+           std::holds_alternative<SymbolicComputationStorage *>(val);
   }
 
-  FailureOr<DeletionKind> visitOp(SliceImmediateOp op) {
-    // FIXME: this is a hack and this case should be handled generically for all
-    // operations
-    if (std::holds_alternative<ValidationValue *>(state[op.getInput()])) {
-      state[op.getResult()] =
-          sharedState.internalizer.internalize<ImmediateSliceStorage>(
-              state[op.getInput()], op.getLowBit(), op.getResult().getType());
+  bool isSymbolic(Operation *op) {
+    return llvm::any_of(op->getOperands(), [&](auto operand) {
+      auto val = state.at(operand);
+      return isSymbolic(val);
+    });
+  }
+
+  /// If all operands are constants, try to fold the operation and register its
+  /// result values with the folded results in the elaborator state.
+  /// Returns 'false' if operation has to be handled symbolically.
+  bool attemptConcreteCase(Operation *op) {
+    if (op->getNumResults() == 0)
+      return false;
+
+    SmallVector<Attribute> operands;
+    for (auto operand : op->getOperands()) {
+      auto evalValue = state[operand];
+      if (std::holds_alternative<TypedAttr>(evalValue))
+        operands.push_back(std::get<TypedAttr>(evalValue));
+      else if (std::holds_alternative<size_t>(evalValue))
+        operands.push_back(IntegerAttr::get(IndexType::get(op->getContext()),
+                                            std::get<size_t>(evalValue)));
+      else if (std::holds_alternative<bool>(evalValue))
+        operands.push_back(
+            BoolAttr::get(op->getContext(), std::get<bool>(evalValue)));
+      else
+        operands.push_back(Attribute());
+    }
+
+    SmallVector<OpFoldResult> results;
+    if (failed(op->fold(operands, results)))
+      return false;
+
+    if (results.size() != op->getNumResults())
+      return false;
+
+    for (auto [res, val] : llvm::zip(results, op->getResults())) {
+      auto attr = llvm::dyn_cast_or_null<TypedAttr>(res.dyn_cast<Attribute>());
+      if (!attr)
+        return false;
+
+      if (attr.getType() != val.getType())
+        return false;
+
+      auto intAttr = dyn_cast<IntegerAttr>(attr);
+      if (intAttr && isa<IndexType>(attr.getType()))
+        state[op->getResult(0)] = size_t(intAttr.getInt());
+      else if (intAttr && intAttr.getType().isSignlessInteger(1))
+        state[op->getResult(0)] = bool(intAttr.getInt());
+      else
+        state[op->getResult(0)] = attr;
+    }
+
+    return true;
+  }
+
+  FailureOr<DeletionKind> visitOpGeneric(Operation *op) {
+    if (op->getNumResults() == 0)
+      return DeletionKind::Keep;
+
+    if (attemptConcreteCase(op))
+      return DeletionKind::Delete;
+
+    if (mlir::isMemoryEffectFree(op)) {
+      if (op->getNumResults() != 1)
+        return op->emitOpError(
+            "symbolic elaboration of memory-effect-free operations with "
+            "multiple results not supported");
+
+      state[op->getResult(0)] =
+          sharedState.internalizer.internalize<SymbolicComputationStorage>(
+              state, op);
       return DeletionKind::Delete;
     }
 
-    auto inputValue =
-        cast<ImmediateAttr>(get<TypedAttr>(op.getInput())).getValue();
-    auto sliced = inputValue.extractBits(op.getResult().getType().getWidth(),
-                                         op.getLowBit());
-    state[op.getResult()] = ImmediateAttr::get(op.getContext(), sliced);
-    return DeletionKind::Delete;
+    // We assume that reordering operations with only allocate effects is
+    // allowed.
+    // FIXME: this is not how the MLIR MemoryEffects interface intends it.
+    // We should create our own interface/trait for that use-case.
+    // Or modify the elaboration pass to keep track of the ordering of such
+    // instructions and materialize all operations that are not already
+    // materialized but have to happen before the current alloc operation to be
+    // materialized.
+    bool onlyAlloc = mlir::hasSingleEffect<mlir::MemoryEffects::Allocate>(op);
+    onlyAlloc |= isa<ValidateOp>(op);
+
+    auto *validationVal =
+        sharedState.internalizer.create<SymbolicComputationWithIdentityStorage>(
+            state, op);
+    materializer.registerIdentityValue(validationVal);
+    state[op->getResult(0)] = validationVal;
+
+    for (auto [i, res] : llvm::enumerate(op->getResults())) {
+      if (i == 0)
+        continue;
+      auto *val =
+          sharedState.internalizer.create<SymbolicComputationWithIdentityValue>(
+              res.getType(), validationVal, i);
+      state[res] = val;
+      materializer.registerIdentityValue(val);
+    }
+    return onlyAlloc ? DeletionKind::Delete : DeletionKind::Keep;
+  }
+
+  bool supportsSymbolicValuesNonGenerically(Operation *op) {
+    return isa<SubstituteSequenceOp, ArrayCreateOp, ArrayInjectOp,
+               TupleCreateOp, arith::SelectOp>(op);
   }
 
   FailureOr<DeletionKind> dispatchOpVisitor(Operation *op) {
+    if (isSymbolic(op) && !supportsSymbolicValuesNonGenerically(op))
+      return visitOpGeneric(op);
+
     return TypeSwitch<Operation *, FailureOr<DeletionKind>>(op)
         .Case<
             // Arith ops

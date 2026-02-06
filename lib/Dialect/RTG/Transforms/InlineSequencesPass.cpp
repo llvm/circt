@@ -51,25 +51,40 @@ struct SequenceInliner
     : public RTGOpVisitor<SequenceInliner, FailureOr<DeletionKind>> {
   using RTGOpVisitor<SequenceInliner, FailureOr<DeletionKind>>::visitOp;
 
-  SequenceInliner(ModuleOp moduleOp) : table(moduleOp) {}
+  SequenceInliner(ModuleOp moduleOp, bool failOnRemaining)
+      : table(moduleOp), failOnRemaining(failOnRemaining) {}
 
-  LogicalResult inlineSequences(TestOp testOp);
+  LogicalResult inlineSequences(Block &block);
   void materializeInterleavedSequence(Value value, ArrayRef<Block *> blocks,
                                       uint32_t batchSize);
+
+  FailureOr<std::pair<Block *, IRMapping>>
+  getMaterializedSequence(Value seq, Location loc) {
+    auto iter = materializedSequences.find(seq);
+    if (iter == materializedSequences.end()) {
+      StringLiteral msg = "sequence operand could not be resolved; it "
+                          "was likely produced by an op or block "
+                          "argument not supported by this pass";
+      if (failOnRemaining)
+        return mlir::emitError(loc, msg);
+
+      LLVM_DEBUG(llvm::dbgs() << msg << "\n");
+      return failure();
+    }
+
+    return iter->getSecond();
+  }
 
   // Visitor methods
 
   FailureOr<DeletionKind> visitOp(InterleaveSequencesOp op) {
     SmallVector<Block *> blocks;
     for (auto [i, seq] : llvm::enumerate(op.getSequences())) {
-      auto iter = materializedSequences.find(seq);
-      if (iter == materializedSequences.end())
-        return op->emitError()
-               << "sequence operand #" << i
-               << " could not be resolved; it was likely produced by an op or "
-                  "block argument not supported by this pass";
+      auto res = getMaterializedSequence(seq, op.getLoc());
+      if (failed(res))
+        return failure();
 
-      blocks.push_back(iter->getSecond().first);
+      blocks.push_back(res->first);
     }
 
     LLVM_DEBUG(llvm::dbgs()
@@ -96,14 +111,12 @@ struct SequenceInliner
   FailureOr<DeletionKind> visitOp(SubstituteSequenceOp op) {
     LLVM_DEBUG(llvm::dbgs() << "  - Substitute sequence: " << op << "\n");
 
-    auto iter = materializedSequences.find(op.getSequence());
-    if (iter == materializedSequences.end())
-      return op->emitError() << "sequence operand could not be resolved; it "
-                                "was likely produced by an op or block "
-                                "argument not supported by this pass";
+    auto res = getMaterializedSequence(op.getSequence(), op.getLoc());
+    if (failed(res))
+      return failure();
 
-    IRMapping mapping = iter->getSecond().second;
-    Block *block = iter->getSecond().first;
+    IRMapping mapping = res->second;
+    Block *block = res->first;
     for (auto [arg, repl] :
          llvm::zip(block->getArguments(), op.getReplacements())) {
       LLVM_DEBUG(llvm::dbgs()
@@ -118,38 +131,33 @@ struct SequenceInliner
   FailureOr<DeletionKind> visitOp(RandomizeSequenceOp op) {
     LLVM_DEBUG(llvm::dbgs() << "  - Randomize sequence: " << op << "\n");
 
-    auto iter = materializedSequences.find(op.getSequence());
-    if (iter == materializedSequences.end())
-      return op->emitError() << "sequence operand could not be resolved; it "
-                                "was likely produced by an op or block "
-                                "argument not supported by this pass";
+    auto res = getMaterializedSequence(op.getSequence(), op.getLoc());
+    if (failed(res))
+      return failure();
 
     // It's important to force a copy here. Without the temporary variable, we'd
     // assign an lvalue.
-    auto value = iter->getSecond();
-    materializedSequences[op.getResult()] = value;
+    materializedSequences[op.getResult()] = *res;
     return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(EmbedSequenceOp op) {
     LLVM_DEBUG(llvm::dbgs() << "  - Inlining sequence: " << op << "\n");
 
-    auto iter = materializedSequences.find(op.getSequence());
-    if (iter == materializedSequences.end())
-      return op->emitError() << "sequence operand could not be resolved; it "
-                                "was likely produced by an op or block "
-                                "argument not supported by this pass";
+    auto res = getMaterializedSequence(op.getSequence(), op.getLoc());
+    if (failed(res))
+      return failure();
 
     OpBuilder builder(op);
     builder.setInsertionPointAfter(op);
-    IRMapping mapping = iter->getSecond().second;
+    IRMapping mapping = res->second;
 
     LLVM_DEBUG({
       for (auto [k, v] : mapping.getValueMap())
         llvm::dbgs() << "    - Maps " << k << " to " << v << "\n";
     });
 
-    for (auto &op : *iter->getSecond().first) {
+    for (auto &op : *res->first) {
       Operation *o = builder.clone(op, mapping);
       (void)o;
       LLVM_DEBUG(llvm::dbgs() << "    - Inlined " << *o << "\n");
@@ -173,6 +181,7 @@ struct SequenceInliner
   SmallVector<std::unique_ptr<Block>> blockStorage;
   size_t numSequencesInlined = 0;
   size_t numSequencesInterleaved = 0;
+  bool failOnRemaining;
 };
 
 } // namespace
@@ -210,12 +219,18 @@ void SequenceInliner::materializeInterleavedSequence(Value value,
   numSequencesInterleaved += blocks.size();
 }
 
-LogicalResult SequenceInliner::inlineSequences(TestOp testOp) {
-  LLVM_DEBUG(llvm::dbgs() << "\n=== Processing test @" << testOp.getSymName()
-                          << "\n\n");
-
+// NOLINTNEXTLINE(misc-no-recursion)
+LogicalResult SequenceInliner::inlineSequences(Block &block) {
+  // Make sure we inline sequences in nested regions. Walk doesn't work here
+  // because it uses 'early_inc_range' which means we'd skip sequence
+  // embeddings that we added with the previous inlining.
   SmallVector<Operation *> toDelete;
-  for (auto &op : *testOp.getBody()) {
+  for (auto &op : block) {
+    for (auto &region : op.getRegions())
+      for (auto &block : region)
+        if (failOnRemaining && failed(inlineSequences(block)))
+          return failure();
+
     auto result = dispatchOpVisitor(&op);
     if (failed(result))
       return failure();
@@ -232,12 +247,18 @@ LogicalResult SequenceInliner::inlineSequences(TestOp testOp) {
 
 void InlineSequencesPass::runOnOperation() {
   auto moduleOp = getOperation();
-  SequenceInliner inliner(moduleOp);
+  SequenceInliner inliner(moduleOp, failOnRemaining);
+
+  // Fast-path: no sequences are defined.
+  if (moduleOp.getOps<SequenceOp>().empty())
+    return;
 
   // Inline all sequences and remove the operations that place the sequences.
-  for (auto testOp : moduleOp.getOps<TestOp>())
-    if (failed(inliner.inlineSequences(testOp)))
+  for (auto testOp : moduleOp.getOps<TestOp>()) {
+    auto res = inliner.inlineSequences(*testOp.getBody());
+    if (failOnRemaining && failed(res))
       return signalPassFailure();
+  }
 
   numSequencesInlined = inliner.numSequencesInlined;
   numSequencesInterleaved = inliner.numSequencesInterleaved;
