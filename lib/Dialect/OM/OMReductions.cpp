@@ -315,7 +315,8 @@ struct OMUnusedClassRemover : public OpReduction<ClassOp> {
     });
 
     // Check if this class contains any om.object instantiations
-    // (classes that instantiate other classes should be kept as they might be entry points)
+    // (classes that instantiate other classes should be kept as they might be
+    // entry points)
     classOp.walk([&](ObjectOp objectOp) {
       containsObjectInstantiation = true;
       return WalkResult::interrupt();
