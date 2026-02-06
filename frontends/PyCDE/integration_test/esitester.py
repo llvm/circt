@@ -471,14 +471,6 @@ class SerialCoordTranslator(Module):
         ce=handshake,
         name="in_is_header",
     )
-    remaining = Reg(
-        UInt(bulk_count_width),
-        clk=clk,
-        rst=rst,
-        rst_value=0,
-        ce=handshake,
-        name="remaining",
-    )
     handshake.when_true(
         lambda: print_info("Received frame count=%d", hdr_count_bits))
 
@@ -505,6 +497,15 @@ class SerialCoordTranslator(Module):
     )
     count_reg.assign(hdr_count)
 
+    data_handshake = handshake & ~in_is_header
+    data_count = Counter(bulk_count_width)(
+        clk=clk,
+        rst=rst,
+        clear=hdr_handshake,
+        increment=data_handshake,
+        instance_name="data_count",
+    ).out
+
     # Latch translations only on the first header of a message.
     x_translation_reg = Reg(
         UInt(32),
@@ -526,16 +527,10 @@ class SerialCoordTranslator(Module):
     y_translation_reg.assign(hdr_y)
 
     # Next-state logic for header/data tracking.
-    rem_is_one = remaining == UInt(bulk_count_width)(1)
-    rem_is_zero = remaining == UInt(bulk_count_width)(0)
-    remaining_minus_one = (remaining -
-                           UInt(bulk_count_width)(1)).as_uint(bulk_count_width)
-    dec_remaining = Mux(rem_is_zero, remaining_minus_one,
-                        UInt(bulk_count_width)(0))
-
-    next_remaining = Mux(in_is_header, dec_remaining, hdr_count)
-    next_is_header = Mux(in_is_header, rem_is_one, hdr_is_zero)
-    remaining.assign(next_remaining)
+    count_minus_one = (count_reg -
+                       UInt(bulk_count_width)(1)).as_uint(bulk_count_width)
+    data_last = data_count == count_minus_one
+    next_is_header = Mux(in_is_header, data_last, hdr_is_zero)
     in_is_header.assign(next_is_header)
 
     # Build output frames.
