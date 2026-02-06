@@ -1,8 +1,7 @@
-from typing import List, Optional
+from typing import List
 import esiaccel
 import esiaccel.types as types
 import sys
-import time
 
 platform = sys.argv[1]
 connstr = sys.argv[2]
