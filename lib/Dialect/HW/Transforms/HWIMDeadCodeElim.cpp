@@ -338,51 +338,36 @@ void HWIMDeadCodeElim::runOnOperation() {
     auto liveAttr = StringAttr::get(&getContext(), "LIVE");
     auto deadAttr = StringAttr::get(&getContext(), "DEAD");
 
-    auto setLiveness = [&](Operation *op,
-                           SmallVector<mlir::Attribute> &resultLiveness) {
-      op->setAttr("val-liveness",
-                  ArrayAttr::get(&getContext(), resultLiveness));
+    auto getLiveness = [&](bool alive) { return alive ? liveAttr : deadAttr; };
+
+    auto getValLiveness = [&](ValueRange values) {
+      SmallVector<Attribute> liveness;
+      for (auto value : values)
+        liveness.push_back(getLiveness(isKnownAlive(value)));
+      return ArrayAttr::get(&getContext(), liveness);
     };
 
     getOperation()->walk([&](Operation *op) {
-      SmallVector<mlir::Attribute> resultLiveness;
-
       if (auto module = dyn_cast<HWModuleOp>(op)) {
-        for (auto result : module.getBodyBlock()->getArguments()) {
-          resultLiveness.push_back(isKnownAlive(result) ? liveAttr : deadAttr);
-        }
-        setLiveness(op, resultLiveness);
-        module->setAttr("op-liveness", isBlockExecutable(module.getBodyBlock())
-                                           ? liveAttr
-                                           : deadAttr);
+        op->setAttr("op-liveness",
+                    getLiveness(isBlockExecutable(module.getBodyBlock())));
+        op->setAttr("val-liveness",
+                    getValLiveness(module.getBodyBlock()->getArguments()));
         return;
       }
 
       if (auto outputOp = dyn_cast<OutputOp>(op)) {
-        for (auto operand : outputOp->getOperands()) {
-          resultLiveness.push_back(isKnownAlive(operand) ? liveAttr : deadAttr);
-        }
-        setLiveness(op, resultLiveness);
+        op->setAttr("val-liveness", getValLiveness(outputOp->getOperands()));
         return;
       }
 
       if (op->getNumResults()) {
-        for (auto result : op->getResults()) {
-          resultLiveness.push_back(isKnownAlive(result) ? liveAttr : deadAttr);
-        }
-        setLiveness(op, resultLiveness);
-
-        if (auto instance = dyn_cast<InstanceOp>(op)) {
-          instance->setAttr("op-liveness",
-                            isKnownAlive(instance) ? liveAttr : deadAttr);
-        } else {
-          op->setAttr("op-liveness", isAssumedDead(op) ? deadAttr : liveAttr);
-        }
-
-        return;
+        if (auto instance = dyn_cast<InstanceOp>(op))
+          op->setAttr("op-liveness", getLiveness(isKnownAlive(instance)));
+        else
+          op->setAttr("op-liveness", getLiveness(!isAssumedDead(op)));
+        op->setAttr("val-liveness", getValLiveness(op->getResults()));
       }
-
-      return;
     });
   }
 
