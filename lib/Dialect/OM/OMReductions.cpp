@@ -75,9 +75,9 @@ struct OMObjectToUnknownReplacer : public OpReduction<ObjectOp> {
   void matches(ObjectOp objectOp,
                llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
     // Check if the object is only used in om.any_cast operations or not used
-    bool onlyAnyCastOrUnused = llvm::all_of(objectOp->getUsers(), [](Operation *user) {
-      return isa<om::AnyCastOp>(user);
-    });
+    bool onlyAnyCastOrUnused =
+        llvm::all_of(objectOp->getUsers(),
+                     [](Operation *user) { return isa<om::AnyCastOp>(user); });
 
     if (!onlyAnyCastOrUnused)
       return;
@@ -87,10 +87,10 @@ struct OMObjectToUnknownReplacer : public OpReduction<ObjectOp> {
   }
 
   LogicalResult rewriteMatches(ObjectOp objectOp,
-                                ArrayRef<uint64_t> matches) override {
+                               ArrayRef<uint64_t> matches) override {
     OpBuilder builder(objectOp);
-    auto unknownOp = om::UnknownValueOp::create(
-        builder, objectOp.getLoc(), objectOp.getResult().getType());
+    auto unknownOp = om::UnknownValueOp::create(builder, objectOp.getLoc(),
+                                                objectOp.getResult().getType());
     objectOp.getResult().replaceAllUsesWith(unknownOp.getResult());
     objectOp->erase();
     return success();
@@ -112,7 +112,7 @@ struct OMListElementPruner : public OpReduction<ListCreateOp> {
   }
 
   LogicalResult rewriteMatches(ListCreateOp listOp,
-                                ArrayRef<uint64_t> matches) override {
+                               ArrayRef<uint64_t> matches) override {
     // Convert matches to a set for fast lookup
     llvm::SmallDenseSet<uint64_t, 4> matchesSet(matches.begin(), matches.end());
 
@@ -175,7 +175,7 @@ struct OMClassFieldPruner : public OpReduction<ClassOp> {
   }
 
   LogicalResult rewriteMatches(ClassOp classOp,
-                                ArrayRef<uint64_t> matches) override {
+                               ArrayRef<uint64_t> matches) override {
     // Convert matches to a set for fast lookup
     llvm::SmallDenseSet<uint64_t, 4> matchesSet(matches.begin(), matches.end());
 
@@ -188,7 +188,8 @@ struct OMClassFieldPruner : public OpReduction<ClassOp> {
     SmallVector<Value> newFieldValues;
     SmallVector<NamedAttribute> newFieldTypes;
 
-    for (auto [idx, nameValue] : llvm::enumerate(llvm::zip(oldFieldNames, oldFieldValues))) {
+    for (auto [idx, nameValue] :
+         llvm::enumerate(llvm::zip(oldFieldNames, oldFieldValues))) {
       if (!matchesSet.contains(idx)) {
         auto [name, value] = nameValue;
         auto nameAttr = cast<StringAttr>(name);
@@ -231,7 +232,7 @@ struct OMClassParameterPruner : public OpReduction<ClassOp> {
   }
 
   LogicalResult rewriteMatches(ClassOp classOp,
-                                ArrayRef<uint64_t> matches) override {
+                               ArrayRef<uint64_t> matches) override {
     // Convert matches to a set for fast lookup
     llvm::SmallDenseSet<uint64_t, 4> matchesSet(matches.begin(), matches.end());
 
@@ -313,7 +314,7 @@ struct OMUnusedClassRemover : public OpReduction<ClassOp> {
   }
 
   LogicalResult rewriteMatches(ClassOp classOp,
-                                ArrayRef<uint64_t> matches) override {
+                               ArrayRef<uint64_t> matches) override {
     classOp->erase();
     return success();
   }
@@ -329,12 +330,13 @@ struct OMAnyCastOfUnknownSimplifier : public OpReduction<om::AnyCastOp> {
   void matches(om::AnyCastOp anyCastOp,
                llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
     // Check if the input is an om.unknown
-    if (auto unknownOp = anyCastOp.getInput().getDefiningOp<om::UnknownValueOp>())
+    if (auto unknownOp =
+            anyCastOp.getInput().getDefiningOp<om::UnknownValueOp>())
       addMatch(2, 0);
   }
 
   LogicalResult rewriteMatches(om::AnyCastOp anyCastOp,
-                                ArrayRef<uint64_t> matches) override {
+                               ArrayRef<uint64_t> matches) override {
     OpBuilder builder(anyCastOp);
     auto unknownOp = om::UnknownValueOp::create(
         builder, anyCastOp.getLoc(), anyCastOp.getResult().getType());
@@ -343,7 +345,9 @@ struct OMAnyCastOfUnknownSimplifier : public OpReduction<om::AnyCastOp> {
     return success();
   }
 
-  std::string getName() const override { return "om-anycast-of-unknown-simplifier"; }
+  std::string getName() const override {
+    return "om-anycast-of-unknown-simplifier";
+  }
 };
 
 } // namespace
@@ -371,4 +375,3 @@ void om::registerReducePatternDialectInterface(
     dialect->addInterfaces<OMReducePatternDialectInterface>();
   });
 }
-

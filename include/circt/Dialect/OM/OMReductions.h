@@ -27,4 +27,3 @@ void registerReducePatternDialectInterface(mlir::DialectRegistry &registry);
 } // namespace circt
 
 #endif // CIRCT_DIALECT_OM_OMREDUCTIONS_H
-
