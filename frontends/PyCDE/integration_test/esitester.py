@@ -23,6 +23,7 @@
 # RUN: esi-cosim.py --source %t -- esitester cosim env streaming_add | FileCheck %s --check-prefix=STREAMING_ADD
 # RUN: esi-cosim.py --source %t -- esitester cosim env streaming_add -t | FileCheck %s --check-prefix=STREAMING_ADD
 # RUN: esi-cosim.py --source %t -- esitester cosim env translate_coords | FileCheck %s --check-prefix=TRANSLATE_COORDS
+# RUN: esi-cosim.py --source %t -- esitester cosim env serial_coords -n 40 -b 33 | FileCheck %s --check-prefix=SERIAL_COORDS
 # RUN: ESI_COSIM_MANIFEST_MMIO=1 esi-cosim.py --source %t -- esiquery cosim env info
 # RUN: esi-cosim.py --source %t -- esiquery cosim env telemetry | FileCheck %s --check-prefix=TELEMETRY
 
@@ -39,8 +40,9 @@ import pycde.esi as esi
 from pycde import Clock, Module, Reset, System, generator, modparams
 from pycde.bsp import get_bsp
 from pycde.common import AppID, Constant, InputChannel, Output, OutputChannel
-from pycde.constructs import ControlReg, Counter, NamedWire, Reg, Wire
+from pycde.constructs import ControlReg, Counter, Mux, NamedWire, Reg, Wire
 from pycde.module import Metadata
+from pycde.testing import print_info
 from pycde.types import Bits, Channel, ChannelSignaling, UInt
 
 # CHECK: [CONNECT] connecting to backend
@@ -60,6 +62,10 @@ from pycde.types import Bits, Channel, ChannelSignaling, UInt
 # TRANSLATE_COORDS:   coord[3]=(218516,390276) + (10,20) = (218526,390296)
 # TRANSLATE_COORDS:   coord[4]=(750021,423525) + (10,20) = (750031,423545)
 # TRANSLATE_COORDS: Coord translate test passed
+
+# SERIAL_COORDS: Serial coord translate test results:
+# SERIAL_COORDS:   coord[0]=
+# SERIAL_COORDS: Serial coord translate test passed
 
 # TELEMETRY: ********************************
 # TELEMETRY: * Telemetry
@@ -353,6 +359,206 @@ class CoordTranslator(Module):
         result_window, arg_valid)
     ready.assign(result_ready)
     result_chan.assign(result_chan_internal)
+
+
+class SerialCoordTranslator(Module):
+  """Like CoordTranslator, but uses the serial (bulk-transfer) list encoding.
+
+  Input wire format is a window with two frames:
+    - "header": {x_translation, y_translation, coords_count}
+    - "data":   {coords[1]}  (one coordinate per frame)
+
+  Output wire format is also a window with two frames:
+    - "header": {coords_count}
+    - "data":   {coords[1]}  (one coordinate per frame)
+
+  In bulk-transfer encoding, the sender may transmit multiple header/data
+  sequences to extend a list. A common pattern is to set coords_count=64 and
+  re-send a new header every 64 items; the final header has coords_count=0.
+  This module passes the header count through and translates each coordinate.
+  """
+
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def construct(ports):
+    from pycde.types import List, StructType, Window
+
+    clk = ports.clk
+    rst = ports.rst
+
+    bulk_count_width = 16
+    items_per_frame = 1
+
+    coord_type = StructType([("x", Bits(32)), ("y", Bits(32))])
+
+    # ----- Input window type (serial/bulk transfer) -----
+    arg_struct_type = StructType([
+        ("x_translation", Bits(32)),
+        ("y_translation", Bits(32)),
+        ("coords", List(coord_type)),
+    ])
+    arg_window_type = Window(
+        "serial_coord_args",
+        arg_struct_type,
+        [
+            Window.Frame(
+                "header",
+                [
+                    "x_translation",
+                    "y_translation",
+                    ("coords", 0, bulk_count_width),
+                ],
+            ),
+            Window.Frame(
+                "data",
+                [("coords", items_per_frame, 0)],
+            ),
+        ],
+    )
+
+    # ----- Output window type (serial/bulk transfer) -----
+    result_struct_type = StructType([("coords", List(coord_type))])
+    result_window_type = Window(
+        "serial_coord_result",
+        result_struct_type,
+        [
+            Window.Frame(
+                "header",
+                [("coords", 0, bulk_count_width)],
+            ),
+            Window.Frame(
+                "data",
+                [("coords", items_per_frame, 0)],
+            ),
+        ],
+    )
+
+    result_chan = Wire(Channel(result_window_type))
+    args = esi.FuncService.get_call_chans(
+        AppID("translate_coords_serial"),
+        arg_type=arg_window_type,
+        result=result_chan,
+    )
+
+    # Unwrap the argument channel.
+    in_ready = Wire(Bits(1))
+    in_window, in_valid = args.unwrap(in_ready)
+    in_union = in_window.unwrap()
+
+    hdr_frame = in_union["header"]
+    data_frame = in_union["data"]
+
+    hdr_x = hdr_frame["x_translation"].as_uint(32)
+    hdr_y = hdr_frame["y_translation"].as_uint(32)
+    hdr_count_bits = hdr_frame["coords_count"]
+    hdr_count = hdr_count_bits.as_uint(bulk_count_width)
+
+    out_hdr_struct_ty = result_window_type.lowered_type.header
+    out_data_struct_ty = result_window_type.lowered_type.data
+
+    # Output channel (built below) drives readiness/backpressure.
+    out_ready_wire = Wire(Bits(1))
+    handshake = in_valid & out_ready_wire
+
+    # Track which frame we're currently expecting.
+    in_is_header = Reg(
+        Bits(1),
+        clk=clk,
+        rst=rst,
+        rst_value=1,
+        ce=handshake,
+        name="in_is_header",
+    )
+    # Only log the frame count when the handshake is for a header frame.
+    hdr_handshake = handshake & in_is_header
+    hdr_handshake.when_true(
+        lambda: print_info("Received frame count=%d", hdr_count_bits))
+
+    # Latch the most recent header count for re-use when emitting the output
+    # header (do not rely on union extracts during data frames).
+    hdr_is_zero = hdr_count == UInt(bulk_count_width)(0)
+    footer_handshake = hdr_handshake & hdr_is_zero
+    start_handshake = hdr_handshake & ~hdr_is_zero
+    message_active = ControlReg(
+        clk,
+        rst,
+        asserts=[start_handshake],
+        resets=[footer_handshake],
+        name="message_active",
+    )
+    count_reg = Reg(
+        UInt(bulk_count_width),
+        clk=clk,
+        rst=rst,
+        rst_value=0,
+        ce=hdr_handshake,
+        name="coords_count",
+    )
+    count_reg.assign(hdr_count)
+
+    data_handshake = handshake & ~in_is_header
+    data_count = Counter(bulk_count_width)(
+        clk=clk,
+        rst=rst,
+        clear=hdr_handshake,
+        increment=data_handshake,
+        instance_name="data_count",
+    ).out
+
+    # Latch translations only on the first header of a message.
+    x_translation_reg = Reg(
+        UInt(32),
+        clk=clk,
+        rst=rst,
+        rst_value=0,
+        ce=start_handshake & ~message_active,
+        name="x_translation",
+    )
+    y_translation_reg = Reg(
+        UInt(32),
+        clk=clk,
+        rst=rst,
+        rst_value=0,
+        ce=start_handshake & ~message_active,
+        name="y_translation",
+    )
+    x_translation_reg.assign(hdr_x)
+    y_translation_reg.assign(hdr_y)
+
+    # Next-state logic for header/data tracking.
+    count_minus_one = (count_reg -
+                       UInt(bulk_count_width)(1)).as_uint(bulk_count_width)
+    data_last = data_count == count_minus_one
+    next_is_header = Mux(in_is_header, data_last, hdr_is_zero)
+    in_is_header.assign(next_is_header)
+
+    # Build output frames.
+    out_hdr_struct = out_hdr_struct_ty(
+        {"coords_count": hdr_count.as_bits(bulk_count_width)})
+
+    in_coord = data_frame["coords"][0]
+    in_x = in_coord["x"].as_uint(32)
+    in_y = in_coord["y"].as_uint(32)
+    translated_x = (x_translation_reg + in_x).as_uint(32)
+    translated_y = (y_translation_reg + in_y).as_uint(32)
+    out_coord = coord_type({
+        "x": translated_x.as_bits(32),
+        "y": translated_y.as_bits(32),
+    })
+    out_data_struct = out_data_struct_ty({"coords": [out_coord]})
+
+    out_union_hdr = result_window_type.lowered_type(("header", out_hdr_struct))
+    out_union_data = result_window_type.lowered_type(("data", out_data_struct))
+    out_union = Mux(in_is_header, out_union_data, out_union_hdr)
+    out_window = result_window_type.wrap(out_union)
+
+    out_chan, out_ready = Channel(result_window_type).wrap(out_window, in_valid)
+    out_ready_wire.assign(out_ready)
+
+    in_ready.assign(out_ready)
+    result_chan.assign(out_chan)
 
 
 @modparams
@@ -1030,6 +1236,12 @@ class EsiTester(Module):
         rst=ports.rst,
         instance_name="coord_translator",
         appid=AppID("coord_translator"),
+    )
+    SerialCoordTranslator(
+        clk=ports.clk,
+        rst=ports.rst,
+        instance_name="coord_translator_serial",
+        appid=AppID("coord_translator_serial"),
     )
 
     for i in range(4, 18, 5):
