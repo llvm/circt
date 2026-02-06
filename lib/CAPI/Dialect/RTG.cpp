@@ -200,6 +200,15 @@ uint32_t rtgMemoryBlockTypeGetAddressWidth(MlirType type) {
   return cast<MemoryBlockType>(unwrap(type)).getAddressWidth();
 }
 
+// StringType
+//===----------------------------------------------------------------------===//
+
+bool rtgTypeIsAString(MlirType type) { return isa<StringType>(unwrap(type)); }
+
+MlirType rtgStringTypeGet(MlirContext ctxt) {
+  return wrap(StringType::get(unwrap(ctxt)));
+}
+
 //===----------------------------------------------------------------------===//
 // Attribute API.
 //===----------------------------------------------------------------------===//

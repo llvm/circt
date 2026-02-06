@@ -149,7 +149,8 @@ private:
   }
 
   LogicalResult emit(CommentOp op) {
-    os << llvm::indent(4) << "# " << op.getComment() << "\n";
+    os << llvm::indent(4) << "# "
+       << cast<StringAttr>(state[op.getComment()]).getValue() << "\n";
     return success();
   }
 
@@ -163,7 +164,7 @@ private:
     os << llvm::indent(4) << ".asciz \"";
     // NOTE: llvm::printEscapedString does not work because assemblers do not
     // support the hex escapes (e.g., \0a instead of \n)
-    for (auto c : op.getData()) {
+    for (auto c : cast<StringAttr>(state[op.getData()]).getValue()) {
       switch (c) {
       case '\n':
         os << "\\n";

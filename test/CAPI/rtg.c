@@ -136,6 +136,16 @@ static void testTupleType(MlirContext ctx) {
   mlirTypeDump(emptyTupleTy);
 }
 
+static void testStringType(MlirContext ctx) {
+  MlirType stringTy = rtgStringTypeGet(ctx);
+
+  // CHECK: is_string
+  fprintf(stderr,
+          rtgTypeIsAString(stringTy) ? "is_string\n" : "isnot_string\n");
+  // CHECK: !rtg.string
+  mlirTypeDump(stringTy);
+}
+
 static void testLabelVisibilityAttr(MlirContext ctx) {
   MlirAttribute labelVisibility =
       rtgLabelVisibilityAttrGet(ctx, RTG_LABEL_VISIBILITY_GLOBAL);
@@ -241,6 +251,7 @@ int main(int argc, char **argv) {
   testDictType(ctx);
   testArrayType(ctx);
   testTupleType(ctx);
+  testStringType(ctx);
 
   testLabelVisibilityAttr(ctx);
   testContextAttrs(ctx);

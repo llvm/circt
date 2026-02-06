@@ -134,6 +134,12 @@ MLIR_CAPI_EXPORTED MlirType rtgMemoryBlockTypeGet(MlirContext ctx,
 /// Returns the address with of an RTG memory block type.
 MLIR_CAPI_EXPORTED uint32_t rtgMemoryBlockTypeGetAddressWidth(MlirType type);
 
+/// If the type is an RTG string.
+MLIR_CAPI_EXPORTED bool rtgTypeIsAString(MlirType type);
+
+/// Creates an RTG string type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgStringTypeGet(MlirContext ctxt);
+
 //===----------------------------------------------------------------------===//
 // Attribute API.
 //===----------------------------------------------------------------------===//

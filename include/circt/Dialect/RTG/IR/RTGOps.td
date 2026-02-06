@@ -683,7 +683,7 @@ def RandomNumberInRangeOp : RTGOp<"random_number_in_range", []> {
 def CommentOp : RTGOp<"comment", []> {
   let summary = "emit a comment in instruction stream";
 
-  let arguments = (ins StrAttr:$comment);
+  let arguments = (ins StringType:$comment);
 
   let assemblyFormat = "$comment attr-dict";
 }
@@ -790,7 +790,7 @@ def TestSuccessOp : RTGOp<"test.success", []> {
 def TestFailureOp : RTGOp<"test.failure", []> {
   let summary = "exit the test and report failure";
 
-  let arguments = (ins StrAttr:$errorMessage);
+  let arguments = (ins StringType:$errorMessage);
   let assemblyFormat = "$errorMessage attr-dict";
 }
 
@@ -1056,7 +1056,7 @@ def StringDataOp : RTGISAOp<"string_data", []> {
     Always appends a zero character (\00).
   }];
 
-  let arguments = (ins StrAttr:$data);
+  let arguments = (ins StringType:$data);
 
   let assemblyFormat = "$data attr-dict";
 }
