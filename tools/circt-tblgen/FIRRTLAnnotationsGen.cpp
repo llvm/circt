@@ -41,7 +41,11 @@ struct BooleanType {
   static StringRef getJSONTypeName() { return "boolean"; }
 };
 struct ArrayType {
+  /// Name of the element type (e.g., "StringParam").
+  std::string elementTypeName;
+
   static StringRef getJSONTypeName() { return "array"; }
+  StringRef getElementTypeName() const { return elementTypeName; }
 };
 struct TargetType {
   static StringRef getJSONTypeName() { return "target"; }
@@ -73,11 +77,27 @@ struct ObjectType {
   ArrayRef<Parameter> getFields() const { return fields; }
 };
 
-/// Variant type for all possible parameter types.
+/// Annotation type - references another annotation definition as a member type.
+/// This is distinct from ObjectType in that it refers to a named annotation
+/// definition rather than an inline object structure.
+struct AnnotationType {
+  /// TableGen def name (e.g., "AugmentedGroundType").
+  std::string annotationName;
+
+  /// JSON class name.
+  std::string className;
+
+  static StringRef getJSONTypeName() { return "object"; }
+  StringRef getAnnotationName() const { return annotationName; }
+  StringRef getClassName() const { return className; }
+};
+
+/// Variant type for all possible parameter types. The std::monostate
+/// alternative represents an uninitialized state.
 using ParameterTypeVariant =
-    std::variant<std::monostate, // For uninitialized state
-                 StringType, IntegerType, BooleanType, ArrayType, TargetType,
-                 EnumType, UnionType, ObjectType>;
+    std::variant<std::monostate, StringType, IntegerType, BooleanType,
+                 ArrayType, TargetType, EnumType, UnionType, ObjectType,
+                 AnnotationType>;
 
 /// Represents a parameter with its name, type, and metadata.
 struct Parameter {
@@ -86,7 +106,7 @@ struct Parameter {
   bool required = true;
   std::string defaultValue;
 
-  // Type-safe variant holding the actual parameter type
+  /// Type-safe variant holding the actual parameter type.
   ParameterTypeVariant type;
 
   Parameter() = default;
@@ -109,10 +129,14 @@ struct Parameter {
 // TargetTypeDef
 //===----------------------------------------------------------------------===//
 
-/// Represents a FIRRTL target type (pure AST node, no TableGen dependencies).
+/// Represents a FIRRTL target type. This is a pure AST node with no TableGen
+/// dependencies.
 struct TargetTypeDef {
-  StringRef name;      // e.g., "Module", "Wire"
-  StringRef operation; // e.g., "FModuleOp", "WireOp"
+  /// The target type name (e.g., "Module", "Wire").
+  StringRef name;
+
+  /// The MLIR operation name (e.g., "FModuleOp", "WireOp").
+  StringRef operation;
 
   TargetTypeDef() = default;
   TargetTypeDef(StringRef name, StringRef operation)
@@ -123,24 +147,28 @@ struct TargetTypeDef {
 // AnnotationDef
 //===----------------------------------------------------------------------===//
 
-/// Represents a FIRRTL annotation (pure AST node, no TableGen dependencies).
+/// Represents a FIRRTL annotation. This is a pure AST node with no TableGen
+/// dependencies. It captures all the information needed to generate code and
+/// documentation for an annotation.
 struct AnnotationDef {
   StringRef className;
   std::string description;
   SmallVector<Parameter> parameters;
 
-  // Annotation type
+  /// The annotation type determines how the annotation is resolved and applied.
   enum class AnnotationType { NoTarget, SingleTarget, Ignored } annoType;
 
-  // For SingleTargetAnnotation
+  /// These fields are only used for SingleTargetAnnotation.
   bool allowNonLocal = false;
   bool allowPortTargets = false;
-  SmallVector<StringRef> targets; // MLIR operation names
 
-  // Custom handler function name
+  /// MLIR operation names that this annotation can target.
+  SmallVector<StringRef> targets;
+
+  /// Custom handler function name, if specified.
   std::string customHandler;
 
-  // Source location for error reporting
+  /// Source location for error reporting.
   ArrayRef<SMLoc> loc;
 
   AnnotationDef() = default;
@@ -310,7 +338,8 @@ static TargetTypeDef parseTargetTypeFromRecord(const Record *def) {
 /// Parse a parameter from a TableGen record into the AST. This is used
 /// recursively for nested object fields.
 // NOLINTNEXTLINE(misc-no-recursion)
-static void parseParameterFromRecord(const Record *paramTypeRec,
+static void parseParameterFromRecord(const RecordKeeper &records,
+                                     const Record *paramTypeRec,
                                      StringRef paramName, Parameter &param) {
   param.name = paramName;
 
@@ -380,7 +409,8 @@ static void parseParameterFromRecord(const Record *paramTypeRec,
 
           // Recursively parse the nested field
           Parameter nestedParam;
-          parseParameterFromRecord(fieldTypeRec, fieldName, nestedParam);
+          parseParameterFromRecord(records, fieldTypeRec, fieldName,
+                                   nestedParam);
           objType.fields.push_back(nestedParam);
         }
       }
@@ -394,9 +424,23 @@ static void parseParameterFromRecord(const Record *paramTypeRec,
   } else if (isOrInheritsFrom(unwrapped, "BooleanParam")) {
     param.type = BooleanType{};
   } else if (isOrInheritsFrom(unwrapped, "ArrayParam")) {
-    param.type = ArrayType{};
+    // Parse ArrayType with element type
+    ArrayType arrayType;
+    if (auto *elementInit = unwrapped->getValue("element")) {
+      if (auto *defInit = dyn_cast<DefInit>(elementInit->getValue())) {
+        arrayType.elementTypeName = defInit->getDef()->getName().str();
+      }
+    }
+    param.type = arrayType;
   } else if (unwrapped->getName() == "TargetParam") {
     param.type = TargetType{};
+  } else if (isOrInheritsFrom(unwrapped, "Annotation")) {
+    // Parse AnnotationType - an annotation used as a member type
+    AnnotationType annoType;
+    annoType.annotationName = unwrapped->getName().str();
+    annoType.className =
+        unwrapped->getValueAsOptionalString("className").value_or("");
+    param.type = annoType;
   } else {
     // Unknown type - leave as monostate
     param.type = std::monostate{};
@@ -404,7 +448,8 @@ static void parseParameterFromRecord(const Record *paramTypeRec,
 }
 
 /// Parse an annotation definition from a TableGen record into the AST.
-static AnnotationDef parseAnnotationFromRecord(const Record *def) {
+static AnnotationDef parseAnnotationFromRecord(const RecordKeeper &records,
+                                               const Record *def) {
   AnnotationDef anno;
   anno.loc = def->getLoc();
   anno.className = def->getValueAsString("className");
@@ -438,11 +483,13 @@ static AnnotationDef parseAnnotationFromRecord(const Record *def) {
     anno.annoType = AnnotationDef::AnnotationType::NoTarget;
   }
 
-  // For SingleTargetAnnotation, automatically add 'target' parameter first
+  // For SingleTargetAnnotation, automatically add 'target' parameter first.
+  // This is a synthetic parameter that is not defined in TableGen, but is
+  // always present in the JSON representation.
   if (anno.annoType == AnnotationDef::AnnotationType::SingleTarget) {
     Parameter targetParam;
     targetParam.name = "target";
-    targetParam.type = TargetType{}; // Synthetic parameter
+    targetParam.type = TargetType{};
     targetParam.description = "Target of the annotation";
     targetParam.required = true;
     anno.parameters.push_back(targetParam);
@@ -468,7 +515,7 @@ static AnnotationDef parseAnnotationFromRecord(const Record *def) {
 
       // Extract parameter information from the type record
       Parameter param;
-      parseParameterFromRecord(paramTypeRec, paramName, param);
+      parseParameterFromRecord(records, paramTypeRec, paramName, param);
       anno.parameters.push_back(param);
     }
   }
@@ -530,7 +577,7 @@ static bool emitMarkdownDocs(const RecordKeeper &records, raw_ostream &os) {
               continue;
 
             Parameter param;
-            parseParameterFromRecord(fieldTypeRec, fieldName, param);
+            parseParameterFromRecord(records, fieldTypeRec, fieldName, param);
             objType.fields.push_back(param);
           }
         }
@@ -624,7 +671,7 @@ static bool emitMarkdownDocs(const RecordKeeper &records, raw_ostream &os) {
   // Collect all annotations (from all base classes)
   SmallVector<AnnotationDef, 0> annotations;
   for (const auto *def : records.getAllDerivedDefinitions("Annotation"))
-    annotations.push_back(parseAnnotationFromRecord(def));
+    annotations.push_back(parseAnnotationFromRecord(records, def));
 
   // Sort by className
   sort(annotations, [](const AnnotationDef &a, const AnnotationDef &b) {
@@ -712,6 +759,23 @@ static bool emitMarkdownDocs(const RecordKeeper &records, raw_ostream &os) {
         }
       }
 
+      // Add annotation reference if present (for Annotation as member type)
+      if (auto *annoType = std::get_if<AnnotationType>(&param.type)) {
+        os << " (annotation: `" << annoType->getAnnotationName() << "`)";
+      }
+
+      // Add element type if present (for ArrayParam)
+      if (auto *arrayType = std::get_if<ArrayType>(&param.type)) {
+        auto elementTypeName = arrayType->getElementTypeName();
+        if (!elementTypeName.empty()) {
+          // Show a cleaner name for anonymous ObjectParam records
+          if (elementTypeName.starts_with("anonymous_"))
+            os << " (elements: `object`)";
+          else
+            os << " (elements: `" << elementTypeName << "`)";
+        }
+      }
+
       // Mark as optional if not required
       if (!param.required) {
         os << " (optional";
@@ -769,7 +833,7 @@ static bool emitAnnotationDetails(const RecordKeeper &records,
   // Get all annotation definitions
   SmallVector<AnnotationDef, 0> annotations;
   for (const auto *def : records.getAllDerivedDefinitions("Annotation")) {
-    annotations.push_back(parseAnnotationFromRecord(def));
+    annotations.push_back(parseAnnotationFromRecord(records, def));
   }
 
   // Sort by className for consistent output
@@ -836,7 +900,7 @@ static bool emitAnnotationRecords(const RecordKeeper &records,
   // Collect all annotations (from all base classes)
   SmallVector<AnnotationDef, 0> annotations;
   for (const auto *def : records.getAllDerivedDefinitions("Annotation"))
-    annotations.push_back(parseAnnotationFromRecord(def));
+    annotations.push_back(parseAnnotationFromRecord(records, def));
 
   // Emit header comment
   os << "//===- FIRRTLAnnotationRecords.h.inc - Annotation Records "

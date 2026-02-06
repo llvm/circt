@@ -53,7 +53,7 @@ def IntegerParam : ParamType;
 
 def BooleanParam : ParamType;
 
-// Object parameter type (nested JSON object)
+// Object parameter type.
 // Can be used in two ways:
 // 1. With a DAG of fields: ObjectParam<(ins StringParam:$field1, IntegerParam:$field2)>
 //    This creates a structured object with named, typed fields
@@ -64,8 +64,11 @@ class ObjectParam<dag fields = (ins)> : ParamType {
   code description = "";
 }
 
-// Array parameter type.
-def ArrayParam : ParamType;
+// Array parameter type with element type.
+// Example: ArrayParam<StringParam> for an array of strings
+class ArrayParam<ParamType elementType> : ParamType {
+  ParamType element = elementType;
+}
 
 // Target parameter type (FIRRTL reference target)
 def TargetParam : ParamType;
@@ -78,8 +81,9 @@ class EnumParam<list<string> values> : ParamType {
 // Union parameter (one of several allowed types)
 // Used to specify that a field can be one of multiple specific types.
 // Example: UnionParam<[AugmentedGroundType, AugmentedVectorType, AugmentedBundleType]>
-class UnionParam<list<ObjectParam> types> : ParamType {
-  list<ObjectParam> allowedTypes = types;
+// Example: UnionParam<[StringParam, IntegerParam]>
+class UnionParam<list<ParamType> types> : ParamType {
+  list<ParamType> allowedTypes = types;
 }
 
 // Decorates a parameter as optional with an optional default value.
@@ -101,7 +105,9 @@ class Doc<ParamType paramType, string desc> {
 
 // Base class for all FIRRTL annotations
 // Matches Scala: trait Annotation
-class Annotation {
+// Inherits from ParamType so annotations can be used as member types in other
+// annotations.
+class Annotation : ParamType {
   // The fully-qualified class name (e.g., "firrtl.transforms.DontTouchAnnotation")
   string className;
 
@@ -535,7 +541,7 @@ def VerbatimBlackBoxAnno : SingleTargetAnnotation {
   let className = "circt.VerbatimBlackBoxAnno";
   let targets = [ExtModule];
   let members = (ins
-    Doc<ArrayParam, "Array of file objects">:$files
+    Doc<ArrayParam<StringParam>, "Array of file paths">:$files
   );
   let description = [{
     Specifies verbatim black box source code with one or more files. Each file
@@ -752,7 +758,7 @@ def TestHarnessHierarchyAnnotation : NoTargetAnnotation {
 def MustDeduplicateAnnotation : NoTargetAnnotation {
   let className = "firrtl.transforms.MustDeduplicateAnnotation";
   let members = (ins
-    Doc<ArrayParam, "A list of module targets which must deduplicate">:$modules
+    Doc<ArrayParam<StringParam>, "A list of module targets which must deduplicate">:$modules
   );
   let description = [{
     This annotation causes the deduplication pass to check that the listed
@@ -891,7 +897,7 @@ def SitestBlackBoxLibrariesAnnotation : SingleTargetAnnotation {
   let className = "sifive.enterprise.firrtl.SitestBlackBoxLibrariesAnnotation";
   let targets = [ExtModule];
   let members = (ins
-    Doc<ArrayParam, "Array of library names to include in blackbox metadata">:$libraries
+    Doc<ArrayParam<StringParam>, "Array of library names to include in blackbox metadata">:$libraries
   );
   let description = [{
     This annotation is used to specify additional library names that should be
@@ -1030,68 +1036,124 @@ def OutputDirAnnotation : SingleTargetAnnotation {
 
 // Grand Central Object Type Definitions
 
+def TargetTokenField : NoTargetAnnotation {
+  let className = "firrtl.annotations.TargetToken$Field";
+  let members = (ins
+    Doc<UnionParam<[StringParam, IntegerParam]>, "Field name or index">:$value
+  );
+  let description = [{
+    This is used to represent an index in to an aggregate type, such as an index
+    or array.
+  }];
+}
+
 // ReferenceTarget object - represents a target reference in FIRRTL
 // Used in Grand Central annotations to reference circuit components
 def ReferenceTarget : ObjectParam<(ins
   Doc<StringParam, "Circuit name">:$circuit,
   Doc<StringParam, "Module name">:$module,
-  Doc<ArrayParam, "Path of instances from circuit to module">:$path,
+  Doc<ArrayParam<StringParam>, "Path of instances from circuit to module">:$path,
   Doc<StringParam, "Reference name">:$ref,
-  Doc<ArrayParam, "Component path (field/index selections)">:$component
+  Doc<ArrayParam<TargetTokenField>, "Component path (field/index selections)">:$component
 )> {
   let description = [{
-    Represents a reference to a specific component in the FIRRTL circuit hierarchy.
-    Used in Grand Central annotations to specify targets for interface connections.
+    Represents a reference to a specific component in the FIRRTL circuit
+    hierarchy. Used in Grand Central annotations to specify targets for
+    interface connections.
   }];
 }
 
-// AugmentedGroundTypeObject - represents a ground type in Grand Central
-def AugmentedGroundTypeObject : ObjectParam<(ins
-  Doc<StringParam, "Class name (always 'sifive.enterprise.grandcentral.AugmentedGroundType')">:$class,
-  Doc<ReferenceTarget, "ReferenceTarget of the target component">:$ref
-)> {
+// AugmentedType - Placeholder object representing any Grand Central augmented type.
+// This is used in recursive type definitions where the actual type is one of:
+// - AugmentedGroundType: A leaf type representing a hardware signal
+// - AugmentedVectorType: An array of augmented types
+// - AugmentedBundleType: A bundle/struct of augmented fields
+// The actual type is determined by the "class" field in the JSON.
+def AugmentedType : ObjectParam<> {
   let description = [{
-    Represents a ground (scalar) type in a Grand Central interface.
-    Maps to a SystemVerilog logic type.
+    Represents any Grand Central augmented type (AugmentedGroundType,
+    AugmentedVectorType, or AugmentedBundleType). The actual type is
+    determined by the "class" field in the JSON object.
   }];
 }
 
-// AugmentedVectorTypeObject - represents a vector type in Grand Central
-def AugmentedVectorTypeObject : ObjectParam<(ins
-  Doc<StringParam, "Class name (always 'sifive.enterprise.grandcentral.AugmentedVectorType')">:$class,
-  Doc<ArrayParam, "List of augmented types">:$elements
-)> {
+def AugmentedGroundType : NoTargetAnnotation {
+  let className = "sifive.enterprise.grandcentral.AugmentedGroundType";
+  let members = (ins
+    Doc<ReferenceTarget, "ReferenceTarget of the target component">:$ref
+  );
   let description = [{
-    Represents a vector (array) type in a Grand Central interface.
-    Maps to a SystemVerilog unpacked array.
+    Creates a SystemVerilog logic type for Grand Central views.
+
+    Example:
+    ```json
+    {
+      "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
+      "ref": { ... }
+    }
+    ```
   }];
 }
 
-// AugmentedBundleType object - represents a bundle type in Grand Central
-def AugmentedBundleType : ObjectParam<(ins
-  Doc<StringParam, "Class name (always 'sifive.enterprise.grandcentral.AugmentedBundleType')">:$class,
-  Doc<StringParam, "SystemVerilog interface name">:$defName,
-  Doc<ArrayParam, "List of interface fields">:$elements
-)> {
+def AugmentedVectorType : NoTargetAnnotation {
+  let className = "sifive.enterprise.grandcentral.AugmentedVectorType";
+  let members = (ins
+    Doc<ArrayParam<AugmentedType>, "List of augmented types">:$elements
+  );
   let description = [{
-    Represents a SystemVerilog interface definition for Grand Central views.
-    Defines the structure of a bundle type that will be emitted as a SystemVerilog interface.
+    Creates a SystemVerilog unpacked array for Grand Central views.
+
+
+    Example:
+    ```json
+    {
+      "class": "sifive.enterprise.grandcentral.AugmentedVectorType",
+      "elements": [
+        {"class": "sifive.enterprise.grandcentral.AugmentedGroundType", "ref": {...}},
+        {"class": "sifive.enterprise.grandcentral.AugmentedGroundType", "ref": {...}}
+      ]
+    }
+    ```
   }];
 }
 
 // AugmentedField object - represents a field in an AugmentedBundleType
+// The tpe field uses AugmentedType to represent any augmented type.
 def AugmentedField : ObjectParam<(ins
   Doc<StringParam, "Field name">:$name,
   Doc<Optional<StringParam>, "Field description">:$description,
-  Doc<UnionParam<[AugmentedGroundTypeObject, AugmentedVectorTypeObject, AugmentedBundleType]>, "Field type">:$tpe
+  Doc<AugmentedType, "Field type">:$tpe
 )> {
   let description = [{
-    Represents a single field in a Grand Central SystemVerilog interface.
-    Each field has a name, optional description, and a type (which can be a ground type, vector, or nested bundle).
+    A field in an augmented bundle type. This can provide a small description of what the field in the bundle is.
   }];
 }
 
-// Grand Central Annotation Definitions
+def AugmentedBundleType : NoTargetAnnotation {
+  let className = "sifive.enterprise.grandcentral.AugmentedBundleType";
+  let members = (ins
+    Doc<StringParam, "The name of the SystemVerilog interface">:$defName,
+    Doc<ArrayParam<AugmentedField>, "List of AugmentedFields">:$elements
+  );
+  let description = [{
+    Creates a SystemVerilog interface for each bundle type in Grand Central views.
+
+    Example:
+    ```json
+    {
+      "class": "sifive.enterprise.grandcentral.AugmentedBundleType",
+      "defName": "MyInterface",
+      "elements": [
+        {
+          "name": "field1",
+          "description": "First field",
+          "tpe": {"class": "sifive.enterprise.grandcentral.AugmentedGroundType", "ref": {...}}
+        }
+      ]
+    }
+    ```
+  }];
+}
 
 def ExtractGrandCentralAnnotation : NoTargetAnnotation {
   let className = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation";
@@ -1136,82 +1198,63 @@ def GrandCentralHierarchyFileAnnotation : NoTargetAnnotation {
     Example:
     ```json
     {
-      "class": "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
-      "filename": "gct_hierarchy.yaml"
+      "class" : "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
+      "filename" : "directory/file.yaml"
     }
     ```
-  }];
-}
-
-def AugmentedGroundType : SingleTargetAnnotation {
-  let className = "sifive.enterprise.grandcentral.AugmentedGroundType";
-  let allowNonLocal = 1;
-  let members = (ins
-    Doc<ReferenceTarget, "ReferenceTarget of the target component">:$ref
-  );
-  let description = [{
-    Creates a SystemVerilog logic type for Grand Central views.
-
-    Example:
-    ```json
-    {
-      "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
-      "target": "~Foo|Bar>baz",
-      "ref": {
-        "circuit": "Foo",
-        "module": "Bar",
-        "path": [],
-        "ref": "baz",
-        "component": []
-      }
-    }
+    The format of the produced YAML file is a one-to-one mapping of the
+    SystemVerilog interface to YAML. Consider the following SystemVerilog
+    interface produced by GrandCentral:
+    
+    ```verilog
+    interface Foo;
+      // A 4-bit type
+      logic [3:0] a;
+      // A 2D vector of an 8-bit type
+      logic [7:0] b [1:0][0:0];
+      // A 1D vector of instances of Bar
+      Bar bar[4]();
+    endinterface
+    
+    interface Bar;
+      logic c;
+    endinterface
+    
+    interface Baz;
+      logic d;
+    endinterface
     ```
-  }];
-}
-
-def AugmentedVectorType : NoTargetAnnotation {
-  let className = "sifive.enterprise.grandcentral.AugmentedVectorType";
-  let members = (ins
-    Doc<ArrayParam, "List of augmented types">:$elements
-  );
-  let description = [{
-    Creates a SystemVerilog unpacked array for Grand Central views.
-
-    Example:
-    ```json
-    {
-      "class": "sifive.enterprise.grandcentral.AugmentedVectorType",
-      "elements": [
-        {"class": "sifive.enterprise.grandcentral.AugmentedGroundType", "ref": {...}},
-        {"class": "sifive.enterprise.grandcentral.AugmentedGroundType", "ref": {...}}
-      ]
-    }
-    ```
-  }];
-}
-
-def AugmentedBundleTypeAnnotation : NoTargetAnnotation {
-  let className = "sifive.enterprise.grandcentral.AugmentedBundleType";
-  let members = (ins
-    Doc<StringParam, "The name of the SystemVerilog interface">:$defName,
-    Doc<ArrayParam, "List of AugmentedFields">:$elements
-  );
-  let description = [{
-    Creates a SystemVerilog interface for each bundle type in Grand Central views.
-
-    Example:
-    ```json
-    {
-      "class": "sifive.enterprise.grandcentral.AugmentedBundleType",
-      "defName": "MyInterface",
-      "elements": [
-        {
-          "name": "field1",
-          "description": "First field",
-          "tpe": {"class": "sifive.enterprise.grandcentral.AugmentedGroundType", "ref": {...}}
-        }
-      ]
-    }
+    
+    This will produce the following YAML representation:
+    
+    ```yaml
+    - name: Foo
+      fields:
+        - name: a
+          description: A 4-bit type
+          dimensions: [  ]
+          width: 4
+        - name: b
+          description: A 2D vector of an 8-bit type
+          dimensions: [ 1, 2 ]
+          width: 8
+      instances:
+        - name: bar
+          description: A 1D vector of instances of Bar
+          dimensions: [ 4 ]
+          interface:
+            name: Bar
+            fields:
+              - name: c
+                dimensions: [ ]
+                width: 1
+            instances: []
+    - name: Baz:
+      fields:
+        - name: d
+          dimensions: [ ]
+          width: 1
+      instances: []
     ```
   }];
 }
@@ -1279,7 +1322,7 @@ def ViewAnnotation : NoTargetAnnotation {
 def MemTapAnnotation : NoTargetAnnotation {
   let className = "sifive.enterprise.grandcentral.MemTapAnnotation";
   let members = (ins
-    Doc<ArrayParam, "List of memory tap paths">:$keys
+    Doc<ArrayParam<StringParam>, "List of memory tap paths">:$keys
   );
   let description = [{
     Annotation for memory taps in Grand Central. This annotation has custom
