@@ -25,7 +25,6 @@
 
 import sys
 
-import pycde
 from pycde import (AppID, Clock, Module, Reset, generator)
 from pycde.bsp import get_bsp
 from pycde.common import Constant
