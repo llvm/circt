@@ -931,7 +931,7 @@ public:
     // Build AugmentedBundleTypeAttr, unchecked.
     auto augmentedType =
         AugmentedBundleTypeAttr::get(gi.op.getContext(), *result);
-    if (augmentedType.getClass() != augmentedBundleTypeClass)
+    if (augmentedType.getClass() != augmentedBundleTypeAnnoClass)
       return gi.emitError() << ": 'info' must be augmented bundle";
 
     // Scan for ground-type (leaves) and count.
@@ -939,11 +939,11 @@ public:
     worklist.push_back(augmentedType.getUnderlying());
     size_t numLeaves = 0;
     auto augGroundAttr =
-        StringAttr::get(gi.op.getContext(), augmentedGroundTypeClass);
+        StringAttr::get(gi.op.getContext(), augmentedGroundTypeAnnoClass);
     [[maybe_unused]] auto augBundleAttr =
-        StringAttr::get(gi.op.getContext(), augmentedBundleTypeClass);
+        StringAttr::get(gi.op.getContext(), augmentedBundleTypeAnnoClass);
     [[maybe_unused]] auto augVectorAttr =
-        StringAttr::get(gi.op.getContext(), augmentedVectorTypeClass);
+        StringAttr::get(gi.op.getContext(), augmentedVectorTypeAnnoClass);
     while (!worklist.empty()) {
       auto dict = worklist.pop_back_val();
       auto clazz = dict.getAs<StringAttr>("class");

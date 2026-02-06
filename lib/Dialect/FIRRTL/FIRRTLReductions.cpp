@@ -1820,7 +1820,7 @@ struct ForceDedup : public OpReduction<CircuitOp> {
     auto &symbolTable = symbols.getNearestSymbolTable(circuitOp);
     auto annotations = AnnotationSet(circuitOp);
     for (auto [annoIdx, anno] : llvm::enumerate(annotations)) {
-      if (!anno.isClass(mustDedupAnnoClass))
+      if (!anno.isClass(mustDeduplicateAnnoClass))
         continue;
 
       auto modulesAttr = anno.getMember<ArrayAttr>("modules");
@@ -1879,7 +1879,7 @@ struct ForceDedup : public OpReduction<CircuitOp> {
         continue;
       }
       auto modulesAttr = anno.getMember<ArrayAttr>("modules");
-      assert(anno.isClass(mustDedupAnnoClass) && modulesAttr &&
+      assert(anno.isClass(mustDeduplicateAnnoClass) && modulesAttr &&
              modulesAttr.size() >= 2);
 
       // Extract module names from the dedup group.
@@ -2038,14 +2038,14 @@ struct MustDedupChildren : public OpReduction<CircuitOp> {
 
     DenseSet<StringRef> modulesAlreadyInMustDedup;
     for (auto [annoIdx, anno] : llvm::enumerate(annotations))
-      if (anno.isClass(mustDedupAnnoClass))
+      if (anno.isClass(mustDeduplicateAnnoClass))
         if (auto modulesAttr = anno.getMember<ArrayAttr>("modules"))
           for (auto moduleRef : modulesAttr.getAsRange<StringAttr>())
             if (auto target = tokenizePath(moduleRef))
               modulesAlreadyInMustDedup.insert(target->module);
 
     for (auto [annoIdx, anno] : llvm::enumerate(annotations)) {
-      if (!anno.isClass(mustDedupAnnoClass))
+      if (!anno.isClass(mustDeduplicateAnnoClass))
         continue;
 
       auto modulesAttr = anno.getMember<ArrayAttr>("modules");
@@ -2085,7 +2085,7 @@ struct MustDedupChildren : public OpReduction<CircuitOp> {
     uint64_t matchId = 0;
 
     for (auto [annoIdx, anno] : llvm::enumerate(annotations)) {
-      if (!anno.isClass(mustDedupAnnoClass)) {
+      if (!anno.isClass(mustDeduplicateAnnoClass)) {
         newAnnotations.push_back(anno);
         continue;
       }
@@ -2115,7 +2115,7 @@ struct MustDedupChildren : public OpReduction<CircuitOp> {
             SmallVector<NamedAttribute> newAnnoAttrs;
             newAnnoAttrs.emplace_back(
                 StringAttr::get(context, "class"),
-                StringAttr::get(context, mustDedupAnnoClass));
+                StringAttr::get(context, mustDeduplicateAnnoClass));
             newAnnoAttrs.emplace_back(
                 StringAttr::get(context, "modules"),
                 ArrayAttr::get(context,

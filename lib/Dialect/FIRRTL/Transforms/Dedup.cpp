@@ -1880,7 +1880,7 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
 
     LLVM_DEBUG(llvm::dbgs() << "Update annotations\n");
     AnnotationSet::removeAnnotations(circuit, [&](Annotation annotation) {
-      if (!annotation.isClass(mustDedupAnnoClass))
+      if (!annotation.isClass(mustDeduplicateAnnoClass))
         return false;
       auto modules = annotation.getMember<ArrayAttr>("modules");
       if (!modules) {

@@ -423,7 +423,7 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
   auto loc = state.circuit.getLoc();
 
   auto sourceAttr =
-      tryGetAs<StringAttr>(anno, anno, "source", loc, memTapClass);
+      tryGetAs<StringAttr>(anno, anno, "source", loc, memTapAnnoClass);
   if (!sourceAttr)
     return failure();
 
@@ -434,14 +434,14 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
     return mlir::emitError(loc, "cannot resolve source target path '")
            << sourceTargetStr << "'";
 
-  auto tapsAttr = tryGetAs<ArrayAttr>(anno, anno, "sink", loc, memTapClass);
+  auto tapsAttr = tryGetAs<ArrayAttr>(anno, anno, "sink", loc, memTapAnnoClass);
   if (!tapsAttr || tapsAttr.empty())
     return mlir::emitError(loc, "sink must have at least one entry");
 
   auto tap = dyn_cast_or_null<StringAttr>(tapsAttr[0]);
   if (!tap) {
     return mlir::emitError(
-               loc, "Annotation '" + Twine(memTapClass) +
+               loc, "Annotation '" + Twine(memTapAnnoClass) +
                         "' with path '.taps[0" +
                         "]' contained an unexpected type (expected a string).")
                .attachNote()
@@ -454,7 +454,7 @@ LogicalResult circt::firrtl::applyGCTMemTaps(const AnnoPathValue &target,
   std::optional<AnnoPathValue> wireTarget = resolvePath(
       wireTargetStr, state.circuit, state.symTbl, state.targetCaches);
   if (!wireTarget)
-    return mlir::emitError(loc, "Annotation '" + Twine(memTapClass) +
+    return mlir::emitError(loc, "Annotation '" + Twine(memTapAnnoClass) +
                                     "' with path '.taps[0]' contains target '" +
                                     wireTargetStr +
                                     "' that cannot be resolved.")

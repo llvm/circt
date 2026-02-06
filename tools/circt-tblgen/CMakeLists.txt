@@ -5,6 +5,7 @@ set(LLVM_LINK_COMPONENTS
 
 add_tablegen(circt-tblgen CIRCT
   circt-tblgen.cpp
+  FIRRTLAnnotationsGen.cpp
   FIRRTLIntrinsicsGen.cpp
 )
 
