@@ -52,13 +52,13 @@ static FailureOr<Value> isSext(Value operand) {
     return failure();
 
   auto operands = concatOp.getOperands();
-  // ConcatOp must have exactly 2 operands: (sign_bits, original_value)
+  // ConcatOp must have exactly 2 operands: {sign_bits, base}
   if (operands.size() != 2)
     return failure();
 
   Value signBits = operands[0];
-  Value originalValue = operands[1];
-  auto originalWidth = originalValue.getType().getIntOrFloatBitWidth();
+  Value baseValue = operands[1];
+  auto baseWidth = baseValue.getType().getIntOrFloatBitWidth();
 
   // Check if signBits is a replicate operation
   auto replicateOp = signBits.getDefiningOp<comb::ReplicateOp>();
@@ -67,18 +67,18 @@ static FailureOr<Value> isSext(Value operand) {
 
   Value signBit = replicateOp.getInput();
 
-  // Check if signBit is the msb of originalValue
+  // Check if signBit is the msb of baseValue
   auto extractOp = signBit.getDefiningOp<comb::ExtractOp>();
   if (!extractOp)
     return failure();
 
-  if ((extractOp.getInput() != originalValue) ||
-      (extractOp.getLowBit() != originalWidth - 1) ||
+  if ((extractOp.getInput() != baseValue) ||
+      (extractOp.getLowBit() != baseWidth - 1) ||
       (extractOp.getType().getIntOrFloatBitWidth() != 1))
     return failure();
 
-  // Return the original unextended value
-  return originalValue;
+  // Return the base unextended value
+  return baseValue;
 }
 
 // This pattern commonly arrises when inverting zext: ~zext(x) = {1,...1, ~x}
@@ -96,7 +96,7 @@ static FailureOr<Value> isOneExt(Value operand) {
 
   APInt value;
   if (matchPattern(operands[0], m_ConstantInt(&value)) && value.isAllOnes())
-    // Return the original unextended value
+    // Return the base unextended value
     return success(operands[1]);
 
   return failure();
@@ -284,16 +284,16 @@ struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
 };
 
 // compress(..., sext(x),...) ->
-// compress(..., zext({~x[msb-1], x[msb-2:0]}), (-1) << (width(x)-1), ...)
+// compress(..., zext({~x[p-1], x[p-2:0]}), (-1) << (width(x)-1), ...)
 // Justification:
-// sext(x) = {x[msb-1], x[msb-1], ...,  x[msb-1], x[msb-2], ..., x[0]} =
-//         = {       0,        0, ..., ~x[msb-1], x[msb-2], ..., x[0]} +
-//           {       1,        1, ...,         1,        0, ...,    0} =
-//         = zext({~x[msb-1], x[msb-2], ..., x[0]}) + ((-1) << (width(x)-1))
+// sext(x) = {x[p-1], x[p-1], ...,  x[p-1], x[p-2], ..., x[0]} =
+//         = {       0,    0, ..., ~x[p-1], x[p-2], ..., x[0]} +
+//           {       1,    1, ...,       1,      0, ...,    0} =
+//         = zext({~x[p-1], x[p-2], ..., x[0]}) + ((-1) << (width(x)-1))
 //
 // Note that we are adding arguments to the compressor, but we are reducing the
 // number of unknown bits in the compressor array
-struct SignedCompress : public OpRewritePattern<CompressOp> {
+struct SextCompress : public OpRewritePattern<CompressOp> {
   using OpRewritePattern::OpRewritePattern;
 
   LogicalResult matchAndRewrite(CompressOp op,
@@ -320,15 +320,15 @@ struct SignedCompress : public OpRewritePattern<CompressOp> {
         continue;
       }
 
-      // x[msb-2:0]
+      // x[p-2:0]
       auto base = comb::ExtractOp::create(rewriter, op.getLoc(), *sextInput, 0,
                                           baseWidth - 1);
-      // x[msb-1]
+      // x[p-1]
       auto signBit = comb::ExtractOp::create(rewriter, op.getLoc(), *sextInput,
                                              baseWidth - 1, 1);
       auto invSign =
           comb::createOrFoldNot(op.getLoc(), signBit, rewriter, true);
-      // {~x[msb-1], x[msb-2:0]}
+      // {~x[p-1], x[p-2:0]}
       auto newOp = comb::ConcatOp::create(rewriter, op.getLoc(),
                                           ValueRange{invSign, base});
       auto newOpZExt = comb::createZExt(rewriter, op.getLoc(), newOp, opSize);
@@ -354,7 +354,19 @@ struct SignedCompress : public OpRewritePattern<CompressOp> {
   }
 };
 
-// Extend inputs of the form {ones, base} into zext(base) + (ones << baseWidth)
+// compress(..., oneExt(x),...) ->
+// compress(..., zext(x), (-1) << (width(x)-1), ...)
+// Justification:
+//           {1, 1, ..., 1, x}
+//         = zext(x) + ((-1) << (width(x)-1))
+//
+// Note that we are adding arguments to the compressor, but these can be
+// constant folded should other constants arise
+//
+// A pattern encountered when we convert subtraction to addition:
+// zext(a)-zext(b) = zext(a) + ~zext(b) + 1
+//                 = zext(a) + oneExt(~b) + 1
+// TODO: use knownBits to extract all constant ones
 struct OnesExtCompress : public OpRewritePattern<CompressOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -373,7 +385,7 @@ struct OnesExtCompress : public OpRewritePattern<CompressOp> {
         continue;
       }
 
-      // Separate {ones, base} -> zext(base) + (ones << baseWidth)
+      // Separate {ones, x} -> zext(x) + (ones << baseWidth)
       auto newOp = comb::createZExt(rewriter, op.getLoc(), *baseInput, opSize);
       newInputs.push_back(newOp);
 
@@ -394,6 +406,9 @@ struct OnesExtCompress : public OpRewritePattern<CompressOp> {
   }
 };
 
+// compress(..., ~sext(x),...) -> compress(..., sext(~x),...)
+// Whilst not immediately beneficial will allow for the simplification of
+// replicated sign-bits in the compressor
 struct NegatedSextCompress : public OpRewritePattern<CompressOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -465,10 +480,10 @@ struct ConstantFoldCompress : public OpRewritePattern<CompressOp> {
 
     APInt value1, value2;
     // compress(...c1, c2) -> compress(..., c1+c2)
-    SmallVector<Value> newInputs(inputs.begin(), inputs.end());
     if (matchPattern(inputs.back(), m_ConstantInt(&value1)) &&
         matchPattern(inputs[size - 2], m_ConstantInt(&value2))) {
 
+      SmallVector<Value> newInputs(inputs.begin(), inputs.end());
       auto summedValue = value1 + value2;
       auto constOp = hw::ConstantOp::create(rewriter, op.getLoc(), summedValue);
       newInputs.pop_back();
@@ -494,7 +509,7 @@ void CompressOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results
       .add<FoldCompressIntoCompress, FoldAddIntoCompress, ConstantFoldCompress,
-           SignedCompress, NegatedSextCompress, OnesExtCompress>(context);
+           SextCompress, NegatedSextCompress, OnesExtCompress>(context);
 }
 
 //===----------------------------------------------------------------------===//
