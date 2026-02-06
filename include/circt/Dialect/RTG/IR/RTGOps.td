@@ -183,6 +183,70 @@ def InterleaveSequencesOp : RTGOp<"interleave_sequences", [Pure]> {
   let hasFolder = 1;
 }
 
+def SequenceToDynamicOp : RTGOp<"sequence_to_dynamic", [Pure]> {
+  let summary = "cast a sequence to a dynamic sequence";
+
+  let arguments = (ins SequenceType:$sequence);
+  let results = (outs DynamicSequenceType:$dynamicSequence);
+
+  let assemblyFormat = "$sequence `:` type($sequence) attr-dict"; 
+}
+
+def DynamicToSequenceOp : RTGOp<"dynamic_to_sequence", [Pure]> {
+  let summary = "cast a dynamic sequence to a sequence";
+  let description = [{
+    This operation casts a dynamic sequence to a sequence. It is only valid if
+    the dynamic sequence matches the expected sequence type. Otherwise, a
+    runtime error is thrown.
+  }];
+
+  let arguments = (ins DynamicSequenceType:$dynamicSequence);
+  let results = (outs SequenceType:$sequence);
+
+  let assemblyFormat = "$dynamicSequence `:` type($sequence) attr-dict";
+}
+
+def SubstituteDynamicSequenceOp : RTGOp<"substitute_dynamic_sequence", [Pure]> {
+  let summary = "substitute dynamic sequence arguments";
+  let description = [{
+    This operation substitutes the first N of the M >= N arguments of the given
+    sequence family, where N is the size of provided argument substitution list.
+    A new sequence (if N == M) or sequence family with M-N will be returned.
+    
+    Not having to deal with sequence arguments after randomly selecting a
+    sequence simplifies the problem of coming up with values to pass as
+    arguments, but also provides a way for the user to constrain the arguments
+    at the location where they are added to a set or bag.
+  }];
+
+  let arguments = (ins DynamicSequenceType:$sequence, Variadic<AnyType>:$args);
+  let results = (outs DynamicSequenceType:$result);
+
+  let assemblyFormat = "$sequence `(` $args `)` `:` type($args) attr-dict";
+}
+
+def SequenceArgumentTypesOp : RTGOp<"sequence_argument_types", [Pure]> {
+  let summary = "get the types of the arguments of a dynamic sequence";
+  let description = [{
+    This operation returns the types of the arguments of a dynamic sequence as
+    an array of '!rtg.type' typed values.
+  }];
+
+  let arguments = (ins DynamicSequenceType:$sequence);
+  let results = (outs ArrayTypeOf<TypeType>:$types);
+
+  let assemblyFormat = "$sequence attr-dict";
+}
+
+def TypeEqOp : RTGOp<"type_eq", [Pure]> {
+  let summary = "compare two types for equality";
+
+  let arguments = (ins TypeType:$lhs, TypeType:$rhs);
+  let results = (outs I1:$eq);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict";
+}
+
 //===- Label Operations ---------------------------------------------------===//
 
 class LabelDeclBase<string mnemonic,

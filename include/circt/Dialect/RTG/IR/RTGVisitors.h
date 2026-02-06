@@ -50,6 +50,8 @@ public:
             // Sequences
             SequenceOp, GetSequenceOp, SubstituteSequenceOp,
             RandomizeSequenceOp, EmbedSequenceOp, InterleaveSequencesOp,
+            SequenceToDynamicOp, DynamicToSequenceOp,
+            SubstituteDynamicSequenceOp, SequenceArgumentTypesOp, TypeEqOp,
             // Sets
             SetCreateOp, SetSelectRandomOp, SetDifferenceOp, SetUnionOp,
             SetSizeOp, SetCartesianProductOp, SetConvertToBagOp,
@@ -149,6 +151,11 @@ public:
   HANDLE(SpaceOp, Unhandled);
   HANDLE(StringDataOp, Unhandled);
   HANDLE(SegmentOp, Unhandled);
+  HANDLE(SequenceToDynamicOp, Unhandled);
+  HANDLE(DynamicToSequenceOp, Unhandled);
+  HANDLE(SubstituteDynamicSequenceOp, Unhandled);
+  HANDLE(SequenceArgumentTypesOp, Unhandled);
+  HANDLE(TypeEqOp, Unhandled);
 #undef HANDLE
 };
 

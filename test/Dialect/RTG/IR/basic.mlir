@@ -294,3 +294,19 @@ rtg.test @testConstraints() {
   %0 = index.bool.constant 1
   rtg.constraint %0
 }
+
+// CHECK-LABEL: rtg.test @dynamicSequences
+rtg.test @dynamicSequences() {
+  // CHECK-NEXT: [[TYPE:%.+]] = rtg.constant #rtg.type<!rtg.dynamic_sequence> : !rtg.type
+  %type = rtg.constant #rtg.type<!rtg.dynamic_sequence> : !rtg.type
+  // CHECK-NEXT: [[V0:%.+]] = rtg.get_sequence @seq0 : !rtg.sequence
+  %0 = rtg.get_sequence @seq0 : !rtg.sequence
+  // CHECK-NEXT: [[V1:%.+]] = rtg.sequence_to_dynamic [[V0]] : !rtg.sequence
+  %1 = rtg.sequence_to_dynamic %0 : !rtg.sequence
+  // CHECK-NEXT: rtg.dynamic_to_sequence [[V1]] : !rtg.sequence
+  %2 = rtg.dynamic_to_sequence %1 : !rtg.sequence
+  // CHECK-NEXT: [[V3:%.+]] = rtg.sequence_argument_types [[V1]]
+  %3 = rtg.sequence_argument_types %1
+  // CHECK-NEXT: rtg.type_eq [[TYPE]], [[TYPE]]
+  %4 = rtg.type_eq %type, %type
+}

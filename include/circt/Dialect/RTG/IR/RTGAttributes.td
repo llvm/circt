@@ -97,6 +97,24 @@ def TupleAttr : RTGAttrDef<"Tuple", [
   let assemblyFormat = "`<` $elements `>`";
 }
 
+// Note: builtin TypeAttr is not a TypedAttr, thus we create our own.
+def RTGTypeAttr : RTGAttrDef<"RTGType", [
+  DeclareAttrInterfaceMethods<TypedAttrInterface>,
+]> {
+  let summary = "an attribute containing a type";
+
+  let parameters = (ins "Type":$value);
+
+  let mnemonic = "type";
+  let assemblyFormat = "`<` $value `>`";
+
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "Type":$type), [{
+      return $_get(type.getContext(), type);
+    }]>,
+  ];
+}
+
 //===----------------------------------------------------------------------===//
 // Attributes for ISA targets
 //===----------------------------------------------------------------------===//

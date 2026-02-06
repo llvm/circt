@@ -37,6 +37,13 @@ def SequenceType : RTGTypeDef<"Sequence"> {
   let assemblyFormat = "(`<` $elementTypes^ `>`)?";
 }
 
+def DynamicSequenceType : RTGTypeDef<"DynamicSequence"> {
+  let summary = "handle to sequence family with dynamic arguments";
+
+  let mnemonic = "dynamic_sequence";
+  let assemblyFormat = "";
+}
+
 def RandomizedSequenceType : RTGTypeDef<"RandomizedSequence"> {
   let summary = "handle to a fully randomized sequence";
   let description = [{
@@ -148,6 +155,13 @@ def ArrayType : RTGTypeDef<"Array"> {
   ];
 }
 
+class ArrayTypeOf<Type elementType> :
+  ContainerType<
+    elementType, ArrayType.predicate,
+    "llvm::cast<rtg::ArrayType>($_self).getElementType()", "array">,
+  BuildableType<
+    "rtg::ArrayType::get(" # elementType.builderCall # ")">;
+
 def TupleType : RTGTypeDef<"Tuple"> {
   let summary = "a tuple of zero or more fields";
   let description = [{
@@ -161,6 +175,17 @@ def TupleType : RTGTypeDef<"Tuple"> {
 
   let mnemonic = "tuple";
   let assemblyFormat = "(`<` $fieldTypes^ `>`)?";
+}
+
+def TypeType : RTGTypeDef<"Type"> {
+  let summary = "a type";
+  let description = [{
+    This type represents a type. It is used to implement type introspection and
+    equality.
+  }];
+
+  let mnemonic = "type";
+  let assemblyFormat = "";
 }
 
 //===----------------------------------------------------------------------===//
