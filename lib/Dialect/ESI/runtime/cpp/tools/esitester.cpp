@@ -292,7 +292,7 @@ int main(int argc, const char *argv[]) {
   serialCoordTranslateSub
       ->add_option("-b,--batch-size", serialBatchSize,
                    "Coordinates per header (default 240, max 65535)")
-      ->check(CLI::Range(0u, 0xFFFFu));
+      ->check(CLI::Range(1u, 0xFFFFu));
 
   if (int rc = cli.esiParse(argc, argv))
     return rc;
@@ -1852,11 +1852,13 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
   while (sent < numCoords) {
     size_t batchSize = std::min(batchSizeLimit, numCoords - sent);
 
-    // Send Header
+    // Send Header. Only the first header needs the translation values, test the
+    // subsequent ones with zero translation to verify that the hardware
+    // correctly applies the first header's translation to the whole list.
     SerialCoordInputFrame headerFrame;
     headerFrame.header.coordsCount = (uint16_t)batchSize;
-    headerFrame.header.xTranslation = xTrans;
-    headerFrame.header.yTranslation = yTrans;
+    headerFrame.header.xTranslation = sent == 0 ? xTrans : 0;
+    headerFrame.header.yTranslation = sent == 0 ? yTrans : 0;
     argPort.write(MessageData(reinterpret_cast<const uint8_t *>(&headerFrame),
                               sizeof(headerFrame)));
 

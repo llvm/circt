@@ -485,6 +485,16 @@ class SerialCoordTranslator(Module):
     # Latch the most recent header count for re-use when emitting the output
     # header (do not rely on union extracts during data frames).
     hdr_handshake = handshake & in_is_header
+    hdr_is_zero = hdr_count == UInt(bulk_count_width)(0)
+    footer_handshake = hdr_handshake & hdr_is_zero
+    start_handshake = hdr_handshake & ~hdr_is_zero
+    message_active = ControlReg(
+        clk,
+        rst,
+        asserts=[start_handshake],
+        resets=[footer_handshake],
+        name="message_active",
+    )
     count_reg = Reg(
         UInt(bulk_count_width),
         clk=clk,
@@ -495,13 +505,13 @@ class SerialCoordTranslator(Module):
     )
     count_reg.assign(hdr_count)
 
-    # Latch translations on each header frame.
+    # Latch translations only on the first header of a message.
     x_translation_reg = Reg(
         UInt(32),
         clk=clk,
         rst=rst,
         rst_value=0,
-        ce=hdr_handshake,
+        ce=start_handshake & ~message_active,
         name="x_translation",
     )
     y_translation_reg = Reg(
@@ -509,14 +519,13 @@ class SerialCoordTranslator(Module):
         clk=clk,
         rst=rst,
         rst_value=0,
-        ce=hdr_handshake,
+        ce=start_handshake & ~message_active,
         name="y_translation",
     )
     x_translation_reg.assign(hdr_x)
     y_translation_reg.assign(hdr_y)
 
     # Next-state logic for header/data tracking.
-    hdr_is_zero = hdr_count == UInt(bulk_count_width)(0)
     rem_is_one = remaining == UInt(bulk_count_width)(1)
     rem_is_zero = remaining == UInt(bulk_count_width)(0)
     remaining_minus_one = (remaining -
