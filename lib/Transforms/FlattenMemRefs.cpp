@@ -204,21 +204,36 @@ struct GlobalOpConversion : public OpConversionPattern<memref::GlobalOp> {
       return failure();
     MemRefType newType = getFlattenedMemRefType(type);
 
-    auto cstAttr =
-        llvm::dyn_cast_or_null<DenseElementsAttr>(op.getConstantInitValue());
+    auto elements =
+        llvm::dyn_cast_or_null<ElementsAttr>(op.getConstantInitValue());
+    if (!elements)
+      return rewriter.notifyMatchFailure(
+          op, "memref.global has non-elements or missing constant initializer");
 
-    SmallVector<Attribute> flattenedVals;
-    for (auto attr : cstAttr.getValues<Attribute>())
-      flattenedVals.push_back(attr);
+    auto oldShapedType = llvm::dyn_cast<ShapedType>(elements.getType());
+    if (!oldShapedType || !oldShapedType.hasStaticShape())
+      return rewriter.notifyMatchFailure(
+          op, "initializer is not a static shaped type");
+
+    auto tensorType = RankedTensorType::get({oldShapedType.getNumElements()},
+                                            oldShapedType.getElementType());
+
+    ElementsAttr newInitValue;
+    if (auto dense = llvm::dyn_cast<DenseElementsAttr>(elements)) {
+      newInitValue = dense.reshape(tensorType);
+    } else if (auto resource =
+                   llvm::dyn_cast<DenseResourceElementsAttr>(elements)) {
+      newInitValue =
+          DenseResourceElementsAttr::get(tensorType, resource.getRawHandle());
+    } else {
+      return rewriter.notifyMatchFailure(
+          op, "unsupported elements initializer kind");
+    }
 
     auto newTypeAttr = TypeAttr::get(newType);
     auto newNameStr = getFlattenedMemRefName(op.getConstantAttrName(), type);
     auto newName = rewriter.getStringAttr(newNameStr);
     globalNameMap[op.getSymNameAttr()] = newName;
-
-    RankedTensorType tensorType = RankedTensorType::get(
-        {static_cast<int64_t>(flattenedVals.size())}, type.getElementType());
-    auto newInitValue = DenseElementsAttr::get(tensorType, flattenedVals);
 
     rewriter.replaceOpWithNewOp<memref::GlobalOp>(
         op, newName, op.getSymVisibilityAttr(), newTypeAttr, newInitValue,
