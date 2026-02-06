@@ -294,3 +294,18 @@ rtg.test @testConstraints() {
   %0 = index.bool.constant 1
   rtg.constraint %0
 }
+
+// CHECK-LABEL: rtg.test @strings
+rtg.test @strings() {
+  %1 = rtg.constant 23 : index
+  // CHECK: [[V3:%.+]] = rtg.int_format {{%.+}}
+  rtg.int_format %1
+
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant "hello" : !rtg.string
+  %0 = rtg.constant "hello" : !rtg.string
+  // CHECK-NEXT: rtg.string_concat [[V0]], [[V0]]
+  %5 = rtg.string_concat %0, %0
+
+  // CHECK-NEXT: rtg.string_concat
+  rtg.string_concat
+}

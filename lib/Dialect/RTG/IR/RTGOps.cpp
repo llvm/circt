@@ -965,6 +965,37 @@ OpFoldResult LabelDeclOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// StringConcatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult StringConcatOp::fold(FoldAdaptor adaptor) {
+  SmallString<32> result;
+  for (auto attr : adaptor.getStrings()) {
+    auto stringAttr = dyn_cast_or_null<StringAttr>(attr);
+    if (!stringAttr)
+      return {};
+
+    result += stringAttr.getValue();
+  }
+
+  return StringAttr::get(result, StringType::get(getContext()));
+}
+
+//===----------------------------------------------------------------------===//
+// IntFormatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult IntFormatOp::fold(FoldAdaptor adaptor) {
+  auto intAttr = dyn_cast_or_null<IntegerAttr>(adaptor.getValue());
+  if (!intAttr)
+    return {};
+  if (!intAttr.getType().isIndex())
+    return {};
+  return StringAttr::get(Twine(intAttr.getValue().getZExtValue()),
+                         StringType::get(getContext()));
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
