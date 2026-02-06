@@ -1232,10 +1232,8 @@ class Window(Type):
         num_items = member.num_items
         bulk_count_width = getattr(member, "bulk_count_width", 0)
         if bulk_count_width and bulk_count_width > 0:
-          members.append(
-              (member.field_name.value,
-               num_items if num_items > 0 else 0,
-               bulk_count_width))
+          members.append((member.field_name.value,
+                          num_items if num_items > 0 else 0, bulk_count_width))
         else:
           members.append(
               (member.field_name.value, num_items if num_items > 0 else None))
