@@ -61,7 +61,7 @@ std::unique_ptr<mlir::Pass> createEnsureDivisionIsSpeculatablePass();
 
 //===----------------------------------------------------------------------===//
 // Utility functions.
-//===----------------------------------------------------------------------===
+//===----------------------------------------------------------------------===//
 
 // Returns true if the provided memref is considered unidimensional (having a
 // shape of size 1).
