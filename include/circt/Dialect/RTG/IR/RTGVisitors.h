@@ -65,6 +65,8 @@ public:
             MemoryBlockDeclareOp,
             // Data segment ops
             SpaceOp, StringDataOp, SegmentOp,
+            // String ops
+            StringConcatOp, IntFormatOp,
             // Misc ops
             CommentOp, ConstraintOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
@@ -149,6 +151,8 @@ public:
   HANDLE(SpaceOp, Unhandled);
   HANDLE(StringDataOp, Unhandled);
   HANDLE(SegmentOp, Unhandled);
+  HANDLE(StringConcatOp, Unhandled);
+  HANDLE(IntFormatOp, Unhandled);
 #undef HANDLE
 };
 

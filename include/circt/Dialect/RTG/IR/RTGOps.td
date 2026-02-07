@@ -183,6 +183,35 @@ def InterleaveSequencesOp : RTGOp<"interleave_sequences", [Pure]> {
   let hasFolder = 1;
 }
 
+//===- String Operations --------------------------------------------------===//
+
+def StringConcatOp : RTGOp<"string_concat", [Pure]> {
+  let summary = "concatenate strings";
+  let description = [{
+    This operation concatenates a variadic number of strings into a single
+    string. The operands are concatenated in order, with the first operand
+    becoming the most significant bits of the result.
+  }];
+
+  let arguments = (ins Variadic<StringType>:$strings);
+  let results = (outs StringType:$result);
+
+  let assemblyFormat = "$strings attr-dict";
+
+  let hasFolder = 1;
+}
+
+def IntFormatOp : RTGOp<"int_format", [Pure]> {
+  let summary = "format an integer as a string";
+
+  let arguments = (ins Index:$value);
+  let results = (outs StringType:$result);
+
+  let assemblyFormat = "$value attr-dict";
+  
+  let hasFolder = 1;
+}
+
 //===- Label Operations ---------------------------------------------------===//
 
 class LabelDeclBase<string mnemonic,

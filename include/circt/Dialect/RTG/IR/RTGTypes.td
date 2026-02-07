@@ -163,6 +163,13 @@ def TupleType : RTGTypeDef<"Tuple"> {
   let assemblyFormat = "(`<` $fieldTypes^ `>`)?";
 }
 
+def StringType : RTGTypeDef<"String"> {
+  let summary = "a string type";
+
+  let mnemonic = "string";
+  let assemblyFormat = "";
+}
+
 //===----------------------------------------------------------------------===//
 // Types for ISA targets
 //===----------------------------------------------------------------------===//
