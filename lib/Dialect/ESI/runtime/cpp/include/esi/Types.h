@@ -20,6 +20,7 @@
 #include <any>
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -29,6 +30,8 @@
 #include "esi/Values.h" // For BitVector / Int / UInt
 
 namespace esi {
+
+class Context;
 
 /// Root class of the ESI type system.
 class Type {
@@ -86,6 +89,17 @@ public:
   // Return a textual representation of this type.
   std::string toString(bool oneLine = false) const;
 
+  // Recursively serialize the provided type to a textual representation (JSON).
+  // Used together with the type-specific deserialization functions, this can
+  // be used to round-trip types through e.g. a manifest.
+  static std::string serializeType(const Type *type);
+
+  // Recursively deserialize the provided string to a type instance. The type
+  // (and any nested types) are registered to the provided context. It is
+  // expected that the type was serialized via the 'serialize' method.
+  static const Type *deserializeType(esi::Context &ctx,
+                                     const std::string &data);
+
 protected:
   ID id;
 };
@@ -100,6 +114,11 @@ public:
 
   using ChannelVector =
       std::vector<std::tuple<std::string, Direction, const Type *>>;
+  /// Create a bundle type with the given channels, registering it with the
+  /// context. If typeID is not provided, one is inferred from the channels.
+  static const BundleType *
+  create(Context &ctxt, const ChannelVector &channels,
+         std::optional<Type::ID> typeID = std::nullopt);
 
   BundleType(const ID &id, const ChannelVector &channels)
       : Type(id), channels(channels) {}
@@ -118,6 +137,12 @@ protected:
 class ChannelType : public Type {
 public:
   using Type::deserialize;
+  /// Create a channel type with the given inner type, registering it with the
+  /// context. If typeID is not provided, one is inferred from the inner type.
+  static const ChannelType *
+  create(Context &ctxt, const Type *inner,
+         std::optional<Type::ID> typeID = std::nullopt);
+
   ChannelType(const ID &id, const Type *inner) : Type(id), inner(inner) {}
   const Type *getInner() const { return inner; }
   std::ptrdiff_t getBitWidth() const override { return inner->getBitWidth(); };
@@ -134,6 +159,10 @@ private:
 class VoidType : public Type {
 public:
   using Type::deserialize;
+  /// Create a void type, registering it with the context.
+  static const VoidType *create(Context &ctxt,
+                                std::optional<Type::ID> typeID = std::nullopt);
+
   VoidType(const ID &id) : Type(id) {}
   // 'void' is 1 bit by convention.
   std::ptrdiff_t getBitWidth() const override { return 1; };
@@ -149,6 +178,9 @@ public:
 /// as it is in software.
 class AnyType : public Type {
 public:
+  /// Create an any type, registering it with the context.
+  static const AnyType *create(Context &ctxt);
+
   AnyType(const ID &id) : Type(id) {}
   std::ptrdiff_t getBitWidth() const override { return -1; };
 };
@@ -169,6 +201,11 @@ private:
 /// identified in the manifest as "signless" ints.
 class BitsType : public BitVectorType {
 public:
+  /// Create a bits type with the given width, registering it with the context.
+  /// If typeID is not provided, one is inferred from the width.
+  static const Type *create(Context &ctxt, uint64_t width,
+                            std::optional<Type::ID> typeID = std::nullopt);
+
   using BitVectorType::BitVectorType;
   using Type::deserialize;
 
@@ -187,6 +224,11 @@ public:
 /// Signed integer.
 class SIntType : public IntegerType {
 public:
+  /// Create a signed integer type with the given width, registering it with the
+  /// context. If typeID is not provided, one is inferred from the width.
+  static const Type *create(Context &ctxt, uint64_t width,
+                            std::optional<Type::ID> typeID = std::nullopt);
+
   using IntegerType::IntegerType;
   using Type::deserialize;
 
@@ -198,6 +240,11 @@ public:
 /// Unsigned integer.
 class UIntType : public IntegerType {
 public:
+  /// Create an unsigned integer type with the given width, registering it with
+  /// the context. If typeID is not provided, one is inferred from the width.
+  static const Type *create(Context &ctxt, uint64_t width,
+                            std::optional<Type::ID> typeID = std::nullopt);
+
   using IntegerType::IntegerType;
   using Type::deserialize;
 
@@ -211,6 +258,12 @@ class StructType : public Type {
 public:
   using FieldVector = std::vector<std::pair<std::string, const Type *>>;
   using Type::deserialize;
+
+  /// Create a struct type with the given fields, registering it with the
+  /// context. If typeID is not provided, one is inferred from the field types.
+  static const StructType *
+  create(Context &ctxt, const FieldVector &fields, bool reverse = true,
+         std::optional<Type::ID> typeID = std::nullopt);
 
   StructType(const ID &id, const FieldVector &fields, bool reverse = true)
       : Type(id), fields(fields), reverse(reverse) {}
@@ -246,6 +299,13 @@ private:
 /// Arrays have a compile time specified (static) size and an element type.
 class ArrayType : public Type {
 public:
+  /// Create an array type with the given element type and size, registering it
+  /// with the context. If typeID is not provided, one is inferred from the
+  /// element type and size.
+  static const ArrayType *create(Context &ctxt, const Type *elementType,
+                                 uint64_t size, bool reverse = true,
+                                 std::optional<Type::ID> typeID = std::nullopt);
+
   ArrayType(const ID &id, const Type *elementType, uint64_t size,
             bool reverse = true)
       : Type(id), elementType(elementType), size(size), reverse(reverse) {}
