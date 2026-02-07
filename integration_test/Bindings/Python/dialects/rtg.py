@@ -259,3 +259,7 @@ with Context() as ctx, Location.unknown():
   print(f"fields={tup.fields}")
   # CHECK: !rtg.tuple
   print(tup)
+
+  stringTy = rtg.StringType.get()
+  # CHECK: !rtg.string
+  print(stringTy)

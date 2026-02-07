@@ -39,6 +39,7 @@ declare_mlir_python_sources(PyRTGSources.Core
     scf.py
     sequences.py
     sets.py
+    strings.py
     tests.py
     tuples.py
 )

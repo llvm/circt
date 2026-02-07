@@ -128,6 +128,14 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
         return fields;
       });
 
+  mlir_type_subclass(m, "StringType", rtgTypeIsAString)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirContext ctxt) {
+            return cls(rtgStringTypeGet(ctxt));
+          },
+          nb::arg("self"), nb::arg("ctxt") = nullptr);
+
   // Types for ISA targets
   //===--------------------------------------------------------------------===//
 

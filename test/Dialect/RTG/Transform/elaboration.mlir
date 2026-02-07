@@ -17,6 +17,7 @@ func.func @dummy14(%arg0: !rtg.isa.memory<32>) -> () {return}
 func.func @dummy15(%arg0: !rtg.isa.immediate<32>) -> () {return}
 func.func @dummy16(%arg0: !rtg.isa.immediate<12>) -> () {return}
 func.func @dummy17(%arg0: !rtg.isa.immediate<3>) -> () {return}
+func.func @dummy18(%arg0: !rtg.string) -> () {return}
 
 rtg.target @singletonTarget : !rtg.dict<singleton: index> {
   %0 = index.constant 0
@@ -704,8 +705,10 @@ rtg.test @useFolders(single_core = %single_core: !rtgtest.cpu) {
 
 // CHECK-LABEL: rtg.test @comments
 rtg.test @comments() {
-  // CHECK-NEXT: rtg.comment "this is a comment"
-  rtg.comment "this is a comment"
+  // CHECK-NEXT: [[STR:%.+]] = rtg.constant "hello" : !rtg.string
+  %str = rtg.constant "hello" : !rtg.string
+  // CHECK-NEXT: rtg.comment [[STR]]
+  rtg.comment %str
 }
 
 rtg.target @memoryBlocks : !rtg.dict<mem_block: !rtg.isa.memory_block<32>> {
@@ -812,8 +815,10 @@ rtg.test @immediateOps(singleton = %none: index) {
 rtg.test @testSuccessAndFailure(singleton = %none: index) {
   // CHECK-NEXT: rtg.test.success
   rtg.test.success
-  // CHECK-NEXT: rtg.test.failure "Error Message"
-  rtg.test.failure "Error Message"
+  // CHECK-NEXT: [[STR:%.+]] = rtg.constant "hello" : !rtg.string
+  %str = rtg.constant "hello" : !rtg.string
+  // CHECK-NEXT: rtg.test.failure [[STR]]
+  rtg.test.failure %str
 }
 
 // CHECK-LABEL: rtg.test @setEquivalence
@@ -886,6 +891,19 @@ rtg.test @opsHandlingSymbolicOperands(singleton = %none: index) {
   %arr3 = rtg.array_inject %arr2[%idx], %val : !rtg.array<!rtg.isa.immediate<32>>
   %ext3 = rtg.array_extract %arr3[%idx] : !rtg.array<!rtg.isa.immediate<32>>
   func.call @dummy15(%ext3) : (!rtg.isa.immediate<32>) -> ()
+}
+
+// CHECK-LABEL: rtg.test @strings
+rtg.test @strings(singleton = %none: index) {
+  %0 = rtg.constant "hello" : !rtg.string
+  %c4 = index.constant 4
+  %c5 = index.constant 5
+  %1 = rtg.random_number_in_range [%c4, %c5] {rtg.elaboration_custom_seed=0}
+  %3 = rtg.int_format %1
+  %5 = rtg.string_concat %0, %3
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant "hello4" : !rtg.string
+  // CHECK-NEXT: func.call @dummy18([[V0]])
+  func.call @dummy18(%5) : (!rtg.string) -> ()
 }
 
 // -----

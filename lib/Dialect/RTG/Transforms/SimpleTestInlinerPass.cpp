@@ -57,14 +57,18 @@ void SimpleTestInlinerPass::runOnOperation() {
 
       testOp.getBody()->eraseArguments(0, testOp.getBody()->getNumArguments());
       rewriter.setInsertionPoint(refOp);
-      CommentOp::create(rewriter, refOp->getLoc(),
-                        rewriter.getStringAttr("Begin of test '" +
-                                               testOp.getSymName() + "'"));
+      auto testBeginComment = ConstantOp::create(
+          rewriter, refOp->getLoc(),
+          StringAttr::get(Twine("Begin of test '") + testOp.getSymName() + "'",
+                          StringType::get(rewriter.getContext())));
+      CommentOp::create(rewriter, refOp->getLoc(), testBeginComment);
       auto newTestOp = cast<TestOp>(testOp->clone());
       rewriter.inlineBlockBefore(newTestOp.getBody(), refOp, {});
-      CommentOp::create(
+      auto testEndComment = ConstantOp::create(
           rewriter, refOp->getLoc(),
-          rewriter.getStringAttr("End of test '" + testOp.getSymName() + "'"));
+          StringAttr::get(Twine("End of test '") + testOp.getSymName() + "'",
+                          StringType::get(rewriter.getContext())));
+      CommentOp::create(rewriter, refOp->getLoc(), testEndComment);
       newTestOp.erase();
       refOp.erase();
     }

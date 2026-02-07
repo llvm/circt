@@ -2,6 +2,9 @@
 
 // CHECK-LABEL: @constants
 rtg.test @constants() {
+  // CHECK-NEXT: [[STR:%.+]] = rtg.constant "hello" : !rtg.string
+  %str = rtg.constant "hello" : !rtg.string
+
   // CHECK-NEXT: rtg.constant #rtg.isa.immediate<2, -1> : !rtg.isa.immediate<2>
   %0 = rtg.constant #rtg.isa.immediate<2, -1>
 
@@ -10,14 +13,14 @@ rtg.test @constants() {
   %1 = index.constant 5
   %2 = rtg.isa.int_to_immediate %1 : !rtg.isa.immediate<32>
 
-  // CHECK-NEXT: rtg.comment "this is a comment"
-  rtg.comment "this is a comment"
+  // CHECK-NEXT: rtg.comment [[STR]]
+  rtg.comment %str
 
   // CHECK-NEXT: rtg.isa.space [[V0]]
   rtg.isa.space %1
 
-  // CHECK-NEXT: rtg.isa.string_data "hello world"
-  rtg.isa.string_data "hello world"
+  // CHECK-NEXT: rtg.isa.string_data [[STR]]
+  rtg.isa.string_data %str
 
   // CHECK-NEXT: rtg.isa.segment data {
   // CHECK-NEXT: }
@@ -281,10 +284,12 @@ rtg.test @immediateOps() {
 
 // CHECK-LABEL: rtg.test @testReportOps
 rtg.test @testReportOps() {
+  // CHECK-NEXT: [[STR:%.+]] = rtg.constant "hello" : !rtg.string
+  %str = rtg.constant "hello" : !rtg.string
   // CHECK-NEXT: rtg.test.success
   rtg.test.success
-  // CHECK-NEXT: rtg.test.failure "error message"
-  rtg.test.failure "error message"
+  // CHECK-NEXT: rtg.test.failure [[STR]]
+  rtg.test.failure %str
 }
 
 // CHECK-LABEL: rtg.test @testConstraints
