@@ -3968,6 +3968,15 @@ endmodule
 // CHECK:      [[POPB:%.+]] = moore.pop_back from [[QR]] : <i32, 0>
 // CHECK:      [[QR:%.+]] = moore.read [[Q]] : <queue<i32, 0>>
 // CHECK:      [[POPF:%.+]] = moore.pop_front from [[QR]] : <i32, 0>
+// CHECK:      [[QR:%.+]] = moore.read [[Q]] : <queue<i32, 0>>
+// CHECK:      [[ONE:%.+]] = moore.constant 1 : i32
+// CHECK:      [[DEL:%.+]] = moore.delete index [[ONE]] of [[QR]] : <i32, 0>
+// CHECK:      [[QR:%.+]] = moore.read [[Q]] : <queue<i32, 0>>
+// CHECK:      [[CLR:%.+]] = moore.clear_queue [[QR]] : <i32, 0>
+// CHECK:      [[QR:%.+]] = moore.read [[Q]] : <queue<i32, 0>>
+// CHECK:      [[ZERO:%.+]] = moore.constant 0 : i32
+// CHECK:      [[ONE:%.+]] = moore.constant 1 : i32
+// CHECK:      [[INS:%.+]] = moore.insert [[ONE]] into [[QR]] at index [[ZERO]] : <i32, 0>
 // CHECK:      moore.return
 // CHECK:    }
 // CHECK:    moore.output
@@ -3981,6 +3990,9 @@ module QueueManipulationTest;
        q.push_front(qsize);
        q.pop_back();
        q.pop_front();
+       q.delete(1);
+       q.delete();
+       q.insert(0, 1);
     end
 endmodule
 
