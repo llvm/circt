@@ -739,48 +739,43 @@ circt::om::Evaluator::evaluateUnknownValue(UnknownValueOp op, Location loc) {
   using namespace circt::om::evaluator;
 
   // Create an unknown value of the appropriate type by switching on the type
-  return TypeSwitch<Type, FailureOr<EvaluatorValuePtr>>(op.getType())
-      .Case([&](ListType type) -> FailureOr<EvaluatorValuePtr> {
-        // Create an empty list and mark it unknown
-        EvaluatorValuePtr result = std::make_shared<ListValue>(type, loc);
-        result->markUnknown();
-        return success(result);
-      })
-      .Case([&](ClassType type) -> FailureOr<EvaluatorValuePtr> {
-        // Look up the class definition
-        auto classDef =
-            symbolTable.lookup<ClassLike>(type.getClassName().getValue());
-        if (!classDef)
-          return symbolTable.getOp()->emitError("unknown class name ")
-                 << type.getClassName();
+  auto result =
+      TypeSwitch<Type, FailureOr<EvaluatorValuePtr>>(op.getType())
+          .Case([&](ListType type) -> FailureOr<EvaluatorValuePtr> {
+            // Create an empty list
+            return success(std::make_shared<ListValue>(type, loc));
+          })
+          .Case([&](ClassType type) -> FailureOr<EvaluatorValuePtr> {
+            // Look up the class definition
+            auto classDef =
+                symbolTable.lookup<ClassLike>(type.getClassName().getValue());
+            if (!classDef)
+              return symbolTable.getOp()->emitError("unknown class name ")
+                     << type.getClassName();
 
-        // Create an ObjectValue for both ClassOp and ClassExternOp and mark it
-        // unknown
-        EvaluatorValuePtr result = std::make_shared<ObjectValue>(classDef, loc);
-        result->markUnknown();
-        return success(result);
-      })
-      .Case([&](FrozenBasePathType type) -> FailureOr<EvaluatorValuePtr> {
-        // Create an empty basepath and mark it unknown
-        EvaluatorValuePtr result =
-            std::make_shared<BasePathValue>(type.getContext());
-        result->markUnknown();
-        return success(result);
-      })
-      .Case([&](FrozenPathType type) -> FailureOr<EvaluatorValuePtr> {
-        // Create an empty path and mark it unknown
-        EvaluatorValuePtr result =
-            std::make_shared<PathValue>(PathValue::getEmptyPath(loc));
-        result->markUnknown();
-        return success(result);
-      })
-      .Default([&](Type type) -> FailureOr<EvaluatorValuePtr> {
-        // For all other types (primitives like integer, string, etc.),
-        // create an AttributeValue
-        EvaluatorValuePtr result = AttributeValue::get(type, LocationAttr(loc));
-        result->markUnknown();
-        return success(result);
-      });
+            // Create an ObjectValue for both ClassOp and ClassExternOp
+            return success(std::make_shared<ObjectValue>(classDef, loc));
+          })
+          .Case([&](FrozenBasePathType type) -> FailureOr<EvaluatorValuePtr> {
+            // Create an empty basepath
+            return success(std::make_shared<BasePathValue>(type.getContext()));
+          })
+          .Case([&](FrozenPathType type) -> FailureOr<EvaluatorValuePtr> {
+            // Create an empty path
+            return success(
+                std::make_shared<PathValue>(PathValue::getEmptyPath(loc)));
+          })
+          .Default([&](Type type) -> FailureOr<EvaluatorValuePtr> {
+            // For all other types (primitives like integer, string,
+            // etc.), create an AttributeValue
+            return success(AttributeValue::get(type, LocationAttr(loc)));
+          });
+
+  // Mark the result as unknown if successful
+  if (succeeded(result))
+    result->get()->markUnknown();
+
+  return result;
 }
 
 //===----------------------------------------------------------------------===//
