@@ -8,6 +8,8 @@
 
 #include "DeseqUtils.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "circt/Dialect/LLHD/LLHDOps.h"
 #include "circt/Dialect/LLHD/LLHDPasses.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -42,6 +44,161 @@ using namespace deseq;
 using llvm::SmallSetVector;
 
 namespace {
+
+/// Trace a block argument back through the CFG to find a unique defining value.
+/// If all predecessor branches pass the same value for this argument, return
+/// that value. Otherwise return the original block argument.
+static Value canonicalizeBlockArg(BlockArgument arg,
+                                  SmallPtrSetImpl<Block *> &visited) {
+  Block *block = arg.getOwner();
+  if (!visited.insert(block).second)
+    return arg; // Cycle detected, bail out.
+
+  Value candidate;
+  for (auto *pred : block->getPredecessors()) {
+    auto *term = pred->getTerminator();
+    Value passedValue;
+
+    // Handle branch operations.
+    if (auto br = dyn_cast<cf::BranchOp>(term)) {
+      if (br.getDest() == block)
+        passedValue = br.getDestOperands()[arg.getArgNumber()];
+    } else if (auto condBr = dyn_cast<cf::CondBranchOp>(term)) {
+      if (condBr.getTrueDest() == block)
+        passedValue = condBr.getTrueDestOperands()[arg.getArgNumber()];
+      else if (condBr.getFalseDest() == block)
+        passedValue = condBr.getFalseDestOperands()[arg.getArgNumber()];
+    } else if (auto wait = dyn_cast<WaitOp>(term)) {
+      if (wait.getDest() == block)
+        passedValue = wait.getDestOperands()[arg.getArgNumber()];
+    } else {
+      // Unknown terminator, can't trace.
+      return arg;
+    }
+
+    if (!passedValue)
+      return arg;
+
+    // Recursively trace if this is also a block argument.
+    if (auto passedArg = dyn_cast<BlockArgument>(passedValue))
+      passedValue = canonicalizeBlockArg(passedArg, visited);
+
+    // Check if all predecessors pass the same value.
+    if (!candidate)
+      candidate = passedValue;
+    else if (candidate != passedValue)
+      return arg; // Different values from different preds.
+  }
+
+  return candidate ? candidate : arg;
+}
+
+/// Convert a value into a (base, fieldID, bitID, bitWidth) key.
+///
+/// - `fieldID == 0` denotes the whole value.
+/// - `fieldID != 0` denotes a stable subfield of `base`.
+/// - `bitID != 0` denotes an additional bit/slice projection within the
+///   selected subfield (e.g., `comb.extract` from an array element).
+/// - `bitWidth != 0` denotes the width (in bits) of the final extracted slice.
+///
+/// This is used to unify equivalent projections across different SSA values in
+/// the process CFG (e.g., past/present clock bits extracted from an observed
+/// bus).
+static ValueField getValueField(Value value) {
+  if (!value)
+    return {};
+
+  // Struct field.
+  if (auto se = value.getDefiningOp<hw::StructExtractOp>()) {
+    Value base = se.getInput();
+    if (auto arg = dyn_cast<BlockArgument>(base)) {
+      SmallPtrSet<Block *, 4> visited;
+      base = canonicalizeBlockArg(arg, visited);
+    }
+    auto baseVF = getValueField(base);
+
+    auto structType = dyn_cast<hw::StructType>(se.getInput().getType());
+    if (!structType)
+      return {value, 0, value};
+
+    uint64_t idx = se.getFieldIndex();
+    uint64_t childID = hw::FieldIdImpl::getFieldID(structType, idx);
+    return {baseVF.value, baseVF.fieldID + childID, value};
+  }
+
+  // Array element with constant index.
+  if (auto ae = value.getDefiningOp<hw::ArrayGetOp>()) {
+    Value base = ae.getInput();
+    Value index = ae.getIndex();
+
+    // Fold `array_get (array_slice ...)` into an access of the original array
+    // if both indices are constant.
+    std::optional<uint64_t> idx;
+    if (auto cst = index.getDefiningOp<hw::ConstantOp>())
+      idx = cst.getValue().getZExtValue();
+
+    if (auto slice = base.getDefiningOp<hw::ArraySliceOp>()) {
+      if (auto sliceIdx = slice.getLowIndex().getDefiningOp<hw::ConstantOp>())
+        if (auto getIdx = index.getDefiningOp<hw::ConstantOp>()) {
+          idx = sliceIdx.getValue().getZExtValue() +
+                getIdx.getValue().getZExtValue();
+          base = slice.getInput();
+        }
+    }
+
+    if (!idx)
+      return {value, 0, value};
+
+    if (auto arg = dyn_cast<BlockArgument>(base)) {
+      SmallPtrSet<Block *, 4> visited;
+      base = canonicalizeBlockArg(arg, visited);
+    }
+    auto baseVF = getValueField(base);
+
+    if (auto arrayType = dyn_cast<hw::ArrayType>(base.getType())) {
+      uint64_t childID = hw::FieldIdImpl::getFieldID(arrayType, *idx);
+      return {baseVF.value, baseVF.fieldID + childID, value};
+    }
+    if (auto arrayType = dyn_cast<hw::UnpackedArrayType>(base.getType())) {
+      uint64_t childID = hw::FieldIdImpl::getFieldID(arrayType, *idx);
+      return {baseVF.value, baseVF.fieldID + childID, value};
+    }
+
+    return {value, 0, value};
+  }
+
+  // Bit slice with static low bit: use lowBit+1 to distinguish from whole.
+  if (auto ext = value.getDefiningOp<comb::ExtractOp>()) {
+    Value base = ext.getInput();
+    if (auto arg = dyn_cast<BlockArgument>(base)) {
+      SmallPtrSet<Block *, 4> visited;
+      base = canonicalizeBlockArg(arg, visited);
+    }
+    auto baseVF = getValueField(base);
+    uint64_t lowBit = static_cast<uint64_t>(ext.getLowBit());
+    auto intType = dyn_cast<IntegerType>(ext.getType());
+    if (!intType)
+      return {value, 0, value};
+    uint64_t bitWidth = intType.getWidth();
+
+    // Integer root: accumulate the low bit into the root `fieldID`.
+    if (baseVF.value.getType().isSignlessInteger()) {
+      uint64_t fieldID = baseVF.fieldID ? baseVF.fieldID + lowBit : lowBit + 1;
+      return {baseVF.value, fieldID, value, 0, bitWidth};
+    }
+
+    // Non-integer root: interpret extracts as bit/slice projections within a
+    // selected aggregate field.
+    if (baseVF.fieldID == 0)
+      return {value, 0, value};
+    uint64_t bitID = baseVF.bitID ? baseVF.bitID + lowBit : lowBit + 1;
+    return {baseVF.value, baseVF.fieldID, value, bitID, bitWidth};
+  }
+
+  // Fallback: whole value.
+  return {value, 0, value};
+}
+
 /// The work horse promoting processes into concrete registers.
 struct Deseq {
   Deseq(ProcessOp process) : process(process) {}
@@ -52,6 +209,7 @@ struct Deseq {
 
   TruthTable computeBoolean(Value value);
   ValueTable computeValue(Value value);
+  TruthTable computeBoolean(ValueField value);
   TruthTable computeBoolean(OpResult value);
   ValueTable computeValue(OpResult value);
   TruthTable computeBoolean(BlockArgument value);
@@ -69,6 +227,9 @@ struct Deseq {
   matchDriveClockAndReset(DriveInfo &drive,
                           ArrayRef<std::pair<DNFTerm, ValueEntry>> valueTable);
 
+  Value materializeProjection(OpBuilder &builder, Location loc, Value value,
+                              SmallDenseMap<Value, Value, 8> &cache);
+
   void implementRegisters();
   void implementRegister(DriveInfo &drive);
 
@@ -81,7 +242,7 @@ struct Deseq {
   WaitOp wait;
   /// The boolean values observed by the wait. These trigger the process and
   /// may cause the described register to update its value.
-  SmallSetVector<Value, 2> triggers;
+  SmallSetVector<ValueField, 2> triggers;
   /// The values carried from the past into the present as destination operands
   /// of the wait op. These values are guaranteed to also be contained in
   /// `triggers`.
@@ -102,9 +263,9 @@ struct Deseq {
   DenseMap<Operation *, bool> staticOps;
 
   /// The boolean expression computed for an `i1` value in the IR.
-  DenseMap<Value, TruthTable> booleanLattice;
-  /// The value table computed for a value in the IR. This essentially lists
-  /// what values an SSA value assumes under certain conditions.
+  DenseMap<ValueField, TruthTable> booleanLattice;
+  /// The value table computed for an SSA value in the IR. This essentially
+  /// lists what values an SSA value assumes under certain conditions.
   DenseMap<Value, ValueTable> valueLattice;
   /// The condition under which control flow reaches a block. The block
   /// immediately following the wait op has this set to true; any further
@@ -168,7 +329,7 @@ void Deseq::deseq() {
     llvm::dbgs() << "- " << triggers.size() << " potential triggers:\n";
     for (auto [index, trigger] : llvm::enumerate(triggers)) {
       llvm::dbgs() << "  - ";
-      trigger.printAsOperand(llvm::dbgs(), OpPrintingFlags());
+      trigger.getProjected().printAsOperand(llvm::dbgs(), OpPrintingFlags());
       llvm::dbgs() << ": past " << getPastTrigger(index);
       llvm::dbgs() << ", present " << getPresentTrigger(index);
       llvm::dbgs() << "\n";
@@ -266,14 +427,32 @@ bool Deseq::analyzeProcess() {
     driveInfos.push_back(DriveInfo(driveOp));
   }
 
-  // Ensure the observed values are all booleans.
+  // Collect triggers from observed values. We support either:
+  // 1. Direct i1 observed values (traditional case)
+  // 2. Non-i1 observed values where dest operands are i1 projections (e.g.,
+  //    comb.extract) - in this case the projections become the triggers
+  bool hasNonI1Observed = false;
   for (auto value : wait.getObserved()) {
-    if (!value.getType().isSignlessInteger(1)) {
-      LLVM_DEBUG(llvm::dbgs() << "Skipping " << process.getLoc()
-                              << ": observes non-i1 value\n");
-      return false;
+    if (!value.getType().isSignlessInteger(1))
+      hasNonI1Observed = true;
+  }
+
+  if (!hasNonI1Observed) {
+    // Traditional case: observed values are i1, use them directly as triggers.
+    for (auto value : wait.getObserved())
+      triggers.insert(getValueField(value));
+  } else {
+    // Projected clock case: find i1 dest operands that are projections of
+    // observed values. These become our triggers.
+    for (auto operand : wait.getDestOperands()) {
+      if (!operand.getType().isSignlessInteger(1))
+        continue;
+      auto vf = getValueField(operand);
+      // Check if this is a projection (fieldID != 0) of an observed value.
+      if (vf.fieldID != 0 && llvm::is_contained(wait.getObserved(), vf.value)) {
+        triggers.insert(vf);
+      }
     }
-    triggers.insert(value);
   }
 
   // We only support 1 or 2 observed values, since we map to registers with a
@@ -284,26 +463,42 @@ bool Deseq::analyzeProcess() {
     return false;
   }
 
-  // Seed the drive value analysis with the observed values.
+  // Seed the drive value analysis with the triggers.
   for (auto [index, trigger] : llvm::enumerate(triggers))
     booleanLattice.insert({trigger, getPresentTrigger(index)});
 
-  // Ensure the wait op destination operands, i.e. the values passed from the
-  // past into the present, are the observed values.
+  // Process the wait op destination operands, i.e. the values passed from the
+  // past into the present. For projected clocks, the dest operand itself may be
+  // a trigger; otherwise trace back to find the observed value it came from.
   for (auto [operand, blockArg] :
        llvm::zip(wait.getDestOperands(), wait.getDest()->getArguments())) {
+    // Check if this dest operand is directly a trigger (projected clock case).
+    auto operandVF = getValueField(operand);
+    auto it = llvm::find(triggers, operandVF);
+    if (it != triggers.end()) {
+      unsigned index = std::distance(triggers.begin(), it);
+      pastValues.push_back(it->getProjected());
+      booleanLattice.insert({getValueField(blockArg), getPastTrigger(index)});
+      continue;
+    }
+    // Non-i1 dest operands are only allowed if they are observed values
+    // (for projected clocks, the bus is passed through but not used as
+    // trigger).
     if (!operand.getType().isSignlessInteger(1)) {
+      if (llvm::is_contained(wait.getObserved(), operand))
+        continue; // Observed bus passed through - OK for projected clocks.
       LLVM_DEBUG(llvm::dbgs() << "Skipping " << process.getLoc()
                               << ": uses non-i1 past value\n");
       return false;
     }
+    // Traditional case: trace back to find the observed value.
     auto trigger = tracePastValue(operand);
     if (!trigger)
       return false;
     pastValues.push_back(trigger);
-    unsigned index =
-        std::distance(triggers.begin(), llvm::find(triggers, trigger));
-    booleanLattice.insert({blockArg, getPastTrigger(index)});
+    unsigned index = std::distance(
+        triggers.begin(), llvm::find(triggers, getValueField(trigger)));
+    booleanLattice.insert({getValueField(blockArg), getPastTrigger(index)});
   }
 
   return true;
@@ -329,7 +524,12 @@ Value Deseq::tracePastValue(Value pastValue) {
 
     // If this is one of the observed values, we're done. Otherwise trace
     // block arguments backwards to their predecessors.
-    if (triggers.contains(value) || !arg) {
+    if (auto it = llvm::find(triggers, getValueField(value));
+        it != triggers.end()) {
+      distinctValues.insert(it->getProjected());
+      continue;
+    }
+    if (!arg) {
       distinctValues.insert(value);
       continue;
     }
@@ -387,7 +587,7 @@ Value Deseq::tracePastValue(Value pastValue) {
     return Value{};
   }
   auto distinctValue = *distinctValues.begin();
-  if (!triggers.contains(distinctValue)) {
+  if (!triggers.contains(getValueField(distinctValue))) {
     LLVM_DEBUG(llvm::dbgs() << "Skipping " << process.getLoc()
                             << ": unobserved past value\n");
     return Value{};
@@ -404,6 +604,28 @@ Value Deseq::tracePastValue(Value pastValue) {
 /// truth table. Any other SSA values that factor into the value are represented
 /// as an opaque term.
 TruthTable Deseq::computeBoolean(Value value) {
+  return computeBoolean(getValueField(value));
+}
+
+TruthTable Deseq::computeBoolean(ValueField vf) {
+  if (!vf)
+    return getUnknownBoolean();
+
+  // Check the lattice first - this is important for projected clocks where
+  // multiple extractions from the same base/offset are equivalent.
+  if (auto it = booleanLattice.find(vf); it != booleanLattice.end())
+    return it->second;
+
+  if (vf.fieldID != 0) {
+    // A projected field is boolean only if we can see the projection; otherwise
+    // we don't try to reason about it. Treat unknown projections as unknown.
+    if (vf.getProjected().getType().isSignlessInteger(1))
+      return computeBoolean(
+          ValueField{vf.getProjected(), 0, vf.getProjected()});
+    return getUnknownBoolean();
+  }
+
+  Value value = vf.value;
   assert(value.getType().isSignlessInteger(1));
 
   // If this value is a result of the process we're analyzing, jump to the
@@ -412,12 +634,9 @@ TruthTable Deseq::computeBoolean(Value value) {
     return computeBoolean(
         wait.getYieldOperands()[cast<OpResult>(value).getResultNumber()]);
 
-  // Check if we have already computed this value. Otherwise insert an unknown
-  // value to break recursions. This will be overwritten by a concrete value
-  // later.
-  if (auto it = booleanLattice.find(value); it != booleanLattice.end())
-    return it->second;
-  booleanLattice[value] = getUnknownBoolean();
+  // Insert an unknown value to break recursions. This will be overwritten by a
+  // concrete value later.
+  booleanLattice[vf] = getUnknownBoolean();
 
   // Actually compute the value.
   TruthTable result =
@@ -430,7 +649,7 @@ TruthTable Deseq::computeBoolean(Value value) {
     value.printAsOperand(llvm::dbgs(), OpPrintingFlags());
     llvm::dbgs() << ": " << result << "\n";
   });
-  booleanLattice[value] = result;
+  booleanLattice[vf] = result;
   return result;
 }
 
@@ -438,6 +657,15 @@ TruthTable Deseq::computeBoolean(Value value) {
 /// how control flow reaches the given value. This is used to determine the list
 /// of different values that are driven onto a signal under various conditions.
 ValueTable Deseq::computeValue(Value value) {
+  auto vf = getValueField(value);
+
+  // For now, treat projections as distinct but known values identified by the
+  // projected SSA value.
+  if (vf.fieldID != 0)
+    return getKnownValue(vf.getProjected());
+
+  value = vf.value;
+
   // If this value is a result of the process we're analyzing, jump to the
   // corresponding yield operand of the wait op.
   if (value.getDefiningOp() == process)
@@ -870,7 +1098,7 @@ bool Deseq::matchDriveClock(
       continue;
 
     // Populate the clock info and return.
-    drive.clock.clock = triggers[0];
+    drive.clock.clock = triggers[0].getProjected();
     drive.clock.risingEdge = !negClock;
     drive.clock.value = drive.op.getValue();
     if (!valueTable[0].second.isUnknown())
@@ -960,11 +1188,11 @@ bool Deseq::matchDriveClockAndReset(
     }
 
     // Populate the reset and clock info, and return.
-    drive.reset.reset = triggers[resetIdx];
+    drive.reset.reset = triggers[resetIdx].getProjected();
     drive.reset.value = resetIt->second.value;
     drive.reset.activeHigh = !negReset;
 
-    drive.clock.clock = triggers[clockIdx];
+    drive.clock.clock = triggers[clockIdx].getProjected();
     drive.clock.risingEdge = !negClock;
     if (clockIt->first == clockWithEnable)
       drive.clock.enable = drive.op.getEnable();
@@ -997,6 +1225,95 @@ bool Deseq::matchDriveClockAndReset(
 // Register Implementation
 //===----------------------------------------------------------------------===//
 
+Value Deseq::materializeProjection(OpBuilder &builder, Location loc,
+                                   Value value,
+                                   SmallDenseMap<Value, Value, 8> &cache) {
+  if (!value)
+    return value;
+
+  // Only values defined within this process need rematerialization.
+  auto isInThisProcess = [&](Value v) {
+    if (auto arg = dyn_cast<BlockArgument>(v)) {
+      Operation *parentOp = arg.getOwner()->getParentOp();
+      if (!parentOp)
+        return false;
+      return parentOp == process.getOperation() ||
+             parentOp->getParentOfType<ProcessOp>() == process;
+    }
+    if (auto *defOp = v.getDefiningOp())
+      return defOp->getParentOfType<ProcessOp>() == process;
+    return false;
+  };
+  if (!isInThisProcess(value))
+    return value;
+
+  if (auto it = cache.find(value); it != cache.end())
+    return it->second;
+
+  // If we encounter a block argument, trace it back to a unique defining
+  // value.
+  if (auto arg = dyn_cast<BlockArgument>(value)) {
+    SmallPtrSet<Block *, 4> visited;
+    Value canon = canonicalizeBlockArg(arg, visited);
+    if (canon == value)
+      return value;
+    auto remat = materializeProjection(builder, loc, canon, cache);
+    cache.insert({value, remat});
+    return remat;
+  }
+
+  auto *defOp = value.getDefiningOp();
+  if (!defOp)
+    return value;
+
+  // Rematerialize common pure projection ops.
+  if (auto ext = dyn_cast<comb::ExtractOp>(defOp)) {
+    Value input = materializeProjection(builder, loc, ext.getInput(), cache);
+    Value remat = comb::ExtractOp::create(builder, loc, ext.getType(), input,
+                                          ext.getLowBit());
+    cache.insert({value, remat});
+    return remat;
+  }
+  if (auto get = dyn_cast<hw::ArrayGetOp>(defOp)) {
+    Value input = materializeProjection(builder, loc, get.getInput(), cache);
+    Value index = materializeProjection(builder, loc, get.getIndex(), cache);
+    Value remat = hw::ArrayGetOp::create(builder, loc, input, index);
+    cache.insert({value, remat});
+    return remat;
+  }
+  if (auto slice = dyn_cast<hw::ArraySliceOp>(defOp)) {
+    Value input = materializeProjection(builder, loc, slice.getInput(), cache);
+    Value lowIndex =
+        materializeProjection(builder, loc, slice.getLowIndex(), cache);
+    Value remat = hw::ArraySliceOp::create(builder, loc, slice.getType(), input,
+                                           lowIndex);
+    cache.insert({value, remat});
+    return remat;
+  }
+  if (auto se = dyn_cast<hw::StructExtractOp>(defOp)) {
+    Value input = materializeProjection(builder, loc, se.getInput(), cache);
+    Value remat =
+        hw::StructExtractOp::create(builder, loc, input, se.getFieldNameAttr());
+    cache.insert({value, remat});
+    return remat;
+  }
+  if (auto cst = dyn_cast<hw::ConstantOp>(defOp)) {
+    Value remat = hw::ConstantOp::create(
+        builder, loc, cst.getResult().getType(), cst.getValueAttr());
+    cache.insert({value, remat});
+    return remat;
+  }
+  if (auto cst = dyn_cast<arith::ConstantOp>(defOp)) {
+    auto *cloned = builder.clone(*defOp);
+    Value remat = cloned->getResult(cast<OpResult>(value).getResultNumber());
+    cache.insert({value, remat});
+    return remat;
+  }
+
+  // Unknown op: leave as-is.
+  return value;
+}
+
 /// Make all drives unconditional and implement the conditional behavior with
 /// register ops.
 void Deseq::implementRegisters() {
@@ -1015,11 +1332,17 @@ void Deseq::implementRegister(DriveInfo &drive) {
   OpBuilder builder(drive.op);
   auto loc = drive.op.getLoc();
 
-  // Materialize the clock as a `!seq.clock` value. Insert an inverter for
-  // negedge clocks.
-  auto &clockCast = materializedClockCasts[drive.clock.clock];
+  // Projected clocks and resets compute the trigger value inside the process,
+  // but the produced register ops must consume the trigger outside.
+  SmallDenseMap<Value, Value, 8> rematerialized;
+
+  // Materialize the clock as a `!seq.clock` value.
+  Value clockValue =
+      materializeProjection(builder, loc, drive.clock.clock, rematerialized);
+
+  auto &clockCast = materializedClockCasts[clockValue];
   if (!clockCast)
-    clockCast = seq::ToClockOp::create(builder, loc, drive.clock.clock);
+    clockCast = seq::ToClockOp::create(builder, loc, clockValue);
   auto clock = clockCast;
   if (!drive.clock.risingEdge) {
     auto &clockInv = materializedClockInverters[clock];
@@ -1033,7 +1356,8 @@ void Deseq::implementRegister(DriveInfo &drive) {
   Value resetValue;
 
   if (drive.reset) {
-    reset = drive.reset.reset;
+    reset =
+        materializeProjection(builder, loc, drive.reset.reset, rematerialized);
     resetValue = drive.reset.value;
 
     // Materialize the reset as an `i1` value. Insert an inverter for negedge
@@ -1217,9 +1541,9 @@ ValueRange Deseq::specializeProcess(FixedValues fixedValues) {
   // Compute the truth table that is true for the given fixed values, and false
   // otherwise. We will use that table to quickly evaluate booleans later.
   auto fixedTable = getConstBoolean(true);
-  for (auto [index, value] : llvm::enumerate(triggers)) {
+  for (auto [index, trigger] : llvm::enumerate(triggers)) {
     for (auto fixedValue : fixedValues) {
-      if (fixedValue.value != value)
+      if (getValueField(fixedValue.value) != trigger)
         continue;
       auto past = getPastTrigger(index);
       fixedTable &= fixedValue.past ? past : ~past;
@@ -1274,7 +1598,7 @@ ValueRange Deseq::specializeProcess(FixedValues fixedValues) {
         // or false with the given fixed values.
         if (oldOp.getNumResults() == 1 &&
             oldOp.getResult(0).getType().isSignlessInteger(1)) {
-          if (auto it = booleanLattice.find(oldOp.getResult(0));
+          if (auto it = booleanLattice.find(getValueField(oldOp.getResult(0)));
               it != booleanLattice.end()) {
             if ((it->second & fixedTable).isFalse()) {
               mapping.map(oldOp.getResult(0), falseValue);
