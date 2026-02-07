@@ -14,18 +14,18 @@
 
 # Test C++ header generation against the manifest file
 # RUN: %PYTHON% -m esiaccel.codegen --file %t/esi_system_manifest.json --output-dir %t/include/loopback/
-# RUN: %cxx -I %t/include %S/test_software/loopback.cpp -o %t/test
+# RUN: %host_cxx -I %t/include %S/test_software/loopback.cpp -o %t/test
 # RUN: %t/test | FileCheck %s --check-prefix=CPP-TEST
 # RUN: FileCheck %s --check-prefix=LOOPBACK-H --input-file %t/include/loopback/LoopbackIP.h
 
 # Test C++ header generation from the live accelerator.
 # RUN: esi-cosim.py --source %t -- %PYTHON% -m esiaccel.codegen --platform cosim --connection env --output-dir %t/include/loopback/
-# RUN: %cxx -I %t/include %S/test_software/loopback.cpp -o %t/test
+# RUN: %host_cxx -I %t/include %S/test_software/loopback.cpp -o %t/test
 # RUN: %t/test | FileCheck %s --check-prefix=CPP-TEST
 
 import sys
 
-from pycde import (AppID, Clock, Module, Reset, generator)
+from pycde import (AppID, Clock, Module, Reset, Signal, System, generator)
 from pycde.bsp import get_bsp
 from pycde.common import Constant
 from pycde.constructs import Wire
@@ -119,7 +119,7 @@ class LoopbackArray(Module):
     elem = arg_data[0]
     elem_plus_one = (elem + SInt(8)(1)).as_sint(8)
     # ArrayCreate reverses element order; provide reversed list to match MLIR.
-    result_array = pycde.Signal.create([elem, elem_plus_one])
+    result_array = Signal.create([elem, elem_plus_one])
     result_chan, result_ready = Channel(ResultArray).wrap(result_array, valid)
     ready.assign(result_ready)
     result_wire.assign(result_chan)
@@ -182,7 +182,7 @@ class Top(Module):
 
 if __name__ == "__main__":
   bsp = get_bsp(sys.argv[2] if len(sys.argv) > 2 else None)
-  s = pycde.System(bsp(Top), name="Loopback", output_directory=sys.argv[1])
+  s = System(bsp(Top), name="Loopback", output_directory=sys.argv[1])
   s.compile()
   s.package()
 
