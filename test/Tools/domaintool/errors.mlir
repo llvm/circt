@@ -33,8 +33,8 @@ om.class @ClockDomain_out(
 
 // -----
 
-// Test 1: Too many domains declared (2 ClockDomains declared, but class only needs 1)
-// RUN: not domaintool --module OneClock --domain ClockDomain,A,10 --domain ClockDomain,B,20 --assign 0 --assign 1 %s 2>&1 | FileCheck %s --check-prefix=TOO_MANY
+// Test 1: Too many assignments (class has 1 ClockDomain parameter, but 2 assignments)
+// RUN: not domaintool --module OneClock --domain ClockDomain,A,10 --assign 0 --assign 0 %s 2>&1 | FileCheck %s --check-prefix=TOO_MANY_ASSIGNS
 
 om.class @OneClock_Class(
   %basepath: !om.frozenbasepath,
@@ -52,12 +52,12 @@ om.class @OneClock_Class(
   om.class.fields %0 : !om.class.type<@ClockDomain_out>
 }
 
-// TOO_MANY: error: declared 2 domain(s) of type 'ClockDomain' but the class has 1 parameter(s) of that type
+// TOO_MANY_ASSIGNS: error: class has 1 parameter(s) of type 'ClockDomain' but only assigned 2
 
 // -----
 
-// Test 2: Not enough assignments (2 ClockDomains declared, but only 1 assigned)
-// RUN: not domaintool --module TwoClocks --domain ClockDomain,A,10 --domain ClockDomain,B,20 --assign 0 %s 2>&1 | FileCheck %s --check-prefix=NOT_ENOUGH_ASSIGNS
+// Test 2: Not enough assignments (class has 2 ClockDomain parameters, but only 1 assigned)
+// RUN: not domaintool --module TwoClocks --domain ClockDomain,A,10 --assign 0 %s 2>&1 | FileCheck %s --check-prefix=NOT_ENOUGH_ASSIGNS
 
 om.class @TwoClocks_Class(
   %basepath: !om.frozenbasepath,
@@ -83,21 +83,14 @@ om.class @TwoClocks_Class(
   om.class.fields %0, %1 : !om.class.type<@ClockDomain_out>, !om.class.type<@ClockDomain_out>
 }
 
-// NOT_ENOUGH_ASSIGNS: error: declared 2 domain(s) of type 'ClockDomain' but only assigned 1
+// NOT_ENOUGH_ASSIGNS: error: class has 2 parameter(s) of type 'ClockDomain' but only assigned 1
 
 // -----
 
-// Test 3: Not enough domains declared (class needs 2 ClockDomains, but only 1 declared)
-// RUN: not domaintool --module TwoClocks --domain ClockDomain,A,10 --assign 0 %s 2>&1 | FileCheck %s --check-prefix=NOT_ENOUGH_DOMAINS
-
-// NOT_ENOUGH_DOMAINS: error: declared 1 domain(s) of type 'ClockDomain' but the class has 2 parameter(s) of that type
-
-// -----
-
-// Test 4: Domain declared but no assignments (1 ClockDomain declared, but no assignments)
+// Test 4: No assignments (class has 1 ClockDomain parameter, but no assignments)
 // RUN: not domaintool --module OneClock --domain ClockDomain,A,10 %s 2>&1 | FileCheck %s --check-prefix=NO_ASSIGNS
 
-// NO_ASSIGNS: error: declared 1 domain(s) of type 'ClockDomain' but only assigned 0
+// NO_ASSIGNS: error: class has 1 parameter(s) of type 'ClockDomain' but only assigned 0
 
 // -----
 

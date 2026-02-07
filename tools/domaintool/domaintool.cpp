@@ -218,20 +218,6 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
       paramCountByType[classType]++;
   }
 
-  // Validate that for each domain type the user declared, they have provided
-  // the exact number needed to cover all parameters of that type.
-  for (auto &[domainType, domainList] : domainsByType) {
-    size_t numParams = paramCountByType[domainType];
-    if (domainList.size() != numParams) {
-      llvm::errs() << "error: declared " << domainList.size()
-                   << " domain(s) of type '"
-                   << domainType.getClassName().getValue()
-                   << "' but the class has " << numParams
-                   << " parameter(s) of that type\n";
-      return failure();
-    }
-  }
-
   // Parse the -assign options to build a list of domain indices for each
   // domain type.
   llvm::MapVector<om::ClassType, SmallVector<size_t>> assignmentsByType;
@@ -258,16 +244,16 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
   }
 
   // Validate that for each domain type, the number of assignments matches
-  // the number of domains declared.
-  for (auto &[domainType, domainList] : domainsByType) {
+  // the number of parameters of that type.
+  for (auto &[domainType, numParams] : paramCountByType) {
     size_t numAssignments = 0;
     auto it = assignmentsByType.find(domainType);
     if (it != assignmentsByType.end())
       numAssignments = it->second.size();
 
-    if (numAssignments != domainList.size()) {
-      llvm::errs() << "error: declared " << domainList.size()
-                   << " domain(s) of type '"
+    if (numAssignments != numParams) {
+      llvm::errs() << "error: class has " << numParams
+                   << " parameter(s) of type '"
                    << domainType.getClassName().getValue()
                    << "' but only assigned " << numAssignments << "\n";
       return failure();
