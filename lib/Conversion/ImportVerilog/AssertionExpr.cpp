@@ -387,16 +387,6 @@ Value Context::convertAssertionCallExpression(
                            << subroutine.name << "`";
       return {};
     }
-    if (subroutine.name == "$past") {
-      // For now, catch unsupported non-i1 $past case before we try and cast to
-      // a bool and get an unhelpful error
-      if (auto ty = dyn_cast<moore::IntType>(value.getType());
-          !ty || ty.getBitSize() != 1) {
-        mlir::emitError(loc, "$past is currently only supported for 1-wide "
-                             "bitvectors");
-        return {};
-      }
-    }
     // If the value is four-valued, we need to map it to two-valued before we
     // cast it to a builtin int
     if (valTy.getDomain() == Domain::FourValued) {

@@ -366,9 +366,11 @@ endfunction
 // CHECK-LABEL: moore.module @SampleValueBuiltins(
 // CHECK-SAME: in [[CLK:%.+]] : !moore.l1
 module SampleValueBuiltins #() (
-    input clk_i
+    input clk_i,
+    input [7:0] data_i
 );
   // CHECK: [[CLKWIRE:%.+]] = moore.net name "clk_i" wire : <l1>
+  // CHECK: [[DATAWIRE:%.+]] = moore.net name "data_i" wire : <l8>
   // CHECK: moore.procedure always {
   // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
   // CHECK-NEXT: [[C_INT:%.+]] = moore.logic_to_int [[C]] : l1
@@ -426,6 +428,17 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i1
   // CHECK-NEXT: [[EQ:%.+]] = moore.eq [[C1]], [[PAST_LOGIC]] : l1 -> l1
   past_eq: assert property (@(posedge clk_i) clk_i == $past(clk_i));
+  // Test $past on wider bitvectors
+  // CHECK: moore.procedure always {
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D2:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D2_INT:%.+]] = moore.logic_to_int [[D2]] : l8
+  // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D2_INT]] : i8
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 : i8
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
+  // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
+  // CHECK-NEXT: [[EQ:%.+]] = moore.eq [[D1]], [[PAST_LOGIC]] : l8 -> l1
+  past_data: assert property (@(posedge clk_i) data_i == $past(data_i));
 
 endmodule
 
