@@ -110,6 +110,8 @@ def OMIntegerAttr : AttrDef<OMDialect, "Integer", [TypedAttrInterface]> {
   let extraClassDeclaration = [{
     mlir::Type getType();
   }];
+
+  let genVerifyDecl = true;
 }
 
 #endif // CIRCT_DIALECT_OM_OMATTRIBUTES_TD

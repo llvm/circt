@@ -1271,6 +1271,7 @@ def FIntegerConstantOp : FIRRTLOp<"integer", [Pure, ConstantLike]> {
   let results = (outs FIntegerType:$result);
   let hasFolder = 1;
   let hasCustomAssemblyFormat = true;
+  let hasVerifier = true;
 }
 
 def UnresolvedPathOp : FIRRTLOp<"unresolved_path", [Pure]> {
