@@ -543,12 +543,9 @@ static LogicalResult extractConcatToConcatExtract(ExtractOp op,
     extractLo = 0;
   }
 
-  if (reverseConcatArgs.size() == 1) {
-    replaceOpAndCopyNamehint(rewriter, op, reverseConcatArgs[0]);
-  } else {
-    replaceOpWithNewOpAndCopyNamehint<ConcatOp>(
-        rewriter, op, SmallVector<Value>(llvm::reverse(reverseConcatArgs)));
-  }
+  // Always use ConcatOp, even for single element - ConcatOp folder will optimize
+  replaceOpWithNewOpAndCopyNamehint<ConcatOp>(
+      rewriter, op, SmallVector<Value>(llvm::reverse(reverseConcatArgs)));
   return success();
 }
 
