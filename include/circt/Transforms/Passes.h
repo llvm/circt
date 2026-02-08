@@ -57,6 +57,7 @@ std::unique_ptr<mlir::Pass> createHierarchicalRunner(
     const std::string &topName,
     llvm::function_ref<void(mlir::OpPassManager &)> pipeline,
     bool includeBoundInstances = false);
+std::unique_ptr<mlir::Pass> createEnsureDivisionIsSpeculatablePass();
 
 //===----------------------------------------------------------------------===//
 // Utility functions.

@@ -25,6 +25,7 @@
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Dialect/Sim/SimPasses.h"
 #include "circt/Support/Passes.h"
+#include "circt/Transforms/Passes.h"
 #include "mlir/Transforms/Passes.h"
 
 using namespace mlir;
@@ -153,6 +154,7 @@ void circt::populateArcToLLVMPipeline(OpPassManager &pm,
     opts.traceFileName = options.traceFileName;
     pm.addPass(createInsertRuntime(opts));
   }
+  pm.addPass(createEnsureDivisionIsSpeculatablePass());
   pm.addPass(createLowerArcToLLVMPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizerPass());
