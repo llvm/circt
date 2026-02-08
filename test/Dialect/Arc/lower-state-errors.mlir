@@ -16,3 +16,10 @@ hw.module @CombLoop(in %a: i42, out z: i42) {
 hw.module.extern @myModule()
 
 hw.instance "alligator" @myModule() -> ()
+
+// -----
+
+hw.module @InoutPortModule(inout %port: i32) {
+  // expected-error @-1 {{inout port 'port' is not supported in Arc lowering}}
+  hw.output
+}
