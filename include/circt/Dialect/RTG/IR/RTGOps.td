@@ -214,8 +214,8 @@ def IntFormatOp : RTGOp<"int_format", [Pure]> {
 
 //===- Label Operations ---------------------------------------------------===//
 
-class LabelDeclBase<string mnemonic,
-                    list<Trait> traits> : RTGOp<mnemonic, traits> {
+def LabelUniqueDeclOp : RTGOp<"label_unique_decl", []> {
+  let summary = "declares a unique label for an instruction sequence";
   let description = [{
     Declares a label that can then be placed by an `rtg.label` operation in an
     instruction sequence, passed on to sequences via their arguments, and used
@@ -223,30 +223,27 @@ class LabelDeclBase<string mnemonic,
     directly as an operand of an instruction or by casting it to a value
     representing an immediate.
 
-    The format string may contain placeholders of the form `{i}` where `i`
-    refers to the i-th element in `args`.
-    The declared label is uniqued by the compiler to no collide with any other
-    label declarations.
+    The provided 'name' value is used as a prefix for the unique label name.
   }];
 
-  // TODO: 'args' can be generalized to more types
-  let arguments = (ins StrAttr:$formatString, Variadic<Index>:$args);
+  let arguments = (ins StringType:$namePrefix);
+  let results = (outs Res<LabelType, "", [MemAlloc]>:$label);
 
-  let assemblyFormat = [{
-    $formatString (`,` $args^)? attr-dict
-  }];
+  let assemblyFormat = "$namePrefix attr-dict";
 }
 
-def LabelDeclOp : LabelDeclBase<"label_decl", [Pure]> {
-  let summary = "declares a label for an instruction sequence";
+def StringToLabelOp : RTGOp<"string_to_label", [Pure]> {
+  let summary = "converts a string to a label";
+  let description = [{
+    This operation converts a string to a label. The label name is not uniqued
+    and it is the user's responsibility to ensure that the label name is valid
+    in the target assembly.
+  }];
+
+  let arguments = (ins StringType:$string);
   let results = (outs LabelType:$label);
 
-  let hasFolder = 1;
-}
-
-def LabelUniqueDeclOp : LabelDeclBase<"label_unique_decl", []> {
-  let summary = "declares a unique label for an instruction sequence";
-  let results = (outs Res<LabelType, "", [MemAlloc]>:$label);
+  let assemblyFormat = "$string attr-dict";
 
   let hasFolder = 1;
 }

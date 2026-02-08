@@ -55,10 +55,14 @@ rtg.sequence @ranomizedSequenceType(%seq: !rtg.randomized_sequence) {}
 // CHECK-LABEL: rtg.sequence @seq
 rtg.sequence @seq0() {
   %arg = arith.constant 1 : index
-  // CHECK: [[LBL0:%.*]] = rtg.label_decl "label_string_{0}_{1}", %{{.*}}, %{{.*}}
-  %0 = rtg.label_decl "label_string_{0}_{1}", %arg, %arg
-  // CHECK: [[LBL1:%.+]] = rtg.label_unique_decl "label_string"
-  %1 = rtg.label_unique_decl "label_string"
+  // CHECK: [[LBL0:%.*]] = rtg.constant #rtg.isa.label<"label_string">
+  %0 = rtg.constant #rtg.isa.label<"label_string">
+
+  // CHECK: [[PREFIX:%.+]] = rtg.constant "label_string" : !rtg.string 
+  // CHECK: [[LBL1:%.+]] = rtg.label_unique_decl [[PREFIX]]
+  %prefix = rtg.constant "label_string" : !rtg.string
+  %1 = rtg.label_unique_decl %prefix
+
   // CHECK: rtg.label local [[LBL0]]
   rtg.label local %0
   // CHECK: rtg.label global [[LBL1]]

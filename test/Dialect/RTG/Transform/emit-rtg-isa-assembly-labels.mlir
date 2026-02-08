@@ -6,7 +6,7 @@ emit.file "" {
   rtg.comment %str_begin
   %rd = rtg.constant #rtgtest.ra
   %rs = rtg.constant #rtgtest.s0
-  %label = rtg.label_decl "label_name"
+  %label = rtg.constant #rtg.isa.label<"label_name">
 
   // CHECK-NEXT:    la ra, label_name
   rtgtest.rv32i.la %rd, %label : !rtg.isa.label

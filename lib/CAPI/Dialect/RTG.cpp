@@ -318,6 +318,21 @@ MlirAttribute rtgVirtualRegisterConfigAttrGetRegister(MlirAttribute attr,
   return wrap(allowedRegs[index]);
 }
 
+// LabelAttr
+//===----------------------------------------------------------------------===//
+
+bool rtgAttrIsALabel(MlirAttribute attr) {
+  return isa<LabelAttr>(unwrap(attr));
+}
+
+MlirAttribute rtgLabelAttrGet(MlirContext ctx, MlirStringRef name) {
+  return wrap(LabelAttr::get(unwrap(ctx), unwrap(name)));
+}
+
+MlirStringRef rtgLabelAttrGetName(MlirAttribute attr) {
+  return wrap(cast<LabelAttr>(unwrap(attr)).getName());
+}
+
 //===----------------------------------------------------------------------===//
 // Passes
 //===----------------------------------------------------------------------===//
