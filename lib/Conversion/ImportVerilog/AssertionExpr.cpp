@@ -326,6 +326,28 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                           .getResult();
                   return notPastAndCurrent;
                 })
+          // Translate $changed to ( x[0] ∧ ¬x[-1] ) ⋁ ( ¬x[0] ∧ x[-1] )
+          .Case("$changed",
+                [&]() -> Value {
+                  auto past =
+                      ltl::PastOp::create(builder, loc, value, 1).getResult();
+                  auto notPast =
+                      ltl::NotOp::create(builder, loc, past).getResult();
+                  auto current = value;
+                  auto notCurrent =
+                      ltl::NotOp::create(builder, loc, value).getResult();
+                  auto notPastAndCurrent =
+                      ltl::AndOp::create(builder, loc, {current, notPast})
+                          .getResult();
+                  auto pastAndNotCurrent =
+                      ltl::AndOp::create(builder, loc, {notCurrent, past})
+                          .getResult();
+                  auto changed =
+                      ltl::OrOp::create(builder, loc,
+                                        {notPastAndCurrent, pastAndNotCurrent})
+                          .getResult();
+                  return changed;
+                })
           // Translate $stable to ( x[0] ∧ x[-1] ) ⋁ ( ¬x[0] ∧ ¬x[-1] )
           .Case("$stable",
                 [&]() -> Value {
