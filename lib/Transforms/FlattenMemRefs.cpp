@@ -115,6 +115,7 @@ static Value flattenIndices(ConversionPatternRewriter &rewriter, Operation *op,
     for (unsigned i = memIdx.index() + 1; i < memrefType.getShape().size();
          ++i) {
       int64_t dimSize = memrefType.getShape()[i];
+      
       indexMulFactor *= dimSize;
     }
 
