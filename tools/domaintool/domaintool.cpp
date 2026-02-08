@@ -57,8 +57,8 @@ cl::list<std::string> assign{
     cl::desc(
         "connect one of the previously declared domains to a port by its "
         "numeric id, e.g., to attach the second domain to the first port and "
-        "the first domain to the second port use '--assign 1 --assign 0'.  To "
-        "set a port to 'unknown' use '--assign u'."),
+        "the first domain to the second port use '--assign 1 --assign 0'.  "
+        "Any unassigned parameters will automatically be set to unknown."),
     cl::Prefix, cl::cat(cat)};
 cl::opt<std::string> moduleName{
     "module", cl::Required,
@@ -198,37 +198,48 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
   }
   ArrayRef<BlockArgument> formalParams = classOp.getBodyBlock()->getArguments();
 
-  // Put the parameters necessary to instantiate the class in `parameters`.
-  // This consists of an empty base path and all the domains whose order is
-  // specified by the command line `-asign` options.
-  SmallVector<om::evaluator::EvaluatorValuePtr> parameters;
-  om::evaluator::BasePathValue emptyPath(&context);
-  parameters.push_back(
-      std::make_shared<om::evaluator::BasePathValue>(emptyPath));
-  auto unknownLoc = UnknownLoc::get(&context);
-  size_t paramIndex = 1; // Start at 1 to skip the basepath parameter
-  for (auto &value : options::assign) {
-    if (value == "u") {
-      // Get the expected type for this parameter position
-      if (paramIndex >= formalParams.size()) {
-        llvm::errs() << "parameter index " << paramIndex
-                     << " exceeds number of formal parameters\n";
-        return failure();
-      }
-      Type expectedType = formalParams[paramIndex].getType();
+  // Build a map from domain type (ClassType) to the list of domain objects
+  // of that type. This allows us to assign domains by type rather than by
+  // position.
+  llvm::MapVector<om::ClassType, SmallVector<om::evaluator::EvaluatorValuePtr>>
+      domainsByType;
+  for (auto &domainObj : domainObjects) {
+    auto *objValue = cast<om::evaluator::ObjectValue>(domainObj.get());
+    om::ClassType domainType = objValue->getObjectType();
+    domainsByType[domainType].push_back(domainObj);
+  }
 
-      // Create an unknown value with the correct type
-      auto unknownValue = om::evaluator::AttributeValue::get(
-          expectedType, LocationAttr(unknownLoc));
-      unknownValue->markUnknown();
-      parameters.push_back(unknownValue);
-      paramIndex++;
-      continue;
+  // Build a map from domain type to the number of parameters of that type
+  // that we need to assign. This is used to validate that the user has
+  // provided enough domain assignments.
+  llvm::MapVector<om::ClassType, size_t> paramCountByType;
+  for (size_t i = 1; i < formalParams.size(); ++i) {
+    if (auto classType = dyn_cast<om::ClassType>(formalParams[i].getType()))
+      paramCountByType[classType]++;
+  }
+
+  // Validate that for each domain type the user declared, they have provided
+  // the exact number needed to cover all parameters of that type.
+  for (auto &[domainType, domainList] : domainsByType) {
+    size_t numParams = paramCountByType[domainType];
+    if (domainList.size() != numParams) {
+      llvm::errs() << "error: declared " << domainList.size()
+                   << " domain(s) of type '"
+                   << domainType.getClassName().getValue()
+                   << "' but the class has " << numParams
+                   << " parameter(s) of that type\n";
+      return failure();
     }
+  }
+
+  // Parse the -assign options to build a list of domain indices for each
+  // domain type.
+  llvm::MapVector<om::ClassType, SmallVector<size_t>> assignmentsByType;
+  for (auto &value : options::assign) {
     size_t domainIndex;
     if (!to_integer(value, domainIndex)) {
       llvm::errs() << "illegal assignment value '" << value
-                   << "', must be 'x' or a number\n";
+                   << "', must be a number\n";
       return failure();
     }
 
@@ -236,11 +247,68 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
       llvm::errs()
           << "unable to assign domain '" << domainIndex
           << "' because it is larger than the number of domains provided, '"
-          << parameters.size() << "'";
+          << domainObjects.size() << "'\n";
       return failure();
     }
-    parameters.push_back(domainObjects[domainIndex]);
-    paramIndex++;
+
+    auto *objValue =
+        cast<om::evaluator::ObjectValue>(domainObjects[domainIndex].get());
+    om::ClassType domainType = objValue->getObjectType();
+    assignmentsByType[domainType].push_back(domainIndex);
+  }
+
+  // Validate that for each domain type, the number of assignments matches
+  // the number of domains declared.
+  for (auto &[domainType, domainList] : domainsByType) {
+    size_t numAssignments = 0;
+    auto it = assignmentsByType.find(domainType);
+    if (it != assignmentsByType.end())
+      numAssignments = it->second.size();
+
+    if (numAssignments != domainList.size()) {
+      llvm::errs() << "error: declared " << domainList.size()
+                   << " domain(s) of type '"
+                   << domainType.getClassName().getValue()
+                   << "' but only assigned " << numAssignments << "\n";
+      return failure();
+    }
+  }
+
+  // Build the parameter list by iterating through formal parameters and
+  // assigning domains by type or unknown values.
+  SmallVector<om::evaluator::EvaluatorValuePtr> parameters;
+  om::evaluator::BasePathValue emptyPath(&context);
+  parameters.push_back(
+      std::make_shared<om::evaluator::BasePathValue>(emptyPath));
+  auto unknownLoc = UnknownLoc::get(&context);
+
+  // Track the next assignment index for each domain type
+  llvm::DenseMap<om::ClassType, size_t> nextAssignmentIndex;
+
+  for (size_t i = 1; i < formalParams.size(); ++i) {
+    Type paramType = formalParams[i].getType();
+
+    // Check if this parameter is a domain type (ClassType)
+    if (auto classType = dyn_cast<om::ClassType>(paramType)) {
+      // Check if we have assignments for this domain type
+      auto it = assignmentsByType.find(classType);
+      if (it != assignmentsByType.end()) {
+        // Get the next assignment for this domain type
+        size_t &nextIdx = nextAssignmentIndex[classType];
+        if (nextIdx < it->second.size()) {
+          size_t domainIndex = it->second[nextIdx];
+          parameters.push_back(domainObjects[domainIndex]);
+          nextIdx++;
+          continue;
+        }
+      }
+    }
+
+    // For non-domain types or unassigned domain types, create an unknown value
+    auto unknownValue =
+        om::evaluator::AttributeValue::get(paramType, LocationAttr(unknownLoc));
+    unknownValue->markUnknown();
+    parameters.push_back(unknownValue);
   }
 
   // Instantiate the class with the provided parameters.
