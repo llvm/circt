@@ -28,15 +28,24 @@ hw.module @fold_add(in %a : i4, in %b : i4, in %c : i4, in %d : i4, out sum : i4
 
 // CHECK-LABEL: @constant_fold_compress
 hw.module @constant_fold_compress(in %a : i4, in %b : i4, in %c : i4,
-                                  out sum0 : i4, out carry0 : i4, out sum1 : i4, out carry1 : i4) {
+                                  out sum0 : i4, out carry0 : i4, 
+                                  out sum1 : i4, out carry1 : i4,  
+                                  out sum2 : i4, out carry2 : i4) {
   %c0_i4 = hw.constant 0 : i4
   %0:2 = datapath.compress %a, %b, %c0_i4 : i4 [3 -> 2]
   
+  // CHECK-NEXT: %c3_i4 = hw.constant 3 : i4
   // CHECK-NEXT: %[[COMP:.+]]:2 = datapath.compress %a, %b, %c : i4 [3 -> 2]
   %1:2 = datapath.compress %a, %b, %c0_i4, %c : i4 [4 -> 2]
+
   
-  // CHECK-NEXT: hw.output %a, %b, %[[COMP]]#0, %[[COMP]]#1 : i4, i4, i4, i4
-  hw.output %0#0, %0#1, %1#0, %1#1 : i4, i4, i4, i4
+  // CHECK-NEXT: %[[COMPFOLD:.+]]:2 = datapath.compress %a, %b, %c, %c3_i4 : i4 [4 -> 2]
+  %c1_i4 = hw.constant 1 : i4
+  %c2_i4 = hw.constant 2 : i4
+  %2:2 = datapath.compress %a, %b, %c1_i4, %c, %c2_i4 : i4 [5 -> 2]
+  
+  // CHECK-NEXT: hw.output %a, %b, %[[COMP]]#0, %[[COMP]]#1, %[[COMPFOLD]]#0, %[[COMPFOLD]]#1 : i4, i4, i4, i4
+  hw.output %0#0, %0#1, %1#0, %1#1, %2#0, %2#1 : i4, i4, i4, i4, i4, i4
 }
 
 // CHECK-LABEL: @constant_fold_compress_passthrough
@@ -46,6 +55,57 @@ hw.module @constant_fold_compress_passthrough(in %a : i4, in %b : i4, in %c : i4
   %0:3 = datapath.compress %a, %b, %c0_i4, %c : i4 [4 -> 3]
   // CHECK-NEXT: hw.output %a, %b, %c : i4, i4, i4
   hw.output %a, %b, %c : i4, i4, i4
+}
+
+// CHECK-LABEL: @sext_compress
+hw.module @sext_compress(in %a : i8, in %b : i8, in %c : i4, 
+                         out sum1 : i8, out carry1 : i8,
+                         out sum2 : i8, out carry2 : i8) {
+  // CHECK-NEXT: %c-1_i4 = hw.constant -1 : i4
+  // CHECK-NEXT: %c-8_i8 = hw.constant -8 : i8
+  // CHECK-NEXT: %c0_i4 = hw.constant 0 : i4
+  // CHECK-NEXT: %true = hw.constant true
+  // CHECK-NEXT: %[[CBASE:.+]] = comb.extract %c from 0 : (i4) -> i3
+  // CHECK-NEXT: %[[SIGN:.+]] = comb.extract %c from 3 : (i4) -> i1
+  // CHECK-NEXT: %[[NOTSIGN:.+]] = comb.xor bin %[[SIGN]], %true : i1
+  // CHECK-NEXT: %[[CEXT:.+]] = comb.concat %c0_i4, %[[NOTSIGN]], %[[CBASE]] : i4, i1, i3
+  // CHECK-NEXT: %[[COMP0:.+]]:2 = datapath.compress %a, %b, %[[CEXT]], %c-8_i8 : i8 [4 -> 2]
+  %c-1_i8 = hw.constant -1 : i8
+  
+  // compress(a,b, sext(c))
+  %0 = comb.extract %c from 3 : (i4) -> i1
+  %1 = comb.replicate %0 : (i1) -> i4
+  %2 = comb.concat %1, %c : i4, i4
+  %3:2 = datapath.compress %a, %b, %2 : i8 [3 -> 2]
+  
+  // CHECK-NEXT: %[[NOTC:.+]] = comb.xor bin %c, %c-1_i4 : i4
+  // CHECK-NEXT: %[[NOTCBASE:.+]] = comb.extract %[[NOTC]] from 0 : (i4) -> i3
+  // CHECK-NEXT: %[[NOTCSIGN:.+]] = comb.extract %[[NOTC]] from 3 : (i4) -> i1
+  // CHECK-NEXT: %[[CSIGN:.+]] = comb.xor bin %[[NOTCSIGN]], %true : i1
+  // CHECK-NEXT: %[[NOTCEXT:.+]] = comb.concat %c0_i4, %[[CSIGN]], %[[NOTCBASE]] : i4, i1, i3
+  // CHECK-NEXT: %[[COMP1:.+]]:2 = datapath.compress %a, %b, %[[NOTCEXT]], %c-8_i8 : i8 [4 -> 2]
+  
+  // compress(a,b, ~sext(c))
+  %4 = comb.xor %2, %c-1_i8 : i8
+  %5:2 = datapath.compress %a, %b, %4 : i8 [3 -> 2]
+  // CHECK-NEXT: hw.output %[[COMP0]]#0, %[[COMP0]]#1, %[[COMP1]]#0, %[[COMP1]]#1 : i8, i8, i8, i8
+  hw.output %3#0, %3#1, %5#0, %5#1 : i8, i8, i8, i8
+}
+
+// CHECK-LABEL: @oneext_compress
+hw.module @oneext_compress(in %a : i8, in %b : i8, in %c : i4, 
+                         out sum1 : i8, out carry1 : i8) {
+  
+  // CHECK-NEXT: %c-16_i8 = hw.constant -16 : i8
+  // CHECK-NEXT: %c0_i4 = hw.constant 0 : i4
+  // CHECK-NEXT: %[[CZEXT:.+]] = comb.concat %c0_i4, %c : i4, i4
+  // CHECK-NEXT: datapath.compress %a, %b, %[[CZEXT]], %c-16_i8 : i8 [4 -> 2]
+  %c-1_i4 = hw.constant -1 : i4
+  // compress(a,b, {ones,c})
+  %0 = comb.concat %c-1_i4, %c : i4, i4
+  %1:2 = datapath.compress %a, %b, %0 : i8 [3 -> 2]
+  
+  hw.output %1#0, %1#1: i8, i8
 }
 
 // CHECK-LABEL: @constant_fold_partial_product

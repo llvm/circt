@@ -30,3 +30,24 @@ hw.module @partial_product_sext_6(in %a : i6, in %b : i6, out e : i12) {
   %7 = comb.add %6#0, %6#1, %6#2, %6#3, %6#4, %6#5, %6#6, %6#7, %6#8, %6#9, %6#10, %6#11 : i12 
   hw.output %7 : i12
 }
+
+// RUN: circt-lec %t.mlir %s -c1=sext_compress -c2=sext_compress --shared-libs=%libz3 | FileCheck %s --check-prefix=COMP_SEXT
+// COMP_SEXT: c1 == c2
+hw.module @sext_compress(in %a : i8, in %b : i8, in %c : i4, 
+                         out sum1 : i8, out sum2 : i8) {
+  
+  %c-1_i8 = hw.constant -1 : i8
+  // compress(a,b, sext(c))
+  %0 = comb.extract %c from 3 : (i4) -> i1
+  %1 = comb.replicate %0 : (i1) -> i4
+  %2 = comb.concat %1, %c : i4, i4
+  %3:2 = datapath.compress %a, %b, %2 : i8 [3 -> 2]
+  %4 = comb.add %3#0, %3#1 : i8
+
+  // compress(a,b, ~sext(c))
+  %5 = comb.xor %2, %c-1_i8 : i8
+  %6:2 = datapath.compress %a, %b, %5 : i8 [3 -> 2]
+  %7 = comb.add %6#0, %6#1 : i8
+  
+  hw.output %4, %7 : i8, i8
+}
