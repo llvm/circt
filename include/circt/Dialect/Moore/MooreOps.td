@@ -2377,6 +2377,25 @@ def UrandomBIOp : Builtin<"urandom"> {
   let assemblyFormat = "($seed^)? attr-dict";
 }
 
+def UrandomrangeBIOp : Builtin<"urandom_range"> {
+  let summary = "Generate a pseudo-random unsigned integer within provided range";
+  let description = [{
+    Corresponds to the `urandom_range()` system function. Returns a 32-bit 
+    pseudo-random integer. The minimum value is optional; when not provided, it 
+    is treated as 0. If the minimum value is provided and larger than the maximum 
+    value, the minimum value is treated as the maximum, aand vice versa.
+
+    See IEEE 1800-2023 $ 18.13.2 "$urandom_range()".
+  }];
+
+  let arguments = (ins
+    TwoValuedI32:$maxval,
+    Optional<TwoValuedI32>:$minval
+  );
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = "$maxval ($minval^)? attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // Simulation Time Measurement Builtins
 //===----------------------------------------------------------------------===//

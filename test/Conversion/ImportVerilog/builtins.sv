@@ -285,9 +285,11 @@ function void MathBuiltins(int x, logic [41:0] y, real r);
 
 endfunction
 
+// IEEE 1800-2023 $ 18.13 "Random number system functions and methods"
 // CHECK-LABEL: func.func private @RandomBuiltins(
-// CHECK-SAME: [[X:%.+]]: !moore.i32
-function RandomBuiltins(int x);
+// CHECK-SAME: [[X:%.+]]: !moore.i32,
+// CHECK-SAME: [[Y:%.+]]: !moore.i32
+function RandomBuiltins(int x, int y);
   // CHECK: [[URAND0:%.+]] = moore.builtin.urandom
   // CHECK-NEXT: call @dummyA([[URAND0]]) : (!moore.i32) -> ()
   dummyA($urandom());
@@ -300,6 +302,12 @@ function RandomBuiltins(int x);
   // CHECK: [[RAND1:%.+]] = moore.builtin.random [[X]]
   // CHECK-NEXT: call @dummyA([[RAND1]]) : (!moore.i32) -> ()
   dummyA($random(x));
+  // CHECK: [[URANDRANGE1:%.+]] = moore.builtin.urandom_range [[X]]
+  // CHECK-NEXT: call @dummyA([[URANDRANGE1]]) : (!moore.i32) -> ()
+  dummyA($urandom_range(x));
+  // CHECK: [[URANDRANGE2:%.+]] = moore.builtin.urandom_range [[X]] [[Y]]
+  // CHECK-NEXT: call @dummyA([[URANDRANGE2]]) : (!moore.i32) -> ()
+  dummyA($urandom_range(x, y));
 endfunction
 
 // CHECK-LABEL: func.func private @TimeBuiltins(
