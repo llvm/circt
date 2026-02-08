@@ -6470,6 +6470,10 @@ void AndRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void SizeOfIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
+void ReadDesignConfigIntIntrinsicOp::getAsmResultNames(
+    OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), getParamName());
+}
 void AsAsyncResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
