@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_LAYERSET_H
 #define CIRCT_DIALECT_FIRRTL_LAYERSET_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 
 namespace circt {
