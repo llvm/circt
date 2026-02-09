@@ -1803,7 +1803,7 @@ def QueueInsertOp : MooreOp<"insert", [
   let arguments = (ins QueueType:$queue, TwoValuedI32:$index, UnpackedType:$item);
   let results = (outs VoidType:$out);
   let assemblyFormat = [{
-    $item `into` $queue `at` `index` $index attr-dict `:` type($queue)
+    $item `into` $queue `at` $index attr-dict `:` type($queue)
   }];
 }
 
