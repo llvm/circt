@@ -1826,7 +1826,7 @@ void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
 }
 
 LogicalResult ArrayCreateOp::verify() {
-  unsigned returnSize = cast<ArrayType>(getType()).getNumElements();
+  unsigned returnSize = hw::type_cast<ArrayType>(getType()).getNumElements();
   if (getInputs().size() != returnSize)
     return failure();
   return success();

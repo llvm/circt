@@ -25,6 +25,7 @@
 #pragma GCC diagnostic pop
 #endif
 #include <sstream>
+#include <string_view>
 
 using namespace ::esi;
 
@@ -614,6 +615,28 @@ ListType *parseList(const nlohmann::json &typeJson, Context &cache) {
                       parseType(typeJson.at("element"), cache));
 }
 
+TypeAliasType *parseTypeAlias(const nlohmann::json &typeJson, Context &cache) {
+  assert(typeJson.at("mnemonic") == "typealias" ||
+         typeJson.at("mnemonic") == "alias");
+  std::string id = typeJson.at("id");
+  std::string name = typeJson.value("name", "");
+
+  const Type *innerType = nullptr;
+  if (typeJson.contains("inner")) {
+    innerType = parseType(typeJson.at("inner"), cache);
+  } else if (typeJson.contains("type")) {
+    innerType = parseType(typeJson.at("type"), cache);
+  } else {
+    throw std::runtime_error(
+        "Malformed manifest: typealias missing inner type");
+  }
+
+  if (name.empty())
+    name = id;
+
+  return new TypeAliasType(id, name, innerType);
+}
+
 using TypeParser = std::function<Type *(const nlohmann::json &, Context &)>;
 const std::map<std::string_view, TypeParser> typeParsers = {
     {"bundle", parseBundleType},
@@ -621,6 +644,8 @@ const std::map<std::string_view, TypeParser> typeParsers = {
     {"std::any", [](const nlohmann::json &typeJson,
                     Context &cache) { return new AnyType(typeJson.at("id")); }},
     {"int", parseInt},
+    {"typealias", parseTypeAlias},
+    {"alias", parseTypeAlias},
     {"struct", parseStruct},
     {"array", parseArray},
     {"window", parseWindow},
