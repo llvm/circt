@@ -102,19 +102,6 @@ static FailureOr<Value> isOneExt(Value operand) {
   return failure();
 }
 
-// Check if the operand is an inversion and return the uninverted operand:
-// inverted = comb.xor(-1, baseValue)
-static FailureOr<Value> isNot(Value operand) {
-  // Check if operand is a concat operation
-  auto xorOp = operand.getDefiningOp<comb::XorOp>();
-  if (!xorOp)
-    return failure();
-  if (!xorOp.isBinaryNot())
-    return failure();
-
-  return success(xorOp.getInputs().front());
-}
-
 // zext(input<<trailingZeros) to targetWidth
 static Value zeroPad(PatternRewriter &rewriter, Location loc, Value input,
                      size_t targetWidth, size_t trailingZeros) {
@@ -406,53 +393,6 @@ struct OnesExtCompress : public OpRewritePattern<CompressOp> {
   }
 };
 
-// compress(..., ~sext(x),...) -> compress(..., sext(~x),...)
-// Whilst not immediately beneficial will allow for the simplification of
-// replicated sign-bits in the compressor
-struct NegatedSextCompress : public OpRewritePattern<CompressOp> {
-  using OpRewritePattern::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(CompressOp op,
-                                PatternRewriter &rewriter) const override {
-    auto inputs = op.getInputs();
-    auto opType = inputs[0].getType();
-
-    SmallVector<Value> newInputs;
-    bool modified = false;
-    for (auto input : inputs) {
-      // Check for inversion operation
-      auto invertedInput = isNot(input);
-      if (failed(invertedInput)) {
-        newInputs.push_back(input);
-        continue;
-      }
-
-      // Check for sext of the inverted value
-      auto baseInput = isSext(*invertedInput);
-      if (failed(baseInput)) {
-        newInputs.push_back(input);
-        continue;
-      }
-
-      modified = true;
-      // Create negated sext: ~sext(x) = sext(~x)
-      auto negateBase =
-          comb::createOrFoldNot(op.getLoc(), *baseInput, rewriter, true);
-      auto newOp =
-          comb::createOrFoldSExt(op.getLoc(), negateBase, opType, rewriter);
-      newInputs.push_back(newOp);
-    }
-
-    if (!modified)
-      return failure();
-
-    auto newCompress = datapath::CompressOp::create(
-        rewriter, op.getLoc(), newInputs, op.getNumResults());
-    rewriter.replaceOp(op, newCompress.getResults());
-    return success();
-  }
-};
-
 struct ConstantFoldCompress : public OpRewritePattern<CompressOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -507,9 +447,8 @@ struct ConstantFoldCompress : public OpRewritePattern<CompressOp> {
 
 void CompressOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results
-      .add<FoldCompressIntoCompress, FoldAddIntoCompress, ConstantFoldCompress,
-           SextCompress, NegatedSextCompress, OnesExtCompress>(context);
+  results.add<FoldCompressIntoCompress, FoldAddIntoCompress,
+              ConstantFoldCompress, SextCompress, OnesExtCompress>(context);
 }
 
 //===----------------------------------------------------------------------===//

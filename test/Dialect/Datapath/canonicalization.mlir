@@ -58,7 +58,7 @@ hw.module @constant_fold_compress_passthrough(in %a : i4, in %b : i4, in %c : i4
   %c1_i4 = hw.constant 1 : i4
   %c2_i4 = hw.constant 2 : i4
   %1:2 = datapath.compress %a, %c1_i4, %c2_i4 : i4 [3 -> 2]
-  
+
   // CHECK-NEXT: %c3_i4 = hw.constant 3 : i4
   // CHECK-NEXT: hw.output %a, %b, %c, %a, %c3_i4 : i4, i4, i4, i4, i4
   hw.output %0#0, %0#1, %0#2, %1#0, %1#1 : i4, i4, i4, i4, i4
@@ -66,8 +66,7 @@ hw.module @constant_fold_compress_passthrough(in %a : i4, in %b : i4, in %c : i4
 
 // CHECK-LABEL: @sext_compress
 hw.module @sext_compress(in %a : i8, in %b : i8, in %c : i4, 
-                         out sum1 : i8, out carry1 : i8,
-                         out sum2 : i8, out carry2 : i8) {
+                         out sum1 : i8, out carry1 : i8) {
   // CHECK-NEXT: %c-1_i4 = hw.constant -1 : i4
   // CHECK-NEXT: %c-8_i8 = hw.constant -8 : i8
   // CHECK-NEXT: %c0_i4 = hw.constant 0 : i4
@@ -85,18 +84,8 @@ hw.module @sext_compress(in %a : i8, in %b : i8, in %c : i4,
   %2 = comb.concat %1, %c : i4, i4
   %3:2 = datapath.compress %a, %b, %2 : i8 [3 -> 2]
   
-  // CHECK-NEXT: %[[NOTC:.+]] = comb.xor bin %c, %c-1_i4 : i4
-  // CHECK-NEXT: %[[NOTCBASE:.+]] = comb.extract %[[NOTC]] from 0 : (i4) -> i3
-  // CHECK-NEXT: %[[NOTCSIGN:.+]] = comb.extract %[[NOTC]] from 3 : (i4) -> i1
-  // CHECK-NEXT: %[[CSIGN:.+]] = comb.xor bin %[[NOTCSIGN]], %true : i1
-  // CHECK-NEXT: %[[NOTCEXT:.+]] = comb.concat %c0_i4, %[[CSIGN]], %[[NOTCBASE]] : i4, i1, i3
-  // CHECK-NEXT: %[[COMP1:.+]]:2 = datapath.compress %a, %b, %[[NOTCEXT]], %c-8_i8 : i8 [4 -> 2]
-  
-  // compress(a,b, ~sext(c))
-  %4 = comb.xor %2, %c-1_i8 : i8
-  %5:2 = datapath.compress %a, %b, %4 : i8 [3 -> 2]
-  // CHECK-NEXT: hw.output %[[COMP0]]#0, %[[COMP0]]#1, %[[COMP1]]#0, %[[COMP1]]#1 : i8, i8, i8, i8
-  hw.output %3#0, %3#1, %5#0, %5#1 : i8, i8, i8, i8
+  // CHECK-NEXT: hw.output %[[COMP0]]#0, %[[COMP0]]#1 : i8, i8
+  hw.output %3#0, %3#1 : i8, i8
 }
 
 // CHECK-LABEL: @oneext_compress
