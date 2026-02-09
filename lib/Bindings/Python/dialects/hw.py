@@ -494,9 +494,17 @@ class ArrayCreateOp(ArrayCreateOp):
         raise TypeError(
             f"Argument {i} has a different element type ({arg_val.type}) than the element type of the array ({element_type})"
         )
-    if result_type is None:
-      self_type = hw.ArrayType.get(element_type, len(elements))
-    else:
+    self_type = hw.ArrayType.get(element_type, len(elements))
+    if result_type is not None:
+      if isinstance(result_type, hw.TypeAliasType):
+        if result_type.inner_type != self_type:
+          raise TypeError(
+              f"result type:\n\t{result_type.inner_type}\nmust match generated array type:\n\t{self_type}"
+          )
+      elif result_type != self_type:
+        raise TypeError(
+            f"result type:\n\t{result_type}\nmust match generated array type:\n\t{self_type}"
+        )
       self_type = result_type
     return hw.ArrayCreateOp(self_type, vals)
 

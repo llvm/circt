@@ -342,8 +342,9 @@ class Array(Type):
     result_type = self if alias is None else alias
     with get_user_loc():
       # CIRCT's ArrayCreate op takes the array in reverse order.
-      return hw.ArrayCreateOp(reversed(list_of_vals),
-                              result_type=result_type._type)
+      return hw.ArrayCreateOp(
+          list(reversed(list_of_vals)),
+          result_type=None if alias is None else alias._type)
 
 
 class StructType(Type):
