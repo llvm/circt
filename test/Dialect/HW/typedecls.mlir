@@ -36,10 +36,12 @@ hw.module @testTypeAliasComb(
 hw.module @testTypeAliasArray(in %arg0: !Foo, in %arg1: !Foo, in %arg2: !FooArray) {
   %c1 = hw.constant 1 : i1
   %0 = hw.array_create %arg0, %arg1 : !Foo
-  %1 = hw.array_concat %arg2, %arg2 : !FooArray, !FooArray
-  %2 = hw.array_slice %arg2[%c1] : (!FooArray) -> !hw.array<1x!Foo>
-  %3 = hw.array_get %arg2[%c1] : !FooArray, i1
-  %4 = hw.aggregate_constant [false, true] : !FooArray
+  // CHECK: hw.array_create %arg0, %arg1 : !Foo
+  %1 = "hw.array_create"(%arg0, %arg1) : (!Foo, !Foo) -> !FooArray
+  %2 = hw.array_concat %arg2, %arg2 : !FooArray, !FooArray
+  %3 = hw.array_slice %arg2[%c1] : (!FooArray) -> !hw.array<1x!Foo>
+  %4 = hw.array_get %arg2[%c1] : !FooArray, i1
+  %5 = hw.aggregate_constant [false, true] : !FooArray
 }
 
 // CHECK-LABEL: hw.module @testTypeAliasStruct
