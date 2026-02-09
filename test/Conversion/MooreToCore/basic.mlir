@@ -1585,3 +1585,28 @@ moore.module @GlobalFooUse() {
     moore.return
   }
 }
+
+// CHECK-LABEL: @Nets
+moore.module @Nets(out o1 : !moore.l1, out o2 : !moore.l2, out o3 : !moore.l1, out o4 : !moore.l2) {
+  // CHECK: [[N1:%.*]] = builtin.unrealized_conversion_cast %false : i1 to !llhd.ref<i1>
+  %n1 = moore.net supply0 : <l1>
+  // CHECK: [[C0:%.*]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[N2:%.*]] = builtin.unrealized_conversion_cast [[C0]] : i2 to !llhd.ref<i2>
+  %n2 = moore.net supply0 : <l2>
+  // CHECK: [[N3:%.*]] = builtin.unrealized_conversion_cast %true : i1 to !llhd.ref<i1>
+  %n3 = moore.net supply1 : <l1>
+  // CHECK: [[C1:%.*]] = hw.constant 1 : i2
+  // CHECK-NEXT: [[N4:%.*]] = builtin.unrealized_conversion_cast [[C1]] : i2 to !llhd.ref<i2>
+  %n4 = moore.net supply1 : <l2>
+
+  // CHECK: %{{.*}} = llhd.prb [[N1]] : i1
+  %0 = moore.read %n1 : <l1>
+  // CHECK-NEXT: %{{.*}} = llhd.prb [[N2]] : i2
+  %1 = moore.read %n2 : <l2>
+  // CHECK-NEXT: %{{.*}} = llhd.prb [[N3]] : i1
+  %2 = moore.read %n3 : <l1>
+  // CHECK-NEXT: %{{.*}} = llhd.prb [[N4]] : i2
+  %3 = moore.read %n4 : <l2>
+
+  moore.output %0, %1, %2, %3 : !moore.l1, !moore.l2, !moore.l1, !moore.l2
+}
