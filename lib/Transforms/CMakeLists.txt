@@ -1,5 +1,4 @@
 add_circt_library(CIRCTTransforms
-  EnsureDivisionIsSpeculatable.cpp
   FlattenMemRefs.cpp
   HierarchicalRunner.cpp
   IndexSwitchToIf.cpp

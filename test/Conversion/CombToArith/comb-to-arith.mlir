@@ -5,17 +5,27 @@ hw.module @test(in %arg0: i32, in %arg1: i32, in %arg2: i32, in %arg3: i32, in %
   // CHECK-NEXT: %c42_i32 = arith.constant 42 : i32
   %c42_i32 = hw.constant 42 : i32
 
-  // CHECK: [[IS_ZERO:%.+]] = arith.cmpi eq, %arg1, %c0_i32{{.*}}
-  // CHECK-NEXT: [[DIVISOR:%.+]] = arith.select [[IS_ZERO]], %c1_i32{{.*}}, %arg1
-  // CHECK-NEXT: arith.divsi %arg0, [[DIVISOR]] : i32
+  // CHECK-DAG: [[IS_ZERO:%.+]] = arith.cmpi eq, %arg1, %c0_i32{{.*}}
+  // CHECK-DAG: [[IS_INT_MIN:%.+]] = arith.cmpi eq, %arg0, %c-2147483648_i32{{.*}}
+  // CHECK-DAG: [[IS_NEG_ONE:%.+]] = arith.cmpi eq, %arg1, %c-1_i32{{.*}}
+  // CHECK-DAG: [[IS_OVERFLOW:%.+]] = arith.andi [[IS_INT_MIN]], [[IS_NEG_ONE]]{{.*}}
+  // CHECK-DAG: [[PRED:%.+]] = arith.ori [[IS_ZERO]], [[IS_OVERFLOW]]{{.*}}
+  // CHECK-DAG: [[SAFE_DIVISOR:%.+]] = arith.select [[PRED]], %c1_i32{{.*}}, %arg1
+  // CHECK-DAG: [[DIV_RESULT:%.+]] = arith.divsi %arg0, [[SAFE_DIVISOR]] : i32
+  // CHECK-DAG: arith.select [[IS_OVERFLOW]], %c-2147483648_i32{{.*}}, [[DIV_RESULT]] : i32
   %0 = comb.divs %arg0, %arg1 : i32
   // CHECK: [[IS_ZERO:%.+]] = arith.cmpi eq, %arg1, %c0_i32{{.*}}
   // CHECK-NEXT: [[DIVISOR:%.+]] = arith.select [[IS_ZERO]], %c1_i32{{.*}}, %arg1
   // CHECK-NEXT: arith.divui %arg0, [[DIVISOR]] : i32
   %1 = comb.divu %arg0, %arg1 : i32
-  // CHECK: [[IS_ZERO:%.+]] = arith.cmpi eq, %arg1, %c0_i32{{.*}}
-  // CHECK-NEXT: [[DIVISOR:%.+]] = arith.select [[IS_ZERO]], %c1_i32{{.*}}, %arg1
-  // CHECK-NEXT: arith.remsi %arg0, [[DIVISOR]] : i32
+  // CHECK-DAG: [[IS_ZERO:%.+]] = arith.cmpi eq, %arg1, %c0_i32{{.*}}
+  // CHECK-DAG: [[IS_INT_MIN:%.+]] = arith.cmpi eq, %arg0, %c-2147483648_i32{{.*}}
+  // CHECK-DAG: [[IS_NEG_ONE:%.+]] = arith.cmpi eq, %arg1, %c-1_i32{{.*}}
+  // CHECK-DAG: [[IS_OVERFLOW:%.+]] = arith.andi [[IS_INT_MIN]], [[IS_NEG_ONE]]{{.*}}
+  // CHECK-DAG: [[PRED:%.+]] = arith.ori [[IS_ZERO]], [[IS_OVERFLOW]]{{.*}}
+  // CHECK-DAG: [[SAFE_DIVISOR:%.+]] = arith.select [[PRED]], %c1_i32{{.*}}, %arg1
+  // CHECK-DAG: [[DIV_RESULT:%.+]] = arith.remsi %arg0, [[SAFE_DIVISOR]] : i32
+  // CHECK-DAG: arith.select [[IS_OVERFLOW]], %c0_i32{{.*}}, [[DIV_RESULT]] : i32
   %2 = comb.mods %arg0, %arg1 : i32
   // CHECK: [[IS_ZERO:%.+]] = arith.cmpi eq, %arg1, %c0_i32{{.*}}
   // CHECK-NEXT: [[DIVISOR:%.+]] = arith.select [[IS_ZERO]], %c1_i32{{.*}}, %arg1
