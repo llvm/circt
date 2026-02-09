@@ -1604,7 +1604,8 @@ struct RvalueExprVisitor : public ExprVisitor {
     auto args = expr.arguments();
 
     FailureOr<Value> result = Value{};
-    Value value, value2;
+    Value value;
+    Value value2;
 
     // $sformatf() and $sformat look like system tasks, but we handle string
     // formatting differently from expression evaluation, so handle them
@@ -1646,6 +1647,7 @@ struct RvalueExprVisitor : public ExprVisitor {
         return {};
       result = context.convertSystemCallArity2(subroutine, loc, value, value2);
       break;
+
     default:
       break;
     }
