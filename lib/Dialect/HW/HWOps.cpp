@@ -1823,7 +1823,8 @@ void ArrayCreateOp::print(OpAsmPrinter &p) {
   p << " : " << getInputs()[0].getType();
 
   // Print optional result type if it's not the default constructed type
-  Type expectedType = ArrayType::get(getInputs()[0].getType(), getInputs().size());
+  Type expectedType =
+      ArrayType::get(getInputs()[0].getType(), getInputs().size());
   if (getType() != expectedType)
     p << " -> " << getType();
 }
