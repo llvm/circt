@@ -512,8 +512,7 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
 
     // Optimization (similar for second sign correction), ext to (p+q)-bits:
     // -2^(p-1)*sign(lhs)*rhsBase = ~((sign(lhs) * rhsBase) << (p-1)) + 1
-    //                            = (~(replicate(sign(lhs)) & rhsBase)) <<
-    //                            (p-1)
+    //                            = (~(replicate(sign(lhs)) & rhsBase)) << (p-1)
     //                            + (-1) << (p+q-2)      [msb correction]
     //                            + (1<<(p-1)) - 1 + 1   [lsb correction]
 
