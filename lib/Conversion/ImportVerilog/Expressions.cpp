@@ -1646,15 +1646,6 @@ struct RvalueExprVisitor : public ExprVisitor {
         return {};
       result = context.convertSystemCallArity2(subroutine, loc, value, value2);
       break;
-    case (3):
-      value = context.convertRvalueExpression(*args[0]);
-      value2 = context.convertRvalueExpression(*args[1]);
-      value3 = context.convertRvalueExpression(*args[2]);
-      if (!value || !value2 || !value3)
-        return {};
-      result = context.convertSystemCallArity3(subroutine, loc, value, value2,
-                                               value3);
-      break;
     default:
       break;
     }
@@ -2813,13 +2804,6 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                     return moore::QueuePopFrontOp::create(builder, loc, value);
                   return {};
                 })
-          .Case("delete",
-                [&]() -> Value {
-                  if (isa<moore::QueueType>(value.getType())) {
-                    return moore::QueueClearOp::create(builder, loc, value);
-                  }
-                  return {};
-                })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
 }
@@ -2834,51 +2818,12 @@ Context::convertSystemCallArity2(const slang::ast::SystemSubroutine &subroutine,
                   return moore::StringGetCOp::create(builder, loc, value1,
                                                      value2);
                 })
-          .Case("push_back",
-                [&]() -> Value {
-                  if (isa<moore::QueueType>(value1.getType()))
-                    return moore::QueuePushBackOp::create(builder, loc, value1,
-                                                          value2);
-                  return {};
-                })
-          .Case("push_front",
-                [&]() -> Value {
-                  if (isa<moore::QueueType>(value1.getType()))
-                    return moore::QueuePushFrontOp::create(builder, loc, value1,
-                                                           value2);
-                  return {};
-                })
-          .Case("delete",
-                [&]() -> Value {
-                  if (isa<moore::QueueType>(value1.getType()))
-                    return moore::QueueDeleteOp::create(builder, loc, value1,
-                                                        value2);
-                  return {};
-                })
           .Case("$urandom_range",
                 [&]() -> Value {
                   return moore::UrandomrangeBIOp::create(builder, loc, value1,
                                                          value2);
                 })
           .Default([&]() -> Value { return {}; });
-  return systemCallRes();
-}
-
-FailureOr<Value>
-Context::convertSystemCallArity3(const slang::ast::SystemSubroutine &subroutine,
-                                 Location loc, Value value1, Value value2,
-                                 Value value3) {
-  auto systemCallRes =
-      llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
-          .Case("insert",
-                [&]() -> Value {
-                  if (isa<moore::QueueType>(value1.getType()))
-                    return moore::QueueInsertOp::create(builder, loc, value1,
-                                                        value2, value3);
-                  return {};
-                })
-          .Default([&]() -> Value { return {}; });
-
   return systemCallRes();
 }
 
