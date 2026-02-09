@@ -2048,7 +2048,8 @@ hw.module @notSext(in %a : i3, out negsext : i8) {
   // CHECK-NEXT: %[[NOTA:.+]] = comb.xor bin %a, %c-1_i3 : i3
   // CHECK-NEXT: %[[NOTASIGN:.+]] = comb.extract %[[NOTA]] from 2 : (i3) -> i1
   // CHECK-NEXT: %[[SIGNBITS:.+]] = comb.replicate %[[NOTASIGN]] : (i1) -> i5
-  // CHECK-NEXT: comb.concat %[[SIGNBITS]], %[[NOTA]] : i5, i3
+  // CHECK-NEXT: %[[NEGSEXT:.+]] = comb.concat %[[SIGNBITS]], %[[NOTA]] : i5, i3
+  // CHECK-NEXT: hw.output %[[NEGSEXT]] : i8
   %c-1_i8 = hw.constant -1 : i8
   // sext(a)
   %0 = comb.extract %a from 2 : (i3) -> i1
