@@ -41,46 +41,6 @@ static FailureOr<size_t> calculateNonZeroBits(Value operand,
   return nonZeroBits;
 }
 
-// Check if the operand is sext() and return the unextended operand:
-// signBit = comb.extract(baseValue, width-1, 1)
-// ext = comb.replicate(signBit, width-baseWidth)
-// sext = comb.concat(ext, baseValue)
-static FailureOr<Value> isSext(Value operand) {
-  // Check if operand is a concat operation
-  auto concatOp = operand.getDefiningOp<comb::ConcatOp>();
-  if (!concatOp)
-    return failure();
-
-  auto operands = concatOp.getOperands();
-  // ConcatOp must have exactly 2 operands: {sign_bits, base}
-  if (operands.size() != 2)
-    return failure();
-
-  Value signBits = operands[0];
-  Value baseValue = operands[1];
-  auto baseWidth = baseValue.getType().getIntOrFloatBitWidth();
-
-  // Check if signBits is a replicate operation
-  auto replicateOp = signBits.getDefiningOp<comb::ReplicateOp>();
-  if (!replicateOp)
-    return failure();
-
-  Value signBit = replicateOp.getInput();
-
-  // Check if signBit is the msb of baseValue
-  auto extractOp = signBit.getDefiningOp<comb::ExtractOp>();
-  if (!extractOp)
-    return failure();
-
-  if ((extractOp.getInput() != baseValue) ||
-      (extractOp.getLowBit() != baseWidth - 1) ||
-      (extractOp.getType().getIntOrFloatBitWidth() != 1))
-    return failure();
-
-  // Return the base unextended value
-  return baseValue;
-}
-
 // This pattern commonly arrises when inverting zext: ~zext(x) = {1,...1, ~x}
 // Check if the operand is {ones, base} and return the unextended operand:
 static FailureOr<Value> isOneExt(Value operand) {
@@ -292,26 +252,26 @@ struct SextCompress : public OpRewritePattern<CompressOp> {
     APInt value;
     SmallVector<Value> newInputs;
     for (auto input : inputs) {
-      auto sextInput = isSext(input);
-      // If not a sext - keep original input
-      if (failed(sextInput)) {
+      Value sextInput;
+      // Check for sext of the inverted value
+      if (!matchPattern(input, comb::m_Sext(m_Any(&sextInput)))) {
         newInputs.push_back(input);
         continue;
       }
 
-      auto baseWidth = sextInput->getType().getIntOrFloatBitWidth();
-      // Need a separate sign-bit that gets extended by at least two bits to be
-      // beneficial
+      auto baseWidth = sextInput.getType().getIntOrFloatBitWidth();
+      // Need a separate sign-bit that gets extended by at least two bits to
+      // be beneficial
       if (baseWidth <= 1 || (opSize - baseWidth) <= 1) {
         newInputs.push_back(input);
         continue;
       }
 
       // x[p-2:0]
-      auto base = comb::ExtractOp::create(rewriter, op.getLoc(), *sextInput, 0,
+      auto base = comb::ExtractOp::create(rewriter, op.getLoc(), sextInput, 0,
                                           baseWidth - 1);
       // x[p-1]
-      auto signBit = comb::ExtractOp::create(rewriter, op.getLoc(), *sextInput,
+      auto signBit = comb::ExtractOp::create(rewriter, op.getLoc(), sextInput,
                                              baseWidth - 1, 1);
       auto invSign =
           comb::createOrFoldNot(op.getLoc(), signBit, rewriter, true);
@@ -497,26 +457,27 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
   // Based on the classical Baugh-Wooley algorithm for signed mulitplication.
   // Paper: A Two's Complement Parallel Array Multiplication Algorithm
   //
-  // Consider a p-bit by q-bit signed multiplier - producing a (p+q)-bit result:
-  // a_sign = a[p-1], a_mag = a[p-2:0],
-  // b_sign = b[q-1], b_mag = b[q-2:0]
-  // sext(a) * sext(b) = a_mag * b_mag                    [unsigned product]
+  // Consider a p-bit by q-bit signed multiplier - producing a (p+q)-bit
+  // result: a_sign = a[p-1], a_mag = a[p-2:0], b_sign = b[q-1], b_mag =
+  // b[q-2:0] sext(a) * sext(b) = a_mag * b_mag                    [unsigned
+  // product]
   //                     - 2^(p-1) * a_sign * b_mag       [sign correction]
   //                     - 2^(q-1) * b_sign * a_mag       [sign correction]
   //                     + 2^(p+q-2) * a_sign * b_sign    [sign * sign]
   //
-  // We implement optimizations to turn the subtractions into bitwise negations
-  // with constant corrections that can be folded together.
+  // We implement optimizations to turn the subtractions into bitwise
+  // negations with constant corrections that can be folded together.
   LogicalResult matchAndRewrite(PartialProductOp op,
                                 PatternRewriter &rewriter) const override {
     auto inputWidth = op.getOperand(0).getType().getIntOrFloatBitWidth();
-    auto lhs = isSext(op.getOperand(0));
-    auto rhs = isSext(op.getOperand(1));
-    if (failed(lhs) || failed(rhs))
+    Value lhs;
+    Value rhs;
+    if (!matchPattern(op.getOperand(0), comb::m_Sext(m_Any(&lhs))) ||
+        !matchPattern(op.getOperand(1), comb::m_Sext(m_Any(&rhs))))
       return failure();
 
-    size_t lhsWidth = lhs->getType().getIntOrFloatBitWidth();
-    size_t rhsWidth = rhs->getType().getIntOrFloatBitWidth();
+    size_t lhsWidth = lhs.getType().getIntOrFloatBitWidth();
+    size_t rhsWidth = rhs.getType().getIntOrFloatBitWidth();
     // Subtract 1 as will handle sign-bit separately
     size_t maxRows = std::max(lhsWidth, rhsWidth) - 1;
 
@@ -533,13 +494,13 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
     auto lhsBaseWidth = lhsWidth - 1;
     auto rhsBaseWidth = rhsWidth - 1;
     auto lhsSignBit =
-        comb::ExtractOp::create(rewriter, op.getLoc(), *lhs, lhsBaseWidth, 1);
+        comb::ExtractOp::create(rewriter, op.getLoc(), lhs, lhsBaseWidth, 1);
     auto rhsSignBit =
-        comb::ExtractOp::create(rewriter, op.getLoc(), *rhs, rhsBaseWidth, 1);
+        comb::ExtractOp::create(rewriter, op.getLoc(), rhs, rhsBaseWidth, 1);
     auto lhsBase =
-        comb::ExtractOp::create(rewriter, op.getLoc(), *lhs, 0, lhsBaseWidth);
+        comb::ExtractOp::create(rewriter, op.getLoc(), lhs, 0, lhsBaseWidth);
     auto rhsBase =
-        comb::ExtractOp::create(rewriter, op.getLoc(), *rhs, 0, rhsBaseWidth);
+        comb::ExtractOp::create(rewriter, op.getLoc(), rhs, 0, rhsBaseWidth);
 
     // Create the unsigned partial product of the unextended inputs
     auto lhsBaseZext =
@@ -551,7 +512,8 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
 
     // Optimization (similar for second sign correction), ext to (p+q)-bits:
     // -2^(p-1)*sign(lhs)*rhsBase = ~((sign(lhs) * rhsBase) << (p-1)) + 1
-    //                            = (~(replicate(sign(lhs)) & rhsBase)) << (p-1)
+    //                            = (~(replicate(sign(lhs)) & rhsBase)) <<
+    //                            (p-1)
     //                            + (-1) << (p+q-2)      [msb correction]
     //                            + (1<<(p-1)) - 1 + 1   [lsb correction]
 

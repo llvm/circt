@@ -85,52 +85,6 @@ static inline ComplementMatcher<SubType> m_Complement(const SubType &subExpr) {
   return ComplementMatcher<SubType>(subExpr);
 }
 
-template <typename SubType>
-struct SextMatcher {
-  SubType lhs;
-  SextMatcher(SubType lhs) : lhs(std::move(lhs)) {}
-  bool match(Operation *op) {
-    // Check if operand is a concat operation
-    auto concatOp = dyn_cast<ConcatOp>(op);
-    if (!concatOp)
-      return false;
-
-    auto operands = concatOp.getOperands();
-    // ConcatOp must have exactly 2 operands: (sign_bits, base_value)
-    if (operands.size() != 2)
-      return false;
-
-    Value signBits = operands[0];
-    Value baseValue = operands[1];
-    auto baseWidth = baseValue.getType().getIntOrFloatBitWidth();
-
-    // Check if signBits is a replicate operation
-    auto replicateOp = dyn_cast<ReplicateOp>(signBits.getDefiningOp());
-    if (!replicateOp)
-      return false;
-
-    Value signBit = replicateOp.getInput();
-
-    // Check if signBit is the msb of baseValue
-    auto extractOp = dyn_cast<ExtractOp>(signBit.getDefiningOp());
-    if (!extractOp)
-      return false;
-
-    if ((extractOp.getInput() != baseValue) ||
-        (extractOp.getLowBit() != baseWidth - 1) ||
-        (extractOp.getType().getIntOrFloatBitWidth() != 1))
-      return false;
-
-    // Match the base unextended value against the sub-matcher
-    return lhs.match(op->getOperand(1));
-  }
-};
-
-template <typename SubType>
-static inline SextMatcher<SubType> m_Sext(const SubType &subExpr) {
-  return SextMatcher<SubType>(subExpr);
-}
-
 /// Return true if the op will be flattened afterwards. Op will be flattend if
 /// it has a single user which has a same op type.  User must be in same block.
 static bool shouldBeFlattened(Operation *op) {
