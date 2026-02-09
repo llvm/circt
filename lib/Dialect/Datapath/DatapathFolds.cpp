@@ -457,10 +457,10 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
   // Based on the classical Baugh-Wooley algorithm for signed mulitplication.
   // Paper: A Two's Complement Parallel Array Multiplication Algorithm
   //
-  // Consider a p-bit by q-bit signed multiplier - producing a (p+q)-bit
-  // result: a_sign = a[p-1], a_mag = a[p-2:0], b_sign = b[q-1], b_mag =
-  // b[q-2:0] sext(a) * sext(b) = a_mag * b_mag                    [unsigned
-  // product]
+  // Consider a p-bit by q-bit signed multiplier - producing a (p+q)-bit result:
+  // a_sign = a[p-1], a_mag = a[p-2:0],
+  // b_sign = b[q-1], b_mag = b[q-2:0]
+  // sext(a) * sext(b) = a_mag * b_mag                    [unsigned product]
   //                     - 2^(p-1) * a_sign * b_mag       [sign correction]
   //                     - 2^(q-1) * b_sign * a_mag       [sign correction]
   //                     + 2^(p+q-2) * a_sign * b_sign    [sign * sign]
