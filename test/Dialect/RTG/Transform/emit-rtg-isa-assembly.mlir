@@ -5,7 +5,8 @@
 // CHECK-ALLOWED:    # Begin of test0
 
 emit.file "" {
-  rtg.comment "Begin of test0"
+  %str_begin = rtg.constant "Begin of test0" : !rtg.string
+  rtg.comment %str_begin
 
   %idx8 = index.constant 8
   // CHECK-ALLOWED-NEXT:    .space 8
@@ -17,7 +18,8 @@ emit.file "" {
   rtg.isa.segment data {
     // CHECK-ALLOWED-NEXT:    # data segment
     // CHECK-NEXT:    # data segment
-    rtg.comment "data segment"
+    %str_data = rtg.constant "data segment" : !rtg.string
+    rtg.comment %str_data
   }
 
   // CHECK-ALLOWED-NEXT:.text
@@ -25,12 +27,14 @@ emit.file "" {
   rtg.isa.segment text {
     // CHECK-ALLOWED-NEXT:    # text segment
     // CHECK-NEXT:    # text segment
-    rtg.comment "text segment"
+    %str_text = rtg.constant "text segment" : !rtg.string
+    rtg.comment %str_text
   }
 
   // CHECK-ALLOWED-NEXT:    .asciz "hello world\n\t\\\""
   // CHECK-NEXT:    .asciz "hello world\n\t\\\""
-  rtg.isa.string_data "hello world\n\t\\\""
+  %str_hello = rtg.constant "hello world\n\t\\\"" : !rtg.string
+  rtg.isa.string_data %str_hello
 
   %rd = rtg.constant #rtgtest.ra
   %rs = rtg.constant #rtgtest.s0
@@ -240,7 +244,8 @@ emit.file "" {
   // CHECK-NEXT:    .word 0x41F45093
   rtgtest.rv32i.srai %rd, %rs, %imm5
   
-  rtg.comment "End of test0"
+  %str_end = rtg.constant "End of test0" : !rtg.string
+  rtg.comment %str_end
 }
 
 // CHECK-NEXT:    # End of test0

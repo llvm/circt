@@ -1,6 +1,7 @@
 // RUN: circt-opt --canonicalize %s | FileCheck %s
 
 func.func @dummy(%arg0: !rtg.isa.label) -> () {return}
+func.func @dummy1(%arg0: !rtg.string) -> () {return}
 
 // CHECK-LABEL: @interleaveSequences
 rtg.test @interleaveSequences(seq0 = %seq0: !rtg.randomized_sequence) {
@@ -24,14 +25,11 @@ rtg.target @immediates : !rtg.dict<imm0: !rtg.isa.immediate<64>, imm1: !rtg.isa.
 
 // CHECK-LABEL: @labels
 rtg.test @labels() {
-  %idx0 = index.constant 0
-  // CHECK: rtg.label_decl "label0"
-  %0 = rtg.label_decl "label{{0}}", %idx0
+  %str = rtg.constant "label" : !rtg.string
+  %0 = rtg.string_to_label %str 
+  // CHECK: [[V0:%.+]] = rtg.constant #rtg.isa.label<"label">
+  // CHECK: func.call @dummy([[V0]])
   func.call @dummy(%0) : (!rtg.isa.label) -> ()
-
-  // CHECK: rtg.label_unique_decl "label0"
-  %1 = rtg.label_unique_decl "label{{0}}", %idx0
-  func.call @dummy(%1) : (!rtg.isa.label) -> ()
 }
 
 // CHECK-LABEL: @constraints
@@ -43,4 +41,25 @@ rtg.test @constraints() {
   // CHECK-NOT: rtg.constraint
   %true = rtg.constant true
   rtg.constraint %true
+}
+
+// CHECK-LABEL: rtg.test @strings
+rtg.test @strings() {
+  // CHECK-NEXT: [[V2:%.+]] = rtg.constant "" : !rtg.string
+  // CHECK-NEXT: [[V1:%.+]] = rtg.constant "23" : !rtg.string
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant "hellohello" : !rtg.string
+
+  %0 = rtg.constant "hello" : !rtg.string
+  %1 = rtg.string_concat %0, %0
+  // CHECK-NEXT: func.call @dummy1([[V0]])
+  func.call @dummy1(%1) : (!rtg.string) -> ()
+
+  %2 = rtg.constant 23 : index
+  %3 = rtg.int_format %2
+  // CHECK-NEXT: func.call @dummy1([[V1]])
+  func.call @dummy1(%3) : (!rtg.string) -> ()
+  
+  %4 = rtg.string_concat
+  // CHECK-NEXT: func.call @dummy1([[V2]])
+  func.call @dummy1(%4) : (!rtg.string) -> ()
 }

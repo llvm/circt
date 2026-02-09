@@ -1479,7 +1479,14 @@ om.class @Foo(
   g: !om.integer,
   h: !om.integer,
   i: !om.class.type<@Baz>,
-  j: !om.integer
+  j: !om.integer,
+  k: !om.integer,
+  l: !om.string,
+  m: !om.list<!om.string>,
+  n: !om.class.type<@Bar>,
+  o: !om.frozenbasepath,
+  p: !om.frozenpath,
+  q: !om.class.type<@Baz>
 ) {
   %0 = om.constant #om.integer<1 : i4> : !om.integer
   %1 = om.integer.add %0, %unknown_int : !om.integer
@@ -1491,7 +1498,14 @@ om.class @Foo(
   %7 = om.unknown : !om.integer
   %8 = om.object @Baz() : () -> !om.class.type<@Baz>
   %9 = om.object.field %8, [@a] : (!om.class.type<@Baz>) -> !om.integer
-  om.class.fields %unknown_int, %1, %2, %3, %4, %5, %6, %7, %8, %9 : !om.integer, !om.integer, !om.list<!om.integer>, !om.list<!om.integer>, !om.frozenbasepath, !om.frozenpath, !om.integer, !om.integer, !om.class.type<@Baz>, !om.integer
+  %10 = om.unknown : !om.integer
+  %11 = om.unknown : !om.string
+  %12 = om.unknown : !om.list<!om.string>
+  %13 = om.unknown : !om.class.type<@Bar>
+  %14 = om.unknown : !om.frozenbasepath
+  %15 = om.unknown : !om.frozenpath
+  %16 = om.unknown : !om.class.type<@Baz>
+  om.class.fields %unknown_int, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16 : !om.integer, !om.integer, !om.list<!om.integer>, !om.list<!om.integer>, !om.frozenbasepath, !om.frozenpath, !om.integer, !om.integer, !om.class.type<@Baz>, !om.integer, !om.integer, !om.string, !om.list<!om.string>, !om.class.type<@Bar>, !om.frozenbasepath, !om.frozenpath, !om.class.type<@Baz>
 }
 )MLIR";
 
@@ -1507,22 +1521,78 @@ om.class @Foo(
   Evaluator evaluator(owning.release());
 
   auto unknownLoc = UnknownLoc::get(&context);
-  auto unknownValue = std::make_shared<circt::om::evaluator::UnknownValue>(
-      circt::om::evaluator::UnknownValue(&context, unknownLoc));
+  // Create unknown values with the correct types
+  auto unknownInt = circt::om::evaluator::AttributeValue::get(
+      circt::om::OMIntegerType::get(&context), LocationAttr(unknownLoc));
+  unknownInt->markUnknown();
+
+  auto unknownBasePath = circt::om::evaluator::AttributeValue::get(
+      circt::om::FrozenBasePathType::get(&context), LocationAttr(unknownLoc));
+  unknownBasePath->markUnknown();
+
+  auto barClassType = circt::om::ClassType::get(
+      &context, mlir::FlatSymbolRefAttr::get(&context, "Bar"));
+  auto unknownClass = circt::om::evaluator::AttributeValue::get(
+      barClassType, LocationAttr(unknownLoc));
+  unknownClass->markUnknown();
+
   auto result =
       evaluator.instantiate(StringAttr::get(&context, "Foo"),
-                            {unknownValue, unknownValue, unknownValue});
+                            {unknownInt, unknownBasePath, unknownClass});
 
   ASSERT_TRUE(succeeded(result));
 
   auto *object = llvm::cast<evaluator::ObjectValue>(result.value().get());
 
-  ASSERT_EQ(object->getFieldNames().size(), 10ul);
+  ASSERT_EQ(object->getFieldNames().size(), 17ul);
 
   for (auto fieldName : object->getFieldNames()) {
     auto field = object->getField(cast<StringAttr>(fieldName));
-    ASSERT_TRUE(isa<circt::om::evaluator::UnknownValue>(field->get()));
+    ASSERT_TRUE(field->get()->isUnknown());
   }
+
+  // Check that each unknown value has the correct type
+  auto checkFieldType = [&](StringRef name, auto expectedType) {
+    auto field = object->getField(name);
+    ASSERT_TRUE(succeeded(field));
+    ASSERT_TRUE(field->get()->isUnknown());
+    ASSERT_EQ(field->get()->getType(), expectedType);
+  };
+
+  // Check primitive types
+  checkFieldType("k", circt::om::OMIntegerType::get(&context));
+  checkFieldType("l", circt::om::StringType::get(&context));
+
+  // Check list type
+  auto listOfStringType =
+      circt::om::ListType::get(circt::om::StringType::get(&context));
+  checkFieldType("m", listOfStringType);
+
+  // Check class types
+  checkFieldType("n", barClassType);
+  auto bazClassType = circt::om::ClassType::get(
+      &context, mlir::FlatSymbolRefAttr::get(&context, "Baz"));
+  checkFieldType("q", bazClassType);
+
+  // Check path types
+  checkFieldType("o", circt::om::FrozenBasePathType::get(&context));
+  checkFieldType("p", circt::om::FrozenPathType::get(&context));
+
+  // Verify that the values have the correct runtime type
+  auto checkFieldValueType = [&](StringRef name, auto expectedKind) {
+    auto field = object->getField(name);
+    ASSERT_TRUE(succeeded(field));
+    ASSERT_EQ(field->get()->getKind(), expectedKind);
+  };
+
+  using Kind = circt::om::evaluator::EvaluatorValue::Kind;
+  checkFieldValueType("k", Kind::Attr);     // integer -> AttributeValue
+  checkFieldValueType("l", Kind::Attr);     // string -> AttributeValue
+  checkFieldValueType("m", Kind::List);     // list -> ListValue
+  checkFieldValueType("n", Kind::Object);   // class -> ObjectValue
+  checkFieldValueType("o", Kind::BasePath); // frozenbasepath -> BasePathValue
+  checkFieldValueType("p", Kind::Path);     // frozenpath -> PathValue
+  checkFieldValueType("q", Kind::Object);   // external class -> ObjectValue
 }
 
 TEST(EvaluatorTests, UnknownValuesNested) {
@@ -1565,10 +1635,13 @@ om.class @Foo(
   Evaluator evaluator(owning.release());
 
   auto unknownLoc = UnknownLoc::get(&context);
-  auto result = evaluator.instantiate(
-      StringAttr::get(&context, "Foo"),
-      {std::make_shared<circt::om::evaluator::UnknownValue>(
-          circt::om::evaluator::UnknownValue(&context, unknownLoc))});
+  // Create unknown value with the correct type (!om.integer)
+  auto unknownValue = circt::om::evaluator::AttributeValue::get(
+      circt::om::OMIntegerType::get(&context), LocationAttr(unknownLoc));
+  unknownValue->markUnknown();
+
+  auto result =
+      evaluator.instantiate(StringAttr::get(&context, "Foo"), {unknownValue});
 
   ASSERT_TRUE(succeeded(result));
 
@@ -1585,8 +1658,7 @@ om.class @Foo(
   ASSERT_TRUE(a == 1);
 
   // B should be unknown.
-  ASSERT_TRUE(isa<circt::om::evaluator::UnknownValue>(
-      object->getField("b").value().get()));
+  ASSERT_TRUE(object->getField("b").value()->isUnknown());
 }
 
 } // namespace

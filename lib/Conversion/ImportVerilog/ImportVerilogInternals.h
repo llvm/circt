@@ -248,8 +248,8 @@ struct Context {
   /// Convert system function calls within properties and assertion with a
   /// single argument.
   FailureOr<Value> convertAssertionSystemCallArity1(
-      const slang::ast::SystemSubroutine &subroutine, Location loc,
-      Value value);
+      const slang::ast::SystemSubroutine &subroutine, Location loc, Value value,
+      Type originalType);
 
   /// Evaluate the constant value of an expression.
   slang::ConstantValue evaluateConstant(const slang::ast::Expression &expr);

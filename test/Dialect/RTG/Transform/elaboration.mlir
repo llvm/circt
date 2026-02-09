@@ -17,6 +17,7 @@ func.func @dummy14(%arg0: !rtg.isa.memory<32>) -> () {return}
 func.func @dummy15(%arg0: !rtg.isa.immediate<32>) -> () {return}
 func.func @dummy16(%arg0: !rtg.isa.immediate<12>) -> () {return}
 func.func @dummy17(%arg0: !rtg.isa.immediate<3>) -> () {return}
+func.func @dummy18(%arg0: !rtg.string) -> () {return}
 
 rtg.target @singletonTarget : !rtg.dict<singleton: index> {
   %0 = index.constant 0
@@ -461,20 +462,16 @@ rtg.test @valuesWithIdentity(singleton = %none: index) {
 
 // CHECK-LABEL: @labels
 rtg.test @labels(singleton = %none: index) {
-  // CHECK-NEXT: [[L0:%.+]] = rtg.label_unique_decl "label0"
+  // CHECK-NEXT: [[STR:%.+]] = rtg.constant "unique_label" : !rtg.string
+  // CHECK-NEXT: [[L0:%.+]] = rtg.label_unique_decl [[STR]]
   // CHECK-NEXT: rtg.label local [[L0]]
-  // CHECK-NEXT: [[L1:%.+]] = rtg.label_decl "label0"
+  // CHECK-NEXT: [[L1:%.+]] = rtg.constant #rtg.isa.label<"label">
   // CHECK-NEXT: rtg.label local [[L1]]
-  // CHECK-NEXT: [[L2:%.+]] = rtg.label_decl "label1_0_1"
-  // CHECK-NEXT: rtg.label local [[L2]]
-  %0 = index.constant 0
-  %1 = index.constant 1
-  %l0 = rtg.label_unique_decl "label{{0}}", %0
-  %l1 = rtg.label_decl "label{{0}}", %0
-  %l2 = rtg.label_decl "label{{0}}_{{1}}_{{0}}", %1, %0
+  %0 = rtg.constant "unique_label" : !rtg.string
+  %l0 = rtg.label_unique_decl %0
+  %l1 = rtg.constant #rtg.isa.label<"label">
   rtg.label local %l0
   rtg.label local %l1
-  rtg.label local %l2
 
   // CHECK-NEXT: rtg.label local [[L1]]
   %set = rtg.set_create %l1 : !rtg.isa.label
@@ -499,19 +496,19 @@ rtg.test @randomIntegers(singleton = %none: index) {
 
 // CHECK-LABEL: rtg.test @contexts_contextCpu
 rtg.test @contexts(cpu0 = %cpu0: !rtgtest.cpu, cpu1 = %cpu1: !rtgtest.cpu) {
-  // CHECK-NEXT:    [[L0:%.+]] = rtg.label_decl "label0"
+  // CHECK-NEXT:    [[L0:%.+]] = rtg.constant #rtg.isa.label<"label0">
   // CHECK-NEXT:    rtg.label local [[L0]]
   // CHECK-NEXT:    [[SEQ0:%.+]] = rtg.get_sequence @switchCpuSeq_0 : !rtg.sequence
   // CHECK-NEXT:    [[SEQ1:%.+]] = rtg.randomize_sequence [[SEQ0]]
   // CHECK-NEXT:    rtg.embed_sequence [[SEQ1]]
-  // CHECK-NEXT:    [[L1:%.+]] = rtg.label_decl "label1"
+  // CHECK-NEXT:    [[L1:%.+]] = rtg.constant #rtg.isa.label<"label1">
   // CHECK-NEXT:    rtg.label local [[L1]]
   %0 = rtg.get_sequence @cpuSeq : !rtg.sequence<!rtgtest.cpu>
   %1 = rtg.substitute_sequence %0(%cpu1) : !rtg.sequence<!rtgtest.cpu>
-  %l0 = rtg.label_decl "label0"
+  %l0 = rtg.constant #rtg.isa.label<"label0">
   rtg.label local %l0
   rtg.on_context %cpu0, %1 : !rtgtest.cpu
-  %l1 = rtg.label_decl "label1"
+  %l1 = rtg.constant #rtg.isa.label<"label1">
   rtg.label local %l1
 }
 
@@ -526,65 +523,65 @@ rtg.target @contextCpu : !rtg.dict<cpu0: !rtgtest.cpu, cpu1: !rtgtest.cpu> {
 }
 
 // CHECK:  rtg.sequence @cpuSeq_0() {
-// CHECK-NEXT:    [[L2:%.+]] = rtg.label_decl "label2"
+// CHECK-NEXT:    [[L2:%.+]] = rtg.constant #rtg.isa.label<"label2">
 // CHECK-NEXT:    rtg.label local [[L2]]
 // CHECK-NEXT:    [[SEQ2:%.+]] = rtg.get_sequence @switchNestedCpuSeq_0 : !rtg.sequence
 // CHECK-NEXT:    [[SEQ3:%.+]] = rtg.randomize_sequence [[SEQ2]]
 // CHECK-NEXT:    rtg.embed_sequence [[SEQ3]]
-// CHECK-NEXT:    [[L3:%.+]] = rtg.label_decl "label3"
+// CHECK-NEXT:    [[L3:%.+]] = rtg.constant #rtg.isa.label<"label3">
 // CHECK-NEXT:    rtg.label local [[L3]]
 // CHECK-NEXT:  }
 rtg.sequence @cpuSeq(%cpu: !rtgtest.cpu) {
-  %l2 = rtg.label_decl "label2"
+  %l2 = rtg.constant #rtg.isa.label<"label2">
   rtg.label local %l2
   %0 = rtg.get_sequence @nestedCpuSeq : !rtg.sequence
   rtg.on_context %cpu, %0 : !rtgtest.cpu
-  %l3 = rtg.label_decl "label3"
+  %l3 = rtg.constant #rtg.isa.label<"label3">
   rtg.label local %l3
 }
 
 // CHECK:  rtg.sequence @nestedCpuSeq_0() {
-// CHECK-NEXT:    [[L6:%.+]] = rtg.label_decl "label4"
+// CHECK-NEXT:    [[L6:%.+]] = rtg.constant #rtg.isa.label<"label4">
 // CHECK-NEXT:    rtg.label local [[L6]]
 // CHECK-NEXT:  }
 rtg.sequence @nestedCpuSeq() {
-  %l4 = rtg.label_decl "label4"
+  %l4 = rtg.constant #rtg.isa.label<"label4">
   rtg.label local %l4
 }
 
 // CHECK:  rtg.sequence @switchCpuSeq_0() {
-// CHECK-NEXT:    [[L8:%.+]] = rtg.label_decl "label5"
+// CHECK-NEXT:    [[L8:%.+]] = rtg.constant #rtg.isa.label<"label5">
 // CHECK-NEXT:    rtg.label local [[L8]]
 // CHECK-NEXT:    [[SEQ5:%.+]] = rtg.get_sequence @cpuSeq_0 : !rtg.sequence
 // CHECK-NEXT:    [[SEQ6:%.+]] = rtg.randomize_sequence [[SEQ5]]
 // CHECK-NEXT:    rtg.embed_sequence [[SEQ6]]
-// CHECK-NEXT:    [[L9:%.+]] = rtg.label_decl "label6"
+// CHECK-NEXT:    [[L9:%.+]] = rtg.constant #rtg.isa.label<"label6">
 // CHECK-NEXT:    rtg.label local [[L9]]
 // CHECK-NEXT:  }
 rtg.sequence @switchCpuSeq(%parent: !rtgtest.cpu, %child: !rtgtest.cpu, %seq: !rtg.sequence) {
-  %l5 = rtg.label_decl "label5"
+  %l5 = rtg.constant #rtg.isa.label<"label5">
   rtg.label local %l5
   %0 = rtg.randomize_sequence %seq
   rtg.embed_sequence %0
-  %l6 = rtg.label_decl "label6"
+  %l6 = rtg.constant #rtg.isa.label<"label6">
   rtg.label local %l6
 }
 
 // CHECK:  rtg.sequence @switchNestedCpuSeq_0() {
-// CHECK-NEXT:    [[L12:%.+]] = rtg.label_decl "label7"
+// CHECK-NEXT:    [[L12:%.+]] = rtg.constant #rtg.isa.label<"label7">
 // CHECK-NEXT:    rtg.label local [[L12]]
 // CHECK-NEXT:    [[SEQ8:%.+]] = rtg.get_sequence @nestedCpuSeq{{.*}} : !rtg.sequence
 // CHECK-NEXT:    [[SEQ9:%.+]] = rtg.randomize_sequence [[SEQ8]]
 // CHECK-NEXT:    rtg.embed_sequence [[SEQ9]]
-// CHECK-NEXT:    [[L13:%.+]] = rtg.label_decl "label8"
+// CHECK-NEXT:    [[L13:%.+]] = rtg.constant #rtg.isa.label<"label8">
 // CHECK-NEXT:    rtg.label local [[L13]]
 // CHECK-NEXT:  }
 rtg.sequence @switchNestedCpuSeq(%parent: !rtgtest.cpu, %child: !rtgtest.cpu, %seq: !rtg.sequence) {
-  %l7 = rtg.label_decl "label7"
+  %l7 = rtg.constant #rtg.isa.label<"label7">
   rtg.label local %l7
   %0 = rtg.randomize_sequence %seq
   rtg.embed_sequence %0
-  %l8 = rtg.label_decl "label8"
+  %l8 = rtg.constant #rtg.isa.label<"label8">
   rtg.label local %l8
 }
 
@@ -704,8 +701,10 @@ rtg.test @useFolders(single_core = %single_core: !rtgtest.cpu) {
 
 // CHECK-LABEL: rtg.test @comments
 rtg.test @comments() {
-  // CHECK-NEXT: rtg.comment "this is a comment"
-  rtg.comment "this is a comment"
+  // CHECK-NEXT: [[STR:%.+]] = rtg.constant "hello" : !rtg.string
+  %str = rtg.constant "hello" : !rtg.string
+  // CHECK-NEXT: rtg.comment [[STR]]
+  rtg.comment %str
 }
 
 rtg.target @memoryBlocks : !rtg.dict<mem_block: !rtg.isa.memory_block<32>> {
@@ -812,8 +811,10 @@ rtg.test @immediateOps(singleton = %none: index) {
 rtg.test @testSuccessAndFailure(singleton = %none: index) {
   // CHECK-NEXT: rtg.test.success
   rtg.test.success
-  // CHECK-NEXT: rtg.test.failure "Error Message"
-  rtg.test.failure "Error Message"
+  // CHECK-NEXT: [[STR:%.+]] = rtg.constant "hello" : !rtg.string
+  %str = rtg.constant "hello" : !rtg.string
+  // CHECK-NEXT: rtg.test.failure [[STR]]
+  rtg.test.failure %str
 }
 
 // CHECK-LABEL: rtg.test @setEquivalence
@@ -886,6 +887,19 @@ rtg.test @opsHandlingSymbolicOperands(singleton = %none: index) {
   %arr3 = rtg.array_inject %arr2[%idx], %val : !rtg.array<!rtg.isa.immediate<32>>
   %ext3 = rtg.array_extract %arr3[%idx] : !rtg.array<!rtg.isa.immediate<32>>
   func.call @dummy15(%ext3) : (!rtg.isa.immediate<32>) -> ()
+}
+
+// CHECK-LABEL: rtg.test @strings
+rtg.test @strings(singleton = %none: index) {
+  %0 = rtg.constant "hello" : !rtg.string
+  %c4 = index.constant 4
+  %c5 = index.constant 5
+  %1 = rtg.random_number_in_range [%c4, %c5] {rtg.elaboration_custom_seed=0}
+  %3 = rtg.int_format %1
+  %5 = rtg.string_concat %0, %3
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant "hello4" : !rtg.string
+  // CHECK-NEXT: func.call @dummy18([[V0]])
+  func.call @dummy18(%5) : (!rtg.string) -> ()
 }
 
 // -----

@@ -285,6 +285,7 @@ function void MathBuiltins(int x, logic [41:0] y, real r);
 
 endfunction
 
+// IEEE 1800-2023 $ 18.3 "Random number system functions and methods"
 // CHECK-LABEL: func.func private @RandomBuiltins(
 // CHECK-SAME: [[X:%.+]]: !moore.i32
 function RandomBuiltins(int x);
@@ -300,6 +301,12 @@ function RandomBuiltins(int x);
   // CHECK: [[RAND1:%.+]] = moore.builtin.random [[X]]
   // CHECK-NEXT: call @dummyA([[RAND1]]) : (!moore.i32) -> ()
   dummyA($random(x));
+  // CHECK: [[URANDRANGE1:%.+]] = moore.builtin.urandom_range [[X]]
+  // CHECK-NEXT: call @dummyA([[URANDRANGE1]]) : (!moore.i32) -> ()
+  dummyA($urandom_range(x));
+  // CHECK: [[URANDRANGE2:%.+]] = moore.builtin.urandom_range [[X]] [[X]]
+  // CHECK-NEXT: call @dummyA([[URANDRANGE2]]) : (!moore.i32) -> ()
+  dummyA($urandom_range(x, x));
 endfunction
 
 // CHECK-LABEL: func.func private @TimeBuiltins(
@@ -415,6 +422,17 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 : i1
   past_clk: assert property (@(posedge clk_i) clk_i |=> $past(clk_i));
+  // Check that the output of past can be used by non-LTL ops
+  // CHECK: moore.procedure always {
+  // CHECK-NEXT: [[C1:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
+  // CHECK-NEXT: [[CB:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CB]], 1 : i1
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i1
+  // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i1
+  // CHECK-NEXT: [[EQ:%.+]] = moore.eq [[C1]], [[PAST_LOGIC]] : l1 -> l1
+  past_eq: assert property (@(posedge clk_i) clk_i == $past(clk_i));
 
 endmodule
 

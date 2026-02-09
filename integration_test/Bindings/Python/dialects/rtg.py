@@ -188,13 +188,13 @@ with Context() as ctx, Location.unknown():
     seq = rtg.SequenceOp('seq', TypeAttr.get(rtg.SequenceType.get([])))
     block = Block.create_at_start(seq.bodyRegion, [])
     with InsertionPoint(block):
-      l = rtg.label_decl("label", [])
+      l = rtg.ConstantOp(rtg.LabelAttr.get("label"))
       visibility = rtg.LabelVisibilityAttr.get(rtg.GLOBAL)
       rtg.label(visibility, l)
       assert visibility.value == rtg.GLOBAL
 
   # CHECK: rtg.sequence @seq
-  # CHECK: rtg.label_decl "label"
+  # CHECK: rtg.constant #rtg.isa.label<"label">
   # CHECK: rtg.label global {{%.+}}
   print(m)
 
@@ -238,6 +238,12 @@ with Context() as ctx, Location.unknown():
   # CHECK: !rtg.isa.memory<32>
   print(memoryTy)
 
+  label_attr = rtg.LabelAttr.get("my_label")
+  # CHECK: name=my_label
+  print(f"name={label_attr.name}")
+  # CHECK: #rtg.isa.label<"my_label">
+  print(label_attr)
+
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
   indexTy = IndexType.get()
@@ -259,3 +265,7 @@ with Context() as ctx, Location.unknown():
   print(f"fields={tup.fields}")
   # CHECK: !rtg.tuple
   print(tup)
+
+  stringTy = rtg.StringType.get()
+  # CHECK: !rtg.string
+  print(stringTy)

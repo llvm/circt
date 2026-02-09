@@ -7,6 +7,9 @@ from .core import CodeGenRoot, CodeGenObject
 from .rtg import rtg
 from .support import _FromCirctValue
 from .configs import PythonParam
+from .strings import String
+
+from typing import Union
 
 from types import SimpleNamespace
 
@@ -62,11 +65,13 @@ def test(config):
   return wrapper
 
 
-def embed_comment(comment: str) -> None:
+def embed_comment(comment: Union[str, String]) -> None:
   """
   Embeds a comment in the instruction stream.
   """
 
+  if not isinstance(comment, String):
+    comment = String(comment)
   rtg.CommentOp(comment)
 
 
@@ -78,9 +83,11 @@ def report_success() -> None:
   rtg.TestSuccessOp()
 
 
-def report_failure(message: str) -> None:
+def report_failure(message: Union[str, String]) -> None:
   """
   Exit this test and report a failure with the provided error message.
   """
 
+  if not isinstance(message, String):
+    message = String(message)
   rtg.TestFailureOp(message)

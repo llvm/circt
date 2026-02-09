@@ -183,6 +183,21 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
     domainObjects.push_back(*maybeDomain);
   }
 
+  // The class is the command-line module name with `_Class` appeneded.
+  //
+  // TODO: This is brittle and relies on the lowering of FIRRTL classes to
+  // objects.  Is there a better "ABI" here?
+  auto className =
+      StringAttr::get(&context, Twine(options::moduleName) + "_Class");
+
+  // Look up the class to get formal parameter types for creating unknown values
+  auto classOp = moduleOp->lookupSymbol<om::ClassLike>(className);
+  if (!classOp) {
+    llvm::errs() << "unable to find class '" << className.getValue() << "'\n";
+    return failure();
+  }
+  ArrayRef<BlockArgument> formalParams = classOp.getBodyBlock()->getArguments();
+
   // Put the parameters necessary to instantiate the class in `parameters`.
   // This consists of an empty base path and all the domains whose order is
   // specified by the command line `-asign` options.
@@ -191,11 +206,23 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
   parameters.push_back(
       std::make_shared<om::evaluator::BasePathValue>(emptyPath));
   auto unknownLoc = UnknownLoc::get(&context);
+  size_t paramIndex = 1; // Start at 1 to skip the basepath parameter
   for (auto &value : options::assign) {
     if (value == "u") {
-      auto unknown = om::evaluator::UnknownValue(&context, unknownLoc);
-      parameters.push_back(
-          std::make_shared<om::evaluator::UnknownValue>(unknown));
+      // Get the expected type for this parameter position
+      if (paramIndex >= formalParams.size()) {
+        llvm::errs() << "parameter index " << paramIndex
+                     << " exceeds number of formal parameters\n";
+        return failure();
+      }
+      Type expectedType = formalParams[paramIndex].getType();
+
+      // Create an unknown value with the correct type
+      auto unknownValue = om::evaluator::AttributeValue::get(
+          expectedType, LocationAttr(unknownLoc));
+      unknownValue->markUnknown();
+      parameters.push_back(unknownValue);
+      paramIndex++;
       continue;
     }
     size_t domainIndex;
@@ -213,15 +240,10 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
       return failure();
     }
     parameters.push_back(domainObjects[domainIndex]);
+    paramIndex++;
   }
 
-  // The class is the command-line module name with `_Class` appeneded.
-  // Instantiate it with the provided parameters.
-  //
-  // TODO: This is brittle and relies on the lowering of FIRRTL classes to
-  // objects.  Is there a better "ABI" here?
-  auto className =
-      StringAttr::get(&context, Twine(options::moduleName) + "_Class");
+  // Instantiate the class with the provided parameters.
   auto evaluatorValue = evaluator.instantiate(className, parameters);
   if (failed(evaluatorValue))
     return failure();
@@ -254,8 +276,7 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
   auto *object = cast<om::evaluator::ObjectValue>(evaluatorValue->get());
   for (auto fieldNameAttr : object->getFieldNames().getAsRange<StringAttr>()) {
     // Skip anything which is unknown.
-    if (dyn_cast<om::evaluator::UnknownValue>(
-            object->getField(fieldNameAttr)->get()))
+    if (object->getField(fieldNameAttr)->get()->isUnknown())
       continue;
 
     // Skip anything which is not an object.

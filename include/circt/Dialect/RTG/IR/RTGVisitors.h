@@ -40,7 +40,7 @@ public:
             // Contexts
             OnContextOp, ContextSwitchOp,
             // Labels
-            LabelDeclOp, LabelUniqueDeclOp, LabelOp,
+            StringToLabelOp, LabelUniqueDeclOp, LabelOp,
             // Registers
             VirtualRegisterOp,
             // RTG tests
@@ -65,6 +65,8 @@ public:
             MemoryBlockDeclareOp,
             // Data segment ops
             SpaceOp, StringDataOp, SegmentOp,
+            // String ops
+            StringConcatOp, IntFormatOp,
             // Misc ops
             CommentOp, ConstraintOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
@@ -129,7 +131,6 @@ public:
   HANDLE(TupleExtractOp, Unhandled);
   HANDLE(CommentOp, Unhandled);
   HANDLE(ConstraintOp, Unhandled);
-  HANDLE(LabelDeclOp, Unhandled);
   HANDLE(LabelUniqueDeclOp, Unhandled);
   HANDLE(LabelOp, Unhandled);
   HANDLE(TestOp, Unhandled);
@@ -149,6 +150,9 @@ public:
   HANDLE(SpaceOp, Unhandled);
   HANDLE(StringDataOp, Unhandled);
   HANDLE(SegmentOp, Unhandled);
+  HANDLE(StringConcatOp, Unhandled);
+  HANDLE(IntFormatOp, Unhandled);
+  HANDLE(StringToLabelOp, Unhandled);
 #undef HANDLE
 };
 

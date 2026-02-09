@@ -136,6 +136,16 @@ static void testTupleType(MlirContext ctx) {
   mlirTypeDump(emptyTupleTy);
 }
 
+static void testStringType(MlirContext ctx) {
+  MlirType stringTy = rtgStringTypeGet(ctx);
+
+  // CHECK: is_string
+  fprintf(stderr,
+          rtgTypeIsAString(stringTy) ? "is_string\n" : "isnot_string\n");
+  // CHECK: !rtg.string
+  mlirTypeDump(stringTy);
+}
+
 static void testLabelVisibilityAttr(MlirContext ctx) {
   MlirAttribute labelVisibility =
       rtgLabelVisibilityAttrGet(ctx, RTG_LABEL_VISIBILITY_GLOBAL);
@@ -228,6 +238,21 @@ static void testMemories(MlirContext ctx) {
   mlirTypeDump(memoryTy);
 }
 
+static void testLabelAttr(MlirContext ctx) {
+  MlirStringRef labelName = mlirStringRefCreateFromCString("my_label");
+  MlirAttribute labelAttr = rtgLabelAttrGet(ctx, labelName);
+
+  // CHECK: is_label_attr
+  fprintf(stderr, rtgAttrIsALabel(labelAttr) ? "is_label_attr\n"
+                                             : "isnot_label_attr\n");
+  // CHECK: #rtg.isa.label<"my_label">
+  mlirAttributeDump(labelAttr);
+
+  MlirStringRef retrievedName = rtgLabelAttrGetName(labelAttr);
+  // CHECK: name=my_label
+  fprintf(stderr, "name=%.*s\n", (int)retrievedName.length, retrievedName.data);
+}
+
 int main(int argc, char **argv) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__rtg__(), ctx);
@@ -241,11 +266,13 @@ int main(int argc, char **argv) {
   testDictType(ctx);
   testArrayType(ctx);
   testTupleType(ctx);
+  testStringType(ctx);
 
   testLabelVisibilityAttr(ctx);
   testContextAttrs(ctx);
   testImmediate(ctx);
   testMemories(ctx);
+  testLabelAttr(ctx);
 
   mlirContextDestroy(ctx);
 

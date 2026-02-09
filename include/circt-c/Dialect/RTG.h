@@ -134,6 +134,12 @@ MLIR_CAPI_EXPORTED MlirType rtgMemoryBlockTypeGet(MlirContext ctx,
 /// Returns the address with of an RTG memory block type.
 MLIR_CAPI_EXPORTED uint32_t rtgMemoryBlockTypeGetAddressWidth(MlirType type);
 
+/// If the type is an RTG string.
+MLIR_CAPI_EXPORTED bool rtgTypeIsAString(MlirType type);
+
+/// Creates an RTG string type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgStringTypeGet(MlirContext ctxt);
+
 //===----------------------------------------------------------------------===//
 // Attribute API.
 //===----------------------------------------------------------------------===//
@@ -201,6 +207,16 @@ rtgVirtualRegisterConfigAttrGetNumRegisters(MlirAttribute attr);
 /// config attribute.
 MLIR_CAPI_EXPORTED MlirAttribute
 rtgVirtualRegisterConfigAttrGetRegister(MlirAttribute attr, intptr_t index);
+
+/// Checks if the attribute is an RTG label attribute.
+MLIR_CAPI_EXPORTED bool rtgAttrIsALabel(MlirAttribute attr);
+
+/// Creates an RTG label attribute in the context with the given name.
+MLIR_CAPI_EXPORTED MlirAttribute rtgLabelAttrGet(MlirContext ctx,
+                                                 MlirStringRef name);
+
+/// Returns the name of the RTG label attribute.
+MLIR_CAPI_EXPORTED MlirStringRef rtgLabelAttrGetName(MlirAttribute attr);
 
 #ifdef __cplusplus
 }

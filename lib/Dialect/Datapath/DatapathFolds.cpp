@@ -52,13 +52,13 @@ static FailureOr<Value> isSext(Value operand) {
     return failure();
 
   auto operands = concatOp.getOperands();
-  // ConcatOp must have exactly 2 operands: (sign_bits, original_value)
+  // ConcatOp must have exactly 2 operands: {sign_bits, base}
   if (operands.size() != 2)
     return failure();
 
   Value signBits = operands[0];
-  Value originalValue = operands[1];
-  auto originalWidth = originalValue.getType().getIntOrFloatBitWidth();
+  Value baseValue = operands[1];
+  auto baseWidth = baseValue.getType().getIntOrFloatBitWidth();
 
   // Check if signBits is a replicate operation
   auto replicateOp = signBits.getDefiningOp<comb::ReplicateOp>();
@@ -67,18 +67,39 @@ static FailureOr<Value> isSext(Value operand) {
 
   Value signBit = replicateOp.getInput();
 
-  // Check if signBit is the msb of originalValue
+  // Check if signBit is the msb of baseValue
   auto extractOp = signBit.getDefiningOp<comb::ExtractOp>();
   if (!extractOp)
     return failure();
 
-  if ((extractOp.getInput() != originalValue) ||
-      (extractOp.getLowBit() != originalWidth - 1) ||
+  if ((extractOp.getInput() != baseValue) ||
+      (extractOp.getLowBit() != baseWidth - 1) ||
       (extractOp.getType().getIntOrFloatBitWidth() != 1))
     return failure();
 
-  // Return the original unextended value
-  return originalValue;
+  // Return the base unextended value
+  return baseValue;
+}
+
+// This pattern commonly arrises when inverting zext: ~zext(x) = {1,...1, ~x}
+// Check if the operand is {ones, base} and return the unextended operand:
+static FailureOr<Value> isOneExt(Value operand) {
+  // Check if operand is a concat operation
+  auto concatOp = operand.getDefiningOp<comb::ConcatOp>();
+  if (!concatOp)
+    return failure();
+
+  auto operands = concatOp.getOperands();
+  // ConcatOp must have exactly 2 operands
+  if (operands.size() != 2)
+    return failure();
+
+  APInt value;
+  if (matchPattern(operands[0], m_ConstantInt(&value)) && value.isAllOnes())
+    // Return the base unextended value
+    return success(operands[1]);
+
+  return failure();
 }
 
 // zext(input<<trailingZeros) to targetWidth
@@ -249,6 +270,129 @@ struct FoldAddIntoCompress : public OpRewritePattern<comb::AddOp> {
   }
 };
 
+// compress(..., sext(x),...) ->
+// compress(..., zext({~x[p-1], x[p-2:0]}), (-1) << (width(x)-1), ...)
+// Justification:
+// sext(x) = {x[p-1], x[p-1], ...,  x[p-1], x[p-2], ..., x[0]} =
+//         = {       0,    0, ..., ~x[p-1], x[p-2], ..., x[0]} +
+//           {       1,    1, ...,       1,      0, ...,    0} =
+//         = zext({~x[p-1], x[p-2], ..., x[0]}) + ((-1) << (width(x)-1))
+//
+// Note that we are adding arguments to the compressor, but we are reducing the
+// number of unknown bits in the compressor array
+struct SextCompress : public OpRewritePattern<CompressOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(CompressOp op,
+                                PatternRewriter &rewriter) const override {
+    auto inputs = op.getInputs();
+    auto opSize = inputs[0].getType().getIntOrFloatBitWidth();
+    auto size = inputs.size();
+
+    APInt value;
+    SmallVector<Value> newInputs;
+    for (auto input : inputs) {
+      auto sextInput = isSext(input);
+      // If not a sext - keep original input
+      if (failed(sextInput)) {
+        newInputs.push_back(input);
+        continue;
+      }
+
+      auto baseWidth = sextInput->getType().getIntOrFloatBitWidth();
+      // Need a separate sign-bit that gets extended by at least two bits to be
+      // beneficial
+      if (baseWidth <= 1 || (opSize - baseWidth) <= 1) {
+        newInputs.push_back(input);
+        continue;
+      }
+
+      // x[p-2:0]
+      auto base = comb::ExtractOp::create(rewriter, op.getLoc(), *sextInput, 0,
+                                          baseWidth - 1);
+      // x[p-1]
+      auto signBit = comb::ExtractOp::create(rewriter, op.getLoc(), *sextInput,
+                                             baseWidth - 1, 1);
+      auto invSign =
+          comb::createOrFoldNot(op.getLoc(), signBit, rewriter, true);
+      // {~x[p-1], x[p-2:0]}
+      auto newOp = comb::ConcatOp::create(rewriter, op.getLoc(),
+                                          ValueRange{invSign, base});
+      auto newOpZExt = comb::createZExt(rewriter, op.getLoc(), newOp, opSize);
+
+      newInputs.push_back(newOpZExt);
+
+      // (-1) << (width(x)-1)
+      auto ones = APInt::getAllOnes(opSize);
+      auto correction = hw::ConstantOp::create(rewriter, op.getLoc(),
+                                               ones << (baseWidth - 1));
+
+      newInputs.push_back(correction);
+    }
+
+    // If no sext inputs have not updated any arguments
+    if (newInputs.size() == size)
+      return failure();
+
+    auto newCompress = datapath::CompressOp::create(
+        rewriter, op.getLoc(), newInputs, op.getNumResults());
+    rewriter.replaceOp(op, newCompress.getResults());
+    return success();
+  }
+};
+
+// compress(..., oneExt(x),...) ->
+// compress(..., zext(x), (-1) << (width(x)-1), ...)
+// Justification:
+//           {1, 1, ..., 1, x}
+//         = zext(x) + ((-1) << (width(x)-1))
+//
+// Note that we are adding arguments to the compressor, but these can be
+// constant folded should other constants arise
+//
+// A pattern encountered when we convert subtraction to addition:
+// zext(a)-zext(b) = zext(a) + ~zext(b) + 1
+//                 = zext(a) + oneExt(~b) + 1
+// TODO: use knownBits to extract all constant ones
+struct OnesExtCompress : public OpRewritePattern<CompressOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(CompressOp op,
+                                PatternRewriter &rewriter) const override {
+    auto inputs = op.getInputs();
+    auto opType = inputs[0].getType();
+    auto opSize = opType.getIntOrFloatBitWidth();
+
+    SmallVector<Value> newInputs;
+    for (auto input : inputs) {
+      // Check for replication of ones leading
+      auto baseInput = isOneExt(input);
+      if (failed(baseInput)) {
+        newInputs.push_back(input);
+        continue;
+      }
+
+      // Separate {ones, x} -> zext(x) + (ones << baseWidth)
+      auto newOp = comb::createZExt(rewriter, op.getLoc(), *baseInput, opSize);
+      newInputs.push_back(newOp);
+
+      APInt ones = APInt::getAllOnes(opSize);
+      auto baseWidth = baseInput->getType().getIntOrFloatBitWidth();
+      auto correction =
+          hw::ConstantOp::create(rewriter, op.getLoc(), ones << baseWidth);
+      newInputs.push_back(correction);
+    }
+
+    if (newInputs.size() == inputs.size())
+      return failure();
+
+    auto newCompress = datapath::CompressOp::create(
+        rewriter, op.getLoc(), newInputs, op.getNumResults());
+    rewriter.replaceOp(op, newCompress.getResults());
+    return success();
+  }
+};
+
 struct ConstantFoldCompress : public OpRewritePattern<CompressOp> {
   using OpRewritePattern::OpRewritePattern;
 
@@ -274,15 +418,37 @@ struct ConstantFoldCompress : public OpRewritePattern<CompressOp> {
       return success();
     }
 
+    APInt value1, value2;
+    // compress(...c1, c2) -> compress(..., c1+c2)
+    assert(size >= 3 &&
+           "compress op has 3 or more operands ensured by a verifier");
+    if (matchPattern(inputs.back(), m_ConstantInt(&value1)) &&
+        matchPattern(inputs[size - 2], m_ConstantInt(&value2))) {
+
+      SmallVector<Value> newInputs(inputs.drop_back(2));
+      auto summedValue = value1 + value2;
+      auto constOp = hw::ConstantOp::create(rewriter, op.getLoc(), summedValue);
+      newInputs.push_back(constOp);
+      // If reducing by one row and constant folding - pass through operands
+      if (size - 1 == op.getNumResults()) {
+        rewriter.replaceOp(op, newInputs);
+        return success();
+      }
+
+      // Default create a compressor with fewer arguments
+      rewriter.replaceOpWithNewOp<CompressOp>(op, newInputs,
+                                              op.getNumResults());
+      return success();
+    }
+
     return failure();
   }
 };
 
 void CompressOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results
-      .add<FoldCompressIntoCompress, FoldAddIntoCompress, ConstantFoldCompress>(
-          context);
+  results.add<FoldCompressIntoCompress, FoldAddIntoCompress,
+              ConstantFoldCompress, SextCompress, OnesExtCompress>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -349,8 +515,8 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
     if (failed(lhs) || failed(rhs))
       return failure();
 
-    size_t lhsWidth = (*lhs).getType().getIntOrFloatBitWidth();
-    size_t rhsWidth = (*rhs).getType().getIntOrFloatBitWidth();
+    size_t lhsWidth = lhs->getType().getIntOrFloatBitWidth();
+    size_t rhsWidth = rhs->getType().getIntOrFloatBitWidth();
     // Subtract 1 as will handle sign-bit separately
     size_t maxRows = std::max(lhsWidth, rhsWidth) - 1;
 

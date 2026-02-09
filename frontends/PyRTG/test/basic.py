@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, embed_comment, MemoryBlock, Memory
+from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, MemoryBlock, Memory, String, report_failure
 
 # MLIR-LABEL: rtg.target @Singleton : !rtg.dict<>
 # MLIR-NEXT: }
@@ -28,10 +28,9 @@ class Tgt0(Config):
 
 
 # MLIR-LABEL: rtg.target @Tgt1 : !rtg.dict<entry0: index, entry1: !rtg.isa.label>
-# MLIR-NEXT: [[C0:%.+]] = index.constant 0
-# MLIR-NEXT: [[LBL:%.+]] = rtg.label_decl "l0"
-# MLIR-NEXT: rtg.yield [[C0]], [[LBL]] : index, !rtg.isa.label
-# MLIR-NEXT: }
+# MLIR-DAG: [[C0:%.+]] = index.constant 0
+# MLIR-DAG: [[LBL:%.+]] = rtg.constant #rtg.isa.label<"l0">
+# MLIR: rtg.yield [[C0]], [[LBL]] : index, !rtg.isa.label
 
 
 @config
@@ -109,14 +108,17 @@ def test0(config):
 
 # MLIR-LABEL: rtg.test @test1_args
 # MLIR-SAME: (entry0 = [[SET:%.+]]: !rtg.set<index>)
+# MLIR-NEXT: [[STR0:%.+]] = rtg.constant "L_" : !rtg.string
 # MLIR-NEXT: [[RAND:%.+]] = rtg.set_select_random [[SET]] : !rtg.set<index>
-# MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", [[RAND]]
-# MLIR-NEXT: rtg.label local
+# MLIR-NEXT: [[INT_AS_STR:%.+]] = rtg.int_format [[RAND]]
+# MLIR-NEXT: [[STR:%.+]] = rtg.string_concat [[STR0]], [[INT_AS_STR]]
+# MLIR-NEXT: [[LBL:%.+]] = rtg.string_to_label [[STR]]
+# MLIR-NEXT: rtg.label local [[LBL]]
 # MLIR-NEXT: }
 
 # ELABORATED-LABEL: rtg.test @test1_args_Tgt0
-# CHECK: rtg.label_decl "L_0"
-# CHECK-NEXT: rtg.label local
+# CHECK: [[LBL:%.+]] = rtg.constant #rtg.isa.label<"L_0">
+# CHECK-NEXT: rtg.label local [[LBL]]
 # CHECK-NEXT: }
 
 # ASM-LABEL: Begin of test 'test1_args
@@ -127,15 +129,18 @@ def test0(config):
 @test(Tgt0)
 def test1_args(config):
   i = config.entry0.get_random()
-  Label.declare(r"L_{{0}}", i).place()
+  Label.declare(String("L_") + i.to_string()).place()
 
 
 # MLIR-LABEL: rtg.test @test2_labels
-# MLIR-NEXT: index.constant 2
-# MLIR-NEXT: index.constant 1
-# MLIR-NEXT: [[L0:%.+]] = rtg.label_decl "l0"
-# MLIR-NEXT: [[L1:%.+]] = rtg.label_unique_decl "l1"
-# MLIR-NEXT: [[L2:%.+]] = rtg.label_unique_decl "l1"
+# MLIR-DAG: index.constant 2
+# MLIR-DAG: index.constant 1
+# MLIR-DAG: [[L0:%.+]] = rtg.constant #rtg.isa.label<"l0">
+# MLIR-DAG: [[STR:%.+]] = rtg.constant "l1" : !rtg.string
+# MLIR-DAG: [[LBL5:%.+]] = rtg.constant #rtg.isa.label<"L_5">
+# MLIR-DAG: [[LBL3:%.+]] = rtg.constant #rtg.isa.label<"L_3">
+# MLIR-NEXT: [[L1:%.+]] = rtg.label_unique_decl [[STR]]
+# MLIR-NEXT: [[L2:%.+]] = rtg.label_unique_decl [[STR]]
 # MLIR-NEXT: rtg.label global [[L0]]
 # MLIR-NEXT: rtg.label external [[L1]]
 # MLIR-NEXT: rtg.label local [[L2]]
@@ -151,10 +156,8 @@ def test1_args(config):
 # MLIR-NEXT: [[RL1:%.+]] = rtg.set_select_random [[SET2_MINUS_SET0]] : !rtg.set<!rtg.isa.label>
 # MLIR-NEXT: rtg.label local [[RL1]]
 
-# MLIR-NEXT: rtg.label_decl "L_5"
-# MLIR-NEXT: rtg.label local
-# MLIR-NEXT: rtg.label_decl "L_3"
-# MLIR-NEXT: rtg.label local
+# MLIR-NEXT: rtg.label local [[LBL5]]
+# MLIR-NEXT: rtg.label local [[LBL3]]
 
 # MLIR-NEXT: [[BAG0:%.+]] = rtg.bag_create (%idx2 x [[L0:%.+]], %idx1 x [[L1:%.+]]) : !rtg.isa.label
 # MLIR-NEXT: [[BAG1:%.+]] = rtg.bag_create (%idx1 x [[L2:%.+]]) : !rtg.isa.label
@@ -182,25 +185,25 @@ def test1_args(config):
 # MLIR-NEXT: [[RAND4:%.+]] = rtg.randomize_sequence [[SEQ1]]
 # MLIR-NEXT: rtg.embed_sequence [[RAND4]]
 
-# MLIR-NEXT: rtg.comment "this is a comment"
-
 # MLIR-NEXT: }
 
 # ELABORATED-LABEL: rtg.test @test2_labels
-# ELABORATED-NEXT: [[L0:%.+]] = rtg.label_decl "l0"
+# ELABORATED-DAG: [[L0:%.+]] = rtg.constant #rtg.isa.label<"l0">
+# ELABORATED-DAG: [[L1:%.+]] = rtg.constant #rtg.isa.label<"l1_0">
+# ELABORATED-DAG: [[L2:%.+]] = rtg.constant #rtg.isa.label<"l1_1">
+# ELABORATED-DAG: [[LBL5:%.+]] = rtg.constant #rtg.isa.label<"L_5">
+# ELABORATED-DAG: [[LBL3:%.+]] = rtg.constant #rtg.isa.label<"L_3">
+# ELABORATED-DAG: [[L5:%.+]] = rtg.constant #rtg.isa.label<"s1">
+
 # ELABORATED-NEXT: rtg.label global [[L0]]
-# ELABORATED-NEXT: [[L1:%.+]] = rtg.label_decl "l1_0"
 # ELABORATED-NEXT: rtg.label external [[L1]]
-# ELABORATED-NEXT: [[L2:%.+]] = rtg.label_decl "l1_1"
 # ELABORATED-NEXT: rtg.label local [[L2]]
 
 # ELABORATED-NEXT: rtg.label local [[L0]]
 # ELABORATED-NEXT: rtg.label local [[L2]]
 
-# ELABORATED-NEXT: rtg.label_decl "L_5"
-# ELABORATED-NEXT: rtg.label local
-# ELABORATED-NEXT: rtg.label_decl "L_3"
-# ELABORATED-NEXT: rtg.label local
+# ELABORATED-NEXT: rtg.label local [[LBL5]]
+# ELABORATED-NEXT: rtg.label local [[LBL3]]
 
 # ELABORATED-NEXT: rtg.label local
 # ELABORATED-NEXT: rtg.label local
@@ -209,10 +212,7 @@ def test1_args(config):
 # ELABORATED-NEXT: rtg.label local [[L1]]
 # ELABORATED-NEXT: rtg.label local [[L0]]
 
-# ELABORATED-NEXT: [[L5:%.+]] = rtg.label_decl "s1"
 # ELABORATED-NEXT: rtg.label local [[L5]]
-
-# ELABORATED-NEXT: rtg.comment "this is a comment"
 
 # ELABORATED-NEXT: }
 
@@ -236,8 +236,6 @@ def test1_args(config):
 # ASM-NEXT: l0:
 
 # ASM-NEXT: s1:
-
-# ASM-NEXT: # this is a comment
 
 # ASM: End of test 'test2_labels
 
@@ -265,9 +263,9 @@ def test2_labels(config):
   sub = Integer(1) - Integer(2)
   add = (sub & Integer(4) | Integer(3) ^ Integer(5))
   add += sub
-  l3 = Label.declare(r"L_{{0}}", add)
+  l3 = Label.declare(String("L_") + add.to_string())
   l3.place()
-  l4 = Label.declare(r"L_{{0}}", 3)
+  l4 = Label.declare("L_3")
   l4.place()
 
   bag0 = Bag.create((2, l0), (1, l1))
@@ -286,8 +284,6 @@ def test2_labels(config):
   seq0.randomize(set0)()
 
   seq1()
-
-  embed_comment("this is a comment")
 
 
 # MLIR-LABEL: rtg.test @test3_registers_and_immediates()
@@ -463,7 +459,7 @@ class PythonParams(Config):
 
 
 # MLIR-LABEL: rtg.test @test92_python_params
-# MLIR-NEXT: [[LBL:%.+]] = rtg.label_decl "python_64"
+# MLIR-NEXT: [[LBL:%.+]] = rtg.constant #rtg.isa.label<"python_64">
 # MLIR-NEXT: rtg.label local [[LBL]]
 
 
@@ -504,7 +500,7 @@ def seq0(set: Set):
 
 
 # MLIR-LABEL: rtg.sequence @seq1
-# MLIR-NEXT: [[LABEL:%.+]] = rtg.label_decl "s1"
+# MLIR-NEXT: [[LABEL:%.+]] = rtg.constant #rtg.isa.label<"s1">
 # MLIR-NEXT: rtg.label local [[LABEL]]
 # MLIR-NEXT: }
 

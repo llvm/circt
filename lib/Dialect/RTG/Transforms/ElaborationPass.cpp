@@ -100,32 +100,15 @@ struct SymbolicComputationWithIdentityStorage;
 struct SymbolicComputationWithIdentityValue;
 struct SymbolicComputationStorage;
 
-/// Simple wrapper around a 'StringAttr' such that we know to materialize it as
-/// a label declaration instead of calling the builtin dialect constant
-/// materializer.
-struct LabelValue {
-  LabelValue(StringAttr name) : name(name) {}
-
-  bool operator==(const LabelValue &other) const { return name == other.name; }
-
-  /// The label name.
-  StringAttr name;
-};
-
 /// The abstract base class for elaborated values.
 using ElaboratorValue =
     std::variant<TypedAttr, BagStorage *, bool, size_t, SequenceStorage *,
                  RandomizedSequenceStorage *, InterleavedSequenceStorage *,
                  SetStorage *, VirtualRegisterStorage *, UniqueLabelStorage *,
-                 LabelValue, ArrayStorage *, TupleStorage *, MemoryStorage *,
+                 ArrayStorage *, TupleStorage *, MemoryStorage *,
                  MemoryBlockStorage *, SymbolicComputationWithIdentityStorage *,
                  SymbolicComputationWithIdentityValue *,
                  SymbolicComputationStorage *>;
-
-// NOLINTNEXTLINE(readability-identifier-naming)
-llvm::hash_code hash_value(const LabelValue &val) {
-  return llvm::hash_value(val.name);
-}
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const ElaboratorValue &val) {
@@ -149,22 +132,6 @@ struct DenseMapInfo<bool> {
   static unsigned getHashValue(const bool &val) { return val * 37U; }
 
   static bool isEqual(const bool &lhs, const bool &rhs) { return lhs == rhs; }
-};
-template <>
-struct DenseMapInfo<LabelValue> {
-  static inline LabelValue getEmptyKey() {
-    return DenseMapInfo<StringAttr>::getEmptyKey();
-  }
-  static inline LabelValue getTombstoneKey() {
-    return DenseMapInfo<StringAttr>::getTombstoneKey();
-  }
-  static unsigned getHashValue(const LabelValue &val) {
-    return hash_value(val);
-  }
-
-  static bool isEqual(const LabelValue &lhs, const LabelValue &rhs) {
-    return lhs == rhs;
-  }
 };
 
 } // namespace llvm
@@ -451,14 +418,14 @@ struct VirtualRegisterStorage : IdentityValue {
 };
 
 struct UniqueLabelStorage : IdentityValue {
-  UniqueLabelStorage(StringAttr name)
-      : IdentityValue(LabelType::get(name.getContext())), name(name) {}
+  UniqueLabelStorage(MLIRContext *context, const ElaboratorValue &name)
+      : IdentityValue(LabelType::get(context)), name(name) {}
 
   // NOTE: we don't need an 'isEqual' function and 'hashcode' here because
   // VirtualRegisters are never internalized.
 
   /// The label name. For unique labels, this is just the prefix.
-  const StringAttr name;
+  const ElaboratorValue name;
 };
 
 /// Storage object for '!rtg.isa.memoryblock`-typed values.
@@ -692,10 +659,6 @@ static void print(const VirtualRegisterStorage *val, llvm::raw_ostream &os) {
 
 static void print(const UniqueLabelStorage *val, llvm::raw_ostream &os) {
   os << "<unique-label " << val << " " << val->name << ">";
-}
-
-static void print(const LabelValue &val, llvm::raw_ostream &os) {
-  os << "<label " << val.name << ">";
 }
 
 static void print(const TupleStorage *val, llvm::raw_ostream &os) {
@@ -1109,15 +1072,10 @@ private:
 
   Value visit(UniqueLabelStorage *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res =
-        LabelUniqueDeclOp::create(builder, loc, val->name, ValueRange());
-    materializedValues[val] = res;
-    return res;
-  }
-
-  Value visit(const LabelValue &val, Location loc,
-              function_ref<InFlightDiagnostic()> emitError) {
-    Value res = LabelDeclOp::create(builder, loc, val.name, ValueRange());
+    auto materialized = materialize(val->name, loc, emitError);
+    if (!materialized)
+      return {};
+    Value res = LabelUniqueDeclOp::create(builder, loc, materialized);
     materializedValues[val] = res;
     return res;
   }
@@ -1597,18 +1555,9 @@ public:
     return DeletionKind::Delete;
   }
 
-  FailureOr<DeletionKind> visitOp(LabelDeclOp op) {
-    // Call the folder to fold the format string.
-    attemptConcreteCase(op);
-    state[op.getLabel()] = LabelValue(op.getFormatStringAttr());
-    return DeletionKind::Delete;
-  }
-
   FailureOr<DeletionKind> visitOp(LabelUniqueDeclOp op) {
-    // Call the folder to fold the format string.
-    attemptConcreteCase(op);
     auto *val = sharedState.internalizer.create<UniqueLabelStorage>(
-        op.getFormatStringAttr());
+        op->getContext(), state.at(op.getNamePrefix()));
     state[op.getLabel()] = val;
     materializer.registerIdentityValue(val);
     return DeletionKind::Delete;

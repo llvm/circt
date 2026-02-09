@@ -2,6 +2,9 @@
 
 // CHECK-LABEL: @constants
 rtg.test @constants() {
+  // CHECK-NEXT: [[STR:%.+]] = rtg.constant "hello" : !rtg.string
+  %str = rtg.constant "hello" : !rtg.string
+
   // CHECK-NEXT: rtg.constant #rtg.isa.immediate<2, -1> : !rtg.isa.immediate<2>
   %0 = rtg.constant #rtg.isa.immediate<2, -1>
 
@@ -10,14 +13,14 @@ rtg.test @constants() {
   %1 = index.constant 5
   %2 = rtg.isa.int_to_immediate %1 : !rtg.isa.immediate<32>
 
-  // CHECK-NEXT: rtg.comment "this is a comment"
-  rtg.comment "this is a comment"
+  // CHECK-NEXT: rtg.comment [[STR]]
+  rtg.comment %str
 
   // CHECK-NEXT: rtg.isa.space [[V0]]
   rtg.isa.space %1
 
-  // CHECK-NEXT: rtg.isa.string_data "hello world"
-  rtg.isa.string_data "hello world"
+  // CHECK-NEXT: rtg.isa.string_data [[STR]]
+  rtg.isa.string_data %str
 
   // CHECK-NEXT: rtg.isa.segment data {
   // CHECK-NEXT: }
@@ -52,10 +55,14 @@ rtg.sequence @ranomizedSequenceType(%seq: !rtg.randomized_sequence) {}
 // CHECK-LABEL: rtg.sequence @seq
 rtg.sequence @seq0() {
   %arg = arith.constant 1 : index
-  // CHECK: [[LBL0:%.*]] = rtg.label_decl "label_string_{0}_{1}", %{{.*}}, %{{.*}}
-  %0 = rtg.label_decl "label_string_{0}_{1}", %arg, %arg
-  // CHECK: [[LBL1:%.+]] = rtg.label_unique_decl "label_string"
-  %1 = rtg.label_unique_decl "label_string"
+  // CHECK: [[LBL0:%.*]] = rtg.constant #rtg.isa.label<"label_string">
+  %0 = rtg.constant #rtg.isa.label<"label_string">
+
+  // CHECK: [[PREFIX:%.+]] = rtg.constant "label_string" : !rtg.string 
+  // CHECK: [[LBL1:%.+]] = rtg.label_unique_decl [[PREFIX]]
+  %prefix = rtg.constant "label_string" : !rtg.string
+  %1 = rtg.label_unique_decl %prefix
+
   // CHECK: rtg.label local [[LBL0]]
   rtg.label local %0
   // CHECK: rtg.label global [[LBL1]]
@@ -281,10 +288,12 @@ rtg.test @immediateOps() {
 
 // CHECK-LABEL: rtg.test @testReportOps
 rtg.test @testReportOps() {
+  // CHECK-NEXT: [[STR:%.+]] = rtg.constant "hello" : !rtg.string
+  %str = rtg.constant "hello" : !rtg.string
   // CHECK-NEXT: rtg.test.success
   rtg.test.success
-  // CHECK-NEXT: rtg.test.failure "error message"
-  rtg.test.failure "error message"
+  // CHECK-NEXT: rtg.test.failure [[STR]]
+  rtg.test.failure %str
 }
 
 // CHECK-LABEL: rtg.test @testConstraints
@@ -293,4 +302,19 @@ rtg.test @testConstraints() {
   // CHECK-NEXT: rtg.constraint [[V0]]
   %0 = index.bool.constant 1
   rtg.constraint %0
+}
+
+// CHECK-LABEL: rtg.test @strings
+rtg.test @strings() {
+  %1 = rtg.constant 23 : index
+  // CHECK: [[V3:%.+]] = rtg.int_format {{%.+}}
+  rtg.int_format %1
+
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant "hello" : !rtg.string
+  %0 = rtg.constant "hello" : !rtg.string
+  // CHECK-NEXT: rtg.string_concat [[V0]], [[V0]]
+  %5 = rtg.string_concat %0, %0
+
+  // CHECK-NEXT: rtg.string_concat
+  rtg.string_concat
 }

@@ -296,7 +296,8 @@ struct AssertionExprVisitor {
 } // namespace
 
 FailureOr<Value> Context::convertAssertionSystemCallArity1(
-    const slang::ast::SystemSubroutine &subroutine, Location loc, Value value) {
+    const slang::ast::SystemSubroutine &subroutine, Location loc, Value value,
+    Type originalType) {
 
   auto systemCallRes =
       llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
@@ -349,8 +350,14 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                 })
           .Case("$past",
                 [&]() -> Value {
-                  auto past =
-                      ltl::PastOp::create(builder, loc, value, 1).getResult();
+                  Value past = ltl::PastOp::create(builder, loc, value, 1);
+                  // Cast back to Moore integers so Moore ops can use the result
+                  // if needed
+                  if (auto ty = dyn_cast<moore::IntType>(originalType)) {
+                    past = moore::FromBuiltinIntOp::create(builder, loc, past);
+                    if (ty.getDomain() == Domain::FourValued)
+                      past = moore::IntToLogicOp::create(builder, loc, past);
+                  }
                   return past;
                 })
           .Default([&]() -> Value { return {}; });
@@ -367,11 +374,13 @@ Value Context::convertAssertionCallExpression(
   FailureOr<Value> result;
   Value value;
   Value intVal;
+  Type originalType;
   moore::IntType valTy;
 
   switch (args.size()) {
   case (1):
     value = this->convertRvalueExpression(*args[0]);
+    originalType = value.getType();
     valTy = dyn_cast<moore::IntType>(value.getType());
     if (!valTy) {
       mlir::emitError(loc) << "expected integer argument for system call `"
@@ -396,7 +405,8 @@ Value Context::convertAssertionCallExpression(
     intVal = builder.createOrFold<moore::ToBuiltinIntOp>(loc, value);
     if (!intVal)
       return {};
-    result = this->convertAssertionSystemCallArity1(subroutine, loc, intVal);
+    result = this->convertAssertionSystemCallArity1(subroutine, loc, intVal,
+                                                    originalType);
     break;
 
   default:

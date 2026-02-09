@@ -41,24 +41,49 @@ struct LowerUniqueLabelsPass
 };
 } // namespace
 
+static StringAttr getLabelName(LabelUniqueDeclOp op) {
+  if (auto constOp = op.getNamePrefix().getDefiningOp<ConstantOp>())
+    return dyn_cast<StringAttr>(constOp.getValue());
+
+  op->emitError("label_unique_decl name prefix must be a constant string");
+  return {};
+}
+
 void LowerUniqueLabelsPass::runOnOperation() {
   Namespace labelNames;
 
   // Collect all the label names in a first iteration.
-  getOperation()->walk([&](Operation *op) {
-    if (auto labelDecl = dyn_cast<LabelDeclOp>(op))
-      labelNames.add(labelDecl.getFormatString());
-    else if (auto labelDecl = dyn_cast<LabelUniqueDeclOp>(op))
-      labelNames.add(labelDecl.getFormatString());
+  auto result = getOperation()->walk([&](Operation *op) -> WalkResult {
+    if (isa<StringToLabelOp>(op))
+      return op->emitError(
+          "string_to_label operations must be elaborated before "
+          "lowering unique labels");
+
+    if (auto constOp = dyn_cast<ConstantOp>(op)) {
+      if (auto labelAttr = dyn_cast<LabelAttr>(constOp.getValue()))
+        labelNames.add(labelAttr.getName());
+    } else if (auto labelDecl = dyn_cast<LabelUniqueDeclOp>(op)) {
+      auto res = getLabelName(labelDecl);
+      if (!res)
+        return WalkResult::interrupt();
+      labelNames.add(res);
+    }
+
+    return WalkResult::advance();
   });
+
+  if (result.wasInterrupted())
+    return signalPassFailure();
 
   // Lower the unique labels in a second iteration.
   getOperation()->walk([&](LabelUniqueDeclOp op) {
-    // Convert 'rtg.label_unique_decl' to 'rtg.label_decl' by choosing a unique
-    // name based on the set of names we collected during elaboration.
+    // Convert 'rtg.label_unique_decl' to 'rtg.constant <labelAttr>' by
+    // choosing a unique name based on the set of names we collected during
+    // elaboration.
     IRRewriter rewriter(op);
-    auto newName = labelNames.newName(op.getFormatString());
-    rewriter.replaceOpWithNewOp<LabelDeclOp>(op, newName, ValueRange());
+    auto newName = labelNames.newName(getLabelName(op).getValue());
+    rewriter.replaceOpWithNewOp<ConstantOp>(
+        op, LabelAttr::get(rewriter.getContext(), newName));
     ++numLabelsLowered;
   });
 }

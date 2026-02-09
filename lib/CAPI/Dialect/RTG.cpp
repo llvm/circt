@@ -200,6 +200,15 @@ uint32_t rtgMemoryBlockTypeGetAddressWidth(MlirType type) {
   return cast<MemoryBlockType>(unwrap(type)).getAddressWidth();
 }
 
+// StringType
+//===----------------------------------------------------------------------===//
+
+bool rtgTypeIsAString(MlirType type) { return isa<StringType>(unwrap(type)); }
+
+MlirType rtgStringTypeGet(MlirContext ctxt) {
+  return wrap(StringType::get(unwrap(ctxt)));
+}
+
 //===----------------------------------------------------------------------===//
 // Attribute API.
 //===----------------------------------------------------------------------===//
@@ -307,6 +316,21 @@ MlirAttribute rtgVirtualRegisterConfigAttrGetRegister(MlirAttribute attr,
   auto allowedRegs =
       cast<VirtualRegisterConfigAttr>(unwrap(attr)).getAllowedRegs();
   return wrap(allowedRegs[index]);
+}
+
+// LabelAttr
+//===----------------------------------------------------------------------===//
+
+bool rtgAttrIsALabel(MlirAttribute attr) {
+  return isa<LabelAttr>(unwrap(attr));
+}
+
+MlirAttribute rtgLabelAttrGet(MlirContext ctx, MlirStringRef name) {
+  return wrap(LabelAttr::get(unwrap(ctx), unwrap(name)));
+}
+
+MlirStringRef rtgLabelAttrGetName(MlirAttribute attr) {
+  return wrap(cast<LabelAttr>(unwrap(attr)).getName());
 }
 
 //===----------------------------------------------------------------------===//

@@ -2751,6 +2751,11 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                 [&]() -> Value {
                   return moore::RandomBIOp::create(builder, loc, value);
                 })
+          .Case("$urandom_range",
+                [&]() -> Value {
+                  return moore::UrandomrangeBIOp::create(builder, loc, value,
+                                                         nullptr);
+                })
           .Case("$realtobits",
                 [&]() -> Value {
                   return moore::RealtobitsBIOp::create(builder, loc, value);
@@ -2828,6 +2833,11 @@ Context::convertSystemCallArity2(const slang::ast::SystemSubroutine &subroutine,
                     return moore::QueuePushFrontOp::create(builder, loc, value1,
                                                            value2);
                   return {};
+                })
+          .Case("$urandom_range",
+                [&]() -> Value {
+                  return moore::UrandomrangeBIOp::create(builder, loc, value1,
+                                                         value2);
                 })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();

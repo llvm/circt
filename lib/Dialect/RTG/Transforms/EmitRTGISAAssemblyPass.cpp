@@ -72,13 +72,13 @@ public:
           return op.emitError("implicit constraint not materialized");
       }
 
-      auto res = TypeSwitch<Operation *, LogicalResult>(&op)
-                     .Case<InstructionOpInterface, LabelDeclOp, LabelOp,
-                           CommentOp, SpaceOp, StringDataOp, SegmentOp>(
-                         [&](auto op) { return emit(op); })
-                     .Default([](auto op) {
-                       return op->emitError("emitter unknown RTG operation");
-                     });
+      auto res =
+          TypeSwitch<Operation *, LogicalResult>(&op)
+              .Case<InstructionOpInterface, LabelOp, CommentOp, SpaceOp,
+                    StringDataOp, SegmentOp>([&](auto op) { return emit(op); })
+              .Default([](auto op) {
+                return op->emitError("emitter unknown RTG operation");
+              });
 
       if (failed(res))
         return failure();
@@ -125,17 +125,8 @@ private:
     return success();
   }
 
-  LogicalResult emit(LabelDeclOp op) {
-    if (!op.getArgs().empty())
-      return op->emitError(
-          "label arguments must be elaborated before emission");
-
-    state[op.getLabel()] = op.getFormatStringAttr();
-    return success();
-  }
-
   LogicalResult emit(LabelOp op) {
-    auto labelStr = cast<StringAttr>(state[op.getLabel()]).getValue();
+    auto labelStr = cast<LabelAttr>(state[op.getLabel()]).getName();
     if (op.getVisibility() == LabelVisibility::external) {
       os << ".extern " << labelStr << "\n";
       return success();
@@ -149,7 +140,8 @@ private:
   }
 
   LogicalResult emit(CommentOp op) {
-    os << llvm::indent(4) << "# " << op.getComment() << "\n";
+    os << llvm::indent(4) << "# "
+       << cast<StringAttr>(state[op.getComment()]).getValue() << "\n";
     return success();
   }
 
@@ -163,7 +155,7 @@ private:
     os << llvm::indent(4) << ".asciz \"";
     // NOTE: llvm::printEscapedString does not work because assemblers do not
     // support the hex escapes (e.g., \0a instead of \n)
-    for (auto c : op.getData()) {
+    for (auto c : cast<StringAttr>(state[op.getData()]).getValue()) {
       switch (c) {
       case '\n':
         os << "\\n";

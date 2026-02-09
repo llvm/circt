@@ -8,6 +8,7 @@ from .base import ir
 from .core import Value, Type
 from .index import index
 from .rtg import rtg
+from .strings import String
 
 from typing import Union
 
@@ -72,6 +73,13 @@ class Integer(Value):
 
   def __ge__(self, other: Integer) -> Bool:
     return index.CmpOp("uge", self._get_ssa_value(), other._get_ssa_value())
+
+  def to_string(self) -> String:
+    """
+    Format this integer as a string in unsigned decimal.
+    """
+
+    return rtg.IntFormatOp(self)
 
   def get_type(self) -> Type:
     return IntegerType()
