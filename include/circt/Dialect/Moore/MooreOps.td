@@ -1808,7 +1808,7 @@ def QueueInsertOp : MooreOp<"insert", [
 }
 
 def QueueDeleteOp : MooreOp<"delete"> {
-  let summary = "Delete an element from an arbitrary position within the queue";
+  let summary = "Delete an element from an arbitrary position within a queue";
   let description = [{
       See IEEE 1800-2023 § 7.10.2.3 "Delete()", specifically the case where an index parameter is supplied.
   }];
