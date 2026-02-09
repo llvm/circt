@@ -56,8 +56,8 @@ cl::list<std::string> assign{
     "assign",
     cl::desc(
         "connect one of the previously declared domains to a port by its "
-        "numeric id, e.g., to attach the second domain to the first port and "
-        "the first domain to the second port use '--assign 1 --assign 0'.  "
+        "numeric id, e.g., to attach the second domain to the first domain and "
+        "the first domain to the second domain use '--assign 1 --assign 0'.  "
         "Any unassigned parameters will automatically be set to unknown."),
     cl::Prefix, cl::cat(cat)};
 cl::opt<std::string> moduleName{
@@ -196,27 +196,6 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
     llvm::errs() << "unable to find class '" << className.getValue() << "'\n";
     return failure();
   }
-  ArrayRef<BlockArgument> formalParams = classOp.getBodyBlock()->getArguments();
-
-  // Build a map from domain type (ClassType) to the list of domain objects
-  // of that type. This allows us to assign domains by type rather than by
-  // position.
-  llvm::MapVector<om::ClassType, SmallVector<om::evaluator::EvaluatorValuePtr>>
-      domainsByType;
-  for (auto &domainObj : domainObjects) {
-    auto *objValue = cast<om::evaluator::ObjectValue>(domainObj.get());
-    om::ClassType domainType = objValue->getObjectType();
-    domainsByType[domainType].push_back(domainObj);
-  }
-
-  // Build a map from domain type to the number of parameters of that type
-  // that we need to assign. This is used to validate that the user has
-  // provided enough domain assignments.
-  llvm::MapVector<om::ClassType, size_t> paramCountByType;
-  for (size_t i = 1; i < formalParams.size(); ++i) {
-    if (auto classType = dyn_cast<om::ClassType>(formalParams[i].getType()))
-      paramCountByType[classType]++;
-  }
 
   // Parse the -assign options to build a list of domain indices for each
   // domain type.
@@ -243,11 +222,20 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
     assignmentsByType[domainType].push_back(domainIndex);
   }
 
+  // Build a map from domain type to the number of parameters of that type
+  // that we need to assign. This is used to validate that the user has
+  // provided enough domain assignments.
+  llvm::MapVector<om::ClassType, size_t> paramCountByType;
+  ArrayRef<BlockArgument> formalParams = classOp.getBodyBlock()->getArguments();
+  for (size_t i = 1; i < formalParams.size(); ++i)
+    if (auto classType = dyn_cast<om::ClassType>(formalParams[i].getType()))
+      ++paramCountByType[classType];
+
   // Validate that for each domain type, the number of assignments matches
   // the number of parameters of that type.
   for (auto &[domainType, numParams] : paramCountByType) {
     size_t numAssignments = 0;
-    auto it = assignmentsByType.find(domainType);
+    auto *it = assignmentsByType.find(domainType);
     if (it != assignmentsByType.end())
       numAssignments = it->second.size();
 
@@ -277,16 +265,13 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
     // Check if this parameter is a domain type (ClassType)
     if (auto classType = dyn_cast<om::ClassType>(paramType)) {
       // Check if we have assignments for this domain type
-      auto it = assignmentsByType.find(classType);
+      auto *it = assignmentsByType.find(classType);
       if (it != assignmentsByType.end()) {
-        // Get the next assignment for this domain type
+        // Get the next assignment for this domain type.
         size_t &nextIdx = nextAssignmentIndex[classType];
-        if (nextIdx < it->second.size()) {
-          size_t domainIndex = it->second[nextIdx];
-          parameters.push_back(domainObjects[domainIndex]);
-          nextIdx++;
-          continue;
-        }
+        size_t domainIndex = it->second[nextIdx++];
+        parameters.push_back(domainObjects[domainIndex]);
+        continue;
       }
     }
 
