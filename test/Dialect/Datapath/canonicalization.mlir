@@ -50,11 +50,18 @@ hw.module @constant_fold_compress(in %a : i4, in %b : i4, in %c : i4,
 
 // CHECK-LABEL: @constant_fold_compress_passthrough
 hw.module @constant_fold_compress_passthrough(in %a : i4, in %b : i4, in %c : i4,
-                                  out sum0 : i4, out sum1 : i4, out sum2 : i4) {
+                                  out sum0 : i4, out sum1 : i4, out sum2 : i4, 
+                                  out sum3 : i4, out sum4 : i4) {
   %c0_i4 = hw.constant 0 : i4
   %0:3 = datapath.compress %a, %b, %c0_i4, %c : i4 [4 -> 3]
-  // CHECK-NEXT: hw.output %a, %b, %c : i4, i4, i4
-  hw.output %a, %b, %c : i4, i4, i4
+
+  %c1_i4 = hw.constant 1 : i4
+  %c2_i4 = hw.constant 2 : i4
+  %1:2 = datapath.compress %a, %c1_i4, %c2_i4 : i4 [3 -> 2]
+  
+  // CHECK-NEXT: %c3_i4 = hw.constant 3 : i4
+  // CHECK-NEXT: hw.output %a, %b, %c, %a, %c3_i4 : i4, i4, i4, i4, i4
+  hw.output %0#0, %0#1, %0#2, %1#0, %1#1 : i4, i4, i4, i4, i4
 }
 
 // CHECK-LABEL: @sext_compress
