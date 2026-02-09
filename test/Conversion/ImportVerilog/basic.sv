@@ -3976,7 +3976,7 @@ endmodule
 // CHECK:      [[QR:%.+]] = moore.read [[Q]] : <queue<i32, 0>>
 // CHECK:      [[ZERO:%.+]] = moore.constant 0 : i32
 // CHECK:      [[ONE:%.+]] = moore.constant 1 : i32
-// CHECK:      [[INS:%.+]] = moore.insert [[ONE]] into [[QR]] at index [[ZERO]] : <i32, 0>
+// CHECK:      [[INS:%.+]] = moore.insert [[ONE]] into [[QR]] at [[ZERO]] : <i32, 0>
 // CHECK:      moore.return
 // CHECK:    }
 // CHECK:    moore.output
