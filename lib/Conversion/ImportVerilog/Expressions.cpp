@@ -1604,7 +1604,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     auto args = expr.arguments();
 
     FailureOr<Value> result = Value{};
-    Value value, value2, value3;
+    Value value, value2;
 
     // $sformatf() and $sformat look like system tasks, but we handle string
     // formatting differently from expression evaluation, so handle them
