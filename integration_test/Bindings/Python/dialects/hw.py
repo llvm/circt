@@ -53,6 +53,22 @@ with Context() as ctx, Location.unknown():
       # CHECK: hw.array_get [[ARRAY2]][%c0_i0] : !hw.array<1xi32>
       hw.ArrayGetOp.create(array2, 0)
 
+      array_type_alias = hw.TypeAliasType.get("arrayScope", "arrayAlias",
+                                              hw.ArrayType.get(i32, 1))
+      typed_array = hw.ArrayCreateOp.create([constI32], array_type_alias)
+      # CHECK: !hw.typealias<@arrayScope::@arrayAlias, !hw.array<1xi32>>
+      print(typed_array.type)
+
+      mismatch_type = TypeAttr.get(hw.ArrayType.get(i1, 1))
+      try:
+        hw.ArrayCreateOp.create([constI32], mismatch_type)
+      except TypeError as e:
+        print("ArrayCreateOp error:", e)
+      # CHECK: ArrayCreateOp error: result type:
+      # CHECK: !hw.array<1xi1>
+      # CHECK: must match generated array type:
+      # CHECK: !hw.array<1xi32>
+
       # CHECK: [[STRUCT1:%.+]] = hw.struct_create (%c1_i32, %true) : !hw.struct<a: i32, b: i1>
       struct1 = hw.StructCreateOp.create([('a', constI32), ('b', constI1)])
 

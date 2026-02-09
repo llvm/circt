@@ -339,9 +339,11 @@ class Array(Type):
                        f"{len(obj)} vs {self.size}")
     elemty = self.element_type
     list_of_vals = list(map(lambda x: elemty._from_obj_or_sig(x), obj))
+    result_type = self if alias is None else alias
     with get_user_loc():
       # CIRCT's ArrayCreate op takes the array in reverse order.
-      return hw.ArrayCreateOp(reversed(list_of_vals))
+      return hw.ArrayCreateOp(reversed(list_of_vals),
+                              result_type=result_type._type)
 
 
 class StructType(Type):
