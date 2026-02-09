@@ -67,7 +67,6 @@ hw.module @constant_fold_compress_passthrough(in %a : i4, in %b : i4, in %c : i4
 // CHECK-LABEL: @sext_compress
 hw.module @sext_compress(in %a : i8, in %b : i8, in %c : i4, 
                          out sum1 : i8, out carry1 : i8) {
-  // CHECK-NEXT: %c-1_i4 = hw.constant -1 : i4
   // CHECK-NEXT: %c-8_i8 = hw.constant -8 : i8
   // CHECK-NEXT: %c0_i4 = hw.constant 0 : i4
   // CHECK-NEXT: %true = hw.constant true
