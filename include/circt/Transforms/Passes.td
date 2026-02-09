@@ -57,7 +57,7 @@ def MapArithToCombPass : Pass<"map-arith-to-comb"> {
   let summary = "Map arith ops to combinational logic";
   let description = [{
     A pass which does a simple `arith` to `comb` mapping wherever possible.
-    This pass will not convert:
+    This pass will not convert:  
     * floating point operations
     * operations using `vector`-typed values
 
@@ -72,7 +72,7 @@ def MapArithToCombPass : Pass<"map-arith-to-comb"> {
            "Enable best effort lowering of operations"
            "(eg, existing arith operations that have no lowering stay as is)">
   ];
-
+  
   let constructor = "circt::createMapArithToCombPass(/*enableBestEffortLowering=*/false)";
   let dependentDialects = ["circt::hw::HWDialect, mlir::arith::ArithDialect, circt::comb::CombDialect"];
 }
