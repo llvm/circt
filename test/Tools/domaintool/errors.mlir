@@ -52,11 +52,11 @@ om.class @OneClock_Class(
   om.class.fields %0 : !om.class.type<@ClockDomain_out>
 }
 
-// TOO_MANY_ASSIGNS: error: class has 1 parameter(s) of type 'ClockDomain' but only assigned 2
+// TOO_MANY_ASSIGNS: error: class has 1 parameter(s) of type 'ClockDomain' but assigned 2
 
 // -----
 
-// Test 2: Not enough assignments (class has 2 ClockDomain parameters, but only 1 assigned)
+// Test 2: Not enough assignments (class has 2 ClockDomain parameters, but 1 assigned)
 // RUN: not domaintool --module TwoClocks --domain ClockDomain,A,10 --assign 0 %s 2>&1 | FileCheck %s --check-prefix=NOT_ENOUGH_ASSIGNS
 
 om.class @TwoClocks_Class(
@@ -83,14 +83,14 @@ om.class @TwoClocks_Class(
   om.class.fields %0, %1 : !om.class.type<@ClockDomain_out>, !om.class.type<@ClockDomain_out>
 }
 
-// NOT_ENOUGH_ASSIGNS: error: class has 2 parameter(s) of type 'ClockDomain' but only assigned 1
+// NOT_ENOUGH_ASSIGNS: error: class has 2 parameter(s) of type 'ClockDomain' but assigned 1
 
 // -----
 
 // Test 4: No assignments (class has 1 ClockDomain parameter, but no assignments)
 // RUN: not domaintool --module OneClock --domain ClockDomain,A,10 %s 2>&1 | FileCheck %s --check-prefix=NO_ASSIGNS
 
-// NO_ASSIGNS: error: class has 1 parameter(s) of type 'ClockDomain' but only assigned 0
+// NO_ASSIGNS: error: class has 1 parameter(s) of type 'ClockDomain' but assigned 0
 
 // -----
 
@@ -105,4 +105,3 @@ om.class @TwoClocks_Class(
 // RUN: not domaintool --module OneClock --domain ClockDomain,A,10 --assign 5 %s 2>&1 | FileCheck %s --check-prefix=OUT_OF_RANGE
 
 // OUT_OF_RANGE: unable to assign domain '5' because it is larger than the number of domains provided, '1'
-

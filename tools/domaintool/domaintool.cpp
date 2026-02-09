@@ -242,8 +242,8 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
     if (numAssignments != numParams) {
       llvm::errs() << "error: class has " << numParams
                    << " parameter(s) of type '"
-                   << domainType.getClassName().getValue()
-                   << "' but only assigned " << numAssignments << "\n";
+                   << domainType.getClassName().getValue() << "' but assigned "
+                   << numAssignments << "\n";
       return failure();
     }
   }
@@ -254,11 +254,10 @@ LogicalResult DomainTool::processSourceMgr(llvm::SourceMgr &sourceMgr) {
   om::evaluator::BasePathValue emptyPath(&context);
   parameters.push_back(
       std::make_shared<om::evaluator::BasePathValue>(emptyPath));
-  auto unknownLoc = UnknownLoc::get(&context);
 
   // Track the next assignment index for each domain type
+  auto unknownLoc = UnknownLoc::get(&context);
   llvm::DenseMap<om::ClassType, size_t> nextAssignmentIndex;
-
   for (size_t i = 1; i < formalParams.size(); ++i) {
     Type paramType = formalParams[i].getType();
 
