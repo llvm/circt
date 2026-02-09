@@ -341,7 +341,9 @@ class Array(Type):
     list_of_vals = list(map(lambda x: elemty._from_obj_or_sig(x), obj))
     with get_user_loc():
       # CIRCT's ArrayCreate op takes the array in reverse order.
-      return hw.ArrayCreateOp(reversed(list_of_vals))
+      return hw.ArrayCreateOp(
+          list(reversed(list_of_vals)),
+          result_type=None if alias is None else alias._type)
 
 
 class StructType(Type):
