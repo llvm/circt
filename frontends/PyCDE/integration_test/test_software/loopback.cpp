@@ -96,8 +96,7 @@ static void runOddStructFunc(Accelerator *accel) {
     throw std::runtime_error("Odd struct func result mismatch");
 
   std::cout << "odd struct func ok: a=" << res->a << " b=" << (int)res->b
-            << " p=" << (int)res->inner.p << " q=" << (int)res->inner.q
-            << "\n";
+            << " p=" << (int)res->inner.p << " q=" << (int)res->inner.q << "\n";
 }
 
 static void runArrayFunc(Accelerator *accel) {

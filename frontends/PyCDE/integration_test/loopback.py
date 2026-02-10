@@ -139,9 +139,7 @@ class LoopbackOddStruct(Module):
     inner = arg_data["inner"]
     p_val = (inner["p"] + UInt(8)(5)).as_uint(8)
     q_val = (inner["q"] + SInt(8)(2)).as_sint(8)
-    result = OddStruct(a=a_val,
-               b=b_val,
-               inner=OddInner(p=p_val, q=q_val))
+    result = OddStruct(a=a_val, b=b_val, inner=OddInner(p=p_val, q=q_val))
     result_chan, result_ready = Channel(OddStruct).wrap(result, valid)
     ready.assign(result_ready)
     result_wire.assign(result_chan)
