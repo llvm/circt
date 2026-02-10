@@ -61,7 +61,7 @@ class ESIType:
     """Does this type support host communication via Python? Returns either
     '(True, None)' if it is, or '(False, reason)' if it is not."""
 
-    if self.bit_width % 8 != 0:
+    if self.bit_width >= 0 and self.bit_width % 8 != 0:
       return (False, "runtime only supports types with multiple of 8 bits")
     return (True, None)
 
@@ -121,6 +121,28 @@ class VoidType(ESIType):
 
 
 __esi_mapping[cpp.VoidType] = VoidType
+
+
+class AnyType(ESIType):
+
+  def __init__(self, id: str):
+    self._init_from_cpp(cpp.AnyType(id))
+
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
+    return (False, "any type is not supported for host communication")
+
+  @property
+  def bit_width(self) -> int:
+    return -1
+
+  def serialize(self, obj) -> bytearray:
+    raise ValueError("any type cannot be serialized")
+
+  def deserialize(self, data: bytearray) -> Tuple[object, bytearray]:
+    raise ValueError("any type cannot be deserialized")
+
+
+__esi_mapping[cpp.AnyType] = AnyType
 
 
 class BitsType(ESIType):
@@ -326,6 +348,36 @@ class ArrayType(ESIType):
 
 
 __esi_mapping[cpp.ArrayType] = ArrayType
+
+
+class TypeAlias(ESIType):
+
+  def __init__(self, id: str, name: str, inner_type: "ESIType"):
+    self._init_from_cpp(cpp.TypeAliasType(id, name, inner_type.cpp_type))
+
+  def _init_from_cpp(self, cpp_type: cpp.TypeAliasType):
+    super()._init_from_cpp(cpp_type)
+    self.name = cpp_type.name
+    self.inner_type = _get_esi_type(cpp_type.inner)
+
+  @property
+  def bit_width(self) -> int:
+    return self.inner_type.bit_width
+
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
+    return self.inner_type.is_valid(obj)
+
+  def serialize(self, obj) -> bytearray:
+    return self.inner_type.serialize(obj)
+
+  def deserialize(self, data: bytearray) -> Tuple[object, bytearray]:
+    return self.inner_type.deserialize(data)
+
+  def __str__(self) -> str:
+    return self.name
+
+
+__esi_mapping[cpp.TypeAliasType] = TypeAlias
 
 
 class Port:
