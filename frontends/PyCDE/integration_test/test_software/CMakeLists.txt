@@ -5,13 +5,14 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Generated headers from esiaccel.codegen live under this directory.
-option(LOOPBACK_GENERATED_DIR "Generated header directory")
+set(LOOPBACK_GENERATED_DIR "" CACHE PATH "Generated header directory")
 if (NOT LOOPBACK_GENERATED_DIR)
   message(FATAL_ERROR "LOOPBACK_GENERATED_DIR must be set")
 endif()
 
 # Optional hint roots to help locate the ESI runtime headers and libraries.
-option(ESI_RUNTIME_ROOT "ESI runtime build/install root" "$ENV{ESI_RUNTIME_ROOT}")
+set(ESI_RUNTIME_ROOT "$ENV{ESI_RUNTIME_ROOT}" CACHE PATH
+  "ESI runtime build/install root")
 if (NOT ESI_RUNTIME_ROOT)
   message(FATAL_ERROR "ESI_RUNTIME_ROOT must be set or available in the environment")
 endif()
@@ -84,14 +85,18 @@ find_path(CLI11_INCLUDE_DIR
   PATH_SUFFIXES _deps/cli11_proj-src/include)
 
 if (NOT CLI11_INCLUDE_DIR)
-  include(FetchContent)
-  FetchContent_Declare(
-    cli11_proj
-    GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
-    GIT_TAG v2.5.0
-  )
-  FetchContent_MakeAvailable(cli11_proj)
-  set(CLI11_INCLUDE_DIR "${cli11_proj_SOURCE_DIR}/include")
+  set(_cli11_cursor "${ESI_RUNTIME_ROOT}")
+  foreach(_idx RANGE 1 8)
+    get_filename_component(_cli11_cursor "${_cli11_cursor}" DIRECTORY)
+    if (_cli11_cursor STREQUAL "")
+      break()
+    endif()
+    if (EXISTS "${_cli11_cursor}/_deps/cli11_proj-src/include/CLI/CLI.hpp")
+      set(CLI11_INCLUDE_DIR
+          "${_cli11_cursor}/_deps/cli11_proj-src/include")
+      break()
+    endif()
+  endforeach()
 endif()
 
 if (NOT ESI_RUNTIME_TARGET)

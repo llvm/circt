@@ -11,7 +11,7 @@ standalone and deterministic.
 # C++ header support included with the runtime, though it is intended to be
 # extensible for other languages.
 
-from typing import Callable, Dict, List, Set, TextIO, Tuple, Type, Optional
+from typing import Dict, List, Set, TextIO, Tuple, Type, Optional
 from .accelerator import AcceleratorConnection, Context
 from .esiCppAccel import ModuleInfo
 from . import types
@@ -40,9 +40,6 @@ class CppGenerator(Generator):
   """Generate C++ headers from an ESI manifest."""
 
   language = "C++"
-
-  # Supported bit widths for lone integer types.
-  int_width_support = set([1, 8, 16, 32, 64])
 
   def __init__(self, conn: AcceleratorConnection):
     super().__init__(conn)
@@ -284,6 +281,8 @@ class CppTypeGenerator:
           self.struct_name_by_id[inner_tid] = alias_name
           self.type_id_map[inner_tid] = alias_name
           self.type_id_map[tid] = alias_name
+          for _, field_type in inner_wrapped.fields:
+            self._assign_single_type_name(field_type)
           return
         self._assign_single_type_name(inner_wrapped)
       self.type_id_map[tid] = alias_name
@@ -410,8 +409,7 @@ class CppTypeGenerator:
     # Alias nodes must appear before anything that references them.
     alias_info = self._get_alias_info(wrapped)
     if alias_info is not None:
-      alias_name, inner_wrapped = alias_info
-      alias_name = self.alias_name_by_id.get(tid, alias_name)
+      _, inner_wrapped = alias_info
       if inner_wrapped is not None and isinstance(inner_wrapped,
                                                   types.StructType):
         self._visit_type(inner_wrapped, emit_nodes, emit_deps, emit_index)
@@ -512,18 +510,21 @@ class CppTypeGenerator:
           indegree[key] += 1
     ready = [key for key, deg in indegree.items() if deg == 0]
     ordered: List[Tuple[str, str]] = []
+    def sort_name(k: Tuple[str, str]) -> str:
+      kind, tid = k
+      if kind == "alias":
+        return self.alias_name_by_id.get(tid, tid)
+      if kind == "struct":
+        return self.struct_name_by_id.get(tid, tid)
+      return tid
+
+    def sort_key(k: Tuple[str, str]) -> Tuple[int, str, int]:
+      alias_or_aliased = k[0] == "alias" or (k[0] == "struct" and k[
+          1] in self.aliased_structs)
+      return (0 if alias_or_aliased else 1, sort_name(k), emit_index[k])
+
     while ready:
-
-      def sort_name(k: Tuple[str, str]) -> str:
-        kind, tid = k
-        if kind == "alias":
-          return self.alias_name_by_id.get(tid, tid)
-        if kind == "struct":
-          return self.struct_name_by_id.get(tid, tid)
-        return tid
-
-      ready.sort(key=lambda k: (0 if k[0] == "alias" or (k[0] == "struct" and k[
-          1] in self.aliased_structs) else 1, sort_name(k), emit_index[k]))
+      ready.sort(key=sort_key)
       key = ready.pop(0)
       ordered.append(key)
       for other_key, deps in emit_deps.items():
@@ -533,7 +534,13 @@ class CppTypeGenerator:
           if indegree[other_key] == 0:
             ready.append(other_key)
 
-    return [emit_nodes[key] for key in ordered], len(ordered) != len(emit_nodes)
+    has_cycle = len(ordered) != len(emit_nodes)
+    if has_cycle:
+      remaining = [key for key in emit_nodes if key not in ordered]
+      remaining.sort(key=sort_key)
+      ordered.extend(remaining)
+
+    return [emit_nodes[key] for key in ordered], has_cycle
 
   def write_header(self, output_dir: Path, system_name: str) -> None:
     """Emit the fully ordered types.h header into the output directory.

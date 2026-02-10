@@ -115,6 +115,19 @@ class ChannelType(ESIType):
   def inner(self) -> "ESIType":
     return self.inner_type
 
+  @property
+  def supports_host(self) -> Tuple[bool, Optional[str]]:
+    return self.inner_type.supports_host
+
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
+    return self.inner_type.is_valid(obj)
+
+  def serialize(self, obj) -> bytearray:
+    return self.inner_type.serialize(obj)
+
+  def deserialize(self, data: bytearray) -> Tuple[object, bytearray]:
+    return self.inner_type.deserialize(data)
+
 
 __esi_mapping[cpp.ChannelType] = ChannelType
 
@@ -127,8 +140,8 @@ class BundleType(ESIType):
     type: "ESIType"
 
   def __init__(self, id: str, channels: List[Channel]):
-    cpp_channels = [(name, direction, channel.type.cpp_type)
-                    for name, direction, channel in channels]
+    cpp_channels = [(name, direction, channel_type.cpp_type)
+                    for name, direction, channel_type in channels]
     self._init_from_cpp(cpp.BundleType(id, cpp_channels))
 
   def _init_from_cpp(self, cpp_type: cpp.BundleType):
