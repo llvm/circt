@@ -1,4 +1,4 @@
-// RUN: circt-opt --rtg-elaborate=seed=0 --split-input-file --verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt --rtg-elaborate=seed=0 --split-input-file --verify-diagnostics --mlir-print-debuginfo --mlir-print-local-scope %s | FileCheck %s
 
 func.func @dummy1(%arg0: index, %arg1: index, %arg2: !rtg.set<index>) -> () {return}
 func.func @dummy2(%arg0: index) -> () {return}
@@ -197,7 +197,7 @@ rtg.sequence @seq0(%arg0: index) {
 
 // CHECK-LABEL: rtg.test @sequenceSubstitution
 rtg.test @sequenceSubstitution(singleton = %none: index) {
-  // CHECK-NEXT: [[V0:%.+]] = rtg.get_sequence @seq0{{.*}} : !rtg.sequence{{$}}
+  // CHECK-NEXT: [[V0:%.+]] = rtg.get_sequence @seq0{{.*}} : !rtg.sequence loc
   // CHECK-NEXT: [[V1:%.+]] = rtg.randomize_sequence [[V0]]
   // CHECK-NEXT: rtg.embed_sequence [[V1]]
   %0 = index.constant 0
@@ -402,31 +402,31 @@ rtg.test @fixedRegisters(singleton = %none: index) {
 
 // CHECK-LABEL: @virtualRegisters
 rtg.test @virtualRegisters(singleton = %none: index) {
-  // CHECK-NEXT: [[R0:%.+]] = rtg.virtual_reg [#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg]
-  // CHECK-NEXT: [[R1:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg]
+  // CHECK-NEXT: [[R0:%.+]] = rtg.virtual_reg [#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg] loc("a")
+  // CHECK-NEXT: [[R1:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg] loc("b")
   // CHECK-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<12, 0>
   // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R1]], [[IMM]]
   // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R1]], [[IMM]]
-  %r0 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1]
-  %r1 = rtg.virtual_reg [#rtgtest.s0, #rtgtest.s1]
+  %r0 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1] loc("a")
+  %r1 = rtg.virtual_reg [#rtgtest.s0, #rtgtest.s1] loc("b")
   %imm = rtg.constant #rtg.isa.immediate<12, 0>
   rtgtest.rv32i.jalr %r0, %r1, %imm
   rtgtest.rv32i.jalr %r0, %r1, %imm
 
-  // CHECK-NEXT: [[R2:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg]
+  // CHECK-NEXT: [[R2:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg] loc("c")
   // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R2]], [[IMM]]
-  // CHECK-NEXT: [[R3:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg]
+  // CHECK-NEXT: [[R3:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg] loc("c")
   // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R3]], [[IMM]]
   %0 = index.constant 0
   %1 = index.constant 1
   %2 = index.constant 2
   scf.for %i = %0 to %2 step %1 {
-    %r2 = rtg.virtual_reg [#rtgtest.s0, #rtgtest.s1]
+    %r2 = rtg.virtual_reg [#rtgtest.s0, #rtgtest.s1] loc("c")
     rtgtest.rv32i.jalr %r0, %r2, %imm
   }
 }
 
-// CHECK-LABEL:  rtg.sequence @valuesWithIdentitySeq{{.*}}(%arg0: !rtgtest.ireg, %arg1: !rtgtest.ireg, %arg2: !rtgtest.ireg) {
+// CHECK-LABEL:  rtg.sequence @valuesWithIdentitySeq{{.*}}(%arg0: !rtgtest.ireg {{.*}}, %arg1: !rtgtest.ireg {{.*}}, %arg2: !rtgtest.ireg {{.*}}) {
 // CHECK: rtgtest.rv32i.jalr %arg0, %arg0
 // CHECK: rtgtest.rv32i.jalr %arg1, %arg2
 
@@ -463,12 +463,12 @@ rtg.test @valuesWithIdentity(singleton = %none: index) {
 // CHECK-LABEL: @labels
 rtg.test @labels(singleton = %none: index) {
   // CHECK-NEXT: [[STR:%.+]] = rtg.constant "unique_label" : !rtg.string
-  // CHECK-NEXT: [[L0:%.+]] = rtg.label_unique_decl [[STR]]
+  // CHECK-NEXT: [[L0:%.+]] = rtg.label_unique_decl [[STR]] loc("l_loc")
   // CHECK-NEXT: rtg.label local [[L0]]
   // CHECK-NEXT: [[L1:%.+]] = rtg.constant #rtg.isa.label<"label">
   // CHECK-NEXT: rtg.label local [[L1]]
   %0 = rtg.constant "unique_label" : !rtg.string
-  %l0 = rtg.label_unique_decl %0
+  %l0 = rtg.label_unique_decl %0 loc("l_loc")
   %l1 = rtg.constant #rtg.isa.label<"label">
   rtg.label local %l0
   rtg.label local %l1
@@ -707,8 +707,10 @@ rtg.test @comments() {
   rtg.comment %str
 }
 
+// CHECK-LABEL: rtg.target @memoryBlocks
 rtg.target @memoryBlocks : !rtg.dict<mem_block: !rtg.isa.memory_block<32>> {
-  %0 = rtg.isa.memory_block_declare [0x0 - 0x8] : !rtg.isa.memory_block<32>
+  // CHECK-NEXT: rtg.isa.memory_block_declare [0x0 - 0x8] : !rtg.isa.memory_block<32> loc("m_b")
+  %0 = rtg.isa.memory_block_declare [0x0 - 0x8] : !rtg.isa.memory_block<32> loc("m_b")
   rtg.yield %0 : !rtg.isa.memory_block<32>
 }
 
@@ -719,15 +721,15 @@ rtg.test @memoryBlockTest(mem_block = %arg0: !rtg.isa.memory_block<32>) {
 
   // CHECK-NEXT: [[IDX8:%.+]] = index.constant 8 
   // CHECK-NEXT: [[IDX4:%.+]] = index.constant 4
-  // CHECK-NEXT: [[MEM:%.+]] = rtg.isa.memory_alloc %mem_block, [[IDX8]], [[IDX4]] : !rtg.isa.memory_block<32>
+  // CHECK-NEXT: [[MEM:%.+]] = rtg.isa.memory_alloc %mem_block, [[IDX8]], [[IDX4]] : !rtg.isa.memory_block<32> loc("m_a")
   // CHECK-NEXT: func.call @dummy14([[MEM]])
   %idx4 = index.constant 4
   %idx8 = index.constant 8 
-  %0 = rtg.isa.memory_alloc %arg0, %idx8, %idx4 : !rtg.isa.memory_block<32>
+  %0 = rtg.isa.memory_alloc %arg0, %idx8, %idx4 : !rtg.isa.memory_block<32> loc("m_a")
   func.call @dummy14(%0) : (!rtg.isa.memory<32>) -> ()
 
   // CHECK-NEXT: func.call @dummy2([[IDX8]])
-  %1 = rtg.isa.memory_size %0 : !rtg.isa.memory<32> 
+  %1 = rtg.isa.memory_size %0 : !rtg.isa.memory<32>
   func.call @dummy2(%1) : (index) -> ()
 
   // CHECK-NEXT: }
@@ -823,8 +825,8 @@ rtg.test @setEquivalence(singleton = %none: index) {
   %idx2 = index.constant 2
   %set1 = rtg.set_create %idx1, %idx2 : index
   %set2 = rtg.set_create %idx2, %idx1 : index
-  // CHECK: func.call @dummy11([[SET:%.+]])
-  // CHECK: func.call @dummy11([[SET]])
+  // CHECK: func.call @dummy11([[SET:%.+]]) :
+  // CHECK: func.call @dummy11([[SET]]) :
   func.call @dummy11(%set1) : (!rtg.set<index>) -> ()
   func.call @dummy11(%set2) : (!rtg.set<index>) -> ()
 }
@@ -865,8 +867,8 @@ rtg.test @opsHandlingSymbolicOperands(singleton = %none: index) {
   %idx = index.constant 0
   %init = rtg.constant #rtg.isa.immediate<32, 0>
   
-  // CHECK-NEXT: [[VAL:%.+]] = rtg.validate [[REG]], [[INIT]], "symbolic_idx" : !rtgtest.ireg -> !rtg.isa.immediate<32>
-  %val = rtg.validate %reg, %init, "symbolic_idx" : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  // CHECK-NEXT: [[VAL:%.+]] = rtg.validate [[REG]], [[INIT]], "symbolic_idx" : !rtgtest.ireg -> !rtg.isa.immediate<32> loc("sym_loc")
+  %val = rtg.validate %reg, %init, "symbolic_idx" : !rtgtest.ireg -> !rtg.isa.immediate<32> loc("sym_loc")
   
   // CHECK-NEXT: func.call @dummy15([[VAL]])
   %arr = rtg.array_create %val, %init : !rtg.isa.immediate<32>

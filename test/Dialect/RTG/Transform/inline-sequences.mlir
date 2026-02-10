@@ -1,4 +1,4 @@
-// RUN: circt-opt --rtg-inline-sequences=fail-on-remaining=true --split-input-file --verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt --rtg-inline-sequences=fail-on-remaining=true --split-input-file --verify-diagnostics --mlir-print-debuginfo --mlir-print-local-scope %s | FileCheck %s
 
 rtg.sequence @seq0() {
   rtgtest.rv32i.ebreak
@@ -13,14 +13,14 @@ rtg.sequence @seq1() {
 // CHECK-LABEL: @inlineSequences
 rtg.test @inlineSequences() {
   // CHECK-NEXT: rtgtest.rv32i.ecall
-  // CHECK-NEXT: rtgtest.rv32i.ebreak
-  // CHECK-NEXT: rtgtest.rv32i.ebreak
+  // CHECK-NEXT: rtgtest.rv32i.ebreak loc("loc_0")
+  // CHECK-NEXT: rtgtest.rv32i.ebreak loc("loc_0")
   // CHECK-NEXT: rtgtest.rv32i.ecall
   // CHECK-NEXT: }
   %0 = rtg.get_sequence @seq0 : !rtg.sequence
   %1 = rtg.randomize_sequence %0
   rtgtest.rv32i.ecall
-  rtg.embed_sequence %1
+  rtg.embed_sequence %1 loc("loc_0")
   rtgtest.rv32i.ecall
 }
 
