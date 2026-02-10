@@ -57,6 +57,11 @@ class ESIType:
     self.cpp_type = cpp_type
 
   @property
+  def id(self) -> str:
+    """Get the stable id of this type."""
+    return self.cpp_type.id
+
+  @property
   def supports_host(self) -> Tuple[bool, Optional[str]]:
     """Does this type support host communication via Python? Returns either
     '(True, None)' if it is, or '(False, reason)' if it is not."""
