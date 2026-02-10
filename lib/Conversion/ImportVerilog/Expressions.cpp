@@ -2820,20 +2820,6 @@ Context::convertSystemCallArity2(const slang::ast::SystemSubroutine &subroutine,
                   return moore::StringGetCOp::create(builder, loc, value1,
                                                      value2);
                 })
-          .Case("push_back",
-                [&]() -> Value {
-                  if (isa<moore::QueueType>(value1.getType()))
-                    return moore::QueuePushBackOp::create(builder, loc, value1,
-                                                          value2);
-                  return {};
-                })
-          .Case("push_front",
-                [&]() -> Value {
-                  if (isa<moore::QueueType>(value1.getType()))
-                    return moore::QueuePushFrontOp::create(builder, loc, value1,
-                                                           value2);
-                  return {};
-                })
           .Case("$urandom_range",
                 [&]() -> Value {
                   return moore::UrandomrangeBIOp::create(builder, loc, value1,

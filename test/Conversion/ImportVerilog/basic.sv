@@ -3960,14 +3960,23 @@ endmodule
 // CHECK:    moore.procedure initial {
 // CHECK:      [[QR:%.+]] = moore.read [[Q]] : <queue<i32, 0>>
 // CHECK:      [[QSIZER:%.+]] = moore.read [[QSIZE]] : <i32>
-// CHECK:      [[PB:%.+]] = moore.push_back [[QSIZER]] into [[QR]] : <i32, 0>
+// CHECK:      moore.push_back [[QSIZER]] into [[QR]] : <i32, 0>
 // CHECK:      [[QR:%.+]] = moore.read [[Q]] : <queue<i32, 0>>
 // CHECK:      [[QSIZER:%.+]] = moore.read [[QSIZE]] : <i32>
-// CHECK:      [[PF:%.+]] = moore.push_front [[QSIZER]] into [[QR]] : <i32, 0>
+// CHECK:      moore.push_front [[QSIZER]] into [[QR]] : <i32, 0>
 // CHECK:      [[QR:%.+]] = moore.read [[Q]] : <queue<i32, 0>>
 // CHECK:      [[POPB:%.+]] = moore.pop_back from [[QR]] : <i32, 0>
 // CHECK:      [[QR:%.+]] = moore.read [[Q]] : <queue<i32, 0>>
 // CHECK:      [[POPF:%.+]] = moore.pop_front from [[QR]] : <i32, 0>
+// CHECK:      [[QR:%.+]] = moore.read [[Q]] : <queue<i32, 0>>
+// CHECK:      [[ONE:%.+]] = moore.constant 1 : i32
+// CHECK:      moore.queue.delete index [[ONE]] of [[QR]] : <i32, 0>
+// CHECK:      [[QR:%.+]] = moore.read [[Q]] : <queue<i32, 0>>
+// CHECK:      moore.queue.clear [[QR]] : <i32, 0>
+// CHECK:      [[QR:%.+]] = moore.read [[Q]] : <queue<i32, 0>>
+// CHECK:      [[ZERO:%.+]] = moore.constant 0 : i32
+// CHECK:      [[ONE:%.+]] = moore.constant 1 : i32
+// CHECK:      moore.queue.insert [[ONE]] into [[QR]] at [[ZERO]] : <i32, 0>
 // CHECK:      moore.return
 // CHECK:    }
 // CHECK:    moore.output
@@ -3981,6 +3990,9 @@ module QueueManipulationTest;
        q.push_front(qsize);
        q.pop_back();
        q.pop_front();
+       q.delete(1);
+       q.delete();
+       q.insert(0, 1);
     end
 endmodule
 

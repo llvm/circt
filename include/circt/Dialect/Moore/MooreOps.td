@@ -1793,6 +1793,45 @@ def DynQueueExtractRefOp : MooreOp<"dyn_queue_extract_ref", [Pure]> {
   }];
 }
 
+def QueueInsertOp : MooreOp<"queue.insert", [
+    TypesMatchWith<"queue and item types must match",
+    "queue", "item", "cast<QueueType>($_self).getElementType()">]> {
+  let summary = "Insert an element at an arbitrary position within a queue";
+  let description = [{
+      See IEEE 1800-2023 § 7.10.2.2 "Insert()"
+  }];
+  let arguments = (ins QueueType:$queue, TwoValuedI32:$index, UnpackedType:$item);
+  let results = (outs);
+  let assemblyFormat = [{
+    $item `into` $queue `at` $index attr-dict `:` type($queue)
+  }];
+}
+
+def QueueDeleteOp : MooreOp<"queue.delete"> {
+  let summary = "Delete an element from an arbitrary position within a queue";
+  let description = [{
+      See IEEE 1800-2023 § 7.10.2.3 "Delete()", specifically the case where an index parameter is supplied.
+  }];
+  let arguments = (ins QueueType:$queue, TwoValuedI32:$index);
+  let results = (outs);
+  let assemblyFormat = [{
+    `index` $index `of` $queue attr-dict `:` type($queue)
+  }];
+}
+
+def QueueClearOp : MooreOp<"queue.clear"> {
+  let summary = "Clear all elements from the given queue";
+  let description = [{
+      See IEEE 1800-2023 § 7.10.2.3 "Delete()", the case where no index is supplied.
+  }];
+
+  let arguments = (ins QueueType:$queue);
+  let results = (outs);
+  let assemblyFormat = [{
+    $queue attr-dict `:` type($queue)
+  }];
+}
+
 def QueuePushBackOp : MooreOp<"push_back", [
     TypesMatchWith<"queue and element types must match",
     "queue", "element", "cast<QueueType>($_self).getElementType()">]> {
@@ -1801,7 +1840,7 @@ def QueuePushBackOp : MooreOp<"push_back", [
     See IEEE 1800-2023 § 7.10.2.7 "Push_back()"
   }];
   let arguments = (ins QueueType:$queue, UnpackedType:$element);
-  let results = (outs VoidType:$out);
+  let results = (outs);
   let assemblyFormat = [{
     $element `into` $queue attr-dict `:` type($queue)
   }];
@@ -1815,7 +1854,7 @@ def QueuePushFrontOp : MooreOp<"push_front", [
     See IEEE 1800-2023 § 7.10.2.6 "Push_front()"
   }];
   let arguments = (ins QueueType:$queue, UnpackedType:$element);
-  let results = (outs VoidType:$out);
+  let results = (outs);
   let assemblyFormat = [{
     $element `into` $queue attr-dict `:` type($queue)
   }];
