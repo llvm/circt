@@ -18,11 +18,13 @@
 
 #include <algorithm>
 #include <any>
+#include <cassert>
 #include <cstdint>
 #include <map>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "esi/Common.h"
@@ -159,7 +161,10 @@ public:
   using Type::deserialize;
 
   TypeAliasType(const ID &id, std::string name, const Type *innerType)
-      : Type(id), name(std::move(name)), innerType(innerType) {}
+      : Type(id), name(std::move(name)), innerType(innerType) {
+    assert(innerType != nullptr &&
+           "TypeAliasType must have a non-null inner type");
+  }
 
   const std::string &getName() const { return name; }
   const Type *getInnerType() const { return innerType; }
