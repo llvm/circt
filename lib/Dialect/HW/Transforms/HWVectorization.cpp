@@ -278,9 +278,9 @@ bool BitArray::isReverse(int size, mlir::Value sourceInput) {
 Bit BitArray::getBit(int n) { return bits[n]; }
 
 mlir::Value BitArray::getSingleSourceValue() const {
-  if (!allBitsHaveSameSource() || bits.empty()) {
+  if (!allBitsHaveSameSource() || bits.empty())
     return nullptr;
-  }
+ 
   return bits.begin()->second.source;
 }
 
