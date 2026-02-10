@@ -96,6 +96,7 @@ class ResultStruct(Struct):
 class OddInner(Struct):
   p: UInt(8)
   q: SInt(8)
+  r: UInt(8) * 2
 
 
 class OddStruct(Struct):
@@ -139,7 +140,11 @@ class LoopbackOddStruct(Module):
     inner = arg_data["inner"]
     p_val = (inner["p"] + UInt(8)(5)).as_uint(8)
     q_val = (inner["q"] + SInt(8)(2)).as_sint(8)
-    result = OddStruct(a=a_val, b=b_val, inner=OddInner(p=p_val, q=q_val))
+    r0_val = (inner["r"][0] + UInt(8)(1)).as_uint(8)
+    r1_val = (inner["r"][1] + UInt(8)(2)).as_uint(8)
+    result = OddStruct(a=a_val,
+                       b=b_val,
+                       inner=OddInner(p=p_val, q=q_val, r=[r0_val, r1_val]))
     result_chan, result_ready = Channel(OddStruct).wrap(result, valid)
     ready.assign(result_ready)
     result_wire.assign(result_chan)
@@ -234,7 +239,7 @@ if __name__ == "__main__":
 # CPP-TEST: depth: 0x5
 # CPP-TEST: loopback i8 ok: 0x5a
 # CPP-TEST: struct func ok: b=-7 x=-6 y=-7
-# CPP-TEST: odd struct func ok: a=2749 b=-20 p=10 q=-5
+# CPP-TEST: odd struct func ok: a=2749 b=-20 p=10 q=-5 r0=4 r1=6
 # CPP-TEST: array func ok: -3 -2
 
 # QUERY-INFO: API version: 0

@@ -43,12 +43,13 @@ class CppGenerator(Generator):
 
   def __init__(self, conn: AcceleratorConnection):
     super().__init__(conn)
-    self.type_generator = CppTypeGenerator(self.manifest.type_table)
+    self.type_planner = CppTypePlanner(self.manifest.type_table)
+    self.type_emitter = CppTypeEmitter(self.type_planner)
 
   def get_consts_str(self, module_info: ModuleInfo) -> str:
     """Get the C++ code for a constant in a module."""
     const_strs: List[str] = [
-        f"static constexpr {self.type_generator.type_identifier(const.type)} "
+        f"static constexpr {self.type_emitter.type_identifier(const.type)} "
         f"{name} = 0x{const.value:x};"
         for name, const in module_info.constants.items()
     ]
@@ -76,45 +77,39 @@ class CppGenerator(Generator):
         hdr.write(textwrap.dedent(s))
 
   def generate(self, output_dir: Path, system_name: str):
-    self.type_generator.write_header(output_dir, system_name)
+    self.type_emitter.write_header(output_dir, system_name)
     self.write_modules(output_dir, system_name)
 
 
-class CppTypeGenerator:
-  """Produce a deterministic types.h from an ESI manifest."""
+class CppTypePlanner:
+  """Plan C++ type naming and ordering from an ESI manifest."""
 
   def __init__(self, type_table) -> None:
     """Initialize the generator with the manifest and target namespace."""
-    self.type_by_id: Dict[str, types.ESIType] = {}
     # Map manifest type ids to their preferred C++ names.
-    self.type_id_map: Dict[str, str] = {}
+    self.type_id_map: Dict[types.ESIType, str] = {}
     # Reserve unique C++ names for type aliases.
-    self.alias_name_by_id: Dict[str, str] = {}
+    self.alias_name_by_id: Dict[types.TypeAlias, str] = {}
     # Reserve unique C++ names for struct types.
-    self.struct_name_by_id: Dict[str, str] = {}
-    # Track all names already taken to avoid collisions.
-    self.used_names: Set[str] = set()
-    # Track structs that were named via alias to keep emission order stable.
-    self.aliased_structs: Set[str] = set()
-    # Monotonic counter for insertion order during emission ordering.
-    self.emit_counter = 0
-    self._precompute(type_table)
+    self.struct_name_by_id: Dict[types.StructType, str] = {}
+    # Track all names already taken to avoid collisions. True => alias-based.
+    self.used_names: Dict[str, bool] = {}
+    self.ordered_types: List[types.ESIType] = []
+    self.has_cycle = False
+    self._prepare_types(type_table)
 
-  def _precompute(self, type_table) -> None:
+  def _prepare_types(self, type_table) -> None:
     """Name the types and prepare for emission by registering all reachable
     types and assigning."""
+    visited: Set[str] = set()
     for t in type_table:
-      self._register_type(t)
-    self._prepare_aliases()
-    self._assign_struct_names()
+      self._collect_aliases(t, visited)
 
-    # Ensure every manifest type gets a mapped C++ identifier.
-    for esi_type in type_table:
-      self._assign_single_type_name(esi_type)
+    visited = set()
+    for t in type_table:
+      self._collect_structs(t, visited)
 
-  def type_identifier(self, type: types.ESIType) -> str:
-    """Get the C++ type string for an ESI type."""
-    return self.type_id_map[type.id]
+    self.ordered_types, self.has_cycle = self._ordered_emit_types()
 
   def _sanitize_name(self, name: str) -> str:
     """Create a C++-safe identifier from the manifest-provided name."""
@@ -133,7 +128,7 @@ class CppTypeGenerator:
       sanitized.insert(0, "_")
     return "".join(sanitized)
 
-  def _reserve_name(self, base: str) -> str:
+  def _reserve_name(self, base: str, is_alias: bool) -> str:
     """Reserve a globally unique identifier using the sanitized base name."""
     base = self._sanitize_name(base)
     name = base
@@ -141,7 +136,7 @@ class CppTypeGenerator:
     while name in self.used_names:
       name = f"{base}_{idx}"
       idx += 1
-    self.used_names.add(name)
+    self.used_names[name] = is_alias
     return name
 
   def _auto_struct_name(self, struct_type: types.StructType) -> str:
@@ -150,94 +145,165 @@ class CppTypeGenerator:
     for field_name, field_type in struct_type.fields:
       parts.append(field_name)
       parts.append(self._sanitize_name(field_type.id))
-    return self._reserve_name("_".join(parts))
+    return self._reserve_name("_".join(parts), is_alias=False)
 
-  def _get_alias_info(
-      self,
-      wrapped: types.ESIType) -> Optional[Tuple[str, Optional[types.ESIType]]]:
-    """Return alias metadata (name and inner type) if the type is a TypeAlias."""
-    if isinstance(wrapped, types.TypeAlias):
-      return (wrapped.name, wrapped.inner_type)
-    return None
+  def _iter_type_children(self, t: types.ESIType) -> List[types.ESIType]:
+    """Return child types in a stable order for traversal."""
+    if isinstance(t, types.TypeAlias):
+      return [t.inner_type] if t.inner_type is not None else []
+    if isinstance(t, types.BundleType):
+      return [channel.type for channel in t.channels]
+    if isinstance(t, types.ChannelType):
+      return [t.inner]
+    if isinstance(t, types.StructType):
+      return [field_type for _, field_type in t.fields]
+    if isinstance(t, types.ArrayType):
+      return [t.element_type]
+    return []
 
-  def _is_opaque_any(self, wrapped: types.ESIType) -> bool:
-    """Detect legacy opaque types that should be treated as std::any."""
-    return wrapped.id == "!esi.any"
-
-  def _register_type(self, t: object) -> None:
-    """Collect reachable types by recursively exploring bundles, channels, and
-    fields."""
+  def _visit_types(self,
+                   t: types.ESIType,
+                   visited: Set[str],
+                   visit_fn,
+                   post_order: bool = False) -> None:
+    """Traverse types with alphabetical child ordering and optional post-order."""
     if not isinstance(t, types.ESIType):
       raise TypeError(f"Expected ESIType, got {type(t)}")
-    # Depth-first traversal ensures all referenced types are registered.
-    wrapped = t
-    tid = wrapped.id
-    if tid in self.type_by_id:
+    tid = t.id
+    if tid in visited:
       return
-    self.type_by_id[tid] = wrapped
+    visited.add(tid)
+    if not post_order:
+      visit_fn(t)
+    children = sorted(self._iter_type_children(t), key=lambda child: child.id)
+    for child in children:
+      self._visit_types(child, visited, visit_fn, post_order=post_order)
+    if post_order:
+      visit_fn(t)
 
-    if isinstance(wrapped, types.BundleType):
-      for channel in wrapped.channels:
-        self._register_type(channel.type)
-      return
+  def _collect_aliases(self, t: types.ESIType, visited: Set[str]) -> None:
+    """Scan for aliases and reserve their names (recursive)."""
 
-    if isinstance(wrapped, types.ChannelType):
-      self._register_type(wrapped.inner)
-      return
+    def visit(alias_type: types.ESIType) -> None:
+      if not isinstance(alias_type, types.TypeAlias):
+        return
+      if alias_type not in self.alias_name_by_id:
+        alias_name = self._reserve_name(alias_type.name, is_alias=True)
+        self.alias_name_by_id[alias_type] = alias_name
+      alias_name = self.alias_name_by_id[alias_type]
+      self.type_id_map.setdefault(alias_type, alias_name)
+      inner_wrapped = alias_type.inner_type
+      if inner_wrapped is not None and isinstance(inner_wrapped,
+                                                  types.StructType):
+        self.struct_name_by_id.setdefault(inner_wrapped, alias_name)
+        self.type_id_map.setdefault(inner_wrapped, alias_name)
 
+    self._visit_types(t, visited, visit, post_order=False)
+
+  def _collect_structs(self, t: types.ESIType, visited: Set[str]) -> None:
+    """Scan for structs needing auto-names and reserve them (recursive)."""
+
+    def visit(struct_type: types.ESIType) -> None:
+      if not isinstance(struct_type, types.StructType):
+        return
+      if struct_type in self.type_id_map:
+        return
+      struct_name = self._auto_struct_name(struct_type)
+      self.struct_name_by_id[struct_type] = struct_name
+      self.type_id_map[struct_type] = struct_name
+
+    self._visit_types(t, visited, visit, post_order=False)
+
+  def _emit_name(self, wrapped: types.ESIType) -> str:
+    """Return the preferred C++ name for an emitted type."""
+    if isinstance(wrapped, types.TypeAlias):
+      return self.alias_name_by_id.get(wrapped, self.type_id_map[wrapped])
     if isinstance(wrapped, types.StructType):
-      for _, field_type in wrapped.fields:
-        self._register_type(field_type)
-      return
+      return self.struct_name_by_id.get(wrapped, self.type_id_map[wrapped])
+    return self.type_id_map[wrapped]
 
-    if isinstance(wrapped, types.ArrayType):
-      self._register_type(wrapped.element_type)
-      return
+  def _emit_nodes_from_type(self, wrapped: types.ESIType) -> Set[types.ESIType]:
+    """Collect emit nodes referenced by the given type."""
+    deps: Set[types.ESIType] = set()
 
-  def _prepare_aliases(self) -> None:
-    """Map raw alias identifiers to unique C++ names and remember aliased structs.
+    def visit(current: types.ESIType) -> None:
+      if isinstance(current, types.TypeAlias):
+        inner = current.inner_type
+        if inner is not None and isinstance(inner, types.StructType):
+          deps.add(inner)
+        else:
+          deps.add(current)
+      elif isinstance(current, types.StructType):
+        deps.add(current)
 
-    The second pass records which structs adopted their alias name so we can
-    emit them immediately after the alias for readability.
-    """
-    for tid, t in self.type_by_id.items():
-      alias_info = self._get_alias_info(t)
-      if alias_info is None:
-        continue
-      alias_raw, inner_wrapped = alias_info
-      alias_name = self.alias_name_by_id.get(tid)
-      if alias_name is None:
-        alias_name = self._reserve_name(alias_raw)
-        self.alias_name_by_id[tid] = alias_name
-      if inner_wrapped is not None and isinstance(inner_wrapped,
-                                                  types.StructType):
-        self.struct_name_by_id.setdefault(inner_wrapped.id, alias_name)
-    # Keep track of structs that gained their name via an alias so we can
-    # emit them immediately after the alias that owns their name.
-    for tid, t in self.type_by_id.items():
-      alias_info = self._get_alias_info(t)
-      if alias_info is None:
-        continue
-      _, inner_wrapped = alias_info
-      if inner_wrapped is not None and isinstance(inner_wrapped,
-                                                  types.StructType):
-        self.aliased_structs.add(inner_wrapped.id)
+    self._visit_types(wrapped, set(), visit, post_order=False)
+    return deps
 
-  def _assign_struct_names(self) -> None:
-    """Generate names for any structs that were not named via aliases.
+  def _ordered_emit_types(self) -> Tuple[List[types.ESIType], bool]:
+    """Collect and order types for deterministic emission."""
+    emit_types: List[types.ESIType] = []
+    for esi_type in self.type_id_map.keys():
+      if isinstance(esi_type, types.StructType):
+        emit_types.append(esi_type)
+      elif isinstance(esi_type, types.TypeAlias):
+        if not isinstance(esi_type.inner_type, types.StructType):
+          emit_types.append(esi_type)
 
-    Anonymous structs are labeled using their field names so the selector is
-    deterministic across runs.
-    """
-    for tid, t in self.type_by_id.items():
-      if isinstance(t, types.StructType) and tid not in self.struct_name_by_id:
-        self.struct_name_by_id[tid] = self._auto_struct_name(t)
+    name_to_type = {self._emit_name(t): t for t in emit_types}
+    sorted_names = sorted(name_to_type.keys(),
+                          key=lambda name:
+                          (0 if self.used_names.get(name, False) else 1, name))
+
+    ordered: List[types.ESIType] = []
+    visited: Set[types.ESIType] = set()
+    visiting: Set[types.ESIType] = set()
+    has_cycle = False
+
+    def visit(current: types.ESIType) -> None:
+      nonlocal has_cycle
+      if current in visited:
+        return
+      if current in visiting:
+        has_cycle = True
+        return
+      visiting.add(current)
+
+      deps: Set[types.ESIType] = set()
+      if isinstance(current, types.TypeAlias):
+        inner = current.inner_type
+        if inner is not None:
+          deps.update(self._emit_nodes_from_type(inner))
+      elif isinstance(current, types.StructType):
+        for _, field_type in current.fields:
+          deps.update(self._emit_nodes_from_type(field_type))
+
+      for dep in sorted(deps, key=self._emit_name):
+        visit(dep)
+
+      visiting.remove(current)
+      visited.add(current)
+      ordered.append(current)
+
+    for name in sorted_names:
+      visit(name_to_type[name])
+
+    return ordered, has_cycle
+
+
+class CppTypeEmitter:
+  """Emit C++ headers from precomputed type ordering."""
+
+  def __init__(self, planner: CppTypePlanner) -> None:
+    self.type_id_map = planner.type_id_map
+    self.ordered_types = planner.ordered_types
+    self.has_cycle = planner.has_cycle
+
+  def type_identifier(self, type: types.ESIType) -> str:
+    """Get the C++ type string for an ESI type."""
+    return self._cpp_type(type)
 
   def _get_bitvector_str(self, type: types.ESIType) -> str:
-    """Get the textual code for the storage class of an integer type.
-
-    Examples: bool, uint32_t, int64_t."""
-
+    """Get the textual code for the storage class of an integer type."""
     assert isinstance(type, (types.BitsType, types.IntType))
 
     if type.bit_width == 1:
@@ -257,198 +323,57 @@ class CppTypeGenerator:
       return f"uint{storage_width}_t"
     return f"int{storage_width}_t"
 
-  def _assign_single_type_name(self, t: object) -> None:
-    """Recursively assign a C++ type name for a single manifest entry.
+  def _array_base_and_suffix(self,
+                             array_type: types.ArrayType) -> Tuple[str, str]:
+    """Return the base C++ type and bracket suffix for a nested array."""
+    dims: List[int] = []
+    inner: types.ESIType = array_type
+    while isinstance(inner, types.ArrayType):
+      dims.append(inner.size)
+      inner = inner.element_type
+    base_cpp = self._cpp_type(inner)
+    suffix = "".join([f"[{d}]" for d in dims])
+    return base_cpp, suffix
 
-    Alias types propagate their chosen name down to structs, while arrays and
-    bundles call down to their element types before assigning the composite
-    string.
-    """
-    if not isinstance(t, types.ESIType):
-      raise TypeError(f"Expected ESIType, got {type(t)}")
-    wrapped = t
-    tid = wrapped.id
-    if tid in self.type_id_map:
-      return
-    # Aliases define preferred names and may propagate to structs.
-    alias_info = self._get_alias_info(wrapped)
-    if alias_info is not None:
-      alias_name, inner_wrapped = alias_info
-      if tid not in self.alias_name_by_id:
-        self.alias_name_by_id[tid] = self._reserve_name(alias_name)
-      alias_name = self.alias_name_by_id[tid]
-      if inner_wrapped is not None:
-        if isinstance(inner_wrapped, types.StructType):
-          inner_tid = inner_wrapped.id
-          self.struct_name_by_id[inner_tid] = alias_name
-          self.type_id_map[inner_tid] = alias_name
-          self.type_id_map[tid] = alias_name
-          for _, field_type in inner_wrapped.fields:
-            self._assign_single_type_name(field_type)
-          return
-        self._assign_single_type_name(inner_wrapped)
-      self.type_id_map[tid] = alias_name
-      return
-    # Bundles/channels forward to their inner payload types.
+  def _format_array_type(self, array_type: types.ArrayType) -> str:
+    """Return the C++ type string for a nested array alias."""
+    base_cpp, suffix = self._array_base_and_suffix(array_type)
+    return f"{base_cpp}{suffix}"
+
+  def _cpp_type(self, wrapped: types.ESIType) -> str:
+    """Resolve an ESI type to its C++ identifier."""
+    if isinstance(wrapped, (types.TypeAlias, types.StructType)):
+      return self.type_id_map[wrapped]
     if isinstance(wrapped, types.BundleType):
-      for channel in wrapped.channels:
-        self._assign_single_type_name(channel.type)
-      self.type_id_map[tid] = "void"
-      return
-
+      return "void"
     if isinstance(wrapped, types.ChannelType):
-      self._assign_single_type_name(wrapped.inner)
-      self.type_id_map[tid] = self.type_id_map[wrapped.inner.id]
-      return
-    # Scalar, array, and struct cases map directly to concrete C++ types.
+      return self._cpp_type(wrapped.inner)
     if isinstance(wrapped, types.VoidType):
-      self.type_id_map[tid] = "void"
-      return
-
+      return "void"
     if isinstance(wrapped, types.AnyType):
-      self.type_id_map[tid] = "std::any"
-      return
-
-    if self._is_opaque_any(wrapped):
-      self.type_id_map[tid] = "std::any"
-      return
-
+      return "std::any"
     if isinstance(wrapped, (types.BitsType, types.IntType)):
-      self.type_id_map[tid] = self._get_bitvector_str(wrapped)
-      return
-
+      return self._get_bitvector_str(wrapped)
     if isinstance(wrapped, types.ArrayType):
-      self._assign_single_type_name(wrapped.element_type)
-      self.type_id_map[tid] = self._format_array_type(wrapped)
-      return
-
-    if isinstance(wrapped, types.StructType):
-      for _, field_type in wrapped.fields:
-        self._assign_single_type_name(field_type)
-      self.type_id_map[tid] = self.struct_name_by_id[tid]
-      return
-
+      return self._format_array_type(wrapped)
     if type(wrapped) is types.ESIType:
-      self.type_id_map[tid] = "std::any"
-      return
+      return "std::any"
     raise NotImplementedError(
         f"Type '{wrapped}' not supported for C++ generation")
+
+  def _unwrap_aliases(self, wrapped: types.ESIType) -> types.ESIType:
+    """Strip alias wrappers to reach the underlying type."""
+    while isinstance(wrapped, types.TypeAlias):
+      wrapped = wrapped.inner_type
+    return wrapped
 
   def _format_array_decl(self, array_type: types.ArrayType, name: str) -> str:
     """Emit a field declaration for a multi-dimensional array member.
 
     The declaration flattens nested arrays into repeated bracketed sizes for C++.
     """
-    dims: List[int] = []
-    inner: types.ESIType = array_type
-    while isinstance(inner, types.ArrayType):
-      dims.append(inner.size)
-      inner = inner.element_type
-    base_cpp = self.type_id_map[inner.id]
-    suffix = "".join([f"[{d}]" for d in dims])
+    base_cpp, suffix = self._array_base_and_suffix(array_type)
     return f"{base_cpp} {name}{suffix};"
-
-  def _format_array_type(self, array_type: types.ArrayType) -> str:
-    """Return the C++ type string for a nested array alias.
-
-    The suffix mirrors the multi-dimensional declaration produced for fields.
-    """
-    dims: List[int] = []
-    inner: types.ESIType = array_type
-    while isinstance(inner, types.ArrayType):
-      dims.append(inner.size)
-      inner = inner.element_type
-    base_cpp = self.type_id_map[inner.id]
-    suffix = "".join([f"[{d}]" for d in dims])
-    return f"{base_cpp}{suffix}"
-
-  def _dep_nodes_for_type(self, wrapped: types.ESIType) -> Set[Tuple[str, str]]:
-    """Return the dependency nodes required before emitting this type.
-
-    Dependencies help the topological sort emit structs and aliases in order.
-    """
-    if isinstance(wrapped, types.StructType):
-      return {("struct", wrapped.id)}
-    if isinstance(wrapped, types.TypeAlias):
-      inner = wrapped.inner_type
-      if isinstance(inner, types.StructType):
-        return {("struct", inner.id)}
-      return {("alias", wrapped.id)}
-    if isinstance(wrapped, types.ArrayType):
-      return self._dep_nodes_for_type(wrapped.element_type)
-    return set()
-
-  def _add_node(self, kind: str, wrapped: types.ESIType,
-                emit_nodes: Dict[Tuple[str, str], types.ESIType],
-                emit_deps: Dict[Tuple[str, str], Set[Tuple[str, str]]],
-                emit_index: Dict[Tuple[str, str], int]) -> Tuple[str, str]:
-    """Register a struct or alias for emission ordering.
-
-    The insertion index keeps the order deterministic when dependencies tie.
-    """
-    tid = wrapped.id
-    key = (kind, tid)
-    if key not in emit_nodes:
-      emit_nodes[key] = wrapped
-      emit_deps[key] = set()
-      emit_index[key] = self.emit_counter
-      self.emit_counter += 1
-    return key
-
-  def _visit_type(self, t: object, emit_nodes: Dict[Tuple[str, str],
-                                                    types.ESIType],
-                  emit_deps: Dict[Tuple[str, str], Set[Tuple[str, str]]],
-                  emit_index: Dict[Tuple[str, str], int]) -> None:
-    """Walk the type structure to collect emit nodes and their dependencies.
-
-    Bundles and channels unwrap into their inner types while structs gather
-    per-field edges needed later during emission.
-    """
-    if not isinstance(t, types.ESIType):
-      raise TypeError(f"Expected ESIType, got {type(t)}")
-    wrapped = t
-    tid = wrapped.id
-    # Alias nodes must appear before anything that references them.
-    alias_info = self._get_alias_info(wrapped)
-    if alias_info is not None:
-      _, inner_wrapped = alias_info
-      if inner_wrapped is not None and isinstance(inner_wrapped,
-                                                  types.StructType):
-        self._visit_type(inner_wrapped, emit_nodes, emit_deps, emit_index)
-        return
-      if inner_wrapped is not None:
-        self._visit_type(inner_wrapped, emit_nodes, emit_deps, emit_index)
-      key = self._add_node("alias", wrapped, emit_nodes, emit_deps, emit_index)
-      if inner_wrapped is not None:
-        emit_deps[key].update(self._dep_nodes_for_type(inner_wrapped))
-      return
-    # Unwrap bundles/channels to their element types.
-    if isinstance(wrapped, types.BundleType):
-      for channel in wrapped.channels:
-        self._visit_type(channel.type, emit_nodes, emit_deps, emit_index)
-      return
-
-    if isinstance(wrapped, types.ChannelType):
-      self._visit_type(wrapped.inner, emit_nodes, emit_deps, emit_index)
-      return
-    # Struct fields introduce dependencies on their member types.
-    if isinstance(wrapped, types.StructType):
-      key = self._add_node("struct", wrapped, emit_nodes, emit_deps, emit_index)
-      for _, field_type in wrapped.fields:
-        self._visit_type(field_type, emit_nodes, emit_deps, emit_index)
-        emit_deps[key].update(self._dep_nodes_for_type(field_type))
-      emit_deps[key].discard(key)
-      return
-
-    if isinstance(wrapped, types.ArrayType):
-      self._visit_type(wrapped.element_type, emit_nodes, emit_deps, emit_index)
-      return
-
-    if self._is_opaque_any(wrapped):
-      return
-
-    if isinstance(wrapped, types.AnyType):
-      return
 
   def _emit_struct(self, hdr: TextIO, struct_type: types.StructType) -> None:
     """Emit a packed struct declaration plus its type id string."""
@@ -461,10 +386,8 @@ class CppTypeGenerator:
       if isinstance(field_type, types.ArrayType):
         field_decls.append(self._format_array_decl(field_type, field_name))
       else:
-        field_cpp = self.type_id_map[field_type.id]
-        wrapped = field_type
-        while isinstance(wrapped, types.TypeAlias):
-          wrapped = wrapped.inner_type
+        field_cpp = self._cpp_type(field_type)
+        wrapped = self._unwrap_aliases(field_type)
         if isinstance(wrapped, (types.BitsType, types.IntType)):
           bitfield_width = wrapped.bit_width
           if bitfield_width >= 0:
@@ -473,7 +396,7 @@ class CppTypeGenerator:
             field_decls.append(f"{field_cpp} {field_name};")
         else:
           field_decls.append(f"{field_cpp} {field_name};")
-    hdr.write(f"struct {self.type_id_map[tid]} {{\n")
+    hdr.write(f"struct {self.type_id_map[struct_type]} {{\n")
     for decl in field_decls:
       hdr.write(f"  {decl}\n")
     hdr.write("\n")
@@ -482,85 +405,20 @@ class CppTypeGenerator:
     )
     hdr.write("};\n\n")
 
-  def _emit_alias(self, hdr: TextIO, alias_type: types.ESIType) -> None:
+  def _emit_alias(self, hdr: TextIO, alias_type: types.TypeAlias) -> None:
     """Emit a using alias when the alias targets a different C++ type."""
-    tid = alias_type.id
-    alias_info = self._get_alias_info(alias_type)
-    if alias_info is None:
-      return
-    alias_name, inner_wrapped = alias_info
-    alias_name = self.alias_name_by_id.get(tid, alias_name)
+    inner_wrapped = alias_type.inner_type
+    alias_name = self.type_id_map[alias_type]
     inner_cpp = None
     if inner_wrapped is not None:
-      inner_cpp = self.type_id_map[inner_wrapped.id]
+      inner_cpp = self._cpp_type(inner_wrapped)
     if inner_cpp is None:
-      inner_cpp = self.type_id_map[tid]
+      inner_cpp = self.type_id_map[alias_type]
     if inner_cpp != alias_name:
       hdr.write(f"using {alias_name} = {inner_cpp};\n\n")
 
-  def _ordered_emit_types(
-      self,
-      types_to_emit: List[types.ESIType]) -> Tuple[List[types.ESIType], bool]:
-    """Collect and order types for deterministic emission."""
-    self.emit_counter = 0
-    emit_nodes: Dict[Tuple[str, str], types.ESIType] = {}
-    emit_deps: Dict[Tuple[str, str], Set[Tuple[str, str]]] = {}
-    emit_index: Dict[Tuple[str, str], int] = {}
-    # First pass: build the dependency graph.
-    for esi_type in types_to_emit:
-      try:
-        self._visit_type(esi_type, emit_nodes, emit_deps, emit_index)
-      except NotImplementedError:
-        sys.stderr.write(
-            f"Warning: type '{esi_type}' not supported for C++ generation\n")
-
-    # Second pass: compute a stable topological ordering.
-    indegree: Dict[Tuple[str, str], int] = {key: 0 for key in emit_nodes}
-    for key, deps in emit_deps.items():
-      for dep in deps:
-        if dep in indegree:
-          indegree[key] += 1
-    ready = [key for key, deg in indegree.items() if deg == 0]
-    ordered: List[Tuple[str, str]] = []
-
-    def sort_name(k: Tuple[str, str]) -> str:
-      kind, tid = k
-      if kind == "alias":
-        return self.alias_name_by_id.get(tid, tid)
-      if kind == "struct":
-        return self.struct_name_by_id.get(tid, tid)
-      return tid
-
-    def sort_key(k: Tuple[str, str]) -> Tuple[int, str, int]:
-      alias_or_aliased = k[0] == "alias" or (k[0] == "struct" and
-                                             k[1] in self.aliased_structs)
-      return (0 if alias_or_aliased else 1, sort_name(k), emit_index[k])
-
-    while ready:
-      ready.sort(key=sort_key)
-      key = ready.pop(0)
-      ordered.append(key)
-      for other_key, deps in emit_deps.items():
-        if key in deps:
-          deps.remove(key)
-          indegree[other_key] -= 1
-          if indegree[other_key] == 0:
-            ready.append(other_key)
-
-    has_cycle = len(ordered) != len(emit_nodes)
-    if has_cycle:
-      remaining = [key for key in emit_nodes if key not in ordered]
-      remaining.sort(key=sort_key)
-      ordered.extend(remaining)
-
-    return [emit_nodes[key] for key in ordered], has_cycle
-
   def write_header(self, output_dir: Path, system_name: str) -> None:
-    """Emit the fully ordered types.h header into the output directory.
-
-    Types are drained via a dependency queue so aliases and structs appear in
-    an order that satisfies their nested references.
-    """
+    """Emit the fully ordered types.h header into the output directory."""
     hdr_file = output_dir / "types.h"
     with open(hdr_file, "w") as hdr:
       hdr.write(
@@ -576,15 +434,13 @@ class CppTypeGenerator:
         #pragma pack(push, 1)
 
       """))
-      ordered_types, has_cycle = self._ordered_emit_types(
-          list(self.type_by_id.values()))
-      if has_cycle:
+      if self.has_cycle:
         sys.stderr.write("Warning: cyclic type dependencies detected.\n")
         sys.stderr.write("  Logically this should not be possible.\n")
         sys.stderr.write(
             "  Emitted code may fail to compile due to ordering issues.\n")
 
-      for emit_type in ordered_types:
+      for emit_type in self.ordered_types:
         if isinstance(emit_type, types.StructType):
           self._emit_struct(hdr, emit_type)
         elif isinstance(emit_type, types.TypeAlias):

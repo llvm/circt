@@ -94,6 +94,12 @@ class ESIType:
     leftover bytes."""
     assert False, "unimplemented"
 
+  def __hash__(self) -> int:
+    return hash(self.id)
+
+  def __eq__(self, other) -> bool:
+    return isinstance(other, ESIType) and self.id == other.id
+
   def __str__(self) -> str:
     return str(self.cpp_type)
 
