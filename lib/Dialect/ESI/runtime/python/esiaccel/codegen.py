@@ -227,11 +227,8 @@ class CppTypePlanner:
     """Collect and order types for deterministic emission."""
     emit_types: List[types.ESIType] = []
     for esi_type in self.type_id_map.keys():
-      if isinstance(esi_type, types.StructType):
+      if isinstance(esi_type, (types.StructType, types.TypeAlias)):
         emit_types.append(esi_type)
-      elif isinstance(esi_type, types.TypeAlias):
-        if not isinstance(esi_type.inner_type, types.StructType):
-          emit_types.append(esi_type)
 
     # Prefer alias-reserved names first, then lexicographic for determinism.
     name_to_type = {self.type_id_map[t]: t for t in emit_types}
@@ -362,7 +359,6 @@ class CppTypeEmitter:
 
   def _emit_struct(self, hdr: TextIO, struct_type: types.StructType) -> None:
     """Emit a packed struct declaration plus its type id string."""
-    tid = struct_type.id
     fields = list(struct_type.fields)
     if struct_type.cpp_type.reverse:
       fields = list(reversed(fields))
@@ -374,6 +370,8 @@ class CppTypeEmitter:
         field_cpp = self._cpp_type(field_type)
         wrapped = self._unwrap_aliases(field_type)
         if isinstance(wrapped, (types.BitsType, types.IntType)):
+          # TODO: Bitfield layout is implementation-defined; consider
+          # byte-aligned storage with explicit pack/unpack helpers.
           bitfield_width = wrapped.bit_width
           if bitfield_width >= 0:
             field_decls.append(f"{field_cpp} {field_name} : {bitfield_width};")
@@ -386,7 +384,7 @@ class CppTypeEmitter:
       hdr.write(f"  {decl}\n")
     hdr.write("\n")
     hdr.write(
-        f"  static constexpr std::string_view __ESI_ID = \"{struct_type.id}\";\n"
+        f"  static constexpr std::string_view _ESI_ID = \"{struct_type.id}\";\n"
     )
     hdr.write("};\n\n")
 
