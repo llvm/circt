@@ -510,6 +510,7 @@ class CppTypeGenerator:
           indegree[key] += 1
     ready = [key for key, deg in indegree.items() if deg == 0]
     ordered: List[Tuple[str, str]] = []
+
     def sort_name(k: Tuple[str, str]) -> str:
       kind, tid = k
       if kind == "alias":
@@ -519,8 +520,8 @@ class CppTypeGenerator:
       return tid
 
     def sort_key(k: Tuple[str, str]) -> Tuple[int, str, int]:
-      alias_or_aliased = k[0] == "alias" or (k[0] == "struct" and k[
-          1] in self.aliased_structs)
+      alias_or_aliased = k[0] == "alias" or (k[0] == "struct" and
+                                             k[1] in self.aliased_structs)
       return (0 if alias_or_aliased else 1, sort_name(k), emit_index[k])
 
     while ready:
