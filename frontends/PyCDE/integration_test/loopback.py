@@ -93,6 +93,17 @@ class ResultStruct(Struct):
   y: SInt(8)
 
 
+class OddInner(Struct):
+  p: UInt(8)
+  q: SInt(8)
+
+
+class OddStruct(Struct):
+  a: UInt(12)
+  b: SInt(7)
+  inner: OddInner
+
+
 class LoopbackStruct(Module):
 
   @generator
@@ -108,6 +119,30 @@ class LoopbackStruct(Module):
     b_plus_one = (b_val + SInt(8)(1)).as_sint(8)
     result = ResultStruct(x=b_plus_one, y=b_val)
     result_chan, result_ready = Channel(ResultStruct).wrap(result, valid)
+    ready.assign(result_ready)
+    result_wire.assign(result_chan)
+
+
+class LoopbackOddStruct(Module):
+
+  @generator
+  def construct(ports):
+    result_wire = Wire(Channel(OddStruct))
+    args = esi.FuncService.get_call_chans(AppID("oddStructFunc"),
+                                          arg_type=OddStruct,
+                                          result=result_wire)
+
+    ready = Wire(Bits(1))
+    arg_data, valid = args.unwrap(ready)
+    a_val = (arg_data["a"] + UInt(12)(1)).as_uint(12)
+    b_val = (arg_data["b"] + SInt(7)(-3)).as_sint(7)
+    inner = arg_data["inner"]
+    p_val = (inner["p"] + UInt(8)(5)).as_uint(8)
+    q_val = (inner["q"] + SInt(8)(2)).as_sint(8)
+    result = OddStruct(a=a_val,
+               b=b_val,
+               inner=OddInner(p=p_val, q=q_val))
+    result_chan, result_ready = Channel(OddStruct).wrap(result, valid)
     ready.assign(result_ready)
     result_wire.assign(result_chan)
 
@@ -188,6 +223,7 @@ class Top(Module):
     MemoryAccess1(clk=ports.clk, rst=ports.rst)
     CallableFunc1()
     LoopbackStruct()
+    LoopbackOddStruct()
     LoopbackArray()
 
 
@@ -200,6 +236,7 @@ if __name__ == "__main__":
 # CPP-TEST: depth: 0x5
 # CPP-TEST: loopback i8 ok: 0x5a
 # CPP-TEST: struct func ok: b=-7 x=-6 y=-7
+# CPP-TEST: odd struct func ok: a=2749 b=-20 p=10 q=-5
 # CPP-TEST: array func ok: -3 -2
 
 # QUERY-INFO: API version: 0

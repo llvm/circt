@@ -101,6 +101,8 @@ class CppTypeGenerator:
     self._precompute(type_table)
 
   def _precompute(self, type_table) -> None:
+    """Name the types and prepare for emission by registering all reachable
+    types and assigning."""
     for t in type_table:
       self._register_type(t)
     self._prepare_aliases()
@@ -232,9 +234,9 @@ class CppTypeGenerator:
         self.struct_name_by_id[tid] = self._auto_struct_name(t)
 
   def _get_bitvector_str(self, type: types.ESIType) -> str:
-    """Get the textual code for the storage class of a type.
+    """Get the textual code for the storage class of an integer type.
 
-    Examples: uint32_t, int64_t, CustomStruct."""
+    Examples: bool, uint32_t, int64_t."""
 
     assert isinstance(type, (types.BitsType, types.IntType))
 
@@ -460,7 +462,17 @@ class CppTypeGenerator:
         field_decls.append(self._format_array_decl(field_type, field_name))
       else:
         field_cpp = self.type_id_map[field_type.id]
-        field_decls.append(f"{field_cpp} {field_name};")
+        wrapped = field_type
+        while isinstance(wrapped, types.TypeAlias):
+          wrapped = wrapped.inner_type
+        if isinstance(wrapped, (types.BitsType, types.IntType)):
+          bitfield_width = wrapped.bit_width
+          if bitfield_width >= 0:
+            field_decls.append(f"{field_cpp} {field_name} : {bitfield_width};")
+          else:
+            field_decls.append(f"{field_cpp} {field_name};")
+        else:
+          field_decls.append(f"{field_cpp} {field_name};")
     hdr.write(f"struct {self.type_id_map[tid]} {{\n")
     for decl in field_decls:
       hdr.write(f"  {decl}\n")
