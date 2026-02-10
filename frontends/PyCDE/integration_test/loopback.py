@@ -12,16 +12,20 @@
 # Run a cosimulation with a python test driver.
 # RUN: esi-cosim.py --source %t -- %PYTHON% %S/test_software/loopback.py cosim env
 
-# Test C++ header generation against the manifest file
+# Test C++ header generation against the manifest file.
+# Use the shared CMake build to compile the C++ test against generated headers.
 # RUN: %PYTHON% -m esiaccel.codegen --file %t/esi_system_manifest.json --output-dir %t/include/loopback/
-# RUN: %host_cxx -I %t/include %S/test_software/loopback.cpp -o %t/test
-# RUN: %t/test | FileCheck %s --check-prefix=CPP-TEST
+# RUN: cmake -S %S/test_software -B %t/loopback-build -DLOOPBACK_GENERATED_DIR=%t/include -DESI_RUNTIME_ROOT=%ESI_RUNTIME_PATH%
+# RUN: cmake --build %t/loopback-build --target loopback_test
+# RUN: esi-cosim.py --source %t -- %t/loopback-build/loopback_test cosim env | FileCheck %s --check-prefix=CPP-TEST
 # RUN: FileCheck %s --check-prefix=LOOPBACK-H --input-file %t/include/loopback/LoopbackIP.h
 
 # Test C++ header generation from the live accelerator.
+# The generated headers are still required to build the C++ test executable.
 # RUN: esi-cosim.py --source %t -- %PYTHON% -m esiaccel.codegen --platform cosim --connection env --output-dir %t/include/loopback/
-# RUN: %host_cxx -I %t/include %S/test_software/loopback.cpp -o %t/test
-# RUN: %t/test | FileCheck %s --check-prefix=CPP-TEST
+# RUN: cmake -S %S/test_software -B %t/loopback-build -DLOOPBACK_GENERATED_DIR=%t/include -DESI_RUNTIME_ROOT=%ESI_RUNTIME_PATH%
+# RUN: cmake --build %t/loopback-build --target loopback_test
+# RUN: esi-cosim.py --source %t -- %t/loopback-build/loopback_test cosim env | FileCheck %s --check-prefix=CPP-TEST
 
 import sys
 
@@ -30,8 +34,9 @@ from pycde.bsp import get_bsp
 from pycde.common import Constant
 from pycde.constructs import Wire
 from pycde.module import Metadata
+from pycde.signals import Struct
 from pycde.types import (Bits, Bundle, BundledChannel, Channel,
-                         ChannelDirection, SInt, StructType, UInt)
+                         ChannelDirection, SInt, TypeAlias, UInt)
 from pycde import esi
 
 SendI8 = Bundle([BundledChannel("send", ChannelDirection.FROM, Bits(8))])
@@ -78,8 +83,26 @@ class Loopback(Module):
     sendi0_bundle.unpack(send=send_chan)
 
 
-ArgStruct = StructType({"a": UInt(16), "b": SInt(8)})
-ResultStruct = StructType({"x": SInt(8), "y": SInt(8)})
+class ArgStruct(Struct):
+  a: UInt(16)
+  b: SInt(8)
+
+
+class ResultStruct(Struct):
+  x: SInt(8)
+  y: SInt(8)
+
+
+class OddInner(Struct):
+  p: UInt(8)
+  q: SInt(8)
+  r: UInt(8) * 2
+
+
+class OddStruct(Struct):
+  a: UInt(12)
+  b: SInt(7)
+  inner: OddInner
 
 
 class LoopbackStruct(Module):
@@ -95,14 +118,40 @@ class LoopbackStruct(Module):
     arg_data, valid = args.unwrap(ready)
     b_val = arg_data["b"]
     b_plus_one = (b_val + SInt(8)(1)).as_sint(8)
-    result = ResultStruct({"x": b_plus_one, "y": b_val})
+    result = ResultStruct(x=b_plus_one, y=b_val)
     result_chan, result_ready = Channel(ResultStruct).wrap(result, valid)
     ready.assign(result_ready)
     result_wire.assign(result_chan)
 
 
+class LoopbackOddStruct(Module):
+
+  @generator
+  def construct(ports):
+    result_wire = Wire(Channel(OddStruct))
+    args = esi.FuncService.get_call_chans(AppID("oddStructFunc"),
+                                          arg_type=OddStruct,
+                                          result=result_wire)
+
+    ready = Wire(Bits(1))
+    arg_data, valid = args.unwrap(ready)
+    a_val = (arg_data["a"] + UInt(12)(1)).as_uint(12)
+    b_val = (arg_data["b"] + SInt(7)(-3)).as_sint(7)
+    inner = arg_data["inner"]
+    p_val = (inner["p"] + UInt(8)(5)).as_uint(8)
+    q_val = (inner["q"] + SInt(8)(2)).as_sint(8)
+    r0_val = (inner["r"][0] + UInt(8)(1)).as_uint(8)
+    r1_val = (inner["r"][1] + UInt(8)(2)).as_uint(8)
+    result = OddStruct(a=a_val,
+                       b=b_val,
+                       inner=OddInner(p=p_val, q=q_val, r=[r0_val, r1_val]))
+    result_chan, result_ready = Channel(OddStruct).wrap(result, valid)
+    ready.assign(result_ready)
+    result_wire.assign(result_chan)
+
+
 ArgArray = SInt(8) * 1
-ResultArray = SInt(8) * 2
+ResultArray = TypeAlias(SInt(8) * 2, "ResultArray")
 
 
 class LoopbackArray(Module):
@@ -119,7 +168,7 @@ class LoopbackArray(Module):
     elem = arg_data[0]
     elem_plus_one = (elem + SInt(8)(1)).as_sint(8)
     # ArrayCreate reverses element order; provide reversed list to match MLIR.
-    result_array = Signal.create([elem, elem_plus_one])
+    result_array = ResultArray([elem, elem_plus_one])
     result_chan, result_ready = Channel(ResultArray).wrap(result_array, valid)
     ready.assign(result_ready)
     result_wire.assign(result_chan)
@@ -177,6 +226,7 @@ class Top(Module):
     MemoryAccess1(clk=ports.clk, rst=ports.rst)
     CallableFunc1()
     LoopbackStruct()
+    LoopbackOddStruct()
     LoopbackArray()
 
 
@@ -187,6 +237,10 @@ if __name__ == "__main__":
   s.package()
 
 # CPP-TEST: depth: 0x5
+# CPP-TEST: loopback i8 ok: 0x5a
+# CPP-TEST: struct func ok: b=-7 x=-6 y=-7
+# CPP-TEST: odd struct func ok: a=2749 b=-20 p=10 q=-5 r0=4 r1=6
+# CPP-TEST: array func ok: -3 -2
 
 # QUERY-INFO: API version: 0
 # QUERY-INFO: ********************************
@@ -205,8 +259,8 @@ if __name__ == "__main__":
 # QUERY-HIER: * Instance: {{.*}}
 # QUERY-HIER: * Ports:
 # QUERY-HIER:     func1: function uint16(uint16)
-# QUERY-HIER:     structFunc: function struct {x: sint8, y: sint8}(struct {a: uint16, b: sint8})
-# QUERY-HIER:     arrayFunc: function sint8[2](sint8[1])
+# QUERY-HIER:     structFunc: function ResultStruct(ArgStruct)
+# QUERY-HIER:     arrayFunc: function ResultArray(sint8[1])
 # QUERY-HIER: * Children:
 # QUERY-HIER:   * Instance: loopback_inst[0]
 # QUERY-HIER:   * Ports:
