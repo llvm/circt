@@ -1,7 +1,6 @@
 #  Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-
 """Code generation from ESI manifests to source code.
 
 Uses a two-pass approach for C++: first collect and name all reachable types,
@@ -162,7 +161,8 @@ class CppGenerator(Generator):
       return reserve_name("_".join(parts))
 
     def get_alias_info(
-        wrapped: types.ESIType) -> Optional[Tuple[str, Optional[types.ESIType]]]:
+        wrapped: types.ESIType
+    ) -> Optional[Tuple[str, Optional[types.ESIType]]]:
       """Return (alias_name, inner_type) if this is a TypeAlias."""
       if isinstance(wrapped, types.TypeAlias):
         return (wrapped.name, wrapped.inner_type)
@@ -347,9 +347,10 @@ class CppGenerator(Generator):
         hdr.write(f"  {decl}\n")
       hdr.write("\n")
       hdr.write(
-          f"  static constexpr std::string_view id = \"{get_type_id(struct_type)}\";\n"
+          f"  static constexpr std::string_view __ESI_ID = \"{get_type_id(struct_type)}\";\n"
       )
       hdr.write("};\n\n")
+
     def dep_nodes_for_type(wrapped: types.ESIType) -> Set[Tuple[str, str]]:
       """Return dependency nodes for topo ordering (struct/alias only)."""
       if isinstance(wrapped, types.StructType):
@@ -475,6 +476,7 @@ class CppGenerator(Generator):
       emitted = 0
       # Emit in dependency order, preferring aliases and alias-named structs.
       while ready:
+
         def sort_name(k: Tuple[str, str]) -> str:
           kind, tid = k
           if kind == "alias":
@@ -484,9 +486,8 @@ class CppGenerator(Generator):
           return tid
 
         ready.sort(
-            key=lambda k: (0 if k[0] == "alias" or
-                           (k[0] == "struct" and k[1] in aliased_structs) else
-                           1, sort_name(k), emit_index[k]))
+            key=lambda k: (0 if k[0] == "alias" or (k[0] == "struct" and k[
+                1] in aliased_structs) else 1, sort_name(k), emit_index[k]))
         key = ready.pop(0)
         kind, _ = key
         wrapped = emit_nodes[key]
