@@ -42,4 +42,37 @@ assert isinstance(array_type.element_type, types.UIntType)
 assert hasattr(array_type, "size")
 assert array_type.size == 10
 
+# Test AnyType construction
+any_type = types.AnyType("any")
+assert any_type is not None
+assert isinstance(any_type, types.AnyType)
+supports, reason = any_type.supports_host
+assert not supports
+assert "any type" in reason
+assert any_type.bit_width == -1
+try:
+  any_type.serialize(0)
+except ValueError as exc:
+  assert "any type" in str(exc)
+else:
+  assert False, "AnyType.serialize should raise"
+
+# Test TypeAliasType construction
+alias_inner = types.UIntType("alias_inner", 16)
+type_alias = types.TypeAlias("alias_scope", "aliasName", alias_inner)
+assert type_alias is not None
+assert isinstance(type_alias, types.TypeAlias)
+assert type_alias.name == "aliasName"
+assert isinstance(type_alias.inner_type, types.UIntType)
+assert type_alias.bit_width == alias_inner.bit_width
+alias_valid, alias_reason = type_alias.is_valid(42)
+inner_valid, inner_reason = alias_inner.is_valid(42)
+assert alias_valid == inner_valid
+assert alias_reason == inner_reason
+serialized = type_alias.serialize(42)
+inner_serialized = alias_inner.serialize(42)
+assert serialized == inner_serialized
+assert type_alias.deserialize(serialized) == alias_inner.deserialize(serialized)
+assert str(type_alias) == "aliasName"
+
 print("SUCCESS!")

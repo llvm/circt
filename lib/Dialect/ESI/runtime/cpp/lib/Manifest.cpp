@@ -623,8 +623,7 @@ TypeAliasType *parseTypeAlias(const nlohmann::json &typeJson, Context &cache) {
   if (typeJson.contains("inner"))
     innerType = parseType(typeJson.at("inner"), cache);
   else
-    throw std::runtime_error(
-        "Malformed manifest: typealias missing inner type");
+    throw std::runtime_error("typealias missing inner type");
 
   if (name.empty())
     name = id;
