@@ -88,12 +88,10 @@ class CppTypePlanner:
     """Initialize the generator with the manifest and target namespace."""
     # Map manifest type ids to their preferred C++ names.
     self.type_id_map: Dict[types.ESIType, str] = {}
-    # Reserve unique C++ names for type aliases.
-    self.alias_name_by_id: Dict[types.TypeAlias, str] = {}
-    # Reserve unique C++ names for struct types.
-    self.struct_name_by_id: Dict[types.StructType, str] = {}
     # Track all names already taken to avoid collisions. True => alias-based.
     self.used_names: Dict[str, bool] = {}
+    # Track alias base names to warn on collisions.
+    self.alias_base_names: Set[str] = set()
     self.ordered_types: List[types.ESIType] = []
     self.has_cycle = False
     self._prepare_types(type_table)
@@ -131,6 +129,11 @@ class CppTypePlanner:
   def _reserve_name(self, base: str, is_alias: bool) -> str:
     """Reserve a globally unique identifier using the sanitized base name."""
     base = self._sanitize_name(base)
+    if is_alias and base in self.alias_base_names:
+      sys.stderr.write(
+          f"Warning: duplicate alias name '{base}' detected; disambiguating.\n")
+    if is_alias:
+      self.alias_base_names.add(base)
     name = base
     idx = 1
     while name in self.used_names:
@@ -161,71 +164,52 @@ class CppTypePlanner:
       return [t.element_type]
     return []
 
-  def _visit_types(self,
-                   t: types.ESIType,
-                   visited: Set[str],
-                   visit_fn,
-                   post_order: bool = False) -> None:
-    """Traverse types with alphabetical child ordering and optional post-order."""
+  def _visit_types(self, t: types.ESIType, visited: Set[str], visit_fn) -> None:
+    """Traverse types with alphabetical child ordering in post-order."""
     if not isinstance(t, types.ESIType):
       raise TypeError(f"Expected ESIType, got {type(t)}")
     tid = t.id
     if tid in visited:
       return
     visited.add(tid)
-    if not post_order:
-      visit_fn(t)
     children = sorted(self._iter_type_children(t), key=lambda child: child.id)
     for child in children:
-      self._visit_types(child, visited, visit_fn, post_order=post_order)
-    if post_order:
-      visit_fn(t)
+      self._visit_types(child, visited, visit_fn)
+    visit_fn(t)
 
   def _collect_aliases(self, t: types.ESIType, visited: Set[str]) -> None:
     """Scan for aliases and reserve their names (recursive)."""
 
+    # Visit callback: reserve alias names and map aliases to identifiers.
     def visit(alias_type: types.ESIType) -> None:
       if not isinstance(alias_type, types.TypeAlias):
         return
-      if alias_type not in self.alias_name_by_id:
+      if alias_type not in self.type_id_map:
         alias_name = self._reserve_name(alias_type.name, is_alias=True)
-        self.alias_name_by_id[alias_type] = alias_name
-      alias_name = self.alias_name_by_id[alias_type]
-      self.type_id_map.setdefault(alias_type, alias_name)
-      inner_wrapped = alias_type.inner_type
-      if inner_wrapped is not None and isinstance(inner_wrapped,
-                                                  types.StructType):
-        self.struct_name_by_id.setdefault(inner_wrapped, alias_name)
-        self.type_id_map.setdefault(inner_wrapped, alias_name)
+        self.type_id_map[alias_type] = alias_name
 
-    self._visit_types(t, visited, visit, post_order=False)
+    self._visit_types(t, visited, visit)
 
   def _collect_structs(self, t: types.ESIType, visited: Set[str]) -> None:
     """Scan for structs needing auto-names and reserve them (recursive)."""
 
+    # Visit callback: assign auto-names to unnamed structs.
     def visit(struct_type: types.ESIType) -> None:
       if not isinstance(struct_type, types.StructType):
         return
       if struct_type in self.type_id_map:
         return
       struct_name = self._auto_struct_name(struct_type)
-      self.struct_name_by_id[struct_type] = struct_name
       self.type_id_map[struct_type] = struct_name
 
-    self._visit_types(t, visited, visit, post_order=False)
+    self._visit_types(t, visited, visit)
 
-  def _emit_name(self, wrapped: types.ESIType) -> str:
-    """Return the preferred C++ name for an emitted type."""
-    if isinstance(wrapped, types.TypeAlias):
-      return self.alias_name_by_id.get(wrapped, self.type_id_map[wrapped])
-    if isinstance(wrapped, types.StructType):
-      return self.struct_name_by_id.get(wrapped, self.type_id_map[wrapped])
-    return self.type_id_map[wrapped]
-
-  def _emit_nodes_from_type(self, wrapped: types.ESIType) -> Set[types.ESIType]:
-    """Collect emit nodes referenced by the given type."""
+  def _collect_decls_from_type(self,
+                               wrapped: types.ESIType) -> Set[types.ESIType]:
+    """Collect types that require top-level declarations for a given type."""
     deps: Set[types.ESIType] = set()
 
+    # Visit callback: collect structs and non-struct aliases used by a type.
     def visit(current: types.ESIType) -> None:
       if isinstance(current, types.TypeAlias):
         inner = current.inner_type
@@ -236,7 +220,7 @@ class CppTypePlanner:
       elif isinstance(current, types.StructType):
         deps.add(current)
 
-    self._visit_types(wrapped, set(), visit, post_order=False)
+    self._visit_types(wrapped, set(), visit)
     return deps
 
   def _ordered_emit_types(self) -> Tuple[List[types.ESIType], bool]:
@@ -249,7 +233,8 @@ class CppTypePlanner:
         if not isinstance(esi_type.inner_type, types.StructType):
           emit_types.append(esi_type)
 
-    name_to_type = {self._emit_name(t): t for t in emit_types}
+    # Prefer alias-reserved names first, then lexicographic for determinism.
+    name_to_type = {self.type_id_map[t]: t for t in emit_types}
     sorted_names = sorted(name_to_type.keys(),
                           key=lambda name:
                           (0 if self.used_names.get(name, False) else 1, name))
@@ -259,6 +244,7 @@ class CppTypePlanner:
     visiting: Set[types.ESIType] = set()
     has_cycle = False
 
+    # Visit callback: DFS to emit dependencies before their users.
     def visit(current: types.ESIType) -> None:
       nonlocal has_cycle
       if current in visited:
@@ -272,12 +258,11 @@ class CppTypePlanner:
       if isinstance(current, types.TypeAlias):
         inner = current.inner_type
         if inner is not None:
-          deps.update(self._emit_nodes_from_type(inner))
+          deps.update(self._collect_decls_from_type(inner))
       elif isinstance(current, types.StructType):
         for _, field_type in current.fields:
-          deps.update(self._emit_nodes_from_type(field_type))
-
-      for dep in sorted(deps, key=self._emit_name):
+          deps.update(self._collect_decls_from_type(field_type))
+      for dep in sorted(deps, key=lambda dep: self.type_id_map[dep]):
         visit(dep)
 
       visiting.remove(current)
