@@ -107,7 +107,7 @@ def test0(config):
 
 
 # MLIR-LABEL: rtg.test @test1_args
-# MLIR-SAME: (entry0 = [[SET:%.+]]: !rtg.set<index>)
+# MLIR-SAME: (entry0 = [[SET:%.+]]: !rtg.set<index>{{.*}})
 # MLIR-NEXT: [[STR0:%.+]] = rtg.constant "L_" : !rtg.string
 # MLIR-NEXT: [[RAND:%.+]] = rtg.set_select_random [[SET]] : !rtg.set<index>
 # MLIR-NEXT: [[INT_AS_STR:%.+]] = rtg.int_format [[RAND]]
@@ -488,7 +488,7 @@ def test93_immediate_ops(config):
 
 
 # MLIR-LABEL: rtg.sequence @seq0
-# MLIR-SAME: ([[SET:%.+]]: !rtg.set<!rtg.isa.label>)
+# MLIR-SAME: ([[SET:%.+]]: !rtg.set<!rtg.isa.label>{{.*}})
 # MLIR-NEXT: [[LABEL:%.+]] = rtg.set_select_random [[SET]]
 # MLIR-NEXT: rtg.label local [[LABEL]]
 # MLIR-NEXT: }

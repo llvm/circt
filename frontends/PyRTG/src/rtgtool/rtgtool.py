@@ -125,7 +125,7 @@ def frontend_codegen(args: argparse.Namespace) -> ir.Module:
   if args.input_format == InputFormat.PYTHON:
     import_module_from_path(Path(args.file))
 
-    module = ir.Module.create()
+    module = ir.Module.create(loc=ir.Location.file(args.file, 0, 0))
     with ir.InsertionPoint(module.body):
       pyrtg.core.CodeGenRoot._codegen_all_instances()
     return module
@@ -162,7 +162,11 @@ def compile(mlir_module: ir.Module, args: argparse.Namespace) -> None:
     pm.add('emit.file(rtg-emit-isa-assembly)')
     return pm
 
-  get_populated_pm().run(mlir_module.operation)
+  try:
+    get_populated_pm().run(mlir_module.operation)
+  except Exception as e:
+    print(str(e), file=sys.stderr)
+    sys.exit(1)
 
 
 def print_output(mlir_module: ir.Module, args: argparse.Namespace) -> None:
@@ -175,12 +179,12 @@ def print_output(mlir_module: ir.Module, args: argparse.Namespace) -> None:
     return
 
   if len(args.output_path) == 0:
-    print(mlir_module, end='', file=sys.stderr)
+    mlir_module.operation.print(file=sys.stderr, enable_debug_info=True)
   elif args.output_path == "-":
-    print(mlir_module, end='')
+    mlir_module.operation.print(enable_debug_info=True)
   else:
     with open(args.output_path, 'w') as f:
-      print(mlir_module, file=f, end='')
+      mlir_module.operation.print(file=f, enable_debug_info=True)
 
 
 def infer_input_format(filename: str) -> InputFormat | None:
