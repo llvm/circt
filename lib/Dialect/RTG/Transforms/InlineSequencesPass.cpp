@@ -157,8 +157,9 @@ struct SequenceInliner
         llvm::dbgs() << "    - Maps " << k << " to " << v << "\n";
     });
 
-    for (auto &op : *res->first) {
-      Operation *o = builder.clone(op, mapping);
+    for (auto &opToInline : *res->first) {
+      Operation *o = builder.clone(opToInline, mapping);
+      o->setLoc(op.getLoc());
       (void)o;
       LLVM_DEBUG(llvm::dbgs() << "    - Inlined " << *o << "\n");
     }

@@ -384,7 +384,7 @@ struct SymbolicComputationStorage {
 /// must be passed as arguments.
 struct IdentityValue {
 
-  IdentityValue(Type type) : type(type) {}
+  IdentityValue(Type type, Location loc) : type(type), loc(loc) {}
 
 #ifndef NDEBUG
 
@@ -402,12 +402,14 @@ struct IdentityValue {
 #endif
 
   const Type type;
+  const Location loc;
 };
 
 /// Represents a unique virtual register.
 struct VirtualRegisterStorage : IdentityValue {
-  VirtualRegisterStorage(VirtualRegisterConfigAttr allowedRegs, Type type)
-      : IdentityValue(type), allowedRegs(allowedRegs) {}
+  VirtualRegisterStorage(VirtualRegisterConfigAttr allowedRegs, Type type,
+                         Location loc)
+      : IdentityValue(type, loc), allowedRegs(allowedRegs) {}
 
   // NOTE: we don't need an 'isEqual' function and 'hashcode' here because
   // VirtualRegisters are never internalized.
@@ -418,8 +420,8 @@ struct VirtualRegisterStorage : IdentityValue {
 };
 
 struct UniqueLabelStorage : IdentityValue {
-  UniqueLabelStorage(MLIRContext *context, const ElaboratorValue &name)
-      : IdentityValue(LabelType::get(context)), name(name) {}
+  UniqueLabelStorage(const ElaboratorValue &name, Location loc)
+      : IdentityValue(LabelType::get(loc->getContext()), loc), name(name) {}
 
   // NOTE: we don't need an 'isEqual' function and 'hashcode' here because
   // VirtualRegisters are never internalized.
@@ -431,8 +433,9 @@ struct UniqueLabelStorage : IdentityValue {
 /// Storage object for '!rtg.isa.memoryblock`-typed values.
 struct MemoryBlockStorage : IdentityValue {
   MemoryBlockStorage(const APInt &baseAddress, const APInt &endAddress,
-                     Type type)
-      : IdentityValue(type), baseAddress(baseAddress), endAddress(endAddress) {}
+                     Type type, Location loc)
+      : IdentityValue(type, loc), baseAddress(baseAddress),
+        endAddress(endAddress) {}
 
   // The base address of the memory. The width of the APInt also represents the
   // address width of the memory. This is an APInt to support memories of
@@ -445,9 +448,11 @@ struct MemoryBlockStorage : IdentityValue {
 
 /// Storage object for '!rtg.isa.memory`-typed values.
 struct MemoryStorage : IdentityValue {
-  MemoryStorage(MemoryBlockStorage *memoryBlock, size_t size, size_t alignment)
+  MemoryStorage(MemoryBlockStorage *memoryBlock, size_t size, size_t alignment,
+                Location loc)
       : IdentityValue(MemoryType::get(memoryBlock->type.getContext(),
-                                      memoryBlock->baseAddress.getBitWidth())),
+                                      memoryBlock->baseAddress.getBitWidth()),
+                      loc),
         memoryBlock(memoryBlock), size(size), alignment(alignment) {}
 
   MemoryBlockStorage *memoryBlock;
@@ -458,9 +463,10 @@ struct MemoryStorage : IdentityValue {
 /// Storage object for an '!rtg.randomized_sequence'.
 struct RandomizedSequenceStorage : IdentityValue {
   RandomizedSequenceStorage(ContextResourceAttrInterface context,
-                            SequenceStorage *sequence)
+                            SequenceStorage *sequence, Location loc)
       : IdentityValue(
-            RandomizedSequenceType::get(sequence->familyName.getContext())),
+            RandomizedSequenceType::get(sequence->familyName.getContext()),
+            loc),
         context(context), sequence(sequence) {}
 
   // The context under which this sequence is placed.
@@ -473,8 +479,8 @@ struct RandomizedSequenceStorage : IdentityValue {
 struct SymbolicComputationWithIdentityStorage : IdentityValue {
   SymbolicComputationWithIdentityStorage(
       const DenseMap<Value, ElaboratorValue> &state, Operation *op)
-      : IdentityValue(op->getResult(0).getType()), name(op->getName()),
-        resultTypes(op->getResultTypes()),
+      : IdentityValue(op->getResult(0).getType(), op->getLoc()),
+        name(op->getName()), resultTypes(op->getResultTypes()),
         operands(llvm::map_range(op->getOperands(),
                                  [&](Value v) { return state.lookup(v); })),
         attributes(op->getAttrDictionary()),
@@ -491,7 +497,7 @@ struct SymbolicComputationWithIdentityValue : IdentityValue {
   SymbolicComputationWithIdentityValue(
       Type type, const SymbolicComputationWithIdentityStorage *storage,
       unsigned idx)
-      : IdentityValue(type), storage(storage), idx(idx) {
+      : IdentityValue(type, storage->loc), storage(storage), idx(idx) {
     assert(
         idx != 0 &&
         "Use SymbolicComputationWithIdentityStorage for result with index 0.");
@@ -975,7 +981,8 @@ private:
               function_ref<InFlightDiagnostic()> emitError) {
     auto intType = builder.getIntegerType(val->baseAddress.getBitWidth());
     Value res = MemoryBlockDeclareOp::create(
-        builder, loc, val->type, IntegerAttr::get(intType, val->baseAddress),
+        builder, val->loc, val->type,
+        IntegerAttr::get(intType, val->baseAddress),
         IntegerAttr::get(intType, val->endAddress));
     materializedValues[val] = res;
     return res;
@@ -983,14 +990,14 @@ private:
 
   Value visit(MemoryStorage *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    auto memBlock = materialize(val->memoryBlock, loc, emitError);
-    auto memSize = materialize(val->size, loc, emitError);
-    auto memAlign = materialize(val->alignment, loc, emitError);
+    auto memBlock = materialize(val->memoryBlock, val->loc, emitError);
+    auto memSize = materialize(val->size, val->loc, emitError);
+    auto memAlign = materialize(val->alignment, val->loc, emitError);
     if (!(memBlock && memSize && memAlign))
       return {};
 
     Value res =
-        MemoryAllocOp::create(builder, loc, memBlock, memSize, memAlign);
+        MemoryAllocOp::create(builder, val->loc, memBlock, memSize, memAlign);
     materializedValues[val] = res;
     return res;
   }
@@ -1020,7 +1027,7 @@ private:
     SmallVector<Value> args;
     SmallVector<Type> argTypes;
     for (auto arg : elabArgs) {
-      Value materialized = materialize(arg, loc, emitError);
+      Value materialized = materialize(arg, val->loc, emitError);
       if (!materialized)
         return {};
 
@@ -1029,15 +1036,15 @@ private:
     }
 
     Value res = GetSequenceOp::create(
-        builder, loc, SequenceType::get(builder.getContext(), argTypes),
+        builder, val->loc, SequenceType::get(builder.getContext(), argTypes),
         seqOp.getSymName());
 
     // Only materialize a substitute_sequence op when we have arguments to
     // substitute since this op does not support 0 arguments.
     if (!args.empty())
-      res = SubstituteSequenceOp::create(builder, loc, res, args);
+      res = SubstituteSequenceOp::create(builder, val->loc, res, args);
 
-    res = RandomizeSequenceOp::create(builder, loc, res);
+    res = RandomizeSequenceOp::create(builder, val->loc, res);
 
     materializedValues[val] = res;
     return res;
@@ -1065,17 +1072,17 @@ private:
 
   Value visit(VirtualRegisterStorage *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = VirtualRegisterOp::create(builder, loc, val->allowedRegs);
+    Value res = VirtualRegisterOp::create(builder, val->loc, val->allowedRegs);
     materializedValues[val] = res;
     return res;
   }
 
   Value visit(UniqueLabelStorage *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    auto materialized = materialize(val->name, loc, emitError);
+    auto materialized = materialize(val->name, val->loc, emitError);
     if (!materialized)
       return {};
-    Value res = LabelUniqueDeclOp::create(builder, loc, materialized);
+    Value res = LabelUniqueDeclOp::create(builder, val->loc, materialized);
     materializedValues[val] = res;
     return res;
   }
@@ -1109,14 +1116,14 @@ private:
               function_ref<InFlightDiagnostic()> emitError) {
     SmallVector<Value> operands;
     for (auto operand : val->operands) {
-      auto materialized = materialize(operand, loc, emitError);
+      auto materialized = materialize(operand, val->loc, emitError);
       if (!materialized)
         return {};
 
       operands.push_back(materialized);
     }
 
-    OperationState state(loc, val->name);
+    OperationState state(val->loc, val->name);
     state.addTypes(val->resultTypes);
     state.attributes = val->attributes;
     state.propertiesAttr = val->properties;
@@ -1243,7 +1250,7 @@ public:
     auto *seq = get<SequenceStorage *>(op.getSequence());
     auto *randomizedSeq =
         sharedState.internalizer.create<RandomizedSequenceStorage>(
-            currentContext, seq);
+            currentContext, seq, op.getLoc());
     materializer.registerIdentityValue(randomizedSeq);
     state[op.getResult()] =
         sharedState.internalizer.internalize<InterleavedSequenceStorage>(
@@ -1501,7 +1508,7 @@ public:
 
   FailureOr<DeletionKind> visitOp(VirtualRegisterOp op) {
     auto *val = sharedState.internalizer.create<VirtualRegisterStorage>(
-        op.getAllowedRegsAttr(), op.getType());
+        op.getAllowedRegsAttr(), op.getType(), op.getLoc());
     state[op.getResult()] = val;
     materializer.registerIdentityValue(val);
     return DeletionKind::Delete;
@@ -1557,7 +1564,7 @@ public:
 
   FailureOr<DeletionKind> visitOp(LabelUniqueDeclOp op) {
     auto *val = sharedState.internalizer.create<UniqueLabelStorage>(
-        op->getContext(), state.at(op.getNamePrefix()));
+        state.at(op.getNamePrefix()), op.getLoc());
     state[op.getLabel()] = val;
     materializer.registerIdentityValue(val);
     return DeletionKind::Delete;
@@ -1655,8 +1662,8 @@ public:
                                       get<SequenceStorage *>(op.getSequence())};
     auto *seq = sharedState.internalizer.internalize<SequenceStorage>(
         familyName, std::move(args));
-    auto *randSeq =
-        sharedState.internalizer.create<RandomizedSequenceStorage>(to, seq);
+    auto *randSeq = sharedState.internalizer.create<RandomizedSequenceStorage>(
+        to, seq, op.getLoc());
     materializer.registerIdentityValue(randSeq);
     Value seqVal = materializer.materialize(randSeq, op.getLoc(), emitError);
     if (!seqVal)
@@ -1674,7 +1681,7 @@ public:
 
   FailureOr<DeletionKind> visitOp(MemoryBlockDeclareOp op) {
     auto *val = sharedState.internalizer.create<MemoryBlockStorage>(
-        op.getBaseAddress(), op.getEndAddress(), op.getType());
+        op.getBaseAddress(), op.getEndAddress(), op.getType(), op.getLoc());
     state[op.getResult()] = val;
     materializer.registerIdentityValue(val);
     return DeletionKind::Delete;
@@ -1684,8 +1691,8 @@ public:
     size_t size = get<size_t>(op.getSize());
     size_t alignment = get<size_t>(op.getAlignment());
     auto *memBlock = get<MemoryBlockStorage *>(op.getMemoryBlock());
-    auto *val = sharedState.internalizer.create<MemoryStorage>(memBlock, size,
-                                                               alignment);
+    auto *val = sharedState.internalizer.create<MemoryStorage>(
+        memBlock, size, alignment, op.getLoc());
     state[op.getResult()] = val;
     materializer.registerIdentityValue(val);
     return DeletionKind::Delete;

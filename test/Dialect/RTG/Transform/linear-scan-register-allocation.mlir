@@ -54,10 +54,13 @@ rtg.test @validation() {
 // -----
 
 rtg.test @spilling() {
+  // expected-note @below {{overlapping live-range with this register that is set to 'ra'}}
   %0 = rtg.virtual_reg [#rtgtest.ra]
   // expected-error @below {{need to spill this register, but not supported yet}}
   %1 = rtg.virtual_reg [#rtgtest.ra]
   %imm = rtg.constant #rtg.isa.immediate<12, 0>
+  // expected-note @below {{register live-range starts here}}
+  // expected-note @below {{register live-range ends here}}
   rtgtest.rv32i.jalr %0, %1, %imm
 }
 

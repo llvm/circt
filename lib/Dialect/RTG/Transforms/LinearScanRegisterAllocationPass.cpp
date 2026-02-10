@@ -75,11 +75,13 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
   }
 
   DenseMap<Operation *, unsigned> opIndices;
+  DenseMap<unsigned, Operation *> opByIndex;
   unsigned maxIdx;
   for (auto [i, op] :
        llvm::enumerate(getOperation()->getRegion(0).getBlocks().front())) {
     // TODO: ideally check that the IR is already fully elaborated
     opIndices[&op] = i;
+    opByIndex[i] = &op;
     maxIdx = i;
   }
 
@@ -157,8 +159,16 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
 
     if (!availableReg) {
       ++numRegistersSpilled;
-      lr->regOp->emitError(
+      auto err = lr->regOp->emitError(
           "need to spill this register, but not supported yet");
+      for (auto *a : active)
+        err.attachNote(a->regOp->getLoc())
+            << "overlapping live-range with this register that is set to '"
+            << a->fixedReg.getRegisterAssembly() << "'";
+      err.attachNote(opByIndex[lr->start]->getLoc())
+          << "register live-range starts here";
+      err.attachNote(opByIndex[lr->end]->getLoc())
+          << "register live-range ends here";
       return signalPassFailure();
     }
 
