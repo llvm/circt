@@ -7,7 +7,7 @@
 // from om.class definitions and update all instantiations accordingly.
 
 module {
-  // CHECK-LABEL: om.class @Foo
+  // CHECK-LABEL: om.class @Foo(%used: !om.integer) -> (out: !om.integer)
   om.class @Foo(%unused1: !om.string, %used: !om.integer, %unused2: i1) -> (out: !om.integer) {
     // Only %used is actually used in the class body
     // CHECK: om.class.fields %used
@@ -28,4 +28,3 @@ module {
     om.class.fields %3 : !om.class.type<@Foo>
   }
 }
-

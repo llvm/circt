@@ -42,4 +42,3 @@ module {
     om.class.fields %1 : !om.any
   }
 }
-

@@ -32,7 +32,7 @@ module {
   om.class @Baz(%basepath: !om.frozenbasepath) -> (result: !om.any) {
     %0 = om.constant #om.integer<99 : si64> : !om.integer
 
-    // This object is not used at all, so it should also be replaced
+    // This object is not used at all. It should _still_ be replaced.
     // CHECK-NOT: om.object @Foo
     %1 = om.object @Foo(%0) : (!om.integer) -> !om.class.type<@Foo>
 
@@ -42,4 +42,3 @@ module {
     om.class.fields %3 : !om.any
   }
 }
-

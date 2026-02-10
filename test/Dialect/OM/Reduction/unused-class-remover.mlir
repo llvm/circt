@@ -9,7 +9,7 @@
 module {
   // This class is never instantiated, so it should be removed
   // CHECK-NOT: om.class @UnusedClass
-  om.class @UnusedClass(%input: !om.integer) -> (output: !om.integer) {
+  om.class @UnusedClass (%input: !om.integer) -> (output: !om.integer) {
     om.class.fields %input : !om.integer
   }
 
@@ -46,4 +46,3 @@ module {
     om.class.fields %3 : !om.any
   }
 }
-

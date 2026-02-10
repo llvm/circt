@@ -7,11 +7,11 @@
 // from om.class definitions.
 
 module {
-  // CHECK-LABEL: om.class @Foo
+  // CHECK-LABEL: om.class @Foo(%input: !om.integer) -> (usedField: !om.integer) {
   om.class @Foo(%input: !om.integer) -> (unusedField: !om.integer, usedField: !om.integer, anotherUnused: !om.string) {
     %0 = om.constant "unused" : !om.string
 
-    // CHECK: om.class.fields
+    // CHECK: om.class.fields %{{.+}} : !om.integer
     om.class.fields %input, %input, %0 : !om.integer, !om.integer, !om.string
   }
 
@@ -27,4 +27,3 @@ module {
     om.class.fields
   }
 }
-

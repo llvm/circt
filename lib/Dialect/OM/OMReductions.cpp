@@ -70,24 +70,20 @@ namespace {
 /// Replaces om.object instantiations with om.unknown when the object's fields
 /// are not accessed (only used in om.any_cast or not used at all).
 struct OMObjectToUnknownReplacer : public OpReduction<ObjectOp> {
-  void beforeReduction(mlir::ModuleOp op) override { symbols.clear(); }
-
-  void matches(ObjectOp objectOp,
-               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
+  uint64_t match(ObjectOp objectOp) override {
     // Check if the object is only used in om.any_cast operations or not used
     bool onlyAnyCastOrUnused =
         llvm::all_of(objectOp->getUsers(),
                      [](Operation *user) { return isa<om::AnyCastOp>(user); });
 
     if (!onlyAnyCastOrUnused)
-      return;
+      return 0;
 
     // Return a benefit proportional to the number of operands we can eliminate
-    addMatch(1 + objectOp.getActualParams().size(), 0);
+    return 1 + objectOp.getActualParams().size();
   }
 
-  LogicalResult rewriteMatches(ObjectOp objectOp,
-                               ArrayRef<uint64_t> matches) override {
+  LogicalResult rewrite(ObjectOp objectOp) override {
     OpBuilder builder(objectOp);
     auto unknownOp = om::UnknownValueOp::create(builder, objectOp.getLoc(),
                                                 objectOp.getResult().getType());
@@ -97,8 +93,6 @@ struct OMObjectToUnknownReplacer : public OpReduction<ObjectOp> {
   }
 
   std::string getName() const override { return "om-object-to-unknown"; }
-
-  SymbolCache symbols;
 };
 
 /// Removes unused elements from om.list_create operations.
@@ -118,16 +112,14 @@ struct OMListElementPruner : public OpReduction<ListCreateOp> {
 
     // Collect inputs that should be kept (not in matches)
     SmallVector<Value> newInputs;
-    auto inputs = listOp.getInputs();
-    for (size_t i = 0; i < inputs.size(); ++i) {
+    for (auto [i, input] : llvm::enumerate(listOp.getInputs()))
       if (!matchesSet.contains(i))
-        newInputs.push_back(inputs[i]);
-    }
+        newInputs.push_back(input);
 
     // Create a new list with the remaining inputs
-    OpBuilder builder(listOp);
-    auto newListOp = ListCreateOp::create(
-        builder, listOp.getLoc(), listOp.getResult().getType(), newInputs);
+    ImplicitLocOpBuilder builder(listOp.getLoc(), listOp);
+    auto newListOp =
+        ListCreateOp::create(builder, listOp.getResult().getType(), newInputs);
     listOp.getResult().replaceAllUsesWith(newListOp.getResult());
     listOp->erase();
     return success();
@@ -142,69 +134,72 @@ struct OMClassFieldPruner : public OpReduction<ClassOp> {
 
   void matches(ClassOp classOp,
                llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
-    // Get the field names
+    // Get the field names.
     auto fieldNames = classOp.getFieldNames();
     if (fieldNames.empty())
       return;
 
-    // Find which fields are actually accessed via om.object.field
+    // Find which fields are actually accessed. We need to walk all operations
+    // in the module because om.class operations are IsolatedFromAbove, so the
+    // SymbolUserMap doesn't find nested uses.
     llvm::DenseSet<StringAttr> usedFields;
-    auto &symbolUserMap = symbols.getNearestSymbolUserMap(classOp);
+    auto moduleOp = classOp->getParentOfType<mlir::ModuleOp>();
 
-    for (auto *user : symbolUserMap.getUsers(classOp)) {
-      if (auto objectOp = dyn_cast<ObjectOp>(user)) {
-        // Check all uses of this object
-        for (auto *objectUser : objectOp->getUsers()) {
-          if (auto fieldOp = dyn_cast<ObjectFieldOp>(objectUser)) {
-            // Mark the accessed field as used
-            auto fieldPath = fieldOp.getFieldPath();
-            if (!fieldPath.empty()) {
-              auto symRef = cast<FlatSymbolRefAttr>(fieldPath[0]);
-              usedFields.insert(symRef.getAttr());
-            }
-          }
-        }
+    moduleOp.walk([&](ObjectOp objectOp) {
+      // Check if this object is an instance of our class
+      if (objectOp.getClassNameAttr() != classOp.getSymNameAttr())
+        return;
+
+      // Check all object field uses of this object
+      for (auto *objectUser : objectOp->getUsers()) {
+        auto fieldOp = dyn_cast<ObjectFieldOp>(objectUser);
+        if (!fieldOp)
+          continue;
+
+        auto fieldPath = fieldOp.getFieldPath();
+        if (fieldPath.empty())
+          continue;
+
+        // Mark the accessed field as used.
+        usedFields.insert(cast<FlatSymbolRefAttr>(fieldPath[0]).getAttr());
       }
-    }
+    });
 
-    // Create one match for each unused field
-    for (auto [idx, fieldName] : llvm::enumerate(fieldNames)) {
+    // Create one match for each unused field.
+    for (auto [idx, fieldName] : llvm::enumerate(fieldNames))
       if (!usedFields.contains(cast<StringAttr>(fieldName)))
         addMatch(1, idx);
-    }
   }
 
   LogicalResult rewriteMatches(ClassOp classOp,
                                ArrayRef<uint64_t> matches) override {
-    // Convert matches to a set for fast lookup
+    // Convert matches to a set for fast lookup.
     llvm::SmallDenseSet<uint64_t, 4> matchesSet(matches.begin(), matches.end());
 
-    // Build new field lists with only fields not in matches
+    // Build new field lists with only fields not in matches.
     auto fieldsOp = classOp.getFieldsOp();
-    auto oldFieldNames = classOp.getFieldNames();
     auto oldFieldValues = fieldsOp.getFields();
 
-    SmallVector<Attribute> newFieldNames;
-    SmallVector<Value> newFieldValues;
-    SmallVector<NamedAttribute> newFieldTypes;
-
+    SmallVector<Attribute> names;
+    SmallVector<Value> values;
+    SmallVector<NamedAttribute> types;
     for (auto [idx, nameValue] :
-         llvm::enumerate(llvm::zip(oldFieldNames, oldFieldValues))) {
-      if (!matchesSet.contains(idx)) {
-        auto [name, value] = nameValue;
-        auto nameAttr = cast<StringAttr>(name);
-        newFieldNames.push_back(name);
-        newFieldValues.push_back(value);
-        newFieldTypes.push_back(
-            NamedAttribute(nameAttr, TypeAttr::get(value.getType())));
-      }
+         llvm::enumerate(llvm::zip(classOp.getFieldNames(), oldFieldValues))) {
+      if (matchesSet.contains(idx))
+        continue;
+
+      auto [name, value] = nameValue;
+      auto nameAttr = cast<StringAttr>(name);
+      names.push_back(name);
+      values.push_back(value);
+      types.push_back(NamedAttribute(nameAttr, TypeAttr::get(value.getType())));
     }
 
-    // Update the class
+    // Update the class.
     OpBuilder builder(classOp);
-    classOp.setFieldNamesAttr(builder.getArrayAttr(newFieldNames));
-    classOp.setFieldTypesAttr(builder.getDictionaryAttr(newFieldTypes));
-    fieldsOp.getFieldsMutable().assign(newFieldValues);
+    classOp.setFieldNamesAttr(builder.getArrayAttr(names));
+    classOp.setFieldTypesAttr(builder.getDictionaryAttr(types));
+    fieldsOp.getFieldsMutable().assign(values);
 
     return success();
   }
@@ -225,10 +220,9 @@ struct OMClassParameterPruner : public OpReduction<ClassOp> {
       return;
 
     // Create one match for each unused parameter
-    for (auto [idx, arg] : llvm::enumerate(bodyBlock->getArguments())) {
+    for (auto [idx, arg] : llvm::enumerate(bodyBlock->getArguments()))
       if (arg.use_empty())
         addMatch(1, idx);
-    }
   }
 
   LogicalResult rewriteMatches(ClassOp classOp,
@@ -238,9 +232,9 @@ struct OMClassParameterPruner : public OpReduction<ClassOp> {
 
     auto *bodyBlock = classOp.getBodyBlock();
 
-    // Collect all object instantiations that need to be updated
-    // We need to walk all operations in the module because om.class operations
-    // are IsolatedFromAbove, so the SymbolUserMap doesn't find nested uses
+    // Collect all object instantiations that need to be updated. We need to
+    // walk all operations in the module because om.class operations are
+    // IsolatedFromAbove, so the SymbolUserMap doesn't find nested uses.
     SmallVector<ObjectOp> objectsToUpdate;
     auto moduleOp = classOp->getParentOfType<mlir::ModuleOp>();
     moduleOp.walk([&](ObjectOp objectOp) {
@@ -248,31 +242,28 @@ struct OMClassParameterPruner : public OpReduction<ClassOp> {
         objectsToUpdate.push_back(objectOp);
     });
 
-    // Update the class formal parameters FIRST, before updating instantiations
-    auto oldParamNames = classOp.getFormalParamNames();
+    // Update the class formal parameters FIRST, before updating instantiations.
     SmallVector<Attribute> newParamNames;
-    for (auto [idx, name] : llvm::enumerate(oldParamNames)) {
+    for (auto [idx, name] : llvm::enumerate(classOp.getFormalParamNames()))
       if (!matchesSet.contains(idx))
         newParamNames.push_back(name);
-    }
 
     OpBuilder builder(classOp);
     classOp.setFormalParamNamesAttr(builder.getArrayAttr(newParamNames));
 
-    // Remove the block arguments in reverse order to maintain indices
+    // Remove the block arguments in reverse order to maintain indices.
     SmallVector<unsigned> indicesToRemove(matches.begin(), matches.end());
     llvm::sort(indicesToRemove, std::greater<unsigned>());
     for (unsigned idx : indicesToRemove)
       bodyBlock->eraseArgument(idx);
 
-    // Now update all om.object instantiations to match the new signature
+    // Now update all om.object instantiations to match the new signature.
     for (auto objectOp : objectsToUpdate) {
       // Build new actual parameters without the removed parameters
       SmallVector<Value> newParams;
-      for (auto [idx, param] : llvm::enumerate(objectOp.getActualParams())) {
+      for (auto [idx, param] : llvm::enumerate(objectOp.getActualParams()))
         if (!matchesSet.contains(idx))
           newParams.push_back(param);
-      }
 
       // Create new object op
       OpBuilder builder(objectOp);
@@ -295,42 +286,38 @@ struct OMClassParameterPruner : public OpReduction<ClassOp> {
 struct OMUnusedClassRemover : public OpReduction<ClassOp> {
   void beforeReduction(mlir::ModuleOp op) override { symbols.clear(); }
 
-  void matches(ClassOp classOp,
-               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
-    // Check if this class is ever instantiated via om.object
-    // We need to walk all operations because SymbolUserMap doesn't find
-    // nested symbol uses inside IsolatedFromAbove operations like om.class
+  uint64_t match(ClassOp classOp) override {
+    // Check if this class is ever instantiated via om.object.  We need to walk
+    // all operations because SymbolUserMap doesn't find nested symbol uses
+    // inside IsolatedFromAbove operations like om.class.
     auto moduleOp = classOp->getParentOfType<mlir::ModuleOp>();
-    auto className = classOp.getSymNameAttr();
-    bool hasObjectInstantiation = false;
-    bool containsObjectInstantiation = false;
 
     // Check if this class is instantiated via om.object anywhere
-    moduleOp.walk([&](ObjectOp objectOp) {
-      if (objectOp.getClassNameAttr() == className) {
-        hasObjectInstantiation = true;
+    auto result = moduleOp.walk([&](ObjectOp objectOp) {
+      if (objectOp.getClassNameAttr() == classOp.getSymNameAttr())
         return WalkResult::interrupt();
-      }
       return WalkResult::advance();
     });
+
+    if (result.wasInterrupted())
+      return 0;
 
     // Check if this class contains any om.object instantiations
     // (classes that instantiate other classes should be kept as they might be
     // entry points)
-    classOp.walk([&](ObjectOp objectOp) {
-      containsObjectInstantiation = true;
-      return WalkResult::interrupt();
-    });
+    result = classOp.walk(
+        [&](ObjectOp objectOp) { return WalkResult::interrupt(); });
+
+    if (result.wasInterrupted())
+      return 0;
 
     // Remove the class if:
-    // 1. It's never instantiated via om.object, AND
-    // 2. It doesn't contain any om.object instantiations (not an entry point)
-    if (!hasObjectInstantiation && !containsObjectInstantiation)
-      addMatch(10, 0);
+    // 1. it's never instantiated via om.object, AND
+    // 2. it doesn't contain any om.object instantiations (not an entry point).
+    return 10;
   }
 
-  LogicalResult rewriteMatches(ClassOp classOp,
-                               ArrayRef<uint64_t> matches) override {
+  LogicalResult rewrite(ClassOp classOp) override {
     classOp->erase();
     return success();
   }
@@ -343,20 +330,17 @@ struct OMUnusedClassRemover : public OpReduction<ClassOp> {
 /// Simplifies om.unknown -> om.any_cast chains by replacing with a direct
 /// om.unknown of the target type.
 struct OMAnyCastOfUnknownSimplifier : public OpReduction<om::AnyCastOp> {
-  void matches(om::AnyCastOp anyCastOp,
-               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
-    // Check if the input is an om.unknown
-    if (auto unknownOp =
-            anyCastOp.getInput().getDefiningOp<om::UnknownValueOp>())
-      addMatch(2, 0);
+  uint64_t match(om::AnyCastOp anyCastOp) override {
+    auto unknownOp = anyCastOp.getInput().getDefiningOp<om::UnknownValueOp>();
+    if (unknownOp)
+      return 2;
+    return 0;
   }
 
-  LogicalResult rewriteMatches(om::AnyCastOp anyCastOp,
-                               ArrayRef<uint64_t> matches) override {
-    OpBuilder builder(anyCastOp);
-    auto unknownOp = om::UnknownValueOp::create(
-        builder, anyCastOp.getLoc(), anyCastOp.getResult().getType());
-    anyCastOp.getResult().replaceAllUsesWith(unknownOp.getResult());
+  LogicalResult rewrite(om::AnyCastOp anyCastOp) override {
+    ImplicitLocOpBuilder builder(anyCastOp.getLoc(), anyCastOp);
+    anyCastOp.getResult().replaceAllUsesWith(
+        om::UnknownValueOp::create(builder, anyCastOp.getResult().getType()));
     anyCastOp->erase();
     return success();
   }
