@@ -51,11 +51,11 @@ assert not supports
 assert "any type" in reason
 assert any_type.bit_width == -1
 try:
-    any_type.serialize(0)
+  any_type.serialize(0)
 except ValueError as exc:
-    assert "any type" in str(exc)
+  assert "any type" in str(exc)
 else:
-    assert False, "AnyType.serialize should raise"
+  assert False, "AnyType.serialize should raise"
 
 # Test TypeAliasType construction
 alias_inner = types.UIntType("alias_inner", 16)
