@@ -306,7 +306,8 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                 [&]() -> Value {
                   auto current = value;
                   auto past =
-                      ltl::PastOp::create(builder, loc, value, 1).getResult();
+                      ltl::PastOp::create(builder, loc, value, 1, Value{})
+                          .getResult();
                   auto notCurrent =
                       ltl::NotOp::create(builder, loc, current).getResult();
                   auto pastAndNotCurrent =
@@ -318,7 +319,8 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
           .Case("$rose",
                 [&]() -> Value {
                   auto past =
-                      ltl::PastOp::create(builder, loc, value, 1).getResult();
+                      ltl::PastOp::create(builder, loc, value, 1, Value{})
+                          .getResult();
                   auto notPast = comb::createOrFoldNot(loc, past, builder);
                   auto current = value;
                   auto notPastAndCurrent =
@@ -330,7 +332,8 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
           .Case("$stable",
                 [&]() -> Value {
                   auto past =
-                      ltl::PastOp::create(builder, loc, value, 1).getResult();
+                      ltl::PastOp::create(builder, loc, value, 1, Value{})
+                          .getResult();
                   auto notPast =
                       ltl::NotOp::create(builder, loc, past).getResult();
                   auto current = value;
@@ -350,7 +353,8 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                 })
           .Case("$past",
                 [&]() -> Value {
-                  Value past = ltl::PastOp::create(builder, loc, value, 1);
+                  Value past =
+                      ltl::PastOp::create(builder, loc, value, 1, Value{});
                   // Cast back to Moore integers so Moore ops can use the result
                   // if needed
                   if (auto ty = dyn_cast<moore::IntType>(originalType)) {

@@ -105,13 +105,16 @@ def DelayOp : LTLOp<"delay", [Pure]> {
   }];
 }
 
-def PastOp : LTLOp<"past", [SameOperandsAndResultType, Pure]> {
+def PastOp : LTLOp<"past", [TypesMatchWith<"input and result types must match",
+    "input", "result", "$_self">,
+    Pure]> {
   let arguments = (ins
     HWIntegerType:$input,
-    I64Attr:$delay);
+    I64Attr:$delay,
+    Optional<I1>:$clk);
   let results = (outs HWIntegerType:$result);
   let assemblyFormat = [{
-    $input `,` $delay attr-dict `:` type($input)
+    $input `,` $delay (`clk` $clk^)? attr-dict `:` type($input)
   }];
 
   let summary = "Observe the sequence $delay cycles earlier.";
