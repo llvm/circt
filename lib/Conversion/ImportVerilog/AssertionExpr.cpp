@@ -8,6 +8,7 @@
 
 #include "slang/ast/expressions/AssertionExpr.h"
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
@@ -326,26 +327,15 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                           .getResult();
                   return notPastAndCurrent;
                 })
-          // Translate $changed to ( x[0] ∧ ¬x[-1] ) ⋁ ( ¬x[0] ∧ x[-1] )
+          // Translate $changed to x[0] != x[-1]
           .Case("$changed",
                 [&]() -> Value {
                   auto past =
                       ltl::PastOp::create(builder, loc, value, 1).getResult();
-                  auto notPast =
-                      ltl::NotOp::create(builder, loc, past).getResult();
                   auto current = value;
-                  auto notCurrent =
-                      ltl::NotOp::create(builder, loc, value).getResult();
-                  auto notPastAndCurrent =
-                      ltl::AndOp::create(builder, loc, {current, notPast})
-                          .getResult();
-                  auto pastAndNotCurrent =
-                      ltl::AndOp::create(builder, loc, {notCurrent, past})
-                          .getResult();
-                  auto changed =
-                      ltl::OrOp::create(builder, loc,
-                                        {notPastAndCurrent, pastAndNotCurrent})
-                          .getResult();
+                  auto changed = comb::ICmpOp::create(builder, loc,
+                                                      comb::ICmpPredicate::ne,
+                                                      past, current, false);
                   return changed;
                 })
           // Translate $stable to ( x[0] ∧ x[-1] ) ⋁ ( ¬x[0] ∧ ¬x[-1] )

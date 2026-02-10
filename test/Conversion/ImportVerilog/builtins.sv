@@ -424,11 +424,7 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
   // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 : i1
-  // CHECK-NEXT: [[NOTPAST:%.+]] = ltl.not [[PAST]] : i1
-  // CHECK-NEXT: [[NOTCURRENT:%.+]] = ltl.not [[CURRENT]] : i1
-  // CHECK-NEXT: [[NOTPASTANDCURRENT:%.+]] = ltl.and [[CURRENT]], [[NOTPAST]] : i1, !ltl.property
-  // CHECK-NEXT: [[PASTANDNOTCURRENT:%.+]] = ltl.and [[NOTCURRENT]], [[PAST]] : !ltl.property, i1
-  // CHECK-NEXT: [[STABLE:%.+]] = ltl.or [[NOTPASTANDCURRENT]], [[PASTANDNOTCURRENT]] : !ltl.property, !ltl.property
+  // CHECK-NEXT: [[STABLE:%.+]] = comb.icmp ne [[PAST]], [[CURRENT]] : i1
   changed_clk: assert property (@(posedge clk_i) clk_i |=> $changed(clk_i));
   // CHECK: moore.procedure always {
   // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
