@@ -302,19 +302,18 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
 
   auto systemCallRes =
       llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
-          // Translate $fell to ¬x[0] ∧ x[-1]
+          // Translate $fell to x[-1] > x[0]
           .Case("$fell",
                 [&]() -> Value {
                   auto current = value;
                   auto past =
                       ltl::PastOp::create(builder, loc, value, 1, Value{})
                           .getResult();
-                  auto notCurrent =
-                      ltl::NotOp::create(builder, loc, current).getResult();
-                  auto pastAndNotCurrent =
-                      ltl::AndOp::create(builder, loc, {notCurrent, past})
-                          .getResult();
-                  return pastAndNotCurrent;
+                  auto fell = comb::ICmpOp::create(builder, loc,
+                                                   comb::ICmpPredicate::ugt,
+                                                   past, current, false)
+                                  .getResult();
+                  return fell;
                 })
           // Translate $rose to x[0] ∧ ¬x[-1]
           .Case("$rose",
