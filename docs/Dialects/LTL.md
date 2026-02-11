@@ -196,25 +196,25 @@ where the `logic_to_int` conversion is only necessary if `%cond` is 4-valued.
 
 - **`$rose(a)`**: 
 ```mlir
-%1 = ltl.compreg %a, %clock : i1
+%1 = seq.compreg %a, %clock : i1
 %rose = comb.icmp bin ult %1, %a : i1  
 ```  
 
 - **`$fell(a)`**: 
 ```mlir
-%1 = ltl.compreg %a, %clock : i1
+%1 = seq.compreg %a, %clock : i1
 %fell = comb.icmp bin ugt %a, %1 : i1
 ```    
 
 - **`$stable(a)`**:
 ```mlir
-%1 = ltl.compreg %a, %clock : i1
+%1 = seq.compreg %a, %clock : i1
 %rose = comb.icmp bin eq %a, %1 : i1
 ``` 
 
 - **`$changed(a)`**:
 ```mlir
-%1 = ltl.compreg %a, %clock : i1
+%1 = seq.compreg %a, %clock : i1
 %changed = comb.icmp bin ne %a, %1 : i1
 ```
 
