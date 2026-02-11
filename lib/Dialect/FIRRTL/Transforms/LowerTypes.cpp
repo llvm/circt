@@ -1144,6 +1144,7 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   // Lower the module block arguments.
   llvm::BitVector argsToRemove;
   auto newArgs = extModule.getPorts();
+  argsToRemove.reserve(newArgs.size());
 
   DomainLoweringHelper domainHelper(context, extModule.getPortTypes());
 
@@ -1160,7 +1161,8 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   }
 
   // Remove block args that have been lowered.
-  eraseElementsAtIndices(newArgs, argsToRemove);
+  if (argsRemoved != 0)
+    eraseElementsAtIndices(newArgs, argsToRemove);
 
   domainHelper.computeDomainMap(newArgs);
 
@@ -1237,6 +1239,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Lower the module block arguments.
   llvm::BitVector argsToRemove;
   auto newArgs = module.getPorts();
+  argsToRemove.reserve(newArgs.size());
 
   DomainLoweringHelper domainHelper(context, module.getPortTypes());
 
