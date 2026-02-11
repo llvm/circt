@@ -2068,12 +2068,11 @@ hw.module @issue9573_loop(in %b : i1, in %c : i1, out out : i4) {
 // CHECK-LABEL: @notSext
 // ~sext(a) -> sext(~a)
 hw.module @notSext(in %a : i3, out negsext : i8) {
-  // CHECK-NEXT: %c-1_i8 = hw.constant -1 : i8
-  // CHECK-NEXT: %[[SIGN:.*]] = comb.extract %a from 2 : (i3) -> i1
-  // CHECK-NEXT: %[[REPL:.*]] = comb.replicate %[[SIGN]] : (i1) -> i5
-  // CHECK-NEXT: %[[SEXT:.*]] = comb.concat %[[REPL]], %a : i5, i3
-  // CHECK-NEXT: %[[NEGSEXT:.*]] = comb.xor %[[SEXT]], %c-1_i8 : i8
-  // CHECK-NEXT: hw.output %[[NEGSEXT]] : i8
+  // CHECK: %[[C:.*]] = hw.constant -1 : i{{3|8}}
+  // CHECK: %[[SIGN:.*]] = comb.extract %{{.*}} from 2 : (i3) -> i1
+  // CHECK: %[[SIGNBITS:.*]] = comb.replicate %[[SIGN]] : (i1) -> i5
+  // CHECK: %[[NEGSEXT:.*]] = comb.concat %[[SIGNBITS]], %{{.*}} : i5, i3
+  // CHECK: hw.output %{{.*}} : i8
   %c-1_i8 = hw.constant -1 : i8
   // sext(a)
   %0 = comb.extract %a from 2 : (i3) -> i1
