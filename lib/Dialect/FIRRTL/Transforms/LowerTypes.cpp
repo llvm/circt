@@ -858,7 +858,8 @@ static void eraseElementsAtIndices(SmallVectorImpl<T> &vec,
   // Copy any remaining elements after the last removal point.
   size_t remainingSize = vec.size() - readIndex;
   if (remainingSize > 0) {
-    std::move(vec.begin() + readIndex, vec.end(), vec.begin() + writeIndex);
+    if (writeIndex != readIndex)
+      std::move(vec.begin() + readIndex, vec.end(), vec.begin() + writeIndex);
     writeIndex += remainingSize;
   }
 
