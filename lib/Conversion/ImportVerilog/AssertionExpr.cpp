@@ -8,6 +8,7 @@
 
 #include "slang/ast/expressions/AssertionExpr.h"
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
@@ -327,6 +328,17 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                       ltl::AndOp::create(builder, loc, {current, notPast})
                           .getResult();
                   return notPastAndCurrent;
+                })
+          // Translate $changed to x[0] != x[-1]
+          .Case("$changed",
+                [&]() -> Value {
+                  auto past =
+                      ltl::PastOp::create(builder, loc, value, 1).getResult();
+                  auto current = value;
+                  auto changed = comb::ICmpOp::create(builder, loc,
+                                                      comb::ICmpPredicate::ne,
+                                                      past, current, false);
+                  return changed;
                 })
           // Translate $stable to ( x[0] ∧ x[-1] ) ⋁ ( ¬x[0] ∧ ¬x[-1] )
           .Case("$stable",

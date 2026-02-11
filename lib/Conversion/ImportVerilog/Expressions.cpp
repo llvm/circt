@@ -1595,7 +1595,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     // LTLDialect; treat them there instead.
     bool isAssertionCall =
         llvm::StringSwitch<bool>(subroutine.name)
-            .Cases({"$rose", "$fell", "$stable", "$past"}, true)
+            .Cases({"$rose", "$fell", "$stable", "$changed", "$past"}, true)
             .Default(false);
 
     if (isAssertionCall)

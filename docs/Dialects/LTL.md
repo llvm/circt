@@ -212,6 +212,12 @@ where the `logic_to_int` conversion is only necessary if `%cond` is 4-valued.
 %rose = comb.icmp bin eq %a, %1 : i1
 ``` 
 
+- **`$changed(a)`**:
+```mlir
+%1 = ltl.compreg %a, %clock : i1
+%changed = comb.icmp bin ne %a, %1 : i1
+```
+
 - **`$past(a, n)`**: 
 ```mlir
 %zero = hw.constant 0 : i1

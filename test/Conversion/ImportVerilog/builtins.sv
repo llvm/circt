@@ -370,6 +370,7 @@ function void SeverityBuiltinEdgeCase(string testStr);
   $fatal(1, $sformatf("%s 23", testStr));
 endfunction
 
+// IEEE 1800-2023 § 16.9.3 "Sampled value functions"
 // CHECK-LABEL: moore.module @SampleValueBuiltins(
 // CHECK-SAME: in [[CLK:%.+]] : !moore.l1
 module SampleValueBuiltins #() (
@@ -415,6 +416,16 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[NOTPASTANDNOTCURRENT:%.+]] = ltl.and [[NOTCURRENT]], [[NOTPAST]] : !ltl.property, !ltl.property
   // CHECK-NEXT: [[STABLE:%.+]] = ltl.or [[PASTANDCURRENT]], [[NOTPASTANDNOTCURRENT]] : i1, !ltl.property
   stable_clk: assert property (@(posedge clk_i) clk_i |=> $stable(clk_i));
+  // CHECK: moore.procedure always {
+  // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[C_INT:%.+]] = moore.logic_to_int [[C]] : l1
+  // CHECK-NEXT: [[CB:%.+]] = moore.to_builtin_int [[C_INT]] : i1
+  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
+  // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 : i1
+  // CHECK-NEXT: [[STABLE:%.+]] = comb.icmp ne [[PAST]], [[CURRENT]] : i1
+  changed_clk: assert property (@(posedge clk_i) clk_i |=> $changed(clk_i));
   // CHECK: moore.procedure always {
   // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
   // CHECK-NEXT: [[C_INT:%.+]] = moore.logic_to_int [[C]] : l1
