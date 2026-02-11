@@ -338,7 +338,8 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                   auto current = value;
                   auto changed = comb::ICmpOp::create(builder, loc,
                                                       comb::ICmpPredicate::ne,
-                                                      past, current, false);
+                                                      past, current, false)
+                                     .getResult();
                   return changed;
                 })
           // Translate $stable to x[0] == x[-1]
