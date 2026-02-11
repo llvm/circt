@@ -831,6 +831,26 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
   }
 }
 
+/// Helper function to remove elements from a vector based on a BitVector mask.
+template <typename T>
+static void eraseElementsAtIndices(SmallVectorImpl<T> &vec,
+                                   const llvm::BitVector &removalMask) {
+  size_t originalSize = vec.size();
+  size_t writeIndex = 0;
+
+  // Compact the vector by copying elements to keep to the front.
+  for (size_t readIndex = 0; readIndex < originalSize; ++readIndex) {
+    if (removalMask[readIndex])
+      continue;
+
+    vec[writeIndex] = vec[readIndex];
+    ++writeIndex;
+  }
+
+  // Truncate the vector to remove the now-unused tail elements.
+  vec.truncate(writeIndex);
+}
+
 void TypeLoweringVisitor::lowerModule(FModuleLike op) {
   if (auto module = llvm::dyn_cast<FModuleOp>(*op))
     visitDecl(module);
@@ -1110,24 +1130,25 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   OpBuilder builder(context);
 
   // Lower the module block arguments.
-  SmallVector<unsigned> argsToRemove;
+  llvm::BitVector argsToRemove;
   auto newArgs = extModule.getPorts();
 
   DomainLoweringHelper domainHelper(context, extModule.getPortTypes());
 
-  for (size_t argIndex = 0, argsRemoved = 0; argIndex < newArgs.size();
-       ++argIndex) {
+  size_t argsRemoved = 0;
+  for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
     SmallVector<Value> lowering;
     if (lowerArg(extModule, argIndex, argsRemoved, newArgs, lowering)) {
-      argsToRemove.push_back(argIndex);
+      argsToRemove.push_back(true);
       ++argsRemoved;
+    } else {
+      argsToRemove.push_back(false);
     }
     // lowerArg might have invalidated any reference to newArgs, be careful
   }
 
-  // Remove block args that have been lowered
-  for (auto toRemove : llvm::reverse(argsToRemove))
-    newArgs.erase(newArgs.begin() + toRemove);
+  // Remove block args that have been lowered.
+  eraseElementsAtIndices(newArgs, argsToRemove);
 
   domainHelper.computeDomainMap(newArgs);
 
@@ -1223,14 +1244,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Remove block args that have been lowered.
   if (argsRemoved != 0) {
     body->eraseArguments(argsToRemove);
-    size_t size = newArgs.size();
-    for (size_t src = 0, dst = 0; src < size; ++src) {
-      if (argsToRemove[src])
-        continue;
-      newArgs[dst] = newArgs[src];
-      ++dst;
-    }
-    newArgs.erase(newArgs.end() - argsRemoved, newArgs.end());
+    eraseElementsAtIndices(newArgs, argsToRemove);
   }
 
   domainHelper.computeDomainMap(newArgs);
