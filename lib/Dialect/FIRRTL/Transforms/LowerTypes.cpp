@@ -831,6 +831,42 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
   }
 }
 
+/// Helper function to remove elements from a vector based on a BitVector mask.
+template <typename T>
+static void eraseElementsAtIndices(SmallVectorImpl<T> &vec,
+                                   const llvm::BitVector &removalMask) {
+  size_t writeIndex = 0, readIndex = 0;
+
+  // Iterate over each set bit (element to remove) in the mask.
+  // Between each removal point, we bulk-copy the range of elements to keep.
+  for (size_t removalIndex : removalMask.set_bits()) {
+    // Copy the range [readIndex, removalIndex) - these are elements to keep.
+    assert(removalIndex >= readIndex && "removal index before read index");
+    size_t rangeSize = removalIndex - readIndex;
+    if (rangeSize > 0) {
+      // Bulk move the range of elements to keep to the write position.
+      // Skip if the read and write positions are the same (= the first
+      // iteration).
+      if (writeIndex != readIndex)
+        std::move(vec.begin() + readIndex, vec.begin() + removalIndex,
+                  vec.begin() + writeIndex);
+      writeIndex += rangeSize;
+    }
+    readIndex = removalIndex + 1;
+  }
+
+  // Copy any remaining elements after the last removal point.
+  size_t remainingSize = vec.size() - readIndex;
+  if (remainingSize > 0) {
+    if (writeIndex != readIndex)
+      std::move(vec.begin() + readIndex, vec.end(), vec.begin() + writeIndex);
+    writeIndex += remainingSize;
+  }
+
+  // Truncate the vector to the new size (number of elements kept).
+  vec.truncate(writeIndex);
+}
+
 void TypeLoweringVisitor::lowerModule(FModuleLike op) {
   if (auto module = llvm::dyn_cast<FModuleOp>(*op))
     visitDecl(module);
@@ -1110,24 +1146,27 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   OpBuilder builder(context);
 
   // Lower the module block arguments.
-  SmallVector<unsigned> argsToRemove;
+  llvm::BitVector argsToRemove;
   auto newArgs = extModule.getPorts();
+  argsToRemove.reserve(newArgs.size());
 
   DomainLoweringHelper domainHelper(context, extModule.getPortTypes());
 
-  for (size_t argIndex = 0, argsRemoved = 0; argIndex < newArgs.size();
-       ++argIndex) {
+  size_t argsRemoved = 0;
+  for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
     SmallVector<Value> lowering;
     if (lowerArg(extModule, argIndex, argsRemoved, newArgs, lowering)) {
-      argsToRemove.push_back(argIndex);
+      argsToRemove.push_back(true);
       ++argsRemoved;
+    } else {
+      argsToRemove.push_back(false);
     }
     // lowerArg might have invalidated any reference to newArgs, be careful
   }
 
-  // Remove block args that have been lowered
-  for (auto toRemove : llvm::reverse(argsToRemove))
-    newArgs.erase(newArgs.begin() + toRemove);
+  // Remove block args that have been lowered.
+  if (argsRemoved != 0)
+    eraseElementsAtIndices(newArgs, argsToRemove);
 
   domainHelper.computeDomainMap(newArgs);
 
@@ -1204,6 +1243,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Lower the module block arguments.
   llvm::BitVector argsToRemove;
   auto newArgs = module.getPorts();
+  argsToRemove.reserve(newArgs.size());
 
   DomainLoweringHelper domainHelper(context, module.getPortTypes());
 
@@ -1223,14 +1263,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Remove block args that have been lowered.
   if (argsRemoved != 0) {
     body->eraseArguments(argsToRemove);
-    size_t size = newArgs.size();
-    for (size_t src = 0, dst = 0; src < size; ++src) {
-      if (argsToRemove[src])
-        continue;
-      newArgs[dst] = newArgs[src];
-      ++dst;
-    }
-    newArgs.erase(newArgs.end() - argsRemoved, newArgs.end());
+    eraseElementsAtIndices(newArgs, argsToRemove);
   }
 
   domainHelper.computeDomainMap(newArgs);
