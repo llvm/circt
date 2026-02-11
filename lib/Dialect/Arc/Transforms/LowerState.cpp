@@ -102,6 +102,7 @@ struct OpLowering {
   LogicalResult lower(hw::OutputOp op);
   LogicalResult lower(seq::InitialOp op);
   LogicalResult lower(llhd::FinalOp op);
+  LogicalResult lower(llhd::ProbeOp op);
 
   scf::IfOp createIfClockOp(Value clock);
 
@@ -147,7 +148,8 @@ struct ModuleLowering {
   DenseMap<std::pair<Value, Phase>, Value> loweredValues;
 
   /// The allocated input ports.
-  SmallVector<Value> allocatedInputs;
+  DenseMap<Value, Value> allocatedInputs;
+  DenseMap<Value, Value> inoutArgToState;
   /// The allocated states as a mapping from op results to `arc.alloc_state`
   /// results.
   DenseMap<Value, Value> allocatedStates;
@@ -214,10 +216,26 @@ LogicalResult ModuleLowering::run() {
   // Allocate storage for the inputs.
   for (auto arg : moduleOp.getBodyBlock()->getArguments()) {
     auto name = moduleOp.getArgName(arg.getArgNumber());
-    auto state =
-        RootInputOp::create(allocBuilder, arg.getLoc(),
-                            StateType::get(arg.getType()), name, storageArg);
-    allocatedInputs.push_back(state);
+    Type argType = arg.getType();
+    if (auto inoutType = dyn_cast<hw::InOutType>(argType)) {
+      Type elementType = inoutType.getElementType();
+      auto state =
+          RootInputOp::create(allocBuilder, arg.getLoc(),
+                              StateType::get(elementType), name, storageArg);
+      inoutArgToState[arg] = state;
+      continue;
+    }
+    if (auto refType = dyn_cast<llhd::RefType>(argType)) {
+      Type nestedType = refType.getNestedType();
+      auto state =
+          RootInputOp::create(allocBuilder, arg.getLoc(),
+                              StateType::get(nestedType), name, storageArg);
+      inoutArgToState[arg] = state;
+      continue;
+    }
+    auto state = RootInputOp::create(allocBuilder, arg.getLoc(),
+                                     StateType::get(argType), name, storageArg);
+    allocatedInputs[arg] = state;
   }
 
   // Lower the ops.
@@ -416,7 +434,8 @@ LogicalResult OpLowering::lower() {
   return TypeSwitch<Operation *, LogicalResult>(op)
       // Operations with special lowering.
       .Case<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp, hw::OutputOp,
-            seq::InitialOp, llhd::FinalOp>([&](auto op) { return lower(op); })
+            seq::InitialOp, llhd::FinalOp, llhd::ProbeOp>(
+          [&](auto op) { return lower(op); })
 
       // Operations that should be skipped entirely and never land on the
       // worklist to be lowered.
@@ -968,6 +987,21 @@ LogicalResult OpLowering::lower(llhd::FinalOp op) {
   return success();
 }
 
+LogicalResult OpLowering::lower(llhd::ProbeOp op) {
+  Value signal = op.getSignal();
+  if (auto arg = dyn_cast<BlockArgument>(signal)) {
+    if (auto state = module.inoutArgToState.lookup(arg)) {
+      if (initial)
+        return success();
+      auto value =
+          StateReadOp::create(module.getBuilder(phase), op.getLoc(), state);
+      module.loweredValues[{op.getResult(), phase}] = value;
+      return success();
+    }
+  }
+  return lowerDefault();
+}
+
 /// Create the operations necessary to detect a posedge on the given clock,
 /// potentially reusing a previous posedge detection, and create an `scf.if`
 /// operation for that posedge. This also tries to reuse an `scf.if` operation
@@ -996,7 +1030,13 @@ Value OpLowering::lowerValue(Value value, Phase phase) {
   if (auto arg = dyn_cast<BlockArgument>(value)) {
     if (initial)
       return {};
-    auto state = module.allocatedInputs[arg.getArgNumber()];
+    if (module.inoutArgToState.lookup(arg))
+      return {};
+    auto state = module.allocatedInputs.lookup(arg);
+    if (!state) {
+      emitError(arg.getLoc()) << "block argument has not been allocated";
+      return {};
+    }
     return StateReadOp::create(module.getBuilder(phase), arg.getLoc(), state);
   }
 
