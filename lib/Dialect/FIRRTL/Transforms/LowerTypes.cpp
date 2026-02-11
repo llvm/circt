@@ -835,19 +835,31 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
 template <typename T>
 static void eraseElementsAtIndices(SmallVectorImpl<T> &vec,
                                    const llvm::BitVector &removalMask) {
-  size_t originalSize = vec.size();
-  size_t writeIndex = 0;
+  size_t writeIndex = 0, readIndex = 0;
 
-  // Compact the vector by copying elements to keep to the front.
-  for (size_t readIndex = 0; readIndex < originalSize; ++readIndex) {
-    if (removalMask[readIndex])
-      continue;
-
-    vec[writeIndex] = vec[readIndex];
-    ++writeIndex;
+  // Iterate over each set bit (element to remove) in the mask.
+  // Between each removal point, we bulk-copy the range of elements to keep.
+  for (int removalIndex : removalMask.set_bits()) {
+    // Copy the range [readIndex, removalIndex) - these are elements to keep.
+    size_t rangeSize = removalIndex - readIndex;
+    if (rangeSize > 0) {
+      // Bulk move the range of elements to keep to the write position.
+      std::move(vec.begin() + readIndex, vec.begin() + removalIndex,
+                vec.begin() + writeIndex);
+      writeIndex += rangeSize;
+    }
+    // Skip the element at removalIndex (it's marked for removal).
+    readIndex = removalIndex + 1;
   }
 
-  // Truncate the vector to remove the now-unused tail elements.
+  // Copy any remaining elements after the last removal point.
+  size_t remainingSize = vec.size() - readIndex;
+  if (remainingSize > 0) {
+    std::move(vec.begin() + readIndex, vec.end(), vec.begin() + writeIndex);
+    writeIndex += remainingSize;
+  }
+
+  // Truncate the vector to the new size (number of elements kept).
   vec.truncate(writeIndex);
 }
 
