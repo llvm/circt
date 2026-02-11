@@ -103,6 +103,7 @@ struct OpLowering {
   LogicalResult lower(seq::InitialOp op);
   LogicalResult lower(llhd::FinalOp op);
   LogicalResult lower(llhd::ProbeOp op);
+  LogicalResult lower(llhd::DriveOp op);
 
   scf::IfOp createIfClockOp(Value clock);
 
@@ -434,7 +435,7 @@ LogicalResult OpLowering::lower() {
   return TypeSwitch<Operation *, LogicalResult>(op)
       // Operations with special lowering.
       .Case<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp, hw::OutputOp,
-            seq::InitialOp, llhd::FinalOp, llhd::ProbeOp>(
+            seq::InitialOp, llhd::FinalOp, llhd::ProbeOp, llhd::DriveOp>(
           [&](auto op) { return lower(op); })
 
       // Operations that should be skipped entirely and never land on the
@@ -1000,6 +1001,27 @@ LogicalResult OpLowering::lower(llhd::ProbeOp op) {
     }
   }
   return lowerDefault();
+}
+
+LogicalResult OpLowering::lower(llhd::DriveOp op) {
+  Value signal = op.getSignal();
+  auto arg = dyn_cast<BlockArgument>(signal);
+  auto state = arg ? module.inoutArgToState.lookup(arg) : Value{};
+  if (!state)
+    return lowerDefault();
+
+  auto value = lowerValue(op.getValue(), phase);
+  auto enable = op.getEnable() ? lowerValue(op.getEnable(), phase) : Value{};
+  if (initial)
+    return success();
+  if (!value)
+    return failure();
+  if (op.getEnable() && !enable)
+    return failure();
+
+  StateWriteOp::create(module.getBuilder(phase), op.getLoc(), state, value,
+                       enable);
+  return success();
 }
 
 /// Create the operations necessary to detect a posedge on the given clock,

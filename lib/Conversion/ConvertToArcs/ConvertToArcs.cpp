@@ -585,8 +585,11 @@ void ConvertToArcsPass::runOnOperation() {
   // Setup the legal ops. (Sort alphabetically.)
   ConversionTarget target(getContext());
   target.addIllegalDialect<llhd::LLHDDialect>();
+  target.addLegalOp<llhd::ConstantTimeOp>();
   target.addDynamicallyLegalOp<llhd::ProbeOp>(
       [](llhd::ProbeOp op) { return isa<BlockArgument>(op.getSignal()); });
+  target.addDynamicallyLegalOp<llhd::DriveOp>(
+      [](llhd::DriveOp op) { return isa<BlockArgument>(op.getSignal()); });
   target.markUnknownOpDynamicallyLegal(
       [](Operation *op) { return !isa<llhd::LLHDDialect>(op->getDialect()); });
 

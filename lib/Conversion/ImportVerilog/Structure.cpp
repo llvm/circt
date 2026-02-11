@@ -987,6 +987,14 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     if (port.ast.direction != slang::ast::ArgumentDirection::In)
       portArg = moore::ReadOp::create(builder, port.loc, port.arg);
     moore::ContinuousAssignOp::create(builder, port.loc, value, portArg);
+
+    if (port.ast.direction == slang::ast::ArgumentDirection::InOut) {
+      Value driveValue = value;
+      if (isa<moore::RefType>(driveValue.getType()))
+        driveValue = moore::ReadOp::create(builder, value.getLoc(), driveValue);
+      moore::ContinuousAssignOp::create(builder, port.loc, port.arg,
+                                        driveValue);
+    }
   }
 
   // Ensure the number of operands of this module's terminator and the number of
