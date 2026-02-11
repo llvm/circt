@@ -99,6 +99,33 @@ firrtl.circuit "Test" {
     }
   }
 
+  // CHECK:      hw.hierpath private @[[CaptureCaching_c1_ui1_path:.+]] [@CaptureCaching::@[[CaptureCaching_c1_ui1_sym:.+]]]
+  // CHECK-NEXT: firrtl.module private @CaptureCaching_A_B() {
+  // CHECK-NEXT:   %[[c1_ui1:.+]] = firrtl.xmr.deref @[[CaptureCaching_c1_ui1_path]] : !firrtl.uint<1>
+  // CHECK-NEXT:   firrtl.not %[[c1_ui1]]
+  // CHECK-NEXT:   firrtl.not %[[c1_ui1]]
+  // CHECK-NEXT: }
+  // CHECK-NEXT: firrtl.module private @CaptureCaching_A() {
+  // CHECK-NEXT:   %[[c1_ui1:.+]] = firrtl.xmr.deref @[[CaptureCaching_c1_ui1_path]] : !firrtl.uint<1>
+  // CHECK-NEXT:   firrtl.not %[[c1_ui1]]
+  // CHECK-NEXT:   firrtl.not %[[c1_ui1]]
+  // CHECK-NEXT: }
+  // CHECK-NEXT: firrtl.module @CaptureCaching() {
+  // CHECK-NEXT:   %c1_ui1 = firrtl.constant 1
+  // CHECK-NEXT:   firrtl.node sym @[[CaptureCaching_c1_ui1_sym]]
+  // CHECK-NEXT: }
+  firrtl.module @CaptureCaching() {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.layerblock @A {
+      %0 = firrtl.not %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+      %1 = firrtl.not %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+      firrtl.layerblock @A::@B {
+        %2 = firrtl.not %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+        %3 = firrtl.not %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+      }
+    }
+  }
+
   // CHECK: hw.hierpath private @[[CapturePort_port_path:.+]] [@CapturePort::@[[CapturePort_port_sym:.+]]]
   // CHECK: firrtl.module private @CapturePort_A() {
   // CHECK:   %[[port:.+]] = firrtl.xmr.deref @[[CapturePort_port_path]] : !firrtl.uint<1>
@@ -120,8 +147,7 @@ firrtl.circuit "Test" {
   // CHECK-NEXT:   firrtl.connect %b, %[[a]] : !firrtl.uint<1>
   // CHECK-NEXT: }
   // CHECK-NEXT: firrtl.module @CaptureConnect() {
-  // CHECK-NEXT:   %a = firrtl.wire : !firrtl.uint<1>
-  // CHECK-NEXT:   %a_0 = firrtl.node sym @[[CaptureConnect_a_sym]] %a {name = "a"} : !firrtl.uint<1>
+  // CHECK-NEXT:   %a = firrtl.wire sym @[[CaptureConnect_a_sym]] : !firrtl.uint<1>
   // CHECK-NEXT:   firrtl.instance {{.+}} sym @{{.+}} {doNotPrint, output_file = #hw.output_file<"layers-CaptureConnect-A.sv", excludeFromFileList>} @CaptureConnect_A()
   // CHECK-NEXT: }
   firrtl.module @CaptureConnect() {
@@ -155,8 +181,7 @@ firrtl.circuit "Test" {
   // CHECK-NEXT:   %1 = firrtl.node %0 : !firrtl.uint<1>
   // CHECK-NEXT: }
   // CHECK-NEXT: firrtl.module private @NestedCapture_A() {
-  // CHECK-NEXT:   %x = firrtl.wire : !firrtl.uint<1>
-  // CHECK-NEXT:   %x_0 = firrtl.node sym @[[NestedCapture_a_sym]] %x {name = "x"}
+  // CHECK-NEXT:   %x = firrtl.wire sym @[[NestedCapture_a_sym]] : !firrtl.uint<1>
   // CHECK-NEXT: }
   // CHECK-NEXT: firrtl.module @NestedCapture() {
   // CHECK-NEXT:   firrtl.instance {{.+}} {doNotPrint, output_file = #hw.output_file<"layers-NestedCapture-A-B.sv", excludeFromFileList>} @NestedCapture_A_B()
@@ -180,8 +205,7 @@ firrtl.circuit "Test" {
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
   // CHECK-NEXT: firrtl.module @WhenUnderLayer() {
-  // CHECK-NEXT:   %x = firrtl.wire : !firrtl.uint<1>
-  // CHECK-NEXT:   %x_0 = firrtl.node sym @[[WhenUnderLayer_x_sym]] %x {name = "x"}
+  // CHECK-NEXT:   %x = firrtl.wire sym @[[WhenUnderLayer_x_sym]] : !firrtl.uint<1>
   // CHECK-NEXT:   firrtl.instance {{.+}} sym @{{.+}} {doNotPrint, output_file = #hw.output_file<"layers-WhenUnderLayer-A.sv", excludeFromFileList>} @WhenUnderLayer_A
   // CHECK-NEXT: }
   firrtl.module @WhenUnderLayer() {
@@ -206,8 +230,7 @@ firrtl.circuit "Test" {
   // CHECK-NEXT:   %0 = firrtl.subaccess %a[%b]
   // CHECK-NEXT:   %1 = firrtl.subindex %0[0]
   // CHECK-NEXT:   %2 = firrtl.subfield %1[a]
-  // CHECK-NEXT:   %3 = firrtl.node %2 :
-  // CHECK-NEXT:   %_layer_probe = firrtl.node sym @[[SubOpsInLayerBlock_sub_sym]] %3
+  // CHECK-NEXT:   %3 = firrtl.node sym @[[SubOpsInLayerBlock_sub_sym]] %2 :
   firrtl.module @SubOpsInLayerBlock(
     in %a: !firrtl.vector<vector<bundle<a: uint<1>, b flip: uint<2>>, 2>, 2>,
     in %b: !firrtl.uint<1>
@@ -278,8 +301,7 @@ firrtl.circuit "Test" {
   // CHECK-NEXT:     %b = firrtl.node %1
 
   // CHECK:      firrtl.module @CaptureWhen2(
-  // CHECK-NEXT:   %a = firrtl.wire
-  // CHECK-NEXT:   %a_0 = firrtl.node {{.*}} %a
+  // CHECK-NEXT:   %a = firrtl.wire {{.*}}
   // CHECK-NEXT:   firrtl.instance a
   firrtl.module @CaptureWhen2(in %cond: !firrtl.uint<1>) {
     %a = firrtl.wire : !firrtl.uint<1>
@@ -632,8 +654,7 @@ firrtl.circuit "Simple" {
 // CHECK-NEXT:   %0 = firrtl.xmr.deref @[[Simple_A_c_path]]
 // CHECK-NEXT:   %1 = firrtl.xmr.deref @[[Simple_b_path]]
 // CHECK-NEXT:   %bb = firrtl.node %1
-// CHECK-NEXT:   %cc = firrtl.node %0
-// CHECK-NEXT:   %cc_0 = firrtl.node sym @[[Simple_A_B_cc_sym]] %cc {name = "cc"}
+// CHECK-NEXT:   %cc = firrtl.node sym @[[Simple_A_B_cc_sym]] %0
 // CHECK-NEXT: }
 //
 // CHECK: hw.hierpath private @[[Simple_a_path:.+]] [@Simple::@[[Simple_a_sym:.+]]]
@@ -641,15 +662,12 @@ firrtl.circuit "Simple" {
 // CHECK:      firrtl.module private @Simple_A() {
 // CHECK-NEXT:   %0 = firrtl.xmr.deref @[[Simple_a_path]]
 // CHECK-NEXT:   %aa = firrtl.node %0
-// CHECK-NEXT:   %c = firrtl.wire
-// CHECK-NEXT:   %c_0 = firrtl.node sym @[[Simple_A_c_sym]] %c {name = "c"}
+// CHECK-NEXT:   %c = firrtl.wire sym @[[Simple_A_c_sym]]
 // CHECK-NEXT: }
 //
 // CHECK:      firrtl.module @Simple() {
-// CHECK-NEXT:   %a = firrtl.wire
-// CHECK-NEXT:   %a_0 = firrtl.node sym @[[Simple_a_sym]] %a {name = "a"}
-// CHECK-NEXT:   %b = firrtl.wire
-// CHECK-NEXT:   %b_1 = firrtl.node sym @[[Simple_b_sym]] %b {name = "b"}
+// CHECK-NEXT:   %a = firrtl.wire sym @[[Simple_a_sym]]
+// CHECK-NEXT:   %b = firrtl.wire sym @[[Simple_b_sym]]
 // CHECK-NEXT:   firrtl.instance a_b_c sym @a_b_c {doNotPrint, output_file = #hw.output_file<"layers-Simple-A-B-C.sv", excludeFromFileList>} @Simple_A_B_C()
 // CHECK-NEXT:   firrtl.instance a_b sym @a_b {doNotPrint, output_file = #hw.output_file<"layers-Simple-A-B.sv", excludeFromFileList>} @Simple_A_B()
 // CHECK-NEXT:   firrtl.instance a sym @a {doNotPrint, output_file = #hw.output_file<"layers-Simple-A.sv", excludeFromFileList>} @Simple_A()

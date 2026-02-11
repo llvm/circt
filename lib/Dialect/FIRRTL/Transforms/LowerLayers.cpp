@@ -401,17 +401,9 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
                                                InnerRefMap &innerRefMap) {
   hw::InnerSymbolNamespace ns(moduleOp);
 
-  // A cache of values to nameable ops that can be used
-  DenseMap<Value, Operation *> nodeCache;
-
   // Get or create a node op for a value captured by a layer block.
   auto getOrCreateNodeOp = [&](Value operand,
-                               ImplicitLocOpBuilder &builder) -> Operation * {
-    // Use the cache hit.
-    auto *nodeOp = nodeCache.lookup(operand);
-    if (nodeOp)
-      return nodeOp;
-
+                               ImplicitLocOpBuilder &builder) -> NodeOp {
     // Create a new node.  Put it in the cache and use it.
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointAfterValue(operand);
@@ -427,9 +419,9 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         nameHint.append(opName);
       }
     }
-    return nodeOp = NodeOp::create(builder, operand.getLoc(), operand,
-                                   nameHint.empty() ? "_layer_probe"
-                                                    : StringRef(nameHint));
+    return NodeOp::create(builder, operand.getLoc(), operand,
+                          nameHint.empty() ? "_layer_probe"
+                                           : StringRef(nameHint));
   };
 
   // Determine the replacement for an operand within the current region.  Keep a
@@ -471,11 +463,13 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     // three cases that can occur:
     //
     // 1. Capturing something zero-width.  Create a zero-width constant zero.
-    // 2. Capture an expression or instance port.  Drop a node and XMR deref
-    //    that.
-    // 3. Capture something that can handle an inner sym.  XMR deref that.
+    // 2. Capture something that can handle an inner sym.  Add the inner sym if
+    //    it doesn't exist and XMRderef that.
+    // 3. Capture something that can't handle an inner sym.  Add a node, RAUW,
+    //    and XMR deref the node.
     //
-    // Note: (3) can be either an operation or a _module_ port.
+    // The handling of (2) and (3) is diffuse in the code below due to needing
+    // to split things based on whether a value has a defining operation or not.
     auto baseType = type_cast<FIRRTLBaseType>(value.getType());
     if (baseType && baseType.getBitWidthOrSentinel() == 0) {
       OpBuilder::InsertionGuard guard(localBuilder);
@@ -484,18 +478,28 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
           value.getType(), ConstantOp::create(localBuilder, zeroUIntType,
                                               getIntZerosAttr(zeroUIntType)));
     } else {
-      auto *definingOp = value.getDefiningOp();
       hw::InnerRefAttr innerRef;
-      if (definingOp) {
-        // Always create a node.  This is a trade-off between optimizations and
-        // dead code.  By adding the node, this allows the original path to be
-        // better optimized, but will leave dead code in the design.  If the
-        // node is not created, then the output is less optimized.  Err on the
-        // side of dead code.  This dead node _may_ be eventually inlined by
-        // `ExportVerilog`.  However, this is not guaranteed.
-        definingOp = getOrCreateNodeOp(value, localBuilder);
-        innerRef = getInnerRefTo(
-            definingOp, [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+      if (auto *definingOp = value.getDefiningOp()) {
+        // Check if the operation can support an inner symbol and targets a
+        // specific result.
+        auto innerSymOp = dyn_cast<hw::InnerSymbolOpInterface>(definingOp);
+        if (innerSymOp && innerSymOp.getTargetResultIndex()) {
+          // The operation can support an inner symbol, so add one directly.
+          innerRef = getInnerRefTo(
+              innerSymOp,
+              [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+        } else {
+          // The operation cannot support an inner symbol, or it has multiple
+          // results and doesn't target a specific result, so create a node
+          // and replace all uses of the original value with the node (except
+          // the node itself).
+          auto node = getOrCreateNodeOp(value, localBuilder);
+          innerRef = getInnerRefTo(
+              node, [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+          auto newValue = node.getResult();
+          value.replaceAllUsesExcept(newValue, node);
+          value = newValue;
+        }
       } else {
         auto portIdx = cast<BlockArgument>(value).getArgNumber();
         innerRef = getInnerRefTo(
