@@ -2041,6 +2041,30 @@ hw.module @issue9403(in %sel: i1, out out1: ui1) {
   hw.output %mux1 : ui1
 }
 
+// CHECK-LABEL: hw.module @issue9573
+// CHECK: %[[E:.*]] = comb.extract %[[C:.*]] from 0 : (i2) -> i1
+// CHECK: %[[C]] = comb.concat %a, %[[E]] : i1, i1
+// CHECK: hw.output %[[E]] : i1
+hw.module @issue9573(in %a : i1, out o : i1) {
+  %0 = comb.extract %1 from 0 : (i2) -> i1
+  %1 = comb.concat %a, %0 : i1, i1
+  hw.output %0 : i1
+}
+
+// CHECK-LABEL: hw.module @issue9573_loop
+// CHECK: %false = hw.constant false
+// CHECK: %[[CAT:.*]] = comb.concat %false, %b, %c, %[[E:.*]] : i1, i1, i1, i1
+// CHECK: %[[E]] = comb.extract %[[CAT]] from 0 : (i4) -> i1
+// CHECK: hw.output %[[CAT]] : i4
+hw.module @issue9573_loop(in %b : i1, in %c : i1, out out : i4) {
+  %c7_i4 = hw.constant 7 : i4
+  %0 = comb.and %3, %c7_i4 : i4
+  %1 = comb.extract %0 from 0 : (i4) -> i1
+  %2 = comb.extract %0 from 3 : (i4) -> i1
+  %3 = comb.concat %2, %b, %c, %1 : i1, i1, i1, i1
+  hw.output %0 : i4
+}
+
 // CHECK-LABEL: @notSext
 // ~sext(a) -> sext(~a)
 hw.module @notSext(in %a : i3, out negsext : i8) {
