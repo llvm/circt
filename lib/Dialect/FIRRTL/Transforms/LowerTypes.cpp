@@ -839,16 +839,19 @@ static void eraseElementsAtIndices(SmallVectorImpl<T> &vec,
 
   // Iterate over each set bit (element to remove) in the mask.
   // Between each removal point, we bulk-copy the range of elements to keep.
-  for (int removalIndex : removalMask.set_bits()) {
+  for (size_t removalIndex : removalMask.set_bits()) {
     // Copy the range [readIndex, removalIndex) - these are elements to keep.
+    assert(removalIndex >= readIndex && "removal index before read index");
     size_t rangeSize = removalIndex - readIndex;
     if (rangeSize > 0) {
       // Bulk move the range of elements to keep to the write position.
-      std::move(vec.begin() + readIndex, vec.begin() + removalIndex,
-                vec.begin() + writeIndex);
+      // Skip if the read and write positions are the same (= the first
+      // iteration).
+      if (writeIndex != readIndex)
+        std::move(vec.begin() + readIndex, vec.begin() + removalIndex,
+                  vec.begin() + writeIndex);
       writeIndex += rangeSize;
     }
-    // Skip the element at removalIndex (it's marked for removal).
     readIndex = removalIndex + 1;
   }
 
