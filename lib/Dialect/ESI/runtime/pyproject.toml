@@ -43,6 +43,9 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
 ]
 
+[project.optional-dependencies]
+test = ["pytest", "pycde", "numpy"]
+
 [project.scripts]
 esiquery = "esiaccel.utils:run_esiquery"
 esi-cosim = "esiaccel.utils:run_esi_cosim"
