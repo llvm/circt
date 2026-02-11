@@ -333,7 +333,8 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
           .Case("$changed",
                 [&]() -> Value {
                   auto past =
-                      ltl::PastOp::create(builder, loc, value, 1).getResult();
+                      ltl::PastOp::create(builder, loc, value, 1, Value{})
+                          .getResult();
                   auto current = value;
                   auto changed = comb::ICmpOp::create(builder, loc,
                                                       comb::ICmpPredicate::ne,
