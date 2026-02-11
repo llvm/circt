@@ -341,8 +341,8 @@ firrtl.circuit "Test" {
   //
   // CHECK:      firrtl.module @InstancePortCapture() {
   // CHECK-NEXT:   %ext_a, %ext_b = firrtl.instance ext @InstancePortCapture_ext
-  // CHECK-NEXT:   %ext_b_0 = firrtl.node sym @[[InstancePortCapture_ext_b_sym]] %ext_b {name = "ext_b"}
-  // CHECK-NEXT:   %ext_a_1 = firrtl.node sym @[[InstancePortCapture_ext_a_sym]] %ext_a {name = "ext_a"}
+  // CHECK-NEXT:   %ext_b_layer_probe = firrtl.node sym @[[InstancePortCapture_ext_b_sym]] %ext_b
+  // CHECK-NEXT:   %ext_a_layer_probe = firrtl.node sym @[[InstancePortCapture_ext_a_sym]] %ext_a
   // CHECK-NEXT:   firrtl.instance {{.*}}
   // CHECK-NEXT: }
   firrtl.extmodule @InstancePortCapture_ext(

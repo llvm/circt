@@ -418,10 +418,11 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       } else if (auto opName = definingOp->getAttrOfType<StringAttr>("name")) {
         nameHint.append(opName);
       }
+      nameHint.append("_layer_probe");
     }
+
     return NodeOp::create(builder, operand.getLoc(), operand,
-                          nameHint.empty() ? "_layer_probe"
-                                           : StringRef(nameHint));
+                          StringRef(nameHint));
   };
 
   // Determine the replacement for an operand within the current region.  Keep a
