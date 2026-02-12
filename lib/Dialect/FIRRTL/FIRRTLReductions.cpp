@@ -979,6 +979,33 @@ struct RootPortPruner : public OpReduction<firrtl::FModuleOp> {
   std::string getName() const override { return "root-port-pruner"; }
 };
 
+/// A reduction pattern that removes all ports from the root `firrtl.extmodule`.
+/// Since extmodules have no body, all ports can be safely removed for reduction
+/// purposes.
+struct RootExtmodulePortPruner : public OpReduction<firrtl::FExtModuleOp> {
+  uint64_t match(firrtl::FExtModuleOp module) override {
+    auto circuit = module->getParentOfType<firrtl::CircuitOp>();
+    if (!circuit || circuit.getNameAttr() != module.getNameAttr())
+      return 0;
+    // We can remove all ports from the root extmodule
+    return module.getNumPorts();
+  }
+
+  LogicalResult rewrite(firrtl::FExtModuleOp module) override {
+    assert(match(module));
+    size_t numPorts = module.getNumPorts();
+    if (numPorts == 0)
+      return failure();
+
+    llvm::BitVector dropPorts(numPorts);
+    dropPorts.set(0, numPorts);
+    module.erasePorts(dropPorts);
+    return success();
+  }
+
+  std::string getName() const override { return "root-extmodule-port-pruner"; }
+};
+
 /// A sample reduction pattern that replaces instances of `firrtl.extmodule`
 /// with wires.
 struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
@@ -1027,6 +1054,213 @@ struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
 
   ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
+};
+
+/// A reduction pattern that removes unused ports from extmodules and regular
+/// modules. This is particularly useful for reducing test cases with many probe
+/// ports or other unused ports.
+///
+/// Shared helper functions for port pruning reductions.
+struct PortPrunerHelpers {
+  /// Compute which ports are unused across all instances of a module.
+  template <typename ModuleOpType>
+  static void computeUnusedInstancePorts(ModuleOpType module,
+                                         ArrayRef<Operation *> users,
+                                         llvm::BitVector &portsToRemove) {
+    auto ports = module.getPorts();
+    for (size_t portIdx = 0; portIdx < ports.size(); ++portIdx) {
+      bool portUsed = false;
+      for (auto *user : users) {
+        if (auto instOp = dyn_cast<firrtl::InstanceOp>(user)) {
+          auto result = instOp.getResult(portIdx);
+          if (!result.use_empty()) {
+            portUsed = true;
+            break;
+          }
+        }
+      }
+      if (!portUsed)
+        portsToRemove.set(portIdx);
+    }
+  }
+
+  /// Update all instances of a module to remove the specified ports.
+  static void
+  updateInstancesAndErasePorts(Operation *module, ArrayRef<Operation *> users,
+                               const llvm::BitVector &portsToRemove) {
+    // Update all instances to remove the corresponding results
+    SmallVector<firrtl::InstanceOp> instancesToUpdate;
+    for (auto *user : users) {
+      if (auto instOp = dyn_cast<firrtl::InstanceOp>(user))
+        instancesToUpdate.push_back(instOp);
+    }
+
+    for (auto instOp : instancesToUpdate) {
+      auto newInst = instOp.cloneWithErasedPorts(portsToRemove);
+
+      // Manually replace uses, skipping erased ports
+      size_t newResultIdx = 0;
+      for (size_t oldResultIdx = 0; oldResultIdx < instOp.getNumResults();
+           ++oldResultIdx) {
+        if (portsToRemove[oldResultIdx]) {
+          // This port is being removed, assert it has no uses
+          assert(instOp.getResult(oldResultIdx).use_empty() &&
+                 "removing port with uses");
+        } else {
+          // Replace uses of the old result with the new result
+          instOp.getResult(oldResultIdx)
+              .replaceAllUsesWith(newInst.getResult(newResultIdx));
+          ++newResultIdx;
+        }
+      }
+
+      instOp->erase();
+    }
+  }
+};
+
+/// Reduction to remove unused ports from regular modules.
+struct ModulePortPruner : public OpReduction<firrtl::FModuleOp> {
+  void beforeReduction(mlir::ModuleOp op) override {
+    symbols.clear();
+    nlaRemover.clear();
+    portsToRemoveMap.clear();
+  }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+
+  uint64_t match(firrtl::FModuleOp module) override {
+    auto *tableOp = SymbolTable::getNearestSymbolTable(module);
+    auto &userMap = symbols.getSymbolUserMap(tableOp);
+    auto ports = module.getPorts();
+    auto users = userMap.getUsers(module);
+
+    // Compute which ports to remove and cache the result
+    llvm::BitVector portsToRemove(ports.size());
+
+    // If the module has no instances, aggressively remove ports that aren't
+    // used within the module body itself
+    if (users.empty()) {
+      for (size_t portIdx = 0; portIdx < ports.size(); ++portIdx) {
+        auto arg = module.getArgument(portIdx);
+        if (arg.use_empty())
+          portsToRemove.set(portIdx);
+      }
+    } else {
+      // For modules with instances, check if ports are unused across all
+      // instances
+      PortPrunerHelpers::computeUnusedInstancePorts(module, users,
+                                                    portsToRemove);
+    }
+
+    auto count = portsToRemove.count();
+    if (count > 0)
+      portsToRemoveMap[module] = std::move(portsToRemove);
+
+    return count;
+  }
+
+  LogicalResult rewrite(firrtl::FModuleOp module) override {
+    // Use the cached ports to remove from match()
+    auto it = portsToRemoveMap.find(module);
+    if (it == portsToRemoveMap.end())
+      return failure();
+
+    const auto &portsToRemove = it->second;
+
+    // Get users for updating instances
+    auto *tableOp = SymbolTable::getNearestSymbolTable(module);
+    auto &userMap = symbols.getSymbolUserMap(tableOp);
+    auto users = userMap.getUsers(module);
+
+    // Update all instances
+    PortPrunerHelpers::updateInstancesAndErasePorts(module, users,
+                                                    portsToRemove);
+
+    // Erase uses of port arguments within the module body
+    for (size_t portIdx = 0; portIdx < module.getNumPorts(); ++portIdx) {
+      if (portsToRemove[portIdx]) {
+        auto arg = module.getArgument(portIdx);
+        for (auto *user : llvm::make_early_inc_range(arg.getUsers()))
+          user->erase();
+      }
+    }
+
+    // Remove the ports from the module
+    module.erasePorts(portsToRemove);
+
+    return success();
+  }
+
+  std::string getName() const override { return "module-port-pruner"; }
+
+  ::detail::SymbolCache symbols;
+  NLARemover nlaRemover;
+  DenseMap<firrtl::FModuleOp, llvm::BitVector> portsToRemoveMap;
+};
+
+/// Reduction to remove unused ports from extmodules.
+struct ExtmodulePortPruner : public OpReduction<firrtl::FExtModuleOp> {
+  void beforeReduction(mlir::ModuleOp op) override {
+    symbols.clear();
+    nlaRemover.clear();
+    portsToRemoveMap.clear();
+  }
+  void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
+
+  uint64_t match(firrtl::FExtModuleOp module) override {
+    auto *tableOp = SymbolTable::getNearestSymbolTable(module);
+    auto &userMap = symbols.getSymbolUserMap(tableOp);
+    auto ports = module.getPorts();
+    auto users = userMap.getUsers(module);
+
+    // Compute which ports to remove and cache the result
+    llvm::BitVector portsToRemove(ports.size());
+
+    if (users.empty()) {
+      // If the extmodule has no instances, aggressively remove all ports
+      portsToRemove.set();
+    } else {
+      // For extmodules with instances, check if ports are unused across all
+      // instances
+      PortPrunerHelpers::computeUnusedInstancePorts(module, users,
+                                                    portsToRemove);
+    }
+
+    auto count = portsToRemove.count();
+    if (count > 0)
+      portsToRemoveMap[module] = std::move(portsToRemove);
+
+    return count;
+  }
+
+  LogicalResult rewrite(firrtl::FExtModuleOp module) override {
+    // Use the cached ports to remove from match()
+    auto it = portsToRemoveMap.find(module);
+    if (it == portsToRemoveMap.end())
+      return failure();
+
+    const auto &portsToRemove = it->second;
+
+    // Get users for updating instances
+    auto *tableOp = SymbolTable::getNearestSymbolTable(module);
+    auto &userMap = symbols.getSymbolUserMap(tableOp);
+    auto users = userMap.getUsers(module);
+
+    // Update all instances.
+    PortPrunerHelpers::updateInstancesAndErasePorts(module, users,
+                                                    portsToRemove);
+
+    // Remove the ports from the module (no body to clean up for extmodules).
+    module.erasePorts(portsToRemove);
+
+    return success();
+  }
+
+  std::string getName() const override { return "extmodule-port-pruner"; }
+
+  ::detail::SymbolCache symbols;
+  NLARemover nlaRemover;
+  DenseMap<firrtl::FExtModuleOp, llvm::BitVector> portsToRemoveMap;
 };
 
 /// A sample reduction pattern that pushes connected values through wires.
@@ -2344,7 +2578,10 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   patterns.add<FIRRTLOperandForwarder<2>, 9>();
   patterns.add<ListCreateElementRemover, 8>();
   patterns.add<DetachSubaccesses, 7>();
+  patterns.add<ModulePortPruner, 7>();
+  patterns.add<ExtmodulePortPruner, 6>();
   patterns.add<RootPortPruner, 5>();
+  patterns.add<RootExtmodulePortPruner, 5>();
   patterns.add<ExtmoduleInstanceRemover, 4>();
   patterns.add<ConnectSourceOperandForwarder<0>, 3>();
   patterns.add<ConnectSourceOperandForwarder<1>, 2>();
