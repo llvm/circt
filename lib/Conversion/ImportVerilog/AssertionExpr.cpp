@@ -315,18 +315,18 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                                   .getResult();
                   return fell;
                 })
-          // Translate $rose to x[0] ∧ ¬x[-1]
+          // Translate $rose to x[-1] < ¬x[0]
           .Case("$rose",
                 [&]() -> Value {
                   auto past =
                       ltl::PastOp::create(builder, loc, value, 1, Value{})
                           .getResult();
-                  auto notPast = comb::createOrFoldNot(loc, past, builder);
                   auto current = value;
-                  auto notPastAndCurrent =
-                      ltl::AndOp::create(builder, loc, {current, notPast})
-                          .getResult();
-                  return notPastAndCurrent;
+                  auto rose = comb::ICmpOp::create(builder, loc,
+                                                   comb::ICmpPredicate::ult,
+                                                   past, current, false)
+                                  .getResult();
+                  return rose;
                 })
           // Translate $changed to x[0] != x[-1]
           .Case("$changed",
