@@ -50,8 +50,8 @@ static InstanceOp roundtrip(InstanceOp instOp, bool check, bool verify,
     return roundtripAs<Problem>(instOp, check, verify, builder);
   if (problemName == "CyclicProblem")
     return roundtripAs<CyclicProblem>(instOp, check, verify, builder);
-  if (problemName == "SharedOperatorsProblem")
-    return roundtripAs<SharedOperatorsProblem>(instOp, check, verify, builder);
+  if (problemName == "SharedResourcesProblem")
+    return roundtripAs<SharedResourcesProblem>(instOp, check, verify, builder);
   if (problemName == "ModuloProblem")
     return roundtripAs<ModuloProblem>(instOp, check, verify, builder);
   if (problemName == "ChainingProblem")
