@@ -2213,32 +2213,33 @@ struct QueueSizeBIOpConversion : public OpConversionPattern<QueueSizeBIOp> {
   LogicalResult
   matchAndRewrite(QueueSizeBIOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<sim::QueueSizeOp>(op, adaptor.getQueue());
+    auto readQueue =
+        llhd::ProbeOp::create(rewriter, op->getLoc(), adaptor.getQueue());
+
+    rewriter.replaceOpWithNewOp<sim::QueueSizeOp>(op, readQueue);
     return success();
   }
 };
 
-// Finds the `ProbeOp` which defines the value `source`, and emits an
-// instruction to drive the same signal with the value `result`.
+// Given a reference `ref` to some Moore type, this function emits a
+// `ProbeOp` to read the contained value, then passes it to the function `func`.
+// It finally emits a `DriveOp` to write the result of the function back to
+// the referenced signal.
 //
-// This is useful for converting impure operations (such as the moore ops for
+// This is useful for converting impure operations (such as the Moore ops for
 // manipulating queues) into pure operations. (Which do not mutate the source
 // value, instead returning a modified value.)
-static LogicalResult writeResultToSourceVariable(OpBuilder &builder,
-                                                 Location loc, Value source,
-                                                 Value result) {
-  if (auto probeOp = source.getDefiningOp<llhd::ProbeOp>()) {
-    // Drive using the same delay as a blocking assignment
-    Value delay = llhd::ConstantTimeOp::create(
-        builder, loc,
-        llhd::TimeAttr::get(builder.getContext(), 0U, "ns", 0, 1));
+static void
+probeRefAndDriveWithResult(OpBuilder &builder, Location loc, Value ref,
+                           const std::function<Value(Value)> &func) {
 
-    llhd::DriveOp::create(builder, loc, probeOp.getSignal(), result, delay,
-                          Value{});
-    return success();
-  }
+  Value v = llhd::ProbeOp::create(builder, loc, ref);
 
-  return failure();
+  // Drive using the same delay as a blocking assignment
+  Value delay = llhd::ConstantTimeOp::create(
+      builder, loc, llhd::TimeAttr::get(builder.getContext(), 0U, "ns", 0, 1));
+
+  llhd::DriveOp::create(builder, loc, ref, func(v), delay, Value{});
 }
 
 struct QueuePushBackOpConversion : public OpConversionPattern<QueuePushBackOp> {
@@ -2247,14 +2248,14 @@ struct QueuePushBackOpConversion : public OpConversionPattern<QueuePushBackOp> {
   LogicalResult
   matchAndRewrite(QueuePushBackOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    probeRefAndDriveWithResult(
+        rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
+          return sim::QueuePushBackOp::create(rewriter, op->getLoc(), queue,
+                                              adaptor.getElement());
+        });
 
-    auto pushBack = sim::QueuePushBackOp::create(
-        rewriter, op->getLoc(), adaptor.getQueue(), adaptor.getElement());
-    auto result = writeResultToSourceVariable(
-        rewriter, op->getLoc(), adaptor.getQueue(), pushBack.getResult());
-    if (result.succeeded())
-      rewriter.eraseOp(op);
-    return result;
+    rewriter.eraseOp(op);
+    return success();
   }
 };
 
@@ -2266,13 +2267,14 @@ struct QueuePushFrontOpConversion
   matchAndRewrite(QueuePushFrontOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
-    auto pushFront = sim::QueuePushFrontOp::create(
-        rewriter, op->getLoc(), adaptor.getQueue(), adaptor.getElement());
-    auto result = writeResultToSourceVariable(
-        rewriter, op->getLoc(), adaptor.getQueue(), pushFront.getResult());
-    if (result.succeeded())
-      rewriter.eraseOp(op);
-    return result;
+    probeRefAndDriveWithResult(
+        rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
+          return sim::QueuePushFrontOp::create(rewriter, op->getLoc(), queue,
+                                               adaptor.getElement());
+        });
+
+    rewriter.eraseOp(op);
+    return success();
   }
 };
 
@@ -2282,17 +2284,16 @@ struct QueuePopBackOpConversion : public OpConversionPattern<QueuePopBackOp> {
   LogicalResult
   matchAndRewrite(QueuePopBackOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    probeRefAndDriveWithResult(
+        rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
+          auto popBack =
+              sim::QueuePopBackOp::create(rewriter, op->getLoc(), queue);
 
-    auto popBack =
-        sim::QueuePopBackOp::create(rewriter, op->getLoc(), adaptor.getQueue());
-    op.replaceAllUsesWith(popBack.getPopped());
+          op.replaceAllUsesWith(popBack.getPopped());
+          return popBack.getOutQueue();
+        });
 
-    auto result = writeResultToSourceVariable(
-        rewriter, op->getLoc(), adaptor.getQueue(), popBack.getOutQueue());
-    if (result.succeeded())
-      rewriter.eraseOp(op);
-
-    return result;
+    return success();
   }
 };
 
@@ -2302,17 +2303,16 @@ struct QueuePopFrontOpConversion : public OpConversionPattern<QueuePopFrontOp> {
   LogicalResult
   matchAndRewrite(QueuePopFrontOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    probeRefAndDriveWithResult(
+        rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
+          auto popFront =
+              sim::QueuePopFrontOp::create(rewriter, op->getLoc(), queue);
 
-    auto popFront = sim::QueuePopFrontOp::create(rewriter, op->getLoc(),
-                                                 adaptor.getQueue());
-    op.replaceAllUsesWith(popFront.getPopped());
+          op.replaceAllUsesWith(popFront.getPopped());
+          return popFront.getOutQueue();
+        });
 
-    auto result = writeResultToSourceVariable(
-        rewriter, op->getLoc(), adaptor.getQueue(), popFront.getOutQueue());
-    if (result.succeeded())
-      rewriter.eraseOp(op);
-
-    return result;
+    return success();
   }
 };
 

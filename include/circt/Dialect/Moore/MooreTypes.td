@@ -597,4 +597,8 @@ def AnyUnionRefType : SpecificRefType<AnyUnionType>;
 
 /// Class references.
 def ClassHandleRefType : SpecificRefType<ClassHandleType>;
+
+/// Queue references
+def QueueRefType : SpecificRefType<QueueType>;
+
 #endif // CIRCT_DIALECT_MOORE_MOORETYPES

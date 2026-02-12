@@ -1622,6 +1622,9 @@ struct RvalueExprVisitor : public ExprVisitor {
       return fmtValue.value();
     }
 
+    // Queue ops take their parameter as a reference
+    bool isByRefOp = args.size() >= 1 && args[0]->type->isQueue();
+
     // Call the conversion function with the appropriate arity. These return one
     // of the following:
     //
@@ -1634,14 +1637,16 @@ struct RvalueExprVisitor : public ExprVisitor {
       break;
 
     case (1):
-      value = context.convertRvalueExpression(*args[0]);
+      value = isByRefOp ? context.convertLvalueExpression(*args[0])
+                        : context.convertRvalueExpression(*args[0]);
       if (!value)
         return {};
       result = context.convertSystemCallArity1(subroutine, loc, value);
       break;
 
     case (2):
-      value = context.convertRvalueExpression(*args[0]);
+      value = isByRefOp ? context.convertLvalueExpression(*args[0])
+                        : context.convertRvalueExpression(*args[0]);
       value2 = context.convertRvalueExpression(*args[1]);
       if (!value || !value2)
         return {};
@@ -2784,28 +2789,38 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                 [&]() -> Value {
                   return moore::StringToUpperOp::create(builder, loc, value);
                 })
-          .Case("size",
-                [&]() -> Value {
-                  if (isa<moore::QueueType>(value.getType()))
-                    return moore::QueueSizeBIOp::create(builder, loc, value);
-                  return {};
-                })
+          .Case(
+              "size",
+              [&]() -> Value {
+                if (isa<moore::RefType>(value.getType()) &&
+                    isa<moore::QueueType>(
+                        cast<moore::RefType>(value.getType()).getNestedType()))
+                  return moore::QueueSizeBIOp::create(builder, loc, value);
+                return {};
+              })
           .Case("tolower",
                 [&]() -> Value {
                   return moore::StringToLowerOp::create(builder, loc, value);
                 })
-          .Case("pop_back",
-                [&]() -> Value {
-                  if (isa<moore::QueueType>(value.getType()))
-                    return moore::QueuePopBackOp::create(builder, loc, value);
-                  return {};
-                })
-          .Case("pop_front",
-                [&]() -> Value {
-                  if (isa<moore::QueueType>(value.getType()))
-                    return moore::QueuePopFrontOp::create(builder, loc, value);
-                  return {};
-                })
+          .Case(
+              "pop_back",
+              [&]() -> Value {
+                if (isa<moore::RefType>(value.getType()) &&
+                    isa<moore::QueueType>(
+                        cast<moore::RefType>(value.getType()).getNestedType()))
+                  return moore::QueuePopBackOp::create(builder, loc, value);
+
+                return {};
+              })
+          .Case(
+              "pop_front",
+              [&]() -> Value {
+                if (isa<moore::RefType>(value.getType()) &&
+                    isa<moore::QueueType>(
+                        cast<moore::RefType>(value.getType()).getNestedType()))
+                  return moore::QueuePopFrontOp::create(builder, loc, value);
+                return {};
+              })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
 }
