@@ -627,6 +627,29 @@ def ArraySizeOp : RTGOp<"array_size", [Pure]> {
   let assemblyFormat = "$array `:` qualified(type($array)) attr-dict";
 }
 
+def ArrayAppendOp : RTGOp<"array_append", [
+  Pure,
+  AllTypesMatch<["array", "result"]>,
+  TypesMatchWith<"element type must match array element type",
+                 "array", "element",
+                 "cast<ArrayType>($_self).getElementType()">,
+]> {
+  let summary = "append an element to an array";
+  let description = [{
+    This operation produces a new array of the same type as the input array with
+    the given element appended at the end. All other values remain the same.
+  }];
+
+  let arguments = (ins ArrayType:$array, AnyType:$element);
+  let results = (outs ArrayType:$result);
+
+  let assemblyFormat = [{
+    $array `,` $element `:` qualified(type($array)) attr-dict
+  }];
+
+  let hasCanonicalizeMethod = 1;
+}
+
 //===- Tuple Operations ---------------------------------------------------===//
 
 def TupleCreateOp : RTGOp<"tuple_create", [

@@ -67,6 +67,16 @@ class Array(Value):
 
     return rtg.ArraySizeOp(self._value)
 
+  def append(self, element: Value) -> Array:
+    """
+    Append an element to the end of the array.
+    """
+
+    return rtg.ArrayAppendOp(self._value, element)
+
+  def __add__(self, other: Value) -> Array:
+    return self.append(other)
+
   def _get_ssa_value(self) -> ir.Value:
     return self._value
 

@@ -69,7 +69,8 @@ class Tgt2(Config):
 # MLIR-NEXT: [[ARR5:%.+]] = rtg.array_create [[IDX2]], [[IDX1]] : index
 # MLIR-NEXT: [[ARR6:%.+]] = rtg.array_inject [[ARR5]][[[IDX1]]], [[IDX3]] : !rtg.array<index>
 # MLIR-NEXT: [[SIZE:%.+]] = rtg.array_size [[ARR6]] : !rtg.array<index>
-# MLIR-NEXT: rtg.yield [[RES0]], [[ARR1]], [[ARR4]], [[SIZE]] : index, !rtg.array<!rtg.array<index>>, !rtg.array<!rtg.array<index>>, index
+# MLIR-NEXT: [[ARR7:%.+]] = rtg.array_create [[IDX1]], [[IDX2]], [[IDX3]] : index
+# MLIR-NEXT: rtg.yield [[RES0]], [[ARR1]], [[ARR4]], [[SIZE]], [[ARR7]] : index, !rtg.array<!rtg.array<index>>, !rtg.array<!rtg.array<index>>, index, !rtg.array<index>
 
 
 @config
@@ -84,6 +85,8 @@ class Tgt4(Config):
   ], ArrayType(IntegerType())))
   arr3 = Param(loader=lambda: Array.create([Integer(2), Integer(
       1)], IntegerType()).set(1, Integer(3)).size())
+  arr4 = Param(loader=lambda: Array.create([Integer(1), Integer(2)],
+                                           IntegerType()).append(Integer(3)))
 
 
 @sequence([SetType(TupleType([IntegerType(), BoolType()]))])

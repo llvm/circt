@@ -55,6 +55,7 @@ public:
             SetSizeOp, SetCartesianProductOp, SetConvertToBagOp,
             // Arrays
             ArrayCreateOp, ArrayExtractOp, ArrayInjectOp, ArraySizeOp,
+            ArrayAppendOp,
             // Tuples
             TupleCreateOp, TupleExtractOp,
             // Immediates
@@ -127,6 +128,7 @@ public:
   HANDLE(ArrayExtractOp, Unhandled);
   HANDLE(ArrayInjectOp, Unhandled);
   HANDLE(ArraySizeOp, Unhandled);
+  HANDLE(ArrayAppendOp, Unhandled);
   HANDLE(TupleCreateOp, Unhandled);
   HANDLE(TupleExtractOp, Unhandled);
   HANDLE(CommentOp, Unhandled);

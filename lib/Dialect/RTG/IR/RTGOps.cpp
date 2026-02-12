@@ -720,6 +720,22 @@ void ArrayCreateOp::print(OpAsmPrinter &p) {
 }
 
 //===----------------------------------------------------------------------===//
+// ArrayAppendOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ArrayAppendOp::canonicalize(ArrayAppendOp op,
+                                          PatternRewriter &rewriter) {
+  auto createOp = op.getArray().getDefiningOp<ArrayCreateOp>();
+  if (!createOp)
+    return failure();
+
+  SmallVector<Value> newElements(createOp.getElements());
+  newElements.push_back(op.getElement());
+  rewriter.replaceOpWithNewOp<ArrayCreateOp>(op, op.getType(), newElements);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // MemoryBlockDeclareOp
 //===----------------------------------------------------------------------===//
 
