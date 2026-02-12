@@ -485,6 +485,7 @@ static LogicalResult extractConcatToConcatExtract(ExtractOp op,
     assert(beginOfFirstRelevantElement <= lowBit &&
            "incorrectly moved past an element that lowBit has coverage over");
     auto operand = *it;
+    if (operand == op.getResult()) return failure();
 
     size_t operandWidth = operand.getType().getIntOrFloatBitWidth();
     if (lowBit < beginOfFirstRelevantElement + operandWidth) {
