@@ -1196,7 +1196,7 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     newArgSyms.push_back(port.sym);
     newArgLocations.push_back(port.loc);
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
-    if (auto &domains = port.domains) {
+    if (port.domains) {
       domainHelper.rewriteDomain(port.domains);
     } else {
       port.domains = cache.aEmpty;
@@ -1293,7 +1293,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
     newArgSyms.push_back(port.sym);
     newArgLocations.push_back(port.loc);
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
-    if (auto domains = port.domains) {
+    if (port.domains) {
       domainHelper.rewriteDomain(port.domains);
     } else {
       port.domains = cache.aEmpty;
