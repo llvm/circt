@@ -398,9 +398,20 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
 
 static void lowerModuleBody(FModuleOp mod,
                             const DenseMap<StringAttr, PortConversion> &ports) {
-  mod->walk([&](InstanceOp inst) -> void {
+  auto fixupInstance = [&](auto inst) -> void {
     ImplicitLocOpBuilder theBuilder(inst.getLoc(), inst);
-    const auto &modPorts = ports.at(inst.getModuleNameAttr().getAttr());
+
+    // Get the module name
+    StringAttr moduleName;
+    if constexpr (std::is_same_v<decltype(inst), InstanceOp>) {
+      moduleName = inst.getModuleNameAttr().getAttr();
+    } else {
+      // For InstanceChoiceOp, use the default target.
+      moduleName =
+          cast<FlatSymbolRefAttr>(inst.getModuleNamesAttr()[0]).getAttr();
+    }
+
+    const auto &modPorts = ports.at(moduleName);
 
     // Fix up the Instance
     SmallVector<PortInfo> instPorts; // Oh I wish ArrayRef was polymorphic.
@@ -411,10 +422,21 @@ static void lowerModuleBody(FModuleOp mod,
       instPorts.push_back(p);
     }
     auto annos = inst.getAnnotations();
-    auto newOp = InstanceOp::create(
-        theBuilder, instPorts, inst.getModuleName(), inst.getName(),
-        inst.getNameKind(), annos.getValue(), inst.getLayers(),
-        inst.getLowerToBind(), inst.getDoNotPrint(), inst.getInnerSymAttr());
+
+    // Create the new instance based on the type
+    decltype(inst) newOp;
+    if constexpr (std::is_same_v<decltype(inst), InstanceOp>) {
+      newOp = InstanceOp::create(
+          theBuilder, instPorts, inst.getModuleName(), inst.getName(),
+          inst.getNameKind(), annos.getValue(), inst.getLayers(),
+          inst.getLowerToBind(), inst.getDoNotPrint(), inst.getInnerSymAttr());
+    } else {
+      newOp = InstanceChoiceOp::create(
+          theBuilder, instPorts, inst.getModuleNamesAttr(),
+          inst.getCaseNamesAttr(), inst.getName(), inst.getNameKind(),
+          inst.getAnnotationsAttr(), inst.getLayersAttr(),
+          inst.getInnerSymAttr());
+    }
 
     auto oldDict = inst->getDiscardableAttrDictionary();
     auto newDict = newOp->getDiscardableAttrDictionary();
@@ -461,6 +483,11 @@ static void lowerModuleBody(FModuleOp mod,
     }
     inst->erase();
     return;
+  };
+
+  mod->walk([&](Operation *op) -> void {
+    TypeSwitch<Operation *>(op).Case<InstanceOp, InstanceChoiceOp>(
+        fixupInstance);
   });
 }
 

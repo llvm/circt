@@ -286,7 +286,15 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"StringAttr", "StringAttr()">:$innerSym)>
+                   CArg<"StringAttr", "StringAttr()">:$innerSym)>,
+    OpBuilder<(ins "ArrayRef<PortInfo>":$ports,
+                   "ArrayAttr":$moduleNames,
+                   "ArrayAttr":$caseNames,
+                   "mlir::StringRef":$name,
+                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
+                   CArg<"ArrayAttr", "{}">:$annotations,
+                   CArg<"ArrayAttr", "{}">:$layers,
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>
   ];
 }
 
