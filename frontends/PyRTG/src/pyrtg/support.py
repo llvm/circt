@@ -4,6 +4,7 @@
 
 from .base import support, ir
 from .core import Value, Type
+from .diagnostics import get_source_loc
 
 from typing import Union
 
@@ -171,6 +172,8 @@ def wrap_opviews_with_values(dialect, module_name, excluded=[]):
 
           args = [to_circt(arg) for arg in args]
           kwargs = {k: to_circt(v) for k, v in kwargs.items()}
+          if "loc" not in kwargs:
+            kwargs["loc"] = get_source_loc()
           # Create the OpView.
           if hasattr(cls, "create"):
             created = cls.create(*args, **kwargs)
