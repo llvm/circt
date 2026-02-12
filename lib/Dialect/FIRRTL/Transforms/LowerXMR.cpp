@@ -216,7 +216,17 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
             }
             auto node = NodeOp::create(b, xmrDef, opName, nameKind);
             auto newValue = node.getResult();
-            xmrDef.replaceAllUsesExcept(newValue, node);
+            // Replace all uses except the node itself and except when the value
+            // is the destination of a connect (operand 0). We need to preserve
+            // connect destinations to maintain proper flow semantics.
+            xmrDef.replaceUsesWithIf(newValue, [&](OpOperand &operand) {
+              if (operand.getOwner() == node.getOperation())
+                return false;
+              if (isa<FConnectLike>(operand.getOwner()) &&
+                  operand.getOperandNumber() == 0)
+                return false;
+              return true;
+            });
             xmrDef = newValue;
 
             // Create a new entry for this RefSendOp. The path is currently

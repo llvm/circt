@@ -787,3 +787,32 @@ firrtl.circuit "PF" {
     firrtl.ref.define %p, %c_p : !firrtl.probe<uint<1>>
   }
 }
+
+
+// -----
+// Test that instance results used in both connects and ref.send preserve
+// correct flow semantics. The node created for the XMR should not replace
+// uses where the instance result is the destination of a connect.
+
+// CHECK-LABEL: firrtl.circuit "ConnectFlow"
+firrtl.circuit "ConnectFlow" {
+  firrtl.extmodule @Ext(in clock: !firrtl.clock)
+
+  // CHECK: firrtl.module @ConnectFlow()
+  firrtl.module @ConnectFlow(out %probe: !firrtl.probe<clock>) {
+    // CHECK: %ext_clock = firrtl.instance ext @Ext(in clock: !firrtl.clock)
+    %ext_clock = firrtl.instance ext @Ext(in clock: !firrtl.clock)
+
+    // CHECK-NEXT: %ext_clock_probe = firrtl.node sym @{{[^ ]+}} interesting_name %ext_clock
+    // CHECK-NEXT: %invalid_clock = firrtl.invalidvalue
+    %invalid_clock = firrtl.invalidvalue : !firrtl.clock
+
+    // CHECK-NEXT: firrtl.matchingconnect %ext_clock, %invalid_clock
+    // The connect should still use %ext_clock (not %ext_clock_probe) to preserve sink flow
+    firrtl.matchingconnect %ext_clock, %invalid_clock : !firrtl.clock
+
+    // The ref.send and ref.define are removed by LowerXMR
+    %0 = firrtl.ref.send %ext_clock : !firrtl.clock
+    firrtl.ref.define %probe, %0 : !firrtl.probe<clock>
+  }
+}
