@@ -209,7 +209,7 @@ where the `logic_to_int` conversion is only necessary if `%cond` is 4-valued.
 - **`$stable(a)`**:
 ```mlir
 %1 = seq.compreg %a, %clock : i1
-%rose = comb.icmp bin eq %a, %1 : i1
+%stable = comb.icmp bin eq %a, %1 : i1
 ``` 
 
 - **`$changed(a)`**:
