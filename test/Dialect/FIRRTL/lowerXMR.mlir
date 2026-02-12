@@ -11,8 +11,7 @@ firrtl.circuit "xmr" {
     %x = firrtl.ref.resolve %1 : !firrtl.probe<uint<2>>
     // CHECK-NOT: firrtl.ref.resolve
     firrtl.matchingconnect %o, %x : !firrtl.uint<2>
-    // CHECK:      %w = firrtl.wire : !firrtl.uint<2>
-    // CHECK:      %w_probe = firrtl.node sym @[[wSym]] interesting_name %w : !firrtl.uint<2>
+    // CHECK:      %w = firrtl.wire sym @[[wSym]] : !firrtl.uint<2>
     // CHECK-NEXT: %[[#xmr:]] = firrtl.xmr.deref @xmrPath : !firrtl.uint<2>
     // CHECK:      firrtl.matchingconnect %o, %[[#xmr]] : !firrtl.uint<2>
   }
@@ -485,7 +484,7 @@ firrtl.circuit "Top" {
                      out %c: !firrtl.probe<uint<1>>,
                      out %d: !firrtl.probe<uint<1>>) {
     %w = firrtl.wire sym @w : !firrtl.uint<1>
-    // CHECK: firrtl.node sym @[[TOP_W_SYM]] interesting_name %w
+    // CHECK: %w = firrtl.wire sym @[[TOP_W_SYM]]
     %0 = firrtl.ref.send %w : !firrtl.uint<1>
     firrtl.ref.define %a, %0 : !firrtl.probe<uint<1>>
 
@@ -507,7 +506,7 @@ firrtl.circuit "Top" {
   // CHECK-LABEL: firrtl.module @Foo()
   firrtl.module @Foo(out %x: !firrtl.probe<uint<1>>, out %y: !firrtl.probe<uint<1>>) {
     %w = firrtl.wire sym @x : !firrtl.uint<1>
-    // CHECK: firrtl.node sym @[[FOO_X_SYM]] interesting_name %w
+    // CHECK: %w = firrtl.wire sym @[[FOO_X_SYM]]
     %0 = firrtl.ref.send %w : !firrtl.uint<1>
     firrtl.ref.define %x, %0 : !firrtl.probe<uint<1>>
 
@@ -759,7 +758,7 @@ firrtl.circuit "Foo" {
     //CHECK: sv.ifdef
     sv.ifdef @A {
       %b = firrtl.wire : !firrtl.uint<1>
-      // CHECK: firrtl.node sym @[[SYM]] {{.*}} %b
+      // CHECK: %b = firrtl.wire sym @[[SYM]]
       %0 = firrtl.ref.send %b : !firrtl.uint<1>
       firrtl.ref.define %a, %0 : !firrtl.probe<uint<1>>
     }
