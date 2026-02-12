@@ -302,7 +302,7 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
 
   auto systemCallRes =
       llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
-          // Translate $fell to x[-1] > x[0]
+          // Translate $fell to ¬x[0] ∧ x[-1]
           .Case("$fell",
                 [&]() -> Value {
                   auto current = value;
@@ -315,7 +315,7 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                                   .getResult();
                   return fell;
                 })
-          // Translate $rose to x[-1] < ¬x[0]
+          // Translate $rose to x[0] ∧ ¬x[-1]
           .Case("$rose",
                 [&]() -> Value {
                   auto past =
@@ -328,7 +328,7 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                                   .getResult();
                   return rose;
                 })
-          // Translate $changed to x[0] != x[-1]
+          // Translate $changed to ( ¬x[0] ∧ x[-1] ) ⋁ ( x[0] ∧ ¬x[-1] )
           .Case("$changed",
                 [&]() -> Value {
                   auto past =
@@ -341,7 +341,7 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                                      .getResult();
                   return changed;
                 })
-          // Translate $stable to x[0] == x[-1]
+          // Translate $stable to ( x[0] ∧ x[-1] ) ⋁ ( ¬x[0] ∧ ¬x[-1] )
           .Case("$stable",
                 [&]() -> Value {
                   auto past =
