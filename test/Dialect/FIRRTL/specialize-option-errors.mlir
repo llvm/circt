@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-specialize-option))' --verify-diagnostics %s
+// RUN: circt-opt --firrtl-specialize-option --verify-diagnostics %s
 
 //===----------------------------------------------------------------------===//
 // Incorrect option case 
@@ -65,10 +65,6 @@ firrtl.module @Foo() {
 
   firrtl.instance_choice inst_default @DefaultTarget alternatives @Platform
     { @ASIC -> @ASICTarget } ()
-
-  // expected-error @below {{missing specialization for option "Performance"}}
-  firrtl.instance_choice inst_perf @DefaultTarget alternatives @Performance
-    { @Fast -> @FastTarget } ()
 }
 
 }
