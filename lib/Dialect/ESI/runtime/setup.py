@@ -52,7 +52,7 @@ class CMakeBuild(build_py):
   def run(self):
     # Set up build dirs.
     target_dir = os.path.abspath(self.build_lib)
-    cmake_build_dir = os.getenv("PYCDE_CMAKE_BUILD_DIR")
+    cmake_build_dir = os.getenv("CMAKE_BUILD_DIR")
     if not cmake_build_dir:
       cmake_build_dir = os.path.abspath(
           os.path.join(target_dir, "..", "cmake_build"))
@@ -70,6 +70,7 @@ class CMakeBuild(build_py):
         "-GNinja",  # This build only works with Ninja on Windows.
         "-DCMAKE_BUILD_TYPE={}".format(cfg),  # not used on MSVC, but no harm
         "-DPython3_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
+        "-DPython_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
         "-DWHEEL_BUILD=ON",
     ]
 
@@ -78,6 +79,7 @@ class CMakeBuild(build_py):
     # nanobind installed in the isolated build environment.
     try:
       import nanobind
+
       nanobind_dir = nanobind.cmake_dir()
       cmake_args.append("-Dnanobind_DIR={}".format(
           nanobind_dir.replace("\\", "/")))
@@ -123,24 +125,33 @@ class CMakeBuild(build_py):
     print(" ".join(["cmake", src_dir] + cmake_args))
 
     # Run the build.
-    subprocess.check_call([
-        "cmake",
-        "--build",
-        ".",
-        "--parallel",
-        "--target",
-        "ESIRuntime",
-    ],
-                          cwd=cmake_build_dir)
+    subprocess.check_call(
+        [
+            "cmake",
+            "--build",
+            ".",
+            "--parallel",
+            "--target",
+            "ESIRuntime",
+        ],
+        cwd=cmake_build_dir,
+    )
 
     # Install the runtime directly into the target directory.
     if os.path.exists(target_dir):
       shutil.rmtree(target_dir)
-    subprocess.check_call([
-        "cmake", "--install", ".", "--prefix",
-        os.path.join(target_dir, "esiaccel"), "--component", "ESIRuntime"
-    ],
-                          cwd=cmake_build_dir)
+    subprocess.check_call(
+        [
+            "cmake",
+            "--install",
+            ".",
+            "--prefix",
+            os.path.join(target_dir, "esiaccel"),
+            "--component",
+            "ESIRuntime",
+        ],
+        cwd=cmake_build_dir,
+    )
 
 
 class NoopBuildExtension(build_ext):
@@ -149,18 +160,20 @@ class NoopBuildExtension(build_ext):
     pass
 
 
-setup(name="esiaccel",
-      include_package_data=True,
-      ext_modules=[
-          CMakeExtension("esiaccel.esiCppAccel"),
-      ],
-      cmdclass={
-          "build": CustomBuild,
-          "build_ext": NoopBuildExtension,
-          "build_py": CMakeBuild,
-      },
-      zip_safe=False,
-      packages=find_namespace_packages(include=[
-          "esiaccel",
-          "esiaccel.*",
-      ]))
+setup(
+    name="esiaccel",
+    include_package_data=True,
+    ext_modules=[
+        CMakeExtension("esiaccel.esiCppAccel"),
+    ],
+    cmdclass={
+        "build": CustomBuild,
+        "build_ext": NoopBuildExtension,
+        "build_py": CMakeBuild,
+    },
+    zip_safe=False,
+    packages=find_namespace_packages(include=[
+        "esiaccel",
+        "esiaccel.*",
+    ]),
+)
