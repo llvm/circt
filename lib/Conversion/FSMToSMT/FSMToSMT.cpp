@@ -9,32 +9,10 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/FSM/FSMDialect.h"
 #include "circt/Dialect/FSM/FSMOps.h"
-#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
-#include "circt/Support/BackedgeBuilder.h"
-#include "circt/Support/LLVM.h"
-#include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
 #include "mlir/Dialect/SMT/IR/SMTOps.h"
-#include "mlir/Dialect/SMT/IR/SMTTypes.h"
-#include "mlir/IR/Builders.h"
-#include "mlir/IR/BuiltinAttributes.h"
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/IRMapping.h"
-#include "mlir/IR/MLIRContext.h"
-#include "mlir/IR/Operation.h"
-#include "mlir/IR/Region.h"
-#include "mlir/IR/Types.h"
-#include "mlir/IR/Value.h"
-#include "mlir/IR/ValueRange.h"
-#include "mlir/Parser/Parser.h"
 #include "mlir/Pass/Pass.h"
-#include "mlir/Pass/PassManager.h"
-#include "mlir/Transforms/DialectConversion.h"
-#include "llvm/ADT/APInt.h"
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallVector.h"
 
 namespace circt {
 #define GEN_PASS_DEF_CONVERTFSMTOSMT
@@ -56,7 +34,7 @@ struct LoweringConfig {
   // every transition.
   bool withTime = false;
   // Width of `time` parameter (if present)
-  unsigned timeWidth = 5;
+  unsigned timeWidth = 8;
 };
 
 class MachineOpConverter {
