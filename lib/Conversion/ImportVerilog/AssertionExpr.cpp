@@ -304,7 +304,16 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
       llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
           .Case("$sampled",
                 [&]() -> Value {
-                  auto sampled = ltl::SampledOp::create(builder, loc, value);
+                  Value sampled = ltl::SampledOp::create(builder, loc, value);
+                  // Cast back to Moore integers so Moore ops can use the result
+                  // if needed
+                  if (auto ty = dyn_cast<moore::IntType>(originalType)) {
+                    sampled =
+                        moore::FromBuiltinIntOp::create(builder, loc, sampled);
+                    if (ty.getDomain() == Domain::FourValued)
+                      sampled =
+                          moore::IntToLogicOp::create(builder, loc, sampled);
+                  }
                   return sampled;
                 })
           // Translate $fell to ¬x[0] ∧ x[-1]
