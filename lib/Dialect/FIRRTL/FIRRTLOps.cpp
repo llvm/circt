@@ -668,6 +668,7 @@ Block *CircuitOp::getBodyBlock() { return &getBody().front(); }
 
 static SmallVector<PortInfo> getPortImpl(FModuleLike module) {
   SmallVector<PortInfo> results;
+  results.reserve(module.getNumPorts());
   ArrayRef<Attribute> domains = module.getDomainInfo();
   for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i) {
     results.push_back({module.getPortNameAttr(i), module.getPortType(i),
@@ -1071,11 +1072,15 @@ void buildModuleLike(OpBuilder &builder, OperationState &result,
 
   // Record the names of the arguments if present.
   SmallVector<Direction, 4> portDirections;
-  SmallVector<Attribute, 4> portNames;
-  SmallVector<Attribute, 4> portTypes;
-  SmallVector<Attribute, 4> portSyms;
-  SmallVector<Attribute, 4> portLocs;
-  SmallVector<Attribute, 4> portDomains;
+  SmallVector<Attribute, 4> portNames, portTypes, portSyms, portLocs,
+      portDomains;
+  portDirections.reserve(ports.size());
+  portNames.reserve(ports.size());
+  portTypes.reserve(ports.size());
+  portSyms.reserve(ports.size());
+  portLocs.reserve(ports.size());
+  portDomains.reserve(ports.size());
+
   for (const auto &port : ports) {
     portDirections.push_back(port.direction);
     portNames.push_back(port.name);
@@ -2236,6 +2241,7 @@ void ClassOp::build(::mlir::OpBuilder &odsBuilder,
                     mlir::ArrayRef<mlir::Type> fieldTypes) {
 
   SmallVector<PortInfo, 10> ports;
+  ports.reserve(fieldNames.size() * 2);
   for (auto [fieldName, fieldType] : llvm::zip(fieldNames, fieldTypes)) {
     ports.emplace_back(odsBuilder.getStringAttr(fieldName + "_in"), fieldType,
                        Direction::In);
@@ -2543,9 +2549,13 @@ void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
   // Gather the result types.
   SmallVector<Type> newResultTypes;
   SmallVector<Direction> newPortDirections;
-  SmallVector<Attribute> newPortNames;
-  SmallVector<Attribute> newPortAnnotations;
-  SmallVector<Attribute> newDomainInfo;
+  SmallVector<Attribute> newPortNames, newPortAnnotations, newDomainInfo;
+  newResultTypes.reserve(ports.size());
+  newPortDirections.reserve(ports.size());
+  newPortNames.reserve(ports.size());
+  newPortAnnotations.reserve(ports.size());
+  newDomainInfo.reserve(ports.size());
+
   for (auto &p : ports) {
     newResultTypes.push_back(p.type);
     newPortDirections.push_back(p.direction);
