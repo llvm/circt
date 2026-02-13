@@ -54,13 +54,14 @@ private:
   struct Transition {
     int from;
     int to;
-    std::optional<Region*> guard;
-    std::optional<Region*> action;
-    std::optional<Region*> output;
+    std::optional<Region *> guard;
+    std::optional<Region *> action;
+    std::optional<Region *> output;
   };
 
   Transition getTransitionRegions(fsm::TransitionOp t, int from,
-                             SmallVector<std::string> &states, Location &loc) {
+                                  SmallVector<std::string> &states,
+                                  Location &loc) {
     std::string nextState = t.getNextState().str();
     Transition tr = {from, insertStates(states, nextState)};
     if (t.hasGuard()) {
@@ -166,7 +167,7 @@ LogicalResult MachineOpConverter::dispatch() {
     if (!isa<IntegerType>(a.getType())) {
       solver.emitError("Only integer arguments are supported in FSMs.");
       return failure();
-    } 
+    }
     quantifiableTypes.push_back(
         b.getType<smt::BitVectorType>(a.getType().getIntOrFloatBitWidth()));
   }
@@ -178,9 +179,9 @@ LogicalResult MachineOpConverter::dispatch() {
       if (!isa<IntegerType>(t)) {
         solver.emitError("Only integer outputs are supported in FSMs.");
         return failure();
-      } 
+      }
       quantifiableTypes.push_back(
-            b.getType<smt::BitVectorType>(t.getIntOrFloatBitWidth()));
+          b.getType<smt::BitVectorType>(t.getIntOrFloatBitWidth()));
     }
   }
 
@@ -209,8 +210,8 @@ LogicalResult MachineOpConverter::dispatch() {
   // Do not allow any operations other than constants outside of FSM regions
   for (auto &op : machineOp.front().getOperations()) {
     if (!isa<fsm::FSMDialect>(op.getDialect()) && !isa<hw::ConstantOp>(op)) {
-      op.emitError(
-          "Only fsm operations and hw.constants are allowed in the top level of the FSM MachineOp.");
+      op.emitError("Only fsm operations and hw.constants are allowed in the "
+                   "top level of the FSM MachineOp.");
       return failure();
     }
   }
@@ -381,7 +382,7 @@ LogicalResult MachineOpConverter::dispatch() {
     transitionQuantified.push_back(ty);
     if (id < numArgs) {
       transitionQuantified.push_back(ty);
-    } 
+    }
   }
 
   // For each transition
@@ -674,9 +675,8 @@ void FSMToSMTPass::runOnOperation() {
       for (auto machine : module.getOps<MachineOp>()) {
         for (auto &use : op.getUses()) {
           if (machine->isAncestor(use.getOwner())) {
-            op.emitError(
-                      "Operation " + op.getName().getStringRef() +
-                          " is declared outside of any FSM MachineOp");
+            op.emitError("Operation " + op.getName().getStringRef() +
+                         " is declared outside of any FSM MachineOp");
             signalPassFailure();
             return;
           }
