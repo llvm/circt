@@ -704,6 +704,42 @@ AllTypesMatch<["queue", "outQueue"]>]> {
   let assemblyFormat = "`from` $queue attr-dict `:` type($queue)";
 }
 
+def QueueDeleteOp : SimOp<"queue.delete", [Pure,
+    AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Deletes an element from a queue";
+  let description = [{
+    Deletes the queue element at the position `index`. Does nothing if `index`
+    is negative or greater than or equal to the length of the queue.
+  }];
+
+  let arguments = (ins QueueType:$queue, I32:$index);
+  let results = (outs QueueType:$outQueue);
+
+  let assemblyFormat = "`index` $index `of` $queue attr-dict `:` type($queue)";
+}
+
+def QueueInsertOp : SimOp<"queue.insert", [Pure,
+    TypesMatchWith<"queue and item types must match",
+      "queue", "item", "cast<QueueType>($_self).getElementType()">,
+    AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Insert an element at an arbitrary position within the queue";
+  let description = [{
+    Inserts an element at the given index within the queue. Any elements
+    at later indexes will be shifted forward one position. If this results in
+    the last item in the queue being outside the bounds, it is discarded.
+
+    If `index` is negative or greater than the queue length, this does nothing.
+    Note that an index equal to the queue length will simply push `item` to the
+    end of the queue.
+  }];
+
+  let arguments = (ins QueueType:$queue, I32:$index, HWNonInOutType:$item);
+  let results = (outs QueueType:$outQueue);
+
+  let assemblyFormat = "$item `into` $queue `at` $index attr-dict `:` type($queue)";
+}
+
+
 //===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//

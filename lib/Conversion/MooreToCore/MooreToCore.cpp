@@ -1946,6 +1946,12 @@ struct AssignedVariableOpConversion
   }
 };
 
+// Blocking and continuous assignments get a 0ns 0d 1e delay.
+static llhd::TimeAttr
+getBlockingOrContinuousAssignDelay(mlir::MLIRContext *context) {
+  return llhd::TimeAttr::get(context, 0U, "ns", 0, 1);
+}
+
 template <typename OpTy>
 struct AssignOpConversion : public OpConversionPattern<OpTy> {
   using OpConversionPattern<OpTy>::OpConversionPattern;
@@ -1958,10 +1964,9 @@ struct AssignOpConversion : public OpConversionPattern<OpTy> {
     Value delay;
     if constexpr (std::is_same_v<OpTy, ContinuousAssignOp> ||
                   std::is_same_v<OpTy, BlockingAssignOp>) {
-      // Blocking and continuous assignments get a 0ns 0d 1e delay.
       delay = llhd::ConstantTimeOp::create(
           rewriter, op->getLoc(),
-          llhd::TimeAttr::get(op->getContext(), 0U, "ns", 0, 1));
+          getBlockingOrContinuousAssignDelay(op->getContext()));
     } else if constexpr (std::is_same_v<OpTy, NonBlockingAssignOp>) {
       // Non-blocking assignments get a 0ns 1d 0e delay.
       delay = llhd::ConstantTimeOp::create(
@@ -2237,7 +2242,7 @@ probeRefAndDriveWithResult(OpBuilder &builder, Location loc, Value ref,
 
   // Drive using the same delay as a blocking assignment
   Value delay = llhd::ConstantTimeOp::create(
-      builder, loc, llhd::TimeAttr::get(builder.getContext(), 0U, "ns", 0, 1));
+      builder, loc, getBlockingOrContinuousAssignDelay(builder.getContext()));
 
   llhd::DriveOp::create(builder, loc, ref, func(v), delay, Value{});
 }
@@ -2292,6 +2297,7 @@ struct QueuePopBackOpConversion : public OpConversionPattern<QueuePopBackOp> {
           op.replaceAllUsesWith(popBack.getPopped());
           return popBack.getOutQueue();
         });
+    rewriter.eraseOp(op);
 
     return success();
   }
@@ -2311,9 +2317,73 @@ struct QueuePopFrontOpConversion : public OpConversionPattern<QueuePopFrontOp> {
           op.replaceAllUsesWith(popFront.getPopped());
           return popFront.getOutQueue();
         });
+    rewriter.eraseOp(op);
 
     return success();
   }
+};
+
+struct QueueClearOpConversion : public OpConversionPattern<QueueClearOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(QueueClearOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto refType = cast<llhd::RefType>(adaptor.getQueue().getType());
+    auto queueType = refType.getNestedType();
+    Value emptyQueue =
+        sim::QueueEmptyOp::create(rewriter, op->getLoc(), queueType);
+
+    // Replace with an assignment to an empty queue
+    Value delay = llhd::ConstantTimeOp::create(
+        rewriter, op.getLoc(),
+        getBlockingOrContinuousAssignDelay(rewriter.getContext()));
+
+    llhd::DriveOp::create(rewriter, op.getLoc(), adaptor.getQueue(), emptyQueue,
+                          delay, Value{});
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct QueueInsertOpConversion : public OpConversionPattern<QueueInsertOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(QueueInsertOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    probeRefAndDriveWithResult(
+        rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
+          auto insert =
+              sim::QueueInsertOp::create(rewriter, op->getLoc(), queue,
+                                         adaptor.getIndex(), adaptor.getItem());
+
+          return insert.getOutQueue();
+        });
+    rewriter.eraseOp(op);
+
+    return success();
+  }
+};
+
+struct QueueDeleteOpConversion : public OpConversionPattern<QueueDeleteOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(QueueDeleteOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    probeRefAndDriveWithResult(
+        rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
+          auto delOp = sim::QueueDeleteOp::create(rewriter, op->getLoc(), queue,
+                                                  adaptor.getIndex());
+
+          return delOp.getOutQueue();
+        });
+    rewriter.eraseOp(op);
+
+    return success();
+  };
 };
 
 struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
@@ -2814,7 +2884,10 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     QueuePushBackOpConversion,
     QueuePushFrontOpConversion,
     QueuePopBackOpConversion,
-    QueuePopFrontOpConversion
+    QueuePopFrontOpConversion,
+    QueueDeleteOpConversion,
+    QueueInsertOpConversion,
+    QueueClearOpConversion
   >(typeConverter, patterns.getContext());
   // clang-format on
 
