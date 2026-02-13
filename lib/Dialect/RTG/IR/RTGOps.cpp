@@ -454,6 +454,48 @@ LogicalResult VirtualRegisterOp::inferReturnTypes(
 }
 
 //===----------------------------------------------------------------------===//
+// RegisterToIndexOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult RegisterToIndexOp::fold(FoldAdaptor adaptor) {
+  if (auto reg = dyn_cast_or_null<rtg::RegisterAttrInterface>(adaptor.getReg()))
+    return IntegerAttr::get(IndexType::get(getContext()), reg.getClassIndex());
+
+  if (auto indexToRegOp = getReg().getDefiningOp<IndexToRegisterOp>())
+    return indexToRegOp.getIndex();
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// IndexToRegisterOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult IndexToRegisterOp::verify() {
+  // Check if the index is a constant and if it's within valid range
+  APInt indexValue;
+  if (matchPattern(getIndex(), m_ConstantInt(&indexValue))) {
+    if (indexValue.uge(getType().getRegisterClassSize())) {
+      SmallString<16> indexStr;
+      indexValue.toString(indexStr, 10, false);
+      return emitOpError() << "index " << indexStr
+                           << " is out of range for register class "
+                           << getReg().getType();
+    }
+  }
+
+  return success();
+}
+
+OpFoldResult IndexToRegisterOp::fold(FoldAdaptor adaptor) {
+  if (auto indexAttr = dyn_cast_or_null<IntegerAttr>(adaptor.getIndex()))
+    return getType().getRegisterAttrForClassIndex(
+        getContext(), indexAttr.getValue().getZExtValue());
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // ContextSwitchOp
 //===----------------------------------------------------------------------===//
 
