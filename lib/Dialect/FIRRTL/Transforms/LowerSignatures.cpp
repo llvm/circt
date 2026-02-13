@@ -19,6 +19,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/Debug.h"
+#include "circt/Support/InstanceGraphInterface.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
@@ -398,18 +399,13 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
 
 static void lowerModuleBody(FModuleOp mod,
                             const DenseMap<StringAttr, PortConversion> &ports) {
-  auto fixupInstance = [&](auto inst) -> void {
+  auto fixupInstance = [&](auto inst, auto clone) -> void {
     ImplicitLocOpBuilder theBuilder(inst.getLoc(), inst);
 
-    // Get the module name
-    StringAttr moduleName;
-    if constexpr (std::is_same_v<decltype(inst), InstanceOp>) {
-      moduleName = inst.getModuleNameAttr().getAttr();
-    } else {
-      // For InstanceChoiceOp, use the default target.
-      moduleName =
-          cast<FlatSymbolRefAttr>(inst.getModuleNamesAttr()[0]).getAttr();
-    }
+    // Get the module name. The first element works for both InstanceOp and
+    // InstanceChoiceOp.
+    StringAttr moduleName =
+        cast<StringAttr>(inst.getReferencedModuleNamesAttr()[0]);
 
     const auto &modPorts = ports.at(moduleName);
 
@@ -421,22 +417,8 @@ static void lowerModuleBody(FModuleOp mod,
       p.annotations = AnnotationSet{mod.getContext()};
       instPorts.push_back(p);
     }
-    auto annos = inst.getAnnotations();
 
-    // Create the new instance based on the type
-    decltype(inst) newOp;
-    if constexpr (std::is_same_v<decltype(inst), InstanceOp>) {
-      newOp = InstanceOp::create(
-          theBuilder, instPorts, inst.getModuleName(), inst.getName(),
-          inst.getNameKind(), annos.getValue(), inst.getLayers(),
-          inst.getLowerToBind(), inst.getDoNotPrint(), inst.getInnerSymAttr());
-    } else {
-      newOp = InstanceChoiceOp::create(
-          theBuilder, instPorts, inst.getModuleNamesAttr(),
-          inst.getCaseNamesAttr(), inst.getName(), inst.getNameKind(),
-          inst.getAnnotationsAttr(), inst.getLayersAttr(),
-          inst.getInnerSymAttr());
-    }
+    auto newOp = clone(theBuilder, inst, instPorts);
 
     auto oldDict = inst->getDiscardableAttrDictionary();
     auto newDict = newOp->getDiscardableAttrDictionary();
@@ -486,8 +468,29 @@ static void lowerModuleBody(FModuleOp mod,
   };
 
   mod->walk([&](Operation *op) -> void {
-    TypeSwitch<Operation *>(op).Case<InstanceOp, InstanceChoiceOp>(
-        fixupInstance);
+    TypeSwitch<Operation *>(op)
+        .Case<InstanceOp>([&](auto inst) {
+          fixupInstance(inst, [&](ImplicitLocOpBuilder &theBuilder,
+                                  InstanceOp inst,
+                                  ArrayRef<PortInfo> newPorts) {
+            return InstanceOp::create(
+                theBuilder, newPorts, inst.getModuleName(), inst.getName(),
+                inst.getNameKind(), inst.getAnnotations().getValue(),
+                inst.getLayers(), inst.getLowerToBind(), inst.getDoNotPrint(),
+                inst.getInnerSymAttr());
+          });
+        })
+        .Case<InstanceChoiceOp>([&](auto inst) {
+          fixupInstance(inst, [&](ImplicitLocOpBuilder &theBuilder,
+                                  InstanceChoiceOp inst,
+                                  ArrayRef<PortInfo> newPorts) {
+            return InstanceChoiceOp::create(
+                theBuilder, newPorts, inst.getModuleNamesAttr(),
+                inst.getCaseNamesAttr(), inst.getName(), inst.getNameKind(),
+                inst.getAnnotationsAttr(), inst.getLayersAttr(),
+                inst.getInnerSymAttr());
+          });
+        });
   });
 }
 
