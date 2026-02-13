@@ -2540,6 +2540,21 @@ firrtl.circuit "Top" {
 
 // -----
 
+firrtl.circuit "IntmoduleWithInstanceChoice" {
+  firrtl.option @Opt {
+    firrtl.option_case @A
+  }
+
+  firrtl.intmodule @test(in i: !firrtl.clock, out size: !firrtl.uint<32>) attributes {intrinsic = "circt.sizeof"}
+
+  firrtl.module @IntmoduleWithInstanceChoice() {
+    // expected-error @below {{intmodule must be instantiated with instance op, not via 'firrtl.instance_choice'}}
+    %i1, %size = firrtl.instance_choice inst interesting_name @test alternatives @Opt { @A -> @test }(in i: !firrtl.clock, out size: !firrtl.uint<32>)
+  }
+}
+
+// -----
+
 firrtl.circuit "DPI" {
   firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<4>, in %in_1: !firrtl.uint) {
     // expected-error @below {{unknown width is not allowed for DPI}}

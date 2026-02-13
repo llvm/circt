@@ -21,17 +21,14 @@ firrtl.circuit "EICGWithModuleAnno" {
 
 // -----
 
-firrtl.circuit "BasicIntmoduleInstances" {
-
+firrtl.circuit "EICGWithInstanceChoice" {
   firrtl.option @Opt {
-      firrtl.option_case @A
+    firrtl.option_case @A
   }
 
-  firrtl.intmodule @test(in i : !firrtl.clock, out size : !firrtl.uint<32>) attributes
-                                     {intrinsic = "circt.sizeof"}
-
-  firrtl.module @BasicIntmoduleInstances() {
-    // expected-error @below {{intmodule must be instantiated with instance op, not via 'firrtl.instance_choice'}}
-    %i1, %size = firrtl.instance_choice inst interesting_name @test alternatives @Opt { @A -> @test }(in i : !firrtl.clock, out size : !firrtl.uint<32>)
+  firrtl.extmodule @EICG_wrapper(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock) attributes {defname = "EICG_wrapper"}
+  firrtl.module @EICGWithInstanceChoice(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>) {
+    // expected-error @below {{EICG_wrapper must be instantiated with instance op, not via 'firrtl.instance_choice'}}
+    %ckg_in, %ckg_test_en, %ckg_en, %ckg_out = firrtl.instance_choice ckg interesting_name @EICG_wrapper alternatives @Opt { @A -> @EICG_wrapper }(in in: !firrtl.clock, in test_en: !firrtl.uint<1>, in en: !firrtl.uint<1>, out out: !firrtl.clock)
   }
 }
