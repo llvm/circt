@@ -725,7 +725,7 @@ def QueueInsertOp : SimOp<"queue.insert", [Pure,
   let summary = "Insert an element at an arbitrary position within the queue";
   let description = [{
     Inserts an element at the given index within the queue. Any elements
-    at later indexes will be shifted forward one position. If this results in
+    at this index or later will be shifted forward one position. If this results in
     the last item in the queue being outside the bounds, it is discarded.
 
     If `index` is negative or greater than the queue length, this does nothing.
