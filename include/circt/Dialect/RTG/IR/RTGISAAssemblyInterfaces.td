@@ -57,7 +57,21 @@ def RegisterTypeInterface : TypeInterface<"RegisterTypeInterface"> {
   ];
 }
 
-def InstructionOpInterface : OpInterface<"InstructionOpInterface"> {
+def RegisterAllocationOpInterface : OpInterface<"RegisterAllocationOpInterface"> {
+  let description = [{
+    This interface should be implemented by operations that read or write 
+    registers. It is primarily used by the register allocation pass.
+  }];
+  let cppNamespace = "::circt::rtg";
+
+  let methods = [
+    // TODO: add methods to query source/destination registers
+  ];
+}
+
+def InstructionOpInterface : OpInterface<"InstructionOpInterface", [
+  RegisterAllocationOpInterface,
+]> {
   let description = [{
     This interface should be implemented by operations that represent
     ISA instructions.
