@@ -174,22 +174,19 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
             // Check if the operation can support an inner symbol and has a
             // single result (or targets a specific result).
             auto *xmrDefOp = xmrDef.getDefiningOp();
-            auto innerSymOp =
-                xmrDefOp ? dyn_cast<hw::InnerSymbolOpInterface>(xmrDefOp)
-                         : hw::InnerSymbolOpInterface();
-            auto targetResultIndex =
-                innerSymOp ? innerSymOp.getTargetResultIndex() : std::nullopt;
 
             // Add the symbol directly if the operation targets a specific
             // result. This ensures that operations like InstanceOp and MemOp,
             // which have inner symbols that target the operation itself (not a
             // specific result), still get nodes created to distinguish which
             // result is being referenced.
-            if (innerSymOp && targetResultIndex.has_value()) {
-              addReachingSendsEntry(send.getResult(), getInnerRefTo(xmrDef));
-              markForRemoval(send);
-              return success();
-            }
+            if (auto innerSymOp =
+                    dyn_cast_or_null<hw::InnerSymbolOpInterface>(xmrDefOp))
+              if (innerSymOp.getTargetResultIndex()) {
+                addReachingSendsEntry(send.getResult(), getInnerRefTo(xmrDef));
+                markForRemoval(send);
+                return success();
+              }
 
             // The operation cannot support an inner symbol, or it has
             // multiple results and doesn't target a specific result, so
