@@ -170,9 +170,6 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
                 return success();
               }
             // Get an InnerRefAttr to the value being sent.
-
-            // Check if the operation can support an inner symbol and has a
-            // single result (or targets a specific result).
             auto *xmrDefOp = xmrDef.getDefiningOp();
 
             // Add the symbol directly if the operation targets a specific
