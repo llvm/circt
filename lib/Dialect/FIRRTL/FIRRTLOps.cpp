@@ -2941,6 +2941,21 @@ std::optional<size_t> InstanceChoiceOp::getTargetResultIndex() {
   return std::nullopt;
 }
 
+StringRef InstanceChoiceOp::getInstanceName() { return getName(); }
+
+StringAttr InstanceChoiceOp::getInstanceNameAttr() { return getNameAttr(); }
+
+ArrayAttr InstanceChoiceOp::getReferencedModuleNamesAttr() {
+  // Convert FlatSymbolRefAttr array to StringAttr array
+  auto moduleNames = getModuleNamesAttr();
+  SmallVector<Attribute> moduleNameStrings;
+  moduleNameStrings.reserve(moduleNames.size());
+  for (auto moduleName : moduleNames)
+    moduleNameStrings.push_back(cast<FlatSymbolRefAttr>(moduleName).getAttr());
+
+  return ArrayAttr::get(getContext(), moduleNameStrings);
+}
+
 void InstanceChoiceOp::print(OpAsmPrinter &p) {
   // Print the instance name.
   p << " ";
@@ -3127,9 +3142,17 @@ LogicalResult
 InstanceChoiceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto caseNames = getCaseNamesAttr();
   for (auto moduleName : getModuleNamesAttr()) {
-    if (failed(instance_like_impl::verifyReferencedModule(
-            *this, symbolTable, cast<FlatSymbolRefAttr>(moduleName))))
+    auto moduleNameRef = cast<FlatSymbolRefAttr>(moduleName);
+    if (failed(instance_like_impl::verifyReferencedModule(*this, symbolTable,
+                                                          moduleNameRef)))
       return failure();
+
+    // Check that the referenced module is not an intmodule.
+    auto referencedModule =
+        symbolTable.lookupNearestSymbolFrom<FModuleLike>(*this, moduleNameRef);
+    if (isa<FIntModuleOp>(referencedModule))
+      return emitOpError("intmodule must be instantiated with instance op, "
+                         "not via 'firrtl.instance_choice'");
   }
 
   auto root = cast<SymbolRefAttr>(caseNames[0]).getRootReference();

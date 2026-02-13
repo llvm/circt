@@ -74,6 +74,10 @@ void LowerIntmodulesPass::runOnOperation() {
 
     for (auto *use : llvm::make_early_inc_range(node->uses())) {
       auto inst = use->getInstance<InstanceOp>();
+      // The verifier should have already checked that intmodules are only
+      // instantiated with InstanceOp, not InstanceChoiceOp.
+      assert(inst && "intmodule must be instantiated with instance op");
+
       if (failed(checkInstForAnnotations(inst, op.getIntrinsic())))
         return signalPassFailure();
 
@@ -174,6 +178,12 @@ void LowerIntmodulesPass::runOnOperation() {
       changed = true;
       for (auto *use : llvm::make_early_inc_range(node->uses())) {
         auto inst = use->getInstance<InstanceOp>();
+        if (!inst) {
+          mlir::emitError(use->getInstance()->getLoc())
+              << "EICG_wrapper must be instantiated with instance op, not via '"
+              << use->getInstance().getOperation()->getName() << "'";
+          return signalPassFailure();
+        }
         if (failed(checkInstForAnnotations(inst, eicgName)))
           return signalPassFailure();
 
