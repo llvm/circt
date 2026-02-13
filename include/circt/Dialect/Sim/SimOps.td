@@ -704,6 +704,10 @@ AllTypesMatch<["queue", "outQueue"]>]> {
   let assemblyFormat = "`from` $queue attr-dict `:` type($queue)";
 }
 
+// TODO: The `index` parameter should in-fact be a 4-valued integer.
+// These are, as of writing, unsupported by the core dialects.
+// Any unknown bit within `index` should result in `queue.delete` having
+// no effect on the queue per IEEE 1800-2023 § 7.10.2.3 "Delete()"
 def QueueDeleteOp : SimOp<"queue.delete", [Pure,
     AllTypesMatch<["queue", "outQueue"]>]> {
   let summary = "Deletes an element from a queue";
@@ -718,6 +722,8 @@ def QueueDeleteOp : SimOp<"queue.delete", [Pure,
   let assemblyFormat = "`index` $index `of` $queue attr-dict `:` type($queue)";
 }
 
+// Likewise, TODO for 4-valued ints.
+// See IEEE 1800-2023 § 7.10.2.2 "Insert()"
 def QueueInsertOp : SimOp<"queue.insert", [Pure,
     TypesMatchWith<"queue and item types must match",
       "queue", "item", "cast<QueueType>($_self).getElementType()">,
