@@ -25,6 +25,7 @@
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/Casting.h"
 #include <iterator>
 
 namespace circt {
@@ -155,6 +156,34 @@ static LogicalResult mangleCircuitSymbols(CircuitOp circuit) {
   return success();
 }
 
+static LogicalResult mergeLayer(LayerOp rootDst, LayerOp rootSrc) {
+  SmallVector<std::pair<LayerOp, LayerOp>> worklist;
+  worklist.push_back({rootDst, rootSrc});
+
+  while (!worklist.empty()) {
+    auto [dst, src] = worklist.pop_back_val();
+
+    if (dst.getConvention() != src.getConvention())
+      return src.emitOpError("layer convention mismatch with existing layer");
+
+    SymbolTable dstSymbolTable(dst);
+
+    SmallVector<Operation *> opsToMove;
+    for (auto &op : src.getBody().front())
+      opsToMove.push_back(&op);
+    for (auto *op : opsToMove) {
+      if (auto srcChildLayer = dyn_cast<LayerOp>(op))
+        if (auto dstChildLayer = cast_if_present<LayerOp>(
+                dstSymbolTable.lookup(srcChildLayer.getNameAttr()))) {
+          worklist.push_back({dstChildLayer, srcChildLayer});
+          continue;
+        }
+      op->moveBefore(&dst.getBody().front(), dst.getBody().front().end());
+    }
+  }
+  return success();
+}
+
 /// Handles colliding symbols when merging circuits.
 ///
 /// This function resolves symbol collisions between operations in different
@@ -236,6 +265,14 @@ static FailureOr<bool> handleCollidingOps(SymbolOpInterface collidingOp,
       declaration->erase();
       return declaration == incomingOp;
     }
+  }
+
+  if (isa<LayerOp>(collidingOp) && isa<LayerOp>(incomingOp)) {
+    if (failed(
+            mergeLayer(cast<LayerOp>(collidingOp), cast<LayerOp>(incomingOp))))
+      return failure();
+    incomingOp->erase();
+    return true;
   }
 
   return failure();
