@@ -158,6 +158,24 @@ firrtl.circuit "Test" {
     }
   }
 
+  // CHECK:      hw.hierpath private @[[CaptureForceable_a_path:.+]] [@CaptureForceable::@[[CaptureForceable_a_sym:.+]]]
+  // CHECK-NEXT: firrtl.module private @CaptureForceable_A()
+  // CHECK-NEXT:   %[[a:.+]] = firrtl.xmr.deref @[[CaptureForceable_a_path]] : !firrtl.uint<1>
+  // CHECK-NEXT:   %b = firrtl.wire : !firrtl.uint<1>
+  // CHECK-NEXT:   firrtl.matchingconnect %b, %[[a]] : !firrtl.uint<1>
+  // CHECK-NEXT: }
+  // CHECK-NEXT: firrtl.module @CaptureForceable() {
+  // CHECK-NEXT:   %a, %a_ref = firrtl.wire sym @[[CaptureForceable_a_sym]] forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+  // CHECK-NEXT:   firrtl.instance {{.+}} sym @{{.+}} {doNotPrint, output_file = #hw.output_file<"layers-CaptureForceable-A.sv", excludeFromFileList>} @CaptureForceable_A()
+  // CHECK-NEXT: }
+  firrtl.module @CaptureForceable() {
+    %a, %a_ref = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+    firrtl.layerblock @A {
+      %b = firrtl.wire : !firrtl.uint<1>
+      firrtl.matchingconnect %b, %a : !firrtl.uint<1>
+    }
+  }
+
   // CHECK:      firrtl.module private @CaptureProbeSrc_A()
   // CHECK-NEXT:   %0 = firrtl.xmr.deref @xmrPath : !firrtl.uint<1>
   // CHECK-NEXT: }
