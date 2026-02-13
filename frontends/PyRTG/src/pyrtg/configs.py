@@ -8,7 +8,6 @@ from .core import CodeGenRoot, Type, Value
 from .base import ir
 from .rtg import rtg
 from .tuples import Tuple, TupleType
-from .diagnostics import get_source_loc
 
 
 class ParamBase:
@@ -155,7 +154,6 @@ def config(cls):
     if isinstance(attr, ParamBase):
       setattr(inst, attr_name, attr)
   inst._name = cls.__name__
-  inst.loc = get_source_loc()
   return inst
 
 
@@ -183,9 +181,7 @@ class Config(CodeGenRoot):
     self._already_generated = True
 
     # Construct the target operation.
-    target_op = rtg.TargetOp(self._name,
-                             ir.TypeAttr.get(rtg.DictType.get()),
-                             loc=self.loc)
+    target_op = rtg.TargetOp(self._name, ir.TypeAttr.get(rtg.DictType.get()))
     entry_block = ir.Block.create_at_start(target_op.bodyRegion, [])
     with ir.InsertionPoint(entry_block):
       if hasattr(self, "load"):
@@ -193,8 +189,7 @@ class Config(CodeGenRoot):
 
       params = self.get_params()
       params.sort(key=lambda param: param.get_name())
-      rtg.YieldOp([param.load_and_get_value() for param in params],
-                  loc=self.loc)
+      rtg.YieldOp([param.load_and_get_value() for param in params])
 
       dict_entries = [(ir.StringAttr.get(param.get_name()),
                        param.get_type()._codegen()) for param in params]

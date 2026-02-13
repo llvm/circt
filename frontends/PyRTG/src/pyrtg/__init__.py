@@ -23,4 +23,3 @@ from .contexts import CPUCore, CPUCoreType
 from .control_flow import If, Else, EndIf, For, Foreach
 from .tuples import Tuple, TupleType
 from .memories import Memory, MemoryType, MemoryBlock, MemoryBlockType
-from .diagnostics import PySourceLocation, PySourceLocationStack, capture_source_loc, get_source_loc

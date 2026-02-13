@@ -22,67 +22,6 @@ class Verbosity(Enum):
   VERBOSE = 'verbose'
 
 
-@dataclass
-class PySourceLocation:
-  """
-  Intermediate data structure to store Python source location information
-  without requiring an MLIR context. Can be converted to ir.Location later.
-  If 'end_line' is provided, 'end_col' must also be provided.
-  """
-
-  filename: str
-  line: int
-  start_col: int
-  end_line: Optional[int] = None
-  end_col: Optional[int] = None
-
-  def to_ir_location(self) -> ir.Location:
-    """
-    Convert this Python source location to an MLIR ir.Location.
-    """
-
-    if self.end_line is not None and self.line != self.end_line:
-      if self.end_col is None:
-        raise ValueError("end_line is provided but end_col is not")
-
-      if self.line > self.end_line:
-        raise ValueError("end_line is provided but is less than line")
-
-      return ir.Location.file(self.filename, self.line, self.start_col,
-                              self.end_line, self.end_col)
-
-    if self.end_col is not None:
-      return ir.Location.file(self.filename, self.line, self.start_col,
-                              self.line, self.end_col)
-
-    return ir.Location.file(self.filename, self.line, self.start_col)
-
-
-@dataclass
-class PySourceLocationStack:
-  """
-  Represents a stack of Python source locations (call stack).
-  Can be converted to an MLIR callsite location later.
-  """
-
-  locations: List[PySourceLocation]
-
-  def to_ir_location(self) -> ir.Location:
-    """
-    Convert this location stack to an MLIR ir.Location.
-    """
-
-    if not self.locations:
-      return ir.Location.unknown()
-
-    stack_locs = [loc.to_ir_location() for loc in self.locations]
-
-    if len(stack_locs) == 1:
-      return stack_locs[0]
-
-    return ir.Location.callsite(stack_locs[0], stack_locs[1:])
-
-
 _pyrtg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -90,6 +29,9 @@ def _is_user_code(loc: ir.Location):
   """
   Check if a file is user code (not part of PyRTG library).
   """
+
+  if loc.is_a_name():
+    loc = loc.child_loc
 
   if not loc.is_a_file():
     return True
@@ -108,49 +50,6 @@ def _is_user_code(loc: ir.Location):
 
   # Filter out PyRTG library frames
   return not os.path.abspath(loc.filename).startswith(_pyrtg_dir)
-
-
-def capture_source_loc():
-  """
-  Capture Python source location information without requiring an MLIR context.
-  Returns a PySourceLocationStack that can be converted to ir.Location later.
-  """
-
-  import traceback
-
-  stack_locs = []
-  for f, lineno in list(traceback.walk_stack(None))[1:]:
-    filename = f.f_code.co_filename
-
-    py_loc = PySourceLocation(filename=filename, line=lineno, start_col=0)
-
-    # Python 3.11+ has co_positions() method for precise location info
-    if sys.version_info >= (3, 11) and hasattr(f.f_code, 'co_positions'):
-      positions = list(f.f_code.co_positions())
-      current_offset = f.f_lasti
-
-      # In Python 3.11+, each instruction is 2 bytes
-      instr_index = current_offset // 2
-      if 0 <= instr_index < len(positions):
-        line_start, line_end, col_start, col_end = positions[instr_index]
-        assert line_start == lineno
-
-        py_loc.start_col = col_start if col_start is not None else 0
-        py_loc.end_col = col_end
-        py_loc.end_line = line_end
-
-    stack_locs.append(py_loc)
-
-  return PySourceLocationStack(stack_locs)
-
-
-def get_source_loc():
-  """
-  Get user location with source information as an ir.Location.
-  This requires an MLIR context to be initialized.
-  """
-
-  return capture_source_loc().to_ir_location()
 
 
 class Color(Enum):

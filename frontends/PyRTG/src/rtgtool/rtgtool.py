@@ -214,7 +214,7 @@ def run() -> None:
 
   # Create the MLIR context and register all CIRCT dialects. In principle, we'd
   # only need to register the RTG and the desired payload dialects.
-  with ir.Context() as ctx, ir.Location.unknown():
+  with ir.Context() as ctx, ir.Location.unknown(), ir.loc_tracebacks():
     ctx.emit_error_diagnostics = True
     ctx.attach_diagnostic_handler(
         pyrtg.diagnostics.get_diagnostic_handler(args.verbosity))

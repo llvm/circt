@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from .core import CodeGenObject, Value, Type
 from .support import _FromCirctValue, _FromCirctType
-from .diagnostics import capture_source_loc
 from .base import ir
 from .rtg import rtg
 
@@ -21,7 +20,6 @@ class SequenceDeclaration(CodeGenObject):
   def __init__(self, sequence_func, arg_types: list[Type]):
     self.sequence_func = sequence_func
     self.arg_types = arg_types
-    self.py_loc = capture_source_loc()
 
   @property
   def name(self) -> str:
@@ -72,8 +70,7 @@ class SequenceDeclaration(CodeGenObject):
   def _codegen(self) -> None:
     mlir_arg_types = [arg._codegen() for arg in self.arg_types]
     seq = rtg.SequenceOp(self.name,
-                         ir.TypeAttr.get(rtg.SequenceType.get(mlir_arg_types)),
-                         loc=self.py_loc.to_ir_location())
+                         ir.TypeAttr.get(rtg.SequenceType.get(mlir_arg_types)))
     block = ir.Block.create_at_start(seq.bodyRegion, mlir_arg_types)
     with ir.InsertionPoint(block):
       self.sequence_func(*[_FromCirctValue(arg) for arg in block.arguments])

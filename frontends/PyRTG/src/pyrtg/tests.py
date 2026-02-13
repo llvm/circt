@@ -8,7 +8,6 @@ from .rtg import rtg
 from .support import _FromCirctValue
 from .configs import PythonParam
 from .strings import String
-from .diagnostics import get_source_loc
 
 from typing import Union
 
@@ -23,7 +22,6 @@ class Test(CodeGenRoot):
   def __init__(self, test_func, config):
     self.test_func = test_func
     self.config = config
-    self.loc = get_source_loc()
 
   def codegen_depends_on(self) -> list[CodeGenObject]:
     return [self.config]
@@ -37,15 +35,12 @@ class Test(CodeGenRoot):
     params_sorted = self.config.get_params()
     params_sorted.sort(key=lambda param: param.get_name())
 
-    test = rtg.TestOp(self.name,
-                      self.name,
-                      ir.TypeAttr.get(
-                          rtg.DictType.get([
-                              (ir.StringAttr.get(param.get_name()),
+    test = rtg.TestOp(
+        self.name, self.name,
+        ir.TypeAttr.get(
+            rtg.DictType.get([(ir.StringAttr.get(param.get_name()),
                                param.get_type()._codegen())
-                              for param in params_sorted
-                          ])),
-                      loc=self.loc)
+                              for param in params_sorted])))
     block = ir.Block.create_at_start(
         test.bodyRegion,
         [param.get_type()._codegen() for param in params_sorted])
