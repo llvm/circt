@@ -53,8 +53,9 @@ private:
   struct Transition {
     int from;
     int to;
-    bool hasGuard = false, hasAction = false, hasOutput = false;
-    Region *guard = nullptr, *action = nullptr, *output = nullptr;
+    std::optional<Region*> guard;
+    std::optional<Region*> action;
+    std::optional<Region*> output;
   };
 
   Transition parseTransition(fsm::TransitionOp t, int from,
@@ -62,12 +63,14 @@ private:
     std::string nextState = t.getNextState().str();
     Transition tr = {from, insertStates(states, nextState)};
     if (t.hasGuard()) {
-      tr.hasGuard = true;
       tr.guard = &t.getGuard();
+    } else {
+      tr.guard = std::nullopt;
     }
     if (t.hasAction()) {
-      tr.hasAction = true;
       tr.action = &t.getAction();
+    } else {
+      tr.action = std::nullopt;
     }
     return tr;
   }
@@ -252,10 +255,9 @@ LogicalResult MachineOpConverter::dispatch() {
            stateOp.getTransitions().front().getOps<fsm::TransitionOp>()) {
         auto t = parseTransition(tr, fromState, states, loc);
         if (!stateOp.getOutput().empty()) {
-          t.hasOutput = true;
           t.output = getOutputRegion(outputOfStateId, t.to);
         } else {
-          t.hasOutput = false;
+          t.output = std::nullopt;
         }
         transitions.push_back(t);
       }
@@ -396,9 +398,9 @@ LogicalResult MachineOpConverter::dispatch() {
         castUpdatedVars.push_back(actionArgsOutsVarsVals[numArgs + numOut + i]);
       }
 
-      if (transition.hasAction) {
+      if (transition.action.has_value()) {
 
-        auto *actionReg = transition.action;
+        auto *actionReg = transition.action.value();
 
         IRMapping mapping = createIRMapping(fsmToCast, constMapper);
 
@@ -450,7 +452,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
       // Clone all the operations in the guard region except for `ReturnOp` and
       // `AssertOp,
-      for (auto &op : transition.guard->front()) {
+      for (auto &op : transition.guard.value()->front()) {
         auto *newOp = b.clone(op, mapping);
         // Retrieve the guard value
         if (isa<fsm::ReturnOp>(newOp)) {
@@ -477,7 +479,7 @@ LogicalResult MachineOpConverter::dispatch() {
       SmallVector<std::pair<mlir::Value, mlir::Value>> fsmToCast = mapSmtToFsm(
           loc, b, outputArgsOutsVarsVals, numArgs, numOut, fsmArgs, fsmVars);
       SmallVector<Value> castOutputVars;
-      auto *outputReg = transition.output;
+      auto *outputReg = transition.output.value();
       IRMapping mapping = createIRMapping(fsmToCast, constMapper);
 
       // Clone each operation in the output region except for `OutputOp`,
@@ -540,7 +542,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
           // Depending on the updated variables, compute the output values at
           // the arriving state
-          if (transition.hasOutput) {
+          if (transition.output.has_value()) {
             auto outputCastVals = output(arrivingArgsOutsVars);
 
             // Add the output values to the arriving-state function inputs
@@ -568,7 +570,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
           // If there is a guard, compute its value with the variable and
           // argument values at the starting state
-          if (transition.hasGuard) {
+          if (transition.guard.has_value()) {
             auto guardVal = guard(startingArgsOutsVars);
             auto guardedlhs = smt::AndOp::create(b, loc, lhs, guardVal);
             return smt::ImpliesOp::create(b, loc, guardedlhs, rhs);
