@@ -603,6 +603,108 @@ def IntToStringOp: SimOp<"string.int_to_string", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Queues
+//===----------------------------------------------------------------------===//
+
+def QueueEmptyOp : SimOp<"queue.empty", [Pure]> {
+  let summary = "Creates an empty queue";
+  let description = [{
+    Creates an empty queue, which is the default value
+    for a variable holding a queue.
+  }];
+
+  let arguments = (ins);
+  let results = (outs QueueType:$outqueue);
+
+  let assemblyFormat = "attr-dict `:` type($outqueue)";
+}
+
+def QueueSizeOp : SimOp<"queue.size", [Pure]> {
+  let summary = "Length of a queue";
+  let description = [{
+    Returns the length of a queue as an `i64` value.
+  }];
+
+  let arguments = (ins QueueType:$queue);
+  let results = (outs I64:$result);
+
+  let assemblyFormat = "$queue attr-dict `:` type($queue)";
+}
+
+def QueuePushBackOp : SimOp<"queue.push_back", [Pure,
+    TypesMatchWith<"queue and element types must match",
+    "queue", "element", "cast<QueueType>($_self).getElementType()">,
+    AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Push an element to the end of a queue";
+  let description = [{
+    Adds an element to the end of the queue. If the queue is a bounded queue
+    which is full, then this has no effect.
+  }];
+
+  let arguments = (ins QueueType:$queue, HWNonInOutType:$element);
+  let results = (outs QueueType:$outQueue);
+
+  let assemblyFormat = "$element `into` $queue attr-dict `:` type($queue)";
+}
+
+def QueuePushFrontOp : SimOp<"queue.push_front", [Pure,
+TypesMatchWith<"queue and element types must match",
+    "queue", "element", "cast<QueueType>($_self).getElementType()">,
+AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Push an element to the front of a queue";
+  let description = [{
+    Adds an element to the front of the queue. If the queue is a bounded 
+    queue which is full, then this will erase the final element of the queue,
+    as to keep the queue within-bounds.
+  }];
+
+  let arguments = (ins QueueType:$queue, HWNonInOutType:$element);
+  let results = (outs QueueType:$outQueue);
+
+  let assemblyFormat = "$element `into` $queue attr-dict `:` type($queue)";
+}
+
+def QueuePopBackOp : SimOp<"queue.pop_back", [Pure,
+TypesMatchWith<"queue and popped types must match",
+    "queue", "popped", "cast<QueueType>($_self).getElementType()">,
+AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Removes the last element of a queue";
+  let description = [{
+    Removes an element from the back of a queue.
+
+    If the queue is empty, this has no effect, and the value of `popped`
+    will be the same as obtained by reading a non-existent array element
+    from an array with the same element type,
+    as described in IEEE 1800-2023 § 7.10.2.5 "Pop_back()".
+  }];
+
+  let arguments = (ins QueueType:$queue);
+  let results = (outs QueueType:$outQueue, HWNonInOutType:$popped);
+
+  let assemblyFormat = "`from` $queue attr-dict `:` type($queue)";
+}
+
+def QueuePopFrontOp : SimOp<"queue.pop_front", [Pure,
+TypesMatchWith<"queue and popped types must match",
+    "queue", "popped", "cast<QueueType>($_self).getElementType()">,
+AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Removes the first element of a queue";
+  let description = [{
+    Removes an element from the front of a queue.
+    
+    If the queue is empty, this has no effect, and the value of `popped`
+    will be the same as obtained by reading a non-existent array element
+    from an array with the same element type,
+    as described in IEEE 1800-2023 § 7.10.2.4 "Pop_front()".
+  }];
+
+  let arguments = (ins QueueType:$queue);
+  let results = (outs QueueType:$outQueue, HWNonInOutType:$popped);
+
+  let assemblyFormat = "`from` $queue attr-dict `:` type($queue)";
+}
+
+//===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//
 

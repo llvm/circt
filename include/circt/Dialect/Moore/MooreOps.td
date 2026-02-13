@@ -1795,12 +1795,12 @@ def DynQueueExtractRefOp : MooreOp<"dyn_queue_extract_ref", [Pure]> {
 
 def QueueInsertOp : MooreOp<"queue.insert", [
     TypesMatchWith<"queue and item types must match",
-    "queue", "item", "cast<QueueType>($_self).getElementType()">]> {
+    "queue", "item", "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">]> {
   let summary = "Insert an element at an arbitrary position within a queue";
   let description = [{
       See IEEE 1800-2023 § 7.10.2.2 "Insert()"
   }];
-  let arguments = (ins QueueType:$queue, TwoValuedI32:$index, UnpackedType:$item);
+  let arguments = (ins QueueRefType:$queue, TwoValuedI32:$index, UnpackedType:$item);
   let results = (outs);
   let assemblyFormat = [{
     $item `into` $queue `at` $index attr-dict `:` type($queue)
@@ -1812,7 +1812,7 @@ def QueueDeleteOp : MooreOp<"queue.delete"> {
   let description = [{
       See IEEE 1800-2023 § 7.10.2.3 "Delete()", specifically the case where an index parameter is supplied.
   }];
-  let arguments = (ins QueueType:$queue, TwoValuedI32:$index);
+  let arguments = (ins QueueRefType:$queue, TwoValuedI32:$index);
   let results = (outs);
   let assemblyFormat = [{
     `index` $index `of` $queue attr-dict `:` type($queue)
@@ -1825,7 +1825,7 @@ def QueueClearOp : MooreOp<"queue.clear"> {
       See IEEE 1800-2023 § 7.10.2.3 "Delete()", the case where no index is supplied.
   }];
 
-  let arguments = (ins QueueType:$queue);
+  let arguments = (ins QueueRefType:$queue);
   let results = (outs);
   let assemblyFormat = [{
     $queue attr-dict `:` type($queue)
@@ -1834,12 +1834,12 @@ def QueueClearOp : MooreOp<"queue.clear"> {
 
 def QueuePushBackOp : MooreOp<"push_back", [
     TypesMatchWith<"queue and element types must match",
-    "queue", "element", "cast<QueueType>($_self).getElementType()">]> {
+    "queue", "element", "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">]> {
   let summary = "Push an element to the back of a queue";
   let description = [{
     See IEEE 1800-2023 § 7.10.2.7 "Push_back()"
   }];
-  let arguments = (ins QueueType:$queue, UnpackedType:$element);
+  let arguments = (ins QueueRefType:$queue, UnpackedType:$element);
   let results = (outs);
   let assemblyFormat = [{
     $element `into` $queue attr-dict `:` type($queue)
@@ -1848,12 +1848,12 @@ def QueuePushBackOp : MooreOp<"push_back", [
 
 def QueuePushFrontOp : MooreOp<"push_front", [
     TypesMatchWith<"queue and element types must match",
-    "queue", "element", "cast<QueueType>($_self).getElementType()">]> {
+    "queue", "element", "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">]> {
   let summary = "Push an element to the front of a queue";
   let description = [{
     See IEEE 1800-2023 § 7.10.2.6 "Push_front()"
   }];
-  let arguments = (ins QueueType:$queue, UnpackedType:$element);
+  let arguments = (ins QueueRefType:$queue, UnpackedType:$element);
   let results = (outs);
   let assemblyFormat = [{
     $element `into` $queue attr-dict `:` type($queue)
@@ -1863,12 +1863,12 @@ def QueuePushFrontOp : MooreOp<"push_front", [
 
 def QueuePopBackOp : MooreOp<"pop_back", [
     TypesMatchWith<"queue and element types must match",
-    "queue", "result", "cast<QueueType>($_self).getElementType()">]> {
+    "queue", "result", "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">]> {
   let summary = "Return and remove an element from the back of a queue";
   let description = [{
     See IEEE 1800-2023 § 7.10.2.4 "Pop_back()"
   }];
-  let arguments = (ins QueueType:$queue);
+  let arguments = (ins QueueRefType:$queue);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
     `from` $queue attr-dict `:` type($queue)
@@ -1877,12 +1877,12 @@ def QueuePopBackOp : MooreOp<"pop_back", [
 
 def QueuePopFrontOp : MooreOp<"pop_front", [
     TypesMatchWith<"queue and element types must match",
-    "queue", "result", "cast<QueueType>($_self).getElementType()">]> {
+    "queue", "result", "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">]> {
   let summary = "Return and remove an element from the front of a queue";
   let description = [{
     See IEEE 1800-2023 § 7.10.2.5 "Pop_front()"
   }];
-  let arguments = (ins QueueType:$queue);
+  let arguments = (ins QueueRefType:$queue);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
     `from` $queue attr-dict `:` type($queue)
@@ -2678,7 +2678,7 @@ def QueueSizeBIOp : Builtin<"size"> {
   }];
 
   // Optional positional attribute for the seed
-  let arguments = (ins QueueType:$queue);
+  let arguments = (ins QueueRefType:$queue);
   let results = (outs TwoValuedI32:$result);
   let assemblyFormat = "$queue `:` type($queue) attr-dict";
 }

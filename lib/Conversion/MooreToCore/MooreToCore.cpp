@@ -709,6 +709,10 @@ static Value createZeroValue(Type type, Location loc,
   if (auto strType = dyn_cast<sim::DynamicStringType>(type))
     return sim::StringConstantOp::create(rewriter, loc, strType, "");
 
+  // Handle queues
+  if (auto queueType = dyn_cast<sim::QueueType>(type))
+    return sim::QueueEmptyOp::create(rewriter, loc, queueType);
+
   // Otherwise try to create a zero integer and bitcast it to the result type.
   int64_t width = hw::getBitWidth(type);
   if (width == -1)
@@ -2203,6 +2207,115 @@ struct StringConcatOpConversion : public OpConversionPattern<StringConcatOp> {
   }
 };
 
+struct QueueSizeBIOpConversion : public OpConversionPattern<QueueSizeBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(QueueSizeBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto readQueue =
+        llhd::ProbeOp::create(rewriter, op->getLoc(), adaptor.getQueue());
+
+    rewriter.replaceOpWithNewOp<sim::QueueSizeOp>(op, readQueue);
+    return success();
+  }
+};
+
+// Given a reference `ref` to some Moore type, this function emits a
+// `ProbeOp` to read the contained value, then passes it to the function `func`.
+// It finally emits a `DriveOp` to write the result of the function back to
+// the referenced signal.
+//
+// This is useful for converting impure operations (such as the Moore ops for
+// manipulating queues) into pure operations. (Which do not mutate the source
+// value, instead returning a modified value.)
+static void
+probeRefAndDriveWithResult(OpBuilder &builder, Location loc, Value ref,
+                           const std::function<Value(Value)> &func) {
+
+  Value v = llhd::ProbeOp::create(builder, loc, ref);
+
+  // Drive using the same delay as a blocking assignment
+  Value delay = llhd::ConstantTimeOp::create(
+      builder, loc, llhd::TimeAttr::get(builder.getContext(), 0U, "ns", 0, 1));
+
+  llhd::DriveOp::create(builder, loc, ref, func(v), delay, Value{});
+}
+
+struct QueuePushBackOpConversion : public OpConversionPattern<QueuePushBackOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(QueuePushBackOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    probeRefAndDriveWithResult(
+        rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
+          return sim::QueuePushBackOp::create(rewriter, op->getLoc(), queue,
+                                              adaptor.getElement());
+        });
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct QueuePushFrontOpConversion
+    : public OpConversionPattern<QueuePushFrontOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(QueuePushFrontOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    probeRefAndDriveWithResult(
+        rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
+          return sim::QueuePushFrontOp::create(rewriter, op->getLoc(), queue,
+                                               adaptor.getElement());
+        });
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct QueuePopBackOpConversion : public OpConversionPattern<QueuePopBackOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(QueuePopBackOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    probeRefAndDriveWithResult(
+        rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
+          auto popBack =
+              sim::QueuePopBackOp::create(rewriter, op->getLoc(), queue);
+
+          op.replaceAllUsesWith(popBack.getPopped());
+          return popBack.getOutQueue();
+        });
+
+    return success();
+  }
+};
+
+struct QueuePopFrontOpConversion : public OpConversionPattern<QueuePopFrontOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(QueuePopFrontOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    probeRefAndDriveWithResult(
+        rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
+          auto popFront =
+              sim::QueuePopFrontOp::create(rewriter, op->getLoc(), queue);
+
+          op.replaceAllUsesWith(popFront.getPopped());
+          return popFront.getOutQueue();
+        });
+
+    return success();
+  }
+};
+
 struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -2364,6 +2477,12 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
 
   typeConverter.addConversion([&](StringType type) {
     return sim::DynamicStringType::get(type.getContext());
+  });
+
+  typeConverter.addConversion([&](QueueType type) {
+    return sim::QueueType::get(type.getContext(),
+                               typeConverter.convertType(type.getElementType()),
+                               type.getBound());
   });
 
   typeConverter.addConversion([&](ArrayType type) -> std::optional<Type> {
@@ -2688,7 +2807,14 @@ static void populateOpConversion(ConversionPatternSet &patterns,
 
     // Dynamic string operations
     StringLenOpConversion,
-    StringConcatOpConversion
+    StringConcatOpConversion,
+
+    // Queue operations
+    QueueSizeBIOpConversion,
+    QueuePushBackOpConversion,
+    QueuePushFrontOpConversion,
+    QueuePopBackOpConversion,
+    QueuePopFrontOpConversion
   >(typeConverter, patterns.getContext());
   // clang-format on
 

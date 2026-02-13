@@ -965,38 +965,37 @@ struct StmtVisitor {
     // Queue Tasks
 
     if (args.size() >= 1 && args[0]->type->isQueue()) {
+      auto queue = context.convertLvalueExpression(*args[0]);
+
       // `delete` has two functions: If there is an index passed, then it
       // deletes that specific element, otherwise, it clears the entire queue.
       if (subroutine.name == "delete") {
         if (args.size() == 1) {
-          auto queue = context.convertRvalueExpression(*args[0]);
           moore::QueueClearOp::create(builder, loc, queue);
           return true;
         }
         if (args.size() == 2) {
-          auto queue = context.convertRvalueExpression(*args[0]);
           auto index = context.convertRvalueExpression(*args[1]);
           moore::QueueDeleteOp::create(builder, loc, queue, index);
           return true;
         }
       } else if (subroutine.name == "insert" && args.size() == 3) {
-        auto queue = context.convertRvalueExpression(*args[0]);
         auto index = context.convertRvalueExpression(*args[1]);
         auto item = context.convertRvalueExpression(*args[2]);
 
         moore::QueueInsertOp::create(builder, loc, queue, index, item);
         return true;
       } else if (subroutine.name == "push_back" && args.size() == 2) {
-        auto queue = context.convertRvalueExpression(*args[0]);
         auto item = context.convertRvalueExpression(*args[1]);
         moore::QueuePushBackOp::create(builder, loc, queue, item);
         return true;
       } else if (subroutine.name == "push_front" && args.size() == 2) {
-        auto queue = context.convertRvalueExpression(*args[0]);
         auto item = context.convertRvalueExpression(*args[1]);
         moore::QueuePushFrontOp::create(builder, loc, queue, item);
         return true;
       }
+
+      return false;
     }
 
     // Give up on any other system tasks. These will be tried again as an

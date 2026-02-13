@@ -1503,6 +1503,37 @@ func.func @StringOperations(%arg0: !moore.i32, %arg1: !moore.string, %arg2: !moo
   return
 }
 
+// CHECK-LABEL func.func @QueueOperations
+func.func @QueueOperations(%arg0: !moore.i32) {
+  // CHECK: [[EMPTY:%.+]] = sim.queue.empty : <i32, 10>
+  // CHECK: [[Q:%.+]] = llhd.sig [[EMPTY]] : !sim.queue<i32, 10>
+  %q = moore.variable : <!moore.queue<i32, 10>>
+  // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
+  // CHECK: [[NEWQ:%.+]] = sim.queue.push_back %arg0 into [[QR]] : <i32, 10>
+  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  moore.push_back %arg0 into %q : <!moore.queue<i32, 10>>
+
+  // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
+  // CHECK: [[NEWQ:%.+]] = sim.queue.push_front %arg0 into [[QR]] : <i32, 10>
+  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  moore.push_front %arg0 into %q : <!moore.queue<i32, 10>>
+
+  // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
+  // CHECK: [[NEWQ:%.+]], [[POPPED:%.+]] = sim.queue.pop_back from [[QR]] : <i32, 10>
+  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  moore.pop_back from %q : <!moore.queue<i32, 10>>
+
+  // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
+  // CHECK: [[NEWQ:%.+]], [[POPPED:%.+]] = sim.queue.pop_front from [[QR]] : <i32, 10>
+  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  moore.pop_front from %q : <!moore.queue<i32, 10>>
+
+  // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
+  // CHECK: sim.queue.size [[QR]]
+  moore.builtin.size %q : <!moore.queue<i32, 10>>
+  return
+}
+
 // CHECK-LABEL: llhd.global_signal @GlobalFoo
 // CHECK-SAME: : i42 init {
 moore.global_variable @GlobalFoo : !moore.i42 init {
