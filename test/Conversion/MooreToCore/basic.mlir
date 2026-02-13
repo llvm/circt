@@ -1504,7 +1504,7 @@ func.func @StringOperations(%arg0: !moore.i32, %arg1: !moore.string, %arg2: !moo
 }
 
 // CHECK-LABEL func.func @QueueOperations
-func.func @QueueOperations(%arg0: !moore.i32) {
+func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: [[EMPTY:%.+]] = sim.queue.empty : <i32, 10>
   // CHECK: [[Q:%.+]] = llhd.sig [[EMPTY]] : !sim.queue<i32, 10>
   %q = moore.variable : <!moore.queue<i32, 10>>
@@ -1527,6 +1527,20 @@ func.func @QueueOperations(%arg0: !moore.i32) {
   // CHECK: [[NEWQ:%.+]], [[POPPED:%.+]] = sim.queue.pop_front from [[QR]] : <i32, 10>
   // CHECK: llhd.drv [[Q]], [[NEWQ]]
   moore.pop_front from %q : <!moore.queue<i32, 10>>
+
+  // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
+  // CHECK: [[NEWQ:%.+]] = sim.queue.delete index %arg0 of [[QR]] : <i32, 10>
+  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  moore.queue.delete index %arg0 of %q : <!moore.queue<i32, 10>>
+
+  // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
+  // CHECK: [[NEWQ:%.+]] = sim.queue.insert %arg0 into [[QR]] at %arg1 : <i32, 10>
+  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  moore.queue.insert %arg0 into %q at %arg1 : <!moore.queue<i32, 10>>
+
+  // CHECK: [[NEWQ:%.+]] = sim.queue.empty : <i32, 10>
+  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  moore.queue.clear %q : <!moore.queue<i32, 10>>
 
   // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
   // CHECK: sim.queue.size [[QR]]

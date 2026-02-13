@@ -704,6 +704,48 @@ AllTypesMatch<["queue", "outQueue"]>]> {
   let assemblyFormat = "`from` $queue attr-dict `:` type($queue)";
 }
 
+// TODO: The `index` parameter should in-fact be a 4-valued integer.
+// These are, as of writing, unsupported by the core dialects.
+// Any unknown bit within `index` should result in `queue.delete` having
+// no effect on the queue per IEEE 1800-2023 § 7.10.2.3 "Delete()"
+def QueueDeleteOp : SimOp<"queue.delete", [Pure,
+    AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Deletes an element from a queue";
+  let description = [{
+    Deletes the queue element at the position `index`. Does nothing if `index`
+    is negative or greater than or equal to the length of the queue.
+  }];
+
+  let arguments = (ins QueueType:$queue, I32:$index);
+  let results = (outs QueueType:$outQueue);
+
+  let assemblyFormat = "`index` $index `of` $queue attr-dict `:` type($queue)";
+}
+
+// Likewise, TODO for 4-valued ints.
+// See IEEE 1800-2023 § 7.10.2.2 "Insert()"
+def QueueInsertOp : SimOp<"queue.insert", [Pure,
+    TypesMatchWith<"queue and item types must match",
+      "queue", "item", "cast<QueueType>($_self).getElementType()">,
+    AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Insert an element at an arbitrary position within the queue";
+  let description = [{
+    Inserts an element at the given index within the queue. Any elements
+    at this index or later will be shifted forward one position. If this results in
+    the last item in the queue being outside the bounds, it is discarded.
+
+    If `index` is negative or greater than the queue length, this does nothing.
+    Note that an index equal to the queue length will simply push `item` to the
+    end of the queue.
+  }];
+
+  let arguments = (ins QueueType:$queue, I32:$index, HWNonInOutType:$item);
+  let results = (outs QueueType:$outQueue);
+
+  let assemblyFormat = "$item `into` $queue `at` $index attr-dict `:` type($queue)";
+}
+
+
 //===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//
