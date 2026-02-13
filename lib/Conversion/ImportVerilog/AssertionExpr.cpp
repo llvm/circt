@@ -302,6 +302,11 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
 
   auto systemCallRes =
       llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
+          .Case("$sampled",
+                [&]() -> Value {
+                  auto sampled = ltl::SampledOp::create(builder, loc, value);
+                  return sampled;
+                })
           // Translate $fell to ¬x[0] ∧ x[-1]
           .Case("$fell",
                 [&]() -> Value {
