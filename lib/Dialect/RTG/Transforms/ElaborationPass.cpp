@@ -1556,6 +1556,14 @@ public:
     return DeletionKind::Delete;
   }
 
+  FailureOr<DeletionKind> visitOp(ArrayAppendOp op) {
+    auto array = std::get<ArrayStorage *>(state.at(op.getArray()))->array;
+    array.push_back(state.at(op.getElement()));
+    state[op.getResult()] = sharedState.internalizer.internalize<ArrayStorage>(
+        op.getResult().getType(), std::move(array));
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(ArraySizeOp op) {
     auto array = get<ArrayStorage *>(op.getArray())->array;
     state[op.getResult()] = array.size();

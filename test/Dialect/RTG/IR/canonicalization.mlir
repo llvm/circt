@@ -2,6 +2,7 @@
 
 func.func @dummy(%arg0: !rtg.isa.label) -> () {return}
 func.func @dummy1(%arg0: !rtg.string) -> () {return}
+func.func @dummy2(%arg0: !rtg.array<index>) -> () {return}
 
 // CHECK-LABEL: @interleaveSequences
 rtg.test @interleaveSequences(seq0 = %seq0: !rtg.randomized_sequence) {
@@ -62,4 +63,21 @@ rtg.test @strings() {
   %4 = rtg.string_concat
   // CHECK-NEXT: func.call @dummy1([[V2]])
   func.call @dummy1(%4) : (!rtg.string) -> ()
+}
+
+// CHECK-LABEL: @arrays
+rtg.test @arrays() {
+  // CHECK-NEXT: [[IDX:%.+]] = index.constant 1
+  %idx1 = index.constant 1
+  %1 = rtg.array_create : index
+  %2 = rtg.array_append %1, %idx1 : !rtg.array<index>
+  // CHECK-NEXT: [[V1:%.+]] = rtg.array_create [[IDX]] : index
+  // CHECK-NEXT: func.call @dummy2([[V1]])
+  func.call @dummy2(%2) : (!rtg.array<index>) -> ()
+
+  // CHECK-NEXT: [[V2:%.+]] = rtg.array_create [[IDX]], [[IDX]], [[IDX]] : index
+  // CHECK-NEXT: func.call @dummy2([[V2]])
+  %3 = rtg.array_create %idx1, %idx1 : index
+  %4 = rtg.array_append %3, %idx1 : !rtg.array<index>
+  func.call @dummy2(%4) : (!rtg.array<index>) -> ()
 }

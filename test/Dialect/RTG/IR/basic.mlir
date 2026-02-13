@@ -219,6 +219,11 @@ rtg.test @arrays(arr = %arr: !rtg.array<index>) {
   %2 = rtg.array_extract %0[%idx1] : !rtg.array<!rtg.array<index>>
   %3 = rtg.array_inject %2[%idx1], %idx1 : !rtg.array<index>
   %4 = rtg.array_size %3 : !rtg.array<index>
+
+  // CHECK-NEXT: [[V5:%.+]] = rtg.array_create : index
+  %5 = rtg.array_create : index
+  // CHECK-NEXT: rtg.array_append [[V5]], [[IDX1]] : !rtg.array<index>
+  %6 = rtg.array_append %5, %idx1 : !rtg.array<index>
 }
 
 // CHECK-LABEL: rtg.test @tuples

@@ -657,6 +657,14 @@ rtg.test @arrays(singleton = %none: index) {
   // CHECK-NEXT: func.call @dummy2([[IDX2]]) : (index) -> ()
   %5 = rtg.array_size %3 : !rtg.array<index>
   func.call @dummy2(%5) : (index) -> ()
+
+  // CHECK-NEXT: [[IDX3:%.+]] = index.constant 3
+  // CHECK-NEXT: [[V6:%.+]] = rtg.array_create [[IDX3]], [[IDX3]] : index
+  // CHECK-NEXT: func.call @dummy7([[V6]]) : (!rtg.array<index>) -> ()
+  %idx3 = index.constant 3
+  %6 = rtg.array_create %idx3 : index
+  %7 = rtg.array_append %6, %idx3 : !rtg.array<index>
+  func.call @dummy7(%7) : (!rtg.array<index>) -> ()
 }
 
 // CHECK-LABEL: rtg.test @arithOps
