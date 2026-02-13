@@ -1745,11 +1745,13 @@ module PortsTop;
   // CHECK: [[Y3:%.+]] = moore.read %y3
   // CHECK: [[V2:%.+]] = moore.extract_ref %z3 from 0
   // CHECK: [[V1:%.+]] = moore.extract_ref %z3 from 1
-  // CHECK: [[V0:%.+]] = moore.extract_ref %z3 from 2
-  // CHECK: [[V0_READ:%.+]] = moore.read [[V0]]
+  // CHECK: [[Z3_READ:%.+]] = moore.read %z3
+  // CHECK: [[C2_I32:%.+]] = moore.constant 2 : i32
+  // CHECK: [[V0_READ:%.+]] = moore.dyn_extract [[Z3_READ]] from [[C2_I32]]
   // CHECK: [[C1:%.+]] = moore.extract_ref %w3 from 0
-  // CHECK: [[C0:%.+]] = moore.extract_ref %w3 from 1
-  // CHECK: [[C0_READ:%.+]] = moore.read [[C0]]
+  // CHECK: [[W3_READ:%.+]] = moore.read %w3
+  // CHECK: [[C1_I32:%.+]] = moore.constant 1 : i32
+  // CHECK: [[C0_READ:%.+]] = moore.dyn_extract [[W3_READ]] from [[C1_I32]]
   // CHECK: [[V1_VALUE:%.+]], [[C1_VALUE:%.+]] = moore.instance "p3" @MultiPorts(
   // CHECK-SAME:   a0: [[X3]]: !moore.l1
   // CHECK-SAME:   a1: [[Y3]]: !moore.l1
