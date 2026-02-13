@@ -11,6 +11,7 @@
 #include "circt/Dialect/FSM/FSMOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "mlir/Dialect/SMT/IR/SMTOps.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
 
@@ -58,7 +59,7 @@ private:
     std::optional<Region*> output;
   };
 
-  Transition parseTransition(fsm::TransitionOp t, int from,
+  Transition getTransitionRegions(fsm::TransitionOp t, int from,
                              SmallVector<std::string> &states, Location &loc) {
     std::string nextState = t.getNextState().str();
     Transition tr = {from, insertStates(states, nextState)};
@@ -162,6 +163,10 @@ LogicalResult MachineOpConverter::dispatch() {
   // Collect arguments and their types
   for (auto a : machineArgs) {
     fsmArgs.push_back(a);
+    if (!isa<IntegerType>(a.getType())) {
+      solver.emitError("Only integer arguments are supported in FSMs.");
+      return failure();
+    } 
     quantifiableTypes.push_back(
         b.getType<smt::BitVectorType>(a.getType().getIntOrFloatBitWidth()));
   }
@@ -170,8 +175,12 @@ LogicalResult MachineOpConverter::dispatch() {
   // Collect output types
   if (!machineOp.getResultTypes().empty()) {
     for (auto t : machineOp.getResultTypes()) {
+      if (!isa<IntegerType>(t)) {
+        solver.emitError("Only integer outputs are supported in FSMs.");
+        return failure();
+      } 
       quantifiableTypes.push_back(
-          b.getType<smt::BitVectorType>(t.getIntOrFloatBitWidth()));
+            b.getType<smt::BitVectorType>(t.getIntOrFloatBitWidth()));
     }
   }
 
@@ -180,6 +189,10 @@ LogicalResult MachineOpConverter::dispatch() {
   // Collect FSM variables, their types, and initial values
   SmallVector<llvm::APInt> varInitValues;
   for (auto t : machineOp.front().getOps<fsm::VariableOp>()) {
+    if (!isa<IntegerType>(t.getType())) {
+      t.emitError("Only integer variables are supported in FSMs.");
+      return failure();
+    }
     auto intAttr = dyn_cast<IntegerAttr>(t.getInitValueAttr());
     varInitValues.push_back(intAttr.getValue());
     quantifiableTypes.push_back(
@@ -197,8 +210,7 @@ LogicalResult MachineOpConverter::dispatch() {
   for (auto &op : machineOp.front().getOperations()) {
     if (!isa<fsm::FSMDialect>(op.getDialect()) && !isa<hw::ConstantOp>(op)) {
       op.emitError(
-          "Operations other than hw.constants are not supported outside FSM "
-          "output, guard, and action regions.");
+          "Only fsm operations and hw.constants are allowed in the top level of the FSM MachineOp.");
       return failure();
     }
   }
@@ -253,7 +265,7 @@ LogicalResult MachineOpConverter::dispatch() {
     if (!stateOp.getTransitions().empty()) {
       for (auto tr :
            stateOp.getTransitions().front().getOps<fsm::TransitionOp>()) {
-        auto t = parseTransition(tr, fromState, states, loc);
+        auto t = getTransitionRegions(tr, fromState, states, loc);
         if (!stateOp.getOutput().empty()) {
           t.output = getOutputRegion(outputOfStateId, t.to);
         } else {
@@ -366,12 +378,10 @@ LogicalResult MachineOpConverter::dispatch() {
   // initial and the arriving state
   SmallVector<Type> transitionQuantified;
   for (auto [id, ty] : llvm::enumerate(quantifiableTypes)) {
+    transitionQuantified.push_back(ty);
     if (id < numArgs) {
       transitionQuantified.push_back(ty);
-      transitionQuantified.push_back(ty);
-    } else {
-      transitionQuantified.push_back(ty);
-    }
+    } 
   }
 
   // For each transition
@@ -664,7 +674,7 @@ void FSMToSMTPass::runOnOperation() {
       for (auto machine : module.getOps<MachineOp>()) {
         for (auto &use : op.getUses()) {
           if (machine->isAncestor(use.getOwner())) {
-            emitError(op.getLoc(),
+            op.emitError(
                       "Operation " + op.getName().getStringRef() +
                           " is declared outside of any FSM MachineOp");
             signalPassFailure();
