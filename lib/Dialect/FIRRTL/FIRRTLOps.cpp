@@ -2937,6 +2937,39 @@ void InstanceChoiceOp::build(
                innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
 }
 
+void InstanceChoiceOp::build(OpBuilder &builder, OperationState &odsState,
+                             ArrayRef<PortInfo> ports, ArrayAttr moduleNames,
+                             ArrayAttr caseNames, StringRef name,
+                             NameKindEnum nameKind, ArrayAttr annotations,
+                             ArrayAttr layers, hw::InnerSymAttr innerSym) {
+  // Gather the result types and port information from PortInfo.
+  SmallVector<Type> newResultTypes;
+  SmallVector<bool> newPortDirections;
+  SmallVector<Attribute> newPortNames, newPortAnnotations, newDomainInfo;
+  newPortDirections.reserve(ports.size());
+  newResultTypes.reserve(ports.size());
+  newPortAnnotations.reserve(ports.size());
+  newDomainInfo.reserve(ports.size());
+  newPortNames.reserve(ports.size());
+  for (auto &p : ports) {
+    newResultTypes.push_back(p.type);
+    // Convert Direction to bool (true = output, false = input)
+    newPortDirections.push_back(p.direction == Direction::Out);
+    newPortNames.push_back(p.name);
+    newPortAnnotations.push_back(p.annotations.getArrayAttr());
+    if (p.domains)
+      newDomainInfo.push_back(p.domains);
+    else
+      newDomainInfo.push_back(builder.getArrayAttr({}));
+  }
+
+  return build(builder, odsState, newResultTypes, moduleNames, caseNames, name,
+               nameKind, newPortDirections, builder.getArrayAttr(newPortNames),
+               builder.getArrayAttr(newDomainInfo), annotations,
+               builder.getArrayAttr(newPortAnnotations), layers.getValue(),
+               innerSym);
+}
+
 std::optional<size_t> InstanceChoiceOp::getTargetResultIndex() {
   return std::nullopt;
 }
