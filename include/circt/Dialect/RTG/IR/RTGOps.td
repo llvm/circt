@@ -758,25 +758,6 @@ def ConstraintOp : RTGOp<"constraint", []> {
   let hasCanonicalizeMethod = 1;
 }
 
-//===- ISA Register Handling Operations -----------------------------------===//
-
-def VirtualRegisterOp : RTGOp<"virtual_reg", [
-  DeclareOpInterfaceMethods<InferTypeOpInterface>,
-]> {
-  let summary = "returns a value representing a virtual register";
-  let description = [{
-    This operation creates a value representing a virtual register. The
-    'allowedRegisters' attribute specifies the concrete registers that may be
-    chosen during register allocation.
-  }];
-
-  // ArrayAttr of RegisterAttrInterfaces
-  let arguments = (ins VirtualRegisterConfigAttr:$allowedRegs);
-  let results = (outs Res<RegisterTypeInterface, "", [MemAlloc]>:$result);
-
-  let assemblyFormat = "$allowedRegs attr-dict";
-}
-
 //===- Test Specification Operations --------------------------------------===//
 
 def TestOp : RTGOp<"test", [
@@ -1008,6 +989,52 @@ def SliceImmediateOp : RTGISAOp<"slice_immediate", [Pure]> {
     qualified(type($input)) `->` qualified(type($result)) attr-dict
   }];
   
+  let hasVerifier = 1;
+  let hasFolder = 1;
+}
+
+//===- ISA Register Handling Operations -----------------------------------===//
+
+def VirtualRegisterOp : RTGOp<"virtual_reg", [
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "returns a value representing a virtual register";
+  let description = [{
+    This operation creates a value representing a virtual register. The
+    'allowedRegisters' attribute specifies the concrete registers that may be
+    chosen during register allocation.
+  }];
+
+  // ArrayAttr of RegisterAttrInterfaces
+  let arguments = (ins VirtualRegisterConfigAttr:$allowedRegs);
+  let results = (outs Res<RegisterTypeInterface, "", [MemAlloc]>:$result);
+
+  let assemblyFormat = "$allowedRegs attr-dict";
+}
+
+def RegisterToIndexOp : RTGISAOp<"register_to_index", [Pure]> {
+  let summary = "convert a register to its class index";
+
+  let arguments = (ins RegisterTypeInterface:$reg);
+  let results = (outs Index:$index);
+
+  let assemblyFormat = "$reg `:` type($reg) attr-dict";
+  let hasFolder = 1;
+}
+
+def IndexToRegisterOp : RTGISAOp<"index_to_register", [Pure]> {
+  let summary = "convert an index to a register";
+  let description = [{
+    This operation converts an index to the register with matching class index.
+    The index must refer to a valid register index. Invalid indices are
+    (immediate) UB.
+  }];
+
+  let arguments = (ins Index:$index);
+  let results = (outs RegisterTypeInterface:$reg);
+
+  let assemblyFormat = "$index `:` type($reg) attr-dict";
+
   let hasVerifier = 1;
   let hasFolder = 1;
 }
