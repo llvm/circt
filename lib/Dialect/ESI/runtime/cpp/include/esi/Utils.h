@@ -28,6 +28,14 @@ namespace utils {
 // Very basic base64 encoding.
 void encodeBase64(const void *data, size_t size, std::string &out);
 
+// Attempt to demangle a runtime type name.
+std::string demangle(const std::type_info &ti);
+
+template <typename T>
+std::string demangle() {
+  return demangle(typeid(T));
+}
+
 /// C++'s stdlib doesn't have a hash_combine function. This is a simple one.
 inline size_t hash_combine(size_t h1, size_t h2) {
   return h1 + 0x9e3779b9 + (h2 << 6) + (h2 >> 2);
