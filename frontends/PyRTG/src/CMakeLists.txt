@@ -32,6 +32,7 @@ declare_mlir_python_sources(PyRTGSources.Core
     core.py
     immediates.py
     index.py
+    instructions.py
     integers.py
     labels.py
     memories.py
