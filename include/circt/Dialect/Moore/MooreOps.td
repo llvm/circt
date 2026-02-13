@@ -829,7 +829,7 @@ def ToBuiltinIntOp : MooreOp<"to_builtin_int", [Pure,
 }
 
 def FromBuiltinIntOp : MooreOp<"from_builtin_int", [Pure,
-  TypesMatchWith<"result is builtin integer matching input type",
+  TypesMatchWith<"result is Moore integer matching input type",
     "input", "result", [{
     moore::IntType::get($_self.getContext(),
       cast<IntegerType>($_self).getIntOrFloatBitWidth(),
