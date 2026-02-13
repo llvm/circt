@@ -333,3 +333,11 @@ rtg.test @strings() {
   // CHECK-NEXT: rtg.string_concat
   rtg.string_concat
 }
+
+// CHECK-LABEL: rtg.test @registerConversion
+rtg.test @registerConversion(idx = %arg0: index, reg = %arg1: !rtgtest.ireg) {
+  // CHECK-NEXT: rtg.isa.index_to_register %idx : !rtgtest.ireg
+  // CHECK-NEXT: rtg.isa.register_to_index %reg : !rtgtest.ireg
+  rtg.isa.index_to_register %arg0 : !rtgtest.ireg
+  rtg.isa.register_to_index %arg1 : !rtgtest.ireg
+}
