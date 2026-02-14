@@ -175,6 +175,55 @@ struct HWArrayInjectOpConversion : OpConversionPattern<hw::ArrayInjectOp> {
   }
 };
 
+struct HWStructCreateOpConversion : OpConversionPattern<hw::StructCreateOp> {
+  using OpConversionPattern<hw::StructCreateOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::StructCreateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Lower struct_create to comb.concat. The first field occupies the MSBs, so
+    // we concatenate fields in order (comb.concat places first operand at MSB).
+    rewriter.replaceOpWithNewOp<comb::ConcatOp>(op, adaptor.getInput());
+    return success();
+  }
+};
+
+struct HWStructExtractOpConversion : OpConversionPattern<hw::StructExtractOp> {
+  using OpConversionPattern<hw::StructExtractOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::StructExtractOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto structType = cast<hw::StructType>(op.getInput().getType());
+    auto fieldIndex = op.getFieldIndex();
+    auto elements = structType.getElements();
+
+    int64_t totalBitWidth = hw::getBitWidth(structType);
+    if (totalBitWidth < 0)
+      return rewriter.notifyMatchFailure(op.getLoc(), "unknown struct width");
+
+    // Compute the bit offset from the MSB by summing the widths of all
+    // preceding fields. The first field occupies the MSBs.
+    int64_t consumedBits = 0;
+    for (size_t i = 0; i < fieldIndex; ++i) {
+      int64_t fieldWidth = hw::getBitWidth(elements[i].type);
+      assert(fieldWidth >= 0 &&
+             "must be failed before if field width is unknown");
+      consumedBits += fieldWidth;
+    }
+
+    int64_t fieldWidth = hw::getBitWidth(elements[fieldIndex].type);
+    assert(fieldWidth >= 0 &&
+           "must be failed before if field width is unknown");
+
+    // Extract the field using comb.extract. Offset is from LSB.
+    int64_t bitOffset = totalBitWidth - consumedBits - fieldWidth;
+    rewriter.replaceOpWithNewOp<comb::ExtractOp>(op, adaptor.getInput(),
+                                                 bitOffset, fieldWidth);
+    return success();
+  }
+};
+
 struct MuxOpConversion : OpConversionPattern<comb::MuxOp> {
   using OpConversionPattern<comb::MuxOp>::OpConversionPattern;
 
@@ -225,11 +274,12 @@ public:
 
 static void populateHWAggregateToCombOpConversionPatterns(
     RewritePatternSet &patterns, AggregateTypeConverter &typeConverter) {
-  patterns.add<HWArrayGetOpConversion,
-               HWArrayCreateLikeOpConversion<hw::ArrayCreateOp>,
-               HWArrayCreateLikeOpConversion<hw::ArrayConcatOp>,
-               HWAggregateConstantOpConversion, HWArrayInjectOpConversion,
-               MuxOpConversion>(typeConverter, patterns.getContext());
+  patterns.add<
+      HWArrayGetOpConversion, HWArrayCreateLikeOpConversion<hw::ArrayCreateOp>,
+      HWArrayCreateLikeOpConversion<hw::ArrayConcatOp>,
+      HWAggregateConstantOpConversion, HWArrayInjectOpConversion,
+      HWStructCreateOpConversion, HWStructExtractOpConversion, MuxOpConversion>(
+      typeConverter, patterns.getContext());
 }
 
 namespace {
@@ -245,7 +295,8 @@ void HWAggregateToCombPass::runOnOperation() {
 
   // TODO: Add ArraySliceOp and struct operatons as well.
   target.addIllegalOp<hw::ArrayGetOp, hw::ArrayCreateOp, hw::ArrayConcatOp,
-                      hw::AggregateConstantOp, hw::ArrayInjectOp>();
+                      hw::AggregateConstantOp, hw::ArrayInjectOp,
+                      hw::StructCreateOp, hw::StructExtractOp>();
   target.addDynamicallyLegalOp<comb::MuxOp>(
       [](comb::MuxOp op) { return hw::type_isa<IntegerType>(op.getType()); });
   target.addLegalDialect<hw::HWDialect, comb::CombDialect>();
