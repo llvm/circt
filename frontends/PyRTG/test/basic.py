@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, MemoryBlock, Memory, String, report_failure
+from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, MemoryBlock, Memory, String, report_failure, embed_comment
 
 # MLIR-LABEL: rtg.target @Singleton : !rtg.dict<>
 # MLIR-NEXT: }
@@ -511,3 +511,20 @@ def seq0(set: Set):
 @sequence([])
 def seq1():
   Label.declare("s1").place()
+
+
+# ASM-LABEL: Begin of test 'test94_to_string
+# ASM-NEXT: # imm=0x2A{{$}}
+# ASM-NEXT: # reg=t0{{$}}
+# ASM: End of test 'test94_to_string
+
+
+@test(Singleton)
+def test94_to_string(config):
+  imm = Immediate(12, 42)
+  imm_str = imm.to_string()
+  embed_comment(String("imm=") + imm_str)
+
+  reg = IntegerRegister.t0()
+  reg_str = reg.to_string()
+  embed_comment(String("reg=") + reg_str)

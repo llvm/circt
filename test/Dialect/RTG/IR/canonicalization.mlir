@@ -46,9 +46,11 @@ rtg.test @constraints() {
 
 // CHECK-LABEL: rtg.test @strings
 rtg.test @strings() {
-  // CHECK-NEXT: [[V2:%.+]] = rtg.constant "" : !rtg.string
-  // CHECK-NEXT: [[V1:%.+]] = rtg.constant "23" : !rtg.string
-  // CHECK-NEXT: [[V0:%.+]] = rtg.constant "hellohello" : !rtg.string
+  // CHECK-DAG: [[V2:%.+]] = rtg.constant "" : !rtg.string
+  // CHECK-DAG: [[V1:%.+]] = rtg.constant "23" : !rtg.string
+  // CHECK-DAG: [[V0:%.+]] = rtg.constant "hellohello" : !rtg.string
+  // CHECK-DAG: [[V3:%.+]] = rtg.constant "0x2A" : !rtg.string
+  // CHECK-DAG: [[V4:%.+]] = rtg.constant "t0" : !rtg.string
 
   %0 = rtg.constant "hello" : !rtg.string
   %1 = rtg.string_concat %0, %0
@@ -59,10 +61,20 @@ rtg.test @strings() {
   %3 = rtg.int_format %2
   // CHECK-NEXT: func.call @dummy1([[V1]])
   func.call @dummy1(%3) : (!rtg.string) -> ()
-  
+
   %4 = rtg.string_concat
   // CHECK-NEXT: func.call @dummy1([[V2]])
   func.call @dummy1(%4) : (!rtg.string) -> ()
+
+  %imm = rtg.constant #rtg.isa.immediate<8, 42>
+  %5 = rtg.immediate_format %imm : !rtg.isa.immediate<8>
+  // CHECK-NEXT: func.call @dummy1([[V3]])
+  func.call @dummy1(%5) : (!rtg.string) -> ()
+
+  %reg = rtg.constant #rtgtest.t0 : !rtgtest.ireg
+  %6 = rtg.register_format %reg : !rtgtest.ireg
+  // CHECK-NEXT: func.call @dummy1([[V4]])
+  func.call @dummy1(%6) : (!rtg.string) -> ()
 }
 
 // CHECK-LABEL: @arrays

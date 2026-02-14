@@ -952,6 +952,31 @@ OpFoldResult IntFormatOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// ImmediateFormatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ImmediateFormatOp::fold(FoldAdaptor adaptor) {
+  auto immAttr = dyn_cast_or_null<ImmediateAttr>(adaptor.getValue());
+  if (!immAttr)
+    return {};
+  SmallString<16> strBuf("0x");
+  immAttr.getValue().toString(strBuf, 16, /*Signed=*/false);
+  return StringAttr::get(strBuf, StringType::get(getContext()));
+}
+
+//===----------------------------------------------------------------------===//
+// RegisterFormatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult RegisterFormatOp::fold(FoldAdaptor adaptor) {
+  auto regAttr = dyn_cast_or_null<RegisterAttrInterface>(adaptor.getValue());
+  if (!regAttr)
+    return {};
+  return StringAttr::get(regAttr.getRegisterAssembly(),
+                         StringType::get(getContext()));
+}
+
+//===----------------------------------------------------------------------===//
 // StringToLabelOp
 //===----------------------------------------------------------------------===//
 

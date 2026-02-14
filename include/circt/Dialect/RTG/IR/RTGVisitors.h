@@ -67,7 +67,7 @@ public:
             // Data segment ops
             SpaceOp, StringDataOp, SegmentOp,
             // String ops
-            StringConcatOp, IntFormatOp,
+            StringConcatOp, IntFormatOp, ImmediateFormatOp, RegisterFormatOp,
             // Misc ops
             CommentOp, ConstraintOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
@@ -154,6 +154,8 @@ public:
   HANDLE(SegmentOp, Unhandled);
   HANDLE(StringConcatOp, Unhandled);
   HANDLE(IntFormatOp, Unhandled);
+  HANDLE(ImmediateFormatOp, Unhandled);
+  HANDLE(RegisterFormatOp, Unhandled);
   HANDLE(StringToLabelOp, Unhandled);
 #undef HANDLE
 };

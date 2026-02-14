@@ -315,6 +315,16 @@ rtg.test @strings() {
   // CHECK: [[V3:%.+]] = rtg.int_format {{%.+}}
   rtg.int_format %1
 
+  // CHECK-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<8, 42>
+  %imm = rtg.constant #rtg.isa.immediate<8, 42>
+  // CHECK-NEXT: rtg.immediate_format [[IMM]] : !rtg.isa.immediate<8>
+  rtg.immediate_format %imm : !rtg.isa.immediate<8>
+
+  // CHECK-NEXT: [[REG:%.+]] = rtg.constant #rtgtest.t0
+  %reg = rtg.constant #rtgtest.t0 : !rtgtest.ireg
+  // CHECK-NEXT: rtg.register_format [[REG]] : !rtgtest.ireg
+  rtg.register_format %reg : !rtgtest.ireg
+
   // CHECK-NEXT: [[V0:%.+]] = rtg.constant "hello" : !rtg.string
   %0 = rtg.constant "hello" : !rtg.string
   // CHECK-NEXT: rtg.string_concat [[V0]], [[V0]]
