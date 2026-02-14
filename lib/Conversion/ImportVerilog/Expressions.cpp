@@ -1593,10 +1593,11 @@ struct RvalueExprVisitor : public ExprVisitor {
     // $rose, $fell, $stable, $changed, and $past are only valid in
     // the context of properties and assertions. Those are treated in the
     // LTLDialect; treat them there instead.
-    bool isAssertionCall =
-        llvm::StringSwitch<bool>(subroutine.name)
-            .Cases({"$rose", "$fell", "$stable", "$changed", "$past"}, true)
-            .Default(false);
+    bool isAssertionCall = llvm::StringSwitch<bool>(subroutine.name)
+                               .Cases({"$rose", "$fell", "$stable", "$changed",
+                                       "$past", "$sampled"},
+                                      true)
+                               .Default(false);
 
     if (isAssertionCall)
       return context.convertAssertionCallExpression(expr, info, loc);
