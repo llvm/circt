@@ -18,6 +18,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/Interfaces/InferIntRangeInterface.h"
@@ -152,7 +153,7 @@ struct SextMatcher {
       return false;
 
     // Match the base unextended value against the sub-matcher
-    return lhs.match(op->getOperand(1));
+    return mlir::detail::matchOperandOrValueAtIndex(op, 1, lhs);
   }
 };
 
