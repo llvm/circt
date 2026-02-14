@@ -65,3 +65,28 @@ def CirctIsX : FIRRTLIntrinsic {
     | found  | UInt<1> | i is `x`    |
   }];
 }
+
+def CirctReadDesignConfigInt : FIRRTLIntrinsic {
+  let mnemonic = "circt.read_design_config_int";
+  let converter = "CirctReadDesignConfigIntConverter";
+  let description = [{
+    Reads an integer design configuration value that will be defined in a
+    generated configuration package. This intrinsic is used for post-Verilog
+    configuration, where configuration values can be set after Verilog generation.
+
+    The generated Verilog will reference the configuration from DesignConfigPackage:
+    ```verilog
+    localparam mode = DesignConfigPackage.mode;
+    ```
+
+    | Parameter    | Type   | Description                                  |
+    | ------------ | ------ | -------------------------------------------- |
+    | name         | String | Name of the configuration                    |
+    | defaultValue | Int    | Default value of the configuration           |
+    | comment      | String | Description of the configuration (can be empty) |
+
+    | Result | Type | Description                                |
+    | ------ | ---- | ------------------------------------------ |
+    | value  | Int  | The configuration value                    |
+  }];
+}
