@@ -198,21 +198,26 @@ public:
 
   /// Check if we can promote the entire signal according to the current
   /// limitations of the pass.
-  bool isPromotable() {
+  LogicalResult isPromotable() {
     for (unsigned i = 0; i < intervals.size(); ++i) {
       if (i >= intervals.size() - 1)
         break;
 
-      if (intervals[i].low.max + intervals[i].bitwidth - 1 >
+      // If two drives touch the same bit range, promotion would erase one of
+      // the involved operations while it is still needed. Treat equality as
+      // overlap so we bail out instead of crashing later.
+      if (intervals[i].low.max + intervals[i].bitwidth - 1 >=
           intervals[i + 1].low.min) {
         LLVM_DEBUG({
           llvm::dbgs() << "  - Potentially overlapping drives, skipping...\n\n";
         });
-        return false;
+        sigOp.emitError("cannot promote signal because multiple drives overlap "
+                        "or target the same bits");
+        return failure();
       }
     }
 
-    return true;
+    return success();
   }
 
   /// Promote the signal. This builds the necessary operations, replaces the
@@ -362,8 +367,13 @@ void Sig2RegPass::runOnOperation() {
     LLVM_DEBUG(llvm::dbgs() << "  - Attempting to promote signal "
                             << sigOp.getName() << "\n");
     SigPromoter promoter(sigOp);
-    if (failed(promoter.computeIntervals()) || !promoter.isPromotable())
+    if (failed(promoter.computeIntervals()))
       continue;
+
+    if (failed(promoter.isPromotable())) {
+      signalPassFailure();
+      return;
+    }
 
     promoter.promote();
     LLVM_DEBUG(llvm::dbgs() << "  - Successfully promoted!\n\n");
