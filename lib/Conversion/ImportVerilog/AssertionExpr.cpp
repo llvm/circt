@@ -309,12 +309,11 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                   auto past =
                       ltl::PastOp::create(builder, loc, value, 1, Value{})
                           .getResult();
-                  auto notCurrent =
-                      ltl::NotOp::create(builder, loc, current).getResult();
-                  auto pastAndNotCurrent =
-                      ltl::AndOp::create(builder, loc, {notCurrent, past})
-                          .getResult();
-                  return pastAndNotCurrent;
+                  auto fell = comb::ICmpOp::create(builder, loc,
+                                                   comb::ICmpPredicate::ugt,
+                                                   past, current, false)
+                                  .getResult();
+                  return fell;
                 })
           // Translate $rose to x[0] ∧ ¬x[-1]
           .Case("$rose",
@@ -322,14 +321,14 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                   auto past =
                       ltl::PastOp::create(builder, loc, value, 1, Value{})
                           .getResult();
-                  auto notPast = comb::createOrFoldNot(loc, past, builder);
                   auto current = value;
-                  auto notPastAndCurrent =
-                      ltl::AndOp::create(builder, loc, {current, notPast})
-                          .getResult();
-                  return notPastAndCurrent;
+                  auto rose = comb::ICmpOp::create(builder, loc,
+                                                   comb::ICmpPredicate::ult,
+                                                   past, current, false)
+                                  .getResult();
+                  return rose;
                 })
-          // Translate $changed to x[0] != x[-1]
+          // Translate $changed to ( ¬x[0] ∧ x[-1] ) ⋁ ( x[0] ∧ ¬x[-1] )
           .Case("$changed",
                 [&]() -> Value {
                   auto past =
@@ -338,7 +337,8 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                   auto current = value;
                   auto changed = comb::ICmpOp::create(builder, loc,
                                                       comb::ICmpPredicate::ne,
-                                                      past, current, false);
+                                                      past, current, false)
+                                     .getResult();
                   return changed;
                 })
           // Translate $stable to ( x[0] ∧ x[-1] ) ⋁ ( ¬x[0] ∧ ¬x[-1] )
@@ -347,21 +347,11 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                   auto past =
                       ltl::PastOp::create(builder, loc, value, 1, Value{})
                           .getResult();
-                  auto notPast =
-                      ltl::NotOp::create(builder, loc, past).getResult();
                   auto current = value;
-                  auto notCurrent =
-                      ltl::NotOp::create(builder, loc, value).getResult();
-                  auto pastAndCurrent =
-                      ltl::AndOp::create(builder, loc, {current, past})
-                          .getResult();
-                  auto notPastAndNotCurrent =
-                      ltl::AndOp::create(builder, loc, {notCurrent, notPast})
-                          .getResult();
-                  auto stable =
-                      ltl::OrOp::create(builder, loc,
-                                        {pastAndCurrent, notPastAndNotCurrent})
-                          .getResult();
+                  auto stable = comb::ICmpOp::create(builder, loc,
+                                                     comb::ICmpPredicate::eq,
+                                                     past, current, false)
+                                    .getResult();
                   return stable;
                 })
           .Case("$past",
