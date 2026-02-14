@@ -2435,6 +2435,9 @@ static LogicalResult convert(SeverityBIOp op, SeverityBIOp::Adaptor adaptor,
   case (Severity::Warning):
     severityString = "Warning: ";
     break;
+  case (Severity::Info):
+    severityString = "Info: ";
+    break;
   default:
     return failure();
   }

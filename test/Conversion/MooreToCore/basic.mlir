@@ -1391,6 +1391,13 @@ func.func @SeverityToPrint() {
   %2 = moore.fmt.literal "Warning condition met!"
   moore.builtin.severity warning %2
 
+  // CHECK: [[MSG:%.*]] = sim.fmt.literal "Info condition met!"
+  // CHECK-NEXT: [[PFX:%.*]] = sim.fmt.literal "Info: "
+  // CHECK-NEXT: [[CONCAT:%.*]] = sim.fmt.concat ([[PFX]], [[MSG]])
+  // CHECK-NEXT: sim.proc.print [[CONCAT]]
+  %3 = moore.fmt.literal "Info condition met!"
+  moore.builtin.severity info %3
+
   return
 }
 
