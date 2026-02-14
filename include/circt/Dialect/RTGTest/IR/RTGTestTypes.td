@@ -35,7 +35,7 @@ def CPUType : RTGTestTypeDef<"CPU", [ContextResourceTypeInterface]> {
 }
 
 def IntegerRegisterType : TypeDef<RTGTestDialect, "IntegerRegister", [
-  RegisterTypeInterface,
+  DeclareTypeInterfaceMethods<RegisterTypeInterface>,
   DeclareTypeInterfaceMethods<ValidationTypeInterface>,
 ]> {
   let summary = "represents an integer register";
@@ -45,7 +45,7 @@ def IntegerRegisterType : TypeDef<RTGTestDialect, "IntegerRegister", [
 }
 
 def FloatRegisterType : TypeDef<RTGTestDialect, "FloatRegister", [
-  RegisterTypeInterface,
+  DeclareTypeInterfaceMethods<RegisterTypeInterface>,
 ]> {
   let summary = "represents a floating-point register";
 
