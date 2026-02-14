@@ -113,6 +113,14 @@ def HWAggregateToComb : Pass<"hw-aggregate-to-comb", "hw::HWModuleOp"> {
   let dependentDialects = ["comb::CombDialect"];
 }
 
+def HWVectorization : Pass<"hw-vectorization", "hw::HWModuleOp"> {
+  let summary = "Vectorizes bit-level operations in HW dialect";
+  let description = [{
+   This pass performs structural vectorization of hardware modules,
+    merging scalar bit-level assignments into vectorized operations.
+  }];
+}
+
 def HWParameterizeConstantPorts : Pass<"hw-parameterize-constant-ports",
                                        "mlir::ModuleOp"> {
   let summary = "Parametize constant ports on private modules";
