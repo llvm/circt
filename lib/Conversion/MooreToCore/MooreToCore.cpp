@@ -17,6 +17,7 @@
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/ConversionPatternSet.h"
+#include "circt/Support/LLVM.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -909,8 +910,13 @@ struct NetOpConversion : public OpConversionPattern<NetOp> {
   matchAndRewrite(NetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    if (op.getKind() != NetKind::Wire)
-      return rewriter.notifyMatchFailure(loc, "only wire nets supported");
+
+    const auto kind = op.getKind();
+    if (op.getKind() != NetKind::Wire && op.getKind() != NetKind::Supply0 &&
+        op.getKind() != NetKind::Supply1) {
+      return rewriter.notifyMatchFailure(
+          loc, "only wire/supply0/supply1 nets supported");
+    }
 
     auto resultType = typeConverter->convertType(op.getResult().getType());
     if (!resultType)
@@ -922,6 +928,16 @@ struct NetOpConversion : public OpConversionPattern<NetOp> {
     int64_t width = hw::getBitWidth(elementType);
     if (width == -1)
       return failure();
+
+    if (kind == NetKind::Supply0) {
+      auto zero = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
+      rewriter.replaceOp(op, zero);
+      return success();
+    } else if (kind == NetKind::Supply1) {
+      auto one = hw::ConstantOp::create(rewriter, loc, APInt(width, 1));
+      rewriter.replaceOp(op, one);
+      return success();
+    }
     auto constZero = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
     auto init =
         rewriter.createOrFold<hw::BitcastOp>(loc, elementType, constZero);
