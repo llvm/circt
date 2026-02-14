@@ -4037,8 +4037,6 @@ StringRef ObjectOp::getInstanceName() { return getName(); }
 
 StringAttr ObjectOp::getInstanceNameAttr() { return getNameAttr(); }
 
-StringRef ObjectOp::getReferencedModuleName() { return getClassName(); }
-
 StringAttr ObjectOp::getReferencedModuleNameAttr() {
   return getClassNameAttr();
 }

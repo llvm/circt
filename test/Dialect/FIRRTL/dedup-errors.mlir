@@ -706,3 +706,74 @@ firrtl.circuit "Foo" attributes {annotations = [{
     %2 = firrtl.wire : !firrtl.uint<42>
   }
 }
+
+// -----
+// Test that dedup failures are properly reported when modules have different
+// instance_choice operations (different number of alternatives).
+
+// expected-error @below {{module "Wrapper1" not deduplicated with "Wrapper0"}}
+// expected-error @below {{module "Wrapper3" not deduplicated with "Wrapper2"}}
+// expected-note @below {{in instance "inst" of "ASICTarget", and instance "inst" of "Target"}}
+firrtl.circuit "InstanceChoiceDedup" attributes {annotations = [{
+  class = "firrtl.transforms.MustDeduplicateAnnotation",
+  modules = ["~InstanceChoiceDedup|Wrapper0", "~InstanceChoiceDedup|Wrapper1"]
+},
+{
+  class = "firrtl.transforms.MustDeduplicateAnnotation",
+  modules = ["~InstanceChoiceDedup|Wrapper2", "~InstanceChoiceDedup|Wrapper3"]
+}
+]} {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
+
+  firrtl.module private @Target() {
+    // expected-note @below {{second type is '!firrtl.uint<1>'}}
+    %wire = firrtl.wire : !firrtl.uint<1>
+  }
+
+  firrtl.module private @FPGATarget() {
+    %wire = firrtl.wire : !firrtl.uint<2>
+  }
+
+  firrtl.module private @ASICTarget() {
+    // expected-note @below {{operation result types don't match, first type is '!firrtl.uint<3>'}}
+    %wire = firrtl.wire : !firrtl.uint<3>
+  }
+
+  firrtl.module private @Wrapper0() {
+    // expected-note @below {{an instance has a different number of referenced modules: first instance has 2 modules}}
+    firrtl.instance_choice inst @Target alternatives @Platform {
+      @FPGA -> @FPGATarget
+    }()
+  }
+
+  firrtl.module private @Wrapper1() {
+    // expected-note @below {{second instance has 3 modules}}
+    firrtl.instance_choice inst @Target alternatives @Platform {
+      @FPGA -> @FPGATarget,
+      @ASIC -> @ASICTarget
+    }()
+  }
+
+  firrtl.module private @Wrapper2() {
+    firrtl.instance_choice inst @Target alternatives @Platform {
+      @FPGA -> @FPGATarget,
+      @ASIC -> @ASICTarget
+    }()
+  }
+  firrtl.module private @Wrapper3() {
+    firrtl.instance_choice inst @Target alternatives @Platform {
+      @FPGA -> @FPGATarget,
+      @ASIC -> @Target
+    }()
+  }
+
+  firrtl.module @InstanceChoiceDedup() {
+    firrtl.instance w0 @Wrapper0()
+    firrtl.instance w1 @Wrapper1()
+    firrtl.instance w2 @Wrapper2()
+    firrtl.instance w3 @Wrapper3()
+  }
+}

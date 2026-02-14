@@ -2211,8 +2211,14 @@ private:
               ref = hw::InnerRefAttr::get(newModName, ref.getName());
               auto newInst = innerRefs.lookupOp<FInstanceLike>(ref);
               if (oldInst && newInst) {
-                oldModName = oldInst.getReferencedModuleNameAttr();
-                newModName = newInst.getReferencedModuleNameAttr();
+                // Get the first module name from the list (for
+                // InstanceOp/ObjectOp, there's only one)
+                auto oldModNames = oldInst.getReferencedModuleNamesAttr();
+                auto newModNames = newInst.getReferencedModuleNamesAttr();
+                if (!oldModNames.empty() && !newModNames.empty()) {
+                  oldModName = cast<StringAttr>(oldModNames[0]);
+                  newModName = cast<StringAttr>(newModNames[0]);
+                }
               }
             }
             newPath.push_back(ref);
@@ -2293,16 +2299,21 @@ struct MustDedupChildren : public OpReduction<CircuitOp> {
 
             // Make sure there are at least two distinct modules.
             SmallDenseSet<StringAttr, 4> moduleTargets;
-            for (auto instOp : instanceGroup)
-              moduleTargets.insert(instOp.getReferencedModuleNameAttr());
+            for (auto instOp : instanceGroup) {
+              auto moduleNames = instOp.getReferencedModuleNamesAttr();
+              for (auto moduleName : moduleNames)
+                moduleTargets.insert(cast<StringAttr>(moduleName));
+            }
             if (moduleTargets.size() < 2)
               return;
 
             // Make sure none of the modules are not yet in a must dedup
             // annotation.
             if (llvm::any_of(instanceGroup, [&](FInstanceLike inst) {
-                  return modulesAlreadyInMustDedup.contains(
-                      inst.getReferencedModuleName());
+                  auto moduleNames = inst.getReferencedModuleNames();
+                  return llvm::any_of(moduleNames, [&](StringRef moduleName) {
+                    return modulesAlreadyInMustDedup.contains(moduleName);
+                  });
                 }))
               return;
 
@@ -2339,10 +2350,13 @@ struct MustDedupChildren : public OpReduction<CircuitOp> {
             // Create the list of modules to put into this new annotation.
             SmallSetVector<StringAttr, 4> moduleTargets;
             for (auto instOp : instanceGroup) {
-              auto target = TokenAnnoTarget();
-              target.circuit = circuitOp.getName();
-              target.module = instOp.getReferencedModuleName();
-              moduleTargets.insert(target.toStringAttr(context));
+              auto moduleNames = instOp.getReferencedModuleNames();
+              for (auto moduleName : moduleNames) {
+                auto target = TokenAnnoTarget();
+                target.circuit = circuitOp.getName();
+                target.module = moduleName;
+                moduleTargets.insert(target.toStringAttr(context));
+              }
             }
 
             // Create a new MustDedup annotation for this list of modules.
