@@ -205,6 +205,7 @@ struct ExprVisitor {
     auto derefType = value.getType();
     if (isLvalue)
       derefType = cast<moore::RefType>(derefType).getNestedType();
+
     if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
              moore::QueueType, moore::AssocArrayType, moore::StringType,
              moore::OpenUnpackedArrayType>(derefType)) {
@@ -3025,6 +3026,9 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                   if (isa<moore::QueueType>(value.getType())) {
                     return moore::QueueSizeBIOp::create(builder, loc, value);
                   }
+                  if (isa<moore::OpenUnpackedArrayType>(value.getType())) {
+                    return moore::OpenUArraySizeOp::create(builder, loc, value);
+                  }
                   if (isa<moore::RefType>(value.getType()) &&
                       isa<moore::AssocArrayType>(
                           cast<moore::RefType>(value.getType())
@@ -3074,7 +3078,6 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                 [&]() -> Value {
                   return moore::OpenUArrayDeleteOp::create(builder, loc, value);
                 })
-
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
 }
