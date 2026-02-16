@@ -7,8 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Moore/MooreTypes.h"
 #include "mlir/IR/Operation.h"
+#include "mlir/IR/TypeRange.h"
 #include "mlir/IR/Value.h"
 #include "slang/ast/EvalContext.h"
 #include "slang/ast/SystemSubroutine.h"
@@ -186,7 +188,13 @@ struct ExprVisitor {
     Value initialSize = context.convertRvalueExpression(
       expr.sizeExpr(), context.convertType(*expr.sizeExpr().type));
 
-    return moore::OpenUArrayCreateOp::create(builder, loc, type, initialSize);
+    if(expr.initExpr() == nullptr) {
+      return moore::OpenUArrayCreateOp::create(builder, loc, type, initialSize);
+    } else {
+      Value initExpr = context.convertRvalueExpression(
+      *expr.initExpr(), context.convertType(*expr.initExpr()->type));
+      return moore::OpenUArrayCreateOp::create(builder, loc, type, {initialSize, initExpr});
+    }
   }
 
   /// Handle single bit selections.

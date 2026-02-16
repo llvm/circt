@@ -1937,10 +1937,10 @@ def OpenUArrayCreateOp: MooreOp<"open_uarray_create"> {
   let description = [{
       See IEEE 1800-2023 § 7.5.1 "New[]"
   }];
-  let arguments = (ins SimpleBitVectorType:$initialSize);
+  let arguments = (ins SimpleBitVectorType:$initialSize, Optional<UnpackedType>:$init);
   let results = (outs OpenUnpackedArrayType:$result);
   let assemblyFormat = [{
-    $initialSize attr-dict `:` type($initialSize) `->` type($result)
+    $initialSize (`initial` $init^)? attr-dict `:` type($initialSize) (`,` type($init)^)? `->` type($result)
   }];
 }
 
