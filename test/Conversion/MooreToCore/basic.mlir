@@ -759,6 +759,14 @@ func.func @CmpReal(%arg0: !moore.f32, %arg1: !moore.f32) {
   return
 }
 
+// CHECK-LABEL: func.func @UnaryRealOps
+func.func @UnaryRealOps(%arg0: !moore.f32) {
+  // CHECK: arith.negf %arg0 : f32
+  moore.fneg %arg0 : f32
+
+  return
+}
+
 // CHECK-LABEL: func.func @BinaryRealOps
 func.func @BinaryRealOps(%arg0: !moore.f32, %arg1: !moore.f32) {
   // CHECK: arith.addf %arg0, %arg1 : f32
