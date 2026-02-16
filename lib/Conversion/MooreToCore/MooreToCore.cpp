@@ -1491,6 +1491,16 @@ struct NegOpConversion : public OpConversionPattern<NegOp> {
   }
 };
 
+struct NegRealOpConversion : public OpConversionPattern<NegRealOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(NegRealOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<arith::NegFOp>(op, adaptor.getInput());
+    return success();
+  }
+};
+
 template <typename SourceOp, typename TargetOp>
 struct BinaryOpConversion : public OpConversionPattern<SourceOp> {
   using OpConversionPattern<SourceOp>::OpConversionPattern;
@@ -2803,6 +2813,9 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     BinaryOpConversion<AndOp, comb::AndOp>,
     BinaryOpConversion<OrOp, comb::OrOp>,
     BinaryOpConversion<XorOp, comb::XorOp>,
+
+    // Patterns for unary real operations.
+    NegRealOpConversion,
 
     // Patterns for binary real operations.
     BinaryRealOpConversion<AddRealOp, arith::AddFOp>,
