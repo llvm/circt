@@ -182,7 +182,6 @@ struct ExprVisitor {
     Type type = context.convertType(*expr.type);
 
     // TODO: Handle 'initExpr' if it exists
-
     if (expr.initExpr()) {
       mlir::emitError(loc)
           << "unsupported expression: array `new` with initializer\n";
@@ -206,7 +205,6 @@ struct ExprVisitor {
     auto derefType = value.getType();
     if (isLvalue)
       derefType = cast<moore::RefType>(derefType).getNestedType();
-
     if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
              moore::QueueType, moore::AssocArrayType, moore::StringType,
              moore::OpenUnpackedArrayType>(derefType)) {
@@ -3068,6 +3066,15 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                   return moore::QueuePopFrontOp::create(builder, loc, value);
                 return {};
               })
+          .Case("size",
+                [&]() -> Value {
+                  return moore::OpenUArraySizeOp::create(builder, loc, value);
+                })
+          .Case("delete",
+                [&]() -> Value {
+                  return moore::OpenUArrayDeleteOp::create(builder, loc, value);
+                })
+
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
 }
