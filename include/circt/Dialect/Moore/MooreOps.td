@@ -2122,6 +2122,47 @@ def AssocArrayClearOp : MooreOp<"assoc_array.clear"> {
   let results = (outs);
   let assemblyFormat = [{
     $assoc_array attr-dict `:` type($assoc_array)
+    }];
+}
+
+//===----------------------------------------------------------------------===//
+// Dynamic Array Manipulation
+//===----------------------------------------------------------------------===//
+
+def OpenUArrayCreateOp: MooreOp<"open_uarray_create"> {
+  let summary = "Create an open uarray given a type and size";
+  let description = [{
+      See IEEE 1800-2023 § 7.5.1 "New[]"
+  }];
+  let arguments = (ins SimpleBitVectorType:$initialSize);
+  let results = (outs OpenUnpackedArrayType:$result);
+  let assemblyFormat = [{
+    $initialSize attr-dict `:` type($initialSize) `->` type($result)
+  }];
+}
+
+def OpenUArraySizeOp: MooreOp<"open_uarray_size"> {
+  let summary = "Fetch the size of a given open uarray";
+  let description = [{
+      See IEEE 1800-2023 § 7.5.2 "Size()"
+  }];
+  let arguments = (ins OpenUnpackedArrayType:$arr);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = [{
+    $arr attr-dict `:` type($arr) `->` type($result)
+  }]; 
+}
+
+def OpenUArrayDeleteOp: MooreOp<"open_uarray_delete"> {
+  let summary = "Delete a given open uarray";
+  let description = [{
+      See IEEE 1800-2023 § 7.5.3 "Delete()"
+  }];
+  let arguments = (ins OpenUnpackedArrayType:$arr);
+  let results = (outs VoidType);
+  let assemblyFormat = [{
+    $arr attr-dict `:` type($arr)
+>>>>>>> 1bde934b12 ([ImportVerilog] Add dynamic array creation + 'size' and 'length' instructions to the moore dialect)
   }];
 }
 

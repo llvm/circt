@@ -178,6 +178,17 @@ struct ExprVisitor {
     return context.convertRvalueExpression(expr);
   }
 
+  Value visit(const slang::ast::NewArrayExpression &expr) {
+    Type type = context.convertType(*expr.type);
+
+    // TODO: Handle 'initExpr' if it exists
+
+    Value initialSize = context.convertRvalueExpression(
+        expr.sizeExpr(), context.convertType(*expr.sizeExpr().type));
+
+    return moore::OpenUArrayCreateOp::create(builder, loc, type, initialSize);
+  }
+
   /// Handle single bit selections.
   Value visit(const slang::ast::ElementSelectExpression &expr) {
     auto type = context.convertType(*expr.type);
