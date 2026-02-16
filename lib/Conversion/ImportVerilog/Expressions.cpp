@@ -178,6 +178,17 @@ struct ExprVisitor {
     return context.convertRvalueExpression(expr);
   }
 
+  Value visit(const slang::ast::NewArrayExpression &expr) {
+    Type type = context.convertType(*expr.type);
+
+    // TODO: Handle 'initExpr' if it exists
+
+    Value initialSize = context.convertRvalueExpression(
+        expr.sizeExpr(), context.convertType(*expr.sizeExpr().type));
+
+    return moore::OpenUArrayCreateOp::create(builder, loc, type, initialSize);
+  }
+
   /// Handle single bit selections.
   Value visit(const slang::ast::ElementSelectExpression &expr) {
     auto type = context.convertType(*expr.type);
@@ -189,9 +200,8 @@ struct ExprVisitor {
     auto derefType = value.getType();
     if (isLvalue)
       derefType = cast<moore::RefType>(derefType).getNestedType();
-
     if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
-             moore::QueueType, moore::AssocArrayType>(derefType)) {
+             moore::OpenUnpackedArrayType, moore::AssocArrayType>(derefType)) {
       mlir::emitError(loc) << "unsupported expression: element select into "
                            << expr.value().type->toString() << "\n";
       return {};
@@ -2996,6 +3006,15 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                   return moore::QueuePopFrontOp::create(builder, loc, value);
                 return {};
               })
+          .Case("size",
+                [&]() -> Value {
+                  return moore::OpenUArraySizeOp::create(builder, loc, value);
+                })
+          .Case("delete",
+                [&]() -> Value {
+                  return moore::OpenUArrayDeleteOp::create(builder, loc, value);
+                })
+
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
 }
