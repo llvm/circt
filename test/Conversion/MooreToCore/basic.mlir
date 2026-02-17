@@ -1588,15 +1588,15 @@ moore.module @GlobalFooUse() {
 
 // CHECK-LABEL: @Nets
 moore.module @Nets(out o1 : !moore.l1, out o2 : !moore.l2, out o3 : !moore.l1, out o4 : !moore.l2) {
-  // CHECK: [[N1:%.*]] = builtin.unrealized_conversion_cast %false : i1 to !llhd.ref<i1>
+  // CHECK: [[N1:%.*]] = llhd.sig %false : i1
   %n1 = moore.net supply0 : <l1>
   // CHECK: [[C0:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N2:%.*]] = builtin.unrealized_conversion_cast [[C0]] : i2 to !llhd.ref<i2>
+  // CHECK-NEXT: [[N2:%.*]] = llhd.sig [[C0]] : i2
   %n2 = moore.net supply0 : <l2>
-  // CHECK: [[N3:%.*]] = builtin.unrealized_conversion_cast %true : i1 to !llhd.ref<i1>
+  // CHECK: [[N3:%.*]] = llhd.sig %true : i1
   %n3 = moore.net supply1 : <l1>
-  // CHECK: [[C1:%.*]] = hw.constant 1 : i2
-  // CHECK-NEXT: [[N4:%.*]] = builtin.unrealized_conversion_cast [[C1]] : i2 to !llhd.ref<i2>
+  // CHECK: [[C1:%.*]] = hw.constant -1 : i2
+  // CHECK-NEXT: [[N4:%.*]] = llhd.sig [[C1]] : i2
   %n4 = moore.net supply1 : <l2>
 
   // CHECK: %{{.*}} = llhd.prb [[N1]] : i1

@@ -17,7 +17,6 @@
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/ConversionPatternSet.h"
-#include "circt/Support/LLVM.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -929,19 +928,7 @@ struct NetOpConversion : public OpConversionPattern<NetOp> {
     if (width == -1)
       return failure();
 
-    if (kind == NetKind::Supply0) {
-      auto zero = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
-      rewriter.replaceOp(op, zero);
-      return success();
-    } else if (kind == NetKind::Supply1) {
-      auto one = hw::ConstantOp::create(rewriter, loc, APInt(width, 1));
-      rewriter.replaceOp(op, one);
-      return success();
-    }
-    auto constZero = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
-    auto init =
-        rewriter.createOrFold<hw::BitcastOp>(loc, elementType, constZero);
-
+    auto init = createInitialValue(kind, rewriter, loc, width, elementType);
     auto signal = rewriter.replaceOpWithNewOp<llhd::SignalOp>(
         op, resultType, op.getNameAttr(), init);
 
@@ -954,6 +941,20 @@ struct NetOpConversion : public OpConversionPattern<NetOp> {
     }
 
     return success();
+  }
+
+  static mlir::Value createInitialValue(NetKind kind,
+                                        ConversionPatternRewriter &rewriter,
+                                        Location loc, int64_t width,
+                                        Type elementType) {
+    auto theConst = [&] {
+      if (kind == NetKind::Wire || kind == NetKind::Supply0)
+        return hw::ConstantOp::create(rewriter, loc, APInt::getZero(width));
+      if (kind == NetKind::Supply1)
+        return hw::ConstantOp::create(rewriter, loc, APInt::getAllOnes(width));
+      llvm_unreachable("unsupported net kind");
+    }();
+    return rewriter.createOrFold<hw::BitcastOp>(loc, elementType, theConst);
   }
 };
 
