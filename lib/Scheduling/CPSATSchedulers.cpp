@@ -38,7 +38,7 @@ using llvm::format;
 /// https://github.com/google/or-tools/blob/stable/examples/python/rcpsp_sat.py
 /// but a gentler introduction (though with differing formulation) is
 /// https://python-mip.readthedocs.io/en/latest/examples.html
-LogicalResult scheduling::scheduleCPSAT(SharedOperatorsProblem &prob,
+LogicalResult scheduling::scheduleCPSAT(SharedResourcesProblem &prob,
                                         Operation *lastOp) {
   Operation *containingOp = prob.getContainingOp();
   if (!prob.hasOperation(lastOp))
@@ -123,7 +123,7 @@ LogicalResult scheduling::scheduleCPSAT(SharedOperatorsProblem &prob,
           (Twine("demand_") + Twine(i) + Twine("_") +
            Twine(resource.getAttr().strref()))
               .str());
-      // Conventional formulation for SharedOperatorsProblem;
+      // Conventional formulation for SharedResourcesProblem;
       // interval during which the resource is occupied has size 1.
       IntervalVar start =
           cpModel.NewFixedSizeIntervalVar(taskInterval.StartExpr(), 1);
