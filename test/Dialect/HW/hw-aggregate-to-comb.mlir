@@ -102,3 +102,47 @@ hw.module private @mux_array(in %cond: i1, in %true_val: !hw.array<2xi2>, in %fa
   %0 = comb.mux %cond, %true_val, %false_val : !hw.array<2xi2>
   hw.output %0 : !hw.array<2xi2>
 }
+
+// CHECK-LABEL: @struct_extract(
+hw.module private @struct_extract(in %s: !hw.struct<foo: i3, bar: i5>, out foo: i3, out bar: i5) {
+  // The first field "foo" occupies the MSBs
+  // struct layout: [foo (i3) | bar (i5)] = 8 bits total
+  // foo is at bits [7:5] (MSB), bar is at bits [4:0] (LSB)
+  // CHECK-NEXT: %[[BITCAST:.+]] = hw.bitcast %s : (!hw.struct<foo: i3, bar: i5>) -> i8
+  // CHECK-NEXT: %[[FOO:.+]] = comb.extract %[[BITCAST]] from 5 : (i8) -> i3
+  // CHECK-NEXT: %[[BAR:.+]] = comb.extract %[[BITCAST]] from 0 : (i8) -> i5
+  // CHECK-NEXT: hw.output %[[FOO]], %[[BAR]]
+  %foo = hw.struct_extract %s["foo"] : !hw.struct<foo: i3, bar: i5>
+  %bar = hw.struct_extract %s["bar"] : !hw.struct<foo: i3, bar: i5>
+  hw.output %foo, %bar : i3, i5
+}
+
+// CHECK-LABEL: @struct_constant_extract(
+hw.module private @struct_constant_extract(out foo: i3, out bar: i5) {
+  // CHECK-DAG: %[[FOO:.+]] = hw.constant 3 : i3
+  // CHECK-DAG: %[[BAR:.+]] = hw.constant 5 : i5
+  // CHECK-NEXT: hw.output %[[FOO]], %[[BAR]]
+  %s = hw.aggregate_constant [3 : i3, 5 : i5] : !hw.struct<foo: i3, bar: i5>
+  %foo = hw.struct_extract %s["foo"] : !hw.struct<foo: i3, bar: i5>
+  %bar = hw.struct_extract %s["bar"] : !hw.struct<foo: i3, bar: i5>
+  hw.output %foo, %bar : i3, i5
+}
+
+// CHECK-LABEL: @struct_create(
+hw.module private @struct_create(in %foo: i3, in %bar: i5, out out: !hw.struct<foo: i3, bar: i5>) {
+  // CHECK-NEXT: %[[CONCAT:.+]] = comb.concat %foo, %bar : i3, i5
+  // CHECK-NEXT: %[[BITCAST:.+]] = hw.bitcast %[[CONCAT]] : (i8) -> !hw.struct<foo: i3, bar: i5>
+  // CHECK-NEXT: hw.output %[[BITCAST]]
+  %s = hw.struct_create (%foo, %bar) : !hw.struct<foo: i3, bar: i5>
+  hw.output %s : !hw.struct<foo: i3, bar: i5>
+}
+
+// CHECK-LABEL: @struct_create_extract_roundtrip(
+hw.module private @struct_create_extract_roundtrip(in %foo: i3, in %bar: i5, out foo_out: i3, out bar_out: i5) {
+  // CHECK-NEXT: %[[CONCAT:.+]] = comb.concat %foo, %bar : i3, i5
+  // CHECK-NEXT: hw.output %foo, %bar
+  %s = hw.struct_create (%foo, %bar) : !hw.struct<foo: i3, bar: i5>
+  %foo_out = hw.struct_extract %s["foo"] : !hw.struct<foo: i3, bar: i5>
+  %bar_out = hw.struct_extract %s["bar"] : !hw.struct<foo: i3, bar: i5>
+  hw.output %foo_out, %bar_out : i3, i5
+}
