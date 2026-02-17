@@ -7,7 +7,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Moore/MooreOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/Diagnostics.h"
 #include "slang/ast/Compilation.h"
+#include "slang/ast/SemanticFacts.h"
+#include "slang/ast/Statement.h"
 #include "slang/ast/SystemSubroutine.h"
 #include "llvm/ADT/ScopeExit.h"
 
@@ -148,9 +154,45 @@ struct StmtVisitor {
     return success();
   }
 
-  // Inline `begin ... end` blocks into the parent.
+  // Process slang BlockStatements. These comprise all standard `begin ... end` blocks
+  // as well as `fork ... join` constructs. Standard blocks can have their contents
+  // extracted directly, however fork-join blocks require special handling.
   LogicalResult visit(const slang::ast::BlockStatement &stmt) {
-    return context.convertStatement(stmt.body);
+    moore::JoinKind kind;
+    switch (stmt.blockKind) {
+      case slang::ast::StatementBlockKind::Sequential:
+        // Inline standard `begin ... end` blocks into the parent.
+        return context.convertStatement(stmt.body);
+      case slang::ast::StatementBlockKind::JoinAll:
+        kind = moore::JoinKind::Join; break;
+      case slang::ast::StatementBlockKind::JoinAny:
+        kind = moore::JoinKind::JoinAny; break;
+      case slang::ast::StatementBlockKind::JoinNone:
+        kind = moore::JoinKind::JoinNone; break;
+    }
+
+    auto forkOp = moore::ForkJoinOp::create(builder, loc, kind);
+    OpBuilder::InsertionGuard guard(builder);
+    auto &body = forkOp.getBody().emplaceBlock();
+    builder.setInsertionPointToStart(&body);
+
+    // Slang stores all threads of a fork-join block inside a `StatementList`.
+    // This cannot be visited normally due to the need to make each statement a thread
+    // so must be converted here.
+    auto &threadList = stmt.body.as<slang::ast::StatementList>();
+
+    for (auto *tStmt: threadList.list) {
+      auto thread = moore::ThreadOp::create(builder, loc);
+      OpBuilder::InsertionGuard g2(builder);
+      auto &tBody = thread.getBody().emplaceBlock();
+      builder.setInsertionPointToStart(&tBody);
+
+      // Populate thread operator with thread body and finish with a thread terminator.
+      if (failed(context.convertStatement(*tStmt))) 
+        return failure();
+      moore::CompleteOp::create(builder, loc);
+    }
+    return success();
   }
 
   // Handle expression statements.
