@@ -618,9 +618,9 @@ private:
     for (auto module : instanceLike.getReferencedModuleNamesAttr()
                            .getAsValueRange<StringAttr>()) {
       auto *moduleOp = symbolTable.lookup(module);
-      if(liveModules.insert(moduleOp).second) {
+      if (liveModules.insert(moduleOp).second) {
         if (auto fmodule = dyn_cast<FModuleOp>(moduleOp))
-        worklist.push_back(fmodule);
+          worklist.push_back(fmodule);
       }
     }
   }

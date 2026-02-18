@@ -1443,85 +1443,9 @@ firrtl.circuit "RemoveNonLocalFromLocal" {
 
 // -----
 
-// Test that instance_choice keeps referenced modules alive during inlining.
-// The inliner should not delete modules referenced by instance_choice even if
-// they are not directly instantiated via regular instance ops.
-firrtl.circuit "InstanceChoiceKeepsModulesAlive" {
-  firrtl.option @Platform {
-    firrtl.option_case @FPGA
-    firrtl.option_case @ASIC
-  }
-
-  // These modules should be kept alive because they are referenced by instance_choice
-  // CHECK: firrtl.module private @FPGAImpl
-  firrtl.module private @FPGAImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
-    firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
-  }
-
-  // CHECK: firrtl.module private @ASICImpl
-  firrtl.module private @ASICImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
-    firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
-  }
-
-  // This module should be deleted as it's not referenced
-  // CHECK-NOT: firrtl.module private @UnusedModule
-  firrtl.module private @UnusedModule() {}
-
-  firrtl.module private @Child(in %x: !firrtl.uint<8>, out %y: !firrtl.uint<8>)
-    attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
-    // instance_choice references both FPGAImpl and ASICImpl
-    %inst_in, %inst_out = firrtl.instance_choice inst @FPGAImpl alternatives @Platform {
-      @FPGA -> @FPGAImpl,
-      @ASIC -> @ASICImpl
-    } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
-    firrtl.connect %inst_in, %x : !firrtl.uint<8>, !firrtl.uint<8>
-    firrtl.connect %y, %inst_out : !firrtl.uint<8>, !firrtl.uint<8>
-  }
-
-  // CHECK-LABEL: firrtl.module @InstanceChoiceKeepsModulesAlive
-  firrtl.module @InstanceChoiceKeepsModulesAlive(in %a: !firrtl.uint<8>, out %b: !firrtl.uint<8>) {
-    // After inlining Child, the instance_choice should still reference the modules
-    // CHECK: firrtl.instance_choice
-    // CHECK-SAME: @FPGAImpl
-    // CHECK-SAME: @ASICImpl
-    %child_x, %child_y = firrtl.instance child @Child(in x: !firrtl.uint<8>, out y: !firrtl.uint<8>)
-    firrtl.connect %child_x, %a : !firrtl.uint<8>, !firrtl.uint<8>
-    firrtl.connect %b, %child_y : !firrtl.uint<8>, !firrtl.uint<8>
-  }
-}
-
-// -----
-
-// Test that firrtl.object keeps referenced classes alive during inlining.
-// The inliner should not crash when encountering object ops.
-firrtl.circuit "ObjectKeepsClassesAlive" {
-  // CHECK: firrtl.class @MyClass
-  firrtl.class @MyClass() {
-    %str = firrtl.string "hello"
-  }
-
-  // Note: The inliner doesn't delete classes, only modules
-  firrtl.class @UnusedClass() {}
-
-  firrtl.module private @Child()
-    attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
-    // Object instantiation of MyClass
-    %obj = firrtl.object @MyClass()
-  }
-
-  // CHECK-LABEL: firrtl.module @ObjectKeepsClassesAlive
-  firrtl.module @ObjectKeepsClassesAlive() {
-    // After inlining Child, the object should still reference MyClass
-    // CHECK: firrtl.object @MyClass
-    firrtl.instance child @Child()
-  }
-}
-
-// -----
-
 // Test that both firrtl.object and instance_choice work together during inlining.
 // This ensures both FInstanceLike operations are handled correctly in the same module.
-firrtl.circuit "ObjectAndInstanceChoiceTogether" {
+firrtl.circuit "FInstanceLike" {
   firrtl.option @Platform {
     firrtl.option_case @FPGA
     firrtl.option_case @ASIC
@@ -1554,8 +1478,8 @@ firrtl.circuit "ObjectAndInstanceChoiceTogether" {
     firrtl.connect %y, %inst_out : !firrtl.uint<8>, !firrtl.uint<8>
   }
 
-  // CHECK-LABEL: firrtl.module @ObjectAndInstanceChoiceTogether
-  firrtl.module @ObjectAndInstanceChoiceTogether(in %a: !firrtl.uint<8>, out %b: !firrtl.uint<8>) {
+  // CHECK-LABEL: firrtl.module @FInstanceLike
+  firrtl.module @FInstanceLike(in %a: !firrtl.uint<8>, out %b: !firrtl.uint<8>) {
     // After inlining, both object and instance_choice should be present
     // CHECK: firrtl.object @MyClass
     // CHECK: firrtl.instance_choice
@@ -1582,9 +1506,7 @@ firrtl.circuit "InstanceChoiceChildrenInlineable" {
   firrtl.module private @InlineableChild(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>)
     attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
     %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
-    %0 = firrtl.add %in, %c1_ui8 : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<9>
-    %1 = firrtl.bits %0 7 to 0 : (!firrtl.uint<9>) -> !firrtl.uint<8>
-    firrtl.connect %out, %1 : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.connect %out, %c1_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
   }
 
   // This module is referenced by instance_choice and has an inlineable child
@@ -1594,7 +1516,6 @@ firrtl.circuit "InstanceChoiceChildrenInlineable" {
     // CHECK: %child_in = firrtl.wire
     // CHECK: %child_out = firrtl.wire
     // CHECK: firrtl.constant 1
-    // CHECK: firrtl.add
     %child_in, %child_out = firrtl.instance child @InlineableChild(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.connect %child_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %out, %child_out : !firrtl.uint<8>, !firrtl.uint<8>
