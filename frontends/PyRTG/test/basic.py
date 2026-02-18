@@ -120,9 +120,9 @@ def test0(config):
 # MLIR-NEXT: }
 
 # ELABORATED-LABEL: rtg.test @test1_args_Tgt0
-# CHECK: [[LBL:%.+]] = rtg.constant #rtg.isa.label<"L_0">
-# CHECK-NEXT: rtg.label local [[LBL]]
-# CHECK-NEXT: }
+# ELABORATED: [[LBL:%.+]] = rtg.constant #rtg.isa.label<"L_0">
+# ELABORATED-NEXT: rtg.label local [[LBL]]
+# ELABORATED-NEXT: }
 
 # ASM-LABEL: Begin of test 'test1_args
 # ASM-NEXT: L_0:
@@ -191,30 +191,31 @@ def test1_args(config):
 # MLIR-NEXT: }
 
 # ELABORATED-LABEL: rtg.test @test2_labels
-# ELABORATED-DAG: [[L0:%.+]] = rtg.constant #rtg.isa.label<"l0">
-# ELABORATED-DAG: [[L1:%.+]] = rtg.constant #rtg.isa.label<"l1_0">
-# ELABORATED-DAG: [[L2:%.+]] = rtg.constant #rtg.isa.label<"l1_1">
-# ELABORATED-DAG: [[LBL5:%.+]] = rtg.constant #rtg.isa.label<"L_5">
-# ELABORATED-DAG: [[LBL3:%.+]] = rtg.constant #rtg.isa.label<"L_3">
-# ELABORATED-DAG: [[L5:%.+]] = rtg.constant #rtg.isa.label<"s1">
-
+# ELABORATED-NEXT: [[L0:%.+]] = rtg.constant #rtg.isa.label<"l0">
 # ELABORATED-NEXT: rtg.label global [[L0]]
+# ELABORATED-NEXT: [[L1STR:%.+]] = rtg.constant "l1"
+# ELABORATED-NEXT: [[L1:%.+]] = rtg.label_unique_decl [[L1STR]]
 # ELABORATED-NEXT: rtg.label external [[L1]]
+# ELABORATED-NEXT: [[L2:%.+]] = rtg.label_unique_decl [[L1STR]]
 # ELABORATED-NEXT: rtg.label local [[L2]]
 
 # ELABORATED-NEXT: rtg.label local [[L0]]
 # ELABORATED-NEXT: rtg.label local [[L2]]
 
+# ELABORATED-NEXT: [[LBL5:%.+]] = rtg.constant #rtg.isa.label<"L_5">
 # ELABORATED-NEXT: rtg.label local [[LBL5]]
+# ELABORATED-NEXT: [[LBL3:%.+]] = rtg.constant #rtg.isa.label<"L_3">
 # ELABORATED-NEXT: rtg.label local [[LBL3]]
 
-# ELABORATED-NEXT: rtg.label local
-# ELABORATED-NEXT: rtg.label local
-
-# ELABORATED-NEXT: rtg.label local [[L1]]
-# ELABORATED-NEXT: rtg.label local [[L1]]
+# ELABORATED-NEXT: rtg.label local [[L2]]
 # ELABORATED-NEXT: rtg.label local [[L0]]
 
+# ELABORATED-NEXT: rtg.label local [[L1]]
+# ELABORATED-NEXT: rtg.label local [[L1]]
+# ELABORATED-NEXT: [[L0_2:%.+]] = rtg.constant #rtg.isa.label<"l0">
+# ELABORATED-NEXT: rtg.label local [[L0_2]]
+
+# ELABORATED-NEXT: [[L5:%.+]] = rtg.constant #rtg.isa.label<"s1">
 # ELABORATED-NEXT: rtg.label local [[L5]]
 
 # ELABORATED-NEXT: }

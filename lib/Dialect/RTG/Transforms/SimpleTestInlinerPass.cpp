@@ -39,8 +39,20 @@ void SimpleTestInlinerPass::runOnOperation() {
   IRRewriter rewriter(getOperation());
 
   for (auto fileOp : getOperation().getOps<emit::FileOp>()) {
-    for (auto refOp :
-         llvm::make_early_inc_range(fileOp.getOps<emit::RefOp>())) {
+    rewriter.setInsertionPointToStart(fileOp.getBody());
+    auto segOp =
+        SegmentOp::create(rewriter, fileOp->getLoc(), SegmentKind::Text);
+    segOp.getBodyRegion().emplaceBlock();
+
+    Block *fileBlock = fileOp.getBody();
+    Block *segBlock = segOp.getBody();
+
+    auto opsToMove = llvm::make_early_inc_range(
+        llvm::make_range(std::next(fileBlock->begin()), fileBlock->end()));
+    for (auto &op : opsToMove)
+      op.moveBefore(segBlock, segBlock->end());
+
+    for (auto refOp : llvm::make_early_inc_range(segOp.getOps<emit::RefOp>())) {
       auto testOp = symTbl.lookup<TestOp>(refOp.getTargetAttr().getAttr());
       if (!testOp) {
         refOp.emitError("invalid symbol reference: ") << refOp.getTargetAttr();
