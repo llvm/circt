@@ -910,25 +910,17 @@ struct NetOpConversion : public OpConversionPattern<NetOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
 
-    const auto kind = op.getKind();
-    if (op.getKind() != NetKind::Wire && op.getKind() != NetKind::Supply0 &&
-        op.getKind() != NetKind::Supply1) {
-      return rewriter.notifyMatchFailure(
-          loc, "only wire/supply0/supply1 nets supported");
-    }
-
     auto resultType = typeConverter->convertType(op.getResult().getType());
     if (!resultType)
       return rewriter.notifyMatchFailure(loc, "invalid net type");
 
-    // TODO: Once the core dialects support four-valued integers, this code
-    // will additionally need to generate an all-X value for four-valued nets.
     auto elementType = cast<llhd::RefType>(resultType).getNestedType();
     int64_t width = hw::getBitWidth(elementType);
     if (width == -1)
       return failure();
 
-    auto init = createInitialValue(kind, rewriter, loc, width, elementType);
+    auto init =
+        createInitialValue(op.getKind(), rewriter, loc, width, elementType);
     auto signal = rewriter.replaceOpWithNewOp<llhd::SignalOp>(
         op, resultType, op.getNameAttr(), init);
 
@@ -947,13 +939,20 @@ struct NetOpConversion : public OpConversionPattern<NetOp> {
                                         ConversionPatternRewriter &rewriter,
                                         Location loc, int64_t width,
                                         Type elementType) {
-    auto theConst = [&] {
-      if (kind == NetKind::Wire || kind == NetKind::Supply0)
-        return hw::ConstantOp::create(rewriter, loc, APInt::getZero(width));
-      if (kind == NetKind::Supply1)
-        return hw::ConstantOp::create(rewriter, loc, APInt::getAllOnes(width));
-      llvm_unreachable("unsupported net kind");
+    // TODO: Once the core dialects support four-valued integers, this code
+    // will additionally need to generate an all-X value for four-valued nets.
+    //
+    // If no driver is connected to a net, its value shall be high-impedance (z)
+    // unless the net is a trireg, in which case it shall hold the previously
+    // driven value.
+    //
+    // See IEEE 1800-2017 § 6.6 "Net types".
+    auto theInt = [&] {
+      if (kind == NetKind::Supply1 || kind == NetKind::Tri1)
+        return APInt::getAllOnes(width);
+      return APInt::getZero(width);
     }();
+    auto theConst = hw::ConstantOp::create(rewriter, loc, theInt);
     return rewriter.createOrFold<hw::BitcastOp>(loc, elementType, theConst);
   }
 };
