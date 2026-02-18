@@ -13,6 +13,7 @@
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -119,6 +120,9 @@ struct StructuralHasherSharedConstants {
 
   // This is a cached "moduleName" string attr.
   StringAttr moduleNameAttr;
+
+  // This is a cached "moduleNames" string attr.
+  StringAttr moduleNamesAttr;
 
   // This is a cached "portNames" string attr.
   StringAttr portNamesAttr;
@@ -301,6 +305,13 @@ private:
       // refers to module names through essential attributes.
       if (isa<InstanceOp>(op) && name == constants.moduleNameAttr) {
         referredModuleNames.push_back(cast<FlatSymbolRefAttr>(value).getAttr());
+        continue;
+      }
+
+      if (isa<InstanceChoiceOp>(op) && name == constants.moduleNamesAttr) {
+        for (auto module : cast<ArrayAttr>(value))
+          referredModuleNames.push_back(
+              cast<FlatSymbolRefAttr>(module).getAttr());
         continue;
       }
 
@@ -763,21 +774,38 @@ struct Equivalence {
   // NOLINTNEXTLINE(misc-no-recursion)
   LogicalResult check(InFlightDiagnostic &diag, FInstanceLike a,
                       FInstanceLike b) {
-    auto aName = a.getReferencedModuleNameAttr();
-    auto bName = b.getReferencedModuleNameAttr();
-    if (aName == bName)
+    // Get the list of module names from the list (for InstanceOp/ObjectOp,
+    // there's only one)
+    auto aNames = a.getReferencedModuleNamesAttr();
+    auto bNames = b.getReferencedModuleNamesAttr();
+    if (aNames == bNames)
       return success();
 
-    // If the modules instantiate are different we will want to know why the
-    // sub module did not dedupliate. This code recursively checks the child
-    // module.
-    auto aModule = instanceGraph.lookup(aName)->getModule();
-    auto bModule = instanceGraph.lookup(bName)->getModule();
-    // Create a new error for the submodule.
-    diag.attachNote(std::nullopt)
-        << "in instance " << a.getInstanceNameAttr() << " of " << aName
-        << ", and instance " << b.getInstanceNameAttr() << " of " << bName;
-    check(diag, aModule, bModule);
+    if (aNames.size() != bNames.size()) {
+      diag.attachNote(a->getLoc())
+          << "an instance has a different number of referenced "
+             "modules: first instance has "
+          << aNames.size() << " modules";
+      diag.attachNote(b->getLoc())
+          << "second instance has " << bNames.size() << " modules";
+      return failure();
+    }
+
+    for (auto [aName, bName] : llvm::zip(aNames.getAsRange<StringAttr>(),
+                                         bNames.getAsRange<StringAttr>())) {
+      if (aName == bName)
+        continue;
+      // If the modules instantiate are different we will want to know why the
+      // sub module did not dedupliate. This code recursively checks the child
+      // module.
+      auto aModule = instanceGraph.lookup(aName)->getModule();
+      auto bModule = instanceGraph.lookup(bName)->getModule();
+      // Create a new error for the submodule.
+      diag.attachNote(std::nullopt)
+          << "in instance " << a.getInstanceNameAttr() << " of " << aName
+          << ", and instance " << b.getInstanceNameAttr() << " of " << bName;
+      check(diag, aModule, bModule);
+    }
     return failure();
   }
 
@@ -1099,6 +1127,19 @@ private:
         auto classLike = cast<ClassLike>(*toNode->getModule());
         ClassType classType = detail::getInstanceTypeForClassLike(classLike);
         objectOp.getResult().setType(classType);
+      } else if (auto instanceChoiceOp = dyn_cast<InstanceChoiceOp>(*inst)) {
+        auto fromModuleName = fromNode->getModule().getModuleNameAttr();
+        SmallVector<Attribute> newModules;
+        for (auto module : instanceChoiceOp.getReferencedModuleNamesAttr()) {
+          auto moduleName = cast<StringAttr>(module);
+          if (moduleName == fromModuleName)
+            newModules.push_back(toModuleRef);
+          else
+            newModules.push_back(FlatSymbolRefAttr::get(moduleName));
+        }
+        instanceChoiceOp.setModuleNamesAttr(
+            ArrayAttr::get(context, newModules));
+        instanceChoiceOp.setPortNamesAttr(toModule.getPortNamesAttr());
       }
       oldInstRec->getParent()->addInstance(inst, toNode);
       oldInstRec->erase();
