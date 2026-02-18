@@ -13,6 +13,7 @@
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -31,7 +32,6 @@
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/SHA256.h"
 
@@ -782,10 +782,10 @@ struct Equivalence {
       return success();
 
     if (aNames.size() != bNames.size()) {
-      auto &note =
-          diag.attachNote(a->getLoc())
-          << "an instance has a different number of referenced modules: ";
-      note << "first instance has " << aNames.size() << " modules";
+      diag.attachNote(a->getLoc())
+          << "an instance has a different number of referenced "
+             "modules: first instance has "
+          << aNames.size() << " modules";
       diag.attachNote(b->getLoc())
           << "second instance has " << bNames.size() << " modules";
       return failure();
@@ -1128,15 +1128,18 @@ private:
         ClassType classType = detail::getInstanceTypeForClassLike(classLike);
         objectOp.getResult().setType(classType);
       } else if (auto instanceChoiceOp = dyn_cast<InstanceChoiceOp>(*inst)) {
+        auto fromModuleName = fromNode->getModule().getModuleNameAttr();
         SmallVector<Attribute> newModules;
-        for (auto module : instanceChoiceOp.getModuleNamesAttr()) {
-          if (module == fromNode->getModule().getModuleNameAttr())
+        for (auto module : instanceChoiceOp.getReferencedModuleNamesAttr()) {
+          auto moduleName = cast<StringAttr>(module);
+          if (moduleName == fromModuleName)
             newModules.push_back(toModuleRef);
           else
-            newModules.push_back(module);
+            newModules.push_back(FlatSymbolRefAttr::get(moduleName));
         }
         instanceChoiceOp.setModuleNamesAttr(
             ArrayAttr::get(context, newModules));
+        instanceChoiceOp.setPortNamesAttr(toModule.getPortNamesAttr());
       }
       oldInstRec->getParent()->addInstance(inst, toNode);
       oldInstRec->erase();
@@ -1649,8 +1652,6 @@ fixupSymbolSensitiveOp(Operation *op, InstanceGraph &instanceGraph,
       else
         fixupConnect(builder, result, wire);
     }
-
-    // FIXME: Handle InstanceChoiceOp.
   }
 
   // Use an attribute/type replacer to look for references to old symbols that
