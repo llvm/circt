@@ -60,6 +60,7 @@ if(Python3_FOUND)
       target_link_options(esiCppAccel PRIVATE
         -static-libstdc++
         -static-libgcc
+        -Wl,--exclude-libs,ALL
       )
     endif()
 
