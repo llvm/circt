@@ -1176,14 +1176,13 @@ struct ModulePortPruner : public OpReduction<firrtl::FModuleOp> {
     PortPrunerHelpers::updateInstancesAndErasePorts(module, users,
                                                     portsToRemove);
 
-    // Erase uses of port arguments within the module body
-    for (size_t portIdx = 0; portIdx < module.getNumPorts(); ++portIdx) {
-      if (portsToRemove[portIdx]) {
-        auto arg = module.getArgument(portIdx);
-        for (auto *user : llvm::make_early_inc_range(arg.getUsers()))
-          user->erase();
-      }
-    }
+    // Erase uses of port arguments within the module body.
+    for (size_t portIdx = 0; portIdx < module.getNumPorts(); ++portIdx)
+      if (portsToRemove[portIdx])
+        // Recursively erase each user and its dependent operations
+        for (auto *user :
+             llvm::make_early_inc_range(module.getArgument(portIdx).getUsers()))
+          reduce::pruneUnusedOps(user, *this);
 
     // Remove the ports from the module
     module.erasePorts(portsToRemove);
