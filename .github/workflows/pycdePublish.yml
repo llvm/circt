@@ -113,6 +113,22 @@ jobs:
           - cp313-win_amd64
     steps:
       # Since we don't use docker on Windows, we need to install the dependencies.
+      - name: Setup vcpkg binary caching
+        shell: pwsh
+        run: |
+          $vcpkgBinaryCacheDir = "${{ github.workspace }}\vcpkg-binary-cache"
+          New-Item -ItemType Directory -Force -Path $vcpkgBinaryCacheDir
+          echo "VCPKG_BINARY_SOURCES=clear;files,$vcpkgBinaryCacheDir,readwrite" >> $env:GITHUB_ENV
+
+      - name: Cache vcpkg binaries
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}\vcpkg-binary-cache
+          key: vcpkg-${{ runner.os }}-x64-windows-zlib-${{ matrix.python-env }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-x64-windows-zlib-
+            vcpkg-${{ runner.os }}-x64-windows-
+
       - name: Build additional c++ deps
         shell: pwsh
         run: |
