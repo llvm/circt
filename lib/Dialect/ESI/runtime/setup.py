@@ -83,6 +83,10 @@ class CMakeBuild(build_py):
           "-DPython_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
           "-DWHEEL_BUILD=ON",
       ]
+      
+      # Skip Python bindings for Debug builds on Windows (only build C++ libraries)
+      if cfg == "Debug" and platform.system() == "Windows":
+        cmake_args.append("-DESI_SKIP_PYTHON_BINDINGS=ON")
 
       # Get the nanobind cmake directory from the isolated build environment.
       # This is necessary because CMake's execute_process may not properly find
