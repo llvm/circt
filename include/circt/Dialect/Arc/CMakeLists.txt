@@ -2,7 +2,7 @@ add_circt_dialect(Arc arc)
 add_circt_doc(Arc Dialects/ArcOps -gen-op-doc)
 add_circt_doc(ArcTypes Dialects/ArcTypes -gen-typedef-doc -dialect arc)
 add_circt_doc(ArcAttributes Dialects/ArcAttributes -gen-attrdef-doc -dialect arc)
-add_circt_doc(ArcEnums Dialects/ArcEnums -gen-enum-doc -dialect arc)
+add_circt_doc(Arc Dialects/ArcEnums -gen-enum-doc -dialect arc)
 add_circt_doc(ArcInterfaces Dialects/ArcInterfaces -gen-op-interface-docs)
 
 set(LLVM_TARGET_DEFINITIONS ArcPasses.td)
