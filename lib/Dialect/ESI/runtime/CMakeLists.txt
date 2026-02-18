@@ -171,6 +171,11 @@ else()
 endif()
 add_library(esiaccel::ESICppRuntime ALIAS ESICppRuntime)
 
+# Set debug postfix for Windows libraries
+if(WIN32)
+  set_target_properties(ESICppRuntime PROPERTIES DEBUG_POSTFIX "d")
+endif()
+
 target_include_directories(ESICppRuntime PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include
 )
@@ -209,6 +214,15 @@ install(TARGETS ESICppRuntime
     PRE_EXCLUDE_REGEXES .*
   COMPONENT ESIRuntime
 )
+
+# Install PDB files for Windows Debug builds
+if(WIN32 AND MSVC)
+  install(FILES $<TARGET_PDB_FILE:ESICppRuntime>
+    DESTINATION ${ESIRT_INSTALL_LIBDIR}
+    COMPONENT ESIRuntime
+    OPTIONAL
+  )
+endif()
 
 install(FILES ${ESICppRuntimeHeaders}
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/esi
@@ -301,6 +315,11 @@ if(ESI_COSIM)
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/RpcServer.h
   )
 
+  # Set debug postfix for Windows libraries
+  if(WIN32)
+    set_target_properties(CosimRpc PROPERTIES DEBUG_POSTFIX "d")
+  endif()
+
   target_link_libraries(CosimRpc PUBLIC
     ESICppRuntime
     protobuf::libprotobuf
@@ -327,6 +346,11 @@ if(ESI_COSIM)
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Cosim.h
   )
 
+  # Set debug postfix for Windows libraries
+  if(WIN32)
+    set_target_properties(CosimBackend PROPERTIES DEBUG_POSTFIX "d")
+  endif()
+
   target_link_libraries(CosimBackend PUBLIC
     ESICppRuntime
     CosimRpc
@@ -345,6 +369,19 @@ if(ESI_COSIM)
         POST_EXCLUDE_REGEXES ".*system32/.*\\.dll"
       COMPONENT ESIRuntime
     )
+    # Install PDB files for Windows Debug builds
+    if(MSVC)
+      install(FILES $<TARGET_PDB_FILE:CosimRpc>
+        DESTINATION ${ESIRT_INSTALL_LIBDIR}
+        COMPONENT ESIRuntime
+        OPTIONAL
+      )
+      install(FILES $<TARGET_PDB_FILE:CosimBackend>
+        DESTINATION ${ESIRT_INSTALL_LIBDIR}
+        COMPONENT ESIRuntime
+        OPTIONAL
+      )
+    endif()
   else()
     install(TARGETS CosimRpc CosimBackend
       DESTINATION ${ESIRT_INSTALL_LIBDIR}
