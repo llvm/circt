@@ -154,21 +154,25 @@ struct StmtVisitor {
     return success();
   }
 
-  // Process slang BlockStatements. These comprise all standard `begin ... end` blocks
-  // as well as `fork ... join` constructs. Standard blocks can have their contents
-  // extracted directly, however fork-join blocks require special handling.
+  // Process slang BlockStatements. These comprise all standard `begin ... end`
+  // blocks as well as `fork ... join` constructs. Standard blocks can have
+  // their contents extracted directly, however fork-join blocks require special
+  // handling.
   LogicalResult visit(const slang::ast::BlockStatement &stmt) {
     moore::JoinKind kind;
     switch (stmt.blockKind) {
-      case slang::ast::StatementBlockKind::Sequential:
-        // Inline standard `begin ... end` blocks into the parent.
-        return context.convertStatement(stmt.body);
-      case slang::ast::StatementBlockKind::JoinAll:
-        kind = moore::JoinKind::Join; break;
-      case slang::ast::StatementBlockKind::JoinAny:
-        kind = moore::JoinKind::JoinAny; break;
-      case slang::ast::StatementBlockKind::JoinNone:
-        kind = moore::JoinKind::JoinNone; break;
+    case slang::ast::StatementBlockKind::Sequential:
+      // Inline standard `begin ... end` blocks into the parent.
+      return context.convertStatement(stmt.body);
+    case slang::ast::StatementBlockKind::JoinAll:
+      kind = moore::JoinKind::Join;
+      break;
+    case slang::ast::StatementBlockKind::JoinAny:
+      kind = moore::JoinKind::JoinAny;
+      break;
+    case slang::ast::StatementBlockKind::JoinNone:
+      kind = moore::JoinKind::JoinNone;
+      break;
     }
 
     auto forkOp = moore::ForkJoinOp::create(builder, loc, kind);
@@ -177,18 +181,19 @@ struct StmtVisitor {
     builder.setInsertionPointToStart(&body);
 
     // Slang stores all threads of a fork-join block inside a `StatementList`.
-    // This cannot be visited normally due to the need to make each statement a thread
-    // so must be converted here.
+    // This cannot be visited normally due to the need to make each statement a
+    // thread so must be converted here.
     auto &threadList = stmt.body.as<slang::ast::StatementList>();
 
-    for (auto *tStmt: threadList.list) {
+    for (auto *tStmt : threadList.list) {
       auto thread = moore::ThreadOp::create(builder, loc);
       OpBuilder::InsertionGuard g2(builder);
       auto &tBody = thread.getBody().emplaceBlock();
       builder.setInsertionPointToStart(&tBody);
 
-      // Populate thread operator with thread body and finish with a thread terminator.
-      if (failed(context.convertStatement(*tStmt))) 
+      // Populate thread operator with thread body and finish with a thread
+      // terminator.
+      if (failed(context.convertStatement(*tStmt)))
         return failure();
       moore::CompleteOp::create(builder, loc);
     }
