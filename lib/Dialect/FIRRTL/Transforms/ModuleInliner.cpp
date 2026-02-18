@@ -13,6 +13,7 @@
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -609,6 +610,21 @@ private:
   /// Identify all module-only NLA's, marking their MutableNLA's accordingly.
   void identifyNLAsTargetingOnlyModules();
 
+  /// Mark referenced modules of an unknown FInstanceLike operation as live.
+  /// For non-InstanceOp FInstanceLike operations (e.g., InstanceChoiceOp,
+  /// ObjectOp), we cannot inline them, so we need to mark their referenced
+  /// modules as live to prevent them from being deleted.
+  void markUnknownFInstanceLikeModulesLive(FInstanceLike instanceLike) {
+    for (auto module : instanceLike.getReferencedModuleNamesAttr()
+                           .getAsValueRange<StringAttr>()) {
+      auto *moduleOp = symbolTable.lookup(module);
+      if(liveModules.insert(moduleOp).second) {
+        if (auto fmodule = dyn_cast<FModuleOp>(moduleOp))
+        worklist.push_back(fmodule);
+      }
+    }
+  }
+
   /// Populate the activeHierpaths with the HierPaths that are active given the
   /// current hierarchy. This is the set of HierPaths that were active in the
   /// parent, and on the current instance. Also HierPaths that are rooted at
@@ -1041,6 +1057,8 @@ LogicalResult Inliner::flattenInto(StringRef prefix, InliningLevel &il,
     // If it's not an instance op, clone it and continue.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance) {
+      if (auto instanceLike = dyn_cast<FInstanceLike>(op))
+        markUnknownFInstanceLikeModulesLive(instanceLike);
       cloneAndRename(prefix, il, mapper, *op, symbolRenames, localSymbols);
       return success();
     }
@@ -1089,7 +1107,12 @@ LogicalResult Inliner::flattenInstances(FModuleOp module) {
   auto moduleName = module.getNameAttr();
   ModuleInliningContext mic(module);
 
-  auto visit = [&](InstanceOp instance) {
+  auto visit = [&](FInstanceLike instanceLike) {
+    auto instance = dyn_cast<InstanceOp>(*instanceLike);
+    if (!instance) {
+      markUnknownFInstanceLikeModulesLive(instanceLike);
+      return WalkResult::advance();
+    }
     // If it's not a regular module we can't inline it. Mark it as live.
     auto *targetModule = symbolTable.lookup(instance.getModuleName());
     auto target = dyn_cast<FModuleOp>(targetModule);
@@ -1163,6 +1186,9 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
     // If it's not an instance op, clone it and continue.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance) {
+      if (auto instanceLike = dyn_cast<FInstanceLike>(op))
+        markUnknownFInstanceLikeModulesLive(instanceLike);
+
       cloneAndRename(prefix, il, mapper, *op, symbolRenames, {});
       return success();
     }
@@ -1261,11 +1287,17 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
 }
 
 LogicalResult Inliner::inlineInstances(FModuleOp module) {
-  // Generate a namespace for this module so that we can safely inline symbols.
+  // Generate a namespace for this module so that we can safely inline
+  // symbols.
   auto moduleName = module.getNameAttr();
   ModuleInliningContext mic(module);
 
-  auto visit = [&](InstanceOp instance) {
+  auto visit = [&](FInstanceLike instanceLike) {
+    auto instance = dyn_cast<InstanceOp>(*instanceLike);
+    if (!instance) {
+      markUnknownFInstanceLikeModulesLive(instanceLike);
+      return WalkResult::advance();
+    }
     // If it's not a regular module we can't inline it. Mark it as live.
     auto *childModule = symbolTable.lookup(instance.getModuleName());
     auto target = dyn_cast<FModuleOp>(childModule);
