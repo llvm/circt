@@ -18,6 +18,21 @@ The Arc dialect is used by the *arcilator* simulation tool, which compiles Arc I
 [include "Dialects/ArcTypes.md"]
 
 
+## Attributes
+
+[include "Dialects/ArcAttributes.md"]
+
+
+## Enums
+
+[include "Dialects/ArcEnums.md"]
+
+
+## Interfaces
+
+[include "Dialects/ArcInterfaces.md"]
+
+
 ## Operations
 
 [include "Dialects/ArcOps.md"]
