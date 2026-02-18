@@ -281,11 +281,7 @@ target_link_libraries(esitester PRIVATE
 add_dependencies(ESIRuntime esitester)
 
 # Add the Python bindings.
-# Skip Python bindings in Debug wheel builds on Windows (they should only be built in Release)
-option(ESI_SKIP_PYTHON_BINDINGS "Skip building Python bindings" OFF)
-if(NOT ESI_SKIP_PYTHON_BINDINGS)
-  add_subdirectory(python)
-endif()
+add_subdirectory(python)
 
 ##===----------------------------------------------------------------------===//
 ## Backends are loaded dynamically as plugins.

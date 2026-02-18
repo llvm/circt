@@ -53,6 +53,11 @@ if(Python3_FOUND)
     nanobind_add_module(esiCppAccel
       ${CMAKE_CURRENT_SOURCE_DIR}/esiaccel/esiCppAccel.cpp)
 
+    # Set debug postfix for Windows Python modules (standard _d suffix)
+    if(WIN32)
+      set_target_properties(esiCppAccel PROPERTIES DEBUG_POSTFIX "_d")
+    endif()
+
     # For wheel builds on Linux, force static linking of libstdc++ to avoid
     # undefined symbols when ESICppRuntime's static libstdc++ symbols aren't
     # exported in its dynamic symbol table.
@@ -114,11 +119,27 @@ if(Python3_FOUND)
         DESTINATION .
         COMPONENT ESIRuntime
       )
+      # Install PDB files for Windows Debug builds
+      if(WIN32 AND MSVC)
+        install(FILES $<TARGET_PDB_FILE:esiCppAccel>
+          DESTINATION .
+          COMPONENT ESIRuntime
+          OPTIONAL
+        )
+      endif()
     else()
       install(TARGETS esiCppAccel
         DESTINATION python/esiaccel
         COMPONENT ESIRuntime
       )
+      # Install PDB files for Windows Debug builds
+      if(WIN32 AND MSVC)
+        install(FILES $<TARGET_PDB_FILE:esiCppAccel>
+          DESTINATION python/esiaccel
+          COMPONENT ESIRuntime
+          OPTIONAL
+        )
+      endif()
     endif()
     install(RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
       DESTINATION ${ESIRT_INSTALL_LIBDIR}
