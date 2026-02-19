@@ -59,7 +59,7 @@ class CMakeBuild(build_py):
     src_dir = _thisdir
 
     # On Windows, we build both Release and Debug configurations
-    # to support applications in both modes
+    # to support applications in both modes.
     configs_to_build = ["Release"]
     if platform.system() == "Windows":
       configs_to_build.append("Debug")
@@ -132,10 +132,17 @@ class CMakeBuild(build_py):
 
       # Finally run the cmake configure.
       print(f"Configuring {cfg} build...")
-      subprocess.check_call(["cmake", src_dir] + cmake_args, cwd=current_build_dir)
+      subprocess.check_call(["cmake", src_dir] + cmake_args,
+                            cwd=current_build_dir)
       print(" ".join(["cmake", src_dir] + cmake_args))
 
       # Run the build.
+      # For Debug builds on Windows, only build the C++ runtime and tools (not
+      # the Python extension). The debug Python extension requires a debug
+      # Python interpreter and nanobind's auto-linking conflicts with the
+      # debug build. The purpose of the Debug build is to include the debug
+      # DLLs, EXEs, and PDBs in the wheel, not the Python extension.
+
       print(f"Building {cfg} configuration...")
       subprocess.check_call(
           [
@@ -154,20 +161,33 @@ class CMakeBuild(build_py):
       # For subsequent configs (Debug on Windows), keep existing files.
       if cfg == "Release" and os.path.exists(target_dir):
         shutil.rmtree(target_dir)
-      
+
       print(f"Installing {cfg} configuration...")
-      subprocess.check_call(
-          [
-              "cmake",
-              "--install",
-              ".",
-              "--prefix",
-              os.path.join(target_dir, "esiaccel"),
-              "--component",
-              "ESIRuntime",
-          ],
-          cwd=current_build_dir,
-      )
+      if cfg == "Debug":
+        # For Debug builds, we only built the C++ runtime (not the Python
+        # extension), so we can't use cmake --install with the ESIRuntime
+        # component (it would fail trying to install the unbuilt Python
+        # extension). Instead, manually copy the debug DLLs and PDBs.
+        import glob
+        install_dir = os.path.join(target_dir, "esiaccel")
+        os.makedirs(install_dir, exist_ok=True)
+        for pattern in ["*.dll", "*.pdb", "*.exe"]:
+          for f in glob.glob(os.path.join(current_build_dir, pattern)):
+            print(f"  Installing {os.path.basename(f)}")
+            shutil.copy2(f, install_dir)
+      else:
+        subprocess.check_call(
+            [
+                "cmake",
+                "--install",
+                ".",
+                "--prefix",
+                os.path.join(target_dir, "esiaccel"),
+                "--component",
+                "ESIRuntime",
+            ],
+            cwd=current_build_dir,
+        )
 
 
 class NoopBuildExtension(build_ext):

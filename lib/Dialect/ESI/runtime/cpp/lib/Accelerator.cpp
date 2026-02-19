@@ -194,7 +194,13 @@ static void loadBackend(Context &ctxt, std::string backend) {
 #ifdef __linux__
   std::string backendFileName = "lib" + backend + "Backend.so";
 #elif _WIN32
+  // In MSVC debug builds, load the debug variant of the plugin DLL (e.g.
+  // CosimBackend_d.dll) to ensure compatibility.
+#if defined(_MSC_VER) && defined(_DEBUG)
+  std::string backendFileName = backend + "Backend_d.dll";
+#else
   std::string backendFileName = backend + "Backend.dll";
+#endif
 #else
 #eror "Unsupported platform"
 #endif
