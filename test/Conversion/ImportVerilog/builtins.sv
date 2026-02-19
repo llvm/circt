@@ -386,6 +386,15 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
   // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
   // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
+  // CHECK-NEXT: [[SAMPLED:%.+]] = ltl.sampled [[CURRENT]] : i1
+  sampled_clk: assert property (@(posedge clk_i) clk_i |=> $sampled(clk_i));
+  // CHECK: moore.procedure always {
+  // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[C_INT:%.+]] = moore.logic_to_int [[C]] : l1
+  // CHECK-NEXT: [[CB:%.+]] = moore.to_builtin_int [[C_INT]] : i1
+  // CHECK-NEXT: [[C2:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[C2_INT:%.+]] = moore.logic_to_int [[C2]] : l1
+  // CHECK-NEXT: [[CURRENT:%.+]] = moore.to_builtin_int [[C2_INT]] : i1
   // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[CURRENT]], 1 : i1
   // CHECK-NEXT: [[ROSE:%.+]] = comb.icmp ult [[PAST]], [[CURRENT]] : i1
   rising_clk: assert property (@(posedge clk_i) clk_i |=> $rose(clk_i));
