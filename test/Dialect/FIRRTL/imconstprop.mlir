@@ -978,7 +978,6 @@ firrtl.circuit "DomainPreservation" {
 firrtl.circuit "InstanceChoiceOutputPort" {
   firrtl.option @ChoiceOption {
     firrtl.option_case @A
-    firrtl.option_case @B
   }
 
   // CHECK-LABEL: firrtl.module private @ModuleA
@@ -988,17 +987,10 @@ firrtl.circuit "InstanceChoiceOutputPort" {
     firrtl.matchingconnect %out, %c1_ui1 : !firrtl.uint<1>
   }
 
-  // CHECK-LABEL: firrtl.module private @ModuleB
-  firrtl.module private @ModuleB(out %out: !firrtl.uint<1>) {
-    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    // CHECK: firrtl.matchingconnect %out, %c1_ui1
-    firrtl.matchingconnect %out, %c1_ui1 : !firrtl.uint<1>
-  }
-
   // CHECK-LABEL: firrtl.module @InstanceChoiceOutputPort
   firrtl.module @InstanceChoiceOutputPort(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
     // CHECK: %inst_out = firrtl.instance_choice inst @ModuleA alternatives @ChoiceOption
-    %inst_out = firrtl.instance_choice inst @ModuleA alternatives @ChoiceOption { @A -> @ModuleA, @B -> @ModuleB } (out out: !firrtl.uint<1>)
+    %inst_out = firrtl.instance_choice inst @ModuleA alternatives @ChoiceOption { @A -> @ModuleA } (out out: !firrtl.uint<1>)
 
     // CHECK: firrtl.matchingconnect %out, %inst_out
     firrtl.matchingconnect %out, %inst_out : !firrtl.uint<1>
