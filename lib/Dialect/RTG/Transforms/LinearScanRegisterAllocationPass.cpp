@@ -62,23 +62,11 @@ static void expireOldInterval(SmallVector<RegisterLiveRange *> &active,
   }
 }
 
-void LinearScanRegisterAllocationPass::runOnOperation() {
-  LLVM_DEBUG(llvm::dbgs() << "=== Processing "
-                          << OpWithFlags(getOperation(),
-                                         OpPrintingFlags().skipRegions())
-                          << "\n\n");
-
-  if (getOperation()->getNumRegions() != 1 ||
-      getOperation()->getRegion(0).getBlocks().size() != 1) {
-    getOperation()->emitError("expected a single region with a single block");
-    return signalPassFailure();
-  }
-
+static LogicalResult allocateRegistersForSegment(rtg::SegmentOp segOp) {
   DenseMap<Operation *, unsigned> opIndices;
   DenseMap<unsigned, Operation *> opByIndex;
   unsigned maxIdx;
-  for (auto [i, op] :
-       llvm::enumerate(getOperation()->getRegion(0).getBlocks().front())) {
+  for (auto [i, op] : llvm::enumerate(*segOp.getBody())) {
     // TODO: ideally check that the IR is already fully elaborated
     opIndices[&op] = i;
     opByIndex[i] = &op;
@@ -88,7 +76,7 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
   // Collect all the register intervals we have to consider.
   SmallVector<std::unique_ptr<RegisterLiveRange>> regRanges;
   SmallVector<RegisterLiveRange *> active;
-  for (auto &op : getOperation()->getRegion(0).getBlocks().front()) {
+  for (auto &op : *segOp.getBody()) {
     if (!isa<rtg::ConstantOp, rtg::VirtualRegisterOp>(&op) ||
         !isa<rtg::RegisterTypeInterface>(op.getResult(0).getType()))
       continue;
@@ -104,7 +92,7 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
       auto reg = dyn_cast<rtg::RegisterAttrInterface>(regOp.getValue());
       if (!reg) {
         op.emitError("expected register attribute");
-        return signalPassFailure();
+        return failure();
       }
       lr.fixedReg = reg;
     }
@@ -113,7 +101,7 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
       if (!isa<rtg::InstructionOpInterface, rtg::ValidateOp>(user)) {
         user->emitError("only operations implementing 'InstructionOpInterface' "
                         "and 'rtg.validate' are allowed to use registers");
-        return signalPassFailure();
+        return failure();
       }
 
       // TODO: support labels and control-flow loops (jumps in general)
@@ -158,7 +146,6 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
     }
 
     if (!availableReg) {
-      ++numRegistersSpilled;
       auto err = lr->regOp->emitError(
           "need to spill this register, but not supported yet");
       for (auto *a : active)
@@ -169,7 +156,7 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
           << "register live-range starts here";
       err.attachNote(opByIndex[lr->end]->getLoc())
           << "register live-range ends here";
-      return signalPassFailure();
+      return failure();
     }
 
     lr->fixedReg = availableReg;
@@ -191,5 +178,25 @@ void LinearScanRegisterAllocationPass::runOnOperation() {
 
     IRRewriter rewriter(reg->regOp);
     rewriter.replaceOpWithNewOp<rtg::ConstantOp>(reg->regOp, reg->fixedReg);
+  }
+
+  return success();
+}
+
+void LinearScanRegisterAllocationPass::runOnOperation() {
+  LLVM_DEBUG(llvm::dbgs() << "=== Processing "
+                          << OpWithFlags(getOperation(),
+                                         OpPrintingFlags().skipRegions())
+                          << "\n\n");
+
+  if (getOperation()->getNumRegions() != 1 ||
+      getOperation()->getRegion(0).getBlocks().size() != 1) {
+    getOperation()->emitError("expected a single region with a single block");
+    return signalPassFailure();
+  }
+
+  for (auto segOp : getOperation()->getRegion(0).getOps<rtg::SegmentOp>()) {
+    if (failed(allocateRegistersForSegment(segOp)))
+      return signalPassFailure();
   }
 }
