@@ -154,70 +154,62 @@ static LogicalResult mangleCircuitSymbols(CircuitOp circuit) {
   return success();
 }
 
-static void collectLayerSymbols(Block *block,
+static void collectLayerSymbols(LayerOp layer,
+                                SmallVectorImpl<FlatSymbolRefAttr> &stack,
                                 llvm::DenseSet<Attribute> &layers) {
-  SmallVector<std::pair<Block *, SmallVector<FlatSymbolRefAttr>>> worklist;
-  worklist.push_back({block, {}});
+  stack.push_back(FlatSymbolRefAttr::get(layer.getSymNameAttr()));
+  layers.insert(SymbolRefAttr::get(stack.front().getAttr(),
+                                   ArrayRef(stack).drop_front()));
+  for (auto child : layer.getOps<LayerOp>())
+    collectLayerSymbols(child, stack, layers);
+  stack.pop_back();
+}
 
-  while (!worklist.empty()) {
-    auto [currentBlock, prefix] = worklist.pop_back_val();
-
-    for (auto layer : currentBlock->getOps<LayerOp>()) {
-      auto layerName = FlatSymbolRefAttr::get(layer.getNameAttr());
-      SmallVector<FlatSymbolRefAttr> newPrefix = prefix;
-      newPrefix.push_back(layerName);
-
-      if (newPrefix.size() == 1) {
-        layers.insert(
-            SymbolRefAttr::get(layer.getContext(), newPrefix[0].getValue()));
-      } else {
-        layers.insert(SymbolRefAttr::get(layer.getContext(),
-                                         newPrefix[0].getValue(),
-                                         ArrayRef(newPrefix).drop_front()));
-      }
-      worklist.push_back({&layer.getBody().front(), newPrefix});
-    }
-  }
+static void collectLayerSymbols(CircuitOp circuit,
+                                llvm::DenseSet<Attribute> &layers) {
+  SmallVector<FlatSymbolRefAttr> stack;
+  for (auto layer : circuit.getOps<LayerOp>())
+    collectLayerSymbols(layer, stack, layers);
 }
 
 static LogicalResult
 verifyKnownLayers(FExtModuleOp extModule,
                   const llvm::DenseSet<Attribute> &availableLayers) {
-  if (auto knownLayersAttr = extModule.getKnownLayersAttr()) {
-    for (auto attr : knownLayersAttr) {
-      if (!availableLayers.contains(attr))
-        return extModule.emitOpError()
-               << "declares known layer " << cast<SymbolRefAttr>(attr)
-               << " but it is not defined in the linked circuit";
-    }
-  }
-  return success();
+  auto knownLayersAttr = extModule.getKnownLayersAttr();
+  if (!knownLayersAttr)
+    return success();
+
+  SmallVector<Attribute> missingLayers;
+  for (auto attr : knownLayersAttr)
+    if (!availableLayers.contains(attr))
+      missingLayers.push_back(attr);
+
+  if (missingLayers.empty())
+    return success();
+
+  auto diag = extModule.emitOpError()
+              << "declares known layers that are not defined in the linked "
+                 "circuit: ";
+  llvm::interleaveComma(missingLayers, diag,
+                        [&](Attribute attr) { diag << attr; });
+  return failure();
 }
 
-static LogicalResult mergeLayer(LayerOp rootDst, LayerOp rootSrc) {
-  SmallVector<std::pair<LayerOp, LayerOp>> worklist;
-  worklist.push_back({rootDst, rootSrc});
+static LogicalResult mergeLayer(LayerOp dst, LayerOp src) {
+  if (dst.getConvention() != src.getConvention())
+    return src.emitOpError("layer convention mismatch with existing layer");
 
-  while (!worklist.empty()) {
-    auto [dst, src] = worklist.pop_back_val();
+  SymbolTable dstSymbolTable(dst);
 
-    if (dst.getConvention() != src.getConvention())
-      return src.emitOpError("layer convention mismatch with existing layer");
-
-    SymbolTable dstSymbolTable(dst);
-
-    SmallVector<Operation *> opsToMove;
-    for (auto &op : src.getBody().front())
-      opsToMove.push_back(&op);
-    for (auto *op : opsToMove) {
-      if (auto srcChildLayer = dyn_cast<LayerOp>(op))
-        if (auto dstChildLayer = cast_if_present<LayerOp>(
-                dstSymbolTable.lookup(srcChildLayer.getNameAttr()))) {
-          worklist.push_back({dstChildLayer, srcChildLayer});
-          continue;
-        }
-      op->moveBefore(&dst.getBody().front(), dst.getBody().front().end());
-    }
+  for (auto &op : llvm::make_early_inc_range(src.getBody().front())) {
+    if (auto srcChildLayer = dyn_cast<LayerOp>(op))
+      if (auto dstChildLayer = cast_if_present<LayerOp>(
+              dstSymbolTable.lookup(srcChildLayer.getNameAttr()))) {
+        if (failed(mergeLayer(dstChildLayer, srcChildLayer)))
+          return failure();
+        continue;
+      }
+    op.moveBefore(&dst.getBody().front(), dst.getBody().front().end());
   }
   return success();
 }
@@ -346,7 +338,7 @@ LogicalResult LinkCircuitsPass::mergeCircuits() {
         return circuit->emitError("failed to mangle private symbol");
 
     llvm::DenseSet<Attribute> incomingLayers;
-    collectLayerSymbols(circuit.getBodyBlock(), incomingLayers);
+    collectLayerSymbols(circuit, incomingLayers);
 
     // TODO: other circuit attributes (such as enable_layers...)
     llvm::transform(circuit.getAnnotations().getValue(),

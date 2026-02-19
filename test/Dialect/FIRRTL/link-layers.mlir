@@ -128,8 +128,8 @@ firrtl.circuit "Bottom" {
 firrtl.circuit "Foo" {
   // Declaration requires both @A and @B
   firrtl.extmodule @Bar() attributes {knownLayers = [@A, @B]}
-  firrtl.layer @A bind {}
-  firrtl.layer @B bind {}
+  firrtl.layer @A inline {}
+  firrtl.layer @B inline {}
   firrtl.module @Foo() {
     firrtl.instance w @Bar()
   }
@@ -138,19 +138,19 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Bar" {
   // Definition provides both @A and @B
   firrtl.module @Bar() {}
-  firrtl.layer @A bind {
-    firrtl.layer @ChildA bind {}
+  firrtl.layer @A inline {
+    firrtl.layer @ChildA inline {}
   }
-  firrtl.layer @B bind {
-    firrtl.layer @ChildB bind {}
+  firrtl.layer @B inline {
+    firrtl.layer @ChildB inline {}
   }
 }
 
-// CHECK:      firrtl.layer @A bind {
-// CHECK-NEXT:   firrtl.layer @ChildA bind {
+// CHECK:      firrtl.layer @A inline {
+// CHECK-NEXT:   firrtl.layer @ChildA inline {
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
-// CHECK-NEXT: firrtl.layer @B bind {
-// CHECK-NEXT:   firrtl.layer @ChildB bind {
+// CHECK-NEXT: firrtl.layer @B inline {
+// CHECK-NEXT:   firrtl.layer @ChildB inline {
 // CHECK-NEXT:   }
 // CHECK-NEXT: }

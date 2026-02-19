@@ -16,7 +16,7 @@ firrtl.circuit "Foo" {
 
 // expected-error @-2 {{has colliding symbol Bar which cannot be merged}}
 firrtl.circuit "Foo" {
-  // expected-error @+1 {{declares known layer @A but it is not defined in the linked circuit}}
+  // expected-error @+1 {{'firrtl.extmodule' op declares known layers that are not defined in the linked circuit: @A}}
   firrtl.extmodule @Bar() attributes {knownLayers = [@A]}
   firrtl.module @Foo() {
     firrtl.instance bar @Bar()
@@ -32,13 +32,14 @@ firrtl.circuit "Bar" {
 
 // expected-error @-2 {{has colliding symbol Bar which cannot be merged}}
 firrtl.circuit "Foo" {
-  // expected-error @+1 {{declares known layer @B but it is not defined in the linked circuit}}
-  firrtl.extmodule @Bar() attributes {knownLayers = [@A, @B]}
+  // expected-error @+1 {{'firrtl.extmodule' op declares known layers that are not defined in the linked circuit: @B, @C}}
+  firrtl.extmodule @Bar() attributes {knownLayers = [@A, @B, @C]}
   firrtl.module @Foo() {
     firrtl.instance bar @Bar()
   }
   firrtl.layer @A bind {}
   firrtl.layer @B bind {}
+  firrtl.layer @C bind {}
 }
 
 firrtl.circuit "Bar" {
