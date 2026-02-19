@@ -2032,6 +2032,106 @@ public:
     return DeletionKind::Delete;
   }
 
+  FailureOr<DeletionKind> visitOp(index::SubOp op) {
+    size_t lhs = get<size_t>(op.getLhs());
+    size_t rhs = get<size_t>(op.getRhs());
+    state[op.getResult()] = lhs - rhs;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(index::MulOp op) {
+    size_t lhs = get<size_t>(op.getLhs());
+    size_t rhs = get<size_t>(op.getRhs());
+    state[op.getResult()] = lhs * rhs;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(index::DivUOp op) {
+    size_t lhs = get<size_t>(op.getLhs());
+    size_t rhs = get<size_t>(op.getRhs());
+
+    if (rhs == 0)
+      return op->emitOpError("attempted division by zero");
+
+    state[op.getResult()] = lhs / rhs;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(index::CeilDivUOp op) {
+    size_t lhs = get<size_t>(op.getLhs());
+    size_t rhs = get<size_t>(op.getRhs());
+
+    if (rhs == 0)
+      return op->emitOpError("attempted division by zero");
+
+    if (lhs == 0)
+      state[op.getResult()] = (lhs + rhs - 1) / rhs;
+    else
+      state[op.getResult()] = 1 + ((lhs - 1) / rhs);
+
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(index::RemUOp op) {
+    size_t lhs = get<size_t>(op.getLhs());
+    size_t rhs = get<size_t>(op.getRhs());
+
+    if (rhs == 0)
+      return op->emitOpError("attempted division by zero");
+
+    state[op.getResult()] = lhs % rhs;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(index::AndOp op) {
+    size_t lhs = get<size_t>(op.getLhs());
+    size_t rhs = get<size_t>(op.getRhs());
+    state[op.getResult()] = lhs & rhs;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(index::OrOp op) {
+    size_t lhs = get<size_t>(op.getLhs());
+    size_t rhs = get<size_t>(op.getRhs());
+    state[op.getResult()] = lhs | rhs;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(index::XOrOp op) {
+    size_t lhs = get<size_t>(op.getLhs());
+    size_t rhs = get<size_t>(op.getRhs());
+    state[op.getResult()] = lhs ^ rhs;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(index::ShlOp op) {
+    size_t lhs = get<size_t>(op.getLhs());
+    size_t rhs = get<size_t>(op.getRhs());
+    state[op.getResult()] = lhs << rhs;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(index::ShrUOp op) {
+    size_t lhs = get<size_t>(op.getLhs());
+    size_t rhs = get<size_t>(op.getRhs());
+    state[op.getResult()] = lhs >> rhs;
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(index::MaxUOp op) {
+    size_t lhs = get<size_t>(op.getLhs());
+    size_t rhs = get<size_t>(op.getRhs());
+    state[op.getResult()] = std::max(lhs, rhs);
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(index::MinUOp op) {
+    size_t lhs = get<size_t>(op.getLhs());
+    size_t rhs = get<size_t>(op.getRhs());
+    state[op.getResult()] = std::min(lhs, rhs);
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(index::CmpOp op) {
     size_t lhs = get<size_t>(op.getLhs());
     size_t rhs = get<size_t>(op.getRhs());
@@ -2181,7 +2281,10 @@ public:
             arith::AddIOp, arith::XOrIOp, arith::AndIOp, arith::OrIOp,
             arith::SelectOp,
             // Index ops
-            index::AddOp, index::CmpOp,
+            index::AddOp, index::SubOp, index::MulOp, index::DivUOp,
+            index::CeilDivUOp, index::RemUOp, index::AndOp, index::OrOp,
+            index::XOrOp, index::ShlOp, index::ShrUOp, index::MaxUOp,
+            index::MinUOp, index::CmpOp,
             // SCF ops
             scf::IfOp, scf::ForOp, scf::YieldOp>(
             [&](auto op) { return visitOp(op); })

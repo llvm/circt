@@ -409,6 +409,32 @@ def test8_random_integer(config):
   int_consumer(Integer.random(config.a, config.b))
 
 
+# MLIR-LABEL: rtg.test @test9_integer_arithmetic_ops
+# MLIR: rtg.substitute_sequence {{.*}}(%true)
+# MLIR: rtg.substitute_sequence {{.*}}(%true)
+# MLIR: rtg.substitute_sequence {{.*}}(%true)
+# MLIR: rtg.substitute_sequence {{.*}}(%true)
+# MLIR: rtg.substitute_sequence {{.*}}(%true)
+# MLIR: rtg.substitute_sequence {{.*}}(%true)
+# MLIR: rtg.substitute_sequence {{.*}}(%true)
+# MLIR: rtg.substitute_sequence {{.*}}(%true)
+
+
+@test(TwoIntegers)
+def test9_integer_arithmetic_ops(config):
+  a = Integer(10)
+  b = Integer(3)
+
+  consumer(a * b == Integer(30))
+  consumer(a // b == Integer(3))
+  consumer(a / b == Integer(4))
+  consumer(a % b == Integer(1))
+  consumer(a << Integer(2) == Integer(40))
+  consumer(a >> Integer(2) == Integer(2))
+  consumer(a.max(b) == Integer(10))
+  consumer(a.min(b) == Integer(3))
+
+
 # MLIR-LABEL: rtg.test @test90_tuples
 # MLIR-NEXT: [[V0:%.+]] = rtg.tuple_create %a, %b : index, i1
 # MLIR-NEXT: rtg.tuple_extract [[V0]] at 1 : !rtg.tuple<index, i1>
