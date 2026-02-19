@@ -861,11 +861,11 @@ firrtl.circuit "InstanceChoice" {
   // CHECK: firrtl.module public @InstanceChoice() {
   firrtl.module public @InstanceChoice() {
     // Effectful instance_choice cannot be moved.
-    // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK-NEXT:   %effectful_i, %effectful_o = firrtl.instance_choice effectful @Pure alternatives @Platform {
-    // CHECK-SAME:     @FPGA -> @Effectful
-    // CHECK-SAME:   } (in i: !firrtl.uint<1>, out o: !firrtl.uint<1>)
-    // CHECK-NEXT:   firrtl.matchingconnect %effectful_i, %c0_ui1 : !firrtl.uint<1>
+    // CHECK:      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK-NEXT: %effectful_i, %effectful_o = firrtl.instance_choice effectful @Pure alternatives @Platform {
+    // CHECK-SAME:   @FPGA -> @Effectful
+    // CHECK-SAME: } (in i: !firrtl.uint<1>, out o: !firrtl.uint<1>)
+    // CHECK-NEXT: firrtl.matchingconnect %effectful_i, %c0_ui1 : !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %effectful_i, %effectful_o = firrtl.instance_choice effectful @Pure alternatives @Platform {
       @FPGA -> @Effectful
@@ -873,14 +873,14 @@ firrtl.circuit "InstanceChoice" {
     firrtl.matchingconnect %effectful_i, %c0_ui1 : !firrtl.uint<1>
 
     // Pure instance_choice can be sunk into layerblock.
-    // CHECK:   firrtl.layerblock @A {
-    // CHECK-NEXT:     %c0_ui1_0 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK-NEXT:     %pure_i, %pure_o = firrtl.instance_choice pure @Pure alternatives @Platform {
-    // CHECK-SAME:       @FPGA -> @PureFPGA
-    // CHECK-SAME:     } (in i: !firrtl.uint<1>, out o: !firrtl.uint<1>)
-    // CHECK-NEXT:     firrtl.matchingconnect %pure_i, %c0_ui1_0 : !firrtl.uint<1>
-    // CHECK-NEXT:     "unknown"(%pure_o) : (!firrtl.uint<1>) -> ()
-    // CHECK-NEXT:   }
+    // CHECK:      firrtl.layerblock @A {
+    // CHECK-NEXT:   %c0_ui1_0 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK-NEXT:   %pure_i, %pure_o = firrtl.instance_choice pure @Pure alternatives @Platform {
+    // CHECK-SAME:     @FPGA -> @PureFPGA
+    // CHECK-SAME:   } (in i: !firrtl.uint<1>, out o: !firrtl.uint<1>)
+    // CHECK-NEXT:   firrtl.matchingconnect %pure_i, %c0_ui1_0 : !firrtl.uint<1>
+    // CHECK-NEXT:   "unknown"(%pure_o) : (!firrtl.uint<1>) -> ()
+    // CHECK-NEXT: }
     %c0_ui1_0 = firrtl.constant 0 : !firrtl.uint<1>
     %pure_i, %pure_o = firrtl.instance_choice pure @Pure alternatives @Platform {
       @FPGA -> @PureFPGA
@@ -890,7 +890,7 @@ firrtl.circuit "InstanceChoice" {
       "unknown"(%pure_o) : (!firrtl.uint<1>) -> ()
     }
 
-    // CHECK:   firrtl.layerblock @A {
+    // CHECK:      firrtl.layerblock @A {
     // CHECK-NEXT:     "unknown"(%effectful_o) : (!firrtl.uint<1>) -> ()
     // CHECK-NEXT:   }
     // CHECK-NEXT: }

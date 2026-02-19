@@ -347,8 +347,7 @@ void DemandInfo::updateConnects(WorkStack &work, Operation *op, Demand demand) {
           updateConnects(work, result, demand);
       })
       .Case<InstanceOp, InstanceChoiceOp>([&](auto op) {
-        auto dirs = op.getPortDirections();
-        for (auto [i, dir] : llvm::enumerate(dirs))
+        for (auto [i, dir] : llvm::enumerate(op.getPortDirections()))
           if (direction::get(dir) == Direction::In)
             updateConnects(work, op->getResult(i), demand);
       });
