@@ -20,3 +20,28 @@ lit.site.cfg.py
 
 # External software
 /ext
+
+# LLVM subprojects not needed for CIRCT
+# NOTE: This is not necessary as they are in a submodule, but this helps
+#       optimize LLM context indexing.
+/llvm/bolt
+/llvm/clang-tools-extra
+/llvm/compiler-rt
+/llvm/cross-project-tests
+/llvm/flang
+/llvm/flang-rt
+/llvm/libc
+/llvm/libclc
+/llvm/libcxx
+/llvm/libcxxabi
+/llvm/libsycl
+/llvm/libunwind
+/llvm/lld
+/llvm/lldb
+/llvm/llvm-libgcc
+/llvm/offload
+/llvm/openmp
+/llvm/orc-rt
+/llvm/polly
+/llvm/runtimes
+/llvm/third-party
