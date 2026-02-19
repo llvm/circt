@@ -117,6 +117,7 @@ def HWVectorization : Pass<"hw-vectorization", "hw::HWModuleOp"> {
    This pass performs structural vectorization of hardware modules,
     merging scalar bit-level assignments into vectorized operations.
   }];
+  let dependentDialects = ["circt::comb::CombDialect", "circt::hw::HWDialect"];
 }
 
 def HWParameterizeConstantPorts : Pass<"hw-parameterize-constant-ports",
