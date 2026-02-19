@@ -4,22 +4,27 @@
 // CHECK-SAME:    %arg0: !llvm.ptr
 // CHECK-SAME:    %arg1: !llvm.ptr
 // CHECK-SAME:    %arg2: !llvm.ptr
+// CHECK-SAME:    %arg3: i64
 // CHECK-SAME:  ) -> !llvm.struct<(
 // CHECK-SAME:    ptr
 // CHECK-SAME:    ptr
+// CHECK-SAME:    ptr
+// CHECK-SAME:    i64
 // CHECK-SAME:  )> {
 func.func @Types(
   %arg0: !arc.storage,
   %arg1: !arc.state<i1>,
-  %arg2: !arc.memory<4 x i7, i2>
+  %arg2: !arc.memory<4 x i7, i2>,
+  %arg3: !llhd.time
 ) -> (
   !arc.storage,
   !arc.state<i1>,
-  !arc.memory<4 x i7, i2>
+  !arc.memory<4 x i7, i2>,
+  !llhd.time
 ) {
-  return %arg0, %arg1, %arg2 : !arc.storage, !arc.state<i1>, !arc.memory<4 x i7, i2>
+  return %arg0, %arg1, %arg2, %arg3 : !arc.storage, !arc.state<i1>, !arc.memory<4 x i7, i2>, !llhd.time
   // CHECK: llvm.return
-  // CHECK-SAME: !llvm.struct<(ptr, ptr, ptr)>
+  // CHECK-SAME: !llvm.struct<(ptr, ptr, ptr, i64)>
 }
 // CHECK-NEXT: }
 
@@ -31,14 +36,15 @@ func.func @Types(
 // CHECK-SAME:    ptr
 // CHECK-SAME:  )> {
 func.func @StorageTypes(%arg0: !arc.storage) -> (!arc.state<i1>, !arc.memory<4 x i1, i2>, !arc.storage) {
+  // Note: offsets are shifted by 8 bytes in LLVM lowering for the time header.
   %0 = arc.storage.get %arg0[42] : !arc.storage -> !arc.state<i1>
-  // CHECK-NEXT: [[OFFSET:%.+]] = llvm.mlir.constant(42 :
+  // CHECK-NEXT: [[OFFSET:%.+]] = llvm.mlir.constant(50 :
   // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[[[OFFSET]]]
   %1 = arc.storage.get %arg0[43] : !arc.storage -> !arc.memory<4 x i1, i2>
-  // CHECK-NEXT: [[OFFSET:%.+]] = llvm.mlir.constant(43 :
+  // CHECK-NEXT: [[OFFSET:%.+]] = llvm.mlir.constant(51 :
   // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[[[OFFSET]]]
   %2 = arc.storage.get %arg0[44] : !arc.storage -> !arc.storage
-  // CHECK-NEXT: [[OFFSET:%.+]] = llvm.mlir.constant(44 :
+  // CHECK-NEXT: [[OFFSET:%.+]] = llvm.mlir.constant(52 :
   // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[[[OFFSET]]]
   return %0, %1, %2 : !arc.state<i1>, !arc.memory<4 x i1, i2>, !arc.storage
   // CHECK: llvm.return
@@ -47,17 +53,18 @@ func.func @StorageTypes(%arg0: !arc.storage) -> (!arc.state<i1>, !arc.memory<4 x
 
 // CHECK-LABEL: llvm.func @StateAllocation(
 // CHECK-SAME:    %arg0: !llvm.ptr) {
+// Note: offsets are shifted by 8 bytes in LLVM lowering for the time header.
 func.func @StateAllocation(%arg0: !arc.storage<10>) {
   arc.root_input "a", %arg0 {offset = 0} : (!arc.storage<10>) -> !arc.state<i1>
-  // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[0]
+  // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[8]
   arc.root_output "b", %arg0 {offset = 1} : (!arc.storage<10>) -> !arc.state<i2>
-  // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[1]
+  // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[9]
   arc.alloc_state %arg0 {offset = 2} : (!arc.storage<10>) -> !arc.state<i3>
-  // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[2]
+  // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[10]
   arc.alloc_memory %arg0 {offset = 3, stride = 1} : (!arc.storage<10>) -> !arc.memory<4 x i1, i2>
-  // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[3]
+  // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[11]
   arc.alloc_storage %arg0[7] : (!arc.storage<10>) -> !arc.storage<3>
-  // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[7]
+  // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[15]
   return
   // CHECK-NEXT: llvm.return
 }
@@ -67,7 +74,7 @@ func.func @StateAllocation(%arg0: !arc.storage<10>) {
 // CHECK-SAME:    %arg0: !llvm.ptr) {
 func.func @StateUpdates(%arg0: !arc.storage<1>) {
   %0 = arc.alloc_state %arg0 {offset = 0} : (!arc.storage<1>) -> !arc.state<i1>
-  // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[0]
+  // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[8]
   %1 = arc.state_read %0 : <i1>
   // CHECK-NEXT: [[LOAD:%.+]] = llvm.load [[PTR]] : !llvm.ptr -> i1
   arc.state_write %0 = %1 : <i1>
@@ -89,7 +96,7 @@ func.func @StateUpdates(%arg0: !arc.storage<1>) {
 // CHECK-SAME:    %arg0: !llvm.ptr, %arg1: i1) {
 func.func @MemoryUpdates(%arg0: !arc.storage<24>, %enable: i1) {
   %0 = arc.alloc_memory %arg0 {offset = 0, stride = 6} : (!arc.storage<24>) -> !arc.memory<4 x i42, i19>
-  // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[0]
+  // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[8]
 
   %clk = hw.constant true
   %c3_i19 = hw.constant 3 : i19
@@ -325,3 +332,22 @@ func.func @issue9171(%arg0: !arc.state<!hw.array<4xi1>>, %idx: i2) -> (i1) {
 arc.runtime.model @arcRuntimeModel_fooModelSym "fooModelName" numStateBytes 1234567
 
 func.func private @Dummy(%arg0: i42, %arg1: !hw.array<4xi19>, %arg2: !arc.storage)
+
+
+// CHECK-LABEL: llvm.func @Time
+// CHECK-SAME: (%arg0: !llvm.ptr)
+// CHECK-SAME: -> !llvm.struct<(i64, i64, i64)>
+func.func @Time(%arg0: !arc.storage<42>) -> (i64, !llhd.time, i64) {
+  // CHECK-NEXT: [[TIME:%.+]] = llvm.load %arg0 : !llvm.ptr -> i64
+  // CHECK-NOT: int_to_time
+  // CHECK-NOT: time_to_int
+  %0 = arc.current_time %arg0 : !arc.storage<42>
+  %1 = llhd.int_to_time %0
+  %2 = llhd.time_to_int %1
+  // CHECK-NEXT: [[TMP1:%.+]] = llvm.mlir.poison : !llvm.struct<(i64, i64, i64)>
+  // CHECK-NEXT: [[TMP2:%.+]] = llvm.insertvalue [[TIME]], [[TMP1]][0]
+  // CHECK-NEXT: [[TMP3:%.+]] = llvm.insertvalue [[TIME]], [[TMP2]][1]
+  // CHECK-NEXT: [[TMP4:%.+]] = llvm.insertvalue [[TIME]], [[TMP3]][2]
+  // CHECK-NEXT: llvm.return [[TMP4]]
+  return %0, %1, %2 : i64, !llhd.time, i64
+}

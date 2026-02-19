@@ -17,6 +17,8 @@
 #include "circt/Dialect/Arc/Runtime/JITBind.h"
 #include "circt/Dialect/Arc/Runtime/TraceTaps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
+#include "circt/Dialect/LLHD/LLHDTypes.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Support/ConversionPatternSet.h"
@@ -60,6 +62,11 @@ using namespace runtime;
 // Lowering Patterns
 //===----------------------------------------------------------------------===//
 
+// The start of the model's memory contains some basic values that are the same
+// across all models. State allocations follow this initial header and require
+// their byte offset to be shifted by a fixed amoutn in the LLVM lowering.
+static constexpr unsigned kStateOffset = 8;
+
 static llvm::Twine evalSymbolFromModelName(StringRef modelName) {
   return modelName + "_eval";
 }
@@ -97,9 +104,10 @@ struct AllocStorageOpLowering
     auto type = typeConverter->convertType(op.getType());
     if (!op.getOffset().has_value())
       return failure();
+    auto offset = *op.getOffset() + kStateOffset;
     rewriter.replaceOpWithNewOp<LLVM::GEPOp>(op, type, rewriter.getI8Type(),
                                              adaptor.getInput(),
-                                             LLVM::GEPArg(*op.getOffset()));
+                                             LLVM::GEPArg(offset));
     return success();
   }
 };
@@ -117,10 +125,10 @@ struct AllocStateLikeOpLowering : public OpConversionPattern<ConcreteOp> {
     auto offsetAttr = op->template getAttrOfType<IntegerAttr>("offset");
     if (!offsetAttr)
       return failure();
+    auto offset = offsetAttr.getValue().getZExtValue() + kStateOffset;
     Value ptr = LLVM::GEPOp::create(
         rewriter, op->getLoc(), adaptor.getStorage().getType(),
-        rewriter.getI8Type(), adaptor.getStorage(),
-        LLVM::GEPArg(offsetAttr.getValue().getZExtValue()));
+        rewriter.getI8Type(), adaptor.getStorage(), LLVM::GEPArg(offset));
     rewriter.replaceOp(op, ptr);
     return success();
   }
@@ -157,6 +165,48 @@ struct StateWriteOpLowering : public OpConversionPattern<arc::StateWriteOp> {
   }
 };
 
+//===----------------------------------------------------------------------===//
+// Time Operations Lowering
+//===----------------------------------------------------------------------===//
+
+struct CurrentTimeOpLowering : public OpConversionPattern<arc::CurrentTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(arc::CurrentTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    // Time is stored at offset 0 in storage (no offset needed).
+    Value ptr = adaptor.getStorage();
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, rewriter.getI64Type(), ptr);
+    return success();
+  }
+};
+
+// `llhd.int_to_time is a no-op
+struct IntToTimeOpLowering : public OpConversionPattern<llhd::IntToTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(llhd::IntToTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOp(op, adaptor.getInput());
+    return success();
+  }
+};
+
+// `llhd.time_to_int is a no-op
+struct TimeToIntOpLowering : public OpConversionPattern<llhd::TimeToIntOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(llhd::TimeToIntOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOp(op, adaptor.getInput());
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// Memory and Storage Lowering
+//===----------------------------------------------------------------------===//
+
 struct AllocMemoryOpLowering : public OpConversionPattern<arc::AllocMemoryOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -165,10 +215,10 @@ struct AllocMemoryOpLowering : public OpConversionPattern<arc::AllocMemoryOp> {
     auto offsetAttr = op->getAttrOfType<IntegerAttr>("offset");
     if (!offsetAttr)
       return failure();
+    auto offset = offsetAttr.getValue().getZExtValue() + kStateOffset;
     Value ptr = LLVM::GEPOp::create(
         rewriter, op.getLoc(), adaptor.getStorage().getType(),
-        rewriter.getI8Type(), adaptor.getStorage(),
-        LLVM::GEPArg(offsetAttr.getValue().getZExtValue()));
+        rewriter.getI8Type(), adaptor.getStorage(), LLVM::GEPArg(offset));
 
     rewriter.replaceOp(op, ptr);
     return success();
@@ -180,11 +230,12 @@ struct StorageGetOpLowering : public OpConversionPattern<arc::StorageGetOp> {
   LogicalResult
   matchAndRewrite(arc::StorageGetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    Value offset = LLVM::ConstantOp::create(
-        rewriter, op.getLoc(), rewriter.getI32Type(), op.getOffsetAttr());
+    auto offset = op.getOffset() + kStateOffset;
+    Value offsetVal = LLVM::ConstantOp::create(rewriter, op.getLoc(),
+                                               rewriter.getI32Type(), offset);
     Value ptr = LLVM::GEPOp::create(
         rewriter, op.getLoc(), adaptor.getStorage().getType(),
-        rewriter.getI8Type(), adaptor.getStorage(), offset);
+        rewriter.getI8Type(), adaptor.getStorage(), offsetVal);
     rewriter.replaceOp(op, ptr);
     return success();
   }
@@ -358,9 +409,10 @@ protected:
   Value createPtrToPortState(ConversionPatternRewriter &rewriter, Location loc,
                              Value state, const StateInfo &port) const {
     MLIRContext *ctx = rewriter.getContext();
+    auto offset = port.offset + kStateOffset;
     return LLVM::GEPOp::create(rewriter, loc, LLVM::LLVMPointerType::get(ctx),
                                IntegerType::get(ctx, 8), state,
-                               LLVM::GEPArg(port.offset));
+                               LLVM::GEPArg(offset));
   }
 
   llvm::DenseMap<StringRef, ModelInfoMap> &modelInfo;
@@ -444,7 +496,7 @@ struct SimInstantiateOpLowering
         return mallocFunc;
 
       Value numStateBytes = LLVM::ConstantOp::create(
-          rewriter, loc, convertedIndex, model.numStateBytes);
+          rewriter, loc, convertedIndex, model.numStateBytes + kStateOffset);
       allocated = LLVM::CallOp::create(rewriter, loc, mallocFunc.value(),
                                        ValueRange{numStateBytes})
                       .getResult();
@@ -578,6 +630,36 @@ struct SimStepOpLowering : public ModelAwarePattern<arc::SimStepOp> {
     rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, mlir::TypeRange(), evalFunc,
                                               adaptor.getInstance());
 
+    return success();
+  }
+};
+
+// Loads the simulation time (i64 femtoseconds) from byte offset 0 in the
+// model instance's state storage.
+struct SimGetTimeOpLowering : public OpConversionPattern<arc::SimGetTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(arc::SimGetTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    // Time is stored at offset 0 in the instance storage.
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, rewriter.getI64Type(),
+                                              adaptor.getInstance());
+    return success();
+  }
+};
+
+// Stores the simulation time (i64 femtoseconds) to byte offset 0 in the
+// model instance's state storage.
+struct SimSetTimeOpLowering : public OpConversionPattern<arc::SimSetTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(arc::SimSetTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    // Time is stored at offset 0 in the instance storage.
+    rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getTime(),
+                                               adaptor.getInstance());
     return success();
   }
 };
@@ -786,13 +868,14 @@ foldFormatString(ConversionPatternRewriter &rewriter, Value fstringValue,
             FmtDescriptor d = FmtDescriptor::createChar();
             return FormatInfo{{d}, {op.getValue()}};
           })
-      .Case<sim::FormatDecOp>([&](sim::FormatDecOp op)
-                                  -> FailureOr<FormatInfo> {
-        FmtDescriptor d = FmtDescriptor::createInt(
-            op.getValue().getType().getWidth(), 10, op.getIsLeftAligned(),
-            op.getSpecifierWidth().value_or(-1), false, op.getIsSigned());
-        return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
-      })
+      .Case<sim::FormatDecOp>(
+          [&](sim::FormatDecOp op) -> FailureOr<FormatInfo> {
+            FmtDescriptor d = FmtDescriptor::createInt(
+                op.getValue().getType().getWidth(), 10, op.getIsLeftAligned(),
+                op.getSpecifierWidth().value_or(-1), false, op.getIsSigned());
+            return FormatInfo{{d},
+                              {reg2mem(rewriter, op.getLoc(), op.getValue())}};
+          })
       .Case<sim::FormatHexOp>([&](sim::FormatHexOp op)
                                   -> FailureOr<FormatInfo> {
         FmtDescriptor d = FmtDescriptor::createInt(
@@ -800,13 +883,14 @@ foldFormatString(ConversionPatternRewriter &rewriter, Value fstringValue,
             op.getSpecifierWidth().value_or(-1), op.getIsHexUppercase(), false);
         return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
       })
-      .Case<sim::FormatOctOp>([&](sim::FormatOctOp op)
-                                  -> FailureOr<FormatInfo> {
-        FmtDescriptor d = FmtDescriptor::createInt(
-            op.getValue().getType().getWidth(), 8, op.getIsLeftAligned(),
-            op.getSpecifierWidth().value_or(-1), false, false);
-        return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
-      })
+      .Case<sim::FormatOctOp>(
+          [&](sim::FormatOctOp op) -> FailureOr<FormatInfo> {
+            FmtDescriptor d = FmtDescriptor::createInt(
+                op.getValue().getType().getWidth(), 8, op.getIsLeftAligned(),
+                op.getSpecifierWidth().value_or(-1), false, false);
+            return FormatInfo{{d},
+                              {reg2mem(rewriter, op.getLoc(), op.getValue())}};
+          })
       .Case<sim::FormatLiteralOp>(
           [&](sim::FormatLiteralOp op) -> FailureOr<FormatInfo> {
             if (op.getLiteral().size() < 8 &&
@@ -1262,6 +1346,10 @@ void LowerArcToLLVMPass::runOnOperation() {
   converter.addConversion([&](sim::FormatStringType type) {
     return LLVM::LLVMPointerType::get(type.getContext());
   });
+  converter.addConversion([&](llhd::TimeType type) {
+    // LLHD time is represented as i64 femtoseconds.
+    return IntegerType::get(type.getContext(), 64);
+  });
 
   // Setup the conversion patterns.
   ConversionPatternSet patterns(&getContext(), converter);
@@ -1299,6 +1387,8 @@ void LowerArcToLLVMPass::runOnOperation() {
     AllocStorageOpLowering,
     ClockGateOpLowering,
     ClockInvOpLowering,
+    CurrentTimeOpLowering,
+    IntToTimeOpLowering,
     MemoryReadOpLowering,
     MemoryWriteOpLowering,
     ModelOpLowering,
@@ -1306,9 +1396,12 @@ void LowerArcToLLVMPass::runOnOperation() {
     ReplaceOpWithInputPattern<seq::FromClockOp>,
     RuntimeModelOpLowering,
     SeqConstClockLowering,
+    SimGetTimeOpLowering,
+    SimSetTimeOpLowering,
     StateReadOpLowering,
     StateWriteOpLowering,
     StorageGetOpLowering,
+    TimeToIntOpLowering,
     ZeroCountOpLowering
   >(converter, &getContext());
   // clang-format on
