@@ -986,3 +986,33 @@ firrtl.circuit "InstanceChoice" {
     firrtl.connect %y, %inst2_out : !firrtl.uint<8>, !firrtl.uint<8>
   }
 }
+
+// When we skip deduplicating two modules only because they are both public,
+// we need to make sure that they are recorded in the dedup map. This test
+// should not deduplicate Bar_1 and Bar2, as well the NLA should
+// remain valid.
+// https://github.com/llvm/circt/issues/9697
+// CHECK-LABEL: firrtl.circuit "PublicModuleNoDedup"
+firrtl.circuit "PublicModuleNoDedup" {
+  // CHECK: hw.hierpath private @nla [@PublicModuleNoDedup::@sym, @Bar_2::@sym, @Baz_3]
+  hw.hierpath private @nla [@PublicModuleNoDedup::@sym, @Bar_2::@sym, @Baz_3]
+  // CHECK: firrtl.module @Baz_1
+  firrtl.module @Baz_1(out %a: !firrtl.uint<1>) {}
+  // CHECK: firrtl.module @Baz_2
+  firrtl.module @Baz_2(out %a: !firrtl.uint<1>) {}
+  // CHECK: firrtl.module @Baz_3
+  firrtl.module @Baz_3(out %a: !firrtl.uint<1>) {}
+  // CHECK: firrtl.module private @Bar_1
+  firrtl.module private @Bar_1() {
+    // CHECK-NEXT: firrtl.instance baz @Baz_2
+    %a = firrtl.instance baz @Baz_2(out a: !firrtl.uint<1>)
+  }
+  // CHECK: firrtl.module private @Bar_2
+  firrtl.module private @Bar_2() {
+    // CHECK-NEXT: firrtl.instance baz sym @sym @Baz_3
+    %a = firrtl.instance baz sym @sym @Baz_3(out a: !firrtl.uint<1>)
+  }
+  firrtl.module @PublicModuleNoDedup() {
+    firrtl.instance bar sym @sym @Bar_2()
+  }
+}
