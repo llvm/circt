@@ -99,6 +99,18 @@ MLIR_CAPI_EXPORTED bool rtgTypeIsAArray(MlirType type);
 /// Returns the element type of the RTG array.
 MLIR_CAPI_EXPORTED MlirType rtgArrayTypeGetElementType(MlirType type);
 
+/// If the type is an RTG map.
+MLIR_CAPI_EXPORTED bool rtgTypeIsAMap(MlirType type);
+
+/// Creates an RTG map type in the context.
+MLIR_CAPI_EXPORTED MlirType rtgMapTypeGet(MlirType keyType, MlirType valueType);
+
+/// Return the key type of the RTG map.
+MLIR_CAPI_EXPORTED MlirType rtgMapTypeGetKeyType(MlirType type);
+
+/// Return the value type of the RTG map.
+MLIR_CAPI_EXPORTED MlirType rtgMapTypeGetValueType(MlirType type);
+
 /// Creates an RTG tuple type in the context.
 MLIR_CAPI_EXPORTED MlirType rtgTupleTypeGet(MlirContext ctxt,
                                             intptr_t numFields,
@@ -217,6 +229,21 @@ MLIR_CAPI_EXPORTED MlirAttribute rtgLabelAttrGet(MlirContext ctx,
 
 /// Returns the name of the RTG label attribute.
 MLIR_CAPI_EXPORTED MlirStringRef rtgLabelAttrGetName(MlirAttribute attr);
+
+/// Checks if the attribute is an RTG map attribute.
+MLIR_CAPI_EXPORTED bool rtgAttrIsAMap(MlirAttribute attr);
+
+/// Creates an RTG map attribute in the context with the given entries.
+MLIR_CAPI_EXPORTED MlirAttribute rtgMapAttrGet(MlirContext ctx,
+                                               MlirType mapType,
+                                               intptr_t numEntries,
+                                               MlirAttribute const *keys,
+                                               MlirAttribute const *values);
+
+/// Looks up the value associated with the given key in the RTG map attribute.
+/// Returns a null attribute if the key is not found.
+MLIR_CAPI_EXPORTED MlirAttribute rtgMapAttrLookup(MlirAttribute attr,
+                                                  MlirAttribute key);
 
 #ifdef __cplusplus
 }

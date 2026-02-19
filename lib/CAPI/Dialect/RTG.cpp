@@ -134,6 +134,23 @@ MlirType rtgArrayTypeGetElementType(MlirType type) {
   return wrap(cast<ArrayType>(unwrap(type)).getElementType());
 }
 
+// MapType
+//===----------------------------------------------------------------------===//
+
+bool rtgTypeIsAMap(MlirType type) { return isa<MapType>(unwrap(type)); }
+
+MlirType rtgMapTypeGet(MlirType keyType, MlirType valueType) {
+  return wrap(MapType::get(unwrap(keyType), unwrap(valueType)));
+}
+
+MlirType rtgMapTypeGetKeyType(MlirType type) {
+  return wrap(cast<MapType>(unwrap(type)).getKeyType());
+}
+
+MlirType rtgMapTypeGetValueType(MlirType type) {
+  return wrap(cast<MapType>(unwrap(type)).getValueType());
+}
+
 // TupleType
 //===----------------------------------------------------------------------===//
 
@@ -331,6 +348,35 @@ MlirAttribute rtgLabelAttrGet(MlirContext ctx, MlirStringRef name) {
 
 MlirStringRef rtgLabelAttrGetName(MlirAttribute attr) {
   return wrap(cast<LabelAttr>(unwrap(attr)).getName());
+}
+
+// MapAttr
+//===----------------------------------------------------------------------===//
+
+bool rtgAttrIsAMap(MlirAttribute attr) {
+  return isa<rtg::MapAttr>(unwrap(attr));
+}
+
+MlirAttribute rtgMapAttrGet(MlirContext ctx, MlirType mapType,
+                            intptr_t numEntries, MlirAttribute const *keys,
+                            MlirAttribute const *values) {
+  DenseMap<TypedAttr, TypedAttr> entries;
+  for (unsigned i = 0; i < numEntries; ++i) {
+    entries.insert(
+        {cast<TypedAttr>(unwrap(keys[i])), cast<TypedAttr>(unwrap(values[i]))});
+  }
+  return wrap(rtg::MapAttr::get(cast<rtg::MapType>(unwrap(mapType)), &entries));
+}
+
+MlirAttribute rtgMapAttrLookup(MlirAttribute attr, MlirAttribute key) {
+  auto mapAttr = cast<rtg::MapAttr>(unwrap(attr));
+  auto keyAttr = cast<TypedAttr>(unwrap(key));
+
+  auto it = mapAttr.getEntries()->find(keyAttr);
+  if (it == mapAttr.getEntries()->end())
+    return wrap(Attribute()); // Return null attribute if key not found
+
+  return wrap(it->second);
 }
 
 //===----------------------------------------------------------------------===//

@@ -43,9 +43,20 @@ rtg.test @constants() {
   // CHECK-NEXT: rtg.constant #rtg.tuple<0 : i32, 1 : index> : !rtg.tuple<i32, index>
   rtg.constant #rtg.tuple<0 : i32, 1 : index> : !rtg.tuple<i32, index>
 
-  // Test set type inference 
+  // Test set type inference
   // CHECK-NEXT: rtg.constant #rtg.tuple<0 : i32, 1 : index> : !rtg.tuple<i32, index>
   rtg.constant #rtg.tuple<0 : i32, 1 : index>
+
+  // CHECK-NEXT: rtg.constant #rtg.map<> : !rtg.map<i32 -> i32>
+  rtg.constant #rtg.map<> : !rtg.map<i32 -> i32>
+
+  // Test that map entries are printed in lexicographic order
+  // CHECK-NEXT: rtg.constant #rtg.map<#rtgtest.a0 : !rtgtest.ireg -> 0 : i32, #rtgtest.a1 : !rtgtest.ireg -> 1 : i32, #rtgtest.a2 : !rtgtest.ireg -> 2 : i32> : !rtg.map<!rtgtest.ireg -> i32>
+  rtg.constant #rtg.map<#rtgtest.a1 -> 1 : i32, #rtgtest.a0 -> 0 : i32, #rtgtest.a2 -> 2 : i32> : !rtg.map<!rtgtest.ireg -> i32>
+
+  // Test map type inference
+  // CHECK-NEXT: rtg.constant #rtg.map<0 : i32 -> 10 : i32, 1 : i32 -> 11 : i32, 2 : i32 -> 12 : i32> : !rtg.map<i32 -> i32>
+  rtg.constant #rtg.map<1 : i32 -> 11 : i32, 0 : i32 -> 10 : i32, 2 : i32 -> 12 : i32>
 }
 
 // CHECK-LABEL: rtg.sequence @ranomizedSequenceType

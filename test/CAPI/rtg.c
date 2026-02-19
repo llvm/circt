@@ -253,6 +253,64 @@ static void testLabelAttr(MlirContext ctx) {
   fprintf(stderr, "name=%.*s\n", (int)retrievedName.length, retrievedName.data);
 }
 
+static void testMapType(MlirContext ctx) {
+  MlirType keyTy = mlirIntegerTypeGet(ctx, 32);
+  MlirType valueTy = mlirIntegerTypeGet(ctx, 64);
+  MlirType mapTy = rtgMapTypeGet(keyTy, valueTy);
+
+  // CHECK: is_map
+  fprintf(stderr, rtgTypeIsAMap(mapTy) ? "is_map\n" : "isnot_map\n");
+  // CHECK: !rtg.map<i32 -> i64>
+  mlirTypeDump(mapTy);
+  // CHECK: i32{{$}}
+  mlirTypeDump(rtgMapTypeGetKeyType(mapTy));
+  // CHECK: i64{{$}}
+  mlirTypeDump(rtgMapTypeGetValueType(mapTy));
+}
+
+static void testMapAttr(MlirContext ctx) {
+  MlirType keyTy = mlirIntegerTypeGet(ctx, 32);
+  MlirType valueTy = mlirIntegerTypeGet(ctx, 64);
+  MlirType mapTy = rtgMapTypeGet(keyTy, valueTy);
+
+  // Create keys and values
+  MlirAttribute key0 = mlirIntegerAttrGet(keyTy, 10);
+  MlirAttribute key1 = mlirIntegerAttrGet(keyTy, 20);
+  MlirAttribute value0 = mlirIntegerAttrGet(valueTy, 100);
+  MlirAttribute value1 = mlirIntegerAttrGet(valueTy, 200);
+
+  const MlirAttribute keys[] = {key0, key1};
+  const MlirAttribute values[] = {value0, value1};
+
+  MlirAttribute mapAttr = rtgMapAttrGet(ctx, mapTy, 2, keys, values);
+
+  // CHECK: is_map_attr
+  fprintf(stderr,
+          rtgAttrIsAMap(mapAttr) ? "is_map_attr\n" : "isnot_map_attr\n");
+  // CHECK: #rtg.map<10 : i32 -> 100 : i64, 20 : i32 -> 200 : i64>
+  mlirAttributeDump(mapAttr);
+
+  // Test key-based lookup
+  MlirAttribute lookedUpValue = rtgMapAttrLookup(mapAttr, key0);
+  // CHECK: 100 : i64
+  mlirAttributeDump(lookedUpValue);
+
+  // Test lookup with non-existent key
+  MlirAttribute key2 = mlirIntegerAttrGet(keyTy, 30);
+  MlirAttribute notFound = rtgMapAttrLookup(mapAttr, key2);
+  // CHECK: key_not_found
+  fprintf(stderr,
+          mlirAttributeIsNull(notFound) ? "key_not_found\n" : "key_found\n");
+
+  // Test empty map
+  MlirAttribute emptyMapAttr = rtgMapAttrGet(ctx, mapTy, 0, NULL, NULL);
+  // CHECK: is_map_attr
+  fprintf(stderr,
+          rtgAttrIsAMap(emptyMapAttr) ? "is_map_attr\n" : "isnot_map_attr\n");
+  // CHECK: #rtg.map<>
+  mlirAttributeDump(emptyMapAttr);
+}
+
 int main(int argc, char **argv) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleLoadDialect(mlirGetDialectHandle__rtg__(), ctx);
@@ -273,6 +331,8 @@ int main(int argc, char **argv) {
   testImmediate(ctx);
   testMemories(ctx);
   testLabelAttr(ctx);
+  testMapType(ctx);
+  testMapAttr(ctx);
 
   mlirContextDestroy(ctx);
 
