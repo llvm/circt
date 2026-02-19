@@ -10,6 +10,7 @@
 #include "circt/Dialect/RTG/IR/RTGOps.h"
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
 #include "mlir/Dialect/Index/IR/IndexOps.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 
 namespace circt {
@@ -118,20 +119,17 @@ void MemoryAllocationPass::runOnOperation() {
       return signalPassFailure();
     }
 
-    auto sizeOp = mem.getSize().getDefiningOp<index::ConstantOp>();
-    if (!sizeOp) {
+    APInt size;
+    if (!matchPattern(mem.getSize(), m_ConstantInt(&size))) {
       mem->emitError("could not determine memory allocation size");
       return signalPassFailure();
     }
 
-    auto alignOp = mem.getAlignment().getDefiningOp<index::ConstantOp>();
-    if (!alignOp) {
+    APInt alignment;
+    if (!matchPattern(mem.getAlignment(), m_ConstantInt(&alignment))) {
       mem->emitError("could not determine memory allocation alignment");
       return signalPassFailure();
     }
-
-    APInt size = sizeOp.getValue();
-    APInt alignment = alignOp.getValue();
 
     if (size.isZero()) {
       mem->emitError(
