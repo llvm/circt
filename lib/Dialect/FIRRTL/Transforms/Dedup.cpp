@@ -102,6 +102,7 @@ struct StructuralHasherSharedConstants {
   explicit StructuralHasherSharedConstants(MLIRContext *context) {
     portTypesAttr = StringAttr::get(context, "portTypes");
     moduleNameAttr = StringAttr::get(context, "moduleName");
+    moduleNamesAttr = StringAttr::get(context, "moduleNames");
     portNamesAttr = StringAttr::get(context, "portNames");
     nonessentialAttributes.insert(StringAttr::get(context, "annotations"));
     nonessentialAttributes.insert(StringAttr::get(context, "convention"));
@@ -1018,6 +1019,8 @@ static Location mergeLoc(MLIRContext *context, Location to, Location from) {
 struct Deduper {
 
   using RenameMap = DenseMap<StringAttr, StringAttr>;
+  using InstanceTargetUpdatesMap =
+      DenseMap<hw::InnerRefAttr, DenseMap<StringAttr, StringAttr>>;
 
   Deduper(InstanceGraph &instanceGraph, SymbolTable &symbolTable,
           NLATable *nlaTable, CircuitOp circuit)
@@ -1039,6 +1042,11 @@ struct Deduper {
     // A map of operation (e.g. wires, nodes) names which are changed, which is
     // used to update NLAs that reference the "fromModule".
     RenameMap renameMap;
+    // A map tracking NLA instance targets that need updating. Maps from the
+    // inner reference (module + symbol) to a mapping from old target module
+    // name to new target module name. This handles InstanceChoiceOp which can
+    // have multiple target modules.
+    InstanceTargetUpdatesMap instanceTargetUpdates;
 
     // Merge the port locations.
     SmallVector<Attribute> newLocs;
@@ -1053,14 +1061,16 @@ struct Deduper {
     toModule->setAttr("portLocations", ArrayAttr::get(context, newLocs));
 
     // Merge the two modules.
-    mergeOps(renameMap, toModule, toModule, fromModule, fromModule);
+    mergeOps(renameMap, instanceTargetUpdates, toModule, toModule, fromModule,
+             fromModule);
 
     // Rewrite NLAs pathing through these modules to refer to the to module. It
     // is safe to do this at this point because NLAs cannot be one element long.
     // This means that all NLAs which require more context cannot be targetting
     // something in the module it self.
     if (auto to = dyn_cast<FModuleOp>(*toModule))
-      rewriteModuleNLAs(renameMap, to, cast<FModuleOp>(*fromModule));
+      rewriteModuleNLAs(renameMap, instanceTargetUpdates, to,
+                        cast<FModuleOp>(*fromModule));
     else
       rewriteExtModuleNLAs(renameMap, toModule.getModuleNameAttr(),
                            fromModule.getModuleNameAttr());
@@ -1219,11 +1229,72 @@ private:
   /// but it does not delete the NLA reference from the target operation's
   /// annotations.
   void eraseNLA(hw::HierPathOp nla) {
-    // Erase the NLA from the leaf module's nlaMap.
+    // Erase the NLA from the target module's nlaMap.
     targetMap.erase(nla.getNameAttr());
     nlaTable->erase(nla);
     nlaCache.erase(nla.getNamepathAttr());
     symbolTable.erase(nla);
+  }
+
+  /// Fix up NLA instance targets. When two modules are deduplicated, instances
+  /// in those modules may point to different child modules. After renaming a
+  /// module in an NLA, we need to update the target module reference that
+  /// follows the instance to match the actual instance target in the renamed
+  /// module.
+  void
+  fixupNLAInstanceTargets(const InstanceTargetUpdatesMap &instanceTargetUpdates,
+                          FModuleOp module) {
+    auto moduleName = module.getNameAttr();
+
+    // Look up all NLAs that reference this module.
+    for (auto nla : nlaTable->lookup(moduleName)) {
+      auto namepath = nla.getNamepath().getValue();
+      if (namepath.size() < 2)
+        continue;
+
+      // Find the position of this module in the namepath.
+      for (size_t i = 0; i < namepath.size() - 1; ++i) {
+        auto innerRef = dyn_cast<hw::InnerRefAttr>(namepath[i]);
+        if (!innerRef || innerRef.getModule() != moduleName)
+          continue;
+
+        // Check if this instance target needs updating.
+        auto it = instanceTargetUpdates.find(innerRef);
+        if (it == instanceTargetUpdates.end())
+          break;
+
+        auto nextElem = namepath[i + 1];
+
+        // Extract the current target module name.
+        StringAttr currentTargetModule;
+        if (auto nextInnerRef = dyn_cast<hw::InnerRefAttr>(nextElem)) {
+          currentTargetModule = nextInnerRef.getModule();
+        } else if (auto flatRef = dyn_cast<FlatSymbolRefAttr>(nextElem)) {
+          currentTargetModule = flatRef.getAttr();
+        } else {
+          break;
+        }
+
+        // Look up the replacement module name.
+        auto renameIt = it->second.find(currentTargetModule);
+        if (renameIt == it->second.end())
+          break;
+
+        auto newTargetModuleName = renameIt->second;
+
+        // Update the target module to match the instance target.
+        SmallVector<Attribute> newNamepath(namepath.begin(), namepath.end());
+        if (auto nextInnerRef = dyn_cast<hw::InnerRefAttr>(nextElem)) {
+          newNamepath[i + 1] = hw::InnerRefAttr::get(newTargetModuleName,
+                                                     nextInnerRef.getName());
+        } else {
+          newNamepath[i + 1] = FlatSymbolRefAttr::get(newTargetModuleName);
+        }
+
+        nla.setNamepathAttr(ArrayAttr::get(context, newNamepath));
+        break;
+      }
+    }
   }
 
   /// Process all NLAs referencing the "from" module to point to the "to"
@@ -1289,10 +1360,15 @@ private:
   /// Process all the NLAs that the two modules participate in, replacing
   /// references to the "from" module with references to the "to" module, and
   /// adding more context if necessary.
-  void rewriteModuleNLAs(RenameMap &renameMap, FModuleOp toModule,
-                         FModuleOp fromModule) {
+  void rewriteModuleNLAs(RenameMap &renameMap,
+                         const InstanceTargetUpdatesMap &instanceTargetUpdates,
+                         FModuleOp toModule, FModuleOp fromModule) {
     addAnnotationContext(renameMap, toModule, toModule);
     addAnnotationContext(renameMap, toModule, fromModule);
+    // After renaming modules in NLAs, fix up any instance target references
+    // that may have changed due to instances in the two modules pointing to
+    // different child modules.
+    fixupNLAInstanceTargets(instanceTargetUpdates, toModule);
   }
 
   // Update all NLAs which the "from" external module participates in to the
@@ -1474,9 +1550,10 @@ private:
   // Record the symbol name change of the operation or any of its ports when
   // merging two operations.  The renamed symbols are used to update the
   // target of any NLAs.  This will add symbols to the "to" operation if needed.
-  void recordSymRenames(RenameMap &renameMap, FModuleLike toModule,
-                        Operation *to, FModuleLike fromModule,
-                        Operation *from) {
+  void recordSymRenames(RenameMap &renameMap,
+                        InstanceTargetUpdatesMap &instanceTargetUpdates,
+                        FModuleLike toModule, Operation *to,
+                        FModuleLike fromModule, Operation *from) {
     // If the "from" operation has an inner_sym, we need to make sure the
     // "to" operation also has an `inner_sym` and then record the renaming.
     if (auto fromInnerSym = dyn_cast<hw::InnerSymbolOpInterface>(from)) {
@@ -1485,6 +1562,39 @@ private:
                                               toInnerSym.getInnerSymAttr(),
                                               fromInnerSym.getInnerSymAttr()))
         toInnerSym.setInnerSymbolAttr(newSymAttr);
+
+      // If this is an instance operation, check if the two instances point to
+      // different target modules. If so, record the target updates.
+      // For InstanceChoiceOp, we need to handle multiple target modules.
+      if (auto toInst = dyn_cast<igraph::InstanceOpInterface>(to)) {
+        auto fromInst = cast<igraph::InstanceOpInterface>(from);
+        auto toModules = toInst.getReferencedModuleNamesAttr();
+        auto fromModules = fromInst.getReferencedModuleNamesAttr();
+
+        // If the modules differ and the new instance has an inner symbol, then
+        // there is a risk that this has an associated NLA part that needs to be
+        // updated.  Preemptively record this relationship so that we can update
+        // NLAs later.
+        if (toModules != fromModules &&
+            toModules.size() == fromModules.size()) {
+          if (auto finalSym = toInnerSym.getInnerSymAttr()) {
+            auto moduleName = toModule.getModuleNameAttr();
+            for (auto prop : finalSym) {
+              auto innerRef = hw::InnerRefAttr::get(moduleName, prop.getName());
+              // For each position in the module array, if they differ, record
+              // the mapping from old target module name to new target module
+              // name.
+              auto &renameMap = instanceTargetUpdates[innerRef];
+              for (auto [toMod, fromMod] : llvm::zip(toModules, fromModules)) {
+                auto toModName = cast<StringAttr>(toMod);
+                auto fromModName = cast<StringAttr>(fromMod);
+                if (toModName != fromModName)
+                  renameMap[fromModName] = toModName;
+              }
+            }
+          }
+        }
+      }
     }
 
     // If there are no port symbols on the "from" operation, we are done here.
@@ -1519,27 +1629,32 @@ private:
 
   /// Recursively merge two operations.
   // NOLINTNEXTLINE(misc-no-recursion)
-  void mergeOps(RenameMap &renameMap, FModuleLike toModule, Operation *to,
-                FModuleLike fromModule, Operation *from) {
+  void mergeOps(RenameMap &renameMap,
+                InstanceTargetUpdatesMap &instanceTargetUpdates,
+                FModuleLike toModule, Operation *to, FModuleLike fromModule,
+                Operation *from) {
     // Merge the operation locations.
     if (to->getLoc() != from->getLoc())
       to->setLoc(mergeLoc(context, to->getLoc(), from->getLoc()));
 
     // Recurse into any regions.
     for (auto regions : llvm::zip(to->getRegions(), from->getRegions()))
-      mergeRegions(renameMap, toModule, std::get<0>(regions), fromModule,
-                   std::get<1>(regions));
+      mergeRegions(renameMap, instanceTargetUpdates, toModule,
+                   std::get<0>(regions), fromModule, std::get<1>(regions));
 
     // Record any inner_sym renamings that happened.
-    recordSymRenames(renameMap, toModule, to, fromModule, from);
+    recordSymRenames(renameMap, instanceTargetUpdates, toModule, to, fromModule,
+                     from);
 
     // Merge the annotations.
     mergeAnnotations(toModule, to, fromModule, from);
   }
 
   /// Recursively merge two blocks.
-  void mergeBlocks(RenameMap &renameMap, FModuleLike toModule, Block &toBlock,
-                   FModuleLike fromModule, Block &fromBlock) {
+  void mergeBlocks(RenameMap &renameMap,
+                   InstanceTargetUpdatesMap &instanceTargetUpdates,
+                   FModuleLike toModule, Block &toBlock, FModuleLike fromModule,
+                   Block &fromBlock) {
     // Merge the block locations.
     for (auto [toArg, fromArg] :
          llvm::zip(toBlock.getArguments(), fromBlock.getArguments()))
@@ -1547,17 +1662,18 @@ private:
         toArg.setLoc(mergeLoc(context, toArg.getLoc(), fromArg.getLoc()));
 
     for (auto ops : llvm::zip(toBlock, fromBlock))
-      mergeOps(renameMap, toModule, &std::get<0>(ops), fromModule,
-               &std::get<1>(ops));
+      mergeOps(renameMap, instanceTargetUpdates, toModule, &std::get<0>(ops),
+               fromModule, &std::get<1>(ops));
   }
 
   // Recursively merge two regions.
-  void mergeRegions(RenameMap &renameMap, FModuleLike toModule,
-                    Region &toRegion, FModuleLike fromModule,
-                    Region &fromRegion) {
+  void mergeRegions(RenameMap &renameMap,
+                    InstanceTargetUpdatesMap &instanceTargetUpdates,
+                    FModuleLike toModule, Region &toRegion,
+                    FModuleLike fromModule, Region &fromRegion) {
     for (auto blocks : llvm::zip(toRegion, fromRegion))
-      mergeBlocks(renameMap, toModule, std::get<0>(blocks), fromModule,
-                  std::get<1>(blocks));
+      mergeBlocks(renameMap, instanceTargetUpdates, toModule,
+                  std::get<0>(blocks), fromModule, std::get<1>(blocks));
   }
 
   MLIRContext *context;

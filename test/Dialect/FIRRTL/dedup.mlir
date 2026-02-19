@@ -158,7 +158,7 @@ firrtl.circuit "Annotations" {
     // Subannotations should be handled correctly.
     // CHECK: %g = firrtl.wire {annotations = [{circt.fieldID = 1 : i32, circt.nonlocal = @annos_nla2, class = "subanno"}]}
     %g = firrtl.wire {annotations = [{circt.fieldID = 1 : i32, class = "subanno"}]} : !firrtl.bundle<a: uint<1>>
-    
+
     // Should deduplicate wires where only one has a symbol
     // CHECK: %h = firrtl.wire sym @h : !firrtl.uint
     // CHECK: %i = firrtl.wire sym @p : !firrtl.uint
@@ -984,5 +984,62 @@ firrtl.circuit "InstanceChoice" {
     firrtl.connect %inst1_in, %x : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %inst2_in, %inst1_out : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %y, %inst2_out : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+}
+
+// Test that NLA instance targets are correctly updated when deduplicating
+// modules with instances pointing to different child modules.
+// CHECK-LABEL: firrtl.circuit "NLAInstanceTargetUpdate"
+firrtl.circuit "NLAInstanceTargetUpdate" {
+  // CHECK: hw.hierpath private @nla [@NLAInstanceTargetUpdate::@sym, @Bar_1::@sym, @Baz_2]
+  hw.hierpath private @nla [@NLAInstanceTargetUpdate::@sym, @Bar_2::@sym, @Baz_3]
+  firrtl.module @Baz_1(out %a: !firrtl.uint<1>) {}
+  firrtl.module @Baz_2(out %a: !firrtl.uint<1>) {}
+  firrtl.module @Baz_3(out %a: !firrtl.uint<1>) {}
+  // CHECK: firrtl.module private @Bar_1
+  firrtl.module private @Bar_1() {
+    // CHECK: firrtl.instance baz sym @sym @Baz_2
+    %a = firrtl.instance baz @Baz_2(out a: !firrtl.uint<1>)
+  }
+  // CHECK-NOT: firrtl.module private @Bar_2
+  firrtl.module private @Bar_2() {
+    %a = firrtl.instance baz sym @sym @Baz_3(out a: !firrtl.uint<1>)
+  }
+  firrtl.module @NLAInstanceTargetUpdate() {
+    // CHECK: firrtl.instance bar sym @sym @Bar_1
+    firrtl.instance bar sym @sym @Bar_2()
+  }
+}
+
+// Test that NLA instance targets are correctly updated when deduplicating
+// modules with instance_choice ops pointing to different child modules.
+// CHECK-LABEL: firrtl.circuit "NLAInstanceTargetUpdateChoice"
+firrtl.circuit "NLAInstanceTargetUpdateChoice" {
+  firrtl.option @Target {
+    firrtl.option_case @A
+    firrtl.option_case @B
+  }
+  // CHECK: hw.hierpath private @nla1 [@NLAInstanceTargetUpdateChoice::@sym, @Bar_1::@sym, @Baz_2]
+  hw.hierpath private @nla1 [@NLAInstanceTargetUpdateChoice::@sym, @Bar_2::@sym, @Baz_3]
+  // CHECK: hw.hierpath private @nla2 [@NLAInstanceTargetUpdateChoice::@sym, @Bar_1::@sym, @Baz_5]
+  hw.hierpath private @nla2 [@NLAInstanceTargetUpdateChoice::@sym, @Bar_2::@sym, @Baz_6]
+  firrtl.module @Baz_1(out %a: !firrtl.uint<1>) {}
+  firrtl.module @Baz_2(out %a: !firrtl.uint<1>) {}
+  firrtl.module @Baz_3(out %a: !firrtl.uint<1>) {}
+  firrtl.module @Baz_4(out %a: !firrtl.uint<1>) {}
+  firrtl.module @Baz_5(out %a: !firrtl.uint<1>) {}
+  firrtl.module @Baz_6(out %a: !firrtl.uint<1>) {}
+  // CHECK: firrtl.module private @Bar_1
+  firrtl.module private @Bar_1() {
+    // CHECK: firrtl.instance_choice baz sym @sym @Baz_1 alternatives @Target {{\{}} @A -> @Baz_2, @B -> @Baz_5 }
+    %a = firrtl.instance_choice baz sym @sym @Baz_1 alternatives @Target { @A -> @Baz_2, @B -> @Baz_5 } (out a: !firrtl.uint<1>)
+  }
+  // CHECK-NOT: firrtl.module private @Bar_2
+  firrtl.module private @Bar_2() {
+    %a = firrtl.instance_choice baz sym @sym @Baz_1 alternatives @Target { @A -> @Baz_3, @B -> @Baz_6 } (out a: !firrtl.uint<1>)
+  }
+  firrtl.module @NLAInstanceTargetUpdateChoice() {
+    // CHECK: firrtl.instance bar sym @sym @Bar_1
+    firrtl.instance bar sym @sym @Bar_2()
   }
 }
