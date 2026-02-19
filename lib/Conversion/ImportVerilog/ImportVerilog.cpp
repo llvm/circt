@@ -216,6 +216,12 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
   for (const auto &libExt : options.libExts)
     driver.sourceLoader.addSearchExtension(libExt);
 
+  for (const auto &[i, f] : llvm::enumerate(options.libraryFiles)) {
+    // Include a space to avoid conflicts with explicitly-specified names.
+    auto libName = "library " + std::to_string(i);
+    driver.sourceLoader.addLibraryFiles(libName, f);
+  }
+
   for (const auto &includeDir : options.includeDirs)
     if (driver.sourceManager.addUserDirectories(includeDir))
       return failure();

@@ -208,7 +208,37 @@ def IntFormatOp : RTGOp<"int_format", [Pure]> {
   let results = (outs StringType:$result);
 
   let assemblyFormat = "$value attr-dict";
-  
+
+  let hasFolder = 1;
+}
+
+def ImmediateFormatOp : RTGOp<"immediate_format", [Pure]> {
+  let summary = "convert an immediate to a string";
+  let description = [{
+    This operation converts an immediate value to its string representation.
+    The immediate is formatted as a decimal number.
+  }];
+
+  let arguments = (ins ImmediateType:$value);
+  let results = (outs StringType:$result);
+
+  let assemblyFormat = "$value `:` qualified(type($value)) attr-dict";
+
+  let hasFolder = 1;
+}
+
+def RegisterFormatOp : RTGOp<"register_format", [Pure]> {
+  let summary = "convert a register to its name as a string";
+  let description = [{
+    This operation converts a register to its assembly name as a string.
+    The string representation is obtained from the register's assembly format.
+  }];
+
+  let arguments = (ins RegisterTypeInterface:$value);
+  let results = (outs StringType:$result);
+
+  let assemblyFormat = "$value `:` qualified(type($value)) attr-dict";
+
   let hasFolder = 1;
 }
 

@@ -2,7 +2,6 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-import inspect
 import argparse
 import importlib.util
 import sys
@@ -13,6 +12,7 @@ from types import ModuleType
 
 import pyrtg
 from pyrtg.circt import ir, passmanager, register_dialects
+from pyrtg.diagnostics import Verbosity
 
 
 class InputFormat(Enum):
@@ -40,8 +40,6 @@ def parse_args() -> argparse.Namespace:
   """
   Parse and post-process the tool's CLI arguments.
   """
-
-  output_format_choices = ["mlir", "elaborated", "asm"]
 
   # Set up argument parser
   parser = argparse.ArgumentParser(
@@ -84,6 +82,11 @@ def parse_args() -> argparse.Namespace:
       default=False,
       const=True,
       help="Print pass timings of the MLIR compilation pipeline")
+  parser.add_argument("--verbosity",
+                      type=Verbosity,
+                      choices=list(Verbosity),
+                      default=Verbosity.NORMAL,
+                      help="Verbosity level for diagnostic output")
 
   args = parser.parse_args()
 
@@ -211,7 +214,10 @@ def run() -> None:
 
   # Create the MLIR context and register all CIRCT dialects. In principle, we'd
   # only need to register the RTG and the desired payload dialects.
-  with ir.Context() as ctx, ir.Location.unknown():
+  with ir.Context() as ctx, ir.Location.unknown(), ir.loc_tracebacks():
+    ctx.emit_error_diagnostics = True
+    ctx.attach_diagnostic_handler(
+        pyrtg.diagnostics.get_diagnostic_handler(args.verbosity))
     register_dialects(ctx)
 
     # If no input format is given, try to infer it from the file extension

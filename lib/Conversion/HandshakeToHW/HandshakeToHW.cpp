@@ -116,14 +116,6 @@ static Type getOperandDataType(Value op) {
   return opType;
 }
 
-/// Filters NoneType's from the input.
-static SmallVector<Type> filterNoneTypes(ArrayRef<Type> input) {
-  SmallVector<Type> filterRes;
-  llvm::copy_if(input, std::back_inserter(filterRes),
-                [](Type type) { return !isa<NoneType>(type); });
-  return filterRes;
-}
-
 /// Returns a set of types which may uniquely identify the provided op. Return
 /// value is <inputTypes, outputTypes>.
 using DiscriminatingTypes = std::pair<SmallVector<Type>, SmallVector<Type>>;
@@ -136,13 +128,12 @@ static DiscriminatingTypes getHandshakeDiscriminatingTypes(Operation *op) {
       .Default([&](auto) {
         // By default, all in- and output types which is not a control type
         // (NoneType) are discriminating types.
-        std::vector<Type> inTypes, outTypes;
+        SmallVector<Type> inTypes, outTypes;
         llvm::transform(op->getOperands(), std::back_inserter(inTypes),
                         getOperandDataType);
         llvm::transform(op->getResults(), std::back_inserter(outTypes),
                         getOperandDataType);
-        return DiscriminatingTypes{filterNoneTypes(inTypes),
-                                   filterNoneTypes(outTypes)};
+        return DiscriminatingTypes{inTypes, outTypes};
       });
 }
 
@@ -168,6 +159,8 @@ static std::string getTypeName(Location loc, Type type) {
     typeName += "_struct";
     for (auto element : structType.getElements())
       typeName += "_" + element.name.str() + getTypeName(loc, element.type);
+  } else if (isa<NoneType>(type)) {
+    typeName += "_none";
   } else
     emitError(loc) << "unsupported data type '" << type << "'";
 

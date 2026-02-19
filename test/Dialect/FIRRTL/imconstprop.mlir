@@ -971,3 +971,64 @@ firrtl.circuit "DomainPreservation" {
     firrtl.domain.define %a, %0
   }
 }
+
+// -----
+
+// Test that InstanceChoiceOp is conservatively handled
+firrtl.circuit "InstanceChoiceOutputPort" {
+  firrtl.option @ChoiceOption {
+    firrtl.option_case @A
+  }
+
+  // CHECK-LABEL: firrtl.module private @ModuleA
+  firrtl.module private @ModuleA(out %out: !firrtl.uint<1>) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %out, %c1_ui1
+    firrtl.matchingconnect %out, %c1_ui1 : !firrtl.uint<1>
+  }
+
+  // CHECK-LABEL: firrtl.module @InstanceChoiceOutputPort
+  firrtl.module @InstanceChoiceOutputPort(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+    // CHECK: %inst_out = firrtl.instance_choice inst @ModuleA alternatives @ChoiceOption
+    %inst_out = firrtl.instance_choice inst @ModuleA alternatives @ChoiceOption { @A -> @ModuleA } (out out: !firrtl.uint<1>)
+
+    // CHECK: firrtl.matchingconnect %out, %inst_out
+    firrtl.matchingconnect %out, %inst_out : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Test that InstanceChoiceOp is conservatively handled even when a module is connected
+// to a normal instance as well.
+firrtl.circuit "InstanceChoiceAndNormalInstance" {
+  firrtl.option @Platform {
+    firrtl.option_case @ASIC
+  }
+
+  // CHECK-LABEL: firrtl.module private @ASICImpl
+  firrtl.module private @ASICImpl(in %data: !firrtl.uint<8>, out %result: !firrtl.uint<8>) {
+    // Make sure constant is not propagated from instances.
+    // CHECK: firrtl.matchingconnect %result, %data
+    firrtl.matchingconnect %result, %data : !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module @InstanceChoiceAndNormalInstance
+  firrtl.module @InstanceChoiceAndNormalInstance(in %clk: !firrtl.clock, out %out: !firrtl.uint<8>) {
+    %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
+    %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
+
+    // CHECK: %inst1_data, %inst1_result = firrtl.instance_choice inst1 @ASICImpl alternatives @Platform { @ASIC -> @ASICImpl }
+    %inst1_data, %inst1_result = firrtl.instance_choice inst1 @ASICImpl alternatives @Platform { @ASIC -> @ASICImpl } (in data: !firrtl.uint<8>, out result: !firrtl.uint<8>)
+    // CHECK: %inst2_data, %inst2_result = firrtl.instance inst2 @ASICImpl
+    %inst2_data, %inst2_result = firrtl.instance inst2 @ASICImpl(in data: !firrtl.uint<8>, out result: !firrtl.uint<8>)
+
+    // CHECK: firrtl.matchingconnect %inst1_data, %c0_ui8
+    firrtl.matchingconnect %inst1_data, %c0_ui8 : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %inst2_data, %c1_ui8
+    firrtl.matchingconnect %inst2_data, %c1_ui8 : !firrtl.uint<8>
+
+    // CHECK: firrtl.matchingconnect %out, %inst1_result
+    firrtl.matchingconnect %out, %inst1_result : !firrtl.uint<8>
+  }
+}

@@ -166,6 +166,25 @@ def InstanceOp : HardwareDeclOp<"instance", [
       const llvm::BitVector &erasures);
 
     //===------------------------------------------------------------------===//
+    // Single-module methods
+    //===------------------------------------------------------------------===//
+
+    /// Get the name of the instantiated module.
+    StringRef getReferencedModuleName() {
+      return getModuleNameAttr().getAttr().getValue();
+    }
+
+    /// Get the name of the instantiated module.
+    StringAttr getReferencedModuleNameAttr() {
+      return getModuleNameAttr().getAttr();
+    }
+
+    /// Get the referenced module via a symbol table.
+    Operation *getReferencedOperation(const SymbolTable &symtbl) {
+      return symtbl.lookup(getReferencedModuleName());
+    }
+
+    //===------------------------------------------------------------------===//
     // Instance graph methods
     //===------------------------------------------------------------------===//
 
@@ -186,6 +205,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
 
 def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<FInstanceLike>,
     DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
       "getInstanceName", "getInstanceNameAttr", "getReferencedModuleNamesAttr"
     ]>
@@ -286,7 +306,15 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"StringAttr", "StringAttr()">:$innerSym)>
+                   CArg<"StringAttr", "StringAttr()">:$innerSym)>,
+    OpBuilder<(ins "ArrayRef<PortInfo>":$ports,
+                   "ArrayAttr":$moduleNames,
+                   "ArrayAttr":$caseNames,
+                   "mlir::StringRef":$name,
+                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
+                   CArg<"ArrayAttr", "{}">:$annotations,
+                   CArg<"ArrayAttr", "{}">:$layers,
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>
   ];
 }
 
@@ -739,11 +767,7 @@ def ContractOp : FIRRTLOp<"contract", [
 def ObjectOp :  FIRRTLOp<"object", [
     ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-    DeclareOpInterfaceMethods<FInstanceLike, [
-      "getReferencedOperation",
-      "getReferencedModuleName",
-      "getReferencedModuleNameAttr",
-    ]>,
+    DeclareOpInterfaceMethods<FInstanceLike>,
     DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
       "getReferencedModuleSlow"
     ]>,
@@ -773,6 +797,11 @@ def ObjectOp :  FIRRTLOp<"object", [
 
     StringAttr getClassNameAttr();
     StringRef getClassName();
+
+    Operation *getReferencedOperation(const SymbolTable &symtbl);
+
+    // Required by InstanceGraphInstanceOpInterface default implementation
+    StringAttr getReferencedModuleNameAttr();
   }];
   let assemblyFormat = [{
     `` custom<ImplicitSSAName>(attr-dict) custom<ClassInterface>(type($result))
