@@ -23,7 +23,7 @@ lit.site.cfg.py
 
 # LLVM subprojects not needed for CIRCT
 # NOTE: This is not necessary as they are in a submodule, but this helps
-#       optimize LLM context indexing
+#       optimize LLM context indexing.
 /llvm/bolt
 /llvm/clang-tools-extra
 /llvm/compiler-rt
