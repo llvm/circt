@@ -193,8 +193,15 @@ struct StorageKeyInfo {
 // Values with structural equivalence intended to be internalized.
 //===----------------------------------------------------------------------===//
 
+/// Base class for all storage objects that can be materialized as attributes.
+/// This provides a cache for the attribute that was materialized from this
+/// storage.
+struct CachableStorage {
+  TypedAttr attrCache;
+};
+
 /// Storage object for an '!rtg.set<T>'.
-struct SetStorage {
+struct SetStorage : CachableStorage {
   static unsigned computeHash(const SetVector<ElaboratorValue> &set,
                               Type type) {
     llvm::hash_code setHash = 0;
@@ -333,7 +340,7 @@ struct ArrayStorage {
 };
 
 /// Storage object for 'tuple`-typed values.
-struct TupleStorage {
+struct TupleStorage : CachableStorage {
   TupleStorage(SmallVector<ElaboratorValue> &&values)
       : hashcode(llvm::hash_combine_range(values.begin(), values.end())),
         values(std::move(values)) {}
@@ -722,6 +729,162 @@ static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
 #endif
 
 //===----------------------------------------------------------------------===//
+// Attribute <-> ElaboratorValue Converters
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+/// Convert an attribute to an ElaboratorValue. This handles nested attributes
+/// like SetAttr and TupleAttr recursively.
+class AttributeToElaboratorValueConverter {
+public:
+  AttributeToElaboratorValueConverter(Internalizer &internalizer)
+      : internalizer(internalizer) {}
+
+  /// Convert an attribute to an ElaboratorValue.
+  FailureOr<ElaboratorValue> convert(Attribute attr) {
+    return llvm::TypeSwitch<Attribute, FailureOr<ElaboratorValue>>(attr)
+        .Case<IntegerAttr, SetAttr, TupleAttr>(
+            [&](auto attr) { return convert(attr); })
+        .Case<TypedAttr>([&](auto typedAttr) -> FailureOr<ElaboratorValue> {
+          return ElaboratorValue(typedAttr);
+        })
+        .Default(
+            [&](Attribute) -> FailureOr<ElaboratorValue> { return failure(); });
+  }
+
+private:
+  FailureOr<ElaboratorValue> convert(IntegerAttr attr) {
+    if (attr.getType().isSignlessInteger(1))
+      return ElaboratorValue(bool(attr.getInt()));
+    if (isa<IndexType>(attr.getType()))
+      return ElaboratorValue(size_t(attr.getInt()));
+    return ElaboratorValue(attr);
+  }
+
+  FailureOr<ElaboratorValue> convert(SetAttr setAttr) {
+    SetVector<ElaboratorValue> set;
+    for (auto element : *setAttr.getElements()) {
+      auto converted = convert(element);
+      if (failed(converted))
+        return failure();
+      set.insert(*converted);
+    }
+    auto *storage =
+        internalizer.internalize<SetStorage>(std::move(set), setAttr.getType());
+    // Cache the original attribute for efficient materialization
+    storage->attrCache = setAttr;
+    return ElaboratorValue(storage);
+  }
+
+  FailureOr<ElaboratorValue> convert(TupleAttr tupleAttr) {
+    SmallVector<ElaboratorValue> values;
+    for (auto element : tupleAttr.getElements()) {
+      auto converted = convert(element);
+      if (failed(converted))
+        return failure();
+      values.push_back(*converted);
+    }
+    auto *storage = internalizer.internalize<TupleStorage>(std::move(values));
+    // Cache the original attribute for efficient materialization
+    storage->attrCache = tupleAttr;
+    return ElaboratorValue(storage);
+  }
+
+  Internalizer &internalizer;
+};
+
+/// Convert an ElaboratorValue to an attribute when possible. Not all
+/// ElaboratorValues can be converted to attributes (e.g., values with
+/// identity).
+class ElaboratorValueToAttributeConverter {
+public:
+  ElaboratorValueToAttributeConverter(MLIRContext *context)
+      : context(context) {}
+
+  /// Convert an ElaboratorValue to an attribute. Returns a null attribute if
+  /// the conversion is not possible.
+  TypedAttr convert(const ElaboratorValue &value) {
+    return std::visit(
+        [&](auto val) -> TypedAttr {
+          if constexpr (std::is_base_of_v<CachableStorage,
+                                          std::remove_pointer_t<
+                                              std::decay_t<decltype(value)>>>) {
+            if (val->attrCache)
+              return val->attrCache;
+          }
+          return visit(val);
+        },
+        value);
+  }
+
+private:
+  TypedAttr visit(TypedAttr val) { return val; }
+
+  TypedAttr visit(bool val) {
+    return IntegerAttr::get(IntegerType::get(context, 1), val);
+  }
+
+  TypedAttr visit(size_t val) {
+    return IntegerAttr::get(IndexType::get(context), val);
+  }
+
+  TypedAttr visit(SetStorage *val) {
+    DenseSet<TypedAttr> elements;
+    for (auto element : val->set) {
+      auto converted = convert(element);
+      if (!converted)
+        return {};
+      auto typedAttr = dyn_cast<TypedAttr>(converted);
+      if (!typedAttr)
+        return {};
+      elements.insert(typedAttr);
+    }
+    return SetAttr::get(cast<SetType>(val->type), &elements);
+  }
+
+  TypedAttr visit(TupleStorage *val) {
+    SmallVector<TypedAttr> elements;
+    for (auto element : val->values) {
+      auto converted = convert(element);
+      if (!converted)
+        return {};
+      auto typedAttr = dyn_cast<TypedAttr>(converted);
+      if (!typedAttr)
+        return {};
+      elements.push_back(typedAttr);
+    }
+    return TupleAttr::get(context, elements);
+  }
+
+  // Default implementation for storage types that cannot be converted to
+  // attributes. Using a macro to avoid repetition. std::visit does not support
+  // any kind of "default" clauses, unfortunately.
+#define VISIT_UNSUPPORTED(STORAGETYPE)                                         \
+  /* NOLINTNEXTLINE(bugprone-macro-parentheses)*/                              \
+  TypedAttr visit(STORAGETYPE *val) { return {}; }
+
+  VISIT_UNSUPPORTED(ArrayStorage)
+  VISIT_UNSUPPORTED(BagStorage)
+  VISIT_UNSUPPORTED(SequenceStorage)
+  VISIT_UNSUPPORTED(RandomizedSequenceStorage)
+  VISIT_UNSUPPORTED(InterleavedSequenceStorage)
+  VISIT_UNSUPPORTED(VirtualRegisterStorage)
+  VISIT_UNSUPPORTED(UniqueLabelStorage)
+  VISIT_UNSUPPORTED(MemoryStorage)
+  VISIT_UNSUPPORTED(MemoryBlockStorage)
+  VISIT_UNSUPPORTED(SymbolicComputationWithIdentityStorage)
+  VISIT_UNSUPPORTED(SymbolicComputationWithIdentityValue)
+  VISIT_UNSUPPORTED(SymbolicComputationStorage)
+
+#undef VISIT_UNSUPPORTED
+
+  MLIRContext *context;
+};
+
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // Elaborator Value Materialization
 //===----------------------------------------------------------------------===//
 
@@ -729,8 +892,10 @@ namespace {
 
 /// State that should be shared by all elaborator and materializer instances.
 struct SharedState {
-  SharedState(SymbolTable &table, unsigned seed) : table(table), rng(seed) {}
+  SharedState(MLIRContext *ctxt, SymbolTable &table, unsigned seed)
+      : ctxt(ctxt), table(table), rng(seed) {}
 
+  MLIRContext *ctxt;
   SymbolTable &table;
   std::mt19937 rng;
   Namespace names;
@@ -756,7 +921,7 @@ public:
                SharedState &sharedState,
                SmallVector<ElaboratorValue> &blockArgs)
       : builder(builder), testState(testState), sharedState(sharedState),
-        blockArgs(blockArgs) {}
+        blockArgs(blockArgs), attrConverter(builder.getContext()) {}
 
   /// Materialize IR representing the provided `ElaboratorValue` and return the
   /// `Value` or a null value on failure.
@@ -767,6 +932,9 @@ public:
       return iter->second;
 
     LLVM_DEBUG(llvm::dbgs() << "Materializing " << val);
+
+    if (auto res = tryMaterializeAsConstant(val, loc))
+      return res;
 
     // In debug mode, track whether values with identity were already
     // materialized before and assert in such a situation.
@@ -888,6 +1056,16 @@ public:
   }
 
 private:
+  Value tryMaterializeAsConstant(ElaboratorValue val, Location loc) {
+    if (auto attr = attrConverter.convert(val)) {
+      Value res = ConstantOp::create(builder, loc, attr);
+      materializedValues[val] = res;
+      return res;
+    }
+
+    return Value();
+  }
+
   SequenceOp elaborateSequence(const RandomizedSequenceStorage *seq,
                                SmallVector<ElaboratorValue> &elabArgs);
 
@@ -904,23 +1082,17 @@ private:
 
   Value visit(TypedAttr val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = ConstantOp::create(builder, loc, val);
-    materializedValues[val] = res;
-    return res;
+    return {};
   }
 
   Value visit(size_t val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = index::ConstantOp::create(builder, loc, val);
-    materializedValues[val] = res;
-    return res;
+    return {};
   }
 
   Value visit(bool val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
-    Value res = index::BoolConstantOp::create(builder, loc, val);
-    materializedValues[val] = res;
-    return res;
+    return {};
   }
 
   Value visit(ArrayStorage *val, Location loc,
@@ -1185,6 +1357,9 @@ private:
   /// otherwise they are added as block arguments and the block that wants to
   /// embed this sequence is expected to provide a value for it.
   DenseSet<IdentityValue *> identityValueRoot;
+
+  /// Helper to convert ElaboratorValues to attributes.
+  ElaboratorValueToAttributeConverter attrConverter;
 };
 
 //===----------------------------------------------------------------------===//
@@ -1205,7 +1380,9 @@ public:
              Materializer &materializer,
              ContextResourceAttrInterface currentContext = {})
       : sharedState(sharedState), testState(testState),
-        materializer(materializer), currentContext(currentContext) {}
+        materializer(materializer), currentContext(currentContext),
+        attrConverter(sharedState.internalizer),
+        elabValConverter(sharedState.ctxt) {}
 
   template <typename ValueTy>
   inline ValueTy get(Value val) const {
@@ -1910,16 +2087,8 @@ public:
     SmallVector<Attribute> operands;
     for (auto operand : op->getOperands()) {
       auto evalValue = state[operand];
-      if (std::holds_alternative<TypedAttr>(evalValue))
-        operands.push_back(std::get<TypedAttr>(evalValue));
-      else if (std::holds_alternative<size_t>(evalValue))
-        operands.push_back(IntegerAttr::get(IndexType::get(op->getContext()),
-                                            std::get<size_t>(evalValue)));
-      else if (std::holds_alternative<bool>(evalValue))
-        operands.push_back(
-            BoolAttr::get(op->getContext(), std::get<bool>(evalValue)));
-      else
-        operands.push_back(Attribute());
+      auto attr = elabValConverter.convert(evalValue);
+      operands.push_back(attr);
     }
 
     SmallVector<OpFoldResult> results;
@@ -1937,13 +2106,13 @@ public:
       if (attr.getType() != val.getType())
         return false;
 
-      auto intAttr = dyn_cast<IntegerAttr>(attr);
-      if (intAttr && isa<IndexType>(attr.getType()))
-        state[op->getResult(0)] = size_t(intAttr.getInt());
-      else if (intAttr && intAttr.getType().isSignlessInteger(1))
-        state[op->getResult(0)] = bool(intAttr.getInt());
-      else
-        state[op->getResult(0)] = attr;
+      // Try to convert the attribute to an ElaboratorValue
+      auto converted = attrConverter.convert(attr);
+      if (succeeded(converted)) {
+        state[val] = *converted;
+        continue;
+      }
+      return false;
     }
 
     return true;
@@ -2078,6 +2247,12 @@ private:
 
   // The current context we are elaborating under.
   ContextResourceAttrInterface currentContext;
+
+  // Allows us to convert attributes to ElaboratorValues.
+  AttributeToElaboratorValueConverter attrConverter;
+
+  // Allows us to convert ElaboratorValues to attributes.
+  ElaboratorValueToAttributeConverter elabValConverter;
 };
 } // namespace
 
@@ -2205,7 +2380,7 @@ static bool onlyLegalToMaterializeInTarget(Type type) {
 
 LogicalResult ElaborationPass::elaborateModule(ModuleOp moduleOp,
                                                SymbolTable &table) {
-  SharedState state(table, seed);
+  SharedState state(moduleOp.getContext(), table, seed);
 
   // Update the name cache
   state.names.add(moduleOp);
@@ -2234,6 +2409,8 @@ LogicalResult ElaborationPass::elaborateModule(ModuleOp moduleOp,
     if (failed(targetElaborator.elaborate(targetOp.getBodyRegion(), {},
                                           result.yields)))
       return failure();
+
+    targetMaterializer.finalize();
   }
 
   // Initialize the worklist with the test ops since they cannot be placed by
