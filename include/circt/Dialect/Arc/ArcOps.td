@@ -611,6 +611,21 @@ def StateWriteOp : ArcOp<"state_write", [
   ];
 }
 
+def CurrentTimeOp : ArcOp<"current_time", [
+  MemoryEffects<[MemRead]>
+]> {
+  let summary = "Read the current simulation time";
+  let description = [{
+    Reads the current simulation time from the model's storage. The time is
+    represented as an `i64` value in femtoseconds.
+  }];
+  let arguments = (ins StorageType:$storage);
+  let results = (outs I64:$time);
+  let assemblyFormat = [{
+    $storage attr-dict `:` qualified(type($storage))
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Procedural Ops
 //===----------------------------------------------------------------------===//
@@ -717,6 +732,37 @@ def SimEmitValueOp : ArcOp<"sim.emit"> {
   }];
   let arguments = (ins StrAttr:$valueName, AnyType:$value);
   let assemblyFormat = [{ $valueName `,` $value attr-dict `:` type($value) }];
+}
+
+def SimGetTimeOp : ArcOp<"sim.get_time", [
+  MemoryEffects<[MemRead]>,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Gets the current simulation time of the model instance";
+  let description = [{
+    Gets the current simulation time of the given model instance. The time is
+    represented as an `i64` value in femtoseconds.
+  }];
+  let arguments = (ins SimModelInstance:$instance);
+  let results = (outs I64:$time);
+  let assemblyFormat = [{
+    $instance attr-dict `:` qualified(type($instance))
+  }];
+}
+
+def SimSetTimeOp : ArcOp<"sim.set_time", [
+  MemoryEffects<[MemWrite]>,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Sets the simulation time of the model instance";
+  let description = [{
+    Sets the simulation time of the given model instance. The time is
+    represented as an `i64` value in femtoseconds.
+  }];
+  let arguments = (ins SimModelInstance:$instance, I64:$time);
+  let assemblyFormat = [{
+    $instance `,` $time attr-dict `:` qualified(type($instance))
+  }];
 }
 
 //===----------------------------------------------------------------------===//
