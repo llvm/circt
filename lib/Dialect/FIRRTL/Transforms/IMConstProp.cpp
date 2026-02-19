@@ -317,6 +317,7 @@ struct IMConstPropPass
   void markInvalidValueOp(InvalidValueOp invalid);
   void markAggregateConstantOp(AggregateConstantOp constant);
   void markInstanceOp(InstanceOp instance);
+  void markInstanceChoiceOp(InstanceChoiceOp instance);
   void markObjectOp(ObjectOp object);
   template <typename OpTy>
   void markConstantValueOp(OpTy op);
@@ -513,6 +514,8 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
         .Case<InvalidValueOp>(
             [&](auto invalid) { markInvalidValueOp(invalid); })
         .Case<InstanceOp>([&](auto instance) { markInstanceOp(instance); })
+        .Case<InstanceChoiceOp>(
+            [&](auto instance) { markInstanceChoiceOp(instance); })
         .Case<ObjectOp>([&](auto obj) { markObjectOp(obj); })
         .Case<MemOp>([&](auto mem) { markMemOp(mem); })
         .Case<LayerBlockOp>(
@@ -666,6 +669,29 @@ void IMConstPropPass::markObjectOp(ObjectOp obj) {
   markOverdefined(obj);
 }
 
+void IMConstPropPass::markInstanceChoiceOp(InstanceChoiceOp instance) {
+  // Mark all results as overdefined.
+  // TODO: Handle instance choice ops by merging lattice values of all possible
+  //       choices.
+  for (auto result : instance.getResults())
+    markOverdefined(result);
+
+  // Mark all referenced modules as executable and mark all ports as
+  // overdefined.
+  for (auto moduleName : instance.getModuleNamesAttr()) {
+    Operation *op =
+        instanceGraph->lookup(cast<FlatSymbolRefAttr>(moduleName).getAttr())
+            ->getModule();
+
+    if (auto fModule = dyn_cast<FModuleOp>(op)) {
+      markBlockExecutable(fModule.getBodyBlock());
+      // Mark all ports overdefined.
+      for (auto port : fModule.getBodyBlock()->getArguments())
+        markOverdefined(port);
+    }
+  }
+}
+
 static std::optional<uint64_t>
 getFieldIDOffset(FieldRef changedFieldRef, Type connectionType,
                  FieldRef connectedValueFieldRef) {
@@ -783,13 +809,9 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
           srcValue);
     }
 
-    // Driving a memory result is ignored because these are always treated
-    // as overdefined.
-    if (dest.getDefiningOp<MemOp>())
-      return;
-
-    // For now, don't support const prop into object fields.
-    if (isa_and_nonnull<ObjectSubfieldOp>(dest.getDefiningOp()))
+    // Skip unsupported ops that are already marked as overdefined.
+    if (isa_and_nonnull<InstanceChoiceOp, MemOp, ObjectSubfieldOp>(
+            dest.getDefiningOp()))
       return;
 
     connect.emitError("connectlike operation unhandled by IMConstProp")
