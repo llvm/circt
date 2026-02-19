@@ -14,7 +14,9 @@ class Singleton(Config):
 
 
 # MLIR-LABEL: rtg.target @Tgt0 : !rtg.dict<entry0: !rtg.set<index>>
-# MLIR-NEXT: [[SET:%.+]] = rtg.constant #rtg.set<0 : index, 1 : index> : !rtg.set<index>
+# MLIR-NEXT: [[C0:%.+]] = index.constant 0
+# MLIR-NEXT: [[C1:%.+]] = index.constant 1
+# MLIR-NEXT: [[SET:%.+]] = rtg.set_create [[C0:%.+]], [[C1:%.+]] : index
 # MLIR-NEXT: rtg.yield [[SET]] : !rtg.set<index>
 # MLIR-NEXT: }
 
@@ -140,7 +142,6 @@ def test1_args(config):
 # MLIR-DAG: [[STR:%.+]] = rtg.constant "l1" : !rtg.string
 # MLIR-DAG: [[LBL5:%.+]] = rtg.constant #rtg.isa.label<"L_5">
 # MLIR-DAG: [[LBL3:%.+]] = rtg.constant #rtg.isa.label<"L_3">
-# MLIR-DAG: [[EMPTY_SET:%.+]] = rtg.constant #rtg.set<> : !rtg.set<!rtg.isa.label>
 # MLIR-NEXT: [[L1:%.+]] = rtg.label_unique_decl [[STR]]
 # MLIR-NEXT: [[L2:%.+]] = rtg.label_unique_decl [[STR]]
 # MLIR-NEXT: rtg.label global [[L0]]
@@ -149,6 +150,7 @@ def test1_args(config):
 
 # MLIR-NEXT: [[SET0:%.+]] = rtg.set_create [[L0]], [[L1]] : !rtg.isa.label
 # MLIR-NEXT: [[SET1:%.+]] = rtg.set_create [[L2]] : !rtg.isa.label
+# MLIR-NEXT: [[EMPTY_SET:%.+]] = rtg.set_create  : !rtg.isa.label
 # MLIR-NEXT: [[SET2_1:%.+]] = rtg.set_union [[SET0]], [[SET1]] : !rtg.set<!rtg.isa.label>
 # MLIR-NEXT: [[SET2:%.+]] = rtg.set_union [[SET2_1]], [[EMPTY_SET]] : !rtg.set<!rtg.isa.label>
 # MLIR-NEXT: [[RL0:%.+]] = rtg.set_select_random [[SET2]] : !rtg.set<!rtg.isa.label>
@@ -162,7 +164,7 @@ def test1_args(config):
 
 # MLIR-NEXT: [[BAG0:%.+]] = rtg.bag_create (%idx2 x [[L0:%.+]], %idx1 x [[L1:%.+]]) : !rtg.isa.label
 # MLIR-NEXT: [[BAG1:%.+]] = rtg.bag_create (%idx1 x [[L2:%.+]]) : !rtg.isa.label
-# MLIR-NEXT: [[EMPTY_BAG:%.+]] = rtg.bag_create : !rtg.isa.label
+# MLIR-NEXT: [[EMPTY_BAG:%.+]] = rtg.bag_create  : !rtg.isa.label
 # MLIR-NEXT: [[BAG2_1:%.+]] = rtg.bag_union [[BAG0]], [[BAG1]] : !rtg.bag<!rtg.isa.label>
 # MLIR-NEXT: [[BAG2:%.+]] = rtg.bag_union [[BAG2_1]], [[EMPTY_BAG]] : !rtg.bag<!rtg.isa.label>
 # MLIR-NEXT: [[RL2:%.+]] = rtg.bag_select_random [[BAG2]] : !rtg.bag<!rtg.isa.label>
