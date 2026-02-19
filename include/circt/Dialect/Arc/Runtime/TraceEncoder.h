@@ -34,11 +34,12 @@ namespace circt::arc::runtime::impl {
 /// Helper for marking time steps within a trace buffer
 struct TraceBufferMarker {
   TraceBufferMarker() = delete;
-  explicit TraceBufferMarker(uint32_t offset) : offset(offset), numSteps(1) {}
+  TraceBufferMarker(uint32_t offset, uint64_t step)
+      : offset(offset), step(step) {}
   /// Offset within the buffer in number of elements
   uint32_t offset;
-  /// Number of time steps to advance at the given offset
-  uint32_t numSteps;
+  /// Absolute simulation time at this marker
+  uint64_t step;
 };
 
 /// A heap allocated buffer containing raw trace data and time step markers
@@ -127,13 +128,13 @@ protected:
   virtual bool initialize(const ArcState *state) = 0;
 
   /// Called by the worker thread before entering the encode loop
-  virtual void startUpWorker(){};
+  virtual void startUpWorker() {}
   /// Encode the given trace buffer. Called by the worker thread.
-  virtual void encode(TraceBuffer &work){};
+  virtual void encode(TraceBuffer &work) {}
   /// Called by the worker thread after leaving the encode loop
-  virtual void windDownWorker(){};
+  virtual void windDownWorker() {}
   /// Finish trace encoding. Called by the simulation thread.
-  virtual void finalize(const ArcState *state){};
+  virtual void finalize(const ArcState *state) {}
 
   /// Metadata of the traced model
   const ArcRuntimeModelInfo *const modelInfo;
@@ -175,7 +176,7 @@ private:
 class DummyTraceEncoder final : public TraceEncoder {
 public:
   DummyTraceEncoder(const ArcRuntimeModelInfo *modelInfo, ArcState *state)
-      : TraceEncoder(modelInfo, state, 1, false){};
+      : TraceEncoder(modelInfo, state, 1, false) {}
 
   ~DummyTraceEncoder() override = default;
 

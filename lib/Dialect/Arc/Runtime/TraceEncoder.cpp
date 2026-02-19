@@ -20,6 +20,12 @@
 
 namespace circt::arc::runtime::impl {
 
+/// Read the simulation time from the model state. The time is stored as an i64
+/// at offset 0 of the model state.
+static inline int64_t readTimeFromState(const ArcState *state) {
+  return *reinterpret_cast<const int64_t *>(state->modelState);
+}
+
 TraceEncoder::TraceEncoder(const ArcRuntimeModelInfo *modelInfo,
                            ArcState *state, unsigned numBuffers,
                            bool debug = false)
@@ -61,8 +67,8 @@ void TraceEncoder::run(ArcState *state) {
     return;
   // Flush the trace buffer which may contain data from the init function
   state->traceBufferSize = 0;
-  timeStep = 0;
-  activeBuffer.firstStep = 0;
+  timeStep = readTimeFromState(state);
+  activeBuffer.firstStep = timeStep;
   assert(activeBuffer.stepMarkers.empty());
   assert(bufferQueue.empty());
   // Start the worker thread
@@ -109,7 +115,7 @@ void TraceEncoder::workLoop() {
 
 void TraceEncoder::step(const ArcState *state) {
   activeBuffer.assertSentinel();
-  ++timeStep;
+  timeStep = readTimeFromState(state);
   if (!worker)
     return;
   assert(activeBuffer.getData() == state->traceBuffer);
@@ -118,10 +124,10 @@ void TraceEncoder::step(const ArcState *state) {
     auto &offsets = activeBuffer.stepMarkers;
     if (!offsets.empty() && offsets.back().offset == state->traceBufferSize) {
       // No new data produced since last time: Bump the existing last step.
-      offsets.back().numSteps++;
+      offsets.back().step = timeStep;
     } else {
       // Store the current offset
-      offsets.emplace_back(state->traceBufferSize);
+      offsets.emplace_back(state->traceBufferSize, timeStep);
     }
   } else {
     // Untouched buffer: Adjust the first step value.

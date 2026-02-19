@@ -65,7 +65,7 @@ static void writeVCDHeader(std::basic_ostream<char> &os) {
   // TODO: Add the current date to the header. For now, keep the output
   // stable to facilitate comparisons.
   os << "$version\n    Some cryptic ArcRuntime magic\n$end\n";
-  os << "$timescale 1ns $end\n";
+  os << "$timescale 1fs $end\n";
 }
 
 } // namespace
@@ -273,7 +273,7 @@ void VCDTraceEncoder::encode(TraceBuffer &work) {
     assert(offset <= work.size);
     // Check if we have reached a new time step marker
     if (stepIter != work.stepMarkers.end() && stepIter->offset == offset) {
-      workerStep += stepIter->numSteps;
+      workerStep = stepIter->step;
       writeTimestepToBuffer(workerStep, workerOutBuffer);
       stepIter++;
     }
@@ -294,7 +294,7 @@ void VCDTraceEncoder::finalize(const ArcState *state) {
   if (outFile.is_open()) {
     // Finalize the trace file
     assert(workerStep <= getTimeStep());
-    outFile << '#' << getTimeStep() + 1 << '\n';
+    outFile << '#' << getTimeStep() << '\n';
     outFile.close();
   }
 }
