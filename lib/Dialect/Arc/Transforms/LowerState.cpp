@@ -102,6 +102,7 @@ struct OpLowering {
   LogicalResult lower(hw::OutputOp op);
   LogicalResult lower(seq::InitialOp op);
   LogicalResult lower(llhd::FinalOp op);
+  LogicalResult lower(llhd::CurrentTimeOp op);
 
   scf::IfOp createIfClockOp(Value clock);
 
@@ -416,7 +417,8 @@ LogicalResult OpLowering::lower() {
   return TypeSwitch<Operation *, LogicalResult>(op)
       // Operations with special lowering.
       .Case<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp, hw::OutputOp,
-            seq::InitialOp, llhd::FinalOp>([&](auto op) { return lower(op); })
+            seq::InitialOp, llhd::FinalOp, llhd::CurrentTimeOp>(
+          [&](auto op) { return lower(op); })
 
       // Operations that should be skipped entirely and never land on the
       // worklist to be lowered.
@@ -965,6 +967,22 @@ LogicalResult OpLowering::lower(llhd::FinalOp op) {
     op.erase();
   });
 
+  return success();
+}
+
+/// Lower `llhd.current_time` to `arc.current_time` followed by
+/// `llhd.int_to_time`. The Arc operation returns `i64` femtoseconds, but the
+/// LLHD operation returns `!llhd.time`, so we convert back.
+LogicalResult OpLowering::lower(llhd::CurrentTimeOp op) {
+  assert(phase == Phase::New);
+  if (initial)
+    return success();
+
+  auto timeInt =
+      CurrentTimeOp::create(module.builder, op.getLoc(), module.storageArg);
+  auto time =
+      llhd::IntToTimeOp::create(module.builder, op.getLoc(), timeInt);
+  module.loweredValues[{op.getResult(), phase}] = time;
   return success();
 }
 

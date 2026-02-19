@@ -639,3 +639,15 @@ arc.define @MemoryPortRegressionArc2(%arg0: i1) -> i1 {
 arc.define @MemoryPortRegressionArc3(%arg0: i3) -> i3 {
   arc.output %arg0 : i3
 }
+
+// CHECK-LABEL: arc.model @LLHDTimeOps
+// CHECK-SAME: io !hw.modty<output t : i64>
+hw.module @LLHDTimeOps(out t: i64) {
+  // CHECK: [[TIME_INT:%.+]] = arc.current_time %arg0
+  // CHECK: [[TIME:%.+]] = llhd.int_to_time [[TIME_INT]]
+  // CHECK: [[TIME_OUT:%.+]] = llhd.time_to_int [[TIME]]
+  // CHECK: arc.state_write %out_t = [[TIME_OUT]]
+  %0 = llhd.current_time
+  %1 = llhd.time_to_int %0
+  hw.output %1 : i64
+}
