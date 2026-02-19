@@ -295,39 +295,47 @@ rtg.test @indexArithmeticOps(singleton = %none: index) {
   %c2 = index.constant 2
   %c0 = index.constant 0
 
-  // CHECK: func.call @dummy2(%idx7)
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant 7 : index
+  // CHECK-NEXT: func.call @dummy2([[V0]])
   %sub = index.sub %c10, %c3
   func.call @dummy2(%sub) : (index) -> ()
 
-  // CHECK: func.call @dummy2(%idx30)
+  // CHECK-NEXT: [[V1:%.+]] = rtg.constant 30 : index
+  // CHECK-NEXT: func.call @dummy2([[V1]])
   %mul = index.mul %c10, %c3
   func.call @dummy2(%mul) : (index) -> ()
 
-  // CHECK: func.call @dummy2(%idx3)
+  // CHECK-NEXT: [[V2:%.+]] = rtg.constant 3 : index
+  // CHECK-NEXT: func.call @dummy2([[V2]])
   %div = index.divu %c10, %c3
   func.call @dummy2(%div) : (index) -> ()
 
-  // CHECK: func.call @dummy2(%idx4)
+  // CHECK-NEXT: [[V3:%.+]] = rtg.constant 4 : index
+  // CHECK-NEXT: func.call @dummy2([[V3]])
   %ceildiv = index.ceildivu %c10, %c3
   func.call @dummy2(%ceildiv) : (index) -> ()
 
-  // CHECK: func.call @dummy2(%idx1)
+  // CHECK-NEXT: [[V4:%.+]] = rtg.constant 1 : index
+  // CHECK-NEXT: func.call @dummy2([[V4]])
   %rem = index.remu %c10, %c3
   func.call @dummy2(%rem) : (index) -> ()
 
-  // CHECK: func.call @dummy2(%idx40)
+  // CHECK-NEXT: [[V5:%.+]] = rtg.constant 40 : index
+  // CHECK-NEXT: func.call @dummy2([[V5]])
   %shl = index.shl %c10, %c2
   func.call @dummy2(%shl) : (index) -> ()
 
-  // CHECK: func.call @dummy2(%idx2)
+  // CHECK-NEXT: [[V6:%.+]] = rtg.constant 2 : index
+  // CHECK-NEXT: func.call @dummy2([[V6]])
   %shr = index.shru %c10, %c2
   func.call @dummy2(%shr) : (index) -> ()
 
-  // CHECK: func.call @dummy2(%idx10)
+  // CHECK-NEXT: [[V7:%.+]] = rtg.constant 10 : index
+  // CHECK-NEXT: func.call @dummy2([[V7]])
   %max = index.maxu %c10, %c3
   func.call @dummy2(%max) : (index) -> ()
 
-  // CHECK: func.call @dummy2(%idx3)
+  // CHECK-NEXT: func.call @dummy2([[V2]])
   %min = index.minu %c10, %c3
   func.call @dummy2(%min) : (index) -> ()
 }
@@ -339,12 +347,14 @@ rtg.test @ceilDivEdgeCases(singleton = %none: index) {
   %c10 = index.constant 10
 
   // Test ceiling division with 0 dividend: ceil(0 / 5) = 0
-  // CHECK: func.call @dummy2(%idx0)
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant 0 : index
+  // CHECK-NEXT: func.call @dummy2([[V0]])
   %ceildiv0 = index.ceildivu %c0, %c5
   func.call @dummy2(%ceildiv0) : (index) -> ()
 
   // Test ceiling division with exact division: ceil(10 / 5) = 2
-  // CHECK: func.call @dummy2(%idx2)
+  // CHECK-NEXT: [[V1:%.+]] = rtg.constant 2 : index
+  // CHECK-NEXT: func.call @dummy2([[V1]])
   %ceildiv1 = index.ceildivu %c10, %c5
   func.call @dummy2(%ceildiv1) : (index) -> ()
 }
@@ -355,15 +365,18 @@ rtg.test @indexBitwiseOps(singleton = %none: index) {
   %c10 = index.constant 10 // bit pattern 0b1010
   %c6 = index.constant 6   // bit pattern 0b0110
 
-  // CHECK: func.call @dummy2(%idx8)
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant 8 : index
+  // CHECK-NEXT: func.call @dummy2([[V0]])
   %and = index.and %c12, %c10
   func.call @dummy2(%and) : (index) -> ()
 
-  // CHECK: func.call @dummy2(%idx14)
+  // CHECK-NEXT: [[V1:%.+]] = rtg.constant 14 : index
+  // CHECK-NEXT: func.call @dummy2([[V1]])
   %or = index.or %c12, %c10
   func.call @dummy2(%or) : (index) -> ()
 
-  // CHECK: func.call @dummy2(%idx10)
+  // CHECK-NEXT: [[V2:%.+]] = rtg.constant 10 : index
+  // CHECK-NEXT: func.call @dummy2([[V2]])
   %xor = index.xor %c12, %c6
   func.call @dummy2(%xor) : (index) -> ()
 }
