@@ -14,6 +14,10 @@
 
 #define DEBUG_TYPE "arc-allocate-state"
 
+// Offset for model state allocations. The first bytes of model storage are
+// reserved for the model header (currently just the i64 simulation time).
+static constexpr unsigned kStateOffset = 8;
+
 namespace circt {
 namespace arc {
 #define GEN_PASS_DEF_ALLOCATESTATE
@@ -39,8 +43,9 @@ struct AllocateStatePass
   using AllocateStateBase::AllocateStateBase;
 
   void runOnOperation() override;
-  void allocateBlock(Block *block);
-  void allocateOps(Value storage, Block *block, ArrayRef<Operation *> ops);
+  void allocateBlock(Block *block, Value rootStorage);
+  void allocateOps(Value storage, Block *block, ArrayRef<Operation *> ops,
+                   unsigned padding);
   void tapNamedState(AllocStateOp allocOp, IntegerAttr offset);
 
   SmallVector<Attribute> traceTaps;
@@ -56,7 +61,8 @@ void AllocateStatePass::runOnOperation() {
 
   // Walk the blocks from innermost to outermost and group all state allocations
   // in that block in one larger allocation.
-  modelOp.walk([&](Block *block) { allocateBlock(block); });
+  Value rootStorage = modelOp.getBodyBlock().getArgument(0);
+  modelOp.walk([&](Block *block) { allocateBlock(block, rootStorage); });
 
   if (!traceTaps.empty())
     modelOp.setTraceTapsAttr(ArrayAttr::get(modelOp.getContext(), traceTaps));
@@ -102,7 +108,7 @@ void AllocateStatePass::tapNamedState(AllocStateOp allocOp,
   }
 }
 
-void AllocateStatePass::allocateBlock(Block *block) {
+void AllocateStatePass::allocateBlock(Block *block, Value rootStorage) {
   SmallMapVector<Value, std::vector<Operation *>, 1> opsByStorage;
 
   // Group operations by their storage. There is generally just one storage,
@@ -115,18 +121,23 @@ void AllocateStatePass::allocateBlock(Block *block) {
   LLVM_DEBUG(llvm::dbgs() << "- Visiting block in "
                           << block->getParentOp()->getName() << "\n");
 
-  // Actually allocate each operation.
-  for (auto &[storage, ops] : opsByStorage)
-    allocateOps(storage, block, ops);
+  // Actually allocate each operation. Root storage gets padding for the model
+  // header.
+  bool isRootBlock = block == rootStorage.getParentBlock();
+  for (auto &[storage, ops] : opsByStorage) {
+    unsigned padding = isRootBlock && storage == rootStorage ? kStateOffset : 0;
+    allocateOps(storage, block, ops, padding);
+  }
 }
 
 void AllocateStatePass::allocateOps(Value storage, Block *block,
-                                    ArrayRef<Operation *> ops) {
+                                    ArrayRef<Operation *> ops,
+                                    unsigned padding) {
   SmallVector<std::tuple<Value, Value, IntegerAttr>> gettersToCreate;
 
-  // Helper function to allocate storage aligned to its own size, or 8 bytes at
-  // most.
-  unsigned currentByte = 0;
+  // Helper function to allocate storage aligned to its own size, or 16 bytes
+  // at most.
+  unsigned currentByte = padding;
   auto allocBytes = [&](unsigned numBytes) {
     currentByte = llvm::alignToPowerOf2(
         currentByte, llvm::bit_ceil(std::min(numBytes, 16U)));
@@ -201,12 +212,12 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
     }
   }
 
-  // Create the substorage accessor at the beginning of the block.
-  Operation *storageOwner = storage.getDefiningOp();
-  if (!storageOwner)
-    storageOwner = cast<BlockArgument>(storage).getOwner()->getParentOp();
-
-  if (storageOwner->isProperAncestor(block->getParentOp())) {
+  // Create the substorage accessor at the beginning of the block, or update the
+  // root storage type to reflect the total allocation size. Root storage is
+  // indicated by non-zero padding.
+  if (padding != 0) {
+    storage.setType(StorageType::get(&getContext(), currentByte));
+  } else {
     auto substorage = AllocStorageOp::create(
         builder, block->getParentOp()->getLoc(),
         StorageType::get(&getContext(), currentByte), storage);
@@ -214,7 +225,5 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
       op->replaceUsesOfWith(storage, substorage);
     for (auto op : getters)
       op->replaceUsesOfWith(storage, substorage);
-  } else {
-    storage.setType(StorageType::get(&getContext(), currentByte));
   }
 }
