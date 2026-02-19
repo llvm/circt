@@ -867,6 +867,7 @@ def ValidateOp : RTGOp<"validate", [
   AllTypesMatch<["defaultValue", "value"]>,
   AllTypesMatch<["defaultUsedValues", "elseValues", "values"]>,
   AttrSizedOperandSegments,
+  DeclareOpInterfaceMethods<RegisterAllocationOpInterface>,
 ]> {
   let summary = "validate the value in the given resource";
   let description = [{
