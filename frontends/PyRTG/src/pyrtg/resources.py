@@ -8,6 +8,7 @@ from .rtg import rtg
 from .rtgtest import rtgtest
 from .core import Value, Type
 from .base import ir
+from .strings import String
 
 
 class IntegerRegister(Value):
@@ -157,6 +158,13 @@ class IntegerRegister(Value):
 
   def t6() -> IntegerRegister:
     return rtg.ConstantOp(rtgtest.RegT6Attr.get())
+
+  def to_string(self) -> String:
+    """
+    Formats this register as a string.
+    """
+
+    return rtg.RegisterFormatOp(self)
 
   def _get_ssa_value(self) -> ir.Value:
     return self._value
