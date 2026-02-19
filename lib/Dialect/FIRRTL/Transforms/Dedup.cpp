@@ -1859,6 +1859,8 @@ class DedupPass : public circt::firrtl::impl::DedupBase<DedupPass> {
         // If the current module is public, and the original is private, we
         // want to dedup the private module into the public one.
         if (!canRemoveModule(module)) {
+          // Record that this module's name is staying the same.
+          dedupMap[moduleName] = moduleName;
           // If both modules are public, then we can't dedup anything.
           if (!canRemoveModule(original))
             continue;
