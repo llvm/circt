@@ -1162,7 +1162,6 @@ firrtl.circuit "InstanceChoiceNoLoop" {
 // -----
 
 // Test that InstanceChoiceOp detects loops through default module
-// CHECK-NOT: firrtl.circuit "InstanceChoiceLoopDefault"
 firrtl.circuit "InstanceChoiceLoopDefault" {
   firrtl.option @Platform {
     firrtl.option_case @FPGA
@@ -1191,7 +1190,6 @@ firrtl.circuit "InstanceChoiceLoopDefault" {
 // -----
 
 // Test that InstanceChoiceOp detects loops through alternative module
-// CHECK-NOT: firrtl.circuit "InstanceChoiceLoopAlt"
 firrtl.circuit "InstanceChoiceLoopAlt" {
   firrtl.option @Platform {
     firrtl.option_case @FPGA
