@@ -286,10 +286,23 @@ endif()
 add_executable(esitester
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/tools/esitester.cpp
 )
+# Set debug postfix for Windows executables
+if(WIN32)
+  set_target_properties(esitester PROPERTIES DEBUG_POSTFIX "_d")
+endif()
 target_link_libraries(esitester PRIVATE
   ESICppRuntime
   CLI11::CLI11
 )
+# Install PDB files for Windows Debug builds
+if(WIN32 AND MSVC)
+  install(FILES $<TARGET_PDB_FILE:esitester>
+    DESTINATION ${ESIRT_INSTALL_BINDIR}
+    COMPONENT ESIRuntime
+    OPTIONAL
+  )
+endif()
+
 
 # Add the Python bindings.
 add_subdirectory(python)

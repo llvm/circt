@@ -118,27 +118,11 @@ if(Python3_FOUND)
         DESTINATION .
         COMPONENT ESIRuntime
       )
-      # Install PDB files for Windows Debug builds
-      if(WIN32 AND MSVC)
-        install(FILES $<TARGET_PDB_FILE:esiCppAccel>
-          DESTINATION .
-          COMPONENT ESIRuntime
-          OPTIONAL
-        )
-      endif()
     else()
       install(TARGETS esiCppAccel
         DESTINATION python/esiaccel
         COMPONENT ESIRuntime
       )
-      # Install PDB files for Windows Debug builds
-      if(WIN32 AND MSVC)
-        install(FILES $<TARGET_PDB_FILE:esiCppAccel>
-          DESTINATION python/esiaccel
-          COMPONENT ESIRuntime
-          OPTIONAL
-        )
-      endif()
     endif()
     install(RUNTIME_DEPENDENCY_SET ESICppRuntime_RUNTIME_DEPS
       DESTINATION ${ESIRT_INSTALL_LIBDIR}
