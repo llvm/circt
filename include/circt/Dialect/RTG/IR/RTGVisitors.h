@@ -169,7 +169,7 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Type, ResultType>(type)
         .template Case<ImmediateType, SequenceType, SetType, BagType, DictType,
-                       LabelType, IndexType, IntegerType>(
+                       MapType, LabelType, IndexType, IntegerType>(
             [&](auto expr) -> ResultType {
               return thisCast->visitType(expr, args...);
             })
