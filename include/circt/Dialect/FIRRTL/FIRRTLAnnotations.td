@@ -711,27 +711,6 @@ def ModuleHierarchyAnnotation : NoTargetAnnotation {
   }];
 }
 
-def TestHarnessHierarchyAnnotation : NoTargetAnnotation {
-  let className = "sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation";
-  let members = (ins
-    Doc<StringParam, "The full output file path">:$filename
-  );
-  let description = [{
-    This annotation indicates that a module hierarchy JSON file should be emitted
-    for the module hierarchy rooted at the circuit root module, which is assumed
-    to be the test harness. See the SV attribute, `firrtl.moduleHierarchyFile`,
-    for information about the JSON file format.
-
-    Example:
-    ```json
-    {
-      "class": "sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation",
-      "filename": "./dir/testharness_hier.json"
-    }
-    ```
-  }];
-}
-
 //===----------------------------------------------------------------------===//
 // Deduplication Annotations
 //===----------------------------------------------------------------------===//

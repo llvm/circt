@@ -603,7 +603,7 @@ void CircuitLoweringState::processRemainingAnnotations(
             // The following will be handled after lowering FModule ops, since
             // they are still needed on the circuit until after lowering
             // FModules.
-            moduleHierarchyAnnoClass, testHarnessHierarchyAnnoClass,
+            moduleHierarchyAnnoClass,
             blackBoxTargetDirAnnoClass))
       continue;
 
@@ -795,7 +795,6 @@ void FIRRTLModuleLowering::runOnOperation() {
   // Collect the two sets of hierarchy files from the circuit. Some of them will
   // be rooted at the test harness, the others will be rooted at the DUT.
   SmallVector<Attribute> dutHierarchyFiles;
-  SmallVector<Attribute> testHarnessHierarchyFiles;
   circuitAnno.removeAnnotations([&](Annotation annotation) {
     if (annotation.isClass(moduleHierarchyAnnoClass)) {
       auto file = hw::OutputFileAttr::getFromFilename(
@@ -805,19 +804,6 @@ void FIRRTLModuleLowering::runOnOperation() {
       dutHierarchyFiles.push_back(file);
       return true;
     }
-    if (annotation.isClass(testHarnessHierarchyAnnoClass)) {
-      auto file = hw::OutputFileAttr::getFromFilename(
-          &getContext(),
-          annotation.getMember<StringAttr>("filename").getValue(),
-          /*excludeFromFileList=*/true);
-      // If there is no testHarness, we print the hiearchy for this file
-      // starting at the DUT.
-      if (state.getTestHarness())
-        testHarnessHierarchyFiles.push_back(file);
-      else
-        dutHierarchyFiles.push_back(file);
-      return true;
-    }
     return false;
   });
   // Attach the lowered form of these annotations.
@@ -825,10 +811,6 @@ void FIRRTLModuleLowering::runOnOperation() {
     state.getNewModule(state.getDut())
         ->setAttr(moduleHierarchyFileAttrName,
                   ArrayAttr::get(&getContext(), dutHierarchyFiles));
-  if (!testHarnessHierarchyFiles.empty())
-    state.getNewModule(state.getTestHarness())
-        ->setAttr(moduleHierarchyFileAttrName,
-                  ArrayAttr::get(&getContext(), testHarnessHierarchyFiles));
 
   // Lower all module and formal op bodies.
   auto result =

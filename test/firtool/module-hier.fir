@@ -11,10 +11,6 @@ circuit Foo: %[[
     "filename": "dut_hier.json"
   },
   {
-    "class": "sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation",
-    "filename": "tb_hier.json"
-  },
-  {
     "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
     "target": "~Foo|Bar"
   },
@@ -58,25 +54,6 @@ circuit Foo: %[[
 ; CHECK-NEXT:          "instance_name": "[[Bar_baz]]",
 ; CHECK-NEXT:          "module_name": "Baz",
 ; CHECK-NEXT:          "instances": []
-; CHECK-NEXT:        }
-; CHECK-NEXT:      ]
-; CHECK-NEXT:    }
-
-; CHECK-LABEL: FILE "tb_hier.json"
-; CHECK:         {
-; CHECK-NEXT:      "instance_name": "Foo",
-; CHECK-NEXT:      "module_name": "Foo",
-; CHECK-NEXT:      "instances": [
-; CHECK-NEXT:        {
-; CHECK-NEXT:          "instance_name": "[[Foo_bar]]",
-; CHECK-NEXT:          "module_name": "Bar",
-; CHECK-NEXT:          "instances": [
-; CHECK-NEXT:            {
-; CHECK-NEXT:              "instance_name": "[[Bar_baz]]",
-; CHECK-NEXT:              "module_name": "Baz",
-; CHECK-NEXT:              "instances": []
-; CHECK-NEXT:            }
-; CHECK-NEXT:          ]
 ; CHECK-NEXT:        }
 ; CHECK-NEXT:      ]
 ; CHECK-NEXT:    }
