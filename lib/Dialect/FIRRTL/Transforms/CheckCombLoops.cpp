@@ -433,7 +433,7 @@ public:
   // relations is per field.
   void handleInstanceOp(InstanceOp inst) {
     auto refMod = inst.getReferencedModule<FModuleOp>(instanceGraph);
-    // TODO: External modules not handled !!
+    // Skip if the instance is not a module (e.g. external module).
     if (!refMod)
       return;
     processInstancePorts(refMod, inst.getResults());
@@ -450,6 +450,7 @@ public:
       if (!node)
         continue;
 
+      // Skip if the instance is not a module (e.g. external module).
       if (auto refMod = dyn_cast<FModuleOp>(*node->getModule()))
         processInstancePorts(refMod, inst.getResults());
     }
