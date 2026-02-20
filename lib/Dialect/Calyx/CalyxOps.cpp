@@ -209,10 +209,7 @@ LogicalResult calyx::verifyComponent(Operation *op) {
 }
 
 LogicalResult calyx::verifyCell(Operation *op) {
-  auto opParent = op->getParentOp();
-  if (!isa<ComponentInterface>(opParent))
-    return op->emitOpError()
-           << "has parent: " << opParent << ", expected ComponentInterface.";
+  // auto opParent = op->getParentOp();
   return success();
 }
 
@@ -1713,12 +1710,14 @@ static LogicalResult
 verifyPrimitiveOpType(PrimitiveOp instance,
                       hw::HWModuleExternOp referencedPrimitive) {
   auto module = instance->getParentOfType<ModuleOp>();
-  StringRef entryPointName =
-      module->getAttrOfType<StringAttr>("calyx.entrypoint");
-  if (instance.getPrimitiveName() == entryPointName)
-    return instance.emitOpError()
-           << "cannot reference the entry-point component: '" << entryPointName
-           << "'.";
+  if (module->hasAttrOfType<StringAttr>("calyx.entrypoint")) {
+    StringRef entryPointName =
+        module->getAttrOfType<StringAttr>("calyx.entrypoint");
+    if (instance.getPrimitiveName() == entryPointName)
+      return instance.emitOpError()
+             << "cannot reference the entry-point component: '"
+             << entryPointName << "'.";
+  }
 
   // Verify the instance result ports with those of its referenced component.
   auto primitivePorts = referencedPrimitive.getPortList();
