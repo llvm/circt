@@ -167,11 +167,12 @@ class CMakeBuild(build_py):
         # For Debug builds, we only built the C++ runtime (not the Python
         # extension), so we can't use cmake --install with the ESIRuntime
         # component (it would fail trying to install the unbuilt Python
-        # extension). Instead, manually copy the debug DLLs and PDBs.
+        # extension). Instead, manually copy the debug DLLs, PDBs, and import
+        # libraries.
         import glob
         install_dir = os.path.join(target_dir, "esiaccel")
         os.makedirs(install_dir, exist_ok=True)
-        for pattern in ["*.dll", "*.pdb", "*.exe"]:
+        for pattern in ["*.dll", "*.pdb", "*.exe", "*.lib"]:
           for f in glob.glob(os.path.join(current_build_dir, pattern)):
             print(f"  Installing {os.path.basename(f)}")
             shutil.copy2(f, install_dir)

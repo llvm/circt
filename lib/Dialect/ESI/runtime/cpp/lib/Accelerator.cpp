@@ -202,7 +202,7 @@ static void loadBackend(Context &ctxt, std::string backend) {
   std::string backendFileName = backend + "Backend.dll";
 #endif
 #else
-#eror "Unsupported platform"
+#error "Unsupported platform"
 #endif
 
   // First, try the current directory.
