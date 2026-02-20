@@ -114,13 +114,11 @@ firrtl.circuit "moduleAnno" attributes {annotations = [{class = "circuitOpAnnota
 // when lowering to HW.
 firrtl.circuit "Foo" attributes {annotations = [
     {class = "sifive.enterprise.firrtl.MetadataDirAnnotation", dirname = "metadata"},
-    {class = "sifive.enterprise.firrtl.ElaborationArtefactsDirectory", dirname = "artefacts"},
     {class = "sifive.enterprise.firrtl.TestBenchDirAnnotation", dirname = "tb"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation", directory = "gct-dir", filename = "gct-dir/bindings.sv"}
   ]} {
     firrtl.module @Foo() attributes {annotations = [
         {class = "firrtl.transforms.NoDedupAnnotation"},
-        {class = "sifive.enterprise.firrtl.DontObfuscateModuleAnnotation"},
         {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"},
         {class = "firrtl.transforms.BlackBox", circt.nonlocal = @nla_1}
     ]} {}
