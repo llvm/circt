@@ -174,16 +174,12 @@ class CMakeBuild(build_py):
         os.makedirs(install_dir, exist_ok=True)
         debug_patterns = [
             "ESICppRuntime*.dll",
-            "ESICppRuntime*.pdb",
             "ESICppRuntime*.lib",
             "CosimRpc*.dll",
-            "CosimRpc*.pdb",
             "CosimRpc*.lib",
             "CosimBackend*.dll",
-            "CosimBackend*.pdb",
             "CosimBackend*.lib",
             "esiquery*.exe",
-            "esiquery*.pdb",
         ]
         for pattern in debug_patterns:
           for f in glob.glob(os.path.join(current_build_dir, pattern)):
