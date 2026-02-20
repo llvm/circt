@@ -1176,7 +1176,7 @@ firrtl.circuit "InstanceChoiceLoopDefault" {
     firrtl.matchingconnect %out, %c0_ui8 : !firrtl.uint<8>
   }
 
-  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: InstanceChoiceLoopDefault.{inst <- inst <- y <- inst}}}
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: InstanceChoiceLoopDefault.{inst.in <- y <- inst.out <- inst.in}}
   firrtl.module @InstanceChoiceLoopDefault(in %x: !firrtl.uint<8>) {
     %y = firrtl.wire : !firrtl.uint<8>
     %inst_in, %inst_out = firrtl.instance_choice inst @LoopImpl alternatives @Platform {
@@ -1204,7 +1204,7 @@ firrtl.circuit "InstanceChoiceLoopAlt" {
     firrtl.matchingconnect %out, %in : !firrtl.uint<8>
   }
 
-  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: InstanceChoiceLoopAlt.{inst <- inst <- y <- inst}}}
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: InstanceChoiceLoopAlt.{inst.in <- y <- inst.out <- inst.in}}
   firrtl.module @InstanceChoiceLoopAlt(in %x: !firrtl.uint<8>) {
     %y = firrtl.wire : !firrtl.uint<8>
     %inst_in, %inst_out = firrtl.instance_choice inst @NoLoopImpl alternatives @Platform {
