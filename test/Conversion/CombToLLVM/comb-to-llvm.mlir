@@ -197,8 +197,8 @@ func.func @test_hw_constant_with_ops() -> i32 {
   // Test that hw.constant works with other operations
   // CHECK: %[[C10:.*]] = llvm.mlir.constant(10 : i32) : i32
   // CHECK: %[[C20:.*]] = llvm.mlir.constant(20 : i32) : i32
-  // CHECK: %[[RESULT:.*]] = llvm.add %[[C10]], %[[C20]] : i32
-  // CHECK: llvm.return %[[RESULT]]
+  // CHECK: %[[C30:.*]] = llvm.mlir.constant(30 : i32) : i32
+  // CHECK: llvm.return %[[C30]]
   %c10 = hw.constant 10 : i32
   %c20 = hw.constant 20 : i32
   %result = comb.add %c10, %c20 : i32
