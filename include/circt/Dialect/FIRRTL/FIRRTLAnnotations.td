@@ -237,7 +237,7 @@ def FlattenAnnotation : SingleTargetAnnotation {
   let description = [{
     Indicates that the target should be flattened, which means that child
     instances will be recursively inlined.
-    
+
     Example:
     ```json
     {
@@ -245,7 +245,7 @@ def FlattenAnnotation : SingleTargetAnnotation {
       "target": "~Foo|Bar/d:Baz"
     }
     ```
-    
+
     Scala documentation: https://javadoc.io/doc/edu.berkeley.cs/firrtl_2.13/latest/firrtl/transforms/FlattenAnnotation.html
   }];
 }
@@ -281,7 +281,7 @@ def BlackBox : SingleTargetAnnotation {
 
     This is used when generating metadata about external modules to distinguish
     generated modules. This annotation is internal to the MLIR FIRRTL compiler.
-    
+
     Example:
     ```json
     {
@@ -355,7 +355,7 @@ def BlackBoxTargetDirAnno : NoTargetAnnotation {
       "targetDir": "/tmp/circt/output"
     }
     ```
-    
+
     Scala documentation: https://javadoc.io/doc/edu.berkeley.cs/firrtl_2.13/latest/firrtl/transforms/BlackBoxTargetDirAnno.html
   }];
 }
@@ -452,7 +452,7 @@ def BodyTypeLoweringAnnotation : SingleTargetAnnotation {
     is applied to all modules in the hierarchy. If there are multiple annotation
     instances that specify conventions, the `scalarized` convention takes
     precedence over the `internal` convention.
-    
+
     Example:
     ```json
     {
@@ -1186,7 +1186,7 @@ def GrandCentralHierarchyFileAnnotation : NoTargetAnnotation {
     The format of the produced YAML file is a one-to-one mapping of the
     SystemVerilog interface to YAML. Consider the following SystemVerilog
     interface produced by GrandCentral:
-    
+
     ```verilog
     interface Foo;
       // A 4-bit type
@@ -1196,18 +1196,18 @@ def GrandCentralHierarchyFileAnnotation : NoTargetAnnotation {
       // A 1D vector of instances of Bar
       Bar bar[4]();
     endinterface
-    
+
     interface Bar;
       logic c;
     endinterface
-    
+
     interface Baz;
       logic d;
     endinterface
     ```
-    
+
     This will produce the following YAML representation:
-    
+
     ```yaml
     - name: Foo
       fields:
