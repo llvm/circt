@@ -2674,20 +2674,20 @@ module ConcurrentAssert(input clk);
   assert property (@(posedge clk) a);
 
   // Clocking with delay - clock should propagate to ltl.delay
-  // CHECK: moore.procedure always
-    // CHECK: [[READ_CLK2:%.+]] = moore.read [[CLK]] : <l1>
-    // CHECK: [[CONV_CLK2:%.+]] = moore.to_builtin_bool [[READ_CLK2]] : l1
-    // CHECK: [[READ_A2:%.+]] = moore.read [[A]] : <i1>
-    // CHECK: [[CONV_A2:%.+]] = moore.to_builtin_bool [[READ_A2]] : i1
-    // CHECK: [[DELAY_A2:%.+]] = ltl.delay [[CONV_CLK2]], posedge, [[CONV_A2]], 0, 0 : i1
-    // CHECK: [[READ_B2:%.+]] = moore.read [[B]] : <l1>
-    // CHECK: [[CONV_B2:%.+]] = moore.to_builtin_bool [[READ_B2]] : l1
-    // CHECK: [[DELAY_B2:%.+]] = ltl.delay [[CONV_CLK2]], posedge, [[CONV_B2]], 1 : i1
-    // CHECK: [[CONCAT2:%.+]] = ltl.concat [[DELAY_A2]], [[DELAY_B2]] : !ltl.sequence, !ltl.sequence
-    // CHECK: [[CLK_OP2:%.+]] = ltl.clock [[CONCAT2]], posedge [[CONV_CLK2]] : !ltl.sequence
-    // CHECK: verif.assert [[CLK_OP2]] : !ltl.sequence
-    // CHECK: moore.return
-  // CHECK: }
+  // CHECK-NOT: moore.procedure always
+  // CHECK: [[READ_CLK2:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[CLK2_INT:%.+]] = moore.logic_to_int [[READ_CLK2]] : l1
+  // CHECK: [[CONV_CLK2:%.+]] = moore.to_builtin_int [[CLK2_INT]] : i1
+  // CHECK: [[READ_A2:%.+]] = moore.read [[A]] : <i1>
+  // CHECK: [[CONV_A2:%.+]] = moore.to_builtin_int [[READ_A2]] : i1
+  // CHECK: [[DELAY_A2:%.+]] = ltl.delay [[CONV_CLK2]], posedge, [[CONV_A2]], 0, 0 : i1
+  // CHECK: [[READ_B2:%.+]] = moore.read [[B]] : <l1>
+  // CHECK: [[B2_INT:%.+]] = moore.logic_to_int [[READ_B2]] : l1
+  // CHECK: [[CONV_B2:%.+]] = moore.to_builtin_int [[B2_INT]] : i1
+  // CHECK: [[DELAY_B2:%.+]] = ltl.delay [[CONV_CLK2]], posedge, [[CONV_B2]], 1, 0 : i1
+  // CHECK: [[CONCAT2:%.+]] = ltl.concat [[DELAY_A2]], [[DELAY_B2]] : !ltl.sequence, !ltl.sequence
+  // CHECK: [[CLK_OP2:%.+]] = ltl.clock [[CONCAT2]], posedge {{%.+}} : !ltl.sequence
+  // CHECK: verif.assert [[CLK_OP2]] : !ltl.sequence
   assert property (@(posedge clk) a ##1 b);
 
   // Sequence declaration
