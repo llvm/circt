@@ -58,100 +58,146 @@ class CMakeBuild(build_py):
           os.path.join(target_dir, "..", "cmake_build"))
     src_dir = _thisdir
 
-    os.makedirs(cmake_build_dir, exist_ok=True)
-    cmake_cache_file = os.path.join(cmake_build_dir, "CMakeCache.txt")
-    if os.path.exists(cmake_cache_file):
-      os.remove(cmake_cache_file)
+    # On Windows, we build both Release and Debug configurations
+    # to support applications in both modes.
+    configs_to_build = ["Release"]
+    if platform.system() == "Windows":
+      configs_to_build.append("Debug")
 
-    # Configure the build.
-    cfg = "Release"
+    for cfg in configs_to_build:
+      # Use separate build directories for each configuration
+      current_build_dir = cmake_build_dir
+      if len(configs_to_build) > 1:
+        current_build_dir = os.path.join(cmake_build_dir, cfg)
 
-    cmake_args = [
-        "-GNinja",  # This build only works with Ninja on Windows.
-        "-DCMAKE_BUILD_TYPE={}".format(cfg),  # not used on MSVC, but no harm
-        "-DPython3_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
-        "-DPython_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
-        "-DWHEEL_BUILD=ON",
-    ]
+      os.makedirs(current_build_dir, exist_ok=True)
+      cmake_cache_file = os.path.join(current_build_dir, "CMakeCache.txt")
+      if os.path.exists(cmake_cache_file):
+        os.remove(cmake_cache_file)
 
-    # Get the nanobind cmake directory from the isolated build environment.
-    # This is necessary because CMake's execute_process may not properly find
-    # nanobind installed in the isolated build environment.
-    try:
-      import nanobind
+      # Configure the build.
+      cmake_args = [
+          "-GNinja",  # This build only works with Ninja on Windows.
+          "-DCMAKE_BUILD_TYPE={}".format(cfg),  # not used on MSVC, but no harm
+          "-DPython3_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
+          "-DPython_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
+          "-DWHEEL_BUILD=ON",
+      ]
 
-      nanobind_dir = nanobind.cmake_dir()
-      cmake_args.append("-Dnanobind_DIR={}".format(
-          nanobind_dir.replace("\\", "/")))
-    except ImportError:
-      print("Skipping nanobind directory detection, nanobind not found.")
+      # Get the nanobind cmake directory from the isolated build environment.
+      # This is necessary because CMake's execute_process may not properly find
+      # nanobind installed in the isolated build environment.
+      try:
+        import nanobind
 
-    cxx = os.getenv("CXX")
-    if cxx is not None:
-      cmake_args.append("-DCMAKE_CXX_COMPILER={}".format(cxx))
+        nanobind_dir = nanobind.cmake_dir()
+        cmake_args.append("-Dnanobind_DIR={}".format(
+            nanobind_dir.replace("\\", "/")))
+      except ImportError:
+        print("Skipping nanobind directory detection, nanobind not found.")
 
-    cc = os.getenv("CC")
-    if cc is not None:
-      cmake_args.append("-DCMAKE_C_COMPILER={}".format(cc))
+      cxx = os.getenv("CXX")
+      if cxx is not None:
+        cmake_args.append("-DCMAKE_CXX_COMPILER={}".format(cxx))
 
-    if "VCPKG_INSTALLATION_ROOT" in os.environ:
-      cmake_args.append(
-          f"-DCMAKE_TOOLCHAIN_FILE={os.environ['VCPKG_INSTALLATION_ROOT']}/scripts/buildsystems/vcpkg.cmake"
+      cc = os.getenv("CC")
+      if cc is not None:
+        cmake_args.append("-DCMAKE_C_COMPILER={}".format(cc))
+
+      if "VCPKG_INSTALLATION_ROOT" in os.environ:
+        cmake_args.append(
+            f"-DCMAKE_TOOLCHAIN_FILE={os.environ['VCPKG_INSTALLATION_ROOT']}/scripts/buildsystems/vcpkg.cmake"
+        )
+
+      if "CIRCT_EXTRA_CMAKE_ARGS" in os.environ:
+        cmake_args += os.environ["CIRCT_EXTRA_CMAKE_ARGS"].split(" ")
+
+      # HACK: CMake fails to auto-detect static linked Python installations, which
+      # happens to be what exists on manylinux. We detect this and give it a dummy
+      # library file to reference (which is checks exists but never gets
+      # used).
+      if platform.system() == "Linux":
+        python_libdir = sysconfig.get_config_var('LIBDIR')
+        python_library = sysconfig.get_config_var('LIBRARY')
+        if python_libdir and not os.path.isabs(python_library):
+          python_library = os.path.join(python_libdir, python_library)
+        if python_library and not os.path.exists(python_library):
+          print("Detected static linked python. Faking a library for cmake.")
+          fake_libdir = os.path.join(current_build_dir, "fake_python", "lib")
+          os.makedirs(fake_libdir, exist_ok=True)
+          fake_library = os.path.join(fake_libdir,
+                                      sysconfig.get_config_var('LIBRARY'))
+          subprocess.check_call(["ar", "q", fake_library])
+          cmake_args.append("-DPython3_LIBRARY:PATH={}".format(fake_library))
+
+      # Finally run the cmake configure.
+      print(f"Configuring {cfg} build...")
+      subprocess.check_call(["cmake", src_dir] + cmake_args,
+                            cwd=current_build_dir)
+      print(" ".join(["cmake", src_dir] + cmake_args))
+
+      # Run the build.
+      # For Debug builds on Windows, only build the C++ runtime and tools (not
+      # the Python extension). The debug Python extension requires a debug
+      # Python interpreter and nanobind's auto-linking conflicts with the
+      # debug build. The purpose of the Debug build is to include the debug
+      # DLLs, EXEs, and PDBs in the wheel, not the Python extension.
+
+      print(f"Building {cfg} configuration...")
+      subprocess.check_call(
+          [
+              "cmake",
+              "--build",
+              ".",
+              "--parallel",
+              "--target",
+              "ESIRuntime",
+          ],
+          cwd=current_build_dir,
       )
 
-    if "CIRCT_EXTRA_CMAKE_ARGS" in os.environ:
-      cmake_args += os.environ["CIRCT_EXTRA_CMAKE_ARGS"].split(" ")
+      # Install the runtime directly into the target directory.
+      # For the first config (Release), clear the target directory.
+      # For subsequent configs (Debug on Windows), keep existing files.
+      if cfg == "Release" and os.path.exists(target_dir):
+        shutil.rmtree(target_dir)
 
-    # HACK: CMake fails to auto-detect static linked Python installations, which
-    # happens to be what exists on manylinux. We detect this and give it a dummy
-    # library file to reference (which is checks exists but never gets
-    # used).
-    if platform.system() == "Linux":
-      python_libdir = sysconfig.get_config_var('LIBDIR')
-      python_library = sysconfig.get_config_var('LIBRARY')
-      if python_libdir and not os.path.isabs(python_library):
-        python_library = os.path.join(python_libdir, python_library)
-      if python_library and not os.path.exists(python_library):
-        print("Detected static linked python. Faking a library for cmake.")
-        fake_libdir = os.path.join(cmake_build_dir, "fake_python", "lib")
-        os.makedirs(fake_libdir, exist_ok=True)
-        fake_library = os.path.join(fake_libdir,
-                                    sysconfig.get_config_var('LIBRARY'))
-        subprocess.check_call(["ar", "q", fake_library])
-        cmake_args.append("-DPython3_LIBRARY:PATH={}".format(fake_library))
-
-    # Finally run the cmake configure.
-    subprocess.check_call(["cmake", src_dir] + cmake_args, cwd=cmake_build_dir)
-    print(" ".join(["cmake", src_dir] + cmake_args))
-
-    # Run the build.
-    subprocess.check_call(
-        [
-            "cmake",
-            "--build",
-            ".",
-            "--parallel",
-            "--target",
-            "ESIRuntime",
-        ],
-        cwd=cmake_build_dir,
-    )
-
-    # Install the runtime directly into the target directory.
-    if os.path.exists(target_dir):
-      shutil.rmtree(target_dir)
-    subprocess.check_call(
-        [
-            "cmake",
-            "--install",
-            ".",
-            "--prefix",
-            os.path.join(target_dir, "esiaccel"),
-            "--component",
-            "ESIRuntime",
-        ],
-        cwd=cmake_build_dir,
-    )
+      print(f"Installing {cfg} configuration...")
+      if cfg == "Debug":
+        # For Debug builds, we only built the C++ runtime (not the Python
+        # extension), so we can't use cmake --install with the ESIRuntime
+        # component (it would fail trying to install the unbuilt Python
+        # extension). Instead, manually copy the debug DLLs, PDBs, import
+        # libraries, and executables for the specific ESIRuntime binaries.
+        import glob
+        install_dir = os.path.join(target_dir, "esiaccel")
+        os.makedirs(install_dir, exist_ok=True)
+        debug_patterns = [
+            "ESICppRuntime*.dll",
+            "ESICppRuntime*.lib",
+            "CosimRpc*.dll",
+            "CosimRpc*.lib",
+            "CosimBackend*.dll",
+            "CosimBackend*.lib",
+            "esiquery*.exe",
+        ]
+        for pattern in debug_patterns:
+          for f in glob.glob(os.path.join(current_build_dir, pattern)):
+            print(f"  Installing {os.path.basename(f)}")
+            shutil.copy2(f, install_dir)
+      else:
+        subprocess.check_call(
+            [
+                "cmake",
+                "--install",
+                ".",
+                "--prefix",
+                os.path.join(target_dir, "esiaccel"),
+                "--component",
+                "ESIRuntime",
+            ],
+            cwd=current_build_dir,
+        )
 
 
 class NoopBuildExtension(build_ext):
