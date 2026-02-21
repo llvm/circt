@@ -3828,12 +3828,6 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   // module.
   SmallVector<PortInfo, 8> portInfo = cast<FModuleLike>(oldModule).getPorts();
 
-  // Build an index from the name attribute to an index into portInfo, so we
-  // can do efficient lookups.
-  llvm::SmallDenseMap<Attribute, unsigned> portIndicesByName;
-  for (unsigned portIdx = 0, e = portInfo.size(); portIdx != e; ++portIdx)
-    portIndicesByName[portInfo[portIdx].name] = portIdx;
-
   // Ok, get ready to create the new instance operation.  We need to prepare
   // input operands.
   SmallVector<Value, 8> operands;
