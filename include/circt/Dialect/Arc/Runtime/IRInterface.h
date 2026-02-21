@@ -56,6 +56,7 @@ namespace circt {
 namespace arc {
 namespace runtime {
 struct FmtDescriptor;
+struct DynamicString;
 } // namespace runtime
 } // namespace arc
 } // namespace circt
@@ -104,6 +105,21 @@ arcRuntimeIR_format(const circt::arc::runtime::FmtDescriptor *fmt, ...);
 /// `traceBufferCapacity` x uint64_t size, which will become the new active
 /// trace buffer.
 ARC_IR_EXPORT uint64_t *arcRuntimeIR_swapTraceBuffer(const uint8_t *modelState);
+
+/// Initializes a DynamicString.
+/// Makes a heap-allocated copy of `initialValue` and stores the buffer pointer
+/// and length in `str`. We are also passing the size of the initial value to
+/// cover the cases where the strings might contain nulls in the middle
+ARC_IR_EXPORT void
+arcRuntimeIR_stringInit(circt::arc::runtime::DynamicString *str,
+                        const char *initialValue, int64_t initialSize);
+
+/// Concatenates multiple strings into a DynamicString.
+/// Allocates a new heap buffer containing the concatenation of all provided
+/// string pointers (terminated by a null pointer) passed as the variadic
+/// arguments and stores the result’s buffer pointer and length in `outStr`.
+ARC_IR_EXPORT void
+arcRuntimeIR_stringConcat(circt::arc::runtime::DynamicString *outStr, ...);
 
 // NOLINTEND(readability-identifier-naming)
 #endif // CIRCT_DIALECT_ARC_RUNTIME_IRINTERFACE_H
