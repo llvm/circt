@@ -1945,3 +1945,36 @@ firrtl.circuit "ExternalRequirements" {
     firrtl.instance ext @ExtMod()
   }
 }
+
+// -----
+
+// Test that instance_choice is lowered
+firrtl.circuit "InstanceChoiceTest" {
+  // CHECK-NOT: firrtl.option
+  // CHECK-NOT: firrtl.option_case
+  firrtl.option @Opt {
+    firrtl.option_case @FPGA
+  }
+
+  firrtl.module private @ModuleDefault(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    firrtl.matchingconnect %out, %in : !firrtl.uint<8>
+  }
+
+  firrtl.module private @ModuleFPGA(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    firrtl.matchingconnect %out, %in : !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: hw.module @InstanceChoiceTest
+  firrtl.module @InstanceChoiceTest(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    // CHECK: %[[WIRE:.+]] = sv.wire
+    // CHECK: %[[READ:.+]] = sv.read_inout %[[WIRE]]
+    // CHECK: %[[INST_DEFAULT:.+]] = hw.instance "inst_default" @ModuleDefault
+    // CHECK: sv.assign %[[WIRE]], %[[INST_DEFAULT]]
+    // CHECK: %[[INST_FPGA:.+]] = hw.instance "inst_FPGA" @ModuleFPGA
+    // CHECK: sv.assign %[[WIRE]], %[[INST_FPGA]]
+    // CHECK: hw.output %[[READ]]
+    %inst_in, %inst_out = firrtl.instance_choice inst @ModuleDefault alternatives @Opt { @FPGA -> @ModuleFPGA } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    firrtl.matchingconnect %inst_in, %in : !firrtl.uint<8>
+    firrtl.matchingconnect %out, %inst_out : !firrtl.uint<8>
+  }
+}
