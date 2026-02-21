@@ -140,6 +140,9 @@ struct Context {
   Value getImplicitThisRef() const {
     return currentThisRef; // block arg added in declareFunction
   }
+
+  Value getIndexedQueue() const { return currentQueue; }
+
   // Convert a statement AST node to MLIR ops.
   LogicalResult convertStatement(const slang::ast::Statement &stmt);
 
@@ -339,6 +342,11 @@ struct Context {
   /// Variable to track the value of the current function's implicit `this`
   /// reference
   Value currentThisRef = {};
+
+  /// Variable that tracks the queue which we are currently converting the index
+  /// expression for. This is necessary to implement the `$` operator, which
+  /// returns the index of the last element of the queue.
+  Value currentQueue = {};
 
 private:
   /// Helper function to extract the commonalities in lowering of functions and
