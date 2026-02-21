@@ -244,3 +244,21 @@ firrtl.circuit "IfElseFatalOnAssume" {
     firrtl.assume %clock, %en, %pred, "foo" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, format = "ifElseFatal"}
   }
 }
+
+// -----
+
+firrtl.circuit "InstanceChoiceInnerSymbol" {
+  firrtl.option @Opt {
+    firrtl.option_case @FPGA
+  }
+
+  firrtl.module private @ModuleDefault() {}
+
+  firrtl.module private @ModuleFPGA() {}
+
+  firrtl.module @InstanceChoiceInnerSymbol() {
+    // expected-error @below {{'firrtl.instance_choice' op LowerToHW couldn't handle this operation}}
+    // expected-error @below {{instance choice with inner sym cannot be lowered}}
+    firrtl.instance_choice inst sym @sym @ModuleDefault alternatives @Opt { @FPGA -> @ModuleFPGA } ()
+  }
+}
