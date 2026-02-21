@@ -390,7 +390,9 @@ private:
     wires.append({clk.getInput(), reset.getInput(), go.getInput(),
                   left.getInput(), right.getInput()});
 
-    auto doneReg = reg(go, clk, reset,
+    // Convert i1 clock to seq.clock for register creation.
+    auto seqClk = seq::ToClockOp::create(b, clk);
+    auto doneReg = reg(go, seqClk, reset,
                        op.instanceName() + "_" + op.portName(op.getDone()), b);
     auto done =
         wireOut(doneReg, op.instanceName(), op.portName(op.getDone()), b);
@@ -400,7 +402,7 @@ private:
          llvm::zip(targetOp->getResults(), op.getOutputPorts())) {
       auto portName = op.portName(sourceRes);
       auto clockEn = AndOp::create(b, go, createOrFoldNot(done, b));
-      auto resReg = regCe(targetRes, clk, clockEn, reset,
+      auto resReg = regCe(targetRes, seqClk, clockEn, reset,
                           createName(op.instanceName(), portName), b);
       wires.push_back(wireOut(resReg, op.instanceName(), portName, b));
     }
