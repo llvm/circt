@@ -3974,7 +3974,8 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
 LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
   if (oldInstanceChoice.getInnerSymAttr()) {
-    oldInstanceChoice->emitOpError("instance choice with inner sym cannot be lowered");
+    oldInstanceChoice->emitOpError(
+        "instance choice with inner sym cannot be lowered");
     return failure();
   }
   // Get all the target modules
@@ -4041,13 +4042,6 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
                                        inputOperands, parameters,
                                        /*innerSym=*/nullptr);
 
-    if (inst.getInnerSymAttr()) {
-      auto key = std::make_pair<Attribute, Attribute>(theModule.getNameAttr(),
-                                                      inst.getInnerNameAttr());
-      if (auto forceName = circuitState.instanceForceNames.lookup(key))
-        inst->setAttr("hw.verilogName", forceName);
-    }
-
     // Assign instance outputs to the wires
     for (unsigned i = 0; i < inst.getNumResults(); ++i)
       sv::AssignOp::create(builder, outputWires[i], inst.getResult(i));
@@ -4055,7 +4049,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
   };
 
   // Create instance for the default module
-  if(failed(createInstanceAndAssign(defaultModule, "default")))
+  if (failed(createInstanceAndAssign(defaultModule, "default")))
     return failure();
 
   // Create instances for all alternative modules
