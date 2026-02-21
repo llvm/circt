@@ -1359,6 +1359,8 @@ static ParseResult parseModulePorts(
   using DomainAndLoc = std::pair<Attribute, llvm::SMLoc>;
   DenseMap<size_t, SmallVector<DomainAndLoc>> domainStrings;
 
+  llvm::StringMap<llvm::SMLoc> seenNames;
+
   auto parseArgument = [&]() -> ParseResult {
     // Parse port direction.
     if (succeeded(parser.parseOptionalKeyword("out")))
@@ -1399,6 +1401,15 @@ static ParseResult parseModulePorts(
       if (parser.parseKeywordOrString(&portName))
         return failure();
       portNames.push_back(StringAttr::get(context, portName));
+    }
+    if (auto [it, ok] = seenNames.try_emplace(
+            llvm::cast<StringAttr>(portNames.back()).str(), irLoc);
+        !ok) {
+      auto diag = mlir::emitError(parser.getEncodedSourceLoc(irLoc))
+                  << "redefinition of name " << portNames.back() << "";
+      diag.attachNote(parser.getEncodedSourceLoc(it->second))
+          << "previous definition here";
+      return diag;
     }
 
     // Parse the port type.
