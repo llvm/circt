@@ -1,5 +1,6 @@
 add_circt_dialect_library(CIRCTFSMTransforms
   PrintFSMGraph.cpp
+  RemoveUnreachableStates.cpp
 
   DEPENDS
   CIRCTFSMTransformsIncGen
