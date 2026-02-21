@@ -1655,7 +1655,8 @@ struct RvalueExprVisitor : public ExprVisitor {
     }
 
     // Queue ops take their parameter as a reference
-    bool isByRefOp = args.size() >= 1 && args[0]->type->isQueue();
+    bool isByRefOp = args.size() >= 1 && args[0]->type->isQueue() &&
+                     subroutine.name != "size";
 
     // Call the conversion function with the appropriate arity. These return one
     // of the following:
@@ -2821,15 +2822,13 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                 [&]() -> Value {
                   return moore::StringToUpperOp::create(builder, loc, value);
                 })
-          .Case(
-              "size",
-              [&]() -> Value {
-                if (isa<moore::RefType>(value.getType()) &&
-                    isa<moore::QueueType>(
-                        cast<moore::RefType>(value.getType()).getNestedType()))
-                  return moore::QueueSizeBIOp::create(builder, loc, value);
-                return {};
-              })
+          .Case("size",
+                [&]() -> Value {
+                  if (isa<moore::QueueType>(value.getType())) {
+                    return moore::QueueSizeBIOp::create(builder, loc, value);
+                  }
+                  return {};
+                })
           .Case("tolower",
                 [&]() -> Value {
                   return moore::StringToLowerOp::create(builder, loc, value);

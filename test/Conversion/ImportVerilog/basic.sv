@@ -3886,7 +3886,8 @@ endmodule
 // CHECK:    [[Q:%.+]] = moore.variable : <queue<i32, 0>>
 // CHECK:    [[QSIZE:%.+]] = moore.variable : <i32>
 // CHECK:    moore.procedure initial {
-// CHECK:      [[SIZE:%.+]] = moore.builtin.size [[Q]] : <queue<i32, 0>>
+// CHECK:      [[QR:%.+]] = moore.read [[Q]] : <queue<i32, 0>>
+// CHECK:      [[SIZE:%.+]] = moore.builtin.size [[QR]] : <i32, 0>
 // CHECK:      moore.blocking_assign [[QSIZE]], [[SIZE]] : i32
 // CHECK:      moore.return
 // CHECK:    }

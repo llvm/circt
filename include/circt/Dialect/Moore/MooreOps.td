@@ -2702,7 +2702,7 @@ def QueueSizeBIOp : Builtin<"size"> {
   }];
 
   // Optional positional attribute for the seed
-  let arguments = (ins QueueRefType:$queue);
+  let arguments = (ins QueueType:$queue);
   let results = (outs TwoValuedI32:$result);
   let assemblyFormat = "$queue `:` type($queue) attr-dict";
 }

@@ -2244,10 +2244,7 @@ struct QueueSizeBIOpConversion : public OpConversionPattern<QueueSizeBIOp> {
   LogicalResult
   matchAndRewrite(QueueSizeBIOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto readQueue =
-        llhd::ProbeOp::create(rewriter, op->getLoc(), adaptor.getQueue());
-
-    rewriter.replaceOpWithNewOp<sim::QueueSizeOp>(op, readQueue);
+    rewriter.replaceOpWithNewOp<sim::QueueSizeOp>(op, adaptor.getQueue());
     return success();
   }
 };
