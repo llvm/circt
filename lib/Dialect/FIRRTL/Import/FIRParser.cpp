@@ -6532,12 +6532,6 @@ circt::firrtl::importFIRFile(SourceMgr &sourceMgr, MLIRContext *context,
           .parseCircuit(annotationsBufs, ts))
     return nullptr;
 
-  // Make sure the parse module has no other structural problems detected by
-  // the verifier.
-  auto circuitVerificationTimer = ts.nest("Verify circuit");
-  if (failed(verify(*module)))
-    return {};
-
   return module;
 }
 
