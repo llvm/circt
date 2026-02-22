@@ -30,6 +30,7 @@
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/MathExtras.h"
+#include <mlir/IR/Attributes.h>
 
 namespace circt {
 #define GEN_PASS_DEF_FLATTENMEMREF
@@ -205,20 +206,25 @@ struct GlobalOpConversion : public OpConversionPattern<memref::GlobalOp> {
     MemRefType newType = getFlattenedMemRefType(type);
 
     auto cstAttr =
-        llvm::dyn_cast_or_null<DenseElementsAttr>(op.getConstantInitValue());
-
-    SmallVector<Attribute> flattenedVals;
-    for (auto attr : cstAttr.getValues<Attribute>())
-      flattenedVals.push_back(attr);
+        llvm::dyn_cast_or_null<DenseElementsAttr>(op.getInitialValueAttr());
 
     auto newTypeAttr = TypeAttr::get(newType);
     auto newNameStr = getFlattenedMemRefName(op.getConstantAttrName(), type);
     auto newName = rewriter.getStringAttr(newNameStr);
     globalNameMap[op.getSymNameAttr()] = newName;
 
-    RankedTensorType tensorType = RankedTensorType::get(
-        {static_cast<int64_t>(flattenedVals.size())}, type.getElementType());
-    auto newInitValue = DenseElementsAttr::get(tensorType, flattenedVals);
+    RankedTensorType tensorType = RankedTensorType::get(newType.getNumElements(), newType.getElementType());
+
+    // handle uninitialized global memref
+    if (!cstAttr) {
+        auto newInitValue = Attribute();
+
+        rewriter.replaceOpWithNewOp<memref::GlobalOp>(op, newName, op.getSymVisibilityAttr(), newTypeAttr, newInitValue, op.getConstantAttr(), op.getAlignmentAttr());
+
+        return success();
+    }
+
+    auto newInitValue = cstAttr.reshape(tensorType);
 
     rewriter.replaceOpWithNewOp<memref::GlobalOp>(
         op, newName, op.getSymVisibilityAttr(), newTypeAttr, newInitValue,
