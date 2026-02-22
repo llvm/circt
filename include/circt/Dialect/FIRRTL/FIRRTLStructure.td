@@ -320,6 +320,7 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
   }];
 
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 def ClassOp : FIRRTLModuleLike<"class", [
