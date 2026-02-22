@@ -745,6 +745,24 @@ def QueueInsertOp : SimOp<"queue.insert", [Pure,
   let assemblyFormat = "$item `into` $queue `at` $index attr-dict `:` type($queue)";
 }
 
+// Likewise, TODO for 4-valued ints. (see above)
+def QueueGetOp : SimOp<"queue.get", [Pure,
+   TypesMatchWith<"queue and item types must match",
+      "queue", "result", "cast<QueueType>($_self).getElementType()">]> {
+  let summary = "Returns an indexed element of the queue";
+
+  let description = [{
+    Returns the element at position `index` within the queue.
+
+    If the index is negative or greater than or equal to the queue length,
+    this returns a value as indicated in Table 7-1 of IEEE 1800-2023 § 7.4.5
+  }];
+
+  let arguments = (ins QueueType:$queue, I32:$index);
+  let results = (outs HWNonInOutType:$result);
+
+  let assemblyFormat = "$index `of` $queue attr-dict `:` type($queue)";
+}
 
 //===----------------------------------------------------------------------===//
 // Simulation Control

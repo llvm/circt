@@ -2252,6 +2252,25 @@ struct QueueSizeBIOpConversion : public OpConversionPattern<QueueSizeBIOp> {
   }
 };
 
+struct DynQueueExtractOpConversion
+    : public OpConversionPattern<DynQueueExtractOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(DynQueueExtractOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    bool isSingleElementExtract =
+        op.getInput().getType().getElementType() == op.getResult().getType();
+
+    if (isSingleElementExtract) {
+      rewriter.replaceOpWithNewOp<sim::QueueGetOp>(op, adaptor.getInput(),
+                                                   adaptor.getLowerIdx());
+      return success();
+    }
+    return failure();
+  }
+};
+
 // Given a reference `ref` to some Moore type, this function emits a
 // `ProbeOp` to read the contained value, then passes it to the function `func`.
 // It finally emits a `DriveOp` to write the result of the function back to
@@ -2919,7 +2938,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     QueuePopFrontOpConversion,
     QueueDeleteOpConversion,
     QueueInsertOpConversion,
-    QueueClearOpConversion
+    QueueClearOpConversion,
+    DynQueueExtractOpConversion
   >(typeConverter, patterns.getContext());
   // clang-format on
 
