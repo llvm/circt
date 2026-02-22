@@ -202,28 +202,21 @@ void InferLTLClocksPass::runOnOperation() {
     }
   }
 
-  // Clean up dead operations (original delays that are no longer used)
-  // We need to iterate until fixpoint because deleting an op may make its
-  // operands dead.
+  // Clean up dead operations (original delays that are no longer used).
+  // SSA dominance guarantees defs appear before uses, so walking in reverse
+  // visits consumers before producers — by the time we reach a producer, all
+  // its users have already been erased and one pass suffices.
   if (changed) {
-    bool erased = true;
-    while (erased) {
-      erased = false;
-      SmallVector<Operation *> toErase;
-      module.walk([&](Operation *op) {
-        // Only clean up LTL ops that have no uses
-        if (isa<DelayOp, ConcatOp, AndOp, OrOp, IntersectOp, RepeatOp,
-                GoToRepeatOp, NonConsecutiveRepeatOp, NotOp, ImplicationOp,
-                UntilOp, EventuallyOp>(op)) {
-          if (op->use_empty())
-            toErase.push_back(op);
-        }
-      });
-      for (Operation *op : llvm::reverse(toErase)) {
+    SmallVector<Operation *> candidates;
+    module.walk([&](Operation *op) {
+      if (isa<DelayOp, ConcatOp, AndOp, OrOp, IntersectOp, RepeatOp,
+              GoToRepeatOp, NonConsecutiveRepeatOp, NotOp, ImplicationOp,
+              UntilOp, EventuallyOp>(op))
+        candidates.push_back(op);
+    });
+    for (Operation *op : llvm::reverse(candidates))
+      if (op->use_empty())
         op->erase();
-        erased = true;
-      }
-    }
   }
 
   // Warn about any remaining placeholder clocks that could not be inferred.
