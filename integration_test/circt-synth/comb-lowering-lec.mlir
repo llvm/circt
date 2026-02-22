@@ -1,7 +1,7 @@
 // REQUIRES: libz3
 // REQUIRES: circt-lec-jit
 
-// RUN: circt-opt %s --hw-aggregate-to-comb --convert-comb-to-synth --convert-synth-to-comb -o %t.mlir
+// RUN: circt-opt %s --hw-aggregate-to-comb --convert-comb-to-synth -o %t.mlir
 // RUN: circt-lec %t.mlir %s -c1=bit_logical -c2=bit_logical --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_BIT_LOGICAL
 // COMB_BIT_LOGICAL: c1 == c2
 hw.module @bit_logical(in %arg0: i32, in %arg1: i32, in %arg2: i32, in %arg3: i32,
