@@ -238,6 +238,17 @@ void InferLTLClocksPass::runOnOperation() {
     }
   }
 
+  // Warn about any remaining placeholder clocks that could not be inferred.
+  // A placeholder clock (hw.constant true) indicates the delay has no
+  // enclosing ltl.clock to provide a real clock signal.
+  module.walk([&](DelayOp delayOp) {
+    if (isPlaceholderClock(delayOp.getClock())) {
+      delayOp.emitWarning("delay has a placeholder clock (hw.constant true) "
+                          "that was not replaced by InferLTLClocks; ensure an "
+                          "enclosing ltl.clock provides a real clock signal");
+    }
+  });
+
   if (!changed)
     markAllAnalysesPreserved();
 }
