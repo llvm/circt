@@ -2284,9 +2284,12 @@ struct DynQueueExtractOpConversion
     if (isSingleElementExtract) {
       rewriter.replaceOpWithNewOp<sim::QueueGetOp>(op, adaptor.getInput(),
                                                    adaptor.getLowerIdx());
-      return success();
+    } else {
+      rewriter.replaceOpWithNewOp<sim::QueueSliceOp>(
+          op, adaptor.getInput(), adaptor.getLowerIdx(), adaptor.getUpperIdx());
     }
-    return failure();
+
+    return success();
   }
 };
 
