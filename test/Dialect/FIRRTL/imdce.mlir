@@ -658,3 +658,47 @@ firrtl.circuit "DomainInfo" {
     firrtl.matchingconnect %b, %bar_b: !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Test that InstanceChoiceOp is handled conservatively by IMDCE.
+// All modules referenced by instance_choice should be kept alive, and all
+// ports should be preserved.
+
+// CHECK-LABEL: firrtl.circuit "InstanceChoiceTest"
+firrtl.circuit "InstanceChoiceTest" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+
+  // All these modules should be kept alive because they are referenced by instance_choice
+  // CHECK-LABEL: firrtl.module private @DefaultImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>)
+  firrtl.module private @DefaultImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    %0 = firrtl.constant 0 : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %out
+    firrtl.matchingconnect %out, %0 : !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module private @FPGAImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>)
+  firrtl.module private @FPGAImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    // Make sure DCE is applied locally in the instance choice module.
+    // CHECK-NOT: firrtl.reg
+    // CHECK: firrtl.matchingconnect %out
+    %clockconst = firrtl.constant 0 : !firrtl.uint<1>
+    %clock = firrtl.asClock %clockconst : (!firrtl.uint<1>) -> !firrtl.clock
+    %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8>
+    %0 = firrtl.constant 0 : !firrtl.uint<8>
+    firrtl.matchingconnect %reg, %reg : !firrtl.uint<8>
+    firrtl.matchingconnect %out, %0 : !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module @InstanceChoiceTest
+  firrtl.module @InstanceChoiceTest() {
+    // CHECK: %inst_in, %inst_out = firrtl.instance_choice inst @DefaultImpl alternatives @Platform
+    // CHECK-SAME: @FPGA -> @FPGAImpl
+    // CHECK-SAME: in in: !firrtl.uint<8>, out out: !firrtl.uint<8>
+    %inst_in, %inst_out = firrtl.instance_choice inst @DefaultImpl alternatives @Platform {
+      @FPGA -> @FPGAImpl
+    } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+  }
+}
