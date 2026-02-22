@@ -13,7 +13,7 @@ firrtl.option @Platform {
   firrtl.option_case @FPGA
   firrtl.option_case @ASIC
 }
-// CHECK-NOT: firrtl.option @Performance 
+// CHECK-NOT: firrtl.option @Performance
 firrtl.option @Performance {
   firrtl.option_case @Fast
   firrtl.option_case @Small
