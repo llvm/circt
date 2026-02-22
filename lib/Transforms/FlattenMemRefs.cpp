@@ -19,6 +19,8 @@
 #include "mlir/Dialect/ControlFlow/Transforms/StructuralTypeConversions.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/MemRef/Utils/MemRefUtils.h"
+#include "mlir/Dialect/Utils/StaticValueUtils.h"
 #include "mlir/Dialect/Utils/ReshapeOpsUtils.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -30,6 +32,7 @@
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/MathExtras.h"
+#include "mlir/IR/DialectResourceBlobManager.h"
 
 namespace circt {
 #define GEN_PASS_DEF_FLATTENMEMREF
@@ -66,6 +69,79 @@ static std::string getFlattenedMemRefName(StringAttr baseName,
                        type.getElementType(), uniqueID);
 }
 
+static Value getValueFromOpFoldResult(OpBuilder &builder, Location loc,
+                                      OpFoldResult in) {
+  if (auto attr = dyn_cast<Attribute>(in))
+    return arith::ConstantIndexOp::create(builder, loc,
+                                          cast<IntegerAttr>(attr).getInt());
+  return cast<Value>(in);
+}
+
+static FailureOr<std::pair<Value, Value>>
+getFlattenMemrefAndOffset(OpBuilder &builder, Location loc, Value source,
+                          ValueRange indices) {
+  auto sourceType = dyn_cast<MemRefType>(source.getType());
+  if (!sourceType)
+    return failure();
+
+  int64_t sourceOffset;
+  SmallVector<int64_t, 4> sourceStrides;
+  if (failed(sourceType.getStridesAndOffset(sourceStrides, sourceOffset)))
+    return failure();
+
+  auto stridedMetadata =
+      memref::ExtractStridedMetadataOp::create(builder, loc, source);
+
+  auto typeBit = sourceType.getElementType().getIntOrFloatBitWidth();
+  if (typeBit == 0)
+    typeBit = 8;
+
+  OpFoldResult linearizedIndices;
+  memref::LinearizedMemRefInfo linearizedInfo;
+  std::tie(linearizedInfo, linearizedIndices) =
+      memref::getLinearizedMemRefOffsetAndSize(
+          builder, loc, typeBit, typeBit,
+          stridedMetadata.getConstifiedMixedOffset(),
+          stridedMetadata.getConstifiedMixedSizes(),
+          stridedMetadata.getConstifiedMixedStrides(),
+          getAsOpFoldResult(indices));
+
+  Value flatMemref = memref::ReinterpretCastOp::create(
+      builder, loc, source, linearizedInfo.linearizedOffset,
+      ArrayRef<OpFoldResult>{linearizedInfo.linearizedSize},
+      ArrayRef<OpFoldResult>{builder.getIndexAttr(1)});
+
+  return std::make_pair(flatMemref,
+                        getValueFromOpFoldResult(builder, loc,
+                                                 linearizedIndices));
+}
+
+struct ExpandShapeOpConversion
+    : public OpConversionPattern<memref::ExpandShapeOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(memref::ExpandShapeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Once memref types are flattened, expand_shape is a no-op.
+    rewriter.replaceOp(op, adaptor.getSrc());
+    return success();
+  }
+};
+
+struct CollapseShapeOpConversion
+    : public OpConversionPattern<memref::CollapseShapeOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(memref::CollapseShapeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // After flattening, collapse is also a no-op.
+    rewriter.replaceOp(op, adaptor.getSrc());
+    return success();
+  }
+};
+
 // Flatten indices by generating the product of the i'th index and the [0:i-1]
 // shapes, for each index, and then summing these.
 static Value flattenIndices(ConversionPatternRewriter &rewriter, Operation *op,
@@ -79,37 +155,15 @@ static Value flattenIndices(ConversionPatternRewriter &rewriter, Operation *op,
         .getResult();
   }
 
-  Value finalIdx = indices.front();
-  for (auto memIdx : llvm::enumerate(indices.drop_front())) {
-    Value partialIdx = memIdx.value();
-    int64_t indexMulFactor = 1;
-
-    // Calculate the product of the i'th index and the [0:i-1] shape dims.
-    for (unsigned i = memIdx.index() + 1; i < memrefType.getShape().size();
-         ++i) {
-      int64_t dimSize = memrefType.getShape()[i];
-      indexMulFactor *= dimSize;
-    }
-
-    // Multiply product by the current index operand.
-    if (llvm::isPowerOf2_64(indexMulFactor)) {
-      auto constant = arith::ConstantOp::create(
-                          rewriter, loc,
-                          rewriter.getIndexAttr(llvm::Log2_64(indexMulFactor)))
-                          .getResult();
-      finalIdx =
-          arith::ShLIOp::create(rewriter, loc, finalIdx, constant).getResult();
-    } else {
-      auto constant = arith::ConstantOp::create(
-                          rewriter, loc, rewriter.getIndexAttr(indexMulFactor))
-                          .getResult();
-      finalIdx =
-          arith::MulIOp::create(rewriter, loc, finalIdx, constant).getResult();
-    }
-
-    // Sum up with the prior lower dimension accessors.
-    auto sumOp = arith::AddIOp::create(rewriter, loc, finalIdx, partialIdx);
-    finalIdx = sumOp.getResult();
+  Value finalIdx = arith::ConstantOp::create(rewriter, loc, rewriter.getIndexAttr(0))
+                       .getResult();
+  auto shape = memrefType.getShape();
+  for (auto [dim, idx] : llvm::zip(shape, indices)) {
+    auto dimVal =
+        arith::ConstantOp::create(rewriter, loc, rewriter.getIndexAttr(dim))
+            .getResult();
+    finalIdx = arith::MulIOp::create(rewriter, loc, finalIdx, dimVal).getResult();
+    finalIdx = arith::AddIOp::create(rewriter, loc, finalIdx, idx).getResult();
   }
   return finalIdx;
 }
@@ -135,11 +189,13 @@ struct LoadOpConversion : public OpConversionPattern<memref::LoadOp> {
     if (isUniDimensional(type) || !type.hasStaticShape() ||
         /*Already converted?*/ op.getIndices().size() == 1)
       return failure();
-    Value finalIdx =
-        flattenIndices(rewriter, op, adaptor.getIndices(), op.getMemRefType());
-    rewriter.replaceOpWithNewOp<memref::LoadOp>(op, adaptor.getMemref(),
+    auto flatMemrefTy = dyn_cast<MemRefType>(adaptor.getMemref().getType());
+    if (!flatMemrefTy || !isUniDimensional(flatMemrefTy))
+      return failure();
+    Value finalIdx = flattenIndices(rewriter, op, adaptor.getIndices(), type);
 
-                                                SmallVector<Value>{finalIdx});
+    rewriter.replaceOpWithNewOp<memref::LoadOp>(
+        op, adaptor.getMemref(), SmallVector<Value>{finalIdx});
     return success();
   }
 };
@@ -154,11 +210,13 @@ struct StoreOpConversion : public OpConversionPattern<memref::StoreOp> {
     if (isUniDimensional(type) || !type.hasStaticShape() ||
         /*Already converted?*/ op.getIndices().size() == 1)
       return failure();
-    Value finalIdx =
-        flattenIndices(rewriter, op, adaptor.getIndices(), op.getMemRefType());
-    rewriter.replaceOpWithNewOp<memref::StoreOp>(op, adaptor.getValue(),
-                                                 adaptor.getMemref(),
-                                                 SmallVector<Value>{finalIdx});
+    auto flatMemrefTy = dyn_cast<MemRefType>(adaptor.getMemref().getType());
+    if (!flatMemrefTy || !isUniDimensional(flatMemrefTy))
+      return failure();
+    Value finalIdx = flattenIndices(rewriter, op, adaptor.getIndices(), type);
+
+    rewriter.replaceOpWithNewOp<memref::StoreOp>(
+        op, adaptor.getValue(), adaptor.getMemref(), SmallVector<Value>{finalIdx});
     return success();
   }
 };
@@ -167,15 +225,22 @@ struct AllocOpConversion : public OpConversionPattern<memref::AllocOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(memref::AllocOp op, OpAdaptor /*adaptor*/,
-                  ConversionPatternRewriter &rewriter) const override {
-    MemRefType type = op.getType();
-    if (isUniDimensional(type) || !type.hasStaticShape())
-      return failure();
-    MemRefType newType = getFlattenedMemRefType(type);
-    rewriter.replaceOpWithNewOp<memref::AllocOp>(op, newType);
-    return success();
-  }
+matchAndRewrite(memref::AllocOp op, OpAdaptor adaptor,
+                ConversionPatternRewriter &rewriter) const override {
+  MemRefType type = op.getType();
+  if (isUniDimensional(type) || !type.hasStaticShape())
+    return failure();
+
+  MemRefType newType = getFlattenedMemRefType(type);
+
+  rewriter.replaceOpWithNewOp<memref::AllocOp>(
+      op, newType,
+      adaptor.getDynamicSizes(),
+      adaptor.getSymbolOperands(),
+      op.getAlignmentAttr());
+  return success();
+}
+  
 };
 
 struct AllocaOpConversion : public OpConversionPattern<memref::AllocaOp> {
@@ -202,23 +267,44 @@ struct GlobalOpConversion : public OpConversionPattern<memref::GlobalOp> {
     MemRefType type = op.getType();
     if (isUniDimensional(type) || !type.hasStaticShape())
       return failure();
+
     MemRefType newType = getFlattenedMemRefType(type);
 
-    auto cstAttr =
-        llvm::dyn_cast_or_null<DenseElementsAttr>(op.getConstantInitValue());
+    // Accept any ElementsAttr (DenseElementsAttr or DenseResourceElementsAttr, etc.)
+    auto elements =
+        llvm::dyn_cast_or_null<ElementsAttr>(op.getConstantInitValue());
+    if (!elements)
+      return rewriter.notifyMatchFailure(
+          op, "memref.global has non-elements or missing constant initializer");
 
-    SmallVector<Attribute> flattenedVals;
-    for (auto attr : cstAttr.getValues<Attribute>())
-      flattenedVals.push_back(attr);
+    // Build the flattened initializer type: 1-D tensor with same element type.
+    auto oldShapedTy = llvm::dyn_cast<ShapedType>(elements.getType());
+    if (!oldShapedTy || !oldShapedTy.hasStaticShape())
+      return rewriter.notifyMatchFailure(op, "initializer is not a static shaped type");
+
+    int64_t nElts = oldShapedTy.getNumElements();
+    RankedTensorType tensorType =
+        RankedTensorType::get({nElts}, type.getElementType());
+
+    // Produce a new initializer without iterating element-by-element.
+    ElementsAttr newInitValue;
+    if (auto dense = llvm::dyn_cast<DenseElementsAttr>(elements)) {
+      // DenseElementsAttr supports reshape in your revision.
+      newInitValue = dense.reshape(tensorType);
+    } else if (auto res = llvm::dyn_cast<DenseResourceElementsAttr>(elements)) {
+      // Resource-backed: reuse the same handle, just change the shaped type.
+      newInitValue = DenseResourceElementsAttr::get(tensorType, res.getRawHandle());
+    } else if (auto splat = llvm::dyn_cast<SplatElementsAttr>(elements)) {
+      // Optional: preserve splat.
+      newInitValue = SplatElementsAttr::get(tensorType, splat.getSplatValue<Attribute>());
+    } else {
+      return rewriter.notifyMatchFailure(op, "unsupported elements initializer kind");
+    }
 
     auto newTypeAttr = TypeAttr::get(newType);
     auto newNameStr = getFlattenedMemRefName(op.getConstantAttrName(), type);
     auto newName = rewriter.getStringAttr(newNameStr);
     globalNameMap[op.getSymNameAttr()] = newName;
-
-    RankedTensorType tensorType = RankedTensorType::get(
-        {static_cast<int64_t>(flattenedVals.size())}, type.getElementType());
-    auto newInitValue = DenseElementsAttr::get(tensorType, flattenedVals);
 
     rewriter.replaceOpWithNewOp<memref::GlobalOp>(
         op, newName, op.getSymVisibilityAttr(), newTypeAttr, newInitValue,
@@ -255,6 +341,9 @@ struct GetGlobalOpConversion : public OpConversionPattern<memref::GetGlobalOp> {
   }
 };
 
+static Value materializeFlattenTo1D(OpBuilder &builder, MemRefType targetType,
+                                    ValueRange inputs, Location loc);
+
 struct ReshapeOpConversion : public OpConversionPattern<memref::ReshapeOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -273,6 +362,54 @@ struct ReshapeOpConversion : public OpConversionPattern<memref::ReshapeOp> {
     }
 
     return failure();
+  }
+};
+
+struct SubViewOpConversion : public OpConversionPattern<memref::SubViewOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(memref::SubViewOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto sourceType = op.getSourceType();
+    auto resultType = op.getType();
+    if (!sourceType.hasStaticShape() || !resultType.hasStaticShape())
+      return failure();
+    if (isUniDimensional(sourceType))
+      return failure();
+    if (isUniDimensional(resultType))
+      return failure();
+
+    Value source = op.getSource();
+    if (isa<BlockArgument>(source))
+      source = memref::CastOp::create(rewriter, op.getLoc(), source.getType(),
+                                      source);
+    Value flatSource = materializeFlattenTo1D(
+        rewriter, getFlattenedMemRefType(sourceType), ValueRange{source},
+        op.getLoc());
+    if (!flatSource)
+      return failure();
+
+    SmallVector<Value> offsets;
+    offsets.reserve(op.getMixedOffsets().size());
+    for (OpFoldResult o : op.getMixedOffsets())
+      offsets.push_back(getValueFromOpFoldResult(rewriter, op.getLoc(), o));
+
+    Value linearOffset = flattenIndices(rewriter, op, offsets, sourceType);
+    MemRefType flatResultType = MemRefType::get(
+        {resultType.getNumElements()}, resultType.getElementType(),
+        StridedLayoutAttr::get(rewriter.getContext(), ShapedType::kDynamic,
+                               {1}),
+        resultType.getMemorySpace());
+
+    Value flatSubview = memref::ReinterpretCastOp::create(
+        rewriter, op.getLoc(), flatResultType, flatSource,
+        linearOffset,
+        ArrayRef<OpFoldResult>{
+            rewriter.getIndexAttr(flatResultType.getNumElements())},
+        ArrayRef<OpFoldResult>{rewriter.getIndexAttr(1)});
+    rewriter.replaceOp(op, flatSubview);
+    return success();
   }
 };
 
@@ -362,8 +499,14 @@ static void populateFlattenMemRefsLegality(ConversionTarget &target) {
       [](memref::GlobalOp op) { return isUniDimensional(op.getType()); });
   target.addDynamicallyLegalOp<memref::GetGlobalOp>(
       [](memref::GetGlobalOp op) { return isUniDimensional(op.getType()); });
+  target.addDynamicallyLegalOp<memref::SubViewOp>([](memref::SubViewOp op) {
+    auto srcType = dyn_cast<MemRefType>(op.getSource().getType());
+    auto dstType = dyn_cast<MemRefType>(op.getType());
+    return srcType && dstType && isUniDimensional(srcType) &&
+           isUniDimensional(dstType);
+  });
   addGenericLegalityConstraint<func::CallOp, func::ReturnOp, memref::DeallocOp,
-                               memref::CopyOp>(target);
+                               memref::CopyOp, memref::ReinterpretCastOp>(target);
 
   target.addDynamicallyLegalOp<func::FuncOp>([](func::FuncOp op) {
     auto argsConverted = llvm::all_of(op.getArgumentTypes(), [](Type type) {
@@ -400,9 +543,66 @@ static Value materializeCollapseShapeFlattening(OpBuilder &builder,
   auto indices = getReassociationIndicesForCollapse(sourceShape, targetShape);
   assert(indices.has_value() && "expected a valid collapse");
 
-  // Generate the appropriate return type:
-  return memref::CollapseShapeOp::create(builder, loc, inputs[0],
-                                         indices.value());
+  Value collapsed =
+      memref::CollapseShapeOp::create(builder, loc, inputs[0], indices.value());
+
+  if (collapsed.getType() == type)
+    return collapsed;
+
+  return memref::CastOp::create(builder, loc, type, collapsed);
+}
+
+// Materializes a 1D flattened memref back into an identity-layout ranked memref
+// using reinterpret_cast so view-like users (e.g. subview) can remain legal.
+static Value materializeExpandShapeFromFlattened(OpBuilder &builder,
+                                                 MemRefType targetType,
+                                                 ValueRange inputs,
+                                                 Location loc) {
+  if (inputs.size() != 1)
+    return {};
+
+  auto sourceType = dyn_cast<MemRefType>(inputs.front().getType());
+  if (!sourceType || !sourceType.hasStaticShape() || !targetType.hasStaticShape())
+    return {};
+  if (!isUniDimensional(sourceType))
+    return {};
+  if (sourceType.getNumElements() != targetType.getNumElements())
+    return {};
+
+  SmallVector<OpFoldResult> sizes;
+  SmallVector<OpFoldResult> strides(targetType.getRank());
+  auto shape = targetType.getShape();
+  int64_t stride = 1;
+  for (int64_t i = targetType.getRank() - 1; i >= 0; --i) {
+    sizes.push_back(builder.getIndexAttr(shape[i]));
+    strides[i] = builder.getIndexAttr(stride);
+    stride *= shape[i];
+  }
+  std::reverse(sizes.begin(), sizes.end());
+
+  return memref::ReinterpretCastOp::create(builder, loc, targetType,
+                                           inputs.front(),
+                                           builder.getIndexAttr(0), sizes,
+                                           strides);
+}
+
+// Materialize a ranked memref to a 1D flattened memref type.
+static Value materializeFlattenTo1D(OpBuilder &builder, MemRefType targetType,
+                                    ValueRange inputs, Location loc) {
+  if (inputs.size() != 1)
+    return {};
+  auto sourceType = dyn_cast<MemRefType>(inputs.front().getType());
+  if (!sourceType || !sourceType.hasStaticShape())
+    return {};
+  if (!isUniDimensional(targetType))
+    return {};
+  if (sourceType.getNumElements() != targetType.getNumElements())
+    return {};
+
+  return memref::ReinterpretCastOp::create(
+      builder, loc, targetType, inputs.front(), builder.getIndexAttr(0),
+      ArrayRef<OpFoldResult>{builder.getIndexAttr(targetType.getNumElements())},
+      ArrayRef<OpFoldResult>{builder.getIndexAttr(1)});
 }
 
 static void populateTypeConversionPatterns(TypeConverter &typeConverter) {
@@ -425,15 +625,22 @@ public:
     auto *ctx = &getContext();
     TypeConverter typeConverter;
     populateTypeConversionPatterns(typeConverter);
+    typeConverter.addTargetMaterialization(materializeExpandShapeFromFlattened);
+    typeConverter.addSourceMaterialization(materializeFlattenTo1D);
 
     RewritePatternSet patterns(ctx);
     SetVector<StringRef> rewrittenCallees;
     patterns.add<LoadOpConversion, StoreOpConversion, AllocOpConversion,
                  AllocaOpConversion, GlobalOpConversion, GetGlobalOpConversion,
-                 ReshapeOpConversion, OperandConversionPattern<func::ReturnOp>,
+                 ReshapeOpConversion, SubViewOpConversion,
+                 ExpandShapeOpConversion,
+		 CollapseShapeOpConversion,
+		 OperandConversionPattern<func::ReturnOp>,
                  OperandConversionPattern<memref::DeallocOp>,
                  OperandConversionPattern<memref::DeallocOp>,
-                 OperandConversionPattern<memref::CopyOp>, CallOpConversion>(
+                 OperandConversionPattern<memref::CopyOp>,
+                 OperandConversionPattern<memref::ReinterpretCastOp>,
+                 CallOpConversion>(
         typeConverter, ctx);
     populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(
         patterns, typeConverter);

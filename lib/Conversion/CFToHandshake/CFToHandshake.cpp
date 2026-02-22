@@ -257,8 +257,11 @@ void handshake::removeBasicBlocks(Region &r) {
 LogicalResult
 HandshakeLowering::runSSAMaximization(ConversionPatternRewriter &rewriter,
                                       Value entryCtrl) {
-  return maximizeSSA(entryCtrl, rewriter);
+  (void)entryCtrl;
+  return maximizeSSANoMem(r, rewriter);
 }
+
+static LogicalResult maximizeSSANoMem(Region &r, ConversionPatternRewriter &rewriter);
 
 void removeBasicBlocks(handshake::FuncOp funcOp) {
   if (funcOp.isExternal())
@@ -405,13 +408,20 @@ static Value getMergeOperand(HandshakeLowering::MergeOpInfo mergeInfo,
 }
 
 static void removeBlockOperands(Region &f) {
-  // Remove all block arguments, they are no longer used
-  // eraseArguments also removes corresponding branch operands
+  // Remove block arguments that were fully rewritten through merges.
+  // Memref block arguments are handled separately and may remain live here.
+  // eraseArgument also removes corresponding branch operands.
   for (Block &block : f) {
     if (!block.isEntryBlock()) {
       int x = block.getNumArguments() - 1;
-      for (int i = x; i >= 0; --i)
+      for (int i = x; i >= 0; --i) {
+        BlockArgument arg = block.getArgument(i);
+        if (isa<MemRefType>(arg.getType()))
+          continue;
+        if (!arg.use_empty())
+          continue;
         block.eraseArgument(i);
+      }
     }
   }
 }
@@ -488,7 +498,9 @@ static void reconnectMergeOps(Region &r,
     }
   }
 
-  removeBlockOperands(r);
+  // Keep block operands for now; removing them can invalidate live memref
+  // threading values in large CFGs during conversion.
+  // removeBlockOperands(r);
 }
 
 static bool isAllocOp(Operation *op) {
@@ -1267,6 +1279,83 @@ static bool isMemoryOp(Operation *op) {
              AffineWriteOpInterface>(op);
 }
 
+static Value getIndexValueFromOpFoldResult(OpBuilder &builder, Location loc,
+                                           OpFoldResult in) {
+  if (auto attr = dyn_cast<Attribute>(in))
+    return arith::ConstantIndexOp::create(builder, loc,
+                                          cast<IntegerAttr>(attr).getInt());
+  return cast<Value>(in);
+}
+
+LogicalResult
+HandshakeLowering::normalizeReinterpretCasts(ConversionPatternRewriter &rewriter) {
+  SmallVector<memref::ReinterpretCastOp> casts;
+  for (auto castOp : r.getOps<memref::ReinterpretCastOp>())
+    casts.push_back(castOp);
+
+  for (auto castOp : casts) {
+    auto srcType = dyn_cast<MemRefType>(castOp.getSource().getType());
+    auto dstType = dyn_cast<MemRefType>(castOp.getType());
+    if (!srcType || !dstType || srcType.getRank() != 1 || dstType.getRank() != 1)
+      continue;
+
+    if (castOp.getMixedOffsets().size() != 1)
+      continue;
+    Value offset = getIndexValueFromOpFoldResult(
+        rewriter, castOp.getLoc(), castOp.getMixedOffsets().front());
+
+    SmallVector<Operation *> opsToErase;
+    bool unsupportedUser = false;
+
+    for (OpOperand &use : llvm::make_early_inc_range(castOp->getUses())) {
+      Operation *user = use.getOwner();
+      rewriter.setInsertionPoint(user);
+
+      if (auto load = dyn_cast<memref::LoadOp>(user)) {
+        if (load.getMemRef() != castOp.getResult() || load.getIndices().size() != 1) {
+          unsupportedUser = true;
+          break;
+        }
+        Value idx = load.getIndices().front();
+        Value srcIdx = arith::AddIOp::create(rewriter, load.getLoc(), idx, offset);
+        auto newLoad = memref::LoadOp::create(rewriter, load.getLoc(),
+                                              castOp.getSource(), ValueRange{srcIdx});
+        load.replaceAllUsesWith(newLoad.getResult());
+        opsToErase.push_back(load);
+        continue;
+      }
+
+      if (auto store = dyn_cast<memref::StoreOp>(user)) {
+        if (store.getMemRef() != castOp.getResult() ||
+            store.getIndices().size() != 1) {
+          unsupportedUser = true;
+          break;
+        }
+        Value idx = store.getIndices().front();
+        Value srcIdx =
+            arith::AddIOp::create(rewriter, store.getLoc(), idx, offset);
+        memref::StoreOp::create(rewriter, store.getLoc(), store.getValueToStore(),
+                                castOp.getSource(), ValueRange{srcIdx});
+        opsToErase.push_back(store);
+        continue;
+      }
+
+      unsupportedUser = true;
+      break;
+    }
+
+    if (unsupportedUser)
+      continue;
+
+    for (Operation *op : opsToErase)
+      rewriter.eraseOp(op);
+    if (castOp.use_empty())
+      rewriter.eraseOp(castOp);
+  }
+
+  return success();
+}
+
 LogicalResult
 HandshakeLowering::replaceMemoryOps(ConversionPatternRewriter &rewriter,
                                     MemRefToMemoryAccessOp &memRefOps) {
@@ -1521,9 +1610,11 @@ HandshakeLowering::connectToMemory(ConversionPatternRewriter &rewriter,
     // First operand corresponds to memref (alloca or function argument)
     Value memrefOperand = memory.first;
 
-    // A memory is external if the memref that defines it is provided as a
-    // function (block) argument.
-    bool isExternalMemory = isa<BlockArgument>(memrefOperand);
+    // A memory is external only if the memref comes from the function entry
+    // block arguments. Non-entry block arguments are CFG threading artifacts.
+    bool isExternalMemory =
+        isa<BlockArgument>(memrefOperand) &&
+        cast<BlockArgument>(memrefOperand).getOwner()->isEntryBlock();
 
     mlir::MemRefType memrefType =
         cast<mlir::MemRefType>(memrefOperand.getType());
