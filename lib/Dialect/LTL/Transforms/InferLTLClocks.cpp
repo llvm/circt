@@ -66,10 +66,8 @@ static bool hasPlaceholderDelays(Value value, DenseSet<Operation *> &visited) {
     return hasPlaceholderDelays(delayOp.getInput(), visited);
   }
 
-  // For clock ops, don't traverse into the clock signal itself
-  if (auto clockOp = dyn_cast<ClockOp>(defOp)) {
-    return hasPlaceholderDelays(clockOp.getInput(), visited);
-  }
+  if (isa<ClockOp>(defOp))
+    return false;
 
   for (Value operand : defOp->getOperands()) {
     if (hasPlaceholderDelays(operand, visited))
@@ -133,17 +131,7 @@ static Value cloneWithClock(Value value, Value clock, ClockEdge edge,
     }
   }
 
-  // Handle ClockOp - don't traverse into clock signal, only input
-  if (auto clockOp = dyn_cast<ClockOp>(defOp)) {
-    Value newInput = cloneWithClock(clockOp.getInput(), clock, edge, builder,
-                                    mapping, visited);
-    if (newInput != clockOp.getInput()) {
-      builder.setInsertionPointAfter(defOp);
-      auto newClockOp = ClockOp::create(builder, clockOp.getLoc(), newInput,
-                                        clockOp.getEdge(), clockOp.getClock());
-      mapping.map(value, newClockOp.getResult());
-      return newClockOp.getResult();
-    }
+  if (isa<ClockOp>(defOp)) {
     mapping.map(value, value);
     return value;
   }
