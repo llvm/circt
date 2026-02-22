@@ -1560,6 +1560,9 @@ func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: llhd.drv [[Q]], [[NEWQ]]
   moore.queue.clear %q : <!moore.queue<i32, 10>>
 
+  // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
+  %qr = moore.read %q : <!moore.queue<i32, 10>>
+  
   // CHECK: sim.queue.size [[QR]]
   moore.builtin.size %qr : <i32, 10>
 
