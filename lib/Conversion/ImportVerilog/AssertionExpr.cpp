@@ -323,10 +323,15 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                   auto past =
                       ltl::PastOp::create(builder, loc, value, 1, Value{})
                           .getResult();
-                  auto fell = comb::ICmpOp::create(builder, loc,
-                                                   comb::ICmpPredicate::ugt,
-                                                   past, current, false)
-                                  .getResult();
+                  Value fell = comb::ICmpOp::create(builder, loc,
+                                                    comb::ICmpPredicate::ugt,
+                                                    past, current, false);
+                  if (auto ty = dyn_cast<moore::IntType>(originalType)) {
+                    fell = moore::FromBuiltinIntOp::create(builder, loc, fell);
+                    if (ty.getDomain() == Domain::FourValued) {
+                      fell = moore::IntToLogicOp::create(builder, loc, fell);
+                    }
+                  }
                   return fell;
                 })
           // Translate $rose to x[0] ∧ ¬x[-1]
@@ -336,10 +341,15 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                       ltl::PastOp::create(builder, loc, value, 1, Value{})
                           .getResult();
                   auto current = value;
-                  auto rose = comb::ICmpOp::create(builder, loc,
-                                                   comb::ICmpPredicate::ult,
-                                                   past, current, false)
-                                  .getResult();
+                  Value rose = comb::ICmpOp::create(builder, loc,
+                                                    comb::ICmpPredicate::ult,
+                                                    past, current, false);
+                  if (auto ty = dyn_cast<moore::IntType>(originalType)) {
+                    rose = moore::FromBuiltinIntOp::create(builder, loc, rose);
+                    if (ty.getDomain() == Domain::FourValued) {
+                      rose = moore::IntToLogicOp::create(builder, loc, rose);
+                    }
+                  }
                   return rose;
                 })
           // Translate $changed to ( ¬x[0] ∧ x[-1] ) ⋁ ( x[0] ∧ ¬x[-1] )
@@ -349,25 +359,38 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
                       ltl::PastOp::create(builder, loc, value, 1, Value{})
                           .getResult();
                   auto current = value;
-                  auto changed = comb::ICmpOp::create(builder, loc,
-                                                      comb::ICmpPredicate::ne,
-                                                      past, current, false)
-                                     .getResult();
+                  Value changed = comb::ICmpOp::create(builder, loc,
+                                                       comb::ICmpPredicate::ne,
+                                                       past, current, false);
+                  if (auto ty = dyn_cast<moore::IntType>(originalType)) {
+                    changed =
+                        moore::FromBuiltinIntOp::create(builder, loc, changed);
+                    if (ty.getDomain() == Domain::FourValued) {
+                      changed =
+                          moore::IntToLogicOp::create(builder, loc, changed);
+                    }
+                  }
                   return changed;
                 })
           // Translate $stable to ( x[0] ∧ x[-1] ) ⋁ ( ¬x[0] ∧ ¬x[-1] )
-          .Case("$stable",
-                [&]() -> Value {
-                  auto past =
-                      ltl::PastOp::create(builder, loc, value, 1, Value{})
-                          .getResult();
-                  auto current = value;
-                  auto stable = comb::ICmpOp::create(builder, loc,
-                                                     comb::ICmpPredicate::eq,
-                                                     past, current, false)
-                                    .getResult();
-                  return stable;
-                })
+          .Case(
+              "$stable",
+              [&]() -> Value {
+                auto past = ltl::PastOp::create(builder, loc, value, 1, Value{})
+                                .getResult();
+                auto current = value;
+                Value stable =
+                    comb::ICmpOp::create(builder, loc, comb::ICmpPredicate::eq,
+                                         past, current, false);
+                if (auto ty = dyn_cast<moore::IntType>(originalType)) {
+                  stable =
+                      moore::FromBuiltinIntOp::create(builder, loc, stable);
+                  if (ty.getDomain() == Domain::FourValued) {
+                    stable = moore::IntToLogicOp::create(builder, loc, stable);
+                  }
+                }
+                return stable;
+              })
           .Case("$past",
                 [&]() -> Value {
                   Value past =
