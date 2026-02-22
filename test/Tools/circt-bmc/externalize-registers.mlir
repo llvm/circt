@@ -133,6 +133,16 @@ hw.module @named_firregs(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out ou
   hw.output %secondreg : i32
 }
 
+// Multi-clock: two registers on independent clocks are both externalized.
+// CHECK:  hw.module @two_clk_regs(in [[CLK0:%.+]] : !seq.clock, in [[CLK1:%.+]] : !seq.clock, in [[IN:%.+]] : i32, in [[REG0:%.+]] : i32, in [[REG1:%.+]] : i32, out {{.+}} : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {initial_values = [unit, unit], num_regs = 2 : i32} {
+// CHECK:    hw.output [[REG1]], [[IN]], [[REG0]]
+// CHECK:  }
+hw.module @two_clk_regs(in %clk0: !seq.clock, in %clk1: !seq.clock, in %in: i32, out out: i32) {
+  %reg0 = seq.compreg %in,   %clk0 : i32
+  %reg1 = seq.compreg %reg0, %clk1 : i32
+  hw.output %reg1 : i32
+}
+
 // CHECK:  hw.module @firreg_with_sync_reset(in [[CLK:%.+]] : !seq.clock, in [[RST:%.+]] : i1, in [[IN:%.+]] : i32, in [[OLD_REG1:%.+]] : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {initial_values = [unit], num_regs = 1 : i32} {
 // CHECK:    [[C0_I32:%.+]] = hw.constant 0 : i32
 // CHECK:    [[MUX1:%.+]] = comb.mux [[RST]], [[C0_I32]], [[IN]] : i32

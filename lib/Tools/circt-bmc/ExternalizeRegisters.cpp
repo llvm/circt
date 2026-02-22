@@ -80,16 +80,6 @@ void ExternalizeRegistersPass::runOnOperation() {
         continue;
 
       unsigned numRegs = 0;
-      bool foundClk = false;
-      for (auto ty : module.getInputTypes()) {
-        if (isa<seq::ClockType>(ty)) {
-          if (foundClk) {
-            module.emitError("modules with multiple clocks not yet supported");
-            return signalPassFailure();
-          }
-          foundClk = true;
-        }
-      }
       module->walk([&](Operation *op) {
         if (auto regOp = dyn_cast<seq::CompRegOp>(op)) {
           mlir::Attribute initState = {};
