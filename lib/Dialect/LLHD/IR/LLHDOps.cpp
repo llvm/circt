@@ -466,6 +466,16 @@ LogicalResult SigArrayGetOp::ensureOnlySafeAccesses(
 }
 
 //===----------------------------------------------------------------------===//
+// SigQueueGetOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SigQueueGetOp::ensureOnlySafeAccesses(
+    const MemorySlot &slot, SmallVectorImpl<MemorySlot> &mustBeSafelyUsed,
+    const DataLayout &dataLayout) {
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // SigStructExtractOp
 //===----------------------------------------------------------------------===//
 

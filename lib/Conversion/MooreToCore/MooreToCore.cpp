@@ -2293,6 +2293,20 @@ struct DynQueueExtractOpConversion
   }
 };
 
+struct DynQueueExtractRefOpConversion
+    : public OpConversionPattern<DynQueueExtractRefOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(DynQueueExtractRefOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Currently only single-element extracts are supported.
+    rewriter.replaceOpWithNewOp<llhd::SigQueueGetOp>(op, adaptor.getInput(),
+                                                     adaptor.getIndex());
+    return success();
+  }
+};
+
 // Given a reference `ref` to some Moore type, this function emits a
 // `ProbeOp` to read the contained value, then passes it to the function `func`.
 // It finally emits a `DriveOp` to write the result of the function back to
@@ -2959,7 +2973,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     QueueDeleteOpConversion,
     QueueInsertOpConversion,
     QueueClearOpConversion,
-    DynQueueExtractOpConversion
+    DynQueueExtractOpConversion,
+    DynQueueExtractRefOpConversion
   >(typeConverter, patterns.getContext());
   // clang-format on
 

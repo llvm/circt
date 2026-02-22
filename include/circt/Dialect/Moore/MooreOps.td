@@ -1796,7 +1796,7 @@ def DynQueueRefElementOp : MooreOp<"dyn_queue_ref_element", [Pure]> {
     will result in a special value as defined by the element type in
     IEEE 1800-2023 § 7.4.5, Table 7-1, and writing it has no effect.
   }];
-  let arguments = (ins RefType:$input, UnpackedType:$index);
+  let arguments = (ins QueueRefType:$input, UnpackedType:$index);
   let results = (outs RefType:$result);
   let assemblyFormat = [{
     $input `from` $index attr-dict `:`

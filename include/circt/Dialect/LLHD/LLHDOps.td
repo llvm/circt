@@ -466,6 +466,46 @@ def SigArrayGetOp : LLHDOp<"sig.array_get", [
 }
 
 //===----------------------------------------------------------------------===//
+// Queue Signal Projections
+//===----------------------------------------------------------------------===//
+
+def SigQueueGetOp : LLHDOp<"sig.queue_get", [
+  Pure,
+  DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
+  TypesMatchWith<"input and result types must match",
+      "input", "result", "RefType::get(cast<sim::QueueType>(cast<RefType>($_self).getNestedType()).getElementType())">
+]> {
+  let summary = "Extract an element from a signal of a queue.";
+  let description = [{
+    The `llhd.sig.queue_get` operation allows to access the element of the
+    `$input` queue at position `$index`. A new subsignal aliasing the element
+    will be returned.
+
+    Example:
+
+    ```mlir
+    // Returns an !llhd.ref<i8>
+    %0 = llhd.sig.queue_get %q[%index] : !llhd.ref<!sim.queue<i8, 0>>
+    ```
+  }];
+
+  let arguments = (ins RefTypeOf<QueueType>:$input, I32:$index);
+  let results = (outs RefType: $result);
+
+  let assemblyFormat = [{
+    $input `[` $index `]` attr-dict `:` type($input)
+  }];
+
+  let extraClassDeclaration = [{
+    sim::QueueType getQueueType() {
+      return cast<sim::QueueType>(
+        cast<RefType>(getInput().getType()).getNestedType()
+      );
+    }
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Struct Signal Projections
 //===----------------------------------------------------------------------===//
 

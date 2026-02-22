@@ -13,6 +13,7 @@
 #include "circt/Dialect/LLHD/LLHDDialect.h"
 #include "circt/Dialect/LLHD/LLHDEnums.h.inc"
 #include "circt/Dialect/LLHD/LLHDTypes.h"
+#include "circt/Dialect/Sim/SimTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Interfaces/CallInterfaces.h"

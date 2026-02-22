@@ -10,6 +10,7 @@
 #define CIRCT_DIALECT_LLHD_LLHDTYPES_TD
 
 include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/Sim/SimTypes.td"
 include "circt/Dialect/LLHD/LLHDDialect.td"
 include "mlir/IR/AttrTypeBase.td"
 
