@@ -13,7 +13,8 @@
 using namespace circt;
 using namespace ImportVerilog;
 
-static ltl::ClockEdge convertEdgeKindLTL(const slang::ast::EdgeKind edge) {
+ltl::ClockEdge
+circt::ImportVerilog::convertEdgeKindLTL(const slang::ast::EdgeKind edge) {
   using slang::ast::EdgeKind;
   switch (edge) {
   case EdgeKind::NegEdge:

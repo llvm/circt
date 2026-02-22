@@ -3603,6 +3603,12 @@ private:
   /// location information tracking.
   SmallPtrSetImpl<Operation *> &emittedOps;
 
+  /// Current clock context from enclosing ltl.clock op. Used to verify that
+  /// ltl.delay ops have consistent clocks, since SVA does not support
+  /// per-delay clocks.
+  Value currentClock;
+  std::optional<ltl::ClockEdge> currentEdge;
+
   /// Tokens buffered for inserting casts/parens after emitting children.
   SmallVector<Token> localTokens;
 
@@ -3752,6 +3758,26 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::IntersectOp op) {
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::DelayOp op) {
+  // Verify that the delay's clock matches the enclosing clock context.
+  // SVA does not support per-delay clocks; all delays inherit from the
+  // enclosing @(edge clock) specification.
+  Value delayClock = op.getClock();
+  if (currentClock) {
+    // Check if delay has a real clock (not a placeholder constant)
+    bool isPlaceholder = false;
+    if (auto constOp = delayClock.getDefiningOp<hw::ConstantOp>()) {
+      auto value = constOp.getValue();
+      isPlaceholder = value.getBitWidth() == 1 && value.isOne();
+    }
+
+    if (!isPlaceholder && delayClock != currentClock) {
+      emitOpError(op, "delay clock does not match enclosing clock; "
+                      "SVA does not support per-delay clocks");
+    } else if (!isPlaceholder && currentEdge && op.getEdge() != *currentEdge) {
+      emitOpError(op, "delay clock edge does not match enclosing clock edge");
+    }
+  }
+
   ps << "##";
   if (auto length = op.getLength()) {
     if (*length == 0) {
@@ -3907,7 +3933,18 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::ClockOp op) {
     ps << ")";
   });
   ps << PP::space;
+
+  // Set the clock context for nested property emission.
+  // Save and restore to handle nested clock ops correctly.
+  Value savedClock = currentClock;
+  auto savedEdge = currentEdge;
+  currentClock = op.getClock();
+  currentEdge = op.getEdge();
+
   emitNestedProperty(op.getInput(), PropertyPrecedence::Clocking);
+
+  currentClock = savedClock;
+  currentEdge = savedEdge;
   return {PropertyPrecedence::Clocking};
 }
 

@@ -19,3 +19,5 @@ add_circt_dialect_library(CIRCTLTL
   MLIRIR
   MLIRInferTypeOpInterface
 )
+
+add_subdirectory(Transforms)

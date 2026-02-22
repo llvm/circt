@@ -30,8 +30,28 @@ struct AssertionExprVisitor {
   Location loc;
   OpBuilder &builder;
 
-  AssertionExprVisitor(Context &context, Location loc)
-      : context(context), loc(loc), builder(context.builder) {}
+  std::optional<std::pair<Value, ltl::ClockEdge>> clockContext;
+
+  AssertionExprVisitor(
+      Context &context, Location loc,
+      std::optional<std::pair<Value, ltl::ClockEdge>> clock = std::nullopt)
+      : context(context), loc(loc), builder(context.builder),
+        clockContext(clock) {}
+
+  std::pair<Value, ltl::ClockEdgeAttr> getClockForDelay() {
+    if (clockContext) {
+      auto edgeAttr =
+          ltl::ClockEdgeAttr::get(builder.getContext(), clockContext->second);
+      return {clockContext->first, edgeAttr};
+    }
+    // Fallback to dummy constant when no clock context available.
+    auto dummyClock =
+        hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1)
+            .getResult();
+    auto dummyEdge =
+        ltl::ClockEdgeAttr::get(builder.getContext(), ltl::ClockEdge::Pos);
+    return {dummyClock, dummyEdge};
+  }
 
   /// Helper to convert a range (min, optional max) to MLIR integer attributes
   std::pair<mlir::IntegerAttr, mlir::IntegerAttr>
@@ -124,8 +144,10 @@ struct AssertionExprVisitor {
 
       auto [delayMin, delayRange] =
           convertRangeToAttrs(concatElement.delay.min, concatElement.delay.max);
-      auto delayedSequence = ltl::DelayOp::create(builder, loc, sequenceValue,
-                                                  delayMin, delayRange);
+      auto [delayClock, delayEdge] = getClockForDelay();
+      auto delayedSequence =
+          ltl::DelayOp::create(builder, loc, delayClock, delayEdge,
+                               sequenceValue, delayMin, delayRange);
       sequenceElements.push_back(delayedSequence);
     }
 
@@ -162,8 +184,9 @@ struct AssertionExprVisitor {
       if (expr.range.has_value()) {
         minRepetitions = builder.getI64IntegerAttr(expr.range.value().min);
       }
-      return ltl::DelayOp::create(builder, loc, value, minRepetitions,
-                                  builder.getI64IntegerAttr(0));
+      auto [clock, edge] = getClockForDelay();
+      return ltl::DelayOp::create(builder, loc, clock, edge, value,
+                                  minRepetitions, builder.getI64IntegerAttr(0));
     }
     case UnaryAssertionOperator::Eventually:
     case UnaryAssertionOperator::SNextTime:
@@ -201,12 +224,13 @@ struct AssertionExprVisitor {
       auto oneRepeat = ltl::RepeatOp::create(builder, loc, constOne,
                                              builder.getI64IntegerAttr(0),
                                              mlir::IntegerAttr{});
-      auto repeatDelay = ltl::DelayOp::create(builder, loc, oneRepeat,
-                                              builder.getI64IntegerAttr(1),
-                                              builder.getI64IntegerAttr(0));
-      auto lhsDelay =
-          ltl::DelayOp::create(builder, loc, lhs, builder.getI64IntegerAttr(1),
-                               builder.getI64IntegerAttr(0));
+      auto [delayClock, delayEdge] = getClockForDelay();
+      auto repeatDelay = ltl::DelayOp::create(
+          builder, loc, delayClock, delayEdge, oneRepeat,
+          builder.getI64IntegerAttr(1), builder.getI64IntegerAttr(0));
+      auto lhsDelay = ltl::DelayOp::create(builder, loc, delayClock, delayEdge,
+                                           lhs, builder.getI64IntegerAttr(1),
+                                           builder.getI64IntegerAttr(0));
       auto combined = ltl::ConcatOp::create(
           builder, loc, SmallVector<Value, 3>{repeatDelay, lhsDelay, constOne});
       return ltl::IntersectOp::create(builder, loc,
@@ -238,9 +262,10 @@ struct AssertionExprVisitor {
     case BinaryAssertionOperator::NonOverlappedImplication: {
       auto constOne =
           hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1);
-      auto lhsDelay =
-          ltl::DelayOp::create(builder, loc, lhs, builder.getI64IntegerAttr(1),
-                               builder.getI64IntegerAttr(0));
+      auto [delayClock, delayEdge] = getClockForDelay();
+      auto lhsDelay = ltl::DelayOp::create(builder, loc, delayClock, delayEdge,
+                                           lhs, builder.getI64IntegerAttr(1),
+                                           builder.getI64IntegerAttr(0));
       auto antecedent = ltl::ConcatOp::create(
           builder, loc, SmallVector<Value, 2>{lhsDelay, constOne});
       return ltl::ImplicationOp::create(builder, loc,
@@ -256,9 +281,10 @@ struct AssertionExprVisitor {
       auto constOne =
           hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1);
       auto notRhs = ltl::NotOp::create(builder, loc, rhs);
-      auto lhsDelay =
-          ltl::DelayOp::create(builder, loc, lhs, builder.getI64IntegerAttr(1),
-                               builder.getI64IntegerAttr(0));
+      auto [delayClock, delayEdge] = getClockForDelay();
+      auto lhsDelay = ltl::DelayOp::create(builder, loc, delayClock, delayEdge,
+                                           lhs, builder.getI64IntegerAttr(1),
+                                           builder.getI64IntegerAttr(0));
       auto antecedent = ltl::ConcatOp::create(
           builder, loc, SmallVector<Value, 2>{lhsDelay, constOne});
       auto implication = ltl::ImplicationOp::create(
@@ -275,7 +301,19 @@ struct AssertionExprVisitor {
   }
 
   Value visit(const slang::ast::ClockingAssertionExpr &expr) {
-    auto assertionExpr = context.convertAssertionExpression(expr.expr, loc);
+    std::optional<std::pair<Value, ltl::ClockEdge>> extractedClock;
+    if (auto *sec = expr.clocking.as_if<slang::ast::SignalEventControl>()) {
+      auto clockExpr = context.convertRvalueExpression(sec->expr);
+      if (!clockExpr)
+        return {};
+      clockExpr = context.convertToI1(clockExpr);
+      if (!clockExpr)
+        return {};
+      extractedClock = {clockExpr, convertEdgeKindLTL(sec->edge)};
+    }
+
+    AssertionExprVisitor innerVisitor{context, loc, extractedClock};
+    auto assertionExpr = expr.expr.visit(innerVisitor);
     if (!assertionExpr)
       return {};
     return context.convertLTLTimingControl(expr.clocking, assertionExpr);
