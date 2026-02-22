@@ -863,7 +863,7 @@ def ConvertCombToSynth : Pass<"convert-comb-to-synth", "hw::HWModuleOp"> {
 //===----------------------------------------------------------------------===//
 // ConvertSynthToComb
 //===----------------------------------------------------------------------===//
-def ConvertSynthToComb: Pass<"convert-synth-to-comb", "hw::HWModuleOp"> {
+def ConvertSynthToComb: Pass<"convert-synth-to-comb"> {
   let summary = "Lower Synth ops to Comb ops";
   let description = [{
     This pass converts Synth operations to Comb operations. This is mostly
