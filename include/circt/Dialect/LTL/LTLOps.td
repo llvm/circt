@@ -152,6 +152,17 @@ def DelayOp : LTLOp<"delay", [Pure]> {
     `$edge` attribute. There is no implicit clock inference for delays; callers
     must provide the desired clock. Backends should discover the clock for a
     larger sequence by scanning its subtree for such explicit clocked delays.
+
+    #### Placeholder Clocks
+
+    Lowering passes that cannot determine the clock at construction time
+    (e.g., FIRRTLToHW) may use `hw.constant true` as a placeholder clock.
+    A constant-high signal is semantically invalid as a real clock because it
+    never produces edges, so it is unambiguously identifiable as a placeholder.
+    The `InferLTLClocks` pass (`--ltl-infer-clocks`) propagates real clocks
+    from enclosing `ltl.clock` ops into these placeholder delays. Backends
+    (e.g., ExportVerilog) will reject any delay that still carries a
+    placeholder clock after inference.
   }];
 }
 

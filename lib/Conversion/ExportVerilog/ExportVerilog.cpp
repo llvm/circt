@@ -3758,22 +3758,30 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::IntersectOp op) {
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::DelayOp op) {
+  // Check if the delay's clock is a placeholder (hw.constant true).
+  // A placeholder clock means the clock was never inferred — this is an error
+  // at emission time since SVA requires a real clock. See the DelayOp docs in
+  // LTLOps.td and the InferLTLClocks pass.
+  Value delayClock = op.getClock();
+  bool isPlaceholder = false;
+  if (auto constOp = delayClock.getDefiningOp<hw::ConstantOp>()) {
+    auto value = constOp.getValue();
+    isPlaceholder = value.getBitWidth() == 1 && value.isOne();
+  }
+  if (isPlaceholder) {
+    emitOpError(op, "delay has a placeholder clock (hw.constant true) that "
+                    "was never replaced with a real clock; run "
+                    "--ltl-infer-clocks or provide an explicit clock");
+  }
+
   // Verify that the delay's clock matches the enclosing clock context.
   // SVA does not support per-delay clocks; all delays inherit from the
   // enclosing @(edge clock) specification.
-  Value delayClock = op.getClock();
-  if (currentClock) {
-    // Check if delay has a real clock (not a placeholder constant)
-    bool isPlaceholder = false;
-    if (auto constOp = delayClock.getDefiningOp<hw::ConstantOp>()) {
-      auto value = constOp.getValue();
-      isPlaceholder = value.getBitWidth() == 1 && value.isOne();
-    }
-
-    if (!isPlaceholder && delayClock != currentClock) {
+  if (!isPlaceholder && currentClock) {
+    if (delayClock != currentClock) {
       emitOpError(op, "delay clock does not match enclosing clock; "
                       "SVA does not support per-delay clocks");
-    } else if (!isPlaceholder && currentEdge && op.getEdge() != *currentEdge) {
+    } else if (currentEdge && op.getEdge() != *currentEdge) {
       emitOpError(op, "delay clock edge does not match enclosing clock edge");
     }
   }
