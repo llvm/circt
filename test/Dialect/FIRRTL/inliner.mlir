@@ -1440,3 +1440,139 @@ firrtl.circuit "RemoveNonLocalFromLocal" {
     firrtl.instance bar sym @sym {annotations = [{circt.nonlocal = @dutNLA, class = "circt.tracker", id = distinct[0]<>}]} @Bar()
   }
 }
+
+// -----
+
+// Test that both firrtl.object and instance_choice work together during inlining.
+// This ensures both FInstanceLike operations are handled correctly in the same module.
+firrtl.circuit "FInstanceLike" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
+
+  // CHECK: firrtl.class @MyClass
+  firrtl.class @MyClass() {
+    %str = firrtl.string "test"
+  }
+
+  // CHECK: firrtl.module private @ImplA
+  firrtl.module private @ImplA(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+
+  // CHECK: firrtl.module private @ImplB
+  firrtl.module private @ImplB(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+
+  firrtl.module private @Child(in %x: !firrtl.uint<8>, out %y: !firrtl.uint<8>)
+    attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    // Both object and instance_choice in the same module
+    %obj = firrtl.object @MyClass()
+    %inst_in, %inst_out = firrtl.instance_choice inst @ImplA alternatives @Platform {
+      @FPGA -> @ImplA,
+      @ASIC -> @ImplB
+    } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    firrtl.connect %inst_in, %x : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.connect %y, %inst_out : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module @FInstanceLike
+  firrtl.module @FInstanceLike(in %a: !firrtl.uint<8>, out %b: !firrtl.uint<8>) {
+    // After inlining, both object and instance_choice should be present
+    // CHECK: firrtl.object @MyClass
+    // CHECK: firrtl.instance_choice
+    // CHECK-SAME: @ImplA
+    // CHECK-SAME: @ImplB
+    %child_x, %child_y = firrtl.instance child @Child(in x: !firrtl.uint<8>, out y: !firrtl.uint<8>)
+    firrtl.connect %child_x, %a : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.connect %b, %child_y : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Test that children of modules referenced by instance_choice can still be inlined.
+// This ensures that marking modules as live doesn't prevent their children from being inlined.
+firrtl.circuit "InstanceChoiceChildrenInlineable" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
+
+  // This should be inlined into FPGAImpl and then deleted
+  // CHECK-NOT: firrtl.module private @InlineableChild
+  firrtl.module private @InlineableChild(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>)
+    attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
+    firrtl.connect %out, %c1_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+
+  // This module is referenced by instance_choice and has an inlineable child
+  // CHECK: firrtl.module private @FPGAImpl
+  firrtl.module private @FPGAImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    // CHECK-NOT: firrtl.instance child @InlineableChild
+    // CHECK: %child_in = firrtl.wire
+    // CHECK: %child_out = firrtl.wire
+    // CHECK: firrtl.constant 1
+    %child_in, %child_out = firrtl.instance child @InlineableChild(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    firrtl.connect %child_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.connect %out, %child_out : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+
+  // CHECK: firrtl.module private @ASICImpl
+  firrtl.module private @ASICImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module @InstanceChoiceChildrenInlineable
+  firrtl.module @InstanceChoiceChildrenInlineable(in %a: !firrtl.uint<8>, out %b: !firrtl.uint<8>) {
+    // CHECK: firrtl.instance_choice
+    // CHECK-SAME: @FPGAImpl
+    // CHECK-SAME: @ASICImpl
+    %inst_in, %inst_out = firrtl.instance_choice inst @FPGAImpl alternatives @Platform {
+      @FPGA -> @FPGAImpl,
+      @ASIC -> @ASICImpl
+    } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    firrtl.connect %inst_in, %a : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.connect %b, %inst_out : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Test that instance_choice works correctly during flattening.
+firrtl.circuit "InstanceChoiceWithFlattening" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
+
+  // CHECK: firrtl.module private @ImplA
+  firrtl.module private @ImplA() {}
+
+  // CHECK: firrtl.module private @ImplB
+  firrtl.module private @ImplB() {}
+
+  firrtl.module private @Level2() {
+    firrtl.instance_choice inst @ImplA alternatives @Platform {
+      @FPGA -> @ImplA,
+      @ASIC -> @ImplB
+    } ()
+  }
+
+  firrtl.module private @Level1() {
+    firrtl.instance level2 @Level2()
+  }
+
+  // CHECK-LABEL: firrtl.module @InstanceChoiceWithFlattening
+  firrtl.module @InstanceChoiceWithFlattening()
+    attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
+    // After flattening, instance_choice should still be present and reference the modules
+    // CHECK: firrtl.instance_choice
+    // CHECK-SAME: @ImplA
+    // CHECK-SAME: @ImplB
+    firrtl.instance level1 @Level1()
+  }
+}
