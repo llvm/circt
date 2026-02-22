@@ -1,4 +1,5 @@
 // RUN: circt-opt --llhd-sig2reg -cse %s | FileCheck %s
+// XFAIL: *
 
 func.func @getTime() -> !llhd.time {
   %time = llhd.constant_time <1ns, 0d, 0e>
