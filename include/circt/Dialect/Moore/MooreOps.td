@@ -1767,29 +1767,36 @@ def DynExtractRefOp : MooreOp<"dyn_extract_ref", [Pure]> {
 //===----------------------------------------------------------------------===//
 
 def DynQueueExtractOp : MooreOp<"dyn_queue_extract", [Pure,
-    TypesMatchWith<"input and result types must match",
-    "input", "result", "cast<QueueType>($_self).getElementType()">]> {
+  AllTypesMatch<["lowerIdx", "upperIdx"]>]> {
   let description = [{
-    It's similar to extract, but it's used to select from a value
-    with a dynamic lower index.
+    Extracts the elements within a queue from `lowerIdx` to `upperIdx` inclusive.
+    This creates a new queue, unless a single element is selected, in which case,
+    that element is returned directly.
+
+    If either index is out of bounds (or has x/z values), the out of bounds elements
+    will result in a special value as defined by the element type in IEEE 1800-2023 § 7.4.5, Table 7-1.
   }];
-  let arguments = (ins QueueType:$input, UnpackedType:$lowerIdx);
+  let arguments = (ins QueueType:$input, UnpackedType:$lowerIdx, UnpackedType:$upperIdx);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    $input `from` $lowerIdx attr-dict `:`
+    $input `from` $lowerIdx `to` $upperIdx attr-dict `:`
     type($input) `,` type($lowerIdx) `->` type($result)
   }];
 }
 
 def DynQueueExtractRefOp : MooreOp<"dyn_queue_extract_ref", [Pure]> {
   let description = [{
-  The copy of dyn_extract that explicitly works on the ref type.
+    Extracts a reference to the element `index` of `input`.
+
+    If the index is out of bounds (or has x/z values), reading the reference
+    will result in a special value as defined by the element type in IEEE 1800-2023 § 7.4.5, Table 7-1,
+    and writing it has no effect.
   }];
-  let arguments = (ins RefType:$input, UnpackedType:$lowerIdx);
+  let arguments = (ins RefType:$input, UnpackedType:$index);
   let results = (outs RefType:$result);
   let assemblyFormat = [{
-    $input `from` $lowerIdx attr-dict `:`
-    type($input) `,` type($lowerIdx) `->` type($result)
+    $input `from` $index attr-dict `:`
+    type($input) `,` type($index) `->` type($result)
   }];
 }
 

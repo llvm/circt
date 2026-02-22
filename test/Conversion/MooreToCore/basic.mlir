@@ -1564,7 +1564,7 @@ func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
   %qr = moore.read %q : <!moore.queue<i32, 10>>
   // CHECK: [[QEL:%.+]] = sim.queue.get %arg0 of [[QR]] : <i32, 10>
-  %el = moore.dyn_queue_extract %qr from %arg0 : <i32, 10>, i32 -> i32
+  %el = moore.dyn_queue_extract %qr from %arg0 to %arg0 : <i32, 10>, i32 -> i32
 
   return
 }
