@@ -81,6 +81,31 @@ static Value foldStructExtract(Operation *inputOp, uint32_t fieldIndex) {
   return {};
 }
 
+static bool dependsOnValue(Value value, Value needle) {
+  if (value == needle)
+    return true;
+
+  SmallVector<Value> worklist{value};
+  SmallPtrSet<Value, 16> visited;
+  while (!worklist.empty()) {
+    Value current = worklist.pop_back_val();
+    if (!visited.insert(current).second)
+      continue;
+    if (current == needle)
+      return true;
+
+    Operation *defOp = current.getDefiningOp();
+    if (!defOp)
+      continue;
+    for (Value operand : defOp->getOperands()) {
+      if (operand == needle)
+        return true;
+      worklist.push_back(operand);
+    }
+  }
+  return false;
+}
+
 static ArrayAttr arrayOrEmpty(mlir::MLIRContext *context,
                               ArrayRef<Attribute> attrs) {
   if (attrs.empty())
@@ -3120,8 +3145,13 @@ LogicalResult BitcastOp::canonicalize(BitcastOp op, PatternRewriter &rewriter) {
       dyn_cast_or_null<BitcastOp>(op.getInput().getDefiningOp());
   if (!inputBitcast)
     return failure();
+
+  Value composedInput = inputBitcast.getInput();
+  if (dependsOnValue(composedInput, op.getResult()))
+    return failure();
+
   auto bitcast = rewriter.createOrFold<BitcastOp>(op.getLoc(), op.getType(),
-                                                  inputBitcast.getInput());
+                                                  composedInput);
   rewriter.replaceOp(op, bitcast);
   return success();
 }
