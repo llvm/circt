@@ -745,6 +745,42 @@ def QueueInsertOp : SimOp<"queue.insert", [Pure,
   let assemblyFormat = "$item `into` $queue `at` $index attr-dict `:` type($queue)";
 }
 
+// Likewise, TODO for 4-valued ints. (see above)
+def QueueGetOp : SimOp<"queue.get", [Pure,
+   TypesMatchWith<"queue and item types must match",
+      "queue", "result", "cast<QueueType>($_self).getElementType()">]> {
+  let summary = "Returns an indexed element of the queue";
+
+  let description = [{
+    Returns the element at position `index` within the queue.
+
+    If the index is negative or greater than or equal to the queue length,
+    this returns a value as indicated in Table 7-1 of IEEE 1800-2023 § 7.4.5
+  }];
+
+  let arguments = (ins QueueType:$queue, I32:$index);
+  let results = (outs HWNonInOutType:$result);
+
+  let assemblyFormat = "$index `of` $queue attr-dict `:` type($queue)";
+}
+
+def QueueSliceOp : SimOp<"queue.slice", [Pure,
+  AllTypesMatch<["queue", "result"]>]> {
+  let summary = "Returns a range of elements from a queue";
+
+  let description = [{
+    Returns the elements from index `lowIdx` of the `queue` to `highIdx` inclusive,
+    copied into a new queue.
+
+    If either index is out of bounds, the out of bounds elements within the selection
+    will have a special value as defined by the element type in IEEE 1800-2023 § 7.4.5, Table 7-1.
+  }];
+
+  let arguments = (ins QueueType:$queue, I32:$lowIdx, I32:$highIdx);
+  let results = (outs QueueType:$result);
+
+  let assemblyFormat = "$queue `from` $lowIdx `to` $highIdx attr-dict `:` type($queue)";
+}
 
 //===----------------------------------------------------------------------===//
 // Simulation Control
