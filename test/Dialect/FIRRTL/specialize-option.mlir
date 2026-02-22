@@ -19,6 +19,7 @@ firrtl.option @Performance {
   firrtl.option_case @Small
 }
 
+// DEFAULT-NOT: firrtl.option @NotSelected
 firrtl.option @NotSelected {
   firrtl.option_case @Fast
 }
