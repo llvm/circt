@@ -178,6 +178,17 @@ struct ExprVisitor {
     return context.convertRvalueExpression(expr);
   }
 
+  Value visit(const slang::ast::NewArrayExpression &expr) {
+    Type type = context.convertType(*expr.type);
+
+    // TODO: Handle 'initExpr' if it exists
+
+    Value initialSize = context.convertRvalueExpression(
+      expr.sizeExpr(), context.convertType(*expr.sizeExpr().type));
+
+    return moore::OpenUArrayCreateOp::create(builder, loc, type, initialSize);
+  }
+
   /// Handle single bit selections.
   Value visit(const slang::ast::ElementSelectExpression &expr) {
     auto type = context.convertType(*expr.type);
@@ -189,9 +200,8 @@ struct ExprVisitor {
     auto derefType = value.getType();
     if (isLvalue)
       derefType = cast<moore::RefType>(derefType).getNestedType();
-
-    if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
-             moore::QueueType>(derefType)) {
+    if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType, moore::OpenUnpackedArrayType>(
+            derefType)) {
       mlir::emitError(loc) << "unsupported expression: element select into "
                            << expr.value().type->toString() << "\n";
       return {};
@@ -2797,6 +2807,9 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                     isa<moore::QueueType>(
                         cast<moore::RefType>(value.getType()).getNestedType()))
                   return moore::QueueSizeBIOp::create(builder, loc, value);
+                if(isa<moore::OpenUnpackedArrayType>(value.getType())) {
+                  return moore::OpenUArraySizeOp::create(builder, loc, value);
+                }
                 return {};
               })
           .Case("tolower",
@@ -2822,6 +2835,12 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                   return moore::QueuePopFrontOp::create(builder, loc, value);
                 return {};
               })
+          .Case("delete",
+                [&]() -> Value {
+                  return moore::OpenUArrayDeleteOp::create(builder, loc, value);
+                })
+          
+          
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
 }
