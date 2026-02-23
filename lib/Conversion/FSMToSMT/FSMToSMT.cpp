@@ -258,7 +258,7 @@ LogicalResult MachineOpConverter::dispatch() {
       for (auto tr :
            stateOp.getTransitions().front().getOps<fsm::TransitionOp>()) {
         auto t = getTransitionRegions(tr, fromState, states, loc);
-        if (!stateOp.getOutput().empty())
+        if (numOut > 0)
           t.output = getOutputRegion(outputOfStateId, t.to);
         else
           t.output = std::nullopt;
