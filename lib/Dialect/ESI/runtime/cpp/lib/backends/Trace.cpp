@@ -21,7 +21,6 @@
 #include <cassert>
 #include <fstream>
 #include <iostream>
-#include <regex>
 #include <sstream>
 
 using namespace esi;
@@ -104,32 +103,61 @@ void TraceAccelerator::Impl::write(const AppIDPath &id,
 
 std::unique_ptr<AcceleratorConnection>
 TraceAccelerator::connect(Context &ctxt, std::string connectionString) {
-  std::string modeStr;
   std::string manifestPath;
   std::string traceFile = "trace.log";
 
   // Parse the connection std::string.
-  // <mode>:<manifest path>[:<traceFile>]
-  std::regex connPattern("([\\w-]):([^:]+)(:(\\w+))?");
-  std::smatch match;
-  if (regex_search(connectionString, match, connPattern)) {
-    modeStr = match[1];
-    manifestPath = match[2];
-    if (match[3].matched)
-      traceFile = match[3];
+  // Format: <mode>SEP<manifest path>[SEP<traceFile>]
+  // where SEP is ':' on Unix and ';' on Windows.
+  // Using different separators avoids conflicts with Windows drive letters
+  // (e.g. "C:/...").
+#ifdef _WIN32
+  constexpr char SEP = ';';
+#else
+  constexpr char SEP = ':';
+#endif
+
+  if (connectionString.size() < 2 || connectionString[1] != SEP)
+    throw std::runtime_error(
+        std::string("connection string must be of the form ") + "'<mode>" +
+        SEP + "<manifest path>[" + SEP + "<traceFile>]'");
+
+  char modeChar = connectionString[0];
+  std::string rest = connectionString.substr(2);
+
+  // Find the optional trace file, separated by the last SEP.
+  size_t lastSep = rest.rfind(SEP);
+  if (lastSep != std::string::npos) {
+    manifestPath = rest.substr(0, lastSep);
+    traceFile = rest.substr(lastSep + 1);
+
+    // Validate that the trace file name is non-empty when present.
+    if (traceFile.empty())
+      throw std::runtime_error(
+          std::string("connection string must be of the form ") + "'<mode>" +
+          SEP + "<manifest path>[" + SEP +
+          "<traceFile>]': "
+          "trace file name cannot be empty");
   } else {
-    throw std::runtime_error("connection std::string must be of the form "
-                             "'<mode>:<manifest path>[:<traceFile>]'");
+    manifestPath = rest;
   }
+
+  // Validate that manifest path is non-empty.
+  if (manifestPath.empty())
+    throw std::runtime_error(
+        std::string("connection string must be of the form ") + "'<mode>" +
+        SEP + "<manifest path>[" + SEP +
+        "<traceFile>]': "
+        "manifest path cannot be empty");
 
   // Parse the mode.
   Mode mode;
-  if (modeStr == "w")
+  if (modeChar == 'w')
     mode = Write;
-  else if (modeStr == "-")
+  else if (modeChar == '-')
     mode = Discard;
   else
-    throw std::runtime_error("unknown mode '" + modeStr + "'");
+    throw std::runtime_error("unknown mode '" + std::string(1, modeChar) + "'");
 
   return std::make_unique<TraceAccelerator>(ctxt, mode,
                                             std::filesystem::path(manifestPath),

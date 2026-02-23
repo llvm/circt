@@ -16,10 +16,11 @@ from .accelerator import AcceleratorConnection, Context
 from .esiCppAccel import ModuleInfo
 from . import types
 
+import sys
+import os
+import textwrap
 import argparse
 from pathlib import Path
-import textwrap
-import sys
 
 _thisdir = Path(__file__).absolute().resolve().parent
 
@@ -490,7 +491,9 @@ def run(generator: Type[Generator] = CppGenerator,
 
   conn: AcceleratorConnection
   if args.file is not None:
-    conn = Context.default().connect("trace", f"-:{args.file}")
+    # Use os.pathsep (';' on Windows, ':' on Unix) to avoid conflicts with
+    # drive letters.
+    conn = Context.default().connect("trace", f"-{os.pathsep}{args.file}")
   elif args.platform is not None:
     if args.connection is None:
       print("Must specify --connection with --platform")
