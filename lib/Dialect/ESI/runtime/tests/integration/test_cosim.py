@@ -10,29 +10,15 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-from typing import Dict, Iterable, Optional, Sequence
+from typing import Dict, Optional, Sequence
 
 import pytest
 
-from esiaccel.cosim.simulator import SourceFiles
-from esiaccel.cosim.verilator import Verilator
-
-# xdist note: Verilator builds are CPU/memory heavy. Prefer `-n 2` or `-n 4`
-# instead of `-n auto` to avoid oversubscribing the host.
+from esiaccel.cosim.pytest import cosim_test
 
 ROOT_DIR = Path(__file__).resolve().parent
 HW_DIR = ROOT_DIR / "hw"
 SW_DIR = ROOT_DIR / "sw"
-
-
-@contextlib.contextmanager
-def chdir(path: Path):
-  old_cwd = Path.cwd()
-  os.chdir(path)
-  try:
-    yield
-  finally:
-    os.chdir(old_cwd)
 
 
 @contextlib.contextmanager
@@ -59,43 +45,9 @@ def require_tool(tool: str) -> None:
     pytest.skip(f"Required tool not found in PATH: {tool}")
 
 
-def resolve_runtime_root() -> Optional[Path]:
-  env_root = os.environ.get("ESI_RUNTIME_ROOT")
-  if env_root:
-    return Path(env_root)
-
-  repo_root = ROOT_DIR
-  while repo_root.parent != repo_root:
-    if (repo_root / "build").exists() and (repo_root / "lib").exists():
-      break
-    repo_root = repo_root.parent
-
-  build_roots = [
-      repo_root / "build" / "default", repo_root / "build" / "release"
-  ]
-  lib_names = [
-      "libESICppRuntime.so", "libESICppRuntime.dylib", "ESICppRuntime.dll"
-  ]
-  for build_root in build_roots:
-    if not build_root.exists():
-      continue
-    for lib_name in lib_names:
-      if (build_root / "lib" / lib_name).exists():
-        return build_root
-      if (build_root / "lib64" / lib_name).exists():
-        return build_root
-
-  runtime_root = ROOT_DIR.parent.parent
-  if (runtime_root / "cpp").exists() and (runtime_root / "python").exists():
-    return runtime_root
-  return None
-
-
 def require_runtime_root() -> Path:
-  runtime_root = resolve_runtime_root()
-  if runtime_root is None:
-    pytest.skip("ESI runtime root not found; set ESI_RUNTIME_ROOT")
-  return runtime_root
+  from esiaccel.utils import get_runtime_root
+  return get_runtime_root()
 
 
 def run_hw_script(script: Path, output_dir: Path, args: Sequence[str]) -> None:
@@ -108,175 +60,96 @@ def run_hw_script(script: Path, output_dir: Path, args: Sequence[str]) -> None:
   )
 
 
-def build_simulator(sources_dir: Path, run_dir: Path) -> Verilator:
-  sources = SourceFiles("ESI_Cosim_Top")
-  hw_dir = sources_dir / "hw"
-  sources.add_dir(hw_dir if hw_dir.exists() else sources_dir)
-  return Verilator(sources, run_dir, debug=False)
-
-
-def run_cosim(sim: Verilator, inner_cmd: Sequence[str]) -> None:
-  with chdir(sim.run_dir):
-    rc = sim.compile()
-    assert rc == 0
-    ret = sim.run(list(inner_cmd))  # type: ignore[arg-type]
-    assert ret == 0
-
-
-def run_cosim_with_env(sim: Verilator, inner_cmd: Sequence[str],
-                       env: Dict[str, Optional[str]]) -> None:
-  with temp_env(env):
-    run_cosim(sim, inner_cmd)
-
-
-@pytest.mark.parametrize(
-    "name, hw_script, sw_script, hw_args, env",
-    [
-        (
-            "esi_test",
-            HW_DIR / "esi_test.py",
-            SW_DIR / "esi_test.py",
-            [],
-            None,
-        ),
-        (
-            "esi_test_manifest_mmio",
-            HW_DIR / "esi_test.py",
-            SW_DIR / "esi_test.py",
-            [],
-            {
-                "ESI_COSIM_MANIFEST_MMIO": "1"
-            },
-        ),
-        (
-            "esi_advanced",
-            HW_DIR / "esi_advanced.py",
-            SW_DIR / "esi_advanced.py",
-            [],
-            None,
-        ),
-        (
-            "esi_ram",
-            HW_DIR / "esi_ram.py",
-            SW_DIR / "esi_ram.py",
-            [],
-            None,
-        ),
-        (
-            "loopback",
-            HW_DIR / "loopback.py",
-            SW_DIR / "loopback.py",
-            [],
-            None,
-        ),
-    ],
-)
-def test_cosim_python(name: str, hw_script: Path, sw_script: Path,
-                      hw_args: Sequence[str],
-                      env: Optional[Dict[str, Optional[str]]],
-                      tmp_path: Path) -> None:
-  require_tool("verilator")
-  hw_out = tmp_path / name
-  run_hw_script(hw_script, hw_out, hw_args)
-
-  sim = build_simulator(hw_out, tmp_path / f"{name}_run")
-  inner_cmd = [sys.executable, str(sw_script), "cosim", "env"]
-
+def run_sw_script(script: Path,
+                  host: str,
+                  port: int,
+                  env: Optional[Dict[str, Optional[str]]] = None) -> None:
+  cmd = [sys.executable, str(script), "cosim", f"{host}:{port}"]
   if env:
-    run_cosim_with_env(sim, inner_cmd, env)
+    with temp_env(env):
+      subprocess.run(cmd, check=True)
   else:
-    run_cosim(sim, inner_cmd)
+    subprocess.run(cmd, check=True)
 
 
-@pytest.mark.parametrize(
-    "name, bsp, commands",
-    [
-        (
-            "esitester",
-            "cosim",
-            [
-                ["esitester", "-v", "cosim", "env", "callback", "-i", "5"],
-                ["esitester", "cosim", "env", "streaming_add"],
-                ["esitester", "cosim", "env", "streaming_add", "-t"],
-                ["esitester", "cosim", "env", "translate_coords"],
-                [
-                    "esitester",
-                    "cosim",
-                    "env",
-                    "serial_coords",
-                    "-n",
-                    "40",
-                    "-b",
-                    "33",
-                ],
-                ["esiquery", "cosim", "env", "telemetry"],
-            ],
-        ),
-        (
-            "esitester_dma",
-            "cosim_dma",
-            [
-                ["esitester", "cosim", "env", "hostmem"],
-                ["esitester", "cosim", "env", "dma", "-w", "-r"],
-                ["esiquery", "cosim", "env", "telemetry"],
-            ],
-        ),
-    ],
-)
-def test_cosim_esitester(name: str, bsp: str, commands: Iterable[Sequence[str]],
-                         tmp_path: Path) -> None:
-  require_tool("verilator")
+@cosim_test(HW_DIR / "esi_test.py")
+def test_cosim_esi_test(host: str, port: int) -> None:
+  run_sw_script(SW_DIR / "esi_test.py", host, port)
+
+
+@cosim_test(HW_DIR / "esi_test.py")
+def test_cosim_esi_test_manifest_mmio(host: str, port: int) -> None:
+  run_sw_script(SW_DIR / "esi_test.py", host, port,
+                {"ESI_COSIM_MANIFEST_MMIO": "1"})
+
+
+@cosim_test(HW_DIR / "esi_advanced.py")
+def test_cosim_esi_advanced(host: str, port: int) -> None:
+  run_sw_script(SW_DIR / "esi_advanced.py", host, port)
+
+
+@cosim_test(HW_DIR / "esi_ram.py")
+def test_cosim_esi_ram(host: str, port: int) -> None:
+  run_sw_script(SW_DIR / "esi_ram.py", host, port)
+
+
+@cosim_test(HW_DIR / "loopback.py")
+def test_cosim_loopback(host: str, port: int) -> None:
+  run_sw_script(SW_DIR / "loopback.py", host, port)
+
+
+@cosim_test(HW_DIR / "esitester.py", args=("{tmp_dir}", "cosim"))
+def test_cosim_esitester(host: str, port: int) -> None:
   require_tool("esitester")
   require_tool("esiquery")
+  conn = f"{host}:{port}"
+  commands = [
+    ["esitester", "-v", "cosim", conn, "callback", "-i", "5"],
+    ["esitester", "cosim", conn, "streaming_add"],
+    ["esitester", "cosim", conn, "streaming_add", "-t"],
+    ["esitester", "cosim", conn, "translate_coords"],
+    ["esitester", "cosim", conn, "serial_coords", "-n", "40", "-b", "33"],
+    ["esiquery", "cosim", conn, "telemetry"],
+  ]
+  for cmd in commands:
+    subprocess.run(cmd, check=True)
 
-  hw_out = tmp_path / name
-  run_hw_script(HW_DIR / "esitester.py", hw_out, [bsp])
 
-  sim = build_simulator(hw_out, tmp_path / f"{name}_run")
-  with chdir(sim.run_dir):
-    rc = sim.compile()
-    assert rc == 0
-    for cmd in commands:
-      ret = sim.run(list(cmd))  # type: ignore[arg-type]
-      assert ret == 0
+@cosim_test(HW_DIR / "esitester.py", args=("{tmp_dir}", "cosim_dma"))
+def test_cosim_esitester_dma(host: str, port: int) -> None:
+  require_tool("esitester")
+  require_tool("esiquery")
+  conn = f"{host}:{port}"
+  commands = [
+    ["esitester", "cosim", conn, "hostmem"],
+    ["esitester", "cosim", conn, "dma", "-w", "-r"],
+    ["esiquery", "cosim", conn, "telemetry"],
+  ]
+  for cmd in commands:
+    subprocess.run(cmd, check=True)
 
 
-@pytest.mark.parametrize(
-    "mode",
-    [
-        "from_manifest",
-        "from_accel",
-    ],
-)
-def test_loopback_cpp_codegen(mode: str, tmp_path: Path) -> None:
-  require_tool("verilator")
+@cosim_test(HW_DIR / "loopback.py")
+@pytest.mark.parametrize("mode", ["from_manifest", "from_accel"])
+def test_loopback_cpp_codegen(mode: str, tmp_path: Path, host: str,
+                port: int, sources_dir: Path) -> None:
   require_tool("cmake")
 
   runtime_root = require_runtime_root()
-  hw_out = tmp_path / "loopback_cpp"
-  run_hw_script(HW_DIR / "loopback.py", hw_out, [])
-
-  sim = build_simulator(hw_out, tmp_path / "loopback_cpp_run")
 
   include_dir = tmp_path / "include"
   generated_dir = include_dir / "loopback"
   generated_dir.mkdir(parents=True, exist_ok=True)
   if mode == "from_manifest":
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "esiaccel.codegen",
-            "--file",
-            str(hw_out / "esi_system_manifest.json"),
-            "--output-dir",
-            str(generated_dir),
-        ],
-        check=True,
-    )
+    # Codegen was already run automatically; copy the generated code.
+    codegen_src = sources_dir / "generated"
+    if codegen_src.exists():
+      for item in codegen_src.iterdir():
+        if item.is_file():
+          shutil.copy(item, generated_dir)
   else:
-    run_cosim(
-        sim,
+    # Generate from live cosim connection instead.
+    subprocess.run(
         [
             sys.executable,
             "-m",
@@ -284,10 +157,11 @@ def test_loopback_cpp_codegen(mode: str, tmp_path: Path) -> None:
             "--platform",
             "cosim",
             "--connection",
-            "env",
+            f"{host}:{port}",
             "--output-dir",
             str(generated_dir),
         ],
+        check=True,
     )
 
   build_dir = tmp_path / f"loopback-build-{mode}"
@@ -309,5 +183,5 @@ def test_loopback_cpp_codegen(mode: str, tmp_path: Path) -> None:
       check=True,
   )
 
-  inner_cmd = [str(build_dir / "loopback_test"), "cosim", "env"]
-  run_cosim(sim, inner_cmd)
+  subprocess.run([str(build_dir / "loopback_test"), "cosim", f"{host}:{port}"],
+                 check=True)

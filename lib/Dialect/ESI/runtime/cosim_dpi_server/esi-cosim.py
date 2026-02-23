@@ -17,11 +17,8 @@ import argparse
 from pathlib import Path
 import sys
 import textwrap
-from typing import Dict, List
 
-from esiaccel.cosim.questa import Questa
-from esiaccel.cosim.verilator import Verilator
-from esiaccel.cosim.simulator import SourceFiles
+from esiaccel.cosim.simulator import get_simulator, SourceFiles
 
 
 def __main__(args):
@@ -82,17 +79,7 @@ def __main__(args):
   sources = SourceFiles(args.top)
   sources.add_dir(Path(args.source))
 
-  if args.sim == "verilator":
-    sim = Verilator(sources, Path(args.rundir), args.debug)
-  elif args.sim == "questa":
-    sim = Questa(sources, Path(args.rundir), args.debug)
-  else:
-    print("Unknown simulator: " + args.sim)
-    print("Supported simulators: ")
-    print("  - verilator")
-    print("  - questa")
-    return 1
-
+  sim = get_simulator(args.sim, sources, Path(args.rundir), args.debug)
   if not args.no_compile:
     rc = sim.compile()
     if rc != 0:
