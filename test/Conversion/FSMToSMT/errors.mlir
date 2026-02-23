@@ -36,14 +36,32 @@ fsm.machine @comb_op(%arg0: i8) -> (i8) attributes {initialState = "S0"} {
 
 // -----
 
-// expected-error @below {{Only integer arguments are supported in FSMs.}}
-%c0_i8 = hw.constant 0 : i8
 fsm.machine @comb_op() -> () attributes {initialState = "A"} {
+  // expected-error @below {{Only integer variables are supported in FSMs.}}
   %var = fsm.variable "var" {initValue = 0.0 : f32} : f32
   fsm.state @A output  {
   } transitions {
   }
 }
 
+// -----
 
+// expected-error @below {{Only integer arguments are supported in FSMs.}}
+fsm.machine @comb_op(%x0 : f32) -> () attributes {initialState = "A"} {
+  fsm.state @A output  {
+  } transitions {
+  }
+}
 
+// -----
+
+// expected-error @below {{Only integer outputs are supported in FSMs.}}
+fsm.machine @comb_op() -> (!hw.enum<A, B, C>) attributes {initialState = "A"} {
+  fsm.state @A output  {
+    %e = hw.enum.constant A : !hw.enum<A, B, C>
+    fsm.output %e : !hw.enum<A, B, C>
+  } transitions {
+  }
+}
+
+// -----
