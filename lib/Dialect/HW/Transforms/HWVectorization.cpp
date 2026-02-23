@@ -132,8 +132,8 @@ public:
         changed = true;
       } else if (arr.isReverse(bitWidth, sourceInput)) {
         rewriter.setInsertionPointAfterValue(sourceInput);
-        Value reversed = rewriter.create<comb::ReverseOp>(
-            sourceInput.getLoc(), sourceInput.getType(), sourceInput);
+        Value reversed = comb::ReverseOp::create(
+            rewriter, sourceInput.getLoc(), sourceInput.getType(), sourceInput);
         oldOutputVal.replaceAllUsesWith(reversed);
         changed = true;
       }
