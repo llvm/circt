@@ -1248,19 +1248,22 @@ firrtl.circuit "top" {
 
 // -----
 // Issue 9396
+// Modules without reset-less registers should not get reset ports added, even
+// when instantiated in multiple reset domains.
 firrtl.circuit "Foo" {
   // CHECK-LABEL: firrtl.module @Baz
   firrtl.module @Baz(in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}]) {
     firrtl.instance bar @Bar()
-    // CHECK: firrtl.matchingconnect %bar_reset, %reset : !firrtl.asyncreset
+    // CHECK-NOT: firrtl.matchingconnect %bar_reset
   }
-  // CHECK-LABEL: firrtl.module private @Bar(in %reset: !firrtl.asyncreset)
+  // CHECK-LABEL: firrtl.module private @Bar()
+  // CHECK-NOT: in %reset
   firrtl.module private @Bar() {
   }
   // CHECK-LABEL: firrtl.module @Foo(in %reset: !firrtl.asyncreset
   firrtl.module @Foo(in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}]) {
     firrtl.instance bar @Bar()
-    // CHECK: firrtl.matchingconnect %bar_reset, %reset : !firrtl.asyncreset
+    // CHECK-NOT: firrtl.matchingconnect %bar_reset
   }
 }
 
