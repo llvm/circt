@@ -136,14 +136,14 @@ struct SextMatcher {
     auto baseWidth = baseValue.getType().getIntOrFloatBitWidth();
 
     // Check if signBits is a replicate operation
-    auto replicateOp = dyn_cast<ReplicateOp>(signBits.getDefiningOp());
+    auto replicateOp = dyn_cast_or_null<ReplicateOp>(signBits.getDefiningOp());
     if (!replicateOp)
       return false;
 
     Value signBit = replicateOp.getInput();
 
     // Check if signBit is the msb of baseValue
-    auto extractOp = dyn_cast<ExtractOp>(signBit.getDefiningOp());
+    auto extractOp = dyn_cast_or_null<ExtractOp>(signBit.getDefiningOp());
     if (!extractOp)
       return false;
 
