@@ -469,57 +469,53 @@ rtg.test @scfFor(singleton = %none: index) {
 rtg.test @fixedRegisters(singleton = %none: index) {
   // CHECK-NEXT: [[RA:%.+]] = rtg.constant #rtgtest.ra
   // CHECK-NEXT: [[SP:%.+]] = rtg.constant #rtgtest.sp
-  // CHECK-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<12, 0>
-  // CHECK-NEXT: rtgtest.rv32i.jalr [[RA]], [[SP]], [[IMM]]
+  // CHECK-NEXT: rtgtest.two_register_instr [[RA]], [[SP]]
   %ra = rtg.constant #rtgtest.ra
   %sp = rtg.constant #rtgtest.sp
-  %imm = rtg.constant #rtg.isa.immediate<12, 0>
-  rtgtest.rv32i.jalr %ra, %sp, %imm
+  rtgtest.two_register_instr %ra, %sp
 }
 
 // CHECK-LABEL: @virtualRegisters
 rtg.test @virtualRegisters(singleton = %none: index) {
   // CHECK-NEXT: [[R0:%.+]] = rtg.virtual_reg [#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg] loc("a")
   // CHECK-NEXT: [[R1:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg] loc("b")
-  // CHECK-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<12, 0>
-  // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R1]], [[IMM]]
-  // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R1]], [[IMM]]
+  // CHECK-NEXT: rtgtest.two_register_instr [[R0]], [[R1]]
+  // CHECK-NEXT: rtgtest.two_register_instr [[R0]], [[R1]]
   %r0 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1] loc("a")
   %r1 = rtg.virtual_reg [#rtgtest.s0, #rtgtest.s1] loc("b")
-  %imm = rtg.constant #rtg.isa.immediate<12, 0>
-  rtgtest.rv32i.jalr %r0, %r1, %imm
-  rtgtest.rv32i.jalr %r0, %r1, %imm
+  rtgtest.two_register_instr %r0, %r1
+  rtgtest.two_register_instr %r0, %r1
 
   // CHECK-NEXT: [[R2:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg] loc("c")
-  // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R2]], [[IMM]]
+  // CHECK-NEXT: rtgtest.two_register_instr [[R0]], [[R2]]
   // CHECK-NEXT: [[R3:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg] loc("c")
-  // CHECK-NEXT: rtgtest.rv32i.jalr [[R0]], [[R3]], [[IMM]]
+  // CHECK-NEXT: rtgtest.two_register_instr [[R0]], [[R3]]
   %0 = index.constant 0
   %1 = index.constant 1
   %2 = index.constant 2
   scf.for %i = %0 to %2 step %1 {
     %r2 = rtg.virtual_reg [#rtgtest.s0, #rtgtest.s1] loc("c")
-    rtgtest.rv32i.jalr %r0, %r2, %imm
+    rtgtest.two_register_instr %r0, %r2
   }
 }
 
 // CHECK-LABEL:  rtg.sequence @valuesWithIdentitySeq{{.*}}(%arg0: !rtgtest.ireg {{.*}}, %arg1: !rtgtest.ireg {{.*}}, %arg2: !rtgtest.ireg {{.*}}) {
-// CHECK: rtgtest.rv32i.jalr %arg0, %arg0
-// CHECK: rtgtest.rv32i.jalr %arg1, %arg2
+// CHECK: rtgtest.two_register_instr %arg0, %arg0
+// CHECK: rtgtest.two_register_instr %arg1, %arg2
 
 // CHECK-LABEL:  rtg.test @valuesWithIdentity
 // CHECK: [[VREG0:%.+]] = rtg.virtual_reg [#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg]
 // CHECK: [[VREG1:%.+]] = rtg.virtual_reg [#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg]
-// CHECK: rtgtest.rv32i.jalr [[VREG0]], [[VREG1]]
+// CHECK: rtgtest.two_register_instr [[VREG0]], [[VREG1]]
 // CHECK: [[VREG2:%.+]] = rtg.virtual_reg [#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg]
 // CHECK: [[V0:%.+]] = rtg.get_sequence @valuesWithIdentitySeq{{.*}} :
 // CHECK: rtg.substitute_sequence [[V0]]([[VREG0]], [[VREG2]], [[VREG1]]) :
 
-rtg.sequence @valuesWithIdentitySeq(%imm: !rtg.isa.immediate<12>, %reg: !rtgtest.ireg, %set0: !rtg.set<!rtgtest.ireg>, %set1: !rtg.set<!rtgtest.ireg>) {
-  rtgtest.rv32i.jalr %reg, %reg, %imm
+rtg.sequence @valuesWithIdentitySeq(%reg: !rtgtest.ireg, %set0: !rtg.set<!rtgtest.ireg>, %set1: !rtg.set<!rtgtest.ireg>) {
+  rtgtest.two_register_instr %reg, %reg
   %r0 = rtg.set_select_random %set0 : !rtg.set<!rtgtest.ireg>
   %r1 = rtg.set_select_random %set1 : !rtg.set<!rtgtest.ireg>
-  rtgtest.rv32i.jalr %r0, %r1, %imm
+  rtgtest.two_register_instr %r0, %r1
 }
 
 rtg.test @valuesWithIdentity(singleton = %none: index) {
@@ -527,12 +523,11 @@ rtg.test @valuesWithIdentity(singleton = %none: index) {
   %r1 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1]
   %r2 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1]
   %r3 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1]
-  %imm = rtg.constant #rtg.isa.immediate<12, 0>
-  rtgtest.rv32i.jalr %r0, %r3, %imm
+  rtgtest.two_register_instr %r0, %r3
   %set0 = rtg.set_create %r1, %r2 : !rtgtest.ireg
   %set1 = rtg.set_create %r3 : !rtgtest.ireg
-  %s0 = rtg.get_sequence @valuesWithIdentitySeq : !rtg.sequence<!rtg.isa.immediate<12>, !rtgtest.ireg, !rtg.set<!rtgtest.ireg>, !rtg.set<!rtgtest.ireg>>
-  %s1 = rtg.substitute_sequence %s0(%imm, %r0, %set0, %set1) : !rtg.sequence<!rtg.isa.immediate<12>, !rtgtest.ireg, !rtg.set<!rtgtest.ireg>, !rtg.set<!rtgtest.ireg>>
+  %s0 = rtg.get_sequence @valuesWithIdentitySeq : !rtg.sequence<!rtgtest.ireg, !rtg.set<!rtgtest.ireg>, !rtg.set<!rtgtest.ireg>>
+  %s1 = rtg.substitute_sequence %s0(%r0, %set0, %set1) : !rtg.sequence<!rtgtest.ireg, !rtg.set<!rtgtest.ireg>, !rtg.set<!rtgtest.ireg>>
   %s2 = rtg.randomize_sequence %s1
   rtg.embed_sequence %s2
 }
@@ -682,13 +677,13 @@ rtg.test @anyContextSwitch(single_core = %single_core: !rtgtest.cpu) {
 }
 
 rtg.sequence @interleaveSequencesSeq0() {
-  rtgtest.rv32i.ebreak
-  rtgtest.rv32i.ebreak
+  rtgtest.zero_operand_instr {a}
+  rtgtest.zero_operand_instr {a}
 }
 
 rtg.sequence @interleaveSequencesSeq1() {
-  rtgtest.rv32i.ecall
-  rtgtest.rv32i.ecall
+  rtgtest.zero_operand_instr {b}
+  rtgtest.zero_operand_instr {b}
 }
 
 // CHECK-LABEL: rtg.test @interleaveSequences

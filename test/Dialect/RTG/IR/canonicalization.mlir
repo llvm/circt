@@ -107,22 +107,6 @@ rtg.test @testRegisterToIndex() {
 
 // CHECK-LABEL: @testIndexToRegister
 rtg.test @testIndexToRegister() {
-  // CHECK-NEXT: [[T6:%.+]] = rtg.constant #rtgtest.t6 : !rtgtest.ireg
-  // CHECK-NEXT: [[T5:%.+]] = rtg.constant #rtgtest.t5 : !rtgtest.ireg
-  // CHECK-NEXT: [[T4:%.+]] = rtg.constant #rtgtest.t4 : !rtgtest.ireg
-  // CHECK-NEXT: [[T3:%.+]] = rtg.constant #rtgtest.t3 : !rtgtest.ireg
-  // CHECK-NEXT: [[S11:%.+]] = rtg.constant #rtgtest.s11 : !rtgtest.ireg
-  // CHECK-NEXT: [[S10:%.+]] = rtg.constant #rtgtest.s10 : !rtgtest.ireg
-  // CHECK-NEXT: [[S9:%.+]] = rtg.constant #rtgtest.s9 : !rtgtest.ireg
-  // CHECK-NEXT: [[S8:%.+]] = rtg.constant #rtgtest.s8 : !rtgtest.ireg
-  // CHECK-NEXT: [[S7:%.+]] = rtg.constant #rtgtest.s7 : !rtgtest.ireg
-  // CHECK-NEXT: [[S6:%.+]] = rtg.constant #rtgtest.s6 : !rtgtest.ireg
-  // CHECK-NEXT: [[S5:%.+]] = rtg.constant #rtgtest.s5 : !rtgtest.ireg
-  // CHECK-NEXT: [[S4:%.+]] = rtg.constant #rtgtest.s4 : !rtgtest.ireg
-  // CHECK-NEXT: [[S3:%.+]] = rtg.constant #rtgtest.s3 : !rtgtest.ireg
-  // CHECK-NEXT: [[S2:%.+]] = rtg.constant #rtgtest.s2 : !rtgtest.ireg
-  // CHECK-NEXT: [[A7:%.+]] = rtg.constant #rtgtest.a7 : !rtgtest.ireg
-  // CHECK-NEXT: [[A6:%.+]] = rtg.constant #rtgtest.a6 : !rtgtest.ireg
   // CHECK-NEXT: [[A5:%.+]] = rtg.constant #rtgtest.a5 : !rtgtest.ireg
   // CHECK-NEXT: [[A4:%.+]] = rtg.constant #rtgtest.a4 : !rtgtest.ireg
   // CHECK-NEXT: [[A3:%.+]] = rtg.constant #rtgtest.a3 : !rtgtest.ireg
@@ -155,22 +139,6 @@ rtg.test @testIndexToRegister() {
   // CHECK-NEXT: func.call @dummy7([[A3]]) : (!rtgtest.ireg) -> ()
   // CHECK-NEXT: func.call @dummy7([[A4]]) : (!rtgtest.ireg) -> ()
   // CHECK-NEXT: func.call @dummy7([[A5]]) : (!rtgtest.ireg) -> ()
-  // CHECK-NEXT: func.call @dummy7([[A6]]) : (!rtgtest.ireg) -> ()
-  // CHECK-NEXT: func.call @dummy7([[A7]]) : (!rtgtest.ireg) -> ()
-  // CHECK-NEXT: func.call @dummy7([[S2]]) : (!rtgtest.ireg) -> ()
-  // CHECK-NEXT: func.call @dummy7([[S3]]) : (!rtgtest.ireg) -> ()
-  // CHECK-NEXT: func.call @dummy7([[S4]]) : (!rtgtest.ireg) -> ()
-  // CHECK-NEXT: func.call @dummy7([[S5]]) : (!rtgtest.ireg) -> ()
-  // CHECK-NEXT: func.call @dummy7([[S6]]) : (!rtgtest.ireg) -> ()
-  // CHECK-NEXT: func.call @dummy7([[S7]]) : (!rtgtest.ireg) -> ()
-  // CHECK-NEXT: func.call @dummy7([[S8]]) : (!rtgtest.ireg) -> ()
-  // CHECK-NEXT: func.call @dummy7([[S9]]) : (!rtgtest.ireg) -> ()
-  // CHECK-NEXT: func.call @dummy7([[S10]]) : (!rtgtest.ireg) -> ()
-  // CHECK-NEXT: func.call @dummy7([[S11]]) : (!rtgtest.ireg) -> ()
-  // CHECK-NEXT: func.call @dummy7([[T3]]) : (!rtgtest.ireg) -> ()
-  // CHECK-NEXT: func.call @dummy7([[T4]]) : (!rtgtest.ireg) -> ()
-  // CHECK-NEXT: func.call @dummy7([[T5]]) : (!rtgtest.ireg) -> ()
-  // CHECK-NEXT: func.call @dummy7([[T6]]) : (!rtgtest.ireg) -> ()
 
   %c0 = index.constant 0
   %c1 = index.constant 1
@@ -188,22 +156,6 @@ rtg.test @testIndexToRegister() {
   %c13 = index.constant 13
   %c14 = index.constant 14
   %c15 = index.constant 15
-  %c16 = index.constant 16
-  %c17 = index.constant 17
-  %c18 = index.constant 18
-  %c19 = index.constant 19
-  %c20 = index.constant 20
-  %c21 = index.constant 21
-  %c22 = index.constant 22
-  %c23 = index.constant 23
-  %c24 = index.constant 24
-  %c25 = index.constant 25
-  %c26 = index.constant 26
-  %c27 = index.constant 27
-  %c28 = index.constant 28
-  %c29 = index.constant 29
-  %c30 = index.constant 30
-  %c31 = index.constant 31
   %0 = rtg.isa.index_to_register %c0 : !rtgtest.ireg
   func.call @dummy7(%0) : (!rtgtest.ireg) -> ()
   %1 = rtg.isa.index_to_register %c1 : !rtgtest.ireg
@@ -236,36 +188,4 @@ rtg.test @testIndexToRegister() {
   func.call @dummy7(%14) : (!rtgtest.ireg) -> ()
   %15 = rtg.isa.index_to_register %c15 : !rtgtest.ireg
   func.call @dummy7(%15) : (!rtgtest.ireg) -> ()
-  %16 = rtg.isa.index_to_register %c16 : !rtgtest.ireg
-  func.call @dummy7(%16) : (!rtgtest.ireg) -> ()
-  %17 = rtg.isa.index_to_register %c17 : !rtgtest.ireg
-  func.call @dummy7(%17) : (!rtgtest.ireg) -> ()
-  %18 = rtg.isa.index_to_register %c18 : !rtgtest.ireg
-  func.call @dummy7(%18) : (!rtgtest.ireg) -> ()
-  %19 = rtg.isa.index_to_register %c19 : !rtgtest.ireg
-  func.call @dummy7(%19) : (!rtgtest.ireg) -> ()
-  %20 = rtg.isa.index_to_register %c20 : !rtgtest.ireg
-  func.call @dummy7(%20) : (!rtgtest.ireg) -> ()
-  %21 = rtg.isa.index_to_register %c21 : !rtgtest.ireg
-  func.call @dummy7(%21) : (!rtgtest.ireg) -> ()
-  %22 = rtg.isa.index_to_register %c22 : !rtgtest.ireg
-  func.call @dummy7(%22) : (!rtgtest.ireg) -> ()
-  %23 = rtg.isa.index_to_register %c23 : !rtgtest.ireg
-  func.call @dummy7(%23) : (!rtgtest.ireg) -> ()
-  %24 = rtg.isa.index_to_register %c24 : !rtgtest.ireg
-  func.call @dummy7(%24) : (!rtgtest.ireg) -> ()
-  %25 = rtg.isa.index_to_register %c25 : !rtgtest.ireg
-  func.call @dummy7(%25) : (!rtgtest.ireg) -> ()
-  %26 = rtg.isa.index_to_register %c26 : !rtgtest.ireg
-  func.call @dummy7(%26) : (!rtgtest.ireg) -> ()
-  %27 = rtg.isa.index_to_register %c27 : !rtgtest.ireg
-  func.call @dummy7(%27) : (!rtgtest.ireg) -> ()
-  %28 = rtg.isa.index_to_register %c28 : !rtgtest.ireg
-  func.call @dummy7(%28) : (!rtgtest.ireg) -> ()
-  %29 = rtg.isa.index_to_register %c29 : !rtgtest.ireg
-  func.call @dummy7(%29) : (!rtgtest.ireg) -> ()
-  %30 = rtg.isa.index_to_register %c30 : !rtgtest.ireg
-  func.call @dummy7(%30) : (!rtgtest.ireg) -> ()
-  %31 = rtg.isa.index_to_register %c31 : !rtgtest.ireg
-  func.call @dummy7(%31) : (!rtgtest.ireg) -> ()
 }
