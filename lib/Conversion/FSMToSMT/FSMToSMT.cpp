@@ -161,8 +161,7 @@ LogicalResult MachineOpConverter::dispatch() {
   for (auto a : machineArgs) {
     fsmArgs.push_back(a);
     if (!isa<IntegerType>(a.getType())) {
-      solver.emitError("Only integer arguments are supported in FSMs.");
-      return failure();
+      return solver.emitError("Only integer arguments are supported in FSMs.");
     }
     quantifiableTypes.push_back(
         b.getType<smt::BitVectorType>(a.getType().getIntOrFloatBitWidth()));
@@ -173,8 +172,7 @@ LogicalResult MachineOpConverter::dispatch() {
   if (!machineOp.getResultTypes().empty()) {
     for (auto t : machineOp.getResultTypes()) {
       if (!isa<IntegerType>(t)) {
-        solver.emitError("Only integer outputs are supported in FSMs.");
-        return failure();
+        return solver.emitError("Only integer outputs are supported in FSMs.");
       }
       quantifiableTypes.push_back(
           b.getType<smt::BitVectorType>(t.getIntOrFloatBitWidth()));
@@ -187,8 +185,7 @@ LogicalResult MachineOpConverter::dispatch() {
   SmallVector<llvm::APInt> varInitValues;
   for (auto t : machineOp.front().getOps<fsm::VariableOp>()) {
     if (!isa<IntegerType>(t.getType())) {
-      t.emitError("Only integer variables are supported in FSMs.");
-      return failure();
+      return t.emitError("Only integer variables are supported in FSMs.");
     }
     auto intAttr = dyn_cast<IntegerAttr>(t.getInitValueAttr());
     varInitValues.push_back(intAttr.getValue());
@@ -207,7 +204,7 @@ LogicalResult MachineOpConverter::dispatch() {
   for (auto &op : machineOp.front().getOperations()) {
     if (!isa<fsm::FSMDialect>(op.getDialect()) && !isa<hw::ConstantOp>(op)) {
       op.emitError("Only fsm operations and hw.constants are allowed in the "
-                   "top level of the FSM MachineOp.");
+                   "top level of the fsm.machine op.");
       return failure();
     }
   }
@@ -672,7 +669,7 @@ void FSMToSMTPass::runOnOperation() {
         for (auto &use : op.getUses()) {
           if (machine->isAncestor(use.getOwner())) {
             op.emitError("Operation " + op.getName().getStringRef() +
-                         " is declared outside of any FSM MachineOp");
+                         " is declared outside of any fsm.machine op");
             signalPassFailure();
             return;
           }
