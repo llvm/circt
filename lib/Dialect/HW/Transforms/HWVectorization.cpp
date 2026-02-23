@@ -8,7 +8,8 @@
 //
 // This pass performs structural vectorization of hardware modules,
 // merging scalar bit-level assignments into vectorized operations.
-// This version handles linear and reverse vectorization using bit-tracking.
+// This version handles linear, reverse, and mix vectorization using
+// bit-tracking.
 //
 //===----------------------------------------------------------------------===//
 
@@ -21,6 +22,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallBitVector.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -136,6 +138,10 @@ public:
             rewriter, sourceInput.getLoc(), sourceInput.getType(), sourceInput);
         oldOutputVal.replaceAllUsesWith(reversed);
         changed = true;
+      } else if (isValidPermutation(arr, bitWidth)) {
+        applyMixVectorization(rewriter, oldOutputVal, sourceInput, arr,
+                              bitWidth);
+        changed = true;
       }
     }
 
@@ -147,6 +153,59 @@ private:
   /// Maps values to their decomposed bit provenance.
   llvm::DenseMap<Value, BitArray> bitArrays;
   hw::HWModuleOp module;
+
+  /// Checks that all bit indices are in [0, bitWidth] and form a bijection.
+  /// Guards applyMixVectorization against malformed BitArrays.
+  bool isValidPermutation(const BitArray &arr, unsigned bitWidth) {
+    if (arr.size() != bitWidth)
+      return false;
+    llvm::SmallBitVector seen(bitWidth);
+    for (const auto &bit : arr.bits) {
+      assert(bit.index >= 0);
+      if (bit.index >= static_cast<int>(bitWidth) || seen.test(bit.index))
+        return false;
+      seen.set(bit.index);
+    }
+    return true;
+  }
+
+  /// Handles arbitrary permutations from a single source by grouping runs of
+  /// consecutive source-bit indices into ExtractOps, then concatenating them.
+  ///
+  /// Example: bits = [2, 3, 0, 1] produces:
+  ///   %0 = extract src[2:1]   // bits 0-1 of output <- source[2:3]
+  ///   %1 = extract src[0:1]   // bits 2-3 of output <- source[0:1]
+  ///   %out = concat(%1, %0)   // MSB->LSB order
+  void applyMixVectorization(IRRewriter &rewriter, Value oldOutputVal,
+                             Value sourceInput, const BitArray &arr,
+                             unsigned bitWidth) {
+    rewriter.setInsertionPointAfterValue(sourceInput);
+    Location loc = sourceInput.getLoc();
+
+    // Walk output bits LSB->MSB, greedily extending each run while source
+    // indices remain consecutive.
+    llvm::SmallVector<Value> chunks;
+    unsigned i = 0;
+    while (i < bitWidth) {
+      unsigned startBit = arr.bits[i].index;
+      unsigned len = 1;
+      while (i + len < bitWidth &&
+             arr.bits[i + len].index == static_cast<int>(startBit + len))
+        ++len;
+
+      chunks.push_back(comb::ExtractOp::create(
+          rewriter, loc, rewriter.getIntegerType(len), sourceInput, startBit));
+      i += len;
+    }
+
+    // comb.concat expects operands MSB->LSB, so reverse the chunk list.
+    std::reverse(chunks.begin(), chunks.end());
+
+    Value newVal = comb::ConcatOp::create(
+        rewriter, loc, rewriter.getIntegerType(bitWidth), chunks);
+
+    oldOutputVal.replaceAllUsesWith(newVal);
+  }
 
   /// Single walk that handles ExtractOp and ConcatOp using TypeSwitch.
   void processOps() {
