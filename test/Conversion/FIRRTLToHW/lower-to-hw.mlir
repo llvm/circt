@@ -1948,8 +1948,10 @@ firrtl.circuit "ExternalRequirements" {
 
 // -----
 
-// Test that instance_choice is lowered to the default module
+// Test that instance_choice is lowered
 firrtl.circuit "InstanceChoiceTest" {
+  // CHECK-NOT: firrtl.option
+  // CHECK-NOT: firrtl.option_case
   firrtl.option @Opt {
     firrtl.option_case @FPGA
   }

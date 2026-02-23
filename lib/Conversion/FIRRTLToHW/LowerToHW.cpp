@@ -1848,10 +1848,10 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
     return attr;
   }
 
-  /// Helper function to prepare operands for instance creation.
-  /// Processes port information and creates appropriate operands for inputs,
-  /// outputs, and inout ports. Returns failure if any port type cannot be
-  /// lowered.
+  /// Prepare operands for instance creation. Processes port information and
+  /// creates appropriate operands for inputs, outputs, and inout ports. If
+  /// instanceName is non-empty, creates wires for output ports. Returns failure
+  /// if any port type cannot be lowered.
   LogicalResult
   prepareInstanceOperands(ArrayRef<PortInfo> portInfo, Operation *instanceOp,
                           SmallVectorImpl<Value> &inputOperands,
@@ -3820,12 +3820,6 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   return success();
 }
 
-/// Helper function to prepare operands for instance creation.
-/// This function processes port information and creates appropriate operands
-/// for inputs, outputs, and inout ports.
-/// If instanceName is non-empty, creates wires for output ports
-/// (InstanceChoiceOp). If instanceName is empty, skips output ports
-/// (InstanceOp).
 LogicalResult FIRRTLLowering::prepareInstanceOperands(
     ArrayRef<PortInfo> portInfo, Operation *instanceOp,
     SmallVectorImpl<Value> &inputOperands,
@@ -3848,26 +3842,24 @@ LogicalResult FIRRTLLowering::prepareInstanceOperands(
     auto portResult = instanceOp->getResult(portIndex);
     assert(portResult && "invalid IR, couldn't find port");
 
-    // Handle input ports - create a backedge for them
     if (port.isInput()) {
       inputOperands.push_back(createBackedge(portResult, portType));
       continue;
     }
 
-    // Handle output ports
     if (port.isOutput()) {
       if (createOutputWires) {
-        // InstanceChoiceOp path: create wire for output
         auto wire = sv::WireOp::create(
             builder, portType, instanceName.str() + "." + port.getName().str());
         outputWires.push_back(wire);
         (void)setLowering(portResult, wire);
       }
-      // InstanceOp path: outputs are wired up after creating the instance
       continue;
     }
 
-    // Handle analog/inout types
+    // Handle analog/inout types: if result has an analog type and is used only
+    // by attach op, try eliminating a temporary wire by directly using an
+    // attached value.
     if (type_isa<AnalogType>(portResult.getType()) && portResult.hasOneUse()) {
       if (auto attach = dyn_cast<AttachOp>(*portResult.getUsers().begin())) {
         if (auto source = getSingleNonInstanceOperand(attach)) {
