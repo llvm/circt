@@ -35,10 +35,13 @@
 // CHECK-DAG: firrtl-remove-unused-ports
 // CHECK-DAG: hw-constantifier
 // CHECK-DAG: hw-module-externalizer
+// CHECK-DAG: hw-module-internal-name-sanitizer
+// CHECK-DAG: hw-module-name-sanitizer
 // CHECK-DAG: hw-operand0-forwarder
 // CHECK-DAG: hw-operand1-forwarder
 // CHECK-DAG: hw-operand2-forwarder
 // CHECK-DAG: instance-stubber
+// CHECK-DAG: sv-namehint-remover
 // CHECK-DAG: memory-stubber
 // CHECK-DAG: module-internal-name-sanitizer
 // CHECK-DAG: module-name-sanitizer
