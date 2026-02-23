@@ -390,14 +390,14 @@ def ConvertFSMToSV : Pass<"convert-fsm-to-sv", "mlir::ModuleOp"> {
 //===----------------------------------------------------------------------===//
 
 def ConvertFSMToSMT : Pass<"convert-fsm-to-smt", "mlir::ModuleOp"> {
-  let summary = "Converts FSMs to SMT models that can be used to check safety 
-    properties";
+  let summary = "Converts FSMs to SMT models that can be used to check" 
+    "safety properties";
   let constructor = "circt::createConvertFSMToSMTPass()";
   let dependentDialects = ["circt::comb::CombDialect", "mlir::smt::SMTDialect",
                            "circt::verif::VerifDialect"];
   let options = [Option<"withTime", "with-time", "bool", "false",
-                        "whether to include a time parameter in the predicates
-                         created to represent states">,
+                        "whether to include a time parameter in the predicates"
+                        "created to represent states">,
                   Option<"timeWidth", "time-width", "int", "8",
                         "bitwidth of time parameter">,
   ];

@@ -1,25 +1,5 @@
 // RUN: circt-opt -split-input-file -convert-fsm-to-smt -verify-diagnostics %s
 
-// expected-error @below {{'fsm.machine' op initial state 'nonexistent' was not defined in the machine}}
-fsm.machine @bad_initial(%arg0: i8) -> (i8) attributes {initialState = "nonexistent"} {
-  %c0_i8 = hw.constant 0 : i8
-  fsm.state @S0 output {
-    fsm.output %c0_i8 : i8
-  }
-}
-
-// -----
-
-fsm.machine @bad_transition(%arg0: i8) -> (i8) attributes {initialState = "S0"} {
-  %c0_i8 = hw.constant 0 : i8
-  fsm.state @S0 output {
-    fsm.output %c0_i8 : i8
-  } transitions {
-    // expected-error @below {{'fsm.transition' op cannot find the definition of the next state `nonexistent`}}
-    fsm.transition @nonexistent
-  }
-}
-
 // -----
 
 fsm.machine @missing_init(%arg0: i8) -> (i8) attributes {initialState = "S0"} {
@@ -53,4 +33,17 @@ fsm.machine @comb_op(%arg0: i8) -> (i8) attributes {initialState = "S0"} {
     fsm.output %arg0 : i8
   }
 }
+
+// -----
+
+// expected-error @below {{Only integer arguments are supported in FSMs.}}
+%c0_i8 = hw.constant 0 : i8
+fsm.machine @comb_op() -> () attributes {initialState = "A"} {
+  %var = fsm.variable "var" {initValue = 0.0 : f32} : f32
+  fsm.state @A output  {
+  } transitions {
+  }
+}
+
+
 

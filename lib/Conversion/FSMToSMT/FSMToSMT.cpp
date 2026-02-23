@@ -121,9 +121,9 @@ private:
   createIRMapping(const SmallVector<std::pair<Value, Value>> &fsmToCast,
                   const IRMapping &constMapper) {
     IRMapping mapping;
-    for (auto couple : fsmToCast) 
+    for (auto couple : fsmToCast)
       mapping.map(couple.first, couple.second);
-    for (auto &pair : constMapper.getValueMap()) 
+    for (auto &pair : constMapper.getValueMap())
       mapping.map(pair.first, pair.second);
 
     return mapping;
