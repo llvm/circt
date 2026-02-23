@@ -1,6 +1,26 @@
 #  Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+"""Pytest integration for ESI cosimulation tests.
+
+Provides the ``@cosim_test`` decorator which automates the full lifecycle of a
+cosimulation test: running a PyCDE hardware script, compiling the design with
+a simulator (e.g. Verilator), launching the simulator, injecting connection
+parameters into the test function, and tearing everything down afterwards.
+
+Decorated functions run in an isolated child process (via ``fork``) so that
+simulator state never leaks between tests.  When applied to a class, the
+hardware compilation is performed once and shared across all ``test_*`` methods.
+
+Typical usage::
+
+    from esiaccel.cosim.pytest import cosim_test
+
+    @cosim_test("path/to/hw_script.py")
+    def test_my_design(acc: AcceleratorConnection):
+        # acc is already connected to the running simulator
+        ...
+"""
 
 from __future__ import annotations
 
@@ -22,7 +42,7 @@ import traceback
 from typing import Any, Callable, Dict, Optional, Pattern, Sequence, Union
 
 import esiaccel
-from esiaccel.accelerator import Accelerator
+from esiaccel.accelerator import Accelerator, AcceleratorConnection
 
 from .simulator import get_simulator, Simulator, SourceFiles
 
@@ -35,6 +55,20 @@ _DEFAULT_FAILURE_PATTERN = re.compile(r"\berror\b", re.IGNORECASE)
 
 @dataclass(frozen=True)
 class CosimPytestConfig:
+  """Immutable configuration for a single cosim test or test class.
+
+  Attributes:
+    pycde_script: Path to the PyCDE hardware generation script.
+    args: Arguments passed to the script; ``{tmp_dir}`` is interpolated.
+    simulator: Simulator backend name (e.g. ``"verilator"``).
+    top: Top-level module name for the simulator.
+    debug: If True, enable verbose simulator output.
+    timeout_s: Maximum wall-clock seconds before the test is killed.
+    failure_matchers: Patterns applied to simulator output to detect errors.
+    warning_matchers: Patterns applied to simulator output to detect warnings.
+    failure_exclude: Patterns that suppress false-positive failure matches.
+  """
+
   pycde_script: Union[str, Path]
   args: Sequence[str] = ("{tmp_dir}",)
   simulator: str = "verilator"
@@ -50,12 +84,16 @@ class CosimPytestConfig:
 
 @dataclass
 class _ClassCompileCache:
+  """Cached compilation artifacts shared across methods of a test class."""
+
   sources_dir: Path
   obj_dir: Path
 
 
 @dataclass
 class _ChildResult:
+  """Outcome of a child-process test execution, passed back via queue."""
+
   success: bool
   traceback: str = ""
   failure_lines: Sequence[str] = field(default_factory=list)
@@ -64,6 +102,7 @@ class _ChildResult:
 
 @contextlib.contextmanager
 def _chdir(path: Path):
+  """Context manager that temporarily changes the working directory."""
   old_cwd = Path.cwd()
   os.chdir(path)
   try:
@@ -74,6 +113,7 @@ def _chdir(path: Path):
 
 def _as_patterns(
     items: Sequence[Union[str, Pattern[str]]]) -> Sequence[Pattern[str]]:
+  """Compile a mixed sequence of strings and compiled regexes into patterns."""
   patterns = []
   for item in items:
     if isinstance(item, str):
@@ -85,6 +125,11 @@ def _as_patterns(
 
 def _line_matches(matchers: Sequence[LogMatcher], line: str,
                   stream: str) -> bool:
+  """Return True if *line* matches any of the given matchers.
+
+  Each matcher may be a plain string (substring search), a compiled regex,
+  or a callable ``(line, stream) -> bool``.
+  """
   for matcher in matchers:
     if isinstance(matcher, str):
       if re.search(matcher, line, re.IGNORECASE):
@@ -102,6 +147,11 @@ def _scan_logs(
     stderr_lines: Sequence[str],
     config: CosimPytestConfig,
 ) -> tuple[list[str], list[str]]:
+  """Scan simulator output for failures and warnings.
+
+  Returns:
+    A ``(failures, warnings)`` tuple of tagged log lines.
+  """
   failure_excludes = _as_patterns(config.failure_exclude)
   failures: list[str] = []
   warnings: list[str] = []
@@ -121,11 +171,13 @@ def _scan_logs(
 
 
 def _render_args(args: Sequence[str], tmp_dir: Path) -> list[str]:
+  """Interpolate ``{tmp_dir}`` placeholders in script arguments."""
   return [arg.format(tmp_dir=tmp_dir) for arg in args]
 
 
 def _create_simulator(config: CosimPytestConfig, sources_dir: Path,
                       run_dir: Path) -> Simulator:
+  """Instantiate a ``Simulator`` from the generated source files."""
   sources = SourceFiles(config.top)
   hw_dir = sources_dir / "hw"
   sources.add_dir(hw_dir if hw_dir.exists() else sources_dir)
@@ -134,13 +186,18 @@ def _create_simulator(config: CosimPytestConfig, sources_dir: Path,
 
 
 def _run_hw_script(config: CosimPytestConfig, tmp_dir: Path) -> Path:
+  """Execute the PyCDE hardware script and run codegen if a manifest exists.
+
+  Returns:
+    The directory containing the generated sources (same as *tmp_dir*).
+  """
   script = Path(config.pycde_script).resolve()
   script_args = _render_args(config.args, tmp_dir)
   with _chdir(tmp_dir):
     subprocess.run([sys.executable, str(script), *script_args],
                    check=True,
                    cwd=tmp_dir)
-  
+
   # Run codegen automatically to generate C++ artifacts from manifest, if present.
   manifest_path = tmp_dir / "esi_system_manifest.json"
   if manifest_path.exists():
@@ -148,15 +205,17 @@ def _run_hw_script(config: CosimPytestConfig, tmp_dir: Path) -> Path:
     generated_dir.mkdir(parents=True, exist_ok=True)
     try:
       subprocess.run(
-          [sys.executable, "-m", "esiaccel.codegen",
-           "--file", str(manifest_path),
-           "--output-dir", str(generated_dir)],
+          [
+              sys.executable, "-m", "esiaccel.codegen", "--file",
+              str(manifest_path), "--output-dir",
+              str(generated_dir)
+          ],
           check=True,
           cwd=tmp_dir,
       )
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
       # Codegen is optional for tests that don't use C++ artifacts
-      pass
+      _logger.warning("codegen failed (non-fatal): %s", e)
   return tmp_dir
 
 
@@ -167,6 +226,12 @@ def _resolve_injected_params(
     port: int,
     sources_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
+  """Build the keyword arguments to inject into the test function.
+
+  Inspects the target's signature and automatically supplies ``host``,
+  ``port``, ``sources_dir``, ``AcceleratorConnection``, or ``Accelerator``
+  parameters that the test declares but the caller did not provide.
+  """
   sig = inspect.signature(target)
   updated = dict(kwargs)
   accepts_host = "host" in sig.parameters or "hostname" in sig.parameters
@@ -182,8 +247,11 @@ def _resolve_injected_params(
 
   for name, param in sig.parameters.items():
     annotation = param.annotation
+    is_conn = annotation is AcceleratorConnection or name == "acc"
     is_accel = annotation is Accelerator or name == "accelerator"
-    if is_accel and name not in updated:
+    if is_conn and name not in updated:
+      updated[name] = esiaccel.connect("cosim", f"{host}:{port}")
+    elif is_accel and name not in updated:
       conn = esiaccel.connect("cosim", f"{host}:{port}")
       updated[name] = conn.build_accelerator()
 
@@ -191,18 +259,27 @@ def _resolve_injected_params(
 
 
 def _pytest_visible_signature(target: Callable[..., Any]) -> inspect.Signature:
+  """Return a signature with injected parameters removed.
+
+  Pytest uses function signatures to determine fixture requirements.  This
+  hides the parameters that the decorator injects (``host``, ``port``,
+  ``acc``, etc.) so pytest does not try to resolve them as fixtures.
+  """
   sig = inspect.signature(target)
   kept_params = []
   for param in sig.parameters.values():
-    if param.name in {"host", "hostname", "port", "accelerator", "sources_dir"}:
+    if param.name in {
+        "host", "hostname", "port", "accelerator", "acc", "sources_dir"
+    }:
       continue
-    if param.annotation is Accelerator:
+    if param.annotation in (Accelerator, AcceleratorConnection):
       continue
     kept_params.append(param)
   return sig.replace(parameters=kept_params)
 
 
 def _copy_compiled_obj_dir(compiled_obj_dir: Optional[Path], run_dir: Path):
+  """Copy a pre-compiled Verilator obj_dir into the per-test run directory."""
   if compiled_obj_dir is None:
     return
   dst = run_dir / "obj_dir"
@@ -212,11 +289,17 @@ def _copy_compiled_obj_dir(compiled_obj_dir: Optional[Path], run_dir: Path):
 
 
 def _compile_once_for_class(config: CosimPytestConfig) -> _ClassCompileCache:
+  """Run the hw script and compile the simulator once for a whole test class.
+
+  The resulting ``_ClassCompileCache`` is reused by each test method to avoid
+  redundant compilations.
+  """
   compile_root = Path(tempfile.mkdtemp(prefix="esi-pytest-class-compile-"))
   sources_dir = _run_hw_script(config, compile_root)
   compile_dir = compile_root / "compile"
   sim = _create_simulator(config, sources_dir, compile_dir)
-  rc = sim.compile()
+  with _chdir(compile_dir):
+    rc = sim.compile()
   if rc != 0:
     raise RuntimeError(f"Simulator compile failed with exit code {rc}")
   return _ClassCompileCache(sources_dir=sources_dir,
@@ -231,6 +314,12 @@ def _run_child(
     kwargs: Dict[str, Any],
     class_cache: Optional[_ClassCompileCache],
 ):
+  """Entry point for the forked child process.
+
+  Compiles (or reuses cached compilation), starts the simulator, injects
+  connection parameters, calls the test function, scans logs for failures,
+  and puts a ``_ChildResult`` onto *result_queue*.
+  """
   stdout_lines: list[str] = []
   stderr_lines: list[str] = []
 
@@ -252,19 +341,25 @@ def _run_child(
       sim._run_stderr_cb = on_stderr
       sim._compile_stdout_cb = on_stdout
       sim._compile_stderr_cb = on_stderr
+      os.chdir(run_dir)
       rc = sim.compile()
       if rc != 0:
         raise RuntimeError(f"Simulator compile failed with exit code {rc}")
     else:
+      sources_dir = class_cache.sources_dir
       run_dir = run_root / f"run-{os.getpid()}"
-      sim = _create_simulator(config, class_cache.sources_dir, run_dir)
+      sim = _create_simulator(config, sources_dir, run_dir)
       sim._run_stdout_cb = on_stdout
       sim._run_stderr_cb = on_stderr
       _copy_compiled_obj_dir(class_cache.obj_dir, run_dir)
 
+    os.chdir(run_dir)
     sim_proc = sim.run_proc()
-    injected_kwargs = _resolve_injected_params(target, kwargs, "localhost",
-                                               sim_proc.port, sources_dir=sources_dir)
+    injected_kwargs = _resolve_injected_params(target,
+                                               kwargs,
+                                               "localhost",
+                                               sim_proc.port,
+                                               sources_dir=sources_dir)
     target(*args, **injected_kwargs)
 
     failure_lines, warning_lines = _scan_logs(stdout_lines, stderr_lines,
@@ -295,6 +390,11 @@ def _run_isolated(
     kwargs: Dict[str, Any],
     class_cache: Optional[_ClassCompileCache] = None,
 ):
+  """Fork a child process to run *target* and wait for its result.
+
+  Handles timeouts, collects warnings, and re-raises any failure from
+  the child as an ``AssertionError`` in the parent.
+  """
   ctx = multiprocessing.get_context("fork")
   queue: multiprocessing.Queue = ctx.Queue()
   process = ctx.Process(
@@ -328,6 +428,7 @@ def _decorate_function(
     config: CosimPytestConfig,
     class_cache_getter: Optional[Callable[[], _ClassCompileCache]] = None,
 ) -> Callable[..., Any]:
+  """Wrap a single test function so it runs inside ``_run_isolated``."""
 
   @functools.wraps(target)
   def _wrapper(*args, **kwargs):
@@ -339,6 +440,12 @@ def _decorate_function(
 
 
 def _decorate_class(target_cls: type, config: CosimPytestConfig) -> type:
+  """Wrap every ``test_*`` method of a class with cosim isolation.
+
+  Compilation is performed once (lazily, on first method invocation) and
+  the resulting artifacts are shared across all methods via a thread-safe
+  cache.
+  """
   lock = threading.Lock()
   cache_holder: dict[str, _ClassCompileCache] = {}
 
@@ -369,6 +476,28 @@ def cosim_test(
     warning_matchers: Optional[Sequence[LogMatcher]] = None,
     failure_exclude: Optional[Sequence[Union[str, Pattern[str]]]] = None,
 ):
+  """Decorator that turns a function or class into a cosimulation test.
+
+  The decorated target is executed in a forked child process with a freshly
+  compiled and running simulator.  Connection parameters (``host``, ``port``,
+  ``acc``, etc.) are injected automatically based on the function signature.
+
+  When applied to a class, the hardware script is run and compiled once;
+  each ``test_*`` method gets its own simulator process but skips
+  recompilation.
+
+  Args:
+    pycde_script: Path to the PyCDE script that generates the hardware.
+    args: Arguments forwarded to the script; ``{tmp_dir}`` is interpolated
+        with the temporary build directory.
+    simulator: Simulator backend (default ``"verilator"``).
+    top: Top-level module name.
+    debug: Enable verbose simulator output.
+    timeout_s: Wall-clock timeout in seconds (``None`` for no limit).
+    failure_matchers: Patterns to detect errors in simulator output.
+    warning_matchers: Patterns to detect warnings in simulator output.
+    failure_exclude: Patterns that suppress false-positive error matches.
+  """
   config = CosimPytestConfig(
       pycde_script=pycde_script,
       args=args,

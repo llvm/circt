@@ -9,7 +9,6 @@ import pytest
 
 collect_ignore_glob = [
     "integration/hw/*.py",
-    "integration/sw/*.py",
 ]
 
 
