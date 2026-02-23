@@ -344,23 +344,7 @@ struct ModuleInternalNameSanitizer : public Reduction {
 ///
 struct ModuleNameSanitizer : OpReduction<mlir::ModuleOp> {
 
-  const char *names[48] = {
-      "Foo",    "Bar",    "Baz",    "Qux",      "Quux",   "Quuux",  "Quuuux",
-      "Quz",    "Corge",  "Grault", "Bazola",   "Ztesch", "Thud",   "Grunt",
-      "Bletch", "Fum",    "Fred",   "Jim",      "Sheila", "Barney", "Flarp",
-      "Zxc",    "Spqr",   "Wombat", "Shme",     "Bongo",  "Spam",   "Eggs",
-      "Snork",  "Zot",    "Blarg",  "Wibble",   "Toto",   "Titi",   "Tata",
-      "Tutu",   "Pippo",  "Pluto",  "Paperino", "Aap",    "Noot",   "Mies",
-      "Oogle",  "Foogle", "Boogle", "Zork",     "Gork",   "Bork"};
-
-  size_t nameIndex = 0;
-
-  const char *getModuleName() {
-    if (nameIndex >= 48)
-      nameIndex = 0;
-    return names[nameIndex++];
-  };
-
+  reduce::MetasyntacticNameGenerator nameGenerator;
   size_t portNameIndex = 0;
 
   char getPortName() {
@@ -370,7 +354,7 @@ struct ModuleNameSanitizer : OpReduction<mlir::ModuleOp> {
   }
 
   void beforeReduction(mlir::ModuleOp op) override {
-    nameIndex = 0;
+    nameGenerator.reset();
     instanceGraph = std::make_unique<InstanceGraph>(op);
     symbolTable = std::make_unique<SymbolTable>(op);
   }
@@ -385,7 +369,8 @@ struct ModuleNameSanitizer : OpReduction<mlir::ModuleOp> {
       if (!hwModule)
         continue;
 
-      auto newName = StringAttr::get(hwModule.getContext(), getModuleName());
+      auto newName =
+          StringAttr::get(hwModule.getContext(), nameGenerator.getNextName());
 
       // Rename ports
       portNameIndex = 0;

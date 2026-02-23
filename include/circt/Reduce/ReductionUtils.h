@@ -22,6 +22,31 @@ namespace reduce {
 /// operations that have no more uses.
 void pruneUnusedOps(Operation *initialOp, Reduction &reduction);
 
+/// A utility class that generates metasyntactic variable names for use in
+/// reductions. This provides a consistent naming scheme across different
+/// reduction patterns.
+class MetasyntacticNameGenerator {
+public:
+  MetasyntacticNameGenerator() = default;
+
+  /// Get the next metasyntactic name in the sequence.
+  const char *getNextName();
+
+  /// Reset the generator to start from the beginning of the sequence.
+  void reset() { index = 0; }
+
+private:
+  size_t index = 0;
+  constexpr static const char *names[48] = {
+      "Foo",    "Bar",    "Baz",    "Qux",      "Quux",   "Quuux",  "Quuuux",
+      "Quz",    "Corge",  "Grault", "Bazola",   "Ztesch", "Thud",   "Grunt",
+      "Bletch", "Fum",    "Fred",   "Jim",      "Sheila", "Barney", "Flarp",
+      "Zxc",    "Spqr",   "Wombat", "Shme",     "Bongo",  "Spam",   "Eggs",
+      "Snork",  "Zot",    "Blarg",  "Wibble",   "Toto",   "Titi",   "Tata",
+      "Tutu",   "Pippo",  "Pluto",  "Paperino", "Aap",    "Noot",   "Mies",
+      "Oogle",  "Foogle", "Boogle", "Zork",     "Gork",   "Bork"};
+};
+
 /// A helper struct that scans a root operation and all its nested operations
 /// for `InnerRefAttr`s.
 struct InnerSymbolUses {
