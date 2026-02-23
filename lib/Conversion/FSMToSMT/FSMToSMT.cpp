@@ -196,19 +196,20 @@ LogicalResult MachineOpConverter::dispatch() {
 
   // Map constant operations to their clones in the new solver region
   IRMapping constMapper;
-  for (auto constOp : machineOp.front().getOps<hw::ConstantOp>()) 
+  for (auto constOp : machineOp.front().getOps<hw::ConstantOp>())
     b.clone(*constOp, constMapper);
 
   // Do not allow any operations other than constants outside of FSM regions
   for (auto &op : machineOp.front().getOperations()) {
     if (!isa<fsm::FSMDialect>(op.getDialect()) && !isa<hw::ConstantOp>(op)) {
-      return op.emitError("Only fsm operations and hw.constants are allowed in the "
-                   "top level of the fsm.machine op.");
+      return op.emitError(
+          "Only fsm operations and hw.constants are allowed in the "
+          "top level of the fsm.machine op.");
     }
   }
 
   // Add a time variable if flag is enabled
-  if (cfg.withTime) 
+  if (cfg.withTime)
     quantifiedTypes.push_back(b.getType<smt::BitVectorType>(cfg.timeWidth));
 
   size_t numVars = varInitValues.size();
@@ -257,9 +258,9 @@ LogicalResult MachineOpConverter::dispatch() {
       for (auto tr :
            stateOp.getTransitions().front().getOps<fsm::TransitionOp>()) {
         auto t = getTransitionRegions(tr, fromState, states, loc);
-        if (!stateOp.getOutput().empty()) 
+        if (!stateOp.getOutput().empty())
           t.output = getOutputRegion(outputOfStateId, t.to);
-        else 
+        else
           t.output = std::nullopt;
         transitions.push_back(t);
       }
@@ -315,8 +316,9 @@ LogicalResult MachineOpConverter::dispatch() {
               newOp->erase();
             }
 
-            // Cast the (builtin integer) results obtained from the output region to SMT
-            // types, to pass them as arguments of the state function
+            // Cast the (builtin integer) results obtained from the output
+            // region to SMT types, to pass them as arguments of the state
+            // function
 
             for (auto [idx, out] : llvm::enumerate(combOutputValues)) {
               auto convCast = UnrealizedConversionCastOp::create(
@@ -369,7 +371,7 @@ LogicalResult MachineOpConverter::dispatch() {
   SmallVector<Type> transitionQuantified;
   for (auto [id, ty] : llvm::enumerate(quantifiedTypes)) {
     transitionQuantified.push_back(ty);
-    if (id < numArgs) 
+    if (id < numArgs)
       transitionQuantified.push_back(ty);
   }
 
@@ -393,7 +395,7 @@ LogicalResult MachineOpConverter::dispatch() {
       SmallVector<Value> castUpdatedVars;
 
       // Initialize to the previous value
-      for (size_t i = 0; i < numVars; i++) 
+      for (size_t i = 0; i < numVars; i++)
         castUpdatedVars.push_back(actionArgsOutsVarsVals[numArgs + numOut + i]);
 
       if (transition.action.has_value()) {
@@ -534,9 +536,8 @@ LogicalResult MachineOpConverter::dispatch() {
 
           // Update the variables according to the action region
           auto updatedCastVals = action(startingArgsOutsVars);
-          for (size_t i = 0; i < numVars; i++) 
+          for (size_t i = 0; i < numVars; i++)
             arrivingArgsOutsVars[numArgs + numOut + i] = updatedCastVals[i];
-          
 
           // Depending on the updated variables, compute the output values at
           // the arriving state
@@ -544,9 +545,8 @@ LogicalResult MachineOpConverter::dispatch() {
             auto outputCastVals = output(arrivingArgsOutsVars);
 
             // Add the output values to the arriving-state function inputs
-            for (auto o : outputCastVals) 
+            for (auto o : outputCastVals)
               arrivingFunArgs.push_back(o);
-            
           }
 
           // Add the updated variable values to the arriving-state function
@@ -652,15 +652,15 @@ void FSMToSMTPass::runOnOperation() {
 
   // Read options from the generated base
   LoweringConfig cfg;
-  cfg.withTime = withTime;  
-  cfg.timeWidth = timeWidth; 
+  cfg.withTime = withTime;
+  cfg.timeWidth = timeWidth;
 
   // Throw an error if the module contains an operation used inside the FSM
-  for (auto &op : module.getOps()) 
-    if (!isa<fsm::MachineOp>(op)) 
+  for (auto &op : module.getOps())
+    if (!isa<fsm::MachineOp>(op))
       // check if the operation is used inside any MachineOp
-      for (auto machine : module.getOps<MachineOp>()) 
-        for (auto &use : op.getUses()) 
+      for (auto machine : module.getOps<MachineOp>())
+        for (auto &use : op.getUses())
           if (machine->isAncestor(use.getOwner())) {
             op.emitError("Operation " + op.getName().getStringRef() +
                          " is declared outside of any fsm.machine op");
