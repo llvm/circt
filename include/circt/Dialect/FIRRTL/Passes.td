@@ -906,6 +906,21 @@ def CheckLayers : Pass<"firrtl-check-layers", "firrtl::CircuitOp"> {
   }];
 }
 
+def CheckInstanceChoice : Pass<"firrtl-check-instance-choice", "firrtl::CircuitOp"> {
+  let summary = "Check for nested instance choices with different options";
+  let description = [{
+    This pass checks that no path from a public module contains nested instance
+    choices with different options (conjunction is banned). On any single path,
+    you can only go through instance choices of the same option. However,
+    reaching the same module through different options on different paths is
+    allowed (disjunction is OK).
+  }];
+  let options = [
+    Option<"dumpInfo", "dump-info", "bool", "false",
+           "Dump instance choice information for testing">
+  ];
+}
+
 def InferDomains : Pass<"firrtl-infer-domains", "firrtl::CircuitOp"> {
   let summary = "Infer and type check all firrtl domains";
   let description = [{
