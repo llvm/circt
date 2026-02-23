@@ -64,16 +64,14 @@ private:
                                   Location &loc) {
     std::string nextState = t.getNextState().str();
     Transition tr = {from, insertStates(states, nextState)};
-    if (t.hasGuard()) {
+    if (t.hasGuard())
       tr.guard = &t.getGuard();
-    } else {
+    else
       tr.guard = std::nullopt;
-    }
-    if (t.hasAction()) {
+    if (t.hasAction())
       tr.action = &t.getAction();
-    } else {
+    else
       tr.action = std::nullopt;
-    }
     return tr;
   }
 
