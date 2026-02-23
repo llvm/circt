@@ -98,3 +98,9 @@ jobs:
       - name: Test PyCDE and ESI runtime integration
         run: |
           ninja -C build check-pycde-integration -j$(nproc)
+
+      - name: Test ESI runtime (pytest)
+        env:
+          PYTHONPATH: "${{ github.workspace }}/build/python_packages/pycde:${{ github.workspace }}/build/tools/circt/lib/Dialect/ESI/runtime/python"
+        run: |
+          python -m pytest ${{ github.workspace }}/lib/Dialect/ESI/runtime/tests/ -v --log-cli-level=INFO

@@ -49,8 +49,8 @@ from .simulator import get_simulator, Simulator, SourceFiles
 LogMatcher = Union[str, Pattern[str], Callable[[str, str], bool]]
 
 _logger = logging.getLogger("esiaccel.cosim.pytest")
-_DEFAULT_FAILURE_EXCLUDE = re.compile(r"^\s*\d+\s+errors?\b", re.IGNORECASE)
 _DEFAULT_FAILURE_PATTERN = re.compile(r"\berror\b", re.IGNORECASE)
+_DEFAULT_WARN_PATTERN = re.compile(r"\bwarn(ing)?\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -64,9 +64,8 @@ class CosimPytestConfig:
     top: Top-level module name for the simulator.
     debug: If True, enable verbose simulator output.
     timeout_s: Maximum wall-clock seconds before the test is killed.
-    failure_matchers: Patterns applied to simulator output to detect errors.
-    warning_matchers: Patterns applied to simulator output to detect warnings.
-    failure_exclude: Patterns that suppress false-positive failure matches.
+    failure_matcher: Pattern applied to simulator output to detect errors.
+    warning_matcher: Pattern applied to simulator output to detect warnings.
   """
 
   pycde_script: Union[str, Path]
@@ -75,11 +74,8 @@ class CosimPytestConfig:
   top: str = "ESI_Cosim_Top"
   debug: bool = False
   timeout_s: Optional[float] = None
-  failure_matchers: Sequence[LogMatcher] = field(
-      default_factory=lambda: [_DEFAULT_FAILURE_PATTERN])
-  warning_matchers: Sequence[LogMatcher] = field(default_factory=list)
-  failure_exclude: Sequence[Union[str, Pattern[str]]] = field(
-      default_factory=lambda: [_DEFAULT_FAILURE_EXCLUDE])
+  failure_matcher: Optional[LogMatcher] = _DEFAULT_FAILURE_PATTERN
+  warning_matcher: Optional[LogMatcher] = _DEFAULT_WARN_PATTERN
 
 
 @dataclass
@@ -111,35 +107,18 @@ def _chdir(path: Path):
     os.chdir(old_cwd)
 
 
-def _as_patterns(
-    items: Sequence[Union[str, Pattern[str]]]) -> Sequence[Pattern[str]]:
-  """Compile a mixed sequence of strings and compiled regexes into patterns."""
-  patterns = []
-  for item in items:
-    if isinstance(item, str):
-      patterns.append(re.compile(item, re.IGNORECASE))
-    else:
-      patterns.append(item)
-  return patterns
+def _line_matches(matcher: LogMatcher, line: str, stream: str) -> bool:
+  """Return True if *line* matches the given matcher.
 
-
-def _line_matches(matchers: Sequence[LogMatcher], line: str,
-                  stream: str) -> bool:
-  """Return True if *line* matches any of the given matchers.
-
-  Each matcher may be a plain string (substring search), a compiled regex,
+  The matcher may be a plain string (regex search), a compiled regex,
   or a callable ``(line, stream) -> bool``.
   """
-  for matcher in matchers:
-    if isinstance(matcher, str):
-      if re.search(matcher, line, re.IGNORECASE):
-        return True
-    elif isinstance(matcher, re.Pattern):
-      if matcher.search(line):
-        return True
-    elif matcher(line, stream):
-      return True
-  return False
+  if isinstance(matcher, str):
+    return bool(re.search(matcher, line, re.IGNORECASE))
+  elif isinstance(matcher, re.Pattern):
+    return bool(matcher.search(line))
+  else:
+    return matcher(line, stream)
 
 
 def _scan_logs(
@@ -152,19 +131,17 @@ def _scan_logs(
   Returns:
     A ``(failures, warnings)`` tuple of tagged log lines.
   """
-  failure_excludes = _as_patterns(config.failure_exclude)
   failures: list[str] = []
   warnings: list[str] = []
 
   for stream, lines in (("stdout", stdout_lines), ("stderr", stderr_lines)):
     for line in lines:
-      if any(p.search(line) for p in failure_excludes):
-        continue
       tagged = f"[{stream}] {line}"
-      if _line_matches(config.failure_matchers, line, stream):
+      if config.failure_matcher and _line_matches(config.failure_matcher, line,
+                                                  stream):
         failures.append(tagged)
-      if config.warning_matchers and _line_matches(config.warning_matchers,
-                                                   line, stream):
+      if config.warning_matcher and _line_matches(config.warning_matcher, line,
+                                                  stream):
         warnings.append(tagged)
 
   return failures, warnings
@@ -472,9 +449,8 @@ def cosim_test(
     top: str = "ESI_Cosim_Top",
     debug: bool = False,
     timeout_s: Optional[float] = None,
-    failure_matchers: Optional[Sequence[LogMatcher]] = None,
-    warning_matchers: Optional[Sequence[LogMatcher]] = None,
-    failure_exclude: Optional[Sequence[Union[str, Pattern[str]]]] = None,
+    failure_matcher: Optional[LogMatcher] = _DEFAULT_FAILURE_PATTERN,
+    warning_matcher: Optional[LogMatcher] = None,
 ):
   """Decorator that turns a function or class into a cosimulation test.
 
@@ -494,9 +470,8 @@ def cosim_test(
     top: Top-level module name.
     debug: Enable verbose simulator output.
     timeout_s: Wall-clock timeout in seconds (``None`` for no limit).
-    failure_matchers: Patterns to detect errors in simulator output.
-    warning_matchers: Patterns to detect warnings in simulator output.
-    failure_exclude: Patterns that suppress false-positive error matches.
+    failure_matcher: Pattern to detect errors in simulator output.
+    warning_matcher: Pattern to detect warnings in simulator output.
   """
   config = CosimPytestConfig(
       pycde_script=pycde_script,
@@ -505,11 +480,8 @@ def cosim_test(
       top=top,
       debug=debug,
       timeout_s=timeout_s,
-      failure_matchers=failure_matchers
-      if failure_matchers is not None else [_DEFAULT_FAILURE_PATTERN],
-      warning_matchers=warning_matchers if warning_matchers is not None else [],
-      failure_exclude=failure_exclude
-      if failure_exclude is not None else [_DEFAULT_FAILURE_EXCLUDE],
+      failure_matcher=failure_matcher,
+      warning_matcher=warning_matcher,
   )
 
   def _decorator(target):
