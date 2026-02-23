@@ -73,7 +73,8 @@ static void collectIntegersRecursively(OpBuilder builder, Location loc,
   // Array Type
   if (auto arrayTy = dyn_cast<ArrayType>(inputVal.getType())) {
     unsigned numElements = arrayTy.getNumElements();
-    auto indexType = builder.getIntegerType(llvm::Log2_64_Ceil(numElements));
+    auto indexType = builder.getIntegerType(
+        std::max(1u, llvm::Log2_64_Ceil(numElements)));
     for (unsigned i = 0; i < numElements; ++i) {
       // Process from high to low array index
       auto indexCst = ConstantOp::create(
