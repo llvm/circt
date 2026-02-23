@@ -18,6 +18,7 @@
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/Iterators.h"
+#include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -89,10 +90,15 @@ static Value spillValueOnStack(OpBuilder &builder, Location loc,
   auto oneC = LLVM::ConstantOp::create(
       builder, loc, IntegerType::get(builder.getContext(), 32),
       builder.getI32IntegerAttr(1));
+  unsigned alignment = 0;
+  if (Block *block = builder.getInsertionBlock()) {
+    alignment = static_cast<unsigned>(
+        DataLayout::closest(block->getParentOp())
+            .getTypePreferredAlignment(spillVal.getType()));
+  }
   Value ptr = LLVM::AllocaOp::create(
       builder, loc, LLVM::LLVMPointerType::get(builder.getContext()),
-      spillVal.getType(), oneC,
-      /*alignment=*/4);
+      spillVal.getType(), oneC, alignment);
   LLVM::StoreOp::create(builder, loc, spillVal, ptr);
   return ptr;
 }
@@ -288,7 +294,6 @@ struct ArrayInjectOpConversion
                                  rewriter.getI32IntegerAttr(1));
     auto zextIndex = zextByOne(op->getLoc(), rewriter, op.getIndex());
 
-    Value arrPtr;
     if (arrElems == 1 || !llvm::isPowerOf2_64(arrElems)) {
       // Clamp index to prevent OOB access. We add an extra element to the
       // array so that OOB access modifies this element, leaving the original
@@ -301,16 +306,14 @@ struct ArrayInjectOpConversion
 
       newArrTy = typeConverter->convertType(
           hw::ArrayType::get(inputType.getElementType(), arrElems + 1));
-      arrPtr = LLVM::AllocaOp::create(
-          rewriter, op->getLoc(),
-          LLVM::LLVMPointerType::get(rewriter.getContext()), newArrTy, oneC,
-          /*alignment=*/4);
-    } else {
-      arrPtr = LLVM::AllocaOp::create(
-          rewriter, op->getLoc(),
-          LLVM::LLVMPointerType::get(rewriter.getContext()), newArrTy, oneC,
-          /*alignment=*/4);
     }
+    auto allocaAlignment =
+        static_cast<unsigned>(DataLayout::closest(op.getOperation())
+                                  .getTypePreferredAlignment(newArrTy));
+    Value arrPtr = LLVM::AllocaOp::create(
+        rewriter, op->getLoc(),
+        LLVM::LLVMPointerType::get(rewriter.getContext()), newArrTy, oneC,
+        allocaAlignment);
 
     LLVM::StoreOp::create(rewriter, op->getLoc(), adaptor.getInput(), arrPtr);
 
