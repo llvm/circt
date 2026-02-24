@@ -30,6 +30,7 @@ import functools
 import inspect
 import logging
 import multiprocessing
+import multiprocessing.connection
 import os
 from pathlib import Path
 import re
@@ -300,7 +301,7 @@ def _compile_once_for_class(config: CosimPytestConfig) -> _ClassCompileCache:
 
 
 def _run_child(
-    result_queue: multiprocessing.Queue,
+    result_pipe: multiprocessing.connection.Connection,
     target: Callable[..., Any],
     config: CosimPytestConfig,
     args: Sequence[Any],
@@ -311,7 +312,7 @@ def _run_child(
 
   Compiles (or reuses cached compilation), starts the simulator, injects
   connection parameters, calls the test function, scans logs for failures,
-  and puts a ``_ChildResult`` onto *result_queue*.
+  and sends a ``_ChildResult`` through *result_pipe*.
   """
   stdout_lines: list[str] = []
   stderr_lines: list[str] = []
@@ -362,14 +363,14 @@ def _run_child(
       raise AssertionError("Detected simulator failures:\n" +
                            "\n".join(failure_lines))
 
-    result_queue.put(
+    result_pipe.send(
         _ChildResult(success=True,
                      warning_lines=warning_lines,
                      failure_lines=failure_lines,
                      stdout_lines=stdout_lines,
                      stderr_lines=stderr_lines))
   except Exception:
-    result_queue.put(
+    result_pipe.send(
         _ChildResult(success=False,
                      traceback=traceback.format_exc(),
                      warning_lines=_scan_logs(stdout_lines, stderr_lines,
@@ -377,10 +378,15 @@ def _run_child(
                      stdout_lines=stdout_lines,
                      stderr_lines=stderr_lines))
   finally:
+    result_pipe.close()
     if sim_proc is not None and sim_proc.proc.poll() is None:
       sim_proc.force_stop()
     if run_root is not None and not config.debug:
       shutil.rmtree(run_root, ignore_errors=True)
+    # Force-exit the forked child.  Non-daemon threads spawned by gRPC (or
+    # other native libraries) can prevent a normal exit even after all Python
+    # work has finished.  The result is already in the pipe, so this is safe.
+    os._exit(0)
 
 
 def _run_isolated(
@@ -400,26 +406,33 @@ def _run_isolated(
   except ValueError:
     import pytest as _pytest
     _pytest.skip("fork start method unavailable on this platform")
-  queue: multiprocessing.Queue = ctx.Queue()
+  reader, writer = ctx.Pipe(duplex=False)
   process = ctx.Process(
       target=_run_child,
-      args=(queue, target, config, args, kwargs, class_cache),
+      args=(writer, target, config, args, kwargs, class_cache),
   )
   process.start()
-  process.join(timeout=config.timeout_s)
+  writer.close()  # Parent only reads.
 
+  # Wait for the result with an optional timeout.  We poll the pipe first
+  # so that we can detect a child crash even before join() returns.
+  if reader.poll(timeout=config.timeout_s):
+    result: _ChildResult = reader.recv()
+  else:
+    result = None
+  reader.close()
+  process.join(timeout=10)
   if process.is_alive():
     process.terminate()
-    process.join(timeout=1)
-    raise AssertionError(
-        f"Cosim test timed out after {config.timeout_s} seconds")
+    process.join(timeout=5)
 
-  if queue.empty():
+  if result is None:
+    if config.timeout_s is not None:
+      raise AssertionError(
+          f"Cosim test timed out after {config.timeout_s} seconds")
     raise RuntimeError(
         f"Cosim child exited without returning a result (exit code: {process.exitcode})"
     )
-
-  result: _ChildResult = queue.get()
 
   # Always surface simulation logs for post-mortem debugging.
   for line in result.stdout_lines:
