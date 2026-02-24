@@ -234,6 +234,7 @@ struct ExprVisitor {
     // Save the queue which is being indexed: this allows us to handle the `$`
     // operator, which evaluates to the last valid index in the queue.
     Value savedQueue = context.currentQueue;
+    llvm::scope_exit restoreQueue([&] { context.currentQueue = savedQueue; });
     if (isa<moore::QueueType>(derefType)) {
       // For QueueSizeBIOp, we need a byvalue queue, so if the queue is an
       // lvalue (because we're assigning to it), we need to dereference it
@@ -244,7 +245,6 @@ struct ExprVisitor {
       }
     }
     auto lowBit = context.convertRvalueExpression(expr.selector());
-    llvm::scope_exit restoreQueue([&] { context.currentQueue = savedQueue; });
 
     if (!lowBit)
       return {};
@@ -1986,9 +1986,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     // Compute queue size and subtract one to get the last element
     auto queueSize =
         moore::QueueSizeBIOp::create(builder, loc, context.getIndexedQueue());
-    auto intType =
-        moore::IntType::get(builder.getContext(), 32, Domain::TwoValued);
-    auto one = moore::ConstantOp::create(builder, loc, intType, 1);
+    auto one = moore::ConstantOp::create(builder, loc, queueSize.getType(), 1);
     auto lastElement = moore::SubOp::create(builder, loc, queueSize, one);
 
     return lastElement;
