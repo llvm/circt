@@ -113,56 +113,57 @@ def test_loopback_cpp_codegen(mode: str, tmp_path: Path, host: str, port: int,
 
 
 @cosim_test(HW_DIR / "loopback.py")
-def test_loopback_query_info(sources_dir: Path) -> None:
-  """Verify esiquery info output against the generated manifest
-  (QUERY-INFO checks)."""
-  require_tool("esiquery")
-  manifest = sources_dir / "esi_system_manifest.json"
-  assert manifest.exists(), "Manifest not found"
-  result = subprocess.run(
-      ["esiquery", "trace", f"w:{manifest}", "info"],
-      check=True,
-      capture_output=True,
-      text=True,
-  )
-  check_lines(result.stdout, [
-      "API version: 0",
-      "* Module information",
-      "- LoopbackIP v0.0",
-      "IP which simply echos bytes",
-      "Constants:",
-      "depth: 5",
-      "Extra metadata:",
-      "foo: 1",
-  ])
+class TestLoopbackQuery:
+  """Tests for esiquery against the loopback design."""
 
+  def test_loopback_query_info(self, sources_dir: Path) -> None:
+    """Verify esiquery info output against the generated manifest
+    (QUERY-INFO checks)."""
+    require_tool("esiquery")
+    manifest = sources_dir / "esi_system_manifest.json"
+    assert manifest.exists(), "Manifest not found"
+    result = subprocess.run(
+        ["esiquery", "trace", f"w:{manifest}", "info"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    check_lines(result.stdout, [
+        "API version: 0",
+        "* Module information",
+        "- LoopbackIP v0.0",
+        "IP which simply echos bytes",
+        "Constants:",
+        "depth: 5",
+        "Extra metadata:",
+        "foo: 1",
+    ])
 
-@cosim_test(HW_DIR / "loopback.py")
-def test_loopback_query_hier(sources_dir: Path) -> None:
-  """Verify esiquery hier output against the generated manifest
-  (QUERY-HIER checks)."""
-  require_tool("esiquery")
-  manifest = sources_dir / "esi_system_manifest.json"
-  assert manifest.exists(), "Manifest not found"
-  result = subprocess.run(
-      ["esiquery", "trace", f"w:{manifest}", "hier"],
-      check=True,
-      capture_output=True,
-      text=True,
-  )
-  check_lines(result.stdout, [
-      "* Design hierarchy",
-      "func1: function uint16(uint16)",
-      "structFunc: function ResultStruct(ArgStruct)",
-      "arrayFunc: function ResultArray(sint8[1])",
-      "* Instance: loopback_inst[0]",
-      "loopback_tohw:",
-      "recv: bits8",
-      "loopback_fromhw:",
-      "send: bits8",
-      "mysvc_recv:",
-      "recv: void",
-      "mysvc_send:",
-      "send: void",
-      "* Instance: loopback_inst[1]",
-  ])
+  def test_loopback_query_hier(self, sources_dir: Path) -> None:
+    """Verify esiquery hier output against the generated manifest
+    (QUERY-HIER checks)."""
+    require_tool("esiquery")
+    manifest = sources_dir / "esi_system_manifest.json"
+    assert manifest.exists(), "Manifest not found"
+    result = subprocess.run(
+        ["esiquery", "trace", f"w:{manifest}", "hier"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    check_lines(result.stdout, [
+        "* Design hierarchy",
+        "func1: function uint16(uint16)",
+        "structFunc: function ResultStruct(ArgStruct)",
+        "arrayFunc: function ResultArray(sint8[1])",
+        "* Instance: loopback_inst[0]",
+        "loopback_tohw:",
+        "recv: bits8",
+        "loopback_fromhw:",
+        "send: bits8",
+        "mysvc_recv:",
+        "recv: void",
+        "mysvc_send:",
+        "send: void",
+        "* Instance: loopback_inst[1]",
+    ])

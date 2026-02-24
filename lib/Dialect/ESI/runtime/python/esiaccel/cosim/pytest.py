@@ -83,7 +83,7 @@ class _ClassCompileCache:
   """Cached compilation artifacts shared across methods of a test class."""
 
   sources_dir: Path
-  obj_dir: Path
+  compile_dir: Path
 
 
 @dataclass
@@ -94,6 +94,8 @@ class _ChildResult:
   traceback: str = ""
   failure_lines: Sequence[str] = field(default_factory=list)
   warning_lines: Sequence[str] = field(default_factory=list)
+  stdout_lines: Sequence[str] = field(default_factory=list)
+  stderr_lines: Sequence[str] = field(default_factory=list)
 
 
 @contextlib.contextmanager
@@ -196,6 +198,17 @@ def _run_hw_script(config: CosimPytestConfig, tmp_dir: Path) -> Path:
   return tmp_dir
 
 
+# Names and annotations that the decorator injects automatically.
+_INJECTED_NAMES = {"host", "hostname", "port", "sources_dir", "conn",
+                   "accelerator"}
+_INJECTED_ANNOTATIONS = frozenset({Accelerator, AcceleratorConnection})
+
+
+def _is_injected_param(name: str, annotation: Any) -> bool:
+  """Return True if *name*/*annotation* will be supplied by the decorator."""
+  return name in _INJECTED_NAMES or annotation in _INJECTED_ANNOTATIONS
+
+
 def _resolve_injected_params(
     target: Callable[..., Any],
     kwargs: Dict[str, Any],
@@ -230,34 +243,35 @@ def _resolve_injected_params(
   return updated
 
 
-def _pytest_visible_signature(target: Callable[..., Any]) -> inspect.Signature:
+def _visible_signature(target: Callable[..., Any]) -> inspect.Signature:
   """Return a signature with injected parameters removed.
 
   Pytest uses function signatures to determine fixture requirements.  This
   hides the parameters that the decorator injects (``host``, ``port``,
   ``conn``, etc.) so pytest does not try to resolve them as fixtures.
+  Uses :func:`_is_injected_param` as the single source of truth.
   """
   sig = inspect.signature(target)
-  kept_params = []
-  for param in sig.parameters.values():
-    if param.name in {
-        "host", "hostname", "port", "accelerator", "conn", "sources_dir"
-    }:
-      continue
-    if param.annotation in (Accelerator, AcceleratorConnection):
-      continue
-    kept_params.append(param)
-  return sig.replace(parameters=kept_params)
+  kept = [p for p in sig.parameters.values()
+          if not _is_injected_param(p.name, p.annotation)]
+  return sig.replace(parameters=kept)
 
 
-def _copy_compiled_obj_dir(compiled_obj_dir: Optional[Path], run_dir: Path):
-  """Copy a pre-compiled Verilator obj_dir into the per-test run directory."""
-  if compiled_obj_dir is None:
+def _copy_compiled_artifacts(compile_dir: Optional[Path], run_dir: Path):
+  """Copy pre-compiled simulator artifacts into the per-test run directory.
+
+  Copies the *entire* compile directory so that all backends (Verilator,
+  Questa, etc.) find their artefacts regardless of internal layout.
+  """
+  if compile_dir is None:
     return
-  dst = run_dir / "obj_dir"
-  if dst.exists():
-    shutil.rmtree(dst)
-  shutil.copytree(compiled_obj_dir, dst)
+  run_dir.mkdir(parents=True, exist_ok=True)
+  for item in compile_dir.iterdir():
+    dst = run_dir / item.name
+    if item.is_dir():
+      shutil.copytree(item, dst, dirs_exist_ok=True)
+    else:
+      shutil.copy2(item, dst)
 
 
 def _compile_once_for_class(config: CosimPytestConfig) -> _ClassCompileCache:
@@ -276,7 +290,7 @@ def _compile_once_for_class(config: CosimPytestConfig) -> _ClassCompileCache:
     if rc != 0:
       raise RuntimeError(f"Simulator compile failed with exit code {rc}")
     return _ClassCompileCache(sources_dir=sources_dir,
-                              obj_dir=compile_dir / "obj_dir")
+                              compile_dir=compile_dir)
   except Exception:
     if not config.debug:
       shutil.rmtree(compile_root, ignore_errors=True)
@@ -329,7 +343,7 @@ def _run_child(
       sim = _create_simulator(config, sources_dir, run_dir)
       sim._run_stdout_cb = on_stdout
       sim._run_stderr_cb = on_stderr
-      _copy_compiled_obj_dir(class_cache.obj_dir, run_dir)
+      _copy_compiled_artifacts(class_cache.compile_dir, run_dir)
 
     os.chdir(run_dir)
     sim_proc = sim.run_proc()
@@ -349,13 +363,17 @@ def _run_child(
     result_queue.put(
         _ChildResult(success=True,
                      warning_lines=warning_lines,
-                     failure_lines=failure_lines))
+                     failure_lines=failure_lines,
+                     stdout_lines=stdout_lines,
+                     stderr_lines=stderr_lines))
   except Exception:
     result_queue.put(
         _ChildResult(success=False,
                      traceback=traceback.format_exc(),
                      warning_lines=_scan_logs(stdout_lines, stderr_lines,
-                                              config)[1]))
+                                              config)[1],
+                     stdout_lines=stdout_lines,
+                     stderr_lines=stderr_lines))
   finally:
     if sim_proc is not None and sim_proc.proc.poll() is None:
       sim_proc.force_stop()
@@ -400,11 +418,24 @@ def _run_isolated(
     )
 
   result: _ChildResult = queue.get()
+
+  # Always surface simulation logs for post-mortem debugging.
+  for line in result.stdout_lines:
+    _logger.debug("sim stdout: %s", line)
+  for line in result.stderr_lines:
+    _logger.debug("sim stderr: %s", line)
   for warning in result.warning_lines:
     _logger.warning("cosim warning: %s", warning)
 
   if not result.success:
-    raise AssertionError(result.traceback)
+    parts = [result.traceback]
+    if result.stdout_lines:
+      parts.append("\n=== Simulator stdout ===")
+      parts.extend(result.stdout_lines[-200:])
+    if result.stderr_lines:
+      parts.append("\n=== Simulator stderr ===")
+      parts.extend(result.stderr_lines[-200:])
+    raise AssertionError("\n".join(parts))
 
 
 def _decorate_function(
@@ -419,7 +450,7 @@ def _decorate_function(
     cache = class_cache_getter() if class_cache_getter is not None else None
     _run_isolated(target, config, args, kwargs, class_cache=cache)
 
-  setattr(_wrapper, "__signature__", _pytest_visible_signature(target))
+  setattr(_wrapper, "__signature__", _visible_signature(target))
   return _wrapper
 
 
