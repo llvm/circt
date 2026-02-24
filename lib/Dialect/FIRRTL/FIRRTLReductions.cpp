@@ -1775,23 +1775,7 @@ struct ModuleInternalNameSanitizer : public Reduction {
 ///
 struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
 
-  const char *names[48] = {
-      "Foo",    "Bar",    "Baz",    "Qux",      "Quux",   "Quuux",  "Quuuux",
-      "Quz",    "Corge",  "Grault", "Bazola",   "Ztesch", "Thud",   "Grunt",
-      "Bletch", "Fum",    "Fred",   "Jim",      "Sheila", "Barney", "Flarp",
-      "Zxc",    "Spqr",   "Wombat", "Shme",     "Bongo",  "Spam",   "Eggs",
-      "Snork",  "Zot",    "Blarg",  "Wibble",   "Toto",   "Titi",   "Tata",
-      "Tutu",   "Pippo",  "Pluto",  "Paperino", "Aap",    "Noot",   "Mies",
-      "Oogle",  "Foogle", "Boogle", "Zork",     "Gork",   "Bork"};
-
-  size_t nameIndex = 0;
-
-  const char *getName() {
-    if (nameIndex >= 48)
-      nameIndex = 0;
-    return names[nameIndex++];
-  };
-
+  reduce::MetasyntacticNameGenerator nameGenerator;
   size_t portNameIndex = 0;
 
   char getPortName() {
@@ -1800,13 +1784,13 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
     return 'a' + portNameIndex++;
   }
 
-  void beforeReduction(mlir::ModuleOp op) override { nameIndex = 0; }
+  void beforeReduction(mlir::ModuleOp op) override { nameGenerator.reset(); }
 
   LogicalResult rewrite(firrtl::CircuitOp circuitOp) override {
 
     firrtl::InstanceGraph iGraph(circuitOp);
 
-    auto *circuitName = getName();
+    auto *circuitName = nameGenerator.getNextName();
     iGraph.getTopLevelModule().setName(circuitName);
     circuitOp.setName(circuitName);
 
@@ -1842,7 +1826,8 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
 
       if (module == iGraph.getTopLevelModule())
         continue;
-      auto newName = StringAttr::get(circuitOp.getContext(), getName());
+      auto newName =
+          StringAttr::get(circuitOp.getContext(), nameGenerator.getNextName());
       module.setName(newName);
       for (auto *use : node->uses()) {
         auto useOp = use->getInstance();
