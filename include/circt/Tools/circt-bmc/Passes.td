@@ -34,6 +34,9 @@ def LowerToBMC : Pass<"lower-to-bmc", "::mlir::ModuleOp"> {
     Option<"risingClocksOnly", "rising-clocks-only", "bool",
            /*default=*/"false",
            "Only consider the circuit and property on rising clock edges.">,
+    Option<"syncClocks", "sync-clocks", "bool",
+           /*default=*/"false",
+           "Force all clocks to toggle together synchronously (old behavior).">,
   ];
 
   let dependentDialects = [
@@ -46,7 +49,7 @@ def ExternalizeRegisters : Pass<"externalize-registers", "::mlir::ModuleOp"> {
   let summary = "Removes registers and adds corresponding input and output ports";
 
   let dependentDialects = [
-    "circt::seq::SeqDialect", "circt::hw::HWDialect"
+    "circt::seq::SeqDialect", "circt::hw::HWDialect", "circt::verif::VerifDialect"
   ];
 }
 

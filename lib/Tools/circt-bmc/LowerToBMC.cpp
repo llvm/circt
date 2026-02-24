@@ -125,8 +125,8 @@ void LowerToBMCPass::runOnOperation() {
   }
 
   // Count top-level clock inputs. Each gets an independent toggle entry in the
-  // init/loop regions so the BMC explores all synchronous interleavings.
-  // Struct-embedded clocks are not yet supported.
+  // init/loop regions so the BMC explores all possible asynchronous clock
+  // interleavings. Struct-embedded clocks are not yet supported.
   unsigned numClocks = 0;
   for (auto input : hwModule.getInputTypes()) {
     if (isa<seq::ClockType>(input)) {
@@ -155,7 +155,8 @@ void LowerToBMCPass::runOnOperation() {
     }
     verif::YieldOp::create(builder, loc, initClocks);
 
-    // Toggle every clock each step (synchronous multi-clock interleaving).
+    // Update clocks each step. If syncClocks is false, each clock independently
+    // decides whether to toggle using a symbolic value.
     auto *loopBlock = builder.createBlock(&bmcOp.getLoop());
     builder.setInsertionPointToStart(loopBlock);
     for (unsigned i = 0; i < numClocks; ++i)
@@ -166,12 +167,25 @@ void LowerToBMCPass::runOnOperation() {
       for (auto arg : loopBlock->getArguments())
         nextClocks.push_back(arg);
     } else {
-      for (auto arg : loopBlock->getArguments()) {
-        auto fromClk = seq::FromClockOp::create(builder, loc, arg);
-        auto cNeg1 =
-            hw::ConstantOp::create(builder, loc, builder.getI1Type(), -1);
-        auto nClk = comb::XorOp::create(builder, loc, fromClk, cNeg1);
-        nextClocks.push_back(seq::ToClockOp::create(builder, loc, nClk));
+      if (syncClocks) {
+        // Old behavior: toggle every clock each step.
+        for (auto arg : loopBlock->getArguments()) {
+          auto fromClk = seq::FromClockOp::create(builder, loc, arg);
+          auto cNeg1 =
+              hw::ConstantOp::create(builder, loc, builder.getI1Type(), -1);
+          auto nClk = comb::XorOp::create(builder, loc, fromClk, cNeg1);
+          nextClocks.push_back(seq::ToClockOp::create(builder, loc, nClk));
+        }
+      } else {
+        // New default behavior: each clock independently decides whether to
+        // toggle. This allows exploring all possible CDC interleavings.
+        for (auto arg : loopBlock->getArguments()) {
+          auto fromClk = seq::FromClockOp::create(builder, loc, arg);
+          auto toggle =
+              verif::SymbolicValueOp::create(builder, loc, builder.getI1Type());
+          auto nClk = comb::XorOp::create(builder, loc, fromClk, toggle);
+          nextClocks.push_back(seq::ToClockOp::create(builder, loc, nClk));
+        }
       }
     }
     verif::YieldOp::create(builder, loc, nextClocks);
