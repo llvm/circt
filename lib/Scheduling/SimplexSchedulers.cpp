@@ -218,17 +218,17 @@ public:
   LogicalResult schedule() override;
 };
 
-// This class solves acyclic, resource-constrained `SharedOperatorsProblem` with
+// This class solves acyclic, resource-constrained `SharedResourcesProblem` with
 // a simplified version of the iterative heuristic presented in [2].
-class SharedOperatorsSimplexScheduler : public SimplexSchedulerBase {
+class SharedResourcesSimplexScheduler : public SimplexSchedulerBase {
 private:
-  SharedOperatorsProblem &prob;
+  SharedResourcesProblem &prob;
 
 protected:
   Problem &getProblem() override { return prob; }
 
 public:
-  SharedOperatorsSimplexScheduler(SharedOperatorsProblem &prob,
+  SharedResourcesSimplexScheduler(SharedResourcesProblem &prob,
                                   Operation *lastOp)
       : SimplexSchedulerBase(lastOp), prob(prob) {}
   LogicalResult schedule() override;
@@ -870,10 +870,10 @@ LogicalResult CyclicSimplexScheduler::schedule() {
 }
 
 //===----------------------------------------------------------------------===//
-// SharedOperatorsSimplexScheduler
+// SharedResourcesSimplexScheduler
 //===----------------------------------------------------------------------===//
 
-static bool isLimited(Operation *op, SharedOperatorsProblem &prob) {
+static bool isLimited(Operation *op, SharedResourcesProblem &prob) {
   auto maybeRsrcs = prob.getLinkedResourceTypes(op);
   if (!maybeRsrcs)
     return false;
@@ -882,7 +882,7 @@ static bool isLimited(Operation *op, SharedOperatorsProblem &prob) {
   });
 }
 
-LogicalResult SharedOperatorsSimplexScheduler::schedule() {
+LogicalResult SharedResourcesSimplexScheduler::schedule() {
   if (failed(checkLastOp()))
     return failure();
 
@@ -938,18 +938,26 @@ LogicalResult SharedOperatorsSimplexScheduler::schedule() {
     assert(maybeRsrcs && "Limited operation must have linked resource types");
 
     auto &rsrcs = *maybeRsrcs;
-    assert(rsrcs.size() == 1 &&
-           "Multi-resource operations are not yet supported by this scheduler");
+    for (auto rsrc : rsrcs) {
+      assert(prob.getLimit(rsrc).value_or(0) > 0 &&
+             "All resources must have non-zero limits");
+    }
 
     auto rsrc = rsrcs[0];
     unsigned limit = prob.getLimit(rsrc).value_or(0);
     assert(limit > 0);
 
     // Find the first time step (beginning at the current start time in the
-    // partial schedule) in which an operator instance is available.
+    // partial schedule) in which all required resources are available for the
+    // operation.
     unsigned startTimeVar = startTimeVariables[op];
     unsigned candTime = getStartTime(startTimeVar);
-    while (reservationTable[rsrc].lookup(candTime) == limit)
+
+    while (std::any_of(rsrcs.begin(), rsrcs.end(),
+                       [&](Problem::ResourceType rsrc) {
+                         return reservationTable[rsrc].lookup(candTime) ==
+                                prob.getLimit(rsrc).value_or(0);
+                       }))
       ++candTime;
 
     // Fix the start time. As explained above, this cannot make the problem
@@ -958,8 +966,9 @@ LogicalResult SharedOperatorsSimplexScheduler::schedule() {
     assert(succeeded(fixed));
     (void)fixed;
 
-    // Record the operator use.
-    ++reservationTable[rsrc][candTime];
+    // Record the resource uses.
+    for (auto rsrc : rsrcs)
+      ++reservationTable[rsrc][candTime];
 
     LLVM_DEBUG(dbgs() << "After scheduling " << startTimeVar
                       << " to t=" << candTime << ":\n";
@@ -1375,9 +1384,9 @@ LogicalResult scheduling::scheduleSimplex(CyclicProblem &prob,
   return simplex.schedule();
 }
 
-LogicalResult scheduling::scheduleSimplex(SharedOperatorsProblem &prob,
+LogicalResult scheduling::scheduleSimplex(SharedResourcesProblem &prob,
                                           Operation *lastOp) {
-  SharedOperatorsSimplexScheduler simplex(prob, lastOp);
+  SharedResourcesSimplexScheduler simplex(prob, lastOp);
   return simplex.schedule();
 }
 
