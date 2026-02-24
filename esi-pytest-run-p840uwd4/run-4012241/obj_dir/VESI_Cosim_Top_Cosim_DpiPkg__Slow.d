@@ -1,2 +1,0 @@
-VESI_Cosim_Top_Cosim_DpiPkg__Slow.o: \
- VESI_Cosim_Top_Cosim_DpiPkg__Slow.cpp VESI_Cosim_Top__pch.h

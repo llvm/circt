@@ -18,6 +18,10 @@ lit.site.cfg.py
 *.egg-info
 *.whl
 
+# Verilator / cosim test artifacts
+obj_dir/
+esi-pytest-*/
+
 # External software
 /ext
 
