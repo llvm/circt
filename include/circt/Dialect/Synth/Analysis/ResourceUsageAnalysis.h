@@ -30,8 +30,8 @@ namespace synth {
 
 /// Analysis that computes resource usage for Synth dialect operations.
 /// This analysis walks module hierarchies and counts resources such as:
-/// - And-inverter gates (AIG)
-/// - Majority-inverter gates (MIG)
+/// - And-inverter graph (AIG)
+/// - Majority-inverter graph (MIG)
 /// - Truth tables (LUTs)
 /// - Sequential elements (DFFs)
 class ResourceUsageAnalysis {

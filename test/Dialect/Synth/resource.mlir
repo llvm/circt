@@ -77,6 +77,7 @@ hw.module private @multibit(in %a : i8, in %b : i8, in %c : i8, out x : i8) {
 // CHECK:      Resource Usage Analysis for module: sequential
 // CHECK-NEXT: ========================================
 // CHECK-NEXT: Total:
+// CHECK-NEXT:   <unknown>: 1
 // CHECK-NEXT:   comb.xor: 8
 // CHECK-NEXT:   seq.compreg: 16
 // CHECK-NEXT:   seq.firreg: 8
@@ -90,6 +91,10 @@ hw.module private @sequential(in %clk : !seq.clock, in %a : i8, in %b : i8, out 
   %r3 = seq.firreg %a clock %clk : i8
   // XOR on 8-bit: (2-1) * 8 = 8 gates
   %xor = comb.xor %r1, %r2 : i8
+  // Constant: no resource count
+  %cst = hw.constant 0 : i8
+  // Unknown operation: count as 1
+  %unk = comb.icmp eq %cst, %cst : i8
   hw.output %xor, %r3 : i8, i8
 }
 
@@ -125,12 +130,11 @@ hw.module private @nested(in %a : i1, in %b : i1, in %c : i1, out x : i1) {
 // CHECK:      Resource Usage Analysis for module: mig_test
 // CHECK-NEXT: ========================================
 // CHECK-NEXT: Total:
-// CHECK-NEXT:   synth.mig.maj_inv: 12
+// CHECK-NEXT:   synth.mig.maj_inv_3: 4
+// CHECK-NEXT:   synth.mig.maj_inv_5: 4
 
 hw.module private @mig_test(in %a : i4, in %b : i4, in %c : i4, out x : i4) {
-  // 3-input MIG on 4-bit: (3/2) * 4 = 1 * 4 = 4 gates
   %maj1 = synth.mig.maj_inv %a, %b, %c : i4
-  // 5-input MIG on 4-bit: (5/2) * 4 = 2 * 4 = 8 gates
   %maj2 = synth.mig.maj_inv %a, %b, %c, %a, %b : i4
   hw.output %maj2 : i4
 }
@@ -139,12 +143,13 @@ hw.module private @mig_test(in %a : i4, in %b : i4, in %c : i4, out x : i4) {
 // CHECK:      Resource Usage Analysis for module: lut_test
 // CHECK-NEXT: ========================================
 // CHECK-NEXT: Total:
-// CHECK-NEXT:   comb.truth_table: 2
+// CHECK-NEXT:   comb.truth_table_2: 1
+// CHECK-NEXT:   comb.truth_table_3: 1
 
 hw.module private @lut_test(in %a : i1, in %b : i1, in %c : i1, out x : i1, out y : i1) {
-  // Truth table on 4-bit: 4 LUT bits
+  // 2-input truth table (LUT2): 1 LUT
   %lut1 = comb.truth_table %a, %b -> [0, 1, 1, 0]
-  // Truth table on 8-bit: 8 LUT bits
+  // 3-input truth table (LUT3): 1 LUT
   %lut2 = comb.truth_table %a, %b, %c -> [0, 1, 1, 0, 1, 0, 0, 1]
   hw.output %lut1, %lut2 : i1, i1
 }

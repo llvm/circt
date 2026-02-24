@@ -14,6 +14,7 @@
 
 #include "circt/Dialect/Synth/Analysis/ResourceUsageAnalysis.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
@@ -42,30 +43,49 @@ using namespace synth;
 
 /// Get resource count for an operation if it's a tracked resource type.
 /// Returns (operation name, count) pair, or std::nullopt if not tracked.
-static std::optional<std::pair<StringRef, uint64_t>>
+/// The operation name may include additional information (e.g., LUT input
+/// count).
+static std::optional<std::pair<std::string, uint64_t>>
 getResourceCount(Operation *op) {
-  return TypeSwitch<Operation *, std::optional<std::pair<StringRef, uint64_t>>>(
-             op)
+  if (op->getNumResults() != 1 || !op->getResult(0).getType().isInteger())
+    return std::nullopt;
+  return TypeSwitch<Operation *,
+                    std::optional<std::pair<std::string, uint64_t>>>(op)
       // Variadic logic operations (AND, OR, XOR, AIG).
       // Gate count = (num_inputs - 1) * bitwidth
       .Case<synth::aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::XorOp>(
           [](auto logicOp) {
-            uint64_t count = (logicOp.getNumOperands() - 1) *
-                             logicOp.getType().getIntOrFloatBitWidth();
-            return std::make_pair(logicOp->getName().getStringRef(), count);
+            return std::make_pair(
+                logicOp->getName().getStringRef(),
+                (logicOp.getNumOperands() - 1) *
+                    logicOp.getType().getIntOrFloatBitWidth());
           })
-      // Majority-inverter gates (MIG).
+      // Majority-inverter graph (MIG) - include input count in the name.
       // Gate count = (num_inputs / 2) * bitwidth
+      // Each MIG gate consumes 3 inputs and produces 1 output, so a variadic
+      // MIG operation with N inputs requires N/2 gates (rounded down).
       .Case<synth::mig::MajorityInverterOp>([](auto logicOp) {
-        uint64_t count = (logicOp.getNumOperands() / 2) *
-                         logicOp.getType().getIntOrFloatBitWidth();
-        return std::make_pair(logicOp->getName().getStringRef(), count);
+        uint64_t count = logicOp.getType().getIntOrFloatBitWidth();
+        // Concatenate input count to the operation name.
+        std::string name = (Twine(logicOp->getName().getStringRef()) + "_" +
+                            Twine(logicOp.getNumOperands()))
+                               .str();
+        return std::make_pair(std::move(name), count);
       })
-      // Truth tables and sequential elements.
-      // Count = bitwidth
-      .Case<comb::TruthTableOp, seq::CompRegOp, seq::FirRegOp>([](auto op) {
+      // Truth tables (LUTs) - include input count in the name.
+      .Case<comb::TruthTableOp>([](auto op) {
         uint64_t count = op.getType().getIntOrFloatBitWidth();
-        return std::make_pair(op->getName().getStringRef(), count);
+        // Concatenate LUT input number to the operation name.
+        std::string name = (Twine(op->getName().getStringRef()) + "_" +
+                            Twine(op.getNumOperands()))
+                               .str();
+        return std::make_pair(std::move(name), count);
+      })
+      // Sequential elements.
+      // Count = bitwidth
+      .Case<seq::CompRegOp, seq::FirRegOp>([](auto op) {
+        uint64_t count = op.getType().getIntOrFloatBitWidth();
+        return std::make_pair(op->getName().getStringRef().str(), count);
       })
       .Default([](Operation *) { return std::nullopt; });
 }
@@ -104,10 +124,20 @@ ResourceUsageAnalysis::getResourceUsage(igraph::ModuleOpInterface module) {
 
   // Count local resources by walking all operations in the module.
   llvm::StringMap<uint64_t> counts;
+  uint64_t unknownOpCount = 0;
   module->walk([&](Operation *op) {
     if (auto resource = getResourceCount(op))
       counts[resource->first] += resource->second;
+    else if (op->getNumResults() > 0 && !isa<hw::HWInstanceLike>(op) &&
+             !op->hasTrait<mlir::OpTrait::ConstantLike>()) {
+      // Track operations that has one result and is not a constant.
+      unknownOpCount++;
+    }
   });
+
+  // Add unknown operation count if any were found.
+  if (unknownOpCount > 0)
+    counts["<unknown>"] = unknownOpCount;
 
   // Initialize module usage with local counts.
   // Total will be updated as we process child instances.
@@ -268,8 +298,15 @@ LogicalResult PrintResourceUsageAnalysisPass::printAnalysisResult(
     llvm::sort(sortedCounts,
                [](const auto &a, const auto &b) { return a.first < b.first; });
 
+    // Find the maximum name length for aligned formatting.
+    size_t maxNameLen = 0;
     for (const auto &[name, count] : sortedCounts)
-      stream << "  " << name << ": " << count << "\n";
+      maxNameLen = std::max(maxNameLen, name.size());
+
+    // Print with aligned columns.
+    for (const auto &[name, count] : sortedCounts)
+      stream << "  " << name << ": "
+             << std::string(maxNameLen - name.size(), ' ') << count << "\n";
     stream << "\n";
   }
 

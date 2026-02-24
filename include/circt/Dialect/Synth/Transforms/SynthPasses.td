@@ -144,8 +144,9 @@ def PrintResourceUsageAnalysis
     : Pass<"synth-print-resource-usage-analysis", "mlir::ModuleOp"> {
   let summary = "Print resource usage analysis results";
   let description = [{
-    This pass performs resource usage analysis on Synth circuits and outputs
-    resource utilization information.
+    This pass performs resource usage analysis on circuits containing Synth,
+    Comb, Seq, and HW dialect operations, and outputs resource utilization
+    information.
 
     The analysis computes both local and total resource usage across module
     hierarchies. Local usage counts resources directly in a module, while total
