@@ -1,0 +1,2012 @@
+{
+  "apiVersion": 0,
+  "design": {
+    "instanceOf": "@ESI_Cosim_Top",
+    "clientPorts": [
+      {
+        "appID": {
+          "name": "__cosim_mmio_read_write"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>> to \"arg\", !esi.channel<i64> from \"result\"]>",
+        "servicePort": {
+          "port": "call",
+          "serviceName": "@_FuncService"
+        }
+      },
+      {
+        "appID": {
+          "name": "internal_write"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<!hw.struct<address: ui5, data: i64>> from \"req\", !esi.channel<i0> to \"ack\"]>",
+        "servicePort": {
+          "port": "write",
+          "serviceName": "@MemA"
+        }
+      },
+      {
+        "appID": {
+          "name": "func1"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<ui16> to \"arg\", !esi.channel<ui16> from \"result\"]>",
+        "servicePort": {
+          "port": "call",
+          "serviceName": "@_FuncService"
+        }
+      },
+      {
+        "appID": {
+          "name": "structFunc"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<!hw.typealias<@pycde::@ArgStruct, !hw.struct<a: ui16, b: si8>>> to \"arg\", !esi.channel<!hw.typealias<@pycde::@ResultStruct, !hw.struct<x: si8, y: si8>>> from \"result\"]>",
+        "servicePort": {
+          "port": "call",
+          "serviceName": "@_FuncService"
+        }
+      },
+      {
+        "appID": {
+          "name": "oddStructFunc"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<!hw.typealias<@pycde::@OddStruct, !hw.struct<a: ui12, b: si7, inner: !hw.typealias<@pycde::@OddInner, !hw.struct<p: ui8, q: si8, r: !hw.array<2xui8>>>>>> to \"arg\", !esi.channel<!hw.typealias<@pycde::@OddStruct, !hw.struct<a: ui12, b: si7, inner: !hw.typealias<@pycde::@OddInner, !hw.struct<p: ui8, q: si8, r: !hw.array<2xui8>>>>>> from \"result\"]>",
+        "servicePort": {
+          "port": "call",
+          "serviceName": "@_FuncService"
+        }
+      },
+      {
+        "appID": {
+          "name": "arrayFunc"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<!hw.array<1xsi8>> to \"arg\", !esi.channel<!hw.typealias<@pycde::@ResultArray, !hw.array<2xsi8>>> from \"result\"]>",
+        "servicePort": {
+          "port": "call",
+          "serviceName": "@_FuncService"
+        }
+      },
+      {
+        "appID": {
+          "name": "__cosim_hostmem_read_resp"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<!hw.struct<tag: ui8, data: i64>> to \"data\"]>",
+        "servicePort": {
+          "port": "from_host",
+          "serviceName": "@_ChannelServiceDecl"
+        }
+      },
+      {
+        "appID": {
+          "name": "__cosim_hostmem_read_req"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<!hw.struct<address: ui64, length: ui32, tag: ui8>> from \"data\"]>",
+        "servicePort": {
+          "port": "to_host",
+          "serviceName": "@_ChannelServiceDecl"
+        }
+      },
+      {
+        "appID": {
+          "name": "__cosim_hostmem_write"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: i64, valid_bytes: i8>> from \"arg\", !esi.channel<ui8> to \"result\"]>",
+        "servicePort": {
+          "port": "call",
+          "serviceName": "@_CallService"
+        }
+      }
+    ],
+    "engines": [
+      {
+        "appID": {
+          "name": "cosim"
+        },
+        "serviceImplName": "cosim",
+        "clientDetails": [
+          {
+            "channelAssignments": {
+              "arg": {
+                "name": "__cosim_mmio_read_write.arg",
+                "type": "cosim"
+              },
+              "result": {
+                "name": "__cosim_mmio_read_write.result",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "__cosim_mmio_read_write"
+              }
+            ],
+            "servicePort": {
+              "port": "call",
+              "serviceName": "@_FuncService"
+            }
+          },
+          {
+            "channelAssignments": {
+              "recv": {
+                "name": "loopback_inst[0].loopback_tohw.recv",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "index": 0,
+                "name": "loopback_inst"
+              },
+              {
+                "name": "loopback_tohw"
+              }
+            ],
+            "servicePort": {
+              "port": "Recv",
+              "serviceName": "@HostComms"
+            }
+          },
+          {
+            "channelAssignments": {
+              "send": {
+                "name": "loopback_inst[0].loopback_fromhw.send",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "index": 0,
+                "name": "loopback_inst"
+              },
+              {
+                "name": "loopback_fromhw"
+              }
+            ],
+            "servicePort": {
+              "port": "Send",
+              "serviceName": "@HostComms"
+            }
+          },
+          {
+            "channelAssignments": {
+              "recv": {
+                "name": "loopback_inst[0].mysvc_recv.recv",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "index": 0,
+                "name": "loopback_inst"
+              },
+              {
+                "name": "mysvc_recv"
+              }
+            ],
+            "servicePort": {
+              "port": "Recv",
+              "serviceName": "@MyService"
+            }
+          },
+          {
+            "channelAssignments": {
+              "send": {
+                "name": "loopback_inst[0].mysvc_send.send",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "index": 0,
+                "name": "loopback_inst"
+              },
+              {
+                "name": "mysvc_send"
+              }
+            ],
+            "servicePort": {
+              "port": "Send",
+              "serviceName": "@MyService"
+            }
+          },
+          {
+            "channelAssignments": {
+              "recv": {
+                "name": "loopback_inst[1].loopback_tohw.recv",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "index": 1,
+                "name": "loopback_inst"
+              },
+              {
+                "name": "loopback_tohw"
+              }
+            ],
+            "servicePort": {
+              "port": "Recv",
+              "serviceName": "@HostComms"
+            }
+          },
+          {
+            "channelAssignments": {
+              "send": {
+                "name": "loopback_inst[1].loopback_fromhw.send",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "index": 1,
+                "name": "loopback_inst"
+              },
+              {
+                "name": "loopback_fromhw"
+              }
+            ],
+            "servicePort": {
+              "port": "Send",
+              "serviceName": "@HostComms"
+            }
+          },
+          {
+            "channelAssignments": {
+              "recv": {
+                "name": "loopback_inst[1].mysvc_recv.recv",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "index": 1,
+                "name": "loopback_inst"
+              },
+              {
+                "name": "mysvc_recv"
+              }
+            ],
+            "servicePort": {
+              "port": "Recv",
+              "serviceName": "@MyService"
+            }
+          },
+          {
+            "channelAssignments": {
+              "send": {
+                "name": "loopback_inst[1].mysvc_send.send",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "index": 1,
+                "name": "loopback_inst"
+              },
+              {
+                "name": "mysvc_send"
+              }
+            ],
+            "servicePort": {
+              "port": "Send",
+              "serviceName": "@MyService"
+            }
+          },
+          {
+            "channelAssignments": {
+              "arg": {
+                "name": "func1.arg",
+                "type": "cosim"
+              },
+              "result": {
+                "name": "func1.result",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "func1"
+              }
+            ],
+            "servicePort": {
+              "port": "call",
+              "serviceName": "@_FuncService"
+            }
+          },
+          {
+            "channelAssignments": {
+              "arg": {
+                "name": "structFunc.arg",
+                "type": "cosim"
+              },
+              "result": {
+                "name": "structFunc.result",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "structFunc"
+              }
+            ],
+            "servicePort": {
+              "port": "call",
+              "serviceName": "@_FuncService"
+            }
+          },
+          {
+            "channelAssignments": {
+              "arg": {
+                "name": "oddStructFunc.arg",
+                "type": "cosim"
+              },
+              "result": {
+                "name": "oddStructFunc.result",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "oddStructFunc"
+              }
+            ],
+            "servicePort": {
+              "port": "call",
+              "serviceName": "@_FuncService"
+            }
+          },
+          {
+            "channelAssignments": {
+              "arg": {
+                "name": "arrayFunc.arg",
+                "type": "cosim"
+              },
+              "result": {
+                "name": "arrayFunc.result",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "arrayFunc"
+              }
+            ],
+            "servicePort": {
+              "port": "call",
+              "serviceName": "@_FuncService"
+            }
+          },
+          {
+            "channelAssignments": {
+              "data": {
+                "name": "__cosim_hostmem_read_resp.data",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "__cosim_hostmem_read_resp"
+              }
+            ],
+            "servicePort": {
+              "port": "from_host",
+              "serviceName": "@_ChannelServiceDecl"
+            }
+          },
+          {
+            "channelAssignments": {
+              "data": {
+                "name": "__cosim_hostmem_read_req.data",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "__cosim_hostmem_read_req"
+              }
+            ],
+            "servicePort": {
+              "port": "to_host",
+              "serviceName": "@_ChannelServiceDecl"
+            }
+          },
+          {
+            "channelAssignments": {
+              "arg": {
+                "name": "__cosim_hostmem_write.arg",
+                "type": "cosim"
+              },
+              "result": {
+                "name": "__cosim_hostmem_write.result",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "__cosim_hostmem_write"
+              }
+            ],
+            "servicePort": {
+              "port": "call",
+              "serviceName": "@_CallService"
+            }
+          }
+        ]
+      }
+    ],
+    "services": [
+      {
+        "appID": {
+          "name": "mem"
+        },
+        "service": "@MemA",
+        "serviceImplName": "sv_mem",
+        "clientDetails": []
+      },
+      {
+        "appID": {
+          "name": "__telemetry"
+        },
+        "service": "@_Telemetry",
+        "serviceImplName": "pycde",
+        "clientDetails": []
+      },
+      {
+        "appID": {
+          "name": "__cosim_mmio"
+        },
+        "service": "@MMIO",
+        "serviceImplName": "pycde",
+        "clientDetails": []
+      },
+      {
+        "appID": {
+          "name": "__cosim_hostmem"
+        },
+        "service": "@_HostMem",
+        "serviceImplName": "pycde",
+        "clientDetails": []
+      }
+    ],
+    "children": [
+      {
+        "appID": {
+          "index": 0,
+          "name": "loopback_inst"
+        },
+        "instanceOf": "@Loopback",
+        "clientPorts": [
+          {
+            "appID": {
+              "name": "loopback_tohw"
+            },
+            "typeID": "!esi.bundle<[!esi.channel<i8> to \"recv\"]>",
+            "servicePort": {
+              "port": "Recv",
+              "serviceName": "@HostComms"
+            }
+          },
+          {
+            "appID": {
+              "name": "loopback_fromhw"
+            },
+            "typeID": "!esi.bundle<[!esi.channel<i8> from \"send\"]>",
+            "servicePort": {
+              "port": "Send",
+              "serviceName": "@HostComms"
+            }
+          },
+          {
+            "appID": {
+              "name": "mysvc_recv"
+            },
+            "typeID": "!esi.bundle<[!esi.channel<i0> to \"recv\"]>",
+            "servicePort": {
+              "port": "Recv",
+              "serviceName": "@MyService"
+            }
+          },
+          {
+            "appID": {
+              "name": "mysvc_send"
+            },
+            "typeID": "!esi.bundle<[!esi.channel<i0> from \"send\"]>",
+            "servicePort": {
+              "port": "Send",
+              "serviceName": "@MyService"
+            }
+          }
+        ],
+        "children": []
+      },
+      {
+        "appID": {
+          "index": 1,
+          "name": "loopback_inst"
+        },
+        "instanceOf": "@Loopback",
+        "clientPorts": [
+          {
+            "appID": {
+              "name": "loopback_tohw"
+            },
+            "typeID": "!esi.bundle<[!esi.channel<i8> to \"recv\"]>",
+            "servicePort": {
+              "port": "Recv",
+              "serviceName": "@HostComms"
+            }
+          },
+          {
+            "appID": {
+              "name": "loopback_fromhw"
+            },
+            "typeID": "!esi.bundle<[!esi.channel<i8> from \"send\"]>",
+            "servicePort": {
+              "port": "Send",
+              "serviceName": "@HostComms"
+            }
+          },
+          {
+            "appID": {
+              "name": "mysvc_recv"
+            },
+            "typeID": "!esi.bundle<[!esi.channel<i0> to \"recv\"]>",
+            "servicePort": {
+              "port": "Recv",
+              "serviceName": "@MyService"
+            }
+          },
+          {
+            "appID": {
+              "name": "mysvc_send"
+            },
+            "typeID": "!esi.bundle<[!esi.channel<i0> from \"send\"]>",
+            "servicePort": {
+              "port": "Send",
+              "serviceName": "@MyService"
+            }
+          }
+        ],
+        "children": []
+      }
+    ]
+  },
+  "serviceDeclarations": [
+    {
+      "symbol": "@_FuncService",
+      "serviceName": "esi.service.std.func",
+      "ports": [
+        {
+          "name": "call",
+          "typeID": "!esi.bundle<[!esi.channel<!esi.any> to \"arg\", !esi.channel<!esi.any> from \"result\"]>"
+        }
+      ]
+    },
+    {
+      "symbol": "@_ChannelServiceDecl",
+      "ports": [
+        {
+          "name": "from_host",
+          "typeID": "!esi.bundle<[!esi.channel<!esi.any> to \"data\"]>"
+        },
+        {
+          "name": "to_host",
+          "typeID": "!esi.bundle<[!esi.channel<!esi.any> from \"data\"]>"
+        }
+      ]
+    },
+    {
+      "symbol": "@_CallService",
+      "serviceName": "esi.service.std.call",
+      "ports": [
+        {
+          "name": "call",
+          "typeID": "!esi.bundle<[!esi.channel<!esi.any> from \"arg\", !esi.channel<!esi.any> to \"result\"]>"
+        }
+      ]
+    },
+    {
+      "symbol": "@_Telemetry",
+      "serviceName": "esi.service.std.telemetry",
+      "ports": [
+        {
+          "name": "report",
+          "typeID": "!esi.bundle<[!esi.channel<i0> to \"get\", !esi.channel<!esi.any> from \"data\"]>"
+        }
+      ]
+    },
+    {
+      "symbol": "@MMIO",
+      "serviceName": "esi.service.std.mmio",
+      "ports": [
+        {
+          "name": "read",
+          "typeID": "!esi.bundle<[!esi.channel<ui32> to \"offset\", !esi.channel<i64> from \"data\"]>"
+        },
+        {
+          "name": "read_write",
+          "typeID": "!esi.bundle<[!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>> to \"cmd\", !esi.channel<i64> from \"data\"]>"
+        }
+      ]
+    },
+    {
+      "symbol": "@_HostMem",
+      "serviceName": "esi.service.std.hostmem",
+      "ports": [
+        {
+          "name": "write",
+          "typeID": "!esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: !esi.any>> from \"req\", !esi.channel<ui8> to \"ackTag\"]>"
+        },
+        {
+          "name": "read",
+          "typeID": "!esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from \"req\", !esi.channel<!hw.struct<tag: ui8, data: !esi.any>> to \"resp\"]>"
+        }
+      ]
+    },
+    {
+      "symbol": "@MemA",
+      "ports": [
+        {
+          "name": "write",
+          "typeID": "!esi.bundle<[!esi.channel<!hw.struct<address: ui5, data: i64>> from \"req\", !esi.channel<i0> to \"ack\"]>"
+        },
+        {
+          "name": "read",
+          "typeID": "!esi.bundle<[!esi.channel<ui5> from \"address\", !esi.channel<i64> to \"data\"]>"
+        }
+      ]
+    },
+    {
+      "symbol": "@HostComms",
+      "ports": [
+        {
+          "name": "Send",
+          "typeID": "!esi.bundle<[!esi.channel<i8> from \"send\"]>"
+        },
+        {
+          "name": "Recv",
+          "typeID": "!esi.bundle<[!esi.channel<i8> to \"recv\"]>"
+        }
+      ]
+    },
+    {
+      "symbol": "@MyService",
+      "ports": [
+        {
+          "name": "Send",
+          "typeID": "!esi.bundle<[!esi.channel<i0> from \"send\"]>"
+        },
+        {
+          "name": "Recv",
+          "typeID": "!esi.bundle<[!esi.channel<i0> to \"recv\"]>"
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "symbol": "@ESI_Cosim_Top",
+      "symInfo": {
+        "name": "ESI_Cosim_Top"
+      }
+    },
+    {
+      "symbol": "@Loopback",
+      "symInfo": {
+        "foo": {
+          "type": "i64",
+          "value": 1
+        },
+        "name": "LoopbackIP",
+        "summary": "IP which simply echos bytes",
+        "version": "v0.0"
+      },
+      "symConsts": {
+        "depth": {
+          "type": "ui32",
+          "value": 5
+        }
+      }
+    }
+  ],
+  "types": [
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "arg",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 97,
+            "id": "!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>>",
+            "inner": {
+              "dialect": "hw",
+              "fields": [
+                {
+                  "name": "write",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 1,
+                    "id": "i1",
+                    "mnemonic": "int",
+                    "signedness": "signless"
+                  }
+                },
+                {
+                  "name": "offset",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 32,
+                    "id": "ui32",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "data",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 64,
+                    "id": "i64",
+                    "mnemonic": "int",
+                    "signedness": "signless"
+                  }
+                }
+              ],
+              "hwBitwidth": 97,
+              "id": "!hw.struct<write: i1, offset: ui32, data: i64>",
+              "mnemonic": "struct"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "from",
+          "name": "result",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 64,
+            "id": "!esi.channel<i64>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 64,
+              "id": "i64",
+              "mnemonic": "int",
+              "signedness": "signless"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 165,
+      "id": "!esi.bundle<[!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>> to \"arg\", !esi.channel<i64> from \"result\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "from",
+          "name": "req",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 69,
+            "id": "!esi.channel<!hw.struct<address: ui5, data: i64>>",
+            "inner": {
+              "dialect": "hw",
+              "fields": [
+                {
+                  "name": "address",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 5,
+                    "id": "ui5",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "data",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 64,
+                    "id": "i64",
+                    "mnemonic": "int",
+                    "signedness": "signless"
+                  }
+                }
+              ],
+              "hwBitwidth": 69,
+              "id": "!hw.struct<address: ui5, data: i64>",
+              "mnemonic": "struct"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "to",
+          "name": "ack",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 0,
+            "id": "!esi.channel<i0>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 0,
+              "id": "i0",
+              "mnemonic": "int",
+              "signedness": "signless"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 73,
+      "id": "!esi.bundle<[!esi.channel<!hw.struct<address: ui5, data: i64>> from \"req\", !esi.channel<i0> to \"ack\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "arg",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 16,
+            "id": "!esi.channel<ui16>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 16,
+              "id": "ui16",
+              "mnemonic": "int",
+              "signedness": "unsigned"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "from",
+          "name": "result",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 16,
+            "id": "!esi.channel<ui16>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 16,
+              "id": "ui16",
+              "mnemonic": "int",
+              "signedness": "unsigned"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 36,
+      "id": "!esi.bundle<[!esi.channel<ui16> to \"arg\", !esi.channel<ui16> from \"result\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "arg",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 24,
+            "id": "!esi.channel<!hw.typealias<@pycde::@ArgStruct, !hw.struct<a: ui16, b: si8>>>",
+            "inner": {
+              "dialect": "hw",
+              "hwBitwidth": 24,
+              "id": "!hw.typealias<@pycde::@ArgStruct, !hw.struct<a: ui16, b: si8>>",
+              "inner": {
+                "dialect": "hw",
+                "fields": [
+                  {
+                    "name": "a",
+                    "type": {
+                      "dialect": "builtin",
+                      "hwBitwidth": 16,
+                      "id": "ui16",
+                      "mnemonic": "int",
+                      "signedness": "unsigned"
+                    }
+                  },
+                  {
+                    "name": "b",
+                    "type": {
+                      "dialect": "builtin",
+                      "hwBitwidth": 8,
+                      "id": "si8",
+                      "mnemonic": "int",
+                      "signedness": "signed"
+                    }
+                  }
+                ],
+                "hwBitwidth": 24,
+                "id": "!hw.struct<a: ui16, b: si8>",
+                "mnemonic": "struct"
+              },
+              "mnemonic": "alias",
+              "name": "ArgStruct"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "from",
+          "name": "result",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 16,
+            "id": "!esi.channel<!hw.typealias<@pycde::@ResultStruct, !hw.struct<x: si8, y: si8>>>",
+            "inner": {
+              "dialect": "hw",
+              "hwBitwidth": 16,
+              "id": "!hw.typealias<@pycde::@ResultStruct, !hw.struct<x: si8, y: si8>>",
+              "inner": {
+                "dialect": "hw",
+                "fields": [
+                  {
+                    "name": "x",
+                    "type": {
+                      "dialect": "builtin",
+                      "hwBitwidth": 8,
+                      "id": "si8",
+                      "mnemonic": "int",
+                      "signedness": "signed"
+                    }
+                  },
+                  {
+                    "name": "y",
+                    "type": {
+                      "dialect": "builtin",
+                      "hwBitwidth": 8,
+                      "id": "si8",
+                      "mnemonic": "int",
+                      "signedness": "signed"
+                    }
+                  }
+                ],
+                "hwBitwidth": 16,
+                "id": "!hw.struct<x: si8, y: si8>",
+                "mnemonic": "struct"
+              },
+              "mnemonic": "alias",
+              "name": "ResultStruct"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 44,
+      "id": "!esi.bundle<[!esi.channel<!hw.typealias<@pycde::@ArgStruct, !hw.struct<a: ui16, b: si8>>> to \"arg\", !esi.channel<!hw.typealias<@pycde::@ResultStruct, !hw.struct<x: si8, y: si8>>> from \"result\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "arg",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 51,
+            "id": "!esi.channel<!hw.typealias<@pycde::@OddStruct, !hw.struct<a: ui12, b: si7, inner: !hw.typealias<@pycde::@OddInner, !hw.struct<p: ui8, q: si8, r: !hw.array<2xui8>>>>>>",
+            "inner": {
+              "dialect": "hw",
+              "hwBitwidth": 51,
+              "id": "!hw.typealias<@pycde::@OddStruct, !hw.struct<a: ui12, b: si7, inner: !hw.typealias<@pycde::@OddInner, !hw.struct<p: ui8, q: si8, r: !hw.array<2xui8>>>>>",
+              "inner": {
+                "dialect": "hw",
+                "fields": [
+                  {
+                    "name": "a",
+                    "type": {
+                      "dialect": "builtin",
+                      "hwBitwidth": 12,
+                      "id": "ui12",
+                      "mnemonic": "int",
+                      "signedness": "unsigned"
+                    }
+                  },
+                  {
+                    "name": "b",
+                    "type": {
+                      "dialect": "builtin",
+                      "hwBitwidth": 7,
+                      "id": "si7",
+                      "mnemonic": "int",
+                      "signedness": "signed"
+                    }
+                  },
+                  {
+                    "name": "inner",
+                    "type": {
+                      "dialect": "hw",
+                      "hwBitwidth": 32,
+                      "id": "!hw.typealias<@pycde::@OddInner, !hw.struct<p: ui8, q: si8, r: !hw.array<2xui8>>>",
+                      "inner": {
+                        "dialect": "hw",
+                        "fields": [
+                          {
+                            "name": "p",
+                            "type": {
+                              "dialect": "builtin",
+                              "hwBitwidth": 8,
+                              "id": "ui8",
+                              "mnemonic": "int",
+                              "signedness": "unsigned"
+                            }
+                          },
+                          {
+                            "name": "q",
+                            "type": {
+                              "dialect": "builtin",
+                              "hwBitwidth": 8,
+                              "id": "si8",
+                              "mnemonic": "int",
+                              "signedness": "signed"
+                            }
+                          },
+                          {
+                            "name": "r",
+                            "type": {
+                              "dialect": "hw",
+                              "element": {
+                                "dialect": "builtin",
+                                "hwBitwidth": 8,
+                                "id": "ui8",
+                                "mnemonic": "int",
+                                "signedness": "unsigned"
+                              },
+                              "hwBitwidth": 16,
+                              "id": "!hw.array<2xui8>",
+                              "mnemonic": "array",
+                              "size": 2
+                            }
+                          }
+                        ],
+                        "hwBitwidth": 32,
+                        "id": "!hw.struct<p: ui8, q: si8, r: !hw.array<2xui8>>",
+                        "mnemonic": "struct"
+                      },
+                      "mnemonic": "alias",
+                      "name": "OddInner"
+                    }
+                  }
+                ],
+                "hwBitwidth": 51,
+                "id": "!hw.struct<a: ui12, b: si7, inner: !hw.typealias<@pycde::@OddInner, !hw.struct<p: ui8, q: si8, r: !hw.array<2xui8>>>>",
+                "mnemonic": "struct"
+              },
+              "mnemonic": "alias",
+              "name": "OddStruct"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "from",
+          "name": "result",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 51,
+            "id": "!esi.channel<!hw.typealias<@pycde::@OddStruct, !hw.struct<a: ui12, b: si7, inner: !hw.typealias<@pycde::@OddInner, !hw.struct<p: ui8, q: si8, r: !hw.array<2xui8>>>>>>",
+            "inner": {
+              "dialect": "hw",
+              "hwBitwidth": 51,
+              "id": "!hw.typealias<@pycde::@OddStruct, !hw.struct<a: ui12, b: si7, inner: !hw.typealias<@pycde::@OddInner, !hw.struct<p: ui8, q: si8, r: !hw.array<2xui8>>>>>",
+              "inner": {
+                "dialect": "hw",
+                "fields": [
+                  {
+                    "name": "a",
+                    "type": {
+                      "dialect": "builtin",
+                      "hwBitwidth": 12,
+                      "id": "ui12",
+                      "mnemonic": "int",
+                      "signedness": "unsigned"
+                    }
+                  },
+                  {
+                    "name": "b",
+                    "type": {
+                      "dialect": "builtin",
+                      "hwBitwidth": 7,
+                      "id": "si7",
+                      "mnemonic": "int",
+                      "signedness": "signed"
+                    }
+                  },
+                  {
+                    "name": "inner",
+                    "type": {
+                      "dialect": "hw",
+                      "hwBitwidth": 32,
+                      "id": "!hw.typealias<@pycde::@OddInner, !hw.struct<p: ui8, q: si8, r: !hw.array<2xui8>>>",
+                      "inner": {
+                        "dialect": "hw",
+                        "fields": [
+                          {
+                            "name": "p",
+                            "type": {
+                              "dialect": "builtin",
+                              "hwBitwidth": 8,
+                              "id": "ui8",
+                              "mnemonic": "int",
+                              "signedness": "unsigned"
+                            }
+                          },
+                          {
+                            "name": "q",
+                            "type": {
+                              "dialect": "builtin",
+                              "hwBitwidth": 8,
+                              "id": "si8",
+                              "mnemonic": "int",
+                              "signedness": "signed"
+                            }
+                          },
+                          {
+                            "name": "r",
+                            "type": {
+                              "dialect": "hw",
+                              "element": {
+                                "dialect": "builtin",
+                                "hwBitwidth": 8,
+                                "id": "ui8",
+                                "mnemonic": "int",
+                                "signedness": "unsigned"
+                              },
+                              "hwBitwidth": 16,
+                              "id": "!hw.array<2xui8>",
+                              "mnemonic": "array",
+                              "size": 2
+                            }
+                          }
+                        ],
+                        "hwBitwidth": 32,
+                        "id": "!hw.struct<p: ui8, q: si8, r: !hw.array<2xui8>>",
+                        "mnemonic": "struct"
+                      },
+                      "mnemonic": "alias",
+                      "name": "OddInner"
+                    }
+                  }
+                ],
+                "hwBitwidth": 51,
+                "id": "!hw.struct<a: ui12, b: si7, inner: !hw.typealias<@pycde::@OddInner, !hw.struct<p: ui8, q: si8, r: !hw.array<2xui8>>>>",
+                "mnemonic": "struct"
+              },
+              "mnemonic": "alias",
+              "name": "OddStruct"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 106,
+      "id": "!esi.bundle<[!esi.channel<!hw.typealias<@pycde::@OddStruct, !hw.struct<a: ui12, b: si7, inner: !hw.typealias<@pycde::@OddInner, !hw.struct<p: ui8, q: si8, r: !hw.array<2xui8>>>>>> to \"arg\", !esi.channel<!hw.typealias<@pycde::@OddStruct, !hw.struct<a: ui12, b: si7, inner: !hw.typealias<@pycde::@OddInner, !hw.struct<p: ui8, q: si8, r: !hw.array<2xui8>>>>>> from \"result\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "arg",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 8,
+            "id": "!esi.channel<!hw.array<1xsi8>>",
+            "inner": {
+              "dialect": "hw",
+              "element": {
+                "dialect": "builtin",
+                "hwBitwidth": 8,
+                "id": "si8",
+                "mnemonic": "int",
+                "signedness": "signed"
+              },
+              "hwBitwidth": 8,
+              "id": "!hw.array<1xsi8>",
+              "mnemonic": "array",
+              "size": 1
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "from",
+          "name": "result",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 16,
+            "id": "!esi.channel<!hw.typealias<@pycde::@ResultArray, !hw.array<2xsi8>>>",
+            "inner": {
+              "dialect": "hw",
+              "hwBitwidth": 16,
+              "id": "!hw.typealias<@pycde::@ResultArray, !hw.array<2xsi8>>",
+              "inner": {
+                "dialect": "hw",
+                "element": {
+                  "dialect": "builtin",
+                  "hwBitwidth": 8,
+                  "id": "si8",
+                  "mnemonic": "int",
+                  "signedness": "signed"
+                },
+                "hwBitwidth": 16,
+                "id": "!hw.array<2xsi8>",
+                "mnemonic": "array",
+                "size": 2
+              },
+              "mnemonic": "alias",
+              "name": "ResultArray"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 28,
+      "id": "!esi.bundle<[!esi.channel<!hw.array<1xsi8>> to \"arg\", !esi.channel<!hw.typealias<@pycde::@ResultArray, !hw.array<2xsi8>>> from \"result\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "data",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 72,
+            "id": "!esi.channel<!hw.struct<tag: ui8, data: i64>>",
+            "inner": {
+              "dialect": "hw",
+              "fields": [
+                {
+                  "name": "tag",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 8,
+                    "id": "ui8",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "data",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 64,
+                    "id": "i64",
+                    "mnemonic": "int",
+                    "signedness": "signless"
+                  }
+                }
+              ],
+              "hwBitwidth": 72,
+              "id": "!hw.struct<tag: ui8, data: i64>",
+              "mnemonic": "struct"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 74,
+      "id": "!esi.bundle<[!esi.channel<!hw.struct<tag: ui8, data: i64>> to \"data\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "from",
+          "name": "data",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 104,
+            "id": "!esi.channel<!hw.struct<address: ui64, length: ui32, tag: ui8>>",
+            "inner": {
+              "dialect": "hw",
+              "fields": [
+                {
+                  "name": "address",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 64,
+                    "id": "ui64",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "length",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 32,
+                    "id": "ui32",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "tag",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 8,
+                    "id": "ui8",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                }
+              ],
+              "hwBitwidth": 104,
+              "id": "!hw.struct<address: ui64, length: ui32, tag: ui8>",
+              "mnemonic": "struct"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 106,
+      "id": "!esi.bundle<[!esi.channel<!hw.struct<address: ui64, length: ui32, tag: ui8>> from \"data\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "from",
+          "name": "arg",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 144,
+            "id": "!esi.channel<!hw.struct<address: ui64, tag: ui8, data: i64, valid_bytes: i8>>",
+            "inner": {
+              "dialect": "hw",
+              "fields": [
+                {
+                  "name": "address",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 64,
+                    "id": "ui64",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "tag",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 8,
+                    "id": "ui8",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "data",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 64,
+                    "id": "i64",
+                    "mnemonic": "int",
+                    "signedness": "signless"
+                  }
+                },
+                {
+                  "name": "valid_bytes",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 8,
+                    "id": "i8",
+                    "mnemonic": "int",
+                    "signedness": "signless"
+                  }
+                }
+              ],
+              "hwBitwidth": 144,
+              "id": "!hw.struct<address: ui64, tag: ui8, data: i64, valid_bytes: i8>",
+              "mnemonic": "struct"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "to",
+          "name": "result",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 8,
+            "id": "!esi.channel<ui8>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 8,
+              "id": "ui8",
+              "mnemonic": "int",
+              "signedness": "unsigned"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 156,
+      "id": "!esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: i64, valid_bytes: i8>> from \"arg\", !esi.channel<ui8> to \"result\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "recv",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 8,
+            "id": "!esi.channel<i8>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 8,
+              "id": "i8",
+              "mnemonic": "int",
+              "signedness": "signless"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 10,
+      "id": "!esi.bundle<[!esi.channel<i8> to \"recv\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "from",
+          "name": "send",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 8,
+            "id": "!esi.channel<i8>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 8,
+              "id": "i8",
+              "mnemonic": "int",
+              "signedness": "signless"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 10,
+      "id": "!esi.bundle<[!esi.channel<i8> from \"send\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "recv",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 0,
+            "id": "!esi.channel<i0>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 0,
+              "id": "i0",
+              "mnemonic": "int",
+              "signedness": "signless"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 2,
+      "id": "!esi.bundle<[!esi.channel<i0> to \"recv\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "from",
+          "name": "send",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 0,
+            "id": "!esi.channel<i0>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 0,
+              "id": "i0",
+              "mnemonic": "int",
+              "signedness": "signless"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 2,
+      "id": "!esi.bundle<[!esi.channel<i0> from \"send\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "arg",
+          "type": {
+            "dialect": "esi",
+            "id": "!esi.channel<!esi.any>",
+            "inner": {
+              "dialect": "esi",
+              "id": "!esi.any",
+              "mnemonic": "any"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "from",
+          "name": "result",
+          "type": {
+            "dialect": "esi",
+            "id": "!esi.channel<!esi.any>",
+            "inner": {
+              "dialect": "esi",
+              "id": "!esi.any",
+              "mnemonic": "any"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "id": "!esi.bundle<[!esi.channel<!esi.any> to \"arg\", !esi.channel<!esi.any> from \"result\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "data",
+          "type": {
+            "dialect": "esi",
+            "id": "!esi.channel<!esi.any>",
+            "inner": {
+              "dialect": "esi",
+              "id": "!esi.any",
+              "mnemonic": "any"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "id": "!esi.bundle<[!esi.channel<!esi.any> to \"data\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "from",
+          "name": "data",
+          "type": {
+            "dialect": "esi",
+            "id": "!esi.channel<!esi.any>",
+            "inner": {
+              "dialect": "esi",
+              "id": "!esi.any",
+              "mnemonic": "any"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "id": "!esi.bundle<[!esi.channel<!esi.any> from \"data\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "from",
+          "name": "arg",
+          "type": {
+            "dialect": "esi",
+            "id": "!esi.channel<!esi.any>",
+            "inner": {
+              "dialect": "esi",
+              "id": "!esi.any",
+              "mnemonic": "any"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "to",
+          "name": "result",
+          "type": {
+            "dialect": "esi",
+            "id": "!esi.channel<!esi.any>",
+            "inner": {
+              "dialect": "esi",
+              "id": "!esi.any",
+              "mnemonic": "any"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "id": "!esi.bundle<[!esi.channel<!esi.any> from \"arg\", !esi.channel<!esi.any> to \"result\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "get",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 0,
+            "id": "!esi.channel<i0>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 0,
+              "id": "i0",
+              "mnemonic": "int",
+              "signedness": "signless"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "from",
+          "name": "data",
+          "type": {
+            "dialect": "esi",
+            "id": "!esi.channel<!esi.any>",
+            "inner": {
+              "dialect": "esi",
+              "id": "!esi.any",
+              "mnemonic": "any"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "id": "!esi.bundle<[!esi.channel<i0> to \"get\", !esi.channel<!esi.any> from \"data\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "offset",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 32,
+            "id": "!esi.channel<ui32>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 32,
+              "id": "ui32",
+              "mnemonic": "int",
+              "signedness": "unsigned"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "from",
+          "name": "data",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 64,
+            "id": "!esi.channel<i64>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 64,
+              "id": "i64",
+              "mnemonic": "int",
+              "signedness": "signless"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 100,
+      "id": "!esi.bundle<[!esi.channel<ui32> to \"offset\", !esi.channel<i64> from \"data\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "cmd",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 97,
+            "id": "!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>>",
+            "inner": {
+              "dialect": "hw",
+              "fields": [
+                {
+                  "name": "write",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 1,
+                    "id": "i1",
+                    "mnemonic": "int",
+                    "signedness": "signless"
+                  }
+                },
+                {
+                  "name": "offset",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 32,
+                    "id": "ui32",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "data",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 64,
+                    "id": "i64",
+                    "mnemonic": "int",
+                    "signedness": "signless"
+                  }
+                }
+              ],
+              "hwBitwidth": 97,
+              "id": "!hw.struct<write: i1, offset: ui32, data: i64>",
+              "mnemonic": "struct"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "from",
+          "name": "data",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 64,
+            "id": "!esi.channel<i64>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 64,
+              "id": "i64",
+              "mnemonic": "int",
+              "signedness": "signless"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 165,
+      "id": "!esi.bundle<[!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>> to \"cmd\", !esi.channel<i64> from \"data\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "from",
+          "name": "req",
+          "type": {
+            "dialect": "esi",
+            "id": "!esi.channel<!hw.struct<address: ui64, tag: ui8, data: !esi.any>>",
+            "inner": {
+              "dialect": "hw",
+              "fields": [
+                {
+                  "name": "address",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 64,
+                    "id": "ui64",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "tag",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 8,
+                    "id": "ui8",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "data",
+                  "type": {
+                    "dialect": "esi",
+                    "id": "!esi.any",
+                    "mnemonic": "any"
+                  }
+                }
+              ],
+              "id": "!hw.struct<address: ui64, tag: ui8, data: !esi.any>",
+              "mnemonic": "struct"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "to",
+          "name": "ackTag",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 8,
+            "id": "!esi.channel<ui8>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 8,
+              "id": "ui8",
+              "mnemonic": "int",
+              "signedness": "unsigned"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "id": "!esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: !esi.any>> from \"req\", !esi.channel<ui8> to \"ackTag\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "from",
+          "name": "req",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 72,
+            "id": "!esi.channel<!hw.struct<address: ui64, tag: ui8>>",
+            "inner": {
+              "dialect": "hw",
+              "fields": [
+                {
+                  "name": "address",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 64,
+                    "id": "ui64",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "tag",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 8,
+                    "id": "ui8",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                }
+              ],
+              "hwBitwidth": 72,
+              "id": "!hw.struct<address: ui64, tag: ui8>",
+              "mnemonic": "struct"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "to",
+          "name": "resp",
+          "type": {
+            "dialect": "esi",
+            "id": "!esi.channel<!hw.struct<tag: ui8, data: !esi.any>>",
+            "inner": {
+              "dialect": "hw",
+              "fields": [
+                {
+                  "name": "tag",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 8,
+                    "id": "ui8",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "data",
+                  "type": {
+                    "dialect": "esi",
+                    "id": "!esi.any",
+                    "mnemonic": "any"
+                  }
+                }
+              ],
+              "id": "!hw.struct<tag: ui8, data: !esi.any>",
+              "mnemonic": "struct"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "id": "!esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from \"req\", !esi.channel<!hw.struct<tag: ui8, data: !esi.any>> to \"resp\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "from",
+          "name": "address",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 5,
+            "id": "!esi.channel<ui5>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 5,
+              "id": "ui5",
+              "mnemonic": "int",
+              "signedness": "unsigned"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "to",
+          "name": "data",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 64,
+            "id": "!esi.channel<i64>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 64,
+              "id": "i64",
+              "mnemonic": "int",
+              "signedness": "signless"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 73,
+      "id": "!esi.bundle<[!esi.channel<ui5> from \"address\", !esi.channel<i64> to \"data\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "dialect": "builtin",
+      "hwBitwidth": 64,
+      "id": "i64",
+      "mnemonic": "int",
+      "signedness": "signless"
+    },
+    {
+      "dialect": "builtin",
+      "hwBitwidth": 32,
+      "id": "ui32",
+      "mnemonic": "int",
+      "signedness": "unsigned"
+    }
+  ]
+}

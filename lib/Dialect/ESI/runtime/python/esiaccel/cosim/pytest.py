@@ -272,15 +272,20 @@ def _compile_once_for_class(config: CosimPytestConfig) -> _ClassCompileCache:
   redundant compilations.
   """
   compile_root = Path(tempfile.mkdtemp(prefix="esi-pytest-class-compile-"))
-  sources_dir = _run_hw_script(config, compile_root)
-  compile_dir = compile_root / "compile"
-  sim = _create_simulator(config, sources_dir, compile_dir)
-  with _chdir(compile_dir):
-    rc = sim.compile()
-  if rc != 0:
-    raise RuntimeError(f"Simulator compile failed with exit code {rc}")
-  return _ClassCompileCache(sources_dir=sources_dir,
-                            obj_dir=compile_dir / "obj_dir")
+  try:
+    sources_dir = _run_hw_script(config, compile_root)
+    compile_dir = compile_root / "compile"
+    sim = _create_simulator(config, sources_dir, compile_dir)
+    with _chdir(compile_dir):
+      rc = sim.compile()
+    if rc != 0:
+      raise RuntimeError(f"Simulator compile failed with exit code {rc}")
+    return _ClassCompileCache(sources_dir=sources_dir,
+                              obj_dir=compile_dir / "obj_dir")
+  except Exception:
+    if not config.debug:
+      shutil.rmtree(compile_root, ignore_errors=True)
+    raise
 
 
 def _run_child(
@@ -308,6 +313,7 @@ def _run_child(
 
   sim_proc = None
   sim = None
+  run_root = None
   try:
     run_root = Path(tempfile.mkdtemp(prefix="esi-pytest-run-"))
     if class_cache is None:
@@ -358,6 +364,8 @@ def _run_child(
   finally:
     if sim_proc is not None and sim_proc.proc.poll() is None:
       sim_proc.force_stop()
+    if run_root is not None and not config.debug:
+      shutil.rmtree(run_root, ignore_errors=True)
 
 
 def _run_isolated(
@@ -372,7 +380,11 @@ def _run_isolated(
   Handles timeouts, collects warnings, and re-raises any failure from
   the child as an ``AssertionError`` in the parent.
   """
-  ctx = multiprocessing.get_context("fork")
+  try:
+    ctx = multiprocessing.get_context("fork")
+  except ValueError:
+    import pytest as _pytest
+    _pytest.skip("fork start method unavailable on this platform")
   queue: multiprocessing.Queue = ctx.Queue()
   process = ctx.Process(
       target=_run_child,
@@ -450,7 +462,7 @@ def cosim_test(
     debug: bool = False,
     timeout_s: Optional[float] = None,
     failure_matcher: Optional[LogMatcher] = _DEFAULT_FAILURE_PATTERN,
-    warning_matcher: Optional[LogMatcher] = None,
+    warning_matcher: Optional[LogMatcher] = _DEFAULT_WARN_PATTERN,
 ):
   """Decorator that turns a function or class into a cosimulation test.
 

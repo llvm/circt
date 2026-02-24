@@ -62,16 +62,10 @@ def run(acc: AcceleratorConnection, platform: str = "cosim") -> None:
 
   d = acc.build_accelerator()
 
-  mmio_svc: esi.accelerator.MMIO
-  for svc in d.services:
-    if isinstance(svc, esi.accelerator.MMIO):
-      mmio_svc = svc
-      break
-
-  for id, region in mmio_svc.regions.items():
+  for id, region in mmio.regions.items():
     print(f"Region {id}: {region.base} - {region.base + region.size}")
 
-  assert len(mmio_svc.regions) == 5
+  assert len(mmio.regions) == 5
 
   ##############################################################################
   # MMIOClient tests

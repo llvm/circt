@@ -1,0 +1,1232 @@
+{
+  "apiVersion": 0,
+  "design": {
+    "instanceOf": "@ESI_Cosim_Top",
+    "clientPorts": [
+      {
+        "appID": {
+          "name": "__cosim_mmio_read_write"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>> to \"arg\", !esi.channel<i64> from \"result\"]>",
+        "servicePort": {
+          "port": "call",
+          "serviceName": "@_FuncService"
+        }
+      },
+      {
+        "appID": {
+          "name": "merge_a"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<ui8> to \"data\"]>",
+        "servicePort": {
+          "port": "from_host",
+          "serviceName": "@_ChannelServiceDecl"
+        }
+      },
+      {
+        "appID": {
+          "name": "merge_b"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<ui8> to \"data\"]>",
+        "servicePort": {
+          "port": "from_host",
+          "serviceName": "@_ChannelServiceDecl"
+        }
+      },
+      {
+        "appID": {
+          "name": "merge_x"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<ui8> from \"data\"]>",
+        "servicePort": {
+          "port": "to_host",
+          "serviceName": "@_ChannelServiceDecl"
+        }
+      },
+      {
+        "appID": {
+          "name": "join_a"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<ui8> to \"data\"]>",
+        "servicePort": {
+          "port": "from_host",
+          "serviceName": "@_ChannelServiceDecl"
+        }
+      },
+      {
+        "appID": {
+          "name": "join_b"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<ui8> to \"data\"]>",
+        "servicePort": {
+          "port": "from_host",
+          "serviceName": "@_ChannelServiceDecl"
+        }
+      },
+      {
+        "appID": {
+          "name": "join_x"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<ui16> from \"data\"]>",
+        "servicePort": {
+          "port": "to_host",
+          "serviceName": "@_ChannelServiceDecl"
+        }
+      },
+      {
+        "appID": {
+          "name": "fork_a"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<ui8> to \"data\"]>",
+        "servicePort": {
+          "port": "from_host",
+          "serviceName": "@_ChannelServiceDecl"
+        }
+      },
+      {
+        "appID": {
+          "name": "fork_x"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<ui8> from \"data\"]>",
+        "servicePort": {
+          "port": "to_host",
+          "serviceName": "@_ChannelServiceDecl"
+        }
+      },
+      {
+        "appID": {
+          "name": "fork_y"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<ui8> from \"data\"]>",
+        "servicePort": {
+          "port": "to_host",
+          "serviceName": "@_ChannelServiceDecl"
+        }
+      },
+      {
+        "appID": {
+          "name": "__cosim_hostmem_read_resp"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<!hw.struct<tag: ui8, data: i64>> to \"data\"]>",
+        "servicePort": {
+          "port": "from_host",
+          "serviceName": "@_ChannelServiceDecl"
+        }
+      },
+      {
+        "appID": {
+          "name": "__cosim_hostmem_read_req"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<!hw.struct<address: ui64, length: ui32, tag: ui8>> from \"data\"]>",
+        "servicePort": {
+          "port": "to_host",
+          "serviceName": "@_ChannelServiceDecl"
+        }
+      },
+      {
+        "appID": {
+          "name": "__cosim_hostmem_write"
+        },
+        "typeID": "!esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: i64, valid_bytes: i8>> from \"arg\", !esi.channel<ui8> to \"result\"]>",
+        "servicePort": {
+          "port": "call",
+          "serviceName": "@_CallService"
+        }
+      }
+    ],
+    "engines": [
+      {
+        "appID": {
+          "name": "cosim"
+        },
+        "serviceImplName": "cosim",
+        "clientDetails": [
+          {
+            "channelAssignments": {
+              "arg": {
+                "name": "__cosim_mmio_read_write.arg",
+                "type": "cosim"
+              },
+              "result": {
+                "name": "__cosim_mmio_read_write.result",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "__cosim_mmio_read_write"
+              }
+            ],
+            "servicePort": {
+              "port": "call",
+              "serviceName": "@_FuncService"
+            }
+          },
+          {
+            "channelAssignments": {
+              "data": {
+                "name": "merge_a.data",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "merge_a"
+              }
+            ],
+            "servicePort": {
+              "port": "from_host",
+              "serviceName": "@_ChannelServiceDecl"
+            }
+          },
+          {
+            "channelAssignments": {
+              "data": {
+                "name": "merge_b.data",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "merge_b"
+              }
+            ],
+            "servicePort": {
+              "port": "from_host",
+              "serviceName": "@_ChannelServiceDecl"
+            }
+          },
+          {
+            "channelAssignments": {
+              "data": {
+                "name": "merge_x.data",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "merge_x"
+              }
+            ],
+            "servicePort": {
+              "port": "to_host",
+              "serviceName": "@_ChannelServiceDecl"
+            }
+          },
+          {
+            "channelAssignments": {
+              "data": {
+                "name": "join_a.data",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "join_a"
+              }
+            ],
+            "servicePort": {
+              "port": "from_host",
+              "serviceName": "@_ChannelServiceDecl"
+            }
+          },
+          {
+            "channelAssignments": {
+              "data": {
+                "name": "join_b.data",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "join_b"
+              }
+            ],
+            "servicePort": {
+              "port": "from_host",
+              "serviceName": "@_ChannelServiceDecl"
+            }
+          },
+          {
+            "channelAssignments": {
+              "data": {
+                "name": "join_x.data",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "join_x"
+              }
+            ],
+            "servicePort": {
+              "port": "to_host",
+              "serviceName": "@_ChannelServiceDecl"
+            }
+          },
+          {
+            "channelAssignments": {
+              "data": {
+                "name": "fork_a.data",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "fork_a"
+              }
+            ],
+            "servicePort": {
+              "port": "from_host",
+              "serviceName": "@_ChannelServiceDecl"
+            }
+          },
+          {
+            "channelAssignments": {
+              "data": {
+                "name": "fork_x.data",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "fork_x"
+              }
+            ],
+            "servicePort": {
+              "port": "to_host",
+              "serviceName": "@_ChannelServiceDecl"
+            }
+          },
+          {
+            "channelAssignments": {
+              "data": {
+                "name": "fork_y.data",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "fork_y"
+              }
+            ],
+            "servicePort": {
+              "port": "to_host",
+              "serviceName": "@_ChannelServiceDecl"
+            }
+          },
+          {
+            "channelAssignments": {
+              "data": {
+                "name": "__cosim_hostmem_read_resp.data",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "__cosim_hostmem_read_resp"
+              }
+            ],
+            "servicePort": {
+              "port": "from_host",
+              "serviceName": "@_ChannelServiceDecl"
+            }
+          },
+          {
+            "channelAssignments": {
+              "data": {
+                "name": "__cosim_hostmem_read_req.data",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "__cosim_hostmem_read_req"
+              }
+            ],
+            "servicePort": {
+              "port": "to_host",
+              "serviceName": "@_ChannelServiceDecl"
+            }
+          },
+          {
+            "channelAssignments": {
+              "arg": {
+                "name": "__cosim_hostmem_write.arg",
+                "type": "cosim"
+              },
+              "result": {
+                "name": "__cosim_hostmem_write.result",
+                "type": "cosim"
+              }
+            },
+            "relAppIDPath": [
+              {
+                "name": "__cosim_hostmem_write"
+              }
+            ],
+            "servicePort": {
+              "port": "call",
+              "serviceName": "@_CallService"
+            }
+          }
+        ]
+      }
+    ],
+    "services": [
+      {
+        "appID": {
+          "name": "__telemetry"
+        },
+        "service": "@_Telemetry",
+        "serviceImplName": "pycde",
+        "clientDetails": []
+      },
+      {
+        "appID": {
+          "name": "__cosim_mmio"
+        },
+        "service": "@MMIO",
+        "serviceImplName": "pycde",
+        "clientDetails": []
+      },
+      {
+        "appID": {
+          "name": "__cosim_hostmem"
+        },
+        "service": "@_HostMem",
+        "serviceImplName": "pycde",
+        "clientDetails": []
+      }
+    ],
+    "children": []
+  },
+  "serviceDeclarations": [
+    {
+      "symbol": "@_FuncService",
+      "serviceName": "esi.service.std.func",
+      "ports": [
+        {
+          "name": "call",
+          "typeID": "!esi.bundle<[!esi.channel<!esi.any> to \"arg\", !esi.channel<!esi.any> from \"result\"]>"
+        }
+      ]
+    },
+    {
+      "symbol": "@_ChannelServiceDecl",
+      "ports": [
+        {
+          "name": "from_host",
+          "typeID": "!esi.bundle<[!esi.channel<!esi.any> to \"data\"]>"
+        },
+        {
+          "name": "to_host",
+          "typeID": "!esi.bundle<[!esi.channel<!esi.any> from \"data\"]>"
+        }
+      ]
+    },
+    {
+      "symbol": "@_CallService",
+      "serviceName": "esi.service.std.call",
+      "ports": [
+        {
+          "name": "call",
+          "typeID": "!esi.bundle<[!esi.channel<!esi.any> from \"arg\", !esi.channel<!esi.any> to \"result\"]>"
+        }
+      ]
+    },
+    {
+      "symbol": "@_Telemetry",
+      "serviceName": "esi.service.std.telemetry",
+      "ports": [
+        {
+          "name": "report",
+          "typeID": "!esi.bundle<[!esi.channel<i0> to \"get\", !esi.channel<!esi.any> from \"data\"]>"
+        }
+      ]
+    },
+    {
+      "symbol": "@MMIO",
+      "serviceName": "esi.service.std.mmio",
+      "ports": [
+        {
+          "name": "read",
+          "typeID": "!esi.bundle<[!esi.channel<ui32> to \"offset\", !esi.channel<i64> from \"data\"]>"
+        },
+        {
+          "name": "read_write",
+          "typeID": "!esi.bundle<[!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>> to \"cmd\", !esi.channel<i64> from \"data\"]>"
+        }
+      ]
+    },
+    {
+      "symbol": "@_HostMem",
+      "serviceName": "esi.service.std.hostmem",
+      "ports": [
+        {
+          "name": "write",
+          "typeID": "!esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: !esi.any>> from \"req\", !esi.channel<ui8> to \"ackTag\"]>"
+        },
+        {
+          "name": "read",
+          "typeID": "!esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from \"req\", !esi.channel<!hw.struct<tag: ui8, data: !esi.any>> to \"resp\"]>"
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "symbol": "@ESI_Cosim_Top",
+      "symInfo": {
+        "name": "ESI_Cosim_Top"
+      }
+    }
+  ],
+  "types": [
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "arg",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 97,
+            "id": "!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>>",
+            "inner": {
+              "dialect": "hw",
+              "fields": [
+                {
+                  "name": "write",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 1,
+                    "id": "i1",
+                    "mnemonic": "int",
+                    "signedness": "signless"
+                  }
+                },
+                {
+                  "name": "offset",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 32,
+                    "id": "ui32",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "data",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 64,
+                    "id": "i64",
+                    "mnemonic": "int",
+                    "signedness": "signless"
+                  }
+                }
+              ],
+              "hwBitwidth": 97,
+              "id": "!hw.struct<write: i1, offset: ui32, data: i64>",
+              "mnemonic": "struct"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "from",
+          "name": "result",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 64,
+            "id": "!esi.channel<i64>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 64,
+              "id": "i64",
+              "mnemonic": "int",
+              "signedness": "signless"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 165,
+      "id": "!esi.bundle<[!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>> to \"arg\", !esi.channel<i64> from \"result\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "data",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 8,
+            "id": "!esi.channel<ui8>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 8,
+              "id": "ui8",
+              "mnemonic": "int",
+              "signedness": "unsigned"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 10,
+      "id": "!esi.bundle<[!esi.channel<ui8> to \"data\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "from",
+          "name": "data",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 8,
+            "id": "!esi.channel<ui8>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 8,
+              "id": "ui8",
+              "mnemonic": "int",
+              "signedness": "unsigned"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 10,
+      "id": "!esi.bundle<[!esi.channel<ui8> from \"data\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "from",
+          "name": "data",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 16,
+            "id": "!esi.channel<ui16>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 16,
+              "id": "ui16",
+              "mnemonic": "int",
+              "signedness": "unsigned"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 18,
+      "id": "!esi.bundle<[!esi.channel<ui16> from \"data\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "data",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 72,
+            "id": "!esi.channel<!hw.struct<tag: ui8, data: i64>>",
+            "inner": {
+              "dialect": "hw",
+              "fields": [
+                {
+                  "name": "tag",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 8,
+                    "id": "ui8",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "data",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 64,
+                    "id": "i64",
+                    "mnemonic": "int",
+                    "signedness": "signless"
+                  }
+                }
+              ],
+              "hwBitwidth": 72,
+              "id": "!hw.struct<tag: ui8, data: i64>",
+              "mnemonic": "struct"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 74,
+      "id": "!esi.bundle<[!esi.channel<!hw.struct<tag: ui8, data: i64>> to \"data\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "from",
+          "name": "data",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 104,
+            "id": "!esi.channel<!hw.struct<address: ui64, length: ui32, tag: ui8>>",
+            "inner": {
+              "dialect": "hw",
+              "fields": [
+                {
+                  "name": "address",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 64,
+                    "id": "ui64",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "length",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 32,
+                    "id": "ui32",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "tag",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 8,
+                    "id": "ui8",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                }
+              ],
+              "hwBitwidth": 104,
+              "id": "!hw.struct<address: ui64, length: ui32, tag: ui8>",
+              "mnemonic": "struct"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 106,
+      "id": "!esi.bundle<[!esi.channel<!hw.struct<address: ui64, length: ui32, tag: ui8>> from \"data\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "from",
+          "name": "arg",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 144,
+            "id": "!esi.channel<!hw.struct<address: ui64, tag: ui8, data: i64, valid_bytes: i8>>",
+            "inner": {
+              "dialect": "hw",
+              "fields": [
+                {
+                  "name": "address",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 64,
+                    "id": "ui64",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "tag",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 8,
+                    "id": "ui8",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "data",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 64,
+                    "id": "i64",
+                    "mnemonic": "int",
+                    "signedness": "signless"
+                  }
+                },
+                {
+                  "name": "valid_bytes",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 8,
+                    "id": "i8",
+                    "mnemonic": "int",
+                    "signedness": "signless"
+                  }
+                }
+              ],
+              "hwBitwidth": 144,
+              "id": "!hw.struct<address: ui64, tag: ui8, data: i64, valid_bytes: i8>",
+              "mnemonic": "struct"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "to",
+          "name": "result",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 8,
+            "id": "!esi.channel<ui8>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 8,
+              "id": "ui8",
+              "mnemonic": "int",
+              "signedness": "unsigned"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 156,
+      "id": "!esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: i64, valid_bytes: i8>> from \"arg\", !esi.channel<ui8> to \"result\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "arg",
+          "type": {
+            "dialect": "esi",
+            "id": "!esi.channel<!esi.any>",
+            "inner": {
+              "dialect": "esi",
+              "id": "!esi.any",
+              "mnemonic": "any"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "from",
+          "name": "result",
+          "type": {
+            "dialect": "esi",
+            "id": "!esi.channel<!esi.any>",
+            "inner": {
+              "dialect": "esi",
+              "id": "!esi.any",
+              "mnemonic": "any"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "id": "!esi.bundle<[!esi.channel<!esi.any> to \"arg\", !esi.channel<!esi.any> from \"result\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "data",
+          "type": {
+            "dialect": "esi",
+            "id": "!esi.channel<!esi.any>",
+            "inner": {
+              "dialect": "esi",
+              "id": "!esi.any",
+              "mnemonic": "any"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "id": "!esi.bundle<[!esi.channel<!esi.any> to \"data\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "from",
+          "name": "data",
+          "type": {
+            "dialect": "esi",
+            "id": "!esi.channel<!esi.any>",
+            "inner": {
+              "dialect": "esi",
+              "id": "!esi.any",
+              "mnemonic": "any"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "id": "!esi.bundle<[!esi.channel<!esi.any> from \"data\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "from",
+          "name": "arg",
+          "type": {
+            "dialect": "esi",
+            "id": "!esi.channel<!esi.any>",
+            "inner": {
+              "dialect": "esi",
+              "id": "!esi.any",
+              "mnemonic": "any"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "to",
+          "name": "result",
+          "type": {
+            "dialect": "esi",
+            "id": "!esi.channel<!esi.any>",
+            "inner": {
+              "dialect": "esi",
+              "id": "!esi.any",
+              "mnemonic": "any"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "id": "!esi.bundle<[!esi.channel<!esi.any> from \"arg\", !esi.channel<!esi.any> to \"result\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "get",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 0,
+            "id": "!esi.channel<i0>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 0,
+              "id": "i0",
+              "mnemonic": "int",
+              "signedness": "signless"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "from",
+          "name": "data",
+          "type": {
+            "dialect": "esi",
+            "id": "!esi.channel<!esi.any>",
+            "inner": {
+              "dialect": "esi",
+              "id": "!esi.any",
+              "mnemonic": "any"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "id": "!esi.bundle<[!esi.channel<i0> to \"get\", !esi.channel<!esi.any> from \"data\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "offset",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 32,
+            "id": "!esi.channel<ui32>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 32,
+              "id": "ui32",
+              "mnemonic": "int",
+              "signedness": "unsigned"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "from",
+          "name": "data",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 64,
+            "id": "!esi.channel<i64>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 64,
+              "id": "i64",
+              "mnemonic": "int",
+              "signedness": "signless"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 100,
+      "id": "!esi.bundle<[!esi.channel<ui32> to \"offset\", !esi.channel<i64> from \"data\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "to",
+          "name": "cmd",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 97,
+            "id": "!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>>",
+            "inner": {
+              "dialect": "hw",
+              "fields": [
+                {
+                  "name": "write",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 1,
+                    "id": "i1",
+                    "mnemonic": "int",
+                    "signedness": "signless"
+                  }
+                },
+                {
+                  "name": "offset",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 32,
+                    "id": "ui32",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "data",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 64,
+                    "id": "i64",
+                    "mnemonic": "int",
+                    "signedness": "signless"
+                  }
+                }
+              ],
+              "hwBitwidth": 97,
+              "id": "!hw.struct<write: i1, offset: ui32, data: i64>",
+              "mnemonic": "struct"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "from",
+          "name": "data",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 64,
+            "id": "!esi.channel<i64>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 64,
+              "id": "i64",
+              "mnemonic": "int",
+              "signedness": "signless"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "hwBitwidth": 165,
+      "id": "!esi.bundle<[!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>> to \"cmd\", !esi.channel<i64> from \"data\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "from",
+          "name": "req",
+          "type": {
+            "dialect": "esi",
+            "id": "!esi.channel<!hw.struct<address: ui64, tag: ui8, data: !esi.any>>",
+            "inner": {
+              "dialect": "hw",
+              "fields": [
+                {
+                  "name": "address",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 64,
+                    "id": "ui64",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "tag",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 8,
+                    "id": "ui8",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "data",
+                  "type": {
+                    "dialect": "esi",
+                    "id": "!esi.any",
+                    "mnemonic": "any"
+                  }
+                }
+              ],
+              "id": "!hw.struct<address: ui64, tag: ui8, data: !esi.any>",
+              "mnemonic": "struct"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "to",
+          "name": "ackTag",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 8,
+            "id": "!esi.channel<ui8>",
+            "inner": {
+              "dialect": "builtin",
+              "hwBitwidth": 8,
+              "id": "ui8",
+              "mnemonic": "int",
+              "signedness": "unsigned"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "id": "!esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: !esi.any>> from \"req\", !esi.channel<ui8> to \"ackTag\"]>",
+      "mnemonic": "bundle"
+    },
+    {
+      "channels": [
+        {
+          "direction": "from",
+          "name": "req",
+          "type": {
+            "dialect": "esi",
+            "hwBitwidth": 72,
+            "id": "!esi.channel<!hw.struct<address: ui64, tag: ui8>>",
+            "inner": {
+              "dialect": "hw",
+              "fields": [
+                {
+                  "name": "address",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 64,
+                    "id": "ui64",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "tag",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 8,
+                    "id": "ui8",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                }
+              ],
+              "hwBitwidth": 72,
+              "id": "!hw.struct<address: ui64, tag: ui8>",
+              "mnemonic": "struct"
+            },
+            "mnemonic": "channel"
+          }
+        },
+        {
+          "direction": "to",
+          "name": "resp",
+          "type": {
+            "dialect": "esi",
+            "id": "!esi.channel<!hw.struct<tag: ui8, data: !esi.any>>",
+            "inner": {
+              "dialect": "hw",
+              "fields": [
+                {
+                  "name": "tag",
+                  "type": {
+                    "dialect": "builtin",
+                    "hwBitwidth": 8,
+                    "id": "ui8",
+                    "mnemonic": "int",
+                    "signedness": "unsigned"
+                  }
+                },
+                {
+                  "name": "data",
+                  "type": {
+                    "dialect": "esi",
+                    "id": "!esi.any",
+                    "mnemonic": "any"
+                  }
+                }
+              ],
+              "id": "!hw.struct<tag: ui8, data: !esi.any>",
+              "mnemonic": "struct"
+            },
+            "mnemonic": "channel"
+          }
+        }
+      ],
+      "dialect": "esi",
+      "id": "!esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from \"req\", !esi.channel<!hw.struct<tag: ui8, data: !esi.any>> to \"resp\"]>",
+      "mnemonic": "bundle"
+    }
+  ]
+}

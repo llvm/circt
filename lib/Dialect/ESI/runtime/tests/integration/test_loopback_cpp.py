@@ -13,7 +13,7 @@ import pytest
 
 from esiaccel.cosim.pytest import cosim_test
 
-from .conftest import HW_DIR, SW_DIR, check_lines, require_tool, run_cmd
+from .conftest import HW_DIR, SW_DIR, check_lines, require_tool
 
 
 @cosim_test(HW_DIR / "loopback.py")

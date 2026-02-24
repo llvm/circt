@@ -1,0 +1,1531 @@
+// Verilated -*- C++ -*-
+// DESCRIPTION: Verilator output: Design implementation internals
+// See VESI_Cosim_Top.h for the primary calling header
+
+#include "VESI_Cosim_Top__pch.h"
+
+VL_ATTR_COLD void VESI_Cosim_Top___024root___eval_static(VESI_Cosim_Top___024root* vlSelf) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VESI_Cosim_Top___024root___eval_static\n"); );
+    VESI_Cosim_Top__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
+    auto& vlSelfRef = std::ref(*vlSelf).get();
+    // Body
+    vlSelfRef.__Vtrigprevexpr___TOP__clk__0 = vlSelfRef.clk;
+}
+
+VL_ATTR_COLD void VESI_Cosim_Top___024root___eval_initial__TOP(VESI_Cosim_Top___024root* vlSelf);
+
+VL_ATTR_COLD void VESI_Cosim_Top___024root___eval_initial(VESI_Cosim_Top___024root* vlSelf) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VESI_Cosim_Top___024root___eval_initial\n"); );
+    VESI_Cosim_Top__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
+    auto& vlSelfRef = std::ref(*vlSelf).get();
+    // Body
+    VESI_Cosim_Top___024root___eval_initial__TOP(vlSelf);
+}
+
+extern const VlWide<481>/*15391:0*/ VESI_Cosim_Top__ConstPool__CONST_h83274c84_0;
+void VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_init_TOP__Cosim_DpiPkg(IData/*31:0*/ &cosim_init__Vfuncrtn);
+void VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_ep_register_TOP__Cosim_DpiPkg(std::string endpoint_id, std::string from_host_type_id, IData/*31:0*/ from_host_type_size, std::string to_host_type_id, IData/*31:0*/ to_host_type_size, IData/*31:0*/ &cosim_ep_register__Vfuncrtn);
+
+VL_ATTR_COLD void VESI_Cosim_Top___024root___eval_initial__TOP(VESI_Cosim_Top___024root* vlSelf) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VESI_Cosim_Top___024root___eval_initial__TOP\n"); );
+    VESI_Cosim_Top__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
+    auto& vlSelfRef = std::ref(*vlSelf).get();
+    // Locals
+    IData/*31:0*/ ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__unnamedblk1__DOT__rc;
+    ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__unnamedblk1__DOT__rc = 0;
+    IData/*31:0*/ ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__unnamedblk1__DOT__rc;
+    ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__unnamedblk1__DOT__rc = 0;
+    IData/*31:0*/ ESI_Cosim_Top__DOT__merge_a_data__DOT__unnamedblk1__DOT__rc;
+    ESI_Cosim_Top__DOT__merge_a_data__DOT__unnamedblk1__DOT__rc = 0;
+    IData/*31:0*/ ESI_Cosim_Top__DOT__merge_b_data__DOT__unnamedblk1__DOT__rc;
+    ESI_Cosim_Top__DOT__merge_b_data__DOT__unnamedblk1__DOT__rc = 0;
+    IData/*31:0*/ ESI_Cosim_Top__DOT__merge_x_data__DOT__unnamedblk1__DOT__rc;
+    ESI_Cosim_Top__DOT__merge_x_data__DOT__unnamedblk1__DOT__rc = 0;
+    IData/*31:0*/ ESI_Cosim_Top__DOT__join_a_data__DOT__unnamedblk1__DOT__rc;
+    ESI_Cosim_Top__DOT__join_a_data__DOT__unnamedblk1__DOT__rc = 0;
+    IData/*31:0*/ ESI_Cosim_Top__DOT__join_b_data__DOT__unnamedblk1__DOT__rc;
+    ESI_Cosim_Top__DOT__join_b_data__DOT__unnamedblk1__DOT__rc = 0;
+    IData/*31:0*/ ESI_Cosim_Top__DOT__join_x_data__DOT__unnamedblk1__DOT__rc;
+    ESI_Cosim_Top__DOT__join_x_data__DOT__unnamedblk1__DOT__rc = 0;
+    IData/*31:0*/ ESI_Cosim_Top__DOT__fork_a_data__DOT__unnamedblk1__DOT__rc;
+    ESI_Cosim_Top__DOT__fork_a_data__DOT__unnamedblk1__DOT__rc = 0;
+    IData/*31:0*/ ESI_Cosim_Top__DOT__fork_x_data__DOT__unnamedblk1__DOT__rc;
+    ESI_Cosim_Top__DOT__fork_x_data__DOT__unnamedblk1__DOT__rc = 0;
+    IData/*31:0*/ ESI_Cosim_Top__DOT__fork_y_data__DOT__unnamedblk1__DOT__rc;
+    ESI_Cosim_Top__DOT__fork_y_data__DOT__unnamedblk1__DOT__rc = 0;
+    IData/*31:0*/ ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__unnamedblk1__DOT__rc;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__unnamedblk1__DOT__rc = 0;
+    VlUnpacked<CData/*7:0*/, 13> ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__DataInBuffer;
+    for (int __Vi0 = 0; __Vi0 < 13; ++__Vi0) {
+        ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__DataInBuffer[__Vi0] = 0;
+    }
+    IData/*31:0*/ ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__unnamedblk1__DOT__rc;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__unnamedblk1__DOT__rc = 0;
+    IData/*31:0*/ ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__unnamedblk1__DOT__rc;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__unnamedblk1__DOT__rc = 0;
+    VlUnpacked<CData/*7:0*/, 18> ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer;
+    for (int __Vi0 = 0; __Vi0 < 18; ++__Vi0) {
+        ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[__Vi0] = 0;
+    }
+    IData/*31:0*/ ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__unnamedblk1__DOT__rc;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__unnamedblk1__DOT__rc = 0;
+    IData/*31:0*/ ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__unnamedblk1__DOT__rc;
+    ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__unnamedblk1__DOT__rc = 0;
+    IData/*31:0*/ ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__unnamedblk1__DOT__rc;
+    ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__unnamedblk1__DOT__rc = 0;
+    IData/*31:0*/ ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT__unnamedblk1__DOT__i;
+    ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT__unnamedblk1__DOT__i = 0;
+    IData/*31:0*/ __Vfunc_cosim_init__0__Vfuncout;
+    __Vfunc_cosim_init__0__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_ep_register__1__Vfuncout;
+    __Vfunc_cosim_ep_register__1__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_init__3__Vfuncout;
+    __Vfunc_cosim_init__3__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_ep_register__4__Vfuncout;
+    __Vfunc_cosim_ep_register__4__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_init__6__Vfuncout;
+    __Vfunc_cosim_init__6__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_ep_register__7__Vfuncout;
+    __Vfunc_cosim_ep_register__7__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_init__9__Vfuncout;
+    __Vfunc_cosim_init__9__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_ep_register__10__Vfuncout;
+    __Vfunc_cosim_ep_register__10__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_init__12__Vfuncout;
+    __Vfunc_cosim_init__12__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_ep_register__13__Vfuncout;
+    __Vfunc_cosim_ep_register__13__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_init__15__Vfuncout;
+    __Vfunc_cosim_init__15__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_ep_register__16__Vfuncout;
+    __Vfunc_cosim_ep_register__16__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_init__18__Vfuncout;
+    __Vfunc_cosim_init__18__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_ep_register__19__Vfuncout;
+    __Vfunc_cosim_ep_register__19__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_init__21__Vfuncout;
+    __Vfunc_cosim_init__21__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_ep_register__22__Vfuncout;
+    __Vfunc_cosim_ep_register__22__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_init__24__Vfuncout;
+    __Vfunc_cosim_init__24__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_ep_register__25__Vfuncout;
+    __Vfunc_cosim_ep_register__25__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_init__27__Vfuncout;
+    __Vfunc_cosim_init__27__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_ep_register__28__Vfuncout;
+    __Vfunc_cosim_ep_register__28__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_init__30__Vfuncout;
+    __Vfunc_cosim_init__30__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_ep_register__31__Vfuncout;
+    __Vfunc_cosim_ep_register__31__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_init__33__Vfuncout;
+    __Vfunc_cosim_init__33__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_ep_register__34__Vfuncout;
+    __Vfunc_cosim_ep_register__34__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_init__36__Vfuncout;
+    __Vfunc_cosim_init__36__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_ep_register__37__Vfuncout;
+    __Vfunc_cosim_ep_register__37__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_init__39__Vfuncout;
+    __Vfunc_cosim_init__39__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_ep_register__40__Vfuncout;
+    __Vfunc_cosim_ep_register__40__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_init__42__Vfuncout;
+    __Vfunc_cosim_init__42__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_ep_register__43__Vfuncout;
+    __Vfunc_cosim_ep_register__43__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_init__45__Vfuncout;
+    __Vfunc_cosim_init__45__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_ep_register__46__Vfuncout;
+    __Vfunc_cosim_ep_register__46__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_init__48__Vfuncout;
+    __Vfunc_cosim_init__48__Vfuncout = 0;
+    IData/*31:0*/ __Vfunc_cosim_ep_register__49__Vfuncout;
+    __Vfunc_cosim_ep_register__49__Vfuncout = 0;
+    // Body
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0U] = 0x0000000000000781ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[1U] = 0x38e26f5b5cedda78ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[2U] = 0x211cf26457e77e14ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[3U] = 0x76d99aaaab650ca0ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[4U] = 0xcbed5348b987db57ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[5U] = 0x4d6e4ef01890a114ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[6U] = 0x24ed7dffa8d074ccULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[7U] = 0xf80242e7138e2e40ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[8U] = 0x9f3e739f6c718da9ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[9U] = 0xeab24927bbf38f9bULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000000aU] = 0x6f92db41eb817fc0ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000000bU] = 0x15c1e0749a4281a4ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000000cU] = 0x3cb433f09f8dfc79ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000000dU] = 0xf26dc4b2f81a5aa4ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000000eU] = 0x0f6defce3dbebf87ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000000fU] = 0x8fa09591db27f39aULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000010U] = 0x3c8bb6afa1604066ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000011U] = 0xf8038528dfbbe9dcULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000012U] = 0x198fd87c79c7541dULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000013U] = 0xb9f398c809aa5a36ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000014U] = 0x40bb9ed09a680fe6ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000015U] = 0xf7de40442eafe7d5ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000016U] = 0xfc03ada1230e537dULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000017U] = 0xc6c5fda17877e4a1ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000018U] = 0xd6d07fddfb700dd2ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000019U] = 0xb5faddf6e30165aaULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000001aU] = 0xa47f5ba1a37721efULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000001bU] = 0x3d2e5ec9150e091bULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000001cU] = 0x92291abc0da46e80ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000001dU] = 0x7777c64fb71522aeULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000001eU] = 0xcf57755967a5b212ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000001fU] = 0x4b4b3f2206c522b2ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000020U] = 0x0636f02eeff136d7ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000021U] = 0x1e3964727767967aULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000022U] = 0xe493d2100d427f70ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000023U] = 0x791186a9ac9b4139ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000024U] = 0xf30ffe90e7d2f0e5ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000025U] = 0x508c682df69637bfULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000026U] = 0x70269f945f504bddULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000027U] = 0x4e06dfe796ae6057ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000028U] = 0xb09920952e10a643ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000029U] = 0x7df743943db6be6cULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000002aU] = 0xda8cd003fa486130ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000002bU] = 0x922abff9365c5fc8ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000002cU] = 0x1add900324be821fULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000002dU] = 0xfbec5cbad0d9fff9ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000002eU] = 0x1fc84afa9a2e2fd4ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000002fU] = 0x71fddb4bfa184e4eULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000030U] = 0xe7b558bfa9f7d0b9ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000031U] = 0x241e77ea54bdbf53ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000032U] = 0x876244e06604df99ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000033U] = 0x788aea4487c5a9cdULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000034U] = 0x251b8a78d38a538dULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000035U] = 0x75d54af0b52f5983ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000036U] = 0x2456326bf08f77ccULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000037U] = 0x3bdcf9deb42b5803ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000038U] = 0x550bead4119dde46ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000039U] = 0xaa7e914ea0a3ac12ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000003aU] = 0x5fb8022d8be7d406ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000003bU] = 0x9bcfa0e5e8b49194ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000003cU] = 0xc5d8ec9771ee5d8cULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000003dU] = 0x68060c44c30b3bffULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000003eU] = 0x973a73cfa2213281ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000003fU] = 0xd639f18e9a3d05c3ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000040U] = 0x52001f4f8827d23bULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000041U] = 0x6ba084be3e9d11a1ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000042U] = 0xfc4d82891e8fbcc0ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000043U] = 0x457758b053589796ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000044U] = 0x2545e4fb698fce69ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000045U] = 0xb514ce850a811afdULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000046U] = 0xbe1056e59e40f761ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000047U] = 0x417849631e88bdcbULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000048U] = 0x275a2aafbf2247c6ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000049U] = 0x9b4ff05f31e69bf8ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000004aU] = 0x346cc91b3e98967eULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000004bU] = 0x5038c445c9e34473ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000004cU] = 0x061845b35b64430aULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000004dU] = 0xca96045767bf7df2ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000004eU] = 0xd7e45dba2028d42eULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000004fU] = 0x2d6145d16b09edeeULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000050U] = 0xeb0a2e9249e8b084ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000051U] = 0x21a74c79a2c22357ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000052U] = 0x9325492dd3a120aaULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000053U] = 0x141d4fb24557624cULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000054U] = 0x45075954f4805095ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000055U] = 0x412dd7a92d1fd425ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000056U] = 0x9032454f628d1325ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000057U] = 0x6964b453d895141dULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000058U] = 0xd7962a8215b50507ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000059U] = 0x8a859fa40aec96edULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000005aU] = 0x172f9e424f9ee664ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000005bU] = 0xf0996338a70b3bb5ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000005cU] = 0xde9a3bf9f19c1216ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000005dU] = 0x9a93727e382e38ccULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000005eU] = 0x9a8cffff67a14faeULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000005fU] = 0x8085ec572d470fc8ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000060U] = 0x1f9f332ddc804c01ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000061U] = 0x77f19d97df69f6acULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000062U] = 0xd559ff19980e9ab6ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000063U] = 0xa7f15fcea0921f03ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000064U] = 0xb6886b5fda5f8f4fULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000065U] = 0xcc04fcf707fe0c02ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000066U] = 0x8686b689c31c96faULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000067U] = 0x6ec65fc3d76b02eeULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000068U] = 0xb6d0455754c0a202ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000069U] = 0x735b7b2591da400eULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000006aU] = 0x23a3d2bc84e91b61ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000006bU] = 0xe90f7d4d857c1c9bULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000006cU] = 0x9449d9d0e77e25fdULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000006dU] = 0xaee3a94cc7194a26ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000006eU] = 0x8cb6b541e4786742ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000006fU] = 0xea6135749743c242ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000070U] = 0x432a322865e02cd0ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000071U] = 0xe8238cd497809628ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000072U] = 0xa3686970cfeef412ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000073U] = 0x79399be5be3d4dceULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000074U] = 0x14584d1189865c7eULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000075U] = 0x238c550b1c803155ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000076U] = 0x6cad2aa1aa2884deULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000077U] = 0x89e4146fd281d8f3ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000078U] = 0x083815cdc5bb7c0bULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000079U] = 0xc02acbbf94015d49ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000007aU] = 0x06dbe0f8f3c8a623ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000007bU] = 0x2548033f3aa8167eULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000007cU] = 0xb45999a0a082c845ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000007dU] = 0x90fcb0472337bfccULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000007eU] = 0x092f3a99ad77532dULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000007fU] = 0xdc72796eb49d1185ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000080U] = 0x4e57e756515e4dd9ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000081U] = 0xc2f20311d91ec7f1ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000082U] = 0x8aea4f1fb550f828ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000083U] = 0xa3335ec0d04df25fULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000084U] = 0x4c39bb4ef4422aceULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000085U] = 0x7d6d3643cf42f424ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000086U] = 0x10c8bb4157b60063ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000087U] = 0xdac3cc7696b478f4ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000088U] = 0x4c39e5cc4efe28b3ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000089U] = 0x8198243a9946b84eULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000008aU] = 0x0c5dc14340ba1d26ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000008bU] = 0x19212dd8b2e3236cULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000008cU] = 0x43a78c449ac2ed5fULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000008dU] = 0x05c44f208583c0d5ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000008eU] = 0xeea15e884ff5faf2ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000008fU] = 0xfa857e275c7f3347ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000090U] = 0x883e72767725e45eULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000091U] = 0xd732c38319a97107ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000092U] = 0x7ba1810965e8e9afULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000093U] = 0x23f73173168b8894ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000094U] = 0x40d0362cf5b45d9bULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000095U] = 0xa330e164928ea2d0ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000096U] = 0xb4c41acc3849c053ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000097U] = 0x28597bf3505b6980ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000098U] = 0xbde16e81d3891babULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x00000099U] = 0xe94ffc8327923a45ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000009aU] = 0x1758f8537b6a96fcULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000009bU] = 0x3161d0c3bc88f4c8ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000009cU] = 0xe0ac6df656ab608fULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000009dU] = 0x629ab1e465f619b9ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000009eU] = 0x6dc64de44cb3d61eULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x0000009fU] = 0xa66fed4b32d12f42ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000a0U] = 0xd693e52e22683a1eULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000a1U] = 0xb666647183525122ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000a2U] = 0x39353280543fda27ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000a3U] = 0x3ed89c8a63516592ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000a4U] = 0xf36baaaaa4a72abaULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000a5U] = 0x42a6c29cda682224ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000a6U] = 0xa0649879990b3a2aULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000a7U] = 0x825e581085871731ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000a8U] = 0xf7d09d58b33404bdULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000a9U] = 0xf56dfc221ffbf793ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000aaU] = 0xd5322560e88c6232ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000abU] = 0xeaba694911c9ae41ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000acU] = 0xcd93f89743e69dd8ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000adU] = 0x656b3c5c819a7741ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000aeU] = 0x283b91d1ceedd2e4ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000afU] = 0x96b0a6a075c65c0cULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000b0U] = 0x596d012eda052badULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000b1U] = 0x1149c36f02ce42b7ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000b2U] = 0x84b92e220d270dc0ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000b3U] = 0x94dcc1739386e408ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000b4U] = 0x5060679efbac7303ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000b5U] = 0x5ba2f53da15c47afULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000b6U] = 0xaa0311d45e3cb1dbULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000b7U] = 0x25e8b1153a304e69ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000b8U] = 0xb69458fca3d7a2c4ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000b9U] = 0xd78f53967c198e5bULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000baU] = 0xf3d815cf0b9132e3ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000bbU] = 0x782cea973183d630ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000bcU] = 0x3bb32e1a656db5efULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000bdU] = 0xa556685ab753615aULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000beU] = 0x13ec92d1d9157206ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000bfU] = 0x9a23a94a3da4bcb6ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000c0U] = 0x86a26fba83a62a41ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000c1U] = 0x03d3f5551b194983ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000c2U] = 0xc70de59ff55bb7c7ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000c3U] = 0x23080e6fb156cc95ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000c4U] = 0x511161684c46da76ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000c5U] = 0x833a46a23960ff1dULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000c6U] = 0x529a4868d7c19abeULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000c7U] = 0x6bbcfa42805c05edULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000c8U] = 0x4b8e46b1f959a607ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000c9U] = 0x3afbdceef34021c5ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000caU] = 0x64ec74873f86b9dcULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000cbU] = 0xd5dbb7cd1fae2d6fULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000ccU] = 0x24f88a7a6c4195ccULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000cdU] = 0x2ab3874926365c78ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000ceU] = 0xb9cdde170e6738adULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000cfU] = 0x6f3ed387fddab69bULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000d0U] = 0x8ca4d9c847e10811ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000d1U] = 0x9799667f84b9f085ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000d2U] = 0x7762ea3b4dbf374bULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000d3U] = 0x32dac4d77c5dd995ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000d4U] = 0x5028372477502bbeULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000d5U] = 0x55641b9030683af7ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000d6U] = 0xd308aaf4573a0ebdULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000d7U] = 0xb6c76de4bb9b1a79ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000d8U] = 0x7d7df548eee53536ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000d9U] = 0xb8351ab9a2922a35ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000daU] = 0xf1ca1a499946afb5ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000dbU] = 0x14b56ba51a59db6bULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000dcU] = 0x6a794d0e51c24ae2ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000ddU] = 0x68ad4b6e21dd4b6dULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000deU] = 0xa3cae24a3cae2ea6ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000dfU] = 0xc795c5450e28f2b8ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000e0U] = 0xe1710bbc28f2be93ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000e1U] = 0x9219cbda4057dab1ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000e2U] = 0x0af896f61236000fULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000e3U] = 0x04a2582512c12888ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000e4U] = 0x0962a2a968eb24abULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000e5U] = 0x6f01aef2a36922a3ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000e6U] = 0x3c15b3acbe564f35ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000e7U] = 0x5409cf05448957c1ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000e8U] = 0x55d3e153a857d4f0ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000e9U] = 0xfcccc55cabeb6e27ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000eaU] = 0xe45ff2c2fcb09696ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000ebU] = 0xcd76b33257229815ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000ecU] = 0xdd18c74d3ab89509ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000edU] = 0xff314e10d6c42a0dULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000eeU] = 0x51fa23e0bc56ebb5ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000efU] = 0xdf22addf333e7ff5ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000f0U] = 0x58ff6d0ffdbdecb2ULL;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[0x000000f1U] = 0x000000000000000aULL;
+    ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT__unnamedblk1__DOT__i = 0U;
+    while (VL_GTS_III(32, 0x00000781U, ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT__unnamedblk1__DOT__i)) {
+        vlSelfRef.ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT____Vlvbound_h8980d261__0 
+            = ((0x3c07U >= (0x00003fffU & VL_SHIFTL_III(14,32,32, ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT__unnamedblk1__DOT__i, 3U)))
+                ? (0x000000ffU & (((0U == (0x0000001fU 
+                                           & VL_SHIFTL_III(14,32,32, ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT__unnamedblk1__DOT__i, 3U)))
+                                    ? 0U : (VESI_Cosim_Top__ConstPool__CONST_h83274c84_0[
+                                            (((IData)(7U) 
+                                              + (0x00003fffU 
+                                                 & VL_SHIFTL_III(14,32,32, ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT__unnamedblk1__DOT__i, 3U))) 
+                                             >> 5U)] 
+                                            << ((IData)(0x00000020U) 
+                                                - (0x0000001fU 
+                                                   & VL_SHIFTL_III(14,32,32, ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT__unnamedblk1__DOT__i, 3U))))) 
+                                  | (VESI_Cosim_Top__ConstPool__CONST_h83274c84_0[
+                                     (0x000001ffU & 
+                                      (VL_SHIFTL_III(14,32,32, ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT__unnamedblk1__DOT__i, 3U) 
+                                       >> 5U))] >> 
+                                     (0x0000001fU & 
+                                      VL_SHIFTL_III(14,32,32, ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT__unnamedblk1__DOT__i, 3U)))))
+                : 0U);
+        if (VL_LIKELY(((0x0780U >= (0x000007ffU & ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT__unnamedblk1__DOT__i))))) {
+            vlSelfRef.ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT__compressed_manifest_bytes[(0x000007ffU 
+                                                                                & ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT__unnamedblk1__DOT__i)] 
+                = vlSelfRef.ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT____Vlvbound_h8980d261__0;
+        }
+        ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT__unnamedblk1__DOT__i 
+            = ((IData)(1U) + ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT__unnamedblk1__DOT__i);
+    }
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__DataInBuffer[0U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__DataInBuffer[1U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__DataInBuffer[2U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__DataInBuffer[3U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__DataInBuffer[4U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__DataInBuffer[5U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__DataInBuffer[6U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__DataInBuffer[7U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__DataInBuffer[8U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__DataInBuffer[9U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__DataInBuffer[0x0000000aU] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__DataInBuffer[0x0000000bU] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__DataInBuffer[0x0000000cU] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[0U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[1U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[2U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[3U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[4U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[5U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[6U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[7U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[8U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[9U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[0x0000000aU] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[0x0000000bU] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[0x0000000cU] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[0x0000000dU] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[0x0000000eU] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[0x0000000fU] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[0x00000010U] = 0U;
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__DataInBuffer[0x00000011U] = 0U;
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__DataInBuffer[0U] = 0U;
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__DataInBuffer[1U] = 0U;
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__DataInBuffer[2U] = 0U;
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__DataInBuffer[3U] = 0U;
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__DataInBuffer[4U] = 0U;
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__DataInBuffer[5U] = 0U;
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__DataInBuffer[6U] = 0U;
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__DataInBuffer[7U] = 0U;
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_init_TOP__Cosim_DpiPkg(__Vfunc_cosim_init__0__Vfuncout);
+    ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_init__0__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:107: Assertion failed in %NESI_Cosim_Top.__cosim_mmio_read_write_arg.unnamedblk1: Cosim init failed (%11d)\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 107, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_ep_register_TOP__Cosim_DpiPkg("__cosim_mmio_read_write.arg"s, "!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>>"s, 0x0000000dU, ""s, 0U, __Vfunc_cosim_ep_register__1__Vfuncout);
+    ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_ep_register__1__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:111: Assertion failed in %NESI_Cosim_Top.__cosim_mmio_read_write_arg.unnamedblk1: Cosim endpoint (__cosim_mmio_read_write.arg) register failed: %11d\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 111, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_init_TOP__Cosim_DpiPkg(__Vfunc_cosim_init__3__Vfuncout);
+    ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_init__3__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:38: Assertion failed in %NESI_Cosim_Top.__cosim_mmio_read_write_result.unnamedblk1: Cosim init failed (%11d)\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 38, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_ep_register_TOP__Cosim_DpiPkg("__cosim_mmio_read_write.result"s, ""s, 0U, "!esi.channel<i64>"s, 8U, __Vfunc_cosim_ep_register__4__Vfuncout);
+    ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_ep_register__4__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:42: Assertion failed in %NESI_Cosim_Top.__cosim_mmio_read_write_result.unnamedblk1: Cosim endpoint (__cosim_mmio_read_write.result) register failed: %11d\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 42, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_init_TOP__Cosim_DpiPkg(__Vfunc_cosim_init__6__Vfuncout);
+    ESI_Cosim_Top__DOT__merge_a_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_init__6__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT__merge_a_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:107: Assertion failed in %NESI_Cosim_Top.merge_a_data.unnamedblk1: Cosim init failed (%11d)\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT__merge_a_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 107, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_ep_register_TOP__Cosim_DpiPkg("merge_a.data"s, "!esi.channel<ui8>"s, 1U, ""s, 0U, __Vfunc_cosim_ep_register__7__Vfuncout);
+    ESI_Cosim_Top__DOT__merge_a_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_ep_register__7__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT__merge_a_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:111: Assertion failed in %NESI_Cosim_Top.merge_a_data.unnamedblk1: Cosim endpoint (merge_a.data) register failed: %11d\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT__merge_a_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 111, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_init_TOP__Cosim_DpiPkg(__Vfunc_cosim_init__9__Vfuncout);
+    ESI_Cosim_Top__DOT__merge_b_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_init__9__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT__merge_b_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:107: Assertion failed in %NESI_Cosim_Top.merge_b_data.unnamedblk1: Cosim init failed (%11d)\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT__merge_b_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 107, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_ep_register_TOP__Cosim_DpiPkg("merge_b.data"s, "!esi.channel<ui8>"s, 1U, ""s, 0U, __Vfunc_cosim_ep_register__10__Vfuncout);
+    ESI_Cosim_Top__DOT__merge_b_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_ep_register__10__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT__merge_b_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:111: Assertion failed in %NESI_Cosim_Top.merge_b_data.unnamedblk1: Cosim endpoint (merge_b.data) register failed: %11d\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT__merge_b_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 111, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_init_TOP__Cosim_DpiPkg(__Vfunc_cosim_init__12__Vfuncout);
+    ESI_Cosim_Top__DOT__merge_x_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_init__12__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT__merge_x_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:38: Assertion failed in %NESI_Cosim_Top.merge_x_data.unnamedblk1: Cosim init failed (%11d)\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT__merge_x_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 38, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_ep_register_TOP__Cosim_DpiPkg("merge_x.data"s, ""s, 0U, "!esi.channel<ui8>"s, 1U, __Vfunc_cosim_ep_register__13__Vfuncout);
+    ESI_Cosim_Top__DOT__merge_x_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_ep_register__13__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT__merge_x_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:42: Assertion failed in %NESI_Cosim_Top.merge_x_data.unnamedblk1: Cosim endpoint (merge_x.data) register failed: %11d\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT__merge_x_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 42, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_init_TOP__Cosim_DpiPkg(__Vfunc_cosim_init__15__Vfuncout);
+    ESI_Cosim_Top__DOT__join_a_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_init__15__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT__join_a_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:107: Assertion failed in %NESI_Cosim_Top.join_a_data.unnamedblk1: Cosim init failed (%11d)\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT__join_a_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 107, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_ep_register_TOP__Cosim_DpiPkg("join_a.data"s, "!esi.channel<ui8>"s, 1U, ""s, 0U, __Vfunc_cosim_ep_register__16__Vfuncout);
+    ESI_Cosim_Top__DOT__join_a_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_ep_register__16__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT__join_a_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:111: Assertion failed in %NESI_Cosim_Top.join_a_data.unnamedblk1: Cosim endpoint (join_a.data) register failed: %11d\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT__join_a_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 111, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_init_TOP__Cosim_DpiPkg(__Vfunc_cosim_init__18__Vfuncout);
+    ESI_Cosim_Top__DOT__join_b_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_init__18__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT__join_b_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:107: Assertion failed in %NESI_Cosim_Top.join_b_data.unnamedblk1: Cosim init failed (%11d)\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT__join_b_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 107, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_ep_register_TOP__Cosim_DpiPkg("join_b.data"s, "!esi.channel<ui8>"s, 1U, ""s, 0U, __Vfunc_cosim_ep_register__19__Vfuncout);
+    ESI_Cosim_Top__DOT__join_b_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_ep_register__19__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT__join_b_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:111: Assertion failed in %NESI_Cosim_Top.join_b_data.unnamedblk1: Cosim endpoint (join_b.data) register failed: %11d\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT__join_b_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 111, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_init_TOP__Cosim_DpiPkg(__Vfunc_cosim_init__21__Vfuncout);
+    ESI_Cosim_Top__DOT__join_x_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_init__21__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT__join_x_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:38: Assertion failed in %NESI_Cosim_Top.join_x_data.unnamedblk1: Cosim init failed (%11d)\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT__join_x_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 38, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_ep_register_TOP__Cosim_DpiPkg("join_x.data"s, ""s, 0U, "!esi.channel<ui16>"s, 2U, __Vfunc_cosim_ep_register__22__Vfuncout);
+    ESI_Cosim_Top__DOT__join_x_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_ep_register__22__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT__join_x_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:42: Assertion failed in %NESI_Cosim_Top.join_x_data.unnamedblk1: Cosim endpoint (join_x.data) register failed: %11d\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT__join_x_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 42, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_init_TOP__Cosim_DpiPkg(__Vfunc_cosim_init__24__Vfuncout);
+    ESI_Cosim_Top__DOT__fork_a_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_init__24__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT__fork_a_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:107: Assertion failed in %NESI_Cosim_Top.fork_a_data.unnamedblk1: Cosim init failed (%11d)\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT__fork_a_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 107, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_ep_register_TOP__Cosim_DpiPkg("fork_a.data"s, "!esi.channel<ui8>"s, 1U, ""s, 0U, __Vfunc_cosim_ep_register__25__Vfuncout);
+    ESI_Cosim_Top__DOT__fork_a_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_ep_register__25__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT__fork_a_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:111: Assertion failed in %NESI_Cosim_Top.fork_a_data.unnamedblk1: Cosim endpoint (fork_a.data) register failed: %11d\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT__fork_a_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 111, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_init_TOP__Cosim_DpiPkg(__Vfunc_cosim_init__27__Vfuncout);
+    ESI_Cosim_Top__DOT__fork_x_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_init__27__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT__fork_x_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:38: Assertion failed in %NESI_Cosim_Top.fork_x_data.unnamedblk1: Cosim init failed (%11d)\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT__fork_x_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 38, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_ep_register_TOP__Cosim_DpiPkg("fork_x.data"s, ""s, 0U, "!esi.channel<ui8>"s, 1U, __Vfunc_cosim_ep_register__28__Vfuncout);
+    ESI_Cosim_Top__DOT__fork_x_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_ep_register__28__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT__fork_x_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:42: Assertion failed in %NESI_Cosim_Top.fork_x_data.unnamedblk1: Cosim endpoint (fork_x.data) register failed: %11d\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT__fork_x_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 42, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_init_TOP__Cosim_DpiPkg(__Vfunc_cosim_init__30__Vfuncout);
+    ESI_Cosim_Top__DOT__fork_y_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_init__30__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT__fork_y_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:38: Assertion failed in %NESI_Cosim_Top.fork_y_data.unnamedblk1: Cosim init failed (%11d)\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT__fork_y_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 38, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_ep_register_TOP__Cosim_DpiPkg("fork_y.data"s, ""s, 0U, "!esi.channel<ui8>"s, 1U, __Vfunc_cosim_ep_register__31__Vfuncout);
+    ESI_Cosim_Top__DOT__fork_y_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_ep_register__31__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT__fork_y_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:42: Assertion failed in %NESI_Cosim_Top.fork_y_data.unnamedblk1: Cosim endpoint (fork_y.data) register failed: %11d\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT__fork_y_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 42, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_init_TOP__Cosim_DpiPkg(__Vfunc_cosim_init__33__Vfuncout);
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_init__33__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:107: Assertion failed in %NESI_Cosim_Top.__cosim_hostmem_read_resp_data.unnamedblk1: Cosim init failed (%11d)\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 107, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_ep_register_TOP__Cosim_DpiPkg("__cosim_hostmem_read_resp.data"s, "!esi.channel<!hw.struct<tag: ui8, data: i64>>"s, 9U, ""s, 0U, __Vfunc_cosim_ep_register__34__Vfuncout);
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_ep_register__34__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:111: Assertion failed in %NESI_Cosim_Top.__cosim_hostmem_read_resp_data.unnamedblk1: Cosim endpoint (__cosim_hostmem_read_resp.data) register failed: %11d\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 111, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_init_TOP__Cosim_DpiPkg(__Vfunc_cosim_init__36__Vfuncout);
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_init__36__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:38: Assertion failed in %NESI_Cosim_Top.__cosim_hostmem_read_req_data.unnamedblk1: Cosim init failed (%11d)\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 38, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_ep_register_TOP__Cosim_DpiPkg("__cosim_hostmem_read_req.data"s, ""s, 0U, "!esi.channel<!hw.struct<address: ui64, length: ui32, tag: ui8>>"s, 0x0000000dU, __Vfunc_cosim_ep_register__37__Vfuncout);
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_ep_register__37__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:42: Assertion failed in %NESI_Cosim_Top.__cosim_hostmem_read_req_data.unnamedblk1: Cosim endpoint (__cosim_hostmem_read_req.data) register failed: %11d\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_req_data__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 42, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_init_TOP__Cosim_DpiPkg(__Vfunc_cosim_init__39__Vfuncout);
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_init__39__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:107: Assertion failed in %NESI_Cosim_Top.__cosim_hostmem_write_result.unnamedblk1: Cosim init failed (%11d)\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 107, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_ep_register_TOP__Cosim_DpiPkg("__cosim_hostmem_write.result"s, "!esi.channel<ui8>"s, 1U, ""s, 0U, __Vfunc_cosim_ep_register__40__Vfuncout);
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_ep_register__40__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:111: Assertion failed in %NESI_Cosim_Top.__cosim_hostmem_write_result.unnamedblk1: Cosim endpoint (__cosim_hostmem_write.result) register failed: %11d\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 111, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_init_TOP__Cosim_DpiPkg(__Vfunc_cosim_init__42__Vfuncout);
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_init__42__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:38: Assertion failed in %NESI_Cosim_Top.__cosim_hostmem_write_arg.unnamedblk1: Cosim init failed (%11d)\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 38, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_ep_register_TOP__Cosim_DpiPkg("__cosim_hostmem_write.arg"s, ""s, 0U, "!esi.channel<!hw.struct<address: ui64, tag: ui8, data: i64, valid_bytes: i8>>"s, 0x00000012U, __Vfunc_cosim_ep_register__43__Vfuncout);
+    ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_ep_register__43__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:42: Assertion failed in %NESI_Cosim_Top.__cosim_hostmem_write_arg.unnamedblk1: Cosim endpoint (__cosim_hostmem_write.arg) register failed: %11d\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_arg__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 42, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_init_TOP__Cosim_DpiPkg(__Vfunc_cosim_init__45__Vfuncout);
+    ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_init__45__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:107: Assertion failed in %NESI_Cosim_Top.__cycle_counter.req_ep.unnamedblk1: Cosim init failed (%11d)\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 107, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_ep_register_TOP__Cosim_DpiPkg("__cosim_cycle_count.arg"s, "!esi.channel<i1>"s, 1U, ""s, 0U, __Vfunc_cosim_ep_register__46__Vfuncout);
+    ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_ep_register__46__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:111: Assertion failed in %NESI_Cosim_Top.__cycle_counter.req_ep.unnamedblk1: Cosim endpoint (__cosim_cycle_count.arg) register failed: %11d\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 111, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_init_TOP__Cosim_DpiPkg(__Vfunc_cosim_init__48__Vfuncout);
+    ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_init__48__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:38: Assertion failed in %NESI_Cosim_Top.__cycle_counter.resp_ep.unnamedblk1: Cosim init failed (%11d)\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 38, "");
+    }
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_ep_register_TOP__Cosim_DpiPkg("__cosim_cycle_count.result"s, ""s, 0U, "struct{cycle:int<64>,freq:int<64>}"s, 0x00000010U, __Vfunc_cosim_ep_register__49__Vfuncout);
+    ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__unnamedblk1__DOT__rc 
+        = __Vfunc_cosim_ep_register__49__Vfuncout;
+    if (VL_UNLIKELY(((0U != ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__unnamedblk1__DOT__rc)))) {
+        VL_WRITEF_NX("[%0t] %%Error: Cosim_Endpoint.sv:42: Assertion failed in %NESI_Cosim_Top.__cycle_counter.resp_ep.unnamedblk1: Cosim endpoint (__cosim_cycle_count.result) register failed: %11d\n",0,
+                     64,VL_TIME_UNITED_Q(1),-12,vlSymsp->name(),
+                     32,ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__unnamedblk1__DOT__rc);
+        VL_STOP_MT("/workspace/circt/build/default/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/cosim/Cosim_Endpoint.sv", 42, "");
+    }
+}
+
+VL_ATTR_COLD void VESI_Cosim_Top___024root___eval_final(VESI_Cosim_Top___024root* vlSelf) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VESI_Cosim_Top___024root___eval_final\n"); );
+    VESI_Cosim_Top__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
+    auto& vlSelfRef = std::ref(*vlSelf).get();
+}
+
+#ifdef VL_DEBUG
+VL_ATTR_COLD void VESI_Cosim_Top___024root___dump_triggers__stl(const VlUnpacked<QData/*63:0*/, 1> &triggers, const std::string &tag);
+#endif  // VL_DEBUG
+VL_ATTR_COLD bool VESI_Cosim_Top___024root___eval_phase__stl(VESI_Cosim_Top___024root* vlSelf);
+
+VL_ATTR_COLD void VESI_Cosim_Top___024root___eval_settle(VESI_Cosim_Top___024root* vlSelf) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VESI_Cosim_Top___024root___eval_settle\n"); );
+    VESI_Cosim_Top__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
+    auto& vlSelfRef = std::ref(*vlSelf).get();
+    // Locals
+    IData/*31:0*/ __VstlIterCount;
+    // Body
+    __VstlIterCount = 0U;
+    vlSelfRef.__VstlFirstIteration = 1U;
+    do {
+        if (VL_UNLIKELY(((0x00000064U < __VstlIterCount)))) {
+#ifdef VL_DEBUG
+            VESI_Cosim_Top___024root___dump_triggers__stl(vlSelfRef.__VstlTriggered, "stl"s);
+#endif
+            VL_FATAL_MT("/workspace/circt/esi-pytest-run-_cymc8kf/hw/ESI_Cosim_Top.sv", 13, "", "Settle region did not converge after 100 tries");
+        }
+        __VstlIterCount = ((IData)(1U) + __VstlIterCount);
+    } while (VESI_Cosim_Top___024root___eval_phase__stl(vlSelf));
+}
+
+VL_ATTR_COLD void VESI_Cosim_Top___024root___eval_triggers__stl(VESI_Cosim_Top___024root* vlSelf) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VESI_Cosim_Top___024root___eval_triggers__stl\n"); );
+    VESI_Cosim_Top__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
+    auto& vlSelfRef = std::ref(*vlSelf).get();
+    // Body
+    vlSelfRef.__VstlTriggered[0U] = ((0xfffffffffffffffeULL 
+                                      & vlSelfRef.__VstlTriggered
+                                      [0U]) | (IData)((IData)(vlSelfRef.__VstlFirstIteration)));
+    vlSelfRef.__VstlFirstIteration = 0U;
+#ifdef VL_DEBUG
+    if (VL_UNLIKELY(vlSymsp->_vm_contextp__->debug())) {
+        VESI_Cosim_Top___024root___dump_triggers__stl(vlSelfRef.__VstlTriggered, "stl"s);
+    }
+#endif
+}
+
+VL_ATTR_COLD bool VESI_Cosim_Top___024root___trigger_anySet__stl(const VlUnpacked<QData/*63:0*/, 1> &in);
+
+#ifdef VL_DEBUG
+VL_ATTR_COLD void VESI_Cosim_Top___024root___dump_triggers__stl(const VlUnpacked<QData/*63:0*/, 1> &triggers, const std::string &tag) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VESI_Cosim_Top___024root___dump_triggers__stl\n"); );
+    // Body
+    if ((1U & (~ (IData)(VESI_Cosim_Top___024root___trigger_anySet__stl(triggers))))) {
+        VL_DBG_MSGS("         No '" + tag + "' region triggers active\n");
+    }
+    if ((1U & (IData)(triggers[0U]))) {
+        VL_DBG_MSGS("         '" + tag + "' region trigger index 0 is active: Internal 'stl' trigger - first iteration\n");
+    }
+}
+#endif  // VL_DEBUG
+
+VL_ATTR_COLD bool VESI_Cosim_Top___024root___trigger_anySet__stl(const VlUnpacked<QData/*63:0*/, 1> &in) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VESI_Cosim_Top___024root___trigger_anySet__stl\n"); );
+    // Locals
+    IData/*31:0*/ n;
+    // Body
+    n = 0U;
+    do {
+        if (in[n]) {
+            return (1U);
+        }
+        n = ((IData)(1U) + n);
+    } while ((1U > n));
+    return (0U);
+}
+
+void VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_set_manifest__Vdpioc2_TOP__Cosim_DpiPkg(IData/*31:0*/ esi_version, const VlUnpacked<CData/*7:0*/, 1921> &compressed_manifest);
+extern const VlWide<10>/*319:0*/ VESI_Cosim_Top__ConstPool__CONST_h2f74ed10_0;
+
+VL_ATTR_COLD void VESI_Cosim_Top___024root___stl_sequent__TOP__0(VESI_Cosim_Top___024root* vlSelf) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VESI_Cosim_Top___024root___stl_sequent__TOP__0\n"); );
+    VESI_Cosim_Top__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
+    auto& vlSelfRef = std::ref(*vlSelf).get();
+    // Locals
+    VlWide<16>/*511:0*/ __Vtemp_2;
+    // Body
+    VESI_Cosim_Top_Cosim_DpiPkg____Vdpiimwrap_cosim_set_manifest__Vdpioc2_TOP__Cosim_DpiPkg(0U, vlSelfRef.ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT__compressed_manifest_bytes);
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__consume_0 
+        = vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__out0_valid_reg__DOT__state;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT___GEN_1[0U] 
+        = (IData)((((QData)((IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__x_reg[1U])) 
+                    << 0x00000020U) | (QData)((IData)(
+                                                      vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__x_reg[0U]))));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT___GEN_1[1U] 
+        = (IData)(((((QData)((IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__x_reg[1U])) 
+                     << 0x00000020U) | (QData)((IData)(
+                                                       vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__x_reg[0U]))) 
+                   >> 0x00000020U));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT___GEN_1[2U] 
+        = ((0U != (vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__x_reg[2U] 
+                   >> 0x0000000aU)) ? (vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__x_reg[2U] 
+                                       - (IData)(0x00000400U))
+            : (0x000003ffU & vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__x_reg[2U]));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT___GEN_1[3U] 
+        = (1U & vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__x_reg[3U]);
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__out_pipe__DOT__xmit 
+        = vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__out_pipe__DOT__x_valid_reg;
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__out_pipe__DOT__xmit 
+        = vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__out_pipe__DOT__x_valid_reg;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_1__DOT__xmit 
+        = vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_1__DOT__x_valid_reg;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_4__DOT__xmit 
+        = vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_4__DOT__x_valid_reg;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_6__DOT__xmit 
+        = vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_6__DOT__x_valid_reg;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_7__DOT__xmit 
+        = vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_7__DOT__x_valid_reg;
+    vlSelfRef.ESI_Cosim_Top__DOT__merge_x_data__DOT__DataInBuffer[0U] 
+        = vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_1__DOT__x_reg;
+    vlSelfRef.ESI_Cosim_Top__DOT__fork_x_data__DOT__DataInBuffer[0U] 
+        = vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_6__DOT__x_reg;
+    vlSelfRef.ESI_Cosim_Top__DOT__fork_y_data__DOT__DataInBuffer[0U] 
+        = vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_7__DOT__x_reg;
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOut_a[0U] 
+        = (((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOutBuffer
+             [3U] << 0x00000018U) | (vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOutBuffer
+                                     [2U] << 0x00000010U)) 
+           | ((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOutBuffer
+               [1U] << 8U) | vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOutBuffer
+              [0U]));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOut_a[1U] 
+        = (((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOutBuffer
+             [7U] << 0x00000018U) | (vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOutBuffer
+                                     [6U] << 0x00000010U)) 
+           | ((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOutBuffer
+               [5U] << 8U) | vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOutBuffer
+              [4U]));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOut_a[2U] 
+        = (((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOutBuffer
+             [0x0bU] << 0x00000018U) | (vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOutBuffer
+                                        [0x0aU] << 0x00000010U)) 
+           | ((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOutBuffer
+               [9U] << 8U) | vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOutBuffer
+              [8U]));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOut_a[3U] 
+        = (1U & vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOutBuffer
+           [0x0cU]);
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOut_a[0U] 
+        = (((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOutBuffer
+             [3U] << 0x00000018U) | (vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOutBuffer
+                                     [2U] << 0x00000010U)) 
+           | ((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOutBuffer
+               [1U] << 8U) | vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOutBuffer
+              [0U]));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOut_a[1U] 
+        = (((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOutBuffer
+             [7U] << 0x00000018U) | (vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOutBuffer
+                                     [6U] << 0x00000010U)) 
+           | ((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOutBuffer
+               [5U] << 8U) | vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOutBuffer
+              [4U]));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOut_a[2U] 
+        = (0x000000ffU & vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOutBuffer
+           [8U]);
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__out_pipe__DOT__xmit 
+        = vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__out_pipe__DOT__x_valid_reg;
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__consume_1 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__out1_valid_reg__DOT__state) 
+           & (~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__out0_valid_reg__DOT__state)));
+    vlSelfRef.ESI_Cosim_Top__DOT__join_x_data__DOT__DataInBuffer[0U] 
+        = (0x000000ffU & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_4__DOT__x_reg));
+    vlSelfRef.ESI_Cosim_Top__DOT__join_x_data__DOT__DataInBuffer[1U] 
+        = (0x000000ffU & ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_4__DOT__x_reg) 
+                          >> 8U));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___join_i8_x 
+        = (0x000001ffU & ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_2__DOT__x_reg) 
+                          + (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_3__DOT__x_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___merge_i8_x 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage__DOT__x_valid_reg)
+            ? (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage__DOT__x_reg)
+            : (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_0__DOT__x_reg));
+    vlSelfRef.ESI_Cosim_Top__DOT___ESI_Cosim_UserTopWrapper_merge_a_data_ready 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage__DOT__x_ready_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT___ESI_Cosim_UserTopWrapper_merge_b_data_ready 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_0__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_0__DOT__x_ready_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT___ESI_Cosim_UserTopWrapper_join_a_data_ready 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_2__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_2__DOT__x_ready_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT___ESI_Cosim_UserTopWrapper_join_b_data_ready 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_3__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_3__DOT__x_ready_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT___ESI_Cosim_UserTopWrapper_fork_a_data_ready 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_5__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_5__DOT__x_ready_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___pipelineStage_a_ready_0 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_6__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_6__DOT__x_ready_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___pipelineStage_a_ready 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_7__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_7__DOT__x_ready_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOut_a_ready 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__x_ready_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT__merge_a_data__DOT__DataOut_a_ready 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT__merge_a_data__DOT__out_pipe__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT__merge_a_data__DOT__out_pipe__DOT__x_ready_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT__merge_b_data__DOT__DataOut_a_ready 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT__merge_b_data__DOT__out_pipe__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT__merge_b_data__DOT__out_pipe__DOT__x_ready_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT__join_a_data__DOT__DataOut_a_ready 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT__join_a_data__DOT__out_pipe__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT__join_a_data__DOT__out_pipe__DOT__x_ready_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT__join_b_data__DOT__DataOut_a_ready 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT__join_b_data__DOT__out_pipe__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT__join_b_data__DOT__out_pipe__DOT__x_ready_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT__fork_a_data__DOT__DataOut_a_ready 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT__fork_a_data__DOT__out_pipe__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT__fork_a_data__DOT__out_pipe__DOT__x_ready_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOut_a_ready 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__out_pipe__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__out_pipe__DOT__x_ready_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__DataOut_a_ready 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__out_pipe__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__out_pipe__DOT__x_ready_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__DataOut_a_ready 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__out_pipe__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__out_pipe__DOT__x_ready_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__DataInBuffer[8U] 
+        = (0x000000ffU & (IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__cycle_count));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__DataInBuffer[9U] 
+        = (0x000000ffU & (IData)((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__cycle_count 
+                                  >> 8U)));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__DataInBuffer[0x0000000aU] 
+        = (0x000000ffU & (IData)((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__cycle_count 
+                                  >> 0x00000010U)));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__DataInBuffer[0x0000000bU] 
+        = (0x000000ffU & (IData)((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__cycle_count 
+                                  >> 0x00000018U)));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__DataInBuffer[0x0000000cU] 
+        = (0x000000ffU & (IData)((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__cycle_count 
+                                  >> 0x00000020U)));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__DataInBuffer[0x0000000dU] 
+        = (0x000000ffU & (IData)((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__cycle_count 
+                                  >> 0x00000028U)));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__DataInBuffer[0x0000000eU] 
+        = (0x000000ffU & (IData)((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__cycle_count 
+                                  >> 0x00000030U)));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__DataInBuffer[0x0000000fU] 
+        = (0x000000ffU & (IData)((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__cycle_count 
+                                  >> 0x00000038U)));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_4__DOT__a_rcv 
+        = (((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_4__DOT__l_valid)) 
+            | (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_4__DOT__x_ready_reg)) 
+           & ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_2__DOT__x_valid_reg) 
+              & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_3__DOT__x_valid_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage__DOT__a_ready 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage__DOT__x_ready_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage_0__DOT__a_ready 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage_0__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage_0__DOT__x_ready_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_1__DOT__a_ready 
+        = (1U & ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_1__DOT__l_valid)) 
+                 | (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_1__DOT__x_ready_reg)));
+    vlSelfRef.__VdfgRegularize_he50b618e_0_0 = (IData)(
+                                                       (0U 
+                                                        != 
+                                                        (0xfffffc00U 
+                                                         & vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__x_reg[2U])));
+    __Vtemp_2[0U] = VESI_Cosim_Top__ConstPool__CONST_h2f74ed10_0[0U];
+    __Vtemp_2[1U] = VESI_Cosim_Top__ConstPool__CONST_h2f74ed10_0[1U];
+    __Vtemp_2[2U] = VESI_Cosim_Top__ConstPool__CONST_h2f74ed10_0[2U];
+    __Vtemp_2[3U] = VESI_Cosim_Top__ConstPool__CONST_h2f74ed10_0[3U];
+    __Vtemp_2[4U] = VESI_Cosim_Top__ConstPool__CONST_h2f74ed10_0[4U];
+    __Vtemp_2[5U] = VESI_Cosim_Top__ConstPool__CONST_h2f74ed10_0[5U];
+    __Vtemp_2[6U] = VESI_Cosim_Top__ConstPool__CONST_h2f74ed10_0[6U];
+    __Vtemp_2[7U] = VESI_Cosim_Top__ConstPool__CONST_h2f74ed10_0[7U];
+    __Vtemp_2[8U] = VESI_Cosim_Top__ConstPool__CONST_h2f74ed10_0[8U];
+    __Vtemp_2[9U] = VESI_Cosim_Top__ConstPool__CONST_h2f74ed10_0[9U];
+    __Vtemp_2[0x0000000aU] = (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__HeaderMMIO__DOT__cycle_counter__DOT___GEN);
+    __Vtemp_2[0x0000000bU] = (IData)((vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__HeaderMMIO__DOT__cycle_counter__DOT___GEN 
+                                      >> 0x00000020U));
+    __Vtemp_2[0x0000000cU] = 0U;
+    __Vtemp_2[0x0000000dU] = 0U;
+    __Vtemp_2[0x0000000eU] = 0U;
+    __Vtemp_2[0x0000000fU] = 0U;
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataIn 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__out0_valid_reg__DOT__state)
+            ? (((QData)((IData)(__Vtemp_2[(((IData)(0x0000003fU) 
+                                            + (0x000001ffU 
+                                               & VL_SHIFTL_III(9,9,32, 
+                                                               (7U 
+                                                                & (vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__out0_msg_reg[2U] 
+                                                                   >> 3U)), 6U))) 
+                                           >> 5U)])) 
+                << ((0U == (0x0000001fU & VL_SHIFTL_III(9,9,32, 
+                                                        (7U 
+                                                         & (vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__out0_msg_reg[2U] 
+                                                            >> 3U)), 6U)))
+                     ? 0x00000020U : ((IData)(0x00000040U) 
+                                      - (0x0000001fU 
+                                         & VL_SHIFTL_III(9,9,32, 
+                                                         (7U 
+                                                          & (vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__out0_msg_reg[2U] 
+                                                             >> 3U)), 6U))))) 
+               | (((0U == (0x0000001fU & VL_SHIFTL_III(9,9,32, 
+                                                       (7U 
+                                                        & (vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__out0_msg_reg[2U] 
+                                                           >> 3U)), 6U)))
+                    ? 0ULL : ((QData)((IData)(__Vtemp_2[
+                                              (((IData)(0x0000001fU) 
+                                                + (0x000001ffU 
+                                                   & VL_SHIFTL_III(9,9,32, 
+                                                                   (7U 
+                                                                    & (vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__out0_msg_reg[2U] 
+                                                                       >> 3U)), 6U))) 
+                                               >> 5U)])) 
+                              << ((IData)(0x00000020U) 
+                                  - (0x0000001fU & 
+                                     VL_SHIFTL_III(9,9,32, 
+                                                   (7U 
+                                                    & (vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__out0_msg_reg[2U] 
+                                                       >> 3U)), 6U))))) 
+                  | ((QData)((IData)(__Vtemp_2[(0x0000000fU 
+                                                & (VL_SHIFTL_III(9,9,32, 
+                                                                 (7U 
+                                                                  & (vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__out0_msg_reg[2U] 
+                                                                     >> 3U)), 6U) 
+                                                   >> 5U))])) 
+                     >> (0x0000001fU & VL_SHIFTL_III(9,9,32, 
+                                                     (7U 
+                                                      & (vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__out0_msg_reg[2U] 
+                                                         >> 3U)), 6U)))))
+            : vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN_1);
+    vlSelfRef.ESI_Cosim_Top__DOT__merge_a_data__DOT__out_pipe__DOT__xmit 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT___ESI_Cosim_UserTopWrapper_merge_a_data_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__merge_a_data__DOT__out_pipe__DOT__x_valid_reg));
+    vlSelfRef.ESI_Cosim_Top__DOT__merge_b_data__DOT__out_pipe__DOT__xmit 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT___ESI_Cosim_UserTopWrapper_merge_b_data_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__merge_b_data__DOT__out_pipe__DOT__x_valid_reg));
+    vlSelfRef.ESI_Cosim_Top__DOT__join_a_data__DOT__out_pipe__DOT__xmit 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT___ESI_Cosim_UserTopWrapper_join_a_data_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__join_a_data__DOT__out_pipe__DOT__x_valid_reg));
+    vlSelfRef.ESI_Cosim_Top__DOT__join_b_data__DOT__out_pipe__DOT__xmit 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT___ESI_Cosim_UserTopWrapper_join_b_data_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__join_b_data__DOT__out_pipe__DOT__x_valid_reg));
+    vlSelfRef.ESI_Cosim_Top__DOT__fork_a_data__DOT__out_pipe__DOT__xmit 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT___ESI_Cosim_UserTopWrapper_fork_a_data_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__fork_a_data__DOT__out_pipe__DOT__x_valid_reg));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage__DOT__xmit 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___pipelineStage_a_ready_0) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage__DOT__x_valid_reg));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage_0__DOT__xmit 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___pipelineStage_a_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage_0__DOT__x_valid_reg));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__a_rcv 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOut_a_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOut_a_valid));
+    vlSelfRef.ESI_Cosim_Top__DOT__merge_a_data__DOT__out_pipe__DOT__a_rcv 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__merge_a_data__DOT__DataOut_a_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__merge_a_data__DOT__DataOut_a_valid));
+    vlSelfRef.ESI_Cosim_Top__DOT__merge_b_data__DOT__out_pipe__DOT__a_rcv 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__merge_b_data__DOT__DataOut_a_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__merge_b_data__DOT__DataOut_a_valid));
+    vlSelfRef.ESI_Cosim_Top__DOT__join_a_data__DOT__out_pipe__DOT__a_rcv 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__join_a_data__DOT__DataOut_a_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__join_a_data__DOT__DataOut_a_valid));
+    vlSelfRef.ESI_Cosim_Top__DOT__join_b_data__DOT__out_pipe__DOT__a_rcv 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__join_b_data__DOT__DataOut_a_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__join_b_data__DOT__DataOut_a_valid));
+    vlSelfRef.ESI_Cosim_Top__DOT__fork_a_data__DOT__out_pipe__DOT__a_rcv 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__fork_a_data__DOT__DataOut_a_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__fork_a_data__DOT__DataOut_a_valid));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__out_pipe__DOT__a_rcv 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOut_a_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOut_a_valid));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__out_pipe__DOT__a_rcv 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__DataOut_a_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__DataOut_a_valid));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__out_pipe__DOT__a_rcv 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__DataOut_a_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__DataOut_a_valid));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_2__DOT__xmit 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_4__DOT__a_rcv) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_2__DOT__x_valid_reg));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_3__DOT__xmit 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_4__DOT__a_rcv) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_3__DOT__x_valid_reg));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___fork_i8_a_ready 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage_0__DOT__a_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage__DOT__a_ready));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_1__DOT__a_rcv 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_1__DOT__a_ready) 
+           & ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_0__DOT__x_valid_reg) 
+              | (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage__DOT__x_valid_reg)));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___merge_i8_a_ready 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage__DOT__x_valid_reg) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_1__DOT__a_ready));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___merge_i8_b_ready 
+        = ((~ (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage__DOT__x_valid_reg)) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_1__DOT__a_ready));
+    vlSelfRef.ESI_Cosim_Top__DOT___ESI_Cosim_UserTopWrapper_mmio_cmd_ready 
+        = (1U & (~ (((~ (IData)(vlSelfRef.__VdfgRegularize_he50b618e_0_0)) 
+                     & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__out0_valid_reg__DOT__state)) 
+                    | ((IData)(vlSelfRef.__VdfgRegularize_he50b618e_0_0) 
+                       & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__out1_valid_reg__DOT__state)))));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataInBuffer[0U] 
+        = (0x000000ffU & (IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataIn));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataInBuffer[1U] 
+        = (0x000000ffU & (IData)((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataIn 
+                                  >> 8U)));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataInBuffer[2U] 
+        = (0x000000ffU & (IData)((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataIn 
+                                  >> 0x00000010U)));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataInBuffer[3U] 
+        = (0x000000ffU & (IData)((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataIn 
+                                  >> 0x00000018U)));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataInBuffer[4U] 
+        = (0x000000ffU & (IData)((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataIn 
+                                  >> 0x00000020U)));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataInBuffer[5U] 
+        = (0x000000ffU & (IData)((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataIn 
+                                  >> 0x00000028U)));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataInBuffer[6U] 
+        = (0x000000ffU & (IData)((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataIn 
+                                  >> 0x00000030U)));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataInBuffer[7U] 
+        = (0x000000ffU & (IData)((vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataIn 
+                                  >> 0x00000038U)));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_5__DOT__xmit 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___fork_i8_a_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_5__DOT__x_valid_reg));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage__DOT__xmit 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___merge_i8_a_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage__DOT__x_valid_reg));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_0__DOT__xmit 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___merge_i8_b_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_0__DOT__x_valid_reg));
+    vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__xmit 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT___ESI_Cosim_UserTopWrapper_mmio_cmd_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__x_valid_reg));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage__DOT__a_rcv 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage__DOT__a_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_5__DOT__xmit));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage_0__DOT__a_rcv 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage_0__DOT__a_ready) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_5__DOT__xmit));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__will_write_0 
+        = ((~ (IData)(vlSelfRef.__VdfgRegularize_he50b618e_0_0)) 
+           & (IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__xmit));
+    vlSelfRef.ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__will_write_1 
+        = ((IData)(vlSelfRef.ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__xmit) 
+           & (IData)(vlSelfRef.__VdfgRegularize_he50b618e_0_0));
+}
+
+VL_ATTR_COLD void VESI_Cosim_Top___024root___eval_stl(VESI_Cosim_Top___024root* vlSelf) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VESI_Cosim_Top___024root___eval_stl\n"); );
+    VESI_Cosim_Top__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
+    auto& vlSelfRef = std::ref(*vlSelf).get();
+    // Body
+    if ((1ULL & vlSelfRef.__VstlTriggered[0U])) {
+        VESI_Cosim_Top___024root___stl_sequent__TOP__0(vlSelf);
+    }
+}
+
+VL_ATTR_COLD bool VESI_Cosim_Top___024root___eval_phase__stl(VESI_Cosim_Top___024root* vlSelf) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VESI_Cosim_Top___024root___eval_phase__stl\n"); );
+    VESI_Cosim_Top__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
+    auto& vlSelfRef = std::ref(*vlSelf).get();
+    // Locals
+    CData/*0:0*/ __VstlExecute;
+    // Body
+    VESI_Cosim_Top___024root___eval_triggers__stl(vlSelf);
+    __VstlExecute = VESI_Cosim_Top___024root___trigger_anySet__stl(vlSelfRef.__VstlTriggered);
+    if (__VstlExecute) {
+        VESI_Cosim_Top___024root___eval_stl(vlSelf);
+    }
+    return (__VstlExecute);
+}
+
+bool VESI_Cosim_Top___024root___trigger_anySet__act(const VlUnpacked<QData/*63:0*/, 1> &in);
+
+#ifdef VL_DEBUG
+VL_ATTR_COLD void VESI_Cosim_Top___024root___dump_triggers__act(const VlUnpacked<QData/*63:0*/, 1> &triggers, const std::string &tag) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VESI_Cosim_Top___024root___dump_triggers__act\n"); );
+    // Body
+    if ((1U & (~ (IData)(VESI_Cosim_Top___024root___trigger_anySet__act(triggers))))) {
+        VL_DBG_MSGS("         No '" + tag + "' region triggers active\n");
+    }
+    if ((1U & (IData)(triggers[0U]))) {
+        VL_DBG_MSGS("         '" + tag + "' region trigger index 0 is active: @(posedge clk)\n");
+    }
+}
+#endif  // VL_DEBUG
+
+VL_ATTR_COLD void VESI_Cosim_Top___024root___ctor_var_reset(VESI_Cosim_Top___024root* vlSelf) {
+    VL_DEBUG_IF(VL_DBG_MSGF("+    VESI_Cosim_Top___024root___ctor_var_reset\n"); );
+    VESI_Cosim_Top__Syms* const __restrict vlSymsp VL_ATTR_UNUSED = vlSelf->vlSymsp;
+    auto& vlSelfRef = std::ref(*vlSelf).get();
+    // Body
+    const uint64_t __VscopeHash = VL_MURMUR64_HASH(vlSelf->name());
+    vlSelf->clk = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 16707436170211756652ull);
+    vlSelf->rst = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 18209466448985614591ull);
+    vlSelf->ESI_Cosim_Top__DOT___ESI_Cosim_UserTopWrapper_mmio_cmd_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 41420702173694259ull);
+    vlSelf->ESI_Cosim_Top__DOT___ESI_Cosim_UserTopWrapper_merge_a_data_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 2623822916079907054ull);
+    vlSelf->ESI_Cosim_Top__DOT___ESI_Cosim_UserTopWrapper_merge_b_data_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 216876813484435317ull);
+    vlSelf->ESI_Cosim_Top__DOT___ESI_Cosim_UserTopWrapper_join_a_data_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 13740165376330582581ull);
+    vlSelf->ESI_Cosim_Top__DOT___ESI_Cosim_UserTopWrapper_join_b_data_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 8570514705287086144ull);
+    vlSelf->ESI_Cosim_Top__DOT___ESI_Cosim_UserTopWrapper_fork_a_data_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 9133917771897491327ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___pipelineStage_a_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 3641444040573316779ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___pipelineStage_a_ready_0 = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 6291854933499893199ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___fork_i8_a_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 1804107409149444624ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___join_i8_x = VL_SCOPED_RAND_RESET_I(9, __VscopeHash, 16204077326761856124ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___merge_i8_a_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 13460431823234708218ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___merge_i8_b_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 10398970055001355480ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT___merge_i8_x = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 8584465725545935840ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage__DOT__x_reg = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 11955094352242234746ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 14188938202371522922ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 16670820772950970522ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 258475611549740289ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage__DOT__l = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 1061803247914311774ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 2919402493061031823ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_0__DOT__x_reg = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 5300831435378084443ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_0__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 17075227753669448780ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_0__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 13005662109292148165ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_0__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 4897734454341761239ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_0__DOT__l = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 8159404332508949680ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_0__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 1873745546305828186ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_1__DOT__a_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 12198151089720704434ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_1__DOT__x_reg = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 17312892794517674602ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_1__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 11193678940299457460ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_1__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 8442225889131795574ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_1__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 12588441478354501924ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_1__DOT__l = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 7532717711505250864ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_1__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 12846486155009155074ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_1__DOT__a_rcv = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 4301729091869171834ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_2__DOT__x_reg = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 542369359532444754ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_2__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 17191570361214413787ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_2__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 16014711748902365385ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_2__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 16298565998954781564ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_2__DOT__l = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 13323337555607840690ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_2__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 7527835321176156989ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_3__DOT__x_reg = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 16230964006140926785ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_3__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 2575689777418852012ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_3__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 12494279821924510866ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_3__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 10989093896848666702ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_3__DOT__l = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 6678963854464316217ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_3__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 6943871740529445555ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_4__DOT__x_reg = VL_SCOPED_RAND_RESET_I(9, __VscopeHash, 1280686619959779370ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_4__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 14238383637835731650ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_4__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 13244420245306831898ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_4__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 13850200967315825544ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_4__DOT__l = VL_SCOPED_RAND_RESET_I(9, __VscopeHash, 15276724015758911556ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_4__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 2475777773423168538ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_4__DOT__a_rcv = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 13378582927620985745ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_5__DOT__x_reg = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 17280796574126246117ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_5__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 1172272092607090550ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_5__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 4268630248654371393ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_5__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 13353337679559608818ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_5__DOT__l = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 1529951015657093076ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_5__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 6119898021693031026ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage__DOT__a_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 15548340008106893160ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage__DOT__x_reg = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 13938288563818126513ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 13756848137969629010ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 12672951852884338472ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 7115456846195122372ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage__DOT__l = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 10852386836700258516ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 7794931520592268409ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage__DOT__a_rcv = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 1395787900047261147ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage_0__DOT__a_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 9906334660430818397ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage_0__DOT__x_reg = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 12953048276540132444ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage_0__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 3227676136402324290ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage_0__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 3309619395637050291ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage_0__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 13159708165341867527ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage_0__DOT__l = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 4735874166483061972ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage_0__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 9943720692991998934ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__fork_i8__DOT__pipelineStage_0__DOT__a_rcv = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 504451830308250567ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_6__DOT__x_reg = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 10516553262352641063ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_6__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 10191004821418154232ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_6__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 16285053392936712695ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_6__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 14296447272010953939ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_6__DOT__l = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 4507826667375032035ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_6__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 7719794948131099034ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_7__DOT__x_reg = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 2704893299431972947ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_7__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 9759733071663018988ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_7__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 3551350823085848322ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_7__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 14294514306345224312ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_7__DOT__l = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 717403119290937393ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__Top__DOT__pipelineStage_7__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 17982068872534219395ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__HeaderMMIO__DOT__cycle_counter__DOT___GEN = VL_SCOPED_RAND_RESET_Q(64, __VscopeHash, 8579712916342621071ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__data_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 14669889388341205251ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__data_valid_0 = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 17359063088583450908ull);
+    for (int __Vi0 = 0; __Vi0 < 242; ++__Vi0) {
+        vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN[__Vi0] = VL_SCOPED_RAND_RESET_Q(64, __VscopeHash, 3036458792222551677ull);
+    }
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN_0 = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 18254345305488834150ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__ESI_Manifest_ROM_Wrapper__DOT__ESI_Manifest_ROM__DOT___GEN_1 = VL_SCOPED_RAND_RESET_Q(64, __VscopeHash, 7176367569398322535ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__consume_1 = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 4765681672168793083ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__consume_0 = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 12617600079505875908ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__will_write_0 = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 7458161116464035244ull);
+    VL_SCOPED_RAND_RESET_W(97, vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT___GEN_1, __VscopeHash, 6569079360018095821ull);
+    VL_SCOPED_RAND_RESET_W(97, vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__out0_msg_reg, __VscopeHash, 16466332573749151235ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__will_write_1 = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 16138274176031677842ull);
+    VL_SCOPED_RAND_RESET_W(97, vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__out1_msg_reg, __VscopeHash, 7411393006328025379ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__out0_valid_reg__DOT__state = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 13931494277802891808ull);
+    vlSelf->ESI_Cosim_Top__DOT__ESI_Cosim_UserTopWrapper__DOT__client_cmd_demux__DOT__demux_l0_i0__DOT__out1_valid_reg__DOT__state = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 1421156512019534714ull);
+    for (int __Vi0 = 0; __Vi0 < 13; ++__Vi0) {
+        vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOutBuffer[__Vi0] = 0;
+    }
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOut_a_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 8183166814260162184ull);
+    VL_SCOPED_RAND_RESET_W(97, vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOut_a, __VscopeHash, 7919667789404140234ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__DataOut_a_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 17866775178300427780ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__unnamedblk2__DOT__data_limit = 0;
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__unnamedblk2__DOT__rc = 0;
+    VL_SCOPED_RAND_RESET_W(97, vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__x_reg, __VscopeHash, 1236029576151022939ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 2673463910591709263ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 7609492501422207120ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 10561791408360756044ull);
+    VL_SCOPED_RAND_RESET_W(97, vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__l, __VscopeHash, 2458283771030084910ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 8471307147724410060ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_arg__DOT__out_pipe__DOT__a_rcv = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 16830900316153162936ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataIn = VL_SCOPED_RAND_RESET_Q(64, __VscopeHash, 9398338701224086134ull);
+    for (int __Vi0 = 0; __Vi0 < 8; ++__Vi0) {
+        vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__DataInBuffer[__Vi0] = 0;
+    }
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_mmio_read_write_result__DOT__unnamedblk2__DOT__rc = 0;
+    for (int __Vi0 = 0; __Vi0 < 1; ++__Vi0) {
+        vlSelf->ESI_Cosim_Top__DOT__merge_a_data__DOT__DataOutBuffer[__Vi0] = 0;
+    }
+    vlSelf->ESI_Cosim_Top__DOT__merge_a_data__DOT__DataOut_a_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 12175068200373544329ull);
+    vlSelf->ESI_Cosim_Top__DOT__merge_a_data__DOT__DataOut_a_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 17295708486226886482ull);
+    vlSelf->ESI_Cosim_Top__DOT__merge_a_data__DOT__unnamedblk2__DOT__data_limit = 0;
+    vlSelf->ESI_Cosim_Top__DOT__merge_a_data__DOT__unnamedblk2__DOT__rc = 0;
+    vlSelf->ESI_Cosim_Top__DOT__merge_a_data__DOT__out_pipe__DOT__x_reg = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 18255241979374501865ull);
+    vlSelf->ESI_Cosim_Top__DOT__merge_a_data__DOT__out_pipe__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 6027349609471811906ull);
+    vlSelf->ESI_Cosim_Top__DOT__merge_a_data__DOT__out_pipe__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 10187071806437995405ull);
+    vlSelf->ESI_Cosim_Top__DOT__merge_a_data__DOT__out_pipe__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 16813074678347688699ull);
+    vlSelf->ESI_Cosim_Top__DOT__merge_a_data__DOT__out_pipe__DOT__l = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 11803809154911388848ull);
+    vlSelf->ESI_Cosim_Top__DOT__merge_a_data__DOT__out_pipe__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 339190028445673633ull);
+    vlSelf->ESI_Cosim_Top__DOT__merge_a_data__DOT__out_pipe__DOT__a_rcv = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 4122045582387593210ull);
+    for (int __Vi0 = 0; __Vi0 < 1; ++__Vi0) {
+        vlSelf->ESI_Cosim_Top__DOT__merge_b_data__DOT__DataOutBuffer[__Vi0] = 0;
+    }
+    vlSelf->ESI_Cosim_Top__DOT__merge_b_data__DOT__DataOut_a_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 17811917028612389760ull);
+    vlSelf->ESI_Cosim_Top__DOT__merge_b_data__DOT__DataOut_a_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 2691643665416624807ull);
+    vlSelf->ESI_Cosim_Top__DOT__merge_b_data__DOT__unnamedblk2__DOT__data_limit = 0;
+    vlSelf->ESI_Cosim_Top__DOT__merge_b_data__DOT__unnamedblk2__DOT__rc = 0;
+    vlSelf->ESI_Cosim_Top__DOT__merge_b_data__DOT__out_pipe__DOT__x_reg = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 6363505570511587010ull);
+    vlSelf->ESI_Cosim_Top__DOT__merge_b_data__DOT__out_pipe__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 5531923608058281551ull);
+    vlSelf->ESI_Cosim_Top__DOT__merge_b_data__DOT__out_pipe__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 15354862483070298938ull);
+    vlSelf->ESI_Cosim_Top__DOT__merge_b_data__DOT__out_pipe__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 5780407006137071067ull);
+    vlSelf->ESI_Cosim_Top__DOT__merge_b_data__DOT__out_pipe__DOT__l = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 8826389886731426742ull);
+    vlSelf->ESI_Cosim_Top__DOT__merge_b_data__DOT__out_pipe__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 2133749255645039728ull);
+    vlSelf->ESI_Cosim_Top__DOT__merge_b_data__DOT__out_pipe__DOT__a_rcv = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 16193761561291017387ull);
+    for (int __Vi0 = 0; __Vi0 < 1; ++__Vi0) {
+        vlSelf->ESI_Cosim_Top__DOT__merge_x_data__DOT__DataInBuffer[__Vi0] = 0;
+    }
+    vlSelf->ESI_Cosim_Top__DOT__merge_x_data__DOT__unnamedblk2__DOT__rc = 0;
+    for (int __Vi0 = 0; __Vi0 < 1; ++__Vi0) {
+        vlSelf->ESI_Cosim_Top__DOT__join_a_data__DOT__DataOutBuffer[__Vi0] = 0;
+    }
+    vlSelf->ESI_Cosim_Top__DOT__join_a_data__DOT__DataOut_a_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 10077838286336279351ull);
+    vlSelf->ESI_Cosim_Top__DOT__join_a_data__DOT__DataOut_a_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 15736604082361293189ull);
+    vlSelf->ESI_Cosim_Top__DOT__join_a_data__DOT__unnamedblk2__DOT__data_limit = 0;
+    vlSelf->ESI_Cosim_Top__DOT__join_a_data__DOT__unnamedblk2__DOT__rc = 0;
+    vlSelf->ESI_Cosim_Top__DOT__join_a_data__DOT__out_pipe__DOT__x_reg = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 11110872862827790074ull);
+    vlSelf->ESI_Cosim_Top__DOT__join_a_data__DOT__out_pipe__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 14868873779604995710ull);
+    vlSelf->ESI_Cosim_Top__DOT__join_a_data__DOT__out_pipe__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 6348700222445462686ull);
+    vlSelf->ESI_Cosim_Top__DOT__join_a_data__DOT__out_pipe__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 16199573357543164350ull);
+    vlSelf->ESI_Cosim_Top__DOT__join_a_data__DOT__out_pipe__DOT__l = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 2732787711404374745ull);
+    vlSelf->ESI_Cosim_Top__DOT__join_a_data__DOT__out_pipe__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 10255396445637759965ull);
+    vlSelf->ESI_Cosim_Top__DOT__join_a_data__DOT__out_pipe__DOT__a_rcv = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 5963853862126005906ull);
+    for (int __Vi0 = 0; __Vi0 < 1; ++__Vi0) {
+        vlSelf->ESI_Cosim_Top__DOT__join_b_data__DOT__DataOutBuffer[__Vi0] = 0;
+    }
+    vlSelf->ESI_Cosim_Top__DOT__join_b_data__DOT__DataOut_a_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 43201065883718197ull);
+    vlSelf->ESI_Cosim_Top__DOT__join_b_data__DOT__DataOut_a_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 12779332013531867898ull);
+    vlSelf->ESI_Cosim_Top__DOT__join_b_data__DOT__unnamedblk2__DOT__data_limit = 0;
+    vlSelf->ESI_Cosim_Top__DOT__join_b_data__DOT__unnamedblk2__DOT__rc = 0;
+    vlSelf->ESI_Cosim_Top__DOT__join_b_data__DOT__out_pipe__DOT__x_reg = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 14708476792204616702ull);
+    vlSelf->ESI_Cosim_Top__DOT__join_b_data__DOT__out_pipe__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 13205136474850732206ull);
+    vlSelf->ESI_Cosim_Top__DOT__join_b_data__DOT__out_pipe__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 2001545016789980752ull);
+    vlSelf->ESI_Cosim_Top__DOT__join_b_data__DOT__out_pipe__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 16871427481090641079ull);
+    vlSelf->ESI_Cosim_Top__DOT__join_b_data__DOT__out_pipe__DOT__l = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 12114586213860555361ull);
+    vlSelf->ESI_Cosim_Top__DOT__join_b_data__DOT__out_pipe__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 11619738278872153390ull);
+    vlSelf->ESI_Cosim_Top__DOT__join_b_data__DOT__out_pipe__DOT__a_rcv = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 381760358344236935ull);
+    for (int __Vi0 = 0; __Vi0 < 2; ++__Vi0) {
+        vlSelf->ESI_Cosim_Top__DOT__join_x_data__DOT__DataInBuffer[__Vi0] = 0;
+    }
+    vlSelf->ESI_Cosim_Top__DOT__join_x_data__DOT__unnamedblk2__DOT__rc = 0;
+    for (int __Vi0 = 0; __Vi0 < 1; ++__Vi0) {
+        vlSelf->ESI_Cosim_Top__DOT__fork_a_data__DOT__DataOutBuffer[__Vi0] = 0;
+    }
+    vlSelf->ESI_Cosim_Top__DOT__fork_a_data__DOT__DataOut_a_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 13854360353501365824ull);
+    vlSelf->ESI_Cosim_Top__DOT__fork_a_data__DOT__DataOut_a_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 2125321136856281109ull);
+    vlSelf->ESI_Cosim_Top__DOT__fork_a_data__DOT__unnamedblk2__DOT__data_limit = 0;
+    vlSelf->ESI_Cosim_Top__DOT__fork_a_data__DOT__unnamedblk2__DOT__rc = 0;
+    vlSelf->ESI_Cosim_Top__DOT__fork_a_data__DOT__out_pipe__DOT__x_reg = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 13594999089706497408ull);
+    vlSelf->ESI_Cosim_Top__DOT__fork_a_data__DOT__out_pipe__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 8012007641373949558ull);
+    vlSelf->ESI_Cosim_Top__DOT__fork_a_data__DOT__out_pipe__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 16025590069349357920ull);
+    vlSelf->ESI_Cosim_Top__DOT__fork_a_data__DOT__out_pipe__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 11015030942259235839ull);
+    vlSelf->ESI_Cosim_Top__DOT__fork_a_data__DOT__out_pipe__DOT__l = VL_SCOPED_RAND_RESET_I(8, __VscopeHash, 14702985231922135603ull);
+    vlSelf->ESI_Cosim_Top__DOT__fork_a_data__DOT__out_pipe__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 3054313204233515316ull);
+    vlSelf->ESI_Cosim_Top__DOT__fork_a_data__DOT__out_pipe__DOT__a_rcv = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 11022095346311406865ull);
+    for (int __Vi0 = 0; __Vi0 < 1; ++__Vi0) {
+        vlSelf->ESI_Cosim_Top__DOT__fork_x_data__DOT__DataInBuffer[__Vi0] = 0;
+    }
+    vlSelf->ESI_Cosim_Top__DOT__fork_x_data__DOT__unnamedblk2__DOT__rc = 0;
+    for (int __Vi0 = 0; __Vi0 < 1; ++__Vi0) {
+        vlSelf->ESI_Cosim_Top__DOT__fork_y_data__DOT__DataInBuffer[__Vi0] = 0;
+    }
+    vlSelf->ESI_Cosim_Top__DOT__fork_y_data__DOT__unnamedblk2__DOT__rc = 0;
+    for (int __Vi0 = 0; __Vi0 < 9; ++__Vi0) {
+        vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOutBuffer[__Vi0] = 0;
+    }
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOut_a_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 2305372722010190646ull);
+    VL_SCOPED_RAND_RESET_W(72, vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOut_a, __VscopeHash, 2990749180915613059ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__DataOut_a_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 5197437540241952304ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__unnamedblk2__DOT__data_limit = 0;
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__unnamedblk2__DOT__rc = 0;
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__out_pipe__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 3612505899187398998ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__out_pipe__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 5530976533515380448ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__out_pipe__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 1231038192026439108ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__out_pipe__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 5571591108872234243ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_read_resp_data__DOT__out_pipe__DOT__a_rcv = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 7426133085902712859ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__DataOut_a_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 17688646462277782760ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__DataOut_a_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 4327244349090099189ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__unnamedblk2__DOT__data_limit = 0;
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__unnamedblk2__DOT__rc = 0;
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__out_pipe__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 6714604024856335525ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__out_pipe__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 15440606833364512884ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__out_pipe__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 12116630330641953189ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__out_pipe__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 14097063689800488915ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcosim_hostmem_write_result__DOT__out_pipe__DOT__a_rcv = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 16584113337763289055ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__cycle_count = 0;
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__DataOut_a_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 14683305574197524076ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__DataOut_a_ready = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 15160585000400120194ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__unnamedblk2__DOT__data_limit = 0;
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__unnamedblk2__DOT__rc = 0;
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__out_pipe__DOT__x_valid_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 9540753860520621166ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__out_pipe__DOT__x_ready_reg = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 15531888128148889152ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__out_pipe__DOT__xmit = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 13590169668561307276ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__out_pipe__DOT__l_valid = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 4340219233450388417ull);
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__req_ep__DOT__out_pipe__DOT__a_rcv = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 10942673575651260843ull);
+    for (int __Vi0 = 0; __Vi0 < 16; ++__Vi0) {
+        vlSelf->ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__DataInBuffer[__Vi0] = 0;
+    }
+    vlSelf->ESI_Cosim_Top__DOT_____05Fcycle_counter__DOT__resp_ep__DOT__unnamedblk2__DOT__rc = 0;
+    for (int __Vi0 = 0; __Vi0 < 1921; ++__Vi0) {
+        vlSelf->ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT__compressed_manifest_bytes[__Vi0] = 0;
+    }
+    vlSelf->ESI_Cosim_Top__DOT_____05Fmanifest__DOT_____05Fmanifest__DOT____Vlvbound_h8980d261__0 = 0;
+    vlSelf->__VdfgRegularize_he50b618e_0_0 = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 777431380022455576ull);
+    for (int __Vi0 = 0; __Vi0 < 1; ++__Vi0) {
+        vlSelf->__VstlTriggered[__Vi0] = 0;
+    }
+    for (int __Vi0 = 0; __Vi0 < 1; ++__Vi0) {
+        vlSelf->__VactTriggered[__Vi0] = 0;
+    }
+    vlSelf->__Vtrigprevexpr___TOP__clk__0 = VL_SCOPED_RAND_RESET_I(1, __VscopeHash, 9526919608049418986ull);
+    for (int __Vi0 = 0; __Vi0 < 1; ++__Vi0) {
+        vlSelf->__VnbaTriggered[__Vi0] = 0;
+    }
+}
