@@ -275,10 +275,15 @@ def _compile_once_for_class(config: CosimPytestConfig) -> _ClassCompileCache:
   sources_dir = _run_hw_script(config, compile_root)
   compile_dir = compile_root / "compile"
   sim = _create_simulator(config, sources_dir, compile_dir)
+  compile_lines: list[str] = []
+  sim._compile_stdout_cb = compile_lines.append
+  sim._compile_stderr_cb = compile_lines.append
   with _chdir(compile_dir):
     rc = sim.compile()
   if rc != 0:
-    raise RuntimeError(f"Simulator compile failed with exit code {rc}")
+    output = "\n".join(compile_lines[-50:])
+    raise RuntimeError(
+        f"Simulator compile failed with exit code {rc}\n{output}")
   return _ClassCompileCache(sources_dir=sources_dir,
                             obj_dir=compile_dir / "obj_dir")
 
@@ -321,7 +326,9 @@ def _run_child(
       os.chdir(run_dir)
       rc = sim.compile()
       if rc != 0:
-        raise RuntimeError(f"Simulator compile failed with exit code {rc}")
+        output = "\n".join((stdout_lines + stderr_lines)[-50:])
+        raise RuntimeError(
+            f"Simulator compile failed with exit code {rc}\n{output}")
     else:
       sources_dir = class_cache.sources_dir
       run_dir = run_root / f"run-{os.getpid()}"

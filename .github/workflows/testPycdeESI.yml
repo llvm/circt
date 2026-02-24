@@ -103,5 +103,6 @@ jobs:
         run: |
           export PYTHONPATH="$PWD/build/tools/circt/python_packages/pycde:$PWD/build/tools/circt/lib/Dialect/ESI/runtime/python"
           export PATH="$PWD/build/bin:$PATH"
+          export LIBRARY_PATH="$PWD/build/lib:$LIBRARY_PATH"
           export LD_LIBRARY_PATH="$PWD/build/lib:$LD_LIBRARY_PATH"
           python3 -m pytest lib/Dialect/ESI/runtime/tests/ -v --log-cli-level=INFO
