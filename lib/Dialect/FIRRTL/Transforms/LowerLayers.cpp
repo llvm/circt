@@ -429,7 +429,8 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
   // densemap of replacements around to avoid creating the same hardware
   // multiple times.
   DenseMap<Value, Value> replacements;
-  auto getReplacement = [&](Operation *user, Value value) -> Value {
+  std::function<Value(Operation *, Value)> getReplacement =
+      [&](Operation *user, Value value) -> Value {
     auto it = replacements.find(value);
     if (it != replacements.end())
       return it->getSecond();
@@ -460,14 +461,43 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       return replacement;
     }
 
+    // If the value is an instance input port, recurse on its driver instead.
+    // Instance input ports have special flow semantics (sink flow but can be
+    // read from). By recursing on the driver, we avoid creating a node for the
+    // instance port itself and instead directly XMR reference the driver,
+    // creating an intermediary node to dereference if the driver cannot support
+    // an inner symbol. This avoids creating intermediary nodes unless
+    // absolutely required while also avoiding dead code.
+    if (isa_and_present<InstanceOp, InstanceChoiceOp>(definingOp)) {
+      bool isInstanceInputPort =
+          TypeSwitch<Operation *, bool>(definingOp)
+              .Case<InstanceOp, InstanceChoiceOp>([&](auto instOp) {
+                for (auto [idx, result] : llvm::enumerate(instOp.getResults()))
+                  if (result == value)
+                    return instOp.getPortDirection(idx) == Direction::In;
+                return false;
+              })
+              .Default(false);
+
+      if (isInstanceInputPort) {
+        if (auto driver = getDriverFromConnect(value)) {
+          // Recurse on the driver to get its replacement. The connect stays
+          // as-is (driver -> instance port) in the original module.
+          replacement = getReplacement(user, driver);
+          replacements.insert({value, replacement});
+          return replacement;
+        }
+      }
+    }
+
     // Determine the replacement value for the captured operand.  There are
     // three cases that can occur:
     //
     // 1. Capturing something zero-width.  Create a zero-width constant zero.
     // 2. Capture something that can handle an inner sym.  Add the inner sym if
     //    it doesn't exist and XMRderef that.
-    // 3. Capture something that can't handle an inner sym.  Add a node, RAUW,
-    //    and XMR deref the node.
+    // 3. Capture something that can't handle an inner sym.  Add a node and XMR
+    //    deref the node.
     //
     // The handling of (2) and (3) is diffuse in the code below due to needing
     // to split things based on whether a value has a defining operation or not.
@@ -492,8 +522,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         } else {
           // The operation cannot support an inner symbol, or it has multiple
           // results and doesn't target a specific result, so create a node
-          // and replace all uses of the original value with the node (except
-          // the node itself).
+          // and XMR deref the node.
           auto node = getOrCreateNodeOp(value, localBuilder);
           innerRef = getInnerRefTo(
               node, [&](auto) -> hw::InnerSymbolNamespace & { return ns; });

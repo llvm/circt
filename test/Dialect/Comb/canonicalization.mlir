@@ -2059,3 +2059,15 @@ hw.module @notSext(in %a : i3, out negsext : i8) {
   %3 = comb.xor %2, %c-1_i8 : i8
   hw.output %3 : i8
 }
+
+// CHECK-LABEL: hw.module private @SextMatcherBlockArguments
+// Test that SextMatcher doesn't crash on block arguments (module ports)
+hw.module private @SextMatcherBlockArguments(in %a : i6, in %b : i2, in %c : i27) {
+  %c-1_i35 = hw.constant -1 : i35
+  %0 = comb.concat %a, %c, %b : i6, i27, i2
+  %wire = hw.wire %0  : i35
+  %1 = comb.xor bin %wire, %c-1_i35 : i35
+  %2 = comb.extract %1 from 34 : (i35) -> i1
+  %3 = comb.extract %1 from 26 : (i35) -> i1
+  hw.output
+}

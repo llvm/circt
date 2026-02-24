@@ -2464,8 +2464,6 @@ static LogicalResult convert(SeverityBIOp op, SeverityBIOp::Adaptor adaptor,
   case (Severity::Info):
     severityString = "Info: ";
     break;
-  default:
-    return failure();
   }
 
   auto prefix =

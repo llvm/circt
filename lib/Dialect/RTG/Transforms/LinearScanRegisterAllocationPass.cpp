@@ -99,14 +99,14 @@ private:
   explicit RegisterAllocationResult(Kind kind) : kind(kind) {}
 
   Kind kind;
-  std::variant<rtg::ConstraintOp, LiveRange *> value;
+  std::variant<rtg::ConstraintOp, LiveRange> value;
 
 public:
   Kind getKind() const { return kind; }
 
-  LiveRange *getUser() const {
+  LiveRange getUser() const {
     assert(kind == Kind::InUse);
-    return std::get<LiveRange *>(value);
+    return std::get<LiveRange>(value);
   }
 
   rtg::ConstraintOp getConstraint() const {
@@ -120,9 +120,9 @@ public:
     return RegisterAllocationResult(Kind::Available);
   }
 
-  static RegisterAllocationResult inUseBy(LiveRange &liveRange) {
+  static RegisterAllocationResult inUseBy(LiveRange liveRange) {
     auto res = RegisterAllocationResult(Kind::InUse);
-    res.value = &liveRange;
+    res.value = liveRange;
     return res;
   }
 
@@ -332,8 +332,7 @@ static bool updateLiveRangeFromUsers(const LiveRangeCache &cache, Value value,
 /// Creates a live range for a virtual register operation. Returns nullptr
 /// if the virtual register has no users that implement
 /// RegisterAllocationOpInterface.
-static VirtualLiveRange *createRange(LiveRangeCache &cache,
-                                     rtg::VirtualRegisterOp op) {
+static void createRange(LiveRangeCache &cache, rtg::VirtualRegisterOp op) {
   LLVM_DEBUG(llvm::dbgs() << "Processing virtual register: " << op << "\n");
 
   auto &liveRange =
@@ -343,7 +342,7 @@ static VirtualLiveRange *createRange(LiveRangeCache &cache,
   auto res = collectTransitiveRegisterAllocationOperands(op.getResult(), {},
                                                          registers);
   if (!res.isAvailable())
-    return nullptr;
+    return;
 
   bool hasUser = updateLiveRangeFromUsers(cache, op.getResult(), liveRange);
 
@@ -360,12 +359,10 @@ static VirtualLiveRange *createRange(LiveRangeCache &cache,
     LLVM_DEBUG(llvm::dbgs()
                << "  No RegisterAllocationOpInterface users, removing range\n");
     cache.virtualRanges.pop_back();
-    return nullptr;
   }
 
   LLVM_DEBUG(llvm::dbgs() << "  Live range: [" << liveRange.start << ", "
                           << liveRange.end << "]\n");
-  return &liveRange;
 }
 
 /// Computes live ranges for all virtual registers and identifies reserved
@@ -395,11 +392,8 @@ static LogicalResult computeLiveRanges(LiveRangeCache &cache, Region &region) {
                return a.start < b.start;
              });
 
-  for (auto op : region.getOps<rtg::VirtualRegisterOp>()) {
-    auto *liveRange = createRange(cache, op);
-    if (!liveRange)
-      continue;
-  }
+  for (auto op : region.getOps<rtg::VirtualRegisterOp>())
+    createRange(cache, op);
 
   // Sort such that we can process registers by increasing interval start.
   LLVM_DEBUG(llvm::dbgs() << "\nSorting " << cache.virtualRanges.size()
@@ -419,13 +413,16 @@ static RegisterAllocationResult isRegisterAvailable(
     const LiveRangeCache &cache, ArrayRef<FixedLiveRange> active,
     rtg::VirtualRegisterOp virtualReg, rtg::RegisterAttrInterface reg,
     DenseMap<Value, rtg::RegisterAttrInterface> &dependentRegValues) {
-  LLVM_DEBUG(llvm::dbgs() << "    Trying register: " << reg << "\n");
+  LLVM_DEBUG(llvm::dbgs() << "Trying register: " << reg << "\n");
 
   SetVector<std::pair<Value, rtg::RegisterAttrInterface>> registers;
   auto res = collectTransitiveRegisterAllocationOperands(virtualReg.getResult(),
                                                          reg, registers);
   if (!res.isAvailable())
     return res;
+
+  LLVM_DEBUG(
+      llvm::dbgs() << "Checking live range overlap with active registers\n");
 
   for (auto activeRange : active) {
     if (activeRange.fixedReg == reg)
@@ -437,11 +434,10 @@ static RegisterAllocationResult isRegisterAvailable(
     }
   }
 
-  LLVM_DEBUG(llvm::dbgs() << "    Found " << registers.size()
-                          << " transitive register allocation operands\n");
-
   for (auto [regVal, regAttr] : registers)
     dependentRegValues[regVal] = regAttr;
+
+  LLVM_DEBUG(llvm::dbgs() << "Register: " << reg << " is available\n");
 
   return RegisterAllocationResult::available();
 }
@@ -479,7 +475,7 @@ static rtg::RegisterAttrInterface findAvailableRegister(
       diag.abandon();
       return reg;
     case RegisterAllocationResult::Kind::InUse:
-      diag.attachNote(res.getUser()->loc)
+      diag.attachNote(res.getUser().loc)
           << "cannot choose '" << reg.getRegisterAssembly()
           << "' because of overlapping live-range with this register";
       continue;

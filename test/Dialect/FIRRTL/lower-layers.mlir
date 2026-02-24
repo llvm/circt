@@ -378,6 +378,57 @@ firrtl.circuit "Test" {
     }
   }
 
+  // Instance input port capture with connect - tests that instance input ports
+  // that are both captured in a layerblock and connected to outside the
+  // layerblock maintain correct flow semantics. When an instance input port is
+  // captured, the pass recurses on the driver to create the XMR reference. This
+  // test covers two scenarios:
+  // 1. Driver is an operation that can't support an inner symbol (invalidvalue)
+  //    - A node is created from the driver and the XMR references the node
+  // 2. Driver is a module port (block argument) that can support an inner symbol
+  //    - No node is created; the XMR references the module port directly
+  //
+  // CHECK:      hw.hierpath private @[[path_reset:.+]] [@InstanceInputPortCapture::@[[sym_reset:.+]]]
+  // CHECK-NEXT: hw.hierpath private @[[path_clock:.+]] [@InstanceInputPortCapture::@[[sym_clock:.+]]]
+  // CHECK-NEXT: firrtl.module private @InstanceInputPortCapture_A() {
+  // CHECK-NEXT:   %[[xmr_clock:.+]] = firrtl.xmr.deref @[[path_clock]]
+  // CHECK-NEXT:   %[[xmr_reset:.+]] = firrtl.xmr.deref @[[path_reset]]
+  // CHECK-NEXT:   %wire_reset = firrtl.wire
+  // CHECK-NEXT:   firrtl.matchingconnect %wire_reset, %[[xmr_reset]]
+  // CHECK-NEXT:   %wire_clock = firrtl.wire
+  // CHECK-NEXT:   firrtl.matchingconnect %wire_clock, %[[xmr_clock]]
+  // CHECK-NEXT: }
+  //
+  // CHECK:      firrtl.module @InstanceInputPortCapture(
+  // CHECK-SAME:   in %clock: !firrtl.clock sym @[[sym_clock]]
+  // CHECK-NEXT:   %ext_reset, %ext_clock = firrtl.instance ext @InstanceInputPortCapture_ext
+  // CHECK:        %invalid_asyncreset = firrtl.invalidvalue
+  // CHECK-NEXT:   %_layer_probe = firrtl.node sym @[[sym_reset]] %invalid_asyncreset
+  // CHECK-NEXT:   firrtl.matchingconnect %ext_reset, %_layer_probe
+  // CHECK-NEXT:   firrtl.matchingconnect %ext_clock, %clock
+  // CHECK-NEXT: }
+  firrtl.extmodule @InstanceInputPortCapture_ext(
+    in reset: !firrtl.asyncreset,
+    in clock: !firrtl.clock
+  )
+  firrtl.module @InstanceInputPortCapture(
+    in %clock: !firrtl.clock
+  ) {
+    %ext_reset, %ext_clock = firrtl.instance ext @InstanceInputPortCapture_ext(
+      in reset: !firrtl.asyncreset,
+      in clock: !firrtl.clock
+    )
+    firrtl.layerblock @A {
+      %wire_reset = firrtl.wire : !firrtl.asyncreset
+      firrtl.matchingconnect %wire_reset, %ext_reset : !firrtl.asyncreset
+      %wire_clock = firrtl.wire : !firrtl.clock
+      firrtl.matchingconnect %wire_clock, %ext_clock : !firrtl.clock
+    }
+    %invalid_asyncreset = firrtl.invalidvalue : !firrtl.asyncreset
+    firrtl.matchingconnect %ext_reset, %invalid_asyncreset : !firrtl.asyncreset
+    firrtl.matchingconnect %ext_clock, %clock : !firrtl.clock
+  }
+
   // Test that a single domain type capture works.
   //
   // CHECK:      firrtl.module private @DomainCapture_A(

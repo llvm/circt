@@ -92,7 +92,11 @@ struct SpecializeOptionPass
 
     bool analysisPreserved = numInstances == 0;
     circuit->walk([&](OptionOp optionOp) {
-      if (!selected.contains(optionOp.getSymNameAttr()))
+      // When selectDefaultInstanceChoice is true, all instance choices are
+      // specialized (either to a selected case or to the default), so we can
+      // erase all options. Otherwise, only erase options that were selected.
+      if (!selectDefaultInstanceChoice &&
+          !selected.contains(optionOp.getSymNameAttr()))
         return;
       optionOp->erase();
       analysisPreserved = false;
