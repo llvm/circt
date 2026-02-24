@@ -9,6 +9,11 @@ on:
       - "frontends/PyCDE/**"
       - "lib/Dialect/ESI/runtime/**"
 
+# Cancel previous CI builds when a new push occurs to the same PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # ---------------------------------------------------------------------------
   #  Build and test Linux wheels. Run the CIRCT tests also.

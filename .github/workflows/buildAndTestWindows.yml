@@ -8,6 +8,11 @@ on:
     types: [assigned, opened, synchronize, reopened]
   workflow_dispatch:
 
+# Cancel previous CI builds when a new push occurs to the same PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Build CIRCT and run its tests.
   build-circt:

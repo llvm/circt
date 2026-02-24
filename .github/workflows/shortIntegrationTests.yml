@@ -16,6 +16,11 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+# Cancel previous CI builds when a new push occurs to the same PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Build CIRCT and run its tests using a Docker container with all the
   # integration testing prerequisite installed.
