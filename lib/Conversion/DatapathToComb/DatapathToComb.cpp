@@ -391,17 +391,13 @@ private:
         break;
     }
 
-    // Sign-extension Optimisation:
-    // Section 7.2.2 of "Application Specific Arithmetic" by Dinechin &
-    // Kumm Handle sign-extension and padding to full width s = encNeg
-    // (sign-bit) {s, s, s, s, s, pp} = {1, 1, 1, 1, 1, pp}
-    //                                + {0, 0, 0, 0,!s, '0}
-    // Applying this to every row we create an upper-triangle of 1s that
-    // can be optimised away since they will not affect the final sum.
-    // {!s3,  0,!s2,  0,!s1,  0}
-    // {  1,  1,  1,  1,  1, p1}
-    // {  1,  1,  1,   p2      }
-    // {  1,       p3          }
+    // Sign-extension:
+    // { s1, s1, s1, s1, s1, p1}
+    // { s2, s2, s2,   p2      }
+    // { s3,       p3          }
+    // TODO: optimize by only replicating the sign bit once using
+    // typical sign-extension trick - can be handled by separate
+    // canonicalization patterns
     for (unsigned i = 0; i < partialProducts.size(); ++i) {
       auto ppRow = partialProducts[i];
       auto encNeg = encNegs[i];
