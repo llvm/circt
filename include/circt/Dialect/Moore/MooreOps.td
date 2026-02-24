@@ -1786,7 +1786,7 @@ def DynQueueExtractOp : MooreOp<"dyn_queue_extract", [Pure,
   }];
 }
 
-def DynQueueExtractRefOp : MooreOp<"dyn_queue_extract_ref", [Pure]> {
+def DynQueueRefElementOp : MooreOp<"dyn_queue_ref_element", [Pure]> {
   let description = [{
     Extracts a reference to the element `index` of `input`.
 

@@ -3999,7 +3999,7 @@ endmodule
 // CHECK:             [[E0:%.+]] = moore.dyn_queue_extract [[QR]] from [[C0A]] to [[C0A]] : <l32, 0>, i32 -> l32
 // CHECK:             moore.blocking_assign [[QE]], [[E0]] : l32
 // CHECK:             [[C0B:%.+]] = moore.constant 0 : i32
-// CHECK:             [[R0:%.+]] = moore.dyn_queue_extract_ref [[Q]] from [[C0B]] : <queue<l32, 0>>, i32 -> <l32>
+// CHECK:             [[R0:%.+]] = moore.dyn_queue_ref_element [[Q]] from [[C0B]] : <queue<l32, 0>>, i32 -> <l32>
 // CHECK:             [[QER:%.+]] = moore.read [[QE]] : <l32>
 // CHECK:             moore.blocking_assign [[R0]], [[QER]] : l32
 // CHECK:             moore.return

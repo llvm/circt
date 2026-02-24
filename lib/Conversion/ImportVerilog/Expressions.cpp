@@ -238,7 +238,7 @@ struct ExprVisitor {
     if (isLvalue)
       return llvm::TypeSwitch<Type, Value>(derefType)
           .Case<moore::QueueType>([&](moore::QueueType) {
-            return moore::DynQueueExtractRefOp::create(builder, loc, resultType,
+            return moore::DynQueueRefElementOp::create(builder, loc, resultType,
                                                        value, lowBit);
           })
           .Default([&](Type) {
