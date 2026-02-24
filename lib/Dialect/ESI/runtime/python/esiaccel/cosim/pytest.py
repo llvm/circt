@@ -52,7 +52,9 @@ LogMatcher = Union[str, Pattern[str], Callable[[str, str], bool]]
 _logger = logging.getLogger("esiaccel.cosim.pytest")
 _DEFAULT_FAILURE_PATTERN = re.compile(r"\berror\b", re.IGNORECASE)
 _DEFAULT_WARN_PATTERN = re.compile(r"\bwarn(ing)?\b", re.IGNORECASE)
-
+# Default per-test wall-clock timeout in seconds.  Matches the 120 s limit
+# used by the lit integration test suite (CIRCT_INTEGRATION_TIMEOUT).
+_DEFAULT_TIMEOUT_S: float = 120.0
 
 @dataclass(frozen=True)
 class CosimPytestConfig:
@@ -74,7 +76,7 @@ class CosimPytestConfig:
   simulator: str = "verilator"
   top: str = "ESI_Cosim_Top"
   debug: bool = False
-  timeout_s: Optional[float] = None
+  timeout_s: float = _DEFAULT_TIMEOUT_S
   failure_matcher: Optional[LogMatcher] = _DEFAULT_FAILURE_PATTERN
   warning_matcher: Optional[LogMatcher] = _DEFAULT_WARN_PATTERN
 
@@ -501,7 +503,7 @@ def cosim_test(
     simulator: str = "verilator",
     top: str = "ESI_Cosim_Top",
     debug: bool = False,
-    timeout_s: Optional[float] = None,
+    timeout_s: float = _DEFAULT_TIMEOUT_S,
     failure_matcher: Optional[LogMatcher] = _DEFAULT_FAILURE_PATTERN,
     warning_matcher: Optional[LogMatcher] = _DEFAULT_WARN_PATTERN,
 ):
@@ -522,7 +524,7 @@ def cosim_test(
     simulator: Simulator backend (default ``"verilator"``).
     top: Top-level module name.
     debug: Enable verbose simulator output.
-    timeout_s: Wall-clock timeout in seconds (``None`` for no limit).
+    timeout_s: Wall-clock timeout in seconds (default 120).
     failure_matcher: Pattern to detect errors in simulator output.
     warning_matcher: Pattern to detect warnings in simulator output.
   """
