@@ -67,7 +67,7 @@ def test_loopback_cpp_codegen(mode: str, tmp_path: Path, host: str, port: int,
   ])
 
   build_dir = tmp_path / f"loopback-build-{mode}"
-  subprocess.run(
+  result = subprocess.run(
       [
           "cmake",
           "-S",
@@ -77,13 +77,24 @@ def test_loopback_cpp_codegen(mode: str, tmp_path: Path, host: str, port: int,
           f"-DLOOPBACK_GENERATED_DIR={include_dir}",
           f"-DESI_RUNTIME_ROOT={runtime_root}",
       ],
-      check=True,
+      capture_output=True,
+      text=True,
   )
-  subprocess.run(
+  assert result.returncode == 0, (
+      f"cmake configure failed (rc={result.returncode}):\n"
+      f"--- stdout ---\n{result.stdout}\n"
+      f"--- stderr ---\n{result.stderr}")
+
+  result = subprocess.run(
       ["cmake", "--build",
        str(build_dir), "--target", "loopback_test"],
-      check=True,
+      capture_output=True,
+      text=True,
   )
+  assert result.returncode == 0, (
+      f"cmake build failed (rc={result.returncode}):\n"
+      f"--- stdout ---\n{result.stdout}\n"
+      f"--- stderr ---\n{result.stderr}")
 
   # Run the C++ test binary and verify output (CPP-TEST checks).
   result = subprocess.run(
