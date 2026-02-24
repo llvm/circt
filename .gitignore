@@ -18,6 +18,9 @@ lit.site.cfg.py
 *.egg-info
 *.whl
 
+# Verilator build artifacts
+obj_dir/
+
 # External software
 /ext
 

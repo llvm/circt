@@ -9,6 +9,7 @@ set(ESIPythonRuntimeSources
   esiaccel/types.py
   esiaccel/utils.py
   esiaccel/cosim/questa.py
+  esiaccel/cosim/pytest.py
   esiaccel/cosim/simulator.py
   esiaccel/cosim/verilator.py
 )

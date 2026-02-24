@@ -3,11 +3,11 @@ name: Test PyCDE and the ESI runtime
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 13 * * *'
+    - cron: "0 13 * * *"
   pull_request:
     paths:
-      - 'frontends/PyCDE/**'
-      - 'lib/Dialect/ESI/runtime/**'
+      - "frontends/PyCDE/**"
+      - "lib/Dialect/ESI/runtime/**"
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -98,3 +98,16 @@ jobs:
       - name: Test PyCDE and ESI runtime integration
         run: |
           ninja -C build check-pycde-integration -j$(nproc)
+
+      - name: Test ESI runtime (pytest)
+        run: |
+          # Install the ESI C++ runtime into the esiaccel Python package tree
+          # so that cmake-based tests can find headers, libraries, and the
+          # esiaccelConfig.cmake.
+          cmake --install build \
+            --prefix build/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel \
+            --component ESIRuntime
+          export PYTHONPATH="$PWD/build/tools/circt/python_packages/pycde:$PWD/build/tools/circt/lib/Dialect/ESI/runtime/python"
+          export PATH="$PWD/build/bin:$PATH"
+          export LD_LIBRARY_PATH="$PWD/build/lib:$LD_LIBRARY_PATH"
+          python3 -m pytest lib/Dialect/ESI/runtime/tests/ -v --log-cli-level=INFO

@@ -17,7 +17,10 @@ if (NOT ESI_RUNTIME_ROOT)
   message(FATAL_ERROR "ESI_RUNTIME_ROOT must be set or available in the environment")
 endif()
 
-set(ESIACCEL_CONFIG "${ESI_RUNTIME_ROOT}/cpp/cmake/esiaccelConfig.cmake")
+set(ESIACCEL_CONFIG "${ESI_RUNTIME_ROOT}/cmake/esiaccelConfig.cmake")
+if (NOT EXISTS "${ESIACCEL_CONFIG}")
+  set(ESIACCEL_CONFIG "${ESI_RUNTIME_ROOT}/cpp/cmake/esiaccelConfig.cmake")
+endif()
 if (EXISTS "${ESIACCEL_CONFIG}")
   include("${ESIACCEL_CONFIG}")
   set(ESI_RUNTIME_TARGET esiaccel::ESICppRuntime)
@@ -35,7 +38,7 @@ if (NOT ESI_RUNTIME_TARGET)
   find_path(ESI_RUNTIME_INCLUDE_DIR
     NAMES esi/Accelerator.h
     PATHS "${ESI_RUNTIME_ROOT}"
-    PATH_SUFFIXES cpp/include cpp/cmake/../include)
+    PATH_SUFFIXES include cpp/include cpp/cmake/../include)
   if (NOT ESI_RUNTIME_INCLUDE_DIR)
     set(_runtime_cursor "${ESI_RUNTIME_ROOT}")
     foreach(_idx RANGE 1 8)
