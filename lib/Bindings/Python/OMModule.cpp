@@ -355,13 +355,11 @@ struct PyOMIntegerAttr : PyConcreteAttribute<PyOMIntegerAttr> {
   using Base::Base;
 
   static void bindDerived(ClassTy &c) {
-    c.def_static("get",
-                 [](MlirAttribute intVal) {
-                   auto attr = omIntegerAttrGet(intVal);
-                   return PyOMIntegerAttr(
-                       PyMlirContext::forContext(mlirAttributeGetContext(attr)),
-                       attr);
-                 });
+    c.def_static("get", [](MlirAttribute intVal) {
+      auto attr = omIntegerAttrGet(intVal);
+      return PyOMIntegerAttr(
+          PyMlirContext::forContext(mlirAttributeGetContext(attr)), attr);
+    });
     c.def_prop_ro("integer", [](PyOMIntegerAttr &self) {
       return omIntegerAttrGetInt(self);
     });
@@ -398,8 +396,7 @@ struct PyOMAnyType : PyConcreteType<PyOMAnyType> {
 
 struct PyClassType : PyConcreteType<PyClassType> {
   static constexpr IsAFunctionTy isaFunction = omTypeIsAClassType;
-  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
-      omClassTypeGetTypeID;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction = omClassTypeGetTypeID;
   static constexpr const char *pyClassName = "ClassType";
   using Base::Base;
 
@@ -421,8 +418,7 @@ struct PyBasePathType : PyConcreteType<PyBasePathType> {
 
 struct PyOMListType : PyConcreteType<PyOMListType> {
   static constexpr IsAFunctionTy isaFunction = omTypeIsAListType;
-  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
-      omListTypeGetTypeID;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction = omListTypeGetTypeID;
   static constexpr const char *pyClassName = "ListType";
   using Base::Base;
 

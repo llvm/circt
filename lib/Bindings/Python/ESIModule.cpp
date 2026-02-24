@@ -113,11 +113,10 @@ struct PyChannelType : PyConcreteType<PyChannelType> {
           return PyChannelType(
               PyMlirContext::forContext(mlirTypeGetContext(type)), type);
         },
-        nb::arg("inner"), nb::arg("signaling") = 0,
-        nb::arg("dataDelay") = 0);
-    c.def_prop_ro(
-        "inner",
-        [](PyChannelType &self) { return circtESIChannelGetInner(self); });
+        nb::arg("inner"), nb::arg("signaling") = 0, nb::arg("dataDelay") = 0);
+    c.def_prop_ro("inner", [](PyChannelType &self) {
+      return circtESIChannelGetInner(self);
+    });
     c.def_prop_ro("signaling", [](PyChannelType &self) {
       return circtESIChannelGetSignaling(self);
     });
@@ -177,15 +176,14 @@ struct PyBundleType : PyConcreteType<PyBundleType> {
               llvm::map_range(channelTuples, [ctxt](nb::tuple t) {
                 std::string name = nb::cast<std::string>(t[0]);
                 return CirctESIBundleTypeBundleChannel{
-                    mlirIdentifierGet(ctxt, mlirStringRefCreate(name.data(),
-                                                                name.length())),
+                    mlirIdentifierGet(
+                        ctxt, mlirStringRefCreate(name.data(), name.length())),
                     (uint32_t)nb::cast<ChannelDirection>(t[1]),
                     nb::cast<MlirType>(t[2])};
               }));
-          return PyBundleType(
-              ctx->getRef(),
-              circtESIBundleTypeGet(ctxt, channels.size(), channels.data(),
-                                    resettable));
+          return PyBundleType(ctx->getRef(), circtESIBundleTypeGet(
+                                                 ctxt, channels.size(),
+                                                 channels.data(), resettable));
         },
         nb::arg("channels"), nb::arg("resettable"),
         nb::arg("ctxt").none() = nb::none());
@@ -227,26 +225,22 @@ struct PyWindowType : PyConcreteType<PyWindowType> {
               throw nb::type_error("All frames must be WindowFrameTypes");
             }
           }
-          return PyWindowType(
-              ctx->getRef(),
-              circtESIWindowTypeGet(ctx->get(), name, into, frames.size(),
-                                    frames.data()));
+          return PyWindowType(ctx->getRef(), circtESIWindowTypeGet(
+                                                 ctx->get(), name, into,
+                                                 frames.size(), frames.data()));
         },
         nb::arg("name"), nb::arg("into"), nb::arg("frames"),
         nb::arg("ctxt").none() = nb::none());
     c.def_prop_ro("name", &circtESIWindowTypeGetName);
     c.def_prop_ro("into", &circtESIWindowTypeGetInto);
-    c.def_prop_ro("frames",
-                  [](PyWindowType &self) {
-                    MlirType windowType = self;
-                    std::vector<MlirType> frames;
-                    size_t numFrames =
-                        circtESIWindowTypeGetNumFrames(windowType);
-                    for (size_t i = 0; i < numFrames; ++i)
-                      frames.push_back(
-                          circtESIWindowTypeGetFrame(windowType, i));
-                    return frames;
-                  });
+    c.def_prop_ro("frames", [](PyWindowType &self) {
+      MlirType windowType = self;
+      std::vector<MlirType> frames;
+      size_t numFrames = circtESIWindowTypeGetNumFrames(windowType);
+      for (size_t i = 0; i < numFrames; ++i)
+        frames.push_back(circtESIWindowTypeGetFrame(windowType, i));
+      return frames;
+    });
     c.def("get_lowered_type", &circtESIWindowTypeGetLoweredType);
   }
 };
@@ -266,10 +260,10 @@ struct PyWindowFrameType : PyConcreteType<PyWindowFrameType> {
               throw nb::type_error("All members must be WindowFieldTypes");
             }
           }
-          return PyWindowFrameType(
-              ctx->getRef(),
-              circtESIWindowFrameTypeGet(ctx->get(), name, members.size(),
-                                          members.data()));
+          return PyWindowFrameType(ctx->getRef(),
+                                   circtESIWindowFrameTypeGet(ctx->get(), name,
+                                                              members.size(),
+                                                              members.data()));
         },
         nb::arg("name"), nb::arg("members"),
         nb::arg("ctxt").none() = nb::none());
@@ -293,16 +287,15 @@ struct PyWindowFieldType : PyConcreteType<PyWindowFieldType> {
   static void bindDerived(ClassTy &c) {
     c.def_static(
         "get",
-        [](MlirAttribute fieldName, uint64_t numItems,
-           uint64_t bulkCountWidth, DefaultingPyMlirContext ctx) {
+        [](MlirAttribute fieldName, uint64_t numItems, uint64_t bulkCountWidth,
+           DefaultingPyMlirContext ctx) {
           return PyWindowFieldType(
               ctx->getRef(),
               circtESIWindowFieldTypeGet(ctx->get(), fieldName, numItems,
-                                          bulkCountWidth));
+                                         bulkCountWidth));
         },
         nb::arg("field_name"), nb::arg("num_items") = 0,
-        nb::arg("bulk_count_width") = 0,
-        nb::arg("ctxt").none() = nb::none());
+        nb::arg("bulk_count_width") = 0, nb::arg("ctxt").none() = nb::none());
     c.def_prop_ro("field_name", &circtESIWindowFieldTypeGetFieldName);
     c.def_prop_ro("num_items", &circtESIWindowFieldTypeGetNumItems);
     c.def_prop_ro("bulk_count_width",
@@ -332,14 +325,11 @@ struct PyAppIDAttr : PyConcreteAttribute<PyAppIDAttr> {
           return PyAppIDAttr(ctx->getRef(), attr);
         },
         "Create an AppID attribute", nb::arg("name"),
-        nb::arg("index") = nb::none(),
-        nb::arg("context").none() = nb::none());
-    c.def_prop_ro("name",
-                  [](PyAppIDAttr &self) {
-                    llvm::StringRef name =
-                        unwrap(circtESIAppIDAttrGetName(self));
-                    return std::string(name.data(), name.size());
-                  });
+        nb::arg("index") = nb::none(), nb::arg("context").none() = nb::none());
+    c.def_prop_ro("name", [](PyAppIDAttr &self) {
+      llvm::StringRef name = unwrap(circtESIAppIDAttrGetName(self));
+      return std::string(name.data(), name.size());
+    });
     c.def_prop_ro("index", [](PyAppIDAttr &self) -> nb::object {
       uint64_t index;
       if (circtESIAppIDAttrGetIndex(self, &index))
@@ -361,9 +351,8 @@ struct PyAppIDPathAttr : PyConcreteAttribute<PyAppIDPathAttr> {
         [](MlirAttribute root, std::vector<MlirAttribute> path,
            DefaultingPyMlirContext ctx) {
           return PyAppIDPathAttr(
-              ctx->getRef(),
-              circtESIAppIDAttrPathGet(ctx->get(), root, path.size(),
-                                       path.data()));
+              ctx->getRef(), circtESIAppIDAttrPathGet(
+                                 ctx->get(), root, path.size(), path.data()));
         },
         "Create an AppIDPath attribute", nb::arg("root"), nb::arg("path"),
         nb::arg("context").none() = nb::none());

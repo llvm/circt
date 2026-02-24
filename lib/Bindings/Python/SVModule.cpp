@@ -54,20 +54,17 @@ struct PySVAttributeAttr : PyConcreteAttribute<PySVAttributeAttr> {
         },
         "Create a SystemVerilog attribute", nb::arg("name"),
         nb::arg("expression") = nb::none(),
-        nb::arg("emit_as_comment") = nb::none(),
-        nb::arg("ctxt") = nb::none());
-    c.def_prop_ro("name",
-                  [](PySVAttributeAttr &self) {
-                    MlirStringRef name = svSVAttributeAttrGetName(self);
-                    return std::string(name.data, name.length);
-                  });
-    c.def_prop_ro("expression",
-                  [](PySVAttributeAttr &self) -> nb::object {
-                    MlirStringRef name = svSVAttributeAttrGetExpression(self);
-                    if (name.data == nullptr)
-                      return nb::none();
-                    return nb::str(name.data, name.length);
-                  });
+        nb::arg("emit_as_comment") = nb::none(), nb::arg("ctxt") = nb::none());
+    c.def_prop_ro("name", [](PySVAttributeAttr &self) {
+      MlirStringRef name = svSVAttributeAttrGetName(self);
+      return std::string(name.data, name.length);
+    });
+    c.def_prop_ro("expression", [](PySVAttributeAttr &self) -> nb::object {
+      MlirStringRef name = svSVAttributeAttrGetExpression(self);
+      if (name.data == nullptr)
+        return nb::none();
+      return nb::str(name.data, name.length);
+    });
     c.def_prop_ro("emit_as_comment", [](PySVAttributeAttr &self) {
       return svSVAttributeAttrGetEmitAsComment(self);
     });

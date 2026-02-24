@@ -44,8 +44,8 @@ struct PyIntegerRegisterType : PyConcreteType<PyIntegerRegisterType> {
     c.def_static(
         "get",
         [](DefaultingPyMlirContext ctx) {
-          return PyIntegerRegisterType(ctx->getRef(),
-                                       rtgtestIntegerRegisterTypeGet(ctx->get()));
+          return PyIntegerRegisterType(
+              ctx->getRef(), rtgtestIntegerRegisterTypeGet(ctx->get()));
         },
         nb::arg("ctxt").none() = nb::none());
   }
@@ -60,12 +60,11 @@ struct PyCPUAttr : PyConcreteAttribute<PyCPUAttr> {
     c.def_static(
         "get",
         [](unsigned id, DefaultingPyMlirContext ctx) {
-          return PyCPUAttr(ctx->getRef(),
-                           rtgtestCPUAttrGet(ctx->get(), id));
+          return PyCPUAttr(ctx->getRef(), rtgtestCPUAttrGet(ctx->get(), id));
         },
         nb::arg("id"), nb::arg("ctxt").none() = nb::none());
-    c.def_prop_ro(
-        "id", [](PyCPUAttr &self) { return rtgtestCPUAttrGetId(self); });
+    c.def_prop_ro("id",
+                  [](PyCPUAttr &self) { return rtgtestCPUAttrGetId(self); });
   }
 };
 
@@ -78,8 +77,8 @@ struct PyCPUAttr : PyConcreteAttribute<PyCPUAttr> {
     static void bindDerived(ClassTy &c) {                                      \
       c.def_static(                                                            \
           "get",                                                               \
-          [](DefaultingPyMlirContext ctx) {                                     \
-            return PyName(ctx->getRef(), getFn(ctx->get()));                    \
+          [](DefaultingPyMlirContext ctx) {                                    \
+            return PyName(ctx->getRef(), getFn(ctx->get()));                   \
           },                                                                   \
           nb::arg("ctxt").none() = nb::none());                                \
     }                                                                          \

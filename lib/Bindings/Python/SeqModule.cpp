@@ -43,13 +43,11 @@ struct PyImmutableType : PyConcreteType<PyImmutableType> {
   using Base::Base;
 
   static void bindDerived(ClassTy &c) {
-    c.def_static("get",
-                 [](MlirType innerType) {
-                   auto type = seqImmutableTypeGet(innerType);
-                   return PyImmutableType(
-                       PyMlirContext::forContext(mlirTypeGetContext(type)),
-                       type);
-                 });
+    c.def_static("get", [](MlirType innerType) {
+      auto type = seqImmutableTypeGet(innerType);
+      return PyImmutableType(
+          PyMlirContext::forContext(mlirTypeGetContext(type)), type);
+    });
     c.def_prop_ro("inner_type", [](PyImmutableType &self) {
       return seqImmutableTypeGetInnerType(self);
     });
@@ -66,18 +64,17 @@ struct PyHLMemType : PyConcreteType<PyHLMemType> {
         "get",
         [](std::vector<int64_t> shape, MlirType elementType,
            DefaultingPyMlirContext ctx) {
-          return PyHLMemType(
-              ctx->getRef(),
-              seqHLMemTypeGet(ctx->get(), shape.size(), shape.data(),
-                              elementType));
+          return PyHLMemType(ctx->getRef(),
+                             seqHLMemTypeGet(ctx->get(), shape.size(),
+                                             shape.data(), elementType));
         },
         nb::arg("shape"), nb::arg("element_type"),
         nb::arg("context").none() = nb::none());
     c.def_prop_ro("element_type", [](PyHLMemType &self) {
       return seqHLMemTypeGetElementType(self);
     });
-    c.def_prop_ro(
-        "rank", [](PyHLMemType &self) { return seqHLMemTypeGetRank(self); });
+    c.def_prop_ro("rank",
+                  [](PyHLMemType &self) { return seqHLMemTypeGetRank(self); });
     c.def_prop_ro("shape", [](PyHLMemType &self) {
       intptr_t rank = seqHLMemTypeGetRank(self);
       const int64_t *shapePtr = seqHLMemTypeGetShape(self);
@@ -105,17 +102,17 @@ struct PyFirMemType : PyConcreteType<PyFirMemType> {
             maskVal = maskWidth.value();
             maskPtr = &maskVal;
           }
-          return PyFirMemType(ctx->getRef(),
-                              seqFirMemTypeGet(ctx->get(), depth, width,
-                                               maskPtr));
+          return PyFirMemType(ctx->getRef(), seqFirMemTypeGet(ctx->get(), depth,
+                                                              width, maskPtr));
         },
-        nb::arg("depth"), nb::arg("width"),
-        nb::arg("mask_width") = nb::none(),
+        nb::arg("depth"), nb::arg("width"), nb::arg("mask_width") = nb::none(),
         nb::arg("context").none() = nb::none());
-    c.def_prop_ro(
-        "depth", [](PyFirMemType &self) { return seqFirMemTypeGetDepth(self); });
-    c.def_prop_ro(
-        "width", [](PyFirMemType &self) { return seqFirMemTypeGetWidth(self); });
+    c.def_prop_ro("depth", [](PyFirMemType &self) {
+      return seqFirMemTypeGetDepth(self);
+    });
+    c.def_prop_ro("width", [](PyFirMemType &self) {
+      return seqFirMemTypeGetWidth(self);
+    });
     c.def_prop_ro("mask_width", [](PyFirMemType &self) -> nb::object {
       if (seqFirMemTypeHasMask(self))
         return nb::cast(seqFirMemTypeGetMaskWidth(self));

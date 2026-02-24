@@ -12,10 +12,10 @@
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Support/LLVM.h"
 
-#include "llvm/ADT/SmallVector.h"
 #include "mlir/Bindings/Python/IRCore.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Support.h"
+#include "llvm/ADT/SmallVector.h"
 
 #include "NanobindUtils.h"
 namespace nb = nanobind;
@@ -157,26 +157,21 @@ struct PyPhysLocationAttr : PyConcreteAttribute<PyPhysLocationAttr> {
         [](PrimitiveType devType, uint64_t x, uint64_t y, uint64_t num,
            DefaultingPyMlirContext ctx) {
           return PyPhysLocationAttr(
-              ctx->getRef(),
-              circtMSFTPhysLocationAttrGet(ctx->get(), (uint64_t)devType, x,
-                                            y, num));
+              ctx->getRef(), circtMSFTPhysLocationAttrGet(
+                                 ctx->get(), (uint64_t)devType, x, y, num));
         },
         "Create a physical location attribute", nb::arg("dev_type"),
         nb::arg("x"), nb::arg("y"), nb::arg("num"),
         nb::arg("ctxt").none() = nb::none());
-    c.def_prop_ro("devtype",
-                  [](PyPhysLocationAttr &self) {
-                    return (PrimitiveType)
-                        circtMSFTPhysLocationAttrGetPrimitiveType(self);
-                  });
-    c.def_prop_ro("x",
-                  [](PyPhysLocationAttr &self) {
-                    return circtMSFTPhysLocationAttrGetX(self);
-                  });
-    c.def_prop_ro("y",
-                  [](PyPhysLocationAttr &self) {
-                    return circtMSFTPhysLocationAttrGetY(self);
-                  });
+    c.def_prop_ro("devtype", [](PyPhysLocationAttr &self) {
+      return (PrimitiveType)circtMSFTPhysLocationAttrGetPrimitiveType(self);
+    });
+    c.def_prop_ro("x", [](PyPhysLocationAttr &self) {
+      return circtMSFTPhysLocationAttrGetX(self);
+    });
+    c.def_prop_ro("y", [](PyPhysLocationAttr &self) {
+      return circtMSFTPhysLocationAttrGetY(self);
+    });
     c.def_prop_ro("num", [](PyPhysLocationAttr &self) {
       return circtMSFTPhysLocationAttrGetNum(self);
     });
@@ -194,9 +189,8 @@ struct PyPhysicalBoundsAttr : PyConcreteAttribute<PyPhysicalBoundsAttr> {
         "get",
         [](uint64_t xMin, uint64_t xMax, uint64_t yMin, uint64_t yMax,
            DefaultingPyMlirContext ctx) {
-          auto physicalBounds =
-              circtMSFTPhysicalBoundsAttrGet(ctx->get(), xMin, xMax, yMin,
-                                              yMax);
+          auto physicalBounds = circtMSFTPhysicalBoundsAttrGet(
+              ctx->get(), xMin, xMax, yMin, yMax);
           return PyPhysicalBoundsAttr(ctx->getRef(), physicalBounds);
         },
         "Create a PhysicalBounds attribute", nb::arg("xMin"), nb::arg("xMax"),
@@ -224,9 +218,8 @@ struct PyLocationVectorAttr : PyConcreteAttribute<PyLocationVectorAttr> {
               locs.push_back(mlirPythonCapsuleToAttribute(
                   mlirApiObjectToCapsule(attrHandle)->ptr()));
           return PyLocationVectorAttr(
-              ctx->getRef(),
-              circtMSFTLocationVectorAttrGet(ctx->get(), type, locs.size(),
-                                              locs.data()));
+              ctx->getRef(), circtMSFTLocationVectorAttrGet(
+                                 ctx->get(), type, locs.size(), locs.data()));
         },
         "Create a LocationVector attribute", nb::arg("type"), nb::arg("locs"),
         nb::arg("context").none() = nb::none());

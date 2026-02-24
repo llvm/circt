@@ -26,16 +26,16 @@ struct PyStateType : PyConcreteType<PyStateType> {
   using Base::Base;
 
   static void bindDerived(ClassTy &c) {
-    c.def_static("get",
-                 [](MlirType innerType) {
-                   auto type = arcStateTypeGet(innerType);
-                   return PyStateType(
-                       PyMlirContext::forContext(mlirTypeGetContext(type)),
-                       type);
-                 },
-                 nb::arg("inner_type"));
-    c.def_prop_ro(
-        "type", [](PyStateType &self) { return arcStateTypeGetType(self); });
+    c.def_static(
+        "get",
+        [](MlirType innerType) {
+          auto type = arcStateTypeGet(innerType);
+          return PyStateType(
+              PyMlirContext::forContext(mlirTypeGetContext(type)), type);
+        },
+        nb::arg("inner_type"));
+    c.def_prop_ro("type",
+                  [](PyStateType &self) { return arcStateTypeGetType(self); });
     c.def_prop_ro("bit_width", [](PyStateType &self) {
       return arcStateTypeGetBitWidth(self);
     });
@@ -68,9 +68,9 @@ struct PyMemoryType : PyConcreteType<PyMemoryType> {
     c.def_prop_ro("address_type", [](PyMemoryType &self) {
       return arcMemoryTypeGetAddressType(self);
     });
-    c.def_prop_ro(
-        "stride",
-        [](PyMemoryType &self) { return arcMemoryTypeGetStride(self); });
+    c.def_prop_ro("stride", [](PyMemoryType &self) {
+      return arcMemoryTypeGetStride(self);
+    });
   }
 };
 
@@ -87,12 +87,11 @@ struct PyStorageType : PyConcreteType<PyStorageType> {
           if (size.is_none())
             type = arcStorageTypeGet(ctx->get());
           else
-            type = arcStorageTypeGetWithSize(ctx->get(),
-                                            nb::cast<unsigned>(size));
+            type =
+                arcStorageTypeGetWithSize(ctx->get(), nb::cast<unsigned>(size));
           return PyStorageType(ctx->getRef(), type);
         },
-        nb::arg("context").none() = nb::none(),
-        nb::arg("size") = nb::none());
+        nb::arg("context").none() = nb::none(), nb::arg("size") = nb::none());
     c.def_prop_ro("size", [](PyStorageType &self) {
       return arcStorageTypeGetSize(self);
     });

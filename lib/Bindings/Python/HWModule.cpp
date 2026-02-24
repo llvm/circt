@@ -37,13 +37,11 @@ struct PyInOutType : PyConcreteType<PyInOutType> {
   using Base::Base;
 
   static void bindDerived(ClassTy &c) {
-    c.def_static("get",
-                 [](MlirType innerType) {
-                   auto type = hwInOutTypeGet(innerType);
-                   return PyInOutType(
-                       PyMlirContext::forContext(mlirTypeGetContext(type)),
-                       type);
-                 });
+    c.def_static("get", [](MlirType innerType) {
+      auto type = hwInOutTypeGet(innerType);
+      return PyInOutType(PyMlirContext::forContext(mlirTypeGetContext(type)),
+                         type);
+    });
     c.def_prop_ro("element_type", [](PyInOutType &self) {
       return hwInOutTypeGetElementType(self);
     });
@@ -56,18 +54,16 @@ struct PyHWArrayType : PyConcreteType<PyHWArrayType> {
   using Base::Base;
 
   static void bindDerived(ClassTy &c) {
-    c.def_static("get",
-                 [](MlirType elementType, intptr_t size) {
-                   auto type = hwArrayTypeGet(elementType, size);
-                   return PyHWArrayType(
-                       PyMlirContext::forContext(mlirTypeGetContext(type)),
-                       type);
-                 });
+    c.def_static("get", [](MlirType elementType, intptr_t size) {
+      auto type = hwArrayTypeGet(elementType, size);
+      return PyHWArrayType(PyMlirContext::forContext(mlirTypeGetContext(type)),
+                           type);
+    });
     c.def_prop_ro("element_type", [](PyHWArrayType &self) {
       return hwArrayTypeGetElementType(self);
     });
-    c.def_prop_ro(
-        "size", [](PyHWArrayType &self) { return hwArrayTypeGetSize(self); });
+    c.def_prop_ro("size",
+                  [](PyHWArrayType &self) { return hwArrayTypeGetSize(self); });
   }
 };
 
@@ -84,38 +80,34 @@ struct PyModuleType : PyConcreteType<PyModuleType> {
           for (auto pyModulePort : pyModulePorts)
             modulePorts.push_back(nb::cast<HWModulePort>(pyModulePort));
 
-          return PyModuleType(
-              ctx->getRef(),
-              hwModuleTypeGet(ctx->get(), modulePorts.size(),
-                              modulePorts.data()));
+          return PyModuleType(ctx->getRef(),
+                              hwModuleTypeGet(ctx->get(), modulePorts.size(),
+                                              modulePorts.data()));
         },
         nb::arg("ports"), nb::arg("context").none() = nb::none());
-    c.def_prop_ro("input_types",
-                  [](PyModuleType &self) {
-                    nb::list inputTypes;
-                    intptr_t numInputs = hwModuleTypeGetNumInputs(self);
-                    for (intptr_t i = 0; i < numInputs; ++i)
-                      inputTypes.append(hwModuleTypeGetInputType(self, i));
-                    return inputTypes;
-                  });
-    c.def_prop_ro("input_names",
-                  [](PyModuleType &self) {
-                    std::vector<std::string> inputNames;
-                    intptr_t numInputs = hwModuleTypeGetNumInputs(self);
-                    for (intptr_t i = 0; i < numInputs; ++i) {
-                      auto name = hwModuleTypeGetInputName(self, i);
-                      inputNames.emplace_back(name.data, name.length);
-                    }
-                    return inputNames;
-                  });
-    c.def_prop_ro("output_types",
-                  [](PyModuleType &self) {
-                    nb::list outputTypes;
-                    intptr_t numOutputs = hwModuleTypeGetNumOutputs(self);
-                    for (intptr_t i = 0; i < numOutputs; ++i)
-                      outputTypes.append(hwModuleTypeGetOutputType(self, i));
-                    return outputTypes;
-                  });
+    c.def_prop_ro("input_types", [](PyModuleType &self) {
+      nb::list inputTypes;
+      intptr_t numInputs = hwModuleTypeGetNumInputs(self);
+      for (intptr_t i = 0; i < numInputs; ++i)
+        inputTypes.append(hwModuleTypeGetInputType(self, i));
+      return inputTypes;
+    });
+    c.def_prop_ro("input_names", [](PyModuleType &self) {
+      std::vector<std::string> inputNames;
+      intptr_t numInputs = hwModuleTypeGetNumInputs(self);
+      for (intptr_t i = 0; i < numInputs; ++i) {
+        auto name = hwModuleTypeGetInputName(self, i);
+        inputNames.emplace_back(name.data, name.length);
+      }
+      return inputNames;
+    });
+    c.def_prop_ro("output_types", [](PyModuleType &self) {
+      nb::list outputTypes;
+      intptr_t numOutputs = hwModuleTypeGetNumOutputs(self);
+      for (intptr_t i = 0; i < numOutputs; ++i)
+        outputTypes.append(hwModuleTypeGetOutputType(self, i));
+      return outputTypes;
+    });
     c.def_prop_ro("output_names", [](PyModuleType &self) {
       std::vector<std::string> outputNames;
       intptr_t numOutputs = hwModuleTypeGetNumOutputs(self);
@@ -134,13 +126,11 @@ struct PyParamIntType : PyConcreteType<PyParamIntType> {
   using Base::Base;
 
   static void bindDerived(ClassTy &c) {
-    c.def_static("get_from_param",
-                 [](MlirContext ctx, MlirAttribute param) {
-                   auto type = hwParamIntTypeGet(param);
-                   return PyParamIntType(
-                       PyMlirContext::forContext(mlirTypeGetContext(type)),
-                       type);
-                 });
+    c.def_static("get_from_param", [](MlirContext ctx, MlirAttribute param) {
+      auto type = hwParamIntTypeGet(param);
+      return PyParamIntType(PyMlirContext::forContext(mlirTypeGetContext(type)),
+                            type);
+    });
     c.def_prop_ro("width", [](PyParamIntType &self) {
       return hwParamIntTypeGetWidthAttr(self);
     });
@@ -169,24 +159,22 @@ struct PyStructType : PyConcreteType<PyStructType> {
             names.emplace_back(nb::cast<std::string>(tuple[0]));
             auto nameStringRef =
                 mlirStringRefCreate(names[i].data(), names[i].size());
-            mlirFieldInfos.push_back(HWStructFieldInfo{
-                mlirIdentifierGet(ctx, nameStringRef), type});
+            mlirFieldInfos.push_back(
+                HWStructFieldInfo{mlirIdentifierGet(ctx, nameStringRef), type});
           }
           if (mlirContextIsNull(ctx)) {
             throw std::invalid_argument(
                 "StructType requires a context if no fields provided.");
           }
-          return PyStructType(
-              PyMlirContext::forContext(ctx),
-              hwStructTypeGet(ctx, mlirFieldInfos.size(),
-                              mlirFieldInfos.data()));
+          return PyStructType(PyMlirContext::forContext(ctx),
+                              hwStructTypeGet(ctx, mlirFieldInfos.size(),
+                                              mlirFieldInfos.data()));
         },
         nb::arg("fields"), nb::arg("context").none() = nb::none());
-    c.def("get_field",
-          [](PyStructType &self, std::string fieldName) {
-            return hwStructTypeGetField(
-                self, mlirStringRefCreateFromCString(fieldName.c_str()));
-          });
+    c.def("get_field", [](PyStructType &self, std::string fieldName) {
+      return hwStructTypeGetField(
+          self, mlirStringRefCreateFromCString(fieldName.c_str()));
+    });
     c.def("get_field_index",
           [](PyStructType &self, const std::string &fieldName) {
             return hwStructTypeGetFieldIndex(
@@ -212,38 +200,34 @@ struct PyUnionType : PyConcreteType<PyUnionType> {
   using Base::Base;
 
   static void bindDerived(ClassTy &c) {
-    c.def_static(
-        "get",
-        [](nb::list pyFieldInfos) {
-          llvm::SmallVector<HWUnionFieldInfo> mlirFieldInfos;
-          MlirContext ctx;
+    c.def_static("get", [](nb::list pyFieldInfos) {
+      llvm::SmallVector<HWUnionFieldInfo> mlirFieldInfos;
+      MlirContext ctx;
 
-          llvm::SmallVector<llvm::SmallString<8>> names;
-          for (size_t i = 0, e = pyFieldInfos.size(); i < e; ++i) {
-            auto tuple = nb::cast<nb::tuple>(pyFieldInfos[i]);
-            if (tuple.size() < 3)
-              throw std::invalid_argument(
-                  "UnionType field info must be a tuple of (name, type, "
-                  "offset)");
-            auto type = nb::cast<MlirType>(tuple[1]);
-            size_t offset = nb::cast<size_t>(tuple[2]);
-            ctx = mlirTypeGetContext(type);
-            names.emplace_back(nb::cast<std::string>(tuple[0]));
-            auto nameStringRef =
-                mlirStringRefCreate(names[i].data(), names[i].size());
-            mlirFieldInfos.push_back(HWUnionFieldInfo{
-                mlirIdentifierGet(ctx, nameStringRef), type, offset});
-          }
-          return PyUnionType(
-              PyMlirContext::forContext(ctx),
-              hwUnionTypeGet(ctx, mlirFieldInfos.size(),
-                             mlirFieldInfos.data()));
-        });
-    c.def("get_field",
-          [](PyUnionType &self, std::string fieldName) {
-            return hwUnionTypeGetField(
-                self, mlirStringRefCreateFromCString(fieldName.c_str()));
-          });
+      llvm::SmallVector<llvm::SmallString<8>> names;
+      for (size_t i = 0, e = pyFieldInfos.size(); i < e; ++i) {
+        auto tuple = nb::cast<nb::tuple>(pyFieldInfos[i]);
+        if (tuple.size() < 3)
+          throw std::invalid_argument(
+              "UnionType field info must be a tuple of (name, type, "
+              "offset)");
+        auto type = nb::cast<MlirType>(tuple[1]);
+        size_t offset = nb::cast<size_t>(tuple[2]);
+        ctx = mlirTypeGetContext(type);
+        names.emplace_back(nb::cast<std::string>(tuple[0]));
+        auto nameStringRef =
+            mlirStringRefCreate(names[i].data(), names[i].size());
+        mlirFieldInfos.push_back(HWUnionFieldInfo{
+            mlirIdentifierGet(ctx, nameStringRef), type, offset});
+      }
+      return PyUnionType(
+          PyMlirContext::forContext(ctx),
+          hwUnionTypeGet(ctx, mlirFieldInfos.size(), mlirFieldInfos.data()));
+    });
+    c.def("get_field", [](PyUnionType &self, std::string fieldName) {
+      return hwUnionTypeGetField(
+          self, mlirStringRefCreateFromCString(fieldName.c_str()));
+    });
     c.def("get_field_index",
           [](PyUnionType &self, const std::string &fieldName) {
             return hwUnionTypeGetFieldIndex(
@@ -269,28 +253,24 @@ struct PyTypeAliasType : PyConcreteType<PyTypeAliasType> {
   using Base::Base;
 
   static void bindDerived(ClassTy &c) {
-    c.def_static("get",
-                 [](std::string scope, std::string name,
-                    MlirType innerType) {
-                   auto type = hwTypeAliasTypeGet(
-                       mlirStringRefCreateFromCString(scope.c_str()),
-                       mlirStringRefCreateFromCString(name.c_str()),
-                       innerType);
-                   return PyTypeAliasType(
-                       PyMlirContext::forContext(mlirTypeGetContext(type)),
-                       type);
-                 });
+    c.def_static(
+        "get", [](std::string scope, std::string name, MlirType innerType) {
+          auto type = hwTypeAliasTypeGet(
+              mlirStringRefCreateFromCString(scope.c_str()),
+              mlirStringRefCreateFromCString(name.c_str()), innerType);
+          return PyTypeAliasType(
+              PyMlirContext::forContext(mlirTypeGetContext(type)), type);
+        });
     c.def_prop_ro("canonical_type", [](PyTypeAliasType &self) {
       return hwTypeAliasTypeGetCanonicalType(self);
     });
     c.def_prop_ro("inner_type", [](PyTypeAliasType &self) {
       return hwTypeAliasTypeGetInnerType(self);
     });
-    c.def_prop_ro("name",
-                  [](PyTypeAliasType &self) {
-                    MlirStringRef cStr = hwTypeAliasTypeGetName(self);
-                    return std::string(cStr.data, cStr.length);
-                  });
+    c.def_prop_ro("name", [](PyTypeAliasType &self) {
+      MlirStringRef cStr = hwTypeAliasTypeGetName(self);
+      return std::string(cStr.data, cStr.length);
+    });
     c.def_prop_ro("scope", [](PyTypeAliasType &self) {
       MlirStringRef cStr = hwTypeAliasTypeGetScope(self);
       return std::string(cStr.data, cStr.length);
@@ -308,24 +288,20 @@ struct PyParamDeclAttr : PyConcreteAttribute<PyParamDeclAttr> {
   using Base::Base;
 
   static void bindDerived(ClassTy &c) {
-    c.def_static("get",
-                 [](std::string name, MlirType type, MlirAttribute value) {
-                   auto attr = hwParamDeclAttrGet(
-                       mlirStringRefCreateFromCString(name.c_str()), type,
-                       value);
-                   return PyParamDeclAttr(
-                       PyMlirContext::forContext(mlirAttributeGetContext(attr)),
-                       attr);
-                 });
-    c.def_static("get_nodefault",
-                 [](std::string name, MlirType type) {
-                   auto attr = hwParamDeclAttrGet(
-                       mlirStringRefCreateFromCString(name.c_str()), type,
-                       MlirAttribute{nullptr});
-                   return PyParamDeclAttr(
-                       PyMlirContext::forContext(mlirAttributeGetContext(attr)),
-                       attr);
-                 });
+    c.def_static(
+        "get", [](std::string name, MlirType type, MlirAttribute value) {
+          auto attr = hwParamDeclAttrGet(
+              mlirStringRefCreateFromCString(name.c_str()), type, value);
+          return PyParamDeclAttr(
+              PyMlirContext::forContext(mlirAttributeGetContext(attr)), attr);
+        });
+    c.def_static("get_nodefault", [](std::string name, MlirType type) {
+      auto attr =
+          hwParamDeclAttrGet(mlirStringRefCreateFromCString(name.c_str()), type,
+                             MlirAttribute{nullptr});
+      return PyParamDeclAttr(
+          PyMlirContext::forContext(mlirAttributeGetContext(attr)), attr);
+    });
     c.def_prop_ro("value", [](PyParamDeclAttr &self) {
       return hwParamDeclAttrGetValue(self);
     });
@@ -345,14 +321,12 @@ struct PyParamDeclRefAttr : PyConcreteAttribute<PyParamDeclRefAttr> {
   using Base::Base;
 
   static void bindDerived(ClassTy &c) {
-    c.def_static(
-        "get",
-        [](MlirContext ctx, std::string name) {
-          auto attr = hwParamDeclRefAttrGet(
-              ctx, mlirStringRefCreateFromCString(name.c_str()));
-          return PyParamDeclRefAttr(
-              PyMlirContext::forContext(mlirAttributeGetContext(attr)), attr);
-        });
+    c.def_static("get", [](MlirContext ctx, std::string name) {
+      auto attr = hwParamDeclRefAttrGet(
+          ctx, mlirStringRefCreateFromCString(name.c_str()));
+      return PyParamDeclRefAttr(
+          PyMlirContext::forContext(mlirAttributeGetContext(attr)), attr);
+    });
     c.def_prop_ro("param_type", [](PyParamDeclRefAttr &self) {
       return hwParamDeclRefAttrGetType(self);
     });
@@ -383,15 +357,14 @@ struct PyOutputFileAttr : PyConcreteAttribute<PyOutputFileAttr> {
   using Base::Base;
 
   static void bindDerived(ClassTy &c) {
-    c.def_static("get_from_filename",
-                 [](MlirAttribute fileName, bool excludeFromFileList,
-                    bool includeReplicatedOp) {
-                   auto attr = hwOutputFileGetFromFileName(
-                       fileName, excludeFromFileList, includeReplicatedOp);
-                   return PyOutputFileAttr(
-                       PyMlirContext::forContext(mlirAttributeGetContext(attr)),
-                       attr);
-                 });
+    c.def_static("get_from_filename", [](MlirAttribute fileName,
+                                         bool excludeFromFileList,
+                                         bool includeReplicatedOp) {
+      auto attr = hwOutputFileGetFromFileName(fileName, excludeFromFileList,
+                                              includeReplicatedOp);
+      return PyOutputFileAttr(
+          PyMlirContext::forContext(mlirAttributeGetContext(attr)), attr);
+    });
     c.def_prop_ro("filename", [](PyOutputFileAttr &self) {
       MlirStringRef cStr = hwOutputFileGetFileName(self);
       return std::string(cStr.data, cStr.length);
@@ -422,13 +395,11 @@ struct PyInnerRefAttr : PyConcreteAttribute<PyInnerRefAttr> {
   using Base::Base;
 
   static void bindDerived(ClassTy &c) {
-    c.def_static(
-        "get",
-        [](MlirAttribute moduleName, MlirAttribute innerSym) {
-          auto attr = hwInnerRefAttrGet(moduleName, innerSym);
-          return PyInnerRefAttr(
-              PyMlirContext::forContext(mlirAttributeGetContext(attr)), attr);
-        });
+    c.def_static("get", [](MlirAttribute moduleName, MlirAttribute innerSym) {
+      auto attr = hwInnerRefAttrGet(moduleName, innerSym);
+      return PyInnerRefAttr(
+          PyMlirContext::forContext(mlirAttributeGetContext(attr)), attr);
+    });
     c.def_prop_ro("module", [](PyInnerRefAttr &self) {
       return hwInnerRefAttrGetModule(self);
     });
