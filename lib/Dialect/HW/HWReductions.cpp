@@ -344,7 +344,6 @@ struct ModuleInternalNameSanitizer : public Reduction {
 ///
 struct ModuleNameSanitizer : OpReduction<mlir::ModuleOp> {
 
-  reduce::MetasyntacticNameGenerator nameGenerator;
   size_t portNameIndex = 0;
 
   char getPortName() {
@@ -353,15 +352,16 @@ struct ModuleNameSanitizer : OpReduction<mlir::ModuleOp> {
     return 'a' + portNameIndex++;
   }
 
-  void beforeReduction(mlir::ModuleOp op) override {
-    nameGenerator.reset();
-    instanceGraph = std::make_unique<InstanceGraph>(op);
-    symbolTable = std::make_unique<SymbolTable>(op);
-  }
-
   LogicalResult rewrite(mlir::ModuleOp moduleOp) override {
+    // Create a new instance graph for this rewrite. We need to recreate it
+    // because renaming modules invalidates the nodeMap (which maps module names
+    // to nodes).
+    InstanceGraph instanceGraph(moduleOp);
+
+    reduce::MetasyntacticNameGenerator nameGenerator;
+
     // Iterate over the instance graph nodes
-    for (auto *node : *instanceGraph) {
+    for (auto *node : instanceGraph) {
       // Skip nodes without a module (e.g., the entry node)
       if (!node->getModule())
         continue;
@@ -369,15 +369,15 @@ struct ModuleNameSanitizer : OpReduction<mlir::ModuleOp> {
       if (!hwModule)
         continue;
 
-      auto newName =
-          StringAttr::get(hwModule.getContext(), nameGenerator.getNextName());
+      auto *context = hwModule.getContext();
+      auto newName = StringAttr::get(context, nameGenerator.getNextName());
 
       // Rename ports
       portNameIndex = 0;
-      SmallVector<Attribute> newPortNames;
-      for (unsigned i = 0, e = hwModule.getNumPorts(); i != e; ++i)
-        newPortNames.push_back(
-            StringAttr::get(hwModule.getContext(), Twine(getPortName())));
+      auto numPorts = hwModule.getNumPorts();
+      SmallVector<Attribute> newPortNames(numPorts);
+      for (unsigned i = 0; i != numPorts; ++i)
+        newPortNames[i] = StringAttr::get(context, Twine(getPortName()));
       hwModule.setAllPortNames(newPortNames);
 
       // Update all instances of this module
@@ -391,16 +391,12 @@ struct ModuleNameSanitizer : OpReduction<mlir::ModuleOp> {
         instOp.setModuleName(newName);
         instOp.setInstanceName(newName);
         // Update argument names (inputs only)
-        SmallVector<Attribute> argNames(newPortNames.begin(),
-                                        newPortNames.begin() +
-                                            hwModule.getNumInputPorts());
-        instOp.setArgNamesAttr(ArrayAttr::get(hwModule.getContext(), argNames));
+        auto *inputEnd = newPortNames.begin() + hwModule.getNumInputPorts();
+        SmallVector<Attribute> argNames(newPortNames.begin(), inputEnd);
+        instOp.setArgNamesAttr(ArrayAttr::get(context, argNames));
         // Update result names (outputs)
-        SmallVector<Attribute> resultNames(newPortNames.begin() +
-                                               hwModule.getNumInputPorts(),
-                                           newPortNames.end());
-        instOp.setResultNamesAttr(
-            ArrayAttr::get(hwModule.getContext(), resultNames));
+        SmallVector<Attribute> resultNames(inputEnd, newPortNames.end());
+        instOp.setResultNamesAttr(ArrayAttr::get(context, resultNames));
       }
 
       // Rename the module (do this last, after updating instances)
@@ -415,9 +411,6 @@ struct ModuleNameSanitizer : OpReduction<mlir::ModuleOp> {
   bool acceptSizeIncrease() const override { return true; }
 
   bool isOneShot() const override { return true; }
-
-  std::unique_ptr<InstanceGraph> instanceGraph;
-  std::unique_ptr<SymbolTable> symbolTable;
 };
 
 //===----------------------------------------------------------------------===//
