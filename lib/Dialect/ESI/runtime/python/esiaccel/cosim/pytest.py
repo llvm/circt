@@ -56,6 +56,7 @@ _DEFAULT_WARN_PATTERN = re.compile(r"\bwarn(ing)?\b", re.IGNORECASE)
 # used by the lit integration test suite (CIRCT_INTEGRATION_TIMEOUT).
 _DEFAULT_TIMEOUT_S: float = 120.0
 
+
 @dataclass(frozen=True)
 class CosimPytestConfig:
   """Immutable configuration for a single cosim test or test class.
