@@ -3,11 +3,11 @@ name: Test PyCDE and the ESI runtime
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 13 * * *'
+    - cron: "0 13 * * *"
   pull_request:
     paths:
-      - 'frontends/PyCDE/**'
-      - 'lib/Dialect/ESI/runtime/**'
+      - "frontends/PyCDE/**"
+      - "lib/Dialect/ESI/runtime/**"
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -103,4 +103,4 @@ jobs:
         env:
           PYTHONPATH: "${{ github.workspace }}/build/python_packages/pycde:${{ github.workspace }}/build/tools/circt/lib/Dialect/ESI/runtime/python"
         run: |
-          python -m pytest ${{ github.workspace }}/lib/Dialect/ESI/runtime/tests/ -v --log-cli-level=INFO
+          python3 -m pytest ${{ github.workspace }}/lib/Dialect/ESI/runtime/tests/ -v --log-cli-level=INFO

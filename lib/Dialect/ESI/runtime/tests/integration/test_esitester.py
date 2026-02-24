@@ -18,8 +18,7 @@ class TestCosimEsitester:
 
   def test_callback(self, host: str, port: int) -> None:
     conn = f"{host}:{port}"
-    stdout = run_cmd(
-        ["esitester", "-v", "cosim", conn, "callback", "-i", "5"])
+    stdout = run_cmd(["esitester", "-v", "cosim", conn, "callback", "-i", "5"])
     check_lines(stdout, [
         "[CONNECT] connecting to backend",
     ])
