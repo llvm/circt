@@ -13,8 +13,8 @@ from esiaccel.cosim.pytest import cosim_test
 HW_DIR = Path(__file__).resolve().parent.parent / "hw"
 
 
-def run(acc: AcceleratorConnection) -> None:
-  d = acc.build_accelerator()
+def run(conn: AcceleratorConnection) -> None:
+  d = conn.build_accelerator()
 
   mem_write = d.ports[esi.AppID("write")].write_port("req")
   mem_write.connect()
@@ -24,12 +24,12 @@ def run(acc: AcceleratorConnection) -> None:
   mem_read_data.connect()
 
   # Baseline
-  m = acc.manifest()
+  m = conn.manifest()
   # TODO: I broke this. Need to fix it.
   # if (platform == "cosim"):
   # MMIO method
-  # acc.cpp_accel.set_manifest_method(esi.esiCppAccel.ManifestMMIO)
-  # m_alt = acc.manifest()
+  # conn.cpp_accel.set_manifest_method(esi.esiCppAccel.ManifestMMIO)
+  # m_alt = conn.manifest()
   # assert len(m.type_table) == len(m_alt.type_table)
 
   info = m.module_infos
@@ -79,12 +79,12 @@ def run(acc: AcceleratorConnection) -> None:
 
 
 @cosim_test(HW_DIR / "esi_ram.py")
-def test_cosim_ram(acc: AcceleratorConnection) -> None:
-  run(acc)
+def test_cosim_ram(conn: AcceleratorConnection) -> None:
+  run(conn)
 
 
 if __name__ == "__main__":
   platform = sys.argv[1]
   conn_str = sys.argv[2]
-  acc = esi.connect(platform, conn_str)
-  run(acc)
+  conn = esi.connect(platform, conn_str)
+  run(conn)

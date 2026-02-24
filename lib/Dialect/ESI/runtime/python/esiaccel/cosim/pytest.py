@@ -17,8 +17,8 @@ Typical usage::
     from esiaccel.cosim.pytest import cosim_test
 
     @cosim_test("path/to/hw_script.py")
-    def test_my_design(acc: AcceleratorConnection):
-        # acc is already connected to the running simulator
+    def test_my_design(conn: AcceleratorConnection):
+        # conn is already connected to the running simulator
         ...
 """
 
@@ -211,24 +211,19 @@ def _resolve_injected_params(
   """
   sig = inspect.signature(target)
   updated = dict(kwargs)
-  accepts_host = "host" in sig.parameters or "hostname" in sig.parameters
-  accepts_port = "port" in sig.parameters
-  if accepts_host and "host" in sig.parameters and "host" not in updated:
-    updated["host"] = host
-  if accepts_host and "hostname" in sig.parameters and "hostname" not in updated:
-    updated["hostname"] = host
-  if accepts_port and "port" not in updated:
-    updated["port"] = port
-  if "sources_dir" in sig.parameters and "sources_dir" not in updated and sources_dir is not None:
-    updated["sources_dir"] = sources_dir
 
   for name, param in sig.parameters.items():
-    annotation = param.annotation
-    is_conn = annotation is AcceleratorConnection or name == "acc"
-    is_accel = annotation is Accelerator or name == "accelerator"
-    if is_conn and name not in updated:
+    if name in updated:
+      continue
+    if name in ("host", "hostname"):
+      updated[name] = host
+    elif name == "port":
+      updated[name] = port
+    elif name == "sources_dir" and sources_dir is not None:
+      updated[name] = sources_dir
+    elif param.annotation is AcceleratorConnection or name == "conn":
       updated[name] = esiaccel.connect("cosim", f"{host}:{port}")
-    elif is_accel and name not in updated:
+    elif param.annotation is Accelerator or name == "accelerator":
       conn = esiaccel.connect("cosim", f"{host}:{port}")
       updated[name] = conn.build_accelerator()
 
@@ -240,13 +235,13 @@ def _pytest_visible_signature(target: Callable[..., Any]) -> inspect.Signature:
 
   Pytest uses function signatures to determine fixture requirements.  This
   hides the parameters that the decorator injects (``host``, ``port``,
-  ``acc``, etc.) so pytest does not try to resolve them as fixtures.
+  ``conn``, etc.) so pytest does not try to resolve them as fixtures.
   """
   sig = inspect.signature(target)
   kept_params = []
   for param in sig.parameters.values():
     if param.name in {
-        "host", "hostname", "port", "accelerator", "acc", "sources_dir"
+        "host", "hostname", "port", "accelerator", "conn", "sources_dir"
     }:
       continue
     if param.annotation in (Accelerator, AcceleratorConnection):

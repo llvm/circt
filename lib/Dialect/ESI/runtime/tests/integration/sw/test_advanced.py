@@ -10,8 +10,8 @@ from esiaccel.cosim.pytest import cosim_test
 HW_DIR = Path(__file__).resolve().parent.parent / "hw"
 
 
-def run(acc: AcceleratorConnection) -> None:
-  d = acc.build_accelerator()
+def run(conn: AcceleratorConnection) -> None:
+  d = conn.build_accelerator()
 
   merge_a = d.ports[esi.AppID("merge_a")].write_port("data")
   merge_a.connect()
@@ -61,12 +61,12 @@ def run(acc: AcceleratorConnection) -> None:
 
 
 @cosim_test(HW_DIR / "esi_advanced.py")
-def test_cosim_advanced(acc: AcceleratorConnection) -> None:
-  run(acc)
+def test_cosim_advanced(conn: AcceleratorConnection) -> None:
+  run(conn)
 
 
 if __name__ == "__main__":
   platform = sys.argv[1]
   conn_str = sys.argv[2]
-  acc = esi.connect(platform, conn_str)
-  run(acc)
+  conn = esi.connect(platform, conn_str)
+  run(conn)

@@ -14,18 +14,18 @@ from esiaccel.types import MMIORegion
 HW_DIR = Path(__file__).resolve().parent.parent / "hw"
 
 
-def run(acc: AcceleratorConnection, platform: str = "cosim") -> None:
-  mmio = acc.get_service_mmio()
+def run(conn: AcceleratorConnection, platform: str = "cosim") -> None:
+  mmio = conn.get_service_mmio()
   data = mmio.read(8)
   assert data == 0x207D98E5E5100E51
 
-  assert acc.sysinfo().esi_version() == 0
-  m = acc.manifest()
+  assert conn.sysinfo().esi_version() == 0
+  m = conn.manifest()
   assert m.api_version == 0
   print(m.type_table)
 
   # Test the cycle count and clock frequency APIs
-  sysinfo = acc.sysinfo()
+  sysinfo = conn.sysinfo()
   cycle_count = sysinfo.cycle_count()
   if cycle_count is not None:
     print(f"Cycle count: {cycle_count}")
@@ -60,7 +60,7 @@ def run(acc: AcceleratorConnection, platform: str = "cosim") -> None:
     else:
       print("Core clock frequency: not available")
 
-  d = acc.build_accelerator()
+  d = conn.build_accelerator()
 
   for id, region in mmio.regions.items():
     print(f"Region {id}: {region.base} - {region.base + region.size}")
@@ -366,19 +366,19 @@ def run(acc: AcceleratorConnection, platform: str = "cosim") -> None:
 
 
 @cosim_test(HW_DIR / "esi_test.py")
-def test_cosim_esi(acc: AcceleratorConnection) -> None:
-  run(acc)
+def test_cosim_esi(conn: AcceleratorConnection) -> None:
+  run(conn)
 
 
 @cosim_test(HW_DIR / "esi_test.py")
 def test_cosim_esi_manifest_mmio(host: str, port: int) -> None:
   os.environ["ESI_COSIM_MANIFEST_MMIO"] = "1"
-  acc = esi.connect("cosim", f"{host}:{port}")
-  run(acc)
+  conn = esi.connect("cosim", f"{host}:{port}")
+  run(conn)
 
 
 if __name__ == "__main__":
   platform = sys.argv[1]
   conn_str = sys.argv[2]
-  acc = esi.Context(esi.LogLevel.Debug).connect(platform, conn_str)
-  run(acc, platform)
+  conn = esi.Context(esi.LogLevel.Debug).connect(platform, conn_str)
+  run(conn, platform)

@@ -12,16 +12,16 @@ import esiaccel.types as types
 HW_DIR = Path(__file__).resolve().parent.parent / "hw"
 
 
-def run(acc: AcceleratorConnection, platform: str = "cosim") -> None:
-  hostmem = acc.get_service_hostmem()
+def run(conn: AcceleratorConnection, platform: str = "cosim") -> None:
+  hostmem = conn.get_service_hostmem()
   if hostmem is not None:
     mem1 = hostmem.allocate(1024)
     assert mem1.size == 1024
     print(f"mem1: {mem1.ptr} size {mem1.size}")
     mem1 = None
 
-  assert acc.sysinfo().esi_version() == 0
-  m = acc.manifest()
+  assert conn.sysinfo().esi_version() == 0
+  m = conn.manifest()
   assert m.api_version == 0
 
   for esiType in m.type_table:
@@ -34,7 +34,7 @@ def run(acc: AcceleratorConnection, platform: str = "cosim") -> None:
       if info.name == "LoopbackIP" and const_name == "depth":
         assert const.value == 5
 
-  d = acc.build_accelerator()
+  d = conn.build_accelerator()
 
   loopback = d.children[esiaccel.AppID("loopback_inst", 0)]
   appid = loopback.id
@@ -112,12 +112,12 @@ def run(acc: AcceleratorConnection, platform: str = "cosim") -> None:
 
 
 @cosim_test(HW_DIR / "loopback.py")
-def test_cosim_loopback(acc: AcceleratorConnection) -> None:
-  run(acc)
+def test_cosim_loopback(conn: AcceleratorConnection) -> None:
+  run(conn)
 
 
 if __name__ == "__main__":
   platform = sys.argv[1]
   connstr = sys.argv[2]
-  acc = esiaccel.connect(platform, connstr)
-  run(acc, platform)
+  conn = esiaccel.connect(platform, connstr)
+  run(conn, platform)
