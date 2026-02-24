@@ -14,7 +14,7 @@
 #include "circt-c/Dialect/HW.h"
 #include "mlir-c/Bindings/Python/Interop.h"
 
-#include "mlir/Bindings/Python/NanobindAdaptors.h"
+#include "mlir/Bindings/Python/IRCore.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Support.h"
 
@@ -31,7 +31,6 @@ using namespace circt::esi;
 // The main entry point into the ESI Assembly API.
 //===----------------------------------------------------------------------===//
 
-/// Container for a Python function that will be called to generate a service.
 class ServiceGenFunc {
 public:
   ServiceGenFunc(nb::object genFunc) : genFunc(std::move(genFunc)) {}
@@ -48,8 +47,6 @@ private:
   nb::object genFunc;
 };
 
-// Mapping from unique identifier to python callback. We use std::string
-// pointers since we also need to allocate memory for the string.
 llvm::DenseMap<std::string *, ServiceGenFunc> serviceGenFuncLookup;
 static MlirLogicalResult serviceGenFunc(MlirOperation reqOp,
                                         MlirOperation declOp,
@@ -90,13 +87,296 @@ private:
   CirctESIAppIDIndex index;
 };
 
-using namespace mlir::python::nanobind_adaptors;
+using mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::DefaultingPyMlirContext;
+using mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteAttribute;
+using mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteType;
+using mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyMlirContext;
+
+//===----------------------------------------------------------------------===//
+// Type bindings
+//===----------------------------------------------------------------------===//
+
+struct PyChannelType : PyConcreteType<PyChannelType> {
+  static constexpr IsAFunctionTy isaFunction = circtESITypeIsAChannelType;
+  static constexpr const char *pyClassName = "ChannelType";
+  using Base::Base;
+
+  static void bindDerived(ClassTy &c) {
+    c.def_static(
+        "get",
+        [](MlirType inner, uint32_t signaling, uint64_t dataDelay) {
+          MlirType type;
+          if (circtESITypeIsAChannelType(inner))
+            type = inner;
+          else
+            type = circtESIChannelTypeGet(inner, signaling, dataDelay);
+          return PyChannelType(
+              PyMlirContext::forContext(mlirTypeGetContext(type)), type);
+        },
+        nb::arg("inner"), nb::arg("signaling") = 0,
+        nb::arg("dataDelay") = 0);
+    c.def_prop_ro(
+        "inner",
+        [](PyChannelType &self) { return circtESIChannelGetInner(self); });
+    c.def_prop_ro("signaling", [](PyChannelType &self) {
+      return circtESIChannelGetSignaling(self);
+    });
+    c.def_prop_ro("data_delay", [](PyChannelType &self) {
+      return circtESIChannelGetDataDelay(self);
+    });
+  }
+};
+
+struct PyESIAnyType : PyConcreteType<PyESIAnyType> {
+  static constexpr IsAFunctionTy isaFunction = circtESITypeIsAnAnyType;
+  static constexpr const char *pyClassName = "AnyType";
+  using Base::Base;
+
+  static void bindDerived(ClassTy &c) {
+    c.def_static(
+        "get",
+        [](DefaultingPyMlirContext ctx) {
+          return PyESIAnyType(ctx->getRef(), circtESIAnyTypeGet(ctx->get()));
+        },
+        nb::arg("ctxt").none() = nb::none());
+  }
+};
+
+struct PyESIListType : PyConcreteType<PyESIListType> {
+  static constexpr IsAFunctionTy isaFunction = circtESITypeIsAListType;
+  static constexpr const char *pyClassName = "ListType";
+  using Base::Base;
+
+  static void bindDerived(ClassTy &c) {
+    c.def_static(
+        "get",
+        [](MlirType inner) {
+          auto type = circtESIListTypeGet(inner);
+          return PyESIListType(
+              PyMlirContext::forContext(mlirTypeGetContext(type)), type);
+        },
+        nb::arg("inner"));
+    c.def_prop_ro("element_type", [](PyESIListType &self) {
+      return circtESIListTypeGetElementType(self);
+    });
+  }
+};
+
+struct PyBundleType : PyConcreteType<PyBundleType> {
+  static constexpr IsAFunctionTy isaFunction = circtESITypeIsABundleType;
+  static constexpr const char *pyClassName = "BundleType";
+  using Base::Base;
+
+  static void bindDerived(ClassTy &c) {
+    c.def_static(
+        "get",
+        [](std::vector<nb::tuple> channelTuples, bool resettable,
+           DefaultingPyMlirContext ctx) {
+          MlirContext ctxt = ctx->get();
+          llvm::SmallVector<CirctESIBundleTypeBundleChannel, 4> channels(
+              llvm::map_range(channelTuples, [ctxt](nb::tuple t) {
+                std::string name = nb::cast<std::string>(t[0]);
+                return CirctESIBundleTypeBundleChannel{
+                    mlirIdentifierGet(ctxt, mlirStringRefCreate(name.data(),
+                                                                name.length())),
+                    (uint32_t)nb::cast<ChannelDirection>(t[1]),
+                    nb::cast<MlirType>(t[2])};
+              }));
+          return PyBundleType(
+              ctx->getRef(),
+              circtESIBundleTypeGet(ctxt, channels.size(), channels.data(),
+                                    resettable));
+        },
+        nb::arg("channels"), nb::arg("resettable"),
+        nb::arg("ctxt").none() = nb::none());
+    c.def_prop_ro("resettable", &circtESIBundleTypeGetResettable);
+    c.def_prop_ro("channels", [](PyBundleType &self) {
+      MlirType bundleType = self;
+      std::vector<nb::tuple> channels;
+      size_t numChannels = circtESIBundleTypeGetNumChannels(bundleType);
+      for (size_t i = 0; i < numChannels; ++i) {
+        CirctESIBundleTypeBundleChannel channel =
+            circtESIBundleTypeGetChannel(bundleType, i);
+        MlirStringRef name = mlirIdentifierStr(channel.name);
+        channels.push_back(nb::make_tuple(nb::str(name.data, name.length),
+                                          (ChannelDirection)channel.direction,
+                                          channel.channelType));
+      }
+      return channels;
+    });
+  }
+};
+
+struct PyWindowType : PyConcreteType<PyWindowType> {
+  static constexpr IsAFunctionTy isaFunction = circtESITypeIsAWindowType;
+  static constexpr const char *pyClassName = "WindowType";
+  using Base::Base;
+
+  static void bindDerived(ClassTy &c) {
+    c.def_static(
+        "get",
+        [](MlirAttribute name, MlirType into, std::vector<MlirType> frames,
+           DefaultingPyMlirContext ctx) {
+          if (!hwTypeIsAStructType(into) &&
+              (!hwTypeIsATypeAliasType(into) ||
+               !hwTypeIsAStructType(hwTypeAliasTypeGetInnerType(into))))
+            throw nb::type_error("'into' type must be a hw.StructType");
+
+          for (const auto &frame : frames) {
+            if (!circtESITypeIsAWindowFrameType(frame)) {
+              throw nb::type_error("All frames must be WindowFrameTypes");
+            }
+          }
+          return PyWindowType(
+              ctx->getRef(),
+              circtESIWindowTypeGet(ctx->get(), name, into, frames.size(),
+                                    frames.data()));
+        },
+        nb::arg("name"), nb::arg("into"), nb::arg("frames"),
+        nb::arg("ctxt").none() = nb::none());
+    c.def_prop_ro("name", &circtESIWindowTypeGetName);
+    c.def_prop_ro("into", &circtESIWindowTypeGetInto);
+    c.def_prop_ro("frames",
+                  [](PyWindowType &self) {
+                    MlirType windowType = self;
+                    std::vector<MlirType> frames;
+                    size_t numFrames =
+                        circtESIWindowTypeGetNumFrames(windowType);
+                    for (size_t i = 0; i < numFrames; ++i)
+                      frames.push_back(
+                          circtESIWindowTypeGetFrame(windowType, i));
+                    return frames;
+                  });
+    c.def("get_lowered_type", &circtESIWindowTypeGetLoweredType);
+  }
+};
+
+struct PyWindowFrameType : PyConcreteType<PyWindowFrameType> {
+  static constexpr IsAFunctionTy isaFunction = circtESITypeIsAWindowFrameType;
+  static constexpr const char *pyClassName = "WindowFrameType";
+  using Base::Base;
+
+  static void bindDerived(ClassTy &c) {
+    c.def_static(
+        "get",
+        [](MlirAttribute name, std::vector<MlirType> members,
+           DefaultingPyMlirContext ctx) {
+          for (const auto &member : members) {
+            if (!circtESITypeIsAWindowFieldType(member)) {
+              throw nb::type_error("All members must be WindowFieldTypes");
+            }
+          }
+          return PyWindowFrameType(
+              ctx->getRef(),
+              circtESIWindowFrameTypeGet(ctx->get(), name, members.size(),
+                                          members.data()));
+        },
+        nb::arg("name"), nb::arg("members"),
+        nb::arg("ctxt").none() = nb::none());
+    c.def_prop_ro("name", &circtESIWindowFrameTypeGetName);
+    c.def_prop_ro("members", [](PyWindowFrameType &self) {
+      MlirType frameType = self;
+      std::vector<MlirType> members;
+      size_t numMembers = circtESIWindowFrameTypeGetNumMembers(frameType);
+      for (size_t i = 0; i < numMembers; ++i)
+        members.push_back(circtESIWindowFrameTypeGetMember(frameType, i));
+      return members;
+    });
+  }
+};
+
+struct PyWindowFieldType : PyConcreteType<PyWindowFieldType> {
+  static constexpr IsAFunctionTy isaFunction = circtESITypeIsAWindowFieldType;
+  static constexpr const char *pyClassName = "WindowFieldType";
+  using Base::Base;
+
+  static void bindDerived(ClassTy &c) {
+    c.def_static(
+        "get",
+        [](MlirAttribute fieldName, uint64_t numItems,
+           uint64_t bulkCountWidth, DefaultingPyMlirContext ctx) {
+          return PyWindowFieldType(
+              ctx->getRef(),
+              circtESIWindowFieldTypeGet(ctx->get(), fieldName, numItems,
+                                          bulkCountWidth));
+        },
+        nb::arg("field_name"), nb::arg("num_items") = 0,
+        nb::arg("bulk_count_width") = 0,
+        nb::arg("ctxt").none() = nb::none());
+    c.def_prop_ro("field_name", &circtESIWindowFieldTypeGetFieldName);
+    c.def_prop_ro("num_items", &circtESIWindowFieldTypeGetNumItems);
+    c.def_prop_ro("bulk_count_width",
+                  &circtESIWindowFieldTypeGetBulkCountWidth);
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// Attribute bindings
+//===----------------------------------------------------------------------===//
+
+struct PyAppIDAttr : PyConcreteAttribute<PyAppIDAttr> {
+  static constexpr IsAFunctionTy isaFunction = circtESIAttributeIsAnAppIDAttr;
+  static constexpr const char *pyClassName = "AppIDAttr";
+  using Base::Base;
+
+  static void bindDerived(ClassTy &c) {
+    c.def_static(
+        "get",
+        [](std::string name, std::optional<uint64_t> index,
+           DefaultingPyMlirContext ctx) {
+          MlirAttribute attr;
+          if (index.has_value())
+            attr = circtESIAppIDAttrGet(ctx->get(), wrap(name), index.value());
+          else
+            attr = circtESIAppIDAttrGetNoIdx(ctx->get(), wrap(name));
+          return PyAppIDAttr(ctx->getRef(), attr);
+        },
+        "Create an AppID attribute", nb::arg("name"),
+        nb::arg("index") = nb::none(),
+        nb::arg("context").none() = nb::none());
+    c.def_prop_ro("name",
+                  [](PyAppIDAttr &self) {
+                    llvm::StringRef name =
+                        unwrap(circtESIAppIDAttrGetName(self));
+                    return std::string(name.data(), name.size());
+                  });
+    c.def_prop_ro("index", [](PyAppIDAttr &self) -> nb::object {
+      uint64_t index;
+      if (circtESIAppIDAttrGetIndex(self, &index))
+        return nb::cast(index);
+      return nb::none();
+    });
+  }
+};
+
+struct PyAppIDPathAttr : PyConcreteAttribute<PyAppIDPathAttr> {
+  static constexpr IsAFunctionTy isaFunction =
+      circtESIAttributeIsAnAppIDPathAttr;
+  static constexpr const char *pyClassName = "AppIDPathAttr";
+  using Base::Base;
+
+  static void bindDerived(ClassTy &c) {
+    c.def_static(
+        "get",
+        [](MlirAttribute root, std::vector<MlirAttribute> path,
+           DefaultingPyMlirContext ctx) {
+          return PyAppIDPathAttr(
+              ctx->getRef(),
+              circtESIAppIDAttrPathGet(ctx->get(), root, path.size(),
+                                       path.data()));
+        },
+        "Create an AppIDPath attribute", nb::arg("root"), nb::arg("path"),
+        nb::arg("context").none() = nb::none());
+    c.def_prop_ro("root", &circtESIAppIDAttrPathGetRoot);
+    c.def("__len__", &circtESIAppIDAttrPathGetNumComponents);
+    c.def("__getitem__", &circtESIAppIDAttrPathGetComponent);
+  }
+};
 
 void circt::python::populateDialectESISubmodule(nb::module_ &m) {
   m.doc() = "ESI Python Native Extension";
   ::registerESIPasses();
 
-  // Clean up references when the module is unloaded.
   auto cleanup = []() { serviceGenFuncLookup.clear(); };
   m.def("cleanup", cleanup,
         "Cleanup various references. Must be called before the module is "
@@ -106,194 +386,20 @@ void circt::python::populateDialectESISubmodule(nb::module_ &m) {
         "Register a service generator for a given service name.",
         nb::arg("impl_type"), nb::arg("generator"));
 
-  mlir_type_subclass(m, "ChannelType", circtESITypeIsAChannelType)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, MlirType inner, uint32_t signaling = 0,
-             uint64_t dataDelay = 0) {
-            if (circtESITypeIsAChannelType(inner))
-              return cls(inner);
-            return cls(circtESIChannelTypeGet(inner, signaling, dataDelay));
-          },
-          nb::arg("cls"), nb::arg("inner"), nb::arg("signaling") = 0,
-          nb::arg("dataDelay") = 0)
-      .def_property_readonly(
-          "inner", [](MlirType self) { return circtESIChannelGetInner(self); })
-      .def_property_readonly(
-          "signaling",
-          [](MlirType self) { return circtESIChannelGetSignaling(self); })
-      .def_property_readonly("data_delay", [](MlirType self) {
-        return circtESIChannelGetDataDelay(self);
-      });
-
-  mlir_type_subclass(m, "AnyType", circtESITypeIsAnAnyType)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, MlirContext ctxt) {
-            return cls(circtESIAnyTypeGet(ctxt));
-          },
-          nb::arg("self"), nb::arg("ctxt") = nullptr);
-
-  mlir_type_subclass(m, "ListType", circtESITypeIsAListType)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, MlirType inner) {
-            return cls(circtESIListTypeGet(inner));
-          },
-          nb::arg("cls"), nb::arg("inner"))
-      .def_property_readonly("element_type", [](MlirType self) {
-        return circtESIListTypeGetElementType(self);
-      });
+  PyChannelType::bind(m);
+  PyESIAnyType::bind(m);
+  PyESIListType::bind(m);
 
   nb::enum_<ChannelDirection>(m, "ChannelDirection")
       .value("TO", ChannelDirection::to)
       .value("FROM", ChannelDirection::from);
-  mlir_type_subclass(m, "BundleType", circtESITypeIsABundleType)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, std::vector<nb::tuple> channelTuples,
-             bool resettable, MlirContext ctxt) {
-            llvm::SmallVector<CirctESIBundleTypeBundleChannel, 4> channels(
-                llvm::map_range(channelTuples, [ctxt](nb::tuple t) {
-                  std::string name = nb::cast<std::string>(t[0]);
-                  return CirctESIBundleTypeBundleChannel{
-                      mlirIdentifierGet(ctxt, mlirStringRefCreate(
-                                                  name.data(), name.length())),
-                      (uint32_t)nb::cast<ChannelDirection>(t[1]),
-                      nb::cast<MlirType>(t[2])};
-                }));
-            return cls(circtESIBundleTypeGet(ctxt, channels.size(),
-                                             channels.data(), resettable));
-          },
-          nb::arg("cls"), nb::arg("channels"), nb::arg("resettable"),
-          nb::arg("ctxt") = nullptr)
-      .def_property_readonly("resettable", &circtESIBundleTypeGetResettable)
-      .def_property_readonly("channels", [](MlirType bundleType) {
-        std::vector<nb::tuple> channels;
-        size_t numChannels = circtESIBundleTypeGetNumChannels(bundleType);
-        for (size_t i = 0; i < numChannels; ++i) {
-          CirctESIBundleTypeBundleChannel channel =
-              circtESIBundleTypeGetChannel(bundleType, i);
-          MlirStringRef name = mlirIdentifierStr(channel.name);
-          channels.push_back(nb::make_tuple(nb::str(name.data, name.length),
-                                            (ChannelDirection)channel.direction,
-                                            channel.channelType));
-        }
-        return channels;
-      });
 
-  mlir_type_subclass(m, "WindowType", circtESITypeIsAWindowType)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, MlirAttribute name, MlirType into,
-             std::vector<MlirType> frames, MlirContext ctxt) {
-            if (!hwTypeIsAStructType(into) &&
-                (!hwTypeIsATypeAliasType(into) ||
-                 !hwTypeIsAStructType(hwTypeAliasTypeGetInnerType(into))))
-              throw nb::type_error("'into' type must be a hw.StructType");
-
-            // Verify all frames are WindowFrameTypes
-            for (const auto &frame : frames) {
-              if (!circtESITypeIsAWindowFrameType(frame)) {
-                throw nb::type_error("All frames must be WindowFrameTypes");
-              }
-            }
-            return cls(circtESIWindowTypeGet(ctxt, name, into, frames.size(),
-                                             frames.data()));
-          },
-          nb::arg("cls"), nb::arg("name"), nb::arg("into"), nb::arg("frames"),
-          nb::arg("ctxt") = nullptr)
-      .def_property_readonly("name", &circtESIWindowTypeGetName)
-      .def_property_readonly("into", &circtESIWindowTypeGetInto)
-      .def_property_readonly(
-          "frames",
-          [](MlirType windowType) {
-            std::vector<MlirType> frames;
-            size_t numFrames = circtESIWindowTypeGetNumFrames(windowType);
-            for (size_t i = 0; i < numFrames; ++i)
-              frames.push_back(circtESIWindowTypeGetFrame(windowType, i));
-            return frames;
-          })
-      .def("get_lowered_type", &circtESIWindowTypeGetLoweredType);
-
-  mlir_type_subclass(m, "WindowFrameType", circtESITypeIsAWindowFrameType)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, MlirAttribute name, std::vector<MlirType> members,
-             MlirContext ctxt) {
-            // Verify all members are WindowFieldTypes
-            for (const auto &member : members) {
-              if (!circtESITypeIsAWindowFieldType(member)) {
-                throw nb::type_error("All members must be WindowFieldTypes");
-              }
-            }
-            return cls(circtESIWindowFrameTypeGet(ctxt, name, members.size(),
-                                                  members.data()));
-          },
-          nb::arg("cls"), nb::arg("name"), nb::arg("members"),
-          nb::arg("ctxt") = nullptr)
-      .def_property_readonly("name", &circtESIWindowFrameTypeGetName)
-      .def_property_readonly("members", [](MlirType frameType) {
-        std::vector<MlirType> members;
-        size_t numMembers = circtESIWindowFrameTypeGetNumMembers(frameType);
-        for (size_t i = 0; i < numMembers; ++i)
-          members.push_back(circtESIWindowFrameTypeGetMember(frameType, i));
-        return members;
-      });
-
-  mlir_type_subclass(m, "WindowFieldType", circtESITypeIsAWindowFieldType)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, MlirAttribute fieldName, uint64_t numItems,
-             uint64_t bulkCountWidth, MlirContext ctxt) {
-            return cls(circtESIWindowFieldTypeGet(ctxt, fieldName, numItems,
-                                                  bulkCountWidth));
-          },
-          nb::arg("cls"), nb::arg("field_name"), nb::arg("num_items") = 0,
-          nb::arg("bulk_count_width") = 0, nb::arg("ctxt") = nullptr)
-      .def_property_readonly("field_name", &circtESIWindowFieldTypeGetFieldName)
-      .def_property_readonly("num_items", &circtESIWindowFieldTypeGetNumItems)
-      .def_property_readonly("bulk_count_width",
-                             &circtESIWindowFieldTypeGetBulkCountWidth);
-
-  mlir_attribute_subclass(m, "AppIDAttr", circtESIAttributeIsAnAppIDAttr)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, std::string name, std::optional<uint64_t> index,
-             MlirContext ctxt) {
-            if (index.has_value())
-              return cls(circtESIAppIDAttrGet(ctxt, wrap(name), index.value()));
-            return cls(circtESIAppIDAttrGetNoIdx(ctxt, wrap(name)));
-          },
-          "Create an AppID attribute", nb::arg("cls"), nb::arg("name"),
-          nb::arg("index") = nb::none(), nb::arg("context") = nb::none())
-      .def_property_readonly("name",
-                             [](MlirAttribute self) {
-                               llvm::StringRef name =
-                                   unwrap(circtESIAppIDAttrGetName(self));
-                               return std::string(name.data(), name.size());
-                             })
-      .def_property_readonly("index", [](MlirAttribute self) -> nb::object {
-        uint64_t index;
-        if (circtESIAppIDAttrGetIndex(self, &index))
-          return nb::cast(index);
-        return nb::none();
-      });
-
-  mlir_attribute_subclass(m, "AppIDPathAttr",
-                          circtESIAttributeIsAnAppIDPathAttr)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, MlirAttribute root,
-             std::vector<MlirAttribute> path, MlirContext ctxt) {
-            return cls(
-                circtESIAppIDAttrPathGet(ctxt, root, path.size(), path.data()));
-          },
-          "Create an AppIDPath attribute", nb::arg("cls"), nb::arg("root"),
-          nb::arg("path"), nb::arg("context") = nb::none())
-      .def_property_readonly("root", &circtESIAppIDAttrPathGetRoot)
-      .def("__len__", &circtESIAppIDAttrPathGetNumComponents)
-      .def("__getitem__", &circtESIAppIDAttrPathGetComponent);
+  PyBundleType::bind(m);
+  PyWindowType::bind(m);
+  PyWindowFrameType::bind(m);
+  PyWindowFieldType::bind(m);
+  PyAppIDAttr::bind(m);
+  PyAppIDPathAttr::bind(m);
 
   m.def("check_inner_type_match", &circtESICheckInnerTypeMatch,
         "Check that two types match, allowing for AnyType in 'expected'.",
