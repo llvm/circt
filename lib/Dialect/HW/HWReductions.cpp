@@ -297,9 +297,7 @@ struct ModuleOutputPruner : public Reduction {
 /// This is not an actual reduction, but often removes extraneous information
 /// that has no bearing on the actual reduction.
 struct SVNamehintRemover : public Reduction {
-  uint64_t match(Operation *op) override {
-    return op->hasAttr("sv.namehint");
-  }
+  uint64_t match(Operation *op) override { return op->hasAttr("sv.namehint"); }
   LogicalResult rewrite(Operation *op) override {
     op->removeAttr("sv.namehint");
     return success();

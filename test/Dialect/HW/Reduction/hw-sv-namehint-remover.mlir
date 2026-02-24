@@ -1,13 +1,7 @@
 // UNSUPPORTED: system-windows
-// RUN: circt-reduce %s --include=sv-namehint-remover --test /usr/bin/env --test-arg true --keep-best=0 | FileCheck %s
+// RUN: circt-reduce %s --include=sv-namehint-remover --test /usr/bin/env --test-arg true --keep-best=0 | FileCheck %s --implicit-check-not=sv.namehint
 
 // CHECK-LABEL: hw.module @TestNamehint
-// CHECK-NEXT: %[[C:.+]] = hw.constant
-// CHECK-NEXT: %[[WIRE:.+]] = hw.wire %[[C]]
-// CHECK-NOT: sv.namehint
-// CHECK-NEXT: %[[XOR:.+]] = comb.xor
-// CHECK-NOT: sv.namehint
-// CHECK-NEXT: hw.output
 
 hw.module @TestNamehint(in %input1: i8, in %input2: i8, out result: i8) {
   %c42_i8 = hw.constant 42 : i8
