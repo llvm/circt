@@ -697,6 +697,21 @@ struct VerifBoundedModelCheckingOpConversion
   SmallVectorImpl<Operation *> &propertylessBMCOps;
 };
 
+struct VerifSymbolicValueOpConversion
+    : OpConversionPattern<verif::SymbolicValueOp> {
+  using OpConversionPattern<verif::SymbolicValueOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(verif::SymbolicValueOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type targetType = typeConverter->convertType(op.getType());
+    if (!targetType)
+      return failure();
+    rewriter.replaceOpWithNewOp<smt::DeclareFunOp>(op, targetType);
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -716,8 +731,8 @@ void circt::populateVerifToSMTConversionPatterns(
     bool risingClocksOnly, SmallVectorImpl<Operation *> &propertylessBMCOps) {
   patterns.add<VerifAssertOpConversion, VerifAssumeOpConversion,
                LogicEquivalenceCheckingOpConversion,
-               RefinementCheckingOpConversion>(converter,
-                                               patterns.getContext());
+               RefinementCheckingOpConversion, VerifSymbolicValueOpConversion>(
+      converter, patterns.getContext());
   patterns.add<VerifBoundedModelCheckingOpConversion>(
       converter, patterns.getContext(), names, risingClocksOnly,
       propertylessBMCOps);
