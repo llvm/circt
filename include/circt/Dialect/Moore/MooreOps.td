@@ -1784,6 +1784,8 @@ def DynQueueExtractOp : MooreOp<"dyn_queue_extract", [Pure,
     $input `from` $lowerIdx `to` $upperIdx attr-dict `:`
     type($input) `,` type($lowerIdx) `->` type($result)
   }];
+
+  let hasVerifier = 1;
 }
 
 def DynQueueRefElementOp : MooreOp<"dyn_queue_ref_element", [Pure]> {
