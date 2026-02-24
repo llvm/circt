@@ -8,7 +8,7 @@
 //
 // This pass performs structural vectorization of hardware modules,
 // merging scalar bit-level assignments into vectorized operations.
-// This version handles linear, reverse, and mix permutation and 
+// This version handles linear, reverse, and mix permutation and
 // structural vectorization using bit-tracking.
 //
 //===----------------------------------------------------------------------===//
@@ -147,8 +147,9 @@ public:
           transformed = true;
         } else if (arr.isReverse(bitWidth, sourceInput)) {
           rewriter.setInsertionPointAfterValue(sourceInput);
-          Value reversed = comb::ReverseOp::create(
-              rewriter, sourceInput.getLoc(), sourceInput.getType(), sourceInput);
+          Value reversed =
+              comb::ReverseOp::create(rewriter, sourceInput.getLoc(),
+                                      sourceInput.getType(), sourceInput);
           oldOutputVal.replaceAllUsesWith(reversed);
           transformed = true;
         } else if (isValidPermutation(arr, bitWidth)) {
@@ -158,7 +159,8 @@ public:
         }
       }
 
-      // 2. If it wasn't vectorized (or if it has multiple sources), try Structural.
+      // 2. If it wasn't vectorized (or if it has multiple sources), try
+      // Structural.
       if (!transformed && canVectorizeStructurally(oldOutputVal)) {
         rewriter.setInsertionPointAfterValue(oldOutputVal);
 
@@ -227,7 +229,7 @@ private:
   /// and to handle DAGs (values with multiple uses) correctly.
   bool areSubgraphsEquivalent(Value a, Value b, unsigned index,
                               DenseMap<Value, Value> &map) {
-    
+
     // If `a` was already mapped, verify it points to the same `b`.
     if (map.count(a))
       return map[a] == b;
@@ -264,8 +266,8 @@ private:
 
     // Recurse into all operand pairs.
     for (unsigned i = 0; i < opA->getNumOperands(); ++i)
-      if (!areSubgraphsEquivalent(opA->getOperand(i), opB->getOperand(i),
-                                  index, map))
+      if (!areSubgraphsEquivalent(opA->getOperand(i), opB->getOperand(i), index,
+                                  map))
         return false;
 
     map[a] = b;
@@ -304,8 +306,8 @@ private:
 
     // Any other 1-bit result (AND, OR, XOR, MUX, …) is its own source at
     // bit position 0.
-    if (op->getNumResults() == 1 &&
-        op->getResult(0).getType().isInteger(1) && bitIndex == 0)
+    if (op->getNumResults() == 1 && op->getResult(0).getType().isInteger(1) &&
+        bitIndex == 0)
       return op->getResult(0);
 
     return nullptr;
@@ -326,8 +328,8 @@ private:
     // Base case: an ExtractOp represents one bit lane of a wider source vector.
     // Return that source vector directly; the other lanes are handled by the
     // isomorphic slices discovered in canVectorizeStructurally
-    if (auto ex = dyn_cast_or_null<comb::ExtractOp>(
-            scalarRoot.getDefiningOp())) {
+    if (auto ex =
+            dyn_cast_or_null<comb::ExtractOp>(scalarRoot.getDefiningOp())) {
       Value vec = ex.getInput();
       map[scalarRoot] = vec;
       return vec;
@@ -338,8 +340,8 @@ private:
     if (isa<BlockArgument>(scalarRoot) ||
         isa<hw::ConstantOp>(scalarRoot.getDefiningOp())) {
       if (cast<IntegerType>(scalarRoot.getType()).getWidth() == 1)
-        return comb::ReplicateOp::create(
-            b, scalarRoot.getLoc(), b.getIntegerType(width), scalarRoot);
+        return comb::ReplicateOp::create(b, scalarRoot.getLoc(),
+                                         b.getIntegerType(width), scalarRoot);
       // Wider constants are already the right width; pass through unchanged.
       return scalarRoot;
     }
@@ -368,13 +370,13 @@ private:
     else if (isa<comb::XorOp>(op))
       result = comb::XorOp::create(b, op->getLoc(), vecTy, ops);
     else if (isa<comb::MuxOp>(op)) {
-        Value sel = op->getOperand(0);
-        Value trueVal  = vectorizeSubgraph(b, op->getOperand(1), width, map);
-        Value falseVal = vectorizeSubgraph(b, op->getOperand(2), width, map);
-        if (!trueVal || !falseVal)
-          return nullptr;
-        result = comb::MuxOp::create(b, op->getLoc(), sel, trueVal, falseVal);
-    }else
+      Value sel = op->getOperand(0);
+      Value trueVal = vectorizeSubgraph(b, op->getOperand(1), width, map);
+      Value falseVal = vectorizeSubgraph(b, op->getOperand(2), width, map);
+      if (!trueVal || !falseVal)
+        return nullptr;
+      result = comb::MuxOp::create(b, op->getLoc(), sel, trueVal, falseVal);
+    } else
       // Unsupported op kind; signal failure to the caller.
       return nullptr;
 
@@ -475,15 +477,16 @@ private:
             }
             bitArrays[concatOp.getResult()] = concatenatedArray;
           })
-          .Case<comb::AndOp, comb::OrOp, comb::XorOp, comb::MuxOp>([&](Operation *op) {
-            auto result = op->getResult(0);
-            auto resultType = dyn_cast<IntegerType>(result.getType());
-            if (resultType && resultType.getWidth() == 1) {
-                BitArray arr;
-                arr.bits.push_back(Bit(result, 0));
-                bitArrays[result] = arr;
-            }
-          });
+          .Case<comb::AndOp, comb::OrOp, comb::XorOp, comb::MuxOp>(
+              [&](Operation *op) {
+                auto result = op->getResult(0);
+                auto resultType = dyn_cast<IntegerType>(result.getType());
+                if (resultType && resultType.getWidth() == 1) {
+                  BitArray arr;
+                  arr.bits.push_back(Bit(result, 0));
+                  bitArrays[result] = arr;
+                }
+              });
     });
   }
 };
