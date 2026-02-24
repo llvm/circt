@@ -36,7 +36,7 @@ def LowerToBMC : Pass<"lower-to-bmc", "::mlir::ModuleOp"> {
            "Only consider the circuit and property on rising clock edges.">,
     Option<"syncClocks", "sync-clocks", "bool",
            /*default=*/"false",
-           "Force all clocks to toggle together synchronously (old behavior).">,
+           "Force all clocks to toggle together synchronously.">,
   ];
 
   let dependentDialects = [

@@ -168,7 +168,7 @@ void LowerToBMCPass::runOnOperation() {
         nextClocks.push_back(arg);
     } else {
       if (syncClocks) {
-        // Old behavior: toggle every clock each step.
+        // Synchronous behavior: toggle every clock each step.
         for (auto arg : loopBlock->getArguments()) {
           auto fromClk = seq::FromClockOp::create(builder, loc, arg);
           auto cNeg1 =
