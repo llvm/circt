@@ -120,6 +120,10 @@ static cl::opt<bool> risingClocksOnly(
     cl::desc("Only consider the circuit and property on rising clock edges"),
     cl::init(false), cl::cat(mainCategory));
 
+static cl::opt<bool> syncClocks(
+    "sync-clocks", cl::desc("Force all clocks to toggle together synchronously"),
+    cl::init(false), cl::cat(mainCategory));
+
 static cl::opt<bool> flattenModules(
     "flatten-modules",
     cl::desc("Flatten all module instances before processing (which will "
@@ -214,6 +218,7 @@ static LogicalResult executeBMC(MLIRContext &context) {
   lowerToBMCOptions.ignoreAssertionsUntil = ignoreAssertionsUntil;
   lowerToBMCOptions.topModule = moduleName;
   lowerToBMCOptions.risingClocksOnly = risingClocksOnly;
+  lowerToBMCOptions.syncClocks = syncClocks;
   pm.addPass(createLowerToBMC(lowerToBMCOptions));
   pm.addPass(createConvertHWToSMT());
   pm.addPass(createConvertCombToSMT());
