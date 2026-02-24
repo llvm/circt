@@ -199,8 +199,9 @@ def _run_hw_script(config: CosimPytestConfig, tmp_dir: Path) -> Path:
 
 
 # Names and annotations that the decorator injects automatically.
-_INJECTED_NAMES = {"host", "hostname", "port", "sources_dir", "conn",
-                   "accelerator"}
+_INJECTED_NAMES = {
+    "host", "hostname", "port", "sources_dir", "conn", "accelerator"
+}
 _INJECTED_ANNOTATIONS = frozenset({Accelerator, AcceleratorConnection})
 
 
@@ -252,8 +253,10 @@ def _visible_signature(target: Callable[..., Any]) -> inspect.Signature:
   Uses :func:`_is_injected_param` as the single source of truth.
   """
   sig = inspect.signature(target)
-  kept = [p for p in sig.parameters.values()
-          if not _is_injected_param(p.name, p.annotation)]
+  kept = [
+      p for p in sig.parameters.values()
+      if not _is_injected_param(p.name, p.annotation)
+  ]
   return sig.replace(parameters=kept)
 
 
@@ -289,8 +292,7 @@ def _compile_once_for_class(config: CosimPytestConfig) -> _ClassCompileCache:
       rc = sim.compile()
     if rc != 0:
       raise RuntimeError(f"Simulator compile failed with exit code {rc}")
-    return _ClassCompileCache(sources_dir=sources_dir,
-                              compile_dir=compile_dir)
+    return _ClassCompileCache(sources_dir=sources_dir, compile_dir=compile_dir)
   except Exception:
     if not config.debug:
       shutil.rmtree(compile_root, ignore_errors=True)
