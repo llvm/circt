@@ -90,12 +90,16 @@ static Value spillValueOnStack(OpBuilder &builder, Location loc,
   auto oneC = LLVM::ConstantOp::create(
       builder, loc, IntegerType::get(builder.getContext(), 32),
       builder.getI32IntegerAttr(1));
+
   unsigned alignment = 0;
   if (Block *block = builder.getInsertionBlock()) {
-    alignment = static_cast<unsigned>(
-        DataLayout::closest(block->getParentOp())
-            .getTypePreferredAlignment(spillVal.getType()));
+    alignment = (unsigned)DataLayout::closest(block->getParentOp())
+                    .getTypePreferredAlignment(spillVal.getType());
+  } else {
+    alignment = (unsigned)DataLayout::closest(spillVal.getDefiningOp())
+                    .getTypePreferredAlignment(spillVal.getType());
   }
+  alignment = std::max(4u, alignment);
   Value ptr = LLVM::AllocaOp::create(
       builder, loc, LLVM::LLVMPointerType::get(builder.getContext()),
       spillVal.getType(), oneC, alignment);
@@ -307,9 +311,9 @@ struct ArrayInjectOpConversion
       newArrTy = typeConverter->convertType(
           hw::ArrayType::get(inputType.getElementType(), arrElems + 1));
     }
-    auto allocaAlignment =
-        static_cast<unsigned>(DataLayout::closest(op.getOperation())
-                                  .getTypePreferredAlignment(newArrTy));
+    auto allocaAlignment = std::max(
+        4u, static_cast<unsigned>(DataLayout::closest(op.getOperation())
+                                      .getTypePreferredAlignment(newArrTy)));
     Value arrPtr = LLVM::AllocaOp::create(
         rewriter, op->getLoc(),
         LLVM::LLVMPointerType::get(rewriter.getContext()), newArrTy, oneC,
