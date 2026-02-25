@@ -12,3 +12,11 @@ hw.module @preset_too_large(in %clock: !seq.clock, in %reset: i1, in %next4: i4)
   // expected-error@below {{custom op 'seq.firreg' preset value too large}}
   seq.firreg %next4 clock %clock preset 1024 : i4
 }
+
+// -----
+
+// CHECK-LABEL: @preset_negative
+hw.module @preset_negative(in %clock: !seq.clock, in %reset: i1, in %next: i1) {
+  // expected-error@below {{custom op 'seq.firreg' preset value must not be negative}}
+  seq.firreg %next clock %clock preset -1 : i1
+}
