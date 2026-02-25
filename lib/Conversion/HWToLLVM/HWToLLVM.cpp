@@ -91,14 +91,12 @@ static Value spillValueOnStack(OpBuilder &builder, Location loc,
       builder, loc, IntegerType::get(builder.getContext(), 32),
       builder.getI32IntegerAttr(1));
 
-  unsigned alignment = 0;
-  if (Block *block = builder.getInsertionBlock()) {
-    alignment = (unsigned)DataLayout::closest(block->getParentOp())
-                    .getTypePreferredAlignment(spillVal.getType());
-  } else {
-    alignment = (unsigned)DataLayout::closest(spillVal.getDefiningOp())
-                    .getTypePreferredAlignment(spillVal.getType());
-  }
+  Block *block = builder.getInsertionBlock();
+  assert(block && "expected an insertion block when spilling a value");
+
+  auto alignment =
+      static_cast<unsigned>(DataLayout::closest(block->getParentOp())
+                                .getTypePreferredAlignment(spillVal.getType()));
   alignment = std::max(4u, alignment);
   Value ptr = LLVM::AllocaOp::create(
       builder, loc, LLVM::LLVMPointerType::get(builder.getContext()),
