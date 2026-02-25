@@ -3886,7 +3886,8 @@ endmodule
 // CHECK:    [[Q:%.+]] = moore.variable : <queue<i32, 0>>
 // CHECK:    [[QSIZE:%.+]] = moore.variable : <i32>
 // CHECK:    moore.procedure initial {
-// CHECK:      [[SIZE:%.+]] = moore.builtin.size [[Q]] : <queue<i32, 0>>
+// CHECK:      [[QR:%.+]] = moore.read [[Q]] : <queue<i32, 0>>
+// CHECK:      [[SIZE:%.+]] = moore.builtin.size [[QR]] : <i32, 0>
 // CHECK:      moore.blocking_assign [[QSIZE]], [[SIZE]] : i32
 // CHECK:      moore.return
 // CHECK:    }
@@ -4035,5 +4036,35 @@ module QueueExtractRangeTest;
 
     initial begin
       q2 = q[0:3];
+    end
+endmodule
+
+// CHECK-LABEL: moore.module @QueueUnboundedLiteralTest() {
+// CHECK:           [[Q1:%.+]] = moore.variable : <queue<i32, 0>>
+// CHECK:           [[Q2:%.+]] = moore.variable : <queue<i32, 0>>
+// CHECK:           [[RES:%.+]] = moore.variable : <i32>
+// CHECK:           moore.procedure initial {
+// CHECK:               [[QR1:%.+]] = moore.read [[Q1]] : <queue<i32, 0>>
+// CHECK:               [[Q1SIZE:%.+]] = moore.builtin.size [[QR1]] : <i32, 0>
+// CHECK:               [[ONE:%.+]] = moore.constant 1 : i32
+// CHECK:               [[Q1LASTIDX:%.+]] = moore.sub [[Q1SIZE]], [[ONE]] : i32
+// CHECK:               [[QR2:%.+]] = moore.read [[Q2]] : <queue<i32, 0>>
+// CHECK:               [[Q2SIZE:%.+]] = moore.builtin.size [[QR2]] : <i32, 0>
+// CHECK:               [[ONE:%.+]] = moore.constant 1 : i32
+// CHECK:               [[Q2LASTIDX:%.+]] = moore.sub [[Q2SIZE:%.+]], [[ONE]] : i32
+// CHECK:               [[Q2LASTEL:%.+]] = moore.dyn_queue_extract [[QR2]] from [[Q2LASTIDX]] to [[Q2LASTIDX]] : <i32, 0>, i32 -> i32
+// CHECK:               [[IDXSUM:%.+]] = moore.add [[Q1LASTIDX]], [[Q2LASTEL]] : i32
+// CHECK:               [[RESVAL:%.+]] = moore.dyn_queue_extract [[QR1]] from [[IDXSUM]] to [[IDXSUM]] : <i32, 0>, i32 -> i32
+// CHECK:               moore.blocking_assign [[RES]], [[RESVAL]] : i32
+// CHECK:               moore.return
+// CHECK:           }
+// CHECK:           moore.output
+// CHECK:         }
+module QueueUnboundedLiteralTest;
+    int q1[$];
+    int q2[$];
+    int res;
+    initial begin
+      res = q1[$ + q2[$]];
     end
 endmodule
