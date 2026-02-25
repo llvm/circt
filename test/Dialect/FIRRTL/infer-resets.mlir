@@ -1328,3 +1328,55 @@ firrtl.circuit "TopA" {
     firrtl.connect %b_reset, %1 : !firrtl.reset, !firrtl.reset
   }
 }
+
+// -----
+// Allow modules with full reset to be instantiated outside of a reset domain,
+// with reset tied-off. (Async reset variant)
+// See https://github.com/llvm/circt/issues/9396
+firrtl.circuit "AsyncNoDomainTieOff" {
+  // CHECK-LABEL: firrtl.module @AsyncNoDomainTieOff
+  firrtl.module @AsyncNoDomainTieOff(in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}]) {
+    // CHECK: %foo_reset = firrtl.instance foo @AsyncFoo(in reset: !firrtl.asyncreset)
+    // CHECK-NEXT: firrtl.matchingconnect %foo_reset, %reset
+    firrtl.instance foo @AsyncFoo()
+  }
+  // CHECK-LABEL: firrtl.module @AsyncTopB
+  firrtl.module @AsyncTopB() {
+    // CHECK: %foo_reset = firrtl.instance foo @AsyncFoo(in reset: !firrtl.asyncreset)
+    // CHECK-NEXT: %c0_asyncreset = firrtl.specialconstant 0 : !firrtl.asyncreset
+    // CHECK-NEXT: firrtl.matchingconnect %foo_reset, %c0_asyncreset
+    firrtl.instance foo @AsyncFoo()
+  }
+  // CHECK-LABEL: firrtl.module private @AsyncFoo
+  // CHECK-SAME: in %reset: !firrtl.asyncreset
+  firrtl.module private @AsyncFoo() {
+    %0 = firrtl.specialconstant false : !firrtl.clock
+    %1 = firrtl.reg %0 : !firrtl.clock, !firrtl.uint<42>
+  }
+}
+
+// -----
+// Allow modules with full reset to be instantiated outside of a reset domain,
+// with reset tied-off. (Sync reset variant)
+// See https://github.com/llvm/circt/issues/9396
+firrtl.circuit "SyncNoDomainTieOff" {
+  // CHECK-LABEL: firrtl.module @SyncNoDomainTieOff
+  firrtl.module @SyncNoDomainTieOff(in %reset: !firrtl.uint<1> [{class = "circt.FullResetAnnotation", resetType = "sync"}]) {
+    // CHECK: %foo_reset = firrtl.instance foo @SyncFoo(in reset: !firrtl.uint<1>)
+    // CHECK-NEXT: firrtl.matchingconnect %foo_reset, %reset
+    firrtl.instance foo @SyncFoo()
+  }
+  // CHECK-LABEL: firrtl.module @SyncTopB
+  firrtl.module @SyncTopB() {
+    // CHECK: %foo_reset = firrtl.instance foo @SyncFoo(in reset: !firrtl.uint<1>)
+    // CHECK-NEXT: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.matchingconnect %foo_reset, %c0_ui1
+    firrtl.instance foo @SyncFoo()
+  }
+  // CHECK-LABEL: firrtl.module private @SyncFoo
+  // CHECK-SAME: in %reset: !firrtl.uint<1>
+  firrtl.module private @SyncFoo() {
+    %0 = firrtl.specialconstant false : !firrtl.clock
+    %1 = firrtl.reg %0 : !firrtl.clock, !firrtl.uint<42>
+  }
+}

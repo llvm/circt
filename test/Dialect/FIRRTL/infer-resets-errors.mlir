@@ -257,7 +257,6 @@ firrtl.circuit "Top" {
     firrtl.connect %inst_clock, %clock : !firrtl.clock, !firrtl.clock
   }
   firrtl.module @Other(in %clock: !firrtl.clock) attributes {annotations = [{class = "circt.ExcludeFromFullResetAnnotation"}]} {
-    // expected-note @+1 {{instance 'other/inst' is in no reset domain}}
     %inst_clock = firrtl.instance inst @Foo(in clock: !firrtl.clock)
     firrtl.connect %inst_clock, %clock : !firrtl.clock, !firrtl.clock
   }
@@ -297,20 +296,3 @@ firrtl.circuit "Top" {
   firrtl.module @Top(in %reset: !firrtl.asyncreset) attributes {portAnnotations = [[{class = "circt.FullResetAnnotation", resetType = "potato"}]]} {}
 }
 
-// -----
-// Issue 9396
-firrtl.circuit "Foo" {
-  firrtl.module @Baz(in %reset: !firrtl.asyncreset) {
-    // expected-note @+1 {{instance 'bar' is in no reset domain}}
-    firrtl.instance bar @Bar()
-  }
-  // expected-error @+1 {{module 'Bar' instantiated in different reset domains}}
-  firrtl.module private @Bar() {
-  }
-
-  // expected-note @+1 {{reset domain 'reset' of module 'Foo' declared here:}}
-  firrtl.module @Foo(in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}]) {
-    // expected-note @+1 {{instance 'bar' is in reset domain rooted at 'reset' of module 'Foo'}}
-    firrtl.instance bar @Bar()
-  }
-}
