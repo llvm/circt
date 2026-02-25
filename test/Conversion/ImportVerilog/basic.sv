@@ -394,6 +394,67 @@ function void CaseStatements(int x, int a, int b, int c);
   endcase
 endfunction
 
+// CHECK-LABEL: func.func private @InsideStatements(
+// CHECK-SAME: %arg0: !moore.i32
+// CHECK-SAME: %arg1: !moore.i32
+// CHECK-SAME: %arg2: !moore.i1
+function void InsideStatements(int a, int b, bit c);
+  int x;
+
+  // CHECK: moore.blocking_assign %x, %arg0
+  // CHECK: cf.br ^[[BB_CHECK:.+]]
+  // CHECK: ^[[BB_CHECK]]:
+  // CHECK: [[TMP1:%.+]] = moore.read %x
+  // CHECK: [[TMP2:%.+]] = moore.slt [[TMP1]], %arg1
+  // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[TMP3]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
+  // CHECK: ^[[BB_BODY]]:
+  // CHECK: call @dummyA()
+  // CHECK: cf.br ^[[BB_STEP:.+]]
+  // CHECK: ^[[BB_STEP]]:
+  // CHECK: call @dummyB()
+  // CHECK: cf.br ^[[BB_CHECK]]
+  // CHECK: ^[[BB_EXIT]]:
+  for (x = a; x < b; dummyB()) dummyA();
+
+  // CHECK: %y = moore.variable %arg0 : <i32>
+  // CHECK: cf.br ^[[BB_CHECK:.+]]
+  // CHECK: ^[[BB_CHECK]]:
+  // CHECK: [[TMP1:%.+]] = moore.read %y
+  // CHECK: [[TMP2:%.+]] = moore.slt [[TMP1]], %arg1
+  // CHECK: [[TMP3:%.+]] = moore.conversion [[TMP2]] : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[TMP3]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
+  // CHECK: ^[[BB_BODY]]:
+  // CHECK: call @dummyA()
+  // CHECK: cf.br ^[[BB_STEP:.+]]
+  // CHECK: ^[[BB_STEP]]:
+  // CHECK: call @dummyB()
+  // CHECK: cf.br ^[[BB_CHECK]]
+  // CHECK: ^[[BB_EXIT]]:
+  for (int y = a; y < b; dummyB()) dummyA();
+
+  // CHECK: cf.br ^[[BB_CHECK:.+]]
+  // CHECK: ^[[BB_CHECK]]:
+  // CHECK: [[TMP:%.+]] = moore.conversion %arg2 : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
+  // CHECK: ^[[BB_BODY]]:
+  // CHECK: [[TMP:%.+]] = moore.conversion %arg2 : !moore.i1 -> i1
+  // CHECK: cf.cond_br [[TMP]], ^[[BB_TRUE:.+]], ^[[BB_FALSE:.+]]
+  // CHECK: ^[[BB_TRUE]]:
+  // CHECK: cf.br ^[[BB_STEP:.+]]
+  // CHECK: ^[[BB_FALSE]]:
+  // CHECK: cf.br ^[[BB_EXIT]]
+  // CHECK: ^[[BB_STEP]]:
+  // CHECK: call @dummyB()
+  // CHECK: cf.br ^[[BB_CHECK]]
+  // CHECK: ^[[BB_EXIT]]:
+  for (; c; dummyB())
+    if (c)
+      continue;
+    else
+      break;
+endfunction
+
 // CHECK-LABEL: func.func private @ForLoopStatements(
 // CHECK-SAME: %arg0: !moore.i32
 // CHECK-SAME: %arg1: !moore.i32
