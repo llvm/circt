@@ -1,6 +1,5 @@
 add_circt_library(CIRCTBMCTransforms
   ExternalizeRegisters.cpp
-  LowerLTLToBMC.cpp
   LowerToBMC.cpp
 
   DEPENDS
