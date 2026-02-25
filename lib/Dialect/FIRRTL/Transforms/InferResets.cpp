@@ -485,6 +485,9 @@ struct InferResetsPass
                     Value parentReset, InstanceGraph &instGraph,
                     unsigned indent = 0);
 
+  LogicalResult analyzeNeedForResetPorts();
+  bool moduleNeedsResetPort(FModuleOp module);
+
   LogicalResult determineImpl();
   LogicalResult determineImpl(FModuleOp module, ResetDomain &domain);
 
@@ -534,6 +537,11 @@ struct InferResetsPass
   MapVector<FModuleOp, SmallVector<std::pair<ResetDomain, InstancePath>, 1>>
       domains;
 
+  /// Set of modules that need a reset port. A module needs a reset port if it
+  /// contains reset-less registers or instantiates a module that needs a reset
+  /// port.
+  DenseSet<FModuleOp> modulesNeedingResetPort;
+
   /// Cache of modules symbols
   InstanceGraph *instanceGraph;
 
@@ -548,6 +556,7 @@ void InferResetsPass::runOnOperation() {
   resetDrives.clear();
   annotatedResets.clear();
   domains.clear();
+  modulesNeedingResetPort.clear();
   instancePathCache.reset(nullptr);
   markAnalysesPreserved<InstanceGraph>();
 }
@@ -569,6 +578,10 @@ void InferResetsPass::runOnOperationInner() {
 
   // Build the reset domains in the design.
   if (failed(buildDomains(getOperation())))
+    return signalPassFailure();
+
+  // Analyze which modules actually need reset ports.
+  if (failed(analyzeNeedForResetPorts()))
     return signalPassFailure();
 
   // Determine how each reset shall be implemented.
@@ -1599,6 +1612,91 @@ void InferResetsPass::buildDomains(FModuleOp module,
   }
 }
 
+//===----------------------------------------------------------------------===//
+// Reset Port Need Analysis
+//===----------------------------------------------------------------------===//
+
+/// Analyze which modules need reset ports. A module needs a reset port if:
+/// 1. It contains reset-less registers (RegOp), OR
+/// 2. It instantiates a module that needs a reset port
+///
+/// This analysis is performed bottom-up in the instance graph to ensure we
+/// correctly propagate the need for reset ports up the hierarchy.
+LogicalResult InferResetsPass::analyzeNeedForResetPorts() {
+  LLVM_DEBUG({
+    llvm::dbgs() << "\n";
+    debugHeader("Analyze need for reset ports") << "\n\n";
+  });
+
+  auto &instGraph = getAnalysis<InstanceGraph>();
+
+  // Process modules in post-order (bottom-up) to ensure we analyze leaf modules
+  // before their parents.
+  for (auto *node : llvm::post_order(&instGraph)) {
+    auto module = dyn_cast_or_null<FModuleOp>(node->getModule().getOperation());
+    if (!module)
+      continue;
+
+    if (moduleNeedsResetPort(module)) {
+      modulesNeedingResetPort.insert(module);
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Module " << module.getName() << " needs reset port\n");
+    }
+  }
+
+  return success();
+}
+
+/// Check if a module needs a reset port. This checks:
+/// 1. Does the module have any reset-less registers (RegOp)?
+/// 2. Does the module instantiate any modules that need reset ports?
+bool InferResetsPass::moduleNeedsResetPort(FModuleOp module) {
+  // Check if this module is in a reset domain. If not, it doesn't need a port.
+  auto domainIt = domains.find(module);
+  if (domainIt == domains.end())
+    return false;
+
+  auto &domain = domainIt->second.back().first;
+  // If the module has no reset domain, it doesn't need a port.
+  if (!domain)
+    return false;
+
+  // If this is the top of a reset domain (where the reset is defined), it
+  // doesn't need a port added - it already has the reset.
+  if (domain.isTop)
+    return false;
+
+  // Check for reset-less registers in the module body.
+  bool hasResetlessReg = false;
+  module.walk([&](RegOp regOp) {
+    hasResetlessReg = true;
+    return WalkResult::interrupt();
+  });
+
+  if (hasResetlessReg) {
+    LLVM_DEBUG(llvm::dbgs() << "  - Has reset-less registers\n");
+    return true;
+  }
+
+  // Check if any instantiated modules need reset ports.
+  bool instantiatesModuleNeedingReset = false;
+  module.walk([&](InstanceOp instOp) {
+    auto refModule = instOp.getReferencedModule<FModuleOp>(*instanceGraph);
+    if (!refModule)
+      return WalkResult::advance();
+
+    if (modulesNeedingResetPort.contains(refModule)) {
+      instantiatesModuleNeedingReset = true;
+      LLVM_DEBUG(llvm::dbgs() << "  - Instantiates " << refModule.getName()
+                              << " which needs reset\n");
+      return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
+  });
+
+  return instantiatesModuleNeedingReset;
+}
+
 /// Determine how the reset for each module shall be implemented.
 LogicalResult InferResetsPass::determineImpl() {
   auto anyFailed = false;
@@ -1657,8 +1755,17 @@ LogicalResult InferResetsPass::determineImpl(FModuleOp module,
   auto portNames = module.getPortNames();
   auto *portIt = llvm::find(portNames, neededName);
 
-  // If this port does not yet exist, record that we need to create it.
+  // If this port does not yet exist, check if we need to create it.
   if (portIt == portNames.end()) {
+    // Only create a port if the module actually needs one. If it doesn't
+    // contain any reset-less registers and doesn't instantiate modules that
+    // need resets, we can skip adding a port.
+    if (!modulesNeedingResetPort.contains(module)) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "- Module doesn't need reset port, skipping\n");
+      // Leave localReset and existingPort empty to indicate no port is needed.
+      return success();
+    }
     LLVM_DEBUG(llvm::dbgs() << "- Creating new port " << neededName << "\n");
     domain.resetName = neededName;
     return success();
@@ -1729,14 +1836,24 @@ LogicalResult InferResetsPass::implementFullReset(FModuleOp module,
   // If needed, add a reset port to the module.
   auto actualReset = domain.localReset;
   if (!domain.localReset) {
-    PortInfo portInfo{domain.resetName,
-                      domain.resetType,
-                      Direction::In,
-                      {},
-                      domain.rootReset.getLoc()};
-    module.insertPorts({{0, portInfo}});
-    actualReset = module.getArgument(0);
-    LLVM_DEBUG(llvm::dbgs() << "- Inserted port " << domain.resetName << "\n");
+    // Only add a port if the module actually needs one.
+    if (modulesNeedingResetPort.contains(module)) {
+      PortInfo portInfo{domain.resetName,
+                        domain.resetType,
+                        Direction::In,
+                        {},
+                        domain.rootReset.getLoc()};
+      module.insertPorts({{0, portInfo}});
+      actualReset = module.getArgument(0);
+      LLVM_DEBUG(llvm::dbgs()
+                 << "- Inserted port " << domain.resetName << "\n");
+    } else {
+      LLVM_DEBUG(
+          llvm::dbgs()
+          << "- Module doesn't need reset port, skipping port insertion\n");
+      // No reset port needed, so no operations to update.
+      return success();
+    }
   }
 
   LLVM_DEBUG({
@@ -1865,15 +1982,24 @@ void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
     // If needed, add a reset port to the instance.
     Value instReset;
     if (!domain.localReset) {
-      LLVM_DEBUG(llvm::dbgs() << "  - Adding new result as reset\n");
-      auto newInstOp = instOp.cloneWithInsertedPortsAndReplaceUses(
-          {{/*portIndex=*/0,
-            {domain.resetName, type_cast<FIRRTLBaseType>(actualReset.getType()),
-             Direction::In}}});
-      instReset = newInstOp.getResult(0);
-      instanceGraph->replaceInstance(instOp, newInstOp);
-      instOp->erase();
-      instOp = newInstOp;
+      // Only add a port if the module actually needs one. If the module
+      // doesn't need a reset port (no reset-less registers and doesn't
+      // instantiate modules needing resets), skip adding the port.
+      if (modulesNeedingResetPort.contains(refModule)) {
+        LLVM_DEBUG(llvm::dbgs() << "  - Adding new result as reset\n");
+        auto newInstOp = instOp.cloneWithInsertedPortsAndReplaceUses(
+            {{/*portIndex=*/0,
+              {domain.resetName,
+               type_cast<FIRRTLBaseType>(actualReset.getType()),
+               Direction::In}}});
+        instReset = newInstOp.getResult(0);
+        instanceGraph->replaceInstance(instOp, newInstOp);
+        instOp->erase();
+        instOp = newInstOp;
+      } else {
+        LLVM_DEBUG(llvm::dbgs()
+                   << "  - Module doesn't need reset port, skipping\n");
+      }
     } else if (domain.existingPort.has_value()) {
       auto idx = *domain.existingPort;
       instReset = instOp.getResult(idx);
@@ -1882,7 +2008,8 @@ void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
 
     // If there's no reset port on the instance to connect, we're done. This
     // can happen if the instantiated module has a reset domain, but that
-    // domain is e.g. rooted at an internal wire.
+    // domain is e.g. rooted at an internal wire, or if the module doesn't
+    // need a reset port.
     if (!instReset)
       return;
 
