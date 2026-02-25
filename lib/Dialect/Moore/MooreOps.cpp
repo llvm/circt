@@ -1756,6 +1756,18 @@ VTableEntryOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
+LogicalResult DynQueueExtractOp::verify() {
+  auto elementType = cast<QueueType>(getInput().getType()).getElementType();
+
+  // If the result type indicates we are extracting a single element,
+  // the upper/lower indexes should be the same register.
+  if (getResult().getType() == elementType && getLowerIdx() != getUpperIdx()) {
+    return failure();
+  }
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//

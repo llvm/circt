@@ -238,7 +238,7 @@ struct ExprVisitor {
     if (isLvalue)
       return llvm::TypeSwitch<Type, Value>(derefType)
           .Case<moore::QueueType>([&](moore::QueueType) {
-            return moore::DynQueueExtractRefOp::create(builder, loc, resultType,
+            return moore::DynQueueRefElementOp::create(builder, loc, resultType,
                                                        value, lowBit);
           })
           .Default([&](Type) {
@@ -250,7 +250,7 @@ struct ExprVisitor {
       return llvm::TypeSwitch<Type, Value>(derefType)
           .Case<moore::QueueType>([&](moore::QueueType) {
             return moore::DynQueueExtractOp::create(builder, loc, resultType,
-                                                    value, lowBit);
+                                                    value, lowBit, lowBit);
           })
           .Default([&](Type) {
             return moore::DynExtractOp::create(builder, loc, resultType, value,
@@ -277,6 +277,37 @@ struct ExprVisitor {
     if (!type || !value)
       return {};
 
+    auto derefType = value.getType();
+    if (isLvalue)
+      derefType = cast<moore::RefType>(derefType).getNestedType();
+
+    if (isa<moore::QueueType>(derefType)) {
+      return handleQueueRangeSelectExpressions(expr, type, value);
+    }
+    return handleArrayRangeSelectExpressions(expr, type, value);
+  }
+
+  // Handles range selections into queues, in which neither bound needs to be
+  // constant
+  Value handleQueueRangeSelectExpressions(
+      const slang::ast::RangeSelectExpression &expr, Type type, Value value) {
+    auto lowerIdx = context.convertRvalueExpression(expr.left());
+    auto upperIdx = context.convertRvalueExpression(expr.right());
+    auto resultType =
+        isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type)) : type;
+
+    if (isLvalue) {
+      mlir::emitError(loc) << "queue lvalue range selections are not supported";
+      return {};
+    }
+    return moore::DynQueueExtractOp::create(builder, loc, resultType, value,
+                                            lowerIdx, upperIdx);
+  }
+
+  // Handles range selections into arrays, which currently require a constant
+  // upper bound
+  Value handleArrayRangeSelectExpressions(
+      const slang::ast::RangeSelectExpression &expr, Type type, Value value) {
     std::optional<int32_t> constLeft;
     std::optional<int32_t> constRight;
     if (auto *constant = expr.left().getConstant())

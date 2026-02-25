@@ -1767,40 +1767,54 @@ def DynExtractRefOp : MooreOp<"dyn_extract_ref", [Pure]> {
 //===----------------------------------------------------------------------===//
 
 def DynQueueExtractOp : MooreOp<"dyn_queue_extract", [Pure,
-    TypesMatchWith<"input and result types must match",
-    "input", "result", "cast<QueueType>($_self).getElementType()">]> {
+  AllTypesMatch<["lowerIdx", "upperIdx"]>]> {
   let description = [{
-    It's similar to extract, but it's used to select from a value
-    with a dynamic lower index.
+    Extracts the elements of a queue from `lowerIdx` to `upperIdx` inclusive.
+    This creates a new queue, unless a single element is selected, in which
+    case that element is returned directly.
+
+    If either index is out of bounds (or has x/z values), the out of bounds
+    elements will result in a special value as defined by the element type
+    in IEEE 1800-2023 § 7.4.5, Table 7-1.
   }];
-  let arguments = (ins QueueType:$input, UnpackedType:$lowerIdx);
+  let arguments = (ins QueueType:$input, UnpackedType:$lowerIdx,
+    UnpackedType:$upperIdx);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    $input `from` $lowerIdx attr-dict `:`
+    $input `from` $lowerIdx `to` $upperIdx attr-dict `:`
     type($input) `,` type($lowerIdx) `->` type($result)
   }];
+
+  let hasVerifier = 1;
 }
 
-def DynQueueExtractRefOp : MooreOp<"dyn_queue_extract_ref", [Pure]> {
+def DynQueueRefElementOp : MooreOp<"dyn_queue_ref_element", [Pure]> {
   let description = [{
-  The copy of dyn_extract that explicitly works on the ref type.
+    Extracts a reference to the element `index` of `input`.
+
+    If the index is out of bounds (or has x/z values), reading the reference
+    will result in a special value as defined by the element type in
+    IEEE 1800-2023 § 7.4.5, Table 7-1, and writing it has no effect.
   }];
-  let arguments = (ins RefType:$input, UnpackedType:$lowerIdx);
+  let arguments = (ins RefType:$input, UnpackedType:$index);
   let results = (outs RefType:$result);
   let assemblyFormat = [{
-    $input `from` $lowerIdx attr-dict `:`
-    type($input) `,` type($lowerIdx) `->` type($result)
+    $input `from` $index attr-dict `:`
+    type($input) `,` type($index) `->` type($result)
   }];
 }
 
 def QueueInsertOp : MooreOp<"queue.insert", [
     TypesMatchWith<"queue and item types must match",
-    "queue", "item", "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">]> {
+    "queue", "item",
+    "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">
+    ]> {
   let summary = "Insert an element at an arbitrary position within a queue";
   let description = [{
       See IEEE 1800-2023 § 7.10.2.2 "Insert()"
   }];
-  let arguments = (ins QueueRefType:$queue, TwoValuedI32:$index, UnpackedType:$item);
+  let arguments = (ins QueueRefType:$queue, TwoValuedI32:$index,
+    UnpackedType:$item);
   let results = (outs);
   let assemblyFormat = [{
     $item `into` $queue `at` $index attr-dict `:` type($queue)
@@ -1810,7 +1824,8 @@ def QueueInsertOp : MooreOp<"queue.insert", [
 def QueueDeleteOp : MooreOp<"queue.delete"> {
   let summary = "Delete an element from an arbitrary position within a queue";
   let description = [{
-      See IEEE 1800-2023 § 7.10.2.3 "Delete()", specifically the case where an index parameter is supplied.
+      See IEEE 1800-2023 § 7.10.2.3 "Delete()", specifically the case where an
+      index parameter is supplied.
   }];
   let arguments = (ins QueueRefType:$queue, TwoValuedI32:$index);
   let results = (outs);
@@ -1822,7 +1837,8 @@ def QueueDeleteOp : MooreOp<"queue.delete"> {
 def QueueClearOp : MooreOp<"queue.clear"> {
   let summary = "Clear all elements from the given queue";
   let description = [{
-      See IEEE 1800-2023 § 7.10.2.3 "Delete()", the case where no index is supplied.
+      See IEEE 1800-2023 § 7.10.2.3 "Delete()", the case where no index is
+      supplied.
   }];
 
   let arguments = (ins QueueRefType:$queue);
@@ -1834,7 +1850,9 @@ def QueueClearOp : MooreOp<"queue.clear"> {
 
 def QueuePushBackOp : MooreOp<"push_back", [
     TypesMatchWith<"queue and element types must match",
-    "queue", "element", "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">]> {
+    "queue", "element",
+    "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">
+    ]> {
   let summary = "Push an element to the back of a queue";
   let description = [{
     See IEEE 1800-2023 § 7.10.2.7 "Push_back()"
@@ -1848,7 +1866,9 @@ def QueuePushBackOp : MooreOp<"push_back", [
 
 def QueuePushFrontOp : MooreOp<"push_front", [
     TypesMatchWith<"queue and element types must match",
-    "queue", "element", "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">]> {
+    "queue", "element",
+    "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">
+    ]> {
   let summary = "Push an element to the front of a queue";
   let description = [{
     See IEEE 1800-2023 § 7.10.2.6 "Push_front()"
@@ -1863,7 +1883,9 @@ def QueuePushFrontOp : MooreOp<"push_front", [
 
 def QueuePopBackOp : MooreOp<"pop_back", [
     TypesMatchWith<"queue and element types must match",
-    "queue", "result", "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">]> {
+    "queue", "result",
+    "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">
+    ]> {
   let summary = "Return and remove an element from the back of a queue";
   let description = [{
     See IEEE 1800-2023 § 7.10.2.4 "Pop_back()"
@@ -1877,7 +1899,9 @@ def QueuePopBackOp : MooreOp<"pop_back", [
 
 def QueuePopFrontOp : MooreOp<"pop_front", [
     TypesMatchWith<"queue and element types must match",
-    "queue", "result", "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">]> {
+    "queue", "result",
+    "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">
+    ]> {
   let summary = "Return and remove an element from the front of a queue";
   let description = [{
     See IEEE 1800-2023 § 7.10.2.5 "Pop_front()"
