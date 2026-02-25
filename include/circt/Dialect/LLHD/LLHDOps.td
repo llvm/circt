@@ -473,7 +473,10 @@ def SigQueueGetOp : LLHDOp<"sig.queue_get", [
   Pure,
   DeclareOpInterfaceMethods<SafeMemorySlotAccessOpInterface>,
   TypesMatchWith<"input and result types must match",
-      "input", "result", "RefType::get(cast<sim::QueueType>(cast<RefType>($_self).getNestedType()).getElementType())">
+      "input",
+      "result",
+      "RefType::get(cast<sim::QueueType>(cast<RefType>($_self).getNestedType())"
+      ".getElementType())">
 ]> {
   let summary = "Extract an element from a signal of a queue.";
   let description = [{
@@ -490,7 +493,7 @@ def SigQueueGetOp : LLHDOp<"sig.queue_get", [
   }];
 
   let arguments = (ins RefTypeOf<QueueType>:$input, I32:$index);
-  let results = (outs RefType: $result);
+  let results = (outs RefType:$result);
 
   let assemblyFormat = [{
     $input `[` $index `]` attr-dict `:` type($input)
