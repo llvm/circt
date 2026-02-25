@@ -2868,9 +2868,8 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                     isa<moore::QueueType>(
                         cast<moore::RefType>(value.getType()).getNestedType()))
                   return moore::QueueSizeBIOp::create(builder, loc, value);
-                if(isa<moore::OpenUnpackedArrayType>(value.getType())) {
-                  return moore::OpenUArraySizeOp::create(builder, loc, value);
-                }
+                if(isa<moore::OpenUnpackedArrayType>(value.getType())) 
+                 return moore::OpenUArraySizeOp::create(builder, loc, value);        
                 return {};
               })
           .Case("tolower",
