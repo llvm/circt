@@ -182,9 +182,6 @@ struct ExprVisitor {
 
   Value visit(const slang::ast::NewArrayExpression &expr) {
     Type type = context.convertType(*expr.type);
-
-    // TODO: Handle 'initExpr' if it exists
-
     Value initialSize = context.convertRvalueExpression(
       expr.sizeExpr(), context.convertType(*expr.sizeExpr().type));
 
