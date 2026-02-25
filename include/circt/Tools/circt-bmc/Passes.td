@@ -42,6 +42,14 @@ def LowerToBMC : Pass<"lower-to-bmc", "::mlir::ModuleOp"> {
   ];
 }
 
+def LowerLTLToBMC : Pass<"lower-ltl-to-bmc", "circt::hw::HWModuleOp"> {
+  let summary = "Lower a subset of LTL to core logic for circt-bmc";
+  let dependentDialects = [
+    "circt::ltl::LTLDialect", "circt::seq::SeqDialect",
+    "circt::comb::CombDialect", "circt::hw::HWDialect"
+  ];
+}
+
 def ExternalizeRegisters : Pass<"externalize-registers", "::mlir::ModuleOp"> {
   let summary = "Removes registers and adds corresponding input and output ports";
 
@@ -51,4 +59,3 @@ def ExternalizeRegisters : Pass<"externalize-registers", "::mlir::ModuleOp"> {
 }
 
 #endif // CIRCT_TOOLS_CIRCT_BMC_PASSES_TD
-
