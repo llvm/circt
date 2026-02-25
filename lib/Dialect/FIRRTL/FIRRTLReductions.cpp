@@ -955,27 +955,39 @@ struct SimplifyResets : public OpReduction<CircuitOp> {
 /// A sample reduction pattern that removes ports from the root `firrtl.module`
 /// if the port is not used or just invalidated.
 struct RootPortPruner : public OpReduction<firrtl::FModuleOp> {
-  uint64_t match(firrtl::FModuleOp module) override {
+  void matches(firrtl::FModuleOp module,
+               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
     auto circuit = module->getParentOfType<firrtl::CircuitOp>();
-    if (!circuit)
-      return 0;
-    return circuit.getNameAttr() == module.getNameAttr();
-  }
-  LogicalResult rewrite(firrtl::FModuleOp module) override {
-    assert(match(module));
+    if (!circuit || circuit.getNameAttr() != module.getNameAttr())
+      return;
+
+    // Generate one match per port that can be removed
     size_t numPorts = module.getNumPorts();
-    llvm::BitVector dropPorts(numPorts);
     for (unsigned i = 0; i != numPorts; ++i) {
-      if (onlyInvalidated(module.getArgument(i))) {
-        dropPorts.set(i);
-        for (auto *user :
-             llvm::make_early_inc_range(module.getArgument(i).getUsers()))
-          user->erase();
-      }
+      if (onlyInvalidated(module.getArgument(i)))
+        addMatch(1, i);
     }
+  }
+
+  LogicalResult rewriteMatches(firrtl::FModuleOp module,
+                               ArrayRef<uint64_t> matches) override {
+    // Build a BitVector of ports to remove
+    llvm::BitVector dropPorts(module.getNumPorts());
+    for (auto portIdx : matches)
+      dropPorts.set(portIdx);
+
+    // Erase users of the ports being removed
+    for (auto portIdx : matches) {
+      for (auto *user :
+           llvm::make_early_inc_range(module.getArgument(portIdx).getUsers()))
+        user->erase();
+    }
+
+    // Remove the ports from the module
     module.erasePorts(dropPorts);
     return success();
   }
+
   std::string getName() const override { return "root-port-pruner"; }
 };
 
@@ -983,22 +995,30 @@ struct RootPortPruner : public OpReduction<firrtl::FModuleOp> {
 /// Since extmodules have no body, all ports can be safely removed for reduction
 /// purposes.
 struct RootExtmodulePortPruner : public OpReduction<firrtl::FExtModuleOp> {
-  uint64_t match(firrtl::FExtModuleOp module) override {
+  void matches(firrtl::FExtModuleOp module,
+               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
     auto circuit = module->getParentOfType<firrtl::CircuitOp>();
     if (!circuit || circuit.getNameAttr() != module.getNameAttr())
-      return 0;
-    // We can remove all ports from the root extmodule
-    return module.getNumPorts();
+      return;
+
+    // Generate one match per port (all ports can be removed from root
+    // extmodule)
+    size_t numPorts = module.getNumPorts();
+    for (unsigned i = 0; i != numPorts; ++i)
+      addMatch(1, i);
   }
 
-  LogicalResult rewrite(firrtl::FExtModuleOp module) override {
-    assert(match(module));
-    size_t numPorts = module.getNumPorts();
-    if (numPorts == 0)
+  LogicalResult rewriteMatches(firrtl::FExtModuleOp module,
+                               ArrayRef<uint64_t> matches) override {
+    if (matches.empty())
       return failure();
 
-    llvm::BitVector dropPorts(numPorts);
-    dropPorts.set(0, numPorts);
+    // Build a BitVector of ports to remove
+    llvm::BitVector dropPorts(module.getNumPorts());
+    for (auto portIdx : matches)
+      dropPorts.set(portIdx);
+
+    // Remove the ports from the module
     module.erasePorts(dropPorts);
     return success();
   }
@@ -1124,17 +1144,17 @@ struct ModulePortPruner : public OpReduction<firrtl::FModuleOp> {
   void beforeReduction(mlir::ModuleOp op) override {
     symbols.clear();
     nlaRemover.clear();
-    portsToRemoveMap.clear();
   }
   void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
 
-  uint64_t match(firrtl::FModuleOp module) override {
+  void matches(firrtl::FModuleOp module,
+               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
     auto *tableOp = SymbolTable::getNearestSymbolTable(module);
     auto &userMap = symbols.getSymbolUserMap(tableOp);
     auto ports = module.getPorts();
     auto users = userMap.getUsers(module);
 
-    // Compute which ports to remove and cache the result
+    // Compute which ports can be removed
     llvm::BitVector portsToRemove(ports.size());
 
     // If the module has no instances, aggressively remove ports that aren't
@@ -1152,20 +1172,21 @@ struct ModulePortPruner : public OpReduction<firrtl::FModuleOp> {
                                                     portsToRemove);
     }
 
-    auto count = portsToRemove.count();
-    if (count > 0)
-      portsToRemoveMap[module] = std::move(portsToRemove);
-
-    return count;
+    // Generate one match per removable port
+    for (size_t portIdx = 0; portIdx < ports.size(); ++portIdx)
+      if (portsToRemove[portIdx])
+        addMatch(1, portIdx);
   }
 
-  LogicalResult rewrite(firrtl::FModuleOp module) override {
-    // Use the cached ports to remove from match()
-    auto it = portsToRemoveMap.find(module);
-    if (it == portsToRemoveMap.end())
+  LogicalResult rewriteMatches(firrtl::FModuleOp module,
+                               ArrayRef<uint64_t> matches) override {
+    if (matches.empty())
       return failure();
 
-    const auto &portsToRemove = it->second;
+    // Build a BitVector of ports to remove
+    llvm::BitVector portsToRemove(module.getNumPorts());
+    for (auto portIdx : matches)
+      portsToRemove.set(portIdx);
 
     // Get users for updating instances
     auto *tableOp = SymbolTable::getNearestSymbolTable(module);
@@ -1177,12 +1198,12 @@ struct ModulePortPruner : public OpReduction<firrtl::FModuleOp> {
                                                     portsToRemove);
 
     // Erase uses of port arguments within the module body.
-    for (size_t portIdx = 0; portIdx < module.getNumPorts(); ++portIdx)
-      if (portsToRemove[portIdx])
-        // Recursively erase each user and its dependent operations
-        for (auto *user :
-             llvm::make_early_inc_range(module.getArgument(portIdx).getUsers()))
-          reduce::pruneUnusedOps(user, *this);
+    for (auto portIdx : matches) {
+      // Recursively erase each user and its dependent operations
+      for (auto *user :
+           llvm::make_early_inc_range(module.getArgument(portIdx).getUsers()))
+        reduce::pruneUnusedOps(user, *this);
+    }
 
     // Remove the ports from the module
     module.erasePorts(portsToRemove);
@@ -1194,7 +1215,6 @@ struct ModulePortPruner : public OpReduction<firrtl::FModuleOp> {
 
   ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
-  DenseMap<firrtl::FModuleOp, llvm::BitVector> portsToRemoveMap;
 };
 
 /// Reduction to remove unused ports from extmodules.
@@ -1202,17 +1222,17 @@ struct ExtmodulePortPruner : public OpReduction<firrtl::FExtModuleOp> {
   void beforeReduction(mlir::ModuleOp op) override {
     symbols.clear();
     nlaRemover.clear();
-    portsToRemoveMap.clear();
   }
   void afterReduction(mlir::ModuleOp op) override { nlaRemover.remove(op); }
 
-  uint64_t match(firrtl::FExtModuleOp module) override {
+  void matches(firrtl::FExtModuleOp module,
+               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
     auto *tableOp = SymbolTable::getNearestSymbolTable(module);
     auto &userMap = symbols.getSymbolUserMap(tableOp);
     auto ports = module.getPorts();
     auto users = userMap.getUsers(module);
 
-    // Compute which ports to remove and cache the result
+    // Compute which ports can be removed
     llvm::BitVector portsToRemove(ports.size());
 
     if (users.empty()) {
@@ -1225,20 +1245,21 @@ struct ExtmodulePortPruner : public OpReduction<firrtl::FExtModuleOp> {
                                                     portsToRemove);
     }
 
-    auto count = portsToRemove.count();
-    if (count > 0)
-      portsToRemoveMap[module] = std::move(portsToRemove);
-
-    return count;
+    // Generate one match per removable port
+    for (size_t portIdx = 0; portIdx < ports.size(); ++portIdx)
+      if (portsToRemove[portIdx])
+        addMatch(1, portIdx);
   }
 
-  LogicalResult rewrite(firrtl::FExtModuleOp module) override {
-    // Use the cached ports to remove from match()
-    auto it = portsToRemoveMap.find(module);
-    if (it == portsToRemoveMap.end())
+  LogicalResult rewriteMatches(firrtl::FExtModuleOp module,
+                               ArrayRef<uint64_t> matches) override {
+    if (matches.empty())
       return failure();
 
-    const auto &portsToRemove = it->second;
+    // Build a BitVector of ports to remove
+    llvm::BitVector portsToRemove(module.getNumPorts());
+    for (auto portIdx : matches)
+      portsToRemove.set(portIdx);
 
     // Get users for updating instances
     auto *tableOp = SymbolTable::getNearestSymbolTable(module);
@@ -1259,7 +1280,6 @@ struct ExtmodulePortPruner : public OpReduction<firrtl::FExtModuleOp> {
 
   ::detail::SymbolCache symbols;
   NLARemover nlaRemover;
-  DenseMap<firrtl::FExtModuleOp, llvm::BitVector> portsToRemoveMap;
 };
 
 /// A sample reduction pattern that pushes connected values through wires.
