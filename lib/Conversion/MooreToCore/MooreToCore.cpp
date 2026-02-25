@@ -2271,34 +2271,12 @@ struct DynQueueExtractOpConversion
   }
 };
 
-struct DynQueueExtractOpConversion
-    : public OpConversionPattern<DynQueueExtractOp> {
+struct DynQueueRefElementOpConversion
+    : public OpConversionPattern<DynQueueRefElementOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(DynQueueExtractOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    bool isSingleElementExtract =
-        op.getInput().getType().getElementType() == op.getResult().getType();
-
-    if (isSingleElementExtract) {
-      rewriter.replaceOpWithNewOp<sim::QueueGetOp>(op, adaptor.getInput(),
-                                                   adaptor.getLowerIdx());
-    } else {
-      rewriter.replaceOpWithNewOp<sim::QueueSliceOp>(
-          op, adaptor.getInput(), adaptor.getLowerIdx(), adaptor.getUpperIdx());
-    }
-
-    return success();
-  }
-};
-
-struct DynQueueExtractRefOpConversion
-    : public OpConversionPattern<DynQueueExtractRefOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(DynQueueExtractRefOp op, OpAdaptor adaptor,
+  matchAndRewrite(DynQueueRefElementOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Currently only single-element extracts are supported.
     rewriter.replaceOpWithNewOp<llhd::SigQueueGetOp>(op, adaptor.getInput(),
@@ -2308,13 +2286,13 @@ struct DynQueueExtractRefOpConversion
 };
 
 // Given a reference `ref` to some Moore type, this function emits a
-// `ProbeOp` to read the contained value, then passes it to the function `func`.
-// It finally emits a `DriveOp` to write the result of the function back to
-// the referenced signal.
+// `ProbeOp` to read the contained value, then passes it to the function
+// `func`. It finally emits a `DriveOp` to write the result of the function
+// back to the referenced signal.
 //
-// This is useful for converting impure operations (such as the Moore ops for
-// manipulating queues) into pure operations. (Which do not mutate the source
-// value, instead returning a modified value.)
+// This is useful for converting impure operations (such as the Moore ops
+// for manipulating queues) into pure operations. (Which do not mutate the
+// source value, instead returning a modified value.)
 static void
 probeRefAndDriveWithResult(OpBuilder &builder, Location loc, Value ref,
                            const std::function<Value(Value)> &func) {
@@ -2974,7 +2952,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     QueueInsertOpConversion,
     QueueClearOpConversion,
     DynQueueExtractOpConversion,
-    DynQueueExtractRefOpConversion
+    DynQueueRefElementOpConversion
   >(typeConverter, patterns.getContext());
   // clang-format on
 
