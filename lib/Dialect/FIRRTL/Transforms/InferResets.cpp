@@ -1580,13 +1580,15 @@ void InferResetsPass::buildDomains(FModuleOp module,
     domain = ResetDomain(parentReset);
   }
 
-  // Associate the domain with this module. If the module already has an
-  // associated domain, it must be identical. Otherwise we'll have to report
-  // the conflicting domains to the user.
+  // Associate the domain with this module. Only record non-null reset domains;
+  // the `domains[module]` entry is created regardless, so modules in no-domain
+  // contexts will have an empty entries list. If the module already has an
+  // entry for this domain, don't add a duplicate.
   auto &entries = domains[module];
-  if (llvm::all_of(entries,
-                   [&](const auto &entry) { return entry.first != domain; }))
-    entries.push_back({domain, instPath});
+  if (domain.rootReset)
+    if (llvm::all_of(entries,
+                     [&](const auto &entry) { return entry.first != domain; }))
+      entries.push_back({domain, instPath});
 
   // Traverse the child instances.
   for (auto *record : *instGraph[module]) {
@@ -1608,7 +1610,11 @@ LogicalResult InferResetsPass::determineImpl() {
   });
   for (auto &it : domains) {
     auto module = cast<FModuleOp>(it.first);
-    auto &domain = it.second.back().first;
+    auto &entries = it.second;
+    // Skip modules with no reset domain (empty entries).
+    if (entries.empty())
+      continue;
+    auto &domain = entries.back().first;
     if (failed(determineImpl(module, domain)))
       anyFailed = true;
   }
@@ -1694,10 +1700,17 @@ LogicalResult InferResetsPass::implementFullReset() {
     llvm::dbgs() << "\n";
     debugHeader("Implement full resets") << "\n\n";
   });
-  for (auto &it : domains)
-    if (failed(implementFullReset(cast<FModuleOp>(it.first),
-                                  it.second.back().first)))
+  for (auto &it : domains) {
+    auto module = cast<FModuleOp>(it.first);
+    auto &entries = it.second;
+    // For modules with a real domain, use that domain. For no-domain modules,
+    // use a default empty domain but still process for tie-off.
+    ResetDomain domain;
+    if (!entries.empty())
+      domain = entries.back().first;
+    if (failed(implementFullReset(module, domain)))
       return failure();
+  }
   return success();
 }
 
@@ -1708,15 +1721,23 @@ LogicalResult InferResetsPass::implementFullReset() {
 /// corresponding reset implementation details.
 LogicalResult InferResetsPass::implementFullReset(FModuleOp module,
                                                   ResetDomain &domain) {
-  LLVM_DEBUG(llvm::dbgs() << "Implementing full reset for " << module.getName()
-                          << "\n");
-
-  // Nothing to do if the module was marked explicitly with no reset domain.
+  // For modules in no-domain contexts, we skip local transformations (adding
+  // reset ports, converting registers) but still process instances to tie off
+  // reset ports of children that have a real reset domain.
   if (!domain) {
-    LLVM_DEBUG(llvm::dbgs()
-               << "- Skipping because module explicitly has no domain\n");
+    SmallVector<InstanceOp> instances;
+    module.walk([&](InstanceOp instOp) { instances.push_back(instOp); });
+    LLVM_DEBUG({
+      if (!instances.empty())
+        llvm::dbgs() << "Tie off instances in " << module.getName() << "\n";
+    });
+    for (auto instOp : instances)
+      implementFullReset(instOp, module, Value());
     return success();
   }
+
+  LLVM_DEBUG(llvm::dbgs() << "Implementing full reset for " << module.getName()
+                          << "\n");
 
   // Add an annotation indicating that this module belongs to a reset domain.
   auto *context = module.getContext();
@@ -1840,7 +1861,8 @@ LogicalResult InferResetsPass::implementFullReset(FModuleOp module,
 }
 
 /// Modify an operation in a module to implement an full reset for that
-/// module.
+/// module. If actualReset is null and op is an `InstanceOp`, creates a tie-off
+/// constant for added reset ports. If the op is not an instance, aborts.
 void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
                                          Value actualReset) {
   ImplicitLocOpBuilder builder(op->getLoc(), op);
@@ -1848,19 +1870,19 @@ void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
   // Handle instances.
   if (auto instOp = dyn_cast<InstanceOp>(op)) {
     // Lookup the reset domain of the instantiated module. If there is no
-    // reset domain associated with that module, or the module is explicitly
-    // marked as being in no domain, simply skip.
+    // reset domain associated with that module, as indicated by an empty list
+    // of domains, simply skip it.
     auto refModule = instOp.getReferencedModule<FModuleOp>(*instanceGraph);
     if (!refModule)
       return;
     auto domainIt = domains.find(refModule);
-    if (domainIt == domains.end())
+    if (domainIt == domains.end() || domainIt->second.empty())
       return;
     auto &domain = domainIt->second.back().first;
-    if (!domain)
-      return;
+    assert(domain && "null domains should not be listed");
     LLVM_DEBUG(llvm::dbgs()
-               << "- Update instance '" << instOp.getName() << "'\n");
+               << (actualReset ? "- Update instance '" : "- Tie-off instance '")
+               << instOp.getName() << "'\n");
 
     // If needed, add a reset port to the instance.
     Value instReset;
@@ -1868,8 +1890,7 @@ void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
       LLVM_DEBUG(llvm::dbgs() << "  - Adding new result as reset\n");
       auto newInstOp = instOp.cloneWithInsertedPortsAndReplaceUses(
           {{/*portIndex=*/0,
-            {domain.resetName, type_cast<FIRRTLBaseType>(actualReset.getType()),
-             Direction::In}}});
+            {domain.resetName, domain.resetType, Direction::In}}});
       instReset = newInstOp.getResult(0);
       instanceGraph->replaceInstance(instOp, newInstOp);
       instOp->erase();
@@ -1886,12 +1907,31 @@ void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
     if (!instReset)
       return;
 
-    // Connect the instance's reset to the actual reset.
-    assert(instReset && actualReset);
     builder.setInsertionPointAfter(instOp);
+
+    // If the module that contains the instance is not in a reset domain, as
+    // indicated by actualReset being null, create a tie-off constant which
+    // effectively turns the no-reset registers that had full resets added back
+    // into no-reset registers.
+    if (!actualReset) {
+      LLVM_DEBUG(llvm::dbgs() << "  - Tying off reset to constant 0\n");
+      if (type_isa<AsyncResetType>(domain.resetType))
+        actualReset =
+            SpecialConstantOp::create(builder, domain.resetType, false);
+      else
+        actualReset = ConstantOp::create(
+            builder, UIntType::get(builder.getContext(), 1), APInt(1, 0));
+    }
+
+    // Connect the instance's reset to the actual reset or tie-off.
+    assert(instReset && actualReset);
     emitConnect(builder, instReset, actualReset);
     return;
   }
+
+  // All other ops require an actual reset. We only ever call this function with
+  // null actualReset to create tie-offs on instance ops.
+  assert(actualReset);
 
   // Handle reset-less registers.
   if (auto regOp = dyn_cast<RegOp>(op)) {
