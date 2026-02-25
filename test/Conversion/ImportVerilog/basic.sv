@@ -4186,6 +4186,7 @@ module QueueUnboundedLiteralTest;
       res = q1[$ + q2[$]];
       q2 = q1[3:$];
     end
+endmodule
 
 // CHECK-LABEL: moore.module @DynamicArrayInitializeTest() {
 // CHECK: [[C4:%.+]] = moore.constant 4 : i32
