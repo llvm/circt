@@ -19,6 +19,11 @@ HW_DIR = ROOT_DIR / "hw"
 SW_DIR = ROOT_DIR / "sw"
 
 
+def get_runtime_root() -> Path:
+  import esiaccel
+  return Path(esiaccel.__file__).resolve().parent.parent.parent
+
+
 def require_tool(tool: str) -> None:
   if shutil.which(tool) is None:
     pytest.skip(f"Required tool not found in PATH: {tool}")

@@ -48,6 +48,8 @@ from esiaccel.accelerator import Accelerator, AcceleratorConnection
 from .simulator import get_simulator, Simulator, SourceFiles
 
 LogMatcher = Union[str, Pattern[str], Callable[[str, str], bool]]
+SourceGeneratorFunc = Callable[["CosimPytestConfig", Path], Path]
+SourceGeneratorArg = Union[str, Path, SourceGeneratorFunc]
 
 _logger = logging.getLogger("esiaccel.cosim.pytest")
 _DEFAULT_FAILURE_PATTERN = re.compile(r"\berror\b", re.IGNORECASE)
@@ -62,7 +64,8 @@ class CosimPytestConfig:
   """Immutable configuration for a single cosim test or test class.
 
   Attributes:
-    pycde_script: Path to the PyCDE hardware generation script.
+    source_generator: Path to the PyCDE hardware generation script, or a
+      callable ``(config, tmp_dir) -> sources_dir``.
     args: Arguments passed to the script; ``{tmp_dir}`` is interpolated.
     simulator: Simulator backend name (e.g. ``"verilator"``).
     top: Top-level module name for the simulator.
@@ -72,7 +75,7 @@ class CosimPytestConfig:
     warning_matcher: Pattern applied to simulator output to detect warnings.
   """
 
-  pycde_script: Union[str, Path]
+  source_generator: SourceGeneratorArg
   args: Sequence[str] = ("{tmp_dir}",)
   simulator: str = "verilator"
   top: str = "ESI_Cosim_Top"
@@ -80,7 +83,6 @@ class CosimPytestConfig:
   timeout_s: float = _DEFAULT_TIMEOUT_S
   failure_matcher: Optional[LogMatcher] = _DEFAULT_FAILURE_PATTERN
   warning_matcher: Optional[LogMatcher] = _DEFAULT_WARN_PATTERN
-  source_generator: Optional[Callable[["CosimPytestConfig", Path], Path]] = None
 
 
 @dataclass
@@ -160,14 +162,19 @@ def _render_args(args: Sequence[str], tmp_dir: Path) -> list[str]:
 
 
 def _generate_sources(config: CosimPytestConfig, tmp_dir: Path) -> Path:
-  """Generate hardware sources using the configured method.
+  """Generate hardware sources via a normalized source-generator callable.
 
-  If ``config.source_generator`` is set, delegates to it; otherwise falls
-  back to running the PyCDE hardware script via ``_run_hw_script``.
+  If ``config.source_generator`` is a string/path, it is wrapped into a callable
+  that runs the PyCDE script. If it is already callable, it is used directly.
   """
-  if config.source_generator is not None:
-    return config.source_generator(config, tmp_dir)
-  return _run_hw_script(config, tmp_dir)
+  source_spec = config.source_generator
+  if isinstance(source_spec, (str, Path)):
+    source_generator: SourceGeneratorFunc = (
+        lambda inner_config, inner_tmp_dir: _run_hw_script(
+            source_spec, inner_config, inner_tmp_dir))
+  else:
+    source_generator = source_spec
+  return source_generator(config, tmp_dir)
 
 
 def _create_simulator(config: CosimPytestConfig, sources_dir: Path,
@@ -180,13 +187,14 @@ def _create_simulator(config: CosimPytestConfig, sources_dir: Path,
   return get_simulator(config.simulator, sources, run_dir, config.debug)
 
 
-def _run_hw_script(config: CosimPytestConfig, tmp_dir: Path) -> Path:
+def _run_hw_script(script_path: Union[str, Path], config: CosimPytestConfig,
+                   tmp_dir: Path) -> Path:
   """Execute the PyCDE hardware script and run codegen if a manifest exists.
 
   Returns:
     The directory containing the generated sources (same as *tmp_dir*).
   """
-  script = Path(config.pycde_script).resolve()
+  script = Path(script_path).resolve()
   script_args = _render_args(config.args, tmp_dir)
   with _chdir(tmp_dir):
     subprocess.run([sys.executable, str(script), *script_args],
@@ -441,10 +449,9 @@ def _run_isolated(
 
   # Wait for the result with an optional timeout.  We poll the pipe first
   # so that we can detect a child crash even before join() returns.
+  result: Optional[_ChildResult] = None
   if reader.poll(timeout=config.timeout_s):
-    result: _ChildResult = reader.recv()
-  else:
-    result = None
+    result = reader.recv()
   reader.close()
   process.join(timeout=10)
   if process.is_alive():
@@ -521,7 +528,7 @@ def _decorate_class(target_cls: type, config: CosimPytestConfig) -> type:
 
 
 def cosim_test(
-    pycde_script: Union[str, Path],
+    source_generator: SourceGeneratorArg,
     args: Sequence[str] = ("{tmp_dir}",),
     simulator: str = "verilator",
     top: str = "ESI_Cosim_Top",
@@ -529,8 +536,6 @@ def cosim_test(
     timeout_s: float = _DEFAULT_TIMEOUT_S,
     failure_matcher: Optional[LogMatcher] = _DEFAULT_FAILURE_PATTERN,
     warning_matcher: Optional[LogMatcher] = _DEFAULT_WARN_PATTERN,
-    source_generator: Optional[Callable[[CosimPytestConfig, Path],
-                                        Path]] = None,
 ):
   """Decorator that turns a function or class into a cosimulation test.
 
@@ -543,7 +548,9 @@ def cosim_test(
   recompilation.
 
   Args:
-    pycde_script: Path to the PyCDE script that generates the hardware.
+    source_generator: Path to the PyCDE script that generates the hardware, or
+      a callable ``(config, tmp_dir) -> sources_dir`` that generates
+      sources directly.
     args: Arguments forwarded to the script; ``{tmp_dir}`` is interpolated
         with the temporary build directory.
     simulator: Simulator backend (default ``"verilator"``).
@@ -552,12 +559,9 @@ def cosim_test(
     timeout_s: Wall-clock timeout in seconds (default 120).
     failure_matcher: Pattern to detect errors in simulator output.
     warning_matcher: Pattern to detect warnings in simulator output.
-    source_generator: Optional callable ``(config, tmp_dir) -> sources_dir``
-        that replaces the default PyCDE script execution.  When provided,
-        ``pycde_script`` is ignored.
   """
   config = CosimPytestConfig(
-      pycde_script=pycde_script,
+      source_generator=source_generator,
       args=args,
       simulator=simulator,
       top=top,
@@ -565,7 +569,6 @@ def cosim_test(
       timeout_s=timeout_s,
       failure_matcher=failure_matcher,
       warning_matcher=warning_matcher,
-      source_generator=source_generator,
   )
 
   def _decorator(target):
