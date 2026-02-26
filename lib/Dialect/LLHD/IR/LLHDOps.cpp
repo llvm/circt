@@ -770,9 +770,7 @@ LogicalResult CombinationalOp::canonicalize(CombinationalOp op,
   if (op.getBody().hasOneBlock()) {
     bool hasUnwantedEffects = false;
     op.getBody().walk([&](Operation *inner) {
-      if (isa<circt::verif::AssertOp>(inner) ||
-          isa<circt::verif::AssumeOp>(inner) ||
-          isa<circt::verif::CoverOp>(inner))
+      if (isa<circt::verif::AssertOp, verif::AssumeOp, verif::CoverOp>(inner))
         return WalkResult::advance();
       if (auto memInterface = dyn_cast<MemoryEffectOpInterface>(inner)) {
         if (!memInterface.hasNoEffect()) {
