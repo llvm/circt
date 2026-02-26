@@ -1480,7 +1480,7 @@ firrtl.circuit "InstanceChoice" {
   // CHECK-LABEL: firrtl.module @InstanceChoice
   firrtl.module @InstanceChoice() {
     // After inlining, both object and instance_choice should be present
-    // CHECK: firrtl.instance_choice inst @ImplA
+    // CHECK: firrtl.instance_choice child_inst @ImplA
     firrtl.instance child @Child(in x: !firrtl.uint<8>, out y: !firrtl.uint<8>)
   }
 }
