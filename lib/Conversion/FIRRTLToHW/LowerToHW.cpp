@@ -776,7 +776,7 @@ void FIRRTLModuleLowering::runOnOperation() {
               return success();
             })
             .Case<OptionOp, OptionCaseOp>([&](auto) {
-              // Option operations are removed after lowering instance choices
+              // Option operations are removed after lowering instance choices.
               return success();
             })
             .Default([&](Operation *op) {
@@ -3986,19 +3986,12 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
   auto moduleNames = oldInstanceChoice.getModuleNamesAttr();
   auto caseNames = oldInstanceChoice.getCaseNamesAttr();
 
-  // Get the default module (first in the list)
+  // Get the default module.
   auto defaultModuleName = oldInstanceChoice.getDefaultTargetAttr();
   auto *defaultModuleNode =
       circuitState.getInstanceGraph().lookup(defaultModuleName.getAttr());
-  if (!defaultModuleNode)
-    return oldInstanceChoice->emitOpError("could not find default module [")
-           << defaultModuleName << "] referenced by instance choice";
 
   Operation *defaultModule = defaultModuleNode->getModule();
-  auto *defaultNewModule = circuitState.getNewModule(defaultModule);
-  if (!defaultNewModule)
-    return oldInstanceChoice->emitOpError("could not find lowered module [")
-           << defaultModuleName << "] referenced by instance choice";
 
   // Get port information from the default module (all alternatives must have
   // same ports).
@@ -4016,7 +4009,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
   StringRef wirePrefix = oldInstanceChoice.getInstanceName();
   for (size_t portIndex = 0, e = portInfo.size(); portIndex != e; ++portIndex) {
     auto &port = portInfo[portIndex];
-    if (!port.isOutput())
+    if (port.isInput())
       continue;
     auto portType = lowerType(port.type);
     if (!portType || portType.isInteger(0))
