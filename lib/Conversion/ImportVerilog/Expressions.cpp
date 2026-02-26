@@ -468,51 +468,7 @@ struct ExprVisitor {
       return moore::StringConcatOp::create(builder, loc, operands);
     }
     if (expr.type->isQueue()) {
-      auto queueType =
-          cast<moore::QueueType>(context.convertType(*expr.type, loc));
-      auto elementType = queueType.getElementType();
-      Value lastQueueVar;
-
-      // Handle queue concatenations.
-      for (auto *operand : expr.operands()) {
-        assert(!isLvalue && "checked by Slang");
-        auto value = convertLvalueOrRvalueExpression(*operand);
-        if (!value)
-          return {};
-
-        // If value is an element of the queue, create an empty queue and add
-        // that element.
-        if (value.getType() == elementType) {
-          auto queueRefType =
-              moore::RefType::get(context.getContext(), queueType);
-
-          if (!lastQueueVar) {
-            lastQueueVar =
-                moore::VariableOp::create(builder, loc, queueRefType, {}, {});
-          }
-          moore::QueuePushBackOp::create(builder, loc, lastQueueVar, value);
-          continue; // Only read the queue once we have definitely finished
-                    // adding elements!
-        }
-        if (isa<moore::UnpackedArrayType>(value.getType())) {
-          if (lastQueueVar) {
-            operands.push_back(
-                moore::ReadOp::create(builder, loc, lastQueueVar));
-          }
-          lastQueueVar = {};
-
-          // Create a queue representing each unpacked array
-          value = context.materializeConversion(queueType, value, false,
-                                                value.getLoc());
-        }
-        operands.push_back(value);
-      }
-
-      if (lastQueueVar) {
-        operands.push_back(moore::ReadOp::create(builder, loc, lastQueueVar));
-      }
-
-      return moore::QueueConcatOp::create(builder, loc, queueType, operands);
+      return handleQueueConcat(expr);
     }
     for (auto *operand : expr.operands()) {
       // Handle empty replications like `{0{...}}` which may occur within
@@ -533,6 +489,71 @@ struct ExprVisitor {
       return moore::ConcatRefOp::create(builder, loc, operands);
     else
       return moore::ConcatOp::create(builder, loc, operands);
+  }
+
+  // Handles a `ConcatenationExpression` which produces a queue as a result.
+  // Intuitively, queue concatenations are the same as unpacked array
+  // concatenations. However, because queues may vary in size, we can't
+  // just convert each argument to a simple bit vector.
+  Value handleQueueConcat(const slang::ast::ConcatenationExpression &expr) {
+    SmallVector<Value> operands;
+
+    auto queueType =
+        cast<moore::QueueType>(context.convertType(*expr.type, loc));
+    auto elementType = queueType.getElementType();
+
+    // Strategy:
+    // QueueConcatOp only takes queues, so other types must be converted to
+    // queues.
+    // - Unpacked arrays have a conversion to queues via
+    // `QueueOfUnpackedArrayOp`.
+    // - For individual elements, we create a new queue for each contiguous
+    // sequence of elements, and add this to the QueueConcatOp.
+
+    // The current contiguous sequence of individual elements.
+    Value contigElements;
+
+    for (auto *operand : expr.operands()) {
+      bool isSingleElement =
+          context.convertType(*operand->type, loc) == elementType;
+
+      // If the subsequent operand is not a single element, add the current
+      // sequence of contiguous elements to the QueueConcatOp
+      if (!isSingleElement && contigElements) {
+        operands.push_back(moore::ReadOp::create(builder, loc, contigElements));
+        contigElements = {};
+      }
+
+      assert(!isLvalue && "checked by Slang");
+      auto value = convertLvalueOrRvalueExpression(*operand);
+      if (!value)
+        return {};
+
+      // If value is an element of the queue, create an empty queue and add
+      // that element.
+      if (value.getType() == elementType) {
+        auto queueRefType =
+            moore::RefType::get(context.getContext(), queueType);
+
+        if (!contigElements) {
+          contigElements =
+              moore::VariableOp::create(builder, loc, queueRefType, {}, {});
+        }
+        moore::QueuePushBackOp::create(builder, loc, contigElements, value);
+        continue;
+      }
+
+      // Otherwise, the value should be directly convertible to a queue type.
+      value = context.materializeConversion(queueType, value, false,
+                                            value.getLoc());
+      operands.push_back(value);
+    }
+
+    if (contigElements) {
+      operands.push_back(moore::ReadOp::create(builder, loc, contigElements));
+    }
+
+    return moore::QueueConcatOp::create(builder, loc, queueType, operands);
   }
 
   /// Handle member accesses.

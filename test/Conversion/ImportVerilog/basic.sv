@@ -4088,6 +4088,41 @@ module QueueToUnpackedArrayTest;
     end
 endmodule
 
+// CHECK-LABEL: moore.module @QueueConcatTest() {
+// CHECK:           [[Q1:%.+]] = moore.variable : <queue<i32, 5>>
+// CHECK:           [[ARR:%.+]] = moore.variable : <uarray<11 x i32>>
+// CHECK:           [[QRES:%.+]] = moore.variable : <queue<i32, 0>>
+// CHECK:           moore.procedure initial {
+// CHECK:             [[ONE:%.+]] = moore.constant 1 : i32
+// CHECK:             [[TMP1:%.+]] = moore.variable : <queue<i32, 0>>
+// CHECK:             moore.push_back [[ONE]] into [[TMP1]] : <queue<i32, 0>>
+// CHECK:             [[TMP1R:%.+]] = moore.read [[TMP1]] : <queue<i32, 0>>
+// CHECK:             [[Q1R:%.+]] = moore.read [[Q1]] : <queue<i32, 5>>
+// CHECK:             [[Q1C:%.+]] = moore.conversion [[Q1R]] : !moore.queue<i32, 5> -> !moore.queue<i32, 0>
+// CHECK:             [[ARRR:%.+]] = moore.read [[ARR]] : <uarray<11 x i32>>
+// CHECK:             [[TMP2:%.+]] = moore.queue_of_up_array [[ARRR]] : <11 x i32> -> <i32, 0>
+// CHECK:             [[ONE:%.+]] = moore.constant 1 : i32
+// CHECK:             [[TMP3:%.+]] = moore.variable : <queue<i32, 0>>
+// CHECK:             moore.push_back [[ONE]] into [[TMP3]] : <queue<i32, 0>>
+// CHECK:             [[TWO:%.+]] = moore.constant 2 : i32
+// CHECK:             moore.push_back [[TWO]] into [[TMP3]] : <queue<i32, 0>>
+// CHECK:             [[TMP3R:%.+]] = moore.read [[TMP3]] : <queue<i32, 0>>
+// CHECK:             [[RESV:%.+]] = moore.queue.concat ([[TMP1R]], [[Q1C]], [[TMP2]], [[TMP3R]])
+// CHECK:           }
+// CHECK:           moore.output
+// CHECK:         }
+module QueueConcatTest;
+    int q1[$:5];
+    int arr [0:10];
+    int qres[$];
+    initial begin
+      // Should create one temporary queue with 1 as an element, then convert 
+      // `arr` to a queue, then create a temporary queue with 1,2,
+      // then finally append them all
+      qres = { 1, q1, arr, 1, 2};
+    end
+endmodule
+
 // CHECK-LABEL: moore.module @ForkJoinTest() {
 // CHECK:         [[C0:%.+]] = moore.constant 0 : i32
 // CHECK:         [[V0:%.+]] = moore.variable [[C0]] : <i32>
@@ -4145,7 +4180,6 @@ endmodule
 // CHECK          }
 // CHECK          moore.output
 // CHECK        }
-
 module ForkJoinTest ();
 	int a = 0;
 	int b = 0;
