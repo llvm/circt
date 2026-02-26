@@ -467,6 +467,53 @@ struct ExprVisitor {
       }
       return moore::StringConcatOp::create(builder, loc, operands);
     }
+    if (expr.type->isQueue()) {
+      auto queueType =
+          cast<moore::QueueType>(context.convertType(*expr.type, loc));
+      auto elementType = queueType.getElementType();
+      Value lastQueueVar;
+
+      // Handle queue concatenations.
+      for (auto *operand : expr.operands()) {
+        assert(!isLvalue && "checked by Slang");
+        auto value = convertLvalueOrRvalueExpression(*operand);
+        if (!value)
+          return {};
+
+        // If value is an element of the queue, create an empty queue and add
+        // that element.
+        if (value.getType() == elementType) {
+          auto queueRefType =
+              moore::RefType::get(context.getContext(), queueType);
+
+          if (!lastQueueVar) {
+            lastQueueVar =
+                moore::VariableOp::create(builder, loc, queueRefType, {}, {});
+          }
+          moore::QueuePushBackOp::create(builder, loc, lastQueueVar, value);
+          continue; // Only read the queue once we have definitely finished
+                    // adding elements!
+        }
+        if (isa<moore::UnpackedArrayType>(value.getType())) {
+          if (lastQueueVar) {
+            operands.push_back(
+                moore::ReadOp::create(builder, loc, lastQueueVar));
+          }
+          lastQueueVar = {};
+
+          // Create a queue representing each unpacked array
+          value = context.materializeConversion(queueType, value, false,
+                                                value.getLoc());
+        }
+        operands.push_back(value);
+      }
+
+      if (lastQueueVar) {
+        operands.push_back(moore::ReadOp::create(builder, loc, lastQueueVar));
+      }
+
+      return moore::QueueConcatOp::create(builder, loc, queueType, operands);
+    }
     for (auto *operand : expr.operands()) {
       // Handle empty replications like `{0{...}}` which may occur within
       // concatenations. Slang assigns them a `void` type which we can check for
