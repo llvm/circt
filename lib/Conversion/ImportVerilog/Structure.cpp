@@ -350,7 +350,33 @@ struct ModuleVisitor : public BaseVisitor {
         case ArgumentDirection::Out:
           continue;
 
-        // TODO: Mark Inout port as unsupported and it will be supported later.
+        case ArgumentDirection::InOut:
+        case ArgumentDirection::Ref: {
+          auto refType = moore::RefType::get(
+              cast<moore::UnpackedType>(context.convertType(port->getType())));
+
+          if (const auto *net =
+                  port->internalSymbol->as_if<slang::ast::NetSymbol>()) {
+            auto netOp = moore::NetOp::create(
+                builder, loc, refType,
+                StringAttr::get(builder.getContext(), net->name),
+                convertNetKind(net->netType.netKind), nullptr);
+            portValues.insert({port, netOp});
+          } else if (const auto *var =
+                         port->internalSymbol
+                             ->as_if<slang::ast::VariableSymbol>()) {
+            auto varOp = moore::VariableOp::create(
+                builder, loc, refType,
+                StringAttr::get(builder.getContext(), var->name), nullptr);
+            portValues.insert({port, varOp});
+          } else {
+            return mlir::emitError(loc)
+                   << "unsupported internal symbol for unconnected port `"
+                   << port->name << "`";
+          }
+          continue;
+        }
+
         default:
           return mlir::emitError(loc)
                  << "unsupported port `" << port->name << "` ("
