@@ -1820,6 +1820,22 @@ def QueueOfUnpackedArrayOp : MooreOp<"queue_of_up_array", [Pure]> {
   }];
 }
 
+def QueueConcatOp : MooreOp<"queue.concat"> {
+  let summary = "Concatenate queues";
+  let description = [{
+    Concatenates an abitrary number of queues into one larger queue.
+    The queues are joined from left to right.
+
+    If the total length of the inputs doesn't fit into the queue bound of
+    $result, then the excess elements are discarded at the end of the queue.
+  }];
+  let arguments = (ins Variadic<QueueType>:$inputs);
+  let results = (outs QueueType:$result);
+  let assemblyFormat = [{
+    ` ` `(` $inputs `)` attr-dict `:` type($inputs) type($result)
+  }];
+}
+
 def QueueInsertOp : MooreOp<"queue.insert", [
     TypesMatchWith<"queue and item types must match",
     "queue", "item",
