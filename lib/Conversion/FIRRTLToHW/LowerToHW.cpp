@@ -4017,7 +4017,8 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
     auto wire = sv::WireOp::create(
         builder, portType, wirePrefix.str() + "." + port.getName().str());
     outputWires.push_back(wire);
-    (void)setLowering(oldInstanceChoice.getResult(portIndex), wire);
+    if (failed(setLowering(oldInstanceChoice.getResult(portIndex), wire)))
+      return failure();
   }
 
   // Lambda to create an instance for a given module and assign outputs to wires
