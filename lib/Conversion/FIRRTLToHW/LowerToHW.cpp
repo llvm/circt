@@ -775,6 +775,10 @@ void FIRRTLModuleLowering::runOnOperation() {
               opsToProcess.push_back(fileOp);
               return success();
             })
+            .Case<OptionOp, OptionCaseOp>([&](auto) {
+              // Option operations are removed after lowering instance choices.
+              return success();
+            })
             .Default([&](Operation *op) {
               // We don't know what this op is.  If it has no illegal FIRRTL
               // types, we can forward the operation.  Otherwise, we emit an
@@ -1864,6 +1868,13 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
     return attr;
   }
 
+  /// Prepare input operands for instance creation. Processes port information
+  /// and creates backedges for input ports and wires for inout ports.
+  /// Returns failure if any port type cannot be lowered.
+  LogicalResult prepareInstanceOperands(ArrayRef<PortInfo> portInfo,
+                                        Operation *instanceOp,
+                                        SmallVectorImpl<Value> &inputOperands);
+
   void runWithInsertionPointAtEndOfBlock(const std::function<void(void)> &fn,
                                          Region &region);
 
@@ -1929,6 +1940,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitDecl(RegResetOp op);
   LogicalResult visitDecl(MemOp op);
   LogicalResult visitDecl(InstanceOp oldInstance);
+  LogicalResult visitDecl(InstanceChoiceOp oldInstanceChoice);
   LogicalResult visitDecl(VerbatimWireOp op);
   LogicalResult visitDecl(ContractOp op);
 
@@ -3826,6 +3838,64 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   return success();
 }
 
+LogicalResult
+FIRRTLLowering::prepareInstanceOperands(ArrayRef<PortInfo> portInfo,
+                                        Operation *instanceOp,
+                                        SmallVectorImpl<Value> &inputOperands) {
+
+  for (size_t portIndex = 0, e = portInfo.size(); portIndex != e; ++portIndex) {
+    auto &port = portInfo[portIndex];
+    auto portType = lowerType(port.type);
+    if (!portType) {
+      instanceOp->emitOpError("could not lower type of port ") << port.name;
+      return failure();
+    }
+
+    // Drop zero bit input/inout ports.
+    if (portType.isInteger(0))
+      continue;
+
+    // We wire outputs up after creating the instance.
+    if (port.isOutput())
+      continue;
+
+    auto portResult = instanceOp->getResult(portIndex);
+    assert(portResult && "invalid IR, couldn't find port");
+
+    // Replace the input port with a backedge.  If it turns out that this port
+    // is never driven, an uninitialized wire will be materialized at the end.
+    if (port.isInput()) {
+      inputOperands.push_back(createBackedge(portResult, portType));
+      continue;
+    }
+
+    // If the result has an analog type and is used only by attach op, try
+    // eliminating a temporary wire by directly using an attached value.
+    if (type_isa<AnalogType>(portResult.getType()) && portResult.hasOneUse()) {
+      if (auto attach = dyn_cast<AttachOp>(*portResult.getUsers().begin())) {
+        if (auto source = getSingleNonInstanceOperand(attach)) {
+          auto loweredResult = getPossiblyInoutLoweredValue(source);
+          inputOperands.push_back(loweredResult);
+          (void)setLowering(portResult, loweredResult);
+          continue;
+        }
+      }
+    }
+
+    // Create a wire for each inout operand, so there is something to connect
+    // to. The instance becomes the sole driver of this wire.
+    auto wire = sv::WireOp::create(builder, portType,
+                                   "." + port.getName().str() + ".wire");
+
+    // Know that the argument FIRRTL value is equal to this wire, allowing
+    // connects to it to be lowered.
+    (void)setLowering(portResult, wire);
+    inputOperands.push_back(wire);
+  }
+
+  return success();
+}
+
 LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   Operation *oldModule =
       oldInstance.getReferencedModule(circuitState.getInstanceGraph());
@@ -3850,56 +3920,8 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   // Ok, get ready to create the new instance operation.  We need to prepare
   // input operands.
   SmallVector<Value, 8> operands;
-  for (size_t portIndex = 0, e = portInfo.size(); portIndex != e; ++portIndex) {
-    auto &port = portInfo[portIndex];
-    auto portType = lowerType(port.type);
-    if (!portType) {
-      oldInstance->emitOpError("could not lower type of port ") << port.name;
-      return failure();
-    }
-
-    // Drop zero bit input/inout ports.
-    if (portType.isInteger(0))
-      continue;
-
-    // We wire outputs up after creating the instance.
-    if (port.isOutput())
-      continue;
-
-    auto portResult = oldInstance.getResult(portIndex);
-    assert(portResult && "invalid IR, couldn't find port");
-
-    // Replace the input port with a backedge.  If it turns out that this port
-    // is never driven, an uninitialized wire will be materialized at the end.
-    if (port.isInput()) {
-      operands.push_back(createBackedge(portResult, portType));
-      continue;
-    }
-
-    // If the result has an analog type and is used only by attach op, try
-    // eliminating a temporary wire by directly using an attached value.
-    if (type_isa<AnalogType>(portResult.getType()) && portResult.hasOneUse()) {
-      if (auto attach = dyn_cast<AttachOp>(*portResult.getUsers().begin())) {
-        if (auto source = getSingleNonInstanceOperand(attach)) {
-          auto loweredResult = getPossiblyInoutLoweredValue(source);
-          operands.push_back(loweredResult);
-          (void)setLowering(portResult, loweredResult);
-          continue;
-        }
-      }
-    }
-
-    // Create a wire for each inout operand, so there is something to connect
-    // to. The instance becomes the sole driver of this wire.
-    auto wire = sv::WireOp::create(builder, portType,
-                                   "." + port.getName().str() + ".wire");
-
-    // Know that the argument FIRRTL value is equal to this wire, allowing
-    // connects to it to be lowered.
-    (void)setLowering(portResult, wire);
-
-    operands.push_back(wire);
-  }
+  if (failed(prepareInstanceOperands(portInfo, oldInstance, operands)))
+    return failure();
 
   // If this instance is destined to be lowered to a bind, generate a symbol
   // for it and generate a bind op.  Enter the bind into global
@@ -3951,6 +3973,108 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     (void)setLowering(oldPortResult, resultVal);
     ++resultNo;
   }
+  return success();
+}
+
+LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
+  if (oldInstanceChoice.getInnerSymAttr()) {
+    oldInstanceChoice->emitOpError(
+        "instance choice with inner sym cannot be lowered");
+    return failure();
+  }
+  // Get all the target modules
+  auto moduleNames = oldInstanceChoice.getModuleNamesAttr();
+  auto caseNames = oldInstanceChoice.getCaseNamesAttr();
+
+  // Get the default module.
+  auto defaultModuleName = oldInstanceChoice.getDefaultTargetAttr();
+  auto *defaultModuleNode =
+      circuitState.getInstanceGraph().lookup(defaultModuleName.getAttr());
+
+  Operation *defaultModule = defaultModuleNode->getModule();
+
+  // Get port information from the default module (all alternatives must have
+  // same ports).
+  SmallVector<PortInfo, 8> portInfo =
+      cast<FModuleLike>(defaultModule).getPorts();
+
+  // Prepare input operands.
+  SmallVector<Value, 8> inputOperands;
+  if (failed(
+          prepareInstanceOperands(portInfo, oldInstanceChoice, inputOperands)))
+    return failure();
+
+  // Create wires for output ports.
+  SmallVector<sv::WireOp, 8> outputWires;
+  StringRef wirePrefix = oldInstanceChoice.getInstanceName();
+  for (size_t portIndex = 0, e = portInfo.size(); portIndex != e; ++portIndex) {
+    auto &port = portInfo[portIndex];
+    if (port.isInput())
+      continue;
+    auto portType = lowerType(port.type);
+    if (!portType || portType.isInteger(0))
+      continue;
+    auto wire = sv::WireOp::create(
+        builder, portType, wirePrefix.str() + "." + port.getName().str());
+    outputWires.push_back(wire);
+    if (failed(setLowering(oldInstanceChoice.getResult(portIndex), wire)))
+      return failure();
+  }
+
+  // Lambda to create an instance for a given module and assign outputs to wires
+  auto createInstanceAndAssign = [&](Operation *oldMod,
+                                     StringRef suffix) -> LogicalResult {
+    auto *newMod = circuitState.getNewModule(oldMod);
+    if (!newMod)
+      return oldInstanceChoice->emitOpError("could not find lowered module");
+
+    ArrayAttr parameters;
+    if (auto oldExtModule = dyn_cast<FExtModuleOp>(oldMod))
+      parameters = getHWParameters(oldExtModule, /*ignoreValues=*/false);
+
+    // Create instance name with suffix
+    SmallString<64> instName;
+    instName = oldInstanceChoice.getInstanceName();
+    if (!suffix.empty()) {
+      instName += "_";
+      instName += suffix;
+    }
+    auto instNameAttr = builder.getStringAttr(instName);
+
+    // Create the instance
+    auto inst = hw::InstanceOp::create(builder, newMod, instNameAttr,
+                                       inputOperands, parameters,
+                                       /*innerSym=*/nullptr);
+
+    // Assign instance outputs to the wires
+    for (unsigned i = 0; i < inst.getNumResults(); ++i)
+      sv::AssignOp::create(builder, outputWires[i], inst.getResult(i));
+    return success();
+  };
+
+  // Create instance for the default module
+  if (failed(createInstanceAndAssign(defaultModule, "default")))
+    return failure();
+
+  // Create instances for all alternative modules
+  for (size_t i = 0; i < caseNames.size(); ++i) {
+    auto caseSymRef = cast<SymbolRefAttr>(caseNames[i]);
+    auto caseName = caseSymRef.getLeafReference();
+    auto targetModuleRef = cast<FlatSymbolRefAttr>(moduleNames[i + 1]);
+
+    Operation *altModule = circuitState.getInstanceGraph()
+                               .lookup(targetModuleRef.getAttr())
+                               ->getModule();
+    if (!altModule)
+      return oldInstanceChoice->emitOpError(
+                 "could not find alternative module [")
+             << targetModuleRef << "] referenced by instance choice";
+
+    // Create instance with case name as suffix
+    if (failed(createInstanceAndAssign(altModule, caseName.getValue())))
+      return failure();
+  }
+
   return success();
 }
 
