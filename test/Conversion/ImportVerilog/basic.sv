@@ -4098,7 +4098,6 @@ endmodule
 // CHECK:             moore.push_back [[ONE]] into [[TMP1]] : <queue<i32, 0>>
 // CHECK:             [[TMP1R:%.+]] = moore.read [[TMP1]] : <queue<i32, 0>>
 // CHECK:             [[Q1R:%.+]] = moore.read [[Q1]] : <queue<i32, 5>>
-// CHECK:             [[Q1C:%.+]] = moore.conversion [[Q1R]] : !moore.queue<i32, 5> -> !moore.queue<i32, 0>
 // CHECK:             [[ARRR:%.+]] = moore.read [[ARR]] : <uarray<11 x i32>>
 // CHECK:             [[TMP2:%.+]] = moore.queue_of_up_array [[ARRR]] : <11 x i32> -> <i32, 0>
 // CHECK:             [[ONE:%.+]] = moore.constant 1 : i32
@@ -4107,7 +4106,7 @@ endmodule
 // CHECK:             [[TWO:%.+]] = moore.constant 2 : i32
 // CHECK:             moore.push_back [[TWO]] into [[TMP3]] : <queue<i32, 0>>
 // CHECK:             [[TMP3R:%.+]] = moore.read [[TMP3]] : <queue<i32, 0>>
-// CHECK:             [[RESV:%.+]] = moore.queue.concat ([[TMP1R]], [[Q1C]], [[TMP2]], [[TMP3R]]) : (!moore.queue<i32, 0>, !moore.queue<i32, 0>, !moore.queue<i32, 0>, !moore.queue<i32, 0>) <i32, 0>
+// CHECK:             [[RESV:%.+]] = moore.queue.concat ([[TMP1R]], [[Q1R]], [[TMP2]], [[TMP3R]]) : (!moore.queue<i32, 0>, !moore.queue<i32, 5>, !moore.queue<i32, 0>, !moore.queue<i32, 0>) <i32, 0>
 // CHECK:             moore.blocking_assign [[QRES]], [[RESV]] : queue<i32, 0>
 // CHECK:           }
 // CHECK:           moore.output
