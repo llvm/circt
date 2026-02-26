@@ -1818,9 +1818,10 @@ def QueueOfUnpackedArrayOp : MooreOp<"queue_of_up_array", [Pure]> {
   let assemblyFormat = [{
     $input attr-dict `:` type($input) `->` type($result)
   }];
+  let hasVerifier = 1;
 }
 
-def QueueConcatOp : MooreOp<"queue.concat"> {
+def QueueConcatOp : MooreOp<"queue.concat", [Pure]> {
   let summary = "Concatenate queues";
   let description = [{
     Concatenates an abitrary number of queues into one larger queue.
@@ -1834,6 +1835,7 @@ def QueueConcatOp : MooreOp<"queue.concat"> {
   let assemblyFormat = [{
     ` ` `(` $inputs `)` attr-dict `:` `(` type($inputs) `)` type($result)
   }];
+  let hasVerifier = 1;
 }
 
 def QueueInsertOp : MooreOp<"queue.insert", [
