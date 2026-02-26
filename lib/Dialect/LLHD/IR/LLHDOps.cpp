@@ -766,7 +766,11 @@ LogicalResult ProcessOp::canonicalize(ProcessOp op, PatternRewriter &rewriter) {
 LogicalResult CombinationalOp::canonicalize(CombinationalOp op,
                                             PatternRewriter &rewriter) {
   // Inline the combinational region if it consists of a single block and
-  // contains no side-effecting operations (ignoring verif assert like).
+  // contains no side-effecting operations, exception for verif assert like
+  // operations.
+  // The exception can be made because the verif ops are linked to the values
+  // via their operands and do not rely on the activation of the
+  // CombinationalOp environment.
   if (op.getBody().hasOneBlock()) {
     bool hasUnwantedEffects = false;
     op.getBody().walk([&](Operation *inner) {
