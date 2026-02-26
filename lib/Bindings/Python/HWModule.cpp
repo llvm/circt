@@ -33,6 +33,7 @@ using mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyMlirContext;
 
 struct PyInOutType : PyConcreteType<PyInOutType> {
   static constexpr IsAFunctionTy isaFunction = hwTypeIsAInOut;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction = hwInOutTypeGetTypeID;
   static constexpr const char *pyClassName = "InOutType";
   using Base::Base;
 
@@ -50,6 +51,7 @@ struct PyInOutType : PyConcreteType<PyInOutType> {
 
 struct PyHWArrayType : PyConcreteType<PyHWArrayType> {
   static constexpr IsAFunctionTy isaFunction = hwTypeIsAArrayType;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction = hwArrayTypeGetTypeID;
   static constexpr const char *pyClassName = "ArrayType";
   using Base::Base;
 
@@ -69,6 +71,8 @@ struct PyHWArrayType : PyConcreteType<PyHWArrayType> {
 
 struct PyModuleType : PyConcreteType<PyModuleType> {
   static constexpr IsAFunctionTy isaFunction = hwTypeIsAModuleType;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      hwModuleTypeGetTypeID;
   static constexpr const char *pyClassName = "ModuleType";
   using Base::Base;
 
@@ -122,6 +126,7 @@ struct PyModuleType : PyConcreteType<PyModuleType> {
 
 struct PyParamIntType : PyConcreteType<PyParamIntType> {
   static constexpr IsAFunctionTy isaFunction = hwTypeIsAIntType;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction = hwIntTypeGetTypeID;
   static constexpr const char *pyClassName = "ParamIntType";
   using Base::Base;
 
@@ -139,6 +144,8 @@ struct PyParamIntType : PyConcreteType<PyParamIntType> {
 
 struct PyStructType : PyConcreteType<PyStructType> {
   static constexpr IsAFunctionTy isaFunction = hwTypeIsAStructType;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      hwStructTypeGetTypeID;
   static constexpr const char *pyClassName = "StructType";
   using Base::Base;
 
@@ -196,6 +203,7 @@ struct PyStructType : PyConcreteType<PyStructType> {
 
 struct PyUnionType : PyConcreteType<PyUnionType> {
   static constexpr IsAFunctionTy isaFunction = hwTypeIsAUnionType;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction = hwUnionTypeGetTypeID;
   static constexpr const char *pyClassName = "UnionType";
   using Base::Base;
 
@@ -249,6 +257,8 @@ struct PyUnionType : PyConcreteType<PyUnionType> {
 
 struct PyTypeAliasType : PyConcreteType<PyTypeAliasType> {
   static constexpr IsAFunctionTy isaFunction = hwTypeIsATypeAliasType;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      hwTypeAliasTypeGetTypeID;
   static constexpr const char *pyClassName = "TypeAliasType";
   using Base::Base;
 
@@ -284,6 +294,8 @@ struct PyTypeAliasType : PyConcreteType<PyTypeAliasType> {
 
 struct PyParamDeclAttr : PyConcreteAttribute<PyParamDeclAttr> {
   static constexpr IsAFunctionTy isaFunction = hwAttrIsAParamDeclAttr;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      hwParamDeclAttrGetTypeID;
   static constexpr const char *pyClassName = "ParamDeclAttr";
   using Base::Base;
 
@@ -317,6 +329,8 @@ struct PyParamDeclAttr : PyConcreteAttribute<PyParamDeclAttr> {
 
 struct PyParamDeclRefAttr : PyConcreteAttribute<PyParamDeclRefAttr> {
   static constexpr IsAFunctionTy isaFunction = hwAttrIsAParamDeclRefAttr;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      hwParamDeclRefAttrGetTypeID;
   static constexpr const char *pyClassName = "ParamDeclRefAttr";
   using Base::Base;
 
@@ -339,6 +353,8 @@ struct PyParamDeclRefAttr : PyConcreteAttribute<PyParamDeclRefAttr> {
 
 struct PyParamVerbatimAttr : PyConcreteAttribute<PyParamVerbatimAttr> {
   static constexpr IsAFunctionTy isaFunction = hwAttrIsAParamVerbatimAttr;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      hwParamVerbatimAttrGetTypeID;
   static constexpr const char *pyClassName = "ParamVerbatimAttr";
   using Base::Base;
 
@@ -353,6 +369,8 @@ struct PyParamVerbatimAttr : PyConcreteAttribute<PyParamVerbatimAttr> {
 
 struct PyOutputFileAttr : PyConcreteAttribute<PyOutputFileAttr> {
   static constexpr IsAFunctionTy isaFunction = hwAttrIsAOutputFileAttr;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      hwOutputFileAttrGetTypeID;
   static constexpr const char *pyClassName = "OutputFileAttr";
   using Base::Base;
 
@@ -374,6 +392,8 @@ struct PyOutputFileAttr : PyConcreteAttribute<PyOutputFileAttr> {
 
 struct PyInnerSymAttr : PyConcreteAttribute<PyInnerSymAttr> {
   static constexpr IsAFunctionTy isaFunction = hwAttrIsAInnerSymAttr;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      hwInnerSymAttrGetTypeID;
   static constexpr const char *pyClassName = "InnerSymAttr";
   using Base::Base;
 
@@ -391,6 +411,8 @@ struct PyInnerSymAttr : PyConcreteAttribute<PyInnerSymAttr> {
 
 struct PyInnerRefAttr : PyConcreteAttribute<PyInnerRefAttr> {
   static constexpr IsAFunctionTy isaFunction = hwAttrIsAInnerRefAttr;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      hwInnerRefAttrGetTypeID;
   static constexpr const char *pyClassName = "InnerRefAttr";
   using Base::Base;
 

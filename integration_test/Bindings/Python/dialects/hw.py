@@ -141,7 +141,7 @@ with Context() as ctx, Location.unknown():
   module_type = hw.ModuleType.get(ports)
   # CHECK: !hw.modty<output out : i1, input in1 : i2, input in2 : i32, inout in3 : i32>
   print(module_type)
-  # CHECK-NEXT:  [IntegerType(i2), IntegerType(i32), Type(!hw.inout<i32>)]
+  # CHECK-NEXT:  [IntegerType(i2), IntegerType(i32), InOutType(!hw.inout<i32>)]
   print(module_type.input_types)
   # CHECK-NEXT:  [IntegerType(i1)]
   print(module_type.output_types)
