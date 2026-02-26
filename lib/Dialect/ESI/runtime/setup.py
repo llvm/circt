@@ -23,7 +23,7 @@ import subprocess
 import sys
 import sysconfig
 
-from distutils.command.build import build as _build
+from setuptools.command.build import build as _build
 from setuptools import find_namespace_packages, setup, Extension
 from setuptools.command.build_ext import build_ext
 from setuptools.command.build_py import build_py
@@ -203,6 +203,32 @@ class CMakeBuild(build_py):
 class NoopBuildExtension(build_ext):
 
   def build_extension(self, ext):
+    if not self.editable_mode:
+      return
+    # For editable installs, trigger the CMake build and copy native
+    # artifacts into the source tree so the extension is importable.
+    self.run_command("build_py")
+    build_py_cmd = self.get_finalized_command("build_py")
+    esiaccel_build = os.path.join(os.path.abspath(build_py_cmd.build_lib),
+                                  "esiaccel")
+    esiaccel_src = os.path.join(_thisdir, "python", "esiaccel")
+
+    import glob
+    # Copy the native extension module and type stubs.
+    for f in glob.glob(os.path.join(esiaccel_build, "esiCppAccel*")):
+      if os.path.isfile(f):
+        shutil.copy2(f, esiaccel_src)
+
+    # Copy shared libraries and tools needed at runtime.
+    for dirname in ("lib", "bin"):
+      src_dir = os.path.join(esiaccel_build, dirname)
+      dst_dir = os.path.join(esiaccel_src, dirname)
+      if os.path.isdir(src_dir):
+        if os.path.exists(dst_dir):
+          shutil.rmtree(dst_dir)
+        shutil.copytree(src_dir, dst_dir)
+
+  def copy_extensions_to_source(self):
     pass
 
 
@@ -218,8 +244,10 @@ setup(
         "build_py": CMakeBuild,
     },
     zip_safe=False,
-    packages=find_namespace_packages(include=[
-        "esiaccel",
-        "esiaccel.*",
-    ]),
+    package_dir={'': 'python'},
+    packages=find_namespace_packages(where="python",
+                                     include=[
+                                         "esiaccel",
+                                         "esiaccel.*",
+                                     ]),
 )
