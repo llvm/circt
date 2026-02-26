@@ -1343,6 +1343,26 @@ def UArrayCmpOp : MooreOp<"uarray_cmp", [
   }];  
 }
 
+def QueueCmpOp : MooreOp<"queue_cmp", [
+  Pure,
+  Commutative,
+  SameTypeOperands,
+]> {
+  let description = [{
+    Performs an elementwise comparison of two queues. This is the equivalent
+    of the op above, but for queues. (which are just resizeable unpacked arrays)
+  }];
+  let arguments = (ins 
+    UArrayCmpPredicateAttr:$predicate,
+    QueueType:$lhs,
+    QueueType:$rhs
+  );
+  let results = (outs BitType:$result);
+  let assemblyFormat = [{
+    $predicate $lhs `,` $rhs attr-dict `:` type($lhs) `->` type($result)
+  }];  
+}
+
 def StringCmpOp : MooreOp<"string_cmp", [
   Pure,
   SameTypeOperands
