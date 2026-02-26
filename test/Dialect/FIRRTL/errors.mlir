@@ -3313,3 +3313,13 @@ firrtl.circuit "UnknownValueReferencesNonClass" {
     %0 = firrtl.unknown : !firrtl.class<@Foo()>
   }
 }
+
+firrtl.circuit "DuplicatePortName" {
+  firrtl.module @DuplicatePortName() {}
+  firrtl.extmodule @Foo(
+    // expected-note @below {{previous definition here}}
+    in a: !firrtl.uint<1>,
+    // expected-error @below {{redefinition of name 'a'}}
+    out a: !firrtl.uint<1>
+  )
+}

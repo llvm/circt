@@ -1797,6 +1797,26 @@ ParseResult FMemModuleOp::parse(OpAsmParser &parser, OperationState &result) {
                                           /*hasSSAIdentifiers=*/false);
 }
 
+static LogicalResult
+checkPortNameUniqueness(llvm::ArrayRef<Attribute> portNames,
+                        llvm::ArrayRef<Attribute> portLocs) {
+  assert(portNames.size() == portLocs.size());
+  bool ok = true;
+  llvm::DenseMap<StringAttr, LocationAttr> seenNames;
+  for (auto [nameAttr, locAttr] : zip(portNames, portLocs)) {
+    auto name = cast<StringAttr>(nameAttr);
+    auto loc = cast<LocationAttr>(locAttr);
+    auto [it, ok] = seenNames.try_emplace(name, loc);
+    if (ok)
+      continue;
+    auto diag = mlir::emitError(loc)
+                << "redefinition of name '" << name.getValue() << "'";
+    diag.attachNote(it->second) << "previous definition here";
+    ok = false;
+  }
+  return success(ok);
+}
+
 LogicalResult FModuleOp::verify() {
   // Verify the block arguments.
   auto *body = getBodyBlock();
@@ -1818,7 +1838,7 @@ LogicalResult FModuleOp::verify() {
           "block argument locations should match signature locations");
   }
 
-  return success();
+  return checkPortNameUniqueness(getPortNames(), portLocs);
 }
 
 LogicalResult FExtModuleOp::verify() {
@@ -1850,14 +1870,16 @@ LogicalResult FExtModuleOp::verify() {
         referenced.insert(layer);
   }
 
-  return checkLayerCompatibility(getOperation(), referenced, known,
-                                 "references unknown layers", "unknown layers");
+  if (checkLayerCompatibility(getOperation(), referenced, known,
+                              "references unknown layers", "unknown layers")
+          .failed())
+    return failure();
+
+  return checkPortNameUniqueness(getPortNames(), getPortLocations());
 }
 
 LogicalResult FIntModuleOp::verify() {
   auto params = getParameters();
-  if (params.empty())
-    return success();
 
   auto checkParmValue = [&](Attribute elt) -> bool {
     auto param = cast<ParamDeclAttr>(elt);
@@ -1872,7 +1894,11 @@ LogicalResult FIntModuleOp::verify() {
   if (!llvm::all_of(params, checkParmValue))
     return failure();
 
-  return success();
+  return checkPortNameUniqueness(getPortNames(), getPortLocations());
+}
+
+LogicalResult FMemModuleOp::verify() {
+  return checkPortNameUniqueness(getPortNames(), getPortLocations());
 }
 
 static LogicalResult verifyProbeType(RefType refType, Location loc,
