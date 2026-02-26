@@ -20,9 +20,9 @@ namespace nb = nanobind;
 
 using namespace mlir;
 using namespace mlir::python;
-using mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteAttribute;
-using mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteType;
-using mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyMlirContext;
+using ::mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteAttribute;
+using ::mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteType;
+using ::mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyMlirContext;
 
 namespace {
 
