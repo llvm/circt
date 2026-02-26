@@ -1804,6 +1804,22 @@ def DynQueueRefElementOp : MooreOp<"dyn_queue_ref_element", [Pure]> {
   }];
 }
 
+def QueueOfUnpackedArrayOp : MooreOp<"queue_of_up_array", [Pure]> {
+  let description = [{
+    Creates a queue containing the elements of the given unpacked array.
+
+    If the queue type has bounds, any elements outside the bounds will be
+    discarded.
+  }];
+
+  let arguments = (ins UnpackedArrayType:$input);
+  let results = (outs QueueType:$result);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
+}
+
 def QueueInsertOp : MooreOp<"queue.insert", [
     TypesMatchWith<"queue and item types must match",
     "queue", "item",

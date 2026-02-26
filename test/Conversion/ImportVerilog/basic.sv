@@ -4069,8 +4069,24 @@ module QueueUnboundedLiteralTest;
     end
 endmodule
 
-
-
+// CHECK-LABEL: moore.module @QueueToUnpackedArrayTest() {
+// CHECK:           [[Q1:%.+]] = moore.variable : <queue<i32, 5>>
+// CHECK:           [[ARR:%.+]] = moore.variable : <uarray<11 x i32>>
+// CHECK:           moore.procedure initial {
+// CHECK:             [[QR:%.+]] = moore.read [[ARR]] : <uarray<11 x i32>>
+// CHECK:             [[QARR:%.+]] = moore.queue_of_up_array [[QR]] : <11 x i32> -> <i32, 5>
+// CHECK:             moore.blocking_assign [[Q1]], [[QARR]] : queue<i32, 5>
+// CHECK:             moore.return
+// CHECK:           }
+// CHECK:           moore.output
+// CHECK:         }
+module QueueToUnpackedArrayTest;
+    int q1[$:5];
+    int arr[0:10];
+    initial begin
+      q1 = arr;
+    end
+endmodule
 
 // CHECK-LABEL: moore.module @ForkJoinTest() {
 // CHECK:         [[C0:%.+]] = moore.constant 0 : i32
