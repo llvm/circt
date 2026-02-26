@@ -89,66 +89,19 @@ def type_to_pytype(t) -> ir.Type:
     return t
 
   from .dialects import esi, hw, seq, rtg, rtgtest
-  if isinstance(t, ir.IntegerType):
-    return ir.IntegerType(t)
-  if isinstance(t, ir.NoneType):
-    return ir.NoneType(t)
-  if isinstance(t, ir.TupleType):
-    return ir.TupleType(t)
-  if isinstance(t, hw.ArrayType):
-    return hw.ArrayType(t)
-  if isinstance(t, hw.StructType):
-    return hw.StructType(t)
-  if isinstance(t, hw.UnionType):
-    return hw.UnionType(t)
-  if isinstance(t, hw.TypeAliasType):
-    return hw.TypeAliasType(t)
-  if isinstance(t, hw.InOutType):
-    return hw.InOutType(t)
-  if isinstance(t, seq.ClockType):
-    return seq.ClockType(t)
-  if isinstance(t, esi.ChannelType):
-    return esi.ChannelType(t)
-  if isinstance(t, esi.AnyType):
-    return esi.AnyType(t)
-  if isinstance(t, esi.BundleType):
-    return esi.BundleType(t)
-  if isinstance(t, esi.ListType):
-    return esi.ListType(t)
-  if isinstance(t, esi.WindowType):
-    return esi.WindowType(t)
-  if isinstance(t, esi.WindowFrameType):
-    return esi.WindowFrameType(t)
-  if isinstance(t, esi.WindowFieldType):
-    return esi.WindowFieldType(t)
-  if isinstance(t, rtg.LabelType):
-    return rtg.LabelType(t)
-  if isinstance(t, rtg.SetType):
-    return rtg.SetType(t)
-  if isinstance(t, rtg.BagType):
-    return rtg.BagType(t)
-  if isinstance(t, rtg.SequenceType):
-    return rtg.SequenceType(t)
-  if isinstance(t, rtg.RandomizedSequenceType):
-    return rtg.RandomizedSequenceType(t)
-  if isinstance(t, rtg.DictType):
-    return rtg.DictType(t)
-  if isinstance(t, rtg.ImmediateType):
-    return rtg.ImmediateType(t)
-  if isinstance(t, rtg.ArrayType):
-    return rtg.ArrayType(t)
-  if isinstance(t, rtg.MemoryType):
-    return rtg.MemoryType(t)
-  if isinstance(t, rtg.MemoryBlockType):
-    return rtg.MemoryBlockType(t)
-  if isinstance(t, rtg.TupleType):
-    return rtg.TupleType(t)
-  if isinstance(t, rtg.StringType):
-    return rtg.StringType(t)
-  if isinstance(t, rtgtest.IntegerRegisterType):
-    return rtgtest.IntegerRegisterType(t)
-  if isinstance(t, rtgtest.CPUType):
-    return rtgtest.CPUType(t)
+
+  for type_cls in [
+      ir.IntegerType, ir.NoneType, ir.TupleType, hw.ArrayType, hw.StructType,
+      hw.UnionType, hw.TypeAliasType, hw.InOutType, seq.ClockType,
+      esi.ChannelType, esi.AnyType, esi.BundleType, esi.ListType,
+      esi.WindowType, esi.WindowFrameType, esi.WindowFieldType, rtg.LabelType,
+      rtg.SetType, rtg.BagType, rtg.SequenceType, rtg.RandomizedSequenceType,
+      rtg.DictType, rtg.ImmediateType, rtg.ArrayType, rtg.MemoryType,
+      rtg.MemoryBlockType, rtg.TupleType, rtg.StringType,
+      rtgtest.IntegerRegisterType, rtgtest.CPUType,
+  ]:
+    if isinstance(t, type_cls):
+      return t
 
   raise TypeError(f"Cannot convert {repr(t)} to python type")
 
