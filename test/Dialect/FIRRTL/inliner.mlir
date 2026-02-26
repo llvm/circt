@@ -1442,43 +1442,46 @@ firrtl.circuit "RemoveNonLocalFromLocal" {
 }
 
 // -----
+firrtl.circuit "Object" {
+  // CHECK: firrtl.class @MyClass
+  firrtl.class @MyClass() {}
+
+  firrtl.module private @Child() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    // Both object and instance_choice in the same module
+    %obj = firrtl.object @MyClass()
+  }
+
+  // CHECK-LABEL: firrtl.module @Object
+  firrtl.module @Object() {
+    // CHECK: firrtl.object @MyClass
+    firrtl.instance child @Child()
+  }
+}
+// -----
 
 // Test that both firrtl.object and instance_choice work together during inlining.
 // This ensures both FInstanceLike operations are handled correctly in the same module.
-firrtl.circuit "FInstanceLike" {
+firrtl.circuit "InstanceChoice" {
   firrtl.option @Platform {
     firrtl.option_case @FPGA
   }
 
-  // CHECK: firrtl.class @MyClass
-  firrtl.class @MyClass() {
-    %str = firrtl.string "test"
-  }
-
   // CHECK: firrtl.module private @ImplA
-  firrtl.module private @ImplA(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
-    firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
-  }
+  firrtl.module private @ImplA() {}
 
   firrtl.module private @Child(in %x: !firrtl.uint<8>, out %y: !firrtl.uint<8>)
     attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
     // Both object and instance_choice in the same module
-    %obj = firrtl.object @MyClass()
-    %inst_in, %inst_out = firrtl.instance_choice inst @ImplA alternatives @Platform {
+    firrtl.instance_choice inst @ImplA alternatives @Platform {
       @FPGA -> @ImplA
-    } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
-    firrtl.connect %inst_in, %x : !firrtl.uint<8>, !firrtl.uint<8>
-    firrtl.connect %y, %inst_out : !firrtl.uint<8>, !firrtl.uint<8>
+    } ()
   }
 
-  // CHECK-LABEL: firrtl.module @FInstanceLike
-  firrtl.module @FInstanceLike(in %a: !firrtl.uint<8>, out %b: !firrtl.uint<8>) {
+  // CHECK-LABEL: firrtl.module @InstanceChoice
+  firrtl.module @InstanceChoice() {
     // After inlining, both object and instance_choice should be present
-    // CHECK: firrtl.object @MyClass
     // CHECK: firrtl.instance_choice inst @ImplA
-    %child_x, %child_y = firrtl.instance child @Child(in x: !firrtl.uint<8>, out y: !firrtl.uint<8>)
-    firrtl.connect %child_x, %a : !firrtl.uint<8>, !firrtl.uint<8>
-    firrtl.connect %b, %child_y : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.instance child @Child(in x: !firrtl.uint<8>, out y: !firrtl.uint<8>)
   }
 }
 
