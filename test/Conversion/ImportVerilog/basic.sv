@@ -4069,8 +4069,34 @@ module QueueUnboundedLiteralTest;
     end
 endmodule
 
-
-
+// CHECK-LABEL: moore.module @QueueCmpTest() {
+// CHECK:           [[Q1:%.+]] = moore.variable : <queue<i32, 0>>
+// CHECK:           [[Q2:%.+]] = moore.variable : <queue<i32, 0>>
+// CHECK:           [[R1:%.+]] = moore.variable : <i1>
+// CHECK:           [[R2:%.+]] = moore.variable : <i1>
+// CHECK:           moore.procedure initial {
+// CHECK:               [[QR1:%.+]] = moore.read [[Q1]] : <queue<i32, 0>>
+// CHECK:               [[QR2:%.+]] = moore.read [[Q2]] : <queue<i32, 0>>
+// CHECK:               [[RES1:%.+]] = moore.queue_cmp eq [[QR1]], [[QR2]] : <i32, 0> -> i1
+// CHECK:               moore.blocking_assign [[R1]], [[RES1]] : i1
+// CHECK:               [[QR1:%.+]] = moore.read [[Q1]] : <queue<i32, 0>>
+// CHECK:               [[QR2:%.+]] = moore.read [[Q2]] : <queue<i32, 0>>
+// CHECK:               [[RES2:%.+]] = moore.queue_cmp ne [[QR1]], [[QR2]] : <i32, 0> -> i1
+// CHECK:               moore.blocking_assign [[R2]], [[RES2]] : i1
+// CHECK:               moore.return
+// CHECK:           }
+// CHECK:           moore.output
+// CHECK:         }
+module QueueCmpTest;
+    int q1[$];
+    int q2[$];
+    bit r1;
+    bit r2;
+    initial begin
+      r1 = (q1 == q2);
+      r2 = (q1 != q2);
+    end
+endmodule
 
 // CHECK-LABEL: moore.module @ForkJoinTest() {
 // CHECK:         [[C0:%.+]] = moore.constant 0 : i32
@@ -4129,7 +4155,6 @@ endmodule
 // CHECK          }
 // CHECK          moore.output
 // CHECK        }
-
 module ForkJoinTest ();
 	int a = 0;
 	int b = 0;
