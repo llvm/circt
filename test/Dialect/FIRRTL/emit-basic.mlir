@@ -1051,4 +1051,20 @@ firrtl.circuit "Foo" {
     %end = firrtl.wire : !firrtl.uint<1>
   }
 
+  // Test that named domain create ops are emitted.
+  firrtl.extmodule @NamedDomains_Foo(
+    in A: !firrtl.domain of @ClockDomain
+  )
+  // CHECK-LABEL: module NamedDomains :
+  firrtl.module @NamedDomains() {
+    // CHECK-NEXT: domain my_clock of ClockDomain
+    %my_clock = firrtl.domain.create : !firrtl.domain of @ClockDomain
+    // CHECK-NEXT: inst foo of NamedDomains_Foo
+    %foo_A = firrtl.instance foo @NamedDomains_Foo(
+      in A: !firrtl.domain of @ClockDomain
+    )
+    // CHECK-NEXT: domain_define foo.A = my_clock
+    firrtl.domain.define %foo_A, %my_clock
+  }
+
 }
