@@ -2048,6 +2048,7 @@ private:
   ParseResult parseCover();
   ParseResult parseWhen(unsigned whenIndent);
   ParseResult parseMatch(unsigned matchIndent);
+  ParseResult parseDomainInstantiation();
   ParseResult parseDomainDefine();
   ParseResult parseRefDefine();
   ParseResult parseRefForce();
@@ -2959,6 +2960,9 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseWhen(stmtIndent);
   case FIRToken::kw_match:
     return parseMatch(stmtIndent);
+  case FIRToken::kw_domain:
+    // In module context, 'domain' is only valid for domain instantiation
+    return parseDomainInstantiation();
   case FIRToken::kw_domain_define:
     return parseDomainDefine();
   case FIRToken::kw_define:
@@ -3993,6 +3997,34 @@ ParseResult FIRStmtParser::parsePathExp(Value &result) {
   result = UnresolvedPathOp::create(
       builder, StringAttr::get(getContext(), FIRToken::getStringValue(target)));
   return success();
+}
+
+/// domain_instantiation ::= 'domain' id 'of' id info?
+ParseResult FIRStmtParser::parseDomainInstantiation() {
+  auto startTok = consumeToken(FIRToken::kw_domain);
+
+  // If this was actually the start of a connect or something else handle that.
+  if (auto isExpr = parseExpWithLeadingKeyword(startTok))
+    return *isExpr;
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  StringAttr instanceName;
+  StringAttr domainKind;
+
+  if (requireFeature(missingSpecFIRVersion, "domains", startTok.getLoc()) ||
+      parseId(instanceName, "expected domain instance name") ||
+      parseToken(FIRToken::kw_of, "expected 'of' after domain instance name") ||
+      parseId(domainKind, "expected domain type name") || parseOptionalInfo())
+    return failure();
+
+  // Create the domain instance
+  auto result = builder.create<DomainCreateOp>(
+      instanceName, FlatSymbolRefAttr::get(domainKind));
+
+  // Add to symbol table
+  return moduleContext.addSymbolEntry(instanceName.getValue(), result,
+                                      startTok.getLoc());
 }
 
 /// domain_define ::= 'domain_define' domain_exp '=' domain_exp info?
