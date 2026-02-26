@@ -2702,9 +2702,20 @@ InstanceOp InstanceOp::cloneWithInsertedPorts(
   newPortAnnos.reserve(newPortCount);
   newDomainInfo.reserve(newPortCount);
 
+  // Build the complete index map from old port indices to new port indices
+  // before processing any ports. This is necessary so that
+  // fixDomainInfoInsertions can correctly update domain references for newly
+  // inserted ports.
   SmallVector<unsigned> indexMap(oldPortCount);
-
   size_t inserted = 0;
+  for (size_t i = 0; i < oldPortCount; ++i) {
+    while (inserted < numInsertions && insertions[inserted].first <= i)
+      ++inserted;
+    indexMap[i] = i + inserted;
+  }
+
+  // Now process the ports, using the complete indexMap.
+  inserted = 0;
   for (size_t i = 0; i < oldPortCount; ++i) {
     while (inserted < numInsertions) {
       auto &[index, info] = insertions[inserted];
@@ -2725,8 +2736,9 @@ InstanceOp InstanceOp::cloneWithInsertedPorts(
     newPortNames.push_back(getPortNameAttr(i));
     newPortTypes.push_back(getType(i));
     newPortAnnos.push_back(getPortAnnotation(i));
-    newDomainInfo.push_back(getDomainInfo()[i]);
-    indexMap[i] = i + inserted;
+    auto domains =
+        fixDomainInfoInsertions(context, getDomainInfo()[i], indexMap);
+    newDomainInfo.push_back(domains);
   }
 
   while (inserted < numInsertions) {
@@ -3253,9 +3265,20 @@ InstanceChoiceOp InstanceChoiceOp::cloneWithInsertedPorts(
   newPortAnnos.reserve(newPortCount);
   newDomainInfo.reserve(newPortCount);
 
+  // Build the complete index map from old port indices to new port indices
+  // before processing any ports. This is necessary so that
+  // fixDomainInfoInsertions can correctly update domain references for newly
+  // inserted ports.
   SmallVector<unsigned> indexMap(oldPortCount);
-
   size_t inserted = 0;
+  for (size_t i = 0; i < oldPortCount; ++i) {
+    while (inserted < numInsertions && insertions[inserted].first <= i)
+      ++inserted;
+    indexMap[i] = i + inserted;
+  }
+
+  // Now process the ports, using the complete indexMap.
+  inserted = 0;
   for (size_t i = 0; i < oldPortCount; ++i) {
     while (inserted < numInsertions) {
       auto &[index, info] = insertions[inserted];
@@ -3276,8 +3299,9 @@ InstanceChoiceOp InstanceChoiceOp::cloneWithInsertedPorts(
     newPortNames.push_back(getPortNameAttr(i));
     newPortTypes.push_back(getType(i));
     newPortAnnos.push_back(getPortAnnotations()[i]);
-    newDomainInfo.push_back(getDomainInfo()[i]);
-    indexMap[i] = i + inserted;
+    auto domains =
+        fixDomainInfoInsertions(context, getDomainInfo()[i], indexMap);
+    newDomainInfo.push_back(domains);
   }
 
   while (inserted < numInsertions) {
