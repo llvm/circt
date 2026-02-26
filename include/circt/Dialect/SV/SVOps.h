@@ -209,6 +209,32 @@ public:
   static LogicalResult verifyTrait(Operation *op) { return success(); }
 };
 
+/// Create nested ifdef operations for a list of macro symbols.
+/// For each macro, creates an ifdef with a then branch and an else branch.
+/// The then branch is provided by the thenCtor callback, which receives the
+/// index of the current macro (0-based).
+///
+/// Example:
+///   createNestedIfDefs({"MACRO1", "MACRO2"}, ...});
+///
+/// Generates:
+///   `ifdef MACRO1
+///     // thenCtor(0)
+///   `else
+///     `ifdef MACRO2
+///       // thenCtor(1)
+///     `else
+///       // defaultCtor()
+///     `endif
+///   `endif
+void createNestedIfDefs(
+    ArrayRef<StringRef> macroSymbols,
+    llvm::function_ref<void(StringRef, std::function<void()>,
+                            std::function<void()>)>
+        ifdefCtor,
+    llvm::function_ref<void(size_t)> thenCtor,
+    llvm::function_ref<void()> defaultCtor);
+
 } // namespace sv
 } // namespace circt
 

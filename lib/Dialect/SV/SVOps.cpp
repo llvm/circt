@@ -487,6 +487,42 @@ LogicalResult IfDefOp::canonicalize(IfDefOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
+// Helper functions
+//===----------------------------------------------------------------------===//
+
+void circt::sv::createNestedIfDefs(
+    ArrayRef<StringRef> macroSymbols,
+    llvm::function_ref<void(StringRef, std::function<void()>,
+                            std::function<void()>)>
+        ifdefCtor,
+    llvm::function_ref<void(size_t)> thenCtor,
+    llvm::function_ref<void()> defaultCtor) {
+
+  // Helper function to recursively build nested ifdefs
+  std::function<void(size_t)> buildNested = [&](size_t index) {
+    if (index >= macroSymbols.size()) {
+      // Base case: we've processed all macros, call the default
+      if (defaultCtor)
+        defaultCtor();
+      return;
+    }
+
+    // Create an ifdef for the current macro
+    ifdefCtor(
+        macroSymbols[index],
+        /*thenCtor=*/
+        [&, index]() {
+          if (thenCtor)
+            thenCtor(index);
+        },
+        /*elseCtor=*/
+        [&, index]() { buildNested(index + 1); });
+  };
+
+  buildNested(0);
+}
+
+//===----------------------------------------------------------------------===//
 // IfDefProceduralOp
 //===----------------------------------------------------------------------===//
 
