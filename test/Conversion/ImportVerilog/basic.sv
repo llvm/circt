@@ -4107,7 +4107,8 @@ endmodule
 // CHECK:             [[TWO:%.+]] = moore.constant 2 : i32
 // CHECK:             moore.push_back [[TWO]] into [[TMP3]] : <queue<i32, 0>>
 // CHECK:             [[TMP3R:%.+]] = moore.read [[TMP3]] : <queue<i32, 0>>
-// CHECK:             [[RESV:%.+]] = moore.queue.concat ([[TMP1R]], [[Q1C]], [[TMP2]], [[TMP3R]])
+// CHECK:             [[RESV:%.+]] = moore.queue.concat ([[TMP1R]], [[Q1C]], [[TMP2]], [[TMP3R]]) : !moore.queue<i32, 0>, !moore.queue<i32, 0>, !moore.queue<i32, 0>, !moore.queue<i32, 0> <i32, 0>
+// CHECK:             moore.blocking_assign [[QRES]], [[RESV]] : queue<i32, 0>
 // CHECK:           }
 // CHECK:           moore.output
 // CHECK:         }
