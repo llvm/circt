@@ -2660,7 +2660,6 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
         dyn_cast<moore::UnpackedArrayType>(value.getType()).getElementType();
 
     if (queueElType == unpackedArrayElType) {
-      printf("Create/fold op:\n");
       return builder.createOrFold<moore::QueueOfUnpackedArrayOp>(loc, type,
                                                                  value);
     }
