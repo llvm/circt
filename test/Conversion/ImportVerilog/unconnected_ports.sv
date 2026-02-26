@@ -1,5 +1,10 @@
 // RUN: circt-verilog --ir-moore %s | FileCheck %s
 
+// REQUIRES: slang
+
+// Internal issue in Slang v3 about jump depending on uninitialised value.
+// UNSUPPORTED: valgrind
+
 // CHECK-LABEL: moore.module private @PortsUnconnected(in %a : !moore.l1, out b : !moore.l1, in %c : !moore.ref<l1>, in %d : !moore.ref<l1>) {
 // CHECK:         %b = moore.net wire : <l1>
 // CHECK:         %c_0 = moore.assigned_variable name "c" %1 : l1
