@@ -1832,7 +1832,7 @@ def QueueConcatOp : MooreOp<"queue.concat"> {
   let arguments = (ins Variadic<QueueType>:$inputs);
   let results = (outs QueueType:$result);
   let assemblyFormat = [{
-    ` ` `(` $inputs `)` attr-dict `:` type($inputs) type($result)
+    ` ` `(` $inputs `)` attr-dict `:` `(` type($inputs) `)` type($result)
   }];
 }
 
