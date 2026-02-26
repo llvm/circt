@@ -825,4 +825,30 @@ def DomainCreateAnonOp
   let assemblyFormat = [{ attr-dict `:` type($result) `of` $domain }];
 }
 
+def DomainCreateOp : FIRRTLOp<"domain.create", [
+    ParentOneOf<["firrtl::ContractOp", "firrtl::FModuleOp",
+                 "firrtl::LayerBlockOp", "firrtl::MatchOp",
+                 "firrtl::WhenOp", "sv::IfDefOp"]>,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<InferTypeOpInterface>,
+    HasCustomSSAName
+]> {
+  let summary = "Create a named domain instance";
+  let description = [{
+    Create a domain instance from a domain type. Unlike domain.anon, this
+    represents an explicit user-created domain instance that will be emitted
+    back to FIRRTL text.
+
+    Example:
+    ```mlir
+    %my_clock = firrtl.domain.create : !firrtl.domain of @ClockDomain
+    ```
+  }];
+  let arguments = (ins StrAttr:$name, FlatSymbolRefAttr:$domain);
+  let results = (outs Res<DomainType, "", [MemAlloc]>:$result);
+  let assemblyFormat = [{
+    custom<ImplicitSSAName>($name) attr-dict `:` type($result) `of` $domain
+  }];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLDECLARATIONS_TD

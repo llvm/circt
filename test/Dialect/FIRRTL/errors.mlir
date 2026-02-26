@@ -3294,6 +3294,24 @@ firrtl.circuit "UndefinedDomainInAnonDomain" {
   }
 }
 
+// -----
+
+firrtl.circuit "UndefinedDomainInCreateDomain" {
+  firrtl.module @UndefinedDomainInCreateDomain() {
+    // expected-error @below {{references undefined domain '@Foo'}}
+    %my_domain = firrtl.domain.create : !firrtl.domain of @Foo
+  }
+}
+
+// -----
+
+firrtl.circuit "CreateDomainPointingAtNonDomain" {
+  firrtl.extmodule @Foo()
+  firrtl.module @CreateDomainPointingAtNonDomain() {
+    // expected-error @below {{references undefined domain '@Foo'}}
+    %my_domain = firrtl.domain.create : !firrtl.domain of @Foo
+  }
+}
 
 // -----
 
