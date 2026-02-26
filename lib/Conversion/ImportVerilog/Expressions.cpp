@@ -2591,6 +2591,20 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
           cast<moore::QueueType>(value.getType()).getElementType())
     return builder.createOrFold<moore::QueueResizeOp>(loc, type, value);
 
+  // Convert from UnpackedArrayType to QueueType
+  if (isa<moore::QueueType>(type) &&
+      isa<moore::UnpackedArrayType>(value.getType())) {
+    auto queueElType = dyn_cast<moore::QueueType>(type).getElementType();
+    auto unpackedArrayElType =
+        dyn_cast<moore::UnpackedArrayType>(value.getType()).getElementType();
+
+    if (queueElType == unpackedArrayElType) {
+      printf("Create/fold op:\n");
+      return builder.createOrFold<moore::QueueOfUnpackedArrayOp>(loc, type,
+                                                                 value);
+    }
+  }
+
   // Handle Real To Int conversion
   if (isa<moore::IntType>(type) && isa<moore::RealType>(value.getType())) {
     auto twoValInt = builder.createOrFold<moore::RealToIntOp>(
