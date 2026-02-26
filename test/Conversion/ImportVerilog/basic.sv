@@ -4069,9 +4069,6 @@ module QueueUnboundedLiteralTest;
     end
 endmodule
 
-
-
-
 // CHECK-LABEL: moore.module @ForkJoinTest() {
 // CHECK:         [[C0:%.+]] = moore.constant 0 : i32
 // CHECK:         [[V0:%.+]] = moore.variable [[C0]] : <i32>
@@ -4164,4 +4161,45 @@ module ForkJoinTest ();
 		join_none	
 		a = 8;
 	end
+endmodule
+
+//===----------------------------------------------------------------------===//
+// Unconnected Ports
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: moore.module private @InOutRefUnconnected(in %a : !moore.l1, out b : !moore.l1, in %c : !moore.ref<l1>, in %d : !moore.ref<l1>) {
+// CHECK:         moore.net name "a" wire : <l1>
+// CHECK:         [[B:%.+]] = moore.net wire : <l1>
+// CHECK:         [[C:%.+]] = moore.net name "c" wire : <l1>
+// CHECK:         [[D:%.+]] = moore.variable name "d" : <l1>
+// CHECK:         [[RB:%.+]] = moore.read [[B]] : <l1>
+// CHECK:         [[RC:%.+]] = moore.read %c : <l1>
+// CHECK:         moore.assign [[C]], [[RC]] : l1
+// CHECK:         [[RD:%.+]] = moore.read %d : <l1>
+// CHECK:         moore.assign [[D]], [[RD]] : l1
+// CHECK:         moore.output [[RB]] : !moore.l1
+// CHECK:       }
+module InOutRefUnconnected(
+  input a,
+  output b,
+  inout logic c,
+  ref logic d
+);
+endmodule
+
+// CHECK-LABEL: moore.module @UnconnectedPortsTop() {
+// CHECK:         [[A:%.+]] = moore.net wire : <l1>
+// CHECK:         [[RA:%.+]] = moore.read [[A]] : <l1>
+// CHECK:         [[C:%.+]] = moore.net wire : <l1>
+// CHECK:         [[D:%.+]] = moore.variable : <l1>
+// CHECK:         moore.instance "p4" @InOutRefUnconnected(a: [[RA]]: !moore.l1, c: [[C]]: !moore.ref<l1>, d: [[D]]: !moore.ref<l1>) -> (b: !moore.l1)
+// CHECK:         moore.output
+// CHECK:       }
+module UnconnectedPortsTop;
+  InOutRefUnconnected p4(
+    .a(), // Unconnected input
+    .b(), // Unconnected output
+    .c(), // Unconnected inout
+    .d()  // Unconnected ref
+  );
 endmodule
