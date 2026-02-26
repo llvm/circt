@@ -48,6 +48,8 @@ from esiaccel.accelerator import Accelerator, AcceleratorConnection
 from .simulator import get_simulator, Simulator, SourceFiles
 
 LogMatcher = Union[str, Pattern[str], Callable[[str, str], bool]]
+SourceGeneratorFunc = Callable[["CosimPytestConfig", Path], Path]
+SourceGeneratorArg = Union[str, Path, SourceGeneratorFunc]
 
 _logger = logging.getLogger("esiaccel.cosim.pytest")
 _DEFAULT_FAILURE_PATTERN = re.compile(r"\berror\b", re.IGNORECASE)
@@ -62,7 +64,8 @@ class CosimPytestConfig:
   """Immutable configuration for a single cosim test or test class.
 
   Attributes:
-    pycde_script: Path to the PyCDE hardware generation script.
+    source_generator: Path to the PyCDE hardware generation script, or a
+      callable ``(config, tmp_dir) -> sources_dir``.
     args: Arguments passed to the script; ``{tmp_dir}`` is interpolated.
     simulator: Simulator backend name (e.g. ``"verilator"``).
     top: Top-level module name for the simulator.
@@ -72,7 +75,7 @@ class CosimPytestConfig:
     warning_matcher: Pattern applied to simulator output to detect warnings.
   """
 
-  pycde_script: Union[str, Path]
+  source_generator: SourceGeneratorArg
   args: Sequence[str] = ("{tmp_dir}",)
   simulator: str = "verilator"
   top: str = "ESI_Cosim_Top"
@@ -158,6 +161,22 @@ def _render_args(args: Sequence[str], tmp_dir: Path) -> list[str]:
   return [arg.format(tmp_dir=tmp_dir) for arg in args]
 
 
+def _generate_sources(config: CosimPytestConfig, tmp_dir: Path) -> Path:
+  """Generate hardware sources via a normalized source-generator callable.
+
+  If ``config.source_generator`` is a string/path, it is wrapped into a callable
+  that runs the PyCDE script. If it is already callable, it is used directly.
+  """
+  source_spec = config.source_generator
+  if isinstance(source_spec, (str, Path)):
+    source_generator: SourceGeneratorFunc = (
+        lambda inner_config, inner_tmp_dir: _run_hw_script(
+            source_spec, inner_config, inner_tmp_dir))
+  else:
+    source_generator = source_spec
+  return source_generator(config, tmp_dir)
+
+
 def _create_simulator(config: CosimPytestConfig, sources_dir: Path,
                       run_dir: Path) -> Simulator:
   """Instantiate a ``Simulator`` from the generated source files."""
@@ -168,13 +187,14 @@ def _create_simulator(config: CosimPytestConfig, sources_dir: Path,
   return get_simulator(config.simulator, sources, run_dir, config.debug)
 
 
-def _run_hw_script(config: CosimPytestConfig, tmp_dir: Path) -> Path:
+def _run_hw_script(script_path: Union[str, Path], config: CosimPytestConfig,
+                   tmp_dir: Path) -> Path:
   """Execute the PyCDE hardware script and run codegen if a manifest exists.
 
   Returns:
     The directory containing the generated sources (same as *tmp_dir*).
   """
-  script = Path(config.pycde_script).resolve()
+  script = Path(script_path).resolve()
   script_args = _render_args(config.args, tmp_dir)
   with _chdir(tmp_dir):
     subprocess.run([sys.executable, str(script), *script_args],
@@ -289,7 +309,7 @@ def _compile_once_for_class(config: CosimPytestConfig) -> _ClassCompileCache:
   """
   compile_root = Path(tempfile.mkdtemp(prefix="esi-pytest-class-compile-"))
   try:
-    sources_dir = _run_hw_script(config, compile_root)
+    sources_dir = _generate_sources(config, compile_root)
     compile_dir = compile_root / "compile"
     sim = _create_simulator(config, sources_dir, compile_dir)
     with _chdir(compile_dir):
@@ -317,6 +337,10 @@ def _run_child(
   connection parameters, calls the test function, scans logs for failures,
   and sends a ``_ChildResult`` through *result_pipe*.
   """
+  # Keep compile and run output separate.  Only run-time output is scanned
+  # by the failure/warning matchers; compile failures are caught via exit code.
+  compile_stdout: list[str] = []
+  compile_stderr: list[str] = []
   stdout_lines: list[str] = []
   stderr_lines: list[str] = []
 
@@ -332,13 +356,13 @@ def _run_child(
   try:
     run_root = Path(tempfile.mkdtemp(prefix="esi-pytest-run-"))
     if class_cache is None:
-      sources_dir = _run_hw_script(config, run_root)
+      sources_dir = _generate_sources(config, run_root)
       run_dir = run_root / f"run-{os.getpid()}"
       sim = _create_simulator(config, sources_dir, run_dir)
       sim._run_stdout_cb = on_stdout
       sim._run_stderr_cb = on_stderr
-      sim._compile_stdout_cb = on_stdout
-      sim._compile_stderr_cb = on_stderr
+      sim._compile_stdout_cb = compile_stdout.append
+      sim._compile_stderr_cb = compile_stderr.append
       os.chdir(run_dir)
       rc = sim.compile()
       if rc != 0:
@@ -366,20 +390,26 @@ def _run_child(
       raise AssertionError("Detected simulator failures:\n" +
                            "\n".join(failure_lines))
 
+    # Combine compile + run output for the diagnostic dump, but only
+    # runtime output was fed to the failure/warning matchers above.
+    all_stdout = compile_stdout + stdout_lines
+    all_stderr = compile_stderr + stderr_lines
     result_pipe.send(
         _ChildResult(success=True,
                      warning_lines=warning_lines,
                      failure_lines=failure_lines,
-                     stdout_lines=stdout_lines,
-                     stderr_lines=stderr_lines))
+                     stdout_lines=all_stdout,
+                     stderr_lines=all_stderr))
   except Exception:
+    all_stdout = compile_stdout + stdout_lines
+    all_stderr = compile_stderr + stderr_lines
     result_pipe.send(
         _ChildResult(success=False,
                      traceback=traceback.format_exc(),
                      warning_lines=_scan_logs(stdout_lines, stderr_lines,
                                               config)[1],
-                     stdout_lines=stdout_lines,
-                     stderr_lines=stderr_lines))
+                     stdout_lines=all_stdout,
+                     stderr_lines=all_stderr))
   finally:
     result_pipe.close()
     if sim_proc is not None and sim_proc.proc.poll() is None:
@@ -419,10 +449,9 @@ def _run_isolated(
 
   # Wait for the result with an optional timeout.  We poll the pipe first
   # so that we can detect a child crash even before join() returns.
+  result: Optional[_ChildResult] = None
   if reader.poll(timeout=config.timeout_s):
-    result: _ChildResult = reader.recv()
-  else:
-    result = None
+    result = reader.recv()
   reader.close()
   process.join(timeout=10)
   if process.is_alive():
@@ -499,7 +528,7 @@ def _decorate_class(target_cls: type, config: CosimPytestConfig) -> type:
 
 
 def cosim_test(
-    pycde_script: Union[str, Path],
+    source_generator: SourceGeneratorArg,
     args: Sequence[str] = ("{tmp_dir}",),
     simulator: str = "verilator",
     top: str = "ESI_Cosim_Top",
@@ -519,7 +548,9 @@ def cosim_test(
   recompilation.
 
   Args:
-    pycde_script: Path to the PyCDE script that generates the hardware.
+    source_generator: Path to the PyCDE script that generates the hardware, or
+      a callable ``(config, tmp_dir) -> sources_dir`` that generates
+      sources directly.
     args: Arguments forwarded to the script; ``{tmp_dir}`` is interpolated
         with the temporary build directory.
     simulator: Simulator backend (default ``"verilator"``).
@@ -530,7 +561,7 @@ def cosim_test(
     warning_matcher: Pattern to detect warnings in simulator output.
   """
   config = CosimPytestConfig(
-      pycde_script=pycde_script,
+      source_generator=source_generator,
       args=args,
       simulator=simulator,
       top=top,

@@ -40,14 +40,6 @@ def run_cppgen():
   return codegen.run()
 
 
-def get_runtime_root() -> Path:
-  """Return the ESI runtime root directory.
-
-  This is the directory containing lib/, include/, cmake/, and bin/
-  subdirectories with the ESI C++ runtime and tools."""
-  return _thisdir
-
-
 def get_cmake_dir() -> Path:
   return _thisdir / "cmake"
 

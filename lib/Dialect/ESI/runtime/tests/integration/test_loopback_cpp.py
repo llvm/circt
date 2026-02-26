@@ -13,7 +13,8 @@ import pytest
 
 from esiaccel.cosim.pytest import cosim_test
 
-from .conftest import HW_DIR, SW_DIR, check_lines, require_tool
+from .conftest import (HW_DIR, SW_DIR, check_lines, get_runtime_root,
+                       require_tool)
 
 
 @cosim_test(HW_DIR / "loopback.py")
@@ -22,7 +23,6 @@ def test_loopback_cpp_codegen(mode: str, tmp_path: Path, host: str, port: int,
                               sources_dir: Path) -> None:
   require_tool("cmake")
 
-  from esiaccel.utils import get_runtime_root
   runtime_root = get_runtime_root()
 
   include_dir = tmp_path / "include"
