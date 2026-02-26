@@ -544,8 +544,16 @@ struct ExprVisitor {
       }
 
       // Otherwise, the value should be directly convertible to a queue type.
-      value = context.materializeConversion(queueType, value, false,
-                                            value.getLoc());
+      // If the type is a queue type with the same element type, skip this step,
+      // since we don't need to cast things like queue<T, 10> to queue<T, 0>,
+      // - QueueConcatOp doesn't mind the queue bounds.
+      if (!(llvm::isa<moore::QueueType>(value.getType()) &&
+            cast<moore::QueueType>(value.getType()).getElementType() ==
+                elementType)) {
+        value = context.materializeConversion(queueType, value, false,
+                                              value.getLoc());
+      }
+
       operands.push_back(value);
     }
 
