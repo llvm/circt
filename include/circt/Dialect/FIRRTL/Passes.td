@@ -906,6 +906,20 @@ def CheckLayers : Pass<"firrtl-check-layers", "firrtl::CircuitOp"> {
   }];
 }
 
+def PopulateInstanceChoiceSymbols : Pass<"firrtl-populate-instance-choice-symbols",
+                                         "firrtl::CircuitOp"> {
+  let summary = "Populate instance macros for instance choices";
+  let description = [{
+    This pass populates globally unique instance macros for all instance choice
+    operations. These macros will be used as macro names when lowering to
+    SystemVerilog.
+
+    The instance macro can be used as a "real" instance verilog name for the
+    given choice.
+  }];
+  let dependentDialects = ["sv::SVDialect"];
+}
+
 def InferDomains : Pass<"firrtl-infer-domains", "firrtl::CircuitOp"> {
   let summary = "Infer and type check all firrtl domains";
   let description = [{
