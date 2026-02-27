@@ -548,3 +548,68 @@ firrtl.circuit "ZeroWidthPort" {
     // CHECK-NEXT: firrtl.propassign %A_out, %A_object :
   }
 }
+
+// -----
+
+// Test that domain create operations are properly lowered to object
+// instantiations.
+firrtl.circuit "DomainCreate" {
+  // CHECK-LABEL: firrtl.class @ClockDomain(
+  // CHECK-LABEL: firrtl.class @ClockDomain_out(
+  firrtl.domain @ClockDomain
+  // CHECK-LABEL: firrtl.module @DomainCreate(
+  // CHECK-SAME:    out %A_out: !firrtl.class<@ClockDomain_out(
+  firrtl.module @DomainCreate(
+    out %A: !firrtl.domain of @ClockDomain
+  ) {
+    // CHECK:      %A_object = firrtl.object @ClockDomain_out
+    // CHECK-NEXT: %[[domainInfo_in:.+]] = firrtl.object.subfield %A_object[domainInfo_in]
+    // CHECK:      %[[associations_in:.+]] = firrtl.object.subfield %A_object[associations_in]
+    // CHECK-NEXT: %[[list:.+]] = firrtl.list.create :
+    // CHECK-NEXT: firrtl.propassign %[[associations_in]], %[[list]]
+    // CHECK-NEXT: firrtl.propassign %A_out, %A_object :
+    // CHECK-NEXT: %my_domain = firrtl.object @ClockDomain()
+    // CHECK-NEXT: firrtl.propassign %[[domainInfo_in]], %my_domain
+    %my_domain = firrtl.domain.create : !firrtl.domain of @ClockDomain
+    firrtl.domain.define %A, %my_domain
+  }
+}
+
+// -----
+
+// Test that dead domain create operations are erased.
+firrtl.circuit "DeadDomainCreate" {
+  firrtl.domain @ClockDomain
+  // CHECK-LABEL: firrtl.module @DeadDomainCreate() {
+  // CHECK-NEXT:  }
+  firrtl.module @DeadDomainCreate() {
+    %my_domain = firrtl.domain.create : !firrtl.domain of @ClockDomain
+  }
+}
+
+// -----
+
+// Test domain create with a domain that has fields.
+firrtl.circuit "DomainCreateWithFields" {
+  // CHECK-LABEL: firrtl.class @ClockDomain(
+  // CHECK-SAME:    in %name_in: !firrtl.string
+  // CHECK-SAME:    out %name_out: !firrtl.string
+  // CHECK-SAME:    in %period_in: !firrtl.integer
+  // CHECK-SAME:    out %period_out: !firrtl.integer
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"name", !firrtl.string>, #firrtl.domain.field<"period", !firrtl.integer>]
+  // CHECK-LABEL: firrtl.module @DomainCreateWithFields(
+  firrtl.module @DomainCreateWithFields(
+    out %A: !firrtl.domain of @ClockDomain
+  ) {
+    // CHECK:      %A_object = firrtl.object @ClockDomain_out
+    // CHECK:      %my_domain = firrtl.object @ClockDomain(
+    // CHECK-NEXT: %[[name_in:.+]] = firrtl.object.subfield %my_domain[name_in]
+    // CHECK-NEXT: %[[unknown_name:.+]] = firrtl.unknown : !firrtl.string
+    // CHECK-NEXT: firrtl.propassign %[[name_in]], %[[unknown_name]]
+    // CHECK-NEXT: %[[period_in:.+]] = firrtl.object.subfield %my_domain[period_in]
+    // CHECK-NEXT: %[[unknown_period:.+]] = firrtl.unknown : !firrtl.integer
+    // CHECK-NEXT: firrtl.propassign %[[period_in]], %[[unknown_period]]
+    %my_domain = firrtl.domain.create : !firrtl.domain of @ClockDomain
+    firrtl.domain.define %A, %my_domain
+  }
+}
