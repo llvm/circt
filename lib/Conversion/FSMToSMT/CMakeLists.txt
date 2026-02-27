@@ -10,7 +10,9 @@ add_circt_conversion_library(CIRCTFSMToSMT
     LINK_LIBS PUBLIC 
     MLIRSMT
     CIRCTFSM
-    CIRCTEmit
+    CIRCTVerif
+    CIRCTHW
+    CIRCTComb
     CIRCTSupport
     MLIRTransforms
 )
