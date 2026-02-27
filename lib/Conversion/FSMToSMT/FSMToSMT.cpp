@@ -176,7 +176,7 @@ LogicalResult MachineOpConverter::dispatch() {
     if (!stateOp.getTransitions().empty())
       for (auto t :
            stateOp.getTransitions().front().getOps<fsm::TransitionOp>()) {
-        if (t.hasGuard()) {
+        if (t.hasGuard())
           for (auto &op : t.getGuard().front().getOperations())
             if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect>(
                     op.getDialect()) &&
@@ -184,8 +184,7 @@ LogicalResult MachineOpConverter::dispatch() {
               return op.emitError("Only fsm, comb, hw, and verif.assert "
                                   "operations are allowed in the guard "
                                   "region of a transition.");
-        }
-        if (t.hasAction()) {
+        if (t.hasAction())
           for (auto &op : t.getAction().front().getOperations())
             if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect>(
                     op.getDialect()) &&
@@ -193,7 +192,6 @@ LogicalResult MachineOpConverter::dispatch() {
               return op.emitError("Only fsm, comb, hw, and verif.assert "
                                   "operations are allowed in the action "
                                   "region of a transition.");
-        }
       }
   }
 
