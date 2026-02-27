@@ -13,7 +13,7 @@ fsm.machine @comb_out(%arg0: i8) -> (i8) attributes {initialState = "S0"} {
 
 // -----
 
-// expected-error @below {{Operation hw.constant is declared outside of any fsm.machine op}}
+// expected-error @below {{Only operations defined within fsm.machine operations are currently supported for use within them}}
 %c0_i8 = hw.constant 0 : i8
 fsm.machine @comb_op(%arg0: i8) -> (i8) attributes {initialState = "S0"} {
   %add = comb.add %arg0, %c0_i8 : i8
