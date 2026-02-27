@@ -3283,6 +3283,35 @@ function automatic void ConcatSformatf(string testStr, string otherString, ref s
    $sformat(logicVector, "%s %s", testStr, otherString);
 endfunction
 
+// CHECK-LABEL: func.func private @Swrite(
+// CHECK-SAME: [[STR1:%[^,]+]]: !moore.string
+// CHECK-SAME: [[STR2:%[^,]+]]: !moore.string
+// CHECK-SAME: [[STR3:%[^,]+]]: !moore.ref<string>
+function automatic void Swrite(string testStr, string otherString, ref string outputString);
+   // CHECK: [[LV:%.+]] = moore.variable : <l64>
+   logic [63:0] logicVector;
+
+   // $swrite to a string output
+   // CHECK: [[FMTSTR1:%.+]] = moore.fmt.string [[STR1]]
+   // CHECK-NEXT: [[SPC:%.+]] = moore.fmt.literal " "
+   // CHECK-NEXT: [[FMTSTR2:%.+]] = moore.fmt.string [[STR2]]
+   // CHECK-NEXT: [[CONCAT:%.+]] = moore.fmt.concat ([[FMTSTR1]], [[SPC]], [[FMTSTR2]])
+   // CHECK-NEXT: [[STROUT:%.+]] = moore.fstring_to_string [[CONCAT]]
+   // CHECK-NEXT: moore.blocking_assign [[STR3]], [[STROUT]] : string
+   $swrite(outputString, "%s %s", testStr, otherString);
+
+   // $swrite to a logic vector (with conversion)
+   // CHECK: [[FMTSTR3:%.+]] = moore.fmt.string [[STR1]]
+   // CHECK-NEXT: [[SPC2:%.+]] = moore.fmt.literal " "
+   // CHECK-NEXT: [[FMTSTR4:%.+]] = moore.fmt.string [[STR2]]
+   // CHECK-NEXT: [[CONCAT2:%.+]] = moore.fmt.concat ([[FMTSTR3]], [[SPC2]], [[FMTSTR4]])
+   // CHECK-NEXT: [[STROUT2:%.+]] = moore.fstring_to_string [[CONCAT2]]
+   // CHECK-NEXT: [[CONV0:%.+]] = moore.string_to_int [[STROUT2]] : i64
+   // CHECK-NEXT: [[CONV:%.+]] = moore.int_to_logic [[CONV0]] : i64
+   // CHECK-NEXT: moore.blocking_assign [[LV]], [[CONV]] : l64
+   $swrite(logicVector, "%s %s", testStr, otherString);
+endfunction
+
 // CHECK-LABEL: moore.module @ContinuousAssignment(
 module ContinuousAssignment;
   // CHECK-NEXT: [[A:%.+]] = moore.variable
