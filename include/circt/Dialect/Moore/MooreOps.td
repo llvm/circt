@@ -1766,6 +1766,23 @@ def DynExtractRefOp : MooreOp<"dyn_extract_ref", [Pure]> {
 // Queue Manipulation
 //===----------------------------------------------------------------------===//
 
+def QueueConvertBoundsOp : MooreOp<"queue.conv_bounds", [Pure]> {
+  let description = [{
+    Converts between two queues with different bounds, but the same element
+    type.
+    
+    If $result has a smaller bound than the size of $input, elements at the end
+    of the queue will be discarded to ensure it fits within the space provided.
+  }];
+
+  let arguments = (ins QueueType:$input);
+  let results = (outs QueueType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
 def DynQueueExtractOp : MooreOp<"dyn_queue_extract", [Pure,
   AllTypesMatch<["lowerIdx", "upperIdx"]>]> {
   let description = [{

@@ -1768,6 +1768,14 @@ LogicalResult DynQueueExtractOp::verify() {
   return success();
 }
 
+LogicalResult QueueConvertBoundsOp::verify() {
+  if (cast<QueueType>(getInput().getType()).getElementType() !=
+      cast<QueueType>(getResult().getType()).getElementType()) {
+    return failure();
+  }
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
