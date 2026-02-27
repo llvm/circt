@@ -143,23 +143,23 @@ void SimplifyRefsPass::runOnOperation() {
   });
 
   target.addLegalDialect<MooreDialect>();
-  RewritePatternSet patterns(&context);
-  patterns.add<ConcatRefLowering<ContinuousAssignOp>,
-               ConcatRefLowering<BlockingAssignOp>,
-               ConcatRefLowering<NonBlockingAssignOp>>(&context);
+  RewritePatternSet concatRefPatterns(&context);
+  concatRefPatterns.add<ConcatRefLowering<ContinuousAssignOp>,
+                        ConcatRefLowering<BlockingAssignOp>,
+                        ConcatRefLowering<NonBlockingAssignOp>>(&context);
 
   if (failed(applyPartialConversion(getOperation(), target,
-                                    std::move(patterns)))) {
+                                    std::move(concatRefPatterns)))) {
     signalPassFailure();
     return;
   }
 
   // Once we have removed ConcatRefOps, attempt to rewrite any queue element
   // references to queue.set
-  patterns.clear();
+  RewritePatternSet queueRefPatterns(&context);
   target.addIllegalOp<DynQueueRefElementOp>();
-  patterns.add<QueueRefLowering>(&context);
-  if (failed(
-          applyPartialConversion(getOperation(), target, std::move(patterns))))
+  queueRefPatterns.add<QueueRefLowering>(&context);
+  if (failed(applyPartialConversion(getOperation(), target,
+                                    std::move(queueRefPatterns))))
     signalPassFailure();
 }
