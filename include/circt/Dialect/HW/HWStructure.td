@@ -26,6 +26,22 @@ include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
+def ContainerOp : HWOp<"container",
+      [IsolatedFromAbove, SymbolTable, SingleBlock, NoTerminator,
+       NoRegionArguments, InnerRefNamespace]> {
+  let summary = "HW Container (of modules and other things)";
+  let description = [{
+    A HW container is a top-level container of HW operations (and anything
+    else).  This is roughly analogous to `builtin.module`, except that it also
+    implements an `InnerRefNamespace` which allows for verification of inner
+    refs.
+  }];
+  let arguments = (ins OptionalAttr<SymbolNameAttr>:$sym_name,
+                       OptionalAttr<StrAttr>:$sym_visibility);
+  let regions = (region SizedRegion<1>:$bodyRegion);
+  let assemblyFormat = "($sym_name^)? attr-dict-with-keyword $bodyRegion";
+}
+
 /// Base class factoring out some of the additional class declarations common to
 /// the module-like operations.
 class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
@@ -34,7 +50,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
       DeclareOpInterfaceMethods<HWModuleLike>,
       DeclareOpInterfaceMethods<HWMutableModuleLike>,
       Symbol, InnerSymbolTable,
-      OpAsmOpInterface, HasParent<"mlir::ModuleOp">]> {
+      OpAsmOpInterface, ParentOneOf<["mlir::ModuleOp", "hw::ContainerOp"]>]> {
   /// Additional class declarations inside the module op.
   code extraModuleClassDeclaration = ?;
 
@@ -304,7 +320,7 @@ def HWModuleExternOp : HWModuleOpBase<"module.extern"> {
 }
 
 def HWGeneratorSchemaOp : HWOp<"generator.schema",
-      [Symbol, HasParent<"mlir::ModuleOp">]> {
+      [Symbol, ParentOneOf<["mlir::ModuleOp", "hw::ContainerOp"]>]> {
   let summary = "HW Generator Schema declaration";
   let description = [{
     The "hw.generator.schema" operation declares a kind of generated module by
