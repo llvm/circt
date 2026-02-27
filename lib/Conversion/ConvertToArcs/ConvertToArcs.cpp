@@ -32,6 +32,8 @@ using mlir::ConversionConfig;
 static bool isArcBreakingOp(Operation *op) {
   if (isa<TapOp>(op))
     return false;
+  if (auto probe = dyn_cast<llhd::ProbeOp>(op))
+    return isa<BlockArgument>(probe.getSignal());
   return op->hasTrait<OpTrait::ConstantLike>() ||
          isa<hw::InstanceOp, seq::CompRegOp, MemoryOp, MemoryReadPortOp,
              ClockedOpInterface, seq::InitialOp, seq::ClockGateOp,
@@ -583,6 +585,11 @@ void ConvertToArcsPass::runOnOperation() {
   // Setup the legal ops. (Sort alphabetically.)
   ConversionTarget target(getContext());
   target.addIllegalDialect<llhd::LLHDDialect>();
+  target.addLegalOp<llhd::ConstantTimeOp>();
+  target.addDynamicallyLegalOp<llhd::ProbeOp>(
+      [](llhd::ProbeOp op) { return isa<BlockArgument>(op.getSignal()); });
+  target.addDynamicallyLegalOp<llhd::DriveOp>(
+      [](llhd::DriveOp op) { return isa<BlockArgument>(op.getSignal()); });
   target.markUnknownOpDynamicallyLegal(
       [](Operation *op) { return !isa<llhd::LLHDDialect>(op->getDialect()); });
 
