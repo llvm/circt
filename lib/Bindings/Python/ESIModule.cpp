@@ -106,7 +106,8 @@ void circt::python::populateDialectESISubmodule(nb::module_ &m) {
         "Register a service generator for a given service name.",
         nb::arg("impl_type"), nb::arg("generator"));
 
-  mlir_type_subclass(m, "ChannelType", circtESITypeIsAChannelType)
+  mlir_type_subclass(m, "ChannelType", circtESITypeIsAChannelType,
+                     circtESIChannelTypeGetTypeID)
       .def_classmethod(
           "get",
           [](nb::object cls, MlirType inner, uint32_t signaling = 0,
@@ -126,7 +127,8 @@ void circt::python::populateDialectESISubmodule(nb::module_ &m) {
         return circtESIChannelGetDataDelay(self);
       });
 
-  mlir_type_subclass(m, "AnyType", circtESITypeIsAnAnyType)
+  mlir_type_subclass(m, "AnyType", circtESITypeIsAnAnyType,
+                     circtESIAnyTypeGetTypeID)
       .def_classmethod(
           "get",
           [](nb::object cls, MlirContext ctxt) {
@@ -134,7 +136,8 @@ void circt::python::populateDialectESISubmodule(nb::module_ &m) {
           },
           nb::arg("self"), nb::arg("ctxt") = nullptr);
 
-  mlir_type_subclass(m, "ListType", circtESITypeIsAListType)
+  mlir_type_subclass(m, "ListType", circtESITypeIsAListType,
+                     circtESIListTypeGetTypeID)
       .def_classmethod(
           "get",
           [](nb::object cls, MlirType inner) {
@@ -148,7 +151,8 @@ void circt::python::populateDialectESISubmodule(nb::module_ &m) {
   nb::enum_<ChannelDirection>(m, "ChannelDirection")
       .value("TO", ChannelDirection::to)
       .value("FROM", ChannelDirection::from);
-  mlir_type_subclass(m, "BundleType", circtESITypeIsABundleType)
+  mlir_type_subclass(m, "BundleType", circtESITypeIsABundleType,
+                     circtESIBundleTypeGetTypeID)
       .def_classmethod(
           "get",
           [](nb::object cls, std::vector<nb::tuple> channelTuples,
@@ -158,12 +162,12 @@ void circt::python::populateDialectESISubmodule(nb::module_ &m) {
                   std::string name = nb::cast<std::string>(t[0]);
                   return CirctESIBundleTypeBundleChannel{
                       mlirIdentifierGet(ctxt, mlirStringRefCreate(
-                                                  name.data(), name.length())),
+                                                   name.data(), name.length())),
                       (uint32_t)nb::cast<ChannelDirection>(t[1]),
                       nb::cast<MlirType>(t[2])};
                 }));
             return cls(circtESIBundleTypeGet(ctxt, channels.size(),
-                                             channels.data(), resettable));
+                                              channels.data(), resettable));
           },
           nb::arg("cls"), nb::arg("channels"), nb::arg("resettable"),
           nb::arg("ctxt") = nullptr)
@@ -182,7 +186,8 @@ void circt::python::populateDialectESISubmodule(nb::module_ &m) {
         return channels;
       });
 
-  mlir_type_subclass(m, "WindowType", circtESITypeIsAWindowType)
+  mlir_type_subclass(m, "WindowType", circtESITypeIsAWindowType,
+                     circtESIWindowTypeGetTypeID)
       .def_classmethod(
           "get",
           [](nb::object cls, MlirAttribute name, MlirType into,
@@ -216,7 +221,8 @@ void circt::python::populateDialectESISubmodule(nb::module_ &m) {
           })
       .def("get_lowered_type", &circtESIWindowTypeGetLoweredType);
 
-  mlir_type_subclass(m, "WindowFrameType", circtESITypeIsAWindowFrameType)
+  mlir_type_subclass(m, "WindowFrameType", circtESITypeIsAWindowFrameType,
+                     circtESIWindowFrameTypeGetTypeID)
       .def_classmethod(
           "get",
           [](nb::object cls, MlirAttribute name, std::vector<MlirType> members,
@@ -241,7 +247,8 @@ void circt::python::populateDialectESISubmodule(nb::module_ &m) {
         return members;
       });
 
-  mlir_type_subclass(m, "WindowFieldType", circtESITypeIsAWindowFieldType)
+  mlir_type_subclass(m, "WindowFieldType", circtESITypeIsAWindowFieldType,
+                     circtESIWindowFieldTypeGetTypeID)
       .def_classmethod(
           "get",
           [](nb::object cls, MlirAttribute fieldName, uint64_t numItems,
