@@ -212,9 +212,8 @@ LogicalResult MachineOpConverter::dispatch() {
   // Collect output types
   if (!machineOp.getResultTypes().empty()) {
     for (auto t : machineOp.getResultTypes()) {
-      if (!isa<IntegerType>(t)) {
+      if (!isa<IntegerType>(t))
         return solver.emitError("Only integer outputs are supported in FSMs.");
-      }
       quantifiedTypes.push_back(
           b.getType<smt::BitVectorType>(t.getIntOrFloatBitWidth()));
     }
