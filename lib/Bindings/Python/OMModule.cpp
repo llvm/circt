@@ -31,13 +31,21 @@ struct Object;
 struct BasePath;
 struct Path;
 
+/// These are the Python types that are represented by the different primitive
+/// OMEvaluatorValues as Attributes.
 using PythonPrimitive = std::variant<nb::int_, nb::float_, nb::str, nb::bool_,
                                      nb::tuple, nb::list, nb::dict>;
 
+/// None is used to by nanobind when default initializing a PythonValue. The
+/// order of types in the variant matters here, and we want nanobind to try
+/// casting to the Python classes defined in this file first, before
+/// MlirAttribute and the upstream MLIR type casters.  If the MlirAttribute
+/// is tried first, then we can hit an assert inside the MLIR codebase.
 struct None {};
 using PythonValue =
     std::variant<None, Object, List, BasePath, Path, PythonPrimitive>;
 
+/// Map an opaque OMEvaluatorValue into a python value.
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result);
 OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result,
                                                MlirContext ctx);
@@ -45,36 +53,48 @@ static PythonPrimitive omPrimitiveToPythonValue(MlirAttribute attr);
 static MlirAttribute omPythonValueToPrimitive(PythonPrimitive value,
                                               MlirContext ctx);
 
+/// Provides a List class by simply wrapping the OMObject CAPI.
 struct List {
+  // Instantiate a List with a reference to the underlying OMEvaluatorValue.
   List(OMEvaluatorValue value) : value(value) {}
 
+  /// Return the number of elements.
   intptr_t getNumElements() { return omEvaluatorListGetNumElements(value); }
 
   PythonValue getElement(intptr_t i);
   OMEvaluatorValue getValue() const { return value; }
 
 private:
+  // The underlying CAPI value.
   OMEvaluatorValue value;
 };
 
+/// Provides a BasePath class by simply wrapping the OMObject CAPI.
 struct BasePath {
+  /// Instantiate a BasePath with a reference to the underlying
+  /// OMEvaluatorValue.
   BasePath(OMEvaluatorValue value) : value(value) {}
 
   static BasePath getEmpty(MlirContext context) {
     return BasePath(omEvaluatorBasePathGetEmpty(context));
   }
 
+  /// Return a context from an underlying value.
   MlirContext getContext() const { return omEvaluatorValueGetContext(value); }
 
   OMEvaluatorValue getValue() const { return value; }
 
 private:
+  // The underlying CAPI value.
   OMEvaluatorValue value;
 };
 
+/// Provides a Path class by simply wrapping the OMObject CAPI.
 struct Path {
+  /// Instantiate a Path with a reference to the underlying OMEvaluatorValue.
   Path(OMEvaluatorValue value) : value(value) {}
 
+  /// Return a context from an underlying value.
   MlirContext getContext() const { return omEvaluatorValueGetContext(value); }
 
   OMEvaluatorValue getValue() const { return value; }
@@ -85,36 +105,49 @@ struct Path {
   }
 
 private:
+  // The underlying CAPI value
   OMEvaluatorValue value;
 };
 
+/// Provides an Object class by simply wrapping the OMObject CAPI.
 struct Object {
+  // Instantiate an Object with a reference to the underlying OMObject.
   Object(OMEvaluatorValue value) : value(value) {}
 
+  /// Get the Type from an Object, which will be a ClassType.
   MlirType getType() { return omEvaluatorObjectGetType(value); }
 
+  /// Get the Location from an Object, which will be an MlirLocation.
   MlirLocation getLocation() { return omEvaluatorValueGetLoc(value); }
 
+  // Get the field location info.
   MlirLocation getFieldLoc(const std::string &name) {
+    // Wrap the requested field name in an attribute.
     MlirContext context = mlirTypeGetContext(omEvaluatorObjectGetType(value));
     MlirStringRef cName = mlirStringRefCreateFromCString(name.c_str());
     MlirAttribute nameAttr = mlirStringAttrGet(context, cName);
 
+    // Get the field's ObjectValue via the CAPI.
     OMEvaluatorValue result = omEvaluatorObjectGetField(value, nameAttr);
 
     return omEvaluatorValueGetLoc(result);
   }
 
+  // Get a field from the Object, using nanobind's support for variant to return
+  // a Python object that is either an Object or Attribute.
   PythonValue getField(const std::string &name) {
+    // Wrap the requested field name in an attribute.
     MlirContext context = mlirTypeGetContext(omEvaluatorObjectGetType(value));
     MlirStringRef cName = mlirStringRefCreateFromCString(name.c_str());
     MlirAttribute nameAttr = mlirStringAttrGet(context, cName);
 
+    // Get the field's ObjectValue via the CAPI.
     OMEvaluatorValue result = omEvaluatorObjectGetField(value, nameAttr);
 
     return omEvaluatorValueToPythonValue(result);
   }
 
+  // Get a list with the names of all the fields in the Object.
   std::vector<std::string> getFieldNames() {
     MlirAttribute fieldNames = omEvaluatorObjectGetFieldNames(value);
     intptr_t numFieldNames = mlirArrayAttrGetNumElements(fieldNames);
@@ -129,19 +162,25 @@ struct Object {
     return pyFieldNames;
   }
 
+  // Get the hash of the object
   unsigned getHash() { return omEvaluatorObjectGetHash(value); }
 
+  // Check the equality of the underlying values.
   bool eq(Object &other) { return omEvaluatorObjectIsEq(value, other.value); }
 
   OMEvaluatorValue getValue() const { return value; }
 
 private:
+  // The underlying CAPI OMObject.
   OMEvaluatorValue value;
 };
 
+/// Provides an Evaluator class by simply wrapping the OMEvaluator CAPI.
 struct Evaluator {
+  // Instantiate an Evaluator with a reference to the underlying OMEvaluator.
   Evaluator(MlirModule mod) : evaluator(omEvaluatorNew(mod)) {}
 
+  // Instantiate an Object.
   Object instantiate(MlirAttribute className,
                      std::vector<PythonValue> actualParams) {
     std::vector<OMEvaluatorValue> values;
@@ -149,19 +188,26 @@ struct Evaluator {
       values.push_back(pythonValueToOMEvaluatorValue(
           param, mlirModuleGetContext(getModule())));
 
+    // Instantiate the Object via the CAPI.
     OMEvaluatorValue result = omEvaluatorInstantiate(
         evaluator, className, values.size(), values.data());
 
+    // If the Object is null, something failed. Diagnostic handling is
+    // implemented in pure Python, so nothing to do here besides throwing an
+    // error to halt execution.
     if (omEvaluatorObjectIsNull(result))
       throw nb::value_error(
           "unable to instantiate object, see previous error(s)");
 
+    // Return a new Object.
     return Object(result);
   }
 
+  // Get the Module the Evaluator is built from.
   MlirModule getModule() { return omEvaluatorGetModule(evaluator); }
 
 private:
+  // The underlying CAPI OMEvaluator.
   OMEvaluator evaluator;
 };
 
@@ -191,7 +237,8 @@ private:
 PythonValue List::getElement(intptr_t i) {
   return omEvaluatorValueToPythonValue(omEvaluatorListGetElement(value, i));
 }
-
+// Convert a generic MLIR Attribute to a PythonValue. This is basically a C++
+// fast path of the parts of attribute_to_var that we use in the OM dialect.
 static PythonPrimitive omPrimitiveToPythonValue(MlirAttribute attr) {
   if (omAttrIsAIntegerAttr(attr)) {
     auto strRef = omIntegerAttrToString(attr);
@@ -207,6 +254,7 @@ static PythonPrimitive omPrimitiveToPythonValue(MlirAttribute attr) {
     return nb::str(strRef.data, strRef.length);
   }
 
+  // BoolAttr's are IntegerAttr's, check this first.
   if (mlirAttributeIsABool(attr)) {
     return nb::bool_(mlirBoolAttrGetValue(attr));
   }
@@ -241,6 +289,9 @@ static PythonPrimitive omPrimitiveToPythonValue(MlirAttribute attr) {
   throw nb::type_error("Unexpected OM primitive attribute");
 }
 
+// Convert a primitive PythonValue to a generic MLIR Attribute. This is
+// basically a C++ fast path of the parts of var_to_attribute that we use in the
+// OM dialect.
 static MlirAttribute omPythonValueToPrimitive(PythonPrimitive value,
                                               MlirContext ctx) {
   if (auto *intValue = std::get_if<nb::int_>(&value)) {
@@ -265,6 +316,8 @@ static MlirAttribute omPythonValueToPrimitive(PythonPrimitive value,
     return mlirBoolAttrGet(ctx, nb::cast<bool>(*attr));
   }
 
+  // For a python list try constructing OM list attribute. The element
+  // type must be uniform.
   if (auto *attr = std::get_if<nb::list>(&value)) {
     if (attr->size() == 0)
       throw nb::type_error("Empty list is prohibited now");
@@ -289,18 +342,25 @@ static MlirAttribute omPythonValueToPrimitive(PythonPrimitive value,
 }
 
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
+  // If the result is null, something failed. Diagnostic handling is
+  // implemented in pure Python, so nothing to do here besides throwing an
+  // error to halt execution.
   if (omEvaluatorValueIsNull(result))
     throw nb::value_error("unable to get field, see previous error(s)");
 
+  // If the field was an Object, return a new Object.
   if (omEvaluatorValueIsAObject(result))
     return Object(result);
 
+  // If the field was a list, return a new List.
   if (omEvaluatorValueIsAList(result))
     return List(result);
 
+  // If the field was a base path, return a new BasePath.
   if (omEvaluatorValueIsABasePath(result))
     return BasePath(result);
 
+  // If the field was a path, return a new Path.
   if (omEvaluatorValueIsAPath(result))
     return Path(result);
 
@@ -308,6 +368,7 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
     return omEvaluatorValueToPythonValue(
         omEvaluatorValueGetReferenceValue(result));
 
+  // If the field was a primitive, return the Attribute.
   assert(omEvaluatorValueIsAPrimitive(result));
   return omPrimitiveToPythonValue(omEvaluatorValueGetPrimitive(result));
 }
@@ -439,6 +500,7 @@ struct PyPathType : PyConcreteType<PyPathType> {
 void circt::python::populateDialectOMSubmodule(nb::module_ &m) {
   m.doc() = "OM dialect Python native extension";
 
+  // Add the Evaluator class definition.
   nb::class_<Evaluator>(m, "Evaluator")
       .def(nb::init<MlirModule>(), nb::arg("module"))
       .def("instantiate", &Evaluator::instantiate, "Instantiate an Object",
@@ -446,20 +508,24 @@ void circt::python::populateDialectOMSubmodule(nb::module_ &m) {
       .def_prop_ro("module", &Evaluator::getModule,
                    "The Module the Evaluator is built from");
 
+  // Add the List class definition.
   nb::class_<List>(m, "List")
       .def(nb::init<List>(), nb::arg("list"))
       .def("__getitem__", &List::getElement)
       .def("__len__", &List::getNumElements);
 
+  // Add the BasePath class definition.
   nb::class_<BasePath>(m, "BasePath")
       .def(nb::init<BasePath>(), nb::arg("basepath"))
       .def_static("get_empty", &BasePath::getEmpty,
                   nb::arg("context") = nb::none());
 
+  // Add the Path class definition.
   nb::class_<Path>(m, "Path")
       .def(nb::init<Path>(), nb::arg("path"))
       .def("__str__", &Path::dunderStr);
 
+  // Add the Object class definition.
   nb::class_<Object>(m, "Object")
       .def(nb::init<Object>(), nb::arg("object"))
       .def("__getattr__", &Object::getField, "Get a field from an Object",

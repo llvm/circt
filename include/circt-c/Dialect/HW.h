@@ -73,6 +73,7 @@ MLIR_CAPI_EXPORTED int64_t hwGetBitWidth(MlirType);
 /// dialects.
 MLIR_CAPI_EXPORTED bool hwTypeIsAValueType(MlirType);
 
+/// If the type is an HW int.
 MLIR_CAPI_EXPORTED bool hwTypeIsAIntType(MlirType);
 MLIR_CAPI_EXPORTED MlirTypeID hwIntTypeGetTypeID(void);
 
