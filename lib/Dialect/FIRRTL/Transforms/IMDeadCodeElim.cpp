@@ -92,11 +92,9 @@ struct IMDeadCodeElimPass
   }
 
   void markDeclaration(Operation *op);
-  void markInstanceLikeOp(FInstanceLike instanceOp);
-  void markObjectOp(ObjectOp objectOp);
+  void markFInstanceLikeOp(FInstanceLike instanceLike);
   void markUnknownSideEffectOp(Operation *op);
-  void visitInstanceLikeOp(FInstanceLike instance);
-  void visitInstanceChoiceOp(InstanceChoiceOp instanceChoice);
+  void visitFInstanceLikeOp(FInstanceLike instanceLike);
   void visitHierPathOp(hw::HierPathOp hierpath);
   void visitModuleOp(FModuleOp module);
 
@@ -134,7 +132,7 @@ private:
 };
 } // namespace
 
-void IMDeadCodeElimPass::visitInstanceLikeOp(FInstanceLike instanceLike) {
+void IMDeadCodeElimPass::visitFInstanceLikeOp(FInstanceLike instanceLike) {
   auto instance = dyn_cast<InstanceOp>(*instanceLike);
 
   // This is already marked as alive in the initialization.
@@ -164,21 +162,11 @@ void IMDeadCodeElimPass::visitInstanceLikeOp(FInstanceLike instanceLike) {
   }
 }
 
-void IMDeadCodeElimPass::visitInstanceChoiceOp(
-    InstanceChoiceOp instanceChoice) {
-  // NOTE: instance choice is marked conservatively alive in the initialization.
-  //       To support proper liveness propagation, remove conservative
-  //       marking from the initialization and implement proper liveness
-  //       propagation here.
-}
-
 void IMDeadCodeElimPass::visitModuleOp(FModuleOp module) {
   // If the module needs to be alive, so are its instances and instance choices.
   for (auto *use : instanceGraph->lookup(module)->uses()) {
-    if (auto instance = use->getInstance<InstanceOp>())
+    if (auto instance = use->getInstance<FInstanceLike>())
       markAlive(instance);
-    else if (auto instanceChoice = use->getInstance<InstanceChoiceOp>())
-      markAlive(instanceChoice);
   }
 }
 
@@ -222,7 +210,7 @@ void IMDeadCodeElimPass::visitUser(Operation *op) {
     return visitSubelement(op);
 }
 
-void IMDeadCodeElimPass::markInstanceLikeOp(FInstanceLike instanceLike) {
+void IMDeadCodeElimPass::markFInstanceLikeOp(FInstanceLike instanceLike) {
   if (auto instance = dyn_cast<InstanceOp>(*instanceLike)) {
     // Get the module being referenced.
     Operation *op = instance.getReferencedModule(*instanceGraph);
@@ -293,7 +281,7 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
     if (isDeclaration(&op))
       markDeclaration(&op);
     else if (auto instance = dyn_cast<FInstanceLike>(op))
-      markInstanceLikeOp(instance);
+      markFInstanceLikeOp(instance);
     else if (isa<FConnectLike>(op))
       // Skip connect op.
       continue;
@@ -338,6 +326,7 @@ void IMDeadCodeElimPass::forwardConstantOutputPort(FModuleOp module) {
   // Rewrite all uses.
   for (auto *use : instanceGraphNode->uses()) {
     auto instance = use->getInstance<InstanceOp>();
+    // Only constprop for instance ops.
     if (!instance)
       continue;
     ImplicitLocOpBuilder builder(instance.getLoc(), instance);
@@ -481,7 +470,7 @@ void IMDeadCodeElimPass::runOnOperation() {
     if (auto *value = std::get_if<Value>(&v))
       visitValue(*value);
     else if (auto *instance = std::get_if<FInstanceLike>(&v))
-      visitInstanceLikeOp(*instance);
+      visitFInstanceLikeOp(*instance);
     else if (auto *hierpath = std::get_if<hw::HierPathOp>(&v))
       visitHierPathOp(*hierpath);
     else if (auto *module = std::get_if<FModuleOp>(&v))
@@ -539,6 +528,7 @@ void IMDeadCodeElimPass::visitValue(Value value) {
       // output ports.
       if (portDirection == Direction::In) {
         for (auto *instRec : instanceGraph->lookup(module)->uses()) {
+          // If this is not an instance, it must be marked overdefined already.
           if (auto instance = instRec->getInstance<InstanceOp>()) {
             if (liveElements.contains(instance))
               markAlive(instance.getResult(blockArg.getArgNumber()));
@@ -694,10 +684,9 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
 
   // First, delete dead instances.
   for (auto *use : llvm::make_early_inc_range(instanceGraphNode->uses())) {
-    auto instance = use->getInstance<InstanceOp>();
-    if (!instance)
-      continue;
-    if (!liveElements.count(instance)) {
+    auto instanceLike = use->getInstance<FInstanceLike>();
+    if (instanceLike && !liveElements.count(instanceLike)) {
+      auto instance = cast<InstanceOp>(instanceLike);
       // Replace old instance results with dummy wires.
       ImplicitLocOpBuilder builder(instance.getLoc(), instance);
       for (auto index : llvm::seq(0u, instance.getNumResults()))
@@ -788,8 +777,11 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
   // Rewrite all uses.
   for (auto *use : llvm::make_early_inc_range(instanceGraphNode->uses())) {
     auto instance = use->getInstance<InstanceOp>();
-    if (!instance)
+    if (!instance) {
+      assert(!use->getInstance<FInstanceLike>() &&
+             "if this is not an instance, it must be marked overdefined");
       continue;
+    }
 
     ImplicitLocOpBuilder builder(instance.getLoc(), instance);
     // Replace old instance results with dummy wires.
