@@ -152,6 +152,40 @@ LogicalResult MachineOpConverter::dispatch() {
 
   TypeRange typeRange;
   ValueRange valueRange;
+  
+  // Do not allow any operations other than constants outside of FSM regions
+  for (auto &op : machineOp.front().getOperations()) {
+    if (!isa<fsm::FSMDialect>(op.getDialect()) && !isa<hw::ConstantOp>(op)) {
+      return op.emitError(
+          "Only fsm operations and hw.constants are allowed in the "
+          "top level of the fsm.machine op.");
+    }
+  }
+
+  // Do not allow any operations other than constants, comb, and FSM operations inside FSM output, guard and action regions
+  for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
+    if (!stateOp.getOutput().empty()) 
+      for (auto &op : stateOp.getOutput().front().getOperations())
+        if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect>(op.getDialect()))
+          return op.emitError(
+              "Only fsm, comb and hw operations are allowed in the output region of a state.");
+    if (!stateOp.getTransitions().empty())
+      for (auto t : stateOp.getTransitions().front().getOps<fsm::TransitionOp>()) {
+        if (t.hasGuard()) {
+          for (auto &op : t.getGuard().front().getOperations())
+            if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect>(op.getDialect()))
+              return op.emitError(
+                  "Only fsm, comb and hw operations are allowed in the guard region of a transition.");
+          
+        }
+        if (t.hasAction()) {
+          for (auto &op : t.getAction().front().getOperations())
+            if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect>(op.getDialect()))
+              return op.emitError(
+                  "Only fsm, comb and hw operations are allowed in the action region of a transition.");
+        }
+      }
+  }
 
   auto solver = smt::SolverOp::create(b, loc, typeRange, valueRange);
   solver.getBodyRegion().emplaceBlock();
@@ -198,16 +232,7 @@ LogicalResult MachineOpConverter::dispatch() {
   IRMapping constMapper;
   for (auto constOp : machineOp.front().getOps<hw::ConstantOp>())
     b.clone(*constOp, constMapper);
-
-  // Do not allow any operations other than constants outside of FSM regions
-  for (auto &op : machineOp.front().getOperations()) {
-    if (!isa<fsm::FSMDialect>(op.getDialect()) && !isa<hw::ConstantOp>(op)) {
-      return op.emitError(
-          "Only fsm operations and hw.constants are allowed in the "
-          "top level of the fsm.machine op.");
-    }
-  }
-
+  
   // Add a time variable if flag is enabled
   if (cfg.withTime)
     quantifiedTypes.push_back(b.getType<smt::BitVectorType>(cfg.timeWidth));
