@@ -4074,7 +4074,7 @@ endmodule
 // CHECK:           [[ARR:%.+]] = moore.variable : <uarray<11 x i32>>
 // CHECK:           moore.procedure initial {
 // CHECK:             [[QR:%.+]] = moore.read [[ARR]] : <uarray<11 x i32>>
-// CHECK:             [[QARR:%.+]] = moore.queue_of_up_array [[QR]] : <11 x i32> -> <i32, 5>
+// CHECK:             [[QARR:%.+]] = moore.queue.from_up_array [[QR]] : <11 x i32> -> <i32, 5>
 // CHECK:             moore.blocking_assign [[Q1]], [[QARR]] : queue<i32, 5>
 // CHECK:             moore.return
 // CHECK:           }
@@ -4099,7 +4099,7 @@ endmodule
 // CHECK:             [[TMP1R:%.+]] = moore.read [[TMP1]] : <queue<i32, 0>>
 // CHECK:             [[Q1R:%.+]] = moore.read [[Q1]] : <queue<i32, 5>>
 // CHECK:             [[ARRR:%.+]] = moore.read [[ARR]] : <uarray<11 x i32>>
-// CHECK:             [[TMP2:%.+]] = moore.queue_of_up_array [[ARRR]] : <11 x i32> -> <i32, 0>
+// CHECK:             [[TMP2:%.+]] = moore.queue.from_up_array [[ARRR]] : <11 x i32> -> <i32, 0>
 // CHECK:             [[ONE:%.+]] = moore.constant 1 : i32
 // CHECK:             [[TMP3:%.+]] = moore.variable : <queue<i32, 0>>
 // CHECK:             moore.push_back [[ONE]] into [[TMP3]] : <queue<i32, 0>>

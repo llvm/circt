@@ -506,7 +506,7 @@ struct ExprVisitor {
     // QueueConcatOp only takes queues, so other types must be converted to
     // queues.
     // - Unpacked arrays have a conversion to queues via
-    // `QueueOfUnpackedArrayOp`.
+    // `QueueFromUnpackedArrayOp`.
     // - For individual elements, we create a new queue for each contiguous
     // sequence of elements, and add this to the QueueConcatOp.
 
@@ -2668,8 +2668,8 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
         dyn_cast<moore::UnpackedArrayType>(value.getType()).getElementType();
 
     if (queueElType == unpackedArrayElType) {
-      return builder.createOrFold<moore::QueueOfUnpackedArrayOp>(loc, type,
-                                                                 value);
+      return builder.createOrFold<moore::QueueFromUnpackedArrayOp>(loc, type,
+                                                                   value);
     }
   }
 
