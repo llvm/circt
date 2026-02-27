@@ -225,9 +225,8 @@ LogicalResult MachineOpConverter::dispatch() {
   // Collect FSM variables, their types, and initial values
   SmallVector<llvm::APInt> varInitValues;
   for (auto t : machineOp.front().getOps<fsm::VariableOp>()) {
-    if (!isa<IntegerType>(t.getType())) {
+    if (!isa<IntegerType>(t.getType())) 
       return t.emitError("Only integer variables are supported in FSMs.");
-    }
     auto intAttr = dyn_cast<IntegerAttr>(t.getInitValueAttr());
     varInitValues.push_back(intAttr.getValue());
     quantifiedTypes.push_back(
