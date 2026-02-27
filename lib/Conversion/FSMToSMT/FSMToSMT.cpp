@@ -167,27 +167,27 @@ LogicalResult MachineOpConverter::dispatch() {
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
     if (!stateOp.getOutput().empty())
       for (auto &op : stateOp.getOutput().front().getOperations())
-        if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect>(
+        if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect, verif::VerifDialect>(
                 op.getDialect()))
-          return op.emitError("Only fsm, comb and hw operations are allowed in "
+          return op.emitError("Only fsm, comb, verif and hw operations are allowed in "
                               "the output region of a state.");
     if (!stateOp.getTransitions().empty())
       for (auto t :
            stateOp.getTransitions().front().getOps<fsm::TransitionOp>()) {
         if (t.hasGuard()) {
           for (auto &op : t.getGuard().front().getOperations())
-            if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect>(
+            if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect, verif::VerifDialect>(
                     op.getDialect()))
               return op.emitError(
-                  "Only fsm, comb and hw operations are allowed in the guard "
+                  "Only fsm, comb, verif and hw operations are allowed in the guard "
                   "region of a transition.");
         }
         if (t.hasAction()) {
           for (auto &op : t.getAction().front().getOperations())
-            if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect>(
+            if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect, verif::VerifDialect>(
                     op.getDialect()))
               return op.emitError(
-                  "Only fsm, comb and hw operations are allowed in the action "
+                  "Only fsm, comb, verif and hw operations are allowed in the action "
                   "region of a transition.");
         }
       }
