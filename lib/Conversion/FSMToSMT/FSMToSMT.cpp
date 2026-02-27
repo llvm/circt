@@ -154,7 +154,7 @@ LogicalResult MachineOpConverter::dispatch() {
   ValueRange valueRange;
 
   // Do not allow any operations other than constants outside of FSM regions
-  for (auto &op : machineOp.front().getOperations()) 
+  for (auto &op : machineOp.front().getOperations())
     if (!isa<fsm::FSMDialect>(op.getDialect()) && !isa<hw::ConstantOp>(op))
       return op.emitError(
           "Only fsm operations and hw.constants are allowed in the "
@@ -200,7 +200,7 @@ LogicalResult MachineOpConverter::dispatch() {
   // Collect arguments and their types
   for (auto a : machineArgs) {
     fsmArgs.push_back(a);
-    if (!isa<IntegerType>(a.getType())) 
+    if (!isa<IntegerType>(a.getType()))
       return solver.emitError("Only integer arguments are supported in FSMs.");
     quantifiedTypes.push_back(
         b.getType<smt::BitVectorType>(a.getType().getIntOrFloatBitWidth()));
@@ -222,7 +222,7 @@ LogicalResult MachineOpConverter::dispatch() {
   // Collect FSM variables, their types, and initial values
   SmallVector<llvm::APInt> varInitValues;
   for (auto v : machineOp.front().getOps<fsm::VariableOp>()) {
-    if (!isa<IntegerType>(v.getType())) 
+    if (!isa<IntegerType>(v.getType()))
       return v.emitError("Only integer variables are supported in FSMs.");
     auto intAttr = dyn_cast<IntegerAttr>(v.getInitValueAttr());
     varInitValues.push_back(intAttr.getValue());
@@ -283,7 +283,7 @@ LogicalResult MachineOpConverter::dispatch() {
     std::string stateName = stateOp.getName().str();
     auto fromState = insertStates(states, stateName);
     for (auto tr :
-          stateOp.getTransitions().front().getOps<fsm::TransitionOp>()) {
+         stateOp.getTransitions().front().getOps<fsm::TransitionOp>()) {
       auto t = getTransitionRegions(tr, fromState, states, loc);
       if (numOut > 0)
         t.output = getOutputRegion(outputOfStateId, t.to);
@@ -329,12 +329,12 @@ LogicalResult MachineOpConverter::dispatch() {
           // of unrealized conversion casts and replacing constants with their
           // new clones
           for (auto &op : initOutputReg->front()) {
-             if (isa<verif::AssertOp>(op)) {
+            if (isa<verif::AssertOp>(op)) {
               // Store the assertion operations, with a pointer to the region
               assertions.push_back({0, initOutputReg});
             } else {
               auto *newOp = b.clone(op, mapping);
-              
+
               // Retrieve all the operands of the output operation
               if (isa<fsm::OutputOp>(newOp)) {
                 for (auto out : newOp->getOperands())
@@ -441,7 +441,7 @@ LogicalResult MachineOpConverter::dispatch() {
           if (isa<verif::AssertOp>(op)) {
             // Ignore assertions in action regions
             op.emitWarning("Assertions in action regions are ignored.");
-          } else { 
+          } else {
             auto *newOp = b.clone(op, mapping);
             // Retrieve the updated values and their operands
             if (isa<fsm::UpdateOp>(newOp)) {
@@ -492,7 +492,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
             guardVal = bv1toSmtBool(b, loc, castVal.getResult(0));
             newOp->erase();
-          } 
+          }
         }
       }
       return guardVal;
@@ -519,7 +519,7 @@ LogicalResult MachineOpConverter::dispatch() {
         } else {
           auto *newOp = b.clone(op, mapping);
           // Retrieve all the operands of the output operation
-          
+
           if (isa<fsm::OutputOp>(newOp)) {
             for (auto [id, operand] : llvm::enumerate(newOp->getOperands())) {
 
@@ -687,14 +687,13 @@ void FSMToSMTPass::runOnOperation() {
   for (auto &op : module.getOps())
     if (!isa<fsm::MachineOp>(op))
       // check if the operation is used inside any MachineOp
-      for (auto machine : module.getOps<MachineOp>())
-        for (auto &use : op.getUses())
-          if (machine->isAncestor(use.getOwner())) {
-            op.emitError("Operation " + op.getName().getStringRef() +
-                         " is declared outside of any fsm.machine op");
-            signalPassFailure();
-            return;
-          }
+      for (auto &use : op.getUses())
+        if (use.getOwner()->getParentOfType<MachineOp>()) {
+          op.emitError("Only operations defined within fsm.machine operations "
+                       "are currently supported for use within them");
+          signalPassFailure();
+          return;
+        }
 
   for (auto machine : llvm::make_early_inc_range(module.getOps<MachineOp>())) {
     MachineOpConverter converter(b, machine, cfg);
