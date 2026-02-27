@@ -5,17 +5,25 @@ firrtl.circuit "Top" {
     firrtl.option_case @FPGA
   }
 
-  firrtl.module private @ModuleDefault(in %clock: !firrtl.clock) { }
-  firrtl.module private @ModuleFPGA(in %clock: !firrtl.clock) { }
+  firrtl.module private @ModuleDefault() { }
+  firrtl.module private @ModuleFPGA() { }
 
   // CHECK: sv.macro.decl @__target_Platform_Top_inst
-  // CHECK: firrtl.module @Top
+  // CHECK: sv.macro.decl @__target_Platform_AnotherTop_inst
+
+  // CHECK-LABEL: firrtl.module @Top
   firrtl.module @Top(in %clock: !firrtl.clock) {
     // CHECK: firrtl.instance_choice inst {instance_macro = @__target_Platform_Top_inst} @ModuleDefault alternatives @Platform
-    %inst_clock = firrtl.instance_choice inst @ModuleDefault alternatives @Platform {
+    firrtl.instance_choice inst @ModuleDefault alternatives @Platform {
       @FPGA -> @ModuleFPGA
-    } (in clock: !firrtl.clock)
-    firrtl.matchingconnect %inst_clock, %clock : !firrtl.clock
+    } ()
+  }
+  // CHECK-LABEL: firrtl.module @AnotherTop
+  firrtl.module @AnotherTop(in %clock: !firrtl.clock) {
+    // CHECK: firrtl.instance_choice inst {instance_macro = @__target_Platform_AnotherTop_inst} @ModuleDefault alternatives @Platform
+    firrtl.instance_choice inst @ModuleDefault alternatives @Platform {
+      @FPGA -> @ModuleFPGA
+    } ()
   }
 }
 
