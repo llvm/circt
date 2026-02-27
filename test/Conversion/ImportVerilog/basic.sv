@@ -4032,53 +4032,43 @@ endmodule
 // CHECK:         [[V4:%.+]] = moore.variable [[C4]] : <i32>
 // CHECK:         moore.procedure initial {
 // CHECK            moore.fork join_all {
-// CHECK              moore.thread {
-// CHECK                [[C5:%.+]] = moore.constant 1 : i32
-// CHECK                moore.blocking_assign [[V0]], [[C5]] : i32
-// CHECK:               [[C6:%.+]] = moore.constant 0 : i32
-// CHECK                moore.blocking_assign [[V0]], [[C6]] : i32
-// CHECK                moore.complete
-// CHECK              }
-// CHECK              moore.thread {
-// CHECK                [[C7:%.+]] = moore.constant 1 : i32
-// CHECK                moore.blocking_assign [[V1]], [[C7]] : i32
-// CHECK                [[C8:%.+]] = moore.constant 2 : i32
-// CHECK                moore.blocking_assign [[V1]], [[C8]] : i32
-// CHECK                moore.complete
-// CHECK              }
+// CHECK              [[C5:%.+]] = moore.constant 1 : i32
+// CHECK              moore.blocking_assign [[V0]], [[C5]] : i32
+// CHECK:             [[C6:%.+]] = moore.constant 0 : i32
+// CHECK              moore.blocking_assign [[V0]], [[C6]] : i32
+// CHECK              moore.complete
+// CHECK            }, {
+// CHECK              [[C7:%.+]] = moore.constant 1 : i32
+// CHECK              moore.blocking_assign [[V1]], [[C7]] : i32
+// CHECK              [[C8:%.+]] = moore.constant 2 : i32
+// CHECK              moore.blocking_assign [[V1]], [[C8]] : i32
+// CHECK              moore.complete
 // CHECK            }
 // CHECK            moore.fork join_any {
-// CHECK              moore.thread {
-// CHECK                [[C9:%.+]] = moore.read [[V0]] : <i32>
-// CHECK                moore.blocking_assign [[V2]], [[C9]] : i32
-// CHECK                moore.complete
-// CHECK              }
-// CHECK              moore.thread {
-// CHECK                [[C10:%.+]] = moore.read [[V1]] : <i32>
-// CHECK                moore.blocking_assign [[V3]], [[C10]] : i32
-// CHECK                moore.complete
-// CHECK              }
+// CHECK              [[C9:%.+]] = moore.read [[V0]] : <i32>
+// CHECK              moore.blocking_assign [[V2]], [[C9]] : i32
+// CHECK              moore.complete
+// CHECK            }, {
+// CHECK              [[C10:%.+]] = moore.read [[V1]] : <i32>
+// CHECK              moore.blocking_assign [[V3]], [[C10]] : i32
+// CHECK              moore.complete
 // CHECK            }
 // CHECK            moore.fork join_none {
-// CHECK              moore.thread {
-// CHECK                [[C11:%.+]] = moore.constant 3 : i32
-// CHECK                moore.blocking_assign [[V0]], [[C11]] : i32
-// CHECK                [[C12:%.+]] = moore.constant 4 : i32
-// CHECK                moore.blocking_assign [[V1]], [[C12]] : i32
-// CHECK                moore.complete
-// CHECK              }
-// CHECK              moore.thread {
-// CHECK                [[C13:%.+]] = moore.constant 5 : i32
-// CHECK                moore.blocking_assign [[V2]], [[C13]] : i32
-// CHECK                moore.complete
-// CHECK              }
-// CHECK              moore.thread {
-// CHECK                [[C14:%.+]] = moore.constant 6 : i32
-// CHECK                moore.blocking_assign [[V3]], [[C14]] : i32
-// CHECK                [[C15:%.+]] = moore.constant 7 : i32
-// CHECK                moore.blocking_assign [[V4]], [[C15]] : i32
-// CHECK                moore.complete
-// CHECK              }
+// CHECK              [[C11:%.+]] = moore.constant 3 : i32
+// CHECK              moore.blocking_assign [[V0]], [[C11]] : i32
+// CHECK              [[C12:%.+]] = moore.constant 4 : i32
+// CHECK              moore.blocking_assign [[V1]], [[C12]] : i32
+// CHECK              moore.complete
+// CHECK            }, {
+// CHECK              [[C13:%.+]] = moore.constant 5 : i32
+// CHECK              moore.blocking_assign [[V2]], [[C13]] : i32
+// CHECK              moore.complete
+// CHECK            }, {
+// CHECK              [[C14:%.+]] = moore.constant 6 : i32
+// CHECK              moore.blocking_assign [[V3]], [[C14]] : i32
+// CHECK              [[C15:%.+]] = moore.constant 7 : i32
+// CHECK              moore.blocking_assign [[V4]], [[C15]] : i32
+// CHECK              moore.complete
 // CHECK            }
 // CHECK            [[C16:%.+]] = moore.constant 8 : i32
 // CHECK            moore.blocking_assign [[V0]], [[C16]] : i32

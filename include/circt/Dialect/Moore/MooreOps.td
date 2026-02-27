@@ -2914,25 +2914,8 @@ def StringConcatOp : StringBuiltin<"concat"> {
 // Forking
 //===----------------------------------------------------------------------===//
 
-def ThreadOp :MooreOp<"thread"> {
-  let summary = "Thread spawned by fork statement";
-  let description = [{
-    Represents a single thread created within a fork-join statement. May be a
-    single statement or a `begin...end` block. Terminates with a `moore.complete`
-    operation to signal to the parent process that execution is complete.
-  }];
-
-  let arguments = (ins);
-  let results = (outs);
-  let regions = (region AnyRegion:$body);
-
-  let assemblyFormat = [{
-    attr-dict-with-keyword $body
-  }];
-}
-
 def CompleteOp : MooreOp<"complete", [
-  Pure, Terminator, HasParent<"ThreadOp">
+  Pure, Terminator, HasParent<"ForkJoinOp">
 ]> {
   let summary = "Complete execution of a thread";
   let description = [{
@@ -2974,7 +2957,7 @@ def ForkJoinOp : MooreOp<"fork", [
 
   let arguments = (ins JoinKindAttr:$kind);
   let results = (outs);
-  let regions = (region SizedRegion<1>:$body);
+  let regions = (region VariadicRegion<MinSizedRegion<1>>:$body);
 
   let assemblyFormat = [{
     $kind attr-dict-with-keyword $body
