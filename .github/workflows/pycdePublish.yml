@@ -1,4 +1,4 @@
-name: PyCDE Test and Publish
+name: PyCDE Publish
 
 on:
   push:
