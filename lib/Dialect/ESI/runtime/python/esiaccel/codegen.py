@@ -425,10 +425,14 @@ class CppTypeEmitter:
             "  Emitted code may fail to compile due to ordering issues.\n")
 
       for emit_type in self.ordered_types:
-        if isinstance(emit_type, types.StructType):
-          self._emit_struct(hdr, emit_type)
-        elif isinstance(emit_type, types.TypeAlias):
-          self._emit_alias(hdr, emit_type)
+        try:
+          if isinstance(emit_type, types.StructType):
+            self._emit_struct(hdr, emit_type)
+          elif isinstance(emit_type, types.TypeAlias):
+            self._emit_alias(hdr, emit_type)
+        except ValueError as e:
+          sys.stderr.write(f"Error emitting type '{emit_type}': {e}\n")
+          hdr.write(f"// Unsupported type '{emit_type}': {e}\n\n")
 
       hdr.write(
           textwrap.dedent(f"""
