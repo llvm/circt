@@ -31,11 +31,18 @@ using namespace mlir;
 namespace {
 
 // A helper function for collecting the non-concatRef operands of concatRef.
-static void collectOperands(Value operand, SmallVectorImpl<Value> &operands) {
-  if (auto concatRefOp = operand.getDefiningOp<ConcatRefOp>())
+static void collectOperands(Value operand, SmallVectorImpl<Value> &operands,
+                            ConversionPatternRewriter &rewriter) {
+  if (auto concatRefOp = operand.getDefiningOp<ConcatRefOp>()) {
+    // Assuming the assignment is the only user, erase the op now.
+    if (std::distance(concatRefOp->getUsers().begin(),
+                      concatRefOp->getUsers().end()) == 1) {
+      rewriter.eraseOp(concatRefOp);
+    }
     for (auto nestedOperand : concatRefOp.getValues())
-      collectOperands(nestedOperand, operands);
-  else
+      collectOperands(nestedOperand, operands, rewriter);
+
+  } else
     operands.push_back(operand);
 }
 
@@ -49,7 +56,7 @@ struct ConcatRefLowering : public OpConversionPattern<OpTy> {
                   ConversionPatternRewriter &rewriter) const override {
     // Use to collect the operands of concatRef.
     SmallVector<Value, 4> operands;
-    collectOperands(op.getDst(), operands);
+    collectOperands(op.getDst(), operands, rewriter);
     auto srcWidth =
         cast<UnpackedType>(op.getSrc().getType()).getBitSize().value();
 
@@ -74,6 +81,38 @@ struct ConcatRefLowering : public OpConversionPattern<OpTy> {
       OpTy::create(rewriter, op.getLoc(), operand, extract);
     }
     rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct QueueRefLowering : public OpConversionPattern<DynQueueRefElementOp> {
+  using OpConversionPattern<DynQueueRefElementOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(DynQueueRefElementOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // For now, we only support using a queue reference in the LHS of a blocking
+    // assignment op.
+    for (auto *consumer : op->getUsers()) {
+      if (isa<BlockingAssignOp>(consumer)) {
+
+        auto assignOp = cast<BlockingAssignOp>(consumer);
+        // Replace BlockingAssignOp with a queue.set operation to the index.
+        rewriter.setInsertionPoint(consumer);
+        moore::QueueSetOp::create(rewriter, op->getLoc(), op.getInput(),
+                                  op.getIndex(), assignOp.getSrc());
+
+        rewriter.eraseOp(assignOp);
+      } else {
+        return mlir::emitError(op.getLoc())
+               << "Queue element reference couldn't be reduced to setting the "
+                  "value at an index: consuming op "
+               << consumer << " is not supported";
+      }
+    }
+
+    rewriter.eraseOp(op);
+
     return success();
   }
 };
@@ -104,6 +143,17 @@ void LowerConcatRefPass::runOnOperation() {
                ConcatRefLowering<BlockingAssignOp>,
                ConcatRefLowering<NonBlockingAssignOp>>(&context);
 
+  if (failed(applyPartialConversion(getOperation(), target,
+                                    std::move(patterns)))) {
+    signalPassFailure();
+    return;
+  }
+
+  // Once we have removed ConcatRefOps, attempt to rewrite any queue element
+  // references to queue.set
+  patterns.clear();
+  target.addIllegalOp<DynQueueRefElementOp>();
+  patterns.add<QueueRefLowering>(&context);
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();

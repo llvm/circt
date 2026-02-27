@@ -1804,6 +1804,28 @@ def DynQueueRefElementOp : MooreOp<"dyn_queue_ref_element", [Pure]> {
   }];
 }
 
+def QueueSetOp : MooreOp<"queue.set", [
+    TypesMatchWith<"queue and item types must match",
+    "queue", "item",
+    "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">
+    ]> {
+  let summary = "Overwrite an element at a position within a queue.";
+  let description = [{
+    This op allows the element at an index within a queue to be overwritten
+    with some new value.
+    
+    If the index is out of bounds for the queue, it does nothing and a warning
+    is generated, unless the index is equal to the length of the queue,
+    in which case this operation adds $item to the end of the queue.
+  }];
+  let arguments = (ins QueueRefType:$queue, TwoValuedI32:$index,
+    UnpackedType:$item);
+  let results = (outs);
+  let assemblyFormat = [{
+    $queue `[` $index `]` `=` $item attr-dict `:` type($queue)
+  }];
+}
+
 def QueueInsertOp : MooreOp<"queue.insert", [
     TypesMatchWith<"queue and item types must match",
     "queue", "item",
