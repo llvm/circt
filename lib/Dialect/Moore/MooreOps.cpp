@@ -1776,7 +1776,7 @@ LogicalResult QueueResizeOp::verify() {
   return success();
 }
 
-LogicalResult QueueOfUnpackedArrayOp::verify() {
+LogicalResult QueueFromUnpackedArrayOp::verify() {
   // Verify the source and result have the same element type
   auto queueElementType =
       cast<QueueType>(getResult().getType()).getElementType();
