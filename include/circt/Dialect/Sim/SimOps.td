@@ -754,11 +754,12 @@ def QueueSetOp : SimOp<"queue.set", [Pure,
   let description = [{
     Overwrites the element at $index with $item, returning an updated queue.
 
-    If the index is out of bounds for the queue, the queue returned is unchanged
-    and a warning will be issued.
 
     If the index is equal to the length of the queue, the operation adds $item
     to the end of the queue.
+
+    If the index is otherwise out of bounds for the queue, the queue returned
+    is unchanged and a warning will be issued.
   }];
 
   let arguments = (ins QueueType:$queue, I32:$index, HWNonInOutType:$item);
