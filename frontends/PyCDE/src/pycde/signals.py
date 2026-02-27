@@ -15,6 +15,7 @@ from .circt import ir
 from contextvars import ContextVar
 from functools import cached_property, singledispatchmethod
 from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
+import inspect
 import re
 import numpy as np
 
@@ -714,14 +715,18 @@ class StructMetaType(type):
 
     cls = super().__new__(self, name, bases, dct)
     from .types import RegisteredStruct, Type
-    # In Python 3.14+, annotations are stored via __annotate__ instead of
-    # __annotations__ in the class namespace dict (PEP 649/749).
-    if "__annotations__" not in dct and "__annotate__" not in dct:
+    # Use inspect.get_annotations() to reliably get class annotations across
+    # Python versions. In Python 3.14+ (PEP 649/749), annotations are lazily
+    # evaluated and may not be present in the class namespace dict.
+    annotations = inspect.get_annotations(cls)
+    if not annotations:
       return cls
     fields: List[Tuple[str, Type]] = []
-    for attr_name, attr in cls.__annotations__.items():
+    for attr_name, attr in annotations.items():
       if isinstance(attr, Type):
         fields.append((attr_name, attr))
+    if not fields:
+      return cls
 
     return RegisteredStruct(fields, name, cls)
 
