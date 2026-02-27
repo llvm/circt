@@ -60,9 +60,9 @@ private:
   };
 
   Transition getTransitionRegions(fsm::TransitionOp t, int from,
-                                  SmallVector<string> &states,
+                                  SmallVector<std::string> &states,
                                   Location &loc) {
-    string nextState = t.getNextState().str();
+    std::string nextState = t.getNextState().str();
     Transition tr = {from, insertStates(states, nextState)};
     if (t.hasGuard())
       tr.guard = &t.getGuard();
@@ -75,7 +75,7 @@ private:
     return tr;
   }
 
-  static int insertStates(SmallVector<string> &states,
+  static int insertStates(SmallVector<std::string> &states,
                           llvm::StringRef st) {
     for (auto [id, s] : llvm::enumerate(states))
       if (s == st)
@@ -222,7 +222,7 @@ LogicalResult MachineOpConverter::dispatch() {
   // Collect FSM variables, their types, and initial values
   SmallVector<llvm::APInt> varInitValues;
   for (auto v : machineOp.front().getOps<fsm::VariableOp>()) {
-    if (!isa<IntegerType>(t.getType())) 
+    if (!isa<IntegerType>(v.getType())) 
       return v.emitError("Only integer variables are supported in FSMs.");
     auto intAttr = dyn_cast<IntegerAttr>(v.getInitValueAttr());
     varInitValues.push_back(intAttr.getValue());
@@ -248,12 +248,12 @@ LogicalResult MachineOpConverter::dispatch() {
   // the activation of each state
   SmallVector<Value> stateFunctions;
   // Store the name of each state
-  SmallVector<string> states;
+  SmallVector<std::string> states;
   // Store the output region of each state
   SmallVector<std::pair<Region *, int>> outputOfStateId;
 
   // Get FSM initial state and store it in the states vector
-  string initialState = machineOp.getInitialState().str();
+  std::string initialState = machineOp.getInitialState().str();
   insertStates(states, initialState);
 
   // Only outputs and variables belong in the state function's domain, since the
@@ -280,18 +280,16 @@ LogicalResult MachineOpConverter::dispatch() {
   // F_state_1(outs, vars, [time])`, simulating the activation of a transition
   // and of the state it reaches.
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
-    string stateName = stateOp.getName().str();
+    std::string stateName = stateOp.getName().str();
     auto fromState = insertStates(states, stateName);
-    if (!stateOp.getTransitions().empty()) {
-      for (auto tr :
-           stateOp.getTransitions().front().getOps<fsm::TransitionOp>()) {
-        auto t = getTransitionRegions(tr, fromState, states, loc);
-        if (numOut > 0)
-          t.output = getOutputRegion(outputOfStateId, t.to);
-        else
-          t.output = std::nullopt;
-        transitions.push_back(t);
-      }
+    for (auto tr :
+          stateOp.getTransitions().front().getOps<fsm::TransitionOp>()) {
+      auto t = getTransitionRegions(tr, fromState, states, loc);
+      if (numOut > 0)
+        t.output = getOutputRegion(outputOfStateId, t.to);
+      else
+        t.output = std::nullopt;
+      transitions.push_back(t);
     }
   }
 
