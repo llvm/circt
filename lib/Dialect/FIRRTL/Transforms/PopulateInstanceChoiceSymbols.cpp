@@ -46,7 +46,14 @@ private:
   /// already has a symbol.
   FlatSymbolRefAttr assignSymbol(InstanceChoiceOp op);
 
-  CircuitNamespace circuitNamespace;
+  /// The namespace associated with the circuit.  This is lazily constructed
+  /// using `getNamespace`.
+  std::optional<CircuitNamespace> circuitNamespace;
+  CircuitNamespace &getNamespace() {
+    if (!circuitNamespace)
+      circuitNamespace = CircuitNamespace(getOperation());
+    return *circuitNamespace;
+  }
 };
 } // namespace
 
@@ -73,8 +80,8 @@ PopulateInstanceChoiceSymbolsPass::assignSymbol(InstanceChoiceOp op) {
   }
 
   // Ensure global uniqueness using CircuitNamespace.
-  auto uniqueName = StringAttr::get(
-      op.getContext(), circuitNamespace.newName(instanceMacroName));
+  auto uniqueName = StringAttr::get(op.getContext(),
+                                    getNamespace().newName(instanceMacroName));
   auto instanceMacro = FlatSymbolRefAttr::get(uniqueName);
   op.setInstanceMacroAttr(instanceMacro);
 
@@ -89,9 +96,6 @@ PopulateInstanceChoiceSymbolsPass::assignSymbol(InstanceChoiceOp op) {
 void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
   auto circuit = getOperation();
   auto &instanceGraph = getAnalysis<InstanceGraph>();
-
-  // Create a circuit namespace for global uniqueness.
-  circuitNamespace = CircuitNamespace(circuit);
 
   OpBuilder builder(circuit.getContext());
   builder.setInsertionPointToStart(circuit.getBodyBlock());
@@ -121,7 +125,7 @@ void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
     }
   });
 
-  circuitNamespace.clear();
+  circuitNamespace.reset();
   if (!changed)
     return markAllAnalysesPreserved();
 
