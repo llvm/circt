@@ -583,8 +583,8 @@ LogicalResult LowerModule::lowerModule() {
             continue;
           auto subfield = ObjectSubfieldOp::create(
               builder, createDomain.getLoc(), object, idx);
-          auto unknown = UnknownValueOp::create(builder, createDomain.getLoc(),
-                                                port.type);
+          auto unknown =
+              UnknownValueOp::create(builder, createDomain.getLoc(), port.type);
           PropAssignOp::create(builder, createDomain.getLoc(), subfield,
                                unknown);
         }
