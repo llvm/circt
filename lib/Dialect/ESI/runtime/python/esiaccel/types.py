@@ -20,16 +20,13 @@ if TYPE_CHECKING:
   from .accelerator import HWModule
 
 from concurrent.futures import Future
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple, Type, Union
 import sys
 import traceback
 
 
 def _get_esi_type(cpp_type: cpp.Type):
   """Get the wrapper class for a C++ type."""
-  if isinstance(cpp_type, cpp.ChannelType):
-    return _get_esi_type(cpp_type.inner)
-
   for cpp_type_cls, wrapper_cls in __esi_mapping.items():
     if isinstance(cpp_type, cpp_type_cls):
       return wrapper_cls.wrap_cpp(cpp_type)
@@ -57,11 +54,16 @@ class ESIType:
     self.cpp_type = cpp_type
 
   @property
+  def id(self) -> str:
+    """Get the stable id of this type."""
+    return self.cpp_type.id
+
+  @property
   def supports_host(self) -> Tuple[bool, Optional[str]]:
     """Does this type support host communication via Python? Returns either
     '(True, None)' if it is, or '(False, reason)' if it is not."""
 
-    if self.bit_width % 8 != 0:
+    if self.bit_width >= 0 and self.bit_width % 8 != 0:
       return (False, "runtime only supports types with multiple of 8 bits")
     return (True, None)
 
@@ -92,8 +94,75 @@ class ESIType:
     leftover bytes."""
     assert False, "unimplemented"
 
+  def __hash__(self) -> int:
+    return hash(self.id)
+
+  def __eq__(self, other) -> bool:
+    return isinstance(other, ESIType) and self.id == other.id
+
   def __str__(self) -> str:
     return str(self.cpp_type)
+
+
+class ChannelType(ESIType):
+
+  def __init__(self, id: str, inner: "ESIType"):
+    self._init_from_cpp(cpp.ChannelType(id, inner.cpp_type))
+
+  def _init_from_cpp(self, cpp_type: cpp.ChannelType):
+    super()._init_from_cpp(cpp_type)
+    self.inner_type = _get_esi_type(cpp_type.inner)
+
+  @property
+  def bit_width(self) -> int:
+    return self.inner_type.bit_width
+
+  @property
+  def inner(self) -> "ESIType":
+    return self.inner_type
+
+  @property
+  def supports_host(self) -> Tuple[bool, Optional[str]]:
+    return self.inner_type.supports_host
+
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
+    return self.inner_type.is_valid(obj)
+
+  def serialize(self, obj) -> bytearray:
+    return self.inner_type.serialize(obj)
+
+  def deserialize(self, data: bytearray) -> Tuple[object, bytearray]:
+    return self.inner_type.deserialize(data)
+
+
+__esi_mapping[cpp.ChannelType] = ChannelType
+
+
+class BundleType(ESIType):
+
+  class Channel(NamedTuple):
+    name: str
+    direction: cpp.BundleType.Direction
+    type: "ESIType"
+
+  def __init__(self, id: str, channels: List[Channel]):
+    cpp_channels = [(name, direction, channel_type.cpp_type)
+                    for name, direction, channel_type in channels]
+    self._init_from_cpp(cpp.BundleType(id, cpp_channels))
+
+  def _init_from_cpp(self, cpp_type: cpp.BundleType):
+    super()._init_from_cpp(cpp_type)
+    self._channels = [
+        BundleType.Channel(name, direction, _get_esi_type(channel_type))
+        for name, direction, channel_type in cpp_type.channels
+    ]
+
+  @property
+  def channels(self) -> List["BundleType.Channel"]:
+    return self._channels
+
+
+__esi_mapping[cpp.BundleType] = BundleType
 
 
 class VoidType(ESIType):
@@ -121,6 +190,28 @@ class VoidType(ESIType):
 
 
 __esi_mapping[cpp.VoidType] = VoidType
+
+
+class AnyType(ESIType):
+
+  def __init__(self, id: str):
+    self._init_from_cpp(cpp.AnyType(id))
+
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
+    return (False, "any type is not supported for host communication")
+
+  @property
+  def bit_width(self) -> int:
+    return -1
+
+  def serialize(self, obj) -> bytearray:
+    raise ValueError("any type cannot be serialized")
+
+  def deserialize(self, data: bytearray) -> Tuple[object, bytearray]:
+    raise ValueError("any type cannot be deserialized")
+
+
+__esi_mapping[cpp.AnyType] = AnyType
 
 
 class BitsType(ESIType):
@@ -326,6 +417,36 @@ class ArrayType(ESIType):
 
 
 __esi_mapping[cpp.ArrayType] = ArrayType
+
+
+class TypeAlias(ESIType):
+
+  def __init__(self, id: str, name: str, inner_type: "ESIType"):
+    self._init_from_cpp(cpp.TypeAliasType(id, name, inner_type.cpp_type))
+
+  def _init_from_cpp(self, cpp_type: cpp.TypeAliasType):
+    super()._init_from_cpp(cpp_type)
+    self.name = cpp_type.name
+    self.inner_type = _get_esi_type(cpp_type.inner)
+
+  @property
+  def bit_width(self) -> int:
+    return self.inner_type.bit_width
+
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
+    return self.inner_type.is_valid(obj)
+
+  def serialize(self, obj) -> bytearray:
+    return self.inner_type.serialize(obj)
+
+  def deserialize(self, data: bytearray) -> Tuple[object, bytearray]:
+    return self.inner_type.deserialize(data)
+
+  def __str__(self) -> str:
+    return self.name
+
+
+__esi_mapping[cpp.TypeAliasType] = TypeAlias
 
 
 class Port:

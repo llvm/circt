@@ -18,11 +18,13 @@
 
 #include <algorithm>
 #include <any>
+#include <cassert>
 #include <cstdint>
 #include <map>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "esi/Common.h"
@@ -151,6 +153,33 @@ class AnyType : public Type {
 public:
   AnyType(const ID &id) : Type(id) {}
   std::ptrdiff_t getBitWidth() const override { return -1; };
+};
+
+/// Type aliases provide a named type which forwards to an inner type.
+class TypeAliasType : public Type {
+public:
+  using Type::deserialize;
+
+  TypeAliasType(const ID &id, std::string name, const Type *innerType)
+      : Type(id), name(std::move(name)), innerType(innerType) {
+    assert(innerType != nullptr &&
+           "TypeAliasType must have a non-null inner type");
+  }
+
+  const std::string &getName() const { return name; }
+  const Type *getInnerType() const { return innerType; }
+
+  std::ptrdiff_t getBitWidth() const override {
+    return innerType->getBitWidth();
+  };
+
+  void ensureValid(const std::any &obj) const override;
+  MutableBitVector serialize(const std::any &obj) const override;
+  std::any deserialize(BitVector &data) const override;
+
+private:
+  std::string name;
+  const Type *innerType;
 };
 
 /// Bit vectors include signed, unsigned, and signless integers.

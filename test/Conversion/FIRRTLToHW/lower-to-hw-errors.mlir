@@ -114,13 +114,11 @@ firrtl.circuit "moduleAnno" attributes {annotations = [{class = "circuitOpAnnota
 // when lowering to HW.
 firrtl.circuit "Foo" attributes {annotations = [
     {class = "sifive.enterprise.firrtl.MetadataDirAnnotation", dirname = "metadata"},
-    {class = "sifive.enterprise.firrtl.ElaborationArtefactsDirectory", dirname = "artefacts"},
     {class = "sifive.enterprise.firrtl.TestBenchDirAnnotation", dirname = "tb"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation", directory = "gct-dir", filename = "gct-dir/bindings.sv"}
   ]} {
     firrtl.module @Foo() attributes {annotations = [
         {class = "firrtl.transforms.NoDedupAnnotation"},
-        {class = "sifive.enterprise.firrtl.DontObfuscateModuleAnnotation"},
         {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"},
         {class = "firrtl.transforms.BlackBox", circt.nonlocal = @nla_1}
     ]} {}
@@ -244,5 +242,23 @@ firrtl.circuit "IfElseFatalOnAssume" {
     // expected-error @+2 {{ifElseFatal format cannot be used for non-assertions}}
     // expected-error @below {{'firrtl.assume' op LowerToHW couldn't handle this operation}}
     firrtl.assume %clock, %en, %pred, "foo" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, format = "ifElseFatal"}
+  }
+}
+
+// -----
+
+firrtl.circuit "InstanceChoiceInnerSymbol" {
+  firrtl.option @Opt {
+    firrtl.option_case @FPGA
+  }
+
+  firrtl.module private @ModuleDefault() {}
+
+  firrtl.module private @ModuleFPGA() {}
+
+  firrtl.module @InstanceChoiceInnerSymbol() {
+    // expected-error @below {{'firrtl.instance_choice' op LowerToHW couldn't handle this operation}}
+    // expected-error @below {{instance choice with inner sym cannot be lowered}}
+    firrtl.instance_choice inst sym @sym @ModuleDefault alternatives @Opt { @FPGA -> @ModuleFPGA } ()
   }
 }

@@ -1,4 +1,4 @@
-# circt-verilog
+# Verilog Front-End
 
 **circt-verilog** \[_options_] \[_filename_]
 

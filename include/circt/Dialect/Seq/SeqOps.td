@@ -475,6 +475,8 @@ def ClockDividerOp : SeqOp<"clock_div", [Pure]> {
   let arguments = (ins ClockType:$input, I64Attr:$pow2);
   let results = (outs ClockType:$output);
 
+  let hasCanonicalizeMethod = 1;
+
   let assemblyFormat = [{
     $input `by` $pow2 attr-dict
   }];

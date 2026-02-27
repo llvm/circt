@@ -52,7 +52,7 @@ class If:
     self._old_system_token = _current_if_stmt.set(self)
     # Keep all the important logic in the _IfBlock class so we can share it with
     # 'Else'.
-    self._op = scf.IfOp(self._cond._get_ssa_value(), hasElse=True)
+    self._op = scf.IfOp(self._cond._get_ssa_value(), has_else=True)
     self.then = _IfBlock(True)
     self.then.__enter__(stack_level=2)
 
@@ -95,7 +95,7 @@ class If:
     hasElse = self._hasElse or len(else_list) > 0
     new_if = scf.IfOp(self._cond._get_ssa_value(),
                       [v.get_type()._codegen() for v in then_list],
-                      hasElse=hasElse)
+                      has_else=hasElse)
     for op in self._op.then_block.operations:
       new_if.operation.regions[0].blocks[0].append(op)
     if hasElse:

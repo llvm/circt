@@ -363,7 +363,7 @@ func.func @DynExtractRefArrayElement(%j: !moore.ref<array<2 x array<1 x l3>>>, %
 func.func @AdvancedConversion(%arg0: !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>) -> (!moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>, !moore.i320) {
   // CHECK: [[V0:%.+]] = hw.constant 3978585893941511189997889893581765703992223160870725712510875979948892565035285336817671 : i320
   %0 = moore.constant 3978585893941511189997889893581765703992223160870725712510875979948892565035285336817671 : i320
-  // CHECK: [[V1:%.+]] = hw.bitcast [[V0]] : (i320) -> !hw.array<5xstruct<exp_bits: i32, man_bits: i32>> 
+  // CHECK: [[V1:%.+]] = hw.bitcast [[V0]] : (i320) -> !hw.array<5xstruct<exp_bits: i32, man_bits: i32>>
   %1 = moore.sbv_to_packed %0 : array<5 x struct<{exp_bits: i32, man_bits: i32}>>
   // CHECK: [[V2:%.+]] = hw.bitcast %arg0 : (!hw.array<5xstruct<exp_bits: i32, man_bits: i32>>) -> i320
   %2 = moore.packed_to_sbv %arg0 : array<5 x struct<{exp_bits: i32, man_bits: i32}>>
@@ -518,7 +518,7 @@ moore.module @Variable() {
 
   // CHECK: [[TMP2:%.+]] = hw.constant 10 : i32
   %3 = moore.constant 10 : i32
-  
+
   // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
   // CHECK: llhd.drv %a, [[TMP2]] after [[TIME]] : i32
   moore.assign %a, %3 : i32
@@ -605,7 +605,7 @@ moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.s
   // CHECK: llhd.sig.struct_extract %arg1["exp_bits"] : <!hw.struct<exp_bits: i32, man_bits: i32>>
   %ref = moore.struct_extract_ref %arg1, "exp_bits" : <!moore.struct<{exp_bits: i32, man_bits: i32}>> -> <i32>
   moore.assign %ref, %0 : !moore.i32
-  
+
   // CHECK: [[C0:%.+]] = hw.constant 0 : i64
   // CHECK: [[INIT:%.+]] = hw.bitcast [[C0]] : (i64) -> !hw.struct<exp_bits: i32, man_bits: i32>
   // CHECK: llhd.sig [[INIT]] : !hw.struct<exp_bits: i32, man_bits: i32>
@@ -622,10 +622,25 @@ moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.s
   moore.output %0, %3, %4 : !moore.i32, !moore.struct<{exp_bits: i32, man_bits: i32}>, !moore.struct<{exp_bits: i32, man_bits: i32}>
 }
 
+// CHECK-LABEL: hw.module @Union
+moore.module @Union(in %a : !moore.i32, in %arg0 : !moore.union<{x: i32, y: i32}>, in %arg1 : !moore.ref<union<{x: i32, y: i32}>>, out o : !moore.i32, out p : !moore.union<{x: i32, y: i32}>) {
+  // CHECK: hw.union_extract %arg0["x"] : !hw.union<x: i32, y: i32>
+  %0 = moore.union_extract %arg0, "x" : !moore.union<{x: i32, y: i32}> -> !moore.i32
+
+  // CHECK: llhd.sig.struct_extract %arg1["x"] : <!hw.union<x: i32, y: i32>>
+  %ref = moore.union_extract_ref %arg1, "x" : <union<{x: i32, y: i32}>> -> <i32>
+  moore.assign %ref, %0 : !moore.i32
+
+  // CHECK: hw.union_create "x", %a : !hw.union<x: i32, y: i32>
+  %1 = moore.union_create %a {fieldName = "x"} : !moore.i32 -> union<{x: i32, y: i32}>
+
+  moore.output %0, %1 : !moore.i32, !moore.union<{x: i32, y: i32}>
+}
+
 // CHECK-LABEL: func @ArrayCreate
 // CHECK-SAME: () ->  !hw.array<2xi8>
 func.func @ArrayCreate() -> !moore.array<2x!moore.i8> {
-  // CHECK-NEXT: %c42_i8 = hw.constant 42 : i8 
+  // CHECK-NEXT: %c42_i8 = hw.constant 42 : i8
   %c0 = moore.constant 42 : !moore.i8
   // CHECK-NEXT: [[ARR:%.*]] = hw.array_create %c42_i8, %c42_i8 : i8
   %arr = moore.array_create %c0, %c0 : !moore.i8, !moore.i8 -> !moore.array<2x!moore.i8>
@@ -636,7 +651,7 @@ func.func @ArrayCreate() -> !moore.array<2x!moore.i8> {
 // CHECK-LABEL: func @UnpackedArrayCreate
 // CHECK-SAME: () ->  !hw.array<2xi8>
 func.func @UnpackedArrayCreate() -> !moore.uarray<2x!moore.i8> {
-  // CHECK-NEXT: %c7_i8 = hw.constant 7 : i8 
+  // CHECK-NEXT: %c7_i8 = hw.constant 7 : i8
   %a = moore.constant 7 : !moore.i8
   // CHECK-NEXT: [[ARR:%.*]] = hw.array_create %c7_i8, %c7_i8 : i8
   %arr = moore.array_create %a, %a : !moore.i8, !moore.i8 -> !moore.uarray<2x!moore.i8>
@@ -740,6 +755,14 @@ func.func @CmpReal(%arg0: !moore.f32, %arg1: !moore.f32) {
   moore.fge %arg0, %arg1 : f32 -> i1
   // CHECK: arith.cmpf oeq, %arg0, %arg1 : f32
   moore.feq %arg0, %arg1 : f32 -> i1
+
+  return
+}
+
+// CHECK-LABEL: func.func @UnaryRealOps
+func.func @UnaryRealOps(%arg0: !moore.f32) {
+  // CHECK: arith.negf %arg0 : f32
+  moore.fneg %arg0 : f32
 
   return
 }
@@ -1235,7 +1258,7 @@ func.func @RecurciveConditional(%arg0 : !moore.l1, %arg1 : !moore.l1) {
 }
 
 // CHECK-LABEL: func.func @Conversions
-func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16, %arg2: !moore.l1) {
+func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16) {
   // CHECK: [[TMP:%.+]] = comb.extract %arg0 from 0 : (i16) -> i8
   // CHECK: dbg.variable "trunc", [[TMP]]
   %0 = moore.trunc %arg0 : i16 -> i8
@@ -1262,9 +1285,15 @@ func.func @Conversions(%arg0: !moore.i16, %arg1: !moore.l16, %arg2: !moore.l1) {
   %4 = moore.logic_to_int %arg1 : l16
   dbg.variable "l2i", %4 : !moore.i16
 
-  // CHECK: dbg.variable "builtin_bool", %arg2 : i1
-  %5 = moore.to_builtin_bool %arg2 : l1
-  dbg.variable "builtin_bool", %5 : i1
+  // CHECK: dbg.variable "builtin_bool", %arg1 : i16
+  %5 = moore.logic_to_int %arg1 : l16
+  %6 = moore.to_builtin_int %5 : i16
+  dbg.variable "builtin_bool", %6 : i16
+
+  // CHECK: dbg.variable "builtin2moore", %arg0 : i16
+  %7 = moore.to_builtin_int %arg0 : !moore.i16
+  %8 = moore.from_builtin_int %7 : i16
+  dbg.variable "builtin2moore", %8 : !moore.i16
 
   return
 }
@@ -1369,6 +1398,13 @@ func.func @SeverityToPrint() {
   // CHECK-NEXT: sim.proc.print [[CONCAT]]
   %2 = moore.fmt.literal "Warning condition met!"
   moore.builtin.severity warning %2
+
+  // CHECK: [[MSG:%.*]] = sim.fmt.literal "Info condition met!"
+  // CHECK-NEXT: [[PFX:%.*]] = sim.fmt.literal "Info: "
+  // CHECK-NEXT: [[CONCAT:%.*]] = sim.fmt.concat ([[PFX]], [[MSG]])
+  // CHECK-NEXT: sim.proc.print [[CONCAT]]
+  %3 = moore.fmt.literal "Info condition met!"
+  moore.builtin.severity info %3
 
   return
 }
@@ -1480,4 +1516,195 @@ func.func @StringOperations(%arg0: !moore.i32, %arg1: !moore.string, %arg2: !moo
   // CHECK: sim.string.length %arg1
   moore.string.len %arg1
   return
+}
+
+// CHECK-LABEL func.func @QueueOperations
+func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
+  // CHECK: [[EMPTY:%.+]] = sim.queue.empty : <i32, 10>
+  // CHECK: [[Q:%.+]] = llhd.sig [[EMPTY]] : !sim.queue<i32, 10>
+  %q = moore.variable : <!moore.queue<i32, 10>>
+  // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
+  // CHECK: [[NEWQ:%.+]] = sim.queue.push_back %arg0 into [[QR]] : <i32, 10>
+  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  moore.push_back %arg0 into %q : <!moore.queue<i32, 10>>
+
+  // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
+  // CHECK: [[NEWQ:%.+]] = sim.queue.push_front %arg0 into [[QR]] : <i32, 10>
+  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  moore.push_front %arg0 into %q : <!moore.queue<i32, 10>>
+
+  // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
+  // CHECK: [[NEWQ:%.+]], [[POPPED:%.+]] = sim.queue.pop_back from [[QR]] : <i32, 10>
+  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  moore.pop_back from %q : <!moore.queue<i32, 10>>
+
+  // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
+  // CHECK: [[NEWQ:%.+]], [[POPPED:%.+]] = sim.queue.pop_front from [[QR]] : <i32, 10>
+  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  moore.pop_front from %q : <!moore.queue<i32, 10>>
+
+  // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
+  // CHECK: [[NEWQ:%.+]] = sim.queue.delete index %arg0 of [[QR]] : <i32, 10>
+  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  moore.queue.delete index %arg0 of %q : <!moore.queue<i32, 10>>
+
+  // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
+  // CHECK: [[NEWQ:%.+]] = sim.queue.insert %arg0 into [[QR]] at %arg1 : <i32, 10>
+  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  moore.queue.insert %arg0 into %q at %arg1 : <!moore.queue<i32, 10>>
+
+  // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
+  %qr = moore.read %q : <!moore.queue<i32, 10>>
+
+  // CHECK: [[NEWQ:%.+]] = sim.queue.empty : <i32, 10>
+  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  moore.queue.clear %q : <!moore.queue<i32, 10>>
+
+  // CHECK: sim.queue.size [[QR]]
+  moore.builtin.size %qr : <i32, 10>
+
+  // CHECK: [[QEL:%.+]] = sim.queue.get %arg0 of [[QR]] : <i32, 10>
+  %el = moore.dyn_queue_extract %qr from %arg0 to %arg0 : <i32, 10>, i32 -> i32
+
+  // CHECK: [[NEWQ:%.+]] = sim.queue.slice [[QR]] from %arg0 to %arg1 : <i32, 10>
+  %newq = moore.dyn_queue_extract %qr from %arg0 to %arg1 : <i32, 10>, i32 -> queue<i32, 10>
+  return
+}
+
+// CHECK-LABEL: llhd.global_signal @GlobalFoo
+// CHECK-SAME: : i42 init {
+moore.global_variable @GlobalFoo : !moore.i42 init {
+  // CHECK: [[TMP:%.+]] = hw.constant 1337 : i42
+  %0 = moore.constant 1337 : i42
+  // CHECK: llhd.yield [[TMP]] : i42
+  moore.yield %0 : i42
+}
+
+// CHECK-LABEL: @GlobalFooUse
+moore.module @GlobalFooUse() {
+  // CHECK: llhd.process
+  moore.procedure initial {
+    // CHECK: [[REF:%.+]] = llhd.get_global_signal @GlobalFoo : <i42>
+    %0 = moore.get_global_variable @GlobalFoo : <i42>
+    // CHECK: [[TMP:%.+]] = llhd.prb [[REF]]
+    %1 = moore.read %0 : <i42>
+    // CHECK: llhd.drv [[REF]], [[TMP]]
+    moore.blocking_assign %0, %1 : i42
+    moore.return
+  }
+}
+
+// CHECK-LABEL: @Nets
+moore.module @Nets(out o1 : !moore.l1, out o2 : !moore.l2, out o3 : !moore.l1, out o4 : !moore.l2, out o5 : !moore.l1, out o6 : !moore.l2, out o7 : !moore.l1, out o8 : !moore.l2, out o9 : !moore.l1, out o10 : !moore.l2, out o11 : !moore.l1, out o12 : !moore.l2, out o13 : !moore.l1, out o14 : !moore.l2, out o15 : !moore.l1, out o16 : !moore.l2, out o17 : !moore.l1, out o18 : !moore.l2, out o19 : !moore.l1, out o20 : !moore.l2, out o21 : !moore.l1, out o22 : !moore.l2, out o23 : !moore.l1, out o24 : !moore.l2) {
+  // CHECK: [[N1:%.*]] = llhd.sig %false : i1
+  %n1 = moore.net wire : <l1>
+  // CHECK: [[C0:%.*]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[N2:%.*]] = llhd.sig [[C0]] : i2
+  %n2 = moore.net wire : <l2>
+  // CHECK: [[N3:%.*]] = llhd.sig %false{{.*}} : i1
+  %n3 = moore.net tri : <l1>
+  // CHECK: [[C0_1:%.*]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[N4:%.*]] = llhd.sig [[C0_1]] : i2
+  %n4 = moore.net tri : <l2>
+  // CHECK: [[N5:%.*]] = llhd.sig %false{{.*}} : i1
+  %n5 = moore.net uwire : <l1>
+  // CHECK: [[C0_2:%.*]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[N6:%.*]] = llhd.sig [[C0_2]] : i2
+  %n6 = moore.net uwire : <l2>
+  // CHECK: [[N7:%.*]] = llhd.sig %false{{.*}} : i1
+  %n7 = moore.net supply0 : <l1>
+  // CHECK: [[C0_3:%.*]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[N8:%.*]] = llhd.sig [[C0_3]] : i2
+  %n8 = moore.net supply0 : <l2>
+  // CHECK: [[N9:%.*]] = llhd.sig %true : i1
+  %n9 = moore.net supply1 : <l1>
+  // CHECK: [[C1:%.*]] = hw.constant -1 : i2
+  // CHECK-NEXT: [[N10:%.*]] = llhd.sig [[C1]] : i2
+  %n10 = moore.net supply1 : <l2>
+  // CHECK: [[N11:%.*]] = llhd.sig %false{{.*}} : i1
+  %n11 = moore.net tri0 : <l1>
+  // CHECK: [[C0_4:%.*]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[N12:%.*]] = llhd.sig [[C0_4]] : i2
+  %n12 = moore.net tri0 : <l2>
+  // CHECK: [[N13:%.*]] = llhd.sig %true{{.*}} : i1
+  %n13 = moore.net tri1 : <l1>
+  // CHECK: [[C1_1:%.*]] = hw.constant -1 : i2
+  // CHECK-NEXT: [[N14:%.*]] = llhd.sig [[C1_1]] : i2
+  %n14 = moore.net tri1 : <l2>
+  // CHECK: [[N15:%.*]] = llhd.sig %false{{.*}} : i1
+  %n15 = moore.net wand : <l1>
+  // CHECK: [[C0_5:%.*]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[N16:%.*]] = llhd.sig [[C0_5]] : i2
+  %n16 = moore.net wand : <l2>
+  // CHECK: [[N17:%.*]] = llhd.sig %false{{.*}} : i1
+  %n17 = moore.net triand : <l1>
+  // CHECK: [[C0_6:%.*]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[N18:%.*]] = llhd.sig [[C0_6]] : i2
+  %n18 = moore.net triand : <l2>
+  // CHECK: [[N19:%.*]] = llhd.sig %false{{.*}} : i1
+  %n19 = moore.net wor : <l1>
+  // CHECK: [[C0_7:%.*]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[N20:%.*]] = llhd.sig [[C0_7]] : i2
+  %n20 = moore.net wor : <l2>
+  // CHECK: [[N21:%.*]] = llhd.sig %false{{.*}} : i1
+  %n21 = moore.net trior : <l1>
+  // CHECK: [[C0_8:%.*]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[N22:%.*]] = llhd.sig [[C0_8]] : i2
+  %n22 = moore.net trior : <l2>
+  // CHECK: [[N23:%.*]] = llhd.sig %false{{.*}} : i1
+  %n23 = moore.net trireg : <l1>
+  // CHECK: [[C0_9:%.*]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[N24:%.*]] = llhd.sig [[C0_9]] : i2
+  %n24 = moore.net trireg : <l2>
+
+  // CHECK: llhd.prb [[N1]] : i1
+  %0 = moore.read %n1 : <l1>
+  // CHECK: llhd.prb [[N2]] : i2
+  %1 = moore.read %n2 : <l2>
+  // CHECK: llhd.prb [[N3]] : i1
+  %2 = moore.read %n3 : <l1>
+  // CHECK: llhd.prb [[N4]] : i2
+  %3 = moore.read %n4 : <l2>
+  // CHECK: llhd.prb [[N5]] : i1
+  %4 = moore.read %n5 : <l1>
+  // CHECK: llhd.prb [[N6]] : i2
+  %5 = moore.read %n6 : <l2>
+  // CHECK: llhd.prb [[N7]] : i1
+  %6 = moore.read %n7 : <l1>
+  // CHECK: llhd.prb [[N8]] : i2
+  %7 = moore.read %n8 : <l2>
+  // CHECK: llhd.prb [[N9]] : i1
+  %8 = moore.read %n9 : <l1>
+  // CHECK: llhd.prb [[N10]] : i2
+  %9 = moore.read %n10 : <l2>
+  // CHECK: llhd.prb [[N11]] : i1
+  %10 = moore.read %n11 : <l1>
+  // CHECK: llhd.prb [[N12]] : i2
+  %11 = moore.read %n12 : <l2>
+  // CHECK: llhd.prb [[N13]] : i1
+  %12 = moore.read %n13 : <l1>
+  // CHECK: llhd.prb [[N14]] : i2
+  %13 = moore.read %n14 : <l2>
+  // CHECK: llhd.prb [[N15]] : i1
+  %14 = moore.read %n15 : <l1>
+  // CHECK: llhd.prb [[N16]] : i2
+  %15 = moore.read %n16 : <l2>
+  // CHECK: llhd.prb [[N17]] : i1
+  %16 = moore.read %n17 : <l1>
+  // CHECK: llhd.prb [[N18]] : i2
+  %17 = moore.read %n18 : <l2>
+  // CHECK: llhd.prb [[N19]] : i1
+  %18 = moore.read %n19 : <l1>
+  // CHECK: llhd.prb [[N20]] : i2
+  %19 = moore.read %n20 : <l2>
+  // CHECK: llhd.prb [[N21]] : i1
+  %20 = moore.read %n21 : <l1>
+  // CHECK: llhd.prb [[N22]] : i2
+  %21 = moore.read %n22 : <l2>
+  // CHECK: llhd.prb [[N23]] : i1
+  %22 = moore.read %n23 : <l1>
+  // CHECK: llhd.prb [[N24]] : i2
+  %23 = moore.read %n24 : <l2>
+
+  moore.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23 : !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2
 }

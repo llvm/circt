@@ -159,8 +159,8 @@ class InstFormatBOpBase<string mnemonic, int opcode7, int funct3>
             .getRegisterAssembly()
          << ", ";
 
-      if (auto label = dyn_cast<StringAttr>(adaptor.getImm())) {
-        os << label.getValue();
+      if (auto label = dyn_cast<rtg::LabelAttr>(adaptor.getImm())) {
+        os << label.getName();
         return;      
       }
 
@@ -293,8 +293,8 @@ class InstFormatUOpBase<string mnemonic, int opcode7>
               .getRegisterAssembly()
          << ", ";
 
-      if (auto label = dyn_cast<StringAttr>(adaptor.getImm())) {
-        os << label.getValue();
+      if (auto label = dyn_cast<rtg::LabelAttr>(adaptor.getImm())) {
+        os << label.getName();
         return;      
       }
 
@@ -341,8 +341,8 @@ class InstFormatJOpBase<string mnemonic, int opcode7>
               .getRegisterAssembly()
          << ", ";
 
-      if (auto label = dyn_cast<StringAttr>(adaptor.getImm())) {
-        os << label.getValue();
+      if (auto label = dyn_cast<rtg::LabelAttr>(adaptor.getImm())) {
+        os << label.getName();
         return;      
       }
 
@@ -461,8 +461,8 @@ def RV32I_LA : RTGTestOp<"rv32i.la", [InstructionOpAdaptor]> {
               .getRegisterAssembly()
          << ", ";
 
-      if (auto label = dyn_cast<StringAttr>(adaptor.getMem())) {
-        os << label.getValue();
+      if (auto label = dyn_cast<rtg::LabelAttr>(adaptor.getMem())) {
+        os << label.getName();
         return;
       }
       

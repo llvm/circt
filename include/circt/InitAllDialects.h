@@ -30,7 +30,7 @@
 #include "circt/Dialect/Handshake/HandshakeDialect.h"
 #include "circt/Dialect/Interop/InteropDialect.h"
 #include "circt/Dialect/Kanagawa/KanagawaDialect.h"
-#include "circt/Dialect/LLHD/IR/LLHDDialect.h"
+#include "circt/Dialect/LLHD/LLHDDialect.h"
 #include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/LoopSchedule/LoopScheduleDialect.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"

@@ -1928,3 +1928,30 @@ circuit Domains:
     input  y : Domain of D
     ; expected-error @below {{expected domain-type expression, got '!firrtl.uint<1>'}}
     domain_define x.a = y
+
+;// -----
+
+FIRRTL version 5.0.0
+circuit Foo:
+  public module Foo:
+    output a: Integer
+    ; expected-error @below {{unknown property expressions are a FIRRTL 5.1.0+ feature}}
+    propassign a, Unknown: Integer
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit Foo:
+  public module Foo:
+    output a: Integer
+    ; expected-error @below {{expected property type}}
+    propassign a, Unknown: UInt<1>
+
+;// -----
+
+FIRRTL version 5.0.0
+circuit AsResetVersion:
+  public module AsResetVersion:
+    input in: UInt<1>
+    ; expected-error @below {{reset casts are a FIRRTL 5.1.0+ feature}}
+    node x = asReset(in)

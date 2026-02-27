@@ -162,13 +162,6 @@ module Foo;
 endmodule
 
 // -----
-function void foo();
-  int q[$];
-  // expected-error @below {{unsupported expression: range select with non-constant bounds}}
-  q = q[2:$];
-endfunction
-
-// -----
 function void foo;
   int a[string];
   // expected-error @below {{unsupported expression: element select into}}
@@ -189,4 +182,18 @@ function void foo;
   struct packed { time t; } b;
   // expected-error @below {{contains a time type}}
   a = b;
+endfunction
+
+// -----
+module Foo;
+  string b;
+  // expected-error @below {{expected integer argument for system call `$past`}}
+  assert property ($past(b));
+endmodule
+
+// -----
+function Foo;
+  logic [1:0] a;
+  // expected-error @below {{unsupported system call `$fwrite`}}
+  $fwrite(32'h0, "%x", a);
 endfunction

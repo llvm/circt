@@ -144,6 +144,7 @@ struct Emitter {
   void emitExpression(GenericIntrinsicOp op);
   void emitExpression(CatPrimOp op);
   void emitExpression(UnsafeDomainCastOp op);
+  void emitExpression(UnknownValueOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -161,7 +162,7 @@ struct Emitter {
   void emitExpression(ShlPrimOp op) { emitPrimExpr("shl", op, op.getAmount()); }
   void emitExpression(ShrPrimOp op) { emitPrimExpr("shr", op, op.getAmount()); }
 
-  void emitExpression(TimeOp op){};
+  void emitExpression(TimeOp op) {}
 
   // Funnel all ops without attrs into `emitPrimExpr`.
 #define HANDLE(OPTYPE, MNEMONIC)                                               \
@@ -187,6 +188,7 @@ struct Emitter {
   HANDLE(AsSIntPrimOp, "asSInt");
   HANDLE(AsUIntPrimOp, "asUInt");
   HANDLE(AsAsyncResetPrimOp, "asAsyncReset");
+  HANDLE(AsResetPrimOp, "asReset");
   HANDLE(AsClockPrimOp, "asClock");
   HANDLE(CvtPrimOp, "cvt");
   HANDLE(NegPrimOp, "neg");
@@ -391,7 +393,7 @@ private:
     SymbolTable symbolTable;
     hw::InnerSymbolTableCollection istc;
     hw::InnerRefNamespace irn{symbolTable, istc};
-    SymInfos(Operation *op) : symbolTable(op), istc(op){};
+    SymInfos(Operation *op) : symbolTable(op), istc(op) {}
   };
   std::optional<std::reference_wrapper<SymInfos>> symInfos;
 
@@ -1435,13 +1437,15 @@ void Emitter::emitExpression(Value value) {
           OrPrimOp, XorPrimOp, LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp,
           EQPrimOp, NEQPrimOp, DShlPrimOp, DShlwPrimOp, DShrPrimOp,
           // Unary
-          AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsClockPrimOp,
-          CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
+          AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsResetPrimOp,
+          AsClockPrimOp, CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp,
+          XorRPrimOp,
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
           UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
+          UnknownValueOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions
@@ -1687,6 +1691,11 @@ void Emitter::emitExpression(UnsafeDomainCastOp op) {
   interleaveComma(op.getOperands(),
                   [&](Value operand) { emitExpression(operand); });
   ps << ")" << PP::end;
+}
+
+void Emitter::emitExpression(UnknownValueOp op) {
+  ps << "Unknown";
+  emitTypeWithColon(op.getType());
 }
 
 void Emitter::emitAttribute(MemDirAttr attr) {

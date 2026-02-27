@@ -379,7 +379,7 @@ ServiceGeneratorDispatcher::generate(ServiceImplementReqOp req,
   // the generator for possible modification.
   OpBuilder b(req);
   auto implRecord = ServiceImplRecordOp::create(
-      b, req.getLoc(), req.getAppID(), /*isEngine=*/false,
+      b, req.getLoc(), req.getAppID(), /*isEngine=*/UnitAttr(),
       req.getServiceSymbolAttr(), req.getStdServiceAttr(),
       req.getImplTypeAttr(), b.getDictionaryAttr({}));
   implRecord.getReqDetails().emplaceBlock();

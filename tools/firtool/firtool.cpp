@@ -61,9 +61,12 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/JSON.h"
+#include "llvm/Support/Parallel.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/ThreadPool.h"
+#include "llvm/Support/Threading.h"
 #include "llvm/Support/ToolOutputFile.h"
 
 using namespace llvm;
@@ -294,6 +297,16 @@ static cl::list<std::string> selectInstanceChoice(
     "select-instance-choice",
     cl::desc("Options to specialize instance choice, in option=case format"),
     cl::MiscFlags::CommaSeparated, cl::cat(mainCategory));
+
+static cl::opt<unsigned>
+    numThreads("num-threads",
+               cl::desc("Number of threads to use for parallel compilation. "
+                        "0 uses all available hardware threads (default)"),
+               cl::value_desc("N"), cl::init(0), cl::cat(mainCategory));
+
+static cl::alias numThreadsShort("j", cl::desc("Alias for --num-threads"),
+                                 cl::aliasopt(numThreads), cl::NotHidden,
+                                 cl::cat(mainCategory));
 
 /// Check output stream before writing bytecode to it.
 /// Warn and return true if output is known to be displayed.
@@ -900,7 +913,21 @@ int main(int argc, char **argv) {
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "MLIR-based FIRRTL compiler\n");
 
-  MLIRContext context;
+  // Set up custom thread pool if multi-threading is requested, and limit the
+  // number of threads used by llvm internally.
+  llvm::ThreadPoolStrategy strategy = llvm::hardware_concurrency(numThreads);
+  llvm::parallel::strategy = strategy;
+  llvm::DefaultThreadPool threadPool(strategy);
+
+  // Create MLIRContext with threading initially disabled so we can set a custom
+  // thread pool.
+  MLIRContext context(MLIRContext::Threading::DISABLED);
+
+  // Set the thread pool on the context.
+  if (threadPool.getMaxConcurrency() > 1) {
+    context.setThreadPool(threadPool);
+  }
+
   // Get firtool options from cmdline
   firtool::FirtoolOptions firtoolOptions;
 

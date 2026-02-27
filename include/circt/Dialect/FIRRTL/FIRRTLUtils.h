@@ -52,6 +52,32 @@ Value getValueSource(Value val, bool lookThroughWires, bool lookThroughNodes,
 Value getModuleScopedDriver(Value val, bool lookThroughWires,
                             bool lookThroughNodes, bool lookThroughCasts);
 
+//===----------------------------------------------------------------------===//
+// TieOffCache
+//===----------------------------------------------------------------------===//
+
+/// Helper class to cache tie-off values for different FIRRTL types.
+/// This avoids creating duplicate InvalidValueOp or UnknownValueOp for the
+/// same type.
+class TieOffCache {
+public:
+  TieOffCache(ImplicitLocOpBuilder &builder) : builder(builder) {}
+
+  /// Get or create an InvalidValueOp for the given base type.
+  Value getInvalid(FIRRTLBaseType type);
+
+  /// Get or create an UnknownValueOp for the given property type.
+  Value getUnknown(PropertyType type);
+
+private:
+  ImplicitLocOpBuilder &builder;
+  SmallDenseMap<Type, Value, 8> cache;
+};
+
+//===----------------------------------------------------------------------===//
+// Template utilities
+//===----------------------------------------------------------------------===//
+
 /// Return true if a value is module-scoped driven by a value of a specific
 /// type.
 template <typename A, typename... B>

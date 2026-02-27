@@ -12,7 +12,7 @@
 
 #include "ImportVerilogInternals.h"
 #include "circt/Conversion/MooreToCore.h"
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
+#include "circt/Dialect/LLHD/LLHDPasses.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Transforms/Passes.h"
@@ -215,6 +215,12 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
 
   for (const auto &libExt : options.libExts)
     driver.sourceLoader.addSearchExtension(libExt);
+
+  for (const auto &[i, f] : llvm::enumerate(options.libraryFiles)) {
+    // Include a space to avoid conflicts with explicitly-specified names.
+    auto libName = "library " + std::to_string(i);
+    driver.sourceLoader.addLibraryFiles(libName, f);
+  }
 
   for (const auto &includeDir : options.includeDirs)
     if (driver.sourceManager.addUserDirectories(includeDir))

@@ -293,7 +293,7 @@ static PythonPrimitive omPrimitiveToPythonValue(MlirAttribute attr) {
 static MlirAttribute omPythonValueToPrimitive(PythonPrimitive value,
                                               MlirContext ctx) {
   if (auto *intValue = std::get_if<nb::int_>(&value)) {
-    auto intType = mlirIntegerTypeGet(ctx, 64);
+    auto intType = mlirIntegerTypeSignedGet(ctx, 64);
     auto intAttr = mlirIntegerAttrGet(intType, nb::cast<int64_t>(*intValue));
     return omIntegerAttrGet(intAttr);
   }

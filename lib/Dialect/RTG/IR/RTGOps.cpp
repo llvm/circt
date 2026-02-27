@@ -15,6 +15,8 @@
 #include "circt/Support/ParsingUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/Matchers.h"
+#include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SmallString.h"
 
 using namespace mlir;
@@ -425,6 +427,20 @@ LogicalResult TupleExtractOp::inferReturnTypes(
 }
 
 //===----------------------------------------------------------------------===//
+// ConstraintOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ConstraintOp::canonicalize(ConstraintOp op,
+                                         PatternRewriter &rewriter) {
+  if (mlir::matchPattern(op.getCondition(), mlir::m_One())) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // VirtualRegisterOp
 //===----------------------------------------------------------------------===//
 
@@ -435,6 +451,48 @@ LogicalResult VirtualRegisterOp::inferReturnTypes(
   auto allowedRegs = properties.as<Properties *>()->getAllowedRegs();
   inferredReturnTypes.push_back(allowedRegs.getType());
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// RegisterToIndexOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult RegisterToIndexOp::fold(FoldAdaptor adaptor) {
+  if (auto reg = dyn_cast_or_null<rtg::RegisterAttrInterface>(adaptor.getReg()))
+    return IntegerAttr::get(IndexType::get(getContext()), reg.getClassIndex());
+
+  if (auto indexToRegOp = getReg().getDefiningOp<IndexToRegisterOp>())
+    return indexToRegOp.getIndex();
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// IndexToRegisterOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult IndexToRegisterOp::verify() {
+  // Check if the index is a constant and if it's within valid range
+  APInt indexValue;
+  if (matchPattern(getIndex(), m_ConstantInt(&indexValue))) {
+    if (indexValue.uge(getType().getRegisterClassSize())) {
+      SmallString<16> indexStr;
+      indexValue.toString(indexStr, 10, false);
+      return emitOpError() << "index " << indexStr
+                           << " is out of range for register class "
+                           << getReg().getType();
+    }
+  }
+
+  return success();
+}
+
+OpFoldResult IndexToRegisterOp::fold(FoldAdaptor adaptor) {
+  if (auto indexAttr = dyn_cast_or_null<IntegerAttr>(adaptor.getIndex()))
+    return getType().getRegisterAttrForClassIndex(
+        getContext(), indexAttr.getValue().getZExtValue());
+
+  return {};
 }
 
 //===----------------------------------------------------------------------===//
@@ -704,6 +762,22 @@ void ArrayCreateOp::print(OpAsmPrinter &p) {
 }
 
 //===----------------------------------------------------------------------===//
+// ArrayAppendOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ArrayAppendOp::canonicalize(ArrayAppendOp op,
+                                          PatternRewriter &rewriter) {
+  auto createOp = op.getArray().getDefiningOp<ArrayCreateOp>();
+  if (!createOp)
+    return failure();
+
+  SmallVector<Value> newElements(createOp.getElements());
+  newElements.push_back(op.getElement());
+  rewriter.replaceOpWithNewOp<ArrayCreateOp>(op, op.getType(), newElements);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // MemoryBlockDeclareOp
 //===----------------------------------------------------------------------===//
 
@@ -889,63 +963,70 @@ OpFoldResult SliceImmediateOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
-// LabelUniqueDeclOp and LabelDeclOp
+// StringConcatOp
 //===----------------------------------------------------------------------===//
 
-static StringAttr substituteFormatString(StringAttr formatString,
-                                         ArrayRef<Attribute> substitutes) {
-  if (substitutes.empty() || formatString.empty())
-    return formatString;
+OpFoldResult StringConcatOp::fold(FoldAdaptor adaptor) {
+  SmallString<32> result;
+  for (auto attr : adaptor.getStrings()) {
+    auto stringAttr = dyn_cast_or_null<StringAttr>(attr);
+    if (!stringAttr)
+      return {};
 
-  auto original = formatString.getValue().str();
-  size_t curr = 0;
-  for (auto [i, subst] : llvm::enumerate(substitutes)) {
-    auto substInt = dyn_cast_or_null<IntegerAttr>(subst);
-    std::string substString;
-    if (!substInt && curr == i) {
-      ++curr;
-      continue;
-    }
-    if (!substInt)
-      substString = "{{" + std::to_string(curr++) + "}}";
-    else
-      substString = std::to_string(substInt.getValue().getZExtValue());
-
-    size_t startPos = 0;
-    std::string from = "{{" + std::to_string(i) + "}}";
-    while ((startPos = original.find(from, startPos)) != std::string::npos) {
-      original.replace(startPos, from.length(), substString);
-    }
+    result += stringAttr.getValue();
   }
 
-  return StringAttr::get(formatString.getContext(), original);
+  return StringAttr::get(result, StringType::get(getContext()));
 }
 
-template <typename OpTy>
-OpFoldResult labelDeclFolder(OpTy op, typename OpTy::FoldAdaptor adaptor) {
-  auto newFormatString =
-      substituteFormatString(op.getFormatStringAttr(), adaptor.getArgs());
-  if (newFormatString == op.getFormatStringAttr())
+//===----------------------------------------------------------------------===//
+// IntFormatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult IntFormatOp::fold(FoldAdaptor adaptor) {
+  auto intAttr = dyn_cast_or_null<IntegerAttr>(adaptor.getValue());
+  if (!intAttr)
     return {};
-
-  op.setFormatStringAttr(newFormatString);
-
-  SmallVector<Value> newArgs;
-  for (auto [arg, attr] : llvm::zip(op.getArgs(), adaptor.getArgs())) {
-    if (!attr)
-      newArgs.push_back(arg);
-  }
-  op.getArgsMutable().assign(newArgs);
-
-  return op.getLabel();
+  if (!intAttr.getType().isIndex())
+    return {};
+  return StringAttr::get(Twine(intAttr.getValue().getZExtValue()),
+                         StringType::get(getContext()));
 }
 
-OpFoldResult LabelUniqueDeclOp::fold(FoldAdaptor adaptor) {
-  return labelDeclFolder(*this, adaptor);
+//===----------------------------------------------------------------------===//
+// ImmediateFormatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ImmediateFormatOp::fold(FoldAdaptor adaptor) {
+  auto immAttr = dyn_cast_or_null<ImmediateAttr>(adaptor.getValue());
+  if (!immAttr)
+    return {};
+  SmallString<16> strBuf("0x");
+  immAttr.getValue().toString(strBuf, 16, /*Signed=*/false);
+  return StringAttr::get(strBuf, StringType::get(getContext()));
 }
 
-OpFoldResult LabelDeclOp::fold(FoldAdaptor adaptor) {
-  return labelDeclFolder(*this, adaptor);
+//===----------------------------------------------------------------------===//
+// RegisterFormatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult RegisterFormatOp::fold(FoldAdaptor adaptor) {
+  auto regAttr = dyn_cast_or_null<RegisterAttrInterface>(adaptor.getValue());
+  if (!regAttr)
+    return {};
+  return StringAttr::get(regAttr.getRegisterAssembly(),
+                         StringType::get(getContext()));
+}
+
+//===----------------------------------------------------------------------===//
+// StringToLabelOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult StringToLabelOp::fold(FoldAdaptor adaptor) {
+  if (auto stringAttr = dyn_cast_or_null<StringAttr>(adaptor.getString()))
+    return LabelAttr::get(getContext(), stringAttr.getValue());
+
+  return {};
 }
 
 //===----------------------------------------------------------------------===//

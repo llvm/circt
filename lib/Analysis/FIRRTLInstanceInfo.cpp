@@ -86,7 +86,7 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
   for (auto *node : iGraph) {
     auto moduleOp = node->getModule();
     AnnotationSet annotations(moduleOp);
-    if (annotations.hasAnnotation(dutAnnoClass)) {
+    if (annotations.hasAnnotation(markDUTAnnoClass)) {
       circuitAttributes.dut = moduleOp;
       circuitAttributes.effectiveDut = moduleOp;
     }
@@ -113,7 +113,7 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
     ModuleAttributes &attributes = moduleAttributes[moduleOp];
 
     AnnotationSet annotations(moduleOp);
-    auto isDut = annotations.hasAnnotation(dutAnnoClass);
+    auto isDut = annotations.hasAnnotation(markDUTAnnoClass);
     auto isGCCompanion = annotations.hasAnnotation(companionAnnoClass);
 
     if (isDut) {

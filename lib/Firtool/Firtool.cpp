@@ -232,6 +232,11 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
                                              const FirtoolOptions &opt,
                                              StringRef inputFilename) {
+  // Populate instance macros for instance choice operations before lowering to
+  // HW.
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createPopulateInstanceChoiceSymbols());
+
   // Run layersink immediately before LowerXMR. LowerXMR will "freeze" the
   // location of probed objects by placing symbols on them. Run layersink first
   // so that probed objects can be sunk if possible.
@@ -776,17 +781,19 @@ struct FirtoolCmdOptions {
 
   llvm::cl::opt<firtool::FirtoolOptions::DomainMode> domainMode{
       "domain-mode", llvm::cl::desc("Enable domain inference and checking"),
-      llvm::cl::init(firtool::FirtoolOptions::DomainMode::Disable),
+      llvm::cl::init(firtool::FirtoolOptions::DomainMode::Strip),
       llvm::cl::values(
+          clEnumValN(firtool::FirtoolOptions::DomainMode::Check, "check",
+                     "Check domains without inference"),
           clEnumValN(firtool::FirtoolOptions::DomainMode::Disable, "disable",
                      "Disable domain checking"),
           clEnumValN(firtool::FirtoolOptions::DomainMode::Infer, "infer",
                      "Check domains with inference for private modules"),
-          clEnumValN(firtool::FirtoolOptions::DomainMode::Check, "check",
-                     "Check domains without inference"),
           clEnumValN(firtool::FirtoolOptions::DomainMode::InferAll, "infer-all",
                      "Check domains with inference for both public and private "
-                     "modules"))};
+                     "modules"),
+          clEnumValN(firtool::FirtoolOptions::DomainMode::Strip, "strip",
+                     "Erase all domain information"))};
 
   //===----------------------------------------------------------------------===
   // Lint options

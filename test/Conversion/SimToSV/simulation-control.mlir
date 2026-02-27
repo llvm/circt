@@ -10,11 +10,11 @@ hw.module @NonProcedural(in %clock: !seq.clock, in %cond: i1) {
 
   // CHECK-NEXT: sv.finish 1
   sim.clocked_terminate %clock, %cond, success, verbose
-  // CHECK-NEXT: sv.fatal 1
+  // CHECK-NEXT: sv.fatal.procedural 1
   sim.clocked_terminate %clock, %cond, failure, verbose
   // CHECK-NEXT: sv.finish 0
   sim.clocked_terminate %clock, %cond, success, quiet
-  // CHECK-NEXT: sv.fatal 0
+  // CHECK-NEXT: sv.fatal.procedural 0
   sim.clocked_terminate %clock, %cond, failure, quiet
   // CHECK-NEXT: sv.stop 1
   sim.clocked_pause %clock, %cond, verbose
@@ -35,11 +35,11 @@ hw.module @Procedural() {
 
     // CHECK-NEXT: sv.finish 1
     sim.terminate success, verbose
-    // CHECK-NEXT: sv.fatal 1
+    // CHECK-NEXT: sv.fatal.procedural 1
     sim.terminate failure, verbose
     // CHECK-NEXT: sv.finish 0
     sim.terminate success, quiet
-    // CHECK-NEXT: sv.fatal 0
+    // CHECK-NEXT: sv.fatal.procedural 0
     sim.terminate failure, quiet
     // CHECK-NEXT: sv.stop 1
     sim.pause verbose

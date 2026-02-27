@@ -12,7 +12,7 @@
 // DBGOFF-NOT: [ArcRuntime] Instance with ID 0 initialized
 
 // DBGON:      [ArcRuntime] Created instance of model "flipflop" with ID 0
-// DBGON-NEXT: [ArcRuntime] Instance with ID 0 initialized
+// DBGON:      [ArcRuntime] Instance with ID 0 initialized
 
 // CHECK:      d0 = 00
 // CHECK-NEXT: d0 = ca
@@ -24,7 +24,7 @@
 // DBGOFF-NOT: [ArcRuntime] Instance with ID 1 initialized
 
 // DBGON-NEXT: [ArcRuntime] Created instance of model "flipflop" with ID 1
-// DBGON-NEXT: [ArcRuntime] Instance with ID 1 initialized
+// DBGON:      [ArcRuntime] Instance with ID 1 initialized
 
 // CHECK:      d1 = 00
 // CHECK-NEXT: d1 = fe

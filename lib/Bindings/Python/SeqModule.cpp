@@ -40,4 +40,53 @@ void circt::python::populateDialectSeqSubmodule(nb::module_ &m) {
       .def_property_readonly("inner_type", [](MlirType self) {
         return seqImmutableTypeGetInnerType(self);
       });
+
+  mlir_type_subclass(m, "HLMemType", seqTypeIsAHLMem)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, std::vector<int64_t> shape, MlirType elementType,
+             MlirContext ctx) {
+            return cls(
+                seqHLMemTypeGet(ctx, shape.size(), shape.data(), elementType));
+          },
+          nb::arg("cls"), nb::arg("shape"), nb::arg("element_type"),
+          nb::arg("context") = nb::none())
+      .def_property_readonly(
+          "element_type",
+          [](MlirType self) { return seqHLMemTypeGetElementType(self); })
+      .def_property_readonly(
+          "rank", [](MlirType self) { return seqHLMemTypeGetRank(self); })
+      .def_property_readonly("shape", [](MlirType self) {
+        intptr_t rank = seqHLMemTypeGetRank(self);
+        const int64_t *shapePtr = seqHLMemTypeGetShape(self);
+        nb::list result;
+        for (intptr_t i = 0; i < rank; ++i)
+          result.append(shapePtr[i]);
+        return result;
+      });
+
+  mlir_type_subclass(m, "FirMemType", seqTypeIsAFirMem)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, uint64_t depth, uint32_t width,
+             std::optional<uint32_t> maskWidth, MlirContext ctx) {
+            const uint32_t *maskPtr = nullptr;
+            uint32_t maskVal = 0;
+            if (maskWidth.has_value()) {
+              maskVal = maskWidth.value();
+              maskPtr = &maskVal;
+            }
+            return cls(seqFirMemTypeGet(ctx, depth, width, maskPtr));
+          },
+          nb::arg("cls"), nb::arg("depth"), nb::arg("width"),
+          nb::arg("mask_width") = nb::none(), nb::arg("context") = nb::none())
+      .def_property_readonly(
+          "depth", [](MlirType self) { return seqFirMemTypeGetDepth(self); })
+      .def_property_readonly(
+          "width", [](MlirType self) { return seqFirMemTypeGetWidth(self); })
+      .def_property_readonly("mask_width", [](MlirType self) -> nb::object {
+        if (seqFirMemTypeHasMask(self))
+          return nb::cast(seqFirMemTypeGetMaskWidth(self));
+        return nb::none();
+      });
 }

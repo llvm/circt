@@ -31,7 +31,7 @@
 
       %4 = moore.constant 1 : i32
       %5 = moore.bool_cast %4 : i32 -> i1
-      %6 = moore.to_builtin_bool %5 : !moore.i1
+      %6 = moore.to_builtin_int %5 : !moore.i1
       scf.if %6 {
         // CHECK: moore.concat_ref %u, %v
         %7 = moore.concat_ref %u, %v : (!moore.ref<l8960>, !moore.ref<l42>) -> <l9002>

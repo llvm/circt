@@ -24,6 +24,9 @@ def _FromCirctValue(value: ir.Value) -> Value:
   if isinstance(type, rtg.BagType):
     from .bags import Bag
     return Bag(value)
+  if isinstance(type, rtg.StringType):
+    from .strings import String
+    return String(value)
   if isinstance(type, rtg.SequenceType):
     from .sequences import Sequence
     return Sequence(value)
@@ -86,6 +89,9 @@ def _FromCirctType(type: Union[ir.Type, Type]) -> Type:
   if isinstance(type, rtg.LabelType):
     from .labels import LabelType
     return LabelType()
+  if isinstance(type, rtg.StringType):
+    from .strings import StringType
+    return StringType()
   if isinstance(type, rtg.SequenceType):
     from .sequences import SequenceType
     return SequenceType(

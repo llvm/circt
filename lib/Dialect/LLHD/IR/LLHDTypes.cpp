@@ -10,9 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/LLHD/IR/LLHDTypes.h"
+#include "circt/Dialect/LLHD/LLHDTypes.h"
 #include "circt/Dialect/HW/HWTypes.h"
-#include "circt/Dialect/LLHD/IR/LLHDDialect.h"
+#include "circt/Dialect/LLHD/LLHDDialect.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -21,10 +21,10 @@ using namespace circt::llhd;
 using namespace mlir;
 
 #define GET_TYPEDEF_CLASSES
-#include "circt/Dialect/LLHD/IR/LLHDTypes.cpp.inc"
+#include "circt/Dialect/LLHD/LLHDTypes.cpp.inc"
 
 #define GET_ATTRDEF_CLASSES
-#include "circt/Dialect/LLHD/IR/LLHDAttributes.cpp.inc"
+#include "circt/Dialect/LLHD/LLHDAttributes.cpp.inc"
 
 //===----------------------------------------------------------------------===//
 // Time Attribute
@@ -83,13 +83,13 @@ LogicalResult TimeAttr::verify(function_ref<InFlightDiagnostic()> emitError,
 void LLHDDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST
-#include "circt/Dialect/LLHD/IR/LLHDTypes.cpp.inc"
+#include "circt/Dialect/LLHD/LLHDTypes.cpp.inc"
       >();
 }
 
 void LLHDDialect::registerAttributes() {
   addAttributes<
 #define GET_ATTRDEF_LIST
-#include "circt/Dialect/LLHD/IR/LLHDAttributes.cpp.inc"
+#include "circt/Dialect/LLHD/LLHDAttributes.cpp.inc"
       >();
 }

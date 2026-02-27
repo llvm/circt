@@ -652,3 +652,26 @@ firrtl.circuit "SameDefname" {
     firrtl.propassign %bar_2_a, %0 : !firrtl.integer
   }
 }
+
+firrtl.circuit "UnknownValue" {
+  // Simple class for testing unknown object references
+  firrtl.class private @SimpleClass(out %value: !firrtl.integer) {
+    %0 = firrtl.integer 42
+    firrtl.propassign %value, %0 : !firrtl.integer
+  }
+
+  // CHECK-LABEL: om.class @UnknownValue_Class
+  // CHECK-SAME: -> (a: !om.integer, b: !om.string, c: !om.class.type<@SimpleClass>)
+  firrtl.module @UnknownValue(out %a: !firrtl.integer, out %b: !firrtl.string, out %c: !firrtl.class<@SimpleClass(out value: !firrtl.integer)>) {
+    // CHECK: %[[UNKNOWN_INT:.+]] = om.unknown : !om.integer
+    %0 = firrtl.unknown : !firrtl.integer
+    firrtl.propassign %a, %0 : !firrtl.integer
+    // CHECK: %[[UNKNOWN_STR:.+]] = om.unknown : !om.string
+    %1 = firrtl.unknown : !firrtl.string
+    firrtl.propassign %b, %1 : !firrtl.string
+    // CHECK: %[[UNKNOWN_OBJ:.+]] = om.unknown : !om.class.type<@SimpleClass>
+    %2 = firrtl.unknown : !firrtl.class<@SimpleClass(out value: !firrtl.integer)>
+    firrtl.propassign %c, %2 : !firrtl.class<@SimpleClass(out value: !firrtl.integer)>
+    // CHECK: om.class.fields %[[UNKNOWN_INT]], %[[UNKNOWN_STR]], %[[UNKNOWN_OBJ]] : !om.integer, !om.string, !om.class.type<@SimpleClass>
+  }
+}

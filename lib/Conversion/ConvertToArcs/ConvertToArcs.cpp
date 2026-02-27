@@ -9,7 +9,7 @@
 #include "circt/Conversion/ConvertToArcs.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/LLHD/IR/LLHDOps.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Support/ConversionPatternSet.h"

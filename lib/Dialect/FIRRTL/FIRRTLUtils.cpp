@@ -23,6 +23,28 @@
 using namespace circt;
 using namespace firrtl;
 
+//===----------------------------------------------------------------------===//
+// TieOffCache
+//===----------------------------------------------------------------------===//
+
+Value TieOffCache::getInvalid(FIRRTLBaseType type) {
+  Value &cached = cache[type];
+  if (!cached)
+    cached = InvalidValueOp::create(builder, type);
+  return cached;
+}
+
+Value TieOffCache::getUnknown(PropertyType type) {
+  Value &cached = cache[type];
+  if (!cached)
+    cached = builder.create<UnknownValueOp>(type);
+  return cached;
+}
+
+//===----------------------------------------------------------------------===//
+// emitConnect
+//===----------------------------------------------------------------------===//
+
 void circt::firrtl::emitConnect(OpBuilder &builder, Location loc, Value dst,
                                 Value src) {
   ImplicitLocOpBuilder locBuilder(loc, builder.getInsertionBlock(),
@@ -569,7 +591,7 @@ static void getDeclName(Value value, SmallString<64> &string, bool nameSafe) {
           string += op.getInstanceName();
           value = nullptr;
         })
-        .Case<InstanceOp, MemOp>([&](auto op) {
+        .Case<InstanceOp, InstanceChoiceOp, MemOp>([&](auto op) {
           string += op.getName();
           string += nameSafe ? "_" : ".";
           string += op.getPortName(cast<OpResult>(value).getResultNumber());

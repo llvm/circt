@@ -167,7 +167,7 @@ struct TypeVisitor {
   }
 
   Type visit(const slang::ast::ClassType &type) {
-    if (failed(context.convertClassDeclaration(type)))
+    if (failed(context.buildClassProperties(type)))
       return {};
     auto *lowering = context.declareClass(type);
     if (!lowering) {

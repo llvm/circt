@@ -190,16 +190,20 @@ struct BinaryOpConversion : OpConversionPattern<SourceOp> {
   }
 };
 
-/// Lowering for division operations that need to special-case zero-value
-/// divisors to not run coarser UB than CIRCT defines.
+/// Lowering for unsigned division / remainder operations that need to
+/// special-case zero-value divisors to not run coarser UB than CIRCT defines.
 template <typename SourceOp, typename TargetOp>
-struct DivOpConversion : OpConversionPattern<SourceOp> {
+struct DivUOpConversion : OpConversionPattern<SourceOp> {
   using OpConversionPattern<SourceOp>::OpConversionPattern;
   using OpAdaptor = typename SourceOp::Adaptor;
 
   LogicalResult
   matchAndRewrite(SourceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    // Rewrite: divu(a, b) ~>
+    //    isZero = (b == 0)
+    //    divisor = isZero ? 1 : b;
+    //    result = divu(a, divisor)
     Location loc = op.getLoc();
     Value zero = arith::ConstantOp::create(
         rewriter, loc, rewriter.getIntegerAttr(adaptor.getRhs().getType(), 0));
@@ -210,6 +214,65 @@ struct DivOpConversion : OpConversionPattern<SourceOp> {
     Value divisor =
         arith::SelectOp::create(rewriter, loc, isZero, one, adaptor.getRhs());
     rewriter.replaceOpWithNewOp<TargetOp>(op, adaptor.getLhs(), divisor);
+    return success();
+  }
+};
+
+/// Lowering for signed division / remainder that need to special-case INT_MIN /
+/// -1 (and division by zero).
+template <typename SourceOp, typename TargetOp, bool IsRem>
+class DivSOpConversion : public OpConversionPattern<SourceOp> {
+public:
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value dividend = adaptor.getLhs();
+    Value divisor = adaptor.getRhs();
+    Type ty = op.getType();
+
+    // Rewrite: divs(a, b) ~>
+    //    isZero = (b == 0)
+    //    isOverflow = (b == -1 && a == INT_MIN)
+    //    pred = isZero || isOverflow
+    //    rhs_safe = pred ? 1 : b;
+    //    c = divs(a, rhs_safe)
+    //    result = isOverflow ? INT_MIN : c;
+    //
+    // mods is the same except the result is zero when isOverflow is true. These
+    // values were chosen to align with the behavior of existing Verilog
+    // simulators.
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    auto eq = [&](Value lhs, Value rhs) {
+      return arith::CmpIOp::create(b, CmpIPredicate::eq, lhs, rhs);
+    };
+    auto and_ = [&](Value lhs, Value rhs) {
+      return arith::AndIOp::create(b, lhs, rhs);
+    };
+    auto or_ = [&](Value lhs, Value rhs) {
+      return arith::OrIOp::create(b, lhs, rhs);
+    };
+
+    int bitwidth = ty.getIntOrFloatBitWidth();
+    Value zero = arith::ConstantOp::create(b, rewriter.getIntegerAttr(ty, 0));
+    Value one = arith::ConstantOp::create(b, rewriter.getIntegerAttr(ty, 1));
+    Value int_min = arith::ConstantOp::create(
+        b, rewriter.getIntegerAttr(ty, APInt::getSignedMinValue(bitwidth)));
+    Value minus_one = arith::ConstantOp::create(
+        b, rewriter.getIntegerAttr(ty, APInt::getAllOnes(bitwidth)));
+
+    Value isZero = eq(divisor, zero);
+    Value isOverflow = and_(eq(dividend, int_min), eq(divisor, minus_one));
+    Value pred = or_(isZero, isOverflow);
+    Value safeDivisor = arith::SelectOp::create(b, pred, one, divisor);
+    auto newOp = TargetOp::create(b, dividend, safeDivisor);
+
+    Value resultIfOverflow = IsRem ? zero : int_min;
+    Value result =
+        arith::SelectOp::create(b, isOverflow, resultIfOverflow, newOp);
+    rewriter.replaceOp(op, result);
     return success();
   }
 };
@@ -311,9 +374,11 @@ void circt::populateCombToArithConversionPatterns(
       ExtractOpConversion, ConcatOpConversion, ShrSOpConversion,
       LogicalShiftConversion<ShlOp, ShLIOp>,
       LogicalShiftConversion<ShrUOp, ShRUIOp>,
-      BinaryOpConversion<SubOp, SubIOp>, DivOpConversion<DivSOp, DivSIOp>,
-      DivOpConversion<DivUOp, DivUIOp>, DivOpConversion<ModSOp, RemSIOp>,
-      DivOpConversion<ModUOp, RemUIOp>, BinaryOpConversion<MuxOp, SelectOp>,
+      BinaryOpConversion<SubOp, SubIOp>,
+      DivSOpConversion<DivSOp, DivSIOp, /*IsRem=*/false>,
+      DivUOpConversion<DivUOp, DivUIOp>,
+      DivSOpConversion<ModSOp, RemSIOp, /*IsRem=*/true>,
+      DivUOpConversion<ModUOp, RemUIOp>, BinaryOpConversion<MuxOp, SelectOp>,
       VariadicOpConversion<AddOp, AddIOp>, VariadicOpConversion<MulOp, MulIOp>,
       VariadicOpConversion<AndOp, AndIOp>, VariadicOpConversion<OrOp, OrIOp>,
       VariadicOpConversion<XorOp, XOrIOp>>(converter, patterns.getContext());

@@ -239,8 +239,20 @@ struct ObjectModelIR {
     auto createConstField = [&](Attribute constVal) -> Value {
       if (auto boolConstant = dyn_cast_or_null<mlir::BoolAttr>(constVal))
         return BoolConstantOp::create(builderOM, boolConstant);
-      if (auto intConstant = dyn_cast_or_null<mlir::IntegerAttr>(constVal))
+      if (auto intConstant = dyn_cast_or_null<mlir::IntegerAttr>(constVal)) {
+        auto type = cast<IntegerType>(intConstant.getType());
+        if (type.isSignlessInteger() || type.isUnsigned()) {
+          auto width = type.getWidth();
+          auto apInt = intConstant.getValue();
+          if (apInt.isNegative()) {
+            ++width;
+            apInt = apInt.zext(width);
+          }
+          type = IntegerType::get(context, width, IntegerType::Signed);
+          intConstant = IntegerAttr::get(type, apInt);
+        }
         return FIntegerConstantOp::create(builderOM, intConstant);
+      }
       if (auto strConstant = dyn_cast_or_null<mlir::StringAttr>(constVal))
         return StringConstantOp::create(builderOM, strConstant);
       return {};
@@ -700,7 +712,7 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
   auto builder = ImplicitLocOpBuilder::atBlockEnd(UnknownLoc::get(context),
                                                   circuitOp.getBodyBlock());
   AnnotationSet annos(circuitOp);
-  auto dirAnno = annos.getAnnotation(metadataDirectoryAttrName);
+  auto dirAnno = annos.getAnnotation(metadataDirAnnoClass);
   StringRef metadataDir = "metadata";
   if (dirAnno)
     if (auto dir = dirAnno.getMember<StringAttr>("dirname"))
@@ -788,7 +800,7 @@ CreateSiFiveMetadataPass::emitRetimeModulesMetadata(ObjectModelIR &omir) {
 
   // Get the filename, removing the annotation from the circuit.
   StringRef filename;
-  if (failed(removeAnnotationWithFilename(circuitOp, retimeModulesFileAnnoClass,
+  if (failed(removeAnnotationWithFilename(circuitOp, retimeModulesAnnoClass,
                                           filename)))
     return failure();
 

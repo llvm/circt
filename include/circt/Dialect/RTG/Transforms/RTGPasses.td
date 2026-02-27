@@ -71,6 +71,11 @@ def InlineSequencesPass : Pass<"rtg-inline-sequences", "mlir::ModuleOp"> {
     ('interleave_sequences' operation).
   }];
 
+  let options = [
+    Option<"failOnRemaining", "fail-on-remaining", "bool", /*default=*/"false",
+      "Fail if there are remaining 'rtg.sequence' operations after inlining.">,
+  ];
+
   let statistics = [
     Statistic<"numSequencesInlined", "num-sequences-inlined",
       "Number of sequences inlined into another sequence or test.">,
@@ -226,6 +231,8 @@ def SimpleTestInlinerPass : Pass<"rtg-simple-test-inliner", "mlir::ModuleOp"> {
     production pipeline but just to bring the IR into a structure understood by
     the RTG ISA assembly emission pass to avoid making that pass more complex.
   }];
+
+  let dependentDialects = ["rtg::RTGDialect"];
 }
 
 def MaterializeConstraintsPass : Pass<"rtg-materialize-constraints"> {

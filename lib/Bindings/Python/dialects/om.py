@@ -41,7 +41,7 @@ def wrap_mlir_object(value):
 
 def om_var_to_attribute(obj, none_on_fail: bool = False) -> ir.Attrbute:
   if isinstance(obj, int):
-    return OMIntegerAttr.get(IntegerAttr.get(IntegerType.get_signless(64), obj))
+    return OMIntegerAttr.get(IntegerAttr.get(IntegerType.get_signed(64), obj))
   return var_to_attribute(obj, none_on_fail)
 
 

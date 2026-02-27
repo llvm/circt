@@ -1,7 +1,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 from pycde import dim, Input, Output, generator, System, Module
-from pycde.types import (Bit, Bits, List, SInt, StructType, TypeAlias,
+from pycde.types import (Array, Bit, Bits, List, SInt, StructType, TypeAlias,
                          UnionType, UInt, Window)
 from pycde.testing import unittestmodule
 from pycde.signals import Struct, UIntSignal
@@ -34,6 +34,12 @@ dim_alias = dim(1, 8, name="myname5")
 # CHECK: List<Bits<5>>
 i5list = List(Bits(5))
 print(i5list)
+
+# CHECK: aliasedArray
+aliasedArray = TypeAlias(Array(Bits(1), 8), "aliasedArray")
+print(aliasedArray)
+# CHECK: Bits<1>[8]
+print(aliasedArray.inner_type)
 
 
 class Dummy(Module):

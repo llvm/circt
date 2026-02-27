@@ -415,6 +415,23 @@ def FrozenEmptyPathOp : OMOp<"frozenpath_empty", [Pure]> {
   let assemblyFormat = "attr-dict";
 }
 
+def UnknownValueOp : OMOp<"unknown", [
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+]> {
+  let summary = "An operation with an unknown value used to tie-off connections";
+  let description = [{
+
+    An operation that is used to tie-off connections to objects for which we do
+    not care about the value being used.
+
+    This is used in situations where a class exists and is instantiated, but the
+    instantiator has no reasonable value that it can or should drive.
+  }];
+  let arguments = (ins);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+}
+
 def AnyCastOp : OMOp<"any_cast", [Pure]> {
   let summary = "Cast any value to any type.";
 

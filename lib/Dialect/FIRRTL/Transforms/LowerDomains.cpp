@@ -44,6 +44,8 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/OM/OMOps.h"
+#include "circt/Dialect/OM/OMTypes.h"
 #include "circt/Support/Debug.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -527,9 +529,31 @@ LogicalResult LowerModule::lowerModule() {
         return WalkResult::advance();
       }
 
-      // Track anonymous domains for later traversal and erasure.
+      // Replace an anonymous domain with an anoymous value op and a conversion.
+      // Only do this if the domain has users that won't be deleted.  Otherwise,
+      // erase it.
       if (auto anonDomain = dyn_cast<DomainCreateAnonOp>(walkOp)) {
-        conversionsToErase.insert(anonDomain);
+        // Short circuit erasure.
+        auto noUser = llvm::all_of(anonDomain->getUsers(), [&](auto *user) {
+          return operationsToErase.contains(user) ||
+                 conversionsToErase.contains(user);
+        });
+        if (noUser) {
+          conversionsToErase.insert(anonDomain);
+          return WalkResult::advance();
+        }
+
+        // The op has at least one use.  Replace it.  This changes the type, so
+        // wrap this in a cast.  The cast will be removed later.
+        OpBuilder builder(anonDomain);
+        auto classIn =
+            domainToClasses.at(anonDomain.getDomainAttr().getAttr()).input;
+        anonDomain.replaceAllUsesWith(UnrealizedConversionCastOp::create(
+            builder, anonDomain.getLoc(), {anonDomain.getType()},
+            {UnknownValueOp::create(builder, anonDomain.getLoc(),
+                                    classIn.getInstanceType())
+                 .getResult()}));
+        anonDomain.erase();
         return WalkResult::advance();
       }
 

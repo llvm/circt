@@ -11,8 +11,7 @@ firrtl.circuit "xmr" {
     %x = firrtl.ref.resolve %1 : !firrtl.probe<uint<2>>
     // CHECK-NOT: firrtl.ref.resolve
     firrtl.matchingconnect %o, %x : !firrtl.uint<2>
-    // CHECK:      %w = firrtl.wire : !firrtl.uint<2>
-    // CHECK:      %w_probe = firrtl.node sym @[[wSym]] interesting_name %w : !firrtl.uint<2>
+    // CHECK:      %w = firrtl.wire sym @[[wSym]] : !firrtl.uint<2>
     // CHECK-NEXT: %[[#xmr:]] = firrtl.xmr.deref @xmrPath : !firrtl.uint<2>
     // CHECK:      firrtl.matchingconnect %o, %[[#xmr]] : !firrtl.uint<2>
   }
@@ -485,7 +484,7 @@ firrtl.circuit "Top" {
                      out %c: !firrtl.probe<uint<1>>,
                      out %d: !firrtl.probe<uint<1>>) {
     %w = firrtl.wire sym @w : !firrtl.uint<1>
-    // CHECK: firrtl.node sym @[[TOP_W_SYM]] interesting_name %w
+    // CHECK: %w = firrtl.wire sym @[[TOP_W_SYM]]
     %0 = firrtl.ref.send %w : !firrtl.uint<1>
     firrtl.ref.define %a, %0 : !firrtl.probe<uint<1>>
 
@@ -507,7 +506,7 @@ firrtl.circuit "Top" {
   // CHECK-LABEL: firrtl.module @Foo()
   firrtl.module @Foo(out %x: !firrtl.probe<uint<1>>, out %y: !firrtl.probe<uint<1>>) {
     %w = firrtl.wire sym @x : !firrtl.uint<1>
-    // CHECK: firrtl.node sym @[[FOO_X_SYM]] interesting_name %w
+    // CHECK: %w = firrtl.wire sym @[[FOO_X_SYM]]
     %0 = firrtl.ref.send %w : !firrtl.uint<1>
     firrtl.ref.define %x, %0 : !firrtl.probe<uint<1>>
 
@@ -759,7 +758,7 @@ firrtl.circuit "Foo" {
     //CHECK: sv.ifdef
     sv.ifdef @A {
       %b = firrtl.wire : !firrtl.uint<1>
-      // CHECK: firrtl.node sym @[[SYM]] {{.*}} %b
+      // CHECK: %b = firrtl.wire sym @[[SYM]]
       %0 = firrtl.ref.send %b : !firrtl.uint<1>
       firrtl.ref.define %a, %0 : !firrtl.probe<uint<1>>
     }
@@ -786,5 +785,34 @@ firrtl.circuit "PF" {
   firrtl.module @Other(out %p: !firrtl.probe<uint<1>>) {
     %c_p = firrtl.instance c @Child(out p: !firrtl.probe<uint<1>>)
     firrtl.ref.define %p, %c_p : !firrtl.probe<uint<1>>
+  }
+}
+
+
+// -----
+// Test that instance results used in both connects and ref.send preserve
+// correct flow semantics. The node created for the XMR should not replace
+// uses where the instance result is the destination of a connect.
+
+// CHECK-LABEL: firrtl.circuit "ConnectFlow"
+firrtl.circuit "ConnectFlow" {
+  firrtl.extmodule @Ext(in clock: !firrtl.clock)
+
+  // CHECK: firrtl.module @ConnectFlow()
+  firrtl.module @ConnectFlow(out %probe: !firrtl.probe<clock>) {
+    // CHECK: %ext_clock = firrtl.instance ext @Ext(in clock: !firrtl.clock)
+    %ext_clock = firrtl.instance ext @Ext(in clock: !firrtl.clock)
+
+    // CHECK-NEXT: %ext_clock_probe = firrtl.node sym @{{[^ ]+}} interesting_name %ext_clock
+    // CHECK-NEXT: %invalid_clock = firrtl.invalidvalue
+    %invalid_clock = firrtl.invalidvalue : !firrtl.clock
+
+    // CHECK-NEXT: firrtl.matchingconnect %ext_clock, %invalid_clock
+    // The connect should still use %ext_clock (not %ext_clock_probe) to preserve sink flow
+    firrtl.matchingconnect %ext_clock, %invalid_clock : !firrtl.clock
+
+    // The ref.send and ref.define are removed by LowerXMR
+    %0 = firrtl.ref.send %ext_clock : !firrtl.clock
+    firrtl.ref.define %probe, %0 : !firrtl.probe<clock>
   }
 }

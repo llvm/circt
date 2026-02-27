@@ -1,4 +1,6 @@
-; RUN: firtool %s -output-final-mlir %t.mlir && FileCheck %s < %t.mlir
+; RUN: firtool %s -output-final-mlir - -o /dev/null                    | FileCheck %s -implicit-check-not om.frozenpath_create -implicit-check-not Domain
+; RUN: firtool %s -output-final-mlir - -domain-mode=check -o /dev/null | FileCheck %s -check-prefixes=CHECK,DOMAIN
+; RUN: firtool %s -output-final-mlir - -domain-mode=strip -o /dev/null | FileCheck %s -implicit-check-not om.frozenpath_create -implicit-check-not Domain
 
 FIRRTL version 6.0.0
 circuit Foo :
@@ -18,17 +20,17 @@ circuit Foo :
     input b : UInt<1> domains [A, B]
 
 ; CHECK-LABEL: om.class @Foo_Class
-; CHECK-NEXT:    om.object @ClockDomain_out(%basepath, %A, %[[#association:]])
-; CHECK-NEXT:    %[[#a:]] = om.frozenpath_create reference %basepath "Foo>a"
-; CHECK-NEXT:    %[[#b:]] = om.frozenpath_create reference %basepath "Foo>b"
-; CHECK-NEXT:    %[[#association]] = om.list_create %[[#a]], %[[#b]]
+; DOMAIN-NEXT:   om.object @ClockDomain_out(%basepath, %A, %[[#association:]])
+; DOMAIN-NEXT:   %[[#a:]] = om.frozenpath_create reference %basepath "Foo>a"
+; DOMAIN-NEXT:   %[[#b:]] = om.frozenpath_create reference %basepath "Foo>b"
+; DOMAIN-NEXT:   %[[#association]] = om.list_create %[[#a]], %[[#b]]
 ;
-; CHECK:         om.object @PowerDomain_out(%basepath, %B, %[[#association:]])
-; CHECK-NEXT:    %[[#a:]] = om.frozenpath_create reference %basepath "Foo>a"
-; CHECK-NEXT:    %[[#b:]] = om.frozenpath_create reference %basepath "Foo>b"
-; CHECK-NEXT:    %[[#association]] = om.list_create %[[#a]], %[[#b]]
+; DOMAIN:        om.object @PowerDomain_out(%basepath, %B, %[[#association:]])
+; DOMAIN-NEXT:   %[[#a:]] = om.frozenpath_create reference %basepath "Foo>a"
+; DOMAIN-NEXT:   %[[#b:]] = om.frozenpath_create reference %basepath "Foo>b"
+; DOMAIN-NEXT:   %[[#association]] = om.list_create %[[#a]], %[[#b]]
 ;
-; CHECK-LABEL: om.class @ClockDomain
-; CHECK-LABEL: om.class @ClockDomain_out
-; CHECK-LABEL: om.class @PowerDomain
-; CHECK-LABEL: om.class @PowerDomain_out
+; DOMAIN-LABEL: om.class @ClockDomain
+; DOMAIN-LABEL: om.class @ClockDomain_out
+; DOMAIN-LABEL: om.class @PowerDomain
+; DOMAIN-LABEL: om.class @PowerDomain_out

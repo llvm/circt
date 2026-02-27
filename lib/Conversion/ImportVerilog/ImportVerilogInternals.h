@@ -58,6 +58,7 @@ struct FunctionLowering {
 // Class lowering information.
 struct ClassLowering {
   circt::moore::ClassDeclOp op;
+  bool methodsFinalized = false;
 };
 
 /// Information about a loops continuation and exit blocks relevant while
@@ -120,8 +121,9 @@ struct Context {
   declareFunction(const slang::ast::SubroutineSymbol &subroutine);
   LogicalResult convertFunction(const slang::ast::SubroutineSymbol &subroutine);
   LogicalResult finalizeFunctionBodyCaptures(FunctionLowering &lowering);
-  LogicalResult convertClassDeclaration(const slang::ast::ClassType &classdecl);
   ClassLowering *declareClass(const slang::ast::ClassType &cls);
+  LogicalResult buildClassProperties(const slang::ast::ClassType &classdecl);
+  LogicalResult materializeClassMethods(const slang::ast::ClassType &classdecl);
   LogicalResult convertGlobalVariable(const slang::ast::VariableSymbol &var);
 
   /// Checks whether one class (actualTy) is derived from another class
@@ -138,6 +140,9 @@ struct Context {
   Value getImplicitThisRef() const {
     return currentThisRef; // block arg added in declareFunction
   }
+
+  Value getIndexedQueue() const { return currentQueue; }
+
   // Convert a statement AST node to MLIR ops.
   LogicalResult convertStatement(const slang::ast::Statement &stmt);
 
@@ -246,8 +251,8 @@ struct Context {
   /// Convert system function calls within properties and assertion with a
   /// single argument.
   FailureOr<Value> convertAssertionSystemCallArity1(
-      const slang::ast::SystemSubroutine &subroutine, Location loc,
-      Value value);
+      const slang::ast::SystemSubroutine &subroutine, Location loc, Value value,
+      Type originalType);
 
   /// Evaluate the constant value of an expression.
   slang::ConstantValue evaluateConstant(const slang::ast::Expression &expr);
@@ -337,6 +342,11 @@ struct Context {
   /// Variable to track the value of the current function's implicit `this`
   /// reference
   Value currentThisRef = {};
+
+  /// Variable that tracks the queue which we are currently converting the index
+  /// expression for. This is necessary to implement the `$` operator, which
+  /// returns the index of the last element of the queue.
+  Value currentQueue = {};
 
 private:
   /// Helper function to extract the commonalities in lowering of functions and

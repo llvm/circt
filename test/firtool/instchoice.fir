@@ -1,7 +1,7 @@
-; RUN: firtool %s --parse-only --select-instance-choice=Platform=ASIC | FileCheck %s
-; RUN: firtool %s --ir-fir --select-default-for-unspecified-instance-choice | FileCheck %s --check-prefixes=DEFAULT
-; RUN: firtool %s --ir-fir --select-instance-choice=Platform=FPGA | FileCheck %s --check-prefix=FPGA
-; RUN: firtool %s --ir-fir --select-instance-choice=Platform=ASIC | FileCheck %s --check-prefix=ASIC
+; RUN: firtool -domain-mode=disable %s --parse-only --select-instance-choice=Platform=ASIC | FileCheck %s
+; RUN: firtool -domain-mode=disable %s --ir-fir --select-default-for-unspecified-instance-choice | FileCheck %s --check-prefixes=DEFAULT
+; RUN: firtool -domain-mode=disable %s --ir-fir --select-instance-choice=Platform=FPGA | FileCheck %s --check-prefix=FPGA
+; RUN: firtool -domain-mode=disable %s --ir-fir --select-instance-choice=Platform=ASIC | FileCheck %s --check-prefix=ASIC
 
 FIRRTL version 5.1.0
 ; CHECK: firrtl.circuit "Foo"

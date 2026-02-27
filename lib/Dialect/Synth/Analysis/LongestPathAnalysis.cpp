@@ -1219,6 +1219,7 @@ LogicalResult LocalVisitor::initializeAndRun(hw::InstanceOp instance) {
         return failure();
 
       for (auto &result : *computedResults) {
+        // Update debug history for this path segment if tracing is enabled.
         auto newHistory = ctx->doTraceDebugPoints()
                               ? mapList(debugPointFactory.get(), history,
                                         [&](DebugPoint p) {
@@ -1229,15 +1230,22 @@ LogicalResult LocalVisitor::initializeAndRun(hw::InstanceOp instance) {
                                           return p;
                                         })
                               : debugPointFactory->getEmptyList();
+        Object newEndPoint(newPath, endPoint, endPointBitPos);
+        // Determine if this path continues upward or terminates here.
+        // If the start point is a module input port, the path
+        // continues to the parent module and needs further propagation.
         if (auto newPort = dyn_cast<BlockArgument>(result.startPoint.value)) {
+          // Record as "unclosed" - this path segment crosses module
+          // boundaries and needs to be combined with paths in the parent.
           putUnclosedResult(
-              {newPath, endPoint, endPointBitPos}, result.delay + delay,
-              newHistory,
+              newEndPoint, result.delay + delay, newHistory,
               fromInputPortToEndPoint[{newPort, result.startPoint.bitPos}]);
         } else {
-          endPointResults[{newPath, endPoint, endPointBitPos}].emplace_back(
-              newPath, result.startPoint.value, result.startPoint.bitPos,
-              result.delay + delay,
+          // This path originates from an internal sequential element
+          // in the parent module, so it's a complete register-to-register path
+          // that can be recorded as closed.
+          endPointResults[newEndPoint].emplace_back(
+              result.startPoint, result.delay + delay,
               ctx->doTraceDebugPoints() ? concatList(debugPointFactory.get(),
                                                      newHistory, result.history)
                                         : debugPointFactory->getEmptyList());

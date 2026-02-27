@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/LLHD/IR/LLHDOps.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -475,16 +475,28 @@ LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   typename SigStructExtractOp::Adaptor adaptor(operands, attrs, properties,
                                                regions);
-  Type type = cast<hw::StructType>(
-                  cast<RefType>(adaptor.getInput().getType()).getNestedType())
-                  .getFieldType(adaptor.getField());
-  if (!type) {
+  auto nestedType = cast<RefType>(adaptor.getInput().getType()).getNestedType();
+  Type fieldType;
+
+  // Support both StructType and UnionType
+  if (auto structType = dyn_cast<hw::StructType>(nestedType)) {
+    fieldType = structType.getFieldType(adaptor.getField());
+  } else if (auto unionType = dyn_cast<hw::UnionType>(nestedType)) {
+    fieldType = unionType.getFieldType(adaptor.getField());
+  } else {
+    context->getDiagEngine().emit(loc.value_or(UnknownLoc()),
+                                  DiagnosticSeverity::Error)
+        << "expected struct or union type";
+    return failure();
+  }
+
+  if (!fieldType) {
     context->getDiagEngine().emit(loc.value_or(UnknownLoc()),
                                   DiagnosticSeverity::Error)
         << "invalid field name specified";
     return failure();
   }
-  results.push_back(RefType::get(type));
+  results.push_back(RefType::get(fieldType));
   return success();
 }
 
@@ -495,9 +507,18 @@ bool SigStructExtractOp::canRewire(
     const DataLayout &dataLayout) {
   if (slot.ptr != getInput())
     return false;
-  auto index =
-      cast<hw::StructType>(cast<RefType>(getInput().getType()).getNestedType())
-          .getFieldIndex(getFieldAttr());
+
+  auto nestedType = cast<RefType>(getInput().getType()).getNestedType();
+  std::optional<uint32_t> index;
+
+  // Support both StructType and UnionType
+  if (auto structType = dyn_cast<hw::StructType>(nestedType))
+    index = structType.getFieldIndex(getFieldAttr());
+  else if (auto unionType = dyn_cast<hw::UnionType>(nestedType))
+    index = unionType.getFieldIndex(getFieldAttr());
+  else
+    return false;
+
   if (!index)
     return false;
   auto indexAttr = IntegerAttr::get(IndexType::get(getContext()), *index);
@@ -764,10 +785,15 @@ static LogicalResult verifyYieldResults(Operation *op,
                                         ValueRange yieldOperands) {
   // Determine the result values of the parent.
   auto *parentOp = op->getParentOp();
-  TypeRange resultTypes = TypeSwitch<Operation *, TypeRange>(parentOp)
-                              .Case<ProcessOp, CombinationalOp>(
-                                  [](auto op) { return op.getResultTypes(); })
-                              .Case<FinalOp>([](auto) { return TypeRange{}; });
+  SmallVector<Type> resultTypes;
+  TypeSwitch<Operation *>(parentOp)
+      .Case<ProcessOp, CombinationalOp>([&](auto op) {
+        resultTypes.append(op.getResultTypes().begin(),
+                           op.getResultTypes().end());
+      })
+      .Case<FinalOp>([](auto) {})
+      .Case<GlobalSignalOp>(
+          [&](auto op) { resultTypes.push_back(op.getType()); });
 
   // Check that the number of yield operands matches the process.
   if (yieldOperands.size() != resultTypes.size())
@@ -843,9 +869,57 @@ void llhd::registerDestructableIntegerExternalModel(DialectRegistry &registry) {
 }
 
 //===----------------------------------------------------------------------===//
+// GlobalSignalOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult GlobalSignalOp::verifyRegions() {
+  if (auto *block = getInitBlock()) {
+    auto &terminator = block->back();
+    if (!isa<YieldOp>(terminator))
+      return emitOpError() << "must have a 'llhd.yield' terminator";
+  }
+  return success();
+}
+
+Block *GlobalSignalOp::getInitBlock() {
+  if (getInitRegion().empty())
+    return nullptr;
+  return &getInitRegion().front();
+}
+
+//===----------------------------------------------------------------------===//
+// GetGlobalSignalOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+GetGlobalSignalOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Resolve the target symbol.
+  auto *symbol =
+      symbolTable.lookupNearestSymbolFrom(*this, getGlobalNameAttr());
+  if (!symbol)
+    return emitOpError() << "references unknown symbol " << getGlobalNameAttr();
+
+  // Check that the symbol is a global signal.
+  auto signal = dyn_cast<GlobalSignalOp>(symbol);
+  if (!signal)
+    return emitOpError() << "must reference a 'llhd.global_signal', but "
+                         << getGlobalNameAttr() << " is a '"
+                         << symbol->getName() << "'";
+
+  // Check that the types match.
+  auto expType = signal.getType();
+  auto actType = getType().getNestedType();
+  if (expType != actType)
+    return emitOpError() << "returns a " << actType << " reference, but "
+                         << getGlobalNameAttr() << " is of type " << expType;
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Auto-Generated Implementations
 //===----------------------------------------------------------------------===//
 
 #define GET_OP_CLASSES
-#include "circt/Dialect/LLHD/IR/LLHD.cpp.inc"
-#include "circt/Dialect/LLHD/IR/LLHDEnums.cpp.inc"
+#include "circt/Dialect/LLHD/LLHD.cpp.inc"
+#include "circt/Dialect/LLHD/LLHDEnums.cpp.inc"

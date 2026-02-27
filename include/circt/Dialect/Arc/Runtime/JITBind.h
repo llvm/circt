@@ -33,12 +33,15 @@ struct APICallbacks {
   void (*fnOnEval)(uint8_t *simState);
   void (*fnOnInitialized)(uint8_t *simState);
   void (*fnFormat)(const FmtDescriptor *fmt, ...);
+  uint64_t *(*fnSwapTraceBuffer)(const uint8_t *simState);
 
   static constexpr char symNameAllocInstance[] = "arcRuntimeIR_allocInstance";
   static constexpr char symNameDeleteInstance[] = "arcRuntimeIR_deleteInstance";
   static constexpr char symNameOnEval[] = "arcRuntimeIR_onEval";
   static constexpr char symNameOnInitialized[] = "arcRuntimeIR_onInitialized";
   static constexpr char symNameFormat[] = "arcRuntimeIR_format";
+  static constexpr char symNameSwapTraceBuffer[] =
+      "arcRuntimeIR_swapTraceBuffer";
 };
 
 #ifdef ARC_RUNTIME_JITBIND_FNDECL

@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/RTG/IR/RTGISAAssemblyOpInterfaces.h"
+#include "circt/Dialect/RTG/IR/RTGOpInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGOps.h"
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
 #include "circt/Support/Path.h"
@@ -42,7 +43,13 @@ public:
       : os(os), unsupportedInstr(unsupportedInstr) {}
 
   LogicalResult emitFile(emit::FileOp fileOp) {
-    for (auto &op : *fileOp.getBody()) {
+    auto res = emitBlock(fileOp.getBody());
+    state.clear();
+    return res;
+  }
+
+  LogicalResult emitBlock(Block *block) {
+    for (auto &op : *block) {
       if (op.hasTrait<OpTrait::ConstantLike>()) {
         SmallVector<OpFoldResult> results;
         if (failed(op.fold(results)))
@@ -59,10 +66,16 @@ public:
         continue;
       }
 
+      if (auto implicitConstrOp =
+              dyn_cast<ImplicitConstraintOpInterface>(&op)) {
+        if (!implicitConstrOp.isConstraintMaterialized())
+          return op.emitError("implicit constraint not materialized");
+      }
+
       auto res =
           TypeSwitch<Operation *, LogicalResult>(&op)
-              .Case<InstructionOpInterface, LabelDeclOp, LabelOp, CommentOp,
-                    SpaceOp>([&](auto op) { return emit(op); })
+              .Case<InstructionOpInterface, LabelOp, CommentOp, SpaceOp,
+                    StringDataOp, SegmentOp>([&](auto op) { return emit(op); })
               .Default([](auto op) {
                 return op->emitError("emitter unknown RTG operation");
               });
@@ -71,7 +84,6 @@ public:
         return failure();
     }
 
-    state.clear();
     return success();
   }
 
@@ -113,17 +125,8 @@ private:
     return success();
   }
 
-  LogicalResult emit(LabelDeclOp op) {
-    if (!op.getArgs().empty())
-      return op->emitError(
-          "label arguments must be elaborated before emission");
-
-    state[op.getLabel()] = op.getFormatStringAttr();
-    return success();
-  }
-
   LogicalResult emit(LabelOp op) {
-    auto labelStr = cast<StringAttr>(state[op.getLabel()]).getValue();
+    auto labelStr = cast<LabelAttr>(state[op.getLabel()]).getName();
     if (op.getVisibility() == LabelVisibility::external) {
       os << ".extern " << labelStr << "\n";
       return success();
@@ -137,7 +140,8 @@ private:
   }
 
   LogicalResult emit(CommentOp op) {
-    os << llvm::indent(4) << "# " << op.getComment() << "\n";
+    os << llvm::indent(4) << "# "
+       << cast<StringAttr>(state[op.getComment()]).getValue() << "\n";
     return success();
   }
 
@@ -145,6 +149,38 @@ private:
     os << llvm::indent(4) << ".space "
        << cast<IntegerAttr>(state[op.getSize()]).getValue() << "\n";
     return success();
+  }
+
+  LogicalResult emit(StringDataOp op) {
+    os << llvm::indent(4) << ".asciz \"";
+    // NOTE: llvm::printEscapedString does not work because assemblers do not
+    // support the hex escapes (e.g., \0a instead of \n)
+    for (auto c : cast<StringAttr>(state[op.getData()]).getValue()) {
+      switch (c) {
+      case '\n':
+        os << "\\n";
+        break;
+      case '\t':
+        os << "\\t";
+        break;
+      case '\\':
+        os << "\\\\";
+        break;
+      case '"':
+        os << "\\\"";
+        break;
+      default:
+        os << c;
+        break;
+      }
+    }
+    os << "\"\n";
+    return success();
+  }
+
+  LogicalResult emit(SegmentOp op) {
+    os << "." << op.getKind() << "\n";
+    return emitBlock(op.getBody());
   }
 
 private:

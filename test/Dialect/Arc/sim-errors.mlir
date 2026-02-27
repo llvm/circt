@@ -123,3 +123,25 @@ func.func @set_port_not_input() {
     }
     return
 }
+
+// -----
+
+func.func @get_time_model_not_found() {
+    // expected-error @+1 {{model not found}}
+    arc.sim.instantiate @unknown as %model {
+        %t = arc.sim.get_time %model : !arc.sim.instance<@unknown>
+        arc.sim.emit "time", %t : i64
+    }
+    return
+}
+
+// -----
+
+func.func @set_time_model_not_found() {
+    // expected-error @+1 {{model not found}}
+    arc.sim.instantiate @unknown as %model {
+        %c0 = arith.constant 0 : i64
+        arc.sim.set_time %model, %c0 : !arc.sim.instance<@unknown>
+    }
+    return
+}

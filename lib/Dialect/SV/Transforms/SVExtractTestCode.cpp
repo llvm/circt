@@ -550,9 +550,9 @@ static bool isAssertOp(hw::HWSymbolCache &symCache, Operation *op) {
         return true;
 
   // If the format of assert is "ifElseFatal", PrintOp is lowered into
-  // ErrorOp. So we have to check message contents whether they encode
-  // verifications. See FIRParserAsserts for more details.
-  if (auto error = dyn_cast<ErrorOp>(op)) {
+  // ErrorOp or ErrorProceduralOp. So we have to check message contents whether
+  // they encode verifications. See FIRParserAsserts for more details.
+  if (auto error = dyn_cast<ErrorProceduralOp>(op)) {
     if (auto message = error.getMessage())
       return message->starts_with("assert:") ||
              message->starts_with("assert failed (verification library)") ||
@@ -563,7 +563,8 @@ static bool isAssertOp(hw::HWSymbolCache &symCache, Operation *op) {
   }
 
   return isa<AssertOp, FinishOp, FWriteOp, FFlushOp, AssertConcurrentOp,
-             FatalOp, verif::AssertOp, verif::ClockedAssertOp>(op);
+             FatalProceduralOp, FatalOp, verif::AssertOp,
+             verif::ClockedAssertOp>(op);
 }
 
 static bool isCoverOp(hw::HWSymbolCache &symCache, Operation *op) {

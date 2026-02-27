@@ -4,7 +4,7 @@
 rtg.test @basic() {
   // CHECK-NEXT: [[REG:%.+]] = rtg.constant #rtgtest.t1
   // CHECK-NEXT: [[IMM0:%.+]] = rtg.constant #rtg.isa.immediate<32, 0>
-  // CHECK-NEXT: [[LBL:%.+]] = rtg.label_decl "spike.pre.printreg.x5.id1"
+  // CHECK-NEXT: [[LBL:%.+]] = rtg.constant #rtg.isa.label<"spike.pre.printreg.x5.id1">
   // CHECK-NEXT: rtg.label global [[LBL]]
   // CHECK-NEXT: rtgtest.rv32i.lui [[REG]], [[IMM0]] : !rtg.isa.immediate<32>
   %0 = rtg.constant #rtgtest.t0
@@ -15,7 +15,7 @@ rtg.test @basic() {
 
   // CHECK-NEXT: [[IMM1:%.+]] = rtg.constant #rtg.isa.immediate<32, 1>
   // CHECK-NEXT: [[IMM2:%.+]] = rtg.constant #rtg.isa.immediate<32, 2>
-  // CHECK-NEXT: [[LBL:%.+]] = rtg.label_decl "spike.pre.printreg.x5.id2"
+  // CHECK-NEXT: [[LBL:%.+]] = rtg.constant #rtg.isa.label<"spike.pre.printreg.x5.id2">
   // CHECK-NEXT: rtg.label global [[LBL]]
   // CHECK-NEXT: rtgtest.rv32i.lui [[REG]], [[IMM0]] : !rtg.isa.immediate<32>
   // CHECK-NEXT: rtgtest.rv32i.lui [[REG]], [[IMM1]] : !rtg.isa.immediate<32>

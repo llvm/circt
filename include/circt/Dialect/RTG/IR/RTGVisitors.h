@@ -40,7 +40,7 @@ public:
             // Contexts
             OnContextOp, ContextSwitchOp,
             // Labels
-            LabelDeclOp, LabelUniqueDeclOp, LabelOp,
+            StringToLabelOp, LabelUniqueDeclOp, LabelOp,
             // Registers
             VirtualRegisterOp,
             // RTG tests
@@ -55,6 +55,7 @@ public:
             SetSizeOp, SetCartesianProductOp, SetConvertToBagOp,
             // Arrays
             ArrayCreateOp, ArrayExtractOp, ArrayInjectOp, ArraySizeOp,
+            ArrayAppendOp,
             // Tuples
             TupleCreateOp, TupleExtractOp,
             // Immediates
@@ -63,6 +64,10 @@ public:
             MemoryAllocOp, MemoryBaseAddressOp, MemorySizeOp,
             // Memory Blocks
             MemoryBlockDeclareOp,
+            // Data segment ops
+            SpaceOp, StringDataOp, SegmentOp,
+            // String ops
+            StringConcatOp, IntFormatOp, ImmediateFormatOp, RegisterFormatOp,
             // Misc ops
             CommentOp, ConstraintOp>([&](auto expr) -> ResultType {
           return thisCast->visitOp(expr, args...);
@@ -123,11 +128,11 @@ public:
   HANDLE(ArrayExtractOp, Unhandled);
   HANDLE(ArrayInjectOp, Unhandled);
   HANDLE(ArraySizeOp, Unhandled);
+  HANDLE(ArrayAppendOp, Unhandled);
   HANDLE(TupleCreateOp, Unhandled);
   HANDLE(TupleExtractOp, Unhandled);
   HANDLE(CommentOp, Unhandled);
   HANDLE(ConstraintOp, Unhandled);
-  HANDLE(LabelDeclOp, Unhandled);
   HANDLE(LabelUniqueDeclOp, Unhandled);
   HANDLE(LabelOp, Unhandled);
   HANDLE(TestOp, Unhandled);
@@ -144,6 +149,14 @@ public:
   HANDLE(MemoryAllocOp, Unhandled);
   HANDLE(MemoryBaseAddressOp, Unhandled);
   HANDLE(MemorySizeOp, Unhandled);
+  HANDLE(SpaceOp, Unhandled);
+  HANDLE(StringDataOp, Unhandled);
+  HANDLE(SegmentOp, Unhandled);
+  HANDLE(StringConcatOp, Unhandled);
+  HANDLE(IntFormatOp, Unhandled);
+  HANDLE(ImmediateFormatOp, Unhandled);
+  HANDLE(RegisterFormatOp, Unhandled);
+  HANDLE(StringToLabelOp, Unhandled);
 #undef HANDLE
 };
 
@@ -156,7 +169,7 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Type, ResultType>(type)
         .template Case<ImmediateType, SequenceType, SetType, BagType, DictType,
-                       LabelType, IndexType, IntegerType>(
+                       MapType, LabelType, IndexType, IntegerType>(
             [&](auto expr) -> ResultType {
               return thisCast->visitType(expr, args...);
             })

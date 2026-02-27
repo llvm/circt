@@ -125,6 +125,11 @@ void circt::populateArcStateLoweringPipeline(
 void circt::populateArcStateAllocationPipeline(
     OpPassManager &pm, const ArcStateAllocationOptions &options) {
   pm.addPass(arc::createLowerArcsToFuncsPass());
+  {
+    AllocateStateOptions allocStateOpts;
+    allocStateOpts.insertTraceTaps = options.insertTraceTaps;
+    pm.nest<arc::ModelOp>().addPass(arc::createAllocateState(allocStateOpts));
+  }
   pm.nest<arc::ModelOp>().addPass(arc::createAllocateState());
   pm.addPass(arc::createLowerClocksToFuncsPass()); // no CSE between state alloc
                                                    // and clock func lowering
@@ -135,18 +140,17 @@ void circt::populateArcStateAllocationPipeline(
   pm.addPass(arc::createArcCanonicalizerPass());
 }
 
-void circt::populateArcToLLVMPipeline(OpPassManager &pm, bool insertRuntime,
-                                      StringRef extraRuntimeArgs) {
+void circt::populateArcToLLVMPipeline(OpPassManager &pm,
+                                      const ArcToLLVMOptions &options) {
   {
     hw::HWConvertBitcastsOptions options;
     options.allowPartialConversion = false;
     pm.addPass(hw::createHWConvertBitcasts(options));
   }
-  if (insertRuntime) {
+  if (!options.noRuntime) {
     InsertRuntimeOptions opts;
-    if (!extraRuntimeArgs.empty())
-      opts.extraArgs =
-          std::string(extraRuntimeArgs.begin(), extraRuntimeArgs.end());
+    opts.extraArgs = options.extraRuntimeArgs;
+    opts.traceFileName = options.traceFileName;
     pm.addPass(createInsertRuntime(opts));
   }
   pm.addPass(createLowerArcToLLVMPass());

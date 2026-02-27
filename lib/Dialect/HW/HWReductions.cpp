@@ -293,6 +293,124 @@ struct ModuleOutputPruner : public Reduction {
   std::unique_ptr<SymbolUserMap> symbolUsers;
 };
 
+/// Pseudo-reduction that removes sv.namehint attributes from operations.
+/// This is not an actual reduction, but often removes extraneous information
+/// that has no bearing on the actual reduction.
+struct SVNamehintRemover : public Reduction {
+  uint64_t match(Operation *op) override { return op->hasAttr("sv.namehint"); }
+  LogicalResult rewrite(Operation *op) override {
+    op->removeAttr("sv.namehint");
+    return success();
+  }
+  std::string getName() const override { return "sv-namehint-remover"; }
+  bool acceptSizeIncrease() const override { return true; }
+  bool isOneShot() const override { return true; }
+};
+
+/// Pseudo-reduction that sanitizes the names of operations inside modules.
+/// This is not an actual reduction, but often removes extraneous information
+/// that has no bearing on the actual reduction. This makes the following
+/// changes:
+///
+///   - All wires are renamed to "wire"
+///
+struct ModuleInternalNameSanitizer : public Reduction {
+  uint64_t match(Operation *op) override {
+    // Only match wire operations.
+    return isa<hw::WireOp>(op);
+  }
+  LogicalResult rewrite(Operation *op) override {
+    cast<hw::WireOp>(op).setName("wire");
+    return success();
+  }
+
+  std::string getName() const override {
+    return "hw-module-internal-name-sanitizer";
+  }
+
+  bool acceptSizeIncrease() const override { return true; }
+
+  bool isOneShot() const override { return true; }
+};
+
+/// Pseudo-reduction that sanitizes module and port names. This makes the
+/// following changes:
+///
+///     - All modules are given metasyntactic names ("Foo", "Bar", etc.)
+///     - All instances are renamed to match the new module name
+///     - All module ports are renamed to simple names ("a", "b", "c", etc.)
+///
+struct ModuleNameSanitizer : OpReduction<mlir::ModuleOp> {
+
+  size_t portNameIndex = 0;
+
+  char getPortName() {
+    if (portNameIndex >= 26)
+      portNameIndex = 0;
+    return 'a' + portNameIndex++;
+  }
+
+  LogicalResult rewrite(mlir::ModuleOp moduleOp) override {
+    // Create a new instance graph for this rewrite. We need to recreate it
+    // because renaming modules invalidates the nodeMap (which maps module names
+    // to nodes).
+    InstanceGraph instanceGraph(moduleOp);
+
+    reduce::MetasyntacticNameGenerator nameGenerator;
+
+    // Iterate over the instance graph nodes
+    for (auto *node : instanceGraph) {
+      // Skip nodes without a module (e.g., the entry node)
+      if (!node->getModule())
+        continue;
+      auto hwModule = dyn_cast<HWModuleOp>(node->getModule().getOperation());
+      if (!hwModule)
+        continue;
+
+      auto *context = hwModule.getContext();
+      auto newName = StringAttr::get(context, nameGenerator.getNextName());
+
+      // Rename ports
+      portNameIndex = 0;
+      auto numPorts = hwModule.getNumPorts();
+      SmallVector<Attribute> newPortNames(numPorts);
+      for (unsigned i = 0; i != numPorts; ++i)
+        newPortNames[i] = StringAttr::get(context, Twine(getPortName()));
+      hwModule.setAllPortNames(newPortNames);
+
+      // Update all instances of this module
+      for (auto *use : node->uses()) {
+        auto useOp = use->getInstance();
+        if (!useOp)
+          continue;
+        auto instOp = dyn_cast<hw::InstanceOp>(*useOp);
+        if (!instOp)
+          continue;
+        instOp.setModuleName(newName);
+        instOp.setInstanceName(newName);
+        // Update argument names (inputs only)
+        auto *inputEnd = newPortNames.begin() + hwModule.getNumInputPorts();
+        SmallVector<Attribute> argNames(newPortNames.begin(), inputEnd);
+        instOp.setArgNamesAttr(ArrayAttr::get(context, argNames));
+        // Update result names (outputs)
+        SmallVector<Attribute> resultNames(inputEnd, newPortNames.end());
+        instOp.setResultNamesAttr(ArrayAttr::get(context, resultNames));
+      }
+
+      // Rename the module (do this last, after updating instances)
+      hwModule.setName(newName);
+    }
+
+    return success();
+  }
+
+  std::string getName() const override { return "hw-module-name-sanitizer"; }
+
+  bool acceptSizeIncrease() const override { return true; }
+
+  bool isOneShot() const override { return true; }
+};
+
 //===----------------------------------------------------------------------===//
 // Reduction Registration
 //===----------------------------------------------------------------------===//
@@ -311,6 +429,9 @@ void HWReducePatternDialectInterface::populateReducePatterns(
   patterns.add<HWOperandForwarder<2>, 2>();
   patterns.add<ModuleOutputPruner, 2>();
   patterns.add<ModuleInputPruner, 2>();
+  patterns.add<SVNamehintRemover, 1>();
+  patterns.add<ModuleInternalNameSanitizer, 1>();
+  patterns.add<ModuleNameSanitizer, 1>();
 }
 
 void hw::registerReducePatternDialectInterface(

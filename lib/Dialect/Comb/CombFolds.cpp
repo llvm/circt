@@ -75,7 +75,8 @@ struct ComplementMatcher {
   ComplementMatcher(SubType lhs) : lhs(std::move(lhs)) {}
   bool match(Operation *op) {
     auto xorOp = dyn_cast<XorOp>(op);
-    return xorOp && xorOp.isBinaryNot() && lhs.match(op->getOperand(0));
+    return xorOp && xorOp.isBinaryNot() &&
+           mlir::detail::matchOperandOrValueAtIndex(op, 0, lhs);
   }
 };
 } // end anonymous namespace
@@ -1277,12 +1278,10 @@ OpFoldResult XorOp::fold(FoldAdaptor adaptor) {
 
   // xor(xor(x,1),1) -> x
   // but not self loop
-  if (isBinaryNot()) {
-    Value subExpr;
-    if (matchPattern(getOperand(0), m_Complement(m_Any(&subExpr))) &&
-        subExpr != getResult())
-      return subExpr;
-  }
+  Value subExpr;
+  if (matchPattern(getResult(), m_Complement(m_Complement(m_Any(&subExpr)))) &&
+      subExpr != getResult())
+    return subExpr;
 
   // Constant fold
   return constFoldAssociativeOp(inputs, hw::PEO::Xor);
@@ -1370,6 +1369,19 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
           return canonicalizeXorIcmpTrue(op, i, rewriter), success();
       }
     }
+  }
+
+  // xor(sext(x), -1) -> sext(xor(x,-1))
+  // More concisely: ~sext(x) = sext(~x)
+  Value base;
+  // Check for sext of the inverted value
+  if (matchPattern(op.getResult(), m_Complement(m_Sext(m_Any(&base))))) {
+    // Create negated sext: ~sext(x) = sext(~x)
+    auto negBase = createOrFoldNot(op.getLoc(), base, rewriter, true);
+    auto sextNegBase =
+        createOrFoldSExt(op.getLoc(), negBase, op.getType(), rewriter);
+    replaceOpAndCopyNamehint(rewriter, op, sextNegBase);
+    return success();
   }
 
   // xor(x, xor(...)) -> xor(x, ...) -- flatten

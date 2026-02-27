@@ -251,6 +251,7 @@ firrtl.circuit "Foo" {
     // CHECK: node asSIntPrimOp = asSInt(x)
     // CHECK: node asUIntPrimOp = asUInt(x)
     // CHECK: node asAsyncResetPrimOp = asAsyncReset(x)
+    // CHECK: node asResetPrimOp = asReset(ui1)
     // CHECK: node asClockPrimOp = asClock(x)
     // CHECK: node cvtPrimOp = cvt(x)
     // CHECK: node negPrimOp = neg(x)
@@ -261,6 +262,7 @@ firrtl.circuit "Foo" {
     %asSIntPrimOp_tmp = firrtl.asSInt %x : (!firrtl.uint) -> !firrtl.sint
     %asUIntPrimOp_tmp = firrtl.asUInt %x : (!firrtl.uint) -> !firrtl.uint
     %asAsyncResetPrimOp_tmp = firrtl.asAsyncReset %x : (!firrtl.uint) -> !firrtl.asyncreset
+    %asResetPrimOp_tmp = firrtl.asReset %ui1 : (!firrtl.uint<1>) -> !firrtl.reset
     %asClockPrimOp_tmp = firrtl.asClock %x : (!firrtl.uint) -> !firrtl.clock
     %cvtPrimOp_tmp = firrtl.cvt %x : (!firrtl.uint) -> !firrtl.sint
     %negPrimOp_tmp = firrtl.neg %x : (!firrtl.uint) -> !firrtl.sint
@@ -271,6 +273,7 @@ firrtl.circuit "Foo" {
     %asSIntPrimOp = firrtl.node %asSIntPrimOp_tmp : !firrtl.sint
     %asUIntPrimOp = firrtl.node %asUIntPrimOp_tmp : !firrtl.uint
     %asAsyncResetPrimOp = firrtl.node %asAsyncResetPrimOp_tmp : !firrtl.asyncreset
+    %asResetPrimOp = firrtl.node %asResetPrimOp_tmp : !firrtl.reset
     %asClockPrimOp = firrtl.node %asClockPrimOp_tmp : !firrtl.clock
     %cvtPrimOp = firrtl.node %cvtPrimOp_tmp : !firrtl.sint
     %negPrimOp = firrtl.node %negPrimOp_tmp : !firrtl.sint
@@ -640,7 +643,8 @@ firrtl.circuit "Foo" {
                             out %bool : !firrtl.bool,
                             out %double : !firrtl.double,
                             out %path : !firrtl.path,
-                            out %list : !firrtl.list<list<string>>) {
+                            out %list : !firrtl.list<list<string>>,
+                            out %unknownString : !firrtl.string) {
     // CHECK: propassign string, String("hello")
     %0 = firrtl.string "hello"
     firrtl.propassign %string, %0 : !firrtl.string
@@ -668,6 +672,10 @@ firrtl.circuit "Foo" {
     %empty = firrtl.list.create : !firrtl.list<string>
     %strings_and_empty = firrtl.list.create %strings, %empty : !firrtl.list<list<string>>
     firrtl.propassign %list, %strings_and_empty : !firrtl.list<list<string>>
+
+    // CHECK: propassign unknownString, Unknown : String
+    %2 = firrtl.unknown : !firrtl.string
+    firrtl.propassign %unknownString, %2 : !firrtl.string
   }
 
   // Test optional group declaration and definition emission.

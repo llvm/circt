@@ -2540,6 +2540,21 @@ firrtl.circuit "Top" {
 
 // -----
 
+firrtl.circuit "IntmoduleWithInstanceChoice" {
+  firrtl.option @Opt {
+    firrtl.option_case @A
+  }
+
+  firrtl.intmodule @test(in i: !firrtl.clock, out size: !firrtl.uint<32>) attributes {intrinsic = "circt.sizeof"}
+
+  firrtl.module @IntmoduleWithInstanceChoice() {
+    // expected-error @below {{intmodule must be instantiated with instance op, not via 'firrtl.instance_choice'}}
+    %i1, %size = firrtl.instance_choice inst interesting_name @test alternatives @Opt { @A -> @test }(in i: !firrtl.clock, out size: !firrtl.uint<32>)
+  }
+}
+
+// -----
+
 firrtl.circuit "DPI" {
   firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<4>, in %in_1: !firrtl.uint) {
     // expected-error @below {{unknown width is not allowed for DPI}}
@@ -3276,5 +3291,40 @@ firrtl.circuit "UndefinedDomainInAnonDomain" {
   firrtl.module @UndefinedDomainInAnonDomain() {
     // expected-error @below {{references undefined domain '@Foo'}}
     %0 = firrtl.domain.anon : !firrtl.domain of @Foo
+  }
+}
+
+
+// -----
+
+firrtl.circuit "UnknownValueReferencesUnknownClass" {
+  firrtl.module @UnknownValueReferencesUnknownClass() {
+    // expected-error @below {{refers to non-existent class ("Missing")}}
+    %0 = firrtl.unknown : !firrtl.class<@Missing()>
+  }
+}
+
+// -----
+
+firrtl.circuit "UnknownValueReferencesNonClass" {
+  firrtl.extmodule @Foo()
+  firrtl.module @UnknownValueReferencesNonClass() {
+    // expected-error @below {{refers to a non-class type ("Foo")}}
+    %0 = firrtl.unknown : !firrtl.class<@Foo()>
+  }
+}
+
+// -----
+firrtl.circuit "NonExistentMacroSymbol" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+
+  firrtl.module @Foo() {}
+  firrtl.module @Choice() {
+    // expected-error @below {{'firrtl.instance_choice' op instance_macro @__target_Platform_Choice_inst does not exist}}
+    firrtl.instance_choice inst {instance_macro = @__target_Platform_Choice_inst} @Foo alternatives @Platform {
+      @FPGA -> @Foo
+    } ()
   }
 }

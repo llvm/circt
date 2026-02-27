@@ -183,10 +183,69 @@ def InterleaveSequencesOp : RTGOp<"interleave_sequences", [Pure]> {
   let hasFolder = 1;
 }
 
+//===- String Operations --------------------------------------------------===//
+
+def StringConcatOp : RTGOp<"string_concat", [Pure]> {
+  let summary = "concatenate strings";
+  let description = [{
+    This operation concatenates a variadic number of strings into a single
+    string. The operands are concatenated in order, with the first operand
+    becoming the most significant bits of the result.
+  }];
+
+  let arguments = (ins Variadic<StringType>:$strings);
+  let results = (outs StringType:$result);
+
+  let assemblyFormat = "$strings attr-dict";
+
+  let hasFolder = 1;
+}
+
+def IntFormatOp : RTGOp<"int_format", [Pure]> {
+  let summary = "format an integer as a string";
+
+  let arguments = (ins Index:$value);
+  let results = (outs StringType:$result);
+
+  let assemblyFormat = "$value attr-dict";
+
+  let hasFolder = 1;
+}
+
+def ImmediateFormatOp : RTGOp<"immediate_format", [Pure]> {
+  let summary = "convert an immediate to a string";
+  let description = [{
+    This operation converts an immediate value to its string representation.
+    The immediate is formatted as a decimal number.
+  }];
+
+  let arguments = (ins ImmediateType:$value);
+  let results = (outs StringType:$result);
+
+  let assemblyFormat = "$value `:` qualified(type($value)) attr-dict";
+
+  let hasFolder = 1;
+}
+
+def RegisterFormatOp : RTGOp<"register_format", [Pure]> {
+  let summary = "convert a register to its name as a string";
+  let description = [{
+    This operation converts a register to its assembly name as a string.
+    The string representation is obtained from the register's assembly format.
+  }];
+
+  let arguments = (ins RegisterTypeInterface:$value);
+  let results = (outs StringType:$result);
+
+  let assemblyFormat = "$value `:` qualified(type($value)) attr-dict";
+
+  let hasFolder = 1;
+}
+
 //===- Label Operations ---------------------------------------------------===//
 
-class LabelDeclBase<string mnemonic,
-                    list<Trait> traits> : RTGOp<mnemonic, traits> {
+def LabelUniqueDeclOp : RTGOp<"label_unique_decl", []> {
+  let summary = "declares a unique label for an instruction sequence";
   let description = [{
     Declares a label that can then be placed by an `rtg.label` operation in an
     instruction sequence, passed on to sequences via their arguments, and used
@@ -194,30 +253,27 @@ class LabelDeclBase<string mnemonic,
     directly as an operand of an instruction or by casting it to a value
     representing an immediate.
 
-    The format string may contain placeholders of the form `{i}` where `i`
-    refers to the i-th element in `args`.
-    The declared label is uniqued by the compiler to no collide with any other
-    label declarations.
+    The provided 'name' value is used as a prefix for the unique label name.
   }];
 
-  // TODO: 'args' can be generalized to more types
-  let arguments = (ins StrAttr:$formatString, Variadic<Index>:$args);
+  let arguments = (ins StringType:$namePrefix);
+  let results = (outs Res<LabelType, "", [MemAlloc]>:$label);
 
-  let assemblyFormat = [{
-    $formatString (`,` $args^)? attr-dict
-  }];
+  let assemblyFormat = "$namePrefix attr-dict";
 }
 
-def LabelDeclOp : LabelDeclBase<"label_decl", [Pure]> {
-  let summary = "declares a label for an instruction sequence";
+def StringToLabelOp : RTGOp<"string_to_label", [Pure]> {
+  let summary = "converts a string to a label";
+  let description = [{
+    This operation converts a string to a label. The label name is not uniqued
+    and it is the user's responsibility to ensure that the label name is valid
+    in the target assembly.
+  }];
+
+  let arguments = (ins StringType:$string);
   let results = (outs LabelType:$label);
 
-  let hasFolder = 1;
-}
-
-def LabelUniqueDeclOp : LabelDeclBase<"label_unique_decl", []> {
-  let summary = "declares a unique label for an instruction sequence";
-  let results = (outs Res<LabelType, "", [MemAlloc]>:$label);
+  let assemblyFormat = "$string attr-dict";
 
   let hasFolder = 1;
 }
@@ -601,6 +657,29 @@ def ArraySizeOp : RTGOp<"array_size", [Pure]> {
   let assemblyFormat = "$array `:` qualified(type($array)) attr-dict";
 }
 
+def ArrayAppendOp : RTGOp<"array_append", [
+  Pure,
+  AllTypesMatch<["array", "result"]>,
+  TypesMatchWith<"element type must match array element type",
+                 "array", "element",
+                 "cast<ArrayType>($_self).getElementType()">,
+]> {
+  let summary = "append an element to an array";
+  let description = [{
+    This operation produces a new array of the same type as the input array with
+    the given element appended at the end. All other values remain the same.
+  }];
+
+  let arguments = (ins ArrayType:$array, AnyType:$element);
+  let results = (outs ArrayType:$result);
+
+  let assemblyFormat = [{
+    $array `,` $element `:` qualified(type($array)) attr-dict
+  }];
+
+  let hasCanonicalizeMethod = 1;
+}
+
 //===- Tuple Operations ---------------------------------------------------===//
 
 def TupleCreateOp : RTGOp<"tuple_create", [
@@ -654,7 +733,7 @@ def RandomNumberInRangeOp : RTGOp<"random_number_in_range", []> {
 def CommentOp : RTGOp<"comment", []> {
   let summary = "emit a comment in instruction stream";
 
-  let arguments = (ins StrAttr:$comment);
+  let arguments = (ins StringType:$comment);
 
   let assemblyFormat = "$comment attr-dict";
 }
@@ -675,25 +754,8 @@ def ConstraintOp : RTGOp<"constraint", []> {
   let arguments = (ins I1:$condition);
 
   let assemblyFormat = "$condition attr-dict";
-}
 
-//===- ISA Register Handling Operations -----------------------------------===//
-
-def VirtualRegisterOp : RTGOp<"virtual_reg", [
-  DeclareOpInterfaceMethods<InferTypeOpInterface>,
-]> {
-  let summary = "returns a value representing a virtual register";
-  let description = [{
-    This operation creates a value representing a virtual register. The
-    'allowedRegisters' attribute specifies the concrete registers that may be
-    chosen during register allocation.
-  }];
-
-  // ArrayAttr of RegisterAttrInterfaces
-  let arguments = (ins VirtualRegisterConfigAttr:$allowedRegs);
-  let results = (outs Res<RegisterTypeInterface, "", [MemAlloc]>:$result);
-
-  let assemblyFormat = "$allowedRegs attr-dict";
+  let hasCanonicalizeMethod = 1;
 }
 
 //===- Test Specification Operations --------------------------------------===//
@@ -759,7 +821,7 @@ def TestSuccessOp : RTGOp<"test.success", []> {
 def TestFailureOp : RTGOp<"test.failure", []> {
   let summary = "exit the test and report failure";
 
-  let arguments = (ins StrAttr:$errorMessage);
+  let arguments = (ins StringType:$errorMessage);
   let assemblyFormat = "$errorMessage attr-dict";
 }
 
@@ -805,6 +867,7 @@ def ValidateOp : RTGOp<"validate", [
   AllTypesMatch<["defaultValue", "value"]>,
   AllTypesMatch<["defaultUsedValues", "elseValues", "values"]>,
   AttrSizedOperandSegments,
+  DeclareOpInterfaceMethods<RegisterAllocationOpInterface>,
 ]> {
   let summary = "validate the value in the given resource";
   let description = [{
@@ -931,6 +994,52 @@ def SliceImmediateOp : RTGISAOp<"slice_immediate", [Pure]> {
   let hasFolder = 1;
 }
 
+//===- ISA Register Handling Operations -----------------------------------===//
+
+def VirtualRegisterOp : RTGOp<"virtual_reg", [
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "returns a value representing a virtual register";
+  let description = [{
+    This operation creates a value representing a virtual register. The
+    'allowedRegisters' attribute specifies the concrete registers that may be
+    chosen during register allocation.
+  }];
+
+  // ArrayAttr of RegisterAttrInterfaces
+  let arguments = (ins VirtualRegisterConfigAttr:$allowedRegs);
+  let results = (outs Res<RegisterTypeInterface, "", [MemAlloc]>:$result);
+
+  let assemblyFormat = "$allowedRegs attr-dict";
+}
+
+def RegisterToIndexOp : RTGISAOp<"register_to_index", [Pure]> {
+  let summary = "convert a register to its class index";
+
+  let arguments = (ins RegisterTypeInterface:$reg);
+  let results = (outs Index:$index);
+
+  let assemblyFormat = "$reg `:` type($reg) attr-dict";
+  let hasFolder = 1;
+}
+
+def IndexToRegisterOp : RTGISAOp<"index_to_register", [Pure]> {
+  let summary = "convert an index to a register";
+  let description = [{
+    This operation converts an index to the register with matching class index.
+    The index must refer to a valid register index. Invalid indices are
+    (immediate) UB.
+  }];
+
+  let arguments = (ins Index:$index);
+  let results = (outs RegisterTypeInterface:$reg);
+
+  let assemblyFormat = "$index `:` type($reg) attr-dict";
+
+  let hasVerifier = 1;
+  let hasFolder = 1;
+}
+
 //===- ISA Memory Block Operations ----------------------------------------===//
 
 def MemoryBlockDeclareOp : RTGISAOp<"memory_block_declare", [
@@ -1017,4 +1126,35 @@ def SpaceOp : RTGISAOp<"space", []> {
   let arguments = (ins Index:$size);
 
   let assemblyFormat = "$size attr-dict";
+}
+
+def StringDataOp : RTGISAOp<"string_data", []> {
+  let summary = "reserve a string";
+  let description = [{
+    Always appends a zero character (\00).
+  }];
+
+  let arguments = (ins StringType:$data);
+
+  let assemblyFormat = "$data attr-dict";
+}
+
+def SegmentKindAttr : I32EnumAttr<"SegmentKind", "kind of segment", [
+  I32EnumAttrCase<"Data", 0, "data">,
+  I32EnumAttrCase<"Text", 1, "text">
+]> {
+  let cppNamespace = "::circt::rtg";
+}
+
+def SegmentOp : RTGISAOp<"segment", [
+  SingleBlock,
+  NoTerminator,
+  NoRegionArguments,
+]> {
+  let summary = "defines a new segment";
+
+  let arguments = (ins SegmentKindAttr:$kind);
+  let regions = (region SizedRegion<1>:$bodyRegion);
+
+  let assemblyFormat = "$kind attr-dict-with-keyword $bodyRegion";
 }

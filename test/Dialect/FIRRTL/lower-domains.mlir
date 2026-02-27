@@ -313,11 +313,10 @@ firrtl.circuit "Foo" {
       in A: !firrtl.domain of @ClockDomain,
       in a: !firrtl.uint<1> domains [A]
     )
+    // CHECK-NEXT: %[[#UNKNOWN:]] = firrtl.unknown : !firrtl.class<@ClockDomain()>
     %anon = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+    // CHECK-NEXT: firrtl.propassign %bar_A, %[[#UNKNOWN]]
     firrtl.domain.define %bar_A, %anon
-    // CHECK-NOT: firrtl.object
-    // CHECK-NOT: firrtl.domain.anon
-    // CHECK-NOT: firrtl.domain.define
   }
 }
 
@@ -509,6 +508,7 @@ firrtl.circuit "DeadDomainOps" {
   // CHECK-NOT: firrtl.wire
   // CHECK-NOT: firrtl.domain.define
   // CHECK-NOT: firrtl.domain.anon : !firrtl.domain of @ClockDomain
+  // CHECK-NOT: firrtl.unknown
   firrtl.module @DeadDomainOps(
   ) {
     // A lone, undriven wire.

@@ -1552,8 +1552,8 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       // Handle operations with a single result type that always has a
       // well-known width.
       .Case<LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp, EQPrimOp, NEQPrimOp,
-            AsClockPrimOp, AsAsyncResetPrimOp, AndRPrimOp, OrRPrimOp,
-            XorRPrimOp>([&](auto op) {
+            AsClockPrimOp, AsAsyncResetPrimOp, AsResetPrimOp, AndRPrimOp,
+            OrRPrimOp, XorRPrimOp>([&](auto op) {
         auto width = op.getType().getBitWidthOrSentinel();
         assert(width > 0 && "width should have been checked by verifier");
         setExpr(op.getResult(), solver.known(width));

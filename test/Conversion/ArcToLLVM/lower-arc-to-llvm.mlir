@@ -310,15 +310,16 @@ func.func @issue9171(%arg0: !arc.state<!hw.array<4xi1>>, %idx: i2) -> (i1) {
 
 // CHECK-LABEL: llvm.mlir.global
 // CHECK-SAME:  internal constant @[[NAMESYM:.+]]("fooModelName\00")
-// CHECK:  llvm.mlir.global external @arcRuntimeModel_fooModelSym() {addr_space = 0 : i32} : !llvm.struct<(i64, i64, ptr)> {
-// CHECK:    %0 = llvm.mlir.constant(0 : i64) : i64
+// CHECK:  llvm.mlir.global external @arcRuntimeModel_fooModelSym() {addr_space = 0 : i32} : !llvm.struct<(i64, i64, ptr, ptr)> {
+// CHECK:    %0 = llvm.mlir.constant({{.+}} : i64) : i64
 // CHECK:    %1 = llvm.mlir.constant(1234567 : i64) : i64
 // CHECK:    %2 = llvm.mlir.addressof @[[NAMESYM]] : !llvm.ptr
-// CHECK:    %3 = llvm.mlir.poison : !llvm.struct<(i64, i64, ptr)>
-// CHECK:    %4 = llvm.insertvalue %0, %3[0] : !llvm.struct<(i64, i64, ptr)>
-// CHECK:    %5 = llvm.insertvalue %1, %4[1] : !llvm.struct<(i64, i64, ptr)>
-// CHECK:    %6 = llvm.insertvalue %2, %5[2] : !llvm.struct<(i64, i64, ptr)>
-// CHECK:    llvm.return %6 : !llvm.struct<(i64, i64, ptr)>
+// CHECK:    %3 = llvm.mlir.zero : !llvm.ptr
+// CHECK:    %4 = llvm.mlir.poison : !llvm.struct<(i64, i64, ptr, ptr)>
+// CHECK:    %5 = llvm.insertvalue %0, %4[0] : !llvm.struct<(i64, i64, ptr, ptr)>
+// CHECK:    %6 = llvm.insertvalue %1, %5[1] : !llvm.struct<(i64, i64, ptr, ptr)>
+// CHECK:    %7 = llvm.insertvalue %2, %6[2] : !llvm.struct<(i64, i64, ptr, ptr)>
+// CHECK:    %8 = llvm.insertvalue %3, %7[3] : !llvm.struct<(i64, i64, ptr, ptr)>
 // CHECK:  }
 
 arc.runtime.model @arcRuntimeModel_fooModelSym "fooModelName" numStateBytes 1234567

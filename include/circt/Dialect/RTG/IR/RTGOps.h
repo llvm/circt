@@ -18,6 +18,7 @@
 #include "circt/Dialect/RTG/IR/RTGAttributes.h"
 #include "circt/Dialect/RTG/IR/RTGDialect.h"
 #include "circt/Dialect/RTG/IR/RTGISAAssemblyAttrInterfaces.h"
+#include "circt/Dialect/RTG/IR/RTGISAAssemblyOpInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGISAAssemblyTypeInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGTypeInterfaces.h"
 #include "circt/Dialect/RTG/IR/RTGTypes.h"

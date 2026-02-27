@@ -2040,3 +2040,34 @@ hw.module @issue9403(in %sel: i1, out out1: ui1) {
   %mux1 = comb.mux %sel, %true, %false : ui1
   hw.output %mux1 : ui1
 }
+
+// CHECK-LABEL: @notSext
+// ~sext(a) -> sext(~a)
+hw.module @notSext(in %a : i3, out negsext : i8) {
+  // CHECK-NEXT: %c-1_i3 = hw.constant -1 : i3
+  // CHECK-NEXT: %[[NOTA:.+]] = comb.xor bin %a, %c-1_i3 : i3
+  // CHECK-NEXT: %[[NOTASIGN:.+]] = comb.extract %[[NOTA]] from 2 : (i3) -> i1
+  // CHECK-NEXT: %[[SIGNBITS:.+]] = comb.replicate %[[NOTASIGN]] : (i1) -> i5
+  // CHECK-NEXT: %[[NEGSEXT:.+]] = comb.concat %[[SIGNBITS]], %[[NOTA]] : i5, i3
+  // CHECK-NEXT: hw.output %[[NEGSEXT]] : i8
+  %c-1_i8 = hw.constant -1 : i8
+  // sext(a)
+  %0 = comb.extract %a from 2 : (i3) -> i1
+  %1 = comb.replicate %0 : (i1) -> i5
+  %2 = comb.concat %1, %a : i5, i3
+  // ~sext(a)
+  %3 = comb.xor %2, %c-1_i8 : i8
+  hw.output %3 : i8
+}
+
+// CHECK-LABEL: hw.module private @SextMatcherBlockArguments
+// Test that SextMatcher doesn't crash on block arguments (module ports)
+hw.module private @SextMatcherBlockArguments(in %a : i6, in %b : i2, in %c : i27) {
+  %c-1_i35 = hw.constant -1 : i35
+  %0 = comb.concat %a, %c, %b : i6, i27, i2
+  %wire = hw.wire %0  : i35
+  %1 = comb.xor bin %wire, %c-1_i35 : i35
+  %2 = comb.extract %1 from 34 : (i35) -> i1
+  %3 = comb.extract %1 from 26 : (i35) -> i1
+  hw.output
+}

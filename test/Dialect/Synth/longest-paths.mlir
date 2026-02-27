@@ -141,3 +141,16 @@ hw.module @parameter<in: i1> (in %a: i1, out o1: i1) {
   %1 = synth.mig.maj_inv %0, %a, %param : i1
   hw.output %1 : i1
 }
+
+// Check that instance paths are set correctly.
+hw.module private @nest(in %clock : !seq.clock, in %a: i1, out x: i1) {
+  // expected-remark-re @below {{endPoint=Object($root/inst2:nest.p[0]), startPoint=Object($root/inst1:nest.p[0], delay=0, history=[{{.+}}])}}
+  %p = seq.compreg %a, %clock : i1
+  hw.output %p: i1
+}
+
+hw.module private @top(in %clock : !seq.clock) {
+  %a = hw.constant false
+  %0 = hw.instance "inst1" @nest(clock: %clock: !seq.clock, a: %a: i1) -> (x: i1)
+  %1 = hw.instance "inst2" @nest(clock: %clock: !seq.clock, a: %0: i1) -> (x: i1)
+}

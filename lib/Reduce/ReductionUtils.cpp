@@ -15,6 +15,20 @@
 using namespace circt;
 using namespace circt::reduce;
 
+//===----------------------------------------------------------------------===//
+// MetasyntacticNameGenerator
+//===----------------------------------------------------------------------===//
+
+const char *MetasyntacticNameGenerator::getNextName() {
+  if (index >= std::size(names))
+    index = 0;
+  return names[index++];
+}
+
+//===----------------------------------------------------------------------===//
+// Utilities
+//===----------------------------------------------------------------------===//
+
 void reduce::pruneUnusedOps(Operation *initialOp, Reduction &reduction) {
   SmallVector<Operation *> worklist;
   SmallSet<Operation *, 4> handled;

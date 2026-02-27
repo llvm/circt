@@ -171,6 +171,11 @@ else()
 endif()
 add_library(esiaccel::ESICppRuntime ALIAS ESICppRuntime)
 
+# Set debug postfix for Windows libraries
+if(WIN32)
+  set_target_properties(ESICppRuntime PROPERTIES DEBUG_POSTFIX "_d")
+endif()
+
 target_include_directories(ESICppRuntime PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include
 )
@@ -210,6 +215,15 @@ install(TARGETS ESICppRuntime
   COMPONENT ESIRuntime
 )
 
+# Install PDB files for Windows Debug builds
+if(WIN32 AND MSVC)
+  install(FILES $<TARGET_PDB_FILE:ESICppRuntime>
+    DESTINATION ${ESIRT_INSTALL_LIBDIR}
+    COMPONENT ESIRuntime
+    OPTIONAL
+  )
+endif()
+
 install(FILES ${ESICppRuntimeHeaders}
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/esi
   COMPONENT ESIRuntime
@@ -241,6 +255,10 @@ set(ESIRuntimePath "${CMAKE_CURRENT_BINARY_DIR}"
 add_executable(esiquery
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/tools/esiquery.cpp
 )
+# Set debug postfix for Windows executables
+if(WIN32)
+  set_target_properties(esiquery PROPERTIES DEBUG_POSTFIX "_d")
+endif()
 target_link_libraries(esiquery PRIVATE
   ESICppRuntime
   CLI11::CLI11
@@ -251,20 +269,40 @@ install(TARGETS esiquery
   DESTINATION ${ESIRT_INSTALL_BINDIR}
   COMPONENT ESIRuntime
 )
+# Install PDB files for Windows Debug builds
+if(WIN32 AND MSVC)
+  install(FILES $<TARGET_PDB_FILE:esiquery>
+    DESTINATION ${ESIRT_INSTALL_BINDIR}
+    COMPONENT ESIRuntime
+    OPTIONAL
+  )
+endif()
 
 ##===----------------------------------------------------------------------===//
 ## The esitester tool is both an example and test driver. As it is not intended
-## for production use, it is not installed.
+## for production use, it is not installed or included in wheels.
 ##===----------------------------------------------------------------------===//
 
 add_executable(esitester
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/tools/esitester.cpp
 )
+# Set debug postfix for Windows executables
+if(WIN32)
+  set_target_properties(esitester PROPERTIES DEBUG_POSTFIX "_d")
+endif()
 target_link_libraries(esitester PRIVATE
   ESICppRuntime
   CLI11::CLI11
 )
-add_dependencies(ESIRuntime esitester)
+# Install PDB files for Windows Debug builds
+if(WIN32 AND MSVC)
+  install(FILES $<TARGET_PDB_FILE:esitester>
+    DESTINATION ${ESIRT_INSTALL_BINDIR}
+    COMPONENT ESIRuntime
+    OPTIONAL
+  )
+endif()
+
 
 # Add the Python bindings.
 add_subdirectory(python)
@@ -301,6 +339,11 @@ if(ESI_COSIM)
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/RpcServer.h
   )
 
+  # Set debug postfix for Windows libraries
+  if(WIN32)
+    set_target_properties(CosimRpc PROPERTIES DEBUG_POSTFIX "_d")
+  endif()
+
   target_link_libraries(CosimRpc PUBLIC
     ESICppRuntime
     protobuf::libprotobuf
@@ -327,6 +370,11 @@ if(ESI_COSIM)
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Cosim.h
   )
 
+  # Set debug postfix for Windows libraries
+  if(WIN32)
+    set_target_properties(CosimBackend PROPERTIES DEBUG_POSTFIX "_d")
+  endif()
+
   target_link_libraries(CosimBackend PUBLIC
     ESICppRuntime
     CosimRpc
@@ -345,6 +393,19 @@ if(ESI_COSIM)
         POST_EXCLUDE_REGEXES ".*system32/.*\\.dll"
       COMPONENT ESIRuntime
     )
+    # Install PDB files for Windows Debug builds
+    if(MSVC)
+      install(FILES $<TARGET_PDB_FILE:CosimRpc>
+        DESTINATION ${ESIRT_INSTALL_LIBDIR}
+        COMPONENT ESIRuntime
+        OPTIONAL
+      )
+      install(FILES $<TARGET_PDB_FILE:CosimBackend>
+        DESTINATION ${ESIRT_INSTALL_LIBDIR}
+        COMPONENT ESIRuntime
+        OPTIONAL
+      )
+    endif()
   else()
     install(TARGETS CosimRpc CosimBackend
       DESTINATION ${ESIRT_INSTALL_LIBDIR}

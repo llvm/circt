@@ -2,6 +2,9 @@
 
 // CHECK-LABEL: @constants
 rtg.test @constants() {
+  // CHECK-NEXT: [[STR:%.+]] = rtg.constant "hello" : !rtg.string
+  %str = rtg.constant "hello" : !rtg.string
+
   // CHECK-NEXT: rtg.constant #rtg.isa.immediate<2, -1> : !rtg.isa.immediate<2>
   %0 = rtg.constant #rtg.isa.immediate<2, -1>
 
@@ -10,11 +13,21 @@ rtg.test @constants() {
   %1 = index.constant 5
   %2 = rtg.isa.int_to_immediate %1 : !rtg.isa.immediate<32>
 
-  // CHECK-NEXT: rtg.comment "this is a comment"
-  rtg.comment "this is a comment"
+  // CHECK-NEXT: rtg.comment [[STR]]
+  rtg.comment %str
 
   // CHECK-NEXT: rtg.isa.space [[V0]]
   rtg.isa.space %1
+
+  // CHECK-NEXT: rtg.isa.string_data [[STR]]
+  rtg.isa.string_data %str
+
+  // CHECK-NEXT: rtg.isa.segment data {
+  // CHECK-NEXT: }
+  rtg.isa.segment data { }
+  // CHECK-NEXT: rtg.isa.segment text {
+  // CHECK-NEXT: }
+  rtg.isa.segment text { }
 
   // CHECK-NEXT: rtg.constant #rtg.set<> : !rtg.set<i32>
   rtg.constant #rtg.set<> : !rtg.set<i32>
@@ -30,9 +43,20 @@ rtg.test @constants() {
   // CHECK-NEXT: rtg.constant #rtg.tuple<0 : i32, 1 : index> : !rtg.tuple<i32, index>
   rtg.constant #rtg.tuple<0 : i32, 1 : index> : !rtg.tuple<i32, index>
 
-  // Test set type inference 
+  // Test set type inference
   // CHECK-NEXT: rtg.constant #rtg.tuple<0 : i32, 1 : index> : !rtg.tuple<i32, index>
   rtg.constant #rtg.tuple<0 : i32, 1 : index>
+
+  // CHECK-NEXT: rtg.constant #rtg.map<> : !rtg.map<i32 -> i32>
+  rtg.constant #rtg.map<> : !rtg.map<i32 -> i32>
+
+  // Test that map entries are printed in lexicographic order
+  // CHECK-NEXT: rtg.constant #rtg.map<#rtgtest.a0 : !rtgtest.ireg -> 0 : i32, #rtgtest.a1 : !rtgtest.ireg -> 1 : i32, #rtgtest.a2 : !rtgtest.ireg -> 2 : i32> : !rtg.map<!rtgtest.ireg -> i32>
+  rtg.constant #rtg.map<#rtgtest.a1 -> 1 : i32, #rtgtest.a0 -> 0 : i32, #rtgtest.a2 -> 2 : i32> : !rtg.map<!rtgtest.ireg -> i32>
+
+  // Test map type inference
+  // CHECK-NEXT: rtg.constant #rtg.map<0 : i32 -> 10 : i32, 1 : i32 -> 11 : i32, 2 : i32 -> 12 : i32> : !rtg.map<i32 -> i32>
+  rtg.constant #rtg.map<1 : i32 -> 11 : i32, 0 : i32 -> 10 : i32, 2 : i32 -> 12 : i32>
 }
 
 // CHECK-LABEL: rtg.sequence @ranomizedSequenceType
@@ -42,10 +66,14 @@ rtg.sequence @ranomizedSequenceType(%seq: !rtg.randomized_sequence) {}
 // CHECK-LABEL: rtg.sequence @seq
 rtg.sequence @seq0() {
   %arg = arith.constant 1 : index
-  // CHECK: [[LBL0:%.*]] = rtg.label_decl "label_string_{0}_{1}", %{{.*}}, %{{.*}}
-  %0 = rtg.label_decl "label_string_{0}_{1}", %arg, %arg
-  // CHECK: [[LBL1:%.+]] = rtg.label_unique_decl "label_string"
-  %1 = rtg.label_unique_decl "label_string"
+  // CHECK: [[LBL0:%.*]] = rtg.constant #rtg.isa.label<"label_string">
+  %0 = rtg.constant #rtg.isa.label<"label_string">
+
+  // CHECK: [[PREFIX:%.+]] = rtg.constant "label_string" : !rtg.string 
+  // CHECK: [[LBL1:%.+]] = rtg.label_unique_decl [[PREFIX]]
+  %prefix = rtg.constant "label_string" : !rtg.string
+  %1 = rtg.label_unique_decl %prefix
+
   // CHECK: rtg.label local [[LBL0]]
   rtg.label local %0
   // CHECK: rtg.label global [[LBL1]]
@@ -202,6 +230,11 @@ rtg.test @arrays(arr = %arr: !rtg.array<index>) {
   %2 = rtg.array_extract %0[%idx1] : !rtg.array<!rtg.array<index>>
   %3 = rtg.array_inject %2[%idx1], %idx1 : !rtg.array<index>
   %4 = rtg.array_size %3 : !rtg.array<index>
+
+  // CHECK-NEXT: [[V5:%.+]] = rtg.array_create : index
+  %5 = rtg.array_create : index
+  // CHECK-NEXT: rtg.array_append [[V5]], [[IDX1]] : !rtg.array<index>
+  %6 = rtg.array_append %5, %idx1 : !rtg.array<index>
 }
 
 // CHECK-LABEL: rtg.test @tuples
@@ -271,10 +304,12 @@ rtg.test @immediateOps() {
 
 // CHECK-LABEL: rtg.test @testReportOps
 rtg.test @testReportOps() {
+  // CHECK-NEXT: [[STR:%.+]] = rtg.constant "hello" : !rtg.string
+  %str = rtg.constant "hello" : !rtg.string
   // CHECK-NEXT: rtg.test.success
   rtg.test.success
-  // CHECK-NEXT: rtg.test.failure "error message"
-  rtg.test.failure "error message"
+  // CHECK-NEXT: rtg.test.failure [[STR]]
+  rtg.test.failure %str
 }
 
 // CHECK-LABEL: rtg.test @testConstraints
@@ -283,4 +318,37 @@ rtg.test @testConstraints() {
   // CHECK-NEXT: rtg.constraint [[V0]]
   %0 = index.bool.constant 1
   rtg.constraint %0
+}
+
+// CHECK-LABEL: rtg.test @strings
+rtg.test @strings() {
+  %1 = rtg.constant 23 : index
+  // CHECK: [[V3:%.+]] = rtg.int_format {{%.+}}
+  rtg.int_format %1
+
+  // CHECK-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<8, 42>
+  %imm = rtg.constant #rtg.isa.immediate<8, 42>
+  // CHECK-NEXT: rtg.immediate_format [[IMM]] : !rtg.isa.immediate<8>
+  rtg.immediate_format %imm : !rtg.isa.immediate<8>
+
+  // CHECK-NEXT: [[REG:%.+]] = rtg.constant #rtgtest.t0
+  %reg = rtg.constant #rtgtest.t0 : !rtgtest.ireg
+  // CHECK-NEXT: rtg.register_format [[REG]] : !rtgtest.ireg
+  rtg.register_format %reg : !rtgtest.ireg
+
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant "hello" : !rtg.string
+  %0 = rtg.constant "hello" : !rtg.string
+  // CHECK-NEXT: rtg.string_concat [[V0]], [[V0]]
+  %5 = rtg.string_concat %0, %0
+
+  // CHECK-NEXT: rtg.string_concat
+  rtg.string_concat
+}
+
+// CHECK-LABEL: rtg.test @registerConversion
+rtg.test @registerConversion(idx = %arg0: index, reg = %arg1: !rtgtest.ireg) {
+  // CHECK-NEXT: rtg.isa.index_to_register %idx : !rtgtest.ireg
+  // CHECK-NEXT: rtg.isa.register_to_index %reg : !rtgtest.ireg
+  rtg.isa.index_to_register %arg0 : !rtgtest.ireg
+  rtg.isa.register_to_index %arg1 : !rtgtest.ireg
 }
