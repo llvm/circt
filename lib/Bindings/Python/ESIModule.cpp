@@ -98,6 +98,8 @@ using mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyMlirContext;
 
 struct PyChannelType : PyConcreteType<PyChannelType> {
   static constexpr IsAFunctionTy isaFunction = circtESITypeIsAChannelType;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      circtESIChannelTypeGetTypeID;
   static constexpr const char *pyClassName = "ChannelType";
   using Base::Base;
 
@@ -128,6 +130,8 @@ struct PyChannelType : PyConcreteType<PyChannelType> {
 
 struct PyESIAnyType : PyConcreteType<PyESIAnyType> {
   static constexpr IsAFunctionTy isaFunction = circtESITypeIsAnAnyType;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      circtESIAnyTypeGetTypeID;
   static constexpr const char *pyClassName = "AnyType";
   using Base::Base;
 
@@ -143,6 +147,8 @@ struct PyESIAnyType : PyConcreteType<PyESIAnyType> {
 
 struct PyESIListType : PyConcreteType<PyESIListType> {
   static constexpr IsAFunctionTy isaFunction = circtESITypeIsAListType;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      circtESIListTypeGetTypeID;
   static constexpr const char *pyClassName = "ListType";
   using Base::Base;
 
@@ -163,6 +169,8 @@ struct PyESIListType : PyConcreteType<PyESIListType> {
 
 struct PyBundleType : PyConcreteType<PyBundleType> {
   static constexpr IsAFunctionTy isaFunction = circtESITypeIsABundleType;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      circtESIBundleTypeGetTypeID;
   static constexpr const char *pyClassName = "BundleType";
   using Base::Base;
 
@@ -207,6 +215,8 @@ struct PyBundleType : PyConcreteType<PyBundleType> {
 
 struct PyWindowType : PyConcreteType<PyWindowType> {
   static constexpr IsAFunctionTy isaFunction = circtESITypeIsAWindowType;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      circtESIWindowTypeGetTypeID;
   static constexpr const char *pyClassName = "WindowType";
   using Base::Base;
 
@@ -247,6 +257,8 @@ struct PyWindowType : PyConcreteType<PyWindowType> {
 
 struct PyWindowFrameType : PyConcreteType<PyWindowFrameType> {
   static constexpr IsAFunctionTy isaFunction = circtESITypeIsAWindowFrameType;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      circtESIWindowFrameTypeGetTypeID;
   static constexpr const char *pyClassName = "WindowFrameType";
   using Base::Base;
 
@@ -281,6 +293,8 @@ struct PyWindowFrameType : PyConcreteType<PyWindowFrameType> {
 
 struct PyWindowFieldType : PyConcreteType<PyWindowFieldType> {
   static constexpr IsAFunctionTy isaFunction = circtESITypeIsAWindowFieldType;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      circtESIWindowFieldTypeGetTypeID;
   static constexpr const char *pyClassName = "WindowFieldType";
   using Base::Base;
 

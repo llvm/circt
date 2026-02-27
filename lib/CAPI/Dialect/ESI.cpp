@@ -30,6 +30,10 @@ bool circtESITypeIsAChannelType(MlirType type) {
   return isa<ChannelType>(unwrap(type));
 }
 
+MlirTypeID circtESIChannelTypeGetTypeID() {
+  return wrap(ChannelType::getTypeID());
+}
+
 MlirType circtESIChannelTypeGet(MlirType inner, uint32_t signaling,
                                 uint64_t dataDelay) {
   auto signalEnum = symbolizeChannelSignaling(signaling);
@@ -53,12 +57,19 @@ uint64_t circtESIChannelGetDataDelay(MlirType channelType) {
 bool circtESITypeIsAnAnyType(MlirType type) {
   return isa<AnyType>(unwrap(type));
 }
+MlirTypeID circtESIAnyTypeGetTypeID() {
+  return wrap(AnyType::getTypeID());
+}
 MlirType circtESIAnyTypeGet(MlirContext ctxt) {
   return wrap(AnyType::get(unwrap(ctxt)));
 }
 
 bool circtESITypeIsAListType(MlirType type) {
   return isa<ListType>(unwrap(type));
+}
+
+MlirTypeID circtESIListTypeGetTypeID() {
+  return wrap(ListType::getTypeID());
 }
 
 MlirType circtESIListTypeGet(MlirType inner) {
@@ -109,6 +120,9 @@ void circtESIRegisterGlobalServiceGenerator(
 bool circtESITypeIsABundleType(MlirType type) {
   return isa<ChannelBundleType>(unwrap(type));
 }
+MlirTypeID circtESIBundleTypeGetTypeID() {
+  return wrap(ChannelBundleType::getTypeID());
+}
 MlirType circtESIBundleTypeGet(MlirContext cctxt, size_t numChannels,
                                const CirctESIBundleTypeBundleChannel *channels,
                                bool resettable) {
@@ -143,6 +157,10 @@ CirctESIBundleTypeBundleChannel circtESIBundleTypeGetChannel(MlirType bundle,
 
 bool circtESITypeIsAWindowType(MlirType type) {
   return isa<WindowType>(unwrap(type));
+}
+
+MlirTypeID circtESIWindowTypeGetTypeID() {
+  return wrap(WindowType::getTypeID());
 }
 
 MlirType circtESIWindowTypeGet(MlirContext cctxt, MlirAttribute name,
@@ -180,6 +198,10 @@ bool circtESITypeIsAWindowFrameType(MlirType type) {
   return isa<WindowFrameType>(unwrap(type));
 }
 
+MlirTypeID circtESIWindowFrameTypeGetTypeID() {
+  return wrap(WindowFrameType::getTypeID());
+}
+
 MlirType circtESIWindowFrameTypeGet(MlirContext cctxt, MlirAttribute name,
                                     size_t numMembers,
                                     const MlirType *cMembers) {
@@ -205,6 +227,10 @@ MlirType circtESIWindowFrameTypeGetMember(MlirType frame, size_t idx) {
 
 bool circtESITypeIsAWindowFieldType(MlirType type) {
   return isa<WindowFieldType>(unwrap(type));
+}
+
+MlirTypeID circtESIWindowFieldTypeGetTypeID() {
+  return wrap(WindowFieldType::getTypeID());
 }
 
 MlirType circtESIWindowFieldTypeGet(MlirContext cctxt, MlirAttribute fieldName,

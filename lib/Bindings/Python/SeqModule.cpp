@@ -24,6 +24,7 @@ using mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyMlirContext;
 
 struct PyClockType : PyConcreteType<PyClockType> {
   static constexpr IsAFunctionTy isaFunction = seqTypeIsAClock;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction = seqClockTypeGetTypeID;
   static constexpr const char *pyClassName = "ClockType";
   using Base::Base;
 
