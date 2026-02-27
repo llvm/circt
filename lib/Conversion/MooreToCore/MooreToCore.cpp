@@ -2431,6 +2431,21 @@ struct QueueDeleteOpConversion : public OpConversionPattern<QueueDeleteOp> {
   };
 };
 
+struct QueueConvertBoundsOpConversion
+    : public OpConversionPattern<QueueConvertBoundsOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(QueueConvertBoundsOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    rewriter.replaceOpWithNewOp<sim::QueueConvertBoundsOp>(
+        op, getTypeConverter()->convertType(op.getResult().getType()),
+        adaptor.getInput());
+    return success();
+  }
+};
+
 struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -2937,7 +2952,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     QueueDeleteOpConversion,
     QueueInsertOpConversion,
     QueueClearOpConversion,
-    DynQueueExtractOpConversion
+    DynQueueExtractOpConversion,
+    QueueConvertBoundsOpConversion
   >(typeConverter, patterns.getContext());
   // clang-format on
 
