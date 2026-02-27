@@ -53,4 +53,11 @@ firrtl.circuit "StripDomains" {
     %0 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
     firrtl.domain.define %D, %0
   }
+
+  // CHECK-LABEL: firrtl.module @StripNamedDomain() {
+  // CHECK-NEXT:  }
+  firrtl.module @StripNamedDomain(out %D: !firrtl.domain of @ClockDomain) {
+    %my_domain = firrtl.domain.create : !firrtl.domain of @ClockDomain
+    firrtl.domain.define %D, %my_domain
+  }
 }
