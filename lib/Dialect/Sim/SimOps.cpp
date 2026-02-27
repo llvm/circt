@@ -538,7 +538,7 @@ OpFoldResult StringConcatOp::fold(FoldAdaptor adaptor) {
 
   SmallString<128> result;
   for (auto &operand : operands) {
-    if (auto strAttr = cast<StringAttr>(operand))
+    if (auto strAttr = dyn_cast_or_null<StringAttr>(operand))
       result += strAttr.getValue();
     else
       return {};

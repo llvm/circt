@@ -19,6 +19,7 @@
 #include "circt/Dialect/Arc/Runtime/IRInterface.h"
 #include "circt/Dialect/Arc/Runtime/Internal.h"
 #include "circt/Dialect/Arc/Runtime/ModelInstance.h"
+#include "circt/Dialect/Arc/Runtime/String.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
@@ -201,13 +202,52 @@ uint64_t *arcRuntimeIR_swapTraceBuffer(const uint8_t *modelState) {
   return getModelInstance(statePtr)->swapTraceBuffer();
 }
 
+void arcRuntimeIR_stringInit(DynamicString *str, const char *initialValue,
+                             int64_t initialSize) {
+  if (!str || !initialValue)
+    impl::fatalError("Invalid string or initial value");
+  str->size = initialSize;
+  str->data = new char[initialSize];
+  std::memcpy(str->data, initialValue, initialSize);
+}
+
+void arcRuntimeIR_stringConcat(DynamicString *outStr, ...) {
+  if (!outStr)
+    impl::fatalError("Invalid output string or string list");
+  va_list args;
+  va_start(args, outStr);
+  uint64_t totalSize = 0;
+  while (true) {
+    auto strPtr = va_arg(args, const DynamicString *);
+    if ((!strPtr || (!strPtr->data)))
+      break;
+    totalSize += strPtr->size;
+  }
+  va_end(args);
+
+  outStr->size = totalSize;
+  outStr->data = new char[totalSize];
+  char *current = outStr->data;
+
+  va_start(args, outStr);
+  while (true) {
+    auto strPtr = va_arg(args, const DynamicString *);
+    if ((!strPtr || (!strPtr->data)))
+      break;
+    std::memcpy(current, strPtr->data, strPtr->size);
+    current += strPtr->size;
+  }
+  va_end(args);
+}
+
 #ifdef ARC_RUNTIME_JIT_BIND
 namespace circt::arc::runtime {
 
 static const APICallbacks apiCallbacksGlobal{
     &arcRuntimeIR_allocInstance, &arcRuntimeIR_deleteInstance,
     &arcRuntimeIR_onEval,        &arcRuntimeIR_onInitialized,
-    &arcRuntimeIR_format,        &arcRuntimeIR_swapTraceBuffer};
+    &arcRuntimeIR_format,        &arcRuntimeIR_swapTraceBuffer,
+    &arcRuntimeIR_stringInit,    &arcRuntimeIR_stringConcat};
 
 const APICallbacks &getArcRuntimeAPICallbacks() { return apiCallbacksGlobal; }
 
