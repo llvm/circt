@@ -766,6 +766,168 @@ firrtl.circuit "Foo" {
 }
 
 // -----
+// Test XMR lowering through instance_choice with probe ports
+// CHECK-LABEL: firrtl.circuit "InstanceChoiceProbe"
+firrtl.circuit "InstanceChoiceProbe" {
+  sv.macro.decl @__option_Platform_FPGA
+  sv.macro.decl @__option_Platform_ASIC
+  sv.macro.decl @__target_Platform_InstanceChoiceProbe_inst
+
+  // CHECK-DAG: sv.macro.decl @__targetref_InstanceChoiceProbe_inst_probe
+  // CHECK-DAG: hw.hierpath private @[[PATH_DEFAULT:[a-zA-Z0-9_]+]] [@DefaultTarget::@[[DEFAULT_SYM:[a-zA-Z0-9_]+]]]
+  // CHECK-DAG: hw.hierpath private @[[PATH_FPGA:[a-zA-Z0-9_]+]] [@FPGATarget::@[[FPGA_SYM:[a-zA-Z0-9_]+]]]
+  // CHECK-DAG: hw.hierpath private @[[PATH_ASIC:[a-zA-Z0-9_]+]] [@ASICTarget::@[[ASIC_SYM:[a-zA-Z0-9_]+]]]
+
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA {case_macro = @__option_Platform_FPGA}
+    firrtl.option_case @ASIC {case_macro = @__option_Platform_ASIC}
+  }
+
+  // CHECK: firrtl.module @DefaultTarget() {
+  firrtl.module @DefaultTarget(out %probe: !firrtl.probe<uint<8>>) {
+    %r = firrtl.wire : !firrtl.uint<8>
+    // CHECK: %r = firrtl.wire sym @[[DEFAULT_SYM]]
+    %0 = firrtl.ref.send %r : !firrtl.uint<8>
+    firrtl.ref.define %probe, %0 : !firrtl.probe<uint<8>>
+  }
+
+  // CHECK: firrtl.module @FPGATarget() {
+  firrtl.module @FPGATarget(out %probe: !firrtl.probe<uint<8>>) {
+    %r = firrtl.wire : !firrtl.uint<8>
+    // CHECK: %r = firrtl.wire sym @[[FPGA_SYM]]
+    %0 = firrtl.ref.send %r : !firrtl.uint<8>
+    firrtl.ref.define %probe, %0 : !firrtl.probe<uint<8>>
+  }
+
+  // CHECK: firrtl.module @ASICTarget() {
+  firrtl.module @ASICTarget(out %probe: !firrtl.probe<uint<8>>) {
+    %r = firrtl.wire : !firrtl.uint<8>
+    // CHECK: %r = firrtl.wire sym @[[ASIC_SYM]]
+    %0 = firrtl.ref.send %r : !firrtl.uint<8>
+    firrtl.ref.define %probe, %0 : !firrtl.probe<uint<8>>
+  }
+
+  // CHECK: emit.file "ref_InstanceChoiceProbe.sv" {
+  // CHECK:   sv.ifdef @__option_Platform_FPGA {
+  // CHECK:     sv.macro.def @__targetref_InstanceChoiceProbe_inst_probe
+  // CHECK:   } else {
+  // CHECK:     sv.ifdef @__option_Platform_ASIC {
+  // CHECK:       sv.macro.def @__targetref_InstanceChoiceProbe_inst_probe
+  // CHECK:     } else {
+  // CHECK:       sv.macro.def @__targetref_InstanceChoiceProbe_inst_probe
+  // CHECK:     }
+  // CHECK:   }
+  // CHECK: }
+
+  // CHECK-LABEL: firrtl.module @InstanceChoiceProbe
+  firrtl.module @InstanceChoiceProbe(out %out: !firrtl.uint<8>) {
+    // CHECK: firrtl.instance_choice inst {instance_macro = @__target_Platform_InstanceChoiceProbe_inst}
+    %inst_probe = firrtl.instance_choice inst {instance_macro = @__target_Platform_InstanceChoiceProbe_inst} @DefaultTarget alternatives @Platform {
+      @FPGA -> @FPGATarget,
+      @ASIC -> @ASICTarget
+    } (out probe: !firrtl.probe<uint<8>>)
+
+    %0 = firrtl.ref.resolve %inst_probe : !firrtl.probe<uint<8>>
+    // CHECK: %[[VERBATIM:.+]] = firrtl.verbatim.expr "{{[{][{]}}0}}" : () -> !firrtl.uint<8> {symbols = [@__targetref_InstanceChoiceProbe_inst_probe]}
+    firrtl.matchingconnect %out, %0 : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %out, %[[VERBATIM]]
+  }
+}
+
+// -----
+// Test instance_choice with ref.sub
+// CHECK-LABEL: firrtl.circuit "InstanceChoiceRefSub"
+firrtl.circuit "InstanceChoiceRefSub" {
+  sv.macro.decl @__option_Platform_FPGA
+  sv.macro.decl @__target_Platform_InstanceChoiceRefSub_inst
+
+  // CHECK: sv.macro.decl @__targetref_InstanceChoiceRefSub_inst_probe
+  // CHECK: hw.hierpath private @[[PATH:[a-zA-Z0-9_]+]] [@Target::@{{.+}}]
+
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA {case_macro = @__option_Platform_FPGA}
+  }
+
+  // CHECK: firrtl.module @Target() {
+  firrtl.module @Target(out %probe: !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>) {
+    %w = firrtl.wire : !firrtl.bundle<a: uint<1>, b: uint<2>>
+    // CHECK: %w = firrtl.wire sym
+    %0 = firrtl.ref.send %w : !firrtl.bundle<a: uint<1>, b: uint<2>>
+    firrtl.ref.define %probe, %0 : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>
+  }
+
+  // CHECK: emit.file "ref_InstanceChoiceRefSub.sv" {
+  // CHECK:   sv.ifdef @__option_Platform_FPGA {
+  // CHECK:     sv.macro.def @__targetref_InstanceChoiceRefSub_inst_probe
+  // CHECK:   } else {
+  // CHECK:     sv.macro.def @__targetref_InstanceChoiceRefSub_inst_probe
+  // CHECK:   }
+  // CHECK: }
+
+  // CHECK-LABEL: firrtl.module @InstanceChoiceRefSub
+  firrtl.module @InstanceChoiceRefSub(out %out: !firrtl.uint<2>) {
+    // CHECK: firrtl.instance_choice inst {instance_macro = @__target_Platform_InstanceChoiceRefSub_inst}
+    %inst_probe = firrtl.instance_choice inst {instance_macro = @__target_Platform_InstanceChoiceRefSub_inst} @Target alternatives @Platform {
+      @FPGA -> @Target
+    } (out probe: !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>)
+
+    %sub = firrtl.ref.sub %inst_probe[1] : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>
+    %0 = firrtl.ref.resolve %sub : !firrtl.probe<uint<2>>
+    // CHECK: %{{.+}} = firrtl.verbatim.expr "{{[{][{]}}0}}.b" : () -> !firrtl.uint<2> {symbols = [@__targetref_InstanceChoiceRefSub_inst_probe]}
+    firrtl.matchingconnect %out, %0 : !firrtl.uint<2>
+    // CHECK: firrtl.matchingconnect %out, %{{.+}}
+  }
+}
+
+// -----
+// Test instance_choice with public module output probe ports
+// CHECK-LABEL: firrtl.circuit "InstanceChoicePublicProbe"
+firrtl.circuit "InstanceChoicePublicProbe" {
+  sv.macro.decl @__option_Platform_FPGA
+  sv.macro.decl @__option_Platform_ASIC
+  sv.macro.decl @__target_Platform_InstanceChoicePublicProbe_inst
+
+  // CHECK: sv.macro.decl @ref_InstanceChoicePublicProbe_out
+  // CHECK-DAG: hw.hierpath private @{{.+}} [@DefaultTarget::@{{.+}}]
+  // CHECK-DAG: hw.hierpath private @{{.+}} [@FPGATarget::@{{.+}}]
+  // CHECK-DAG: hw.hierpath private @{{.+}} [@ASICTarget::@{{.+}}]
+
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA {case_macro = @__option_Platform_FPGA}
+    firrtl.option_case @ASIC {case_macro = @__option_Platform_ASIC}
+  }
+
+  firrtl.module @DefaultTarget(out %probe: !firrtl.probe<uint<3>>) {
+    %w = firrtl.wire : !firrtl.uint<3>
+    %0 = firrtl.ref.send %w : !firrtl.uint<3>
+    firrtl.ref.define %probe, %0 : !firrtl.probe<uint<3>>
+  }
+
+  firrtl.module @FPGATarget(out %probe: !firrtl.probe<uint<3>>) {
+    %w = firrtl.wire : !firrtl.uint<3>
+    %0 = firrtl.ref.send %w : !firrtl.uint<3>
+    firrtl.ref.define %probe, %0 : !firrtl.probe<uint<3>>
+  }
+
+  firrtl.module @ASICTarget(out %probe: !firrtl.probe<uint<3>>) {
+    %w = firrtl.wire : !firrtl.uint<3>
+    %0 = firrtl.ref.send %w : !firrtl.uint<3>
+    firrtl.ref.define %probe, %0 : !firrtl.probe<uint<3>>
+  }
+
+  // CHECK: emit.file "ref_InstanceChoicePublicProbe.sv"
+  // CHECK-LABEL: firrtl.module @InstanceChoicePublicProbe
+  firrtl.module @InstanceChoicePublicProbe(out %out: !firrtl.probe<uint<3>>) {
+    %inst_probe = firrtl.instance_choice inst {instance_macro = @__target_Platform_InstanceChoicePublicProbe_inst} @DefaultTarget alternatives @Platform {
+      @FPGA -> @FPGATarget,
+      @ASIC -> @ASICTarget
+    } (out probe: !firrtl.probe<uint<3>>)
+
+    firrtl.ref.define %out, %inst_probe : !firrtl.probe<uint<3>>
+  }
+}
+
+// -----
 // Test that all modules are reached and updated.
 
 // CHECK-LABEL: firrtl.circuit "PF"
@@ -787,7 +949,6 @@ firrtl.circuit "PF" {
     firrtl.ref.define %p, %c_p : !firrtl.probe<uint<1>>
   }
 }
-
 
 // -----
 // Test that instance results used in both connects and ref.send preserve
