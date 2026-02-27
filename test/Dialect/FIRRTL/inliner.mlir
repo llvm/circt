@@ -1563,7 +1563,7 @@ firrtl.circuit "InstanceChoiceWithFlattening" {
   firrtl.module @InstanceChoiceWithFlattening()
     attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
     // After flattening, instance_choice should be inlined but still reference @ImplA
-    // CHECK: firrtl.instance_choice inst @ImplA
+    // CHECK: firrtl.instance_choice level1_level2_inst @ImplA
     firrtl.instance level1 @Level1()
   }
 }
