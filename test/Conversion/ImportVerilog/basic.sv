@@ -4068,3 +4068,100 @@ module QueueUnboundedLiteralTest;
       res = q1[$ + q2[$]];
     end
 endmodule
+
+
+
+
+// CHECK-LABEL: moore.module @ForkJoinTest() {
+// CHECK:         [[C0:%.+]] = moore.constant 0 : i32
+// CHECK:         [[V0:%.+]] = moore.variable [[C0]] : <i32>
+// CHECK:         [[C1:%.+]] = moore.constant 0 : i32
+// CHECK:         [[V1:%.+]] = moore.variable [[C1]] : <i32>
+// CHECK:         [[C2:%.+]] = moore.constant 0 : i32
+// CHECK:         [[V2:%.+]] = moore.variable [[C2]] : <i32>
+// CHECK:         [[C3:%.+]] = moore.constant 0 : i32
+// CHECK:         [[V3:%.+]] = moore.variable [[C3]] : <i32>
+// CHECK:         [[C4:%.+]] = moore.constant 0 : i32
+// CHECK:         [[V4:%.+]] = moore.variable [[C4]] : <i32>
+// CHECK:         moore.procedure initial {
+// CHECK            moore.fork join_all {
+// CHECK              [[C5:%.+]] = moore.constant 1 : i32
+// CHECK              moore.blocking_assign [[V0]], [[C5]] : i32
+// CHECK:             [[C6:%.+]] = moore.constant 0 : i32
+// CHECK              moore.blocking_assign [[V0]], [[C6]] : i32
+// CHECK              moore.complete
+// CHECK            }, {
+// CHECK              [[C7:%.+]] = moore.constant 1 : i32
+// CHECK              moore.blocking_assign [[V1]], [[C7]] : i32
+// CHECK              [[C8:%.+]] = moore.constant 2 : i32
+// CHECK              moore.blocking_assign [[V1]], [[C8]] : i32
+// CHECK              moore.complete
+// CHECK            }
+// CHECK            moore.fork join_any {
+// CHECK              [[C9:%.+]] = moore.read [[V0]] : <i32>
+// CHECK              moore.blocking_assign [[V2]], [[C9]] : i32
+// CHECK              moore.complete
+// CHECK            }, {
+// CHECK              [[C10:%.+]] = moore.read [[V1]] : <i32>
+// CHECK              moore.blocking_assign [[V3]], [[C10]] : i32
+// CHECK              moore.complete
+// CHECK            }
+// CHECK            moore.fork join_none {
+// CHECK              [[C11:%.+]] = moore.constant 3 : i32
+// CHECK              moore.blocking_assign [[V0]], [[C11]] : i32
+// CHECK              [[C12:%.+]] = moore.constant 4 : i32
+// CHECK              moore.blocking_assign [[V1]], [[C12]] : i32
+// CHECK              moore.complete
+// CHECK            }, {
+// CHECK              [[C13:%.+]] = moore.constant 5 : i32
+// CHECK              moore.blocking_assign [[V2]], [[C13]] : i32
+// CHECK              moore.complete
+// CHECK            }, {
+// CHECK              [[C14:%.+]] = moore.constant 6 : i32
+// CHECK              moore.blocking_assign [[V3]], [[C14]] : i32
+// CHECK              [[C15:%.+]] = moore.constant 7 : i32
+// CHECK              moore.blocking_assign [[V4]], [[C15]] : i32
+// CHECK              moore.complete
+// CHECK            }
+// CHECK            [[C16:%.+]] = moore.constant 8 : i32
+// CHECK            moore.blocking_assign [[V0]], [[C16]] : i32
+// CHECK            moore.return
+// CHECK          }
+// CHECK          moore.output
+// CHECK        }
+
+module ForkJoinTest ();
+	int a = 0;
+	int b = 0;
+	int c = 0;
+	int d = 0;
+	int e = 0;
+	initial begin
+		fork
+			begin
+				a = 1;
+				a = 0;
+			end
+			begin
+				b = 1;
+				b = 2;
+			end
+		join
+		fork
+			c = a;
+			d = b;
+		join_any
+		fork
+			begin
+				a = 3;
+				b = 4;
+			end
+			c = 5;
+			begin
+				d = 6;
+				e = 7;
+			end
+		join_none	
+		a = 8;
+	end
+endmodule

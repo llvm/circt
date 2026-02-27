@@ -2933,4 +2933,59 @@ def StringConcatOp : StringBuiltin<"concat"> {
   let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
 }
 
+
+//===----------------------------------------------------------------------===//
+// Forking
+//===----------------------------------------------------------------------===//
+
+def CompleteOp : MooreOp<"complete", [
+  Pure, Terminator, HasParent<"ForkJoinOp">
+]> {
+  let summary = "Complete execution of a thread";
+  let description = [{
+    Complete execution of a thread, ending the forked process and notifying
+    the parent process
+  }];
+
+  // TODO: Add field to store location of parent process to signal
+
+  let assemblyFormat = [{ attr-dict }];
+}
+
+
+def Join: I32EnumAttrCase<"Join", 0, "join_all">;
+def JoinAny: I32EnumAttrCase<"JoinAny", 1, "join_any">;
+def JoinNone: I32EnumAttrCase<"JoinNone", 2, "join_none">;
+
+def JoinKindAttr: I32EnumAttr<"JoinKind", "Join kind", [Join, JoinAny, JoinNone]>{
+  let cppNamespace = "circt::moore";
+}
+
+def ForkJoinOp : MooreOp<"fork", [
+  HasOnlyGraphRegion,
+  NoTerminator
+]> {
+  let summary = "Create separate threads";
+  let description = [{
+    Forks execution to create one thread for each block inside the `body` region.
+    The main process resumes progress according to the kind of join operation used:
+
+    - `join_all` will not allow the main process to continue until all forked processes
+      have completed.
+    
+    - `join_any` will allow the main process to continue once any one of the forked
+      processes completes.
+
+    - `join_none` will continue executing the main process without waiting.
+  }];
+
+  let arguments = (ins JoinKindAttr:$kind);
+  let results = (outs);
+  let regions = (region VariadicRegion<MinSizedRegion<1>>:$body);
+
+  let assemblyFormat = [{
+    $kind attr-dict-with-keyword $body
+  }];
+}
+
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS
