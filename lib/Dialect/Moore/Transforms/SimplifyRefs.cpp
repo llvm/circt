@@ -1,4 +1,4 @@
-//===- LowerConcatRef.cpp - moore.concat_ref lowering ---------------------===//
+//===- SimplifyRefs.cpp - moore.concat_ref and queue reference lowering -- ===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,10 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the LowerConcatRef pass.
-// It's used to disassemble the moore.concat_ref. Which is tricky to lower
+// This file defines the SimplifyRefs pass.
+// It has two purposes:
+// - To disassemble the moore.concat_ref. Which is tricky to lower
 // directly. For example, disassemble "{a, b} = c" onto "a = c[7:3]"
 // and "b = c[2:0]".
+// - To eliminate moore.dyn_queue_ref_element in the case where the reference
+// immediately has a value assigned via blocking assignment, replacing it with
+// moore.queue.set. Queue element references are tricky to lower into LLHD,
+// so it's best to get rid of them.
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,7 +24,7 @@
 
 namespace circt {
 namespace moore {
-#define GEN_PASS_DEF_LOWERCONCATREF
+#define GEN_PASS_DEF_SIMPLIFYREFS
 #include "circt/Dialect/Moore/MoorePasses.h.inc"
 } // namespace moore
 } // namespace circt
@@ -117,18 +122,18 @@ struct QueueRefLowering : public OpConversionPattern<DynQueueRefElementOp> {
   }
 };
 
-struct LowerConcatRefPass
-    : public circt::moore::impl::LowerConcatRefBase<LowerConcatRefPass> {
+struct SimplifyRefsPass
+    : public circt::moore::impl::SimplifyRefsBase<SimplifyRefsPass> {
   void runOnOperation() override;
 };
 
 } // namespace
 
-std::unique_ptr<mlir::Pass> circt::moore::createLowerConcatRefPass() {
-  return std::make_unique<LowerConcatRefPass>();
+std::unique_ptr<mlir::Pass> circt::moore::createSimplifyRefsPass() {
+  return std::make_unique<SimplifyRefsPass>();
 }
 
-void LowerConcatRefPass::runOnOperation() {
+void SimplifyRefsPass::runOnOperation() {
   MLIRContext &context = getContext();
   ConversionTarget target(context);
 

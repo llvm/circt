@@ -1,4 +1,4 @@
-// RUN: circt-opt --moore-lower-concatref %s | FileCheck %s
+// RUN: circt-opt --moore-simplify-refs %s | FileCheck %s
 
 // CHECK-LABEL: moore.module @Foo()
  moore.module @Foo() {
