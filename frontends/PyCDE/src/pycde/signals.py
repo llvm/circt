@@ -714,10 +714,12 @@ class StructMetaType(type):
 
     cls = super().__new__(self, name, bases, dct)
     from .types import RegisteredStruct, Type
-    if "__annotations__" not in dct:
+    # In Python 3.14+, annotations are stored via __annotate__ instead of
+    # __annotations__ in the class namespace dict (PEP 649/749).
+    if "__annotations__" not in dct and "__annotate__" not in dct:
       return cls
     fields: List[Tuple[str, Type]] = []
-    for attr_name, attr in dct["__annotations__"].items():
+    for attr_name, attr in cls.__annotations__.items():
       if isinstance(attr, Type):
         fields.append((attr_name, attr))
 
