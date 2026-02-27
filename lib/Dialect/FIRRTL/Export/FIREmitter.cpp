@@ -112,6 +112,7 @@ struct Emitter {
   void emitStatement(LayerBlockOp op);
   void emitStatement(GenericIntrinsicOp op);
   void emitStatement(DomainCreateAnonOp op);
+  void emitStatement(DomainCreateOp op);
 
   template <class T>
   void emitVerifStatement(T op, StringRef mnemonic);
@@ -770,7 +771,7 @@ void Emitter::emitStatementsInBlock(Block &block) {
               CombMemOp, MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp,
               DomainDefineOp, RefDefineOp, RefForceOp, RefForceInitialOp,
               RefReleaseOp, RefReleaseInitialOp, LayerBlockOp,
-              GenericIntrinsicOp, DomainCreateAnonOp>(
+              GenericIntrinsicOp, DomainCreateAnonOp, DomainCreateOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           startStatement();
@@ -1414,6 +1415,15 @@ void Emitter::emitStatement(GenericIntrinsicOp op) {
 
 void Emitter::emitStatement(DomainCreateAnonOp op) {
   // These ops are not emitted.
+}
+
+void Emitter::emitStatement(DomainCreateOp op) {
+  startStatement();
+  auto name = legalize(op.getNameAttr());
+  addValueName(op.getResult(), name);
+  ps << "domain " << PPExtString(name) << " of "
+     << PPExtString(op.getDomainAttr().getValue());
+  emitLocationAndNewLine(op);
 }
 
 void Emitter::emitExpression(Value value) {

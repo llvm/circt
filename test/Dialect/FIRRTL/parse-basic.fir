@@ -2259,6 +2259,25 @@ circuit Domains:
     domain_define C = foo.A
 
 ;// -----
+FIRRTL version 5.1.0
+circuit DomainCreate:
+  domain ClockDomain:
+
+  extmodule Child:
+    input A: Domain of ClockDomain
+
+  ; CHECK-LABEL: firrtl.module @DomainCreate
+  public module DomainCreate:
+    ; CHECK: %my_clock = firrtl.domain.create : !firrtl.domain of @ClockDomain
+    domain my_clock of ClockDomain
+
+    ; CHECK: %child_A = firrtl.instance child interesting_name @Child(in A: !firrtl.domain of @ClockDomain)
+    inst child of Child
+
+    ; CHECK: firrtl.domain.define %child_A, %my_clock
+    domain_define child.A = my_clock
+
+;// -----
 FIRRTL version 6.0.0
 circuit UnknownProperties:
   class Foo:
