@@ -438,28 +438,27 @@ LogicalResult MachineOpConverter::dispatch() {
         // results of unrealized conversion casts and replacing constants with
         // their new clone
         for (auto &op : actionReg->front()) {
-          auto *newOp = b.clone(op, mapping);
-          // Retrieve the updated values and their operands
-          if (isa<fsm::UpdateOp>(newOp)) {
-            auto varToUpdate = newOp->getOperand(0);
-            auto updatedValue = newOp->getOperand(1);
-
-            for (auto [id, var] : llvm::enumerate(fsmToCast)) {
-              if (var.second == varToUpdate) {
-
-                // Cast the updated value to the appropriate SMT type
-                auto convCast = UnrealizedConversionCastOp::create(
-                    b, loc, actionArgsOutsVarsVals[numOut + id].getType(),
-                    updatedValue);
-
-                castUpdatedVars[id - numArgs] = convCast->getResult(0);
-              }
-            }
-            newOp->erase();
-          } else if (isa<verif::AssertOp>(newOp)) {
+          if (isa<verif::AssertOp>(op)) {
             // Ignore assertions in action regions
-            newOp->emitWarning("Assertions in action regions are ignored.");
-            newOp->erase();
+            op.emitWarning("Assertions in action regions are ignored.");
+          } else { 
+            auto *newOp = b.clone(op, mapping);
+            // Retrieve the updated values and their operands
+            if (isa<fsm::UpdateOp>(newOp)) {
+              auto varToUpdate = newOp->getOperand(0);
+              auto updatedValue = newOp->getOperand(1);
+              for (auto [id, var] : llvm::enumerate(fsmToCast)) {
+                if (var.second == varToUpdate) {
+                  // Cast the updated value to the appropriate SMT type
+                  auto convCast = UnrealizedConversionCastOp::create(
+                      b, loc, actionArgsOutsVarsVals[numOut + id].getType(),
+                      updatedValue);
+
+                  castUpdatedVars[id - numArgs] = convCast->getResult(0);
+                }
+              }
+              newOp->erase();
+            }
           }
         }
       }
