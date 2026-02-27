@@ -108,11 +108,11 @@ void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
     for (auto *record : node) {
       auto op = record->getInstance<InstanceChoiceOp>();
       if (!op)
-        return;
+        continue;
 
       auto instanceMacro = assignSymbol(op);
       if (!instanceMacro)
-        return;
+        continue;
       changed = true;
       // Create macro declaration only if we haven't created it yet.
       if (createdMacros.insert(instanceMacro.getAttr()).second)
