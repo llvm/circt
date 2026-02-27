@@ -1544,9 +1544,15 @@ firrtl.circuit "InstanceChoiceWithFlattening" {
     firrtl.option_case @FPGA
   }
 
+  // CHECK-LABEL: firrtl.module private @ChildInsideChoice
+  firrtl.module private @ChildInsideChoice() {}
+
   // This module is referenced by instance_choice and should be kept
-  // CHECK: firrtl.module private @ImplA
-  firrtl.module private @ImplA() {}
+  // CHECK-LABEL: firrtl.module private @ImplA
+  firrtl.module private @ImplA() {
+    // CHECK: firrtl.instance child @ChildInsideChoice
+    firrtl.instance child @ChildInsideChoice()
+  }
 
   // This module contains an instance_choice
   firrtl.module private @Level2() {
@@ -1565,38 +1571,5 @@ firrtl.circuit "InstanceChoiceWithFlattening" {
     // After flattening, instance_choice should be inlined but still reference @ImplA
     // CHECK: firrtl.instance_choice level1_level2_inst @ImplA
     firrtl.instance level1 @Level1()
-  }
-}
-
-// -----
-
-// Test that flattening stops at instance_choice boundaries.
-// Modules referenced by instance_choice should not be flattened into the parent.
-firrtl.circuit "FlatteningStopsAtInstanceChoice" {
-  firrtl.option @Platform {
-    firrtl.option_case @FPGA
-  }
-
-  // This child module should NOT be flattened because it's inside a module
-  // referenced by instance_choice
-  // CHECK: firrtl.module private @ChildInsideChoice
-  firrtl.module private @ChildInsideChoice() {}
-
-  // This module is referenced by instance_choice and contains a child instance
-  // CHECK: firrtl.module private @ImplWithChild
-  firrtl.module private @ImplWithChild() {
-    // This instance should remain because flattening stops at instance_choice boundary
-    // CHECK: firrtl.instance child @ChildInsideChoice
-    firrtl.instance child @ChildInsideChoice()
-  }
-
-  // CHECK-LABEL: firrtl.module @FlatteningStopsAtInstanceChoice
-  firrtl.module @FlatteningStopsAtInstanceChoice()
-    attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
-    // The instance_choice should be present, and @ImplWithChild should not be flattened
-    // CHECK: firrtl.instance_choice inst @ImplWithChild
-    firrtl.instance_choice inst @ImplWithChild alternatives @Platform {
-      @FPGA -> @ImplWithChild
-    } ()
   }
 }
