@@ -25,13 +25,34 @@ struct RandomizationPipelineOptions
       llvm::cl::init(true)};
 };
 
+/// Options for the RTG emission pipeline.
+struct EmissionPipelineOptions
+    : public mlir::PassPipelineOptions<EmissionPipelineOptions> {
+  PassOptions::Option<bool> splitOutput{
+      *this, "split-output",
+      llvm::cl::desc("If 'true' emits one file per 'rtg.test' in the IR. The "
+                     "name of the file matches the test name and is placed in "
+                     "'path'. Otherwise, path is interpreted as the full file "
+                     "path including filename."),
+      llvm::cl::init(false)};
+  PassOptions::Option<std::string> path{
+      *this, "path",
+      llvm::cl::desc("The directory or file path in which the output files "
+                     "should be created. If empty is is emitted to stderr (not "
+                     "allowed if 'split-output' is set to 'true')")};
+};
+
 //===----------------------------------------------------------------------===//
 // Building and Registering.
 //===----------------------------------------------------------------------===//
 
 /// Adds the randomization pipeline to the `OpPassManager`.
-void buildRandomizationPipeline(mlir::OpPassManager &pm,
-                                const RandomizationPipelineOptions &options);
+void populateRandomizationPipeline(mlir::OpPassManager &pm,
+                                   const RandomizationPipelineOptions &options);
+
+/// Adds the emission pipeline to the `OpPassManager`.
+void populateEmissionPipeline(mlir::OpPassManager &pm,
+                              const EmissionPipelineOptions &options);
 
 /// Registers all pipelines for the `rtg` dialect.
 void registerPipelines();

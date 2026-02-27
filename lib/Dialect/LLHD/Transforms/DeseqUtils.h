@@ -10,12 +10,52 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Value.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace circt {
 namespace llhd {
 namespace deseq {
+
+//===----------------------------------------------------------------------===//
+// ValueField
+//===----------------------------------------------------------------------===//
+
+/// Identify a specific subfield (or the whole) of an SSA value using the HW
+/// field ID scheme. `fieldID == 0` means the whole value.
+struct ValueField {
+  /// The root SSA value being accessed (e.g. the full struct or array).
+  Value value;
+  /// The HW field ID describing which subfield is referenced. `0` means the
+  /// whole value.
+  uint64_t fieldID = 0;
+  /// Optional bit/slice projection within the selected field. `0` means the
+  /// whole field, otherwise this is `lowBit + 1` of a `comb.extract` applied to
+  /// the field (and can be chained by addition).
+  uint64_t bitID = 0;
+  /// Width (in bits) of the final extracted slice. `0` means no explicit slice
+  /// width is tracked.
+  uint64_t bitWidth = 0;
+  /// An optional SSA value that already materializes this specific subfield.
+  /// For non-projection values, this is identical to `value`.
+  Value projection;
+
+  ValueField() = default;
+  ValueField(Value value, uint64_t fieldID, Value projection = {},
+             uint64_t bitID = 0, uint64_t bitWidth = 0)
+      : value(value), fieldID(fieldID), bitID(bitID), bitWidth(bitWidth),
+        projection(projection ? projection : value) {}
+
+  Value getProjected() const { return projection ? projection : value; }
+
+  bool operator==(const ValueField &other) const {
+    return value == other.value && fieldID == other.fieldID &&
+           bitID == other.bitID && bitWidth == other.bitWidth;
+  }
+  bool operator!=(const ValueField &other) const { return !(*this == other); }
+  operator bool() const { return static_cast<bool>(value); }
+};
 
 //===----------------------------------------------------------------------===//
 // Disjunctive Normal Form
@@ -305,6 +345,25 @@ struct DenseMapInfo<circt::llhd::deseq::FixedValues> {
   static bool isEqual(const FixedValues &a, const FixedValues &b) {
     return a == b;
   }
+};
+
+// Allow `ValueField` to be used as a DenseMap key.
+template <>
+struct DenseMapInfo<circt::llhd::deseq::ValueField> {
+  using VF = circt::llhd::deseq::ValueField;
+  static inline VF getEmptyKey() {
+    return VF(DenseMapInfo<mlir::Value>::getEmptyKey(), ~0ULL);
+  }
+  static inline VF getTombstoneKey() {
+    return VF(DenseMapInfo<mlir::Value>::getTombstoneKey(), ~0ULL - 1);
+  }
+  static unsigned getHashValue(const VF &key) {
+    return DenseMapInfo<mlir::Value>::getHashValue(key.value) ^
+           DenseMapInfo<uint64_t>::getHashValue(key.fieldID) ^
+           DenseMapInfo<uint64_t>::getHashValue(key.bitID) ^
+           DenseMapInfo<uint64_t>::getHashValue(key.bitWidth);
+  }
+  static bool isEqual(const VF &a, const VF &b) { return a == b; }
 };
 
 } // namespace llvm

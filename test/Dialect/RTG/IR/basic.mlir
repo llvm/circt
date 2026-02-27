@@ -43,9 +43,20 @@ rtg.test @constants() {
   // CHECK-NEXT: rtg.constant #rtg.tuple<0 : i32, 1 : index> : !rtg.tuple<i32, index>
   rtg.constant #rtg.tuple<0 : i32, 1 : index> : !rtg.tuple<i32, index>
 
-  // Test set type inference 
+  // Test set type inference
   // CHECK-NEXT: rtg.constant #rtg.tuple<0 : i32, 1 : index> : !rtg.tuple<i32, index>
   rtg.constant #rtg.tuple<0 : i32, 1 : index>
+
+  // CHECK-NEXT: rtg.constant #rtg.map<> : !rtg.map<i32 -> i32>
+  rtg.constant #rtg.map<> : !rtg.map<i32 -> i32>
+
+  // Test that map entries are printed in lexicographic order
+  // CHECK-NEXT: rtg.constant #rtg.map<#rtgtest.a0 : !rtgtest.ireg -> 0 : i32, #rtgtest.a1 : !rtgtest.ireg -> 1 : i32, #rtgtest.a2 : !rtgtest.ireg -> 2 : i32> : !rtg.map<!rtgtest.ireg -> i32>
+  rtg.constant #rtg.map<#rtgtest.a1 -> 1 : i32, #rtgtest.a0 -> 0 : i32, #rtgtest.a2 -> 2 : i32> : !rtg.map<!rtgtest.ireg -> i32>
+
+  // Test map type inference
+  // CHECK-NEXT: rtg.constant #rtg.map<0 : i32 -> 10 : i32, 1 : i32 -> 11 : i32, 2 : i32 -> 12 : i32> : !rtg.map<i32 -> i32>
+  rtg.constant #rtg.map<1 : i32 -> 11 : i32, 0 : i32 -> 10 : i32, 2 : i32 -> 12 : i32>
 }
 
 // CHECK-LABEL: rtg.sequence @ranomizedSequenceType
@@ -315,6 +326,16 @@ rtg.test @strings() {
   // CHECK: [[V3:%.+]] = rtg.int_format {{%.+}}
   rtg.int_format %1
 
+  // CHECK-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<8, 42>
+  %imm = rtg.constant #rtg.isa.immediate<8, 42>
+  // CHECK-NEXT: rtg.immediate_format [[IMM]] : !rtg.isa.immediate<8>
+  rtg.immediate_format %imm : !rtg.isa.immediate<8>
+
+  // CHECK-NEXT: [[REG:%.+]] = rtg.constant #rtgtest.t0
+  %reg = rtg.constant #rtgtest.t0 : !rtgtest.ireg
+  // CHECK-NEXT: rtg.register_format [[REG]] : !rtgtest.ireg
+  rtg.register_format %reg : !rtgtest.ireg
+
   // CHECK-NEXT: [[V0:%.+]] = rtg.constant "hello" : !rtg.string
   %0 = rtg.constant "hello" : !rtg.string
   // CHECK-NEXT: rtg.string_concat [[V0]], [[V0]]
@@ -322,4 +343,12 @@ rtg.test @strings() {
 
   // CHECK-NEXT: rtg.string_concat
   rtg.string_concat
+}
+
+// CHECK-LABEL: rtg.test @registerConversion
+rtg.test @registerConversion(idx = %arg0: index, reg = %arg1: !rtgtest.ireg) {
+  // CHECK-NEXT: rtg.isa.index_to_register %idx : !rtgtest.ireg
+  // CHECK-NEXT: rtg.isa.register_to_index %reg : !rtgtest.ireg
+  rtg.isa.index_to_register %arg0 : !rtgtest.ireg
+  rtg.isa.register_to_index %arg1 : !rtgtest.ireg
 }

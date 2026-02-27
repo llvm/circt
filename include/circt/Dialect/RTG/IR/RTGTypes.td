@@ -148,6 +148,38 @@ def ArrayType : RTGTypeDef<"Array"> {
   ];
 }
 
+def MapType : RTGTypeDef<"Map"> {
+  let summary = "a map from keys to values";
+  let description = [{
+    This type represents a standard map/dictionary datastructure. It does not
+    make any assumptions about the underlying implementation. Thus a hash map,
+    tree map, etc. can be used in a backend. It does not guarentee deterministic
+    iteration.
+  }];
+
+  let parameters = (ins "::mlir::Type":$keyType, "::mlir::Type":$valueType);
+
+  let mnemonic = "map";
+  let assemblyFormat = "`<` $keyType `->` $valueType `>`";
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "::mlir::Type":$keyType,
+                                        "::mlir::Type":$valueType),
+      "return $_get(keyType.getContext(), keyType, valueType);">,
+  ];
+}
+
+class MapTypeOf<Type keyType, Type valueType> : Type<
+  And<[
+    MapType.predicate,
+    SubstLeaves<"$_self", "llvm::cast<rtg::MapType>($_self).getKeyType()",
+                keyType.predicate>,
+    SubstLeaves<"$_self", "llvm::cast<rtg::MapType>($_self).getValueType()",
+                valueType.predicate>
+  ]>,
+  "map of " # keyType.summary # " keys to " # valueType.summary # " values",
+  "::circt::rtg::MapType">;
+
 def TupleType : RTGTypeDef<"Tuple"> {
   let summary = "a tuple of zero or more fields";
   let description = [{

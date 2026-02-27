@@ -12,6 +12,7 @@
 
 #include "circt/Conversion/CombToSMT.h"
 #include "circt/Conversion/HWToSMT.h"
+#include "circt/Conversion/Passes.h"
 #include "circt/Conversion/SMTToZ3LLVM.h"
 #include "circt/Conversion/VerifToSMT.h"
 #include "circt/Dialect/Comb/CombDialect.h"
@@ -20,6 +21,7 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
+#include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
@@ -28,6 +30,7 @@
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "circt/Tools/circt-bmc/Passes.h"
+#include "circt/Transforms/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -207,6 +210,7 @@ static LogicalResult executeBMC(MLIRContext &context) {
     options.inlinePublic = true;
     pm.addPass(hw::createFlattenModules(options));
   }
+  pm.addNestedPass<hw::HWModuleOp>(createLowerLTLToCorePass());
   pm.addNestedPass<hw::HWModuleOp>(verif::createCombineAssertLikePass());
   pm.addPass(createExternalizeRegisters());
   LowerToBMCOptions lowerToBMCOptions;
@@ -362,6 +366,7 @@ int main(int argc, char **argv) {
     circt::seq::SeqDialect,
     mlir::smt::SMTDialect,
     circt::verif::VerifDialect,
+    circt::ltl::LTLDialect,
     mlir::arith::ArithDialect,
     mlir::BuiltinDialect,
     mlir::func::FuncDialect,

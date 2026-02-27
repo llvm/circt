@@ -8,6 +8,7 @@ from .rtg import rtg
 from .core import Value, Type
 from .base import ir
 from .integers import Integer
+from .strings import String
 
 from typing import Union
 
@@ -101,6 +102,13 @@ class Immediate(Value):
     """
 
     return Immediate(width, 1 << (width - 1))
+
+  def to_string(self) -> String:
+    """
+    Formats this immediate as a string.
+    """
+
+    return rtg.ImmediateFormatOp(self)
 
   def __repr__(self) -> str:
     return f"Immediate<{self._width}, {self._value}>"

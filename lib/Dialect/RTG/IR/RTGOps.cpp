@@ -454,6 +454,48 @@ LogicalResult VirtualRegisterOp::inferReturnTypes(
 }
 
 //===----------------------------------------------------------------------===//
+// RegisterToIndexOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult RegisterToIndexOp::fold(FoldAdaptor adaptor) {
+  if (auto reg = dyn_cast_or_null<rtg::RegisterAttrInterface>(adaptor.getReg()))
+    return IntegerAttr::get(IndexType::get(getContext()), reg.getClassIndex());
+
+  if (auto indexToRegOp = getReg().getDefiningOp<IndexToRegisterOp>())
+    return indexToRegOp.getIndex();
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// IndexToRegisterOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult IndexToRegisterOp::verify() {
+  // Check if the index is a constant and if it's within valid range
+  APInt indexValue;
+  if (matchPattern(getIndex(), m_ConstantInt(&indexValue))) {
+    if (indexValue.uge(getType().getRegisterClassSize())) {
+      SmallString<16> indexStr;
+      indexValue.toString(indexStr, 10, false);
+      return emitOpError() << "index " << indexStr
+                           << " is out of range for register class "
+                           << getReg().getType();
+    }
+  }
+
+  return success();
+}
+
+OpFoldResult IndexToRegisterOp::fold(FoldAdaptor adaptor) {
+  if (auto indexAttr = dyn_cast_or_null<IntegerAttr>(adaptor.getIndex()))
+    return getType().getRegisterAttrForClassIndex(
+        getContext(), indexAttr.getValue().getZExtValue());
+
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // ContextSwitchOp
 //===----------------------------------------------------------------------===//
 
@@ -948,6 +990,31 @@ OpFoldResult IntFormatOp::fold(FoldAdaptor adaptor) {
   if (!intAttr.getType().isIndex())
     return {};
   return StringAttr::get(Twine(intAttr.getValue().getZExtValue()),
+                         StringType::get(getContext()));
+}
+
+//===----------------------------------------------------------------------===//
+// ImmediateFormatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ImmediateFormatOp::fold(FoldAdaptor adaptor) {
+  auto immAttr = dyn_cast_or_null<ImmediateAttr>(adaptor.getValue());
+  if (!immAttr)
+    return {};
+  SmallString<16> strBuf("0x");
+  immAttr.getValue().toString(strBuf, 16, /*Signed=*/false);
+  return StringAttr::get(strBuf, StringType::get(getContext()));
+}
+
+//===----------------------------------------------------------------------===//
+// RegisterFormatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult RegisterFormatOp::fold(FoldAdaptor adaptor) {
+  auto regAttr = dyn_cast_or_null<RegisterAttrInterface>(adaptor.getValue());
+  if (!regAttr)
+    return {};
+  return StringAttr::get(regAttr.getRegisterAssembly(),
                          StringType::get(getContext()));
 }
 

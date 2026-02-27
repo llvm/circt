@@ -231,6 +231,8 @@ def SimpleTestInlinerPass : Pass<"rtg-simple-test-inliner", "mlir::ModuleOp"> {
     production pipeline but just to bring the IR into a structure understood by
     the RTG ISA assembly emission pass to avoid making that pass more complex.
   }];
+
+  let dependentDialects = ["rtg::RTGDialect"];
 }
 
 def MaterializeConstraintsPass : Pass<"rtg-materialize-constraints"> {

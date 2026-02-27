@@ -4,7 +4,7 @@
 import circt
 
 from circt.dialects import rtg, rtgtest
-from circt.ir import Context, Location, Module, InsertionPoint, Block, StringAttr, TypeAttr, IndexType
+from circt.ir import Context, Location, Module, InsertionPoint, Block, StringAttr, TypeAttr, IndexType, IntegerType, IntegerAttr
 from circt.passmanager import PassManager
 
 with Context() as ctx, Location.unknown():
@@ -269,3 +269,44 @@ with Context() as ctx, Location.unknown():
   stringTy = rtg.StringType.get()
   # CHECK: !rtg.string
   print(stringTy)
+
+with Context() as ctx, Location.unknown():
+  circt.register_dialects(ctx)
+
+  # Test MapType
+  keyTy = IntegerType.get_signless(32)
+  valueTy = IntegerType.get_signless(64)
+  mapTy = rtg.MapType.get(keyTy, valueTy)
+
+  # CHECK: key_type=i32
+  print(f"key_type={mapTy.key_type}")
+  # CHECK: value_type=i64
+  print(f"value_type={mapTy.value_type}")
+  # CHECK: !rtg.map<i32 -> i64>
+  print(mapTy)
+
+  # Test MapAttr
+  key0 = IntegerAttr.get(keyTy, 10)
+  key1 = IntegerAttr.get(keyTy, 20)
+  value0 = IntegerAttr.get(valueTy, 100)
+  value1 = IntegerAttr.get(valueTy, 200)
+
+  mapAttr = rtg.MapAttr.get(mapTy, [(key0, value0), (key1, value1)])
+  # CHECK: #rtg.map<10 : i32 -> 100 : i64, 20 : i32 -> 200 : i64>
+  print(mapAttr)
+
+  # Test key-based lookup
+  lookedUpValue = mapAttr.lookup(key0)
+  # CHECK: 100 : i64
+  print(lookedUpValue)
+
+  # Test lookup with non-existent key
+  key2 = IntegerAttr.get(keyTy, 30)
+  notFound = mapAttr.lookup(key2)
+  # CHECK: key_not_found=True
+  print(f"key_not_found={notFound is None}")
+
+  # Test empty map
+  emptyMapAttr = rtg.MapAttr.get(mapTy)
+  # CHECK: #rtg.map<>
+  print(emptyMapAttr)

@@ -232,6 +232,11 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
                                              const FirtoolOptions &opt,
                                              StringRef inputFilename) {
+  // Populate instance macros for instance choice operations before lowering to
+  // HW.
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createPopulateInstanceChoiceSymbols());
+
   // Run layersink immediately before LowerXMR. LowerXMR will "freeze" the
   // location of probed objects by placing symbols on them. Run layersink first
   // so that probed objects can be sunk if possible.

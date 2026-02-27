@@ -40,9 +40,38 @@ def RegisterTypeInterface : TypeInterface<"RegisterTypeInterface"> {
     etc.
   }];
   let cppNamespace = "::circt::rtg";
+
+  let methods = [
+    StaticInterfaceMethod<[{
+        Returns the number of registers in the class. Class indices are assumed
+        to be a continuous range from 0 
+      }],
+      "unsigned", "getRegisterClassSize">,
+    StaticInterfaceMethod<[{
+        Returns the register attribute for the given class-specific index.
+        Returns nullptr if the index is out of range.
+      }],
+      "::circt::rtg::RegisterAttrInterface",
+      "getRegisterAttrForClassIndex",
+      (ins "::mlir::MLIRContext *":$ctx, "unsigned":$index)>,
+  ];
 }
 
-def InstructionOpInterface : OpInterface<"InstructionOpInterface"> {
+def RegisterAllocationOpInterface : OpInterface<"RegisterAllocationOpInterface"> {
+  let description = [{
+    This interface should be implemented by operations that read or write 
+    registers. It is primarily used by the register allocation pass.
+  }];
+  let cppNamespace = "::circt::rtg";
+
+  let methods = [
+    // TODO: add methods to query source/destination registers
+  ];
+}
+
+def InstructionOpInterface : OpInterface<"InstructionOpInterface", [
+  RegisterAllocationOpInterface,
+]> {
   let description = [{
     This interface should be implemented by operations that represent
     ISA instructions.

@@ -27,6 +27,7 @@
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Synth/Analysis/LongestPathAnalysis.h"
+#include "circt/Dialect/Synth/Analysis/ResourceUsageAnalysis.h"
 #include "circt/Dialect/Synth/SynthDialect.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Dialect/Synth/Transforms/SynthesisPipeline.h"
@@ -46,7 +47,9 @@
 #include "mlir/Transforms/Passes.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
@@ -127,18 +130,27 @@ static cl::opt<bool>
                   cl::desc("Convert AIG to Comb at the end of the pipeline"),
                   cl::init(false), cl::cat(mainCategory));
 
-static cl::opt<std::string>
-    outputLongestPath("output-longest-path",
-                      cl::desc("Output file for longest path analysis "
-                               "results. The analysis is only run "
-                               "if file name is specified"),
-                      cl::init(""), cl::cat(mainCategory));
+static cl::opt<std::string> analysisOutput(
+    "analysis-output",
+    cl::desc("Directory for analysis output files. When specified, "
+             "automatically runs all analyses and writes reports "
+             "to this directory. Use '-' for stdout"),
+    cl::init(""), cl::cat(mainCategory));
 
-static cl::opt<bool>
-    outputLongestPathJSON("output-longest-path-json",
-                          cl::desc("Output longest path analysis results in "
-                                   "JSON format"),
-                          cl::init(false), cl::cat(mainCategory));
+enum AnalysisOutputFormat {
+  AnalysisOutputFormatText,
+  AnalysisOutputFormatJSON
+};
+
+static cl::opt<AnalysisOutputFormat>
+    analysisOutputFormat("analysis-output-format",
+                         cl::desc("Output format for analysis results"),
+                         cl::init(AnalysisOutputFormatText),
+                         cl::values(clEnumValN(AnalysisOutputFormatText, "text",
+                                               "Text output format"),
+                                    clEnumValN(AnalysisOutputFormatJSON, "json",
+                                               "JSON output format")),
+                         cl::cat(mainCategory));
 static cl::opt<int>
     outputLongestPathTopKPercent("output-longest-path-top-k-percent",
                                  cl::desc("Output top K percent of longest "
@@ -283,14 +295,49 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
     pm.addPass(synth::createTechMapper(options));
   }
 
-  // Run analysis if requested.
-  if (!outputLongestPath.empty()) {
-    circt::synth::PrintLongestPathAnalysisOptions options;
-    options.outputFile = outputLongestPath;
-    options.showTopKPercent = outputLongestPathTopKPercent;
-    options.emitJSON = outputLongestPathJSON;
-    options.topModuleName = topName;
-    pm.addPass(circt::synth::createPrintLongestPathAnalysis(options));
+  // Run analysis if analysis output is specified.
+  if (!analysisOutput.empty()) {
+    // Create output directory if it's not stdout
+    if (analysisOutput != "-") {
+      std::error_code ec = llvm::sys::fs::create_directories(analysisOutput);
+      if (ec) {
+        llvm::errs() << "Error: cannot create analysis output directory '"
+                     << analysisOutput << "': " << ec.message() << "\n";
+        return;
+      }
+    }
+
+    // Determine file extension based on output format
+    const char *ext =
+        analysisOutputFormat == AnalysisOutputFormatJSON ? ".json" : ".txt";
+    auto getFileName = [&](const std::string &base) -> std::string {
+      if (analysisOutput == "-")
+        return "-";
+      llvm::SmallString<128> path(analysisOutput);
+      llvm::sys::path::append(path, base + ext);
+      return path.str().str();
+    };
+
+    // Run longest path analysis
+    {
+      circt::synth::PrintLongestPathAnalysisOptions options;
+
+      // Construct output path
+      options.outputFile = getFileName("longest_path");
+      options.showTopKPercent = outputLongestPathTopKPercent;
+      options.emitJSON = analysisOutputFormat == AnalysisOutputFormatJSON;
+      options.topModuleName = topName;
+      pm.addPass(circt::synth::createPrintLongestPathAnalysis(options));
+    }
+
+    // Run resource usage analysis
+    {
+      circt::synth::PrintResourceUsageAnalysisOptions options;
+      options.outputFile = getFileName("resource_usage");
+      options.emitJSON = analysisOutputFormat == AnalysisOutputFormatJSON;
+      options.topModuleName = topName;
+      pm.addPass(circt::synth::createPrintResourceUsageAnalysis(options));
+    }
   }
 
   if (convertToComb)

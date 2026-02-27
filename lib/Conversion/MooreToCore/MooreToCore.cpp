@@ -909,23 +909,18 @@ struct NetOpConversion : public OpConversionPattern<NetOp> {
   matchAndRewrite(NetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    if (op.getKind() != NetKind::Wire)
-      return rewriter.notifyMatchFailure(loc, "only wire nets supported");
 
     auto resultType = typeConverter->convertType(op.getResult().getType());
     if (!resultType)
       return rewriter.notifyMatchFailure(loc, "invalid net type");
 
-    // TODO: Once the core dialects support four-valued integers, this code
-    // will additionally need to generate an all-X value for four-valued nets.
     auto elementType = cast<llhd::RefType>(resultType).getNestedType();
     int64_t width = hw::getBitWidth(elementType);
     if (width == -1)
       return failure();
-    auto constZero = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
-    auto init =
-        rewriter.createOrFold<hw::BitcastOp>(loc, elementType, constZero);
 
+    auto init =
+        createInitialValue(op.getKind(), rewriter, loc, width, elementType);
     auto signal = rewriter.replaceOpWithNewOp<llhd::SignalOp>(
         op, resultType, op.getNameAttr(), init);
 
@@ -938,6 +933,27 @@ struct NetOpConversion : public OpConversionPattern<NetOp> {
     }
 
     return success();
+  }
+
+  static mlir::Value createInitialValue(NetKind kind,
+                                        ConversionPatternRewriter &rewriter,
+                                        Location loc, int64_t width,
+                                        Type elementType) {
+    // TODO: Once the core dialects support four-valued integers, this code
+    // will additionally need to generate an all-X value for four-valued nets.
+    //
+    // If no driver is connected to a net, its value shall be high-impedance (z)
+    // unless the net is a trireg, in which case it shall hold the previously
+    // driven value.
+    //
+    // See IEEE 1800-2017 § 6.6 "Net types".
+    auto theInt = [&] {
+      if (kind == NetKind::Supply1 || kind == NetKind::Tri1)
+        return APInt::getAllOnes(width);
+      return APInt::getZero(width);
+    }();
+    auto theConst = hw::ConstantOp::create(rewriter, loc, theInt);
+    return rewriter.createOrFold<hw::BitcastOp>(loc, elementType, theConst);
   }
 };
 
@@ -2228,10 +2244,29 @@ struct QueueSizeBIOpConversion : public OpConversionPattern<QueueSizeBIOp> {
   LogicalResult
   matchAndRewrite(QueueSizeBIOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto readQueue =
-        llhd::ProbeOp::create(rewriter, op->getLoc(), adaptor.getQueue());
+    rewriter.replaceOpWithNewOp<sim::QueueSizeOp>(op, adaptor.getQueue());
+    return success();
+  }
+};
 
-    rewriter.replaceOpWithNewOp<sim::QueueSizeOp>(op, readQueue);
+struct DynQueueExtractOpConversion
+    : public OpConversionPattern<DynQueueExtractOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(DynQueueExtractOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    bool isSingleElementExtract =
+        op.getInput().getType().getElementType() == op.getResult().getType();
+
+    if (isSingleElementExtract) {
+      rewriter.replaceOpWithNewOp<sim::QueueGetOp>(op, adaptor.getInput(),
+                                                   adaptor.getLowerIdx());
+    } else {
+      rewriter.replaceOpWithNewOp<sim::QueueSliceOp>(
+          op, adaptor.getInput(), adaptor.getLowerIdx(), adaptor.getUpperIdx());
+    }
+
     return success();
   }
 };
@@ -2448,8 +2483,6 @@ static LogicalResult convert(SeverityBIOp op, SeverityBIOp::Adaptor adaptor,
   case (Severity::Info):
     severityString = "Info: ";
     break;
-  default:
-    return failure();
   }
 
   auto prefix =
@@ -2903,7 +2936,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     QueuePopFrontOpConversion,
     QueueDeleteOpConversion,
     QueueInsertOpConversion,
-    QueueClearOpConversion
+    QueueClearOpConversion,
+    DynQueueExtractOpConversion
   >(typeConverter, patterns.getContext());
   // clang-format on
 

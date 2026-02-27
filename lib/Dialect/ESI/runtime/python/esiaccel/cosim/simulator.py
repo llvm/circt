@@ -381,3 +381,16 @@ class Simulator:
     finally:
       if simProc and simProc.proc.poll() is None:
         simProc.force_stop()
+
+
+def get_simulator(name: str, sources: SourceFiles, rundir: Path,
+                  debug: bool) -> Simulator:
+  name = name.lower()
+  if name == "verilator":
+    from .verilator import Verilator
+    return Verilator(sources, rundir, debug)
+  elif name == "questa":
+    from .questa import Questa
+    return Questa(sources, rundir, debug)
+  else:
+    raise ValueError(f"Unknown simulator: {name}")

@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/RTG/IR/RTGAttributes.h"
 #include "circt/Dialect/RTG/IR/RTGDialect.h"
+#include "circt/Dialect/RTG/IR/RTGTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -27,6 +28,16 @@ llvm::hash_code hash_value(const DenseSet<T> &set) {
   unsigned hash = 0;
   for (auto element : set)
     hash ^= element;
+  return hash;
+}
+
+template <typename K, typename V>
+// NOLINTNEXTLINE(readability-identifier-naming)
+llvm::hash_code hash_value(const DenseMap<K, V> &map) {
+  // TODO: improve collision resistance
+  unsigned hash = 0;
+  for (auto [key, value] : map)
+    hash ^= (key ^ value);
   return hash;
 }
 } // namespace llvm
@@ -100,6 +111,85 @@ void SetAttr::print(AsmPrinter &odsPrinter) const {
   }
   llvm::sort(sortedElements);
   llvm::interleaveComma(sortedElements, odsPrinter);
+  odsPrinter << ">";
+}
+
+//===----------------------------------------------------------------------===//
+// MapAttr
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+MapAttr::verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
+                rtg::MapType type,
+                const DenseMap<TypedAttr, TypedAttr> *entries) {
+
+  // check that all keys and values have the right type
+  if (!llvm::all_of(*entries, [&](auto entry) {
+        return entry.first.getType() == type.getKeyType() &&
+               entry.second.getType() == type.getValueType();
+      })) {
+    return emitError() << "all keys must be of type " << type.getKeyType()
+                       << " and all values must be of type "
+                       << type.getValueType();
+  }
+
+  return success();
+}
+
+Attribute MapAttr::parse(AsmParser &odsParser, Type odsType) {
+  DenseMap<TypedAttr, TypedAttr> entries;
+  Type keyType, valueType;
+  if (odsParser.parseCommaSeparatedList(
+          mlir::AsmParser::Delimiter::LessGreater, [&]() {
+            TypedAttr key, value;
+            if (odsParser.parseAttribute(key) || odsParser.parseArrow() ||
+                odsParser.parseAttribute(value))
+              return failure();
+            entries.insert({key, value});
+            keyType = key.getType();
+            valueType = value.getType();
+            return success();
+          }))
+    return {};
+
+  auto mapType = llvm::dyn_cast_or_null<MapType>(odsType);
+  if (odsType && !mapType) {
+    odsParser.emitError(odsParser.getNameLoc())
+        << "type must be an '!rtg.map' type";
+    return {};
+  }
+
+  if (!mapType && entries.empty()) {
+    odsParser.emitError(odsParser.getNameLoc())
+        << "type must be explicitly provided: cannot infer map key and value "
+           "types from empty map";
+    return {};
+  }
+
+  if (!mapType && !entries.empty())
+    mapType = MapType::get(keyType, valueType);
+
+  return MapAttr::getChecked(
+      odsParser.getEncodedSourceLoc(odsParser.getNameLoc()),
+      odsParser.getContext(), mapType, &entries);
+}
+
+void MapAttr::print(AsmPrinter &odsPrinter) const {
+  odsPrinter << "<";
+  // Sort entries lexicographically by their printed string representation
+  SmallVector<std::pair<std::string, std::string>> sortedEntries;
+  for (auto [key, value] : *getEntries()) {
+    std::string keyStr, valueStr;
+    llvm::raw_string_ostream keyOS(keyStr);
+    llvm::raw_string_ostream valueOS(valueStr);
+    key.print(keyOS);
+    value.print(valueOS);
+    sortedEntries.emplace_back(std::move(keyStr), std::move(valueStr));
+  }
+  llvm::sort(sortedEntries);
+  llvm::interleaveComma(sortedEntries, odsPrinter, [&](auto &entry) {
+    odsPrinter << entry.first << " -> " << entry.second;
+  });
   odsPrinter << ">";
 }
 

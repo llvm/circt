@@ -85,6 +85,47 @@ def SetAttr : RTGAttrDef<"Set", [
   let genVerifyDecl = true;
 }
 
+// The accessor type is a pointer instead of a reference because references
+// cannot be reassigned (in the attribute 'construct' function).
+class DenseMapParameter<string keyOf, string valueOf, string desc = "">
+    : AttrOrTypeParameter<
+        "const ::llvm::DenseMap<" # keyOf # ", " # valueOf # "> *", desc> {
+  let allocator =
+    "$_dst = new ($_allocator.allocate<DenseMap<" # keyOf # ", " # valueOf #
+    ">>()) DenseMap<" # keyOf # ", " # valueOf #
+    ">($_self->begin(), $_self->end());";
+  let cppStorageType = "::llvm::DenseMap<" # keyOf # ", " # valueOf # ">";
+}
+
+def MapAttr : RTGAttrDef<"Map", [
+  DeclareAttrInterfaceMethods<TypedAttrInterface>,
+]> {
+  let summary = "a map from keys to values";
+
+  let parameters = (ins
+      AttributeSelfTypeParameter<"", "rtg::MapType">:$type,
+      DenseMapParameter<"TypedAttr", "TypedAttr", "map entries">:$entries);
+
+  let builders = [
+    AttrBuilderWithInferredContext<
+      (ins "rtg::MapType":$type,
+           "const ::llvm::DenseMap<::mlir::TypedAttr, " #
+           "::mlir::TypedAttr> *":$entries), [{
+      return $_get(type.getContext(), type, entries);
+    }]>,
+    AttrBuilderWithInferredContext<
+      (ins "rtg::MapType":$type), [{
+      ::llvm::DenseMap<::mlir::TypedAttr, ::mlir::TypedAttr> entries;
+      return $_get(type.getContext(), type, &entries);
+    }]>
+  ];
+
+  let mnemonic = "map";
+  let hasCustomAssemblyFormat = true;
+
+  let genVerifyDecl = true;
+}
+
 def TupleAttr : RTGAttrDef<"Tuple", [
   DeclareAttrInterfaceMethods<TypedAttrInterface>,
 ]> {

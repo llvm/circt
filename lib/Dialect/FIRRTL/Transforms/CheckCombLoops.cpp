@@ -128,6 +128,8 @@ public:
           .Case<RefForceOp, RefForceInitialOp>(
               [&](auto ref) { handleRefForce(ref.getDest(), ref.getSrc()); })
           .Case<InstanceOp>([&](auto inst) { handleInstanceOp(inst); })
+          .Case<InstanceChoiceOp>(
+              [&](auto inst) { handleInstanceChoiceOp(inst); })
           .Case<SubindexOp>([&](SubindexOp sub) {
             recordValueRefersToFieldRef(
                 sub.getInput(),
@@ -328,14 +330,9 @@ public:
       drivenBy[iter->second].second.push_back(getOrAddNode(srcVal));
   }
 
-  // Check the referenced module paths and add input ports as the drivers for
-  // the corresponding output port. The granularity of the connectivity
-  // relations is per field.
-  void handleInstanceOp(InstanceOp inst) {
-    auto refMod = inst.getReferencedModule<FModuleOp>(instanceGraph);
-    // TODO: External modules not handled !!
-    if (!refMod)
-      return;
+  // Helper to process instance ports for a given module and instance results.
+  // This is used by both handleInstanceOp and handleInstanceChoiceOp.
+  void processInstancePorts(FModuleOp refMod, ValueRange instResults) {
     auto modulePaths = modulePortPaths.find(refMod);
     if (modulePaths == modulePortPaths.end())
       return;
@@ -356,12 +353,11 @@ public:
       auto modSinkPortField = path.first;
       auto sinkArgNum =
           cast<BlockArgument>(modSinkPortField.getValue()).getArgNumber();
-      FieldRef sinkPort(inst.getResult(sinkArgNum),
-                        modSinkPortField.getFieldID());
+      FieldRef sinkPort(instResults[sinkArgNum], modSinkPortField.getFieldID());
       auto sinkNode = getOrAddNode(sinkPort);
       bool sinkPortIsForceable = false;
       if (auto refResultType =
-              type_dyn_cast<RefType>(inst.getResult(sinkArgNum).getType()))
+              type_dyn_cast<RefType>(instResults[sinkArgNum].getType()))
         sinkPortIsForceable = refResultType.getForceable();
 
       DenseSet<unsigned> setOfEquivalentRWProbes;
@@ -374,11 +370,10 @@ public:
         if (modSrcPortField == modSinkPortField)
           continue;
 
-        FieldRef srcPort(inst.getResult(srcArgNum),
-                         modSrcPortField.getFieldID());
+        FieldRef srcPort(instResults[srcArgNum], modSrcPortField.getFieldID());
         bool srcPortIsForceable = false;
         if (auto refResultType =
-                type_dyn_cast<RefType>(inst.getResult(srcArgNum).getType()))
+                type_dyn_cast<RefType>(instResults[srcArgNum].getType()))
           srcPortIsForceable = refResultType.getForceable();
         // RWProbes can potentially refer to the same base value. Such ports
         // have a path from each other, a false loop, detect such cases.
@@ -430,6 +425,34 @@ public:
       for (auto probe : setOfEquivalentRWProbes)
         if (probe != basePortNode)
           drivenBy[probe].second.push_back(basePortNode);
+    }
+  }
+
+  // Check the referenced module paths and add input ports as the drivers for
+  // the corresponding output port. The granularity of the connectivity
+  // relations is per field.
+  void handleInstanceOp(InstanceOp inst) {
+    auto refMod = inst.getReferencedModule<FModuleOp>(instanceGraph);
+    // Skip if the instance is not a module (e.g. external module).
+    if (!refMod)
+      return;
+    processInstancePorts(refMod, inst.getResults());
+  }
+
+  // For InstanceChoiceOp, conservatively process all possible target modules.
+  // Since we cannot determine which module will be selected at runtime, we
+  // must consider combinational paths through all alternatives.
+  void handleInstanceChoiceOp(InstanceChoiceOp inst) {
+    // Process all referenced modules (default + alternatives)
+    for (auto moduleName : inst.getReferencedModuleNamesAttr()) {
+      auto moduleNameStr = cast<StringAttr>(moduleName);
+      auto *node = instanceGraph.lookup(moduleNameStr);
+      if (!node)
+        continue;
+
+      // Skip if the instance is not a module (e.g. external module).
+      if (auto refMod = dyn_cast<FModuleOp>(*node->getModule()))
+        processInstancePorts(refMod, inst.getResults());
     }
   }
 

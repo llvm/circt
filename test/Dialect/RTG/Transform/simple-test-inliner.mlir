@@ -23,6 +23,7 @@ rtg.test @test3(imm = %imm: !rtg.isa.immediate<32>) {
 
 // CHECK-LABEL: emit.file "filename"
 emit.file "filename" {
+  // CHECK: rtg.isa.segment text
   // CHECK-NOT: emit.ref
   // CHECK-DAG: [[STR0:%.+]] = rtg.constant "Begin of test 'test1'" : !rtg.string
   // CHECK-NEXT: rtg.comment [[STR0]]

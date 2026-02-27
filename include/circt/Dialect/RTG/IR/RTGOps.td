@@ -208,7 +208,37 @@ def IntFormatOp : RTGOp<"int_format", [Pure]> {
   let results = (outs StringType:$result);
 
   let assemblyFormat = "$value attr-dict";
-  
+
+  let hasFolder = 1;
+}
+
+def ImmediateFormatOp : RTGOp<"immediate_format", [Pure]> {
+  let summary = "convert an immediate to a string";
+  let description = [{
+    This operation converts an immediate value to its string representation.
+    The immediate is formatted as a decimal number.
+  }];
+
+  let arguments = (ins ImmediateType:$value);
+  let results = (outs StringType:$result);
+
+  let assemblyFormat = "$value `:` qualified(type($value)) attr-dict";
+
+  let hasFolder = 1;
+}
+
+def RegisterFormatOp : RTGOp<"register_format", [Pure]> {
+  let summary = "convert a register to its name as a string";
+  let description = [{
+    This operation converts a register to its assembly name as a string.
+    The string representation is obtained from the register's assembly format.
+  }];
+
+  let arguments = (ins RegisterTypeInterface:$value);
+  let results = (outs StringType:$result);
+
+  let assemblyFormat = "$value `:` qualified(type($value)) attr-dict";
+
   let hasFolder = 1;
 }
 
@@ -728,25 +758,6 @@ def ConstraintOp : RTGOp<"constraint", []> {
   let hasCanonicalizeMethod = 1;
 }
 
-//===- ISA Register Handling Operations -----------------------------------===//
-
-def VirtualRegisterOp : RTGOp<"virtual_reg", [
-  DeclareOpInterfaceMethods<InferTypeOpInterface>,
-]> {
-  let summary = "returns a value representing a virtual register";
-  let description = [{
-    This operation creates a value representing a virtual register. The
-    'allowedRegisters' attribute specifies the concrete registers that may be
-    chosen during register allocation.
-  }];
-
-  // ArrayAttr of RegisterAttrInterfaces
-  let arguments = (ins VirtualRegisterConfigAttr:$allowedRegs);
-  let results = (outs Res<RegisterTypeInterface, "", [MemAlloc]>:$result);
-
-  let assemblyFormat = "$allowedRegs attr-dict";
-}
-
 //===- Test Specification Operations --------------------------------------===//
 
 def TestOp : RTGOp<"test", [
@@ -856,6 +867,7 @@ def ValidateOp : RTGOp<"validate", [
   AllTypesMatch<["defaultValue", "value"]>,
   AllTypesMatch<["defaultUsedValues", "elseValues", "values"]>,
   AttrSizedOperandSegments,
+  DeclareOpInterfaceMethods<RegisterAllocationOpInterface>,
 ]> {
   let summary = "validate the value in the given resource";
   let description = [{
@@ -978,6 +990,52 @@ def SliceImmediateOp : RTGISAOp<"slice_immediate", [Pure]> {
     qualified(type($input)) `->` qualified(type($result)) attr-dict
   }];
   
+  let hasVerifier = 1;
+  let hasFolder = 1;
+}
+
+//===- ISA Register Handling Operations -----------------------------------===//
+
+def VirtualRegisterOp : RTGOp<"virtual_reg", [
+  DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "returns a value representing a virtual register";
+  let description = [{
+    This operation creates a value representing a virtual register. The
+    'allowedRegisters' attribute specifies the concrete registers that may be
+    chosen during register allocation.
+  }];
+
+  // ArrayAttr of RegisterAttrInterfaces
+  let arguments = (ins VirtualRegisterConfigAttr:$allowedRegs);
+  let results = (outs Res<RegisterTypeInterface, "", [MemAlloc]>:$result);
+
+  let assemblyFormat = "$allowedRegs attr-dict";
+}
+
+def RegisterToIndexOp : RTGISAOp<"register_to_index", [Pure]> {
+  let summary = "convert a register to its class index";
+
+  let arguments = (ins RegisterTypeInterface:$reg);
+  let results = (outs Index:$index);
+
+  let assemblyFormat = "$reg `:` type($reg) attr-dict";
+  let hasFolder = 1;
+}
+
+def IndexToRegisterOp : RTGISAOp<"index_to_register", [Pure]> {
+  let summary = "convert an index to a register";
+  let description = [{
+    This operation converts an index to the register with matching class index.
+    The index must refer to a valid register index. Invalid indices are
+    (immediate) UB.
+  }];
+
+  let arguments = (ins Index:$index);
+  let results = (outs RegisterTypeInterface:$reg);
+
+  let assemblyFormat = "$index `:` type($reg) attr-dict";
+
   let hasVerifier = 1;
   let hasFolder = 1;
 }

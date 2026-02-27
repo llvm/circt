@@ -231,14 +231,28 @@ struct ExprVisitor {
             });
     }
 
+    // Save the queue which is being indexed: this allows us to handle the `$`
+    // operator, which evaluates to the last valid index in the queue.
+    Value savedQueue = context.currentQueue;
+    llvm::scope_exit restoreQueue([&] { context.currentQueue = savedQueue; });
+    if (isa<moore::QueueType>(derefType)) {
+      // For QueueSizeBIOp, we need a byvalue queue, so if the queue is an
+      // lvalue (because we're assigning to it), we need to dereference it
+      if (isa<moore::RefType>(value.getType())) {
+        context.currentQueue = moore::ReadOp::create(builder, loc, value);
+      } else {
+        context.currentQueue = value;
+      }
+    }
     auto lowBit = context.convertRvalueExpression(expr.selector());
+
     if (!lowBit)
       return {};
     lowBit = getSelectIndex(context, loc, lowBit, range);
     if (isLvalue)
       return llvm::TypeSwitch<Type, Value>(derefType)
           .Case<moore::QueueType>([&](moore::QueueType) {
-            return moore::DynQueueExtractRefOp::create(builder, loc, resultType,
+            return moore::DynQueueRefElementOp::create(builder, loc, resultType,
                                                        value, lowBit);
           })
           .Default([&](Type) {
@@ -250,7 +264,7 @@ struct ExprVisitor {
       return llvm::TypeSwitch<Type, Value>(derefType)
           .Case<moore::QueueType>([&](moore::QueueType) {
             return moore::DynQueueExtractOp::create(builder, loc, resultType,
-                                                    value, lowBit);
+                                                    value, lowBit, lowBit);
           })
           .Default([&](Type) {
             return moore::DynExtractOp::create(builder, loc, resultType, value,
@@ -277,6 +291,37 @@ struct ExprVisitor {
     if (!type || !value)
       return {};
 
+    auto derefType = value.getType();
+    if (isLvalue)
+      derefType = cast<moore::RefType>(derefType).getNestedType();
+
+    if (isa<moore::QueueType>(derefType)) {
+      return handleQueueRangeSelectExpressions(expr, type, value);
+    }
+    return handleArrayRangeSelectExpressions(expr, type, value);
+  }
+
+  // Handles range selections into queues, in which neither bound needs to be
+  // constant
+  Value handleQueueRangeSelectExpressions(
+      const slang::ast::RangeSelectExpression &expr, Type type, Value value) {
+    auto lowerIdx = context.convertRvalueExpression(expr.left());
+    auto upperIdx = context.convertRvalueExpression(expr.right());
+    auto resultType =
+        isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type)) : type;
+
+    if (isLvalue) {
+      mlir::emitError(loc) << "queue lvalue range selections are not supported";
+      return {};
+    }
+    return moore::DynQueueExtractOp::create(builder, loc, resultType, value,
+                                            lowerIdx, upperIdx);
+  }
+
+  // Handles range selections into arrays, which currently require a constant
+  // upper bound
+  Value handleArrayRangeSelectExpressions(
+      const slang::ast::RangeSelectExpression &expr, Type type, Value value) {
     std::optional<int32_t> constLeft;
     std::optional<int32_t> constRight;
     if (auto *constant = expr.left().getConstant())
@@ -1593,10 +1638,11 @@ struct RvalueExprVisitor : public ExprVisitor {
     // $rose, $fell, $stable, $changed, and $past are only valid in
     // the context of properties and assertions. Those are treated in the
     // LTLDialect; treat them there instead.
-    bool isAssertionCall =
-        llvm::StringSwitch<bool>(subroutine.name)
-            .Cases({"$rose", "$fell", "$stable", "$changed", "$past"}, true)
-            .Default(false);
+    bool isAssertionCall = llvm::StringSwitch<bool>(subroutine.name)
+                               .Cases({"$rose", "$fell", "$stable", "$changed",
+                                       "$past", "$sampled"},
+                                      true)
+                               .Default(false);
 
     if (isAssertionCall)
       return context.convertAssertionCallExpression(expr, info, loc);
@@ -1623,7 +1669,8 @@ struct RvalueExprVisitor : public ExprVisitor {
     }
 
     // Queue ops take their parameter as a reference
-    bool isByRefOp = args.size() >= 1 && args[0]->type->isQueue();
+    bool isByRefOp = args.size() >= 1 && args[0]->type->isQueue() &&
+                     subroutine.name != "size";
 
     // Call the conversion function with the appropriate arity. These return one
     // of the following:
@@ -1933,6 +1980,16 @@ struct RvalueExprVisitor : public ExprVisitor {
 
   Value visit(const slang::ast::AssertionInstanceExpression &expr) {
     return context.convertAssertionExpression(expr.body, loc);
+  }
+
+  Value visit(const slang::ast::UnboundedLiteral &expr) {
+    // Compute queue size and subtract one to get the last element
+    auto queueSize =
+        moore::QueueSizeBIOp::create(builder, loc, context.getIndexedQueue());
+    auto one = moore::ConstantOp::create(builder, loc, queueSize.getType(), 1);
+    auto lastElement = moore::SubOp::create(builder, loc, queueSize, one);
+
+    return lastElement;
   }
 
   // A new class expression can stand for one of two things:
@@ -2789,15 +2846,13 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                 [&]() -> Value {
                   return moore::StringToUpperOp::create(builder, loc, value);
                 })
-          .Case(
-              "size",
-              [&]() -> Value {
-                if (isa<moore::RefType>(value.getType()) &&
-                    isa<moore::QueueType>(
-                        cast<moore::RefType>(value.getType()).getNestedType()))
-                  return moore::QueueSizeBIOp::create(builder, loc, value);
-                return {};
-              })
+          .Case("size",
+                [&]() -> Value {
+                  if (isa<moore::QueueType>(value.getType())) {
+                    return moore::QueueSizeBIOp::create(builder, loc, value);
+                  }
+                  return {};
+                })
           .Case("tolower",
                 [&]() -> Value {
                   return moore::StringToLowerOp::create(builder, loc, value);

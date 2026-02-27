@@ -14,6 +14,7 @@
 #ifndef CIRCT_DIALECT_RTG_IR_RTGISAASSEMBLYOPINTERFACES_H
 #define CIRCT_DIALECT_RTG_IR_RTGISAASSEMBLYOPINTERFACES_H
 
+#include "circt/Dialect/RTG/IR/RTGISAAssemblyAttrInterfaces.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
 

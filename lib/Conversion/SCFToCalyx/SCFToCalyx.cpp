@@ -188,7 +188,7 @@ public:
   void setResultRegs(scf::IfOp op, calyx::RegisterOp reg, unsigned idx) {
     assert(resultRegs[op.getOperation()].count(idx) == 0 &&
            "A register was already registered for the given yield result.\n");
-    assert(idx < op->getNumOperands());
+    assert(idx < op->getNumResults());
     resultRegs[op.getOperation()][idx] = reg;
   }
 
