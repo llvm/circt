@@ -3277,19 +3277,19 @@ firrtl.circuit "WrongInstanceChoiceDomainInfo" {
 
 // -----
 
-firrtl.circuit "AnonDomainPointingAtNonDomain" {
-  firrtl.extmodule @Foo()
+firrtl.circuit "UndefinedDomainInAnonDomain" {
   firrtl.module @UndefinedDomainInAnonDomain() {
-    // expected-error @below {{references undefined domain '@Foo'}}
+    // expected-error @below {{references undefined symbol '@Foo'}}
     %0 = firrtl.domain.anon : !firrtl.domain of @Foo
   }
 }
 
 // -----
 
-firrtl.circuit "UndefinedDomainInAnonDomain" {
-  firrtl.module @UndefinedDomainInAnonDomain() {
-    // expected-error @below {{references undefined domain '@Foo'}}
+firrtl.circuit "AnonDomainPointingAtNonDomain" {
+  firrtl.extmodule @Foo()
+  firrtl.module @AnonDomainPointingAtNonDomain() {
+    // expected-error @below {{references symbol '@Foo' which is not a domain}}
     %0 = firrtl.domain.anon : !firrtl.domain of @Foo
   }
 }
@@ -3298,7 +3298,7 @@ firrtl.circuit "UndefinedDomainInAnonDomain" {
 
 firrtl.circuit "UndefinedDomainInCreateDomain" {
   firrtl.module @UndefinedDomainInCreateDomain() {
-    // expected-error @below {{references undefined domain '@Foo'}}
+    // expected-error @below {{references undefined symbol '@Foo'}}
     %my_domain = firrtl.domain.create : !firrtl.domain of @Foo
   }
 }
@@ -3308,7 +3308,7 @@ firrtl.circuit "UndefinedDomainInCreateDomain" {
 firrtl.circuit "CreateDomainPointingAtNonDomain" {
   firrtl.extmodule @Foo()
   firrtl.module @CreateDomainPointingAtNonDomain() {
-    // expected-error @below {{references undefined domain '@Foo'}}
+    // expected-error @below {{references symbol '@Foo' which is not a domain}}
     %my_domain = firrtl.domain.create : !firrtl.domain of @Foo
   }
 }
