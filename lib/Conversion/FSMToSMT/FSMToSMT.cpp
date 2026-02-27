@@ -329,17 +329,18 @@ LogicalResult MachineOpConverter::dispatch() {
           // of unrealized conversion casts and replacing constants with their
           // new clones
           for (auto &op : initOutputReg->front()) {
-            auto *newOp = b.clone(op, mapping);
-
-            // Retrieve all the operands of the output operation
-            if (isa<fsm::OutputOp>(newOp)) {
-              for (auto out : newOp->getOperands())
-                combOutputValues.push_back(out);
-              newOp->erase();
-            } else if (isa<verif::AssertOp>(newOp)) {
+             if (isa<verif::AssertOp>(op)) {
               // Store the assertion operations, with a pointer to the region
               assertions.push_back({0, initOutputReg});
-              newOp->erase();
+            } else {
+              auto *newOp = b.clone(op, mapping);
+              
+              // Retrieve all the operands of the output operation
+              if (isa<fsm::OutputOp>(newOp)) {
+                for (auto out : newOp->getOperands())
+                  combOutputValues.push_back(out);
+                newOp->erase();
+              }
             }
 
             // Cast the (builtin integer) results obtained from the output
