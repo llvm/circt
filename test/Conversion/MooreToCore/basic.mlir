@@ -426,6 +426,13 @@ func.func @FormatStrings(%arg0: !moore.i42, %arg1: !moore.f32, %arg2: !moore.f64
   moore.fmt.real general %arg2, align right : f64
   // CHECK: sim.fmt.flt %arg1 fieldWidth 15 : f32
   moore.fmt.real float %arg1, align right fieldWidth 15 : f32
+
+  // CHECK: sim.fmt.hier_path
+  // CHECK-NOT: escaped
+  moore.fmt.hier_path
+  // CHECK: sim.fmt.hier_path escaped
+  moore.fmt.hier_path escaped
+
   // CHECK: sim.proc.print [[TMP]]
   moore.builtin.display %0
   return
