@@ -7249,10 +7249,13 @@ LogicalResult BindOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 LogicalResult
 DomainCreateAnonOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
-  auto domain = getDomainAttr();
-  if (!symbolTable.lookupSymbolIn<DomainOp>(circuitOp, domain))
-    return emitOpError() << "references undefined domain '" << domain << "'";
-
+  auto domainAttr = getDomainAttr();
+  auto *symbol = symbolTable.lookupSymbolIn(circuitOp, domainAttr);
+  if (!symbol)
+    return emitOpError() << "references undefined symbol '" << domainAttr << "'";
+  if (!isa<DomainOp>(symbol))
+    return emitOpError() << "references symbol '" << domainAttr
+                         << "' which is not a domain";
   return success();
 }
 
@@ -7263,10 +7266,13 @@ void DomainCreateOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 LogicalResult
 DomainCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
-  auto domain = getDomainAttr();
-  if (!symbolTable.lookupSymbolIn<DomainOp>(circuitOp, domain))
-    return emitOpError() << "references undefined domain '" << domain << "'";
-
+  auto domainAttr = getDomainAttr();
+  auto *symbol = symbolTable.lookupSymbolIn(circuitOp, domainAttr);
+  if (!symbol)
+    return emitOpError() << "references undefined symbol '" << domainAttr << "'";
+  if (!isa<DomainOp>(symbol))
+    return emitOpError() << "references symbol '" << domainAttr
+                         << "' which is not a domain";
   return success();
 }
 
