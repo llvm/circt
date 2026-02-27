@@ -3,6 +3,7 @@
 func.func private @VoidFunc()
 func.func private @RandomI42() -> i42
 func.func private @ConsumeI42(i42)
+func.func private @ConsumeI64(i64)
 func.func private @IdI42(i42) -> i42
 
 arc.define @Not(%arg0: !seq.clock) -> !seq.clock {
@@ -12,6 +13,10 @@ arc.define @Not(%arg0: !seq.clock) -> !seq.clock {
 
 arc.define @IdI42Arc(%arg0: i42) -> i42 {
   arc.output %arg0 : i42
+}
+
+arc.define @IdI64Arc(%arg0: i64) -> i64 {
+  arc.output %arg0 : i64
 }
 
 arc.define @IdI2AndI42Arc(%arg0: i2, %arg1: i42) -> (i2, i42) {
@@ -638,4 +643,77 @@ arc.define @MemoryPortRegressionArc2(%arg0: i1) -> i1 {
 }
 arc.define @MemoryPortRegressionArc3(%arg0: i3) -> i3 {
   arc.output %arg0 : i3
+}
+
+// CHECK-LABEL: arc.model @LLHDTimeOps
+// CHECK-SAME: io !hw.modty<input clock : !seq.clock, output t : i64>
+hw.module @LLHDTimeOps(in %clock: !seq.clock, out t: i64) {
+  // An llhd.current_time defined outside llhd.final, used inside it.
+  // This tests the case where the time value is an "external operand".
+  // Note: seq.initial has IsolatedFromAbove, so external llhd.current_time
+  // values cannot be directly used inside. We only test this for llhd.final.
+  %external_time = llhd.current_time
+
+  // Phase::Initial - llhd.current_time used inside seq.initial.
+  // During initialization, time is always 0.
+  // CHECK: arc.initial {
+  // CHECK:   %c0_i64 = hw.constant 0 : i64
+  // CHECK:   [[ZERO_TIME:%.+]] = llhd.int_to_time %c0_i64
+  // CHECK:   [[ZERO_TIME_INT:%.+]] = llhd.time_to_int [[ZERO_TIME]]
+  // CHECK:   func.call @ConsumeI64([[ZERO_TIME_INT]])
+  // CHECK: }
+  seq.initial() {
+    %4 = llhd.current_time
+    %5 = llhd.time_to_int %4
+    func.call @ConsumeI64(%5) : (i64) -> ()
+  } : () -> ()
+
+  // Phase::Final - llhd.current_time used inside llhd.final.
+  // In final phase, we use arc.current_time to get the current time.
+  // This tests both:
+  // 1. llhd.current_time defined inside llhd.final
+  // 2. llhd.current_time defined outside and used inside (llhd.final does NOT
+  //    have IsolatedFromAbove, so external values can be used directly)
+  // All llhd.current_time ops are pre-lowered before cloning other ops.
+  // CHECK: arc.final {
+  // CHECK:   [[OUT_INT1:%.+]] = arc.current_time %arg0
+  // CHECK:   [[OUT_TIME:%.+]] = llhd.int_to_time [[OUT_INT1]]
+  // CHECK:   [[IN_INT1:%.+]] = arc.current_time %arg0
+  // CHECK:   [[IN_TIME:%.+]] = llhd.int_to_time [[IN_INT1]]
+  // CHECK:   [[OUT_INT2:%.+]] = llhd.time_to_int [[OUT_TIME]]
+  // CHECK:   func.call @ConsumeI64([[OUT_INT2]]) {out}
+  // CHECK:   [[IN_INT2:%.+]] = llhd.time_to_int [[IN_TIME]]
+  // CHECK:   func.call @ConsumeI64([[IN_INT2]]) {in}
+  // CHECK: }
+  llhd.final {
+    // Use llhd.current_time defined outside llhd.final
+    %7 = llhd.time_to_int %external_time
+    func.call @ConsumeI64(%7) {out} : (i64) -> ()
+    // Use llhd.current_time defined inside llhd.final
+    %8 = llhd.current_time
+    %9 = llhd.time_to_int %8
+    func.call @ConsumeI64(%9) {in} : (i64) -> ()
+    llhd.halt
+  }
+
+  // Phase::New - llhd.current_time used directly in module body.
+  // CHECK: [[TIME_INT_NEW:%.+]] = arc.current_time %arg0
+  // CHECK: [[TIME_NEW:%.+]] = llhd.int_to_time [[TIME_INT_NEW]]
+  %0 = llhd.current_time
+  %1 = llhd.time_to_int %0
+
+  // Phase::Old - llhd.current_time used as data input to a state.
+  // CHECK: [[TIME_INT_OLD:%.+]] = arc.current_time %arg0
+  // CHECK: [[TIME_OLD:%.+]] = llhd.int_to_time [[TIME_INT_OLD]]
+  // CHECK: [[TIME_OLD_INT:%.+]] = llhd.time_to_int [[TIME_OLD]]
+  // CHECK: arc.call @IdI64Arc([[TIME_OLD_INT]])
+  %2 = llhd.current_time
+  %3 = llhd.time_to_int %2
+  %q0 = arc.state @IdI64Arc(%3) clock %clock latency 1 : (i64) -> i64
+
+  // Write the output from Phase::New.
+  // CHECK: [[TIME_OUT:%.+]] = llhd.time_to_int [[TIME_NEW]]
+  // CHECK: arc.state_write %out_t = [[TIME_OUT]]
+
+  hw.output %1 : i64
 }

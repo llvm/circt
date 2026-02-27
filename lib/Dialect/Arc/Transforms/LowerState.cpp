@@ -102,6 +102,7 @@ struct OpLowering {
   LogicalResult lower(hw::OutputOp op);
   LogicalResult lower(seq::InitialOp op);
   LogicalResult lower(llhd::FinalOp op);
+  LogicalResult lower(llhd::CurrentTimeOp op);
 
   scf::IfOp createIfClockOp(Value clock);
 
@@ -416,7 +417,8 @@ LogicalResult OpLowering::lower() {
   return TypeSwitch<Operation *, LogicalResult>(op)
       // Operations with special lowering.
       .Case<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp, hw::OutputOp,
-            seq::InitialOp, llhd::FinalOp>([&](auto op) { return lower(op); })
+            seq::InitialOp, llhd::FinalOp, llhd::CurrentTimeOp>(
+          [&](auto op) { return lower(op); })
 
       // Operations that should be skipped entirely and never land on the
       // worklist to be lowered.
@@ -880,17 +882,41 @@ LogicalResult OpLowering::lower(seq::InitialOp op) {
   for (auto [arg, operand] : llvm::zip(op.getBody().getArguments(), operands))
     module.loweredValues[{arg, Phase::Initial}] = operand;
 
-  // Lower each op in the body.
+  // Lower each op in the body. We maintain a mapping from original values
+  // defined in the body to their cloned counterparts.
+  IRMapping bodyMapping;
+  auto *initialBlock = module.initialBuilder.getBlock();
+
+  // Pre-lower all llhd.current_time ops inside the body. This reuses the
+  // existing lower(llhd::CurrentTimeOp) logic which handles Phase::Initial
+  // by replacing with constant 0 time.
+  auto result = op.walk([&](llhd::CurrentTimeOp timeOp) {
+    if (failed(lower(timeOp)))
+      return WalkResult::interrupt();
+    auto loweredTime = module.loweredValues.lookup({timeOp.getResult(), phase});
+    timeOp.replaceAllUsesWith(loweredTime);
+    timeOp.erase();
+    return WalkResult::advance();
+  });
+  if (result.wasInterrupted())
+    return failure();
+
   for (auto &bodyOp : op.getOps()) {
     if (isa<seq::YieldOp>(bodyOp))
       continue;
 
     // Clone the operation.
-    auto *clonedOp = module.initialBuilder.clone(bodyOp);
+    auto *clonedOp = module.initialBuilder.clone(bodyOp, bodyMapping);
     auto result = clonedOp->walk([&](Operation *nestedClonedOp) {
       for (auto &operand : nestedClonedOp->getOpOperands()) {
+        // Skip operands defined within the cloned tree.
         if (clonedOp->isAncestor(operand.get().getParentBlock()->getParentOp()))
           continue;
+        // Skip operands defined within the initial block (e.g., results of
+        // previously lowered ops like our zeroTime).
+        if (auto *defOp = operand.get().getDefiningOp())
+          if (defOp->getBlock() == initialBlock)
+            continue;
         auto value = module.requireLoweredValue(operand.get(), Phase::Initial,
                                                 nestedClonedOp->getLoc());
         if (!value)
@@ -902,10 +928,12 @@ LogicalResult OpLowering::lower(seq::InitialOp op) {
     if (result.wasInterrupted())
       return failure();
 
-    // Keep track of the results.
+    // Keep track of the results in both mappings.
     for (auto [result, lowered] :
-         llvm::zip(bodyOp.getResults(), clonedOp->getResults()))
+         llvm::zip(bodyOp.getResults(), clonedOp->getResults())) {
+      bodyMapping.map(result, lowered);
       module.loweredValues[{result, Phase::Initial}] = lowered;
+    }
   }
 
   // Expose the operands of `seq.yield` as results from the initial op.
@@ -945,6 +973,20 @@ LogicalResult OpLowering::lower(llhd::FinalOp op) {
   if (initial)
     return success();
 
+  // Pre-lower all llhd.current_time ops inside the body. This reuses the
+  // existing lower(llhd::CurrentTimeOp) logic which handles Phase::Final
+  // by replacing with arc.current_time.
+  auto result = op.walk([&](llhd::CurrentTimeOp timeOp) {
+    if (failed(lower(timeOp)))
+      return WalkResult::interrupt();
+    auto loweredTime = module.loweredValues.lookup({timeOp.getResult(), phase});
+    timeOp.replaceAllUsesWith(loweredTime);
+    timeOp.erase();
+    return WalkResult::advance();
+  });
+  if (result.wasInterrupted())
+    return failure();
+
   // Handle the simple case where the final op contains only one block, which we
   // can inline directly.
   if (op.getBody().hasOneBlock()) {
@@ -959,12 +1001,46 @@ LogicalResult OpLowering::lower(llhd::FinalOp op) {
                                                 op.getLoc(), TypeRange{});
   module.finalBuilder.cloneRegionBefore(op.getBody(), executeOp.getRegion(),
                                         executeOp.getRegion().begin(), mapping);
-  executeOp.walk([&](llhd::HaltOp op) {
-    auto builder = OpBuilder(op);
-    scf::YieldOp::create(builder, op.getLoc());
-    op.erase();
+  executeOp.walk([&](llhd::HaltOp haltOp) {
+    auto builder = OpBuilder(haltOp);
+    scf::YieldOp::create(builder, haltOp.getLoc());
+    haltOp.erase();
   });
 
+  return success();
+}
+
+/// Lower `llhd.current_time` based on the current phase:
+/// - Phase::Initial: Replace with constant 0 time.
+/// - Phase::Old, Phase::New, Phase::Final: Replace with `arc.current_time`
+///   followed by `llhd.int_to_time`.
+LogicalResult OpLowering::lower(llhd::CurrentTimeOp op) {
+  if (initial)
+    return success();
+
+  auto loc = op.getLoc();
+  Value time;
+
+  switch (phase) {
+  case Phase::Initial: {
+    // During initialization, time is always 0.
+    auto zeroInt = hw::ConstantOp::create(
+        module.initialBuilder, loc, module.initialBuilder.getI64Type(), 0);
+    time = llhd::IntToTimeOp::create(module.initialBuilder, loc, zeroInt);
+    break;
+  }
+  case Phase::Old:
+  case Phase::New:
+  case Phase::Final: {
+    // Get the current time from storage.
+    auto &builder = module.getBuilder(phase);
+    auto timeInt = CurrentTimeOp::create(builder, loc, module.storageArg);
+    time = llhd::IntToTimeOp::create(builder, loc, timeInt);
+    break;
+  }
+  }
+
+  module.loweredValues[{op.getResult(), phase}] = time;
   return success();
 }
 
