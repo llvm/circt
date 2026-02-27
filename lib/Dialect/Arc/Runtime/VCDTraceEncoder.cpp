@@ -65,7 +65,7 @@ static void writeVCDHeader(std::basic_ostream<char> &os) {
   // TODO: Add the current date to the header. For now, keep the output
   // stable to facilitate comparisons.
   os << "$version\n    Some cryptic ArcRuntime magic\n$end\n";
-  os << "$timescale 1ns $end\n";
+  os << "$timescale 1fs $end\n";
 }
 
 } // namespace
@@ -252,7 +252,7 @@ void VCDTraceEncoder::encode(TraceBuffer &work) {
   if (workerStep != work.firstStep) {
     // The new buffer starts at a different step than the previous one ended on
     workerStep = work.firstStep;
-    writeTimestepToBuffer(workerStep, workerOutBuffer);
+    writeTimestepToBuffer(work.firstSimTime, workerOutBuffer);
   }
   // Walk through the the buffer
   const uint64_t *basePtr = work.getData();
@@ -274,7 +274,7 @@ void VCDTraceEncoder::encode(TraceBuffer &work) {
     // Check if we have reached a new time step marker
     if (stepIter != work.stepMarkers.end() && stepIter->offset == offset) {
       workerStep += stepIter->numSteps;
-      writeTimestepToBuffer(workerStep, workerOutBuffer);
+      writeTimestepToBuffer(stepIter->simTime, workerOutBuffer);
       stepIter++;
     }
   }
@@ -292,9 +292,11 @@ void VCDTraceEncoder::windDownWorker() {
 
 void VCDTraceEncoder::finalize(const ArcState *state) {
   if (outFile.is_open()) {
-    // Finalize the trace file
+    // Finalize the trace file with the final simulation time
     assert(workerStep <= getTimeStep());
-    outFile << '#' << getTimeStep() + 1 << '\n';
+    uint64_t finalSimTime =
+        *reinterpret_cast<const uint64_t *>(state->modelState);
+    outFile << '#' << finalSimTime << '\n';
     outFile.close();
   }
 }
