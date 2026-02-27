@@ -223,14 +223,14 @@ LogicalResult MachineOpConverter::dispatch() {
 
   // Collect FSM variables, their types, and initial values
   SmallVector<llvm::APInt> varInitValues;
-  for (auto t : machineOp.front().getOps<fsm::VariableOp>()) {
+  for (auto v : machineOp.front().getOps<fsm::VariableOp>()) {
     if (!isa<IntegerType>(t.getType())) 
-      return t.emitError("Only integer variables are supported in FSMs.");
-    auto intAttr = dyn_cast<IntegerAttr>(t.getInitValueAttr());
+      return v.emitError("Only integer variables are supported in FSMs.");
+    auto intAttr = dyn_cast<IntegerAttr>(v.getInitValueAttr());
     varInitValues.push_back(intAttr.getValue());
     quantifiedTypes.push_back(
-        b.getType<smt::BitVectorType>(t.getType().getIntOrFloatBitWidth()));
-    fsmVars.push_back(t.getResult());
+        b.getType<smt::BitVectorType>(v.getType().getIntOrFloatBitWidth()));
+    fsmVars.push_back(v.getResult());
   }
 
   // Map constant operations to their clones in the new solver region
