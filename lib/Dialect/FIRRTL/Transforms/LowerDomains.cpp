@@ -557,6 +557,45 @@ LogicalResult LowerModule::lowerModule() {
         return WalkResult::advance();
       }
 
+      // Replace a named domain create with an object instantiation.
+      // TODO: The object's fields are all connected to unknown values. This is
+      // a temporary solution while support for domains is being brought online.
+      if (auto createDomain = dyn_cast<DomainCreateOp>(walkOp)) {
+        auto noUser = llvm::all_of(createDomain->getUsers(), [&](auto *user) {
+          return operationsToErase.contains(user) ||
+                 conversionsToErase.contains(user);
+        });
+        if (noUser) {
+          conversionsToErase.insert(createDomain);
+          return WalkResult::advance();
+        }
+
+        OpBuilder builder(createDomain);
+        auto classIn =
+            domainToClasses.at(createDomain.getDomainAttr().getAttr()).input;
+        auto object = ObjectOp::create(builder, createDomain.getLoc(), classIn,
+                                       createDomain.getNameAttr());
+        instanceGraph.lookup(op)->addInstance(object,
+                                              instanceGraph.lookup(classIn));
+
+        for (auto [idx, port] : llvm::enumerate(classIn.getPorts())) {
+          if (port.direction == Direction::Out)
+            continue;
+          auto subfield = ObjectSubfieldOp::create(
+              builder, createDomain.getLoc(), object, idx);
+          auto unknown = UnknownValueOp::create(builder, createDomain.getLoc(),
+                                                port.type);
+          PropAssignOp::create(builder, createDomain.getLoc(), subfield,
+                               unknown);
+        }
+
+        createDomain.replaceAllUsesWith(UnrealizedConversionCastOp::create(
+            builder, createDomain.getLoc(), {createDomain.getType()},
+            {object.getResult()}));
+        createDomain.erase();
+        return WalkResult::advance();
+      }
+
       // If we see a WireOp of a domain type, then we want to erase it.  To do
       // this, find what is driving it and what it is driving and then replace
       // that triplet of operations with a single domain define inserted before
@@ -621,9 +660,9 @@ LogicalResult LowerModule::lowerModule() {
       // There are only two possibilities for kinds of `DomainDefineOp`s that we
       // can see a this point: the destination is always a conversion cast and
       // the source is _either_ (1) a conversion cast if the source is a module
-      // or instance port or (2) an anonymous domain op.  This relies on the
-      // earlier "canonicalization" that erased `WireOp`s to leave only
-      // `DomainDefineOp`s.
+      // or instance port or (2) an anonymous domain op or a domain create op.
+      // This relies on the earlier "canonicalization" that erased `WireOp`s to
+      // leave only `DomainDefineOp`s.
       auto *src = defineOp.getSrc().getDefiningOp();
       auto dest = dyn_cast<UnrealizedConversionCastOp>(
           defineOp.getDest().getDefiningOp());
@@ -638,7 +677,7 @@ LogicalResult LowerModule::lowerModule() {
         OpBuilder builder(defineOp);
         PropAssignOp::create(builder, defineOp.getLoc(), dest.getOperand(0),
                              srcCast.getOperand(0));
-      } else if (!isa<DomainCreateAnonOp>(src)) {
+      } else if (!isa<DomainCreateAnonOp, DomainCreateOp>(src)) {
         auto diag = defineOp.emitOpError()
                     << "has a source which cannot be lowered by 'LowerDomains'";
         diag.attachNote(src->getLoc()) << "unsupported source is here";
