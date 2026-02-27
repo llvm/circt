@@ -152,7 +152,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
   TypeRange typeRange;
   ValueRange valueRange;
-  
+
   // Do not allow any operations other than constants outside of FSM regions
   for (auto &op : machineOp.front().getOperations()) {
     if (!isa<fsm::FSMDialect>(op.getDialect()) && !isa<hw::ConstantOp>(op)) {
@@ -162,27 +162,33 @@ LogicalResult MachineOpConverter::dispatch() {
     }
   }
 
-  // Do not allow any operations other than constants, comb, and FSM operations inside FSM output, guard and action regions
+  // Do not allow any operations other than constants, comb, and FSM operations
+  // inside FSM output, guard and action regions
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
-    if (!stateOp.getOutput().empty()) 
+    if (!stateOp.getOutput().empty())
       for (auto &op : stateOp.getOutput().front().getOperations())
-        if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect>(op.getDialect()))
-          return op.emitError(
-              "Only fsm, comb and hw operations are allowed in the output region of a state.");
+        if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect>(
+                op.getDialect()))
+          return op.emitError("Only fsm, comb and hw operations are allowed in "
+                              "the output region of a state.");
     if (!stateOp.getTransitions().empty())
-      for (auto t : stateOp.getTransitions().front().getOps<fsm::TransitionOp>()) {
+      for (auto t :
+           stateOp.getTransitions().front().getOps<fsm::TransitionOp>()) {
         if (t.hasGuard()) {
           for (auto &op : t.getGuard().front().getOperations())
-            if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect>(op.getDialect()))
+            if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect>(
+                    op.getDialect()))
               return op.emitError(
-                  "Only fsm, comb and hw operations are allowed in the guard region of a transition.");
-          
+                  "Only fsm, comb and hw operations are allowed in the guard "
+                  "region of a transition.");
         }
         if (t.hasAction()) {
           for (auto &op : t.getAction().front().getOperations())
-            if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect>(op.getDialect()))
+            if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect>(
+                    op.getDialect()))
               return op.emitError(
-                  "Only fsm, comb and hw operations are allowed in the action region of a transition.");
+                  "Only fsm, comb and hw operations are allowed in the action "
+                  "region of a transition.");
         }
       }
   }
@@ -232,7 +238,7 @@ LogicalResult MachineOpConverter::dispatch() {
   IRMapping constMapper;
   for (auto constOp : machineOp.front().getOps<hw::ConstantOp>())
     b.clone(*constOp, constMapper);
-  
+
   // Add a time variable if flag is enabled
   if (cfg.withTime)
     quantifiedTypes.push_back(b.getType<smt::BitVectorType>(cfg.timeWidth));
