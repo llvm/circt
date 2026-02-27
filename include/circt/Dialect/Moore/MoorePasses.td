@@ -29,14 +29,19 @@ def SimplifyProcedures : Pass<"moore-simplify-procedures", "moore::SVModuleOp"> 
     let constructor = "circt::moore::createSimplifyProceduresPass()";
 }
 
-def LowerConcatRef : Pass<"moore-lower-concatref", "moore::SVModuleOp"> {
-    let summary = "Lower moore.concat_ref ops";
+def SimplifyRefs : Pass<"moore-simplify-refs", "moore::SVModuleOp"> {
+    let summary = "Lower moore.concat_ref ops and moore.dyn_queue_ref_element";
     let description = [{
-      It's used to disassemble the LHS of assignments that have a form like
-      "{a, b} = c" onto "a = c[9001:42];" and "b = c[41:0]". Aimed at
-      conveniently lowering this kind of assignment.
+      It has two purposes:
+      - To disassemble the moore.concat_ref. Which is tricky to lower
+      directly. For example, disassemble "{a, b} = c" onto "a = c[7:3]"
+      and "b = c[2:0]".
+      - To eliminate moore.dyn_queue_ref_element in the case where the reference
+      immediately has a value assigned via blocking assignment, replacing it with
+      moore.queue.set. Queue element references are tricky to lower into LLHD,
+      so it's best to get rid of them.
     }];
-    let constructor = "circt::moore::createLowerConcatRefPass()";
+    let constructor = "circt::moore::createSimplifyRefsPass()";
 }
 
 def CreateVTables : Pass<"moore-create-vtables", "mlir::ModuleOp"> {
