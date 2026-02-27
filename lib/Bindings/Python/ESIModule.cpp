@@ -48,7 +48,7 @@ private:
   nb::object genFunc;
 };
 
-// Mapping from unique identifier to python callback. We use std::string 
+// Mapping from unique identifier to python callback. We use std::string
 // pointers since we also need to allocate memory for the string.
 llvm::DenseMap<std::string *, ServiceGenFunc> serviceGenFuncLookup;
 static MlirLogicalResult serviceGenFunc(MlirOperation reqOp,
