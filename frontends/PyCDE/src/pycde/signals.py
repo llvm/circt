@@ -15,7 +15,6 @@ from .circt import ir
 from contextvars import ContextVar
 from functools import cached_property, singledispatchmethod
 from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
-import inspect
 import re
 import numpy as np
 
@@ -715,12 +714,32 @@ class StructMetaType(type):
 
     cls = super().__new__(self, name, bases, dct)
     from .types import RegisteredStruct, Type
-    # Use inspect.get_annotations() to reliably get class annotations across
-    # Python versions. In Python 3.14+ (PEP 649/749), annotations are lazily
-    # evaluated and may not be present in the class namespace dict.
-    annotations = inspect.get_annotations(cls)
+
+    # Get class annotations, handling Python 3.14+ (PEP 649/749) where
+    # annotations are lazily evaluated via __annotate__ instead of being
+    # stored directly in __annotations__ during class body execution.
+    annotations = dct.get("__annotations__")
+    if annotations is None:
+      # Python 3.14+: use annotationlib (new in 3.14) for proper retrieval.
+      try:
+        import annotationlib
+        annotations = annotationlib.get_annotations(
+            cls, format=annotationlib.Format.VALUE)
+      except ImportError:
+        pass
+      # If annotationlib didn't find them (e.g. __annotate__ not yet on cls),
+      # try calling __annotate__ from the class namespace dict directly.
+      if not annotations:
+        annotate_fn = dct.get("__annotate__")
+        if annotate_fn is not None:
+          try:
+            annotations = annotate_fn(1)  # 1 = FORMAT_VALUE
+          except Exception:
+            pass
+
     if not annotations:
       return cls
+
     fields: List[Tuple[str, Type]] = []
     for attr_name, attr in annotations.items():
       if isinstance(attr, Type):
