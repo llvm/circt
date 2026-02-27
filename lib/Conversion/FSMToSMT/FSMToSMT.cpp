@@ -202,9 +202,8 @@ LogicalResult MachineOpConverter::dispatch() {
   // Collect arguments and their types
   for (auto a : machineArgs) {
     fsmArgs.push_back(a);
-    if (!isa<IntegerType>(a.getType())) {
+    if (!isa<IntegerType>(a.getType())) 
       return solver.emitError("Only integer arguments are supported in FSMs.");
-    }
     quantifiedTypes.push_back(
         b.getType<smt::BitVectorType>(a.getType().getIntOrFloatBitWidth()));
   }
