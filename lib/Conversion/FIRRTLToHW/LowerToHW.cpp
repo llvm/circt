@@ -3982,7 +3982,6 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
         "instance choice with inner sym cannot be lowered");
     return failure();
   }
-
   // Get all the target modules
   auto moduleNames = oldInstanceChoice.getModuleNamesAttr();
   auto caseNames = oldInstanceChoice.getCaseNamesAttr();

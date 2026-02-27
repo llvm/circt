@@ -35,28 +35,31 @@ using namespace firrtl;
 
 namespace {
 class PopulateInstanceChoiceSymbolsPass
-    : public circt::firrtl::impl::PopulateInstanceChoiceSymbolsBase<
+    : public impl::PopulateInstanceChoiceSymbolsBase<
           PopulateInstanceChoiceSymbolsPass> {
 public:
   void runOnOperation() override;
 
 private:
-  FlatSymbolRefAttr assignSymbol(InstanceChoiceOp op,
-                                 CircuitNamespace &circuitNamespace);
+  /// Assign a unique instance macro symbol to the given instance choice
+  /// operation. Returns the assigned symbol, or nullptr if the operation
+  /// already has a symbol.
+  FlatSymbolRefAttr assignSymbol(InstanceChoiceOp op);
+
+  CircuitNamespace circuitNamespace;
 };
 } // namespace
 
-FlatSymbolRefAttr PopulateInstanceChoiceSymbolsPass::assignSymbol(
-    InstanceChoiceOp op, CircuitNamespace &circuitNamespace) {
-  // Skip if already has an instance macro
+FlatSymbolRefAttr
+PopulateInstanceChoiceSymbolsPass::assignSymbol(InstanceChoiceOp op) {
+  // Skip if already has an instance macro.
   if (op.getInstanceMacroAttr())
     return nullptr;
 
-  // Get the parent module name
+  // Get the parent module name.
   auto parentModule = op->getParentOfType<FModuleLike>();
-  assert(parentModule && "instance choice must be inside a module");
 
-  // Get the option name
+  // Get the option name.
   auto optionName = op.getOptionNameAttr();
 
   // Generate the instance macro name.
@@ -69,7 +72,7 @@ FlatSymbolRefAttr PopulateInstanceChoiceSymbolsPass::assignSymbol(
        << parentModule.getModuleName() << "_" << op.getInstanceName();
   }
 
-  // Ensure global uniqueness using CircuitNamespace
+  // Ensure global uniqueness using CircuitNamespace.
   auto uniqueName = StringAttr::get(
       op.getContext(), circuitNamespace.newName(instanceMacroName));
   auto instanceMacro = FlatSymbolRefAttr::get(uniqueName);
@@ -87,8 +90,8 @@ void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
   auto circuit = getOperation();
   auto &instanceGraph = getAnalysis<InstanceGraph>();
 
-  // Create a circuit namespace for global uniqueness
-  CircuitNamespace circuitNamespace(circuit);
+  // Create a circuit namespace for global uniqueness.
+  circuitNamespace = CircuitNamespace(circuit);
 
   OpBuilder builder(circuit.getContext());
   builder.setInsertionPointToStart(circuit.getBodyBlock());
@@ -97,24 +100,28 @@ void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
   bool changed = false;
 
   // Iterate through all instance choices.
-  for (auto *node : instanceGraph) {
-    auto module = dyn_cast<FModuleLike>(node->getModule().getOperation());
+  instanceGraph.walkPostOrder([&](igraph::InstanceGraphNode &node) {
+    auto module = dyn_cast<FModuleLike>(node.getModule().getOperation());
     if (!module)
-      continue;
+      return;
 
-    for (auto *record : *node) {
-      if (auto op = record->getInstance<InstanceChoiceOp>()) {
-        auto instanceMacro = assignSymbol(op, circuitNamespace);
-        if (!instanceMacro)
-          continue;
-        changed = true;
-        // Create macro declaration only if we haven't created it yet
-        if (createdMacros.insert(instanceMacro.getAttr()).second)
-          sv::MacroDeclOp::create(builder, circuit.getLoc(),
-                                  instanceMacro.getAttr());
-      }
+    for (auto *record : node) {
+      auto op = record->getInstance<InstanceChoiceOp>();
+      if (!op)
+        return;
+
+      auto instanceMacro = assignSymbol(op);
+      if (!instanceMacro)
+        return;
+      changed = true;
+      // Create macro declaration only if we haven't created it yet.
+      if (createdMacros.insert(instanceMacro.getAttr()).second)
+        sv::MacroDeclOp::create(builder, circuit.getLoc(),
+                                instanceMacro.getAttr());
     }
-  }
+  });
+
+  circuitNamespace.clear();
   if (!changed)
     return markAllAnalysesPreserved();
 
