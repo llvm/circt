@@ -399,7 +399,7 @@ def ConvertFSMToSMT : Pass<"convert-fsm-to-smt", "mlir::ModuleOp"> {
                         "Whether to include a time parameter in the predicates"
                         "created to represent states">,
                   Option<"timeWidth", "time-width", "int", "8",
-                        "bitwidth of time parameter">,
+                        "Bitwidth of time parameter">,
   ];
 }
 
