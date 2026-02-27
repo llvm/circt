@@ -183,8 +183,8 @@ struct StmtVisitor {
 
     auto forkOp = moore::ForkJoinOp::create(builder, loc, kind, threadCount);
     OpBuilder::InsertionGuard guard(builder);
-    
-    int i=0;
+
+    int i = 0;
     for (auto *thread : threadList.list) {
       auto &tBlock = forkOp->getRegion(i).emplaceBlock();
       builder.setInsertionPointToStart(&tBlock);
