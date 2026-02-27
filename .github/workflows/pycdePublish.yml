@@ -33,7 +33,7 @@ jobs:
           - cp314-manylinux_x86_64
     steps:
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@v1.3.1
         with:
           tool-cache: false
           android: true
