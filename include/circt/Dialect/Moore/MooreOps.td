@@ -1808,6 +1808,8 @@ def QueueFromUnpackedArrayOp : MooreOp<"queue.from_up_array", [Pure]> {
   let description = [{
     Creates a queue containing the elements of the given unpacked array.
 
+    The queue and unpacked array must have the same element type.
+
     If the queue type has bounds, any elements outside the bounds will be
     discarded.
   }];
@@ -1824,8 +1826,10 @@ def QueueFromUnpackedArrayOp : MooreOp<"queue.from_up_array", [Pure]> {
 def QueueConcatOp : MooreOp<"queue.concat", [Pure]> {
   let summary = "Concatenate queues";
   let description = [{
-    Concatenates an abitrary number of queues into one larger queue.
+    Concatenates an arbitrary number of queues into one larger queue.
     The queues are joined from left to right.
+
+    All queues must have the same element type, but the bounds may differ.
 
     If the total length of the inputs doesn't fit into the queue bound of
     $result, then the excess elements are discarded at the end of the queue.
