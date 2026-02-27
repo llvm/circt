@@ -349,3 +349,16 @@ func.func @Time(%arg0: !arc.storage<42>) -> (i64, !llhd.time, i64) {
   // CHECK-NEXT: llvm.return [[TMP4]]
   return %0, %1, %2 : i64, !llhd.time, i64
 }
+
+// CHECK-LABEL: func @GetSetTime_eval
+
+// CHECK: func @GetSetTime_getTime(%arg0: !llvm.ptr)
+// CHECK-NEXT: [[TIME:%.+]] = llvm.load %arg0 : !llvm.ptr -> i64
+// CHECK-NEXT: llvm.return [[TIME]] : i64
+
+// CHECK: func @GetSetTime_setTime(%arg0: !llvm.ptr, %arg1: i64)
+// CHECK-NEXT: llvm.store %arg1, %arg0 : i64, !llvm.ptr
+// CHECK-NEXT: llvm.return
+arc.model @GetSetTime io !hw.modty<> {
+^bb0(%arg0: !arc.storage<8>):
+}

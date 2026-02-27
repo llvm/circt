@@ -66,25 +66,80 @@ static llvm::Twine evalSymbolFromModelName(StringRef modelName) {
   return modelName + "_eval";
 }
 
+static llvm::Twine getTimeSymbolFromModelName(StringRef modelName) {
+  return modelName + "_getTime";
+}
+
+static llvm::Twine setTimeSymbolFromModelName(StringRef modelName) {
+  return modelName + "_setTime";
+}
+
 namespace {
 
+/// Lower an `arc.model` to three functions:
+///
+/// - `{name}_eval(state)`: The model's evaluation function
+/// - `{name}_getTime(state) -> i64`: Returns the simulation time
+/// - `{name}_setTime(state, i64)`: Sets the simulation time
 struct ModelOpLowering : public OpConversionPattern<arc::ModelOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
   matchAndRewrite(arc::ModelOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
+    auto loc = op.getLoc();
+    auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
+    auto i64Type = rewriter.getI64Type();
+    auto voidType = LLVM::LLVMVoidType::get(rewriter.getContext());
+
+    // Create the _eval function from the model body.
     {
       IRRewriter::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointToEnd(&op.getBodyBlock());
-      func::ReturnOp::create(rewriter, op.getLoc());
+      func::ReturnOp::create(rewriter, loc);
     }
-    auto funcName =
+    auto evalFuncName =
         rewriter.getStringAttr(evalSymbolFromModelName(op.getName()));
-    auto funcType =
+    auto evalFuncType =
         rewriter.getFunctionType(op.getBody().getArgumentTypes(), {});
-    auto func =
-        mlir::func::FuncOp::create(rewriter, op.getLoc(), funcName, funcType);
-    rewriter.inlineRegionBefore(op.getRegion(), func.getBody(), func.end());
+    auto evalFunc =
+        mlir::func::FuncOp::create(rewriter, loc, evalFuncName, evalFuncType);
+    rewriter.inlineRegionBefore(op.getRegion(), evalFunc.getBody(),
+                                evalFunc.end());
+
+    // Create the _getTime function: i64 {name}_getTime(ptr state)
+    {
+      OpBuilder::InsertionGuard guard(rewriter);
+      auto getTimeFuncName =
+          rewriter.getStringAttr(getTimeSymbolFromModelName(op.getName()));
+      auto getTimeFuncType = LLVM::LLVMFunctionType::get(i64Type, {ptrType});
+      auto getTimeFunc = LLVM::LLVMFuncOp::create(
+          rewriter, loc, getTimeFuncName, getTimeFuncType);
+      auto *block = rewriter.createBlock(&getTimeFunc.getBody());
+      block->addArgument(ptrType, loc);
+      rewriter.setInsertionPointToStart(block);
+      Value time =
+          LLVM::LoadOp::create(rewriter, loc, i64Type, block->getArgument(0));
+      LLVM::ReturnOp::create(rewriter, loc, ValueRange{time});
+    }
+
+    // Create the _setTime function: void {name}_setTime(ptr state, i64 time)
+    {
+      OpBuilder::InsertionGuard guard(rewriter);
+      auto setTimeFuncName =
+          rewriter.getStringAttr(setTimeSymbolFromModelName(op.getName()));
+      auto setTimeFuncType =
+          LLVM::LLVMFunctionType::get(voidType, {ptrType, i64Type});
+      auto setTimeFunc = LLVM::LLVMFuncOp::create(
+          rewriter, loc, setTimeFuncName, setTimeFuncType);
+      auto *block = rewriter.createBlock(&setTimeFunc.getBody());
+      block->addArgument(ptrType, loc);
+      block->addArgument(i64Type, loc);
+      rewriter.setInsertionPointToStart(block);
+      LLVM::StoreOp::create(rewriter, loc, block->getArgument(1),
+                            block->getArgument(0));
+      LLVM::ReturnOp::create(rewriter, loc, ValueRange{});
+    }
+
     rewriter.eraseOp(op);
     return success();
   }
