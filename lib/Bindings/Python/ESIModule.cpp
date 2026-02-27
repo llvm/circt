@@ -31,6 +31,7 @@ using namespace circt::esi;
 // The main entry point into the ESI Assembly API.
 //===----------------------------------------------------------------------===//
 
+/// Container for a Python function that will be called to generate a service.
 class ServiceGenFunc {
 public:
   ServiceGenFunc(nb::object genFunc) : genFunc(std::move(genFunc)) {}
@@ -47,6 +48,8 @@ private:
   nb::object genFunc;
 };
 
+// Mapping from unique identifier to python callback. We use std::string 
+// pointers since we also need to allocate memory for the string.
 llvm::DenseMap<std::string *, ServiceGenFunc> serviceGenFuncLookup;
 static MlirLogicalResult serviceGenFunc(MlirOperation reqOp,
                                         MlirOperation declOp,
@@ -380,6 +383,7 @@ void circt::python::populateDialectESISubmodule(nb::module_ &m) {
   m.doc() = "ESI Python Native Extension";
   ::registerESIPasses();
 
+  // Clean up references when the module is unloaded.
   auto cleanup = []() { serviceGenFuncLookup.clear(); };
   m.def("cleanup", cleanup,
         "Cleanup various references. Must be called before the module is "
