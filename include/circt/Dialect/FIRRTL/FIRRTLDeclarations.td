@@ -234,7 +234,8 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
                        LayerArrayAttr:$layers,
-                       OptionalAttr<InnerSymAttr>:$inner_sym);
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
+                       OptionalAttr<FlatSymbolRefAttr>:$instance_macro);
 
   let results = (outs Variadic<AnyType>:$results);
 
@@ -306,7 +307,8 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"StringAttr", "StringAttr()">:$innerSym)>,
+                   CArg<"StringAttr", "StringAttr()">:$innerSym,
+                   CArg<"FlatSymbolRefAttr", "FlatSymbolRefAttr()">:$instanceMacro)>,
     OpBuilder<(ins "ArrayRef<PortInfo>":$ports,
                    "ArrayAttr":$moduleNames,
                    "ArrayAttr":$caseNames,
@@ -314,7 +316,8 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayAttr", "{}">:$annotations,
                    CArg<"ArrayAttr", "{}">:$layers,
-                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym,
+                   CArg<"FlatSymbolRefAttr", "FlatSymbolRefAttr()">:$instanceMacro)>
   ];
 }
 

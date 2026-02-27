@@ -3313,3 +3313,18 @@ firrtl.circuit "UnknownValueReferencesNonClass" {
     %0 = firrtl.unknown : !firrtl.class<@Foo()>
   }
 }
+
+// -----
+firrtl.circuit "NonExistentMacroSymbol" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+
+  firrtl.module @Foo() {}
+  firrtl.module @Choice() {
+    // expected-error @below {{'firrtl.instance_choice' op instance_macro @__target_Platform_Choice_inst does not exist}}
+    firrtl.instance_choice inst {instance_macro = @__target_Platform_Choice_inst} @Foo alternatives @Platform {
+      @FPGA -> @Foo
+    } ()
+  }
+}
