@@ -479,19 +479,20 @@ LogicalResult MachineOpConverter::dispatch() {
       // Clone all the operations in the guard region except for `ReturnOp` and
       // `AssertOp,
       for (auto &op : transition.guard.value()->front()) {
-        auto *newOp = b.clone(op, mapping);
-        // Retrieve the guard value
-        if (isa<fsm::ReturnOp>(newOp)) {
-          // Cast the guard value to an SMT boolean type
-          auto castVal = mlir::UnrealizedConversionCastOp::create(
-              b, loc, b.getType<smt::BitVectorType>(1), newOp->getOperand(0));
-
-          guardVal = bv1toSmtBool(b, loc, castVal.getResult(0));
-          newOp->erase();
-        } else if (isa<verif::AssertOp>(newOp)) {
+        if (isa<verif::AssertOp>(op)) {
           // Ignore assertions in guard regions
-          newOp->emitWarning("Assertions in guard regions are ignored.");
-          newOp->erase();
+          op.emitWarning("Assertions in guard regions are ignored.");
+        } else {
+          auto *newOp = b.clone(op, mapping);
+          // Retrieve the guard value
+          if (isa<fsm::ReturnOp>(newOp)) {
+            // Cast the guard value to an SMT boolean type
+            auto castVal = mlir::UnrealizedConversionCastOp::create(
+                b, loc, b.getType<smt::BitVectorType>(1), newOp->getOperand(0));
+
+            guardVal = bv1toSmtBool(b, loc, castVal.getResult(0));
+            newOp->erase();
+          } 
         }
       }
       return guardVal;
@@ -512,22 +513,24 @@ LogicalResult MachineOpConverter::dispatch() {
       // replacing FSM variables and arguments with the results of unrealized
       // conversion casts and replacing constants with their new clone
       for (auto &op : outputReg->front()) {
-        auto *newOp = b.clone(op, mapping);
-        // Retrieve all the operands of the output operation
-        if (isa<fsm::OutputOp>(newOp)) {
-          for (auto [id, operand] : llvm::enumerate(newOp->getOperands())) {
-
-            // Cast the output value to the appropriate SMT type
-            auto convCast = UnrealizedConversionCastOp::create(
-                b, loc, outputArgsOutsVarsVals[numArgs + id].getType(),
-                operand);
-            castOutputVars.push_back(convCast->getResult(0));
-          }
-          newOp->erase();
-        } else if (isa<verif::AssertOp>(newOp)) {
+        if (isa<verif::AssertOp>(op)) {
           // Store the assertion operations, with a pointer to the region
           assertions.push_back({transition.to, outputReg});
-          newOp->erase();
+        } else {
+          auto *newOp = b.clone(op, mapping);
+          // Retrieve all the operands of the output operation
+          
+          if (isa<fsm::OutputOp>(newOp)) {
+            for (auto [id, operand] : llvm::enumerate(newOp->getOperands())) {
+
+              // Cast the output value to the appropriate SMT type
+              auto convCast = UnrealizedConversionCastOp::create(
+                  b, loc, outputArgsOutsVarsVals[numArgs + id].getType(),
+                  operand);
+              castOutputVars.push_back(convCast->getResult(0));
+            }
+            newOp->erase();
+          }
         }
       }
 
@@ -608,7 +611,6 @@ LogicalResult MachineOpConverter::dispatch() {
   // Produce an implication for each `verif.assert` operation found in output
   // regions
   for (auto pa : assertions) {
-
     auto forall = smt::ForallOp::create(
         b, loc, quantifiedTypes,
         [&](OpBuilder &b, Location loc, ValueRange forallQuantified) -> Value {
