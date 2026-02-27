@@ -682,13 +682,11 @@ firrtl.circuit "InstanceChoiceTest" {
   // CHECK-LABEL: firrtl.module private @FPGAImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>)
   firrtl.module private @FPGAImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
     // Make sure DCE is applied locally in the instance choice module.
-    // CHECK-NOT: firrtl.reg
+    // CHECK-NOT: firrtl.wire
     // CHECK: firrtl.matchingconnect %out
-    %clockconst = firrtl.constant 0 : !firrtl.uint<1>
-    %clock = firrtl.asClock %clockconst : (!firrtl.uint<1>) -> !firrtl.clock
-    %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8>
+    %wire = firrtl.wire : !firrtl.uint<8>
     %0 = firrtl.constant 0 : !firrtl.uint<8>
-    firrtl.matchingconnect %reg, %reg : !firrtl.uint<8>
+    firrtl.matchingconnect %wire, %wire : !firrtl.uint<8>
     firrtl.matchingconnect %out, %0 : !firrtl.uint<8>
   }
 

@@ -92,11 +92,11 @@ struct IMDeadCodeElimPass
   }
 
   void markDeclaration(Operation *op);
-  void markInstanceOp(InstanceOp instanceOp);
-  void markInstanceChoiceOp(InstanceChoiceOp instanceChoice);
+  void markInstanceLikeOp(FInstanceLike instanceOp);
   void markObjectOp(ObjectOp objectOp);
   void markUnknownSideEffectOp(Operation *op);
-  void visitInstanceOp(InstanceOp instance);
+  void visitInstanceLikeOp(FInstanceLike instance);
+  void visitInstanceChoiceOp(InstanceChoiceOp instanceChoice);
   void visitHierPathOp(hw::HierPathOp hierpath);
   void visitModuleOp(FModuleOp module);
 
@@ -108,7 +108,7 @@ private:
 
   // The type with which we associate liveness.
   using ElementType =
-      std::variant<Value, FModuleOp, InstanceOp, hw::HierPathOp>;
+      std::variant<Value, FModuleOp, FInstanceLike, hw::HierPathOp>;
 
   void markAlive(ElementType element) {
     if (!liveElements.insert(element).second)
@@ -134,7 +134,13 @@ private:
 };
 } // namespace
 
-void IMDeadCodeElimPass::visitInstanceOp(InstanceOp instance) {
+void IMDeadCodeElimPass::visitInstanceLikeOp(FInstanceLike instanceLike) {
+  auto instance = dyn_cast<InstanceOp>(*instanceLike);
+
+  // This is already marked as alive in the initialization.
+  if (!instance)
+    return;
+
   markBlockUndeletable(instance);
 
   auto module = instance.getReferencedModule<FModuleOp>(*instanceGraph);
@@ -158,11 +164,21 @@ void IMDeadCodeElimPass::visitInstanceOp(InstanceOp instance) {
   }
 }
 
+void IMDeadCodeElimPass::visitInstanceChoiceOp(
+    InstanceChoiceOp instanceChoice) {
+  // NOTE: instance choice is marked conservatively alive in the initialization.
+  //       To support proper liveness propagation, remove conservative
+  //       marking from the initialization and implement proper liveness
+  //       propagation here.
+}
+
 void IMDeadCodeElimPass::visitModuleOp(FModuleOp module) {
-  // If the module needs to be alive, so are its instances.
+  // If the module needs to be alive, so are its instances and instance choices.
   for (auto *use : instanceGraph->lookup(module)->uses()) {
     if (auto instance = use->getInstance<InstanceOp>())
       markAlive(instance);
+    else if (auto instanceChoice = use->getInstance<InstanceChoiceOp>())
+      markAlive(instanceChoice);
   }
 }
 
@@ -206,47 +222,45 @@ void IMDeadCodeElimPass::visitUser(Operation *op) {
     return visitSubelement(op);
 }
 
-void IMDeadCodeElimPass::markInstanceOp(InstanceOp instance) {
-  // Get the module being referenced.
-  Operation *op = instance.getReferencedModule(*instanceGraph);
+void IMDeadCodeElimPass::markInstanceLikeOp(FInstanceLike instanceLike) {
+  if (auto instance = dyn_cast<InstanceOp>(*instanceLike)) {
+    // Get the module being referenced.
+    Operation *op = instance.getReferencedModule(*instanceGraph);
 
-  // If this is an extmodule, just remember that any inputs and inouts are
-  // alive.
-  if (!isa<FModuleOp>(op)) {
-    auto module = dyn_cast<FModuleLike>(op);
-    for (auto resultNo : llvm::seq(0u, instance.getNumResults())) {
-      // If this is an output to the extmodule, we can ignore it.
-      if (module.getPortDirection(resultNo) == Direction::Out)
-        continue;
+    // If this is an extmodule, just remember that any inputs and inouts are
+    // alive.
+    if (!isa<FModuleOp>(op)) {
+      auto module = dyn_cast<FModuleLike>(op);
+      for (auto resultNo : llvm::seq(0u, instance.getNumResults())) {
+        // If this is an output to the extmodule, we can ignore it.
+        if (module.getPortDirection(resultNo) == Direction::Out)
+          continue;
 
-      // Otherwise this is an input from it or an inout, mark it as alive.
-      markAlive(instance.getResult(resultNo));
+        // Otherwise this is an input from it or an inout, mark it as alive.
+        markAlive(instance.getResult(resultNo));
+      }
+      markAlive(instance);
+
+      return;
     }
-    markAlive(instance);
 
+    // Otherwise this is a defined module.
+    auto fModule = cast<FModuleOp>(op);
+    markBlockExecutable(fModule.getBodyBlock());
     return;
   }
 
-  // Otherwise this is a defined module.
-  auto fModule = cast<FModuleOp>(op);
-  markBlockExecutable(fModule.getBodyBlock());
-}
+  // Conservatively mark everything.
 
-void IMDeadCodeElimPass::markObjectOp(ObjectOp object) {
-  // unconditionally keep all objects alive.
-  markAlive(object);
-}
-
-void IMDeadCodeElimPass::markInstanceChoiceOp(InstanceChoiceOp instanceChoice) {
-  // Conservatively mark InstanceChoiceOp alive.
-  markBlockUndeletable(instanceChoice);
+  markAlive(instanceLike);
+  markBlockUndeletable(instanceLike);
 
   // Mark all results (ports) as alive.
-  for (auto result : instanceChoice.getResults())
+  for (auto result : instanceLike->getResults())
     markAlive(result);
 
   // Mark all possible target modules as executable.
-  for (auto moduleName : instanceChoice.getReferencedModuleNamesAttr()) {
+  for (auto moduleName : instanceLike.getReferencedModuleNamesAttr()) {
     auto *node = instanceGraph->lookup(cast<StringAttr>(moduleName));
     if (!node)
       continue;
@@ -278,12 +292,8 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
   for (auto &op : *block) {
     if (isDeclaration(&op))
       markDeclaration(&op);
-    else if (auto instance = dyn_cast<InstanceOp>(op))
-      markInstanceOp(instance);
-    else if (auto instanceChoice = dyn_cast<InstanceChoiceOp>(op))
-      markInstanceChoiceOp(instanceChoice);
-    else if (auto object = dyn_cast<ObjectOp>(op))
-      markObjectOp(object);
+    else if (auto instance = dyn_cast<FInstanceLike>(op))
+      markInstanceLikeOp(instance);
     else if (isa<FConnectLike>(op))
       // Skip connect op.
       continue;
@@ -470,8 +480,8 @@ void IMDeadCodeElimPass::runOnOperation() {
     auto v = worklist.pop_back_val();
     if (auto *value = std::get_if<Value>(&v))
       visitValue(*value);
-    else if (auto *instance = std::get_if<InstanceOp>(&v))
-      visitInstanceOp(*instance);
+    else if (auto *instance = std::get_if<FInstanceLike>(&v))
+      visitInstanceLikeOp(*instance);
     else if (auto *hierpath = std::get_if<hw::HierPathOp>(&v))
       visitHierPathOp(*hierpath);
     else if (auto *module = std::get_if<FModuleOp>(&v))
