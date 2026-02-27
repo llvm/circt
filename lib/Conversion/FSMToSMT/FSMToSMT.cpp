@@ -285,7 +285,7 @@ LogicalResult MachineOpConverter::dispatch() {
   // F_state_1(outs, vars, [time])`, simulating the activation of a transition
   // and of the state it reaches.
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
-    std::string stateName = stateOp.getName().str();
+    string stateName = stateOp.getName().str();
     auto fromState = insertStates(states, stateName);
     if (!stateOp.getTransitions().empty()) {
       for (auto tr :
