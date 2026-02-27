@@ -60,9 +60,9 @@ private:
   };
 
   Transition getTransitionRegions(fsm::TransitionOp t, int from,
-                                  SmallVector<std::string> &states,
+                                  SmallVector<string> &states,
                                   Location &loc) {
-    std::string nextState = t.getNextState().str();
+    string nextState = t.getNextState().str();
     Transition tr = {from, insertStates(states, nextState)};
     if (t.hasGuard())
       tr.guard = &t.getGuard();
@@ -75,7 +75,7 @@ private:
     return tr;
   }
 
-  static int insertStates(SmallVector<std::string> &states,
+  static int insertStates(SmallVector<string> &states,
                           llvm::StringRef st) {
     for (auto [id, s] : llvm::enumerate(states))
       if (s == st)
@@ -154,13 +154,11 @@ LogicalResult MachineOpConverter::dispatch() {
   ValueRange valueRange;
 
   // Do not allow any operations other than constants outside of FSM regions
-  for (auto &op : machineOp.front().getOperations()) {
-    if (!isa<fsm::FSMDialect>(op.getDialect()) && !isa<hw::ConstantOp>(op)) {
+  for (auto &op : machineOp.front().getOperations()) 
+    if (!isa<fsm::FSMDialect>(op.getDialect()) && !isa<hw::ConstantOp>(op))
       return op.emitError(
           "Only fsm operations and hw.constants are allowed in the "
           "top level of the fsm.machine op.");
-    }
-  }
 
   // Do not allow any operations other than constants, comb, and FSM operations
   // inside FSM output, guard and action regions
@@ -171,7 +169,7 @@ LogicalResult MachineOpConverter::dispatch() {
                 op.getDialect()) &&
             !isa<verif::AssertOp>(op))
           return op.emitError(
-              "Only fsm, comb, hw, and verif.assert operations are allowed in "
+              "Only fsm, comb, hw, and verif.assert operations are handled in "
               "the output region of a state.");
     if (!stateOp.getTransitions().empty())
       for (auto t :
@@ -182,7 +180,7 @@ LogicalResult MachineOpConverter::dispatch() {
                     op.getDialect()) &&
                 !isa<verif::AssertOp>(op))
               return op.emitError("Only fsm, comb, hw, and verif.assert "
-                                  "operations are allowed in the guard "
+                                  "operations are handled in the guard "
                                   "region of a transition.");
         if (t.hasAction())
           for (auto &op : t.getAction().front().getOperations())
@@ -190,7 +188,7 @@ LogicalResult MachineOpConverter::dispatch() {
                     op.getDialect()) &&
                 !isa<verif::AssertOp>(op))
               return op.emitError("Only fsm, comb, hw, and verif.assert "
-                                  "operations are allowed in the action "
+                                  "operations are handled in the action "
                                   "region of a transition.");
       }
   }
@@ -250,12 +248,12 @@ LogicalResult MachineOpConverter::dispatch() {
   // the activation of each state
   SmallVector<Value> stateFunctions;
   // Store the name of each state
-  SmallVector<std::string> states;
+  SmallVector<string> states;
   // Store the output region of each state
   SmallVector<std::pair<Region *, int>> outputOfStateId;
 
   // Get FSM initial state and store it in the states vector
-  std::string initialState = machineOp.getInitialState().str();
+  string initialState = machineOp.getInitialState().str();
   insertStates(states, initialState);
 
   // Only outputs and variables belong in the state function's domain, since the
