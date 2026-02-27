@@ -4,22 +4,27 @@
 // CHECK-SAME:    %arg0: !llvm.ptr
 // CHECK-SAME:    %arg1: !llvm.ptr
 // CHECK-SAME:    %arg2: !llvm.ptr
+// CHECK-SAME:    %arg3: i64
 // CHECK-SAME:  ) -> !llvm.struct<(
 // CHECK-SAME:    ptr
 // CHECK-SAME:    ptr
+// CHECK-SAME:    ptr
+// CHECK-SAME:    i64
 // CHECK-SAME:  )> {
 func.func @Types(
   %arg0: !arc.storage,
   %arg1: !arc.state<i1>,
-  %arg2: !arc.memory<4 x i7, i2>
+  %arg2: !arc.memory<4 x i7, i2>,
+  %arg3: !llhd.time
 ) -> (
   !arc.storage,
   !arc.state<i1>,
-  !arc.memory<4 x i7, i2>
+  !arc.memory<4 x i7, i2>,
+  !llhd.time
 ) {
-  return %arg0, %arg1, %arg2 : !arc.storage, !arc.state<i1>, !arc.memory<4 x i7, i2>
+  return %arg0, %arg1, %arg2, %arg3 : !arc.storage, !arc.state<i1>, !arc.memory<4 x i7, i2>, !llhd.time
   // CHECK: llvm.return
-  // CHECK-SAME: !llvm.struct<(ptr, ptr, ptr)>
+  // CHECK-SAME: !llvm.struct<(ptr, ptr, ptr, i64)>
 }
 // CHECK-NEXT: }
 
@@ -325,3 +330,22 @@ func.func @issue9171(%arg0: !arc.state<!hw.array<4xi1>>, %idx: i2) -> (i1) {
 arc.runtime.model @arcRuntimeModel_fooModelSym "fooModelName" numStateBytes 1234567
 
 func.func private @Dummy(%arg0: i42, %arg1: !hw.array<4xi19>, %arg2: !arc.storage)
+
+
+// CHECK-LABEL: llvm.func @Time
+// CHECK-SAME: (%arg0: !llvm.ptr)
+// CHECK-SAME: -> !llvm.struct<(i64, i64, i64)>
+func.func @Time(%arg0: !arc.storage<42>) -> (i64, !llhd.time, i64) {
+  // CHECK-NEXT: [[TIME:%.+]] = llvm.load %arg0 : !llvm.ptr -> i64
+  // CHECK-NOT: int_to_time
+  // CHECK-NOT: time_to_int
+  %0 = arc.current_time %arg0 : !arc.storage<42>
+  %1 = llhd.int_to_time %0
+  %2 = llhd.time_to_int %1
+  // CHECK-NEXT: [[TMP1:%.+]] = llvm.mlir.poison : !llvm.struct<(i64, i64, i64)>
+  // CHECK-NEXT: [[TMP2:%.+]] = llvm.insertvalue [[TIME]], [[TMP1]][0]
+  // CHECK-NEXT: [[TMP3:%.+]] = llvm.insertvalue [[TIME]], [[TMP2]][1]
+  // CHECK-NEXT: [[TMP4:%.+]] = llvm.insertvalue [[TIME]], [[TMP3]][2]
+  // CHECK-NEXT: llvm.return [[TMP4]]
+  return %0, %1, %2 : i64, !llhd.time, i64
+}
