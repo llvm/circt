@@ -167,28 +167,32 @@ LogicalResult MachineOpConverter::dispatch() {
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
     if (!stateOp.getOutput().empty())
       for (auto &op : stateOp.getOutput().front().getOperations())
-        if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect, verif::VerifDialect>(
-                op.getDialect()))
-          return op.emitError("Only fsm, comb, verif and hw operations are allowed in "
-                              "the output region of a state.");
+        if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect>(
+                op.getDialect()) &&
+            !isa<verif::AssertOp>(op))
+          return op.emitError(
+              "Only fsm, comb, hw, and verif.assert operations are allowed in "
+              "the output region of a state.");
     if (!stateOp.getTransitions().empty())
       for (auto t :
            stateOp.getTransitions().front().getOps<fsm::TransitionOp>()) {
         if (t.hasGuard()) {
           for (auto &op : t.getGuard().front().getOperations())
-            if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect, verif::VerifDialect>(
-                    op.getDialect()))
-              return op.emitError(
-                  "Only fsm, comb, verif and hw operations are allowed in the guard "
-                  "region of a transition.");
+            if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect>(
+                    op.getDialect()) &&
+                !isa<verif::AssertOp>(op))
+              return op.emitError("Only fsm, comb, hw, and verif.assert "
+                                  "operations are allowed in the guard "
+                                  "region of a transition.");
         }
         if (t.hasAction()) {
           for (auto &op : t.getAction().front().getOperations())
-            if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect, verif::VerifDialect>(
-                    op.getDialect()))
-              return op.emitError(
-                  "Only fsm, comb, verif and hw operations are allowed in the action "
-                  "region of a transition.");
+            if (!isa<fsm::FSMDialect, comb::CombDialect, hw::HWDialect>(
+                    op.getDialect()) &&
+                !isa<verif::AssertOp>(op))
+              return op.emitError("Only fsm, comb, hw, and verif.assert "
+                                  "operations are allowed in the action "
+                                  "region of a transition.");
         }
       }
   }

@@ -57,7 +57,7 @@ fsm.machine @comb_op() -> (!hw.enum<A, B, C>) attributes {initialState = "A"} {
 fsm.machine @out() -> (i1) attributes {initialState = "A"} {
   fsm.state @A output  {
     %x = hw.constant true
-    // expected-error @below {{Only fsm, comb and hw operations are allowed in the output region of a state.}}
+    // expected-error @below {{Only fsm, comb, hw, and verif.assert operations are allowed in the output region of a state.}}
     %tc = seq.to_clock %x
     %fc = seq.from_clock %tc
     verif.assert %fc : i1
@@ -74,7 +74,7 @@ fsm.machine @guard() -> () attributes {initialState = "A"} {
   fsm.state @A output  {
   } transitions {
     fsm.transition @A guard {
-      // expected-error @below {{Only fsm, comb and hw operations are allowed in the guard region of a transition.}}
+      // expected-error @below {{Only fsm, comb, hw, and verif.assert operations are allowed in the guard region of a transition.}}
       %tc = seq.to_clock %x
       %fc = seq.from_clock %tc
       verif.assert %fc : i1
@@ -93,7 +93,7 @@ fsm.machine @action() -> () attributes {initialState = "A"} {
   } transitions {
     fsm.transition @A guard {
     } action {
-      // expected-error @below {{Only fsm, comb and hw operations are allowed in the action region of a transition.}}
+      // expected-error @below {{Only fsm, comb, hw, and verif.assert operations are allowed in the action region of a transition.}}
       %tc = seq.to_clock %x
       %fc = seq.from_clock %tc
       verif.assert %fc : i1
