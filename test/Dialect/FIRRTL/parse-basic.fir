@@ -383,8 +383,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     ; CHECK: firrtl.attach %a8, %a8, %a8 :
     attach (a8, a8, a8)
 
-    wire pred: UInt <1>
-    wire en: UInt <1>
+    wire pred: UInt<1>
+    wire en: UInt<1>
     connect pred, eq(i8, i8)
     connect en, not(reset)
     ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false}
@@ -2298,3 +2298,25 @@ circuit UnknownProperties:
     ; CHECK:      %[[#INSTANCE:]] = firrtl.unknown : !firrtl.class<@Foo()>
     ; CHECK-NEXT: firrtl.propassign %c, %[[#INSTANCE]] : !firrtl.class<@Foo()>
     propassign c, Unknown: Inst<Foo>
+
+; // -----
+
+; Test that keywords can be used as identifiers when not followed by '(' or '<'
+; and as expressions when followed by '(' or '<'
+
+FIRRTL version 4.0.0
+circuit KeywordIdentifiers :
+  public module KeywordIdentifiers :
+    ; CHECK-LABEL: firrtl.module @KeywordIdentifiers
+
+    ; Test UInt and SInt as identifiers
+    ; CHECK: %UInt = firrtl.wire
+    ; CHECK: %SInt = firrtl.wire
+    wire UInt : UInt<8>
+    wire SInt : SInt<8>
+
+    ; Test UInt<>() and SInt<>() as expressions
+    ; CHECK: firrtl.constant 42
+    ; CHECK: firrtl.constant -10
+    connect UInt, UInt<8>(42)
+    connect SInt, SInt<8>(-10)
