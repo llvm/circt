@@ -42,6 +42,8 @@ static unsigned getSignalingBitWidth(ChannelSignaling signaling) {
     return 2;
   case ChannelSignaling::FIFO:
     return 2;
+  case ChannelSignaling::ValidOnly:
+    return 1;
   }
   llvm_unreachable("Unhandled ChannelSignaling");
 }
