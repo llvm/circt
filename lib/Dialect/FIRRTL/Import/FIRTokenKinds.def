@@ -14,7 +14,7 @@
 #if !defined(TOK_MARKER) && !defined(TOK_IDENTIFIER) &&                        \
     !defined(TOK_LITERAL) && !defined(TOK_PUNCTUATION) &&                      \
     !defined(TOK_KEYWORD) && !defined(TOK_LPKEYWORD) &&                        \
-    !defined(TOK_LPKEYWORD_PRIM)
+    !defined(TOK_LESSKEYWORD) && !defined(TOK_LPKEYWORD_PRIM)
 #error Must define one of the TOK_ macros.
 #endif
 
@@ -40,6 +40,9 @@
 #define TOK_LPKEYWORD_PRIM(SPELLING, CLASS, NUMOPERANDS, NUMATTRIBUTES,        \
                            VERSION, FEATURE)                                   \
   TOK_LPKEYWORD(SPELLING)
+#endif
+#ifndef TOK_LESSKEYWORD
+#define TOK_LESSKEYWORD(SPELLING)
 #endif
 
 // Markers
@@ -199,6 +202,21 @@ TOK_LPKEYWORD(intrinsic)
 TOK_LPKEYWORD(cat)
 TOK_LPKEYWORD(unsafe_domain_cast)
 
+TOK_LPKEYWORD(UInt)
+TOK_LPKEYWORD(SInt)
+TOK_LPKEYWORD(String)
+TOK_LPKEYWORD(Integer)
+TOK_LPKEYWORD(Bool)
+TOK_LPKEYWORD(Double)
+TOK_LPKEYWORD(List)
+
+// Keywords when followed by a '<'. These turn "foo" into
+// FIRToken::langle_foo enums.
+TOK_LESSKEYWORD(UInt)
+TOK_LESSKEYWORD(SInt)
+TOK_LESSKEYWORD(Analog)
+TOK_LESSKEYWORD(List)
+
 // These are for LPKEYWORD cases that correspond to a primitive operation.
 TOK_LPKEYWORD_PRIM(add, AddPrimOp, 2, 0, FIRVersion(0, 0, 0), "Base")
 TOK_LPKEYWORD_PRIM(and, AndPrimOp, 2, 0, FIRVersion(0, 0, 0), "Base")
@@ -253,4 +271,5 @@ TOK_LPKEYWORD_PRIM(integer_shl, IntegerShlOp, 2, 0, FIRVersion(3, 1, 0),
 #undef TOK_PUNCTUATION
 #undef TOK_KEYWORD
 #undef TOK_LPKEYWORD
+#undef TOK_LESSKEYWORD
 #undef TOK_LPKEYWORD_PRIM
