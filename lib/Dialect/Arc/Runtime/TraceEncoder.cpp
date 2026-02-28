@@ -20,6 +20,12 @@
 
 namespace circt::arc::runtime::impl {
 
+/// Read the simulation time from the model state. The time is stored as an i64
+/// at offset 0 of the model state.
+static inline int64_t readTimeFromState(const ArcState *state) {
+  return *reinterpret_cast<const int64_t *>(state->modelState);
+}
+
 TraceEncoder::TraceEncoder(const ArcRuntimeModelInfo *modelInfo,
                            ArcState *state, unsigned numBuffers,
                            bool debug = false)
@@ -28,6 +34,7 @@ TraceEncoder::TraceEncoder(const ArcRuntimeModelInfo *modelInfo,
   assert(numBuffers > 0);
   assert(!!modelInfo->traceInfo && modelInfo->traceInfo->numTraceTaps > 0);
   timeStep = 0;
+  simTime = 0;
   isFinished = false;
   worker = {};
   // Put the first buffer in place
@@ -63,6 +70,7 @@ void TraceEncoder::run(ArcState *state) {
   state->traceBufferSize = 0;
   timeStep = 0;
   activeBuffer.firstStep = 0;
+  activeBuffer.firstSimTime = 0;
   assert(activeBuffer.stepMarkers.empty());
   assert(bufferQueue.empty());
   // Start the worker thread
@@ -113,20 +121,23 @@ void TraceEncoder::step(const ArcState *state) {
   if (!worker)
     return;
   assert(activeBuffer.getData() == state->traceBuffer);
+  simTime = readTimeFromState(state);
   if (state->traceBufferSize > 0) {
     // Mark the beginning of the new step in the active trace buffer
     auto &offsets = activeBuffer.stepMarkers;
     if (!offsets.empty() && offsets.back().offset == state->traceBufferSize) {
       // No new data produced since last time: Bump the existing last step.
       offsets.back().numSteps++;
+      offsets.back().simTime = simTime;
     } else {
       // Store the current offset
-      offsets.emplace_back(state->traceBufferSize);
+      offsets.emplace_back(state->traceBufferSize, simTime);
     }
   } else {
-    // Untouched buffer: Adjust the first step value.
+    // Untouched buffer: Adjust the first step value and simulation time.
     assert(activeBuffer.stepMarkers.empty());
     activeBuffer.firstStep = timeStep;
+    activeBuffer.firstSimTime = simTime;
   }
 }
 
@@ -159,6 +170,7 @@ uint64_t *TraceEncoder::dispatch(uint32_t oldBufferSize) {
     enqueueBuffer(std::move(activeBuffer));
     activeBuffer = getBuffer();
     activeBuffer.firstStep = timeStep;
+    activeBuffer.firstSimTime = simTime;
   }
   return activeBuffer.getData();
 }
