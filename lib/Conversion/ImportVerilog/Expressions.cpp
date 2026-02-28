@@ -2862,17 +2862,16 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                 [&]() -> Value {
                   return moore::StringToUpperOp::create(builder, loc, value);
                 })
-          .Case(
-              "size",
-              [&]() -> Value {
-                if (isa<moore::RefType>(value.getType()) &&
-                    isa<moore::QueueType>(
-                        cast<moore::RefType>(value.getType()).getNestedType()))
-                  return moore::QueueSizeBIOp::create(builder, loc, value);
-                if(isa<moore::OpenUnpackedArrayType>(value.getType())) 
-                 return moore::OpenUArraySizeOp::create(builder, loc, value);        
-                return {};
-              })
+          .Case("size",
+                [&]() -> Value {
+                  if (isa<moore::QueueType>(value.getType())) {
+                    return moore::QueueSizeBIOp::create(builder, loc, value);
+                  }
+                  if(isa<moore::OpenUnpackedArrayType>(value.getType())) {
+                    return moore::OpenUArraySizeOp::create(builder, loc, value);  
+                  }
+                  return {};
+                })
           .Case("tolower",
                 [&]() -> Value {
                   return moore::StringToLowerOp::create(builder, loc, value);
