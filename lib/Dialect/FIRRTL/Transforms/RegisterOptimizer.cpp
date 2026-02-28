@@ -10,15 +10,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
-
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/Debug.h"
 #include "mlir/IR/Dominance.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-register-optimizer"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_REGISTEROPTIMIZER
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -37,7 +43,7 @@ namespace {
 //===----------------------------------------------------------------------===//
 
 struct RegisterOptimizerPass
-    : public RegisterOptimizerBase<RegisterOptimizerPass> {
+    : public circt::firrtl::impl::RegisterOptimizerBase<RegisterOptimizerPass> {
   void runOnOperation() override;
   void checkRegReset(mlir::DominanceInfo &dom,
                      SmallVector<Operation *> &toErase, RegResetOp reg);
@@ -58,8 +64,9 @@ void RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
 
   // Register is only written by itself, replace with invalid.
   if (con.getSrc() == reg.getResult()) {
-    auto inv = OpBuilder(reg).create<InvalidValueOp>(reg.getLoc(),
-                                                     reg.getResult().getType());
+    auto builder = OpBuilder(reg);
+    auto inv = InvalidValueOp::create(builder, reg.getLoc(),
+                                      reg.getResult().getType());
     reg.getResult().replaceAllUsesWith(inv.getResult());
     toErase.push_back(reg);
     toErase.push_back(con);
@@ -92,8 +99,9 @@ void RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
         reg.getResult().replaceAllUsesWith(con.getSrc());
         toErase.push_back(con);
       } else {
-        auto bounce = OpBuilder(reg).create<WireOp>(reg.getLoc(),
-                                                    reg.getResult().getType());
+        auto builder = OpBuilder(reg);
+        auto bounce =
+            WireOp::create(builder, reg.getLoc(), reg.getResult().getType());
         reg.replaceAllUsesWith(bounce);
       }
     }
@@ -133,9 +141,9 @@ void RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
 }
 
 void RegisterOptimizerPass::runOnOperation() {
-  auto mod = getOperation();
-  LLVM_DEBUG(debugPassHeader(this) << "\n";);
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
+  auto mod = getOperation();
   SmallVector<Operation *> toErase;
   mlir::DominanceInfo dom(mod);
 
@@ -150,8 +158,4 @@ void RegisterOptimizerPass::runOnOperation() {
 
   if (!toErase.empty())
     return markAllAnalysesPreserved();
-}
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createRegisterOptimizerPass() {
-  return std::make_unique<RegisterOptimizerPass>();
 }

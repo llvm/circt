@@ -58,39 +58,40 @@ Operation *FIRRTLDialect::materializeConstant(OpBuilder &builder,
   // important that this goes first.
   if (auto attrValue = dyn_cast<BoolAttr>(value)) {
     if (isa<BoolType>(type))
-      return builder.create<BoolConstantOp>(loc, type, attrValue);
+      return BoolConstantOp::create(builder, loc, type, attrValue);
     assert((isa<ClockType, AsyncResetType, ResetType>(type) &&
             "BoolAttrs can only be materialized for special constant types."));
-    return builder.create<SpecialConstantOp>(loc, type, attrValue);
+    return SpecialConstantOp::create(builder, loc, type, attrValue);
   }
 
   // Integer constants.
   if (auto attrValue = dyn_cast<IntegerAttr>(value)) {
     if (isa<FIntegerType>(type))
-      return builder.create<FIntegerConstantOp>(loc, type, attrValue);
+      return FIntegerConstantOp::create(builder, loc, type, attrValue);
     // Integer attributes (ui1) might still be special constant types.
     if (attrValue.getValue().getBitWidth() == 1 &&
         isa<ClockType, AsyncResetType, ResetType>(type))
-      return builder.create<SpecialConstantOp>(
-          loc, type, builder.getBoolAttr(attrValue.getValue().isAllOnes()));
+      return SpecialConstantOp::create(
+          builder, loc, type,
+          builder.getBoolAttr(attrValue.getValue().isAllOnes()));
 
     assert((!type_cast<IntType>(type).hasWidth() ||
             (unsigned)type_cast<IntType>(type).getWidthOrSentinel() ==
                 attrValue.getValue().getBitWidth()) &&
            "type/value width mismatch materializing constant");
-    return builder.create<ConstantOp>(loc, type, attrValue);
+    return ConstantOp::create(builder, loc, type, attrValue);
   }
 
   // Aggregate constants.
   if (auto arrayAttr = dyn_cast<ArrayAttr>(value)) {
     if (isa<BundleType, FVectorType>(type))
-      return builder.create<AggregateConstantOp>(loc, type, arrayAttr);
+      return AggregateConstantOp::create(builder, loc, type, arrayAttr);
   }
 
   // String constants.
   if (auto stringAttr = dyn_cast<StringAttr>(value)) {
     if (type_isa<StringType>(type))
-      return builder.create<StringConstantOp>(loc, type, stringAttr);
+      return StringConstantOp::create(builder, loc, type, stringAttr);
   }
 
   return nullptr;

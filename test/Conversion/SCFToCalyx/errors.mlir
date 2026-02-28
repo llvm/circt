@@ -1,15 +1,5 @@
 // RUN: circt-opt --lower-scf-to-calyx %s -split-input-file -verify-diagnostics
 
-module {
-  func.func @f(%arg0 : f32, %arg1 : f32) -> f32 {
-    // expected-error @+1 {{failed to legalize operation 'arith.addf' that was explicitly marked illegal}}
-    %2 = arith.addf %arg0, %arg1 : f32
-    return %2 : f32
-  }
-}
-
-// -----
-
 // expected-error @+1 {{Module contains multiple functions, but no top level function was set. Please see --top-level-function}}
 module {
   func.func @f1() {
@@ -59,6 +49,24 @@ module {
       %0 = memref.load %alloca_1[%arg0] : memref<40xi32>
       %2 = arith.addi %0, %c2_32 : i32
       memref.store %2, %alloca_1[%arg0] : memref<40xi32>
+    }
+    return
+  }
+}
+
+// -----
+
+module {
+  func.func @main(%arg0: i32) {
+    %c1 = arith.constant 1 : index
+    %c0 = arith.constant 0 : index
+    %alloc = memref.alloc() : memref<6xi32>
+    // expected-error @+1{{AffineParallelUnroll must be run in order to lower scf.parallel}}
+    scf.parallel (%arg2) = (%c0) to (%c1) step (%c1) {
+      scf.execute_region {
+        memref.store %arg0, %alloc[%arg2] : memref<6xi32>
+        scf.yield
+      }
     }
     return
   }

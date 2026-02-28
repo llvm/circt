@@ -30,12 +30,14 @@ bool circtESITypeIsAChannelType(MlirType type) {
   return isa<ChannelType>(unwrap(type));
 }
 
-MlirType circtESIChannelTypeGet(MlirType inner, uint32_t signaling) {
+MlirType circtESIChannelTypeGet(MlirType inner, uint32_t signaling,
+                                uint64_t dataDelay) {
   auto signalEnum = symbolizeChannelSignaling(signaling);
   if (!signalEnum)
     return {};
   auto cppInner = unwrap(inner);
-  return wrap(ChannelType::get(cppInner.getContext(), cppInner, *signalEnum));
+  return wrap(ChannelType::get(cppInner.getContext(), cppInner, *signalEnum,
+                               dataDelay));
 }
 
 MlirType circtESIChannelGetInner(MlirType channelType) {
@@ -43,6 +45,9 @@ MlirType circtESIChannelGetInner(MlirType channelType) {
 }
 uint32_t circtESIChannelGetSignaling(MlirType channelType) {
   return (uint32_t)cast<ChannelType>(unwrap(channelType)).getSignaling();
+}
+uint64_t circtESIChannelGetDataDelay(MlirType channelType) {
+  return cast<ChannelType>(unwrap(channelType)).getDataDelay();
 }
 
 bool circtESITypeIsAnAnyType(MlirType type) {
@@ -63,6 +68,10 @@ MlirType circtESIListTypeGet(MlirType inner) {
 
 MlirType circtESIListTypeGetElementType(MlirType list) {
   return wrap(cast<ListType>(unwrap(list)).getElementType());
+}
+
+bool circtESICheckInnerTypeMatch(MlirType to, MlirType from) {
+  return succeeded(checkInnerTypeMatch(unwrap(to), unwrap(from)));
 }
 
 void circtESIAppendMlirFile(MlirModule cMod, MlirStringRef filename) {
@@ -86,10 +95,11 @@ void circtESIRegisterGlobalServiceGenerator(
     MlirStringRef impl_type, CirctESIServiceGeneratorFunc genFunc,
     void *userData) {
   ServiceGeneratorDispatcher::globalDispatcher().registerGenerator(
-      unwrap(impl_type),
-      [genFunc, userData](ServiceImplementReqOp req,
-                          ServiceDeclOpInterface decl, ServiceImplRecordOp) {
-        return unwrap(genFunc(wrap(req), wrap(decl.getOperation()), userData));
+      unwrap(impl_type), [genFunc, userData](ServiceImplementReqOp req,
+                                             ServiceDeclOpInterface decl,
+                                             ServiceImplRecordOp record) {
+        return unwrap(genFunc(wrap(req), wrap(decl.getOperation()),
+                              wrap(record.getOperation()), userData));
       });
 }
 //===----------------------------------------------------------------------===//
@@ -125,6 +135,96 @@ CirctESIBundleTypeBundleChannel circtESIBundleTypeGetChannel(MlirType bundle,
       cast<ChannelBundleType>(unwrap(bundle)).getChannels()[idx];
   return CirctESIBundleTypeBundleChannel{
       wrap(channel.name), (unsigned)channel.direction, wrap(channel.type)};
+}
+
+//===----------------------------------------------------------------------===//
+// Window types
+//===----------------------------------------------------------------------===//
+
+bool circtESITypeIsAWindowType(MlirType type) {
+  return isa<WindowType>(unwrap(type));
+}
+
+MlirType circtESIWindowTypeGet(MlirContext cctxt, MlirAttribute name,
+                               MlirType into, size_t numFrames,
+                               const MlirType *cFrames) {
+  MLIRContext *ctxt = unwrap(cctxt);
+  SmallVector<WindowFrameType, 4> frames;
+  for (size_t i = 0; i < numFrames; ++i)
+    frames.push_back(cast<WindowFrameType>(unwrap(cFrames[i])));
+  return wrap(WindowType::get(ctxt, cast<StringAttr>(unwrap(name)),
+                              unwrap(into), frames));
+}
+
+MlirAttribute circtESIWindowTypeGetName(MlirType window) {
+  return wrap((Attribute)cast<WindowType>(unwrap(window)).getName());
+}
+
+MlirType circtESIWindowTypeGetInto(MlirType window) {
+  return wrap(cast<WindowType>(unwrap(window)).getInto());
+}
+
+size_t circtESIWindowTypeGetNumFrames(MlirType window) {
+  return cast<WindowType>(unwrap(window)).getFrames().size();
+}
+
+MlirType circtESIWindowTypeGetFrame(MlirType window, size_t idx) {
+  return wrap(cast<WindowType>(unwrap(window)).getFrames()[idx]);
+}
+
+MlirType circtESIWindowTypeGetLoweredType(MlirType window) {
+  return wrap(cast<WindowType>(unwrap(window)).getLoweredType());
+}
+
+bool circtESITypeIsAWindowFrameType(MlirType type) {
+  return isa<WindowFrameType>(unwrap(type));
+}
+
+MlirType circtESIWindowFrameTypeGet(MlirContext cctxt, MlirAttribute name,
+                                    size_t numMembers,
+                                    const MlirType *cMembers) {
+  MLIRContext *ctxt = unwrap(cctxt);
+  SmallVector<WindowFieldType, 4> members;
+  for (size_t i = 0; i < numMembers; ++i)
+    members.push_back(cast<WindowFieldType>(unwrap(cMembers[i])));
+  return wrap(
+      WindowFrameType::get(ctxt, cast<StringAttr>(unwrap(name)), members));
+}
+
+MlirAttribute circtESIWindowFrameTypeGetName(MlirType frame) {
+  return wrap((Attribute)cast<WindowFrameType>(unwrap(frame)).getName());
+}
+
+size_t circtESIWindowFrameTypeGetNumMembers(MlirType frame) {
+  return cast<WindowFrameType>(unwrap(frame)).getMembers().size();
+}
+
+MlirType circtESIWindowFrameTypeGetMember(MlirType frame, size_t idx) {
+  return wrap(cast<WindowFrameType>(unwrap(frame)).getMembers()[idx]);
+}
+
+bool circtESITypeIsAWindowFieldType(MlirType type) {
+  return isa<WindowFieldType>(unwrap(type));
+}
+
+MlirType circtESIWindowFieldTypeGet(MlirContext cctxt, MlirAttribute fieldName,
+                                    uint64_t numItems,
+                                    uint64_t bulkCountWidth) {
+  return wrap(WindowFieldType::get(unwrap(cctxt),
+                                   cast<StringAttr>(unwrap(fieldName)),
+                                   numItems, bulkCountWidth));
+}
+
+MlirAttribute circtESIWindowFieldTypeGetFieldName(MlirType field) {
+  return wrap((Attribute)cast<WindowFieldType>(unwrap(field)).getFieldName());
+}
+
+uint64_t circtESIWindowFieldTypeGetNumItems(MlirType field) {
+  return cast<WindowFieldType>(unwrap(field)).getNumItems();
+}
+
+uint64_t circtESIWindowFieldTypeGetBulkCountWidth(MlirType field) {
+  return cast<WindowFieldType>(unwrap(field)).getBulkCountWidth();
 }
 
 //===----------------------------------------------------------------------===//

@@ -13,8 +13,8 @@
 #ifndef CIRCT_DIALECT_FIRRTL_TYPES_H
 #define CIRCT_DIALECT_FIRRTL_TYPES_H
 
-#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLEnums.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypeInterfaces.h"
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
 #include "circt/Support/LLVM.h"
@@ -32,6 +32,7 @@ struct FVectorTypeStorage;
 struct FEnumTypeStorage;
 struct CMemoryTypeStorage;
 struct RefTypeStorage;
+struct LHSTypeStorage;
 struct BaseTypeAliasStorage;
 struct OpenBundleTypeStorage;
 struct OpenVectorTypeStorage;
@@ -52,6 +53,7 @@ class OpenVectorType;
 class FVectorType;
 class FEnumType;
 class RefType;
+class LHSType;
 class PropertyType;
 class StringType;
 class FIntegerType;
@@ -60,6 +62,8 @@ class PathType;
 class BoolType;
 class DoubleType;
 class BaseTypeAliasType;
+class FStringType;
+class DomainType;
 
 /// A collection of bits indicating the recursive properties of a type.
 struct RecursiveTypeProperties {
@@ -130,7 +134,7 @@ public:
 
   /// Returns true if this is a 'const' type that can only hold compile-time
   /// constant values
-  bool isConst();
+  bool isConst() const;
 
 protected:
   using Type::Type;
@@ -145,7 +149,7 @@ public:
 
   /// Returns true if this is a 'const' type that can only hold compile-time
   /// constant values
-  bool isConst();
+  bool isConst() const;
 
   /// Return true if this is a "passive" type - one that contains no "flip"
   /// types recursively within itself.
@@ -159,7 +163,7 @@ public:
   FIRRTLBaseType getAnonymousType();
 
   /// Return a 'const' or non-'const' version of this type.
-  FIRRTLBaseType getConstType(bool isConst);
+  FIRRTLBaseType getConstType(bool isConst) const;
 
   /// Return this type with a 'const' modifiers dropped
   FIRRTLBaseType getAllConstDroppedType();
@@ -182,8 +186,8 @@ public:
   /// Support method to enable LLVM-style type casting.
   static bool classof(Type type) {
     return llvm::isa<FIRRTLDialect>(type.getDialect()) &&
-           !llvm::isa<PropertyType, RefType, OpenBundleType, OpenVectorType>(
-               type);
+           !llvm::isa<PropertyType, RefType, LHSType, OpenBundleType,
+                      OpenVectorType, FStringType, DomainType>(type);
   }
 
   /// Returns true if this is a non-const "passive" that which is not analog.
@@ -300,16 +304,16 @@ public:
   static IntType get(MLIRContext *context, bool isSigned,
                      int32_t widthOrSentinel = -1, bool isConst = false);
 
-  bool isSigned() { return isa<SIntType>(); }
-  bool isUnsigned() { return isa<UIntType>(); }
+  bool isSigned() { return mlir::isa<SIntType>(*this); }
+  bool isUnsigned() { return mlir::isa<UIntType>(*this); }
 
   /// Return the width of this type, or -1 if it has none specified.
   int32_t getWidthOrSentinel() const;
 
   /// Return a 'const' or non-'const' version of this type.
-  IntType getConstType(bool isConst);
+  IntType getConstType(bool isConst) const;
 
-  static bool classof(Type type) { return llvm::isa<SIntType, UIntType>(type); }
+  static bool classof(Type type) { return mlir::isa<SIntType, UIntType>(type); }
 };
 
 //===----------------------------------------------------------------------===//
@@ -620,5 +624,88 @@ public:
 
 } // namespace firrtl
 } // namespace circt
+
+//===--------------------------------------------------------------------===//
+// Subelement Visitors
+//===--------------------------------------------------------------------===//
+
+/// Allow walking and replacing the subelements of a ClassElement.
+template <>
+struct mlir::AttrTypeSubElementHandler<circt::firrtl::ClassElement> {
+  using ClassElement = circt::firrtl::ClassElement;
+
+  static void walk(ClassElement param,
+                   AttrTypeImmediateSubElementWalker &walker) {
+    walker.walk(param.name);
+    walker.walk(param.type);
+  }
+  static ClassElement replace(ClassElement param,
+                              AttrSubElementReplacements &attrRepls,
+                              TypeSubElementReplacements &typeRepls) {
+    return ClassElement(cast<StringAttr>(attrRepls.take_front(1)[0]),
+                        typeRepls.take_front(1)[0], param.direction);
+  }
+};
+
+/// Allow walking and replacing the subelements of a BundleElement.
+template <>
+struct mlir::AttrTypeSubElementHandler<
+    circt::firrtl::BundleType::BundleElement> {
+  using BundleElement = circt::firrtl::BundleType::BundleElement;
+
+  static void walk(const BundleElement &param,
+                   AttrTypeImmediateSubElementWalker &walker) {
+    walker.walk(param.name);
+    walker.walk(param.type);
+  }
+  static BundleElement replace(const BundleElement &param,
+                               AttrSubElementReplacements &attrRepls,
+                               TypeSubElementReplacements &typeRepls) {
+    return BundleElement(
+        cast<StringAttr>(attrRepls.take_front(1)[0]), param.isFlip,
+        cast<circt::firrtl::FIRRTLBaseType>(typeRepls.take_front(1)[0]));
+  }
+};
+
+/// Allow walking and replacing the subelements of an OpenBundleElement.
+template <>
+struct mlir::AttrTypeSubElementHandler<
+    circt::firrtl::OpenBundleType::BundleElement> {
+  using BundleElement = circt::firrtl::OpenBundleType::BundleElement;
+
+  static void walk(const BundleElement &param,
+                   AttrTypeImmediateSubElementWalker &walker) {
+    walker.walk(param.name);
+    walker.walk(param.type);
+  }
+  static BundleElement replace(const BundleElement &param,
+                               AttrSubElementReplacements &attrRepls,
+                               TypeSubElementReplacements &typeRepls) {
+    return BundleElement(
+        cast<StringAttr>(attrRepls.take_front(1)[0]), param.isFlip,
+        cast<circt::firrtl::FIRRTLType>(typeRepls.take_front(1)[0]));
+  }
+};
+
+/// Allow walking and replacing the subelements of an EnumElement.
+template <>
+struct mlir::AttrTypeSubElementHandler<circt::firrtl::FEnumType::EnumElement> {
+  using EnumElement = circt::firrtl::FEnumType::EnumElement;
+
+  static void walk(const EnumElement &param,
+                   AttrTypeImmediateSubElementWalker &walker) {
+    walker.walk(param.name);
+    walker.walk(param.value);
+    walker.walk(param.type);
+  }
+  static EnumElement replace(const EnumElement &param,
+                             AttrSubElementReplacements &attrRepls,
+                             TypeSubElementReplacements &typeRepls) {
+    auto attrs = attrRepls.take_front(2);
+    return EnumElement(
+        cast<StringAttr>(attrs[0]), cast<IntegerAttr>(attrs[1]),
+        cast<circt::firrtl::FIRRTLBaseType>(typeRepls.take_front(1)[0]));
+  }
+};
 
 #endif // CIRCT_DIALECT_FIRRTL_TYPES_H

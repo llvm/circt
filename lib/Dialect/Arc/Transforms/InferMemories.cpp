@@ -115,7 +115,7 @@ void InferMemoriesPass::runOnOperation() {
       return signalPassFailure();
     }
     auto memType = MemoryType::get(&getContext(), depth, wordType, addressTy);
-    auto memOp = builder.create<MemoryOp>(memType);
+    auto memOp = MemoryOp::create(builder, memType);
     if (tapMemories && !instOp.getInstanceName().empty())
       memOp->setAttr("name", instOp.getInstanceNameAttr());
 
@@ -124,9 +124,9 @@ void InferMemoriesPass::runOnOperation() {
 
     auto applyLatency = [&](Value clock, Value data, unsigned latency) {
       for (unsigned i = 0; i < latency; ++i)
-        data = builder.create<seq::CompRegOp>(
-            data, clock, builder.getStringAttr(""), Value{}, Value{}, Value{},
-            hw::InnerSymAttr{});
+        data = seq::CompRegOp::create(builder, data, clock,
+                                      builder.getStringAttr(""), Value{},
+                                      Value{}, Value{}, hw::InnerSymAttr{});
       return data;
     };
 
@@ -141,7 +141,7 @@ void InferMemoriesPass::runOnOperation() {
 
     auto tap = [&](Value value, const Twine &name) {
       auto prefixedName = builder.getStringAttr(tapPrefix + "_" + name);
-      builder.create<arc::TapOp>(value, prefixedName);
+      arc::TapOp::create(builder, value, prefixedName);
     };
 
     // Handle read ports.
@@ -174,9 +174,10 @@ void InferMemoriesPass::runOnOperation() {
 
       // Read the underlying storage. (The result of a disabled read port is
       // undefined, currently we define it to be zero.)
-      Value readOp = builder.create<MemoryReadPortOp>(wordType, memOp, address);
-      Value zero = builder.create<hw::ConstantOp>(wordType, 0);
-      readOp = builder.create<comb::MuxOp>(enable, readOp, zero);
+      Value readOp =
+          MemoryReadPortOp::create(builder, wordType, memOp, address);
+      Value zero = hw::ConstantOp::create(builder, wordType, 0);
+      readOp = comb::MuxOp::create(builder, enable, readOp, zero);
 
       // Apply the latency after the underlying storage was accessed. (If the
       // latency is 0, the memory read is combinatorial without any buffer.)
@@ -216,9 +217,9 @@ void InferMemoriesPass::runOnOperation() {
         tap(readData, "rdata");
       }
 
-      auto c1_i1 = builder.create<hw::ConstantOp>(builder.getI1Type(), 1);
-      auto notWriteMode = builder.create<comb::XorOp>(writeMode, c1_i1);
-      Value readEnable = builder.create<comb::AndOp>(enable, notWriteMode);
+      auto c1_i1 = hw::ConstantOp::create(builder, builder.getI1Type(), 1);
+      auto notWriteMode = comb::XorOp::create(builder, writeMode, c1_i1);
+      Value readEnable = comb::AndOp::create(builder, enable, notWriteMode);
 
       // Apply the latency before the underlying storage is accessed.
       Value readAddress = applyLatency(clock, address, readPreLatency);
@@ -227,21 +228,21 @@ void InferMemoriesPass::runOnOperation() {
       // Read the underlying storage. (The result of a disabled read port is
       // undefined, currently we define it to be zero.)
       Value readOp =
-          builder.create<MemoryReadPortOp>(wordType, memOp, readAddress);
-      Value zero = builder.create<hw::ConstantOp>(wordType, 0);
-      readOp = builder.create<comb::MuxOp>(readEnable, readOp, zero);
+          MemoryReadPortOp::create(builder, wordType, memOp, readAddress);
+      Value zero = hw::ConstantOp::create(builder, wordType, 0);
+      readOp = comb::MuxOp::create(builder, readEnable, readOp, zero);
 
       if (writeMask) {
         unsigned maskWidth = cast<IntegerType>(writeMask.getType()).getWidth();
         SmallVector<Value> toConcat;
         for (unsigned i = 0; i < maskWidth; ++i) {
-          Value bit = builder.create<comb::ExtractOp>(writeMask, i, 1);
-          Value replicated = builder.create<comb::ReplicateOp>(bit, maskGran);
+          Value bit = comb::ExtractOp::create(builder, writeMask, i, 1);
+          Value replicated = comb::ReplicateOp::create(builder, bit, maskGran);
           toConcat.push_back(replicated);
         }
         std::reverse(toConcat.begin(), toConcat.end()); // I hate concat
         writeMask =
-            builder.create<comb::ConcatOp>(writeData.getType(), toConcat);
+            comb::ConcatOp::create(builder, writeData.getType(), toConcat);
       }
 
       // Apply the latency after the underlying storage was accessed. (If the
@@ -249,7 +250,7 @@ void InferMemoriesPass::runOnOperation() {
       readOp = applyLatency(clock, readOp, readPostLatency);
       readData.replaceAllUsesWith(readOp);
 
-      auto writeEnable = builder.create<comb::AndOp>(enable, writeMode);
+      auto writeEnable = comb::AndOp::create(builder, enable, writeMode);
       SmallVector<Value> inputs({address, writeData, writeEnable});
       if (writeMask)
         inputs.push_back(writeMask);
@@ -287,12 +288,12 @@ void InferMemoriesPass::runOnOperation() {
         unsigned maskWidth = cast<IntegerType>(mask.getType()).getWidth();
         SmallVector<Value> toConcat;
         for (unsigned i = 0; i < maskWidth; ++i) {
-          Value bit = builder.create<comb::ExtractOp>(mask, i, 1);
-          Value replicated = builder.create<comb::ReplicateOp>(bit, maskGran);
+          Value bit = comb::ExtractOp::create(builder, mask, i, 1);
+          Value replicated = comb::ReplicateOp::create(builder, bit, maskGran);
           toConcat.push_back(replicated);
         }
         std::reverse(toConcat.begin(), toConcat.end()); // I hate concat
-        mask = builder.create<comb::ConcatOp>(data.getType(), toConcat);
+        mask = comb::ConcatOp::create(builder, data.getType(), toConcat);
       }
       SmallVector<Value> inputs({address, data});
       if (enable)
@@ -308,16 +309,16 @@ void InferMemoriesPass::runOnOperation() {
       auto ipSave = builder.saveInsertionPoint();
       TypeRange types = ValueRange(inputs).getTypes();
       builder.setInsertionPointToStart(module.getBody());
-      auto defOp = builder.create<DefineOp>(
-          names.newName("mem_write"), builder.getFunctionType(types, types));
+      auto defOp = DefineOp::create(builder, names.newName("mem_write"),
+                                    builder.getFunctionType(types, types));
       auto &block = defOp.getBody().emplaceBlock();
       auto args = block.addArguments(
           types, SmallVector<Location>(types.size(), builder.getLoc()));
       builder.setInsertionPointToEnd(&block);
-      builder.create<arc::OutputOp>(SmallVector<Value>(args));
+      arc::OutputOp::create(builder, SmallVector<Value>(args));
       builder.restoreInsertionPoint(ipSave);
-      builder.create<MemoryWritePortOp>(memOp, defOp.getName(), inputs, clock,
-                                        hasEnable, hasMask);
+      MemoryWritePortOp::create(builder, memOp, defOp.getName(), inputs, clock,
+                                hasEnable, hasMask);
     }
 
     opsToDelete.push_back(instOp);

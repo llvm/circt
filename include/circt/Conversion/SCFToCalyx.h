@@ -20,6 +20,9 @@
 
 namespace circt {
 
+#define GEN_PASS_DECL_SCFTOCALYX
+#include "circt/Conversion/Passes.h.inc"
+
 namespace scfToCalyx {
 // If this attribute is set as a FuncOp argument or result attribute, it will be
 // used as the Calyx port name.
@@ -28,7 +31,8 @@ static constexpr std::string_view sPortNameAttr = "calyx.port_name";
 } // namespace scfToCalyx
 
 /// Create an SCF to Calyx conversion pass.
-std::unique_ptr<OperationPass<ModuleOp>> createSCFToCalyxPass();
+std::unique_ptr<OperationPass<ModuleOp>>
+createSCFToCalyxPass(std::string topLevelFunction = "");
 
 } // namespace circt
 

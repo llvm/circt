@@ -1,32 +1,37 @@
-add_mlir_public_c_api_library(CIRCTCAPIConversion
+add_circt_public_c_api_library(CIRCTCAPIConversion
   Passes.cpp
 
   LINK_LIBS PUBLIC
   CIRCTAffineToLoopSchedule
+  CIRCTSynthToComb
   CIRCTArcToLLVM
   CIRCTCalyxToFSM
   CIRCTCalyxToHW
   CIRCTCalyxNative
+  CIRCTCombToSynth
   CIRCTCombToArith
+  CIRCTCombToDatapath
   CIRCTCombToLLVM
   CIRCTCombToSMT
   CIRCTConvertToArcs
+  CIRCTConvertToLLVM
+  CIRCTDatapathToComb
+  CIRCTDatapathToSMT
   CIRCTDCToHW
-  CIRCTExportChiselInterface
   CIRCTExportVerilog
   CIRCTFIRRTLToHW
   CIRCTFSMToSV
+  CIRCTFSMToCore
   CIRCTHandshakeToDC
   CIRCTHandshakeToHW
   CIRCTHWArithToHW
-  CIRCTHWToLLHD
   CIRCTHWToLLVM
   CIRCTHWToBTOR2
   CIRCTHWToSMT
   CIRCTHWToSV
   CIRCTHWToSystemC
-  CIRCTLLHDToLLVM
   CIRCTLoopScheduleToCalyx
+  CIRCTLTLToCore
   CIRCTMooreToCore
   CIRCTPipelineToHW
   CIRCTSCFToCalyx
@@ -36,4 +41,5 @@ add_mlir_public_c_api_library(CIRCTCAPIConversion
   CIRCTCFToHandshake
   CIRCTVerifToSMT
   CIRCTVerifToSV
+  CIRCTCoreToFSM
 )

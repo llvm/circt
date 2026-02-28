@@ -13,28 +13,71 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/ImportVerilog.h"
+#include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Debug/DebugDialect.h"
+#include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/LLHD/LLHDDialect.h"
+#include "circt/Dialect/LLHD/LLHDPasses.h"
+#include "circt/Dialect/Moore/MooreDialect.h"
+#include "circt/Dialect/Moore/MoorePasses.h"
+#include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Sim/SimDialect.h"
+#include "circt/Dialect/Verif/VerifDialect.h"
+#include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/Transforms/InlinerInterfaceImpl.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
+#include "llvm/Support/WithColor.h"
 
-using namespace llvm;
 using namespace mlir;
 using namespace circt;
+namespace cl = llvm::cl;
+using llvm::WithColor;
 
 //===----------------------------------------------------------------------===//
 // Command Line Options
 //===----------------------------------------------------------------------===//
 
 namespace {
-enum class LoweringMode { OnlyPreprocess, OnlyLint, OnlyParse, Full };
+enum class Format {
+  SV,
+  MLIR,
+};
+
+enum class LoweringMode {
+  OnlyPreprocess,
+  OnlyLint,
+  OnlyParse,
+  OutputIRMoore,
+  OutputIRLLHD,
+  OutputIRHW,
+  Full
+};
 
 struct CLOptions {
   cl::OptionCategory cat{"Verilog Frontend Options"};
+
+  cl::opt<Format> format{
+      "format", cl::desc("Input file format (auto-detected by default)"),
+      cl::values(
+          clEnumValN(Format::SV, "sv", "Parse as SystemVerilog files"),
+          clEnumValN(Format::MLIR, "mlir", "Parse as MLIR or MLIRBC file")),
+      cl::cat(cat)};
 
   cl::list<std::string> inputFilenames{cl::Positional,
                                        cl::desc("<input files>"), cl::cat(cat)};
@@ -49,6 +92,11 @@ struct CLOptions {
                "corresponding line"),
       cl::init(false), cl::Hidden, cl::cat(cat)};
 
+  cl::opt<bool> verbosePassExecutions{
+      "verbose-pass-executions",
+      cl::desc("Print passes as they are being executed"), cl::init(false),
+      cl::cat(cat)};
+
   cl::opt<LoweringMode> loweringMode{
       cl::desc("Specify how to process the input:"),
       cl::values(
@@ -60,8 +108,36 @@ struct CLOptions {
                      "CIRCT IR"),
           clEnumValN(LoweringMode::OnlyParse, "parse-only",
                      "Only parse and elaborate the input, without mapping to "
-                     "CIRCT IR")),
+                     "CIRCT IR"),
+          clEnumValN(LoweringMode::OutputIRMoore, "ir-moore",
+                     "Run the entire pass manager to just before MooreToCore "
+                     "conversion, and emit the resulting Moore dialect IR"),
+          clEnumValN(
+              LoweringMode::OutputIRLLHD, "ir-llhd",
+              "Run the entire pass manager to just before the LLHD pipeline "
+              ", and emit the resulting LLHD+Core dialect IR"),
+          clEnumValN(LoweringMode::OutputIRHW, "ir-hw",
+                     "Run the MooreToCore conversion and emit the resulting "
+                     "core dialect IR")),
       cl::init(LoweringMode::Full), cl::cat(cat)};
+
+  cl::opt<bool> debugInfo{"g", cl::desc("Generate debug information"),
+                          cl::cat(cat)};
+
+  cl::opt<bool> lowerAlwaysAtStarAsComb{
+      "always-at-star-as-comb",
+      cl::desc("Interpret `always @(*)` as `always_comb`"), cl::init(true),
+      cl::cat(cat)};
+
+  cl::opt<bool> detectMemories{
+      "detect-memories",
+      cl::desc("Detect memories and lower them to `seq.firmem`"),
+      cl::init(true), cl::cat(cat)};
+
+  cl::opt<bool> sroa{
+      "sroa",
+      cl::desc("Destructure arrays and structs into individual signals."),
+      cl::init(false), cl::cat(cat)};
 
   //===--------------------------------------------------------------------===//
   // Include paths
@@ -195,10 +271,32 @@ struct CLOptions {
           "One or more library files, which are separate compilation units "
           "where modules are not automatically instantiated."),
       cl::value_desc("filename"), cl::Prefix, cl::cat(cat)};
+
+  cl::list<std::string> commandFiles{
+      "C",
+      cl::desc(
+          "One or more command files, which are independent compilation units "
+          "where modules are automatically instantiated."),
+      cl::value_desc("filename"), cl::Prefix, cl::cat(cat)};
 };
 } // namespace
 
 static CLOptions opts;
+
+/// Populate the given pass manager with transformations as configured by the
+/// command line options.
+static void populatePasses(PassManager &pm) {
+  populateVerilogToMoorePipeline(pm);
+  if (opts.loweringMode == LoweringMode::OutputIRMoore)
+    return;
+  populateMooreToCorePipeline(pm);
+  if (opts.loweringMode == LoweringMode::OutputIRLLHD)
+    return;
+  LlhdToCorePipelineOptions options;
+  options.detectMemories = opts.detectMemories;
+  options.sroa = opts.sroa;
+  populateLlhdToCorePipeline(pm, options);
+}
 
 //===----------------------------------------------------------------------===//
 // Implementation
@@ -217,6 +315,8 @@ static LogicalResult executeWithSources(MLIRContext *context,
     options.mode = ImportVerilogOptions::Mode::OnlyLint;
   else if (opts.loweringMode == LoweringMode::OnlyParse)
     options.mode = ImportVerilogOptions::Mode::OnlyParse;
+  options.debugInfo = opts.debugInfo;
+  options.lowerAlwaysAtStarAsComb = opts.lowerAlwaysAtStarAsComb;
 
   options.includeDirs = opts.includeDirs;
   options.includeSystemDirs = opts.includeSystemDirs;
@@ -245,44 +345,125 @@ static LogicalResult executeWithSources(MLIRContext *context,
 
   options.singleUnit = opts.singleUnit;
   options.libraryFiles = opts.libraryFiles;
+  options.commandFiles = opts.commandFiles;
 
   // Open the output file.
   std::string errorMessage;
   auto outputFile = openOutputFile(opts.outputFilename, &errorMessage);
   if (!outputFile) {
-    llvm::errs() << errorMessage << "\n";
+    WithColor::error() << errorMessage << "\n";
     return failure();
   }
 
-  // If the user requested for the files to be only preprocessed, do so and
-  // print the results to the configured output file.
-  if (opts.loweringMode == LoweringMode::OnlyPreprocess) {
-    auto result =
-        preprocessVerilog(sourceMgr, context, ts, outputFile->os(), &options);
-    if (succeeded(result))
-      outputFile->keep();
-    return result;
-  }
+  // Parse the input as SystemVerilog or MLIR file.
+  OwningOpRef<ModuleOp> module;
+  switch (opts.format) {
+  case Format::SV: {
+    // If the user requested for the files to be only preprocessed, do so and
+    // print the results to the configured output file.
+    if (opts.loweringMode == LoweringMode::OnlyPreprocess) {
+      auto result =
+          preprocessVerilog(sourceMgr, context, ts, outputFile->os(), &options);
+      if (succeeded(result))
+        outputFile->keep();
+      return result;
+    }
 
-  // Parse the Verilog input into an MLIR module.
-  OwningOpRef<ModuleOp> module(ModuleOp::create(UnknownLoc::get(context)));
-  if (failed(importVerilog(sourceMgr, context, ts, module.get(), &options)))
+    // Parse the Verilog input into an MLIR module.
+    module = ModuleOp::create(UnknownLoc::get(context));
+    if (failed(importVerilog(sourceMgr, context, ts, module.get(), &options)))
+      return failure();
+
+    // If the user requested for the files to be only linted, the module remains
+    // empty and there is nothing left to do.
+    if (opts.loweringMode == LoweringMode::OnlyLint)
+      return success();
+  } break;
+
+  case Format::MLIR: {
+    auto parserTimer = ts.nest("MLIR Parser");
+    module = parseSourceFile<ModuleOp>(sourceMgr, context);
+  } break;
+  }
+  if (!module)
     return failure();
+
+  // If the user requested anything besides simply parsing the input, run the
+  // appropriate transformation passes according to the command line options.
+  if (opts.loweringMode != LoweringMode::OnlyParse) {
+    PassManager pm(context);
+    pm.enableVerifier(true);
+    pm.enableTiming(ts);
+    if (opts.verbosePassExecutions)
+      pm.addInstrumentation(
+          std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
+              "circt-verilog"));
+    if (failed(applyPassManagerCLOptions(pm)))
+      return failure();
+    populatePasses(pm);
+    if (failed(pm.run(module.get())))
+      return failure();
+  }
 
   // Print the final MLIR.
+  auto outputTimer = ts.nest("MLIR Printer");
   module->print(outputFile->os());
   outputFile->keep();
   return success();
 }
 
 static LogicalResult execute(MLIRContext *context) {
+  // Default to reading from stdin if no files were provided except if
+  // commandfiles were.
+  if (opts.inputFilenames.empty() && opts.commandFiles.empty()) {
+    opts.inputFilenames.push_back("-");
+  }
+
+  // Auto-detect the input format if it was not explicitly specified.
+  if (opts.format.getNumOccurrences() == 0) {
+    std::optional<Format> detectedFormat = std::nullopt;
+    for (const auto &inputFilename : opts.inputFilenames) {
+      std::optional<Format> format = std::nullopt;
+      auto name = StringRef(inputFilename);
+      if (name.ends_with(".v") || name.ends_with(".sv") ||
+          name.ends_with(".vh") || name.ends_with(".svh"))
+        format = Format::SV;
+      else if (name.ends_with(".mlir") || name.ends_with(".mlirbc"))
+        format = Format::MLIR;
+      if (!format)
+        continue;
+      if (detectedFormat && format != detectedFormat) {
+        detectedFormat = std::nullopt;
+        break;
+      }
+      detectedFormat = format;
+    }
+    if (!detectedFormat) {
+      if (!opts.commandFiles.empty()) {
+        detectedFormat = Format::SV;
+      } else {
+        WithColor::error() << "cannot auto-detect input format; use --format\n";
+        return failure();
+      }
+    }
+    opts.format = *detectedFormat;
+  }
+
   // Open the input files.
   llvm::SourceMgr sourceMgr;
+  DenseSet<StringRef> seenInputFilenames;
   for (const auto &inputFilename : opts.inputFilenames) {
+    // Don't add the same file multiple times.
+    if (!seenInputFilenames.insert(inputFilename).second) {
+      WithColor::warning() << "redundant input file `" << inputFilename
+                           << "`\n";
+      continue;
+    }
+
     std::string errorMessage;
     auto buffer = openInputFile(inputFilename, &errorMessage);
     if (!buffer) {
-      llvm::errs() << errorMessage << "\n";
+      WithColor::error() << errorMessage << "\n";
       return failure();
     }
     sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
@@ -301,11 +482,11 @@ static LogicalResult execute(MLIRContext *context) {
 }
 
 int main(int argc, char **argv) {
-  InitLLVM y(argc, argv);
+  llvm::InitLLVM y(argc, argv);
 
   // Set the bug report message to indicate users should file issues on
   // llvm/circt and not llvm/llvm-project.
-  setBugReportMsg(circtBugReportMsg);
+  llvm::setBugReportMsg(circtBugReportMsg);
 
   // Print the CIRCT and Slang versions when requested.
   cl::AddExtraVersionPrinter([](raw_ostream &os) {
@@ -314,6 +495,8 @@ int main(int argc, char **argv) {
   });
 
   // Register any pass manager command line options.
+  llhd::registerPasses();
+  moore::registerPasses();
   registerMLIRContextCLOptions();
   registerPassManagerCLOptions();
   registerDefaultTimingManagerCLOptions();
@@ -323,7 +506,30 @@ int main(int argc, char **argv) {
   cl::ParseCommandLineOptions(argc, argv,
                               "Verilog and SystemVerilog frontend\n");
 
+  // Register the dialects.
+  // clang-format off
+  DialectRegistry registry;
+  registry.insert<
+    arith::ArithDialect,
+    cf::ControlFlowDialect,
+    comb::CombDialect,
+    debug::DebugDialect,
+    func::FuncDialect,
+    hw::HWDialect,
+    llhd::LLHDDialect,
+    LLVM::LLVMDialect,
+    moore::MooreDialect,
+    scf::SCFDialect,
+    seq::SeqDialect,
+    sim::SimDialect,
+    verif::VerifDialect
+  >();
+  // clang-format on
+
   // Perform the actual work and use "exit" to avoid slow context teardown.
-  MLIRContext context;
+  mlir::func::registerInlinerExtension(registry);
+  mlir::LLVM::registerInlinerInterface(registry);
+
+  MLIRContext context(registry);
   exit(failed(execute(&context)));
 }

@@ -22,7 +22,4 @@
 // Pull in the dialect definition.
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h.inc"
 
-// Pull in all enum type definitions and utility function declarations.
-#include "circt/Dialect/FIRRTL/FIRRTLEnums.h.inc"
-
 #endif // CIRCT_DIALECT_FIRRTL_IR_DIALECT_H

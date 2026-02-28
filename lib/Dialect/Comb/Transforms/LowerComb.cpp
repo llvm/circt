@@ -6,9 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Comb/CombPasses.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -42,18 +42,18 @@ private:
         getMux(loc, b, t, f, table.drop_front(half), inputs.drop_front());
     Value if0 =
         getMux(loc, b, t, f, table.drop_back(half), inputs.drop_front());
-    return b.create<MuxOp>(loc, inputs.front(), if1, if0, false);
+    return MuxOp::create(b, loc, inputs.front(), if1, if0, false);
   }
 
 public:
   LogicalResult matchAndRewrite(TruthTableOp op, OpAdaptor adaptor,
                                 ConversionPatternRewriter &b) const override {
     Location loc = op.getLoc();
-    SmallVector<bool> table(
-        llvm::map_range(op.getLookupTableAttr().getAsValueRange<IntegerAttr>(),
-                        [](const APInt &a) { return !a.isZero(); }));
-    Value t = b.create<hw::ConstantOp>(loc, b.getIntegerAttr(b.getI1Type(), 1));
-    Value f = b.create<hw::ConstantOp>(loc, b.getIntegerAttr(b.getI1Type(), 0));
+    auto table = op.getLookupTableAttr().asArrayRef();
+    Value t =
+        hw::ConstantOp::create(b, loc, b.getIntegerAttr(b.getI1Type(), 1));
+    Value f =
+        hw::ConstantOp::create(b, loc, b.getIntegerAttr(b.getI1Type(), 0));
 
     Value tree = getMux(loc, b, t, f, table, op.getInputs());
     b.modifyOpInPlace(tree.getDefiningOp(), [&]() {
@@ -75,7 +75,7 @@ public:
 } // namespace
 
 void LowerCombPass::runOnOperation() {
-  ModuleOp module = getOperation();
+  auto module = getOperation();
 
   ConversionTarget target(getContext());
   RewritePatternSet patterns(&getContext());

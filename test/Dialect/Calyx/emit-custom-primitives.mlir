@@ -19,7 +19,7 @@ module attributes {calyx.entrypoint = "A"} {
     %prim.in, %prim.out = calyx.primitive @prim_0 of @prim : i32, i32
 
     calyx.wires {
-      // CHECK: done = 1'd1;
+      // CHECK: done = 1'b1;
       calyx.assign %done = %c1_1 : i1
       // CHECK: params_0.in = in_0;
       calyx.assign %params.in = %in_0 : i32
@@ -48,7 +48,7 @@ module attributes {calyx.entrypoint = "A"} {
     %params.in, %params.clk, %params.go, %params.out, %params.done = calyx.primitive @params_0 of @params<WIDTH: i32 = 32> : i32, i1, i1, i32, i1
 
     calyx.wires {
-      // CHECK: done = 1'd1;
+      // CHECK: done = 1'b1;
       calyx.assign %done = %c1_1 : i1
       // CHECK: params_0.in = in_0;
       calyx.assign %params.in = %in_0 : i32

@@ -33,26 +33,19 @@ def ClassLike : OpInterface<"ClassLike"> {
       "mlir::ArrayAttr", "getFormalParamNames", (ins)>,
     InterfaceMethod<"Get the class-like formal parameter names attribute name",
       "mlir::StringAttr", "getFormalParamNamesAttrName", (ins)>,
+    InterfaceMethod<"Get the class-like dictionary mapping field names to type",
+      "mlir::DictionaryAttr", "getFieldTypes", (ins)>,
     InterfaceMethod<"Get the class-like body region",
       "mlir::Region &", "getBody", (ins)>,
     InterfaceMethod<"Get the class-like body block",
       "mlir::Block *", "getBodyBlock", (ins),
-      /*methodBody=*/[{ return $_op.getBodyBlock(); }]>
-  ];
-}
-
-def ClassFieldLike : OpInterface<"ClassFieldLike"> {
-  let cppNamespace = "circt::om";
-
-  let description = [{
-    Common functionality for class-like field operations.
-  }];
-
-  let methods = [
-    InterfaceMethod<"Get the class-like field's type",
-      "mlir::Type", "getType", (ins)>,
-    InterfaceMethod<"Get the class-like field's name attribute",
-      "mlir::StringAttr", "getNameAttr", (ins)>
+      /*methodBody=*/[{ return $_op.getBodyBlock(); }]>,
+    InterfaceMethod<"Get the class-like field type",
+      "std::optional<mlir::Type>", "getFieldType", (ins "mlir::StringAttr":$field)>,
+    InterfaceMethod<"Get the class-like field names",
+      "mlir::ArrayAttr", "getFieldNames", (ins)>,
+    InterfaceMethod<"Replace field types dictionary attr",
+      "void", "replaceFieldTypes", (ins "mlir::AttrTypeReplacer":$replacer)>,
   ];
 }
 

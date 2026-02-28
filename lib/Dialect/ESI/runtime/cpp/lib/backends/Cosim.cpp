@@ -1,4 +1,4 @@
-//===- Cosim.cpp - Connection to ESI simulation via capnp RPC -------------===//
+//===- Cosim.cpp - Connection to ESI simulation via GRPC ------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -14,40 +14,169 @@
 //===----------------------------------------------------------------------===//
 
 #include "esi/backends/Cosim.h"
+#include "esi/Engines.h"
+#include "esi/Ports.h"
 #include "esi/Services.h"
+#include "esi/Utils.h"
+#include "esi/backends/RpcClient.h"
 
-#include "CosimDpi.capnp.h"
-#include <capnp/ez-rpc.h>
-
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <set>
-
-using namespace std;
 
 using namespace esi;
 using namespace esi::services;
 using namespace esi::backends::cosim;
 
-/// Parse the connection string and instantiate the accelerator. Support the
-/// traditional 'host:port' syntax and a path to 'cosim.cfg' which is output by
-/// the cosimulation when it starts (which is useful when it chooses its own
+namespace {
+
+//===----------------------------------------------------------------------===//
+// WriteCosimChannelPort
+//===----------------------------------------------------------------------===//
+
+/// Cosim client implementation of a write channel port.
+class WriteCosimChannelPort : public WriteChannelPort {
+public:
+  WriteCosimChannelPort(AcceleratorConnection &conn, RpcClient &client,
+                        const RpcClient::ChannelDesc &desc, const Type *type,
+                        std::string name)
+      : WriteChannelPort(type), conn(conn), client(client), desc(desc),
+        name(std::move(name)) {}
+  ~WriteCosimChannelPort() = default;
+
+  void connectImpl(const ChannelPort::ConnectOptions &options) override {
+    if (desc.dir != RpcClient::ChannelDirection::ToServer)
+      throw std::runtime_error("Channel '" + name +
+                               "' is not a to server channel");
+  }
+
+protected:
+  void writeImpl(const MessageData &data) override {
+    // Add trace logging before sending the message.
+    conn.getLogger().trace(
+        [this,
+         &data](std::string &subsystem, std::string &msg,
+                std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "cosim_write";
+          msg = "Writing message to channel '" + name + "'";
+          details = std::make_unique<std::map<std::string, std::any>>();
+          (*details)["channel"] = name;
+          (*details)["data_size"] = data.getSize();
+          (*details)["message_data"] = data.toHex();
+        });
+
+    client.writeToServer(name, data);
+  }
+
+  bool tryWriteImpl(const MessageData &data) override {
+    writeImpl(data);
+    return true;
+  }
+
+private:
+  AcceleratorConnection &conn;
+  RpcClient &client;
+  RpcClient::ChannelDesc desc;
+  std::string name;
+};
+
+//===----------------------------------------------------------------------===//
+// ReadCosimChannelPort
+//===----------------------------------------------------------------------===//
+
+/// Cosim client implementation of a read channel port. Since gRPC read protocol
+/// streams messages back, this implementation is quite complex.
+class ReadCosimChannelPort : public ReadChannelPort {
+public:
+  ReadCosimChannelPort(AcceleratorConnection &conn, RpcClient &client,
+                       const RpcClient::ChannelDesc &desc, const Type *type,
+                       std::string name)
+      : ReadChannelPort(type), conn(conn), client(client), desc(desc),
+        name(std::move(name)) {}
+
+  ~ReadCosimChannelPort() = default;
+
+  void connectImpl(const ChannelPort::ConnectOptions &options) override {
+    if (desc.dir != RpcClient::ChannelDirection::ToClient)
+      throw std::runtime_error("Channel '" + name +
+                               "' is not a to client channel");
+
+    // Connect to the channel and set up callback.
+    connection =
+        client.connectClientReceiver(name, [this](const MessageData &data) {
+          // Add trace logging for the received message.
+          conn.getLogger().trace(
+              [this, &data](
+                  std::string &subsystem, std::string &msg,
+                  std::unique_ptr<std::map<std::string, std::any>> &details) {
+                subsystem = "cosim_read";
+                msg = "Received message from channel '" + name + "'";
+                details = std::make_unique<std::map<std::string, std::any>>();
+                (*details)["channel"] = name;
+                (*details)["data_size"] = data.getSize();
+                (*details)["message_data"] = data.toHex();
+              });
+
+          bool consumed = callback(data);
+
+          if (consumed) {
+            // Log the message consumption.
+            conn.getLogger().trace(
+                [this](
+                    std::string &subsystem, std::string &msg,
+                    std::unique_ptr<std::map<std::string, std::any>> &details) {
+                  subsystem = "cosim_read";
+                  msg = "Message from channel '" + name + "' consumed";
+                });
+          }
+
+          return consumed;
+        });
+  }
+
+  void disconnect() override {
+    conn.getLogger().debug("cosim_read", "Disconnecting channel " + name);
+    if (connection) {
+      connection->disconnect();
+      connection.reset();
+    }
+    ReadChannelPort::disconnect();
+  }
+
+private:
+  AcceleratorConnection &conn;
+  RpcClient &client;
+  RpcClient::ChannelDesc desc;
+  std::string name;
+  std::unique_ptr<RpcClient::ReadChannelConnection> connection;
+};
+
+} // anonymous namespace
+
+//===----------------------------------------------------------------------===//
+// CosimAccelerator
+//===----------------------------------------------------------------------===//
+
+/// Parse the connection std::string and instantiate the accelerator. Support
+/// the traditional 'host:port' syntax and a path to 'cosim.cfg' which is output
+/// by the cosimulation when it starts (which is useful when it chooses its own
 /// port).
-unique_ptr<AcceleratorConnection>
-CosimAccelerator::connect(Context &ctxt, string connectionString) {
-  string portStr;
-  string host = "localhost";
+std::unique_ptr<AcceleratorConnection>
+CosimAccelerator::connect(Context &ctxt, std::string connectionString) {
+  std::string portStr;
+  std::string host = "localhost";
 
   size_t colon;
-  if ((colon = connectionString.find(':')) != string::npos) {
+  if ((colon = connectionString.find(':')) != std::string::npos) {
     portStr = connectionString.substr(colon + 1);
     host = connectionString.substr(0, colon);
   } else if (connectionString.ends_with("cosim.cfg")) {
-    ifstream cfg(connectionString);
-    string line, key, value;
+    std::ifstream cfg(connectionString);
+    std::string line, key, value;
 
     while (getline(cfg, line))
-      if ((colon = line.find(":")) != string::npos) {
+      if ((colon = line.find(":")) != std::string::npos) {
         key = line.substr(0, colon);
         value = line.substr(colon + 1);
         if (key == "port")
@@ -57,7 +186,7 @@ CosimAccelerator::connect(Context &ctxt, string connectionString) {
       }
 
     if (portStr.size() == 0)
-      throw runtime_error("port line not found in file");
+      throw std::runtime_error("port line not found in file");
   } else if (connectionString == "env") {
     char *hostEnv = getenv("ESI_COSIM_HOST");
     if (hostEnv)
@@ -68,293 +197,492 @@ CosimAccelerator::connect(Context &ctxt, string connectionString) {
     if (portEnv)
       portStr = portEnv;
     else
-      throw runtime_error("ESI_COSIM_PORT environment variable not set");
+      throw std::runtime_error("ESI_COSIM_PORT environment variable not set");
   } else {
-    throw runtime_error("Invalid connection string '" + connectionString + "'");
+    throw std::runtime_error("Invalid connection std::string '" +
+                             connectionString + "'");
   }
   uint16_t port = stoul(portStr);
-  return make_unique<CosimAccelerator>(ctxt, host, port);
+  auto conn = make_unique<CosimAccelerator>(ctxt, host, port);
+
+  // Using the MMIO manifest method is really only for internal debugging, so it
+  // doesn't need to be part of the connection string.
+  char *manifestMethod = getenv("ESI_COSIM_MANIFEST_MMIO");
+  if (manifestMethod != nullptr)
+    conn->setManifestMethod(ManifestMethod::MMIO);
+
+  return conn;
+}
+
+/// Construct and connect to a cosim server.
+CosimAccelerator::CosimAccelerator(Context &ctxt, std::string hostname,
+                                   uint16_t port)
+    : AcceleratorConnection(ctxt) {
+  // Connect to the simulation.
+  rpcClient = std::make_unique<RpcClient>(hostname, port);
+}
+CosimAccelerator::~CosimAccelerator() {
+  disconnect();
+  channels.clear();
 }
 
 namespace {
-class CosimChannelPort;
-}
+class CosimSysInfo : public SysInfo {
+#pragma pack(push, 1)
+  struct CycleInfo {
+    uint64_t freq;
+    uint64_t cycle;
+  };
+#pragma pack(pop)
 
-struct esi::backends::cosim::CosimAccelerator::Impl {
-  capnp::EzRpcClient rpcClient;
-  kj::WaitScope &waitScope;
-  CosimDpiServer::Client cosim;
-  EsiLowLevel::Client lowLevel;
+public:
+  CosimSysInfo(CosimAccelerator &conn, RpcClient *rpcClient)
+      : SysInfo(conn), rpcClient(rpcClient) {
+    // This is an optional interface; if the channels aren't present, we simply
+    // report no cycle/frequency information.
+    RpcClient::ChannelDesc argDesc, resultDesc;
+    if (!rpcClient->getChannelDesc("__cosim_cycle_count.arg", argDesc) ||
+        !rpcClient->getChannelDesc("__cosim_cycle_count.result", resultDesc))
+      return;
 
-  // We own all channels connected to rpcClient since their lifetime is tied to
-  // rpcClient.
-  set<unique_ptr<ChannelPort>> channels;
+    Context &ctxt = conn.getCtxt();
+    const esi::Type *i1Type = getType(ctxt, new BitsType("i1", 1));
+    const esi::Type *i64Type = getType(ctxt, new BitsType("i64", 64));
+    const esi::Type *resultType =
+        getType(ctxt, new StructType(resultDesc.type,
+                                     {{"cycle", i64Type}, {"freq", i64Type}}));
 
-  // Map from client path to channel assignments for that client.
-  map<AppIDPath, map<string, string>> clientChannelAssignments;
-
-  Impl(string hostname, uint16_t port)
-      : rpcClient(hostname, port), waitScope(rpcClient.getWaitScope()),
-        cosim(rpcClient.getMain<CosimDpiServer>()), lowLevel(nullptr) {
-    auto llReq = cosim.openLowLevelRequest();
-    auto llPromise = llReq.send();
-    lowLevel = llPromise.wait(waitScope).getLowLevel();
+    reqPort = std::make_unique<WriteCosimChannelPort>(
+        conn, *rpcClient, argDesc, i1Type, "__cosim_cycle_count.arg");
+    respPort = std::make_unique<ReadCosimChannelPort>(
+        conn, *rpcClient, resultDesc, resultType, "__cosim_cycle_count.result");
+    auto *bundleType =
+        new BundleType("cosimCycleCount",
+                       {{"arg", BundleType::Direction::To, i1Type},
+                        {"result", BundleType::Direction::From, resultType}});
+    func.reset(FuncService::Function::get(AppID("__cosim_cycle_count"),
+                                          bundleType, *reqPort, *respPort));
+    func->connect();
   }
-  ~Impl();
 
-  /// Request the host side channel ports for a particular instance (identified
-  /// by the AppID path). For convenience, provide the bundle type and direction
-  /// of the bundle port.
-  std::map<std::string, ChannelPort &> requestChannelsFor(AppIDPath,
-                                                          const BundleType *);
+  uint32_t getEsiVersion() const override { return rpcClient->getEsiVersion(); }
+  std::optional<uint64_t> getCycleCount() const override {
+    if (!func)
+      return std::nullopt;
+    return getCycleInfo().cycle;
+  }
+  std::optional<uint64_t> getCoreClockFrequency() const override {
+    if (!func)
+      return std::nullopt;
+    return getCycleInfo().freq;
+  }
+
+  std::vector<uint8_t> getCompressedManifest() const override {
+    return rpcClient->getCompressedManifest();
+  }
+
+private:
+  const esi::Type *getType(Context &ctxt, esi::Type *type) {
+    if (auto t = ctxt.getType(type->getID())) {
+      delete type;
+      return *t;
+    }
+    ctxt.registerType(type);
+    return type;
+  }
+
+  RpcClient *rpcClient;
+  std::unique_ptr<WriteCosimChannelPort> reqPort;
+  std::unique_ptr<ReadCosimChannelPort> respPort;
+  std::unique_ptr<FuncService::Function> func;
+
+  CycleInfo getCycleInfo() const {
+    MessageData arg({1}); // 1-bit trigger message
+    std::future<MessageData> result = func->call(arg);
+    result.wait();
+    MessageData respMsg = result.get();
+    return *respMsg.as<CycleInfo>();
+  }
 };
-
-/// Construct and connect to a cosim server.
-CosimAccelerator::CosimAccelerator(Context &ctxt, string hostname,
-                                   uint16_t port)
-    : AcceleratorConnection(ctxt) {
-  impl = make_unique<Impl>(hostname, port);
-}
+} // namespace
 
 namespace {
 class CosimMMIO : public MMIO {
 public:
-  CosimMMIO(EsiLowLevel::Client &llClient, kj::WaitScope &waitScope)
-      : llClient(llClient), waitScope(waitScope) {}
+  CosimMMIO(CosimAccelerator &conn, Context &ctxt, const AppIDPath &idPath,
+            RpcClient *rpcClient, const HWClientDetails &clients)
+      : MMIO(conn, idPath, clients) {
+    // We have to locate the channels ourselves since this service might be used
+    // to retrieve the manifest.
+    RpcClient::ChannelDesc cmdArg, cmdResp;
+    if (!rpcClient->getChannelDesc("__cosim_mmio_read_write.arg", cmdArg) ||
+        !rpcClient->getChannelDesc("__cosim_mmio_read_write.result", cmdResp))
+      throw std::runtime_error("Could not find MMIO channels");
 
-  uint32_t read(uint32_t addr) const override {
-    auto req = llClient.readMMIORequest();
-    req.setAddress(addr);
-    return req.send().wait(waitScope).getData();
+    const esi::Type *i64Type = getType(ctxt, new UIntType(cmdResp.type, 64));
+    const esi::Type *cmdType = getType(
+        ctxt, new StructType(cmdArg.type, {{"write", new BitsType("i1", 1)},
+                                           {"offset", new UIntType("ui32", 32)},
+                                           {"data", new BitsType("i64", 64)}}));
+
+    // Get ports, create the function, then connect to it.
+    cmdArgPort = std::make_unique<WriteCosimChannelPort>(
+        conn, *rpcClient, cmdArg, cmdType, "__cosim_mmio_read_write.arg");
+    cmdRespPort = std::make_unique<ReadCosimChannelPort>(
+        conn, *rpcClient, cmdResp, i64Type, "__cosim_mmio_read_write.result");
+    auto *bundleType = new BundleType(
+        "cosimMMIO", {{"arg", BundleType::Direction::To, cmdType},
+                      {"result", BundleType::Direction::From, i64Type}});
+    cmdMMIO.reset(FuncService::Function::get(AppID("__cosim_mmio"), bundleType,
+                                             *cmdArgPort, *cmdRespPort));
+    cmdMMIO->connect();
   }
-  void write(uint32_t addr, uint32_t data) override {
-    auto req = llClient.writeMMIORequest();
-    req.setAddress(addr);
-    req.setData(data);
-    req.send().wait(waitScope);
+
+#pragma pack(push, 1)
+  struct MMIOCmd {
+    uint64_t data;
+    uint32_t offset;
+    bool write;
+  };
+#pragma pack(pop)
+
+  // Call the read function and wait for a response.
+  uint64_t read(uint32_t addr) const override {
+    MMIOCmd cmd{.data = 0, .offset = addr, .write = false};
+    auto arg = MessageData::from(cmd);
+    std::future<MessageData> result = cmdMMIO->call(arg);
+    result.wait();
+    uint64_t ret = *result.get().as<uint64_t>();
+    conn.getLogger().trace(
+        [addr, ret](std::string &subsystem, std::string &msg,
+                    std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "cosim_mmio";
+          msg = "MMIO[0x" + toHex(addr) + "] = 0x" + toHex(ret);
+        });
+    return ret;
+  }
+
+  void write(uint32_t addr, uint64_t data) override {
+    conn.getLogger().trace(
+        [addr,
+         data](std::string &subsystem, std::string &msg,
+               std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "cosim_mmio";
+          msg = "MMIO[0x" + toHex(addr) + "] <- 0x" + toHex(data);
+        });
+    MMIOCmd cmd{.data = data, .offset = addr, .write = true};
+    auto arg = MessageData::from(cmd);
+    std::future<MessageData> result = cmdMMIO->call(arg);
+    result.wait();
   }
 
 private:
-  EsiLowLevel::Client &llClient;
-  kj::WaitScope &waitScope;
-};
-} // namespace
-
-namespace {
-class CosimSysInfo : public SysInfo {
-public:
-  CosimSysInfo(CosimDpiServer::Client &client, kj::WaitScope &waitScope)
-      : client(client), waitScope(waitScope) {}
-
-  uint32_t getEsiVersion() const override {
-    auto maniResp =
-        client.getCompressedManifestRequest().send().wait(waitScope);
-    return maniResp.getVersion();
-  }
-
-  vector<uint8_t> getCompressedManifest() const override {
-    auto maniResp =
-        client.getCompressedManifestRequest().send().wait(waitScope);
-    capnp::Data::Reader data = maniResp.getCompressedManifest();
-    return vector<uint8_t>(data.begin(), data.end());
-  }
-
-private:
-  CosimDpiServer::Client &client;
-  kj::WaitScope &waitScope;
-};
-} // namespace
-
-namespace {
-/// Parent class for read and write channel ports.
-class CosimChannelPort {
-public:
-  CosimChannelPort(CosimAccelerator::Impl &impl, string name)
-      : impl(impl), name(name), isConnected(false), ep(nullptr) {}
-  virtual ~CosimChannelPort() {}
-
-  void connect();
-  void disconnect();
-  void write(const MessageData &);
-  bool read(MessageData &);
-
-protected:
-  CosimAccelerator::Impl &impl;
-  string name;
-  bool isConnected;
-  EsiDpiEndpoint::Client ep;
-};
-} // namespace
-
-void CosimChannelPort::write(const MessageData &data) {
-  if (!isConnected)
-    throw runtime_error("Cannot write to a channel port that is not connected");
-
-  auto req = ep.sendFromHostRequest();
-  req.setMsg(capnp::Data::Reader(data.getBytes(), data.getSize()));
-  req.send().wait(impl.waitScope);
-}
-
-bool CosimChannelPort::read(MessageData &data) {
-  auto req = ep.recvToHostRequest();
-  auto resp = req.send().wait(impl.waitScope);
-  if (!resp.getHasData())
-    return false;
-  capnp::Data::Reader msg = resp.getResp();
-  size_t size = msg.size();
-  std::vector<uint8_t> vec(size);
-  memcpy(vec.data(), msg.begin(), size);
-  data = MessageData(vec);
-  return true;
-}
-
-esi::backends::cosim::CosimAccelerator::Impl::~Impl() {
-  // Make sure all channels are disconnected before rpcClient gets deconstructed
-  // or it'll throw an exception.
-  for (auto &ccp : channels)
-    ccp->disconnect();
-}
-
-void CosimChannelPort::connect() {
-  if (isConnected)
-    return;
-
-  // Linear search through the list of cosim endpoints. Slow, but good enough as
-  // connect isn't expected to be called often.
-  auto listResp = impl.cosim.listRequest().send().wait(impl.waitScope);
-  for (auto iface : listResp.getIfaces())
-    if (iface.getEndpointID() == name) {
-      auto openReq = impl.cosim.openRequest();
-      openReq.setIface(iface);
-      auto openResp = openReq.send().wait(impl.waitScope);
-      ep = openResp.getEndpoint();
-      isConnected = true;
-      return;
+  const esi::Type *getType(Context &ctxt, esi::Type *type) {
+    if (auto t = ctxt.getType(type->getID())) {
+      delete type;
+      return *t;
     }
-  throw runtime_error("Could not find channel '" + name + "' in cosimulation");
-}
+    ctxt.registerType(type);
+    return type;
+  }
+  std::unique_ptr<WriteCosimChannelPort> cmdArgPort;
+  std::unique_ptr<ReadCosimChannelPort> cmdRespPort;
+  std::unique_ptr<FuncService::Function> cmdMMIO;
+};
 
-void CosimChannelPort::disconnect() {
-  if (!isConnected)
-    return;
-  ep.closeRequest().send().wait(impl.waitScope);
-  ep = nullptr;
-  isConnected = false;
-}
+#pragma pack(push, 1)
+struct HostMemReadReq {
+  uint8_t tag;
+  uint32_t length;
+  uint64_t address;
+};
 
-namespace {
-class WriteCosimChannelPort : public WriteChannelPort {
+struct HostMemReadResp {
+  uint64_t data;
+  uint8_t tag;
+};
+
+struct HostMemWriteReq {
+  uint8_t valid_bytes;
+  uint64_t data;
+  uint8_t tag;
+  uint64_t address;
+};
+
+using HostMemWriteResp = uint8_t;
+#pragma pack(pop)
+
+class CosimHostMem : public HostMem {
 public:
-  WriteCosimChannelPort(CosimAccelerator::Impl &impl, const Type *type,
-                        string name)
-      : WriteChannelPort(type),
-        cosim(make_unique<CosimChannelPort>(impl, name)) {}
+  CosimHostMem(AcceleratorConnection &acc, Context &ctxt, RpcClient *rpcClient)
+      : HostMem(acc), acc(acc), ctxt(ctxt), rpcClient(rpcClient) {}
 
-  virtual ~WriteCosimChannelPort() = default;
+  void start() override {
+    // We have to locate the channels ourselves since this service might be used
+    // to retrieve the manifest.
 
-  virtual void connect() override { cosim->connect(); }
-  virtual void disconnect() override { cosim->disconnect(); }
-  virtual void write(const MessageData &) override;
+    if (writeRespPort)
+      return;
 
-protected:
-  std::unique_ptr<CosimChannelPort> cosim;
+    // TODO: The types here are WRONG. They need to be wrapped in Channels! Fix
+    // this in a subsequent PR.
+
+    // Setup the read side callback.
+    RpcClient::ChannelDesc readArg, readResp;
+    if (!rpcClient->getChannelDesc("__cosim_hostmem_read_req.data", readArg) ||
+        !rpcClient->getChannelDesc("__cosim_hostmem_read_resp.data", readResp))
+      throw std::runtime_error("Could not find HostMem read channels");
+
+    const esi::Type *readRespType =
+        getType(ctxt, new StructType(readResp.type,
+                                     {{"tag", new UIntType("ui8", 8)},
+                                      {"data", new BitsType("i64", 64)}}));
+    const esi::Type *readReqType =
+        getType(ctxt, new StructType(readArg.type,
+                                     {{"address", new UIntType("ui64", 64)},
+                                      {"length", new UIntType("ui32", 32)},
+                                      {"tag", new UIntType("ui8", 8)}}));
+
+    // Get ports. Unfortunately, we can't model this as a callback since there
+    // will sometimes be multiple responses per request.
+    readRespPort = std::make_unique<WriteCosimChannelPort>(
+        conn, *rpcClient, readResp, readRespType,
+        "__cosim_hostmem_read_resp.data");
+    readReqPort = std::make_unique<ReadCosimChannelPort>(
+        conn, *rpcClient, readArg, readReqType,
+        "__cosim_hostmem_read_req.data");
+    readReqPort->connect(
+        [this](const MessageData &req) { return serviceRead(req); });
+
+    // Setup the write side callback.
+    RpcClient::ChannelDesc writeArg, writeResp;
+    if (!rpcClient->getChannelDesc("__cosim_hostmem_write.arg", writeArg) ||
+        !rpcClient->getChannelDesc("__cosim_hostmem_write.result", writeResp))
+      throw std::runtime_error("Could not find HostMem write channels");
+
+    const esi::Type *writeRespType =
+        getType(ctxt, new UIntType(writeResp.type, 8));
+    const esi::Type *writeReqType =
+        getType(ctxt, new StructType(writeArg.type,
+                                     {{"address", new UIntType("ui64", 64)},
+                                      {"tag", new UIntType("ui8", 8)},
+                                      {"data", new BitsType("i64", 64)}}));
+
+    // Get ports, create the function, then connect to it.
+    writeRespPort = std::make_unique<WriteCosimChannelPort>(
+        conn, *rpcClient, writeResp, writeRespType,
+        "__cosim_hostmem_write.result");
+    writeReqPort = std::make_unique<ReadCosimChannelPort>(
+        conn, *rpcClient, writeArg, writeReqType, "__cosim_hostmem_write.arg");
+    auto *bundleType = new BundleType(
+        "cosimHostMem",
+        {{"arg", BundleType::Direction::To, writeReqType},
+         {"result", BundleType::Direction::From, writeRespType}});
+    write.reset(CallService::Callback::get(acc, AppID("__cosim_hostmem_write"),
+                                           bundleType, *writeRespPort,
+                                           *writeReqPort));
+    write->connect([this](const MessageData &req) { return serviceWrite(req); },
+                   true);
+  }
+
+  // Service the read request as a callback. Simply reads the data from the
+  // location specified. TODO: check that the memory has been mapped.
+  bool serviceRead(const MessageData &reqBytes) {
+    const HostMemReadReq *req = reqBytes.as<HostMemReadReq>();
+    acc.getLogger().trace(
+        [&](std::string &subsystem, std::string &msg,
+            std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "hostmem";
+          msg = "Read request: addr=0x" + toHex(req->address) +
+                " len=" + std::to_string(req->length) +
+                " tag=" + std::to_string(req->tag);
+        });
+    // Send one response per 8 bytes.
+    uint64_t *dataPtr = reinterpret_cast<uint64_t *>(req->address);
+    for (uint32_t i = 0, e = (req->length + 7) / 8; i < e; ++i) {
+      HostMemReadResp resp{.data = dataPtr[i], .tag = req->tag};
+      acc.getLogger().trace(
+          [&](std::string &subsystem, std::string &msg,
+              std::unique_ptr<std::map<std::string, std::any>> &details) {
+            subsystem = "HostMem";
+            msg = "Read result: data=0x" + toHex(resp.data) +
+                  " tag=" + std::to_string(resp.tag);
+          });
+      readRespPort->write(MessageData::from(resp));
+    }
+    return true;
+  }
+
+  // Service a write request as a callback. Simply write the data to the
+  // location specified. TODO: check that the memory has been mapped.
+  MessageData serviceWrite(const MessageData &reqBytes) {
+    const HostMemWriteReq *req = reqBytes.as<HostMemWriteReq>();
+    acc.getLogger().trace(
+        [&](std::string &subsystem, std::string &msg,
+            std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "hostmem";
+          msg = "Write request: addr=0x" + toHex(req->address) + " data=0x" +
+                toHex(req->data) +
+                " valid_bytes=" + std::to_string(req->valid_bytes) +
+                " tag=" + std::to_string(req->tag);
+        });
+    uint8_t *dataPtr = reinterpret_cast<uint8_t *>(req->address);
+    for (uint8_t i = 0; i < req->valid_bytes; ++i)
+      dataPtr[i] = (req->data >> (i * 8)) & 0xFF;
+    HostMemWriteResp resp = req->tag;
+    return MessageData::from(resp);
+  }
+
+  struct CosimHostMemRegion : public HostMemRegion {
+    CosimHostMemRegion(std::size_t size) {
+      ptr = malloc(size);
+      memset(ptr, 0xFF, size);
+      this->size = size;
+    }
+    virtual ~CosimHostMemRegion() { free(ptr); }
+    virtual void *getPtr() const override { return ptr; }
+    virtual std::size_t getSize() const override { return size; }
+
+  private:
+    void *ptr;
+    std::size_t size;
+  };
+
+  virtual std::unique_ptr<HostMemRegion>
+  allocate(std::size_t size, HostMem::Options opts) const override {
+    auto ret = std::unique_ptr<HostMemRegion>(new CosimHostMemRegion(size));
+    acc.getLogger().debug(
+        [&](std::string &subsystem, std::string &msg,
+            std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "HostMem";
+          msg = "Allocated host memory region at 0x" + toHex(ret->getPtr()) +
+                " of size " + std::to_string(size);
+        });
+    return ret;
+  }
+  virtual bool mapMemory(void *ptr, std::size_t size,
+                         HostMem::Options opts) const override {
+    return true;
+  }
+  virtual void unmapMemory(void *ptr) const override {}
+
+private:
+  const esi::Type *getType(Context &ctxt, esi::Type *type) {
+    if (auto t = ctxt.getType(type->getID())) {
+      delete type;
+      return *t;
+    }
+    ctxt.registerType(type);
+    return type;
+  }
+  AcceleratorConnection &acc;
+  Context &ctxt;
+  RpcClient *rpcClient;
+  std::unique_ptr<WriteCosimChannelPort> readRespPort;
+  std::unique_ptr<ReadCosimChannelPort> readReqPort;
+  std::unique_ptr<CallService::Callback> read;
+  std::unique_ptr<WriteCosimChannelPort> writeRespPort;
+  std::unique_ptr<ReadCosimChannelPort> writeReqPort;
+  std::unique_ptr<CallService::Callback> write;
 };
 } // namespace
 
-void WriteCosimChannelPort::write(const MessageData &data) {
-  cosim->write(data);
-}
-
-namespace {
-class ReadCosimChannelPort : public ReadChannelPort {
+namespace esi::backends::cosim {
+/// Implement the magic cosim channel communication.
+class CosimEngine : public Engine {
 public:
-  ReadCosimChannelPort(CosimAccelerator::Impl &impl, const Type *type,
-                       string name)
-      : ReadChannelPort(type), cosim(new CosimChannelPort(impl, name)) {}
+  CosimEngine(CosimAccelerator &conn, AppIDPath idPath,
+              const ServiceImplDetails &details, const HWClientDetails &clients)
+      : Engine(conn), conn(conn) {
+    // Compute our parents idPath path.
+    AppIDPath prefix = std::move(idPath);
+    if (prefix.size() > 0)
+      prefix.pop_back();
 
-  virtual ~ReadCosimChannelPort() = default;
+    for (auto client : clients) {
+      AppIDPath fullClientPath = prefix + client.relPath;
+      std::map<std::string, std::string> channelAssignments;
+      for (auto assignment : client.channelAssignments)
+        if (assignment.second.type == "cosim")
+          channelAssignments[assignment.first] = std::any_cast<std::string>(
+              assignment.second.implOptions.at("name"));
+      clientChannelAssignments[fullClientPath] = std::move(channelAssignments);
+    }
+  }
 
-  virtual void connect() override { cosim->connect(); }
-  virtual void disconnect() override { cosim->disconnect(); }
-  virtual bool read(MessageData &) override;
+  std::unique_ptr<ChannelPort> createPort(AppIDPath idPath,
+                                          const std::string &channelName,
+                                          BundleType::Direction dir,
+                                          const Type *type) override;
 
-protected:
-  std::unique_ptr<CosimChannelPort> cosim;
+private:
+  CosimAccelerator &conn;
+  std::map<AppIDPath, std::map<std::string, std::string>>
+      clientChannelAssignments;
 };
+} // namespace esi::backends::cosim
 
-} // namespace
-
-bool ReadCosimChannelPort::read(MessageData &data) { return cosim->read(data); }
-
-map<string, ChannelPort &>
-CosimAccelerator::Impl::requestChannelsFor(AppIDPath idPath,
-                                           const BundleType *bundleType) {
-  map<string, ChannelPort &> channelResults;
+std::unique_ptr<ChannelPort>
+CosimEngine::createPort(AppIDPath idPath, const std::string &channelName,
+                        BundleType::Direction dir, const Type *type) {
 
   // Find the client details for the port at 'fullPath'.
   auto f = clientChannelAssignments.find(idPath);
   if (f == clientChannelAssignments.end())
-    return channelResults;
-  const map<string, string> &channelAssignments = f->second;
+    throw std::runtime_error("Could not find port for '" + idPath.toStr() +
+                             "." + channelName + "'");
+  const std::map<std::string, std::string> &channelAssignments = f->second;
+  auto cosimChannelNameIter = channelAssignments.find(channelName);
+  if (cosimChannelNameIter == channelAssignments.end())
+    throw std::runtime_error("Could not find channel '" + idPath.toStr() + "." +
+                             channelName + "' in cosimulation");
 
-  // Each channel in a bundle has a separate cosim endpoint. Find them all.
-  for (auto [name, dir, type] : bundleType->getChannels()) {
-    auto f = channelAssignments.find(name);
-    if (f == channelAssignments.end())
-      throw runtime_error("Could not find channel assignment for '" +
-                          idPath.toStr() + "." + name + "'");
-    string channelName = f->second;
+  // Get the endpoint, which may or may not exist. Construct the port.
+  // Everything is validated when the client calls 'connect()' on the port.
+  RpcClient::ChannelDesc chDesc;
+  if (!conn.rpcClient->getChannelDesc(cosimChannelNameIter->second, chDesc))
+    throw std::runtime_error("Could not find channel '" + idPath.toStr() + "." +
+                             channelName + "' in cosimulation");
 
-    ChannelPort *port;
-    if (BundlePort::isWrite(dir))
-      port = new WriteCosimChannelPort(*this, type, channelName);
-    else
-      port = new ReadCosimChannelPort(*this, type, channelName);
-    channels.emplace(port);
-    channelResults.emplace(name, *port);
-  }
-  return channelResults;
+  std::unique_ptr<ChannelPort> port;
+  std::string fullChannelName = idPath.toStr() + "." + channelName;
+  if (BundlePort::isWrite(dir))
+    port = std::make_unique<WriteCosimChannelPort>(
+        conn, *conn.rpcClient, chDesc, type, fullChannelName);
+  else
+    port = std::make_unique<ReadCosimChannelPort>(conn, *conn.rpcClient, chDesc,
+                                                  type, fullChannelName);
+  return port;
 }
 
-map<string, ChannelPort &>
-CosimAccelerator::requestChannelsFor(AppIDPath idPath,
-                                     const BundleType *bundleType) {
-  return impl->requestChannelsFor(idPath, bundleType);
+void CosimAccelerator::createEngine(const std::string &engineTypeName,
+                                    AppIDPath idPath,
+                                    const ServiceImplDetails &details,
+                                    const HWClientDetails &clients) {
+
+  std::unique_ptr<Engine> engine = nullptr;
+  if (engineTypeName == "cosim")
+    engine = std::make_unique<CosimEngine>(*this, idPath, details, clients);
+  else
+    engine = ::esi::registry::createEngine(*this, engineTypeName, idPath,
+                                           details, clients);
+  registerEngine(idPath, std::move(engine), clients);
 }
 Service *CosimAccelerator::createService(Service::Type svcType,
                                          AppIDPath idPath, std::string implName,
                                          const ServiceImplDetails &details,
                                          const HWClientDetails &clients) {
-  // Compute our parents idPath path.
-  AppIDPath prefix = std::move(idPath);
-  if (prefix.size() > 0)
-    prefix.pop_back();
-
-  if (implName == "cosim") {
-    // Get the channel assignments for each client.
-    for (auto client : clients) {
-      AppIDPath fullClientPath = prefix + client.relPath;
-      map<string, string> channelAssignments;
-      for (auto assignment : any_cast<map<string, any>>(
-               client.implOptions.at("channel_assignments")))
-        channelAssignments[assignment.first] =
-            any_cast<string>(assignment.second);
-      impl->clientChannelAssignments[fullClientPath] =
-          std::move(channelAssignments);
-    }
-  }
-
   if (svcType == typeid(services::MMIO)) {
-    return new CosimMMIO(impl->lowLevel, impl->waitScope);
+    return new CosimMMIO(*this, getCtxt(), idPath, rpcClient.get(), clients);
+  } else if (svcType == typeid(services::HostMem)) {
+    return new CosimHostMem(*this, getCtxt(), rpcClient.get());
   } else if (svcType == typeid(SysInfo)) {
     switch (manifestMethod) {
     case ManifestMethod::Cosim:
-      return new CosimSysInfo(impl->cosim, impl->waitScope);
+      return new CosimSysInfo(*this, rpcClient.get());
     case ManifestMethod::MMIO:
       return new MMIOSysInfo(getService<services::MMIO>());
     }
-  } else if (svcType == typeid(CustomService) && implName == "cosim") {
-    return new CustomService(idPath, details, clients);
   }
   return nullptr;
 }

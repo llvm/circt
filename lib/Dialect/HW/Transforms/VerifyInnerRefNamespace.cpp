@@ -12,16 +12,24 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
+#include "mlir/Pass/Pass.h"
 
 /// VerifyInnerRefNamespace pass until have container operation.
+
+namespace circt {
+namespace hw {
+#define GEN_PASS_DEF_VERIFYINNERREFNAMESPACE
+#include "circt/Dialect/HW/Passes.h.inc"
+} // namespace hw
+} // namespace circt
 
 namespace {
 
 class VerifyInnerRefNamespacePass
-    : public circt::hw::VerifyInnerRefNamespaceBase<
+    : public circt::hw::impl::VerifyInnerRefNamespaceBase<
           VerifyInnerRefNamespacePass> {
 public:
   void runOnOperation() override {
@@ -38,7 +46,3 @@ public:
 };
 
 } // namespace
-
-std::unique_ptr<mlir::Pass> circt::hw::createVerifyInnerRefNamespacePass() {
-  return std::make_unique<VerifyInnerRefNamespacePass>();
-}

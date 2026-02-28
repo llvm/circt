@@ -10,21 +10,29 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "circt/Dialect/OM/OMAttributes.h"
 #include "circt/Dialect/OM/OMOps.h"
 #include "circt/Dialect/OM/OMPasses.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace om {
+#define GEN_PASS_DEF_FREEZEPATHS
+#include "circt/Dialect/OM/OMPasses.h.inc"
+} // namespace om
+} // namespace circt
 
 using namespace circt;
 using namespace om;
 
 namespace {
 struct PathVisitor {
-  PathVisitor(hw::InstanceGraph &instanceGraph, hw::InnerRefNamespace &irn)
-      : instanceGraph(instanceGraph), irn(irn) {}
+  PathVisitor(hw::InstanceGraph &instanceGraph, hw::InnerRefNamespace &irn,
+              std::function<StringAttr(Operation *)> &getOpName)
+      : instanceGraph(instanceGraph), irn(irn), getOpNameFallback(getOpName) {}
 
   StringAttr field;
   LogicalResult processPath(Location loc, hw::HierPathOp hierPathOp,
@@ -33,10 +41,12 @@ struct PathVisitor {
   LogicalResult process(BasePathCreateOp pathOp);
   LogicalResult process(PathCreateOp pathOp);
   LogicalResult process(EmptyPathOp pathOp);
-  LogicalResult process(ListCreateOp listCreateOp);
+  LogicalResult processListCreator(Operation *listCreateOp);
+  LogicalResult process(ObjectFieldOp objectFieldOp);
   LogicalResult run(ModuleOp module);
   hw::InstanceGraph &instanceGraph;
   hw::InnerRefNamespace &irn;
+  std::function<StringAttr(Operation *)> getOpNameFallback;
 };
 } // namespace
 
@@ -80,8 +90,7 @@ static bool hasPathType(Type type) {
   return isPathType;
 }
 
-// Convert potentially nested lists of PathType or BasePathType to frozen lists.
-static Type processType(Type type) {
+mlir::AttrTypeReplacer makeReplacer() {
   mlir::AttrTypeReplacer replacer;
   replacer.addReplacement([](BasePathType innerType) {
     return FrozenBasePathType::get(innerType.getContext());
@@ -89,7 +98,12 @@ static Type processType(Type type) {
   replacer.addReplacement([](PathType innerType) {
     return FrozenPathType::get(innerType.getContext());
   });
+  return replacer;
+}
 
+// Convert potentially nested lists of PathType or BasePathType to frozen lists.
+static Type processType(Type type) {
+  mlir::AttrTypeReplacer replacer = makeReplacer();
   return replacer.replace(type);
 }
 
@@ -111,6 +125,8 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
     auto *op = target.getOp();
     // Get the verilog name of the target.
     auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName");
+    if (!verilogName && getOpNameFallback)
+      verilogName = getOpNameFallback(op);
     if (!verilogName) {
       auto diag = emitError(loc, "component does not have verilog name");
       diag.attachNote(op->getLoc()) << "component here";
@@ -140,6 +156,8 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
       auto currentModule = innerRef.getModule();
       // Get the verilog name of the target.
       auto verilogName = op->getAttrOfType<StringAttr>("hw.verilogName");
+      if (!verilogName && getOpNameFallback)
+        verilogName = getOpNameFallback(op);
       if (!verilogName) {
         auto diag = emitError(loc, "component does not have verilog name");
         diag.attachNote(op->getLoc()) << "component here";
@@ -148,14 +166,14 @@ LogicalResult PathVisitor::processPath(Location loc, hw::HierPathOp hierPathOp,
       // If this is our inner ref pair: [Foo::bar]
       // if "bar" is an instance, modules = [Foo::bar], bottomModule = Bar.
       // if "bar" is a wire, modules = [], bottomModule = Foo, component = bar.
-      if (isa<hw::HWInstanceLike>(op)) {
+      if (auto inst = dyn_cast<hw::HWInstanceLike>(op)) {
         // TODO: add support for instance choices.
-        auto inst = dyn_cast<hw::InstanceOp>(op);
-        if (!inst)
+        auto mods = inst.getReferencedModuleNamesAttr();
+        if (mods.size() > 1)
           return op->emitError("unsupported instance operation");
         // We are targeting an instance.
         modules.emplace_back(currentModule, verilogName);
-        bottomModule = inst.getReferencedModuleNameAttr();
+        bottomModule = cast<StringAttr>(mods[0]);
         component = StringAttr::get(context, "");
         field = StringAttr::get(context, "");
       } else {
@@ -195,9 +213,9 @@ LogicalResult PathVisitor::process(PathCreateOp path) {
 
   // Replace the old path operation.
   OpBuilder builder(path);
-  auto frozenPath = builder.create<FrozenPathCreateOp>(
-      path.getLoc(), path.getTargetKindAttr(), path->getOperand(0), targetPath,
-      bottomModule, ref, field);
+  auto frozenPath = FrozenPathCreateOp::create(
+      builder, path.getLoc(), path.getTargetKindAttr(), path->getOperand(0),
+      targetPath, bottomModule, ref, field);
   path.replaceAllUsesWith(frozenPath.getResult());
   path->erase();
 
@@ -222,8 +240,8 @@ LogicalResult PathVisitor::process(BasePathCreateOp path) {
 
   // Replace the old path operation.
   OpBuilder builder(path);
-  auto frozenPath = builder.create<FrozenBasePathCreateOp>(
-      path.getLoc(), path->getOperand(0), targetPath);
+  auto frozenPath = FrozenBasePathCreateOp::create(
+      builder, path.getLoc(), path->getOperand(0), targetPath);
   path.replaceAllUsesWith(frozenPath.getResult());
   path->erase();
 
@@ -232,15 +250,15 @@ LogicalResult PathVisitor::process(BasePathCreateOp path) {
 
 LogicalResult PathVisitor::process(EmptyPathOp path) {
   OpBuilder builder(path);
-  auto frozenPath = builder.create<FrozenEmptyPathOp>(path.getLoc());
+  auto frozenPath = FrozenEmptyPathOp::create(builder, path.getLoc());
   path.replaceAllUsesWith(frozenPath.getResult());
   path->erase();
   return success();
 }
 
 /// Replace a ListCreateOp of path types with frozen path types.
-LogicalResult PathVisitor::process(ListCreateOp listCreateOp) {
-  ListType listType = listCreateOp.getResult().getType();
+LogicalResult PathVisitor::processListCreator(Operation *listCreateOp) {
+  ListType listType = cast<ListType>(listCreateOp->getResult(0).getType());
 
   // Check if there are any path types in the list(s).
   if (!hasPathType(listType))
@@ -251,10 +269,32 @@ LogicalResult PathVisitor::process(ListCreateOp listCreateOp) {
 
   // Create a new op with the result type updated to replace path types.
   OpBuilder builder(listCreateOp);
-  auto newListCreateOp = builder.create<ListCreateOp>(
-      listCreateOp.getLoc(), newListType, listCreateOp.getOperands());
-  listCreateOp.replaceAllUsesWith(newListCreateOp.getResult());
+  auto *newListCreateOp = builder.create(
+      listCreateOp->getLoc(), listCreateOp->getName().getIdentifier(),
+      listCreateOp->getOperands(), {newListType});
+  listCreateOp->getResult(0).replaceAllUsesWith(newListCreateOp->getResult(0));
   listCreateOp->erase();
+  return success();
+}
+
+/// Replace an ObjectFieldOp of path types with frozen path types.
+LogicalResult PathVisitor::process(ObjectFieldOp objectFieldOp) {
+  Type resultType = objectFieldOp.getResult().getType();
+
+  // Check if there are any path types in the field.
+  if (!hasPathType(resultType))
+    return success();
+
+  // Create a new result Type with frozen path types.
+  auto newResultType = processType(resultType);
+
+  // Create a new op with the result type updated to replace path types.
+  OpBuilder builder(objectFieldOp);
+  auto newObjectFieldOp = ObjectFieldOp::create(
+      builder, objectFieldOp.getLoc(), newResultType, objectFieldOp.getObject(),
+      objectFieldOp.getFieldPath());
+  objectFieldOp.replaceAllUsesWith(newObjectFieldOp.getResult());
+  objectFieldOp->erase();
   return success();
 }
 
@@ -277,21 +317,32 @@ LogicalResult PathVisitor::run(ModuleOp module) {
       } else if (auto path = dyn_cast<EmptyPathOp>(op)) {
         if (failed(process(path)))
           return WalkResult::interrupt();
-      } else if (auto listCreate = dyn_cast<ListCreateOp>(op)) {
-        if (failed(process(listCreate)))
+      } else if (isa<ListCreateOp, ListConcatOp>(op)) {
+        if (failed(processListCreator(op)))
+          return WalkResult::interrupt();
+      } else if (auto objectField = dyn_cast<ObjectFieldOp>(op)) {
+        if (failed(process(objectField)))
           return WalkResult::interrupt();
       }
       return WalkResult::advance();
     });
     if (result.wasInterrupted())
       return failure();
+
+    // Transform field types
+    classLike.replaceFieldTypes(makeReplacer());
   }
   return success();
 }
 
 namespace {
-struct FreezePathsPass : public FreezePathsBase<FreezePathsPass> {
+struct FreezePathsPass
+    : public circt::om::impl::FreezePathsBase<FreezePathsPass> {
+  FreezePathsPass(std::function<StringAttr(Operation *)> getOpName)
+      : getOpName(std::move(getOpName)) {}
   void runOnOperation() override;
+
+  std::function<StringAttr(Operation *)> getOpName;
 };
 } // namespace
 
@@ -302,10 +353,11 @@ void FreezePathsPass::runOnOperation() {
   auto &symbolTable = getAnalysis<SymbolTable>();
   hw::InnerSymbolTableCollection collection(module);
   hw::InnerRefNamespace irn{symbolTable, collection};
-  if (failed(PathVisitor(instanceGraph, irn).run(module)))
+  if (failed(PathVisitor(instanceGraph, irn, getOpName).run(module)))
     signalPassFailure();
 }
 
-std::unique_ptr<mlir::Pass> circt::om::createFreezePathsPass() {
-  return std::make_unique<FreezePathsPass>();
+std::unique_ptr<mlir::Pass> circt::om::createFreezePathsPass(
+    std::function<StringAttr(Operation *)> getOpName) {
+  return std::make_unique<FreezePathsPass>(getOpName);
 }

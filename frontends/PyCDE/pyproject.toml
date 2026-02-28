@@ -3,17 +3,13 @@ requires = [
   "setuptools>=68",
   "setuptools_scm>=8.0",
   "wheel",
-  "cmake>=3.12",
+  "cmake>=3.23,<4",
+  "ninja>=1.10",
 
   # MLIR build depends.
   "numpy",
-  "pybind11>=2.9",
+  "nanobind>=2.2",
   "PyYAML",
-
-  # PyCDE depends
-  "cocotb>=1.6.2",
-  "cocotb-test>=0.2.2",
-  "jinja2",
 ]
 build-backend = "setuptools.build_meta"
 
@@ -30,15 +26,24 @@ manylinux-x86_64-image = "ghcr.io/circt/images/pycde-build"
 
 [tool.cibuildwheel.linux]
 # Use our internal auditwheel script so as to not mess up the collateral.
-repair-wheel-command = "frontends/PyCDE/auditwheel.sh {dest_dir} {wheel}"
+environment-pass = [
+  "SCCACHE_GHA_ENABLED",
+  "ACTIONS_CACHE_URL",
+  "ACTIONS_RUNTIME_TOKEN",
+  "CMAKE_GENERATOR",
+  "SETUPTOOLS_SCM_DEBUG",
+  "BUILD_TYPE",
+  "RUN_TESTS",
+  "COMPILER_LAUNCHER",
+]
 
 [project]
 name = "pycde"
 dynamic = ["version"]
 description = "Python CIRCT Design Entry"
 authors = [{ name = "John Demme", email = "John.Demme@microsoft.com" }]
-dependencies = ['numpy', 'jinja2']
-requires-python = ">=3.8"
+dependencies = ['numpy']
+requires-python = ">=3.10"
 
 [project.urls]
 "Homepage" = "https://circt.llvm.org/docs/PyCDE/"

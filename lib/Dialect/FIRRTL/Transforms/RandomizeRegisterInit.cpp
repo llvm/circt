@@ -10,16 +10,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
-#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
-#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
-#include "llvm/Support/Parallel.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_RANDOMIZEREGISTERINIT
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -27,15 +31,12 @@ using namespace firrtl;
 
 namespace {
 struct RandomizeRegisterInitPass
-    : public RandomizeRegisterInitBase<RandomizeRegisterInitPass> {
+    : public circt::firrtl::impl::RandomizeRegisterInitBase<
+          RandomizeRegisterInitPass> {
   void runOnOperation() override;
 };
 
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createRandomizeRegisterInitPass() {
-  return std::make_unique<RandomizeRegisterInitPass>();
-}
 
 /// Create attributes indicating the required size of random initialization
 /// values for each register in the module, and mark which range of these values

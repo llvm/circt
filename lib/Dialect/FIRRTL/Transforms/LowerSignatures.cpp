@@ -12,29 +12,26 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
-
-#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
-#include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
-#include "circt/Dialect/FIRRTL/NLATable.h"
-#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
-#include "circt/Dialect/HW/HWOpInterfaces.h"
-#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/Debug.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "circt/Support/InstanceGraphInterface.h"
 #include "mlir/IR/Threading.h"
-#include "llvm/ADT/APSInt.h"
-#include "llvm/ADT/BitVector.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/Parallel.h"
 
 #define DEBUG_TYPE "firrtl-lower-signatures"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LOWERSIGNATURES
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -52,12 +49,14 @@ struct AttrCache {
     sPortTypes = StringAttr::get(context, "portTypes");
     sPortLocations = StringAttr::get(context, "portLocations");
     sPortAnnotations = StringAttr::get(context, "portAnnotations");
-    sInternalPaths = StringAttr::get(context, "internalPaths");
+    sPortDomains = StringAttr::get(context, "domainInfo");
+    aEmpty = ArrayAttr::get(context, {});
   }
   AttrCache(const AttrCache &) = default;
 
   StringAttr nameAttr, sPortDirections, sPortNames, sPortTypes, sPortLocations,
-      sPortAnnotations, sInternalPaths;
+      sPortAnnotations, sPortDomains;
+  ArrayAttr aEmpty;
 };
 
 struct FieldMapEntry : public PortInfo {
@@ -155,7 +154,8 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
               {{StringAttr::get(ctx, name), type,
                 isFlip ? Direction::Out : Direction::In,
                 symbolsForFieldIDRange(ctx, syms, fieldID, lastId), port.loc,
-                annosForFieldIDRange(ctx, annos, fieldID, lastId)},
+                annosForFieldIDRange(ctx, annos, fieldID, lastId),
+                port.domains},
                portID,
                newPorts.size(),
                fieldID});
@@ -197,7 +197,8 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
               {{StringAttr::get(ctx, name), type,
                 isFlip ? Direction::Out : Direction::In,
                 symbolsForFieldIDRange(ctx, syms, fieldID, lastId), port.loc,
-                annosForFieldIDRange(ctx, annos, fieldID, lastId)},
+                annosForFieldIDRange(ctx, annos, fieldID, lastId),
+                port.domains},
                portID,
                newPorts.size(),
                fieldID});
@@ -231,14 +232,13 @@ computeLoweringImpl(FModuleLike mod, PortConversion &newPorts, Convention conv,
         }
         return success();
       })
-      .Case<FEnumType>([&](FEnumType fenum) { return failure(); })
       .Default([&](FIRRTLType type) {
         // Properties and other types wind up here.
         newPorts.push_back(
             {{StringAttr::get(ctx, name), type,
               isFlip ? Direction::Out : Direction::In,
               symbolsForFieldIDRange(ctx, syms, fieldID, fieldID), port.loc,
-              annosForFieldIDRange(ctx, annos, fieldID, fieldID)},
+              annosForFieldIDRange(ctx, annos, fieldID, fieldID), port.domains},
              portID,
              newPorts.size(),
              fieldID});
@@ -267,6 +267,27 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
   ImplicitLocOpBuilder theBuilder(module.getLoc(), module.getContext());
   if (computeLowering(module, conv, newPorts).failed())
     return failure();
+
+  // Update domain information now that all port expansions are fixed.
+  DenseMap<size_t, size_t> domainMap;
+  for (auto &newPort : newPorts) {
+    if (!type_isa<DomainType>(newPort.type))
+      continue;
+    domainMap[newPort.portID] = newPort.resultID;
+  }
+  for (auto &newPort : newPorts) {
+    if (type_isa<DomainType>(newPort.type))
+      continue;
+    auto oldAssociations = dyn_cast_or_null<ArrayAttr>(newPort.domains);
+    if (!oldAssociations)
+      continue;
+    SmallVector<Attribute> newAssociations;
+    for (auto oldAttr : oldAssociations)
+      newAssociations.push_back(theBuilder.getUI32IntegerAttr(
+          domainMap[cast<IntegerAttr>(oldAttr).getValue().getZExtValue()]));
+    newPort.domains = theBuilder.getArrayAttr(newAssociations);
+  }
+
   if (auto mod = dyn_cast<FModuleOp>(module.getOperation())) {
     Block *body = mod.getBodyBlock();
     theBuilder.setInsertionPointToStart(body);
@@ -283,10 +304,9 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
       if (p.fieldID != 0) {
         auto &wire = bounceWires[p.portID];
         if (!wire)
-          wire = theBuilder
-                     .create<WireOp>(module.getPortType(p.portID),
-                                     module.getPortNameAttr(p.portID),
-                                     NameKindEnum::InterestingName)
+          wire = WireOp::create(theBuilder, module.getPortType(p.portID),
+                                module.getPortNameAttr(p.portID),
+                                NameKindEnum::InterestingName)
                      .getResult();
       } else {
         bounceWires[p.portID] = newArg;
@@ -296,9 +316,8 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
     // zero-length vectors.
     for (auto idx = 0U; idx < oldNumArgs; ++idx) {
       if (!bounceWires[idx]) {
-        bounceWires[idx] = theBuilder
-                               .create<WireOp>(module.getPortType(idx),
-                                               module.getPortNameAttr(idx))
+        bounceWires[idx] = WireOp::create(theBuilder, module.getPortType(idx),
+                                          module.getPortNameAttr(idx))
                                .getResult();
       }
       body->getArgument(idx).replaceAllUsesWith(bounceWires[idx]);
@@ -331,8 +350,7 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
     // handled differently below.
     if (attr.getName() != "portNames" && attr.getName() != "portDirections" &&
         attr.getName() != "portTypes" && attr.getName() != "portAnnotations" &&
-        attr.getName() != "portSyms" && attr.getName() != "portLocations" &&
-        attr.getName() != "internalPaths")
+        attr.getName() != "portSymbols" && attr.getName() != "portLocations")
       newModuleAttrs.push_back(attr);
 
   SmallVector<Direction> newPortDirections;
@@ -341,10 +359,8 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
   SmallVector<Attribute> newPortSyms;
   SmallVector<Attribute> newPortLocations;
   SmallVector<Attribute, 8> newPortAnnotations;
-  SmallVector<Attribute> newInternalPaths;
+  SmallVector<Attribute> newPortDomains;
 
-  bool hasInternalPaths = false;
-  auto internalPaths = module->getAttrOfType<ArrayAttr>("internalPaths");
   for (auto p : newPorts) {
     newPortTypes.push_back(TypeAttr::get(p.type));
     newPortNames.push_back(p.name);
@@ -352,12 +368,7 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
     newPortSyms.push_back(p.sym);
     newPortLocations.push_back(p.loc);
     newPortAnnotations.push_back(p.annotations.getArrayAttr());
-    if (internalPaths) {
-      auto internalPath = cast<InternalPathAttr>(internalPaths[p.portID]);
-      newInternalPaths.push_back(internalPath);
-      if (internalPath.getPath())
-        hasInternalPaths = true;
-    }
+    newPortDomains.push_back(p.domains ? p.domains : cache.aEmpty);
   }
 
   newModuleAttrs.push_back(NamedAttribute(
@@ -376,24 +387,27 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
   newModuleAttrs.push_back(NamedAttribute(
       cache.sPortAnnotations, theBuilder.getArrayAttr(newPortAnnotations)));
 
-  assert(newInternalPaths.empty() ||
-         newInternalPaths.size() == newPorts.size());
-  if (hasInternalPaths) {
-    newModuleAttrs.emplace_back(cache.sInternalPaths,
-                                theBuilder.getArrayAttr(newInternalPaths));
-  }
+  newModuleAttrs.push_back(NamedAttribute(
+      cache.sPortDomains, theBuilder.getArrayAttr(newPortDomains)));
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
+  FModuleLike::fixupPortSymsArray(newPortSyms, theBuilder.getContext());
   module.setPortSymbols(newPortSyms);
   return success();
 }
 
 static void lowerModuleBody(FModuleOp mod,
                             const DenseMap<StringAttr, PortConversion> &ports) {
-  mod->walk([&](InstanceOp inst) -> void {
+  auto fixupInstance = [&](auto inst, auto clone) -> void {
     ImplicitLocOpBuilder theBuilder(inst.getLoc(), inst);
-    const auto &modPorts = ports.at(inst.getModuleNameAttr().getAttr());
+
+    // Get the module name. The first element works for both InstanceOp and
+    // InstanceChoiceOp.
+    StringAttr moduleName =
+        cast<StringAttr>(inst.getReferencedModuleNamesAttr()[0]);
+
+    const auto &modPorts = ports.at(moduleName);
 
     // Fix up the Instance
     SmallVector<PortInfo> instPorts; // Oh I wish ArrayRef was polymorphic.
@@ -403,11 +417,8 @@ static void lowerModuleBody(FModuleOp mod,
       p.annotations = AnnotationSet{mod.getContext()};
       instPorts.push_back(p);
     }
-    auto annos = inst.getAnnotations();
-    auto newOp = theBuilder.create<InstanceOp>(
-        instPorts, inst.getModuleName(), inst.getName(), inst.getNameKind(),
-        annos.getValue(), inst.getLayers(), inst.getLowerToBind(),
-        inst.getInnerSymAttr());
+
+    auto newOp = clone(theBuilder, inst, instPorts);
 
     auto oldDict = inst->getDiscardableAttrDictionary();
     auto newDict = newOp->getDiscardableAttrDictionary();
@@ -427,8 +438,8 @@ static void lowerModuleBody(FModuleOp mod,
         continue;
       }
       if (!bounce[p.portID]) {
-        bounce[p.portID] = theBuilder.create<WireOp>(
-            inst.getResult(p.portID).getType(),
+        bounce[p.portID] = WireOp::create(
+            theBuilder, inst.getResult(p.portID).getType(),
             theBuilder.getStringAttr(
                 inst.getName() + "." +
                 cast<StringAttr>(oldNames[p.portID]).getValue()));
@@ -449,11 +460,37 @@ static void lowerModuleBody(FModuleOp mod,
     // Zero Width ports may have dangling connects since they are not preserved
     // and do not have bounce wires.
     for (auto *use : llvm::make_early_inc_range(inst->getUsers())) {
-      assert(isa<StrictConnectOp>(use) || isa<ConnectOp>(use));
+      assert(isa<MatchingConnectOp>(use) || isa<ConnectOp>(use));
       use->erase();
     }
     inst->erase();
     return;
+  };
+
+  mod->walk([&](Operation *op) -> void {
+    TypeSwitch<Operation *>(op)
+        .Case<InstanceOp>([&](auto inst) {
+          fixupInstance(inst, [&](ImplicitLocOpBuilder &theBuilder,
+                                  InstanceOp inst,
+                                  ArrayRef<PortInfo> newPorts) {
+            return InstanceOp::create(
+                theBuilder, newPorts, inst.getModuleName(), inst.getName(),
+                inst.getNameKind(), inst.getAnnotations().getValue(),
+                inst.getLayers(), inst.getLowerToBind(), inst.getDoNotPrint(),
+                inst.getInnerSymAttr());
+          });
+        })
+        .Case<InstanceChoiceOp>([&](auto inst) {
+          fixupInstance(inst, [&](ImplicitLocOpBuilder &theBuilder,
+                                  InstanceChoiceOp inst,
+                                  ArrayRef<PortInfo> newPorts) {
+            return InstanceChoiceOp::create(
+                theBuilder, newPorts, inst.getModuleNamesAttr(),
+                inst.getCaseNamesAttr(), inst.getName(), inst.getNameKind(),
+                inst.getAnnotationsAttr(), inst.getLayersAttr(),
+                inst.getInnerSymAttr());
+          });
+        });
   });
 }
 
@@ -462,14 +499,16 @@ static void lowerModuleBody(FModuleOp mod,
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct LowerSignaturesPass : public LowerSignaturesBase<LowerSignaturesPass> {
+struct LowerSignaturesPass
+    : public circt::firrtl::impl::LowerSignaturesBase<LowerSignaturesPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace
 
 // This is the main entrypoint for the lowering pass.
 void LowerSignaturesPass::runOnOperation() {
-  LLVM_DEBUG(debugPassHeader(this) << "\n");
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
+
   // Cached attr
   AttrCache cache(&getContext());
 
@@ -484,9 +523,4 @@ void LowerSignaturesPass::runOnOperation() {
   }
   parallelForEach(&getContext(), circuit.getOps<FModuleOp>(),
                   [&portMap](FModuleOp mod) { lowerModuleBody(mod, portMap); });
-}
-
-/// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerSignaturesPass() {
-  return std::make_unique<LowerSignaturesPass>();
 }

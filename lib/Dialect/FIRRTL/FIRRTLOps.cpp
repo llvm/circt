@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
@@ -18,9 +19,12 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
+#include "circt/Dialect/FIRRTL/FieldRefCache.h"
+#include "circt/Dialect/FIRRTL/LayerSet.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
+#include "circt/Support/Utils.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -34,6 +38,7 @@
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/FormatVariadic.h"
 
 using llvm::SmallDenseSet;
@@ -45,6 +50,21 @@ using namespace chirrtl;
 //===----------------------------------------------------------------------===//
 // Utilities
 //===----------------------------------------------------------------------===//
+
+/// Helper to print domain kind: " of @Symbol"
+static void printDomainKind(OpAsmPrinter &p, FlatSymbolRefAttr domainKind) {
+  p << " of " << domainKind;
+}
+
+/// Helper to parse domain kind: "of @Symbol"
+static ParseResult parseDomainKind(OpAsmParser &parser,
+                                   FlatSymbolRefAttr &domainKind) {
+  StringAttr domainName;
+  if (parser.parseKeyword("of") || parser.parseSymbolName(domainName))
+    return failure();
+  domainKind = FlatSymbolRefAttr::get(domainName);
+  return success();
+}
 
 /// Remove elements from the input array corresponding to set bits in
 /// `indicesToDrop`, returning the elements not mentioned.
@@ -113,6 +133,29 @@ bool firrtl::isDuplexValue(Value val) {
   return false;
 }
 
+SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>
+MemOp::computeDataFlow() {
+  // If read result has non-zero latency, then no combinational dependency
+  // exists.
+  if (getReadLatency() > 0)
+    return {};
+  SmallVector<std::pair<circt::FieldRef, circt::FieldRef>> deps;
+  // Add a dependency from the enable and address fields to the data field.
+  for (auto memPort : getResults())
+    if (auto type = type_dyn_cast<BundleType>(memPort.getType())) {
+      auto enableFieldId = type.getFieldID((unsigned)ReadPortSubfield::en);
+      auto addressFieldId = type.getFieldID((unsigned)ReadPortSubfield::addr);
+      auto dataFieldId = type.getFieldID((unsigned)ReadPortSubfield::data);
+      deps.emplace_back(
+          FieldRef(memPort, static_cast<unsigned>(dataFieldId)),
+          FieldRef(memPort, static_cast<unsigned>(enableFieldId)));
+      deps.emplace_back(
+          FieldRef(memPort, static_cast<unsigned>(dataFieldId)),
+          FieldRef(memPort, static_cast<unsigned>(addressFieldId)));
+    }
+  return deps;
+}
+
 /// Return the kind of port this is given the port type from a 'mem' decl.
 static MemOp::PortKind getMemPortKindFromType(FIRRTLType type) {
   constexpr unsigned int addr = 1 << 0;
@@ -164,9 +207,11 @@ Flow firrtl::swapFlow(Flow flow) {
   case Flow::Duplex:
     return Flow::Duplex;
   }
+  // Unreachable but silences warning
+  llvm_unreachable("Unsupported Flow type.");
 }
 
-constexpr const char *toString(Flow flow) {
+const char *toString(Flow flow) {
   switch (flow) {
   case Flow::None:
     return "no flow";
@@ -177,6 +222,8 @@ constexpr const char *toString(Flow flow) {
   case Flow::Duplex:
     return "duplex flow";
   }
+  // Unreachable but silences warning
+  llvm_unreachable("Unsupported Flow type.");
 }
 
 Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
@@ -288,7 +335,9 @@ bool firrtl::hasDontTouch(Value value) {
   if (auto *op = value.getDefiningOp())
     return hasDontTouch(op);
   auto arg = dyn_cast<BlockArgument>(value);
-  auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
+  auto module = dyn_cast<FModuleOp>(arg.getOwner()->getParentOp());
+  if (!module)
+    return false;
   return (module.getPortSymbolAttr(arg.getArgNumber())) ||
          AnnotationSet::forPort(module, arg.getArgNumber()).hasDontTouch();
 }
@@ -322,34 +371,6 @@ static ParseResult parseNameKind(OpAsmParser &parser,
 //===----------------------------------------------------------------------===//
 // Layer Verification Utilities
 //===----------------------------------------------------------------------===//
-
-namespace {
-struct CompareSymbolRefAttr {
-  // True if lhs is lexicographically less than rhs.
-  bool operator()(SymbolRefAttr lhs, SymbolRefAttr rhs) const {
-    auto cmp = lhs.getRootReference().compare(rhs.getRootReference());
-    if (cmp == -1)
-      return true;
-    if (cmp == 1)
-      return false;
-    auto lhsNested = lhs.getNestedReferences();
-    auto rhsNested = rhs.getNestedReferences();
-    auto lhsNestedSize = lhsNested.size();
-    auto rhsNestedSize = rhsNested.size();
-    auto e = std::min(lhsNestedSize, rhsNestedSize);
-    for (unsigned i = 0; i < e; ++i) {
-      auto cmp = lhsNested[i].getAttr().compare(rhsNested[i].getAttr());
-      if (cmp == -1)
-        return true;
-      if (cmp == 1)
-        return false;
-    }
-    return lhsNestedSize < rhsNestedSize;
-  }
-};
-} // namespace
-
-using LayerSet = SmallSet<SymbolRefAttr, 4, CompareSymbolRefAttr>;
 
 /// Get the ambient layers active at the given op.
 static LayerSet getAmbientLayersAt(Operation *op) {
@@ -437,8 +458,20 @@ static bool isLayerSetCompatibleWith(const LayerSet &src, const LayerSet &dst,
     if (!isLayerCompatibleWith(srcLayer, dst))
       missing.push_back(srcLayer);
 
-  llvm::sort(missing, CompareSymbolRefAttr());
+  llvm::sort(missing, LayerSetCompare());
   return missing.empty();
+}
+
+static LogicalResult checkLayerCompatibility(
+    Operation *op, const LayerSet &src, const LayerSet &dst,
+    const Twine &errorMsg,
+    const Twine &noteMsg = Twine("missing layer requirements")) {
+  SmallVector<SymbolRefAttr> missing;
+  if (isLayerSetCompatibleWith(src, dst, missing))
+    return success();
+  interleaveComma(missing, op->emitOpError(errorMsg).attachNote()
+                               << noteMsg << ": ");
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -448,11 +481,11 @@ static bool isLayerSetCompatibleWith(const LayerSet &src, const LayerSet &dst,
 void CircuitOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name, ArrayAttr annotations) {
   // Add an attribute for the name.
-  result.addAttribute(builder.getStringAttr("name"), name);
+  result.getOrAddProperties<Properties>().setName(name);
 
   if (!annotations)
     annotations = builder.getArrayAttr({});
-  result.addAttribute("annotations", annotations);
+  result.getOrAddProperties<Properties>().setAnnotations(annotations);
 
   // Create a region and a block for the body.
   Region *bodyRegion = result.addRegion();
@@ -492,8 +525,16 @@ LogicalResult CircuitOp::verifyRegions() {
 
   mlir::SymbolTable symtbl(getOperation());
 
-  if (!symtbl.lookup(main))
-    return emitOpError().append("Module with same name as circuit not found");
+  auto *mainModule = symtbl.lookup(main);
+  if (!mainModule)
+    return emitOpError().append(
+        "does not contain module with same name as circuit");
+  if (!isa<FModuleLike>(mainModule))
+    return mainModule->emitError(
+        "entity with name of circuit must be a module");
+  if (symtbl.getSymbolVisibility(mainModule) !=
+      mlir::SymbolTable::Visibility::Public)
+    return mainModule->emitError("main module must be public");
 
   // Store a mapping of defname to either the first external module
   // that defines it or, preferentially, the first external module
@@ -590,12 +631,30 @@ LogicalResult CircuitOp::verifyRegions() {
     return success();
   };
 
+  SmallVector<FModuleOp, 1> dutModules;
   for (auto &op : *getBodyBlock()) {
+    // Verify modules.
+    if (auto moduleOp = dyn_cast<FModuleOp>(op)) {
+      if (AnnotationSet(moduleOp).hasAnnotation(markDUTAnnoClass))
+        dutModules.push_back(moduleOp);
+      continue;
+    }
+
     // Verify external modules.
     if (auto extModule = dyn_cast<FExtModuleOp>(op)) {
       if (verifyExtModule(extModule).failed())
         return failure();
     }
+  }
+
+  // Error if there is more than one design-under-test.
+  if (dutModules.size() > 1) {
+    auto diag = dutModules[0]->emitOpError()
+                << "is annotated as the design-under-test (DUT), but other "
+                   "modules are also annotated";
+    for (auto moduleOp : ArrayRef(dutModules).drop_front())
+      diag.attachNote(moduleOp.getLoc()) << "is also annotated as the DUT";
+    return failure();
   }
 
   return success();
@@ -609,11 +668,14 @@ Block *CircuitOp::getBodyBlock() { return &getBody().front(); }
 
 static SmallVector<PortInfo> getPortImpl(FModuleLike module) {
   SmallVector<PortInfo> results;
+  results.reserve(module.getNumPorts());
+  ArrayRef<Attribute> domains = module.getDomainInfo();
   for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i) {
     results.push_back({module.getPortNameAttr(i), module.getPortType(i),
                        module.getPortDirection(i), module.getPortSymbolAttr(i),
                        module.getPortLocation(i),
-                       AnnotationSet::forPort(module, i)});
+                       AnnotationSet::forPort(module, i),
+                       domains.empty() ? Attribute{} : domains[i]});
   }
   return results;
 }
@@ -672,15 +734,16 @@ SmallVector<::circt::hw::PortInfo> FMemModuleOp::getPortList() {
 }
 
 static hw::PortInfo getPortImpl(FModuleLike module, size_t idx) {
+  auto sym = module.getPortSymbolAttr(idx);
+  auto attrs = sym ? DictionaryAttr::getWithSorted(
+                         module.getContext(),
+                         ArrayRef(mlir::NamedAttribute(
+                             hw::HWModuleLike::getPortSymbolAttrName(), sym)))
+                   : DictionaryAttr::get(module.getContext());
   return {{module.getPortNameAttr(idx), module.getPortType(idx),
            dirFtoH(module.getPortDirection(idx))},
           idx,
-          DictionaryAttr::get(
-              module.getContext(),
-              ArrayRef<mlir::NamedAttribute>{NamedAttribute{
-                  StringAttr::get(module.getContext(),
-                                  hw::HWModuleLike::getPortSymbolAttrName()),
-                  module.getPortSymbolAttr(idx)}}),
+          attrs,
           module.getPortLocation(idx)};
 }
 
@@ -705,16 +768,48 @@ BlockArgument FModuleOp::getArgument(size_t portNumber) {
   return getBodyBlock()->getArgument(portNumber);
 }
 
+/// Return an updated domain info Attribute with domain indices updated based on
+/// port insertions.
+static Attribute fixDomainInfoInsertions(MLIRContext *context,
+                                         Attribute domainInfoAttr,
+                                         ArrayRef<unsigned> indexMap) {
+  // This is a domain type port.  Return the original domain info unmodified.
+  auto di = dyn_cast_or_null<ArrayAttr>(domainInfoAttr);
+  if (!di || di.empty())
+    return domainInfoAttr;
+
+  // This is a non-domain type port.  Update any indeices referenced.
+  SmallVector<Attribute> domainInfo;
+  for (auto attr : di) {
+    auto oldIdx = cast<IntegerAttr>(attr).getUInt();
+    auto newIdx = indexMap[oldIdx];
+    if (oldIdx == newIdx)
+      domainInfo.push_back(attr);
+    else
+      domainInfo.push_back(IntegerAttr::get(
+          IntegerType::get(context, 32, IntegerType::Unsigned), newIdx));
+  }
+  return ArrayAttr::get(context, domainInfo);
+}
+
 /// Inserts the given ports. The insertion indices are expected to be in order.
 /// Insertion occurs in-order, such that ports with the same insertion index
 /// appear in the module in the same order they appeared in the list.
 static void insertPorts(FModuleLike op,
-                        ArrayRef<std::pair<unsigned, PortInfo>> ports,
-                        bool supportsInternalPaths = false) {
+                        ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   if (ports.empty())
     return;
   unsigned oldNumArgs = op.getNumPorts();
   unsigned newNumArgs = oldNumArgs + ports.size();
+
+  // Build a map from old port indices to new indices.
+  SmallVector<unsigned> indexMap(oldNumArgs);
+  size_t inserted = 0;
+  for (size_t i = 0; i < oldNumArgs; ++i) {
+    while (inserted < ports.size() && ports[inserted].first == i)
+      ++inserted;
+    indexMap[i] = i + inserted;
+  }
 
   // Add direction markers and names for new ports.
   auto existingDirections = op.getPortDirectionsAttr();
@@ -725,26 +820,17 @@ static void insertPorts(FModuleLike op,
   assert(existingNames.size() == oldNumArgs);
   assert(existingTypes.size() == oldNumArgs);
   assert(existingLocs.size() == oldNumArgs);
-  SmallVector<Attribute> internalPaths;
-  auto emptyInternalPath = InternalPathAttr::get(op.getContext());
-  if (supportsInternalPaths) {
-    if (auto internalPathsAttr = op->getAttrOfType<ArrayAttr>("internalPaths"))
-      llvm::append_range(internalPaths, internalPathsAttr);
-    else
-      internalPaths.resize(oldNumArgs, emptyInternalPath);
-    assert(internalPaths.size() == oldNumArgs);
-  }
 
   SmallVector<bool> newDirections;
-  SmallVector<Attribute> newNames, newTypes, newAnnos, newSyms, newLocs,
-      newInternalPaths;
+  SmallVector<Attribute> newNames, newTypes, newDomains, newAnnos, newSyms,
+      newLocs;
   newDirections.reserve(newNumArgs);
   newNames.reserve(newNumArgs);
   newTypes.reserve(newNumArgs);
+  newDomains.reserve(newNumArgs);
   newAnnos.reserve(newNumArgs);
   newSyms.reserve(newNumArgs);
   newLocs.reserve(newNumArgs);
-  newInternalPaths.reserve(newNumArgs);
 
   auto emptyArray = ArrayAttr::get(op.getContext(), {});
 
@@ -754,27 +840,29 @@ static void insertPorts(FModuleLike op,
       newDirections.push_back(existingDirections[oldIdx]);
       newNames.push_back(existingNames[oldIdx]);
       newTypes.push_back(existingTypes[oldIdx]);
+      newDomains.push_back(fixDomainInfoInsertions(
+          op.getContext(), op.getDomainInfoAttrForPort(oldIdx), indexMap));
       newAnnos.push_back(op.getAnnotationsAttrForPort(oldIdx));
       newSyms.push_back(op.getPortSymbolAttr(oldIdx));
       newLocs.push_back(existingLocs[oldIdx]);
-      if (supportsInternalPaths)
-        newInternalPaths.push_back(internalPaths[oldIdx]);
       ++oldIdx;
     }
   };
-  for (auto pair : llvm::enumerate(ports)) {
-    auto idx = pair.value().first;
-    auto &port = pair.value().second;
+
+  for (auto [idx, port] : ports) {
     migrateOldPorts(idx);
     newDirections.push_back(direction::unGet(port.direction));
     newNames.push_back(port.name);
     newTypes.push_back(TypeAttr::get(port.type));
+    newDomains.push_back(fixDomainInfoInsertions(
+        op.getContext(),
+        port.domains ? port.domains : ArrayAttr::get(op.getContext(), {}),
+        indexMap));
     auto annos = port.annotations.getArrayAttr();
     newAnnos.push_back(annos ? annos : emptyArray);
     newSyms.push_back(port.sym);
     newLocs.push_back(port.loc);
-    if (supportsInternalPaths)
-      newInternalPaths.push_back(emptyInternalPath);
+    ++inserted;
   }
   migrateOldPorts(oldNumArgs);
 
@@ -785,25 +873,100 @@ static void insertPorts(FModuleLike op,
       }))
     newAnnos.clear();
 
+  // The lack of *any* domains is also represented by an empty `domainInfo`
+  // attribute.
+  if (llvm::all_of(newDomains, [](Attribute attr) {
+        if (!attr)
+          return true;
+        if (auto arrayAttr = dyn_cast<ArrayAttr>(attr))
+          return arrayAttr.empty();
+        return false;
+      }))
+    newDomains.clear();
+
   // Apply these changed markers.
   op->setAttr("portDirections",
               direction::packAttribute(op.getContext(), newDirections));
   op->setAttr("portNames", ArrayAttr::get(op.getContext(), newNames));
   op->setAttr("portTypes", ArrayAttr::get(op.getContext(), newTypes));
+  op->setAttr("domainInfo", ArrayAttr::get(op.getContext(), newDomains));
   op->setAttr("portAnnotations", ArrayAttr::get(op.getContext(), newAnnos));
+  FModuleLike::fixupPortSymsArray(newSyms, op.getContext());
   op.setPortSymbols(newSyms);
   op->setAttr("portLocations", ArrayAttr::get(op.getContext(), newLocs));
-  if (supportsInternalPaths) {
-    // Drop if all-empty, otherwise set to new array.
-    auto empty = llvm::all_of(newInternalPaths, [](Attribute attr) {
-      return !cast<InternalPathAttr>(attr).getPath();
-    });
-    if (empty)
-      op->removeAttr("internalPaths");
-    else
-      op->setAttr("internalPaths",
-                  ArrayAttr::get(op.getContext(), newInternalPaths));
+}
+
+// Return an Attribute with updated port domain information based on information
+// about which ports have been deleted.  This is necessary because the port
+// domain storage uses an integer to indicate the index of a domain port with
+// which it is associated.
+//
+// Note: this will _always_ return one-entry-per-port.  While this is not
+// required for FModuleLike, InstanceOps have this restriction.
+static ArrayAttr fixDomainInfoDeletions(MLIRContext *context,
+                                        ArrayAttr domainInfoAttr,
+                                        const llvm::BitVector &portIndices,
+                                        bool supportsEmptyAttr) {
+  if (supportsEmptyAttr && domainInfoAttr.empty())
+    return domainInfoAttr;
+
+  // Build a map from old port indices to new indices.
+  SmallVector<unsigned> indexMap(portIndices.size());
+  size_t deleted = 0;
+  for (size_t i = 0, e = portIndices.size(); i != e; ++i) {
+    indexMap[i] = i - deleted;
+    if (portIndices[i])
+      ++deleted;
   }
+
+  // Return a cached empty ArrayAttr.
+  ArrayAttr eEmpty;
+  auto getEmpty = [&]() {
+    if (!eEmpty)
+      eEmpty = ArrayAttr::get(context, {});
+    return eEmpty;
+  };
+
+  // Update the domain indices.
+  SmallVector<Attribute> newDomainInfo;
+  newDomainInfo.reserve(portIndices.size() - portIndices.count());
+  for (size_t i = 0, e = portIndices.size(); i != e; ++i) {
+    // If this port is deleted, then do nothing.
+    if (portIndices.test(i))
+      continue;
+    // If there is no domain info, then add an empty attribute.
+    if (domainInfoAttr.empty()) {
+      newDomainInfo.push_back(getEmpty());
+      continue;
+    }
+    auto attr = domainInfoAttr[i];
+    // If this is a Domain Type (indicating domain kind) or an empty domain.
+    auto domains = dyn_cast<ArrayAttr>(attr);
+    if (!domains || domains.empty()) {
+      newDomainInfo.push_back(attr);
+      continue;
+    }
+    // This contains indexes to domain ports.  Update them.
+    SmallVector<Attribute> newDomains;
+    for (auto domain : domains) {
+      // If the domain port was deleted, drop the association.
+      auto oldIdx = cast<IntegerAttr>(domain).getUInt();
+      if (portIndices.test(oldIdx))
+        continue;
+      // If the new index is the same, do nothing.
+      auto newIdx = indexMap[oldIdx];
+      if (oldIdx == newIdx) {
+        newDomains.push_back(domain);
+        continue;
+      }
+      // Update the index.
+      newDomains.push_back(IntegerAttr::get(
+          IntegerType::get(context, 32, IntegerType::Unsigned), newIdx));
+    }
+    newDomainInfo.push_back(ArrayAttr::get(context, newDomains));
+  }
+
+  return ArrayAttr::get(context, newDomainInfo);
 }
 
 /// Erases the ports that have their corresponding bit set in `portIndices`.
@@ -818,6 +981,7 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   ArrayRef<Attribute> portAnnos = op.getPortAnnotations();
   ArrayRef<Attribute> portSyms = op.getPortSymbols();
   ArrayRef<Attribute> portLocs = op.getPortLocations();
+  ArrayRef<Attribute> portDomains = op.getDomainInfo();
   auto numPorts = op.getNumPorts();
   (void)numPorts;
   assert(portDirections.size() == numPorts);
@@ -826,6 +990,7 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   assert(portTypes.size() == numPorts);
   assert(portSyms.size() == numPorts || portSyms.empty());
   assert(portLocs.size() == numPorts);
+  assert(portDomains.size() == numPorts || portDomains.empty());
 
   SmallVector<bool> newPortDirections =
       removeElementsAtIndices<bool>(portDirections, portIndices);
@@ -836,44 +1001,26 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   newPortAnnos = removeElementsAtIndices(portAnnos, portIndices);
   newPortSyms = removeElementsAtIndices(portSyms, portIndices);
   newPortLocs = removeElementsAtIndices(portLocs, portIndices);
+
   op->setAttr("portDirections",
               direction::packAttribute(op.getContext(), newPortDirections));
   op->setAttr("portNames", ArrayAttr::get(op.getContext(), newPortNames));
   op->setAttr("portAnnotations", ArrayAttr::get(op.getContext(), newPortAnnos));
   op->setAttr("portTypes", ArrayAttr::get(op.getContext(), newPortTypes));
   FModuleLike::fixupPortSymsArray(newPortSyms, op.getContext());
-  op->setAttr("portSyms", ArrayAttr::get(op.getContext(), newPortSyms));
+  op->setAttr("portSymbols", ArrayAttr::get(op.getContext(), newPortSyms));
   op->setAttr("portLocations", ArrayAttr::get(op.getContext(), newPortLocs));
-}
-
-template <typename T>
-static void eraseInternalPaths(T op, const llvm::BitVector &portIndices) {
-  // Fixup internalPaths array.
-  auto internalPaths = op.getInternalPaths();
-  if (!internalPaths)
-    return;
-
-  auto newPaths =
-      removeElementsAtIndices(internalPaths->getValue(), portIndices);
-
-  // Drop if all-empty, otherwise set to new array.
-  auto empty = llvm::all_of(newPaths, [](Attribute attr) {
-    return !cast<InternalPathAttr>(attr).getPath();
-  });
-  if (empty)
-    op.removeInternalPathsAttr();
-  else
-    op.setInternalPathsAttr(ArrayAttr::get(op.getContext(), newPaths));
+  op->setAttr("domainInfo",
+              fixDomainInfoDeletions(op.getContext(), op.getDomainInfoAttr(),
+                                     portIndices, /*supportsEmptyAttr=*/true));
 }
 
 void FExtModuleOp::erasePorts(const llvm::BitVector &portIndices) {
   ::erasePorts(cast<FModuleLike>((Operation *)*this), portIndices);
-  eraseInternalPaths(*this, portIndices);
 }
 
 void FIntModuleOp::erasePorts(const llvm::BitVector &portIndices) {
   ::erasePorts(cast<FModuleLike>((Operation *)*this), portIndices);
-  eraseInternalPaths(*this, portIndices);
 }
 
 void FMemModuleOp::erasePorts(const llvm::BitVector &portIndices) {
@@ -902,13 +1049,11 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
 }
 
 void FExtModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
-  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports,
-                /*supportsInternalPaths=*/true);
+  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
 }
 
 void FIntModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
-  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports,
-                /*supportsInternalPaths=*/true);
+  ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
 }
 
 /// Inserts the given ports. The insertion indices are expected to be in order.
@@ -918,83 +1063,96 @@ void FMemModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   ::insertPorts(cast<FModuleLike>((Operation *)*this), ports);
 }
 
-static void buildModuleLike(OpBuilder &builder, OperationState &result,
-                            StringAttr name, ArrayRef<PortInfo> ports,
-                            ArrayAttr annotations, ArrayAttr layers,
-                            bool withAnnotations, bool withLayers) {
+template <typename OpTy>
+void buildModuleLike(OpBuilder &builder, OperationState &result,
+                     StringAttr name, ArrayRef<PortInfo> ports) {
   // Add an attribute for the name.
-  result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
+  auto &properties = result.getOrAddProperties<typename OpTy::Properties>();
+  properties.setSymName(name);
 
   // Record the names of the arguments if present.
   SmallVector<Direction, 4> portDirections;
-  SmallVector<Attribute, 4> portNames;
-  SmallVector<Attribute, 4> portTypes;
-  SmallVector<Attribute, 4> portAnnotations;
-  SmallVector<Attribute, 4> portSyms;
-  SmallVector<Attribute, 4> portLocs;
+  SmallVector<Attribute, 4> portNames, portTypes, portSyms, portLocs,
+      portDomains;
+  portDirections.reserve(ports.size());
+  portNames.reserve(ports.size());
+  portTypes.reserve(ports.size());
+  portSyms.reserve(ports.size());
+  portLocs.reserve(ports.size());
+  portDomains.reserve(ports.size());
+
   for (const auto &port : ports) {
     portDirections.push_back(port.direction);
     portNames.push_back(port.name);
     portTypes.push_back(TypeAttr::get(port.type));
-    portAnnotations.push_back(port.annotations.getArrayAttr());
     portSyms.push_back(port.sym);
     portLocs.push_back(port.loc);
+    portDomains.push_back(port.domains);
   }
-
-  // The lack of *any* port annotations is represented by an empty
-  // `portAnnotations` array as a shorthand.
-  if (llvm::all_of(portAnnotations, [](Attribute attr) {
-        return cast<ArrayAttr>(attr).empty();
+  if (llvm::all_of(portDomains, [](Attribute attr) {
+        if (!attr)
+          return true;
+        if (auto arrayAttr = dyn_cast<ArrayAttr>(attr))
+          return arrayAttr.empty();
+        return false;
       }))
-    portAnnotations.clear();
+    portDomains.clear();
 
   FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
+
   // Both attributes are added, even if the module has no ports.
-  result.addAttribute(
-      "portDirections",
+  properties.setPortDirections(
       direction::packAttribute(builder.getContext(), portDirections));
-  result.addAttribute("portNames", builder.getArrayAttr(portNames));
-  result.addAttribute("portTypes", builder.getArrayAttr(portTypes));
-  result.addAttribute("portSyms", builder.getArrayAttr(portSyms));
-  result.addAttribute("portLocations", builder.getArrayAttr(portLocs));
-
-  if (withAnnotations) {
-    if (!annotations)
-      annotations = builder.getArrayAttr({});
-    result.addAttribute("annotations", annotations);
-    result.addAttribute("portAnnotations",
-                        builder.getArrayAttr(portAnnotations));
-  }
-
-  if (withLayers) {
-    if (!layers)
-      layers = builder.getArrayAttr({});
-    result.addAttribute("layers", layers);
-  }
+  properties.setPortNames(builder.getArrayAttr(portNames));
+  properties.setPortTypes(builder.getArrayAttr(portTypes));
+  properties.setPortSymbols(builder.getArrayAttr(portSyms));
+  properties.setPortLocations(builder.getArrayAttr(portLocs));
+  properties.setDomainInfo(builder.getArrayAttr(portDomains));
 
   result.addRegion();
 }
 
+template <typename OpTy>
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<PortInfo> ports,
                         ArrayAttr annotations, ArrayAttr layers) {
-  buildModuleLike(builder, result, name, ports, annotations, layers,
-                  /*withAnnotations=*/true, /*withLayers=*/true);
+  buildModuleLike<OpTy>(builder, result, name, ports);
+  auto &properties = result.getOrAddProperties<typename OpTy::Properties>();
+  // Annotations.
+  if (!annotations)
+    annotations = builder.getArrayAttr({});
+  properties.setAnnotations(annotations);
+
+  // Port annotations. lack of *any* port annotations is represented by an empty
+  // `portAnnotations` array as a shorthand.
+  SmallVector<Attribute, 4> portAnnotations;
+  for (const auto &port : ports)
+    portAnnotations.push_back(port.annotations.getArrayAttr());
+  if (llvm::all_of(portAnnotations, [](Attribute attr) {
+        return cast<ArrayAttr>(attr).empty();
+      }))
+    portAnnotations.clear();
+  properties.setPortAnnotations(builder.getArrayAttr(portAnnotations));
+
+  // Layers.
+  if (!layers)
+    layers = builder.getArrayAttr({});
+  properties.setLayers(layers);
 }
 
+template <typename OpTy>
 static void buildClass(OpBuilder &builder, OperationState &result,
                        StringAttr name, ArrayRef<PortInfo> ports) {
-  return buildModuleLike(builder, result, name, ports, {}, {},
-                         /*withAnnotations=*/false,
-                         /*withLayers=*/false);
+  return buildModuleLike<OpTy>(builder, result, name, ports);
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name, ConventionAttr convention,
                       ArrayRef<PortInfo> ports, ArrayAttr annotations,
                       ArrayAttr layers) {
-  buildModule(builder, result, name, ports, annotations, layers);
-  result.addAttribute("convention", convention);
+  buildModule<FModuleOp>(builder, result, name, ports, annotations, layers);
+  auto &properties = result.getOrAddProperties<Properties>();
+  properties.setConvention(convention);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -1008,32 +1166,35 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ConventionAttr convention,
-                         ArrayRef<PortInfo> ports, StringRef defnameAttr,
-                         ArrayAttr annotations, ArrayAttr parameters,
-                         ArrayAttr internalPaths, ArrayAttr layers) {
-  buildModule(builder, result, name, ports, annotations, layers);
-  result.addAttribute("convention", convention);
+                         ArrayRef<PortInfo> ports, ArrayAttr knownLayers,
+                         StringRef defnameAttr, ArrayAttr annotations,
+                         ArrayAttr parameters, ArrayAttr layers,
+                         ArrayAttr externalRequirements) {
+  buildModule<FExtModuleOp>(builder, result, name, ports, annotations, layers);
+  auto &properties = result.getOrAddProperties<Properties>();
+  properties.setConvention(convention);
+  if (!knownLayers)
+    knownLayers = builder.getArrayAttr({});
+  properties.setKnownLayers(knownLayers);
   if (!defnameAttr.empty())
-    result.addAttribute("defname", builder.getStringAttr(defnameAttr));
+    properties.setDefname(builder.getStringAttr(defnameAttr));
   if (!parameters)
     parameters = builder.getArrayAttr({});
-  result.addAttribute(getParametersAttrName(result.name), parameters);
-  if (internalPaths && !internalPaths.empty())
-    result.addAttribute(getInternalPathsAttrName(result.name), internalPaths);
+  properties.setParameters(parameters);
+  if (externalRequirements)
+    properties.setExternalRequirements(externalRequirements);
 }
 
 void FIntModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<PortInfo> ports,
                          StringRef intrinsicNameStr, ArrayAttr annotations,
-                         ArrayAttr parameters, ArrayAttr internalPaths,
-                         ArrayAttr layers) {
-  buildModule(builder, result, name, ports, annotations, layers);
-  result.addAttribute("intrinsic", builder.getStringAttr(intrinsicNameStr));
+                         ArrayAttr parameters, ArrayAttr layers) {
+  buildModule<FIntModuleOp>(builder, result, name, ports, annotations, layers);
+  auto &properties = result.getOrAddProperties<Properties>();
+  properties.setIntrinsic(builder.getStringAttr(intrinsicNameStr));
   if (!parameters)
     parameters = builder.getArrayAttr({});
-  result.addAttribute(getParametersAttrName(result.name), parameters);
-  if (internalPaths && !internalPaths.empty())
-    result.addAttribute(getInternalPathsAttrName(result.name), internalPaths);
+  properties.setParameters(parameters);
 }
 
 void FMemModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -1041,23 +1202,24 @@ void FMemModuleOp::build(OpBuilder &builder, OperationState &result,
                          uint32_t numReadPorts, uint32_t numWritePorts,
                          uint32_t numReadWritePorts, uint32_t dataWidth,
                          uint32_t maskBits, uint32_t readLatency,
-                         uint32_t writeLatency, uint64_t depth,
+                         uint32_t writeLatency, uint64_t depth, RUWBehavior ruw,
                          ArrayAttr annotations, ArrayAttr layers) {
   auto *context = builder.getContext();
-  buildModule(builder, result, name, ports, annotations, layers);
+  buildModule<FMemModuleOp>(builder, result, name, ports, annotations, layers);
   auto ui32Type = IntegerType::get(context, 32, IntegerType::Unsigned);
   auto ui64Type = IntegerType::get(context, 64, IntegerType::Unsigned);
-  result.addAttribute("numReadPorts", IntegerAttr::get(ui32Type, numReadPorts));
-  result.addAttribute("numWritePorts",
-                      IntegerAttr::get(ui32Type, numWritePorts));
-  result.addAttribute("numReadWritePorts",
-                      IntegerAttr::get(ui32Type, numReadWritePorts));
-  result.addAttribute("dataWidth", IntegerAttr::get(ui32Type, dataWidth));
-  result.addAttribute("maskBits", IntegerAttr::get(ui32Type, maskBits));
-  result.addAttribute("readLatency", IntegerAttr::get(ui32Type, readLatency));
-  result.addAttribute("writeLatency", IntegerAttr::get(ui32Type, writeLatency));
-  result.addAttribute("depth", IntegerAttr::get(ui64Type, depth));
-  result.addAttribute("extraPorts", ArrayAttr::get(context, {}));
+  auto &properties = result.getOrAddProperties<Properties>();
+  properties.setNumReadPorts(IntegerAttr::get(ui32Type, numReadPorts));
+  properties.setNumWritePorts(IntegerAttr::get(ui32Type, numWritePorts));
+  properties.setNumReadWritePorts(
+      IntegerAttr::get(ui32Type, numReadWritePorts));
+  properties.setDataWidth(IntegerAttr::get(ui32Type, dataWidth));
+  properties.setMaskBits(IntegerAttr::get(ui32Type, maskBits));
+  properties.setReadLatency(IntegerAttr::get(ui32Type, readLatency));
+  properties.setWriteLatency(IntegerAttr::get(ui32Type, writeLatency));
+  properties.setDepth(IntegerAttr::get(ui64Type, depth));
+  properties.setExtraPorts(ArrayAttr::get(context, {}));
+  properties.setRuw(RUWBehaviorAttr::get(context, ruw));
 }
 
 /// Print a list of module ports in the following form:
@@ -1076,16 +1238,42 @@ static bool
 printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
                  ArrayRef<Attribute> portNames, ArrayRef<Attribute> portTypes,
                  ArrayRef<Attribute> portAnnotations,
-                 ArrayRef<Attribute> portSyms, ArrayRef<Attribute> portLocs) {
+                 ArrayRef<Attribute> portSyms, ArrayRef<Attribute> portLocs,
+                 ArrayRef<Attribute> domainInfo) {
   // When printing port names as SSA values, we can fail to print them
   // identically.
   bool printedNamesDontMatch = false;
 
   mlir::OpPrintingFlags flags;
 
+  // Return an SSA name for an argument.
+  DenseMap<unsigned, std::string> ssaNames;
+  auto getSsaName = [&](unsigned idx) -> StringRef {
+    // We already computed this name.  Return it.
+    auto itr = ssaNames.find(idx);
+    if (itr != ssaNames.end())
+      return itr->getSecond();
+
+    // Compute the name, insert it, and return it.
+    if (block) {
+      SmallString<32> resultNameStr;
+      // Get the printed format for the argument name.
+      llvm::raw_svector_ostream tmpStream(resultNameStr);
+      p.printOperand(block->getArgument(idx), tmpStream);
+      // If the name wasn't printable in a way that agreed with portName, make
+      // sure to print out an explicit portNames attribute.
+      auto portName = cast<StringAttr>(portNames[idx]).getValue();
+      if (tmpStream.str().drop_front() != portName)
+        printedNamesDontMatch = true;
+      return ssaNames.insert({idx, tmpStream.str().str()}).first->getSecond();
+    }
+
+    auto name = cast<StringAttr>(portNames[idx]).getValue();
+    return ssaNames.insert({idx, name.str()}).first->getSecond();
+  };
+
   // If we are printing the ports as block arguments the op must have a first
   // block.
-  SmallString<32> resultNameStr;
   p << '(';
   for (unsigned i = 0, e = portTypes.size(); i < e; ++i) {
     if (i > 0)
@@ -1096,24 +1284,15 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
 
     // Print the port name.  If there is a valid block, we print it as a block
     // argument.
+    auto portType = cast<TypeAttr>(portTypes[i]).getValue();
     if (block) {
-      // Get the printed format for the argument name.
-      resultNameStr.clear();
-      llvm::raw_svector_ostream tmpStream(resultNameStr);
-      p.printOperand(block->getArgument(i), tmpStream);
-      // If the name wasn't printable in a way that agreed with portName, make
-      // sure to print out an explicit portNames attribute.
-      auto portName = cast<StringAttr>(portNames[i]).getValue();
-      if (!portName.empty() && tmpStream.str().drop_front() != portName)
-        printedNamesDontMatch = true;
-      p << tmpStream.str();
+      p << getSsaName(i);
     } else {
-      p.printKeywordOrString(cast<StringAttr>(portNames[i]).getValue());
+      p.printKeywordOrString(getSsaName(i));
     }
 
     // Print the port type.
     p << ": ";
-    auto portType = cast<TypeAttr>(portTypes[i]).getValue();
     p.printType(portType);
 
     // Print the optional port symbol.
@@ -1121,6 +1300,22 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
       if (!cast<hw::InnerSymAttr>(portSyms[i]).empty()) {
         p << " sym ";
         cast<hw::InnerSymAttr>(portSyms[i]).print(p);
+      }
+    }
+
+    // Print domain information.
+    if (!domainInfo.empty()) {
+      if (auto domainKind = dyn_cast<FlatSymbolRefAttr>(domainInfo[i])) {
+        printDomainKind(p, domainKind);
+      } else {
+        auto domains = cast<ArrayAttr>(domainInfo[i]);
+        if (!domains.empty()) {
+          p << " domains [";
+          llvm::interleaveComma(domains, p, [&](Attribute attr) {
+            p << getSsaName(cast<IntegerAttr>(attr).getUInt());
+          });
+          p << "]";
+        }
       }
     }
 
@@ -1146,23 +1341,29 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
 
 /// Parse a list of module ports.  If port names are SSA identifiers, then this
 /// will populate `entryArgs`.
-static ParseResult
-parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
-                 bool supportsSymbols,
-                 SmallVectorImpl<OpAsmParser::Argument> &entryArgs,
-                 SmallVectorImpl<Direction> &portDirections,
-                 SmallVectorImpl<Attribute> &portNames,
-                 SmallVectorImpl<Attribute> &portTypes,
-                 SmallVectorImpl<Attribute> &portAnnotations,
-                 SmallVectorImpl<Attribute> &portSyms,
-                 SmallVectorImpl<Attribute> &portLocs) {
+static ParseResult parseModulePorts(
+    OpAsmParser &parser, bool hasSSAIdentifiers, bool supportsSymbols,
+    bool supportsDomains, SmallVectorImpl<OpAsmParser::Argument> &entryArgs,
+    SmallVectorImpl<Direction> &portDirections,
+    SmallVectorImpl<Attribute> &portNames,
+    SmallVectorImpl<Attribute> &portTypes,
+    SmallVectorImpl<Attribute> &portAnnotations,
+    SmallVectorImpl<Attribute> &portSyms, SmallVectorImpl<Attribute> &portLocs,
+    SmallVectorImpl<Attribute> &domains) {
   auto *context = parser.getContext();
+
+  // Mapping of domain name to port index.
+  DenseMap<Attribute, size_t> domainIndex;
+
+  // Mapping of port index to domain names and source locators.
+  using DomainAndLoc = std::pair<Attribute, llvm::SMLoc>;
+  DenseMap<size_t, SmallVector<DomainAndLoc>> domainStrings;
 
   auto parseArgument = [&]() -> ParseResult {
     // Parse port direction.
     if (succeeded(parser.parseOptionalKeyword("out")))
       portDirections.push_back(Direction::Out);
-    else if (succeeded(parser.parseKeyword("in", "or 'out'")))
+    else if (succeeded(parser.parseKeyword("in", " or 'out'")))
       portDirections.push_back(Direction::In);
     else
       return failure();
@@ -1170,6 +1371,7 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
     // This is the location or the port declaration in the IR.  If there is no
     // other location information, we use this to point to the MLIR.
     llvm::SMLoc irLoc;
+    auto portIdx = portNames.size();
 
     if (hasSSAIdentifiers) {
       OpAsmParser::Argument arg;
@@ -1204,6 +1406,8 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
     if (parser.parseColonType(portType))
       return failure();
     portTypes.push_back(TypeAttr::get(portType));
+    if (isa<DomainType>(portType))
+      domainIndex[portNames.back()] = portIdx;
 
     if (hasSSAIdentifiers)
       entryArgs.back().type = portType;
@@ -1221,6 +1425,43 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
       }
       portSyms.push_back(innerSymAttr);
     }
+
+    // Parse optional port domain information if it exists.  At this point, this
+    // will be something if this is a domain port or null if domain associations
+    // could exist.  We don't know how to resolve the names of the domains at
+    // this point, so this is only building up the information necessary to add
+    // the domain information later.
+    Attribute domainInfo;
+    if (supportsDomains) {
+      if (isa<DomainType>(portType)) {
+        FlatSymbolRefAttr domainKind;
+        if (parseDomainKind(parser, domainKind))
+          return failure();
+        domainInfo = domainKind;
+      } else if (succeeded(parser.parseOptionalKeyword("domains"))) {
+        auto result = parser.parseCommaSeparatedList(
+            OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
+              StringAttr argName;
+              if (hasSSAIdentifiers) {
+                OpAsmParser::Argument arg;
+                if (parser.parseArgument(arg))
+                  return failure();
+                argName =
+                    StringAttr::get(context, arg.ssaName.name.drop_front());
+              } else {
+                std::string portName;
+                if (parser.parseKeywordOrString(&portName))
+                  return failure();
+                argName = StringAttr::get(context, portName);
+              }
+              domainStrings[portIdx].push_back({argName, irLoc});
+              return success();
+            });
+        if (failed(result))
+          return failure();
+      }
+    }
+    domains.push_back(domainInfo);
 
     // Parse the port annotations.
     ArrayAttr annos;
@@ -1243,9 +1484,35 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
     return success();
   };
 
-  // Parse all ports.
-  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
-                                        parseArgument);
+  // Parse all ports, in two phases.  First, parse all the ports and build up
+  // the information about what domains exist and the _names_ of domains
+  // associated with ports.  After this, the domain information is only
+  // populated for domain ports.  All associations are null.
+  if (failed(parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                            parseArgument)))
+    return failure();
+
+  // Second, for non-domain ports, convert the domain names to domain indices
+  // and update the domain information.
+  for (auto [portIdx, domainInfo] : llvm::enumerate(domains)) {
+    // Domain ports _already_ have domain info.  Skip them.
+    if (domainInfo)
+      continue;
+    // Convert domain names to domain indices for non-domain ports.
+    SmallVector<Attribute> portDomains;
+    for (auto [domainName, loc] : domainStrings[portIdx]) {
+      auto index = domainIndex.find(domainName);
+      if (index == domainIndex.end()) {
+        parser.emitError(loc) << "domain name '" << domainName << "' not found";
+        return failure();
+      }
+      portDomains.push_back(IntegerAttr::get(
+          IntegerType::get(context, 32, IntegerType::Unsigned), index->second));
+    }
+    domains[portIdx] = parser.getBuilder().getArrayAttr(portDomains);
+  }
+
+  return success();
 }
 
 /// Print a paramter list for a module or instance.
@@ -1288,11 +1555,13 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
 
   auto needPortNamesAttr = printModulePorts(
       p, body, op.getPortDirectionsAttr(), op.getPortNames(), op.getPortTypes(),
-      op.getPortAnnotations(), op.getPortSymbols(), op.getPortLocations());
+      op.getPortAnnotations(), op.getPortSymbols(), op.getPortLocations(),
+      op.getDomainInfo());
 
-  SmallVector<StringRef, 12> omittedAttrs = {
-      "sym_name", "portDirections", "portTypes",  "portAnnotations",
-      "portSyms", "portLocations",  "parameters", visibilityAttrName};
+  SmallVector<StringRef, 13> omittedAttrs = {
+      "sym_name",        "portDirections",   "portTypes",
+      "portAnnotations", "portSymbols",      "portLocations",
+      "parameters",      visibilityAttrName, "domainInfo"};
 
   if (op.getConvention() == Convention::Internal)
     omittedAttrs.push_back("convention");
@@ -1306,10 +1575,20 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
     omittedAttrs.push_back("annotations");
 
+  // If there are no known layers, then omit the empty array.
+  if (auto knownLayers = op->getAttrOfType<ArrayAttr>("knownLayers"))
+    if (knownLayers.empty())
+      omittedAttrs.push_back("knownLayers");
+
   // If there are no enabled layers, then omit the empty array.
   if (auto layers = op->getAttrOfType<ArrayAttr>("layers"))
     if (layers.empty())
       omittedAttrs.push_back("layers");
+
+  // If there are no external requirements, then omit the empty array.
+  if (auto extReqs = op->getAttrOfType<ArrayAttr>("externalRequirements"))
+    if (extReqs.empty())
+      omittedAttrs.push_back("externalRequirements");
 
   p.printOptionalAttrDictWithKeyword(op->getAttrs(), omittedAttrs);
 }
@@ -1377,26 +1656,40 @@ static ParseResult parseParameterList(OpAsmParser &parser,
   return success();
 }
 
+template <typename Properties, typename = void>
+struct HasParameters : std::false_type {};
+
+template <typename Properties>
+struct HasParameters<
+    Properties, std::void_t<decltype(std::declval<Properties>().parameters)>>
+    : std::true_type {};
+
+template <typename OpTy>
 static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
                                       OperationState &result,
                                       bool hasSSAIdentifiers) {
   auto *context = result.getContext();
   auto &builder = parser.getBuilder();
+  using Properties = typename OpTy::Properties;
+  auto &properties = result.getOrAddProperties<Properties>();
 
+  // TODO: this should be using properties.
   // Parse the visibility attribute.
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
   // Parse the name as a symbol.
   StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, ::mlir::SymbolTable::getSymbolAttrName(),
-                             result.attributes))
+  if (parser.parseSymbolName(nameAttr))
     return failure();
+  properties.setSymName(nameAttr);
 
   // Parse optional parameters.
-  SmallVector<Attribute, 4> parameters;
-  if (parseOptionalParameters(parser, parameters))
-    return failure();
-  result.addAttribute("parameters", builder.getArrayAttr(parameters));
+  if constexpr (HasParameters<Properties>::value) {
+    SmallVector<Attribute, 4> parameters;
+    if (parseOptionalParameters(parser, parameters))
+      return failure();
+    properties.setParameters(builder.getArrayAttr(parameters));
+  }
 
   // Parse the module ports.
   SmallVector<OpAsmParser::Argument> entryArgs;
@@ -1406,9 +1699,11 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   SmallVector<Attribute, 4> portAnnotations;
   SmallVector<Attribute, 4> portSyms;
   SmallVector<Attribute, 4> portLocs;
+  SmallVector<Attribute, 4> domains;
   if (parseModulePorts(parser, hasSSAIdentifiers, /*supportsSymbols=*/true,
-                       entryArgs, portDirections, portNames, portTypes,
-                       portAnnotations, portSyms, portLocs))
+                       /*supportsDomains=*/true, entryArgs, portDirections,
+                       portNames, portTypes, portAnnotations, portSyms,
+                       portLocs, domains))
     return failure();
 
   // If module attributes are present, parse them.
@@ -1421,46 +1716,42 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   // for external modules.
 
   // Add port directions.
-  if (!result.attributes.get("portDirections"))
-    result.addAttribute("portDirections",
-                        direction::packAttribute(context, portDirections));
+  properties.setPortDirections(
+      direction::packAttribute(context, portDirections));
 
   // Add port names.
-  if (!result.attributes.get("portNames"))
-    result.addAttribute("portNames", builder.getArrayAttr(portNames));
+  properties.setPortNames(builder.getArrayAttr(portNames));
 
   // Add the port types.
-  if (!result.attributes.get("portTypes"))
-    result.addAttribute("portTypes", ArrayAttr::get(context, portTypes));
+  properties.setPortTypes(ArrayAttr::get(context, portTypes));
 
   // Add the port annotations.
-  if (!result.attributes.get("portAnnotations")) {
-    // If there are no portAnnotations, don't add the attribute.
-    if (llvm::any_of(portAnnotations, [&](Attribute anno) {
-          return !cast<ArrayAttr>(anno).empty();
-        }))
-      result.addAttribute("portAnnotations",
-                          ArrayAttr::get(context, portAnnotations));
-  }
+  // If there are no portAnnotations, don't add the attribute.
+  if (llvm::any_of(portAnnotations, [&](Attribute anno) {
+        return !cast<ArrayAttr>(anno).empty();
+      }))
+    properties.setPortAnnotations(ArrayAttr::get(context, portAnnotations));
+  else
+    properties.setPortAnnotations(builder.getArrayAttr({}));
 
   // Add port symbols.
-  if (!result.attributes.get("portSyms")) {
-    FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
-    result.addAttribute("portSyms", builder.getArrayAttr(portSyms));
-  }
+  FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
+  properties.setPortSymbols(builder.getArrayAttr(portSyms));
 
   // Add port locations.
-  if (!result.attributes.get("portLocations"))
-    result.addAttribute("portLocations", ArrayAttr::get(context, portLocs));
+  properties.setPortLocations(ArrayAttr::get(context, portLocs));
 
   // The annotations attribute is always present, but not printed when empty.
-  if (!result.attributes.get("annotations"))
-    result.addAttribute("annotations", builder.getArrayAttr({}));
+  properties.setAnnotations(builder.getArrayAttr({}));
 
-  // The portAnnotations attribute is always present, but not printed when
-  // empty.
-  if (!result.attributes.get("portAnnotations"))
-    result.addAttribute("portAnnotations", builder.getArrayAttr({}));
+  // Add domains.  Use an empty array if none are set.
+  if (llvm::all_of(domains, [&](Attribute attr) {
+        auto arrayAttr = dyn_cast<ArrayAttr>(attr);
+        return arrayAttr && arrayAttr.empty();
+      }))
+    properties.setDomainInfo(ArrayAttr::get(context, {}));
+  else
+    properties.setDomainInfo(ArrayAttr::get(context, domains));
 
   // Parse the optional function body.
   auto *body = result.addRegion();
@@ -1475,33 +1766,35 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
 }
 
 ParseResult FModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  if (parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/true))
+  if (parseFModuleLikeOp<FModuleOp>(parser, result,
+                                    /*hasSSAIdentifiers=*/true))
     return failure();
-  if (!result.attributes.get("convention"))
-    result.addAttribute(
-        "convention",
-        ConventionAttr::get(result.getContext(), Convention::Internal));
-  if (!result.attributes.get("layers"))
-    result.addAttribute("layers", ArrayAttr::get(parser.getContext(), {}));
+  auto &properties = result.getOrAddProperties<Properties>();
+  properties.setConvention(
+      ConventionAttr::get(result.getContext(), Convention::Internal));
+  properties.setLayers(ArrayAttr::get(parser.getContext(), {}));
   return success();
 }
 
 ParseResult FExtModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  if (parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false))
+  if (parseFModuleLikeOp<FExtModuleOp>(parser, result,
+                                       /*hasSSAIdentifiers=*/false))
     return failure();
-  if (!result.attributes.get("convention"))
-    result.addAttribute(
-        "convention",
-        ConventionAttr::get(result.getContext(), Convention::Internal));
+  auto &properties = result.getOrAddProperties<Properties>();
+  properties.setConvention(
+      ConventionAttr::get(result.getContext(), Convention::Internal));
+  properties.setKnownLayers(ArrayAttr::get(result.getContext(), {}));
   return success();
 }
 
 ParseResult FIntModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false);
+  return parseFModuleLikeOp<FIntModuleOp>(parser, result,
+                                          /*hasSSAIdentifiers=*/false);
 }
 
 ParseResult FMemModuleOp::parse(OpAsmParser &parser, OperationState &result) {
-  return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false);
+  return parseFModuleLikeOp<FMemModuleOp>(parser, result,
+                                          /*hasSSAIdentifiers=*/false);
 }
 
 LogicalResult FModuleOp::verify() {
@@ -1528,40 +1821,8 @@ LogicalResult FModuleOp::verify() {
   return success();
 }
 
-static LogicalResult
-verifyInternalPaths(FModuleLike op,
-                    std::optional<::mlir::ArrayAttr> internalPaths) {
-  if (!internalPaths)
-    return success();
-
-  // If internal paths are present, should cover all ports.
-  if (internalPaths->size() != op.getNumPorts())
-    return op.emitError("module has inconsistent internal path array with ")
-           << internalPaths->size() << " entries for " << op.getNumPorts()
-           << " ports";
-
-  // No internal paths for non-ref-type ports.
-  for (auto [idx, path, typeattr] : llvm::enumerate(
-           internalPaths->getAsRange<InternalPathAttr>(), op.getPortTypes())) {
-    if (path.getPath() &&
-        !type_isa<RefType>(cast<TypeAttr>(typeattr).getValue())) {
-      auto diag =
-          op.emitError("module has internal path for non-ref-type port ")
-          << op.getPortNameAttr(idx);
-      return diag.attachNote(op.getPortLocation(idx)) << "this port";
-    }
-  }
-
-  return success();
-}
-
 LogicalResult FExtModuleOp::verify() {
-  if (failed(verifyInternalPaths(*this, getInternalPaths())))
-    return failure();
-
   auto params = getParameters();
-  if (params.empty())
-    return success();
 
   auto checkParmValue = [&](Attribute elt) -> bool {
     auto param = cast<ParamDeclAttr>(elt);
@@ -1576,13 +1837,24 @@ LogicalResult FExtModuleOp::verify() {
   if (!llvm::all_of(params, checkParmValue))
     return failure();
 
-  return success();
+  // Verify that any mentioned layers are marked as known.
+  LayerSet known;
+  known.insert_range(getKnownLayersAttr().getAsRange<SymbolRefAttr>());
+
+  LayerSet referenced;
+  referenced.insert_range(getLayersAttr().getAsRange<SymbolRefAttr>());
+  for (auto attr : getPortTypes()) {
+    auto type = cast<TypeAttr>(attr).getValue();
+    if (auto refType = type_dyn_cast<RefType>(type))
+      if (auto layer = refType.getLayer())
+        referenced.insert(layer);
+  }
+
+  return checkLayerCompatibility(getOperation(), referenced, known,
+                                 "references unknown layers", "unknown layers");
 }
 
 LogicalResult FIntModuleOp::verify() {
-  if (failed(verifyInternalPaths(*this, getInternalPaths())))
-    return failure();
-
   auto params = getParameters();
   if (params.empty())
     return success();
@@ -1652,20 +1924,29 @@ static LogicalResult verifyPortSymbolUses(FModuleLike module,
         return failure();
       continue;
     }
+
+    if (isa<DomainType>(type)) {
+      auto domainInfo = module.getDomainInfoAttrForPort(i);
+      if (auto kind = dyn_cast<FlatSymbolRefAttr>(domainInfo))
+        if (!dyn_cast_or_null<DomainOp>(
+                symbolTable.lookupSymbolIn(circuitOp, kind)))
+          return mlir::emitError(module.getPortLocation(i))
+                 << "domain port '" << module.getPortName(i)
+                 << "' has undefined domain kind '" << kind.getValue() << "'";
+    }
   }
 
   return success();
 }
 
 LogicalResult FModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  if (failed(
-          verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable)))
+  if (failed(verifyPortSymbolUses(*this, symbolTable)))
     return failure();
 
-  auto circuitOp = (*this)->getParentOfType<CircuitOp>();
+  auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
   for (auto layer : getLayers()) {
     if (!symbolTable.lookupSymbolIn(circuitOp, cast<SymbolRefAttr>(layer)))
-      return emitOpError() << "enables unknown layer '" << layer << "'";
+      return emitOpError() << "enables undefined layer '" << layer << "'";
   }
 
   return success();
@@ -1673,17 +1954,30 @@ LogicalResult FModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 LogicalResult
 FExtModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+  if (failed(verifyPortSymbolUses(*this, symbolTable)))
+    return failure();
+
+  auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
+  for (auto layer : getKnownLayersAttr().getAsRange<SymbolRefAttr>()) {
+    if (!symbolTable.lookupSymbolIn(circuitOp, layer))
+      return emitOpError() << "knows undefined layer '" << layer << "'";
+  }
+  for (auto layer : getLayersAttr().getAsRange<SymbolRefAttr>()) {
+    if (!symbolTable.lookupSymbolIn(circuitOp, layer))
+      return emitOpError() << "enables undefined layer '" << layer << "'";
+  }
+
+  return success();
 }
 
 LogicalResult
 FIntModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+  return verifyPortSymbolUses(*this, symbolTable);
 }
 
 LogicalResult
 FMemModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  return verifyPortSymbolUses(cast<FModuleLike>(getOperation()), symbolTable);
+  return verifyPortSymbolUses(*this, symbolTable);
 }
 
 void FModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
@@ -1694,6 +1988,18 @@ void FModuleOp::getAsmBlockArgumentNames(mlir::Region &region,
 void FExtModuleOp::getAsmBlockArgumentNames(
     mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
   getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
+}
+
+StringAttr FExtModuleOp::getExtModuleNameAttr() {
+  if (auto defnameAttr = getDefnameAttr(); defnameAttr && !defnameAttr.empty())
+    return defnameAttr;
+  return getNameAttr();
+}
+
+StringRef FExtModuleOp::getExtModuleName() {
+  if (auto defname = getDefname(); defname && !defname->empty())
+    return *defname;
+  return getName();
 }
 
 void FIntModuleOp::getAsmBlockArgumentNames(
@@ -1784,19 +2090,22 @@ ClassType firrtl::detail::getInstanceTypeForClassLike(ClassLike classOp) {
   return ClassType::get(name, elements);
 }
 
-static ParseResult parseClassLike(OpAsmParser &parser, OperationState &result,
-                                  bool hasSSAIdentifiers) {
+template <typename OpTy>
+ParseResult parseClassLike(OpAsmParser &parser, OperationState &result,
+                           bool hasSSAIdentifiers) {
   auto *context = result.getContext();
   auto &builder = parser.getBuilder();
+  auto &properties = result.getOrAddProperties<typename OpTy::Properties>();
 
+  // TODO: this should use properties.
   // Parse the visibility attribute.
   (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
 
   // Parse the name as a symbol.
   StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, ::mlir::SymbolTable::getSymbolAttrName(),
-                             result.attributes))
+  if (parser.parseSymbolName(nameAttr))
     return failure();
+  properties.setSymName(nameAttr);
 
   // Parse the module ports.
   SmallVector<OpAsmParser::Argument> entryArgs;
@@ -1806,10 +2115,11 @@ static ParseResult parseClassLike(OpAsmParser &parser, OperationState &result,
   SmallVector<Attribute, 4> portAnnotations;
   SmallVector<Attribute, 4> portSyms;
   SmallVector<Attribute, 4> portLocs;
+  SmallVector<Attribute, 4> domains;
   if (parseModulePorts(parser, hasSSAIdentifiers,
-                       /*supportsSymbols=*/false, entryArgs, portDirections,
-                       portNames, portTypes, portAnnotations, portSyms,
-                       portLocs))
+                       /*supportsSymbols=*/false, /*supportsDomains=*/false,
+                       entryArgs, portDirections, portNames, portTypes,
+                       portAnnotations, portSyms, portLocs, domains))
     return failure();
 
   // Ports on ClassLike ops cannot have annotations
@@ -1827,27 +2137,21 @@ static ParseResult parseClassLike(OpAsmParser &parser, OperationState &result,
   // for external modules.
 
   // Add port directions.
-  if (!result.attributes.get("portDirections"))
-    result.addAttribute("portDirections",
-                        direction::packAttribute(context, portDirections));
+  properties.setPortDirections(
+      direction::packAttribute(context, portDirections));
 
   // Add port names.
-  if (!result.attributes.get("portNames"))
-    result.addAttribute("portNames", builder.getArrayAttr(portNames));
+  properties.setPortNames(builder.getArrayAttr(portNames));
 
   // Add the port types.
-  if (!result.attributes.get("portTypes"))
-    result.addAttribute("portTypes", builder.getArrayAttr(portTypes));
+  properties.setPortTypes(builder.getArrayAttr(portTypes));
 
   // Add the port symbols.
-  if (!result.attributes.get("portSyms")) {
-    FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
-    result.addAttribute("portSyms", builder.getArrayAttr(portSyms));
-  }
+  FModuleLike::fixupPortSymsArray(portSyms, builder.getContext());
+  properties.setPortSymbols(builder.getArrayAttr(portSyms));
 
   // Add port locations.
-  if (!result.attributes.get("portLocations"))
-    result.addAttribute("portLocations", ArrayAttr::get(context, portLocs));
+  properties.setPortLocations(ArrayAttr::get(context, portLocs));
 
   // Notably missing compared to other FModuleLike, we do not track port
   // annotations, nor port symbols, on classes.
@@ -1885,12 +2189,12 @@ static void printClassLike(OpAsmPrinter &p, ClassLike op) {
 
   auto needPortNamesAttr = printModulePorts(
       p, body, op.getPortDirectionsAttr(), op.getPortNames(), op.getPortTypes(),
-      {}, op.getPortSymbols(), op.getPortLocations());
+      {}, op.getPortSymbols(), op.getPortLocations(), {});
 
   // Print the attr-dict.
   SmallVector<StringRef, 8> omittedAttrs = {
-      "sym_name", "portNames",     "portTypes",       "portDirections",
-      "portSyms", "portLocations", visibilityAttrName};
+      "sym_name",    "portNames",     "portTypes",        "portDirections",
+      "portSymbols", "portLocations", visibilityAttrName, "domainInfo"};
 
   // We can omit the portNames if they were able to be printed as properly as
   // block arguments.
@@ -1919,7 +2223,7 @@ void ClassOp::build(OpBuilder &builder, OperationState &result, StringAttr name,
                    [](const auto &port) { return port.annotations.empty(); }) &&
       "class ports may not have annotations");
 
-  buildClass(builder, result, name, ports);
+  buildClass<ClassOp>(builder, result, name, ports);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -1931,13 +2235,38 @@ void ClassOp::build(OpBuilder &builder, OperationState &result, StringAttr name,
     body->addArgument(elt.type, elt.loc);
 }
 
+void ClassOp::build(::mlir::OpBuilder &odsBuilder,
+                    ::mlir::OperationState &odsState, Twine name,
+                    mlir::ArrayRef<mlir::StringRef> fieldNames,
+                    mlir::ArrayRef<mlir::Type> fieldTypes) {
+
+  SmallVector<PortInfo, 10> ports;
+  ports.reserve(fieldNames.size() * 2);
+  for (auto [fieldName, fieldType] : llvm::zip(fieldNames, fieldTypes)) {
+    ports.emplace_back(odsBuilder.getStringAttr(fieldName + "_in"), fieldType,
+                       Direction::In);
+    ports.emplace_back(odsBuilder.getStringAttr(fieldName), fieldType,
+                       Direction::Out);
+  }
+  build(odsBuilder, odsState, odsBuilder.getStringAttr(name), ports);
+  // Create a region and a block for the body.
+  auto &body = odsState.regions[0]->getBlocks().front();
+  auto prevLoc = odsBuilder.saveInsertionPoint();
+  odsBuilder.setInsertionPointToEnd(&body);
+  auto args = body.getArguments();
+  auto loc = odsState.location;
+  for (unsigned i = 0, e = ports.size(); i != e; i += 2)
+    PropAssignOp::create(odsBuilder, loc, args[i + 1], args[i]);
+
+  odsBuilder.restoreInsertionPoint(prevLoc);
+}
 void ClassOp::print(OpAsmPrinter &p) {
   printClassLike(p, cast<ClassLike>(getOperation()));
 }
 
 ParseResult ClassOp::parse(OpAsmParser &parser, OperationState &result) {
   auto hasSSAIdentifiers = true;
-  return parseClassLike(parser, result, hasSSAIdentifiers);
+  return parseClassLike<ClassOp>(parser, result, hasSSAIdentifiers);
 }
 
 LogicalResult ClassOp::verify() {
@@ -1987,9 +2316,15 @@ ArrayAttr ClassOp::getPortAnnotationsAttr() {
   return ArrayAttr::get(getContext(), {});
 }
 
+ArrayRef<Attribute> ClassOp::getPortAnnotations() { return {}; }
+
+void ClassOp::setPortAnnotationsAttr(ArrayAttr annotations) {
+  llvm_unreachable("classes do not support annotations");
+}
+
 ArrayAttr ClassOp::getLayersAttr() { return ArrayAttr::get(getContext(), {}); }
 
-ArrayRef<Attribute> ClassOp::getLayers() { return getLayersAttr(); }
+ArrayRef<Attribute> ClassOp::getLayers() { return {}; }
 
 SmallVector<::circt::hw::PortInfo> ClassOp::getPortList() {
   return ::getPortListImpl(*this);
@@ -2020,8 +2355,7 @@ void ExtClassOp::build(OpBuilder &builder, OperationState &result,
       llvm::all_of(ports,
                    [](const auto &port) { return port.annotations.empty(); }) &&
       "class ports may not have annotations");
-
-  buildClass(builder, result, name, ports);
+  buildClass<ClassOp>(builder, result, name, ports);
 }
 
 void ExtClassOp::print(OpAsmPrinter &p) {
@@ -2030,7 +2364,7 @@ void ExtClassOp::print(OpAsmPrinter &p) {
 
 ParseResult ExtClassOp::parse(OpAsmParser &parser, OperationState &result) {
   auto hasSSAIdentifiers = false;
-  return parseClassLike(parser, result, hasSSAIdentifiers);
+  return parseClassLike<ExtClassOp>(parser, result, hasSSAIdentifiers);
 }
 
 LogicalResult
@@ -2065,12 +2399,18 @@ ArrayAttr ExtClassOp::getLayersAttr() {
   return ArrayAttr::get(getContext(), {});
 }
 
-ArrayRef<Attribute> ExtClassOp::getLayers() { return getLayersAttr(); }
+ArrayRef<Attribute> ExtClassOp::getLayers() { return {}; }
 
 ArrayAttr ExtClassOp::getParameters() { return {}; }
 
 ArrayAttr ExtClassOp::getPortAnnotationsAttr() {
   return ArrayAttr::get(getContext(), {});
+}
+
+ArrayRef<Attribute> ExtClassOp::getPortAnnotations() { return {}; }
+
+void ExtClassOp::setPortAnnotationsAttr(ArrayAttr annotations) {
+  llvm_unreachable("classes do not support annotations");
 }
 
 SmallVector<::circt::hw::PortInfo> ExtClassOp::getPortList() {
@@ -2092,22 +2432,16 @@ bool ExtClassOp::canDiscardOnUseEmpty() {
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
-SmallVector<::circt::hw::PortInfo> InstanceOp::getPortList() {
-  auto circuit = (*this)->getParentOfType<CircuitOp>();
-  if (!circuit)
-    llvm::report_fatal_error("instance op not in circuit");
-  return circuit.lookupSymbol<hw::PortList>(getModuleNameAttr()).getPortList();
-}
-
 void InstanceOp::build(
     OpBuilder &builder, OperationState &result, TypeRange resultTypes,
     StringRef moduleName, StringRef name, NameKindEnum nameKind,
     ArrayRef<Direction> portDirections, ArrayRef<Attribute> portNames,
-    ArrayRef<Attribute> annotations, ArrayRef<Attribute> portAnnotations,
-    ArrayRef<Attribute> layers, bool lowerToBind, StringAttr innerSym) {
+    ArrayRef<Attribute> domainInfo, ArrayRef<Attribute> annotations,
+    ArrayRef<Attribute> portAnnotations, ArrayRef<Attribute> layers,
+    bool lowerToBind, bool doNotPrint, StringAttr innerSym) {
   build(builder, result, resultTypes, moduleName, name, nameKind,
-        portDirections, portNames, annotations, portAnnotations, layers,
-        lowerToBind,
+        portDirections, portNames, domainInfo, annotations, portAnnotations,
+        layers, lowerToBind, doNotPrint,
         innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
 }
 
@@ -2115,34 +2449,54 @@ void InstanceOp::build(
     OpBuilder &builder, OperationState &result, TypeRange resultTypes,
     StringRef moduleName, StringRef name, NameKindEnum nameKind,
     ArrayRef<Direction> portDirections, ArrayRef<Attribute> portNames,
-    ArrayRef<Attribute> annotations, ArrayRef<Attribute> portAnnotations,
-    ArrayRef<Attribute> layers, bool lowerToBind, hw::InnerSymAttr innerSym) {
+    ArrayRef<Attribute> domainInfo, ArrayRef<Attribute> annotations,
+    ArrayRef<Attribute> portAnnotations, ArrayRef<Attribute> layers,
+    bool lowerToBind, bool doNotPrint, hw::InnerSymAttr innerSym) {
   result.addTypes(resultTypes);
-  result.addAttribute("moduleName",
-                      SymbolRefAttr::get(builder.getContext(), moduleName));
-  result.addAttribute("name", builder.getStringAttr(name));
-  result.addAttribute(
-      "portDirections",
+  result.getOrAddProperties<Properties>().setModuleName(
+      SymbolRefAttr::get(builder.getContext(), moduleName));
+  result.getOrAddProperties<Properties>().setName(builder.getStringAttr(name));
+  result.getOrAddProperties<Properties>().setPortDirections(
       direction::packAttribute(builder.getContext(), portDirections));
-  result.addAttribute("portNames", builder.getArrayAttr(portNames));
-  result.addAttribute("annotations", builder.getArrayAttr(annotations));
-  result.addAttribute("layers", builder.getArrayAttr(layers));
+  result.getOrAddProperties<Properties>().setPortNames(
+      builder.getArrayAttr(portNames));
+
+  if (domainInfo.empty()) {
+    SmallVector<Attribute, 16> domainInfoVec(resultTypes.size(),
+                                             builder.getArrayAttr({}));
+    result.getOrAddProperties<Properties>().setDomainInfo(
+        builder.getArrayAttr(domainInfoVec));
+  } else {
+    assert(domainInfo.size() == resultTypes.size());
+    result.getOrAddProperties<Properties>().setDomainInfo(
+        builder.getArrayAttr(domainInfo));
+  }
+
+  result.getOrAddProperties<Properties>().setAnnotations(
+      builder.getArrayAttr(annotations));
+  result.getOrAddProperties<Properties>().setLayers(
+      builder.getArrayAttr(layers));
   if (lowerToBind)
-    result.addAttribute("lowerToBind", builder.getUnitAttr());
+    result.getOrAddProperties<Properties>().setLowerToBind(
+        builder.getUnitAttr());
+  if (doNotPrint)
+    result.getOrAddProperties<Properties>().setDoNotPrint(
+        builder.getUnitAttr());
   if (innerSym)
-    result.addAttribute("inner_sym", innerSym);
-  result.addAttribute("nameKind",
-                      NameKindEnumAttr::get(builder.getContext(), nameKind));
+    result.getOrAddProperties<Properties>().setInnerSym(innerSym);
+
+  result.getOrAddProperties<Properties>().setNameKind(
+      NameKindEnumAttr::get(builder.getContext(), nameKind));
 
   if (portAnnotations.empty()) {
     SmallVector<Attribute, 16> portAnnotationsVec(resultTypes.size(),
                                                   builder.getArrayAttr({}));
-    result.addAttribute("portAnnotations",
-                        builder.getArrayAttr(portAnnotationsVec));
+    result.getOrAddProperties<Properties>().setPortAnnotations(
+        builder.getArrayAttr(portAnnotationsVec));
   } else {
     assert(portAnnotations.size() == resultTypes.size());
-    result.addAttribute("portAnnotations",
-                        builder.getArrayAttr(portAnnotations));
+    result.getOrAddProperties<Properties>().setPortAnnotations(
+        builder.getArrayAttr(portAnnotations));
   }
 }
 
@@ -2150,7 +2504,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        FModuleLike module, StringRef name,
                        NameKindEnum nameKind, ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       hw::InnerSymAttr innerSym) {
+                       bool doNotPrint, hw::InnerSymAttr innerSym) {
 
   // Gather the result types.
   SmallVector<Type> resultTypes;
@@ -2159,7 +2513,9 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       module.getPortTypes(), std::back_inserter(resultTypes),
       [](Attribute typeAttr) { return cast<TypeAttr>(typeAttr).getValue(); });
 
-  // Create the port annotations.
+  // The storage for annotations and domains on the module uses an empty array
+  // if there are no annotations or domains.  However, the instance op always
+  // stores one-array-per-port.  Do this massaging here.
   ArrayAttr portAnnotationsAttr;
   if (portAnnotations.empty()) {
     portAnnotationsAttr = builder.getArrayAttr(SmallVector<Attribute, 16>(
@@ -2167,16 +2523,21 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   } else {
     portAnnotationsAttr = builder.getArrayAttr(portAnnotations);
   }
+  ArrayAttr domainInfoAttr = module.getDomainInfoAttr();
+  if (domainInfoAttr.empty()) {
+    domainInfoAttr = builder.getArrayAttr(SmallVector<Attribute, 16>(
+        resultTypes.size(), builder.getArrayAttr({})));
+  }
 
   return build(
       builder, result, resultTypes,
       SymbolRefAttr::get(builder.getContext(), module.getModuleNameAttr()),
       builder.getStringAttr(name),
       NameKindEnumAttr::get(builder.getContext(), nameKind),
-      module.getPortDirectionsAttr(), module.getPortNamesAttr(),
+      module.getPortDirectionsAttr(), module.getPortNamesAttr(), domainInfoAttr,
       builder.getArrayAttr(annotations), portAnnotationsAttr,
       module.getLayersAttr(), lowerToBind ? builder.getUnitAttr() : UnitAttr(),
-      innerSym);
+      doNotPrint ? builder.getUnitAttr() : UnitAttr(), innerSym);
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
@@ -2184,22 +2545,31 @@ void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
                        StringRef name, NameKindEnum nameKind,
                        ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> layers, bool lowerToBind,
-                       hw::InnerSymAttr innerSym) {
+                       bool doNotPrint, hw::InnerSymAttr innerSym) {
   // Gather the result types.
   SmallVector<Type> newResultTypes;
   SmallVector<Direction> newPortDirections;
-  SmallVector<Attribute> newPortNames;
-  SmallVector<Attribute> newPortAnnotations;
+  SmallVector<Attribute> newPortNames, newPortAnnotations, newDomainInfo;
+  newResultTypes.reserve(ports.size());
+  newPortDirections.reserve(ports.size());
+  newPortNames.reserve(ports.size());
+  newPortAnnotations.reserve(ports.size());
+  newDomainInfo.reserve(ports.size());
+
   for (auto &p : ports) {
     newResultTypes.push_back(p.type);
     newPortDirections.push_back(p.direction);
     newPortNames.push_back(p.name);
     newPortAnnotations.push_back(p.annotations.getArrayAttr());
+    if (p.domains)
+      newDomainInfo.push_back(p.domains);
+    else
+      newDomainInfo.push_back(builder.getArrayAttr({}));
   }
 
   return build(builder, odsState, newResultTypes, moduleName, name, nameKind,
-               newPortDirections, newPortNames, annotations, newPortAnnotations,
-               layers, lowerToBind, innerSym);
+               newPortDirections, newPortNames, newDomainInfo, annotations,
+               newPortAnnotations, layers, lowerToBind, doNotPrint, innerSym);
 }
 
 LogicalResult InstanceOp::verify() {
@@ -2221,48 +2591,75 @@ LogicalResult InstanceOp::verify() {
   return failure();
 }
 
-/// Builds a new `InstanceOp` with the ports listed in `portIndices` erased, and
-/// updates any users of the remaining ports to point at the new instance.
-InstanceOp InstanceOp::erasePorts(OpBuilder &builder,
-                                  const llvm::BitVector &portIndices) {
-  assert(portIndices.size() >= getNumResults() &&
-         "portIndices is not at least as large as getNumResults()");
+static void replaceUsesRespectingInsertedPorts(
+    Operation *op1, Operation *op2,
+    ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
+  assert(op1 != op2);
+  size_t n = insertions.size();
+  size_t inserted = 0;
+  for (size_t i = 0, e = op1->getNumResults(); i < e; ++i) {
+    while (inserted < n) {
+      auto &[index, portInfo] = insertions[inserted];
+      if (i < index)
+        break;
+      ++inserted;
+    }
+    auto r1 = op1->getResult(i);
+    auto r2 = op2->getResult(i + inserted);
+    r1.replaceAllUsesWith(r2);
+  }
+}
 
-  if (portIndices.none())
-    return *this;
-
-  SmallVector<Type> newResultTypes = removeElementsAtIndices<Type>(
-      SmallVector<Type>(result_type_begin(), result_type_end()), portIndices);
-  SmallVector<Direction> newPortDirections = removeElementsAtIndices<Direction>(
-      direction::unpackAttribute(getPortDirectionsAttr()), portIndices);
-  SmallVector<Attribute> newPortNames =
-      removeElementsAtIndices(getPortNames().getValue(), portIndices);
-  SmallVector<Attribute> newPortAnnotations =
-      removeElementsAtIndices(getPortAnnotations().getValue(), portIndices);
-
-  auto newOp = builder.create<InstanceOp>(
-      getLoc(), newResultTypes, getModuleName(), getName(), getNameKind(),
-      newPortDirections, newPortNames, getAnnotations().getValue(),
-      newPortAnnotations, getLayers(), getLowerToBind(), getInnerSymAttr());
-
-  for (unsigned oldIdx = 0, newIdx = 0, numOldPorts = getNumResults();
-       oldIdx != numOldPorts; ++oldIdx) {
-    if (portIndices.test(oldIdx)) {
-      assert(getResult(oldIdx).use_empty() && "removed instance port has uses");
+static void replaceUsesRespectingErasedPorts(Operation *op1, Operation *op2,
+                                             const llvm::BitVector &erasures) {
+  assert(op1 != op2);
+  size_t erased = 0;
+  for (size_t i = 0, e = op1->getNumResults(); i < e; ++i) {
+    auto r1 = op1->getResult(i);
+    if (erasures[i]) {
+      assert(r1.use_empty() && "removed instance port has uses");
+      ++erased;
       continue;
     }
-    getResult(oldIdx).replaceAllUsesWith(newOp.getResult(newIdx));
-    ++newIdx;
+    auto r2 = op2->getResult(i - erased);
+    r1.replaceAllUsesWith(r2);
   }
+}
 
-  // Compy over "output_file" information so that this is not lost when ports
-  // are erased.
-  //
-  // TODO: Other attributes may need to be copied over.
+InstanceOp InstanceOp::cloneWithErasedPorts(const llvm::BitVector &erasures) {
+  assert(erasures.size() >= getNumResults() &&
+         "erasures is not at least as large as getNumResults()");
+
+  SmallVector<Type> newResultTypes = removeElementsAtIndices<Type>(
+      SmallVector<Type>(result_type_begin(), result_type_end()), erasures);
+  SmallVector<Direction> newPortDirections = removeElementsAtIndices<Direction>(
+      direction::unpackAttribute(getPortDirectionsAttr()), erasures);
+  SmallVector<Attribute> newPortNames =
+      removeElementsAtIndices(getPortNames().getValue(), erasures);
+  SmallVector<Attribute> newPortAnnotations =
+      removeElementsAtIndices(getPortAnnotations().getValue(), erasures);
+  ArrayAttr newDomainInfo =
+      fixDomainInfoDeletions(getContext(), getDomainInfoAttr(), erasures,
+                             /*supportsEmptyAttr=*/false);
+
+  OpBuilder builder(*this);
+  auto clone = InstanceOp::create(
+      builder, getLoc(), newResultTypes, getModuleName(), getName(),
+      getNameKind(), newPortDirections, newPortNames, newDomainInfo.getValue(),
+      getAnnotations().getValue(), newPortAnnotations, getLayers(),
+      getLowerToBind(), getDoNotPrint(), getInnerSymAttr());
+
   if (auto outputFile = (*this)->getAttr("output_file"))
-    newOp->setAttr("output_file", outputFile);
+    clone->setAttr("output_file", outputFile);
 
-  return newOp;
+  return clone;
+}
+
+InstanceOp InstanceOp::cloneWithErasedPortsAndReplaceUses(
+    const llvm::BitVector &erasures) {
+  auto clone = cloneWithErasedPorts(erasures);
+  replaceUsesRespectingErasedPorts(getOperation(), clone, erasures);
+  return clone;
 }
 
 ArrayAttr InstanceOp::getPortAnnotation(unsigned portIdx) {
@@ -2278,45 +2675,102 @@ void InstanceOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
                    ArrayAttr::get(getContext(), annotations));
 }
 
-InstanceOp
-InstanceOp::cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
-  auto portSize = ports.size();
-  auto newPortCount = getNumResults() + portSize;
-  SmallVector<Direction> newPortDirections;
-  newPortDirections.reserve(newPortCount);
-  SmallVector<Attribute> newPortNames;
-  newPortNames.reserve(newPortCount);
-  SmallVector<Type> newPortTypes;
-  newPortTypes.reserve(newPortCount);
-  SmallVector<Attribute> newPortAnnos;
-  newPortAnnos.reserve(newPortCount);
+Attribute InstanceOp::getPortDomain(unsigned portIdx) {
+  assert(portIdx < getNumResults() &&
+         "index should be smaller than result number");
+  return getDomainInfo()[portIdx];
+}
 
-  unsigned oldIndex = 0;
-  unsigned newIndex = 0;
-  while (oldIndex + newIndex < newPortCount) {
-    // Check if we should insert a port here.
-    if (newIndex < portSize && ports[newIndex].first == oldIndex) {
-      auto &newPort = ports[newIndex].second;
-      newPortDirections.push_back(newPort.direction);
-      newPortNames.push_back(newPort.name);
-      newPortTypes.push_back(newPort.type);
-      newPortAnnos.push_back(newPort.annotations.getArrayAttr());
-      ++newIndex;
-    } else {
-      // Copy the next old port.
-      newPortDirections.push_back(getPortDirection(oldIndex));
-      newPortNames.push_back(getPortName(oldIndex));
-      newPortTypes.push_back(getType(oldIndex));
-      newPortAnnos.push_back(getPortAnnotation(oldIndex));
-      ++oldIndex;
-    }
+InstanceOp InstanceOp::cloneWithInsertedPorts(
+    ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
+  auto *context = getContext();
+  auto empty = ArrayAttr::get(context, {});
+
+  auto oldPortCount = getNumResults();
+  auto numInsertions = insertions.size();
+  auto newPortCount = oldPortCount + numInsertions;
+
+  SmallVector<Direction> newPortDirections;
+  SmallVector<Attribute> newPortNames;
+  SmallVector<Type> newPortTypes;
+  SmallVector<Attribute> newPortAnnos;
+  SmallVector<Attribute> newDomainInfo;
+
+  newPortDirections.reserve(newPortCount);
+  newPortNames.reserve(newPortCount);
+  newPortTypes.reserve(newPortCount);
+  newPortAnnos.reserve(newPortCount);
+  newDomainInfo.reserve(newPortCount);
+
+  // Build the complete index map from old port indices to new port indices
+  // before processing any ports. This is necessary so that
+  // fixDomainInfoInsertions can correctly update domain references for newly
+  // inserted ports.
+  SmallVector<unsigned> indexMap(oldPortCount);
+  size_t inserted = 0;
+  for (size_t i = 0; i < oldPortCount; ++i) {
+    while (inserted < numInsertions && insertions[inserted].first <= i)
+      ++inserted;
+    indexMap[i] = i + inserted;
   }
 
-  // Create a new instance op with the reset inserted.
-  return OpBuilder(*this).create<InstanceOp>(
-      getLoc(), newPortTypes, getModuleName(), getName(), getNameKind(),
-      newPortDirections, newPortNames, getAnnotations().getValue(),
-      newPortAnnos, getLayers(), getLowerToBind(), getInnerSymAttr());
+  // Now process the ports, using the complete indexMap.
+  inserted = 0;
+  for (size_t i = 0; i < oldPortCount; ++i) {
+    while (inserted < numInsertions) {
+      auto &[index, info] = insertions[inserted];
+      if (index > i)
+        break;
+
+      auto domains = fixDomainInfoInsertions(
+          context, info.domains ? info.domains : empty, indexMap);
+      newPortDirections.push_back(info.direction);
+      newPortNames.push_back(info.name);
+      newPortTypes.push_back(info.type);
+      newPortAnnos.push_back(info.annotations.getArrayAttr());
+      newDomainInfo.push_back(domains);
+      ++inserted;
+    }
+
+    newPortDirections.push_back(getPortDirection(i));
+    newPortNames.push_back(getPortNameAttr(i));
+    newPortTypes.push_back(getType(i));
+    newPortAnnos.push_back(getPortAnnotation(i));
+    auto domains =
+        fixDomainInfoInsertions(context, getDomainInfo()[i], indexMap);
+    newDomainInfo.push_back(domains);
+  }
+
+  while (inserted < numInsertions) {
+    auto &[index, info] = insertions[inserted];
+    auto domains = fixDomainInfoInsertions(
+        context, info.domains ? info.domains : empty, indexMap);
+    newPortDirections.push_back(info.direction);
+    newPortNames.push_back(info.name);
+    newPortTypes.push_back(info.type);
+    newPortAnnos.push_back(info.annotations.getArrayAttr());
+    newDomainInfo.push_back(domains);
+    ++inserted;
+  }
+
+  OpBuilder builder(*this);
+  auto clone = InstanceOp::create(
+      builder, getLoc(), newPortTypes, getModuleName(), getName(),
+      getNameKind(), newPortDirections, newPortNames, newDomainInfo,
+      getAnnotations().getValue(), newPortAnnos, getLayers(), getLowerToBind(),
+      getDoNotPrint(), getInnerSymAttr());
+
+  if (auto outputFile = (*this)->getAttr("output_file"))
+    clone->setAttr("output_file", outputFile);
+
+  return clone;
+}
+
+InstanceOp InstanceOp::cloneWithInsertedPortsAndReplaceUses(
+    ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
+  auto clone = cloneWithInsertedPorts(insertions);
+  replaceUsesRespectingInsertedPorts(getOperation(), clone, insertions);
+  return clone;
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -2343,7 +2797,7 @@ void InstanceOp::print(OpAsmPrinter &p) {
   SmallVector<StringRef, 10> omittedAttrs = {
       "moduleName", "name",      "portDirections",
       "portNames",  "portTypes", "portAnnotations",
-      "inner_sym",  "nameKind"};
+      "inner_sym",  "nameKind",  "domainInfo"};
   if (getAnnotations().empty())
     omittedAttrs.push_back("annotations");
   if (getLayers().empty())
@@ -2359,14 +2813,16 @@ void InstanceOp::print(OpAsmPrinter &p) {
   portTypes.reserve(getNumResults());
   llvm::transform(getResultTypes(), std::back_inserter(portTypes),
                   &TypeAttr::get);
+  // This needs to be passed domain information.
   printModulePorts(p, /*block=*/nullptr, getPortDirectionsAttr(),
                    getPortNames().getValue(), portTypes,
-                   getPortAnnotations().getValue(), {}, {});
+                   getPortAnnotations().getValue(), {}, {},
+                   getDomainInfo().getValue());
 }
 
 ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   auto *context = parser.getContext();
-  auto &resultAttrs = result.attributes;
+  auto &properties = result.getOrAddProperties<Properties>();
 
   std::string name;
   hw::InnerSymAttr innerSymAttr;
@@ -2378,6 +2834,7 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<Attribute, 4> portAnnotations;
   SmallVector<Attribute, 4> portSyms;
   SmallVector<Attribute, 4> portLocs;
+  SmallVector<Attribute, 4> domains;
   NameKindEnumAttr nameKind;
 
   if (parser.parseKeywordOrString(&name))
@@ -2392,35 +2849,31 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   }
   if (parseNameKind(parser, nameKind) ||
       parser.parseOptionalAttrDict(result.attributes) ||
-      parser.parseAttribute(moduleName, "moduleName", resultAttrs) ||
+      parser.parseAttribute(moduleName) ||
       parseModulePorts(parser, /*hasSSAIdentifiers=*/false,
-                       /*supportsSymbols=*/false, entryArgs, portDirections,
-                       portNames, portTypes, portAnnotations, portSyms,
-                       portLocs))
+                       /*supportsSymbols=*/false, /*supportsDomains=*/true,
+                       entryArgs, portDirections, portNames, portTypes,
+                       portAnnotations, portSyms, portLocs, domains))
     return failure();
 
   // Add the attributes. We let attributes defined in the attr-dict override
   // attributes parsed out of the module signature.
-  if (!resultAttrs.get("moduleName"))
-    result.addAttribute("moduleName", moduleName);
-  if (!resultAttrs.get("name"))
-    result.addAttribute("name", StringAttr::get(context, name));
-  result.addAttribute("nameKind", nameKind);
-  if (!resultAttrs.get("portDirections"))
-    result.addAttribute("portDirections",
-                        direction::packAttribute(context, portDirections));
-  if (!resultAttrs.get("portNames"))
-    result.addAttribute("portNames", ArrayAttr::get(context, portNames));
-  if (!resultAttrs.get("portAnnotations"))
-    result.addAttribute("portAnnotations",
-                        ArrayAttr::get(context, portAnnotations));
+
+  properties.setModuleName(moduleName);
+  properties.setName(StringAttr::get(context, name));
+  properties.setNameKind(nameKind);
+  properties.setPortDirections(
+      direction::packAttribute(context, portDirections));
+  properties.setPortNames(ArrayAttr::get(context, portNames));
+  properties.setPortAnnotations(ArrayAttr::get(context, portAnnotations));
 
   // Annotations, layers, and LowerToBind are omitted in the printed format
   // if they are empty, empty, and false (respectively).
-  if (!resultAttrs.get("annotations"))
-    resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
-  if (!resultAttrs.get("layers"))
-    resultAttrs.append("layers", parser.getBuilder().getArrayAttr({}));
+  properties.setAnnotations(parser.getBuilder().getArrayAttr({}));
+  properties.setLayers(parser.getBuilder().getArrayAttr({}));
+
+  // Add domain information.
+  properties.setDomainInfo(ArrayAttr::get(context, domains));
 
   // Add result types.
   result.types.reserve(portTypes.size());
@@ -2437,7 +2890,7 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     base = "inst";
 
   for (size_t i = 0, e = (*this)->getNumResults(); i != e; ++i) {
-    setNameFn(getResult(i), (base + "_" + getPortNameStr(i)).str());
+    setNameFn(getResult(i), (base + "_" + getPortName(i)).str());
   }
 }
 
@@ -2454,7 +2907,8 @@ void InstanceChoiceOp::build(
     OpBuilder &builder, OperationState &result, FModuleLike defaultModule,
     ArrayRef<std::pair<OptionCaseOp, FModuleLike>> cases, StringRef name,
     NameKindEnum nameKind, ArrayRef<Attribute> annotations,
-    ArrayRef<Attribute> portAnnotations, StringAttr innerSym) {
+    ArrayRef<Attribute> portAnnotations, StringAttr innerSym,
+    FlatSymbolRefAttr instanceMacro) {
   // Gather the result types.
   SmallVector<Type> resultTypes;
   for (Attribute portType : defaultModule.getPortTypes())
@@ -2467,6 +2921,13 @@ void InstanceChoiceOp::build(
         resultTypes.size(), builder.getArrayAttr({})));
   } else {
     portAnnotationsAttr = builder.getArrayAttr(portAnnotations);
+  }
+
+  // Create the domain info attribute.
+  ArrayAttr domainInfoAttr = defaultModule.getDomainInfoAttr();
+  if (domainInfoAttr.empty()) {
+    domainInfoAttr = builder.getArrayAttr(SmallVector<Attribute, 16>(
+        resultTypes.size(), builder.getArrayAttr({})));
   }
 
   // Gather the module & case names.
@@ -2483,14 +2944,64 @@ void InstanceChoiceOp::build(
                builder.getArrayAttr(caseNames), builder.getStringAttr(name),
                NameKindEnumAttr::get(builder.getContext(), nameKind),
                defaultModule.getPortDirectionsAttr(),
-               defaultModule.getPortNamesAttr(),
+               defaultModule.getPortNamesAttr(), domainInfoAttr,
                builder.getArrayAttr(annotations), portAnnotationsAttr,
                defaultModule.getLayersAttr(),
-               innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
+               innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
+               instanceMacro);
+}
+
+void InstanceChoiceOp::build(OpBuilder &builder, OperationState &odsState,
+                             ArrayRef<PortInfo> ports, ArrayAttr moduleNames,
+                             ArrayAttr caseNames, StringRef name,
+                             NameKindEnum nameKind, ArrayAttr annotations,
+                             ArrayAttr layers, hw::InnerSymAttr innerSym,
+                             FlatSymbolRefAttr instanceMacro) {
+  // Gather the result types and port information from PortInfo.
+  SmallVector<Type> newResultTypes;
+  SmallVector<bool> newPortDirections;
+  SmallVector<Attribute> newPortNames, newPortAnnotations, newDomainInfo;
+  newPortDirections.reserve(ports.size());
+  newResultTypes.reserve(ports.size());
+  newPortAnnotations.reserve(ports.size());
+  newDomainInfo.reserve(ports.size());
+  newPortNames.reserve(ports.size());
+  for (auto &p : ports) {
+    newResultTypes.push_back(p.type);
+    // Convert Direction to bool (true = output, false = input)
+    newPortDirections.push_back(p.direction == Direction::Out);
+    newPortNames.push_back(p.name);
+    newPortAnnotations.push_back(p.annotations.getArrayAttr());
+    if (p.domains)
+      newDomainInfo.push_back(p.domains);
+    else
+      newDomainInfo.push_back(builder.getArrayAttr({}));
+  }
+
+  return build(builder, odsState, newResultTypes, moduleNames, caseNames, name,
+               nameKind, newPortDirections, builder.getArrayAttr(newPortNames),
+               builder.getArrayAttr(newDomainInfo), annotations,
+               builder.getArrayAttr(newPortAnnotations), layers.getValue(),
+               innerSym, instanceMacro);
 }
 
 std::optional<size_t> InstanceChoiceOp::getTargetResultIndex() {
   return std::nullopt;
+}
+
+StringRef InstanceChoiceOp::getInstanceName() { return getName(); }
+
+StringAttr InstanceChoiceOp::getInstanceNameAttr() { return getNameAttr(); }
+
+ArrayAttr InstanceChoiceOp::getReferencedModuleNamesAttr() {
+  // Convert FlatSymbolRefAttr array to StringAttr array
+  auto moduleNames = getModuleNamesAttr();
+  SmallVector<Attribute> moduleNameStrings;
+  moduleNameStrings.reserve(moduleNames.size());
+  for (auto moduleName : moduleNames)
+    moduleNameStrings.push_back(cast<FlatSymbolRefAttr>(moduleName).getAttr());
+
+  return ArrayAttr::get(getContext(), moduleNameStrings);
 }
 
 void InstanceChoiceOp::print(OpAsmPrinter &p) {
@@ -2505,10 +3016,11 @@ void InstanceChoiceOp::print(OpAsmPrinter &p) {
     p << ' ' << stringifyNameKindEnum(getNameKindAttr().getValue());
 
   // Print the attr-dict.
-  SmallVector<StringRef, 10> omittedAttrs = {
+  SmallVector<StringRef, 11> omittedAttrs = {
       "moduleNames",     "caseNames", "name",
       "portDirections",  "portNames", "portTypes",
-      "portAnnotations", "inner_sym", "nameKind"};
+      "portAnnotations", "inner_sym", "nameKind",
+      "domainInfo"};
   if (getAnnotations().empty())
     omittedAttrs.push_back("annotations");
   if (getLayers().empty())
@@ -2546,13 +3058,14 @@ void InstanceChoiceOp::print(OpAsmPrinter &p) {
                   &TypeAttr::get);
   printModulePorts(p, /*block=*/nullptr, getPortDirectionsAttr(),
                    getPortNames().getValue(), portTypes,
-                   getPortAnnotations().getValue(), {}, {});
+                   getPortAnnotations().getValue(), {}, {},
+                   getDomainInfo().getValue());
 }
 
 ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
                                     OperationState &result) {
   auto *context = parser.getContext();
-  auto &resultAttrs = result.attributes;
+  auto &properties = result.getOrAddProperties<Properties>();
 
   std::string name;
   hw::InnerSymAttr innerSymAttr;
@@ -2565,6 +3078,7 @@ ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
   SmallVector<Attribute, 4> portAnnotations;
   SmallVector<Attribute, 4> portSyms;
   SmallVector<Attribute, 4> portLocs;
+  SmallVector<Attribute, 4> domains;
   NameKindEnumAttr nameKind;
 
   if (parser.parseKeywordOrString(&name))
@@ -2609,35 +3123,27 @@ ParseResult InstanceChoiceOp::parse(OpAsmParser &parser,
   }
 
   if (parseModulePorts(parser, /*hasSSAIdentifiers=*/false,
-                       /*supportsSymbols=*/false, entryArgs, portDirections,
-                       portNames, portTypes, portAnnotations, portSyms,
-                       portLocs))
+                       /*supportsSymbols=*/false, /*supportsDomains=*/true,
+                       entryArgs, portDirections, portNames, portTypes,
+                       portAnnotations, portSyms, portLocs, domains))
     return failure();
 
   // Add the attributes. We let attributes defined in the attr-dict override
   // attributes parsed out of the module signature.
-  if (!resultAttrs.get("moduleNames"))
-    result.addAttribute("moduleNames", ArrayAttr::get(context, moduleNames));
-  if (!resultAttrs.get("caseNames"))
-    result.addAttribute("caseNames", ArrayAttr::get(context, caseNames));
-  if (!resultAttrs.get("name"))
-    result.addAttribute("name", StringAttr::get(context, name));
-  result.addAttribute("nameKind", nameKind);
-  if (!resultAttrs.get("portDirections"))
-    result.addAttribute("portDirections",
-                        direction::packAttribute(context, portDirections));
-  if (!resultAttrs.get("portNames"))
-    result.addAttribute("portNames", ArrayAttr::get(context, portNames));
-  if (!resultAttrs.get("portAnnotations"))
-    result.addAttribute("portAnnotations",
-                        ArrayAttr::get(context, portAnnotations));
+  properties.setModuleNames(ArrayAttr::get(context, moduleNames));
+  properties.setCaseNames(ArrayAttr::get(context, caseNames));
+  properties.setName(StringAttr::get(context, name));
+  properties.setNameKind(nameKind);
+  properties.setPortDirections(
+      direction::packAttribute(context, portDirections));
+  properties.setPortNames(ArrayAttr::get(context, portNames));
+  properties.setDomainInfo(ArrayAttr::get(context, domains));
+  properties.setPortAnnotations(ArrayAttr::get(context, portAnnotations));
 
   // Annotations, layers, and LowerToBind are omitted in the printed format if
   // they are empty, empty, and false (respectively).
-  if (!resultAttrs.get("annotations"))
-    resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
-  if (!resultAttrs.get("layers"))
-    resultAttrs.append("layers", parser.getBuilder().getArrayAttr({}));
+  properties.setAnnotations(parser.getBuilder().getArrayAttr({}));
+  properties.setLayers(parser.getBuilder().getArrayAttr({}));
 
   // Add result types.
   result.types.reserve(portTypes.size());
@@ -2684,9 +3190,17 @@ LogicalResult
 InstanceChoiceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto caseNames = getCaseNamesAttr();
   for (auto moduleName : getModuleNamesAttr()) {
-    if (failed(instance_like_impl::verifyReferencedModule(
-            *this, symbolTable, cast<FlatSymbolRefAttr>(moduleName))))
+    auto moduleNameRef = cast<FlatSymbolRefAttr>(moduleName);
+    if (failed(instance_like_impl::verifyReferencedModule(*this, symbolTable,
+                                                          moduleNameRef)))
       return failure();
+
+    // Check that the referenced module is not an intmodule.
+    auto referencedModule =
+        symbolTable.lookupNearestSymbolFrom<FModuleLike>(*this, moduleNameRef);
+    if (isa<FIntModuleOp>(referencedModule))
+      return emitOpError("intmodule must be instantiated with instance op, "
+                         "not via 'firrtl.instance_choice'");
   }
 
   auto root = cast<SymbolRefAttr>(caseNames[0]).getRootReference();
@@ -2705,6 +3219,11 @@ InstanceChoiceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       return emitOpError() << "option " << refRoot
                            << " does not contain option case " << ref;
   }
+
+  if (auto instanceMacro = getInstanceMacroAttr())
+    if (!symbolTable.lookupNearestSymbolFrom(*this, instanceMacro))
+      return emitOpError() << "instance_macro " << instanceMacro
+                           << " does not exist";
 
   return success();
 }
@@ -2733,57 +3252,143 @@ InstanceChoiceOp::getTargetChoices() {
   return choices;
 }
 
+InstanceChoiceOp InstanceChoiceOp::cloneWithInsertedPorts(
+    ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
+  auto *context = getContext();
+  auto empty = ArrayAttr::get(context, {});
+
+  auto oldPortCount = getNumResults();
+  auto numInsertions = insertions.size();
+  auto newPortCount = oldPortCount + numInsertions;
+
+  SmallVector<Direction> newPortDirections;
+  SmallVector<Attribute> newPortNames;
+  SmallVector<Type> newPortTypes;
+  SmallVector<Attribute> newPortAnnos;
+  SmallVector<Attribute> newDomainInfo;
+
+  newPortDirections.reserve(newPortCount);
+  newPortNames.reserve(newPortCount);
+  newPortTypes.reserve(newPortCount);
+  newPortAnnos.reserve(newPortCount);
+  newDomainInfo.reserve(newPortCount);
+
+  // Build the complete index map from old port indices to new port indices
+  // before processing any ports. This is necessary so that
+  // fixDomainInfoInsertions can correctly update domain references for newly
+  // inserted ports.
+  SmallVector<unsigned> indexMap(oldPortCount);
+  size_t inserted = 0;
+  for (size_t i = 0; i < oldPortCount; ++i) {
+    while (inserted < numInsertions && insertions[inserted].first <= i)
+      ++inserted;
+    indexMap[i] = i + inserted;
+  }
+
+  // Now process the ports, using the complete indexMap.
+  inserted = 0;
+  for (size_t i = 0; i < oldPortCount; ++i) {
+    while (inserted < numInsertions) {
+      auto &[index, info] = insertions[inserted];
+      if (i < index)
+        break;
+
+      auto domains = fixDomainInfoInsertions(
+          context, info.domains ? info.domains : empty, indexMap);
+      newPortDirections.push_back(info.direction);
+      newPortNames.push_back(info.name);
+      newPortTypes.push_back(info.type);
+      newPortAnnos.push_back(info.annotations.getArrayAttr());
+      newDomainInfo.push_back(domains);
+      ++inserted;
+    }
+
+    newPortDirections.push_back(getPortDirection(i));
+    newPortNames.push_back(getPortNameAttr(i));
+    newPortTypes.push_back(getType(i));
+    newPortAnnos.push_back(getPortAnnotations()[i]);
+    auto domains =
+        fixDomainInfoInsertions(context, getDomainInfo()[i], indexMap);
+    newDomainInfo.push_back(domains);
+  }
+
+  while (inserted < numInsertions) {
+    auto &[index, info] = insertions[inserted];
+    auto domains = fixDomainInfoInsertions(
+        context, info.domains ? info.domains : empty, indexMap);
+    newPortDirections.push_back(info.direction);
+    newPortNames.push_back(info.name);
+    newPortTypes.push_back(info.type);
+    newPortAnnos.push_back(info.annotations.getArrayAttr());
+    newDomainInfo.push_back(domains);
+    ++inserted;
+  }
+
+  OpBuilder builder(*this);
+  auto clone = InstanceChoiceOp::create(
+      builder, getLoc(), newPortTypes, getModuleNames(), getCaseNames(),
+      getName(), getNameKind(),
+      direction::packAttribute(context, newPortDirections),
+      ArrayAttr::get(context, newPortNames),
+      ArrayAttr::get(context, newDomainInfo), getAnnotationsAttr(),
+      ArrayAttr::get(context, newPortAnnos), getLayers(), getInnerSymAttr(),
+      getInstanceMacroAttr());
+
+  if (auto outputFile = (*this)->getAttr("output_file"))
+    clone->setAttr("output_file", outputFile);
+
+  return clone;
+}
+
+InstanceChoiceOp InstanceChoiceOp::cloneWithInsertedPortsAndReplaceUses(
+    ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
+  auto clone = cloneWithInsertedPorts(insertions);
+  replaceUsesRespectingInsertedPorts(getOperation(), clone, insertions);
+  return clone;
+}
+
+InstanceChoiceOp
+InstanceChoiceOp::cloneWithErasedPorts(const llvm::BitVector &erasures) {
+  assert(erasures.size() >= getNumResults() &&
+         "erasures is not at least as large as getNumResults()");
+
+  SmallVector<Type> newResultTypes = removeElementsAtIndices<Type>(
+      SmallVector<Type>(result_type_begin(), result_type_end()), erasures);
+  SmallVector<Direction> newPortDirections = removeElementsAtIndices<Direction>(
+      direction::unpackAttribute(getPortDirectionsAttr()), erasures);
+  SmallVector<Attribute> newPortNames =
+      removeElementsAtIndices(getPortNames().getValue(), erasures);
+  SmallVector<Attribute> newPortAnnotations =
+      removeElementsAtIndices(getPortAnnotations().getValue(), erasures);
+  ArrayAttr newPortDomains =
+      fixDomainInfoDeletions(getContext(), getDomainInfoAttr(), erasures,
+                             /*supportsEmptyAttr=*/false);
+
+  OpBuilder builder(*this);
+  auto clone = InstanceChoiceOp::create(
+      builder, getLoc(), newResultTypes, getModuleNames(), getCaseNames(),
+      getName(), getNameKind(),
+      direction::packAttribute(getContext(), newPortDirections),
+      ArrayAttr::get(getContext(), newPortNames), newPortDomains,
+      getAnnotationsAttr(), ArrayAttr::get(getContext(), newPortAnnotations),
+      getLayers(), getInnerSymAttr(), getInstanceMacroAttr());
+
+  if (auto outputFile = (*this)->getAttr("output_file"))
+    clone->setAttr("output_file", outputFile);
+
+  return clone;
+}
+
+InstanceChoiceOp InstanceChoiceOp::cloneWithErasedPortsAndReplaceUses(
+    const llvm::BitVector &erasures) {
+  auto clone = cloneWithErasedPorts(erasures);
+  replaceUsesRespectingErasedPorts(getOperation(), clone, erasures);
+  return clone;
+}
+
 //===----------------------------------------------------------------------===//
 // MemOp
 //===----------------------------------------------------------------------===//
-
-void MemOp::build(OpBuilder &builder, OperationState &result,
-                  TypeRange resultTypes, uint32_t readLatency,
-                  uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
-                  ArrayRef<Attribute> portNames, StringRef name,
-                  NameKindEnum nameKind, ArrayRef<Attribute> annotations,
-                  ArrayRef<Attribute> portAnnotations,
-                  hw::InnerSymAttr innerSym) {
-  result.addAttribute(
-      "readLatency",
-      builder.getIntegerAttr(builder.getIntegerType(32), readLatency));
-  result.addAttribute(
-      "writeLatency",
-      builder.getIntegerAttr(builder.getIntegerType(32), writeLatency));
-  result.addAttribute(
-      "depth", builder.getIntegerAttr(builder.getIntegerType(64), depth));
-  result.addAttribute("ruw", ::RUWAttrAttr::get(builder.getContext(), ruw));
-  result.addAttribute("portNames", builder.getArrayAttr(portNames));
-  result.addAttribute("name", builder.getStringAttr(name));
-  result.addAttribute("nameKind",
-                      NameKindEnumAttr::get(builder.getContext(), nameKind));
-  result.addAttribute("annotations", builder.getArrayAttr(annotations));
-  if (innerSym)
-    result.addAttribute("inner_sym", innerSym);
-  result.addTypes(resultTypes);
-
-  if (portAnnotations.empty()) {
-    SmallVector<Attribute, 16> portAnnotationsVec(resultTypes.size(),
-                                                  builder.getArrayAttr({}));
-    result.addAttribute("portAnnotations",
-                        builder.getArrayAttr(portAnnotationsVec));
-  } else {
-    assert(portAnnotations.size() == resultTypes.size());
-    result.addAttribute("portAnnotations",
-                        builder.getArrayAttr(portAnnotations));
-  }
-}
-
-void MemOp::build(OpBuilder &builder, OperationState &result,
-                  TypeRange resultTypes, uint32_t readLatency,
-                  uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
-                  ArrayRef<Attribute> portNames, StringRef name,
-                  NameKindEnum nameKind, ArrayRef<Attribute> annotations,
-                  ArrayRef<Attribute> portAnnotations, StringAttr innerSym) {
-  build(builder, result, resultTypes, readLatency, writeLatency, depth, ruw,
-        portNames, name, nameKind, annotations, portAnnotations,
-        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
-}
 
 ArrayAttr MemOp::getPortAnnotation(unsigned portIdx) {
   assert(portIdx < getNumResults() &&
@@ -2830,7 +3435,7 @@ LogicalResult MemOp::verify() {
   FIRRTLType oldDataType;
 
   for (size_t i = 0, e = getNumResults(); i != e; ++i) {
-    auto portName = getPortName(i);
+    auto portName = getPortNameAttr(i);
 
     // Get a bundle type representing this port, stripping an outer
     // flip if it exists.  If this is not a bundle<> or
@@ -2940,10 +3545,10 @@ LogicalResult MemOp::verify() {
     // Error if the type of the current port was not the same as the
     // last port, but skip checking the first port.
     if (oldDataType && oldDataType != dataType) {
-      emitOpError() << "port " << getPortName(i)
-                    << " has a different type than port " << getPortName(i - 1)
-                    << " (expected " << oldDataType << ", but got " << dataType
-                    << ")";
+      emitOpError() << "port " << getPortNameAttr(i)
+                    << " has a different type than port "
+                    << getPortNameAttr(i - 1) << " (expected " << oldDataType
+                    << ", but got " << dataType << ")";
       return failure();
     }
 
@@ -3026,7 +3631,7 @@ SmallVector<MemOp::NamedPort> MemOp::getPorts() {
   for (size_t i = 0, e = getNumResults(); i != e; ++i) {
     // Each port is a bundle.
     auto portType = type_cast<FIRRTLType>(getResult(i).getType());
-    result.push_back({getPortName(i), getMemPortKindFromType(portType)});
+    result.push_back({getPortNameAttr(i), getMemPortKindFromType(portType)});
   }
   return result;
 }
@@ -3083,7 +3688,7 @@ FIRRTLBaseType MemOp::getDataType() {
       .getElementType(dataFieldName);
 }
 
-StringAttr MemOp::getPortName(size_t resultNo) {
+StringAttr MemOp::getPortNameAttr(size_t resultNo) {
   return cast<StringAttr>(getPortNames()[resultNo]);
 }
 
@@ -3204,7 +3809,7 @@ void MemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     base = "mem";
 
   for (size_t i = 0, e = (*this)->getNumResults(); i != e; ++i) {
-    setNameFn(getResult(i), (base + "_" + getPortNameStr(i)).str());
+    setNameFn(getResult(i), (base + "_" + getPortName(i)).str());
   }
 }
 
@@ -3237,19 +3842,19 @@ LogicalResult NodeOp::inferReturnTypes(
     ::llvm::SmallVectorImpl<::mlir::Type> &inferredReturnTypes) {
   if (operands.empty())
     return failure();
-  inferredReturnTypes.push_back(operands[0].getType());
-  for (auto &attr : attributes)
-    if (attr.getName() == Forceable::getForceableAttrName()) {
-      auto forceableType =
-          firrtl::detail::getForceableResultType(true, operands[0].getType());
-      if (!forceableType) {
-        if (location)
-          ::mlir::emitError(*location, "cannot force a node of type ")
-              << operands[0].getType();
-        return failure();
-      }
-      inferredReturnTypes.push_back(forceableType);
+  Adaptor adaptor(operands, attributes, properties, regions);
+  inferredReturnTypes.push_back(adaptor.getInput().getType());
+  if (adaptor.getForceable()) {
+    auto forceableType = firrtl::detail::getForceableResultType(
+        true, adaptor.getInput().getType());
+    if (!forceableType) {
+      if (location)
+        ::mlir::emitError(*location, "cannot force a node of type ")
+            << operands[0].getType();
+      return failure();
     }
+    inferredReturnTypes.push_back(forceableType);
+  }
   return success();
 }
 
@@ -3260,6 +3865,12 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 std::optional<size_t> RegOp::getTargetResultIndex() { return 0; }
+
+SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>
+RegOp::computeDataFlow() {
+  // A register does't have any combinational dataflow.
+  return {};
+}
 
 LogicalResult RegResetOp::verify() {
   auto reset = getResetValue();
@@ -3281,8 +3892,113 @@ void RegResetOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
 }
 
+//===----------------------------------------------------------------------===//
+// FormalOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+FormalOp::verifySymbolUses(mlir::SymbolTableCollection &symbolTable) {
+  auto *op = symbolTable.lookupNearestSymbolFrom(*this, getModuleNameAttr());
+  if (!op)
+    return emitOpError() << "targets unknown module " << getModuleNameAttr();
+
+  if (!isa<FModuleLike>(op)) {
+    auto d = emitOpError() << "target " << getModuleNameAttr()
+                           << " is not a module";
+    d.attachNote(op->getLoc()) << "target defined here";
+    return d;
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SimulationOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+SimulationOp::verifySymbolUses(mlir::SymbolTableCollection &symbolTable) {
+  auto *op = symbolTable.lookupNearestSymbolFrom(*this, getModuleNameAttr());
+  if (!op)
+    return emitOpError() << "targets unknown module " << getModuleNameAttr();
+
+  auto complain = [&] {
+    auto d = emitOpError() << "target " << getModuleNameAttr() << " ";
+    d.attachNote(op->getLoc()) << "target defined here";
+    return d;
+  };
+
+  auto module = dyn_cast<FModuleLike>(op);
+  if (!module)
+    return complain() << "is not a module";
+
+  auto numPorts = module.getNumPorts();
+  if (numPorts < 4)
+    return complain() << "must have at least 4 ports, got " << numPorts
+                      << " instead";
+
+  // Check ports 0-3 for expected hardware ports: clock, init, done, success.
+  auto checkPort = [&](unsigned idx, StringRef expName, Direction expDir,
+                       llvm::function_ref<bool(Type)> checkType,
+                       StringRef expType) {
+    auto name = module.getPortNameAttr(idx);
+    if (name != expName) {
+      complain() << "port " << idx << " must be called \"" << expName
+                 << "\", got " << name << " instead";
+      return false;
+    }
+    if (auto dir = module.getPortDirection(idx); dir != expDir) {
+      auto stringify = [](Direction dir) {
+        return dir == Direction::In ? "an input" : "an output";
+      };
+      complain() << "port " << name << " must be " << stringify(expDir)
+                 << ", got " << stringify(dir) << " instead";
+      return false;
+    }
+    if (auto type = module.getPortType(idx); !checkType(type)) {
+      complain() << "port " << name << " must be a '!firrtl." << expType
+                 << "', got " << type << " instead";
+      return false;
+    }
+    return true;
+  };
+
+  auto isClock = [](Type type) { return isa<ClockType>(type); };
+  auto isBool = [](Type type) {
+    if (auto uintType = dyn_cast<UIntType>(type))
+      return uintType.getWidth() == 1;
+    return false;
+  };
+
+  if (!checkPort(0, "clock", Direction::In, isClock, "clock") ||
+      !checkPort(1, "init", Direction::In, isBool, "uint<1>") ||
+      !checkPort(2, "done", Direction::Out, isBool, "uint<1>") ||
+      !checkPort(3, "success", Direction::Out, isBool, "uint<1>"))
+    return failure();
+
+  // Additional non-hardware ports are allowed.
+  for (unsigned i = 4; i < numPorts; ++i) {
+    auto type = module.getPortType(i);
+    if (!isa<PropertyType>(type))
+      return complain() << "port " << i << " may only be a property type, got "
+                        << type << " instead";
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// WireOp
+//===----------------------------------------------------------------------===//
+
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   return forceableAsmResultNames(*this, getName(), setNameFn);
+}
+
+SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>
+RegResetOp::computeDataFlow() {
+  // A register does't have any combinational dataflow.
+  return {};
 }
 
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
@@ -3297,13 +4013,25 @@ LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       symbolTable, Twine("'") + getOperationName() + "' op is");
 }
 
+//===----------------------------------------------------------------------===//
+// ContractOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ContractOp::verify() {
+  if (getBody().getArgumentTypes() != getInputs().getType())
+    return emitOpError("result types and region argument types must match");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ObjectOp
+//===----------------------------------------------------------------------===//
+
 void ObjectOp::build(OpBuilder &builder, OperationState &state, ClassLike klass,
                      StringRef name) {
   build(builder, state, klass.getInstanceType(),
         StringAttr::get(builder.getContext(), name));
 }
-
-LogicalResult ObjectOp::verify() { return success(); }
 
 LogicalResult ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
@@ -3341,8 +4069,6 @@ Operation *ObjectOp::getReferencedOperation(const SymbolTable &symtbl) {
 StringRef ObjectOp::getInstanceName() { return getName(); }
 
 StringAttr ObjectOp::getInstanceNameAttr() { return getNameAttr(); }
-
-StringRef ObjectOp::getReferencedModuleName() { return getClassName(); }
 
 StringAttr ObjectOp::getReferencedModuleNameAttr() {
   return getClassNameAttr();
@@ -3382,9 +4108,11 @@ static LogicalResult checkConnectFlow(Operation *connect) {
   // instance/memory input ports.
   auto srcFlow = foldFlow(src);
   if (!isValidSrc(srcFlow)) {
-    // A sink that is a port output or instance input used as a source is okay.
+    // A sink that is a port output or instance input used as a source is okay,
+    // as long as it is not a property.
     auto kind = getDeclarationKind(src);
-    if (kind != DeclKind::Port && kind != DeclKind::Instance) {
+    if (isa<PropertyType>(src.getType()) ||
+        (kind != DeclKind::Port && kind != DeclKind::Instance)) {
       auto srcRef = getFieldRefFromValue(src, /*lookThroughCasts=*/true);
       auto [srcName, rootKnown] = getFieldName(srcRef);
       auto diag = emitError(connect->getLoc());
@@ -3530,6 +4258,29 @@ static LogicalResult checkConnectConditionality(FConnectLike connect) {
   return success();
 }
 
+/// Returns success if the given connect is the sole driver of its dest operand.
+/// Returns failure if there are other connects driving the dest.
+static LogicalResult checkSingleConnect(FConnectLike connect) {
+  // For now, refs and domains can't be in bundles so this is sufficient. This
+  // is insufficient for properties, and insufficient before
+  // lower-open-aggregates has run. In the future, need to ensure no other
+  // define's to same "fieldSource". (When aggregates can have references, we
+  // can define a reference within, but this must be unique.  Checking this here
+  // may be expensive, consider adding something to FModuleLike's to check it
+  // there instead)
+  auto dest = connect.getDest();
+  for (auto *user : dest.getUsers()) {
+    if (auto c = dyn_cast<FConnectLike>(user);
+        c && c.getDest() == dest && c != connect) {
+      auto diag = connect.emitError("destination cannot be driven by multiple "
+                                    "operations");
+      diag.attachNote(c->getLoc()) << "other driver is here";
+      return failure();
+    }
+  }
+  return success();
+}
+
 LogicalResult ConnectOp::verify() {
   auto dstType = getDest().getType();
   auto srcType = getSrc().getType();
@@ -3565,7 +4316,7 @@ LogicalResult ConnectOp::verify() {
   return success();
 }
 
-LogicalResult StrictConnectOp::verify() {
+LogicalResult MatchingConnectOp::verify() {
   if (auto type = type_dyn_cast<FIRRTLType>(getDest().getType())) {
     auto baseType = type_cast<FIRRTLBaseType>(type);
 
@@ -3591,23 +4342,12 @@ LogicalResult StrictConnectOp::verify() {
 }
 
 LogicalResult RefDefineOp::verify() {
-  // Check that the flows make sense.
   if (failed(checkConnectFlow(*this)))
     return failure();
 
-  // For now, refs can't be in bundles so this is sufficient.
-  // In the future need to ensure no other define's to same "fieldSource".
-  // (When aggregates can have references, we can define a reference within,
-  // but this must be unique.  Checking this here may be expensive,
-  // consider adding something to FModuleLike's to check it there instead)
-  for (auto *user : getDest().getUsers()) {
-    if (auto conn = dyn_cast<FConnectLike>(user);
-        conn && conn.getDest() == getDest() && conn != *this)
-      return emitError("destination reference cannot be reused by multiple "
-                       "operations, it can only capture a unique dataflow");
-  }
+  if (failed(checkSingleConnect(*this)))
+    return failure();
 
-  // Check "static" source/dest
   if (auto *op = getDest().getDefiningOp()) {
     // TODO: Make ref.sub only source flow?
     if (isa<RefSubOp>(op))
@@ -3624,28 +4364,99 @@ LogicalResult RefDefineOp::verify() {
   auto ambientLayers = getAmbientLayersAt(getOperation());
   auto dstLayers = getLayersFor(getDest());
   SmallVector<SymbolRefAttr> missingLayers;
-  if (!isLayerSetCompatibleWith(ambientLayers, dstLayers, missingLayers)) {
-    auto diag = emitOpError("has more layer requirements than destination");
-    auto &note = diag.attachNote();
-    note << "additional layers required: ";
-    interleaveComma(missingLayers, note);
+
+  return checkLayerCompatibility(getOperation(), ambientLayers, dstLayers,
+                                 "has more layer requirements than destination",
+                                 "additional layers required");
+}
+
+LogicalResult PropAssignOp::verify() {
+  if (failed(checkConnectFlow(*this)))
     return failure();
-  }
+
+  if (failed(checkSingleConnect(*this)))
+    return failure();
 
   return success();
 }
 
-LogicalResult PropAssignOp::verify() {
-  // Check that the flows make sense.
+template <typename T>
+static FlatSymbolRefAttr getDomainTypeNameOfResult(T op, size_t i) {
+  auto info = op.getDomainInfo();
+  if (info.empty())
+    return {};
+  return dyn_cast<FlatSymbolRefAttr>(info[i]);
+}
+
+static FlatSymbolRefAttr getDomainTypeName(Value value) {
+  if (!isa<DomainType>(value.getType()))
+    return {};
+
+  if (auto arg = dyn_cast<BlockArgument>(value)) {
+    auto *parent = arg.getOwner()->getParentOp();
+    if (auto module = dyn_cast<FModuleLike>(parent)) {
+      auto info = module.getDomainInfo();
+      if (info.empty())
+        return {};
+      auto attr = info[arg.getArgNumber()];
+      return dyn_cast<FlatSymbolRefAttr>(attr);
+    }
+
+    return {};
+  }
+
+  if (auto result = dyn_cast<OpResult>(value)) {
+    auto *op = result.getDefiningOp();
+    if (auto instance = dyn_cast<InstanceOp>(op))
+      return getDomainTypeNameOfResult(instance, result.getResultNumber());
+    if (auto instance = dyn_cast<InstanceChoiceOp>(op))
+      return getDomainTypeNameOfResult(instance, result.getResultNumber());
+    if (auto anonDomain = dyn_cast<DomainCreateAnonOp>(op))
+      return anonDomain.getDomainAttr();
+    if (auto domain = dyn_cast<DomainCreateOp>(op))
+      return domain.getDomainAttr();
+    return {};
+  }
+
+  return {};
+}
+
+LogicalResult DomainDefineOp::verify() {
   if (failed(checkConnectFlow(*this)))
     return failure();
 
-  // Verify that there is a single value driving the destination.
-  for (auto *user : getDest().getUsers()) {
-    if (auto conn = dyn_cast<FConnectLike>(user);
-        conn && conn.getDest() == getDest() && conn != *this)
-      return emitError("destination property cannot be reused by multiple "
-                       "operations, it can only capture a unique dataflow");
+  if (failed(checkSingleConnect(*this)))
+    return failure();
+
+  auto dst = getDest();
+  auto src = getSrc();
+
+  // As wires cannot have domain information, don't do any checking when a wire
+  // is involved.  This weakens the verification.
+  //
+  // TOOD: Remove this by adding Domain Info to wires [1].
+  //
+  // [1] https://github.com/llvm/circt/issues/9398
+  if (auto *srcDefOp = src.getDefiningOp())
+    if (isa<WireOp>(srcDefOp))
+      return success();
+  if (auto *dstDefOp = dst.getDefiningOp())
+    if (isa<WireOp>(dstDefOp))
+      return success();
+
+  auto dstDomain = getDomainTypeName(dst);
+  if (!dstDomain)
+    return emitError("could not determine domain-type of destination");
+
+  auto srcDomain = getDomainTypeName(src);
+  if (!srcDomain)
+    return emitError("could not determine domain-type of source");
+
+  if (dstDomain != srcDomain) {
+    auto diag = emitError()
+                << "source domain type " << srcDomain
+                << " does not match destination domain type " << dstDomain;
+    return diag;
   }
 
   return success();
@@ -3755,6 +4566,7 @@ void MatchOp::print(OpAsmPrinter &p) {
 
 ParseResult MatchOp::parse(OpAsmParser &parser, OperationState &result) {
   auto *context = parser.getContext();
+  auto &properties = result.getOrAddProperties<Properties>();
   OpAsmParser::UnresolvedOperand input;
   if (parser.parseOperand(input) || parser.parseColon())
     return failure();
@@ -3800,7 +4612,7 @@ ParseResult MatchOp::parse(OpAsmParser &parser, OperationState &result) {
     if (parser.parseRegion(*region, arg))
       return failure();
   }
-  result.addAttribute("tags", ArrayAttr::get(context, tags));
+  properties.setTags(ArrayAttr::get(context, tags));
 
   return parser.parseRBrace();
 }
@@ -3808,58 +4620,15 @@ ParseResult MatchOp::parse(OpAsmParser &parser, OperationState &result) {
 void MatchOp::build(OpBuilder &builder, OperationState &result, Value input,
                     ArrayAttr tags,
                     MutableArrayRef<std::unique_ptr<Region>> regions) {
+  auto &properties = result.getOrAddProperties<Properties>();
   result.addOperands(input);
-  result.addAttribute("tags", tags);
+  properties.setTags(tags);
   result.addRegions(regions);
 }
 
 //===----------------------------------------------------------------------===//
 // Expressions
 //===----------------------------------------------------------------------===//
-
-/// Type inference adaptor that narrows from the very generic MLIR
-/// `InferTypeOpInterface` to what we need in the FIRRTL dialect: just operands
-/// and attributes, no context or regions. Also, we only ever produce a single
-/// result value, so the FIRRTL-specific type inference ops directly return the
-/// inferred type rather than pushing into the `results` vector.
-LogicalResult impl::inferReturnTypes(
-    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
-    RegionRange regions, SmallVectorImpl<Type> &results,
-    llvm::function_ref<FIRRTLType(ValueRange, ArrayRef<NamedAttribute>,
-                                  std::optional<Location>)>
-        callback) {
-  auto type = callback(
-      operands, attrs ? attrs.getValue() : ArrayRef<NamedAttribute>{}, loc);
-  if (type) {
-    results.push_back(type);
-    return success();
-  }
-  return failure();
-}
-
-/// Get an attribute by name from a list of named attributes.  Return null if no
-/// attribute is found with that name.
-static Attribute maybeGetAttr(ArrayRef<NamedAttribute> attrs, StringRef name) {
-  for (auto attr : attrs)
-    if (attr.getName() == name)
-      return attr.getValue();
-  return {};
-}
-
-/// Get an attribute by name from a list of named attributes. Aborts if the
-/// attribute does not exist.
-static Attribute getAttr(ArrayRef<NamedAttribute> attrs, StringRef name) {
-  if (auto attr = maybeGetAttr(attrs, name))
-    return attr;
-  llvm::report_fatal_error("attribute '" + name + "' not found");
-}
-
-/// Same as above, but casts the attribute to a specific type.
-template <typename AttrClass>
-AttrClass getAttr(ArrayRef<NamedAttribute> attrs, StringRef name) {
-  return cast<AttrClass>(getAttr(attrs, name));
-}
 
 /// Return true if the specified operation is a firrtl expression.
 bool firrtl::isExpression(Operation *op) {
@@ -3908,6 +4677,7 @@ void ConstantOp::print(OpAsmPrinter &p) {
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto &properties = result.getOrAddProperties<Properties>();
   // Parse the constant value, without knowing its width.
   APInt value;
   auto loc = parser.getCurrentLocation();
@@ -3946,7 +4716,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   auto intType = parser.getBuilder().getIntegerType(value.getBitWidth(),
                                                     resultType.isSigned());
   auto valueAttr = parser.getBuilder().getIntegerAttr(intType, value);
-  result.addAttribute("value", valueAttr);
+  properties.setValue(valueAttr);
   return success();
 }
 
@@ -4020,6 +4790,7 @@ void SpecialConstantOp::print(OpAsmPrinter &p) {
 
 ParseResult SpecialConstantOp::parse(OpAsmParser &parser,
                                      OperationState &result) {
+  auto &properties = result.getOrAddProperties<Properties>();
   // Parse the constant value.  SpecialConstant uses bool attributes, but it
   // prints as an integer.
   APInt value;
@@ -4041,7 +4812,7 @@ ParseResult SpecialConstantOp::parse(OpAsmParser &parser,
 
   // Create the attribute.
   auto valueAttr = parser.getBuilder().getBoolAttr(value == 1);
-  result.addAttribute("value", valueAttr);
+  properties.setValue(valueAttr);
   return success();
 }
 
@@ -4135,6 +4906,13 @@ Attribute AggregateConstantOp::getAttributeFromFieldID(uint64_t fieldID) {
   return value;
 }
 
+LogicalResult FIntegerConstantOp::verify() {
+  auto i = getValueAttr();
+  if (!i.getType().isSignedInteger())
+    return emitOpError("value must be signed");
+  return success();
+}
+
 void FIntegerConstantOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printAttributeWithoutType(getValueAttr());
@@ -4144,6 +4922,7 @@ void FIntegerConstantOp::print(OpAsmPrinter &p) {
 ParseResult FIntegerConstantOp::parse(OpAsmParser &parser,
                                       OperationState &result) {
   auto *context = parser.getContext();
+  auto &properties = result.getOrAddProperties<Properties>();
   APInt value;
   if (parser.parseInteger(value) ||
       parser.parseOptionalAttrDict(result.attributes))
@@ -4152,7 +4931,7 @@ ParseResult FIntegerConstantOp::parse(OpAsmParser &parser,
   auto intType =
       IntegerType::get(context, value.getBitWidth(), IntegerType::Signed);
   auto valueAttr = parser.getBuilder().getIntegerAttr(intType, value);
-  result.addAttribute("value", valueAttr);
+  properties.setValue(valueAttr);
   return success();
 }
 
@@ -4217,6 +4996,28 @@ LogicalResult VectorCreateOp::verify() {
   return success();
 }
 
+LogicalResult
+UnknownValueOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Unknown values of non-class type don't need to be verified.
+  auto classType = dyn_cast<ClassType>(getType());
+  if (!classType)
+    return success();
+
+  auto className = classType.getNameAttr();
+  // Verify that the symbol exists.
+  Operation *op = symbolTable.lookupNearestSymbolFrom(*this, className);
+  if (!op)
+    return emitOpError() << "refers to non-existent class ("
+                         << className.getAttr() << ")";
+
+  // Verify that the symbol is on a classlike.
+  if (!isa<ClassLike>(op))
+    return emitOpError() << "refers to a non-class type ("
+                         << className.getAttr() << ")";
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // FEnumCreateOp
 //===----------------------------------------------------------------------===//
@@ -4248,6 +5049,7 @@ void FEnumCreateOp::print(OpAsmPrinter &printer) {
 
 ParseResult FEnumCreateOp::parse(OpAsmParser &parser, OperationState &result) {
   auto *context = parser.getContext();
+  auto &properties = result.getOrAddProperties<Properties>();
 
   OpAsmParser::UnresolvedOperand input;
   std::string fieldName;
@@ -4279,8 +5081,7 @@ ParseResult FEnumCreateOp::parse(OpAsmParser &parser, OperationState &result) {
                             "unknown field " + fieldName + " in enum type ")
            << enumType;
 
-  result.addAttribute(
-      "fieldIndex",
+  properties.setFieldIndex(
       IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
 
   result.addTypes(enumType);
@@ -4309,6 +5110,7 @@ void IsTagOp::print(::mlir::OpAsmPrinter &printer) {
 
 ParseResult IsTagOp::parse(OpAsmParser &parser, OperationState &result) {
   auto *context = parser.getContext();
+  auto &properties = result.getOrAddProperties<Properties>();
 
   OpAsmParser::UnresolvedOperand input;
   std::string fieldName;
@@ -4332,8 +5134,7 @@ ParseResult IsTagOp::parse(OpAsmParser &parser, OperationState &result) {
                             "unknown field " + fieldName + " in enum type ")
            << enumType;
 
-  result.addAttribute(
-      "fieldIndex",
+  properties.setFieldIndex(
       IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
 
   result.addTypes(UIntType::get(context, 1, /*isConst=*/false));
@@ -4341,11 +5142,13 @@ ParseResult IsTagOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-FIRRTLType IsTagOp::inferReturnType(ValueRange operands,
-                                    ArrayRef<NamedAttribute> attrs,
+FIRRTLType IsTagOp::inferReturnType(ValueRange operands, DictionaryAttr attrs,
+                                    OpaqueProperties properties,
+                                    mlir::RegionRange regions,
                                     std::optional<Location> loc) {
-  return UIntType::get(operands[0].getContext(), 1,
-                       isConst(operands[0].getType()));
+  Adaptor adaptor(operands, attrs, properties, regions);
+  return UIntType::get(attrs.getContext(), 1,
+                       isConst(adaptor.getInput().getType()));
 }
 
 template <typename OpTy>
@@ -4375,17 +5178,13 @@ ParseResult parseSubfieldLikeOp(OpAsmParser &parser, OperationState &result) {
                             "unknown field " + fieldName + " in bundle type ")
            << bundleType;
 
-  result.addAttribute(
-      "fieldIndex",
+  result.getOrAddProperties<typename OpTy::Properties>().setFieldIndex(
       IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
 
-  SmallVector<Type> inferredReturnTypes;
-  if (failed(OpTy::inferReturnTypes(context, result.location, result.operands,
-                                    result.attributes.getDictionary(context),
-                                    result.getRawProperties(), result.regions,
-                                    inferredReturnTypes)))
+  auto type = OpTy::inferReturnType(inputType, *fieldIndex, {});
+  if (!type)
     return failure();
-  result.addTypes(inferredReturnTypes);
+  result.addTypes(type);
 
   return success();
 }
@@ -4416,8 +5215,7 @@ ParseResult SubtagOp::parse(OpAsmParser &parser, OperationState &result) {
                             "unknown field " + fieldName + " in enum type ")
            << enumType;
 
-  result.addAttribute(
-      "fieldIndex",
+  result.getOrAddProperties<Properties>().setFieldIndex(
       IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
 
   SmallVector<Type> inferredReturnTypes;
@@ -4538,12 +5336,9 @@ LogicalResult ConstCastOp::verify() {
   return success();
 }
 
-FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
+FIRRTLType SubfieldOp::inferReturnType(Type type, uint32_t fieldIndex,
                                        std::optional<Location> loc) {
-  auto inType = type_cast<BundleType>(operands[0].getType());
-  auto fieldIndex =
-      getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
+  auto inType = type_cast<BundleType>(type);
 
   if (fieldIndex >= inType.getNumElements())
     return emitInferRetTypeError(loc,
@@ -4555,12 +5350,9 @@ FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
   return inType.getElementTypePreservingConst(fieldIndex);
 }
 
-FIRRTLType OpenSubfieldOp::inferReturnType(ValueRange operands,
-                                           ArrayRef<NamedAttribute> attrs,
+FIRRTLType OpenSubfieldOp::inferReturnType(Type type, uint32_t fieldIndex,
                                            std::optional<Location> loc) {
-  auto inType = type_cast<OpenBundleType>(operands[0].getType());
-  auto fieldIndex =
-      getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
+  auto inType = type_cast<OpenBundleType>(type);
 
   if (fieldIndex >= inType.getNumElements())
     return emitInferRetTypeError(loc,
@@ -4581,46 +5373,36 @@ bool OpenSubfieldOp::isFieldFlipped() {
   return bundle.getElement(getFieldIndex()).isFlip;
 }
 
-FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
+FIRRTLType SubindexOp::inferReturnType(Type type, uint32_t fieldIndex,
                                        std::optional<Location> loc) {
-  Type inType = operands[0].getType();
-  auto fieldIdx =
-      getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
-
-  if (auto vectorType = type_dyn_cast<FVectorType>(inType)) {
-    if (fieldIdx < vectorType.getNumElements())
+  if (auto vectorType = type_dyn_cast<FVectorType>(type)) {
+    if (fieldIndex < vectorType.getNumElements())
       return vectorType.getElementTypePreservingConst();
-    return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
-                                 "' in vector type ", inType);
+    return emitInferRetTypeError(loc, "out of range index '", fieldIndex,
+                                 "' in vector type ", type);
   }
-
   return emitInferRetTypeError(loc, "subindex requires vector operand");
 }
 
-FIRRTLType OpenSubindexOp::inferReturnType(ValueRange operands,
-                                           ArrayRef<NamedAttribute> attrs,
+FIRRTLType OpenSubindexOp::inferReturnType(Type type, uint32_t fieldIndex,
                                            std::optional<Location> loc) {
-  Type inType = operands[0].getType();
-  auto fieldIdx =
-      getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
-
-  if (auto vectorType = type_dyn_cast<OpenVectorType>(inType)) {
-    if (fieldIdx < vectorType.getNumElements())
+  if (auto vectorType = type_dyn_cast<OpenVectorType>(type)) {
+    if (fieldIndex < vectorType.getNumElements())
       return vectorType.getElementTypePreservingConst();
-    return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
-                                 "' in vector type ", inType);
+    return emitInferRetTypeError(loc, "out of range index '", fieldIndex,
+                                 "' in vector type ", type);
   }
 
   return emitInferRetTypeError(loc, "subindex requires vector operand");
 }
 
-FIRRTLType SubtagOp::inferReturnType(ValueRange operands,
-                                     ArrayRef<NamedAttribute> attrs,
+FIRRTLType SubtagOp::inferReturnType(ValueRange operands, DictionaryAttr attrs,
+                                     OpaqueProperties properties,
+                                     mlir::RegionRange regions,
                                      std::optional<Location> loc) {
-  auto inType = type_cast<FEnumType>(operands[0].getType());
-  auto fieldIndex =
-      getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
+  Adaptor adaptor(operands, attrs, properties, regions);
+  auto inType = type_cast<FEnumType>(adaptor.getInput().getType());
+  auto fieldIndex = adaptor.getFieldIndex();
 
   if (fieldIndex >= inType.getNumElements())
     return emitInferRetTypeError(loc,
@@ -4633,12 +5415,8 @@ FIRRTLType SubtagOp::inferReturnType(ValueRange operands,
   return elementType.getConstType(elementType.isConst() || inType.isConst());
 }
 
-FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
-                                        ArrayRef<NamedAttribute> attrs,
+FIRRTLType SubaccessOp::inferReturnType(Type inType, Type indexType,
                                         std::optional<Location> loc) {
-  auto inType = operands[0].getType();
-  auto indexType = operands[1].getType();
-
   if (!type_isa<UIntType>(indexType))
     return emitInferRetTypeError(loc, "subaccess index must be UInt type, not ",
                                  indexType);
@@ -4653,12 +5431,10 @@ FIRRTLType SubaccessOp::inferReturnType(ValueRange operands,
                                inType);
 }
 
-FIRRTLType TagExtractOp::inferReturnType(ValueRange operands,
-                                         ArrayRef<NamedAttribute> attrs,
+FIRRTLType TagExtractOp::inferReturnType(FIRRTLType input,
                                          std::optional<Location> loc) {
-  auto inType = type_cast<FEnumType>(operands[0].getType());
-  auto i = llvm::Log2_32_Ceil(inType.getNumElements());
-  return UIntType::get(inType.getContext(), i);
+  auto inType = type_cast<FEnumType>(input);
+  return UIntType::get(inType.getContext(), inType.getTagWidth());
 }
 
 ParseResult MultibitMuxOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -4689,7 +5465,9 @@ void MultibitMuxOp::print(OpAsmPrinter &p) {
 }
 
 FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
-                                          ArrayRef<NamedAttribute> attrs,
+                                          DictionaryAttr attrs,
+                                          OpaqueProperties properties,
+                                          mlir::RegionRange regions,
                                           std::optional<Location> loc) {
   if (operands.size() < 2)
     return emitInferRetTypeError(loc, "at least one input is required");
@@ -4711,26 +5489,24 @@ LogicalResult ObjectSubfieldOp::inferReturnTypes(
     MLIRContext *context, std::optional<mlir::Location> location,
     ValueRange operands, DictionaryAttr attributes, OpaqueProperties properties,
     RegionRange regions, llvm::SmallVectorImpl<Type> &inferredReturnTypes) {
-  auto type = inferReturnType(operands, attributes.getValue(), location);
+  auto type =
+      inferReturnType(operands, attributes, properties, regions, location);
   if (!type)
     return failure();
   inferredReturnTypes.push_back(type);
   return success();
 }
 
-Type ObjectSubfieldOp::inferReturnType(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
+Type ObjectSubfieldOp::inferReturnType(Type inType, uint32_t fieldIndex,
                                        std::optional<Location> loc) {
-  auto classType = dyn_cast<ClassType>(operands[0].getType());
+  auto classType = dyn_cast<ClassType>(inType);
   if (!classType)
     return emitInferRetTypeError(loc, "base object is not a class");
 
-  auto index = getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
-  if (classType.getNumElements() <= index)
+  if (classType.getNumElements() <= fieldIndex)
     return emitInferRetTypeError(loc, "element index is greater than the "
                                       "number of fields in the object");
-
-  return classType.getElement(index).type;
+  return classType.getElement(fieldIndex).type;
 }
 
 void ObjectSubfieldOp::print(OpAsmPrinter &p) {
@@ -4762,8 +5538,8 @@ ParseResult ObjectSubfieldOp::parse(OpAsmParser &parser,
     return parser.emitError(parser.getNameLoc(),
                             "unknown field " + fieldName + " in class type ")
            << inputType;
-  result.addAttribute("index",
-                      IntegerAttr::get(IntegerType::get(context, 32), *index));
+  result.getOrAddProperties<Properties>().setIndex(
+      IntegerAttr::get(IntegerType::get(context, 32), *index));
 
   SmallVector<Type> inferredReturnTypes;
   if (failed(inferReturnTypes(context, result.location, result.operands,
@@ -4826,16 +5602,6 @@ LogicalResult impl::verifySameOperandsIntTypeKind(Operation *op) {
                                    rhsWidth, isConstResult, op->getLoc()));
 }
 
-LogicalResult impl::validateBinaryOpArguments(ValueRange operands,
-                                              ArrayRef<NamedAttribute> attrs,
-                                              Location loc) {
-  if (operands.size() != 2 || !attrs.empty()) {
-    mlir::emitError(loc, "operation requires two operands and no constants");
-    return failure();
-  }
-  return success();
-}
-
 FIRRTLType impl::inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
                                    std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
@@ -4849,8 +5615,8 @@ FIRRTLType impl::inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
                       isConstResult);
 }
 
-FIRRTLType MulPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                            std::optional<Location> loc) {
+FIRRTLType MulPrimOp::inferReturnType(FIRRTLType lhs, FIRRTLType rhs,
+                                      std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
   bool isConstResult = false;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, isConstResult, loc))
@@ -4863,8 +5629,8 @@ FIRRTLType MulPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
                       isConstResult);
 }
 
-FIRRTLType DivPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                            std::optional<Location> loc) {
+FIRRTLType DivPrimOp::inferReturnType(FIRRTLType lhs, FIRRTLType rhs,
+                                      std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth;
   bool isConstResult = false;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, isConstResult, loc))
@@ -4879,8 +5645,8 @@ FIRRTLType DivPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
   return SIntType::get(lhs.getContext(), resultWidth, isConstResult);
 }
 
-FIRRTLType RemPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                            std::optional<Location> loc) {
+FIRRTLType RemPrimOp::inferReturnType(FIRRTLType lhs, FIRRTLType rhs,
+                                      std::optional<Location> loc) {
   int32_t lhsWidth, rhsWidth, resultWidth = -1;
   bool isConstResult = false;
   if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, isConstResult, loc))
@@ -4938,20 +5704,51 @@ FIRRTLType impl::inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
   return UIntType::get(lhs.getContext(), 1, isConst(lhs) && isConst(rhs));
 }
 
-FIRRTLType CatPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                            std::optional<Location> loc) {
-  int32_t lhsWidth, rhsWidth, resultWidth = -1;
-  bool isConstResult = false;
-  if (!isSameIntTypeKind(lhs, rhs, lhsWidth, rhsWidth, isConstResult, loc))
-    return {};
+FIRRTLType CatPrimOp::inferReturnType(ValueRange operands, DictionaryAttr attrs,
+                                      OpaqueProperties properties,
+                                      mlir::RegionRange regions,
+                                      std::optional<Location> loc) {
+  // If no operands, return a 0-bit UInt
+  if (operands.empty())
+    return UIntType::get(attrs.getContext(), 0);
 
-  if (lhsWidth != -1 && rhsWidth != -1)
-    resultWidth = lhsWidth + rhsWidth;
-  return UIntType::get(lhs.getContext(), resultWidth, isConstResult);
+  // Check that all operands are Int types with same signedness
+  bool isSigned = type_isa<SIntType>(operands[0].getType());
+  for (auto operand : operands) {
+    auto type = type_dyn_cast<IntType>(operand.getType());
+    if (!type)
+      return emitInferRetTypeError(loc, "all operands must be Int type");
+    if (type.isSigned() != isSigned)
+      return emitInferRetTypeError(loc,
+                                   "all operands must have same signedness");
+  }
+
+  // Calculate the total width and determine if result is const
+  int32_t resultWidth = 0;
+  bool isConstResult = true;
+
+  for (auto operand : operands) {
+    auto type = type_cast<IntType>(operand.getType());
+    int32_t width = type.getWidthOrSentinel();
+
+    // If any width is unknown, the result width is unknown
+    if (width == -1) {
+      resultWidth = -1;
+    }
+
+    if (resultWidth != -1)
+      resultWidth += width;
+
+    // Result is const only if all operands are const
+    isConstResult &= type.isConst();
+  }
+
+  // Create and return the result type
+  return UIntType::get(attrs.getContext(), resultWidth, isConstResult);
 }
 
-FIRRTLType DShlPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                             std::optional<Location> loc) {
+FIRRTLType DShlPrimOp::inferReturnType(FIRRTLType lhs, FIRRTLType rhs,
+                                       std::optional<Location> loc) {
   auto lhsi = type_dyn_cast<IntType>(lhs);
   auto rhsui = type_dyn_cast<UIntType>(rhs);
   if (!rhsui || !lhsi)
@@ -4980,8 +5777,8 @@ FIRRTLType DShlPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
                       lhsi.isConst() && rhsui.isConst());
 }
 
-FIRRTLType DShlwPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                              std::optional<Location> loc) {
+FIRRTLType DShlwPrimOp::inferReturnType(FIRRTLType lhs, FIRRTLType rhs,
+                                        std::optional<Location> loc) {
   auto lhsi = type_dyn_cast<IntType>(lhs);
   auto rhsu = type_dyn_cast<UIntType>(rhs);
   if (!lhsi || !rhsu)
@@ -4990,8 +5787,8 @@ FIRRTLType DShlwPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
   return lhsi.getConstType(lhsi.isConst() && rhsu.isConst());
 }
 
-FIRRTLType DShrPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
-                                             std::optional<Location> loc) {
+FIRRTLType DShrPrimOp::inferReturnType(FIRRTLType lhs, FIRRTLType rhs,
+                                       std::optional<Location> loc) {
   auto lhsi = type_dyn_cast<IntType>(lhs);
   auto rhsu = type_dyn_cast<UIntType>(rhs);
   if (!lhsi || !rhsu)
@@ -5004,24 +5801,13 @@ FIRRTLType DShrPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
 // Unary Primitives
 //===----------------------------------------------------------------------===//
 
-LogicalResult impl::validateUnaryOpArguments(ValueRange operands,
-                                             ArrayRef<NamedAttribute> attrs,
-                                             Location loc) {
-  if (operands.size() != 1 || !attrs.empty()) {
-    mlir::emitError(loc, "operation requires one operand and no constants");
-    return failure();
-  }
-  return success();
-}
-
-FIRRTLType
-SizeOfIntrinsicOp::inferUnaryReturnType(FIRRTLType input,
-                                        std::optional<Location> loc) {
+FIRRTLType SizeOfIntrinsicOp::inferReturnType(FIRRTLType input,
+                                              std::optional<Location> loc) {
   return UIntType::get(input.getContext(), 32);
 }
 
-FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                              std::optional<Location> loc) {
+FIRRTLType AsSIntPrimOp::inferReturnType(FIRRTLType input,
+                                         std::optional<Location> loc) {
   auto base = type_dyn_cast<FIRRTLBaseType>(input);
   if (!base)
     return emitInferRetTypeError(loc, "operand must be a scalar base type");
@@ -5031,8 +5817,8 @@ FIRRTLType AsSIntPrimOp::inferUnaryReturnType(FIRRTLType input,
   return SIntType::get(input.getContext(), width, base.isConst());
 }
 
-FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                              std::optional<Location> loc) {
+FIRRTLType AsUIntPrimOp::inferReturnType(FIRRTLType input,
+                                         std::optional<Location> loc) {
   auto base = type_dyn_cast<FIRRTLBaseType>(input);
   if (!base)
     return emitInferRetTypeError(loc, "operand must be a scalar base type");
@@ -5042,9 +5828,8 @@ FIRRTLType AsUIntPrimOp::inferUnaryReturnType(FIRRTLType input,
   return UIntType::get(input.getContext(), width, base.isConst());
 }
 
-FIRRTLType
-AsAsyncResetPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                         std::optional<Location> loc) {
+FIRRTLType AsAsyncResetPrimOp::inferReturnType(FIRRTLType input,
+                                               std::optional<Location> loc) {
   auto base = type_dyn_cast<FIRRTLBaseType>(input);
   if (!base)
     return emitInferRetTypeError(loc,
@@ -5055,13 +5840,21 @@ AsAsyncResetPrimOp::inferUnaryReturnType(FIRRTLType input,
   return AsyncResetType::get(input.getContext(), base.isConst());
 }
 
-FIRRTLType AsClockPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                               std::optional<Location> loc) {
+FIRRTLType AsResetPrimOp::inferReturnType(FIRRTLType input,
+                                          std::optional<Location> loc) {
+  auto base = type_dyn_cast<FIRRTLBaseType>(input);
+  if (!base)
+    return emitInferRetTypeError(loc, "operand must be a scalar base type");
+  return ResetType::get(input.getContext(), base.isConst());
+}
+
+FIRRTLType AsClockPrimOp::inferReturnType(FIRRTLType input,
+                                          std::optional<Location> loc) {
   return ClockType::get(input.getContext(), isConst(input));
 }
 
-FIRRTLType CvtPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                           std::optional<Location> loc) {
+FIRRTLType CvtPrimOp::inferReturnType(FIRRTLType input,
+                                      std::optional<Location> loc) {
   if (auto uiType = type_dyn_cast<UIntType>(input)) {
     auto width = uiType.getWidthOrSentinel();
     if (width != -1)
@@ -5075,8 +5868,8 @@ FIRRTLType CvtPrimOp::inferUnaryReturnType(FIRRTLType input,
   return emitInferRetTypeError(loc, "operand must have integer type");
 }
 
-FIRRTLType NegPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                           std::optional<Location> loc) {
+FIRRTLType NegPrimOp::inferReturnType(FIRRTLType input,
+                                      std::optional<Location> loc) {
   auto inputi = type_dyn_cast<IntType>(input);
   if (!inputi)
     return emitInferRetTypeError(loc, "operand must have integer type");
@@ -5086,8 +5879,8 @@ FIRRTLType NegPrimOp::inferUnaryReturnType(FIRRTLType input,
   return SIntType::get(input.getContext(), width, inputi.isConst());
 }
 
-FIRRTLType NotPrimOp::inferUnaryReturnType(FIRRTLType input,
-                                           std::optional<Location> loc) {
+FIRRTLType NotPrimOp::inferReturnType(FIRRTLType input,
+                                      std::optional<Location> loc) {
   auto inputi = type_dyn_cast<IntType>(input);
   if (!inputi)
     return emitInferRetTypeError(loc, "operand must have integer type");
@@ -5106,23 +5899,9 @@ FIRRTLType impl::inferReductionResult(FIRRTLType input,
 // Other Operations
 //===----------------------------------------------------------------------===//
 
-LogicalResult BitsPrimOp::validateArguments(ValueRange operands,
-                                            ArrayRef<NamedAttribute> attrs,
-                                            Location loc) {
-  if (operands.size() != 1 || attrs.size() != 2) {
-    mlir::emitError(loc, "operation requires one operand and two constants");
-    return failure();
-  }
-  return success();
-}
-
-FIRRTLType BitsPrimOp::inferReturnType(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
+FIRRTLType BitsPrimOp::inferReturnType(FIRRTLType input, int64_t high,
+                                       int64_t low,
                                        std::optional<Location> loc) {
-  auto input = operands[0].getType();
-  auto high = getAttr<IntegerAttr>(attrs, "hi").getValue().getSExtValue();
-  auto low = getAttr<IntegerAttr>(attrs, "lo").getValue().getSExtValue();
-
   auto inputi = type_dyn_cast<IntType>(input);
   if (!inputi)
     return emitInferRetTypeError(
@@ -5149,21 +5928,8 @@ FIRRTLType BitsPrimOp::inferReturnType(ValueRange operands,
   return UIntType::get(input.getContext(), high - low + 1, inputi.isConst());
 }
 
-LogicalResult impl::validateOneOperandOneConst(ValueRange operands,
-                                               ArrayRef<NamedAttribute> attrs,
-                                               Location loc) {
-  if (operands.size() != 1 || attrs.size() != 1) {
-    mlir::emitError(loc, "operation requires one operand and one constant");
-    return failure();
-  }
-  return success();
-}
-
-FIRRTLType HeadPrimOp::inferReturnType(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
+FIRRTLType HeadPrimOp::inferReturnType(FIRRTLType input, int64_t amount,
                                        std::optional<Location> loc) {
-  auto input = operands[0].getType();
-  auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
   auto inputi = type_dyn_cast<IntType>(input);
   if (amount < 0 || !inputi)
@@ -5175,16 +5941,6 @@ FIRRTLType HeadPrimOp::inferReturnType(ValueRange operands,
     return emitInferRetTypeError(loc, "amount larger than input width");
 
   return UIntType::get(input.getContext(), amount, inputi.isConst());
-}
-
-LogicalResult MuxPrimOp::validateArguments(ValueRange operands,
-                                           ArrayRef<NamedAttribute> attrs,
-                                           Location loc) {
-  if (operands.size() != 3 || attrs.size() != 0) {
-    mlir::emitError(loc, "operation requires three operands and no constants");
-    return failure();
-  }
-  return success();
 }
 
 /// Infer the result type for a multiplexer given its two operand types, which
@@ -5224,6 +5980,33 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
     if (highWidth == -1)
       return high.getConstType(outerTypeIsConst);
     return (lowWidth > highWidth ? low : high).getConstType(outerTypeIsConst);
+  }
+
+  // Two different Enum types can be compatible if one is the constant version
+  // of the other.
+  auto highEnum = type_dyn_cast<FEnumType>(high);
+  auto lowEnum = type_dyn_cast<FEnumType>(low);
+  if (lowEnum && highEnum) {
+    if (lowEnum.getNumElements() != highEnum.getNumElements())
+      return emitInferRetTypeError<FIRRTLBaseType>(
+          loc, "incompatible mux operand types, true value type: ", high,
+          ", false value type: ", low);
+    SmallVector<FEnumType::EnumElement> elements;
+    for (auto [high, low] : llvm::zip_equal(highEnum, lowEnum)) {
+      // Variants should have the same name and value.
+      if (high.name != low.name || high.value != low.value)
+        return emitInferRetTypeError<FIRRTLBaseType>(
+            loc, "incompatible mux operand types, true value type: ", highEnum,
+            ", false value type: ", lowEnum);
+      // Enumerations can only have constant variants only if the whole
+      // enumeration is constant, so this logic can differ a bit from bundles.
+      auto inner =
+          inferMuxReturnType(high.type, low.type, isConstCondition, loc);
+      if (!inner)
+        return {};
+      elements.emplace_back(high.name, high.value, inner);
+    }
+    return FEnumType::get(high.getContext(), elements, outerTypeIsConst);
   }
 
   // Infer vector types by comparing the element types.
@@ -5280,19 +6063,20 @@ static FIRRTLBaseType inferMuxReturnType(FIRRTLBaseType high,
       ", false value type: ", low);
 }
 
-FIRRTLType MuxPrimOp::inferReturnType(ValueRange operands,
-                                      ArrayRef<NamedAttribute> attrs,
+FIRRTLType MuxPrimOp::inferReturnType(FIRRTLType sel, FIRRTLType high,
+                                      FIRRTLType low,
                                       std::optional<Location> loc) {
-  auto highType = type_dyn_cast<FIRRTLBaseType>(operands[1].getType());
-  auto lowType = type_dyn_cast<FIRRTLBaseType>(operands[2].getType());
+  auto highType = type_dyn_cast<FIRRTLBaseType>(high);
+  auto lowType = type_dyn_cast<FIRRTLBaseType>(low);
   if (!highType || !lowType)
     return emitInferRetTypeError(loc, "operands must be base type");
-  return inferMuxReturnType(highType, lowType, isConst(operands[0].getType()),
-                            loc);
+  return inferMuxReturnType(highType, lowType, isConst(sel), loc);
 }
 
 FIRRTLType Mux2CellIntrinsicOp::inferReturnType(ValueRange operands,
-                                                ArrayRef<NamedAttribute> attrs,
+                                                DictionaryAttr attrs,
+                                                OpaqueProperties properties,
+                                                mlir::RegionRange regions,
                                                 std::optional<Location> loc) {
   auto highType = type_dyn_cast<FIRRTLBaseType>(operands[1].getType());
   auto lowType = type_dyn_cast<FIRRTLBaseType>(operands[2].getType());
@@ -5303,7 +6087,9 @@ FIRRTLType Mux2CellIntrinsicOp::inferReturnType(ValueRange operands,
 }
 
 FIRRTLType Mux4CellIntrinsicOp::inferReturnType(ValueRange operands,
-                                                ArrayRef<NamedAttribute> attrs,
+                                                DictionaryAttr attrs,
+                                                OpaqueProperties properties,
+                                                mlir::RegionRange regions,
                                                 std::optional<Location> loc) {
   SmallVector<FIRRTLBaseType> types;
   FIRRTLBaseType result;
@@ -5323,12 +6109,8 @@ FIRRTLType Mux4CellIntrinsicOp::inferReturnType(ValueRange operands,
   return result;
 }
 
-FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
-                                      ArrayRef<NamedAttribute> attrs,
+FIRRTLType PadPrimOp::inferReturnType(FIRRTLType input, int64_t amount,
                                       std::optional<Location> loc) {
-  auto input = operands[0].getType();
-  auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
-
   auto inputi = type_dyn_cast<IntType>(input);
   if (amount < 0 || !inputi)
     return emitInferRetTypeError(
@@ -5343,12 +6125,8 @@ FIRRTLType PadPrimOp::inferReturnType(ValueRange operands,
                       inputi.isConst());
 }
 
-FIRRTLType ShlPrimOp::inferReturnType(ValueRange operands,
-                                      ArrayRef<NamedAttribute> attrs,
+FIRRTLType ShlPrimOp::inferReturnType(FIRRTLType input, int64_t amount,
                                       std::optional<Location> loc) {
-  auto input = operands[0].getType();
-  auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
-
   auto inputi = type_dyn_cast<IntType>(input);
   if (amount < 0 || !inputi)
     return emitInferRetTypeError(
@@ -5362,12 +6140,8 @@ FIRRTLType ShlPrimOp::inferReturnType(ValueRange operands,
                       inputi.isConst());
 }
 
-FIRRTLType ShrPrimOp::inferReturnType(ValueRange operands,
-                                      ArrayRef<NamedAttribute> attrs,
+FIRRTLType ShrPrimOp::inferReturnType(FIRRTLType input, int64_t amount,
                                       std::optional<Location> loc) {
-  auto input = operands[0].getType();
-  auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
-
   auto inputi = type_dyn_cast<IntType>(input);
   if (amount < 0 || !inputi)
     return emitInferRetTypeError(
@@ -5384,11 +6158,8 @@ FIRRTLType ShrPrimOp::inferReturnType(ValueRange operands,
                       inputi.isConst());
 }
 
-FIRRTLType TailPrimOp::inferReturnType(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
+FIRRTLType TailPrimOp::inferReturnType(FIRRTLType input, int64_t amount,
                                        std::optional<Location> loc) {
-  auto input = operands[0].getType();
-  auto amount = getAttr<IntegerAttr>(attrs, "amount").getValue().getSExtValue();
 
   auto inputi = type_dyn_cast<IntType>(input);
   if (amount < 0 || !inputi)
@@ -5442,6 +6213,77 @@ void VerbatimWireOp::getAsmResultNames(
   name = name.take_while(isOkCharacter);
   if (!name.empty())
     setNameFn(getResult(), name);
+}
+
+//===----------------------------------------------------------------------===//
+// DPICallIntrinsicOp
+//===----------------------------------------------------------------------===//
+
+static bool isTypeAllowedForDPI(Operation *op, Type type) {
+  return !type.walk([&](firrtl::IntType intType) -> mlir::WalkResult {
+                auto width = intType.getWidth();
+                if (width < 0) {
+                  op->emitError() << "unknown width is not allowed for DPI";
+                  return WalkResult::interrupt();
+                }
+                if (width == 1 || width == 8 || width == 16 || width == 32 ||
+                    width >= 64)
+                  return WalkResult::advance();
+                op->emitError()
+                    << "integer types used by DPI functions must have a "
+                       "specific bit width; "
+                       "it must be equal to 1(bit), 8(byte), 16(shortint), "
+                       "32(int), 64(longint) "
+                       "or greater than 64, but got "
+                    << intType;
+                return WalkResult::interrupt();
+              })
+              .wasInterrupted();
+}
+
+LogicalResult DPICallIntrinsicOp::verify() {
+  if (auto inputNames = getInputNames()) {
+    if (getInputs().size() != inputNames->size())
+      return emitError() << "inputNames has " << inputNames->size()
+                         << " elements but there are " << getInputs().size()
+                         << " input arguments";
+  }
+  if (auto outputName = getOutputName())
+    if (getNumResults() == 0)
+      return emitError() << "output name is given but there is no result";
+
+  auto checkType = [this](Type type) {
+    return isTypeAllowedForDPI(*this, type);
+  };
+  return success(llvm::all_of(this->getResultTypes(), checkType) &&
+                 llvm::all_of(this->getOperandTypes(), checkType));
+}
+
+SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>
+DPICallIntrinsicOp::computeDataFlow() {
+  if (getClock())
+    return {};
+
+  SmallVector<std::pair<circt::FieldRef, circt::FieldRef>> deps;
+
+  for (auto operand : getOperands()) {
+    auto type = type_cast<FIRRTLBaseType>(operand.getType());
+    auto baseFieldRef = getFieldRefFromValue(operand);
+    SmallVector<circt::FieldRef> operandFields;
+    walkGroundTypes(
+        type, [&](uint64_t dstIndex, FIRRTLBaseType t, bool dstIsFlip) {
+          operandFields.push_back(baseFieldRef.getSubField(dstIndex));
+        });
+
+    // Record operand -> result dependency.
+    for (auto result : getResults())
+      walkGroundTypes(
+          type, [&](uint64_t dstIndex, FIRRTLBaseType t, bool dstIsFlip) {
+            for (auto field : operandFields)
+              deps.emplace_back(circt::FieldRef(result, dstIndex), field);
+          });
+  }
+  return deps;
 }
 
 //===----------------------------------------------------------------------===//
@@ -5677,6 +6519,17 @@ static void printPrintfAttrs(OpAsmPrinter &p, Operation *op,
   printElideEmptyName(p, op, attr, {"formatString"});
 }
 
+static ParseResult parseFPrintfAttrs(OpAsmParser &p,
+                                     NamedAttrList &resultAttrs) {
+  return parseElideEmptyName(p, resultAttrs);
+}
+
+static void printFPrintfAttrs(OpAsmPrinter &p, Operation *op,
+                              DictionaryAttr attr) {
+  printElideEmptyName(p, op, attr,
+                      {"formatString", "outputFile", "operandSegmentSizes"});
+}
+
 static ParseResult parseStopAttrs(OpAsmParser &p, NamedAttrList &resultAttrs) {
   return parseElideEmptyName(p, resultAttrs);
 }
@@ -5724,6 +6577,9 @@ void SizeOfIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void AsAsyncResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void AsResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void AsClockPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -5778,6 +6634,9 @@ void IntegerMulOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void IntegerShrOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void IntegerShlOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void IsTagOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -5853,6 +6712,7 @@ void SubaccessOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void SubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
+
 void OpenSubfieldOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
@@ -5930,7 +6790,9 @@ void RWProbeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
-                                         ArrayRef<NamedAttribute> attrs,
+                                         DictionaryAttr attrs,
+                                         OpaqueProperties properties,
+                                         mlir::RegionRange regions,
                                          std::optional<Location> loc) {
   Type inType = operands[0].getType();
   auto inRefType = type_dyn_cast<RefType>(inType);
@@ -5940,8 +6802,9 @@ FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
   return inRefType.getType();
 }
 
-FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
-                                      ArrayRef<NamedAttribute> attrs,
+FIRRTLType RefSendOp::inferReturnType(ValueRange operands, DictionaryAttr attrs,
+                                      OpaqueProperties properties,
+                                      mlir::RegionRange regions,
                                       std::optional<Location> loc) {
   Type inType = operands[0].getType();
   auto inBaseType = type_dyn_cast<FIRRTLBaseType>(inType);
@@ -5951,39 +6814,38 @@ FIRRTLType RefSendOp::inferReturnType(ValueRange operands,
   return RefType::get(inBaseType.getPassiveType());
 }
 
-FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
-                                     ArrayRef<NamedAttribute> attrs,
+FIRRTLType RefSubOp::inferReturnType(Type type, uint32_t fieldIndex,
                                      std::optional<Location> loc) {
-  auto refType = type_dyn_cast<RefType>(operands[0].getType());
+  auto refType = type_dyn_cast<RefType>(type);
   if (!refType)
     return emitInferRetTypeError(loc, "input must be of reference type");
   auto inType = refType.getType();
-  auto fieldIdx =
-      getAttr<IntegerAttr>(attrs, "index").getValue().getZExtValue();
 
   // TODO: Determine ref.sub + rwprobe behavior, test.
   // Probably best to demote to non-rw, but that has implications
   // for any LowerTypes behavior being relied on.
   // Allow for now, as need to LowerTypes things generally.
   if (auto vectorType = type_dyn_cast<FVectorType>(inType)) {
-    if (fieldIdx < vectorType.getNumElements())
+    if (fieldIndex < vectorType.getNumElements())
       return RefType::get(
           vectorType.getElementType().getConstType(
               vectorType.isConst() || vectorType.getElementType().isConst()),
           refType.getForceable(), refType.getLayer());
-    return emitInferRetTypeError(loc, "out of range index '", fieldIdx,
+    return emitInferRetTypeError(loc, "out of range index '", fieldIndex,
                                  "' in RefType of vector type ", refType);
   }
   if (auto bundleType = type_dyn_cast<BundleType>(inType)) {
-    if (fieldIdx >= bundleType.getNumElements()) {
+    if (fieldIndex >= bundleType.getNumElements()) {
       return emitInferRetTypeError(loc,
                                    "subfield element index is greater than "
                                    "the number of fields in the bundle type");
     }
-    return RefType::get(bundleType.getElement(fieldIdx).type.getConstType(
-                            bundleType.isConst() ||
-                            bundleType.getElement(fieldIdx).type.isConst()),
-                        refType.getForceable(), refType.getLayer());
+    return RefType::get(
+        bundleType.getElement(fieldIndex)
+            .type.getConstType(
+                bundleType.isConst() ||
+                bundleType.getElement(fieldIndex).type.isConst()),
+        refType.getForceable(), refType.getLayer());
   }
 
   return emitInferRetTypeError(
@@ -5993,31 +6855,18 @@ FIRRTLType RefSubOp::inferReturnType(ValueRange operands,
 LogicalResult RefCastOp::verify() {
   auto srcLayers = getLayersFor(getInput());
   auto dstLayers = getLayersFor(getResult());
-  SmallVector<SymbolRefAttr> missingLayers;
-  if (!isLayerSetCompatibleWith(srcLayers, dstLayers, missingLayers)) {
-    auto diag =
-        emitOpError("cannot discard layer requirements of input reference");
-    auto &note = diag.attachNote();
-    note << "discarding layer requirements: ";
-    llvm::interleaveComma(missingLayers, note);
-    return failure();
-  }
-  return success();
+  return checkLayerCompatibility(
+      getOperation(), srcLayers, dstLayers,
+      "cannot discard layer requirements of input reference",
+      "discarding layer requirements");
 }
 
 LogicalResult RefResolveOp::verify() {
   auto srcLayers = getLayersFor(getRef());
   auto dstLayers = getAmbientLayersAt(getOperation());
-  SmallVector<SymbolRefAttr> missingLayers;
-  if (!isLayerSetCompatibleWith(srcLayers, dstLayers, missingLayers)) {
-    auto diag =
-        emitOpError("ambient layers are insufficient to resolve reference");
-    auto &note = diag.attachNote();
-    note << "missing layer requirements: ";
-    interleaveComma(missingLayers, note);
-    return failure();
-  }
-  return success();
+  return checkLayerCompatibility(
+      getOperation(), srcLayers, dstLayers,
+      "ambient layers are insufficient to resolve reference");
 }
 
 LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
@@ -6064,6 +6913,62 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   return checkFinalType(symOp.getTargetResult().getType(), symOp.getLoc());
 }
 
+LogicalResult RefForceOp::verify() {
+  auto ambientLayers = getAmbientLayersAt(getOperation());
+  auto destLayers = getLayersFor(getDest());
+  return checkLayerCompatibility(
+      getOperation(), destLayers, ambientLayers,
+      "has insufficient ambient layers to force its reference");
+}
+
+LogicalResult RefForceInitialOp::verify() {
+  auto ambientLayers = getAmbientLayersAt(getOperation());
+  auto destLayers = getLayersFor(getDest());
+  return checkLayerCompatibility(
+      getOperation(), destLayers, ambientLayers,
+      "has insufficient ambient layers to force its reference");
+}
+
+LogicalResult RefReleaseOp::verify() {
+  auto ambientLayers = getAmbientLayersAt(getOperation());
+  auto destLayers = getLayersFor(getDest());
+  return checkLayerCompatibility(
+      getOperation(), destLayers, ambientLayers,
+      "has insufficient ambient layers to release its reference");
+}
+
+LogicalResult RefReleaseInitialOp::verify() {
+  auto ambientLayers = getAmbientLayersAt(getOperation());
+  auto destLayers = getLayersFor(getDest());
+  return checkLayerCompatibility(
+      getOperation(), destLayers, ambientLayers,
+      "has insufficient ambient layers to release its reference");
+}
+
+LogicalResult XMRRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *target = symbolTable.lookupNearestSymbolFrom(*this, getRefAttr());
+  if (!target)
+    return emitOpError("has an invalid symbol reference");
+
+  if (!isa<hw::HierPathOp>(target))
+    return emitOpError("does not target a hierpath op");
+
+  // TODO: Verify that the target's type matches the type of this op.
+  return success();
+}
+
+LogicalResult XMRDerefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *target = symbolTable.lookupNearestSymbolFrom(*this, getRefAttr());
+  if (!target)
+    return emitOpError("has an invalid symbol reference");
+
+  if (!isa<hw::HierPathOp>(target))
+    return emitOpError("does not target a hierpath op");
+
+  // TODO: Verify that the target's type matches the type of this op.
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Layer Block Operations
 //===----------------------------------------------------------------------===//
@@ -6071,6 +6976,10 @@ LogicalResult RWProbeOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 LogicalResult LayerBlockOp::verify() {
   auto layerName = getLayerName();
   auto *parentOp = (*this)->getParentOp();
+
+  // Get parent operation that isn't a when or match.
+  while (isa<WhenOp, MatchOp>(parentOp))
+    parentOp = parentOp->getParentOp();
 
   // Verify the correctness of the symbol reference.  Only verify that this
   // layer block makes sense in its parent module or layer block.
@@ -6103,6 +7012,7 @@ LogicalResult LayerBlockOp::verify() {
   }
 
   // Verify the body of the region.
+  FieldRefCache fieldRefCache;
   auto result = getBody(0)->walk<mlir::WalkOrder::PreOrder>(
       [&](Operation *op) -> WalkResult {
         // Skip nested layer blocks.  Those will be verified separately.
@@ -6126,17 +7036,6 @@ LogicalResult LayerBlockOp::verify() {
             diag.attachNote(op->getLoc()) << "operand is used here";
             return WalkResult::interrupt();
           }
-
-          // Capturing a non-passive type is illegal.
-          if (auto baseType = type_dyn_cast<FIRRTLBaseType>(type)) {
-            if (!baseType.isPassive()) {
-              auto diag = emitOpError()
-                          << "captures an operand which is not a passive type";
-              diag.attachNote(operand.getLoc()) << "operand is defined here";
-              diag.attachNote(op->getLoc()) << "operand is used here";
-              return WalkResult::interrupt();
-            }
-          }
         }
 
         // Ensure that the layer block does not drive any sinks outside.
@@ -6145,11 +7044,27 @@ LogicalResult LayerBlockOp::verify() {
           if (isa<RefDefineOp>(connect))
             return WalkResult::advance();
 
-          // We can drive any destination inside the current layerblock.
-          auto dest = getFieldRefFromValue(connect.getDest()).getValue();
-          if (auto *destOp = dest.getDefiningOp())
-            if (getOperation()->isAncestor(destOp))
-              return WalkResult::advance();
+          // Verify that connects only drive values declared in the layer block.
+          // If we see a non-passive connect destination, then verify that the
+          // source is in the same layer block so that the source is not driven.
+          auto dest =
+              fieldRefCache.getFieldRefFromValue(connect.getDest()).getValue();
+          bool passive = true;
+          if (auto type =
+                  type_dyn_cast<FIRRTLBaseType>(connect.getDest().getType()))
+            passive = type.isPassive();
+          // TODO: Improve this verifier.  This is intentionally _not_ verifying
+          // a non-passive ConnectLike because it is hugely annoying to do
+          // so---it requires a full understanding of if the connect is driving
+          // destination-to-source, source-to-destination, or bi-directionally
+          // which requires deep inspection of the type.  Eventually, the FIRRTL
+          // pass pipeline will remove all flips (e.g., canonicalize connect to
+          // matchingconnect) and this hole won't exist.
+          if (!passive)
+            return WalkResult::advance();
+
+          if (isAncestorOfValueOwner(getOperation(), dest))
+            return WalkResult::advance();
 
           auto diag =
               connect.emitOpError()
@@ -6173,6 +7088,198 @@ LayerBlockOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!layerOp) {
     return emitOpError("invalid symbol reference");
   }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Format String operations
+//===----------------------------------------------------------------------===//
+
+void TimeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), "time");
+}
+
+void HierarchicalModuleNameOp::getAsmResultNames(
+    OpAsmSetValueNameFn setNameFn) {
+  setNameFn(getResult(), "hierarchicalmodulename");
+}
+
+ParseResult FPrintFOp::parse(::mlir::OpAsmParser &parser,
+                             ::mlir::OperationState &result) {
+  // Parse required clock and condition operands
+  OpAsmParser::UnresolvedOperand clock, cond;
+  if (parser.parseOperand(clock) || parser.parseComma() ||
+      parser.parseOperand(cond) || parser.parseComma())
+    return failure();
+
+  auto parseFormatString =
+      [&parser](llvm::SMLoc &loc, StringAttr &result,
+                SmallVectorImpl<OpAsmParser::UnresolvedOperand> &operands)
+      -> ParseResult {
+    loc = parser.getCurrentLocation();
+    // NOTE: Don't use parseAttribute. "format_string" : !firrtl.clock is
+    // considered as a typed attr.
+    std::string resultStr;
+    if (parser.parseString(&resultStr))
+      return failure();
+    result = parser.getBuilder().getStringAttr(resultStr);
+
+    // This is an optional
+    if (parser.parseOperandList(operands, AsmParser::Delimiter::OptionalParen))
+      return failure();
+    return success();
+  };
+
+  // Parse output file and format string substitutions
+  SmallVector<OpAsmParser::UnresolvedOperand> outputFileSubstitutions,
+      substitutions;
+  llvm::SMLoc outputFileLoc, formatStringLoc;
+
+  if (parseFormatString(
+          outputFileLoc,
+          result.getOrAddProperties<FPrintFOp::Properties>().outputFile,
+          outputFileSubstitutions) ||
+      parser.parseComma() ||
+      parseFormatString(
+          formatStringLoc,
+          result.getOrAddProperties<FPrintFOp::Properties>().formatString,
+          substitutions))
+    return failure();
+
+  if (parseFPrintfAttrs(parser, result.attributes))
+    return failure();
+
+  // Parse types
+  Type clockType, condType;
+  SmallVector<Type> restTypes;
+
+  if (parser.parseColon() || parser.parseType(clockType) ||
+      parser.parseComma() || parser.parseType(condType))
+    return failure();
+
+  if (succeeded(parser.parseOptionalComma())) {
+    if (parser.parseTypeList(restTypes))
+      return failure();
+  }
+
+  // Set operand segment sizes
+  result.getOrAddProperties<FPrintFOp::Properties>().operandSegmentSizes = {
+      1, 1, static_cast<int32_t>(outputFileSubstitutions.size()),
+      static_cast<int32_t>(substitutions.size())};
+
+  // Resolve all operands
+  if (parser.resolveOperand(clock, clockType, result.operands) ||
+      parser.resolveOperand(cond, condType, result.operands) ||
+      parser.resolveOperands(
+          outputFileSubstitutions,
+          ArrayRef(restTypes).take_front(outputFileSubstitutions.size()),
+          outputFileLoc, result.operands) ||
+      parser.resolveOperands(
+          substitutions,
+          ArrayRef(restTypes).drop_front(outputFileSubstitutions.size()),
+          formatStringLoc, result.operands))
+    return failure();
+
+  return success();
+}
+
+void FPrintFOp::print(OpAsmPrinter &p) {
+  p << " " << getClock() << ", " << getCond() << ", ";
+  p.printAttributeWithoutType(getOutputFileAttr());
+  if (!getOutputFileSubstitutions().empty()) {
+    p << "(";
+    p.printOperands(getOutputFileSubstitutions());
+    p << ")";
+  }
+  p << ", ";
+  p.printAttributeWithoutType(getFormatStringAttr());
+  if (!getSubstitutions().empty()) {
+    p << "(";
+    p.printOperands(getSubstitutions());
+    p << ")";
+  }
+  printFPrintfAttrs(p, *this, (*this)->getAttrDictionary());
+  p << " : " << getClock().getType() << ", " << getCond().getType();
+  if (!getOutputFileSubstitutions().empty() || !getSubstitutions().empty()) {
+    for (auto type : getOperands().drop_front(2).getTypes()) {
+      p << ", ";
+      p.printType(type);
+    }
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// FFlushOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult FFlushOp::verify() {
+  if (!getOutputFileAttr() && !getOutputFileSubstitutions().empty())
+    return emitOpError("substitutions without output file are not allowed");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// BindOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult BindOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  auto ref = getInstanceAttr();
+  auto target = ns.lookup(ref);
+  if (!target)
+    return emitError() << "target " << ref << " cannot be resolved";
+
+  if (!target.isOpOnly())
+    return emitError() << "target " << ref << " is not an operation";
+
+  auto instance = dyn_cast<InstanceOp>(target.getOp());
+  if (!instance)
+    return emitError() << "target " << ref << " is not an instance";
+
+  if (!instance.getDoNotPrint())
+    return emitError() << "target " << ref << " is not marked doNotPrint";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Domain operations
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+DomainCreateAnonOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
+  auto domainAttr = getDomainAttr();
+
+  auto *symbol = symbolTable.lookupSymbolIn(circuitOp, domainAttr);
+  if (!symbol)
+    return emitOpError() << "references undefined symbol '" << domainAttr
+                         << "'";
+
+  if (!isa<DomainOp>(symbol))
+    return emitOpError() << "references symbol '" << domainAttr
+                         << "' which is not a domain";
+
+  return success();
+}
+
+void DomainCreateOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+LogicalResult
+DomainCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
+  auto domainAttr = getDomainAttr();
+
+  auto *symbol = symbolTable.lookupSymbolIn(circuitOp, domainAttr);
+  if (!symbol)
+    return emitOpError() << "references undefined symbol '" << domainAttr
+                         << "'";
+
+  if (!isa<DomainOp>(symbol))
+    return emitOpError() << "references symbol '" << domainAttr
+                         << "' which is not a domain";
 
   return success();
 }

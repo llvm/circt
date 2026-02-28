@@ -1,6 +1,7 @@
 ; RUN: firtool --output-annotation-file=Baz.anno.json %s | FileCheck %s
 
 ; Test that a wire in an inlined instance get the proper Trace Annotation.
+FIRRTL version 4.0.0
 circuit Foo: %[[
   {
     "class":"chisel3.experimental.Trace$TraceNameAnnotation",
@@ -22,24 +23,24 @@ circuit Foo: %[[
     output b: UInt<1>
 
     node _x = a
-    b <= _x
+    connect b, _x
 
   module Bar:
     input a: UInt<1>
     output b: UInt<1>
 
     inst baz of Baz
-    baz.a <= a
-    b <= baz.b
+    connect baz.a, a
+    connect b, baz.b
 
-  module Foo:
+  public module Foo:
     input a: UInt<1>
     output b: UInt<1>
 
     inst bar of Bar
 
-    bar.a <= a
-    b <= bar.b
+    connect bar.a, a
+    connect b, bar.b
 
 
 ; Wire "_x" should not be optimized away.

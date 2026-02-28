@@ -11,7 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/MLIRContext.h"
@@ -20,6 +19,11 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/raw_ostream.h"
+
+namespace circt {
+#define GEN_PASS_DEF_MAXIMIZESSA
+#include "circt/Transforms/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -214,7 +218,7 @@ public:
   }
 };
 
-struct MaximizeSSAPass : public MaximizeSSABase<MaximizeSSAPass> {
+struct MaximizeSSAPass : public circt::impl::MaximizeSSABase<MaximizeSSAPass> {
 public:
   void runOnOperation() override {
     auto *ctx = &getContext();

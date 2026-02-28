@@ -20,6 +20,7 @@
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/OpDefinition.h"
+#include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 
 #define GET_OP_CLASSES

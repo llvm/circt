@@ -44,9 +44,9 @@ void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
   if (argAttrs.empty())
     return;
   assert(type.getNumInputs() == argAttrs.size());
-  function_interface_impl::addArgAndResultAttrs(
+  call_interface_impl::addArgAndResultAttrs(
       builder, state, argAttrs,
-      /*resultAttrs=*/std::nullopt, MachineOp::getArgAttrsAttrName(state.name),
+      /*resultAttrs=*/{}, MachineOp::getArgAttrsAttrName(state.name),
       MachineOp::getResAttrsAttrName(state.name));
 }
 
@@ -315,7 +315,19 @@ void StateOp::build(OpBuilder &builder, OperationState &state,
   Region *output = state.addRegion();
   output->push_back(new Block());
   builder.setInsertionPointToEnd(&output->back());
-  builder.create<fsm::OutputOp>(state.location);
+  fsm::OutputOp::create(builder, state.location);
+  Region *transitions = state.addRegion();
+  transitions->push_back(new Block());
+  state.addAttribute("sym_name", builder.getStringAttr(stateName));
+}
+
+void StateOp::build(OpBuilder &builder, OperationState &state,
+                    StringRef stateName, ValueRange outputs) {
+  OpBuilder::InsertionGuard guard(builder);
+  Region *output = state.addRegion();
+  output->push_back(new Block());
+  builder.setInsertionPointToEnd(&output->back());
+  fsm::OutputOp::create(builder, state.location, outputs);
   Region *transitions = state.addRegion();
   transitions->push_back(new Block());
   state.addAttribute("sym_name", builder.getStringAttr(stateName));
@@ -370,7 +382,7 @@ Block *StateOp::ensureOutput(OpBuilder &builder) {
     auto *block = new Block();
     getOutput().push_back(block);
     builder.setInsertionPointToStart(block);
-    builder.create<fsm::OutputOp>(getLoc());
+    fsm::OutputOp::create(builder, getLoc());
   }
   return &getOutput().front();
 }
@@ -402,16 +414,29 @@ LogicalResult OutputOp::verify() {
 //===----------------------------------------------------------------------===//
 
 void TransitionOp::build(OpBuilder &builder, OperationState &state,
-                         StringRef nextState) {
-  state.addRegion(); // guard
-  state.addRegion(); // action
-  state.addAttribute("nextState",
-                     FlatSymbolRefAttr::get(builder.getStringAttr(nextState)));
+                         StateOp nextState) {
+  build(builder, state, nextState.getName());
 }
 
 void TransitionOp::build(OpBuilder &builder, OperationState &state,
-                         StateOp nextState) {
-  build(builder, state, nextState.getName());
+                         StringRef nextState,
+                         llvm::function_ref<void()> guardCtor,
+                         llvm::function_ref<void()> actionCtor) {
+  state.addAttribute("nextState",
+                     FlatSymbolRefAttr::get(builder.getStringAttr(nextState)));
+  OpBuilder::InsertionGuard guard(builder);
+
+  Region *guardRegion = state.addRegion(); // guard
+  if (guardCtor) {
+    builder.createBlock(guardRegion);
+    guardCtor();
+  }
+
+  Region *actionRegion = state.addRegion(); // action
+  if (actionCtor) {
+    builder.createBlock(actionRegion);
+    actionCtor();
+  }
 }
 
 Block *TransitionOp::ensureGuard(OpBuilder &builder) {
@@ -420,7 +445,7 @@ Block *TransitionOp::ensureGuard(OpBuilder &builder) {
     auto *block = new Block();
     getGuard().push_back(block);
     builder.setInsertionPointToStart(block);
-    builder.create<fsm::ReturnOp>(getLoc());
+    fsm::ReturnOp::create(builder, getLoc());
   }
   return &getGuard().front();
 }
@@ -467,7 +492,7 @@ LogicalResult TransitionOp::canonicalize(TransitionOp op,
           // Replace the original return op with a new one without any operands
           // if the constant is TRUE.
           rewriter.setInsertionPoint(guardReturn);
-          rewriter.create<fsm::ReturnOp>(guardReturn.getLoc());
+          fsm::ReturnOp::create(rewriter, guardReturn.getLoc());
           rewriter.eraseOp(guardReturn);
         } else {
           // Erase the whole transition op if the constant is FALSE, because the

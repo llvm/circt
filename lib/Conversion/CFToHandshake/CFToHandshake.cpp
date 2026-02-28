@@ -10,9 +10,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/CFToHandshake.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
+#include "circt/Dialect/Handshake/HandshakeUtils.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Analysis/CFGLoopInfo.h"
@@ -45,6 +45,12 @@
 
 #include <list>
 #include <map>
+
+namespace circt {
+#define GEN_PASS_DEF_CFTOHANDSHAKE
+#define GEN_PASS_DEF_HANDSHAKEREMOVEBLOCK
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace mlir::func;
@@ -299,14 +305,15 @@ HandshakeLowering::insertMerge(Block *block, Value val,
       // argument. Taking this step out should have no impact on functionality
       // but would make the resulting IR less "regular"
       operands.push_back(val);
-      mergeOp = rewriter.create<handshake::MergeOp>(insertLoc, operands);
+      mergeOp = handshake::MergeOp::create(rewriter, insertLoc, operands);
     } else {
       for (unsigned i = 0; i < numPredecessors; i++) {
         auto edge = edgeBuilder.get(rewriter.getNoneType());
         dataEdges.push_back(edge);
         operands.push_back(Value(edge));
       }
-      mergeOp = rewriter.create<handshake::ControlMergeOp>(insertLoc, operands);
+      mergeOp =
+          handshake::ControlMergeOp::create(rewriter, insertLoc, operands);
     }
     setBlockEntryControl(block, mergeOp->getResult(0));
     return MergeOpInfo{mergeOp, val, dataEdges};
@@ -330,7 +337,7 @@ HandshakeLowering::insertMerge(Block *block, Value val,
       dataEdges.push_back(edge);
       operands.push_back(Value(edge));
     }
-    auto merge = rewriter.create<handshake::MergeOp>(insertLoc, operands);
+    auto merge = handshake::MergeOp::create(rewriter, insertLoc, operands);
     return MergeOpInfo{merge, val, dataEdges};
   }
 
@@ -345,7 +352,7 @@ HandshakeLowering::insertMerge(Block *block, Value val,
     operands.push_back(Value(edge));
   }
   auto mux =
-      rewriter.create<handshake::MuxOp>(insertLoc, Value(indexEdge), operands);
+      handshake::MuxOp::create(rewriter, insertLoc, Value(indexEdge), operands);
   return MergeOpInfo{mux, val, dataEdges, indexEdge};
 }
 
@@ -719,8 +726,8 @@ BufferOp FeedForwardNetworkRewriter::buildSplitNetwork(
   // TODO how to size these?
   // Longest path in a CFG-DAG would be O(#blocks)
 
-  return rewriter.create<handshake::BufferOp>(loc, cond, bufferSize,
-                                              BufferTypeEnum::fifo);
+  return handshake::BufferOp::create(rewriter, loc, cond, bufferSize,
+                                     BufferTypeEnum::fifo);
 }
 
 LogicalResult FeedForwardNetworkRewriter::buildMergeNetwork(
@@ -746,22 +753,22 @@ LogicalResult FeedForwardNetworkRewriter::buildMergeNetwork(
   else
     muxOperands = llvm::to_vector(ctrlMerge.getOperands());
 
-  Value newCtrl = rewriter.create<handshake::MuxOp>(loc, buf, muxOperands);
+  Value newCtrl = handshake::MuxOp::create(rewriter, loc, buf, muxOperands);
 
   Value cond = buf.getResult();
   if (requiresFlip) {
     // As the mux operand order is the flipped cmerge input order, the index
     // which replaces the output of the cmerge has to be flipped/negated as
     // well.
-    cond = rewriter.create<arith::XOrIOp>(
-        loc, cond.getType(), cond,
-        rewriter.create<arith::ConstantOp>(
-            loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1)));
+    cond = arith::XOrIOp::create(
+        rewriter, loc, cond.getType(), cond,
+        arith::ConstantOp::create(
+            rewriter, loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1)));
   }
 
   // Require a cast to index to stick to the type of the mux input.
   Value condAsIndex =
-      rewriter.create<arith::IndexCastOp>(loc, rewriter.getIndexType(), cond);
+      arith::IndexCastOp::create(rewriter, loc, rewriter.getIndexType(), cond);
 
   hl.setBlockEntryControl(mergeBlock, newCtrl);
 
@@ -876,7 +883,7 @@ static Value getOperandFromBlock(MuxOp mux, Block *block) {
     return block == operand.getParentBlock();
   });
   assert(
-      inValueIt != mux.getOperands().end() &&
+      inValueIt != mux.getDataOperands().end() &&
       "Expected mux to have an operand originating from the requested block.");
   return *inValueIt;
 }
@@ -940,20 +947,21 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
 
   // Merge all of the controls in each partition
   rewriter->setInsertionPointToStart(loopHeader);
-  auto externalCtrlMerge = rewriter->create<ControlMergeOp>(loc, externalCtrls);
+  auto externalCtrlMerge =
+      ControlMergeOp::create(*rewriter, loc, externalCtrls);
 
   // Create loop mux and the loop priming register. The loop mux will on select
   // "0" select external control, and internal control at "1". This convention
   // must be followed by the loop exit network.
-  auto primingRegister =
-      rewriter->create<BufferOp>(loc, loopPrimingInput, 1, BufferTypeEnum::seq);
+  auto primingRegister = BufferOp::create(*rewriter, loc, loopPrimingInput, 1,
+                                          BufferTypeEnum::seq);
   // Initialize the priming register to path 0.
   primingRegister->setAttr("initValues", rewriter->getI64ArrayAttr({0}));
 
   // The loop control mux will deterministically select between control entering
   // the loop from any external block or the single loop backedge.
-  auto loopCtrlMux = rewriter->create<MuxOp>(
-      loc, primingRegister.getResult(),
+  auto loopCtrlMux = MuxOp::create(
+      *rewriter, loc, primingRegister.getResult(),
       llvm::SmallVector<Value>{externalCtrlMerge.getResult(), loopCtrl});
 
   // Replace the existing control merge 'result' output with the loop control
@@ -992,14 +1000,13 @@ BufferOp LoopNetworkRewriter::buildContinueNetwork(Block *loopHeader,
   // loop latch, will then be selected between by a 3rd mux, based on the
   // priming register.
   for (MuxOp mux : muxesToReplace) {
-    auto externalDataMux = rewriter->create<MuxOp>(
-        loc, externalCtrlMerge.getIndex(), externalDataInputs[mux]);
+    auto externalDataMux = MuxOp::create(
+        *rewriter, loc, externalCtrlMerge.getIndex(), externalDataInputs[mux]);
 
     rewriter->replaceOp(
-        mux, rewriter
-                 ->create<MuxOp>(loc, primingRegister,
-                                 llvm::SmallVector<Value>{externalDataMux,
-                                                          loopDataInputs[mux]})
+        mux, MuxOp::create(
+                 *rewriter, loc, primingRegister,
+                 llvm::SmallVector<Value>{externalDataMux, loopDataInputs[mux]})
                  .getResult());
   }
 
@@ -1042,17 +1049,18 @@ void LoopNetworkRewriter::buildExitNetwork(
       // This goes against the convention, and we have to invert the condition
       // value before connecting it to the exit network.
       rewriter->setInsertionPoint(condBr);
-      condValue = rewriter->create<arith::XOrIOp>(
-          loc, condValue.getType(), condValue,
-          rewriter->create<arith::ConstantOp>(
-              loc, rewriter->getIntegerAttr(rewriter->getI1Type(), 1)));
+      condValue = arith::XOrIOp::create(
+          *rewriter, loc, condValue.getType(), condValue,
+          arith::ConstantOp::create(
+              *rewriter, loc,
+              rewriter->getIntegerAttr(rewriter->getI1Type(), 1)));
     }
     parityCorrectedConds.push_back(condValue);
   }
 
   // Merge all of the parity-corrected exit conditions and assign them
   // to the loop priming input.
-  auto exitMerge = rewriter->create<MergeOp>(loc, parityCorrectedConds);
+  auto exitMerge = MergeOp::create(*rewriter, loc, parityCorrectedConds);
   loopPrimingInput.setValue(exitMerge);
 }
 
@@ -1143,10 +1151,10 @@ HandshakeLowering::addBranchOps(ConversionPatternRewriter &rewriter) {
         Operation *newOp = nullptr;
 
         if (auto condBranchOp = dyn_cast<mlir::cf::CondBranchOp>(termOp))
-          newOp = rewriter.create<handshake::ConditionalBranchOp>(
-              termOp->getLoc(), condBranchOp.getCondition(), val);
+          newOp = handshake::ConditionalBranchOp::create(
+              rewriter, termOp->getLoc(), condBranchOp.getCondition(), val);
         else if (isa<mlir::cf::BranchOp>(termOp))
-          newOp = rewriter.create<handshake::BranchOp>(termOp->getLoc(), val);
+          newOp = handshake::BranchOp::create(rewriter, termOp->getLoc(), val);
 
         if (newOp == nullptr)
           continue;
@@ -1183,8 +1191,8 @@ LogicalResult HandshakeLowering::connectConstantsToControl(
       auto value = constantOp.getValue();
       rewriter.replaceOpWithNewOp<handshake::ConstantOp>(
           constantOp, value.getType(), value,
-          rewriter.create<handshake::SourceOp>(constantOp.getLoc(),
-                                               rewriter.getNoneType()));
+          handshake::SourceOp::create(rewriter, constantOp.getLoc(),
+                                      rewriter.getNoneType()));
     }
   } else {
     for (Block &block : r) {
@@ -1295,8 +1303,8 @@ HandshakeLowering::replaceMemoryOps(ConversionPatternRewriter &rewriter,
           // This will add all operands except alloc
           SmallVector<Value, 8> operands(loadOp.getIndices());
 
-          newOp =
-              rewriter.create<handshake::LoadOp>(op.getLoc(), memref, operands);
+          newOp = handshake::LoadOp::create(rewriter, op.getLoc(), memref,
+                                            operands);
           op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
         })
         .Case<memref::StoreOp>([&](auto storeOp) {
@@ -1305,8 +1313,8 @@ HandshakeLowering::replaceMemoryOps(ConversionPatternRewriter &rewriter,
           SmallVector<Value, 8> operands(storeOp.getIndices());
 
           // Create new op where operands are store data and address indices
-          newOp = rewriter.create<handshake::StoreOp>(
-              op.getLoc(), storeOp.getValueToStore(), operands);
+          newOp = handshake::StoreOp::create(
+              rewriter, op.getLoc(), storeOp.getValueToStore(), operands);
         })
         .Case<AffineReadOpInterface, AffineWriteOpInterface>([&](auto) {
           // Get essential memref access inforamtion.
@@ -1333,13 +1341,13 @@ HandshakeLowering::replaceMemoryOps(ConversionPatternRewriter &rewriter,
                              "cannot be reduced.");
 
           if (isa<AffineReadOpInterface>(op)) {
-            auto loadOp = rewriter.create<handshake::LoadOp>(
-                op.getLoc(), access.memref, *operands);
+            auto loadOp = handshake::LoadOp::create(rewriter, op.getLoc(),
+                                                    access.memref, *operands);
             newOp = loadOp;
             op.getResult(0).replaceAllUsesWith(loadOp.getDataResult());
           } else {
-            newOp = rewriter.create<handshake::StoreOp>(
-                op.getLoc(), op.getOperand(0), *operands);
+            newOp = handshake::StoreOp::create(rewriter, op.getLoc(),
+                                               op.getOperand(0), *operands);
           }
         })
         .Default([&](auto) {
@@ -1411,7 +1419,7 @@ static void addJoinOps(ConversionPatternRewriter &rewriter,
     // Insert only single join per block
     if (!isa<JoinOp>(srcOp)) {
       rewriter.setInsertionPointAfter(srcOp);
-      Operation *newJoin = rewriter.create<JoinOp>(srcOp->getLoc(), ctrl);
+      Operation *newJoin = JoinOp::create(rewriter, srcOp->getLoc(), ctrl);
       op->replaceUsesOfWith(ctrl, newJoin->getResult(0));
     }
   }
@@ -1497,7 +1505,7 @@ void HandshakeLowering::setMemOpControlInputs(
     else {
       rewriter.setInsertionPoint(currOp);
       Operation *joinOp =
-          rewriter.create<JoinOp>(currOp->getLoc(), controlOperands);
+          JoinOp::create(rewriter, currOp->getLoc(), controlOperands);
       addValueToOperands(currOp, joinOp->getResult(0));
     }
   }
@@ -1577,13 +1585,13 @@ HandshakeLowering::connectToMemory(ConversionPatternRewriter &rewriter,
     // Place memory op next to the alloc op
     Operation *newOp = nullptr;
     if (isExternalMemory)
-      newOp = rewriter.create<ExternalMemoryOp>(
-          entryBlock->front().getLoc(), memrefOperand, operands, ld_count,
-          cntrl_count - ld_count, mem_count++);
+      newOp = ExternalMemoryOp::create(rewriter, entryBlock->front().getLoc(),
+                                       memrefOperand, operands, ld_count,
+                                       cntrl_count - ld_count, mem_count++);
     else
-      newOp = rewriter.create<MemoryOp>(entryBlock->front().getLoc(), operands,
-                                        ld_count, cntrl_count, lsq, mem_count++,
-                                        memrefOperand);
+      newOp = MemoryOp::create(rewriter, entryBlock->front().getLoc(), operands,
+                               ld_count, cntrl_count, lsq, mem_count++,
+                               memrefOperand);
 
     setLoadDataInputs(memory.second, newOp);
 
@@ -1630,9 +1638,9 @@ HandshakeLowering::replaceCallOps(ConversionPatternRewriter &rewriter) {
         llvm::copy(callOp.getOperands(), std::back_inserter(operands));
         operands.push_back(blockEntryControl);
         rewriter.setInsertionPoint(callOp);
-        auto instanceOp = rewriter.create<handshake::InstanceOp>(
-            callOp.getLoc(), callOp.getCallee(), callOp.getResultTypes(),
-            operands);
+        auto instanceOp = handshake::InstanceOp::create(
+            rewriter, callOp.getLoc(), callOp.getCallee(),
+            callOp.getResultTypes(), operands);
         // Replace all results of the source callOp.
         for (auto it : llvm::zip(callOp.getResults(), instanceOp.getResults()))
           std::get<0>(it).replaceAllUsesWith(std::get<1>(it));
@@ -1699,8 +1707,9 @@ static LogicalResult lowerFuncOp(func::FuncOp funcOp, MLIRContext *ctx,
             resTypes.push_back(noneType);
             argTypes.push_back(noneType);
             auto func_type = rewriter.getFunctionType(argTypes, resTypes);
-            newFuncOp = rewriter.create<handshake::FuncOp>(
-                funcOp.getLoc(), funcOp.getName(), func_type, attributes);
+            newFuncOp = handshake::FuncOp::create(rewriter, funcOp.getLoc(),
+                                                  funcOp.getName(), func_type,
+                                                  attributes);
             rewriter.inlineRegionBefore(funcOp.getBody(), newFuncOp.getBody(),
                                         newFuncOp.end());
             if (!newFuncOp.isExternal()) {
@@ -1734,11 +1743,12 @@ static LogicalResult lowerFuncOp(func::FuncOp funcOp, MLIRContext *ctx,
 namespace {
 
 struct HandshakeRemoveBlockPass
-    : HandshakeRemoveBlockBase<HandshakeRemoveBlockPass> {
+    : circt::impl::HandshakeRemoveBlockBase<HandshakeRemoveBlockPass> {
   void runOnOperation() override { removeBasicBlocks(getOperation()); }
 };
 
-struct CFToHandshakePass : public CFToHandshakeBase<CFToHandshakePass> {
+struct CFToHandshakePass
+    : public circt::impl::CFToHandshakeBase<CFToHandshakePass> {
   CFToHandshakePass(bool sourceConstants, bool disableTaskPipelining) {
     this->sourceConstants = sourceConstants;
     this->disableTaskPipelining = disableTaskPipelining;

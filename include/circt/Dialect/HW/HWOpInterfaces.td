@@ -15,6 +15,7 @@
 
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/OpBase.td"
+include "circt/Dialect/Emit/EmitOpInterfaces.td"
 include "circt/Support/InstanceGraphInterface.td"
 
 def PortList : OpInterface<"PortList", []> {
@@ -402,11 +403,110 @@ def HWMutableModuleLike : OpInterface<"HWMutableModuleLike", [HWModuleLike]> {
   ];
 }
 
+def HWEmittableModuleLike : OpInterface<"HWEmittableModuleLike", [HWModuleLike,
+                                        Emittable]> {
+  let cppNamespace = "::circt::hw";
+  let description = [{
+    This interface indicates that the module like op is emittable in SV and
+    requires SV legalization on its body.
+  }];
+}
+
 
 def HWInstanceLike : OpInterface<"HWInstanceLike", [
     InstanceGraphInstanceOpInterface]> {
   let cppNamespace = "circt::hw";
-  let description = "Provide common  module information.";
+  let description = "Provide common instance information.";
+
+  // Note that the single-element getters and setters could be implemented as
+  // shared declarations using the interface methods that operate on the entire
+  // array or vice versa.  However, depending on how the names are stored in the
+  // instance operation, they can be implemented more efficiently by giving the
+  // operation the freedom to define all those methods (e.g., by avoiding
+  // construction of unnecessary intermedate array attributes).
+  let methods = [
+    InterfaceMethod<[{
+      Return the name of the specified input port or null if it cannot be
+      determined.
+    }], "::mlir::StringAttr", "getInputName", (ins "size_t":$idx),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return ::circt::hw::instance_like_impl::getName(
+        $_op.getArgNames(), idx);
+    }]>,
+
+    InterfaceMethod<[{
+      Return the name of the specified result or null if it cannot be
+      determined.
+    }], "::mlir::StringAttr", "getOutputName", (ins "size_t":$idx),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return ::circt::hw::instance_like_impl::getName(
+        $_op.getResultNames(), idx);
+    }]>,
+
+    InterfaceMethod<[{
+      Change the name of the specified input port.
+    }], "void", "setInputName",
+    (ins "size_t":$idx, "::mlir::StringAttr":$name),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      $_op.setArgNamesAttr(::circt::hw::instance_like_impl::updateName(
+        $_op.getArgNames(), idx, name));
+    }]>,
+
+    InterfaceMethod<[{
+      Change the name of the specified output port.
+    }], "void", "setOutputName",
+    (ins "size_t":$idx, "::mlir::StringAttr":$name),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      $_op.setResultNamesAttr(::circt::hw::instance_like_impl::updateName(
+        $_op.getResultNames(), idx, name));
+    }]>,
+
+    InterfaceMethod<[{
+      Return the names of all input ports. If the instance operation stores the
+      names in an ArrayAttr this can avoid attribute constructions.
+    }],
+    "::mlir::ArrayAttr", "getInputNames", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return $_op.getArgNamesAttr();
+    }]>,
+
+    InterfaceMethod<[{
+      Return the name of all ouput ports. If the instance operation stores the
+      names in an ArrayAttr this can avoid attribute constructions.
+    }],
+    "::mlir::ArrayAttr", "getOutputNames", (ins),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      return $_op.getResultNamesAttr();
+    }]>,
+
+    InterfaceMethod<[{
+      Change the names of all input ports. If all names have to be changed, this
+      can avoid repeated intermediate attribute constructions.
+    }], "void", "setInputNames", (ins "::mlir::ArrayAttr":$names),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      $_op.setArgNamesAttr(names);
+    }]>,
+
+    InterfaceMethod<[{
+      Change the names of all output ports. If all names have to be changed, this
+      can avoid repeated intermediate attribute constructions.
+    }], "void", "setOutputNames", (ins "::mlir::ArrayAttr":$names),
+    /*methodBody=*/[{}],
+    /*defaultImplementation=*/[{
+      $_op.setResultNamesAttr(names);
+    }]>,
+
+    InterfaceMethod<"True if this instance is a phony placeholder",
+      "bool", "getDoNotPrint", (ins)
+    >
+  ];
 }
 
 def InnerRefNamespace : NativeOpTrait<"InnerRefNamespace">;
@@ -514,7 +614,7 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
   ];
 
   let verify = [{
-    return verifyInnerSymAttr(cast<circt::hw::InnerSymbolOpInterface>(op));
+    return verifyInnerSymOp(cast<circt::hw::InnerSymbolOpInterface>($_op));
   }];
 }
 
@@ -534,6 +634,25 @@ def InnerRefUserOpInterface : OpInterface<"InnerRefUserOpInterface"> {
       "::mlir::LogicalResult", "verifyInnerRefs",
       (ins "::circt::hw::InnerRefNamespace&":$ns)
     >,
+  ];
+}
+
+def CombDataflow : OpInterface<"CombDataFlow"> {
+  let cppNamespace = "circt::hw";
+  let description = [{
+    This interface is used for specifying the combinational dataflow that exists
+    in the results and operands of an operation.
+    Any operation that doesn't implement this interface is assumed to have a
+    combinational dependence from each operand to each result.
+  }];
+  let methods = [
+    InterfaceMethod<[{
+     Get the combinational dataflow relations between the operands and the results.
+     This returns a pair of ground type fieldrefs. The first element is the destination
+     and the second is the source of the dependence. The default implementation returns
+     an empty list, which implies that the operation is not combinational.}],
+     "llvm::SmallVector<std::pair<circt::FieldRef, circt::FieldRef>>", "computeDataFlow",
+     (ins)>,
   ];
 }
 

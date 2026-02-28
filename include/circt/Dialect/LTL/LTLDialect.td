@@ -19,8 +19,7 @@ def LTLDialect : Dialect {
   let useDefaultTypePrinterParser = 1;
   let dependentDialects = ["hw::HWDialect", "comb::CombDialect"];
 
-  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
-  let usePropertiesForAttributes = 0;
+  let hasConstantMaterializer = 1;
 }
 
 #endif // CIRCT_DIALECT_LTL_LTLDIALECT_TD

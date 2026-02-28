@@ -6,9 +6,9 @@ func.func @missingMergeBlocks(%arg0: i1) {
 ^bb1:  // pred: ^bb0
   cf.cond_br %arg0, ^bb3, ^bb4
 ^bb2:  // pred: ^bb0
+// expected-note @+1 {{This branch jumps to the illegal block}}
   cf.br ^bb4
 ^bb3:  // pred: ^bb1
-// expected-note @+1 {{This branch jumps to the illegal block}}
   cf.br ^bb4
 ^bb4:  // 3 preds: ^bb1, ^bb2, ^bb3
   return

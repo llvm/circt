@@ -11,12 +11,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/Diagnostics.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LOWERINTMODULES
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -26,9 +33,11 @@ using namespace firrtl;
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct LowerIntmodulesPass : public LowerIntmodulesBase<LowerIntmodulesPass> {
+struct LowerIntmodulesPass
+    : public circt::firrtl::impl::LowerIntmodulesBase<LowerIntmodulesPass> {
+  using Base::Base;
+
   void runOnOperation() override;
-  using LowerIntmodulesBase::fixupEICGWrapper;
 };
 } // namespace
 
@@ -52,6 +61,7 @@ void LowerIntmodulesPass::runOnOperation() {
   auto &ig = getAnalysis<InstanceGraph>();
 
   bool changed = false;
+  bool warnEICGwrapperDropsDedupAnno = false;
 
   // Convert to int ops.
   for (auto op :
@@ -64,6 +74,10 @@ void LowerIntmodulesPass::runOnOperation() {
 
     for (auto *use : llvm::make_early_inc_range(node->uses())) {
       auto inst = use->getInstance<InstanceOp>();
+      // The verifier should have already checked that intmodules are only
+      // instantiated with InstanceOp, not InstanceChoiceOp.
+      assert(inst && "intmodule must be instantiated with instance op");
+
       if (failed(checkInstForAnnotations(inst, op.getIntrinsic())))
         return signalPassFailure();
 
@@ -80,7 +94,7 @@ void LowerIntmodulesPass::runOnOperation() {
       for (auto [idx, result] : llvm::enumerate(inst.getResults())) {
         // Replace inputs with wires that will be used as operands.
         if (inst.getPortDirection(idx) != Direction::Out) {
-          auto w = builder.create<WireOp>(result.getLoc(), result.getType())
+          auto w = WireOp::create(builder, result.getLoc(), result.getType())
                        .getResult();
           result.replaceAllUsesWith(w);
           inputs.push_back(w);
@@ -98,33 +112,35 @@ void LowerIntmodulesPass::runOnOperation() {
         }
         outputs.push_back(
             OutputInfo{inst.getResult(idx),
-                       BundleType::BundleElement(inst.getPortName(idx),
+                       BundleType::BundleElement(inst.getPortNameAttr(idx),
                                                  /*isFlip=*/false, ftype)});
       }
 
       // Create the replacement operation.
       if (outputs.empty()) {
         // If no outputs, just create the operation.
-        builder.create<GenericIntrinsicOp>(/*result=*/Type(),
-                                           op.getIntrinsicAttr(), inputs,
-                                           op.getParameters());
+        GenericIntrinsicOp::create(builder, /*result=*/Type(),
+                                   op.getIntrinsicAttr(), inputs,
+                                   op.getParameters());
 
       } else if (outputs.size() == 1) {
         // For single output, the result is the output.
         auto resultType = outputs.front().element.type;
-        auto intop = builder.create<GenericIntrinsicOp>(
-            resultType, op.getIntrinsicAttr(), inputs, op.getParameters());
+        auto intop = GenericIntrinsicOp::create(builder, resultType,
+                                                op.getIntrinsicAttr(), inputs,
+                                                op.getParameters());
         outputs.front().result.replaceAllUsesWith(intop.getResult());
       } else {
         // For multiple outputs, create a bundle with fields for each output
         // and replace users with subfields.
         auto resultType = builder.getType<BundleType>(llvm::map_to_vector(
             outputs, [](const auto &info) { return info.element; }));
-        auto intop = builder.create<GenericIntrinsicOp>(
-            resultType, op.getIntrinsicAttr(), inputs, op.getParameters());
+        auto intop = GenericIntrinsicOp::create(builder, resultType,
+                                                op.getIntrinsicAttr(), inputs,
+                                                op.getParameters());
         for (auto &output : outputs)
-          output.result.replaceAllUsesWith(builder.create<SubfieldOp>(
-              intop.getResult(), output.element.name));
+          output.result.replaceAllUsesWith(SubfieldOp::create(
+              builder, intop.getResult(), output.element.name));
       }
       // Remove instance from IR and instance graph.
       use->erase();
@@ -149,8 +165,11 @@ void LowerIntmodulesPass::runOnOperation() {
       //        it causes an error with `fixupEICGWrapper`. For now drop the
       //        annotation until we fully migrate into EICG intrinsic.
       if (AnnotationSet::removeAnnotations(op, firrtl::dedupGroupAnnoClass))
-        op.emitWarning() << "Annotation " << firrtl::dedupGroupAnnoClass
-                         << " on EICG_wrapper is dropped";
+        if (!warnEICGwrapperDropsDedupAnno) {
+          op.emitWarning() << "Annotation " << firrtl::dedupGroupAnnoClass
+                           << " on EICG_wrapper is dropped";
+          warnEICGwrapperDropsDedupAnno = true;
+        }
 
       if (failed(checkModForAnnotations(op, eicgName)))
         return signalPassFailure();
@@ -159,21 +178,41 @@ void LowerIntmodulesPass::runOnOperation() {
       changed = true;
       for (auto *use : llvm::make_early_inc_range(node->uses())) {
         auto inst = use->getInstance<InstanceOp>();
+        if (!inst) {
+          mlir::emitError(use->getInstance()->getLoc())
+              << "EICG_wrapper must be instantiated with instance op, not via '"
+              << use->getInstance().getOperation()->getName() << "'";
+          return signalPassFailure();
+        }
         if (failed(checkInstForAnnotations(inst, eicgName)))
           return signalPassFailure();
 
         ImplicitLocOpBuilder builder(op.getLoc(), inst);
         auto replaceResults = [](OpBuilder &b, auto &&range) {
           return llvm::map_to_vector(range, [&b](auto v) {
-            auto w = b.create<WireOp>(v.getLoc(), v.getType()).getResult();
+            auto w = WireOp::create(b, v.getLoc(), v.getType()).getResult();
             v.replaceAllUsesWith(w);
             return w;
           });
         };
 
         auto inputs = replaceResults(builder, inst.getResults().drop_back());
-        auto intop = builder.create<GenericIntrinsicOp>(
-            builder.getType<ClockType>(), "circt_clock_gate", inputs,
+        // en and test_en are swapped between extmodule and intrinsic.
+        if (inputs.size() > 2) {
+          auto port1 = inst.getPortName(1);
+          auto port2 = inst.getPortName(2);
+          if (port1 != "test_en") {
+            mlir::emitError(op.getPortLocation(1),
+                            "expected port named 'test_en'");
+            return signalPassFailure();
+          } else if (port2 != "en") {
+            mlir::emitError(op.getPortLocation(2), "expected port named 'en'");
+            return signalPassFailure();
+          } else
+            std::swap(inputs[1], inputs[2]);
+        }
+        auto intop = GenericIntrinsicOp::create(
+            builder, builder.getType<ClockType>(), "circt_clock_gate", inputs,
             op.getParameters());
         inst.getResults().back().replaceAllUsesWith(intop.getResult());
 
@@ -191,12 +230,4 @@ void LowerIntmodulesPass::runOnOperation() {
 
   if (!changed)
     markAllAnalysesPreserved();
-}
-
-/// This is the pass constructor.
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createLowerIntmodulesPass(bool fixupEICGWrapper) {
-  auto pass = std::make_unique<LowerIntmodulesPass>();
-  pass->fixupEICGWrapper = fixupEICGWrapper;
-  return pass;
 }

@@ -1,4 +1,4 @@
-add_circt_library(CIRCTCalyxToFSM
+add_circt_conversion_library(CIRCTCalyxToFSM
   CalyxToFSM.cpp
   MaterializeFSM.cpp
   RemoveGroupsFromFSM.cpp

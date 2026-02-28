@@ -13,7 +13,11 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD
 #define CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD
 
+include "FIRRTLAttributes.td"
 include "FIRRTLDialect.td"
+include "FIRRTLTypes.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 
 //===----------------------------------------------------------------------===//
 // Generic intrinsic operation for parsing into before lowering.
@@ -204,5 +208,39 @@ def HasBeenResetIntrinsicOp : FIRRTLOp<"int.has_been_reset", [Pure]> {
   let assemblyFormat = "$clock `,` $reset attr-dict `:` type($reset)";
 }
 
+
+def DPICallIntrinsicOp : FIRRTLOp<"int.dpi.call",
+    [AttrSizedOperandSegments, DeclareOpInterfaceMethods<CombDataflow>]> {
+  let summary = "Import and call DPI function";
+  let description = [{
+    The `int.dpi.call` intrinsic calls an external function.
+    See Sim dialect DPI call op.
+    }];
+
+  let arguments = (ins StrAttr:$functionName,
+                       OptionalAttr<StrArrayAttr>:$inputNames,
+                       OptionalAttr<StrAttr>:$outputName,
+                       Optional<NonConstClockType>:$clock,
+                       Optional<NonConstUInt1Type>:$enable,
+                       Variadic<PassiveType>:$inputs);
+  let results = (outs Optional<PassiveType>:$result);
+  let assemblyFormat = [{
+    $functionName `(` $inputs `)` (`clock` $clock^)? (`enable` $enable^)?
+    attr-dict `:` functional-type($inputs, results)
+  }];
+  let hasVerifier = 1;
+}
+
+def ViewIntrinsicOp : FIRRTLOp<"view", []> {
+  let summary = "A SystemVerilog Interface only usable for waveform debugging";
+  let description = [{
+    This will become a SystemVerilog Interface that is driven by its arguments.
+    This is _not_ intended to be used for anything other than assistance when
+    debugging in a waveform.  This is _not_ a true SystemVerilog Interface, it
+    is only lowered to one.
+  }];
+  let arguments = (ins StrAttr:$name, OptionalAttr<StrAttr>:$yamlFile, AugmentedBundleType:$augmentedType, Variadic<GroundType>:$inputs);
+  let assemblyFormat = "$name `,` (`yaml` $yamlFile^ `,`)? $augmentedType (`,` $inputs^)? attr-dict (`:` type($inputs)^)?";
+}
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD

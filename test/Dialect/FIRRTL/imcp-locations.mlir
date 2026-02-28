@@ -5,8 +5,8 @@ firrtl.circuit "Test" {
   firrtl.module private @Consts(out %c2 : !firrtl.uint<3>, out %c4 : !firrtl.uint<3>) {
     %c2_ui3 = firrtl.constant 2 : !firrtl.uint<3>
     %c4_ui3 = firrtl.constant 4 : !firrtl.uint<3>
-    firrtl.strictconnect %c2, %c2_ui3 : !firrtl.uint<3>
-    firrtl.strictconnect %c4, %c4_ui3 : !firrtl.uint<3>
+    firrtl.matchingconnect %c2, %c2_ui3 : !firrtl.uint<3>
+    firrtl.matchingconnect %c4, %c4_ui3 : !firrtl.uint<3>
   }
   // CHECK-LABEL: module @Test
   firrtl.module @Test() {
@@ -22,8 +22,8 @@ firrtl.circuit "Test" {
     %add = firrtl.add %c2, %c4: (!firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<4>
     %addtrunc = firrtl.bits %add 2 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<3>
 
-    firrtl.strictconnect %w_or, %or : !firrtl.uint<3>
-    firrtl.strictconnect %w_add, %addtrunc : !firrtl.uint<3>
+    firrtl.matchingconnect %w_or, %or : !firrtl.uint<3>
+    firrtl.matchingconnect %w_add, %addtrunc : !firrtl.uint<3>
 
     // CHECK: %n_or = firrtl.node sym @n_or %[[SIX]]
     // CHECK: %n_add = firrtl.node sym @n_add %[[SIX]]

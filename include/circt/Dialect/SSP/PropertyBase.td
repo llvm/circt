@@ -85,6 +85,26 @@ class OperatorTypeProperty<Dialect dialect, string name, string type, string pro
   }];
 }
 
+class ResourceTypeProperty<Dialect dialect, string name, string type, string problem,
+                           list<Trait> traits = []>
+    : PropertyBase<dialect, name, type, problem, traits> {
+  let extraClassDeclaration = [{
+    void setInProblem(}] # problemClassName # [{ &prob,
+                      ::circt::scheduling::Problem::ResourceType rsrc) {
+      prob.set}] # propertyName # [{(rsrc, }] # unwrapValue # [{);
+    }
+    static ::mlir::Attribute getFromProblem(}] # problemClassName # [{ &prob,
+                                            ::circt::scheduling::Problem::ResourceType rsrc,
+                                            ::mlir::MLIRContext *ctx) {
+      if (auto optValue = prob.get}] # propertyName # [{(rsrc)) {
+        auto value = *optValue;
+        return }] # cppClassName # [{::get(ctx, }] # wrapValue # [{);
+      }
+      return {};
+    }
+  }];
+}
+
 class DependenceProperty<Dialect dialect, string name, string type, string problem,
                          list<Trait> traits = []>
     : PropertyBase<dialect, name, type, problem, traits> {

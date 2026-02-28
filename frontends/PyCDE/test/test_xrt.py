@@ -13,15 +13,16 @@
 # RUN: FileCheck %s --input-file %t/hw/XrtTop.sv --check-prefix=TOP
 
 import pycde
-from pycde import Clock, Input, Module, generator, types
+from pycde import Clock, Input, Module, generator
+from pycde.types import Bits
 from pycde.bsp import XrtBSP
 
 import sys
 
 
 class Main(Module):
-  clk = Clock(types.i1)
-  rst = Input(types.i1)
+  clk = Clock()
+  rst = Input(Bits(1))
 
   @generator
   def construct(ports):
@@ -29,44 +30,64 @@ class Main(Module):
 
 
 gendir = sys.argv[1]
-s = pycde.System(XrtBSP(Main),
-                 name="ESILoopback",
-                 output_directory=gendir,
-                 sw_api_langs=["python"])
-s.run_passes(debug=True)
+s = pycde.System(XrtBSP(Main), name="ESILoopback", output_directory=gendir)
 s.compile()
 s.package()
 
 # TOP-LABEL: module XrtTop(
-# TOP:         input         ap_clk,
-# TOP:                       ap_resetn,
-# TOP:                       s_axi_control_AWVALID,
-# TOP:         input  [19:0] s_axi_control_AWADDR,
-# TOP:         input         s_axi_control_WVALID,
-# TOP:         input  [31:0] s_axi_control_WDATA,
-# TOP:         input  [3:0]  s_axi_control_WSTRB,
-# TOP:         input         s_axi_control_ARVALID,
-# TOP:         input  [19:0] s_axi_control_ARADDR,
-# TOP:         input         s_axi_control_RREADY,
-# TOP:                       s_axi_control_BREADY,
-# TOP:         output        s_axi_control_AWREADY,
-# TOP:                       s_axi_control_WREADY,
-# TOP:                       s_axi_control_ARREADY,
-# TOP:                       s_axi_control_RVALID,
-# TOP:         output [31:0] s_axi_control_RDATA,
-# TOP:         output [1:0]  s_axi_control_RRESP,
-# TOP:         output        s_axi_control_BVALID,
-# TOP:         output [1:0]  s_axi_control_BRESP
+# TOP-NEXT:    input         ap_clk,
+# TOP-NEXT:                  ap_resetn,
+# TOP-NEXT:                   s_axi_control_AWVALID,
+# TOP-NEXT:    input  [19:0]  s_axi_control_AWADDR,
+# TOP-NEXT:    input          s_axi_control_WVALID,
+# TOP-NEXT:    input  [31:0]  s_axi_control_WDATA,
+# TOP-NEXT:    input  [3:0]   s_axi_control_WSTRB,
+# TOP-NEXT:    input          s_axi_control_ARVALID,
+# TOP-NEXT:    input  [19:0]  s_axi_control_ARADDR,
+# TOP-NEXT:    input          s_axi_control_RREADY,
+# TOP-NEXT:                   s_axi_control_BREADY,
+# TOP-NEXT:                   m_axi_gmem_AWREADY,
+# TOP-NEXT:                   m_axi_gmem_WREADY,
+# TOP-NEXT:                   m_axi_gmem_BVALID,
+# TOP-NEXT:    input  [1:0]   m_axi_gmem_BRESP,
+# TOP-NEXT:    input  [7:0]   m_axi_gmem_BID,
+# TOP-NEXT:    input          m_axi_gmem_ARREADY,
+# TOP-NEXT:                   m_axi_gmem_RVALID,
+# TOP-NEXT:    input  [511:0] m_axi_gmem_RDATA,
+# TOP-NEXT:    input          m_axi_gmem_RLAST,
+# TOP-NEXT:    input  [7:0]   m_axi_gmem_RID,
+# TOP-NEXT:    input  [1:0]   m_axi_gmem_RRESP,
+# TOP-NEXT:    output         s_axi_control_AWREADY,
+# TOP-NEXT:                   s_axi_control_WREADY,
+# TOP-NEXT:                   s_axi_control_ARREADY,
+# TOP-NEXT:                   s_axi_control_RVALID,
+# TOP-NEXT:    output [31:0]  s_axi_control_RDATA,
+# TOP-NEXT:    output [1:0]   s_axi_control_RRESP,
+# TOP-NEXT:    output         s_axi_control_BVALID,
+# TOP-NEXT:    output [1:0]   s_axi_control_BRESP,
+# TOP-NEXT:    output         m_axi_gmem_AWVALID,
+# TOP-NEXT:    output [63:0]  m_axi_gmem_AWADDR,
+# TOP-NEXT:    output [7:0]   m_axi_gmem_AWID,
+# TOP-NEXT:                   m_axi_gmem_AWLEN,
+# TOP-NEXT:    output [2:0]   m_axi_gmem_AWSIZE,
+# TOP-NEXT:    output [1:0]   m_axi_gmem_AWBURST,
+# TOP-NEXT:    output         m_axi_gmem_WVALID,
+# TOP-NEXT:    output [511:0] m_axi_gmem_WDATA,
+# TOP-NEXT:    output [63:0]  m_axi_gmem_WSTRB,
+# TOP-NEXT:    output         m_axi_gmem_WLAST,
+# TOP-NEXT:                   m_axi_gmem_BREADY,
+# TOP-NEXT:                   m_axi_gmem_ARVALID,
+# TOP-NEXT:    output [63:0]  m_axi_gmem_ARADDR,
+# TOP-NEXT:    output [7:0]   m_axi_gmem_ARID,
+# TOP-NEXT:                   m_axi_gmem_ARLEN,
+# TOP-NEXT:    output [2:0]   m_axi_gmem_ARSIZE,
+# TOP-NEXT:    output [1:0]   m_axi_gmem_ARBURST,
+# TOP-NEXT:    output         m_axi_gmem_RREADY
 
-# TOP:         __ESI_Manifest_ROM ESI_Manifest_ROM (
-# TOP:           .clk     (ap_clk),
-# TOP:           .address (rom_address),
-# TOP:           .data    (_ESI_Manifest_ROM_data)
-# TOP:         );
-
-# TOP:         Main Main (
-# TOP:           .clk (ap_clk),
-# TOP:           .rst (inv_ap_resetn)
-# TOP:         );
-
-# TOP:       endmodule
+# TOP:  Main Main (
+# TOP:  MMIOAxiReadWriteMux MMIOAxiReadWriteMux (
+# TOP:  MMIOAxiReadWriteDemux MMIOAxiReadWriteDemux (
+# TOP:  HeaderMMIO_manifest_loc{{.+}} HeaderMMIO (
+# TOP:  ESI_Manifest_ROM_Wrapper ESI_Manifest_ROM_Wrapper (
+# TOP:   HostmemReadProcessorImpl HostmemReadProcessorImpl (
+# TOP:   HostMemWriteProcessorImpl HostMemWriteProcessorImpl (

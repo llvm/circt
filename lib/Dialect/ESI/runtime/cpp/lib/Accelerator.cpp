@@ -14,22 +14,74 @@
 
 #include "esi/Accelerator.h"
 
+#include <cassert>
+#include <cstdlib>
+#include <filesystem>
 #include <map>
+#include <sstream>
 #include <stdexcept>
+#include <vector>
 
-using namespace std;
+#include <iostream>
+
+#ifdef __linux__
+#include <dlfcn.h>
+#include <linux/limits.h>
+#include <unistd.h>
+#elif _WIN32
+#include <windows.h>
+#endif
 
 using namespace esi;
 using namespace esi::services;
 
 namespace esi {
+AcceleratorConnection::AcceleratorConnection(Context &ctxt)
+    : ctxt(ctxt), serviceThread(nullptr) {}
+AcceleratorConnection::~AcceleratorConnection() { disconnect(); }
+
+AcceleratorServiceThread *AcceleratorConnection::getServiceThread() {
+  if (!serviceThread)
+    serviceThread = std::make_unique<AcceleratorServiceThread>();
+  return serviceThread.get();
+}
+void AcceleratorConnection::createEngine(const std::string &engineTypeName,
+                                         AppIDPath idPath,
+                                         const ServiceImplDetails &details,
+                                         const HWClientDetails &clients) {
+  std::unique_ptr<Engine> engine = ::esi::registry::createEngine(
+      *this, engineTypeName, idPath, details, clients);
+  registerEngine(idPath, std::move(engine), clients);
+}
+
+void AcceleratorConnection::registerEngine(AppIDPath idPath,
+                                           std::unique_ptr<Engine> engine,
+                                           const HWClientDetails &clients) {
+  assert(engine);
+  auto [engineIter, _] = ownedEngines.emplace(idPath, std::move(engine));
+
+  // Engine is now owned by the accelerator connection, so the std::unique_ptr
+  // is no longer valid. Resolve a new one from the map iter.
+  Engine *enginePtr = engineIter->second.get();
+  // Compute our parents idPath path.
+  AppIDPath prefix = std::move(idPath);
+  if (prefix.size() > 0)
+    prefix.pop_back();
+
+  for (const auto &client : clients) {
+    AppIDPath fullClientPath = prefix + client.relPath;
+    for (const auto &channel : client.channelAssignments)
+      clientEngines[fullClientPath].setEngine(channel.first, enginePtr);
+  }
+}
 
 services::Service *AcceleratorConnection::getService(Service::Type svcType,
                                                      AppIDPath id,
                                                      std::string implName,
                                                      ServiceImplDetails details,
                                                      HWClientDetails clients) {
-  unique_ptr<Service> &cacheEntry = serviceCache[make_tuple(&svcType, id)];
+  std::unique_ptr<Service> &cacheEntry =
+      serviceCache[make_tuple(std::string(svcType.name()), id)];
   if (cacheEntry == nullptr) {
     Service *svc = createService(svcType, id, implName, details, clients);
     if (!svc)
@@ -37,29 +89,396 @@ services::Service *AcceleratorConnection::getService(Service::Type svcType,
                                            clients);
     if (!svc)
       return nullptr;
-    cacheEntry = unique_ptr<Service>(svc);
+    cacheEntry = std::unique_ptr<Service>(svc);
   }
   return cacheEntry.get();
+}
+
+Accelerator *
+AcceleratorConnection::takeOwnership(std::unique_ptr<Accelerator> acc) {
+  if (ownedAccelerator)
+    throw std::runtime_error(
+        "AcceleratorConnection already owns an accelerator");
+  ownedAccelerator = std::move(acc);
+  return ownedAccelerator.get();
+}
+
+/// Get the path to the currently running executable.
+static std::filesystem::path getExePath() {
+#ifdef __linux__
+  char result[PATH_MAX];
+  ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
+  if (count == -1)
+    throw std::runtime_error("Could not get executable path");
+  return std::filesystem::path(std::string(result, count));
+#elif _WIN32
+  char buffer[MAX_PATH];
+  DWORD length = GetModuleFileNameA(NULL, buffer, MAX_PATH);
+  if (length == 0)
+    throw std::runtime_error("Could not get executable path");
+  return std::filesystem::path(std::string(buffer, length));
+#else
+#eror "Unsupported platform"
+#endif
+}
+
+/// Get the path to the currently running shared library.
+static std::filesystem::path getLibPath() {
+#ifdef __linux__
+  Dl_info dl_info;
+  dladdr((void *)getLibPath, &dl_info);
+  return std::filesystem::path(std::string(dl_info.dli_fname));
+#elif _WIN32
+  HMODULE hModule = NULL;
+  if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                              GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                          reinterpret_cast<LPCSTR>(&getLibPath), &hModule)) {
+    // Handle error
+    return std::filesystem::path();
+  }
+
+  char buffer[MAX_PATH];
+  DWORD length = GetModuleFileNameA(hModule, buffer, MAX_PATH);
+  if (length == 0)
+    throw std::runtime_error("Could not get library path");
+
+  return std::filesystem::path(std::string(buffer, length));
+#else
+#eror "Unsupported platform"
+#endif
+}
+
+/// Get the list of directories to search for backend plugins.
+static std::vector<std::filesystem::path> getESIBackendDirectories() {
+  std::vector<std::filesystem::path> directories;
+
+  // First, check current directory.
+  directories.push_back(std::filesystem::current_path());
+
+  // Next, parse the ESI_BACKENDS environment variable and add those.
+  const char *esiBackends = std::getenv("ESI_BACKENDS");
+  if (esiBackends) {
+    // Use platform-specific path separator
+#ifdef _WIN32
+    const char separator = ';';
+#else
+    const char separator = ':';
+#endif
+
+    std::string pathsStr(esiBackends);
+    std::stringstream ss(pathsStr);
+    std::string path;
+
+    while (std::getline(ss, path, separator))
+      if (!path.empty())
+        directories.emplace_back(path);
+  }
+
+  // Next, try the directory of the executable.
+  directories.push_back(getExePath().parent_path());
+  // Finally, try the directory of the library.
+  directories.push_back(getLibPath().parent_path());
+
+  return directories;
+}
+
+/// Load a backend plugin dynamically. Plugins are expected to be named
+/// lib<BackendName>Backend.so and located in one of 1) CWD, 2) directories
+/// specified in ESI_BACKENDS environment variable, 3) in the same directory as
+/// the application, or 4) in the same directory as this library.
+static void loadBackend(Context &ctxt, std::string backend) {
+  Logger &logger = ctxt.getLogger();
+  backend[0] = toupper(backend[0]);
+
+  // Get the file name we are looking for.
+#ifdef __linux__
+  std::string backendFileName = "lib" + backend + "Backend.so";
+#elif _WIN32
+  // In MSVC debug builds, load the debug variant of the plugin DLL (e.g.
+  // CosimBackend_d.dll) to ensure compatibility.
+#if defined(_MSC_VER) && defined(_DEBUG)
+  std::string backendFileName = backend + "Backend_d.dll";
+#else
+  std::string backendFileName = backend + "Backend.dll";
+#endif
+#else
+#error "Unsupported platform"
+#endif
+
+  // First, try the current directory.
+  std::filesystem::path backendPath;
+  // Next, try directories specified in ESI_BACKENDS environment variable.
+  std::vector<std::filesystem::path> esiBackendDirs =
+      getESIBackendDirectories();
+  bool found = false;
+  for (const auto &dir : esiBackendDirs) {
+    backendPath = dir / backendFileName;
+    logger.debug("CONNECT",
+                 "trying to find backend plugin: " + backendPath.string());
+    if (std::filesystem::exists(backendPath)) {
+      found = true;
+      break;
+    }
+  }
+
+  // If the path was found, convert it to a string.
+  if (found) {
+    backendPath = std::filesystem::absolute(backendPath);
+    logger.debug("CONNECT", "found backend plugin: " + backendPath.string());
+  } else {
+    // If all else fails, just try the name.
+    backendPath = backendFileName;
+    logger.debug("CONNECT",
+                 "trying to find backend plugin: " + backendFileName);
+  }
+
+  // Attempt to load it.
+#ifdef __linux__
+  void *handle = dlopen(backendPath.string().c_str(), RTLD_NOW | RTLD_GLOBAL);
+  if (!handle) {
+    std::string error(dlerror());
+    logger.error("CONNECT",
+                 "while attempting to load backend plugin: " + error);
+    throw std::runtime_error("While attempting to load backend plugin: " +
+                             error);
+  }
+#elif _WIN32
+  // Set the DLL directory to the same directory as the backend DLL in case it
+  // has transitive dependencies.
+  if (found) {
+    std::filesystem::path backendPathParent = backendPath.parent_path();
+    // If backendPath has no parent directory (e.g., it's a relative path or
+    // a filename without a directory), fallback to the current working
+    // directory. This ensures a valid directory is used for setting the DLL
+    // search path.
+    if (backendPathParent.empty())
+      backendPathParent = std::filesystem::current_path();
+    logger.debug("CONNECT", "setting DLL search directory to: " +
+                                backendPathParent.string());
+    if (SetDllDirectoryA(backendPathParent.string().c_str()) == 0)
+      throw std::runtime_error("While setting DLL directory: " +
+                               std::to_string(GetLastError()));
+  }
+
+  // Load the backend plugin.
+  HMODULE handle = LoadLibraryA(backendPath.string().c_str());
+  if (!handle) {
+    DWORD error = GetLastError();
+    // Get the error message string
+    LPSTR messageBuffer = nullptr;
+    size_t size = FormatMessageA(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+            FORMAT_MESSAGE_IGNORE_INSERTS,
+        nullptr, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        (LPSTR)&messageBuffer, 0, nullptr);
+
+    std::string errorMessage;
+    if (size > 0 && messageBuffer != nullptr) {
+      errorMessage = std::string(messageBuffer, size);
+      LocalFree(messageBuffer);
+    } else {
+      errorMessage = "Unknown error";
+    }
+
+    std::string fullError = "While attempting to load backend plugin '" +
+                            backendPath.string() + "': " + errorMessage +
+                            " (error code: " + std::to_string(error) + ")";
+
+    logger.error("CONNECT", fullError);
+    throw std::runtime_error(fullError);
+  }
+#else
+#eror "Unsupported platform"
+#endif
+  logger.info("CONNECT", "loaded backend plugin: " + backendPath.string());
 }
 
 namespace registry {
 namespace internal {
 
-static map<string, BackendCreate> backendRegistry;
-void registerBackend(string name, BackendCreate create) {
-  if (backendRegistry.count(name))
-    throw runtime_error("Backend already exists in registry");
-  backendRegistry[name] = create;
+class BackendRegistry {
+public:
+  static std::map<std::string, BackendCreate> &get() {
+    static BackendRegistry instance;
+    return instance.backendRegistry;
+  }
+
+private:
+  std::map<std::string, BackendCreate> backendRegistry;
+};
+
+void registerBackend(const std::string &name, BackendCreate create) {
+  auto &registry = BackendRegistry::get();
+  if (registry.count(name))
+    throw std::runtime_error("Backend already exists in registry");
+  registry[name] = create;
 }
 } // namespace internal
 
-unique_ptr<AcceleratorConnection> connect(Context &ctxt, string backend,
-                                          string connection) {
-  auto f = internal::backendRegistry.find(backend);
-  if (f == internal::backendRegistry.end())
-    throw runtime_error("Backend not found");
-  return f->second(ctxt, connection);
+} // namespace registry
+
+AcceleratorConnection *Context::connect(std::string backend,
+                                        std::string connection) {
+  auto &registry = registry::internal::BackendRegistry::get();
+  auto f = registry.find(backend);
+  if (f == registry.end()) {
+    // If it's not already found in the registry, try to load it dynamically.
+    loadBackend(*this, backend);
+    f = registry.find(backend);
+    if (f == registry.end()) {
+      ServiceImplDetails details;
+      details["backend"] = backend;
+      std::ostringstream loaded_backends;
+      bool first = true;
+      for (const auto &b : registry) {
+        if (!first)
+          loaded_backends << ", ";
+        loaded_backends << b.first;
+        first = false;
+      }
+      details["loaded_backends"] = loaded_backends.str();
+      getLogger().error("CONNECT", "backend '" + backend + "' not found",
+                        &details);
+      throw std::runtime_error("Backend '" + backend + "' not found");
+    }
+  }
+  getLogger().info("CONNECT", "connecting to backend " + backend + " via '" +
+                                  connection + "'");
+  auto conn = f->second(*this, connection);
+  auto *connPtr = conn.get();
+  connections.emplace_back(std::move(conn));
+  return connPtr;
 }
 
-} // namespace registry
+struct AcceleratorServiceThread::Impl {
+  Impl() {}
+  void start() { me = std::thread(&Impl::loop, this); }
+  void stop() {
+    shutdown = true;
+    me.join();
+  }
+  /// When there's data on any of the listenPorts, call the callback. This
+  /// method can be called from any thread.
+  void
+  addListener(std::initializer_list<ReadChannelPort *> listenPorts,
+              std::function<void(ReadChannelPort *, MessageData)> callback);
+
+  void addTask(std::function<void(void)> task) {
+    std::lock_guard<std::mutex> g(m);
+    taskList.push_back(task);
+  }
+
+private:
+  void loop();
+  volatile bool shutdown = false;
+  std::thread me;
+
+  // Protect the shared data structures.
+  std::mutex m;
+
+  // Map of read ports to callbacks.
+  std::map<ReadChannelPort *,
+           std::pair<std::function<void(ReadChannelPort *, MessageData)>,
+                     std::future<MessageData>>>
+      listeners;
+
+  /// Tasks which should be called on every loop iteration.
+  std::vector<std::function<void(void)>> taskList;
+};
+
+void AcceleratorServiceThread::Impl::loop() {
+  // These two variables should logically be in the loop, but this avoids
+  // reconstructing them on each iteration.
+  std::vector<std::tuple<ReadChannelPort *,
+                         std::function<void(ReadChannelPort *, MessageData)>,
+                         MessageData>>
+      portUnlockWorkList;
+  std::vector<std::function<void(void)>> taskListCopy;
+  MessageData data;
+
+  while (!shutdown) {
+    // Ideally we'd have some wake notification here, but this sufficies for
+    // now.
+    // TODO: investigate better ways to do this. For now, just play nice with
+    // the other processes but don't waste time in between polling intervals.
+    std::this_thread::yield();
+
+    // Check and gather data from all the read ports we are monitoring. Put the
+    // callbacks to be called later so we can release the lock.
+    {
+      std::lock_guard<std::mutex> g(m);
+      for (auto &[channel, cbfPair] : listeners) {
+        assert(channel && "Null channel in listener list");
+        std::future<MessageData> &f = cbfPair.second;
+        if (f.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+          portUnlockWorkList.emplace_back(channel, cbfPair.first, f.get());
+          f = channel->readAsync();
+        }
+      }
+    }
+
+    // Call the callbacks outside the lock.
+    for (auto [channel, cb, data] : portUnlockWorkList)
+      cb(channel, std::move(data));
+
+    // Clear the worklist for the next iteration.
+    portUnlockWorkList.clear();
+
+    // Call any tasks that have been added. Copy it first so we can release the
+    // lock ASAP.
+    {
+      std::lock_guard<std::mutex> g(m);
+      taskListCopy = taskList;
+    }
+    for (auto &task : taskListCopy)
+      task();
+  }
+}
+
+void AcceleratorServiceThread::Impl::addListener(
+    std::initializer_list<ReadChannelPort *> listenPorts,
+    std::function<void(ReadChannelPort *, MessageData)> callback) {
+  std::lock_guard<std::mutex> g(m);
+  for (auto port : listenPorts) {
+    if (listeners.count(port))
+      throw std::runtime_error("Port already has a listener");
+    listeners[port] = std::make_pair(callback, port->readAsync());
+  }
+}
+
+AcceleratorServiceThread::AcceleratorServiceThread()
+    : impl(std::make_unique<Impl>()) {
+  impl->start();
+}
+AcceleratorServiceThread::~AcceleratorServiceThread() { stop(); }
+
+void AcceleratorServiceThread::stop() {
+  if (impl) {
+    impl->stop();
+    impl.reset();
+  }
+}
+
+// When there's data on any of the listenPorts, call the callback. This is
+// kinda silly now that we have callback port support, especially given the
+// polling loop. Keep the functionality for now.
+void AcceleratorServiceThread::addListener(
+    std::initializer_list<ReadChannelPort *> listenPorts,
+    std::function<void(ReadChannelPort *, MessageData)> callback) {
+  assert(impl && "Service thread not running");
+  impl->addListener(listenPorts, callback);
+}
+
+void AcceleratorServiceThread::addPoll(HWModule &module) {
+  assert(impl && "Service thread not running");
+  impl->addTask([&module]() { module.poll(); });
+}
+
+void AcceleratorConnection::disconnect() {
+  if (serviceThread) {
+    serviceThread->stop();
+    serviceThread.reset();
+  }
+}
+
 } // namespace esi

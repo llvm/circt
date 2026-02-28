@@ -1,34 +1,51 @@
 if(ARCILATOR_JIT_ENABLED)
   add_compile_definitions(ARCILATOR_ENABLE_JIT)
   set(ARCILATOR_JIT_LLVM_COMPONENTS native)
-  set(ARCILATOR_JIT_DEPS MLIRExecutionEngine)
+  set(ARCILATOR_JIT_DEPS
+    CIRCTArcJITRuntime
+    LLVMOrcJIT
+    MLIRExecutionEngine
+  )
 endif()
 
 set(LLVM_LINK_COMPONENTS Support ${ARCILATOR_JIT_LLVM_COMPONENTS})
 
-add_circt_tool(arcilator arcilator.cpp)
-target_link_libraries(arcilator
-  PRIVATE
+set(libs
   CIRCTArc
   CIRCTArcToLLVM
   CIRCTArcTransforms
+  CIRCTArcilator
   CIRCTCombToArith
   CIRCTConvertToArcs
-  CIRCTEmit
+  CIRCTEmitTransforms
   CIRCTExportArc
-  CIRCTOM
+  CIRCTHWTransforms
+  CIRCTLLHD
+  CIRCTOMTransforms
   CIRCTSeqToSV
   CIRCTSeqTransforms
+  CIRCTSimTransforms
   CIRCTSupport
   CIRCTTransforms
+  CIRCTVerif
+  MLIRArithDialect
   MLIRBuiltinToLLVMIRTranslation
+  MLIRControlFlowDialect
   MLIRDLTIDialect
+  MLIRFuncDialect
   MLIRFuncInlinerExtension
+  MLIRIndexDialect
   MLIRLLVMIRTransforms
   MLIRLLVMToLLVMIRTranslation
   MLIRParser
+  MLIRSCFDialect
   MLIRTargetLLVMIRExport
+)
 
+add_circt_tool(arcilator arcilator.cpp DEPENDS ${libs})
+target_link_libraries(arcilator
+  PRIVATE
+  ${libs}
   ${ARCILATOR_JIT_DEPS}
 )
 

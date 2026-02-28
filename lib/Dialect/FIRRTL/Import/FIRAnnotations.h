@@ -13,33 +13,14 @@
 #ifndef FIRANNOTATIONS_H
 #define FIRANNOTATIONS_H
 
-#include "circt/Support/LLVM.h"
-#include "llvm/ADT/SmallVector.h"
-
-namespace llvm {
-namespace json {
-class Path;
-class Value;
-} // namespace json
-} // namespace llvm
-
-namespace mlir {
-class ArrayAttr;
-}
-
 namespace circt {
 namespace firrtl {
 
-class CircuitOp;
 class PrintFOp;
 
-/// Convert a JSON value containing OMIR JSON (an array of OMNodes), convert
-/// this to an OMIRAnnotation, and add it to a mutable `annotations` argument.
-bool fromOMIRJSON(llvm::json::Value &value,
-                  SmallVectorImpl<Attribute> &annotations,
-                  llvm::json::Path path, MLIRContext *context);
-
-ParseResult foldWhenEncodedVerifOp(PrintFOp printOp);
+/// Classifier for legacy verif intent captured in printf + when's.  Returns
+/// true if the printf encodes verif intent, false otherwise.
+bool isRecognizedPrintfEncodedVerif(PrintFOp printOp);
 
 } // namespace firrtl
 } // namespace circt

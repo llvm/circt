@@ -16,6 +16,7 @@
 #include "circt/Dialect/SSP/SSPAttributes.h"
 #include "circt/Dialect/SSP/SSPDialect.h"
 
+#include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"

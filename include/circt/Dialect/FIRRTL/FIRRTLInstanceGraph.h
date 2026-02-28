@@ -50,8 +50,6 @@ private:
   InstanceGraphNode *topLevelNode;
 };
 
-bool allUnder(ArrayRef<InstanceRecord *> nodes, InstanceGraphNode *top);
-
 } // namespace firrtl
 } // namespace circt
 

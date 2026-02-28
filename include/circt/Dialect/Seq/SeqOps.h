@@ -59,6 +59,23 @@ struct FirMemory {
   FirMemory(hw::HWModuleGeneratedOp op);
 };
 
+// Helper functions to create constant initial values.
+mlir::TypedValue<seq::ImmutableType>
+createConstantInitialValue(OpBuilder builder, Location loc,
+                           mlir::IntegerAttr attr);
+mlir::TypedValue<seq::ImmutableType>
+createConstantInitialValue(OpBuilder builder, Operation *constantLike);
+
+// Helper function to unwrap an immutable type value and get yield value in
+// initial op.
+Value unwrapImmutableValue(mlir::TypedValue<seq::ImmutableType> immutableVal);
+
+// Helper function to merge initial ops within the block into a single initial
+// op. Return failure if we cannot topologically sort the initial ops.
+// Return null if there is no initial op in the block. Return the initial op
+// otherwise.
+FailureOr<seq::InitialOp> mergeInitialOps(Block *block);
+
 } // namespace seq
 } // namespace circt
 

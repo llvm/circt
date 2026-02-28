@@ -9,20 +9,28 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "llvm/Support/DOTGraphTraits.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/GraphWriter.h"
 #include "llvm/Support/raw_ostream.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_PRINTINSTANCEGRAPH
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
 
 namespace {
 struct PrintInstanceGraphPass
-    : public PrintInstanceGraphBase<PrintInstanceGraphPass> {
-  PrintInstanceGraphPass(raw_ostream &os) : os(os) {}
+    : public circt::firrtl::impl::PrintInstanceGraphBase<
+          PrintInstanceGraphPass> {
+  PrintInstanceGraphPass() : os(llvm::errs()) {}
   void runOnOperation() override {
     auto circuitOp = getOperation();
     auto &instanceGraph = getAnalysis<InstanceGraph>();
@@ -33,7 +41,3 @@ struct PrintInstanceGraphPass
   raw_ostream &os;
 };
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createPrintInstanceGraphPass() {
-  return std::make_unique<PrintInstanceGraphPass>(llvm::errs());
-}

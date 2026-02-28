@@ -32,7 +32,7 @@ TEST(JSONTest, RoundTripTypes) {
 
   NamedAttrList mapping;
 
-  auto floatAttr = FloatAttr::get(FloatType::getF64(&context), 123.4);
+  auto floatAttr = FloatAttr::get(Float64Type::get(&context), 123.4);
   mapping.append("float", floatAttr);
 
   auto intAttr = IntegerAttr::get(i64ty, 567);

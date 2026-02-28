@@ -17,6 +17,10 @@ class Pass;
 } // namespace mlir
 
 namespace circt {
+
+#define GEN_PASS_DECL_AFFINETOLOOPSCHEDULE
+#include "circt/Conversion/Passes.h.inc"
+
 std::unique_ptr<mlir::Pass> createAffineToLoopSchedule();
 } // namespace circt
 

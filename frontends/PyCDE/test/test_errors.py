@@ -1,8 +1,12 @@
 # RUN: %PYTHON% py-split-input-file.py %s | FileCheck %s
 
-from pycde import Clock, Input, types, System
+from pycde import Clock, Input, System
 from pycde.module import AppID, generator, Module, modparams
 from pycde.testing import unittestmodule
+from pycde.types import Bits, SInt, StructType
+
+I32 = Bits(32)
+S32 = SInt(32)
 
 
 # CHECK: TypeError: Module parameter definitions cannot have *args
@@ -25,7 +29,7 @@ def bar(**kwargs):
 
 @unittestmodule()
 class ClkError(Module):
-  a = Input(types.i32)
+  a = Input(I32)
 
   @generator
   def build(ports):
@@ -41,7 +45,7 @@ class AppIDError(Module):
 
   @generator
   def build(ports):
-    c = types.i32(4)
+    c = I32(4)
     # CHECK: ValueError: AppIDs can only be attached to ops with symbols
     c.appid = AppID("c", 0)
 
@@ -51,7 +55,7 @@ class AppIDError(Module):
 
 class Test(Module):
   clk = Clock()
-  x = Input(types.i32)
+  x = Input(I32)
 
   @generator
   def build(ports):
@@ -70,8 +74,8 @@ inst.reg[8]
 
 @unittestmodule()
 class OperatorError(Module):
-  a = Input(types.i32)
-  b = Input(types.si32)
+  a = Input(I32)
+  b = Input(S32)
 
   @generator
   def build(ports):
@@ -84,10 +88,16 @@ class OperatorError(Module):
 
 @unittestmodule()
 class OperatorError2(Module):
-  a = Input(types.i32)
-  b = Input(types.si32)
+  a = Input(I32)
+  b = Input(S32)
 
   @generator
   def build(ports):
     # CHECK: Comparisons of signed/unsigned integers to Bits<32> not supported. RHS operand should be cast .as_sint()/.as_uint() if possible.
     ports.b == ports.a
+
+
+# -----
+
+# CHECK: Structs must have at least one field
+StructType([])

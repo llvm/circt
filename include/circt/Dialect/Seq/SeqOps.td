@@ -14,6 +14,7 @@
 
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/Sim/SimTypes.td"
 include "circt/Dialect/Seq/SeqAttributes.td"
 include "circt/Dialect/Seq/SeqOpInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
@@ -39,16 +40,16 @@ def CompRegOp : SeqOp<"compreg",
     OptionalAttr<StrAttr>:$name,
     Optional<I1>:$reset,
     Optional<AnyType>:$resetValue,
-    Optional<AnyType>:$powerOnValue,
+    Optional<ImmutableType>:$initialValue,
     OptionalAttr<InnerSymAttr>:$inner_sym
   );
   let results = (outs AnyType:$data);
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) $input `,` $clk
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) $input `,` $clk
     (`reset` $reset^ `,` $resetValue)?
-    (`powerOn` $powerOnValue^)? attr-dict `:` type($data)
+    (`initial` $initialValue^)? attr-dict `:` type($data)
     custom<OptionalTypeMatch>(ref(type($data)), ref($resetValue), type($resetValue))
-    custom<OptionalTypeMatch>(ref(type($data)), ref($powerOnValue), type($powerOnValue))
+    custom<OptionalImmutableTypeMatch>(ref(type($data)), ref($initialValue), type($initialValue))
   }];
   let hasVerifier = 1;
 
@@ -58,23 +59,31 @@ def CompRegOp : SeqOp<"compreg",
       return build($_builder, $_state, input.getType(), input, clk,
                    /*name*/ StringAttr(),
                    /*reset*/ Value(), /*resetValue*/ Value(),
-                   /*powerOnValue*/ Value(), hw::InnerSymAttr());
+                    /*initialValue*/ Value(),
+                   hw::InnerSymAttr());
     }]>,
     /// Create a register with an inner_sym matching the register's name.
     OpBuilder<(ins "Value":$input, "Value":$clk, "StringAttrOrRef":$name), [{
       auto nameAttr = name.get($_builder.getContext());
       return build($_builder, $_state, input.getType(), input, clk, nameAttr,
                    /*reset*/ Value(), /*resetValue*/ Value(),
-                   /*powerOnValue*/ Value(), hw::InnerSymAttr::get(nameAttr));
+                   /*initialValue*/ Value(),
+                   hw::InnerSymAttr::get(nameAttr));
+    }]>,
+    /// Create a register with a reset and optional power-on value.
+    OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$reset, "Value":$rstValue,
+                   CArg<"Value", "{}">:$initialValue), [{
+      return build($_builder, $_state, input.getType(), input, clk, StringAttr(),
+                   reset, rstValue, initialValue, hw::InnerSymAttr());
     }]>,
     /// Create a register with a reset, with an inner_sym matching the
     /// register's name, and optional power-on value.
     OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$reset, "Value":$rstValue,
-                   "StringAttrOrRef":$name, CArg<"Value", "{}">:$powerOnValue), [{
+                   "StringAttrOrRef":$name, CArg<"Value", "{}">:$initialValue), [{
       auto nameAttr = name.get($_builder.getContext());
       return build($_builder, $_state, input.getType(), input, clk, nameAttr,
-                   reset, rstValue, powerOnValue, hw::InnerSymAttr::get(nameAttr));
-    }]>
+                   reset, rstValue, initialValue, hw::InnerSymAttr::get(nameAttr));
+    }]>,
   ];
 }
 
@@ -96,18 +105,19 @@ def CompRegClockEnabledOp : SeqOp<"compreg.ce",
     OptionalAttr<StrAttr>:$name,
     Optional<I1>:$reset,
     Optional<AnyType>:$resetValue,
-    Optional<AnyType>:$powerOnValue,
+    Optional<ImmutableType>:$initialValue,
     OptionalAttr<InnerSymAttr>:$inner_sym
   );
   let results = (outs AnyType:$data);
   let assemblyFormat = [{
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) $input `,` $clk `,` $clockEnable
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) $input `,` $clk `,` $clockEnable
     (`reset` $reset^ `,` $resetValue)?
-    (`powerOn` $powerOnValue^)? attr-dict `:` type($data)
+    (`initial` $initialValue^)? attr-dict `:` type($data)
     custom<OptionalTypeMatch>(ref(type($data)), ref($resetValue), type($resetValue))
-    custom<OptionalTypeMatch>(ref(type($data)), ref($powerOnValue), type($powerOnValue))
+    custom<OptionalImmutableTypeMatch>(ref(type($data)), ref($initialValue), type($initialValue))
   }];
   let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$ce,
@@ -120,11 +130,11 @@ def CompRegClockEnabledOp : SeqOp<"compreg.ce",
     }]>,
     OpBuilder<(ins "Value":$input, "Value":$clk, "Value":$ce,
                    "Value":$reset, "Value":$rstValue, "StringRef":$name,
-                   CArg<"Value", "{}">:$powerOnValue),
+                   CArg<"Value", "{}">:$initialValue),
     [{
       auto nameAttr = StringAttr::get($_builder.getContext(), name);
       return build($_builder, $_state, input.getType(), input, clk, ce,
-                   nameAttr, reset, rstValue, powerOnValue,
+                   nameAttr, reset, rstValue, initialValue,
                    hw::InnerSymAttr::get(nameAttr));
     }]>,
   ];
@@ -165,7 +175,7 @@ def ShiftRegOp : SeqOp<"shiftreg", [
 
   let assemblyFormat = [{
     `[` $numElements `]`
-    (`sym` $inner_sym^)? custom<ImplicitSSAName>($name) $input `,` $clk `,` $clockEnable
+    (`sym` $inner_sym^)? `` custom<ImplicitSSAName>($name) $input `,` $clk `,` $clockEnable
     (`reset` $reset^ `,` $resetValue)?
     (`powerOn` $powerOnValue^)? attr-dict `:` type($data)
     custom<OptionalTypeMatch>(ref(type($data)), ref($resetValue), type($resetValue))
@@ -229,13 +239,13 @@ def FirRegOp : SeqOp<"firreg",
   );
   let results = (outs AnyType:$data);
 
-  let skipDefaultBuilders = 1;
   let hasCanonicalizeMethod = true;
   let hasFolder = true;
   let builders = [
     OpBuilder<(ins "Value":$next, "Value":$clk,
                    "StringAttr":$name,
-                   CArg<"hw::InnerSymAttr", "{}">:$innerSym)>,
+                   CArg<"hw::InnerSymAttr", "{}">:$innerSym,
+                   CArg<"Attribute","{}">:$preset)>,
     OpBuilder<(ins "Value":$next, "Value":$clk,
                    "StringAttr":$name,
                    "Value":$reset, "Value":$resetValue,
@@ -267,7 +277,9 @@ def FIFOOp : SeqOp<"fifo", [
     operations.
     The fifo operation is configurable with the following parameters:
     1. Depth (cycles)
-    2. Almost full/empty thresholds (optional). If not provided, these will
+    2. Read latency (cycles) is the number of cycles it takes for a read to
+       return data after the read enable signal is asserted.
+    3. Almost full/empty thresholds (optional). If not provided, these will
        be asserted when the FIFO is full/empty.
 
     Like `seq.hlmem` there are no guarantees that all possible fifo configuration
@@ -276,18 +288,21 @@ def FIFOOp : SeqOp<"fifo", [
   }];
 
   let arguments = (ins
-    HWIntegerType:$input, I1:$rdEn, I1:$wrEn, ClockType:$clk, I1:$rst,
+    AnyType:$input, I1:$rdEn, I1:$wrEn, ClockType:$clk, I1:$rst,
     ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth,
+    DefaultValuedOptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>, "0">
+      :$rdLatency,
     OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>>:$almostFullThreshold,
     OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>>:$almostEmptyThreshold
   );
 
   let results = (outs
-    HWIntegerType:$output, I1:$full, I1:$empty, Optional<I1>:$almostFull,
+    AnyType:$output, I1:$full, I1:$empty, Optional<I1>:$almostFull,
     Optional<I1>:$almostEmpty);
 
   let assemblyFormat = [{
     `depth` $depth
+    (`rd_latency` $rdLatency^)?
     custom<FIFOAFThreshold>($almostFullThreshold, type($almostFull))
     custom<FIFOAEThreshold>($almostEmptyThreshold, type($almostEmpty))
     `in` $input `rdEn` $rdEn `wrEn` $wrEn `clk` $clk `rst` $rst attr-dict `:` type($input)
@@ -403,6 +418,13 @@ def ClockGateOp : SeqOp<"clock_gate", [
   );
 
   let results = (outs ClockType:$output);
+
+  let builders = [
+    OpBuilder<(ins "Value":$clock, "Value":$enable), [{
+      build($_builder, $_state, clock, enable, Value(), hw::InnerSymAttr());
+    }]>,
+  ];
+
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
   let assemblyFormat = [{
@@ -452,6 +474,8 @@ def ClockDividerOp : SeqOp<"clock_div", [Pure]> {
 
   let arguments = (ins ClockType:$input, I64Attr:$pow2);
   let results = (outs ClockType:$output);
+
+  let hasCanonicalizeMethod = 1;
 
   let assemblyFormat = [{
     $input `by` $pow2 attr-dict
@@ -695,4 +719,53 @@ def FromClockOp : SeqOp<"from_clock", [Pure]> {
 
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
+}
+
+def InitialOp : SeqOp<"initial", [SingleBlock,
+      SingleBlockImplicitTerminator<"YieldOp">,
+      RecursivelySpeculatable,
+      RecursiveMemoryEffects, IsolatedFromAbove]> {
+  let summary = "Operation that produces values for initialization";
+  let description = [{
+    `seq.initial` op creates values wrapped types with !seq.immutable.
+    See the Seq dialect rationale for a longer description.
+  }];
+
+  let arguments = (ins Variadic<ImmutableType>: $inputs);
+  let results = (outs Variadic<ImmutableType>); // seq.immutable values
+  let regions = (region SizedRegion<1>:$body);
+  let hasVerifier = 1;
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins CArg<"TypeRange", "{}">:$resultTypes, CArg<"std::function<void()>", "{}">:$ctor)>
+  ];
+
+  let assemblyFormat = [{
+    `(` $inputs `)` $body attr-dict `:` functional-type($inputs, results)
+  }];
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &getBody().front(); }
+  }];
+}
+
+def YieldOp : SeqOp<"yield",
+                   [Pure, Terminator, HasParent<"InitialOp">]> {
+  let summary = "Yield values";
+
+  let arguments = (ins Variadic<AnyType>:$operands);
+  let builders = [
+    OpBuilder<(ins), "build($_builder, $_state, mlir::ValueRange());">
+  ];
+
+  let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
+}
+
+def FromImmutableOp : SeqOp<"from_immutable", [Pure]> {
+  let summary = "Cast from an immutable type to a wire type";
+
+  let arguments = (ins ImmutableType:$input);
+  let results = (outs AnyType:$output);
+
+  let assemblyFormat = "$input attr-dict `:` functional-type(operands, results)";
 }

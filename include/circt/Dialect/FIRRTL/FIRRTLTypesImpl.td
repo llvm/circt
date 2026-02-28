@@ -52,7 +52,7 @@ def SIntImpl : FIRRTLImplType<"SInt",
     using WidthQualifiedTypeTrait<SIntType>::getWidth;
     using WidthQualifiedTypeTrait<SIntType>::hasWidth;
     int32_t getWidthOrSentinel() const;
-    SIntType getConstType(bool isConst);
+    SIntType getConstType(bool isConst) const;
   }];
 }
 
@@ -72,7 +72,7 @@ def UIntImpl : FIRRTLImplType<"UInt",
     using WidthQualifiedTypeTrait<UIntType>::getWidth;
     using WidthQualifiedTypeTrait<UIntType>::hasWidth;
     int32_t getWidthOrSentinel() const;
-    UIntType getConstType(bool isConst);
+    UIntType getConstType(bool isConst) const;
   }];
 }
 
@@ -87,7 +87,7 @@ def ClockTypeImpl : FIRRTLImplType<"Clock"> {
     }]>
   ];
   let extraClassDeclaration = [{
-    ClockType getConstType(bool isConst);
+    ClockType getConstType(bool isConst) const;
   }];
 }
 
@@ -102,7 +102,7 @@ def ResetTypeImpl : FIRRTLImplType<"Reset"> {
     }]>
   ];
   let extraClassDeclaration = [{
-    ResetType getConstType(bool isConst);
+    ResetType getConstType(bool isConst) const;
   }];
 }
 
@@ -117,7 +117,7 @@ def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset"> {
     }]>
   ];
   let extraClassDeclaration = [{
-    AsyncResetType getConstType(bool isConst);
+    AsyncResetType getConstType(bool isConst) const;
   }];
 }
 
@@ -133,7 +133,7 @@ def AnalogTypeImpl : FIRRTLImplType<"Analog",
   ];
   let extraClassDeclaration = [{
     int32_t getWidthOrSentinel() const;
-    AnalogType getConstType(bool isConst);
+    AnalogType getConstType(bool isConst) const;
   }];
   let genVerifyDecl = true;
 }
@@ -169,11 +169,11 @@ class BaseVectorTypeImpl<string name, string ElementType, list<Trait> traits = [
     RecursiveTypeProperties getRecursiveTypeProperties() const;
 
     /// Const support.
-    bool isConst();
+    bool isConst() const;
     ElementType getElementTypePreservingConst();
 
     /// Return a 'const' or non-'const' version of this type.
-    }] # name # [{Type getConstType(bool isConst);
+    }] # name # [{Type getConstType(bool isConst) const;
 
   }] # firrtlExtraClassDeclaration;
 }
@@ -268,17 +268,18 @@ class BaseBundleTypeImpl<string name, string ElementType, list<Trait> traits = [
     iterator end() const { return getElements().end(); }
 
     /// Const support.
-    bool isConst();
+    bool isConst() const;
     ElementType getElementTypePreservingConst(size_t index);
 
     /// Return a 'const' or non-'const' version of this type.
-    }] # name # [{Type getConstType(bool isConst);
+    }] # name # [{Type getConstType(bool isConst) const;
 
   }] # firrtlExtraClassDeclaration;
 }
 
 def BundleImpl : BaseBundleTypeImpl<"Bundle","::circt::firrtl::FIRRTLBaseType"> {
   let typeName = "firrtl.bundle";
+  let genVerifyDecl = 1;
   let firrtlExtraClassDeclaration = [{
     /// Return this type with any flip types recursively removed from itself.
     FIRRTLBaseType getPassiveType();
@@ -296,7 +297,7 @@ def OpenBundleImpl : BaseBundleTypeImpl<"OpenBundle","::circt::firrtl::FIRRTLTyp
   let genVerifyDecl = 1;
 }
 
-def FEnumImpl : FIRRTLImplType<"FEnum", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
+def FEnumImpl : FIRRTLImplType<"FEnum"> {
   let summary = "a sum type of named elements.";
   let parameters = (ins "ArrayRef<EnumElement>":$elements, "bool":$isConst);
   let storageClass = "FEnumTypeStorage";
@@ -310,20 +311,25 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [DeclareTypeInterfaceMethods<FieldIDType
     /// Each element of an enum, which is a name and type.
     struct EnumElement {
       StringAttr name;
+      IntegerAttr value;
       FIRRTLBaseType type;
 
-      EnumElement(StringAttr name, FIRRTLBaseType type)
-          : name(name), type(type) {}
+      EnumElement(StringAttr name, IntegerAttr value, FIRRTLBaseType type)
+          : name(name), value(value), type(type) {}
 
       bool operator==(const EnumElement &rhs) const {
-        return name == rhs.name && type == rhs.type;
+        return name == rhs.name && value == rhs.value && type == rhs.type;
       }
       bool operator!=(const EnumElement &rhs) const {
         return !operator==(rhs);
       }
+      bool operator<(const EnumElement &rhs) const {
+        return value.getValue().ult(rhs.value.getValue());
+      }
 
       friend llvm::hash_code hash_value(const FEnumType::EnumElement &arg) {
-        return mlir::hash_value(arg.name) ^ mlir::hash_value(arg.type);
+        return mlir::hash_value(arg.name) ^ mlir::hash_value(arg.value) ^
+               mlir::hash_value(arg.type);
       }
     };
 
@@ -331,13 +337,22 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [DeclareTypeInterfaceMethods<FieldIDType
 
     size_t getNumElements() const { return getElements().size(); }
 
-    FEnumType getConstType(bool isConst);
+    FEnumType getConstType(bool isConst) const;
 
     /// Return this type with a 'const' modifiers dropped
     FEnumType getAllConstDroppedType();
 
     /// Return this type with any type alias types recursively removed from itself.
     FIRRTLBaseType getAnonymousType();
+
+    /// Get the width of this
+    size_t getBitWidth();
+
+    /// Get the width of the data. Equal to the width of the largest element.
+    size_t getDataWidth();
+
+    /// Get the width of the the tag field.
+    size_t getTagWidth();
 
     /// Look up an element's index by name.  This returns None on failure.
     std::optional<unsigned> getElementIndex(StringAttr name);
@@ -346,6 +361,13 @@ def FEnumImpl : FIRRTLImplType<"FEnum", [DeclareTypeInterfaceMethods<FieldIDType
     /// Look up an element's name by index. This asserts if index is invalid.
     StringAttr getElementNameAttr(size_t index);
     StringRef getElementName(size_t index);
+
+    // Look up an element's value by index. This asserts if index is invalid.
+    IntegerAttr getElementValueAttr(size_t index);
+    APInt getElementValue(size_t index);
+
+    // Look up an element's type by index. This asserts if index is invalid.
+    FIRRTLBaseType getElementType(size_t index);
 
     /// Look up an element by name.  This returns None on failure.
     std::optional<EnumElement> getElement(StringAttr name);
@@ -417,6 +439,25 @@ def RefImpl : FIRRTLImplType<"Ref",
   }];
 }
 
+def LHSTypeImpl : FIRRTLImplType<"LHS", [], "::circt::firrtl::FIRRTLType"> {
+  let summary = "A wrapper for LHS types.";
+  let description = [{
+    A LHS type is a type usable for the destination of a strict connect
+    and for field indexing.  No other operations are valid.  Any passive,
+    strict-connectable types are valid inside LHS types.
+  }];
+  let parameters = (ins "FIRRTLBaseType":$type);
+  let genAccessors = true;
+  let genStorageClass = true;
+  let genVerifyDecl = true;
+
+  let typeName = "firrtl.lhs";
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "::circt::firrtl::FIRRTLBaseType":$type)>
+  ];
+}
+
 def BaseTypeAliasImpl : FIRRTLImplType<"BaseTypeAlias", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>],
                                         "::circt::firrtl::FIRRTLBaseType"> {
   let summary = "type alias for firrtl base types";
@@ -431,7 +472,7 @@ def BaseTypeAliasImpl : FIRRTLImplType<"BaseTypeAlias", [DeclareTypeInterfaceMet
       // FIRRTLBaseType utils.
       FIRRTLBaseType getAnonymousType();
       FIRRTLBaseType getPassiveType();
-      FIRRTLBaseType getConstType(bool isConst);
+      FIRRTLBaseType getConstType(bool isConst) const;
       FIRRTLBaseType getAllConstDroppedType();
 
       /// Return the recursive properties of the type.
@@ -439,7 +480,7 @@ def BaseTypeAliasImpl : FIRRTLImplType<"BaseTypeAlias", [DeclareTypeInterfaceMet
 
       // If a given `newInnerType` is identical to innerType, return `*this`
       // because we can reuse the type alias. Otherwise return `newInnerType`.
-      FIRRTLBaseType getModifiedType(FIRRTLBaseType newInnerType);
+      FIRRTLBaseType getModifiedType(FIRRTLBaseType newInnerType) const;
   }];
 
   let builders = [
@@ -557,6 +598,20 @@ def DoubleImpl : PropImplType<"Double"> {
   let parameters = (ins);
   let genStorageClass = true;
   let typeName = "firrtl.propDouble";
+}
+
+def FStringImpl : FIRRTLImplType<"FString", [], "::circt::firrtl::FIRRTLType" > {
+  let summary = "A format string type";
+  let parameters = (ins);
+  let genStorageClass = true;
+  let typeName = "firrtl.fstring";
+}
+
+def DomainTypeImpl : FIRRTLImplType<"Domain", [], "::circt::firrtl::FIRRTLType"> {
+  let summary = "A domain type";
+  let parameters = (ins);
+  let genStorageClass = true;
+  let typeName = "firrtl.domain";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD

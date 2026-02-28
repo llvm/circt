@@ -39,7 +39,9 @@ static ServicePortInfo createReqResp(StringAttr sym, Twine name,
 
 ServicePortInfo RandomAccessMemoryDeclOp::writePortInfo() {
   auto *ctxt = getContext();
-  auto addressType = IntegerType::get(ctxt, llvm::Log2_64_Ceil(getDepth()));
+  auto addressType =
+      IntegerType::get(ctxt, llvm::Log2_64_Ceil(getDepth()),
+                       IntegerType::SignednessSemantics::Unsigned);
 
   // Write port
   hw::StructType writeType = hw::StructType::get(
@@ -53,7 +55,9 @@ ServicePortInfo RandomAccessMemoryDeclOp::writePortInfo() {
 
 ServicePortInfo RandomAccessMemoryDeclOp::readPortInfo() {
   auto *ctxt = getContext();
-  auto addressType = IntegerType::get(ctxt, llvm::Log2_64_Ceil(getDepth()));
+  auto addressType =
+      IntegerType::get(ctxt, llvm::Log2_64_Ceil(getDepth()),
+                       IntegerType::SignednessSemantics::Unsigned);
 
   return createReqResp(getSymNameAttr(), "read", "address", addressType, "data",
                        getInnerType());
@@ -63,6 +67,19 @@ void RandomAccessMemoryDeclOp::getPortList(
     SmallVectorImpl<ServicePortInfo> &ports) {
   ports.push_back(writePortInfo());
   ports.push_back(readPortInfo());
+}
+
+void CallServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
+  auto *ctxt = getContext();
+  ports.push_back(ServicePortInfo{
+      hw::InnerRefAttr::get(getSymNameAttr(), StringAttr::get(ctxt, "call")),
+      ChannelBundleType::get(
+          ctxt,
+          {BundledChannel{StringAttr::get(ctxt, "arg"), ChannelDirection::from,
+                          ChannelType::get(ctxt, AnyType::get(ctxt))},
+           BundledChannel{StringAttr::get(ctxt, "result"), ChannelDirection::to,
+                          ChannelType::get(ctxt, AnyType::get(ctxt))}},
+          /*resettable=*/UnitAttr())});
 }
 
 void FuncServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
@@ -86,19 +103,102 @@ void MMIOServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
       hw::InnerRefAttr::get(getSymNameAttr(), StringAttr::get(ctxt, "read")),
       ChannelBundleType::get(
           ctxt,
-          {BundledChannel{StringAttr::get(ctxt, "offset"), ChannelDirection::to,
-                          ChannelType::get(ctxt, IntegerType::get(ctxt, 32))},
+          {BundledChannel{
+               StringAttr::get(ctxt, "offset"), ChannelDirection::to,
+               ChannelType::get(
+                   ctxt,
+                   IntegerType::get(
+                       ctxt, 32, IntegerType::SignednessSemantics::Unsigned))},
            BundledChannel{StringAttr::get(ctxt, "data"), ChannelDirection::from,
-                          ChannelType::get(ctxt, IntegerType::get(ctxt, 32))}},
+                          ChannelType::get(ctxt, IntegerType::get(ctxt, 64))}},
           /*resettable=*/UnitAttr())});
-  // Write only port.
+  // Read-write port.
+  auto cmdType = hw::StructType::get(
+      ctxt, {
+                hw::StructType::FieldInfo{StringAttr::get(ctxt, "write"),
+                                          IntegerType::get(ctxt, 1)},
+                hw::StructType::FieldInfo{
+                    StringAttr::get(ctxt, "offset"),
+                    IntegerType::get(
+                        ctxt, 32, IntegerType::SignednessSemantics::Unsigned)},
+                hw::StructType::FieldInfo{StringAttr::get(ctxt, "data"),
+                                          IntegerType::get(ctxt, 64)},
+            });
   ports.push_back(ServicePortInfo{
-      hw::InnerRefAttr::get(getSymNameAttr(), StringAttr::get(ctxt, "write")),
+      hw::InnerRefAttr::get(getSymNameAttr(),
+                            StringAttr::get(ctxt, "read_write")),
       ChannelBundleType::get(
           ctxt,
-          {BundledChannel{StringAttr::get(ctxt, "offset"), ChannelDirection::to,
-                          ChannelType::get(ctxt, IntegerType::get(ctxt, 32))},
-           BundledChannel{StringAttr::get(ctxt, "data"), ChannelDirection::to,
-                          ChannelType::get(ctxt, IntegerType::get(ctxt, 32))}},
+          {BundledChannel{StringAttr::get(ctxt, "cmd"), ChannelDirection::to,
+                          ChannelType::get(ctxt, cmdType)},
+           BundledChannel{StringAttr::get(ctxt, "data"), ChannelDirection::from,
+                          ChannelType::get(ctxt, IntegerType::get(ctxt, 64))}},
+          /*resettable=*/UnitAttr())});
+}
+
+ServicePortInfo HostMemServiceDeclOp::writePortInfo() {
+  auto *ctxt = getContext();
+  auto addressType =
+      IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
+
+  // Write port
+  hw::StructType writeType = hw::StructType::get(
+      ctxt,
+      {hw::StructType::FieldInfo{StringAttr::get(ctxt, "address"), addressType},
+       hw::StructType::FieldInfo{
+           StringAttr::get(ctxt, "tag"),
+           IntegerType::get(ctxt, 8,
+                            IntegerType::SignednessSemantics::Unsigned)},
+       hw::StructType::FieldInfo{StringAttr::get(ctxt, "data"),
+                                 AnyType::get(ctxt)}});
+  return createReqResp(
+      getSymNameAttr(), "write", "req", writeType, "ackTag",
+      IntegerType::get(ctxt, 8, IntegerType::SignednessSemantics::Unsigned));
+}
+
+ServicePortInfo HostMemServiceDeclOp::readPortInfo() {
+  auto *ctxt = getContext();
+  auto addressType =
+      IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
+
+  hw::StructType readReqType = hw::StructType::get(
+      ctxt, {
+                hw::StructType::FieldInfo{StringAttr::get(ctxt, "address"),
+                                          addressType},
+                hw::StructType::FieldInfo{
+                    StringAttr::get(ctxt, "tag"),
+                    IntegerType::get(
+                        ctxt, 8, IntegerType::SignednessSemantics::Unsigned)},
+            });
+  hw::StructType readRespType = hw::StructType::get(
+      ctxt, {
+                hw::StructType::FieldInfo{
+                    StringAttr::get(ctxt, "tag"),
+                    IntegerType::get(
+                        ctxt, 8, IntegerType::SignednessSemantics::Unsigned)},
+                hw::StructType::FieldInfo{StringAttr::get(ctxt, "data"),
+                                          AnyType::get(ctxt)},
+            });
+  return createReqResp(getSymNameAttr(), "read", "req", readReqType, "resp",
+                       readRespType);
+}
+
+void HostMemServiceDeclOp::getPortList(
+    SmallVectorImpl<ServicePortInfo> &ports) {
+  ports.push_back(writePortInfo());
+  ports.push_back(readPortInfo());
+}
+
+void TelemetryServiceDeclOp::getPortList(
+    SmallVectorImpl<ServicePortInfo> &ports) {
+  auto *ctxt = getContext();
+  ports.push_back(ServicePortInfo{
+      hw::InnerRefAttr::get(getSymNameAttr(), StringAttr::get(ctxt, "report")),
+      ChannelBundleType::get(
+          ctxt,
+          {BundledChannel{StringAttr::get(ctxt, "get"), ChannelDirection::to,
+                          ChannelType::get(ctxt, IntegerType::get(ctxt, 0))},
+           BundledChannel{StringAttr::get(ctxt, "data"), ChannelDirection::from,
+                          ChannelType::get(ctxt, AnyType::get(ctxt))}},
           /*resettable=*/UnitAttr())});
 }

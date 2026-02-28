@@ -15,6 +15,7 @@
 //===----------------------------------------------------------------------===//
 
 include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/Interfaces/InferIntRangeInterface.td"
 include "mlir/IR/EnumAttr.td"
 
 // Base class for binary operators.
@@ -30,7 +31,9 @@ class BinOp<string mnemonic, list<Trait> traits = []> :
 // Binary operator with uniform input/result types.
 class UTBinOp<string mnemonic, list<Trait> traits = []> :
       BinOp<mnemonic,
-               traits # [SameTypeOperands, SameOperandsAndResultType]> {
+               traits # [SameTypeOperands, SameOperandsAndResultType, 
+                DeclareOpInterfaceMethods<InferIntRangeInterface, 
+                                          ["inferResultRanges"]>]> {
   let assemblyFormat = "(`bin` $twoState^)? $lhs `,` $rhs attr-dict `:` qualified(type($result))";
 }
 
@@ -42,8 +45,10 @@ class VariadicOp<string mnemonic, list<Trait> traits = []> :
 }
 
 class UTVariadicOp<string mnemonic, list<Trait> traits = []> :
-      VariadicOp<mnemonic,
-                    traits # [SameTypeOperands, SameOperandsAndResultType]> {
+      VariadicOp<mnemonic, 
+                  traits # [SameTypeOperands, SameOperandsAndResultType, 
+                   DeclareOpInterfaceMethods<InferIntRangeInterface, 
+                                             ["inferResultRanges"]>]> {
 
   let hasCanonicalizeMethod = true;
   let hasFolder = true;
@@ -63,11 +68,11 @@ class UTVariadicOp<string mnemonic, list<Trait> traits = []> :
 def AddOp : UTVariadicOp<"add", [Commutative]>;
 def MulOp : UTVariadicOp<"mul", [Commutative]>;
 let hasFolder = true in {
-  def DivUOp : UTBinOp<"divu">;
   def DivSOp : UTBinOp<"divs">;
-  def ModUOp : UTBinOp<"modu">;
   def ModSOp : UTBinOp<"mods">;
   let hasCanonicalizeMethod = true in {
+    def DivUOp : UTBinOp<"divu">;
+    def ModUOp : UTBinOp<"modu">;
     def ShlOp : UTBinOp<"shl">;
     def ShrUOp : UTBinOp<"shru">;
     def ShrSOp : UTBinOp<"shrs">;
@@ -76,7 +81,7 @@ let hasFolder = true in {
 }
 
 def AndOp : UTVariadicOp<"and", [Commutative]>;
-def OrOp  : UTVariadicOp<"or", [Commutative]>;
+def OrOp  : UTVariadicOp<"or",  [Commutative]>;
 def XorOp : UTVariadicOp<"xor", [Commutative]> {
   let extraClassDeclaration = [{
     /// Return true if this is a two operand xor with an all ones constant as
@@ -114,7 +119,10 @@ def ICmpPredicate : I64EnumAttr<
      ICmpPredicateUGT, ICmpPredicateUGE, ICmpPredicateCEQ, ICmpPredicateCNE,
      ICmpPredicateWEQ, ICmpPredicateWNE]>;
 
-def ICmpOp : CombOp<"icmp", [Pure, SameTypeOperands]> {
+def ICmpOp : CombOp<"icmp", 
+  [Pure, 
+   SameTypeOperands, 
+   DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "Compare two integer values";
   let description = [{
     This operation compares two integers using a predicate.  If the predicate is
@@ -178,7 +186,9 @@ def ParityOp : UnaryI1ReductionOp<"parity">;
 //===----------------------------------------------------------------------===//
 
 // Extract a range of bits from the specified input.
-def ExtractOp : CombOp<"extract", [Pure]> {
+def ExtractOp : CombOp<"extract", 
+  [Pure, 
+   DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "Extract a range of bits into a smaller value, lowBit "
                 "specifies the lowest bit included.";
 
@@ -203,7 +213,9 @@ def ExtractOp : CombOp<"extract", [Pure]> {
 //===----------------------------------------------------------------------===//
 // Other Operations
 //===----------------------------------------------------------------------===//
-def ConcatOp : CombOp<"concat", [InferTypeOpInterface, Pure]> {
+def ConcatOp : CombOp<"concat", 
+  [InferTypeOpInterface, Pure, 
+   DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "Concatenate a variadic list of operands together.";
   let description = [{
     See the comb rationale document for details on operand ordering.
@@ -214,9 +226,8 @@ def ConcatOp : CombOp<"concat", [InferTypeOpInterface, Pure]> {
 
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
-  let hasVerifier = 1;
 
-  let assemblyFormat = "$inputs attr-dict `:` qualified(type($inputs))";
+  let hasCustomAssemblyFormat = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
@@ -237,7 +248,9 @@ def ConcatOp : CombOp<"concat", [InferTypeOpInterface, Pure]> {
   }];
 }
 
-def ReplicateOp : CombOp<"replicate", [Pure]> {
+def ReplicateOp : CombOp<"replicate", 
+  [Pure, 
+   DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "Concatenate the operand a constant number of times";
 
   let arguments = (ins HWIntegerType:$input);
@@ -267,8 +280,10 @@ def ReplicateOp : CombOp<"replicate", [Pure]> {
 }
 
 // Select one of two values based on a condition.
-def MuxOp : CombOp<"mux",
- [Pure, AllTypesMatch<["trueValue", "falseValue", "result"]>]> {
+def MuxOp : CombOp<"mux", 
+  [Pure,   AllTypesMatch<["trueValue", "falseValue", "result"]>,
+   DeclareOpInterfaceMethods<InferIntRangeInterface, 
+                            ["inferResultRangesFromOptional"]>]> {
   let summary = "Return one or the other operand depending on a selector bit";
   let description = [{
     ```
@@ -307,7 +322,7 @@ def TruthTableOp : CombOp<"truth_table", [Pure]> {
     be 'x' -- it should be the well-known result.
   }];
 
-  let arguments = (ins Variadic<I1>:$inputs, BoolArrayAttr:$lookupTable);
+  let arguments = (ins Variadic<I1>:$inputs, DenseBoolArrayAttr:$lookupTable);
   let results = (outs I1:$result);
 
   let assemblyFormat = [{
@@ -315,4 +330,29 @@ def TruthTableOp : CombOp<"truth_table", [Pure]> {
   }];
 
   let hasVerifier = 1;
+}
+
+def ReverseOp : CombOp<"reverse", [
+    SameOperandsAndResultType,
+    Pure
+]> {
+  let summary = "Reverses the bit order of an integer value";
+
+  let description = [{
+    Reverses the bit ordering of a value. The LSB becomes the MSB and vice versa.
+
+    Example:
+    ```mlir
+      %out = comb.reverse %in : i4
+    ```
+    If %in is 4'b1101, then %out is 4'b1011.
+  }];
+
+  let arguments = (ins HWIntegerType:$input);
+  let results = (outs HWIntegerType:$result);
+
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
+
+  let assemblyFormat = "$input attr-dict `:` type($input)";
 }

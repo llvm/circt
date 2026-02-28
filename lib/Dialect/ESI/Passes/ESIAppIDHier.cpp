@@ -12,11 +12,19 @@
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESIPasses.h"
 
+namespace circt {
+namespace esi {
+#define GEN_PASS_DEF_ESIAPPIDHIER
+#include "circt/Dialect/ESI/ESIPasses.h.inc"
+} // namespace esi
+} // namespace circt
+
 using namespace circt;
 using namespace esi;
 
 namespace {
-struct ESIAppIDHierPass : public ESIAppIDHierBase<ESIAppIDHierPass> {
+struct ESIAppIDHierPass
+    : public circt::esi::impl::ESIAppIDHierBase<ESIAppIDHierPass> {
   void runOnOperation() override;
 
 private:
@@ -33,19 +41,19 @@ private:
 
     // Check if we need to create a root node.
     if (path.getPath().empty()) {
-      auto rootOp = OpBuilder::atBlockEnd(getOperation().getBody())
-                        .create<AppIDHierRootOp>(UnknownLoc::get(&getContext()),
-                                                 path.getRoot());
+      auto builder = OpBuilder::atBlockEnd(getOperation().getBody());
+      auto rootOp = AppIDHierRootOp::create(
+          builder, UnknownLoc::get(&getContext()), path.getRoot());
       block = &rootOp.getChildren().emplaceBlock();
     } else {
       Block *parentBlock = getBlock(path.getParent(), opStack.drop_back());
       Operation *op = opStack.back();
       if (auto inst = dyn_cast<hw::InstanceOp>(op)) {
         // Create a normal node underneath the parent AppID.
-        auto node = OpBuilder::atBlockEnd(parentBlock)
-                        .create<AppIDHierNodeOp>(UnknownLoc::get(&getContext()),
-                                                 path.getPath().back(),
-                                                 inst.getModuleNameAttr());
+        auto builder = OpBuilder::atBlockEnd(parentBlock);
+        auto node = AppIDHierNodeOp::create(
+            builder, UnknownLoc::get(&getContext()), path.getPath().back(),
+            inst.getModuleNameAttr());
         block = &node.getChildren().emplaceBlock();
       } else {
         block = parentBlock;

@@ -11,24 +11,30 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseSet.h"
+
+namespace circt {
+#define GEN_PASS_DEF_LEGALIZEANONENUMS
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace circt;
 using namespace hw;
 using namespace sv;
 
 namespace {
-struct LegalizeAnonEnums : public LegalizeAnonEnumsBase<LegalizeAnonEnums> {
+struct LegalizeAnonEnums
+    : public circt::impl::LegalizeAnonEnumsBase<LegalizeAnonEnums> {
   /// Creates a TypeScope on demand for anonymous enumerations.
   TypeScopeOp getTypeScope() {
     auto topLevel = getOperation();
     if (!typeScope) {
       auto builder = OpBuilder::atBlockBegin(&topLevel.getRegion().front());
-      typeScope = builder.create<TypeScopeOp>(topLevel.getLoc(), "Enums");
+      typeScope = TypeScopeOp::create(builder, topLevel.getLoc(), "Enums");
       typeScope.getBodyRegion().push_back(new Block());
       mlir::SymbolTable symbolTable(topLevel);
       symbolTable.insert(typeScope);
@@ -46,7 +52,7 @@ struct LegalizeAnonEnums : public LegalizeAnonEnumsBase<LegalizeAnonEnums> {
     auto typeScope = getTypeScope();
     auto builder = OpBuilder::atBlockEnd(&typeScope.getRegion().front());
     auto declName = StringAttr::get(context, "enum" + Twine(enumCount++));
-    builder.create<TypedeclOp>(loc, declName, TypeAttr::get(type), nullptr);
+    TypedeclOp::create(builder, loc, declName, TypeAttr::get(type), nullptr);
     auto symRef = SymbolRefAttr::get(typeScope.getSymNameAttr(),
                                      FlatSymbolRefAttr::get(declName));
     typeAlias = TypeAliasType::get(symRef, type);
@@ -199,7 +205,3 @@ struct LegalizeAnonEnums : public LegalizeAnonEnumsBase<LegalizeAnonEnums> {
 };
 
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass> circt::createLegalizeAnonEnumsPass() {
-  return std::make_unique<LegalizeAnonEnums>();
-}

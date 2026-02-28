@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -21,8 +20,16 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+namespace circt {
+namespace hw {
+#define GEN_PASS_DEF_HWSPECIALIZE
+#include "circt/Dialect/HW/Passes.h.inc"
+} // namespace hw
+} // namespace circt
 
 using namespace llvm;
 using namespace mlir;
@@ -63,13 +70,11 @@ static FailureOr<Value> narrowValueToArrayWidth(OpBuilder &builder, Value array,
   unsigned hiBit = llvm::Log2_64_Ceil(arrayType.getNumElements());
 
   return hiBit == 0
-             ? builder
-                   .create<hw::ConstantOp>(value.getLoc(),
-                                           APInt(arrayType.getNumElements(), 0))
+             ? hw::ConstantOp::create(builder, value.getLoc(),
+                                      APInt(arrayType.getNumElements(), 0))
                    .getResult()
-             : builder
-                   .create<comb::ExtractOp>(value.getLoc(), value,
-                                            /*lowBit=*/0, hiBit)
+             : comb::ExtractOp::create(builder, value.getLoc(), value,
+                                       /*lowBit=*/0, hiBit)
                    .getResult();
 }
 
@@ -115,7 +120,7 @@ struct EliminateParamValueOpPattern : public OpRewritePattern<ParamValueOp> {
       return failure();
     rewriter.replaceOpWithNewOp<hw::ConstantOp>(
         op, op.getType(),
-        evaluated->cast<IntegerAttr>().getValue().getSExtValue());
+        cast<IntegerAttr>(*evaluated).getValue().getSExtValue());
     return success();
   }
 
@@ -189,7 +194,8 @@ struct ParametricTypeConversionPattern : public ConversionPattern {
   ArrayAttr parameters;
 };
 
-struct HWSpecializePass : public hw::HWSpecializeBase<HWSpecializePass> {
+struct HWSpecializePass
+    : public circt::hw::impl::HWSpecializeBase<HWSpecializePass> {
   void runOnOperation() override;
 };
 
@@ -291,8 +297,8 @@ static LogicalResult specializeModule(
   }
 
   // Create the specialized module using the evaluated port info.
-  target = builder.create<HWModuleOp>(
-      source.getLoc(),
+  target = HWModuleOp::create(
+      builder, source.getLoc(),
       StringAttr::get(ctx, generateModuleName(ns, source, parameters)), ports);
 
   // Erase the default created hw.output op - we'll copy the correct operation
@@ -426,7 +432,3 @@ void HWSpecializePass::runOnOperation() {
 }
 
 } // namespace
-
-std::unique_ptr<Pass> circt::hw::createHWSpecializePass() {
-  return std::make_unique<HWSpecializePass>();
-}

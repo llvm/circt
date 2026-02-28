@@ -256,7 +256,8 @@ void CombMemOp::build(OpBuilder &builder, OperationState &result,
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), name,
         nameKind, annotations,
-        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(), init);
+        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(), init,
+        {});
 }
 
 void CombMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -284,13 +285,14 @@ static void printSeqMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
 
 void SeqMemOp::build(OpBuilder &builder, OperationState &result,
                      FIRRTLBaseType elementType, uint64_t numElements,
-                     RUWAttr ruw, StringRef name, NameKindEnum nameKind,
+                     RUWBehavior ruw, StringRef name, NameKindEnum nameKind,
                      ArrayAttr annotations, StringAttr innerSym,
                      MemoryInitAttr init) {
   build(builder, result,
         CMemoryType::get(builder.getContext(), elementType, numElements), ruw,
         name, nameKind, annotations,
-        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(), init);
+        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(), init,
+        {});
 }
 
 void SeqMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

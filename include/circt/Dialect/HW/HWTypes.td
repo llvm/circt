@@ -39,12 +39,20 @@ def HWNonInOutType : DialectType<HWDialect,
 
 def InOutType : DialectType<HWDialect,
     CPred<"::circt::hw::type_isa<circt::hw::InOutType>($_self)">,
-          "InOutType", "InOutType">;
+          "InOutType", "::circt::hw::InOutType">;
+
+class InOutTypeOf<list<Type> allowedTypes>
+  : ContainerType<AnyTypeOf<allowedTypes>, CPred<"::circt::hw::type_isa<::circt::hw::InOutType>($_self)">,
+    "::circt::hw::type_cast<::circt::hw::InOutType>($_self).getElementType()", "InOutType">;
 
 // A handle to refer to circt::hw::ArrayType in ODS.
 def ArrayType : DialectType<HWDialect,
     CPred<"::circt::hw::type_isa<circt::hw::ArrayType>($_self)">,
           "an ArrayType", "::circt::hw::TypeAliasOr<circt::hw::ArrayType>">;
+
+def UnpackedArrayType : DialectType<HWDialect,
+    CPred<"::circt::hw::type_isa<circt::hw::UnpackedArrayType>($_self)">,
+          "an Unpacked ArrayType", "::circt::hw::TypeAliasOr<circt::hw::UnpackedArrayType>">;
 
 // A handle to refer to circt::hw::StructType in ODS.
 def StructType : DialectType<HWDialect,
@@ -54,7 +62,7 @@ def StructType : DialectType<HWDialect,
 // A handle to refer to circt::hw::UnionType in ODS.
 def UnionType : DialectType<HWDialect,
     CPred<"::circt::hw::type_isa<circt::hw::UnionType>($_self)">,
-          "a UnionType", "::circt::hw::TypeAliasOr<hw::UnionType>">;
+          "a UnionType", "::circt::hw::TypeAliasOr<::circt::hw::UnionType>">;
 
 // A handle to refer to circt::hw::EnumType in ODS.
 def EnumType : DialectType<HWDialect,

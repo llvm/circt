@@ -10,13 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
-#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -24,11 +22,19 @@
 
 #define DEBUG_TYPE "firrtl-infer-read-write"
 
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_INFERREADWRITE
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
+
 using namespace circt;
 using namespace firrtl;
 
 namespace {
-struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
+struct InferReadWritePass
+    : public circt::firrtl::impl::InferReadWriteBase<InferReadWritePass> {
 
   /// This pass performs two memory transformations:
   ///  1. If the multi-bit enable port is connected to a constant 1,
@@ -42,8 +48,27 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
     LLVM_DEBUG(llvm::dbgs() << "\n Running Infer Read Write on module:"
                             << getOperation().getName());
     SmallVector<Operation *> opsToErase;
-    for (MemOp memOp : llvm::make_early_inc_range(
-             getOperation().getBodyBlock()->getOps<MemOp>())) {
+
+    auto result = getOperation().walk([&](Operation *op) {
+      // This pass is going to have problems if it tries to determine signal
+      // drivers in the presence of WhenOps.  Conservatively error out if we see
+      // any WhenOps.
+      //
+      // TODO: This would be better handled if WhenOps were moved into the
+      // CHIRRTL dialect so that this pass could more strongly specify that it
+      // only works on FIRRTL as opposed to a subset of FIRRTL.
+      if (isa<WhenOp>(op)) {
+        op->emitOpError()
+            << "is unsupported by InferReadWrite as this pass cannot trace "
+               "signal drivers in their presence. Please run `ExpandWhens` to "
+               "remove these operations before running this pass.";
+        return WalkResult::interrupt();
+      }
+
+      MemOp memOp = dyn_cast<MemOp>(op);
+      if (!memOp)
+        return WalkResult::advance();
+
       inferUnmasked(memOp, opsToErase);
       simplifyWmode(memOp);
       size_t nReads, nWrites, nRWs, nDbgs;
@@ -52,7 +77,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       // and write ports.
       if (!(nReads == 1 && nWrites == 1 && nRWs == 0) ||
           !(memOp.getReadLatency() == 1 && memOp.getWriteLatency() == 1))
-        continue;
+        return WalkResult::skip();
       SmallVector<Attribute, 4> resultNames;
       SmallVector<Type, 4> resultTypes;
       SmallVector<Attribute> portAtts;
@@ -64,7 +89,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
         Attribute portAnno;
         portAnno = memOp.getPortAnnotation(portIt.index());
         if (memOp.getPortKind(portIt.index()) == MemOp::PortKind::Debug) {
-          resultNames.push_back(memOp.getPortName(portIt.index()));
+          resultNames.push_back(memOp.getPortNameAttr(portIt.index()));
           resultTypes.push_back(memOp.getResult(portIt.index()).getType());
           portAnnotations.push_back(portAnno);
           continue;
@@ -85,10 +110,10 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
                 sf.getFieldIndex());
             // If this is the enable field, record the product terms(the And
             // expression tree).
-            if (fName.equals("en"))
+            if (fName == "en")
               getProductTerms(sf, isReadPort ? readTerms : writeTerms);
 
-            else if (fName.equals("clk")) {
+            else if (fName == "clk") {
               if (isReadPort)
                 rClock = getConnectSrc(sf);
               else
@@ -98,7 +123,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
         // End of loop for getting MemOp port users.
       }
       if (!sameDriver(rClock, wClock))
-        continue;
+        return WalkResult::skip();
 
       rClock = wClock;
       LLVM_DEBUG(
@@ -118,7 +143,7 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       // the write enable term.
       auto complementTerm = checkComplement(readTerms, writeTerms);
       if (!complementTerm)
-        continue;
+        return WalkResult::skip();
 
       // Create the merged rw port for the new memory.
       resultNames.push_back(StringAttr::get(memOp.getContext(), "rw"));
@@ -129,9 +154,9 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
       portAnnotations.push_back(builder.getArrayAttr(portAtts));
       // Create the new rw memory.
-      auto rwMem = builder.create<MemOp>(
-          resultTypes, memOp.getReadLatency(), memOp.getWriteLatency(),
-          memOp.getDepth(), RUWAttr::Undefined,
+      auto rwMem = MemOp::create(
+          builder, resultTypes, memOp.getReadLatency(), memOp.getWriteLatency(),
+          memOp.getDepth(), RUWBehavior::Undefined,
           builder.getArrayAttr(resultNames), memOp.getNameAttr(),
           memOp.getNameKind(), memOp.getAnnotations(),
           builder.getArrayAttr(portAnnotations), memOp.getInnerSymAttr(),
@@ -141,36 +166,36 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       // Create the subfield access to all fields of the port.
       // The addr should be connected to read/write address depending on the
       // read/write mode.
-      auto addr = builder.create<SubfieldOp>(rwPort, "addr");
+      auto addr = SubfieldOp::create(builder, rwPort, "addr");
       // Enable is high whenever the memory is written or read.
-      auto enb = builder.create<SubfieldOp>(rwPort, "en");
+      auto enb = SubfieldOp::create(builder, rwPort, "en");
       // Read/Write clock.
-      auto clk = builder.create<SubfieldOp>(rwPort, "clk");
-      auto readData = builder.create<SubfieldOp>(rwPort, "rdata");
+      auto clk = SubfieldOp::create(builder, rwPort, "clk");
+      auto readData = SubfieldOp::create(builder, rwPort, "rdata");
       // wmode is high when the port is in write mode. That is this can be
       // connected to the write enable.
-      auto wmode = builder.create<SubfieldOp>(rwPort, "wmode");
-      auto writeData = builder.create<SubfieldOp>(rwPort, "wdata");
-      auto mask = builder.create<SubfieldOp>(rwPort, "wmask");
+      auto wmode = SubfieldOp::create(builder, rwPort, "wmode");
+      auto writeData = SubfieldOp::create(builder, rwPort, "wdata");
+      auto mask = SubfieldOp::create(builder, rwPort, "wmask");
       // Temp wires to replace the original memory connects.
       auto rAddr =
-          builder.create<WireOp>(addr.getType(), "readAddr").getResult();
+          WireOp::create(builder, addr.getType(), "readAddr").getResult();
       auto wAddr =
-          builder.create<WireOp>(addr.getType(), "writeAddr").getResult();
+          WireOp::create(builder, addr.getType(), "writeAddr").getResult();
       auto wEnWire =
-          builder.create<WireOp>(enb.getType(), "writeEnable").getResult();
+          WireOp::create(builder, enb.getType(), "writeEnable").getResult();
       auto rEnWire =
-          builder.create<WireOp>(enb.getType(), "readEnable").getResult();
+          WireOp::create(builder, enb.getType(), "readEnable").getResult();
       auto writeClock =
-          builder.create<WireOp>(ClockType::get(enb.getContext())).getResult();
+          WireOp::create(builder, ClockType::get(enb.getContext())).getResult();
       // addr = Mux(WriteEnable, WriteAddress, ReadAddress).
-      builder.create<StrictConnectOp>(
-          addr, builder.create<MuxPrimOp>(wEnWire, wAddr, rAddr));
+      MatchingConnectOp::create(
+          builder, addr, MuxPrimOp::create(builder, wEnWire, wAddr, rAddr));
       // Enable = Or(WriteEnable, ReadEnable).
-      builder.create<StrictConnectOp>(
-          enb, builder.create<OrPrimOp>(rEnWire, wEnWire));
+      MatchingConnectOp::create(builder, enb,
+                                OrPrimOp::create(builder, rEnWire, wEnWire));
       builder.setInsertionPointToEnd(wmode->getBlock());
-      builder.create<StrictConnectOp>(wmode, complementTerm);
+      MatchingConnectOp::create(builder, wmode, complementTerm);
       // Now iterate over the original memory read and write ports.
       size_t dbgsIndex = 0;
       for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
@@ -213,7 +238,12 @@ struct InferReadWritePass : public InferReadWriteBase<InferReadWritePass> {
       simplifyWmode(rwMem);
       // All uses for all results of mem removed, now erase the memOp.
       opsToErase.push_back(memOp);
-    }
+      return WalkResult::advance();
+    });
+
+    if (result.wasInterrupted())
+      return signalPassFailure();
+
     for (auto *o : opsToErase)
       o->erase();
   }
@@ -440,8 +470,8 @@ private:
         ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
         builder.setInsertionPointToStart(
             memOp->getParentOfType<FModuleOp>().getBodyBlock());
-        auto constOne = builder.create<ConstantOp>(
-            UIntType::get(builder.getContext(), 1), APInt(1, 1));
+        auto constOne = ConstantOp::create(
+            builder, UIntType::get(builder.getContext(), 1), APInt(1, 1));
         setEnable(enableDriver, wmodeDriver, constOne);
       }
     }
@@ -523,12 +553,13 @@ private:
                                   memOp.getPortKind(i), /*maskBits=*/1));
 
       // Copy everything from old memory, except the result type.
-      auto newMem = builder.create<MemOp>(
-          resultTypes, memOp.getReadLatency(), memOp.getWriteLatency(),
-          memOp.getDepth(), memOp.getRuw(), memOp.getPortNames().getValue(),
-          memOp.getNameAttr(), memOp.getNameKind(),
-          memOp.getAnnotations().getValue(),
-          memOp.getPortAnnotations().getValue(), memOp.getInnerSymAttr());
+      auto newMem = MemOp::create(
+          builder, resultTypes, memOp.getReadLatencyAttr(),
+          memOp.getWriteLatencyAttr(), memOp.getDepthAttr(), memOp.getRuwAttr(),
+          memOp.getPortNamesAttr(), memOp.getNameAttr(),
+          memOp.getNameKindAttr(), memOp.getAnnotationsAttr(),
+          memOp.getPortAnnotationsAttr(), memOp.getInnerSymAttr(),
+          memOp.getInitAttr(), memOp.getPrefixAttr());
       // Now replace the result of old memory with the new one.
       for (const auto &portIt : llvm::enumerate(memOp.getResults())) {
         // Old result.
@@ -545,17 +576,19 @@ private:
         for (Operation *u : oldPort.getUsers()) {
           auto oldRes = dyn_cast<SubfieldOp>(u);
           auto sf =
-              builder.create<SubfieldOp>(newPortVal, oldRes.getFieldIndex());
+              SubfieldOp::create(builder, newPortVal, oldRes.getFieldIndex());
           auto fName =
               sf.getInput().getType().base().getElementName(sf.getFieldIndex());
           // Replace all mask fields with a one bit constant 1.
           // Replace all other fields with the new port.
           if (fName.contains("mask")) {
-            WireOp dummy = builder.create<WireOp>(oldRes.getType());
+            WireOp dummy = WireOp::create(builder, oldRes.getType());
             oldRes->replaceAllUsesWith(dummy);
-            builder.create<StrictConnectOp>(
-                sf, builder.create<ConstantOp>(
-                        UIntType::get(builder.getContext(), 1), APInt(1, 1)));
+            MatchingConnectOp::create(
+                builder, sf,
+                ConstantOp::create(builder,
+                                   UIntType::get(builder.getContext(), 1),
+                                   APInt(1, 1)));
           } else
             oldRes->replaceAllUsesWith(sf);
 
@@ -572,7 +605,3 @@ private:
   llvm::DenseMap<Value, SmallVector<Value>> valueBitsSrc;
 };
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createInferReadWritePass() {
-  return std::make_unique<InferReadWritePass>();
-}

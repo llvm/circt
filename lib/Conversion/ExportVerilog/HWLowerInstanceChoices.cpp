@@ -17,7 +17,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -27,6 +26,12 @@
 #include "circt/Support/SymCache.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+#define GEN_PASS_DEF_HWLOWERINSTANCECHOICES
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -37,7 +42,8 @@ using namespace ExportVerilog;
 namespace {
 
 struct HWLowerInstanceChoicesPass
-    : public HWLowerInstanceChoicesBase<HWLowerInstanceChoicesPass> {
+    : public circt::impl::HWLowerInstanceChoicesBase<
+          HWLowerInstanceChoicesPass> {
   void runOnOperation() override;
 };
 
@@ -77,20 +83,20 @@ LogicalResult ExportVerilog::lowerHWInstanceChoices(mlir::ModuleOp module) {
     auto symName = ns.newName(name);
     auto symNameAttr = declBuilder.getStringAttr(symName);
     auto symRef = FlatSymbolRefAttr::get(symNameAttr);
-    declBuilder.create<MacroDeclOp>(inst.getLoc(), symNameAttr,
-                                    /*args=*/ArrayAttr{},
-                                    /*verilogName=*/StringAttr{});
+    MacroDeclOp::create(declBuilder, inst.getLoc(), symNameAttr,
+                        /*args=*/ArrayAttr{},
+                        /*verilogName=*/StringAttr{});
 
     // This pass now generates the macros and attaches them to the instance
     // choice as an attribute. As a better solution, this pass should be moved
     // out of the umbrella of ExportVerilog and it should lower the `hw`
     // instance choices to a better SV-level representation of the operation.
     ImplicitLocOpBuilder builder(inst.getLoc(), inst);
-    builder.create<sv::IfDefOp>(
-        symName, [&] {},
+    sv::IfDefOp::create(
+        builder, symName, [&] {},
         [&] {
-          builder.create<sv::MacroDefOp>(
-              symRef, builder.getStringAttr("{{0}}"),
+          sv::MacroDefOp::create(
+              builder, symRef, builder.getStringAttr("{{0}}"),
               builder.getArrayAttr(
                   {FlatSymbolRefAttr::get(defaultModuleOp.getNameAttr())}));
         });
@@ -104,8 +110,4 @@ void HWLowerInstanceChoicesPass::runOnOperation() {
   ModuleOp module = getOperation();
   if (failed(lowerHWInstanceChoices(module)))
     signalPassFailure();
-}
-
-std::unique_ptr<mlir::Pass> circt::createHWLowerInstanceChoicesPass() {
-  return std::make_unique<HWLowerInstanceChoicesPass>();
 }

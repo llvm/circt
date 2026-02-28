@@ -9,14 +9,23 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
-#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-inner-symbol-dce"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_INNERSYMBOLDCE
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -36,7 +45,7 @@ static void dropSymbol(const InnerSymTarget &target) {
     auto mod = cast<FModuleLike>(target.getOp());
     assert(target.getPort() < mod.getNumPorts());
     auto base = mod.getPortSymbolAttr(target.getPort());
-    cast<firrtl::FModuleLike>(*mod).setPortSymbolsAttr(
+    cast<firrtl::FModuleLike>(*mod).setPortSymbolAttr(
         target.getPort(), base.erase(target.getField()));
     return;
   }
@@ -46,7 +55,8 @@ static void dropSymbol(const InnerSymTarget &target) {
   symOp.setInnerSymbolAttr(base.erase(target.getField()));
 }
 
-struct InnerSymbolDCEPass : public InnerSymbolDCEBase<InnerSymbolDCEPass> {
+struct InnerSymbolDCEPass
+    : public circt::firrtl::impl::InnerSymbolDCEBase<InnerSymbolDCEPass> {
   void runOnOperation() override;
 
 private:
@@ -124,8 +134,4 @@ void InnerSymbolDCEPass::runOnOperation() {
   // dead code.
   parallelForEach(&getContext(), modules,
                   [&](FModuleLike mod) { removeInnerSyms(mod); });
-}
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createInnerSymbolDCEPass() {
-  return std::make_unique<InnerSymbolDCEPass>();
 }

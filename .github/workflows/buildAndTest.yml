@@ -8,13 +8,18 @@ on:
     types: [assigned, opened, synchronize, reopened]
   workflow_dispatch:
 
+# Cancel previous CI builds when a new push occurs to the same PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Do sanity check (clang-format and python-format) first.
   sanity-check:
     name: Sanity Check
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-ci-build:20240213211952
+      image: ghcr.io/circt/images/circt-ci-build:20260107030736
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -72,7 +77,7 @@ jobs:
         if: ${{ always() }}
         run: |
           # Run clang-format
-          git clang-format $DIFF_COMMIT
+          git clang-format $DIFF_COMMIT || true
           git diff --ignore-submodules > clang-format.patch
           if [ -s clang-format.patch ]; then
             echo "Clang-format found formatting problems in the following " \
@@ -97,7 +102,7 @@ jobs:
       # Upload the format patches to an artifact (zip'd) associated
       # with the workflow run. Only run this on a failure.
       - name: Upload format patches
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         continue-on-error: true
         if: ${{ failure() }}
         with:
@@ -134,7 +139,7 @@ jobs:
     # John and re-run the job.
     runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds", "linux"]
     container:
-      image: ghcr.io/circt/images/circt-ci-build:20240213211952
+      image: ghcr.io/circt/images/circt-ci-build:20260107030736
       volumes:
         - /mnt:/__w/circt
     strategy:
@@ -145,12 +150,12 @@ jobs:
           # gcc   + debug   + assert   + shared
           - cc: clang
             cxx: clang++
-            mode: debug
+            mode: Debug
             assert: ON
             shared: ON
           - cc: gcc
             cxx: g++
-            mode: release
+            mode: Release
             assert: OFF
             shared: OFF
 
@@ -220,9 +225,9 @@ jobs:
             -DCMAKE_CXX_COMPILER=${{ matrix.compiler.cxx }} \
             -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DLLVM_LIT_ARGS="-v" \
+            -DLLVM_LIT_ARGS="-v --timeout 300" \
             -DCIRCT_SLANG_FRONTEND_ENABLED=ON
-          ninja check-circt check-circt-unit -j$(nproc)
+          CIRCT_OPT_CHECK_IR_ROUNDTRIP=1 ninja check-circt check-circt-unit -j$(nproc)
           ninja circt-doc
 
       # --------
@@ -268,24 +273,24 @@ jobs:
       - name: clang-tidy
         if: ${{ always() }}
         run: |
-          git diff -U0 $DIFF_COMMIT...HEAD | \
-            clang-tidy-diff -path build -p1 -fix -j$(nproc)
-          git clang-format -f $DIFF_COMMIT
-          git diff --ignore-submodules > clang-tidy.patch
-          if [ -s clang-tidy.patch ]; then
-            echo "Clang-tidy problems in the following files. " \
-              "See diff in the clang-tidy.patch artifact."
-            git diff --ignore-submodules --name-only
-            git checkout .
+          if git diff -U0 $DIFF_COMMIT...HEAD | clang-tidy-diff -path build -p1 -fix -j$(nproc); then
+            exit 0
+          fi
+          if git diff --quiet --ignore-submodules; then
             exit 1
           fi
-          echo "Clang-tidy found no problems"
-          exit 0
+          git clang-format -f $DIFF_COMMIT
+          echo "Fixups available for the following files:"
+          git diff --ignore-submodules --name-only
+          echo "See diff in the clang-tidy.patch artifact."
+          git diff --ignore-submodules > clang-tidy.patch
+          git checkout .
+          exit 1
 
       # Upload the tidy patches to an artifact (zip'd) associated
       # with the workflow run. Only run this on a failure.
       - name: Upload tidy patches
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         continue-on-error: true
         if: ${{ failure() }}
         with:

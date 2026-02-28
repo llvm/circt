@@ -6,22 +6,22 @@ firrtl.circuit "Foo" {
   firrtl.module @Foo(in %clk : !firrtl.clock, out %s : !firrtl.uint<32>, out %io1 : !firrtl.uint<1>, out %io2 : !firrtl.uint<1>, out %io3 : !firrtl.uint<1>, out %io4 : !firrtl.uint<5>) {
     // CHECK: firrtl.int.sizeof %clk
     %size = firrtl.int.generic "circt.sizeof"  %clk : (!firrtl.clock) -> !firrtl.uint<32>
-    firrtl.strictconnect %s, %size : !firrtl.uint<32>
+    firrtl.matchingconnect %s, %size : !firrtl.uint<32>
 
     // CHECK: firrtl.int.isX
     %isX = firrtl.int.generic "circt.isX"  %clk : (!firrtl.clock) -> !firrtl.uint<1>
-    firrtl.strictconnect %io1, %isX : !firrtl.uint<1>
+    firrtl.matchingconnect %io1, %isX : !firrtl.uint<1>
 
     // CHECK: firrtl.int.plusargs.test "foo"
     %foo = firrtl.int.generic "circt.plusargs.test" <FORMAT: none = "foo"> : () -> !firrtl.uint<1>
-    firrtl.strictconnect %io2, %foo : !firrtl.uint<1>
+    firrtl.matchingconnect %io2, %foo : !firrtl.uint<1>
 
     // CHECK: firrtl.int.plusargs.value "foo" : !firrtl.uint<5>
     %pav = firrtl.int.generic "circt.plusargs.value" <FORMAT: none = "foo"> : () -> !firrtl.bundle<found: uint<1>, result: uint<5>>
     %found = firrtl.subfield %pav[found] : !firrtl.bundle<found: uint<1>, result: uint<5>>
     %result = firrtl.subfield %pav[result] : !firrtl.bundle<found: uint<1>, result: uint<5>>
-    firrtl.strictconnect %io3, %found : !firrtl.uint<1>
-    firrtl.strictconnect %io4, %result : !firrtl.uint<5>
+    firrtl.matchingconnect %io3, %found : !firrtl.uint<1>
+    firrtl.matchingconnect %io4, %result : !firrtl.uint<5>
   }
   // CHECK-LABEL: @ClockGate
   firrtl.module @ClockGate(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>) {
@@ -49,25 +49,36 @@ firrtl.circuit "Foo" {
     firrtl.int.generic "circt_ltl_and"  %in0, %in1: (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.ltl.or %in0, %in1 :
     firrtl.int.generic "circt_ltl_or"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.intersect %in0, %in1 :
+    firrtl.int.generic "circt_ltl_intersect"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: firrtl.int.ltl.delay %in0, 42 :
-    // CHECK-NEXT: firrtl.int.ltl.delay %in0, 42, 1337 :
     firrtl.int.generic "circt_ltl_delay" <delay: i64 = 42> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.delay %in0, 42, 1337 :
     firrtl.int.generic "circt_ltl_delay" <delay: i64 = 42, length: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 
+    // CHECK-NEXT: firrtl.int.ltl.repeat %in0, 42 :
+    firrtl.int.generic "circt_ltl_repeat" <base: i64 = 42> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.repeat %in0, 42, 1337 :
+    firrtl.int.generic "circt_ltl_repeat" <base: i64 = 42, more: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.goto_repeat %in0, 42, 1337 :
+    firrtl.int.generic "circt_ltl_goto_repeat" <base: i64 = 42, more: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.non_consecutive_repeat %in0, 42, 1337 :
+    firrtl.int.generic "circt_ltl_non_consecutive_repeat" <base: i64 = 42, more: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+
     // CHECK-NEXT: firrtl.int.ltl.concat %in0, %in1 :
-    // CHECK-NEXT: firrtl.int.ltl.not %in0 :
-    // CHECK-NEXT: firrtl.int.ltl.implication %in0, %in1 :
-    // CHECK-NEXT: firrtl.int.ltl.eventually %in0 :
     firrtl.int.generic "circt_ltl_concat"  %in0, %in1: (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.not %in0 :
     firrtl.int.generic "circt_ltl_not"  %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.implication %in0, %in1 :
     firrtl.int.generic "circt_ltl_implication"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.until %in0, %in1 :
+    firrtl.int.generic "circt_ltl_until"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.eventually %in0 :
     firrtl.int.generic "circt_ltl_eventually"  %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: firrtl.int.ltl.clock %in0, %clk :
     firrtl.int.generic "circt_ltl_clock"  %in0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.int.ltl.disable %in0, %in1 :
-    firrtl.int.generic "circt_ltl_disable"  %in0, %in1: (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   }
 
   // CHECK-LABEL: firrtl.module @Verif(
@@ -76,10 +87,14 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: firrtl.int.verif.assert %in {label = "hello"} :
     // CHECK-NEXT: firrtl.int.verif.assume %in :
     // CHECK-NEXT: firrtl.int.verif.cover %in :
+    // CHECK-NEXT: firrtl.int.verif.require %in :
+    // CHECK-NEXT: firrtl.int.verif.ensure %in :
     firrtl.int.generic "circt_verif_assert"  %in : (!firrtl.uint<1>) -> ()
     firrtl.int.generic "circt_verif_assert" <label: none = "hello"> %in : (!firrtl.uint<1>) -> ()
     firrtl.int.generic "circt_verif_assume"  %in : (!firrtl.uint<1>) -> ()
     firrtl.int.generic "circt_verif_cover"  %in : (!firrtl.uint<1>) -> ()
+    firrtl.int.generic "circt_verif_require"  %in : (!firrtl.uint<1>) -> ()
+    firrtl.int.generic "circt_verif_ensure"  %in : (!firrtl.uint<1>) -> ()
   }
 
   // CHECK-LABEL: firrtl.module private @MuxCell(
@@ -138,9 +153,108 @@ firrtl.circuit "Foo" {
     firrtl.int.generic "circt.unclocked_assume" <format: none = "text: %d", label: none = "label for unr", guards: none = "MACRO_GUARD;ASDF"> %cond, %enable, %enable : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> ()
   }
 
+  // CHECK-LABEL: firrtl.module @ChiselVerifSpecialSubstitutions(
+  firrtl.module @ChiselVerifSpecialSubstitutions(in %clock: !firrtl.clock,
+                                                 in %cond: !firrtl.uint<1>,
+                                                 in %enable: !firrtl.uint<1>) {
+    // CHECK: %[[TIME:.+]] = firrtl.fstring.time
+    // CHECK: firrtl.assert
+    // CHECK-SAME{LITERAL}: "Time: {{}}"
+    // CHECK-SAME: (%[[TIME]])
+    firrtl.int.generic "circt_chisel_assert" <format: none = "Time: {{SimulationTime}}"> %clock, %cond, %enable : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> ()
+
+    // CHECK: %[[HIER:.+]] = firrtl.fstring.hierarchicalmodulename
+    // CHECK: firrtl.assume
+    // CHECK-SAME{LITERAL}: "Module: {{}}"
+    // CHECK-SAME: (%[[HIER]])
+    firrtl.int.generic "circt_chisel_assume" <format: none = "Module: {{HierarchicalModuleName}}"> %clock, %cond, %enable : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> ()
+
+    // CHECK: %[[HIER2:.+]] = firrtl.fstring.hierarchicalmodulename
+    // CHECK: %[[TIME2:.+]] = firrtl.fstring.time
+    // CHECK: firrtl.assert
+    // CHECK-SAME{LITERAL}: "In {{}} at {{}}, value = %d"
+    // CHECK-SAME: (%[[HIER2]], %[[TIME2]], %{{.+}})
+    firrtl.int.generic "circt_chisel_ifelsefatal" <format: none = "In {{HierarchicalModuleName}} at {{SimulationTime}}, value = %d"> %clock, %cond, %enable, %cond : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> ()
+  }
+
   // CHECK-LABEL: firrtl.module private @ProbeIntrinsicTest
   firrtl.module private @ProbeIntrinsicTest(in %clock : !firrtl.clock, in %data : !firrtl.uint<32>) {
     // CHECK-NEXT: firrtl.int.fpga_probe %clock, %data : !firrtl.uint<32>
     firrtl.int.generic "circt_fpga_probe"  %data, %clock : (!firrtl.uint<32>, !firrtl.clock) -> ()
+  }
+
+  // CHECK-LABEL: firrtl.module private @DPIIntrinsicTest
+  firrtl.module private @DPIIntrinsicTest(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in1: !firrtl.uint<8>, in %in2: !firrtl.uint<8>) {
+    // CHECK-NEXT: %0 = firrtl.int.dpi.call "clocked_result"(%in1, %in2) clock %clock enable %enable {inputNames = ["foo", "bar"], outputName = "baz"} : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+    %0 = firrtl.int.generic "circt_dpi_call" <isClocked: ui32 = 1, functionName: none = "clocked_result", inputNames: none = "foo;bar", outputName: none = "baz"> %clock, %enable, %in1, %in2 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+    // CHECK-NEXT: firrtl.int.dpi.call "clocked_void"(%in1, %in2) clock %clock enable %enable : (!firrtl.uint<8>, !firrtl.uint<8>) -> ()
+    firrtl.int.generic "circt_dpi_call" <isClocked: ui32 = 1, functionName: none = "clocked_void"> %clock, %enable, %in1, %in2 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> ()
+    // CHECK-NEXT:  %1 = firrtl.int.dpi.call "unclocked_result"(%in1, %in2) enable %enable : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+    %1 = firrtl.int.generic "circt_dpi_call" <isClocked: ui32 = 0, functionName: none = "unclocked_result"> %enable, %in1, %in2 : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module private @ViewIntrinsicTest
+  firrtl.module private @ViewIntrinsicTest(in %in: !firrtl.vector<uint<1>, 5>) attributes {convention = #firrtl<convention scalarized>} {
+    %0 = firrtl.subindex %in[4] : !firrtl.vector<uint<1>, 5>
+    %1 = firrtl.subindex %in[3] : !firrtl.vector<uint<1>, 5>
+    %2 = firrtl.subindex %in[2] : !firrtl.vector<uint<1>, 5>
+    %3 = firrtl.subindex %in[1] : !firrtl.vector<uint<1>, 5>
+    %4 = firrtl.subindex %in[0] : !firrtl.vector<uint<1>, 5>
+
+    // Taken from old test, these descriptions don't really apply anymore but leaving as-is for now.
+    firrtl.int.generic "circt_view" <name: none = "view", info: none = "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"ViewName\",\"elements\":[{\"description\":\"the register in GCTInterface\",\"name\":\"register\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"Register\",\"elements\":[{\"name\":\"_2\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedVectorType\",\"elements\":[{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"},{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"}]}},{\"name\":\"_0_inst\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"_0_def\",\"elements\":[{\"name\":\"_1\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"}},{\"name\":\"_0\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"}}]}}]}},{\"description\":\"the port 'a' in GCTInterface\",\"name\":\"port\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\"}}]}"> %4, %3, %2, %1, %0 : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> ()
+
+    // CHECK: firrtl.view "view", <{
+    // CHECK-SAME:   class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+    // CHECK-SAME:   defName = "ViewName",
+    // CHECK-SAME:   elements = [
+    // CHECK-SAME:      {
+    // CHECK-SAME:        class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+    // CHECK-SAME:        defName = "Register",
+    // CHECK-SAME:        description = "the register in GCTInterface",
+    // CHECK-SAME:        elements = [
+    // CHECK-SAME:          {
+    // CHECK-SAME:            class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+    // CHECK-SAME:            elements = [
+    // CHECK-SAME:              {
+    // CHECK-SAME:                class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+    // CHECK-SAME:                name = "_2"
+    // CHECK-SAME:              }, {
+    // CHECK-SAME:                class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+    // CHECK-SAME:                name = "_2
+    // CHECK-SAME:              }
+    // CHECK-SAME:            ],
+    // CHECK-SAME:            name = "_2"
+    // CHECK-SAME:          }, {
+    // CHECK-SAME:            class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+    // CHECK-SAME:            defName = "_0_def",
+    // CHECK-SAME:            elements = [
+    // CHECK-SAME:              {
+    // CHECK-SAME:                class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+    // CHECK-SAME:                name = "_1"
+    // CHECK-SAME:              }, {
+    // CHECK-SAME:                class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+    // CHECK-SAME:                name = "_0"
+    // CHECK-SAME:              }
+    // CHECK-SAME:            ],
+    // CHECK-SAME:            name = "_0_inst"
+    // CHECK-SAME:          }
+    // CHECK-SAME:        ],
+    // CHECK-SAME:        name = "register"
+    // CHECK-SAME:     }, {
+    // CHECK-SAME:       class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+    // CHECK-SAME:       description = "the port 'a' in GCTInterface",
+    // CHECK-SAME:       name = "port"
+    // CHECK-SAME:     }
+    // CHECK-SAME:   ],
+    // This is copied in, for better or for worse.
+    // CHECK-SAME:   name = "view"
+    // CHECK-SAME: }>,
+    // Check operands and types.
+    // CHECK-SAME: %4, %3, %2, %1, %0 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+
+    firrtl.int.generic "circt_view" <name: none = "view2", yaml: none = "views.yml", info: none = "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"ViewName\",\"elements\":[]}"> : () -> ()
+
+    // CHECK: firrtl.view "view2", yaml "views.yml", <{
   }
 }

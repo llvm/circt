@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --verify-diagnostics -split-input-file | circt-opt | FileCheck %s
+// RUN: circt-opt --verify-diagnostics --verify-roundtrip %s | circt-opt | FileCheck %s
 
 // CHECK-LABEL: arc.define @Foo
 arc.define @Foo(%arg0: i42, %arg1: i9) -> (i42, i9) {
@@ -159,8 +159,6 @@ arc.define @identity3(%arg0: i32, %arg1: i32, %arg2: i32) -> (i32, i32, i32) {
   arc.output %arg0, %arg1, %arg2 : i32, i32, i32
 }
 
-// -----
-
 hw.module @vectorize_in_clock_domain(in %in0: i2, in %in1: i2, in %in2: i1, in %in3: i1, in %clk: !seq.clock, out out0: i1, out out1: i1) {
   %0:2 = arc.clock_domain (%in0, %in1, %in2, %in3) clock %clk : (i2, i2, i1, i1) -> (i1, i1) {
     ^bb0(%arg0: i2, %arg1: i2, %arg2: i1, %arg3: i1):
@@ -186,8 +184,6 @@ arc.define @vectorizable(%arg0: i2, %arg1: i1) -> i1 {
 //       CHECK:   [[V1:%.+]] = arc.state @vectorizable([[A]], [[B]]) latency 1 : (i2, i1) -> i1
 //       CHECK:   arc.vectorize.return [[V1]] : i1
 //       CHECK: }
-
-// -----
 
 hw.module @vectorize(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: i1, out out1: i1, out out2: i1) {
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (i1, i1) {
@@ -215,8 +211,6 @@ hw.module @vectorize(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out
 //       CHECK:   arc.vectorize.return [[V3]] : i1
 //       CHECK: }
 //       CHECK: hw.output [[V0]]#0, [[V0]]#1, [[V2]] :
-
-// -----
 
 hw.module @vectorize_body_lowered(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: i1, out out1: i1, out out2: i1, out out3: i1) {
   %0:2 = arc.vectorize (%in0, %in1), (%in2, %in2) : (i1, i1, i1, i1) -> (i1, i1) {
@@ -247,8 +241,6 @@ hw.module @vectorize_body_lowered(in %in0: i1, in %in1: i1, in %in2: i1, in %in3
 //       CHECK:   arc.vectorize.return [[V3]] : vector<2xi1>
 //       CHECK: }
 //       CHECK: hw.output [[V0]]#0, [[V0]]#1, [[V2]]#0, [[V2]]#1 :
-
-// -----
 
 hw.module @vectorize_boundary_lowered(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: i1, out out1: i1, out out2: i1, out out3: i1) {
   %0 = comb.concat %in0, %in1 : i1, i1
@@ -298,8 +290,6 @@ hw.module @vectorize_boundary_lowered(in %in0: i1, in %in1: i1, in %in2: i1, in 
 //       CHECK: [[V9:%.+]] = vector.extract [[V7]][1]
 //       CHECK: hw.output [[V3]], [[V4]], [[V8]], [[V9]] :
 
-// -----
-
 hw.module @vectorize_both_sides_lowered(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: i1, out out1: i1, out out2: i1, out out3: i1) {
   %0 = comb.concat %in0, %in1 : i1, i1
   %1 = comb.replicate %in2 : (i1) -> i2
@@ -348,8 +338,6 @@ hw.module @vectorize_both_sides_lowered(in %in0: i1, in %in1: i1, in %in2: i1, i
 //       CHECK: [[V9:%.+]] = vector.extract [[V7]][1]
 //       CHECK: hw.output [[V3]], [[V4]], [[V8]], [[V9]] :
 
-// -----
-
 // CHECK-LABEL: hw.module @sim_test
 hw.module @sim_test(in %a : i8, out b : i8) {
   hw.output %a : i8
@@ -368,3 +356,74 @@ func.func @with_attr() {
   arc.sim.instantiate @sim_test as %model attributes {foo = "foo"} {}
   return
 }
+
+arc.runtime.model @rtFooModel "FooModel" numStateBytes 123
+
+// CHECK-LABEL: func.func @with_rt
+func.func @with_rt() {
+  // CHECK: arc.sim.instantiate @sim_test as %{{.*}} runtime @rtFooModel("args") {
+  // CHECK: arc.sim.instantiate @sim_test as %{{.*}} runtime @rtFooModel("args") attributes {foo = "foo"} {
+  // CHECK: arc.sim.instantiate @sim_test as %{{.*}} runtime @rtFooModel() {
+  // CHECK: arc.sim.instantiate @sim_test as %{{.*}} runtime ("args") {
+  arc.sim.instantiate @sim_test as %model runtime @rtFooModel("args") {}
+  arc.sim.instantiate @sim_test as %model runtime @rtFooModel("args") attributes {foo = "foo"} {}
+  arc.sim.instantiate @sim_test as %model runtime @rtFooModel() {}
+  arc.sim.instantiate @sim_test as %model runtime ("args") {}
+  return
+}
+
+// CHECK-LABEL: func.func @ReadsWrites(
+// CHECK-SAME: %arg0: !arc.state<i42>
+// CHECK-SAME: %arg1: i42
+// CHECK-SAME: %arg2: i1
+func.func @ReadsWrites(%arg0: !arc.state<i42>, %arg1: i42, %arg2: i1) {
+  // CHECK: arc.state_read %arg0 : <i42>
+  arc.state_read %arg0 : <i42>
+  // CHECK: arc.state_write %arg0 = %arg1 : <i42>
+  arc.state_write %arg0 = %arg1 : <i42>
+  // CHECK: arc.state_write %arg0 = %arg1 if %arg2 : <i42>
+  arc.state_write %arg0 = %arg1 if %arg2 : <i42>
+  return
+}
+
+func.func @Execute(%arg0: i42) {
+  // CHECK: arc.execute {
+  arc.execute {
+    arc.output
+  }
+  // CHECK: arc.execute (%arg0 : i42) {
+  arc.execute (%arg0 : i42) {
+  ^bb0(%0: i42):
+    arc.output
+  }
+  // CHECK: arc.execute -> (i42) {
+  arc.execute -> (i42) {
+    %0 = hw.constant 1337 : i42
+    arc.output %0 : i42
+  }
+  // CHECK: arc.execute (%arg0 : i42) -> (i42) {
+  arc.execute (%arg0 : i42) -> (i42) {
+  ^bb0(%0: i42):
+    arc.output %0 : i42
+  }
+  return
+}
+
+// CHECK-LABEL: func.func @CurrentTime
+func.func @CurrentTime(%arg0: !arc.storage<100>) {
+  // CHECK-NEXT: arc.current_time %arg0 : !arc.storage<100>
+  %0 = arc.current_time %arg0 : !arc.storage<100>
+  return
+}
+
+// CHECK-LABEL: func.func @SimGetSetTime
+func.func @SimGetSetTime() {
+  arc.sim.instantiate @TimeTestModule as %model {
+    // CHECK: arc.sim.get_time %{{.*}} : !arc.sim.instance<@TimeTestModule>
+    %0 = arc.sim.get_time %model : !arc.sim.instance<@TimeTestModule>
+    // CHECK: arc.sim.set_time %{{.*}}, %{{.*}} : !arc.sim.instance<@TimeTestModule>
+    arc.sim.set_time %model, %0 : !arc.sim.instance<@TimeTestModule>
+  }
+  return
+}
+hw.module @TimeTestModule() {}

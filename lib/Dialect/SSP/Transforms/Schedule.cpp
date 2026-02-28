@@ -10,11 +10,24 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/SSP/SSPAttributes.h"
+#include "circt/Dialect/SSP/SSPOps.h"
+#include "circt/Dialect/SSP/SSPPasses.h"
+#include "circt/Dialect/SSP/Utilities.h"
+#include "circt/Scheduling/Problems.h"
+#include "mlir/Pass/Pass.h"
 
 #include "circt/Scheduling/Algorithms.h"
 
 #include "llvm/ADT/StringExtras.h"
+
+namespace circt {
+namespace ssp {
+#define GEN_PASS_DEF_SCHEDULE
+#include "circt/Dialect/SSP/SSPPasses.h.inc"
+} // namespace ssp
+} // namespace circt
 
 using namespace circt;
 using namespace scheduling;
@@ -56,7 +69,7 @@ static std::optional<float> getCycleTime(StringRef options) {
 
 static InstanceOp scheduleWithASAP(InstanceOp instOp, OpBuilder &builder) {
   auto problemName = instOp.getProblemName();
-  if (!problemName.equals("Problem")) {
+  if (problemName != "Problem") {
     llvm::errs() << "ssp-schedule: Unsupported problem '" << problemName
                  << "' for ASAP scheduler\n";
     return {};
@@ -121,16 +134,16 @@ static InstanceOp scheduleWithSimplex(InstanceOp instOp, StringRef options,
   }
 
   auto problemName = instOp.getProblemName();
-  if (problemName.equals("Problem"))
+  if (problemName == "Problem")
     return scheduleProblemTWithSimplex<Problem>(instOp, lastOp, builder);
-  if (problemName.equals("CyclicProblem"))
+  if (problemName == "CyclicProblem")
     return scheduleProblemTWithSimplex<CyclicProblem>(instOp, lastOp, builder);
-  if (problemName.equals("SharedOperatorsProblem"))
+  if (problemName == "SharedOperatorsProblem")
     return scheduleProblemTWithSimplex<SharedOperatorsProblem>(instOp, lastOp,
                                                                builder);
-  if (problemName.equals("ModuloProblem"))
+  if (problemName == "ModuloProblem")
     return scheduleProblemTWithSimplex<ModuloProblem>(instOp, lastOp, builder);
-  if (problemName.equals("ChainingProblem")) {
+  if (problemName == "ChainingProblem") {
     if (auto cycleTime = getCycleTime(options))
       return scheduleChainingProblemWithSimplex(instOp, lastOp,
                                                 cycleTime.value(), builder);
@@ -138,7 +151,7 @@ static InstanceOp scheduleWithSimplex(InstanceOp instOp, StringRef options,
                     "ChainingProblem simplex scheduler\n";
     return {};
   }
-  if (problemName.equals("ChainingCyclicProblem")) {
+  if (problemName == "ChainingCyclicProblem") {
     if (auto cycleTime = getCycleTime(options))
       return scheduleChainingCyclicProblemWithSimplex(
           instOp, lastOp, cycleTime.value(), builder);
@@ -180,9 +193,9 @@ static InstanceOp scheduleWithLP(InstanceOp instOp, StringRef options,
   }
 
   auto problemName = instOp.getProblemName();
-  if (problemName.equals("Problem"))
+  if (problemName == "Problem")
     return scheduleProblemTWithLP<Problem>(instOp, lastOp, builder);
-  if (problemName.equals("CyclicProblem"))
+  if (problemName == "CyclicProblem")
     return scheduleProblemTWithLP<CyclicProblem>(instOp, lastOp, builder);
 
   llvm::errs() << "ssp-schedule: Unsupported problem '" << problemName
@@ -206,7 +219,7 @@ static InstanceOp scheduleWithCPSAT(InstanceOp instOp, StringRef options,
   }
 
   auto problemName = instOp.getProblemName();
-  if (!problemName.equals("SharedOperatorsProblem")) {
+  if (problemName != "SharedOperatorsProblem") {
     llvm::errs() << "ssp-schedule: Unsupported problem '" << problemName
                  << "' for CPSAT scheduler\n";
     return {};
@@ -227,14 +240,14 @@ static InstanceOp scheduleWithCPSAT(InstanceOp instOp, StringRef options,
 
 static InstanceOp scheduleWith(InstanceOp instOp, StringRef scheduler,
                                StringRef options, OpBuilder &builder) {
-  if (scheduler.empty() || scheduler.equals("simplex"))
+  if (scheduler.empty() || scheduler == "simplex")
     return scheduleWithSimplex(instOp, options, builder);
-  if (scheduler.equals("asap"))
+  if (scheduler == "asap")
     return scheduleWithASAP(instOp, builder);
 #ifdef SCHEDULING_OR_TOOLS
-  if (scheduler.equals("lp"))
+  if (scheduler == "lp")
     return scheduleWithLP(instOp, options, builder);
-  if (scheduler.equals("cpsat"))
+  if (scheduler == "cpsat")
     return scheduleWithCPSAT(instOp, options, builder);
 #endif
 
@@ -248,7 +261,7 @@ static InstanceOp scheduleWith(InstanceOp instOp, StringRef scheduler,
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct SchedulePass : public ScheduleBase<SchedulePass> {
+struct SchedulePass : public circt::ssp::impl::ScheduleBase<SchedulePass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace

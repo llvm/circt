@@ -1,0 +1,5 @@
+/build*
+
+# Verilator / cosim test artifacts
+obj_dir/
+esi-pytest-*/

@@ -15,7 +15,11 @@
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/OperationSupport.h"
+#include "mlir/IR/TypeRange.h"
+#include "mlir/IR/Types.h"
 
 namespace circt {
 
@@ -85,6 +89,26 @@ ParseResult parseKeywordBool(OpAsmParser &parser, BoolAttr &attr,
 /// labeled-bool ::= (true-label | false-label)
 void printKeywordBool(OpAsmPrinter &printer, Operation *op, BoolAttr attr,
                       StringRef trueKeyword, StringRef falseKeyword);
+
+//===----------------------------------------------------------------------===//
+// Variadic Invertible Custom Directive
+//===----------------------------------------------------------------------===//
+
+/// Parse a variadic list of operands that may be prefixed with an optional
+/// `not` keyword. If the `not` keyword is present, the corresponding element
+/// in the `inverted` attribute is set to true; otherwise, it is set to false.
+ParseResult parseVariadicInvertibleOperands(
+    OpAsmParser &parser,
+    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &operands, Type &resultType,
+    mlir::DenseBoolArrayAttr &inverted, NamedAttrList &attrDict);
+
+/// Print a variadic list of operands that may be prefixed with an optional
+/// `not` keyword. If the corresponding element in `isInverted` is true, the
+/// `not` keyword is printed before the operand; otherwise, it is omitted.
+void printVariadicInvertibleOperands(OpAsmPrinter &printer, Operation *op,
+                                     OperandRange operands, Type resultType,
+                                     mlir::DenseBoolArrayAttr inverted,
+                                     DictionaryAttr attrDict);
 
 } // namespace circt
 

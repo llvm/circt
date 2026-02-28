@@ -38,12 +38,36 @@ struct Reduction {
   /// benefit measure where a higher number means that applying the pattern
   /// leads to a bigger reduction and zero means that the patten does not
   /// match and thus cannot be applied at all.
-  virtual uint64_t match(Operation *op) = 0;
+  virtual uint64_t match(Operation *op) { return 0; }
+
+  /// Collect all ways how this reduction can apply to a specific operation. If
+  /// a reduction can apply to an operation in different ways, for example
+  /// deleting different operands, it should call `addMatch` multiple times with
+  /// the expected benefit of the match, as well as an integer identifying one
+  /// of the different ways it can match.
+  ///
+  /// Calls `match(op)` by default.
+  virtual void matches(Operation *op,
+                       llvm::function_ref<void(uint64_t, uint64_t)> addMatch) {
+    addMatch(match(op), 0);
+  }
 
   /// Apply the reduction to a specific operation. If the returned result
   /// indicates that the application failed, the resulting module is treated the
   /// same as if the tester marked it as uninteresting.
-  virtual LogicalResult rewrite(Operation *op) = 0;
+  virtual LogicalResult rewrite(Operation *op) { return failure(); }
+
+  /// Apply a set of matches of this reduction to a specific operation. If the
+  /// reduction registered multiple matches for an operation, a subset of the
+  /// integer identifiers of those matches will be passed to this function
+  /// again. If the returned result indicates that the application failed, the
+  /// resulting module is treated the same as if the tester marked it as
+  /// uninteresting.
+  virtual LogicalResult rewriteMatches(Operation *op,
+                                       ArrayRef<uint64_t> matches) {
+    assert(matches.size() == 1 && matches[0] == 0);
+    return rewrite(op);
+  }
 
   /// Return a human-readable name for this reduction pattern.
   virtual std::string getName() const = 0;
@@ -80,19 +104,38 @@ struct Reduction {
   }
 };
 
+/// A reduction pattern for a specific operation.
+///
+/// Only matches on operations of type `OpTy`, and calls corresponding match and
+/// rewrite functions with the operation cast to this type, for convenience.
 template <typename OpTy>
 struct OpReduction : public Reduction {
-  uint64_t match(Operation *op) override {
+  void matches(Operation *op,
+               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
     if (auto concreteOp = dyn_cast<OpTy>(op))
-      return match(concreteOp);
-    return 0;
+      matches(concreteOp, addMatch);
   }
-  LogicalResult rewrite(Operation *op) override {
-    return rewrite(cast<OpTy>(op));
+  LogicalResult rewriteMatches(Operation *op,
+                               ArrayRef<uint64_t> matches) override {
+    return rewriteMatches(cast<OpTy>(op), matches);
   }
 
   virtual uint64_t match(OpTy op) { return 1; }
-  virtual LogicalResult rewrite(OpTy op) = 0;
+  virtual void matches(OpTy op,
+                       llvm::function_ref<void(uint64_t, uint64_t)> addMatch) {
+    addMatch(match(op), 0);
+  }
+  virtual LogicalResult rewrite(OpTy op) { return failure(); }
+  virtual LogicalResult rewriteMatches(OpTy op, ArrayRef<uint64_t> matches) {
+    assert(matches.size() == 1 && matches[0] == 0);
+    return rewrite(op);
+  }
+
+private:
+  /// Hide the base class match/rewrite functions to prevent compiler warnings
+  /// about the `OpTy`-specific ones hiding the base class functions.
+  using Reduction::match;
+  using Reduction::rewrite;
 };
 
 /// A reduction pattern that applies an `mlir::Pass`.

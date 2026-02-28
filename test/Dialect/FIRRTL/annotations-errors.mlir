@@ -3,11 +3,13 @@
 // An unknown annotation should error.
 //
 // expected-error @+1 {{Unhandled annotation}}
-firrtl.circuit "Foo" attributes {rawAnnotations = [
-  {
-    class = "circt.unknown"
-  }
-]} {
+firrtl.circuit "Foo" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.unknown"
+    }
+  ]
+} {
   firrtl.module @Foo() {}
 }
 
@@ -17,12 +19,14 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
 //
 // expected-error @+2 {{circuit name doesn't match annotation}}
 // expected-error @+1 {{Unable to resolve target of annotation}}
-firrtl.circuit "Foo"  attributes {rawAnnotations = [
-  {
-    class = "circt.test",
-    target = "~Fooo|Foo>bar"
-  }
-]} {
+firrtl.circuit "Foo"  attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "~Fooo|Foo>bar"
+    }
+  ]
+} {
   firrtl.module @Foo() {}
 }
 
@@ -32,12 +36,14 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
 //
 // expected-error @+2 {{circuit name doesn't match annotation}}
 // expected-error @+1 {{Unable to resolve target of annotation}}
-firrtl.circuit "Foo"  attributes {rawAnnotations = [
-  {
-    class = "circt.test",
-    target = "~Fooo"
-  }
-]} {
+firrtl.circuit "Foo"  attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "~Fooo"
+    }
+  ]
+} {
   firrtl.module @Foo() {}
 }
 
@@ -47,12 +53,14 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
 //
 // expected-error @+2 {{Cannot tokenize annotation path}}
 // expected-error @+1 {{Unable to resolve target of annotation}}
-firrtl.circuit "Foo"  attributes {rawAnnotations = [
-  {
-    class = "circt.test",
-    target = ""
-  }
-]} {
+firrtl.circuit "Foo"  attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = ""
+    }
+  ]
+} {
   firrtl.module @Foo() {}
 }
 
@@ -62,12 +70,14 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
 //
 // expected-error @+2 {{illegal target '~Foo|Foo>bar[0]' indexes into an instance}}
 // expected-error @+1 {{Unable to resolve target of annotation}}
-firrtl.circuit "Foo"  attributes {rawAnnotations = [
-  {
-    class = "circt.test",
-    target = "~Foo|Foo>bar[0]"
-  }
-]} {
+firrtl.circuit "Foo"  attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "~Foo|Foo>bar[0]"
+    }
+  ]
+} {
   firrtl.module @Bar() {}
   firrtl.module @Foo() {
     firrtl.instance bar @Bar()
@@ -79,12 +89,14 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
 // A target that uses a string for an index should be illegal.
 //
 // expected-error @+1 {{Unable to resolve target of annotation}}
-firrtl.circuit "Foo" attributes {rawAnnotations = [
-  {
-    class = "circt.test",
-    target = "~Foo|Foo>bar[a].baz"
-  }
-]} {
+firrtl.circuit "Foo" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "~Foo|Foo>bar[a].baz"
+    }
+  ]
+} {
   firrtl.module @Foo() {
     // expected-error @+1 {{Cannot convert 'a' to an integer}}
     %bar = firrtl.wire : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
@@ -96,20 +108,22 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
 // Invalid subindex or subfield targets are checked.
 //
 // expected-error @+1 {{Unable to resolve target of annotation}}
-firrtl.circuit "Foo"  attributes {rawAnnotations = [
-  {
-    class = "circt.test",
-    target = "~Foo|Foo>bar[1][42]"
-  },
-  {
-    class = "circt.test",
-    target = "~Foo|Foo>bar[1].qnx"
-  },
-  {
-    class = "circt.test",
-    target = "~Foo|Foo>bar[1].baz[1337]"
-  }
-]} {
+firrtl.circuit "Foo"  attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "~Foo|Foo>bar[1][42]"
+    },
+    {
+      class = "circt.test",
+      target = "~Foo|Foo>bar[1].qnx"
+    },
+    {
+      class = "circt.test",
+      target = "~Foo|Foo>bar[1].baz[1337]"
+    }
+  ]
+} {
   firrtl.module @Foo(in %clock: !firrtl.clock) {
     // expected-error @+3 {{index access '42' into non-vector type}}
     // expected-error @+2 {{cannot resolve field 'qnx' in subtype}}
@@ -124,12 +138,14 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
 //
 // expected-error @+2 {{module doesn't exist 'Bar'}}
 // expected-error @+1 {{Unable to resolve target of annotation}}
-firrtl.circuit "Foo"  attributes {rawAnnotations = [
-  {
-    class = "circt.test",
-    target = "~Foo|Bar"
-  }
-]} {
+firrtl.circuit "Foo"  attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "~Foo|Bar"
+    }
+  ]
+} {
   firrtl.module @Foo() {}
 }
 
@@ -139,12 +155,14 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
 //
 // expected-error @+2 {{cannot find name 'x' in Foo}}
 // expected-error @+1 {{Unable to resolve target of annotation}}
-firrtl.circuit "Foo"  attributes {rawAnnotations = [
-  {
-    class = "circt.test",
-    target = "~Foo|Foo>x"
-  }
-]} {
+firrtl.circuit "Foo"  attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "~Foo|Foo>x"
+    }
+  ]
+} {
   firrtl.module @Foo() {}
 }
 
@@ -154,12 +172,14 @@ firrtl.circuit "Foo"  attributes {rawAnnotations = [
 //
 // expected-error @+2 {{cannot find instance 'baz' in 'Foo'}}
 // expected-error @+1 {{Unable to resolve target of annotation}}
-firrtl.circuit "Foo" attributes {rawAnnotations = [
-  {
-    class = "circt.test",
-    target = "~Foo|Foo/baz:Bar"
-  }
-]} {
+firrtl.circuit "Foo" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "~Foo|Foo/baz:Bar"
+    }
+  ]
+} {
   firrtl.module private @Bar() {}
   firrtl.module @Foo() {
     firrtl.instance bar interesting_name  @Bar()
@@ -171,9 +191,12 @@ firrtl.circuit "Foo" attributes {rawAnnotations = [
 // expected-error @+1 {{Unable to apply annotation}}
 firrtl.circuit "LocalOnlyAnnotation" attributes {
   rawAnnotations = [
-    {class = "circt.testLocalOnly",
-     target = "~LocalOnlyAnnotation|LocalOnlyAnnotation/foo:Foo>w"}
-  ]} {
+    {
+      class = "circt.testLocalOnly",
+      target = "~LocalOnlyAnnotation|LocalOnlyAnnotation/foo:Foo>w"
+    }
+  ]
+} {
   firrtl.module @Foo() {
     // expected-error @+2 {{targeted by a non-local annotation}}
     // expected-note @+1 {{see current annotation}}
@@ -189,54 +212,19 @@ firrtl.circuit "LocalOnlyAnnotation" attributes {
 // expected-error @+1 {{Unable to apply annotation}}
 firrtl.circuit "DontTouchOnNonReferenceTarget" attributes {
   rawAnnotations = [
-    {class = "firrtl.transforms.DontTouchAnnotation",
-     target = "~DontTouchOnNonReferenceTarget|Submodule"},
-    {class = "firrtl.transforms.DontTouchAnnotation",
-     target = "~DontTouchOnNonReferenceTarget|DontTouchOnNonReferenceTarget>submodule"}]} {
+    {
+      class = "firrtl.transforms.DontTouchAnnotation",
+      target = "~DontTouchOnNonReferenceTarget|Submodule"
+    },
+    {
+      class = "firrtl.transforms.DontTouchAnnotation",
+      target = "~DontTouchOnNonReferenceTarget|DontTouchOnNonReferenceTarget>submodule"
+    }
+  ]
+} {
   firrtl.module @Submodule() {}
   firrtl.module @DontTouchOnNonReferenceTarget() {
     firrtl.instance submodule @Submodule()
-  }
-}
-
-// -----
-
-// expected-error @+3 {{unknown/unimplemented DataTapKey class 'sifive.enterprise.grandcentral.DeletedDataTapKey'}}
-// expected-note  @+2 {{full Annotation is reproduced here}}
-// expected-error @+1 {{Unable to apply annotation}}
-firrtl.circuit "GCTDataTapUnsupportedDeleted" attributes {rawAnnotations = [{
-  blackBox = "~GCTDataTap|DataTap",
-  class = "sifive.enterprise.grandcentral.DataTapsAnnotation",
-  keys = [
-    {
-      class = "sifive.enterprise.grandcentral.DeletedDataTapKey",
-      sink = "~GCTDataTap|GCTDataTap>tap_1"
-    }
-  ]
-}]} {
-  firrtl.module @GCTDataTapUnsupportedDeleted() {
-    %tap = firrtl.wire : !firrtl.uint<1>
-  }
-}
-
-// -----
-
-// expected-error @+3 {{unknown/unimplemented DataTapKey class 'sifive.enterprise.grandcentral.LiteralDataTapKey'}}
-// expected-note  @+2 {{full Annotation is reproduced here}}
-// expected-error @+1 {{Unable to apply annotation}}
-firrtl.circuit "GCTDataTapUnsupportedLiteral" attributes {rawAnnotations = [{
-  blackBox = "~GCTDataTap|DataTap",
-  class = "sifive.enterprise.grandcentral.DataTapsAnnotation",
-  keys = [
-    {
-      class = "sifive.enterprise.grandcentral.LiteralDataTapKey",
-      literal = "UInt<16>(\22h2a\22)",
-      sink = "~GCTDataTap|GCTDataTap>tap"
-    }
-  ]
-}]} {
-  firrtl.module @GCTDataTapUnsupportedLiteral() {
-    %tap = firrtl.wire : !firrtl.uint<1>
   }
 }
 
@@ -245,10 +233,14 @@ firrtl.circuit "GCTDataTapUnsupportedLiteral" attributes {rawAnnotations = [{
 
 // expected-error @below {{cannot find port 'a' in module Ext}}
 // expected-error @below {{Unable to resolve target of annotation}}
-firrtl.circuit "InstancePortNotFound" attributes {rawAnnotations = [{
-  class = "circt.test",
-  target = "~InstancePortNotFound|InstancePortNotFound>inst.a"
-}]} {
+firrtl.circuit "InstancePortNotFound" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "~InstancePortNotFound|InstancePortNotFound>inst.a"
+    }
+  ]
+} {
   firrtl.extmodule @Ext()
   firrtl.module @InstancePortNotFound() {
     firrtl.instance inst @Ext()
@@ -260,10 +252,14 @@ firrtl.circuit "InstancePortNotFound" attributes {rawAnnotations = [{
 
 // expected-error @below {{annotation cannot target reference-type port 'ref' in module Ext}}
 // expected-error @below {{Unable to resolve target of annotation}}
-firrtl.circuit "InstancePortRef" attributes {rawAnnotations = [{
-  class = "circt.test",
-  target = "~InstancePortRef|InstancePortRef>inst.ref"
-}]} {
+firrtl.circuit "InstancePortRef" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "~InstancePortRef|InstancePortRef>inst.ref"
+    }
+  ]
+} {
   firrtl.extmodule @Ext(out ref : !firrtl.ref<uint<1>>)
   firrtl.module @InstancePortRef() {
     %ref = firrtl.instance inst @Ext(out ref : !firrtl.ref<uint<1>>)
@@ -275,10 +271,14 @@ firrtl.circuit "InstancePortRef" attributes {rawAnnotations = [{
 
 // expected-error @below {{annotation cannot target reference-type port 'ref' in module Ext}}
 // expected-error @below {{Unable to resolve target of annotation}}
-firrtl.circuit "InstancePortRefField" attributes {rawAnnotations = [{
-  class = "circt.test",
-  target = "~InstancePortRefField|InstancePortRefField>inst.ref.x"
-}]} {
+firrtl.circuit "InstancePortRefField" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "~InstancePortRefField|InstancePortRefField>inst.ref.x"
+    }
+  ]
+} {
   firrtl.extmodule @Ext(out ref : !firrtl.ref<bundle<x: uint<1>>>)
   firrtl.module @InstancePortRefField() {
     %ref = firrtl.instance inst @Ext(out ref : !firrtl.ref<bundle<x: uint<1>>>)
@@ -290,10 +290,14 @@ firrtl.circuit "InstancePortRefField" attributes {rawAnnotations = [{
 
 // expected-error @below {{cannot target reference-type 'out' in RefAnno}}
 // expected-error @below {{Unable to resolve target of annotation}}
-firrtl.circuit "RefAnno" attributes {rawAnnotations = [{
-  class = "circt.test",
-  target = "~RefAnno|RefAnno>out"
-}]} {
+firrtl.circuit "RefAnno" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "~RefAnno|RefAnno>out"
+    }
+  ]
+} {
   firrtl.module @RefAnno(in %in : !firrtl.uint<1>, out %out : !firrtl.ref<uint<1>>) {
     %ref = firrtl.ref.send %in : !firrtl.uint<1>
     firrtl.ref.define %out, %ref : !firrtl.ref<uint<1>>
@@ -305,10 +309,14 @@ firrtl.circuit "RefAnno" attributes {rawAnnotations = [{
 
 // expected-error @below {{cannot target reference-type 'out' in RefFieldAnno}}
 // expected-error @below {{Unable to resolve target of annotation}}
-firrtl.circuit "RefFieldAnno" attributes {rawAnnotations = [{
-  class = "circt.test",
-  target = "~RefFieldAnno|RefFieldAnno>out.x"
-}]} {
+firrtl.circuit "RefFieldAnno" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "~RefFieldAnno|RefFieldAnno>out.x"
+    }
+  ]
+} {
   firrtl.module @RefFieldAnno(in %in : !firrtl.bundle<x: uint<1>>, out %out : !firrtl.ref<bundle<x: uint<1>>>) {
     %ref = firrtl.ref.send %in : !firrtl.bundle<x: uint<1>>
     firrtl.ref.define %out, %ref : !firrtl.ref<bundle<x: uint<1>>>
@@ -321,11 +329,15 @@ firrtl.circuit "RefFieldAnno" attributes {rawAnnotations = [{
 
 
 // expected-error @+1 {{Unable to apply annotation:}}
-firrtl.circuit "Anno" attributes {rawAnnotations = [{
-  class = "firrtl.AttributeAnnotation",
-  target = "~Anno|Anno>in",
-  description = "attr"
-}]} {
+firrtl.circuit "Anno" attributes {
+  rawAnnotations = [
+    {
+      class = "firrtl.AttributeAnnotation",
+      target = "~Anno|Anno>in",
+      description = "attr"
+    }
+  ]
+} {
   // expected-error @+1 {{firrtl.AttributeAnnotation must target an operation. Currently ports are not supported}}
   firrtl.module @Anno(in %in : !firrtl.uint<1>) {}
 }
@@ -334,11 +346,15 @@ firrtl.circuit "Anno" attributes {rawAnnotations = [{
 // Reject AttributeAnnotations on external modules.
 
 // expected-error @+1 {{Unable to apply annotation:}}
-firrtl.circuit "Anno" attributes {rawAnnotations = [{
-  class = "firrtl.AttributeAnnotation",
-  target = "~Anno|Ext",
-  description = "ext"
-}]} {
+firrtl.circuit "Anno" attributes {
+  rawAnnotations = [
+    {
+      class = "firrtl.AttributeAnnotation",
+      target = "~Anno|Ext",
+      description = "ext"
+    }
+  ]
+} {
   // expected-error @+1 {{firrtl.AttributeAnnotation unhandled operation. The target must be a module, wire, node or register}}
   firrtl.extmodule @Ext()
   firrtl.module @Anno(in %in : !firrtl.uint<1>) {}
@@ -348,14 +364,13 @@ firrtl.circuit "Anno" attributes {rawAnnotations = [{
 // Reject annotation on a class.
 
 // expected-error @+1 {{Unable to resolve target of annotation: {class = "circt.test", target = "~Component|Class"}}}
-firrtl.circuit "Component"
-  attributes {
-    rawAnnotations = [
-      {
-        class = "circt.test",
-        target = "~Component|Class"
-      }
-    ]
+firrtl.circuit "Component" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "~Component|Class"
+    }
+  ]
 } {
   firrtl.module @Component() {}
   // expected-error @+1 {{annotations cannot target classes}}
@@ -366,14 +381,13 @@ firrtl.circuit "Component"
 // Reject annotation on a class's port.
 
 // expected-error @+1 {{Unable to resolve target of annotation: {class = "circt.test", target = "~Component|Class>port"}}}
-firrtl.circuit "Component"
-  attributes {
-    rawAnnotations = [
-      {
-        class = "circt.test",
-        target = "~Component|Class>port"
-      }
-    ]
+firrtl.circuit "Component" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "~Component|Class>port"
+    }
+  ]
 } {
   firrtl.module @Component() {}
   // expected-error @+1 {{annotations cannot target classes}}
@@ -384,14 +398,13 @@ firrtl.circuit "Component"
 // Don't crash trying to annotate-subindex through targets that don't name a result.
 
 // expected-error @below {{Unable to resolve target of annotation: {class = "circt.test", target = "~Issue5947|Issue5947>mem[0]"}}}
-firrtl.circuit "Issue5947"
-  attributes {
-    rawAnnotations = [
-      {
-        class = "circt.test",
-        target = "~Issue5947|Issue5947>mem[0]"
-      }
-    ]
+firrtl.circuit "Issue5947" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "~Issue5947|Issue5947>mem[0]"
+    }
+  ]
 } {
   firrtl.module @Issue5947() {
     // expected-error @below {{index access in annotation not supported for this operation}}
@@ -403,17 +416,108 @@ firrtl.circuit "Issue5947"
 // Don't crash trying to annotate-subfield through targets that don't name a result.
 
 // expected-error @below {{Unable to resolve target of annotation: {class = "circt.test", target = "~Issue5947|Issue5947>mem.a"}}}
-firrtl.circuit "Issue5947"
-  attributes {
-    rawAnnotations = [
-      {
-        class = "circt.test",
-        target = "~Issue5947|Issue5947>mem.a"
-      }
-    ]
+firrtl.circuit "Issue5947" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.test",
+      target = "~Issue5947|Issue5947>mem.a"
+    }
+  ]
 } {
   firrtl.module @Issue5947() {
     // expected-error @below {{field access in annotation not supported for this operation}}
     %mem = chirrtl.combmem : !chirrtl.cmemory<uint<1>, 2>
   }
+}
+
+// -----
+// An empty directory on an OutputDirAnnotation should fail.
+
+// expected-error @below {{Unable to apply annotation: {class = "circt.OutputDirAnnotation", dirname = "", target = "~Top|Top"}}}
+firrtl.circuit "Top" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.OutputDirAnnotation",
+      dirname = "",
+      target = "~Top|Top"
+    }
+  ]
+} {
+  // expected-error @below {{circt.OutputDirAnnotation dirname must not be empty}}
+  firrtl.module @Top() {}
+}
+
+// -----
+// OutputDirAnnotation targeting a non-public module should fail.
+
+// expected-error @below {{Unable to apply annotation: {class = "circt.OutputDirAnnotation", dirname = "foo", target = "~Top|NotTop"}}}
+firrtl.circuit "Top" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.OutputDirAnnotation",
+      dirname = "foo",
+      target = "~Top|NotTop"
+    }
+  ]
+} {
+  firrtl.module @Top() {}
+  // expected-error @below {{circt.OutputDirAnnotation must target a public module}}
+  firrtl.module private @NotTop() {}
+}
+
+// -----
+// An OutputDirAnnotation targeting an ExtModule should fail.
+
+// expected-error @below {{Unable to apply annotation: {class = "circt.OutputDirAnnotation", dirname = "foo", target = "~Top|Target"}}}
+firrtl.circuit "Top" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.OutputDirAnnotation",
+      dirname = "foo",
+      target = "~Top|Target"
+    }
+  ]
+} {
+  firrtl.module @Top() {}
+  // expected-error @below {{circt.OutputDirAnnotation must target a module}}
+  firrtl.extmodule @Target()
+}
+
+// -----
+// An OutputDirAnnotation targeting a module which already has an output directory, should fail.
+
+// expected-error @below {{Unable to apply annotation: {class = "circt.OutputDirAnnotation", dirname = "bar", target = "~Top|Top"}}}
+firrtl.circuit "Top" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.OutputDirAnnotation",
+      dirname = "bar",
+      target = "~Top|Top"
+    }
+  ]
+} {
+  // expected-error @below {{circt.OutputDirAnnotation target already has an output file}}
+  firrtl.module @Top() attributes {output_file = #hw.output_file<"foo">} {}
+}
+
+// -----
+// Multiple OutputDirAnnotation targeting the same module should fail.
+
+// expected-error @below {{Unable to apply annotation: {class = "circt.OutputDirAnnotation", dirname = "foo", target = "~Top|Top"}}}
+firrtl.circuit "Top" attributes {
+  rawAnnotations = [
+    {
+      class = "circt.OutputDirAnnotation",
+      dirname = "foo",
+      target = "~Top|Top"
+    },
+        {
+      class = "circt.OutputDirAnnotation",
+      dirname = "foo",
+      target = "~Top|Top"
+    }
+  ]
+} {
+  // expected-error @below {{circt.OutputDirAnnotation target already has an output file}}
+  firrtl.module @Top() {}
 }

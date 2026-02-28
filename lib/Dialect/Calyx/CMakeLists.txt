@@ -21,6 +21,7 @@ add_circt_dialect_library(CIRCTCalyx
   CIRCTComb
   CIRCTSV
   CIRCTHW
+  CIRCTFSM
   MLIRArithDialect
   MLIRIR
   MLIRMemRefDialect

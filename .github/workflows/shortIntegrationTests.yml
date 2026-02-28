@@ -16,6 +16,11 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+# Cancel previous CI builds when a new push occurs to the same PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Build CIRCT and run its tests using a Docker container with all the
   # integration testing prerequisite installed.
@@ -28,8 +33,10 @@ jobs:
     # If individual jobs fail due to timeouts or disconnects, please report to
     # John and re-run the job.
     runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds", "linux"]
+    outputs:
+      cache-key-pattern: ${{ steps.cache-key.outputs.pattern }}
     container:
-      image: ghcr.io/circt/images/circt-integration-test:v13.1
+      image: ghcr.io/circt/images/circt-integration-test:v20
       volumes:
         - /mnt:/__w/circt
     strategy:
@@ -44,6 +51,13 @@ jobs:
             cxx: clang++
 
     steps:
+      - name: Generate cache key pattern
+        id: cache-key
+        shell: bash
+        run: |
+          CACHE_KEY="short-${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}"
+          echo "pattern=$CACHE_KEY" >> $GITHUB_OUTPUT
+
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
       - name: Get CIRCT
@@ -55,7 +69,7 @@ jobs:
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: short-${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}
+          key: ${{ steps.cache-key.outputs.pattern }}
           max-size: 500M
 
       # --------
@@ -88,15 +102,26 @@ jobs:
             -DLLVM_USE_SPLIT_DWARF=ON \
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
-            -DESI_RUNTIME=ON \
-            -DLLVM_LIT_ARGS="-v --show-unsupported" \
+            -DLLVM_LIT_ARGS="-v --show-unsupported --timeout 300" \
             -DCIRCT_SLANG_FRONTEND_ENABLED=ON
+
+            # Temporarily disable ESI runtime builds until we work out the Abseil conflict (#7236).
+            # -DESI_RUNTIME=ON
       - name: Test CIRCT
         run: |
-          ninja -C build check-circt -j$(nproc)
+          ninja -C build check-circt circt-capi -j$(nproc)
       - name: Unit Test CIRCT
         run: |
           ninja -C build check-circt-unit -j$(nproc)
       - name: Integration Test CIRCT
         run: |
           ninja -C build check-circt-integration -j$(nproc)
+  # Clean up cache after build completes
+  cleanup-cache:
+    needs: build-circt
+    if: always() # Run even if build fails
+    uses: ./.github/workflows/cleanupCache.yml
+    permissions:
+      actions: write
+    with:
+      cache_key_pattern: ${{ needs.build-circt.outputs.cache-key-pattern }}

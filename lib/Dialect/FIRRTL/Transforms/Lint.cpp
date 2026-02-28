@@ -6,32 +6,63 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
-#include "mlir/IR/Threading.h"
+#include "circt/Analysis/FIRRTLInstanceInfo.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/Utils.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/APSInt.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LINT
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
 using namespace firrtl;
 
 namespace {
-struct LintPass : public LintBase<LintPass> {
-  void runOnOperation() override {
-    auto fModule = getOperation();
-    auto walkResult = fModule.walk<WalkOrder::PreOrder>([&](Operation *op) {
+/// Class that stores state related to linting.  This exists to avoid needing to
+/// clear members of `LintPass` and instead just rely on `Linter` objects being
+/// deleted.
+class Linter {
+
+public:
+  Linter(FModuleOp fModule, InstanceInfo &instanceInfo,
+         const LintOptions &options)
+      : fModule(fModule), instanceInfo(instanceInfo), options(options){};
+
+  /// Lint the specified module.
+  LogicalResult lint() {
+    bool failed = false;
+    fModule.walk<WalkOrder::PreOrder>([&](Operation *op) {
       if (isa<WhenOp>(op))
         return WalkResult::skip();
       if (isa<AssertOp, VerifAssertIntrinsicOp>(op))
-        if (checkAssert(op).failed())
-          return WalkResult::interrupt();
+        if (options.lintStaticAsserts && checkAssert(op).failed())
+          failed = true;
+
+      if (auto xmrDerefOp = dyn_cast<XMRDerefOp>(op))
+        if (options.lintXmrsInDesign && checkXmr(xmrDerefOp).failed())
+          failed = true;
 
       return WalkResult::advance();
     });
-    if (walkResult.wasInterrupted())
-      return signalPassFailure();
 
-    markAllAnalysesPreserved();
-  };
+    if (failed)
+      return failure();
+
+    return success();
+  }
+
+private:
+  FModuleOp fModule;
+  InstanceInfo &instanceInfo;
+  const LintOptions &options;
 
   LogicalResult checkAssert(Operation *op) {
     Value predicate;
@@ -63,9 +94,72 @@ struct LintPass : public LintBase<LintPass> {
 
     return success();
   }
+
+  LogicalResult checkXmr(XMRDerefOp op) {
+    // XMRs under layers are okay.
+    if (op->getParentOfType<LayerBlockOp>() ||
+        op->getParentOfType<sv::IfDefOp>())
+      return success();
+
+    // The XMR is not under a layer.  This module must never be instantiated in
+    // the design.  Intentionally do NOT use "effective" design as this could
+    // lead to false positives.
+    if (!instanceInfo.anyInstanceInDesign(fModule))
+      return success();
+
+    // If all users are connect sources, and each connect destinations is to an
+    // instance which is marked `lowerToBind`, then this is a pattern for
+    // inlining the XMR into the bound instance site.  This pattern is used by
+    // Grand Central, but not elsewhere.
+    //
+    // If there are _no_ users, this is also okay as this expression will not be
+    // emitted.
+    auto boundInstancePortUser = [&](auto user) {
+      auto connect = dyn_cast<MatchingConnectOp>(user);
+      if (connect && connect.getSrc() == op.getResult())
+        if (auto *definingOp = connect.getDest().getDefiningOp())
+          if (auto instanceOp = dyn_cast<InstanceOp>(definingOp))
+            if (instanceOp->hasAttr("lowerToBind"))
+              return true;
+      return false;
+    };
+    if (llvm::all_of(op.getResult().getUsers(), boundInstancePortUser))
+      return success();
+
+    auto diag =
+        op.emitOpError()
+        << "is in the design. (Did you forget to put it under a layer?)";
+    diag.attachNote(fModule.getLoc()) << "op is instantiated in this module";
+
+    return failure();
+  }
+};
+
+struct LintPass : public circt::firrtl::impl::LintBase<LintPass> {
+  using LintBase::LintBase;
+
+  void runOnOperation() override {
+
+    CircuitOp circuitOp = getOperation();
+    auto instanceInfo = getAnalysis<InstanceInfo>();
+
+    auto reduce = [](LogicalResult a, LogicalResult b) -> LogicalResult {
+      if (succeeded(a) && succeeded(b))
+        return success();
+      return failure();
+    };
+    auto transform = [&](FModuleOp moduleOp) -> LogicalResult {
+      return Linter(moduleOp, instanceInfo,
+                    {lintStaticAsserts, lintXmrsInDesign})
+          .lint();
+    };
+
+    SmallVector<FModuleOp> modules(circuitOp.getOps<FModuleOp>());
+    if (failed(transformReduce(circuitOp.getContext(), modules, success(),
+                               reduce, transform)))
+      return signalPassFailure();
+
+    markAllAnalysesPreserved();
+  };
 };
 } // namespace
-
-std::unique_ptr<Pass> firrtl::createLintingPass() {
-  return std::make_unique<LintPass>();
-}

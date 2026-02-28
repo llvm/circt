@@ -2,5 +2,6 @@
 ;
 ; CHECK: [firtool] Running
 
+FIRRTL version 4.0.0
 circuit Empty:
-  module Empty:
+  public module Empty:

@@ -5,20 +5,21 @@
 from __future__ import annotations
 
 from .support import get_user_loc, _obj_to_value_infer_type
-from .types import ChannelDirection, ChannelSignaling, Type
+from .types import (Array, Bit, Bits, Bundle, BundledChannel, Channel,
+                    ChannelDirection, ChannelSignaling, Type)
 
 from .circt.dialects import esi, sv
 from .circt import support
 from .circt import ir
 
 from contextvars import ContextVar
-from functools import singledispatchmethod
-from typing import Dict, List, Optional, Tuple, Union
+from functools import cached_property, singledispatchmethod
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 import re
 import numpy as np
 
 
-def _FromCirctValue(value: ir.Value, type: Type = None) -> Signal:
+def _FromCirctValue(value: ir.Value, type: Type | None = None) -> Signal:
   from .types import _FromCirctType
   assert isinstance(value, ir.Value)
   if type is None:
@@ -52,7 +53,7 @@ class Signal:
 
   def bitcast(self, new_type: Type) -> Signal:
     from .circt.dialects import hw
-    casted_value = hw.BitcastOp(new_type._type, self.value)
+    casted_value = hw.BitcastOp(new_type._type, self.value, loc=get_user_loc())
     return _FromCirctValue(casted_value.result, new_type)
 
   def reg(self,
@@ -74,7 +75,6 @@ class Signal:
       if clk is None:
         raise ValueError("If 'clk' not specified, must be in clock block")
     from .dialects import seq, hw
-    from .types import types, Bits
     if name is None:
       basename = None
       if self.name is not None:
@@ -92,9 +92,11 @@ class Signal:
     with get_user_loc():
       # If rst without reset value, provide a default '0'.
       if rst_value is None and rst is not None:
-        rst_value = types.int(self.type.bitwidth)(0)
+        rst_value = Bits(self.type.bitwidth)(0)
         if not isinstance(self.type, Bits):
           rst_value = hw.BitcastOp(self.type, rst_value)
+      elif rst_value is not None and not isinstance(rst_value, Signal):
+        rst_value = self.type(rst_value)
 
       reg = self.value
       for i in range(cycles):
@@ -127,16 +129,21 @@ class Signal:
 
   @property
   def _namehint_attrname(self):
-    if self.value.owner.name == "seq.compreg":
+    # seq.compreg and seq.compreg.ce use "name" attribute, others use "sv.namehint"
+    op_name = self.value.owner.operation.name
+    if op_name in ("seq.compreg", "seq.compreg.ce"):
       return "name"
     return "sv.namehint"
 
   @property
-  def name(self):
+  def name(self) -> Optional[str]:
     owner = self.value.owner
     if hasattr(owner,
                "attributes") and self._namehint_attrname in owner.attributes:
-      return ir.StringAttr(owner.attributes[self._namehint_attrname]).value
+      attr_value = ir.StringAttr(
+          owner.attributes[self._namehint_attrname]).value
+      # Treat empty string names as None
+      return attr_value if attr_value else None
     from .circt.dialects import hw
     if isinstance(owner, ir.Block) and isinstance(owner.owner, hw.HWModuleOp):
       block_arg = ir.BlockArgument(self.value)
@@ -144,6 +151,7 @@ class Signal:
       return mod_type.input_names[block_arg.arg_number]
     if hasattr(self, "_name"):
       return self._name
+    return None
 
   @name.setter
   def name(self, new: str):
@@ -152,6 +160,9 @@ class Signal:
       owner.attributes[self._namehint_attrname] = ir.StringAttr.get(new)
     else:
       self._name = new
+
+  def get_name(self, default: str = "") -> str:
+    return self.name if self.name is not None else default
 
   @property
   def appid(self) -> Optional[object]:  # Optional AppID.
@@ -190,7 +201,7 @@ class ClockSignal(Signal):
     _current_clock_context.reset(self._old_token)
 
   @staticmethod
-  def _get_current_clock_block():
+  def _get_current_clock_block() -> Optional[ClockSignal]:
     return _current_clock_context.get(None)
 
   def to_bit(self):
@@ -216,16 +227,19 @@ def _validate_idx(size: int, idx: Union[int, BitVectorSignal]):
   if isinstance(idx, int):
     if idx >= size:
       raise ValueError("Subscript out-of-bounds")
+  elif isinstance(idx, BitVectorSignal):
+    if idx.type.width != (size - 1).bit_length():
+      raise ValueError("Index must be exactly clog2 of the size of the array")
   else:
-    idx = support.get_value(idx)
-    if idx is None or not isinstance(support.type_to_pytype(idx.type),
-                                     ir.IntegerType):
-      raise TypeError("Subscript on array must be either int or int signal"
-                      f" not {type(idx)}.")
+    raise TypeError("Subscript on array must be either int or int signal"
+                    f" not {type(idx)}.")
 
 
 def get_slice_bounds(size, idxOrSlice: Union[int, slice]):
   if isinstance(idxOrSlice, int):
+    # Deal with negative indices.
+    if idxOrSlice < 0:
+      idxOrSlice = size + idxOrSlice
     s = slice(idxOrSlice, idxOrSlice + 1)
   elif isinstance(idxOrSlice, slice):
     if idxOrSlice.stop and idxOrSlice.stop > size:
@@ -298,12 +312,21 @@ class BitsSignal(BitVectorSignal):
   """Operations on signless ints (bits). These will all return signless values -
   a user is expected to reapply signedness semantics if needed."""
 
+  def _exec_cast(self, targetValueType, type_getter, width: int = None):
+    if width is not None and width != self.type.width:
+      return self.pad_or_truncate(width)._exec_cast(targetValueType,
+                                                    type_getter)
+    return super()._exec_cast(targetValueType, type_getter)
+
   @singledispatchmethod
   def __getitem__(self, idxOrSlice: Union[int, slice]) -> BitVectorSignal:
     lo, hi = get_slice_bounds(len(self), idxOrSlice)
-    from .types import types
+
     from .dialects import comb
-    ret_type = types.int(hi - lo)
+    ret_type = Bits(hi - lo)
+    # Corner case: empty slice. ExtractOp doesn't support this.
+    if hi - lo == 0:
+      return Bits(0)(0)
 
     with get_user_loc():
       ret = comb.ExtractOp(lo, ret_type, self.value)
@@ -317,7 +340,7 @@ class BitsSignal(BitVectorSignal):
     return self.slice(idx, 1)
 
   @staticmethod
-  def concat(items: List[BitVectorSignal]):
+  def concat(items: Iterable[BitVectorSignal]):
     """Concatenate a list of bitvectors into one larger bitvector."""
     from .dialects import comb
     return comb.ConcatOp(*items)
@@ -355,15 +378,13 @@ class BitsSignal(BitVectorSignal):
     return v
 
   def and_reduce(self):
-    from .types import types
     bits = [self[i] for i in range(len(self))]
-    assert bits[0].type == types.i1
+    assert bits[0].type == Bit
     return And(*bits)
 
   def or_reduce(self):
-    from .types import types
     bits = [self[i] for i in range(len(self))]
-    assert bits[0].type == types.i1
+    assert bits[0].type == Bit
     return Or(*bits)
 
   # === Infix operators ===
@@ -413,11 +434,44 @@ class BitsSignal(BitVectorSignal):
     return self.__exec_signless_binop_nocast__(other, comb.XorOp, "^", "xor")
 
   def __invert__(self):
-    from .types import types
-    ret = self ^ types.int(self.type.width)(-1)
+    ret = self ^ Bits(self.type.width)(-1)
     if self.name is not None:
       ret.name = f"inv_{self.name}"
     return ret
+
+  def when_true(self,
+                callback: Callable[[], None],
+                clk: Optional[ClockSignal] = None):
+    """Call the hardware generated by `callback` when this signal is true on
+    'clk' posedge. Only works for 1-bit signals."""
+    if self.type.width != 1:
+      raise ValueError("when_true only works for 1-bit signals")
+
+    # Get the clock signal, either from parameter or from current clock context
+    if clk is None:
+      clk = ClockSignal._get_current_clock_block()
+      if clk is None:
+        raise ValueError("If 'clk' not specified, must be in clock block")
+
+    from .dialects import seq
+
+    # Create the sv.alwaysff block with posedge clock (EventControl::AtPosEdge = 0)
+    with get_user_loc():
+      # Convert clock to i1 for use with sv.alwaysff
+      clk_i1 = seq.FromClockOp(clk.value)
+      alwaysff_op = sv.AlwaysFFOp(clockEdge=ir.IntegerAttr.get(
+          ir.IntegerType.get_signless(32), 0),
+                                  clock=clk_i1.value)
+      # Append a block to the body region
+      alwaysff_op.bodyBlk.blocks.append()
+      # Insert the sv.if inside the alwaysff body
+      with ir.InsertionPoint(alwaysff_op.bodyBlk.blocks[0]):
+        if_op = sv.IfOp(cond=self.value)
+        # Append a block to the then region
+        if_op.thenRegion.blocks.append()
+        # Execute the callback inside the if block
+        with ir.InsertionPoint(if_op.thenRegion.blocks[0]):
+          callback()
 
 
 class IntSignal(BitVectorSignal):
@@ -520,8 +574,7 @@ class UIntSignal(IntSignal):
 class SIntSignal(IntSignal):
 
   def __neg__(self):
-    from .types import types
-    return self * types.int(self.type.width)(-1).as_sint()
+    return self * Bits(self.type.width)(-1).as_sint()
 
 
 class ArraySignal(Signal):
@@ -531,6 +584,8 @@ class ArraySignal(Signal):
     _validate_idx(self.type.size, idx)
     from .dialects import hw
     with get_user_loc():
+      if isinstance(idx, UIntSignal):
+        idx = idx.as_bits()
       v = hw.ArrayGetOp(self.value, idx)
       if self.name and isinstance(idx, int):
         v.name = self.name + f"__{idx}"
@@ -541,10 +596,11 @@ class ArraySignal(Signal):
     idxs = s.indices(len(self))
     if idxs[2] != 1:
       raise ValueError("Array slices do not support steps")
+    if not isinstance(idxs[0], int) or not isinstance(idxs[1], int):
+      raise ValueError("Array slices must be constant ints")
 
-    from .types import types
     from .dialects import hw
-    ret_type = types.array(self.type.element_type, idxs[1] - idxs[0])
+    ret_type = Array(self.type.element_type, idxs[1] - idxs[0])
 
     with get_user_loc():
       ret = hw.ArraySliceOp(self.value, idxs[0], ret_type)
@@ -573,15 +629,13 @@ class ArraySignal(Signal):
       return v
 
   def and_reduce(self):
-    from .types import types
     bits = [self[i] for i in range(len(self))]
-    assert bits[0].type == types.i1
+    assert bits[0].type == Bit
     return And(*bits)
 
   def or_reduce(self):
-    from .types import types
     bits = [self[i] for i in range(len(self))]
-    assert bits[0].type == types.i1
+    assert bits[0].type == Bit
     return Or(*bits)
 
   def __len__(self):
@@ -693,6 +747,27 @@ class Struct(StructSignal, metaclass=StructMetaType):
   # All the work is done in the metaclass.
 
 
+class UnionSignal(Signal):
+
+  @cached_property
+  def field_indices(self) -> Dict[str, int]:
+    return {
+        name: idx for idx, (name, _, _) in enumerate(self.type.strip.fields)
+    }
+
+  def __getitem__(self, sub):
+    if sub not in self.field_indices:
+      raise LookupError(f"Union field '{sub}' not found in {self.type}")
+    from .dialects import hw
+    with get_user_loc():
+      return hw.UnionExtractOp(self.value, self.field_indices[sub])
+
+  def __getattr__(self, attr):
+    if attr not in self.field_indices:
+      raise AttributeError(f"{type(self)} object has no attribute '{attr}'")
+    return self.__getitem__(attr)
+
+
 class ChannelSignal(Signal):
 
   def reg(self, clk, rst=None, name=None):
@@ -700,19 +775,101 @@ class ChannelSignal(Signal):
 
   def unwrap(self, readyOrRden):
     from .dialects import esi
-    from .types import types
     signaling = self.type.signaling
     if signaling == ChannelSignaling.ValidReady:
-      ready = types.i1(readyOrRden)
-      unwrap_op = esi.UnwrapValidReadyOp(self.type.inner_type, types.i1,
-                                         self.value, ready.value)
+      ready = Bit(readyOrRden)
+      unwrap_op = esi.UnwrapValidReadyOp(self.type.inner_type, Bit, self.value,
+                                         ready.value)
       return unwrap_op[0], unwrap_op[1]
-    elif signaling == ChannelSignaling.FIFO0:
-      rden = types.i1(readyOrRden)
+    elif signaling == ChannelSignaling.FIFO:
+      rden = Bit(readyOrRden)
       wrap_op = esi.UnwrapFIFOOp(self.value, rden.value)
       return wrap_op[0], wrap_op[1]
     else:
       raise TypeError("Unknown signaling standard")
+
+  def buffer(
+      self,
+      clk: ClockSignal,
+      reset: BitsSignal,
+      stages: int,
+      output_signaling: Optional[ChannelSignaling] = None,
+  ) -> ChannelSignal:
+    """Insert a channel buffer with `stages` stages on the channel. Return the
+    output of that buffer."""
+    from .types import Channel
+
+    if output_signaling is None:
+      res_type = self.type
+    else:
+      inner_type = self.type.inner
+      res_type = Channel(inner_type, output_signaling, self.type.data_delay)
+
+    from .dialects import esi
+    return ChannelSignal(
+        esi.ChannelBufferOp(
+            res_type,
+            clk,
+            reset,
+            self.value,
+            stages=stages,
+        ), res_type)
+
+  def snoop(self) -> Tuple[Bits(1), Bits(1), Type]:
+    """Combinationally snoop on the internal signals of a channel."""
+    from .dialects import esi
+    assert self.type.signaling == ChannelSignaling.ValidReady, "Only valid-ready channels can be snooped currently"
+    snoop = esi.SnoopValidReadyOp(self.value)
+    return snoop[0], snoop[1], snoop[2]
+
+  def snoop_xact(self) -> Tuple[Bits(1), Type]:
+    """Combinationally snoop on the internal signals of a channel."""
+    from .dialects import esi
+    snoop = esi.SnoopTransactionOp(self.value)
+    return snoop[0], snoop[1]
+
+  def transform(self, transform: Callable[[Signal], Signal]) -> ChannelSignal:
+    """Transform the data in the channel using the provided function. Said
+    function must be combinational so it is intended for wire and simple type
+    transformations."""
+
+    from .constructs import Wire
+    from .types import Bits, Channel
+    ready_wire = Wire(Bits(1))
+    data, valid = self.unwrap(ready_wire)
+    data = transform(data)
+    ret_chan, ready = Channel(data.type,
+                              signaling=self.type.signaling).wrap(data, valid)
+    ready_wire.assign(ready)
+    return ret_chan
+
+  def fork(self, clk, rst) -> Tuple[ChannelSignal, ChannelSignal]:
+    """Fork the channel into two channels, returning the two new channels."""
+    from .constructs import Wire
+    from .types import Bits
+    both_ready = Wire(Bits(1))
+    both_ready.name = self.get_name() + "_fork_both_ready"
+    data, valid = self.unwrap(both_ready)
+    valid_gate = both_ready & valid
+    a, a_rdy = self.type.wrap(data, valid_gate)
+    b, b_rdy = self.type.wrap(data, valid_gate)
+    abuf = a.buffer(clk, rst, 1)
+    bbuf = b.buffer(clk, rst, 1)
+    both_ready.assign(a_rdy & b_rdy)
+    return abuf, bbuf
+
+  def wait_for_ready(self, other: ChannelSignal) -> ChannelSignal:
+    """Return a channel which doesn't issue valid unless some other channel is
+    ready to recieve data."""
+    from .constructs import Wire
+    from .types import Bits
+    _, other_ready, _ = other.snoop()
+    ready_wire = Wire(Bits(1))
+    data, valid = self.unwrap(ready_wire)
+    out_valid = valid & other_ready
+    out_chan, ready = self.type.wrap(data, out_valid)
+    ready_wire.assign(ready)
+    return out_chan
 
 
 class BundleSignal(Signal):
@@ -721,24 +878,23 @@ class BundleSignal(Signal):
   def reg(self, clk, rst=None, name=None):
     raise TypeError("Cannot register a bundle")
 
-  def unpack(self, **kwargs: Dict[str,
-                                  ChannelSignal]) -> Dict[str, ChannelSignal]:
+  def unpack(self, **kwargs: ChannelSignal) -> Dict[str, ChannelSignal]:
     """Given FROM channels, unpack a bundle into the TO channels."""
     from_channels = {
         bc.name: (idx, bc) for idx, bc in enumerate(
             filter(lambda c: c.direction == ChannelDirection.FROM,
                    self.type.channels))
     }
-    to_channels = [
+    to_channels: List[BundledChannel] = [
         c for c in self.type.channels if c.direction == ChannelDirection.TO
     ]
 
-    operands = [None] * len(to_channels)
+    operands = [None] * len(from_channels)
     for name, value in kwargs.items():
       if name not in from_channels:
         raise ValueError(f"Unknown channel name '{name}'")
       idx, bc = from_channels[name]
-      if value.type != bc.channel:
+      if not bc.channel.castable(value.type):
         raise TypeError(f"Expected channel type {bc.channel}, got {value.type} "
                         f"on channel '{name}'")
       operands[idx] = value.value
@@ -747,14 +903,18 @@ class BundleSignal(Signal):
       raise ValueError(
           f"Missing channel values for {', '.join(from_channels.keys())}")
 
-    unpack_op = esi.UnpackBundleOp([bc.channel._type for bc in to_channels],
-                                   self.value, operands)
+    with get_user_loc():
+      unpack_op = esi.UnpackBundleOp([bc.channel._type for bc in to_channels],
+                                     self.value, operands)
 
     to_channels_results = unpack_op.toChannels
-    return {
+    ret = {
         bc.name: _FromCirctValue(to_channels_results[idx])
         for idx, bc in enumerate(to_channels)
     }
+    if not all([bc.channel.castable(ret[bc.name].type) for bc in to_channels]):
+      raise TypeError("Unpacked bundle did not match expected types")
+    return ret
 
   def connect(self, other: BundleSignal):
     """Connect two bundles together such that one drives the other."""
@@ -767,9 +927,188 @@ class BundleSignal(Signal):
     for name, wire in froms:
       wire.assign(unpacked_self[name])
 
+  def transform(
+      self, **kwargs: Union[Callable, Tuple[Type, Callable]]) -> BundleSignal:
+    """Transform the channels in the bundle using the functions given as kwargs
+    by channel name. The transformed output bundle type's FROM channels are
+    given in `from_transforms_input_types`."""
+    from .constructs import Wire
+
+    def get_type_func(kwarg: Union[Callable, Tuple[Type, Callable]],
+                      default_type: Channel) -> Tuple[Type, Callable]:
+      """If `kwarg` is a tuple, return a (channel of the type, the callable).
+      Get the control spec from the default_type. If it's callable, return the
+      default type and the callable."""
+
+      if isinstance(kwarg, tuple):
+        if len(kwarg) != 2:
+          raise ValueError(
+              "Expected a tuple of (Type, Callable) for channel transform")
+        t = kwarg[0]
+        if not isinstance(t, Type):
+          raise TypeError(
+              f"Expected first element of tuple to be a Type, got {type(t)}")
+        if not isinstance(kwarg[1], Callable):
+          raise TypeError(
+              f"Expected second element of tuple to be a Callable, got {type(kwarg[1])}"
+          )
+        return Channel(inner_type=t,
+                       signaling=default_type.signaling,
+                       data_delay=default_type.data_delay), kwarg[1]
+      elif callable(kwarg):
+        # If a callable, return the type of the channel.
+        return default_type, kwarg
+      else:
+        raise TypeError(
+            "Expected a callable or a tuple of (Type, Callable) for channel "
+            f"transform, got {type(kwarg)}")
+
+    # Build wires for the FROM channels to be assigned after packing.
+    transformed_from_channels = {}
+    for bc in self.type.channels:
+      if bc.direction == ChannelDirection.FROM:
+        transformed_from_channels[bc.name] = Wire(bc.channel)
+
+    # Unpack the bundle.
+    to_channels = self.unpack(**transformed_from_channels)
+
+    # Transform the TO channels.
+    transformed_to_channels = {}
+    for name, channel in to_channels.items():
+      if name in kwargs:
+        t, transform = get_type_func(kwargs[name], channel.type)
+        if t != channel.type:
+          # If the type is different, we need to create a new channel.
+          raise TypeError(f"Cannot transform types of TO channel '{name}'")
+        transformed_to_channels[name] = channel.transform(transform)
+      else:
+        transformed_to_channels[name] = channel
+
+    # Since we return a new bundle potentially with a different type, we need to
+    # build that new type.
+    ret_bundled_channels = []
+    for bc in self.type.channels:
+      if bc.direction == ChannelDirection.TO:
+        assert bc.name in transformed_to_channels, f"Missing transformed channel '{bc.name}'"
+        ret_bundled_channels.append(
+            BundledChannel(bc.name, ChannelDirection.TO,
+                           transformed_to_channels[bc.name].type))
+      else:
+        from_type = bc.channel
+        if bc.name in kwargs:
+          from_type, _ = get_type_func(kwargs[bc.name], from_type)
+        ret_bundled_channels.append(
+            BundledChannel(bc.name, ChannelDirection.FROM, from_type))
+    ret_bundle_type = Bundle(ret_bundled_channels)
+
+    # Pack the transformed TO channels into the new bundle type. Assign the FROM channels.
+    ret_bundle, from_channels = ret_bundle_type.pack(**transformed_to_channels)
+    for name, wire in transformed_from_channels.items():
+      assert name in from_channels, f"Missing from channel '{name}'"
+      if name in kwargs:
+        # If a transform was provided, assign the transformed wire.
+        _, transform = get_type_func(kwargs[name], from_channels[name].type)
+        wire.assign(from_channels[name].transform(transform))
+      else:
+        wire.assign(from_channels[name])
+
+    return ret_bundle
+
+  def coerce(
+      self,
+      new_bundle_type: "Bundle",
+      to_chan_transform: Optional[Callable[[Signal], Signal]] = None,
+      from_chan_transform: Optional[Callable[[Signal], Signal]] = None,
+      clk: Optional[ClockSignal] = None,
+      rst: Optional[BitsSignal] = None,
+  ) -> BundleSignal:
+    """Coerce a two-channel, bidirectional bundle to a different two-channel,
+    bidirectional bundle type. Transform functions can be provided to transform
+    the individual channels for situations where the types do not match."""
+
+    def check_clk_rst():
+      if clk is None or rst is None:
+        raise ValueError("Clock and reset must be provided for "
+                         "coercion of signaling types.")
+
+    from .constructs import Wire
+    sig_to_chan, sig_from_chan = self.type.get_to_from()
+    ret_to_chan, ret_from_chan = new_bundle_type.get_to_from()
+
+    froms = {}
+    from_channel_wire = None
+    if ret_from_chan is not None:
+      if sig_from_chan is None:
+        raise ValueError(
+            "Cannot coerce a bundle with no FROM channel to one with a FROM channel."
+        )
+      # Get the from channel and run the transform if specified.
+      from_channel_wire = Wire(ret_from_chan.channel)
+      if from_chan_transform is not None:
+        from_channel = from_channel_wire.transform(from_chan_transform)
+      else:
+        from_channel = from_channel_wire
+      if from_channel.type.signaling != sig_from_chan.channel.signaling:
+        check_clk_rst()
+        from_channel = from_channel.buffer(
+            clk,
+            rst,
+            stages=1,
+            output_signaling=sig_from_chan.channel.signaling)
+
+      if from_channel.type != sig_from_chan.channel:
+        raise TypeError(
+            f"Expected channel type {sig_from_chan.channel}, got {from_channel.type} on FROM channel"
+        )
+      froms = {sig_from_chan.name: from_channel}
+
+    # Unpack the to channel and run the transform if specified.
+    to_channels = self.unpack(**froms)
+
+    pack_to_channels = {}
+    if ret_to_chan is not None:
+      if sig_to_chan is None:
+        raise ValueError(
+            "Cannot coerce a bundle with no TO channel to one with a TO channel."
+        )
+
+      to_channel = to_channels[sig_to_chan.name]
+      if to_chan_transform is not None:
+        to_channel = to_channel.transform(to_chan_transform)
+      if ret_to_chan.channel.signaling != sig_to_chan.channel.signaling:
+        check_clk_rst()
+        to_channel = to_channel.buffer(
+            clk, rst, 1, output_signaling=ret_to_chan.channel.signaling)
+      if to_channel.type != ret_to_chan.channel:
+        raise TypeError(
+            f"Expected channel type {ret_to_chan.channel}, got {to_channel.type} on TO channel"
+        )
+      pack_to_channels[ret_to_chan.name] = to_channel
+
+    # Pack the new bundle, assign the from channel, and return.
+    ret_bundle, from_chans = new_bundle_type.pack(**pack_to_channels)
+    if from_channel_wire is not None:
+      from_channel_wire.assign(from_chans[ret_from_chan.name])
+    return ret_bundle
+
 
 class ListSignal(Signal):
   pass
+
+
+class WindowSignal(Signal):
+  """A signal representing a Window.
+
+  Windows are a way to view a struct as a set of frames. Each frame is a
+  collection of fields from the struct.
+  """
+
+  def unwrap(self) -> UnionSignal | StructSignal:
+    """Unwrap the window into either a struct (if the window has one unnamed
+    frame) or a union of frames."""
+
+    from .dialects import esi
+    return esi.UnwrapWindow(self.value)
 
 
 def wrap_opviews_with_values(dialect, module_name, excluded=[]):

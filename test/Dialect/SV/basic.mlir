@@ -24,7 +24,7 @@ hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
   sv.always posedge  %arg0 {
     sv.ifdef.procedural @SYNTHESIS {
     } else {
-      %tmp = sv.macro.ref @PRINTF_COND_() : () -> i1
+      %tmp = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
       %tmpx = sv.constantX : i1
       %tmpz = sv.constantZ : i1
       %tmp2 = comb.and %tmp, %tmpx, %tmpz, %arg1 : i1
@@ -43,7 +43,7 @@ hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
   // CHECK-NEXT: sv.always posedge %arg0 {
   // CHECK-NEXT:   sv.ifdef.procedural @SYNTHESIS {
   // CHECK-NEXT:   } else {
-  // CHECK-NEXT:     %PRINTF_COND_ = sv.macro.ref @PRINTF_COND
+  // CHECK-NEXT:     %PRINTF_COND_ = sv.macro.ref.expr @PRINTF_COND
   // CHECK-NEXT:     %x_i1 = sv.constantX : i1
   // CHECK-NEXT:     %z_i1 = sv.constantZ : i1
   // CHECK-NEXT:     [[COND:%.*]] = comb.and %PRINTF_COND_, %x_i1, %z_i1, %arg1 : i1
@@ -241,35 +241,61 @@ hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
     sv.exit
   }
 
-  // Severity Message Tasks
+  // Severity Message Tasks (run-time)
   // CHECK-NEXT: sv.initial {
-  // CHECK-NEXT: sv.fatal 1
-  // CHECK-NEXT: sv.fatal 1, "hello"
-  // CHECK-NEXT: sv.fatal 1, "hello %d"(%arg0) : i1
-  // CHECK-NEXT: sv.error
-  // CHECK-NEXT: sv.error "hello"
-  // CHECK-NEXT: sv.error "hello %d"(%arg0) : i1
-  // CHECK-NEXT: sv.warning
-  // CHECK-NEXT: sv.warning "hello"
-  // CHECK-NEXT: sv.warning "hello %d"(%arg0) : i1
-  // CHECK-NEXT: sv.info
-  // CHECK-NEXT: sv.info "hello"
-  // CHECK-NEXT: sv.info "hello %d"(%arg0) : i1
+  // CHECK-NEXT: sv.fatal.procedural 1
+  // CHECK-NEXT: sv.fatal.procedural 1, "hello"
+  // CHECK-NEXT: sv.fatal.procedural 1, "hello %d"(%arg0) : i1
+  // CHECK-NEXT: sv.error.procedural
+  // CHECK-NEXT: sv.error.procedural "hello"
+  // CHECK-NEXT: sv.error.procedural "hello %d"(%arg0) : i1
+  // CHECK-NEXT: sv.warning.procedural
+  // CHECK-NEXT: sv.warning.procedural "hello"
+  // CHECK-NEXT: sv.warning.procedural "hello %d"(%arg0) : i1
+  // CHECK-NEXT: sv.info.procedural
+  // CHECK-NEXT: sv.info.procedural "hello"
+  // CHECK-NEXT: sv.info.procedural "hello %d"(%arg0) : i1
   // CHECK-NEXT: }
   sv.initial {
-    sv.fatal 1
-    sv.fatal 1, "hello"
-    sv.fatal 1, "hello %d"(%arg0) : i1
-    sv.error
-    sv.error "hello"
-    sv.error "hello %d"(%arg0) : i1
-    sv.warning
-    sv.warning "hello"
-    sv.warning "hello %d"(%arg0) : i1
-    sv.info
-    sv.info "hello"
-    sv.info "hello %d"(%arg0) : i1
+    sv.fatal.procedural 1
+    sv.fatal.procedural 1, "hello"
+    sv.fatal.procedural 1, "hello %d"(%arg0) : i1
+    sv.error.procedural
+    sv.error.procedural "hello"
+    sv.error.procedural "hello %d"(%arg0) : i1
+    sv.warning.procedural
+    sv.warning.procedural "hello"
+    sv.warning.procedural "hello %d"(%arg0) : i1
+    sv.info.procedural
+    sv.info.procedural "hello"
+    sv.info.procedural "hello %d"(%arg0) : i1
   }
+
+  // Elaboration-time Severity Message Tasks
+  // CHECK-NEXT: sv.fatal 1
+  // CHECK-NEXT: sv.fatal 1, "elaboration fatal"
+  // CHECK-NEXT: sv.fatal 1, "elaboration fatal %d"(%arg0) : i1
+  // CHECK-NEXT: sv.error
+  // CHECK-NEXT: sv.error "elaboration error"
+  // CHECK-NEXT: sv.error "elaboration error %d"(%arg0) : i1
+  // CHECK-NEXT: sv.warning
+  // CHECK-NEXT: sv.warning "elaboration warning"
+  // CHECK-NEXT: sv.warning "elaboration warning %d"(%arg0) : i1
+  // CHECK-NEXT: sv.info
+  // CHECK-NEXT: sv.info "elaboration info"
+  // CHECK-NEXT: sv.info "elaboration info %d"(%arg0) : i1
+  sv.fatal 1
+  sv.fatal 1, "elaboration fatal"
+  sv.fatal 1, "elaboration fatal %d"(%arg0) : i1
+  sv.error
+  sv.error "elaboration error"
+  sv.error "elaboration error %d"(%arg0) : i1
+  sv.warning
+  sv.warning "elaboration warning"
+  sv.warning "elaboration warning %d"(%arg0) : i1
+  sv.info
+  sv.info "elaboration info"
+  sv.info "elaboration info %d"(%arg0) : i1
 
   // Tests for ReadMemOp ($readmemb/$readmemh)
   // CHECK-NEXT: sv.initial {
@@ -282,6 +308,13 @@ hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
     sv.readmem %memForReadMem, "file1.txt", MemBaseBin : !hw.inout<uarray<8xi32>>
     sv.readmem %memForReadMem, "file2.txt", MemBaseHex : !hw.inout<uarray<8xi32>>
   }
+
+
+  // CHECK-NEXT: sv.system.time : i64
+  %time = sv.system.time : i64
+
+  // CHECK-NEXT: sv.system.stime : i32
+  %stime = sv.system.stime : i32
 
   // CHECK-NEXT: hw.output
   hw.output
@@ -296,12 +329,12 @@ sv.bind <@AB::@b1>
 hw.module.extern @ExternDestMod(in %a: i1, in %b: i2)
 hw.module @InternalDestMod(in %a: i1, in %b: i2) {}
 //CHECK-LABEL: hw.module @AB(in %a : i1, in %b : i2) {
-//CHECK-NEXT:   hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint = 1 : i64}
-//CHECK-NEXT:   hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint = 1 : i64}
+//CHECK-NEXT:   hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint}
+//CHECK-NEXT:   hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint}
 
 hw.module @AB(in %a: i1, in %b: i2) {
-  hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint=1}
-  hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint=1}
+  hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint}
+  hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint}
 }
 
 //CHECK-LABEL: hw.module @XMR_src
@@ -388,4 +421,83 @@ hw.module @XMRRefOp() {
   %0 = sv.xmr.ref @ref : !hw.inout<i2>
   // CHECK: %1 = sv.xmr.ref @ref2 ".x.y.z[42]" : !hw.inout<i8>
   %1 = sv.xmr.ref @ref2 ".x.y.z[42]" : !hw.inout<i8>
+}
+
+// Functions.
+// CHECK-LABEL: sv.func private @function_declare(in %in_0 : i2, in %in_1 : i2, out out_0 : i1, in %in_2 : !hw.array<2xi2>)
+sv.func private @function_declare(in %in_0 : i2, in %in_1 : i2, out out_0 : i1, in %in_2 : !hw.array<2xi2>)
+// CHECK-NEXT: sv.func.dpi.import linkage "c_func_name" @function_declare
+sv.func.dpi.import linkage "c_func_name" @function_declare
+
+// CHECK-LABEL: sv.func private @function_define(in %in_0 : i2, in %in_1 : i2, out out_0 : i1, in %in_2 : !hw.array<2xi2>)
+sv.func private @function_define(in %in_0 : i2, in %in_1 : i2, out out_0 : i1, in %in_2 : !hw.array<2xi2>) attributes {test = "foo"} {
+  %0 = comb.icmp eq %in_0, %in_1: i2
+  // CHECK: sv.return %{{.+}} : i1
+  sv.return %0 : i1
+}
+
+// CHECK-LABEL: sv.func @recurse(in %n : i32, out out : i32) {
+// CHECK: %0 = sv.func.call.procedural @recurse(%n) : (i32) -> i32
+// CHECK-NEXT:  sv.return %0
+sv.func @recurse(in %n : i32, out out : i32) {
+  %v = sv.func.call.procedural @recurse(%n) : (i32) -> i32
+  sv.return %v : i32
+}
+
+// CHECK-LABEL: sv.func private @open_array(in %array : !sv.open_uarray<i8>)
+// CHECK-LABEL:hw.module @test_open_array
+// CHECK:        %[[OPEN_ARRAY:.+]] = sv.unpacked_array_create %in_1, %in_0 : (i8, i8) -> !hw.uarray<2xi8>
+// CHECK-NEXT:   sv.unpacked_open_array_cast %[[OPEN_ARRAY:.+]] : (!hw.uarray<2xi8>) -> !sv.open_uarray<i8>
+sv.func private @open_array(in %array : !sv.open_uarray<i8>)
+hw.module @test_open_array(in %clock : i1, in %in_0 : i8, in %in_1 : i8) {
+  %0 = sv.unpacked_array_create %in_1, %in_0 : (i8, i8) -> !hw.uarray<2xi8>
+  %1 = sv.unpacked_open_array_cast %0 : (!hw.uarray<2xi8>) -> !sv.open_uarray<i8>
+  sv.always posedge %clock {
+    sv.func.call.procedural @open_array(%1) : (!sv.open_uarray<i8>) -> ()
+  }
+}
+
+// CHECK-LABEL: hw.module @test_sformatf(in %a : i8) {
+// CHECK-NEXT:  sv.sformatf "foo%d"(%a) : i8
+hw.module @test_sformatf(in %a : i8) {
+  %0 = sv.sformatf "foo%d"(%a) : i8
+}
+
+// CHECK-LABEL: hw.module @test_fflush(in %a : i32) {
+// CHECK: sv.fflush
+// CHECK-NEXT: sv.fflush fd %a
+hw.module @test_fflush(in %a : i32) {
+  sv.initial {
+    sv.fflush
+    sv.fflush fd %a
+  }
+}
+
+emit.file "test_header.vh" sym @test_header {
+  emit.verbatim "`define TEST_MACRO 1'b1"
+}
+
+// CHECK-LABEL: sv.verbatim.source @VerbatimTestModule.v
+// CHECK-SAME:    <WIDTH: i32 = 8>
+// CHECK-SAME:    attributes {
+// CHECK-SAME:      additional_files = [@test_header],
+// CHECK-SAME:      content = "module VerbatimTestModule(); endmodule",
+// CHECK-SAME:      output_file = #hw.output_file<"VerbatimTestModule.v">,
+// CHECK-SAME:      verilogName = "VerbatimTestModule"
+// CHECK-SAME:    }
+sv.verbatim.source @VerbatimTestModule.v<WIDTH: i32 = 8> attributes {
+    content = "module VerbatimTestModule(); endmodule",
+    output_file = #hw.output_file<"VerbatimTestModule.v">,
+    additional_files = [@test_header],
+    verilogName = "VerbatimTestModule"
+}
+
+// CHECK-LABEL: sv.verbatim.module @VerbatimTestModule
+// CHECK-SAME:    <WIDTH: i32 = 8>
+// CHECK-SAME:    (in %clk : i1, out out : i1)
+// CHECK-SAME:    attributes {
+// CHECK-SAME:      source = @VerbatimTestModule.v
+// CHECK-SAME:    }
+sv.verbatim.module @VerbatimTestModule<WIDTH: i32 = 8>(in %clk: i1, out out: i1) attributes {
+  source = @VerbatimTestModule.v
 }

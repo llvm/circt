@@ -19,7 +19,7 @@
 namespace circt {
 namespace sv {
 
-#define GEN_PASS_DECL_HWELIMINATEINOUTPORTS
+#define GEN_PASS_DECL
 #include "circt/Dialect/SV/SVPasses.h.inc"
 
 std::unique_ptr<mlir::Pass> createPrettifyVerilogPass();

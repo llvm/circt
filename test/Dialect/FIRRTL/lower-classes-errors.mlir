@@ -32,9 +32,12 @@ firrtl.circuit "PathIllegalHierpath" {
 
 firrtl.circuit "PathDuplicateID" {
   firrtl.module @PathDuplicateID() {
-    // expected-error @below {{duplicate identifier found}}
+    // Duplicate ID is only an error if something actually refers to that ID. Dedup can create dead, duplicate IDs.
+    %path = firrtl.path reference distinct[0]<>
+
+    // expected-error @below {{path identifier already found, paths must resolve to a unique target}}
     %a = firrtl.wire {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} : !firrtl.uint<8>
-    // expected-note @below {{other identifier here}}
+    // expected-note @below {{other path identifier here}}
     %b = firrtl.wire {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} : !firrtl.uint<8>
   }
 }
@@ -77,5 +80,14 @@ firrtl.circuit "NotInstance" {
     // expected-error @below {{invalid target for instance path}}
     // expected-error @below {{failed to legalize operation 'firrtl.path' that was explicitly marked illegal}}
     %0 = firrtl.path instance distinct[0]<>
+  }
+}
+
+// -----
+
+firrtl.circuit "DontCrashOnUnassignedWire" {
+  firrtl.module @DontCrashOnUnassignedWire() {
+    // expected-error @below {{failed to legalize operation}}
+    %wire = firrtl.wire : !firrtl.integer
   }
 }

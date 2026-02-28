@@ -1,4 +1,4 @@
-//===- circt-lec.cpp - The circt-lec driver ---------------------*- C++ -*-===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -13,12 +13,20 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/CombToSMT.h"
+#include "circt/Conversion/DatapathToSMT.h"
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Conversion/SMTToZ3LLVM.h"
+#include "circt/Conversion/SynthToComb.h"
 #include "circt/Conversion/VerifToSMT.h"
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Datapath/DatapathDialect.h"
+#include "circt/Dialect/Emit/EmitDialect.h"
+#include "circt/Dialect/Emit/EmitPasses.h"
 #include "circt/Dialect/HW/HWDialect.h"
-#include "circt/Dialect/SMT/SMTDialect.h"
+#include "circt/Dialect/OM/OMDialect.h"
+#include "circt/Dialect/OM/OMPasses.h"
+#include "circt/Dialect/Synth/SynthDialect.h"
+#include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "circt/Tools/circt-lec/Passes.h"
@@ -26,6 +34,7 @@
 #include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/Transforms/Passes.h"
+#include "mlir/Dialect/SMT/IR/SMTDialect.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OwningOpRef.h"
@@ -36,7 +45,9 @@
 #include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
+#include "mlir/Target/SMTLIB/ExportSMTLIB.h"
 #include "mlir/Transforms/Passes.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/PrettyStackTrace.h"
@@ -71,9 +82,9 @@ static cl::opt<std::string> secondModuleName(
     cl::desc("Specify a named module for the second circuit of the comparison"),
     cl::value_desc("module name"), cl::cat(mainCategory));
 
-static cl::opt<std::string> inputFilename(cl::Positional, cl::Required,
-                                          cl::desc("<input file>"),
-                                          cl::cat(mainCategory));
+static cl::list<std::string> inputFilenames(cl::Positional, cl::OneOrMore,
+                                            cl::desc("<input files>"),
+                                            cl::cat(mainCategory));
 
 static cl::opt<std::string> outputFilename("o", cl::desc("Output filename"),
                                            cl::value_desc("filename"),
@@ -122,6 +133,65 @@ static cl::opt<OutputFormat> outputFormat(
 // Tool implementation
 //===----------------------------------------------------------------------===//
 
+// Move all operations in `src` to `dest`. Rename all symbols in `src` to avoid
+// conflict.
+static FailureOr<StringAttr> mergeModules(ModuleOp dest, ModuleOp src,
+                                          StringAttr name) {
+
+  SymbolTable destTable(dest), srcTable(src);
+  StringAttr newName = {};
+  for (auto &op : src.getOps()) {
+    if (SymbolOpInterface symbol = dyn_cast<SymbolOpInterface>(op)) {
+      auto oldSymbol = symbol.getNameAttr();
+      auto result = srcTable.renameToUnique(&op, {&destTable});
+      if (failed(result))
+        return src->emitError() << "failed to rename symbol " << oldSymbol;
+
+      if (oldSymbol == name) {
+        assert(!newName && "symbol must be unique");
+        newName = *result;
+      }
+    }
+  }
+
+  if (!newName)
+    return src->emitError()
+           << "module " << name << " was not found in the second module";
+
+  dest.getBody()->getOperations().splice(dest.getBody()->begin(),
+                                         src.getBody()->getOperations());
+  return newName;
+}
+
+// Parse one or two MLIR modules and merge it into a single module.
+static FailureOr<OwningOpRef<ModuleOp>>
+parseAndMergeModules(MLIRContext &context, TimingScope &ts) {
+  auto parserTimer = ts.nest("Parse and merge MLIR input(s)");
+
+  if (inputFilenames.size() > 2) {
+    llvm::errs() << "more than 2 files are provided!\n";
+    return failure();
+  }
+
+  auto module = parseSourceFile<ModuleOp>(inputFilenames[0], &context);
+  if (!module)
+    return failure();
+
+  if (inputFilenames.size() == 2) {
+    auto moduleOpt = parseSourceFile<ModuleOp>(inputFilenames[1], &context);
+    if (!moduleOpt)
+      return failure();
+    auto result = mergeModules(module.get(), moduleOpt.get(),
+                               StringAttr::get(&context, secondModuleName));
+    if (failed(result))
+      return failure();
+
+    secondModuleName.setValue(result->getValue().str());
+  }
+
+  return module;
+}
+
 /// This functions initializes the various components of the tool and
 /// orchestrates the work to be done.
 static LogicalResult executeLEC(MLIRContext &context) {
@@ -130,14 +200,11 @@ static LogicalResult executeLEC(MLIRContext &context) {
   applyDefaultTimingManagerCLOptions(tm);
   auto ts = tm.getRootScope();
 
-  OwningOpRef<ModuleOp> module;
-  {
-    auto parserTimer = ts.nest("Parse MLIR input");
-    // Parse the provided input files.
-    module = parseSourceFile<ModuleOp>(inputFilename, &context);
-  }
-  if (!module)
+  auto parsedModule = parseAndMergeModules(context, ts);
+  if (failed(parsedModule))
     return failure();
+
+  OwningOpRef<ModuleOp> module = std::move(parsedModule.value());
 
   // Create the output directory or output file depending on our mode.
   std::optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
@@ -160,11 +227,19 @@ static LogicalResult executeLEC(MLIRContext &context) {
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
             "circt-lec"));
 
-  ConstructLECOptions constructLECOptions;
-  constructLECOptions.firstModule = firstModuleName;
-  constructLECOptions.secondModule = secondModuleName;
-  pm.addPass(createConstructLEC(constructLECOptions));
+  pm.addPass(om::createStripOMPass());
+  pm.addPass(emit::createStripEmitPass());
+  {
+    ConstructLECOptions opts;
+    opts.firstModule = firstModuleName;
+    opts.secondModule = secondModuleName;
+    if (outputFormat == OutputSMTLIB)
+      opts.insertMode = lec::InsertAdditionalModeEnum::None;
+    pm.addPass(createConstructLEC(opts));
+  }
+  pm.addPass(createConvertSynthToComb());
   pm.addPass(createConvertHWToSMT());
+  pm.addPass(createConvertDatapathToSMT());
   pm.addPass(createConvertCombToSMT());
   pm.addPass(createConvertVerifToSMT());
   pm.addPass(createSimpleCanonicalizerPass());
@@ -189,8 +264,10 @@ static LogicalResult executeLEC(MLIRContext &context) {
 
   if (outputFormat == OutputSMTLIB) {
     auto timer = ts.nest("Print SMT-LIB output");
-    llvm::errs() << "Printing SMT-LIB not yet supported!\n";
-    return failure();
+    if (failed(smt::exportSMTLIB(module.get(), outputFile.value()->os())))
+      return failure();
+    outputFile.value()->keep();
+    return success();
   }
 
   if (outputFormat == OutputLLVM) {
@@ -217,6 +294,9 @@ static LogicalResult executeLEC(MLIRContext &context) {
   };
 
   std::unique_ptr<mlir::ExecutionEngine> engine;
+  std::function<llvm::Error(llvm::Module *)> transformer =
+      mlir::makeOptimizingTransformer(
+          /*optLevel*/ 3, /*sizeLevel=*/0, /*targetMachine=*/nullptr);
   {
     auto timer = ts.nest("Setting up the JIT");
     auto entryPoint = dyn_cast_or_null<LLVM::LLVMFuncOp>(
@@ -239,8 +319,7 @@ static LogicalResult executeLEC(MLIRContext &context) {
     SmallVector<StringRef, 4> sharedLibraries(sharedLibs.begin(),
                                               sharedLibs.end());
     mlir::ExecutionEngineOptions engineOptions;
-    engineOptions.transformer = mlir::makeOptimizingTransformer(
-        /*optLevel*/ 3, /*sizeLevel=*/0, /*targetMachine=*/nullptr);
+    engineOptions.transformer = transformer;
     engineOptions.jitCodeGenOptLevel = llvm::CodeGenOptLevel::Aggressive;
     engineOptions.sharedLibPaths = sharedLibraries;
     engineOptions.enableObjectDump = true;
@@ -295,10 +374,22 @@ int main(int argc, char **argv) {
 
   // Register the supported CIRCT dialects and create a context to work with.
   DialectRegistry registry;
-  registry.insert<circt::comb::CombDialect, circt::hw::HWDialect,
-                  circt::smt::SMTDialect, mlir::func::FuncDialect,
-                  mlir::LLVM::LLVMDialect, mlir::arith::ArithDialect,
-                  mlir::BuiltinDialect>();
+  // clang-format off
+  registry.insert<
+    circt::comb::CombDialect,
+    circt::datapath::DatapathDialect,
+    circt::emit::EmitDialect,
+    circt::hw::HWDialect,
+    circt::om::OMDialect,
+    circt::synth::SynthDialect,
+    mlir::smt::SMTDialect,
+    circt::verif::VerifDialect,
+    mlir::arith::ArithDialect,
+    mlir::BuiltinDialect,
+    mlir::func::FuncDialect,
+    mlir::LLVM::LLVMDialect
+  >();
+  // clang-format on
   mlir::func::registerInlinerExtension(registry);
   mlir::registerBuiltinDialectTranslation(registry);
   mlir::registerLLVMDialectTranslation(registry);

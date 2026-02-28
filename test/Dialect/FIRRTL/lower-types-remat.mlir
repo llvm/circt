@@ -19,7 +19,7 @@ firrtl.circuit "Bar" {
 
 // No agg preservation:
 // CHECK-COUNT-3: firrtl.mux
-// CHECK-COUNT-3: firrtl.strictconnect
+// CHECK-COUNT-3: firrtl.matchingconnect
 
 // 1d-vec preservation:
 // (recreate the vector leaves, but that's it)
@@ -36,6 +36,6 @@ firrtl.circuit "Bar" {
 // ALL-NEXT: mux
   firrtl.module @Bar(in %a1: !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>, in %a2: !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>, in %cond: !firrtl.uint<1>, out %b: !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>) attributes {convention = #firrtl<convention scalarized>} {
     %0 = firrtl.mux(%cond, %a1, %a2) : (!firrtl.uint<1>, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>) -> !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>
-    firrtl.strictconnect %b, %0 : !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>
+    firrtl.matchingconnect %b, %0 : !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<2>>
   }
 }

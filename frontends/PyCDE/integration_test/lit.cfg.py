@@ -32,11 +32,20 @@ config.test_source_root = os.path.dirname(__file__)
 config.test_exec_root = os.path.join(config.circt_obj_root, 'test')
 
 config.substitutions.append(('%PATH%', config.environment['PATH']))
+config.substitutions.append(('%host_cxx', config.host_cxx))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 config.substitutions.append(('%shlibdir', config.circt_shlib_dir))
 config.substitutions.append(('%INC%', config.circt_include_dir))
 config.substitutions.append(('%PYTHON%', f'"{config.python_executable}"'))
 config.substitutions.append(('%CIRCT_SOURCE%', config.circt_src_root))
+# Paths used by CMake-based C++ tests to locate runtime headers and libraries.
+esi_runtime_root = config.esi_runtime_path
+if not esi_runtime_root:
+  candidate = os.path.join(config.circt_obj_root,
+                           'tools/circt/lib/Dialect/ESI/runtime')
+  if os.path.isdir(candidate):
+    esi_runtime_root = candidate
+config.substitutions.append(('%ESI_RUNTIME_PATH%', esi_runtime_root))
 
 llvm_config.with_system_environment(['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
 
@@ -79,7 +88,7 @@ if config.bindings_python_enabled:
 tool_dirs = [
     config.circt_tools_dir, config.mlir_tools_dir, config.llvm_tools_dir
 ]
-tools = ['circt-rtl-sim.py', 'esi-cosim-runner.py']
+tools = ['circt-rtl-sim.py']
 
 # Enable Icarus Verilog as a fallback if no other ieee-sim was detected.
 if config.iverilog_path != "":
@@ -152,6 +161,7 @@ if ieee_sims and ieee_sims[-1][1] == config.iverilog_path:
 # Enable ESI runtime tests.
 if config.esi_runtime == "ON":
   config.available_features.add('esi-runtime')
+  config.available_features.add('esitester')
 
   llvm_config.with_environment('PYTHONPATH',
                                [f"{config.esi_runtime_path}/python/"],

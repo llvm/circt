@@ -64,9 +64,17 @@ def IsManifestData : OpInterface<"IsManifestData"> {
   }];
 
   let methods = [
-    StaticInterfaceMethod<
+    InterfaceMethod<
       "Get the class name for this op.",
       "StringRef", "getManifestClass", (ins)
+    >,
+    InterfaceMethod<
+      "Get the symbol to which this manifest data is referring, if any.",
+      "FlatSymbolRefAttr", "getSymbolRefAttr", (ins),
+        /*methodBody=*/"",
+        /*defaultImplementation=*/[{
+          return FlatSymbolRefAttr();
+        }]
     >,
     InterfaceMethod<
       "Populate results with the manifest data.",

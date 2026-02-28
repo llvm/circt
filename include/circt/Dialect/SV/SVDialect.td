@@ -22,13 +22,11 @@ def SVDialect : Dialect {
     This dialect defines the `sv` dialect, which represents various
     SystemVerilog-specific constructs in an AST-like representation.
   }];
-  let dependentDialects = ["circt::comb::CombDialect"];
+  let dependentDialects = ["circt::comb::CombDialect", "circt::hw::HWDialect", 
+    "circt::ltl::LTLDialect"];
 
   let useDefaultTypePrinterParser = 1;
   let useDefaultAttributePrinterParser = 1;
-
-  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
-  let usePropertiesForAttributes = 0;
 
   let extraClassDeclaration = [{
     /// Register all SV types.

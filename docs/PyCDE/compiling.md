@@ -66,12 +66,11 @@ python -m pip install -r frontends/PyCDE/python/requirements.txt
 
 Although not scrictly needed for PyCDE develoment, scripts for some tools you
 might want to install are located in utils/
-(Cap'n Proto, Verilator, OR-Tools):
+(Verilator, OR-Tools):
 
 ```bash
-utils/get-capnp.sh
 utils/get-verilator.sh
-utils/get-or-tools
+utils/get-or-tools.sh
 ```
 
 Install PyCDE with CMake. PyCDE requires cmake version >= 3.21:

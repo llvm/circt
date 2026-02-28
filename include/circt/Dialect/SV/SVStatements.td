@@ -12,6 +12,12 @@
 
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/RegionKindInterface.td"
+include "mlir/Interfaces/FunctionInterfaces.td"
+include "mlir/Interfaces/CallInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "circt/Dialect/Emit/EmitOpInterfaces.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
@@ -40,10 +46,9 @@ def OrderedOutputOp : SVOp<"ordered", [SingleBlock, NoTerminator, NoRegionArgume
 }
 
 def IfDefOp : SVOp<"ifdef", [
-    SingleBlock,
-    NoTerminator,
     NoRegionArguments,
     NonProceduralOp,
+    GraphRegionNoTerminator,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "'ifdef MACRO' block";
@@ -265,8 +270,9 @@ def SyncReset: I32EnumAttrCase<"SyncReset", 1, "syncreset">;
 def AsyncReset: I32EnumAttrCase<"AsyncReset", 2, "asyncreset">;
 
 def ResetTypeAttr : I32EnumAttr<"ResetType", "reset type",
-                                   [NoReset, SyncReset, AsyncReset]>;
-
+                                   [NoReset, SyncReset, AsyncReset]> {
+  let cppNamespace = "::circt::sv";
+}
 
 def AlwaysFFOp : SVOp<"alwaysff", [SingleBlock, NoTerminator, NoRegionArguments,
                                    RecursiveMemoryEffects, RecursivelySpeculatable,
@@ -345,6 +351,11 @@ def CaseZStmt: I32EnumAttrCase<"CaseZStmt", 2, "casez">;
 def CaseStmtTypeAttr : I32EnumAttr<"CaseStmtType", "case type",
                                    [CaseStmt, CaseXStmt, CaseZStmt]>;
 
+def CaseExprPatternAttr : AttrDef<SVDialect, "CaseExprPattern"> {
+  let summary = "Represents a case expression pattern";
+  let mnemonic = "expr";
+}
+
 def ValidationQualifierPlain: I32EnumAttrCase<"ValidationQualifierPlain", 0, "plain">;
 def ValidationQualifierUnique: I32EnumAttrCase<"ValidationQualifierUnique", 1, "unique">;
 def ValidationQualifierUnique0: I32EnumAttrCase<"ValidationQualifierUnique0", 2, "unique0">;
@@ -368,6 +379,7 @@ def CaseOp : SVOp<"case", [SingleBlock, NoTerminator, NoRegionArguments,
   let arguments = (ins DefaultValuedAttr<CaseStmtTypeAttr,
                                          "CaseStmtType::CaseStmt">:$caseStyle,
                        AnyType:$cond, ArrayAttr:$casePatterns,
+                       Variadic<AnyType>:$caseValues,
                        DefaultValuedAttr<ValidationQualifierTypeAttr,
                        "ValidationQualifierTypeEnum::ValidationQualifierPlain">:
                       $validationQualifier);
@@ -515,7 +527,27 @@ def FWriteOp : SVOp<"fwrite", [ProceduralOp]> {
   }];
 }
 
-def VerbatimOp : SVOp<"verbatim"> {
+def FFlushOp : SVOp<"fflush", [ProceduralOp]> {
+  let summary = "'$fflush' statement";
+
+  let description = [{
+    The $fflush system task flushes the output buffer of the specified file
+    descriptor. If no file descriptor is specified, all open files are flushed.
+
+    See IEEE 1800-2023 Section 21.3.6.
+  }];
+
+  let arguments = (ins Optional<I32>:$fd);
+  let results = (outs);
+
+  let assemblyFormat = [{
+     (`fd` $fd^)? attr-dict
+  }];
+}
+
+def VerbatimOp : SVOp<"verbatim", [
+    DeclareOpInterfaceMethods<InnerRefUserOpInterface>
+]> {
   let summary = "Verbatim opaque text emitted inline.";
   let description = [{
     This operation produces opaque text inline in the SystemVerilog output.
@@ -539,6 +571,29 @@ def VerbatimOp : SVOp<"verbatim"> {
                  "build(odsBuilder, odsState, formatString, ValueRange{},"
                  "odsBuilder.getArrayAttr({}));">
   ];
+}
+
+def MacroRefOp : SVOp<"macro.ref", [
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Statement to refer to a SystemVerilog macro";
+  let description = [{
+    This operation represent a statement by referencing a named macro.
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$macroName, Variadic<AnyType>:$inputs);
+  let results = (outs);
+
+  let assemblyFormat = "$macroName (`(` $inputs^ `)` `:` type($inputs))? attr-dict";
+
+  let builders = [
+    OpBuilder<(ins "StringRef":$ident),
+               "build(odsBuilder, odsState, "
+                "FlatSymbolRefAttr::get($_builder.getContext(), ident), {});">
+  ];
+
+  let extraClassDeclaration = [{
+    MacroDeclOp getReferencedMacro(const hw::HWSymbolCache *cache);
+  }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -653,14 +708,9 @@ def ExitOp : SVOp<"exit", [ProceduralOp]> {
 // Severity Message Tasks
 //===----------------------------------------------------------------------===//
 
-def FatalOp : SVOp<"fatal", [ProceduralOp]> {
-  let summary = "`$fatal` severity message task";
-  let description = [{
-    Generates a run-time fatal error which terminates the simulation with an
-    error code. Makes an implicit call to `$finish`, forwarding the `verbosity`
-    operand. If present, the optional message is printed with any additional
-    operands interpolated into the message string.
-  }];
+/// Base class for fatal message operations
+class FatalMessageOp<string mnemonic, list<Trait> traits = []> :
+    SVOp<mnemonic, traits> {
   let arguments = (ins
     VerbosityIntAttr:$verbosity,
     OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$substitutions);
@@ -678,9 +728,31 @@ def FatalOp : SVOp<"fatal", [ProceduralOp]> {
   ];
 }
 
+def FatalProceduralOp : FatalMessageOp<"fatal.procedural", [ProceduralOp]> {
+  let summary = "`$fatal` severity message task (run-time)";
+  let description = [{
+    Generates a run-time fatal error which terminates the simulation with an
+    error code. Makes an implicit call to `$finish`, forwarding the `verbosity`
+    operand. See IEEE 1800-2023 section 20.10 for more information.
+    If present, the optional message is printed with any additional
+    operands interpolated into the message string.
+  }];
+}
+
+def FatalOp : FatalMessageOp<"fatal", [NonProceduralOp]> {
+  let summary = "`$fatal` severity message task (elaboration-time)";
+  let description = [{
+    Generates an elaboration-time fatal error which terminates the elaboration
+    with an error code. Makes an implicit call to `$finish`, forwarding the
+    `verbosity` operand. See IEEE 1800-2023 section 20.11 for more information.
+    If present, the optional message is printed with any additional
+    operands interpolated into the message string.
+  }];
+}
+
 /// Commonalities between `ErrorOp`, `WarningOp`, and `InfoOp`.
 class NonfatalMessageOp<string mnemonic, list<Trait> traits = []> :
-    SVOp<mnemonic, [ProceduralOp] # traits> {
+    SVOp<mnemonic, traits> {
   string messageDescription = [{
     If present, the optional message is printed with any additional operands
     interpolated into the message string.
@@ -699,25 +771,29 @@ class NonfatalMessageOp<string mnemonic, list<Trait> traits = []> :
   ];
 }
 
-def ErrorOp : NonfatalMessageOp<"error"> {
-  let summary = "`$error` severity message task";
-  let description = [{
-    This system task indicates a run-time error.
-  }] # messageDescription;
-}
+foreach severity = ["Error", "Warning", "Info"] in {
+  defvar severityLower = !tolower(severity);
 
-def WarningOp : NonfatalMessageOp<"warning"> {
-  let summary = "`$warning` severity message task";
-  let description = [{
-    This system task indicates a run-time warning.
-  }] # messageDescription;
-}
+  // Define procedural (run-time) severity message operations
+  def severity # "ProceduralOp" : NonfatalMessageOp<
+      severityLower # ".procedural", [ProceduralOp]> {
+    let summary = "`$" # severityLower # "` severity message task (run-time)";
+    let description = [{
+      This system task indicates a run-time }] # severityLower # [{. It must be
+      used within a procedural region (e.g., `initial`, `always` blocks).
+      See IEEE 1800-2023 section 20.10 for more information.
+    }] # messageDescription;
+  }
 
-def InfoOp : NonfatalMessageOp<"info"> {
-  let summary = "`$info` severity message task";
-  let description = [{
-    This system task indicates a message with no specific severity.
-  }] # messageDescription;
+  // Define non-procedural (elaboration-time) severity message operations
+  def severity # "Op" : NonfatalMessageOp<severityLower, [NonProceduralOp]> {
+    let summary = "`$" # severityLower # "` severity message task (elaboration-time)";
+    let description = [{
+      This system task indicates an elaboration-time }] # severityLower # [{. It must
+      be used outside of procedural regions and will be executed during elaboration.
+      See IEEE 1800-2023 section 20.11 for more information.
+    }] # messageDescription;
+  }
 }
 
 def DepositOp : SVOp<"nonstandard.deposit",
@@ -809,6 +885,23 @@ def ForOp : SVOp<"for", [SingleBlock, NoTerminator, ProceduralOp,
 // Macros
 //===----------------------------------------------------------------------===//
 
+def MacroErrorOp : SVOp<"macro.error"> {
+  let summary = "Produce a compilation error using the preprocessor";
+  let description = [{
+    The `sv.macro.error` op represents a static error in System Verilog. Since
+    System Verilog lacks an error preprocessor directive, this is emitted as a
+    reference to an undefined macro definition.
+
+    We reserve the macro prefix _ERROR for emitting static assertions.
+  }];
+  let arguments = (ins OptionalAttr<StrAttr>:$message);
+  let assemblyFormat = "($message^)? attr-dict";
+  let extraClassDeclaration = [{
+    /// Build the bogus macro identifier for this error op. Do not define this
+    /// macro identifier. The identifier will be prefixed by `_ERROR`.
+    std::string getMacroIdentifier();
+  }];
+}
 
 def MacroDeclOp : SVOp<"macro.decl", [Symbol]> {
   let summary = "System verilog macro declaration";
@@ -839,6 +932,12 @@ def MacroDeclOp : SVOp<"macro.decl", [Symbol]> {
   let assemblyFormat = [{
     $sym_name (`[` $verilogName^ `]`)? (`(` $args^ `)`)?  attr-dict
   }];
+
+  let extraClassDeclaration = [{
+    // Return the Verilog "text macro identifier".  This will be either the
+    // Verilog name, if one was provided or the symbol name.
+    StringRef getMacroIdentifier();
+  }];
 }
 
 
@@ -866,9 +965,15 @@ def MacroDefOp : SVOp<"macro.def",
   let results = (outs);
 
   let builders = [
-    OpBuilder<(ins "StringRef":$macroName, "StringRef":$format_string),
-                "build($_builder, $_state, macroName, format_string,"
-                "odsBuilder.getArrayAttr({}));">
+    OpBuilder<(ins "FlatSymbolRefAttr":$macroName), [{
+      auto formatString = StringAttr::get($_builder.getContext());
+      auto symbols = $_builder.getArrayAttr({});
+      build($_builder, $_state, macroName, formatString, symbols);
+    }]>,
+    OpBuilder<(ins "StringRef":$macroName, "StringRef":$formatString), [{
+      auto symbols = $_builder.getArrayAttr({});
+      build($_builder, $_state, macroName, formatString, symbols);
+    }]>
   ];
 
   let assemblyFormat = [{
@@ -877,5 +982,236 @@ def MacroDefOp : SVOp<"macro.def",
 
   let extraClassDeclaration = [{
     MacroDeclOp getReferencedMacro(const hw::HWSymbolCache *cache);
+  }];
+}
+
+def IncludeStyle
+    : I32EnumAttr<
+          "IncludeStyle",
+          "Double-quoted local include, or angle bracketed system include",
+          [I32EnumAttrCase<"Local", 0, "local">,
+           I32EnumAttrCase<"System", 1, "system">]> {
+  let genSpecializedAttr = 0;
+}
+
+def IncludeStyleAttr : EnumAttr<SVDialect, IncludeStyle, "include_style">;
+
+def IncludeOp : SVOp<"include"> {
+  let summary = "preprocessor `include directive";
+  let arguments = (ins IncludeStyleAttr:$style, StrAttr:$target);
+  let assemblyFormat = [{ $style $target attr-dict }];
+}
+
+//===----------------------------------------------------------------------===//
+// Function/Call
+//===----------------------------------------------------------------------===//
+
+def FuncDPIImportOp: SVOp<"func.dpi.import",
+  [DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "DPI import statement";
+  let description = [{
+     `sv.func.dpi.import` represents DPI function import statement defined in
+     IEEE 1800-2017 section 35.4.
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$callee,
+                       OptionalAttr<StrAttr>: $linkage_name);
+  let results = (outs);
+
+  let assemblyFormat = "(`linkage` $linkage_name^)? $callee attr-dict";
+}
+
+def FuncOp : SVOp<"func",
+     [IsolatedFromAbove, Symbol, OpAsmOpInterface, ProceduralRegion,
+      DeclareOpInterfaceMethods<HWModuleLike>,
+      DeclareOpInterfaceMethods<PortList>,
+      FunctionOpInterface, HasParent<"mlir::ModuleOp">,
+      HWEmittableModuleLike]> {
+  let summary = "A SystemVerilog function";
+  let description = [{
+    `sv.func` represents SystemVerilog function in IEEE 1800-2017 section 13.4
+     "Functions". Similar to HW module, it's allowed to mix the order of input
+    and output arguments. `sv.func` can be used for both function
+    declaration and definition, i.e. a function without a body
+    region is a declaration.
+
+    In SV there are two representations for function results,
+    "output argument" and "return value". Currently an output argument
+    is considered as as a return value if it's is the last argument
+    and has a special attribute `sv.func.explicitly_returned`.
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttrOf<ModuleType>:$module_type,
+    OptionalAttr<DictArrayAttr>:$per_argument_attrs,
+    OptionalAttr<LocationArrayAttr>:$input_locs, // Null for actual definition.
+    OptionalAttr<LocationArrayAttr>:$result_locs,
+    OptionalAttr<StrAttr>:$verilogName
+  );
+
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+
+  let hasCustomAssemblyFormat = 1;
+  let extraClassDeclaration = [{
+    static mlir::StringRef getExplicitlyReturnedAttrName() {
+      return "sv.func.explicitly_returned";
+    }
+
+    mlir::FunctionType getFunctionType() {
+      return getModuleType().getFuncType();
+    }
+
+    void setFunctionTypeAttr(mlir::TypeAttr mlirType) {
+      setModuleType(cast<hw::ModuleType>(mlirType.getValue()));
+    }
+
+    /// Returns the argument types of this function.
+    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+
+    /// Returns the result types of this function.
+    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+    Type getExplicitlyReturnedType();
+
+    size_t getNumOutputs() {
+      return getResultTypes().size();
+    }
+
+    size_t getNumInputs() {
+      return getArgumentTypes().size();
+    }
+
+    ::mlir::Region *getCallableRegion() { return isExternal() ? nullptr : &getBody(); }
+    bool isDeclaration() { return isExternal(); }
+
+    /// OpAsmInterface
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                          mlir::OpAsmSetValueNameFn setNameFn);
+    SmallVector<hw::PortInfo> getPortList(bool excludeExplicitReturn);
+
+    /// Stub implementations for ArgumentAttributesMethods. If desired,
+    /// implement these by defining arg_attrs and res_attrs as arguments to the
+    /// operation as OptionalAttr<DictArrayAttr>.
+    mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
+    mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
+    void setArgAttrsAttr(mlir::ArrayAttr args) {}
+    void setResAttrsAttr(mlir::ArrayAttr args) {}
+    mlir::Attribute removeArgAttrsAttr() { return nullptr; }
+    mlir::Attribute removeResAttrsAttr() { return nullptr; }
+  }];
+  let extraClassDefinition = [{
+    hw::ModuleType $cppClass::getHWModuleType() {
+      return getModuleType();
+    }
+    void $cppClass::setHWModuleType(hw::ModuleType type) {
+      return setModuleType(type);
+    }
+    void $cppClass::setAllPortNames(llvm::ArrayRef<mlir::Attribute>) {
+    }
+
+    size_t $cppClass::getNumPorts() {
+      auto modty = getHWModuleType();
+      return modty.getNumPorts();
+    }
+
+    size_t $cppClass::getNumInputPorts() {
+      auto modty = getHWModuleType();
+      return modty.getNumInputs();
+    }
+
+    size_t $cppClass::getNumOutputPorts() {
+      auto modty = getHWModuleType();
+      return modty.getNumOutputs();
+    }
+
+    size_t $cppClass::getPortIdForInputId(size_t idx) {
+      auto modty = getHWModuleType();
+      return modty.getPortIdForInputId(idx);
+    }
+
+    size_t $cppClass::getPortIdForOutputId(size_t idx) {
+      auto modty = getHWModuleType();
+      return modty.getPortIdForOutputId(idx);
+    }
+  }];
+}
+
+class SVFuncCallBase<string mnemonic, list<Trait> traits = []>: SVOp<mnemonic,
+  traits # [CallOpInterface, DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+
+  let arguments = (ins FlatSymbolRefAttr:$callee, Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>);
+
+  let assemblyFormat =
+      "$callee `(` $inputs `)` attr-dict `:` functional-type($inputs, results)";
+
+  let extraClassDeclaration = [{
+    Value getExplicitlyReturnedValue(sv::FuncOp op);
+
+    operand_range getArgOperands() {
+      return getInputs();
+    }
+    MutableOperandRange getArgOperandsMutable() {
+      return getInputsMutable();
+    }
+    mlir::CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<mlir::SymbolRefAttr>("callee");
+    }
+
+    /// Set the callee for this operation.
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getCalleeAttrName(), llvm::cast<mlir::SymbolRefAttr>(callee));
+    }
+
+    /// Stub implementations for ArgumentAttributesMethods. If desired,
+    /// implement these by defining arg_attrs and res_attrs as arguments to the
+    /// operation as OptionalAttr<DictArrayAttr>.
+    mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
+    mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
+    void setArgAttrsAttr(mlir::ArrayAttr args) {}
+    void setResAttrsAttr(mlir::ArrayAttr args) {}
+    mlir::Attribute removeArgAttrsAttr() { return nullptr; }
+    mlir::Attribute removeResAttrsAttr() { return nullptr; }
+  }];
+}
+
+def FuncCallProceduralOp : SVFuncCallBase<"func.call.procedural", [ProceduralOp]> {
+  let summary = "Function call in a procedural region";
+}
+
+def FuncCallOp : SVFuncCallBase<"func.call", [NonProceduralOp]> {
+  let summary = "Function call in a non-procedural region";
+  let description = [{
+    This op represents a function call in a non-procedural region.
+    A function call in a non-procedural region must have a return
+    value and no output argument.
+  }];
+}
+
+def ReturnOp : SVOp<"return",
+                   [Pure, ReturnLike, Terminator, HasParent<"FuncOp">]> {
+  let summary = "Function return operation";
+
+  let arguments = (ins Variadic<AnyType>:$operands);
+
+  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
+  let hasVerifier = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// SV output control.
+//===----------------------------------------------------------------------===//
+
+def ReserveNamesOp : SVOp<"reserve_names", [
+  HasParent<"mlir::ModuleOp">
+]> {
+  let summary = "Disallow a set of names to be used during emission";
+
+  let arguments = (ins StrArrayAttr:$reservedNames);
+  let assemblyFormat = [{
+    $reservedNames attr-dict
   }];
 }

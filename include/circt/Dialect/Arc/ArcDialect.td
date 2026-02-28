@@ -9,6 +9,8 @@
 #ifndef CIRCT_DIALECT_ARC_ARCDIALECT_TD
 #define CIRCT_DIALECT_ARC_ARCDIALECT_TD
 
+include "mlir/IR/DialectBase.td"
+
 def ArcDialect : Dialect {
   let name = "arc";
   let summary = "Canonical representation of state transfer in a circuit";
@@ -21,12 +23,11 @@ def ArcDialect : Dialect {
 
   let hasConstantMaterializer = 1;
   let useDefaultTypePrinterParser = 1;
-
-  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
-  let usePropertiesForAttributes = 0;
+  let useDefaultAttributePrinterParser = 1;
 
   let extraClassDeclaration = [{
     void registerTypes();
+    void registerAttributes();
   }];
 }
 

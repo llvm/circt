@@ -23,6 +23,7 @@
 
 #include "esi/Context.h"
 #include "esi/Design.h"
+#include "esi/Engines.h"
 #include "esi/Manifest.h"
 #include "esi/Ports.h"
 #include "esi/Services.h"
@@ -34,15 +35,28 @@
 #include <typeinfo>
 
 namespace esi {
+// Forward declarations.
+class AcceleratorServiceThread;
 
 //===----------------------------------------------------------------------===//
-// Constants used by low-level APIs.
+// Metadata constants which may or may not be used by various backends. Provided
+// here since they are intended to be somewhat standard.
 //===----------------------------------------------------------------------===//
 
 constexpr uint32_t MetadataOffset = 8;
-constexpr uint32_t MagicNumberLo = 0xE5100E51;
-constexpr uint32_t MagicNumberHi = 0x207D98E5;
+
+constexpr uint64_t MagicNumberLo = 0xE5100E51;
+constexpr uint64_t MagicNumberHi = 0x207D98E5;
+constexpr uint64_t MagicNumber = MagicNumberLo | (MagicNumberHi << 32);
+constexpr uint64_t MagicNumberOffset = 0;
+
 constexpr uint32_t ExpectedVersionNumber = 0;
+constexpr uint64_t VersionNumberOffset = 8;
+
+constexpr uint32_t ManifestPtrOffset = 0x10;
+
+constexpr uint32_t CycleCountOffset = 0x20;
+constexpr uint32_t CoreFreqOffset = 0x28;
 
 //===----------------------------------------------------------------------===//
 // Accelerator design hierarchy root.
@@ -61,8 +75,8 @@ public:
   Accelerator(std::optional<ModuleInfo> info,
               std::vector<std::unique_ptr<Instance>> children,
               std::vector<services::Service *> services,
-              std::vector<std::unique_ptr<BundlePort>> &ports)
-      : HWModule(info, std::move(children), services, ports) {}
+              std::vector<std::unique_ptr<BundlePort>> &&ports)
+      : HWModule(info, std::move(children), services, std::move(ports)) {}
 };
 
 //===----------------------------------------------------------------------===//
@@ -71,18 +85,23 @@ public:
 
 /// Abstract class representing a connection to an accelerator. Actual
 /// connections (e.g. to a co-simulation or actual device) are implemented by
-/// subclasses.
+/// subclasses. No methods in here are thread safe.
 class AcceleratorConnection {
 public:
-  AcceleratorConnection(Context &ctxt) : ctxt(ctxt) {}
-
-  virtual ~AcceleratorConnection() = default;
+  AcceleratorConnection(Context &ctxt);
+  virtual ~AcceleratorConnection();
   Context &getCtxt() const { return ctxt; }
+  Logger &getLogger() const { return ctxt.getLogger(); }
 
-  /// Request the host side channel ports for a particular instance (identified
-  /// by the AppID path). For convenience, provide the bundle type.
-  virtual std::map<std::string, ChannelPort &>
-  requestChannelsFor(AppIDPath, const BundleType *) = 0;
+  /// Disconnect from the accelerator cleanly.
+  virtual void disconnect();
+
+  /// Return a pointer to the accelerator 'service' thread (or threads). If the
+  /// thread(s) are not running, they will be started when this method is
+  /// called. `std::thread` is used. If users don't want the runtime to spin up
+  /// threads, don't call this method. `AcceleratorServiceThread` is owned by
+  /// AcceleratorConnection and governed by the lifetime of the this object.
+  AcceleratorServiceThread *getServiceThread();
 
   using Service = services::Service;
   /// Get a typed reference to a particular service type. Caller does *not* take
@@ -102,7 +121,34 @@ public:
                               ServiceImplDetails details = {},
                               HWClientDetails clients = {});
 
+  /// Assume ownership of an accelerator object. Ties the lifetime of the
+  /// accelerator to this connection. Returns a raw pointer to the object.
+  Accelerator *takeOwnership(std::unique_ptr<Accelerator> accel);
+
+  /// Create a new engine for channel communication with the accelerator. The
+  /// default is to call the global `createEngine` to get an engine which has
+  /// registered itself. Individual accelerator connection backends can override
+  /// this to customize behavior.
+  virtual void createEngine(const std::string &engineTypeName, AppIDPath idPath,
+                            const ServiceImplDetails &details,
+                            const HWClientDetails &clients);
+  virtual const BundleEngineMap &getEngineMapFor(AppIDPath id) {
+    return clientEngines[id];
+  }
+
+  Accelerator &getAccelerator() {
+    if (!ownedAccelerator)
+      throw std::runtime_error(
+          "AcceleratorConnection does not own an accelerator");
+    return *ownedAccelerator;
+  }
+
 protected:
+  /// If `createEngine` is overridden, this method should be called to register
+  /// the engine and all of the channels it services.
+  void registerEngine(AppIDPath idPath, std::unique_ptr<Engine> engine,
+                      const HWClientDetails &clients);
+
   /// Called by `getServiceImpl` exclusively. It wraps the pointer returned by
   /// this in a unique_ptr and caches it. Separate this from the
   /// wrapping/caching since wrapping/caching is an implementation detail.
@@ -111,29 +157,34 @@ protected:
                                  const ServiceImplDetails &details,
                                  const HWClientDetails &clients) = 0;
 
-private:
-  /// Cache services via a unique_ptr so they get free'd automatically when
-  /// Accelerator objects get deconstructed.
-  using ServiceCacheKey = std::tuple<const std::type_info *, AppIDPath>;
-  std::map<ServiceCacheKey, std::unique_ptr<Service>> serviceCache;
+  /// Collection of owned engines.
+  std::map<AppIDPath, std::unique_ptr<Engine>> ownedEngines;
+  /// Mapping of clients to their servicing engines.
+  std::map<AppIDPath, BundleEngineMap> clientEngines;
 
+private:
   /// ESI accelerator context.
   Context &ctxt;
+
+  /// Cache services via a unique_ptr so they get free'd automatically when
+  /// Accelerator objects get deconstructed.
+  using ServiceCacheKey = std::tuple<std::string, AppIDPath>;
+  std::map<ServiceCacheKey, std::unique_ptr<Service>> serviceCache;
+
+  std::unique_ptr<AcceleratorServiceThread> serviceThread;
+
+  /// Accelerator object owned by this connection.
+  std::unique_ptr<Accelerator> ownedAccelerator;
 };
 
 namespace registry {
-
-// Connect to an ESI accelerator given a backend name and connection specifier.
-// Alternatively, instantiate the backend directly (if you're using C++).
-std::unique_ptr<AcceleratorConnection>
-connect(Context &ctxt, std::string backend, std::string connection);
 
 namespace internal {
 
 /// Backends can register themselves to be connected via a connection string.
 using BackendCreate = std::function<std::unique_ptr<AcceleratorConnection>(
     Context &, std::string)>;
-void registerBackend(std::string name, BackendCreate create);
+void registerBackend(const std::string &name, BackendCreate create);
 
 // Helper struct to
 template <typename TAccelerator>
@@ -149,6 +200,30 @@ struct RegisterAccelerator {
 
 } // namespace internal
 } // namespace registry
+
+/// Background thread which services various requests. Currently, it listens on
+/// ports and calls callbacks for incoming messages on said ports.
+class AcceleratorServiceThread {
+public:
+  AcceleratorServiceThread();
+  ~AcceleratorServiceThread();
+
+  /// When there's data on any of the listenPorts, call the callback. Callable
+  /// from any thread.
+  void
+  addListener(std::initializer_list<ReadChannelPort *> listenPorts,
+              std::function<void(ReadChannelPort *, MessageData)> callback);
+
+  /// Poll this module.
+  void addPoll(HWModule &module);
+
+  /// Instruct the service thread to stop running.
+  void stop();
+
+private:
+  struct Impl;
+  std::unique_ptr<Impl> impl;
+};
 } // namespace esi
 
 #endif // ESI_ACCELERATOR_H

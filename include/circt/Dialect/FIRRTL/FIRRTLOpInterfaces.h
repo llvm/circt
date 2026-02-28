@@ -15,6 +15,8 @@
 #define CIRCT_DIALECT_FIRRTL_OP_INTERFACES_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLEnums.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
@@ -45,6 +47,7 @@ struct PortInfo {
   hw::InnerSymAttr sym = {};
   Location loc = UnknownLoc::get(type.getContext());
   AnnotationSet annotations = AnnotationSet(type.getContext());
+  Attribute domains;
 
   StringRef getName() const { return name ? name.getValue() : ""; }
 
@@ -64,7 +67,8 @@ struct PortInfo {
   /// Default constructors
   PortInfo(StringAttr name, Type type, Direction dir, StringAttr symName = {},
            std::optional<Location> location = {},
-           std::optional<AnnotationSet> annos = {})
+           std::optional<AnnotationSet> annos = {},
+           std::optional<Attribute> domains = {})
       : name(name), type(type), direction(dir) {
     if (symName)
       sym = hw::InnerSymAttr::get(symName);
@@ -72,11 +76,13 @@ struct PortInfo {
       loc = *location;
     if (annos)
       annotations = *annos;
+    if (domains)
+      this->domains = *domains;
   };
   PortInfo(StringAttr name, Type type, Direction dir, hw::InnerSymAttr sym,
-           Location loc, AnnotationSet annos)
+           Location loc, AnnotationSet annos, Attribute domains)
       : name(name), type(type), direction(dir), sym(sym), loc(loc),
-        annotations(annos) {}
+        annotations(annos), domains(domains) {}
 };
 
 enum class ConnectBehaviorKind {

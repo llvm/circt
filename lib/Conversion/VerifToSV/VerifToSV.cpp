@@ -11,13 +11,20 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/VerifToSV.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+namespace circt {
+#define GEN_PASS_DEF_LOWERVERIFTOSV
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -29,7 +36,6 @@ using namespace verif;
 //===----------------------------------------------------------------------===//
 
 namespace {
-
 struct PrintOpConversionPattern : public OpConversionPattern<PrintOp> {
   using OpConversionPattern<PrintOp>::OpConversionPattern;
 
@@ -38,8 +44,8 @@ struct PrintOpConversionPattern : public OpConversionPattern<PrintOp> {
                   ConversionPatternRewriter &rewriter) const override {
 
     // Printf's will be emitted to stdout (32'h8000_0001 in IEEE Std 1800-2012).
-    Value fdStdout = rewriter.create<hw::ConstantOp>(
-        op.getLoc(), APInt(32, 0x80000001, false));
+    Value fdStdout =
+        hw::ConstantOp::create(rewriter, op.getLoc(), APInt(32, 0x80000001));
 
     auto fstrOp =
         dyn_cast_or_null<FormatVerilogStringOp>(op.getString().getDefiningOp());
@@ -60,13 +66,13 @@ struct HasBeenResetConversion : public OpConversionPattern<HasBeenResetOp> {
   matchAndRewrite(HasBeenResetOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
     auto i1 = rewriter.getI1Type();
-    auto constOne = rewriter.create<hw::ConstantOp>(op.getLoc(), i1, 1);
-    auto constZero = rewriter.create<hw::ConstantOp>(op.getLoc(), i1, 0);
-    auto constX = rewriter.create<sv::ConstantXOp>(op.getLoc(), i1);
+    auto constOne = hw::ConstantOp::create(rewriter, op.getLoc(), i1, 1);
+    auto constZero = hw::ConstantOp::create(rewriter, op.getLoc(), i1, 0);
+    auto constX = sv::ConstantXOp::create(rewriter, op.getLoc(), i1);
 
     // Declare the register that will track the reset state.
-    auto reg = rewriter.create<sv::RegOp>(
-        op.getLoc(), i1, rewriter.getStringAttr("hasBeenResetReg"));
+    auto reg = sv::RegOp::create(rewriter, op.getLoc(), i1,
+                                 rewriter.getStringAttr("hasBeenResetReg"));
 
     auto clock = operands.getClock();
     auto reset = operands.getReset();
@@ -78,15 +84,15 @@ struct HasBeenResetConversion : public OpConversionPattern<HasBeenResetOp> {
     // In case the reset is async, check if the reset is already active during
     // the `initial` block and immediately set the register to 1. Otherwise
     // initialize to X.
-    rewriter.create<sv::InitialOp>(op.getLoc(), [&] {
+    sv::InitialOp::create(rewriter, op.getLoc(), [&] {
       auto assignOne = [&] {
-        rewriter.create<sv::BPAssignOp>(op.getLoc(), reg, constOne);
+        sv::BPAssignOp::create(rewriter, op.getLoc(), reg, constOne);
       };
       auto assignX = [&] {
-        rewriter.create<sv::BPAssignOp>(op.getLoc(), reg, constX);
+        sv::BPAssignOp::create(rewriter, op.getLoc(), reg, constX);
       };
       if (op.getAsync())
-        rewriter.create<sv::IfOp>(op.getLoc(), reset, assignOne, assignX);
+        sv::IfOp::create(rewriter, op.getLoc(), reset, assignOne, assignX);
       else
         assignX();
     });
@@ -94,21 +100,21 @@ struct HasBeenResetConversion : public OpConversionPattern<HasBeenResetOp> {
     // Create the `always` block that sets the register to 1 as soon as the
     // reset is initiated. For async resets this happens at the reset's posedge;
     // for sync resets this happens on the clock's posedge if the reset is set.
-    Value triggerOn = op.getAsync() ? reset : clock;
-    rewriter.create<sv::AlwaysOp>(
-        op.getLoc(), sv::EventControl::AtPosEdge, triggerOn, [&] {
-          auto assignOne = [&] {
-            rewriter.create<sv::PAssignOp>(op.getLoc(), reg, constOne);
-          };
-          if (op.getAsync())
-            assignOne();
-          else
-            rewriter.create<sv::IfOp>(op.getLoc(), reset, assignOne);
-        });
+    SmallVector<sv::EventControl, 2> eventControl{sv::EventControl::AtPosEdge};
+    SmallVector<Value, 2> triggerOn{clock};
+    if (op.getAsync()) {
+      eventControl.push_back(sv::EventControl::AtPosEdge);
+      triggerOn.push_back(reset);
+    }
+    sv::AlwaysOp::create(rewriter, op.getLoc(), eventControl, triggerOn, [&] {
+      sv::IfOp::create(rewriter, op.getLoc(), reset, [&] {
+        sv::PAssignOp::create(rewriter, op.getLoc(), reg, constOne);
+      });
+    });
 
     // Derive the actual result value:
     //   hasBeenReset = (hasBeenResetReg === 1) && (reset === 0);
-    auto regRead = rewriter.create<sv::ReadInOutOp>(op.getLoc(), reg);
+    auto regRead = sv::ReadInOutOp::create(rewriter, op.getLoc(), reg);
     auto regIsOne = rewriter.createOrFold<comb::ICmpOp>(
         op.getLoc(), comb::ICmpPredicate::ceq, regRead, constOne);
     auto resetIsZero = rewriter.createOrFold<comb::ICmpOp>(
@@ -122,6 +128,78 @@ struct HasBeenResetConversion : public OpConversionPattern<HasBeenResetOp> {
   }
 };
 
+// Conversion from one event control enum to another
+static sv::EventControl verifToSVEventControl(verif::ClockEdge ce) {
+  switch (ce) {
+  case verif::ClockEdge::Pos:
+    return sv::EventControl::AtPosEdge;
+  case verif::ClockEdge::Neg:
+    return sv::EventControl::AtNegEdge;
+  case verif::ClockEdge::Both:
+    return sv::EventControl::AtEdge;
+  }
+  llvm_unreachable("Unknown event control kind");
+}
+
+// Generic conversion for verif.assert, verif.assume and verif.cover
+template <typename Op, typename TargetOp>
+struct VerifAssertLikeConversion : public OpConversionPattern<Op> {
+  using OpConversionPattern<Op>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<Op>::OpAdaptor;
+
+  // Convert the verif.assert like op that uses an enable, into an equivalent
+  // sv.assert_property op that has the negated enable as its disable.
+  LogicalResult
+  matchAndRewrite(Op op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Negate the enable if it exists
+    Value disable;
+    if (auto enable = operands.getEnable()) {
+      Value constOne = rewriter.createOrFold<hw::ConstantOp>(
+          op.getLoc(), rewriter.getI1Type(), 1);
+      disable =
+          rewriter.createOrFold<comb::XorOp>(op.getLoc(), enable, constOne);
+    }
+
+    rewriter.replaceOpWithNewOp<TargetOp>(op, operands.getProperty(), disable,
+                                          operands.getLabelAttr());
+
+    return success();
+  }
+};
+
+// Generic conversion for verif.clocked_assert, verif.clocked_assume and
+// verif.clocked_cover
+template <typename Op, typename TargetOp>
+struct VerifClockedAssertLikeConversion : public OpConversionPattern<Op> {
+  using OpConversionPattern<Op>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<Op>::OpAdaptor;
+
+  // Convert the verif.assert like op that uses an enable, into an equivalent
+  // sv.assert_property op that has the negated enable as its disable.
+  LogicalResult
+  matchAndRewrite(Op op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Negate the enable if it exists
+    Value disable;
+    if (auto enable = operands.getEnable()) {
+      Value constOne = rewriter.createOrFold<hw::ConstantOp>(
+          op.getLoc(), rewriter.getI1Type(), 1);
+      disable =
+          rewriter.createOrFold<comb::XorOp>(op.getLoc(), enable, constOne);
+    }
+    // Convert a verif clock edge into an sv event control
+    auto eventattr = sv::EventControlAttr::get(
+        op.getContext(), verifToSVEventControl(operands.getEdge()));
+
+    rewriter.replaceOpWithNewOp<TargetOp>(op, operands.getProperty(), eventattr,
+                                          operands.getClock(), disable,
+                                          operands.getLabelAttr());
+
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -129,7 +207,7 @@ struct HasBeenResetConversion : public OpConversionPattern<HasBeenResetOp> {
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct VerifToSVPass : public LowerVerifToSVBase<VerifToSVPass> {
+struct VerifToSVPass : public circt::impl::LowerVerifToSVBase<VerifToSVPass> {
   void runOnOperation() override;
 };
 } // namespace
@@ -141,9 +219,21 @@ void VerifToSVPass::runOnOperation() {
   ConversionTarget target(context);
   RewritePatternSet patterns(&context);
 
-  target.addIllegalOp<PrintOp, HasBeenResetOp>();
+  target.addIllegalOp<PrintOp, HasBeenResetOp, verif::AssertOp, verif::AssumeOp,
+                      verif::CoverOp, ClockedAssertOp, ClockedAssumeOp,
+                      ClockedCoverOp>();
   target.addLegalDialect<sv::SVDialect, hw::HWDialect, comb::CombDialect>();
-  patterns.add<PrintOpConversionPattern, HasBeenResetConversion>(&context);
+  patterns.add<
+      PrintOpConversionPattern, HasBeenResetConversion,
+      VerifAssertLikeConversion<verif::AssertOp, AssertPropertyOp>,
+      VerifAssertLikeConversion<verif::AssumeOp, AssumePropertyOp>,
+      VerifAssertLikeConversion<verif::CoverOp, CoverPropertyOp>,
+      VerifClockedAssertLikeConversion<verif::ClockedAssertOp,
+                                       AssertPropertyOp>,
+      VerifClockedAssertLikeConversion<verif::ClockedAssumeOp,
+                                       AssumePropertyOp>,
+      VerifClockedAssertLikeConversion<verif::ClockedCoverOp, CoverPropertyOp>>(
+      &context);
 
   if (failed(applyPartialConversion(module, target, std::move(patterns))))
     signalPassFailure();

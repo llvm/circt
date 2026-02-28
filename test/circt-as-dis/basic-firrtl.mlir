@@ -5,12 +5,12 @@
 firrtl.circuit "Top" {
   firrtl.module @Top(in %in : !firrtl.uint<8>,
                      out %out : !firrtl.uint<8>) {
-    firrtl.strictconnect %out, %in : !firrtl.uint<8>
+    firrtl.matchingconnect %out, %in : !firrtl.uint<8>
   }
 }
 
 // CHECK-LABEL: firrtl.circuit "Top" {
 // CHECK-NEXT:    firrtl.module @Top(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
-// CHECK-NEXT:      firrtl.strictconnect %out, %in : !firrtl.uint<8>
+// CHECK-NEXT:      firrtl.matchingconnect %out, %in : !firrtl.uint<8>
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }

@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -205,14 +206,12 @@ struct EliminateUnusedForkResultsPattern : mlir::OpRewritePattern<ForkOp> {
     // Create a new fork op, dropping the unused results.
     rewriter.setInsertionPoint(op);
     auto operand = op.getOperand();
-    auto newFork = rewriter.create<ForkOp>(
-        op.getLoc(), operand, op.getNumResults() - unusedIndexes.size());
-    rewriter.modifyOpInPlace(op, [&] {
-      unsigned i = 0;
-      for (auto oldRes : llvm::enumerate(op.getResults()))
-        if (unusedIndexes.count(oldRes.index()) == 0)
-          oldRes.value().replaceAllUsesWith(newFork.getResults()[i++]);
-    });
+    auto newFork = ForkOp::create(rewriter, op.getLoc(), operand,
+                                  op.getNumResults() - unusedIndexes.size());
+    unsigned i = 0;
+    for (auto oldRes : llvm::enumerate(op.getResults()))
+      if (unusedIndexes.count(oldRes.index()) == 0)
+        rewriter.replaceAllUsesWith(oldRes.value(), newFork.getResults()[i++]);
     rewriter.eraseOp(op);
     return success();
   }
@@ -232,21 +231,20 @@ struct EliminateForkToForkPattern : mlir::OpRewritePattern<ForkOp> {
     /// on if op is the single user of the value), but we'll let
     /// EliminateUnusedForkResultsPattern apply in that case.
     unsigned totalNumOuts = op.getSize() + parentForkOp.getSize();
-    rewriter.modifyOpInPlace(parentForkOp, [&] {
-      /// Create a new parent fork op which produces all of the fork outputs and
-      /// replace all of the uses of the old results.
-      auto newParentForkOp = rewriter.create<ForkOp>(
-          parentForkOp.getLoc(), parentForkOp.getOperand(), totalNumOuts);
+    /// Create a new parent fork op which produces all of the fork outputs and
+    /// replace all of the uses of the old results.
+    auto newParentForkOp =
+        ForkOp::create(rewriter, parentForkOp.getLoc(),
+                       parentForkOp.getOperand(), totalNumOuts);
 
-      for (auto it :
-           llvm::zip(parentForkOp->getResults(), newParentForkOp.getResults()))
-        std::get<0>(it).replaceAllUsesWith(std::get<1>(it));
+    for (auto it :
+         llvm::zip(parentForkOp->getResults(), newParentForkOp.getResults()))
+      rewriter.replaceAllUsesWith(std::get<0>(it), std::get<1>(it));
 
-      /// Replace the results of the matches fork op with the corresponding
-      /// results of the new parent fork op.
-      rewriter.replaceOp(op,
-                         newParentForkOp.getResults().take_back(op.getSize()));
-    });
+    /// Replace the results of the matches fork op with the corresponding
+    /// results of the new parent fork op.
+    rewriter.replaceOp(op,
+                       newParentForkOp.getResults().take_back(op.getSize()));
     rewriter.eraseOp(parentForkOp);
     return success();
   }
@@ -553,7 +551,7 @@ parseFuncOpArgs(OpAsmParser &parser,
                 SmallVectorImpl<Type> &resTypes,
                 SmallVectorImpl<DictionaryAttr> &resAttrs) {
   bool isVariadic;
-  if (mlir::function_interface_impl::parseFunctionSignature(
+  if (mlir::function_interface_impl::parseFunctionSignatureWithArguments(
           parser, /*allowVariadic=*/true, entryArgs, isVariadic, resTypes,
           resAttrs)
           .failed())
@@ -644,7 +642,7 @@ ParseResult FuncOp::parse(OpAsmParser &parser, OperationState &result) {
                              result.attributes) ||
       parseFuncOpArgs(parser, args, resTypes, resAttributes))
     return failure();
-  mlir::function_interface_impl::addArgAndResultAttrs(
+  mlir::call_interface_impl::addArgAndResultAttrs(
       builder, result, args, resAttributes,
       handshake::FuncOp::getArgAttrsAttrName(result.name),
       handshake::FuncOp::getResAttrsAttrName(result.name));
@@ -733,7 +731,7 @@ LogicalResult EliminateSimpleControlMergesPattern::matchAndRewrite(
       return failure();
   }
 
-  auto merge = rewriter.create<MergeOp>(op.getLoc(), op.getDataOperands());
+  auto merge = MergeOp::create(rewriter, op.getLoc(), op.getDataOperands());
 
   for (auto &use : llvm::make_early_inc_range(dataResult.getUses())) {
     auto *user = use.getOwner();
@@ -1337,6 +1335,56 @@ void JoinOp::print(OpAsmPrinter &p) {
   p << " " << getData();
   p.printOptionalAttrDict((*this)->getAttrs(), {"control"});
   p << " : " << getData().getTypes();
+}
+
+LogicalResult
+ESIInstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Check that the module attribute was specified.
+  auto fnAttr = this->getModuleAttr();
+  assert(fnAttr && "requires a 'module' symbol reference attribute");
+
+  FuncOp fn = symbolTable.lookupNearestSymbolFrom<FuncOp>(*this, fnAttr);
+  if (!fn)
+    return emitOpError() << "'" << fnAttr.getValue()
+                         << "' does not reference a valid handshake function";
+
+  // Verify that the operand and result types match the callee.
+  auto fnType = fn.getFunctionType();
+  if (fnType.getNumInputs() != getNumOperands() - NumFixedOperands)
+    return emitOpError(
+        "incorrect number of operands for the referenced handshake function");
+
+  for (unsigned i = 0, e = fnType.getNumInputs(); i != e; ++i) {
+    Type operandType = getOperand(i + NumFixedOperands).getType();
+    auto channelType = dyn_cast<esi::ChannelType>(operandType);
+    if (!channelType)
+      return emitOpError("operand type mismatch: expected channel type, but "
+                         "provided ")
+             << operandType << " for operand number " << i;
+    if (channelType.getInner() != fnType.getInput(i))
+      return emitOpError("operand type mismatch: expected operand type ")
+             << fnType.getInput(i) << ", but provided "
+             << getOperand(i).getType() << " for operand number " << i;
+  }
+
+  if (fnType.getNumResults() != getNumResults())
+    return emitOpError(
+        "incorrect number of results for the referenced handshake function");
+
+  for (unsigned i = 0, e = fnType.getNumResults(); i != e; ++i) {
+    Type resultType = getResult(i).getType();
+    auto channelType = dyn_cast<esi::ChannelType>(resultType);
+    if (!channelType)
+      return emitOpError("result type mismatch: expected channel type, but "
+                         "provided ")
+             << resultType << " for result number " << i;
+    if (channelType.getInner() != fnType.getResult(i))
+      return emitOpError("result type mismatch: expected result type ")
+             << fnType.getResult(i) << ", but provided "
+             << getResult(i).getType() << " for result number " << i;
+  }
+
+  return success();
 }
 
 /// Based on mlir::func::CallOp::verifySymbolUses

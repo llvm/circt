@@ -48,6 +48,13 @@ struct TokenAnnoTarget {
     toVector(out);
     return std::string(out);
   }
+
+  /// Convert the annotation path to a StringAttr.
+  StringAttr toStringAttr(MLIRContext *context) const {
+    SmallString<32> out;
+    toVector(out);
+    return StringAttr::get(context, out);
+  }
 };
 
 // The potentially non-local resolved annotation.
@@ -67,7 +74,7 @@ struct AnnoPathValue {
 
   template <typename... T>
   bool isOpOfType() const {
-    if (auto opRef = ref.dyn_cast<OpAnnoTarget>())
+    if (auto opRef = dyn_cast<OpAnnoTarget>(ref))
       return isa<T...>(opRef.getOp());
     return false;
   }
@@ -127,9 +134,9 @@ static T &operator<<(T &os, const PortAnnoTarget &target) {
 
 template <typename T>
 static T &operator<<(T &os, const AnnoTarget &target) {
-  if (auto op = target.dyn_cast<OpAnnoTarget>())
+  if (auto op = dyn_cast<OpAnnoTarget>(target))
     os << op;
-  else if (auto port = target.dyn_cast<PortAnnoTarget>())
+  else if (auto port = dyn_cast<PortAnnoTarget>(target))
     os << port;
   else
     os << "<<Unknown Anno Target>>";
@@ -141,9 +148,9 @@ struct AnnoTargetCache {
   AnnoTargetCache() = delete;
   AnnoTargetCache(const AnnoTargetCache &other) = default;
   AnnoTargetCache(AnnoTargetCache &&other)
-      : targets(std::move(other.targets)){};
+      : targets(std::move(other.targets)) {}
 
-  AnnoTargetCache(FModuleLike mod) { gatherTargets(mod); };
+  AnnoTargetCache(FModuleLike mod) { gatherTargets(mod); }
 
   /// Lookup the target for 'name', empty if not found.
   /// (check for validity using operator bool()).
@@ -155,7 +162,7 @@ struct AnnoTargetCache {
     TypeSwitch<Operation *>(op)
         .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp,
               chirrtl::CombMemOp, chirrtl::SeqMemOp, chirrtl::MemoryPortOp,
-              chirrtl::MemoryDebugPortOp, PrintFOp>([&](auto op) {
+              chirrtl::MemoryDebugPortOp, PrintFOp, FPrintFOp>([&](auto op) {
           // To be safe, check attribute and non-empty name before adding.
           if (auto name = op.getNameAttr(); name && !name.getValue().empty())
             targets.insert({name, OpAnnoTarget(op)});
@@ -319,6 +326,8 @@ struct HierPathCache {
     return FlatSymbolRefAttr::get(getSymFor(attr));
   }
 
+  const SymbolTable &getSymbolTable() const { return symbolTable; }
+
 private:
   OpBuilder builder;
   DenseMap<ArrayAttr, hw::HierPathOp> cache;
@@ -357,7 +366,7 @@ struct ApplyState {
   IntegerAttr newID() {
     return IntegerAttr::get(IntegerType::get(circuit.getContext(), 64),
                             annotationID++);
-  };
+  }
 
 private:
   hw::InnerSymbolNamespaceCollection namespaces;
@@ -373,9 +382,6 @@ LogicalResult applyGCTDataTaps(const AnnoPathValue &target, DictionaryAttr anno,
 LogicalResult applyGCTMemTaps(const AnnoPathValue &target, DictionaryAttr anno,
                               ApplyState &state);
 
-LogicalResult applyOMIR(const AnnoPathValue &target, DictionaryAttr anno,
-                        ApplyState &state);
-
 LogicalResult applyTraceName(const AnnoPathValue &target, DictionaryAttr anno,
                              ApplyState &state);
 
@@ -385,43 +391,52 @@ LogicalResult applyWiring(const AnnoPathValue &target, DictionaryAttr anno,
 /// Implements the same behavior as DictionaryAttr::getAs<A> to return the
 /// value of a specific type associated with a key in a dictionary. However,
 /// this is specialized to print a useful error message, specific to custom
-/// annotation process, on failure.
+/// processing, on failure.
 template <typename A>
-A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
-           Location loc, Twine className, Twine path = Twine()) {
+A tryGetAsBase(DictionaryAttr dict, Attribute root, StringRef key, Location loc,
+               Twine whatSpecific, Twine whatFull, Twine path = Twine()) {
+  SmallString<128> msg;
   // Check that the key exists.
   auto value = dict.get(key);
   if (!value) {
-    SmallString<128> msg;
     if (path.isTriviallyEmpty())
-      msg = ("Annotation '" + className + "' did not contain required key '" +
-             key + "'.")
-                .str();
+      (whatSpecific + " did not contain required key '" + key + "'.")
+          .toVector(msg);
     else
-      msg = ("Annotation '" + className + "' with path '" + path +
-             "' did not contain required key '" + key + "'.")
-                .str();
+      (whatSpecific + " with path '" + path +
+       "' did not contain required key '" + key + "'.")
+          .toVector(msg);
     mlir::emitError(loc, msg).attachNote()
-        << "The full Annotation is reproduced here: " << root << "\n";
+        << "The full " << whatFull << " is reproduced here: " << root;
     return nullptr;
   }
   // Check that the value has the correct type.
-  auto valueA = dyn_cast_or_null<A>(value);
+  auto valueA = dyn_cast<A>(value);
   if (!valueA) {
-    SmallString<128> msg;
     if (path.isTriviallyEmpty())
-      msg = ("Annotation '" + className +
-             "' did not contain the correct type for key '" + key + "'.")
-                .str();
+      (whatSpecific + " did not contain the correct type for key '" + key +
+       "'.")
+          .toVector(msg);
     else
-      msg = ("Annotation '" + className + "' with path '" + path +
-             "' did not contain the correct type for key '" + key + "'.")
-                .str();
+      (whatSpecific + " with path '" + path +
+       "' did not contain the correct type for key '" + key + "'.")
+          .toVector(msg);
     mlir::emitError(loc, msg).attachNote()
-        << "The full Annotation is reproduced here: " << root << "\n";
+        << "The full " << whatFull << " is reproduced here: " << root;
     return nullptr;
   }
   return valueA;
+}
+
+/// Implements the same behavior as DictionaryAttr::getAs<A> to return the
+/// value of a specific type associated with a key in a dictionary. However,
+/// this is specialized to print a useful error message, specific to custom
+/// annotation process, on failure.
+template <typename A>
+A tryGetAs(DictionaryAttr dict, Attribute root, StringRef key, Location loc,
+           Twine clazz, Twine path = Twine()) {
+  return tryGetAsBase<A>(dict, root, key, loc, "Annotation '" + clazz + "'",
+                         "Annotation", path);
 }
 
 /// Add ports to the module and all its instances and return the clone for
@@ -481,7 +496,7 @@ template <bool allowNonLocal, bool allowPortAnnoTarget, typename T,
 static LogicalResult applyWithoutTarget(const AnnoPathValue &target,
                                         DictionaryAttr anno,
                                         ApplyState &state) {
-  if (target.ref.isa<PortAnnoTarget>()) {
+  if (isa<PortAnnoTarget>(target.ref)) {
     if (!allowPortAnnoTarget)
       return failure();
   } else if (!target.isOpOfType<T, Tr...>())

@@ -4,33 +4,20 @@
 ##
 ##===----------------------------------------------------------------------===//
 
-cmake_minimum_required(VERSION 3.13.4)
+cmake_minimum_required(VERSION 3.20.0)
 
-if(POLICY CMP0068)
-  cmake_policy(SET CMP0068 NEW)
-  set(CMAKE_BUILD_WITH_INSTALL_NAME_DIR ON)
-endif()
+#-------------------------------------------------------------------------------
+# Project setup and globals
+#-------------------------------------------------------------------------------
 
-if(POLICY CMP0075)
-  cmake_policy(SET CMP0075 NEW)
-endif()
+  project(circt LANGUAGES CXX C)
 
-if(POLICY CMP0077)
-  cmake_policy(SET CMP0077 NEW)
-endif()
+set(CMAKE_BUILD_WITH_INSTALL_NAME_DIR ON)
 
-# CMP0116: Ninja generators transform `DEPFILE`s from `add_custom_command()`
-# New in CMake 3.20. https://cmake.org/cmake/help/latest/policy/CMP0116.html
-if(POLICY CMP0116)
-  cmake_policy(SET CMP0116 OLD)
-endif()
-
-if(POLICY CMP0135)
-  cmake_policy(SET CMP0135 NEW)
-endif()
-
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard to conform to")
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
+# NOTE: If the Slang Verilog frontend is enabled, the libraries interfacing with
+# Slang will be built using the C++20 standard. (See SlangCompilerOptions.cmake)
 
 # If we are not building as a part of LLVM, build Circt as an
 # standalone project, using LLVM as an external library:
@@ -45,14 +32,10 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
   set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 
 #-------------------------------------------------------------------------------
-# Project setup and globals
-#-------------------------------------------------------------------------------
-  project(circt LANGUAGES CXX C)
-
-#-------------------------------------------------------------------------------
 # Options and settings
 #-------------------------------------------------------------------------------
 
+  # MSVC-specific compiler configuration
   if (MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHs-c- /GR-")
   else ()
@@ -186,6 +169,9 @@ option(CIRCT_BUILD_TOOLS "Build the CIRCT tools. If OFF, just generate build tar
 set(CIRCT_TOOLS_INSTALL_DIR "${CMAKE_INSTALL_BINDIR}" CACHE PATH
     "Path for binary subdirectory (defaults to '${CMAKE_INSTALL_BINDIR}')")
 
+option(CIRCT_INCLUDE_TESTS
+       "Generate build targets for the CIRCT tests." ON)
+
 list(APPEND CMAKE_MODULE_PATH "${MLIR_MAIN_SRC_DIR}/cmake/modules")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 include(AddCIRCT)
@@ -195,6 +181,9 @@ include(AddCIRCT)
 add_custom_target(circt-headers)
 set_target_properties(circt-headers PROPERTIES FOLDER "Misc")
 add_custom_target(circt-doc)
+
+# Umbrella target that builds all C API bindings.
+add_custom_target(circt-capi)
 
 # Add MLIR and LLVM headers to the include path
 include_directories(${LLVM_INCLUDE_DIRS})
@@ -446,24 +435,6 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
-# llhd-sim Configuration
-#-------------------------------------------------------------------------------
-
-if(NOT WIN32)
-  option(CIRCT_LLHD_SIM_ENABLED "Enables LLHD sim." ON)
-else()
-  option(CIRCT_LLHD_SIM_ENABLED "Enables LLHD sim." OFF)
-endif()
-
-if(CIRCT_LLHD_SIM_ENABLED)
-  message(STATUS "llhd-sim is enabled.")
-else()
-  message(STATUS "llhd-sim is disabled.")
-endif()
-
-llvm_canonicalize_cmake_booleans(CIRCT_LLHD_SIM_ENABLED)
-
-#-------------------------------------------------------------------------------
 # Z3Lib Configuration (for circt-lec and SMT dialect integration tests)
 #-------------------------------------------------------------------------------
 
@@ -525,7 +496,7 @@ option(CIRCT_BINDINGS_PYTHON_ENABLED "Enables CIRCT Python bindings." OFF)
 
 if(CIRCT_BINDINGS_PYTHON_ENABLED)
   message(STATUS "CIRCT Python bindings are enabled.")
-  include(MLIRDetectPythonEnv)
+  set(MLIR_DISABLE_CONFIGURE_PYTHON_DEV_PACKAGES 0)
   mlir_configure_python_dev_packages()
 else()
   message(STATUS "CIRCT Python bindings are disabled.")
@@ -534,6 +505,24 @@ else()
   find_package(Python3)
   if(Python3_FOUND)
     message(STATUS "Found python at ${Python3_EXECUTABLE}")
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
+# SymbiYosys Configuration
+#-------------------------------------------------------------------------------
+
+# If SymbiYosys hasn't been explicitly disabled, find it.
+option(SBY_DISABLE "Disable the SymbiYosys tests.")
+if (SBY_DISABLE)
+  message(STATUS "Disabling SymbiYosys tests.")
+else()
+  find_program(SBY_PATH "sby")
+  if(EXISTS ${SBY_PATH})
+    message(STATUS "Found SymbiYosys at ${SBY_PATH}.")
+  else()
+    set(SBY_PATH "")
+    message(STATUS "Did not find SymbiYosys.")
   endif()
 endif()
 
@@ -572,22 +561,19 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     FetchContent_Declare(
       slang
       GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
-      GIT_TAG v3.0
-      GIT_SHALLOW ON)
+      GIT_TAG v10.0
+      GIT_SHALLOW ON
+    )
     set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
 
     # Force Slang to be built as a static library to avoid messing around with
     # RPATHs and installing a slang dylib alongside CIRCT. The static library
-    # will embed Slang into ImportVerilog.
+    # will embed Slang into ImportVerilog and circt-verilog-lsp-server.
     set(ORIGINAL_CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
     set(ORIGINAL_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
 
-    if (MSVC)
-      set(CMAKE_CXX_FLAGS "/EHsc")
-    else ()
-      set(CMAKE_CXX_FLAGS "")
-    endif ()
     set(BUILD_SHARED_LIBS OFF)
+    set(SLANG_USE_MIMALLOC OFF)
     FetchContent_MakeAvailable(slang)
 
     set(CMAKE_CXX_FLAGS ${ORIGINAL_CMAKE_CXX_FLAGS})
@@ -596,7 +582,6 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     if(BUILD_SHARED_LIBS)
       set_target_properties(slang_slang PROPERTIES POSITION_INDEPENDENT_CODE ON)
       set_target_properties(fmt PROPERTIES POSITION_INDEPENDENT_CODE ON)
-      set_target_properties(unordered_dense PROPERTIES POSITION_INDEPENDENT_CODE ON)
     endif()
 
     # The following feels *very* hacky, but CMake complains about the
@@ -604,11 +589,25 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     # linking) without the latter being in an export set. I think we'd want to
     # statically link slang into the CIRCTImportVerilog library, but seems to be
     # harder than it ought to be.
-    set_property(
-      GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang unordered_dense fmt)
-    install(TARGETS slang_slang unordered_dense fmt EXPORT CIRCTTargets)
+    get_target_property(slang_deps slang_slang INTERFACE_LINK_LIBRARIES)
+    foreach(dep_alias ${slang_deps})
+      if (TARGET ${dep_alias})
+        get_target_property(dep_target ${dep_alias} ALIASED_TARGET)
+        message(STATUS "Installing slang dependency ${dep_target}")
+        set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS ${dep_target})
+
+        # Disable the installation of headers coming from third-party libraries.
+        # We won't use those APIs directly. Just make them static libraries for
+        # the sake of running slang normally.
+        set_target_properties(${dep_target} PROPERTIES PUBLIC_HEADER "")
+
+        install(TARGETS ${dep_target} EXPORT CIRCTTargets)
+      endif()
+    endforeach()
+    set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang)
+    install(TARGETS slang_slang EXPORT CIRCTTargets)
   else()
-    find_package(slang 3.0 REQUIRED)
+    find_package(slang 9.1 REQUIRED)
   endif()
 endif()
 
@@ -626,17 +625,32 @@ endif()
 # Directory setup
 #-------------------------------------------------------------------------------
 
+if (CIRCT_INCLUDE_TESTS)
+  add_definitions(-DCIRCT_INCLUDE_TESTS)
+endif()
+
+# Add circt-tblgen early, since it sets a few variables needed by other parts of
+# the project.
+add_subdirectory(tools/circt-tblgen)
+set(CIRCT_TABLEGEN_EXE "${CIRCT_TABLEGEN_EXE}" CACHE INTERNAL "")
+set(CIRCT_TABLEGEN_TARGET "${CIRCT_TABLEGEN_TARGET}" CACHE INTERNAL "")
+
 add_subdirectory(include/circt)
 add_subdirectory(lib)
 if(CIRCT_INCLUDE_TOOLS)
   add_subdirectory(tools)
 endif()
-if (CIRCT_GTEST_AVAILABLE)
-  add_subdirectory(unittests)
-endif()
-add_subdirectory(test)
-add_subdirectory(integration_test)
 add_subdirectory(frontends)
+
+if (CIRCT_INCLUDE_TESTS)
+  # Test directories are added after everything else so their cmake files can
+  # use targets and target properties defined by the things they test.
+  if (CIRCT_GTEST_AVAILABLE)
+    add_subdirectory(unittests)
+  endif()
+  add_subdirectory(test)
+  add_subdirectory(integration_test)
+endif()
 
 option(CIRCT_INCLUDE_DOCS "Generate build targets for the CIRCT docs.")
 if (CIRCT_INCLUDE_DOCS)
@@ -644,7 +658,7 @@ if (CIRCT_INCLUDE_DOCS)
 endif()
 
 install(DIRECTORY include/circt include/circt-c
-  DESTINATION include
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
   COMPONENT circt-headers
   FILES_MATCHING
   PATTERN "*.def"
@@ -656,7 +670,7 @@ install(DIRECTORY include/circt include/circt-c
   )
 
 install(DIRECTORY ${CIRCT_INCLUDE_DIR}/circt ${CIRCT_INCLUDE_DIR}/circt-c
-  DESTINATION include
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
   COMPONENT circt-headers
   FILES_MATCHING
   PATTERN "*.def"

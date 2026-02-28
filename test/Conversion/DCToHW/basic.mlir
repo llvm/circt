@@ -78,7 +78,7 @@ hw.module @fork(in %t : !dc.token, in %clk : !seq.clock {"dc.clock"}, in %rst : 
 
 // CHECK-LABEL:   hw.module @bufferToken(
 // CHECK:              in %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !seq.clock {dc.clock}, in %[[VAL_2:.*]] : i1 {dc.reset}, out out0 : !esi.channel<i0>) {
-// CHECK:           %[[VAL_3:.*]] = esi.buffer %[[VAL_1]], %[[VAL_2]], %[[VAL_0]] {stages = 2 : i64} : i0
+// CHECK:           %[[VAL_3:.*]] = esi.buffer %[[VAL_1]], %[[VAL_2]], %[[VAL_0]] {stages = 2 : i64} : !esi.channel<i0> -> !esi.channel<i0>
 // CHECK:           hw.output %[[VAL_3]] : !esi.channel<i0>
 // CHECK:         }
 hw.module @bufferToken(in %t1 : !dc.token, in %clk : !seq.clock {"dc.clock"}, in %rst : i1 {"dc.reset"}, out out0: !dc.token) {
@@ -91,7 +91,7 @@ hw.module @bufferToken(in %t1 : !dc.token, in %clk : !seq.clock {"dc.clock"}, in
 // CHECK-SAME:              in %[[VAL_1:.*]] : !seq.clock {dc.clock}, 
 // CHECK-SAME:              in %[[VAL_2:.*]] : i1 {dc.reset},
 // CHECK-SAME:              out out0 : !esi.channel<i64>) {
-// CHECK:           %[[VAL_3:.*]] = esi.buffer %[[VAL_1]], %[[VAL_2]], %[[VAL_0]] {stages = 2 : i64} : i64
+// CHECK:           %[[VAL_3:.*]] = esi.buffer %[[VAL_1]], %[[VAL_2]], %[[VAL_0]] {stages = 2 : i64} : !esi.channel<i64> -> !esi.channel<i64>
 // CHECK:           hw.output %[[VAL_3]] : !esi.channel<i64>
 // CHECK:         }
 hw.module @bufferValue(in %v1 : !dc.value<i64>, in %clk : !seq.clock {"dc.clock"}, in %rst : i1 {"dc.reset"}, out out0: !dc.value<i64>) {
@@ -177,3 +177,28 @@ hw.module @source(out token : !dc.token) {
     %token = dc.source
     hw.output %token : !dc.token
 }
+
+// CHECK-LABEL:   hw.module @merge(in 
+// CHECK-SAME:                        %[[VAL_0:.*]] : !esi.channel<i0>, in
+// CHECK-SAME:                        %[[VAL_1:.*]] : !esi.channel<i0>, out token : !esi.channel<i1>) {
+// CHECK:           %[[VAL_2:.*]], %[[VAL_3:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_4:.*]] : i0
+// CHECK:           %[[VAL_5:.*]], %[[VAL_6:.*]] = esi.unwrap.vr %[[VAL_1]], %[[VAL_7:.*]] : i0
+// CHECK:           %[[VAL_8:.*]], %[[VAL_9:.*]] = esi.wrap.vr %[[VAL_10:.*]], %[[VAL_11:.*]] : i1
+// CHECK:           %[[VAL_11]] = comb.or %[[VAL_3]], %[[VAL_6]] : i1
+// CHECK:           %[[VAL_12:.*]] = hw.constant true
+// CHECK:           %[[VAL_10]] = comb.xor %[[VAL_3]], %[[VAL_12]] : i1
+// CHECK:           %[[VAL_13:.*]] = comb.and %[[VAL_11]], %[[VAL_9]] : i1
+// CHECK:           %[[VAL_4]] = comb.and %[[VAL_13]], %[[VAL_3]] : i1
+// CHECK:           %[[VAL_7]] = comb.and %[[VAL_13]], %[[VAL_10]] : i1
+// CHECK:           hw.output %[[VAL_8]] : !esi.channel<i1>
+// CHECK:         }
+hw.module @merge(in %first : !dc.token, in %second : !dc.token, out token : !dc.value<i1>) {
+    %selected = dc.merge %first, %second
+    hw.output %selected : !dc.value<i1>
+}
+
+// CHECK:  hw.module.extern @ext(in %a : i32, out b : i32)
+hw.module.extern @ext(in %a : i32, out b : i32)
+
+// CHECK:  hw.module.extern @extDC(in %a : !esi.channel<i32>, out b : i32)
+hw.module.extern @extDC(in %a : !dc.value<i32>, out b : i32)

@@ -1,4 +1,4 @@
-add_circt_library(CIRCTHandshakeToDC
+add_circt_conversion_library(CIRCTHandshakeToDC
     HandshakeToDC.cpp
 
     ADDITIONAL_HEADER_DIRS
@@ -11,7 +11,6 @@ add_circt_library(CIRCTHandshakeToDC
     LINK_LIBS PUBLIC
     CIRCTHW
     CIRCTHandshake
-    CIRCTHandshakeTransforms
     CIRCTDC
     MLIRIR
     MLIRPass

@@ -13,13 +13,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -27,9 +27,17 @@
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/SetVector.h"
 
 #include <set>
+
+namespace circt {
+namespace sv {
+#define GEN_PASS_DEF_SVEXTRACTTESTCODE
+#include "circt/Dialect/SV/SVPasses.h.inc"
+} // namespace sv
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -157,7 +165,7 @@ static StringAttr getNameForPort(Value val,
       auto index = cast<mlir::OpResult>(val).getResultNumber();
       SmallString<64> portName = inst.getInstanceName();
       portName += ".";
-      auto resultName = inst.getResultName(index);
+      auto resultName = inst.getOutputName(index);
       if (resultName && !resultName.getValue().empty())
         portName += resultName.getValue();
       else
@@ -219,8 +227,8 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   }
 
   // Create the module, setting the output path if indicated.
-  auto newMod = b.create<hw::HWModuleOp>(
-      op.getLoc(),
+  auto newMod = hw::HWModuleOp::create(
+      b, op.getLoc(),
       b.getStringAttr(getVerilogModuleNameAttr(op).getValue() + suffix), ports);
   if (path)
     newMod->setAttr("output_file", path);
@@ -239,17 +247,17 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
 
   // Add an instance in the old module for the extracted module
   b = OpBuilder::atBlockTerminator(op.getBodyBlock());
-  auto inst = b.create<hw::InstanceOp>(
-      op.getLoc(), newMod, newMod.getName(), realInputs, ArrayAttr(),
+  auto inst = hw::InstanceOp::create(
+      b, op.getLoc(), newMod, newMod.getName(), realInputs, ArrayAttr(),
       hw::InnerSymAttr::get(b.getStringAttr(
           ("__ETC_" + getVerilogModuleNameAttr(op).getValue() + suffix)
               .str())));
-  inst->setAttr("doNotPrint", b.getBoolAttr(true));
+  inst.setDoNotPrintAttr(b.getUnitAttr());
   b = OpBuilder::atBlockEnd(
       &op->getParentOfType<mlir::ModuleOp>()->getRegion(0).front());
 
-  auto bindOp = b.create<sv::BindOp>(op.getLoc(), op.getNameAttr(),
-                                     inst.getInnerSymAttr().getSymName());
+  auto bindOp = sv::BindOp::create(b, op.getLoc(), op.getNameAttr(),
+                                   inst.getInnerSymAttr().getSymName());
   bindTable[op.getNameAttr()][inst.getInnerSymAttr().getSymName()] = bindOp;
   if (fileName)
     bindOp->setAttr("output_file", fileName);
@@ -330,10 +338,11 @@ static void migrateOps(hw::HWModuleOp oldMod, hw::HWModuleOp newMod,
 static bool isBound(hw::HWModuleLike op, hw::InstanceGraph &instanceGraph) {
   auto *node = instanceGraph.lookup(op);
   return llvm::any_of(node->uses(), [](igraph::InstanceRecord *a) {
-    auto inst = a->getInstance();
+    auto inst = a->getInstance<hw::HWInstanceLike>();
     if (!inst)
       return false;
-    return inst->hasAttr("doNotPrint");
+
+    return inst.getDoNotPrint();
   });
 }
 
@@ -541,9 +550,9 @@ static bool isAssertOp(hw::HWSymbolCache &symCache, Operation *op) {
         return true;
 
   // If the format of assert is "ifElseFatal", PrintOp is lowered into
-  // ErrorOp. So we have to check message contents whether they encode
-  // verifications. See FIRParserAsserts for more details.
-  if (auto error = dyn_cast<ErrorOp>(op)) {
+  // ErrorOp or ErrorProceduralOp. So we have to check message contents whether
+  // they encode verifications. See FIRParserAsserts for more details.
+  if (auto error = dyn_cast<ErrorProceduralOp>(op)) {
     if (auto message = error.getMessage())
       return message->starts_with("assert:") ||
              message->starts_with("assert failed (verification library)") ||
@@ -553,8 +562,9 @@ static bool isAssertOp(hw::HWSymbolCache &symCache, Operation *op) {
     return false;
   }
 
-  return isa<AssertOp, FinishOp, FWriteOp, AssertConcurrentOp, FatalOp,
-             verif::AssertOp>(op);
+  return isa<AssertOp, FinishOp, FWriteOp, FFlushOp, AssertConcurrentOp,
+             FatalProceduralOp, FatalOp, verif::AssertOp,
+             verif::ClockedAssertOp>(op);
 }
 
 static bool isCoverOp(hw::HWSymbolCache &symCache, Operation *op) {
@@ -564,7 +574,8 @@ static bool isCoverOp(hw::HWSymbolCache &symCache, Operation *op) {
     if (auto *mod = symCache.getDefinition(inst.getModuleNameAttr()))
       if (mod->getAttr("firrtl.extract.cover.extra"))
         return true;
-  return isa<CoverOp, CoverConcurrentOp, verif::CoverOp>(op);
+  return isa<CoverOp, CoverConcurrentOp, verif::CoverOp, verif::ClockedCoverOp>(
+      op);
 }
 
 static bool isAssumeOp(hw::HWSymbolCache &symCache, Operation *op) {
@@ -575,7 +586,8 @@ static bool isAssumeOp(hw::HWSymbolCache &symCache, Operation *op) {
       if (mod->getAttr("firrtl.extract.assume.extra"))
         return true;
 
-  return isa<AssumeOp, AssumeConcurrentOp, verif::AssumeOp>(op);
+  return isa<AssumeOp, AssumeConcurrentOp, verif::AssumeOp,
+             verif::ClockedAssumeOp>(op);
 }
 
 /// Return true if the operation belongs to the design.
@@ -616,6 +628,10 @@ bool isInDesign(hw::HWSymbolCache &symCache, Operation *op,
   if (op->getNumRegions() > 0)
     return false;
 
+  // Special case some operations which we want to clone.
+  if (isa<TimeOp, sv::FuncCallProceduralOp>(op))
+    return false;
+
   // Otherwise, operations with memory effects as a part design.
   return !mlir::isMemoryEffectFree(op);
 }
@@ -627,7 +643,7 @@ bool isInDesign(hw::HWSymbolCache &symCache, Operation *op,
 namespace {
 
 struct SVExtractTestCodeImplPass
-    : public SVExtractTestCodeBase<SVExtractTestCodeImplPass> {
+    : public circt::sv::impl::SVExtractTestCodeBase<SVExtractTestCodeImplPass> {
   SVExtractTestCodeImplPass(bool disableInstanceExtraction,
                             bool disableRegisterExtraction,
                             bool disableModuleInlining) {

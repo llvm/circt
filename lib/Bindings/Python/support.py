@@ -4,6 +4,8 @@
 
 from . import ir
 
+from ._mlir_libs._circt._support import _walk_with_filter
+from .ir import Operation
 from contextlib import AbstractContextManager
 from contextvars import ContextVar
 from typing import List
@@ -86,43 +88,67 @@ def type_to_pytype(t) -> ir.Type:
   if t.__class__ != ir.Type:
     return t
 
-  from .dialects import esi, hw, seq
-  try:
+  from .dialects import esi, hw, seq, rtg, rtgtest
+  if isinstance(t, ir.IntegerType):
     return ir.IntegerType(t)
-  except ValueError:
-    pass
-  try:
+  if isinstance(t, ir.NoneType):
     return ir.NoneType(t)
-  except ValueError:
-    pass
-  try:
+  if isinstance(t, ir.TupleType):
+    return ir.TupleType(t)
+  if hw.ArrayType.isinstance(t):
     return hw.ArrayType(t)
-  except ValueError:
-    pass
-  try:
+  if hw.StructType.isinstance(t):
     return hw.StructType(t)
-  except ValueError:
-    pass
-  try:
+  if hw.UnionType.isinstance(t):
+    return hw.UnionType(t)
+  if hw.TypeAliasType.isinstance(t):
     return hw.TypeAliasType(t)
-  except ValueError:
-    pass
-  try:
+  if hw.InOutType.isinstance(t):
     return hw.InOutType(t)
-  except ValueError:
-    pass
-  try:
+  if seq.ClockType.isinstance(t):
     return seq.ClockType(t)
-  except ValueError:
-    pass
-  try:
+  if esi.ChannelType.isinstance(t):
     return esi.ChannelType(t)
-  except ValueError:
-    pass
-  try:
+  if esi.AnyType.isinstance(t):
+    return esi.AnyType(t)
+  if esi.BundleType.isinstance(t):
     return esi.BundleType(t)
-  except ValueError:
-    pass
+  if esi.ListType.isinstance(t):
+    return esi.ListType(t)
+  if esi.WindowType.isinstance(t):
+    return esi.WindowType(t)
+  if esi.WindowFrameType.isinstance(t):
+    return esi.WindowFrameType(t)
+  if esi.WindowFieldType.isinstance(t):
+    return esi.WindowFieldType(t)
+  if rtg.LabelType.isinstance(t):
+    return rtg.LabelType(t)
+  if rtg.SetType.isinstance(t):
+    return rtg.SetType(t)
+  if rtg.BagType.isinstance(t):
+    return rtg.BagType(t)
+  if rtg.SequenceType.isinstance(t):
+    return rtg.SequenceType(t)
+  if rtg.RandomizedSequenceType.isinstance(t):
+    return rtg.RandomizedSequenceType(t)
+  if rtg.DictType.isinstance(t):
+    return rtg.DictType(t)
+  if rtg.ImmediateType.isinstance(t):
+    return rtg.ImmediateType(t)
+  if rtg.ArrayType.isinstance(t):
+    return rtg.ArrayType(t)
+  if rtg.MemoryType.isinstance(t):
+    return rtg.MemoryType(t)
+  if rtg.MemoryBlockType.isinstance(t):
+    return rtg.MemoryBlockType(t)
+  if rtg.TupleType.isinstance(t):
+    return rtg.TupleType(t)
+  if rtg.StringType.isinstance(t):
+    return rtg.StringType(t)
+  if rtgtest.IntegerRegisterType.isinstance(t):
+    return rtgtest.IntegerRegisterType(t)
+  if rtgtest.CPUType.isinstance(t):
+    return rtgtest.CPUType(t)
 
   raise TypeError(f"Cannot convert {repr(t)} to python type")
 
@@ -143,65 +169,35 @@ def attribute_to_var(attr):
     return attr.value
 
   from .dialects import hw, om
-  try:
+  if isinstance(attr, ir.BoolAttr):
     return ir.BoolAttr(attr).value
-  except ValueError:
-    pass
-  try:
+  if isinstance(attr, ir.IntegerAttr):
     return ir.IntegerAttr(attr).value
-  except ValueError:
-    pass
-  try:
+  if hw.InnerSymAttr.isinstance(attr):
     return ir.StringAttr(hw.InnerSymAttr(attr).symName).value
-  except ValueError:
-    pass
-  try:
+  if isinstance(attr, ir.StringAttr):
     return ir.StringAttr(attr).value
-  except ValueError:
-    pass
-  try:
+  if isinstance(attr, ir.FlatSymbolRefAttr):
     return ir.FlatSymbolRefAttr(attr).value
-  except ValueError:
-    pass
-  try:
+  if isinstance(attr, ir.TypeAttr):
     return ir.TypeAttr(attr).value
-  except ValueError:
-    pass
-  try:
+  if isinstance(attr, ir.ArrayAttr):
     arr = ir.ArrayAttr(attr)
     return [attribute_to_var(x) for x in arr]
-  except ValueError:
-    pass
-  try:
+  if isinstance(attr, ir.DictAttr):
     dict = ir.DictAttr(attr)
     return {i.name: attribute_to_var(i.attr) for i in dict}
-  except ValueError:
-    pass
-  try:
+  if om.ReferenceAttr.isinstance(attr):
     return attribute_to_var(om.ReferenceAttr(attr).inner_ref)
-  except ValueError:
-    pass
-  try:
+  if hw.InnerRefAttr.isinstance(attr):
     ref = hw.InnerRefAttr(attr)
     return (ir.StringAttr(ref.module).value, ir.StringAttr(ref.name).value)
-  except ValueError:
-    pass
-  try:
+  if om.ListAttr.isinstance(attr):
     return list(map(attribute_to_var, om.ListAttr(attr)))
-  except ValueError:
-    pass
-  try:
-    return {name: attribute_to_var(value) for name, value in om.MapAttr(attr)}
-  except ValueError:
-    pass
-  try:
+  if om.OMIntegerAttr.isinstance(attr):
     return int(str(om.OMIntegerAttr(attr)))
-  except ValueError:
-    pass
-  try:
+  if om.PathAttr.isinstance(attr):
     return om.PathAttr(attr).value
-  except ValueError:
-    pass
 
   raise TypeError(f"Cannot convert {repr(attr)} to python value")
 
@@ -233,6 +229,7 @@ class BackedgeBuilder(AbstractContextManager):
       self.instance_of = instance_of
       self.op_view = op_view
       self.port_name = backedge_name
+      self.loc = loc
       self.erased = False
 
     @property
@@ -246,7 +243,8 @@ class BackedgeBuilder(AbstractContextManager):
         self.creator.edges.remove(self)
         self.dummy_op.operation.erase()
 
-  def __init__(self):
+  def __init__(self, circuit_name: str = ""):
+    self.circuit_name = circuit_name
     self.edges = set()
 
   @staticmethod
@@ -287,10 +285,13 @@ class BackedgeBuilder(AbstractContextManager):
       if edge.op_view is not None:
         op = edge.op_view.operation
         msg += "Instance:   " + str(op)
+      if edge.loc is not None:
+        msg += "Location:   " + str(edge.loc)
       errors.append(msg)
 
     if errors:
-      errors.insert(0, "Uninitialized backedges remain in circuit!")
+      errors.insert(
+          0, f"Uninitialized backedges remain in module '{self.circuit_name}'")
       raise RuntimeError("\n".join(errors))
 
 
@@ -407,3 +408,13 @@ class NamedValueOpView:
   def operation(self):
     """Get the operation associated with this builder."""
     return self.opview.operation
+
+
+# Helper function to walk operation with a filter on operation names.
+# `op_views` is a list of operation views to visit. This is a wrapper
+# around the C++ implementation of walk_with_filter.
+def walk_with_filter(operation: Operation, op_views: List[ir.OpView], callback,
+                     walk_order):
+  op_names_identifiers = [name.OPERATION_NAME for name in op_views]
+  return _walk_with_filter(operation, op_names_identifiers, callback,
+                           walk_order)

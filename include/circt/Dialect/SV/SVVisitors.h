@@ -31,7 +31,8 @@ public:
             ReadInOutOp, ArrayIndexInOutOp, VerbatimExprOp, VerbatimExprSEOp,
             IndexedPartSelectInOutOp, IndexedPartSelectOp, StructFieldInOutOp,
             ConstantXOp, ConstantZOp, ConstantStrOp, MacroRefExprOp,
-            MacroRefExprSEOp,
+            MacroRefExprSEOp, UnpackedArrayCreateOp, UnpackedOpenArrayCastOp,
+            SFormatFOp,
             // Declarations.
             RegOp, WireOp, LogicOp, LocalParamOp, XMROp, XMRRefOp,
             // Control flow.
@@ -39,20 +40,24 @@ public:
             AlwaysCombOp, AlwaysFFOp, InitialOp, CaseOp,
             // Other Statements.
             AssignOp, BPAssignOp, PAssignOp, ForceOp, ReleaseOp, AliasOp,
-            FWriteOp, SystemFunctionOp, VerbatimOp,
+            FWriteOp, FFlushOp, SystemFunctionOp, VerbatimOp, MacroRefOp,
+            FuncCallOp, FuncCallProceduralOp, ReturnOp, IncludeOp, MacroErrorOp,
             // Type declarations.
-            InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
-            InterfaceInstanceOp, GetModportOp, AssignInterfaceSignalOp,
-            ReadInterfaceSignalOp, MacroDeclOp, MacroDefOp,
+            InterfaceOp, SVVerbatimSourceOp, InterfaceSignalOp,
+            InterfaceModportOp, InterfaceInstanceOp, GetModportOp,
+            AssignInterfaceSignalOp, ReadInterfaceSignalOp, MacroDeclOp,
+            MacroDefOp, FuncOp, FuncDPIImportOp,
             // Verification statements.
             AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
-            CoverConcurrentOp,
+            CoverConcurrentOp, AssertPropertyOp, AssumePropertyOp,
+            CoverPropertyOp,
             // Bind Statements
             BindOp,
             // Simulator control tasks
             StopOp, FinishOp, ExitOp,
             // Severity message tasks
-            FatalOp, ErrorOp, WarningOp, InfoOp,
+            FatalProceduralOp, FatalOp, ErrorProceduralOp, WarningProceduralOp,
+            InfoProceduralOp, ErrorOp, WarningOp, InfoOp,
             // Memory loading tasks
             ReadMemOp,
             // Generate statements
@@ -60,7 +65,9 @@ public:
             // For statements
             ForOp,
             // Sampled value functiions
-            SampledOp>([&](auto expr) -> ResultType {
+            SampledOp,
+            // Time system functions
+            TimeOp, STimeOp>([&](auto expr) -> ResultType {
           return thisCast->visitSV(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -106,6 +113,9 @@ public:
   HANDLE(ConstantStrOp, Unhandled);
   HANDLE(MacroRefExprOp, Unhandled);
   HANDLE(MacroRefExprSEOp, Unhandled);
+  HANDLE(UnpackedArrayCreateOp, Unhandled);
+  HANDLE(UnpackedOpenArrayCastOp, Unhandled);
+  HANDLE(SFormatFOp, Unhandled);
 
   // Control flow.
   HANDLE(OrderedOutputOp, Unhandled);
@@ -126,11 +136,19 @@ public:
   HANDLE(ReleaseOp, Unhandled);
   HANDLE(AliasOp, Unhandled);
   HANDLE(FWriteOp, Unhandled);
+  HANDLE(FFlushOp, Unhandled);
   HANDLE(SystemFunctionOp, Unhandled);
+  HANDLE(FuncCallProceduralOp, Unhandled);
+  HANDLE(FuncCallOp, Unhandled);
+  HANDLE(ReturnOp, Unhandled);
   HANDLE(VerbatimOp, Unhandled);
+  HANDLE(MacroRefOp, Unhandled);
+  HANDLE(IncludeOp, Unhandled);
+  HANDLE(MacroErrorOp, Unhandled);
 
   // Type declarations.
   HANDLE(InterfaceOp, Unhandled);
+  HANDLE(SVVerbatimSourceOp, Unhandled);
   HANDLE(InterfaceInstanceOp, Unhandled);
   HANDLE(InterfaceSignalOp, Unhandled);
   HANDLE(InterfaceModportOp, Unhandled);
@@ -139,6 +157,8 @@ public:
   HANDLE(ReadInterfaceSignalOp, Unhandled);
   HANDLE(MacroDefOp, Unhandled);
   HANDLE(MacroDeclOp, Unhandled);
+  HANDLE(FuncDPIImportOp, Unhandled);
+  HANDLE(FuncOp, Unhandled);
 
   // Verification statements.
   HANDLE(AssertOp, Unhandled);
@@ -147,6 +167,9 @@ public:
   HANDLE(AssertConcurrentOp, Unhandled);
   HANDLE(AssumeConcurrentOp, Unhandled);
   HANDLE(CoverConcurrentOp, Unhandled);
+  HANDLE(AssertPropertyOp, Unhandled);
+  HANDLE(AssumePropertyOp, Unhandled);
+  HANDLE(CoverPropertyOp, Unhandled);
 
   // Bind statements.
   HANDLE(BindOp, Unhandled);
@@ -157,7 +180,11 @@ public:
   HANDLE(ExitOp, Unhandled);
 
   // Severity message tasks
+  HANDLE(FatalProceduralOp, Unhandled);
   HANDLE(FatalOp, Unhandled);
+  HANDLE(ErrorProceduralOp, Unhandled);
+  HANDLE(WarningProceduralOp, Unhandled);
+  HANDLE(InfoProceduralOp, Unhandled);
   HANDLE(ErrorOp, Unhandled);
   HANDLE(WarningOp, Unhandled);
   HANDLE(InfoOp, Unhandled);
@@ -174,6 +201,10 @@ public:
 
   // Sampled Value Functions
   HANDLE(SampledOp, Unhandled);
+
+  // Time System Functions
+  HANDLE(TimeOp, Unhandled);
+  HANDLE(STimeOp, Unhandled);
 #undef HANDLE
 };
 

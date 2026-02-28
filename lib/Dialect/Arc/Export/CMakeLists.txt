@@ -3,5 +3,6 @@ add_circt_translation_library(CIRCTExportArc
 
   LINK_LIBS PUBLIC
   CIRCTArc
+  MLIRFuncDialect
   MLIRTranslateLib
 )

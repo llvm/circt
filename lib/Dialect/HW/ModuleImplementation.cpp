@@ -391,20 +391,21 @@ static const char *directionAsString(ModulePort::Direction dir) {
   abort();
   return "unknown";
 }
-
 void module_like_impl::printModuleSignatureNew(OpAsmPrinter &p,
-                                               HWModuleLike op) {
+                                               hw::HWModuleLike op) {
+  module_like_impl::printModuleSignatureNew(
+      p, op.getModuleBody(), op.getHWModuleType(), op.getAllPortAttrs(),
+      op.getAllPortLocs());
+}
 
-  Region &body = op.getModuleBody();
+void module_like_impl::printModuleSignatureNew(OpAsmPrinter &p, Region &body,
+                                               hw::ModuleType modType,
+                                               ArrayRef<Attribute> portAttrs,
+                                               ArrayRef<Location> locAttrs) {
   bool isExternal = body.empty();
   SmallString<32> resultNameStr;
   mlir::OpPrintingFlags flags;
   unsigned curArg = 0;
-
-  auto modType = op.getHWModuleType();
-  auto portAttrs = op.getAllPortAttrs();
-  auto locAttrs = op.getAllPortLocs();
-
   p << '(';
   for (auto [i, port] : llvm::enumerate(modType.getPorts())) {
     if (i > 0)
@@ -440,7 +441,7 @@ void module_like_impl::printModuleSignatureNew(OpAsmPrinter &p,
     // TODO: `printOptionalLocationSpecifier` will emit aliases for locations,
     // even if they are not printed.  This will have to be fixed upstream.  For
     // now, use what was specified on the command line.
-    if (flags.shouldPrintDebugInfo()) {
+    if (!locAttrs.empty() && flags.shouldPrintDebugInfo()) {
       auto loc = locAttrs[i];
       if (!isa<UnknownLoc>(loc))
         p.printOptionalLocationSpecifier(cast<Location>(loc));
@@ -448,4 +449,21 @@ void module_like_impl::printModuleSignatureNew(OpAsmPrinter &p,
   }
 
   p << ')';
+}
+
+/// Get a special name to use when printing the entry block arguments of the
+/// region contained by an operation in this dialect.
+void module_like_impl::getAsmBlockArgumentNamesImpl(
+    mlir::Region &region, OpAsmSetValueNameFn setNameFn) {
+  if (region.empty())
+    return;
+  // Assign port names to the bbargs.
+  auto module = cast<HWModuleOp>(region.getParentOp());
+
+  auto *block = &region.front();
+  for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
+    auto name = module.getInputName(i);
+    // Let mlir deterministically convert names to valid identifiers
+    setNameFn(block->getArgument(i), name);
+  }
 }

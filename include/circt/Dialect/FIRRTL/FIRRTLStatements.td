@@ -17,6 +17,7 @@ include "FIRRTLDialect.td"
 include "FIRRTLEnums.td"
 include "FIRRTLOpInterfaces.td"
 include "FIRRTLTypes.td"
+include "circt/Dialect/HW/HWAttributesNaming.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -46,7 +47,7 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
   let results = (outs);
 
   let assemblyFormat =
-    "$dest `,` $src  attr-dict `:` qualified(type($dest)) `,` qualified(type($src))";
+    "$dest `,` $src  attr-dict `:` custom<OptionalBinaryOpTypes>(type($dest), type($src))";
 
   let hasVerifier = 1;
   let hasCanonicalizer = true;
@@ -55,19 +56,20 @@ def ConnectOp : FIRRTLOp<"connect", [FConnectLike]> {
 def SameAnonTypeOperands: PredOpTrait<
         "operands must be structurally equivalent",
         CPred<"areAnonymousTypesEquivalent(getOperand(0).getType(), getOperand(1).getType())">>;
-def StrictConnectOp : FIRRTLOp<"strictconnect", [FConnectLike,
+def MatchingConnectOp : FIRRTLOp<"matchingconnect", [FConnectLike,
                       SameAnonTypeOperands]> {
   let summary = "Connect two signals";
   let description =  [{
-    Connect two values with strict constraints:
+    Connect two values with matching type constraints.  The types of the lhs and
+    rhs must match:
     ```
-      firrtl.strictconnect %dest, %src : t1
-      firrtl.strictconnect %dest, %src : t1, !firrtl.alias<foo, t1>
+      firrtl.matchingconnect %dest, %src : t1
+      firrtl.matchingconnect %dest, %src : t1, !firrtl.alias<foo, t1>
     ```
     }];
 
-  let arguments = (ins StrictConnectableType:$dest,
-                       StrictConnectableType:$src);
+  let arguments = (ins MatchingConnectableType:$dest,
+                       MatchingConnectableType:$src);
   let results = (outs);
   let hasCanonicalizeMethod = true;
 
@@ -106,18 +108,86 @@ def RefDefineOp : FIRRTLOp<"ref.define", [SameTypeOperands, FConnectLike]> {
   }];
 }
 
+def DomainDefineOp
+    : FIRRTLOp<"domain.define", [SameTypeOperands, FConnectLike]> {
+  let summary = "FIRRTL Define Domains.";
+  let description = [{
+    Define a target domain to the source domain:
+    ```
+      firrtl.domain.define %dest, %src
+    ```
+    Used to statically route domains from source to destination
+    through the design, one module at a time.
+
+    Similar to "connect" but cannot have multiple define's to same
+    destination, and the define is never conditional even if under
+    a "when".
+
+    Source and destination must resolve statically.
+  }];
+  let arguments = (ins DomainType:$dest, DomainType:$src);
+  let hasVerifier = 1;
+  let assemblyFormat = "$dest `,` $src  attr-dict";
+  let extraClassDeclaration = [{
+    static ConnectBehaviorKind getConnectBehaviorKind() {
+      return ConnectBehaviorKind::StaticSingleConnect;
+    }
+  }];
+}
 
 def PrintFOp : FIRRTLOp<"printf"> {
   let summary = "Formatted Print Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$formatString,
-                       Variadic<FIRRTLBaseType>:$substitutions, StrAttr:$name);
+                       Variadic<PrintfOperandType>:$substitutions, StrAttr:$name);
   let results = (outs);
 
   let assemblyFormat = [{
     $clock `,` $cond `,` $formatString `` custom<PrintfAttrs>(attr-dict) ` `
     (`(` $substitutions^ `)`)? `:` type($clock) `,` type($cond) (`,` qualified(type($substitutions))^)?
   }];
+}
+
+def FPrintFOp : FIRRTLOp<"fprintf", [AttrSizedOperandSegments]> {
+  let summary = "Formatted File Print Statement";
+
+  let description = [{
+    This operation is similar to the "firrtl.printf" operation, but it prints
+    to a file instead of stdout.
+  }];
+
+  let arguments = (ins ClockType:$clock, UInt1Type:$cond, StrAttr:$outputFile,
+                       Variadic<PrintfOperandType>:$outputFileSubstitutions,
+                       StrAttr:$formatString, Variadic<PrintfOperandType>:$substitutions,
+                       StrAttr:$name);
+  let results = (outs);
+  let hasCustomAssemblyFormat = 1;
+}
+
+def FFlushOp : FIRRTLOp<"fflush"> {
+  let summary = "FFlush statement";
+  let description = [{
+    This operation flushes the output buffer of the specified file descriptor. If
+    no file descriptor is specified, the output buffer of the default output
+    file descriptor is flushed.
+  }];
+
+  let arguments = (ins ClockType:$clock, UInt1Type:$cond,
+                       OptionalAttr<StrAttr>: $outputFile,
+                       Variadic<PrintfOperandType>:$outputFileSubstitutions);
+  let results = (outs);
+
+  let assemblyFormat = [{
+      $clock `,` $cond (`,` $outputFile `(` $outputFileSubstitutions^ `)`)?
+      attr-dict `:` type($clock) `,` type($cond)
+      (`,` qualified(type($outputFileSubstitutions))^)?
+  }];
+  let hasVerifier = 1;
+  let builders = [
+    OpBuilder<(ins "Value":$clock, "Value":$cond), [{
+      build(odsBuilder, odsState, clock, cond, {}, ValueRange{});
+    }]>
+  ];
 }
 
 def SkipOp : FIRRTLOp<"skip", [Pure]> {
@@ -246,10 +316,10 @@ def MatchOp : FIRRTLOp<"match", [SingleBlock, NoTerminator,
     ```mlir
       firrtl.match %in : !firrtl.enum<Some: uint<1>, None: uint<0>> {
         case Some(%arg0) {
-          !firrtl.strictconnect %w, %arg0 : !firrtl.uint<1>
+          !firrtl.matchingconnect %w, %arg0 : !firrtl.uint<1>
         }
         case None(%arg0) {
-          !firrt.strictconnect %w, %c1 : !firrtl.uint<1>
+          !firrt.matchingconnect %w, %c1 : !firrtl.uint<1>
         }
       }
     ```
@@ -311,26 +381,30 @@ def ForceOp : FIRRTLOp<"force", [SameTypeOperands]> {
 
 //===- Reference force/release --------------------------------------------===//
 
-class ForceRefTypeConstraint<string ref, string base>
-  : TypesMatchWith<"reference type of " # ref # " should be RWProbe of " # base,
-                   base, ref,
-                   "RefType::get(firrtl::type_cast<FIRRTLBaseType>($_self).getAllConstDroppedType(), true)">;
+class ForceRefTypeConstraint<string ref, string base> : PredOpTrait<
+        "reference type of " # ref # " should be RWProbe of " # base,
+        CPred<[{
+          firrtl::type_cast<RefType>($}] # ref # [{.getType()).getType() ==
+          firrtl::type_cast<FIRRTLBaseType>($}] # base # [{.getType()).getAllConstDroppedType()
+        }]>>;
 
 def RefForceOp : FIRRTLOp<"ref.force",[ForceRefTypeConstraint<"dest", "src">]> {
   let summary = "FIRRTL force statement";
   let description = "Force a RWProbe to the specified value using the specified clock and predicate.";
   let arguments = (ins ClockType:$clock, UInt1Type:$predicate, RWProbe:$dest, FIRRTLBaseType:$src);
   let assemblyFormat =
-    "$clock `,` $predicate `,` $dest `,` $src attr-dict `:` type($clock) `,` type($predicate) `,` qualified(type($src))";
+    "$clock `,` $predicate `,` $dest `,` $src attr-dict `:` type($clock) `,` type($predicate) `,` qualified(type($dest)) `,` qualified(type($src))";
   let hasCanonicalizer = 1;
+  let hasVerifier = 1;
 }
 def RefForceInitialOp : FIRRTLOp<"ref.force_initial",[ForceRefTypeConstraint<"dest", "src">]> {
   let summary = "FIRRTL force_initial statement";
   let description = "Force a RWProbe to the specified value continuously.";
   let arguments = (ins UInt1Type:$predicate, RWProbe:$dest, FIRRTLBaseType:$src);
   let assemblyFormat =
-    "$predicate `,` $dest `,` $src attr-dict `:` type($predicate) `,` qualified(type($src))";
+    "$predicate `,` $dest `,` $src attr-dict `:` type($predicate) `,` qualified(type($dest)) `,` qualified(type($src))";
   let hasCanonicalizer = 1;
+  let hasVerifier = 1;
 }
 def RefReleaseOp : FIRRTLOp<"ref.release"> {
   let summary = "FIRRTL release statement";
@@ -339,6 +413,7 @@ def RefReleaseOp : FIRRTLOp<"ref.release"> {
   let assemblyFormat =
     "$clock `,` $predicate `,` $dest attr-dict `:` type($clock) `,` type($predicate) `,` qualified(type($dest))";
   let hasCanonicalizer = 1;
+  let hasVerifier = 1;
 }
 def RefReleaseInitialOp : FIRRTLOp<"ref.release_initial"> {
   let summary = "FIRRTL release_initial statement";
@@ -346,6 +421,7 @@ def RefReleaseInitialOp : FIRRTLOp<"ref.release_initial"> {
   let arguments = (ins UInt1Type:$predicate, RWProbe:$dest);
   let assemblyFormat = "$predicate `,` $dest attr-dict `:` type($predicate) `,` qualified(type($dest))";
   let hasCanonicalizer = 1;
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -356,7 +432,7 @@ class VerifIntrinsicOp<string mnemonic, list<Trait> traits = []> :
     FIRRTLOp<"int.verif." # mnemonic, traits> {
   let summary = "FIRRTL variant of `verif." # mnemonic # "`";
   let description = "See `verif." # mnemonic # "` op in the Verif dialect.";
-  let arguments = (ins UInt1Type:$property, OptionalAttr<StrAttr>:$label);
+  let arguments = (ins UInt1Type:$property, Optional<UInt1Type>:$enable, OptionalAttr<StrAttr>:$label);
   let assemblyFormat = [{
     operands attr-dict `:` type(operands)
   }];
@@ -365,6 +441,8 @@ class VerifIntrinsicOp<string mnemonic, list<Trait> traits = []> :
 def VerifAssertIntrinsicOp : VerifIntrinsicOp<"assert">;
 def VerifAssumeIntrinsicOp : VerifIntrinsicOp<"assume">;
 def VerifCoverIntrinsicOp : VerifIntrinsicOp<"cover">;
+def VerifRequireIntrinsicOp : VerifIntrinsicOp<"require">;
+def VerifEnsureIntrinsicOp : VerifIntrinsicOp<"ensure">;
 
 //===----------------------------------------------------------------------===//
 // Layer Block Op
@@ -373,7 +451,9 @@ def VerifCoverIntrinsicOp : VerifIntrinsicOp<"cover">;
 def LayerBlockOp : FIRRTLOp<
   "layerblock",
   [SingleBlock, NoTerminator, NoRegionArguments,
-   ParentOneOf<["firrtl::FModuleOp", "firrtl::LayerBlockOp"]>,
+   ParentOneOf<[
+     "firrtl::FModuleOp", "firrtl::LayerBlockOp",
+     "firrtl::WhenOp", "firrtl::MatchOp"]>,
    DeclareOpInterfaceMethods<SymbolUserOpInterface>]
 > {
   let summary = "A definition of a layer block";
@@ -398,6 +478,30 @@ def LayerBlockOp : FIRRTLOp<
     $layerName $region attr-dict
   }];
   let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// Bind Op
+//===----------------------------------------------------------------------===//
+
+def BindOp
+    : FIRRTLOp<"bind", [DeclareOpInterfaceMethods<InnerRefUserOpInterface>]> {
+  let summary = "Indirect instantiation statement";
+  let description = [{
+    Indirectly instantiate a module from the context of another module. BindOp
+    pairs with a `firrtl.instance` which tracks all information except the
+    emission point for the bind.
+
+    This op exists to aid in the progressive lowering of FIRRTL surface level
+    constructs, such as layers, to system verilog (sv dialect).
+  }];
+  let arguments = (ins InnerRefAttr:$instance);
+  let assemblyFormat = "$instance attr-dict";
+  let builders = [OpBuilder<(ins "StringAttr":$mod, "StringAttr":$name), [{
+      auto instance = hw::InnerRefAttr::get(mod, name);
+      build(odsBuilder, odsState, instance);
+    }]>];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLSTATEMENTS_TD

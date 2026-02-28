@@ -10,13 +10,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OperationSupport.h"
+
+namespace circt {
+namespace calyx {
+#define GEN_PASS_DEF_REMOVEGROUPS
+#include "circt/Dialect/Calyx/CalyxPasses.h.inc"
+} // namespace calyx
+} // namespace circt
 
 using namespace circt;
 using namespace calyx;
@@ -48,8 +54,8 @@ static void modifyGroupOperations(ComponentOp component) {
       // Replace `calyx.group_done %0, %1 ? : i1`
       //    with `calyx.assign %done, %0, %1 ? : i1`
       auto assignOp =
-          builder.create<AssignOp>(group->getLoc(), component.getDonePort(),
-                                   groupDone.getSrc(), groupDone.getGuard());
+          AssignOp::create(builder, group->getLoc(), component.getDonePort(),
+                           groupDone.getSrc(), groupDone.getGuard());
       groupDone->replaceAllUsesWith(assignOp);
     } else {
       // Replace calyx.group_go's uses with its guard, e.g.
@@ -94,7 +100,8 @@ void inlineGroups(ComponentOp component) {
 
 namespace {
 
-struct RemoveGroupsPass : public RemoveGroupsBase<RemoveGroupsPass> {
+struct RemoveGroupsPass
+    : public circt::calyx::impl::RemoveGroupsBase<RemoveGroupsPass> {
   void runOnOperation() override;
 };
 

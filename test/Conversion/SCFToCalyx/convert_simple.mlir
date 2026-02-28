@@ -88,6 +88,11 @@ module {
 // CHECK-DAG:    calyx.assign %std_mult_pipe_0.go = %0 ? %true : i1
 // CHECK-DAG:    calyx.group_done %muli_0_reg.done : i1
 // CHECK-NEXT:  }
+// CHECK:      calyx.group @ret_assign_0 {
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.in = %muli_0_reg.out : i32
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-DAG:        calyx.group_done %ret_arg0_reg.done : i1
+// CHECK-DAG:      }
     %0 = arith.muli %a0, %a1 : i32
     return %0 : i32
   }
@@ -106,6 +111,11 @@ module {
 // CHECK-DAG:    calyx.assign %std_divu_pipe_0.go = %0 ? %true : i1
 // CHECK-DAG:    calyx.group_done %divui_0_reg.done : i1
 // CHECK-NEXT:  }
+// CHECK:      calyx.group @ret_assign_0 {
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.in = %divui_0_reg.out : i32
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-DAG:        calyx.group_done %ret_arg0_reg.done : i1
+// CHECK-DAG:      }
     %0 = arith.divui %a0, %a1 : i32
     return %0 : i32
   }
@@ -124,6 +134,11 @@ module {
 // CHECK-DAG:    calyx.assign %std_remu_pipe_0.go = %0 ? %true : i1
 // CHECK-DAG:    calyx.group_done %remui_0_reg.done : i1
 // CHECK-NEXT:  }
+// CHECK:      calyx.group @ret_assign_0 {
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.in = %remui_0_reg.out : i32
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-DAG:        calyx.group_done %ret_arg0_reg.done : i1
+// CHECK-DAG:      }
     %0 = arith.remui %a0, %a1 : i32
     return %0 : i32
   }
@@ -142,6 +157,11 @@ module {
 // CHECK-DAG:    calyx.assign %std_divs_pipe_0.go = %0 ? %true : i1
 // CHECK-DAG:    calyx.group_done %divsi_0_reg.done : i1
 // CHECK-NEXT:  }
+// CHECK:      calyx.group @ret_assign_0 {
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.in = %divsi_0_reg.out : i32
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-DAG:        calyx.group_done %ret_arg0_reg.done : i1
+// CHECK-DAG:      }
     %0 = arith.divsi %a0, %a1 : i32
     return %0 : i32
   }
@@ -160,6 +180,11 @@ module {
 // CHECK-DAG:    calyx.assign %std_rems_pipe_0.go = %0 ? %true : i1
 // CHECK-DAG:    calyx.group_done %remsi_0_reg.done : i1
 // CHECK-NEXT:  }
+// CHECK:      calyx.group @ret_assign_0 {
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.in = %remsi_0_reg.out : i32
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-DAG:        calyx.group_done %ret_arg0_reg.done : i1
+// CHECK-DAG:      }
     %0 = arith.remsi %a0, %a1 : i32
     return %0 : i32
   }
@@ -207,5 +232,457 @@ module {
     %0 = arith.extui %arg0 : i4 to i8
     %1 = arith.extsi %arg0 : i4 to i8
     return %0, %1 : i8, i8
+  }
+}
+
+// -----
+
+// Test integer and floating point constant
+
+// CHECK:     calyx.group @ret_assign_0 {
+// CHECK-DAG:   calyx.assign %ret_arg0_reg.in = %in0 : i32
+// CHECK-DAG:   calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-DAG:   calyx.assign %ret_arg1_reg.in = %c42_i32 : i32
+// CHECK-DAG:   calyx.assign %ret_arg1_reg.write_en = %true : i1
+// CHECK-DAG:   calyx.assign %ret_arg2_reg.in = %cst : i32
+// CHECK-DAG:   calyx.assign %ret_arg2_reg.write_en = %true : i1
+// CHECK-DAG:   %0 = comb.and %ret_arg2_reg.done, %ret_arg1_reg.done, %ret_arg0_reg.done : i1
+// CHECK-DAG:   calyx.group_done %0 ? %true : i1
+// CHECK-DAG: }
+
+module {
+  func.func @main(%arg0 : f32) -> (f32, i32, f32) {
+    %0 = arith.constant 42 : i32
+    %1 = arith.constant 4.2e+1 : f32
+
+    return %arg0, %0, %1 : f32, i32, f32
+  }
+}
+
+// -----
+
+// Test floating point add
+
+// CHECK:             calyx.group @bb0_0 {
+// CHECK-DAG:               calyx.assign %std_addFN_0.left = %in0 : i32
+// CHECK-DAG:               calyx.assign %std_addFN_0.right = %cst : i32
+// CHECK-DAG:               calyx.assign %addf_0_reg.in = %std_addFN_0.out : i32
+// CHECK-DAG:               calyx.assign %addf_0_reg.write_en = %std_addFN_0.done : i1
+// CHECK-DAG:               %0 = comb.xor %std_addFN_0.done, %true : i1
+// CHECK-DAG:               calyx.assign %std_addFN_0.go = %0 ? %true : i1
+// CHECK-DAG:               calyx.assign %std_addFN_0.subOp = %false : i1
+// CHECK-DAG:               calyx.group_done %addf_0_reg.done : i1
+// CHECK-DAG:             }
+// CHECK:      calyx.group @ret_assign_0 {
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.in = %addf_0_reg.out : i32
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-DAG:        calyx.group_done %ret_arg0_reg.done : i1
+// CHECK-DAG:      }
+
+module {
+  func.func @main(%arg0 : f32) -> f32 {
+    %0 = arith.constant 4.2 : f32
+    %1 = arith.addf %arg0, %0 : f32
+
+    return %1 : f32
+  }
+}
+
+// -----
+
+// Test floating point sub
+
+// CHECK:             calyx.group @bb0_0 {
+// CHECK-DAG:               calyx.assign %std_addFN_0.left = %in0 : i32
+// CHECK-DAG:               calyx.assign %std_addFN_0.right = %cst : i32
+// CHECK-DAG:               calyx.assign %subf_0_reg.in = %std_addFN_0.out : i32
+// CHECK-DAG:               calyx.assign %subf_0_reg.write_en = %std_addFN_0.done : i1
+// CHECK-DAG:               %0 = comb.xor %std_addFN_0.done, %true : i1
+// CHECK-DAG:               calyx.assign %std_addFN_0.go = %0 ? %true : i1
+// CHECK-DAG:               calyx.assign %std_addFN_0.subOp = %true : i1
+// CHECK-DAG:               calyx.group_done %subf_0_reg.done : i1
+// CHECK-DAG:             }
+// CHECK:      calyx.group @ret_assign_0 {
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.in = %subf_0_reg.out : i32
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-DAG:        calyx.group_done %ret_arg0_reg.done : i1
+// CHECK-DAG:      }
+
+module {
+  func.func @main(%arg0 : f32) -> f32 {
+    %0 = arith.constant 4.2 : f32
+    %1 = arith.subf %arg0, %0 : f32
+
+    return %1 : f32
+  }
+}
+
+// -----
+
+// Test floating point mul
+
+// CHECK:        %cst = calyx.constant @cst_0 <4.200000e+00 : f32> : i32
+// CHECK-DAG:    %true = hw.constant true
+// CHECK-DAG:    %mulf_0_reg.in, %mulf_0_reg.write_en, %mulf_0_reg.clk, %mulf_0_reg.reset, %mulf_0_reg.out, %mulf_0_reg.done = calyx.register @mulf_0_reg : i32, i1, i1, i1, i32, i1
+// CHECK-DAG:    %std_mulFN_0.clk, %std_mulFN_0.reset, %std_mulFN_0.go, %std_mulFN_0.control, %std_mulFN_0.left, %std_mulFN_0.right, %std_mulFN_0.roundingMode, %std_mulFN_0.out, %std_mulFN_0.exceptionalFlags, %std_mulFN_0.done = calyx.ieee754.mul @std_mulFN_0 : i1, i1, i1, i1, i32, i32, i3, i32, i5, i1
+// CHECK-DAG:    %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
+// CHECK:      calyx.group @bb0_0 {
+// CHECK-DAG:        calyx.assign %std_mulFN_0.left = %in0 : i32
+// CHECK-DAG:        calyx.assign %std_mulFN_0.right = %cst : i32
+// CHECK-DAG:        calyx.assign %mulf_0_reg.in = %std_mulFN_0.out : i32
+// CHECK-DAG:        calyx.assign %mulf_0_reg.write_en = %std_mulFN_0.done : i1
+// CHECK-DAG:        %0 = comb.xor %std_mulFN_0.done, %true : i1
+// CHECK-DAG:        calyx.assign %std_mulFN_0.go = %0 ? %true : i1
+// CHECK-DAG:        calyx.group_done %mulf_0_reg.done : i1
+// CHECK-DAG:      }
+// CHECK:      calyx.group @ret_assign_0 {
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.in = %mulf_0_reg.out : i32
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-DAG:        calyx.group_done %ret_arg0_reg.done : i1
+// CHECK-DAG:      }
+module {
+  func.func @main(%arg0 : f32) -> f32 {
+    %0 = arith.constant 4.2 : f32
+    %1 = arith.mulf %arg0, %0 : f32
+
+    return %1 : f32
+  }
+}
+
+// -----
+
+// Test parallel op lowering
+
+// CHECK:    calyx.wires {
+// CHECK-DAG:      calyx.group @bb0_0 {
+// CHECK-DAG:        calyx.assign %std_slice_5.in = %c1_i32 : i32
+// CHECK-DAG:        calyx.assign %arg_mem_0.addr0 = %std_slice_5.out : i1
+// CHECK-DAG:        calyx.assign %arg_mem_0.content_en = %true : i1
+// CHECK-DAG:        calyx.assign %arg_mem_0.write_en = %false : i1
+// CHECK-DAG:        calyx.assign %load_0_reg.in = %arg_mem_0.read_data : i32
+// CHECK-DAG:        calyx.assign %load_0_reg.write_en = %arg_mem_0.done : i1
+// CHECK-DAG:        calyx.group_done %load_0_reg.done : i1
+// CHECK-DAG:      }
+// CHECK-DAG:      calyx.group @bb0_1 {
+// CHECK-DAG:        calyx.assign %std_slice_4.in = %c1_i32 : i32
+// CHECK-DAG:        calyx.assign %arg_mem_2.addr0 = %std_slice_4.out : i1
+// CHECK-DAG:        calyx.assign %arg_mem_2.content_en = %true : i1
+// CHECK-DAG:        calyx.assign %arg_mem_2.write_en = %false : i1
+// CHECK-DAG:        calyx.assign %load_1_reg.in = %arg_mem_2.read_data : i32
+// CHECK-DAG:        calyx.assign %load_1_reg.write_en = %arg_mem_2.done : i1
+// CHECK-DAG:        calyx.group_done %load_1_reg.done : i1
+// CHECK-DAG:      }
+// CHECK-DAG:      calyx.group @bb0_3 {
+// CHECK-DAG:        calyx.assign %std_slice_3.in = %c1_i32 : i32
+// CHECK-DAG:        calyx.assign %arg_mem_1.addr0 = %std_slice_3.out : i1
+// CHECK-DAG:        calyx.assign %arg_mem_1.write_data = %std_add_0.out : i32
+// CHECK-DAG:        calyx.assign %arg_mem_1.write_en = %true : i1
+// CHECK-DAG:        calyx.assign %arg_mem_1.content_en = %true : i1
+// CHECK-DAG:        calyx.assign %std_add_0.left = %load_0_reg.out : i32
+// CHECK-DAG:        calyx.assign %std_add_0.right = %load_1_reg.out : i32
+// CHECK-DAG:        calyx.group_done %arg_mem_1.done : i1
+// CHECK-DAG:      }
+// CHECK-DAG:      calyx.group @bb0_4 {
+// CHECK-DAG:        calyx.assign %std_slice_2.in = %c0_i32 : i32
+// CHECK-DAG:        calyx.assign %arg_mem_0.addr0 = %std_slice_2.out : i1
+// CHECK-DAG:        calyx.assign %arg_mem_0.content_en = %true : i1
+// CHECK-DAG:        calyx.assign %arg_mem_0.write_en = %false : i1
+// CHECK-DAG:        calyx.assign %load_2_reg.in = %arg_mem_0.read_data : i32
+// CHECK-DAG:        calyx.assign %load_2_reg.write_en = %arg_mem_0.done : i1
+// CHECK-DAG:        calyx.group_done %load_2_reg.done : i1
+// CHECK-DAG:      }
+// CHECK-DAG:      calyx.group @bb0_5 {
+// CHECK-DAG:        calyx.assign %std_slice_1.in = %c0_i32 : i32
+// CHECK-DAG:        calyx.assign %arg_mem_2.addr0 = %std_slice_1.out : i1
+// CHECK-DAG:        calyx.assign %arg_mem_2.content_en = %true : i1
+// CHECK-DAG:        calyx.assign %arg_mem_2.write_en = %false : i1
+// CHECK-DAG:        calyx.assign %load_3_reg.in = %arg_mem_2.read_data : i32
+// CHECK-DAG:        calyx.assign %load_3_reg.write_en = %arg_mem_2.done : i1
+// CHECK-DAG:        calyx.group_done %load_3_reg.done : i1
+// CHECK-DAG:      }
+// CHECK-DAG:      calyx.group @bb0_7 {
+// CHECK-DAG:        calyx.assign %std_slice_0.in = %c0_i32 : i32
+// CHECK-DAG:        calyx.assign %arg_mem_1.addr0 = %std_slice_0.out : i1
+// CHECK-DAG:        calyx.assign %arg_mem_1.write_data = %std_add_1.out : i32
+// CHECK-DAG:        calyx.assign %arg_mem_1.write_en = %true : i1
+// CHECK-DAG:        calyx.assign %arg_mem_1.content_en = %true : i1
+// CHECK-DAG:        calyx.assign %std_add_1.left = %load_2_reg.out : i32
+// CHECK-DAG:        calyx.assign %std_add_1.right = %load_3_reg.out : i32
+// CHECK-DAG:        calyx.group_done %arg_mem_1.done : i1
+// CHECK-DAG:      }
+// CHECK-DAG:    }
+// CHECK-DAG:    calyx.control {
+// CHECK-DAG:      calyx.seq {
+// CHECK-DAG:        calyx.par {
+// CHECK-DAG:          calyx.seq {
+// CHECK-DAG:            calyx.enable @bb0_0
+// CHECK-DAG:            calyx.enable @bb0_1
+// CHECK-DAG:            calyx.enable @bb0_3
+// CHECK-DAG:          }
+// CHECK-DAG:          calyx.seq {
+// CHECK-DAG:            calyx.enable @bb0_4
+// CHECK-DAG:            calyx.enable @bb0_5
+// CHECK-DAG:            calyx.enable @bb0_7
+// CHECK-DAG:          }
+// CHECK-DAG:        }
+// CHECK-DAG:      }
+// CHECK-DAG:    }
+
+module {
+  func.func @main(%arg0: memref<2xi32>, %arg1: memref<2xi32>) {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %alloc = memref.alloc() : memref<2xi32>
+    scf.parallel (%arg2) = (%c0) to (%c1) step (%c1) {
+      scf.execute_region {
+        %0 = memref.load %arg0[%c1] : memref<2xi32>
+        %1 = memref.load %alloc[%c1] : memref<2xi32>
+        %2 = arith.addi %0, %1 : i32
+        memref.store %2, %arg1[%c1] : memref<2xi32>
+        scf.yield
+      }
+      scf.execute_region {
+        %0 = memref.load %arg0[%c0] : memref<2xi32>
+        %1 = memref.load %alloc[%c0] : memref<2xi32>
+        %2 = arith.addi %0, %1 : i32
+        memref.store %2, %arg1[%c0] : memref<2xi32>
+        scf.yield
+      }
+    } {calyx.unroll = true}
+    return
+  }
+}
+
+// -----
+
+// Test lowering SelectOp and CmpFOp with floating point operands
+
+// CHECK:    %std_mux_1.cond, %std_mux_1.tru, %std_mux_1.fal, %std_mux_1.out = calyx.std_mux @std_mux_1 : i1, i64, i64, i64
+// CHECK-DAG:    %unordered_port_1_reg.in, %unordered_port_1_reg.write_en, %unordered_port_1_reg.clk, %unordered_port_1_reg.reset, %unordered_port_1_reg.out, %unordered_port_1_reg.done = calyx.register @unordered_port_1_reg : i1, i1, i1, i1, i1, i1
+// CHECK-DAG:    %cmpf_1_reg.in, %cmpf_1_reg.write_en, %cmpf_1_reg.clk, %cmpf_1_reg.reset, %cmpf_1_reg.out, %cmpf_1_reg.done = calyx.register @cmpf_1_reg : i1, i1, i1, i1, i1, i1
+// CHECK-DAG:    %std_compareFN_1.clk, %std_compareFN_1.reset, %std_compareFN_1.go, %std_compareFN_1.left, %std_compareFN_1.right, %std_compareFN_1.signaling, %std_compareFN_1.lt, %std_compareFN_1.eq, %std_compareFN_1.gt, %std_compareFN_1.unordered, %std_compareFN_1.exceptionalFlags, %std_compareFN_1.done = calyx.ieee754.compare @std_compareFN_1 : i1, i1, i1, i64, i64, i1, i1, i1, i1, i1, i5, i1
+// CHECK-DAG:    %std_mux_0.cond, %std_mux_0.tru, %std_mux_0.fal, %std_mux_0.out = calyx.std_mux @std_mux_0 : i1, i64, i64, i64
+// CHECK-DAG:    %std_and_0.left, %std_and_0.right, %std_and_0.out = calyx.std_and @std_and_0 : i1, i1, i1
+// CHECK-DAG:    %std_or_0.left, %std_or_0.right, %std_or_0.out = calyx.std_or @std_or_0 : i1, i1, i1
+// CHECK-DAG:    %unordered_port_0_reg.in, %unordered_port_0_reg.write_en, %unordered_port_0_reg.clk, %unordered_port_0_reg.reset, %unordered_port_0_reg.out, %unordered_port_0_reg.done = calyx.register @unordered_port_0_reg : i1, i1, i1, i1, i1, i1
+// CHECK-DAG:    %compare_port_0_reg.in, %compare_port_0_reg.write_en, %compare_port_0_reg.clk, %compare_port_0_reg.reset, %compare_port_0_reg.out, %compare_port_0_reg.done = calyx.register @compare_port_0_reg : i1, i1, i1, i1, i1, i1
+// CHECK-DAG:    %cmpf_0_reg.in, %cmpf_0_reg.write_en, %cmpf_0_reg.clk, %cmpf_0_reg.reset, %cmpf_0_reg.out, %cmpf_0_reg.done = calyx.register @cmpf_0_reg : i1, i1, i1, i1, i1, i1
+// CHECK-DAG:    %std_compareFN_0.clk, %std_compareFN_0.reset, %std_compareFN_0.go, %std_compareFN_0.left, %std_compareFN_0.right, %std_compareFN_0.signaling, %std_compareFN_0.lt, %std_compareFN_0.eq, %std_compareFN_0.gt, %std_compareFN_0.unordered, %std_compareFN_0.exceptionalFlags, %std_compareFN_0.done = calyx.ieee754.compare @std_compareFN_0 : i1, i1, i1, i64, i64, i1, i1, i1, i1, i1, i5, i1
+// CHECK:    calyx.wires {
+// CHECK:      calyx.group @bb0_0 {
+// CHECK-DAG:        calyx.assign %std_compareFN_0.left = %in0 : i64
+// CHECK-DAG:        calyx.assign %std_compareFN_0.right = %in1 : i64
+// CHECK-DAG:        calyx.assign %std_compareFN_0.signaling = %true : i1
+// CHECK-DAG:        calyx.assign %compare_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:        calyx.assign %compare_port_0_reg.in = %std_compareFN_0.gt : i1
+// CHECK-DAG:        calyx.assign %unordered_port_0_reg.write_en = %std_compareFN_0.done : i1
+// CHECK-DAG:        calyx.assign %unordered_port_0_reg.in = %std_compareFN_0.unordered : i1
+// CHECK-DAG:        calyx.assign %std_or_0.left = %compare_port_0_reg.out : i1
+// CHECK-DAG:        calyx.assign %std_or_0.right = %unordered_port_0_reg.out : i1
+// CHECK-DAG:        calyx.assign %std_and_0.left = %compare_port_0_reg.done : i1
+// CHECK-DAG:        calyx.assign %std_and_0.right = %unordered_port_0_reg.done : i1
+// CHECK-DAG:        calyx.assign %cmpf_0_reg.in = %std_or_0.out : i1
+// CHECK-DAG:        calyx.assign %cmpf_0_reg.write_en = %std_and_0.out : i1
+// CHECK-DAG:        %0 = comb.xor %std_compareFN_0.done, %true : i1
+// CHECK-DAG:        calyx.assign %std_compareFN_0.go = %0 ? %true : i1
+// CHECK-DAG:        calyx.group_done %cmpf_0_reg.done : i1
+// CHECK-DAG:      }
+// CHECK:      calyx.group @bb0_2 {
+// CHECK-DAG:        calyx.assign %std_compareFN_1.left = %in1 : i64
+// CHECK-DAG:        calyx.assign %std_compareFN_1.right = %in1 : i64
+// CHECK-DAG:        calyx.assign %std_compareFN_1.signaling = %false : i1
+// CHECK-DAG:        calyx.assign %unordered_port_1_reg.write_en = %std_compareFN_1.done : i1
+// CHECK-DAG:        calyx.assign %unordered_port_1_reg.in = %std_compareFN_1.unordered : i1
+// CHECK-DAG:        calyx.assign %cmpf_1_reg.in = %unordered_port_1_reg.out : i1
+// CHECK-DAG:        calyx.assign %cmpf_1_reg.write_en = %unordered_port_1_reg.done : i1
+// CHECK-DAG:        %0 = comb.xor %std_compareFN_1.done, %true : i1
+// CHECK-DAG:        calyx.assign %std_compareFN_1.go = %0 ? %true : i1
+// CHECK-DAG:        calyx.group_done %cmpf_1_reg.done : i1
+// CHECK-DAG:      }
+// CHECK:      calyx.group @ret_assign_0 {
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.in = %std_mux_1.out : i64
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-DAG:        calyx.assign %std_mux_1.cond = %cmpf_1_reg.out : i1
+// CHECK-DAG:        calyx.assign %std_mux_1.tru = %in1 : i64
+// CHECK-DAG:        calyx.assign %std_mux_1.fal = %std_mux_0.out : i64
+// CHECK-DAG:        calyx.assign %std_mux_0.cond = %cmpf_0_reg.out : i1
+// CHECK-DAG:        calyx.assign %std_mux_0.tru = %in0 : i64
+// CHECK-DAG:        calyx.assign %std_mux_0.fal = %in1 : i64
+// CHECK-DAG:        calyx.group_done %ret_arg0_reg.done : i1
+// CHECK-DAG:      }
+// CHECK-DAG:    }
+
+module {
+  func.func @main(%arg0: f64, %arg1: f64) -> f64 {
+    %0 = arith.cmpf ugt, %arg0, %arg1 : f64
+    %1 = arith.select %0, %arg0, %arg1 : f64
+    %2 = arith.cmpf uno, %arg1, %arg1 : f64
+    %3 = arith.select %2, %arg1, %1 : f64
+    return %3 : f64
+  }
+}
+
+// Test SelectOp with signed integer type to signless integer type
+
+// -----
+
+// CHECK:    %std_mux_0.cond, %std_mux_0.tru, %std_mux_0.fal, %std_mux_0.out = calyx.std_mux @std_mux_0 : i1, i32, i32, i32
+// CHECK-DAG:    %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
+// CHECK:    calyx.wires {
+// CHECK:      calyx.group @ret_assign_0 {
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.in = %std_mux_0.out : i32
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-DAG:        calyx.assign %std_mux_0.cond = %in2 : i1
+// CHECK-DAG:        calyx.assign %std_mux_0.tru = %in0 : i32
+// CHECK-DAG:        calyx.assign %std_mux_0.fal = %in1 : i32
+// CHECK-DAG:        calyx.group_done %ret_arg0_reg.done : i1
+// CHECK-DAG:      }
+// CHECK-DAG:    }
+
+module {
+  func.func @main(%true : si32, %false: si32, %cond: i1) -> si32 {
+    %res = "arith.select" (%cond, %true, %false) : (i1, si32, si32) -> si32
+    return %res : si32
+  }
+}
+
+// Test floating point to signed integer conversion
+
+// -----
+
+// CHECK:      calyx.group @bb0_0 {
+// CHECK-DAG:        calyx.assign %std_fpToIntFN_0.in = %in0 : i32
+// CHECK-DAG:        calyx.assign %std_fpToIntFN_0.signedOut = %true : i1
+// CHECK-DAG:        %0 = comb.xor %std_fpToIntFN_0.done, %true : i1
+// CHECK-DAG:        calyx.assign %fptosi_0_reg.in = %std_fpToIntFN_0.out : i64
+// CHECK-DAG:        calyx.assign %fptosi_0_reg.write_en = %true : i1
+// CHECK-DAG:        calyx.assign %std_fpToIntFN_0.go = %0 ? %true : i1
+// CHECK-DAG:        calyx.group_done %fptosi_0_reg.done : i1
+// CHECK-DAG:      }
+
+module {
+  func.func @main(%arg0 : f32) -> i64 {
+    %0 = arith.fptosi %arg0 : f32 to i64
+
+    return %0 : i64
+  }
+}
+
+// Test signed integer to floating point conversion
+
+// -----
+
+// CHECK:      calyx.group @bb0_0 {
+// CHECK-DAG:        calyx.assign %std_intToFpFN_0.in = %in0 : i64
+// CHECK-DAG:        calyx.assign %std_intToFpFN_0.signedIn = %true : i1
+// CHECK-DAG:        calyx.assign %sitofp_0_reg.in = %std_intToFpFN_0.out : i32
+// CHECK-DAG:        calyx.assign %sitofp_0_reg.write_en = %true : i1
+// CHECK-DAG:        %0 = comb.xor %std_intToFpFN_0.done, %true : i1
+// CHECK-DAG:        calyx.assign %std_intToFpFN_0.go = %0 ? %true : i1
+// CHECK-DAG:        calyx.group_done %sitofp_0_reg.done : i1
+// CHECK-DAG:      }
+
+module {
+  func.func @main(%arg0 : i64) -> f32 {
+    %0 = arith.sitofp %arg0 : i64 to f32
+
+    return %0 : f32
+  }
+}
+
+// Test `arith.bitcast` is a no-op
+
+// -----
+
+// CHECK:      calyx.group @ret_assign_0 {
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.in = %in0 : i64
+// CHECK-DAG:        calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-DAG:        calyx.group_done %ret_arg0_reg.done : i1
+// CHECK-DAG:      }
+
+module {
+  func.func @main(%arg0 : i64) -> f64 {
+    %0 = arith.bitcast %arg0 : i64 to f64
+
+    return %0 : f64
+  }
+}
+
+// -----
+
+// Test floating point division
+
+// CHECK:    %cst = calyx.constant @cst_0 <4.200000e+00 : f32> : i32
+// CHECK-DAG:    %true = hw.constant true
+// CHECK-DAG:    %false = hw.constant false
+// CHECK-DAG:    %divf_0_reg.in, %divf_0_reg.write_en, %divf_0_reg.clk, %divf_0_reg.reset, %divf_0_reg.out, %divf_0_reg.done = calyx.register @divf_0_reg : i32, i1, i1, i1, i32, i1
+// CHECK-DAG:    %std_divSqrtFN_0.clk, %std_divSqrtFN_0.reset, %std_divSqrtFN_0.go, %std_divSqrtFN_0.control, %std_divSqrtFN_0.sqrtOp, %std_divSqrtFN_0.left, %std_divSqrtFN_0.right, %std_divSqrtFN_0.roundingMode, %std_divSqrtFN_0.out, %std_divSqrtFN_0.exceptionalFlags, %std_divSqrtFN_0.done = calyx.ieee754.divSqrt @std_divSqrtFN_0 : i1, i1, i1, i1, i1, i32, i32, i3, i32, i5, i1
+// CHECK-DAG:    %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
+// CHECK:      calyx.group @bb0_0 {
+// CHECK-DAG:        calyx.assign %std_divSqrtFN_0.left = %in0 : i32
+// CHECK-DAG:        calyx.assign %std_divSqrtFN_0.right = %cst : i32
+// CHECK-DAG:        calyx.assign %divf_0_reg.in = %std_divSqrtFN_0.out : i32
+// CHECK-DAG:        calyx.assign %divf_0_reg.write_en = %std_divSqrtFN_0.done : i1
+// CHECK-DAG:        %0 = comb.xor %std_divSqrtFN_0.done, %true : i1
+// CHECK-DAG:        calyx.assign %std_divSqrtFN_0.go = %0 ? %true : i1
+// CHECK-DAG:        calyx.assign %std_divSqrtFN_0.sqrtOp = %false : i1
+// CHECK-DAG:        calyx.group_done %divf_0_reg.done : i1
+// CHECK-DAG:      }
+
+module {
+  func.func @main(%arg0 : f32) -> f32 {
+    %0 = arith.constant 4.2 : f32
+    %1 = arith.divf %arg0, %0 : f32
+
+    return %1 : f32
+  }
+}
+
+// -----
+
+// Test floating point square root
+
+// CHECK:    %sqrt_0_reg.in, %sqrt_0_reg.write_en, %sqrt_0_reg.clk, %sqrt_0_reg.reset, %sqrt_0_reg.out, %sqrt_0_reg.done = calyx.register @sqrt_0_reg : i32, i1, i1, i1, i32, i1
+// CHECK-DAG:    %std_divSqrtFN_0.clk, %std_divSqrtFN_0.reset, %std_divSqrtFN_0.go, %std_divSqrtFN_0.control, %std_divSqrtFN_0.sqrtOp, %std_divSqrtFN_0.left, %std_divSqrtFN_0.right, %std_divSqrtFN_0.roundingMode, %std_divSqrtFN_0.out, %std_divSqrtFN_0.exceptionalFlags, %std_divSqrtFN_0.done = calyx.ieee754.divSqrt @std_divSqrtFN_0 : i1, i1, i1, i1, i1, i32, i32, i3, i32, i5, i1
+// CHECK:      calyx.group @bb0_0 {
+// CHECK-DAG:        calyx.assign %std_divSqrtFN_0.left = %in0 : i32
+// CHECK-DAG:        calyx.assign %sqrt_0_reg.in = %std_divSqrtFN_0.out : i32
+// CHECK-DAG:        calyx.assign %sqrt_0_reg.write_en = %std_divSqrtFN_0.done : i1
+// CHECK-DAG:        %0 = comb.xor %std_divSqrtFN_0.done, %true : i1
+// CHECK-DAG:        calyx.assign %std_divSqrtFN_0.go = %0 ? %true : i1
+// CHECK-DAG:        calyx.assign %std_divSqrtFN_0.sqrtOp = %true : i1
+// CHECK-DAG:        calyx.group_done %sqrt_0_reg.done : i1
+// CHECK-DAG:      }
+
+module {
+  func.func @main(%arg0: f32) -> f32 {
+    %result = math.sqrt %arg0 : f32
+    return %result : f32
+  }
+}
+
+// -----
+
+// Test floating point absolute lowering
+
+// CHECK:      calyx.group @bb0_2 {
+// CHECK-DAG:        calyx.assign %std_slice_0.in = %c0_i32 : i32
+// CHECK-DAG:        calyx.assign %arg_mem_0.addr0 = %std_slice_0.out : i1
+// CHECK-DAG:        calyx.assign %arg_mem_0.write_data = %std_and_0.out : i32
+// CHECK-DAG:        calyx.assign %arg_mem_0.write_en = %true : i1
+// CHECK-DAG:        calyx.assign %arg_mem_0.content_en = %true : i1
+// CHECK-DAG:        calyx.assign %std_and_0.left = %c2147483647_i32 : i32
+// CHECK-DAG:        calyx.assign %std_and_0.right = %addf_0_reg.out : i32
+// CHECK-DAG:        calyx.group_done %arg_mem_0.done : i1
+// CHECK-DAG:      }
+
+module {
+  func.func @main(%arg0: memref<1xf32>, %arg1: f32) {
+    %zero_idx = arith.constant 0 : index
+    %cst = arith.constant -1.1 : f32
+    %sum = arith.addf %cst, %arg1 : f32
+    %abs = math.absf %sum : f32
+    memref.store %abs, %arg0[%zero_idx] : memref<1xf32>
+    return
   }
 }

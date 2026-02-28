@@ -1,4 +1,4 @@
-add_circt_library(CIRCTCalyxNative
+add_circt_conversion_library(CIRCTCalyxNative
   CalyxNative.cpp
 
   ADDITIONAL_HEADER_DIRS

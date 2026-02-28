@@ -1,7 +1,8 @@
 // RUN: circt-translate %s --emit-hgldd | FileCheck %s
-// RUN: circt-translate %s --emit-split-hgldd --hgldd-output-dir=%T --hgldd-source-prefix=my_source --hgldd-output-prefix=my_verilog
-// RUN: cat %T/Foo.dd | FileCheck %s --check-prefix=CHECK-FOO
-// RUN: cat %T/Bar.dd | FileCheck %s --check-prefix=CHECK-BAR
+// RUN: rm -rf %t.dir && mkdir %t.dir
+// RUN: circt-translate %s --emit-split-hgldd --hgldd-output-dir=%t.dir --hgldd-source-prefix=my_source --hgldd-output-prefix=my_verilog
+// RUN: cat %t.dir/Foo.dd | FileCheck %s --check-prefix=CHECK-FOO
+// RUN: cat %t.dir/Bar.dd | FileCheck %s --check-prefix=CHECK-BAR
 
 #loc1 = loc("InputFoo.scala":4:10)
 #loc2 = loc("InputFoo.scala":5:11)

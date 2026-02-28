@@ -14,6 +14,10 @@
 
 #define DEBUG_TYPE "arc-allocate-state"
 
+// Offset for model state allocations. The first bytes of model storage are
+// reserved for the model header (currently just the i64 simulation time).
+static constexpr unsigned kStateOffset = 8;
+
 namespace circt {
 namespace arc {
 #define GEN_PASS_DEF_ALLOCATESTATE
@@ -32,25 +36,79 @@ using llvm::SmallMapVector;
 //===----------------------------------------------------------------------===//
 
 namespace {
+
 struct AllocateStatePass
     : public arc::impl::AllocateStateBase<AllocateStatePass> {
+
+  using AllocateStateBase::AllocateStateBase;
+
   void runOnOperation() override;
-  void allocateBlock(Block *block);
-  void allocateOps(Value storage, Block *block, ArrayRef<Operation *> ops);
+  void allocateBlock(Block *block, Value rootStorage);
+  void allocateOps(Value storage, Block *block, ArrayRef<Operation *> ops,
+                   unsigned padding);
+  void tapNamedState(AllocStateOp allocOp, IntegerAttr offset);
+
+  SmallVector<Attribute> traceTaps;
 };
 } // namespace
 
 void AllocateStatePass::runOnOperation() {
+  traceTaps.clear();
+
   ModelOp modelOp = getOperation();
   LLVM_DEBUG(llvm::dbgs() << "Allocating state in `" << modelOp.getName()
                           << "`\n");
 
   // Walk the blocks from innermost to outermost and group all state allocations
   // in that block in one larger allocation.
-  modelOp.walk([&](Block *block) { allocateBlock(block); });
+  Value rootStorage = modelOp.getBodyBlock().getArgument(0);
+  modelOp.walk([&](Block *block) { allocateBlock(block, rootStorage); });
+
+  if (!traceTaps.empty())
+    modelOp.setTraceTapsAttr(ArrayAttr::get(modelOp.getContext(), traceTaps));
 }
 
-void AllocateStatePass::allocateBlock(Block *block) {
+/// Create a TraceTap attribute for the given `allocOp` if it carries one or
+/// more names. Annotates all StateWriteOp users of the allocated state to
+/// preserve the association between the write operations and the signal.
+void AllocateStatePass::tapNamedState(AllocStateOp allocOp,
+                                      IntegerAttr offset) {
+  TraceTapAttr tapAttr;
+  auto valueType = cast<StateType>(allocOp.getType()).getType();
+  auto typeAttr = TypeAttr::get(valueType);
+  // Check for "name" or "names" attribute
+  if (auto namesAttr = allocOp->getAttrOfType<ArrayAttr>("names")) {
+    if (!namesAttr.empty()) {
+      tapAttr = TraceTapAttr::get(allocOp.getContext(), typeAttr,
+                                  offset.getValue().getZExtValue(), namesAttr);
+    }
+  } else if (auto nameAttr = allocOp->getAttrOfType<StringAttr>("name")) {
+    auto arrayAttr = ArrayAttr::get(nameAttr.getContext(), {nameAttr});
+    tapAttr = TraceTapAttr::get(allocOp.getContext(), typeAttr,
+                                offset.getValue().getZExtValue(), arrayAttr);
+  }
+  if (!tapAttr)
+    return;
+  traceTaps.push_back(tapAttr);
+  // Annotate the StateWrite users with the current ModelOp and the newly
+  // created tap's index in the array.
+  auto indexAttr = IntegerAttr::get(
+      IntegerType::get(allocOp.getContext(), 64,
+                       IntegerType::SignednessSemantics::Unsigned),
+      traceTaps.size() - 1);
+  auto modelSymAttr = FlatSymbolRefAttr::get(getOperation().getSymNameAttr());
+
+  for (auto *user : allocOp.getResult().getUsers()) {
+    if (auto writeUser = dyn_cast<StateWriteOp>(user)) {
+      // TODO: Can a StateWriteOp be shared across models?
+      assert(!(writeUser.getTraceTapIndex() || writeUser.getTraceTapModel()));
+      writeUser.setTraceTapIndexAttr(indexAttr);
+      writeUser.setTraceTapModelAttr(modelSymAttr);
+    }
+  }
+}
+
+void AllocateStatePass::allocateBlock(Block *block, Value rootStorage) {
   SmallMapVector<Value, std::vector<Operation *>, 1> opsByStorage;
 
   // Group operations by their storage. There is generally just one storage,
@@ -63,18 +121,23 @@ void AllocateStatePass::allocateBlock(Block *block) {
   LLVM_DEBUG(llvm::dbgs() << "- Visiting block in "
                           << block->getParentOp()->getName() << "\n");
 
-  // Actually allocate each operation.
-  for (auto &[storage, ops] : opsByStorage)
-    allocateOps(storage, block, ops);
+  // Actually allocate each operation. Root storage gets padding for the model
+  // header.
+  bool isRootBlock = block == rootStorage.getParentBlock();
+  for (auto &[storage, ops] : opsByStorage) {
+    unsigned padding = isRootBlock && storage == rootStorage ? kStateOffset : 0;
+    allocateOps(storage, block, ops, padding);
+  }
 }
 
 void AllocateStatePass::allocateOps(Value storage, Block *block,
-                                    ArrayRef<Operation *> ops) {
+                                    ArrayRef<Operation *> ops,
+                                    unsigned padding) {
   SmallVector<std::tuple<Value, Value, IntegerAttr>> gettersToCreate;
 
-  // Helper function to allocate storage aligned to its own size, or 8 bytes at
-  // most.
-  unsigned currentByte = 0;
+  // Helper function to allocate storage aligned to its own size, or 16 bytes
+  // at most.
+  unsigned currentByte = padding;
   auto allocBytes = [&](unsigned numBytes) {
     currentByte = llvm::alignToPowerOf2(
         currentByte, llvm::bit_ceil(std::min(numBytes, 16U)));
@@ -93,6 +156,9 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
       auto offset = builder.getI32IntegerAttr(allocBytes(numBytes));
       op->setAttr("offset", offset);
       gettersToCreate.emplace_back(result, storage, offset);
+      if (insertTraceTaps)
+        if (auto allocStateOp = dyn_cast<AllocStateOp>(op))
+          tapNamedState(allocStateOp, offset);
       continue;
     }
 
@@ -135,7 +201,7 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
       if (!getter || !result.getDefiningOp<AllocStorageOp>()) {
         ImplicitLocOpBuilder builder(result.getLoc(), user);
         getter =
-            builder.create<StorageGetOp>(result.getType(), storage, offset);
+            StorageGetOp::create(builder, result.getType(), storage, offset);
         getters.push_back(getter);
         opOrder[getter] = userOrder;
       } else if (userOrder < opOrder.lookup(getter)) {
@@ -146,24 +212,18 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
     }
   }
 
-  // Create the substorage accessor at the beginning of the block.
-  Operation *storageOwner = storage.getDefiningOp();
-  if (!storageOwner)
-    storageOwner = cast<BlockArgument>(storage).getOwner()->getParentOp();
-
-  if (storageOwner->isProperAncestor(block->getParentOp())) {
-    auto substorage = builder.create<AllocStorageOp>(
-        block->getParentOp()->getLoc(),
+  // Create the substorage accessor at the beginning of the block, or update the
+  // root storage type to reflect the total allocation size. Root storage is
+  // indicated by non-zero padding.
+  if (padding != 0) {
+    storage.setType(StorageType::get(&getContext(), currentByte));
+  } else {
+    auto substorage = AllocStorageOp::create(
+        builder, block->getParentOp()->getLoc(),
         StorageType::get(&getContext(), currentByte), storage);
     for (auto *op : ops)
       op->replaceUsesOfWith(storage, substorage);
     for (auto op : getters)
       op->replaceUsesOfWith(storage, substorage);
-  } else {
-    storage.setType(StorageType::get(&getContext(), currentByte));
   }
-}
-
-std::unique_ptr<Pass> arc::createAllocateStatePass() {
-  return std::make_unique<AllocateStatePass>();
 }

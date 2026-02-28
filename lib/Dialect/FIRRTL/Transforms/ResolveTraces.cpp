@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
@@ -21,13 +20,21 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/Utils.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "llvm/ADT/APSInt.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/JSON.h"
 
 #define DEBUG_TYPE "firrtl-resolve-traces"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_RESOLVETRACES
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -66,8 +73,9 @@ LogicalResult circt::firrtl::applyTraceName(const AnnoPathValue &target,
   return success();
 }
 
-struct ResolveTracesPass : public ResolveTracesBase<ResolveTracesPass> {
-  using ResolveTracesBase::outputAnnotationFilename;
+struct ResolveTracesPass
+    : public circt::firrtl::impl::ResolveTracesBase<ResolveTracesPass> {
+  using Base::Base;
 
   void runOnOperation() override;
 
@@ -137,7 +145,7 @@ private:
 
     // If this targets a module or an instance, then we're done.  There is no
     // "reference" part of the FIRRTL target.
-    if (path.ref.isa<OpAnnoTarget>() &&
+    if (isa<OpAnnoTarget>(path.ref) &&
         path.isOpOfType<FModuleOp, FExtModuleOp, InstanceOp>())
       return;
 
@@ -409,18 +417,10 @@ void ResolveTracesPass::runOnOperation() {
   else
     fileAttr = builder.getStringAttr(outputAnnotationFilename);
 
-  builder.create<emit::FileOp>(fileAttr, [&] {
-    builder.create<sv::VerbatimOp>(jsonBuffer, ValueRange{},
-                                   builder.getArrayAttr(symbols));
+  emit::FileOp::create(builder, fileAttr, [&] {
+    sv::VerbatimOp::create(builder, jsonBuffer, ValueRange{},
+                           builder.getArrayAttr(symbols));
   });
 
   return markAllAnalysesPreserved();
-}
-
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createResolveTracesPass(StringRef outputAnnotationFilename) {
-  auto pass = std::make_unique<ResolveTracesPass>();
-  if (!outputAnnotationFilename.empty())
-    pass->outputAnnotationFilename = outputAnnotationFilename.str();
-  return pass;
 }

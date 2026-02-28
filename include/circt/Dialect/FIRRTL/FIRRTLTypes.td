@@ -81,22 +81,27 @@ def AggregateType : FIRRTLDialectType<
   CPred<"type_isa<FVectorType, BundleType, FEnumType>($_self)">,
   "a aggregate type", "::circt::firrtl::FIRRTLBaseType">;
 
+def GroundType : FIRRTLDialectType<
+  CPred<"llvm::isa<FIRRTLBaseType>($_self) && cast<FIRRTLBaseType>($_self).isGround()">,
+  "a ground type", "::circt::firrtl::FIRRTLBaseType">;
+
 def PassiveType : FIRRTLDialectType<
   CPred<"type_isa<FIRRTLBaseType>($_self) && cast<FIRRTLBaseType>($_self).isPassive()">,
   "a passive base type (contain no flips)", "::circt::firrtl::FIRRTLBaseType">;
 
 def SizedType : FIRRTLDialectType<CPred<"type_isa<FIRRTLBaseType>($_self) && "
     "!type_cast<FIRRTLBaseType>($_self).hasUninferredWidth()">,
-    "a sized type (contains no uninferred widths)", "::circt::firrtl::FIRRTLType">;
+    "a sized type (contains no uninferred widths)",
+    "::circt::firrtl::FIRRTLBaseType">;
 def SizedOrForeignType : AnyTypeOf<[SizedType, ForeignType]>;
 def SizedPassiveType : FIRRTLDialectType<And<[SizedType.predicate,PassiveType.predicate]>,
-    "a sized passive base type (contains no uninferred widths, or flips)", "::circt::firrtl::FIRRTLType">;
+    "a sized passive base type (contains no uninferred widths, or flips)",
+    "::circt::firrtl::FIRRTLBaseType">;
 def SizedPassiveOrForeignType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
 
 def AsyncResetType : FIRRTLDialectAliasTypeHelper<"AsyncResetType", "async reset type">;
 
 def ResetType : FIRRTLDialectAliasTypeHelper<"ResetType", "reset type">;
-
 
 def RefType : FIRRTLDialectTypeHelper<"RefType", "reference type">;
 
@@ -104,14 +109,11 @@ def RWProbe : FIRRTLDialectType<
   CPred<"type_isa<RefType>($_self) && type_cast<RefType>($_self).getForceable()">,
    "rwprobe type", "::circt::firrtl::RefType">;
 
-def RWProbeConcreteReset : FIRRTLDialectType<
-  CPred<[{type_isa<RefType>($_self) &&
-         type_cast<RefType>($_self).getForceable() &&
-         !type_cast<RefType>($_self).hasUninferredReset()}]>,
-   "rwprobe type (with concrete resets only)", "::circt::firrtl::RefType">;
+def LHSType : FIRRTLDialectType<CPred<"isa<LHSType>($_self)">,
+                                      "writable type", "::circt::firrtl::LHSType">;
 
 def ConnectableType : AnyTypeOf<[FIRRTLBaseType, ForeignType]>;
-def StrictConnectableType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
+def MatchingConnectableType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
 
 //===----------------------------------------------------------------------===//
 // Sized and Unsized Integers
@@ -233,5 +235,31 @@ def DoubleType : FIRRTLDialectTypeHelper<"DoubleType", "double type">,
 
 def PathType : FIRRTLDialectTypeHelper<"PathType", "path type">,
   BuildableType<"::circt::firrtl::PathType::get($_builder.getContext())">;
+
+//===----------------------------------------------------------------------===//
+// Format String Types
+//===----------------------------------------------------------------------===//
+
+def FStringType :
+  FIRRTLDialectTypeHelper<"FStringType",
+    "a format string type">,
+  BuildableType<"::circt::firrtl::FStringType::get($_builder.getContext())">;
+
+// TODO: Migrate off of this by making the operands for `PrintfOp` use only
+// `FStringType`.  This requires conversion ops that convert from
+// `FIRRTLBaseType` to `FStringType`.
+def PrintfOperandType : FIRRTLDialectType<
+  CPred<"type_isa<FIRRTLBaseType, FStringType>($_self)">,
+    "a printf operand type (a FIRRTL base type or a format string type)",
+    "::circt::firrtl::FIRRTLType">;
+
+//===----------------------------------------------------------------------===//
+// Domain Type
+//===----------------------------------------------------------------------===//
+
+def DomainType : FIRRTLDialectTypeHelper<
+  "DomainType",
+  "a domain type">,
+  BuildableType<"::circt::firrtl::DomainType::get($_builder.getContext())">;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD

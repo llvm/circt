@@ -11,6 +11,8 @@ ssp.instance @cyclic of "CyclicProblem" [II<2>] {
     operator_type @_1 [latency<1>]
     operator_type @_2 [latency<2>]
   }
+  resource {
+  }
   graph {
     %0 = operation<@_1>() [t<0>]
     %1 = operation<@_0>(@op4 [dist<1>]) [t<2>]
@@ -30,6 +32,8 @@ ssp.instance @mobility of "CyclicProblem" [II<3>] {
   library {
     operator_type @_1 [latency<1>]
     operator_type @_4 [latency<4>]
+  }
+  resource {
   }
   graph {
     %0 = operation<@_1>() [t<0>]
@@ -51,6 +55,8 @@ ssp.instance @interleaved_cycles of "CyclicProblem" [II<4>] {
   library {
     operator_type @_1 [latency<1>]
     operator_type @_10 [latency<10>]
+  }
+  resource {
   }
   graph {
     %0 = operation<@_1>() [t<0>]
@@ -76,6 +82,8 @@ ssp.instance @self_arc of "CyclicProblem" [II<3>] {
   library {
     operator_type @_1 [latency<1>]
     operator_type @_3 [latency<3>]
+  }
+  resource {
   }
   graph {
     %0 = operation<@_1>() [t<0>]

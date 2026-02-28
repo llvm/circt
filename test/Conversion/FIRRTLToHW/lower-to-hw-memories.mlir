@@ -20,9 +20,9 @@ firrtl.circuit "Foo" {
     %mem1_r.en = firrtl.subfield %mem1_r[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     %mem1_r.addr = firrtl.subfield %mem1_r[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     %mem1_r.data = firrtl.subfield %mem1_r[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
-    firrtl.strictconnect %mem1_r.clk, %clk : !firrtl.clock
-    firrtl.strictconnect %mem1_r.en, %en : !firrtl.uint<1>
-    firrtl.strictconnect %mem1_r.addr, %addr : !firrtl.uint<4>
+    firrtl.matchingconnect %mem1_r.clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %mem1_r.en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %mem1_r.addr, %addr : !firrtl.uint<4>
     %mem1_data = firrtl.node sym @mem1_data %mem1_r.data : !firrtl.uint<42>
 
     // CHECK-NEXT: %mem2 = seq.firmem 1, 2, old, port_order : <13 x 42, mask 2>
@@ -33,11 +33,11 @@ firrtl.circuit "Foo" {
     %mem2_w.addr = firrtl.subfield %mem2_w[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<2>>
     %mem2_w.data = firrtl.subfield %mem2_w[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<2>>
     %mem2_w.mask = firrtl.subfield %mem2_w[mask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<2>>
-    firrtl.strictconnect %mem2_w.clk, %clk : !firrtl.clock
-    firrtl.strictconnect %mem2_w.en, %en : !firrtl.uint<1>
-    firrtl.strictconnect %mem2_w.addr, %addr : !firrtl.uint<4>
-    firrtl.strictconnect %mem2_w.data, %wdata : !firrtl.uint<42>
-    firrtl.strictconnect %mem2_w.mask, %mask2 : !firrtl.uint<2>
+    firrtl.matchingconnect %mem2_w.clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %mem2_w.en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %mem2_w.addr, %addr : !firrtl.uint<4>
+    firrtl.matchingconnect %mem2_w.data, %wdata : !firrtl.uint<42>
+    firrtl.matchingconnect %mem2_w.mask, %mask2 : !firrtl.uint<2>
 
     // CHECK-NEXT: %mem3 = seq.firmem 3, 2, new, port_order : <14 x 42, mask 3>
     // CHECK-NEXT: [[RDATA:%.+]] = seq.firmem.read_write_port %mem3[%addr] = %wdata if %wmode, clock %clk enable %en mask %mask3 :
@@ -50,12 +50,12 @@ firrtl.circuit "Foo" {
     %mem3_rw.rdata = firrtl.subfield %mem3_rw[rdata] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<3>>
     %mem3_rw.wmask = firrtl.subfield %mem3_rw[wmask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<3>>
     %mem3_rw.wmode = firrtl.subfield %mem3_rw[wmode] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<3>>
-    firrtl.strictconnect %mem3_rw.clk, %clk : !firrtl.clock
-    firrtl.strictconnect %mem3_rw.en, %en : !firrtl.uint<1>
-    firrtl.strictconnect %mem3_rw.addr, %addr : !firrtl.uint<4>
-    firrtl.strictconnect %mem3_rw.wdata, %wdata : !firrtl.uint<42>
-    firrtl.strictconnect %mem3_rw.wmask, %mask3 : !firrtl.uint<3>
-    firrtl.strictconnect %mem3_rw.wmode, %wmode : !firrtl.uint<1>
+    firrtl.matchingconnect %mem3_rw.clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %mem3_rw.en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %mem3_rw.addr, %addr : !firrtl.uint<4>
+    firrtl.matchingconnect %mem3_rw.wdata, %wdata : !firrtl.uint<42>
+    firrtl.matchingconnect %mem3_rw.wmask, %mask3 : !firrtl.uint<3>
+    firrtl.matchingconnect %mem3_rw.wmode, %wmode : !firrtl.uint<1>
     %mem3_data = firrtl.node sym @mem3_data %mem3_rw.rdata : !firrtl.uint<42>
 
     // CHECK-NEXT: %mem4 = seq.firmem 4, 5, undefined, port_order : <15 x 42, mask 6>
@@ -81,20 +81,20 @@ firrtl.circuit "Foo" {
     %mem4_w.mask = firrtl.subfield %mem4_w[mask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<6>>
     %mem4_rw.wmask = firrtl.subfield %mem4_rw[wmask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<6>>
     %mem4_rw.wmode = firrtl.subfield %mem4_rw[wmode] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<6>>
-    firrtl.strictconnect %mem4_r.clk, %clk : !firrtl.clock
-    firrtl.strictconnect %mem4_w.clk, %clk : !firrtl.clock
-    firrtl.strictconnect %mem4_rw.clk, %clk : !firrtl.clock
-    firrtl.strictconnect %mem4_r.en, %en : !firrtl.uint<1>
-    firrtl.strictconnect %mem4_w.en, %en : !firrtl.uint<1>
-    firrtl.strictconnect %mem4_rw.en, %en : !firrtl.uint<1>
-    firrtl.strictconnect %mem4_r.addr, %addr : !firrtl.uint<4>
-    firrtl.strictconnect %mem4_w.addr, %addr : !firrtl.uint<4>
-    firrtl.strictconnect %mem4_rw.addr, %addr : !firrtl.uint<4>
-    firrtl.strictconnect %mem4_w.data, %wdata : !firrtl.uint<42>
-    firrtl.strictconnect %mem4_rw.wdata, %wdata : !firrtl.uint<42>
-    firrtl.strictconnect %mem4_w.mask, %mask6 : !firrtl.uint<6>
-    firrtl.strictconnect %mem4_rw.wmask, %mask6 : !firrtl.uint<6>
-    firrtl.strictconnect %mem4_rw.wmode, %wmode : !firrtl.uint<1>
+    firrtl.matchingconnect %mem4_r.clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %mem4_w.clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %mem4_rw.clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %mem4_r.en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %mem4_w.en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %mem4_rw.en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %mem4_r.addr, %addr : !firrtl.uint<4>
+    firrtl.matchingconnect %mem4_w.addr, %addr : !firrtl.uint<4>
+    firrtl.matchingconnect %mem4_rw.addr, %addr : !firrtl.uint<4>
+    firrtl.matchingconnect %mem4_w.data, %wdata : !firrtl.uint<42>
+    firrtl.matchingconnect %mem4_rw.wdata, %wdata : !firrtl.uint<42>
+    firrtl.matchingconnect %mem4_w.mask, %mask6 : !firrtl.uint<6>
+    firrtl.matchingconnect %mem4_rw.wmask, %mask6 : !firrtl.uint<6>
+    firrtl.matchingconnect %mem4_rw.wmode, %wmode : !firrtl.uint<1>
     %mem4_data0 = firrtl.node sym @mem4_data0 %mem4_r.data : !firrtl.uint<42>
     %mem4_data1 = firrtl.node sym @mem4_data1 %mem4_rw.rdata : !firrtl.uint<42>
   }
@@ -111,11 +111,11 @@ firrtl.circuit "Foo" {
     %mem_w.addr = firrtl.subfield %mem_w[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
     %mem_w.data = firrtl.subfield %mem_w[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
     %mem_w.mask = firrtl.subfield %mem_w[mask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
-    firrtl.strictconnect %mem_w.clk, %clk : !firrtl.clock
-    firrtl.strictconnect %mem_w.en, %en : !firrtl.uint<1>
-    firrtl.strictconnect %mem_w.addr, %addr : !firrtl.uint<4>
-    firrtl.strictconnect %mem_w.data, %data : !firrtl.uint<0>
-    firrtl.strictconnect %mem_w.mask, %mask : !firrtl.uint<1>
+    firrtl.matchingconnect %mem_w.clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %mem_w.en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %mem_w.addr, %addr : !firrtl.uint<4>
+    firrtl.matchingconnect %mem_w.data, %data : !firrtl.uint<0>
+    firrtl.matchingconnect %mem_w.mask, %mask : !firrtl.uint<1>
   }
 
   // FIRRTL memories with a single mask bit for the entire word should lower to
@@ -134,11 +134,11 @@ firrtl.circuit "Foo" {
     %mem_w.data = firrtl.subfield %mem_w[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
     %mem_w.mask = firrtl.subfield %mem_w[mask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
 
-    firrtl.strictconnect %mem_w.clk, %clk : !firrtl.clock
-    firrtl.strictconnect %mem_w.en, %en : !firrtl.uint<1>
-    firrtl.strictconnect %mem_w.addr, %addr : !firrtl.uint<4>
-    firrtl.strictconnect %mem_w.data, %data : !firrtl.uint<42>
-    firrtl.strictconnect %mem_w.mask, %mask : !firrtl.uint<1>
+    firrtl.matchingconnect %mem_w.clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %mem_w.en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %mem_w.addr, %addr : !firrtl.uint<4>
+    firrtl.matchingconnect %mem_w.data, %data : !firrtl.uint<42>
+    firrtl.matchingconnect %mem_w.mask, %mask : !firrtl.uint<1>
   }
 
   // FIRRTL memories with a single mask bit for the entire word should lower to
@@ -158,12 +158,12 @@ firrtl.circuit "Foo" {
     %mem_rw.rdata = firrtl.subfield %mem_rw[rdata] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
     %mem_rw.wmask = firrtl.subfield %mem_rw[wmask] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
     %mem_rw.wmode = firrtl.subfield %mem_rw[wmode] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<42>, wmode: uint<1>, wdata: uint<42>, wmask: uint<1>>
-    firrtl.strictconnect %mem_rw.clk, %clk : !firrtl.clock
-    firrtl.strictconnect %mem_rw.en, %en : !firrtl.uint<1>
-    firrtl.strictconnect %mem_rw.addr, %addr : !firrtl.uint<4>
-    firrtl.strictconnect %mem_rw.wdata, %wdata : !firrtl.uint<42>
-    firrtl.strictconnect %mem_rw.wmask, %wmask : !firrtl.uint<1>
-    firrtl.strictconnect %mem_rw.wmode, %wmode : !firrtl.uint<1>
+    firrtl.matchingconnect %mem_rw.clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %mem_rw.en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %mem_rw.addr, %addr : !firrtl.uint<4>
+    firrtl.matchingconnect %mem_rw.wdata, %wdata : !firrtl.uint<42>
+    firrtl.matchingconnect %mem_rw.wmask, %wmask : !firrtl.uint<1>
+    firrtl.matchingconnect %mem_rw.wmode, %wmode : !firrtl.uint<1>
   }
 
   // CHECK-LABEL: hw.module @MemInit
@@ -174,9 +174,9 @@ firrtl.circuit "Foo" {
     %mem1_r.clk = firrtl.subfield %mem1_r[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     %mem1_r.en = firrtl.subfield %mem1_r[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     %mem1_r.addr = firrtl.subfield %mem1_r[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
-    firrtl.strictconnect %mem1_r.clk, %clk : !firrtl.clock
-    firrtl.strictconnect %mem1_r.en, %en : !firrtl.uint<1>
-    firrtl.strictconnect %mem1_r.addr, %addr : !firrtl.uint<4>
+    firrtl.matchingconnect %mem1_r.clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %mem1_r.en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %mem1_r.addr, %addr : !firrtl.uint<4>
 
     // CHECK: %mem2 = seq.firmem
     // CHECK-SAME: init = #seq.firmem.init<"mem.txt", false, true>
@@ -184,9 +184,9 @@ firrtl.circuit "Foo" {
     %mem2_r.clk = firrtl.subfield %mem2_r[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     %mem2_r.en = firrtl.subfield %mem2_r[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     %mem2_r.addr = firrtl.subfield %mem2_r[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
-    firrtl.strictconnect %mem2_r.clk, %clk : !firrtl.clock
-    firrtl.strictconnect %mem2_r.en, %en : !firrtl.uint<1>
-    firrtl.strictconnect %mem2_r.addr, %addr : !firrtl.uint<4>
+    firrtl.matchingconnect %mem2_r.clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %mem2_r.en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %mem2_r.addr, %addr : !firrtl.uint<4>
 
     // CHECK: %mem3 = seq.firmem
     // CHECK-SAME: init = #seq.firmem.init<"mem.txt", true, false>
@@ -194,9 +194,9 @@ firrtl.circuit "Foo" {
     %mem3_r.clk = firrtl.subfield %mem3_r[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     %mem3_r.en = firrtl.subfield %mem3_r[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     %mem3_r.addr = firrtl.subfield %mem3_r[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
-    firrtl.strictconnect %mem3_r.clk, %clk : !firrtl.clock
-    firrtl.strictconnect %mem3_r.en, %en : !firrtl.uint<1>
-    firrtl.strictconnect %mem3_r.addr, %addr : !firrtl.uint<4>
+    firrtl.matchingconnect %mem3_r.clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %mem3_r.en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %mem3_r.addr, %addr : !firrtl.uint<4>
   }
 
   // CHECK-LABEL: hw.module @IncompleteRead
@@ -213,9 +213,9 @@ firrtl.circuit "Foo" {
     %mem_r.clk = firrtl.subfield %mem_r[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     %mem_r.en = firrtl.subfield %mem_r[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     %mem_r.addr = firrtl.subfield %mem_r[addr] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
-    firrtl.strictconnect %mem_r.clk, %clock : !firrtl.clock
-    firrtl.strictconnect %mem_r.en, %en : !firrtl.uint<1>
-    firrtl.strictconnect %mem_r.addr, %addr : !firrtl.uint<4>
+    firrtl.matchingconnect %mem_r.clk, %clock : !firrtl.clock
+    firrtl.matchingconnect %mem_r.en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %mem_r.addr, %addr : !firrtl.uint<4>
   }
 
   // CHECK-LABEL: hw.module @Depth1
@@ -247,16 +247,16 @@ firrtl.circuit "Foo" {
     %mem_0.clk = firrtl.subfield %mem_0[clk] : !firrtl.bundle<addr: uint<31>, en: uint<1>, clk: clock, data flip: uint<42>>
     %mem_0.en = firrtl.subfield %mem_0[en] : !firrtl.bundle<addr: uint<31>, en: uint<1>, clk: clock, data flip: uint<42>>
     %mem_0.addr = firrtl.subfield %mem_0[addr] : !firrtl.bundle<addr: uint<31>, en: uint<1>, clk: clock, data flip: uint<42>>
-    firrtl.strictconnect %mem_0.clk, %clk : !firrtl.clock
-    firrtl.strictconnect %mem_0.en, %en : !firrtl.uint<1>
-    firrtl.strictconnect %mem_0.addr, %addr31 : !firrtl.uint<31>
+    firrtl.matchingconnect %mem_0.clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %mem_0.en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %mem_0.addr, %addr31 : !firrtl.uint<31>
 
     %mem_1 = firrtl.mem Undefined {depth = 8589934592 : i64, name = "mem33", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<33>, en: uint<1>, clk: clock, data flip: uint<42>>
     %mem_1.clk = firrtl.subfield %mem_1[clk] : !firrtl.bundle<addr: uint<33>, en: uint<1>, clk: clock, data flip: uint<42>>
     %mem_1.en = firrtl.subfield %mem_1[en] : !firrtl.bundle<addr: uint<33>, en: uint<1>, clk: clock, data flip: uint<42>>
     %mem_1.addr = firrtl.subfield %mem_1[addr] : !firrtl.bundle<addr: uint<33>, en: uint<1>, clk: clock, data flip: uint<42>>
-    firrtl.strictconnect %mem_1.clk, %clk : !firrtl.clock
-    firrtl.strictconnect %mem_1.en, %en : !firrtl.uint<1>
-    firrtl.strictconnect %mem_1.addr, %addr33 : !firrtl.uint<33>
+    firrtl.matchingconnect %mem_1.clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %mem_1.en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %mem_1.addr, %addr33 : !firrtl.uint<33>
   }
 }

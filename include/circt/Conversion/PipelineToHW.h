@@ -17,10 +17,10 @@
 #include "circt/Support/LLVM.h"
 #include <memory>
 
+namespace circt {
+
 #define GEN_PASS_DECL_PIPELINETOHW
 #include "circt/Conversion/Passes.h.inc"
-
-namespace circt {
 
 /// Create an SCF to Calyx conversion pass.
 std::unique_ptr<mlir::Pass>

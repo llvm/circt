@@ -1,7 +1,7 @@
 # REQUIRES: iverilog,cocotb
 # RUN: %PYTHON% %s 2>&1 | FileCheck %s
 from pycde import Input, Output, generator, modparams, Module, Clock
-from pycde.types import types
+from pycde.types import Bit, Bits
 from pycde.testing import cocotestbench, cocotest, cocoextra
 from pycde.dialects import comb
 import os
@@ -19,9 +19,9 @@ import os
 def make_adder(width):
 
   class Adder(Module):
-    in1 = Input(types.int(width))
-    in2 = Input(types.int(width))
-    out = Output(types.int(width))
+    in1 = Input(Bits(width))
+    in2 = Input(Bits(width))
+    out = Output(Bits(width))
 
     @generator
     def build(ports):
@@ -31,11 +31,11 @@ def make_adder(width):
 
 
 class RegAdd(Module):
-  rst = Input(types.i1)
+  rst = Input(Bit)
   clk = Clock()
-  in1 = Input(types.i16)
-  in2 = Input(types.i16)
-  out = Output(types.i16)
+  in1 = Input(Bits(16))
+  in2 = Input(Bits(16))
+  out = Output(Bits(16))
 
   @generator
   def build(ports):
@@ -103,19 +103,19 @@ class RegAddTester:
 
 
 class ExternAdder(Module):
-  in1 = Input(types.i16)
-  in2 = Input(types.i16)
-  out = Output(types.i16)
+  in1 = Input(Bits(16))
+  in2 = Input(Bits(16))
+  out = Output(Bits(16))
 
   module_name = "adder"
 
 
 class RegAdd(Module):
-  rst = Input(types.i1)
+  rst = Input(Bit)
   clk = Clock()
-  in1 = Input(types.i16)
-  in2 = Input(types.i16)
-  out = Output(types.i16)
+  in1 = Input(Bits(16))
+  in2 = Input(Bits(16))
+  out = Output(Bits(16))
 
   @generator
   def build(ports):

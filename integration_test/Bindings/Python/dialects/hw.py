@@ -53,6 +53,20 @@ with Context() as ctx, Location.unknown():
       # CHECK: hw.array_get [[ARRAY2]][%c0_i0] : !hw.array<1xi32>
       hw.ArrayGetOp.create(array2, 0)
 
+      array_type_alias = hw.TypeAliasType.get("arrayScope", "arrayAlias",
+                                              hw.ArrayType.get(i32, 1))
+      typed_array = hw.ArrayCreateOp.create([constI32], array_type_alias)
+      # CHECK: !hw.typealias<@arrayScope::@arrayAlias, !hw.array<1xi32>>
+      print(typed_array.result.type)
+
+      mismatch_type = hw.TypeAliasType.get("mismatchScope", "mismatchAlias",
+                                           hw.ArrayType.get(i1, 1))
+      try:
+        hw.ArrayCreateOp.create([constI32], mismatch_type)
+        assert False, "Expected TypeError not raised"
+      except TypeError as e:
+        assert str(e).startswith("result type:")
+
       # CHECK: [[STRUCT1:%.+]] = hw.struct_create (%c1_i32, %true) : !hw.struct<a: i32, b: i1>
       struct1 = hw.StructCreateOp.create([('a', constI32), ('b', constI1)])
 
@@ -97,6 +111,7 @@ with Context() as ctx, Location.unknown():
 
   outfile = hw.OutputFileAttr.get_from_filename(StringAttr.get("file.txt"),
                                                 True, True)
+  assert outfile.filename == "file.txt"
   print(outfile)
   # CHECK: #hw.output_file<"file.txt", excludeFromFileList, includeReplicatedOps>
 
@@ -134,3 +149,20 @@ with Context() as ctx, Location.unknown():
   print(module_type.input_names)
   # CHECK-NEXT:  ['out']
   print(module_type.output_names)
+
+  # Test StructType
+  # CHECK: !hw.struct<>
+  print(hw.StructType.get([]))
+
+  # Test UnionType
+  union_type = hw.UnionType.get([('a', i32, 0), ('b', i1, 4), ('c', i2, 0)])
+  # CHECK: !hw.union<a: i32, b: i1 offset 4, c: i2>
+  print(union_type)
+  # CHECK-NEXT: i32
+  print(union_type.get_field('a'))
+  # CHECK-NEXT: i1
+  print(union_type.get_field('b'))
+  # CHECK-NEXT: i2
+  print(union_type.get_field('c'))
+  # CHECK-NEXT: [('a', IntegerType(i32), 0), ('b', IntegerType(i1), 4), ('c', IntegerType(i2), 0)]
+  print(union_type.get_fields())

@@ -11,22 +11,27 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
-#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Support/FieldRef.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/IR/Visitors.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/ErrorHandling.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_VBTOBV
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -60,7 +65,7 @@ public:
   void handleConnect(Op);
 
   LogicalResult visitStmt(ConnectOp);
-  LogicalResult visitStmt(StrictConnectOp);
+  LogicalResult visitStmt(MatchingConnectOp);
 
   LogicalResult visitExpr(AggregateConstantOp);
   LogicalResult visitExpr(VectorCreateOp);
@@ -292,7 +297,7 @@ Value Visitor::getSubfield(Value input, unsigned index) {
 
   OpBuilder builder(context);
   builder.setInsertionPointAfterValue(input);
-  result = builder.create<SubfieldOp>(input.getLoc(), input, index);
+  result = SubfieldOp::create(builder, input.getLoc(), input, index);
   return result;
 }
 
@@ -303,7 +308,7 @@ Value Visitor::getSubindex(Value input, unsigned index) {
 
   OpBuilder builder(context);
   builder.setInsertionPointAfterValue(input);
-  result = builder.create<SubindexOp>(input.getLoc(), input, index);
+  result = SubindexOp::create(builder, input.getLoc(), input, index);
   return result;
 }
 
@@ -312,7 +317,7 @@ Value Visitor::getSubaccess(Operation *place, Value input, Value index) {
   if (result)
     return result;
   OpBuilder builder(place);
-  result = builder.create<SubaccessOp>(input.getLoc(), input, index);
+  result = SubaccessOp::create(builder, input.getLoc(), input, index);
   return result;
 }
 
@@ -322,7 +327,7 @@ Value Visitor::getRefSub(Value input, unsigned index) {
     return result;
   OpBuilder builder(context);
   builder.setInsertionPointAfterValue(input);
-  result = builder.create<RefSubOp>(input.getLoc(), input, index);
+  result = RefSubOp::create(builder, input.getLoc(), input, index);
   return result;
 }
 
@@ -337,7 +342,7 @@ void Visitor::explodeRef(Value value, SmallVectorImpl<Value> &output) {
     for (size_t i = 0, e = bundleType.getNumElements(); i < e; ++i) {
       OpBuilder builder(context);
       builder.setInsertionPointAfterValue(value);
-      auto field = builder.create<RefSubOp>(value.getLoc(), value, i);
+      auto field = RefSubOp::create(builder, value.getLoc(), value, i);
       explodeRef(field, output);
     }
     return;
@@ -626,7 +631,7 @@ void Visitor::emitExplodedConnect(ImplicitLocOpBuilder &builder, Type type,
     auto rhs = *rhsIt++;
     if (flip)
       std::swap(lhs, rhs);
-    builder.create<Op>(lhs, rhs);
+    Op::create(builder, lhs, rhs);
   };
   explodeConnect(explodeConnect, type);
 }
@@ -640,7 +645,7 @@ Value Visitor::emitBundleCreate(ImplicitLocOpBuilder &builder, Type type,
       for (auto element : bundleType.getElements()) {
         fields.push_back(self(self, element.type));
       }
-      return builder.create<BundleCreateOp>(type, fields);
+      return BundleCreateOp::create(builder, type, fields);
     }
     return *(it++);
   };
@@ -672,12 +677,12 @@ void Visitor::handleConnect(Op op) {
     if (rhsExploded) {
       if (auto baseType = type_dyn_cast<FIRRTLBaseType>(type);
           baseType && baseType.isPassive()) {
-        builder.create<Op>(lhs[0], emitBundleCreate(builder, type, rhs));
+        Op::create(builder, lhs[0], emitBundleCreate(builder, type, rhs));
       } else {
         emitExplodedConnect<Op>(builder, type, explode(lhs[0]), rhs);
       }
     } else {
-      builder.create<Op>(lhs[0], rhs[0]);
+      Op::create(builder, lhs[0], rhs[0]);
     }
   }
 
@@ -689,7 +694,7 @@ LogicalResult Visitor::visitStmt(ConnectOp op) {
   return success();
 }
 
-LogicalResult Visitor::visitStmt(StrictConnectOp op) {
+LogicalResult Visitor::visitStmt(MatchingConnectOp op) {
   handleConnect(op);
   return success();
 }
@@ -772,7 +777,7 @@ LogicalResult Visitor::visitExpr(AggregateConstantOp op) {
 
   OpBuilder builder(op);
   auto newOp =
-      builder.create<AggregateConstantOp>(op.getLoc(), newType, fields);
+      AggregateConstantOp::create(builder, op.getLoc(), newType, fields);
 
   valueMap[oldValue] = newOp.getResult();
   toDelete.push_back(op);
@@ -802,11 +807,11 @@ Value Visitor::sinkVecDimIntoOperands(ImplicitLocOpBuilder &builder,
                                type_cast<FIRRTLBaseType>(newField.getType()));
     }
     auto newType = BundleType::get(builder.getContext(), newElements);
-    auto newBundle = builder.create<BundleCreateOp>(newType, newFields);
+    auto newBundle = BundleCreateOp::create(builder, newType, newFields);
     return newBundle;
   }
   auto newType = FVectorType::get(type, length);
-  return builder.create<VectorCreateOp>(newType, values);
+  return VectorCreateOp::create(builder, newType, values);
 }
 
 LogicalResult Visitor::visitExpr(VectorCreateOp op) {
@@ -832,7 +837,7 @@ LogicalResult Visitor::visitExpr(VectorCreateOp op) {
     }
 
     auto newOp =
-        builder.create<VectorCreateOp>(op.getLoc(), newType, newFields);
+        VectorCreateOp::create(builder, op.getLoc(), newType, newFields);
     valueMap[op.getResult()] = newOp.getResult();
     toDelete.push_back(op);
     return success();
@@ -890,7 +895,7 @@ LogicalResult Visitor::visitExpr(RefResolveOp op) {
       valueMap[op.getResult()] = op.getResult();
       return success();
     }
-    auto value = builder.create<RefResolveOp>(convertType(op.getType()), ref)
+    auto value = RefResolveOp::create(builder, convertType(op.getType()), ref)
                      .getResult();
     valueMap[op.getResult()] = value;
     toDelete.push_back(op);
@@ -900,10 +905,10 @@ LogicalResult Visitor::visitExpr(RefResolveOp op) {
   auto type = convertType(op.getType());
   SmallVector<Value> values;
   for (auto ref : refs) {
-    values.push_back(builder
-                         .create<RefResolveOp>(
+    values.push_back(
+        RefResolveOp::create(builder,
                              type_cast<RefType>(ref.getType()).getType(), ref)
-                         .getResult());
+            .getResult());
   }
   auto value = emitBundleCreate(builder, type, values);
   valueMap[op.getResult()] = value;
@@ -967,7 +972,7 @@ LogicalResult Visitor::visit(FModuleOp op) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-class VBToBVPass : public VBToBVBase<VBToBVPass> {
+class VBToBVPass : public circt::firrtl::impl::VBToBVBase<VBToBVPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace
@@ -983,8 +988,4 @@ void VBToBVPass::runOnOperation() {
 
   if (result.failed())
     signalPassFailure();
-}
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createVBToBVPass() {
-  return std::make_unique<VBToBVPass>();
 }

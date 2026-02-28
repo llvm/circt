@@ -9,7 +9,6 @@ module Foo 4;
 endmodule
 
 // -----
-
 // expected-note @below {{expanded from macro 'FOO'}}
 `define FOO input
 // expected-note @below {{expanded from macro 'BAR'}}
@@ -19,7 +18,6 @@ module Bar(`BAR);
 endmodule
 
 // -----
-
 module Foo;
   mailbox a;
   string b;
@@ -28,29 +26,12 @@ module Foo;
 endmodule
 
 // -----
-
 module Foo;
-  // expected-error @below {{unsupported construct}}
-  genvar a;
-endmodule
-
-// -----
-
-module Foo(
-  // expected-error @below {{unsupported module port}}
-  input a
-);
-endmodule
-
-// -----
-
-module Foo;
-  // expected-error @below {{unsupported construct}}
+  // expected-error @below {{unsupported module member}}
   nettype real x;
 endmodule
 
 // -----
-
 module Foo;
   // expected-error @+2 {{unsupported type}}
   // expected-note @+1 {{untyped}}
@@ -58,42 +39,28 @@ module Foo;
 endmodule
 
 // -----
-
-// expected-error @below {{unsupported construct}}
-package Foo;
-endpackage
-
-module Bar;
-endmodule
-
-// -----
-
 module Foo;
   int x;
-  // expected-error @below {{delayed assignments not supported}}
-  initial x <= #1ns x;
+  bit y;
+  // expected-error @below {{unsupported non-blocking assignment timing control: SignalEvent}}
+  initial x <= @y x;
 endmodule
 
 // -----
-
 module Foo;
   int x;
-  // expected-error @below {{delayed continuous assignments not supported}}
-  assign #1ns x = x;
+  // expected-error @below {{implicit events cannot be used here}}
+  initial x = @* x;
 endmodule
 
 // -----
-
 module Foo;
   int a;
-  initial begin
-    // expected-error @below {{unsupported statement}}
-    release a;
-  end
+  // expected-error @below {{unsupported statement}}
+  initial release a;
 endmodule
 
 // -----
-
 module Foo;
   bit x, y;
   // expected-error @below {{match patterns in if conditions not supported}}
@@ -101,65 +68,132 @@ module Foo;
 endmodule
 
 // -----
-
 module Foo;
-  bit y;
-  // expected-error @below {{variables in for loop initializer not supported}}
-  initial for (bit x = 0; x;) x = y;
+  int a, b[3];
+  // expected-error @below {{unpacked arrays in 'inside' expressions not supported}}
+  int c = a inside { b };
 endmodule
 
 // -----
-
 module Foo;
-  logic x;
-  // expected-error @below {{literals with X or Z bits not supported}}
-  initial x = 'x;
-  // expected-error @below {{literals with X or Z bits not supported}}
-  initial x = 'z;
-endmodule
-
-// -----
-
-module Foo;
-  // expected-remark @below {{declared here}}
-  int a, b;
+  int a, b, c;
+  int j;
   initial begin
-    // expected-error @below {{replication constant can only be zero inside of a concatenation}}
-    a = {0{32'd5}};
-    // expected-error @below {{value must be positive}}
-    a = {-1{32'd5}};
-    // expected-error @below {{value must not have any unknown bits}}
-    a = {32'bx{1'b0}};
-    // expected-error @below {{value must not have any unknown bits}}
-    a = {32'bz{1'b0}};
-    // expected-error @below {{reference to non-constant variable 'b' is not allowed in a constant expression}}
-    a = {b{32'd5}};
+    // expected-error @below {{streaming operator target size 32 does not fit source size 96}}
+    j = {>>{ a, b, c }}; // error: j is 32 bits < 96 bits
+  end
+endmodule
+
+
+// -----
+module Foo;
+  int a, b, c;
+  int j;
+  initial begin
+    // expected-error @below {{streaming operator target size 96 does not fit source size 23}}
+    {>>{ a, b, c }} = 23'b1;
   end
 endmodule
 
 // -----
-
 module Foo;
-  bit [3:0] a;
-  bit [1:0] b;
-  // expected-remark @below {{declared here}}
-  bit c;
   initial begin
-    // expected-error @below {{cannot refer to element 1'bx of 'bit[3:0]' [-Windex-oob]}}
-    c = a[1'bx];
-    // expected-error @below {{endianness of selection must match declared range (type is 'bit[3:0]')}}
-    b = a[0:1];
-    // expected-error @below {{reference to non-constant variable 'c' is not allowed in a constant expression}}
-    b = a[c:1];
-    // expected-error @below {{reference to non-constant variable 'c' is not allowed in a constant expression}}
-    b = a[2-:c];
-    // expected-error @below {{value must not have any unknown bits}}
-    b = a[1'bz:0];
-    // expected-error @below {{value must not have any unknown bits}}
-    b = a[1-:'x];
-    // expected-error @below {{value must be positive}}
-    b = a[1-:0];
-    // expected-error @below {{value must be positive}}
-    b = a[1-:-1];
+    logic [15:0] vec_0;
+    logic [47:0] vec_1;
+    logic arr [63:0];
+    int c;
+    // expected-error @below {{Moore only support streaming concatenation with fixed size 'with expression'}}
+    vec_1 = {<<byte{vec_0, arr with [c:0]}};
   end
 endmodule
+
+// -----
+module Foo;
+  initial begin
+    int my_queue[];
+    logic [31:0] vec_0;
+    // expected-error @below {{expression of type '!moore.open_uarray<i32>' cannot be cast to a simple bit vector}}
+    vec_0 = {<<byte{my_queue}};
+  end
+endmodule
+
+// -----
+module Foo;
+  // expected-remark @below {{hello}}
+  $info("hello");
+  // expected-warning @below {{hello}}
+  $warning("hello");
+endmodule
+
+// -----
+module Foo;
+  // expected-error @below {{hello}}
+  $error("hello");
+endmodule
+
+// -----
+module Foo;
+  // expected-error @below {{hello}}
+  $fatal(0, "hello");
+endmodule
+
+// -----
+function Foo;
+  // expected-error @below {{unsupported format specifier `%l`}}
+  $write("%l");
+endfunction
+
+// -----
+function Foo;
+  // expected-error @below {{string format specifier with width not supported}}
+  $write("%42s", "foo");
+endfunction
+
+// -----
+function time Foo;
+  // expected-error @below {{time value is larger than 18446744073709549568 fs}}
+  return 100000s;
+endfunction
+
+// -----
+module Foo;
+  // expected-error @below {{unsupported type: associative arrays with wildcard index}}
+  int x[*];
+endmodule
+
+// -----
+function void foo;
+  int a[string];
+  // expected-error @below {{unsupported expression: element select into}}
+  a["foo"] = 1;
+endfunction
+
+// -----
+function void foo;
+  struct packed { time t; } a;
+  int b;
+  // expected-error @below {{contains a time type}}
+  a = b;
+endfunction
+
+// -----
+function void foo;
+  int a;
+  struct packed { time t; } b;
+  // expected-error @below {{contains a time type}}
+  a = b;
+endfunction
+
+// -----
+module Foo;
+  string b;
+  // expected-error @below {{expected integer argument for system call `$past`}}
+  assert property ($past(b));
+endmodule
+
+// -----
+function Foo;
+  logic [1:0] a;
+  // expected-error @below {{unsupported system call `$fwrite`}}
+  $fwrite(32'h0, "%x", a);
+endfunction

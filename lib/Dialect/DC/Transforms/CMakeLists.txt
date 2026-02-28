@@ -1,5 +1,6 @@
 add_circt_dialect_library(CIRCTDCTransforms
   DCMaterialization.cpp
+  DCPrintDot.cpp
 
   DEPENDS
   CIRCTDCTransformsIncGen

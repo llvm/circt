@@ -66,3 +66,17 @@ static StringAttr getNameOrHint(Operation *a) {
 StringAttr circt::chooseName(Operation *a, Operation *b) {
   return chooseName(getNameOrHint(a), getNameOrHint(b));
 }
+
+/// A wrapper of `PatternRewriter::replaceOp` to propagate "sv.namehint"
+/// attribute. If a replaced op has a "sv.namehint" attribute, this function
+/// propagates the name to the new value.
+void circt::replaceOpAndCopyNamehint(PatternRewriter &rewriter, Operation *op,
+                                     Value newValue) {
+  if (auto *newOp = newValue.getDefiningOp()) {
+    auto name = op->getAttrOfType<StringAttr>("sv.namehint");
+    if (name && !newOp->hasAttr("sv.namehint"))
+      rewriter.modifyOpInPlace(newOp,
+                               [&] { newOp->setAttr("sv.namehint", name); });
+  }
+  rewriter.replaceOp(op, newValue);
+}

@@ -14,27 +14,30 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
-#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/FieldRefCache.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/Debug.h"
 #include "mlir/IR/BuiltinAttributes.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/IR/Visitors.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/FormatAdapters.h"
 #include "llvm/Support/FormatVariadic.h"
 
-#include <vector>
-
 #define DEBUG_TYPE "firrtl-lower-open-aggs"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LOWEROPENAGGS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -303,7 +306,7 @@ LogicalResult Visitor::visit(FModuleLike mod) {
           auto orientation =
               (Direction)((unsigned)port.direction ^ field.isFlip);
           PortInfo pi(name, field.type, orientation, /*symName=*/StringAttr{},
-                      port.loc, std::nullopt);
+                      port.loc, std::nullopt, port.domains);
           newPorts.emplace_back(idxOfInsertPoint, pi);
         }
         return success();
@@ -442,7 +445,7 @@ LogicalResult Visitor::visitExpr(OpenSubfieldOp op) {
   assert(newFieldIndex.has_value());
 
   ImplicitLocOpBuilder builder(op.getLoc(), op);
-  auto newOp = builder.create<SubfieldOp>(newInput, *newFieldIndex);
+  auto newOp = SubfieldOp::create(builder, newInput, *newFieldIndex);
   if (auto name = op->getAttrOfType<StringAttr>("name"))
     newOp->setAttr("name", name);
 
@@ -482,7 +485,7 @@ LogicalResult Visitor::visitExpr(OpenSubindexOp op) {
   assert(newInput);
 
   ImplicitLocOpBuilder builder(op.getLoc(), op);
-  auto newOp = builder.create<SubindexOp>(newInput, op.getIndex());
+  auto newOp = SubindexOp::create(builder, newInput, op.getIndex());
   if (auto name = op->getAttrOfType<StringAttr>("name"))
     newOp->setAttr("name", name);
 
@@ -544,15 +547,17 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
         // If not identity, mark this port for eventual removal.
         portsToErase.set(newIndex);
 
-        auto portName = op.getPortName(index);
+        auto portName = op.getPortNameAttr(index);
         auto portDirection = op.getPortDirection(index);
+        auto portDomain = op.getPortDomain(index);
         auto loc = op.getLoc();
 
         // Create new hw-only port, this will generally replace this port.
         if (pmi.hwType) {
           PortInfo hwPort(portName, pmi.hwType, portDirection,
                           /*symName=*/StringAttr{}, loc,
-                          AnnotationSet(op.getPortAnnotation(index)));
+                          AnnotationSet(op.getPortAnnotation(index)),
+                          portDomain);
           newPorts.emplace_back(idxOfInsertPoint, hwPort);
 
           // If want to run this pass later, need to fixup annotations.
@@ -572,7 +577,7 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
           auto orientation =
               (Direction)((unsigned)portDirection ^ field.isFlip);
           PortInfo pi(name, field.type, orientation, /*symName=*/StringAttr{},
-                      loc, std::nullopt);
+                      loc, std::nullopt, portDomain);
           newPorts.emplace_back(idxOfInsertPoint, pi);
         }
         return success();
@@ -590,10 +595,9 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
   // Create new instance op with desired ports.
 
   // TODO: add and erase ports without intermediate + various array attributes.
-  auto tempOp = op.cloneAndInsertPorts(newPorts);
+  auto tempOp = op.cloneWithInsertedPorts(newPorts);
   opsToErase.push_back(tempOp);
-  ImplicitLocOpBuilder builder(op.getLoc(), op);
-  auto newInst = tempOp.erasePorts(builder, portsToErase);
+  auto newInst = tempOp.cloneWithErasedPorts(portsToErase);
 
   auto mappingResult = walkMappings(
       portMappings, /*includeErased=*/false,
@@ -664,19 +668,16 @@ LogicalResult Visitor::visitDecl(WireOp op) {
   // Create the new HW wire.
   if (mappings.hwType)
     hwOnlyAggMap[op.getResult()] =
-        builder
-            .create<WireOp>(mappings.hwType, op.getName(), op.getNameKind(),
-                            op.getAnnotations(), mappings.newSym,
-                            op.getForceable())
+        WireOp::create(builder, mappings.hwType, op.getName(), op.getNameKind(),
+                       op.getAnnotations(), mappings.newSym, op.getForceable())
             .getResult();
 
   // Create the non-HW wires.  Non-HW wire names are always droppable.
   for (auto &[type, fieldID, _, suffix] : mappings.fields)
     nonHWValues[FieldRef(op.getResult(), fieldID)] =
-        builder
-            .create<WireOp>(type,
-                            builder.getStringAttr(Twine(op.getName()) + suffix),
-                            NameKindEnum::DroppableName)
+        WireOp::create(builder, type,
+                       builder.getStringAttr(Twine(op.getName()) + suffix),
+                       NameKindEnum::DroppableName)
             .getResult();
 
   for (auto fieldID : mappings.mapToNullInteriors)
@@ -824,7 +825,8 @@ FailureOr<MappingInfo> Visitor::mapType(Type type, Location errorLoc,
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct LowerOpenAggsPass : public LowerOpenAggsBase<LowerOpenAggsPass> {
+struct LowerOpenAggsPass
+    : public circt::firrtl::impl::LowerOpenAggsBase<LowerOpenAggsPass> {
   LowerOpenAggsPass() = default;
   void runOnOperation() override;
 };
@@ -832,7 +834,8 @@ struct LowerOpenAggsPass : public LowerOpenAggsBase<LowerOpenAggsPass> {
 
 // This is the main entrypoint for the lowering pass.
 void LowerOpenAggsPass::runOnOperation() {
-  LLVM_DEBUG(debugPassHeader(this) << "\n");
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
+
   SmallVector<Operation *, 0> ops(getOperation().getOps<FModuleLike>());
 
   LLVM_DEBUG(llvm::dbgs() << "Visiting modules:\n");
@@ -849,9 +852,4 @@ void LowerOpenAggsPass::runOnOperation() {
     signalPassFailure();
   if (!madeChanges)
     markAllAnalysesPreserved();
-}
-
-/// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerOpenAggsPass() {
-  return std::make_unique<LowerOpenAggsPass>();
 }

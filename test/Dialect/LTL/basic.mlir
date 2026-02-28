@@ -1,6 +1,7 @@
 // RUN: circt-opt %s | circt-opt | FileCheck %s
 
 %true = hw.constant true
+%c0_i8 = hw.constant 0 : i8
 
 //===----------------------------------------------------------------------===//
 // Types
@@ -38,7 +39,7 @@ ltl.or %p, %p : !ltl.property, !ltl.property
 %p1 = ltl.and %p, %true : !ltl.property, i1
 %p2 = ltl.and %s, %p : !ltl.sequence, !ltl.property
 %p3 = ltl.and %p, %s : !ltl.property, !ltl.sequence
-unrealized_conversion_cast %s0 : !ltl.sequence to index
+unrealized_conversion_cast %s0 : i1 to index
 unrealized_conversion_cast %s1 : !ltl.sequence to index
 unrealized_conversion_cast %s2 : !ltl.sequence to index
 unrealized_conversion_cast %p0 : !ltl.property to index
@@ -62,9 +63,20 @@ ltl.concat %s : !ltl.sequence
 ltl.concat %s, %s : !ltl.sequence, !ltl.sequence
 ltl.concat %s, %s, %s : !ltl.sequence, !ltl.sequence, !ltl.sequence
 
+// CHECK: ltl.repeat {{%.+}}, 0 : !ltl.sequence
+// CHECK: ltl.repeat {{%.+}}, 42 : !ltl.sequence
+// CHECK: ltl.repeat {{%.+}}, 42, 1337 : !ltl.sequence
+ltl.repeat %s, 0 : !ltl.sequence
+ltl.repeat %s, 42 : !ltl.sequence
+ltl.repeat %s, 42, 1337 : !ltl.sequence
+
 //===----------------------------------------------------------------------===//
 // Properties
 //===----------------------------------------------------------------------===//
+
+// CHECK: ltl.boolean_constant true
+%bc = ltl.boolean_constant true
+unrealized_conversion_cast %bc : !ltl.property to index
 
 // CHECK: ltl.not {{%.+}} : i1
 // CHECK: ltl.not {{%.+}} : !ltl.sequence
@@ -76,12 +88,23 @@ ltl.not %p : !ltl.property
 // CHECK: ltl.implication {{%.+}}, {{%.+}} : !ltl.sequence, !ltl.property
 ltl.implication %s, %p : !ltl.sequence, !ltl.property
 
+// CHECK: ltl.until {{%.+}}, {{%.+}} : !ltl.property, !ltl.property
+ltl.until %p, %p : !ltl.property, !ltl.property
+
 // CHECK: ltl.eventually {{%.+}} : i1
 // CHECK: ltl.eventually {{%.+}} : !ltl.sequence
 // CHECK: ltl.eventually {{%.+}} : !ltl.property
 ltl.eventually %true : i1
 ltl.eventually %s : !ltl.sequence
 ltl.eventually %p : !ltl.property
+
+// CHECK: ltl.past {{%.+}}, 1 : i1
+// CHECK: ltl.past {{%.+}}, 5 : i8
+ltl.past %true, 1 : i1
+ltl.past %c0_i8, 5 : i8
+
+// CHECK: ltl.past {{%.+}}, 5 clk {{%.+}} : i8
+ltl.past %c0_i8, 5 clk %true : i8
 
 //===----------------------------------------------------------------------===//
 // Clocking
@@ -104,5 +127,3 @@ unrealized_conversion_cast %clk0 : !ltl.sequence to index
 unrealized_conversion_cast %clk1 : !ltl.sequence to index
 unrealized_conversion_cast %clk2 : !ltl.property to index
 
-// CHECK: ltl.disable {{%.+}} if {{%.+}} : !ltl.property
-ltl.disable %p if %true : !ltl.property

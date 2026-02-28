@@ -1,4 +1,4 @@
-add_circt_library(CIRCTAffineToLoopSchedule
+add_circt_conversion_library(CIRCTAffineToLoopSchedule
   AffineToLoopSchedule.cpp
 
   DEPENDS

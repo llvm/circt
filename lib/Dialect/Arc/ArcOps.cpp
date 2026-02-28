@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
@@ -212,6 +213,38 @@ LogicalResult StateOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// StateWriteOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+StateWriteOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  if (!getTraceTapModel().has_value())
+    return success();
+
+  auto modelOp = symbolTable.lookupNearestSymbolFrom<ModelOp>(
+      getOperation(), getTraceTapModelAttr());
+  if (!modelOp)
+    return emitOpError() << "`" << getTraceTapModelAttr()
+                         << "` does not reference a valid `arc.model`";
+  if (!modelOp.getTraceTaps())
+    return emitOpError() << "referenced model has no trace metadata";
+  if (modelOp.getTraceTapsAttr().size() <= *getTraceTapIndex())
+    return emitOpError() << "tap index exceeds model's tap array";
+  auto tapAttr =
+      cast<TraceTapAttr>(modelOp.getTraceTapsAttr()[*getTraceTapIndex()]);
+  if (tapAttr.getSigType().getValue() != getValue().getType())
+    return emitOpError() << "incorrect signal type in referenced tap attribute";
+
+  return success();
+}
+
+LogicalResult StateWriteOp::verify() {
+  if (getTraceTapIndex().has_value() == getTraceTapModel().has_value())
+    return success();
+  return emitOpError() << "must specify both a trace tap model and index";
+}
+
+//===----------------------------------------------------------------------===//
 // CallOp
 //===----------------------------------------------------------------------===//
 
@@ -307,6 +340,26 @@ LogicalResult ModelOp::verify() {
   return success();
 }
 
+LogicalResult ModelOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto fnAttrs = std::array{getInitialFnAttr(), getFinalFnAttr()};
+  auto nouns = std::array{"initializer", "finalizer"};
+  for (auto [fnAttr, noun] : llvm::zip(fnAttrs, nouns)) {
+    if (!fnAttr)
+      continue;
+    auto fn = symbolTable.lookupNearestSymbolFrom<func::FuncOp>(*this, fnAttr);
+    if (!fn)
+      return emitOpError() << noun << " '" << fnAttr.getValue()
+                           << "' does not reference a valid function";
+    if (!llvm::equal(fn.getArgumentTypes(), getBody().getArgumentTypes())) {
+      auto diag = emitError() << noun << " '" << fnAttr.getValue()
+                              << "' arguments must match arguments of model";
+      diag.attachNote(fn.getLoc()) << noun << " declared here:";
+      return diag;
+    }
+  }
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // LutOp
 //===----------------------------------------------------------------------===//
@@ -355,10 +408,6 @@ LogicalResult VectorizeOp::verify() {
       return emitOpError("input vector must have at least one element");
   }
 
-  if (getInputs().front().size() > 1 &&
-      !isa<IntegerType>(getInputs().front().front().getType()))
-    return emitOpError("input vector element type must be a signless integer");
-
   if (getResults().empty())
     return emitOpError("must have at least one result");
 
@@ -367,11 +416,6 @@ LogicalResult VectorizeOp::verify() {
 
   if (getResults().size() != getInputs().front().size())
     return emitOpError("number results must match input vector size");
-
-  if (getResults().size() > 1 &&
-      !isa<IntegerType>(getResults().front().getType()))
-    return emitError(
-        "may only return a vector type if boundary is already vectorized");
 
   return success();
 }
@@ -488,7 +532,19 @@ void SimInstantiateOp::print(OpAsmPrinter &p) {
   p << " " << modelType.getModel() << " as ";
   p.printRegionArgument(modelArg, {}, true);
 
-  p.printOptionalAttrDictWithKeyword(getOperation()->getAttrs());
+  if (getRuntimeModel() || getRuntimeArgs()) {
+    p << " runtime ";
+    if (getRuntimeModel())
+      p << getRuntimeModelAttr();
+    p << "(";
+    if (getRuntimeArgs())
+      p << getRuntimeArgsAttr();
+    p << ")";
+  }
+
+  p.printOptionalAttrDictWithKeyword(
+      getOperation()->getAttrs(),
+      {getRuntimeModelAttrName(), getRuntimeArgsAttrName()});
 
   p << " ";
 
@@ -507,6 +563,24 @@ ParseResult SimInstantiateOp::parse(OpAsmParser &parser,
   OpAsmParser::Argument modelArg;
   if (failed(parser.parseArgument(modelArg, false, false)))
     return failure();
+
+  if (succeeded(parser.parseOptionalKeyword("runtime"))) {
+    StringAttr runtimeSym;
+    StringAttr runtimeArgs;
+    auto symOpt = parser.parseOptionalSymbolName(runtimeSym);
+    if (parser.parseLParen())
+      return failure();
+    auto nameOpt = parser.parseOptionalAttribute(runtimeArgs);
+    if (parser.parseRParen())
+      return failure();
+    if (succeeded(symOpt))
+      result.addAttribute(
+          SimInstantiateOp::getRuntimeModelAttrName(result.name),
+          FlatSymbolRefAttr::get(runtimeSym));
+    if (nameOpt.has_value())
+      result.addAttribute(SimInstantiateOp::getRuntimeArgsAttrName(result.name),
+                          runtimeArgs);
+  }
 
   if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
     return failure();
@@ -535,15 +609,28 @@ LogicalResult SimInstantiateOp::verifyRegions() {
 
 LogicalResult
 SimInstantiateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  bool failed = false;
   Operation *moduleOp = getSupportedModuleOp(
       symbolTable, getOperation(),
       llvm::cast<SimModelInstanceType>(getBody().getArgument(0).getType())
           .getModel()
           .getAttr());
   if (!moduleOp)
-    return failure();
+    failed = true;
 
-  return success();
+  if (getRuntimeModel().has_value()) {
+    Operation *runtimeModelOp = symbolTable.lookupNearestSymbolFrom(
+        getOperation(), getRuntimeModelAttr());
+    if (!runtimeModelOp) {
+      emitOpError("runtime model not found");
+      failed = true;
+    } else if (!isa<RuntimeModelOp>(runtimeModelOp)) {
+      emitOpError("referenced runtime model is not a RuntimeModelOp");
+      failed = true;
+    }
+  }
+
+  return success(!failed);
 }
 
 //===----------------------------------------------------------------------===//
@@ -616,6 +703,49 @@ LogicalResult SimStepOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return failure();
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SimGetTimeOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+SimGetTimeOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *moduleOp = getSupportedModuleOp(
+      symbolTable, getOperation(),
+      llvm::cast<SimModelInstanceType>(getInstance().getType())
+          .getModel()
+          .getAttr());
+  if (!moduleOp)
+    return failure();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SimSetTimeOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+SimSetTimeOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *moduleOp = getSupportedModuleOp(
+      symbolTable, getOperation(),
+      llvm::cast<SimModelInstanceType>(getInstance().getType())
+          .getModel()
+          .getAttr());
+  if (!moduleOp)
+    return failure();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ExecuteOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ExecuteOp::verifyRegions() {
+  return verifyTypeListEquivalence(*this, getInputs().getTypes(),
+                                   getBody().getArgumentTypes(), "input");
 }
 
 #include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"

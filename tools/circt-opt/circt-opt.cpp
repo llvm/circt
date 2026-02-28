@@ -15,13 +15,18 @@
 #include "circt/InitAllPasses.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/Version.h"
+#include "mlir/Conversion/Passes.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/DLTI/DLTI.h"
 #include "mlir/Dialect/EmitC/IR/EmitC.h"
 #include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Index/IR/IndexDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/Transforms/InlinerInterfaceImpl.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
@@ -46,7 +51,9 @@ int main(int argc, char **argv) {
 
   // Register MLIR stuff
   registry.insert<mlir::affine::AffineDialect>();
+  registry.insert<mlir::math::MathDialect>();
   registry.insert<mlir::LLVM::LLVMDialect>();
+  registry.insert<mlir::DLTIDialect>();
   registry.insert<mlir::memref::MemRefDialect>();
   registry.insert<mlir::func::FuncDialect>();
   registry.insert<mlir::arith::ArithDialect>();
@@ -54,11 +61,13 @@ int main(int argc, char **argv) {
   registry.insert<mlir::scf::SCFDialect>();
   registry.insert<mlir::emitc::EmitCDialect>();
   registry.insert<mlir::vector::VectorDialect>();
+  registry.insert<mlir::index::IndexDialect>();
 
   circt::registerAllDialects(registry);
   circt::registerAllPasses();
 
   mlir::func::registerInlinerExtension(registry);
+  mlir::LLVM::registerInlinerInterface(registry);
 
   // Register the standard passes we want.
   mlir::registerCSEPass();
@@ -67,11 +76,14 @@ int main(int argc, char **argv) {
   mlir::registerCanonicalizerPass();
   mlir::registerViewOpGraphPass();
   mlir::registerSymbolDCEPass();
+  mlir::registerReconcileUnrealizedCastsPass();
   llvm::cl::AddExtraVersionPrinter(
       [](llvm::raw_ostream &os) { os << circt::getCirctVersion() << '\n'; });
 
   // Register test passes
   circt::test::registerAnalysisTestPasses();
+  mlir::registerSROA();
+  mlir::registerMem2RegPass();
 
   return mlir::failed(mlir::MlirOptMain(
       argc, argv, "CIRCT modular optimizer driver", registry));

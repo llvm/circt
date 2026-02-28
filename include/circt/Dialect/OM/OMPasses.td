@@ -25,3 +25,19 @@ def LinkModules: Pass<"om-link-modules", "mlir::ModuleOp"> {
   }];
   let constructor = "circt::om::createOMLinkModulesPass()";
 }
+
+def VerifyObjectFields: Pass<"om-verify-object-fields"> {
+  let summary = "Verify fields of ObjectOp are valid";
+  let description = [{
+    Verify object fields are valid.
+  }];
+  let constructor = "circt::om::createVerifyObjectFieldsPass()";
+}
+
+def StripOMPass : Pass<"strip-om", "mlir::ModuleOp"> {
+  let summary = "Remove OM information";
+  let description = [{
+    Removes all OM operations from the IR. Useful as a prepass in pipelines that
+    have to discard OM.
+  }];
+}

@@ -11,6 +11,8 @@ ssp.instance @cyclic of "ChainingCyclicProblem" [II<2>] {
     operator_type @_1 [latency<1>, incDelay<0.0>, outDelay<0.0>]
     operator_type @_2 [latency<2>, incDelay<0.0>, outDelay<0.0>]
   }
+  resource {
+  }
   graph {
     %0 = operation<@_1>() [t<0>, z<0.000000e+00 : f32>]
     %1 = operation<@_0>(@op4 [dist<1>]) [t<1>, z<0.000000e+00 : f32>]
@@ -28,6 +30,8 @@ ssp.instance @mobility of "ChainingCyclicProblem" [II<3>] {
   library {
     operator_type @_1 [latency<1>, incDelay<0.0>, outDelay<0.0>]
     operator_type @_4 [latency<4>, incDelay<0.0>, outDelay<0.0>]
+  }
+  resource {
   }
   graph {
     %0 = operation<@_1>() [t<0>, z<0.000000e+00 : f32>]
@@ -47,6 +51,8 @@ ssp.instance @interleaved_cycles of "ChainingCyclicProblem" [II<4>] {
   library {
     operator_type @_1 [latency<1>, incDelay<0.0>, outDelay<0.0>]
     operator_type @_10 [latency<10>, incDelay<0.0>, outDelay<0.0>]
+  }
+  resource {
   }
   graph {
     %0 = operation<@_1>() [t<0>, z<0.000000e+00 : f32>]
@@ -71,6 +77,8 @@ ssp.instance @self_arc of "ChainingCyclicProblem" [II<3>] {
     operator_type @_1 [latency<1>, incDelay<0.0>, outDelay<0.0>]
     operator_type @_3 [latency<3>, incDelay<0.0>, outDelay<0.0>]
   }
+  resource {
+  }
   graph {
     %0 = operation<@_1>() [t<0>, z<0.000000e+00 : f32>]
     %1 = operation<@_3> @op1(%0, @op1 [dist<1>]) [t<1>, z<0.000000e+00 : f32>]
@@ -86,6 +94,8 @@ ssp.instance @adder_chain of "ChainingCyclicProblem" [II<1>] {
   library {
     operator_type @_0 [latency<0>, incDelay<2.34>, outDelay<2.34>]
     operator_type @_1 [latency<1>, incDelay<0.0>, outDelay<0.0>]
+  }
+  resource {
   }
   graph {
     %0 = operation<@_0>() [t<0>, z<0.0>]
@@ -105,6 +115,8 @@ ssp.instance @multi_cycle of "ChainingCyclicProblem" [II<1>] {
     operator_type @_1 [latency<1>, incDelay<0.0>, outDelay<0.0>]
     operator_type @_3 [latency<3>, incDelay<2.5>, outDelay<3.75>]
   }
+  resource {
+  }
   graph {
     %0 = operation<@_0>() [t<0>, z<0.0>]
     %1 = operation<@_0>(%0) [t<0>, z<2.34>]
@@ -121,6 +133,8 @@ ssp.instance @mco_outgoing_delays of "ChainingCyclicProblem" [II<1>] {
   library {
     operator_type @_2 [latency<2>, incDelay<0.1>, outDelay<0.1>]
     operator_type @_3 [latency<3>, incDelay<5.0>, outDelay<0.1>]
+  }
+  resource {
   }
   // SIMPLEX: graph
   graph {
@@ -152,7 +166,8 @@ ssp.instance @chaining_and_cyclic of "ChainingCyclicProblem" [II<2>] {
     operator_type @_4 [latency<1>, incDelay<1.2>, outDelay<1.2>]
     operator_type @_5 [latency<0>, incDelay<3.8>, outDelay<3.8>]
   }
-
+  resource {
+  }
   graph {
     %0 = operation<@_0>(@op2 [dist<1>]) [t<0>, z<0.0>]
     %1 = operation<@_1>(%0) [t<0>, z<1.0>]
@@ -169,6 +184,8 @@ ssp.instance @chaining_and_cyclic of "ChainingCyclicProblem" [II<2>] {
 ssp.instance @backedge_delay_propagation of "ChainingCyclicProblem" [II<1>] {
   library {
     operator_type @_0 [latency<0>, incDelay<1.0>, outDelay<1.0>]
+  }
+  resource {
   }
   graph {
     // SIMPLEX: @last(@last [dist<1>]) [t<0>, z<0.000000e+00 : f32>]

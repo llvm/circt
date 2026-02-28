@@ -227,16 +227,16 @@ def ICmpOp : HWArithOp<"icmp", [Pure]> {
   let description = [{
     The `icmp` operation compares two integers using a predicate. If the
     predicate is true, returns 1, otherwise returns 0. This operation always
-    returns a one bit wide result of type `ui1`. Both operand types may be
+    returns a one bit wide result of type `i1`. Both operand types may be
     signed or unsigned scalar integer types of arbitrary bitwidth.
 
     | LHS type | RHS type | Comparison type                          | Result type |
     | :------- | :------- | :--------------------------------------- | :---------- |
-    | `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = max(*a*, *b*)             | `ui1`       |
-    | `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a*, *b*)             | `ui1`       |
-    | `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 1 **if** *a* ≥ *b*  | `ui1`       |
-    |          |          | `si<r>`, *r* = *b* **if** *a* < *b*      | `ui1`       |
-    | `si<a>`  | `ui<b>`  | Same as `ui<b> si<a>`                    | `ui1`       |
+    | `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = max(*a*, *b*)             | `i1`        |
+    | `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a*, *b*)             | `i1`        |
+    | `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 1 **if** *a* ≥ *b*  | `i1`        |
+    |          |          | `si<r>`, *r* = *b* **if** *a* < *b*      | `i1`        |
+    | `si<a>`  | `ui<b>`  | Same as `ui<b> si<a>`                    | `i1`        |
 
     Examples:
     ```mlir
@@ -248,7 +248,7 @@ def ICmpOp : HWArithOp<"icmp", [Pure]> {
 
   let arguments = (ins ICmpPredicate:$predicate,
                    HWArithIntegerType:$lhs, HWArithIntegerType:$rhs);
-  let results = (outs UI1:$result);
+  let results = (outs I1:$result);
 
   let assemblyFormat = "$predicate $lhs `,` $rhs  attr-dict `:` type($lhs) `,` type($rhs)";
 }

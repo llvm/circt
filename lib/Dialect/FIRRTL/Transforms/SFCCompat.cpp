@@ -18,22 +18,28 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "llvm/ADT/APSInt.h"
-#include "llvm/ADT/TypeSwitch.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-remove-resets"
 
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_SFCCOMPAT
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
+
 using namespace circt;
 using namespace firrtl;
 
-struct SFCCompatPass : public SFCCompatBase<SFCCompatPass> {
+struct SFCCompatPass
+    : public circt::firrtl::impl::SFCCompatBase<SFCCompatPass> {
   void runOnOperation() override;
 };
 
@@ -46,13 +52,18 @@ void SFCCompatPass::runOnOperation() {
   bool madeModifications = false;
   SmallVector<InvalidValueOp> invalidOps;
 
-  bool fullAsyncResetExists = false;
-  AnnotationSet::removePortAnnotations(
-      getOperation(), [&](unsigned argNum, Annotation anno) {
-        if (!anno.isClass(fullAsyncResetAnnoClass))
-          return false;
-        return fullAsyncResetExists = true;
-      });
+  auto fullResetAttr = StringAttr::get(&getContext(), fullResetAnnoClass);
+  auto isFullResetAnno = [fullResetAttr](Annotation anno) {
+    auto annoClassAttr = anno.getClassAttr();
+    return annoClassAttr == fullResetAttr;
+  };
+  bool fullResetExists = AnnotationSet::removePortAnnotations(
+      getOperation(),
+      [&](unsigned argNum, Annotation anno) { return isFullResetAnno(anno); });
+  getOperation()->walk([isFullResetAnno, &fullResetExists](Operation *op) {
+    fullResetExists |= AnnotationSet::removeAnnotations(op, isFullResetAnno);
+  });
+  madeModifications |= fullResetExists;
 
   auto result = getOperation()->walk([&](Operation *op) {
     // Populate invalidOps for later handling.
@@ -66,15 +77,14 @@ void SFCCompatPass::runOnOperation() {
 
     // If the `RegResetOp` has an invalidated initialization and we
     // are not running FART, then replace it with a `RegOp`.
-    if (!fullAsyncResetExists &&
-        walkDrivers(reg.getResetValue(), true, false, false,
-                    [](FieldRef dst, FieldRef src) {
-                      return src.isa<InvalidValueOp>();
-                    })) {
+    if (!fullResetExists && walkDrivers(reg.getResetValue(), true, true, false,
+                                        [](FieldRef dst, FieldRef src) {
+                                          return src.isa<InvalidValueOp>();
+                                        })) {
       ImplicitLocOpBuilder builder(reg.getLoc(), reg);
-      RegOp newReg = builder.create<RegOp>(
-          reg.getResult().getType(), reg.getClockVal(), reg.getNameAttr(),
-          reg.getNameKindAttr(), reg.getAnnotationsAttr(),
+      RegOp newReg = RegOp::create(
+          builder, reg.getResult().getType(), reg.getClockVal(),
+          reg.getNameAttr(), reg.getNameKindAttr(), reg.getAnnotationsAttr(),
           reg.getInnerSymAttr(), reg.getForceableAttr());
       reg.replaceAllUsesWith(newReg);
       reg.erase();
@@ -127,17 +137,17 @@ void SFCCompatPass::runOnOperation() {
         FIRRTLTypeSwitch<FIRRTLType, Value>(inv.getType())
             .Case<ClockType, AsyncResetType, ResetType>(
                 [&](auto type) -> Value {
-                  return builder.create<SpecialConstantOp>(
-                      type, builder.getBoolAttr(false));
+                  return SpecialConstantOp::create(builder, type,
+                                                   builder.getBoolAttr(false));
                 })
             .Case<IntType>([&](IntType type) -> Value {
-              return builder.create<ConstantOp>(type, getIntZerosAttr(type));
+              return ConstantOp::create(builder, type, getIntZerosAttr(type));
             })
-            .Case<BundleType, FVectorType>([&](auto type) -> Value {
+            .Case<FEnumType, BundleType, FVectorType>([&](auto type) -> Value {
               auto width = circt::firrtl::getBitWidth(type);
               assert(width && "width must be inferred");
-              auto zero = builder.create<ConstantOp>(APSInt(*width));
-              return builder.create<BitCastOp>(type, zero);
+              auto zero = ConstantOp::create(builder, APSInt(*width));
+              return BitCastOp::create(builder, type, zero);
             })
             .Default([&](auto) {
               llvm_unreachable("all types are supported");
@@ -150,8 +160,4 @@ void SFCCompatPass::runOnOperation() {
 
   if (!madeModifications)
     return markAllAnalysesPreserved();
-}
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createSFCCompatPass() {
-  return std::make_unique<SFCCompatPass>();
 }

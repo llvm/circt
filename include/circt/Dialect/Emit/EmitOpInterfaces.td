@@ -15,7 +15,7 @@
 
 include "mlir/IR/OpBase.td"
 
-def Emittable : NativeOpTrait<"Emittable"> {
+def Emittable : OpInterface<"Emittable", []> {
   let cppNamespace = "::circt::emit";
 }
 

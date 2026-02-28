@@ -129,7 +129,7 @@ hw.module @lowering(in %clk : !seq.clock, in %rst : i1, in %in : i32, out a : i3
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
   // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<8xi32>>
   // CHECK-NEXT:         sv.for %i = %c0_i4 to %c-8_i4 step %c1_i4 : i4 {
-  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
+  // CHECK-NEXT:           %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %24 = comb.extract %i from 0 : (i4) -> i3
   // CHECK-NEXT:           %25 = sv.array_index_inout %_RANDOM[%24] : !hw.inout<uarray<8xi32>>, i3
   // CHECK-NEXT:           sv.bpassign %25, %RANDOM : i32
@@ -210,7 +210,7 @@ hw.module private @UninitReg1(in %clock : !seq.clock, in %reset : i1, in %cond :
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
   // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<1xi32>>
   // CHECK:              sv.for %i = %{{false.*}} to %{{true.*}} step %{{true.*}} : i1 {
-  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
+  // CHECK-NEXT:           %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %6 = comb.extract %i from 0 : (i1) -> i0
   // CHECK-NEXT:           %7 = sv.array_index_inout %_RANDOM[%6] : !hw.inout<uarray<1xi32>>, i0
   // CHECK-NEXT:           sv.bpassign %7, %RANDOM : i32
@@ -317,7 +317,7 @@ hw.module private @InitReg1(in %clock: !seq.clock, in %reset: i1, in %io_d: i32,
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
   // CHECK-NEXT:          %_RANDOM = sv.logic : !hw.inout<uarray<3xi32>>
   // CHECK-NEXT:          sv.for %i = %c0_i2 to %c-1_i2 step %c1_i2 : i2 {
-  // CHECK-NEXT:            %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
+  // CHECK-NEXT:            %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
   // CHECK-NEXT:            %14 = sv.array_index_inout %_RANDOM[%i] : !hw.inout<uarray<3xi32>>, i2
   // CHECK-NEXT:            sv.bpassign %14, %RANDOM : i32
   // CHECK-NEXT:          }
@@ -366,7 +366,7 @@ hw.module private @UninitReg42(in %clock: !seq.clock, in %reset: i1, in %cond: i
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
   // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<2xi32>>
   // CHECK-NEXT:         sv.for %i = %c0_i2 to %c-2_i2 step %c1_i2 : i2 {
-  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
+  // CHECK-NEXT:           %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %9 = comb.extract %i from 0 : (i2) -> i1
   // CHECK-NEXT:           %10 = sv.array_index_inout %_RANDOM[%9] : !hw.inout<uarray<2xi32>>, i1
   // CHECK-NEXT:           sv.bpassign %10, %RANDOM : i32
@@ -412,7 +412,7 @@ hw.module private @init1DVector(in %clock: !seq.clock, in %a: !hw.array<2xi1>, o
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
   // CHECK-NEXT:       %_RANDOM = sv.logic : !hw.inout<uarray<1xi32>>
   // CHECK-NEXT:       sv.for %i = %false to %true step %true : i1 {
-  // CHECK-NEXT:         %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
+  // CHECK-NEXT:         %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
   // CHECK-NEXT:         %8 = comb.extract %i from 0 : (i1) -> i0
   // CHECK-NEXT:         %9 = sv.array_index_inout %_RANDOM[%8] : !hw.inout<uarray<1xi32>>, i0
   // CHECK-NEXT:         sv.bpassign %9, %RANDOM : i32
@@ -459,7 +459,7 @@ hw.module private @init2DVector(in %clock: !seq.clock, in %a: !hw.array<1xarray<
   // CHECK-NEXT:       sv.ifdef.procedural @RANDOMIZE_REG_INIT {
   // CHECK-NEXT:         %_RANDOM = sv.logic : !hw.inout<uarray<1xi32>>
   // CHECK-NEXT:         sv.for %i = %false to %true step %true : i1 {
-  // CHECK-NEXT:           %RANDOM = sv.macro.ref.se @RANDOM() : () -> i32
+  // CHECK-NEXT:           %RANDOM = sv.macro.ref.expr.se @RANDOM() : () -> i32
   // CHECK-NEXT:           %6 = comb.extract %i from 0 : (i1) -> i0
   // CHECK-NEXT:           %7 = sv.array_index_inout %_RANDOM[%6] : !hw.inout<uarray<1xi32>>, i0
   // CHECK-NEXT:           sv.bpassign %7, %RANDOM : i32
@@ -606,8 +606,8 @@ hw.module @ArrayElements(in %a: !hw.array<2xi1>, in %clock: !seq.clock, in %cond
   // CHECK-NEXT: %[[r2:.+]] = sv.array_index_inout %r[%true] : !hw.inout<array<2xi1>>, i1
   // CHECK:      sv.always posedge %clock {
   // CHECK-NEXT:   sv.if %cond {
-  // CHECK-NEXT:     sv.passign %[[r1]], %1 : i1
   // CHECK-NEXT:     sv.passign %[[r2]], %0 : i1
+  // CHECK-NEXT:     sv.passign %[[r1]], %1 : i1
   // CHECK-NEXT:   } else {
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
@@ -711,9 +711,9 @@ hw.module @NestedSubaccess(in %clock: !seq.clock, in %en_0: i1, in %en_1: i1, in
   %31 = comb.mux bin %en_1, %27, %30 : !hw.array<3xi32>
   %32 = hw.array_create %26, %24, %22 : i32
   %33 = comb.mux bin %en_0, %31, %32 : !hw.array<3xi32>
-  // CHECK:        %[[IDX1:.+]] = sv.array_index_inout %r[%addr_0] : !hw.inout<array<3xi32>>, i2
-  // CHECK:        %[[IDX2:.+]] = sv.array_index_inout %r[%addr_1] : !hw.inout<array<3xi32>>, i2
   // CHECK:        %[[IDX3:.+]] = sv.array_index_inout %r[%addr_2] : !hw.inout<array<3xi32>>, i2
+  // CHECK:        %[[IDX2:.+]] = sv.array_index_inout %r[%addr_1] : !hw.inout<array<3xi32>>, i2
+  // CHECK:        %[[IDX1:.+]] = sv.array_index_inout %r[%addr_0] : !hw.inout<array<3xi32>>, i2
   // CHECK:        %[[IDX4:.+]] = sv.array_index_inout %r[%addr_3] : !hw.inout<array<3xi32>>, i2
   // CHECK:        sv.always posedge %clock {
   // CHECK-NEXT:   sv.if %en_0 {
@@ -927,4 +927,145 @@ hw.module @RegMuxInlining3(in %clock: !seq.clock, in %c: i1, out out: i8) {
     //CHECK:     sv.passign %r2, %[[V1]] : i2
     //CHECK:   } else {
     //CHECK:     sv.passign %r1, %[[V2]] : i2
+}
+
+// Tests for registers buried under ifdef macros.
+
+// CHECK-LABEL: sv.macro.decl @MyMacro
+sv.macro.decl @MyMacro
+
+// Test for registers buried under an ifdef's "then" branch.
+
+// CHECK: hw.hierpath @RegUnderIfdef_reg [@RegUnderIfdef::@reg]
+// CHECK: @RegUnderIfdef
+hw.module @RegUnderIfdef(in %clock : !seq.clock, in %reset : i1, in %value : i1) {
+  %c = hw.constant 0 : i1
+  // CHECK: sv.ifdef @MyMacro {
+  // CHECK:   %reg = sv.reg sym @reg
+  // CHECK:   sv.if %reset {
+  // CHECK:     sv.passign %reg, %false_0 : i1
+  // CHECK:   } else {
+  // CHECK:     sv.passign %reg, %value : i1
+  // CHECK:   }
+  // CHECK: }
+  sv.ifdef @MyMacro {
+    %reg = seq.firreg %value clock %clock reset sync %reset, %c : i1
+  }
+
+  // CHECK: sv.initial {
+  // CHECK:   sv.ifdef.procedural @MyMacro {
+  // CHECK:     %[[REG:.*]] = sv.xmr.ref @RegUnderIfdef_reg : !hw.inout<i1>
+  // CHECK:     %[[RNG:.*]] = sv.read_inout %{{.*}} : !hw.inout<i32>
+  // CHECK:     %[[VAL:.*]] = comb.extract %[[RNG]] from 0 : (i32) -> i1
+  // CHECK:     sv.bpassign %[[REG]], %[[VAL]] : i1
+  // CHECK:   }
+  // CHECK: }
+  hw.output
+}
+
+// Test for registers buried under an ifdef's "else" branch.
+
+// CHECK: hw.hierpath @RegUnderIfdefElse_reg [@RegUnderIfdefElse::@reg]
+// CHECK: @RegUnderIfdefElse
+hw.module @RegUnderIfdefElse(in %clock : !seq.clock, in %reset : i1, in %value : i1) {
+  %c = hw.constant 0 : i1
+
+  // CHECK: sv.ifdef @MyMacro {
+  // CHECK: } else {
+  // CHECK:   %reg = sv.reg sym @reg
+  // CHECK:   sv.if %reset {
+  // CHECK:     sv.passign %reg, %false_0 : i1
+  // CHECK:   } else {
+  // CHECK:     sv.passign %reg, %value : i1
+  // CHECK:   }
+  // CHECK: }
+  sv.ifdef @MyMacro {
+  } else {
+    %reg = seq.firreg %value clock %clock reset sync %reset, %c : i1
+  }
+
+  // CHECK: sv.initial {
+  // CHECK:   sv.ifdef.procedural @MyMacro {
+  // CHECK:   } else {
+  // CHECK:     %[[REG:.*]] = sv.xmr.ref @RegUnderIfdefElse_reg : !hw.inout<i1>
+  // CHECK:     %[[RNG:.*]] = sv.read_inout %{{.*}} : !hw.inout<i32>
+  // CHECK:     %[[VAL:.*]] = comb.extract %[[RNG]] from 0 : (i32) -> i1
+  // CHECK:     sv.bpassign %[[REG]], %[[VAL]] : i1
+  // CHECK:   }
+  // CHECK: }
+  hw.output
+}
+
+// Test for registers with conflicting names, to ensure we are uniquing.
+
+// CHECK: hw.hierpath @RegUnderIfdefDupName_reg [@RegUnderIfdefDupName::@reg]
+// CHECK: hw.hierpath @RegUnderIfdefDupName_reg_0 [@RegUnderIfdefDupName::@reg_0]
+// CHECK: @RegUnderIfdefDupName
+hw.module @RegUnderIfdefDupName(in %clock : !seq.clock, in %reset : i1, in %value : i1) {
+  %c = hw.constant 0 : i1
+
+  sv.ifdef @MyMacro {
+    %reg = seq.firreg %value clock %clock reset sync %reset, %c : i1
+  } else {
+    %reg = seq.firreg %value clock %clock reset sync %reset, %c : i1
+  }
+  hw.output
+}
+
+// Test for registers with async resets.
+
+// CHECK:  hw.hierpath @[[reg_path:.+]] [@AsyncResetRegUnderIfdef::@reg]
+hw.module @AsyncResetRegUnderIfdef(in %clock : !seq.clock, in %reset : i1, in %value : i1) {
+  %c = hw.constant 0 : i1
+
+  // CHECK: sv.ifdef @MyMacro {
+  // CHECK:   %reg = sv.reg sym @reg : !hw.inout<i1>
+  // CHECK:   %0 = sv.read_inout %reg : !hw.inout<i1>
+  // CHECK:   sv.always posedge %clock, posedge %reset {
+  // CHECK:     sv.if %reset {
+  // CHECK:       sv.passign %reg, %false_0 : i1
+  // CHECK:     } else {
+  // CHECK:       sv.passign %reg, %value : i1
+  // CHECK:     }
+  // CHECK:   }
+  // CHECK: }
+  sv.ifdef @MyMacro {
+    %reg = seq.firreg %value clock %clock reset async %reset, %c : i1
+  }
+
+  // CHECK: sv.initial {
+  // CHECK:   sv.if %reset {
+  // CHECK:     sv.ifdef.procedural @MyMacro {
+  // CHECK:       %0 = sv.xmr.ref @[[reg_path]] : !hw.inout<i1>
+  // CHECK:       sv.bpassign %0, %false_0 : i1
+  // CHECK:     }
+  // CHECK:   }
+  // CHECK: }
+  hw.output
+}
+
+// Test for registers with "preset".
+
+// CHECK:  hw.hierpath @[[reg_path:.+]] [@PresetRegUnderIfdef::@reg]
+hw.module @PresetRegUnderIfdef(in %clock : !seq.clock, in %value : i1) {
+  %c = hw.constant 0 : i1
+
+  // CHECK: sv.ifdef @MyMacro {
+  // CHECK:   %reg = sv.reg sym @reg : !hw.inout<i1>
+  // CHECK:   %0 = sv.read_inout %reg : !hw.inout<i1>
+  // CHECK:   sv.always posedge %clock {
+  // CHECK:     sv.passign %reg, %value : i1
+  // CHECK:   }
+  // CHECK: }
+  sv.ifdef @MyMacro {
+    %reg = seq.firreg %value clock %clock preset 0: i1
+  }
+
+  // CHECK: sv.initial {
+  // CHECK:   sv.ifdef.procedural @MyMacro {
+  // CHECK:     %0 = sv.xmr.ref @[[reg_path]] : !hw.inout<i1>
+  // CHECK:     sv.bpassign %0, %false : i1
+  // CHECK:   }
+  // CHECK: }
+  hw.output
 }

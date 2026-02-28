@@ -10,7 +10,7 @@ firrtl.circuit "Prop" {
   }
 
   firrtl.module private @emptyVec(in %vi : !firrtl.vector<uint<4>, 0>, out %vo : !firrtl.vector<uint<4>, 0>) attributes {convention = #firrtl<convention scalarized>} {
-    firrtl.strictconnect %vo, %vi : !firrtl.vector<uint<4>, 0>
+    firrtl.matchingconnect %vo, %vi : !firrtl.vector<uint<4>, 0>
   }
 
   // CHECK-LABEL: @Annos
@@ -45,7 +45,7 @@ firrtl.circuit "Prop" {
   firrtl.module private @Foo() attributes {convention = #firrtl<convention scalarized>} {
     %bar_in1, %bar_in2, %bar_out = firrtl.instance bar interesting_name @Bar(out in1: !firrtl.bundle<a flip: uint<1>, b flip: uint<1>>, in in2: !firrtl.bundle<c: uint<1>>, in out: !firrtl.bundle<d flip: uint<1>, e flip: uint<1>>)
     // CHECK: %bar.in1 = firrtl.wire
-    // CHECK: %bar.in2 = firrtl.wire 
+    // CHECK: %bar.in2 = firrtl.wire
     // CHECK: %bar.out = firrtl.wire
   }
 
@@ -65,38 +65,102 @@ firrtl.circuit "PreserveLocation" {
 #moduleLoc = loc("wrongLoc":42:1)
 #instLoc = loc("someLoc":9001:1)
 
-// Internal paths should be expanded
-firrtl.circuit "InternalPaths"  {
-  // CHECK: firrtl.extmodule private @BlackBox
-  // CHECK-SAME: out bundle_a: !firrtl.uint<32>, out bundle_b: !firrtl.uint<23>
-  // CHECK-SAME: out array_0: !firrtl.uint<1>, out array_1: !firrtl.uint<1>
-  // CHECK-SAME: out probe: !firrtl.probe<uint<32>>
-  // CHECK-SAME: internalPaths = [
-  // CHECK-SAME: #firrtl.internalpath
-  // CHECK-SAME: #firrtl.internalpath
-  // CHECK-SAME: #firrtl.internalpath
-  // CHECK-SAME: #firrtl.internalpath
-  // CHECK-SAME: #firrtl.internalpath<"some_probe">
-  // CHECK-SAME: ]
-  firrtl.extmodule private @BlackBox(
-    out bundle : !firrtl.bundle<a: uint<32>, b: uint<23>>,
-    out array : !firrtl.vector<uint<1>, 2>,
-    out probe : !firrtl.probe<uint<32>>
+//CHECK-LABEL: firrtl.circuit "Domains"
+firrtl.circuit "Domains" {
+  firrtl.domain @ClockDomain
+  // CHECK:      firrtl.module @Foo
+  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  // CHECK-SAME:   in %a_b: !firrtl.uint<1> domains [%A]
+  // CHECK-SAME:   in %a_c: !firrtl.uint<1> domains [%A]
+  // CHECK-SAME:   in %d_0: !firrtl.uint<1> domains [%D]
+  // CHECK-SAME:   in %d_1: !firrtl.uint<1> domains [%D]
+  // CHECK-SAME:   in %D: !firrtl.domain of @ClockDomain
+  firrtl.module @Foo(
+    in %A: !firrtl.domain of @ClockDomain,
+    in %a: !firrtl.bundle<b: uint<1>, c: uint<1>> domains [%A],
+    in %d: !firrtl.vector<uint<1>, 2> domains [%D],
+    in %D: !firrtl.domain of @ClockDomain
   ) attributes {
-    convention = #firrtl<convention scalarized>,
-    internalPaths = [
-      #firrtl.internalpath,
-      #firrtl.internalpath,
-      #firrtl.internalpath<"some_probe">
-    ]
+    convention = #firrtl<convention scalarized>
+  } {
+  }
+  // CHECK: firrtl.module @Domains
+  firrtl.module @Domains() {
+    // CHECK:      firrtl.instance foo @Foo
+    // CHECK-SAME:   in A: !firrtl.domain of @ClockDomain
+    // CHECK-SAME:   in a_b: !firrtl.uint<1> domains [A]
+    // CHECK-SAME:   in a_c: !firrtl.uint<1> domains [A]
+    // CHECK-SAME:   in d_0: !firrtl.uint<1> domains [D]
+    // CHECK-SAME:   in d_1: !firrtl.uint<1> domains [D]
+    // CHECK-SAME:   in D: !firrtl.domain of @ClockDomain
+    firrtl.instance foo @Foo(
+      in A: !firrtl.domain of @ClockDomain,
+      in a: !firrtl.bundle<b: uint<1>, c: uint<1>> domains [A],
+      in d: !firrtl.vector<uint<1>, 2> domains [D],
+      in D: !firrtl.domain of @ClockDomain
+    )
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "InstanceChoice"
+firrtl.circuit "InstanceChoice" {
+  firrtl.domain @ClockDomain
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
   }
 
-  // CHECK-LABEL: @InternalPaths
-  firrtl.module @InternalPaths() {
-    %bundle, %array, %probe = firrtl.instance blackbox @BlackBox(
-      out bundle : !firrtl.bundle<a: uint<32>, b: uint<23>>,
-      out array : !firrtl.vector<uint<1>, 2>,
-      out probe : !firrtl.probe<uint<32>>
-    )
+  // CHECK: firrtl.module @Target
+  // CHECK-SAME: in %a_x: !firrtl.uint<1>
+  // CHECK-SAME: in %a_y: !firrtl.uint<2>
+  firrtl.module @Target(in %a: !firrtl.bundle<x: uint<1>, y: uint<2>>)
+    attributes {convention = #firrtl<convention scalarized>} {
+  }
+
+  firrtl.module @FPGATarget(in %a: !firrtl.bundle<x: uint<1>, y: uint<2>>)
+    attributes {convention = #firrtl<convention scalarized>} {
+  }
+
+  firrtl.module @ASICTarget(in %a: !firrtl.bundle<x: uint<1>, y: uint<2>>)
+    attributes {convention = #firrtl<convention scalarized>} {
+  }
+
+  // CHECK: firrtl.module @TargetWithDomain
+  // CHECK-SAME: in %D: !firrtl.domain of @ClockDomain
+  // CHECK-SAME: in %b_x: !firrtl.uint<1> domains [%D]
+  // CHECK-SAME: in %b_y: !firrtl.uint<2> domains [%D]
+  firrtl.module @TargetWithDomain(
+    in %D: !firrtl.domain of @ClockDomain,
+    in %b: !firrtl.bundle<x: uint<1>, y: uint<2>> domains [%D]
+  ) attributes {convention = #firrtl<convention scalarized>} {
+  }
+
+  firrtl.module @FPGATargetWithDomain(
+    in %D: !firrtl.domain of @ClockDomain,
+    in %b: !firrtl.bundle<x: uint<1>, y: uint<2>> domains [%D]
+  ) attributes {convention = #firrtl<convention scalarized>} {
+  }
+
+  firrtl.module @ASICTargetWithDomain(
+    in %D: !firrtl.domain of @ClockDomain,
+    in %b: !firrtl.bundle<x: uint<1>, y: uint<2>> domains [%D]
+  ) attributes {convention = #firrtl<convention scalarized>} {
+  }
+
+  // CHECK: firrtl.module @InstanceChoice
+  firrtl.module @InstanceChoice() {
+    // CHECK: firrtl.instance_choice inst @Target alternatives @Platform
+    // CHECK-SAME: in a_x: !firrtl.uint<1>
+    // CHECK-SAME: in a_y: !firrtl.uint<2>
+    %inst_a = firrtl.instance_choice inst @Target alternatives @Platform
+      { @FPGA -> @FPGATarget, @ASIC -> @ASICTarget }
+      (in a: !firrtl.bundle<x: uint<1>, y: uint<2>>)
+    // CHECK: firrtl.instance_choice inst2 @TargetWithDomain alternatives @Platform
+    // CHECK-SAME: in D: !firrtl.domain of @ClockDomain
+    // CHECK-SAME: in b_x: !firrtl.uint<1> domains [D]
+    // CHECK-SAME: in b_y: !firrtl.uint<2> domains [D]
+    %inst2_D, %inst2_b = firrtl.instance_choice inst2 @TargetWithDomain alternatives @Platform
+      { @FPGA -> @FPGATargetWithDomain, @ASIC -> @ASICTargetWithDomain }
+      (in D: !firrtl.domain of @ClockDomain, in b: !firrtl.bundle<x: uint<1>, y: uint<2>> domains [D])
   }
 }

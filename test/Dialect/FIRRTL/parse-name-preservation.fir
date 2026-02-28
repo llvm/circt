@@ -1,6 +1,7 @@
 ; RUN: firtool --parse-only %s | FileCheck %s
+FIRRTL version 4.0.0
 circuit Bar :
-  module Bar :
+  public module Bar :
     input in: UInt<1>
 
     ; Should create a "tap" node with the same type and a symbol when the type
@@ -9,8 +10,8 @@ circuit Bar :
     ; CHECK: %a = firrtl.wire interesting_name : !firrtl.uint<1>
 
     ; Should use the non-tap wire in expressions.
-    a <= in
-    ; CHECK: firrtl.strictconnect %a, %in
+    connect a, in
+    ; CHECK: firrtl.matchingconnect %a, %in
 
     ; When the type is not passive, the tap should be a wire with the passive
     ; type of the original wire.

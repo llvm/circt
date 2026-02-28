@@ -5,7 +5,7 @@ from pycde.testing import unittestmodule
 
 from pycde.ndarray import NDArray
 from pycde.dialects import hw
-from pycde.types import types, dim
+from pycde.types import Bit, Bits, dim
 
 # ndarray transposition via injected ndarray on a ListValue
 # Putting this as first test in case users use this file as a reference.
@@ -15,8 +15,8 @@ from pycde.types import types, dim
 
 @unittestmodule()
 class M1(Module):
-  in1 = Input(dim(types.i32, 4, 8))
-  out = Output(dim(types.i32, 8, 4))
+  in1 = Input(dim(Bits(32), 4, 8))
+  out = Output(dim(Bits(32), 8, 4))
 
   @generator
   def build(ports):
@@ -30,8 +30,8 @@ class M1(Module):
 
 @unittestmodule()
 class M1(Module):
-  in1 = Input(dim(types.i32, 4, 8))
-  out = Output(dim(types.i32, 2, 16))
+  in1 = Input(dim(Bits(32), 4, 8))
+  out = Output(dim(Bits(32), 2, 16))
 
   @generator
   def build(ports):
@@ -43,15 +43,15 @@ class M1(Module):
 
 @unittestmodule()
 class M2(Module):
-  in0 = Input(dim(types.i32, 16))
-  in1 = Input(types.i32)
-  t_c = dim(types.i32, 8, 4)
+  in0 = Input(dim(Bits(32), 16))
+  in1 = Input(Bits(32))
+  t_c = dim(Bits(32), 8, 4)
   c = Output(t_c)
 
   @generator
   def build(ports):
     # a 32xi32 ndarray.
-    m = NDArray((32,), dtype=types.i32, name='m2')
+    m = NDArray((32,), dtype=Bits(32), name='m2')
     for i in range(16):
       m[i] = ports.in1
     m[16:32] = ports.in0
@@ -62,9 +62,9 @@ class M2(Module):
 # -----
 @unittestmodule()
 class M5(Module):
-  in0 = Input(dim(types.i32, 16))
-  in1 = Input(types.i32)
-  t_c = dim(types.i32, 32)
+  in0 = Input(dim(Bits(32), 16))
+  in1 = Input(Bits(32))
+  t_c = dim(Bits(32), 32)
   c = Output(t_c)
 
   @generator
@@ -72,11 +72,11 @@ class M5(Module):
     # a 32x32xi1 ndarray.
     # A dtype of i32 is fairly expensive wrt. the size of the output IR, but
     # but allows for assigning indiviudal bits.
-    m = NDArray((32, 32), dtype=types.i1, name='m1')
+    m = NDArray((32, 32), dtype=Bit, name='m1')
 
     # Assign individual bits to the first 32 bits.
     for i in range(32):
-      m[0, i] = hw.ConstantOp(types.i1, 1)
+      m[0, i] = hw.ConstantOp(Bit, 1)
 
     # Fill the next 15 values with an i32. The ndarray knows how to convert
     # from i32 to <32xi1> to comply with the ndarray dtype.
@@ -100,8 +100,8 @@ class M5(Module):
 
 @unittestmodule()
 class M1(Module):
-  in1 = Input(dim(types.i32, 10, 10))
-  out = Output(dim(types.i32, 10, 10))
+  in1 = Input(dim(Bits(32), 10, 10))
+  out = Output(dim(Bits(32), 10, 10))
 
   @generator
   def build(ports):
@@ -116,8 +116,8 @@ class M1(Module):
 
 @unittestmodule()
 class M1(Module):
-  in1 = Input(dim(types.i32, 10))
-  out = Output(dim(types.i32, 10))
+  in1 = Input(dim(Bits(32), 10))
+  out = Output(dim(Bits(32), 10))
 
   @generator
   def build(ports):
@@ -132,10 +132,10 @@ class M1(Module):
 
 @unittestmodule()
 class M1(Module):
-  in1 = Input(dim(types.i32, 10))
-  in2 = Input(dim(types.i32, 10))
-  in3 = Input(dim(types.i32, 10))
-  out = Output(dim(types.i32, 30))
+  in1 = Input(dim(Bits(32), 10))
+  in2 = Input(dim(Bits(32), 10))
+  in3 = Input(dim(Bits(32), 10))
+  out = Output(dim(Bits(32), 30))
 
   @generator
   def build(ports):
@@ -153,8 +153,8 @@ class M1(Module):
 
 @unittestmodule()
 class M1(Module):
-  in1 = Input(dim(types.i32, 10))
-  out = Output(dim(types.i32, 10))
+  in1 = Input(dim(Bits(32), 10))
+  out = Output(dim(Bits(32), 10))
 
   @generator
   def build(ports):
@@ -186,12 +186,12 @@ class M1(Module):
 
 @unittestmodule()
 class M1(Module):
-  out = Output(dim(types.i32, 3, 3))
+  out = Output(dim(Bits(32), 3, 3))
 
   @generator
   def build(ports):
-    m = NDArray((3, 3), dtype=types.i32)
+    m = NDArray((3, 3), dtype=Bits(32))
     for i in range(3):
       for j in range(3):
-        m[i][j] = types.i32(i * 3 + j)
+        m[i][j] = Bits(32)(i * 3 + j)
     ports.out = m.to_circt()

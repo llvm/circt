@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 include "mlir/Interfaces/InferTypeOpInterface.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/SV/SVTypes.td"
 
@@ -34,7 +35,8 @@ def SystemFunctionOp : SVOp<"system"> {
 }
 
 
-def VerbatimExprOp : SVOp<"verbatim.expr", [Pure, HasCustomSSAName]> {
+def VerbatimExprOp : SVOp<"verbatim.expr", [Pure, HasCustomSSAName,
+    DeclareOpInterfaceMethods<InnerRefUserOpInterface>]> {
   let summary = "Expression that expands to a value given SystemVerilog text";
   let description = [{
     This operation produces a typed value expressed by a string of
@@ -62,15 +64,11 @@ def VerbatimExprOp : SVOp<"verbatim.expr", [Pure, HasCustomSSAName]> {
                "build(odsBuilder, odsState, resultType, "
                "odsBuilder.getStringAttr(formatString), substitutions,"
                "odsBuilder.getArrayAttr({}));">,
-    OpBuilder<(ins "Type":$resultType, "StringAttr":$formatString,
-                CArg<"ValueRange", "{}">:$substitutions),
-               "build(odsBuilder, odsState, resultType, "
-               "formatString, substitutions,"
-               "odsBuilder.getArrayAttr({}));">
   ];
 }
 
-def VerbatimExprSEOp : SVOp<"verbatim.expr.se", [HasCustomSSAName]> {
+def VerbatimExprSEOp : SVOp<"verbatim.expr.se", [HasCustomSSAName,
+    DeclareOpInterfaceMethods<InnerRefUserOpInterface>]> {
   let summary = "Expression that expands to a value given SystemVerilog text";
   let description = [{
     This operation produces a typed value expressed by a string of
@@ -100,7 +98,7 @@ def VerbatimExprSEOp : SVOp<"verbatim.expr.se", [HasCustomSSAName]> {
   ];
 }
 
-def MacroRefExprOp : SVOp<"macro.ref", [Pure, HasCustomSSAName,
+def MacroRefExprOp : SVOp<"macro.ref.expr", [Pure, HasCustomSSAName,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Expression to refer to a SystemVerilog macro";
   let description = [{
@@ -127,7 +125,7 @@ def MacroRefExprOp : SVOp<"macro.ref", [Pure, HasCustomSSAName,
   }];
 }
 
-def MacroRefExprSEOp : SVOp<"macro.ref.se", [HasCustomSSAName,
+def MacroRefExprSEOp : SVOp<"macro.ref.expr.se", [HasCustomSSAName,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Expression to refer to a SystemVerilog macro";
   let description = [{
@@ -201,6 +199,21 @@ def ConstantStrOp : SVOp<"constantStr", [Pure]> {
   let assemblyFormat = " $str attr-dict";
 }
 
+def SFormatFOp : SVOp<"sformatf", [Pure]> {
+  let summary = "'$sformatf' task";
+  let description = [{
+    This operations represents `$sformatf` task that produces a string from
+    a format string and substitutions.
+
+    See section 21.3.3 of 1800-2023 for more details.
+  }];
+
+  let arguments = (ins StrAttr: $format_string, Variadic<AnyType>:$substitutions);
+  let results = (outs HWStringType:$result);
+  let assemblyFormat =
+    "$format_string attr-dict (`(` $substitutions^ `)` `:` qualified(type($substitutions)))?";
+}
+
 def LocalParamOp : SVOp<"localparam",
       [FirstAttrDerivedResultType, Pure, HasCustomSSAName]> {
   let summary = "Declare a localparam";
@@ -264,4 +277,49 @@ def SampledOp : SVOp<"system.sampled", [Pure, SameOperandsAndResultType]> {
   let arguments = (ins AnyType:$expression);
   let results = (outs AnyType:$sampledValue);
   let assemblyFormat = "$expression attr-dict `:` qualified(type($expression))";
+}
+
+def TimeOp : SVOp<"system.time", []> {
+  let summary = "`$time` system function";
+  let description = [{
+    Return a 64-bit integer value representing the time at which the function
+    was called.
+  }];
+  let arguments = (ins);
+  let results = (outs I64:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+}
+
+def STimeOp : SVOp<"system.stime", []> {
+  let summary = "`$time` system function";
+  let description = [{
+    Return a 32-bit integer value representing the time at which the function
+    was called.
+  }];
+  let arguments = (ins);
+  let results = (outs I32:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+}
+
+def UnpackedArrayCreateOp : SVOp<"unpacked_array_create", [Pure, SameTypeOperands]> {
+  let summary = "Create an unpacked array";
+  let description = [{
+    Creates an unpacked array from a variable set of values. One or more values must be
+    listed.
+
+    See the HW-SV rationale document for details on operand ordering.
+  }];
+
+  let arguments = (ins Variadic<HWNonInOutType>:$inputs);
+  let results = (outs UnpackedArrayType:$result);
+
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $result)";
+}
+
+def UnpackedOpenArrayCastOp : SVOp<"unpacked_open_array_cast"> {
+  let summary = "Cast an unpacked array into an unpacked open array";
+  let arguments = (ins UnpackedArrayType:$input);
+  let results = (outs UnpackedOpenArrayType:$result);
+
+  let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
 }

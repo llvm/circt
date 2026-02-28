@@ -48,7 +48,7 @@ circt::analysis::CyclicSchedulingAnalysis::CyclicSchedulingAnalysis(
 void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
     AffineForOp forOp, MemoryDependenceAnalysis memoryAnalysis) {
   // Create a cyclic scheduling problem.
-  CyclicProblem problem = CyclicProblem::get(forOp);
+  CyclicProblem problem(forOp);
 
   // Insert memory dependences into the problem.
   forOp.getBody()->walk([&](Operation *op) {

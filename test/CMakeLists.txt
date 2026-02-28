@@ -22,15 +22,25 @@ set(CIRCT_TEST_DEPENDS
   circt-capi-om-test
   circt-capi-firrtl-test
   circt-capi-firtool-test
+  circt-capi-rtg-test
+  circt-capi-rtgtest-test
+  circt-capi-support-test
+  circt-capi-synth-test
   circt-as
+  circt-bmc
   circt-dis
+  circt-lec
   circt-opt
+  circt-synth
+  circt-test
   circt-translate
   circt-reduce
+  domaintool
   handshake-runner
+  firld
   firtool
   hlstool
-  ibistool
+  kanagawatool
   om-linker
   )
 
@@ -38,13 +48,9 @@ if (CIRCT_GTEST_AVAILABLE)
   list(APPEND CIRCT_TEST_DEPENDS CIRCTUnitTests)
 endif()
 
-if(CIRCT_LLHD_SIM_ENABLED)
-  list(APPEND CIRCT_TEST_DEPENDS llhd-sim)
-  list(APPEND CIRCT_TEST_DEPENDS circt-llhd-signals-runtime-wrappers)
-endif()
-
 if(CIRCT_SLANG_FRONTEND_ENABLED)
   list(APPEND CIRCT_TEST_DEPENDS circt-verilog)
+  list(APPEND CIRCT_TEST_DEPENDS circt-verilog-lsp-server)
 endif()
 
 add_lit_testsuite(check-circt "Running the CIRCT regression tests"

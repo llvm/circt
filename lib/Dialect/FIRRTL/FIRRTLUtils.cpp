@@ -16,10 +16,34 @@
 #include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Support/Naming.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Path.h"
 
 using namespace circt;
 using namespace firrtl;
+
+//===----------------------------------------------------------------------===//
+// TieOffCache
+//===----------------------------------------------------------------------===//
+
+Value TieOffCache::getInvalid(FIRRTLBaseType type) {
+  Value &cached = cache[type];
+  if (!cached)
+    cached = InvalidValueOp::create(builder, type);
+  return cached;
+}
+
+Value TieOffCache::getUnknown(PropertyType type) {
+  Value &cached = cache[type];
+  if (!cached)
+    cached = builder.create<UnknownValueOp>(type);
+  return cached;
+}
+
+//===----------------------------------------------------------------------===//
+// emitConnect
+//===----------------------------------------------------------------------===//
 
 void circt::firrtl::emitConnect(OpBuilder &builder, Location loc, Value dst,
                                 Value src) {
@@ -41,29 +65,32 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     // References use ref.define.  Add cast if types don't match.
     if (type_isa<RefType>(dstFType)) {
       if (dstFType != srcFType)
-        src = builder.create<RefCastOp>(dstFType, src);
-      builder.create<RefDefineOp>(dst, src);
+        src = RefCastOp::create(builder, dstFType, src);
+      RefDefineOp::create(builder, dst, src);
     } else if (type_isa<PropertyType>(dstFType) &&
                type_isa<PropertyType>(srcFType)) {
       // Properties use propassign.
-      builder.create<PropAssignOp>(dst, src);
+      PropAssignOp::create(builder, dst, src);
+    } else if (type_isa<DomainType>(dstFType) &&
+               type_isa<DomainType>(srcFType)) {
+      DomainDefineOp::create(builder, dst, src);
     } else {
       // Other types, give up and leave a connect
-      builder.create<ConnectOp>(dst, src);
+      ConnectOp::create(builder, dst, src);
     }
     return;
   }
 
   // More special connects
   if (isa<AnalogType>(dstType)) {
-    builder.create<AttachOp>(ArrayRef{dst, src});
+    AttachOp::create(builder, ArrayRef{dst, src});
     return;
   }
 
   // If the types are the exact same we can just connect them.
   if (dstType == srcType && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {
-    builder.create<StrictConnectOp>(dst, src);
+    MatchingConnectOp::create(builder, dst, src);
     return;
   }
 
@@ -74,12 +101,12 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     // connect and let the verifier catch it.
     auto srcBundle = type_dyn_cast<BundleType>(srcType);
     if (!srcBundle || numElements != srcBundle.getNumElements()) {
-      builder.create<ConnectOp>(dst, src);
+      ConnectOp::create(builder, dst, src);
       return;
     }
     for (size_t i = 0; i < numElements; ++i) {
-      auto dstField = builder.create<SubfieldOp>(dst, i);
-      auto srcField = builder.create<SubfieldOp>(src, i);
+      auto dstField = SubfieldOp::create(builder, dst, i);
+      auto srcField = SubfieldOp::create(builder, src, i);
       if (dstBundle.getElement(i).isFlip)
         std::swap(dstField, srcField);
       emitConnect(builder, dstField, srcField);
@@ -94,12 +121,12 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     // connect and let the verifier catch it.
     auto srcVector = type_dyn_cast<FVectorType>(srcType);
     if (!srcVector || numElements != srcVector.getNumElements()) {
-      builder.create<ConnectOp>(dst, src);
+      ConnectOp::create(builder, dst, src);
       return;
     }
     for (size_t i = 0; i < numElements; ++i) {
-      auto dstField = builder.create<SubindexOp>(dst, i);
-      auto srcField = builder.create<SubindexOp>(src, i);
+      auto dstField = SubindexOp::create(builder, dst, i);
+      auto srcField = SubindexOp::create(builder, src, i);
       emitConnect(builder, dstField, srcField);
     }
     return;
@@ -108,7 +135,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   if ((dstType.hasUninferredReset() || srcType.hasUninferredReset()) &&
       dstType != srcType) {
     srcType = dstType.getConstType(srcType.isConst());
-    src = builder.create<UninferredResetCastOp>(srcType, src);
+    src = UninferredResetCastOp::create(builder, srcType, src);
   }
 
   // Handle passive types with possibly uninferred widths.
@@ -123,10 +150,10 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     //  can be const-cast'd, do so)
     if (dstType != srcType && dstType.getWidthlessType() != srcType &&
         areTypesConstCastable(dstType.getWidthlessType(), srcType)) {
-      src = builder.create<ConstCastOp>(dstType.getWidthlessType(), src);
+      src = ConstCastOp::create(builder, dstType.getWidthlessType(), src);
     }
 
-    builder.create<ConnectOp>(dst, src);
+    ConnectOp::create(builder, dst, src);
     return;
   }
 
@@ -139,29 +166,29 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     if (isSignedDest)
       tmpType =
           UIntType::get(dstType.getContext(), dstWidth, srcType.isConst());
-    src = builder.create<TailPrimOp>(tmpType, src, srcWidth - dstWidth);
+    src = TailPrimOp::create(builder, tmpType, src, srcWidth - dstWidth);
     // Insert the cast back to signed if needed.
     if (isSignedDest)
-      src = builder.create<AsSIntPrimOp>(
-          dstType.getConstType(tmpType.isConst()), src);
+      src = AsSIntPrimOp::create(builder,
+                                 dstType.getConstType(tmpType.isConst()), src);
   } else if (srcWidth < dstWidth) {
     // Need to extend arg.
-    src = builder.create<PadPrimOp>(src, dstWidth);
+    src = PadPrimOp::create(builder, src, dstWidth);
   }
 
   if (auto srcType = type_cast<FIRRTLBaseType>(src.getType());
       srcType && dstType != srcType &&
       areTypesConstCastable(dstType, srcType)) {
-    src = builder.create<ConstCastOp>(dstType, src);
+    src = ConstCastOp::create(builder, dstType, src);
   }
 
   // Strict connect requires the types to be completely equal, including
   // connecting uint<1> to abstract reset types.
   if (dstType == src.getType() && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {
-    builder.create<StrictConnectOp>(dst, src);
+    MatchingConnectOp::create(builder, dst, src);
   } else
-    builder.create<ConnectOp>(dst, src);
+    ConnectOp::create(builder, dst, src);
 }
 
 IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {
@@ -187,7 +214,8 @@ IntegerAttr circt::firrtl::getIntZerosAttr(Type type) {
 /// type. This handles both the known width and unknown width case.
 IntegerAttr circt::firrtl::getIntOnesAttr(Type type) {
   int32_t width = abs(type_cast<IntType>(type).getWidthOrSentinel());
-  return getIntAttr(type, APInt(width, -1));
+  return getIntAttr(
+      type, APInt(width, -1, /*isSigned=*/false, /*implicitTrunc=*/true));
 }
 
 /// Return the single assignment to a Property value. It is assumed that the
@@ -457,7 +485,13 @@ bool circt::firrtl::walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
         auto subRef = fieldRef.getSubField(subID);
         auto subOriginal = original.getSubField(subID);
         auto value = subfield.getResult();
-        workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
+        // If fieldID is zero, this points to entire subfields.
+        if (fieldID == 0)
+          workStack.emplace_back(subOriginal, subRef, value, 0);
+        else {
+          assert(fieldID >= subID);
+          workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
+        }
       } else if (auto subindex = dyn_cast<SubindexOp>(user)) {
         FVectorType vectorType = subindex.getInput().getType();
         auto index = subindex.getIndex();
@@ -468,7 +502,13 @@ bool circt::firrtl::walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
         auto subRef = fieldRef.getSubField(subID);
         auto subOriginal = original.getSubField(subID);
         auto value = subindex.getResult();
-        workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
+        // If fieldID is zero, this points to entire subfields.
+        if (fieldID == 0)
+          workStack.emplace_back(subOriginal, subRef, value, 0);
+        else {
+          assert(fieldID >= subID);
+          workStack.emplace_back(subOriginal, subRef, value, fieldID - subID);
+        }
       } else if (auto connect = dyn_cast<FConnectLike>(user)) {
         // Make sure that this connect is driving the value.
         if (connect.getDest() != current)
@@ -551,11 +591,10 @@ static void getDeclName(Value value, SmallString<64> &string, bool nameSafe) {
           string += op.getInstanceName();
           value = nullptr;
         })
-        .Case<InstanceOp, MemOp>([&](auto op) {
+        .Case<InstanceOp, InstanceChoiceOp, MemOp>([&](auto op) {
           string += op.getName();
           string += nameSafe ? "_" : ".";
-          string += op.getPortName(cast<OpResult>(value).getResultNumber())
-                        .getValue();
+          string += op.getPortName(cast<OpResult>(value).getResultNumber());
           value = nullptr;
         })
         .Case<FNamableOp>([&](auto op) {
@@ -634,13 +673,6 @@ circt::firrtl::getFieldName(const FieldRef &fieldRef, bool nameSafe) {
       // Recurse in to the element type.
       type = vecType.getElementType();
       localID = localID - vecType.getFieldID(index);
-    } else if (auto enumType = type_dyn_cast<FEnumType>(type)) {
-      auto index = enumType.getIndexForFieldID(localID);
-      auto &element = enumType.getElements()[index];
-      name += nameSafe ? "_" : ".";
-      name += element.name.getValue();
-      type = element.type;
-      localID = localID - enumType.getFieldID(index);
     } else if (auto classType = type_dyn_cast<ClassType>(type)) {
       auto index = classType.getIndexForFieldID(localID);
       auto &element = classType.getElement(index);
@@ -671,19 +703,19 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
     FIRRTLTypeSwitch<Type, void>(value.getType())
         .Case<BundleType, OpenBundleType>([&](auto bundle) {
           auto index = bundle.getIndexForFieldID(fieldID);
-          value = builder.create<SubfieldOp>(value, index);
+          value = SubfieldOp::create(builder, value, index);
           fieldID -= bundle.getFieldID(index);
         })
         .Case<FVectorType, OpenVectorType>([&](auto vector) {
           auto index = vector.getIndexForFieldID(fieldID);
-          value = builder.create<SubindexOp>(value, index);
+          value = SubindexOp::create(builder, value, index);
           fieldID -= vector.getFieldID(index);
         })
         .Case<RefType>([&](auto reftype) {
           FIRRTLTypeSwitch<FIRRTLBaseType, void>(reftype.getType())
               .template Case<BundleType, FVectorType>([&](auto type) {
                 auto index = type.getIndexForFieldID(fieldID);
-                value = builder.create<RefSubOp>(value, index);
+                value = RefSubOp::create(builder, value, index);
                 fieldID -= type.getFieldID(index);
               })
               .Default([&](auto _) {
@@ -733,10 +765,10 @@ void circt::firrtl::walkGroundTypes(
           }
         })
         .template Case<FEnumType>([&](FEnumType fenum) {
-          for (size_t i = 0, e = fenum.getNumElements(); i < e; ++i) {
-            fieldID++;
-            f(f, fenum.getElementType(i), isFlip);
-          }
+          // TODO: are enums aggregates or not?  Where is walkGroundTypes called
+          // from?  They are required to have passive types internally, so they
+          // don't really form an aggregate value.
+          fn(fieldID, fenum, isFlip);
         })
         .Default([&](FIRRTLBaseType groundType) {
           assert(groundType.isGround() &&
@@ -756,6 +788,24 @@ hw::InnerSymTarget circt::firrtl::getTargetFor(FieldRef ref) {
     return hw::InnerSymTarget(arg.getArgNumber(), mod, ref.getFieldID());
   }
   return hw::InnerSymTarget(root.getDefiningOp(), ref.getFieldID());
+}
+
+/// Get FieldRef pointing to the specified inner symbol target, which must be
+/// valid. Returns null FieldRef if target points to something with no value,
+/// such as a port of an external module.
+FieldRef circt::firrtl::getFieldRefForTarget(const hw::InnerSymTarget &ist) {
+  if (ist.isPort()) {
+    return TypeSwitch<Operation *, FieldRef>(ist.getOp())
+        .Case<FModuleOp>([&](auto fmod) {
+          return FieldRef(fmod.getArgument(ist.getPort()), ist.getField());
+        })
+        .Default({});
+  }
+
+  auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(ist.getOp());
+  assert(symOp && symOp.getTargetResultIndex() &&
+         (symOp.supportsPerFieldSymbols() || ist.getField() == 0));
+  return FieldRef(symOp.getTargetResult(), ist.getField());
 }
 
 // Return InnerSymAttr with sym on specified fieldID.
@@ -785,13 +835,13 @@ StringAttr circt::firrtl::getOrAddInnerSym(
     const hw::InnerSymTarget &target,
     llvm::function_ref<hw::InnerSymbolNamespace &()> getNamespace) {
   if (target.isPort()) {
-    if (auto mod = dyn_cast<FModuleOp>(target.getOp())) {
+    if (auto mod = dyn_cast<FModuleLike>(target.getOp())) {
       auto portIdx = target.getPort();
       assert(portIdx < mod.getNumPorts());
       auto [attr, sym] =
           getOrAddInnerSym(mod.getContext(), mod.getPortSymbolAttr(portIdx),
                            target.getField(), getNamespace);
-      mod.setPortSymbolsAttr(portIdx, attr);
+      mod.setPortSymbolAttr(portIdx, attr);
       return sym;
     }
   } else {
@@ -805,7 +855,7 @@ StringAttr circt::firrtl::getOrAddInnerSym(
     }
   }
 
-  assert(0 && "target must be port of FModuleOp or InnerSymbol");
+  assert(0 && "target must be port of FModuleLike or InnerSymbol");
   return {};
 }
 
@@ -828,10 +878,10 @@ StringAttr circt::firrtl::getOrAddInnerSym(const hw::InnerSymTarget &target,
 hw::InnerRefAttr
 circt::firrtl::getInnerRefTo(const hw::InnerSymTarget &target,
                              GetNamespaceCallback getNamespace) {
-  auto mod = target.isPort() ? dyn_cast<FModuleOp>(target.getOp())
+  auto mod = target.isPort() ? dyn_cast<FModuleLike>(target.getOp())
                              : target.getOp()->getParentOfType<FModuleOp>();
   assert(mod &&
-         "must be an operation inside an FModuleOp or port of FModuleOp");
+         "must be an operation inside an FModuleOp or port of FModuleLike");
   return hw::InnerRefAttr::get(SymbolTable::getSymbolName(mod),
                                getOrAddInnerSym(target, getNamespace));
 }
@@ -998,20 +1048,16 @@ Type circt::firrtl::lowerType(
   }
   if (auto fenum = type_dyn_cast<FEnumType>(firType)) {
     mlir::SmallVector<hw::UnionType::FieldInfo, 8> hwfields;
-    SmallVector<Attribute> names;
     bool simple = true;
     for (auto element : fenum) {
       Type etype = lowerType(element.type, loc, getTypeDeclFn);
       if (!etype)
         return {};
       hwfields.push_back(hw::UnionType::FieldInfo{element.name, etype, 0});
-      names.push_back(element.name);
-      if (!isa<UIntType>(element.type) ||
-          element.type.getBitWidthOrSentinel() != 0)
+      if (element.type.getBitWidthOrSentinel() != 0)
         simple = false;
     }
-    auto tagTy = hw::EnumType::get(type.getContext(),
-                                   ArrayAttr::get(type.getContext(), names));
+    auto tagTy = IntegerType::get(type.getContext(), fenum.getTagWidth());
     if (simple)
       return tagTy;
     auto bodyTy = hw::UnionType::get(type.getContext(), hwfields);
@@ -1028,4 +1074,142 @@ Type circt::firrtl::lowerType(
     return IntegerType::get(type.getContext(), width);
 
   return {};
+}
+
+void circt::firrtl::makeCommonPrefix(SmallString<64> &a, StringRef b) {
+  // truncate 'a' to the common prefix of 'a' and 'b'.
+  size_t i = 0;
+  size_t e = std::min(a.size(), b.size());
+  for (; i < e; ++i)
+    if (a[i] != b[i])
+      break;
+  a.resize(i);
+
+  // truncate 'a' so it ends on a directory seperator.
+  auto sep = llvm::sys::path::get_separator();
+  while (!a.empty() && !a.ends_with(sep))
+    a.pop_back();
+}
+
+PathOp circt::firrtl::createPathRef(Operation *op, hw::HierPathOp nla,
+                                    mlir::ImplicitLocOpBuilder &builderOM) {
+
+  auto *context = op->getContext();
+  auto id = DistinctAttr::create(UnitAttr::get(context));
+  TargetKind kind = TargetKind::Reference;
+  // If op is null, then create an empty path.
+  if (op) {
+    NamedAttrList fields;
+    fields.append("id", id);
+    fields.append("class", StringAttr::get(context, "circt.tracker"));
+    if (nla)
+      fields.append("circt.nonlocal", mlir::FlatSymbolRefAttr::get(nla));
+    AnnotationSet annos(op);
+    annos.addAnnotations(DictionaryAttr::get(context, fields));
+    annos.applyToOperation(op);
+    if (isa<InstanceOp, FModuleLike>(op))
+      kind = TargetKind::Instance;
+  }
+
+  // Create the path operation.
+  return PathOp::create(builderOM, kind, id);
+}
+
+//===----------------------------------------------------------------------===//
+// Format string utilities
+//===----------------------------------------------------------------------===//
+
+mlir::ParseResult
+circt::firrtl::parseFormatString(mlir::OpBuilder &builder, mlir::Location loc,
+                                 llvm::StringRef formatString,
+                                 llvm::ArrayRef<mlir::Value> specOperands,
+                                 mlir::StringAttr &formatStringResult,
+                                 llvm::SmallVectorImpl<mlir::Value> &operands) {
+
+  // Validate the format string and process any "special" substitutions.
+  llvm::SmallString<64> validatedFormatString;
+
+  for (size_t i = 0, e = formatString.size(), opIdx = 0; i != e; ++i) {
+    auto c = formatString[i];
+    switch (c) {
+    // FIRRTL percent format strings.  If this is actually a format string,
+    // then grab one of the "spec" operands.
+    case '%': {
+      validatedFormatString.push_back(c);
+
+      // Parse the width specifier.
+      llvm::SmallString<6> width;
+      c = formatString[++i];
+      while (isdigit(c)) {
+        width.push_back(c);
+        c = formatString[++i];
+      }
+
+      // Parse the radix.
+      switch (c) {
+      case 'c':
+        if (!width.empty())
+          return mlir::emitError(loc) << "ASCII character format specifiers "
+                                         "('%c') may not specify a width";
+        [[fallthrough]];
+      case 'b':
+      case 'd':
+      case 'x':
+        if (!width.empty())
+          validatedFormatString.append(width);
+        operands.push_back(specOperands[opIdx++]);
+        break;
+      case '%':
+        if (!width.empty())
+          return mlir::emitError(loc)
+                 << "literal percents ('%%') may not specify a width";
+        break;
+      // Anything else is illegal.
+      default:
+        return mlir::emitError(loc)
+               << "unknown printf substitution '%" << width << c << "'";
+      }
+      validatedFormatString.push_back(c);
+      break;
+    }
+    // FIRRTL special format strings.  If this is a special format string,
+    // then create an operation for it and put its result in the operand list.
+    // This will cause the operands to interleave with the spec operands.
+    // Replace any special format string with the generic '{{}}' placeholder.
+    case '{': {
+      if (formatString[i + 1] != '{') {
+        validatedFormatString.push_back(c);
+        break;
+      }
+      // Handle a special substitution.
+      i += 2;
+      size_t start = i;
+      while (formatString[i] != '}')
+        ++i;
+      if (formatString[i] != '}')
+        return mlir::emitError(loc)
+               << "expected '}' to terminate special substitution";
+
+      auto specialString = formatString.slice(start, i);
+      if (specialString == "SimulationTime") {
+        operands.push_back(TimeOp::create(builder, loc));
+      } else if (specialString == "HierarchicalModuleName") {
+        operands.push_back(HierarchicalModuleNameOp::create(builder, loc));
+      } else {
+        return mlir::emitError(loc)
+               << "unknown printf substitution '" << specialString
+               << "' (did you misspell it?)";
+      }
+
+      validatedFormatString.append("{{}}");
+      ++i;
+      break;
+    }
+    default:
+      validatedFormatString.push_back(c);
+    }
+  }
+
+  formatStringResult = builder.getStringAttr(validatedFormatString);
+  return mlir::success();
 }

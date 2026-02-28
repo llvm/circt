@@ -10,16 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/LLHD/IR/LLHDDialect.h"
+#include "circt/Dialect/LLHD/LLHDDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/LLHD/IR/LLHDTypes.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
+#include "circt/Dialect/LLHD/LLHDTypes.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/Transforms/InliningUtils.h"
-#include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/StringRef.h"
 
 using namespace circt;
 using namespace circt::llhd;
@@ -43,9 +40,7 @@ struct LLHDInlinerInterface : public mlir::DialectInlinerInterface {
   }
 
   bool isLegalToInline(Region *, Region *src, bool, IRMapping &) const final {
-    // Don't inline processes and entities
-    return !isa<llhd::ProcOp>(src->getParentOp()) &&
-           !isa<llhd::EntityOp>(src->getParentOp());
+    return false;
   }
 };
 } // end anonymous namespace
@@ -60,21 +55,25 @@ void LLHDDialect::initialize() {
 
   addOperations<
 #define GET_OP_LIST
-#include "circt/Dialect/LLHD/IR/LLHD.cpp.inc"
+#include "circt/Dialect/LLHD/LLHD.cpp.inc"
       >();
 
   addInterfaces<LLHDInlinerInterface>();
+
+  mlir::DialectRegistry registry;
+  registerDestructableIntegerExternalModel(registry);
+  getContext()->appendDialectRegistry(registry);
 }
 
 Operation *LLHDDialect::materializeConstant(OpBuilder &builder, Attribute value,
                                             Type type, Location loc) {
   if (auto timeAttr = dyn_cast<TimeAttr>(value))
-    return builder.create<llhd::ConstantTimeOp>(loc, type, timeAttr);
+    return llhd::ConstantTimeOp::create(builder, loc, type, timeAttr);
 
   if (auto intAttr = dyn_cast<IntegerAttr>(value))
-    return builder.create<hw::ConstantOp>(loc, type, intAttr);
+    return hw::ConstantOp::create(builder, loc, type, intAttr);
 
   return nullptr;
 }
 
-#include "circt/Dialect/LLHD/IR/LLHDDialect.cpp.inc"
+#include "circt/Dialect/LLHD/LLHDDialect.cpp.inc"

@@ -54,6 +54,15 @@ firrtl.module @BundleTarget(in %a : !firrtl.bundle<>) {
 
 // -----
 
+firrtl.circuit "AliasBundleTarget" {
+firrtl.module @AliasBundleTarget(in %a : !firrtl.alias<t, bundle<>>) {
+    // expected-error @below {{unable to target aggregate type '!firrtl.alias<t, bundle<>>'}}
+    %0 = firrtl.unresolved_path "OMReferenceTarget:~AliasBundleTarget|AliasBundleTarget>a"
+}
+}
+
+// -----
+
 firrtl.circuit "VectorTarget" {
 firrtl.module @VectorTarget(in %a : !firrtl.vector<uint<1>, 1>) {
     // expected-error @below {{unable to target aggregate type '!firrtl.vector<uint<1>, 1>'}}
@@ -66,13 +75,16 @@ firrtl.module @VectorTarget(in %a : !firrtl.vector<uint<1>, 1>) {
 firrtl.circuit "AmbiguousPath" {
 firrtl.module @AmbiguousPath() {
     // expected-error @below {{unable to uniquely resolve target due to multiple instantiation}}
-    %0 = firrtl.unresolved_path "OMReferenceTarget:~AmbiguousPath|Child"
+    %0 = firrtl.unresolved_path "OMReferenceTarget:~AmbiguousPath|Child/grandchild:GrandChild"
     // expected-note @below {{instance here}}
     firrtl.instance child0 @Child()
     // expected-note @below {{instance here}}
     firrtl.instance child1 @Child()
 }
-firrtl.module @Child() {}
+firrtl.module @Child() {
+    firrtl.instance grandchild @GrandChild()
+}
+firrtl.module @GrandChild() {}
 }
 
 // -----
@@ -93,18 +105,17 @@ firrtl.class @Test(){
 
 firrtl.circuit "UpwardPath" {
 firrtl.module @UpwardPath() {
-  %wire = firrtl.wire : !firrtl.uint<8>
   firrtl.instance child @Child()
 }
 
 firrtl.module @Child() {
   %om = firrtl.object @OM()
-
+  %wire = firrtl.wire : !firrtl.uint<8>
 }
 
 firrtl.class @OM(){
   // expected-error @below {{unable to resolve path relative to owning module "Child"}}
-  %0 = firrtl.unresolved_path "OMReferenceTarget:~UpwardPath|UpwardPath>wire"
+  %0 = firrtl.unresolved_path "OMReferenceTarget:~UpwardPath|UpwardPath/child:Child>wire"
 }
 }
 

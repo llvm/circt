@@ -62,6 +62,7 @@ LogicalResult verifyOutputs(ArrayAttr resultNames, ArrayAttr moduleResultNames,
 /// Verify that the parameter lists of the instance and the module match in
 /// terms of length, names, and types.
 LogicalResult verifyParameters(ArrayAttr parameters, ArrayAttr moduleParameters,
+                               ArrayRef<Type> resolvedModParametersRefs,
                                const EmitErrorFn &emitError);
 
 /// Combines verifyReferencedModule, verifyInputs, verifyOutputs, and

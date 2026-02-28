@@ -15,6 +15,7 @@
 #define CIRCT_SUPPORT_PATH_H
 
 #include "circt/Support/LLVM.h"
+#include "llvm/Support/ToolOutputFile.h"
 
 namespace circt {
 
@@ -24,6 +25,14 @@ namespace circt {
 /// respectively.
 void appendPossiblyAbsolutePath(llvm::SmallVectorImpl<char> &base,
                                 const llvm::Twine &suffix);
+
+/// Creates an output file with the given filename in the specified directory.
+/// The function will create any parent directories as needed. If an error
+/// occurs during file or directory creation, it will use the provided emitError
+/// callback to report the error and return an empty unique_ptr.
+std::unique_ptr<llvm::ToolOutputFile>
+createOutputFile(StringRef filename, StringRef dirname,
+                 function_ref<InFlightDiagnostic()> emitError);
 
 } // namespace circt
 

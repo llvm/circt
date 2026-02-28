@@ -18,24 +18,31 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Matchers.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-using namespace circt;
+namespace circt {
+namespace sv {
+#define GEN_PASS_DEF_PRETTIFYVERILOG
+#include "circt/Dialect/SV/SVPasses.h.inc"
+} // namespace sv
+} // namespace circt
 
+using namespace circt;
 //===----------------------------------------------------------------------===//
 // PrettifyVerilogPass
 //===----------------------------------------------------------------------===//
 
 namespace {
 struct PrettifyVerilogPass
-    : public sv::PrettifyVerilogBase<PrettifyVerilogPass> {
+    : public circt::sv::impl::PrettifyVerilogBase<PrettifyVerilogPass> {
   void runOnOperation() override;
 
 private:
@@ -144,9 +151,9 @@ bool PrettifyVerilogPass::splitStructAssignment(OpBuilder &builder,
       continue;
 
     auto &[loc, value] = it->second;
-    auto ref = builder.create<sv::StructFieldInOutOp>(loc, dst, name);
+    auto ref = sv::StructFieldInOutOp::create(builder, loc, dst, name);
     if (!splitAssignment(builder, ref, value))
-      builder.create<sv::PAssignOp>(loc, ref, value);
+      sv::PAssignOp::create(builder, loc, ref, value);
   }
   return true;
 }
@@ -166,11 +173,11 @@ bool PrettifyVerilogPass::splitArrayAssignment(OpBuilder &builder,
 
     Value value = op.getInputs()[0];
     auto loc = op.getLoc();
-    auto index = builder.create<hw::ConstantOp>(loc, zero);
+    auto index = hw::ConstantOp::create(builder, loc, zero);
 
-    auto field = builder.create<sv::ArrayIndexInOutOp>(loc, dst, index);
+    auto field = sv::ArrayIndexInOutOp::create(builder, loc, dst, index);
     if (!splitAssignment(builder, field, value))
-      builder.create<sv::PAssignOp>(loc, field, value);
+      sv::PAssignOp::create(builder, loc, field, value);
     return true;
   }
 
@@ -256,10 +263,10 @@ bool PrettifyVerilogPass::splitArrayAssignment(OpBuilder &builder,
   for (auto &[i, loc, value] : fields) {
     if (i == last)
       continue;
-    auto index = builder.create<hw::ConstantOp>(loc, i);
-    auto field = builder.create<sv::ArrayIndexInOutOp>(loc, dst, index);
+    auto index = hw::ConstantOp::create(builder, loc, i);
+    auto field = sv::ArrayIndexInOutOp::create(builder, loc, dst, index);
     if (!splitAssignment(builder, field, value))
-      builder.create<sv::PAssignOp>(loc, field, value);
+      sv::PAssignOp::create(builder, loc, field, value);
     last = i;
   }
   return true;
@@ -341,8 +348,12 @@ bool PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
   for (auto *user : op->getUsers()) {
     if (isa<comb::ExtractOp, hw::ArraySliceOp>(user))
       return false;
+    // TODO: We should use the condition used in ExportVerilog regarding
+    // allowExprInEventControl.
     if (!options.allowExprInEventControl &&
-        isa<sv::AlwaysFFOp, sv::AlwaysOp>(user))
+        isa<sv::AlwaysFFOp, sv::AlwaysOp, sv::AssertConcurrentOp,
+            sv::AssumeConcurrentOp, sv::CoverConcurrentOp, sv::AssertPropertyOp,
+            sv::AssumePropertyOp, sv::CoverPropertyOp>(user))
       return false;
   }
 

@@ -26,31 +26,31 @@ TEST(HWModuleOpTest, AddOutputs) {
   LocationAttr loc = UnknownLoc::get(&context);
   auto module = ModuleOp::create(loc);
   auto builder = ImplicitLocOpBuilder::atBlockEnd(loc, module.getBody());
-  auto top = builder.create<HWModuleOp>(StringAttr::get(&context, "Top"),
-                                        ArrayRef<PortInfo>{});
+  auto top = HWModuleOp::create(builder, StringAttr::get(&context, "Top"),
+                                ArrayRef<PortInfo>{});
 
   builder.setInsertionPointToStart(top.getBodyBlock());
   auto wireTy = builder.getIntegerType(2);
 
   // Add two ports.
   SmallVector<std::pair<StringAttr, Value>> appendPorts;
-  auto wireA = builder.create<ConstantOp>(wireTy, 0);
+  auto wireA = ConstantOp::create(builder, wireTy, 0);
   appendPorts.emplace_back(builder.getStringAttr("a"), wireA);
-  auto wireD = builder.create<ConstantOp>(wireTy, 1);
+  auto wireD = ConstantOp::create(builder, wireTy, 1);
   appendPorts.emplace_back(builder.getStringAttr("d"), wireD);
   top.appendOutputs(appendPorts);
 
   SmallVector<std::pair<StringAttr, Value>> insertPorts;
-  auto wireB = builder.create<ConstantOp>(wireTy, 2);
+  auto wireB = ConstantOp::create(builder, wireTy, 2);
   insertPorts.emplace_back(builder.getStringAttr("b"), wireB);
-  auto wireC = builder.create<ConstantOp>(wireTy, 3);
+  auto wireC = ConstantOp::create(builder, wireTy, 3);
   insertPorts.emplace_back(builder.getStringAttr("c"), wireC);
   top.insertOutputs(1, insertPorts);
 
   // Convenience methods.
-  auto wireF = builder.create<hw::ConstantOp>(APInt(2, 0));
+  auto wireF = hw::ConstantOp::create(builder, APInt(2, 0));
   top.appendOutput("f", wireF);
-  auto wireQ = builder.create<hw::ConstantOp>(APInt(2, 0));
+  auto wireQ = hw::ConstantOp::create(builder, APInt(2, 0));
   top.prependOutput("q", wireQ);
 
   auto ports = top.getPortList();
@@ -98,8 +98,8 @@ TEST(HWModuleOpTest, AddInputs) {
   LocationAttr loc = UnknownLoc::get(&context);
   auto module = ModuleOp::create(loc);
   auto builder = ImplicitLocOpBuilder::atBlockEnd(loc, module.getBody());
-  auto top = builder.create<HWModuleOp>(StringAttr::get(&context, "Top"),
-                                        ArrayRef<PortInfo>{});
+  auto top = HWModuleOp::create(builder, StringAttr::get(&context, "Top"),
+                                ArrayRef<PortInfo>{});
 
   builder.setInsertionPointToStart(top.getBodyBlock());
 

@@ -37,8 +37,14 @@ class ReferableDeclOp<string mnemonic, list<Trait> traits = []> :
 class HardwareDeclOp<string mnemonic, list <Trait> traits = []> :
   ReferableDeclOp<mnemonic, traits # [
     ParentOneOf<[
-      "firrtl::FModuleOp", "firrtl::LayerBlockOp",
-      "firrtl::WhenOp", "firrtl::MatchOp"]>]> {}
+      "firrtl::ContractOp",
+      "firrtl::FModuleOp",
+      "firrtl::LayerBlockOp",
+      "firrtl::MatchOp",
+      "firrtl::WhenOp",
+      "sv::IfDefOp",
+    ]>
+  ]> {}
 
 def InstanceOp : HardwareDeclOp<"instance", [
     DeclareOpInterfaceMethods<FInstanceLike>,
@@ -47,7 +53,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
       "getModuleName"
     ]>,
   ]> {
-  let summary = "Instantiate an instance of a module";
+  let summary = "Instantiate a module";
   let description = [{
     This represents an instance of a module.  The results are the modules inputs
     and outputs.  The inputs have flip type, the outputs do not.
@@ -58,89 +64,125 @@ def InstanceOp : HardwareDeclOp<"instance", [
     ```
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name, NameKindAttr:$nameKind,
-                       DenseBoolArrayAttr:$portDirections, StrArrayAttr:$portNames,
-                       AnnotationArrayAttr:$annotations,
-                       PortAnnotationsAttr:$portAnnotations,
-                       LayerArrayAttr:$layers,
-                       UnitAttr:$lowerToBind,
-                       OptionalAttr<InnerSymAttr>:$inner_sym);
+  let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name,
+      NameKindAttr:$nameKind, DenseBoolArrayAttr:$portDirections,
+      StrArrayAttr:$portNames, DomainInfoAttr:$domainInfo,
+      AnnotationArrayAttr:$annotations, PortAnnotationsAttr:$portAnnotations,
+      LayerArrayAttr:$layers, UnitAttr:$lowerToBind, UnitAttr:$doNotPrint,
+      OptionalAttr<InnerSymAttr>:$inner_sym);
 
   let results = (outs Variadic<AnyType>:$results);
 
   let hasCustomAssemblyFormat = 1;
 
-  let builders = [
-    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
-                   "::mlir::StringRef":$moduleName,
-                   "::mlir::StringRef":$name,
-                   "::circt::firrtl::NameKindEnum":$nameKind,
-                   "::mlir::ArrayRef<Direction>":$portDirections,
-                   "::mlir::ArrayRef<Attribute>":$portNames,
-                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
-                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"::mlir::ArrayRef<Attribute>", "{}">:$layers,
-                   CArg<"bool","false">:$lowerToBind,
-                   CArg<"StringAttr", "StringAttr()">:$innerSym)>,
-    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
-                   "::mlir::StringRef":$moduleName,
-                   "::mlir::StringRef":$name,
-                   "::circt::firrtl::NameKindEnum":$nameKind,
-                   "::mlir::ArrayRef<Direction>":$portDirections,
-                   "::mlir::ArrayRef<Attribute>":$portNames,
-                   "ArrayRef<Attribute>":$annotations,
-                   "ArrayRef<Attribute>":$portAnnotations,
-                   "::mlir::ArrayRef<Attribute>":$layers,
-                   "bool":$lowerToBind,
-                   "hw::InnerSymAttr":$innerSym)>,
+  let builders =
+      [OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
+           "::mlir::StringRef":$moduleName, "::mlir::StringRef":$name,
+           "::circt::firrtl::NameKindEnum":$nameKind,
+           "::mlir::ArrayRef<Direction>":$portDirections,
+           "::mlir::ArrayRef<Attribute>":$portNames,
+           "::mlir::ArrayRef<Attribute>":$domainInfo,
+           CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+           CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
+           CArg<"::mlir::ArrayRef<Attribute>", "{}">:$layers,
+           CArg<"bool", "false">:$lowerToBind,
+           CArg<"bool", "false">:$doNotPrint,
+           CArg<"StringAttr", "StringAttr()">:$innerSym)>,
+       OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
+           "::mlir::StringRef":$moduleName, "::mlir::StringRef":$name,
+           "::circt::firrtl::NameKindEnum":$nameKind,
+           "::mlir::ArrayRef<Direction>":$portDirections,
+           "::mlir::ArrayRef<Attribute>":$portNames,
+           "::mlir::ArrayRef<Attribute>":$domainInfo,
+           "ArrayRef<Attribute>":$annotations,
+           "ArrayRef<Attribute>":$portAnnotations,
+           "::mlir::ArrayRef<Attribute>":$layers, "bool":$lowerToBind,
+           "bool":$doNotPrint, "hw::InnerSymAttr":$innerSym)>,
 
-    /// Constructor when you have the target module in hand.
-    OpBuilder<(ins "FModuleLike":$module,
-                   "mlir::StringRef":$name,
-                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
-                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
-                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"bool","false">:$lowerToBind,
-                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>,
+       /// Constructor when you have the target module in hand.
+       OpBuilder<(ins "FModuleLike":$module, "mlir::StringRef":$name,
+           CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
+           CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+           CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
+           CArg<"bool", "false">:$lowerToBind,
+           CArg<"bool", "false">:$doNotPrint,
+           CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>,
 
-    /// Constructor when you have a port info list in hand.
-    OpBuilder<(ins "ArrayRef<PortInfo>":$ports,
-                   "::mlir::StringRef":$moduleName,
-                   "mlir::StringRef":$name,
-                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
-                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
-                   CArg<"ArrayRef<Attribute>", "{}">:$layers,
-                   CArg<"bool","false">:$lowerToBind,
-                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>
-  ];
+       /// Constructor when you have a port info list in hand.
+       OpBuilder<(ins "ArrayRef<PortInfo>":$ports,
+           "::mlir::StringRef":$moduleName, "mlir::StringRef":$name,
+           CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
+           CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+           CArg<"ArrayRef<Attribute>", "{}">:$layers,
+           CArg<"bool", "false">:$lowerToBind,
+           CArg<"bool", "false">:$doNotPrint,
+           CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>];
 
   let extraClassDeclaration = [{
+    /// Return the number of ports for this instance.
+    size_t getNumPorts() {
+      return getNumResults();
+    }
+
     /// Return the port direction for the specified result number.
     Direction getPortDirection(size_t resultNo) {
       return direction::get(getPortDirections()[resultNo]);
     }
 
     /// Return the port name for the specified result number.
-    StringAttr getPortName(size_t resultNo) {
+    StringAttr getPortNameAttr(size_t resultNo) {
       return cast<StringAttr>(getPortNames()[resultNo]);
     }
-    StringRef getPortNameStr(size_t resultNo) {
-      return getPortName(resultNo).getValue();
+
+    StringRef getPortName(size_t resultNo) {
+      return getPortNameAttr(resultNo).getValue();
+    }
+
+    /// Returns the port location for the specified result number.
+    Location getPortLocation(size_t) {
+      return getLoc();
     }
 
     /// Hooks for port annotations.
     ArrayAttr getPortAnnotation(unsigned portIdx);
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
 
-    /// Builds a new `InstanceOp` with the ports listed in `portIndices` erased,
-    /// and updates any users of the remaining ports to point at the new
-    /// instance.
-    InstanceOp erasePorts(OpBuilder &builder, const llvm::BitVector &portIndices);
+    /// Hooks for domain information.
+    Attribute getPortDomain(unsigned portIdx);
 
-    /// Clone the instance op and add ports.  This is usually used in
-    /// conjuction with adding ports to the referenced module. This will emit
-    /// the new InstanceOp to the same location.
-    InstanceOp cloneAndInsertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
+    /// Clone this instance with inserted ports.
+    InstanceOp cloneWithInsertedPorts(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
+
+    /// Clone this instance with inserted ports, then replaces uses.
+    InstanceOp cloneWithInsertedPortsAndReplaceUses(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
+
+    /// Clone this instance with erased ports.
+    InstanceOp cloneWithErasedPorts(const llvm::BitVector &erasures);
+
+    /// Clone this instance with erased ports, then replaces uses.
+    InstanceOp cloneWithErasedPortsAndReplaceUses(
+      const llvm::BitVector &erasures);
+
+    //===------------------------------------------------------------------===//
+    // Single-module methods
+    //===------------------------------------------------------------------===//
+
+    /// Get the name of the instantiated module.
+    StringRef getReferencedModuleName() {
+      return getModuleNameAttr().getAttr().getValue();
+    }
+
+    /// Get the name of the instantiated module.
+    StringAttr getReferencedModuleNameAttr() {
+      return getModuleNameAttr().getAttr();
+    }
+
+    /// Get the referenced module via a symbol table.
+    Operation *getReferencedOperation(const SymbolTable &symtbl) {
+      return symtbl.lookup(getReferencedModuleName());
+    }
 
     //===------------------------------------------------------------------===//
     // Instance graph methods
@@ -156,18 +198,17 @@ def InstanceOp : HardwareDeclOp<"instance", [
       Operation *moduleOp = node->getModule();
       return dyn_cast_or_null<T>(moduleOp);
     }
-
-    //===------------------------------------------------------------------===//
-    // PortList Methods
-    //===------------------------------------------------------------------===//
-    SmallVector<::circt::hw::PortInfo> getPortList();
   }];
 
   let hasVerifier = true;
 }
 
 def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<FInstanceLike>,
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
+      "getInstanceName", "getInstanceNameAttr", "getReferencedModuleNamesAttr"
+    ]>
   ]> {
   let summary = "Creates an instance of a module based on a option";
 
@@ -189,10 +230,12 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
                        SymbolRefArrayAttr:$caseNames,
                        StrAttr:$name, NameKindAttr:$nameKind,
                        DenseBoolArrayAttr:$portDirections, StrArrayAttr:$portNames,
+                       DomainInfoAttr:$domainInfo,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
                        LayerArrayAttr:$layers,
-                       OptionalAttr<InnerSymAttr>:$inner_sym);
+                       OptionalAttr<InnerSymAttr>:$inner_sym,
+                       OptionalAttr<FlatSymbolRefAttr>:$instance_macro);
 
   let results = (outs Variadic<AnyType>:$results);
 
@@ -200,14 +243,28 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
   let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
+    /// Return the number of ports for this instance.
+    size_t getNumPorts() {
+      return getNumResults();
+    }
+
     /// Return the port direction for the specified result number.
     Direction getPortDirection(size_t resultNo) {
       return direction::get(getPortDirections()[resultNo]);
     }
 
     /// Return the port name for the specified result number.
-    StringAttr getPortName(size_t resultNo) {
+    StringAttr getPortNameAttr(size_t resultNo) {
       return cast<StringAttr>(getPortNames()[resultNo]);
+    }
+
+    StringRef getPortName(size_t resultNo) {
+      return getPortNameAttr(resultNo).getValue();
+    }
+
+    /// Returns the port location for the specified result number.
+    Location getPortLocation(size_t resultNo) {
+      return getLoc();
     }
 
     /// Return the default target attribute.
@@ -226,6 +283,21 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
     /// Return the list of case-module mappings.
     SmallVector<std::pair<SymbolRefAttr, FlatSymbolRefAttr>, 1>
     getTargetChoices();
+
+    /// Clone this instance with inserted ports.
+    InstanceChoiceOp cloneWithInsertedPorts(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
+
+    /// Clone this instance with inserted ports, then replaces uses.
+    InstanceChoiceOp cloneWithInsertedPortsAndReplaceUses(
+      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
+
+    /// Clone this instance with erased ports.
+    InstanceChoiceOp cloneWithErasedPorts(const llvm::BitVector &erasures);
+
+    /// Clone this instance with erased ports, then replaces uses.
+    InstanceChoiceOp cloneWithErasedPortsAndReplaceUses(
+      const llvm::BitVector &erasures);
   }];
 
   let builders = [
@@ -235,17 +307,27 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"StringAttr", "StringAttr()">:$innerSym)>
+                   CArg<"StringAttr", "StringAttr()">:$innerSym,
+                   CArg<"FlatSymbolRefAttr", "FlatSymbolRefAttr()">:$instanceMacro)>,
+    OpBuilder<(ins "ArrayRef<PortInfo>":$ports,
+                   "ArrayAttr":$moduleNames,
+                   "ArrayAttr":$caseNames,
+                   "mlir::StringRef":$name,
+                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
+                   CArg<"ArrayAttr", "{}">:$annotations,
+                   CArg<"ArrayAttr", "{}">:$layers,
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym,
+                   CArg<"FlatSymbolRefAttr", "FlatSymbolRefAttr()">:$instanceMacro)>
   ];
 }
 
 
-def MemOp : HardwareDeclOp<"mem"> {
+def MemOp : HardwareDeclOp<"mem", [DeclareOpInterfaceMethods<CombDataflow>]> {
   let summary = "Define a new mem";
   let arguments =
     (ins ConfinedAttr<I32Attr, [IntMinValue<0>]>:$readLatency,
          ConfinedAttr<I32Attr, [IntMinValue<1>]>:$writeLatency,
-         ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
+         ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth, RUWBehaviorAttr:$ruw,
          StrArrayAttr:$portNames, StrAttr:$name, NameKindAttr:$nameKind,
          AnnotationArrayAttr:$annotations,
          PortAnnotationsAttr:$portAnnotations,
@@ -258,24 +340,6 @@ def MemOp : HardwareDeclOp<"mem"> {
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
     $ruw `` custom<MemOp>(attr-dict) `:` qualified(type($results))
   }];
-
-  let builders = [
-    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
-                   "uint32_t":$readLatency, "uint32_t":$writeLatency,
-                   "uint64_t":$depth, "RUWAttr":$ruw,
-                   "ArrayRef<Attribute>":$portNames,
-                   CArg<"StringRef", "{}">:$name,
-                   CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
-                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
-                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"StringAttr", "StringAttr()">:$innerSym)>,
-    OpBuilder<(ins "::mlir::TypeRange":$resultTypes, "uint32_t":$readLatency,
-                   "uint32_t":$writeLatency, "uint64_t":$depth, "RUWAttr":$ruw,
-                   "ArrayRef<Attribute>":$portNames, "StringRef":$name,
-                   "NameKindEnum":$nameKind, "ArrayRef<Attribute>":$annotations,
-                   "ArrayRef<Attribute>":$portAnnotations,
-                   "hw::InnerSymAttr":$innerSym)>
-  ];
 
   let hasVerifier = 1;
 
@@ -309,9 +373,10 @@ def MemOp : HardwareDeclOp<"mem"> {
     size_t getMaskBits();
 
     /// Return the port name for the specified result number.
-    StringAttr getPortName(size_t resultNo);
-    StringRef getPortNameStr(size_t resultNo) {
-      return getPortName(resultNo).getValue();
+    StringAttr getPortNameAttr(size_t resultNo);
+
+    StringRef getPortName(size_t resultNo) {
+      return getPortNameAttr(resultNo).getValue();
     }
 
     /// Return the port type for the specified result number.
@@ -358,7 +423,7 @@ def NodeOp : HardwareDeclOp<"node", [
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym,
                        UnitAttr:$forceable); // ReferenceKinds
-  let results = (outs FIRRTLBaseType:$result, Optional<RefType>:$ref);
+  let results = (outs PassiveType:$result, Optional<RefType>:$ref);
 
   let builders = [
     OpBuilder<(ins "::mlir::Value":$input,
@@ -393,7 +458,7 @@ def NodeOp : HardwareDeclOp<"node", [
   let hasFolder = 1;
 }
 
-def RegOp : HardwareDeclOp<"reg", [Forceable]> {
+def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombDataflow>]> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
@@ -417,6 +482,14 @@ def RegOp : HardwareDeclOp<"reg", [Forceable]> {
       assert(operands.size() == 1u && "mismatched number of parameters");
       odsState.addOperands(operands);
       odsState.addAttributes(attributes);
+      assert(resultTypes.size() >= 1u && "mismatched number of return types");
+      odsState.addTypes(resultTypes);
+    }]>,
+    OpBuilder<(ins "::mlir::TypeRange":$resultTypes, "::mlir::ValueRange":$operands,
+                   CArg<"const Properties &","{}">:$properties), [{
+      assert(operands.size() == 1u && "mismatched number of parameters");
+      odsState.addOperands(operands);
+      odsState.useProperties(const_cast<Properties &>(properties));
       assert(resultTypes.size() >= 1u && "mismatched number of return types");
       odsState.addTypes(resultTypes);
     }]>,
@@ -485,7 +558,7 @@ def RegOp : HardwareDeclOp<"reg", [Forceable]> {
   let hasCanonicalizeMethod = true;
 }
 
-def RegResetOp : HardwareDeclOp<"regreset", [Forceable]> {
+def RegResetOp : HardwareDeclOp<"regreset", [Forceable, DeclareOpInterfaceMethods<CombDataflow>]> {
   let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:
@@ -669,6 +742,27 @@ def WireOp : HardwareDeclOp<"wire", [
   }];
 }
 
+def ContractOp : FIRRTLOp<"contract", [
+  SingleBlock,
+  NoTerminator,
+  AllTypesMatch<["inputs", "outputs"]>,
+]> {
+  let summary = "Contract declaration";
+  let description = [{
+    The `firrtl.contract` operation defines values that adhere to a set of
+    formal assertions and assumptions outlined in the contract's body.
+
+    See the `verif.contract` operation for more details.
+  }];
+  let arguments = (ins Variadic<PassiveType>:$inputs);
+  let results = (outs Variadic<PassiveType>:$outputs);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    ($inputs^ `:` type($inputs))? attr-dict-with-keyword $body
+  }];
+  let hasVerifier = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // Property Ops
 //===----------------------------------------------------------------------===//
@@ -676,11 +770,7 @@ def WireOp : HardwareDeclOp<"wire", [
 def ObjectOp :  FIRRTLOp<"object", [
     ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-    DeclareOpInterfaceMethods<FInstanceLike, [
-      "getReferencedOperation",
-      "getReferencedModuleName",
-      "getReferencedModuleNameAttr",
-    ]>,
+    DeclareOpInterfaceMethods<FInstanceLike>,
     DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
       "getReferencedModuleSlow"
     ]>,
@@ -700,7 +790,6 @@ def ObjectOp :  FIRRTLOp<"object", [
   }];
   let arguments = (ins StrAttr:$name);
   let results = (outs ClassType:$result);
-  let hasVerifier = 1;
   let builders = [
     OpBuilder<(ins "ClassLike":$klass, "StringRef":$name)>
   ];
@@ -711,9 +800,54 @@ def ObjectOp :  FIRRTLOp<"object", [
 
     StringAttr getClassNameAttr();
     StringRef getClassName();
+
+    Operation *getReferencedOperation(const SymbolTable &symtbl);
+
+    // Required by InstanceGraphInstanceOpInterface default implementation
+    StringAttr getReferencedModuleNameAttr();
   }];
   let assemblyFormat = [{
     `` custom<ImplicitSSAName>(attr-dict) custom<ClassInterface>(type($result))
+  }];
+}
+
+def DomainCreateAnonOp
+    : FIRRTLOp<"domain.anon",
+               [ParentOneOf<["firrtl::ContractOp", "firrtl::FModuleOp",
+                             "firrtl::LayerBlockOp", "firrtl::MatchOp",
+                             "firrtl::WhenOp", "sv::IfDefOp"]>,
+                DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+                DeclareOpInterfaceMethods<InferTypeOpInterface>,
+]> {
+  let summary = "Create an anonymous domain, without parameters set";
+  let arguments = (ins FlatSymbolRefAttr:$domain);
+  let results = (outs Res<DomainType, "", [MemAlloc]>:$result);
+  let assemblyFormat = [{ attr-dict `:` type($result) `of` $domain }];
+}
+
+def DomainCreateOp : FIRRTLOp<"domain.create", [
+    ParentOneOf<["firrtl::ContractOp", "firrtl::FModuleOp",
+                 "firrtl::LayerBlockOp", "firrtl::MatchOp",
+                 "firrtl::WhenOp", "sv::IfDefOp"]>,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<InferTypeOpInterface>,
+    HasCustomSSAName
+]> {
+  let summary = "Create a named domain instance";
+  let description = [{
+    Create a domain instance from a domain type. Unlike domain.anon, this
+    represents an explicit user-created domain instance that will be emitted
+    back to FIRRTL text.
+
+    Example:
+    ```mlir
+    %my_clock = firrtl.domain.create : !firrtl.domain of @ClockDomain
+    ```
+  }];
+  let arguments = (ins StrAttr:$name, FlatSymbolRefAttr:$domain);
+  let results = (outs Res<DomainType, "", [MemAlloc]>:$result);
+  let assemblyFormat = [{
+    custom<ImplicitSSAName>($name) attr-dict `:` type($result) `of` $domain
   }];
 }
 

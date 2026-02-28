@@ -26,6 +26,7 @@ Checks: >
         bugprone-terminating-continue,
         bugprone-unused-raii,
         bugprone-unused-return-value,
+        google-global-names-in-headers,
         modernize-use-bool-literals,
         modernize-loop-convert,
         modernize-make-unique,

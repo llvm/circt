@@ -15,8 +15,6 @@
 
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
-#include <memory>
-#include <optional>
 
 namespace mlir {
 class Pass;
@@ -24,15 +22,6 @@ class Pass;
 
 namespace circt {
 namespace firrtl {
-
-std::unique_ptr<mlir::Pass> createResolvePathsPass();
-
-std::unique_ptr<mlir::Pass>
-createLowerFIRRTLAnnotationsPass(bool ignoreUnhandledAnnotations = false,
-                                 bool ignoreClasslessAnnotations = false,
-                                 bool noRefTypePorts = false);
-
-std::unique_ptr<mlir::Pass> createLowerOpenAggsPass();
 
 /// Configure which aggregate values will be preserved by the LowerTypes pass.
 namespace PreserveAggregate {
@@ -52,102 +41,6 @@ enum PreserveMode {
 };
 }
 
-std::unique_ptr<mlir::Pass> createLowerFIRRTLTypesPass(
-    PreserveAggregate::PreserveMode mode = PreserveAggregate::None,
-    PreserveAggregate::PreserveMode memoryMode = PreserveAggregate::None);
-
-std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
-
-std::unique_ptr<mlir::Pass> createLowerCHIRRTLPass();
-
-std::unique_ptr<mlir::Pass>
-createLowerIntmodulesPass(bool fixupEICGWrapper = false);
-
-std::unique_ptr<mlir::Pass> createLowerIntrinsicsPass();
-
-std::unique_ptr<mlir::Pass> createIMConstPropPass();
-
-std::unique_ptr<mlir::Pass>
-createRemoveUnusedPortsPass(bool ignoreDontTouch = false);
-
-std::unique_ptr<mlir::Pass> createInlinerPass();
-
-std::unique_ptr<mlir::Pass> createInferReadWritePass();
-
-std::unique_ptr<mlir::Pass>
-createCreateSiFiveMetadataPass(bool replSeqMem = false,
-                               mlir::StringRef replSeqMemFile = "");
-
-std::unique_ptr<mlir::Pass> createVBToBVPass();
-
-std::unique_ptr<mlir::Pass> createAddSeqMemPortsPass();
-
-std::unique_ptr<mlir::Pass> createDedupPass();
-
-std::unique_ptr<mlir::Pass>
-createEmitOMIRPass(mlir::StringRef outputFilename = "");
-
-std::unique_ptr<mlir::Pass> createLowerMatchesPass();
-
-std::unique_ptr<mlir::Pass> createLowerSignaturesPass();
-
-std::unique_ptr<mlir::Pass> createPassiveWiresPass();
-
-std::unique_ptr<mlir::Pass> createExpandWhensPass();
-
-std::unique_ptr<mlir::Pass> createFlattenMemoryPass();
-
-std::unique_ptr<mlir::Pass> createInferWidthsPass();
-
-std::unique_ptr<mlir::Pass> createInferResetsPass();
-
-std::unique_ptr<mlir::Pass> createLowerMemoryPass();
-
-std::unique_ptr<mlir::Pass>
-createHoistPassthroughPass(bool hoistHWDrivers = true);
-
-std::unique_ptr<mlir::Pass> createProbeDCEPass();
-
-std::unique_ptr<mlir::Pass>
-createMemToRegOfVecPass(bool replSeqMem = false, bool ignoreReadEnable = false);
-
-std::unique_ptr<mlir::Pass> createPrefixModulesPass();
-
-std::unique_ptr<mlir::Pass> createFIRRTLFieldSourcePass();
-
-std::unique_ptr<mlir::Pass> createPrintInstanceGraphPass();
-
-std::unique_ptr<mlir::Pass> createPrintNLATablePass();
-
-std::unique_ptr<mlir::Pass>
-createBlackBoxReaderPass(std::optional<mlir::StringRef> inputPrefix = {});
-
-enum class CompanionMode {
-  // Lower companions to SystemVerilog binds.
-  Bind,
-  // Lower companions to explicit instances. Used when assertions or other
-  // debugging constructs from the companion are to be included in the design.
-  Instantiate,
-  // Drop companion modules, eliminating them from the design.
-  Drop,
-};
-
-std::unique_ptr<mlir::Pass>
-createGrandCentralPass(CompanionMode companionMode = CompanionMode::Bind);
-
-std::unique_ptr<mlir::Pass> createCheckCombLoopsPass();
-
-std::unique_ptr<mlir::Pass> createSFCCompatPass();
-
-std::unique_ptr<mlir::Pass>
-createMergeConnectionsPass(bool enableAggressiveMerging = false);
-
-std::unique_ptr<mlir::Pass> createVectorizationPass();
-
-std::unique_ptr<mlir::Pass> createInjectDUTHierarchyPass();
-
-std::unique_ptr<mlir::Pass> createDropConstPass();
-
 /// Configure which values will be explicitly preserved by the DropNames pass.
 namespace PreserveValues {
 enum PreserveMode {
@@ -164,43 +57,32 @@ enum PreserveMode {
   // away by the compiler.
   All,
 };
-}
+} // namespace PreserveValues
 
-std::unique_ptr<mlir::Pass>
-createDropNamesPass(PreserveValues::PreserveMode mode = PreserveValues::None);
+enum class CompanionMode {
+  // Lower companions to SystemVerilog binds.
+  Bind,
+  // Lower companions to explicit instances. Used when assertions or other
+  // debugging constructs from the companion are to be included in the design.
+  Instantiate,
+  // Drop companion modules, eliminating them from the design.
+  Drop,
+};
 
-std::unique_ptr<mlir::Pass> createExtractInstancesPass();
+/// The mode for the InferDomains pass.
+enum class InferDomainsMode {
+  /// Erase domains from the input circuit.
+  Strip,
+  /// Check domains without inference.
+  Check,
+  /// Check domains with inference for private modules.
+  Infer,
+  /// Check domains with inference for both public and private modules.
+  InferAll,
+};
 
-std::unique_ptr<mlir::Pass> createIMDeadCodeElimPass();
-
-std::unique_ptr<mlir::Pass> createRandomizeRegisterInitPass();
-
-std::unique_ptr<mlir::Pass> createRegisterOptimizerPass();
-
-std::unique_ptr<mlir::Pass> createLowerXMRPass();
-
-std::unique_ptr<mlir::Pass>
-createResolveTracesPass(mlir::StringRef outputAnnotationFilename = "");
-
-std::unique_ptr<mlir::Pass> createInnerSymbolDCEPass();
-
-std::unique_ptr<mlir::Pass> createFinalizeIRPass();
-
-std::unique_ptr<mlir::Pass> createLowerClassesPass();
-
-std::unique_ptr<mlir::Pass> createLowerLayersPass();
-
-std::unique_ptr<mlir::Pass> createLayerMergePass();
-
-std::unique_ptr<mlir::Pass> createLayerSinkPass();
-
-std::unique_ptr<mlir::Pass> createMaterializeDebugInfoPass();
-
-std::unique_ptr<mlir::Pass> createLintingPass();
-
-std::unique_ptr<mlir::Pass> createSpecializeOptionPass();
-
-std::unique_ptr<mlir::Pass> createCreateCompanionAssume();
+#define GEN_PASS_DECL
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

@@ -1,5 +1,6 @@
 ; RUN: firtool %s | FileCheck %s
 
+FIRRTL version 4.0.0
 circuit Foo: %[[{"class": "firrtl.AttributeAnnotation",
                  "description": "keep_hierarchy = \"true\"",
                  "target": "~Foo|Foo"},
@@ -18,7 +19,7 @@ circuit Foo: %[[{"class": "firrtl.AttributeAnnotation",
                  "target": "~Foo|Foo>r"}]]
   ; CHECK: (* keep_hierarchy = "true" *)
   ; CHECK-NEXT: module Foo
-  module Foo:
+  public module Foo:
     input a: UInt<1>
     input clock: Clock
     output b1: UInt<1>
@@ -29,10 +30,10 @@ circuit Foo: %[[{"class": "firrtl.AttributeAnnotation",
     ; CHECK:      (* mark_debug = "yes" *)
     ; CHECK-NEXT: wire n
     node n = w;
-    ; CHECK:      (* keep = "true" *) 
+    ; CHECK:      (* keep = "true" *)
     ; CHECK-NEXT: reg r
     reg r: UInt<1>, clock
-    w <= a
-    b1 <= n
-    r <= a
-    b2 <= r
+    connect w, a
+    connect b1, n
+    connect r, a
+    connect b2, r

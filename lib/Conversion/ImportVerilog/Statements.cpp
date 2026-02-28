@@ -7,6 +7,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Moore/MooreOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/Diagnostics.h"
+#include "slang/ast/Compilation.h"
+#include "slang/ast/SemanticFacts.h"
+#include "slang/ast/Statement.h"
+#include "slang/ast/SystemSubroutine.h"
+#include "llvm/ADT/ScopeExit.h"
 
 using namespace mlir;
 using namespace circt;
@@ -22,6 +31,106 @@ struct StmtVisitor {
   StmtVisitor(Context &context, Location loc)
       : context(context), loc(loc), builder(context.builder) {}
 
+  bool isTerminated() const { return !builder.getInsertionBlock(); }
+  void setTerminated() { builder.clearInsertionPoint(); }
+
+  Block &createBlock() {
+    assert(builder.getInsertionBlock());
+    auto block = std::make_unique<Block>();
+    block->insertAfter(builder.getInsertionBlock());
+    return *block.release();
+  }
+
+  LogicalResult recursiveForeach(const slang::ast::ForeachLoopStatement &stmt,
+                                 uint32_t level) {
+    // find current dimension we are operate.
+    const auto &loopDim = stmt.loopDims[level];
+    if (!loopDim.range.has_value())
+      return mlir::emitError(loc) << "dynamic loop variable is unsupported";
+    auto &exitBlock = createBlock();
+    auto &stepBlock = createBlock();
+    auto &bodyBlock = createBlock();
+    auto &checkBlock = createBlock();
+
+    // Push the blocks onto the loop stack such that we can continue and break.
+    context.loopStack.push_back({&stepBlock, &exitBlock});
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
+
+    const auto &iter = loopDim.loopVar;
+    auto type = context.convertType(*iter->getDeclaredType());
+    if (!type)
+      return failure();
+
+    Value initial = moore::ConstantOp::create(
+        builder, loc, cast<moore::IntType>(type), loopDim.range->lower());
+
+    // Create loop varirable in this dimension
+    Value varOp = moore::VariableOp::create(
+        builder, loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
+        builder.getStringAttr(iter->name), initial);
+    context.valueSymbols.insertIntoScope(context.valueSymbols.getCurScope(),
+                                         iter, varOp);
+
+    cf::BranchOp::create(builder, loc, &checkBlock);
+    builder.setInsertionPointToEnd(&checkBlock);
+
+    // When the loop variable is greater than the upper bound, goto exit
+    auto upperBound = moore::ConstantOp::create(
+        builder, loc, cast<moore::IntType>(type), loopDim.range->upper());
+
+    auto var = moore::ReadOp::create(builder, loc, varOp);
+    Value cond = moore::SleOp::create(builder, loc, var, upperBound);
+    if (!cond)
+      return failure();
+    cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
+    if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+        ty && ty.getDomain() == Domain::FourValued) {
+      cond = moore::LogicToIntOp::create(builder, loc, cond);
+    }
+    cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
+    cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
+
+    builder.setInsertionPointToEnd(&bodyBlock);
+
+    // find next dimension in this foreach statement, it finded then recuersive
+    // resolve, else perform body statement
+    bool hasNext = false;
+    for (uint32_t nextLevel = level + 1; nextLevel < stmt.loopDims.size();
+         nextLevel++) {
+      if (stmt.loopDims[nextLevel].loopVar) {
+        if (failed(recursiveForeach(stmt, nextLevel)))
+          return failure();
+        hasNext = true;
+        break;
+      }
+    }
+
+    if (!hasNext) {
+      if (failed(context.convertStatement(stmt.body)))
+        return failure();
+    }
+    if (!isTerminated())
+      cf::BranchOp::create(builder, loc, &stepBlock);
+
+    builder.setInsertionPointToEnd(&stepBlock);
+
+    // add one to loop variable
+    var = moore::ReadOp::create(builder, loc, varOp);
+    auto one =
+        moore::ConstantOp::create(builder, loc, cast<moore::IntType>(type), 1);
+    auto postValue = moore::AddOp::create(builder, loc, var, one).getResult();
+    moore::BlockingAssignOp::create(builder, loc, varOp, postValue);
+    cf::BranchOp::create(builder, loc, &checkBlock);
+
+    if (exitBlock.hasNoPredecessors()) {
+      exitBlock.erase();
+      setTerminated();
+    } else {
+      builder.setInsertionPointToEnd(&exitBlock);
+    }
+    return success();
+  }
+
   // Skip empty statements (stray semicolons).
   LogicalResult visit(const slang::ast::EmptyStatement &) { return success(); }
 
@@ -33,20 +142,128 @@ struct StmtVisitor {
   // which in turn has a single body statement, which then commonly is a list of
   // statements.
   LogicalResult visit(const slang::ast::StatementList &stmts) {
-    for (auto *stmt : stmts.list)
+    for (auto *stmt : stmts.list) {
+      if (isTerminated()) {
+        auto loc = context.convertLocation(stmt->sourceRange);
+        mlir::emitWarning(loc, "unreachable code");
+        break;
+      }
       if (failed(context.convertStatement(*stmt)))
         return failure();
+    }
     return success();
   }
 
-  // Inline `begin ... end` blocks into the parent.
+  // Process slang BlockStatements. These comprise all standard `begin ... end`
+  // blocks as well as `fork ... join` constructs. Standard blocks can have
+  // their contents extracted directly, however fork-join blocks require special
+  // handling.
   LogicalResult visit(const slang::ast::BlockStatement &stmt) {
-    return context.convertStatement(stmt.body);
+    moore::JoinKind kind;
+    switch (stmt.blockKind) {
+    case slang::ast::StatementBlockKind::Sequential:
+      // Inline standard `begin ... end` blocks into the parent.
+      return context.convertStatement(stmt.body);
+    case slang::ast::StatementBlockKind::JoinAll:
+      kind = moore::JoinKind::Join;
+      break;
+    case slang::ast::StatementBlockKind::JoinAny:
+      kind = moore::JoinKind::JoinAny;
+      break;
+    case slang::ast::StatementBlockKind::JoinNone:
+      kind = moore::JoinKind::JoinNone;
+      break;
+    }
+
+    // Slang stores all threads of a fork-join block inside a `StatementList`.
+    // This cannot be visited normally due to the need to make each statement a
+    // separate thread so must be converted here.
+    auto &threadList = stmt.body.as<slang::ast::StatementList>();
+    unsigned int threadCount = threadList.list.size();
+
+    auto forkOp = moore::ForkJoinOp::create(builder, loc, kind, threadCount);
+    OpBuilder::InsertionGuard guard(builder);
+
+    int i = 0;
+    for (auto *thread : threadList.list) {
+      auto &tBlock = forkOp->getRegion(i).emplaceBlock();
+      builder.setInsertionPointToStart(&tBlock);
+      // Populate thread operator with thread body and finish with a thread
+      // terminator.
+      if (failed(context.convertStatement(*thread)))
+        return failure();
+      moore::CompleteOp::create(builder, loc);
+      i++;
+    }
+    return success();
   }
 
   // Handle expression statements.
   LogicalResult visit(const slang::ast::ExpressionStatement &stmt) {
-    return success(context.convertExpression(stmt.expr));
+    // Special handling for calls to system tasks that return no result value.
+    if (const auto *call = stmt.expr.as_if<slang::ast::CallExpression>()) {
+      if (const auto *info =
+              std::get_if<slang::ast::CallExpression::SystemCallInfo>(
+                  &call->subroutine)) {
+        auto handled = visitSystemCall(stmt, *call, *info);
+        if (failed(handled))
+          return failure();
+        if (handled == true)
+          return success();
+      }
+
+      // According to IEEE 1800-2023 Section 21.3.3 "Formatting data to a
+      // string" the first argument of $sformat is its output; the other
+      // arguments work like a FormatString.
+      // In Moore we only support writing to a location if it is a reference;
+      // However, Section 21.3.3 explains that the output of $sformat is
+      // assigned as if it were cast from a string literal (Section 5.9),
+      // so this implementation casts the string to the target value.
+      if (!call->getSubroutineName().compare("$sformat")) {
+
+        // Use the first argument as the output location
+        auto *lhsExpr = call->arguments().front();
+        // Format the second and all later arguments as a string
+        auto fmtValue =
+            context.convertFormatString(call->arguments().subspan(1), loc,
+                                        moore::IntFormat::Decimal, false);
+        if (failed(fmtValue))
+          return failure();
+        // Convert the FormatString to a StringType
+        auto strValue = moore::FormatStringToStringOp::create(builder, loc,
+                                                              fmtValue.value());
+        // The Slang AST produces a `AssignmentExpression` for the first
+        // argument; the RHS of this expression is invalid though
+        // (`EmptyArgument`), so we only use the LHS of the
+        // `AssignmentExpression` and plug in the formatted string for the RHS.
+        if (auto assignExpr =
+                lhsExpr->as_if<slang::ast::AssignmentExpression>()) {
+          auto lhs = context.convertLvalueExpression(assignExpr->left());
+          if (!lhs)
+            return failure();
+
+          auto convertedValue = context.materializeConversion(
+              cast<moore::RefType>(lhs.getType()).getNestedType(), strValue,
+              false, loc);
+          moore::BlockingAssignOp::create(builder, loc, lhs, convertedValue);
+          return success();
+        } else {
+          return failure();
+        }
+      }
+    }
+
+    auto value = context.convertRvalueExpression(stmt.expr);
+    if (!value)
+      return failure();
+
+    // Expressions like calls to void functions return a dummy value that has no
+    // uses. If the returned value is trivially dead, remove it.
+    if (auto *defOp = value.getDefiningOp())
+      if (isOpTriviallyDead(defOp))
+        defOp->erase();
+
+    return success();
   }
 
   // Handle variable declarations.
@@ -58,13 +275,17 @@ struct StmtVisitor {
 
     Value initial;
     if (const auto *init = var.getInitializer()) {
-      initial = context.convertExpression(*init);
+      initial = context.convertRvalueExpression(*init, type);
       if (!initial)
         return failure();
     }
 
-    builder.create<moore::VariableOp>(loc, type,
-                                      builder.getStringAttr(var.name), initial);
+    // Collect local temporary variables.
+    auto varOp = moore::VariableOp::create(
+        builder, loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
+        builder.getStringAttr(var.name), initial);
+    context.valueSymbols.insertIntoScope(context.valueSymbols.getCurScope(),
+                                         &var, varOp);
     return success();
   }
 
@@ -77,229 +298,792 @@ struct StmtVisitor {
       if (condition.pattern)
         return mlir::emitError(loc,
                                "match patterns in if conditions not supported");
-      auto cond = context.convertExpression(*condition.expr);
+      auto cond = context.convertRvalueExpression(*condition.expr);
       if (!cond)
         return failure();
       cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
       if (allConds)
-        allConds = builder.create<moore::AndOp>(loc, allConds, cond);
+        allConds = moore::AndOp::create(builder, loc, allConds, cond);
       else
         allConds = cond;
     }
     assert(allConds && "slang guarantees at least one condition");
-    allConds =
-        builder.create<moore::ConversionOp>(loc, builder.getI1Type(), allConds);
+    if (auto ty = dyn_cast<moore::IntType>(allConds.getType());
+        ty && ty.getDomain() == Domain::FourValued) {
+      allConds = moore::LogicToIntOp::create(builder, loc, allConds);
+    }
+    allConds = moore::ToBuiltinIntOp::create(builder, loc, allConds);
 
-    // Generate the if operation.
-    auto ifOp =
-        builder.create<scf::IfOp>(loc, allConds, stmt.ifFalse != nullptr);
-    OpBuilder::InsertionGuard guard(builder);
+    // Create the blocks for the true and false branches, and the exit block.
+    Block &exitBlock = createBlock();
+    Block *falseBlock = stmt.ifFalse ? &createBlock() : nullptr;
+    Block &trueBlock = createBlock();
+    cf::CondBranchOp::create(builder, loc, allConds, &trueBlock,
+                             falseBlock ? falseBlock : &exitBlock);
 
-    // Generate the "then" body.
-    builder.setInsertionPoint(ifOp.thenYield());
+    // Generate the true branch.
+    builder.setInsertionPointToEnd(&trueBlock);
     if (failed(context.convertStatement(stmt.ifTrue)))
       return failure();
+    if (!isTerminated())
+      cf::BranchOp::create(builder, loc, &exitBlock);
 
-    // Generate the "else" body if present.
+    // Generate the false branch if present.
     if (stmt.ifFalse) {
-      builder.setInsertionPoint(ifOp.elseYield());
+      builder.setInsertionPointToEnd(falseBlock);
       if (failed(context.convertStatement(*stmt.ifFalse)))
         return failure();
+      if (!isTerminated())
+        cf::BranchOp::create(builder, loc, &exitBlock);
     }
 
+    // If control never reaches the exit block, remove it and mark control flow
+    // as terminated. Otherwise we continue inserting ops in the exit block.
+    if (exitBlock.hasNoPredecessors()) {
+      exitBlock.erase();
+      setTerminated();
+    } else {
+      builder.setInsertionPointToEnd(&exitBlock);
+    }
     return success();
   }
 
-  // Handle case statements.
+  /// Handle case statements.
   LogicalResult visit(const slang::ast::CaseStatement &caseStmt) {
-    auto caseExpr = context.convertExpression(caseStmt.expr);
-    auto items = caseStmt.items;
-    // Used to generate the condition of the default case statement.
-    SmallVector<Value> defaultConds;
-    // Traverse the case items.
-    for (auto item : items) {
-      // One statement will be matched with multi-conditions.
-      // Like case(cond) 0, 1 : y = x; endcase.
-      SmallVector<Value> allConds;
+    using slang::ast::AttributeSymbol;
+    using slang::ast::CaseStatementCondition;
+    auto caseExpr = context.convertRvalueExpression(caseStmt.expr);
+    if (!caseExpr)
+      return failure();
+
+    // Check each case individually. This currently ignores the `unique`,
+    // `unique0`, and `priority` modifiers which would allow for additional
+    // optimizations.
+    auto &exitBlock = createBlock();
+    Block *lastMatchBlock = nullptr;
+    SmallVector<moore::FVIntegerAttr> itemConsts;
+
+    for (const auto &item : caseStmt.items) {
+      // Create the block that will contain the main body of the expression.
+      // This is where any of the comparisons will branch to if they match.
+      auto &matchBlock = createBlock();
+      lastMatchBlock = &matchBlock;
+
+      // The SV standard requires expressions to be checked in the order
+      // specified by the user, and for the evaluation to stop as soon as the
+      // first matching expression is encountered.
       for (const auto *expr : item.expressions) {
-        auto itemExpr = context.convertExpression(*expr);
-        auto newEqOp = builder.create<moore::EqOp>(loc, caseExpr, itemExpr);
-        allConds.push_back(newEqOp);
+        auto value = context.convertRvalueExpression(*expr);
+        if (!value)
+          return failure();
+        auto itemLoc = value.getLoc();
+
+        // Take note if the expression is a constant.
+        auto maybeConst = value;
+        while (isa_and_nonnull<moore::ConversionOp, moore::IntToLogicOp,
+                               moore::LogicToIntOp>(maybeConst.getDefiningOp()))
+          maybeConst = maybeConst.getDefiningOp()->getOperand(0);
+        if (auto defOp = maybeConst.getDefiningOp<moore::ConstantOp>())
+          itemConsts.push_back(defOp.getValueAttr());
+
+        // Generate the appropriate equality operator.
+        Value cond;
+        switch (caseStmt.condition) {
+        case CaseStatementCondition::Normal:
+          cond = moore::CaseEqOp::create(builder, itemLoc, caseExpr, value);
+          break;
+        case CaseStatementCondition::WildcardXOrZ:
+          cond = moore::CaseXZEqOp::create(builder, itemLoc, caseExpr, value);
+          break;
+        case CaseStatementCondition::WildcardJustZ:
+          cond = moore::CaseZEqOp::create(builder, itemLoc, caseExpr, value);
+          break;
+        case CaseStatementCondition::Inside:
+          mlir::emitError(loc, "unsupported set membership case statement");
+          return failure();
+        }
+        if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+            ty && ty.getDomain() == Domain::FourValued) {
+          cond = moore::LogicToIntOp::create(builder, loc, cond);
+        }
+        cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
+
+        // If the condition matches, branch to the match block. Otherwise
+        // continue checking the next expression in a new block.
+        auto &nextBlock = createBlock();
+        mlir::cf::CondBranchOp::create(builder, itemLoc, cond, &matchBlock,
+                                       &nextBlock);
+        builder.setInsertionPointToEnd(&nextBlock);
       }
-      // Bound all conditions of an item into one.
-      auto cond = allConds.back();
-      allConds.pop_back();
-      while (!allConds.empty()) {
-        cond = builder.create<moore::OrOp>(loc, allConds.back(), cond);
-        allConds.pop_back();
-      }
-      // Gather all items' conditions.
-      defaultConds.push_back(cond);
-      cond =
-          builder.create<moore::ConversionOp>(loc, builder.getI1Type(), cond);
-      auto ifOp = builder.create<mlir::scf::IfOp>(loc, cond);
+
+      // The current block is the fall-through after all conditions have been
+      // checked and nothing matched. Move the match block up before this point
+      // to make the IR easier to read.
+      matchBlock.moveBefore(builder.getInsertionBlock());
+
+      // Generate the code for this item's statement in the match block.
       OpBuilder::InsertionGuard guard(builder);
-      builder.setInsertionPoint(ifOp.thenYield());
+      builder.setInsertionPointToEnd(&matchBlock);
       if (failed(context.convertStatement(*item.stmt)))
         return failure();
-    }
-    // Handle the 'default case' statement if it exists.
-    if (caseStmt.defaultCase) {
-      auto cond = defaultConds.back();
-      defaultConds.pop_back();
-      while (!defaultConds.empty()) {
-        cond = builder.create<moore::OrOp>(loc, defaultConds.back(), cond);
-        defaultConds.pop_back();
+      if (!isTerminated()) {
+        auto loc = context.convertLocation(item.stmt->sourceRange);
+        mlir::cf::BranchOp::create(builder, loc, &exitBlock);
       }
-      cond = builder.create<moore::NotOp>(loc, cond);
-      cond =
-          builder.create<moore::ConversionOp>(loc, builder.getI1Type(), cond);
-      auto ifOp = builder.create<mlir::scf::IfOp>(loc, cond);
-      OpBuilder::InsertionGuard guard(builder);
-      builder.setInsertionPoint(ifOp.thenYield());
-      if (failed(context.convertStatement(*caseStmt.defaultCase)))
-        return failure();
+    }
+
+    const auto caseStmtAttrs = context.compilation.getAttributes(caseStmt);
+    const bool hasFullCaseAttr =
+        llvm::find_if(caseStmtAttrs, [](const AttributeSymbol *attr) {
+          return attr->name == "full_case";
+        }) != caseStmtAttrs.end();
+
+    // Check if the case statement looks exhaustive assuming two-state values.
+    // We use this information to work around a common bug in input Verilog
+    // where a case statement enumerates all possible two-state values of the
+    // case expression, but forgets to deal with cases involving X and Z bits in
+    // the input.
+    //
+    // Once the core dialects start supporting four-state values we may want to
+    // tuck this behind an import option that is on by default, since it does
+    // not preserve semantics.
+    auto twoStateExhaustive = false;
+    if (auto intType = dyn_cast<moore::IntType>(caseExpr.getType());
+        intType && intType.getWidth() < 32 &&
+        itemConsts.size() == (1 << intType.getWidth())) {
+      // Sort the constants by value.
+      llvm::sort(itemConsts, [](auto a, auto b) {
+        return a.getValue().getRawValue().ult(b.getValue().getRawValue());
+      });
+
+      // Ensure that every possible value of the case expression is present. Do
+      // this by starting at 0 and iterating over all sorted items. Each item
+      // must be the previous item + 1. At the end, the addition must exactly
+      // overflow and take us back to zero.
+      auto nextValue = FVInt::getZero(intType.getWidth());
+      for (auto value : itemConsts) {
+        if (value.getValue() != nextValue)
+          break;
+        nextValue += 1;
+      }
+      twoStateExhaustive = nextValue.isZero();
+    }
+
+    // If the case statement is exhaustive assuming two-state values, don't
+    // generate the default case. Instead, branch to the last match block. This
+    // will essentially make the last case item the "default".
+    //
+    // Alternatively, if the case statement has an (* full_case *) attribute
+    // but no default case, it indicates that the developer has intentionally
+    // covered all known possible values. Hence, the last match block is
+    // treated as the implicit "default" case.
+    if ((twoStateExhaustive || (hasFullCaseAttr && !caseStmt.defaultCase)) &&
+        lastMatchBlock &&
+        caseStmt.condition == CaseStatementCondition::Normal) {
+      mlir::cf::BranchOp::create(builder, loc, lastMatchBlock);
+    } else {
+      // Generate the default case if present.
+      if (caseStmt.defaultCase)
+        if (failed(context.convertStatement(*caseStmt.defaultCase)))
+          return failure();
+      if (!isTerminated())
+        mlir::cf::BranchOp::create(builder, loc, &exitBlock);
+    }
+
+    // If control never reaches the exit block, remove it and mark control flow
+    // as terminated. Otherwise we continue inserting ops in the exit block.
+    if (exitBlock.hasNoPredecessors()) {
+      exitBlock.erase();
+      setTerminated();
+    } else {
+      builder.setInsertionPointToEnd(&exitBlock);
     }
     return success();
   }
 
   // Handle `for` loops.
   LogicalResult visit(const slang::ast::ForLoopStatement &stmt) {
-    if (!stmt.loopVars.empty())
-      return mlir::emitError(loc,
-                             "variables in for loop initializer not supported");
-
     // Generate the initializers.
     for (auto *initExpr : stmt.initializers)
-      if (!context.convertExpression(*initExpr))
+      if (!context.convertRvalueExpression(*initExpr))
         return failure();
 
-    // Create the while op.
-    auto whileOp = builder.create<scf::WhileOp>(loc, TypeRange{}, ValueRange{});
-    OpBuilder::InsertionGuard guard(builder);
+    // Create the blocks for the loop condition, body, step, and exit.
+    auto &exitBlock = createBlock();
+    auto &stepBlock = createBlock();
+    auto &bodyBlock = createBlock();
+    auto &checkBlock = createBlock();
+    cf::BranchOp::create(builder, loc, &checkBlock);
 
-    // In the "before" region, check that the condition holds.
-    builder.createBlock(&whileOp.getBefore());
-    auto cond = context.convertExpression(*stmt.stopExpr);
+    // Push the blocks onto the loop stack such that we can continue and break.
+    context.loopStack.push_back({&stepBlock, &exitBlock});
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
+
+    // Generate the loop condition check.
+    builder.setInsertionPointToEnd(&checkBlock);
+    auto cond = context.convertRvalueExpression(*stmt.stopExpr);
     if (!cond)
       return failure();
     cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
-    cond = builder.create<moore::ConversionOp>(loc, builder.getI1Type(), cond);
-    builder.create<mlir::scf::ConditionOp>(loc, cond, ValueRange{});
+    if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+        ty && ty.getDomain() == Domain::FourValued) {
+      cond = moore::LogicToIntOp::create(builder, loc, cond);
+    }
+    cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
+    cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
 
-    // In the "after" region, generate the loop body and step expressions.
-    builder.createBlock(&whileOp.getAfter());
+    // Generate the loop body.
+    builder.setInsertionPointToEnd(&bodyBlock);
     if (failed(context.convertStatement(stmt.body)))
       return failure();
-    for (auto *stepExpr : stmt.steps)
-      if (!context.convertExpression(*stepExpr))
-        return failure();
-    builder.create<mlir::scf::YieldOp>(loc);
+    if (!isTerminated())
+      cf::BranchOp::create(builder, loc, &stepBlock);
 
+    // Generate the step expressions.
+    builder.setInsertionPointToEnd(&stepBlock);
+    for (auto *stepExpr : stmt.steps)
+      if (!context.convertRvalueExpression(*stepExpr))
+        return failure();
+    if (!isTerminated())
+      cf::BranchOp::create(builder, loc, &checkBlock);
+
+    // If control never reaches the exit block, remove it and mark control flow
+    // as terminated. Otherwise we continue inserting ops in the exit block.
+    if (exitBlock.hasNoPredecessors()) {
+      exitBlock.erase();
+      setTerminated();
+    } else {
+      builder.setInsertionPointToEnd(&exitBlock);
+    }
+    return success();
+  }
+
+  LogicalResult visit(const slang::ast::ForeachLoopStatement &stmt) {
+    for (uint32_t level = 0; level < stmt.loopDims.size(); level++) {
+      if (stmt.loopDims[level].loopVar)
+        return recursiveForeach(stmt, level);
+    }
     return success();
   }
 
   // Handle `repeat` loops.
   LogicalResult visit(const slang::ast::RepeatLoopStatement &stmt) {
-    // Create the while op and feed in the repeat count as the initial counter
-    // value.
-    auto count = context.convertExpression(stmt.count);
+    auto count = context.convertRvalueExpression(stmt.count);
     if (!count)
       return failure();
-    auto type = count.getType();
-    auto whileOp = builder.create<scf::WhileOp>(loc, type, count);
-    OpBuilder::InsertionGuard guard(builder);
 
-    // In the "before" region, check that the counter is non-zero.
-    auto *block = builder.createBlock(&whileOp.getBefore(), {}, type, loc);
-    auto counterArg = block->getArgument(0);
-    auto cond = builder.createOrFold<moore::BoolCastOp>(loc, counterArg);
-    cond = builder.create<moore::ConversionOp>(loc, builder.getI1Type(), cond);
-    builder.create<scf::ConditionOp>(loc, cond, counterArg);
+    // Create the blocks for the loop condition, body, step, and exit.
+    auto &exitBlock = createBlock();
+    auto &stepBlock = createBlock();
+    auto &bodyBlock = createBlock();
+    auto &checkBlock = createBlock();
+    auto currentCount = checkBlock.addArgument(count.getType(), count.getLoc());
+    cf::BranchOp::create(builder, loc, &checkBlock, count);
 
-    // In the "after" region, generate the loop body and decrement the counter.
-    block = builder.createBlock(&whileOp.getAfter(), {}, type, loc);
+    // Push the blocks onto the loop stack such that we can continue and break.
+    context.loopStack.push_back({&stepBlock, &exitBlock});
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
+
+    // Generate the loop condition check.
+    builder.setInsertionPointToEnd(&checkBlock);
+    auto cond = builder.createOrFold<moore::BoolCastOp>(loc, currentCount);
+    if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+        ty && ty.getDomain() == Domain::FourValued) {
+      cond = moore::LogicToIntOp::create(builder, loc, cond);
+    }
+    cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
+    cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
+
+    // Generate the loop body.
+    builder.setInsertionPointToEnd(&bodyBlock);
     if (failed(context.convertStatement(stmt.body)))
       return failure();
-    counterArg = block->getArgument(0);
-    auto constOne = builder.create<moore::ConstantOp>(loc, type, 1);
-    auto subOp = builder.create<moore::SubOp>(loc, counterArg, constOne);
-    builder.create<scf::YieldOp>(loc, ValueRange{subOp});
+    if (!isTerminated())
+      cf::BranchOp::create(builder, loc, &stepBlock);
 
+    // Decrement the current count and branch back to the check block.
+    builder.setInsertionPointToEnd(&stepBlock);
+    auto one = moore::ConstantOp::create(
+        builder, count.getLoc(), cast<moore::IntType>(count.getType()), 1);
+    Value nextCount =
+        moore::SubOp::create(builder, count.getLoc(), currentCount, one);
+    cf::BranchOp::create(builder, loc, &checkBlock, nextCount);
+
+    // If control never reaches the exit block, remove it and mark control flow
+    // as terminated. Otherwise we continue inserting ops in the exit block.
+    if (exitBlock.hasNoPredecessors()) {
+      exitBlock.erase();
+      setTerminated();
+    } else {
+      builder.setInsertionPointToEnd(&exitBlock);
+    }
     return success();
   }
 
-  // Handle `while` loops.
+  // Handle `while` and `do-while` loops.
+  LogicalResult createWhileLoop(const slang::ast::Expression &condExpr,
+                                const slang::ast::Statement &bodyStmt,
+                                bool atLeastOnce) {
+    // Create the blocks for the loop condition, body, and exit.
+    auto &exitBlock = createBlock();
+    auto &bodyBlock = createBlock();
+    auto &checkBlock = createBlock();
+    cf::BranchOp::create(builder, loc, atLeastOnce ? &bodyBlock : &checkBlock);
+    if (atLeastOnce)
+      bodyBlock.moveBefore(&checkBlock);
+
+    // Push the blocks onto the loop stack such that we can continue and break.
+    context.loopStack.push_back({&checkBlock, &exitBlock});
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
+
+    // Generate the loop condition check.
+    builder.setInsertionPointToEnd(&checkBlock);
+    auto cond = context.convertRvalueExpression(condExpr);
+    if (!cond)
+      return failure();
+    cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
+    if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+        ty && ty.getDomain() == Domain::FourValued) {
+      cond = moore::LogicToIntOp::create(builder, loc, cond);
+    }
+    cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
+    cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
+
+    // Generate the loop body.
+    builder.setInsertionPointToEnd(&bodyBlock);
+    if (failed(context.convertStatement(bodyStmt)))
+      return failure();
+    if (!isTerminated())
+      cf::BranchOp::create(builder, loc, &checkBlock);
+
+    // If control never reaches the exit block, remove it and mark control flow
+    // as terminated. Otherwise we continue inserting ops in the exit block.
+    if (exitBlock.hasNoPredecessors()) {
+      exitBlock.erase();
+      setTerminated();
+    } else {
+      builder.setInsertionPointToEnd(&exitBlock);
+    }
+    return success();
+  }
+
   LogicalResult visit(const slang::ast::WhileLoopStatement &stmt) {
-    // Create the while op.
-    auto whileOp = builder.create<scf::WhileOp>(loc, TypeRange{}, ValueRange{});
-    OpBuilder::InsertionGuard guard(builder);
-
-    // In the "before" region, check that the condition holds.
-    builder.createBlock(&whileOp.getBefore());
-    auto cond = context.convertExpression(stmt.cond);
-    if (!cond)
-      return failure();
-    cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
-    cond = builder.create<moore::ConversionOp>(loc, builder.getI1Type(), cond);
-    builder.create<mlir::scf::ConditionOp>(loc, cond, ValueRange{});
-
-    // In the "after" region, generate the loop body.
-    builder.createBlock(&whileOp.getAfter());
-    if (failed(context.convertStatement(stmt.body)))
-      return failure();
-    builder.create<mlir::scf::YieldOp>(loc);
-
-    return success();
+    return createWhileLoop(stmt.cond, stmt.body, false);
   }
 
-  // Handle `do ... while` loops.
   LogicalResult visit(const slang::ast::DoWhileLoopStatement &stmt) {
-    // Create the while op.
-    auto whileOp = builder.create<scf::WhileOp>(loc, TypeRange{}, ValueRange{});
-    OpBuilder::InsertionGuard guard(builder);
-
-    // In the "before" region, generate the loop body and check that the
-    // condition holds.
-    builder.createBlock(&whileOp.getBefore());
-    if (failed(context.convertStatement(stmt.body)))
-      return failure();
-    auto cond = context.convertExpression(stmt.cond);
-    if (!cond)
-      return failure();
-    cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
-    cond = builder.create<moore::ConversionOp>(loc, builder.getI1Type(), cond);
-    builder.create<mlir::scf::ConditionOp>(loc, cond, ValueRange{});
-
-    // Generate an empty "after" region.
-    builder.createBlock(&whileOp.getAfter());
-    builder.create<mlir::scf::YieldOp>(loc);
-
-    return success();
+    return createWhileLoop(stmt.cond, stmt.body, true);
   }
 
   // Handle `forever` loops.
   LogicalResult visit(const slang::ast::ForeverLoopStatement &stmt) {
-    // Create the while op.
-    auto whileOp = builder.create<scf::WhileOp>(loc, TypeRange{}, ValueRange{});
-    OpBuilder::InsertionGuard guard(builder);
+    // Create the blocks for the loop body and exit.
+    auto &exitBlock = createBlock();
+    auto &bodyBlock = createBlock();
+    cf::BranchOp::create(builder, loc, &bodyBlock);
 
-    // In the "before" region, return true for the condition.
-    builder.createBlock(&whileOp.getBefore());
-    auto cond = builder.create<hw::ConstantOp>(loc, builder.getI1Type(), 1);
-    builder.create<mlir::scf::ConditionOp>(loc, cond, ValueRange{});
+    // Push the blocks onto the loop stack such that we can continue and break.
+    context.loopStack.push_back({&bodyBlock, &exitBlock});
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
-    // In the "after" region, generate the loop body.
-    builder.createBlock(&whileOp.getAfter());
+    // Generate the loop body.
+    builder.setInsertionPointToEnd(&bodyBlock);
     if (failed(context.convertStatement(stmt.body)))
       return failure();
-    builder.create<mlir::scf::YieldOp>(loc);
+    if (!isTerminated())
+      cf::BranchOp::create(builder, loc, &bodyBlock);
 
+    // If control never reaches the exit block, remove it and mark control flow
+    // as terminated. Otherwise we continue inserting ops in the exit block.
+    if (exitBlock.hasNoPredecessors()) {
+      exitBlock.erase();
+      setTerminated();
+    } else {
+      builder.setInsertionPointToEnd(&exitBlock);
+    }
     return success();
   }
 
-  // Ignore timing control for now.
+  // Handle timing control.
   LogicalResult visit(const slang::ast::TimedStatement &stmt) {
+    return context.convertTimingControl(stmt.timing, stmt.stmt);
+  }
+
+  // Handle return statements.
+  LogicalResult visit(const slang::ast::ReturnStatement &stmt) {
+    if (stmt.expr) {
+      auto expr = context.convertRvalueExpression(*stmt.expr);
+      if (!expr)
+        return failure();
+      mlir::func::ReturnOp::create(builder, loc, expr);
+    } else {
+      mlir::func::ReturnOp::create(builder, loc);
+    }
+    setTerminated();
+    return success();
+  }
+
+  // Handle continue statements.
+  LogicalResult visit(const slang::ast::ContinueStatement &stmt) {
+    if (context.loopStack.empty())
+      return mlir::emitError(loc,
+                             "cannot `continue` without a surrounding loop");
+    cf::BranchOp::create(builder, loc, context.loopStack.back().continueBlock);
+    setTerminated();
+    return success();
+  }
+
+  // Handle break statements.
+  LogicalResult visit(const slang::ast::BreakStatement &stmt) {
+    if (context.loopStack.empty())
+      return mlir::emitError(loc, "cannot `break` without a surrounding loop");
+    cf::BranchOp::create(builder, loc, context.loopStack.back().breakBlock);
+    setTerminated();
+    return success();
+  }
+
+  // Handle immediate assertion statements.
+  LogicalResult visit(const slang::ast::ImmediateAssertionStatement &stmt) {
+    auto cond = context.convertRvalueExpression(stmt.cond);
+    cond = context.convertToBool(cond);
+    if (!cond)
+      return failure();
+
+    // Handle assertion statements that don't have an action block.
+    if (stmt.ifTrue && stmt.ifTrue->as_if<slang::ast::EmptyStatement>()) {
+      auto defer = moore::DeferAssert::Immediate;
+      if (stmt.isFinal)
+        defer = moore::DeferAssert::Final;
+      else if (stmt.isDeferred)
+        defer = moore::DeferAssert::Observed;
+
+      switch (stmt.assertionKind) {
+      case slang::ast::AssertionKind::Assert:
+        moore::AssertOp::create(builder, loc, defer, cond, StringAttr{});
+        return success();
+      case slang::ast::AssertionKind::Assume:
+        moore::AssumeOp::create(builder, loc, defer, cond, StringAttr{});
+        return success();
+      case slang::ast::AssertionKind::CoverProperty:
+        moore::CoverOp::create(builder, loc, defer, cond, StringAttr{});
+        return success();
+      default:
+        break;
+      }
+      mlir::emitError(loc) << "unsupported immediate assertion kind: "
+                           << slang::ast::toString(stmt.assertionKind);
+      return failure();
+    }
+
+    // Regard assertion statements with an action block as the "if-else".
+    if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+        ty && ty.getDomain() == Domain::FourValued) {
+      cond = moore::LogicToIntOp::create(builder, loc, cond);
+    }
+    cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
+
+    // Create the blocks for the true and false branches, and the exit block.
+    Block &exitBlock = createBlock();
+    Block *falseBlock = stmt.ifFalse ? &createBlock() : nullptr;
+    Block &trueBlock = createBlock();
+    cf::CondBranchOp::create(builder, loc, cond, &trueBlock,
+                             falseBlock ? falseBlock : &exitBlock);
+
+    // Generate the true branch.
+    builder.setInsertionPointToEnd(&trueBlock);
+    if (stmt.ifTrue && failed(context.convertStatement(*stmt.ifTrue)))
+      return failure();
+    if (!isTerminated())
+      cf::BranchOp::create(builder, loc, &exitBlock);
+
+    if (stmt.ifFalse) {
+      // Generate the false branch if present.
+      builder.setInsertionPointToEnd(falseBlock);
+      if (failed(context.convertStatement(*stmt.ifFalse)))
+        return failure();
+      if (!isTerminated())
+        cf::BranchOp::create(builder, loc, &exitBlock);
+    }
+
+    // If control never reaches the exit block, remove it and mark control flow
+    // as terminated. Otherwise we continue inserting ops in the exit block.
+    if (exitBlock.hasNoPredecessors()) {
+      exitBlock.erase();
+      setTerminated();
+    } else {
+      builder.setInsertionPointToEnd(&exitBlock);
+    }
+    return success();
+  }
+
+  // Handle concurrent assertion statements.
+  LogicalResult visit(const slang::ast::ConcurrentAssertionStatement &stmt) {
+    auto loc = context.convertLocation(stmt.sourceRange);
+
+    // Check for a `disable iff` expression:
+    // The DisableIff construct can only occcur at the top level of an assertion
+    // and cannot be nested within properties.
+    // Hence we only need to detect if the top level assertion expression
+    // has type DisableIff, negate the `disable` expression, then pass it to
+    // the `enable` parameter of AssertOp/AssumeOp.
+    Value enable;
+    Value property;
+    if (auto *disableIff =
+            stmt.propertySpec.as_if<slang::ast::DisableIffAssertionExpr>()) {
+      auto disableCond = context.convertRvalueExpression(disableIff->condition);
+      auto enableCond = moore::NotOp::create(builder, loc, disableCond);
+
+      enable = context.convertToI1(enableCond);
+      property = context.convertAssertionExpression(disableIff->expr, loc);
+    } else {
+      property = context.convertAssertionExpression(stmt.propertySpec, loc);
+    }
+
+    if (!property)
+      return failure();
+
+    // Handle assertion statements that don't have an action block.
+    if (stmt.ifTrue && stmt.ifTrue->as_if<slang::ast::EmptyStatement>()) {
+      switch (stmt.assertionKind) {
+      case slang::ast::AssertionKind::Assert:
+        verif::AssertOp::create(builder, loc, property, enable, StringAttr{});
+        return success();
+      case slang::ast::AssertionKind::Assume:
+        verif::AssumeOp::create(builder, loc, property, enable, StringAttr{});
+        return success();
+      default:
+        break;
+      }
+      mlir::emitError(loc) << "unsupported concurrent assertion kind: "
+                           << slang::ast::toString(stmt.assertionKind);
+      return failure();
+    }
+
+    mlir::emitError(loc)
+        << "concurrent assertion statements with action blocks "
+           "are not supported yet";
+    return failure();
+  }
+
+  // According to 1800-2023 Section 21.2.1 "The display and write tasks":
+  // >> The $display and $write tasks display their arguments in the same
+  // >> order as they appear in the argument list. Each argument can be a
+  // >> string literal or an expression that returns a value.
+  // According to Section 20.10 "Severity system tasks", the same
+  // semantics apply to $fatal, $error, $warning, and $info.
+  // This means we must first check whether the first "string-able"
+  // argument is a Literal Expression which doesn't represent a fully-formatted
+  // string, otherwise we convert it to a FormatStringType.
+  FailureOr<Value>
+  getDisplayMessage(std::span<const slang::ast::Expression *const> args) {
+    if (args.size() == 0)
+      return Value{};
+
+    // Handle the string formatting.
+    // If the second argument is a Literal of some type, we should either
+    // treat it as a literal-to-be-formatted or a FormatStringType.
+    // In this check we use a StringLiteral, but slang allows casting between
+    // any literal expressions (strings, integers, reals, and time at least) so
+    // this is short-hand for "any value literal"
+    if (args[0]->as_if<slang::ast::StringLiteral>()) {
+      return context.convertFormatString(args, loc);
+    }
+    // Check if there's only one argument and it's a FormatStringType
+    if (args.size() == 1) {
+      return context.convertRvalueExpression(
+          *args[0], builder.getType<moore::FormatStringType>());
+    }
+    // Otherwise this looks invalid. Raise an error.
+    return emitError(loc) << "Failed to convert Display Message!";
+  }
+
+  /// Handle the subset of system calls that return no result value. Return
+  /// true if the called system task could be handled, false otherwise. Return
+  /// failure if an error occurred.
+  FailureOr<bool>
+  visitSystemCall(const slang::ast::ExpressionStatement &stmt,
+                  const slang::ast::CallExpression &expr,
+                  const slang::ast::CallExpression::SystemCallInfo &info) {
+    const auto &subroutine = *info.subroutine;
+    auto args = expr.arguments();
+
+    // Simulation Control Tasks
+
+    if (subroutine.name == "$stop") {
+      createFinishMessage(args.size() >= 1 ? args[0] : nullptr);
+      moore::StopBIOp::create(builder, loc);
+      return true;
+    }
+
+    if (subroutine.name == "$finish") {
+      createFinishMessage(args.size() >= 1 ? args[0] : nullptr);
+      moore::FinishBIOp::create(builder, loc, 0);
+      moore::UnreachableOp::create(builder, loc);
+      setTerminated();
+      return true;
+    }
+
+    if (subroutine.name == "$exit") {
+      // Calls to `$exit` from outside a `program` are ignored. Since we don't
+      // yet support programs, there is nothing to do here.
+      // TODO: Fix this once we support programs.
+      return true;
+    }
+
+    // Display and Write Tasks (`$display[boh]?` or `$write[boh]?`)
+
+    // Check for a `$display` or `$write` prefix.
+    bool isDisplay = false;     // display or write
+    bool appendNewline = false; // display
+    StringRef remainingName = subroutine.name;
+    if (remainingName.consume_front("$display")) {
+      isDisplay = true;
+      appendNewline = true;
+    } else if (remainingName.consume_front("$write")) {
+      isDisplay = true;
+    }
+
+    // Check for optional `b`, `o`, or `h` suffix indicating default format.
+    using moore::IntFormat;
+    IntFormat defaultFormat = IntFormat::Decimal;
+    if (isDisplay && !remainingName.empty()) {
+      if (remainingName == "b")
+        defaultFormat = IntFormat::Binary;
+      else if (remainingName == "o")
+        defaultFormat = IntFormat::Octal;
+      else if (remainingName == "h")
+        defaultFormat = IntFormat::HexLower;
+      else
+        isDisplay = false;
+    }
+
+    if (isDisplay) {
+      auto message =
+          context.convertFormatString(args, loc, defaultFormat, appendNewline);
+      if (failed(message))
+        return failure();
+      if (*message == Value{})
+        return true;
+      moore::DisplayBIOp::create(builder, loc, *message);
+      return true;
+    }
+
+    // Severity Tasks
+    using moore::Severity;
+    std::optional<Severity> severity;
+    if (subroutine.name == "$info")
+      severity = Severity::Info;
+    else if (subroutine.name == "$warning")
+      severity = Severity::Warning;
+    else if (subroutine.name == "$error")
+      severity = Severity::Error;
+    else if (subroutine.name == "$fatal")
+      severity = Severity::Fatal;
+
+    if (severity) {
+      // The `$fatal` task has an optional leading verbosity argument.
+      const slang::ast::Expression *verbosityExpr = nullptr;
+      if (severity == Severity::Fatal && args.size() >= 1) {
+        verbosityExpr = args[0];
+        args = args.subspan(1);
+      }
+
+      FailureOr<Value> maybeMessage = getDisplayMessage(args);
+      if (failed(maybeMessage))
+        return failure();
+      auto message = maybeMessage.value();
+
+      if (message == Value{})
+        message = moore::FormatLiteralOp::create(builder, loc, "");
+      moore::SeverityBIOp::create(builder, loc, *severity, message);
+
+      // Handle the `$fatal` case which behaves like a `$finish`.
+      if (severity == Severity::Fatal) {
+        createFinishMessage(verbosityExpr);
+        moore::FinishBIOp::create(builder, loc, 1);
+        moore::UnreachableOp::create(builder, loc);
+        setTerminated();
+      }
+      return true;
+    }
+
+    // Queue Tasks
+
+    if (args.size() >= 1 && args[0]->type->isQueue()) {
+      auto queue = context.convertLvalueExpression(*args[0]);
+
+      // `delete` has two functions: If there is an index passed, then it
+      // deletes that specific element, otherwise, it clears the entire queue.
+      if (subroutine.name == "delete") {
+        if (args.size() == 1) {
+          moore::QueueClearOp::create(builder, loc, queue);
+          return true;
+        }
+        if (args.size() == 2) {
+          auto index = context.convertRvalueExpression(*args[1]);
+          moore::QueueDeleteOp::create(builder, loc, queue, index);
+          return true;
+        }
+      } else if (subroutine.name == "insert" && args.size() == 3) {
+        auto index = context.convertRvalueExpression(*args[1]);
+        auto item = context.convertRvalueExpression(*args[2]);
+
+        moore::QueueInsertOp::create(builder, loc, queue, index, item);
+        return true;
+      } else if (subroutine.name == "push_back" && args.size() == 2) {
+        auto item = context.convertRvalueExpression(*args[1]);
+        moore::QueuePushBackOp::create(builder, loc, queue, item);
+        return true;
+      } else if (subroutine.name == "push_front" && args.size() == 2) {
+        auto item = context.convertRvalueExpression(*args[1]);
+        moore::QueuePushFrontOp::create(builder, loc, queue, item);
+        return true;
+      }
+
+      return false;
+    }
+
+    // Give up on any other system tasks. These will be tried again as an
+    // expression later.
+    return false;
+  }
+
+  /// Create the optional diagnostic message print for finish-like ops.
+  void createFinishMessage(const slang::ast::Expression *verbosityExpr) {
+    unsigned verbosity = 1;
+    if (verbosityExpr) {
+      auto value =
+          context.evaluateConstant(*verbosityExpr).integer().as<unsigned>();
+      assert(value && "Slang guarantees constant verbosity parameter");
+      verbosity = *value;
+    }
+    if (verbosity == 0)
+      return;
+    moore::FinishMessageBIOp::create(builder, loc, verbosity > 1);
+  }
+
+  // Handle event trigger statements.
+  LogicalResult visit(const slang::ast::EventTriggerStatement &stmt) {
+    if (stmt.timing) {
+      mlir::emitError(loc) << "unsupported delayed event trigger";
+      return failure();
+    }
+
+    // Events are lowered to `i1` signals. Get an lvalue ref to the signal such
+    // that we can assign to it.
+    auto target = context.convertLvalueExpression(stmt.target);
+    if (!target)
+      return failure();
+
+    // Read and invert the current value of the signal. Writing this inverted
+    // value to the signal is our event signaling mechanism.
+    Value inverted = moore::ReadOp::create(builder, loc, target);
+    inverted = moore::NotOp::create(builder, loc, inverted);
+
+    if (stmt.isNonBlocking)
+      moore::NonBlockingAssignOp::create(builder, loc, target, inverted);
+    else
+      moore::BlockingAssignOp::create(builder, loc, target, inverted);
     return success();
   }
 
@@ -320,6 +1104,7 @@ struct StmtVisitor {
 } // namespace
 
 LogicalResult Context::convertStatement(const slang::ast::Statement &stmt) {
+  assert(builder.getInsertionBlock());
   auto loc = convertLocation(stmt.sourceRange);
   return stmt.visit(StmtVisitor(*this, loc));
 }

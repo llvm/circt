@@ -12,14 +12,22 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
-
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/Debug.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-passive-wires"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_PASSIVEWIRES
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -35,14 +43,16 @@ static bool hasFlip(Type t) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct PassiveWiresPass : public PassiveWiresBase<PassiveWiresPass> {
+struct PassiveWiresPass
+    : public circt::firrtl::impl::PassiveWiresBase<PassiveWiresPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace
 
 // This is the main entrypoint for the lowering pass.
 void PassiveWiresPass::runOnOperation() {
-  LLVM_DEBUG(debugPassHeader(this) << "\n";);
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
+
   auto module = getOperation();
 
   // First, expand any connects to resolve flips.
@@ -53,9 +63,9 @@ void PassiveWiresPass::runOnOperation() {
         worklist.push_back(wire);
       return WalkResult::advance();
     }
-    if (!isa<ConnectOp, StrictConnectOp>(op))
+    if (!isa<ConnectOp, MatchingConnectOp>(op))
       return WalkResult::advance();
-    // connect/strictconnect
+    // connect/matchingconnect
     if (!hasFlip(op->getOperand(0).getType()))
       return WalkResult::advance();
 
@@ -78,9 +88,4 @@ void PassiveWiresPass::runOnOperation() {
     // In-place updates is safe as consumers don't care about flip.
     r.setType(type_cast<FIRRTLBaseType>(r.getType()).getPassiveType());
   }
-}
-
-/// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createPassiveWiresPass() {
-  return std::make_unique<PassiveWiresPass>();
 }

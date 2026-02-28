@@ -22,6 +22,10 @@ page](https://github.com/freechipsproject/firrtl).
 
 [include "Dialects/FIRRTLExpressionOps.md"]
 
+## Operation Definitions -- Intrinsics
+
+[include "Dialects/FIRRTLIntrinsicOps.md"]
+
 ## Type Definitions
 
 [include "Dialects/FIRRTLTypes.md"]

@@ -11,9 +11,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/FoldUtils.h"
+#include "mlir/Analysis/TopologicalSortUtils.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/Matchers.h"
@@ -81,6 +84,20 @@ parseOptionalTypeMatch(OpAsmParser &parser, Type refType,
 
 static void printOptionalTypeMatch(OpAsmPrinter &p, Operation *op, Type refType,
                                    Value operand, Type type) {
+  // Nothing to do - this is strictly an implicit parsing helper.
+}
+
+static ParseResult parseOptionalImmutableTypeMatch(
+    OpAsmParser &parser, Type refType,
+    std::optional<OpAsmParser::UnresolvedOperand> operand, Type &type) {
+  if (operand)
+    type = seq::ImmutableType::get(refType);
+  return success();
+}
+
+static void printOptionalImmutableTypeMatch(OpAsmPrinter &p, Operation *op,
+                                            Type refType, Value operand,
+                                            Type type) {
   // Nothing to do - this is strictly an implicit parsing helper.
 }
 
@@ -250,18 +267,16 @@ ParseResult parseFIFOAEThreshold(OpAsmParser &parser, IntegerAttr &threshold,
 
 void printFIFOAFThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
                           Type outputFlagType) {
-  if (threshold) {
+  if (threshold)
     p << "almost_full"
       << " " << threshold.getInt();
-  }
 }
 
 void printFIFOAEThreshold(OpAsmPrinter &p, Operation *op, IntegerAttr threshold,
                           Type outputFlagType) {
-  if (threshold) {
+  if (threshold)
     p << "almost_empty"
       << " " << threshold.getInt();
-  }
 }
 
 void FIFOOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -294,19 +309,9 @@ LogicalResult FIFOOp::verify() {
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void CompRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  // If the wire has an optional 'name' attribute, use it.
   if (auto name = getName())
     setNameFn(getResult(), *name);
 }
-
-LogicalResult CompRegOp::verify() {
-  if ((getReset() == nullptr) ^ (getResetValue() == nullptr))
-    return emitOpError(
-        "either reset and resetValue or neither must be specified");
-  return success();
-}
-
-std::optional<size_t> CompRegOp::getTargetResultIndex() { return 0; }
 
 template <typename TOp>
 LogicalResult verifyResets(TOp op) {
@@ -320,10 +325,17 @@ LogicalResult verifyResets(TOp op) {
   return success();
 }
 
+std::optional<size_t> CompRegOp::getTargetResultIndex() { return 0; }
+
+LogicalResult CompRegOp::verify() { return verifyResets(*this); }
+
+//===----------------------------------------------------------------------===//
+// CompRegClockEnabledOp
+//===----------------------------------------------------------------------===//
+
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void CompRegClockEnabledOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  // If the wire has an optional 'name' attribute, use it.
   if (auto name = getName())
     setNameFn(getResult(), *name);
 }
@@ -332,10 +344,32 @@ std::optional<size_t> CompRegClockEnabledOp::getTargetResultIndex() {
   return 0;
 }
 
-LogicalResult CompRegClockEnabledOp::verify() {
-  if (failed(verifyResets(*this)))
-    return failure();
-  return success();
+LogicalResult CompRegClockEnabledOp::verify() { return verifyResets(*this); }
+
+LogicalResult CompRegClockEnabledOp::canonicalize(CompRegClockEnabledOp op,
+                                                  PatternRewriter &rewriter) {
+  // reg(comb.mux(en, d, ?), en) -> reg(d, en)
+  // reg(arith.select(en, d, ?), en) -> reg(d, en)
+  auto *inputOp = op.getInput().getDefiningOp();
+  if (isa_and_nonnull<comb::MuxOp, arith::SelectOp>(inputOp) &&
+      inputOp->getOperand(0) == op.getClockEnable()) {
+    rewriter.modifyOpInPlace(
+        op, [&] { op.getInputMutable().assign(inputOp->getOperand(1)); });
+    return success();
+  }
+
+  // Match constant clock enable values.
+  APInt en;
+  if (mlir::matchPattern(op.getClockEnable(), mlir::m_ConstantInt(&en))) {
+    if (en.isAllOnes()) {
+      rewriter.replaceOpWithNewOp<seq::CompRegOp>(
+          op, op.getInput(), op.getClk(), op.getNameAttr(), op.getReset(),
+          op.getResetValue(), op.getInitialValue(), op.getInnerSymAttr());
+      return success();
+    }
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -361,7 +395,8 @@ LogicalResult ShiftRegOp::verify() {
 //===----------------------------------------------------------------------===//
 
 void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
-                     Value clk, StringAttr name, hw::InnerSymAttr innerSym) {
+                     Value clk, StringAttr name, hw::InnerSymAttr innerSym,
+                     Attribute preset) {
 
   OpBuilder::InsertionGuard guard(builder);
 
@@ -372,6 +407,9 @@ void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
 
   if (innerSym)
     result.addAttribute(getInnerSymAttrName(result.name), innerSym);
+
+  if (preset)
+    result.addAttribute(getPresetAttrName(result.name), preset);
 
   result.addTypes(input.getType());
 }
@@ -547,14 +585,15 @@ void FirRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 std::optional<size_t> FirRegOp::getTargetResultIndex() { return 0; }
 
 LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
+
   // If the register has a constant zero reset, drop the reset and reset value
-  // altogether.
+  // altogether (And preserve the PresetAttr).
   if (auto reset = op.getReset()) {
     if (auto constOp = reset.getDefiningOp<hw::ConstantOp>()) {
       if (constOp.getValue().isZero()) {
-        rewriter.replaceOpWithNewOp<FirRegOp>(op, op.getNext(), op.getClk(),
-                                              op.getNameAttr(),
-                                              op.getInnerSymAttr());
+        rewriter.replaceOpWithNewOp<FirRegOp>(
+            op, op.getNext(), op.getClk(), op.getNameAttr(),
+            op.getInnerSymAttr(), op.getPresetAttr());
         return success();
       }
     }
@@ -576,21 +615,67 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
     return false;
   };
 
-  if (isConstant()) {
-    if (auto resetValue = op.getResetValue()) {
-      // If the register has a reset value, we can replace it with that.
-      rewriter.replaceOp(op, resetValue);
+  // Preset can block canonicalization only if it is non-zero.
+  bool replaceWithConstZero = true;
+  if (auto preset = op.getPresetAttr())
+    if (!preset.getValue().isZero())
+      replaceWithConstZero = false;
+
+  if (isConstant() && !op.getResetValue() && replaceWithConstZero) {
+    if (isa<seq::ClockType>(op.getType())) {
+      rewriter.replaceOpWithNewOp<seq::ConstClockOp>(
+          op, seq::ClockConstAttr::get(rewriter.getContext(), ClockConst::Low));
     } else {
-      if (isa<seq::ClockType>(op.getType())) {
-        rewriter.replaceOpWithNewOp<seq::ConstClockOp>(
-            op,
-            seq::ClockConstAttr::get(rewriter.getContext(), ClockConst::Low));
+      auto constant = hw::ConstantOp::create(
+          rewriter, op.getLoc(), APInt::getZero(hw::getBitWidth(op.getType())));
+      rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, op.getType(), constant);
+    }
+    return success();
+  }
+
+  // Canonicalize registers with mux-based constant drivers.
+  // This pattern matches registers where the next value is a mux with one
+  // branch being the register itself (creating a self-loop) and the other
+  // branch being a constant. In such cases, the register effectively holds a
+  // constant value and can be replaced with that constant.
+  if (auto nextMux = op.getNext().getDefiningOp<comb::MuxOp>()) {
+    // Reject optimization if register has preset attribute (for simplicity)
+    if (op.getPresetAttr())
+      return failure();
+
+    Attribute value;
+    Value replacedValue;
+
+    // Check if true branch is self-loop and false branch is constant
+    if (nextMux.getTrueValue() == op.getResult() &&
+        matchPattern(nextMux.getFalseValue(), m_Constant(&value))) {
+      replacedValue = nextMux.getFalseValue();
+    }
+    // Check if false branch is self-loop and true branch is constant
+    else if (nextMux.getFalseValue() == op.getResult() &&
+             matchPattern(nextMux.getTrueValue(), m_Constant(&value))) {
+      replacedValue = nextMux.getTrueValue();
+    }
+
+    if (!replacedValue)
+      return failure();
+
+    // Verify reset value compatibility: if register has reset, it must be
+    // a constant that matches the mux constant
+    if (op.getResetValue()) {
+      Attribute resetConst;
+      if (matchPattern(op.getResetValue(), m_Constant(&resetConst))) {
+        if (resetConst != value)
+          return failure();
       } else {
-        auto constant = rewriter.create<hw::ConstantOp>(
-            op.getLoc(), APInt::getZero(hw::getBitWidth(op.getType())));
-        rewriter.replaceOpWithNewOp<hw::BitcastOp>(op, op.getType(), constant);
+        // Non-constant reset value prevents optimization
+        return failure();
       }
     }
+
+    assert(replacedValue);
+    // Apply the optimization if all conditions are met
+    rewriter.replaceOp(op, replacedValue);
     return success();
   }
 
@@ -600,7 +685,7 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
   // initialized. If we don't enable aggregate preservation, `r_0` is replaced
   // with `0`. Hence this canonicalization replaces 0th element of the next
   // value with zero to match the behaviour.
-  if (!op.getReset()) {
+  if (!op.getReset() && !op.getPresetAttr()) {
     if (auto arrayCreate = op.getNext().getDefiningOp<hw::ArrayCreateOp>()) {
       // For now only support 1d arrays.
       // TODO: Support nested arrays and bundles.
@@ -619,8 +704,8 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
                 matchPattern(arrayGet.getIndex(),
                              m_ConstantInt(&elementIndex)) &&
                 elementIndex == index) {
-              nextOperands.push_back(rewriter.create<hw::ConstantOp>(
-                  op.getLoc(),
+              nextOperands.push_back(hw::ConstantOp::create(
+                  rewriter, op.getLoc(),
                   APInt::getZero(hw::getBitWidth(arrayGet.getType()))));
               changed = true;
               continue;
@@ -629,8 +714,8 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
         }
         // If one of the operands is self loop, update the next value.
         if (changed) {
-          auto newNextVal = rewriter.create<hw::ArrayCreateOp>(
-              arrayCreate.getLoc(), nextOperands);
+          auto newNextVal = hw::ArrayCreateOp::create(
+              rewriter, arrayCreate.getLoc(), nextOperands);
           if (arrayCreate->hasOneUse())
             // If the original next value has a single use, we can replace the
             // value directly.
@@ -652,9 +737,12 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult FirRegOp::fold(FoldAdaptor adaptor) {
-  // If the register has a symbol, we can't optimize it away.
+  // If the register has a symbol or preset value, we can't optimize it away.
+  // TODO: Handle a preset value.
   if (getInnerSymAttr())
     return {};
+
+  auto presetAttr = getPresetAttr();
 
   // If the register is held in permanent reset, replace it with its reset
   // value. This works trivially if the reset is asynchronous and therefore
@@ -662,11 +750,12 @@ OpFoldResult FirRegOp::fold(FoldAdaptor adaptor) {
   // value in silicon. If it is synchronous, the register value is undefined
   // until the first clock edge at which point it becomes the reset value, in
   // which case we simply define the initial value to already be the reset
-  // value.
-  if (auto reset = getReset())
-    if (auto constOp = reset.getDefiningOp<hw::ConstantOp>())
-      if (constOp.getValue().isOne())
-        return getResetValue();
+  // value. Works only if no preset.
+  if (!presetAttr)
+    if (auto reset = getReset())
+      if (auto constOp = reset.getDefiningOp<hw::ConstantOp>())
+        if (constOp.getValue().isOne())
+          return getResetValue();
 
   // If the register's next value is trivially it's current value, or the
   // register is never clocked, we can replace the register with a constant
@@ -677,15 +766,27 @@ OpFoldResult FirRegOp::fold(FoldAdaptor adaptor) {
   if (!isTrivialFeedback && !isNeverClocked)
     return {};
 
-  // If the register has a reset value, we can replace it with that.
-  if (auto resetValue = getResetValue())
-    return resetValue;
+  // If the register has a const reset value, and no preset, we can replace it
+  // with the const reset. We cannot replace it with a non-constant reset value.
+  if (auto resetValue = getResetValue()) {
+    if (auto *op = resetValue.getDefiningOp()) {
+      if (op->hasTrait<OpTrait::ConstantLike>() && !presetAttr)
+        return resetValue;
+      if (auto constOp = dyn_cast<hw::ConstantOp>(op))
+        if (presetAttr.getValue() == constOp.getValue())
+          return resetValue;
+    }
+    return {};
+  }
 
   // Otherwise we want to replace the register with a constant 0. For now this
   // only works with integer types.
   auto intType = dyn_cast<IntegerType>(getType());
   if (!intType)
     return {};
+  // If preset present, then replace with preset.
+  if (presetAttr)
+    return presetAttr;
   return IntegerAttr::get(intType, 0);
 }
 
@@ -755,6 +856,25 @@ OpFoldResult ClockMuxOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// ClockDividerOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ClockDividerOp::canonicalize(ClockDividerOp op,
+                                           PatternRewriter &rewriter) {
+  // clock_div(clock_div(clock, a), b) -> clock_div(clock, a + b)
+  if (auto innerDiv = op.getInput().getDefiningOp<ClockDividerOp>()) {
+    auto outerPow2 = op.getPow2();
+    auto innerPow2 = innerDiv.getPow2();
+    auto combinedPow2 = outerPow2 + innerPow2;
+
+    rewriter.replaceOpWithNewOp<ClockDividerOp>(op, innerDiv.getInput(),
+                                                combinedPow2);
+    return success();
+  }
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // FirMemOp
 //===----------------------------------------------------------------------===//
 
@@ -763,18 +883,43 @@ LogicalResult FirMemOp::canonicalize(FirMemOp op, PatternRewriter &rewriter) {
   if (op.getInnerSymAttr())
     return failure();
 
+  bool readOnly = true, writeOnly = true;
+
   // If the memory has no read ports, erase it.
   for (auto *user : op->getUsers()) {
-    if (isa<FirMemReadOp, FirMemReadWriteOp>(user))
-      return failure();
-    assert(isa<FirMemWriteOp>(user) && "invalid seq.firmem user");
+    if (isa<FirMemReadOp, FirMemReadWriteOp>(user)) {
+      writeOnly = false;
+    }
+    if (isa<FirMemWriteOp, FirMemReadWriteOp>(user)) {
+      readOnly = false;
+    }
+    assert((isa<FirMemReadOp, FirMemWriteOp, FirMemReadWriteOp>(user)) &&
+           "invalid seq.firmem user");
+  }
+  if (writeOnly) {
+    for (auto *user : llvm::make_early_inc_range(op->getUsers()))
+      rewriter.eraseOp(user);
+
+    rewriter.eraseOp(op);
+    return success();
   }
 
-  for (auto *user : llvm::make_early_inc_range(op->getUsers()))
-    rewriter.eraseOp(user);
-
-  rewriter.eraseOp(op);
-  return success();
+  if (readOnly && !op.getInit()) {
+    // Replace all read ports with a constant 0.
+    for (auto *user : llvm::make_early_inc_range(op->getUsers())) {
+      auto readOp = cast<FirMemReadOp>(user);
+      Value zero = hw::ConstantOp::create(
+          rewriter, readOp.getLoc(),
+          APInt::getZero(hw::getBitWidth(readOp.getType())));
+      if (readOp.getType() != zero.getType())
+        zero = hw::BitcastOp::create(rewriter, readOp.getLoc(),
+                                     readOp.getType(), zero);
+      rewriter.replaceOp(readOp, zero);
+    }
+    rewriter.eraseOp(op);
+    return success();
+  }
+  return failure();
 }
 
 void FirMemOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -839,6 +984,9 @@ LogicalResult FirMemWriteOp::canonicalize(FirMemWriteOp op,
   // Remove the write port if it is trivially dead.
   if (isConstZero(op.getEnable()) || isConstZero(op.getMask()) ||
       isConstClock(op.getClk())) {
+    auto memOp = op.getMemory().getDefiningOp<FirMemOp>();
+    if (memOp.getInnerSymAttr())
+      return failure();
     rewriter.eraseOp(op);
     return success();
   }
@@ -983,6 +1131,171 @@ FirMemory::FirMemory(hw::HWModuleGeneratedOp op) {
   initFilename = op->getAttrOfType<StringAttr>("initFilename").getValue();
   initIsBinary = op->getAttrOfType<BoolAttr>("initIsBinary").getValue();
   initIsInline = op->getAttrOfType<BoolAttr>("initIsInline").getValue();
+}
+
+LogicalResult InitialOp::verify() {
+  // Check outputs.
+  auto *terminator = this->getBody().front().getTerminator();
+  if (terminator->getOperands().size() != getNumResults())
+    return emitError() << "result type doesn't match with the terminator";
+  for (auto [lhs, rhs] :
+       llvm::zip(terminator->getOperands().getTypes(), getResultTypes())) {
+    if (cast<seq::ImmutableType>(rhs).getInnerType() != lhs)
+      return emitError() << cast<seq::ImmutableType>(rhs).getInnerType()
+                         << " is expected but got " << lhs;
+  }
+
+  auto blockArgs = this->getBody().front().getArguments();
+
+  if (blockArgs.size() != getNumOperands())
+    return emitError() << "operand type doesn't match with the block arg";
+
+  for (auto [blockArg, operand] : llvm::zip(blockArgs, getOperands())) {
+    if (blockArg.getType() !=
+        cast<ImmutableType>(operand.getType()).getInnerType())
+      return emitError()
+             << blockArg.getType() << " is expected but got "
+             << cast<ImmutableType>(operand.getType()).getInnerType();
+  }
+  return success();
+}
+void InitialOp::build(OpBuilder &builder, OperationState &result,
+                      TypeRange resultTypes, std::function<void()> ctor) {
+  OpBuilder::InsertionGuard guard(builder);
+
+  builder.createBlock(result.addRegion());
+  SmallVector<Type> types;
+  for (auto t : resultTypes)
+    types.push_back(seq::ImmutableType::get(t));
+
+  result.addTypes(types);
+
+  if (ctor)
+    ctor();
+}
+
+TypedValue<seq::ImmutableType>
+circt::seq::createConstantInitialValue(OpBuilder builder, Location loc,
+                                       mlir::IntegerAttr attr) {
+  auto initial = seq::InitialOp::create(builder, loc, attr.getType(), [&]() {
+    auto constant = hw::ConstantOp::create(builder, loc, attr);
+    seq::YieldOp::create(builder, loc, ArrayRef<Value>{constant});
+  });
+  return cast<TypedValue<seq::ImmutableType>>(initial->getResult(0));
+}
+
+mlir::TypedValue<seq::ImmutableType>
+circt::seq::createConstantInitialValue(OpBuilder builder, Operation *op) {
+  assert(op->getNumResults() == 1 &&
+         op->hasTrait<mlir::OpTrait::ConstantLike>());
+  auto initial = seq::InitialOp::create(
+      builder, op->getLoc(), op->getResultTypes(), [&]() {
+        auto clonedOp = builder.clone(*op);
+        seq::YieldOp::create(builder, op->getLoc(), clonedOp->getResults());
+      });
+  return cast<mlir::TypedValue<seq::ImmutableType>>(initial.getResult(0));
+}
+
+Value circt::seq::unwrapImmutableValue(TypedValue<seq::ImmutableType> value) {
+  auto resultNum = cast<OpResult>(value).getResultNumber();
+  auto initialOp = value.getDefiningOp<seq::InitialOp>();
+  assert(initialOp);
+  return initialOp.getBodyBlock()->getTerminator()->getOperand(resultNum);
+}
+
+FailureOr<seq::InitialOp> circt::seq::mergeInitialOps(Block *block) {
+  SmallVector<Operation *> initialOps;
+  for (auto &op : *block)
+    if (isa<seq::InitialOp>(op))
+      initialOps.push_back(&op);
+
+  if (!mlir::computeTopologicalSorting(initialOps, {}))
+    return block->getParentOp()->emitError() << "initial ops cannot be "
+                                             << "topologically sorted";
+
+  // No need to merge if there is only one initial op.
+  if (initialOps.size() <= 1)
+    return initialOps.empty() ? seq::InitialOp()
+                              : cast<seq::InitialOp>(initialOps[0]);
+
+  auto initialOp = cast<seq::InitialOp>(initialOps.front());
+  auto yieldOp = cast<seq::YieldOp>(initialOp.getBodyBlock()->getTerminator());
+
+  llvm::MapVector<Value, Value>
+      resultToYieldOperand; // seq.immutable value to operand.
+
+  for (auto [result, operand] :
+       llvm::zip(initialOp.getResults(), yieldOp->getOperands()))
+    resultToYieldOperand.insert({result, operand});
+
+  for (size_t i = 1; i < initialOps.size(); ++i) {
+    auto currentInitialOp = cast<seq::InitialOp>(initialOps[i]);
+    auto operands = currentInitialOp->getOperands();
+    for (auto [blockArg, operand] :
+         llvm::zip(currentInitialOp.getBodyBlock()->getArguments(), operands)) {
+      if (auto initOp = operand.getDefiningOp<seq::InitialOp>()) {
+        assert(resultToYieldOperand.count(operand) &&
+               "it must be visited already");
+        blockArg.replaceAllUsesWith(resultToYieldOperand.lookup(operand));
+      } else {
+        // Otherwise add the operand to the current block.
+        initialOp.getBodyBlock()->addArgument(
+            cast<seq::ImmutableType>(operand.getType()).getInnerType(),
+            operand.getLoc());
+        initialOp.getInputsMutable().append(operand);
+      }
+    }
+
+    auto currentYieldOp =
+        cast<seq::YieldOp>(currentInitialOp.getBodyBlock()->getTerminator());
+
+    for (auto [result, operand] : llvm::zip(currentInitialOp.getResults(),
+                                            currentYieldOp->getOperands()))
+      resultToYieldOperand.insert({result, operand});
+
+    // Append the operands of the current yield op to the original yield op.
+    yieldOp.getOperandsMutable().append(currentYieldOp.getOperands());
+    currentYieldOp->erase();
+
+    // Append the operations of the current initial op to the original initial
+    // op.
+    initialOp.getBodyBlock()->getOperations().splice(
+        initialOp.end(), currentInitialOp.getBodyBlock()->getOperations());
+  }
+
+  // Move the terminator to the end of the block.
+  yieldOp->moveBefore(initialOp.getBodyBlock(),
+                      initialOp.getBodyBlock()->end());
+
+  auto builder = OpBuilder::atBlockBegin(block);
+  SmallVector<Type> types;
+  for (auto [result, operand] : resultToYieldOperand)
+    types.push_back(operand.getType());
+
+  // Create a new initial op which accumulates the results of the merged initial
+  // ops.
+  auto newInitial = seq::InitialOp::create(builder, initialOp.getLoc(), types);
+  newInitial.getInputsMutable().append(initialOp.getInputs());
+
+  for (auto [resultAndOperand, newResult] :
+       llvm::zip(resultToYieldOperand, newInitial.getResults()))
+    resultAndOperand.first.replaceAllUsesWith(newResult);
+
+  // Update the block arguments of the new initial op.
+  for (auto oldBlockArg : initialOp.getBodyBlock()->getArguments()) {
+    auto blockArg = newInitial.getBodyBlock()->addArgument(
+        oldBlockArg.getType(), oldBlockArg.getLoc());
+    oldBlockArg.replaceAllUsesWith(blockArg);
+  }
+
+  newInitial.getBodyBlock()->getOperations().splice(
+      newInitial.end(), initialOp.getBodyBlock()->getOperations());
+
+  // Clean up.
+  while (!initialOps.empty())
+    initialOps.pop_back_val()->erase();
+
+  return newInitial;
 }
 
 //===----------------------------------------------------------------------===//

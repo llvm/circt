@@ -1,12 +1,13 @@
 // RUN: circt-opt --esi-connect-services --canonicalize %s | circt-opt | FileCheck %s --check-prefix=CONN
 // RUN: circt-opt --esi-connect-services --lower-esi-bundles %s
 
+!sendAny = !esi.bundle<[!esi.channel<!esi.any> from "send"]>
 !sendI8 = !esi.bundle<[!esi.channel<i8> from "send"]>
 !recvI8 = !esi.bundle<[!esi.channel<i8> to "recv"]>
 !reqResp = !esi.bundle<[!esi.channel<i16> to "req", !esi.channel<i8> from "resp"]>
 
 esi.service.decl @HostComms {
-  esi.service.port @Send : !sendI8
+  esi.service.port @Send : !sendAny
   esi.service.port @Recv : !recvI8
   esi.service.port @ReqResp : !reqResp
 }
@@ -105,13 +106,14 @@ hw.module @InOutLoopback (in %clk: !seq.clock) {
 // CONN-LABEL:  esi.pure_module @LoopbackCosimPure {
 // CONN-NEXT:     [[clk:%.+]] = esi.pure_module.input "clk" : !seq.clock
 // CONN-NEXT:     [[rst:%.+]] = esi.pure_module.input "rst" : i1
-// CONN-NEXT:     esi.manifest.service_impl #esi.appid<"cosim"> svc @HostComms by "cosim" with {} {
-// CONN-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inout">] req <@HostComms::@ReqResp>(!esi.bundle<[!esi.channel<i16> to "req", !esi.channel<i8> from "resp"]>) with {channel_assignments = {req = "loopback_inout.req", resp = "loopback_inout.resp"}}
+// CONN-NEXT:     esi.manifest.service_impl #esi.appid<"cosim"> svc @HostComms by "cosim" engine with {} {
+// CONN-NEXT:       esi.manifest.impl_conn [#esi.appid<"loopback_inout">] req <@HostComms::@ReqResp>(!esi.bundle<[!esi.channel<i16> to "req", !esi.channel<i8> from "resp"]>) channels {req = {name = "loopback_inout.req", type = "cosim"}, resp = {name = "loopback_inout.resp", type = "cosim"}}
 // CONN-NEXT:     }
 // CONN-NEXT:     [[r2:%.+]] = esi.cosim.from_host [[clk]], [[rst]], "loopback_inout.req" : !esi.channel<i16>
 // CONN-NEXT:     %bundle, %resp = esi.bundle.pack [[r2]] : !esi.bundle<[!esi.channel<i16> to "req", !esi.channel<i8> from "resp"]>
 // CONN-NEXT:     esi.cosim.to_host [[clk]], [[rst]], %resp, "loopback_inout.resp" : !esi.channel<i8>
-// CONN-NEXT:     hw.instance "m1" @InOutLoopback(clk: %0: !seq.clock, loopback_inout: %bundle: !esi.bundle<[!esi.channel<i16> to "req", !esi.channel<i8> from "resp"]>) -> ()
+// CONN-NEXT:     hw.instance "__cycle_counter" @Cosim_CycleCount<CORE_CLOCK_FREQUENCY_HZ: i64 = 0>(clk: [[clk]]: !seq.clock, rst: [[rst]]: i1) -> ()
+// CONN-NEXT:     hw.instance "m1" @InOutLoopback(clk: [[clk]]: !seq.clock, loopback_inout: %bundle: !esi.bundle<[!esi.channel<i16> to "req", !esi.channel<i8> from "resp"]>) -> ()
 esi.pure_module @LoopbackCosimPure {
   %clk = esi.pure_module.input "clk" : !seq.clock
   %rst = esi.pure_module.input "rst" : i1
@@ -120,22 +122,24 @@ esi.pure_module @LoopbackCosimPure {
 }
 
 // CONN-LABEL: esi.mem.ram @MemA i64 x 20
-// CONN-LABEL: hw.module @MemoryAccess1(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!hw.struct<address: i5, data: i64>>, in %readAddress : !esi.channel<i5>, out readData : !esi.channel<i64>, out writeDone : !esi.channel<i0>) {
+// CONN-LABEL: hw.module @MemoryAccess1(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!hw.struct<address: ui5, data: i64>>, in %readAddress : !esi.channel<ui5>, out readData : !esi.channel<i64>, out writeDone : !esi.channel<i0>) {
 // CONN:         %MemA = sv.reg  : !hw.inout<uarray<20xi64>>
 // CONN:         %chanOutput, %ready = esi.wrap.vr %c0_i0, %write_done : i0
-// CONN:         %rawOutput, %valid = esi.unwrap.vr %write, %ready : !hw.struct<address: i5, data: i64>
-// CONN:         %address = hw.struct_extract %rawOutput["address"] : !hw.struct<address: i5, data: i64>
-// CONN:         %data = hw.struct_extract %rawOutput["data"] : !hw.struct<address: i5, data: i64>
+// CONN:         %rawOutput, %valid = esi.unwrap.vr %write, %ready : !hw.struct<address: ui5, data: i64>
+// CONN:         %address = hw.struct_extract %rawOutput["address"] : !hw.struct<address: ui5, data: i64>
+// CONN:         %data = hw.struct_extract %rawOutput["data"] : !hw.struct<address: ui5, data: i64>
 // CONN:         %[[ANDVR:.*]] = comb.and %valid, %ready {sv.namehint = "write_go"} : i1
 // CONN:         %write_done = seq.compreg sym @write_done  %[[ANDVR]], %clk reset %rst, %false  : i1
 // CONN:         %chanOutput_0, %ready_1 = esi.wrap.vr %[[MEMREAD:.*]], %valid_3 : i64
-// CONN:         %rawOutput_2, %valid_3 = esi.unwrap.vr %readAddress, %ready_1 : i5
-// CONN:         %[[MEMREADIO:.*]] = sv.array_index_inout %MemA[%rawOutput_2] : !hw.inout<uarray<20xi64>>, i5
+// CONN:         %rawOutput_2, %valid_3 = esi.unwrap.vr %readAddress, %ready_1 : ui5
+// CONN:         %[[ADDR:.*]] = hw.bitcast %rawOutput_2 : (ui5) -> i5
+// CONN:         %[[MEMREADIO:.*]] = sv.array_index_inout %MemA[%[[ADDR]]] : !hw.inout<uarray<20xi64>>, i5
 // CONN:         %[[MEMREAD]] = sv.read_inout %[[MEMREADIO]] : !hw.inout<i64>
 // CONN:         %[[CLOCK:.+]] = seq.from_clock %clk
 // CONN:         sv.alwaysff(posedge %[[CLOCK]]) {
 // CONN:           sv.if %[[ANDVR]] {
-// CONN:             %[[ARRIDX:.*]] = sv.array_index_inout %MemA[%address] : !hw.inout<uarray<20xi64>>, i5
+// CONN:             %[[ADDR:.*]] = hw.bitcast %address : (ui5) -> i5
+// CONN:             %[[ARRIDX:.*]] = sv.array_index_inout %MemA[%[[ADDR]]] : !hw.inout<uarray<20xi64>>, i5
 // CONN:             sv.passign %[[ARRIDX]], %data : i64
 // CONN:           }
 // CONN:         }(syncreset : posedge %rst) {
@@ -143,11 +147,11 @@ esi.pure_module @LoopbackCosimPure {
 // CONN:         hw.output %chanOutput_0, %chanOutput : !esi.channel<i64>, !esi.channel<i0>
 
 esi.mem.ram @MemA i64 x 20
-!write = !hw.struct<address: i5, data: i64>
+!write = !hw.struct<address: ui5, data: i64>
 !writeBundle = !esi.bundle<[!esi.channel<!write> from "req", !esi.channel<i0> to "ack"]>
-!readBundle = !esi.bundle<[!esi.channel<i5> from "address", !esi.channel<i64> to "data"]>
+!readBundle = !esi.bundle<[!esi.channel<ui5> from "address", !esi.channel<i64> to "data"]>
 
-hw.module @MemoryAccess1(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!write>, in %readAddress : !esi.channel<i5>, out readData : !esi.channel<i64>, out writeDone : !esi.channel<i0>) {
+hw.module @MemoryAccess1(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!write>, in %readAddress : !esi.channel<ui5>, out readData : !esi.channel<i64>, out writeDone : !esi.channel<i0>) {
   esi.service.instance #esi.appid<"mem"> svc @MemA impl as "sv_mem" (%clk, %rst) : (!seq.clock, i1) -> ()
   %writeBundle = esi.service.req <@MemA::@write> (#esi.appid<"write">) : !writeBundle
   %done = esi.bundle.unpack %write from %writeBundle : !writeBundle
@@ -157,11 +161,11 @@ hw.module @MemoryAccess1(in %clk : !seq.clock, in %rst : i1, in %write : !esi.ch
   hw.output %readData, %done : !esi.channel<i64>, !esi.channel<i0>
 }
 
-// CONN-LABEL: hw.module @MemoryAccess2Read(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!hw.struct<address: i5, data: i64>>, in %readAddress : !esi.channel<i5>, in %readAddress2 : !esi.channel<i5>, out readData : !esi.channel<i64>, out readData2 : !esi.channel<i64>, out writeDone : !esi.channel<i0>) {
+// CONN-LABEL: hw.module @MemoryAccess2Read(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!hw.struct<address: ui5, data: i64>>, in %readAddress : !esi.channel<ui5>, in %readAddress2 : !esi.channel<ui5>, out readData : !esi.channel<i64>, out readData2 : !esi.channel<i64>, out writeDone : !esi.channel<i0>) {
 // CONN:         %MemA = sv.reg : !hw.inout<uarray<20xi64>>
 // CONN:         hw.output %chanOutput_0, %chanOutput_4, %chanOutput : !esi.channel<i64>, !esi.channel<i64>, !esi.channel<i0>
 
-hw.module @MemoryAccess2Read(in %clk: !seq.clock, in %rst: i1, in %write: !esi.channel<!write>, in %readAddress: !esi.channel<i5>, in %readAddress2: !esi.channel<i5>, out readData: !esi.channel<i64>, out readData2: !esi.channel<i64>, out writeDone: !esi.channel<i0>) {
+hw.module @MemoryAccess2Read(in %clk: !seq.clock, in %rst: i1, in %write: !esi.channel<!write>, in %readAddress: !esi.channel<ui5>, in %readAddress2: !esi.channel<ui5>, out readData: !esi.channel<i64>, out readData2: !esi.channel<i64>, out writeDone: !esi.channel<i0>) {
   esi.service.instance #esi.appid<"mem"> svc @MemA impl as "sv_mem" (%clk, %rst) : (!seq.clock, i1) -> ()
 
   %writeBundle = esi.service.req <@MemA::@write> (#esi.appid<"write">) : !writeBundle
@@ -193,8 +197,8 @@ hw.module @CallableFunc1() {
 
 // CONN-LABEL:   hw.module @CallableAccel1(in %clk : !seq.clock, in %rst : i1) {
 // CONN-NEXT:      hw.instance "func1" @CallableFunc1(func1: %bundle: !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>) -> ()
-// CONN-NEXT:      esi.manifest.service_impl #esi.appid<"funcComms"> svc @funcs std "esi.service.std.func" by "cosim" with {} {
-// CONN-NEXT:        esi.manifest.impl_conn [#esi.appid<"func1">] req <@funcs::@call>(!esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>) with {channel_assignments = {arg = "func1.arg", result = "func1.result"}}
+// CONN-NEXT:      esi.manifest.service_impl #esi.appid<"funcComms"> svc @funcs std "esi.service.std.func" by "cosim" engine with {} {
+// CONN-NEXT:        esi.manifest.impl_conn [#esi.appid<"func1">] req <@funcs::@call>(!esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>) channels {arg = {name = "func1.arg", type = "cosim"}, result = {name = "func1.result", type = "cosim"}}
 // CONN-NEXT:      }
 // CONN-NEXT:      %0 = esi.cosim.from_host %clk, %rst, "func1.arg" : !esi.channel<i16>
 // CONN-NEXT:      %bundle, %result = esi.bundle.pack %0 : !esi.bundle<[!esi.channel<i16> to "arg", !esi.channel<i16> from "result"]>
@@ -205,12 +209,52 @@ hw.module @CallableAccel1(in %clk: !seq.clock, in %rst: i1) {
 }
 
 esi.service.std.mmio @mmio
-!mmioReq = !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i32> from "data"]>
+!mmioReq = !esi.bundle<[!esi.channel<ui32> to "offset", !esi.channel<i64> from "data"]>
+!mmioRWReq = !esi.bundle<[!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>> to "cmd", !esi.channel<i64> from "data"]>
 
-// CONN-LABEL:  hw.module @MMIOManifest(in %clk : !seq.clock, in %rst : i1, in %manifest : !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i32> from "data"]>) {
-// CONN-NEXT:     esi.manifest.req #esi.appid<"manifest">, <@mmio::@read> std "esi.service.std.mmio", !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i32> from "data"]>
-// CONN-NEXT:     %offset = esi.bundle.unpack %offset from %manifest : !esi.bundle<[!esi.channel<i32> to "offset", !esi.channel<i32> from "data"]>
+// CONN-LABEL:  hw.module @MMIOManifest(in %clk : !seq.clock, in %rst : i1, in %manifest : !esi.bundle<[!esi.channel<ui32> to "offset", !esi.channel<i64> from "data"]>, in %manifestRW : !esi.bundle<[!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>> to "cmd", !esi.channel<i64> from "data"]>) {
+// CONN-NEXT:     %true = hw.constant true
+// CONN-NEXT:     %c0_i64 = hw.constant 0 : i64
+// CONN-NEXT:     esi.manifest.req #esi.appid<"manifest">, <@mmio::@read> std "esi.service.std.mmio", !esi.bundle<[!esi.channel<ui32> to "offset", !esi.channel<i64> from "data"]>
+// CONN-NEXT:     %chanOutput, %ready = esi.wrap.vr %c0_i64, %true : i64
+// CONN-NEXT:     %offset = esi.bundle.unpack %chanOutput from %manifest : !esi.bundle<[!esi.channel<ui32> to "offset", !esi.channel<i64> from "data"]>
+// CONN-NEXT:     esi.manifest.req #esi.appid<"manifestRW">, <@mmio::@read_write> std "esi.service.std.mmio", !esi.bundle<[!esi.channel<!hw.struct<write: i1, offset: ui32, data: i64>> to "cmd", !esi.channel<i64> from "data"]>
 hw.module @MMIOManifest(in %clk: !seq.clock, in %rst: i1) {
   %req = esi.service.req <@mmio::@read> (#esi.appid<"manifest">) : !mmioReq
-  %loopback = esi.bundle.unpack %loopback from %req : !mmioReq
+  %data = hw.constant 0 : i64
+  %valid = hw.constant 1 : i1
+  %data_ch, %ready = esi.wrap.vr %data, %valid : i64
+  %addr = esi.bundle.unpack %data_ch from %req : !mmioReq
+
+  %reqRW = esi.service.req <@mmio::@read_write> (#esi.appid<"manifestRW">) : !mmioRWReq
+  %dataChannel, %dataChannelReady = esi.wrap.vr %data, %valid: i64
+  %cmdChannel = esi.bundle.unpack %dataChannel from %reqRW : !mmioRWReq
+}
+
+// CONN-LABEL:  esi.service.std.hostmem @hostmem
+// CONN-LABEL:  hw.module @HostmemRW(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!hw.struct<address: ui64, tag: ui8, data: i128>>, in %readAddress : !esi.channel<!hw.struct<address: ui64, tag: ui8>>, in %hostmemWrite : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: i128>> from "req", !esi.channel<ui8> to "ackTag"]>, in %hostmemRead : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: i64>> to "resp"]>, out readData : !esi.channel<!hw.struct<tag: ui8, data: i64>>, out writeDone : !esi.channel<ui8>) {
+// CONN-NEXT:     esi.manifest.req #esi.appid<"hostmemWrite">, <@hostmem::@write> std "esi.service.std.hostmem", !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: i128>> from "req", !esi.channel<ui8> to "ackTag"]>
+// CONN-NEXT:     %ackTag = esi.bundle.unpack %write from %hostmemWrite : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: i128>> from "req", !esi.channel<ui8> to "ackTag"]>
+// CONN-NEXT:     esi.manifest.req #esi.appid<"hostmemRead">, <@hostmem::@read> std "esi.service.std.hostmem", !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: i64>> to "resp"]>
+// CONN-NEXT:     %resp = esi.bundle.unpack %readAddress from %hostmemRead : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: i64>> to "resp"]>
+// CONN-NEXT:     hw.output %resp, %ackTag : !esi.channel<!hw.struct<tag: ui8, data: i64>>, !esi.channel<ui8>
+
+esi.service.std.hostmem @hostmem
+!hostmemReadReq = !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8>> from "req", !esi.channel<!hw.struct<tag: ui8, data: i64>> to "resp"]>
+!hostmemWriteReq = !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, data: i128>> from "req", !esi.channel<ui8> to "ackTag"]>
+
+hw.module @HostmemRW(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channel<!hw.struct<address: ui64, tag: ui8, data: i128>>, in %readAddress : !esi.channel<!hw.struct<address: ui64, tag: ui8>>, out readData : !esi.channel<!hw.struct<tag: ui8, data: i64>>, out writeDone : !esi.channel<ui8>) {
+  %writeBundle = esi.service.req <@hostmem::@write> (#esi.appid<"hostmemWrite">) : !hostmemWriteReq
+  %ackTag = esi.bundle.unpack %write from %writeBundle : !hostmemWriteReq
+
+  %readBundle = esi.service.req <@hostmem::@read> (#esi.appid<"hostmemRead">) : !hostmemReadReq
+  %readData = esi.bundle.unpack %readAddress from %readBundle : !hostmemReadReq
+
+  hw.output %readData, %ackTag: !esi.channel<!hw.struct<tag: ui8, data: i64>>, !esi.channel<ui8>
+}
+
+esi.service.std.telemetry @telemetry
+hw.module @TelemetryTest1(in %clk : !seq.clock, in %rst : i1, in %value: !esi.channel<ui64>) {
+  %telemetryBundle = esi.service.req <@telemetry::@report> (#esi.appid<"telemetry">) : !esi.bundle<[!esi.channel<i0> to "get", !esi.channel<ui64> from "data"]>
+  esi.bundle.unpack %value from %telemetryBundle : !esi.bundle<[!esi.channel<i0> to "get", !esi.channel<ui64> from "data"]>
 }

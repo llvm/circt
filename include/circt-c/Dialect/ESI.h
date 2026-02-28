@@ -20,9 +20,11 @@ MLIR_CAPI_EXPORTED void registerESIPasses(void);
 
 MLIR_CAPI_EXPORTED bool circtESITypeIsAChannelType(MlirType type);
 MLIR_CAPI_EXPORTED MlirType circtESIChannelTypeGet(MlirType inner,
-                                                   uint32_t signaling);
+                                                   uint32_t signaling,
+                                                   uint64_t dataDelay);
 MLIR_CAPI_EXPORTED MlirType circtESIChannelGetInner(MlirType channelType);
 MLIR_CAPI_EXPORTED uint32_t circtESIChannelGetSignaling(MlirType channelType);
+MLIR_CAPI_EXPORTED uint64_t circtESIChannelGetDataDelay(MlirType channelType);
 
 MLIR_CAPI_EXPORTED bool circtESITypeIsAnAnyType(MlirType type);
 MLIR_CAPI_EXPORTED MlirType circtESIAnyTypeGet(MlirContext);
@@ -36,6 +38,8 @@ MLIR_CAPI_EXPORTED void circtESIAppendMlirFile(MlirModule,
                                                MlirStringRef fileName);
 MLIR_CAPI_EXPORTED MlirOperation circtESILookup(MlirModule,
                                                 MlirStringRef symbol);
+
+MLIR_CAPI_EXPORTED bool circtESICheckInnerTypeMatch(MlirType to, MlirType from);
 
 //===----------------------------------------------------------------------===//
 // Channel bundles
@@ -58,11 +62,50 @@ MLIR_CAPI_EXPORTED CirctESIBundleTypeBundleChannel
 circtESIBundleTypeGetChannel(MlirType bundle, size_t idx);
 
 //===----------------------------------------------------------------------===//
+// Window types
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool circtESITypeIsAWindowType(MlirType type);
+MLIR_CAPI_EXPORTED MlirType circtESIWindowTypeGet(MlirContext cctxt,
+                                                  MlirAttribute name,
+                                                  MlirType into,
+                                                  size_t numFrames,
+                                                  const MlirType *frames);
+MLIR_CAPI_EXPORTED MlirAttribute circtESIWindowTypeGetName(MlirType window);
+MLIR_CAPI_EXPORTED MlirType circtESIWindowTypeGetInto(MlirType window);
+MLIR_CAPI_EXPORTED size_t circtESIWindowTypeGetNumFrames(MlirType window);
+MLIR_CAPI_EXPORTED MlirType circtESIWindowTypeGetFrame(MlirType window,
+                                                       size_t idx);
+MLIR_CAPI_EXPORTED MlirType circtESIWindowTypeGetLoweredType(MlirType window);
+
+MLIR_CAPI_EXPORTED bool circtESITypeIsAWindowFrameType(MlirType type);
+MLIR_CAPI_EXPORTED MlirType circtESIWindowFrameTypeGet(MlirContext cctxt,
+                                                       MlirAttribute name,
+                                                       size_t numMembers,
+                                                       const MlirType *members);
+MLIR_CAPI_EXPORTED MlirAttribute circtESIWindowFrameTypeGetName(MlirType frame);
+MLIR_CAPI_EXPORTED size_t circtESIWindowFrameTypeGetNumMembers(MlirType frame);
+MLIR_CAPI_EXPORTED MlirType circtESIWindowFrameTypeGetMember(MlirType frame,
+                                                             size_t idx);
+
+MLIR_CAPI_EXPORTED bool circtESITypeIsAWindowFieldType(MlirType type);
+MLIR_CAPI_EXPORTED MlirType circtESIWindowFieldTypeGet(MlirContext cctxt,
+                                                       MlirAttribute fieldName,
+                                                       uint64_t numItems,
+                                                       uint64_t bulkCountWidth);
+MLIR_CAPI_EXPORTED MlirAttribute
+circtESIWindowFieldTypeGetFieldName(MlirType field);
+MLIR_CAPI_EXPORTED uint64_t circtESIWindowFieldTypeGetNumItems(MlirType field);
+MLIR_CAPI_EXPORTED uint64_t
+circtESIWindowFieldTypeGetBulkCountWidth(MlirType field);
+
+//===----------------------------------------------------------------------===//
 // Services
 //===----------------------------------------------------------------------===//
 
 typedef MlirLogicalResult (*CirctESIServiceGeneratorFunc)(
-    MlirOperation serviceImplementReqOp, MlirOperation declOp, void *userData);
+    MlirOperation serviceImplementReqOp, MlirOperation declOp,
+    MlirOperation recordOp, void *userData);
 MLIR_CAPI_EXPORTED void circtESIRegisterGlobalServiceGenerator(
     MlirStringRef impl_type, CirctESIServiceGeneratorFunc, void *userData);
 

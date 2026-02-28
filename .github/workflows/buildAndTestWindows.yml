@@ -1,12 +1,17 @@
 name: Windows build and test
 
-# Run on main (after PRs land) to ensure that they aren't heinously breaking the
-# Windows build.
 on:
   push:
     branches:
       - main
+  pull_request:
+    types: [assigned, opened, synchronize, reopened]
   workflow_dispatch:
+
+# Cancel previous CI builds when a new push occurs to the same PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Build CIRCT and run its tests.
@@ -16,12 +21,13 @@ jobs:
     # This should not be needed, but the unified job unconditionally requires this permission currently.
     permissions:
       contents: write # Upload assets to release.
+      actions: write
     with:
       runner: windows-2022
       cmake_build_type: release
       llvm_enable_assertions: ON
       build_shared_libs: OFF
       llvm_force_enable_stats: ON
-      runTests: true
+      run_tests: true
       cmake_c_compiler: cl
       cmake_cxx_compiler: cl

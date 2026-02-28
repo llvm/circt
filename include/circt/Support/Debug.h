@@ -15,6 +15,7 @@
 
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Support/Debug.h"
 
 namespace circt {
 
@@ -25,7 +26,7 @@ namespace circt {
 ///
 /// This is commonly used for generating a header in debug information.  The
 /// format is modeled after LLVM/MLIR/CIRCT source file headers.
-llvm::raw_ostream &debugHeader(llvm::StringRef str, int width = 80);
+llvm::raw_ostream &debugHeader(const llvm::Twine &str, unsigned width = 80);
 
 /// Write a boilerplate header for a pass to the debug stream.  This generates
 /// output like the following if the pass's name is "FooPass":
@@ -34,13 +35,45 @@ llvm::raw_ostream &debugHeader(llvm::StringRef str, int width = 80);
 ///
 /// This is commonly used to generate a header in debug when a pass starts
 /// running.
-llvm::raw_ostream &debugPassHeader(const mlir::Pass *pass, int width = 80);
+llvm::raw_ostream &debugPassHeader(const mlir::Pass *pass, unsigned width = 80);
 
 /// Write a boilerplate footer to the debug stream to indicate that a pass has
 /// ended.  This produces text like the following:
 ///
 ///    ===-----------------------------------===
-llvm::raw_ostream &debugFooter(int width = 80);
+llvm::raw_ostream &debugFooter(unsigned width = 80);
+
+#ifndef NDEBUG
+/// RAII helper for creating a pass header and footer automatically.  The heaer
+/// is printed on construction and the footer on destruction.
+class ScopedDebugPassLogger {
+
+public:
+  ScopedDebugPassLogger(const mlir::Pass *pass, unsigned width = 80)
+      : pass(pass), width(width) {
+    if (::llvm::DebugFlag &&
+        ::llvm::isCurrentDebugType(pass->getArgument().data(), 1))
+      debugPassHeader(pass, width) << "\n";
+  }
+
+  ~ScopedDebugPassLogger() {
+    if (::llvm::DebugFlag &&
+        ::llvm::isCurrentDebugType(pass->getArgument().data(), 1))
+      debugFooter(width) << "\n";
+  }
+
+private:
+  const mlir::Pass *pass;
+  unsigned width;
+};
+
+#define CIRCT_DEBUG_SCOPED_PASS_LOGGER(PASS)                                   \
+  ScopedDebugPassLogger _scopedDebugPassLogger(PASS)
+#else
+#define CIRCT_DEBUG_SCOPED_PASS_LOGGER(PASS)                                   \
+  do {                                                                         \
+  } while (0)
+#endif
 
 } // namespace circt
 

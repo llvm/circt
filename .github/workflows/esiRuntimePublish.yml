@@ -17,51 +17,111 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - os: ubuntu-20.04
-            cibw_build: cp38-manylinux_x86_64
-          - os: ubuntu-20.04
+          - os: ubuntu-24.04
             cibw_build: cp39-manylinux_x86_64
-          - os: ubuntu-20.04
+          - os: ubuntu-24.04
             cibw_build: cp310-manylinux_x86_64
-          - os: ubuntu-20.04
+          - os: ubuntu-24.04
             cibw_build: cp311-manylinux_x86_64
-          - os: ubuntu-20.04
+          - os: ubuntu-24.04
             cibw_build: cp312-manylinux_x86_64
-          #- os: ubuntu-20.04
-          #  cibw_build: cp313-manylinux_x86_64
+          - os: ubuntu-24.04
+            cibw_build: cp313-manylinux_x86_64
+          - os: ubuntu-24.04
+            cibw_build: cp314-manylinux_x86_64
+          - os: windows-2022
+            cibw_build: cp39-win_amd64
+          - os: windows-2022
+            cibw_build: cp310-win_amd64
+          - os: windows-2022
+            cibw_build: cp311-win_amd64
+          - os: windows-2022
+            cibw_build: cp312-win_amd64
+          - os: windows-2022
+            cibw_build: cp313-win_amd64
+          - os: windows-2022
+            cibw_build: cp314-win_amd64
 
     steps:
       - name: Get CIRCT
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: false
 
       - name: Setup Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps with choco (Windows)
+        shell: pwsh
+        if: runner.os == 'Windows'
+        run: choco install ninja
+
+      - name: Setup vcpkg binary caching (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vcpkgBinaryCacheDir = "${{ github.workspace }}\vcpkg-binary-cache"
+          New-Item -ItemType Directory -Force -Path $vcpkgBinaryCacheDir
+          echo "VCPKG_BINARY_SOURCES=clear;files,$vcpkgBinaryCacheDir,readwrite" >> $env:GITHUB_ENV
+
+      - name: Cache vcpkg binaries (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}\vcpkg-binary-cache
+          key: vcpkg-${{ runner.os }}-x64-windows-zlib-grpc
+          restore-keys: |
+            vcpkg-${{ runner.os }}-x64-windows-zlib-grpc
+            vcpkg-${{ runner.os }}-x64-windows-
+
+      - name: Build additional c++ deps (Windows)
+        shell: pwsh
+        if: runner.os == 'Windows'
+        run: |
+          & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" --triplet x64-windows install zlib grpc
 
       - name: Install cibuildwheel
-        run: python -m pip install cibuildwheel==2.16.2
+        run: python -m pip install cibuildwheel==3.3.0
 
       - name: Build wheels
-        run: python -m cibuildwheel --output-dir wheelhouse ./lib/Dialect/ESI/runtime
+        if: runner.os != 'Windows'
         env:
           CIBW_BUILD: ${{ matrix.config.cibw_build }}
-          CIBW_MANYLINUX_X86_64_IMAGE: ghcr.io/circt/images/pycde-build
           SETUPTOOLS_SCM_DEBUG: True
+        run: python -m cibuildwheel --output-dir wheelhouse ./lib/Dialect/ESI/runtime
 
-      - name: Upload (stage) wheels as artifacts
-        uses: actions/upload-artifact@v3
+      - name: Build wheels (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          CIBW_BUILD: ${{ matrix.config.cibw_build }}
+          SETUPTOOLS_SCM_DEBUG: True
+        run: |
+          echo "Building wheel"
+          & "${env:GITHUB_WORKSPACE}\utils\find-vs.ps1"
+          python3 -m cibuildwheel --output-dir wheelhouse ./lib/Dialect/ESI/runtime
+
+      - name: Get wheel name
+        shell: bash
+        id: whl-name
+        run: |
+          cd wheelhouse
+          echo WHL=`ls *.whl` >> "$GITHUB_OUTPUT"
+
+      - name: Upload wheels as artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: python-wheels
-          path: ./wheelhouse/*.whl
+          name: ${{ steps.whl-name.outputs.WHL }}
+          path: wheelhouse/${{ steps.whl-name.outputs.WHL }}
           retention-days: 7
           if-no-files-found: error
 
   push_wheels:
     name: Push wheels (Tag or Weekly)
-    runs-on: ubuntu-20.04
-    if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'schedule')
+    runs-on: ubuntu-24.04
     needs: build_wheels
     environment:
       name: pypi
@@ -71,10 +131,10 @@ jobs:
 
     steps:
       - name: Download wheels
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: python-wheels
           path: ./wheelhouse/
+          merge-multiple: true
 
       - name: List downloaded wheels
         run: ls -laR
@@ -82,6 +142,7 @@ jobs:
 
       - name: Upload wheels to pypi
         uses: pypa/gh-action-pypi-publish@release/v1
+        if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         with:
           packages-dir: wheelhouse/
           verify-metadata: false

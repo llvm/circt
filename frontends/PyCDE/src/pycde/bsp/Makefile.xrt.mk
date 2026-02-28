@@ -16,6 +16,15 @@ SRC := hw
 BUILD := build_$(TARGET)
 TEMP := $(BUILD)/temp
 
+# Limit number of Vivado jobs to avoid running out of memory. 0 is unlimited.
+JOBS := 0
+
+# Frequency of the kernel in MHz
+FREQ := 150
+
+# Optimization level (set to 0-3, s, or quick)
+OPT := 1
+
 # Toggle to automatically set custom options for running in Azure NP-series VMs
 AZURE := true
 
@@ -24,15 +33,21 @@ LINK_OUT := $(BUILD)/$(NAME).link.xclbin
 XCL_OUT := $(NAME).$(TARGET).xclbin
 HOST_APP := $(BUILD)/host_app
 
-VPPFLAGS = --save-temps
+VPPFLAGS = --config xrt_vitis.cfg
+VPPFLAGS += --save-temps --kernel_frequency $(FREQ) -O $(OPT)
+VPPFLAGS += --remote_ip_cache cache
 
 # Platform must match the device + shell you're using
 # For Azure NP-series, use the official Azure Shell
 # For a local card or hw_emu mode, use the latest U250 XDMA Shell
 
 ifeq ($(AZURE), true)
-PLATFORM := xilinx_u250_gen3x16_xdma_2_1_202010_1
-# For Azure NP-series, output the routed netlist as a DCP instead of a bitsream!
+	ifeq ($(TARGET), hw_emu)
+		PLATFORM := xilinx_u250_gen3x16_xdma_4_1_202210_1
+	else
+		PLATFORM := xilinx_u250_gen3x16_xdma_2_1_202010_1
+	endif
+# For Azure NP-series, output the routed netlist as a DCP instead of a bitstream!
 VPPFLAGS += --advanced.param compiler.acceleratorBinaryContent=dcp
 else
 PLATFORM := xilinx_u250_gen3x16_xdma_4_1_202210_1
@@ -43,6 +58,10 @@ PACKAGE := $(BUILD)/package
 
 ifneq ($(TARGET), hw)
 VPPFLAGS += -g
+endif
+
+ifneq ($(JOBS), 0)
+	VPPFLAGS += --jobs $(JOBS)
 endif
 
 device2xsa = $(strip $(patsubst %.xpfm, % , $(shell basename $(PLATFORM))))
@@ -73,11 +92,10 @@ $(XCL_OUT): $(LINK_OUT)
 # Generate configuration for use with hw_emu mode
 emconfig: $(BUILD)/emconfig.json
 $(BUILD)/emconfig.json:
-	emconfigutil --platform $(PLATFORM) --od $(BUILD)
+	$(XILINX_VITIS)/bin/emconfigutil --platform $(PLATFORM) --od $(BUILD)
 
 clean:
 	rm -rf $(BUILD) temp_kernel .Xil vivado* kernel *.jou *.log *.wdb *.wcfg *.protoinst *.csv
-	rm -f runtime/*.so
 
 # Targets which only apply to image builds.
 ifeq ($(TARGET), hw)
@@ -97,13 +115,13 @@ azure_creds:
 		exit 1; \
 	fi
 
-	$(eval SAS_EXPIRY=$(shell date --date "now + 48hours" +"%Y-%m-%dT%0k:%MZ"))
+	$(eval SAS_EXPIRY=$(shell date --date "now + 16hours" +"%Y-%m-%dT%0k:%MZ"))
 	$(eval SAS=$(shell \
 		az storage container generate-sas \
 			--subscription $(AZ_FPGA_SUB) \
 			--account-name $(AZ_FPGA_STORAGE_ACCOUNT) \
 			--name $(AZ_FPGA_STORAGE_CONTAINER) \
-			--https-only --permissions rwc --auth-mode key \
+			--https-only --permissions rwc --as-user --auth-mode login \
 			--expiry $(SAS_EXPIRY) --output tsv))
 
 $(IMAGE_AZ_NAME).azure.xclbin: azure_creds $(XCL_OUT) validate-fpgaimage.sh
@@ -113,6 +131,7 @@ $(IMAGE_AZ_NAME).azure.xclbin: azure_creds $(XCL_OUT) validate-fpgaimage.sh
 	@echo "*   Using name $(IMAGE_AZ_NAME)"
 	@echo "*************************"
 
+	az account set --subscription "$(AZ_FPGA_SUB)"
 	az storage blob upload \
 		--subscription $(AZ_FPGA_SUB) \
 		--account-name $(AZ_FPGA_STORAGE_ACCOUNT) \
@@ -123,7 +142,8 @@ $(IMAGE_AZ_NAME).azure.xclbin: azure_creds $(XCL_OUT) validate-fpgaimage.sh
 	bash validate-fpgaimage.sh --storage-account $(AZ_FPGA_STORAGE_ACCOUNT) \
 														 --container $(AZ_FPGA_STORAGE_CONTAINER) \
 														 --netlist-name $(IMAGE_AZ_NAME).xclbin \
-														 --blob-container-sas "$(SAS)"
+														 --blob-container-sas "$(SAS)" \
+														 --endpoint fpga-attestation-alternate-vitis.azurewebsites.net
 
 	az storage blob download \
 		--subscription $(AZ_FPGA_SUB) \
@@ -133,10 +153,7 @@ $(IMAGE_AZ_NAME).azure.xclbin: azure_creds $(XCL_OUT) validate-fpgaimage.sh
 		--name $(IMAGE_AZ_NAME).azure.xclbin --file $(IMAGE_AZ_NAME).azure.xclbin
 
 validate-fpgaimage.sh:
-	wget -O azure_validate.zip \
-		https://fpgaattestation.blob.core.windows.net/validationscripts/validate.zip
-	unzip azure_validate.zip
-	mv scripts/validate-fpgaimage.sh .
+	wget https://raw.githubusercontent.com/teqdruid/azhpc-fpga-attestation/refs/heads/jodemme/alt-url/scripts/validate-fpgaimage.sh
 
 azpackage: $(NAME)_azpackage.tar.gz
 $(NAME)_azpackage.tar.gz: $(IMAGE_AZ_NAME).azure.xclbin

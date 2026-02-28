@@ -1,14 +1,17 @@
-// RUN: circt-opt %s --arc-allocate-state | FileCheck %s
+// RUN: circt-opt %s --arc-allocate-state=trace-taps=false | FileCheck %s --check-prefixes=CHECK,NOTAPS
+// RUN: circt-opt %s --arc-allocate-state=trace-taps=true  | FileCheck %s --check-prefixes=CHECK,TAPS
 
 // CHECK-LABEL: arc.model @test
+// NOTAPS-NOT:  traceTaps
+// TAPS-SAME:   traceTaps [#arc.trace_tap<i16, 0, ["foo", "bar"]>, #arc.trace_tap<i1, 2, ["baz"]>]
 arc.model @test io !hw.modty<input x : i1, output y : i1> {
 ^bb0(%arg0: !arc.storage):
-  // CHECK-NEXT: ([[PTR:%.+]]: !arc.storage<5780>):
+  // CHECK-NEXT: ([[PTR:%.+]]: !arc.storage<5799>):
 
-  // CHECK-NEXT: arc.alloc_storage [[PTR]][0] : (!arc.storage<5780>) -> !arc.storage<1159>
-  // CHECK-NEXT: arc.passthrough {
-  arc.passthrough {
-    // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][0] : !arc.storage<5780> -> !arc.storage<1159>
+  // CHECK-NEXT: arc.alloc_storage [[PTR]][16] : (!arc.storage<5799>) -> !arc.storage<1159>
+  // CHECK-NEXT: arc.initial {
+  arc.initial {
+    // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][16] : !arc.storage<5799> -> !arc.storage<1159>
     %0 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i1>
     arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i8>
     arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i16>
@@ -28,7 +31,7 @@ arc.model @test io !hw.modty<input x : i1, output y : i1> {
     // CHECK-NEXT: scf.execute_region {
     scf.execute_region {
       arc.state_read %0 : <i1>
-      // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][0] : !arc.storage<5780> -> !arc.storage<1159>
+      // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][16] : !arc.storage<5799> -> !arc.storage<1159>
       // CHECK-NEXT: [[STATE:%.+]] = arc.storage.get [[SUBPTR]][0] : !arc.storage<1159> -> !arc.state<i1>
       // CHECK-NEXT: arc.state_read [[STATE]] : <i1>
       arc.state_read %1 : <i1>
@@ -41,10 +44,10 @@ arc.model @test io !hw.modty<input x : i1, output y : i1> {
   }
   // CHECK-NEXT: }
 
-  // CHECK-NEXT: arc.alloc_storage [[PTR]][1168] : (!arc.storage<5780>) -> !arc.storage<4609>
-  // CHECK-NEXT: arc.passthrough {
-  arc.passthrough {
-    // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][1168] : !arc.storage<5780> -> !arc.storage<4609>
+  // CHECK-NEXT: arc.alloc_storage [[PTR]][1184] : (!arc.storage<5799>) -> !arc.storage<4609>
+  // CHECK-NEXT: arc.initial {
+  arc.initial {
+    // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][1184] : !arc.storage<5799> -> !arc.storage<4609>
     arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i1, i1>
     arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i8, i1>
     arc.alloc_memory %arg0 : (!arc.storage) -> !arc.memory<4 x i16, i1>
@@ -68,14 +71,50 @@ arc.model @test io !hw.modty<input x : i1, output y : i1> {
   }
   // CHECK-NEXT: }
 
-  // CHECK-NEXT: arc.alloc_storage [[PTR]][5778] : (!arc.storage<5780>) -> !arc.storage<2>
-  // CHECK-NEXT: arc.passthrough {
-  arc.passthrough {
+  // CHECK-NEXT: arc.alloc_storage %arg0[5794] : (!arc.storage<5799>) -> !arc.storage<2>
+  // CHECK-NEXT: arc.initial {
+  arc.initial {
     arc.root_input "x", %arg0 : (!arc.storage) -> !arc.state<i1>
     arc.root_output "y", %arg0 : (!arc.storage) -> !arc.state<i1>
-    // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][5778] : !arc.storage<5780> -> !arc.storage<2>
+    // CHECK-NEXT: [[SUBPTR:%.+]] = arc.storage.get [[PTR]][5794] : !arc.storage<5799> -> !arc.storage<2>
     // CHECK-NEXT: arc.root_input "x", [[SUBPTR]] {offset = 0 : i32}
     // CHECK-NEXT: arc.root_output "y", [[SUBPTR]] {offset = 1 : i32}
   }
   // CHECK-NEXT: }
+
+  // CHECK-NEXT: arc.alloc_storage [[PTR]][5796] : (!arc.storage<5799>) -> !arc.storage<3>
+  // CHECK-NEXT: arc.initial {
+  arc.initial {
+    %cstCAFE = hw.constant 0xCAFE: i16
+    %cstTrue = hw.constant 1 : i1
+    %0 = arc.alloc_state %arg0 {names = ["foo", "bar"]} : (!arc.storage) -> !arc.state<i16>
+    %1 = arc.alloc_state %arg0 {name = "baz"} : (!arc.storage) -> !arc.state<i1>
+    // TAPS:   arc.state_write %{{.+}} = %{{.+}} tap @test[0] : <i16>
+    // NOTAPS: arc.state_write %{{.+}} = %{{.+}} : <i16>
+    arc.state_write %0 = %cstCAFE : !arc.state<i16>
+    scf.execute_region {
+      // TAPS:   arc.state_write %{{.+}} = %{{.+}} tap @test[1] : <i1>
+      // NOTAPS: arc.state_write %{{.+}} = %{{.+}} : <i1>
+      arc.state_write %1 = %cstTrue : !arc.state<i1>
+      scf.yield
+    }
+  }
+}
+
+// CHECK-LABEL: arc.model @StructPadding
+// CHECK-NEXT: !arc.storage<12>
+arc.model @StructPadding io !hw.modty<> {
+^bb0(%arg0: !arc.storage):
+  // This !hw.struct is only 11 bits wide, but mapped to an !llvm.struct, each
+  // field gets byte-aligned.
+  arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<!hw.struct<tag: i5, sign_ext: i1, offset: i3, size: i2>>
+}
+
+// CHECK-LABEL: arc.model @ArrayPadding
+// CHECK-NEXT: !arc.storage<12>
+arc.model @ArrayPadding io !hw.modty<> {
+^bb0(%arg0: !arc.storage):
+  // This !hw.array is only 18 bits wide, but mapped to an !llvm.array, each
+  // element gets aligned to the next power-of-two.
+  arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<!hw.array<2xi9>>
 }

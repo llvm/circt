@@ -1,5 +1,6 @@
 ; RUN: firtool %s | FileCheck %s
 
+FIRRTL version 4.0.0
 circuit PortDelete : %[[
   {
     "class": "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",
@@ -16,7 +17,6 @@ circuit PortDelete : %[[
           "tpe": {
             "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
             "ref": {
-              "circuit": "PortDelete",
               "module": "PortDelete",
               "path": [
                 {
@@ -45,21 +45,21 @@ circuit PortDelete : %[[
   module MyView_companion :
 
     wire _WIRE : UInt<1>
-    _WIRE <= UInt<1>("h0")
+    connect _WIRE, UInt<1>(0h0)
 
   module DUT :
     output out : UInt<1>
 
     wire w : UInt<1>
-    w <= UInt<1>("h1")
-    out <= w
+    connect w, UInt<1>(0h1)
+    connect out, w
     inst MyView_companion of MyView_companion
 
-  module PortDelete :
+  public module PortDelete :
     output out : UInt<1>
 
     inst dut of DUT
-    out <= dut.out
+    connect out, dut.out
 
 ; Assert that the DUT has no ports in Verilog.  This ensures that even though
 ; wire "w" is part of a Grand Central View, it does not block optimizations.

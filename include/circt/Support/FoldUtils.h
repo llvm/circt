@@ -9,6 +9,7 @@
 #ifndef CIRCT_SUPPORT_FOLDUTILS_H
 #define CIRCT_SUPPORT_FOLDUTILS_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "llvm/ADT/APInt.h"
 

@@ -55,8 +55,19 @@ LogicalResult circt::arc::collectStates(Value storage, unsigned offset,
     if (!isa<AllocStateOp, RootInputOp, RootOutputOp, AllocMemoryOp>(op))
       continue;
 
+    SmallVector<StringAttr> names;
+
     auto opName = op->getAttrOfType<StringAttr>("name");
-    if (!opName || opName.getValue().empty())
+    if (opName && !opName.getValue().empty())
+      names.push_back(opName);
+
+    if (auto nameAttrs = op->getAttrOfType<ArrayAttr>("names"))
+      for (auto attr : nameAttrs)
+        if (auto nameAttr = dyn_cast<StringAttr>(attr))
+          if (!nameAttr.empty())
+            names.push_back(nameAttr);
+
+    if (names.empty())
       continue;
 
     auto opOffset = op->getAttrOfType<IntegerAttr>("offset");
@@ -64,9 +75,9 @@ LogicalResult circt::arc::collectStates(Value storage, unsigned offset,
       return op->emitOpError(
           "without allocated offset; run state allocation first");
 
+    StateInfo stateInfo;
     if (isa<AllocStateOp, RootInputOp, RootOutputOp>(op)) {
       auto result = op->getResult(0);
-      auto &stateInfo = states.emplace_back();
       stateInfo.type = StateInfo::Register;
       if (isa<RootInputOp>(op))
         stateInfo.type = StateInfo::Input;
@@ -76,9 +87,12 @@ LogicalResult circt::arc::collectStates(Value storage, unsigned offset,
         if (alloc.getTap())
           stateInfo.type = StateInfo::Wire;
       }
-      stateInfo.name = opName.getValue();
       stateInfo.offset = opOffset.getValue().getZExtValue() + offset;
       stateInfo.numBits = cast<StateType>(result.getType()).getBitWidth();
+      for (auto name : names) {
+        stateInfo.name = name.getValue();
+        states.push_back(stateInfo);
+      }
       continue;
     }
 
@@ -89,13 +103,15 @@ LogicalResult circt::arc::collectStates(Value storage, unsigned offset,
             "without allocated stride; run state allocation first");
       auto memType = memOp.getType();
       auto intType = memType.getWordType();
-      auto &stateInfo = states.emplace_back();
       stateInfo.type = StateInfo::Memory;
-      stateInfo.name = opName.getValue();
       stateInfo.offset = opOffset.getValue().getZExtValue() + offset;
       stateInfo.numBits = intType.getWidth();
       stateInfo.memoryStride = stride.getValue().getZExtValue();
       stateInfo.memoryDepth = memType.getNumWords();
+      for (auto name : names) {
+        stateInfo.name = name.getValue();
+        states.push_back(stateInfo);
+      }
       continue;
     }
   }
@@ -105,6 +121,7 @@ LogicalResult circt::arc::collectStates(Value storage, unsigned offset,
 
 LogicalResult circt::arc::collectModels(mlir::ModuleOp module,
                                         SmallVector<ModelInfo> &models) {
+
   for (auto modelOp : module.getOps<ModelOp>()) {
     auto storageArg = modelOp.getBody().getArgument(0);
     auto storageType = cast<StorageType>(storageArg.getType());
@@ -112,10 +129,12 @@ LogicalResult circt::arc::collectModels(mlir::ModuleOp module,
     SmallVector<StateInfo> states;
     if (failed(collectStates(storageArg, 0, states)))
       return failure();
-    llvm::sort(states, [](auto &a, auto &b) { return a.offset < b.offset; });
+    llvm::stable_sort(states,
+                      [](auto &a, auto &b) { return a.offset < b.offset; });
 
     models.emplace_back(std::string(modelOp.getName()), storageType.getSize(),
-                        std::move(states));
+                        std::move(states), modelOp.getInitialFnAttr(),
+                        modelOp.getFinalFnAttr());
   }
 
   return success();
@@ -130,6 +149,11 @@ void circt::arc::serializeModelInfoToJson(llvm::raw_ostream &outputStream,
       json.object([&] {
         json.attribute("name", model.name);
         json.attribute("numStateBytes", model.numStateBytes);
+        json.attribute("initialFnSym", !model.initialFnSym
+                                           ? ""
+                                           : model.initialFnSym.getValue());
+        json.attribute("finalFnSym",
+                       !model.finalFnSym ? "" : model.finalFnSym.getValue());
         json.attributeArray("states", [&] {
           for (const auto &state : model.states) {
             json.object([&] {
@@ -162,4 +186,27 @@ void circt::arc::serializeModelInfoToJson(llvm::raw_ostream &outputStream,
       });
     }
   });
+}
+
+circt::arc::ModelInfoAnalysis::ModelInfoAnalysis(Operation *container) {
+  assert(container->getNumRegions() == 1 && "Expected single region");
+  assert(container->getRegion(0).getBlocks().size() == 1 &&
+         "Expected single body block");
+
+  for (auto modelOp :
+       container->getRegion(0).getBlocks().front().getOps<ModelOp>()) {
+    auto storageArg = modelOp.getBody().getArgument(0);
+    auto storageType = cast<StorageType>(storageArg.getType());
+
+    SmallVector<StateInfo> states;
+    if (failed(collectStates(storageArg, 0, states))) {
+      assert(false && "Failed to collect model states");
+      continue;
+    }
+    llvm::stable_sort(states,
+                      [](auto &a, auto &b) { return a.offset < b.offset; });
+    infoMap.try_emplace(modelOp, std::string(modelOp.getName()),
+                        storageType.getSize(), std::move(states),
+                        modelOp.getInitialFnAttr(), modelOp.getFinalFnAttr());
+  }
 }

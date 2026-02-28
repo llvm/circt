@@ -10,7 +10,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/SSP/SSPAttributes.h"
+#include "circt/Dialect/SSP/SSPOps.h"
+#include "circt/Dialect/SSP/SSPPasses.h"
+#include "circt/Dialect/SSP/Utilities.h"
+#include "circt/Scheduling/Problems.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace ssp {
+#define GEN_PASS_DEF_ROUNDTRIP
+#include "circt/Dialect/SSP/SSPPasses.h.inc"
+} // namespace ssp
+} // namespace circt
 
 using namespace circt;
 using namespace scheduling;
@@ -33,17 +46,17 @@ static InstanceOp roundtrip(InstanceOp instOp, bool check, bool verify,
                             OpBuilder &builder) {
   auto problemName = instOp.getProblemName();
 
-  if (problemName.equals("Problem"))
+  if (problemName == "Problem")
     return roundtripAs<Problem>(instOp, check, verify, builder);
-  if (problemName.equals("CyclicProblem"))
+  if (problemName == "CyclicProblem")
     return roundtripAs<CyclicProblem>(instOp, check, verify, builder);
-  if (problemName.equals("SharedOperatorsProblem"))
+  if (problemName == "SharedOperatorsProblem")
     return roundtripAs<SharedOperatorsProblem>(instOp, check, verify, builder);
-  if (problemName.equals("ModuloProblem"))
+  if (problemName == "ModuloProblem")
     return roundtripAs<ModuloProblem>(instOp, check, verify, builder);
-  if (problemName.equals("ChainingProblem"))
+  if (problemName == "ChainingProblem")
     return roundtripAs<ChainingProblem>(instOp, check, verify, builder);
-  if (problemName.equals("ChainingCyclicProblem"))
+  if (problemName == "ChainingCyclicProblem")
     return roundtripAs<ChainingCyclicProblem>(instOp, check, verify, builder);
 
   llvm::errs() << "ssp-roundtrip: Unknown problem '" << problemName << "'\n";
@@ -51,7 +64,7 @@ static InstanceOp roundtrip(InstanceOp instOp, bool check, bool verify,
 }
 
 namespace {
-struct RoundtripPass : public RoundtripBase<RoundtripPass> {
+struct RoundtripPass : public circt::ssp::impl::RoundtripBase<RoundtripPass> {
   void runOnOperation() override;
 };
 } // end anonymous namespace

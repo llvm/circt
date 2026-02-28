@@ -1,3 +1,6 @@
+get_property(dialect_libs GLOBAL PROPERTY CIRCT_DIALECT_LIBS)
+get_property(conversion_libs GLOBAL PROPERTY CIRCT_CONVERSION_LIBS)
+
 set(LLVM_LINK_COMPONENTS
   Support
 )
@@ -8,92 +11,20 @@ add_circt_tool(circt-opt
   DEPENDS
   SUPPORT_PLUGINS
 )
+
 llvm_update_compile_flags(circt-opt)
+
 target_link_libraries(circt-opt
   PRIVATE
-  CIRCTAffineToLoopSchedule
+  ${dialect_libs}
+  ${conversion_libs}
+
   CIRCTAnalysisTestPasses
-  CIRCTArc
-  CIRCTArcToLLVM
-  CIRCTArcTransforms
-  CIRCTCalyx
-  CIRCTCalyxToHW
-  CIRCTCalyxNative
-  CIRCTCalyxToFSM
-  CIRCTCalyxTransforms
-  CIRCTComb
-  CIRCTCombToSMT
-  CIRCTCombTransforms
-  CIRCTConvertToArcs
-  CIRCTDC
-  CIRCTDCToHW
-  CIRCTDCTransforms
-  CIRCTDebug
-  CIRCTEmit
-  CIRCTESI
-  CIRCTExportChiselInterface
+  CIRCTBMCTransforms
   CIRCTExportVerilog
-  CIRCTFIRRTL
-  CIRCTFIRRTLToHW
-  CIRCTFIRRTLTransforms
-  CIRCTFSM
-  CIRCTFSMTransforms
-  CIRCTFSMToSV
-  CIRCTHandshake
-  CIRCTHandshakeToDC
-  CIRCTHandshakeToHW
-  CIRCTHandshakeTransforms
   CIRCTLECTransforms
-  CIRCTLLHD
-  CIRCTLLHDToLLVM
-  CIRCTHWToLLVM
-  CIRCTCombToArith
-  CIRCTCombToLLVM
-  CIRCTLLHDTransforms
-  CIRCTMoore
-  CIRCTMooreToCore
-  CIRCTMSFT
-  CIRCTMSFTTransforms
-  CIRCTHW
-  CIRCTHWArith
-  CIRCTHWArithToHW
-  CIRCTHWToBTOR2
-  CIRCTIbis
-  CIRCTIbisTransforms
-  CIRCTInteropDialect
-  CIRCTHWToLLHD
-  CIRCTHWToSMT
-  CIRCTHWToSystemC
-  CIRCTHWToSV
-  CIRCTHWTransforms
-  CIRCTLoopSchedule
-  CIRCTLoopScheduleToCalyx
-  CIRCTLTL
-  CIRCTSCFToCalyx
-  CIRCTScheduling
-  CIRCTSeq
-  CIRCTSeqToSV
-  CIRCTSeqTransforms
-  CIRCTSimToSV
-  CIRCTSSP
-  CIRCTSSPTransforms
-  CIRCTCFToHandshake
-  CIRCTOM
-  CIRCTOMTransforms
-  CIRCTPipelineOps
-  CIRCTPipelineToHW
-  CIRCTPipelineTransforms
-  CIRCTSMT
-  CIRCTSMTToZ3LLVM
-  CIRCTSV
-  CIRCTSVTransforms
-  CIRCTHWArith
-  CIRCTSystemC
-  CIRCTSystemCTransforms
+  CIRCTCoreToFSM
   CIRCTTransforms
-  CIRCTVerif
-  CIRCTVerifToSMT
-  CIRCTVerifToSV
 
   MLIRIR
   MLIRLLVMDialect
@@ -107,6 +38,8 @@ target_link_libraries(circt-opt
   MLIREmitCDialect
   MLIRFuncInlinerExtension
   MLIRVectorDialect
+  MLIRIndexDialect
+  MLIRLLVMIRTransforms
 )
 
 export_executable_symbols_for_plugins(circt-opt)

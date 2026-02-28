@@ -9,8 +9,6 @@
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/Emit/EmitDialect.h"
-#include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -32,6 +30,9 @@ using namespace arc;
 
 namespace {
 struct StripSVPass : public arc::impl::StripSVBase<StripSVPass> {
+  explicit StripSVPass(bool asyncResetsAsSync) {
+    this->asyncResetsAsSync = asyncResetsAsSync;
+  }
   void runOnOperation() override;
   SmallVector<Operation *> opsToDelete;
   SmallPtrSet<StringAttr, 4> clockGateModuleNames;
@@ -75,11 +76,6 @@ void StripSVPass::runOnOperation() {
   }
   LLVM_DEBUG(llvm::dbgs() << "Found " << clockGateModuleNames.size()
                           << " clock gates\n");
-
-  // Remove OM and Emit dialect nodes.
-  for (auto &op : llvm::make_early_inc_range(*mlirModule.getBody()))
-    if (isa<emit::EmitDialect, om::OMDialect>(op.getDialect()))
-      op.erase();
 
   // Remove `sv.*` operation attributes.
   mlirModule.walk([](Operation *op) {
@@ -142,18 +138,26 @@ void StripSVPass::runOnOperation() {
       // Canonicalize registers.
       if (auto reg = dyn_cast<seq::FirRegOp>(&op)) {
         OpBuilder builder(reg);
-        Value next;
-        // Note: this register will have an sync reset regardless.
-        if (reg.hasReset())
-          next = builder.create<comb::MuxOp>(reg.getLoc(), reg.getReset(),
-                                             reg.getResetValue(), reg.getNext(),
-                                             false);
-        else
-          next = reg.getNext();
 
-        Value compReg = builder.create<seq::CompRegOp>(
-            reg.getLoc(), next.getType(), next, reg.getClk(), reg.getNameAttr(),
-            Value{}, Value{}, Value{}, reg.getInnerSymAttr());
+        if (reg.getIsAsync() && !asyncResetsAsSync) {
+          reg.emitOpError("only synchronous resets are currently supported");
+          return signalPassFailure();
+        }
+
+        Value presetValue;
+        // Materialize initial value, assume zero initialization as default.
+        if (reg.getPreset() && !reg.getPreset()->isZero()) {
+          assert(hw::type_isa<IntegerType>(reg.getType()) &&
+                 "cannot lower non integer preset");
+          presetValue = circt::seq::createConstantInitialValue(
+              builder, reg.getLoc(),
+              IntegerAttr::get(reg.getType(), *reg.getPreset()));
+        }
+
+        Value compReg = seq::CompRegOp::create(
+            builder, reg.getLoc(), reg.getType(), reg.getNext(), reg.getClk(),
+            reg.getNameAttr(), reg.getReset(), reg.getResetValue(),
+            /*initialValue*/ presetValue, reg.getInnerSymAttr());
         reg.replaceAllUsesWith(compReg);
         opsToDelete.push_back(reg);
         continue;
@@ -165,9 +169,9 @@ void StripSVPass::runOnOperation() {
         auto modName = instOp.getModuleNameAttr().getAttr();
         ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
         if (clockGateModuleNames.contains(modName)) {
-          auto gated = builder.create<seq::ClockGateOp>(
-              instOp.getOperand(0), instOp.getOperand(1), instOp.getOperand(2),
-              hw::InnerSymAttr{});
+          auto gated = seq::ClockGateOp::create(
+              builder, instOp.getOperand(0), instOp.getOperand(1),
+              instOp.getOperand(2), hw::InnerSymAttr{});
           instOp.replaceAllUsesWith(gated);
           opsToDelete.push_back(instOp);
         }
@@ -179,6 +183,6 @@ void StripSVPass::runOnOperation() {
     op->erase();
 }
 
-std::unique_ptr<Pass> arc::createStripSVPass() {
-  return std::make_unique<StripSVPass>();
+std::unique_ptr<Pass> arc::createStripSVPass(bool asyncResetsAsSync) {
+  return std::make_unique<StripSVPass>(asyncResetsAsSync);
 }

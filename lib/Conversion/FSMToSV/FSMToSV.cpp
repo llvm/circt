@@ -7,7 +7,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/FSMToSV.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FSM/FSMOps.h"
@@ -15,11 +14,17 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/BackedgeBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #include <memory>
 #include <variant>
+
+namespace circt {
+#define GEN_PASS_DEF_CONVERTFSMTOSV
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -147,8 +152,8 @@ StateEncoding::StateEncoding(OpBuilder &b, hw::TypeScopeOp typeScope,
 
   OpBuilder::InsertionGuard guard(b);
   b.setInsertionPointToStart(&typeScope.getBodyRegion().front());
-  auto typedeclEnumType = b.create<hw::TypedeclOp>(
-      loc, b.getStringAttr(hwModule.getName() + "_state_t"),
+  auto typedeclEnumType = hw::TypedeclOp::create(
+      b, loc, b.getStringAttr(hwModule.getName() + "_state_t"),
       TypeAttr::get(rawEnumType), nullptr);
 
   stateType = hw::TypeAliasType::get(
@@ -161,8 +166,8 @@ StateEncoding::StateEncoding(OpBuilder &b, hw::TypeScopeOp typeScope,
   for (auto state : machine.getBody().getOps<StateOp>()) {
     auto fieldAttr = hw::EnumFieldAttr::get(
         loc, b.getStringAttr(state.getName()), stateType);
-    auto enumConstantOp = b.create<hw::EnumConstantOp>(
-        loc, fieldAttr.getType().getValue(), fieldAttr);
+    auto enumConstantOp = hw::EnumConstantOp::create(
+        b, loc, fieldAttr.getType().getValue(), fieldAttr);
     setEncoding(state, enumConstantOp,
                 /*wire=*/true);
   }
@@ -198,11 +203,11 @@ void StateEncoding::setEncoding(StateOp state, Value v, bool wire) {
   if (wire) {
     auto loc = machine.getLoc();
     auto stateType = getStateType();
-    auto stateEncodingWire = b.create<sv::RegOp>(
-        loc, stateType, b.getStringAttr("to_" + state.getName()),
+    auto stateEncodingWire = sv::RegOp::create(
+        b, loc, stateType, b.getStringAttr("to_" + state.getName()),
         hw::InnerSymAttr::get(state.getNameAttr()));
-    b.create<sv::AssignOp>(loc, stateEncodingWire, v);
-    encodedValue = b.create<sv::ReadInOutOp>(loc, stateEncodingWire);
+    sv::AssignOp::create(b, loc, stateEncodingWire, v);
+    encodedValue = sv::ReadInOutOp::create(b, loc, stateEncodingWire);
   } else
     encodedValue = v;
   stateToValue[state] = encodedValue;
@@ -363,13 +368,13 @@ void MachineOpConverter::buildStateCaseMux(
   // Default assignments.
   for (auto &assignment : assignments) {
     if (assignment.defaultValue)
-      b.create<sv::BPAssignOp>(assignment.wire.getLoc(), assignment.wire,
-                               *assignment.defaultValue);
+      sv::BPAssignOp::create(b, assignment.wire.getLoc(), assignment.wire,
+                             *assignment.defaultValue);
   }
 
   // Case assignments.
-  caseMux = b.create<sv::CaseOp>(
-      machineOp.getLoc(), CaseStmtType::CaseStmt,
+  caseMux = sv::CaseOp::create(
+      b, machineOp.getLoc(), CaseStmtType::CaseStmt,
       /*sv::ValidationQualifierTypeEnum::ValidationQualifierUnique, */ select,
       /*numCases=*/machineOp.getNumStates() + 1, [&](size_t caseIdx) {
         // Make Verilator happy for sized enums.
@@ -390,7 +395,7 @@ void MachineOpConverter::buildStateCaseMux(
         continue;
       b.setInsertionPointToEnd(caseInfo.block);
       if (auto v = std::get_if<Value>(&assignmentInState->second); v) {
-        b.create<sv::BPAssignOp>(machineOp.getLoc(), assignment.wire, *v);
+        sv::BPAssignOp::create(b, machineOp.getLoc(), assignment.wire, *v);
       } else {
         // Nested case statement.
         llvm::SmallVector<CaseMuxItem, 4> nestedAssignments;
@@ -405,8 +410,6 @@ void MachineOpConverter::buildStateCaseMux(
 LogicalResult MachineOpConverter::dispatch() {
   b.setInsertionPoint(machineOp);
   auto loc = machineOp.getLoc();
-  if (machineOp.getNumStates() < 2)
-    return machineOp.emitOpError() << "expected at least 2 states.";
 
   // Clone all referenced constants into the machine body - constants may have
   // been moved to the machine parent due to the lack of IsolationFromAbove.
@@ -415,7 +418,8 @@ LogicalResult MachineOpConverter::dispatch() {
   // 1) Get the port info of the machine and create a new HW module for it.
   SmallVector<hw::PortInfo, 16> ports;
   auto clkRstIdxs = getMachinePortInfo(ports, machineOp, b);
-  hwModuleOp = b.create<hw::HWModuleOp>(loc, machineOp.getSymNameAttr(), ports);
+  hwModuleOp =
+      hw::HWModuleOp::create(b, loc, machineOp.getSymNameAttr(), ports);
   hwModuleOp->setAttr(emit::getFragmentsAttrName(),
                       b.getArrayAttr({headerName}));
   b.setInsertionPointToStart(hwModuleOp.getBodyBlock());
@@ -438,10 +442,10 @@ LogicalResult MachineOpConverter::dispatch() {
   auto stateType = encoding->getStateType();
 
   auto nextStateWire =
-      b.create<sv::RegOp>(loc, stateType, b.getStringAttr("state_next"));
-  auto nextStateWireRead = b.create<sv::ReadInOutOp>(loc, nextStateWire);
-  stateReg = b.create<seq::CompRegOp>(
-      loc, nextStateWireRead, clock, reset,
+      sv::RegOp::create(b, loc, stateType, b.getStringAttr("state_next"));
+  auto nextStateWireRead = sv::ReadInOutOp::create(b, loc, nextStateWire);
+  stateReg = seq::CompRegOp::create(
+      b, loc, nextStateWireRead, clock, reset,
       /*reset value=*/encoding->encode(machineOp.getInitialStateOp()),
       "state_reg");
 
@@ -453,12 +457,12 @@ LogicalResult MachineOpConverter::dispatch() {
                                          "for the initial value.";
     Type varType = variableOp.getType();
     auto varLoc = variableOp.getLoc();
-    auto varNextState = b.create<sv::RegOp>(
-        varLoc, varType, b.getStringAttr(variableOp.getName() + "_next"));
-    auto varResetVal = b.create<hw::ConstantOp>(varLoc, initValueAttr);
-    auto variableReg = b.create<seq::CompRegOp>(
-        varLoc, b.create<sv::ReadInOutOp>(varLoc, varNextState), clock, reset,
-        varResetVal, b.getStringAttr(variableOp.getName() + "_reg"));
+    auto varNextState = sv::RegOp::create(
+        b, varLoc, varType, b.getStringAttr(variableOp.getName() + "_next"));
+    auto varResetVal = hw::ConstantOp::create(b, varLoc, initValueAttr);
+    auto variableReg = seq::CompRegOp::create(
+        b, varLoc, sv::ReadInOutOp::create(b, varLoc, varNextState), clock,
+        reset, varResetVal, b.getStringAttr(variableOp.getName() + "_reg"));
     variableToRegister[variableOp] = variableReg;
     variableNextStateWires[variableOp] = varNextState;
     // Postpone value replacement until all logic has been created.
@@ -495,8 +499,8 @@ LogicalResult MachineOpConverter::dispatch() {
       continue;
     auto outputPortType = port.type;
     CaseMuxItem outputAssignment;
-    outputAssignment.wire = b.create<sv::RegOp>(
-        machineOp.getLoc(), outputPortType,
+    outputAssignment.wire = sv::RegOp::create(
+        b, machineOp.getLoc(), outputPortType,
         b.getStringAttr("output_" + std::to_string(portIndex)));
     outputAssignment.select = stateReg;
     for (auto &state : orderedStates)
@@ -558,7 +562,7 @@ LogicalResult MachineOpConverter::dispatch() {
                                   outputCaseAssignments.end());
 
   {
-    auto alwaysCombOp = b.create<sv::AlwaysCombOp>(loc);
+    auto alwaysCombOp = sv::AlwaysCombOp::create(b, loc);
     OpBuilder::InsertionGuard g(b);
     b.setInsertionPointToStart(alwaysCombOp.getBodyBlock());
     buildStateCaseMux(nextStateCaseAssignments);
@@ -572,12 +576,12 @@ LogicalResult MachineOpConverter::dispatch() {
   llvm::SmallVector<Value> outputPortAssignments;
   for (auto outputAssignment : outputCaseAssignments)
     outputPortAssignments.push_back(
-        b.create<sv::ReadInOutOp>(machineOp.getLoc(), outputAssignment.wire));
+        sv::ReadInOutOp::create(b, machineOp.getLoc(), outputAssignment.wire));
 
   // Delete the default created output op and replace it with the output
   // muxes.
   auto *oldOutputOp = hwModuleOp.getBodyBlock()->getTerminator();
-  b.create<hw::OutputOp>(loc, outputPortAssignments);
+  hw::OutputOp::create(b, loc, outputPortAssignments);
   oldOutputOp->erase();
 
   // Erase the original machine op.
@@ -635,8 +639,8 @@ MachineOpConverter::convertTransitions( // NOLINT(misc-no-recursion)
           convertTransitions(currentState, transitions.drop_front());
       if (failed(otherNextState))
         return failure();
-      comb::MuxOp nextStateMux = b.create<comb::MuxOp>(
-          transition.getLoc(), guard, nextState, *otherNextState, false);
+      comb::MuxOp nextStateMux = comb::MuxOp::create(
+          b, transition.getLoc(), guard, nextState, *otherNextState, false);
       nextState = nextStateMux;
     }
   }
@@ -660,8 +664,18 @@ MachineOpConverter::convertState(StateOp state) {
     res.outputs = outputOp.getOperands(); // 3.2
   }
 
-  auto transitions = llvm::SmallVector<TransitionOp>(
-      state.getTransitions().getOps<TransitionOp>());
+  SmallVector<TransitionOp> transitions;
+  for (auto &op : state.getTransitions().getOps()) {
+    if (auto transOp = dyn_cast<TransitionOp>(op)) {
+      transitions.push_back(transOp);
+    } else {
+      // Clone operations which are inside `transitions` region but outside
+      // `guard` region.
+      auto opClone = b.clone(op);
+      for (auto [i, res] : llvm::enumerate(op.getResults()))
+        res.replaceAllUsesWith(opClone->getResult(i));
+    }
+  }
   // 3.3, 3.4) Convert the transitions and record the next-state value
   // derived from the transitions being selected in a priority-encoded manner.
   auto nextStateRes = convertTransitions(state, transitions);
@@ -671,7 +685,7 @@ MachineOpConverter::convertState(StateOp state) {
   return res;
 }
 
-struct FSMToSVPass : public ConvertFSMToSVBase<FSMToSVPass> {
+struct FSMToSVPass : public circt::impl::ConvertFSMToSVBase<FSMToSVPass> {
   void runOnOperation() override;
 };
 
@@ -692,15 +706,15 @@ void FSMToSVPass::runOnOperation() {
   // typedefs.
   b.setInsertionPointToStart(module.getBody());
   hw::TypeScopeOp typeScope =
-      b.create<hw::TypeScopeOp>(loc, b.getStringAttr("fsm_enum_typedecls"));
+      hw::TypeScopeOp::create(b, loc, b.getStringAttr("fsm_enum_typedecls"));
   typeScope.getBodyRegion().push_back(new Block());
 
-  auto file = b.create<emit::FileOp>(loc, "fsm_enum_typedefs.sv", [&] {
-    b.create<emit::RefOp>(loc,
-                          FlatSymbolRefAttr::get(typeScope.getSymNameAttr()));
+  auto file = emit::FileOp::create(b, loc, "fsm_enum_typedefs.sv", [&] {
+    emit::RefOp::create(b, loc,
+                        FlatSymbolRefAttr::get(typeScope.getSymNameAttr()));
   });
-  auto fragment = b.create<emit::FragmentOp>(loc, "FSM_ENUM_TYPEDEFS", [&] {
-    b.create<sv::VerbatimOp>(loc, "`include \"" + file.getFileName() + "\"");
+  auto fragment = emit::FragmentOp::create(b, loc, "FSM_ENUM_TYPEDEFS", [&] {
+    sv::VerbatimOp::create(b, loc, "`include \"" + file.getFileName() + "\"");
   });
 
   auto headerName = FlatSymbolRefAttr::get(fragment.getSymNameAttr());
@@ -728,8 +742,8 @@ void FSMToSVPass::runOnOperation() {
     llvm::SmallVector<Value, 4> operands;
     llvm::transform(instance.getOperands(), std::back_inserter(operands),
                     [&](auto operand) { return operand; });
-    auto hwInstance = b.create<hw::InstanceOp>(
-        instance.getLoc(), fsmHWModule, b.getStringAttr(instance.getName()),
+    auto hwInstance = hw::InstanceOp::create(
+        b, instance.getLoc(), fsmHWModule, b.getStringAttr(instance.getName()),
         operands, nullptr);
     instance.replaceAllUsesWith(hwInstance);
     instance.erase();

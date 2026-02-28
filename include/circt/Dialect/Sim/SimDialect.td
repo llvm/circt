@@ -6,12 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This contains the SimDialect definition to be included in other files.
+// This contains the Sim dialect definition to be included in other files.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef CIRCT_DIALECT_SIM_SIMDIALECT
 #define CIRCT_DIALECT_SIM_SIMDIALECT
+
+include "mlir/IR/DialectBase.td"
 
 def SimDialect : Dialect {
   let name = "sim";
@@ -22,8 +24,17 @@ def SimDialect : Dialect {
     The `sim` dialect is intented to model simulator-specific operations.
   }];
 
-  let useDefaultTypePrinterParser = 0;
+  let dependentDialects = ["circt::hw::HWDialect"];
+
   let useDefaultAttributePrinterParser = 0;
+  let useDefaultTypePrinterParser = 1;
+  let hasConstantMaterializer = 1;
+
+  let extraClassDeclaration = [{
+    /// Register all Sim types.
+    void registerTypes();
+  }];
+
 }
 
 #endif // CIRCT_DIALECT_SIM_SIMDIALECT

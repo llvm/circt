@@ -2,18 +2,28 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from ..common import Clock, Input, Output
-from ..constructs import ControlReg, Mux, NamedWire, Wire
+from __future__ import annotations
+from math import ceil
+
+from ..common import Clock, Input, InputChannel, Output, OutputChannel, Reset
+from ..constructs import (AssignableSignal, ControlReg, Counter, Mux, NamedWire,
+                          Wire)
 from .. import esi
-from ..module import Module, generator
-from ..signals import BundleSignal
-from ..types import Array, Bits, ChannelDirection
+from ..module import Module, generator, modparams
+from ..signals import BitsSignal, ChannelSignal, StructSignal
+from ..support import clog2
+from ..system import System
+from ..types import (Array, Bits, Bundle, BundledChannel, Channel,
+                     ChannelDirection, StructType, Type, UInt, Window)
 
-from typing import Dict, Tuple
+from typing import Callable, Dict, List, Tuple
+import typing
 
-MagicNumberLo = 0xE5100E51  # ESI__ESI
-MagicNumberHi = 0x207D98E5  # Random
+MagicNumber = 0x207D98E5_E5100E51  # random + ESI__ESI
 VersionNumber = 0  # Version 0: format subject to change
+
+IndirectionMagicNumber = 0x312bf0cc_E5100E51  # random + ESI__ESI
+IndirectionVersionNumber = 0  # Version 0: format subject to change
 
 
 class ESI_Manifest_ROM(Module):
@@ -23,192 +33,1230 @@ class ESI_Manifest_ROM(Module):
   module_name = "__ESI_Manifest_ROM"
 
   clk = Clock()
-  address = Input(Bits(30))
+  address = Input(Bits(29))
   # Data is two cycles delayed after address changes.
-  data = Output(Bits(32))
+  data = Output(Bits(64))
 
 
-class AxiMMIO(esi.ServiceImplementation):
-  """MMIO service implementation with an AXI-lite protocol. This assumes a 20
-  bit address bus for 1MB of addressable MMIO space. Which should be fine for
-  now, though nothing should assume this limit. It also only supports 32-bit
-  aligned accesses and just throws awary the lower two bits of address.
+class ESI_Manifest_ROM_Wrapper(Module):
+  """Wrap the manifest ROM with ESI bundle."""
+
+  clk = Clock()
+  read = Input(esi.MMIO.read.type)
+
+  @generator
+  def build(self):
+    data, data_valid = Wire(Bits(64)), Wire(Bits(1))
+    data_chan, data_ready = Channel(Bits(64)).wrap(data, data_valid)
+    address_chan = self.read.unpack(data=data_chan)['offset']
+    address, address_valid = address_chan.unwrap(data_ready)
+    address_words = address.as_bits(32)[3:]  # Lop off the lower three bits.
+
+    rom = ESI_Manifest_ROM(clk=self.clk, address=address_words)
+    data.assign(rom.data)
+    data_valid.assign(address_valid.reg(self.clk, name="data_valid", cycles=2))
+
+
+@modparams
+def HeaderMMIO(manifest_loc: int) -> Module:
+
+  class HeaderMMIO(Module):
+    """Construct the ESI header MMIO adhering to the MMIO layout specified in
+    the ChannelMMIO service implementation."""
+
+    clk = Clock()
+    rst = Reset()
+    read = Input(esi.MMIO.read.type)
+
+    @generator
+    def build(ports):
+      data_chan_wire = Wire(Channel(esi.MMIODataType))
+      input_bundles = ports.read.unpack(data=data_chan_wire)
+      address_chan = input_bundles['offset']
+
+      address_ready = Wire(Bits(1))
+      address, address_valid = address_chan.unwrap(address_ready)
+      address_words = address.as_bits()[3:]  # Lop off the lower three bits.
+
+      cycles = Counter(64)(clk=ports.clk,
+                           rst=ports.rst,
+                           clear=Bits(1)(0),
+                           increment=Bits(1)(1),
+                           instance_name="cycle_counter")
+
+      # Layout the header as an array.
+      core_freq = System.current().core_freq
+      if core_freq is None:
+        core_freq = 0
+      header = Array(Bits(64), 8)([
+          0,  # Generally a good idea to not use address 0.
+          MagicNumber,  # ESI magic number.
+          VersionNumber,  # ESI version number.
+          manifest_loc,  # Absolute address of the manifest ROM.
+          0,  # Reserved for future use.
+          cycles.out.as_bits(),  # Cycle counter.
+          core_freq,  # Core frequency, if known.
+          0,
+      ])
+      header.name = "header"
+      header_response_valid = address_valid  # Zero latency read.
+      # Select the appropriate header index.
+      header_out = header[address_words[:3]]
+      header_out.name = "header_out"
+      # Wrap the response.
+      data_chan, data_chan_ready = Channel(esi.MMIODataType).wrap(
+          header_out, header_response_valid)
+      data_chan_wire.assign(data_chan)
+      address_ready.assign(data_chan_ready)
+
+  return HeaderMMIO
+
+
+@modparams
+def ChannelDemuxN_HalfStage_ReadyBlocking(
+    data_type: Type, num_outs: int,
+    next_sel_width: int) -> type["ChannelDemuxNImpl"]:
+  """N-way channel demultiplexer for valid/ready signaling. Contains
+    valid/ready registers on the output channels. The selection signal is now
+    embedded in the input channel payload as a struct {sel, data}. Input
+    signals ready when the selected output register is empty."""
+
+  assert num_outs >= 1, "num_outs must be at least 1."
+
+  class ChannelDemuxNImpl(Module):
+    clk = Clock()
+    rst = Reset()
+
+    # Input channel now carries selection along with data.
+    InPayloadType = StructType([
+        ("sel", Bits(clog2(num_outs))),
+        ("next_sel", Bits(next_sel_width)),
+        ("data", data_type),
+    ])
+    inp = Input(Channel(InPayloadType))
+    OutPayloadType = StructType([
+        ("next_sel", Bits(next_sel_width)),
+        ("data", data_type),
+    ])
+    # Outputs are channels of OutPayloadType, which includes both 'next_sel' and 'data' fields.
+    for i in range(num_outs):
+      locals()[f"output_{i}"] = Output(Channel(OutPayloadType))
+
+    @generator
+    def generate(ports) -> None:
+      # Half-stage demux: one register per output channel. Input is ready
+      # when the currently selected output register is empty (not valid).
+      clk = ports.clk
+      rst = ports.rst
+      sel_width = clog2(num_outs)
+
+      # Unwrap input with backpressure from selected output register.
+      input_ready = Wire(Bits(1), name="input_ready")
+      in_payload, in_valid = ports.inp.unwrap(input_ready)
+      in_sel = in_payload.sel
+      in_next_sel = in_payload.next_sel
+      in_data = in_payload.data
+
+      # Track per-output valid regs and build a purely combinational
+      # expression 'selected_valid_expr' = OR_i((sel==i)&valid_i). Avoid
+      # assigning to a Wire multiple times.
+      valid_regs: List[BitsSignal] = []
+      selected_valid_expr = Bits(1)(0)
+
+      for i in range(num_outs):
+        # Write when input transaction targets this output and output not holding data yet.
+        will_write = Wire(Bits(1), name=f"will_write_{i}")
+        write_cond = (in_valid & input_ready & (in_sel == Bits(sel_width)(i)))
+        will_write.assign(write_cond)
+
+        # Data and next_sel registers.
+        out_msg_reg = ChannelDemuxNImpl.OutPayloadType({
+            "next_sel": in_next_sel,
+            "data": in_data
+        }).reg(clk=clk, rst=rst, ce=will_write, name=f"out{i}_msg_reg")
+
+        # Valid register cleared on successful downstream consume.
+        consume = Wire(Bits(1), name=f"consume_{i}")
+        valid_reg = ControlReg(
+            clk=clk,
+            rst=rst,
+            asserts=[will_write],
+            resets=[consume],
+            name=f"out{i}_valid_reg",
+        )
+        valid_regs.append(valid_reg)
+
+        # Channel wrapper.
+        ch_sig, ch_ready = Channel(ChannelDemuxNImpl.OutPayloadType).wrap(
+            out_msg_reg, valid_reg)
+        setattr(ports, f"output_{i}", ch_sig)
+        consume.assign(valid_reg & ch_ready)
+
+        # Accumulate selected_valid expression.
+        selected_valid_expr = (selected_valid_expr | (
+            (in_sel == Bits(sel_width)(i)) & valid_reg)).as_bits()
+
+      # Input ready only when selected output has no valid data latched.
+      input_ready.assign((selected_valid_expr ^ Bits(1)(1)).as_bits())
+
+    def get_out(self, index: int) -> ChannelSignal:
+      return getattr(self, f"output_{index}")
+
+  return ChannelDemuxNImpl
+
+
+@modparams
+def ChannelDemuxTree_HalfStage_ReadyBlocking(
+    data_type: Type, num_outs: int,
+    branching_factor_log2: int) -> type["ChannelDemuxTree"]:
+  """Pipelined N-way channel demultiplexer for valid/ready signaling. This
+    implementation uses a tree structure of
+    ChannelDemuxN_HalfStage_ReadyBlocking modules to reduce fanout pressure.
+    Supports maximum half-throughput to save complexity and area.
+    """
+
+  root_sel_width = clog2(num_outs)
+  # Simplify algorithm by making sure num_outs is a power of two.
+  num_outs = 2**root_sel_width
+  sel_width = branching_factor_log2
+  fanout = 2**sel_width
+
+  class ChannelDemuxTree(Module):
+    clk = Clock()
+    rst = Reset()
+    # Input now embeds selection bits alongside data.
+    InPayloadType = StructType([
+        ("sel", Bits(clog2(num_outs))),
+        ("data", data_type),
+    ])
+    inp = Input(Channel(InPayloadType))
+
+    # Outputs (data only).
+    for i in range(num_outs):
+      locals()[f"output_{i}"] = Output(Channel(data_type))
+
+    @generator
+    def build(ports) -> None:
+      assert branching_factor_log2 > 0
+      if num_outs == 1:
+        # Strip selection bits and return single channel.
+        setattr(ports, "output_0", ports.inp.transform(lambda p: p.data))
+        return
+
+      def payload_type(sel_width: int, next_sel_width: int) -> Type:
+        return StructType([
+            ("sel", Bits(sel_width)),
+            ("next_sel", Bits(next_sel_width)),
+            ("data", data_type),
+        ])
+
+      def next_sel_width_calc(curr_sel_width) -> int:
+        return max(curr_sel_width - sel_width, 0)
+
+      def payload_next(curr_msg: StructSignal) -> StructSignal:
+        """Given current level payload, produce next level payload by
+        stripping off the top selection bits."""
+
+        next_sel_width = next_sel_width_calc(curr_msg.next_sel.type.width)
+        curr_sel_width = curr_msg.next_sel.type.width
+        new_sel_width = min(curr_sel_width, sel_width)
+        return payload_type(
+            new_sel_width,
+            next_sel_width,
+        )({
+            # Use the MSB bits of next_sel as the next level selection.
+            "sel": (curr_msg.next_sel[next_sel_width:]
+                    if curr_sel_width > 0 else Bits(0)(0)),
+            "next_sel": (curr_msg.next_sel[:next_sel_width]
+                         if next_sel_width > 0 else Bits(0)(0)),
+            "data": curr_msg.data,
+        })
+
+      current_channels: List[ChannelSignal] = [
+          ports.inp.transform(lambda m: payload_type(0, root_sel_width)({
+              "sel": Bits(0)(0),
+              "next_sel": m.sel,
+              "data": m.data,
+          }))
+      ]
+
+      curr_sel_width = root_sel_width
+      level = 0
+      while len(current_channels) < num_outs:
+        next_level: List[ChannelSignal] = []
+        level_num_outs = min(2**curr_sel_width, fanout)
+        for i, c in enumerate(current_channels):
+          dmux = ChannelDemuxN_HalfStage_ReadyBlocking(
+              data_type,
+              num_outs=level_num_outs,
+              next_sel_width=next_sel_width_calc(curr_sel_width),
+          )(
+              clk=ports.clk,
+              rst=ports.rst,
+              inp=c.transform(payload_next),
+              instance_name=f"demux_l{level}_i{i}",
+          )
+          for j in range(level_num_outs):
+            next_level.append(dmux.get_out(j))
+        current_channels = next_level
+        curr_sel_width -= sel_width
+        level += 1
+
+      for i in range(num_outs):
+        # Strip off next_sel bits for final output.
+        setattr(
+            ports,
+            f"output_{i}",
+            current_channels[i].transform(lambda p: p.data),
+        )
+
+    def get_out(self, index: int) -> ChannelSignal:
+      return getattr(self, f"output_{index}")
+
+  return ChannelDemuxTree
+
+
+class ChannelMMIO(esi.ServiceImplementation):
+  """MMIO service implementation with MMIO bundle interfaces. Should be
+  relatively easy to adapt to physical interfaces by wrapping the wires to
+  channels then bundles. Allows the implementation to be shared and (hopefully)
+  platform independent.
+  
+  Whether or not to support unaligned accesses is up to the clients. The header
+  and manifest do not support unaligned accesses and throw away the lower three
+  bits.
 
   Only allows for one outstanding request at a time. If a client doesn't return
   a response, the MMIO service will hang. TODO: add some kind of timeout.
 
   Implementation-defined MMIO layout:
-    - 0x0: 0 constanst
-    - 0x4: 0 constanst
-    - 0x8: Magic number low (0xE5100E51)
-    - 0xC: Magic number high (random constant: 0x207D98E5)
-    - 0x10: ESI version number (0)
-    - 0x14: Location of the manifest ROM (absolute address)
+    - 0x0: 0 constant
+    - 0x8: Magic number (0x207D98E5_E5100E51)
+    - 0x12: ESI version number (0)
+    - 0x18: Location of the manifest ROM (absolute address)
 
-    - 0x100: Start of MMIO space for requests. Mapping is contained in the
+    - 0x400: Start of MMIO space for requests. Mapping is contained in the
              manifest so can be dynamically queried.
 
     - addr(Manifest ROM) + 0: Size of compressed manifest
-    - addr(Manifest ROM) + 4: Start of compressed manifest
+    - addr(Manifest ROM) + 8: Start of compressed manifest
 
   This layout _should_ be pretty standard, but different BSPs may have various
-  different restrictions.
+  different restrictions. Any BSP which uses this service implementation will
+  have this layout, possibly with an offset or address window.
   """
 
   clk = Clock()
   rst = Input(Bits(1))
 
-  # MMIO read: address channel.
-  arvalid = Input(Bits(1))
-  arready = Output(Bits(1))
-  araddr = Input(Bits(20))
+  cmd = Input(esi.MMIO.read_write.type)
 
-  # MMIO read: data response channel.
-  rvalid = Output(Bits(1))
-  rready = Input(Bits(1))
-  rdata = Output(Bits(32))
-  rresp = Output(Bits(2))
+  # Amount of register space each client gets. This is a GIANT HACK and needs to
+  # be replaced by parameterizable services.
+  # TODO: make the amount of register space each client gets a parameter.
+  # Supporting this will require more address decode logic.
+  #
+  # TODO: only supports one outstanding transaction at a time. This is NOT
+  # enforced or checked! Enforce this.
 
-  # MMIO write: address channel.
-  awvalid = Input(Bits(1))
-  awready = Output(Bits(1))
-  awaddr = Input(Bits(20))
-
-  # MMIO write: data channel.
-  wvalid = Input(Bits(1))
-  wready = Output(Bits(1))
-  wdata = Input(Bits(32))
-
-  # MMIO write: write response channel.
-  bvalid = Output(Bits(1))
-  bready = Input(Bits(1))
-  bresp = Output(Bits(2))
+  RegisterSpace = 0x400
+  RegisterSpaceBits = RegisterSpace.bit_length() - 1
+  AddressMask = 0x3FF
 
   # Start at this address for assigning MMIO addresses to service requests.
-  initial_offset: int = 0x100
+  initial_offset: int = RegisterSpace
 
   @generator
-  def generate(self, bundles: esi._ServiceGeneratorBundles):
-    read_table, write_table, manifest_loc = AxiMMIO.build_table(self, bundles)
-    AxiMMIO.build_read(self, manifest_loc, read_table)
-    AxiMMIO.build_write(self, write_table)
+  def generate(ports, bundles: esi._ServiceGeneratorBundles):
+    table, manifest_loc = ChannelMMIO.build_table(bundles)
+    ChannelMMIO.build_read(ports, manifest_loc, table)
     return True
 
-  def build_table(
-      self,
-      bundles) -> Tuple[Dict[int, BundleSignal], Dict[int, BundleSignal], int]:
+  @staticmethod
+  def build_table(bundles) -> Tuple[Dict[int, AssignableSignal], int]:
     """Build a table of read and write addresses to BundleSignals."""
-    offset = AxiMMIO.initial_offset
-    read_table = {}
-    write_table = {}
+    offset = ChannelMMIO.initial_offset
+    table: Dict[int, AssignableSignal] = {}
     for bundle in bundles.to_client_reqs:
-      if bundle.direction == ChannelDirection.Input:
-        read_table[offset] = bundle
-        offset += 4
-      elif bundle.direction == ChannelDirection.Output:
-        write_table[offset] = bundle
-        offset += 4
+      if bundle.port == 'read':
+        table[offset] = bundle
+        bundle.add_record(details={
+            "offset": offset,
+            "size": ChannelMMIO.RegisterSpace,
+            "type": "ro"
+        })
+        offset += ChannelMMIO.RegisterSpace
+      elif bundle.port == 'read_write':
+        table[offset] = bundle
+        bundle.add_record(details={
+            "offset": offset,
+            "size": ChannelMMIO.RegisterSpace,
+            "type": "rw"
+        })
+        offset += ChannelMMIO.RegisterSpace
+      else:
+        assert False, "Unrecognized port name."
 
-    manifest_loc = 1 << offset.bit_length()
-    return read_table, write_table, manifest_loc
+    manifest_loc = offset
+    return table, manifest_loc
 
-  def build_read(self, manifest_loc: int, bundles):
+  @staticmethod
+  def build_read(ports, manifest_loc: int, table: Dict[int, AssignableSignal]):
     """Builds the read side of the MMIO service."""
 
-    # Currently just exposes the header and manifest. Not any of the possible
-    # service requests.
+    # Instantiate the header and manifest ROM. Fill in the read_table with
+    # bundle wires to be assigned identically to the other MMIO clients.
+    header_bundle_wire = Wire(esi.MMIO.read.type)
+    table[0] = header_bundle_wire
+    HeaderMMIO(manifest_loc)(clk=ports.clk,
+                             rst=ports.rst,
+                             read=header_bundle_wire)
 
-    i32 = Bits(32)
-    i2 = Bits(2)
-    i1 = Bits(1)
+    mani_bundle_wire = Wire(esi.MMIO.read.type)
+    table[manifest_loc] = mani_bundle_wire
+    ESI_Manifest_ROM_Wrapper(clk=ports.clk, read=mani_bundle_wire)
 
-    address_written = NamedWire(i1, "address_written")
-    response_written = NamedWire(i1, "response_written")
+    # Unpack the cmd bundle.
+    data_resp_channel = Wire(Channel(esi.MMIODataType))
+    counted_output = Wire(Channel(esi.MMIODataType))
+    cmd_channel = ports.cmd.unpack(data=counted_output)["cmd"]
+    counted_output.assign(data_resp_channel)
 
-    # Only allow one outstanding request at a time. Don't clear it until the
-    # output has been transmitted. This way, we don't have to deal with
-    # backpressure.
-    req_outstanding = ControlReg(self.clk,
-                                 self.rst, [address_written],
-                                 [response_written],
-                                 name="req_outstanding")
-    self.arready = ~req_outstanding
+    # Get the selection index and the address to hand off to the clients.
+    sel_bits, client_cmd_chan = ChannelMMIO.build_addr_read(
+        cmd_channel, len(table), manifest_loc)
 
-    # Capture the address if a the bus transaction occured.
-    address_written.assign(self.arvalid & ~req_outstanding)
-    address = self.araddr.reg(self.clk, ce=address_written, name="address")
-    address_valid = address_written.reg(name="address_valid")
-    address_words = address[2:]  # Lop off the lower two bits.
+    # Build the demux/mux and assign the results of each appropriately.
+    read_clients_clog2 = clog2(len(table))
+    # Combine selection bits and command channel payload into a struct channel for the demux tree.
+    TreeInType = StructType([
+        ("sel", Bits(read_clients_clog2)),
+        ("data", client_cmd_chan.type.inner_type),
+    ])
+    sel_bits_truncated = sel_bits.pad_or_truncate(read_clients_clog2)
+    combined_cmd_chan = client_cmd_chan.transform(
+        lambda cmd, _sel=sel_bits_truncated: TreeInType({
+            "sel": _sel,
+            "data": cmd
+        }))
+    demux_inst = ChannelDemuxTree_HalfStage_ReadyBlocking(
+        client_cmd_chan.type.inner_type, len(table), branching_factor_log2=2)(
+            clk=ports.clk,
+            rst=ports.rst,
+            inp=combined_cmd_chan,
+            instance_name="client_cmd_demux",
+        )
+    client_cmd_channels = [demux_inst.get_out(i) for i in range(len(table))]
+    client_data_channels = []
+    for (idx, offset) in enumerate(sorted(table.keys())):
+      bundle_wire = table[offset]
+      bundle_type = bundle_wire.type
+      if bundle_type == esi.MMIO.read.type:
+        offset = client_cmd_channels[idx].transform(lambda cmd: cmd.offset)
+        bundle, bundle_froms = esi.MMIO.read.type.pack(offset=offset)
+      elif bundle_type == esi.MMIO.read_write.type:
+        bundle, bundle_froms = esi.MMIO.read_write.type.pack(
+            cmd=client_cmd_channels[idx])
+      else:
+        assert False, "Unrecognized bundle type."
+      bundle_wire.assign(bundle)
+      client_data_channels.append(bundle_froms["data"])
+    resp_channel = esi.ChannelMux(client_data_channels)
+    data_resp_channel.assign(resp_channel)
 
-    # Set up the output of the data response pipeline. `data_pipeline*` are to
-    # be connected below.
-    data_pipeline_valid = NamedWire(i1, "data_pipeline_valid")
-    data_pipeline = NamedWire(i32, "data_pipeline")
-    data_pipeline_rresp = NamedWire(i2, "data_pipeline_rresp")
-    data_out_valid = ControlReg(self.clk,
-                                self.rst, [data_pipeline_valid],
-                                [response_written],
-                                name="data_out_valid")
-    self.rvalid = data_out_valid
-    self.rdata = data_pipeline.reg(self.clk,
-                                   self.rst,
-                                   ce=data_pipeline_valid,
-                                   name="data_pipeline_reg")
-    self.rresp = data_pipeline_rresp.reg(self.clk,
-                                         self.rst,
-                                         ce=data_pipeline_valid,
-                                         name="data_pipeline_rresp_reg")
-    # Clear the `req_outstanding` flag when the response has been transmitted.
-    response_written.assign(data_out_valid & self.rready)
+  @staticmethod
+  def build_addr_read(read_addr_chan: ChannelSignal, num_clients: int,
+                      manifest_loc: int) -> Tuple[BitsSignal, ChannelSignal]:
+    """Build a channel for the address read request. Returns the index to select
+    the client and a channel for the masked address to be passed to the
+    clients."""
 
-    # Handle reads from the header (< 0x100).
-    header_upper = address_words[AxiMMIO.initial_offset.bit_length() - 2:]
-    # Is the address in the header?
-    header_sel = (header_upper == header_upper.type(0))
-    header_sel.name = "header_sel"
-    # Layout the header as an array.
-    header = Array(Bits(32), 6)(
-        [0, 0, MagicNumberLo, MagicNumberHi, VersionNumber, manifest_loc])
-    header.name = "header"
-    header_response_valid = address_valid  # Zero latency read.
-    header_out = header[address[2:5]]
-    header_out.name = "header_out"
-    header_rresp = i2(0)
+    # Decoding the selection bits is very simple as of now. This might need to
+    # change to support more flexibility in addressing. Not clear if what we're
+    # doing now it sufficient or not.
 
-    # Handle reads from the manifest.
-    rom_address = NamedWire(
-        (address_words.as_uint() - (manifest_loc >> 2)).as_bits(30),
-        "rom_address")
-    mani_rom = ESI_Manifest_ROM(clk=self.clk, address=rom_address)
-    mani_valid = address_valid.reg(
-        self.clk,
-        self.rst,
-        rst_value=i1(0),
-        cycles=2,  # Two cycle read to match the ROM latency.
-        name="mani_valid_reg")
-    mani_rresp = i2(0)
-    # mani_sel = (address.as_uint() >= manifest_loc)
+    manifest_loc_const = UInt(32)(manifest_loc)
 
-    # Mux the output depending on whether or not the address is in the header.
-    sel = NamedWire(~header_sel, "sel")
-    data_mux_inputs = [header_out, mani_rom.data]
-    data_pipeline.assign(Mux(sel, *data_mux_inputs))
-    data_valid_mux_inputs = [header_response_valid, mani_valid]
-    data_pipeline_valid.assign(Mux(sel, *data_valid_mux_inputs))
-    rresp_mux_inputs = [header_rresp, mani_rresp]
-    data_pipeline_rresp.assign(Mux(sel, *rresp_mux_inputs))
+    cmd_ready_wire = Wire(Bits(1))
+    cmd, cmd_valid = read_addr_chan.unwrap(cmd_ready_wire)
+    is_manifest_read = cmd.offset >= manifest_loc_const
+    sel_bits = NamedWire(Bits(32 - ChannelMMIO.RegisterSpaceBits), "sel_bits")
+    # If reading the manifest, override the selection to select the manifest instead.
+    sel_bits.assign(
+        Mux(is_manifest_read,
+            cmd.offset.as_bits()[ChannelMMIO.RegisterSpaceBits:],
+            Bits(32 - ChannelMMIO.RegisterSpaceBits)(num_clients - 1)))
+    regular_client_offset = (cmd.offset.as_bits() &
+                             Bits(32)(ChannelMMIO.AddressMask)).as_uint()
+    offset = Mux(is_manifest_read, regular_client_offset,
+                 (cmd.offset - manifest_loc_const).as_uint(32))
+    client_cmd = NamedWire(esi.MMIOReadWriteCmdType, "client_cmd")
+    client_cmd.assign(
+        esi.MMIOReadWriteCmdType({
+            "write": cmd.write,
+            "offset": offset,
+            "data": cmd.data
+        }))
+    client_addr_chan, client_addr_ready = Channel(
+        esi.MMIOReadWriteCmdType).wrap(client_cmd, cmd_valid)
+    cmd_ready_wire.assign(client_addr_ready)
+    return sel_bits, client_addr_chan
 
-  def build_write(self, bundles):
-    # TODO: this.
 
-    # So that we don't wedge the AXI-lite for writes, just ack all of them.
-    write_happened = Wire(Bits(1))
-    latched_aw = ControlReg(self.clk, self.rst, [self.awvalid],
-                            [write_happened])
-    latched_w = ControlReg(self.clk, self.rst, [self.wvalid], [write_happened])
-    write_happened.assign(latched_aw & latched_w)
+class MMIOIndirection(Module):
+  """Some platforms do not support MMIO space greater than a certain size (e.g.
+  Vitis 2022's limit is 4k). This module implements a level of indirection to
+  provide access to a full 32-bit address space.
 
-    self.awready = 1
-    self.wready = 1
-    self.bvalid = write_happened
-    self.bresp = 0
+  MMIO addresses:
+    - 0x0:  0 constant
+    - 0x8:  64 bit ESI magic number for Indirect MMIO (0x312bf0cc_E5100E51)
+    - 0x10: Version number for Indirect MMIO (0)
+    - 0x18: Location of read/write in the virtual MMIO space.
+    - 0x20: A read from this location will initiate a read in the virtual MMIO
+            space specified by the address stored in 0x18 and return the result.
+            A write to this location will initiate a write into the virtual MMIO
+            space to the virtual address specified in 0x18.
+  """
+  clk = Clock()
+  rst = Reset()
+
+  upstream = Input(esi.MMIO.read_write.type)
+  downstream = Output(esi.MMIO.read_write.type)
+
+  @generator
+  def build(ports):
+    # This implementation assumes there is only one outstanding upstream MMIO
+    # transaction in flight at once. TODO: enforce this or make it more robust.
+
+    reg_bits = 8
+    location_reg = UInt(reg_bits)(0x18)
+    indirect_mmio_reg = UInt(reg_bits)(0x20)
+    virt_address = Wire(UInt(32))
+
+    # Set up the upstream MMIO interface. Capture last upstream command in a
+    # mailbox which never empties to give access to the last command for all
+    # time.
+    upstream_resp_chan_wire = Wire(Channel(esi.MMIODataType))
+    upstream_cmd_chan = ports.upstream.unpack(
+        data=upstream_resp_chan_wire)["cmd"]
+    _, _, upstream_cmd_data = upstream_cmd_chan.snoop()
+
+    # Set up a channel demux to separate the MMIO commands which get processed
+    # locally with ones which should be transformed and fowarded downstream.
+    phys_loc = upstream_cmd_data.offset.as_uint(reg_bits)
+    fwd_upstream = NamedWire(phys_loc == indirect_mmio_reg, "fwd_upstream")
+    local_reg_cmd_chan, downstream_cmd_channel = esi.ChannelDemux(
+        upstream_cmd_chan, fwd_upstream, 2, "upstream_demux")
+
+    # Set up the downstream MMIO interface.
+    downstream_cmd_channel = downstream_cmd_channel.transform(
+        lambda cmd: esi.MMIOReadWriteCmdType({
+            "write": cmd.write,
+            "offset": virt_address,
+            "data": cmd.data
+        }))
+    ports.downstream, froms = esi.MMIO.read_write.type.pack(
+        cmd=downstream_cmd_channel)
+    downstream_data_chan = froms["data"]
+
+    # Process local regs.
+    (local_reg_cmd_valid, local_reg_cmd_ready,
+     local_reg_cmd) = local_reg_cmd_chan.snoop()
+    write_virt_address = (local_reg_cmd_valid & local_reg_cmd_ready &
+                          local_reg_cmd.write & (phys_loc == location_reg))
+    virt_address.assign(
+        local_reg_cmd.data.as_uint(32).reg(
+            name="virt_address",
+            clk=ports.clk,
+            ce=write_virt_address,
+        ))
+
+    # Build the pysical MMIO register space.
+    local_reg_resp_array = Array(Bits(64), 4)([
+        0x0,  # 0x0
+        IndirectionMagicNumber,  # 0x8
+        IndirectionVersionNumber,  # 0x10
+        virt_address.as_bits(64),  # 0x18
+    ])
+    local_reg_resp_chan = local_reg_cmd_chan.transform(
+        lambda cmd: local_reg_resp_array[cmd.offset.as_uint(2)])
+
+    # Mux together the local register responses and the downstream data to
+    # create the upstream response.
+    upstream_resp = esi.ChannelMux([local_reg_resp_chan, downstream_data_chan])
+    upstream_resp_chan_wire.assign(upstream_resp)
+
+
+@modparams
+def TaggedReadGearbox(input_bitwidth: int,
+                      output_bitwidth: int) -> type["TaggedReadGearboxImpl"]:
+  """Build a gearbox to convert the upstream data to the client data
+  type. Assumes a struct {tag, data} and only gearboxes the data. Tag is stored
+  separately and the struct is re-assembled later on."""
+
+  class TaggedReadGearboxImpl(Module):
+    clk = Clock()
+    rst = Reset()
+    in_ = InputChannel(
+        StructType([
+            ("tag", esi.HostMem.TagType),
+            ("data", Bits(input_bitwidth)),
+        ]))
+    out = OutputChannel(
+        StructType([
+            ("tag", esi.HostMem.TagType),
+            ("data", Bits(output_bitwidth)),
+        ]))
+
+    @generator
+    def build(ports):
+      ready_for_upstream = Wire(Bits(1), name="ready_for_upstream")
+      upstream_tag_and_data, upstream_valid = ports.in_.unwrap(
+          ready_for_upstream)
+      upstream_data = upstream_tag_and_data.data
+      upstream_xact = ready_for_upstream & upstream_valid
+
+      # Determine if gearboxing is necessary and whether it needs to be
+      # gearboxed up or just sliced down.
+      if output_bitwidth == input_bitwidth:
+        client_data_bits = upstream_data
+        client_valid = upstream_valid
+      elif output_bitwidth < input_bitwidth:
+        client_data_bits = upstream_data[:output_bitwidth]
+        client_valid = upstream_valid
+      else:
+        # Create registers equal to the number of upstream transactions needed
+        # to fill the client data. Set the output to the concatenation of said
+        # registers.
+        chunks = ceil(output_bitwidth / input_bitwidth)
+        reg_ces = [Wire(Bits(1)) for _ in range(chunks)]
+        regs = [
+            upstream_data.reg(ports.clk,
+                              ports.rst,
+                              ce=reg_ces[idx],
+                              name=f"chunk_reg_{idx}") for idx in range(chunks)
+        ]
+        client_data_bits = BitsSignal.concat(reversed(regs))[:output_bitwidth]
+
+        # Use counter to determine to which register to write and determine if
+        # the registers are all full.
+        clear_counter = Wire(Bits(1))
+        counter_width = clog2(chunks)
+        counter = Counter(counter_width)(clk=ports.clk,
+                                         rst=ports.rst,
+                                         clear=clear_counter,
+                                         increment=upstream_xact)
+        set_client_valid = counter.out == chunks - 1
+        client_xact = Wire(Bits(1))
+        client_valid = ControlReg(ports.clk, ports.rst,
+                                  [set_client_valid & upstream_xact],
+                                  [client_xact])
+        client_xact.assign(client_valid & ready_for_upstream)
+        clear_counter.assign(client_xact)
+        for idx, reg_ce in enumerate(reg_ces):
+          reg_ce.assign(upstream_xact &
+                        (counter.out == UInt(counter_width)(idx)))
+
+      # Construct the output channel. Shared logic across all three cases.
+      tag_reg = upstream_tag_and_data.tag.reg(ports.clk,
+                                              ports.rst,
+                                              ce=upstream_xact,
+                                              name="tag_reg")
+
+      client_channel, client_ready = TaggedReadGearboxImpl.out.type.wrap(
+          {
+              "tag": tag_reg,
+              "data": client_data_bits,
+          }, client_valid)
+      ready_for_upstream.assign(client_ready)
+      ports.out = client_channel
+
+  return TaggedReadGearboxImpl
+
+
+def HostmemReadProcessor(read_width: int, hostmem_module,
+                         reqs: List[esi._OutputBundleSetter]):
+  """Construct a host memory read request module to orchestrate the the read
+  connections. Responsible for both gearboxing the data, multiplexing the
+  requests, reassembling out-of-order responses and routing the responses to the
+  correct clients.
+
+  Generate this module dynamically to allow for multiple read clients of
+  multiple types to be directly accomodated."""
+
+  class HostmemReadProcessorImpl(Module):
+    clk = Clock()
+    rst = Reset()
+
+    # Add an output port for each read client.
+    reqPortMap: Dict[esi._OutputBundleSetter, str] = {}
+    for req in reqs:
+      name = "client_" + req.client_name_str
+      locals()[name] = Output(req.type)
+      reqPortMap[req] = name
+
+    # And then the port which goes to the host.
+    upstream = Output(hostmem_module.read.type)
+
+    @generator
+    def build(ports):
+      """Build the read side of the HostMem service."""
+
+      # If there's no read clients, just return a no-op read bundle.
+      if len(reqs) == 0:
+        upstream_req_channel, _ = Channel(hostmem_module.UpstreamReadReq).wrap(
+            {
+                "tag": 0,
+                "length": 0,
+                "address": 0
+            }, 0)
+        upstream_read_bundle, _ = hostmem_module.read.type.pack(
+            req=upstream_req_channel)
+        ports.upstream = upstream_read_bundle
+        return
+
+      # Since we use the tag to identify the client, we can't have more than 256
+      # read clients. Supporting more than 256 clients would require
+      # tag-rewriting, which we'll probably have to implement at some point.
+      # TODO: Implement tag-rewriting.
+      assert len(reqs) <= 256, "More than 256 read clients not supported."
+
+      # Pack the upstream bundle and leave the request as a wire.
+      upstream_req_channel = Wire(Channel(hostmem_module.UpstreamReadReq))
+      upstream_read_bundle, froms = hostmem_module.read.type.pack(
+          req=upstream_req_channel)
+      ports.upstream = upstream_read_bundle
+      upstream_resp_channel = froms["resp"]
+
+      demux = esi.TaggedDemux(len(reqs), upstream_resp_channel.type)(
+          clk=ports.clk, rst=ports.rst, in_=upstream_resp_channel)
+
+      tagged_client_reqs = []
+      for idx, client in enumerate(reqs):
+        # Find the response channel in the request bundle.
+        resp_type = [
+            c.channel for c in client.type.channels if c.name == 'resp'
+        ][0]
+        demuxed_upstream_channel = demux.get_out(idx)
+
+        # TODO: Should responses come back out-of-order (interleaved tags),
+        # re-order them here so the gearbox doesn't get confused. (Longer term.)
+        # For now, only support one outstanding transaction at a time.  This has
+        # the additional benefit of letting the upstream tag be the client
+        # identifier. TODO: Implement the gating logic here.
+
+        # Gearbox the data to the client's data type.
+        client_type = resp_type.inner_type
+        gearbox = TaggedReadGearbox(read_width, client_type.data.bitwidth)(
+            clk=ports.clk, rst=ports.rst, in_=demuxed_upstream_channel)
+        client_resp_channel = gearbox.out.transform(lambda m: client_type({
+            "tag": m.tag,
+            "data": m.data.bitcast(client_type.data)
+        }))
+
+        # Assign the client response to the correct port.
+        client_bundle, froms = client.type.pack(resp=client_resp_channel)
+        client_req = froms["req"]
+        tagged_client_req = client_req.transform(
+            lambda r: hostmem_module.UpstreamReadReq({
+                "address": r.address,
+                "length": (client_type.data.bitwidth + 7) // 8,
+                # TODO: Change this once we support tag-rewriting.
+                "tag": idx
+            }))
+        tagged_client_reqs.append(tagged_client_req)
+
+        # Set the port for the client request.
+        setattr(ports, HostmemReadProcessorImpl.reqPortMap[client],
+                client_bundle)
+
+      # Assign the multiplexed read request to the upstream request.
+      # TODO: Don't release a request until the client is ready to accept
+      # the response otherwise the system could deadlock.
+      muxed_client_reqs = esi.ChannelMux(tagged_client_reqs)
+      upstream_req_channel.assign(muxed_client_reqs)
+      HostmemReadProcessorImpl.reqPortMap.clear()
+
+  return HostmemReadProcessorImpl
+
+
+@modparams
+def TaggedWriteGearbox(input_bitwidth: int,
+                       output_bitwidth: int) -> type["TaggedWriteGearboxImpl"]:
+  """Build a gearbox to convert the client data to upstream write chunks.
+  Assumes a struct {address, tag, data} and only gearboxes the data. Tag is
+  stored separately and the struct is re-assembled later on."""
+
+  if output_bitwidth % 8 != 0:
+    raise ValueError("Output bitwidth must be a multiple of 8.")
+  input_pad_bits = 0
+  if input_bitwidth % 8 != 0:
+    input_pad_bits = 8 - (input_bitwidth % 8)
+  input_padded_bitwidth = input_bitwidth + input_pad_bits
+
+  class TaggedWriteGearboxImpl(Module):
+    clk = Clock()
+    rst = Reset()
+    in_ = InputChannel(
+        StructType([
+            ("address", UInt(64)),
+            ("tag", esi.HostMem.TagType),
+            ("data", Bits(input_bitwidth)),
+        ]))
+    out = OutputChannel(
+        StructType([
+            ("address", UInt(64)),
+            ("tag", esi.HostMem.TagType),
+            ("data", Bits(output_bitwidth)),
+            ("valid_bytes", Bits(8)),
+        ]))
+
+    num_chunks = ceil(input_padded_bitwidth / output_bitwidth)
+
+    @generator
+    def build(ports):
+      upstream_ready = Wire(Bits(1))
+      ready_for_client = Wire(Bits(1))
+      client_tag_and_data, client_valid = ports.in_.unwrap(ready_for_client)
+      client_data = client_tag_and_data.data
+      if input_pad_bits > 0:
+        client_data = client_data.pad_or_truncate(input_padded_bitwidth)
+      client_xact = ready_for_client & client_valid
+      input_bitwidth_bytes = input_padded_bitwidth // 8
+      output_bitwidth_bytes = output_bitwidth // 8
+
+      # Determine if gearboxing is necessary and whether it needs to be
+      # gearboxed up or just sliced down.
+      if output_bitwidth == input_padded_bitwidth:
+        upstream_data_bits = client_data
+        upstream_valid = client_valid
+        ready_for_client.assign(upstream_ready)
+        tag = client_tag_and_data.tag
+        address = client_tag_and_data.address
+        valid_bytes = Bits(8)(input_bitwidth_bytes)
+      elif output_bitwidth > input_padded_bitwidth:
+        upstream_data_bits = client_data.as_bits(output_bitwidth)
+        upstream_valid = client_valid
+        ready_for_client.assign(upstream_ready)
+        tag = client_tag_and_data.tag
+        address = client_tag_and_data.address
+        valid_bytes = Bits(8)(input_bitwidth_bytes)
+      else:
+        # Create registers equal to the number of upstream transactions needed
+        # to complete the transmission.
+        num_chunks = TaggedWriteGearboxImpl.num_chunks
+        num_chunks_idx_bitwidth = clog2(num_chunks)
+        if input_padded_bitwidth % output_bitwidth == 0:
+          padding_numbits = 0
+        else:
+          padding_numbits = output_bitwidth - (input_padded_bitwidth %
+                                               output_bitwidth)
+        client_data_padded = BitsSignal.concat(
+            [Bits(padding_numbits)(0), client_data])
+        chunks = [
+            client_data_padded[i * output_bitwidth:(i + 1) * output_bitwidth]
+            for i in range(num_chunks)
+        ]
+        chunk_regs = Array(Bits(output_bitwidth), num_chunks)([
+            c.reg(ports.clk, ce=client_xact, name=f"chunk_{idx}")
+            for idx, c in enumerate(chunks)
+        ])
+        increment = Wire(Bits(1))
+        clear = Wire(Bits(1))
+        counter = Counter(num_chunks_idx_bitwidth)(clk=ports.clk,
+                                                   rst=ports.rst,
+                                                   increment=increment,
+                                                   clear=clear)
+        upstream_data_bits = chunk_regs[counter.out]
+        upstream_valid = ControlReg(ports.clk, ports.rst, [client_xact],
+                                    [clear])
+        upstream_xact = upstream_valid & upstream_ready
+        clear.assign(upstream_xact & (counter.out == (num_chunks - 1)))
+        increment.assign(upstream_xact)
+        ready_for_client.assign(~upstream_valid)
+        address_padding_bits = clog2(output_bitwidth_bytes)
+        counter_bytes = BitsSignal.concat(
+            [counter.out.as_bits(),
+             Bits(address_padding_bits)(0)]).as_uint()
+
+        # Construct the output channel. Shared logic across all three cases.
+        tag_reg = client_tag_and_data.tag.reg(ports.clk,
+                                              ce=client_xact,
+                                              name="tag_reg")
+        addr_reg = client_tag_and_data.address.reg(ports.clk,
+                                                   ce=client_xact,
+                                                   name="address_reg")
+        address = (addr_reg + counter_bytes).as_uint(64)
+        tag = tag_reg
+        valid_bytes = Mux(counter.out == (num_chunks - 1),
+                          Bits(8)(output_bitwidth_bytes),
+                          Bits(8)((output_bitwidth - padding_numbits) // 8))
+
+      upstream_channel, upstrm_ready_sig = TaggedWriteGearboxImpl.out.type.wrap(
+          {
+              "address": address,
+              "tag": tag,
+              "data": upstream_data_bits,
+              "valid_bytes": valid_bytes
+          }, upstream_valid)
+      upstream_ready.assign(upstrm_ready_sig)
+      ports.out = upstream_channel
+
+  return TaggedWriteGearboxImpl
+
+
+@modparams
+def EmitEveryN(message_type: Type, N: int) -> type['EmitEveryNImpl']:
+  """Emit (forward) one message for every N input messages. The emitted message
+  is the last one of the N received. N must be >= 1."""
+
+  if N < 1:
+    raise ValueError("N must be >= 1")
+
+  class EmitEveryNImpl(Module):
+    clk = Clock()
+    rst = Reset()
+    in_ = InputChannel(message_type)
+    out = OutputChannel(message_type)
+
+    @generator
+    def build(ports):
+      ready_for_in = Wire(Bits(1))
+      in_data, in_valid = ports.in_.unwrap(ready_for_in)
+      xact = in_valid & ready_for_in
+
+      # Fast path: N == 1 -> pass-through.
+      if N == 1:
+        out_chan, out_ready = EmitEveryNImpl.out.type.wrap(in_data, in_valid)
+        ready_for_in.assign(out_ready)
+        ports.out = out_chan
+        return
+
+      counter_width = clog2(N)
+      increment = xact
+      clear = Wire(Bits(1))
+      counter = Counter(counter_width)(clk=ports.clk,
+                                       rst=ports.rst,
+                                       increment=increment,
+                                       clear=clear)
+
+      # Capture last message of the group.
+      last_msg = in_data.reg(ports.clk, ports.rst, ce=xact, name="last_msg")
+
+      hit_last = (counter.out == UInt(counter_width)(N - 1)) & xact
+      out_valid = ControlReg(ports.clk, ports.rst, [hit_last], [clear])
+
+      out_chan, out_ready = EmitEveryNImpl.out.type.wrap(last_msg, out_valid)
+      # Stall input while waiting for downstream to accept the aggregated output.
+      ready_for_in.assign(~(out_valid & ~out_ready))
+      clear.assign(out_valid & out_ready)  # Clear after successful emit.
+
+      ports.out = out_chan
+
+  return EmitEveryNImpl
+
+
+def HostMemWriteProcessor(
+    write_width: int, hostmem_module,
+    reqs: List[esi._OutputBundleSetter]) -> type["HostMemWriteProcessorImpl"]:
+  """Construct a host memory write request module to orchestrate the the write
+  connections. Responsible for both gearboxing the data, multiplexing the
+  requests, reassembling out-of-order responses and routing the responses to the
+  correct clients.
+
+  Generate this module dynamically to allow for multiple write clients of
+  multiple types to be directly accomodated."""
+
+  class HostMemWriteProcessorImpl(Module):
+
+    clk = Clock()
+    rst = Reset()
+
+    # Add an output port for each read client.
+    reqPortMap: Dict[esi._OutputBundleSetter, str] = {}
+    for req in reqs:
+      name = "client_" + req.client_name_str
+      locals()[name] = Output(req.type)
+      reqPortMap[req] = name
+
+    # And then the port which goes to the host.
+    upstream = Output(hostmem_module.write.type)
+
+    @generator
+    def build(ports):
+      clk = ports.clk
+      rst = ports.rst
+
+      # If there's no write clients, just create a no-op write bundle
+      if len(reqs) == 0:
+        req, _ = Channel(hostmem_module.UpstreamWriteReq).wrap(
+            {
+                "address": 0,
+                "tag": 0,
+                "data": 0,
+                "valid_bytes": 0,
+            }, 0)
+        write_bundle, _ = hostmem_module.write.type.pack(req=req)
+        ports.upstream = write_bundle
+        return
+
+      assert len(reqs) <= 256, "More than 256 write clients not supported."
+
+      upstream_req_channel = Wire(Channel(hostmem_module.UpstreamWriteReq))
+      upstream_write_bundle, froms = hostmem_module.write.type.pack(
+          req=upstream_req_channel)
+      ports.upstream = upstream_write_bundle
+      upstream_ack_tag = froms["ackTag"]
+
+      demuxed_acks = esi.TaggedDemux(len(reqs), upstream_ack_tag.type)(
+          clk=ports.clk, rst=ports.rst, in_=upstream_ack_tag)
+
+      # TODO: re-write the tags and store the client and client tag.
+
+      # Build the write request channels and ack wires.
+      write_channels: List[ChannelSignal] = []
+      for idx, req in enumerate(reqs):
+        # Get the request channel and its data type.
+        reqch = [c.channel for c in req.type.channels if c.name == 'req'][0]
+        client_type = reqch.inner_type
+        if isinstance(client_type.data, Window):
+          client_type = client_type.lowered_type
+
+        # Pack up the bundle and assign the request channel.
+        write_req_bundle_type = esi.HostMem.write_req_bundle_type(
+            client_type.data)
+        input_flit_ack = Wire(upstream_ack_tag.type)
+        bundle_sig, froms = write_req_bundle_type.pack(ackTag=input_flit_ack)
+
+        gearbox_mod = TaggedWriteGearbox(client_type.data.bitwidth, write_width)
+        gearbox_in_type = gearbox_mod.in_.type.inner_type
+        tagged_client_req = froms["req"]
+        bitcast_client_req = tagged_client_req.transform(
+            lambda m: gearbox_in_type({
+                "tag": m.tag,
+                "address": m.address,
+                "data": m.data.bitcast(gearbox_in_type.data)
+            }))
+
+        # Gearbox the data to the client's data type.
+        gearbox = gearbox_mod(clk=ports.clk,
+                              rst=ports.rst,
+                              in_=bitcast_client_req)
+        write_channels.append(
+            gearbox.out.transform(lambda m: m.type({
+                "address": m.address,
+                "tag": idx,
+                "data": m.data,
+                "valid_bytes": m.valid_bytes
+            })))
+
+        # Count the number of acks received from hostmem for this client
+        # and only send one back to the client per input.
+        ack_every_n = EmitEveryN(upstream_ack_tag.type, gearbox_mod.num_chunks)(
+            clk=clk, rst=rst, in_=demuxed_acks.get_out(idx))
+        input_flit_ack.assign(ack_every_n.out)
+
+        # Set the port for the client request.
+        setattr(ports, HostMemWriteProcessorImpl.reqPortMap[req], bundle_sig)
+
+      # Build a channel mux for the write requests.
+      muxed_write_channel = esi.ChannelMux(write_channels)
+      upstream_req_channel.assign(muxed_write_channel)
+
+  return HostMemWriteProcessorImpl
+
+
+@modparams
+def ChannelHostMem(read_width: int,
+                   write_width: int) -> typing.Type['ChannelHostMemImpl']:
+
+  class ChannelHostMemImpl(esi.ServiceImplementation):
+    """Builds a HostMem service which multiplexes multiple HostMem clients into
+    two (read and write) bundles of the given data width."""
+
+    clk = Clock()
+    rst = Reset()
+
+    UpstreamReadReq = StructType([
+        ("address", UInt(64)),
+        ("length", UInt(32)),  # In bytes.
+        ("tag", UInt(8)),
+    ])
+    read = Output(
+        Bundle([
+            BundledChannel("req", ChannelDirection.TO, UpstreamReadReq),
+            BundledChannel(
+                "resp", ChannelDirection.FROM,
+                StructType([
+                    ("tag", esi.HostMem.TagType),
+                    ("data", Bits(read_width)),
+                ])),
+        ]))
+
+    if write_width % 8 != 0:
+      raise ValueError("Write width must be a multiple of 8.")
+    UpstreamWriteReq = StructType([
+        ("address", UInt(64)),
+        ("tag", UInt(8)),
+        ("data", Bits(write_width)),
+        ("valid_bytes", Bits(8)),
+    ])
+    write = Output(
+        Bundle([
+            BundledChannel("req", ChannelDirection.TO, UpstreamWriteReq),
+            BundledChannel("ackTag", ChannelDirection.FROM, UInt(8)),
+        ]))
+
+    @generator
+    def generate(ports, bundles: esi._ServiceGeneratorBundles):
+      # Split the read side out into a separate module. Must assign the output
+      # ports to the clients since we can't service a request in a different
+      # module.
+      read_reqs = [req for req in bundles.to_client_reqs if req.port == 'read']
+      read_proc_module = HostmemReadProcessor(read_width, ChannelHostMemImpl,
+                                              read_reqs)
+      read_proc = read_proc_module(clk=ports.clk, rst=ports.rst)
+      ports.read = read_proc.upstream
+      for req in read_reqs:
+        req.assign(getattr(read_proc, read_proc_module.reqPortMap[req]))
+
+      # The write side.
+      write_reqs = [
+          req for req in bundles.to_client_reqs if req.port == 'write'
+      ]
+      write_proc_module = HostMemWriteProcessor(write_width, ChannelHostMemImpl,
+                                                write_reqs)
+      write_proc = write_proc_module(clk=ports.clk, rst=ports.rst)
+      ports.write = write_proc.upstream
+      for req in write_reqs:
+        req.assign(getattr(write_proc, write_proc_module.reqPortMap[req]))
+
+  return ChannelHostMemImpl
+
+
+@modparams
+def DummyToHostEngine(client_type: Type) -> type['DummyToHostEngineImpl']:
+  """Create a fake DMA engine which just throws everything away."""
+
+  class DummyToHostEngineImpl(esi.EngineModule):
+
+    @property
+    def TypeName(self):
+      return "DummyToHostEngine"
+
+    clk = Clock()
+    rst = Reset()
+    input_channel = InputChannel(client_type)
+
+    @generator
+    def build(ports):
+      pass
+
+  return DummyToHostEngineImpl
+
+
+@modparams
+def DummyFromHostEngine(client_type: Type) -> type['DummyFromHostEngineImpl']:
+  """Create a fake DMA engine which just never produces messages."""
+
+  class DummyFromHostEngineImpl(esi.EngineModule):
+
+    @property
+    def TypeName(self):
+      return "DummyFromHostEngine"
+
+    clk = Clock()
+    rst = Reset()
+    output_channel = OutputChannel(client_type)
+
+    @generator
+    def build(ports):
+      valid = Bits(1)(0)
+      data = Bits(client_type.bitwidth)(0).bitcast(client_type)
+      channel, ready = Channel(client_type).wrap(data, valid)
+      ports.output_channel = channel
+
+  return DummyFromHostEngineImpl
+
+
+def ChannelEngineService(
+    to_host_engine_gen: Callable,
+    from_host_engine_gen: Callable) -> type['ChannelEngineService']:
+  """Returns a channel service implementation which calls
+  to_host_engine_gen(<client_type>) or from_host_engine_gen(<client_type>) to
+  generate the to_host and from_host engines for each channel. Does not support
+  engines which can service multiple clients at once."""
+
+  class ChannelEngineService(esi.ServiceImplementation):
+    """Service implementation which services the clients via a per-channel DMA
+    engine."""
+
+    clk = Clock()
+    rst = Reset()
+
+    @generator
+    def build(ports, bundles: esi._ServiceGeneratorBundles):
+      clk = ports.clk
+      rst = ports.rst
+
+      def build_engine_appid(client_appid: List[esi.AppID],
+                             channel_name: str) -> str:
+        appid_strings = [str(appid) for appid in client_appid]
+        return f"{'_'.join(appid_strings)}.{channel_name}"
+
+      def build_engine(bc: BundledChannel, input_channel=None) -> Type:
+        idbase = build_engine_appid(bundle.client_name, bc.name)
+        eng_appid = esi.AppID(idbase)
+        if bc.direction == ChannelDirection.FROM:
+          engine_mod = to_host_engine_gen(bc.channel.inner_type)
+        else:
+          engine_mod = from_host_engine_gen(bc.channel.inner_type)
+        eng_inputs = {
+            "clk": ports.clk,
+            "rst": ports.rst,
+        }
+        eng_details: Dict[str, object] = {"engine_inst": eng_appid}
+        if input_channel is not None:
+          if (engine_mod.input_channel.type.signaling
+              != input_channel.type.signaling):
+            input_channel = input_channel.buffer(
+                clk,
+                rst,
+                stages=1,
+                output_signaling=engine_mod.input_channel.type.signaling)
+          eng_inputs["input_channel"] = input_channel
+        if hasattr(engine_mod, "mmio"):
+          mmio_appid = esi.AppID(idbase + ".mmio")
+          eng_inputs["mmio"] = esi.MMIO.read_write(mmio_appid)
+          eng_details["mmio"] = mmio_appid
+        if hasattr(engine_mod, "hostmem_write"):
+          eng_inputs["hostmem_write"] = esi.HostMem.write_from_bundle(
+              esi.AppID(idbase + ".hostmem_write"),
+              engine_mod.hostmem_write.type)
+        if hasattr(engine_mod, "hostmem_read"):
+          eng_inputs["hostmem_read"] = esi.HostMem.read_from_bundle(
+              esi.AppID(idbase + ".hostmem_read"), engine_mod.hostmem_read.type)
+        engine = engine_mod(appid=eng_appid, **eng_inputs)
+        engine_rec = bundles.emit_engine(engine, details=eng_details)
+        engine_rec.add_record(bundle, {bc.name: {}})
+        return engine
+
+      for bundle in bundles.to_client_reqs:
+        bundle_type = bundle.type
+        to_channels = {}
+        # Create a DMA engine for each channel headed TO the client (from the host).
+        for bc in bundle_type.channels:
+          if bc.direction == ChannelDirection.TO:
+            engine = build_engine(bc)
+            to_channels[bc.name] = engine.output_channel
+
+        client_bundle_sig, froms = bundle_type.pack(**to_channels)
+        bundle.assign(client_bundle_sig)
+
+        # Create a DMA engine for each channel headed FROM the client (to the host).
+        for bc in bundle_type.channels:
+          if bc.direction == ChannelDirection.FROM:
+            build_engine(bc, froms[bc.name])
+
+  return ChannelEngineService

@@ -24,6 +24,13 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
+namespace circt {
+namespace msft {
+#define GEN_PASS_DEF_EXPORTTCL
+#include "circt/Dialect/MSFT/MSFTPasses.h.inc"
+} // namespace msft
+} // namespace circt
+
 using namespace circt;
 using namespace msft;
 
@@ -47,7 +54,7 @@ struct RemovePhysOpLowering : public OpConversionPattern<PhysOpTy> {
 } // anonymous namespace
 
 namespace {
-struct ExportTclPass : public ExportTclBase<ExportTclPass> {
+struct ExportTclPass : public circt::msft::impl::ExportTclBase<ExportTclPass> {
   void runOnOperation() override;
 };
 } // anonymous namespace

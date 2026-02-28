@@ -7,8 +7,8 @@
 //===----------------------------------------------------------------------===//
 //
 // This is a specialization of the ESI C++ API (backend) for connection into a
-// simulation of an ESI system. Currently uses Cap'nProto RPC, but that could
-// change. Requires Cap'nProto C++ library.
+// simulation of an ESI system. Currently uses gRPC, but that could change.
+// Requires gRPC C++ library.
 //
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file
@@ -23,21 +23,23 @@
 #include "esi/Accelerator.h"
 
 #include <memory>
-
-// Only expose this backend class directly if the cosimulation backend is
-// enabled.
-#ifdef ESI_COSIM
+#include <set>
 
 namespace esi {
 namespace backends {
 namespace cosim {
 
+class CosimEngine;
+class RpcClient;
+
 /// Connect to an ESI simulation.
 class CosimAccelerator : public esi::AcceleratorConnection {
-public:
-  struct Impl;
+  friend class CosimEngine;
 
+public:
   CosimAccelerator(Context &, std::string hostname, uint16_t port);
+  ~CosimAccelerator();
+
   static std::unique_ptr<AcceleratorConnection>
   connect(Context &, std::string connectionString);
 
@@ -49,11 +51,9 @@ public:
   // Set the way this connection will retrieve the manifest.
   void setManifestMethod(ManifestMethod method);
 
-  /// Request the host side channel ports for a particular instance (identified
-  /// by the AppID path). For convenience, provide the bundle type and direction
-  /// of the bundle port.
-  virtual std::map<std::string, ChannelPort &>
-  requestChannelsFor(AppIDPath, const BundleType *) override;
+  void createEngine(const std::string &engineTypeName, AppIDPath idPath,
+                    const ServiceImplDetails &details,
+                    const HWClientDetails &clients) override;
 
 protected:
   virtual Service *createService(Service::Type service, AppIDPath path,
@@ -62,14 +62,17 @@ protected:
                                  const HWClientDetails &clients) override;
 
 private:
-  std::unique_ptr<Impl> impl;
+  std::unique_ptr<RpcClient> rpcClient;
+
+  // We own all channels connected to rpcClient since their lifetime is tied to
+  // rpcClient.
+  std::set<std::unique_ptr<ChannelPort>> channels;
+
   ManifestMethod manifestMethod = Cosim;
 };
 
 } // namespace cosim
 } // namespace backends
 } // namespace esi
-
-#endif // ESI_COSIM
 
 #endif // ESI_BACKENDS_COSIM_H

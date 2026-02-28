@@ -16,7 +16,7 @@ module attributes {calyx.entrypoint = "main"} {
         calyx.assign %incr.left = %p.out : i3
         calyx.assign %incr.right = %c1_3 : i3
         calyx.assign %p.in = %incr.out : i3
-        // CHECK: p.write_en = %0 ? 1'd1;
+        // CHECK: p.write_en = %0 ? 1'b1;
         %0 = calyx.cycle 0
         calyx.assign %p.write_en = %0 ? %c1_1 : i1
       }
@@ -49,7 +49,7 @@ module attributes {calyx.entrypoint = "main"} {
         calyx.assign %incr.left = %p.out : i3
         calyx.assign %incr.right = %c1_3 : i3
         calyx.assign %p.in = %incr.out : i3
-        // CHECK: p.write_en = %0 ? 1'd1;
+        // CHECK: p.write_en = %0 ? 1'b1;
         %0 = calyx.cycle 0
         calyx.assign %p.write_en = %0 ? %c1_1 : i1
       }
@@ -82,11 +82,11 @@ module attributes {calyx.entrypoint = "main"} {
       calyx.static_group latency<2> @A {
         calyx.assign %a.in = %c0_2 : i2
         %0 = calyx.cycle 0
-        // CHECK: a.write_en = %0 ? 1'd1;
+        // CHECK: a.write_en = %0 ? 1'b1;
         calyx.assign %a.write_en = %0 ? %c1_1 : i1
         calyx.assign %b.in = %c1_2 : i2
         %1 = calyx.cycle 1
-        // CHECK: b.write_en = %1 ? 1'd1;
+        // CHECK: b.write_en = %1 ? 1'b1;
         calyx.assign %b.write_en = %1 ? %c1_1 : i1
       }
 
@@ -94,7 +94,7 @@ module attributes {calyx.entrypoint = "main"} {
       calyx.static_group latency<1> @C {
         calyx.assign %c.in = %c2_2 : i2
         %0 = calyx.cycle 0
-        // CHECK: c.write_en = %0 ? 1'd1;
+        // CHECK: c.write_en = %0 ? 1'b1;
         calyx.assign %c.write_en = %0 ? %c1_1 : i1
       }
     }
@@ -123,14 +123,14 @@ module attributes {calyx.entrypoint = "main"} {
       // CHECK: static<1> group A {
       calyx.static_group latency<1> @A {
         calyx.assign %a.in = %c0_2  : i2
-        // CHECK: a.write_en = %0 ? 1'd1;
+        // CHECK: a.write_en = %0 ? 1'b1;
         %0 = calyx.cycle 0
         calyx.assign %a.write_en = %0 ? %c1_1 : i1
       }
       // CHECK: static<1> group B {
       calyx.static_group latency<1> @B {
         calyx.assign %b.in =%c2_2  : i2
-        // CHECK: b.write_en = %0 ? 1'd1;
+        // CHECK: b.write_en = %0 ? 1'b1;
         %0 = calyx.cycle 0
         calyx.assign %b.write_en = %0 ? %c1_1 : i1
       }
@@ -162,7 +162,7 @@ module attributes {calyx.entrypoint = "main"} {
       // CHECK: static<1> group C {
       calyx.static_group latency<1> @C {
         calyx.assign %c.in = %c0_2 : i2
-        // CHECK: c.write_en = %0 ? 1'd1;
+        // CHECK: c.write_en = %0 ? 1'b1;
         %0 = calyx.cycle 0
         calyx.assign %c.write_en = %0 ? %c1_1 : i1
       }
@@ -170,7 +170,7 @@ module attributes {calyx.entrypoint = "main"} {
       // CHECK: static<1> group D {
       calyx.static_group latency<1> @D {
         calyx.assign %d.in = %c1_2 : i2
-        // CHECK: d.write_en = %0 ? 1'd1;
+        // CHECK: d.write_en = %0 ? 1'b1;
         %0 = calyx.cycle 0
         calyx.assign %d.write_en = %0 ? %c1_1 : i1
       }

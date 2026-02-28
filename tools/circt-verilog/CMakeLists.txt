@@ -1,11 +1,34 @@
-add_circt_tool(circt-verilog
-  circt-verilog.cpp
+set(libs
+  CIRCTComb
+  CIRCTDebug
+  CIRCTHW
+  CIRCTImportVerilog
+  CIRCTLLHD
+  CIRCTLLHDTransforms
+  CIRCTMoore
+  CIRCTMooreToCore
+  CIRCTMooreTransforms
+  CIRCTSeq
+  CIRCTSeqTransforms
+  CIRCTSim
+  CIRCTSupport
+  CIRCTTransforms
+  CIRCTVerif
+  MLIRArithDialect
+  MLIRBytecodeReader
+  MLIRControlFlowDialect
+  MLIRFuncDialect
+  MLIRFuncInlinerExtension
+  MLIRIR
+  MLIRLLVMDialect
+  MLIRLLVMIRTransforms
+  MLIRParser
+  MLIRSCFDialect
+  MLIRSupport
 )
+
+add_circt_tool(circt-verilog circt-verilog.cpp DEPENDS ${libs})
+target_link_libraries(circt-verilog PRIVATE ${libs})
 
 llvm_update_compile_flags(circt-verilog)
-
-target_link_libraries(circt-verilog PRIVATE
-  CIRCTImportVerilog
-  CIRCTSupport
-  MLIRIR
-)
+mlir_check_all_link_libraries(circt-verilog)

@@ -43,6 +43,9 @@ public:
     // Data read from the accelerator is read from the trace file.
     // TODO: Full trace mode not yet supported.
     // Read
+
+    // Discard all data sent to the accelerator. Disable trace file generation.
+    Discard,
   };
 
   /// Create a trace-based accelerator backend.
@@ -52,21 +55,23 @@ public:
   ///   is opened for writing. For 'Read' mode, this file is opened for reading.
   TraceAccelerator(Context &, Mode mode, std::filesystem::path manifestJson,
                    std::filesystem::path traceFile);
+  ~TraceAccelerator() override;
 
   /// Parse the connection string and instantiate the accelerator. Format is:
-  /// "<mode>:<manifest path>[:<traceFile>]".
+  /// "<mode>SEP<manifest path>[SEP<traceFile>]" where SEP is ':' on Unix
+  /// and ';' on Windows (to avoid conflicts with drive letters).
   static std::unique_ptr<AcceleratorConnection>
   connect(Context &, std::string connectionString);
 
   /// Internal implementation.
   struct Impl;
-
-  /// Request the host side channel ports for a particular instance (identified
-  /// by the AppID path). For convenience, provide the bundle type.
-  std::map<std::string, ChannelPort &>
-  requestChannelsFor(AppIDPath, const BundleType *) override;
+  Impl &getImpl();
 
 protected:
+  void createEngine(const std::string &engineTypeName, AppIDPath idPath,
+                    const ServiceImplDetails &details,
+                    const HWClientDetails &clients) override;
+
   virtual Service *createService(Service::Type service, AppIDPath idPath,
                                  std::string implName,
                                  const ServiceImplDetails &details,

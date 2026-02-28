@@ -70,11 +70,11 @@ def ServiceRequestRecordOp : ESI_Op<"manifest.req", [
   let arguments = (ins AppIDAttr:$requestor,
                        InnerRefAttr:$servicePort,
                        OptionalAttr<StrAttr>:$stdService,
-                       TypeAttrOf<ChannelBundleType>:$bundleType);
+                       TypeAttrOf<ChannelBundleType>:$typeID);
 
   let assemblyFormat = [{
     qualified($requestor) `,` $servicePort (`std` $stdService^)?
-    `,` $bundleType attr-dict
+    `,` $typeID attr-dict
   }];
 
   let extraClassDeclaration = [{
@@ -99,6 +99,7 @@ def ServiceImplRecordOp : ESI_Op<"manifest.service_impl", [
   }];
 
   let arguments = (ins AppIDAttr:$appID,
+                       DefaultValuedAttr<UnitAttr, "false">:$isEngine,
                        OptionalAttr<FlatSymbolRefAttr>:$service,
                        OptionalAttr<StrAttr>:$stdService,
                        StrAttr:$serviceImplName,
@@ -106,7 +107,7 @@ def ServiceImplRecordOp : ESI_Op<"manifest.service_impl", [
   let regions = (region SizedRegion<1>:$reqDetails);
   let assemblyFormat = [{
     qualified($appID) (`svc` $service^)? (`std` $stdService^)?
-   `by` $serviceImplName `with` $implDetails
+   `by` $serviceImplName (`engine` $isEngine^)? `with` $implDetails
     attr-dict-with-keyword custom<ServiceImplRecordReqDetails>($reqDetails)
   }];
 
@@ -123,16 +124,19 @@ def ServiceImplClientRecordOp : ESI_Op<"manifest.impl_conn", [
   let summary = "Details of a service implementation client connection";
   let description = [{
     A record containing all the necessary details of how to connect to a client
-    which the parent service record is servicing.
+    which the parent service record is servicing. Emitted on a per-client bundle
+    basis. There shall be at most on of these records in the entire manifest for
+    a particular client.
   }];
 
   let arguments = (ins AppIDArrayAttr:$relAppIDPath,
                        InnerRefAttr:$servicePort,
-                       TypeAttrOf<ChannelBundleType>:$bundleType,
-                       DictionaryAttr:$implDetails);
+                       TypeAttrOf<ChannelBundleType>:$typeID,
+                       OptionalAttr<DictionaryAttr>:$channelAssignments,
+                       OptionalAttr<DictionaryAttr>:$implDetails);
   let assemblyFormat = [{
-    $relAppIDPath `req` $servicePort `(` $bundleType `)`
-      `with` $implDetails attr-dict
+    $relAppIDPath `req` $servicePort `(` $typeID `)`
+      (`channels` $channelAssignments^)? (`with` $implDetails^)? attr-dict
   }];
 
   let extraClassDeclaration = [{
@@ -166,6 +170,23 @@ def AppIDHierNodeOp : ESI_Op<"manifest.hier_node", [
 
   let assemblyFormat = [{
     qualified($appID) `mod` $moduleRef attr-dict-with-keyword $children
+  }];
+}
+
+def SymbolConstantsOp : ESI_Op<"manifest.constants", [
+  DeclareOpInterfaceMethods<IsManifestData>]> {
+  let summary = "Constant values associated with a symbol";
+
+  let arguments = (ins FlatSymbolRefAttr:$symbolRef,
+                       DictionaryAttr:$constants);
+  let assemblyFormat = [{
+    $symbolRef $constants attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    // Get information which needs to appear in the manifest for the host to
+    // connect to this service.
+    void getDetails(SmallVectorImpl<NamedAttribute> &results);
   }];
 }
 

@@ -31,7 +31,7 @@ namespace circt {
 namespace om {
 
 namespace evaluator {
-struct EvaluatorValue;
+class EvaluatorValue;
 
 /// A value of an object in memory. It is either a composite Object, or a
 /// primitive Attribute. Further refinement is expected.
@@ -45,19 +45,36 @@ using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
 /// Enables the shared_from_this functionality so Evaluator Value pointers can
 /// be passed through the CAPI and unwrapped back into C++ smart pointers with
 /// the appropriate reference count.
-struct EvaluatorValue : std::enable_shared_from_this<EvaluatorValue> {
+class EvaluatorValue : public std::enable_shared_from_this<EvaluatorValue> {
+public:
   // Implement LLVM RTTI.
-  enum class Kind { Attr, Object, List, Tuple, Map, Reference, BasePath, Path };
+  enum class Kind { Attr, Object, List, Reference, BasePath, Path };
   EvaluatorValue(MLIRContext *ctx, Kind kind, Location loc)
       : kind(kind), ctx(ctx), loc(loc) {}
   Kind getKind() const { return kind; }
   MLIRContext *getContext() const { return ctx; }
 
   // Return true the value is fully evaluated.
+  // Unknown values are considered fully evaluated.
   bool isFullyEvaluated() const { return fullyEvaluated; }
   void markFullyEvaluated() {
     assert(!fullyEvaluated && "should not mark twice");
     fullyEvaluated = true;
+  }
+
+  /// Return true if the value is unknown (has unknown in its fan-in).
+  /// A value is unknown if it depends on an UnknownValueOp or if any of its
+  /// inputs are unknown. Unknown values propagate through operations.
+  bool isUnknown() const { return unknown; }
+
+  /// Mark this value as unknown.
+  /// This also marks the value as fully evaluated if it isn't already, since
+  /// unknown values are considered fully evaluated. This maintains the
+  /// invariant that unknown implies fullyEvaluated.
+  void markUnknown() {
+    unknown = true;
+    if (!fullyEvaluated)
+      markFullyEvaluated();
   }
 
   /// Return the associated MLIR context.
@@ -85,12 +102,14 @@ private:
   Location loc;
   bool fullyEvaluated = false;
   bool finalized = false;
+  bool unknown = false;
 };
 
 /// Values which can be used as pointers to different values.
 /// ReferenceValue is replaced with its element and erased at the end of
 /// evaluation.
-struct ReferenceValue : EvaluatorValue {
+class ReferenceValue : public EvaluatorValue {
+public:
   ReferenceValue(Type type, Location loc)
       : EvaluatorValue(type.getContext(), Kind::Reference, loc), value(nullptr),
         type(type) {}
@@ -129,21 +148,8 @@ private:
 };
 
 /// Values which can be directly representable by MLIR attributes.
-struct AttributeValue : EvaluatorValue {
-  AttributeValue(Attribute attr)
-      : AttributeValue(attr, mlir::UnknownLoc::get(attr.getContext())) {}
-  AttributeValue(Attribute attr, Location loc)
-      : EvaluatorValue(attr.getContext(), Kind::Attr, loc), attr(attr),
-        type(cast<TypedAttr>(attr).getType()) {
-    markFullyEvaluated();
-  }
-
-  // Constructors for partially evaluated AttributeValue.
-  AttributeValue(Type type)
-      : AttributeValue(mlir::UnknownLoc::get(type.getContext())) {}
-  AttributeValue(Type type, Location loc)
-      : EvaluatorValue(type.getContext(), Kind::Attr, loc), type(type) {}
-
+class AttributeValue : public EvaluatorValue {
+public:
   Attribute getAttr() const { return attr; }
   template <typename AttrTy>
   AttrTy getAs() const {
@@ -161,9 +167,32 @@ struct AttributeValue : EvaluatorValue {
 
   Type getType() const { return type; }
 
+  // Factory methods that create AttributeValue objects
+  static std::shared_ptr<EvaluatorValue> get(Attribute attr,
+                                             LocationAttr loc = {});
+  static std::shared_ptr<EvaluatorValue> get(Type type, LocationAttr loc = {});
+
 private:
+  // Make AttributeValue constructible only by the factory methods
+  struct PrivateTag {};
+
+  // Constructor that requires a PrivateTag
+  AttributeValue(PrivateTag, Attribute attr, Location loc)
+      : EvaluatorValue(attr.getContext(), Kind::Attr, loc), attr(attr),
+        type(cast<TypedAttr>(attr).getType()) {
+    markFullyEvaluated();
+  }
+
+  // Constructor for partially evaluated AttributeValue
+  AttributeValue(PrivateTag, Type type, Location loc)
+      : EvaluatorValue(type.getContext(), Kind::Attr, loc), type(type) {}
+
   Attribute attr = {};
   Type type;
+
+  // Friend declaration for the factory methods
+  friend std::shared_ptr<EvaluatorValue> get(Attribute attr, LocationAttr loc);
+  friend std::shared_ptr<EvaluatorValue> get(Type type, LocationAttr loc);
 };
 
 // This perform finalization to `value`.
@@ -180,7 +209,8 @@ static inline LogicalResult finalizeEvaluatorValue(EvaluatorValuePtr &value) {
 }
 
 /// A List which contains variadic length of elements with the same type.
-struct ListValue : EvaluatorValue {
+class ListValue : public EvaluatorValue {
+public:
   ListValue(om::ListType type, SmallVector<EvaluatorValuePtr> elements,
             Location loc)
       : EvaluatorValue(type.getContext(), Kind::List, loc), type(type),
@@ -215,57 +245,20 @@ private:
   SmallVector<EvaluatorValuePtr> elements;
 };
 
-/// A Map value.
-struct MapValue : EvaluatorValue {
-  MapValue(om::MapType type, DenseMap<Attribute, EvaluatorValuePtr> elements,
-           Location loc)
-      : EvaluatorValue(type.getContext(), Kind::Map, loc), type(type),
-        elements(std::move(elements)) {
-    markFullyEvaluated();
-  }
-
-  // Partially evaluated value.
-  MapValue(om::MapType type, Location loc)
-      : EvaluatorValue(type.getContext(), Kind::Map, loc), type(type) {}
-
-  const auto &getElements() const { return elements; }
-  void setElements(DenseMap<Attribute, EvaluatorValuePtr> newElements) {
-    elements = std::move(newElements);
-    markFullyEvaluated();
-  }
-
-  // Finalize the evaluator value.
-  LogicalResult finalizeImpl();
-
-  /// Return the type of the value, which is a MapType.
-  om::MapType getMapType() const { return type; }
-
-  /// Return an array of keys in the ascending order.
-  ArrayAttr getKeys();
-
-  /// Implement LLVM RTTI.
-  static bool classof(const EvaluatorValue *e) {
-    return e->getKind() == Kind::Map;
-  }
-
-private:
-  om::MapType type;
-  DenseMap<Attribute, EvaluatorValuePtr> elements;
-};
-
 /// A composite Object, which has a type and fields.
-struct ObjectValue : EvaluatorValue {
-  ObjectValue(om::ClassOp cls, ObjectFields fields, Location loc)
+class ObjectValue : public EvaluatorValue {
+public:
+  ObjectValue(om::ClassLike cls, ObjectFields fields, Location loc)
       : EvaluatorValue(cls.getContext(), Kind::Object, loc), cls(cls),
         fields(std::move(fields)) {
     markFullyEvaluated();
   }
 
   // Partially evaluated value.
-  ObjectValue(om::ClassOp cls, Location loc)
+  ObjectValue(om::ClassLike cls, Location loc)
       : EvaluatorValue(cls.getContext(), Kind::Object, loc), cls(cls) {}
 
-  om::ClassOp getClassOp() const { return cls; }
+  om::ClassLike getClassOp() const { return cls; }
   const auto &getFields() const { return fields; }
 
   void setFields(llvm::SmallDenseMap<StringAttr, EvaluatorValuePtr> newFields) {
@@ -275,9 +268,9 @@ struct ObjectValue : EvaluatorValue {
 
   /// Return the type of the value, which is a ClassType.
   om::ClassType getObjectType() const {
-    auto clsConst = const_cast<ClassOp &>(cls);
-    return ClassType::get(clsConst.getContext(),
-                          FlatSymbolRefAttr::get(clsConst.getNameAttr()));
+    auto clsNonConst = const_cast<om::ClassLike &>(cls);
+    return ClassType::get(clsNonConst.getContext(),
+                          FlatSymbolRefAttr::get(clsNonConst.getSymNameAttr()));
   }
 
   Type getType() const { return getObjectType(); }
@@ -300,52 +293,13 @@ struct ObjectValue : EvaluatorValue {
   LogicalResult finalizeImpl();
 
 private:
-  om::ClassOp cls;
+  om::ClassLike cls;
   llvm::SmallDenseMap<StringAttr, EvaluatorValuePtr> fields;
 };
 
-/// Tuple values.
-struct TupleValue : EvaluatorValue {
-  using TupleElements = llvm::SmallVector<EvaluatorValuePtr>;
-  TupleValue(TupleType type, TupleElements tupleElements, Location loc)
-      : EvaluatorValue(type.getContext(), Kind::Tuple, loc), type(type),
-        elements(std::move(tupleElements)) {
-    markFullyEvaluated();
-  }
-
-  // Partially evaluated value.
-  TupleValue(TupleType type, Location loc)
-      : EvaluatorValue(type.getContext(), Kind::Tuple, loc), type(type) {}
-
-  void setElements(TupleElements newElements) {
-    elements = std::move(newElements);
-    markFullyEvaluated();
-  }
-
-  LogicalResult finalizeImpl() {
-    for (auto &&value : elements)
-      if (failed(finalizeEvaluatorValue(value)))
-        return failure();
-
-    return success();
-  }
-  /// Implement LLVM RTTI.
-  static bool classof(const EvaluatorValue *e) {
-    return e->getKind() == Kind::Tuple;
-  }
-
-  /// Return the type of the value, which is a TupleType.
-  TupleType getTupleType() const { return type; }
-
-  const TupleElements &getElements() const { return elements; }
-
-private:
-  TupleType type;
-  TupleElements elements;
-};
-
 /// A Basepath value.
-struct BasePathValue : EvaluatorValue {
+class BasePathValue : public EvaluatorValue {
+public:
   BasePathValue(MLIRContext *context);
 
   /// Create a path value representing a basepath.
@@ -369,7 +323,8 @@ private:
 };
 
 /// A Path value.
-struct PathValue : EvaluatorValue {
+class PathValue : public EvaluatorValue {
+public:
   /// Create a path value representing a regular path.
   PathValue(om::TargetKindAttr targetKind, om::PathAttr path, StringAttr module,
             StringAttr ref, StringAttr field, Location loc);
@@ -417,7 +372,8 @@ getEvaluatorValuesFromAttributes(MLIRContext *context,
 
 /// An Evaluator, which is constructed with an IR module and can instantiate
 /// Objects. Further refinement is expected.
-struct Evaluator {
+class Evaluator {
+public:
   /// Construct an Evaluator with an IR module.
   Evaluator(ModuleOp mod);
 
@@ -481,14 +437,9 @@ private:
   FailureOr<EvaluatorValuePtr> evaluateListCreate(ListCreateOp op,
                                                   ActualParameters actualParams,
                                                   Location loc);
-  FailureOr<EvaluatorValuePtr>
-  evaluateTupleCreate(TupleCreateOp op, ActualParameters actualParams,
-                      Location loc);
-  FailureOr<EvaluatorValuePtr>
-  evaluateTupleGet(TupleGetOp op, ActualParameters actualParams, Location loc);
-  FailureOr<evaluator::EvaluatorValuePtr>
-  evaluateMapCreate(MapCreateOp op, ActualParameters actualParams,
-                    Location loc);
+  FailureOr<EvaluatorValuePtr> evaluateListConcat(ListConcatOp op,
+                                                  ActualParameters actualParams,
+                                                  Location loc);
   FailureOr<evaluator::EvaluatorValuePtr>
   evaluateBasePathCreate(FrozenBasePathCreateOp op,
                          ActualParameters actualParams, Location loc);
@@ -498,6 +449,8 @@ private:
   FailureOr<evaluator::EvaluatorValuePtr>
   evaluateEmptyPath(FrozenEmptyPathOp op, ActualParameters actualParams,
                     Location loc);
+  FailureOr<evaluator::EvaluatorValuePtr>
+  evaluateUnknownValue(UnknownValueOp op, Location loc);
 
   FailureOr<ActualParameters>
   createParametersFromOperands(ValueRange range, ActualParameters actualParams,
@@ -531,14 +484,16 @@ operator<<(mlir::Diagnostic &diag,
     diag << "Object(" << object->getType() << ")";
   else if (auto *list = llvm::dyn_cast<evaluator::ListValue>(&evaluatorValue))
     diag << "List(" << list->getType() << ")";
-  else if (auto *map = llvm::dyn_cast<evaluator::MapValue>(&evaluatorValue))
-    diag << "Map(" << map->getType() << ")";
   else if (llvm::isa<evaluator::BasePathValue>(&evaluatorValue))
     diag << "BasePath()";
   else if (llvm::isa<evaluator::PathValue>(&evaluatorValue))
     diag << "Path()";
   else
     assert(false && "unhandled evaluator value");
+
+  // Add unknown marker if the value is unknown
+  if (evaluatorValue.isUnknown())
+    diag << " [unknown]";
   return diag;
 }
 

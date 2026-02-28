@@ -1,4 +1,4 @@
-// RUN: circt-opt -canonicalize='top-down=true region-simplify=true' %s | FileCheck %s
+// RUN: circt-opt -canonicalize='top-down=true region-simplify=aggressive' %s | FileCheck %s
 
 // CHECK-LABEL: func @if_dead_condition(%arg0: i1) {
 // CHECK-NEXT:    [[FD:%.*]] = hw.constant -2147483646 : i32
@@ -319,5 +319,13 @@ hw.module @MergeAssignments(in %a: !hw.array<4xi1>, in %clock: i1, out d: !hw.ar
 // CHECK-NEXT: hw.output
 hw.module @Sampled(in %in: i1) {
   %2 = sv.system.sampled %in : i1
+  hw.output
+}
+
+// CHECK-LABEL: @Issue7563
+// CHECK-NEXT: hw.output
+hw.module @Issue7563(in %in: i8) {
+  %r = sv.reg : !hw.inout<i8>
+  sv.assign %r, %in : i8
   hw.output
 }

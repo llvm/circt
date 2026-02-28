@@ -41,14 +41,33 @@ static bool isAlways(Value value, bool expected) {
 
 LogicalResult StateOp::fold(FoldAdaptor adaptor,
                             SmallVectorImpl<OpFoldResult> &results) {
-  if ((isAlways(adaptor.getEnable(), false) ||
-       isAlways(adaptor.getReset(), true)) &&
-      !getOperation()->hasAttr("name") && !getOperation()->hasAttr("names")) {
-    // We can fold to zero here because the states are zero-initialized and
-    // don't ever change.
-    for (auto resTy : getResultTypes())
-      results.push_back(IntegerAttr::get(resTy, 0));
-    return success();
+
+  if (getNumResults() > 0 && !getOperation()->hasAttr("name") &&
+      !getOperation()->hasAttr("names")) {
+    bool hasExplicitInitials = !getInitials().empty();
+    bool allInitialsConstant =
+        !hasExplicitInitials ||
+        llvm::all_of(adaptor.getInitials(),
+                     [&](Attribute attr) { return !!attr; });
+    if (isAlways(adaptor.getEnable(), false) && allInitialsConstant) {
+      // Fold to the explicit or implicit initial value if
+      // the state is never enabled and the initial values
+      // are compile-time constants.
+      if (hasExplicitInitials)
+        results.append(adaptor.getInitials().begin(),
+                       adaptor.getInitials().end());
+      else
+        for (auto resTy : getResultTypes())
+          results.push_back(IntegerAttr::get(resTy, 0));
+      return success();
+    }
+    if (!hasExplicitInitials && isAlways(adaptor.getReset(), true)) {
+      // We assume both the implicit initial value and the
+      // implicit (synchronous) reset value to be zero.
+      for (auto resTy : getResultTypes())
+        results.push_back(IntegerAttr::get(resTy, 0));
+      return success();
+    }
   }
 
   // Remove operand when input is default value.
@@ -98,8 +117,10 @@ LogicalResult MemoryWriteOp::canonicalize(MemoryWriteOp op,
 LogicalResult StorageGetOp::canonicalize(StorageGetOp op,
                                          PatternRewriter &rewriter) {
   if (auto pred = op.getStorage().getDefiningOp<StorageGetOp>()) {
-    op.getStorageMutable().assign(pred.getStorage());
-    op.setOffset(op.getOffset() + pred.getOffset());
+    rewriter.modifyOpInPlace(op, [&] {
+      op.getStorageMutable().assign(pred.getStorage());
+      op.setOffset(op.getOffset() + pred.getOffset());
+    });
     return success();
   }
   return failure();
@@ -116,21 +137,28 @@ static bool removeUnusedClockDomainInputs(ClockDomainOp op,
     if (arg.use_empty()) {
       auto i = arg.getArgNumber();
       toDelete.set(i);
-      op.getInputsMutable().erase(i);
+      rewriter.modifyOpInPlace(op, [&] { op.getInputsMutable().erase(i); });
     }
   }
-  op.getBodyBlock().eraseArguments(toDelete);
-  return toDelete.any();
+  if (toDelete.any()) {
+    rewriter.modifyOpInPlace(
+        op, [&] { op.getBodyBlock().eraseArguments(toDelete); });
+    return true;
+  }
+  return false;
 }
 
 static bool removeUnusedClockDomainOutputs(ClockDomainOp op,
                                            PatternRewriter &rewriter) {
   SmallVector<Type> resultTypes;
   for (auto res : llvm::reverse(op->getResults())) {
-    if (res.use_empty())
-      op.getBodyBlock().getTerminator()->eraseOperand(res.getResultNumber());
-    else
+    if (res.use_empty()) {
+      auto *terminator = op.getBodyBlock().getTerminator();
+      rewriter.modifyOpInPlace(
+          terminator, [&] { terminator->eraseOperand(res.getResultNumber()); });
+    } else {
       resultTypes.push_back(res.getType());
+    }
   }
 
   // Nothing is changed.
@@ -139,8 +167,8 @@ static bool removeUnusedClockDomainOutputs(ClockDomainOp op,
 
   rewriter.setInsertionPoint(op);
 
-  auto newDomain = rewriter.create<ClockDomainOp>(
-      op.getLoc(), resultTypes, op.getInputs(), op.getClock());
+  auto newDomain = ClockDomainOp::create(rewriter, op.getLoc(), resultTypes,
+                                         op.getInputs(), op.getClock());
   rewriter.inlineRegionBefore(op.getBody(), newDomain.getBody(),
                               newDomain->getRegion(0).begin());
 

@@ -28,6 +28,10 @@ class HWModuleOp;
 } // namespace circt
 
 namespace circt {
+
+#define GEN_PASS_DECL_LOWERHWTOSV
+#include "circt/Conversion/Passes.h.inc"
+
 std::unique_ptr<mlir::OperationPass<hw::HWModuleOp>> createLowerHWToSVPass();
 } // namespace circt
 

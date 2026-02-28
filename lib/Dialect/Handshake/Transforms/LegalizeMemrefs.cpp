@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Support/BackedgeBuilder.h"
@@ -18,8 +17,16 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Rewrite/FrozenRewritePatternSet.h"
 #include "mlir/Transforms/DialectConversion.h"
+
+namespace circt {
+namespace handshake {
+#define GEN_PASS_DEF_HANDSHAKELEGALIZEMEMREFS
+#include "circt/Dialect/Handshake/HandshakePasses.h.inc"
+} // namespace handshake
+} // namespace circt
 
 using namespace circt;
 using namespace handshake;
@@ -28,7 +35,8 @@ using namespace mlir;
 namespace {
 
 struct HandshakeLegalizeMemrefsPass
-    : public HandshakeLegalizeMemrefsBase<HandshakeLegalizeMemrefsPass> {
+    : public circt::handshake::impl::HandshakeLegalizeMemrefsBase<
+          HandshakeLegalizeMemrefsPass> {
   void runOnOperation() override {
     func::FuncOp op = getOperation();
     if (op.isExternal())
@@ -63,25 +71,25 @@ struct HandshakeLegalizeMemrefsPass
 
       auto emitLoadStore = [&](Value index) {
         llvm::SmallVector<Value> indices = {index};
-        auto loadValue = b.create<memref::LoadOp>(loc, src, indices);
-        b.create<memref::StoreOp>(loc, loadValue, dst, indices);
+        auto loadValue = memref::LoadOp::create(b, loc, src, indices);
+        memref::StoreOp::create(b, loc, loadValue, dst, indices);
       };
 
       auto n = memrefType.getShape()[0];
 
       if (n > 1) {
-        auto lb = b.create<arith::ConstantIndexOp>(loc, 0).getResult();
-        auto ub = b.create<arith::ConstantIndexOp>(loc, n).getResult();
-        auto step = b.create<arith::ConstantIndexOp>(loc, 1).getResult();
+        auto lb = arith::ConstantIndexOp::create(b, loc, 0).getResult();
+        auto ub = arith::ConstantIndexOp::create(b, loc, n).getResult();
+        auto step = arith::ConstantIndexOp::create(b, loc, 1).getResult();
 
-        b.create<scf::ForOp>(
-            loc, lb, ub, step, llvm::SmallVector<Value>(),
+        scf::ForOp::create(
+            b, loc, lb, ub, step, llvm::SmallVector<Value>(),
             [&](OpBuilder &b, Location loc, Value iv, ValueRange loopState) {
               emitLoadStore(iv);
-              b.create<scf::YieldOp>(loc);
+              scf::YieldOp::create(b, loc);
             });
       } else
-        emitLoadStore(b.create<arith::ConstantIndexOp>(loc, 0));
+        emitLoadStore(arith::ConstantIndexOp::create(b, loc, 0));
 
       copy.erase();
     }

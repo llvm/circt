@@ -14,8 +14,12 @@
 #define CIRCT_CONVERSION_IMPORTVERILOG_H
 
 #include "circt/Support/LLVM.h"
+#include "mlir/Pass/PassOptions.h"
+#include "llvm/Support/CommandLine.h"
+#include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace llvm {
 class SourceMgr;
@@ -23,6 +27,7 @@ class SourceMgr;
 
 namespace mlir {
 class LocationAttr;
+class PassManager;
 class TimingScope;
 } // namespace mlir
 
@@ -44,6 +49,12 @@ struct ImportVerilogOptions {
     Full
   };
   Mode mode = Mode::Full;
+
+  /// Generate debug information in the form of debug dialect ops in the IR.
+  bool debugInfo = false;
+
+  /// Interpret `always @(*)` as `always_comb`.
+  bool lowerAlwaysAtStarAsComb = true;
 
   //===--------------------------------------------------------------------===//
   // Include paths
@@ -130,6 +141,9 @@ struct ImportVerilogOptions {
 
   /// A list of library files to include in the compilation.
   std::vector<std::string> libraryFiles;
+
+  /// A list of command files to process for compilation.
+  std::vector<std::string> commandFiles;
 };
 
 /// Parse files in a source manager as Verilog source code and populate the
@@ -138,6 +152,28 @@ mlir::LogicalResult
 importVerilog(llvm::SourceMgr &sourceMgr, mlir::MLIRContext *context,
               mlir::TimingScope &ts, mlir::ModuleOp module,
               const ImportVerilogOptions *options = nullptr);
+
+/// Optimize and simplify the Moore dialect IR.
+void populateVerilogToMoorePipeline(mlir::OpPassManager &pm);
+
+/// Convert Moore dialect IR into core dialect IR
+void populateMooreToCorePipeline(mlir::OpPassManager &pm);
+
+/// Convert LLHD dialect IR into core dialect IR
+struct LlhdToCorePipelineOptions
+    : mlir::PassPipelineOptions<LlhdToCorePipelineOptions> {
+  Option<bool> detectMemories{
+      *this, "detect-memories",
+      llvm::cl::desc("Detect memories and lower them to `seq.firmem`"),
+      llvm::cl::init(true)};
+  Option<bool> sroa{
+      *this, "sroa",
+      llvm::cl::desc("Destructure arrays and structs into individual signals. "
+                     "See https://github.com/llvm/circt/issues/8804."),
+      llvm::cl::init(false)};
+};
+void populateLlhdToCorePipeline(mlir::OpPassManager &pm,
+                                const LlhdToCorePipelineOptions &options);
 
 /// Run the files in a source manager through Slang's Verilog preprocessor and
 /// emit the result to the given output stream.

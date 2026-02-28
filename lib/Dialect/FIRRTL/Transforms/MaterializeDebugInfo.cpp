@@ -6,15 +6,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/Naming.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
-#include "llvm/ADT/StringExtras.h"
-#include "llvm/Support/Parallel.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_MATERIALIZEDEBUGINFO
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -22,7 +28,8 @@ using namespace firrtl;
 
 namespace {
 struct MaterializeDebugInfoPass
-    : public MaterializeDebugInfoBase<MaterializeDebugInfoPass> {
+    : public circt::firrtl::impl::MaterializeDebugInfoBase<
+          MaterializeDebugInfoPass> {
   void runOnOperation() override;
   void materializeVariable(OpBuilder &builder, StringAttr name, Value value);
   Value convertToDebugAggregates(OpBuilder &builder, Value value);
@@ -58,8 +65,8 @@ void MaterializeDebugInfoPass::materializeVariable(OpBuilder &builder,
   if (name.getValue().starts_with("_"))
     return;
   if (auto dbgValue = convertToDebugAggregates(builder, value))
-    builder.create<debug::VariableOp>(value.getLoc(), name, dbgValue,
-                                      /*scope=*/Value{});
+    debug::VariableOp::create(builder, value.getLoc(), name, dbgValue,
+                              /*scope=*/Value{});
 }
 
 /// Unpack all aggregates in a FIRRTL value and repack them as debug aggregates.
@@ -72,15 +79,16 @@ Value MaterializeDebugInfoPass::convertToDebugAggregates(OpBuilder &builder,
         SmallVector<Attribute> names;
         SmallVector<Operation *> subOps;
         for (auto [index, element] : llvm::enumerate(type.getElements())) {
-          auto subOp = builder.create<SubfieldOp>(value.getLoc(), value, index);
+          auto subOp =
+              SubfieldOp::create(builder, value.getLoc(), value, index);
           subOps.push_back(subOp);
           if (auto dbgValue = convertToDebugAggregates(builder, subOp)) {
             fields.push_back(dbgValue);
             names.push_back(element.name);
           }
         }
-        auto result = builder.create<debug::StructOp>(
-            value.getLoc(), fields, builder.getArrayAttr(names));
+        auto result = debug::StructOp::create(builder, value.getLoc(), fields,
+                                              builder.getArrayAttr(names));
         for (auto *subOp : subOps)
           if (subOp->use_empty())
             subOp->erase();
@@ -90,14 +98,15 @@ Value MaterializeDebugInfoPass::convertToDebugAggregates(OpBuilder &builder,
         SmallVector<Value> elements;
         SmallVector<Operation *> subOps;
         for (unsigned index = 0; index < type.getNumElements(); ++index) {
-          auto subOp = builder.create<SubindexOp>(value.getLoc(), value, index);
+          auto subOp =
+              SubindexOp::create(builder, value.getLoc(), value, index);
           subOps.push_back(subOp);
           if (auto dbgValue = convertToDebugAggregates(builder, subOp))
             elements.push_back(dbgValue);
         }
         Value result;
         if (!elements.empty() && elements.size() == type.getNumElements())
-          result = builder.create<debug::ArrayOp>(value.getLoc(), elements);
+          result = debug::ArrayOp::create(builder, value.getLoc(), elements);
         for (auto *subOp : subOps)
           if (subOp->use_empty())
             subOp->erase();
@@ -106,8 +115,4 @@ Value MaterializeDebugInfoPass::convertToDebugAggregates(OpBuilder &builder,
       .Case<FIRRTLBaseType>(
           [&](auto type) { return type.isGround() ? value : Value{}; })
       .Default({});
-}
-
-std::unique_ptr<Pass> firrtl::createMaterializeDebugInfoPass() {
-  return std::make_unique<MaterializeDebugInfoPass>();
 }

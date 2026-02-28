@@ -10,13 +10,29 @@ func.func @test(%a0: !smt.bv<32>, %a1: !smt.bv<32>, %a2: !smt.bv<32>, %a3: !smt.
   %arg4 = builtin.unrealized_conversion_cast %a4 : !smt.bv<1> to i1
   %arg5 = builtin.unrealized_conversion_cast %a5 : !smt.bv<4> to i4
 
-  // CHECK: smt.bv.sdiv [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK:      [[ZERO:%.+]] = smt.bv.constant #smt.bv<0> : !smt.bv<32>
+  // CHECK-NEXT: [[IS_ZERO:%.+]] = smt.eq [[A1]], [[ZERO]] : !smt.bv<32>
+  // CHECK-NEXT: [[UNDEF:%.+]] = smt.declare_fun : !smt.bv<32>
+  // CHECK-NEXT: [[DIV:%.+]] = smt.bv.sdiv [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK-NEXT: smt.ite [[IS_ZERO]], [[UNDEF]], [[DIV]] : !smt.bv<32>
   %0 = comb.divs %arg0, %arg1 : i32
-  // CHECK-NEXT: smt.bv.udiv [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK-NEXT: [[ZERO:%.+]] = smt.bv.constant #smt.bv<0> : !smt.bv<32>
+  // CHECK-NEXT: [[IS_ZERO:%.+]] = smt.eq [[A1]], [[ZERO]] : !smt.bv<32>
+  // CHECK-NEXT: [[UNDEF:%.+]] = smt.declare_fun : !smt.bv<32>
+  // CHECK-NEXT: [[DIV:%.+]] = smt.bv.udiv [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK-NEXT: smt.ite [[IS_ZERO]], [[UNDEF]], [[DIV]] : !smt.bv<32>
   %1 = comb.divu %arg0, %arg1 : i32
-  // CHECK-NEXT: smt.bv.srem [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK-NEXT: [[ZERO:%.+]] = smt.bv.constant #smt.bv<0> : !smt.bv<32>
+  // CHECK-NEXT: [[IS_ZERO:%.+]] = smt.eq [[A1]], [[ZERO]] : !smt.bv<32>
+  // CHECK-NEXT: [[UNDEF:%.+]] = smt.declare_fun : !smt.bv<32>
+  // CHECK-NEXT: [[DIV:%.+]] = smt.bv.srem [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK-NEXT: smt.ite [[IS_ZERO]], [[UNDEF]], [[DIV]] : !smt.bv<32>
   %2 = comb.mods %arg0, %arg1 : i32
-  // CHECK-NEXT: smt.bv.urem [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK-NEXT: [[ZERO:%.+]] = smt.bv.constant #smt.bv<0> : !smt.bv<32>
+  // CHECK-NEXT: [[IS_ZERO:%.+]] = smt.eq [[A1]], [[ZERO]] : !smt.bv<32>
+  // CHECK-NEXT: [[UNDEF:%.+]] = smt.declare_fun : !smt.bv<32>
+  // CHECK-NEXT: [[DIV:%.+]] = smt.bv.urem [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK-NEXT: smt.ite [[IS_ZERO]], [[UNDEF]], [[DIV]] : !smt.bv<32>
   %3 = comb.modu %arg0, %arg1 : i32
 
   // CHECK-NEXT: [[NEG:%.+]] = smt.bv.neg [[A1]] : !smt.bv<32>
@@ -49,25 +65,35 @@ func.func @test(%a0: !smt.bv<32>, %a1: !smt.bv<32>, %a2: !smt.bv<32>, %a3: !smt.
   // CHECK-NEXT: smt.ite [[COND]], [[A0]], [[A1]] : !smt.bv<32>
   %13 = comb.mux %arg4, %arg0, %arg1 : i32
 
-  // CHECK-NEXT: smt.eq [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK-NEXT: [[V0:%.+]] = smt.eq [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK: smt.ite [[V0]]
   %14 = comb.icmp eq %arg0, %arg1 : i32
-  // CHECK-NEXT: smt.distinct [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK-NEXT: [[V0:%.+]] = smt.distinct [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK: smt.ite [[V0]]
   %15 = comb.icmp ne %arg0, %arg1 : i32
-  // CHECK-NEXT: smt.bv.cmp sle [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK-NEXT: [[V0:%.+]] = smt.bv.cmp sle [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK: smt.ite [[V0]]
   %20 = comb.icmp sle %arg0, %arg1 : i32
-  // CHECK-NEXT: smt.bv.cmp slt [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK-NEXT: [[V0:%.+]] = smt.bv.cmp slt [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK: smt.ite [[V0]]
   %21 = comb.icmp slt %arg0, %arg1 : i32
-  // CHECK-NEXT: smt.bv.cmp ule [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK-NEXT: [[V0:%.+]] = smt.bv.cmp ule [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK: smt.ite [[V0]]
   %22 = comb.icmp ule %arg0, %arg1 : i32
-  // CHECK-NEXT: smt.bv.cmp ult [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK-NEXT: [[V0:%.+]] = smt.bv.cmp ult [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK: smt.ite [[V0]]
   %23 = comb.icmp ult %arg0, %arg1 : i32
-  // CHECK-NEXT: smt.bv.cmp sge [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK-NEXT: [[V0:%.+]] = smt.bv.cmp sge [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK: smt.ite [[V0]]
   %24 = comb.icmp sge %arg0, %arg1 : i32
-  // CHECK-NEXT: smt.bv.cmp sgt [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK-NEXT: [[V0:%.+]] = smt.bv.cmp sgt [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK: smt.ite [[V0]]
   %25 = comb.icmp sgt %arg0, %arg1 : i32
-  // CHECK-NEXT: smt.bv.cmp uge [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK-NEXT: [[V0:%.+]] = smt.bv.cmp uge [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK: smt.ite [[V0]]
   %26 = comb.icmp uge %arg0, %arg1 : i32
-  // CHECK-NEXT: smt.bv.cmp ugt [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK-NEXT: [[V0:%.+]] = smt.bv.cmp ugt [[A0]], [[A1]] : !smt.bv<32>
+  // CHECK: smt.ite [[V0]]
   %27 = comb.icmp ugt %arg0, %arg1 : i32
 
   // CHECK-NEXT: smt.bv.extract [[A0]] from 5 : (!smt.bv<32>) -> !smt.bv<16>

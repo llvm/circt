@@ -8,15 +8,16 @@
 ; CHECK:       %[[memory_0:.+]] = firrtl.reg %clock {{.*}}: !firrtl.clock, !firrtl.uint<8>
 ; CHECK:       firrtl.mux(%[[v14:.+]], %wData_0, %[[memory_0]])
 ; CHECK:       firrtl.mux(%[[v19:.+]], %wData_1, %[[v5:.+]])
-; CHECK:       firrtl.strictconnect %[[memory_0]], %[[v22:.+]]
+; CHECK:       firrtl.matchingconnect %[[memory_0]], %[[v22:.+]]
+FIRRTL version 4.0.0
 circuit Issue794: %[[{
     "class": "sifive.enterprise.firrtl.MarkDUTAnnotation",
     "target":"~Issue794|Issue794"
-  }, 
+  },
   {
     "class": "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"
   }]]
-  module Issue794:
+  public module Issue794:
     input clock: Clock
     input rAddr: UInt<2>
     input rEn: UInt<1>
@@ -30,24 +31,25 @@ circuit Issue794: %[[{
       data-type => UInt<8>
       depth => 4
       reader => r
-      writer => w0,w1
+      writer => w0
+      writer => w1
       read-latency => 0
       write-latency => 1
       read-under-write => undefined
 
-    memory.r.clk <= clock
-    memory.r.en <= rEn
-    memory.r.addr <= rAddr
-    rData <= memory.r.data
+    connect memory.r.clk, clock
+    connect memory.r.en, rEn
+    connect memory.r.addr, rAddr
+    connect rData, memory.r.data
 
-    memory.w0.clk <= clock
-    memory.w0.en <= wEn[0]
-    memory.w0.addr <= wAddr[0]
-    memory.w0.mask <= wMask[0]
-    memory.w0.data <= wData[0]
+    connect memory.w0.clk, clock
+    connect memory.w0.en, wEn[0]
+    connect memory.w0.addr, wAddr[0]
+    connect memory.w0.mask, wMask[0]
+    connect memory.w0.data, wData[0]
 
-    memory.w1.clk <= clock
-    memory.w1.en <= wEn[1]
-    memory.w1.addr <= wAddr[1]
-    memory.w1.mask <= wMask[1]
-    memory.w1.data <= wData[1]
+    connect memory.w1.clk, clock
+    connect memory.w1.en, wEn[1]
+    connect memory.w1.addr, wAddr[1]
+    connect memory.w1.mask, wMask[1]
+    connect memory.w1.data, wData[1]

@@ -11,12 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Emit/EmitOpInterfaces.h"
-#include "circt/Dialect/Emit/EmitOps.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 
 using namespace mlir;
 using namespace llvm;
-using namespace circt::seq;
 
 #include "circt/Dialect/Emit/EmitOpInterfaces.cpp.inc"

@@ -11,12 +11,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+namespace circt {
+namespace seq {
+#define GEN_PASS_DEF_LOWERSEQHLMEM
+#include "circt/Dialect/Seq/SeqPasses.h.inc"
+} // namespace seq
+} // namespace circt
 
 using namespace circt;
 using namespace seq;
@@ -68,7 +75,7 @@ public:
     hw::UnpackedArrayType memArrType =
         hw::UnpackedArrayType::get(memType.getElementType(), size);
     auto svMem =
-        rewriter.create<sv::RegOp>(mem.getLoc(), memArrType, mem.getNameAttr())
+        sv::RegOp::create(rewriter, mem.getLoc(), memArrType, mem.getNameAttr())
             .getResult();
 
     // Create write ports by gathering up the write port inputs and
@@ -91,18 +98,18 @@ public:
       rewriter.eraseOp(writeOp);
     }
 
-    auto hwClk = rewriter.create<seq::FromClockOp>(clk.getLoc(), clk);
-    rewriter.create<sv::AlwaysFFOp>(
-        mem.getLoc(), sv::EventControl::AtPosEdge, hwClk, ResetType::SyncReset,
-        sv::EventControl::AtPosEdge, rst, [&] {
+    auto hwClk = seq::FromClockOp::create(rewriter, clk.getLoc(), clk);
+    sv::AlwaysFFOp::create(
+        rewriter, mem.getLoc(), sv::EventControl::AtPosEdge, hwClk,
+        sv::ResetType::SyncReset, sv::EventControl::AtPosEdge, rst, [&] {
           for (auto [loc, address, data, en] : writeTuples) {
             Value a = address, d = data; // So the lambda can capture.
             Location l = loc;
             // Perform write upon write enable being high.
-            rewriter.create<sv::IfOp>(loc, en, [&] {
+            sv::IfOp::create(rewriter, loc, en, [&] {
               Value memLoc =
-                  rewriter.create<sv::ArrayIndexInOutOp>(l, svMem, a);
-              rewriter.create<sv::PAssignOp>(l, memLoc, d);
+                  sv::ArrayIndexInOutOp::create(rewriter, l, svMem, a);
+              sv::PAssignOp::create(rewriter, l, memLoc, d);
             });
           }
         });
@@ -123,8 +130,8 @@ public:
       if (latency > 0) {
         // Materialize any delays on the read address.
         for (unsigned i = 0; i < addressDelayCycles; ++i) {
-          readAddress = rewriter.create<seq::CompRegOp>(
-              loc, readAddress, clk,
+          readAddress = seq::CompRegOp::create(
+              rewriter, loc, readAddress, clk,
               rewriter.getStringAttr(memName + "_rdaddr" + std::to_string(ri) +
                                      "_dly" + std::to_string(i)));
         }
@@ -132,12 +139,12 @@ public:
 
       // Create a combinational read.
       Value memLoc =
-          rewriter.create<sv::ArrayIndexInOutOp>(loc, svMem, readAddress);
-      Value readData = rewriter.create<sv::ReadInOutOp>(loc, memLoc);
+          sv::ArrayIndexInOutOp::create(rewriter, loc, svMem, readAddress);
+      Value readData = sv::ReadInOutOp::create(rewriter, loc, memLoc);
       if (latency > 0) {
         // Register the read data.
-        readData = rewriter.create<seq::CompRegOp>(
-            loc, readData, clk,
+        readData = seq::CompRegOp::create(
+            rewriter, loc, readData, clk,
             rewriter.getStringAttr(memName + "_rd" + std::to_string(ri) +
                                    "_reg"));
       }
@@ -148,11 +155,8 @@ public:
     return success();
   }
 };
-
-#define GEN_PASS_DEF_LOWERSEQHLMEM
-#include "circt/Dialect/Seq/SeqPasses.h.inc"
-
-struct LowerSeqHLMemPass : public impl::LowerSeqHLMemBase<LowerSeqHLMemPass> {
+struct LowerSeqHLMemPass
+    : public circt::seq::impl::LowerSeqHLMemBase<LowerSeqHLMemPass> {
   void runOnOperation() override;
 };
 

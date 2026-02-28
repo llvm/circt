@@ -31,7 +31,7 @@ with Context() as ctx:
   assert (not bundle_type.resettable)
   for bchan in bundle_type.channels:
     print(bchan)
-  # CHECK: ('i16chan', <ChannelDirection.TO: 1>, Type(!esi.channel<i16>))
+  # CHECK: ('i16chan', ChannelDirection.TO, Type(!esi.channel<i16>))
   print()
 
   bundle_type = esi.BundleType.get(
@@ -41,13 +41,93 @@ with Context() as ctx:
   assert (bundle_type.resettable)
   print()
 
+  # Test WindowFieldType
+  field_name_attr = StringAttr.get("field1")
+  window_field_type = esi.WindowFieldType.get(field_name_attr, 5)
+  print(window_field_type)
+  # CHECK: !esi.window.field<"field1", 5>
+  print(window_field_type.field_name)
+  # CHECK: "field1"
+  print(window_field_type.num_items)
+  # CHECK: 5
+  print(window_field_type.bulk_count_width)
+  # CHECK: 0
+  print()
 
-# CHECK-LABEL: === testGen called with op:
-# CHECK:       %0:2 = esi.service.impl_req #esi.appid<"mstop"> svc @HostComms impl as "test"(%clk) : (i1) -> (i8, !esi.bundle<[!esi.channel<i8> to "recv"]>) {
-# CHECK:         %2 = esi.service.impl_req.req <@HostComms::@Recv>([#esi.appid<"loopback_tohw">]) : !esi.bundle<[!esi.channel<i8> to "recv"]>
-def testGen(reqOp: esi.ServiceImplementReqOp) -> bool:
-  print("=== testGen called with op:")
+  # Test WindowFieldType with bulk_count_width (bulk transfer mode)
+  bulk_field_name_attr = StringAttr.get("payload")
+  bulk_window_field_type = esi.WindowFieldType.get(bulk_field_name_attr,
+                                                   bulk_count_width=16)
+  print(bulk_window_field_type)
+  # CHECK: !esi.window.field<"payload" countWidth 16>
+  print(bulk_window_field_type.field_name)
+  # CHECK: "payload"
+  print(bulk_window_field_type.num_items)
+  # CHECK: 0
+  print(bulk_window_field_type.bulk_count_width)
+  # CHECK: 16
+  print()
+
+  # Test WindowFrameType
+  frame_name_attr = StringAttr.get("frame1")
+  field2_name_attr = StringAttr.get("field2")
+  window_field2_type = esi.WindowFieldType.get(field2_name_attr)
+  window_frame_type = esi.WindowFrameType.get(
+      frame_name_attr, [window_field_type, window_field2_type])
+  print(window_frame_type)
+  # CHECK: !esi.window.frame<"frame1", [<"field1", 5>, <"field2">]>
+  print(window_frame_type.name)
+  # CHECK: "frame1"
+  print(len(window_frame_type.members))
+  # CHECK: 2
+  for member in window_frame_type.members:
+    print(member)
+  # CHECK: !esi.window.field<"field1", 5>
+  # CHECK: !esi.window.field<"field2">
+  print()
+
+  # Test WindowType - must use struct type with matching fields
+  window_name_attr = StringAttr.get("window1")
+  i32_type = IntegerType.get_signless(32)
+  i8_type = IntegerType.get_signless(8)
+  # field1 needs to be an array since it has numItems=5
+  array_type = Type.parse("!hw.array<5xi32>")
+  # Create a struct with field1 (array) and field2 (scalar)
+  struct_type = Type.parse("!hw.struct<field1: !hw.array<5xi32>, field2: i8>")
+  window_type = esi.WindowType.get(window_name_attr, struct_type,
+                                   [window_frame_type])
+  print(window_type)
+  # CHECK: !esi.window<"window1", !hw.struct<field1: !hw.array<5xi32>, field2: i8>, [<"frame1", [<"field1", 5>, <"field2">]>]>
+  print(window_type.name)
+  # CHECK: "window1"
+  print(window_type.into)
+  # CHECK: !hw.struct<field1: !hw.array<5xi32>, field2: i8>
+  print(len(window_type.frames))
+  # CHECK: 1
+  for frame in window_type.frames:
+    print(frame)
+  # CHECK: !esi.window.frame<"frame1", [<"field1", 5>, <"field2">]>
+  print(window_type.get_lowered_type())
+  # CHECK: !hw.union<frame1: !hw.struct<field1: !hw.array<5xi32>, field2: i8>>
+  print()
+
+# CHECK-LABEL: === testGen called with ops:
+# CHECK-NEXT:  [[R0:%.+]]:2 = esi.service.impl_req #esi.appid<"mstop"> svc @HostComms impl as "test"(%clk) : (i1) -> (i8, !esi.bundle<[!esi.channel<i8> to "recv"]>) {
+# CHECK-NEXT:    [[R2:%.+]] = esi.service.impl_req.req <@HostComms::@Recv>([#esi.appid<"loopback_tohw">]) : !esi.bundle<[!esi.channel<i8> to "recv"]>
+# CHECK-NEXT:  }
+# CHECK-NEXT:  esi.service.decl @HostComms {
+# CHECK-NEXT:    esi.service.port @Recv : !esi.bundle<[!esi.channel<i8> to "recv"]>
+# CHECK-NEXT:  }
+# CHECK-NEXT:  esi.manifest.service_impl #esi.appid<"mstop"> svc @HostComms by "test" with {}
+
+
+def testGen(reqOp: Operation, decl_op: Operation, rec_op: Operation) -> bool:
+  print("=== testGen called with ops:")
   reqOp.print()
+  print()
+  decl_op.print()
+  print()
+  rec_op.print()
   print()
   return True
 

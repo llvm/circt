@@ -81,33 +81,42 @@ void HWDialect::initialize() {
   addInterfaces<HWOpAsmDialectInterface, HWInlinerInterface>();
 }
 
-// Registered hook to materialize a single constant operation from a given
+/// Registered hook to materialize a single constant operation from a given
 /// attribute value with the desired resultant type. This method should use
 /// the provided builder to create the operation without changing the
 /// insertion position. The generated operation is expected to be constant
 /// like, i.e. single result, zero operands, non side-effecting, etc. On
 /// success, this hook should return the value generated to represent the
 /// constant value. Otherwise, it should return null on failure.
-Operation *HWDialect::materializeConstant(OpBuilder &builder, Attribute value,
-                                          Type type, Location loc) {
+Operation *hw::materializeConstant(OpBuilder &builder, Attribute value,
+                                   Type type, Location loc) {
   // Integer constants can materialize into hw.constant
   if (auto intType = dyn_cast<IntegerType>(type))
     if (auto attrValue = dyn_cast<IntegerAttr>(value))
-      return builder.create<ConstantOp>(loc, type, attrValue);
+      return ConstantOp::create(builder, loc, type, attrValue);
 
   // Aggregate constants.
   if (auto arrayAttr = dyn_cast<ArrayAttr>(value)) {
-    if (isa<StructType, ArrayType, UnpackedArrayType>(type))
-      return builder.create<AggregateConstantOp>(loc, type, arrayAttr);
+    if (type_isa<StructType, ArrayType, UnpackedArrayType>(type))
+      return AggregateConstantOp::create(builder, loc, type, arrayAttr);
   }
 
   // Parameter expressions materialize into hw.param.value.
-  auto parentOp = builder.getBlock()->getParentOp();
+  Block *block = builder.getBlock();
+  if (!block)
+    return nullptr;
+  auto *parentOp = block->getParentOp();
+  if (!parentOp)
+    return nullptr;
   auto curModule = dyn_cast<HWModuleOp>(parentOp);
   if (!curModule)
     curModule = parentOp->getParentOfType<HWModuleOp>();
   if (curModule && isValidParameterExpression(value, curModule))
-    return builder.create<ParamValueOp>(loc, type, value);
-
+    return ParamValueOp::create(builder, loc, type, value);
   return nullptr;
+}
+
+Operation *HWDialect::materializeConstant(OpBuilder &builder, Attribute value,
+                                          Type type, Location loc) {
+  return hw::materializeConstant(builder, value, type, loc);
 }

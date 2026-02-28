@@ -18,6 +18,7 @@ include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 
+include "circt/Dialect/HW/HWTypeInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Seq/SeqTypes.td"
 
@@ -33,22 +34,30 @@ include "circt/Dialect/ESI/ESITypes.td"
 def ChannelSignalingValidReady : I32EnumAttrCase<"ValidReady", 0>;
 // FIFO interface with a read latency of zero. Very similiar to valid-ready, but
 // cannot assert ready if data is not available.
-def ChannelSignalingFIFO0      : I32EnumAttrCase<"FIFO0",      1>;
+def ChannelSignalingFIFO      : I32EnumAttrCase<"FIFO",      1>;
 
 def ChannelSignaling : I32EnumAttr<
     "ChannelSignaling",
     "ESI channel wire signaling standard",
-    [ChannelSignalingValidReady, ChannelSignalingFIFO0]>{
+    [ChannelSignalingValidReady, ChannelSignalingFIFO]>{
   let cppNamespace = "::circt::esi";
 }
 
-def ChannelTypeImpl : ESI_Type<"Channel"> {
+def ChannelTypeImpl : ESI_Type<"Channel", [
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "An ESI-compatible channel port";
   let description = [{
     An ESI port kind which models a latency-insensitive, unidirectional,
     point-to-point data stream. Channels are typed (like all of ESI). Said
     type can be any MLIR type, but must be lowered to something a backend
     knows how to output (i.e. something emitVerilog knows about).
+
+    Parameters:
+      signaling: the style of the control signals (valid/ready vs FIFO).
+      dataDelay: the number of cycles data takes to arrive after the control
+      indicates a transaction has occured. For instance, on a FIFO without read
+      ahead, this would be 1. Defaults to 0.
 
     Example:
 
@@ -63,16 +72,96 @@ def ChannelTypeImpl : ESI_Type<"Channel"> {
       "Type":$inner,
       DefaultValuedParameter<
         "::circt::esi::ChannelSignaling",
-        "::circt::esi::ChannelSignaling::ValidReady">:$signaling);
+        "::circt::esi::ChannelSignaling::ValidReady">:$signaling,
+      DefaultValuedParameter<"uint64_t", "0">:$dataDelay);
 
-  let assemblyFormat = "`<` $inner (`,` $signaling^)? `>`";
+  let assemblyFormat = [{
+    `<` $inner (`,` $signaling^ ( `(` $dataDelay^ `)` )? )? `>`
+  }];
 
   let builders = [
     TypeBuilder<(ins "Type":$type), [{
         return Base::get(type.getContext(), type,
-                         ::circt::esi::ChannelSignaling::ValidReady);
+                         ::circt::esi::ChannelSignaling::ValidReady, 0);
       }]>,
   ];
+
+  let extraClassDeclaration = [{
+    /// Consumers are ones which actually absorb tokens. Non-consumer ops
+    /// include any snooping operations.
+    static SmallVector<std::reference_wrapper<OpOperand>, 4> getConsumers(
+      mlir::TypedValue<ChannelType>);
+    static bool hasOneConsumer(mlir::TypedValue<ChannelType>);
+    static bool hasNoConsumers(mlir::TypedValue<ChannelType>);
+    static LogicalResult verifyChannel(mlir::TypedValue<ChannelType>);
+
+    /// Get the single consumer of a channel. Returns nullptr if there are zero
+    /// or more than one.
+    static OpOperand* getSingleConsumer(mlir::TypedValue<ChannelType>);
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Operations which reveal the internal signals of a channel. They hang off
+// channels but don't count towards its user count.
+//===----------------------------------------------------------------------===//
+
+def SnoopValidReadyOp : ESI_Physical_Op<"snoop.vr", [InferTypeOpInterface]> {
+  let summary = "Get the valid, ready, and data signals from a channel";
+  let description = [{
+    A snoop allows one to combinationally observe a channel's internal signals.
+    It does not count as another user of the channel. Useful for constructing
+    control logic which can be combinationally driven. Also potentially useful
+    for debugging.
+  }];
+
+  let arguments = (ins ChannelType:$input);
+  let results = (outs I1:$valid, I1:$ready, AnyType:$data);
+  let hasVerifier = 1;
+  let assemblyFormat = [{
+    $input attr-dict `:` qualified(type($input))
+  }];
+
+  let extraClassDeclaration = [{
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          std::optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::OpaqueProperties properties,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
+}
+
+def SnoopTransactionOp : ESI_Physical_Op<"snoop.xact", [InferTypeOpInterface]> {
+  let summary = "Get the data and transaction signal from a channel";
+  let description = [{
+    A snoop that observes when a transaction occurs on a channel and provides
+    the data being transmitted. The transaction signal indicates when data is
+    actually being transferred on the channel, regardless of the underlying
+    signaling protocol (ValidReady or FIFO). Like other snoop operations, this
+    does not count as another user of the channel. Useful for monitoring data
+    flow and debugging.
+  }];
+
+  let arguments = (ins ChannelType:$input);
+  let results = (outs I1:$transaction, AnyType:$data);
+  let hasVerifier = 1;
+  let assemblyFormat = [{
+    $input attr-dict `:` qualified(type($input))
+  }];
+
+  let extraClassDeclaration = [{
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          std::optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::OpaqueProperties properties,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -92,7 +181,7 @@ def WrapValidReadyOp : ESI_Op<"wrap.vr", [
   let arguments = (ins AnyType:$rawInput, I1:$valid);
   let results = (outs ChannelType:$chanOutput, I1:$ready);
   let hasCustomAssemblyFormat = 1;
-  let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
   let hasVerifier = 1;
 
   let builders = [
@@ -128,7 +217,6 @@ def WrapFIFOOp : ESI_Op<"wrap.fifo", [
   let arguments = (ins AnyType:$data, I1:$empty);
   let results = (outs ChannelType:$chanOutput, I1:$rden);
   let hasCanonicalizeMethod = true;
-  let hasFolder = true;
   let hasVerifier = 1;
 
   let assemblyFormat = [{
@@ -221,7 +309,9 @@ def ChannelDirection : I32EnumAttr<"ChannelDirection",
 }
 
 
-def ChannelBundleType : ESI_Type<"ChannelBundle"> {
+def ChannelBundleType : ESI_Type<"ChannelBundle", [
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "a bundle of channels";
 
   let description = [{
@@ -311,11 +401,13 @@ def UnpackBundleOp : ESI_Op<"bundle.unpack", [
 // Data windows
 //===----------------------------------------------------------------------===//
 
-def ESIWindowType : ESI_Type<"Window"> {
+def ESIWindowType : ESI_Type<"Window", [
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "a data window";
   let description = [{
     A 'data window' allows designers to break up large messages into multiple
-    frames (aka phits) spread across multiple cycles. Windows are specified in
+    frames (aka flits) spread across multiple cycles. Windows are specified in
     terms of a mapping of struct fields to frames. The width of a window is the
     maximum frame size + the union tag (log2(#frames)).
 
@@ -327,7 +419,20 @@ def ESIWindowType : ESI_Type<"Window"> {
     - Array fields whose array length is not evenly divisible by 'numItems' will
     have an implicit frame inserted directly after containing the leftover array
     items.
-    - Array fields with an array length MUST be in their own frame.
+    - A frame which contains an array with a 'numItems' specification CANNOT
+    contain another array with 'numItems' specified or a list field.
+    - Likewise, a frame which contains a list field CANNOT contain another list
+    field or an array with 'numItems' specified.
+
+    When either a list or an array with 'numItems' is specified in a frame, all
+    the other fields in the frame are assumed to be constant over the length of
+    the list/array transmission. This allows for efficient hardware
+    implementations where the constant fields can be held in registers while the
+    list/array segments stream through. In general, when a struct field appears
+    in multiple frames, it must be constant throughout the message transmission.
+
+    Typically lowered to a union of structs. There is a special case of one
+    frame with no name. In this case, it is lowered to just the struct itself.
   }];
 
   let mnemonic = "window";
@@ -339,7 +444,7 @@ def ESIWindowType : ESI_Type<"Window"> {
 
   let extraClassDeclaration = [{
     /// Get the union which realizes this window during lowering.
-    circt::hw::UnionType getLoweredType() const;
+    Type getLoweredType() const;
   }];
 }
 
@@ -362,25 +467,53 @@ def WindowFieldType : ESI_Type<"WindowField"> {
   let summary = "a field-in-frame specifier";
   let description = [{
     Specify that a field should appear within the enclosing frame.
+    
+    'numItems' indicates how many items of the field should appear in the frame.
+    Only applicable to array or list fields. If not specified:
+    - For arrays, the entire array will appear in the frame.
+    - For lists, it is assumed to be 1.
+
+    For lists, there are two possible encodings:
+      - Parallel (default): a 'last' field to the struct to indicate that the
+      end of the list is this frame.  If 'numItems' is specified for a list, a
+      '<fieldName>_size' (representing the number of valid items in the array)
+      field will be added to the struct.  When `<fieldName>_size` is less than
+      'numItems', `last` MUST be true meaning that all frames must be full
+      except for the last one. This format matches typical on-chip hardware
+      streaming interfaces but is terribly inefficient for serial links.
+      - Serial (bulk transfer): in this encoding, there must be a 'header' frame
+      immediately preceding the frame which contains the list field. That frame
+      must include a special 'count' field which indicates how many items of the
+      list will be transmitted next. Once the number of items are transmitted
+      (transmitted frames == ceil(count/numItems)), the header is re-transmitted
+      to set up the next bulk transfer _for the same list_. If the transfer was
+      the last transfer, the header should set the count to zero. This method
+      allows for efficient transfers over serial links (no 'last' or '_size'
+      fields) without requiring knowledge of the total list size up front.
   }];
   let mnemonic = "window.field";
 
   let parameters = (ins
       "StringAttr":$fieldName,
-      OptionalParameter<"uint64_t", "# of items in arrays or lists">:$numItems);
+      OptionalParameter<"uint64_t", "# of items in arrays or lists">:$numItems,
+      OptionalParameter<"uint64_t", "bitwidth of the 'count' field in bulk mode">:$bulkCountWidth
+  );
 
   let assemblyFormat = [{
-    `<` $fieldName (`,` $numItems^)? `>`
+    `<` $fieldName (`,` $numItems^)? ( `countWidth` $bulkCountWidth^ )? `>`
   }];
+
+  let genVerifyDecl = 1;
 }
 
 def WrapWindow : ESI_Physical_Op<"window.wrap", [Pure]> {
   let summary = "wrap a union into a data window";
 
-  let arguments = (ins UnionType:$frame);
+  let arguments = (ins AnyType:$frame);
   let results = (outs ESIWindowType:$window);
   let hasVerifier = 1;
   let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
 
   let assemblyFormat = [{
      $frame attr-dict `:` custom<InferWindowRet>(type($frame), type($window))
@@ -394,7 +527,7 @@ def UnwrapWindow : ESI_Physical_Op<"window.unwrap", [
   let summary = "unwrap a data window into a union";
 
   let arguments = (ins ESIWindowType:$window);
-  let results = (outs UnionType:$frame);
+  let results = (outs AnyType:$frame);
   let hasFolder = 1;
 
   let assemblyFormat = [{
@@ -442,12 +575,17 @@ def ChannelBufferOp : ESI_Abstract_Op<"buffer", [
     OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<1>]>>:$stages,
     OptionalAttr<StrAttr>:$name);
   let results = (outs ChannelType:$output);
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{
+    $clk `,` $rst `,` $input attr-dict
+      `:` qualified(type($input)) `->` qualified(type($output))
+  }];
+  let hasVerifier = 1;
 }
 
 def PipelineStageOp : ESI_Physical_Op<"stage", [
     Pure,
-    DeclareOpInterfaceMethods<ChannelOpInterface>
+    DeclareOpInterfaceMethods<ChannelOpInterface>,
+    AllTypesMatch<["input", "output"]>,
   ]> {
   let summary = "An elastic buffer stage.";
   let description = [{
@@ -459,12 +597,36 @@ def PipelineStageOp : ESI_Physical_Op<"stage", [
 
   let arguments = (ins ClockType:$clk, I1:$rst, ChannelType:$input);
   let results = (outs ChannelType:$output);
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{
+    $clk `,` $rst `,` $input attr-dict
+      `:` qualified(type($input))
+  }];
 }
 
 //===----------------------------------------------------------------------===//
 // Misc operations
 //===----------------------------------------------------------------------===//
+
+def FIFOOp : ESI_Physical_Op<"fifo", []> {
+  let summary = "A FIFO with ESI channel connections";
+  let description = [{
+    A FIFO is a first-in-first-out buffer. This operation is a simple FIFO
+    which can be used to connect two ESI channels. The ESI channels MUST have
+    FIFO signaling semantics.
+  }];
+
+  let arguments = (ins
+    ClockType:$clk, I1:$rst, ChannelType:$input,
+    ConfinedAttr<I64Attr, [IntMinValue<1>]>:$depth
+  );
+  let results = (outs ChannelType:$output);
+
+  let assemblyFormat = [{
+    `in` $input `clk` $clk `rst` $rst `depth` $depth attr-dict
+      `:` type($input) `->` type($output)
+  }];
+  let hasVerifier = 1;
+}
 
 def CosimToHostEndpointOp : ESI_Physical_Op<"cosim.to_host", []> {
   let summary = "Co-simulation endpoint sending data to the host.";
@@ -485,6 +647,7 @@ def CosimToHostEndpointOp : ESI_Physical_Op<"cosim.to_host", []> {
   let assemblyFormat = [{
     $clk `,` $rst `,` $toHost`,` $id attr-dict `:` qualified(type($toHost))
   }];
+  let hasVerifier = 1;
 }
 
 def CosimFromHostEndpointOp : ESI_Physical_Op<"cosim.from_host", []> {
@@ -506,6 +669,7 @@ def CosimFromHostEndpointOp : ESI_Physical_Op<"cosim.from_host", []> {
   let assemblyFormat = [{
     $clk `,` $rst `,` $id attr-dict `:` qualified(type($fromHost))
   }];
+  let hasVerifier = 1;
 }
 
 def NullSourceOp : ESI_Physical_Op<"null", [Pure]> {

@@ -76,9 +76,9 @@ firrtl.circuit "unprocessedAnnotations" {
     %_M_read.data = firrtl.subfield %_M_read[data] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
     %c0_i1 = firrtl.constant 0 : !firrtl.uint<1>
     %c0_i4 = firrtl.constant 0 : !firrtl.uint<4>
-    firrtl.strictconnect %_M_read.clk, %clock : !firrtl.clock
-    firrtl.strictconnect %_M_read.en, %c0_i1 : !firrtl.uint<1>
-    firrtl.strictconnect %_M_read.addr, %c0_i4 : !firrtl.uint<4>
+    firrtl.matchingconnect %_M_read.clk, %clock : !firrtl.clock
+    firrtl.matchingconnect %_M_read.en, %c0_i1 : !firrtl.uint<1>
+    firrtl.matchingconnect %_M_read.addr, %c0_i4 : !firrtl.uint<4>
 
     // expected-warning @+1 {{unprocessed annotation:'firrtl.transforms.RemainingAnnotation6'}}
     %5 = firrtl.instance fetch {annotations = [{class = "firrtl.transforms.RemainingAnnotation6"}]} @bar(in io_cpu_flush: !firrtl.uint<1>)
@@ -114,15 +114,12 @@ firrtl.circuit "moduleAnno" attributes {annotations = [{class = "circuitOpAnnota
 // when lowering to HW.
 firrtl.circuit "Foo" attributes {annotations = [
     {class = "sifive.enterprise.firrtl.MetadataDirAnnotation", dirname = "metadata"},
-    {class = "sifive.enterprise.firrtl.ElaborationArtefactsDirectory", dirname = "artefacts"},
     {class = "sifive.enterprise.firrtl.TestBenchDirAnnotation", dirname = "tb"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation", directory = "gct-dir", filename = "gct-dir/bindings.sv"}
   ]} {
     firrtl.module @Foo() attributes {annotations = [
         {class = "firrtl.transforms.NoDedupAnnotation"},
-        {class = "sifive.enterprise.firrtl.DontObfuscateModuleAnnotation"},
         {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"},
-        {class = "sifive.enterprise.firrtl.ScalaClassAnnotation"},
         {class = "firrtl.transforms.BlackBox", circt.nonlocal = @nla_1}
     ]} {}
     // Non-local annotations should not produce errors either.
@@ -137,6 +134,26 @@ firrtl.circuit "Foo" attributes {annotations = [
 firrtl.circuit "SymArgZero" {
   // expected-error @+1 {{zero width port "foo" is referenced by name [#hw<innerSym@symfoo>] (e.g. in an XMR) but must be removed}}
   firrtl.module @SymArgZero(in %foo :!firrtl.uint<0> sym @symfoo) {
+  }
+}
+
+// -----
+
+firrtl.circuit "SymWireZero" {
+  firrtl.module @SymWireZero() {
+    // expected-error @+2 {{couldn't handle this operation}}
+    // expected-error @+1 {{zero width wire is referenced by name [#hw<innerSym@x>] (e.g. in an XMR) but must be removed}}
+    %w = firrtl.wire sym [<@x,0,public>] : !firrtl.uint<0>
+  }
+}
+
+// -----
+
+firrtl.circuit "SymNodeZero" {
+  firrtl.module @SymNodeZero(in %foo :!firrtl.uint<0>) {
+    // expected-error @+2 {{couldn't handle this operation}}
+    // expected-error @+1 {{zero width node is referenced by name [#hw<innerSym@x>] (e.g. in an XMR) but must be removed}}
+    %w = firrtl.node sym [<@x,0,public>] %foo : !firrtl.uint<0>
   }
 }
 
@@ -163,8 +180,8 @@ firrtl.circuit "ConnectDestSubfield" {
     %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.bundle<a: uint<1>>
     // expected-error @below {{'hw.struct_extract' op used as connect destination}}
     %1 = firrtl.subfield %0[a] : !firrtl.bundle<a: uint<1>>
-    // expected-error @below {{'firrtl.strictconnect' op LowerToHW couldn't handle this operation}}
-    firrtl.strictconnect %1, %value : !firrtl.uint<1>
+    // expected-error @below {{'firrtl.matchingconnect' op LowerToHW couldn't handle this operation}}
+    firrtl.matchingconnect %1, %value : !firrtl.uint<1>
   }
 }
 
@@ -175,8 +192,8 @@ firrtl.circuit "ConnectDestSubindex" {
     %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<uint<1>, 1>
     // expected-error @below {{'hw.array_get' op used as connect destination}}
     %1 = firrtl.subindex %0[0] : !firrtl.vector<uint<1>, 1>
-    // expected-error @below {{'firrtl.strictconnect' op LowerToHW couldn't handle this operation}}
-    firrtl.strictconnect %1, %value : !firrtl.uint<1>
+    // expected-error @below {{'firrtl.matchingconnect' op LowerToHW couldn't handle this operation}}
+    firrtl.matchingconnect %1, %value : !firrtl.uint<1>
   }
 }
 
@@ -187,8 +204,8 @@ firrtl.circuit "ConnectDestSubaccess" {
     %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<uint<1>, 1>
     // expected-error @below {{'hw.array_get' op used as connect destination}}
     %1 = firrtl.subaccess %0[%index] : !firrtl.vector<uint<1>, 1>, !firrtl.uint<1>
-    // expected-error @below {{'firrtl.strictconnect' op LowerToHW couldn't handle this operation}}
-    firrtl.strictconnect %1, %value : !firrtl.uint<1>
+    // expected-error @below {{'firrtl.matchingconnect' op LowerToHW couldn't handle this operation}}
+    firrtl.matchingconnect %1, %value : !firrtl.uint<1>
   }
 }
 
@@ -202,8 +219,8 @@ firrtl.circuit "UndrivenInputPort" {
     %0 = firrtl.instance blackbox @Blackbox(in inst : !firrtl.uint<1>)
     // expected-note @below {{through driver here}}
     %1 = firrtl.instance blackbox @Blackbox(in inst : !firrtl.uint<1>)
-    firrtl.strictconnect %0, %1 : !firrtl.uint<1>
-    firrtl.strictconnect %1, %0 : !firrtl.uint<1>
+    firrtl.matchingconnect %0, %1 : !firrtl.uint<1>
+    firrtl.matchingconnect %1, %0 : !firrtl.uint<1>
   }
 }
 
@@ -225,5 +242,23 @@ firrtl.circuit "IfElseFatalOnAssume" {
     // expected-error @+2 {{ifElseFatal format cannot be used for non-assertions}}
     // expected-error @below {{'firrtl.assume' op LowerToHW couldn't handle this operation}}
     firrtl.assume %clock, %en, %pred, "foo" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {isConcurrent = true, format = "ifElseFatal"}
+  }
+}
+
+// -----
+
+firrtl.circuit "InstanceChoiceInnerSymbol" {
+  firrtl.option @Opt {
+    firrtl.option_case @FPGA
+  }
+
+  firrtl.module private @ModuleDefault() {}
+
+  firrtl.module private @ModuleFPGA() {}
+
+  firrtl.module @InstanceChoiceInnerSymbol() {
+    // expected-error @below {{'firrtl.instance_choice' op LowerToHW couldn't handle this operation}}
+    // expected-error @below {{instance choice with inner sym cannot be lowered}}
+    firrtl.instance_choice inst sym @sym @ModuleDefault alternatives @Opt { @FPGA -> @ModuleFPGA } ()
   }
 }

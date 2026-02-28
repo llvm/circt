@@ -33,8 +33,8 @@ firrtl.module @Ports(
 
   // CHECK-NEXT: dbg.variable "outA", %outA
 
-  // CHECK-NEXT: firrtl.strictconnect
-  firrtl.strictconnect %outA, %inA : !firrtl.uint<42>
+  // CHECK-NEXT: firrtl.matchingconnect
+  firrtl.matchingconnect %outA, %inA : !firrtl.uint<42>
 }
 
 // CHECK-LABEL: firrtl.module @Decls
@@ -62,8 +62,8 @@ firrtl.module @Decls() {
   // CHECK-NEXT: dbg.variable "someReg2", %someReg2
   %someReg2 = firrtl.regreset %c0_clock, %c0_ui1, %c0_ui17 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<17>, !firrtl.uint<17>
 
-  // CHECK-NEXT: firrtl.strictconnect
-  firrtl.strictconnect %someWire, %c0_ui17 : !firrtl.uint<17>
+  // CHECK-NEXT: firrtl.matchingconnect
+  firrtl.matchingconnect %someWire, %c0_ui17 : !firrtl.uint<17>
 }
 
 }

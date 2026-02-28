@@ -26,8 +26,10 @@ def AddTaps : Pass<"arc-add-taps", "mlir::ModuleOp"> {
 
 def AllocateState : Pass<"arc-allocate-state", "arc::ModelOp"> {
   let summary = "Allocate and layout the global simulation state";
-  let constructor = "circt::arc::createAllocateStatePass()";
   let dependentDialects = ["arc::ArcDialect"];
+  let options = [Option<"insertTraceTaps", "trace-taps", "bool", "false",
+                        "Insert TraceTap attributes for signal tracing">,
+  ];
 }
 
 def ArcCanonicalizer : Pass<"arc-canonicalizer", "mlir::ModuleOp"> {
@@ -58,11 +60,38 @@ def Dedup : Pass<"arc-dedup", "mlir::ModuleOp"> {
   ];
 }
 
-def GroupResetsAndEnables : Pass<"arc-group-resets-and-enables",
-                                 "mlir::ModuleOp"> {
-  let summary = "Group reset and enable conditions of lowered states";
-  let constructor = "circt::arc::createGroupResetsAndEnablesPass()";
-  let dependentDialects = ["arc::ArcDialect", "mlir::scf::SCFDialect"];
+def PrintCostModel : Pass<"arc-print-cost-model", "mlir::ModuleOp"> {
+  let summary = "A dummy pass to test analysis passes";
+  let constructor = "circt::arc::createPrintCostModelPass()";
+  let dependentDialects = ["arc::ArcDialect"];
+  let statistics = [
+    Statistic<"moduleCost", "Operation(s)",
+      "Number of operations in the module">,
+    Statistic<"packingCost", "Pack operations(s)",
+      "Number of scalar to vector packking in the module">,
+    Statistic<"shufflingCost", "Shuffle operation(s)",
+      "Number of shuffles done to set up the VectorizeOps">,
+    Statistic<"vectoroizeOpsBodyCost", "VectorizeOps Body Cost",
+      "Number of operations inside the body of the VectorizeOps">,
+    Statistic<"allVectorizeOpsCost", "All VectorizeOps Cost",
+      "Total Cost of all VectorizeOps in the module">
+  ];
+}
+
+def FindInitialVectors : Pass<"arc-find-initial-vectors", "mlir::ModuleOp"> {
+  let summary = "Find initial groups of vectorizable ops";
+  let constructor = "circt::arc::createFindInitialVectorsPass()";
+  let dependentDialects = ["arc::ArcDialect"];
+  let statistics = [
+    Statistic<"numOfVectorizedOps", "vectorizedOps",
+      "Total number of ops that were vectorized">,
+    Statistic<"numOfSavedOps", "numOfSavedOps",
+      "Total number of ops saved after FindInitialVectors pass">,
+    Statistic<"biggestSeedVector", "biggestSeedVector",
+      "Size of the biggest seed vector">,
+    Statistic<"numOfVectorsCreated", "numOfVectorsCreated",
+      "Total number of VectorizeOps the pass inserted">,
+  ];
 }
 
 def InferMemories : Pass<"arc-infer-memories", "mlir::ModuleOp"> {
@@ -97,20 +126,6 @@ def InlineArcs : Pass<"arc-inline" , "mlir::ModuleOp"> {
   ];
 }
 
-def InlineModules : Pass<"arc-inline-modules", "mlir::ModuleOp"> {
-  let summary = "Eagerly inline private modules";
-  let description = [{
-    This pass eagerly inlines private HW modules into their instantiation sites.
-    After outlining combinational logic and registers into arcs, module bodies
-    become fairly lightweight. Since arc definitions now fulfill the purpose of
-    code reuse by allowing a single definition to be called multiple times, the
-    module hierarchy degenerates into a purely cosmetic construct. At that point
-    it is beneficial to fully flatten the module hierarchy to simplify further
-    analysis and optimization of state transfer arcs.
-  }];
-  let constructor = "circt::arc::createInlineModulesPass()";
-}
-
 def InferStateProperties : Pass<"arc-infer-state-properties",
                                 "mlir::ModuleOp"> {
   let summary = "Add resets and enables explicitly to the state operations";
@@ -128,6 +143,17 @@ def InferStateProperties : Pass<"arc-infer-state-properties",
       "Detected enables that could not be added explicitly to a StateOp">,
     Statistic<"missedResets", "missed-resets",
       "Detected resets that could not be added explicitly to a StateOp">,
+  ];
+}
+
+def InsertRuntime : Pass<"arc-insert-runtime", "mlir::ModuleOp"> {
+  let summary = "Insert structs and function calls for the ArcRuntime library";
+  let dependentDialects = ["mlir::LLVM::LLVMDialect",  "mlir::scf::SCFDialect"];
+  let options = [
+    Option<"extraArgs", "extra-args", "std::string", "",
+     "Extra arguments passed to the runtime when creating simulation instances">,
+    Option<"traceFileName", "trace-file", "std::string", "",
+     "Output file name for signal trace">
   ];
 }
 
@@ -150,12 +176,6 @@ def LatencyRetiming : Pass<"arc-latency-retiming", "mlir::ModuleOp"> {
   ];
 }
 
-def LegalizeStateUpdate : Pass<"arc-legalize-state-update", "mlir::ModuleOp"> {
-  let summary = "Insert temporaries such that state reads don't see writes";
-  let constructor = "circt::arc::createLegalizeStateUpdatePass()";
-  let dependentDialects = ["arc::ArcDialect"];
-}
-
 def LowerArcsToFuncs : Pass<"arc-lower-arcs-to-funcs", "mlir::ModuleOp"> {
   let summary = "Lower arc definitions into functions";
   let constructor = "circt::arc::createLowerArcsToFuncsPass()";
@@ -174,12 +194,15 @@ def LowerLUT : Pass<"arc-lower-lut", "arc::DefineOp"> {
   let dependentDialects = ["hw::HWDialect", "comb::CombDialect"];
 }
 
-def LowerState : Pass<"arc-lower-state", "mlir::ModuleOp"> {
+def LowerStatePass : Pass<"arc-lower-state", "mlir::ModuleOp"> {
   let summary = "Split state into read and write ops grouped by clock tree";
-  let constructor = "circt::arc::createLowerStatePass()";
   let dependentDialects = [
-    "arc::ArcDialect", "mlir::scf::SCFDialect", "mlir::func::FuncDialect",
-    "mlir::LLVM::LLVMDialect", "comb::CombDialect", "seq::SeqDialect"
+    "arc::ArcDialect",
+    "comb::CombDialect",
+    "mlir::LLVM::LLVMDialect",
+    "mlir::func::FuncDialect",
+    "mlir::scf::SCFDialect",
+    "seq::SeqDialect",
   ];
 }
 
@@ -199,7 +222,7 @@ def LowerVectorizations : Pass<"arc-lower-vectorizations", "mlir::ModuleOp"> {
     This pass lowers `arc.vectorize` operations. By default, the operation will
     be fully lowered (i.e., the op disappears in the IR). Alternatively, it can
     be partially lowered.
-    
+
     The "mode" pass option allows to only lower the boundary, only the body, or
     only inline the body given that both the boundary and the body are already
     lowered.
@@ -256,9 +279,53 @@ def LowerVectorizations : Pass<"arc-lower-vectorizations", "mlir::ModuleOp"> {
   ];
 }
 
+def LowerVerifSimulationsPass : Pass<"arc-lower-verif-simulations",
+                                     "mlir::ModuleOp"> {
+  let summary = "Lower verif.simulation ops to main functions";
+  let dependentDialects = [
+    "arc::ArcDialect",
+    "hw::HWDialect",
+    "mlir::arith::ArithDialect",
+    "mlir::cf::ControlFlowDialect",
+    "mlir::func::FuncDialect",
+    "mlir::scf::SCFDialect",
+    "seq::SeqDialect",
+  ];
+}
+
 def MakeTables : Pass<"arc-make-tables", "mlir::ModuleOp"> {
   let summary = "Transform appropriate arc logic into lookup tables";
   let constructor = "circt::arc::createMakeTablesPass()";
+  let dependentDialects = ["arc::ArcDialect"];
+}
+
+def MergeIfsPass : Pass<"arc-merge-ifs"> {
+  let summary = "Merge control flow structures";
+  let description = [{
+    This pass optimizes control flow in a few ways. It moves operations closer
+    to their earliest user, if possible sinking them into blocks if all uses are
+    nested in the same block. It merges adjacent `scf.if` operations with the
+    same condition. And it moves operations in between two `scf.if` operations
+    ahead of the first if op to allow them to be merged. The pass runs on any
+    SSACFG regions nested under the operation it is applied to.
+
+    Note that this pass assumes that `!arc.state` and `!arc.memory` values can
+    never alias. That is, different values are assumed to never point to the
+    same storage location in simulation memory.
+  }];
+  let statistics = [
+    Statistic<"numOpsSunk", "sunk", "Ops sunk into blocks">,
+    Statistic<"numOpsMovedToUser", "moved-to-user", "Ops moved to first user">,
+    Statistic<"numIfsMerged", "ifs-merged", "Adjacent scf.if ops merged">,
+    Statistic<"numOpsMovedFromBetweenIfs", "moved-from-between-ifs",
+      "Ops moved from between ifs to enable merging">,
+    Statistic<"numIterations", "iterations",
+      "Number of iterations until no more ops were sunk/merged">,
+  ];
+}
+
+def MergeTaps : Pass<"arc-merge-taps", "hw::HWModuleOp"> {
+  let summary = "Merge TapOps observing the same value in the same Block.";
   let dependentDialects = ["arc::ArcDialect"];
 }
 
@@ -283,6 +350,19 @@ def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "mlir::ModuleOp"> {
   ];
 }
 
+def SplitFuncs : Pass<"arc-split-funcs", "mlir::ModuleOp"> {
+  let summary = "Split large funcs into multiple smaller funcs";
+  let dependentDialects = ["mlir::func::FuncDialect"];
+  let options = [
+    Option<"splitBound", "split-bound", "unsigned", "20000",
+      "Size threshold (in ops) above which to split funcs">
+  ];
+  let statistics = [
+    Statistic<"numFuncsCreated", "funcs-created",
+      "Number of new functions created">,
+  ];
+}
+
 def SplitLoops : Pass<"arc-split-loops", "mlir::ModuleOp"> {
   let summary = "Split arcs to break zero latency loops";
   let constructor = "circt::arc::createSplitLoopsPass()";
@@ -298,6 +378,10 @@ def StripSV : Pass<"arc-strip-sv", "mlir::ModuleOp"> {
   let constructor = "circt::arc::createStripSVPass()";
   let dependentDialects = ["arc::ArcDialect", "comb::CombDialect",
                            "hw::HWDialect", "seq::SeqDialect"];
+  let options = [
+    Option<"asyncResetsAsSync", "async-resets-as-sync", "bool", "false",
+      "Treat asynchronous resets as synchronous.">
+  ];
 }
 
 #endif // CIRCT_DIALECT_ARC_ARCPASSES_TD

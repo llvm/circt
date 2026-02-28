@@ -1,7 +1,8 @@
 set(HANDSHAKE_SRCS
+  HandshakeDialect.cpp
   HandshakeExecutableOps.cpp
   HandshakeOps.cpp
-  HandshakeDialect.cpp
+  HandshakeUtils.cpp
   )
 
 add_circt_dialect_library(CIRCTHandshake
@@ -13,6 +14,7 @@ add_circt_dialect_library(CIRCTHandshake
 
   LINK_LIBS PUBLIC
   CIRCTSeq
+  CIRCTESI
   MLIRFuncDialect
   MLIRIR
 

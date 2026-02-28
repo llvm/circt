@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/Seq/SeqAttributes.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Seq/SeqTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -18,6 +19,8 @@ using namespace seq;
 #include "circt/Dialect/Seq/SeqEnums.cpp.inc"
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/Seq/SeqAttributes.cpp.inc"
+
+Type ClockConstAttr::getType() { return seq::ClockType::get(getContext()); }
 
 void SeqDialect::registerAttributes() {
   addAttributes<

@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/CustomDirectiveImpl.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWInstanceImplementation.h"
@@ -22,6 +21,7 @@
 #include "circt/Support/Namespace.h"
 #include "circt/Support/Naming.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/BitVector.h"
@@ -256,6 +256,14 @@ void HWModulePortAccessor::setOutput(StringRef name, Value v) {
 }
 
 //===----------------------------------------------------------------------===//
+// Declarative Canonicalization Patterns
+//===----------------------------------------------------------------------===//
+
+namespace {
+#include "circt/Dialect/HW/HWCanonicalization.cpp.inc"
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
 
@@ -309,7 +317,9 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
 void ConstantOp::build(OpBuilder &builder, OperationState &result, Type type,
                        int64_t value) {
   auto numBits = cast<IntegerType>(type).getWidth();
-  build(builder, result, APInt(numBits, (uint64_t)value, /*isSigned=*/true));
+  build(builder, result,
+        APInt(numBits, (uint64_t)value, /*isSigned=*/true,
+              /*implicitTrunc=*/true));
 }
 
 void ConstantOp::getAsmResultNames(
@@ -460,8 +470,12 @@ static LogicalResult checkAttributes(Operation *op, Attribute attr, Type type) {
     if (intAttr.getValue().getBitWidth() != intType.getWidth())
       return op->emitOpError("hw.constant attribute bitwidth "
                              "doesn't match return type");
+  } else if (auto typedAttr = dyn_cast<TypedAttr>(attr)) {
+    if (typedAttr.getType() != type)
+      return op->emitOpError("typed attr doesn't match the return type ")
+             << type;
   } else {
-    return op->emitOpError("unknown element type") << type;
+    return op->emitOpError("unknown element type ") << type;
   }
   return success();
 }
@@ -779,7 +793,7 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &odsState,
   modBuilder(builder, accessor);
   // Create output operands.
   llvm::SmallVector<Value> outputOperands = accessor.getOutputOperands();
-  builder.create<hw::OutputOp>(odsState.location, outputOperands);
+  hw::OutputOp::create(builder, odsState.location, outputOperands);
 }
 
 void HWModuleOp::modifyPorts(
@@ -1120,7 +1134,7 @@ LogicalResult HWModuleOp::verify() {
   // Verify the number of block arguments.
   auto numInputs = type.getNumInputs();
   if (body->getNumArguments() != numInputs)
-    return emitOpError("entry block must have")
+    return emitOpError("entry block must have ")
            << numInputs << " arguments to match module signature";
 
   return success();
@@ -1472,7 +1486,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   FunctionType funcType = resolvedModType->getFuncType();
   build(builder, result, funcType.getResults(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
-        argNames, resultNames, parameters, innerSym);
+        argNames, resultNames, parameters, innerSym, /*doNotPrint=*/{});
 }
 
 std::optional<size_t> InstanceOp::getTargetResultIndex() {
@@ -1785,7 +1799,16 @@ ParseResult ArrayCreateOp::parse(OpAsmParser &parser, OperationState &result) {
   if (operands.size() == 0)
     return parser.emitError(inputOperandsLoc,
                             "Cannot construct an array of length 0");
-  result.addTypes({ArrayType::get(elemType, operands.size())});
+
+  // Check for optional result type: " -> <type>"
+  Type resultType;
+  if (parser.parseOptionalArrow().succeeded()) {
+    if (parser.parseType(resultType))
+      return failure();
+    result.addTypes(resultType);
+  } else {
+    result.addTypes({ArrayType::get(elemType, operands.size())});
+  }
 
   for (auto operand : operands)
     if (parser.resolveOperand(operand, elemType, result.operands))
@@ -1798,6 +1821,12 @@ void ArrayCreateOp::print(OpAsmPrinter &p) {
   p.printOperands(getInputs());
   p.printOptionalAttrDict((*this)->getAttrs());
   p << " : " << getInputs()[0].getType();
+
+  // Print optional result type if it's not the default constructed type
+  Type expectedType =
+      ArrayType::get(getInputs()[0].getType(), getInputs().size());
+  if (getType() != expectedType)
+    p << " -> " << getType();
 }
 
 void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
@@ -1812,14 +1841,16 @@ void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
 }
 
 LogicalResult ArrayCreateOp::verify() {
-  unsigned returnSize = cast<ArrayType>(getType()).getNumElements();
+  unsigned returnSize = hw::type_cast<ArrayType>(getType()).getNumElements();
   if (getInputs().size() != returnSize)
     return failure();
   return success();
 }
 
 OpFoldResult ArrayCreateOp::fold(FoldAdaptor adaptor) {
-  if (llvm::any_of(adaptor.getInputs(), [](Attribute attr) { return !attr; }))
+  if (llvm::any_of(adaptor.getInputs(), [](Attribute attr) {
+        return !isa_and_nonnull<IntegerAttr>(attr);
+      }))
     return {};
   return ArrayAttr::get(getContext(), adaptor.getInputs());
 }
@@ -1957,8 +1988,8 @@ LogicalResult ArraySliceOp::canonicalize(ArraySliceOp op,
 
   if (sliceSize == 1) {
     // slice(a, n) -> create(a[n])
-    auto get = rewriter.create<ArrayGetOp>(op.getLoc(), op.getInput(),
-                                           op.getLowIndex());
+    auto get = ArrayGetOp::create(rewriter, op.getLoc(), op.getInput(),
+                                  op.getLowIndex());
     rewriter.replaceOpWithNewOp<ArrayCreateOp>(op, op.getType(),
                                                get.getResult());
     return success();
@@ -1968,7 +1999,7 @@ LogicalResult ArraySliceOp::canonicalize(ArraySliceOp op,
   if (!offsetOpt)
     return failure();
 
-  auto inputOp = op.getInput().getDefiningOp();
+  auto *inputOp = op.getInput().getDefiningOp();
   if (auto inputSlice = dyn_cast_or_null<ArraySliceOp>(inputOp)) {
     // slice(slice(a, n), m) -> slice(a, n + m)
     if (inputSlice == op)
@@ -1981,7 +2012,7 @@ LogicalResult ArraySliceOp::canonicalize(ArraySliceOp op,
 
     uint64_t offset = *offsetOpt + *inputOffsetOpt;
     auto lowIndex =
-        rewriter.create<ConstantOp>(op.getLoc(), inputIndex.getType(), offset);
+        ConstantOp::create(rewriter, op.getLoc(), inputIndex.getType(), offset);
     rewriter.replaceOpWithNewOp<ArraySliceOp>(op, op.getType(),
                                               inputSlice.getInput(), lowIndex);
     return success();
@@ -2022,10 +2053,11 @@ LogicalResult ArraySliceOp::canonicalize(ArraySliceOp op,
       } else {
         // Slice the required bits from the input.
         unsigned width = inputSize == 1 ? 1 : llvm::Log2_64_Ceil(inputSize);
-        auto lowIndex = rewriter.create<ConstantOp>(
-            op.getLoc(), rewriter.getIntegerType(width), sliceStart);
-        chunks.push_back(rewriter.create<ArraySliceOp>(
-            op.getLoc(), hw::ArrayType::get(elemTy, cutSize), input, lowIndex));
+        auto lowIndex = ConstantOp::create(
+            rewriter, op.getLoc(), rewriter.getIntegerType(width), sliceStart);
+        chunks.push_back(ArraySliceOp::create(
+            rewriter, op.getLoc(), hw::ArrayType::get(elemTy, cutSize), input,
+            lowIndex));
       }
 
       sliceStart = 0;
@@ -2104,6 +2136,9 @@ void ArrayConcatOp::build(OpBuilder &b, OperationState &state,
 }
 
 OpFoldResult ArrayConcatOp::fold(FoldAdaptor adaptor) {
+  if (getInputs().size() == 1)
+    return getInputs()[0];
+
   auto inputs = adaptor.getInputs();
   SmallVector<Attribute> array;
   for (size_t i = 0, e = getNumOperands(); i < e; ++i) {
@@ -2226,7 +2261,7 @@ LogicalResult ArrayConcatOp::canonicalize(ArrayConcatOp op,
   if (mergeConcatSlices(op, rewriter))
     return success();
 
-  return success();
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -2360,7 +2395,9 @@ OpFoldResult StructCreateOp::fold(FoldAdaptor adaptor) {
       return explodeOp.getInput();
 
   auto inputs = adaptor.getInput();
-  if (llvm::any_of(inputs, [](Attribute attr) { return !attr; }))
+  if (llvm::any_of(inputs, [](Attribute attr) {
+        return !isa_and_nonnull<IntegerAttr>(attr);
+      }))
     return {};
   return ArrayAttr::get(getContext(), inputs);
 }
@@ -2559,7 +2596,7 @@ OpFoldResult StructExtractOp::fold(FoldAdaptor adaptor) {
 
 LogicalResult StructExtractOp::canonicalize(StructExtractOp op,
                                             PatternRewriter &rewriter) {
-  auto inputOp = op.getInput().getDefiningOp();
+  auto *inputOp = op.getInput().getDefiningOp();
 
   // b = extract(inject(x["a"], v0)["b"]) => extract(x, "b")
   if (auto structInject = dyn_cast_or_null<StructInjectOp>(inputOp)) {
@@ -2653,6 +2690,15 @@ OpFoldResult StructInjectOp::fold(FoldAdaptor adaptor) {
 
 LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
                                            PatternRewriter &rewriter) {
+  // If this inject is only used as an input to another inject, don't try to
+  // canonicalize it. It will be included in that other op's canonicalization
+  // attempt. This avoids doing redundant work.
+  if (op->hasOneUse()) {
+    auto &use = *op->use_begin();
+    if (isa<StructInjectOp>(use.getOwner()) && use.getOperandNumber() == 0)
+      return failure();
+  }
+
   // Canonicalize multiple injects into a create op and eliminate overwrites.
   SmallPtrSet<Operation *, 4> injects;
   DenseMap<StringAttr, Value> fields;
@@ -2662,7 +2708,7 @@ LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
   Value input;
   do {
     if (!injects.insert(inject).second)
-      return failure();
+      break;
 
     fields.try_emplace(inject.getFieldNameAttr(), inject.getNewValue());
     input = inject.getInput();
@@ -2694,8 +2740,8 @@ LogicalResult StructInjectOp::canonicalize(StructInjectOp op,
     auto it = fields.find(elements[fieldIndex].name);
     if (it == fields.end())
       continue;
-    input = rewriter.create<StructInjectOp>(op.getLoc(), ty, input, fieldIndex,
-                                            it->second);
+    input = StructInjectOp::create(rewriter, op.getLoc(), ty, input, fieldIndex,
+                                   it->second);
   }
 
   rewriter.replaceOp(op, input);
@@ -2776,10 +2822,10 @@ LogicalResult UnionExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::OpaqueProperties properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
+  Adaptor adaptor(operands, attrs, properties, regions);
   auto unionElements =
-      hw::type_cast<UnionType>((operands[0].getType())).getElements();
-  unsigned fieldIndex =
-      attrs.getAs<IntegerAttr>("fieldIndex").getValue().getZExtValue();
+      hw::type_cast<UnionType>((adaptor.getInput().getType())).getElements();
+  unsigned fieldIndex = adaptor.getFieldIndexAttr().getValue().getZExtValue();
   if (fieldIndex >= unionElements.size()) {
     if (loc)
       mlir::emitError(*loc, "field index " + Twine(fieldIndex) +
@@ -2847,6 +2893,11 @@ OpFoldResult ArrayGetOp::fold(FoldAdaptor adaptor) {
                                        intTy.getIntOrFloatBitWidth()));
   }
 
+  // array_get(array_inject(_, index, element), index) -> element
+  if (auto inject = getInput().getDefiningOp<ArrayInjectOp>())
+    if (getIndex() == inject.getIndex())
+      return inject.getElement();
+
   auto inputCreate = getInput().getDefiningOp<ArrayCreateOp>();
   if (!inputCreate)
     return {};
@@ -2880,7 +2931,7 @@ LogicalResult ArrayGetOp::canonicalize(ArrayGetOp op,
 
     uint64_t offset = *offsetOpt + *idxOpt;
     auto newOffset =
-        rewriter.create<ConstantOp>(op.getLoc(), offsetOp.getType(), offset);
+        ConstantOp::create(rewriter, op.getLoc(), offsetOp.getType(), offset);
     rewriter.replaceOpWithNewOp<ArrayGetOp>(op, inputSlice.getInput(),
                                             newOffset);
     return success();
@@ -2897,8 +2948,9 @@ LogicalResult ArrayGetOp::canonicalize(ArrayGetOp op,
       }
 
       unsigned indexWidth = size == 1 ? 1 : llvm::Log2_64_Ceil(size);
-      auto newIdxOp = rewriter.create<ConstantOp>(
-          op.getLoc(), rewriter.getIntegerType(indexWidth), elemIndex);
+      auto newIdxOp =
+          ConstantOp::create(rewriter, op.getLoc(),
+                             rewriter.getIntegerType(indexWidth), elemIndex);
 
       rewriter.replaceOpWithNewOp<ArrayGetOp>(op, input, newIdxOp);
       return success();
@@ -2929,6 +2981,105 @@ LogicalResult ArrayGetOp::canonicalize(ArrayGetOp op,
   }
 
   return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// ArrayInjectOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ArrayInjectOp::fold(FoldAdaptor adaptor) {
+  auto inputAttr = dyn_cast_or_null<ArrayAttr>(adaptor.getInput());
+  auto indexAttr = dyn_cast_or_null<IntegerAttr>(adaptor.getIndex());
+  auto elementAttr = adaptor.getElement();
+
+  // inject(constant[xs, y, zs], iy, a) -> constant[x, a, z]
+  if (inputAttr && indexAttr && elementAttr) {
+    if (auto index = indexAttr.getValue().tryZExtValue()) {
+      if (*index < inputAttr.size()) {
+        SmallVector<Attribute> elements(inputAttr.getValue());
+        elements[inputAttr.size() - 1 - *index] = elementAttr;
+        return ArrayAttr::get(getContext(), elements);
+      }
+    }
+  }
+
+  return {};
+}
+
+static LogicalResult canonicalizeArrayInjectChain(ArrayInjectOp op,
+                                                  PatternRewriter &rewriter) {
+  // If this inject is only used as an input to another inject, don't try to
+  // canonicalize it. It will be included in that other op's canonicalization
+  // attempt. This avoids doing redundant work.
+  if (op->hasOneUse()) {
+    auto &use = *op->use_begin();
+    if (isa<ArrayInjectOp>(use.getOwner()) && use.getOperandNumber() == 0)
+      return failure();
+  }
+
+  // Collect all injects to constant indices.
+  auto arrayLength = type_cast<ArrayType>(op.getType()).getNumElements();
+  Value input = op;
+  SmallDenseMap<uint32_t, Value> elements;
+  while (auto inject = input.getDefiningOp<ArrayInjectOp>()) {
+    // Determine the constant index.
+    APInt indexAPInt;
+    if (!matchPattern(inject.getIndex(), mlir::m_ConstantInt(&indexAPInt)))
+      break;
+    if (indexAPInt.getActiveBits() > 32)
+      break;
+    uint32_t index = indexAPInt.getZExtValue();
+
+    // Track the injected value. Make sure to only track indices that are in
+    // bounds. This will allow us to later check if `elements.size()` matches
+    // the array length.
+    if (index < arrayLength)
+      elements.insert({index, inject.getElement()});
+
+    // Step to the next inject op.
+    input = inject.getInput();
+    if (input == op)
+      break; // break cycles
+  }
+
+  // If we are assigning every single element, replace the op with an
+  // `hw.array_create`.
+  if (elements.size() == arrayLength) {
+    SmallVector<Value, 4> operands;
+    operands.reserve(arrayLength);
+    for (uint32_t idx = 0; idx < arrayLength; ++idx)
+      operands.push_back(elements.at(arrayLength - idx - 1));
+    rewriter.replaceOpWithNewOp<ArrayCreateOp>(op, op.getType(), operands);
+    return success();
+  }
+
+  return failure();
+}
+
+static LogicalResult
+canonicalizeArrayInjectIntoCreate(ArrayInjectOp op, PatternRewriter &rewriter) {
+  auto createOp = op.getInput().getDefiningOp<ArrayCreateOp>();
+  if (!createOp)
+    return failure();
+
+  // Make sure the access is in bounds.
+  APInt indexAPInt;
+  if (!matchPattern(op.getIndex(), mlir::m_ConstantInt(&indexAPInt)) ||
+      !indexAPInt.ult(createOp.getInputs().size()))
+    return failure();
+
+  // Substitute the injected value.
+  SmallVector<Value> elements = createOp.getInputs();
+  elements[elements.size() - indexAPInt.getZExtValue() - 1] = op.getElement();
+  rewriter.replaceOpWithNewOp<ArrayCreateOp>(op, elements);
+  return success();
+}
+
+void ArrayInjectOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                                MLIRContext *context) {
+  patterns.add<ArrayInjectToSameIndex>(context);
+  patterns.add(canonicalizeArrayInjectChain);
+  patterns.add(canonicalizeArrayInjectIntoCreate);
 }
 
 //===----------------------------------------------------------------------===//

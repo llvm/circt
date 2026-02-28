@@ -1,12 +1,14 @@
 // RUN: circt-opt %s -ssp-roundtrip=verify
 // RUN: circt-opt %s -ssp-schedule=scheduler=asap | FileCheck %s -check-prefixes=CHECK,ASAP
 // RUN: circt-opt %s -ssp-schedule=scheduler=simplex | FileCheck %s -check-prefixes=CHECK,SIMPLEX
-// RUN: %if or-tools %{ circt-opt %s -ssp-schedule=scheduler=lp | FileCheck %s -check-prefixes=CHECK,LP %} 
+// RUN: %if or-tools %{ circt-opt %s -ssp-schedule=scheduler=lp | FileCheck %s -check-prefixes=CHECK,LINEAR %}
 
 // CHECK-LABEL: unit_latencies
 ssp.instance @unit_latencies of "Problem" {
   library {
     operator_type @_1 [latency<1>]
+  }
+  resource {
   }
   // ASAP: graph
   graph {
@@ -26,7 +28,7 @@ ssp.instance @unit_latencies of "Problem" {
     %6 = operation<@_1>(%3, %4, %5) [t<5>]
     // ASAP-NEXT: [t<6>]
     // SIMPLEX: @last(%{{.*}}) [t<6>]
-    // LP: @last(%{{.*}}) [t<6>]
+    // LINEAR: @last(%{{.*}}) [t<6>]
     operation<@_1> @last(%6) [t<6>]
   }
 }
@@ -39,6 +41,8 @@ ssp.instance @arbitrary_latencies of "Problem" {
     operator_type @_3 [latency<3>]
     operator_type @_6 [latency<6>]
     operator_type @_10 [latency<10>]
+  }
+  resource {
   }
   // ASAP: graph
   graph {
@@ -56,7 +60,7 @@ ssp.instance @arbitrary_latencies of "Problem" {
     %5 = operation<@_10>(%4) [t<50>]
     // ASAP-NEXT: [t<19>]
     // SIMPLEX: @last(%{{.*}}) [t<19>]
-    // LP: @last(%{{.*}}) [t<19>]
+    // LINEAR: @last(%{{.*}}) [t<19>]
     operation<@_1> @last(%5) [t<60>]
   }
 }
@@ -65,6 +69,8 @@ ssp.instance @arbitrary_latencies of "Problem" {
 ssp.instance @auxiliary_dependences of "Problem" {
   library {
     operator_type @_1 [latency<1>]
+  }
+  resource {
   }
   // ASAP: graph
   graph {
@@ -82,7 +88,7 @@ ssp.instance @auxiliary_dependences of "Problem" {
     operation<@_1> @op5(@op4) [t<4>]
     // ASAP-NEXT: [t<5>]
     // SIMPLEX: @last(@op3, @op5) [t<5>]
-    // LP: @last(@op3, @op5) [t<5>]
+    // LINEAR: @last(@op3, @op5) [t<5>]
     operation<@_1> @last(@op3, @op5) [t<5>]
   }
 }

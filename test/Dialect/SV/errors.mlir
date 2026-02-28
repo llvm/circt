@@ -77,15 +77,57 @@ hw.module @IfOp(in %arg0: i1) {
 }
 
 // -----
-hw.module @Fatal() {
-  // expected-error @+1 {{sv.fatal should be in a procedural region}}
-  sv.fatal 1
+hw.module @FatalProcedural() {
+  // expected-error @+1 {{sv.fatal.procedural should be in a procedural region}}
+  sv.fatal.procedural 1
 }
 
 // -----
 hw.module @Finish() {
   // expected-error @+1 {{sv.finish should be in a procedural region}}
   sv.finish 1
+}
+
+// -----
+hw.module @ErrorProcedural() {
+  // expected-error @+1 {{sv.error.procedural should be in a procedural region}}
+  sv.error.procedural
+}
+
+// -----
+hw.module @WarningProcedural() {
+  // expected-error @+1 {{sv.warning.procedural should be in a procedural region}}
+  sv.warning.procedural
+}
+
+// -----
+hw.module @InfoProcedural() {
+  // expected-error @+1 {{sv.info.procedural should be in a procedural region}}
+  sv.info.procedural
+}
+
+// -----
+hw.module @ErrorInProcedural() {
+  sv.initial {
+    // expected-error @+1 {{sv.error should be in a non-procedural region}}
+    sv.error
+  }
+}
+
+// -----
+hw.module @WarningInProcedural() {
+  sv.initial {
+    // expected-error @+1 {{sv.warning should be in a non-procedural region}}
+    sv.warning
+  }
+}
+
+// -----
+hw.module @InfoInProcedural() {
+  sv.initial {
+    // expected-error @+1 {{sv.info should be in a non-procedural region}}
+    sv.info
+  }
 }
 
 // -----
@@ -237,4 +279,71 @@ hw.module @NoMessage(in %clock: i1, in %value : i4) {
     // expected-error @below {{failed to verify that has message if has substitutions}}
    "sv.assert"(%clock, %value) { defer = 0 : i32 } : (i1, i4) -> ()
   }
+}
+
+// -----
+
+sv.func private @function() {
+  %0 = hw.constant true
+  // expected-error @below {{'sv.return' op must have same number of operands as region results}}
+  sv.return %0 : i1
+}
+
+// -----
+
+sv.func private @function(out out: i2) {
+  %0 = hw.constant true
+  // expected-error @below {{'sv.return' op output types must match function. In operand 0, expected 'i2', but got 'i1'}}
+  sv.return %0 : i1
+}
+
+// -----
+
+hw.module private @module(out out: i2) {
+  %0 = hw.constant true
+  // expected-error @below {{'sv.return' op expects parent op 'sv.func'}}
+  sv.return %0 : i1
+}
+
+// -----
+
+// expected-note @below {{doesn't satisfy the constraint}}
+sv.func private @func(out out: i1)
+hw.module private @call(){
+  // expected-error @below {{function called in a non-procedural region must return a single result}}
+  %0 = sv.func.call @func() : () -> (i1)
+}
+
+// -----
+
+sv.func private @func() {
+  sv.return
+}
+
+// expected-error @below {{imported function must be a declaration but 'func' is defined}}
+sv.func.dpi.import @func
+
+// -----
+
+hw.module @RandomModule() {
+  hw.output
+}
+
+// expected-error @below {{references RandomModule, which is not an emit.file}}
+sv.verbatim.source @TestVerbatimModule.v attributes {
+  content = "module TestVerbatimModule();\nendmodule",
+  output_file = #hw.output_file<"TestVerbatimModule.v">,
+  additional_files = [@RandomModule],
+  verilogName = "TestVerbatimModule"
+}
+
+// -----
+
+hw.module @RandomModule() {
+  hw.output
+}
+
+// expected-error @below {{references RandomModule, which is not an sv.verbatim.source}}
+sv.verbatim.module @TestVerbatimModule() attributes {
+  source = @RandomModule
 }

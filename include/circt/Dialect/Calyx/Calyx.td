@@ -39,9 +39,6 @@ def CalyxDialect : Dialect {
   // Depends on the HWDialect to support external primitives using hw.module.extern
   let dependentDialects = ["circt::hw::HWDialect"];
   let cppNamespace = "::circt::calyx";
-
-  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
-  let usePropertiesForAttributes = 0;
 }
 
 class SameTypeConstraint<string lhs, string rhs>
@@ -55,7 +52,6 @@ class CalyxOp<string mnemonic, list<Trait> traits = []> :
 /// Base class for Calyx cells.
 class CalyxCell<string mnemonic, list<Trait> traits = []> :
   CalyxOp<mnemonic, !listconcat(traits, [
-    Symbol,
     DeclareOpInterfaceMethods<CellOpInterface>,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
   ])> {}

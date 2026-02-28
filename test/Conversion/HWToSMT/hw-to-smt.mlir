@@ -25,3 +25,16 @@ hw.module @modB(in %in: i32, out out: i32) {
   // CHECK-NEXT: return [[V]] : !smt.bv<32>
   hw.output %0 : i32
 }
+
+// CHECK-LABEL: func.func @inject
+// CHECK-SAME: (%[[ARR:.+]]: !smt.array<[!smt.bv<2> -> !smt.bv<8>]>, %[[IDX:.+]]: !smt.bv<2>, %[[VAL:.+]]: !smt.bv<8>)
+hw.module @inject(in %arr: !hw.array<3xi8>, in %index: i2, in %v: i8, out out: !hw.array<3xi8>) {
+  // CHECK-NEXT: %[[OOB:.+]] = smt.declare_fun : !smt.array<[!smt.bv<2> -> !smt.bv<8>]>
+  // CHECK-NEXT: %[[C2:.+]] = smt.bv.constant #smt.bv<-2> : !smt.bv<2>
+  // CHECK-NEXT: %[[CMP:.+]] = smt.bv.cmp ule %[[IDX]], %[[C2]] : !smt.bv<2>
+  // CHECK-NEXT: %[[STORED:.+]] = smt.array.store %[[ARR]][%[[IDX]]], %[[VAL]] : !smt.array<[!smt.bv<2> -> !smt.bv<8>]>
+  // CHECK-NEXT: %[[RESULT:.+]] = smt.ite %[[CMP]], %[[STORED]], %[[OOB]] : !smt.array<[!smt.bv<2> -> !smt.bv<8>]>
+  // CHECK-NEXT: return %[[RESULT]] : !smt.array<[!smt.bv<2> -> !smt.bv<8>]>
+  %arr_injected = hw.array_inject %arr[%index], %v : !hw.array<3xi8>, i2
+  hw.output %arr_injected : !hw.array<3xi8>
+}

@@ -21,7 +21,6 @@ add_circt_dialect_library(CIRCTSeq
 
   DEPENDS
   CIRCTHW
-  CIRCTSV
   MLIRSeqIncGen
   MLIRSeqEnumsIncGen
   MLIRSeqAttributesIncGen
@@ -30,8 +29,9 @@ add_circt_dialect_library(CIRCTSeq
   Support
 
   LINK_LIBS PUBLIC
+  CIRCTComb
   CIRCTHW
-  CIRCTSV
+  MLIRArithDialect
   MLIRIR
   MLIRPass
   MLIRTransforms

@@ -12,8 +12,7 @@ calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%don
 // CHECK:   calyx.assign %eq_reg.write_en = %true : i1
 // CHECK:   calyx.assign %eq.left = %true : i1
 // CHECK:   calyx.assign %eq.right = %true : i1
-// CHECK:    %0 = comb.and %eq_reg.done : i1
-// CHECK:   calyx.group_done %0 ? %true : i1
+// CHECK:   calyx.group_done %eq_reg.done ? %true : i1
     calyx.comb_group @Cond {
       calyx.assign %eq.left =  %c1_1 : i1
       calyx.assign %eq.right = %c1_1 : i1
@@ -60,8 +59,7 @@ calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%don
 // CHECK:   calyx.assign %eq_reg.write_en = %true : i1
 // CHECK:   calyx.assign %eq.left = %true : i1
 // CHECK:   calyx.assign %eq.right = %true : i1
-// CHECK:   %0 = comb.and %eq_reg.done : i1
-// CHECK:   calyx.group_done %0 ? %true : i1
+// CHECK:   calyx.group_done %eq_reg.done ? %true : i1
 // CHECK: }
     calyx.comb_group @Cond1 {
       calyx.assign %eq.left =  %c1_1 : i1
@@ -74,8 +72,7 @@ calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%don
 // CHECK:   calyx.assign %eq_reg.write_en = %true : i1
 // CHECK:   calyx.assign %eq.left = %true : i1
 // CHECK:   calyx.assign %eq.right = %true : i1
-// CHECK:   %0 = comb.and %eq_reg.done : i1
-// CHECK:   calyx.group_done %0 ? %true : i1
+// CHECK:   calyx.group_done %eq_reg.done ? %true : i1
 // CHECK: }
     calyx.comb_group @Cond2 {
       calyx.assign %eq.left =  %c1_1 : i1

@@ -185,13 +185,13 @@ static void doConversion(Operation *op, BranchInfo info,
 
   // Build the scf.if operation with the scf.yields inside.
   ImplicitLocOpBuilder builder(op->getLoc(), op);
-  mlir::scf::IfOp ifOp = builder.create<mlir::scf::IfOp>(
-      info.condition,
+  mlir::scf::IfOp ifOp = mlir::scf::IfOp::create(
+      builder, info.condition,
       [&](OpBuilder &builder, Location loc) {
-        builder.create<mlir::scf::YieldOp>(loc, info.trueValue);
+        mlir::scf::YieldOp::create(builder, loc, info.trueValue);
       },
       [&](OpBuilder &builder, Location loc) {
-        builder.create<mlir::scf::YieldOp>(loc, info.falseValue);
+        mlir::scf::YieldOp::create(builder, loc, info.falseValue);
       });
 
   op->getResult(0).replaceAllUsesWith(ifOp.getResult(0));

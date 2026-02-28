@@ -5,8 +5,9 @@
 // RUN:    --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw \
 // RUN:    --export-verilog -o %t_low.mlir > %t.sv
 
+// RUN: rm -rf %t.dir && mkdir %t.dir
 // RUN: circt-cocotb-driver.py \
-// RUN:   --objdir=%T                         \
+// RUN:   --objdir=%t.dir                     \
 // RUN:   --topLevel=top                      \
 // RUN:   --pythonModule=max                  \
 // RUN:   --pythonFolders="%S,%S/.." %t.sv 2>&1 | FileCheck %s

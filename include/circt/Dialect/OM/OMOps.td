@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_OM_OMOPS_TD
 #define CIRCT_DIALECT_OM_OMOPS_TD
 
+include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "circt/Dialect/OM/OMDialect.td"
 include "circt/Dialect/OM/OMEnums.td"
 include "circt/Dialect/OM/OMOpInterfaces.td"
@@ -33,13 +34,15 @@ class OMOp<string mnemonic, list<Trait> traits = []> :
 
 class OMClassLike<string mnemonic, list<Trait> traits = []> :
   OMOp<mnemonic, traits # [
-    SingleBlock, NoTerminator, Symbol, RegionKindInterface,
+    Symbol, RegionKindInterface, IsolatedFromAbove,
     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
     DeclareOpInterfaceMethods<ClassLike>]> {
 
   let arguments = (ins
     SymbolNameAttr:$sym_name,
-    StrArrayAttr:$formalParamNames
+    StrArrayAttr:$formalParamNames,
+    ArrayAttr:$fieldNames,
+    DictionaryAttr:$fieldTypes
   );
 
   let regions = (region
@@ -47,9 +50,44 @@ class OMClassLike<string mnemonic, list<Trait> traits = []> :
   );
 
   let builders = [
-    OpBuilder<(ins "::mlir::Twine":$name)>,
     OpBuilder<(ins "::mlir::Twine":$name,
-                   "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames)>,
+                   "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames,
+                   "::mlir::ArrayRef<::mlir::Attribute>":$fieldNames,
+                   "::mlir::ArrayRef<::mlir::NamedAttribute>":$fieldTypes), [{
+      build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+            odsBuilder.getStrArrayAttr(formalParamNames),
+            odsBuilder.getArrayAttr(fieldNames),
+            odsBuilder.getDictionaryAttr(fieldTypes));
+    }]>,
+    OpBuilder<(ins "::mlir::Twine":$name,
+                   "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames), [{
+      build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+            odsBuilder.getStrArrayAttr(formalParamNames));
+    }]>,
+    OpBuilder<(ins "::mlir::Twine":$name), [{
+      build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+            odsBuilder.getStrArrayAttr({}));
+    }]>,
+    OpBuilder<(ins "::mlir::Twine":$name,
+                   "::mlir::ArrayAttr":$fieldNames,
+                   "::mlir::DictionaryAttr":$fieldTypes), [{
+      build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+            odsBuilder.getStrArrayAttr({}), fieldNames, fieldTypes);
+    }]>,
+    OpBuilder<(ins "::mlir::Twine":$name,
+                   "::mlir::ArrayRef<::mlir::StringRef>":$formalParamNames,
+                   "::mlir::ArrayAttr":$fieldNames,
+                   "::mlir::DictionaryAttr":$fieldTypes), [{
+      build(odsBuilder, odsState, odsBuilder.getStringAttr(name),
+            odsBuilder.getStrArrayAttr(formalParamNames), fieldNames,
+            fieldTypes);
+    }]>,
+    OpBuilder<(ins "::mlir::StringAttr":$name,
+                   "::mlir::ArrayAttr":$formalParamNames), [{
+      build(odsBuilder, odsState, name, formalParamNames,
+            odsBuilder.getArrayAttr({}), odsBuilder.getDictionaryAttr({}));
+
+    }]>
   ];
 
   let hasCustomAssemblyFormat = 1;
@@ -57,16 +95,12 @@ class OMClassLike<string mnemonic, list<Trait> traits = []> :
   let hasVerifier = 1;
 }
 
-class OMClassFieldLike<string mnemonic, list<Trait> traits = []> :
-  OMOp<mnemonic, traits # [
-    DeclareOpInterfaceMethods<ClassFieldLike>]> {
-}
-
 //===----------------------------------------------------------------------===//
 // Class definitions
 //===----------------------------------------------------------------------===//
 
-def ClassOp : OMClassLike<"class"> {
+def ClassOp : OMClassLike<"class", [
+      SingleBlockImplicitTerminator<"ClassFieldsOp">]> {
   let extraClassDeclaration = [{
     mlir::Block *getBodyBlock() { return &getBody().front(); }
     // This builds a ClassOp, and populates it with the CLassFieldOps.
@@ -82,29 +116,63 @@ def ClassOp : OMClassLike<"class"> {
     static mlir::RegionKind getRegionKind(unsigned index) {
       return mlir::RegionKind::Graph;
     }
+
+    circt::om::ClassFieldsOp getFieldsOp() {
+      return mlir::cast<ClassFieldsOp>(this->getBodyBlock()->getTerminator());
+    }
+
+    // The addNewFieldsOp API encapsulates the logic used to represent field
+    // locations under the hood.  Users should invoke this method rather
+    // than construct the operation directly, otherwise logic to retrieve
+    // the field location will break.
+    // This is required because MLIR's FusedLoc uses a "set" semantics where a
+    // single location is used to represent multiple fields with the same
+    // location.  The OM implementation uses an attribute to store the original
+    // array of locations, so that the specific location of a field may be
+    // easily retrieved by index using the `getFieldLocByIndex` API.
+    void addNewFieldsOp(mlir::OpBuilder &builder, mlir::ArrayRef<mlir::Location>
+                   locs, mlir::ArrayRef<mlir::Value> values);
+
+    // Add additional fields to the class. This updates the ClassOp output type
+    //  with the additional field types and field names and adds the field
+    // values to the fieldsOp.
+    void updateFields(mlir::ArrayRef<mlir::Location> newLocations,
+                   mlir::ArrayRef<mlir::Value> newValues,
+                   mlir::ArrayRef<mlir::Attribute> newNames);
+
+    // Return the location for a field referenced by index in the fieldNames
+    // array attribute.  If the field has a location added by addNewFieldsOp API,
+    // its location will be retrieved from the array of per field locations.
+    // Otherwise, it will inherit the location of the class op Using this with
+    // a ClassFieldsOp that has been constructed with a FusedLoc but not
+    // following the internal storage format of `addNewFieldsOp` will result in an
+    // assertion error
+    mlir::Location getFieldLocByIndex(size_t i);
   }];
+
+  let hasRegionVerifier = 1;
 }
 
-def ClassFieldOp : OMClassFieldLike<"class.field",
-    [HasParent<"ClassOp">]> {
-  let arguments = (ins
-    SymbolNameAttr:$name,
-    AnyType:$value
-  );
-
+def ClassFieldsOp : OMOp<"class.fields", [Terminator, ReturnLike, Pure,
+      HasParent<"ClassOp">]> {
+  let arguments = (ins Variadic<AnyType>:$fields,
+                       OptionalAttr<LocationArrayAttr>:$field_locs);
   let assemblyFormat = [{
-    $name `,` $value  attr-dict `:` type($value)
+    attr-dict ($fields^ `:` qualified(type($fields)))?
+    custom<FieldLocs>($field_locs)
   }];
+
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//
 // External class definitions
 //===----------------------------------------------------------------------===//
 
-def ClassExternOp : OMClassLike<"class.extern"> {
+def ClassExternOp : OMClassLike<"class.extern", [NoTerminator]> {
   let extraClassDeclaration = [{
     mlir::Block *getBodyBlock() { return &getBody().front(); }
-    
+
     // Implement RegionKindInterface.
     static mlir::RegionKind getRegionKind(unsigned index) {
       return mlir::RegionKind::Graph;
@@ -112,31 +180,20 @@ def ClassExternOp : OMClassLike<"class.extern"> {
   }];
 }
 
-def ClassExternFieldOp : OMClassFieldLike<"class.extern.field",
-    [HasParent<"ClassExternOp">]> {
-  let arguments = (ins
-    SymbolNameAttr:$name,
-    TypeAttr:$type
-  );
-
-  let assemblyFormat = [{
-    $name attr-dict `:` $type
-  }];
-}
-
 //===----------------------------------------------------------------------===//
 // Object instantiations and fields
 //===----------------------------------------------------------------------===//
 
-def ObjectOp : OMOp<"object",
-    [DeclareOpInterfaceMethods<SymbolUserOpInterface>, Pure]> {
+def ObjectOp : OMOp<"object", [
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+]> {
   let arguments = (ins
     SymbolNameAttr:$className,
     Variadic<AnyType>:$actualParams
   );
 
   let results = (outs
-    ClassType:$result
+    Res<ClassType, "", [MemAlloc]>:$result
   );
 
   let builders = [
@@ -149,8 +206,7 @@ def ObjectOp : OMOp<"object",
   }];
 }
 
-def ObjectFieldOp : OMOp<"object.field",
-    [DeclareOpInterfaceMethods<SymbolUserOpInterface>, Pure]> {
+def ObjectFieldOp : OMOp<"object.field", [Pure]> {
   let arguments = (ins
     ClassType:$object,
     FlatSymbolRefArrayAttr:$fieldPath
@@ -208,95 +264,24 @@ def ListCreateOp : OMOp<"list_create", [Pure, SameTypeOperands]> {
   let hasCustomAssemblyFormat = 1;
 }
 
-def TupleCreateOp : OMOp<"tuple_create", [Pure, InferTypeOpInterface]> {
-  let summary = "Create a tuple of values";
+def ListConcatOp : OMOp<"list_concat", [Pure, SameOperandsAndResultType]> {
+  let summary = "Concatenate multiple lists to produce a new list";
   let description = [{
-    Create a tuple from a sequence of inputs.
+    Produces a value of list type by concatenating the provided lists.
 
+    Example:
     ```
-    %tuple = om.tuple_create %a, %b, %c : !om.ref, !om.string, !om.list<i32>
+    %3 = om.list_concat %0, %1, %2 : !om.list<string>
     ```
   }];
 
-  let arguments = (ins Variadic<AnyType>:$inputs);
-  let results = (outs
-    TupleOf<[AnyType]>:$result
-  );
+  let arguments = (ins Variadic<ListType>:$subLists);
+  let results = (outs ListType:$result);
 
-  let assemblyFormat = [{
-    $inputs attr-dict `:` type($inputs)
-  }];
-
-  let extraClassDeclaration = [{
-    // Implement InferTypeOpInterface.
-    static ::mlir::LogicalResult inferReturnTypes(
-      ::mlir::MLIRContext *context, ::std::optional<::mlir::Location> location,
-      ::mlir::ValueRange operands, ::mlir::DictionaryAttr attributes,
-      ::mlir::OpaqueProperties,
-      ::mlir::RegionRange regions,
-      ::llvm::SmallVectorImpl<::mlir::Type> &inferredReturnTypes);
-   }];
-
+  let assemblyFormat = "$subLists attr-dict `:` type($result)";
 }
 
-def TupleGetOp : OMOp<"tuple_get", [Pure, InferTypeOpInterface]> {
-  let summary = "Extract a value from a tuple";
-  let description = [{
-    Extract a value from a tuple.
-
-    ```
-    %value = om.tuple_get %a[0] : tuple<!om.ref, !om.string, !om.list<i32>>
-    ```
-  }];
-
-  let arguments = (ins
-    TupleOf<[AnyType]>:$input,
-    I32Attr:$index
-  );
-
-  let results = (outs
-    AnyType:$result
-  );
-
-  let assemblyFormat = [{
-    $input `[` $index `]` attr-dict `:` type($input)
-  }];
-
-  let extraClassDeclaration = [{
-    // Implement InferTypeOpInterface.
-    static ::mlir::LogicalResult inferReturnTypes(
-      ::mlir::MLIRContext *context, ::std::optional<::mlir::Location> location,
-      ::mlir::ValueRange operands, ::mlir::DictionaryAttr attributes,
-      ::mlir::OpaqueProperties, ::mlir::RegionRange regions,
-      ::llvm::SmallVectorImpl<::mlir::Type> &inferredReturnTypes);
-   }];
-}
-
-def MapKeyValuePair: Type<CPred<"::circt::om::isMapKeyValuePairType($_self)">,
-                        "a pair whose first element is an attribute",
-                        "::mlir::TupleType">;
-
-def MapCreateOp : OMOp<"map_create", [Pure, SameTypeOperands]> {
-  let summary = "Create a map";
-  let description = [{
-    Creates a map from a sequence of inputs.
-
-    ```
-    %map = om.map_create %e1, %e2 : !om.string, i8
-    ```
-    where `%e1` and `e2` have !om.tuple<!om.string, i8> and
-    `%map` has `!om.map<!om.string, i8>` type.
-  }];
-
-  let arguments = (ins Variadic<MapKeyValuePair>:$inputs);
-  let results = (outs
-    MapType:$result
-  );
-
-  let hasCustomAssemblyFormat = true;
-}
-
-def BasePathCreateOp : OMOp<"basepath_create", [Pure, 
+def BasePathCreateOp : OMOp<"basepath_create", [Pure,
       DeclareOpInterfaceMethods<SymbolUserOpInterface>
     ]> {
   let summary = "Produce a base path value";
@@ -430,6 +415,23 @@ def FrozenEmptyPathOp : OMOp<"frozenpath_empty", [Pure]> {
   let assemblyFormat = "attr-dict";
 }
 
+def UnknownValueOp : OMOp<"unknown", [
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+]> {
+  let summary = "An operation with an unknown value used to tie-off connections";
+  let description = [{
+
+    An operation that is used to tie-off connections to objects for which we do
+    not care about the value being used.
+
+    This is used in situations where a class exists and is instantiated, but the
+    instantiator has no reasonable value that it can or should drive.
+  }];
+  let arguments = (ins);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+}
+
 def AnyCastOp : OMOp<"any_cast", [Pure]> {
   let summary = "Cast any value to any type.";
 
@@ -496,6 +498,20 @@ def IntegerShrOp : IntegerBinaryArithmeticOp<"integer.shr"> {
     Example:
     ```mlir
     %2 = om.integer.shr %0, %1 : !om.integer
+    ```
+  }];
+}
+
+def IntegerShlOp : IntegerBinaryArithmeticOp<"integer.shl"> {
+  let summary = "Shift an OMIntegerType value left by an OMIntegerType value";
+  let description = [{
+    Perform arbitrary precision signed integer arithmetic shift left of the lhs
+    OMIntegerType value by the rhs OMIntegerType value. The rhs value must be
+    non-negative.
+
+    Example:
+    ```mlir
+    %2 = om.integer.shl %0, %1 : !om.integer
     ```
   }];
 }

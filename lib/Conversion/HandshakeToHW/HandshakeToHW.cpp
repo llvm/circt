@@ -11,13 +11,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/HandshakeToHW.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
+#include "circt/Dialect/Handshake/HandshakeUtils.h"
 #include "circt/Dialect/Handshake/Visitor.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/BackedgeBuilder.h"
@@ -25,11 +26,17 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/MathExtras.h"
 #include <optional>
+
+namespace circt {
+#define GEN_PASS_DEF_HANDSHAKETOHW
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -59,23 +66,25 @@ public:
   ESITypeConverter() {
     addConversion([](Type type) -> Type { return esiWrapper(type); });
 
-    addTargetMaterialization(
-        [&](mlir::OpBuilder &builder, mlir::Type resultType,
-            mlir::ValueRange inputs,
-            mlir::Location loc) -> std::optional<mlir::Value> {
-          if (inputs.size() != 1)
-            return std::nullopt;
-          return inputs[0];
-        });
+    addTargetMaterialization([&](mlir::OpBuilder &builder,
+                                 mlir::Type resultType, mlir::ValueRange inputs,
+                                 mlir::Location loc) -> mlir::Value {
+      if (inputs.size() != 1)
+        return Value();
+      return UnrealizedConversionCastOp::create(builder, loc, resultType,
+                                                inputs[0])
+          ->getResult(0);
+    });
 
-    addSourceMaterialization(
-        [&](mlir::OpBuilder &builder, mlir::Type resultType,
-            mlir::ValueRange inputs,
-            mlir::Location loc) -> std::optional<mlir::Value> {
-          if (inputs.size() != 1)
-            return std::nullopt;
-          return inputs[0];
-        });
+    addSourceMaterialization([&](mlir::OpBuilder &builder,
+                                 mlir::Type resultType, mlir::ValueRange inputs,
+                                 mlir::Location loc) -> mlir::Value {
+      if (inputs.size() != 1)
+        return Value();
+      return UnrealizedConversionCastOp::create(builder, loc, resultType,
+                                                inputs[0])
+          ->getResult(0);
+    });
   }
 };
 
@@ -107,14 +116,6 @@ static Type getOperandDataType(Value op) {
   return opType;
 }
 
-/// Filters NoneType's from the input.
-static SmallVector<Type> filterNoneTypes(ArrayRef<Type> input) {
-  SmallVector<Type> filterRes;
-  llvm::copy_if(input, std::back_inserter(filterRes),
-                [](Type type) { return !isa<NoneType>(type); });
-  return filterRes;
-}
-
 /// Returns a set of types which may uniquely identify the provided op. Return
 /// value is <inputTypes, outputTypes>.
 using DiscriminatingTypes = std::pair<SmallVector<Type>, SmallVector<Type>>;
@@ -127,13 +128,12 @@ static DiscriminatingTypes getHandshakeDiscriminatingTypes(Operation *op) {
       .Default([&](auto) {
         // By default, all in- and output types which is not a control type
         // (NoneType) are discriminating types.
-        std::vector<Type> inTypes, outTypes;
+        SmallVector<Type> inTypes, outTypes;
         llvm::transform(op->getOperands(), std::back_inserter(inTypes),
                         getOperandDataType);
         llvm::transform(op->getResults(), std::back_inserter(outTypes),
                         getOperandDataType);
-        return DiscriminatingTypes{filterNoneTypes(inTypes),
-                                   filterNoneTypes(outTypes)};
+        return DiscriminatingTypes{inTypes, outTypes};
       });
 }
 
@@ -159,6 +159,8 @@ static std::string getTypeName(Location loc, Type type) {
     typeName += "_struct";
     for (auto element : structType.getElements())
       typeName += "_" + element.name.str() + getTypeName(loc, element.type);
+  } else if (isa<NoneType>(type)) {
+    typeName += "_none";
   } else
     emitError(loc) << "unsupported data type '" << type << "'";
 
@@ -341,8 +343,8 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
     auto newInPort = mod.getArgumentForInput(i);
     // Replace the extmemory submodule outputs with the newly created inputs.
     b.setInsertionPointToStart(mod.getBodyBlock());
-    auto newInPortExploded = b.create<hw::StructExplodeOp>(
-        arg.getLoc(), extmemMod.getOutputTypes(), newInPort);
+    auto newInPortExploded = hw::StructExplodeOp::create(
+        b, arg.getLoc(), extmemMod.getOutputTypes(), newInPort);
     extmemInstance.replaceAllUsesWith(newInPortExploded.getResults());
 
     // Add memory output - this is the inputs of the extmemory op (without the
@@ -355,8 +357,8 @@ static LogicalResult convertExtMemoryOps(HWModuleOp mod) {
 
     auto memOutputArgs = extmemInstance.getOperands().drop_front();
     b.setInsertionPoint(mod.getBodyBlock()->getTerminator());
-    auto memOutputStruct = b.create<hw::StructCreateOp>(
-        arg.getLoc(), outPortInfo.type, memOutputArgs);
+    auto memOutputStruct = hw::StructCreateOp::create(
+        b, arg.getLoc(), outPortInfo.type, memOutputArgs);
     mod.appendOutputs({{outPortInfo.name, memOutputStruct}});
 
     // Erase the extmemory submodule instace since the i/o has now been
@@ -467,7 +469,7 @@ struct RTLBuilder {
         return it->second;
     }
 
-    auto cval = b.create<hw::ConstantOp>(loc, apv);
+    auto cval = hw::ConstantOp::create(b, loc, apv);
     if (!isZeroWidth)
       constants[apv] = cval;
     return cval;
@@ -475,16 +477,17 @@ struct RTLBuilder {
 
   Value constant(unsigned width, int64_t value,
                  std::optional<StringRef> name = {}) {
-    return constant(APInt(width, value));
+    return constant(
+        APInt(width, value, /*isSigned=*/false, /*implicitTrunc=*/true));
   }
   std::pair<Value, Value> wrap(Value data, Value valid,
                                std::optional<StringRef> name = {}) {
-    auto wrapOp = b.create<esi::WrapValidReadyOp>(loc, data, valid);
+    auto wrapOp = esi::WrapValidReadyOp::create(b, loc, data, valid);
     return {wrapOp.getResult(0), wrapOp.getResult(1)};
   }
   std::pair<Value, Value> unwrap(Value channel, Value ready,
                                  std::optional<StringRef> name = {}) {
-    auto unwrapOp = b.create<esi::UnwrapValidReadyOp>(loc, channel, ready);
+    auto unwrapOp = esi::UnwrapValidReadyOp::create(b, loc, channel, ready);
     return {unwrapOp.getResult(0), unwrapOp.getResult(1)};
   }
 
@@ -500,13 +503,13 @@ struct RTLBuilder {
            "No global reset provided to this RTLBuilder - a reset "
            "signal must be provided to the reg(...) function.");
 
-    return b.create<seq::CompRegOp>(loc, in, resolvedClk, resolvedRst, rstValue,
-                                    name);
+    return seq::CompRegOp::create(b, loc, in, resolvedClk, resolvedRst,
+                                  rstValue, name);
   }
 
   Value cmp(Value lhs, Value rhs, comb::ICmpPredicate predicate,
             std::optional<StringRef> name = {}) {
-    return b.create<comb::ICmpOp>(loc, predicate, lhs, rhs);
+    return comb::ICmpOp::create(b, loc, predicate, lhs, rhs);
   }
 
   Value buildNamedOp(llvm::function_ref<Value()> f,
@@ -524,12 +527,12 @@ struct RTLBuilder {
   // Bitwise 'and'.
   Value bAnd(ValueRange values, std::optional<StringRef> name = {}) {
     return buildNamedOp(
-        [&]() { return b.create<comb::AndOp>(loc, values, false); }, name);
+        [&]() { return comb::AndOp::create(b, loc, values, false); }, name);
   }
 
   Value bOr(ValueRange values, std::optional<StringRef> name = {}) {
     return buildNamedOp(
-        [&]() { return b.create<comb::OrOp>(loc, values, false); }, name);
+        [&]() { return comb::OrOp::create(b, loc, values, false); }, name);
   }
 
   // Bitwise 'not'.
@@ -546,19 +549,19 @@ struct RTLBuilder {
     }
 
     return buildNamedOp(
-        [&]() { return b.create<comb::XorOp>(loc, value, allOnes); }, name);
+        [&]() { return comb::XorOp::create(b, loc, value, allOnes); }, name);
 
     return b.createOrFold<comb::XorOp>(loc, value, allOnes, false);
   }
 
   Value shl(Value value, Value shift, std::optional<StringRef> name = {}) {
     return buildNamedOp(
-        [&]() { return b.create<comb::ShlOp>(loc, value, shift); }, name);
+        [&]() { return comb::ShlOp::create(b, loc, value, shift); }, name);
   }
 
   Value concat(ValueRange values, std::optional<StringRef> name = {}) {
-    return buildNamedOp([&]() { return b.create<comb::ConcatOp>(loc, values); },
-                        name);
+    return buildNamedOp(
+        [&]() { return comb::ConcatOp::create(b, loc, values); }, name);
   }
 
   // Packs a list of values into a hw.struct.
@@ -567,7 +570,9 @@ struct RTLBuilder {
     if (!structType)
       structType = tupleToStruct(values.getTypes());
     return buildNamedOp(
-        [&]() { return b.create<hw::StructCreateOp>(loc, structType, values); },
+        [&]() {
+          return hw::StructCreateOp::create(b, loc, structType, values);
+        },
         name);
   }
 
@@ -576,13 +581,13 @@ struct RTLBuilder {
     auto structType = cast<hw::StructType>(value.getType());
     llvm::SmallVector<Type> innerTypes;
     structType.getInnerTypes(innerTypes);
-    return b.create<hw::StructExplodeOp>(loc, innerTypes, value).getResults();
+    return hw::StructExplodeOp::create(b, loc, innerTypes, value).getResults();
   }
 
   llvm::SmallVector<Value> toBits(Value v, std::optional<StringRef> name = {}) {
     llvm::SmallVector<Value> bits;
     for (unsigned i = 0, e = v.getType().getIntOrFloatBitWidth(); i != e; ++i)
-      bits.push_back(b.create<comb::ExtractOp>(loc, v, i, /*bitWidth=*/1));
+      bits.push_back(comb::ExtractOp::create(b, loc, v, i, /*bitWidth=*/1));
     return bits;
   }
 
@@ -596,7 +601,7 @@ struct RTLBuilder {
                 std::optional<StringRef> name = {}) {
     unsigned width = hi - lo + 1;
     return buildNamedOp(
-        [&]() { return b.create<comb::ExtractOp>(loc, v, lo, width); }, name);
+        [&]() { return comb::ExtractOp::create(b, loc, v, lo, width); }, name);
   }
 
   // Truncates 'value' to its lower 'width' bits.
@@ -628,13 +633,13 @@ struct RTLBuilder {
   // Creates a hw.array of the given values.
   Value arrayCreate(ValueRange values, std::optional<StringRef> name = {}) {
     return buildNamedOp(
-        [&]() { return b.create<hw::ArrayCreateOp>(loc, values); }, name);
+        [&]() { return hw::ArrayCreateOp::create(b, loc, values); }, name);
   }
 
   // Extract the 'index'th value from the input array.
   Value arrayGet(Value array, Value index, std::optional<StringRef> name = {}) {
     return buildNamedOp(
-        [&]() { return b.create<hw::ArrayGetOp>(loc, array, index); }, name);
+        [&]() { return hw::ArrayGetOp::create(b, loc, array, index); }, name);
   }
 
   // Muxes a range of values.
@@ -643,7 +648,7 @@ struct RTLBuilder {
   Value mux(Value index, ValueRange values,
             std::optional<StringRef> name = {}) {
     if (values.size() == 2)
-      return b.create<comb::MuxOp>(loc, index, values[1], values[0]);
+      return comb::MuxOp::create(b, loc, index, values[1], values[0]);
 
     return arrayGet(arrayCreate(values), index, name);
   }
@@ -692,7 +697,7 @@ static Value createZeroDataConst(RTLBuilder &s, Location loc, Type type) {
         SmallVector<Value> zeroValues;
         for (auto field : structType.getElements())
           zeroValues.push_back(createZeroDataConst(s, loc, field.type));
-        return s.b.create<hw::StructCreateOp>(loc, structType, zeroValues);
+        return hw::StructCreateOp::create(s.b, loc, structType, zeroValues);
       })
       .Default([&](Type) -> Value {
         emitError(loc) << "unsupported type for zero value: " << type;
@@ -738,9 +743,10 @@ public:
       auto portInfo = ModulePortInfo(getPortInfoForOp(op));
 
       submoduleBuilder.setInsertionPoint(op->getParentOp());
-      implModule = submoduleBuilder.create<hw::HWModuleOp>(
-          op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
-          portInfo, [&](OpBuilder &b, hw::HWModulePortAccessor &ports) {
+      implModule = hw::HWModuleOp::create(
+          submoduleBuilder, op.getLoc(),
+          submoduleBuilder.getStringAttr(getSubModuleName(op)), portInfo,
+          [&](OpBuilder &b, hw::HWModulePortAccessor &ports) {
             // if 'op' has clock trait, extract these and provide them to the
             // RTL builder.
             Value clk, rst;
@@ -1046,6 +1052,40 @@ public:
   }
 };
 
+class ESIInstanceConversionPattern
+    : public OpConversionPattern<handshake::ESIInstanceOp> {
+public:
+  ESIInstanceConversionPattern(MLIRContext *context,
+                               const HWSymbolCache &symCache)
+      : OpConversionPattern(context), symCache(symCache) {}
+
+  LogicalResult
+  matchAndRewrite(ESIInstanceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // The operand signature of this op is very similar to the lowered
+    // `handshake.func`s (especially since handshake uses ESI channels
+    // internally). Whereas ESIInstance ops have 'clk' and 'rst' at the
+    // beginning, lowered `handshake.func`s have them at the end. So we've just
+    // got to re-arrange them.
+    SmallVector<Value> operands;
+    for (size_t i = ESIInstanceOp::NumFixedOperands, e = op.getNumOperands();
+         i < e; ++i)
+      operands.push_back(adaptor.getOperands()[i]);
+    operands.push_back(adaptor.getClk());
+    operands.push_back(adaptor.getRst());
+    // Locate the lowered module so the instance builder can get all the
+    // metadata.
+    Operation *targetModule = symCache.getDefinition(op.getModuleAttr());
+    // And replace the op with an instance of the target module.
+    rewriter.replaceOpWithNewOp<hw::InstanceOp>(op, targetModule,
+                                                op.getInstNameAttr(), operands);
+    return success();
+  }
+
+private:
+  const HWSymbolCache &symCache;
+};
+
 class ReturnConversionPattern
     : public OpConversionPattern<handshake::ReturnOp> {
 public:
@@ -1078,8 +1118,8 @@ public:
       // constructs from the input data signals of TIn.
       // To disambiguate ambiguous builders with default arguments (e.g.,
       // twoState UnitAttr), specify attribute array explicitly.
-      return s.b.create<TOut>(op.getLoc(), inputs,
-                              /* attributes */ ArrayRef<NamedAttribute>{});
+      return TOut::create(s.b, op.getLoc(), inputs,
+                          /* attributes */ ArrayRef<NamedAttribute>{});
     });
   };
 };
@@ -1173,8 +1213,8 @@ public:
     auto unwrappedIO = this->unwrapIO(s, bb, ports);
     auto buildCompareLogic = [&](comb::ICmpPredicate predicate) {
       return buildUnitRateJoinLogic(s, unwrappedIO, [&](ValueRange inputs) {
-        return s.b.create<comb::ICmpOp>(op.getLoc(), predicate, inputs[0],
-                                        inputs[1]);
+        return comb::ICmpOp::create(s.b, op.getLoc(), predicate, inputs[0],
+                                    inputs[1]);
       });
     };
 
@@ -1493,16 +1533,17 @@ public:
     auto c0I0 = s.constant(0, 0);
 
     auto cl2dim = llvm::Log2_64_Ceil(op.getMemRefType().getShape()[0]);
-    auto hlmem = s.b.create<seq::HLMemOp>(
-        loc, s.clk, s.rst, "_handshake_memory_" + std::to_string(op.getId()),
+    auto hlmem = seq::HLMemOp::create(
+        s.b, loc, s.clk, s.rst,
+        "_handshake_memory_" + std::to_string(op.getId()),
         op.getMemRefType().getShape(), op.getMemRefType().getElementType());
 
     // Create load ports...
     for (auto &ld : loadPorts) {
       llvm::SmallVector<Value> addresses = {s.truncate(ld.addr.data, cl2dim)};
-      auto readData = s.b.create<seq::ReadPortOp>(loc, hlmem.getHandle(),
-                                                  addresses, ld.addr.valid,
-                                                  /*latency=*/0);
+      auto readData = seq::ReadPortOp::create(s.b, loc, hlmem.getHandle(),
+                                              addresses, ld.addr.valid,
+                                              /*latency=*/0);
       ld.data.data->setValue(readData);
       ld.done.data->setValue(c0I0);
       // Create control fork for the load address valid and ready signals.
@@ -1547,12 +1588,12 @@ public:
       // Instantiate the write port operation - truncate address width to memory
       // width.
       llvm::SmallVector<Value> addresses = {s.truncate(st.addr.data, cl2dim)};
-      s.b.create<seq::WritePortOp>(loc, hlmem.getHandle(), addresses,
-                                   st.data.data, writeValid,
-                                   /*latency=*/1);
+      seq::WritePortOp::create(s.b, loc, hlmem.getHandle(), addresses,
+                               st.data.data, writeValid,
+                               /*latency=*/1);
     }
   }
-}; // namespace
+};
 
 class SinkConversionPattern : public HandshakeConversionPattern<SinkOp> {
 public:
@@ -1778,9 +1819,9 @@ public:
     hw::HWModuleLike implModule = checkSubModuleOp(ls.parentModule, op);
     if (!implModule) {
       auto portInfo = ModulePortInfo(getPortInfoForOp(op));
-      implModule = submoduleBuilder.create<hw::HWModuleExternOp>(
-          op.getLoc(), submoduleBuilder.getStringAttr(getSubModuleName(op)),
-          portInfo);
+      implModule = hw::HWModuleExternOp::create(
+          submoduleBuilder, op.getLoc(),
+          submoduleBuilder.getStringAttr(getSubModuleName(op)), portInfo);
     }
 
     llvm::SmallVector<Value> operands = adaptor.getOperands();
@@ -1807,11 +1848,11 @@ public:
 
     HWModuleLike hwModule;
     if (op.isExternal()) {
-      hwModule = rewriter.create<hw::HWModuleExternOp>(
-          op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
+      hwModule = hw::HWModuleExternOp::create(
+          rewriter, op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
     } else {
-      auto hwModuleOp = rewriter.create<hw::HWModuleOp>(
-          op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
+      auto hwModuleOp = hw::HWModuleOp::create(
+          rewriter, op.getLoc(), rewriter.getStringAttr(op.getName()), ports);
       auto args = hwModuleOp.getBodyBlock()->getArguments().drop_back(2);
       rewriter.inlineBlockBefore(&op.getBody().front(),
                                  hwModuleOp.getBodyBlock()->getTerminator(),
@@ -1911,7 +1952,8 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
 }
 
 namespace {
-class HandshakeToHWPass : public HandshakeToHWBase<HandshakeToHWPass> {
+class HandshakeToHWPass
+    : public circt::impl::HandshakeToHWBase<HandshakeToHWPass> {
 public:
   void runOnOperation() override {
     mlir::ModuleOp mod = getOperation();
@@ -1967,6 +2009,18 @@ public:
     for (auto hwModule : mod.getOps<hw::HWModuleOp>())
       if (failed(convertExtMemoryOps(hwModule)))
         return signalPassFailure();
+
+    // Run conversions which need see everything.
+    HWSymbolCache symbolCache;
+    symbolCache.addDefinitions(mod);
+    symbolCache.freeze();
+    RewritePatternSet patterns(mod.getContext());
+    patterns.insert<ESIInstanceConversionPattern>(mod.getContext(),
+                                                  symbolCache);
+    if (failed(applyPartialConversion(mod, target, std::move(patterns)))) {
+      mod->emitOpError() << "error during conversion";
+      signalPassFailure();
+    }
   }
 };
 } // end anonymous namespace

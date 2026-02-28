@@ -444,3 +444,90 @@ module attributes {calyx.entrypoint = "main"} {
     }
   }
 }
+
+// -----
+
+module attributes {calyx.entrypoint = "main"} {
+  // CHECK-LABEL:   calyx.component @main(%in0: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%done: i1 {done}) {
+  calyx.component @main(%in0: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%done: i1 {done}) {
+    %true = hw.constant true
+    %mem_1.addr0, %mem_1.clk, %mem_1.reset, %mem_1.content_en, %mem_1.write_en, %mem_1.write_data, %mem_1.read_data, %mem_1.done = calyx.seq_mem @mem_1 <[8] x 32> [3] {external = true} : i3, i1, i1, i1, i1, i32, i32, i1
+    %mem_0.addr0, %mem_0.clk, %mem_0.reset, %mem_0.content_en, %mem_0.write_en, %mem_0.write_data, %mem_0.read_data, %mem_0.done = calyx.seq_mem @mem_0 <[8] x 32> [3] {external = true} : i3, i1, i1, i1, i1, i32, i32, i1
+    %main_1_instance.in1, %main_1_instance.clk, %main_1_instance.reset, %main_1_instance.go, %main_1_instance.done = calyx.instance @main_1_instance of @main_1 : i32, i1, i1, i1, i1
+    calyx.wires {
+      calyx.group @init_main_1_instance {
+        calyx.assign %main_1_instance.reset = %true : i1
+        calyx.assign %main_1_instance.go = %true : i1
+        calyx.group_done %main_1_instance.done : i1
+      }
+    }
+    calyx.control {
+      calyx.seq {
+        calyx.seq {
+          calyx.enable @init_main_1_instance
+          // CHECK: calyx.invoke @main_1_instance[arg_mem_0 = mem_0, arg_mem_1 = mem_1](%main_1_instance.in1 = %in0) -> (i32)
+          calyx.invoke @main_1_instance[arg_mem_0 = mem_0, arg_mem_1 = mem_1](%main_1_instance.in1 = %in0) -> (i32)
+        }
+      }
+    }
+  } {toplevel}
+  // CHECK-LABEL: calyx.component @main_1(%in1: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%done: i1 {done}) {
+  calyx.component @main_1(%in1: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%done: i1 {done}) {
+    %true = hw.constant true
+    %c1_i32 = hw.constant 1 : i32
+    %func_1_instance.in0, %func_1_instance.in2, %func_1_instance.clk, %func_1_instance.reset, %func_1_instance.go, %func_1_instance.done = calyx.instance @func_1_instance of @func_1 : i32, i32, i1, i1, i1, i1
+    %arg_mem_1.addr0, %arg_mem_1.clk, %arg_mem_1.reset, %arg_mem_1.content_en, %arg_mem_1.write_en, %arg_mem_1.write_data, %arg_mem_1.read_data, %arg_mem_1.done = calyx.seq_mem @arg_mem_1 <[8] x 32> [3] : i3, i1, i1, i1, i1, i32, i32, i1
+    %arg_mem_0.addr0, %arg_mem_0.clk, %arg_mem_0.reset, %arg_mem_0.content_en, %arg_mem_0.write_en, %arg_mem_0.write_data, %arg_mem_0.read_data, %arg_mem_0.done = calyx.seq_mem @arg_mem_0 <[8] x 32> [3] : i3, i1, i1, i1, i1, i32, i32, i1
+    calyx.wires {
+      calyx.group @init_func_1_instance {
+        calyx.assign %func_1_instance.reset = %true : i1
+        calyx.assign %func_1_instance.go = %true : i1
+        calyx.group_done %func_1_instance.done : i1
+      }
+    }
+    calyx.control {
+      calyx.seq {
+        calyx.seq {
+          calyx.enable @init_func_1_instance
+          // CHECK: calyx.invoke @func_1_instance[arg_mem_0 = arg_mem_0, arg_mem_1 = arg_mem_1](%func_1_instance.in0 = %c1_i32, %func_1_instance.in2 = %in1) -> (i32, i32)
+          calyx.invoke @func_1_instance[arg_mem_0 = arg_mem_0, arg_mem_1 = arg_mem_1](%func_1_instance.in0 = %c1_i32, %func_1_instance.in2 = %in1) -> (i32, i32)
+        }
+      }
+    }
+  }
+  // CHECK-LABEL: calyx.component @func_1(%in0: i32, %in2: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%done: i1 {done}) {
+  calyx.component @func_1(%in0: i32, %in2: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%done: i1 {done}) {
+    %true = hw.constant true
+    %std_slice_1.in, %std_slice_1.out = calyx.std_slice @std_slice_1 : i32, i3
+    %std_slice_0.in, %std_slice_0.out = calyx.std_slice @std_slice_0 : i32, i3
+    %arg_mem_1.addr0, %arg_mem_1.clk, %arg_mem_1.reset, %arg_mem_1.content_en, %arg_mem_1.write_en, %arg_mem_1.write_data, %arg_mem_1.read_data, %arg_mem_1.done = calyx.seq_mem @arg_mem_1 <[8] x 32> [3] : i3, i1, i1, i1, i1, i32, i32, i1
+    %arg_mem_0.addr0, %arg_mem_0.clk, %arg_mem_0.reset, %arg_mem_0.content_en, %arg_mem_0.write_en, %arg_mem_0.write_data, %arg_mem_0.read_data, %arg_mem_0.done = calyx.seq_mem @arg_mem_0 <[8] x 32> [3] : i3, i1, i1, i1, i1, i32, i32, i1
+    calyx.wires {
+      calyx.group @bb0_0 {
+        calyx.assign %std_slice_1.in = %in2 : i32
+        calyx.assign %arg_mem_1.addr0 = %std_slice_1.out : i3
+        calyx.assign %arg_mem_1.write_data = %in0 : i32
+        calyx.assign %arg_mem_1.write_en = %true : i1
+        calyx.assign %arg_mem_1.content_en = %true : i1
+        calyx.group_done %arg_mem_1.done : i1
+      }
+      calyx.group @bb0_1 {
+        calyx.assign %std_slice_0.in = %in2 : i32
+        calyx.assign %arg_mem_0.addr0 = %std_slice_0.out : i3
+        calyx.assign %arg_mem_0.write_data = %in0 : i32
+        calyx.assign %arg_mem_0.write_en = %true : i1
+        calyx.assign %arg_mem_0.content_en = %true : i1
+        calyx.group_done %arg_mem_0.done : i1
+      }
+    }
+    calyx.control {
+      calyx.seq {
+        calyx.seq {
+          calyx.enable @bb0_0
+          calyx.enable @bb0_1
+        }
+      }
+    }
+  }
+}
+

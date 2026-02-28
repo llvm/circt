@@ -31,4 +31,15 @@ def DCDematerializeForksSinks : Pass<"dc-dematerialize-forks-sinks"> {
   let dependentDialects = ["dc::DCDialect"];
 }
 
+def DCDotPrint : Pass<"dc-print-dot", "mlir::ModuleOp"> {
+  let summary = "Print .dot graph of a DC function.";
+  let description = [{
+    This pass analyses a dc modulen and prints a .dot graph of the
+    structure. If multiple functions are present in the IR, the top level
+    function will be printed, and called functions will be subgraphs within
+    the main graph.
+  }];
+  let constructor = "circt::dc::createDCDotPrintPass()";
+}
+
 #endif // CIRCT_DIALECT_DC_PASSES_TD

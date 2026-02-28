@@ -10,19 +10,28 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
-#include "circt/Conversion/HandshakeToHW.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/Handshake/HandshakeDialect.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
+#include "circt/Dialect/Handshake/HandshakeUtils.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Rewrite/FrozenRewritePatternSet.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Debug.h"
+
+namespace circt {
+namespace handshake {
+#define GEN_PASS_DEF_HANDSHAKELOWEREXTMEMTOHW
+#include "circt/Dialect/Handshake/HandshakePasses.h.inc"
+} // namespace handshake
+} // namespace circt
 
 using namespace circt;
 using namespace handshake;
@@ -107,7 +116,8 @@ static HandshakeMemType getMemTypeForExtmem(Value v) {
 
 namespace {
 struct HandshakeLowerExtmemToHWPass
-    : public HandshakeLowerExtmemToHWBase<HandshakeLowerExtmemToHWPass> {
+    : public circt::handshake::impl::HandshakeLowerExtmemToHWBase<
+          HandshakeLowerExtmemToHWPass> {
 
   HandshakeLowerExtmemToHWPass(std::optional<bool> createESIWrapper) {
     if (createESIWrapper)
@@ -142,8 +152,8 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
   b.setInsertionPoint(func);
   auto newPortInfo = handshake::getPortInfoForOpTypes(
       func, func.getArgumentTypes(), func.getResultTypes());
-  auto extMod = b.create<hw::HWModuleExternOp>(
-      loc, StringAttr::get(ctx, "__" + func.getName() + "_hw"), newPortInfo);
+  auto extMod = hw::HWModuleExternOp::create(
+      b, loc, StringAttr::get(ctx, "__" + func.getName() + "_hw"), newPortInfo);
 
   // Add an attribute to the original handshake function to indicate that it
   // needs to resolve to extMod in a later pass.
@@ -158,8 +168,8 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
                   [](auto &pair) { return pair.first; });
   for (auto i : llvm::reverse(argReplacementsIdxs))
     wrapperModPortInfo.eraseInput(i);
-  auto wrapperMod = b.create<hw::HWModuleOp>(
-      loc, StringAttr::get(ctx, func.getName() + "_esi_wrapper"),
+  auto wrapperMod = hw::HWModuleOp::create(
+      b, loc, StringAttr::get(ctx, func.getName() + "_esi_wrapper"),
       wrapperModPortInfo);
   Value clk = wrapperMod.getBodyBlock()->getArgument(
       wrapperMod.getBodyBlock()->getNumArguments() - 2);
@@ -182,7 +192,7 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
 
   // Maintain the arguments which each memory will add to the inner module
   // instance.
-  llvm::SmallVector<llvm::OwningArrayRef<Value>> instanceArgsForMem;
+  llvm::SmallVector<llvm::SmallVector<Value>> instanceArgsForMem;
 
   for (auto [i, memType] : argReplacements) {
 
@@ -194,8 +204,8 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
     auto dataType = memType.memRefType.getElementType();
     assert(memrefShape.size() == 1 && "Only 1D memrefs are supported");
     unsigned memrefSize = memrefShape[0];
-    auto memServiceDecl = b.create<esi::RandomAccessMemoryDeclOp>(
-        loc, origPortInfo.name, TypeAttr::get(dataType),
+    auto memServiceDecl = esi::RandomAccessMemoryDeclOp::create(
+        b, loc, origPortInfo.name, TypeAttr::get(dataType),
         b.getI64IntegerAttr(memrefSize));
     esi::ServicePortInfo writePortInfo = memServiceDecl.writePortInfo();
     esi::ServicePortInfo readPortInfo = memServiceDecl.readPortInfo();
@@ -208,11 +218,11 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
 
     // Load ports:
     for (unsigned i = 0; i < memType.loadPorts; ++i) {
-      auto req = b.create<esi::RequestConnectionOp>(
-          loc, readPortInfo.type, readPortInfo.port,
-          esi::AppIDAttr::get(ctx, b.getStringAttr("load"), {}));
-      auto reqUnpack = b.create<esi::UnpackBundleOp>(
-          loc, req.getToClient(), ValueRange{backedges[resIdx]});
+      auto req = esi::RequestConnectionOp::create(
+          b, loc, readPortInfo.type, readPortInfo.port,
+          esi::AppIDAttr::get(ctx, b.getStringAttr("load"), resIdx));
+      auto reqUnpack = esi::UnpackBundleOp::create(
+          b, loc, req.getToClient(), ValueRange{backedges[resIdx]});
       instanceArgsFromThisMem.push_back(
           reqUnpack.getToChannels()
               [esi::RandomAccessMemoryDeclOp::RespDirChannelIdx]);
@@ -221,18 +231,18 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
 
     // Store ports:
     for (unsigned i = 0; i < memType.storePorts; ++i) {
-      auto req = b.create<esi::RequestConnectionOp>(
-          loc, writePortInfo.type, writePortInfo.port,
-          esi::AppIDAttr::get(ctx, b.getStringAttr("store"), {}));
-      auto reqUnpack = b.create<esi::UnpackBundleOp>(
-          loc, req.getToClient(), ValueRange{backedges[resIdx]});
+      auto req = esi::RequestConnectionOp::create(
+          b, loc, writePortInfo.type, writePortInfo.port,
+          esi::AppIDAttr::get(ctx, b.getStringAttr("store"), resIdx));
+      auto reqUnpack = esi::UnpackBundleOp::create(
+          b, loc, req.getToClient(), ValueRange{backedges[resIdx]});
       instanceArgsFromThisMem.push_back(
           reqUnpack.getToChannels()
               [esi::RandomAccessMemoryDeclOp::RespDirChannelIdx]);
       ++resIdx;
     }
 
-    instanceArgsForMem.emplace_back(instanceArgsFromThisMem);
+    instanceArgsForMem.emplace_back(std::move(instanceArgsFromThisMem));
   }
 
   // Stitch together arguments from the top-level ESI wrapper and the instance
@@ -270,7 +280,7 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
 
   // Instantiate the inner module.
   auto instance =
-      b.create<hw::InstanceOp>(loc, extMod, func.getName(), instanceArgs);
+      hw::InstanceOp::create(b, loc, extMod, func.getName(), instanceArgs);
 
   // And resolve the backedges.
   for (auto [res, be] : llvm::zip(instance.getResults(), backedges))
@@ -281,8 +291,8 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
   auto outputOp =
       cast<hw::OutputOp>(wrapperMod.getBodyBlock()->getTerminator());
   b.setInsertionPoint(outputOp);
-  b.create<hw::OutputOp>(
-      outputOp.getLoc(),
+  hw::OutputOp::create(
+      b, outputOp.getLoc(),
       instance.getResults().take_front(wrapperMod.getNumOutputPorts()));
   outputOp.erase();
 
@@ -297,7 +307,7 @@ static Value truncateToMemoryWidth(Location loc, OpBuilder &b, Value v,
                                    MemRefType memRefType) {
   assert(isa<IndexType>(v.getType()) && "Expected an index-typed value");
   auto addrWidth = llvm::Log2_64_Ceil(memRefType.getShape().front());
-  return b.create<arith::IndexCastOp>(loc, b.getIntegerType(addrWidth), v);
+  return arith::IndexCastOp::create(b, loc, b.getIntegerType(addrWidth), v);
 }
 
 static Value plumbLoadPort(Location loc, OpBuilder &b,
@@ -306,11 +316,11 @@ static Value plumbLoadPort(Location loc, OpBuilder &b,
   // We need to feed both the load data and the load done outputs.
   // Fork the extracted load data into two, and 'join' the second one to
   // generate a none-typed output to drive the load done.
-  auto dataFork = b.create<ForkOp>(loc, loadData, 2);
+  auto dataFork = ForkOp::create(b, loc, loadData, 2);
 
   auto dataOut = dataFork.getResult()[0];
   llvm::SmallVector<Value> joinArgs = {dataFork.getResult()[1]};
-  auto dataDone = b.create<JoinOp>(loc, joinArgs);
+  auto dataDone = JoinOp::create(b, loc, joinArgs);
 
   ldif.dataOut.replaceAllUsesWith(dataOut);
   ldif.doneOut.replaceAllUsesWith(dataDone);
@@ -329,9 +339,8 @@ static Value plumbStorePort(Location loc, OpBuilder &b,
   llvm::SmallVector<Value> structArgs = {
       truncateToMemoryWidth(loc, b, stif.addressIn, memrefType), stif.dataIn};
 
-  return b
-      .create<hw::StructCreateOp>(loc, cast<hw::StructType>(outType),
-                                  structArgs)
+  return hw::StructCreateOp::create(b, loc, cast<hw::StructType>(outType),
+                                    structArgs)
       .getResult();
 }
 
@@ -410,10 +419,13 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
     llvm::SmallVector<Value> newReturnOperands = oldReturnOp.getOperands();
     unsigned addedInPorts = 0;
     auto memName = func.getArgName(i);
-    auto addArgRes = [&](unsigned id, NamedType &argType, NamedType &resType) {
+    auto addArgRes = [&](unsigned id, NamedType &argType,
+                         NamedType &resType) -> FailureOr<Value> {
       // Function argument
       unsigned newArgIdx = i + addedInPorts;
-      func.insertArgument(newArgIdx, argType.second, {}, arg.getLoc());
+      if (failed(
+              func.insertArgument(newArgIdx, argType.second, {}, arg.getLoc())))
+        return failure();
       insertInStringArrayAttr(func, "argNames",
                               memName.str() + "_" + argType.first.str(),
                               newArgIdx);
@@ -421,7 +433,8 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
       ++addedInPorts;
 
       // Function result.
-      func.insertResult(func.getNumResults(), resType.second, {});
+      if (failed(func.insertResult(func.getNumResults(), resType.second, {})))
+        return failure();
       appendToStringArrayAttr(func, "resNames",
                               memName.str() + "_" + resType.first.str());
       return newInPort;
@@ -432,8 +445,10 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
     for (auto loadPort : extmemOp.getLoadPorts()) {
       auto newInPort = addArgRes(loadPort.index, memIOTypes.inputTypes[portIdx],
                                  memIOTypes.outputTypes[portIdx]);
+      if (failed(newInPort))
+        return failure();
       newReturnOperands.push_back(
-          plumbLoadPort(loc, b, loadPort, newInPort, memrefType));
+          plumbLoadPort(loc, b, loadPort, *newInPort, memrefType));
       ++portIdx;
     }
 
@@ -442,8 +457,10 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
       auto newInPort =
           addArgRes(storePort.index, memIOTypes.inputTypes[portIdx],
                     memIOTypes.outputTypes[portIdx]);
+      if (failed(newInPort))
+        return failure();
       newReturnOperands.push_back(
-          plumbStorePort(loc, b, storePort, newInPort,
+          plumbStorePort(loc, b, storePort, *newInPort,
                          memIOTypes.outputTypes[portIdx].second, memrefType));
       ++portIdx;
     }
@@ -451,7 +468,7 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
     // Replace the return op of the function with a new one that returns the
     // memory output struct.
     b.setInsertionPoint(oldReturnOp);
-    b.create<ReturnOp>(arg.getLoc(), newReturnOperands);
+    ReturnOp::create(b, arg.getLoc(), newReturnOperands);
     oldReturnOp.erase();
 
     // Erase the extmemory operation since I/O plumbing has replaced all of its
@@ -460,7 +477,8 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
 
     // Erase the original memref argument of the top-level i/o now that it's
     // use has been removed.
-    func.eraseArgument(i + addedInPorts);
+    if (failed(func.eraseArgument(i + addedInPorts)))
+      return failure();
     eraseFromArrayAttr(func, "argNames", i + addedInPorts);
 
     argReplacements[i] = memIOTypes;

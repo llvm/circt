@@ -13,8 +13,9 @@
 ; The FIRRTL circuits in this file were generated using:
 ;   https://github.com/seldridge/firrtl-torture/blob/main/Invalid.scala
 
+FIRRTL version 4.0.0
 circuit add :
-  module add :
+  public module add :
     input clock : Clock
     input reset : UInt<1>
     input in_0 : UInt<4>
@@ -25,31 +26,27 @@ circuit add :
     output out_3 : UInt<5>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<5>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<5>, clock with :
-      reset => (UInt<1>("h0"), r_1)
-    reg r_2 : UInt<5>, clock with :
-      reset => (UInt<1>("h0"), r_2)
-    reg r_3 : UInt<5>, clock with :
-      reset => (UInt<1>("h0"), r_3)
+    invalidate invalid
+    reg r_0 : UInt<5>, clock
+    reg r_1 : UInt<5>, clock
+    reg r_2 : UInt<5>, clock
+    reg r_3 : UInt<5>, clock
     node _T = add(in_1, in_0)
     node _T_1 = tail(_T, 1)
-    r_0 <= _T_1
-    out_0 <= r_0
+    connect r_0, _T_1
+    connect out_0, r_0
     node _T_2 = add(in_1, invalid)
     node _T_3 = tail(_T_2, 1)
-    r_1 <= _T_3
-    out_1 <= r_1
+    connect r_1, _T_3
+    connect out_1, r_1
     node _T_4 = add(invalid, in_0)
     node _T_5 = tail(_T_4, 1)
-    r_2 <= _T_5
-    out_2 <= r_2
+    connect r_2, _T_5
+    connect out_2, r_2
     node _T_6 = add(invalid, invalid)
     node _T_7 = tail(_T_6, 1)
-    r_3 <= _T_7
-    out_3 <= r_3
+    connect r_3, _T_7
+    connect out_3, r_3
 
     ; CHECK-LABEL: module add
     ; CHECK:         r_0
@@ -59,8 +56,9 @@ circuit add :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit and :
-  module and :
+  public module and :
     input clock : Clock
     input reset : UInt<1>
     input in_0 : UInt<1>
@@ -71,27 +69,23 @@ circuit and :
     output out_3 : UInt<1>
 
     wire invalid : UInt<1>
-    invalid is invalid
-    reg r_0 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_1)
-    reg r_2 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_2)
-    reg r_3 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_3)
+    invalidate invalid
+    reg r_0 : UInt<1>, clock
+    reg r_1 : UInt<1>, clock
+    reg r_2 : UInt<1>, clock
+    reg r_3 : UInt<1>, clock
     node _T = and(in_1, in_0)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = and(in_1, invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
     node _T_2 = and(invalid, in_0)
-    r_2 <= _T_2
-    out_2 <= r_2
+    connect r_2, _T_2
+    connect out_2, r_2
     node _T_3 = and(invalid, invalid)
-    r_3 <= _T_3
-    out_3 <= r_3
+    connect r_3, _T_3
+    connect out_3, r_3
 
     ; CHECK-LABEL: module and
     ; CHECK:         r_0
@@ -101,8 +95,9 @@ circuit and :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit asAsyncReset :
-  module asAsyncReset :
+  public module asAsyncReset :
     input clock : Clock
     input reset : UInt<1>
     input in : UInt<1>
@@ -110,17 +105,15 @@ circuit asAsyncReset :
     output out_1 : AsyncReset
 
     wire invalid : UInt<1>
-    invalid is invalid
-    reg r_0 : AsyncReset, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : AsyncReset, clock with :
-      reset => (UInt<1>("h0"), r_1)
+    invalidate invalid
+    reg r_0 : AsyncReset, clock
+    reg r_1 : AsyncReset, clock
     node _T = asAsyncReset(in)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = asAsyncReset(invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
 
     ; CHECK-LABEL: module asAsyncReset
     ; CHECK:         r_0
@@ -128,8 +121,9 @@ circuit asAsyncReset :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit asClock :
-  module asClock :
+  public module asClock :
     input clock : Clock
     input reset : UInt<1>
     input in : UInt<1>
@@ -137,17 +131,15 @@ circuit asClock :
     output out_1 : Clock
 
     wire invalid : UInt<1>
-    invalid is invalid
-    reg r_0 : Clock, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : Clock, clock with :
-      reset => (UInt<1>("h0"), r_1)
+    invalidate invalid
+    reg r_0 : Clock, clock
+    reg r_1 : Clock, clock
     node _T = asClock(in)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = asClock(invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
 
     ; CHECK-LABEL: module asClock
     ; CHECK:         r_0
@@ -157,8 +149,9 @@ circuit asClock :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit cvt :
-  module cvt :
+  public module cvt :
     input clock : Clock
     input reset : UInt<1>
     input in : UInt<4>
@@ -166,17 +159,15 @@ circuit cvt :
     output out_1 : SInt<5>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : SInt<5>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : SInt<5>, clock with :
-      reset => (UInt<1>("h0"), r_1)
+    invalidate invalid
+    reg r_0 : SInt<5>, clock
+    reg r_1 : SInt<5>, clock
     node _T = cvt(in)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = cvt(invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
 
     ; CHECK-LABEL: module cvt
     ; CHECK:         r_0
@@ -186,8 +177,9 @@ circuit cvt :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit eq :
-  module eq :
+  public module eq :
     input clock : Clock
     input reset : UInt<1>
     input in_0 : UInt<4>
@@ -198,27 +190,23 @@ circuit eq :
     output out_3 : UInt<1>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_1)
-    reg r_2 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_2)
-    reg r_3 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_3)
+    invalidate invalid
+    reg r_0 : UInt<1>, clock
+    reg r_1 : UInt<1>, clock
+    reg r_2 : UInt<1>, clock
+    reg r_3 : UInt<1>, clock
     node _T = eq(in_1, in_0)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = eq(in_1, invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
     node _T_2 = eq(invalid, in_0)
-    r_2 <= _T_2
-    out_2 <= r_2
+    connect r_2, _T_2
+    connect out_2, r_2
     node _T_3 = eq(invalid, invalid)
-    r_3 <= _T_3
-    out_3 <= r_3
+    connect r_3, _T_3
+    connect out_3, r_3
 
     ; CHECK-LABEL: module eq
     ; CHECK:         r_0
@@ -228,8 +216,9 @@ circuit eq :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit neg :
-  module neg :
+  public module neg :
     input clock : Clock
     input reset : UInt<1>
     input in : UInt<4>
@@ -237,19 +226,17 @@ circuit neg :
     output out_1 : UInt<5>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<5>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<5>, clock with :
-      reset => (UInt<1>("h0"), r_1)
-    node _T = sub(UInt<1>("h0"), in)
+    invalidate invalid
+    reg r_0 : UInt<5>, clock
+    reg r_1 : UInt<5>, clock
+    node _T = sub(UInt<1>(0h0), in)
     node _T_1 = tail(_T, 1)
-    r_0 <= _T_1
-    out_0 <= r_0
-    node _T_2 = sub(UInt<1>("h0"), invalid)
+    connect r_0, _T_1
+    connect out_0, r_0
+    node _T_2 = sub(UInt<1>(0h0), invalid)
     node _T_3 = tail(_T_2, 1)
-    r_1 <= _T_3
-    out_1 <= r_1
+    connect r_1, _T_3
+    connect out_1, r_1
 
     ; CHECK-LABEL: module neg
     ; CHECK:         r_0
@@ -260,8 +247,9 @@ circuit neg :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit neq :
-  module neq :
+  public module neq :
     input clock : Clock
     input reset : UInt<1>
     input in_0 : UInt<4>
@@ -272,27 +260,23 @@ circuit neq :
     output out_3 : UInt<1>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_1)
-    reg r_2 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_2)
-    reg r_3 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_3)
+    invalidate invalid
+    reg r_0 : UInt<1>, clock
+    reg r_1 : UInt<1>, clock
+    reg r_2 : UInt<1>, clock
+    reg r_3 : UInt<1>, clock
     node _T = neq(in_1, in_0)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = neq(in_1, invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
     node _T_2 = neq(invalid, in_0)
-    r_2 <= _T_2
-    out_2 <= r_2
+    connect r_2, _T_2
+    connect out_2, r_2
     node _T_3 = neq(invalid, invalid)
-    r_3 <= _T_3
-    out_3 <= r_3
+    connect r_3, _T_3
+    connect out_3, r_3
 
     ; CHECK-LABEL: module neq
     ; CHECK:         r_0
@@ -302,8 +286,9 @@ circuit neq :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit or :
-  module or :
+  public module or :
     input clock : Clock
     input reset : UInt<1>
     input in_0 : UInt<1>
@@ -314,27 +299,23 @@ circuit or :
     output out_3 : UInt<1>
 
     wire invalid : UInt<1>
-    invalid is invalid
-    reg r_0 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_1)
-    reg r_2 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_2)
-    reg r_3 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_3)
+    invalidate invalid
+    reg r_0 : UInt<1>, clock
+    reg r_1 : UInt<1>, clock
+    reg r_2 : UInt<1>, clock
+    reg r_3 : UInt<1>, clock
     node _T = or(in_1, in_0)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = or(in_1, invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
     node _T_2 = or(invalid, in_0)
-    r_2 <= _T_2
-    out_2 <= r_2
+    connect r_2, _T_2
+    connect out_2, r_2
     node _T_3 = or(invalid, invalid)
-    r_3 <= _T_3
-    out_3 <= r_3
+    connect r_3, _T_3
+    connect out_3, r_3
 
     ; CHECK-LABEL: module or
     ; CHECK:         r_0
@@ -344,8 +325,9 @@ circuit or :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit pad :
-  module pad :
+  public module pad :
     input clock : Clock
     input reset : UInt<1>
     input in : UInt<1>
@@ -353,17 +335,15 @@ circuit pad :
     output out_1 : UInt<2>
 
     wire invalid : UInt<1>
-    invalid is invalid
-    reg r_0 : UInt<2>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<2>, clock with :
-      reset => (UInt<1>("h0"), r_1)
+    invalidate invalid
+    reg r_0 : UInt<2>, clock
+    reg r_1 : UInt<2>, clock
     node _T = pad(in, 2)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = pad(invalid, 2)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
 
     ; CHECK-LABEL: module pad
     ; CHECK:         r_0
@@ -373,8 +353,9 @@ circuit pad :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit xor :
-  module xor :
+  public module xor :
     input clock : Clock
     input reset : UInt<1>
     input in_0 : UInt<1>
@@ -385,27 +366,23 @@ circuit xor :
     output out_3 : UInt<1>
 
     wire invalid : UInt<1>
-    invalid is invalid
-    reg r_0 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_1)
-    reg r_2 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_2)
-    reg r_3 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_3)
+    invalidate invalid
+    reg r_0 : UInt<1>, clock
+    reg r_1 : UInt<1>, clock
+    reg r_2 : UInt<1>, clock
+    reg r_3 : UInt<1>, clock
     node _T = xor(in_1, in_0)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = xor(in_1, invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
     node _T_2 = xor(invalid, in_0)
-    r_2 <= _T_2
-    out_2 <= r_2
+    connect r_2, _T_2
+    connect out_2, r_2
     node _T_3 = xor(invalid, invalid)
-    r_3 <= _T_3
-    out_3 <= r_3
+    connect r_3, _T_3
+    connect out_3, r_3
 
     ; CHECK-LABEL: module xor
     ; CHECK:         r_0
@@ -415,8 +392,9 @@ circuit xor :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit andr :
-  module andr :
+  public module andr :
     input clock : Clock
     input reset : UInt<1>
     input in : UInt<4>
@@ -424,17 +402,15 @@ circuit andr :
     output out_1 : UInt<1>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_1)
+    invalidate invalid
+    reg r_0 : UInt<1>, clock
+    reg r_1 : UInt<1>, clock
     node _T = andr(in)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = andr(invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
 
     ; CHECK-LABEL: module andr
     ; CHECK:         r_0
@@ -444,8 +420,9 @@ circuit andr :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit asSInt :
-  module asSInt :
+  public module asSInt :
     input clock : Clock
     input reset : UInt<1>
     input in : UInt<2>
@@ -453,17 +430,15 @@ circuit asSInt :
     output out_1 : SInt<2>
 
     wire invalid : UInt<2>
-    invalid is invalid
-    reg r_0 : SInt<2>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : SInt<2>, clock with :
-      reset => (UInt<1>("h0"), r_1)
+    invalidate invalid
+    reg r_0 : SInt<2>, clock
+    reg r_1 : SInt<2>, clock
     node _T = asSInt(in)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = asSInt(invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
 
     ; CHECK-LABEL: module asSInt
     ; CHECK:         r_0
@@ -473,8 +448,9 @@ circuit asSInt :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit asUInt :
-  module asUInt :
+  public module asUInt :
     input clock : Clock
     input reset : UInt<1>
     input in : SInt<2>
@@ -482,17 +458,15 @@ circuit asUInt :
     output out_1 : UInt<2>
 
     wire invalid : SInt<2>
-    invalid is invalid
-    reg r_0 : UInt<2>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<2>, clock with :
-      reset => (UInt<1>("h0"), r_1)
+    invalidate invalid
+    reg r_0 : UInt<2>, clock
+    reg r_1 : UInt<2>, clock
     node _T = asUInt(in)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = asUInt(invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
 
     ; CHECK-LABEL: module asUInt
     ; CHECK:         r_0
@@ -502,8 +476,9 @@ circuit asUInt :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit bits :
-  module bits :
+  public module bits :
     input clock : Clock
     input reset : UInt<1>
     input in : UInt<4>
@@ -511,17 +486,15 @@ circuit bits :
     output out_1 : UInt<2>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<2>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<2>, clock with :
-      reset => (UInt<1>("h0"), r_1)
+    invalidate invalid
+    reg r_0 : UInt<2>, clock
+    reg r_1 : UInt<2>, clock
     node _T = bits(in, 3, 2)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = bits(invalid, 3, 2)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
 
     ; CHECK-LABEL: module bits
     ; CHECK:         r_0
@@ -531,8 +504,9 @@ circuit bits :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit cat :
-  module cat :
+  public module cat :
     input clock : Clock
     input reset : UInt<1>
     input in_0 : UInt<2>
@@ -543,27 +517,23 @@ circuit cat :
     output out_3 : UInt<4>
 
     wire invalid : UInt<2>
-    invalid is invalid
-    reg r_0 : UInt<4>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<4>, clock with :
-      reset => (UInt<1>("h0"), r_1)
-    reg r_2 : UInt<4>, clock with :
-      reset => (UInt<1>("h0"), r_2)
-    reg r_3 : UInt<4>, clock with :
-      reset => (UInt<1>("h0"), r_3)
+    invalidate invalid
+    reg r_0 : UInt<4>, clock
+    reg r_1 : UInt<4>, clock
+    reg r_2 : UInt<4>, clock
+    reg r_3 : UInt<4>, clock
     node _T = cat(in_1, in_0)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = cat(in_1, invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
     node _T_2 = cat(invalid, in_0)
-    r_2 <= _T_2
-    out_2 <= r_2
+    connect r_2, _T_2
+    connect out_2, r_2
     node _T_3 = cat(invalid, invalid)
-    r_3 <= _T_3
-    out_3 <= r_3
+    connect r_3, _T_3
+    connect out_3, r_3
 
     ; CHECK-LABEL: module cat
     ; CHECK:         r_0
@@ -573,8 +543,9 @@ circuit cat :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit dshl :
-  module dshl :
+  public module dshl :
     input clock : Clock
     input reset : UInt<1>
     input in_0 : UInt<2>
@@ -585,27 +556,23 @@ circuit dshl :
     output out_3 : UInt<5>
 
     wire invalid : UInt<2>
-    invalid is invalid
-    reg r_0 : UInt<5>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<5>, clock with :
-      reset => (UInt<1>("h0"), r_1)
-    reg r_2 : UInt<5>, clock with :
-      reset => (UInt<1>("h0"), r_2)
-    reg r_3 : UInt<5>, clock with :
-      reset => (UInt<1>("h0"), r_3)
+    invalidate invalid
+    reg r_0 : UInt<5>, clock
+    reg r_1 : UInt<5>, clock
+    reg r_2 : UInt<5>, clock
+    reg r_3 : UInt<5>, clock
     node _T = dshl(in_1, in_0)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = dshl(in_1, invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
     node _T_2 = dshl(invalid, in_0)
-    r_2 <= _T_2
-    out_2 <= r_2
+    connect r_2, _T_2
+    connect out_2, r_2
     node _T_3 = dshl(invalid, invalid)
-    r_3 <= _T_3
-    out_3 <= r_3
+    connect r_3, _T_3
+    connect out_3, r_3
 
     ; CHECK-LABEL: module dshl
     ; CHECK:         r_0
@@ -615,8 +582,9 @@ circuit dshl :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit dshr :
-  module dshr :
+  public module dshr :
     input clock : Clock
     input reset : UInt<1>
     input in_0 : UInt<2>
@@ -627,27 +595,23 @@ circuit dshr :
     output out_3 : UInt<2>
 
     wire invalid : UInt<2>
-    invalid is invalid
-    reg r_0 : UInt<2>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<2>, clock with :
-      reset => (UInt<1>("h0"), r_1)
-    reg r_2 : UInt<2>, clock with :
-      reset => (UInt<1>("h0"), r_2)
-    reg r_3 : UInt<2>, clock with :
-      reset => (UInt<1>("h0"), r_3)
+    invalidate invalid
+    reg r_0 : UInt<2>, clock
+    reg r_1 : UInt<2>, clock
+    reg r_2 : UInt<2>, clock
+    reg r_3 : UInt<2>, clock
     node _T = dshr(in_1, in_0)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = dshr(in_1, invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
     node _T_2 = dshr(invalid, in_0)
-    r_2 <= _T_2
-    out_2 <= r_2
+    connect r_2, _T_2
+    connect out_2, r_2
     node _T_3 = dshr(invalid, invalid)
-    r_3 <= _T_3
-    out_3 <= r_3
+    connect r_3, _T_3
+    connect out_3, r_3
 
     ; CHECK-LABEL: module dshr
     ; CHECK:         r_0
@@ -657,8 +621,9 @@ circuit dshr :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit head :
-  module head :
+  public module head :
     input clock : Clock
     input reset : UInt<1>
     input in : UInt<4>
@@ -666,17 +631,15 @@ circuit head :
     output out_1 : UInt<2>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<2>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<2>, clock with :
-      reset => (UInt<1>("h0"), r_1)
+    invalidate invalid
+    reg r_0 : UInt<2>, clock
+    reg r_1 : UInt<2>, clock
     node _T = head(in, 2)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = head(invalid, 2)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
 
     ; CHECK-LABEL: module head
     ; CHECK:         r_0
@@ -686,8 +649,9 @@ circuit head :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit lt :
-  module lt :
+  public module lt :
     input clock : Clock
     input reset : UInt<1>
     input in_0 : UInt<4>
@@ -698,27 +662,23 @@ circuit lt :
     output out_3 : UInt<1>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_1)
-    reg r_2 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_2)
-    reg r_3 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_3)
+    invalidate invalid
+    reg r_0 : UInt<1>, clock
+    reg r_1 : UInt<1>, clock
+    reg r_2 : UInt<1>, clock
+    reg r_3 : UInt<1>, clock
     node _T = lt(in_1, in_0)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = lt(in_1, invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
     node _T_2 = lt(invalid, in_0)
-    r_2 <= _T_2
-    out_2 <= r_2
+    connect r_2, _T_2
+    connect out_2, r_2
     node _T_3 = lt(invalid, invalid)
-    r_3 <= _T_3
-    out_3 <= r_3
+    connect r_3, _T_3
+    connect out_3, r_3
 
     ; CHECK-LABEL: module lt
     ; CHECK:         r_0
@@ -728,8 +688,9 @@ circuit lt :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit gt :
-  module gt :
+  public module gt :
     input clock : Clock
     input reset : UInt<1>
     input in_0 : UInt<4>
@@ -740,27 +701,23 @@ circuit gt :
     output out_3 : UInt<1>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_1)
-    reg r_2 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_2)
-    reg r_3 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_3)
+    invalidate invalid
+    reg r_0 : UInt<1>, clock
+    reg r_1 : UInt<1>, clock
+    reg r_2 : UInt<1>, clock
+    reg r_3 : UInt<1>, clock
     node _T = gt(in_1, in_0)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = gt(in_1, invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
     node _T_2 = gt(invalid, in_0)
-    r_2 <= _T_2
-    out_2 <= r_2
+    connect r_2, _T_2
+    connect out_2, r_2
     node _T_3 = gt(invalid, invalid)
-    r_3 <= _T_3
-    out_3 <= r_3
+    connect r_3, _T_3
+    connect out_3, r_3
 
     ; CHECK-LABEL: module gt
     ; CHECK:         r_0
@@ -770,8 +727,9 @@ circuit gt :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit leq :
-  module leq :
+  public module leq :
     input clock : Clock
     input reset : UInt<1>
     input in_0 : UInt<4>
@@ -782,27 +740,23 @@ circuit leq :
     output out_3 : UInt<1>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_1)
-    reg r_2 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_2)
-    reg r_3 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_3)
+    invalidate invalid
+    reg r_0 : UInt<1>, clock
+    reg r_1 : UInt<1>, clock
+    reg r_2 : UInt<1>, clock
+    reg r_3 : UInt<1>, clock
     node _T = leq(in_1, in_0)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = leq(in_1, invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
     node _T_2 = leq(invalid, in_0)
-    r_2 <= _T_2
-    out_2 <= r_2
+    connect r_2, _T_2
+    connect out_2, r_2
     node _T_3 = leq(invalid, invalid)
-    r_3 <= _T_3
-    out_3 <= r_3
+    connect r_3, _T_3
+    connect out_3, r_3
 
     ; CHECK-LABEL: module leq
     ; CHECK:         r_0
@@ -812,8 +766,9 @@ circuit leq :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit geq :
-  module geq :
+  public module geq :
     input clock : Clock
     input reset : UInt<1>
     input in_0 : UInt<4>
@@ -824,27 +779,23 @@ circuit geq :
     output out_3 : UInt<1>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_1)
-    reg r_2 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_2)
-    reg r_3 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_3)
+    invalidate invalid
+    reg r_0 : UInt<1>, clock
+    reg r_1 : UInt<1>, clock
+    reg r_2 : UInt<1>, clock
+    reg r_3 : UInt<1>, clock
     node _T = geq(in_1, in_0)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = geq(in_1, invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
     node _T_2 = geq(invalid, in_0)
-    r_2 <= _T_2
-    out_2 <= r_2
+    connect r_2, _T_2
+    connect out_2, r_2
     node _T_3 = geq(invalid, invalid)
-    r_3 <= _T_3
-    out_3 <= r_3
+    connect r_3, _T_3
+    connect out_3, r_3
 
     ; CHECK-LABEL: module geq
     ; CHECK:         r_0
@@ -854,8 +805,9 @@ circuit geq :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit mul :
-  module mul :
+  public module mul :
     input clock : Clock
     input reset : UInt<1>
     input in_0 : UInt<4>
@@ -866,27 +818,23 @@ circuit mul :
     output out_3 : UInt<8>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<8>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<8>, clock with :
-      reset => (UInt<1>("h0"), r_1)
-    reg r_2 : UInt<8>, clock with :
-      reset => (UInt<1>("h0"), r_2)
-    reg r_3 : UInt<8>, clock with :
-      reset => (UInt<1>("h0"), r_3)
+    invalidate invalid
+    reg r_0 : UInt<8>, clock
+    reg r_1 : UInt<8>, clock
+    reg r_2 : UInt<8>, clock
+    reg r_3 : UInt<8>, clock
     node _T = mul(in_1, in_0)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = mul(in_1, invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
     node _T_2 = mul(invalid, in_0)
-    r_2 <= _T_2
-    out_2 <= r_2
+    connect r_2, _T_2
+    connect out_2, r_2
     node _T_3 = mul(invalid, invalid)
-    r_3 <= _T_3
-    out_3 <= r_3
+    connect r_3, _T_3
+    connect out_3, r_3
 
     ; CHECK-LABEL: module mul
     ; CHECK:         r_0
@@ -896,8 +844,9 @@ circuit mul :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit not :
-  module not :
+  public module not :
     input clock : Clock
     input reset : UInt<1>
     input in : UInt<4>
@@ -905,17 +854,15 @@ circuit not :
     output out_1 : UInt<4>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<4>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<4>, clock with :
-      reset => (UInt<1>("h0"), r_1)
+    invalidate invalid
+    reg r_0 : UInt<4>, clock
+    reg r_1 : UInt<4>, clock
     node _T = not(in)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = not(invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
 
     ; CHECK-LABEL: module not
     ; CHECK:         r_0
@@ -925,8 +872,9 @@ circuit not :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit orr :
-  module orr :
+  public module orr :
     input clock : Clock
     input reset : UInt<1>
     input in : UInt<4>
@@ -934,17 +882,15 @@ circuit orr :
     output out_1 : UInt<1>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_1)
+    invalidate invalid
+    reg r_0 : UInt<1>, clock
+    reg r_1 : UInt<1>, clock
     node _T = orr(in)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = orr(invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
 
     ; CHECK-LABEL: module orr
     ; CHECK:         r_0
@@ -954,8 +900,9 @@ circuit orr :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit shl :
-  module shl :
+  public module shl :
     input clock : Clock
     input reset : UInt<1>
     input in : UInt<2>
@@ -963,17 +910,15 @@ circuit shl :
     output out_1 : UInt<4>
 
     wire invalid : UInt<2>
-    invalid is invalid
-    reg r_0 : UInt<4>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<4>, clock with :
-      reset => (UInt<1>("h0"), r_1)
+    invalidate invalid
+    reg r_0 : UInt<4>, clock
+    reg r_1 : UInt<4>, clock
     node _T = shl(in, 2)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = shl(invalid, 2)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
 
     ; CHECK-LABEL: module shl
     ; CHECK:         r_0
@@ -983,8 +928,9 @@ circuit shl :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit shr :
-  module shr :
+  public module shr :
     input clock : Clock
     input reset : UInt<1>
     input in : UInt<4>
@@ -992,17 +938,15 @@ circuit shr :
     output out_1 : UInt<2>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<2>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<2>, clock with :
-      reset => (UInt<1>("h0"), r_1)
+    invalidate invalid
+    reg r_0 : UInt<2>, clock
+    reg r_1 : UInt<2>, clock
     node _T = shr(in, 2)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = shr(invalid, 2)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
 
     ; CHECK-LABEL: module shr
     ; CHECK:         r_0
@@ -1012,8 +956,9 @@ circuit shr :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit sub :
-  module sub :
+  public module sub :
     input clock : Clock
     input reset : UInt<1>
     input in_0 : UInt<4>
@@ -1024,31 +969,27 @@ circuit sub :
     output out_3 : UInt<5>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<5>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<5>, clock with :
-      reset => (UInt<1>("h0"), r_1)
-    reg r_2 : UInt<5>, clock with :
-      reset => (UInt<1>("h0"), r_2)
-    reg r_3 : UInt<5>, clock with :
-      reset => (UInt<1>("h0"), r_3)
+    invalidate invalid
+    reg r_0 : UInt<5>, clock
+    reg r_1 : UInt<5>, clock
+    reg r_2 : UInt<5>, clock
+    reg r_3 : UInt<5>, clock
     node _T = sub(in_1, in_0)
     node _T_1 = tail(_T, 1)
-    r_0 <= _T_1
-    out_0 <= r_0
+    connect r_0, _T_1
+    connect out_0, r_0
     node _T_2 = sub(in_1, invalid)
     node _T_3 = tail(_T_2, 1)
-    r_1 <= _T_3
-    out_1 <= r_1
+    connect r_1, _T_3
+    connect out_1, r_1
     node _T_4 = sub(invalid, in_0)
     node _T_5 = tail(_T_4, 1)
-    r_2 <= _T_5
-    out_2 <= r_2
+    connect r_2, _T_5
+    connect out_2, r_2
     node _T_6 = sub(invalid, invalid)
     node _T_7 = tail(_T_6, 1)
-    r_3 <= _T_7
-    out_3 <= r_3
+    connect r_3, _T_7
+    connect out_3, r_3
 
     ; CHECK-LABEL: module sub
     ; CHECK:         r_0
@@ -1058,8 +999,9 @@ circuit sub :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit tail :
-  module tail :
+  public module tail :
     input clock : Clock
     input reset : UInt<1>
     input in : UInt<4>
@@ -1067,17 +1009,15 @@ circuit tail :
     output out_1 : UInt<2>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<2>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<2>, clock with :
-      reset => (UInt<1>("h0"), r_1)
+    invalidate invalid
+    reg r_0 : UInt<2>, clock
+    reg r_1 : UInt<2>, clock
     node _T = tail(in, 2)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = tail(invalid, 2)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
 
     ; CHECK-LABEL: module tail
     ; CHECK:         r_0
@@ -1087,8 +1027,9 @@ circuit tail :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit div :
-  module div :
+  public module div :
     input clock : Clock
     input reset : UInt<1>
     input in_0 : UInt<4>
@@ -1099,27 +1040,23 @@ circuit div :
     output out_3 : UInt<4>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<4>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<4>, clock with :
-      reset => (UInt<1>("h0"), r_1)
-    reg r_2 : UInt<4>, clock with :
-      reset => (UInt<1>("h0"), r_2)
-    reg r_3 : UInt<4>, clock with :
-      reset => (UInt<1>("h0"), r_3)
+    invalidate invalid
+    reg r_0 : UInt<4>, clock
+    reg r_1 : UInt<4>, clock
+    reg r_2 : UInt<4>, clock
+    reg r_3 : UInt<4>, clock
     node _T = div(in_1, in_0)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = div(in_1, invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
     node _T_2 = div(invalid, in_0)
-    r_2 <= _T_2
-    out_2 <= r_2
+    connect r_2, _T_2
+    connect out_2, r_2
     node _T_3 = div(invalid, invalid)
-    r_3 <= _T_3
-    out_3 <= r_3
+    connect r_3, _T_3
+    connect out_3, r_3
 
     ; CHECK-LABEL: module div
     ; CHECK:         r_0
@@ -1129,8 +1066,9 @@ circuit div :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit rem :
-  module rem :
+  public module rem :
     input clock : Clock
     input reset : UInt<1>
     input in_0 : UInt<4>
@@ -1141,27 +1079,23 @@ circuit rem :
     output out_3 : UInt<4>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<4>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<4>, clock with :
-      reset => (UInt<1>("h0"), r_1)
-    reg r_2 : UInt<4>, clock with :
-      reset => (UInt<1>("h0"), r_2)
-    reg r_3 : UInt<4>, clock with :
-      reset => (UInt<1>("h0"), r_3)
+    invalidate invalid
+    reg r_0 : UInt<4>, clock
+    reg r_1 : UInt<4>, clock
+    reg r_2 : UInt<4>, clock
+    reg r_3 : UInt<4>, clock
     node _T = rem(in_1, in_0)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = rem(in_1, invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
     node _T_2 = rem(invalid, in_0)
-    r_2 <= _T_2
-    out_2 <= r_2
+    connect r_2, _T_2
+    connect out_2, r_2
     node _T_3 = rem(invalid, invalid)
-    r_3 <= _T_3
-    out_3 <= r_3
+    connect r_3, _T_3
+    connect out_3, r_3
 
     ; CHECK-LABEL: module rem
     ; CHECK:         r_0
@@ -1171,8 +1105,9 @@ circuit rem :
 
     ; // -----
 
+FIRRTL version 4.0.0
 circuit xorr :
-  module xorr :
+  public module xorr :
     input clock : Clock
     input reset : UInt<1>
     input in : UInt<4>
@@ -1180,17 +1115,15 @@ circuit xorr :
     output out_1 : UInt<1>
 
     wire invalid : UInt<4>
-    invalid is invalid
-    reg r_0 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_0)
-    reg r_1 : UInt<1>, clock with :
-      reset => (UInt<1>("h0"), r_1)
+    invalidate invalid
+    reg r_0 : UInt<1>, clock
+    reg r_1 : UInt<1>, clock
     node _T = xorr(in)
-    r_0 <= _T
-    out_0 <= r_0
+    connect r_0, _T
+    connect out_0, r_0
     node _T_1 = xorr(invalid)
-    r_1 <= _T_1
-    out_1 <= r_1
+    connect r_1, _T_1
+    connect out_1, r_1
 
     ; CHECK-LABEL: module xorr
     ; CHECK:         r_0

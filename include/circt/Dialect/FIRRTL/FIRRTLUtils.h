@@ -15,7 +15,6 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "llvm/Support/Parallel.h"
 
 namespace circt {
 namespace hw {
@@ -52,6 +51,32 @@ Value getValueSource(Value val, bool lookThroughWires, bool lookThroughNodes,
 /// assumes a single driver and should only be run after `ExpandWhens`.
 Value getModuleScopedDriver(Value val, bool lookThroughWires,
                             bool lookThroughNodes, bool lookThroughCasts);
+
+//===----------------------------------------------------------------------===//
+// TieOffCache
+//===----------------------------------------------------------------------===//
+
+/// Helper class to cache tie-off values for different FIRRTL types.
+/// This avoids creating duplicate InvalidValueOp or UnknownValueOp for the
+/// same type.
+class TieOffCache {
+public:
+  TieOffCache(ImplicitLocOpBuilder &builder) : builder(builder) {}
+
+  /// Get or create an InvalidValueOp for the given base type.
+  Value getInvalid(FIRRTLBaseType type);
+
+  /// Get or create an UnknownValueOp for the given property type.
+  Value getUnknown(PropertyType type);
+
+private:
+  ImplicitLocOpBuilder &builder;
+  SmallDenseMap<Type, Value, 8> cache;
+};
+
+//===----------------------------------------------------------------------===//
+// Template utilities
+//===----------------------------------------------------------------------===//
 
 /// Return true if a value is module-scoped driven by a value of a specific
 /// type.
@@ -123,6 +148,11 @@ void walkGroundTypes(
 /// Return the inner sym target for the specified value and fieldID.
 /// If root is a blockargument, this must be FModuleLike.
 hw::InnerSymTarget getTargetFor(FieldRef ref);
+
+/// Get FieldRef pointing to the specified inner symbol target, which must be
+/// valid. Returns null FieldRef if target points to something with no value,
+/// such as a port of an external module.
+FieldRef getFieldRefForTarget(const hw::InnerSymTarget &ist);
 
 /// Ensure that the the InnerSymAttr has a symbol on the field specified.
 /// Returns the updated InnerSymAttr as well as the name of the symbol attached
@@ -217,6 +247,7 @@ getInnerRefTo(FModuleLike mod, size_t portIdx, uint64_t fieldID,
 inline FIRRTLBaseType getBaseType(Type type) {
   return TypeSwitch<Type, FIRRTLBaseType>(type)
       .Case<FIRRTLBaseType>([](auto base) { return base; })
+      .Case<LHSType>([](auto lhs) { return lhs.getType(); })
       .Case<RefType>([](auto ref) { return ref.getType(); })
       .Default([](Type type) { return nullptr; });
 }
@@ -277,37 +308,37 @@ std::pair<bool, std::optional<mlir::LocationAttr>> maybeStringToLocation(
     StringRef spelling, bool skipParsing, StringAttr &locatorFilenameCache,
     FileLineColLoc &fileLineColLocCache, MLIRContext *context);
 
+// Parse a format string and build operations for FIRRTL "special"
+// substitutions.
+//
+// This function handles:
+// - percent format strings (%b, %d, %x, %c, %%)
+// - special format strings ({{SimulationTime}}, {{HierarchicalModuleName}})
+//
+// The formatStringResult output parameter is set to the validated format
+// string. The operands output parameter is set to the list of actual operands
+// (including special ops created for {{...}} substitutions).
+mlir::ParseResult
+parseFormatString(mlir::OpBuilder &builder, mlir::Location loc,
+                  llvm::StringRef formatString,
+                  llvm::ArrayRef<mlir::Value> specOperands,
+                  mlir::StringAttr &formatStringResult,
+                  llvm::SmallVectorImpl<mlir::Value> &operands);
+
 //===----------------------------------------------------------------------===//
-// Parallel utilities
+// File utilities
 //===----------------------------------------------------------------------===//
 
-/// Wrapper for llvm::parallelTransformReduce that performs the transform_reduce
-/// serially when MLIR multi-threading is disabled.
-/// Does not add a ParallelDiagnosticHandler like mlir::parallelFor.
-template <class IterTy, class ResultTy, class ReduceFuncTy,
-          class TransformFuncTy>
-static ResultTy transformReduce(MLIRContext *context, IterTy begin, IterTy end,
-                                ResultTy init, ReduceFuncTy reduce,
-                                TransformFuncTy transform) {
-  // Parallel when enabled
-  if (context->isMultithreadingEnabled())
-    return llvm::parallelTransformReduce(begin, end, init, reduce, transform);
+/// Truncate `a` to the common prefix of `a` and `b`.
+void makeCommonPrefix(SmallString<64> &a, StringRef b);
 
-  // Serial fallback (from llvm::parallelTransformReduce)
-  for (IterTy i = begin; i != end; ++i)
-    init = reduce(std::move(init), transform(*i));
-  return std::move(init);
-}
+//===----------------------------------------------------------------------===//
+// Object related utilities
+//===----------------------------------------------------------------------===//
 
-/// Range wrapper
-template <class RangeTy, class ResultTy, class ReduceFuncTy,
-          class TransformFuncTy>
-static ResultTy transformReduce(MLIRContext *context, RangeTy &&r,
-                                ResultTy init, ReduceFuncTy reduce,
-                                TransformFuncTy transform) {
-  return transformReduce(context, std::begin(r), std::end(r), init, reduce,
-                         transform);
-}
+/// Add the tracker annotation to the op and get a PathOp to the op.
+PathOp createPathRef(Operation *op, hw::HierPathOp nla,
+                     mlir::ImplicitLocOpBuilder &builderOM);
 
 } // namespace firrtl
 } // namespace circt

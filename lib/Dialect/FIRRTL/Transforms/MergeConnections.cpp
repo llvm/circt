@@ -21,16 +21,23 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
-
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/Debug.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Iterators.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-merge-connections"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_MERGECONNECTIONS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -61,11 +68,11 @@ struct MergeConnection {
   bool changed = false;
 
   // Return true if the given connect op is merged.
-  bool peelConnect(StrictConnectOp connect);
+  bool peelConnect(MatchingConnectOp connect);
 
   // A map from a destination FieldRef to a pair of (i) the number of
   // connections seen so far and (ii) the vector to store subconnections.
-  DenseMap<FieldRef, std::pair<unsigned, SmallVector<StrictConnectOp>>>
+  DenseMap<FieldRef, std::pair<unsigned, SmallVector<MatchingConnectOp>>>
       connections;
 
   FModuleOp moduleOp;
@@ -76,7 +83,7 @@ struct MergeConnection {
   bool enableAggressiveMerging = false;
 };
 
-bool MergeConnection::peelConnect(StrictConnectOp connect) {
+bool MergeConnection::peelConnect(MatchingConnectOp connect) {
   // Ignore connections between different types because it will produce a
   // partial connect. Also ignore non-passive connections or non-integer
   // connections.
@@ -237,9 +244,9 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
   // Emit strict connect if possible, fallback to normal connect.
   // Don't use emitConnect(), will split the connect apart.
   if (!parentBaseTy.hasUninferredWidth())
-    builder->create<StrictConnectOp>(connect.getLoc(), parent, merged);
+    MatchingConnectOp::create(*builder, connect.getLoc(), parent, merged);
   else
-    builder->create<ConnectOp>(connect.getLoc(), parent, merged);
+    ConnectOp::create(*builder, connect.getLoc(), parent, merged);
 
   return true;
 }
@@ -247,36 +254,75 @@ bool MergeConnection::peelConnect(StrictConnectOp connect) {
 bool MergeConnection::run() {
   ImplicitLocOpBuilder theBuilder(moduleOp.getLoc(), moduleOp.getContext());
   builder = &theBuilder;
+
+  // Block worklist that tracks the current position within a block.
+  SmallVector<std::pair<Block::iterator, Block::iterator>> worklist;
+
+  // Walk the IR in order, top-to-bottom, stepping into blocks as they are
+  // found.  This is basically the same as `moduleOp.walk`, however, it allows
+  // for visiting operations that are inserted _after_ the current operation.
+  // Using the existing `walk` does not do this.
   auto *body = moduleOp.getBodyBlock();
-  // Merge connections by forward iterations.
-  for (auto it = body->begin(), e = body->end(); it != e;) {
-    auto connectOp = dyn_cast<StrictConnectOp>(*it);
-    if (!connectOp) {
-      it++;
-      continue;
+  worklist.push_back({body->begin(), body->end()});
+  while (!worklist.empty()) {
+    auto &[it, e] = worklist.back();
+
+    // Merge connections by forward iterations.
+    bool opWithBlocks = false;
+    while (it != e) {
+      // Add blocks to the stack such that they will be pulled off in-order.
+      for (auto &region : llvm::reverse(it->getRegions()))
+        for (auto &block : llvm::reverse(region.getBlocks())) {
+          worklist.push_back({block.begin(), block.end()});
+          opWithBlocks = true;
+        }
+
+      // We found one or more blocks.  Stop and go process these blocks.
+      if (opWithBlocks) {
+        ++it;
+        break;
+      }
+
+      // This operation does not have blocks.  Process it normally.
+      auto connectOp = dyn_cast<MatchingConnectOp>(*it);
+      if (!connectOp) {
+        ++it;
+        continue;
+      }
+      builder->setInsertionPointAfter(connectOp);
+      builder->setLoc(connectOp.getLoc());
+      bool removeOp = peelConnect(connectOp);
+      ++it;
+      if (removeOp)
+        connectOp.erase();
     }
-    builder->setInsertionPointAfter(connectOp);
-    builder->setLoc(connectOp.getLoc());
-    bool removeOp = peelConnect(connectOp);
-    ++it;
-    if (removeOp)
-      connectOp.erase();
+
+    // We found a block and added to the worklist.
+    if (opWithBlocks)
+      continue;
+
+    // We finished processing a block.
+    worklist.pop_back();
   }
 
   // Clean up dead operations introduced by this pass.
-  for (auto &op : llvm::make_early_inc_range(llvm::reverse(*body)))
-    if (isa<SubfieldOp, SubindexOp, InvalidValueOp, ConstantOp, BitCastOp,
-            CatPrimOp>(op))
-      if (op.use_empty()) {
-        changed = true;
-        op.erase();
-      }
+  moduleOp.walk<mlir::WalkOrder::PostOrder, mlir::ReverseIterator>(
+      [&](Operation *op) {
+        if (isa<SubfieldOp, SubindexOp, InvalidValueOp, ConstantOp, BitCastOp,
+                CatPrimOp>(op))
+          if (op->use_empty()) {
+            changed = true;
+            op->erase();
+          }
+      });
 
   return changed;
 }
 
 struct MergeConnectionsPass
-    : public MergeConnectionsBase<MergeConnectionsPass> {
+    : public circt::firrtl::impl::MergeConnectionsBase<MergeConnectionsPass> {
+  using Base::Base;
+
   MergeConnectionsPass(bool enableAggressiveMergingFlag) {
     enableAggressiveMerging = enableAggressiveMergingFlag;
   }
@@ -286,18 +332,12 @@ struct MergeConnectionsPass
 } // namespace
 
 void MergeConnectionsPass::runOnOperation() {
-  LLVM_DEBUG(debugPassHeader(this)
-             << "\n"
-             << "Module: '" << getOperation().getName() << "'\n");
+  CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
+  LLVM_DEBUG(llvm::dbgs() << "Module: '" << getOperation().getName() << "'\n");
 
   MergeConnection mergeConnection(getOperation(), enableAggressiveMerging);
   bool changed = mergeConnection.run();
 
   if (!changed)
     return markAllAnalysesPreserved();
-}
-
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createMergeConnectionsPass(bool enableAggressiveMerging) {
-  return std::make_unique<MergeConnectionsPass>(enableAggressiveMerging);
 }

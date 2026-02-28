@@ -20,8 +20,8 @@
 // DIALECT-SAME: handshake
 // DIALECT-SAME: hw
 // DIALECT-SAME: hwarith
-// DIALECT-SAME: ibis
 // DIALECT-SAME: interop
+// DIALECT-SAME: kanagawa
 // DIALECT-SAME: llhd
 // DIALECT-SAME: llvm
 // DIALECT-SAME: memref
@@ -34,4 +34,5 @@
 // DIALECT-SAME: smt
 // DIALECT-SAME: ssp
 // DIALECT-SAME: sv
+// DIALECT-SAME: synth
 // DIALECT-SAME: systemc

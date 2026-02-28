@@ -1,7 +1,6 @@
 // RUN: circt-opt %s --lower-scf-to-calyx="top-level-function=main" -canonicalize -split-input-file | FileCheck %s
 
-// CHECK-LABEL:   calyx.enable @init_func_instance
-// CHECK:         calyx.invoke @func_instance(%[[VAL_0:.*]] = %[[VAL_1:.*]]) -> (i32)
+// CHECK:         calyx.invoke @func_instance[](%[[VAL_0:.*]] = %[[VAL_1:.*]]) -> (i32)
 
 module {
   func.func @func(%0 : i32) -> i32 {
@@ -17,8 +16,7 @@ module {
 
 // -----
 
-// CHECK-LABEL:   calyx.enable @init_func_instance
-// CHECK:         calyx.invoke @func_instance(%[[VAL_0:.*]] = %[[VAL_1:.*]]) -> (i32)
+// CHECK:         calyx.invoke @func_instance[](%[[VAL_0:.*]] = %[[VAL_1:.*]]) -> (i32)
 
 module {
   func.func @func(%0 : i32) -> i32 {
@@ -48,8 +46,7 @@ module {
 
 // -----
 
-// CHECK-LABEL:   calyx.enable @init_fun_instance
-// CHECK:         calyx.invoke @fun_instance(%[[VAL_0:.*]] = %[[VAL_1:.*]]) -> (i32)
+// CHECK:         calyx.invoke @fun_instance[](%[[VAL_0:.*]] = %[[VAL_1:.*]]) -> (i32)
 
 module {
   func.func @fun(%0 : i32) -> i32 {
@@ -72,10 +69,8 @@ module {
 
 // -----
 
-// CHECK-LABEL:   calyx.enable @init_func_instance
-// CHECK:         calyx.invoke @func_instance(%[[VAL_0:.*]] = %[[VAL_1:.*]]) -> (i32)
-// CHECK:         calyx.enable @init_func_instance
-// CHECK:         calyx.invoke @func_instance(%[[VAL_2:.*]] = %[[VAL_3:.*]]) -> (i32)
+// CHECK:         calyx.invoke @func_instance[](%[[VAL_0:.*]] = %[[VAL_1:.*]]) -> (i32)
+// CHECK:         calyx.invoke @func_instance[](%[[VAL_2:.*]] = %[[VAL_3:.*]]) -> (i32)
 
 module {
   func.func @func(%0 : i32) -> i32 { 

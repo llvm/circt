@@ -3,13 +3,14 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from . import hw
+from . import seq
 from .._mlir_libs._circt._seq import *
 from ..dialects._ods_common import _cext as _ods_cext
-from ..ir import IntegerType, OpView, StringAttr
+from ..ir import IntegerType, OpView, StringAttr, InsertionPoint
 from ..support import BackedgeBuilder, NamedValueOpView
 from ._seq_ops_gen import *
 from ._seq_ops_gen import _Dialect
-from .seq import CompRegOp
+from .seq import CompRegOp, InitialOp
 
 
 # Create a computational register whose input is the given value, and is clocked
@@ -55,28 +56,29 @@ class CompRegLikeBuilder(NamedValueOpView):
 
 class CompRegLike:
 
-  def __init__(self,
-               data_type,
-               input,
-               clk,
-               clockEnable=None,
-               *,
-               reset=None,
-               reset_value=None,
-               power_on_value=None,
-               name=None,
-               sym_name=None,
-               loc=None,
-               ip=None):
+  @staticmethod
+  def init(op,
+           data_type,
+           input,
+           clk,
+           clockEnable=None,
+           *,
+           reset=None,
+           reset_value=None,
+           power_on_value=None,
+           name=None,
+           sym_name=None,
+           loc=None,
+           ip=None):
     operands = [input, clk]
     results = []
     attributes = {}
     results.append(data_type)
     operand_segment_sizes = [1, 1]
-    if isinstance(self, CompRegOp):
+    if isinstance(op, CompRegOp):
       if clockEnable is not None:
         raise Exception("Clock enable not supported on compreg")
-    elif isinstance(self, CompRegClockEnabledOp):
+    elif isinstance(op, CompRegClockEnabledOp):
       if clockEnable is None:
         raise Exception("Clock enable required on compreg.ce")
       operands.append(clockEnable)
@@ -92,6 +94,21 @@ class CompRegLike:
       operands += [None, None]
 
     if power_on_value is not None:
+      if isinstance(power_on_value.type, seq.ImmutableType):
+        pass
+      else:
+        if power_on_value.owner is None:
+          assert False, "Initial value must not be port"
+        elif isinstance(power_on_value.owner.opview, hw.ConstantOp):
+          init = InitialOp([seq.ImmutableType.get(power_on_value.type)], [])
+          init.body.blocks.append()
+          with InsertionPoint(init.body.blocks[0]):
+            cloned_constant = power_on_value.owner.clone()
+            seq.YieldOp(cloned_constant)
+
+          power_on_value = init.results[0]
+        else:
+          assert False, "Non-constant initial value not supported"
       operands.append(power_on_value)
       operand_segment_sizes.append(1)
     else:
@@ -104,11 +121,11 @@ class CompRegLike:
     if sym_name is not None:
       attributes["inner_sym"] = hw.InnerSymAttr.get(StringAttr.get(sym_name))
 
-    self._ODS_OPERAND_SEGMENTS = operand_segment_sizes
+    op._ODS_OPERAND_SEGMENTS = operand_segment_sizes
 
     OpView.__init__(
-        self,
-        self.build_generic(
+        op,
+        op.build_generic(
             attributes=attributes,
             results=results,
             operands=operands,
@@ -125,7 +142,10 @@ class CompRegBuilder(CompRegLikeBuilder):
 
 
 @_ods_cext.register_operation(_Dialect, replace=True)
-class CompRegOp(CompRegLike, CompRegOp):
+class CompRegOp(CompRegOp):
+
+  def __init__(self, *args, **kwargs):
+    CompRegLike.init(self, *args, **kwargs)
 
   @classmethod
   def create(cls,
@@ -152,7 +172,10 @@ class CompRegClockEnabledBuilder(CompRegLikeBuilder):
 
 
 @_ods_cext.register_operation(_Dialect, replace=True)
-class CompRegClockEnabledOp(CompRegLike, CompRegClockEnabledOp):
+class CompRegClockEnabledOp(CompRegClockEnabledOp):
+
+  def __init__(self, *args, **kwargs):
+    CompRegLike.init(self, *args, **kwargs)
 
   @classmethod
   def create(cls,

@@ -27,7 +27,9 @@
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/JSON.h"
 
+#include <optional>
 #include <variant>
 
 namespace circt {
@@ -61,9 +63,10 @@ bool noStoresToMemory(Value memoryReference);
 // Get the index'th output port of compOp.
 Value getComponentOutput(calyx::ComponentOp compOp, unsigned outPortIdx);
 
-// If the provided type is an index type, converts it to i32, else, returns the
-// unmodified type.
-Type convIndexType(OpBuilder &builder, Type type);
+// If the provided type is an index type, converts it to i32; else if the
+// provided is an integer or floating point, bitcasts it to a signless integer
+// type; otherwise, returns the unmodified type.
+Type normalizeType(OpBuilder &builder, Type type);
 
 // Creates a new calyx::CombGroupOp or calyx::GroupOp group within compOp.
 template <typename TGroup>
@@ -71,7 +74,7 @@ TGroup createGroup(OpBuilder &builder, calyx::ComponentOp compOp, Location loc,
                    Twine uniqueName) {
   mlir::IRRewriter::InsertionGuard guard(builder);
   builder.setInsertionPointToEnd(compOp.getWiresOp().getBodyBlock());
-  return builder.create<TGroup>(loc, uniqueName.str());
+  return TGroup::create(builder, loc, uniqueName.str());
 }
 
 /// Creates register assignment operations within the provided groupOp.
@@ -84,6 +87,7 @@ void buildAssignmentsForRegisterWrite(OpBuilder &builder,
 // A structure representing a set of ports which act as a memory interface for
 // external memories.
 struct MemoryPortsImpl {
+  std::string memName;
   std::optional<Value> readData;
   std::optional<Value> readOrContentEn;
   std::optional<Value> writeData;
@@ -103,6 +107,7 @@ struct MemoryInterface {
   explicit MemoryInterface(calyx::SeqMemoryOp memOp);
 
   // Getter methods for each memory interface port.
+  std::string memName();
   Value readData();
   Value readEn();
   Value contentEn();
@@ -335,7 +340,7 @@ class ComponentLoweringStateInterface {
 public:
   ComponentLoweringStateInterface(calyx::ComponentOp component);
 
-  ~ComponentLoweringStateInterface();
+  virtual ~ComponentLoweringStateInterface();
 
   /// Returns the calyx::ComponentOp associated with this lowering state.
   calyx::ComponentOp getComponentOp();
@@ -400,12 +405,21 @@ public:
   /// Put the name of the callee and the instance of the call into map.
   void addInstance(StringRef calleeName, InstanceOp instanceOp);
 
-  /// Return the group which evaluates the value v. Optionally, caller may
-  /// specify the expected type of the group.
+  /// Returns if `op` is a compare operator that requires a register to hold the
+  /// value of its sequential guard computation.
+  bool isSeqGuardCmpLibOp(Operation *op);
+
+  /// Add `op` if it's a compare operator that requires a register to hold the
+  /// value of its sequential guard computation.
+  void addSeqGuardCmpLibOp(Operation *op);
+
+  /// Returns the evaluating group or None if not found.
   template <typename TGroupOp = calyx::GroupInterface>
-  TGroupOp getEvaluatingGroup(Value v) {
+  std::optional<TGroupOp> findEvaluatingGroup(Value v) {
     auto it = valueGroupAssigns.find(v);
-    assert(it != valueGroupAssigns.end() && "No group evaluating value!");
+    if (it == valueGroupAssigns.end())
+      return std::nullopt;
+
     if constexpr (std::is_same_v<TGroupOp, calyx::GroupInterface>)
       return it->second;
     else {
@@ -415,14 +429,78 @@ public:
     }
   }
 
+  /// Return the group which evaluates the value v. Optionally, caller may
+  /// specify the expected type of the group.
+  template <typename TGroupOp = calyx::GroupInterface>
+  TGroupOp getEvaluatingGroup(Value v) {
+    std::optional<TGroupOp> group = findEvaluatingGroup<TGroupOp>(v);
+    assert(group.has_value() && "No group evaluating value!");
+    return *group;
+  }
+
+  template <typename T, typename = void>
+  struct IsFloatingPoint : std::false_type {};
+
+  template <typename T>
+  struct IsFloatingPoint<
+      T, std::void_t<decltype(std::declval<T>().getFloatingPointStandard())>>
+      : std::is_same<decltype(std::declval<T>().getFloatingPointStandard()),
+                     FloatingPointStandard> {};
+
   template <typename TLibraryOp>
   TLibraryOp getNewLibraryOpInstance(OpBuilder &builder, Location loc,
                                      TypeRange resTypes) {
     mlir::IRRewriter::InsertionGuard guard(builder);
     Block *body = component.getBodyBlock();
     builder.setInsertionPoint(body, body->begin());
-    auto name = TLibraryOp::getOperationName().split(".").second;
-    return builder.create<TLibraryOp>(loc, getUniqueName(name), resTypes);
+    std::string name = TLibraryOp::getOperationName().split(".").second.str();
+    if constexpr (IsFloatingPoint<TLibraryOp>::value) {
+      switch (TLibraryOp::getFloatingPointStandard()) {
+      case FloatingPointStandard::IEEE754: {
+        constexpr char prefix[] = "ieee754.";
+        assert(name.find(prefix) == 0 &&
+               ("IEEE754 type operation's name must begin with '" +
+                std::string(prefix) + "'")
+                   .c_str());
+        name.erase(0, sizeof(prefix) - 1);
+        name = llvm::join_items(/*separator=*/"", "std_", name, "FN");
+        break;
+      }
+      }
+    }
+    return TLibraryOp::create(builder, loc, getUniqueName(name), resTypes);
+  }
+
+  llvm::json::Value &getExtMemData() { return extMemData; }
+
+  const llvm::json::Value &getExtMemData() const { return extMemData; }
+
+  void setDataField(StringRef name, llvm::json::Array data) {
+    auto *extMemDataObj = extMemData.getAsObject();
+    assert(extMemDataObj && "extMemData should be an object");
+
+    auto &value = (*extMemDataObj)[name.str()];
+    llvm::json::Object *obj = value.getAsObject();
+    if (!obj) {
+      value = llvm::json::Object{};
+      obj = value.getAsObject();
+    }
+    (*obj)["data"] = llvm::json::Value(std::move(data));
+  }
+
+  void setFormat(StringRef name, std::string numType, bool isSigned,
+                 unsigned width) {
+    auto *extMemDataObj = extMemData.getAsObject();
+    assert(extMemDataObj && "extMemData should be an object");
+
+    auto &value = (*extMemDataObj)[name.str()];
+    llvm::json::Object *obj = value.getAsObject();
+    if (!obj) {
+      value = llvm::json::Object{};
+      obj = value.getAsObject();
+    }
+    (*obj)["format"] = llvm::json::Object{
+        {"numeric_type", numType}, {"is_signed", isSigned}, {"width", width}};
   }
 
 private:
@@ -461,6 +539,14 @@ private:
 
   /// A mapping between the callee and the instance.
   llvm::StringMap<calyx::InstanceOp> instanceMap;
+
+  /// A json file to store external global memory data. See
+  /// https://docs.calyxir.org/lang/data-format.html?highlight=json#the-data-format
+  llvm::json::Value extMemData;
+
+  /// A set of compare operators that require registers to hold their sequential
+  /// guard computation.
+  DenseSet<Operation *> seqGuardCmpLibOps;
 };
 
 /// An interface for conversion passes that lower Calyx programs. This handles
@@ -682,6 +768,23 @@ struct EliminateUnusedCombGroups : mlir::OpRewritePattern<calyx::CombGroupOp> {
                                 PatternRewriter &rewriter) const override;
 };
 
+/// Removes duplicate EnableOps in parallel operations.
+struct DeduplicateParallelOp : mlir::OpRewritePattern<calyx::ParOp> {
+  using mlir::OpRewritePattern<calyx::ParOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(calyx::ParOp parOp,
+                                PatternRewriter &rewriter) const override;
+};
+
+/// Removes duplicate EnableOps in static parallel operations.
+struct DeduplicateStaticParallelOp
+    : mlir::OpRewritePattern<calyx::StaticParOp> {
+  using mlir::OpRewritePattern<calyx::StaticParOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(calyx::StaticParOp parOp,
+                                PatternRewriter &rewriter) const override;
+};
+
 /// This pass recursively inlines use-def chains of combinational logic (from
 /// non-stateful groups) into groups referenced in the control schedule.
 class InlineCombGroups
@@ -753,6 +856,46 @@ class BuildCallInstance : public calyx::FuncOpPartialLoweringPattern {
                            PatternRewriter &rewriter) const override;
   ComponentOp getCallComponent(mlir::func::CallOp callOp) const;
 };
+
+/// Predicate information for the floating point comparisons
+struct PredicateInfo {
+  struct InputPorts {
+    // Relevant ports to extract from the `std_compareFN`. For example, we
+    // extract the `lt` and the `unordered` ports when the predicate is `oge`.
+    enum class Port { Eq, Gt, Lt, Unordered };
+    Port port;
+    // Whether we should invert the port before passing as inputs to the `op`
+    // field. For example, we should invert both the `lt` and the `unordered`
+    // port just extracted for predicate `oge`.
+    bool invert;
+  };
+
+  // The combinational logic to apply to the input ports. For example, we should
+  // apply `And` to the two input ports for predicate `oge`.
+  enum class CombLogic { None, And, Or };
+  CombLogic logic;
+  SmallVector<InputPorts> inputPorts;
+};
+
+PredicateInfo getPredicateInfo(mlir::arith::CmpFPredicate pred);
+
+/// Performs a bit cast from a non-signless integer type value, such as a
+/// floating point value, to a signless integer type. Calyx treats everything as
+/// bit vectors, and leaves their interpretation to the respective operation
+/// using it. In CIRCT Calyx, we use signless `IntegerType` to represent a bit
+/// vector.
+template <typename T>
+Type toBitVector(T type) {
+  if (!type.isSignlessInteger()) {
+    unsigned bitWidth = cast<T>(type).getIntOrFloatBitWidth();
+    return IntegerType::get(type.getContext(), bitWidth);
+  }
+  return type;
+}
+
+// Returns whether `value` is the result of a sequential Calyx library
+// operation.
+bool parentIsSeqCell(Value value);
 
 } // namespace calyx
 } // namespace circt

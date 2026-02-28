@@ -22,7 +22,7 @@ from .common import (AppID, Clock, Reset, Input, InputChannel, Output,
                      OutputChannel)
 from .module import (generator, modparams, Module)
 from .system import (System)
-from .types import (dim, types)
+from .types import dim
 from .signals import (Signal)
 
 # Until we get source location based on Python stack traces, default to unknown

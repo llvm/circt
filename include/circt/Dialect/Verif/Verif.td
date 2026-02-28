@@ -10,6 +10,7 @@
 #define CIRCT_DIALECT_VERIF_VERIF_TD
 
 include "circt/Dialect/Verif/VerifDialect.td"
+include "circt/Dialect/Verif/Passes.td"
 include "circt/Dialect/Verif/VerifOps.td"
 
 #endif // CIRCT_DIALECT_VERIF_VERIF_TD

@@ -1,0 +1,21 @@
+add_circt_dialect(Kanagawa kanagawa)
+add_circt_dialect_doc(Kanagawa kanagawa)
+
+set(LLVM_TARGET_DEFINITIONS KanagawaPasses.td)
+mlir_tablegen(KanagawaPasses.h.inc -gen-pass-decls)
+add_public_tablegen_target(CIRCTKanagawaTransformsIncGen)
+add_circt_doc(KanagawaPasses KanagawaPasses -gen-pass-doc)
+
+set(LLVM_TARGET_DEFINITIONS KanagawaInterfaces.td)
+mlir_tablegen(KanagawaInterfaces.h.inc -gen-op-interface-decls)
+mlir_tablegen(KanagawaInterfaces.cpp.inc -gen-op-interface-defs)
+add_public_tablegen_target(MLIRKanagawaInterfacKanagawancGen)
+add_dependencies(circt-headers MLIRKanagawaInterfacKanagawancGen)
+
+set(LLVM_TARGET_DEFINITIONS Kanagawa.td)
+mlir_tablegen(KanagawaEnums.h.inc -gen-enum-decls)
+mlir_tablegen(KanagawaEnums.cpp.inc -gen-enum-defs)
+mlir_tablegen(KanagawaAttributes.h.inc -gen-attrdef-decls -attrdefs-dialect=kanagawa)
+mlir_tablegen(KanagawaAttributes.cpp.inc -gen-attrdef-defs -attrdefs-dialect=kanagawa)
+add_public_tablegen_target(MLIRKanagawaEnumsIncGen)
+add_dependencies(circt-headers MLIRKanagawaEnumsIncGen)

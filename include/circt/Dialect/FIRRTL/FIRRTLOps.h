@@ -19,6 +19,7 @@
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqAttributes.h"
 #include "circt/Support/FieldRef.h"
 #include "circt/Support/InstanceGraph.h"
@@ -33,7 +34,7 @@
 namespace circt {
 namespace firrtl {
 
-class StrictConnectOp;
+class MatchingConnectOp;
 
 // works for regs, nodes, and wires
 bool hasDroppableName(Operation *op);
@@ -131,21 +132,12 @@ bool hasDontTouch(Operation *op);
 /// after the definition of the value. Users of this function are likely
 /// interested in the source side of the returned connect, the definition of
 /// which does likely not dominate the original value.
-StrictConnectOp getSingleConnectUserOf(Value value);
+MatchingConnectOp getSingleConnectUserOf(Value value);
 
 // Out-of-line implementation of various trait verification methods and
 // functions commonly used among operations.
 namespace impl {
 LogicalResult verifySameOperandsIntTypeKind(Operation *op);
-
-// Type inference adaptor for FIRRTL operations.
-LogicalResult inferReturnTypes(
-    MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
-    mlir::RegionRange regions, SmallVectorImpl<Type> &results,
-    llvm::function_ref<FIRRTLType(ValueRange, ArrayRef<NamedAttribute>,
-                                  std::optional<Location>)>
-        callback);
 
 // Common type inference functions.
 FIRRTLType inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
@@ -157,17 +149,6 @@ FIRRTLType inferElementwiseResult(FIRRTLType lhs, FIRRTLType rhs,
 FIRRTLType inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
                                  std::optional<Location> loc);
 FIRRTLType inferReductionResult(FIRRTLType arg, std::optional<Location> loc);
-
-// Common parsed argument validation functions.
-LogicalResult validateBinaryOpArguments(ValueRange operands,
-                                        ArrayRef<NamedAttribute> attrs,
-                                        Location loc);
-LogicalResult validateUnaryOpArguments(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
-                                       Location loc);
-LogicalResult validateOneOperandOneConst(ValueRange operands,
-                                         ArrayRef<NamedAttribute> attrs,
-                                         Location loc);
 } // namespace impl
 
 /// A binary operation where the operands have the same integer kind.
@@ -227,11 +208,11 @@ struct FirMemory {
    * Check whether the memory is a seq mem.
    *
    * The following conditions must hold:
-   *   1. read latency and write latency of one.
+   *   1. read latency and write latency of at least one.
    *   2. undefined read-under-write behavior.
    */
   bool isSeqMem() const {
-    if (readLatency != 1 || writeLatency != 1)
+    if (readLatency < 1 || writeLatency < 1)
       return false;
     return dataWidth > 0;
   }

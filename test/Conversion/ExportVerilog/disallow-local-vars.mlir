@@ -27,7 +27,7 @@ hw.module @side_effect_expr(in %clock: i1, out a: i1, out a2: i1) {
       // CHECK: if (INLINE_OK)
       // DISALLOW: if (INLINE_OK)
       sv.if %0  {
-        sv.fatal 1
+        sv.fatal.procedural 1
       }
 
       // This should go through a reg when in "disallow" mode.
@@ -36,7 +36,7 @@ hw.module @side_effect_expr(in %clock: i1, out a: i1, out a2: i1) {
       // DISALLOW: if ([[SE_REG]])
       %1 = sv.verbatim.expr.se "SIDE_EFFECT" : () -> i1
       sv.if %1  {
-        sv.fatal 1
+        sv.fatal.procedural 1
       }
     }
   }
@@ -75,7 +75,7 @@ hw.module @hoist_expressions(in %clock: i1, in %x: i8, in %y: i8, in %z: i8) {
       // DISALLOW: $fwrite(32'h80000002, "Hi %x\n", _GEN * z);
       %2 = comb.mul %0, %z : i8
       sv.fwrite %fd, "Hi %x\0A"(%2) : i8
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
   }
 
@@ -94,7 +94,7 @@ hw.module @hoist_expressions(in %clock: i1, in %x: i8, in %y: i8, in %z: i8) {
     // CHECK: if (x + myWire == z)
     // DISALLOW: if (x + myWire == z)
     sv.if %4  {
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
  }
 
@@ -188,7 +188,7 @@ hw.module @DefinedInDifferentBlock(in %a: i1, in %b: i1) {
     %0 = comb.icmp eq %a, %b : i1
     sv.initial {
       sv.if %0 {
-        sv.error "error"
+        sv.error.procedural "error"
       }
     }
   }
@@ -208,7 +208,7 @@ hw.module @TemporaryWireAtDifferentBlock(in %a: i1, out b: i1) {
   %1 = comb.add %0, %0 : i1
   sv.initial {
     sv.if %0 {
-      sv.error "error"
+      sv.error.procedural "error"
     }
   }
   %0 = comb.shl %a, %a : i1
@@ -238,4 +238,42 @@ hw.module @AggregateInline(in %clock: i1) {
   // DISALLOW: assign [[GEN]] = register.a[15:0]
   // CHECK: assign [[GEN]] = register.a[15:0]
   hw.output
+}
+
+// CHECK-LABEL: module hoist_reg
+// DISALLOW-LABEL: module hoist_reg
+hw.module @hoist_reg(in %dummy : i32, out out : i17) {
+  %res_reg = sv.reg : !hw.inout<i17>
+  // CHECK: initial
+  // CHECK: reg  [31:0] tmp;
+  // CHECK end // initial
+  // DISALLOW: reg  [31:0] tmp;
+  // DISALLOW: initial
+  sv.initial {
+    %tmp = sv.reg : !hw.inout<i32>
+    %17 = sv.read_inout %tmp : !hw.inout<i32>
+    %29 = comb.xor %dummy, %17 : i32
+    %32 = comb.extract %29 from 3 : (i32) -> i17
+    sv.passign %res_reg, %32 : i17
+  }
+
+  %res_reg_data = sv.read_inout %res_reg : !hw.inout<i17>
+  hw.output %res_reg_data : i17
+}
+
+// DISALLOW-LABEL: module ArrayInjectProcedural(
+hw.module @ArrayInjectProcedural(in %a: !hw.array<4xi42>, in %b: i42, in %i: i2) {
+  // DISALLOW: reg [3:0][41:0] z;
+  %z = sv.reg : !hw.inout<array<4xi42>>
+  // DISALLOW-NEXT: reg [3:0][41:0] [[TMP:.+]];
+  // DISALLOW-NEXT: always_comb begin
+  // DISALLOW-NEXT:   [[TMP]] = a;
+  // DISALLOW-NEXT:   [[TMP]][i] = b;
+  // DISALLOW-NEXT: end // always_comb
+  // DISALLOW-NEXT: always_comb
+  // DISALLOW-NEXT:   z = [[TMP]];
+  sv.alwayscomb {
+    %0 = hw.array_inject %a[%i], %b : !hw.array<4xi42>, i2
+    sv.bpassign %z, %0 : !hw.array<4xi42>
+  }
 }

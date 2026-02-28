@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Reduce/Tester.h"
+#include "circt/Support/Version.h"
+#include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/IR/Verifier.h"
 #include "llvm/Support/ToolOutputFile.h"
 
@@ -23,9 +25,9 @@ using namespace circt;
 //===----------------------------------------------------------------------===//
 
 Tester::Tester(StringRef testScript, ArrayRef<std::string> testScriptArgs,
-               bool testMustFail)
-    : testScript(testScript), testScriptArgs(testScriptArgs),
-      testMustFail(testMustFail) {}
+               bool testMustFail, bool emitBytecode)
+    : emitBytecode(emitBytecode), testScript(testScript),
+      testScriptArgs(testScriptArgs), testMustFail(testMustFail) {}
 
 std::pair<bool, size_t> Tester::isInteresting(ModuleOp module) const {
   auto test = get(module);
@@ -46,7 +48,7 @@ bool Tester::isInteresting(StringRef testCase) const {
   // Run the tester.
   std::string errMsg;
   int result = llvm::sys::ExecuteAndWait(
-      testScript, testerArgs, /*Env=*/std::nullopt, /*Redirects=*/std::nullopt,
+      testScript, testerArgs, /*Env=*/std::nullopt, /*Redirects=*/{},
       /*SecondsToWait=*/0, /*MemoryLimit=*/0, &errMsg);
   if (result < 0)
     llvm::report_fatal_error(
@@ -131,7 +133,19 @@ void TestCase::ensureFileOnDisk() {
 
     // Write to the output.
     file = std::make_unique<llvm::ToolOutputFile>(filepath, fd);
-    module.print(file->os());
+    if (tester.emitBytecode) {
+      if (failed(writeBytecodeToFile(
+              module, file->os(),
+              mlir::BytecodeWriterConfig(getCirctVersion())))) {
+        file->os().close();
+        llvm::report_fatal_error(
+            llvm::Twine("Error emitting the IR to file `") + filepath + "`",
+            false);
+      }
+    } else {
+      module.print(file->os());
+    }
+
     file->os().close();
     if (file->os().has_error())
       llvm::report_fatal_error(llvm::Twine("Error emitting the IR to file `") +

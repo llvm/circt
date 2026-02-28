@@ -15,6 +15,7 @@
 
 include "circt/Dialect/HW/HWDialect.td"
 include "circt/Dialect/HW/HWTypeInterfaces.td"
+include "mlir/Interfaces/MemorySlotInterfaces.td"
 include "mlir/IR/AttrTypeBase.td"
 
 // Base class for other typedefs. Provides dialact-specific defaults.
@@ -41,15 +42,20 @@ def IntTypeImpl : HWType<"Int"> {
 
   let skipDefaultBuilders = 1;
 
-  let extraClassDeclaration = [{
+  let builders = [
     /// Get an integer type for the specified width.  Note that this may return
     /// a builtin integer type if the width is a known-constant value.
-    static Type get(::mlir::TypedAttr width);
-  }];
+    TypeBuilderWithInferredContext<(ins "::mlir::TypedAttr":$width), "", "Type">
+  ];
+
 }
 
 // A simple fixed size array. Declares the hw::ArrayType in C++.
-def ArrayTypeImpl : HWType<"Array", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
+def ArrayTypeImpl : HWType<"Array", [
+  DeclareTypeInterfaceMethods<DestructurableTypeInterface>,
+  DeclareTypeInterfaceMethods<FieldIDTypeInterface>,
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "fixed-sized array";
   let description = [{
     Fixed sized HW arrays are roughly similar to C arrays. On the wire (vs.
@@ -62,21 +68,27 @@ def ArrayTypeImpl : HWType<"Array", [DeclareTypeInterfaceMethods<FieldIDTypeInte
   let parameters = (ins "::mlir::Type":$elementType, "::mlir::Attribute":$sizeAttr);
   let genVerifyDecl = 1;
 
-  let hasCustomAssemblyFormat = 1;
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "Type":$elementType, "size_t":$size), [{
+      auto *ctx = elementType.getContext();
+      auto intType = mlir::IntegerType::get(ctx, 64);
+      auto sizeAttr = mlir::IntegerAttr::get(intType, size);
+      return $_get(ctx, elementType, sizeAttr);
+    }]>
+  ];
+
+  let assemblyFormat = "`<` custom<HWArray>($sizeAttr, $elementType) `>`";
 
   let extraClassDeclaration = [{
-    static ArrayType get(Type elementType, size_t size) {
-      auto *ctx = elementType.getContext();
-      auto intType = ::mlir::IntegerType::get(ctx, 64);
-      auto sizeAttr = ::mlir::IntegerAttr::get(intType, size);
-      return ArrayType::get(ctx, elementType, sizeAttr);
-    }
     size_t getNumElements() const;
   }];
 }
 
 // An 'unpacked' array of fixed size.
-def UnpackedArrayType : HWType<"UnpackedArray", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
+def UnpackedArrayTypeImpl : HWType<"UnpackedArray", [
+  DeclareTypeInterfaceMethods<FieldIDTypeInterface>,
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "SystemVerilog 'unpacked' fixed-sized array";
   let description = [{
     Unpacked arrays are a more flexible array representation than packed arrays,
@@ -87,15 +99,18 @@ def UnpackedArrayType : HWType<"UnpackedArray", [DeclareTypeInterfaceMethods<Fie
   let parameters = (ins "::mlir::Type":$elementType, "::mlir::Attribute":$sizeAttr);
   let genVerifyDecl = 1;
 
-  let hasCustomAssemblyFormat = 1;
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "Type":$elementType, "size_t":$size), [{
+      auto *ctx = elementType.getContext();
+      auto intType = mlir::IntegerType::get(ctx, 64);
+      auto sizeAttr = mlir::IntegerAttr::get(intType, size);
+      return $_get(ctx, elementType, sizeAttr);
+    }]>
+  ];
+
+  let assemblyFormat = "`<` custom<HWArray>($sizeAttr, $elementType) `>`";
 
   let extraClassDeclaration = [{
-    static UnpackedArrayType get(Type elementType, size_t size) {
-      auto *ctx = elementType.getContext();
-      auto intType = ::mlir::IntegerType::get(ctx, 64);
-      auto sizeAttr = ::mlir::IntegerAttr::get(intType, size);
-      return UnpackedArrayType::get(ctx, elementType, sizeAttr);
-    }
     size_t getNumElements() const;
   }];
 }
@@ -112,21 +127,26 @@ def InOutTypeImpl : HWType<"InOut"> {
   let parameters = (ins "::mlir::Type":$elementType);
   let genVerifyDecl = 1;
 
-  let hasCustomAssemblyFormat = 1;
-
-  let extraClassDeclaration = [{
-    static InOutType get(Type elementType) {
-      return get(elementType.getContext(), elementType);
-    }
-  }];
+  let assemblyFormat = "`<` custom<HWElementType>($elementType) `>`";
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "Type":$elementType), [{
+       return $_get(elementType.getContext(), elementType);
+    }]>
+  ];
 }
 
 // A packed struct. Declares the hw::StructType in C++.
-def StructTypeImpl : HWType<"Struct", [DeclareTypeInterfaceMethods<FieldIDTypeInterface>]> {
+def StructTypeImpl : HWType<"Struct", [
+  DeclareTypeInterfaceMethods<DestructurableTypeInterface>,
+  DeclareTypeInterfaceMethods<FieldIDTypeInterface>,
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "HW struct type";
   let description = [{
     Represents a structure of name, value pairs.
+    ```mlir
     !hw.struct<fieldName1: Type1, fieldName2: Type2>
+    ```
   }];
   let mnemonic = "struct";
 
@@ -148,12 +168,16 @@ def StructTypeImpl : HWType<"Struct", [DeclareTypeInterfaceMethods<FieldIDTypeIn
 }
 
 // An enum type. Declares the hw::EnumType in C++.
-def EnumTypeImpl : HWType<"Enum"> {
+def EnumTypeImpl : HWType<"Enum", [
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "HW Enum type";
   let description = [{
     Represents an enumeration of values. Enums are interpreted as integers with
     a synthesis-defined encoding.
+    ```mlir
     !hw.enum<field1, field2>
+    ```
   }];
   let mnemonic = "enum";
   let parameters = (
@@ -164,9 +188,6 @@ def EnumTypeImpl : HWType<"Enum"> {
     /// Returns true if the requested field is part of this enum
     bool contains(mlir::StringRef field);
 
-    /// Returns the number of bits used by the enum
-    size_t getBitWidth();
-
     /// Returns the index of the requested field, or a nullopt if the field is
     // not part of this enum.
     std::optional<size_t> indexOf(mlir::StringRef field);
@@ -176,7 +197,9 @@ def EnumTypeImpl : HWType<"Enum"> {
 }
 
 // An untagged union. Declares the hw::UnionType in C++.
-def UnionTypeImpl : HWType<"Union"> {
+def UnionTypeImpl : HWType<"Union", [
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "An untagged union of types";
   let parameters = (
     ins ArrayRefParameter<
@@ -198,7 +221,9 @@ def UnionTypeImpl : HWType<"Union"> {
   }];
 }
 
-def TypeAliasType : HWType<"TypeAlias"> {
+def TypeAliasType : HWType<"TypeAlias", [
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+]> {
   let summary = "An symbolic reference to a type declaration";
   let description = [{
     A TypeAlias is parameterized by a SymbolRefAttr, which points to a

@@ -57,20 +57,20 @@ static VectorizeOp lowerBoundaryScalar(VectorizeOp op) {
 
   for (ValueRange range : op.getInputs()) {
     unsigned bw = range.front().getType().getIntOrFloatBitWidth();
-    vectors.push_back(builder
-                          .create<comb::ConcatOp>(
-                              builder.getIntegerType(bw * range.size()), range)
-                          ->getResults());
+    vectors.push_back(
+        comb::ConcatOp::create(builder,
+                               builder.getIntegerType(bw * range.size()), range)
+            ->getResults());
   }
 
   unsigned width = op->getResult(0).getType().getIntOrFloatBitWidth();
-  VectorizeOp newOp = builder.create<VectorizeOp>(
-      builder.getIntegerType(width * op->getNumResults()), vectors);
+  VectorizeOp newOp = VectorizeOp::create(
+      builder, builder.getIntegerType(width * op->getNumResults()), vectors);
   newOp.getBody().takeBody(op.getBody());
 
   for (OpResult res : op.getResults()) {
-    Value newRes = builder.create<comb::ExtractOp>(
-        newOp.getResult(0), width * res.getResultNumber(), width);
+    Value newRes = comb::ExtractOp::create(
+        builder, newOp.getResult(0), width * res.getResultNumber(), width);
     res.replaceAllUsesWith(newRes);
   }
 
@@ -119,21 +119,22 @@ static VectorizeOp lowerBoundaryVector(VectorizeOp op) {
                                       range.front().getType());
     if (llvm::all_equal(range)) {
       vectors.push_back(
-          builder.create<vector::BroadcastOp>(type, range.front())
+          vector::BroadcastOp::create(builder, type, range.front())
               ->getResults());
       continue;
     }
 
     // Otherwise do a gather.
     ValueRange vector =
-        builder
-            .create<arith::ConstantOp>(DenseElementsAttr::get(
+        arith::ConstantOp::create(
+            builder,
+            DenseElementsAttr::get(
                 type, SmallVector<Attribute>(
                           range.size(),
                           builder.getIntegerAttr(type.getElementType(), 0))))
             ->getResults();
     for (auto [i, element] : llvm::enumerate(range))
-      vector = builder.create<vector::InsertOp>(element, vector.front(), i)
+      vector = vector::InsertOp::create(builder, element, vector.front(), i)
                    ->getResults();
 
     vectors.push_back(vector);
@@ -141,12 +142,12 @@ static VectorizeOp lowerBoundaryVector(VectorizeOp op) {
 
   VectorType resType = VectorType::get(
       SmallVector<int64_t>(1, op->getNumResults()), op.getResult(0).getType());
-  VectorizeOp newOp = builder.create<VectorizeOp>(resType, vectors);
+  VectorizeOp newOp = VectorizeOp::create(builder, resType, vectors);
   newOp.getBody().takeBody(op.getBody());
 
   for (OpResult res : op.getResults())
-    res.replaceAllUsesWith(builder.create<vector::ExtractOp>(
-        newOp.getResult(0), res.getResultNumber()));
+    res.replaceAllUsesWith(vector::ExtractOp::create(
+        builder, newOp.getResult(0), res.getResultNumber()));
 
   op->erase();
   return newOp;

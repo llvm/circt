@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/CalyxToHW.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
@@ -22,8 +21,14 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+namespace circt {
+#define GEN_PASS_DEF_CALYXTOHW
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -48,8 +53,8 @@ struct ConvertComponentOp : public OpConversionPattern<ComponentOp> {
     ModulePortInfo hwPortInfo(hwInputInfo);
 
     SmallVector<Value> argValues;
-    auto hwMod = rewriter.create<HWModuleOp>(
-        component.getLoc(), component.getNameAttr(), hwPortInfo,
+    auto hwMod = HWModuleOp::create(
+        rewriter, component.getLoc(), component.getNameAttr(), hwPortInfo,
         [&](OpBuilder &b, HWModulePortAccessor &ports) {
           for (auto [name, type, direction, _] : portInfo) {
             switch (direction) {
@@ -58,9 +63,9 @@ struct ConvertComponentOp : public OpConversionPattern<ComponentOp> {
               argValues.push_back(ports.getInput(name));
               break;
             case calyx::Direction::Output:
-              auto wire = b.create<sv::WireOp>(component.getLoc(), type, name);
+              auto wire = sv::WireOp::create(b, component.getLoc(), type, name);
               auto wireRead =
-                  b.create<sv::ReadInOutOp>(component.getLoc(), wire);
+                  sv::ReadInOutOp::create(b, component.getLoc(), wire);
               argValues.push_back(wireRead);
               ports.setOutput(name, wireRead);
               break;
@@ -126,15 +131,15 @@ struct ConvertAssignOp : public OpConversionPattern<calyx::AssignOp> {
     Value src = adaptor.getSrc();
     if (auto guard = adaptor.getGuard()) {
       auto zero =
-          rewriter.create<hw::ConstantOp>(assign.getLoc(), src.getType(), 0);
-      src = rewriter.create<MuxOp>(assign.getLoc(), guard, src, zero);
+          hw::ConstantOp::create(rewriter, assign.getLoc(), src.getType(), 0);
+      src = MuxOp::create(rewriter, assign.getLoc(), guard, src, zero);
       for (Operation *destUser :
            llvm::make_early_inc_range(assign.getDest().getUsers())) {
         if (destUser == assign)
           continue;
         if (auto otherAssign = dyn_cast<calyx::AssignOp>(destUser)) {
-          src = rewriter.create<MuxOp>(assign.getLoc(), otherAssign.getGuard(),
-                                       otherAssign.getSrc(), src);
+          src = MuxOp::create(rewriter, assign.getLoc(), otherAssign.getGuard(),
+                              otherAssign.getSrc(), src);
           rewriter.eraseOp(destUser);
         }
       }
@@ -245,7 +250,7 @@ private:
           auto fal = wireIn(op.getFal(), op.instanceName(),
                             op.portName(op.getFal()), b);
 
-          auto mux = b.create<MuxOp>(sel, tru, fal);
+          auto mux = MuxOp::create(b, sel, tru, fal);
 
           auto out =
               wireOut(mux, op.instanceName(), op.portName(op.getOut()), b);
@@ -277,12 +282,12 @@ private:
                             op.portName(op.getClk()), b);
           auto reset = wireIn(op.getReset(), op.instanceName(),
                               op.portName(op.getReset()), b);
-          auto seqClk = b.create<seq::ToClockOp>(clk);
+          auto seqClk = seq::ToClockOp::create(b, clk);
           auto doneReg =
               reg(writeEn, seqClk, reset, op.instanceName() + "_done_reg", b);
           auto done =
               wireOut(doneReg, op.instanceName(), op.portName(op.getDone()), b);
-          auto clockEn = b.create<AndOp>(writeEn, createOrFoldNot(done, b));
+          auto clockEn = AndOp::create(b, writeEn, createOrFoldNot(done, b));
           auto outReg =
               regCe(in, seqClk, clockEn, reset, op.instanceName() + "_reg", b);
           auto out = wireOut(outReg, op.instanceName(), "", b);
@@ -295,7 +300,7 @@ private:
               wireIn(op.getIn(), op.instanceName(), op.portName(op.getIn()), b);
           auto outWidth = op.getOut().getType().getIntOrFloatBitWidth();
 
-          auto extract = b.create<ExtractOp>(in, 0, outWidth);
+          auto extract = ExtractOp::create(b, in, 0, outWidth);
 
           auto out =
               wireOut(extract, op.instanceName(), op.portName(op.getOut()), b);
@@ -316,7 +321,7 @@ private:
           wires.append({wire.getInput(), wire});
         })
         .Case([&](UndefLibOp op) {
-          auto undef = b.create<sv::ConstantXOp>(op.getType());
+          auto undef = sv::ConstantXOp::create(b, op.getType());
           wires.append({undef});
         })
         .Case([&](PadLibOp op) {
@@ -324,8 +329,8 @@ private:
               wireIn(op.getIn(), op.instanceName(), op.portName(op.getIn()), b);
           auto srcWidth = in.getType().getIntOrFloatBitWidth();
           auto destWidth = op.getOut().getType().getIntOrFloatBitWidth();
-          auto zero = b.create<hw::ConstantOp>(op.getLoc(),
-                                               APInt(destWidth - srcWidth, 0));
+          auto zero = hw::ConstantOp::create(b, op.getLoc(),
+                                             APInt(destWidth - srcWidth, 0));
           auto padded = wireOut(b.createOrFold<comb::ConcatOp>(zero, in),
                                 op.instanceName(), op.portName(op.getOut()), b);
           wires.append({in.getInput(), padded});
@@ -349,7 +354,7 @@ private:
     auto right =
         wireIn(op.getRight(), op.instanceName(), op.portName(op.getRight()), b);
 
-    auto add = b.create<ResultTy>(left, right, false);
+    auto add = ResultTy::create(b, left, right, false);
 
     auto out = wireOut(add, op.instanceName(), op.portName(op.getOut()), b);
     wires.append({left.getInput(), right.getInput(), out});
@@ -364,7 +369,7 @@ private:
     auto right =
         wireIn(op.getRight(), op.instanceName(), op.portName(op.getRight()), b);
 
-    auto add = b.create<ICmpOp>(pred, left, right, false);
+    auto add = ICmpOp::create(b, pred, left, right, false);
 
     auto out = wireOut(add, op.instanceName(), op.portName(op.getOut()), b);
     wires.append({left.getInput(), right.getInput(), out});
@@ -385,17 +390,19 @@ private:
     wires.append({clk.getInput(), reset.getInput(), go.getInput(),
                   left.getInput(), right.getInput()});
 
-    auto doneReg = reg(go, clk, reset,
+    // Convert i1 clock to seq.clock for register creation.
+    auto seqClk = seq::ToClockOp::create(b, clk);
+    auto doneReg = reg(go, seqClk, reset,
                        op.instanceName() + "_" + op.portName(op.getDone()), b);
     auto done =
         wireOut(doneReg, op.instanceName(), op.portName(op.getDone()), b);
 
-    auto targetOp = b.create<TargetOpTy>(left, right, false);
+    auto targetOp = TargetOpTy::create(b, left, right, false);
     for (auto &&[targetRes, sourceRes] :
          llvm::zip(targetOp->getResults(), op.getOutputPorts())) {
       auto portName = op.portName(sourceRes);
-      auto clockEn = b.create<AndOp>(go, createOrFoldNot(done, b));
-      auto resReg = regCe(targetRes, clk, clockEn, reset,
+      auto clockEn = AndOp::create(b, go, createOrFoldNot(done, b));
+      auto resReg = regCe(targetRes, seqClk, clockEn, reset,
                           createName(op.instanceName(), portName), b);
       wires.push_back(wireOut(resReg, op.instanceName(), portName, b));
     }
@@ -405,31 +412,31 @@ private:
 
   ReadInOutOp wireIn(Value source, StringRef instanceName, StringRef portName,
                      ImplicitLocOpBuilder &b) const {
-    auto wire = b.create<sv::WireOp>(source.getType(),
-                                     createName(instanceName, portName));
-    return b.create<ReadInOutOp>(wire);
+    auto wire = sv::WireOp::create(b, source.getType(),
+                                   createName(instanceName, portName));
+    return ReadInOutOp::create(b, wire);
   }
 
   ReadInOutOp wireOut(Value source, StringRef instanceName, StringRef portName,
                       ImplicitLocOpBuilder &b) const {
-    auto wire = b.create<sv::WireOp>(source.getType(),
-                                     createName(instanceName, portName));
-    b.create<sv::AssignOp>(wire, source);
-    return b.create<ReadInOutOp>(wire);
+    auto wire = sv::WireOp::create(b, source.getType(),
+                                   createName(instanceName, portName));
+    sv::AssignOp::create(b, wire, source);
+    return ReadInOutOp::create(b, wire);
   }
 
   CompRegOp reg(Value source, Value clock, Value reset, const Twine &name,
                 ImplicitLocOpBuilder &b) const {
-    auto resetValue = b.create<hw::ConstantOp>(source.getType(), 0);
-    return b.create<CompRegOp>(source, clock, reset, resetValue, name.str());
+    auto resetValue = hw::ConstantOp::create(b, source.getType(), 0);
+    return CompRegOp::create(b, source, clock, reset, resetValue, name.str());
   }
 
   CompRegClockEnabledOp regCe(Value source, Value clock, Value ce, Value reset,
                               const Twine &name,
                               ImplicitLocOpBuilder &b) const {
-    auto resetValue = b.create<hw::ConstantOp>(source.getType(), 0);
-    return b.create<CompRegClockEnabledOp>(source, clock, ce, reset, resetValue,
-                                           name.str());
+    auto resetValue = hw::ConstantOp::create(b, source.getType(), 0);
+    return CompRegClockEnabledOp::create(b, source, clock, ce, reset,
+                                         resetValue, name.str());
   }
 
   std::string createName(StringRef instanceName, StringRef portName) const {
@@ -443,7 +450,7 @@ private:
 /// Pass entrypoint.
 
 namespace {
-class CalyxToHWPass : public CalyxToHWBase<CalyxToHWPass> {
+class CalyxToHWPass : public circt::impl::CalyxToHWBase<CalyxToHWPass> {
 public:
   void runOnOperation() override;
 

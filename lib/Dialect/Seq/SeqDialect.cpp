@@ -47,11 +47,11 @@ Operation *SeqDialect::materializeConstant(OpBuilder &builder, Attribute value,
   // Integer constants.
   if (auto intType = dyn_cast<IntegerType>(type))
     if (auto attrValue = dyn_cast<IntegerAttr>(value))
-      return builder.create<hw::ConstantOp>(loc, type, attrValue);
+      return hw::ConstantOp::create(builder, loc, type, attrValue);
 
   if (isa<ClockType>(type))
     if (auto attrValue = dyn_cast<ClockConstAttr>(value))
-      return builder.create<seq::ConstClockOp>(loc, attrValue);
+      return seq::ConstClockOp::create(builder, loc, attrValue);
 
   return nullptr;
 }

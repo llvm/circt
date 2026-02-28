@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/DCToHW.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/DC/DCDialect.h"
 #include "circt/Dialect/DC/DCOps.h"
@@ -25,12 +24,18 @@
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/ValueMapper.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/MathExtras.h"
 
 #include <optional>
+
+namespace circt {
+#define GEN_PASS_DEF_DCTOHW
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -106,25 +111,27 @@ public:
   ESITypeConverter() {
     addConversion([](Type type) -> Type { return toESIHWType(type); });
     addConversion([](esi::ChannelType t) -> Type { return t; });
-    addTargetMaterialization(
-        [](mlir::OpBuilder &builder, mlir::Type resultType,
-           mlir::ValueRange inputs,
-           mlir::Location loc) -> std::optional<mlir::Value> {
-          if (inputs.size() != 1)
-            return std::nullopt;
+    addTargetMaterialization([](mlir::OpBuilder &builder, mlir::Type resultType,
+                                mlir::ValueRange inputs,
+                                mlir::Location loc) -> mlir::Value {
+      if (inputs.size() != 1)
+        return Value();
 
-          return inputs[0];
-        });
+      return UnrealizedConversionCastOp::create(builder, loc, resultType,
+                                                inputs[0])
+          ->getResult(0);
+    });
 
-    addSourceMaterialization(
-        [](mlir::OpBuilder &builder, mlir::Type resultType,
-           mlir::ValueRange inputs,
-           mlir::Location loc) -> std::optional<mlir::Value> {
-          if (inputs.size() != 1)
-            return std::nullopt;
+    addSourceMaterialization([](mlir::OpBuilder &builder, mlir::Type resultType,
+                                mlir::ValueRange inputs,
+                                mlir::Location loc) -> mlir::Value {
+      if (inputs.size() != 1)
+        return Value();
 
-          return inputs[0];
-        });
+      return UnrealizedConversionCastOp::create(builder, loc, resultType,
+                                                inputs[0])
+          ->getResult(0);
+    });
   }
 };
 
@@ -223,22 +230,23 @@ struct RTLBuilder {
         return it->second;
     }
 
-    auto cval = b.create<hw::ConstantOp>(loc, apv);
+    auto cval = hw::ConstantOp::create(b, loc, apv);
     if (!isZeroWidth)
       constants[apv] = cval;
     return cval;
   }
 
   Value constant(unsigned width, int64_t value, StringRef name = {}) {
-    return constant(APInt(width, value));
+    return constant(
+        APInt(width, value, /*isSigned=*/false, /*implicitTrunc=*/true));
   }
   std::pair<Value, Value> wrap(Value data, Value valid, StringRef name = {}) {
-    auto wrapOp = b.create<esi::WrapValidReadyOp>(loc, data, valid);
+    auto wrapOp = esi::WrapValidReadyOp::create(b, loc, data, valid);
     return {wrapOp.getResult(0), wrapOp.getResult(1)};
   }
   std::pair<Value, Value> unwrap(Value channel, Value ready,
                                  StringRef name = {}) {
-    auto unwrapOp = b.create<esi::UnwrapValidReadyOp>(loc, channel, ready);
+    auto unwrapOp = esi::UnwrapValidReadyOp::create(b, loc, channel, ready);
     return {unwrapOp.getResult(0), unwrapOp.getResult(1)};
   }
 
@@ -254,13 +262,13 @@ struct RTLBuilder {
            "No global reset provided to this RTLBuilder - a reset "
            "signal must be provided to the reg(...) function.");
 
-    return b.create<seq::CompRegOp>(loc, in, resolvedClk, resolvedRst, rstValue,
-                                    name);
+    return seq::CompRegOp::create(b, loc, in, resolvedClk, resolvedRst,
+                                  rstValue, name);
   }
 
   Value cmp(Value lhs, Value rhs, comb::ICmpPredicate predicate,
             StringRef name = {}) {
-    return b.create<comb::ICmpOp>(loc, predicate, lhs, rhs);
+    return comb::ICmpOp::create(b, loc, predicate, lhs, rhs);
   }
 
   Value buildNamedOp(llvm::function_ref<Value()> f, StringRef name) {
@@ -277,13 +285,13 @@ struct RTLBuilder {
   ///  Bitwise 'and'.
   Value bitAnd(ValueRange values, StringRef name = {}) {
     return buildNamedOp(
-        [&]() { return b.create<comb::AndOp>(loc, values, false); }, name);
+        [&]() { return comb::AndOp::create(b, loc, values, false); }, name);
   }
 
   // Bitwise 'or'.
   Value bitOr(ValueRange values, StringRef name = {}) {
     return buildNamedOp(
-        [&]() { return b.create<comb::OrOp>(loc, values, false); }, name);
+        [&]() { return comb::OrOp::create(b, loc, values, false); }, name);
   }
 
   ///  Bitwise 'not'.
@@ -300,23 +308,23 @@ struct RTLBuilder {
     }
 
     return buildNamedOp(
-        [&]() { return b.create<comb::XorOp>(loc, value, allOnes); }, name);
+        [&]() { return comb::XorOp::create(b, loc, value, allOnes); }, name);
   }
 
   Value shl(Value value, Value shift, StringRef name = {}) {
     return buildNamedOp(
-        [&]() { return b.create<comb::ShlOp>(loc, value, shift); }, name);
+        [&]() { return comb::ShlOp::create(b, loc, value, shift); }, name);
   }
 
   Value concat(ValueRange values, StringRef name = {}) {
-    return buildNamedOp([&]() { return b.create<comb::ConcatOp>(loc, values); },
-                        name);
+    return buildNamedOp(
+        [&]() { return comb::ConcatOp::create(b, loc, values); }, name);
   }
 
   llvm::SmallVector<Value> extractBits(Value v, StringRef name = {}) {
     llvm::SmallVector<Value> bits;
     for (unsigned i = 0, e = v.getType().getIntOrFloatBitWidth(); i != e; ++i)
-      bits.push_back(b.create<comb::ExtractOp>(loc, v, i, /*bitWidth=*/1));
+      bits.push_back(comb::ExtractOp::create(b, loc, v, i, /*bitWidth=*/1));
     return bits;
   }
 
@@ -329,7 +337,7 @@ struct RTLBuilder {
   Value extract(Value v, unsigned lo, unsigned hi, StringRef name = {}) {
     unsigned width = hi - lo + 1;
     return buildNamedOp(
-        [&]() { return b.create<comb::ExtractOp>(loc, v, lo, width); }, name);
+        [&]() { return comb::ExtractOp::create(b, loc, v, lo, width); }, name);
   }
 
   ///  Truncates 'value' to its lower 'width' bits.
@@ -358,13 +366,13 @@ struct RTLBuilder {
   ///  Creates a hw.array of the given values.
   Value arrayCreate(ValueRange values, StringRef name = {}) {
     return buildNamedOp(
-        [&]() { return b.create<hw::ArrayCreateOp>(loc, values); }, name);
+        [&]() { return hw::ArrayCreateOp::create(b, loc, values); }, name);
   }
 
   ///  Extract the 'index'th value from the input array.
   Value arrayGet(Value array, Value index, StringRef name = {}) {
     return buildNamedOp(
-        [&]() { return b.create<hw::ArrayGetOp>(loc, array, index); }, name);
+        [&]() { return hw::ArrayGetOp::create(b, loc, array, index); }, name);
   }
 
   ///  Muxes a range of values.
@@ -374,7 +382,7 @@ struct RTLBuilder {
     if (values.size() == 2) {
       return buildNamedOp(
           [&]() {
-            return b.create<comb::MuxOp>(loc, index, values[1], values[0]);
+            return comb::MuxOp::create(b, loc, index, values[1], values[0]);
           },
           name);
     }
@@ -439,7 +447,7 @@ static UnwrappedIO unwrapIO(Location loc, ValueRange operands,
     if (isZeroWidthType(innerType)) {
       // Feed the ESI wrap with an i0 constant.
       data =
-          rewriter.create<hw::ConstantOp>(loc, rewriter.getIntegerType(0), 0);
+          hw::ConstantOp::create(rewriter, loc, rewriter.getIntegerType(0), 0);
     } else {
       // Create a backedge for the unresolved data.
       auto dataBackedge = bb.get(innerType);
@@ -656,6 +664,46 @@ public:
   }
 };
 
+class MergeConversionPattern : public OpConversionPattern<MergeOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(MergeOp op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    BackedgeBuilder bb(rewriter, op.getLoc());
+    UnwrappedIO io = unwrapIO(op, operands.getOperands(), rewriter, bb);
+    auto output = io.outputs[0];
+    RTLBuilder rtlb(op.getLoc(), rewriter);
+
+    // A winner is found if any of the two input valids are high.
+    Value hasWin = rtlb.bitOr(io.getInputValids());
+
+    // The winning index is either 0b0 (first) or 0b1 (second), hence we can
+    // just use either of the input valids as win index signal. The op is
+    // defined to select inputs with priority first >> second, so use the first
+    // input.
+    Value winWasFirst = io.inputs[0].valid;
+    Value winWasSecond = rtlb.bitNot(winWasFirst);
+    Value winIndex = winWasSecond;
+
+    output.valid->setValue(hasWin);
+    output.data->setValue(winIndex);
+
+    // Create the logic to set the done wires for the result. The done wire is
+    // asserted when the output is valid and ready.
+    Value outValidAndReady = rtlb.bitAnd({hasWin, output.ready});
+
+    // Create the logic to assign the arg ready outputs. An argument is ready
+    // when the output is valid and ready, and the given input is selected.
+    io.inputs[0].ready->setValue(rtlb.bitAnd({outValidAndReady, winWasFirst}));
+    io.inputs[1].ready->setValue(rtlb.bitAnd({outValidAndReady, winWasSecond}));
+
+    rewriter.replaceOp(op, output.channel);
+
+    return success();
+  }
+};
+
 class ToESIConversionPattern : public OpConversionPattern<ToESIOp> {
   // Essentially a no-op, seeing as the type converter does the heavy
   // lifting here.
@@ -768,6 +816,10 @@ public:
   LogicalResult
   matchAndRewrite(BufferOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
+    if (op.getInitValuesAttr())
+      return rewriter.notifyMatchFailure(
+          op, "BufferOp with initial values not supported");
+
     auto crRes = getClockAndReset(op);
     if (failed(crRes))
       return failure();
@@ -790,10 +842,8 @@ static bool isDCType(Type type) { return isa<TokenType, ValueType>(type); }
 ///  Returns true if the given `op` is considered as legal - i.e. it does not
 ///  contain any dc-typed values.
 static bool isLegalOp(Operation *op) {
-  if (auto funcOp = dyn_cast<HWModuleLike>(op)) {
-    return llvm::none_of(funcOp.getPortTypes(), isDCType) &&
-           llvm::none_of(funcOp.getBodyBlock()->getArgumentTypes(), isDCType);
-  }
+  if (auto funcOp = dyn_cast<HWModuleLike>(op))
+    return llvm::none_of(funcOp.getPortTypes(), isDCType);
 
   bool operandsOK = llvm::none_of(op->getOperandTypes(), isDCType);
   bool resultsOK = llvm::none_of(op->getResultTypes(), isDCType);
@@ -805,7 +855,7 @@ static bool isLegalOp(Operation *op) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-class DCToHWPass : public DCToHWBase<DCToHWPass> {
+class DCToHWPass : public circt::impl::DCToHWBase<DCToHWPass> {
 public:
   void runOnOperation() override {
     Operation *parent = getOperation();
@@ -848,13 +898,12 @@ public:
 
     RewritePatternSet patterns(parent->getContext());
 
-    patterns.insert<ForkConversionPattern, JoinConversionPattern,
-                    SelectConversionPattern, BranchConversionPattern,
-                    PackConversionPattern, UnpackConversionPattern,
-                    BufferConversionPattern, SourceConversionPattern,
-                    SinkConversionPattern, TypeConversionPattern,
-                    ToESIConversionPattern, FromESIConversionPattern>(
-        typeConverter, parent->getContext());
+    patterns.insert<
+        ForkConversionPattern, JoinConversionPattern, SelectConversionPattern,
+        BranchConversionPattern, PackConversionPattern, UnpackConversionPattern,
+        BufferConversionPattern, SourceConversionPattern, SinkConversionPattern,
+        MergeConversionPattern, TypeConversionPattern, ToESIConversionPattern,
+        FromESIConversionPattern>(typeConverter, parent->getContext());
 
     if (failed(applyPartialConversion(parent, target, std::move(patterns))))
       signalPassFailure();

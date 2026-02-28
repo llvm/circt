@@ -20,11 +20,15 @@ hw.module @testRegsOnly(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !
       pipeline.stage ^bb1
 
     ^bb1(%s1_enable : i1):
-      %add1 = comb.add %add0, %a0 : i32 // %a0 is a block argument fed through a stage.
+      %add0_bb1 = pipeline.src %add0 : i32
+      %a0_bb1 = pipeline.src %a0 : i32
+      %add1 = comb.add %add0_bb1, %a0_bb1 : i32
       pipeline.stage ^bb2
 
     ^bb2(%s2_enable : i1):
-      %add2 = comb.add %add1, %add0 : i32 // %add0 crosses multiple stages.
+      %add1_bb2 = pipeline.src %add1 : i32
+      %add0_bb2 = pipeline.src %add0_bb1 : i32
+      %add2 = comb.add %add1_bb2, %add0_bb2 : i32 // %add0 crosses multiple stages.
       pipeline.return %add2 : i32
   }
   hw.output %out#0, %out#1 : i32, i1
@@ -65,7 +69,8 @@ hw.module @testLatency1(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !
   ^bb3(%s3_enable : i1):
     pipeline.stage ^bb4
   ^bb4(%s4_enable : i1):
-    pipeline.return %out : i32
+    %out_bb4 = pipeline.src %out : i32
+    pipeline.return %out_bb4 : i32
   }
   hw.output %out#0 : i32
 }
@@ -86,15 +91,16 @@ hw.module @testLatency1(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !
 // CHECK:               %[[VAL_20:.*]] = comb.sub %[[VAL_17]], %[[VAL_17]] : i32
 // CHECK:               pipeline.latency.return %[[VAL_20]] : i32
 // CHECK:             }
-// CHECK:             pipeline.stage ^bb3 regs(%[[VAL_17]] : i32) pass(%[[VAL_21:.*]] : i32)
+// CHECK:             pipeline.stage ^bb3 regs(%[[VAL_17]] : i32) pass(%[[VAL_19]] : i32)
 // CHECK:           ^bb3(%[[VAL_22:.*]]: i32, %[[VAL_23:.*]]: i32, %[[VAL_24:.*]]: i1):
 // CHECK:             pipeline.stage ^bb4 regs(%[[VAL_22]] : i32) pass(%[[VAL_23]] : i32)
 // CHECK:           ^bb4(%[[VAL_25:.*]]: i32, %[[VAL_26:.*]]: i32, %[[VAL_27:.*]]: i1):
 // CHECK:             %[[VAL_28:.*]] = comb.add %[[VAL_25]], %[[VAL_26]] : i32
-// CHECK:             pipeline.return %[[VAL_25]] : i32
+// CHECK:             pipeline.return %[[VAL_28]] : i32
 // CHECK:           }
 // CHECK:           hw.output %[[VAL_29:.*]] : i32
 // CHECK:         }
+
 hw.module @testLatency2(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !seq.clock, in %rst : i1, out out : i32) {
   %out:2 = pipeline.scheduled(%a0 : i32 = %arg0) clock(%clk) reset(%rst) go(%go) entryEn(%s0_enable) -> (out: i32) {
     %true = hw.constant true
@@ -106,16 +112,19 @@ hw.module @testLatency2(in %arg0 : i32, in %arg1 : i32, in %go : i1, in %clk : !
   ^bb1(%s1_enable : i1):
     pipeline.stage ^bb2
   ^bb2(%s2_enable : i1):
+    %out_bb2 = pipeline.src %out : i32
     %out2 = pipeline.latency 2 -> (i32) {
-      %d = comb.sub %out, %out : i32
+      %d = comb.sub %out_bb2, %out_bb2 : i32
       pipeline.latency.return %d : i32
     }
     pipeline.stage ^bb3
   ^bb3(%s3_enable : i1):
     pipeline.stage ^bb4
   ^bb4(%s4_enable : i1):
-    %res = comb.add %out, %out2 : i32
-    pipeline.return %out : i32
+    %out_bb4 = pipeline.src %out : i32
+    %out2_bb4 = pipeline.src %out2 : i32
+    %res = comb.add %out_bb4, %out2_bb4 : i32
+    pipeline.return %res : i32
   }
   hw.output %out#0 : i32
 }
@@ -157,9 +166,10 @@ hw.module @testLatencyToLatency(in %arg0: i32, in %arg1: i32, in %go: i1, in %cl
     pipeline.stage ^bb2
 
   ^bb2(%s2_enable : i1):
+    %bb2_1 = pipeline.src %1 : i32
     %2 = pipeline.latency 2 -> (i32) {
       %c1_i32 = hw.constant 1 : i32
-      %res2 = comb.add %1, %c1_i32 : i32
+      %res2 = comb.add %bb2_1, %c1_i32 : i32
       pipeline.latency.return %res2 : i32
     }
     pipeline.stage ^bb3
@@ -168,7 +178,8 @@ hw.module @testLatencyToLatency(in %arg0: i32, in %arg1: i32, in %go: i1, in %cl
     pipeline.stage ^bb4
 
   ^bb4(%s4_enable : i1):
-    pipeline.return %2 : i32
+    %bb4_2 = pipeline.src %2 : i32
+    pipeline.return %bb4_2 : i32
   }
   hw.output %0#0 : i32
 }
@@ -199,10 +210,11 @@ hw.module @test_arbitrary_nesting(in %arg0 : i32, in %arg1 : i32, in %go : i1, i
     %true = hw.constant true
     pipeline.stage ^bb1
   ^bb1(%s1_enable : i1):
-    %foo = "foo.foo" (%a0) : (i32) -> (i32)
+    %a0_bb1 = pipeline.src %a0 : i32
+    %foo = "foo.foo" (%a0_bb1) : (i32) -> (i32)
     "foo.bar" () ({
       ^bb0:
-      %foo2 = "foo.foo" (%a0) : (i32) -> (i32)
+      %foo2 = "foo.foo" (%a0_bb1) : (i32) -> (i32)
       "foo.baz" () ({
         ^bb0(%innerArg0 : i32):
         // Reference all of the values defined above - none of these should
@@ -210,13 +222,14 @@ hw.module @test_arbitrary_nesting(in %arg0 : i32, in %arg1 : i32, in %go : i1, i
         "foo.foobar" (%foo, %foo2, %innerArg0) : (i32, i32, i32) -> ()
 
         // Reference %a0 - this should be registered.
-        "foo.foobar" (%a0) : (i32) -> ()
+        "foo.foobar" (%a0_bb1) : (i32) -> ()
       }) : () -> ()
     }) : () -> ()
 
     pipeline.stage ^bb2
   ^bb2(%s2_enable : i1):
-    pipeline.return %a0 : i32
+    %a0_bb2 = pipeline.src %a0 : i32
+    pipeline.return %a0_bb2 : i32
   }
   hw.output %out#0 : i32
 }
@@ -239,7 +252,8 @@ hw.module @testExtInput(in %arg0 : i32, in %ext1 : i32, in %go : i1, in %clk : !
       pipeline.stage ^bb1
 
     ^bb1(%s1_enable : i1):
-      pipeline.return %add0, %ext1 : i32, i32
+      %add0_bb1 = pipeline.src %add0 : i32
+      pipeline.return %add0_bb1, %ext1 : i32, i32
   }
   hw.output %out#0, %out#1 : i32, i32
 }
@@ -271,10 +285,13 @@ hw.module @testNaming(in %myArg : i32, in %go : i1, in %clk : !seq.clock, in %rs
   ^bb1(%s1_enable : i1):
     pipeline.stage ^bb2
   ^bb2(%s2_enable : i1):
-    %0 = comb.add %A, %res  {"sv.namehint" = "bar"} : i32
+    %A_bb2 = pipeline.src %A : i32
+    %res_bb2 = pipeline.src %res : i32
+    %0 = comb.add %A_bb2, %res_bb2  {"sv.namehint" = "bar"} : i32
     pipeline.stage ^bb3
   ^bb3(%s3_enable : i1):
-    pipeline.return %0 : i32
+    %bb3_0 = pipeline.src %0 : i32
+    pipeline.return %bb3_0 : i32
   }
   hw.output %out#0 : i32
 }
@@ -318,10 +335,12 @@ hw.module @pipelineLatencyCrashRepro(in %clk : !seq.clock, in %rst: i1, in %go: 
   ^bb2(%s2_enable: i1):  // pred: ^bb1
     pipeline.stage ^bb3
   ^bb3(%s3_enable: i1):  // pred: ^bb2
-    "dummy.op"(%1) : (i54) -> ()
+    %bb3_1 = pipeline.src %1 : i54
+    "dummy.op"(%bb3_1) : (i54) -> ()
     pipeline.stage ^bb4
   ^bb4(%s4_enable: i1):  // pred: ^bb3
-    pipeline.return %0 : i128
+    %bb4_0 = pipeline.src %0 : i128
+    pipeline.return %bb4_0 : i128
   }
   hw.output
 }

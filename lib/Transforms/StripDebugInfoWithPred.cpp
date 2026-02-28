@@ -6,7 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Operation.h"
@@ -14,8 +13,12 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/SmallVector.h"
 
-using namespace mlir;
+namespace circt {
+#define GEN_PASS_DEF_STRIPDEBUGINFOWITHPRED
+#include "circt/Transforms/Passes.h.inc"
+} // namespace circt
 
+using namespace mlir;
 template <typename OpOrBlockArgument>
 static void updateLocIfChanged(OpOrBlockArgument *op, Location newLoc) {
   if (op->getLoc() != newLoc)
@@ -24,27 +27,30 @@ static void updateLocIfChanged(OpOrBlockArgument *op, Location newLoc) {
 
 namespace {
 struct StripDebugInfoWithPred
-    : public circt::StripDebugInfoWithPredBase<StripDebugInfoWithPred> {
+    : public circt::impl::StripDebugInfoWithPredBase<StripDebugInfoWithPred> {
   StripDebugInfoWithPred(const std::function<bool(mlir::Location)> &pred)
       : pred(pred) {}
   void runOnOperation() override;
 
   // Return stripped location for the given `loc`.
   mlir::Location getStrippedLoc(Location loc) {
-    // If `pred` return true, strip the location.
-    if (pred(loc))
-      return UnknownLoc::get(loc.getContext());
-
-    if (auto fusedLoc = dyn_cast<FusedLoc>(loc)) {
-      SmallVector<mlir::Location> newLocations;
-      newLocations.reserve(fusedLoc.getLocations().size());
-      for (auto loc : fusedLoc.getLocations())
-        newLocations.push_back(getStrippedLoc(loc));
-      return FusedLoc::get(&getContext(), newLocations, fusedLoc.getMetadata());
+    SetVector<Location> newLocations;
+    SmallVector<Location, 8> worklist({loc});
+    while (!worklist.empty()) {
+      auto currentLoc = worklist.pop_back_val();
+      if (auto fusedLoc = dyn_cast<FusedLoc>(currentLoc)) {
+        for (auto loc : fusedLoc.getLocations())
+          worklist.push_back(loc);
+      } else {
+        if (!pred(currentLoc))
+          newLocations.insert(currentLoc);
+      }
     }
 
-    // TODO: Handle other loc type.
-    return loc;
+    // NOTE: Don't use FusedLoc::get(&getContext(), locations, metadata) to
+    // avoid a bytecode reader bug llvm-project#99626.
+    return FusedLoc::get(newLocations.getArrayRef(), Attribute(),
+                         &getContext());
   }
 
   void updateLocArray(Operation *op, StringRef attributeName) {

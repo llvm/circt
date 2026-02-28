@@ -14,16 +14,26 @@
 
 #include "esi/Context.h"
 #include "esi/Accelerator.h"
+#include <format>
+#include <sstream>
 
 using namespace esi;
 
-void Context::registerType(Type *type) {
-  if (types.count(type->getID()))
-    throw std::runtime_error("Type already exists in context");
-  types.emplace(type->getID(), std::unique_ptr<Type>(type));
+Context::Context()
+    : logger(std::make_unique<ConsoleLogger>(Logger::Level::Warning)) {}
+Context::Context(std::unique_ptr<Logger> logger) : logger(std::move(logger)) {}
+Context::~Context() { disconnectAll(); }
+
+void Context::disconnectAll() {
+  for (auto &conn : connections)
+    conn->disconnect();
+  connections.clear();
 }
 
-std::unique_ptr<AcceleratorConnection>
-Context::connect(std::string backend, std::string connection) {
-  return registry::connect(*this, backend, connection);
+void Context::registerType(Type *type) {
+  if (types.count(type->getID()))
+    throw std::runtime_error(
+        std::format("Type '{}' already registered in context (type is '{}')",
+                    type->getID(), type->toString()));
+  types.emplace(type->getID(), std::unique_ptr<Type>(type));
 }

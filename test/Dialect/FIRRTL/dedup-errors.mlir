@@ -20,16 +20,26 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
 // -----
 
 // expected-error@below {{module "Test1" not deduplicated with "Test0"}}
+// expected-error@below {{module "Test3" not deduplicated with "Test2"}}
 firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
+    },
+    {
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~MustDedup|Test2", "~MustDedup|Test3"]
     }]} {
   // expected-note@below {{module marked NoDedup}}
   firrtl.module private @Test0() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]} { }
-  firrtl.module private @Test1() { }
+  firrtl.module private @Test1() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]} { }
+  // expected-note@below {{module marked NoDedup}}
+  firrtl.module private @Test2() attributes {annotations = [{class = "firrtl.transforms.NoDedupAnnotation"}]} { }
+  firrtl.module private @Test3() { }
   firrtl.module @MustDedup() {
     firrtl.instance test0 @Test0()
     firrtl.instance test1 @Test1()
+    firrtl.instance test2 @Test2()
+    firrtl.instance test3 @Test3()
   }
 }
 
@@ -280,6 +290,95 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
 
 // -----
 
+// Check same number of blocks but instructions across are same.
+// https://github.com/llvm/circt/issues/7415
+// expected-error@below {{module "Test1" not deduplicated with "Test0"}}
+firrtl.circuit "SameInstDiffBlock" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~SameInstDiffBlock|Test0", "~SameInstDiffBlock|Test1"]
+    }]} {
+  firrtl.module private @Test0(in %a : !firrtl.uint<1>) {
+    "test"()({
+      ^bb0:
+        // expected-note@below {{first block has more operations}}
+        "return"() : () -> ()
+    }, {
+      ^bb0:
+    }) : () -> ()
+  }
+  firrtl.module private @Test1(in %a : !firrtl.uint<1>) {
+    // expected-note@below {{second block here}}
+    "test"() ({
+      ^bb0:
+    }, {
+      ^bb0:
+        "return"() : () -> ()
+    }): () -> ()
+  }
+  firrtl.module @SameInstDiffBlock() {
+    firrtl.instance test0 @Test0(in a : !firrtl.uint<1>)
+    firrtl.instance test1 @Test1(in a : !firrtl.uint<1>)
+  }
+}
+
+// -----
+
+// Check differences in block arguments.
+// expected-error@below {{module "Test1" not deduplicated with "Test0"}}
+firrtl.circuit "BlockArgTypes" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~BlockArgTypes|Test0", "~BlockArgTypes|Test1"]
+    }]} {
+  firrtl.module private @Test0(in %a : !firrtl.uint<1>) {
+    // expected-note@below {{types don't match, first type is 'i32'}}
+    "test"()({
+      ^bb0(%arg0 : i32):
+        "return"() : () -> ()
+    }) : () -> ()
+  }
+  firrtl.module private @Test1(in %a : !firrtl.uint<1>) {
+    // expected-note@below {{second type is 'i64'}}
+    "test"() ({
+      ^bb0(%arg0 : i64):
+        "return"() : () -> ()
+    }): () -> ()
+  }
+  firrtl.module @BlockArgTypes() {
+    firrtl.instance test0 @Test0(in a : !firrtl.uint<1>)
+    firrtl.instance test1 @Test1(in a : !firrtl.uint<1>)
+  }
+}
+
+// -----
+
+// Check empty block not same as no block.
+// https://github.com/llvm/circt/issues/7416
+// expected-error@below {{module "B" not deduplicated with "A"}}
+firrtl.circuit "NoBlockEmptyBlock" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~NoBlockEmptyBlock|A", "~NoBlockEmptyBlock|B"]
+    }]} {
+  firrtl.module private @A(in %x: !firrtl.uint<1>) {
+    // expected-note @below {{operation regions have different number of blocks}}
+    firrtl.when %x : !firrtl.uint<1> {
+    }
+  }
+  firrtl.module private @B(in %x: !firrtl.uint<1>) {
+    // expected-note @below {{second operation here}}
+    firrtl.when %x : !firrtl.uint<1> {
+    } else {
+    }
+  }
+  firrtl.module @NoBlockEmptyBlock(in %x: !firrtl.uint<1>) {
+    %a_x = firrtl.instance a @A(in x: !firrtl.uint<1>)
+    firrtl.matchingconnect %a_x, %x : !firrtl.uint<1>
+    %b_x = firrtl.instance b @B(in x: !firrtl.uint<1>)
+    firrtl.matchingconnect %b_x, %x : !firrtl.uint<1>
+  }
+}
+
+// -----
+
 // expected-error@below {{module "Test1" not deduplicated with "Test0"}}
 firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
@@ -302,13 +401,13 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
     }]} {
-  // expected-note@below {{module port 'a' types don't match, first type is '!firrtl.uint<1>'}}
-  firrtl.module private @Test0(in %a : !firrtl.uint<1>) { }
+  // expected-note@below {{module port 'a' -> bundle element 'b' types don't match, first type is '!firrtl.uint<1>'}}
+  firrtl.module private @Test0(in %a : !firrtl.bundle<b: uint<1>>) { }
   // expected-note@below {{second type is '!firrtl.uint<2>'}}
-  firrtl.module private @Test1(in %a : !firrtl.uint<2>) { }
+  firrtl.module private @Test1(in %a : !firrtl.bundle<b: uint<2>>) { }
   firrtl.module @MustDedup() {
-    firrtl.instance test0 @Test0(in a : !firrtl.uint<1>)
-    firrtl.instance test1 @Test1(in a : !firrtl.uint<2>)
+    firrtl.instance test0 @Test0(in a : !firrtl.bundle<b: uint<1>>)
+    firrtl.instance test1 @Test1(in a : !firrtl.bundle<b: uint<2>>)
   }
 }
 
@@ -428,7 +527,7 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
       class = "firrtl.transforms.MustDeduplicateAnnotation",
       modules = ["~MustDedup|Test1", "~MustDedup|Test3"]
     }]} {
-  
+
   // expected-note@below {{first operation has attribute 'test' with value "a"}}
   firrtl.module private @Test0() attributes {test = "a"} { }
   firrtl.module private @Test1() attributes {test = "a"} { }
@@ -443,56 +542,6 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
   }
 }
 
-// -----
-
-// expected-error@below {{module "Test1" not deduplicated with "Test0"}}
-firrtl.circuit "MustDedup" attributes {annotations = [{
-      class = "firrtl.transforms.MustDeduplicateAnnotation",
-      modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
-    }]} {
-  // expected-note@below {{module port 'a', has a RefType with a different base type '!firrtl.uint<1>' in the same position of the two modules marked as 'must dedup'. (This may be due to Grand Central Taps or Views being different between the two modules.)}}
-  firrtl.module private @Test0(in %a : !firrtl.probe<uint<1>>, in %b : !firrtl.probe<uint<2>>) { }
-  // expected-note@below {{the second module has a different base type '!firrtl.uint<2>'}}
-  firrtl.module private @Test1(in %a : !firrtl.probe<uint<2>>, in %b : !firrtl.probe<uint<1>>) { }
-  firrtl.module @MustDedup() {
-    firrtl.instance test0 @Test0(in a : !firrtl.probe<uint<1>>, in b : !firrtl.probe<uint<2>>)
-    firrtl.instance test1 @Test1(in a : !firrtl.probe<uint<2>>, in b : !firrtl.probe<uint<1>>)
-  }
-}
-
-// -----
-
-// expected-error@below {{module "Test1" not deduplicated with "Test0"}}
-firrtl.circuit "MustDedup" attributes {annotations = [{
-      class = "firrtl.transforms.MustDeduplicateAnnotation",
-      modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
-    }]} {
-  // expected-note@below {{contains a RefType port named 'b' that only exists in one of the modules (can be due to difference in Grand Central Tap or View of two modules marked with must dedup)}}
-  firrtl.module private @Test0(in %a : !firrtl.probe<uint<1>>, in %b : !firrtl.probe<uint<2>>) { }
-  // expected-note@below {{second module to be deduped that does not have the RefType port}}
-  firrtl.module private @Test1(in %a : !firrtl.probe<uint<1>>) { }
-  firrtl.module @MustDedup() {
-    firrtl.instance test0 @Test0(in a : !firrtl.probe<uint<1>>, in b : !firrtl.probe<uint<2>>)
-    firrtl.instance test1 @Test1(in a : !firrtl.probe<uint<1>>)
-  }
-}
-
-// -----
-
-// expected-error@below {{module "Test1" not deduplicated with "Test0"}}
-firrtl.circuit "MustDedup" attributes {annotations = [{
-      class = "firrtl.transforms.MustDeduplicateAnnotation",
-      modules = ["~MustDedup|Test0", "~MustDedup|Test1"]
-    }]} {
-  // expected-note@below {{contains a RefType port named 'b' that only exists in one of the modules (can be due to difference in Grand Central Tap or View of two modules marked with must dedup)}}
-  firrtl.module private @Test1(in %a : !firrtl.probe<uint<1>>, in %b : !firrtl.probe<uint<2>>) { }
-  // expected-note@below {{second module to be deduped that does not have the RefType port}}
-  firrtl.module private @Test0(in %a : !firrtl.probe<uint<1>>) { }
-  firrtl.module @MustDedup() {
-    firrtl.instance test0 @Test1(in a : !firrtl.probe<uint<1>>, in b : !firrtl.probe<uint<2>>)
-    firrtl.instance test1 @Test0(in a : !firrtl.probe<uint<1>>)
-  }
-}
 
 // -----
 
@@ -579,5 +628,152 @@ firrtl.circuit "MustDedup" attributes {annotations = [{
   firrtl.module @MustDedup() {
     firrtl.instance test0 @Test0(in in : !firrtl.vector<uint<1>, 2>)
     firrtl.instance test1 @Test1(in in : !firrtl.vector<uint<1>, 2>)
+  }
+}
+
+// -----
+
+// Modules instantiating equivalent public modules do not dedup.
+// Check diagnostic.
+// expected-error @below {{module "Test1Parent" not deduplicated with "Test0Parent"}}
+// expected-note @below {{in instance "test0" of "Test0", and instance "test1" of "Test1"}}
+firrtl.circuit "InstOfEquivPublic" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~InstOfEquivPublic|Test0Parent", "~InstOfEquivPublic|Test1Parent"]
+    }]} {
+  // expected-note @below {{module is public}}
+  firrtl.module public @Test0() { }
+  // expected-note @below {{module is public}}
+  firrtl.module public @Test1() { }
+  firrtl.module private @Test0Parent() {
+    firrtl.instance test0 @Test0()
+  }
+  firrtl.module private @Test1Parent() {
+    firrtl.instance test1 @Test1()
+  }
+
+  firrtl.module @InstOfEquivPublic() {
+    firrtl.instance test0p @Test0Parent()
+    firrtl.instance test1p @Test1Parent()
+  }
+}
+
+// -----
+
+// When comparing two modules, if one is private and the other public, we should
+// not report that as the difference, we should examine the bodies of the 
+// modules.
+// expected-error @below {{module "Test1" not deduplicated with "Test0"}}
+firrtl.circuit "VisibilityDoesNotBlockDedup" attributes {annotations = [{
+      class = "firrtl.transforms.MustDeduplicateAnnotation",
+      modules = ["~|Test0", "~|Test1"]
+    }]} {
+  firrtl.module @Test0() {
+    // expected-note @below {{operation result types don't match, first type is '!firrtl.uint<1>'}}
+    %wire = firrtl.wire : !firrtl.uint<1>
+  }
+  firrtl.module private @Test1() {
+    // expected-note @below {{second type is '!firrtl.uint<2>'}}
+    %wire = firrtl.wire : !firrtl.uint<2>
+  }
+  firrtl.module @VisibilityDoesNotBlockDedup() {
+    firrtl.instance test0 @Test0()
+    firrtl.instance test1 @Test1()
+  }
+}
+
+// -----
+// When reporting on a dedup failure, use `data.map.lookup()` on the correct
+// copy of the target operation. This used to trigger an assertion failure when
+// comparing the rwprobes even though the dedup failure was a trivial mismatch
+// in the number of operations.
+// See https://github.com/llvm/circt/issues/9102
+
+// expected-error @below {{module "Bar" not deduplicated with "Foo"}}
+firrtl.circuit "Foo" attributes {annotations = [{
+  class = "firrtl.transforms.MustDeduplicateAnnotation",
+  modules = ["~Foo|Foo", "~Foo|Bar"]
+}]} {
+  // expected-note @below {{first block here}}
+  firrtl.module @Foo() {
+    %0 = firrtl.wire sym @sym : !firrtl.uint<42>
+    %1 = firrtl.ref.rwprobe <@Foo::@sym> : !firrtl.rwprobe<uint<42>>
+  }
+  firrtl.module private @Bar() {
+    %0 = firrtl.wire sym @sym : !firrtl.uint<42>
+    %1 = firrtl.ref.rwprobe <@Bar::@sym> : !firrtl.rwprobe<uint<42>>
+    // expected-note @below {{second block has more operations}}
+    %2 = firrtl.wire : !firrtl.uint<42>
+  }
+}
+
+// -----
+// Test that dedup failures are properly reported when modules have different
+// instance_choice operations (different number of alternatives).
+
+// expected-error @below {{module "Wrapper1" not deduplicated with "Wrapper0"}}
+// expected-error @below {{module "Wrapper3" not deduplicated with "Wrapper2"}}
+// expected-note @below {{in instance "inst" of "ASICTarget", and instance "inst" of "Target"}}
+firrtl.circuit "InstanceChoiceDedup" attributes {annotations = [{
+  class = "firrtl.transforms.MustDeduplicateAnnotation",
+  modules = ["~InstanceChoiceDedup|Wrapper0", "~InstanceChoiceDedup|Wrapper1"]
+},
+{
+  class = "firrtl.transforms.MustDeduplicateAnnotation",
+  modules = ["~InstanceChoiceDedup|Wrapper2", "~InstanceChoiceDedup|Wrapper3"]
+}
+]} {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
+
+  firrtl.module private @Target() {
+    // expected-note @below {{second type is '!firrtl.uint<1>'}}
+    %wire = firrtl.wire : !firrtl.uint<1>
+  }
+
+  firrtl.module private @FPGATarget() {
+    %wire = firrtl.wire : !firrtl.uint<2>
+  }
+
+  firrtl.module private @ASICTarget() {
+    // expected-note @below {{operation result types don't match, first type is '!firrtl.uint<3>'}}
+    %wire = firrtl.wire : !firrtl.uint<3>
+  }
+
+  firrtl.module private @Wrapper0() {
+    // expected-note @below {{an instance has a different number of referenced modules: first instance has 2 modules}}
+    firrtl.instance_choice inst @Target alternatives @Platform {
+      @FPGA -> @FPGATarget
+    }()
+  }
+
+  firrtl.module private @Wrapper1() {
+    // expected-note @below {{second instance has 3 modules}}
+    firrtl.instance_choice inst @Target alternatives @Platform {
+      @FPGA -> @FPGATarget,
+      @ASIC -> @ASICTarget
+    }()
+  }
+
+  firrtl.module private @Wrapper2() {
+    firrtl.instance_choice inst @Target alternatives @Platform {
+      @FPGA -> @FPGATarget,
+      @ASIC -> @ASICTarget
+    }()
+  }
+  firrtl.module private @Wrapper3() {
+    firrtl.instance_choice inst @Target alternatives @Platform {
+      @FPGA -> @FPGATarget,
+      @ASIC -> @Target
+    }()
+  }
+
+  firrtl.module @InstanceChoiceDedup() {
+    firrtl.instance w0 @Wrapper0()
+    firrtl.instance w1 @Wrapper1()
+    firrtl.instance w2 @Wrapper2()
+    firrtl.instance w3 @Wrapper3()
   }
 }

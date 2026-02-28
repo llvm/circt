@@ -12,19 +12,26 @@
 
 #include "circt/Analysis/DebugAnalysis.h"
 #include "circt/Analysis/DependenceAnalysis.h"
+#include "circt/Analysis/FIRRTLInstanceInfo.h"
+#include "circt/Analysis/OpCountAnalysis.h"
 #include "circt/Analysis/SchedulingAnalysis.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Scheduling/Problems.h"
+#include "mlir/Analysis/DataFlow/DeadCodeAnalysis.h"
+#include "mlir/Analysis/DataFlow/IntegerRangeAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/Support/Debug.h"
 
 using namespace mlir;
 using namespace mlir::affine;
+using namespace mlir::dataflow;
 using namespace circt;
 using namespace circt::analysis;
 using namespace circt::scheduling;
@@ -177,6 +184,152 @@ void InferTopModulePass::runOnOperation() {
 }
 
 //===----------------------------------------------------------------------===//
+// FIRRTL Instance Info
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct FIRRTLInstanceInfoPass
+    : public PassWrapper<FIRRTLInstanceInfoPass,
+                         OperationPass<firrtl::CircuitOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(FIRRTLInstanceInfoPass)
+
+  void runOnOperation() override;
+  StringRef getArgument() const override { return "test-firrtl-instance-info"; }
+  StringRef getDescription() const override {
+    return "Run firrtl::InstanceInfo analysis and show the results.  This pass "
+           "is intended to be used for testing purposes only.";
+  }
+};
+} // namespace
+
+static llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const bool a) {
+  if (a)
+    return os << "true";
+  return os << "false";
+}
+
+static void printCircuitInfo(firrtl::CircuitOp op,
+                             firrtl::InstanceInfo &iInfo) {
+  OpPrintingFlags flags;
+  flags.skipRegions();
+  llvm::errs() << "  - operation: ";
+  op->print(llvm::errs(), flags);
+  llvm::errs() << "\n"
+               << "    hasDut: " << iInfo.hasDut() << "\n"
+               << "    dut: ";
+  if (auto dutNode = iInfo.getDut())
+    dutNode->print(llvm::errs(), flags);
+  else
+    llvm::errs() << "null";
+  llvm::errs() << "\n"
+               << "    effectiveDut: ";
+  iInfo.getEffectiveDut()->print(llvm::errs(), flags);
+  llvm::errs() << "\n";
+}
+
+static void printModuleInfo(igraph::ModuleOpInterface op,
+                            firrtl::InstanceInfo &iInfo) {
+  OpPrintingFlags flags;
+  flags.skipRegions();
+  llvm::errs() << "  - operation: ";
+  op->print(llvm::errs(), flags);
+  llvm::errs() << "\n"
+               << "    isDut: " << iInfo.isDut(op) << "\n"
+               << "    anyInstanceUnderDut: " << iInfo.anyInstanceUnderDut(op)
+               << "\n"
+               << "    allInstancesUnderDut: " << iInfo.allInstancesUnderDut(op)
+               << "\n"
+               << "    anyInstanceUnderEffectiveDut: "
+               << iInfo.anyInstanceUnderEffectiveDut(op) << "\n"
+               << "    allInstancesUnderEffectiveDut: "
+               << iInfo.allInstancesUnderEffectiveDut(op) << "\n"
+               << "    anyInstanceUnderLayer: "
+               << iInfo.anyInstanceUnderLayer(op) << "\n"
+               << "    allInstancesUnderLayer: "
+               << iInfo.allInstancesUnderLayer(op) << "\n"
+               << "    anyInstanceInDesign: " << iInfo.anyInstanceInDesign(op)
+               << "\n"
+               << "    allInstancesInDesign: " << iInfo.allInstancesInDesign(op)
+               << "\n"
+               << "    anyInstanceInEffectiveDesign: "
+               << iInfo.anyInstanceInEffectiveDesign(op) << "\n"
+               << "    allInstancesInEffectiveDesign: "
+               << iInfo.allInstancesInEffectiveDesign(op) << "\n";
+}
+
+void FIRRTLInstanceInfoPass::runOnOperation() {
+  auto &iInfo = getAnalysis<firrtl::InstanceInfo>();
+
+  printCircuitInfo(getOperation(), iInfo);
+  for (auto op :
+       getOperation().getBodyBlock()->getOps<igraph::ModuleOpInterface>())
+    printModuleInfo(op, iInfo);
+}
+
+//===----------------------------------------------------------------------===//
+// Comb IntRange Analysis
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct TestCombIntegerRangeAnalysisPass
+    : public PassWrapper<TestCombIntegerRangeAnalysisPass,
+                         OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TestCombIntegerRangeAnalysisPass)
+
+  void runOnOperation() override;
+  StringRef getArgument() const override {
+    return "test-comb-int-range-analysis";
+  }
+  StringRef getDescription() const override {
+    return "Perform integer range analysis on comb dialect and set results as "
+           "attributes.";
+  }
+};
+} // namespace
+
+void TestCombIntegerRangeAnalysisPass::runOnOperation() {
+  Operation *op = getOperation();
+  MLIRContext *ctx = op->getContext();
+  DataFlowSolver solver;
+  solver.load<DeadCodeAnalysis>();
+  solver.load<IntegerRangeAnalysis>();
+  if (failed(solver.initializeAndRun(op)))
+    return signalPassFailure();
+
+  // Append the integer range analysis as an operation attribute.
+  op->walk([&](Operation *op) {
+    for (auto value : op->getResults()) {
+      if (auto *range = solver.lookupState<IntegerValueRangeLattice>(value)) {
+        // All analyzed comb operations should return a single result.
+        assert(op->getResults().size() == 1 &&
+               "Expected a single result for the operation analysis");
+        assert(!range->getValue().isUninitialized() &&
+               "Expected a valid range for the value");
+        auto interval = range->getValue().getValue();
+        auto smax = interval.smax();
+        auto smaxAttr =
+            IntegerAttr::get(IntegerType::get(ctx, smax.getBitWidth()), smax);
+        op->setAttr("smax", smaxAttr);
+        auto smin = interval.smin();
+        auto sminAttr =
+            IntegerAttr::get(IntegerType::get(ctx, smin.getBitWidth()), smin);
+        op->setAttr("smin", sminAttr);
+        auto umax = interval.umax();
+        auto umaxAttr = IntegerAttr::get(
+            IntegerType::get(ctx, umax.getBitWidth(), IntegerType::Unsigned),
+            umax);
+        op->setAttr("umax", umaxAttr);
+        auto umin = interval.umin();
+        auto uminAttr = IntegerAttr::get(
+            IntegerType::get(ctx, umin.getBitWidth(), IntegerType::Unsigned),
+            umin);
+        op->setAttr("umin", uminAttr);
+      }
+    }
+  });
+}
+
+//===----------------------------------------------------------------------===//
 // Pass registration
 //===----------------------------------------------------------------------===//
 
@@ -194,6 +347,12 @@ void registerAnalysisTestPasses() {
   });
   registerPass([]() -> std::unique_ptr<Pass> {
     return std::make_unique<InferTopModulePass>();
+  });
+  registerPass([]() -> std::unique_ptr<Pass> {
+    return std::make_unique<FIRRTLInstanceInfoPass>();
+  });
+  registerPass([]() -> std::unique_ptr<Pass> {
+    return std::make_unique<TestCombIntegerRangeAnalysisPass>();
   });
 }
 } // namespace test

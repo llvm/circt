@@ -30,18 +30,25 @@
 // and continue the analysis through the instance graph.
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/PostOrderIterator.h"
 
 #define DEBUG_TYPE "check-comb-loops"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_CHECKCOMBLOOPS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
@@ -86,10 +93,14 @@ public:
                       });
     }
 
-    bool foreignOps = false;
     walk(module, [&](Operation *op) {
       llvm::TypeSwitch<Operation *>(op)
-          .Case<RegOp, RegResetOp>([&](auto) {})
+          .Case<hw::CombDataFlow>([&](hw::CombDataFlow df) {
+            // computeDataFlow returns a pair of FieldRefs, first element is the
+            // destination and the second is the source.
+            for (auto [dest, source] : df.computeDataFlow())
+              addDrivenBy(dest, source);
+          })
           .Case<Forceable>([&](Forceable forceableOp) {
             // Any declaration that can be forced.
             if (auto node = dyn_cast<NodeOp>(op))
@@ -103,7 +114,6 @@ public:
             recordDataflow(ref, data);
             recordProbe(data, ref);
           })
-          .Case<MemOp>([&](MemOp mem) { handleMemory(mem); })
           .Case<RefSendOp>([&](RefSendOp send) {
             recordDataflow(send.getResult(), send.getBase());
           })
@@ -118,6 +128,8 @@ public:
           .Case<RefForceOp, RefForceInitialOp>(
               [&](auto ref) { handleRefForce(ref.getDest(), ref.getSrc()); })
           .Case<InstanceOp>([&](auto inst) { handleInstanceOp(inst); })
+          .Case<InstanceChoiceOp>(
+              [&](auto inst) { handleInstanceChoiceOp(inst); })
           .Case<SubindexOp>([&](SubindexOp sub) {
             recordValueRefersToFieldRef(
                 sub.getInput(),
@@ -165,33 +177,12 @@ public:
           .Case<FConnectLike>([&](FConnectLike connect) {
             recordDataflow(connect.getDest(), connect.getSrc());
           })
-          .Case<mlir::UnrealizedConversionCastOp>([&](auto) {
-            // Casts are cast-like regardless of source.
-            // UnrealizedConversionCastOp doesn't implement CastOpInterace,
-            // otherwise we would use it here.
+          .Default([&](Operation *op) {
+            // All other expressions are assumed to be combinational, so record
+            // the dataflow between all inputs to outputs.
             for (auto res : op->getResults())
               for (auto src : op->getOperands())
                 recordDataflow(res, src);
-          })
-          .Default([&](Operation *op) {
-            // Non FIRRTL ops are not checked
-            if (!op->getDialect() ||
-                !isa<FIRRTLDialect, chirrtl::CHIRRTLDialect>(
-                    op->getDialect())) {
-              if (!foreignOps && op->getNumResults() > 0 &&
-                  op->getNumOperands() > 0) {
-                op->emitRemark("Non-firrtl operations detected, combinatorial "
-                               "loop checking may miss some loops.");
-                foreignOps = true;
-              }
-              return;
-            }
-            // All other expressions.
-            if (op->getNumResults() == 1) {
-              auto res = op->getResult(0);
-              for (auto src : op->getOperands())
-                recordDataflow(res, src);
-            }
           });
     });
   }
@@ -339,14 +330,9 @@ public:
       drivenBy[iter->second].second.push_back(getOrAddNode(srcVal));
   }
 
-  // Check the referenced module paths and add input ports as the drivers for
-  // the corresponding output port. The granularity of the connectivity
-  // relations is per field.
-  void handleInstanceOp(InstanceOp inst) {
-    auto refMod = inst.getReferencedModule<FModuleOp>(instanceGraph);
-    // TODO: External modules not handled !!
-    if (!refMod)
-      return;
+  // Helper to process instance ports for a given module and instance results.
+  // This is used by both handleInstanceOp and handleInstanceChoiceOp.
+  void processInstancePorts(FModuleOp refMod, ValueRange instResults) {
     auto modulePaths = modulePortPaths.find(refMod);
     if (modulePaths == modulePortPaths.end())
       return;
@@ -367,12 +353,11 @@ public:
       auto modSinkPortField = path.first;
       auto sinkArgNum =
           cast<BlockArgument>(modSinkPortField.getValue()).getArgNumber();
-      FieldRef sinkPort(inst.getResult(sinkArgNum),
-                        modSinkPortField.getFieldID());
+      FieldRef sinkPort(instResults[sinkArgNum], modSinkPortField.getFieldID());
       auto sinkNode = getOrAddNode(sinkPort);
       bool sinkPortIsForceable = false;
       if (auto refResultType =
-              type_dyn_cast<RefType>(inst.getResult(sinkArgNum).getType()))
+              type_dyn_cast<RefType>(instResults[sinkArgNum].getType()))
         sinkPortIsForceable = refResultType.getForceable();
 
       DenseSet<unsigned> setOfEquivalentRWProbes;
@@ -385,11 +370,10 @@ public:
         if (modSrcPortField == modSinkPortField)
           continue;
 
-        FieldRef srcPort(inst.getResult(srcArgNum),
-                         modSrcPortField.getFieldID());
+        FieldRef srcPort(instResults[srcArgNum], modSrcPortField.getFieldID());
         bool srcPortIsForceable = false;
         if (auto refResultType =
-                type_dyn_cast<RefType>(inst.getResult(srcArgNum).getType()))
+                type_dyn_cast<RefType>(instResults[srcArgNum].getType()))
           srcPortIsForceable = refResultType.getForceable();
         // RWProbes can potentially refer to the same base value. Such ports
         // have a path from each other, a false loop, detect such cases.
@@ -444,6 +428,34 @@ public:
     }
   }
 
+  // Check the referenced module paths and add input ports as the drivers for
+  // the corresponding output port. The granularity of the connectivity
+  // relations is per field.
+  void handleInstanceOp(InstanceOp inst) {
+    auto refMod = inst.getReferencedModule<FModuleOp>(instanceGraph);
+    // Skip if the instance is not a module (e.g. external module).
+    if (!refMod)
+      return;
+    processInstancePorts(refMod, inst.getResults());
+  }
+
+  // For InstanceChoiceOp, conservatively process all possible target modules.
+  // Since we cannot determine which module will be selected at runtime, we
+  // must consider combinational paths through all alternatives.
+  void handleInstanceChoiceOp(InstanceChoiceOp inst) {
+    // Process all referenced modules (default + alternatives)
+    for (auto moduleName : inst.getReferencedModuleNamesAttr()) {
+      auto moduleNameStr = cast<StringAttr>(moduleName);
+      auto *node = instanceGraph.lookup(moduleNameStr);
+      if (!node)
+        continue;
+
+      // Skip if the instance is not a module (e.g. external module).
+      if (auto refMod = dyn_cast<FModuleOp>(*node->getModule()))
+        processInstancePorts(refMod, inst.getResults());
+    }
+  }
+
   // Record the FieldRef, corresponding to the result of the sub op
   // `result = base[index]`
   void recordValueRefersToFieldRef(Value base, unsigned fieldID, Value result) {
@@ -466,23 +478,6 @@ public:
         return;
     }
     valToFieldRefs[result].emplace_back(base, fieldID);
-  }
-
-  void handleMemory(MemOp mem) {
-    if (mem.getReadLatency() > 0)
-      return;
-    // Add the enable and address fields as the drivers of the data field.
-    for (auto memPort : mem.getResults())
-      // TODO: Can reftype ports create cycle ?
-      if (auto type = type_dyn_cast<BundleType>(memPort.getType())) {
-        auto enableFieldId = type.getFieldID((unsigned)ReadPortSubfield::en);
-        auto addressFieldId = type.getFieldID((unsigned)ReadPortSubfield::addr);
-        auto dataFieldId = type.getFieldID((unsigned)ReadPortSubfield::data);
-        addDrivenBy({memPort, static_cast<unsigned int>(dataFieldId)},
-                    {memPort, static_cast<unsigned int>(enableFieldId)});
-        addDrivenBy({memPort, static_cast<unsigned int>(dataFieldId)},
-                    {memPort, static_cast<unsigned int>(addressFieldId)});
-      }
   }
 
   // Perform an iterative DFS traversal of the given graph. Record paths between
@@ -640,14 +635,12 @@ public:
         llvm::dbgs() << "\n node:" << getName(drivenBy[node.first].first)
                      << "=> probe:" << getName(drivenBy[node.second].first);
       }
-      for (auto i = rwProbeClasses.begin(), e = rwProbeClasses.end(); i != e;
-           ++i) { // Iterate over all of the equivalence sets.
+      for (const auto &i :
+           rwProbeClasses) { // Iterate over all of the equivalence sets.
         if (!i->isLeader())
           continue; // Ignore non-leader sets.
         // Print members in this set.
-        llvm::interleave(llvm::make_range(rwProbeClasses.member_begin(i),
-                                          rwProbeClasses.member_end()),
-                         llvm::dbgs(), "\n");
+        llvm::interleave(rwProbeClasses.members(*i), llvm::dbgs(), "\n");
         llvm::dbgs() << "\n dataflow at leader::" << i->getData() << "\n =>"
                      << rwProbeRefersTo[i->getData()];
         llvm::dbgs() << "\n Done\n"; // Finish set.
@@ -680,10 +673,7 @@ public:
             rwProbeClasses.getLeaderValue(getOrAddNode(defOp.getDataRef()));
         // For all the probes, that are in the same eqv class, i.e., refer to
         // the same value.
-        for (auto probe :
-             llvm::make_range(rwProbeClasses.member_begin(
-                                  rwProbeClasses.findValue(rwProbeNode)),
-                              rwProbeClasses.member_end())) {
+        for (auto probe : rwProbeClasses.members(rwProbeNode)) {
           auto probeVal = drivenBy[probe].first;
           // If the probe is a port, then record the path from the probe to the
           // input port.
@@ -729,7 +719,8 @@ private:
 /// combinational cycles. To capture the cross-module combinational cycles,
 /// this pass inlines the combinational paths between IOs of its
 /// subinstances into a subgraph and encodes them in `modulePortPaths`.
-class CheckCombLoopsPass : public CheckCombLoopsBase<CheckCombLoopsPass> {
+class CheckCombLoopsPass
+    : public circt::firrtl::impl::CheckCombLoopsBase<CheckCombLoopsPass> {
 public:
   void runOnOperation() override {
     auto &instanceGraph = getAnalysis<InstanceGraph>();
@@ -750,7 +741,3 @@ public:
     markAllAnalysesPreserved();
   }
 };
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createCheckCombLoopsPass() {
-  return std::make_unique<CheckCombLoopsPass>();
-}

@@ -72,7 +72,6 @@
 /// }
 /// ```
 
-#include "PassDetails.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
 #include "circt/Support/LLVM.h"
@@ -80,6 +79,13 @@
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+
+namespace circt {
+namespace calyx {
+#define GEN_PASS_DEF_REMOVECOMBGROUPS
+#include "circt/Dialect/Calyx/CalyxPasses.h.inc"
+} // namespace calyx
+} // namespace circt
 
 using namespace circt;
 using namespace calyx;
@@ -92,8 +98,8 @@ static calyx::RegisterOp createReg(ComponentOp component,
                                    Twine prefix, size_t width) {
   IRRewriter::InsertionGuard guard(rewriter);
   rewriter.setInsertionPointToStart(component.getBodyBlock());
-  return rewriter.create<calyx::RegisterOp>(loc, (prefix + "_reg").str(),
-                                            width);
+  return calyx::RegisterOp::create(rewriter, loc, (prefix + "_reg").str(),
+                                   width);
 }
 
 // Wraps the provided 'op' inside a newly created TOp operation, and
@@ -102,7 +108,7 @@ template <typename TOp>
 static TOp wrapInsideOp(OpBuilder &builder, Operation *op) {
   OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPoint(op);
-  auto newOp = builder.create<TOp>(op->getLoc());
+  auto newOp = TOp::create(builder, op->getLoc());
   op->moveBefore(newOp.getBodyBlock(), newOp.getBodyBlock()->begin());
   return newOp;
 }
@@ -119,8 +125,8 @@ struct RemoveCombGroupsPattern : public OpRewritePattern<calyx::CombGroupOp> {
                                 PatternRewriter &rewriter) const override {
 
     auto component = combGroup->getParentOfType<ComponentOp>();
-    auto group = rewriter.create<calyx::GroupOp>(combGroup.getLoc(),
-                                                 combGroup.getName());
+    auto group = calyx::GroupOp::create(rewriter, combGroup.getLoc(),
+                                        combGroup.getName());
     rewriter.mergeBlocks(combGroup.getBodyBlock(), group.getBodyBlock());
     rewriter.replaceOp(combGroup, group);
 
@@ -133,8 +139,9 @@ struct RemoveCombGroupsPattern : public OpRewritePattern<calyx::CombGroupOp> {
     }
 
     rewriter.setInsertionPointToStart(group.getBodyBlock());
-    auto oneConstant = rewriter.create<hw::ConstantOp>(
-        group.getLoc(), APInt(1, 1, /*isSigned=*/true));
+    auto oneConstant = hw::ConstantOp::create(
+        rewriter, group.getLoc(),
+        APInt(1, 1, /*isSigned=*/true, /*implicitTrunc=*/true));
 
     // Maintain the set of cell results which have already been assigned to
     // its register within this group.
@@ -171,11 +178,10 @@ struct RemoveCombGroupsPattern : public OpRewritePattern<calyx::CombGroupOp> {
             // Assign the cell result register - a register should only be
             // assigned once within a group.
             if (!alreadyAssignedResults.contains(combRes)) {
-              rewriter.create<AssignOp>(combRes.getLoc(),
-                                        combResReg->second.getIn(), combRes);
-              rewriter.create<AssignOp>(combRes.getLoc(),
-                                        combResReg->second.getWriteEn(),
-                                        oneConstant);
+              AssignOp::create(rewriter, combRes.getLoc(),
+                               combResReg->second.getIn(), combRes);
+              AssignOp::create(rewriter, combRes.getLoc(),
+                               combResReg->second.getWriteEn(), oneConstant);
               alreadyAssignedResults.insert(combRes);
             }
 
@@ -190,11 +196,11 @@ struct RemoveCombGroupsPattern : public OpRewritePattern<calyx::CombGroupOp> {
     assert(!registerDoneSigs.empty() &&
            "No registers assigned in the combinational group?");
     rewriter.setInsertionPointToEnd(group.getBodyBlock());
-    rewriter.create<calyx::GroupDoneOp>(
-        group.getLoc(),
-        rewriter.create<hw::ConstantOp>(group.getLoc(), APInt(1, 1)),
-        rewriter.create<comb::AndOp>(combGroup.getLoc(), rewriter.getI1Type(),
-                                     registerDoneSigs.takeVector()));
+    calyx::GroupDoneOp::create(
+        rewriter, group.getLoc(),
+        hw::ConstantOp::create(rewriter, group.getLoc(), APInt(1, 1)),
+        comb::AndOp::create(rewriter, combGroup.getLoc(), rewriter.getI1Type(),
+                            registerDoneSigs.takeVector()));
 
     return success();
   }
@@ -203,7 +209,7 @@ struct RemoveCombGroupsPattern : public OpRewritePattern<calyx::CombGroupOp> {
 };
 
 struct RemoveCombGroupsPass
-    : public RemoveCombGroupsBase<RemoveCombGroupsPass> {
+    : public circt::calyx::impl::RemoveCombGroupsBase<RemoveCombGroupsPass> {
   void runOnOperation() override;
 
   /// Removes 'with' groups from an operation and instead schedules the group
@@ -217,7 +223,7 @@ struct RemoveCombGroupsPass
       // Ensure that we're inside a sequential control composition.
       wrapInsideOp<SeqOp>(builder, ifOp);
       builder.setInsertionPoint(ifOp);
-      builder.create<EnableOp>(ifOp.getLoc(), groupName.value());
+      EnableOp::create(builder, ifOp.getLoc(), groupName.value());
       ifOp.removeGroupNameAttr();
     });
   }
@@ -231,16 +237,16 @@ struct RemoveCombGroupsPass
       // Ensure that we're inside a sequential control composition.
       wrapInsideOp<SeqOp>(builder, whileOp);
       builder.setInsertionPoint(whileOp);
-      builder.create<EnableOp>(whileOp.getLoc(), groupName);
+      EnableOp::create(builder, whileOp.getLoc(), groupName);
       whileOp.removeGroupNameAttr();
 
       // Also schedule the group at the end of the while body.
       auto &curWhileBodyOp = whileOp.getBodyBlock()->front();
       builder.setInsertionPointToStart(whileOp.getBodyBlock());
-      auto newSeqBody = builder.create<SeqOp>(curWhileBodyOp.getLoc());
+      auto newSeqBody = SeqOp::create(builder, curWhileBodyOp.getLoc());
       builder.setInsertionPointToStart(newSeqBody.getBodyBlock());
       auto condEnable =
-          builder.create<EnableOp>(curWhileBodyOp.getLoc(), groupName);
+          EnableOp::create(builder, curWhileBodyOp.getLoc(), groupName);
       curWhileBodyOp.moveBefore(condEnable);
     });
   }

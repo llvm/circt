@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -split-input-file -verify-diagnostics
+// RUN: circt-opt %s -split-input-file -verify-diagnostics -allow-unregistered-dialect
 
 firrtl.circuit "X" {
 
@@ -73,7 +73,7 @@ firrtl.circuit "foo" {
 "firrtl.module"() ( { }, { })
    {sym_name = "foo", convention = #firrtl<convention internal>,
     portTypes = [!firrtl.uint], portDirections = array<i1: true>,
-    portNames = ["in0"], portAnnotations = [], portSyms = []} : () -> ()
+    portNames = ["in0"], portAnnotations = [], portSymbols = []} : () -> ()
 }
 
 // -----
@@ -84,7 +84,7 @@ firrtl.circuit "foo" {
   ^entry:
 }) { sym_name = "foo", convention = #firrtl<convention internal>,
     portTypes = [!firrtl.uint], portDirections = array<i1: true>,
-    portNames = ["in0"], portAnnotations = [], portSyms = []} : () -> ()
+    portNames = ["in0"], portAnnotations = [], portSymbols = []} : () -> ()
 }
 
 // -----
@@ -95,7 +95,7 @@ firrtl.circuit "foo" {
   ^entry:
 }) {sym_name = "foo", convention = #firrtl<convention internal>,
     portTypes = [!firrtl.uint], portDirections = array<i1: true>,
-    portNames = ["in0"], portAnnotations = [], portSyms = [],
+    portNames = ["in0"], portAnnotations = [], portSymbols = [],
     portLocations = []} : () -> ()
 }
 
@@ -110,7 +110,7 @@ firrtl.circuit "foo" {
   ^entry:
 }) {sym_name = "foo", convention = #firrtl<convention internal>,
     portTypes = [!firrtl.uint], portDirections = array<i1: true>,
-    portNames = ["in0"], portAnnotations = [], portSyms = [],
+    portNames = ["in0"], portAnnotations = [], portSymbols = [],
     portLocations = [loc("loc")]} : () -> ()
 }
 
@@ -122,7 +122,7 @@ firrtl.circuit "foo" {
   ^entry(%a: i1):
 }) {sym_name = "foo", convention = #firrtl<convention internal>,
     portTypes = [!firrtl.uint], portDirections = array<i1: true>,
-    portNames = ["in0"], portAnnotations = [], portSyms = [],
+    portNames = ["in0"], portAnnotations = [], portSymbols = [],
     portLocations = [loc("foo")]} : () -> ()
 }
 
@@ -279,18 +279,8 @@ firrtl.circuit "Foo" {
 
 firrtl.circuit "Foo" {
   firrtl.extmodule @Foo()
-  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match'}}
+  // expected-error @+1 {{'firrtl.instance' op expects parent op to be one of 'firrtl.contract, firrtl.module, firrtl.layerblock, firrtl.match, firrtl.when, sv.ifdef'}}
   firrtl.instance "" @Foo()
-}
-
-// -----
-
-firrtl.circuit "Foo" {
-  // expected-note @+1 {{containing module declared here}}
-  firrtl.module @Foo() {
-    // expected-error @+1 {{'firrtl.instance' op is a recursive instantiation of its containing module}}
-    firrtl.instance "" @Foo()
-  }
 }
 
 // -----
@@ -362,9 +352,38 @@ firrtl.circuit "InstanceCannotHavePortSymbols" {
 
 // -----
 
+firrtl.circuit "ExtModuleKnowsOfMissingLayer" {
+  // expected-error @below {{op knows undefined layer '@A'}}
+  firrtl.extmodule @Ext() attributes {knownLayers=[@A]}
+}
+
+// -----
+
+firrtl.circuit "ExtModuleUsesUnknownLayerInProbeColor" {
+  firrtl.layer @A bind {}
+
+  // expected-error @below {{op references unknown layers}}
+  // expected-note  @below {{unknown layers: @A}}
+  firrtl.extmodule @Ext(out p: !firrtl.probe<uint<1>, @A>)
+
+}
+
+// -----
+
+firrtl.circuit "ExtModuleUseUnkownLayerInEnableLayerSpec" {
+  firrtl.layer @A bind {}
+
+  // expected-error @below {{op references unknown layers}}
+  // expected-note  @below {{unknown layers: @A}}
+  firrtl.extmodule @Ext() attributes {layers=[@A]}
+}
+
+// -----
+
 firrtl.circuit "InstanceMissingLayers" {
+  firrtl.layer @A bind {}
   // expected-note @below {{original module declared here}}
-  firrtl.extmodule @Ext(in in : !firrtl.uint<1>) attributes {layers = [@A]}
+  firrtl.extmodule @Ext(in in : !firrtl.uint<1>) attributes {knownLayers = [@A], layers = [@A]}
   firrtl.module @InstanceMissingLayers() {
     // expected-error @below {{'firrtl.instance' op layers must be [@A], but got []}}
     %foo_in = firrtl.instance foo @Ext(in in : !firrtl.uint<1>)
@@ -523,6 +542,24 @@ firrtl.circuit "CombMemPerFieldSym" {
 
 // -----
 
+firrtl.circuit "InstMultipleSyms" {
+  firrtl.module @Empty() {}
+  firrtl.module @InstMultipleSyms() {
+    // expected-error @below {{op has more than one symbol defined: 'x', 'y'}}
+    firrtl.instance empty sym [<@x,0,public>,<@y,0,public>] @Empty()
+  }
+}
+
+// -----
+
+firrtl.circuit "PortMultSymbol" {
+   // expected-error @below {{verification of inner symbols failed on port 0 with name "x": cannot assign multiple symbol names to the field id 0}}
+  firrtl.module @PortMultSymbol(in %x : !firrtl.uint<5>) attributes { portSymbols = [#hw<innerSym[<@foo,0,public>,<@bar,0,public>]>] } {
+  }
+}
+
+// -----
+
 firrtl.circuit "SeqMemInvalidReturnType" {
   firrtl.module @SeqMemInvalidReturnType() {
     // expected-error @+1 {{'chirrtl.seqmem' op result #0 must be a behavioral memory, but got '!firrtl.uint<1>'}}
@@ -543,7 +580,7 @@ firrtl.circuit "SeqMemNonPassiveReturnType" {
 
 firrtl.circuit "SeqMemPerFieldSym" {
   firrtl.module @SeqMemPerFieldSym() {
-    // expected-error @below {{op does not support per-field inner symbols}}
+    // expected-error @below {{does not support per-field inner symbols, but has inner symbol 'x' with non-zero field id 1}}
     %mem = chirrtl.seqmem sym [<@x,1,public>] Undefined : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
   }
 }
@@ -921,7 +958,7 @@ firrtl.circuit "Top" {
   firrtl.module @Top (in %in : !firrtl.uint) {
     %a = firrtl.wire : !firrtl.uint
     // expected-error @+1 {{op operand #0 must be a sized passive base type}}
-    firrtl.strictconnect %a, %in : !firrtl.uint
+    firrtl.matchingconnect %a, %in : !firrtl.uint
   }
 }
 
@@ -990,7 +1027,7 @@ firrtl.circuit "EnumNonExaustive" {
 
 firrtl.circuit "InnerSymAttr" {
   firrtl.module @InnerSymAttr() {
-    // expected-error @+1 {{cannot assign multiple symbol names to the field id:'2'}}
+    // expected-error @+1 {{cannot assign multiple symbol names to the field id 2}}
     %w3 = firrtl.wire sym [<@w3,2,public>,<@x2,2,private>,<@syh2,0,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
   }
 }
@@ -999,7 +1036,7 @@ firrtl.circuit "InnerSymAttr" {
 
 firrtl.circuit "InnerSymAttr2" {
   firrtl.module @InnerSymAttr2() {
-    // expected-error @+1 {{cannot reuse symbol name:'w3'}}
+    // expected-error @+1 {{cannot reuse symbol name 'w3'}}
     %w4 = firrtl.wire sym [<@w3,1,public>,<@w3,2,private>,<@syh2,0,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
   }
 }
@@ -1130,9 +1167,12 @@ firrtl.circuit "InvalidRef" {
 // Mux ref
 
 firrtl.circuit "MuxRef" {
-  firrtl.module @MuxRef() {}
-  firrtl.module private @MuxRefPrivate(in %a: !firrtl.probe<uint<1>>, in %b: !firrtl.probe<uint<1>>,
-                          in %cond: !firrtl.uint<1>) {
+  firrtl.extmodule private @MuxRefPrivate(out a: !firrtl.probe<uint<1>>, out b: !firrtl.probe<uint<1>>,
+                                          out cond: !firrtl.uint<1>)
+  firrtl.module @MuxRef() {
+    %a, %b, %cond = firrtl.instance vals @MuxRefPrivate(out a: !firrtl.probe<uint<1>>,
+                                                        out b: !firrtl.probe<uint<1>>,
+                                                        out cond: !firrtl.uint<1>)
     // expected-error @+1 {{'firrtl.mux' op operand #1 must be a passive base type (contain no flips), but got '!firrtl.probe<uint<1>>'}}
     %a_or_b = firrtl.mux(%cond, %a, %b) : (!firrtl.uint<1>, !firrtl.probe<uint<1>>, !firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>>
   }
@@ -1142,8 +1182,9 @@ firrtl.circuit "MuxRef" {
 // Bitcast ref
 
 firrtl.circuit "BitcastRef" {
-  firrtl.module @BitcastRef() {}
-  firrtl.module private @BitcastRefPrivate(in %a: !firrtl.probe<uint<1>>) {
+  firrtl.extmodule @BitcastRef(out a: !firrtl.probe<uint<1>>)
+  firrtl.module private @BitcastRefPrivate() {
+    %a = firrtl.instance vals @BitcastRef(out a: !firrtl.probe<uint<1>>)
     // expected-error @+1 {{'firrtl.bitcast' op operand #0 must be a base type, but got '!firrtl.probe<uint<1>>}}
     %0 = firrtl.bitcast %a : (!firrtl.probe<uint<1>>) -> (!firrtl.probe<uint<1>>)
   }
@@ -1157,7 +1198,7 @@ firrtl.circuit "Top" {
   firrtl.module @Top (out %out: !firrtl.probe<uint<2>>) {
     %foo_out = firrtl.instance foo @Foo(out out: !firrtl.probe<uint<2>>)
     // expected-error @below {{must be a sized passive base type}}
-    firrtl.strictconnect %out, %foo_out: !firrtl.probe<uint<2>>
+    firrtl.matchingconnect %out, %foo_out: !firrtl.probe<uint<2>>
   }
 }
 
@@ -1165,12 +1206,13 @@ firrtl.circuit "Top" {
 // Check flow semantics for ref.send
 
 firrtl.circuit "Foo" {
-  firrtl.module @Foo() {}
-  // expected-note @+1 {{destination was defined here}}
-  firrtl.module private @InProbe(in  %_a: !firrtl.probe<uint<1>>) {
+  firrtl.extmodule private @Probe(out _a: !firrtl.probe<uint<1>>)
+  firrtl.module @Foo() {
+    // expected-note @below {{destination was defined here}}
+    %_a = firrtl.instance val @Probe(out _a: !firrtl.probe<uint<1>>)
     %a = firrtl.wire : !firrtl.uint<1>
     %1 = firrtl.ref.send %a : !firrtl.uint<1>
-    // expected-error @+1 {{connect has invalid flow: the destination expression "_a" has source flow, expected sink or duplex flow}}
+    // expected-error @+1 {{connect has invalid flow: the destination expression "val._a" has source flow, expected sink or duplex flow}}
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
 }
@@ -1183,8 +1225,9 @@ firrtl.circuit "Bar" {
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) {
     %x = firrtl.instance x @Bar2(out _a: !firrtl.probe<uint<1>>)
     %y = firrtl.instance y @Bar2(out _a: !firrtl.probe<uint<1>>)
-    // expected-error @below {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    // expected-error @below {{destination cannot be driven by multiple operations}}
     firrtl.ref.define %_a, %x : !firrtl.probe<uint<1>>
+    // expected-note @below {{other driver is here}}
     firrtl.ref.define %_a, %y : !firrtl.probe<uint<1>>
   }
 }
@@ -1197,9 +1240,10 @@ firrtl.circuit "Bar" {
   firrtl.module @Bar(out %_a: !firrtl.probe<uint<1>>) {
     %x = firrtl.instance x @Bar2(out _a: !firrtl.probe<uint<1>>)
     %y = firrtl.wire : !firrtl.uint<1>
-    // expected-error @below {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    // expected-error @below {{destination cannot be driven by multiple operations}}
     firrtl.ref.define %_a, %x : !firrtl.probe<uint<1>>
     %1 = firrtl.ref.send %y : !firrtl.uint<1>
+    // expected-note @below {{other driver is here}}
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
 }
@@ -1213,8 +1257,9 @@ firrtl.circuit "Bar" {
     %y = firrtl.wire : !firrtl.uint<1>
     %1 = firrtl.ref.send %x : !firrtl.uint<1>
     %2 = firrtl.ref.send %y : !firrtl.uint<1>
-    // expected-error @below {{destination reference cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    // expected-error @below {{destination cannot be driven by multiple operations}}
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
+    // expected-note @below {{other driver is here}}
     firrtl.ref.define %_a, %2 : !firrtl.probe<uint<1>>
   }
 }
@@ -1305,8 +1350,9 @@ firrtl.circuit "PropertyDriveSource" {
 firrtl.circuit "PropertyDoubleDrive" {
   firrtl.module @PropertyDriveSource(out %out: !firrtl.string) {
     %0 = firrtl.string "hello"
-    // expected-error @below {{destination property cannot be reused by multiple operations, it can only capture a unique dataflow}}
+    // expected-error @below {{destination cannot be driven by multiple operations}}
     firrtl.propassign %out, %0 : !firrtl.string
+    // expected-note @below {{other driver is here}}
     firrtl.propassign %out, %0 : !firrtl.string
   }
 }
@@ -1318,7 +1364,7 @@ firrtl.circuit "PropertyConnect" {
   firrtl.module @PropertyConnect(out %out: !firrtl.string) {
     %0 = firrtl.string "hello"
     // expected-error @below {{must be a sized passive base type}}
-    firrtl.strictconnect %out, %0 : !firrtl.string
+    firrtl.matchingconnect %out, %0 : !firrtl.string
   }
 }
 
@@ -1456,7 +1502,7 @@ firrtl.circuit "RefForceProbe" {
     %1 = firrtl.ref.send %a : !firrtl.uint<1>
     // expected-note @above {{prior use here}}
     // expected-error @below {{use of value '%1' expects different type than prior uses: '!firrtl.rwprobe<uint<1>>' vs '!firrtl.probe<uint<1>>'}}
-    firrtl.ref.force_initial %a, %1, %a : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.ref.force_initial %a, %1, %a : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>, !firrtl.uint<1>
   }
 }
 
@@ -1761,7 +1807,7 @@ firrtl.module @ConstEnumCreateNonConstOperands(in %a: !firrtl.uint<1>) {
 
 // Enum types must be passive
 firrtl.circuit "EnumNonPassive" {
-  // expected-error @+1 {{enum field '"a"' not passive}}
+  // expected-error @+1 {{enum field "a" not passive}}
   firrtl.module @EnumNonPassive(in %a : !firrtl.enum<a: bundle<a flip: uint<1>>>) {
   }
 }
@@ -1770,9 +1816,23 @@ firrtl.circuit "EnumNonPassive" {
 
 // Enum types must not contain analog
 firrtl.circuit "EnumAnalog" {
-  // expected-error @+1 {{enum field '"a"' contains analog}}
+  // expected-error @+1 {{enum field "a" contains analog}}
   firrtl.module @EnumAnalog(in %a : !firrtl.enum<a: analog<1>>) {
   }
+}
+
+// -----
+
+firrtl.circuit "EnumUninferredWidth" {
+  // expected-error @+1 {{enum field "a" has uninferred width}}
+  firrtl.module @EnumUninferredWidth(in %enum : !firrtl.enum<a: uint>) { }
+}
+
+// -----
+
+firrtl.circuit "EnumUninferredReset" {
+  // expected-error @+1 {{enum field "a" has uninferred reset}}
+  firrtl.module @EnumUninferredReset(in %enum : !firrtl.enum<a: reset>) { }
 }
 
 // -----
@@ -1784,11 +1844,41 @@ firrtl.module @NonConstEnumConstElements(in %a: !firrtl.enum<None: uint<0>, Some
 }
 
 // -----
+
+firrtl.circuit "EnumDupVarName" {
+  // expected-error @+1 {{duplicate variant name "a" in enum}}
+  firrtl.module @EnumDupVarName(in %enum : !firrtl.enum<a, a>) { }
+}
+
+// -----
+
+firrtl.circuit "EnumDupVarValue" {
+  // expected-error @+1 {{enum variant "b" has value 0 : ui0 which is not greater than previous variant 0 : ui0}}
+  firrtl.module @EnumDupVarValue(in %enum : !firrtl.enum<a, b=0>) { }
+}
+
+// -----
 // No const with probes within.
 
 firrtl.circuit "ConstOpenVector" {
   // expected-error @below {{vector cannot be const with references}}
   firrtl.extmodule @ConstOpenVector(out out : !firrtl.const.openvector<probe<uint<1>>, 2>)
+}
+
+// -----
+// No duplicate fields within.
+
+firrtl.circuit "DupFieldsBundle" {
+  // expected-error @below {{duplicate field name "a" in bundle}}
+  firrtl.extmodule @DupFieldsBundle(out out : !firrtl.bundle<a: uint<1>, a: uint<1>>)
+}
+
+// -----
+// No duplicate fields within.
+
+firrtl.circuit "DupFieldsOpenBundle" {
+  // expected-error @below {{duplicate field name "a" in openbundle}}
+  firrtl.extmodule @DupFieldsOpenBundle(out out : !firrtl.openbundle<a: uint<1>, a: uint<1>>)
 }
 
 // -----
@@ -1800,12 +1890,12 @@ firrtl.circuit "ConstOpenBundle" {
 }
 
 // -----
-// Strict connect between non-equivalent anonymous type operands.
+// Matching connect between non-equivalent anonymous type operands.
 
-firrtl.circuit "NonEquivalenctStrictConnect" {
-  firrtl.module @NonEquivalenctStrictConnect(in %in: !firrtl.uint<1>, out %out: !firrtl.alias<foo, uint<2>>) {
+firrtl.circuit "NonEquivalenctMatchingConnect" {
+  firrtl.module @NonEquivalenctMatchingConnect(in %in: !firrtl.uint<1>, out %out: !firrtl.alias<foo, uint<2>>) {
     // expected-error @below {{op failed to verify that operands must be structurally equivalent}}
-    firrtl.strictconnect %out, %in: !firrtl.alias<foo, uint<2>>, !firrtl.uint<1>
+    firrtl.matchingconnect %out, %in: !firrtl.alias<foo, uint<2>>, !firrtl.uint<1>
   }
 }
 
@@ -1824,7 +1914,7 @@ firrtl.circuit "ClassCannotHaveHardwarePorts" {
 firrtl.circuit "ClassCannotHaveWires" {
   firrtl.module @ClassCannotHaveWires() {}
   firrtl.class @ClassWithWire() {
-    // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.module, firrtl.layerblock, firrtl.when, firrtl.match'}}
+    // expected-error @below {{'firrtl.wire' op expects parent op to be one of 'firrtl.contract, firrtl.module, firrtl.layerblock, firrtl.match, firrtl.when, sv.ifdef'}}
     %w = firrtl.wire : !firrtl.uint<8>
   }
 }
@@ -1889,23 +1979,6 @@ firrtl.circuit "WrongLayerBlockNesting" {
 
 // -----
 
-// A layer block captures a non-passive type.
-firrtl.circuit "NonPassiveCapture" {
-  firrtl.layer @A bind {}
-  firrtl.module @NonPassiveCapture() {
-    // expected-note @below {{operand is defined here}}
-    %a = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
-    // expected-error @below {{'firrtl.layerblock' op captures an operand which is not a passive type}}
-    firrtl.layerblock @A {
-      %b = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
-      // expected-note @below {{operand is used here}}
-      firrtl.connect %b, %a : !firrtl.bundle<a flip: uint<1>>, !firrtl.bundle<a flip: uint<1>>
-    }
-  }
-}
-
-// -----
-
 // A layer block may not drive sinks outside the layer block.
 firrtl.circuit "LayerBlockDrivesSinksOutside" {
   firrtl.layer @A bind {}
@@ -1917,8 +1990,8 @@ firrtl.circuit "LayerBlockDrivesSinksOutside" {
     firrtl.layerblock @A {
       firrtl.when %cond : !firrtl.uint<1> {
         %b_c = firrtl.subfield %b[c] : !firrtl.bundle<c: uint<1>>
-        // expected-error @below {{'firrtl.strictconnect' op connects to a destination which is defined outside its enclosing layer block}}
-        firrtl.strictconnect %b_c, %a : !firrtl.uint<1>
+        // expected-error @below {{'firrtl.matchingconnect' op connects to a destination which is defined outside its enclosing layer block}}
+        firrtl.matchingconnect %b_c, %a : !firrtl.uint<1>
       }
     }
   }
@@ -1993,7 +2066,7 @@ firrtl.circuit "InvalidProbeAssociationWire_SymbolIsNotALayer" {
 // -----
 
 firrtl.circuit "UnknownEnabledLayer" {
-  // expected-error @below {{'firrtl.module' op enables unknown layer '@A'}}
+  // expected-error @below {{'firrtl.module' op enables undefined layer '@A'}}
   firrtl.module @UnknownEnabledLayer() attributes {layers = [@A]} {}
 }
 
@@ -2036,16 +2109,6 @@ firrtl.circuit "RWProbeTypes" {
     %w = firrtl.wire sym @x : !firrtl.sint<1>
     // expected-error @below {{op has type mismatch: target resolves to '!firrtl.sint<1>' instead of expected '!firrtl.uint<1>'}}
     %rw = firrtl.ref.rwprobe <@RWProbeTypes::@x> : !firrtl.rwprobe<uint<1>>
-  }
-}
-
-// -----
-
-firrtl.circuit "RWProbeUninferredReset" {
-  firrtl.module @RWProbeUninferredReset() {
-    %w = firrtl.wire sym @x : !firrtl.bundle<a: reset>
-    // expected-error @below {{op result #0 must be rwprobe type (with concrete resets only), but got '!firrtl.rwprobe<bundle<a: reset>>}}
-    %rw = firrtl.ref.rwprobe <@RWProbeUninferredReset::@x> : !firrtl.rwprobe<bundle<a: reset>>
   }
 }
 
@@ -2143,23 +2206,6 @@ firrtl.circuit "ObjectFieldDoesntExist" {
 }
 
 // -----
-
-firrtl.circuit "WrongInternalPathCount" {
-  // expected-error @below {{module has inconsistent internal path array with 1 entries for 0 ports}}
-  firrtl.extmodule @WrongInternalPathCount() attributes { internalPaths = [ #firrtl.internalpath ] }
-}
-
-// -----
-
-firrtl.circuit "InternalPathForNonRefType" {
-  // expected-error @below {{module has internal path for non-ref-type port "in"}}
-  firrtl.extmodule @WrongInternalPathCount(
-    // expected-note @below {{this port}}
-    in in : !firrtl.uint<1>
-    ) attributes { internalPaths = [ #firrtl.internalpath<"x.y"> ] }
-}
-
-// -----
 // Try to read from an output object's input ports.
 
 firrtl.circuit "Top" {
@@ -2206,6 +2252,29 @@ firrtl.circuit "Top" {
 }
 
 // -----
+// Try to read from an output property port with sink flow.
+firrtl.circuit "Top" {
+  // expected-note @below {{the source was defined here}}
+  firrtl.module @Top(out %a : !firrtl.string, out %b : !firrtl.string) {
+    // expected-error @below {{connect has invalid flow: the source expression "b" has sink flow, expected source or duplex flow}}
+    firrtl.propassign %a, %b : !firrtl.string
+  }
+}
+
+// -----
+// Try to read from an input property instance port with sink flow.
+
+firrtl.circuit "Top" {
+  firrtl.module @Child(in %in : !firrtl.string) { }
+  firrtl.module @Top(out %out : !firrtl.string) {
+    // expected-note @below {{the source was defined here}}
+    %child_in = firrtl.instance child @Child(in in : !firrtl.string)
+    // expected-error @below {{connect has invalid flow: the source expression "child.in" has sink flow, expected source or duplex flow}}
+    firrtl.propassign %out, %child_in : !firrtl.string
+  }
+}
+
+// -----
 // Try to assign to the input port of an output object of a local object.
 // This fails because we can only assign directly to the ports of a local object
 // declaration.
@@ -2248,7 +2317,7 @@ firrtl.circuit "InvalidDouble" {
 
 firrtl.circuit "InvalidInnerSymTooHigh" {
   firrtl.module @InvalidInnerSymTooHigh () {
-    // expected-error @below {{field id:'1' is greater than the maximum field id:'0'}}
+    // expected-error @below {{field id 1 is greater than the maximum field id 0}}
     %w = firrtl.wire sym [<@"test",1,public>] : !firrtl.uint<5>
   }
 }
@@ -2257,7 +2326,7 @@ firrtl.circuit "InvalidInnerSymTooHigh" {
 
 firrtl.circuit "InvalidInnerSymDupe" {
   firrtl.module @InvalidInnerSymDupe() {
-    // expected-error @below {{op cannot assign multiple symbol names to the field id:'0'}}
+    // expected-error @below {{op cannot assign multiple symbol names to the field id 0}}
     %w = firrtl.wire sym [<@"foo",0,public>,<@"bar",0,public>] : !firrtl.uint<5>
   }
 }
@@ -2276,21 +2345,29 @@ firrtl.circuit "InstanceOfClass" {
 // -----
 
 firrtl.circuit "InputProbePublic" {
-  // expected-error @below {{input probe not allowed on public module}}
+  // expected-error @below {{input probe not allowed}}
   firrtl.module @InputProbePublic(in %in : !firrtl.probe<uint<1>>) { }
 }
 
 // -----
 
+firrtl.circuit "InputProbePrivate" {
+  firrtl.module @InputProbePrivate() { }
+  // expected-error @below {{input probe not allowed}}
+  firrtl.module private @Private(in %in : !firrtl.probe<uint<1>>) { }
+}
+
+// -----
+
 firrtl.circuit "InputProbeExt" {
-  // expected-error @below {{input probe not allowed on public module}}
+  // expected-error @below {{input probe}}
   firrtl.extmodule @InputProbeExt(in in : !firrtl.probe<uint<1>>)
 }
 
 // -----
 
 firrtl.circuit "InputProbeExt" {
-  // expected-error @below {{input probe not allowed on public module}}
+  // expected-error @below {{input probe not allowed}}
   firrtl.extmodule @InputProbeExt(in in : !firrtl.openbundle<b flip: openbundle<p flip: probe<uint<1>>>>)
 }
 
@@ -2383,6 +2460,7 @@ firrtl.circuit "NoCases" {
       nameKind = #firrtl<name_kind interesting_name>,
       portDirections = array<i1>,
       portNames = [],
+      domainInfo = [],
       annotations = [],
       portAnnotations = [],
       layers = []
@@ -2414,6 +2492,7 @@ firrtl.circuit "MismatchedCases" {
       nameKind = #firrtl<name_kind interesting_name>,
       portDirections = array<i1>,
       portNames = [],
+      domainInfo = [],
       annotations = [],
       portAnnotations = [],
       layers = []
@@ -2459,3 +2538,811 @@ firrtl.circuit "Top" {
   }
 }
 
+// -----
+
+firrtl.circuit "IntmoduleWithInstanceChoice" {
+  firrtl.option @Opt {
+    firrtl.option_case @A
+  }
+
+  firrtl.intmodule @test(in i: !firrtl.clock, out size: !firrtl.uint<32>) attributes {intrinsic = "circt.sizeof"}
+
+  firrtl.module @IntmoduleWithInstanceChoice() {
+    // expected-error @below {{intmodule must be instantiated with instance op, not via 'firrtl.instance_choice'}}
+    %i1, %size = firrtl.instance_choice inst interesting_name @test alternatives @Opt { @A -> @test }(in i: !firrtl.clock, out size: !firrtl.uint<32>)
+  }
+}
+
+// -----
+
+firrtl.circuit "DPI" {
+  firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<4>, in %in_1: !firrtl.uint) {
+    // expected-error @below {{unknown width is not allowed for DPI}}
+    %1 = firrtl.int.dpi.call "clocked_result"(%in_1) clock %clock enable %enable : (!firrtl.uint) -> !firrtl.uint<8>
+  }
+}
+
+
+// -----
+
+firrtl.circuit "DPI" {
+  firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<4>, in %in_1: !firrtl.uint) {
+    // expected-error @below {{integer types used by DPI functions must have a specific bit width; it must be equal to 1(bit), 8(byte), 16(shortint), 32(int), 64(longint) or greater than 64, but got '!firrtl.uint<4>'}}
+    %0 = firrtl.int.dpi.call "clocked_result"(%in_0) clock %clock enable %enable : (!firrtl.uint<4>) -> !firrtl.uint<8>
+  }
+}
+
+// -----
+
+firrtl.circuit "DPI" {
+  firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<8>, in %in_1: !firrtl.uint) {
+    // expected-error @below {{inputNames has 0 elements but there are 1 input arguments}}
+    %0 = firrtl.int.dpi.call "clocked_result"(%in_0) clock %clock enable %enable {inputNames=[]} : (!firrtl.uint<8>) -> !firrtl.uint<8>
+  }
+}
+
+// -----
+
+firrtl.circuit "DPI" {
+  firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<8>, in %in_1: !firrtl.uint) {
+    // expected-error @below {{output name is given but there is no result}}
+    firrtl.int.dpi.call "clocked_result"(%in_0) clock %clock enable %enable {outputName="foo"} : (!firrtl.uint<8>) -> ()
+  }
+}
+
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{expected base type}}
+  builtin.unrealized_conversion_cast to !firrtl.bundle<a: lhs<uint<1>>>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{expected base type}}
+  builtin.unrealized_conversion_cast to !firrtl.vector<lhs<uint<1>>, 1>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{expected base type}}
+  builtin.unrealized_conversion_cast to !firrtl.lhs<lhs<uint<1>>>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{bundle element "a" cannot have a left-hand side type}}
+  builtin.unrealized_conversion_cast to !firrtl.openbundle<a: lhs<uint<1>>>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{vector cannot have a left-hand side type}}
+  builtin.unrealized_conversion_cast to !firrtl.openvector<lhs<uint<1>>, 1>
+}
+}
+
+// -----
+
+firrtl.circuit "LHSTypes" {
+firrtl.module @LHSTypes() {
+  // expected-error @below {{lhs type cannot contain an AnalogType}}
+  builtin.unrealized_conversion_cast to !firrtl.lhs<analog<1>>
+}
+}
+
+// -----
+
+// expected-error @below {{op does not contain module with same name as circuit}}
+firrtl.circuit "NoMain" { }
+
+// -----
+
+firrtl.circuit "PrivateMain" {
+  // expected-error @below {{main module must be public}}
+  firrtl.module private @PrivateMain() {}
+}
+
+// -----
+
+firrtl.circuit "MainNotModule" {
+  // expected-error @below {{entity with name of circuit must be a module}}
+  func.func @MainNotModule() {
+    return
+  }
+}
+
+// -----
+
+firrtl.circuit "MultipleDUTModules" {
+  firrtl.module @MultipleDUTModules() {}
+  // expected-error @below {{is annotated as the design-under-test}}
+  firrtl.module @Foo() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {}
+  // expected-note @below {{is also annotated as the DUT}}
+  firrtl.module @Bar() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {}
+  // expected-note @below {{is also annotated as the DUT}}
+  firrtl.module @Baz() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {}
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+  firrtl.module @Foo(in %a: !firrtl.uint<42>) {
+    // expected-error @below {{result types and region argument types must match}}
+    firrtl.contract %a : !firrtl.uint<42> {
+    ^bb0:
+    }
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+  firrtl.module @Foo(in %a: !firrtl.uint<42>) {
+    // expected-error @below {{result types and region argument types must match}}
+    firrtl.contract {
+    ^bb0(%arg0: !firrtl.uint<1337>):
+    }
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+  firrtl.module @Foo(in %a: !firrtl.uint<42>) {
+    // expected-error @below {{result types and region argument types must match}}
+    firrtl.contract %a : !firrtl.uint<42> {
+    ^bb0(%arg0: !firrtl.uint<1337>):
+    }
+  }
+}
+
+// -----
+
+firrtl.circuit "FormalTargetUnknown" {
+  firrtl.extmodule @FormalTargetUnknown()
+  // expected-error @below {{op targets unknown module @A}}
+  firrtl.formal @foo, @A {}
+}
+
+// -----
+
+firrtl.circuit "FormalTargetInvalid" {
+  firrtl.extmodule @FormalTargetInvalid()
+  // expected-error @below {{op target @A is not a module}}
+  firrtl.formal @foo, @A {}
+  // expected-note @below {{target defined here}}
+  firrtl.layer @A inline {}
+}
+
+// -----
+
+firrtl.circuit "SimulationTargetUnknown" {
+  firrtl.extmodule @SimulationTargetUnknown()
+  // expected-error @below {{op targets unknown module @A}}
+  firrtl.simulation @foo, @A {}
+}
+
+// -----
+
+firrtl.circuit "SimulationTargetInvalid" {
+  firrtl.extmodule @SimulationTargetInvalid()
+  // expected-error @below {{op target @A is not a module}}
+  firrtl.simulation @foo, @A {}
+  // expected-note @below {{target defined here}}
+  firrtl.layer @A inline {}
+}
+
+// -----
+
+firrtl.circuit "SimulationPortCount" {
+  firrtl.extmodule @SimulationPortCount()
+  // expected-error @below {{op target @Foo must have at least 4 ports, got 0 instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo()
+}
+
+// -----
+
+firrtl.circuit "SimulationPortName0" {
+  firrtl.extmodule @SimulationPortName0()
+  // expected-error @below {{op target @Foo port 0 must be called "clock", got "foo" instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in foo: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortName1" {
+  firrtl.extmodule @SimulationPortName1()
+  // expected-error @below {{op target @Foo port 1 must be called "init", got "foo" instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in foo: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortName2" {
+  firrtl.extmodule @SimulationPortName2()
+  // expected-error @below {{op target @Foo port 2 must be called "done", got "foo" instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out foo: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortName3" {
+  firrtl.extmodule @SimulationPortName3()
+  // expected-error @below {{op target @Foo port 3 must be called "success", got "foo" instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out foo: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortDirection0" {
+  firrtl.extmodule @SimulationPortDirection0()
+  // expected-error @below {{op target @Foo port "clock" must be an input, got an output instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    out clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortDirection1" {
+  firrtl.extmodule @SimulationPortDirection1()
+  // expected-error @below {{op target @Foo port "init" must be an input, got an output instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    out init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortDirection2" {
+  firrtl.extmodule @SimulationPortDirection2()
+  // expected-error @below {{op target @Foo port "done" must be an output, got an input instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    in done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortDirection3" {
+  firrtl.extmodule @SimulationPortDirection3()
+  // expected-error @below {{op target @Foo port "success" must be an output, got an input instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    in success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortType0" {
+  firrtl.extmodule @SimulationPortType0()
+  // expected-error @below {{op target @Foo port "clock" must be a '!firrtl.clock', got '!firrtl.reset' instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.reset,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortType1" {
+  firrtl.extmodule @SimulationPortType1()
+  // expected-error @below {{op target @Foo port "init" must be a '!firrtl.uint<1>', got '!firrtl.reset' instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.reset,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortType2" {
+  firrtl.extmodule @SimulationPortType2()
+  // expected-error @below {{op target @Foo port "done" must be a '!firrtl.uint<1>', got '!firrtl.reset' instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.reset,
+    out success: !firrtl.uint<1>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationPortType3" {
+  firrtl.extmodule @SimulationPortType3()
+  // expected-error @below {{op target @Foo port "success" must be a '!firrtl.uint<1>', got '!firrtl.reset' instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.reset
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationExtraHardwarePort" {
+  firrtl.extmodule @SimulationExtraHardwarePort()
+  // expected-error @below {{op target @Foo port 4 may only be a property type, got '!firrtl.uint<8>' instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>,
+    in extra: !firrtl.uint<8>
+  )
+}
+
+// -----
+
+firrtl.circuit "BindTargetMissingModule" {
+  firrtl.module @BindTargetMissing() {}
+  // expected-error @below {{target #hw.innerNameRef<@XXX::@YYY> cannot be resolved}}
+  firrtl.bind <@XXX::@YYY>
+}
+
+// -----
+
+firrtl.circuit "BindTargetMissingInstance" {
+  firrtl.module @BindTargetMissingInstance() {}
+  // expected-error @below {{target #hw.innerNameRef<@BindTargetMissingInstance::@YYY> cannot be resolved}}
+  firrtl.bind <@BindTargetMissingInstance::@YYY>
+}
+
+// -----
+
+firrtl.circuit "BindTargetNotAnInstance" {
+  firrtl.module @Target() {}
+  firrtl.module @BindTargetMissingDoNotPrintFlag() {
+    %wire = firrtl.wire sym @target : !firrtl.uint<8>
+  }
+
+  // expected-error @below {{target #hw.innerNameRef<@BindTargetMissingDoNotPrintFlag::@target> is not an instance}}
+  firrtl.bind <@BindTargetMissingDoNotPrintFlag::@target>
+}
+
+// -----
+
+firrtl.circuit "BindTargetMissingDoNotPrintFlag" {
+  firrtl.module @Target() {}
+  firrtl.module @BindTargetMissingDoNotPrintFlag() {
+    firrtl.instance target sym @target @Target()
+  }
+
+  // expected-error @below {{target #hw.innerNameRef<@BindTargetMissingDoNotPrintFlag::@target> is not marked doNotPrint}}
+  firrtl.bind <@BindTargetMissingDoNotPrintFlag::@target>
+}
+
+// -----
+
+firrtl.circuit "InvalidCatOperands" {
+  firrtl.module @InvalidCatOperands(in %in: !firrtl.vector<uint<4>, 4>) {
+    %a = firrtl.wire : !firrtl.uint<4>
+    %b = firrtl.wire : !firrtl.sint<4>
+    // expected-error @below {{all operands must have same signedness}}
+    // expected-error @below {{'firrtl.cat' op failed to infer returned types}}
+    %result = firrtl.cat %a, %b : (!firrtl.uint<4>, !firrtl.sint<4>) -> !firrtl.uint<8>
+  }
+}
+
+// -----
+
+firrtl.circuit "XMRRefOpMissingTarget" {
+  firrtl.module @XMRRefOpMissingTarget() {
+    // expected-error @below {{op has an invalid symbol reference}}
+    %0 = firrtl.xmr.ref @MissingTarget : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+
+firrtl.circuit "XMRRefOpTargetsNonHierPath" {
+  firrtl.extmodule @Target()
+  firrtl.module @XMRRefOpMissingTarget() {
+    // expected-error @below {{op does not target a hierpath op}}
+    %0 = firrtl.xmr.ref @Target : !firrtl.ref<uint<1>>
+  }
+}
+
+// -----
+
+firrtl.circuit "XMRDerefOpMissingTarget" {
+  firrtl.module @XMRDerefOpMissingTarget() {
+    // expected-error @below {{op has an invalid symbol reference}}
+    %0 = firrtl.xmr.deref @MissingTarget : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "XMRDerefOpTargetsNonHierPath" {
+  firrtl.extmodule @Target()
+  firrtl.module @XMRDerefOpTargetsNonHierPath() {
+    // expected-error @below {{op does not target a hierpath op}}
+    %0 = firrtl.xmr.deref @Target : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "UndefinedDomainKind" {
+  firrtl.module @UndefinedDomainKind(
+    // expected-error @below {{domain port 'A' has undefined domain kind 'ClockDomain'}}
+    in %A: !firrtl.domain of @ClockDomain
+  ) {}
+}
+
+// -----
+
+firrtl.circuit "WrongDomainKind" {
+  firrtl.module @ClockDomain() {}
+  firrtl.module @UndefinedDomainKind(
+    // expected-error @below {{domain port 'A' has undefined domain kind 'ClockDomain'}}
+    in %A: !firrtl.domain of @ClockDomain
+  ) {}
+}
+
+// -----
+
+firrtl.circuit "DomainInfoNotArray" {
+  firrtl.domain @ClockDomain
+  // expected-error @below {{requires valid port domains}}
+  firrtl.module @WrongDomainPortInfo(
+    in %A: !firrtl.domain of @ClockDomain
+  ) attributes {domainInfo = 0 : i32} {}
+}
+
+// -----
+
+firrtl.circuit "DomainInfoWrongSize" {
+  firrtl.domain @ClockDomain
+  // expected-error @below {{requires 2 port domains, but has 1}}
+  firrtl.module @WrongDomainPortInfo(
+    in %A: !firrtl.domain of @ClockDomain,
+    in %a: !firrtl.uint<1>
+  ) attributes {domainInfo = [@ClockDomain]} {}
+}
+
+// -----
+
+firrtl.circuit "WrongDomainPortInfo" {
+  firrtl.domain @ClockDomain
+  // expected-error @below {{domain information for domain port 'A' must be a 'FlatSymbolRefAttr'}}
+  firrtl.module @WrongDomainPortInfo(
+    in %A: !firrtl.domain of @ClockDomain
+  ) attributes {domainInfo = [0 : i32]} {}
+}
+
+// -----
+
+firrtl.circuit "WrongNonDomainPortInfoType" {
+  firrtl.domain @ClockDomain
+  // expected-error @below {{domain information for non-domain port 'a' must be an 'ArrayAttr'}}
+  firrtl.module @WrongNonDomainPortInfoType(
+    in %a: !firrtl.uint<1>
+  ) attributes {domainInfo = ["hello"]} {}
+}
+
+// -----
+
+firrtl.circuit "WrongNonDomainPortInfoElementType" {
+  firrtl.domain @ClockDomain
+  // expected-error @below {{domain information for non-domain port 'a' must be an 'ArrayAttr<IntegerAttr>'}}
+  firrtl.module @WrongNonDomainPortInfoElementType(
+    in %a: !firrtl.uint<1>
+  ) attributes {domainInfo = [["hello"]]} {}
+}
+
+// -----
+
+firrtl.circuit "DomainAssociationOOB" {
+  firrtl.domain @ClockDomain
+  // expected-error @below {{has domain association 1 for port 'a', but the module only has 1 ports}}
+  firrtl.module @DomainAssociationOOB(
+    in %a: !firrtl.uint<1>
+  ) attributes {domainInfo = [[1 : i32]]} {}
+}
+
+// -----
+
+firrtl.circuit "DomainAssociationOOB" {
+  firrtl.domain @ClockDomain
+  // expected-error @below {{has port 'a' which has a domain association with non-domain port 'a'}}
+  firrtl.module @DomainAssociationOOB(
+    in %a: !firrtl.uint<1>
+  ) attributes {domainInfo = [[0 : i32]]} {}
+}
+
+// -----
+
+// Output domain ports on modules can only be driven once.
+
+firrtl.circuit "Top" {
+  firrtl.domain @ClockDomain
+  firrtl.module @Top(
+    in  %i: !firrtl.domain of @ClockDomain,
+    out %o: !firrtl.domain of @ClockDomain
+  ) {
+    // expected-error @below {{destination cannot be driven by multiple operations}}
+    firrtl.domain.define %o, %i
+    // expected-note @below {{other driver is here}}
+    firrtl.domain.define %o, %i
+  }
+}
+
+// -----
+
+// Input domain ports on instances can only be driven once.
+
+firrtl.circuit "Top" {
+  firrtl.domain @ClockDomain
+  firrtl.extmodule @Ext(in i: !firrtl.domain of @ClockDomain)
+  firrtl.module @Top(in %i: !firrtl.domain of @ClockDomain) {
+    %ext_i = firrtl.instance ext @Ext(in  i: !firrtl.domain of @ClockDomain)
+    // expected-error @below {{destination cannot be driven by multiple operations}}
+    firrtl.domain.define %ext_i, %i
+    // expected-note @below {{other driver is here}}
+    firrtl.domain.define %ext_i, %i
+  }
+}
+
+// -----
+
+// No-crossing of domain types.
+
+firrtl.circuit "Top" {
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
+  firrtl.module @Top(in %i: !firrtl.domain of @ClockDomain, out %o : !firrtl.domain of @PowerDomain) {
+    // expected-error @below {{source domain type @ClockDomain does not match destination domain type @PowerDomain}}
+    firrtl.domain.define %o, %i
+  }
+}
+
+// -----
+
+// Unable to determine domain type of source.
+
+firrtl.circuit "Top" {
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
+  firrtl.module @Top(out %o : !firrtl.domain of @PowerDomain) {
+    %i = "test"() : () -> !firrtl.domain
+    // expected-error @below {{could not determine domain-type of source}}
+    firrtl.domain.define %o, %i
+  }
+}
+
+// -----
+
+// The type of a domain field must be a PropertyType.
+firrtl.circuit "NonPropertyTypeInDomainField" {
+  // expected-error @below {{an array of domain fields}}
+  firrtl.domain @Foo ["bar", !firrtl.uint<1>]
+  firrtl.module @NonPropertyTypeInDomainField() {}
+}
+
+// -----
+
+firrtl.circuit "WrongInstanceDomainInfo" {
+  firrtl.domain @ClockDomain
+  // expected-note @below {{original module declared here}}
+  firrtl.module @Foo(in %a: !firrtl.uint<1>) {}
+  firrtl.module @WrongInstanceDomainInfo() {
+    // expected-error @below {{'firrtl.instance' op has a wrong number of port domain info attributes; expected 1, got 0}}
+    %a = firrtl.instance foo  {domainInfo = []} @Foo(in a: !firrtl.uint<1>)
+  }
+}
+
+// -----
+
+firrtl.circuit "WrongInstanceDomainInfo" {
+  firrtl.domain @ClockDomain
+  // expected-note @below {{original module declared here}}
+  firrtl.module @Foo(
+    in %A : !firrtl.domain of @ClockDomain,
+    in %B : !firrtl.domain of @ClockDomain,
+    in %a : !firrtl.uint<1> domains [%A]
+  ) {}
+  firrtl.module @WrongInstanceDomainInfo() {
+  // expected-error @below {{op domain info for "a" must be '[0 : ui32]', but got '[1 : ui32]'}}
+    %foo_A, %foo_B, %foo_a = firrtl.instance foo @Foo(
+      in A : !firrtl.domain of @ClockDomain,
+      in B : !firrtl.domain of @ClockDomain,
+      in a : !firrtl.uint<1> domains [B]
+    )
+  }
+}
+
+// -----
+
+firrtl.circuit "WrongInstanceChoiceDomainInfo" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+  firrtl.domain @ClockDomain
+  // expected-note @below {{original module declared here}}
+  firrtl.module @Foo(
+    in %A : !firrtl.domain of @ClockDomain,
+    in %B : !firrtl.domain of @ClockDomain,
+    in %a : !firrtl.uint<1> domains [%A]
+  ) {}
+  firrtl.module @WrongInstanceChoiceDomainInfo() {
+    // expected-error @below {{op domain info for "a" must be '[0 : ui32]', but got '[1 : ui32]'}}
+    %foo_A, %foo_B, %foo_a = firrtl.instance_choice foo @Foo alternatives @Platform { @FPGA -> @Foo } (
+      in A : !firrtl.domain of @ClockDomain,
+      in B : !firrtl.domain of @ClockDomain,
+      in a : !firrtl.uint<1> domains [B]
+    )
+  }
+}
+
+// -----
+
+firrtl.circuit "UndefinedDomainInAnonDomain" {
+  firrtl.module @UndefinedDomainInAnonDomain() {
+    // expected-error @below {{references undefined symbol '@Foo'}}
+    %0 = firrtl.domain.anon : !firrtl.domain of @Foo
+  }
+}
+
+// -----
+
+firrtl.circuit "AnonDomainPointingAtNonDomain" {
+  firrtl.extmodule @Foo()
+  firrtl.module @AnonDomainPointingAtNonDomain() {
+    // expected-error @below {{references symbol '@Foo' which is not a domain}}
+    %0 = firrtl.domain.anon : !firrtl.domain of @Foo
+  }
+}
+
+// -----
+
+firrtl.circuit "UndefinedDomainInCreateDomain" {
+  firrtl.module @UndefinedDomainInCreateDomain() {
+    // expected-error @below {{references undefined symbol '@Foo'}}
+    %my_domain = firrtl.domain.create : !firrtl.domain of @Foo
+  }
+}
+
+// -----
+
+firrtl.circuit "CreateDomainPointingAtNonDomain" {
+  firrtl.extmodule @Foo()
+  firrtl.module @CreateDomainPointingAtNonDomain() {
+    // expected-error @below {{references symbol '@Foo' which is not a domain}}
+    %my_domain = firrtl.domain.create : !firrtl.domain of @Foo
+  }
+}
+
+// -----
+
+firrtl.circuit "UnknownValueReferencesUnknownClass" {
+  firrtl.module @UnknownValueReferencesUnknownClass() {
+    // expected-error @below {{refers to non-existent class ("Missing")}}
+    %0 = firrtl.unknown : !firrtl.class<@Missing()>
+  }
+}
+
+// -----
+
+firrtl.circuit "UnknownValueReferencesNonClass" {
+  firrtl.extmodule @Foo()
+  firrtl.module @UnknownValueReferencesNonClass() {
+    // expected-error @below {{refers to a non-class type ("Foo")}}
+    %0 = firrtl.unknown : !firrtl.class<@Foo()>
+  }
+}
+
+// -----
+firrtl.circuit "NonExistentMacroSymbol" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+
+  firrtl.module @Foo() {}
+  firrtl.module @Choice() {
+    // expected-error @below {{'firrtl.instance_choice' op instance_macro @__target_Platform_Choice_inst does not exist}}
+    firrtl.instance_choice inst {instance_macro = @__target_Platform_Choice_inst} @Foo alternatives @Platform {
+      @FPGA -> @Foo
+    } ()
+  }
+}

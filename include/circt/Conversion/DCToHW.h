@@ -21,6 +21,10 @@ class Pass;
 } // namespace mlir
 
 namespace circt {
+
+#define GEN_PASS_DECL_DCTOHW
+#include "circt/Conversion/Passes.h.inc"
+
 std::unique_ptr<mlir::Pass> createDCToHWPass();
 
 } // namespace circt

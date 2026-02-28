@@ -1,8 +1,9 @@
 ; RUN: firtool %s --format=fir | FileCheck %s  --check-prefixes COMMON,NOLOWER
 ; RUN: firtool %s --format=fir -lower-memories | FileCheck %s --check-prefixes COMMON,LOWER
 
+FIRRTL version 4.0.0
 circuit ByteEnableMemory:
-  module ByteEnableMemory :
+  public module ByteEnableMemory :
     input clock : Clock
     input reset : UInt<1>
     output io : { flip readAddr : UInt<16>, dataOut : UInt<8>[2], flip readEnable : UInt<1>, flip dataIn : UInt<8>[2], flip writeAddr : UInt<16>, flip writeMask : UInt<1>[2]}
@@ -11,17 +12,17 @@ circuit ByteEnableMemory:
     node _T = bits(io.writeAddr, 0, 0)
     write mport MPORT = mem[_T], clock
     when io.writeMask[0] :
-      MPORT[0] <= io.dataIn[0]
+      connect MPORT[0], io.dataIn[0]
     when io.writeMask[1] :
-      MPORT[1] <= io.dataIn[1]
+      connect MPORT[1], io.dataIn[1]
     wire _WIRE : UInt
-    _WIRE is invalid
+    invalidate _WIRE
     when io.readEnable :
-      _WIRE <= io.readAddr
-      node _T_1 = or(_WIRE, UInt<1>("h0"))
+      connect _WIRE, io.readAddr
+      node _T_1 = or(_WIRE, UInt<1>(0h0))
       node _T_2 = bits(_T_1, 0, 0)
       read mport MPORT_1 = mem[_T_2], clock
-    io.dataOut <= MPORT_1
+    connect io.dataOut, MPORT_1
 
 ; COMMON:        module [[memory:[a-zA-Z0-9_]+]]
 ; COMMON:        module ByteEnableMemory

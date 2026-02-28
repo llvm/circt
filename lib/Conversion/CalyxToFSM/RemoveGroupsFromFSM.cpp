@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../PassDetail.h"
 #include "circt/Conversion/CalyxToFSM.h"
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Comb/CombOps.h"
@@ -20,7 +19,13 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OperationSupport.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/STLExtras.h"
+
+namespace circt {
+#define GEN_PASS_DEF_CALYXREMOVEGROUPSFROMFSM
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace circt;
 using namespace calyx;
@@ -30,7 +35,8 @@ using namespace fsm;
 namespace {
 
 struct CalyxRemoveGroupsFromFSM
-    : public CalyxRemoveGroupsFromFSMBase<CalyxRemoveGroupsFromFSM> {
+    : public circt::impl::CalyxRemoveGroupsFromFSMBase<
+          CalyxRemoveGroupsFromFSM> {
   void runOnOperation() override;
 
   // Outlines the `fsm.machine` operation from within the `calyx.control`
@@ -98,8 +104,8 @@ LogicalResult CalyxRemoveGroupsFromFSM::modifyGroupOperations() {
     auto doneWire = doneWireIt->second;
 
     b->setInsertionPointToEnd(componentOp.getWiresOp().getBodyBlock());
-    b->create<calyx::AssignOp>(loc, doneWire.getIn(), groupDone.getSrc(),
-                               groupDone.getGuard());
+    calyx::AssignOp::create(*b, loc, doneWire.getIn(), groupDone.getSrc(),
+                            groupDone.getGuard());
 
     groupDone.erase();
   }
@@ -211,8 +217,8 @@ LogicalResult CalyxRemoveGroupsFromFSM::outlineMachine() {
 
     // Create a wire for the group done input.
     b->setInsertionPointToStart(&componentOp.getBody().front());
-    auto groupDoneWire = b->create<calyx::WireLibOp>(
-        componentOp.getLoc(), name.str() + "_done", b->getI1Type());
+    auto groupDoneWire = calyx::WireLibOp::create(
+        *b, componentOp.getLoc(), name.str() + "_done", b->getI1Type());
     fsmInputMap[inputIdx] = groupDoneWire.getOut();
     groupDoneWires[name] = groupDoneWire;
   }
@@ -258,10 +264,11 @@ LogicalResult CalyxRemoveGroupsFromFSM::outlineMachine() {
 
   // Instantiate the FSM.
   auto clkPort = componentOp.getClkPort();
-  auto clk = b->create<seq::ToClockOp>(clkPort.getLoc(), clkPort);
-  auto fsmInstance = b->create<fsm::HWInstanceOp>(
-      machineOp.getLoc(), machineOutputTypes, b->getStringAttr("controller"),
-      machineOp.getSymNameAttr(), fsmInputs, clk, componentOp.getResetPort());
+  auto clk = seq::ToClockOp::create(*b, clkPort.getLoc(), clkPort);
+  auto fsmInstance = fsm::HWInstanceOp::create(
+      *b, machineOp.getLoc(), machineOutputTypes,
+      b->getStringAttr("controller"), machineOp.getSymNameAttr(), fsmInputs,
+      clk, componentOp.getResetPort());
 
   // Record the FSM output group go signals.
   for (auto namedAttr : groupGoOutputsAttr.getValue()) {
@@ -272,8 +279,8 @@ LogicalResult CalyxRemoveGroupsFromFSM::outlineMachine() {
 
   // Assign FSM top level done to the component done.
   b->setInsertionPointToEnd(componentOp.getWiresOp().getBodyBlock());
-  b->create<calyx::AssignOp>(machineOp.getLoc(), componentOp.getDonePort(),
-                             fsmInstance.getResult(topLevelDoneAttr.getInt()));
+  calyx::AssignOp::create(*b, machineOp.getLoc(), componentOp.getDonePort(),
+                          fsmInstance.getResult(topLevelDoneAttr.getInt()));
 
   return success();
 }

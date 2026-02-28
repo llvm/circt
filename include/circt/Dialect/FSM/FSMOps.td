@@ -222,7 +222,8 @@ def StateOp : FSMOp<"state", [HasParent<"MachineOp">, Symbol, NoTerminator]> {
   }];
 
   let builders = [
-    OpBuilder<(ins "StringRef":$stateName)>
+    OpBuilder<(ins "StringRef":$stateName)>,
+    OpBuilder<(ins "StringRef":$stateName, "ValueRange":$outputs)>
   ];
 
   let skipDefaultBuilders = 1;
@@ -239,7 +240,7 @@ def OutputOp : FSMOp<"output", [HasParent<"StateOp">, ReturnLike, Terminator]> {
 
   let arguments = (ins Variadic<AnyType>:$operands);
 
-  let builders = [ OpBuilder<(ins), "build($_builder, $_state, std::nullopt);"> ];
+  let builders = [ OpBuilder<(ins), "build($_builder, $_state, mlir::ValueRange());"> ];
 
   let assemblyFormat = [{ attr-dict ($operands^ `:` qualified(type($operands)))? }];
 
@@ -301,8 +302,11 @@ def TransitionOp : FSMOp<"transition", [HasParent<"StateOp">, NoTerminator]> {
   }];
 
   let builders = [
-    OpBuilder<(ins "StringRef":$nextState)>,
-    OpBuilder<(ins "fsm::StateOp":$nextState)>
+    // OpBuilder<(ins "StringRef":$nextState)>,
+    OpBuilder<(ins "fsm::StateOp":$nextState)>,
+    OpBuilder<(ins "StringRef":$nextState,
+                   CArg<"llvm::function_ref<void()>", "{}">:$guardCtor,
+                   CArg<"llvm::function_ref<void()>", "{}">:$actionCtor)>
   ];
 
   let skipDefaultBuilders = 1;

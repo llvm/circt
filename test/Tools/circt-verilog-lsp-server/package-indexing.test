@@ -1,0 +1,38 @@
+// RUN: circt-verilog-lsp-server -lit-test  --source-location-include-dir=%S  < %s | FileCheck %s
+// REQUIRES: slang
+// UNSUPPORTED: valgrind
+{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"processId":123,"rootPath":"verilog","capabilities":{},"trace":"off"}}
+// -----
+{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{
+  "uri":"test:///test.sv",
+  "languageId":"verilog",
+  "version":1,
+  "text":"package test;\nlocalparam int unsigned testValue = 0;\nlocalparam int unsigned testValueB = testValue;\nendpackage"
+}}}
+// -----
+// Find definition of `testValue`
+{"jsonrpc":"2.0","id":1,"method":"textDocument/definition","params":{
+  "textDocument":{"uri":"test:///test.sv"},
+  "position":{"line":2,"character":39}
+}}
+// CHECK:       "id": 1,
+// CHECK-NEXT:  "jsonrpc": "2.0",
+// CHECK-NEXT:  "result": [
+// CHECK-NEXT:    {
+// CHECK-NEXT:      "range": {
+// CHECK-NEXT:        "end": {
+// CHECK-NEXT:          "character": 33,
+// CHECK-NEXT:          "line": 1
+// CHECK-NEXT:        },
+// CHECK-NEXT:        "start": {
+// CHECK-NEXT:          "character": 24,
+// CHECK-NEXT:          "line": 1
+// CHECK-NEXT:        }
+// CHECK-NEXT:      },
+// CHECK-NEXT:      "uri": "test:///test.sv"
+// CHECK-NEXT:    }
+// CHECK-NEXT:  ]
+// -----
+{"jsonrpc":"2.0","id":5,"method":"shutdown"}
+// -----
+{"jsonrpc":"2.0","method":"exit"}

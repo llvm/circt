@@ -24,6 +24,9 @@ class Pass;
 
 namespace circt {
 
+#define GEN_PASS_DECL_HWARITHTOHW
+#include "circt/Conversion/Passes.h.inc"
+
 /// A helper type converter class that automatically populates the relevant
 /// materializations and type conversions for converting HWArith to HW.
 class HWArithToHWTypeConverter : public mlir::TypeConverter {

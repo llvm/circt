@@ -17,22 +17,97 @@
 #include <mlir-c/Support.h>
 #include <stdio.h>
 
+void testTypes(MlirContext ctx) {
+  // Test StringType creation and type checking
+  MlirType stringType = omStringTypeGet(ctx);
+
+  // CHECK: string type is StringType: 1
+  fprintf(stderr, "string type is StringType: %d\n",
+          omTypeIsAStringType(stringType));
+
+  // CHECK: !om.string
+  mlirTypeDump(stringType);
+
+  MlirTypeID stringTypeID = omStringTypeGetTypeID();
+  MlirTypeID actualStringTypeID = mlirTypeGetTypeID(stringType);
+
+  // CHECK: StringType TypeID matches: 1
+  fprintf(stderr, "StringType TypeID matches: %d\n",
+          mlirTypeIDEqual(stringTypeID, actualStringTypeID));
+}
+
+void testListAttr(MlirContext ctx) {
+  // Test creating ListAttr with integer elements
+  MlirType i64Type = mlirIntegerTypeGet(ctx, 64);
+
+  MlirAttribute elem1 = mlirIntegerAttrGet(i64Type, 42);
+  MlirAttribute elem2 = mlirIntegerAttrGet(i64Type, 84);
+
+  const MlirAttribute elements[] = {elem1, elem2};
+  MlirAttribute listAttr = omListAttrGet(i64Type, 2, elements);
+
+  // CHECK: list attr is ListAttr: 1
+  fprintf(stderr, "list attr is ListAttr: %d\n", omAttrIsAListAttr(listAttr));
+
+  // CHECK: list attr num elements: 2
+  fprintf(stderr, "list attr num elements: %ld\n",
+          omListAttrGetNumElements(listAttr));
+
+  // CHECK: #om.list<i64, [42, 84]>
+  mlirAttributeDump(listAttr);
+
+  // Test accessing elements
+  MlirAttribute retrievedElem1 = omListAttrGetElement(listAttr, 0);
+  MlirAttribute retrievedElem2 = omListAttrGetElement(listAttr, 1);
+
+  // CHECK: first element: 42 : i64
+  fprintf(stderr, "first element: ");
+  mlirAttributeDump(retrievedElem1);
+
+  // CHECK: second element: 84 : i64
+  fprintf(stderr, "second element: ");
+  mlirAttributeDump(retrievedElem2);
+
+  // Test creating empty ListAttr
+  MlirAttribute emptyListAttr = omListAttrGet(i64Type, 0, NULL);
+
+  // CHECK: empty list attr is ListAttr: 1
+  fprintf(stderr, "empty list attr is ListAttr: %d\n",
+          omAttrIsAListAttr(emptyListAttr));
+
+  // CHECK: empty list attr num elements: 0
+  fprintf(stderr, "empty list attr num elements: %ld\n",
+          omListAttrGetNumElements(emptyListAttr));
+
+  // Test creating ListAttr with string elements
+  MlirType stringType = omStringTypeGet(ctx);
+
+  MlirAttribute strElem = mlirStringAttrTypedGet(
+      stringType, mlirStringRefCreateFromCString("hello"));
+  const MlirAttribute stringElements[] = {strElem};
+  MlirAttribute stringListAttr = omListAttrGet(stringType, 1, stringElements);
+
+  // CHECK: string list attr is ListAttr: 1
+  fprintf(stderr, "string list attr is ListAttr: %d\n",
+          omAttrIsAListAttr(stringListAttr));
+
+  // CHECK: #om.list<!om.string, ["hello" : !om.string]>
+  mlirAttributeDump(stringListAttr);
+}
+
 void testEvaluator(MlirContext ctx) {
   const char *testIR =
       "module {"
-      "  om.class @Test(%param: !om.integer) {"
-      "    om.class.field @field, %param : !om.integer"
+      "  om.class @Test(%param: !om.integer) -> (field: !om.integer, child: "
+      "!om.class.type<@Child>) {"
       "    %0 = om.object @Child() : () -> !om.class.type<@Child>"
-      "    om.class.field @child, %0 : !om.class.type<@Child>"
+      "    om.class.fields %param, %0 : !om.integer, !om.class.type<@Child>"
       "  }"
-      "  om.class @Child() {"
+      "  om.class @Child() -> (foo: i64, bar: !om.list<i64>){"
       "    %0 = om.constant 14 : i64"
       "    %1 = om.constant 15 : i64"
       "    %2 = om.list_create %0, %1 : i64"
-      "    %3 = om.tuple_create %2, %0 : !om.list<i64>, i64"
-      "    om.class.field @foo, %0 : i64"
-      "    om.class.field @bar, %2 : !om.list<i64>"
-      "    om.class.field @baz, %3 : tuple<!om.list<i64>, i64>"
+      "    om.class.fields %0, %2 : i64, !om.list<i64>"
       "  }"
       "}";
 
@@ -56,8 +131,8 @@ void testEvaluator(MlirContext ctx) {
 
   // Test instantiation success.
 
-  OMEvaluatorValue actualParam = omEvaluatorValueFromPrimitive(
-      omIntegerAttrGet(mlirIntegerAttrGet(mlirIntegerTypeGet(ctx, 8), 42)));
+  OMEvaluatorValue actualParam = omEvaluatorValueFromPrimitive(omIntegerAttrGet(
+      mlirIntegerAttrGet(mlirIntegerTypeSignedGet(ctx, 8), 42)));
 
   OMEvaluatorValue object =
       omEvaluatorInstantiate(evaluator, className, 1, &actualParam);
@@ -101,7 +176,7 @@ void testEvaluator(MlirContext ctx) {
 
   MlirAttribute fieldValue = omEvaluatorValueGetPrimitive(field);
 
-  // CHECK: #om.integer<42 : i8> : !om.integer
+  // CHECK: #om.integer<42 : si8> : !om.integer
   mlirAttributeDump(fieldValue);
 
   // Test get field success for child object.
@@ -124,12 +199,9 @@ void testEvaluator(MlirContext ctx) {
   OMEvaluatorValue bar = omEvaluatorObjectGetField(
       child, mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("bar")));
 
-  OMEvaluatorValue baz = omEvaluatorObjectGetField(
-      child, mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("baz")));
-
   MlirAttribute fieldNamesC = omEvaluatorObjectGetFieldNames(child);
 
-  // CHECK: ["bar", "baz", "foo"]
+  // CHECK: ["bar", "foo"]
   mlirAttributeDump(fieldNamesC);
 
   // CHECK: child object field `foo` is primitive: 1
@@ -148,19 +220,19 @@ void testEvaluator(MlirContext ctx) {
   // CHECK: 15 : i64
   mlirAttributeDump(
       omEvaluatorValueGetPrimitive(omEvaluatorListGetElement(bar, 1)));
-
-  // CHECK: child object field `baz` is tuple: 1
-  fprintf(stderr, "child object field `baz` is tuple: %d\n",
-          omEvaluatorValueIsATuple(baz));
-
-  // CHECK: 14 : i64
-  mlirAttributeDump(
-      omEvaluatorValueGetPrimitive(omEvaluatorTupleGetElement(baz, 1)));
 }
 
 int main(void) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleRegisterDialect(mlirGetDialectHandle__om__(), ctx);
+  MlirDialectHandle omDialectHandle = mlirGetDialectHandle__om__();
+
+  // Load the OM dialect to ensure types are properly initialized
+  mlirContextGetOrLoadDialect(ctx,
+                              mlirDialectHandleGetNamespace(omDialectHandle));
+
+  testTypes(ctx);
+  testListAttr(ctx);
   testEvaluator(ctx);
   return 0;
 }

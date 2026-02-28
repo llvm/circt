@@ -113,9 +113,9 @@ ClockDomainOp ClockDomain::materialize(OpBuilder &materializeBuilder,
   computeCrossingValues(inputs, outputs);
 
   // Add the terminator and clock domain outputs and rewire the SSA value uses
-  auto outputOp = builder.create<arc::OutputOp>(loc, outputs);
-  auto clockDomainOp = materializeBuilder.create<ClockDomainOp>(
-      loc, ValueRange(outputs).getTypes(), inputs, clock);
+  auto outputOp = arc::OutputOp::create(builder, loc, outputs);
+  auto clockDomainOp = ClockDomainOp::create(
+      materializeBuilder, loc, ValueRange(outputs).getTypes(), inputs, clock);
   for (auto [domainOutput, val] :
        llvm::zip(clockDomainOp.getOutputs(), outputOp->getOperands())) {
     val.replaceUsesWithIf(domainOutput, [&](OpOperand &operand) {

@@ -17,6 +17,13 @@
 
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
+namespace circt {
+namespace esi {
+#define GEN_PASS_DEF_LOWERESIBUNDLES
+#include "circt/Dialect/ESI/ESIPasses.h.inc"
+} // namespace esi
+} // namespace circt
+
 using namespace circt;
 using namespace circt::esi;
 using namespace circt::esi::detail;
@@ -78,8 +85,8 @@ void BundlePort::mapInputSignals(OpBuilder &b, Operation *inst, Value,
       }));
   SmallVector<Type, 5> toChannelTypes(llvm::map_range(
       newInputChannels, [](hw::PortInfo port) { return port.type; }));
-  auto unpack = b.create<UnpackBundleOp>(
-      origPort.loc,
+  auto unpack = UnpackBundleOp::create(
+      b, origPort.loc,
       /*bundle=*/inst->getOperand(origPort.argNum), fromChannels);
 
   // Connect the new instance inputs to the results of the unpack.
@@ -99,8 +106,8 @@ void BundlePort::mapOutputSignals(OpBuilder &b, Operation *inst, Value,
       }));
   SmallVector<Type, 5> fromChannelTypes(llvm::map_range(
       newInputChannels, [](hw::PortInfo port) { return port.type; }));
-  auto pack = b.create<PackBundleOp>(
-      origPort.loc, cast<ChannelBundleType>(origPort.type), toChannels);
+  auto pack = PackBundleOp::create(
+      b, origPort.loc, cast<ChannelBundleType>(origPort.type), toChannels);
 
   // Feed the fromChannels into the new instance.
   for (auto [idx, inPort] : llvm::enumerate(newInputChannels))
@@ -134,7 +141,7 @@ void BundlePort::buildInputSignals() {
   PackBundleOp pack;
   if (body) {
     ImplicitLocOpBuilder b(origPort.loc, body, body->begin());
-    pack = b.create<PackBundleOp>(bundleType, newInputValues);
+    pack = PackBundleOp::create(b, bundleType, newInputValues);
     body->getArgument(origPort.argNum).replaceAllUsesWith(pack.getBundle());
   }
 
@@ -172,10 +179,12 @@ void BundlePort::buildOutputSignals() {
   // For an output port, the original bundle must be unpacked into the
   // individual channel ports.
   UnpackBundleOp unpack;
-  if (body)
-    unpack = OpBuilder::atBlockTerminator(body).create<UnpackBundleOp>(
-        origPort.loc, body->getTerminator()->getOperand(origPort.argNum),
-        unpackChannels);
+  if (body) {
+    auto builder = OpBuilder::atBlockTerminator(body);
+    unpack = UnpackBundleOp::create(
+        builder, origPort.loc,
+        body->getTerminator()->getOperand(origPort.argNum), unpackChannels);
+  }
 
   // Build new ports and put the new port info directly into the member
   // variable.
@@ -188,7 +197,8 @@ void BundlePort::buildOutputSignals() {
 
 namespace {
 /// Convert all the ESI bundle ports on modules to channel ports.
-struct ESIBundlesPass : public LowerESIBundlesBase<ESIBundlesPass> {
+struct ESIBundlesPass
+    : public circt::esi::impl::LowerESIBundlesBase<ESIBundlesPass> {
   void runOnOperation() override;
 };
 } // anonymous namespace
@@ -212,8 +222,7 @@ void ESIBundlesPass::runOnOperation() {
   RewritePatternSet patterns(&ctxt);
   PackBundleOp::getCanonicalizationPatterns(patterns, &ctxt);
   UnpackBundleOp::getCanonicalizationPatterns(patterns, &ctxt);
-  if (failed(mlir::applyPatternsAndFoldGreedily(getOperation(),
-                                                std::move(patterns))))
+  if (failed(mlir::applyPatternsGreedily(getOperation(), std::move(patterns))))
     signalPassFailure();
 
   top.walk([&](PackBundleOp pack) {

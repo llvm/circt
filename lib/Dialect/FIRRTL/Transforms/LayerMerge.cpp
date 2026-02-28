@@ -11,18 +11,28 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
+#include "mlir/IR/Iterators.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-layer-merge"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_LAYERMERGE
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
 
 namespace {
 /// A pass that merges layer blocks referencing the same layer definition.
-struct LayerMerge : public LayerMergeBase<LayerMerge> {
+struct LayerMerge : public circt::firrtl::impl::LayerMergeBase<LayerMerge> {
   void runOnOperation() override;
 };
 } // namespace
@@ -33,43 +43,28 @@ void LayerMerge::runOnOperation() {
                       "--------------------------------------------------===\n"
                    << "Module: '" << getOperation().getName() << "'\n";);
 
-  // Track the last layer block that we saw which referenced a specific layer
-  // definition.  Because this pass operates as a single walk of the IR, it is
-  // only ever possible that there is one prior layer block that references a
-  // given layer definition.
-  llvm::DenseMap<SymbolRefAttr, LayerBlockOp> priorLayerBlocks;
+  // Track the last layer block in a module associated with a specific layer.
+  llvm::DenseMap<SymbolRefAttr, LayerBlockOp> lastBlockMap;
 
-  // Recursively walk LayerBlockOps in the module.  Whenever we see a layer
-  // block, check to see if there is a prior layer block that references the
-  // same declaration.  If not, this layer block becomes the prior layer block
-  // and we continue.  If there is a prior layer block, then splice the prior
-  // layer block's body into the beginning of this layer block and erase the
-  // prior layer block.  This layer block then becomes the new prior layer
-  // block.
+  // Recursively visit LayerBlockOps in reverse order.  Merge all earlier layer
+  // blocks into the last layer blocks of the same layer definition.
   //
   // The recursive walk will cause nested layer blocks to also be merged.
   auto moduleOp = getOperation();
   mlir::IRRewriter rewriter(moduleOp.getContext());
-  moduleOp.walk([&](LayerBlockOp layerBlock) {
-    auto layerName = layerBlock.getLayerName();
-    // If we haven't seen this layer before, then just insert it into
-    // priorLayerBlocks.
-    auto priorLayerBlockIt = priorLayerBlocks.find(layerName);
-    if (priorLayerBlockIt == priorLayerBlocks.end()) {
-      priorLayerBlocks[layerName] = layerBlock;
-      return WalkResult::advance();
-    }
+  moduleOp.walk<mlir::WalkOrder::PostOrder, mlir::ReverseIterator>(
+      [&](LayerBlockOp thisBlock) {
+        auto layer = thisBlock.getLayerName();
+        // If we haven't seen this block before, then it is the last block.
+        auto [item, inserted] = lastBlockMap.try_emplace(layer, thisBlock);
+        if (inserted)
+          return WalkResult::advance();
 
-    auto &priorLayerBlock = priorLayerBlockIt->getSecond();
-    rewriter.inlineBlockBefore(priorLayerBlock.getBody(), layerBlock.getBody(),
-                               layerBlock.getBody()->begin());
-    priorLayerBlock->erase();
-    priorLayerBlocks[layerName] = layerBlock;
-    numMerged++;
-    return WalkResult::advance();
-  });
-}
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createLayerMergePass() {
-  return std::make_unique<LayerMerge>();
+        auto &lastBlock = item->getSecond();
+        rewriter.inlineBlockBefore(thisBlock.getBody(), lastBlock.getBody(),
+                                   lastBlock.getBody()->begin());
+        thisBlock->erase();
+        numMerged++;
+        return WalkResult::advance();
+      });
 }

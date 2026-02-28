@@ -34,4 +34,36 @@ hw.module @err(in %a: i0) {
 hw.module @err(in %a: i16) {
   // expected-error @+1 {{from bit too large for input}}
   %0 = comb.extract %a from 0xFFFFFFFF : (i16) -> i8
+
+// -----
+
+hw.module @err(in %a: i4, out out: i7) {
+  // expected-note @+1 {{prior use here}}
+  %0 = comb.concat %a, %a : i4, i4
+  // expected-error @+1 {{use of value '%0' expects different type than prior uses: 'i7' vs 'i8'}}
+  hw.output %0 : i7
+}
+
+// -----
+
+// Check return type is still inferred correctly with generic parser
+hw.module @err(in %a: i4, out out: i7) {
+  // expected-error @+2 {{'comb.concat' op inferred type(s) 'i8' are incompatible with return type(s) of operation 'i7'}}
+  // expected-error @+1 {{'comb.concat' op failed to infer returned types}}
+  %0 = "comb.concat"(%a, %a) : (i4, i4) -> i7
+  hw.output %0 : i7
+}
+
+// -----
+
+hw.module @err() {
+  // expected-error @below {{number of operands and types do not match: got 0 operands and 1 types}}
+  comb.concat : i1
+}
+
+// -----
+
+hw.module @err(in %arg0: i1) {
+  // expected-error @below {{number of operands and types do not match: got 1 operands and 0 types}}
+  comb.concat %arg0 :
 }

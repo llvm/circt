@@ -7,11 +7,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/CombToArith.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+
+namespace circt {
+#define GEN_PASS_DEF_CONVERTCOMBTOARITH
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace circt;
 using namespace hw;
@@ -118,11 +123,11 @@ struct ExtractOpConversion : OpConversionPattern<ExtractOp> {
   matchAndRewrite(ExtractOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
-    Value lowBit = rewriter.create<arith::ConstantOp>(
-        op.getLoc(),
+    Value lowBit = arith::ConstantOp::create(
+        rewriter, op.getLoc(),
         IntegerAttr::get(adaptor.getInput().getType(), adaptor.getLowBit()));
     Value shifted =
-        rewriter.create<ShRUIOp>(op.getLoc(), adaptor.getInput(), lowBit);
+        ShRUIOp::create(rewriter, op.getLoc(), adaptor.getInput(), lowBit);
     rewriter.replaceOpWithNewOp<TruncIOp>(op, op.getResult().getType(),
                                           shifted);
     return success();
@@ -157,8 +162,8 @@ struct ConcatOpConversion : OpConversionPattern<ConcatOp> {
     unsigned offset = type.getIntOrFloatBitWidth();
     for (auto operand : adaptor.getOperands().drop_back()) {
       offset -= operand.getType().getIntOrFloatBitWidth();
-      auto offsetConst = rewriter.create<arith::ConstantOp>(
-          loc, IntegerAttr::get(type, offset));
+      auto offsetConst = arith::ConstantOp::create(
+          rewriter, loc, IntegerAttr::get(type, offset));
       auto extended = rewriter.createOrFold<ExtUIOp>(loc, type, operand);
       auto shifted = rewriter.createOrFold<ShLIOp>(loc, extended, offsetConst);
       aggregate = rewriter.createOrFold<OrIOp>(loc, aggregate, shifted);
@@ -185,6 +190,93 @@ struct BinaryOpConversion : OpConversionPattern<SourceOp> {
   }
 };
 
+/// Lowering for unsigned division / remainder operations that need to
+/// special-case zero-value divisors to not run coarser UB than CIRCT defines.
+template <typename SourceOp, typename TargetOp>
+struct DivUOpConversion : OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Rewrite: divu(a, b) ~>
+    //    isZero = (b == 0)
+    //    divisor = isZero ? 1 : b;
+    //    result = divu(a, divisor)
+    Location loc = op.getLoc();
+    Value zero = arith::ConstantOp::create(
+        rewriter, loc, rewriter.getIntegerAttr(adaptor.getRhs().getType(), 0));
+    Value one = arith::ConstantOp::create(
+        rewriter, loc, rewriter.getIntegerAttr(adaptor.getRhs().getType(), 1));
+    Value isZero = arith::CmpIOp::create(rewriter, loc, CmpIPredicate::eq,
+                                         adaptor.getRhs(), zero);
+    Value divisor =
+        arith::SelectOp::create(rewriter, loc, isZero, one, adaptor.getRhs());
+    rewriter.replaceOpWithNewOp<TargetOp>(op, adaptor.getLhs(), divisor);
+    return success();
+  }
+};
+
+/// Lowering for signed division / remainder that need to special-case INT_MIN /
+/// -1 (and division by zero).
+template <typename SourceOp, typename TargetOp, bool IsRem>
+class DivSOpConversion : public OpConversionPattern<SourceOp> {
+public:
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value dividend = adaptor.getLhs();
+    Value divisor = adaptor.getRhs();
+    Type ty = op.getType();
+
+    // Rewrite: divs(a, b) ~>
+    //    isZero = (b == 0)
+    //    isOverflow = (b == -1 && a == INT_MIN)
+    //    pred = isZero || isOverflow
+    //    rhs_safe = pred ? 1 : b;
+    //    c = divs(a, rhs_safe)
+    //    result = isOverflow ? INT_MIN : c;
+    //
+    // mods is the same except the result is zero when isOverflow is true. These
+    // values were chosen to align with the behavior of existing Verilog
+    // simulators.
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    auto eq = [&](Value lhs, Value rhs) {
+      return arith::CmpIOp::create(b, CmpIPredicate::eq, lhs, rhs);
+    };
+    auto and_ = [&](Value lhs, Value rhs) {
+      return arith::AndIOp::create(b, lhs, rhs);
+    };
+    auto or_ = [&](Value lhs, Value rhs) {
+      return arith::OrIOp::create(b, lhs, rhs);
+    };
+
+    int bitwidth = ty.getIntOrFloatBitWidth();
+    Value zero = arith::ConstantOp::create(b, rewriter.getIntegerAttr(ty, 0));
+    Value one = arith::ConstantOp::create(b, rewriter.getIntegerAttr(ty, 1));
+    Value int_min = arith::ConstantOp::create(
+        b, rewriter.getIntegerAttr(ty, APInt::getSignedMinValue(bitwidth)));
+    Value minus_one = arith::ConstantOp::create(
+        b, rewriter.getIntegerAttr(ty, APInt::getAllOnes(bitwidth)));
+
+    Value isZero = eq(divisor, zero);
+    Value isOverflow = and_(eq(dividend, int_min), eq(divisor, minus_one));
+    Value pred = or_(isZero, isOverflow);
+    Value safeDivisor = arith::SelectOp::create(b, pred, one, divisor);
+    auto newOp = TargetOp::create(b, dividend, safeDivisor);
+
+    Value resultIfOverflow = IsRem ? zero : int_min;
+    Value result =
+        arith::SelectOp::create(b, isOverflow, resultIfOverflow, newOp);
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
 /// Lower a comb::ReplicateOp operation to the LLVM dialect.
 template <typename SourceOp, typename TargetOp>
 struct VariadicOpConversion : OpConversionPattern<SourceOp> {
@@ -200,7 +292,7 @@ struct VariadicOpConversion : OpConversionPattern<SourceOp> {
     Value runner = operands[0];
     for (Value operand :
          llvm::make_range(operands.begin() + 1, operands.end())) {
-      runner = rewriter.create<TargetOp>(op.getLoc(), runner, operand);
+      runner = TargetOp::create(rewriter, op.getLoc(), runner, operand);
     }
     rewriter.replaceOp(op, runner);
     return success();
@@ -225,10 +317,10 @@ struct LogicalShiftConversion : OpConversionPattern<SourceOp> {
     unsigned shifteeWidth =
         hw::type_cast<IntegerType>(adaptor.getLhs().getType())
             .getIntOrFloatBitWidth();
-    auto zeroConstOp = rewriter.create<arith::ConstantOp>(
-        op.getLoc(), IntegerAttr::get(adaptor.getLhs().getType(), 0));
-    auto maxShamtConstOp = rewriter.create<arith::ConstantOp>(
-        op.getLoc(),
+    auto zeroConstOp = arith::ConstantOp::create(
+        rewriter, op.getLoc(), IntegerAttr::get(adaptor.getLhs().getType(), 0));
+    auto maxShamtConstOp = arith::ConstantOp::create(
+        rewriter, op.getLoc(),
         IntegerAttr::get(adaptor.getLhs().getType(), shifteeWidth));
     auto shiftOp = rewriter.createOrFold<TargetOp>(
         op.getLoc(), adaptor.getLhs(), adaptor.getRhs());
@@ -252,8 +344,8 @@ struct ShrSOpConversion : OpConversionPattern<ShrSOp> {
         hw::type_cast<IntegerType>(adaptor.getLhs().getType())
             .getIntOrFloatBitWidth();
     // Clamp the shift amount to shifteeWidth - 1
-    auto maxShamtMinusOneConstOp = rewriter.create<arith::ConstantOp>(
-        op.getLoc(),
+    auto maxShamtMinusOneConstOp = arith::ConstantOp::create(
+        rewriter, op.getLoc(),
         IntegerAttr::get(adaptor.getLhs().getType(), shifteeWidth - 1));
     auto shamtOp = rewriter.createOrFold<MinUIOp>(op.getLoc(), adaptor.getRhs(),
                                                   maxShamtMinusOneConstOp);
@@ -270,7 +362,7 @@ struct ShrSOpConversion : OpConversionPattern<ShrSOp> {
 
 namespace {
 struct ConvertCombToArithPass
-    : public ConvertCombToArithBase<ConvertCombToArithPass> {
+    : public circt::impl::ConvertCombToArithBase<ConvertCombToArithPass> {
   void runOnOperation() override;
 };
 } // namespace
@@ -282,9 +374,11 @@ void circt::populateCombToArithConversionPatterns(
       ExtractOpConversion, ConcatOpConversion, ShrSOpConversion,
       LogicalShiftConversion<ShlOp, ShLIOp>,
       LogicalShiftConversion<ShrUOp, ShRUIOp>,
-      BinaryOpConversion<SubOp, SubIOp>, BinaryOpConversion<DivSOp, DivSIOp>,
-      BinaryOpConversion<DivUOp, DivUIOp>, BinaryOpConversion<ModSOp, RemSIOp>,
-      BinaryOpConversion<ModUOp, RemUIOp>, BinaryOpConversion<MuxOp, SelectOp>,
+      BinaryOpConversion<SubOp, SubIOp>,
+      DivSOpConversion<DivSOp, DivSIOp, /*IsRem=*/false>,
+      DivUOpConversion<DivUOp, DivUIOp>,
+      DivSOpConversion<ModSOp, RemSIOp, /*IsRem=*/true>,
+      DivUOpConversion<ModUOp, RemUIOp>, BinaryOpConversion<MuxOp, SelectOp>,
       VariadicOpConversion<AddOp, AddIOp>, VariadicOpConversion<MulOp, MulIOp>,
       VariadicOpConversion<AndOp, AndIOp>, VariadicOpConversion<OrOp, OrIOp>,
       VariadicOpConversion<XorOp, XOrIOp>>(converter, patterns.getContext());
@@ -299,18 +393,26 @@ void ConvertCombToArithPass::runOnOperation() {
   // would result in undesirably complex logic, therefore, we mark it legal
   // here.
   target.addLegalOp<comb::ParityOp>();
-
+  // Arith does not have bitreverse, so we leave it for the CombToLLVM pass.
+  target.addLegalOp<comb::ReverseOp>();
+  // This pass is intended to rewrite Comb ops into Arith ops. Other dialects
+  // (e.g. LLVM) may legitimately be present when this pass is used in custom
+  // pipelines. Treat all unknown operations as legal so we don't attempt to
+  // fold/legalize unrelated ops.
+  target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
   RewritePatternSet patterns(&getContext());
   TypeConverter converter;
   converter.addConversion([](Type type) { return type; });
   // TODO: a pattern for comb.parity
   populateCombToArithConversionPatterns(converter, patterns);
 
+  ConversionConfig config;
+  config.allowPatternRollback = false;
   if (failed(mlir::applyPartialConversion(getOperation(), target,
-                                          std::move(patterns))))
+                                          std::move(patterns), config)))
     signalPassFailure();
 }
 
-std::unique_ptr<OperationPass<ModuleOp>> circt::createConvertCombToArithPass() {
+std::unique_ptr<Pass> circt::createConvertCombToArithPass() {
   return std::make_unique<ConvertCombToArithPass>();
 }

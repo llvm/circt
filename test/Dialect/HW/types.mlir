@@ -51,4 +51,11 @@ module {
     %1 = hw.union_create "a", %i : !hw.typealias<@ns::@bar, !hw.union<a: i1, b: i1>>
     return
   }
+
+  // CHECK-LABEL: func @nestedUnionArray
+  func.func @nestedUnionArray(
+    // CHECK: %arg0: !hw.array<4xunion<u8: i8, u16: i16>>
+    %arg0: !hw.array<4x!hw.union<u8: i8, u16: i16>>) {
+    return
+  }
 }

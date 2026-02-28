@@ -10,19 +10,27 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/HandshakePasses.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Rewrite/FrozenRewritePatternSet.h"
 #include "mlir/Transforms/DialectConversion.h"
+
+namespace circt {
+namespace handshake {
+#define GEN_PASS_DEF_HANDSHAKELOCKFUNCTIONS
+#include "circt/Dialect/Handshake/HandshakePasses.h.inc"
+} // namespace handshake
+} // namespace circt
 
 using namespace circt;
 using namespace handshake;
 using namespace mlir;
 
-LogicalResult handshake::lockRegion(Region &r, OpBuilder &rewriter) {
+/// Adds a locking mechanism around the region.
+static LogicalResult lockRegion(Region &r, OpBuilder &rewriter) {
   Block *entry = &r.front();
   Location loc = r.getLoc();
 
@@ -37,8 +45,8 @@ LogicalResult handshake::lockRegion(Region &r, OpBuilder &rewriter) {
   BackedgeBuilder bebuilder(rewriter, loc);
   auto backEdge = bebuilder.get(rewriter.getNoneType());
 
-  auto buff = rewriter.create<handshake::BufferOp>(loc, backEdge, 1,
-                                                   BufferTypeEnum::seq);
+  auto buff = handshake::BufferOp::create(rewriter, loc, backEdge, 1,
+                                          BufferTypeEnum::seq);
 
   // Dummy value that causes a buffer initialization, but itself does not have a
   // semantic meaning.
@@ -47,7 +55,7 @@ LogicalResult handshake::lockRegion(Region &r, OpBuilder &rewriter) {
   SmallVector<Value> inSyncOperands =
       llvm::to_vector_of<Value>(entry->getArguments());
   inSyncOperands.push_back(buff);
-  auto sync = rewriter.create<SyncOp>(loc, inSyncOperands);
+  auto sync = SyncOp::create(rewriter, loc, inSyncOperands);
 
   // replace all func arg usages with the synced ones
   // TODO is this UB?
@@ -59,7 +67,7 @@ LogicalResult handshake::lockRegion(Region &r, OpBuilder &rewriter) {
   SmallVector<Value> endJoinOperands = llvm::to_vector(ret->getOperands());
   // Add the axilirary control signal output to the end-join
   endJoinOperands.push_back(sync.getResults().back());
-  auto endJoin = rewriter.create<JoinOp>(loc, endJoinOperands);
+  auto endJoin = JoinOp::create(rewriter, loc, endJoinOperands);
 
   backEdge.setValue(endJoin);
   return success();
@@ -68,7 +76,8 @@ LogicalResult handshake::lockRegion(Region &r, OpBuilder &rewriter) {
 namespace {
 
 struct HandshakeLockFunctionsPass
-    : public HandshakeLockFunctionsBase<HandshakeLockFunctionsPass> {
+    : public circt::handshake::impl::HandshakeLockFunctionsBase<
+          HandshakeLockFunctionsPass> {
   void runOnOperation() override {
     handshake::FuncOp op = getOperation();
     if (op.isExternal())

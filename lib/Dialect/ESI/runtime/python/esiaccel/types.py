@@ -15,39 +15,55 @@ from __future__ import annotations
 from . import esiCppAccel as cpp
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
   from .accelerator import HWModule
 
 from concurrent.futures import Future
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Tuple, Type, Union
+import sys
+import traceback
 
 
 def _get_esi_type(cpp_type: cpp.Type):
   """Get the wrapper class for a C++ type."""
-  for cpp_type_cls, fn in __esi_mapping.items():
+  for cpp_type_cls, wrapper_cls in __esi_mapping.items():
     if isinstance(cpp_type, cpp_type_cls):
-      return fn(cpp_type)
-  return ESIType(cpp_type)
+      return wrapper_cls.wrap_cpp(cpp_type)
+  return ESIType.wrap_cpp(cpp_type)
 
 
-# Mapping from C++ types to functions constructing the Python object
-# corresponding to that type.
-__esi_mapping: Dict[Type, Callable] = {
-    cpp.ChannelType: lambda cpp_type: _get_esi_type(cpp_type.inner)
-}
+# Mapping from C++ types to wrapper classes
+__esi_mapping: Dict[Type, Type] = {}
 
 
 class ESIType:
 
-  def __init__(self, cpp_type: cpp.Type):
+  def __init__(self, id: str):
+    self._init_from_cpp(cpp.Type(id))
+
+  @classmethod
+  def wrap_cpp(cls, cpp_type: cpp.Type):
+    """Wrap a C++ ESI type with its corresponding Python ESI Type."""
+    instance = cls.__new__(cls)
+    instance._init_from_cpp(cpp_type)
+    return instance
+
+  def _init_from_cpp(self, cpp_type: cpp.Type):
+    """Initialize instance attributes from a C++ type object."""
     self.cpp_type = cpp_type
+
+  @property
+  def id(self) -> str:
+    """Get the stable id of this type."""
+    return self.cpp_type.id
 
   @property
   def supports_host(self) -> Tuple[bool, Optional[str]]:
     """Does this type support host communication via Python? Returns either
     '(True, None)' if it is, or '(False, reason)' if it is not."""
 
-    if self.bit_width % 8 != 0:
+    if self.bit_width >= 0 and self.bit_width % 8 != 0:
       return (False, "runtime only supports types with multiple of 8 bits")
     return (True, None)
 
@@ -78,11 +94,81 @@ class ESIType:
     leftover bytes."""
     assert False, "unimplemented"
 
+  def __hash__(self) -> int:
+    return hash(self.id)
+
+  def __eq__(self, other) -> bool:
+    return isinstance(other, ESIType) and self.id == other.id
+
   def __str__(self) -> str:
     return str(self.cpp_type)
 
 
+class ChannelType(ESIType):
+
+  def __init__(self, id: str, inner: "ESIType"):
+    self._init_from_cpp(cpp.ChannelType(id, inner.cpp_type))
+
+  def _init_from_cpp(self, cpp_type: cpp.ChannelType):
+    super()._init_from_cpp(cpp_type)
+    self.inner_type = _get_esi_type(cpp_type.inner)
+
+  @property
+  def bit_width(self) -> int:
+    return self.inner_type.bit_width
+
+  @property
+  def inner(self) -> "ESIType":
+    return self.inner_type
+
+  @property
+  def supports_host(self) -> Tuple[bool, Optional[str]]:
+    return self.inner_type.supports_host
+
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
+    return self.inner_type.is_valid(obj)
+
+  def serialize(self, obj) -> bytearray:
+    return self.inner_type.serialize(obj)
+
+  def deserialize(self, data: bytearray) -> Tuple[object, bytearray]:
+    return self.inner_type.deserialize(data)
+
+
+__esi_mapping[cpp.ChannelType] = ChannelType
+
+
+class BundleType(ESIType):
+
+  class Channel(NamedTuple):
+    name: str
+    direction: cpp.BundleType.Direction
+    type: "ESIType"
+
+  def __init__(self, id: str, channels: List[Channel]):
+    cpp_channels = [(name, direction, channel_type.cpp_type)
+                    for name, direction, channel_type in channels]
+    self._init_from_cpp(cpp.BundleType(id, cpp_channels))
+
+  def _init_from_cpp(self, cpp_type: cpp.BundleType):
+    super()._init_from_cpp(cpp_type)
+    self._channels = [
+        BundleType.Channel(name, direction, _get_esi_type(channel_type))
+        for name, direction, channel_type in cpp_type.channels
+    ]
+
+  @property
+  def channels(self) -> List["BundleType.Channel"]:
+    return self._channels
+
+
+__esi_mapping[cpp.BundleType] = BundleType
+
+
 class VoidType(ESIType):
+
+  def __init__(self, id: str):
+    self._init_from_cpp(cpp.VoidType(id))
 
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     if obj is not None:
@@ -106,10 +192,32 @@ class VoidType(ESIType):
 __esi_mapping[cpp.VoidType] = VoidType
 
 
+class AnyType(ESIType):
+
+  def __init__(self, id: str):
+    self._init_from_cpp(cpp.AnyType(id))
+
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
+    return (False, "any type is not supported for host communication")
+
+  @property
+  def bit_width(self) -> int:
+    return -1
+
+  def serialize(self, obj) -> bytearray:
+    raise ValueError("any type cannot be serialized")
+
+  def deserialize(self, data: bytearray) -> Tuple[object, bytearray]:
+    raise ValueError("any type cannot be deserialized")
+
+
+__esi_mapping[cpp.AnyType] = AnyType
+
+
 class BitsType(ESIType):
 
-  def __init__(self, cpp_type: cpp.BitsType):
-    self.cpp_type: cpp.BitsType = cpp_type
+  def __init__(self, id: str, width: int):
+    self._init_from_cpp(cpp.BitsType(id, width))
 
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     if not isinstance(obj, (bytearray, bytes, list)):
@@ -141,8 +249,8 @@ __esi_mapping[cpp.BitsType] = BitsType
 
 class IntType(ESIType):
 
-  def __init__(self, cpp_type: cpp.IntegerType):
-    self.cpp_type: cpp.IntegerType = cpp_type
+  def __init__(self, id: str, width: int):
+    self._init_from_cpp(cpp.IntegerType(id, width))
 
   @property
   def bit_width(self) -> int:
@@ -150,6 +258,9 @@ class IntType(ESIType):
 
 
 class UIntType(IntType):
+
+  def __init__(self, id: str, width: int):
+    self._init_from_cpp(cpp.UIntType(id, width))
 
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     if not isinstance(obj, int):
@@ -173,6 +284,9 @@ __esi_mapping[cpp.UIntType] = UIntType
 
 
 class SIntType(IntType):
+
+  def __init__(self, id: str, width: int):
+    self._init_from_cpp(cpp.SIntType(id, width))
 
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     if not isinstance(obj, int):
@@ -201,11 +315,16 @@ __esi_mapping[cpp.SIntType] = SIntType
 
 class StructType(ESIType):
 
-  def __init__(self, cpp_type: cpp.StructType):
-    self.cpp_type = cpp_type
-    self.fields: List[Tuple[str, ESIType]] = [
-        (name, _get_esi_type(ty)) for (name, ty) in cpp_type.fields
-    ]
+  def __init__(self, id: str, fields: List[Tuple[str, "ESIType"]]):
+    # Convert Python ESIType fields to cpp Type fields
+    cpp_fields = [(name, field_type.cpp_type) for name, field_type in fields]
+    self._init_from_cpp(cpp.StructType(id, cpp_fields))
+
+  def _init_from_cpp(self, cpp_type: cpp.StructType):
+    """Initialize instance attributes from a C++ type object."""
+    super()._init_from_cpp(cpp_type)
+    # For wrap_cpp path, we need to convert C++ fields back to Python
+    self.fields = [(name, _get_esi_type(ty)) for (name, ty) in cpp_type.fields]
 
   @property
   def bit_width(self) -> int:
@@ -217,6 +336,8 @@ class StructType(ESIType):
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     fields_count = 0
     if not isinstance(obj, dict):
+      if not hasattr(obj, "__dict__"):
+        return (False, "must be a dict or have __dict__ attribute")
       obj = obj.__dict__
 
     for (fname, ftype) in self.fields:
@@ -232,14 +353,20 @@ class StructType(ESIType):
 
   def serialize(self, obj) -> bytearray:
     ret = bytearray()
-    for (fname, ftype) in reversed(self.fields):
+    if not isinstance(obj, dict):
+      obj = obj.__dict__
+    ordered_fields = reversed(
+        self.fields) if self.cpp_type.reverse else self.fields
+    for (fname, ftype) in ordered_fields:
       fval = obj[fname]
       ret.extend(ftype.serialize(fval))
     return ret
 
   def deserialize(self, data: bytearray) -> Tuple[Dict[str, Any], bytearray]:
     ret = {}
-    for (fname, ftype) in reversed(self.fields):
+    ordered_fields = reversed(
+        self.fields) if self.cpp_type.reverse else self.fields
+    for (fname, ftype) in ordered_fields:
       (fval, data) = ftype.deserialize(data)
       ret[fname] = fval
     return (ret, data)
@@ -250,8 +377,12 @@ __esi_mapping[cpp.StructType] = StructType
 
 class ArrayType(ESIType):
 
-  def __init__(self, cpp_type: cpp.ArrayType):
-    self.cpp_type = cpp_type
+  def __init__(self, id: str, element_type: "ESIType", size: int):
+    self._init_from_cpp(cpp.ArrayType(id, element_type.cpp_type, size))
+
+  def _init_from_cpp(self, cpp_type: cpp.ArrayType):
+    """Initialize instance attributes from a C++ type object."""
+    super()._init_from_cpp(cpp_type)
     self.element_type = _get_esi_type(cpp_type.element)
     self.size = cpp_type.size
 
@@ -288,6 +419,36 @@ class ArrayType(ESIType):
 __esi_mapping[cpp.ArrayType] = ArrayType
 
 
+class TypeAlias(ESIType):
+
+  def __init__(self, id: str, name: str, inner_type: "ESIType"):
+    self._init_from_cpp(cpp.TypeAliasType(id, name, inner_type.cpp_type))
+
+  def _init_from_cpp(self, cpp_type: cpp.TypeAliasType):
+    super()._init_from_cpp(cpp_type)
+    self.name = cpp_type.name
+    self.inner_type = _get_esi_type(cpp_type.inner)
+
+  @property
+  def bit_width(self) -> int:
+    return self.inner_type.bit_width
+
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
+    return self.inner_type.is_valid(obj)
+
+  def serialize(self, obj) -> bytearray:
+    return self.inner_type.serialize(obj)
+
+  def deserialize(self, data: bytearray) -> Tuple[object, bytearray]:
+    return self.inner_type.deserialize(data)
+
+  def __str__(self) -> str:
+    return self.name
+
+
+__esi_mapping[cpp.TypeAliasType] = TypeAlias
+
+
 class Port:
   """A unidirectional communication channel. This is the basic communication
   method with an accelerator."""
@@ -296,13 +457,19 @@ class Port:
     self.owner = owner
     self.cpp_port = cpp_port
     self.type = _get_esi_type(cpp_port.type)
+
+  def connect(self, buffer_size: Optional[int] = None):
     (supports_host, reason) = self.type.supports_host
     if not supports_host:
       raise TypeError(f"unsupported type: {reason}")
 
-  def connect(self):
-    self.cpp_port.connect()
+    opts = cpp.ConnectOptions()
+    opts.buffer_size = buffer_size
+    self.cpp_port.connect(opts)
     return self
+
+  def disconnect(self):
+    self.cpp_port.disconnect()
 
 
 class WritePort(Port):
@@ -312,18 +479,25 @@ class WritePort(Port):
     super().__init__(owner, cpp_port)
     self.cpp_port: cpp.WriteChannelPort = cpp_port
 
-  def write(self, msg=None) -> bool:
-    """Write a typed message to the channel. Attempts to serialize 'msg' to what
-    the accelerator expects, but will fail if the object is not convertible to
-    the port type."""
-
+  def __serialize_msg(self, msg=None) -> bytearray:
     valid, reason = self.type.is_valid(msg)
     if not valid:
       raise ValueError(
           f"'{msg}' cannot be converted to '{self.type}': {reason}")
     msg_bytes: bytearray = self.type.serialize(msg)
-    self.cpp_port.write(msg_bytes)
+    return msg_bytes
+
+  def write(self, msg=None) -> bool:
+    """Write a typed message to the channel. Attempts to serialize 'msg' to what
+        the accelerator expects, but will fail if the object is not convertible to
+        the port type."""
+    self.cpp_port.write(self.__serialize_msg(msg))
     return True
+
+  def try_write(self, msg=None) -> bool:
+    """Like 'write', but uses the non-blocking tryWrite method of the underlying
+        port. Returns True if the write was successful, False otherwise."""
+    return self.cpp_port.tryWrite(self.__serialize_msg(msg))
 
 
 class ReadPort(Port):
@@ -333,17 +507,15 @@ class ReadPort(Port):
     super().__init__(owner, cpp_port)
     self.cpp_port: cpp.ReadChannelPort = cpp_port
 
-  def read(self) -> Tuple[bool, Optional[object]]:
+  def read(self) -> object:
     """Read a typed message from the channel. Returns a deserialized object of a
     type defined by the port type."""
 
     buffer = self.cpp_port.read()
-    if buffer is None:
-      return (False, None)
     (msg, leftover) = self.type.deserialize(buffer)
     if len(leftover) != 0:
       raise ValueError(f"leftover bytes: {leftover}")
-    return (True, msg)
+    return msg
 
 
 class BundlePort:
@@ -355,6 +527,12 @@ class BundlePort:
     # TODO: add a proper registration mechanism for service ports.
     if isinstance(cpp_port, cpp.Function):
       return super().__new__(FunctionPort)
+    if isinstance(cpp_port, cpp.Callback):
+      return super().__new__(CallbackPort)
+    if isinstance(cpp_port, cpp.MMIORegion):
+      return super().__new__(MMIORegion)
+    if isinstance(cpp_port, cpp.Metric):
+      return super().__new__(MetricPort)
     return super().__new__(cls)
 
   def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
@@ -396,6 +574,28 @@ class MessageFuture(Future):
     raise NotImplementedError("add_done_callback is not implemented")
 
 
+class MMIORegion(BundlePort):
+  """A region of memory-mapped I/O space. This is a collection of named
+  channels, which are either read or read-write. The channels are accessed
+  by name, and can be connected to the host."""
+
+  def __init__(self, owner: HWModule, cpp_port: cpp.MMIORegion):
+    super().__init__(owner, cpp_port)
+    self.region = cpp_port
+
+  @property
+  def descriptor(self) -> cpp.MMIORegionDesc:
+    return self.region.descriptor
+
+  def read(self, offset: int) -> bytearray:
+    """Read a value from the MMIO region at the given offset."""
+    return self.region.read(offset)
+
+  def write(self, offset: int, data: bytearray) -> None:
+    """Write a value to the MMIO region at the given offset."""
+    self.region.write(offset, data)
+
+
 class FunctionPort(BundlePort):
   """A pair of channels which carry the input and output of a function."""
 
@@ -409,16 +609,78 @@ class FunctionPort(BundlePort):
     self.cpp_port.connect()
     self.connected = True
 
-  def call(self, **kwargs: Any) -> Future:
+  def call(self, *args: Any, **kwargs: Any) -> Future:
     """Call the function with the given argument and returns a future of the
     result."""
-    valid, reason = self.arg_type.is_valid(kwargs)
+
+    # Accept either positional or keyword arguments, but not both.
+    if len(args) > 0 and len(kwargs) > 0:
+      raise ValueError("cannot use both positional and keyword arguments")
+
+    # Handle arguments: for single positional arg, unwrap it from tuple
+    if len(args) == 1:
+      selected = args[0]
+    elif len(args) > 1:
+      selected = args
+    else:
+      selected = kwargs
+
+    valid, reason = self.arg_type.is_valid(selected)
     if not valid:
       raise ValueError(
-          f"'{kwargs}' cannot be converted to '{self.arg_type}': {reason}")
-    arg_bytes: bytearray = self.arg_type.serialize(kwargs)
+          f"'{selected}' cannot be converted to '{self.arg_type}': {reason}")
+    arg_bytes: bytearray = self.arg_type.serialize(selected)
     cpp_future = self.cpp_port.call(arg_bytes)
     return MessageFuture(self.result_type, cpp_future)
 
   def __call__(self, *args: Any, **kwds: Any) -> Future:
     return self.call(*args, **kwds)
+
+
+class CallbackPort(BundlePort):
+  """Callback ports are the inverse of function ports -- instead of calls to the
+  accelerator, they get called from the accelerator. Specify the function which
+  you'd like the accelerator to call when you call `connect`."""
+
+  def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
+    super().__init__(owner, cpp_port)
+    self.arg_type = self.read_port("arg").type
+    self.result_type = self.write_port("result").type
+    self.connected = False
+
+  def connect(self, cb: Callable[[Any], Any]):
+
+    def type_convert_wrapper(cb: Callable[[Any], Any],
+                             msg: bytearray) -> Optional[bytearray]:
+      try:
+        (obj, leftover) = self.arg_type.deserialize(msg)
+        if len(leftover) != 0:
+          raise ValueError(f"leftover bytes: {leftover}")
+        result = cb(obj)
+        if result is None:
+          return None
+        return self.result_type.serialize(result)
+      except Exception as e:
+        traceback.print_exception(e)
+        return None
+
+    self.cpp_port.connect(lambda x: type_convert_wrapper(cb=cb, msg=x))
+    self.connected = True
+
+
+class MetricPort(BundlePort):
+  """Telemetry ports report an individual piece of information from the
+  acceelerator. The method of accessing telemetry will likely change in the
+  future."""
+
+  def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
+    super().__init__(owner, cpp_port)
+    self.connected = False
+
+  def connect(self):
+    self.cpp_port.connect()
+    self.connected = True
+
+  def read(self) -> Future:
+    cpp_future = self.cpp_port.read()
+    return MessageFuture(self.cpp_port.type, cpp_future)

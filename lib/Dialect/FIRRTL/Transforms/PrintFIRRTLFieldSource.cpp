@@ -9,18 +9,27 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLFieldSource.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/Support/raw_ostream.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_PRINTFIRRTLFIELDSOURCEPASS
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
 
 namespace {
 struct PrintFIRRTLFieldSourcePass
-    : public PrintFIRRTLFieldSourcePassBase<PrintFIRRTLFieldSourcePass> {
-  PrintFIRRTLFieldSourcePass(raw_ostream &os) : os(os) {}
+    : public circt::firrtl::impl::PrintFIRRTLFieldSourcePassBase<
+          PrintFIRRTLFieldSourcePass> {
+  PrintFIRRTLFieldSourcePass() : os(llvm::errs()) {}
 
   void visitValue(const FieldSource &fieldRefs, Value v) {
     auto *p = fieldRefs.nodeForValue(v);
@@ -67,7 +76,3 @@ struct PrintFIRRTLFieldSourcePass
   raw_ostream &os;
 };
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass> circt::firrtl::createFIRRTLFieldSourcePass() {
-  return std::make_unique<PrintFIRRTLFieldSourcePass>(llvm::errs());
-}

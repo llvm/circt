@@ -21,4 +21,3 @@ Operation *FieldRef::getDefiningOp() const {
     return op;
   return cast<BlockArgument>(value).getOwner()->getParentOp();
 }
-

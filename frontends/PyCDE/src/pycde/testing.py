@@ -1,3 +1,4 @@
+from .signals import Signal
 from .system import System
 from .module import Module
 
@@ -7,6 +8,14 @@ from pathlib import Path
 import subprocess
 import re
 import os
+
+
+def print_info(msg_fmt: str, *args: Signal):
+  """Emit SystemVerilog info message."""
+  from .dialects import sv
+  from .circt.ir import StringAttr
+  subs = [arg.value for arg in args]
+  sv.InfoProceduralOp(subs, message=StringAttr.get(msg_fmt))
 
 
 def unittestmodule(generate=True,
@@ -123,7 +132,7 @@ class _IVerilogHandler:
     # lives easier and create a minimum timescale through the command-line.
     cmd_file = os.path.join(pycde_system.output_directory, "cmds.f")
     with open(cmd_file, "w+") as f:
-      f.write("+timescale+1ns/1ps")
+      f.write("+timescale+1ns/1ps\n")
 
     return [f"-f{cmd_file}"]
 

@@ -89,13 +89,13 @@ Any readValueWithType(mlir::Type type, std::stringstream &arg) {
     int64_t x;
     arg >> x;
     int64_t width = INDEX_WIDTH;
-    APInt aparg(width, x);
+    APInt aparg(width, x, /*isSigned=*/false, /*implicitTrunc=*/true);
     return aparg;
   } else if (isa<mlir::IntegerType>(type)) {
     int64_t x;
     arg >> x;
     int64_t width = type.getIntOrFloatBitWidth();
-    APInt aparg(width, x);
+    APInt aparg(width, x, /*isSigned=*/false, /*implicitTrunc=*/true);
     return aparg;
   } else if (type.isF32()) {
     float x;

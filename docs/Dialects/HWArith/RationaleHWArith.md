@@ -483,19 +483,18 @@ can be simplified to:
 %4 = hwarith.icmp lt %0, %1 : si3, ui5
 ```
 
-Note that the result of the comparison is *always* of type `ui1`, regardless of
-the operands. So if the `i1` type is needed, the result must be cast
-accordingly.
+Note that the result of the comparison is *always* of type `i1` since the
+logical result is a boolean, which doesn't have signedness semantics.
 
 #### Overview
 
 |   | LHS type | RHS type | Comparison type                          | Result type |
 | - | :------- | :------- | :--------------------------------------- | :---------- |
-|(U)| `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = max(*a*, *b*)             | `ui1`       |
-|(S)| `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a*, *b*)             | `ui1`       |
-|(M)| `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 1 **if** *a* ≥ *b*  | `ui1`       |
-|   |          |          | `si<r>`, *r* = *b* **if** *a* < *b*      | `ui1`       |
-|(M)| `si<a>`  | `ui<b>`  | Same as `ui<b> si<a>`                    | `ui1`       |
+|(U)| `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = max(*a*, *b*)             | `i1`        |
+|(S)| `si<a>`  | `si<b>`  | `si<r>`, *r* = max(*a*, *b*)             | `i1`        |
+|(M)| `ui<a>`  | `si<b>`  | `si<r>`, *r* = *a* + 1 **if** *a* ≥ *b*  | `i1`        |
+|   |          |          | `si<r>`, *r* = *b* **if** *a* < *b*      | `i1`        |
+|(M)| `si<a>`  | `ui<b>`  | Same as `ui<b> si<a>`                    | `i1`        |
 
 #### Examples
 ```mlir

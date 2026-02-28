@@ -39,7 +39,7 @@ void DebugAnalysisBuilder::run() {
   // Find all debug ops nested under the root op and mark them as debug-only
   // to kickstart the analysis.
   rootOp->walk([&](Operation *op) {
-    if (isa<debug::DebugDialect>(op->getDialect())) {
+    if (isa_and_nonnull<debug::DebugDialect>(op->getDialect())) {
       addDebugOp(op);
       return;
     }
@@ -64,7 +64,7 @@ void DebugAnalysisBuilder::run() {
     // configurable, since certain forms of debug info extraction would be able
     // to pull entire state machines out of the design. For now this just
     // represents the common denominator across all debug infos.
-    if (!isa<hw::HWDialect, comb::CombDialect>(op->getDialect()))
+    if (!isa_and_nonnull<hw::HWDialect, comb::CombDialect>(op->getDialect()))
       continue;
     if (op->hasAttr("name"))
       continue;

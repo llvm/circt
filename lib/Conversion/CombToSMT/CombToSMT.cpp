@@ -9,7 +9,9 @@
 #include "circt/Conversion/CombToSMT.h"
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/SMT/SMTOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/SMT/IR/SMTOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -18,6 +20,7 @@ namespace circt {
 #include "circt/Conversion/Passes.h.inc"
 } // namespace circt
 
+using namespace mlir;
 using namespace circt;
 using namespace comb;
 
@@ -54,50 +57,55 @@ struct IcmpOpConversion : OpConversionPattern<ICmpOp> {
       return rewriter.notifyMatchFailure(op,
                                          "comparison predicate not supported");
 
+    Value result;
     if (adaptor.getPredicate() == ICmpPredicate::eq) {
-      rewriter.replaceOpWithNewOp<smt::EqOp>(op, adaptor.getLhs(),
-                                             adaptor.getRhs());
-      return success();
+      result = smt::EqOp::create(rewriter, op.getLoc(), adaptor.getLhs(),
+                                 adaptor.getRhs());
+    } else if (adaptor.getPredicate() == ICmpPredicate::ne) {
+      result = smt::DistinctOp::create(rewriter, op.getLoc(), adaptor.getLhs(),
+                                       adaptor.getRhs());
+    } else {
+      smt::BVCmpPredicate pred;
+      switch (adaptor.getPredicate()) {
+      case ICmpPredicate::sge:
+        pred = smt::BVCmpPredicate::sge;
+        break;
+      case ICmpPredicate::sgt:
+        pred = smt::BVCmpPredicate::sgt;
+        break;
+      case ICmpPredicate::sle:
+        pred = smt::BVCmpPredicate::sle;
+        break;
+      case ICmpPredicate::slt:
+        pred = smt::BVCmpPredicate::slt;
+        break;
+      case ICmpPredicate::uge:
+        pred = smt::BVCmpPredicate::uge;
+        break;
+      case ICmpPredicate::ugt:
+        pred = smt::BVCmpPredicate::ugt;
+        break;
+      case ICmpPredicate::ule:
+        pred = smt::BVCmpPredicate::ule;
+        break;
+      case ICmpPredicate::ult:
+        pred = smt::BVCmpPredicate::ult;
+        break;
+      default:
+        llvm_unreachable("all cases handled above");
+      }
+
+      result = smt::BVCmpOp::create(rewriter, op.getLoc(), pred,
+                                    adaptor.getLhs(), adaptor.getRhs());
     }
 
-    if (adaptor.getPredicate() == ICmpPredicate::ne) {
-      rewriter.replaceOpWithNewOp<smt::DistinctOp>(op, adaptor.getLhs(),
-                                                   adaptor.getRhs());
-      return success();
-    }
+    Value convVal = typeConverter->materializeTargetConversion(
+        rewriter, op.getLoc(), typeConverter->convertType(op.getType()),
+        result);
+    if (!convVal)
+      return failure();
 
-    smt::BVCmpPredicate pred;
-    switch (adaptor.getPredicate()) {
-    case ICmpPredicate::sge:
-      pred = smt::BVCmpPredicate::sge;
-      break;
-    case ICmpPredicate::sgt:
-      pred = smt::BVCmpPredicate::sgt;
-      break;
-    case ICmpPredicate::sle:
-      pred = smt::BVCmpPredicate::sle;
-      break;
-    case ICmpPredicate::slt:
-      pred = smt::BVCmpPredicate::slt;
-      break;
-    case ICmpPredicate::uge:
-      pred = smt::BVCmpPredicate::uge;
-      break;
-    case ICmpPredicate::ugt:
-      pred = smt::BVCmpPredicate::ugt;
-      break;
-    case ICmpPredicate::ule:
-      pred = smt::BVCmpPredicate::ule;
-      break;
-    case ICmpPredicate::ult:
-      pred = smt::BVCmpPredicate::ult;
-      break;
-    default:
-      llvm_unreachable("all cases handled above");
-    }
-
-    rewriter.replaceOpWithNewOp<smt::BVCmpOp>(op, pred, adaptor.getLhs(),
-                                              adaptor.getRhs());
+    rewriter.replaceOp(op, convVal);
     return success();
   }
 };
@@ -140,7 +148,8 @@ struct SubOpConversion : OpConversionPattern<SubOp> {
   LogicalResult
   matchAndRewrite(SubOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Value negRhs = rewriter.create<smt::BVNegOp>(op.getLoc(), adaptor.getRhs());
+    Value negRhs =
+        smt::BVNegOp::create(rewriter, op.getLoc(), adaptor.getRhs());
     rewriter.replaceOpWithNewOp<smt::BVAddOp>(op, adaptor.getLhs(), negRhs);
     return success();
   }
@@ -161,11 +170,11 @@ struct ParityOpConversion : OpConversionPattern<ParityOp> {
     // the type conversion should already fail.
     Type oneBitTy = smt::BitVectorType::get(getContext(), 1);
     Value runner =
-        rewriter.create<smt::ExtractOp>(loc, oneBitTy, 0, adaptor.getInput());
+        smt::ExtractOp::create(rewriter, loc, oneBitTy, 0, adaptor.getInput());
     for (unsigned i = 1; i < bitwidth; ++i) {
-      Value ext =
-          rewriter.create<smt::ExtractOp>(loc, oneBitTy, i, adaptor.getInput());
-      runner = rewriter.create<smt::BVXOrOp>(loc, runner, ext);
+      Value ext = smt::ExtractOp::create(rewriter, loc, oneBitTy, i,
+                                         adaptor.getInput());
+      runner = smt::BVXOrOp::create(rewriter, loc, runner, ext);
     }
 
     rewriter.replaceOp(op, runner);
@@ -192,6 +201,34 @@ struct OneToOneOpConversion : OpConversionPattern<SourceOp> {
   }
 };
 
+/// Lower the SourceOp to the TargetOp special-casing if the second operand is
+/// zero to return a new symbolic value.
+template <typename SourceOp, typename TargetOp>
+struct DivisionOpConversion : OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    auto type = dyn_cast<smt::BitVectorType>(adaptor.getRhs().getType());
+    if (!type)
+      return failure();
+
+    auto resultType = OpConversionPattern<SourceOp>::typeConverter->convertType(
+        op.getResult().getType());
+    Value zero =
+        smt::BVConstantOp::create(rewriter, loc, APInt(type.getWidth(), 0));
+    Value isZero = smt::EqOp::create(rewriter, loc, adaptor.getRhs(), zero);
+    Value symbolicVal = smt::DeclareFunOp::create(rewriter, loc, resultType);
+    Value division =
+        TargetOp::create(rewriter, loc, resultType, adaptor.getOperands());
+    rewriter.replaceOpWithNewOp<smt::IteOp>(op, isZero, symbolicVal, division);
+    return success();
+  }
+};
+
 /// Converts an operation with a variadic number of operands to a chain of
 /// binary operations assuming left-associativity of the operation.
 template <typename SourceOp, typename TargetOp>
@@ -209,7 +246,7 @@ struct VariadicToBinaryOpConversion : OpConversionPattern<SourceOp> {
 
     Value runner = operands[0];
     for (Value operand : operands.drop_front())
-      runner = rewriter.create<TargetOp>(op.getLoc(), runner, operand);
+      runner = TargetOp::create(rewriter, op.getLoc(), runner, operand);
 
     rewriter.replaceOp(op, runner);
     return success();
@@ -224,7 +261,7 @@ struct VariadicToBinaryOpConversion : OpConversionPattern<SourceOp> {
 
 namespace {
 struct ConvertCombToSMTPass
-    : public impl::ConvertCombToSMTBase<ConvertCombToSMTPass> {
+    : public circt::impl::ConvertCombToSMTBase<ConvertCombToSMTPass> {
   void runOnOperation() override;
 };
 } // namespace
@@ -236,10 +273,10 @@ void circt::populateCombToSMTConversionPatterns(TypeConverter &converter,
                OneToOneOpConversion<ShlOp, smt::BVShlOp>,
                OneToOneOpConversion<ShrUOp, smt::BVLShrOp>,
                OneToOneOpConversion<ShrSOp, smt::BVAShrOp>,
-               OneToOneOpConversion<DivSOp, smt::BVSDivOp>,
-               OneToOneOpConversion<DivUOp, smt::BVUDivOp>,
-               OneToOneOpConversion<ModSOp, smt::BVSRemOp>,
-               OneToOneOpConversion<ModUOp, smt::BVURemOp>,
+               DivisionOpConversion<DivSOp, smt::BVSDivOp>,
+               DivisionOpConversion<DivUOp, smt::BVUDivOp>,
+               DivisionOpConversion<ModSOp, smt::BVSRemOp>,
+               DivisionOpConversion<ModUOp, smt::BVURemOp>,
                VariadicToBinaryOpConversion<ConcatOp, smt::ConcatOp>,
                VariadicToBinaryOpConversion<AddOp, smt::BVAddOp>,
                VariadicToBinaryOpConversion<MulOp, smt::BVMulOp>,
@@ -254,8 +291,12 @@ void circt::populateCombToSMTConversionPatterns(TypeConverter &converter,
 
 void ConvertCombToSMTPass::runOnOperation() {
   ConversionTarget target(getContext());
+  target.addIllegalDialect<hw::HWDialect>();
+  target.addIllegalOp<seq::FromClockOp>();
+  target.addIllegalOp<seq::ToClockOp>();
   target.addIllegalDialect<comb::CombDialect>();
   target.addLegalDialect<smt::SMTDialect>();
+  target.addLegalDialect<mlir::func::FuncDialect>();
 
   RewritePatternSet patterns(&getContext());
   TypeConverter converter;
@@ -263,7 +304,7 @@ void ConvertCombToSMTPass::runOnOperation() {
   // Also add HW patterns because some 'comb' canonicalizers produce constant
   // operations, i.e., even if there is absolutely no HW operation present
   // initially, we might have to convert one.
-  populateHWToSMTConversionPatterns(converter, patterns);
+  populateHWToSMTConversionPatterns(converter, patterns, false);
   populateCombToSMTConversionPatterns(converter, patterns);
 
   if (failed(mlir::applyPartialConversion(getOperation(), target,

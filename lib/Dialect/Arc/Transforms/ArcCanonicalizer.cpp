@@ -14,8 +14,10 @@
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/SymCache.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
@@ -47,7 +49,8 @@ public:
   /// Return the users of the provided symbol operation.
   ArrayRef<Operation *> getUsers(Operation *symbol) const {
     auto it = userMap.find(symbol);
-    return it != userMap.end() ? it->second.getArrayRef() : std::nullopt;
+    return it != userMap.end() ? it->second.getArrayRef()
+                               : ArrayRef<Operation *>();
   }
 
   /// Return true if the given symbol has no uses.
@@ -240,6 +243,12 @@ struct ICMPCanonicalizer : public OpRewritePattern<comb::ICmpOp> {
                                 PatternRewriter &rewriter) const final;
 };
 
+struct CompRegCanonicalizer : public OpRewritePattern<seq::CompRegOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(seq::CompRegOp op,
+                                PatternRewriter &rewriter) const final;
+};
+
 struct RemoveUnusedArcArgumentsPattern : public SymOpRewritePattern<DefineOp> {
   using SymOpRewritePattern::SymOpRewritePattern;
   LogicalResult matchAndRewrite(DefineOp op,
@@ -249,6 +258,18 @@ struct RemoveUnusedArcArgumentsPattern : public SymOpRewritePattern<DefineOp> {
 struct SinkArcInputsPattern : public SymOpRewritePattern<DefineOp> {
   using SymOpRewritePattern::SymOpRewritePattern;
   LogicalResult matchAndRewrite(DefineOp op,
+                                PatternRewriter &rewriter) const final;
+};
+
+struct MergeVectorizeOps : public OpRewritePattern<VectorizeOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(VectorizeOp op,
+                                PatternRewriter &rewriter) const final;
+};
+
+struct KeepOneVecOp : public OpRewritePattern<VectorizeOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(VectorizeOp op,
                                 PatternRewriter &rewriter) const final;
 };
 
@@ -262,13 +283,25 @@ LogicalResult canonicalizePassthoughCall(mlir::CallOpInterface callOp,
                                          SymbolHandler &symbolCache,
                                          PatternRewriter &rewriter) {
   auto defOp = cast<DefineOp>(symbolCache.getDefinition(
-      callOp.getCallableForCallee().get<SymbolRefAttr>().getLeafReference()));
+      llvm::cast<SymbolRefAttr>(callOp.getCallableForCallee())
+          .getLeafReference()));
   if (defOp.isPassthrough()) {
     symbolCache.removeUser(defOp, callOp);
     rewriter.replaceOp(callOp, callOp.getArgOperands());
     return success();
   }
   return failure();
+}
+
+LogicalResult updateInputOperands(VectorizeOp &vecOp,
+                                  const SmallVector<Value> &newOperands) {
+  // Set the new inputOperandSegments value
+  unsigned groupSize = vecOp.getResults().size();
+  unsigned numOfGroups = newOperands.size() / groupSize;
+  SmallVector<int32_t> newAttr(numOfGroups, groupSize);
+  vecOp.setInputOperandSegments(newAttr);
+  vecOp.getOperation()->setOperands(ValueRange(newOperands));
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -325,13 +358,13 @@ LogicalResult MemWritePortEnableAndMaskCanonicalizer::matchAndRewrite(
           &newDefOp.getBody(), newDefOp.getBody().end(),
           newDefOp.getArgumentTypes(),
           SmallVector<Location>(newDefOp.getNumArguments(), defOp.getLoc()));
-      auto callOp = rewriter.create<CallOp>(newDefOp.getLoc(), newResultTypes,
-                                            newName, block->getArguments());
+      auto callOp = CallOp::create(rewriter, newDefOp.getLoc(), newResultTypes,
+                                   newName, block->getArguments());
       SmallVector<Value> results(callOp->getResults());
-      Value constTrue = rewriter.create<hw::ConstantOp>(
-          newDefOp.getLoc(), rewriter.getI1Type(), 1);
+      Value constTrue = hw::ConstantOp::create(rewriter, newDefOp.getLoc(),
+                                               rewriter.getI1Type(), 1);
       results.insert(results.begin() + op.getEnableIdx(), constTrue);
-      rewriter.create<OutputOp>(newDefOp.getLoc(), results);
+      OutputOp::create(rewriter, newDefOp.getLoc(), results);
 
       // Remove the enable output from the current arc
       auto *terminator = defOp.getBodyBlock().getTerminator();
@@ -383,7 +416,7 @@ LogicalResult
 ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
                                    PatternRewriter &rewriter) const {
   auto getConstant = [&](const APInt &constant) -> Value {
-    return rewriter.create<hw::ConstantOp>(op.getLoc(), constant);
+    return hw::ConstantOp::create(rewriter, op.getLoc(), constant);
   };
   auto sameWidthIntegers = [](TypeRange types) -> std::optional<unsigned> {
     if (llvm::all_equal(types) && !types.empty())
@@ -392,9 +425,9 @@ ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
     return std::nullopt;
   };
   auto negate = [&](Value input) -> Value {
-    auto constTrue = rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(1, 1));
-    return rewriter.create<comb::XorOp>(op.getLoc(), input, constTrue,
-                                        op.getTwoState());
+    auto constTrue = hw::ConstantOp::create(rewriter, op.getLoc(), APInt(1, 1));
+    return comb::XorOp::create(rewriter, op.getLoc(), input, constTrue,
+                               op.getTwoState());
   };
 
   APInt rhs;
@@ -405,8 +438,8 @@ ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
         if ((op.getPredicate() == comb::ICmpPredicate::eq ||
              op.getPredicate() == comb::ICmpPredicate::ne) &&
             rhs.isAllOnes()) {
-          Value andOp = rewriter.create<comb::AndOp>(
-              op.getLoc(), concatOp.getInputs(), op.getTwoState());
+          Value andOp = comb::AndOp::create(
+              rewriter, op.getLoc(), concatOp.getInputs(), op.getTwoState());
           if (*optionalWidth == 1) {
             if (op.getPredicate() == comb::ICmpPredicate::ne)
               andOp = negate(andOp);
@@ -415,7 +448,8 @@ ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
           }
           rewriter.replaceOpWithNewOp<comb::ICmpOp>(
               op, op.getPredicate(), andOp,
-              getConstant(APInt(*optionalWidth, rhs.getZExtValue())),
+              getConstant(APInt(*optionalWidth, rhs.getZExtValue(),
+                                /*isSigned=*/false, /*implicitTrunc=*/true)),
               op.getTwoState());
           return success();
         }
@@ -423,8 +457,8 @@ ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
         if ((op.getPredicate() == comb::ICmpPredicate::ne ||
              op.getPredicate() == comb::ICmpPredicate::eq) &&
             rhs.isZero()) {
-          Value orOp = rewriter.create<comb::OrOp>(
-              op.getLoc(), concatOp.getInputs(), op.getTwoState());
+          Value orOp = comb::OrOp::create(
+              rewriter, op.getLoc(), concatOp.getInputs(), op.getTwoState());
           if (*optionalWidth == 1) {
             if (op.getPredicate() == comb::ICmpPredicate::eq)
               orOp = negate(orOp);
@@ -433,7 +467,8 @@ ICMPCanonicalizer::matchAndRewrite(comb::ICmpOp op,
           }
           rewriter.replaceOpWithNewOp<comb::ICmpOp>(
               op, op.getPredicate(), orOp,
-              getConstant(APInt(*optionalWidth, rhs.getZExtValue())),
+              getConstant(APInt(*optionalWidth, rhs.getZExtValue(),
+                                /*isSigned=*/false, /*implicitTrunc=*/true)),
               op.getTwoState());
           return success();
         }
@@ -470,7 +505,8 @@ LogicalResult RemoveUnusedArcArgumentsPattern::matchAndRewrite(
       if (toDelete[i])
         user.getArgOperandsMutable().erase(i);
 
-  op.eraseArguments(toDelete);
+  if (failed(op.eraseArguments(toDelete)))
+    return failure();
   op.setFunctionType(
       rewriter.getFunctionType(op.getArgumentTypes(), op.getResultTypes()));
 
@@ -547,6 +583,192 @@ SinkArcInputsPattern::matchAndRewrite(DefineOp op,
   return success(toDelete.any());
 }
 
+LogicalResult
+CompRegCanonicalizer::matchAndRewrite(seq::CompRegOp op,
+                                      PatternRewriter &rewriter) const {
+  if (!op.getReset())
+    return failure();
+
+  // Because Arcilator supports constant zero reset values, skip them.
+  APInt constant;
+  if (mlir::matchPattern(op.getResetValue(), mlir::m_ConstantInt(&constant)))
+    if (constant.isZero())
+      return failure();
+
+  Value newInput = comb::MuxOp::create(rewriter, op->getLoc(), op.getReset(),
+                                       op.getResetValue(), op.getInput());
+  rewriter.modifyOpInPlace(op, [&]() {
+    op.getInputMutable().set(newInput);
+    op.getResetMutable().clear();
+    op.getResetValueMutable().clear();
+  });
+
+  return success();
+}
+
+LogicalResult
+MergeVectorizeOps::matchAndRewrite(VectorizeOp vecOp,
+                                   PatternRewriter &rewriter) const {
+  auto &currentBlock = vecOp.getBody().front();
+  IRMapping argMapping;
+  SmallVector<Value> newOperands;
+  SmallVector<VectorizeOp> vecOpsToRemove;
+  bool canBeMerged = false;
+  // Used to calculate the new positions of args after insertions and removals
+  unsigned paddedBy = 0;
+
+  for (unsigned argIdx = 0, numArgs = vecOp.getInputs().size();
+       argIdx < numArgs; ++argIdx) {
+    auto inputVec = vecOp.getInputs()[argIdx];
+    // Make sure that the input comes from a `VectorizeOp`
+    // Ensure that the input vector matches the output of the `otherVecOp`
+    // Make sure that the results of the otherVecOp have only one use
+    auto otherVecOp = inputVec[0].getDefiningOp<VectorizeOp>();
+    if (!otherVecOp || otherVecOp == vecOp ||
+        !llvm::all_of(otherVecOp.getResults(),
+                      [](auto result) { return result.hasOneUse(); }) ||
+        !llvm::all_of(inputVec, [&](auto result) {
+          return result.template getDefiningOp<VectorizeOp>() == otherVecOp;
+        })) {
+      newOperands.insert(newOperands.end(), inputVec.begin(), inputVec.end());
+      continue;
+    }
+
+    // Here, all elements are from the same `VectorizeOp`.
+    // If all elements of the input vector come from the same `VectorizeOp`
+    // sort the vectors by their indices
+    DenseMap<Value, size_t> resultIdxMap;
+    for (auto [resultIdx, result] : llvm::enumerate(otherVecOp.getResults()))
+      resultIdxMap[result] = resultIdx;
+
+    SmallVector<Value> tempVec(inputVec.begin(), inputVec.end());
+    llvm::sort(tempVec, [&](Value a, Value b) {
+      return resultIdxMap[a] < resultIdxMap[b];
+    });
+
+    // Check if inputVec matches the result after sorting.
+    if (tempVec != SmallVector<Value>(otherVecOp.getResults().begin(),
+                                      otherVecOp.getResults().end())) {
+      newOperands.insert(newOperands.end(), inputVec.begin(), inputVec.end());
+      continue;
+    }
+
+    DenseMap<size_t, size_t> fromRealIdxToSortedIdx;
+    for (auto [inIdx, in] : llvm::enumerate(inputVec))
+      fromRealIdxToSortedIdx[inIdx] = resultIdxMap[in];
+
+    // If this flag is set that means we changed the IR so we cannot return
+    // failure
+    canBeMerged = true;
+
+    // If the results got shuffled, then shuffle the operands before merging.
+    if (inputVec != otherVecOp.getResults()) {
+      for (auto otherVecOpInputVec : otherVecOp.getInputs()) {
+        // use the tempVec again instead of creating another one.
+        tempVec = SmallVector<Value>(inputVec.size());
+        for (auto [realIdx, opernad] : llvm::enumerate(otherVecOpInputVec))
+          tempVec[realIdx] =
+              otherVecOpInputVec[fromRealIdxToSortedIdx[realIdx]];
+
+        newOperands.insert(newOperands.end(), tempVec.begin(), tempVec.end());
+      }
+
+    } else
+      newOperands.insert(newOperands.end(), otherVecOp.getOperands().begin(),
+                         otherVecOp.getOperands().end());
+
+    auto &otherBlock = otherVecOp.getBody().front();
+    for (auto &otherArg : otherBlock.getArguments()) {
+      auto newArg = currentBlock.insertArgument(
+          argIdx + paddedBy, otherArg.getType(), otherArg.getLoc());
+      argMapping.map(otherArg, newArg);
+      ++paddedBy;
+    }
+
+    rewriter.setInsertionPointToStart(&currentBlock);
+    for (auto &op : otherBlock.without_terminator())
+      rewriter.clone(op, argMapping);
+
+    unsigned argNewPos = paddedBy + argIdx;
+    // Get the result of the return value and use it in all places the
+    // the `otherVecOp` results were used
+    auto retOp = cast<VectorizeReturnOp>(otherBlock.getTerminator());
+    rewriter.replaceAllUsesWith(currentBlock.getArgument(argNewPos),
+                                argMapping.lookupOrDefault(retOp.getValue()));
+    currentBlock.eraseArgument(argNewPos);
+    vecOpsToRemove.push_back(otherVecOp);
+    // We erased an arg so the padding decreased by 1
+    paddedBy--;
+  }
+
+  // We didn't change the IR as there were no vectors to merge
+  if (!canBeMerged)
+    return failure();
+
+  (void)updateInputOperands(vecOp, newOperands);
+
+  // Erase dead VectorizeOps
+  for (auto deadOp : vecOpsToRemove)
+    rewriter.eraseOp(deadOp);
+
+  return success();
+}
+
+namespace llvm {
+static unsigned hashValue(const SmallVector<Value> &inputs) {
+  unsigned hash = hash_value(inputs.size());
+  for (auto input : inputs)
+    hash = hash_combine(hash, input);
+  return hash;
+}
+
+template <>
+struct DenseMapInfo<SmallVector<Value>> {
+  static inline SmallVector<Value> getEmptyKey() {
+    return SmallVector<Value>();
+  }
+
+  static inline SmallVector<Value> getTombstoneKey() {
+    return SmallVector<Value>();
+  }
+
+  static unsigned getHashValue(const SmallVector<Value> &inputs) {
+    return hashValue(inputs);
+  }
+
+  static bool isEqual(const SmallVector<Value> &lhs,
+                      const SmallVector<Value> &rhs) {
+    return lhs == rhs;
+  }
+};
+} // namespace llvm
+
+LogicalResult KeepOneVecOp::matchAndRewrite(VectorizeOp vecOp,
+                                            PatternRewriter &rewriter) const {
+  DenseMap<SmallVector<Value>, unsigned> inExists;
+  auto &currentBlock = vecOp.getBody().front();
+  SmallVector<Value> newOperands;
+  BitVector argsToRemove(vecOp.getInputs().size(), false);
+  for (size_t argIdx = 0; argIdx < vecOp.getInputs().size(); ++argIdx) {
+    auto input = SmallVector<Value>(vecOp.getInputs()[argIdx].begin(),
+                                    vecOp.getInputs()[argIdx].end());
+    if (auto in = inExists.find(input); in != inExists.end()) {
+      rewriter.replaceAllUsesWith(currentBlock.getArgument(argIdx),
+                                  currentBlock.getArgument(in->second));
+      argsToRemove.set(argIdx);
+      continue;
+    }
+    inExists[input] = argIdx;
+    newOperands.insert(newOperands.end(), input.begin(), input.end());
+  }
+
+  if (argsToRemove.none())
+    return failure();
+
+  currentBlock.eraseArguments(argsToRemove);
+  return updateInputOperands(vecOp, newOperands);
+}
+
 //===----------------------------------------------------------------------===//
 // ArcCanonicalizerPass implementation
 //===----------------------------------------------------------------------===//
@@ -569,11 +791,12 @@ void ArcCanonicalizerPass::runOnOperation() {
   DenseMap<StringAttr, StringAttr> arcMapping;
 
   mlir::GreedyRewriteConfig config;
-  config.enableRegionSimplification = false;
-  config.maxIterations = 10;
-  config.useTopDownTraversal = true;
+  config.setRegionSimplificationLevel(
+      mlir::GreedySimplifyRegionLevel::Disabled);
+  config.setMaxIterations(10);
+  config.setUseTopDownTraversal(true);
   ArcListener listener(&cache);
-  config.listener = &listener;
+  config.setListener(&listener);
 
   PatternStatistics statistics;
   RewritePatternSet symbolPatterns(&getContext());
@@ -583,8 +806,8 @@ void ArcCanonicalizerPass::runOnOperation() {
   symbolPatterns.add<MemWritePortEnableAndMaskCanonicalizer>(
       &getContext(), cache, names, statistics, arcMapping);
 
-  if (failed(mlir::applyPatternsAndFoldGreedily(
-          getOperation(), std::move(symbolPatterns), config)))
+  if (failed(mlir::applyPatternsGreedily(getOperation(),
+                                         std::move(symbolPatterns), config)))
     return signalPassFailure();
 
   numArcArgsRemoved = statistics.removeUnusedArcArgumentsPatternNumArgsRemoved;
@@ -594,11 +817,12 @@ void ArcCanonicalizerPass::runOnOperation() {
     dialect->getCanonicalizationPatterns(patterns);
   for (mlir::RegisteredOperationName op : ctxt.getRegisteredOperations())
     op.getCanonicalizationPatterns(patterns, &ctxt);
-  patterns.add<ICMPCanonicalizer>(&getContext());
+  patterns.add<ICMPCanonicalizer, CompRegCanonicalizer, MergeVectorizeOps,
+               KeepOneVecOp>(&getContext());
 
   // Don't test for convergence since it is often not reached.
-  (void)mlir::applyPatternsAndFoldGreedily(getOperation(), std::move(patterns),
-                                           config);
+  (void)mlir::applyPatternsGreedily(getOperation(), std::move(patterns),
+                                    config);
 }
 
 std::unique_ptr<mlir::Pass> arc::createArcCanonicalizerPass() {

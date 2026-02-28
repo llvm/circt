@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/HWArithToHW.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/ConversionPatterns.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -19,9 +18,15 @@
 #include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "mlir/Pass/Pass.h"
 
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+namespace circt {
+#define GEN_PASS_DEF_HWARITHTOHW
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -85,13 +90,13 @@ static Value extendTypeWidth(OpBuilder &builder, Location loc, Value value,
         builder.createOrFold<comb::ReplicateOp>(loc, highBit, extensionLength);
   } else {
     // Zero extension
-    extensionBits = builder
-                        .create<hw::ConstantOp>(
-                            loc, builder.getIntegerType(extensionLength), 0)
-                        ->getOpResult(0);
+    extensionBits =
+        hw::ConstantOp::create(builder, loc,
+                               builder.getIntegerType(extensionLength), 0)
+            ->getOpResult(0);
   }
 
-  auto extOp = builder.create<comb::ConcatOp>(loc, extensionBits, value);
+  auto extOp = comb::ConcatOp::create(builder, loc, extensionBits, value);
   improveNamehint(value, extOp, [&](StringRef oldNamehint) {
     return (oldNamehint + "_" + (signExtension ? "sext_" : "zext_") +
             std::to_string(targetWidth))
@@ -107,6 +112,8 @@ static bool isSignednessType(Type type) {
           .Case<IntegerType>([](auto type) { return !type.isSignless(); })
           .Case<hw::ArrayType>(
               [](auto type) { return isSignednessType(type.getElementType()); })
+          .Case<hw::UnpackedArrayType>(
+              [](auto type) { return isSignednessType(type.getElementType()); })
           .Case<hw::StructType>([](auto type) {
             return llvm::any_of(type.getElements(), [](auto element) {
               return isSignednessType(element.type);
@@ -114,6 +121,8 @@ static bool isSignednessType(Type type) {
           })
           .Case<hw::InOutType>(
               [](auto type) { return isSignednessType(type.getElementType()); })
+          .Case<hw::TypeAliasType>(
+              [](auto type) { return isSignednessType(type.getInnerType()); })
           .Default([](auto type) { return false; });
 
   return match;
@@ -201,10 +210,10 @@ struct DivOpLowering : public OpConversionPattern<DivOp> {
 
     Value divResult;
     if (signedDivision)
-      divResult = rewriter.create<comb::DivSOp>(loc, lhsValue, rhsValue, false)
+      divResult = comb::DivSOp::create(rewriter, loc, lhsValue, rhsValue, false)
                       ->getOpResult(0);
     else
-      divResult = rewriter.create<comb::DivUOp>(loc, lhsValue, rhsValue, false)
+      divResult = comb::DivUOp::create(rewriter, loc, lhsValue, rhsValue, false)
                       ->getOpResult(0);
 
     // Carry over any attributes from the original div op.
@@ -304,8 +313,8 @@ struct ICmpOpLowering : public OpConversionPattern<ICmpOp> {
     Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.getRhs(), cmpWidth,
                                      rhsType.isSigned());
 
-    auto newOp = rewriter.create<comb::ICmpOp>(op->getLoc(), combPred, lhsValue,
-                                               rhsValue, false);
+    auto newOp = comb::ICmpOp::create(rewriter, op->getLoc(), combPred,
+                                      lhsValue, rhsValue, false);
     rewriter.modifyOpInPlace(
         newOp, [&]() { newOp->setDialectAttrs(op->getDialectAttrs()); });
     rewriter.replaceOp(op, newOp);
@@ -334,7 +343,7 @@ struct BinaryOpLowering : public OpConversionPattern<BinOp> {
     Value rhsValue = extendTypeWidth(rewriter, loc, adaptor.getInputs()[1],
                                      targetWidth, isRhsTypeSigned);
     auto newOp =
-        rewriter.create<ReplaceOp>(op.getLoc(), lhsValue, rhsValue, false);
+        ReplaceOp::create(rewriter, op.getLoc(), lhsValue, rhsValue, false);
     rewriter.modifyOpInPlace(
         newOp, [&]() { newOp->setDialectAttrs(op->getDialectAttrs()); });
     rewriter.replaceOp(op, newOp);
@@ -361,6 +370,10 @@ Type HWArithToHWTypeConverter::removeSignedness(Type type) {
             return hw::ArrayType::get(removeSignedness(type.getElementType()),
                                       type.getNumElements());
           })
+          .Case<hw::UnpackedArrayType>([this](auto type) {
+            return hw::UnpackedArrayType::get(
+                removeSignedness(type.getElementType()), type.getNumElements());
+          })
           .Case<hw::StructType>([this](auto type) {
             // Recursively convert each element.
             llvm::SmallVector<hw::StructType::FieldInfo> convertedElements;
@@ -373,6 +386,10 @@ Type HWArithToHWTypeConverter::removeSignedness(Type type) {
           .Case<hw::InOutType>([this](auto type) {
             return hw::InOutType::get(removeSignedness(type.getElementType()));
           })
+          .Case<hw::TypeAliasType>([this](auto type) {
+            return hw::TypeAliasType::get(
+                type.getRef(), removeSignedness(type.getInnerType()));
+          })
           .Default([](auto type) { return type; });
 
   return convertedType;
@@ -382,23 +399,25 @@ HWArithToHWTypeConverter::HWArithToHWTypeConverter() {
   // Pass any type through the signedness remover.
   addConversion([this](Type type) { return removeSignedness(type); });
 
-  addTargetMaterialization(
-      [&](mlir::OpBuilder &builder, mlir::Type resultType,
-          mlir::ValueRange inputs,
-          mlir::Location loc) -> std::optional<mlir::Value> {
-        if (inputs.size() != 1)
-          return std::nullopt;
-        return inputs[0];
-      });
+  addTargetMaterialization([&](mlir::OpBuilder &builder, mlir::Type resultType,
+                               mlir::ValueRange inputs,
+                               mlir::Location loc) -> mlir::Value {
+    if (inputs.size() != 1)
+      return Value();
+    return UnrealizedConversionCastOp::create(builder, loc, resultType,
+                                              inputs[0])
+        ->getResult(0);
+  });
 
-  addSourceMaterialization(
-      [&](mlir::OpBuilder &builder, mlir::Type resultType,
-          mlir::ValueRange inputs,
-          mlir::Location loc) -> std::optional<mlir::Value> {
-        if (inputs.size() != 1)
-          return std::nullopt;
-        return inputs[0];
-      });
+  addSourceMaterialization([&](mlir::OpBuilder &builder, mlir::Type resultType,
+                               mlir::ValueRange inputs,
+                               mlir::Location loc) -> mlir::Value {
+    if (inputs.size() != 1)
+      return Value();
+    return UnrealizedConversionCastOp::create(builder, loc, resultType,
+                                              inputs[0])
+        ->getResult(0);
+  });
 }
 
 //===----------------------------------------------------------------------===//
@@ -416,7 +435,7 @@ void circt::populateHWArithToHWConversionPatterns(
 
 namespace {
 
-class HWArithToHWPass : public HWArithToHWBase<HWArithToHWPass> {
+class HWArithToHWPass : public circt::impl::HWArithToHWBase<HWArithToHWPass> {
 public:
   void runOnOperation() override {
     ModuleOp module = getOperation();

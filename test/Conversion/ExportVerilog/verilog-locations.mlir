@@ -10,7 +10,7 @@ hw.module @MultiUseExpr(in %a: i4, out b0: i1) {
 //   input  [3:0] a,
 //   output       b0
 // );
-// 
+//
 //   assign b0 = ^a;
 // endmodule
 
@@ -61,7 +61,7 @@ hw.module @SimpleConstPrintReset(in %clock: i1, in %reset: i1, in %in4: i4) {
 //               reset,
 //   input [3:0] in4
 // );
-// 
+//
 //   wire [3:0] w = 4'h1;
 //   reg  [3:0] q;
 //   always @(posedge clock or posedge reset) begin
@@ -156,11 +156,11 @@ hw.module @InlineDeclAssignment(in %a: i1) {
 // module InlineDeclAssignment(
 //   input a
 // );
-// 
+//
 //   wire b = a;
 //   wire c = a + a;
 // endmodule
-// 
+//
 // CHECK:   hw.module @InlineDeclAssignment
 // CHECK:     %b = sv.wire {hw.verilogName = "b"} : !hw.inout<i1> loc(#loc25)
 // CHECK:     sv.assign %b, %a : i1 loc(#loc8)
@@ -205,19 +205,10 @@ module attributes {circt.loweringOptions = "emitVerilogLocations"} {
 hw.module.extern @MyExtModule()
 hw.module.extern @AParameterizedExtModule<CFG: none>()
 }
-// CHECK:   hw.module.extern @MyExtModule() loc(#loc11)
-// CHECK:   hw.module.extern @AParameterizedExtModule<CFG: none>() loc(#loc12)
+// CHECK:   hw.module.extern @MyExtModule() loc(#loc1)
+// CHECK:   hw.module.extern @AParameterizedExtModule<CFG: none>() loc(#loc2)
 
 // CHECK: #loc = loc("{{.*}}verilog-locations.mlir{{.*}})
 // CHECK: #loc1 = loc("{{.*}}verilog-locations.mlir{{.*}})
-// CHECK: #loc2 = loc("":2:0)
-// CHECK: #loc3 = loc("":3:0)
-// CHECK: #loc4 = loc("{{.*}}verilog-locations.mlir{{.*}})
-// CHECK: #loc5 = loc("":4:0)
-// CHECK: #loc6 = loc("":5:0)
-// CHECK: #loc7 = loc(fused<"Range">[#loc2, #loc3])
-// CHECK: #loc8 = loc(fused<"Range">[#loc5, #loc6])
-// CHECK: #loc9 = loc(fused<"verilogLocations">[#loc7])
-// CHECK: #loc10 = loc(fused<"verilogLocations">[#loc8])
-// CHECK: #loc11 = loc(fused[#loc1, #loc9])
-// CHECK: #loc12 = loc(fused[#loc4, #loc10])
+// CHECK: #loc2 = loc("{{.*}}verilog-locations.mlir{{.*}})
+// CHECK-NOT: #loc

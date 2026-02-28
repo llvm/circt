@@ -3,6 +3,7 @@
 ; - test/scala/firrtlTests/WidthSpec.scala
 
 ; Literal width checks
+FIRRTL version 3.0.0
 circuit Foo :
   ; CHECK-LABEL: firrtl.module @Foo(
   ; CHECK-SAME: out %si0: !firrtl.sint<3>
@@ -36,18 +37,18 @@ circuit Foo :
     output ui3 : UInt
     output ui4 : UInt
 
-    si0 <= SInt(-4)
-    si1 <= SInt(-3)
-    si2 <= SInt(-2)
-    si3 <= SInt(-1)
-    si4 <= SInt(0)
-    si5 <= SInt(1)
-    si6 <= SInt(2)
-    si7 <= SInt(3)
-    si8 <= SInt(4)
+    connect si0, SInt(-4)
+    connect si1, SInt(-3)
+    connect si2, SInt(-2)
+    connect si3, SInt(-1)
+    connect si4, SInt(0)
+    connect si5, SInt(1)
+    connect si6, SInt(2)
+    connect si7, SInt(3)
+    connect si8, SInt(4)
 
-    ui0 <= UInt(0)
-    ui1 <= UInt(1)
-    ui2 <= UInt(2)
-    ui3 <= UInt(3)
-    ui4 <= UInt(4)
+    connect ui0, UInt(0)
+    connect ui1, UInt(1)
+    connect ui2, UInt(2)
+    connect ui3, UInt(3)
+    connect ui4, UInt(4)

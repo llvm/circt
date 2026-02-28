@@ -51,7 +51,9 @@ def ConventionAttr : EnumAttr<FIRRTLDialect, Convention, "convention">;
 //===----------------------------------------------------------------------===//
 
 def LayerConvention : I32EnumAttr<"LayerConvention", "layer convention", [
-  I32EnumAttrCase<"Bind", 0, "bind">]> {
+  I32EnumAttrCase<"Bind", 0, "bind">,
+  I32EnumAttrCase<"Inline", 1, "inline">
+]> {
 
   let genSpecializedAttr = 0;
 }
@@ -59,15 +61,32 @@ def LayerConvention : I32EnumAttr<"LayerConvention", "layer convention", [
 def LayerConventionAttr : EnumAttr<FIRRTLDialect, LayerConvention, "layerconvention">;
 
 //===----------------------------------------------------------------------===//
-// Read Under Write Behaviour
+// Layer Specialization
 //===----------------------------------------------------------------------===//
 
-def RUW_Undefined: I32EnumAttrCase<"Undefined", 0>;
-def RUW_Old: I32EnumAttrCase<"Old", 1>;
-def RUW_New: I32EnumAttrCase<"New", 2>;
+def LayerSpecialization :
+    I32EnumAttr<"LayerSpecialization", "layer specialization", [
+  I32EnumAttrCase<"Enable", 0, "enable">,
+  I32EnumAttrCase<"Disable", 1, "disable">
+]> {
+  let genSpecializedAttr = 0;
+}
 
-def RUWAttr: I32EnumAttr<"RUWAttr", "Read Under Write Enum",
-                         [RUW_Undefined, RUW_Old, RUW_New]>;
+def LayerSpecializationAttr :
+    EnumAttr<FIRRTLDialect, LayerSpecialization, "layerspecialization">;
+
+//===----------------------------------------------------------------------===//
+// Read Under Write Behavior
+//===----------------------------------------------------------------------===//
+
+def RUWBehavior
+    : I32EnumAttr<"RUWBehavior", "read under write behavior",
+                  [I32EnumAttrCase<"Undefined", 0>, I32EnumAttrCase<"Old", 1>,
+                   I32EnumAttrCase<"New", 2>]> {
+  let genSpecializedAttr = 0;
+}
+
+def RUWBehaviorAttr : EnumAttr<FIRRTLDialect, RUWBehavior, "ruwbehavior">;
 
 //===----------------------------------------------------------------------===//
 // Memory Port Direction

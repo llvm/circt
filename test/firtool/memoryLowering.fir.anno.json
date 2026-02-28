@@ -1,6 +1,0 @@
-[
-	{
-		"class":"sifive.enterprise.firrtl.MarkDUTAnnotation",
-		"target": "test.test"
-	}
-]

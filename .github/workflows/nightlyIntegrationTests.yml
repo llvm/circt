@@ -19,7 +19,7 @@ jobs:
     # John and re-run the job.
     runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds", "linux"]
     container:
-      image: ghcr.io/circt/images/circt-integration-test:v13.1
+      image: ghcr.io/circt/images/circt-integration-test:v20
       volumes:
         - /mnt:/__w/circt
     strategy:
@@ -62,6 +62,8 @@ jobs:
 
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
+        # Cache only when build type is release
+        if: matrix.build-type == 'Release'
         with:
           max-size: 300M
           key: nightly-${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}
@@ -95,9 +97,11 @@ jobs:
             -DLLVM_USE_SPLIT_DWARF=ON \
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
-            -DESI_RUNTIME=ON \
             -DLLVM_LIT_ARGS="-v --show-unsupported ${{ matrix.lit-flags }}" \
             -DCIRCT_SLANG_FRONTEND_ENABLED=ON
+
+            # Temporarily disable ESI runtime builds until we work out the Abseil conflict (#7236).
+            # -DESI_RUNTIME=ON
       - name: Test CIRCT
         run: |
           ninja -C build check-circt -j$(nproc)

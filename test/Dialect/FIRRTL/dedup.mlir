@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-dedup))' %s | FileCheck %s
+// RUN: circt-opt --firrtl-dedup %s | FileCheck %s
 
 // CHECK-LABEL: firrtl.circuit "Empty"
 firrtl.circuit "Empty" {
@@ -34,6 +34,36 @@ firrtl.circuit "Simple" {
     // CHECK: firrtl.instance simple1 @Simple0
     firrtl.instance simple0 @Simple0()
     firrtl.instance simple1 @Simple1()
+  }
+}
+
+// CHECK-LABEL: "PrivateModulesDifferentConventionsDedup"
+firrtl.circuit "PrivateModulesDifferentConventionsDedup" {
+  firrtl.module private @A() attributes {convention = #firrtl<convention scalarized>} { }
+  firrtl.module private @B() attributes { } { }
+  firrtl.module @PrivateModulesDifferentConventionsDedup() {
+    // CHECK: firrtl.instance a @A()
+    // CHECK: firrtl.instance b @A()
+    firrtl.instance a @A()
+    firrtl.instance b @B()
+  }
+}
+
+
+firrtl.circuit "PublicAndPrivateModulesDedup" {
+  // CHECK-NOT: @A
+  firrtl.module private @A() { }
+  // CHECK:     @B()
+  firrtl.module @B() { }
+  // CHECK-NOT: @C
+  firrtl.module private @C() { }
+  firrtl.module @PublicAndPrivateModulesDedup() {
+    // CHECK: firrtl.instance a @B()
+    // CHECK: firrtl.instance b @B()
+    // CHECK: firrtl.instance c @B()
+    firrtl.instance a @A()
+    firrtl.instance b @B()
+    firrtl.instance c @C()
   }
 }
 
@@ -128,6 +158,16 @@ firrtl.circuit "Annotations" {
     // Subannotations should be handled correctly.
     // CHECK: %g = firrtl.wire {annotations = [{circt.fieldID = 1 : i32, circt.nonlocal = @annos_nla2, class = "subanno"}]}
     %g = firrtl.wire {annotations = [{circt.fieldID = 1 : i32, class = "subanno"}]} : !firrtl.bundle<a: uint<1>>
+    
+    // Should deduplicate wires where only one has a symbol
+    // CHECK: %h = firrtl.wire sym @h : !firrtl.uint
+    // CHECK: %i = firrtl.wire sym @p : !firrtl.uint
+    %h = firrtl.wire sym @h : !firrtl.uint
+    %i = firrtl.wire : !firrtl.uint
+
+    // Should merge multiple different symbols.
+    // CHECK: %j = firrtl.wire sym [<@q,0,private>, <@j,1,private>] : !firrtl.bundle<a: uint<1>>
+    %j = firrtl.wire sym [<@j, 1, private>] : !firrtl.bundle<a: uint<1>>
   }
   // CHECK-NOT: firrtl.module private @Annotations1
   firrtl.module private @Annotations1() attributes {annotations = [{class = "one"}]} {
@@ -138,6 +178,9 @@ firrtl.circuit "Annotations" {
     %l = firrtl.wire {annotations = [{class = "both"}]} : !firrtl.uint<1>
     %m = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
     %n = firrtl.wire : !firrtl.bundle<a: uint<1>>
+    %o = firrtl.wire : !firrtl.uint
+    %p = firrtl.wire sym @p : !firrtl.uint
+    %q = firrtl.wire sym [<@q, 0, private>] : !firrtl.bundle<a: uint<1>>
   }
   firrtl.module @Annotations() {
     // CHECK: firrtl.instance annotations0 sym @annotations0  @Annotations0()
@@ -197,6 +240,31 @@ firrtl.circuit "PortAnnotations" {
     %portannos0_in = firrtl.instance portannos0 @PortAnnotations0(in a: !firrtl.uint<1>)
     // CHECK: firrtl.instance portannos1 sym @[[PORTANNOS_1]] @PortAnnotations
     %portannos1_in = firrtl.instance portannos1 @PortAnnotations1(in b: !firrtl.uint<1>)
+  }
+}
+
+// Check that we are merging inner symbols correctly when deduplicating.
+// CHECK-LABEL: firrtl.circuit "InnerSymOpTarget"
+firrtl.circuit "InnerSymOpTarget" {
+  // CHECK: hw.hierpath private @path0 [@InnerSymOpTarget::@foo0, @Foo0::@A]
+  hw.hierpath private @path0 [@InnerSymOpTarget::@foo0, @Foo0::@A]
+  // CHECK: hw.hierpath private @path1 [@InnerSymOpTarget::@foo0, @Foo0::@C]
+  hw.hierpath private @path1 [@InnerSymOpTarget::@foo0, @Foo0::@C]
+  // CHECK: hw.hierpath private @path2 [@InnerSymOpTarget::@foo1, @Foo0::@A_0]
+  hw.hierpath private @path2 [@InnerSymOpTarget::@foo1, @Foo1::@A]
+  // CHECK: hw.hierpath private @path3 [@InnerSymOpTarget::@foo1, @Foo0::@C]
+  hw.hierpath private @path3 [@InnerSymOpTarget::@foo1, @Foo1::@B]
+  firrtl.module private @Foo0() {
+    // CHECK: %w0 = firrtl.wire sym [<@A,0,private>, <@C,1,public>, <@A_0,2,private>]
+    %w0 = firrtl.wire sym [<@A, 0, private>, <@C, 1, private>]: !firrtl.vector<uint<1>, 4>
+  }
+  firrtl.module private @Foo1() {
+    %w1 = firrtl.wire sym [<@A, 2, private>, <@B, 1, public>]: !firrtl.vector<uint<1>, 4>
+  }
+  firrtl.module @InnerSymOpTarget() {
+    firrtl.instance foo0 sym @foo0 @Foo0()
+    // CHECK: firrtl.instance foo1 sym @foo1 @Foo0()
+    firrtl.instance foo1 sym @foo1 @Foo1()
   }
 }
 
@@ -409,15 +477,15 @@ firrtl.circuit "ExtModuleTest" {
 // https://github.com/llvm/circt/issues/2713
 // CHECK-LABEL: firrtl.circuit "Foo"
 firrtl.circuit "Foo"  {
-  // CHECK: hw.hierpath private @nla_1 [@Foo::@b, @A::@a]
+  // CHECK: hw.hierpath private @nla_1 [@Foo::@b, @A::@b_0]
   hw.hierpath private @nla_1 [@Foo::@b, @B::@b]
-  // CHECK: firrtl.extmodule private @A(out a: !firrtl.clock sym @a [{circt.nonlocal = @nla_1}])
-  firrtl.extmodule private @A(out a: !firrtl.clock) attributes {defname = "a"}
-  firrtl.extmodule private @B(out a: !firrtl.clock sym @b [{circt.nonlocal = @nla_1}]) attributes {defname = "a"}
+  // CHECK: firrtl.extmodule private @A(out a: !firrtl.clock sym @b_0 [{circt.nonlocal = @nla_1}], out b: !firrtl.clock sym @b)
+  firrtl.extmodule private @A(out a: !firrtl.clock, out b: !firrtl.clock sym @b) attributes {defname = "a"}
+  firrtl.extmodule private @B(out a: !firrtl.clock sym @b [{circt.nonlocal = @nla_1}], out b: !firrtl.clock) attributes {defname = "a"}
   firrtl.module @Foo() {
-    %b0_out = firrtl.instance a @A(out a: !firrtl.clock)
-    // CHECK: firrtl.instance b sym @b  @A(out a: !firrtl.clock)
-    %b1_out = firrtl.instance b sym @b @B(out a: !firrtl.clock)
+    %a0, %b0 = firrtl.instance a @A(out a: !firrtl.clock, out b: !firrtl.clock)
+    // CHECK: firrtl.instance b sym @b @A(out a: !firrtl.clock, out b: !firrtl.clock)
+    %a1, %b1 = firrtl.instance b sym @b @B(out a: !firrtl.clock, out b: !firrtl.clock)
   }
 }
 
@@ -496,10 +564,10 @@ firrtl.circuit "Bundle" {
     // CHECK: [[A_B:%.+]] = firrtl.subfield %bundle1_a[b]
     // CHECK: [[A_F_G:%.+]] = firrtl.subfield %0[g]
     // CHECK: [[A_B_C:%.+]] = firrtl.subfield %1[c]
-    // CHECK: firrtl.strictconnect [[A_B_C]], [[A_F_G]]
+    // CHECK: firrtl.matchingconnect [[A_B_C]], [[A_F_G]]
     // CHECK: [[A_F_H:%.+]] = firrtl.subfield [[A_F]][h]
     // CHECK: [[A_B_D:%.+]] = firrtl.subfield [[A_B]][d]
-    // CHECK: firrtl.strictconnect [[A_F_H]], [[A_B_D]]
+    // CHECK: firrtl.matchingconnect [[A_F_H]], [[A_B_D]]
     %e = firrtl.instance bundle1 @Bundle1(out e: !firrtl.bundle<f: bundle<g flip: uint<1>, h: uint<1>>>)
 
     // CHECK: [[B:%.+]] = firrtl.subfield %bundle0_a[b]
@@ -520,11 +588,11 @@ firrtl.circuit "Bundle" {
 firrtl.circuit "MuxBundle" {
   firrtl.module private @Bar0(out %o: !firrtl.bundle<a: uint<1>>) {
     %invalid = firrtl.invalidvalue : !firrtl.bundle<a: uint<1>>
-    firrtl.strictconnect %o, %invalid : !firrtl.bundle<a: uint<1>>
+    firrtl.matchingconnect %o, %invalid : !firrtl.bundle<a: uint<1>>
   }
   firrtl.module private @Bar1(out %o: !firrtl.bundle<b: uint<1>>) {
     %invalid = firrtl.invalidvalue : !firrtl.bundle<b: uint<1>>
-    firrtl.strictconnect %o, %invalid : !firrtl.bundle<b: uint<1>>
+    firrtl.matchingconnect %o, %invalid : !firrtl.bundle<b: uint<1>>
   }
   firrtl.module @MuxBundle(in %p: !firrtl.uint<1>, in %l: !firrtl.bundle<b: uint<1>>, out %o: !firrtl.bundle<b: uint<1>>) attributes {convention = #firrtl<convention scalarized>} {
     // CHECK: %bar0_o = firrtl.instance bar0 @Bar0(out o: !firrtl.bundle<a: uint<1>>)
@@ -534,13 +602,13 @@ firrtl.circuit "MuxBundle" {
     // CHECK: [[WIRE:%.+]] = firrtl.wire {name = "o"} : !firrtl.bundle<b: uint<1>>
     // CHECK: [[WIRE_B:%.+]] = firrtl.subfield [[WIRE]][b]
     // CHECK: [[PORT_A:%.+]] = firrtl.subfield %bar1_o[a]
-    // CHECK: firrtl.strictconnect [[WIRE_B]], [[PORT_A]]
+    // CHECK: firrtl.matchingconnect [[WIRE_B]], [[PORT_A]]
     %bar1_o = firrtl.instance bar1 @Bar1(out o: !firrtl.bundle<b: uint<1>>)
 
     // CHECK: %2 = firrtl.mux(%p, [[WIRE]], %l)
-    // CHECK: firrtl.strictconnect %o, %2 : !firrtl.bundle<b: uint<1>>
+    // CHECK: firrtl.matchingconnect %o, %2 : !firrtl.bundle<b: uint<1>>
     %0 = firrtl.mux(%p, %bar1_o, %l) : (!firrtl.uint<1>, !firrtl.bundle<b: uint<1>>, !firrtl.bundle<b: uint<1>>) -> !firrtl.bundle<b: uint<1>>
-    firrtl.strictconnect %o, %0 : !firrtl.bundle<b: uint<1>>
+    firrtl.matchingconnect %o, %0 : !firrtl.bundle<b: uint<1>>
   }
 }
 
@@ -576,13 +644,13 @@ firrtl.circuit "DelayedFixup"  {
   firrtl.module private @Foo(out %a: !firrtl.bundle<a: uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %a_a = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<1>>
-    firrtl.strictconnect %a_a, %zero : !firrtl.uint<1>
+    firrtl.matchingconnect %a_a, %zero : !firrtl.uint<1>
   }
   // CHECK-NOT: @Bar
   firrtl.module private @Bar(out %b: !firrtl.bundle<b: uint<1>>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     %b_b = firrtl.subfield %b[b] : !firrtl.bundle<b: uint<1>>
-    firrtl.strictconnect %b_b, %zero : !firrtl.uint<1>
+    firrtl.matchingconnect %b_b, %zero : !firrtl.uint<1>
   }
   // CHECK: firrtl.module private @Parent0
   firrtl.module private @Parent0(out %a: !firrtl.bundle<a: uint<1>>, out %b: !firrtl.bundle<b: uint<1>>) {
@@ -636,18 +704,6 @@ firrtl.circuit "NoDedup" {
   firrtl.module @NoDedup() {
     firrtl.instance simple0 @Simple0()
     firrtl.instance simple1 @Simple1()
-  }
-}
-
-// Don't deduplicate modules with input RefType ports.
-// CHECK-LABEL:   firrtl.circuit "InputRefTypePorts"
-// CHECK-COUNT-3: firrtl.module
-firrtl.circuit "InputRefTypePorts" {
-  firrtl.module private @Foo(in %a: !firrtl.probe<uint<1>>) {}
-  firrtl.module private @Bar(in %a: !firrtl.probe<uint<1>>) {}
-  firrtl.module @InputRefTypePorts() {
-    %foo_a = firrtl.instance foo @Foo(in a: !firrtl.probe<uint<1>>)
-    %bar_a = firrtl.instance bar @Bar(in a: !firrtl.probe<uint<1>>)
   }
 }
 
@@ -784,4 +840,179 @@ firrtl.circuit "NoDedupPublic" {
   }
   firrtl.module @DUTLike() {}
   firrtl.module @NotDUT() {}
+}
+
+// CHECK-LABEL: "UninstantiatedClasses"
+// Classes that are only used in `!firrtl.class` types without concrete
+// instances should still be properly hashed and deduplicated.
+firrtl.circuit "UninstantiatedClasses" attributes {annotations = [
+  {class = "firrtl.transforms.MustDeduplicateAnnotation", modules = [
+    "~UninstantiatedClasses|Foo",
+    "~UninstantiatedClasses|Bar"
+  ]}
+]} {
+  // CHECK: @UninstantiatedClasses
+  firrtl.module @UninstantiatedClasses() {
+    // CHECK-NEXT: %x = firrtl.object @Foo
+    // CHECK-NEXT: %y = firrtl.object @Foo
+    %x = firrtl.object @Foo(out a: !firrtl.class<@Spam()>)
+    %y = firrtl.object @Bar(out a: !firrtl.class<@Eggs()>)
+  }
+  // CHECK:     firrtl.class private @Foo
+  // CHECK-NOT: firrtl.class private @Bar
+  firrtl.class private @Foo(out %a: !firrtl.class<@Spam()>) {}
+  firrtl.class private @Bar(out %a: !firrtl.class<@Eggs()>) {}
+  // CHECK:     firrtl.class private @Spam
+  // CHECK-NOT: firrtl.class private @Eggs
+  firrtl.class private @Spam() {}
+  firrtl.class private @Eggs() {}
+}
+
+// CHECK-LABEL: "UpdateAttrsAndTypes"
+// Ops that contain references to symbols have to have the symbol references
+// updated after dedup.
+firrtl.circuit "UpdateAttrsAndTypes" {
+  // CHECK: @Foo()
+  // CHECK-NOT: @Bar()
+  firrtl.class private @Foo() {}
+  firrtl.class private @Bar() {}
+
+  // CHECK: @UpdateAttrsAndTypes()
+  firrtl.module @UpdateAttrsAndTypes() {
+    // CHECK-NEXT: firrtl.wire : !firrtl.class<@Foo()>
+    // CHECK-NEXT: firrtl.wire : !firrtl.class<@Foo()>
+    %wire1 = firrtl.wire : !firrtl.class<@Foo()>
+    %wire2 = firrtl.wire : !firrtl.class<@Bar()>
+
+    // Should work on attributes and types of arbitrary operations, too.
+    // CHECK-NEXT: builtin.unrealized_conversion_cast to !firrtl.class<@Foo()> {a = @Foo, b = [@Foo]}
+    // CHECK-NEXT: builtin.unrealized_conversion_cast to !firrtl.class<@Foo()> {a = @Foo, b = [@Foo]}
+    %0 = builtin.unrealized_conversion_cast to !firrtl.class<@Foo()> {a = @Foo, b = [@Foo]}
+    %1 = builtin.unrealized_conversion_cast to !firrtl.class<@Bar()> {a = @Bar, b = [@Bar]}
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "DedupModuleSwapIssue"
+// There used to be a bug where swapping the canonical module would update the
+// entries in the dedupMap inappropriately, causing all non-deduped modules to
+// be deduped with the new canonical module, even if completely unrelated.
+// See https://github.com/llvm/circt/issues/9335.
+firrtl.circuit "DedupModuleSwapIssue" {
+  // CHECK: firrtl.module private @Bar
+  firrtl.module private @Bar(in %clock: !firrtl.clock) {}
+  // CHECK: firrtl.module private @Baz
+  firrtl.module private @Baz() {
+    %Bar_clock = firrtl.instance Bar @Bar(in clock: !firrtl.clock)
+  }
+  // CHECK-NOT: firrtl.module private @Qux
+  firrtl.module private @Qux() {}
+  // This public module appearing after the private one above would cause the
+  // dedupMap entries to be swapped such that the public module is now the
+  // canonical one.
+  // CHECK: firrtl.module @DedupModuleSwapIssue
+  firrtl.module @DedupModuleSwapIssue() {}
+}
+
+// CHECK-LABEL: firrtl.circuit "InstanceChoice"
+// Test that modules instantiated via instance_choice are properly deduplicated
+firrtl.circuit "InstanceChoice" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
+
+  // CHECK: firrtl.module private @Target0
+  firrtl.module private @Target0(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    %0 = firrtl.node %in : !firrtl.uint<8>
+    firrtl.connect %out, %0 : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+
+  // CHECK-NOT: firrtl.module private @Target1
+  firrtl.module private @Target1(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    %0 = firrtl.node %in : !firrtl.uint<8>
+    firrtl.connect %out, %0 : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+
+  // CHECK: firrtl.module private @FPGA0
+  firrtl.module private @FPGA0(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
+    %0 = firrtl.add %in, %c1_ui8 : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<9>
+    %1 = firrtl.bits %0 7 to 0 : (!firrtl.uint<9>) -> !firrtl.uint<8>
+    firrtl.connect %out, %1 : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+
+  // CHECK-NOT: firrtl.module private @FPGA1
+  firrtl.module private @FPGA1(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
+    %0 = firrtl.add %in, %c1_ui8 : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<9>
+    %1 = firrtl.bits %0 7 to 0 : (!firrtl.uint<9>) -> !firrtl.uint<8>
+    firrtl.connect %out, %1 : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+
+  // CHECK: firrtl.module @InstanceChoice
+  firrtl.module @InstanceChoice(in %x: !firrtl.uint<8>, out %y: !firrtl.uint<8>) {
+    // CHECK: %inst_in, %inst_out = firrtl.instance_choice inst @Target0 alternatives @Platform {
+    // CHECK-SAME: @FPGA -> @FPGA0
+    // CHECK-SAME: @ASIC -> @Target0
+    %inst_in, %inst_out = firrtl.instance_choice inst @Target0 alternatives @Platform {
+      @FPGA -> @FPGA0,
+      @ASIC -> @Target1
+    } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    firrtl.connect %inst_in, %x : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.connect %y, %inst_out : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+
+  // CHECK: firrtl.module @InstanceChoiceMultiple
+  firrtl.module @InstanceChoiceMultiple(in %x: !firrtl.uint<8>, out %y: !firrtl.uint<8>) {
+    // Test that multiple instance_choice ops get updated correctly
+    // CHECK: %inst1_in, %inst1_out = firrtl.instance_choice inst1 @Target0 alternatives @Platform {
+    // CHECK-SAME: @FPGA -> @FPGA0
+    // CHECK-SAME: @ASIC -> @Target0
+    %inst1_in, %inst1_out = firrtl.instance_choice inst1 @Target0 alternatives @Platform {
+      @FPGA -> @FPGA1,
+      @ASIC -> @Target1
+    } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+
+    // CHECK: %inst2_in, %inst2_out = firrtl.instance_choice inst2 @Target0 alternatives @Platform {
+    // CHECK-SAME: @FPGA -> @FPGA0
+    // CHECK-SAME: @ASIC -> @Target0
+    %inst2_in, %inst2_out = firrtl.instance_choice inst2 @Target1 alternatives @Platform {
+      @FPGA -> @FPGA0,
+      @ASIC -> @Target0
+    } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+
+    firrtl.connect %inst1_in, %x : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.connect %inst2_in, %inst1_out : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.connect %y, %inst2_out : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+}
+
+// When we skip deduplicating two modules only because they are both public,
+// we need to make sure that they are recorded in the dedup map. This test
+// should not deduplicate Bar_1 and Bar2, as well the NLA should
+// remain valid.
+// https://github.com/llvm/circt/issues/9697
+// CHECK-LABEL: firrtl.circuit "PublicModuleNoDedup"
+firrtl.circuit "PublicModuleNoDedup" {
+  // CHECK: hw.hierpath private @nla [@PublicModuleNoDedup::@sym, @Bar_2::@sym, @Baz_3]
+  hw.hierpath private @nla [@PublicModuleNoDedup::@sym, @Bar_2::@sym, @Baz_3]
+  // CHECK: firrtl.module @Baz_1
+  firrtl.module @Baz_1(out %a: !firrtl.uint<1>) {}
+  // CHECK: firrtl.module @Baz_2
+  firrtl.module @Baz_2(out %a: !firrtl.uint<1>) {}
+  // CHECK: firrtl.module @Baz_3
+  firrtl.module @Baz_3(out %a: !firrtl.uint<1>) {}
+  // CHECK: firrtl.module private @Bar_1
+  firrtl.module private @Bar_1() {
+    // CHECK-NEXT: firrtl.instance baz @Baz_2
+    %a = firrtl.instance baz @Baz_2(out a: !firrtl.uint<1>)
+  }
+  // CHECK: firrtl.module private @Bar_2
+  firrtl.module private @Bar_2() {
+    // CHECK-NEXT: firrtl.instance baz sym @sym @Baz_3
+    %a = firrtl.instance baz sym @sym @Baz_3(out a: !firrtl.uint<1>)
+  }
+  firrtl.module @PublicModuleNoDedup() {
+    firrtl.instance bar sym @sym @Bar_2()
+  }
 }

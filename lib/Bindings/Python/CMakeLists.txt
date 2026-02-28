@@ -9,39 +9,84 @@ add_compile_definitions("MLIR_PYTHON_PACKAGE_PREFIX=circt.")
 ################################################################################
 # Declare native Python extension
 ################################################################################
+set(LLVM_OPTIONAL_SOURCES
+  RTGTestModule.cpp
+)
 
+set(PYTHON_BINDINGS_SOURCES
+  ArcModule.cpp
+  CIRCTModule.cpp
+  ESIModule.cpp
+  HWModule.cpp
+  MSFTModule.cpp
+  OMModule.cpp
+  PipelineModule.cpp
+  RTGModule.cpp
+  SeqModule.cpp
+  SupportModule.cpp
+  SVModule.cpp
+  SynthModule.cpp
+  # Headers must be included explicitly so they are installed.
+  CIRCTModules.h
+  NanobindUtils.h
+)
+
+set(PYTHON_BINDINGS_LINK_LIBS
+  CIRCTCAPIArc
+  CIRCTCAPIComb
+  CIRCTCAPIConversion
+  CIRCTCAPIDC
+  CIRCTCAPIDebug
+  CIRCTCAPIEmit
+  CIRCTCAPIESI
+  CIRCTCAPIExportLLVM
+  CIRCTCAPIExportVerilog
+  CIRCTCAPIFSM
+  CIRCTCAPIHandshake
+  CIRCTCAPIHW
+  CIRCTCAPIHWArith
+  CIRCTCAPIKanagawa
+  CIRCTCAPILTL
+  CIRCTCAPIMSFT
+  CIRCTCAPIOM
+  CIRCTCAPIPipeline
+  CIRCTCAPIRTG
+  CIRCTCAPISeq
+  CIRCTCAPISim
+  CIRCTCAPISV
+  CIRCTCAPISupport
+  CIRCTCAPIVerif
+  CIRCTCAPITransforms
+  CIRCTCAPISynth
+  MLIRCAPIIndex
+  MLIRCAPILLVM
+  MLIRCAPISMT
+  MLIRCAPIExportSMTLIB
+  MLIRCAPISCF
+  MLIRCAPITarget
+  # needed for mlirFrozenRewritePatternSetDestroy
+  # but not the actual passes
+  MLIRCAPITransforms
+)
+
+if (CIRCT_INCLUDE_TESTS)
+  list(APPEND PYTHON_BINDINGS_SOURCES RTGTestModule.cpp)
+  list(APPEND PYTHON_BINDINGS_LINK_LIBS CIRCTCAPIRTGTest)
+endif()
 
 declare_mlir_python_extension(CIRCTBindingsPythonExtension
   MODULE_NAME _circt
   SOURCES
-    CIRCTModule.cpp
-    ESIModule.cpp
-    HWModule.cpp
-    OMModule.cpp
-    MSFTModule.cpp
-    SeqModule.cpp
-    SVModule.cpp
+    ${PYTHON_BINDINGS_SOURCES}
   EMBED_CAPI_LINK_LIBS
-    CIRCTCAPIComb
-    CIRCTCAPIDebug
-    CIRCTCAPIEmit
-    CIRCTCAPIESI
-    CIRCTCAPIExportVerilog
-    CIRCTCAPIFSM
-    CIRCTCAPIHW
-    CIRCTCAPIHWArith
-    CIRCTCAPIHandshake
-    CIRCTCAPILTL
-    CIRCTCAPIMSFT
-    CIRCTCAPIOM
-    CIRCTCAPISV
-    CIRCTCAPISeq
-    CIRCTCAPIVerif
-    CIRCTCAPIConversion
-    MLIRCAPITransforms
+    ${PYTHON_BINDINGS_LINK_LIBS}
   PRIVATE_LINK_LIBS
     LLVMSupport
 )
+
+if (CIRCT_INCLUDE_TESTS)
+  target_compile_definitions(CIRCTBindingsPythonExtension INTERFACE CIRCT_INCLUDE_TESTS)
+endif()
 
 add_dependencies(CIRCTBindingsPythonExtension circt-headers)
 
@@ -53,6 +98,11 @@ declare_mlir_python_sources(CIRCTBindingsPythonSources
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   SOURCES
     __init__.py
+)
+
+declare_mlir_python_sources(CIRCTBindingsPythonSources.Support
+  ADD_TO_PARENT CIRCTBindingsPythonSources
+  SOURCES
     support.py
 )
 
@@ -70,10 +120,26 @@ declare_mlir_python_sources(CIRCTBindingsPythonSources.Dialects
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/ArcOps.td
+  SOURCES
+    dialects/arc.py
+  DIALECT_NAME arc)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   TD_FILE dialects/CombOps.td
   SOURCES
     dialects/comb.py
   DIALECT_NAME comb)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/SynthOps.td
+  SOURCES
+    dialects/synth.py
+  DIALECT_NAME synth)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
@@ -94,10 +160,39 @@ declare_mlir_dialect_python_bindings(
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/HandshakeOps.td
+  SOURCES
+    dialects/handshake.py
+  DIALECT_NAME handshake)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   TD_FILE dialects/HWOps.td
   SOURCES
     dialects/hw.py
   DIALECT_NAME hw)
+
+# We need the 'arith.py' file because 'scf.py' imports from it. We are not
+# calling the function that constructs arith ops and thus don't need to
+# register and link against the dialect.
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${MLIR_MAIN_SRC_DIR}/python/mlir"
+  TD_FILE dialects/ArithOps.td
+  SOURCES
+    dialects/arith.py
+  DIALECT_NAME arith
+  GEN_ENUM_BINDINGS)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${MLIR_MAIN_SRC_DIR}/python/mlir"
+  TD_FILE dialects/IndexOps.td
+  SOURCES
+    dialects/index.py
+  DIALECT_NAME index
+  GEN_ENUM_BINDINGS)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
@@ -114,6 +209,32 @@ declare_mlir_dialect_python_bindings(
   SOURCES
     dialects/om.py
   DIALECT_NAME om)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/PipelineOps.td
+  SOURCES
+    dialects/pipeline.py
+  DIALECT_NAME pipeline)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/RTGOps.td
+  SOURCES
+    dialects/rtg.py
+  DIALECT_NAME rtg)
+
+if (CIRCT_INCLUDE_TESTS)
+  declare_mlir_dialect_python_bindings(
+    ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+    ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+    TD_FILE dialects/RTGTestOps.td
+    SOURCES
+      dialects/rtgtest.py
+    DIALECT_NAME rtgtest)
+endif()
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
@@ -158,10 +279,26 @@ declare_mlir_dialect_python_bindings(
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE dialects/SimOps.td
+  SOURCES
+    dialects/sim.py
+  DIALECT_NAME sim)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   TD_FILE dialects/VerifOps.td
   SOURCES
     dialects/verif.py
   DIALECT_NAME verif)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${MLIR_MAIN_SRC_DIR}/python/mlir"
+  TD_FILE dialects/SCFOps.td
+  SOURCES
+    dialects/scf.py
+  DIALECT_NAME scf)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
@@ -192,7 +329,8 @@ add_mlir_python_modules(CIRCTPythonModules
   INSTALL_PREFIX "python_packages/circt_core/circt"
   DECLARED_SOURCES
     MLIRPythonSources.Core
-    MLIRPythonSources.Dialects.builtin
+    MLIRPythonSources.Dialects.llvm
+    MLIRPythonSources.Dialects.smt
     CIRCTBindingsPythonExtension
     CIRCTBindingsPythonSources
   COMMON_CAPI_LINK_LIBS

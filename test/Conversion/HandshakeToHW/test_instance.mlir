@@ -34,3 +34,14 @@ handshake.func @bar(%in : i32) -> (i32) {
     %out = handshake.instance @foo(%in) : (i32) -> (i32)
     handshake.return %out : i32
 }
+
+// -----
+
+handshake.func @foo(%ctrl : i32) -> i32 {
+  return %ctrl : i32
+}
+
+hw.module @outer(in %clk: !seq.clock, in %rst: i1, in %ctrl: !esi.channel<i32>, out out: !esi.channel<i32>) {
+  %ret = handshake.esi_instance @foo "foo_inst" clk %clk rst %rst (%ctrl) : (!esi.channel<i32>) -> (!esi.channel<i32>)
+  hw.output %ret : !esi.channel<i32>
+}

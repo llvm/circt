@@ -58,12 +58,20 @@ struct Emitter {
   void emitModulePorts(ArrayRef<PortInfo> ports,
                        Block::BlockArgListType arguments = {});
   void emitModuleParameters(Operation *op, ArrayAttr parameters);
+  void emitDeclaration(DomainOp op);
   void emitDeclaration(LayerOp op);
   void emitDeclaration(OptionOp op);
+  void emitDeclaration(FormalOp op);
+  void emitDeclaration(SimulationOp op);
+  void emitFormalLike(Operation *op, StringRef keyword, StringAttr symName,
+                      StringAttr moduleName, DictionaryAttr params);
   void emitEnabledLayers(ArrayRef<Attribute> layers);
-
+  void emitKnownLayers(ArrayRef<Attribute> layers);
+  void emitRequirements(ArrayRef<Attribute> requirements);
   void emitParamAssign(ParamDeclAttr param, Operation *op,
                        std::optional<PPExtString> wordBeforeLHS = std::nullopt);
+  void emitParamValue(Attribute value, Operation *op);
+
   void emitGenericIntrinsic(GenericIntrinsicOp op);
 
   // Statement emission
@@ -75,9 +83,15 @@ struct Emitter {
   void emitStatement(NodeOp op);
   void emitStatement(StopOp op);
   void emitStatement(SkipOp op);
+  void emitFormatString(Operation *op, StringRef formatString, OperandRange ops,
+                        llvm::SmallVectorImpl<Value> &substitutions);
+  template <class T>
+  void emitPrintfLike(T op, StringAttr fileName);
   void emitStatement(PrintFOp op);
+  void emitStatement(FPrintFOp op);
+  void emitStatement(FFlushOp op);
   void emitStatement(ConnectOp op);
-  void emitStatement(StrictConnectOp op);
+  void emitStatement(MatchingConnectOp op);
   void emitStatement(PropAssignOp op);
   void emitStatement(InstanceOp op);
   void emitStatement(InstanceChoiceOp op);
@@ -89,6 +103,7 @@ struct Emitter {
   void emitStatement(MemoryPortOp op);
   void emitStatement(MemoryDebugPortOp op);
   void emitStatement(MemoryPortAccessOp op);
+  void emitStatement(DomainDefineOp op);
   void emitStatement(RefDefineOp op);
   void emitStatement(RefForceOp op);
   void emitStatement(RefForceInitialOp op);
@@ -96,6 +111,8 @@ struct Emitter {
   void emitStatement(RefReleaseInitialOp op);
   void emitStatement(LayerBlockOp op);
   void emitStatement(GenericIntrinsicOp op);
+  void emitStatement(DomainCreateAnonOp op);
+  void emitStatement(DomainCreateOp op);
 
   template <class T>
   void emitVerifStatement(T op, StringRef mnemonic);
@@ -126,6 +143,9 @@ struct Emitter {
   void emitExpression(ListCreateOp op);
   void emitExpression(UnresolvedPathOp op);
   void emitExpression(GenericIntrinsicOp op);
+  void emitExpression(CatPrimOp op);
+  void emitExpression(UnsafeDomainCastOp op);
+  void emitExpression(UnknownValueOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -142,6 +162,8 @@ struct Emitter {
   void emitExpression(PadPrimOp op) { emitPrimExpr("pad", op, op.getAmount()); }
   void emitExpression(ShlPrimOp op) { emitPrimExpr("shl", op, op.getAmount()); }
   void emitExpression(ShrPrimOp op) { emitPrimExpr("shr", op, op.getAmount()); }
+
+  void emitExpression(TimeOp op) {}
 
   // Funnel all ops without attrs into `emitPrimExpr`.
 #define HANDLE(OPTYPE, MNEMONIC)                                               \
@@ -160,7 +182,6 @@ struct Emitter {
   HANDLE(GTPrimOp, "gt");
   HANDLE(EQPrimOp, "eq");
   HANDLE(NEQPrimOp, "neq");
-  HANDLE(CatPrimOp, "cat");
   HANDLE(DShlPrimOp, "dshl");
   HANDLE(DShlwPrimOp, "dshlw");
   HANDLE(DShrPrimOp, "dshr");
@@ -168,6 +189,7 @@ struct Emitter {
   HANDLE(AsSIntPrimOp, "asSInt");
   HANDLE(AsUIntPrimOp, "asUInt");
   HANDLE(AsAsyncResetPrimOp, "asAsyncReset");
+  HANDLE(AsResetPrimOp, "asReset");
   HANDLE(AsClockPrimOp, "asClock");
   HANDLE(CvtPrimOp, "cvt");
   HANDLE(NegPrimOp, "neg");
@@ -179,7 +201,7 @@ struct Emitter {
 
   // Attributes
   void emitAttribute(MemDirAttr attr);
-  void emitAttribute(RUWAttr attr);
+  void emitAttribute(RUWBehaviorAttr attr);
 
   // Types
   void emitType(Type type, bool includeConst = true);
@@ -187,6 +209,9 @@ struct Emitter {
     ps << PP::space << ":" << PP::nbsp;
     emitType(type);
   }
+
+  // Domains
+  void emitDomains(Attribute attr, ArrayRef<PortInfo> ports);
 
   // Locations
   void emitLocation(Location loc);
@@ -369,7 +394,7 @@ private:
     SymbolTable symbolTable;
     hw::InnerSymbolTableCollection istc;
     hw::InnerRefNamespace irn{symbolTable, istc};
-    SymInfos(Operation *op) : symbolTable(op), istc(op){};
+    SymInfos(Operation *op) : symbolTable(op), istc(op) {}
   };
   std::optional<std::reference_wrapper<SymInfos>> symInfos;
 
@@ -404,8 +429,8 @@ void Emitter::emitCircuit(CircuitOp op) {
             emitModule(op);
             ps << PP::newline;
           })
-          .Case<LayerOp>([&](auto op) { emitDeclaration(op); })
-          .Case<OptionOp>([&](auto op) { emitDeclaration(op); })
+          .Case<DomainOp, LayerOp, OptionOp, FormalOp, SimulationOp>(
+              [&](auto op) { emitDeclaration(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside circuit");
           });
@@ -425,13 +450,39 @@ void Emitter::emitEnabledLayers(ArrayRef<Attribute> layers) {
   }
 }
 
+void Emitter::emitKnownLayers(ArrayRef<Attribute> layers) {
+  for (auto layer : layers) {
+    ps << PP::space;
+    ps.cbox(2, IndentStyle::Block);
+    ps << "knownlayer" << PP::space;
+    emitSymbol(cast<SymbolRefAttr>(layer));
+    ps << PP::end;
+  }
+}
+
+void Emitter::emitRequirements(ArrayRef<Attribute> requirements) {
+  if (requirements.empty())
+    return;
+  ps << PP::space;
+  ps.cbox(2, IndentStyle::Block);
+  ps << "requires" << PP::space;
+  llvm::interleaveComma(requirements, ps, [&](Attribute req) {
+    ps.writeQuotedEscaped(cast<StringAttr>(req).getValue());
+  });
+  ps << PP::end;
+}
+
 void Emitter::emitParamAssign(ParamDeclAttr param, Operation *op,
                               std::optional<PPExtString> wordBeforeLHS) {
   if (wordBeforeLHS) {
     ps << *wordBeforeLHS << PP::nbsp;
   }
   ps << PPExtString(param.getName().strref()) << PP::nbsp << "=" << PP::nbsp;
-  TypeSwitch<Attribute>(param.getValue())
+  emitParamValue(param.getValue(), op);
+}
+
+void Emitter::emitParamValue(Attribute value, Operation *op) {
+  TypeSwitch<Attribute>(value)
       .Case<IntegerAttr>([&](auto attr) { ps.addAsString(attr.getValue()); })
       .Case<FloatAttr>([&](auto attr) {
         SmallString<16> str;
@@ -440,6 +491,24 @@ void Emitter::emitParamAssign(ParamDeclAttr param, Operation *op,
       })
       .Case<StringAttr>(
           [&](auto attr) { ps.writeQuotedEscaped(attr.getValue()); })
+      .Case<ArrayAttr>([&](auto attr) {
+        ps.scopedBox(PP::bbox2, [&]() {
+          ps << "[";
+          interleaveComma(attr.getValue(),
+                          [&](auto element) { emitParamValue(element, op); });
+          ps << "]";
+        });
+      })
+      .Case<DictionaryAttr>([&](auto attr) {
+        ps.scopedBox(PP::bbox2, [&]() {
+          ps << "{";
+          interleaveComma(attr.getValue(), [&](auto field) {
+            ps << PPExtString(field.getName()) << PP::nbsp << "=" << PP::nbsp;
+            emitParamValue(field.getValue(), op);
+          });
+          ps << "}";
+        });
+      })
       .Default([&](auto attr) {
         emitOpError(op, "with unsupported parameter attribute: ") << attr;
         ps << "<unsupported-attr ";
@@ -508,7 +577,10 @@ void Emitter::emitModule(FExtModuleOp op) {
   startStatement();
   ps.cbox(4, IndentStyle::Block);
   ps << "extmodule " << PPExtString(legalize(op.getNameAttr()));
+  emitKnownLayers(op.getKnownLayers());
   emitEnabledLayers(op.getLayers());
+  if (auto reqs = op.getExternalRequirements())
+    emitRequirements(reqs.getValue());
   ps << PP::nbsp << ":" << PP::end;
   emitLocation(op);
 
@@ -561,6 +633,7 @@ void Emitter::emitModule(FIntModuleOp op) {
 /// during expression emission.
 void Emitter::emitModulePorts(ArrayRef<PortInfo> ports,
                               Block::BlockArgListType arguments) {
+  // Emit the ports.
   for (unsigned i = 0, e = ports.size(); i < e; ++i) {
     startStatement();
     const auto &port = ports[i];
@@ -570,6 +643,7 @@ void Emitter::emitModulePorts(ArrayRef<PortInfo> ports,
       addValueName(arguments[i], legalName);
     ps << PPExtString(legalName) << " : ";
     emitType(port.type);
+    emitDomains(port.domains, ports);
     emitLocation(ports[i].loc);
     setPendingNewline();
   }
@@ -583,11 +657,31 @@ void Emitter::emitModuleParameters(Operation *op, ArrayAttr parameters) {
   }
 }
 
+void Emitter::emitDeclaration(DomainOp op) {
+  startStatement();
+  ps << "domain " << PPExtString(op.getSymName()) << " :";
+  emitLocationAndNewLine(op);
+  ps.scopedBox(PP::bbox2, [&]() {
+    for (auto attr : op.getFields()) {
+      auto fieldAttr = cast<DomainFieldAttr>(attr);
+      ps << PP::newline << PPExtString(fieldAttr.getName()) << " : ";
+      emitType(fieldAttr.getType());
+    }
+  });
+}
+
 /// Emit a layer definition.
 void Emitter::emitDeclaration(LayerOp op) {
   startStatement();
   ps << "layer " << PPExtString(op.getSymName()) << ", "
-     << PPExtString(stringifyLayerConvention(op.getConvention())) << " : ";
+     << PPExtString(stringifyLayerConvention(op.getConvention()));
+
+  if (auto outputFile = op->getAttrOfType<hw::OutputFileAttr>("output_file")) {
+    ps << ", ";
+    ps.writeQuotedEscaped(outputFile.getFilename().getValue());
+  }
+
+  ps << " : ";
   emitLocationAndNewLine(op);
   ps.scopedBox(PP::bbox2, [&]() {
     for (auto &bodyOp : op.getBody().getOps()) {
@@ -616,6 +710,40 @@ void Emitter::emitDeclaration(OptionOp op) {
   ps << PP::newline << PP::newline;
 }
 
+/// Emit a formal test definition.
+void Emitter::emitDeclaration(FormalOp op) {
+  emitFormalLike(op, "formal", op.getSymNameAttr(),
+                 op.getModuleNameAttr().getAttr(), op.getParameters());
+}
+
+/// Emit a simulation test definition.
+void Emitter::emitDeclaration(SimulationOp op) {
+  emitFormalLike(op, "simulation", op.getSymNameAttr(),
+                 op.getModuleNameAttr().getAttr(), op.getParameters());
+}
+
+/// Emit a formal or simulation test definition.
+void Emitter::emitFormalLike(Operation *op, StringRef keyword,
+                             StringAttr symName, StringAttr moduleName,
+                             DictionaryAttr params) {
+  startStatement();
+  ps.cbox(4, IndentStyle::Block);
+  ps << keyword << " " << PPExtString(legalize(symName));
+  ps << " of " << PPExtString(legalize(moduleName));
+  ps << PP::nbsp << ":" << PP::end;
+  emitLocation(op);
+
+  ps.scopedBox(PP::bbox2, [&]() {
+    setPendingNewline();
+    for (auto param : params) {
+      startStatement();
+      ps << PPExtString(param.getName()) << PP::nbsp << "=" << PP::nbsp;
+      emitParamValue(param.getValue(), op);
+      setPendingNewline();
+    }
+  });
+}
+
 /// Check if an operation is inlined into the emission of their users. For
 /// example, subfields are always inlined.
 static bool isEmittedInline(Operation *op) {
@@ -637,12 +765,13 @@ void Emitter::emitStatementsInBlock(Block &block) {
       continue;
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
-              PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp, StrictConnectOp,
-              PropAssignOp, InstanceOp, InstanceChoiceOp, AttachOp, MemOp,
-              InvalidValueOp, SeqMemOp, CombMemOp, MemoryPortOp,
-              MemoryDebugPortOp, MemoryPortAccessOp, RefDefineOp, RefForceOp,
-              RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
-              LayerBlockOp, GenericIntrinsicOp>(
+              PrintFOp, FPrintFOp, FFlushOp, AssertOp, AssumeOp, CoverOp,
+              ConnectOp, MatchingConnectOp, PropAssignOp, InstanceOp,
+              InstanceChoiceOp, AttachOp, MemOp, InvalidValueOp, SeqMemOp,
+              CombMemOp, MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp,
+              DomainDefineOp, RefDefineOp, RefForceOp, RefForceInitialOp,
+              RefReleaseOp, RefReleaseInitialOp, LayerBlockOp,
+              GenericIntrinsicOp, DomainCreateAnonOp, DomainCreateOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           startStatement();
@@ -773,6 +902,71 @@ void Emitter::emitStatement(SkipOp op) {
   emitLocationAndNewLine(op);
 }
 
+void Emitter::emitFormatString(Operation *op, StringRef origFormatString,
+                               OperandRange substitutionOperands,
+                               llvm::SmallVectorImpl<Value> &substitutions) {
+  // Replace the generic "{{}}" special substitutions with their attributes.
+  // E.g.:
+  //
+  //     "hello {{}} world"(%time)
+  //
+  // Becomes:
+  //
+  //     "hello {{SimulationTime}} world"
+  SmallString<64> formatString;
+  for (size_t i = 0, e = origFormatString.size(), opIdx = 0; i != e; ++i) {
+    auto c = origFormatString[i];
+    switch (c) {
+    case '%': {
+      formatString.push_back(c);
+
+      // Parse the width specifier.
+      SmallString<6> width;
+      c = origFormatString[++i];
+      while (isdigit(c)) {
+        width.push_back(c);
+        c = origFormatString[++i];
+      }
+
+      // Parse the radix.
+      switch (c) {
+      case 'b':
+      case 'd':
+      case 'x':
+        if (!width.empty())
+          formatString.append(width);
+        [[fallthrough]];
+      case 'c':
+        substitutions.push_back(substitutionOperands[opIdx++]);
+        [[fallthrough]];
+      default:
+        formatString.push_back(c);
+      }
+      break;
+    }
+    case '{':
+      if (origFormatString.slice(i, i + 4) == "{{}}") {
+        formatString.append("{{");
+        TypeSwitch<Operation *>(substitutionOperands[opIdx++].getDefiningOp())
+            .Case<TimeOp>(
+                [&](auto time) { formatString.append("SimulationTime"); })
+            .Case<HierarchicalModuleNameOp>([&](auto time) {
+              formatString.append("HierarchicalModuleName");
+            })
+            .Default([&](auto) {
+              emitError(op, "unsupported fstring substitution type");
+            });
+        formatString.append("}}");
+      }
+      i += 3;
+      break;
+    default:
+      formatString.push_back(c);
+    }
+  }
+  ps.writeQuotedEscaped(formatString);
+}
+
 void Emitter::emitStatement(PrintFOp op) {
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
@@ -781,8 +975,11 @@ void Emitter::emitStatement(PrintFOp op) {
     ps << "," << PP::space;
     emitExpression(op.getCond());
     ps << "," << PP::space;
-    ps.writeQuotedEscaped(op.getFormatString());
-    for (auto operand : op.getSubstitutions()) {
+
+    SmallVector<Value, 4> substitutions;
+    emitFormatString(op, op.getFormatString(), op.getSubstitutions(),
+                     substitutions);
+    for (auto operand : substitutions) {
       ps << "," << PP::space;
       emitExpression(operand);
     }
@@ -790,6 +987,62 @@ void Emitter::emitStatement(PrintFOp op) {
     if (!op.getName().empty()) {
       ps << PP::space << ": " << PPExtString(legalize(op.getNameAttr()));
     }
+  });
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(FPrintFOp op) {
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "fprintf(" << PP::ibox0;
+    emitExpression(op.getClock());
+    ps << "," << PP::space;
+    emitExpression(op.getCond());
+    ps << "," << PP::space;
+
+    SmallVector<Value, 4> outputFileSubstitutions;
+    emitFormatString(op, op.getOutputFile(), op.getOutputFileSubstitutions(),
+                     outputFileSubstitutions);
+    if (!outputFileSubstitutions.empty()) {
+      ps << "," << PP::space;
+      interleaveComma(outputFileSubstitutions);
+    }
+
+    ps << "," << PP::space;
+    SmallVector<Value, 4> substitutions;
+    emitFormatString(op, op.getFormatString(), op.getSubstitutions(),
+                     substitutions);
+    if (!substitutions.empty()) {
+      ps << "," << PP::space;
+      interleaveComma(substitutions);
+    }
+
+    ps << ")" << PP::end;
+    if (!op.getName().empty()) {
+      ps << PP::space << ": " << PPExtString(legalize(op.getNameAttr()));
+    }
+  });
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(FFlushOp op) {
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "fflush(" << PP::ibox0;
+    emitExpression(op.getClock());
+    ps << "," << PP::space;
+    emitExpression(op.getCond());
+    if (op.getOutputFileAttr()) {
+      ps << "," << PP::space;
+      SmallVector<Value, 4> substitutions;
+      emitFormatString(op, op.getOutputFileAttr(),
+                       op.getOutputFileSubstitutions(), substitutions);
+      if (!substitutions.empty()) {
+        ps << "," << PP::space;
+        interleaveComma(substitutions);
+      }
+    }
+    ps << ")" << PP::end;
   });
   emitLocationAndNewLine(op);
 }
@@ -841,7 +1094,7 @@ void Emitter::emitStatement(ConnectOp op) {
   emitLocationAndNewLine(op);
 }
 
-void Emitter::emitStatement(StrictConnectOp op) {
+void Emitter::emitStatement(MatchingConnectOp op) {
   startStatement();
   if (FIRVersion(3, 0, 0) <= version) {
     ps.scopedBox(PP::ibox2, [&]() {
@@ -890,7 +1143,7 @@ void Emitter::emitStatement(InstanceOp op) {
   portName.push_back('.');
   unsigned baseLen = portName.size();
   for (unsigned i = 0, e = op.getNumResults(); i < e; ++i) {
-    portName.append(legalize(op.getPortName(i)));
+    portName.append(legalize(op.getPortNameAttr(i)));
     addValueName(op.getResult(i), portName);
     portName.resize(baseLen);
   }
@@ -917,7 +1170,7 @@ void Emitter::emitStatement(InstanceChoiceOp op) {
   portName.push_back('.');
   unsigned baseLen = portName.size();
   for (unsigned i = 0, e = op.getNumResults(); i < e; ++i) {
-    portName.append(legalize(op.getPortName(i)));
+    portName.append(legalize(op.getPortNameAttr(i)));
     addValueName(op.getResult(i), portName);
     portName.resize(baseLen);
   }
@@ -986,7 +1239,7 @@ void Emitter::emitStatement(MemOp op) {
       ps << "readwriter => " << readwriter << PP::newline;
 
     ps << "read-under-write => ";
-    emitAttribute(op.getRuw());
+    emitAttribute(op.getRuwAttr());
     setPendingNewline();
   });
 }
@@ -996,8 +1249,8 @@ void Emitter::emitStatement(SeqMemOp op) {
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "smem " << PPExtString(legalize(op.getNameAttr()));
     emitTypeWithColon(op.getType());
-    ps << PP::space;
-    emitAttribute(op.getRuw());
+    ps << "," << PP::space;
+    emitAttribute(op.getRuwAttr());
   });
   emitLocationAndNewLine(op);
 }
@@ -1045,6 +1298,18 @@ void Emitter::emitStatement(MemoryPortAccessOp op) {
   // Print the clock.
   emitExpression(op.getClock());
 
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(DomainDefineOp op) {
+  // If the source is an anonymous domain, then we can skip emitting this op.
+  if (isa_and_nonnull<DomainCreateAnonOp>(op.getSrc().getDefiningOp()))
+    return;
+
+  startStatement();
+  emitAssignLike([&]() { emitExpression(op.getDest()); },
+                 [&]() { emitExpression(op.getSrc()); }, PPExtString("="),
+                 PPExtString("domain_define"));
   emitLocationAndNewLine(op);
 }
 
@@ -1115,7 +1380,7 @@ void Emitter::emitStatement(InvalidValueOp op) {
   // a connect.
   if (llvm::all_of(op->getUses(), [&](OpOperand &use) {
         return use.getOperandNumber() == 1 &&
-               isa<ConnectOp, StrictConnectOp>(use.getOwner());
+               isa<ConnectOp, MatchingConnectOp>(use.getOwner());
       }))
     return;
 
@@ -1148,6 +1413,19 @@ void Emitter::emitStatement(GenericIntrinsicOp op) {
   emitLocationAndNewLine(op);
 }
 
+void Emitter::emitStatement(DomainCreateAnonOp op) {
+  // These ops are not emitted.
+}
+
+void Emitter::emitStatement(DomainCreateOp op) {
+  startStatement();
+  auto name = legalize(op.getNameAttr());
+  addValueName(op.getResult(), name);
+  ps << "domain " << PPExtString(name) << " of "
+     << PPExtString(op.getDomainAttr().getValue());
+  emitLocationAndNewLine(op);
+}
+
 void Emitter::emitExpression(Value value) {
   // Handle the trivial case where we already have a name for this value which
   // we can use.
@@ -1167,20 +1445,23 @@ void Emitter::emitExpression(Value value) {
           // Binary
           AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
           OrPrimOp, XorPrimOp, LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp,
-          EQPrimOp, NEQPrimOp, CatPrimOp, DShlPrimOp, DShlwPrimOp, DShrPrimOp,
+          EQPrimOp, NEQPrimOp, DShlPrimOp, DShlwPrimOp, DShrPrimOp,
           // Unary
-          AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsClockPrimOp,
-          CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
+          AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsResetPrimOp,
+          AsClockPrimOp, CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp,
+          XorRPrimOp,
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
-          UnresolvedPathOp, GenericIntrinsicOp,
+          UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
+          UnknownValueOp,
           // Reference expressions
-          RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp>(
-          [&](auto op) {
-            ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
-          })
+          RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
+          // Format String expressions
+          TimeOp>([&](auto op) {
+        ps.scopedBox(PP::ibox0, [&]() { emitExpression(op); });
+      })
       .Default([&](auto op) {
         emitOpError(op, "not supported as expression");
         ps << "<unsupported-expr-" << PPExtString(op->getName().stripDialect())
@@ -1379,6 +1660,54 @@ void Emitter::emitPrimExpr(StringRef mnemonic, Operation *op,
   ps << ")" << PP::end;
 }
 
+void Emitter::emitExpression(CatPrimOp op) {
+  size_t numOperands = op.getNumOperands();
+  switch (numOperands) {
+  case 0:
+    // Emit "UInt<0>(0)"
+    emitType(op.getType(), false);
+    ps << "(0)";
+    return;
+  case 1: {
+    auto operand = op->getOperand(0);
+    // If there is no sign conversion, just emit the operand.
+    if (isa<UIntType>(operand.getType()))
+      return emitExpression(operand);
+
+    // Emit cat to convert sign.
+    ps << "cat(" << PP::ibox0;
+    emitExpression(op->getOperand(0));
+    ps << "," << PP::space << "SInt<0>(0))" << PP::end;
+    return;
+  }
+
+  default:
+    // Construct a linear tree of cats.
+    for (size_t i = 0; i < numOperands - 1; ++i) {
+      ps << "cat(" << PP::ibox0;
+      emitExpression(op->getOperand(i));
+      ps << "," << PP::space;
+    }
+
+    emitExpression(op->getOperand(numOperands - 1));
+    for (size_t i = 0; i < numOperands - 1; ++i)
+      ps << ")" << PP::end;
+    return;
+  }
+}
+
+void Emitter::emitExpression(UnsafeDomainCastOp op) {
+  ps << "unsafe_domain_cast(" << PP::ibox0;
+  interleaveComma(op.getOperands(),
+                  [&](Value operand) { emitExpression(operand); });
+  ps << ")" << PP::end;
+}
+
+void Emitter::emitExpression(UnknownValueOp op) {
+  ps << "Unknown";
+  emitTypeWithColon(op.getType());
+}
+
 void Emitter::emitAttribute(MemDirAttr attr) {
   switch (attr) {
   case MemDirAttr::Infer:
@@ -1396,15 +1725,15 @@ void Emitter::emitAttribute(MemDirAttr attr) {
   }
 }
 
-void Emitter::emitAttribute(RUWAttr attr) {
-  switch (attr) {
-  case RUWAttr::Undefined:
+void Emitter::emitAttribute(RUWBehaviorAttr attr) {
+  switch (attr.getValue()) {
+  case RUWBehavior::Undefined:
     ps << "undefined";
     break;
-  case RUWAttr::Old:
+  case RUWBehavior::Old:
     ps << "old";
     break;
-  case RUWAttr::New:
+  case RUWBehavior::New:
     ps << "new";
     break;
   }
@@ -1492,9 +1821,30 @@ void Emitter::emitType(Type type, bool includeConst) {
         emitType(type.getElementType());
         ps << ">";
       })
+      .Case<DomainType>([&](DomainType type) { ps << "Domain"; })
       .Default([&](auto type) {
         llvm_unreachable("all types should be implemented");
       });
+}
+
+void Emitter::emitDomains(Attribute attr, ArrayRef<PortInfo> ports) {
+  if (!attr)
+    return;
+  if (auto domains = dyn_cast<ArrayAttr>(attr)) {
+    if (domains.empty())
+      return;
+    ps << " domains [";
+    ps.scopedBox(PP::ibox0, [&]() {
+      interleaveComma(domains, [&](Attribute attr) {
+        ps.addAsString(
+            ports[cast<IntegerAttr>(attr).getUInt()].name.getValue());
+      });
+      ps << "]";
+    });
+  } else {
+    auto kind = cast<FlatSymbolRefAttr>(attr);
+    ps << " of " << PPExtString(kind.getValue());
+  }
 }
 
 /// Emit a location as `@[<filename> <line>:<column>]` annotation, including a
@@ -1502,7 +1852,8 @@ void Emitter::emitType(Type type, bool includeConst) {
 void Emitter::emitLocation(Location loc) {
   // TODO: Handle FusedLoc and uniquify locations, avoid repeated file names.
   ps << PP::neverbreak;
-  if (auto fileLoc = loc->dyn_cast_or_null<FileLineColLoc>()) {
+  if (auto fileLoc =
+          dyn_cast_or_null<FileLineColLoc, LocationAttr>(LocationAttr(loc))) {
     ps << " @[" << fileLoc.getFilename().getValue();
     if (auto line = fileLoc.getLine()) {
       ps << " ";

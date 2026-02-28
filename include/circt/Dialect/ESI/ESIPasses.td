@@ -85,4 +85,9 @@ def LowerESItoHW: Pass<"lower-esi-to-hw", "mlir::ModuleOp"> {
   ];
 }
 
+def VerifyESIConnections: Pass<"verify-esi-connections"> {
+  let summary = "Verify that channels and bundles are only used once";
+  let constructor = "circt::esi::createESIVerifyConnectionsPass()";
+}
+
 #endif // CIRCT_DIALECT_ESI_ESIPASSES_TD

@@ -50,6 +50,7 @@ using mlir::dyn_cast_or_null; // NOLINT(misc-unused-using-decls)
 using mlir::function_ref;     // NOLINT(misc-unused-using-decls)
 using mlir::isa;              // NOLINT(misc-unused-using-decls)
 using mlir::isa_and_nonnull;  // NOLINT(misc-unused-using-decls)
+using mlir::isa_and_present;  // NOLINT(misc-unused-using-decls)
 using mlir::iterator_range;   // NOLINT(misc-unused-using-decls)
 using mlir::MutableArrayRef;  // NOLINT(misc-unused-using-decls)
 using mlir::PointerUnion;     // NOLINT(misc-unused-using-decls)
@@ -139,7 +140,6 @@ class OpOperand;
 class OpResult;
 template <typename OpTy>
 class OwningOpRef;
-class ParseResult;
 class Pass;
 class PatternRewriter;
 class Region;
@@ -165,7 +165,6 @@ class VectorType;
 class WalkResult;
 enum class RegionKind;
 struct CallInterfaceCallable;
-struct LogicalResult;
 struct OperationState;
 class OperationName;
 
@@ -173,8 +172,6 @@ namespace affine {
 struct MemRefAccess;
 } // namespace affine
 
-template <typename T>
-class FailureOr;
 template <typename SourceOp>
 class OpConversionPattern;
 template <typename T>

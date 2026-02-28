@@ -43,6 +43,27 @@ static KnownBits computeKnownBits(Value v, unsigned depth) {
     return result;
   }
 
+  // `extract(x from y)` has whatever is known about the extracted bits of the
+  // operand.
+  if (auto extractOp = dyn_cast<ExtractOp>(op)) {
+    unsigned lowBit = extractOp.getLowBit();
+    unsigned width = extractOp.getType().getIntOrFloatBitWidth();
+    // Compute known bits of the input
+    KnownBits inputBits = computeKnownBits(extractOp.getInput(), depth + 1);
+    // Shift down to start at the extract position
+    APInt inputZero = inputBits.Zero.lshr(lowBit);
+    APInt inputOne = inputBits.One.lshr(lowBit);
+
+    // Truncate to the width of the extract result
+    APInt knownZero = inputZero.trunc(width);
+    APInt knownOne = inputOne.trunc(width);
+
+    KnownBits result(width);
+    result.Zero = knownZero;
+    result.One = knownOne;
+    return result;
+  }
+
   // `and(x, y, z)` has whatever is known about the operands intersected.
   if (auto andOp = dyn_cast<AndOp>(op)) {
     auto result = computeKnownBits(andOp.getOperand(0), depth + 1);
@@ -76,6 +97,22 @@ static KnownBits computeKnownBits(Value v, unsigned depth) {
     auto lhs = computeKnownBits(muxOp.getTrueValue(), depth + 1);
     auto rhs = computeKnownBits(muxOp.getFalseValue(), depth + 1);
     return lhs.intersectWith(rhs);
+  }
+
+  // `shl(x, y)` is the known bits of `x` << known bits of `y`.
+  if (auto shlOp = dyn_cast<ShlOp>(op)) {
+    auto lhs = computeKnownBits(shlOp.getOperand(0), depth + 1);
+    auto rhs = computeKnownBits(shlOp.getOperand(1), depth + 1);
+    auto res = KnownBits::shl(lhs, rhs);
+    return res;
+  }
+
+  // `shr(x, y)` is the known bits of `x` >> known bits of `y`.
+  if (auto shrOp = dyn_cast<ShrUOp>(op)) {
+    auto lhs = computeKnownBits(shrOp.getOperand(0), depth + 1);
+    auto rhs = computeKnownBits(shrOp.getOperand(1), depth + 1);
+    auto res = KnownBits::lshr(lhs, rhs);
+    return res;
   }
 
   return KnownBits(v.getType().getIntOrFloatBitWidth());

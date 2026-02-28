@@ -3,7 +3,8 @@
 // RUN: circt-opt %s -pipeline-explicit-regs -lower-pipeline-to-hw -lower-seq-to-sv -sv-trace-iverilog -export-verilog \
 // RUN:     -o %t.mlir > %t.sv
 
-// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=nonstallable_test2 \
+// RUN: rm -rf %t.dir && mkdir %t.dir
+// RUN: circt-cocotb-driver.py --objdir=%t.dir --topLevel=nonstallable_test2 \
 // RUN:     --pythonModule=nonstallable_test2 --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 
@@ -24,7 +25,8 @@ hw.module @nonstallable_test2(in %arg0: i32, in %go: i1, in %clock: !seq.clock, 
   ^bb4(%s4_enable: i1):
     pipeline.stage ^bb5
   ^bb5(%s5_enable: i1):
-    pipeline.return %a0 : i32
+    %a0_bb5 = pipeline.src %a0 : i32
+    pipeline.return %a0_bb5 : i32
   }
   hw.output %out, %done : i32, i1
 }

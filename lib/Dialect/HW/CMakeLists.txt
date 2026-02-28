@@ -1,6 +1,7 @@
 set(CIRCT_HW_Sources
   ConversionPatterns.cpp
   CustomDirectiveImpl.cpp
+  HierPathCache.cpp
   HWAttributes.cpp
   HWEnums.cpp
   HWDialect.cpp
@@ -14,6 +15,7 @@ set(CIRCT_HW_Sources
   ModuleImplementation.cpp
   InnerSymbolTable.cpp
   PortConverter.cpp
+  InferIntRangeInterfaceImpls.cpp
 )
 
 set(LLVM_OPTIONAL_SOURCES
@@ -29,8 +31,9 @@ add_circt_dialect_library(CIRCTHW
 
   DEPENDS
   MLIRHWIncGen
-  MLIRHWAttrIncGen
-  MLIRHWEnumsIncGen
+  CIRCTHWAttrIncGen
+  CIRCTHWEnumsIncGen
+  CIRCTHWCanonicalizationIncGen
 
   LINK_COMPONENTS
   Support
@@ -39,6 +42,9 @@ add_circt_dialect_library(CIRCTHW
   CIRCTSupport
   MLIRIR
   MLIRInferTypeOpInterface
+  MLIRMemorySlotInterfaces
+  MLIRInferIntRangeCommon
+  MLIRInferIntRangeInterface
 )
 
 add_circt_library(CIRCTHWReductions

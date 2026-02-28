@@ -15,6 +15,7 @@
 #include "circt/Support/LLVM.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/SymCache.h"
+#include "llvm/ADT/MapVector.h"
 
 namespace circt {
 

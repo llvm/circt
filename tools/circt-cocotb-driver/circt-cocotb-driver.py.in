@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 import re
-from cocotb_test.simulator import run
+import cocotb_test.simulator as csim
 
 
 def parseArgs(args):
@@ -22,7 +22,7 @@ def parseArgs(args):
                          help="Name of the top level verilog module.")
 
   argparser.add_argument("--simulator",
-                         choices=['icarus'],
+                         choices=['icarus', 'questa'],
                          default="icarus",
                          help="Name of the simulator to use.")
 
@@ -31,10 +31,20 @@ def parseArgs(args):
                          required=True,
                          help="Name of the python module.")
 
-  argparser.add_argument("--pythonFolders",
-                            type=str,
-                         default="",
-                         help="The folders where cocotb should include from, separated by commas.")
+  argparser.add_argument("--waves",
+                         action="store_true",
+                         help="Enable waveform dumping.")
+
+  argparser.add_argument(
+      "--pythonFolders",
+      type=str,
+      default="",
+      help="The folders where cocotb should include from, separated by commas.")
+
+  argparser.add_argument(
+      "--gui",
+      action="store_true",
+      help="Run the simulator with a GUI. Only supported by Questa.")
 
   argparser.add_argument(
       "sources",
@@ -44,10 +54,17 @@ def parseArgs(args):
   return argparser.parse_args(args[1:])
 
 
-class _IVerilogHandler:
+class Icarus(csim.Icarus):
   """ Class for handling icarus-verilog specific commands and patching."""
 
-  def __init__(self):
+  def __init__(self, **kwargs):
+    super().__init__(**kwargs)
+
+    # If cmake discovered the iverilog path, add it to the path.
+    if "@IVERILOG_PATH@" != "":
+      iverilog_dir = os.path.dirname("@IVERILOG_PATH@")
+      os.environ["PATH"] = f"{iverilog_dir}:{os.environ['PATH']}"
+
     # Ensure that iverilog is available in path and it is at least iverilog v11
     try:
       out = subprocess.check_output(["iverilog", "-V"])
@@ -64,16 +81,60 @@ class _IVerilogHandler:
     if float(ver) < 11:
       raise Exception(f"Icarus Verilog version must be >= 11, got {ver}")
 
-  def extra_compile_args(self, objDir):
+  def run(self, objDir, gui=False):
+    if gui:
+      raise Exception("GUI is not supported by Icarus Verilog")
+
     # If no timescale is defined in the source code, icarus assumes a
     # timescale of '1'. This prevents cocotb from creating small timescale clocks.
     # Since a timescale is not emitted by default from export-verilog, make our
     # lives easier and create a minimum timescale through the command-line.
     cmd_file = os.path.join(objDir, "cmds.f")
     with open(cmd_file, "w+") as f:
-      f.write("+timescale+1ns/1ps")
+      f.write("+timescale+1ns/100ps\n")
 
-    return [f"-f{cmd_file}"]
+    self.compile_args.extend([
+        f"-f{cmd_file}",
+        "-gsupported-assertions",  # Enable SV assertions which are supported.
+    ])
+    return super().run()
+
+
+class Questa(csim.Questa):
+  """ Class for handling icarus-verilog specific commands and patching."""
+
+  def __init__(self, **kwargs):
+    super().__init__(**kwargs)
+
+    # If cmake discovered the Questa path, add it to the path.
+    if "@QUESTA_PATH@" != "":
+      os.environ["PATH"] = f"@QUESTA_PATH@:{os.environ['PATH']}"
+
+    # Ensure that Questa is available in path and it is at least iverilog v11
+    try:
+      out = subprocess.check_output(["vlog", "-version"])
+    except subprocess.CalledProcessError:
+      raise Exception("vlog not found in path")
+
+    # find the Questa version string and extract the version number using a
+    # regex
+    ver_re = r"QuestaSim-64 vlog (\d+\.\d+)"
+    ver_match = re.search(ver_re, out.decode("utf-8"))
+    if ver_match is None:
+      raise Exception("Could not find Questa version")
+
+  def run(self, objDir, gui=False):
+    # If no timescale is defined in the source code, icarus assumes a
+    # timescale of '1'. This prevents cocotb from creating small timescale clocks.
+    # Since a timescale is not emitted by default from export-verilog, make our
+    # lives easier and create a minimum timescale through the command-line.
+    cmd_file = os.path.join(objDir, "cmds.f")
+    with open(cmd_file, "w+") as f:
+      f.write("+timescale+1ns/100ps")
+
+    self.gui = gui
+    self.extra_compile_args = ["-f", f"{cmd_file}"]
+    return super().run()
 
 
 def main():
@@ -96,28 +157,26 @@ def main():
   except subprocess.CalledProcessError:
     raise Exception(
         "'make' is not available, and is required to run cocotb tests.")
-
+  kwargs = {
+      "module": args.pythonModule,
+      "toplevel": args.topLevel,
+      "toplevel_lang": "verilog",
+      "verilog_sources": sources,
+      "python_search": [f.strip() for f in args.pythonFolders.split(",")],
+      "work_dir": objDir,
+      "waves": args.waves,
+  }
   try:
     if args.simulator == "icarus":
-      simhandler = _IVerilogHandler()
+      sim = Icarus(**kwargs)
+    elif args.simulator == "questa":
+      sim = Questa(**kwargs)
     else:
       raise Exception(f"Unknown simulator: {args.simulator}")
   except Exception as e:
     raise Exception(f"Failed to initialize simulator handler: {e}")
 
-  # Simulator-specific extra compile args.
-  compileArgs = []
-  if simhandler:
-    compileArgs += simhandler.extra_compile_args(objDir)
-
-  run(simulator=args.simulator,
-      module=args.pythonModule,
-      toplevel=args.topLevel,
-      toplevel_lang="verilog",
-      verilog_sources=sources,
-      python_search=[f.strip() for f in args.pythonFolders.split(",")],
-      work_dir=objDir,
-      compile_args=compileArgs)
+  sim.run(objDir, gui=args.gui)
 
 
 if __name__ == "__main__":

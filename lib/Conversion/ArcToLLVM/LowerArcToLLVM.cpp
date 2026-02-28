@@ -6,22 +6,31 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../PassDetail.h"
 #include "circt/Conversion/ArcToLLVM.h"
+#include "circt/Conversion/CombToArith.h"
 #include "circt/Conversion/CombToLLVM.h"
 #include "circt/Conversion/HWToLLVM.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ModelInfo.h"
+#include "circt/Dialect/Arc/Runtime/Common.h"
+#include "circt/Dialect/Arc/Runtime/FmtDescriptor.h"
+#include "circt/Dialect/Arc/Runtime/JITBind.h"
+#include "circt/Dialect/Arc/Runtime/TraceTaps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
+#include "circt/Dialect/LLHD/LLHDTypes.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Sim/SimOps.h"
+#include "circt/Support/ConversionPatternSet.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
+#include "mlir/Conversion/IndexToLLVM/IndexToLLVM.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
-#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Index/IR/IndexOps.h"
 #include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
@@ -29,15 +38,25 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinDialect.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/FormatVariadic.h"
+
+#include <cstddef>
 
 #define DEBUG_TYPE "lower-arc-to-llvm"
+
+namespace circt {
+#define GEN_PASS_DEF_LOWERARCTOLLVM
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
 using namespace arc;
 using namespace hw;
+using namespace runtime;
 
 //===----------------------------------------------------------------------===//
 // Lowering Patterns
@@ -57,14 +76,14 @@ struct ModelOpLowering : public OpConversionPattern<arc::ModelOp> {
     {
       IRRewriter::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointToEnd(&op.getBodyBlock());
-      rewriter.create<func::ReturnOp>(op.getLoc());
+      func::ReturnOp::create(rewriter, op.getLoc());
     }
     auto funcName =
         rewriter.getStringAttr(evalSymbolFromModelName(op.getName()));
     auto funcType =
         rewriter.getFunctionType(op.getBody().getArgumentTypes(), {});
     auto func =
-        rewriter.create<mlir::func::FuncOp>(op.getLoc(), funcName, funcType);
+        mlir::func::FuncOp::create(rewriter, op.getLoc(), funcName, funcType);
     rewriter.inlineRegionBefore(op.getRegion(), func.getBody(), func.end());
     rewriter.eraseOp(op);
     return success();
@@ -100,9 +119,9 @@ struct AllocStateLikeOpLowering : public OpConversionPattern<ConcreteOp> {
     auto offsetAttr = op->template getAttrOfType<IntegerAttr>("offset");
     if (!offsetAttr)
       return failure();
-    Value ptr = rewriter.create<LLVM::GEPOp>(
-        op->getLoc(), adaptor.getStorage().getType(), rewriter.getI8Type(),
-        adaptor.getStorage(),
+    Value ptr = LLVM::GEPOp::create(
+        rewriter, op->getLoc(), adaptor.getStorage().getType(),
+        rewriter.getI8Type(), adaptor.getStorage(),
         LLVM::GEPArg(offsetAttr.getValue().getZExtValue()));
     rewriter.replaceOp(op, ptr);
     return success();
@@ -128,9 +147,9 @@ struct StateWriteOpLowering : public OpConversionPattern<arc::StateWriteOp> {
     if (adaptor.getCondition()) {
       rewriter.replaceOpWithNewOp<scf::IfOp>(
           op, adaptor.getCondition(), [&](auto &builder, auto loc) {
-            builder.template create<LLVM::StoreOp>(loc, adaptor.getValue(),
-                                                   adaptor.getState());
-            builder.template create<scf::YieldOp>(loc);
+            LLVM::StoreOp::create(builder, loc, adaptor.getValue(),
+                                  adaptor.getState());
+            scf::YieldOp::create(builder, loc);
           });
     } else {
       rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getValue(),
@@ -140,6 +159,48 @@ struct StateWriteOpLowering : public OpConversionPattern<arc::StateWriteOp> {
   }
 };
 
+//===----------------------------------------------------------------------===//
+// Time Operations Lowering
+//===----------------------------------------------------------------------===//
+
+struct CurrentTimeOpLowering : public OpConversionPattern<arc::CurrentTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(arc::CurrentTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    // Time is stored at offset 0 in storage (no offset needed).
+    Value ptr = adaptor.getStorage();
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, rewriter.getI64Type(), ptr);
+    return success();
+  }
+};
+
+// `llhd.int_to_time` is a no-op
+struct IntToTimeOpLowering : public OpConversionPattern<llhd::IntToTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(llhd::IntToTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOp(op, adaptor.getInput());
+    return success();
+  }
+};
+
+// `llhd.time_to_int` is a no-op
+struct TimeToIntOpLowering : public OpConversionPattern<llhd::TimeToIntOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(llhd::TimeToIntOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOp(op, adaptor.getInput());
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// Memory and Storage Lowering
+//===----------------------------------------------------------------------===//
+
 struct AllocMemoryOpLowering : public OpConversionPattern<arc::AllocMemoryOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -148,9 +209,9 @@ struct AllocMemoryOpLowering : public OpConversionPattern<arc::AllocMemoryOp> {
     auto offsetAttr = op->getAttrOfType<IntegerAttr>("offset");
     if (!offsetAttr)
       return failure();
-    Value ptr = rewriter.create<LLVM::GEPOp>(
-        op.getLoc(), adaptor.getStorage().getType(), rewriter.getI8Type(),
-        adaptor.getStorage(),
+    Value ptr = LLVM::GEPOp::create(
+        rewriter, op.getLoc(), adaptor.getStorage().getType(),
+        rewriter.getI8Type(), adaptor.getStorage(),
         LLVM::GEPArg(offsetAttr.getValue().getZExtValue()));
 
     rewriter.replaceOp(op, ptr);
@@ -163,11 +224,11 @@ struct StorageGetOpLowering : public OpConversionPattern<arc::StorageGetOp> {
   LogicalResult
   matchAndRewrite(arc::StorageGetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    Value offset = rewriter.create<LLVM::ConstantOp>(
-        op.getLoc(), rewriter.getI32Type(), op.getOffsetAttr());
-    Value ptr = rewriter.create<LLVM::GEPOp>(
-        op.getLoc(), adaptor.getStorage().getType(), rewriter.getI8Type(),
-        adaptor.getStorage(), offset);
+    Value offset = LLVM::ConstantOp::create(
+        rewriter, op.getLoc(), rewriter.getI32Type(), op.getOffsetAttr());
+    Value ptr = LLVM::GEPOp::create(
+        rewriter, op.getLoc(), adaptor.getStorage().getType(),
+        rewriter.getI8Type(), adaptor.getStorage(), offset);
     rewriter.replaceOp(op, ptr);
     return success();
   }
@@ -183,13 +244,14 @@ static MemoryAccess prepareMemoryAccess(Location loc, Value memory,
                                         ConversionPatternRewriter &rewriter) {
   auto zextAddrType = rewriter.getIntegerType(
       cast<IntegerType>(address.getType()).getWidth() + 1);
-  Value addr = rewriter.create<LLVM::ZExtOp>(loc, zextAddrType, address);
-  Value addrLimit = rewriter.create<LLVM::ConstantOp>(
-      loc, zextAddrType, rewriter.getI32IntegerAttr(type.getNumWords()));
-  Value withinBounds = rewriter.create<LLVM::ICmpOp>(
-      loc, LLVM::ICmpPredicate::ult, addr, addrLimit);
-  Value ptr = rewriter.create<LLVM::GEPOp>(
-      loc, LLVM::LLVMPointerType::get(memory.getContext()),
+  Value addr = LLVM::ZExtOp::create(rewriter, loc, zextAddrType, address);
+  Value addrLimit =
+      LLVM::ConstantOp::create(rewriter, loc, zextAddrType,
+                               rewriter.getI32IntegerAttr(type.getNumWords()));
+  Value withinBounds = LLVM::ICmpOp::create(
+      rewriter, loc, LLVM::ICmpPredicate::ult, addr, addrLimit);
+  Value ptr = LLVM::GEPOp::create(
+      rewriter, loc, LLVM::LLVMPointerType::get(memory.getContext()),
       rewriter.getIntegerType(type.getStride() * 8), memory, ValueRange{addr});
   return {ptr, withinBounds};
 }
@@ -210,14 +272,14 @@ struct MemoryReadOpLowering : public OpConversionPattern<arc::MemoryReadOp> {
     rewriter.replaceOpWithNewOp<scf::IfOp>(
         op, access.withinBounds,
         [&](auto &builder, auto loc) {
-          Value loadOp = builder.template create<LLVM::LoadOp>(
-              loc, memoryType.getWordType(), access.ptr);
-          builder.template create<scf::YieldOp>(loc, loadOp);
+          Value loadOp = LLVM::LoadOp::create(
+              builder, loc, memoryType.getWordType(), access.ptr);
+          scf::YieldOp::create(builder, loc, loadOp);
         },
         [&](auto &builder, auto loc) {
-          Value zeroValue = builder.template create<LLVM::ConstantOp>(
-              loc, type, builder.getI64IntegerAttr(0));
-          builder.template create<scf::YieldOp>(loc, zeroValue);
+          Value zeroValue = LLVM::ConstantOp::create(
+              builder, loc, type, builder.getI64IntegerAttr(0));
+          scf::YieldOp::create(builder, loc, zeroValue);
         });
     return success();
   }
@@ -233,15 +295,14 @@ struct MemoryWriteOpLowering : public OpConversionPattern<arc::MemoryWriteOp> {
         cast<MemoryType>(op.getMemory().getType()), rewriter);
     auto enable = access.withinBounds;
     if (adaptor.getEnable())
-      enable = rewriter.create<LLVM::AndOp>(op.getLoc(), adaptor.getEnable(),
-                                            enable);
+      enable = LLVM::AndOp::create(rewriter, op.getLoc(), adaptor.getEnable(),
+                                   enable);
 
     // Only attempt to write the memory if the address is within bounds.
     rewriter.replaceOpWithNewOp<scf::IfOp>(
         op, enable, [&](auto &builder, auto loc) {
-          builder.template create<LLVM::StoreOp>(loc, adaptor.getData(),
-                                                 access.ptr);
-          builder.template create<scf::YieldOp>(loc);
+          LLVM::StoreOp::create(builder, loc, adaptor.getData(), access.ptr);
+          scf::YieldOp::create(builder, loc);
         });
     return success();
   }
@@ -253,8 +314,21 @@ struct ClockGateOpLowering : public OpConversionPattern<seq::ClockGateOp> {
   LogicalResult
   matchAndRewrite(seq::ClockGateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    rewriter.replaceOpWithNewOp<comb::AndOp>(op, adaptor.getInput(),
-                                             adaptor.getEnable(), true);
+    rewriter.replaceOpWithNewOp<LLVM::AndOp>(op, adaptor.getInput(),
+                                             adaptor.getEnable());
+    return success();
+  }
+};
+
+/// Lower 'seq.clock_inv x' to 'llvm.xor x true'
+struct ClockInvOpLowering : public OpConversionPattern<seq::ClockInverterOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(seq::ClockInverterOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto constTrue = LLVM::ConstantOp::create(rewriter, op->getLoc(),
+                                              rewriter.getI1Type(), 1);
+    rewriter.replaceOpWithNewOp<LLVM::XOrOp>(op, adaptor.getInput(), constTrue);
     return success();
   }
 };
@@ -313,6 +387,8 @@ namespace {
 struct ModelInfoMap {
   size_t numStateBytes;
   llvm::DenseMap<StringRef, StateInfo> states;
+  mlir::FlatSymbolRefAttr initialFnSymbol;
+  mlir::FlatSymbolRefAttr finalFnSymbol;
 };
 
 template <typename OpTy>
@@ -326,9 +402,9 @@ protected:
   Value createPtrToPortState(ConversionPatternRewriter &rewriter, Location loc,
                              Value state, const StateInfo &port) const {
     MLIRContext *ctx = rewriter.getContext();
-    return rewriter.create<LLVM::GEPOp>(loc, LLVM::LLVMPointerType::get(ctx),
-                                        IntegerType::get(ctx, 8), state,
-                                        LLVM::GEPArg(port.offset));
+    return LLVM::GEPOp::create(rewriter, loc, LLVM::LLVMPointerType::get(ctx),
+                               IntegerType::get(ctx, 8), state,
+                               LLVM::GEPArg(port.offset));
   }
 
   llvm::DenseMap<StringRef, ModelInfoMap> &modelInfo;
@@ -349,6 +425,8 @@ struct SimInstantiateOpLowering
             .getValue());
     ModelInfoMap &model = modelIt->second;
 
+    bool useRuntime = op.getRuntimeModel().has_value();
+
     ModuleOp moduleOp = op->getParentOfType<ModuleOp>();
     if (!moduleOp)
       return failure();
@@ -358,26 +436,111 @@ struct SimInstantiateOpLowering
     // FIXME: like the rest of MLIR, this assumes sizeof(intptr_t) ==
     // sizeof(size_t) on the target architecture.
     Type convertedIndex = typeConverter->convertType(rewriter.getIndexType());
-
-    LLVM::LLVMFuncOp mallocFunc =
-        LLVM::lookupOrCreateMallocFn(moduleOp, convertedIndex);
-    LLVM::LLVMFuncOp freeFunc = LLVM::lookupOrCreateFreeFn(moduleOp);
-
     Location loc = op.getLoc();
-    Value numStateBytes = rewriter.create<LLVM::ConstantOp>(
-        loc, convertedIndex, model.numStateBytes);
-    Value allocated =
-        rewriter
-            .create<LLVM::CallOp>(loc, mallocFunc, ValueRange{numStateBytes})
-            .getResult();
-    Value zero =
-        rewriter.create<LLVM::ConstantOp>(loc, rewriter.getI8Type(), 0);
-    rewriter.create<LLVM::MemsetOp>(loc, allocated, zero, numStateBytes, false);
+    Value allocated;
+
+    if (useRuntime) {
+      // The instance is using the runtime library
+      auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+
+      Value runtimeArgs;
+      // If present, materialize the runtime argument string on the stack
+      if (op.getRuntimeArgs().has_value()) {
+        SmallVector<int8_t> argStringVec(op.getRuntimeArgsAttr().begin(),
+                                         op.getRuntimeArgsAttr().end());
+        argStringVec.push_back('\0');
+        auto strAttr = mlir::DenseElementsAttr::get(
+            mlir::RankedTensorType::get({(int64_t)argStringVec.size()},
+                                        rewriter.getI8Type()),
+            llvm::ArrayRef(argStringVec));
+
+        auto arrayCst = LLVM::ConstantOp::create(
+            rewriter, loc,
+            LLVM::LLVMArrayType::get(rewriter.getI8Type(), argStringVec.size()),
+            strAttr);
+        auto cst1 = LLVM::ConstantOp::create(rewriter, loc,
+                                             rewriter.getI32IntegerAttr(1));
+        runtimeArgs = LLVM::AllocaOp::create(rewriter, loc, ptrTy,
+                                             arrayCst.getType(), cst1);
+        LLVM::LifetimeStartOp::create(rewriter, loc, runtimeArgs);
+        LLVM::StoreOp::create(rewriter, loc, arrayCst, runtimeArgs);
+      } else {
+        runtimeArgs = LLVM::ZeroOp::create(rewriter, loc, ptrTy).getResult();
+      }
+      // Call the state allocation function
+      auto rtModelPtr = LLVM::AddressOfOp::create(rewriter, loc, ptrTy,
+                                                  op.getRuntimeModelAttr())
+                            .getResult();
+      allocated =
+          LLVM::CallOp::create(rewriter, loc, {ptrTy},
+                               runtime::APICallbacks::symNameAllocInstance,
+                               {rtModelPtr, runtimeArgs})
+              .getResult();
+
+      if (op.getRuntimeArgs().has_value())
+        LLVM::LifetimeEndOp::create(rewriter, loc, runtimeArgs);
+
+    } else {
+      // The instance is not using the runtime library
+      FailureOr<LLVM::LLVMFuncOp> mallocFunc =
+          LLVM::lookupOrCreateMallocFn(rewriter, moduleOp, convertedIndex);
+      if (failed(mallocFunc))
+        return mallocFunc;
+
+      Value numStateBytes = LLVM::ConstantOp::create(
+          rewriter, loc, convertedIndex, model.numStateBytes);
+      allocated = LLVM::CallOp::create(rewriter, loc, mallocFunc.value(),
+                                       ValueRange{numStateBytes})
+                      .getResult();
+      Value zero =
+          LLVM::ConstantOp::create(rewriter, loc, rewriter.getI8Type(), 0);
+      LLVM::MemsetOp::create(rewriter, loc, allocated, zero, numStateBytes,
+                             false);
+    }
+
+    // Call the model's 'initial' function if present.
+    if (model.initialFnSymbol) {
+      auto initialFnType = LLVM::LLVMFunctionType::get(
+          LLVM::LLVMVoidType::get(op.getContext()),
+          {LLVM::LLVMPointerType::get(op.getContext())});
+      LLVM::CallOp::create(rewriter, loc, initialFnType, model.initialFnSymbol,
+                           ValueRange{allocated});
+    }
+
+    // Call the runtime's 'onInitialized' function if present.
+    if (useRuntime)
+      LLVM::CallOp::create(rewriter, loc, TypeRange{},
+                           runtime::APICallbacks::symNameOnInitialized,
+                           {allocated});
+
+    // Execute the body.
     rewriter.inlineBlockBefore(&adaptor.getBody().getBlocks().front(), op,
                                {allocated});
-    rewriter.create<LLVM::CallOp>(loc, freeFunc, ValueRange{allocated});
-    rewriter.eraseOp(op);
 
+    // Call the model's 'final' function if present.
+    if (model.finalFnSymbol) {
+      auto finalFnType = LLVM::LLVMFunctionType::get(
+          LLVM::LLVMVoidType::get(op.getContext()),
+          {LLVM::LLVMPointerType::get(op.getContext())});
+      LLVM::CallOp::create(rewriter, loc, finalFnType, model.finalFnSymbol,
+                           ValueRange{allocated});
+    }
+
+    if (useRuntime) {
+      LLVM::CallOp::create(rewriter, loc, TypeRange{},
+                           runtime::APICallbacks::symNameDeleteInstance,
+                           {allocated});
+    } else {
+      FailureOr<LLVM::LLVMFuncOp> freeFunc =
+          LLVM::lookupOrCreateFreeFn(rewriter, moduleOp);
+      if (failed(freeFunc))
+        return freeFunc;
+
+      LLVM::CallOp::create(rewriter, loc, freeFunc.value(),
+                           ValueRange{allocated});
+    }
+
+    rewriter.eraseOp(op);
     return success();
   }
 };
@@ -424,20 +587,21 @@ struct SimGetPortOpLowering : public ModelAwarePattern<arc::SimGetPortOp> {
                            .getValue());
     ModelInfoMap &model = modelIt->second;
 
+    auto type = typeConverter->convertType(op.getValue().getType());
+    if (!type)
+      return failure();
     auto portIt = model.states.find(op.getPort());
     if (portIt == model.states.end()) {
       // If the port is not found in the state, it means the model does not
       // actually set it. Thus this operation returns 0.
-      rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(
-          op, typeConverter->convertType(op.getValue().getType()), 0);
+      rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, type, 0);
       return success();
     }
 
     StateInfo &port = portIt->second;
     Value statePtr = createPtrToPortState(rewriter, op.getLoc(),
                                           adaptor.getInstance(), port);
-    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, op.getValue().getType(),
-                                              statePtr);
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, type, statePtr);
 
     return success();
   }
@@ -455,19 +619,107 @@ struct SimStepOpLowering : public ModelAwarePattern<arc::SimStepOp> {
 
     StringAttr evalFunc =
         rewriter.getStringAttr(evalSymbolFromModelName(modelName));
-    rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, std::nullopt, evalFunc,
+    rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, mlir::TypeRange(), evalFunc,
                                               adaptor.getInstance());
 
     return success();
   }
 };
 
+// Loads the simulation time (i64 femtoseconds) from byte offset 0 in the
+// model instance's state storage.
+struct SimGetTimeOpLowering : public OpConversionPattern<arc::SimGetTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(arc::SimGetTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    // Time is stored at offset 0 in the instance storage.
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, rewriter.getI64Type(),
+                                              adaptor.getInstance());
+    return success();
+  }
+};
+
+// Stores the simulation time (i64 femtoseconds) to byte offset 0 in the
+// model instance's state storage.
+struct SimSetTimeOpLowering : public OpConversionPattern<arc::SimSetTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(arc::SimSetTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    // Time is stored at offset 0 in the instance storage.
+    rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getTime(),
+                                               adaptor.getInstance());
+    return success();
+  }
+};
+
+// Global string constants in the module.
+class StringCache {
+public:
+  Value getOrCreate(OpBuilder &b, StringRef formatStr) {
+    auto it = cache.find(formatStr);
+    if (it != cache.end()) {
+      return LLVM::AddressOfOp::create(b, b.getUnknownLoc(), it->second);
+    }
+
+    Location loc = b.getUnknownLoc();
+    LLVM::GlobalOp global;
+    {
+      OpBuilder::InsertionGuard guard(b);
+      ModuleOp m =
+          b.getInsertionBlock()->getParent()->getParentOfType<ModuleOp>();
+      b.setInsertionPointToStart(m.getBody());
+
+      SmallVector<char> strVec(formatStr.begin(), formatStr.end());
+      strVec.push_back(0);
+
+      auto name = llvm::formatv("_arc_str_{0}", cache.size()).str();
+      auto globalType = LLVM::LLVMArrayType::get(b.getI8Type(), strVec.size());
+      global = LLVM::GlobalOp::create(b, loc, globalType, /*isConstant=*/true,
+                                      LLVM::Linkage::Internal,
+                                      /*name=*/name, b.getStringAttr(strVec),
+                                      /*alignment=*/0);
+    }
+
+    cache[formatStr] = global;
+    return LLVM::AddressOfOp::create(b, loc, global);
+  }
+
+private:
+  llvm::StringMap<LLVM::GlobalOp> cache;
+};
+
+FailureOr<LLVM::CallOp> emitPrintfCall(OpBuilder &builder, Location loc,
+                                       StringCache &cache, StringRef formatStr,
+                                       ValueRange args) {
+  ModuleOp moduleOp =
+      builder.getInsertionBlock()->getParent()->getParentOfType<ModuleOp>();
+  // Lookup or create printf function symbol.
+  MLIRContext *ctx = builder.getContext();
+  auto printfFunc = LLVM::lookupOrCreateFn(builder, moduleOp, "printf",
+                                           LLVM::LLVMPointerType::get(ctx),
+                                           LLVM::LLVMVoidType::get(ctx), true);
+  if (failed(printfFunc))
+    return printfFunc;
+
+  Value formatStrPtr = cache.getOrCreate(builder, formatStr);
+  SmallVector<Value> argsVec(1, formatStrPtr);
+  argsVec.append(args.begin(), args.end());
+  return LLVM::CallOp::create(builder, loc, printfFunc.value(), argsVec);
+}
+
 /// Lowers SimEmitValueOp to a printf call. The integer will be printed in its
 /// entirety if it is of size up to size_t, and explicitly truncated otherwise.
 /// This pattern will mutate the global module.
 struct SimEmitValueOpLowering
     : public OpConversionPattern<arc::SimEmitValueOp> {
-  using OpConversionPattern::OpConversionPattern;
+  SimEmitValueOpLowering(const TypeConverter &typeConverter,
+                         MLIRContext *context, StringCache &formatStringCache)
+      : OpConversionPattern(typeConverter, context),
+        formatStringCache(formatStringCache) {}
 
   LogicalResult
   matchAndRewrite(arc::SimEmitValueOp op, OpAdaptor adaptor,
@@ -482,79 +734,566 @@ struct SimEmitValueOpLowering
     if (!moduleOp)
       return failure();
 
-    // Cast the value to a size_t.
-    // FIXME: like the rest of MLIR, this assumes sizeof(intptr_t) ==
-    // sizeof(size_t) on the target architecture.
-    Value toPrint = adaptor.getValue();
-    DataLayout layout = DataLayout::closest(op);
-    llvm::TypeSize sizeOfSizeT =
-        layout.getTypeSizeInBits(rewriter.getIndexType());
-    assert(!sizeOfSizeT.isScalable() &&
-           sizeOfSizeT.getFixedValue() <= std::numeric_limits<unsigned>::max());
-    bool truncated = false;
-    if (valueType.getWidth() > sizeOfSizeT) {
-      toPrint = rewriter.create<LLVM::TruncOp>(
-          loc, IntegerType::get(getContext(), sizeOfSizeT.getFixedValue()),
-          toPrint);
-      truncated = true;
-    } else if (valueType.getWidth() < sizeOfSizeT)
-      toPrint = rewriter.create<LLVM::ZExtOp>(
-          loc, IntegerType::get(getContext(), sizeOfSizeT.getFixedValue()),
-          toPrint);
+    SmallVector<Value> printfVariadicArgs;
+    SmallString<16> printfFormatStr;
+    int remainingBits = valueType.getWidth();
+    Value value = adaptor.getValue();
 
-    // Lookup of create printf function symbol.
-    auto printfFunc = LLVM::lookupOrCreateFn(
-        moduleOp, "printf", LLVM::LLVMPointerType::get(getContext()),
-        LLVM::LLVMVoidType::get(getContext()), true);
+    // Assumes the target platform uses 64bit for long long ints (%llx
+    // formatter).
+    constexpr llvm::StringRef intFormatter = "llx";
+    auto intType = IntegerType::get(getContext(), 64);
+    Value shiftValue = LLVM::ConstantOp::create(
+        rewriter, loc, rewriter.getIntegerAttr(valueType, intType.getWidth()));
 
-    // Insert the format string if not already available.
-    SmallString<16> formatStrName{"_arc_sim_emit_"};
-    formatStrName.append(truncated ? "trunc_" : "full_");
-    formatStrName.append(adaptor.getValueName());
-    LLVM::GlobalOp formatStrGlobal;
-    if (!(formatStrGlobal =
-              moduleOp.lookupSymbol<LLVM::GlobalOp>(formatStrName))) {
-      ConversionPatternRewriter::InsertionGuard insertGuard(rewriter);
+    if (valueType.getWidth() < intType.getWidth()) {
+      int width = llvm::divideCeil(valueType.getWidth(), 4);
+      printfFormatStr = llvm::formatv("%0{0}{1}", width, intFormatter);
+      printfVariadicArgs.push_back(
+          LLVM::ZExtOp::create(rewriter, loc, intType, value));
+    } else {
+      // Process the value in 64 bit chunks, starting from the least significant
+      // bits. Since we append chunks in low-to-high order, we reverse the
+      // vector to print them in the correct high-to-low order.
+      int otherChunkWidth = intType.getWidth() / 4;
+      int firstChunkWidth =
+          llvm::divideCeil(valueType.getWidth() % intType.getWidth(), 4);
+      if (firstChunkWidth == 0) { // print the full 64-bit hex or a subset.
+        firstChunkWidth = otherChunkWidth;
+      }
 
-      SmallString<16> formatStr = adaptor.getValueName();
-      formatStr.append(" = ");
-      if (truncated)
-        formatStr.append("(truncated) ");
-      formatStr.append("%zx\n");
-      SmallVector<char> formatStrVec{formatStr.begin(), formatStr.end()};
-      formatStrVec.push_back(0);
+      std::string firstChunkFormat =
+          llvm::formatv("%0{0}{1}", firstChunkWidth, intFormatter);
+      std::string otherChunkFormat =
+          llvm::formatv("%0{0}{1}", otherChunkWidth, intFormatter);
 
-      rewriter.setInsertionPointToStart(moduleOp.getBody());
-      auto globalType =
-          LLVM::LLVMArrayType::get(rewriter.getI8Type(), formatStrVec.size());
-      formatStrGlobal = rewriter.create<LLVM::GlobalOp>(
-          loc, globalType, /*isConstant=*/true, LLVM::Linkage::Internal,
-          /*name=*/formatStrName, rewriter.getStringAttr(formatStrVec),
-          /*alignment=*/0);
+      for (int i = 0; remainingBits > 0; ++i) {
+        // Append 64-bit chunks to the printf arguments, in low-to-high
+        // order. The integer is printed in hex format with zero padding.
+        printfVariadicArgs.push_back(
+            LLVM::TruncOp::create(rewriter, loc, intType, value));
+
+        // Zero-padded format specifier for fixed width, e.g. %01llx for 4 bits.
+        printfFormatStr.append(i == 0 ? firstChunkFormat : otherChunkFormat);
+
+        value =
+            LLVM::LShrOp::create(rewriter, loc, value, shiftValue).getResult();
+        remainingBits -= intType.getWidth();
+      }
     }
 
-    Value formatStrGlobalPtr =
-        rewriter.create<LLVM::AddressOfOp>(loc, formatStrGlobal);
-    rewriter.replaceOpWithNewOp<LLVM::CallOp>(
-        op, printfFunc, ValueRange{formatStrGlobalPtr, toPrint});
+    std::reverse(printfVariadicArgs.begin(), printfVariadicArgs.end());
+
+    SmallString<16> formatStr = adaptor.getValueName();
+    formatStr.append(" = ");
+    formatStr.append(printfFormatStr);
+    formatStr.append("\n");
+
+    auto callOp = emitPrintfCall(rewriter, op->getLoc(), formatStringCache,
+                                 formatStr, printfVariadicArgs);
+    if (failed(callOp))
+      return failure();
+    rewriter.replaceOp(op, *callOp);
 
     return success();
   }
+
+  StringCache &formatStringCache;
+};
+
+//===----------------------------------------------------------------------===//
+// `sim` dialect lowerings
+//===----------------------------------------------------------------------===//
+
+// Helper struct to hold the format string and arguments for arcRuntimeFormat.
+struct FormatInfo {
+  SmallVector<FmtDescriptor> descriptors;
+  SmallVector<Value> args;
+};
+
+// Copies the given integer value into an alloca, returning a pointer to it.
+//
+// The alloca is rounded up to a 64-bit boundary and is written as little-endian
+// words of size 64-bits, to be compatible with the constructor of APInt.
+static Value reg2mem(ConversionPatternRewriter &rewriter, Location loc,
+                     Value value) {
+  // Round up the type size to a 64-bit boundary.
+  int64_t origBitwidth = cast<IntegerType>(value.getType()).getWidth();
+  int64_t bitwidth = llvm::divideCeil(origBitwidth, 64) * 64;
+  int64_t numWords = bitwidth / 64;
+
+  // Create an alloca for the rounded up type.
+  LLVM::ConstantOp alloca_size =
+      LLVM::ConstantOp::create(rewriter, loc, rewriter.getI32Type(), numWords);
+  auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
+  auto allocaOp = LLVM::AllocaOp::create(rewriter, loc, ptrType,
+                                         rewriter.getI64Type(), alloca_size);
+  LLVM::LifetimeStartOp::create(rewriter, loc, allocaOp);
+
+  // Copy `value` into the alloca, 64-bits at a time from the least significant
+  // bits first.
+  for (int64_t wordIdx = 0; wordIdx < numWords; ++wordIdx) {
+    Value cst = LLVM::ConstantOp::create(
+        rewriter, loc, rewriter.getIntegerType(origBitwidth), wordIdx * 64);
+    Value v = LLVM::LShrOp::create(rewriter, loc, value, cst);
+    if (origBitwidth > 64) {
+      v = LLVM::TruncOp::create(rewriter, loc, rewriter.getI64Type(), v);
+    } else if (origBitwidth < 64) {
+      v = LLVM::ZExtOp::create(rewriter, loc, rewriter.getI64Type(), v);
+    }
+    Value gep = LLVM::GEPOp::create(rewriter, loc, ptrType,
+                                    rewriter.getI64Type(), allocaOp, {wordIdx});
+    LLVM::StoreOp::create(rewriter, loc, v, gep);
+  }
+
+  return allocaOp;
+}
+
+// Statically folds a value of type sim::FormatStringType to a FormatInfo.
+static FailureOr<FormatInfo>
+foldFormatString(ConversionPatternRewriter &rewriter, Value fstringValue,
+                 StringCache &cache) {
+  Operation *op = fstringValue.getDefiningOp();
+  return llvm::TypeSwitch<Operation *, FailureOr<FormatInfo>>(op)
+      .Case<sim::FormatCharOp>(
+          [&](sim::FormatCharOp op) -> FailureOr<FormatInfo> {
+            FmtDescriptor d = FmtDescriptor::createChar();
+            return FormatInfo{{d}, {op.getValue()}};
+          })
+      .Case<sim::FormatDecOp>([&](sim::FormatDecOp op)
+                                  -> FailureOr<FormatInfo> {
+        FmtDescriptor d = FmtDescriptor::createInt(
+            op.getValue().getType().getWidth(), 10, op.getIsLeftAligned(),
+            op.getSpecifierWidth().value_or(-1), false, op.getIsSigned());
+        return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
+      })
+      .Case<sim::FormatHexOp>([&](sim::FormatHexOp op)
+                                  -> FailureOr<FormatInfo> {
+        FmtDescriptor d = FmtDescriptor::createInt(
+            op.getValue().getType().getWidth(), 16, op.getIsLeftAligned(),
+            op.getSpecifierWidth().value_or(-1), op.getIsHexUppercase(), false);
+        return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
+      })
+      .Case<sim::FormatOctOp>([&](sim::FormatOctOp op)
+                                  -> FailureOr<FormatInfo> {
+        FmtDescriptor d = FmtDescriptor::createInt(
+            op.getValue().getType().getWidth(), 8, op.getIsLeftAligned(),
+            op.getSpecifierWidth().value_or(-1), false, false);
+        return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
+      })
+      .Case<sim::FormatLiteralOp>(
+          [&](sim::FormatLiteralOp op) -> FailureOr<FormatInfo> {
+            if (op.getLiteral().size() < 8 &&
+                op.getLiteral().find('\0') == StringRef::npos) {
+              // We can use the small string optimization.
+              FmtDescriptor d =
+                  FmtDescriptor::createSmallLiteral(op.getLiteral());
+              return FormatInfo{{d}, {}};
+            }
+            FmtDescriptor d =
+                FmtDescriptor::createLiteral(op.getLiteral().size());
+            Value value = cache.getOrCreate(rewriter, op.getLiteral());
+            return FormatInfo{{d}, {value}};
+          })
+      .Case<sim::FormatStringConcatOp>(
+          [&](sim::FormatStringConcatOp op) -> FailureOr<FormatInfo> {
+            auto fmt = foldFormatString(rewriter, op.getInputs()[0], cache);
+            if (failed(fmt))
+              return failure();
+            for (auto input : op.getInputs().drop_front()) {
+              auto next = foldFormatString(rewriter, input, cache);
+              if (failed(next))
+                return failure();
+              fmt->descriptors.append(next->descriptors);
+              fmt->args.append(next->args);
+            }
+            return fmt;
+          })
+      .Default(
+          [](Operation *op) -> FailureOr<FormatInfo> { return failure(); });
+}
+
+FailureOr<LLVM::CallOp> emitFmtCall(OpBuilder &builder, Location loc,
+                                    StringCache &stringCache,
+                                    ArrayRef<FmtDescriptor> descriptors,
+                                    ValueRange args) {
+  ModuleOp moduleOp =
+      builder.getInsertionBlock()->getParent()->getParentOfType<ModuleOp>();
+  // Lookup or create the arcRuntimeFormat function symbol.
+  MLIRContext *ctx = builder.getContext();
+  auto func = LLVM::lookupOrCreateFn(
+      builder, moduleOp, runtime::APICallbacks::symNameFormat,
+      LLVM::LLVMPointerType::get(ctx), LLVM::LLVMVoidType::get(ctx), true);
+  if (failed(func))
+    return func;
+
+  StringRef rawDescriptors(reinterpret_cast<const char *>(descriptors.data()),
+                           descriptors.size() * sizeof(FmtDescriptor));
+  Value fmtPtr = stringCache.getOrCreate(builder, rawDescriptors);
+
+  SmallVector<Value> argsVec(1, fmtPtr);
+  argsVec.append(args.begin(), args.end());
+  auto result = LLVM::CallOp::create(builder, loc, func.value(), argsVec);
+
+  for (Value arg : args) {
+    Operation *definingOp = arg.getDefiningOp();
+    if (auto alloca = dyn_cast_if_present<LLVM::AllocaOp>(definingOp)) {
+      LLVM::LifetimeEndOp::create(builder, loc, arg);
+    }
+  }
+
+  return result;
+}
+
+struct SimPrintFormattedProcOpLowering
+    : public OpConversionPattern<sim::PrintFormattedProcOp> {
+  SimPrintFormattedProcOpLowering(const TypeConverter &typeConverter,
+                                  MLIRContext *context,
+                                  StringCache &stringCache)
+      : OpConversionPattern<sim::PrintFormattedProcOp>(typeConverter, context),
+        stringCache(stringCache) {}
+
+  LogicalResult
+  matchAndRewrite(sim::PrintFormattedProcOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto formatInfo = foldFormatString(rewriter, op.getInput(), stringCache);
+    if (failed(formatInfo))
+      return rewriter.notifyMatchFailure(op, "unsupported format string");
+
+    // Add the end descriptor.
+    formatInfo->descriptors.push_back(FmtDescriptor());
+
+    auto result = emitFmtCall(rewriter, op.getLoc(), stringCache,
+                              formatInfo->descriptors, formatInfo->args);
+    if (failed(result))
+      return failure();
+    rewriter.replaceOp(op, result.value());
+
+    return success();
+  }
+
+  StringCache &stringCache;
 };
 
 } // namespace
+
+static LogicalResult convert(arc::ExecuteOp op, arc::ExecuteOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter,
+                             const TypeConverter &converter) {
+  // Convert the argument types in the body blocks.
+  if (failed(rewriter.convertRegionTypes(&op.getBody(), converter)))
+    return failure();
+
+  // Split the block at the current insertion point such that we can branch into
+  // the `arc.execute` body region, and have `arc.output` branch back to the
+  // point after the `arc.execute`.
+  auto *blockBefore = rewriter.getInsertionBlock();
+  auto *blockAfter =
+      rewriter.splitBlock(blockBefore, rewriter.getInsertionPoint());
+
+  // Branch to the entry block.
+  rewriter.setInsertionPointToEnd(blockBefore);
+  mlir::cf::BranchOp::create(rewriter, op.getLoc(), &op.getBody().front(),
+                             adaptor.getInputs());
+
+  // Make all `arc.output` terminators branch to the block after the
+  // `arc.execute` op.
+  for (auto &block : op.getBody()) {
+    auto outputOp = dyn_cast<arc::OutputOp>(block.getTerminator());
+    if (!outputOp)
+      continue;
+    rewriter.setInsertionPointToEnd(&block);
+    rewriter.replaceOpWithNewOp<mlir::cf::BranchOp>(outputOp, blockAfter,
+                                                    outputOp.getOperands());
+  }
+
+  // Inline the body region between the before and after blocks.
+  rewriter.inlineRegionBefore(op.getBody(), blockAfter);
+
+  // Add arguments to the block after the `arc.execute`, replace the op's
+  // results with the arguments, then perform block signature conversion.
+  SmallVector<Value> args;
+  args.reserve(op.getNumResults());
+  for (auto result : op.getResults())
+    args.push_back(blockAfter->addArgument(result.getType(), result.getLoc()));
+  rewriter.replaceOp(op, args);
+  auto conversion = converter.convertBlockSignature(blockAfter);
+  if (!conversion)
+    return failure();
+  rewriter.applySignatureConversion(blockAfter, *conversion, &converter);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Runtime Implementation
+//===----------------------------------------------------------------------===//
+
+template <typename T, typename = std::enable_if_t<std::is_integral<T>::value>>
+static LLVM::GlobalOp
+buildGlobalConstantIntArray(OpBuilder &builder, Location loc, Twine symName,
+                            SmallVectorImpl<T> &data,
+                            unsigned alignment = alignof(T)) {
+  auto intType = builder.getIntegerType(8 * sizeof(T));
+  Attribute denseAttr = mlir::DenseElementsAttr::get(
+      mlir::RankedTensorType::get({(int64_t)data.size()}, intType),
+      llvm::ArrayRef(data));
+  auto globalOp = LLVM::GlobalOp::create(
+      builder, loc, LLVM::LLVMArrayType::get(intType, data.size()),
+      /*isConstant=*/true, LLVM::Linkage::Internal,
+      builder.getStringAttr(symName), denseAttr);
+  globalOp.setAlignmentAttr(builder.getI64IntegerAttr(alignment));
+  return globalOp;
+}
+
+// Construct a raw constant byte array from a vector of struct values
+template <typename T>
+static LLVM::GlobalOp
+buildGlobalConstantRuntimeStructArray(OpBuilder &builder, Location loc,
+                                      Twine symName,
+                                      SmallVectorImpl<T> &array) {
+  assert(!array.empty());
+  static_assert(std::is_standard_layout<T>(),
+                "Runtime struct must have standard layout");
+  int64_t numBytes = sizeof(T) * array.size();
+  Attribute denseAttr = mlir::DenseElementsAttr::get(
+      mlir::RankedTensorType::get({numBytes}, builder.getI8Type()),
+      llvm::ArrayRef(reinterpret_cast<uint8_t *>(array.data()), numBytes));
+  auto globalOp = LLVM::GlobalOp::create(
+      builder, loc, LLVM::LLVMArrayType::get(builder.getI8Type(), numBytes),
+      /*isConstant=*/true, LLVM::Linkage::Internal,
+      builder.getStringAttr(symName), denseAttr, alignof(T));
+  return globalOp;
+}
+
+struct RuntimeModelOpLowering
+    : public OpConversionPattern<arc::RuntimeModelOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  static constexpr uint64_t runtimeApiVersion = ARC_RUNTIME_API_VERSION;
+
+  // Build the constant ArcModelTraceInfo struct and its members
+  LLVM::GlobalOp
+  buildTraceInfoStruct(arc::RuntimeModelOp &op,
+                       ConversionPatternRewriter &rewriter) const {
+    if (!op.getTraceTaps().has_value() || op.getTraceTaps()->empty())
+      return {};
+    // Construct the array of tap names/aliases
+    SmallVector<char> namesArray;
+    SmallVector<ArcTraceTap> tapArray;
+    tapArray.reserve(op.getTraceTaps()->size());
+    for (auto attr : op.getTraceTapsAttr()) {
+      auto tap = cast<TraceTapAttr>(attr);
+      assert(!tap.getNames().empty() &&
+             "Expected trace tap to have at least one name");
+      for (auto alias : tap.getNames()) {
+        auto aliasStr = cast<StringAttr>(alias);
+        namesArray.append(aliasStr.begin(), aliasStr.end());
+        namesArray.push_back('\0');
+      }
+      ArcTraceTap tapStruct;
+      tapStruct.stateOffset = tap.getStateOffset();
+      tapStruct.nameOffset = namesArray.size() - 1;
+      tapStruct.typeBits = tap.getSigType().getValue().getIntOrFloatBitWidth();
+      tapStruct.reserved = 0;
+      tapArray.emplace_back(tapStruct);
+    }
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    auto namesGlobal = buildGlobalConstantIntArray(
+        rewriter, op.getLoc(), "_arc_tap_names_" + op.getName(), namesArray);
+    auto traceTapsArrayGlobal = buildGlobalConstantRuntimeStructArray(
+        rewriter, op.getLoc(), "_arc_trace_taps_" + op.getName(), tapArray);
+
+    //
+    //  struct ArcModelTraceInfo {
+    //    uint64_t numTraceTaps;
+    //    struct ArcTraceTap *traceTaps;
+    //    const char *traceTapNames;
+    //    uint64_t traceBufferCapacity;
+    //  };
+    //
+    auto traceInfoStructType = LLVM::LLVMStructType::getLiteral(
+        getContext(),
+        {rewriter.getI64Type(), ptrTy, ptrTy, rewriter.getI64Type()});
+    static_assert(sizeof(ArcModelTraceInfo) == 32 &&
+                  "Unexpected size of ArcModelTraceInfo struct");
+
+    auto globalSymName =
+        rewriter.getStringAttr("_arc_trace_info_" + op.getName());
+    auto traceInfoGlobalOp = LLVM::GlobalOp::create(
+        rewriter, op.getLoc(), traceInfoStructType,
+        /*isConstant=*/false, LLVM::Linkage::Internal, globalSymName,
+        Attribute{}, alignof(ArcModelTraceInfo));
+    OpBuilder::InsertionGuard g(rewriter);
+
+    // Struct Initializer
+    Region &initRegion = traceInfoGlobalOp.getInitializerRegion();
+    Block *initBlock = rewriter.createBlock(&initRegion);
+    rewriter.setInsertionPointToStart(initBlock);
+
+    auto numTraceTapsCst = LLVM::ConstantOp::create(
+        rewriter, op.getLoc(), rewriter.getI64IntegerAttr(tapArray.size()));
+    auto traceTapArrayAddr =
+        LLVM::AddressOfOp::create(rewriter, op.getLoc(), traceTapsArrayGlobal);
+    auto tapNameArrayAddr =
+        LLVM::AddressOfOp::create(rewriter, op.getLoc(), namesGlobal);
+    auto bufferCapacityCst = LLVM::ConstantOp::create(
+        rewriter, op.getLoc(),
+        rewriter.getI64IntegerAttr(runtime::defaultTraceBufferCapacity));
+
+    Value initStruct =
+        LLVM::PoisonOp::create(rewriter, op.getLoc(), traceInfoStructType);
+
+    // Field: uint64_t numTraceTaps
+    initStruct =
+        LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
+                                    numTraceTapsCst, ArrayRef<int64_t>{0});
+    static_assert(offsetof(ArcModelTraceInfo, numTraceTaps) == 0,
+                  "Unexpected offset of field numTraceTaps");
+    // Field: struct ArcTraceTap *traceTaps
+    initStruct =
+        LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
+                                    traceTapArrayAddr, ArrayRef<int64_t>{1});
+    static_assert(offsetof(ArcModelTraceInfo, traceTaps) == 8,
+                  "Unexpected offset of field traceTaps");
+    // Field: const char *traceTapNames
+    initStruct =
+        LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
+                                    tapNameArrayAddr, ArrayRef<int64_t>{2});
+    static_assert(offsetof(ArcModelTraceInfo, traceTapNames) == 16,
+                  "Unexpected offset of field traceTapNames");
+    // Field: uint64_t traceBufferCapacity
+    initStruct =
+        LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
+                                    bufferCapacityCst, ArrayRef<int64_t>{3});
+    static_assert(offsetof(ArcModelTraceInfo, traceBufferCapacity) == 24,
+                  "Unexpected offset of field traceBufferCapacity");
+    LLVM::ReturnOp::create(rewriter, op.getLoc(), initStruct);
+
+    return traceInfoGlobalOp;
+  }
+
+  // Create a global LLVM struct containing the RuntimeModel metadata
+  LogicalResult
+  matchAndRewrite(arc::RuntimeModelOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    auto modelInfoStructType = LLVM::LLVMStructType::getLiteral(
+        getContext(),
+        {rewriter.getI64Type(), rewriter.getI64Type(), ptrTy, ptrTy});
+    static_assert(sizeof(ArcRuntimeModelInfo) == 32 &&
+                  "Unexpected size of ArcRuntimeModelInfo struct");
+
+    rewriter.setInsertionPoint(op);
+    auto traceInfoGlobal = buildTraceInfoStruct(op, rewriter);
+
+    // Construct the Model Name String GlobalOp
+    SmallVector<char, 16> modNameArray(op.getName().begin(),
+                                       op.getName().end());
+    modNameArray.push_back('\0');
+    auto nameGlobalType =
+        LLVM::LLVMArrayType::get(rewriter.getI8Type(), modNameArray.size());
+    auto globalSymName =
+        rewriter.getStringAttr("_arc_mod_name_" + op.getName());
+    auto nameGlobal = LLVM::GlobalOp::create(
+        rewriter, op.getLoc(), nameGlobalType, /*isConstant=*/true,
+        LLVM::Linkage::Internal,
+        /*name=*/globalSymName, rewriter.getStringAttr(modNameArray),
+        /*alignment=*/0);
+
+    // Construct the Model Info Struct GlobalOp
+    // Note: The struct is supposed to be constant at runtime, but contains the
+    // relocatable address of another symbol, so it should not be placed in the
+    // "rodata" section.
+    auto modInfoGlobalOp =
+        LLVM::GlobalOp::create(rewriter, op.getLoc(), modelInfoStructType,
+                               /*isConstant=*/false, LLVM::Linkage::External,
+                               op.getSymName(), Attribute{});
+
+    // Struct Initializer
+    Region &initRegion = modInfoGlobalOp.getInitializerRegion();
+    Block *initBlock = rewriter.createBlock(&initRegion);
+    rewriter.setInsertionPointToStart(initBlock);
+    auto apiVersionCst = LLVM::ConstantOp::create(
+        rewriter, op.getLoc(), rewriter.getI64IntegerAttr(runtimeApiVersion));
+    auto numStateBytesCst = LLVM::ConstantOp::create(rewriter, op.getLoc(),
+                                                     op.getNumStateBytesAttr());
+    auto nameAddr =
+        LLVM::AddressOfOp::create(rewriter, op.getLoc(), nameGlobal);
+    Value traceInfoPtr;
+    if (traceInfoGlobal)
+      traceInfoPtr =
+          LLVM::AddressOfOp::create(rewriter, op.getLoc(), traceInfoGlobal);
+    else
+      traceInfoPtr = LLVM::ZeroOp::create(rewriter, op.getLoc(), ptrTy);
+
+    Value initStruct =
+        LLVM::PoisonOp::create(rewriter, op.getLoc(), modelInfoStructType);
+
+    // Field: uint64_t apiVersion
+    initStruct = LLVM::InsertValueOp::create(
+        rewriter, op.getLoc(), initStruct, apiVersionCst, ArrayRef<int64_t>{0});
+    static_assert(offsetof(ArcRuntimeModelInfo, apiVersion) == 0,
+                  "Unexpected offset of field apiVersion");
+    // Field: uint64_t numStateBytes
+    initStruct =
+        LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
+                                    numStateBytesCst, ArrayRef<int64_t>{1});
+    static_assert(offsetof(ArcRuntimeModelInfo, numStateBytes) == 8,
+                  "Unexpected offset of field numStateBytes");
+    // Field: const char *modelName
+    initStruct = LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
+                                             nameAddr, ArrayRef<int64_t>{2});
+    static_assert(offsetof(ArcRuntimeModelInfo, modelName) == 16,
+                  "Unexpected offset of field modelName");
+    // Field: struct ArcModelTraceInfo *traceInfo
+    initStruct = LLVM::InsertValueOp::create(
+        rewriter, op.getLoc(), initStruct, traceInfoPtr, ArrayRef<int64_t>{3});
+    static_assert(offsetof(ArcRuntimeModelInfo, traceInfo) == 24,
+                  "Unexpected offset of field traceInfo");
+
+    LLVM::ReturnOp::create(rewriter, op.getLoc(), initStruct);
+
+    rewriter.replaceOp(op, modInfoGlobalOp);
+    return success();
+  }
+};
 
 //===----------------------------------------------------------------------===//
 // Pass Implementation
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct LowerArcToLLVMPass : public LowerArcToLLVMBase<LowerArcToLLVMPass> {
+struct LowerArcToLLVMPass
+    : public circt::impl::LowerArcToLLVMBase<LowerArcToLLVMPass> {
   void runOnOperation() override;
 };
 } // namespace
 
 void LowerArcToLLVMPass::runOnOperation() {
+  // Replace any `i0` values with an `hw.constant 0 : i0` to avoid later issues
+  // in LLVM conversion.
+  {
+    DenseMap<Region *, hw::ConstantOp> zeros;
+    getOperation().walk([&](Operation *op) {
+      if (op->hasTrait<OpTrait::ConstantLike>())
+        return;
+      for (auto result : op->getResults()) {
+        auto type = dyn_cast<IntegerType>(result.getType());
+        if (!type || type.getWidth() != 0)
+          continue;
+        auto *region = op->getParentRegion();
+        auto &zero = zeros[region];
+        if (!zero) {
+          auto builder = OpBuilder::atBlockBegin(&region->front());
+          zero = hw::ConstantOp::create(builder, result.getLoc(),
+                                        APInt::getZero(0));
+        }
+        result.replaceAllUsesWith(zero);
+      }
+    });
+  }
+
   // Collect the symbols in the root op such that the HW-to-LLVM lowering can
   // create LLVM globals with non-colliding names.
   Namespace globals;
@@ -569,6 +1308,13 @@ void LowerArcToLLVMPass::runOnOperation() {
   LLVMConversionTarget target(getContext());
   target.addLegalOp<mlir::ModuleOp>();
   target.addLegalOp<scf::YieldOp>(); // quirk of SCF dialect conversion
+
+  // Mark sim::Format*Op as legal. These are not converted to LLVM, but the
+  // lowering of sim::PrintFormattedOp walks them to build up its format string.
+  // They are all marked Pure so are removed after the conversion.
+  target.addLegalOp<sim::FormatLiteralOp, sim::FormatDecOp, sim::FormatHexOp,
+                    sim::FormatBinOp, sim::FormatOctOp, sim::FormatCharOp,
+                    sim::FormatStringConcatOp>();
 
   // Setup the arc dialect type conversion.
   LLVMTypeConverter converter(&getContext());
@@ -587,22 +1333,38 @@ void LowerArcToLLVMPass::runOnOperation() {
   converter.addConversion([&](SimModelInstanceType type) {
     return LLVM::LLVMPointerType::get(type.getContext());
   });
+  converter.addConversion([&](sim::FormatStringType type) {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
+  converter.addConversion([&](llhd::TimeType type) {
+    // LLHD time is represented as i64 femtoseconds.
+    return IntegerType::get(type.getContext(), 64);
+  });
 
   // Setup the conversion patterns.
-  RewritePatternSet patterns(&getContext());
+  ConversionPatternSet patterns(&getContext(), converter);
 
   // MLIR patterns.
   populateSCFToControlFlowConversionPatterns(patterns);
   populateFuncToLLVMConversionPatterns(converter, patterns);
   cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
   arith::populateArithToLLVMConversionPatterns(converter, patterns);
+  index::populateIndexToLLVMConversionPatterns(converter, patterns);
   populateAnyFunctionOpInterfaceTypeConversionPattern(patterns, converter);
 
   // CIRCT patterns.
   DenseMap<std::pair<Type, ArrayAttr>, LLVM::GlobalOp> constAggregateGlobalsMap;
-  populateHWToLLVMConversionPatterns(converter, patterns, globals,
-                                     constAggregateGlobalsMap);
   populateHWToLLVMTypeConversions(converter);
+  std::optional<HWToLLVMArraySpillCache> spillCacheOpt =
+      HWToLLVMArraySpillCache();
+  {
+    OpBuilder spillBuilder(getOperation());
+    spillCacheOpt->spillNonHWOps(spillBuilder, converter, getOperation());
+  }
+  populateHWToLLVMConversionPatterns(converter, patterns, globals,
+                                     constAggregateGlobalsMap, spillCacheOpt);
+
+  populateCombToArithConversionPatterns(converter, patterns);
   populateCombToLLVMConversionPatterns(converter, patterns);
 
   // Arc patterns.
@@ -614,33 +1376,41 @@ void LowerArcToLLVMPass::runOnOperation() {
     AllocStateLikeOpLowering<arc::RootOutputOp>,
     AllocStorageOpLowering,
     ClockGateOpLowering,
+    ClockInvOpLowering,
+    CurrentTimeOpLowering,
+    IntToTimeOpLowering,
     MemoryReadOpLowering,
     MemoryWriteOpLowering,
     ModelOpLowering,
     ReplaceOpWithInputPattern<seq::ToClockOp>,
     ReplaceOpWithInputPattern<seq::FromClockOp>,
+    RuntimeModelOpLowering,
     SeqConstClockLowering,
-    SimEmitValueOpLowering,
+    SimGetTimeOpLowering,
+    SimSetTimeOpLowering,
     StateReadOpLowering,
     StateWriteOpLowering,
     StorageGetOpLowering,
+    TimeToIntOpLowering,
     ZeroCountOpLowering
   >(converter, &getContext());
   // clang-format on
+  patterns.add<ExecuteOp>(convert);
 
-  SmallVector<ModelInfo> models;
-  if (failed(collectModels(getOperation(), models))) {
-    signalPassFailure();
-    return;
-  }
+  StringCache stringCache;
+  patterns.add<SimEmitValueOpLowering, SimPrintFormattedProcOpLowering>(
+      converter, &getContext(), stringCache);
 
-  llvm::DenseMap<StringRef, ModelInfoMap> modelMap(models.size());
-  for (ModelInfo &modelInfo : models) {
+  auto &modelInfo = getAnalysis<ModelInfoAnalysis>();
+  llvm::DenseMap<StringRef, ModelInfoMap> modelMap(modelInfo.infoMap.size());
+  for (auto &[_, modelInfo] : modelInfo.infoMap) {
     llvm::DenseMap<StringRef, StateInfo> states(modelInfo.states.size());
     for (StateInfo &stateInfo : modelInfo.states)
       states.insert({stateInfo.name, stateInfo});
-    modelMap.insert({modelInfo.name,
-                     ModelInfoMap{modelInfo.numStateBytes, std::move(states)}});
+    modelMap.insert(
+        {modelInfo.name,
+         ModelInfoMap{modelInfo.numStateBytes, std::move(states),
+                      modelInfo.initialFnSym, modelInfo.finalFnSym}});
   }
 
   patterns.add<SimInstantiateOpLowering, SimSetInputOpLowering,
@@ -648,7 +1418,10 @@ void LowerArcToLLVMPass::runOnOperation() {
       converter, &getContext(), modelMap);
 
   // Apply the conversion.
-  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
+  ConversionConfig config;
+  config.allowPatternRollback = false;
+  if (failed(applyFullConversion(getOperation(), target, std::move(patterns),
+                                 config)))
     signalPassFailure();
 }
 

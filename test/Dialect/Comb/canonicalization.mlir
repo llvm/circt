@@ -1,4 +1,57 @@
-// RUN: circt-opt %s -canonicalize='top-down=true region-simplify=false' --allow-unregistered-dialect | FileCheck %s
+// RUN: circt-opt %s -canonicalize='top-down=true region-simplify=disabled' --allow-unregistered-dialect | FileCheck %s
+
+func.func private @use_i10(%arg0: i10)
+
+// CHECK-LABEL: @bailOnRecursiveOps
+hw.module @bailOnRecursiveOps(in %a: i1, in %b: i1, out z0: i42, out z1: i1) {
+  %c1_i42 = hw.constant 1 : i42
+  %false = hw.constant false
+
+  // CHECK: [[TMP:%.+]] = comb.add [[TMP]], %c1_i42 : i42
+  %0 = comb.add %0, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.sub [[TMP]], %c1_i42 : i42
+  %1 = comb.sub %1, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.mul [[TMP]], %c1_i42 : i42
+  %2 = comb.mul %2, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.shl [[TMP]], %c1_i42 : i42
+  %3 = comb.shl %3, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.shru [[TMP]], %c1_i42 : i42
+  %4 = comb.shru %4, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.shrs [[TMP]], %c1_i42 : i42
+  %5 = comb.shrs %5, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.and [[TMP]], %c1_i42 : i42
+  %6 = comb.and %6, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.or [[TMP]], %c1_i42 : i42
+  %7 = comb.or %7, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.xor [[TMP]], %c1_i42 : i42
+  %8 = comb.xor %8, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.extract [[TMP]] from 0 : (i42) -> i42
+  %9 = comb.extract %9 from 0 : (i42) -> i42
+  // CHECK: [[TMP:%.+]] = comb.concat [[TMP]] : i42
+  %10 = comb.concat %10 : i42
+  // CHECK: [[TMP:%.+]] = comb.icmp eq [[TMP]], %false : i1
+  %11 = comb.icmp eq %11, %false : i1
+  // CHECK: [[TMP:%.+]] = comb.divu [[TMP]], %c1_i42 : i42
+  %12 = comb.divu %12, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.divs [[TMP]], %c1_i42 : i42
+  %13 = comb.divs %13, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.modu [[TMP]], %c1_i42 : i42
+  %14 = comb.modu %14, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.mods [[TMP]], %c1_i42 : i42
+  %15 = comb.mods %15, %c1_i42 : i42
+  // CHECK: [[TMP:%.+]] = comb.mux %a, [[TMP]], [[TMP]] : i42
+  %16 = comb.mux %a, %16, %16 : i42
+  // CHECK: [[TMP:%.+]] = comb.mux [[TMP]], %a, %b : i1
+  %17 = comb.mux %17, %a, %b : i1
+  // CHECK: [[TMP:%.+]] = comb.parity [[TMP]] : i1
+  %18 = comb.parity %18 : i1
+  // CHECK: [[TMP:%.+]] = comb.replicate [[TMP]] : (i42) -> i42
+  %19 = comb.replicate %19 : (i42) -> i42
+
+  %z0 = comb.xor %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %12, %13, %14, %15, %16, %19 : i42
+  %z1 = comb.xor %11, %17, %18 : i1
+  hw.output %z0, %z1 : i42, i1
+}
 
 // CHECK-LABEL: @narrowMux
 hw.module @narrowMux(in %a: i8, in %b: i8, in %c: i1, out o: i4) {
@@ -179,87 +232,6 @@ hw.module @dedupLong(in %arg0 : i7, in %arg1 : i7, in %arg2: i7, out resAnd: i7,
   %0 = comb.and %arg0, %arg1, %arg2, %arg0 : i7
   %1 = comb.or %arg0, %arg1, %arg2, %arg0 : i7
   hw.output %0, %1 : i7, i7
-}
-
-// CHECK-LABEL: hw.module @orExclusiveConcats
-hw.module @orExclusiveConcats(in %arg0 : i6, in %arg1 : i2, out o: i9) {
-  // CHECK-NEXT:    %false = hw.constant false
-  // CHECK-NEXT:    %0 = comb.concat %arg1, %false, %arg0 : i2, i1, i6
-  // CHECK-NEXT:    hw.output %0 : i9
-  %c0 = hw.constant 0 : i3
-  %0 = comb.concat %c0, %arg0 : i3, i6
-  %c1 = hw.constant 0 : i7
-  %1 = comb.concat %arg1, %c1 : i2, i7
-  %2 = comb.or %0, %1 : i9
-  hw.output %2 : i9
-}
-
-// When two concats are or'd together and have mutually-exclusive fields, they
-// can be merged together into a single concat.
-// concat0: 0aaa aaa0 0000 0bb0
-// concat1: 0000 0000 ccdd d000
-// merged:  0aaa aaa0 ccdd dbb0
-// CHECK-LABEL: hw.module @orExclusiveConcats2
-hw.module @orExclusiveConcats2(in %arg0 : i6, in %arg1 : i2, in %arg2: i2, in %arg3: i3, out o: i16) {
-  // CHECK-NEXT:    %false = hw.constant false
-  // CHECK-NEXT:    %0 = comb.concat %false, %arg0, %false, %arg2, %arg3, %arg1, %false : i1, i6, i1, i2, i3, i2, i1
-  // CHECK-NEXT:    hw.output %0 : i16
-  %c0 = hw.constant 0 : i1
-  %c1 = hw.constant 0 : i6
-  %c2 = hw.constant 0 : i1
-  %0 = comb.concat %c0, %arg0, %c1, %arg1, %c2: i1, i6, i6, i2, i1
-  %c3 = hw.constant 0 : i8
-  %c4 = hw.constant 0 : i3
-  %1 = comb.concat %c3, %arg2, %arg3, %c4 : i8, i2, i3, i3
-  %2 = comb.or %0, %1 : i16
-  hw.output %2 : i16
-}
-
-// When two concats are or'd together and have mutually-exclusive fields, they
-// can be merged together into a single concat.
-// concat0: aaaa 1111
-// concat1: 1111 10bb
-// merged:  1111 1111
-// CHECK-LABEL: hw.module @orExclusiveConcats3
-hw.module @orExclusiveConcats3(in %arg0 : i4, in %arg1 : i2, out o: i8) {
-  // CHECK-NEXT:    [[RES:%[a-z0-9_-]+]] = hw.constant -1 : i8
-  // CHECK-NEXT:    hw.output [[RES]] : i8
-  %c0 = hw.constant -1 : i4
-  %0 = comb.concat %arg0, %c0: i4, i4
-  %c1 = hw.constant -1 : i5
-  %c2 = hw.constant 0 : i1
-  %1 = comb.concat %c1, %c2, %arg1 : i5, i1, i2
-  %2 = comb.or %0, %1 : i8
-  hw.output %2 : i8
-}
-
-// CHECK-LABEL: hw.module @orMultipleExclusiveConcats
-hw.module @orMultipleExclusiveConcats(in %arg0 : i2, in %arg1 : i2, in %arg2: i2, out o: i6) {
-  // CHECK-NEXT:    %0 = comb.concat %arg0, %arg1, %arg2 : i2, i2, i2
-  // CHECK-NEXT:    hw.output %0 : i6
-  %c2 = hw.constant 0 : i2
-  %c4 = hw.constant 0 : i4
-  %0 = comb.concat %arg0, %c4: i2, i4
-  %1 = comb.concat %c2, %arg1, %c2: i2, i2, i2
-  %2 = comb.concat %c4, %arg2: i4, i2
-  %out = comb.or %0, %1, %2 : i6
-  hw.output %out : i6
-}
-
-// CHECK-LABEL: hw.module @orConcatsWithMux
-hw.module @orConcatsWithMux(in %bit: i1, in %cond: i1, out o: i6) {
-  // CHECK-NEXT:    [[RES:%[a-z0-9_-]+]] = hw.constant 0 : i4
-  // CHECK-NEXT:    %0 = comb.concat [[RES]], %cond, %bit : i4, i1, i1
-  // CHECK-NEXT:    hw.output %0 : i6
-  %c0 = hw.constant 0 : i5
-  %0 = comb.concat %c0, %bit: i5, i1
-  %c1 = hw.constant 0 : i4
-  %c2 = hw.constant 2 : i2
-  %c3 = hw.constant 0 : i2
-  %1 = comb.mux %cond, %c2, %c3 : i2
-  %2 = comb.concat %c1, %1 : i4, i2
-  %3 = comb.or %0, %2 : i6
-  hw.output %3 : i6
 }
 
 // CHECK-LABEL: @extractNested
@@ -569,6 +541,20 @@ hw.module @narrowAdditionToDirectAddition(in %x: i8, in %y: i8, out z1: i8) {
   hw.output %3 : i8
 }
 
+// Validates that narrowing preserves the two-state attribute.
+// CHECK-LABEL: hw.module @narrowAdditionToDirectAdditionTwoState
+hw.module @narrowAdditionToDirectAdditionTwoState(in %x: i8, in %y: i8, out z1: i8) {
+  // CHECK-NEXT: [[RESULT:%.+]] = comb.add bin %x, %y : i8
+  // CHECK-NEXT: hw.output [[RESULT]]
+
+  %false = hw.constant false
+  %0 = comb.concat %x, %x : i8, i8
+  %1 = comb.concat %y, %y : i8, i8
+  %2 = comb.add bin %0, %1 : i16
+  %3 = comb.extract %2 from 0 : (i16) -> i8
+  hw.output %3 : i8
+}
+
 // Validates that addition narrow to the widest extract
 // CHECK-LABEL: hw.module @narrowAdditionToWidestExtract
 hw.module @narrowAdditionToWidestExtract(in %x: i8, in %y: i8, out z1: i3, out z2: i4) {
@@ -810,6 +796,21 @@ hw.module @fold_mux_tree1r(in %sel: i2, in %a: i8, in %b: i8, in %c: i8, in %d: 
   hw.output %5 : i8
 }
 
+// CHECK-LABEL: hw.module @parameter
+hw.module @parameter<in: i8> (in %a: i8, out o1: i8) {
+  %param = hw.param.value i8 = #hw.param.decl.ref<"in">
+  // CHECK-NEXT: %[[PARAM:.+]] = hw.param.value i8 = #hw.param.decl.ref<"in">
+  // CHECK-NEXT: comb.and %a, %[[PARAM]]
+  // CHECK-NEXT: comb.or %a, %[[PARAM]]
+  // CHECK-NEXT: comb.xor %a, %[[PARAM]]
+  // CHECK-NEXT: comb.mul %a, %[[PARAM]]
+  %0 = comb.and %a, %param : i8
+  %1 = comb.or %a, %param : i8
+  %2 = comb.xor %a, %param : i8
+  %3 = comb.mul %a, %param : i8
+  %result = comb.add %0, %1, %2, %3 : i8
+  hw.output %result : i8
+}
 
 // CHECK-LABEL: hw.module @fold_mux_tree2
 // This is a sparse tree with 5/8ths load.
@@ -1026,39 +1027,39 @@ hw.module @shru_zero(in %a: i8, out y: i8) {
 }
 
 // CHECK-LABEL: hw.module @logical_concat_cst1
-hw.module @logical_concat_cst1(in %value: i38, in %v2: i39, out a: i39) {
+hw.module @logical_concat_cst1(in %v1: i38, in %v2: i39, out a: i39) {
   %true = hw.constant true
-  %0 = comb.concat %true, %value : i1, i38
+  %0 = comb.concat %true, %v1 : i1, i38
 
-  %c255 = hw.constant 255 : i39
-  %1 = comb.and %0, %v2, %c255 : i39
+  %c255_i39 = hw.constant 255 : i39
+  %1 = comb.and %0, %v2, %c255_i39 : i39
   hw.output %1 : i39
 
-  // CHECK: %false = hw.constant false
-  // CHECK: %c255_i38 = hw.constant 255 : i38
-  // CHECK: %0 = comb.and %value, %c255_i38 : i38
-  // CHECK: %1 = comb.concat %false, %0 : i1, i38
-  // CHECK: %2 = comb.and %v2, %1 : i39
-  // CHECK: hw.output %2 : i39
+  // CHECK-NEXT: %c0_i31 = hw.constant 0 : i31
+  // CHECK-NEXT: [[TMP1:%.+]] = comb.extract %v1 from 0 : (i38) -> i8
+  // CHECK-NEXT: [[TMP2:%.+]] = comb.extract %v2 from 0 : (i39) -> i8
+  // CHECK-NEXT: [[TMP3:%.+]] = comb.and [[TMP1]], [[TMP2]] : i8
+  // CHECK-NEXT: [[TMP4:%.+]] = comb.concat %c0_i31, [[TMP3]] : i31, i8
+  // CHECK-NEXT: hw.output [[TMP4]] : i39
 }
 
 // CHECK-LABEL: hw.module @logical_concat_cst2
-hw.module @logical_concat_cst2(in %value: i8, in %v2: i16, out a: i16) {
-  %c15 = hw.constant 15 : i8
-  %0 = comb.and %value, %c15 : i8
+hw.module @logical_concat_cst2(in %v1: i8, in %v2: i16, out a: i16) {
+  %c15_i8 = hw.constant 15 : i8
+  %0 = comb.and %v1, %c15_i8 : i8
 
-  %1 = comb.concat %value, %0 : i8, i8
+  %1 = comb.concat %v1, %0 : i8, i8
 
-  %c7 = hw.constant 7 : i16
-  %2 = comb.and %v2, %1, %c7 : i16
+  %c7_i16 = hw.constant 7 : i16
+  %2 = comb.and %v2, %1, %c7_i16 : i16
   hw.output %2 : i16
 
-  // CHECK: %c0_i8 = hw.constant 0 : i8
-  // CHECK: %c7_i8 = hw.constant 7 : i8
-  // CHECK: %0 = comb.and %value, %c7_i8 : i8
-  // CHECK: %1 = comb.concat %c0_i8, %0 : i8, i8
-  // CHECK: %2 = comb.and %v2, %1 : i16
-  // CHECK: hw.output %2 : i16
+  // CHECK-NEXT: %c0_i13 = hw.constant 0 : i13
+  // CHECK-NEXT: [[TMP1:%.+]] = comb.extract %v2 from 0 : (i16) -> i3
+  // CHECK-NEXT: [[TMP2:%.+]] = comb.extract %v1 from 0 : (i8) -> i3
+  // CHECK-NEXT: [[TMP3:%.+]] = comb.and [[TMP1]], [[TMP2]] : i3
+  // CHECK-NEXT: [[TMP4:%.+]] = comb.concat %c0_i13, [[TMP3]] : i13, i3
+  // CHECK-NEXT: hw.output [[TMP4]] : i16
 }
 
 // CHECK-LABEL: hw.module @concat_fold
@@ -1221,17 +1222,26 @@ hw.module @test1560(in %value: i38, out a: i1) {
 }
 
 // CHECK-LABEL: hw.module @extractShift
-hw.module @extractShift(in %arg0 : i4, out o1 : i1, out o2: i1) {
+hw.module @extractShift(in %arg0 : i4, out o1 : i1, out o2: i1, out o3: i1, out o4: i1) {
   %c1 = hw.constant 1: i4
   %0 = comb.shl %c1, %arg0 : i4
+  %1 = comb.shl %c1, %arg0 : i4
+  %2 = comb.shl %c1, %arg0 : i4
 
-  // CHECK:  %0 = comb.icmp eq %arg0, %c0_i4 : i4
-  %1 = comb.extract %0 from 0 : (i4) -> i1
+  // CHECK: %[[O1:.+]] = comb.icmp eq %arg0, %c0_i4 : i4
+  %3 = comb.extract %0 from 0 : (i4) -> i1
 
-  // CHECK: %1 = comb.icmp eq %arg0, %c2_i4 : i4
-  %2 = comb.extract %0 from 2 : (i4) -> i1
-  // CHECK: hw.output %0, %1
-  hw.output %1, %2: i1, i1
+  // CHECK: %[[O2:.+]] = comb.icmp eq %arg0, %c2_i4 : i4
+  %4 = comb.extract %1 from 2 : (i4) -> i1
+
+  // CHECK: %[[O3:.+]] = comb.extract
+  %5 = comb.extract %2 from 2 : (i4) -> i1
+
+  // CHECK: %[[O4:.+]] = comb.extract
+  %6 = comb.extract %2 from 2 : (i4) -> i1
+
+  // CHECK: hw.output %[[O1]], %[[O2]], %[[O3]], %[[O4]]
+  hw.output %3, %4, %5, %6: i1, i1, i1, i1
 }
 
 // CHECK-LABEL: hw.module @moduloZeroDividend
@@ -1243,6 +1253,71 @@ hw.module @moduloZeroDividend(in %arg0 : i32, out o1: i32, out o2: i32) {
 
   // CHECK: hw.output [[ZERO]], [[ZERO]]
   hw.output %0, %1 : i32, i32
+}
+
+// CHECK-LABEL: hw.module @divuPowerOfTwo
+hw.module @divuPowerOfTwo(in %arg0 : i8, out o1: i8, out o2: i8, out o3: i8, out o4: i8, out o5: i8) {
+  // divu(x, 2) -> concat(0, extract(x, 1, 7))
+  // CHECK: [[EXT1:%.+]] = comb.extract %arg0 from 1 : (i8) -> i7
+  // CHECK-NEXT: [[RES1:%.+]] = comb.concat %false, [[EXT1]] : i1, i7
+  %c2 = hw.constant 2 : i8
+  %0 = comb.divu bin %arg0, %c2 : i8
+
+  // divu(x, 4) -> concat(00, extract(x, 2, 6))
+  // CHECK-NEXT: [[EXT2:%.+]] = comb.extract %arg0 from 2 : (i8) -> i6
+  // CHECK-NEXT: [[RES2:%.+]] = comb.concat %c0_i2, [[EXT2]] : i2, i6
+  %c4 = hw.constant 4 : i8
+  %1 = comb.divu bin %arg0, %c4 : i8
+
+  // divu(x, 16) -> concat(0000, extract(x, 4, 4))
+  // CHECK-NEXT: [[EXT4:%.+]] = comb.extract %arg0 from 4 : (i8) -> i4
+  // CHECK-NEXT: [[RES3:%.+]] = comb.concat %c0_i4, [[EXT4]] : i4, i4
+  %c16 = hw.constant 16 : i8
+  %2 = comb.divu bin %arg0, %c16 : i8
+
+  // divu(x, 3) -> not canonicalized (not power of two)
+  // CHECK-NEXT: [[RES4:%.+]] = comb.divu bin %arg0, %c3_i8 : i8
+  %c3 = hw.constant 3 : i8
+  %3 = comb.divu bin %arg0, %c3 : i8
+
+  // Make sure canonicalization does not happen if there is no bin flag.
+  // CHECK-NEXT: [[RES5:%.+]] = comb.divu %arg0, %c2_i8 : i8
+  %4 = comb.divu %arg0, %c2 : i8
+
+  // CHECK: hw.output [[RES1]], [[RES2]], [[RES3]], [[RES4]], [[RES5]]
+  hw.output %0, %1, %2, %3, %4 : i8, i8, i8, i8, i8
+}
+
+// CHECK-LABEL: hw.module @moduPowerOfTwo
+hw.module @moduPowerOfTwo(in %arg0 : i8, out o1: i8, out o2: i8, out o3: i8, out o4: i8, out o5: i8) {
+  // modu(x, 2) -> concat(0000000, extract(x, 0, 1))
+  // CHECK:      [[EXT1:%.+]] = comb.extract %arg0 from 0 : (i8) -> i1
+  // CHECK-NEXT: [[RES1:%.+]] = comb.concat %c0_i7, [[EXT1]] : i7, i1
+  %c2 = hw.constant 2 : i8
+  %0 = comb.modu bin %arg0, %c2 : i8
+
+  // modu(x, 4) -> concat(000000, extract(x, 0, 2))
+  // CHECK-NEXT: [[EXT2:%.+]] = comb.extract %arg0 from 0 : (i8) -> i2
+  // CHECK-NEXT: [[RES2:%.+]] = comb.concat %c0_i6, [[EXT2]] : i6, i2
+  %c4 = hw.constant 4 : i8
+  %1 = comb.modu bin %arg0, %c4 : i8
+
+  // modu(x, 16) -> concat(0000, extract(x, 0, 4))
+  // CHECK-NEXT: [[EXT4:%.+]] = comb.extract %arg0 from 0 : (i8) -> i4
+  // CHECK-NEXT: [[RES3:%.+]] = comb.concat %c0_i4, [[EXT4]] : i4, i4
+  %c16 = hw.constant 16 : i8
+  %2 = comb.modu bin %arg0, %c16 : i8
+
+  // modu(x, 3) -> not canonicalized (not power of two)
+  // CHECK-NEXT: [[RES4:%.+]] = comb.modu bin %arg0, %c3_i8 : i8
+  %c3 = hw.constant 3 : i8
+  %3 = comb.modu bin %arg0, %c3 : i8
+
+  // Make sure canonicalization does not happen if there is no bin flag.
+  // CHECK-NEXT: [[RES5:%.+]] = comb.modu %arg0, %c2_i8 : i8
+  %4 = comb.modu %arg0, %c2 : i8
+  // CHECK: hw.output [[RES1]], [[RES2]], [[RES3]], [[RES4]], [[RES5]]
+  hw.output %0, %1, %2, %3, %4 : i8, i8, i8, i8, i8
 }
 
 // CHECK-LABEL: hw.module @orWithNegation
@@ -1285,10 +1360,15 @@ hw.module @muxConstantsFold(in %cond: i1, out o: i25) {
 
 // CHECK-LABEL: hw.module @muxCommon
 // This handles various cases of mux(cond, x, someop(x, y, z)).
-hw.module @muxCommon(in %cond: i1, in %cond2: i1,
+hw.module @muxCommon(in %cond: i1, in %cond2: i1, in %cond3: i1,
                      in %arg0 : i32, in %arg1 : i32, in %arg2: i32, in %arg3: i32,
-  out o1: i32, out o2: i32, out o3: i32, out o4: i32, 
-  out o5: i32, out orResult: i32, out o6: i32, out o7: i32) {
+  out o1: i32, out o2: i32, out o3: i32, out o4: i32, out o5: i32,
+  out orResult: i32, out o6: i32, out o7: i32, out o8 : i1, out o9: i32,
+  out o10: i32, out o11: i1, out o12: i32, out o13: i32) {
+  // CHECK: [[TRUE:%.+]] = hw.constant true
+  // CHECK: [[FALSE:%.+]] = hw.constant false
+  %true = hw.constant true
+  %false = hw.constant false
   %allones = hw.constant -1 : i32
   %notArg0 = comb.xor %arg0, %allones : i32
 
@@ -1333,24 +1413,56 @@ hw.module @muxCommon(in %cond: i1, in %cond2: i1,
   %1 = comb.mux %cond, %arg1, %arg0 : i32
   %o7 = comb.mux %cond2, %1, %arg0 : i32
 
+  // CHECK: [[O8:%.+]] = comb.mux [[O8]], [[O8]], [[O8]] : i1
+  %o8 = comb.mux %o8, %o8, %o8 : i1
+
+  // CHECK: [[O9:%.+]] = comb.mux [[TRUE]], [[O9]], %arg0 : i32
+  // CHECK: [[O10:%.+]] = comb.mux [[FALSE]], %arg0, [[O10]] : i32
+  %o9 = comb.mux %true, %o9, %arg0 : i32
+  %o10 = comb.mux %false, %arg0, %o10 : i32
+
+  // CHECK: [[O11:%.+]] = comb.mux [[O11]], %cond, %cond2 : i1
+  %o11 = comb.mux %o11, %cond, %cond2 : i1
+
+  // Avoid a non-terminating case
+  // CHECK: [[LOOPMUX:%.+]] = comb.mux %cond, %arg1, %2
+  // CHECK: [[TMP:%.+]] = comb.or %cond3, %cond2 : i1
+  // CHECK: [[O12:%.+]] = comb.mux [[TMP]], %arg0, [[LOOPMUX]] : i32
+  %2 = comb.mux %cond, %arg1, %2 : i32
+  %3 = comb.mux %cond2, %arg0, %2 : i32
+  %o12 = comb.mux %cond3, %arg0, %3 : i32
+
+  // CHECK: [[O13:%.+]] = comb.mux %cond, %arg0, [[LOOPMUX]] : i32
+  %o13 = comb.mux %cond, %arg0, %2 : i32
+
   // CHECK: hw.output [[O1]], [[O2]], [[O3]], [[O4]], [[O5]], [[ORRESULT]],
-  // CHECK: [[O6]], [[O7]]
-  hw.output %o1, %o2, %o3, %o4, %o5, %orResult, %o6, %o7
-    : i32, i32, i32, i32, i32, i32, i32, i32
+  // CHECK: [[O6]], [[O7]], [[O8]], [[O9]], [[O10]]
+  hw.output %o1, %o2, %o3, %o4, %o5, %orResult, %o6, %o7, %o8, %o9, %o10, %o11, %o12, %o13
+    : i32, i32, i32, i32, i32, i32, i32, i32, i1, i32, i32, i1, i32, i32
 }
 
 // CHECK-LABEL: @flatten_multi_use_and
-hw.module @flatten_multi_use_and(in %arg0 : i8, in %arg1 : i8, in %arg2: i8,
-  out o1: i8, out o2: i8) {
-  %c1 = hw.constant 15 : i8
-  %0 = comb.and %arg0, %c1 : i8
-  // CHECK: %0 = comb.and %arg0, %c15_i8 : i8
+hw.module @flatten_multi_use_and(
+  in %arg0: i8, in %arg1: i8, in %arg2: i8,
+  out o1: i8, out o2: i8
+) {
+  // CHECK-NEXT: %c0_i5 = hw.constant 0 : i5
+  // CHECK-NEXT: %c0_i4 = hw.constant 0 : i4
 
-  %c2 = hw.constant 7 : i8
-  %1 = comb.and %arg1, %0, %arg2, %c2 : i8
-  // CHECK: %1 = comb.and %arg1, %arg0, %arg2, %c7_i8 : i8
+  %c15_i8 = hw.constant 15 : i8
+  %0 = comb.and %arg0, %c15_i8 : i8
+  // CHECK-NEXT: [[TMP1:%.+]] = comb.extract %arg0 from 0 : (i8) -> i4
+  // CHECK-NEXT: [[TMP2:%.+]] = comb.concat %c0_i4, [[TMP1]] : i4, i4
 
-  // CHECK: hw.output %0, %1 
+  %c7_i8 = hw.constant 7 : i8
+  %1 = comb.and %arg1, %0, %arg2, %c7_i8 : i8
+  // CHECK-NEXT: [[TMP3:%.+]] = comb.extract %arg1 from 0 : (i8) -> i3
+  // CHECK-NEXT: [[TMP4:%.+]] = comb.extract %arg0 from 0 : (i8) -> i3
+  // CHECK-NEXT: [[TMP5:%.+]] = comb.extract %arg2 from 0 : (i8) -> i3
+  // CHECK-NEXT: [[TMP6:%.+]] = comb.and [[TMP3]], [[TMP4]], [[TMP5]] : i3
+  // CHECK-NEXT: [[TMP7:%.+]] = comb.concat %c0_i5, [[TMP6]] : i5, i3
+
+  // CHECK-NEXT: hw.output [[TMP2]], [[TMP7]]
   hw.output %0, %1 : i8, i8
 }
 
@@ -1537,7 +1649,7 @@ hw.module @OrMuxSameTrueValueAndZero(in %tag_0: i1, in %tag_1: i1, in %tag_2: i1
 // CHECK-LABEL:   "test.acrossBlockCanonicalizationBarrier"() ({
 // CHECK:         ^bb0(%[[A:.*]]: i32, %[[B:.*]]: i32, %[[C:.*]]: i32):
 // CHECK:           %[[ADD1:.*]] = comb.add %[[A]], %[[B]] : i32
-// CHECK:           "terminator"() : () -> ()
+// CHECK:           "terminator"()[^bb1] : () -> ()
 // CHECK:         ^bb1:
 // CHECK:           %[[ADD2:.*]] = comb.add %[[ADD1]], %[[C]] : i32
 // CHECK:           "terminator"(%[[ADD2]]) : (i32) -> ()
@@ -1545,13 +1657,66 @@ hw.module @OrMuxSameTrueValueAndZero(in %tag_0: i1, in %tag_1: i1, in %tag_2: i1
 "test.acrossBlockCanonicalizationBarrier"() ({
   ^bb0(%a : i32, %b : i32, %c : i32):
     %add1 = comb.add %a, %b : i32
-    "terminator"() : () -> ()
+    "terminator"()[^bb1] : () -> ()
   ^bb1:
     // Canonicalization should _not_ pull %add1 into a combined add op when %add1
     // is defined in another block.
     %add2 = comb.add %add1, %c : i32
     "terminator"(%add2) : (i32) -> ()
 }) : () -> ()
+
+// CHECK-LABEL: "test.acrossBlockCanonicalizationBarrierFlattenAndIdem"
+// CHECK: ^bb1:
+// CHECK-NEXT: %[[OUT:.+]] = comb.or %0, %1, %2 : i32
+// CHECK-NEXT: "terminator"(%[[OUT]]) : (i32) -> ()
+"test.acrossBlockCanonicalizationBarrierFlattenAndIdem"() ({
+^bb0(%arg0: i32, %arg1: i32, %arg2: i32):
+  %0 = comb.or %arg0, %arg1 : i32
+  %1 = comb.or %arg1, %arg2 : i32
+  %2 = comb.or %arg0, %arg2 : i32
+  "terminator"()[^bb1] : () -> ()
+^bb1:
+  // Flatten and unique, but not across blocks.
+  %3 = comb.or %0, %1 : i32
+  %4 = comb.or %1, %2 : i32
+  %5 = comb.or %3, %4, %0, %1, %1, %2 : i32
+
+  "terminator"(%5) : (i32) -> ()
+}) : () -> ()
+
+// CHECK-LABEL: "test.acrossBlockCanonicalizationBarrierIdem"
+// CHECK: ^bb1:
+// CHECK-NEXT: %[[OUT1:.+]] = comb.or %0, %1 : i32
+// CHECK-NEXT: %[[OUT2:.+]] = comb.or %[[OUT1]], %arg0 : i32
+// CHECK-NEXT: "terminator"(%[[OUT1]], %[[OUT2]]) : (i32, i32) -> ()
+"test.acrossBlockCanonicalizationBarrierIdem"() ({
+^bb0(%arg0: i32, %arg1: i32, %arg2: i32):
+  %0 = comb.or %arg0, %arg1 : i32
+  %1 = comb.or %arg1, %arg2 : i32
+  "terminator"()[^bb1] : () -> ()
+^bb1:
+  %2 = comb.or %0, %1, %1 : i32
+  %3 = comb.or %2, %0, %1, %arg0 : i32
+
+  "terminator"(%2, %3) : (i32, i32) -> ()
+}) : () -> ()
+
+// Check multi-operation idempotent operand deduplication.
+// CHECK-LABEL: @IdemTwoState
+// CHECK-NEXT: %[[ZERO:.+]] = comb.or bin %cond, %val1
+// CHECK-NEXT: %[[ONE:.+]] = comb.or bin %val1, %val2
+// Don't allow dropping these (%0/%1) due to two-state differences.
+// CHECK-NEXT: %[[TWO:.+]] = comb.or %[[ZERO]], %[[ONE]]
+// New operation should preserve two-state-ness.
+// CHECK-NEXT: %[[THREE:.+]] = comb.or bin %[[TWO]], %[[ZERO]], %[[ONE]]
+// CHECK-NEXT: hw.output %[[ZERO]], %[[ONE]], %[[TWO]], %[[THREE]]
+hw.module @IdemTwoState(in %cond: i32, in %val1: i32, in %val2: i32, out o1: i32, out o2: i32, out o3: i32, out o4: i32) {
+  %0 = comb.or bin %cond, %val1 : i32
+  %1 = comb.or bin %val1, %val2: i32
+  %2 = comb.or %0, %1 : i32
+  %3 = comb.or bin %cond, %val1, %val2, %2, %0, %1 : i32
+  hw.output %0, %1, %2, %3: i32, i32, i32, i32
+}
 
 // CHECK-LABEL: hw.module @combineOppositeBinCmpIntoConstant
 // CHECK: %[[TRUE:.+]] = hw.constant true
@@ -1718,4 +1883,248 @@ hw.module @i0checks(in %i32_val: i32, in %i1_val: i1, in %i0_val: i0, out add: i
             %parity, %replicate, %extract, %shl, %shrs, %shru :
             i0, i0, i0, i0, i0, i0, i32, i32, i33, i0, i0,
             i0, i1, i1, i0, i0, i1, i0, i0, i0, i0, i0
+}
+
+// CHECK-LABEL: hw.module @mul_0
+hw.module @mul_0(in %arg0: i0, in %arg1: i0, out out: i0) {
+  // CHECK: %[[C0:.+]] = hw.constant 0 : i0
+  // CHECK: hw.output %[[C0]]
+  %0 = comb.mul %arg0, %arg1 : i0
+  hw.output %0 : i0
+}
+
+// CHECK-LABEL: @assumeMuxCondInOperand
+func.func @assumeMuxCondInOperand(%arg0: i1, %arg1: i1) -> i2 {
+  // CHECK: [[TV:%.+]] = comb.concat %true, %arg1
+  // CHECK: [[FV:%.+]] = comb.concat %arg1, %false
+  // CHECK: comb.mux %arg0, [[TV]], [[FV]]
+  %0 = comb.concat %arg0, %arg1 : i1, i1
+  %1 = comb.concat %arg1, %arg0 : i1, i1
+  %2 = comb.mux %arg0, %0, %1 : i2
+  return %2 : i2
+}
+
+// CHECK-LABEL: @dontAssumeMuxCondIfOperandHasOtherUses
+func.func @dontAssumeMuxCondIfOperandHasOtherUses(%arg0: i1, %arg1: i1) -> (i2, i2, i2) {
+  // CHECK: [[TV:%.+]] = comb.concat %arg0, %arg1
+  // CHECK: [[FV:%.+]] = comb.concat %arg1, %arg0
+  // CHECK: comb.mux %arg0, [[TV]], [[FV]]
+  %0 = comb.concat %arg0, %arg1 : i1, i1
+  %1 = comb.concat %arg1, %arg0 : i1, i1
+  %2 = comb.mux %arg0, %0, %1 : i2
+  return %0, %1, %2 : i2, i2, i2
+}
+
+// CHECK-LABEL: @dontAssumeMuxCondIfOperandIsOtherwiseObservable
+func.func @dontAssumeMuxCondIfOperandIsOtherwiseObservable(%arg0: i1, %arg1: i1) -> i1 {
+  // CHECK: [[TV:%.+]] = hw.wire %arg0
+  // CHECK: [[FV:%.+]] = hw.wire %arg0
+  // CHECK: comb.mux %arg0, [[TV]], [[FV]]
+  %0 = hw.wire %arg0 sym @s0 : i1
+  %1 = hw.wire %arg0 sym @s1 : i1
+  %2 = comb.mux %arg0, %0, %1 : i1
+  return %2 : i1
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShlTotalShiftOut
+hw.module @ShlTotalShiftOut(in %a: i4, out y: i4) {
+  // CHECK: [[TMP1:%.+]] = hw.constant 0
+  // CHECK: hw.output [[TMP1]]
+  %0 = hw.constant 7 : i4
+  %1 = comb.shl %a, %0 : i4
+  hw.output %1 : i4
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShrUTotalShiftOut
+hw.module @ShrUTotalShiftOut(in %a: i4, out y: i4) {
+  // CHECK: [[TMP1:%.+]] = hw.constant 0
+  // CHECK: hw.output [[TMP1]]
+  %0 = hw.constant 7 : i4
+  %1 = comb.shru %a, %0 : i4
+  hw.output %1 : i4
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShrSTotalShiftOut
+hw.module @ShrSTotalShiftOut(in %a: i4, out y: i4) {
+  // CHECK: [[TMP1:%.+]] = comb.extract %a from 3
+  // CHECK: [[TMP2:%.+]] = comb.replicate [[TMP1]] : (i1) -> i4
+  %0 = hw.constant 7 : i4
+  %1 = comb.shrs %a, %0 : i4
+  hw.output %1 : i4
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShlExcessiveShiftConst
+hw.module @ShlExcessiveShiftConst(in %a: i1000, out y: i1000) {
+  // CHECK: [[TMP1:%.+]] = hw.constant 0
+  // CHECK: hw.output [[TMP1]]
+  %0 = hw.constant -1 : i1000
+  %1 = comb.shl %a, %0 : i1000
+  hw.output %1 : i1000
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShrUExcessiveShiftConst
+hw.module @ShrUExcessiveShiftConst(in %a: i1000, out y: i1000) {
+  // CHECK: [[TMP1:%.+]] = hw.constant 0
+  // CHECK: hw.output [[TMP1]]
+  %0 = hw.constant -1 : i1000
+  %1 = comb.shru %a, %0 : i1000
+  hw.output %1 : i1000
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShrSExcessiveShiftConst
+hw.module @ShrSExcessiveShiftConst(in %a: i1000, out y: i1000) {
+  // CHECK: [[TMP1:%.+]] = comb.extract %a from 999
+  // CHECK: [[TMP2:%.+]] = comb.replicate [[TMP1]] : (i1) -> i1000
+  %0 = hw.constant -1 : i1000
+  %1 = comb.shrs %a, %0 : i1000
+  hw.output %1 : i1000
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShlWideZeroShift
+hw.module @ShlWideZeroShift(in %a: i1000, out y: i1000) {
+  // CHECK: hw.output %a
+  %0 = hw.constant 0 : i1000
+  %1 = comb.shl %a, %0 : i1000
+  hw.output %1 : i1000
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShrUWideZeroShift
+hw.module @ShrUWideZeroShift(in %a: i1000, out y: i1000) {
+  // CHECK: hw.output %a
+  %0 = hw.constant 0 : i1000
+  %1 = comb.shru %a, %0 : i1000
+  hw.output %1 : i1000
+}
+
+// See https://github.com/llvm/circt/issues/8695
+// CHECK-LABEL: @ShrSWideZeroShift
+hw.module @ShrSWideZeroShift(in %a: i1000, out y: i1000) {
+  // CHECK: hw.output %a
+  %0 = hw.constant 0 : i1000
+  %1 = comb.shrs %a, %0 : i1000
+  hw.output %1 : i1000
+}
+
+// This test checks two things for comb.reverse:
+// 1. Constant folding: reversing a constant should be done at compile time.
+// 2. Canonicalization: the pattern reverse(reverse(x)) should be simplified to x.
+
+// CHECK-LABEL: hw.module @test_reverse_canonicalize
+// CHECK-SAME: (in %[[IN:.*]] : i8, out out_double_rev : i8, out out_const_rev : i8)
+
+// After canonicalization, there should be NO comb.reverse operations,
+// since reverse(reverse(x)) simplifies to x, and reverse(const) should be folded.
+// Therefore, we ensure there are no comb.reverse ops in the output:
+// CHECK-NOT: comb.reverse
+
+hw.module @test_reverse_canonicalize(in %in : i8, out out_double_rev : i8, out out_const_rev : i8) {
+
+  // Apply reverse twice to test canonicalization
+  %rev1 = comb.reverse %in : i8
+  %rev2 = comb.reverse %rev1 : i8
+
+  // Apply reverse on a constant to test folding
+  %c13 = hw.constant 13 : i8
+  %rev_const = comb.reverse %c13 : i8
+
+  // Check outputs: after canonicalization,
+  // out_double_rev should be wired directly to %in,
+  // and out_const_rev should be wired to the folded constant (which is -80 in i8)
+  hw.output %rev2, %rev_const : i8, i8
+}
+
+// CHECK: %[[CST:.*]] = hw.constant -80 : i8
+// CHECK: hw.output %[[IN]], %[[CST]] : i8, i8
+
+// CHECK-LABEL: @AndMaskToConcat
+func.func @AndMaskToConcat(%arg0: i10, %arg1: i10, %arg2: i20) {
+  %b0000111100 = hw.constant 60 : i10   // 0b0000111100
+  %b0000001111 = hw.constant 15 : i10   // 0b0000001111
+  %b1111000000 = hw.constant 960 : i10  // 0b1111000000
+  %b0000101100 = hw.constant 44 : i10   // 0b0000101100
+
+  // Contiguous masks.
+  // CHECK:      [[TMP:%.+]] = comb.extract %arg0 from 2 : (i10) -> i4
+  // CHECK-NEXT: comb.concat %c0_i4, [[TMP]], %c0_i2
+  %a = comb.and %arg0, %b0000111100 : i10
+  // CHECK-NEXT: [[TMP:%.+]] = comb.extract %arg0 from 0 : (i10) -> i4
+  // CHECK-NEXT: comb.concat %c0_i6, [[TMP]]
+  %b = comb.and %arg0, %b0000001111 : i10
+  // CHECK-NEXT: [[TMP:%.+]] = comb.extract %arg0 from 6 : (i10) -> i4
+  // CHECK-NEXT: comb.concat [[TMP]], %c0_i6
+  %c = comb.and %arg0, %b1111000000 : i10
+
+  // Non-contiguous mask.
+  // CHECK-NEXT: [[TMP1:%.+]] = comb.extract %arg0 from 2 : (i10) -> i4
+  // CHECK-NEXT: [[TMP2:%.+]] = comb.and [[TMP1]], %c-5_i4
+  // CHECK-NEXT: comb.concat %c0_i4, [[TMP2]], %c0_i2
+  %d = comb.and %arg0, %b0000101100 : i10
+
+  // Multiple operands.
+  // CHECK-NEXT: [[TMP1:%.+]] = comb.extract %arg0 from 2 : (i10) -> i4
+  // CHECK-NEXT: [[TMP2:%.+]] = comb.extract %arg1 from 2 : (i10) -> i4
+  // CHECK-NEXT: [[TMP3:%.+]] = comb.and [[TMP1]], [[TMP2]]
+  // CHECK-NEXT: comb.concat %c0_i4, [[TMP3]], %c0_i2
+  %e = comb.and %arg0, %arg1, %b0000111100 : i10
+
+  // look through extracts.
+  // CHECK-NEXT: [[TMP:%.+]] = comb.extract %arg2 from 6 : (i20) -> i4
+  // CHECK-NEXT: comb.concat %c0_i4, [[TMP]], %c0_i2
+  %f0 = comb.extract %arg2 from 1 : (i20) -> i15
+  %f1 = comb.extract %f0 from 3 : (i15) -> i10
+  %f2 = comb.and %f1, %b0000111100 : i10
+
+  call @use_i10(%a) : (i10) -> ()
+  call @use_i10(%b) : (i10) -> ()
+  call @use_i10(%c) : (i10) -> ()
+  call @use_i10(%d) : (i10) -> ()
+  call @use_i10(%e) : (i10) -> ()
+  call @use_i10(%f2) : (i10) -> ()
+  return
+}
+
+hw.module @issue9403(in %sel: i1, out out1: ui1) {
+  %true = hwarith.constant 1 : ui1
+  %false = hwarith.constant 0 : ui1
+  %mux1 = comb.mux %sel, %true, %false : ui1
+  hw.output %mux1 : ui1
+}
+
+// CHECK-LABEL: @notSext
+// ~sext(a) -> sext(~a)
+hw.module @notSext(in %a : i3, out negsext : i8) {
+  // CHECK-NEXT: %c-1_i3 = hw.constant -1 : i3
+  // CHECK-NEXT: %[[NOTA:.+]] = comb.xor bin %a, %c-1_i3 : i3
+  // CHECK-NEXT: %[[NOTASIGN:.+]] = comb.extract %[[NOTA]] from 2 : (i3) -> i1
+  // CHECK-NEXT: %[[SIGNBITS:.+]] = comb.replicate %[[NOTASIGN]] : (i1) -> i5
+  // CHECK-NEXT: %[[NEGSEXT:.+]] = comb.concat %[[SIGNBITS]], %[[NOTA]] : i5, i3
+  // CHECK-NEXT: hw.output %[[NEGSEXT]] : i8
+  %c-1_i8 = hw.constant -1 : i8
+  // sext(a)
+  %0 = comb.extract %a from 2 : (i3) -> i1
+  %1 = comb.replicate %0 : (i1) -> i5
+  %2 = comb.concat %1, %a : i5, i3
+  // ~sext(a)
+  %3 = comb.xor %2, %c-1_i8 : i8
+  hw.output %3 : i8
+}
+
+// CHECK-LABEL: hw.module private @SextMatcherBlockArguments
+// Test that SextMatcher doesn't crash on block arguments (module ports)
+hw.module private @SextMatcherBlockArguments(in %a : i6, in %b : i2, in %c : i27) {
+  %c-1_i35 = hw.constant -1 : i35
+  %0 = comb.concat %a, %c, %b : i6, i27, i2
+  %wire = hw.wire %0  : i35
+  %1 = comb.xor bin %wire, %c-1_i35 : i35
+  %2 = comb.extract %1 from 34 : (i35) -> i1
+  %3 = comb.extract %1 from 26 : (i35) -> i1
+  hw.output
 }

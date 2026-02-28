@@ -144,7 +144,7 @@ protected:
   // classes), we only need to dynamically tell whether any given PortConversion
   // is the UntouchedPortConversion.
   bool isUntouchedFlag = false;
-}; // namespace hw
+};
 
 // A PortConversionBuilder will, given an input type, build the appropriate
 // port conversion for that type.

@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Calyx/CalyxLoweringUtils.h"
-#include "circt/Conversion/SCFToCalyx.h"
 #include "circt/Dialect/Calyx/CalyxHelpers.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Support/LLVM.h"
@@ -28,6 +27,28 @@ using namespace mlir::arith;
 
 namespace circt {
 namespace calyx {
+
+template <typename OpTy>
+static LogicalResult deduplicateParallelOperation(OpTy parOp,
+                                                  PatternRewriter &rewriter) {
+  auto *body = parOp.getBodyBlock();
+  if (body->getOperations().size() < 2)
+    return failure();
+
+  LogicalResult result = LogicalResult::failure();
+  SetVector<StringRef> members;
+  for (auto &op : make_early_inc_range(*body)) {
+    auto enableOp = dyn_cast<EnableOp>(&op);
+    if (enableOp == nullptr)
+      continue;
+    bool inserted = members.insert(enableOp.getGroupName());
+    if (!inserted) {
+      rewriter.eraseOp(enableOp);
+      result = LogicalResult::success();
+    }
+  }
+  return result;
+}
 
 void appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
                                   Value memref, unsigned memoryID,
@@ -136,9 +157,11 @@ Value getComponentOutput(calyx::ComponentOp compOp, unsigned outPortIdx) {
   return compOp.getArgument(index);
 }
 
-Type convIndexType(OpBuilder &builder, Type type) {
+Type normalizeType(OpBuilder &builder, Type type) {
   if (type.isIndex())
     return builder.getI32Type();
+  if (type.isIntOrFloat())
+    return toBitVector(type);
   return type;
 }
 
@@ -150,10 +173,10 @@ void buildAssignmentsForRegisterWrite(OpBuilder &builder,
   mlir::IRRewriter::InsertionGuard guard(builder);
   auto loc = inputValue.getLoc();
   builder.setInsertionPointToEnd(groupOp.getBodyBlock());
-  builder.create<calyx::AssignOp>(loc, reg.getIn(), inputValue);
-  builder.create<calyx::AssignOp>(
-      loc, reg.getWriteEn(), createConstant(loc, builder, componentOp, 1, 1));
-  builder.create<calyx::GroupDoneOp>(loc, reg.getDone());
+  calyx::AssignOp::create(builder, loc, reg.getIn(), inputValue);
+  calyx::AssignOp::create(builder, loc, reg.getWriteEn(),
+                          createConstant(loc, builder, componentOp, 1, 1));
+  calyx::GroupDoneOp::create(builder, loc, reg.getDone());
 }
 
 //===----------------------------------------------------------------------===//
@@ -203,6 +226,17 @@ Value MemoryInterface::done() {
   auto done = doneOpt();
   assert(done.has_value() && "Memory does not have done");
   return done.value();
+}
+
+std::string MemoryInterface::memName() {
+  if (auto *memOp = std::get_if<calyx::MemoryOp>(&impl); memOp) {
+    return memOp->instanceName().str();
+  }
+
+  if (auto *memOp = std::get_if<calyx::SeqMemoryOp>(&impl); memOp) {
+    return memOp->instanceName().str();
+  }
+  return std::get<MemoryPortsImpl>(impl).memName;
 }
 
 std::optional<Value> MemoryInterface::readDataOpt() {
@@ -305,7 +339,7 @@ BasicLoopInterface::~BasicLoopInterface() = default;
 
 ComponentLoweringStateInterface::ComponentLoweringStateInterface(
     calyx::ComponentOp component)
-    : component(component) {}
+    : component(component), extMemData(llvm::json::Object{}) {}
 
 ComponentLoweringStateInterface::~ComponentLoweringStateInterface() = default;
 
@@ -423,6 +457,14 @@ void ComponentLoweringStateInterface::addInstance(StringRef calleeName,
   instanceMap[calleeName] = instanceOp;
 }
 
+bool ComponentLoweringStateInterface::isSeqGuardCmpLibOp(Operation *op) {
+  return seqGuardCmpLibOps.contains(op);
+}
+
+void ComponentLoweringStateInterface::addSeqGuardCmpLibOp(Operation *op) {
+  seqGuardCmpLibOps.insert(op);
+}
+
 //===----------------------------------------------------------------------===//
 // CalyxLoweringState
 //===----------------------------------------------------------------------===//
@@ -509,7 +551,7 @@ ConvertIndexTypes::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
                                             PatternRewriter &rewriter) const {
   funcOp.walk([&](Block *block) {
     for (Value arg : block->getArguments())
-      arg.setType(calyx::convIndexType(rewriter, arg.getType()));
+      arg.setType(calyx::normalizeType(rewriter, arg.getType()));
   });
 
   funcOp.walk([&](Operation *op) {
@@ -518,7 +560,7 @@ ConvertIndexTypes::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
       if (!resType.isIndex())
         continue;
 
-      result.setType(calyx::convIndexType(rewriter, resType));
+      result.setType(calyx::normalizeType(rewriter, resType));
       auto constant = dyn_cast<mlir::arith::ConstantOp>(op);
       if (!constant)
         continue;
@@ -567,13 +609,13 @@ MultipleGroupDonePattern::matchAndRewrite(calyx::GroupOp groupOp,
   SmallVector<Value> doneOpSrcs;
   llvm::transform(groupDoneOps, std::back_inserter(doneOpSrcs),
                   [](calyx::GroupDoneOp op) { return op.getSrc(); });
-  Value allDone = rewriter.create<comb::AndOp>(groupDoneOps.front().getLoc(),
-                                               doneOpSrcs, false);
+  Value allDone = comb::AndOp::create(rewriter, groupDoneOps.front().getLoc(),
+                                      doneOpSrcs, false);
 
   /// Create a group done op with the complex expression as a guard.
-  rewriter.create<calyx::GroupDoneOp>(
-      groupOp.getLoc(),
-      rewriter.create<hw::ConstantOp>(groupOp.getLoc(), APInt(1, 1)), allDone);
+  calyx::GroupDoneOp::create(
+      rewriter, groupOp.getLoc(),
+      hw::ConstantOp::create(rewriter, groupOp.getLoc(), APInt(1, 1)), allDone);
   for (auto groupDoneOp : groupDoneOps)
     rewriter.eraseOp(groupDoneOp);
 
@@ -594,6 +636,22 @@ EliminateUnusedCombGroups::matchAndRewrite(calyx::CombGroupOp combGroupOp,
 
   rewriter.eraseOp(combGroupOp);
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// DeduplicateParallelOperations
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+DeduplicateParallelOp::matchAndRewrite(calyx::ParOp parOp,
+                                       PatternRewriter &rewriter) const {
+  return deduplicateParallelOperation<calyx::ParOp>(parOp, rewriter);
+}
+
+LogicalResult
+DeduplicateStaticParallelOp::matchAndRewrite(calyx::StaticParOp parOp,
+                                             PatternRewriter &rewriter) const {
+  return deduplicateParallelOperation<calyx::StaticParOp>(parOp, rewriter);
 }
 
 //===----------------------------------------------------------------------===//
@@ -659,9 +717,16 @@ void InlineCombGroups::recurseInlineCombGroups(
         isa<calyx::RegisterOp, calyx::MemoryOp, calyx::SeqMemoryOp,
             hw::ConstantOp, mlir::arith::ConstantOp, calyx::MultPipeLibOp,
             calyx::DivUPipeLibOp, calyx::DivSPipeLibOp, calyx::RemSPipeLibOp,
-            calyx::RemUPipeLibOp, mlir::scf::WhileOp, calyx::InstanceOp>(
+            calyx::RemUPipeLibOp, mlir::scf::WhileOp, calyx::InstanceOp,
+            calyx::ConstantOp, calyx::AddFOpIEEE754, calyx::MulFOpIEEE754,
+            calyx::CompareFOpIEEE754, calyx::FpToIntOpIEEE754,
+            calyx::IntToFpOpIEEE754, calyx::DivSqrtOpIEEE754>(
             src.getDefiningOp()))
       continue;
+
+    if (state.isSeqGuardCmpLibOp(src.getDefiningOp())) {
+      continue;
+    }
 
     auto srcCombGroup = dyn_cast<calyx::CombGroupOp>(
         state.getEvaluatingGroup(src).getOperation());
@@ -709,8 +774,8 @@ RewriteMemoryAccesses::partiallyLower(calyx::AssignOp assignOp,
 
   rewriter.setInsertionPoint(assignOp->getBlock(),
                              assignOp->getBlock()->begin());
-  rewriter.create<calyx::AssignOp>(assignOp->getLoc(), newOp->getResult(0),
-                                   src);
+  calyx::AssignOp::create(rewriter, assignOp->getLoc(), newOp->getResult(0),
+                          src);
   assignOp.setOperand(1, newOp->getResult(1));
 
   return success();
@@ -752,18 +817,18 @@ BuildReturnRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
                                           PatternRewriter &rewriter) const {
 
   for (auto argType : enumerate(funcOp.getResultTypes())) {
-    auto convArgType = calyx::convIndexType(rewriter, argType.value());
-    assert(isa<IntegerType>(convArgType) && "unsupported return type");
-    unsigned width = convArgType.getIntOrFloatBitWidth();
+    auto convArgType = calyx::normalizeType(rewriter, argType.value());
+    assert((isa<IntegerType>(convArgType) || isa<FloatType>(convArgType)) &&
+           "unsupported return type");
     std::string name = "ret_arg" + std::to_string(argType.index());
-    auto reg =
-        createRegister(funcOp.getLoc(), rewriter, getComponent(), width, name);
+    auto reg = createRegister(funcOp.getLoc(), rewriter, getComponent(),
+                              convArgType.getIntOrFloatBitWidth(), name);
     getState().addReturnReg(reg, argType.index());
 
     rewriter.setInsertionPointToStart(
         getComponent().getWiresOp().getBodyBlock());
-    rewriter.create<calyx::AssignOp>(
-        funcOp->getLoc(),
+    calyx::AssignOp::create(
+        rewriter, funcOp->getLoc(),
         calyx::getComponentOutput(
             getComponent(), getState().getFuncOpResultMapping(argType.index())),
         reg.getOut());
@@ -795,24 +860,6 @@ BuildCallInstance::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
           createInstance(callOp.getLoc(), rewriter, getComponent(), resultTypes,
                          instanceName, componentOp.getName());
       getState().addInstance(instanceName, instanceOp);
-      hw::ConstantOp constantOp =
-          createConstant(callOp.getLoc(), rewriter, getComponent(), 1, 1);
-      OpBuilder::InsertionGuard g(rewriter);
-      rewriter.setInsertionPointToStart(
-          getComponent().getWiresOp().getBodyBlock());
-
-      // Creates the group that initializes the instance.
-      calyx::GroupOp groupOp = rewriter.create<calyx::GroupOp>(
-          callOp.getLoc(), "init_" + instanceName);
-      rewriter.setInsertionPointToStart(groupOp.getBodyBlock());
-      auto portInfos = instanceOp.getReferencedComponent().getPortInfo();
-      auto results = instanceOp.getResults();
-      for (const auto &[portInfo, result] : llvm::zip(portInfos, results)) {
-        if (portInfo.hasAttribute(goPort) || portInfo.hasAttribute(resetPort))
-          rewriter.create<calyx::AssignOp>(callOp.getLoc(), result, constantOp);
-        else if (portInfo.hasAttribute(donePort))
-          rewriter.create<calyx::GroupDoneOp>(callOp.getLoc(), result);
-      }
     }
     WalkResult::advance();
   });
@@ -827,6 +874,110 @@ BuildCallInstance::getCallComponent(mlir::func::CallOp callOp) const {
       return componentOp;
   }
   return nullptr;
+}
+
+PredicateInfo getPredicateInfo(CmpFPredicate pred) {
+  using CombLogic = PredicateInfo::CombLogic;
+  using Port = PredicateInfo::InputPorts::Port;
+  PredicateInfo info;
+  switch (pred) {
+  case CmpFPredicate::OEQ: {
+    info.logic = CombLogic::And;
+    info.inputPorts = {{Port::Eq, /*inverted=*/false},
+                       {Port::Unordered, /*inverted=*/true}};
+    break;
+  }
+  case CmpFPredicate::OGT: {
+    info.logic = PredicateInfo::CombLogic::And;
+    info.inputPorts = {{Port::Gt, /*inverted=*/false},
+                       {Port::Unordered, /*inverted=*/true}};
+    break;
+  }
+  case CmpFPredicate::OGE: {
+    info.logic = PredicateInfo::CombLogic::And;
+    info.inputPorts = {{Port::Lt, /*inverted=*/true},
+                       {Port::Unordered, /*inverted=*/true}};
+    break;
+  }
+  case CmpFPredicate::OLT: {
+    info.logic = PredicateInfo::CombLogic::And;
+    info.inputPorts = {{Port::Lt, /*inverted=*/false},
+                       {Port::Unordered, /*inverted=*/true}};
+    break;
+  }
+  case CmpFPredicate::OLE: {
+    info.logic = PredicateInfo::CombLogic::And;
+    info.inputPorts = {{Port::Gt, /*inverted=*/true},
+                       {Port::Unordered, /*inverted=*/true}};
+    break;
+  }
+  case CmpFPredicate::ONE: {
+    info.logic = PredicateInfo::CombLogic::And;
+    info.inputPorts = {{Port::Eq, /*inverted=*/true},
+                       {Port::Unordered, /*inverted=*/true}};
+    break;
+  }
+  case CmpFPredicate::ORD: {
+    info.logic = PredicateInfo::CombLogic::None;
+    info.inputPorts = {{Port::Unordered, /*inverted=*/true}};
+    break;
+  }
+  case CmpFPredicate::UEQ: {
+    info.logic = PredicateInfo::CombLogic::Or;
+    info.inputPorts = {{Port::Eq, /*inverted=*/false},
+                       {Port::Unordered, /*inverted=*/false}};
+    break;
+  }
+  case CmpFPredicate::UGT: {
+    info.logic = PredicateInfo::CombLogic::Or;
+    info.inputPorts = {{Port::Gt, /*inverted=*/false},
+                       {Port::Unordered, /*inverted=*/false}};
+    break;
+  }
+  case CmpFPredicate::UGE: {
+    info.logic = PredicateInfo::CombLogic::Or;
+    info.inputPorts = {{Port::Lt, /*inverted=*/true},
+                       {Port::Unordered, /*inverted=*/false}};
+    break;
+  }
+  case CmpFPredicate::ULT: {
+    info.logic = PredicateInfo::CombLogic::Or;
+    info.inputPorts = {{Port::Lt, /*inverted=*/false},
+                       {Port::Unordered, /*inverted=*/false}};
+    break;
+  }
+  case CmpFPredicate::ULE: {
+    info.logic = PredicateInfo::CombLogic::Or;
+    info.inputPorts = {{Port::Gt, /*inverted=*/true},
+                       {Port::Unordered, /*inverted=*/false}};
+    break;
+  }
+  case CmpFPredicate::UNE: {
+    info.logic = PredicateInfo::CombLogic::Or;
+    info.inputPorts = {{Port::Eq, /*inverted=*/true},
+                       {Port::Unordered, /*inverted=*/false}};
+    break;
+  }
+  case CmpFPredicate::UNO: {
+    info.logic = PredicateInfo::CombLogic::None;
+    info.inputPorts = {{Port::Unordered, /*inverted=*/false}};
+    break;
+  }
+  case CmpFPredicate::AlwaysTrue:
+  case CmpFPredicate::AlwaysFalse:
+    info.logic = PredicateInfo::CombLogic::None;
+    break;
+  }
+
+  return info;
+}
+
+bool parentIsSeqCell(const Value value) {
+  if (Operation *defOp = value.getDefiningOp()) {
+    auto cellOp = dyn_cast_or_null<calyx::CellInterface>(defOp);
+    return cellOp && !cellOp.isCombinational();
+  }
+  return false;
 }
 
 } // namespace calyx

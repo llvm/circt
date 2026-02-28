@@ -7,6 +7,7 @@
 
 #include "mlir-c/Support.h"
 
+#include "circt/Conversion/Conversion.capi.h.inc"
 #include "mlir/Conversion/Passes.capi.h.inc"
 
 #endif // CIRCT_C_CONVERSION_H

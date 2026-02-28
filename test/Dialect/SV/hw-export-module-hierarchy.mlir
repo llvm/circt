@@ -5,6 +5,7 @@ hw.module @InnerModule() {}
 hw.module @MainDesign() {
   hw.instance "" @InnerModule() -> ()
   hw.instance "inner" @InnerModule() -> ()
+  hw.instance "bound" @InnerModule() -> () {doNotPrint}
 }
 
 hw.module @TestHarness() attributes {firrtl.moduleHierarchyFile = [#hw.output_file<"testharness_hier.json", excludeFromFileList>]} {
@@ -16,6 +17,7 @@ hw.module @TestHarness() attributes {firrtl.moduleHierarchyFile = [#hw.output_fi
 // CHECK-SAME:     sym @{{[_a-zA-Z0-9]+}}
 // CHECK-NEXT:   hw.instance "inner"
 // CHECK-SAME:     sym @[[MainDesign_inner_sym:[_a-zA-Z0-9]+]]
+// CHECK-NEXT:   hw.instance "bound" {{.*}} {doNotPrint}
 
 // CHECK:      hw.module @TestHarness()
 // CHECK-NEXT:   hw.instance "main_design"
@@ -42,4 +44,5 @@ hw.module @TestHarness() attributes {firrtl.moduleHierarchyFile = [#hw.output_fi
 // CHECK-SAME:           #hw.innerNameRef<@TestHarness::@[[TestHarness_main_design_sym]]>,
 // CHECK-SAME:           @MainDesign,
 // CHECK-SAME:           #hw.innerNameRef<@MainDesign::@[[MainDesign_inner_sym]]>,
+// CHECK-NOT:            #hw.innerNameRef<@MainDesign::@bound>,
 // CHECK-SAME:           @InnerModule]

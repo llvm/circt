@@ -34,6 +34,7 @@
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
+#include "circt/Dialect/Verif/VerifPasses.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/LoweringOptionsParser.h"
 #include "circt/Support/Passes.h"
@@ -59,9 +60,13 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/JSON.h"
+#include "llvm/Support/Parallel.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/SourceMgr.h"
+#include "llvm/Support/ThreadPool.h"
+#include "llvm/Support/Threading.h"
 #include "llvm/Support/ToolOutputFile.h"
 
 using namespace llvm;
@@ -172,6 +177,7 @@ enum OutputFormatKind {
   OutputIRSV,
   OutputIRVerilog,
   OutputVerilog,
+  OutputBTOR2,
   OutputSplitVerilog,
   OutputDisabled
 };
@@ -188,6 +194,7 @@ static cl::opt<OutputFormatKind> outputFormat(
         clEnumValN(OutputIRVerilog, "ir-verilog",
                    "Emit IR after Verilog lowering"),
         clEnumValN(OutputVerilog, "verilog", "Emit Verilog"),
+        clEnumValN(OutputBTOR2, "btor2", "Emit BTOR2"),
         clEnumValN(OutputSplitVerilog, "split-verilog",
                    "Emit Verilog (one file per module; specify "
                    "directory with -o=<dir>)"),
@@ -203,9 +210,17 @@ static cl::list<std::string> inputAnnotationFilenames(
     "annotation-file", cl::desc("Optional input annotation file"),
     cl::CommaSeparated, cl::value_desc("filename"), cl::cat(mainCategory));
 
-static cl::list<std::string> inputOMIRFilenames(
-    "omir-file", cl::desc("Optional input object model 2.0 file"),
-    cl::CommaSeparated, cl::value_desc("filename"), cl::cat(mainCategory));
+static cl::opt<std::string>
+    hwOutFile("output-hw-mlir",
+              cl::desc("Optional file name to output the HW IR into, in "
+                       "addition to the output requested by -o"),
+              cl::init(""), cl::value_desc("filename"), cl::cat(mainCategory));
+
+static cl::opt<std::string>
+    errorDiagnosticsFile("output-error-diagnostics",
+                         cl::desc("Output error diagnostics to a JSON file"),
+                         cl::init(""), cl::value_desc("filename"),
+                         cl::cat(mainCategory));
 
 static cl::opt<std::string>
     mlirOutFile("output-final-mlir",
@@ -252,6 +267,46 @@ static cl::opt<bool>
                           cl::init(false), cl::cat(mainCategory));
 
 static LoweringOptionsOption loweringOptions(mainCategory);
+
+static cl::list<std::string>
+    enableLayers("enable-layers", cl::desc("enable these layers permanently"),
+                 cl::value_desc("layer-list"), cl::MiscFlags::CommaSeparated,
+                 cl::cat(mainCategory));
+
+static cl::list<std::string>
+    disableLayers("disable-layers",
+                  cl::desc("disable these layers permanently"),
+                  cl::value_desc("layer-list"), cl::MiscFlags::CommaSeparated,
+                  cl::cat(mainCategory));
+
+enum class LayerSpecializationOpt { None, Enable, Disable };
+static llvm::cl::opt<LayerSpecializationOpt> defaultLayerSpecialization{
+    "default-layer-specialization",
+    llvm::cl::desc("The default specialization for layers"),
+    llvm::cl::values(clEnumValN(LayerSpecializationOpt::None, "none",
+                                "Layers are unchanged"),
+                     clEnumValN(LayerSpecializationOpt::Disable, "disable",
+                                "Layers are disabled"),
+                     clEnumValN(LayerSpecializationOpt::Enable, "enable",
+                                "Layers are enabled")),
+    cl::init(LayerSpecializationOpt::None), cl::cat(mainCategory)};
+
+/// Specify the select option for specializing instance choice. Currently
+/// firtool does not support partially specified instance choice.
+static cl::list<std::string> selectInstanceChoice(
+    "select-instance-choice",
+    cl::desc("Options to specialize instance choice, in option=case format"),
+    cl::MiscFlags::CommaSeparated, cl::cat(mainCategory));
+
+static cl::opt<unsigned>
+    numThreads("num-threads",
+               cl::desc("Number of threads to use for parallel compilation. "
+                        "0 uses all available hardware threads (default)"),
+               cl::value_desc("N"), cl::init(0), cl::cat(mainCategory));
+
+static cl::alias numThreadsShort("j", cl::desc("Alias for --num-threads"),
+                                 cl::aliasopt(numThreads), cl::NotHidden,
+                                 cl::cat(mainCategory));
 
 /// Check output stream before writing bytecode to it.
 /// Warn and return true if output is known to be displayed.
@@ -307,6 +362,38 @@ struct EmitSplitHGLDDPass
   }
 };
 
+/// Wrapper pass to dump IR.
+struct DumpIRPass
+    : public PassWrapper<DumpIRPass, OperationPass<mlir::ModuleOp>> {
+  DumpIRPass(const std::string &outputFile)
+      : PassWrapper<DumpIRPass, OperationPass<mlir::ModuleOp>>() {
+    this->outputFile.setValue(outputFile);
+  }
+
+  DumpIRPass(const DumpIRPass &other) : PassWrapper(other) {
+    outputFile.setValue(other.outputFile.getValue());
+  }
+
+  void runOnOperation() override {
+    assert(!outputFile.empty());
+
+    std::string error;
+    auto mlirFile = openOutputFile(outputFile.getValue(), &error);
+    if (!mlirFile) {
+      errs() << error;
+      return signalPassFailure();
+    }
+
+    if (failed(printOp(getOperation(), mlirFile->os())))
+      return signalPassFailure();
+    mlirFile->keep();
+    markAllAnalysesPreserved();
+  }
+
+  Pass::Option<std::string> outputFile{*this, "output-file",
+                                       cl::desc("filename"), cl::init("-")};
+};
+
 /// Process a single buffer of the input.
 static LogicalResult processBuffer(
     MLIRContext &context, firtool::FirtoolOptions &firtoolOptions,
@@ -325,15 +412,6 @@ static LogicalResult processBuffer(
       return failure();
     }
     ++numAnnotationFiles;
-  }
-
-  for (const auto &file : inputOMIRFilenames) {
-    std::string filename;
-    if (!sourceMgr.AddIncludeFile(file, llvm::SMLoc(), filename)) {
-      llvm::errs() << "cannot open input annotation file '" << file
-                   << "': No such file or directory\n";
-      return failure();
-    }
   }
 
   // Parse the input.
@@ -355,6 +433,22 @@ static LogicalResult processBuffer(
     options.scalarizePublicModules = scalarizePublicModules;
     options.scalarizeInternalModules = scalarizeIntModules;
     options.scalarizeExtModules = scalarizeExtModules;
+    options.enableLayers = enableLayers;
+    options.disableLayers = disableLayers;
+    options.selectInstanceChoice = selectInstanceChoice;
+
+    switch (defaultLayerSpecialization) {
+    case LayerSpecializationOpt::None:
+      options.defaultLayerSpecialization = std::nullopt;
+      break;
+    case LayerSpecializationOpt::Enable:
+      options.defaultLayerSpecialization = firrtl::LayerSpecialization::Enable;
+      break;
+    case LayerSpecializationOpt::Disable:
+      options.defaultLayerSpecialization = firrtl::LayerSpecialization::Disable;
+      break;
+    }
+
     module = importFIRFile(sourceMgr, &context, parserTimer, options);
   } else {
     auto parserTimer = ts.nest("MLIR Parser");
@@ -399,21 +493,32 @@ static LogicalResult processBuffer(
     if (failed(parsePassPipeline(StringRef(highFIRRTLPassPlugin), pm)))
       return failure();
 
-  if (failed(firtool::populateCHIRRTLToLowFIRRTL(pm, firtoolOptions,
-                                                 inputFilename)))
+  if (failed(firtool::populateCHIRRTLToLowFIRRTL(pm, firtoolOptions)))
     return failure();
 
   if (!lowFIRRTLPassPlugin.empty())
     if (failed(parsePassPipeline(StringRef(lowFIRRTLPassPlugin), pm)))
       return failure();
 
-  // Lower if we are going to verilog or if lowering was specifically requested.
+  // Lower if we are going to verilog or if lowering was specifically
+  // requested.
   if (outputFormat != OutputIRFir) {
-    if (failed(firtool::populateLowFIRRTLToHW(pm, firtoolOptions)))
+    if (failed(
+            firtool::populateLowFIRRTLToHW(pm, firtoolOptions, inputFilename)))
       return failure();
     if (!hwPassPlugin.empty())
       if (failed(parsePassPipeline(StringRef(hwPassPlugin), pm)))
         return failure();
+    // Add passes specific to btor2 emission
+    if (outputFormat == OutputBTOR2)
+      if (failed(firtool::populateHWToBTOR2(pm, firtoolOptions,
+                                            (*outputFile)->os())))
+        return failure();
+
+    // If requested, emit the HW IR to hwOutFile.
+    if (!hwOutFile.empty())
+      pm.addPass(std::make_unique<DumpIRPass>(hwOutFile.getValue()));
+
     if (outputFormat != OutputIRHW)
       if (failed(firtool::populateHWToSV(pm, firtoolOptions)))
         return failure();
@@ -462,11 +567,15 @@ static LogicalResult processBuffer(
       break;
     }
 
-    // Run final IR mutations to clean it up after ExportVerilog and before
-    // emitting the final MLIR.
-    if (!mlirOutFile.empty())
+    // If requested, print the final MLIR into mlirOutFile.
+    if (!mlirOutFile.empty()) {
+      // Run final IR mutations to clean it up after ExportVerilog and before
+      // emitting the final MLIR.
       if (failed(firtool::populateFinalizeIR(pm, firtoolOptions)))
         return failure();
+
+      pm.addPass(std::make_unique<DumpIRPass>(mlirOutFile.getValue()));
+    }
   }
 
   if (failed(pm.run(module.get())))
@@ -477,20 +586,6 @@ static LogicalResult processBuffer(
     auto outputTimer = ts.nest("Print .mlir output");
     if (failed(printOp(*module, (*outputFile)->os())))
       return failure();
-  }
-
-  // If requested, print the final MLIR into mlirOutFile.
-  if (!mlirOutFile.empty()) {
-    std::string mlirOutError;
-    auto mlirFile = openOutputFile(mlirOutFile, &mlirOutError);
-    if (!mlirFile) {
-      llvm::errs() << mlirOutError;
-      return failure();
-    }
-
-    if (failed(printOp(*module, mlirFile->os())))
-      return failure();
-    mlirFile->keep();
   }
 
   // We intentionally "leak" the Module into the MLIRContext instead of
@@ -527,6 +622,82 @@ public:
   }
 };
 
+class ErrorDiagnosticDumper : public ScopedDiagnosticHandler {
+  // Mutex to protect concurrent access to the errors vector, though typically
+  // not needed as ErrorDiagnosticDumper usually runs outside of parallel
+  // contexts.
+  llvm::sys::SmartMutex<true> mutex;
+  std::unique_ptr<llvm::ToolOutputFile> outputFile;
+  std::unique_ptr<json::OStream> jsonStream;
+  bool errorEmitted = false;
+
+  void convertLocToJson(Location loc, SmallVector<json::Value> &locs) {
+    if (auto fileLineColLoc = dyn_cast<FileLineColLoc>(loc)) {
+      json::Object obj;
+      obj["file"] = fileLineColLoc.getFilename().getValue();
+      obj["line"] = fileLineColLoc.getLine();
+      obj["column"] = fileLineColLoc.getColumn();
+      locs.push_back(std::move(obj));
+      return;
+    }
+    if (auto fusedLoc = dyn_cast<FusedLoc>(loc)) {
+      for (auto l : fusedLoc.getLocations())
+        convertLocToJson(l, locs);
+      return;
+    }
+    // TODO: Serialize others.
+  }
+
+  json::Value convertToJSON(Diagnostic &d) {
+    json::Object obj;
+    obj["message"] = d.str();
+    SmallVector<json::Value> locs;
+    convertLocToJson(d.getLocation(), locs);
+    obj["location"] = json::Array(locs);
+    assert(d.getSeverity() == mlir::DiagnosticSeverity::Error &&
+           "only errors are expected");
+    return std::move(obj);
+  }
+
+public:
+  ErrorDiagnosticDumper(MLIRContext *ctxt) : ScopedDiagnosticHandler(ctxt) {
+    if (errorDiagnosticsFile.empty())
+      return;
+    std::string error;
+    outputFile = openOutputFile(errorDiagnosticsFile.getValue(), &error);
+    if (!outputFile) {
+      errs() << error;
+      return;
+    }
+
+    jsonStream = std::make_unique<json::OStream>(outputFile->os());
+    jsonStream->arrayBegin();
+
+    // Set a handler that captures errors.
+    setHandler([&](Diagnostic &d) {
+      if (d.getSeverity() == mlir::DiagnosticSeverity::Error) {
+        llvm::sys::SmartScopedLock<true> lock(mutex);
+        auto json = convertToJSON(d);
+        jsonStream->value(json);
+        errorEmitted = true;
+      }
+      return failure();
+    });
+  }
+
+  ~ErrorDiagnosticDumper() {
+    if (errorDiagnosticsFile.empty() || !outputFile)
+      return;
+
+    assert(jsonStream && "jsonStream should have been initialized");
+
+    jsonStream->arrayEnd();
+    jsonStream->flush();
+    if (errorEmitted)
+      outputFile->keep();
+  }
+};
+
 /// Process a single split of the input. This allocates a source manager and
 /// creates a regular or verifying diagnostic handler, depending on whether the
 /// user set the verifyDiagnostics option.
@@ -534,6 +705,14 @@ static LogicalResult processInputSplit(
     MLIRContext &context, firtool::FirtoolOptions &firtoolOptions,
     TimingScope &ts, std::unique_ptr<llvm::MemoryBuffer> buffer,
     std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+  // In LLVM commit b6a98b9, we started creating splits that don't have null
+  // terminated buffers, which are assumed by our tool and the SourceMgr. Make
+  // a copy to ensure null-termination.
+  if (!buffer->getBuffer().ends_with('\0')) {
+    buffer = llvm::MemoryBuffer::getMemBufferCopy(
+        buffer->getBuffer(), buffer->getBufferIdentifier());
+  }
+
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
   sourceMgr.setIncludeDirs(includeDirs);
@@ -541,10 +720,12 @@ static LogicalResult processInputSplit(
     SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr,
                                                 &context /*, shouldShow */);
     FileLineColLocsAsNotesDiagnosticHandler addLocs(&context);
+    ErrorDiagnosticDumper errorDumper(&context);
     return processBuffer(context, firtoolOptions, ts, sourceMgr, outputFile);
   }
 
   SourceMgrDiagnosticVerifierHandler sourceMgrHandler(sourceMgr, &context);
+  ErrorDiagnosticDumper errorDumper(&context);
   context.printOpOnDiagnostic(false);
   (void)processBuffer(context, firtoolOptions, ts, sourceMgr, outputFile);
   return sourceMgrHandler.verify();
@@ -702,10 +883,10 @@ int main(int argc, char **argv) {
     firrtl::registerPasses();
     om::registerPasses();
     sv::registerPasses();
+    hw::registerFlattenModulesPass();
+    verif::registerVerifyClockedAssertLikePass();
 
     // Export passes:
-    registerExportChiselInterfacePass();
-    registerExportSplitChiselInterfacePass();
     registerExportSplitVerilogPass();
     registerExportVerilogPass();
 
@@ -717,6 +898,8 @@ int main(int argc, char **argv) {
     registerLowerSeqToSVPass();
     registerLowerSimToSVPass();
     registerLowerVerifToSVPass();
+    registerLowerLTLToCorePass();
+    registerConvertHWToBTOR2Pass();
   }
 
   // Register any pass manager command line options.
@@ -730,7 +913,21 @@ int main(int argc, char **argv) {
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "MLIR-based FIRRTL compiler\n");
 
-  MLIRContext context;
+  // Set up custom thread pool if multi-threading is requested, and limit the
+  // number of threads used by llvm internally.
+  llvm::ThreadPoolStrategy strategy = llvm::hardware_concurrency(numThreads);
+  llvm::parallel::strategy = strategy;
+  llvm::DefaultThreadPool threadPool(strategy);
+
+  // Create MLIRContext with threading initially disabled so we can set a custom
+  // thread pool.
+  MLIRContext context(MLIRContext::Threading::DISABLED);
+
+  // Set the thread pool on the context.
+  if (threadPool.getMaxConcurrency() > 1) {
+    context.setThreadPool(threadPool);
+  }
+
   // Get firtool options from cmdline
   firtool::FirtoolOptions firtoolOptions;
 

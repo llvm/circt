@@ -18,7 +18,11 @@ include "mlir/Pass/PassBase.td"
 def LowerSeqFIFO : Pass<"lower-seq-fifo", "hw::HWModuleOp"> {
   let summary = "Lower seq.fifo ops";
   let constructor = "circt::seq::createLowerSeqFIFOPass()";
-  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
+  let dependentDialects = [
+    "circt::hw::HWDialect",
+    "circt::comb::CombDialect",
+    "circt::verif::VerifDialect"
+  ];
 }
 
 def LowerSeqHLMem: Pass<"lower-seq-hlmem", "hw::HWModuleOp"> {
@@ -105,6 +109,18 @@ def LowerSeqShiftReg : Pass<"lower-seq-shiftreg", "hw::HWModuleOp"> {
   }];
   let constructor = "circt::seq::createLowerSeqShiftRegPass()";
   let dependentDialects = ["circt::hw::HWDialect"];
+}
+
+def RegOfVecToMem : Pass<"seq-reg-of-vec-to-mem", "hw::HWModuleOp"> {
+  let summary = "Convert register arrays to FIRRTL memories";
+  let description = [{
+    This pass identifies register arrays that follow memory access patterns
+    and converts them to seq.firmem operations. It looks for patterns where:
+    1. A register array is updated via array_inject operations
+    2. The array is read via array_get operations  
+    3. Updates are controlled by enable signals through mux operations
+    4. Read and write operations use the same clock
+  }];
 }
 
 #endif // CIRCT_DIALECT_SEQ_SEQPASSES

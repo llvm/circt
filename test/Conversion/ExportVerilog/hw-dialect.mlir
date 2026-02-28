@@ -1,6 +1,6 @@
 // RUN: circt-opt %s --test-apply-lowering-options='options=emittedLineLength=100,emitBindComments' -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s
 
-// CHECK-LABEL: // external module E
+// CHECK-NOT: module E
 hw.module.extern @E(in %a: i1, in %b: i1, in %c: i1)
 hw.module.extern @Array(in %a: !hw.array<2xi4>)
 
@@ -11,19 +11,19 @@ hw.module @TESTSIMPLE(in %a: i4, in %b: i4, in %c: i2, in %cond: i1,
                         in %structA: !hw.struct<foo: i2, bar:i4>,
                         in %arrOfStructA: !hw.array<5 x struct<foo: i2>>,
                         in %array1: !hw.array<1xi1>,
-  out r0: i4, out r2: i4, out r4: i4, out r6: i4, out r7: i4, 
+  out r0: i4, out r2: i4, out r4: i4, out r6: i4, out r7: i4,
   out r8: i4, out r9: i4, out r10: i4, out r11: i4,
-  out r12: i4, out r13: i4, out r14: i4, out r15: i4, 
+  out r12: i4, out r13: i4, out r14: i4, out r15: i4,
   out r16: i1, out r17: i1, out r18: i1, out r19: i1,
-  out r20: i1, out r21: i1, out r22: i1, out r23: i1, 
+  out r20: i1, out r21: i1, out r22: i1, out r23: i1,
   out r24: i1, out r25: i1, out r26: i1, out r27: i1,
-  out r28: i1, out r29: i12, out r30: i2, out r31: i9, 
+  out r28: i1, out r29: i12, out r30: i2, out r31: i9,
   out r33: i4, out r34: i4, out r35: !hw.array<3xi4>,
-  out r36: !hw.array<6xi4>, out r37: i4, out r38: i12, 
-  out r39: !hw.struct<a: i1, b: i1>, out r40: !hw.array<4xi2>, 
-  out r41: !hw.uarray<1xi1>, out r42: !hw.struct<a: !hw.array<1xi1>>, 
-  out r43: i4, out r44: !hw.struct<foo: i2, bar: i4>, 
-  out r45: !hw.struct<foo: i2, bar: i4>, 
+  out r36: !hw.array<6xi4>, out r37: i4, out r38: i12,
+  out r39: !hw.struct<a: i1, b: i1>, out r40: !hw.array<4xi2>,
+  out r41: !hw.uarray<1xi1>, out r42: !hw.struct<a: !hw.array<1xi1>>,
+  out r43: i4, out r44: !hw.struct<foo: i2, bar: i4>,
+  out r45: !hw.struct<foo: i2, bar: i4>,
   out r46: !hw.struct<foo: i2, bar: i4>, out r47: i1
   ) attributes {sv.attributes = [#sv.attribute<"svAttr">]} {
 
@@ -95,15 +95,15 @@ hw.module @TESTSIMPLE(in %a: i4, in %b: i4, in %c: i2, in %cond: i1,
   %none = hw.constant 0 : i0
   %47 = hw.array_get %array1[%none] : !hw.array<1xi1>, i0
 
-  hw.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, 
+  hw.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17,
             %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30,
             %31, %33, %34, %35, %36, %37, %38, %39, %40, %41, %42, %43, %44,
             %45, %46, %47:
     i4, i4, i4, i4, i4, i4, i4, i4, i4, i4, i4, i4, i4, i1, i1, i1, i1, i1, i1,
     i1, i1, i1, i1, i1, i1, i1, i12, i2, i9, i4, i4, !hw.array<3xi4>,
     !hw.array<6xi4>, i4, i12, !hw.struct<a: i1, b: i1>, !hw.array<4xi2>,
-    !hw.uarray<1xi1>, !hw.struct<a: !hw.array<1xi1>>, i4, 
-    !hw.struct<foo: i2, bar: i4>, !hw.struct<foo: i2, bar: i4>, 
+    !hw.uarray<1xi1>, !hw.struct<a: !hw.array<1xi1>>, i4,
+    !hw.struct<foo: i2, bar: i4>, !hw.struct<foo: i2, bar: i4>,
     !hw.struct<foo: i2, bar: i4>, i1
 }
 
@@ -171,12 +171,12 @@ hw.module @TESTSIMPLE(in %a: i4, in %b: i4, in %c: i2, in %cond: i1,
 // CHECK-NEXT:      assign r2 = a - b;
 // CHECK-NEXT:      assign r4 = a * b;
 // CHECK-NEXT:      assign r6 = a / b;
-// CHECK-NEXT:      assign r7 = $signed(a) / $signed(b);
+// CHECK-NEXT:      assign r7 = $unsigned($signed($signed(a) / $signed(b)));
 // CHECK-NEXT:      assign r8 = a % b;
-// CHECK-NEXT:      assign r9 = $signed(a) % $signed(b);
+// CHECK-NEXT:      assign r9 = $unsigned($signed($signed(a) % $signed(b)));
 // CHECK-NEXT:      assign r10 = a << b;
 // CHECK-NEXT:      assign r11 = a >> b;
-// CHECK-NEXT:      assign r12 = $signed($signed(a) >>> b);
+// CHECK-NEXT:      assign r12 = $unsigned($signed($signed(a) >>> b));
 // CHECK-NEXT:      assign r13 = a | b;
 // CHECK-NEXT:      assign r14 = a & b;
 // CHECK-NEXT:      assign r15 = a ^ b;
@@ -437,16 +437,17 @@ hw.module @signs(in %in1: i4, in %in2: i4, in %in3: i4, in %in4: i4)  {
   %awire = sv.wire : !hw.inout<i4>
   // CHECK: wire [3:0] awire;
 
-  // CHECK: assign awire = $unsigned($signed(in1) / $signed(in2)) /
-  // CHECK:                $unsigned($signed(in3) / $signed(in4));
+  // CHECK:      assign awire =
+  // CHECK-NEXT:   $unsigned($signed($signed(in1) / $signed(in2)))
+  // CHECK-NEXT:   / $unsigned($signed($signed(in3) / $signed(in4)));
   %a1 = comb.divs %in1, %in2: i4
   %a2 = comb.divs %in3, %in4: i4
   %a3 = comb.divu %a1, %a2: i4
   sv.assign %awire, %a3: i4
 
   // CHECK:       assign awire =
-  // CHECK-NEXT:    $unsigned($signed(in1) / $signed(in2) + $signed(in1) / $signed(in2))
-  // CHECK-NEXT:    / $unsigned($signed(in1) / $signed(in2) * $signed(in1) / $signed(in2));
+  // CHECK-NEXT:    $unsigned($signed($signed(in1) / $signed(in2)) + $signed($signed(in1) / $signed(in2)))
+  // CHECK-NEXT:    / $unsigned($signed($signed(in1) / $signed(in2)) * $signed($signed(in1) / $signed(in2)));
   %b1a = comb.divs %in1, %in2: i4
   %b1b = comb.divs %in1, %in2: i4
   %b1c = comb.divs %in1, %in2: i4
@@ -457,7 +458,7 @@ hw.module @signs(in %in1: i4, in %in2: i4, in %in3: i4, in %in4: i4)  {
   sv.assign %awire, %b4: i4
 
   // https://github.com/llvm/circt/issues/369
-  // CHECK: assign awire = 4'sh5 / -4'sh3;
+  // CHECK: assign awire = $unsigned($signed(4'sh5 / -4'sh3));
   %c5_i4 = hw.constant 5 : i4
   %c-3_i4 = hw.constant -3 : i4
   %divs = comb.divs %c5_i4, %c-3_i4 : i4
@@ -548,7 +549,7 @@ hw.module @zeroElements(in %in0: i0, in %in1: i32, out out0: !hw.struct<z1: i0, 
   // CHECK-SAME: _GEN = '{};
   // CHECK-NEXT: wire struct packed {logic [31:0] d1; /*z: Zero Width;*/ } _GEN_0 = '{d1: in1};
   //      CHECK: wire
-  // CHECK-NEXT:   struct packed {/*z1: Zero Width;*/ logic [31:0] a; /*z2: Zero Width;*/ logic [31:0] b; /*c: Zero Width;*/ struct packed {logic [31:0] d1; /*z: Zero Width;*/ } d; } 
+  // CHECK-NEXT:   struct packed {/*z1: Zero Width;*/ logic [31:0] a; /*z2: Zero Width;*/ logic [31:0] b; /*c: Zero Width;*/ struct packed {logic [31:0] d1; /*z: Zero Width;*/ } d; }
   // CHECK-NEXT:   _GEN_1 = '{a: in1, b: in1, d: _GEN_0};
   // CHECK-NEXT: assign out0 = '{a: in1, b: _GEN_1.b, d: _GEN_1.d};
   %0 = hw.struct_create (%in0) : !hw.struct<z: i0>
@@ -583,9 +584,9 @@ hw.module @TestZeroStructInstance(in %structZero: !hw.struct<>, in %structZeroNe
 // CHECK-NEXT:   // output /*Zero Width*/ out2
 // CHECK-NEXT:  );
 
-// CHECK:   assign out = arg1[/*Zero width*/ 1'b0];	
-// CHECK-NEXT:   assign out1 = arg1[/*Zero width*/ 1'b0];	
-// CHECK-NEXT:   // Zero width: assign out2 = arg0;	
+// CHECK:   assign out = arg1[/*Zero width*/ 1'b0];
+// CHECK-NEXT:   assign out1 = arg1[/*Zero width*/ 1'b0];
+// CHECK-NEXT:   // Zero width: assign out2 = arg0;
 
 hw.module @testZeroArrayGet(in %arg0: i0, in %arg1 : !hw.array<1xi32>, out out: i32, out out1: i32, out out2: i0) {
   // Using an expression as index.
@@ -803,10 +804,10 @@ hw.module.extern @ExternDestMod(in %a: i1, in %b: i2, out c: i3, out d: i4)
 hw.module @InternalDestMod(in %a: i1, in %b: i3, in %c: i1) {}
 // CHECK-LABEL: module ABC
 hw.module @ABC(in %a: i1, in %b: i2, out c: i4) {
-  %0,%1 = hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> (c: i3, d: i4) {doNotPrint=1}
+  %0,%1 = hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> (c: i3, d: i4) {doNotPrint}
   %2 = sv.xmr "whatever", "a" : !hw.inout<i1>
   %3 = sv.read_inout %2: !hw.inout<i1>
-  hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %0: i3, c: %3: i1) -> () {doNotPrint=1}
+  hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %0: i3, c: %3: i1) -> () {doNotPrint}
   hw.output %1 : i4
 }
 
@@ -971,7 +972,7 @@ hw.module @ShiftAmountZext(in %a: i8, in %b1: i4, in %b2: i4, in %b3: i4,
   // CHECK: assign o2 = a >> b2;
   %r2 = comb.shru %a, %B2 : i8
 
-  // CHECK: assign o3 = $signed($signed(a) >>> b3);
+  // CHECK: assign o3 = $unsigned($signed($signed(a) >>> b3));
   %r3 = comb.shrs %a, %B3 : i8
   hw.output %r1, %r2, %r3 : i8, i8, i8
 }
@@ -996,7 +997,7 @@ hw.module @SignedshiftResultSign(in %a: i18, out b: i18) {
 }
 // CHECK-LABEL: module SignedShiftRightPrecendence
 hw.module @SignedShiftRightPrecendence(in %p: i1, in %x: i45, out o: i45) {
-  // CHECK: assign o = $signed($signed(x) >>> (p ? 45'h5 : 45'h8))
+  // CHECK: assign o = $unsigned($signed($signed(x) >>> (p ? 45'h5 : 45'h8)))
   %c5_i45 = hw.constant 5 : i45
   %c8_i45 = hw.constant 8 : i45
   %0 = comb.mux %p, %c5_i45, %c8_i45 : i45
@@ -1058,6 +1059,14 @@ hw.module @unionExtractFromTemporary(in %cond: i1, in %a: !hw.union<c: i1>, in %
     hw.output %1 : i1
 }
 
+// CHECK-LABEL: module unionBitcast(
+hw.module @unionBitcast(in %a: !hw.union<a: i1>, out b: i1) {
+  // CHECK: assign b = a;
+  %0 = hw.bitcast %a : (!hw.union<a: i1>) -> i1
+  hw.output %0 : i1
+}
+
+
 // CHECK-LABEL: structExplodeLowering
 hw.module @structExplodeLowering(in %a: !hw.struct<a: i1, b: i1>, out outA: i1, out outB: i1) {
   // CHECK: assign outA = a.a;
@@ -1080,7 +1089,7 @@ hw.module @renameKeyword(in %a: !hw.struct<repeat: i1, repeat_0: i1>, out r1: !h
 // CHECK-NEXT:  inout  struct packed {logic repeat_0; logic repeat_0_0; } a,
 // CHECK-NEXT:  output                                                    r1,
 // CHECK-NEXT:                                                            r2,
-// CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_0; } r3, 
+// CHECK-NEXT:  output struct packed {logic repeat_0; logic repeat_0_0; } r3,
 // CHECK-NEXT:                                                            r4
 // CHECK-NEXT:  );
 hw.module @useRenamedStruct(inout %a: !hw.struct<repeat: i1, repeat_0: i1>, out r1: i1, out r2: i1, out r3: !hw.struct<repeat: i1, repeat_0: i1>, out r4: !hw.struct<repeat: i1, repeat_0: i1>) {
@@ -1252,7 +1261,7 @@ hw.module @UseParameterValue<xx: i42>(in %arg0: i8,
   %e = comb.extract %d from 0 : (i42) -> i8
   %f = comb.add %e, %e : i8
 
-  // CHECK-NEXT: assign out4 = $signed(42'd4) >>> $signed(xx);
+  // CHECK-NEXT: assign out4 = $unsigned($signed(42'd4) >>> $signed(xx));
   %g = hw.param.value i42 = #hw.param.expr.shrs<4, #hw.param.decl.ref<"xx">>
 
   hw.output %a, %b, %f, %g : i8, i8, i8, i42
@@ -1362,7 +1371,7 @@ hw.module @ParamsParensPrecedence<param: i32>(out a:i32, out b:i32, out c:i32) {
   // CHECK: = $clog2($unsigned($clog2($unsigned(param + 8))));
   %3 = hw.param.value i32 = #hw.param.expr.clog2<#hw.param.expr.clog2<#hw.param.expr.add<#hw.param.decl.ref<"param">,8>>>
 
-  // CHECK: = $signed(param) >>> $signed(param & 8);
+  // CHECK: = $unsigned($signed(param) >>> $signed(param & 8));
   %4 = hw.param.value i32 = #hw.param.expr.shrs<#hw.param.decl.ref<"param">,#hw.param.expr.and<8,#hw.param.decl.ref<"param">>>
   hw.output %1, %3, %4: i32, i32, i32
 }
@@ -1466,4 +1475,32 @@ hw.module @Issue6275(out z: !hw.struct<a: !hw.array<2xstruct<b: i1>>>) {
   // CHECK: assign z = '{a: '{'{b: 1'h0}, '{b: 1'h1}}};
   %0 = hw.aggregate_constant [[[false], [true]]] : !hw.struct<a: !hw.array<2xstruct<b: i1>>>
   hw.output %0 : !hw.struct<a: !hw.array<2xstruct<b: i1>>>
+}
+
+// CHECK-LABEL: module ArrayInjectStructural(
+hw.module @ArrayInjectStructural(in %a: !hw.array<4xi42>, in %b: i42, in %i: i2, out z: !hw.array<4xi42>) {
+  // CHECK: reg [3:0][41:0] [[TMP:.+]];
+  // CHECK-NEXT: always_comb begin
+  // CHECK-NEXT:   [[TMP]] = a;
+  // CHECK-NEXT:   [[TMP]][i] = b;
+  // CHECK-NEXT: end
+  %0 = hw.array_inject %a[%i], %b : !hw.array<4xi42>, i2
+  // CHECK-NEXT: assign z = [[TMP]];
+  hw.output %0 : !hw.array<4xi42>
+}
+
+// CHECK-LABEL: module ArrayInjectProcedural(
+hw.module @ArrayInjectProcedural(in %a: !hw.array<4xi42>, in %b: i42, in %i: i2) {
+  // CHECK: reg [3:0][41:0] z;
+  %z = sv.reg : !hw.inout<array<4xi42>>
+  // CHECK-NEXT: always_comb begin
+  sv.alwayscomb {
+    // CHECK-NEXT: automatic logic [3:0][41:0] [[TMP:.+]];
+    // CHECK-NEXT: [[TMP]] = a;
+    // CHECK-NEXT: [[TMP]][i] = b;
+    %0 = hw.array_inject %a[%i], %b : !hw.array<4xi42>, i2
+    // CHECK-NEXT: z = [[TMP]];
+    sv.bpassign %z, %0 : !hw.array<4xi42>
+  }
+  // CHECK-NEXT: end
 }

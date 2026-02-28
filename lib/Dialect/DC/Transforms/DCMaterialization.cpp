@@ -10,9 +10,17 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/DC/DCOps.h"
 #include "circt/Dialect/DC/DCPasses.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace dc {
+#define GEN_PASS_DEF_DCMATERIALIZEFORKSSINKS
+#define GEN_PASS_DEF_DCDEMATERIALIZEFORKSSINKS
+#include "circt/Dialect/DC/DCPasses.h.inc"
+} // namespace dc
+} // namespace circt
 
 using namespace circt;
 using namespace dc;
@@ -35,10 +43,10 @@ static void insertSink(Value v, OpBuilder &rewriter) {
   rewriter.setInsertionPointAfterValue(v);
   if (isa<ValueType>(v.getType())) {
     // Unpack before sinking
-    v = rewriter.create<UnpackOp>(v.getLoc(), v).getToken();
+    v = UnpackOp::create(rewriter, v.getLoc(), v).getToken();
   }
 
-  rewriter.create<SinkOp>(v.getLoc(), v);
+  SinkOp::create(rewriter, v.getLoc(), v);
 }
 
 // Adds a fork of the provided token or value-typed Value `result`.
@@ -53,14 +61,14 @@ static void insertFork(Value result, OpBuilder &rewriter) {
   Value token = result;
   Value value;
   if (isValue) {
-    auto unpack = rewriter.create<UnpackOp>(result.getLoc(), result);
+    auto unpack = UnpackOp::create(rewriter, result.getLoc(), result);
     token = unpack.getToken();
     value = unpack.getOutput();
   }
 
   // Insert fork after op
   auto forkSize = opsToProcess.size();
-  auto newFork = rewriter.create<ForkOp>(token.getLoc(), token, forkSize);
+  auto newFork = ForkOp::create(rewriter, token.getLoc(), token, forkSize);
 
   // Modify operands of successor
   // opsToProcess may have multiple instances of same operand
@@ -68,8 +76,8 @@ static void insertFork(Value result, OpBuilder &rewriter) {
   for (auto [op, forkOutput] : llvm::zip(opsToProcess, newFork->getResults())) {
     Value forkRes = forkOutput;
     if (isValue)
-      forkRes =
-          rewriter.create<PackOp>(forkRes.getLoc(), forkRes, value).getOutput();
+      forkRes = PackOp::create(rewriter, forkRes.getLoc(), forkRes, value)
+                    .getOutput();
     replaceFirstUse(op, result, forkRes);
   }
 }
@@ -99,7 +107,8 @@ static LogicalResult addForkOps(Block &block, OpBuilder &rewriter) {
 
   for (auto barg : block.getArguments())
     if (!barg.use_empty() && !barg.hasOneUse())
-      insertFork(barg, rewriter);
+      if (isDCTyped(barg))
+        insertFork(barg, rewriter);
 
   return success();
 }
@@ -132,7 +141,8 @@ static LogicalResult addSinkOps(Block &block, OpBuilder &rewriter) {
 
 namespace {
 struct DCMaterializeForksSinksPass
-    : public DCMaterializeForksSinksBase<DCMaterializeForksSinksPass> {
+    : public circt::dc::impl::DCMaterializeForksSinksBase<
+          DCMaterializeForksSinksPass> {
   void runOnOperation() override {
     auto *op = getOperation();
     OpBuilder builder(op);
@@ -151,7 +161,8 @@ struct DCMaterializeForksSinksPass
 };
 
 struct DCDematerializeForksSinksPass
-    : public DCDematerializeForksSinksBase<DCDematerializeForksSinksPass> {
+    : public circt::dc::impl::DCDematerializeForksSinksBase<
+          DCDematerializeForksSinksPass> {
   void runOnOperation() override {
     auto *op = getOperation();
     op->walk([&](dc::SinkOp sinkOp) { sinkOp.erase(); });

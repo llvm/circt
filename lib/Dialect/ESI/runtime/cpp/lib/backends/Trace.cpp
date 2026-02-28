@@ -21,35 +21,39 @@
 #include <cassert>
 #include <fstream>
 #include <iostream>
-#include <regex>
 #include <sstream>
-
-using namespace std;
 
 using namespace esi;
 using namespace esi::services;
 using namespace esi::backends::trace;
 
-// We only support v1.
-constexpr uint32_t ESIVersion = 1;
+// We only support v0.
+constexpr uint32_t ESIVersion = 0;
 
 namespace {
 class TraceChannelPort;
-}
+class TraceEngine;
+} // namespace
+
+TraceAccelerator::Impl &TraceAccelerator::getImpl() { return *impl; }
 
 struct esi::backends::trace::TraceAccelerator::Impl {
-  Impl(Mode mode, filesystem::path manifestJson, filesystem::path traceFile)
+  friend class TraceAccelerator;
+  Impl(Mode mode, std::filesystem::path manifestJson,
+       std::filesystem::path traceFile)
       : manifestJson(manifestJson), traceFile(traceFile) {
-    if (!filesystem::exists(manifestJson))
-      throw runtime_error("manifest file '" + manifestJson.string() +
-                          "' does not exist");
+    if (!std::filesystem::exists(manifestJson))
+      throw std::runtime_error("manifest file '" + manifestJson.string() +
+                               "' does not exist");
 
     if (mode == Write) {
       // Open the trace file for writing.
-      traceWrite = new ofstream(traceFile);
+      traceWrite = new std::ofstream(traceFile);
       if (!traceWrite->is_open())
-        throw runtime_error("failed to open trace file '" + traceFile.string() +
-                            "'");
+        throw std::runtime_error("failed to open trace file '" +
+                                 traceFile.string() + "'");
+    } else if (mode == Discard) {
+      traceWrite = nullptr;
     } else {
       assert(false && "not implemented");
     }
@@ -62,105 +66,139 @@ struct esi::backends::trace::TraceAccelerator::Impl {
     }
   }
 
-  Service *createService(Service::Type svcType, AppIDPath idPath,
-                         const ServiceImplDetails &details,
+  Service *createService(TraceAccelerator &conn, Service::Type svcType,
+                         AppIDPath idPath, const ServiceImplDetails &details,
                          const HWClientDetails &clients);
-
-  /// Request the host side channel ports for a particular instance (identified
-  /// by the AppID path). For convenience, provide the bundle type and direction
-  /// of the bundle port.
-  std::map<std::string, ChannelPort &> requestChannelsFor(AppIDPath,
-                                                          const BundleType *);
 
   void adoptChannelPort(ChannelPort *port) { channels.emplace_back(port); }
 
-  void write(const AppIDPath &id, const string &portName, const void *data,
-             size_t size);
+  void write(const AppIDPath &id, const std::string &portName, const void *data,
+             size_t size, const std::string &prefix = "");
+  std::ostream &write(std::string service) {
+    assert(traceWrite && "traceWrite is null");
+    *traceWrite << "[" << service << "] ";
+    return *traceWrite;
+  }
+  bool isWriteable() { return traceWrite; }
 
 private:
-  ofstream *traceWrite;
-  filesystem::path manifestJson;
-  filesystem::path traceFile;
-  vector<unique_ptr<ChannelPort>> channels;
+  std::ofstream *traceWrite;
+  std::filesystem::path manifestJson;
+  std::filesystem::path traceFile;
+  std::vector<std::unique_ptr<ChannelPort>> channels;
 };
 
-void TraceAccelerator::Impl::write(const AppIDPath &id, const string &portName,
-                                   const void *data, size_t size) {
-  string b64data;
+void TraceAccelerator::Impl::write(const AppIDPath &id,
+                                   const std::string &portName,
+                                   const void *data, size_t size,
+                                   const std::string &prefix) {
+  if (!isWriteable())
+    return;
+  std::string b64data;
   utils::encodeBase64(data, size, b64data);
 
-  *traceWrite << "write " << id << '.' << portName << ": " << b64data << endl;
+  *traceWrite << prefix << (prefix.empty() ? "w" : "W") << "rite " << id << '.'
+              << portName << ": " << b64data << std::endl;
 }
 
-unique_ptr<AcceleratorConnection>
-TraceAccelerator::connect(Context &ctxt, string connectionString) {
-  string modeStr;
-  string manifestPath;
-  string traceFile = "trace.log";
+std::unique_ptr<AcceleratorConnection>
+TraceAccelerator::connect(Context &ctxt, std::string connectionString) {
+  std::string manifestPath;
+  std::string traceFile = "trace.log";
 
-  // Parse the connection string.
-  // <mode>:<manifest path>[:<traceFile>]
-  regex connPattern("(\\w):([^:]+)(:(\\w+))?");
-  smatch match;
-  if (regex_search(connectionString, match, connPattern)) {
-    modeStr = match[1];
-    manifestPath = match[2];
-    if (match[3].matched)
-      traceFile = match[3];
+  // Parse the connection std::string.
+  // Format: <mode>SEP<manifest path>[SEP<traceFile>]
+  // where SEP is ':' on Unix and ';' on Windows.
+  // Using different separators avoids conflicts with Windows drive letters
+  // (e.g. "C:/...").
+#ifdef _WIN32
+  constexpr char SEP = ';';
+#else
+  constexpr char SEP = ':';
+#endif
+
+  if (connectionString.size() < 2 || connectionString[1] != SEP)
+    throw std::runtime_error(
+        std::string("connection string must be of the form ") + "'<mode>" +
+        SEP + "<manifest path>[" + SEP + "<traceFile>]'");
+
+  char modeChar = connectionString[0];
+  std::string rest = connectionString.substr(2);
+
+  // Find the optional trace file, separated by the last SEP.
+  size_t lastSep = rest.rfind(SEP);
+  if (lastSep != std::string::npos) {
+    manifestPath = rest.substr(0, lastSep);
+    traceFile = rest.substr(lastSep + 1);
+
+    // Validate that the trace file name is non-empty when present.
+    if (traceFile.empty())
+      throw std::runtime_error(
+          std::string("connection string must be of the form ") + "'<mode>" +
+          SEP + "<manifest path>[" + SEP +
+          "<traceFile>]': "
+          "trace file name cannot be empty");
   } else {
-    throw runtime_error("connection string must be of the form "
-                        "'<mode>:<manifest path>[:<traceFile>]'");
+    manifestPath = rest;
   }
+
+  // Validate that manifest path is non-empty.
+  if (manifestPath.empty())
+    throw std::runtime_error(
+        std::string("connection string must be of the form ") + "'<mode>" +
+        SEP + "<manifest path>[" + SEP +
+        "<traceFile>]': "
+        "manifest path cannot be empty");
 
   // Parse the mode.
   Mode mode;
-  if (modeStr == "w")
+  if (modeChar == 'w')
     mode = Write;
+  else if (modeChar == '-')
+    mode = Discard;
   else
-    throw runtime_error("unknown mode '" + modeStr + "'");
+    throw std::runtime_error("unknown mode '" + std::string(1, modeChar) + "'");
 
-  return make_unique<TraceAccelerator>(
-      ctxt, mode, filesystem::path(manifestPath), filesystem::path(traceFile));
+  return std::make_unique<TraceAccelerator>(ctxt, mode,
+                                            std::filesystem::path(manifestPath),
+                                            std::filesystem::path(traceFile));
 }
 
 TraceAccelerator::TraceAccelerator(Context &ctxt, Mode mode,
-                                   filesystem::path manifestJson,
-                                   filesystem::path traceFile)
+                                   std::filesystem::path manifestJson,
+                                   std::filesystem::path traceFile)
     : AcceleratorConnection(ctxt) {
-  impl = make_unique<Impl>(mode, manifestJson, traceFile);
+  impl = std::make_unique<Impl>(mode, manifestJson, traceFile);
 }
+TraceAccelerator::~TraceAccelerator() { disconnect(); }
 
-Service *TraceAccelerator::createService(Service::Type svcType,
-                                         AppIDPath idPath, std::string implName,
-                                         const ServiceImplDetails &details,
-                                         const HWClientDetails &clients) {
-  return impl->createService(svcType, idPath, details, clients);
-}
 namespace {
 class TraceSysInfo : public SysInfo {
 public:
-  TraceSysInfo(filesystem::path manifestJson) : manifestJson(manifestJson) {}
+  TraceSysInfo(AcceleratorConnection &conn, std::filesystem::path manifestJson)
+      : SysInfo(conn), manifestJson(manifestJson) {}
 
   uint32_t getEsiVersion() const override { return ESIVersion; }
 
-  string getJsonManifest() const override {
+  std::string getJsonManifest() const override {
     // Read in the whole json file and return it.
-    ifstream manifest(manifestJson);
+    std::ifstream manifest(manifestJson);
     if (!manifest.is_open())
-      throw runtime_error("failed to open manifest file '" +
-                          manifestJson.string() + "'");
-    stringstream buffer;
+      throw std::runtime_error("failed to open manifest file '" +
+                               manifestJson.string() + "'");
+    std::stringstream buffer;
     buffer << manifest.rdbuf();
     manifest.close();
     return buffer.str();
   }
 
-  vector<uint8_t> getCompressedManifest() const override {
-    throw runtime_error("compressed manifest not supported by trace backend");
+  std::vector<uint8_t> getCompressedManifest() const override {
+    throw std::runtime_error(
+        "compressed manifest not supported by trace backend");
   }
 
 private:
-  filesystem::path manifestJson;
+  std::filesystem::path manifestJson;
 };
 } // namespace
 
@@ -168,17 +206,22 @@ namespace {
 class WriteTraceChannelPort : public WriteChannelPort {
 public:
   WriteTraceChannelPort(TraceAccelerator::Impl &impl, const Type *type,
-                        const AppIDPath &id, const string &portName)
+                        const AppIDPath &id, const std::string &portName)
       : WriteChannelPort(type), impl(impl), id(id), portName(portName) {}
 
-  virtual void write(const MessageData &data) override {
+protected:
+  void writeImpl(const MessageData &data) override {
     impl.write(id, portName, data.getBytes(), data.getSize());
   }
 
-protected:
+  bool tryWriteImpl(const MessageData &data) override {
+    impl.write(id, portName, data.getBytes(), data.getSize(), "try");
+    return true;
+  }
+
   TraceAccelerator::Impl &impl;
   AppIDPath id;
-  string portName;
+  std::string portName;
 };
 } // namespace
 
@@ -187,71 +230,147 @@ class ReadTraceChannelPort : public ReadChannelPort {
 public:
   ReadTraceChannelPort(TraceAccelerator::Impl &impl, const Type *type)
       : ReadChannelPort(type) {}
-
-  virtual bool read(MessageData &data) override;
+  ~ReadTraceChannelPort() { disconnect(); }
 
 private:
-  size_t numReads = 0;
+  MessageData genMessage() {
+    std::ptrdiff_t numBits = getType()->getBitWidth();
+    if (numBits < 0)
+      // TODO: support other types.
+      throw std::runtime_error("unsupported type for read: " +
+                               getType()->getID());
+
+    std::ptrdiff_t size = (numBits + 7) / 8;
+    std::vector<uint8_t> bytes(size);
+    for (std::ptrdiff_t i = 0; i < size; ++i)
+      bytes[i] = rand() % 256;
+    return MessageData(bytes);
+  }
+
+  bool pollImpl() override { return callback(genMessage()); }
 };
 } // namespace
-
-bool ReadTraceChannelPort::read(MessageData &data) {
-  if ((++numReads & 0x1) == 1)
-    return false;
-
-  std::ptrdiff_t numBits = getType()->getBitWidth();
-  if (numBits < 0)
-    // TODO: support other types.
-    throw runtime_error("unsupported type for read: " + getType()->getID());
-
-  std::ptrdiff_t size = (numBits + 7) / 8;
-  std::vector<uint8_t> bytes(size);
-  for (std::ptrdiff_t i = 0; i < size; ++i)
-    bytes[i] = rand() % 256;
-  data = MessageData(bytes);
-  return true;
-}
 
 namespace {
-class TraceCustomService : public CustomService {
+class TraceEngine : public Engine {
 public:
-  TraceCustomService(TraceAccelerator::Impl &impl, AppIDPath idPath,
-                     const ServiceImplDetails &details,
-                     const HWClientDetails &clients)
-      : CustomService(idPath, details, clients) {}
+  TraceEngine(AcceleratorConnection &conn, TraceAccelerator::Impl &impl)
+      : Engine(conn), impl(impl) {}
+
+  std::unique_ptr<ChannelPort> createPort(AppIDPath idPath,
+                                          const std::string &channelName,
+                                          BundleType::Direction dir,
+                                          const Type *type) override {
+    std::unique_ptr<ChannelPort> port;
+    if (BundlePort::isWrite(dir))
+      port = std::make_unique<WriteTraceChannelPort>(impl, type, idPath,
+                                                     channelName);
+    else
+      port = std::make_unique<ReadTraceChannelPort>(impl, type);
+    return port;
+  }
+
+private:
+  TraceAccelerator::Impl &impl;
 };
 } // namespace
 
-map<string, ChannelPort &>
-TraceAccelerator::Impl::requestChannelsFor(AppIDPath idPath,
-                                           const BundleType *bundleType) {
-  map<string, ChannelPort &> channels;
-  for (auto [name, dir, type] : bundleType->getChannels()) {
-    ChannelPort *port;
-    if (BundlePort::isWrite(dir))
-      port = new WriteTraceChannelPort(*this, type, idPath, name);
-    else
-      port = new ReadTraceChannelPort(*this, type);
-    channels.emplace(name, *port);
-    adoptChannelPort(port);
+void TraceAccelerator::createEngine(const std::string &dmaEngineName,
+                                    AppIDPath idPath,
+                                    const ServiceImplDetails &details,
+                                    const HWClientDetails &clients) {
+  registerEngine(idPath, std::make_unique<TraceEngine>(*this, getImpl()),
+                 clients);
+}
+
+class TraceMMIO : public MMIO {
+public:
+  TraceMMIO(TraceAccelerator &conn, const AppIDPath &idPath,
+            const HWClientDetails &clients)
+      : MMIO(conn, idPath, clients), impl(conn.getImpl()) {}
+
+  virtual uint64_t read(uint32_t addr) const override {
+    uint64_t data = rand();
+    if (impl.isWriteable())
+      impl.write("MMIO") << "[" << std::hex << addr << "] -> " << data
+                         << std::endl;
+    return data;
   }
-  return channels;
-}
+  virtual void write(uint32_t addr, uint64_t data) override {
+    if (!impl.isWriteable())
+      return;
+    impl.write("MMIO") << "[" << std::hex << addr << "] <- " << data
+                       << std::endl;
+  }
 
-map<string, ChannelPort &>
-TraceAccelerator::requestChannelsFor(AppIDPath idPath,
-                                     const BundleType *bundleType) {
-  return impl->requestChannelsFor(idPath, bundleType);
-}
+private:
+  TraceAccelerator::Impl &impl;
+};
 
-Service *
-TraceAccelerator::Impl::createService(Service::Type svcType, AppIDPath idPath,
-                                      const ServiceImplDetails &details,
-                                      const HWClientDetails &clients) {
+class TraceHostMem : public HostMem {
+public:
+  TraceHostMem(TraceAccelerator &conn) : HostMem(conn), impl(conn.getImpl()) {}
+
+  struct TraceHostMemRegion : public HostMemRegion {
+    TraceHostMemRegion(std::size_t size, TraceAccelerator::Impl &impl)
+        : impl(impl) {
+      ptr = malloc(size);
+      this->size = size;
+    }
+    virtual ~TraceHostMemRegion() {
+      if (impl.isWriteable())
+        impl.write("HostMem") << "free " << ptr << std::endl;
+      free(ptr);
+    }
+    virtual void *getPtr() const override { return ptr; }
+    virtual std::size_t getSize() const override { return size; }
+
+  private:
+    void *ptr;
+    std::size_t size;
+    TraceAccelerator::Impl &impl;
+  };
+
+  virtual std::unique_ptr<HostMemRegion>
+  allocate(std::size_t size, HostMem::Options opts) const override {
+    auto ret =
+        std::unique_ptr<HostMemRegion>(new TraceHostMemRegion(size, impl));
+    if (impl.isWriteable())
+      impl.write("HostMem 0x")
+          << ret->getPtr() << " allocate " << size
+          << " bytes. Writeable: " << opts.writeable
+          << ", useLargePages: " << opts.useLargePages << std::endl;
+    return ret;
+  }
+  virtual bool mapMemory(void *ptr, std::size_t size,
+                         HostMem::Options opts) const override {
+
+    if (impl.isWriteable())
+      impl.write("HostMem")
+          << "map 0x" << ptr << " size " << size
+          << " bytes. Writeable: " << opts.writeable
+          << ", useLargePages: " << opts.useLargePages << std::endl;
+    return true;
+  }
+  virtual void unmapMemory(void *ptr) const override {
+    if (impl.isWriteable())
+      impl.write("HostMem") << "unmap 0x" << ptr << std::endl;
+  }
+
+private:
+  TraceAccelerator::Impl &impl;
+};
+
+Service *TraceAccelerator::createService(Service::Type svcType,
+                                         AppIDPath idPath, std::string implName,
+                                         const ServiceImplDetails &details,
+                                         const HWClientDetails &clients) {
   if (svcType == typeid(SysInfo))
-    return new TraceSysInfo(manifestJson);
-  if (svcType == typeid(CustomService))
-    return new TraceCustomService(*this, idPath, details, clients);
+    return new TraceSysInfo(*this, getImpl().manifestJson);
+  if (svcType == typeid(MMIO))
+    return new TraceMMIO(*this, idPath, clients);
+  if (svcType == typeid(HostMem))
+    return new TraceHostMem(*this);
   return nullptr;
 }
 

@@ -3,14 +3,14 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from re import T
 
-from .common import Clock, Input, Output
+from .common import Clock, Input, Output, Reset
 from .dialects import comb, msft, sv
 from .module import generator, modparams, Module, _BlockContext
 from .signals import ArraySignal, BitsSignal, BitVectorSignal, Signal
 from .signals import get_slice_bounds, _FromCirctValue
-from .types import dim, types, Array, Bits, InOut, Type
+from .support import get_user_loc
+from .types import dim, Array, Bit, Bits, InOut, Type, UInt
 
 from .circt import ir
 from .circt.support import BackedgeBuilder
@@ -33,6 +33,9 @@ def NamedWire(type_or_value: Union[Type, Signal], name: str):
     value = type_or_value
 
   class NamedWire(type._get_value_class()):
+
+    if not type.is_hw_type:
+      raise TypeError(f"NamedWire must have a hardware type, not {type}")
 
     def __init__(self):
       self.assigned_value = None
@@ -62,16 +65,25 @@ def NamedWire(type_or_value: Union[Type, Signal], name: str):
   return w
 
 
+class AssignableSignal:
+  """An interface which indicates that a signal should be assigned to exactly
+  once before generator exit."""
+
+  def assign(self, new_signal: Signal) -> None:
+    assert False, "assign must be implemented by the subclass"
+
+
 def Wire(type: Type, name: str = None):
   """Declare a wire. Used to create backedges. Must assign exactly once. If
   'name' is specified, use 'NamedWire' instead."""
 
-  class WireValue(type._get_value_class()):
+  class WireValue(type._get_value_class(), AssignableSignal):
 
     def __init__(self):
       self._backedge = BackedgeBuilder.create(type._type,
                                               "wire" if name is None else name,
-                                              None)
+                                              None,
+                                              loc=get_user_loc())
       super().__init__(self._backedge.result, type)
       if name is not None:
         self.name = name
@@ -123,7 +135,8 @@ def Reg(type: Type,
         clk: Signal = None,
         rst: Signal = None,
         rst_value=0,
-        ce: Signal = None):
+        ce: Signal = None,
+        name: str = None) -> Signal:
   """Declare a register. Must assign exactly once."""
 
   class RegisterValue(type._get_value_class()):
@@ -135,7 +148,7 @@ def Reg(type: Type,
       self._wire = None
 
   # Create a wire and register it.
-  wire = Wire(type)
+  wire = Wire(type, name)
   if rst_value is not None and not isinstance(rst_value, Signal):
     rst_value = type(rst_value)
   value = RegisterValue(wire.reg(clk=clk, rst=rst, rst_value=rst_value, ce=ce),
@@ -148,11 +161,14 @@ def ControlReg(clk: Signal,
                rst: Signal,
                asserts: List[Signal],
                resets: List[Signal],
-               name: Optional[str] = None) -> BitVectorSignal:
+               name: Optional[str] = None) -> BitsSignal:
   """Constructs a 'control register' and returns the output. Asserts are signals
   which causes the output to go high (on the next cycle). Resets do the
   opposite. If both an assert and a reset are active on the same cycle, the
   assert takes priority."""
+
+  assert len(asserts) > 0
+  assert len(resets) > 0
 
   @modparams
   def ControlReg(num_asserts: int, num_resets: int):
@@ -168,9 +184,9 @@ def ControlReg(clk: Signal,
       def generate(ports):
         a = ports.asserts.or_reduce()
         r = ports.resets.or_reduce()
-        reg = Reg(types.i1, ports.clk, ports.rst)
+        reg = Reg(Bit, ports.clk, ports.rst)
         reg.name = "state"
-        next_value = Mux(a, Mux(r, reg, types.i1(0)), types.i1(1))
+        next_value = Mux(a, Mux(r, reg, Bit(0)), Bit(1))
         reg.assign(next_value)
         ports.out = reg
 
@@ -183,7 +199,7 @@ def ControlReg(clk: Signal,
                                                instance_name=name).out
 
 
-def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Signal]):
+def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Signal]) -> Signal:
   """Create a single mux from a list of values."""
   num_inputs = len(data_inputs)
   if num_inputs == 0:
@@ -192,6 +208,9 @@ def Mux(sel: BitVectorSignal, *data_inputs: typing.List[Signal]):
     return data_inputs[0]
   if sel.type.width != (num_inputs - 1).bit_length():
     raise TypeError("'Sel' bit width must be clog2 of number of inputs")
+  data_type = data_inputs[0].type
+  if not all([d.type == data_type for d in data_inputs]):
+    raise TypeError("All data inputs must have the same type")
 
   input_names = [
       i.name if i.name is not None else f"in{idx}"
@@ -234,3 +253,29 @@ def SystolicArray(row_inputs: ArraySignal, col_inputs: ArraySignal, pe_builder):
   dummy_op.operation.erase()
 
   return _FromCirctValue(array.peOutputs)
+
+
+@modparams
+def Counter(width: int):
+  """Construct a counter with the specified width. Increment the counter on the
+  if the increment signal is asserted."""
+
+  class Counter(Module):
+    clk = Clock()
+    rst = Reset()
+    clear = Input(Bits(1))
+    increment = Input(Bits(1))
+    out = Output(UInt(width))
+
+    @generator
+    def construct(ports):
+      count = Reg(UInt(width),
+                  clk=ports.clk,
+                  rst=ports.rst,
+                  rst_value=0,
+                  ce=ports.increment | ports.clear)
+      next = (count + 1).as_uint(width)
+      count.assign(Mux(ports.clear, next, UInt(width)(0)))
+      ports.out = count
+
+  return Counter

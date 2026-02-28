@@ -1,0 +1,87 @@
+// RUN: circt-translate --import-liberty %s -o %t.mlir
+// RUN: cat %t.mlir | FileCheck %s
+// RUN: circt-opt %t.mlir -cse -prettify-verilog -export-verilog | FileCheck %s --check-prefix=VERILOG
+// CHECK: module attributes {synth.liberty.library = {
+// CHECK-DAG:   args = ["test"]
+// CHECK-DAG:   current_unit = "1uA"
+// CHECK-DAG:   default_cell_leakage_power = 0.0
+// CHECK-SAME: }
+library(test) {
+  current_unit: "1uA";
+  default_cell_leakage_power : 0;
+  // CHECK-LABEL: hw.module @Basic(
+  // CHECK-SAME: in %A : i1 {synth.liberty.pin =
+  // CHECK-SAME: capacitance = 1.0
+  // CHECK-SAME: fall_capacitance = 1.5
+  // CHECK-SAME: in %B : i1 {synth.liberty.pin = {}}
+  // CHECK-SAME: in %C : i1 {synth.liberty.pin = {}}
+  // CHECK-SAME: out Z : i1 {synth.liberty.pin = {function = "A * !B + C"}}
+  // CHECK-SAME: out PRECEDENCE : i1 {synth.liberty.pin = {function = "A * B ^ C"}}
+  // CHECK-SAME: out COMPLEX : i1 {synth.liberty.pin = {function = "(A + B) (C + !A) !A C"}}
+  // CHECK-SAME: out POSTFIX_NOT : i1 {synth.liberty.pin = {function = "C'"}}
+  // CHECK-SAME: out PAREN_POSTFIX : i1 {synth.liberty.pin = {function = "(C + B)'"}}
+  // CHECK-SAME: inout %IO : i1 {synth.liberty.pin = {}})
+  // VERILOG-LABEL: module Basic(
+  // VERILOG:      assign Z = A & ~B | C;
+  // VERILOG-NEXT: assign PRECEDENCE = A & B ^ C;
+  // VERILOG-NEXT: assign COMPLEX = (A | B) & (C | ~A) & ~A & C;
+  // VERILOG-NEXT: assign POSTFIX_NOT = ~C;
+  // VERILOG-NEXT: assign PAREN_POSTFIX = ~(C | B);
+  cell(Basic) {
+    pin(A) {
+      direction: input;
+      capacitance: 0.1;
+      fall_capacitance: 0.15;
+    }
+    pin(B) {
+      direction: input;
+    }
+    pin(C) {
+      direction: input;
+    }
+    pin(Z) {
+      direction: output;
+      function: "A * !B + C";
+    }
+    // Check precedence parsing
+    pin(PRECEDENCE) {
+      direction: output;
+      function: "A * B ^ C";
+    }
+    // Check complex expression
+    pin(COMPLEX) {
+      direction: output;
+      // Check a space is treated as AND operator
+      function: "(A + B) (C + !A) !A C";
+    }
+    // Check postfix NOT
+    pin(POSTFIX_NOT) {
+      direction: output;
+      function: "C'";
+    }
+    // Check postfix NOT on parenthesized expression
+    pin(PAREN_POSTFIX) {
+      direction: output;
+      function: "(C + B)'";
+    }
+    // Check inout
+    pin(IO) {
+      direction: inout;
+    }
+  }
+  // Check that multiple cells are supported
+  // CHECK-LABEL: hw.module @Buffer(
+  // CHECK-SAME: in %A : i1 {synth.liberty.pin = {}}
+  // CHECK-SAME: out Z : i1 {synth.liberty.pin = {function = "A"}}
+  // VERILOG-LABEL: module Buffer(
+  // VERILOG:      assign Z = A;
+  cell(Buffer) {
+    pin(A) {
+      direction: input;
+    }
+    pin(Z) {
+      direction: output;
+      function: "A";
+    }
+  }
+}

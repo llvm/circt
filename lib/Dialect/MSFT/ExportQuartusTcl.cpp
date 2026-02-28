@@ -335,9 +335,9 @@ LogicalResult TclEmitter::emit(Operation *hwMod, StringRef outputFile) {
   // Create a verbatim op containing the Tcl and symbol references.
   auto builder = ImplicitLocOpBuilder::atBlockEnd(
       UnknownLoc::get(hwMod->getContext()), hwMod->getBlock());
-  builder.create<emit::FileOp>(outputFile, [&] {
-    builder.create<sv::VerbatimOp>(os.str(), ValueRange{},
-                                   builder.getArrayAttr(state.symbolRefs));
+  emit::FileOp::create(builder, outputFile, [&] {
+    sv::VerbatimOp::create(builder, os.str(), ValueRange{},
+                           builder.getArrayAttr(state.symbolRefs));
   });
 
   return success();

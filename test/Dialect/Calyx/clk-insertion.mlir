@@ -6,7 +6,7 @@ module attributes {calyx.entrypoint = "main"} {
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
-  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+  calyx.component @main(%in: i8, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i8, %done: i1 {done}) {
     %c0.in, %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance @c0 of @A : i8, i1, i1, i1, i8, i1
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i1, i1, i1, i1, i1, i1
 // CHECK: calyx.wires {
@@ -16,6 +16,8 @@ module attributes {calyx.entrypoint = "main"} {
 // CHECK:   calyx.assign %r.clk = %clk : i1
 // CHECK: }
     calyx.wires {
+      calyx.assign %c0.in = %in : i8
+      calyx.assign %out = %c0.out : i8
     }
     calyx.control {
       calyx.seq { }

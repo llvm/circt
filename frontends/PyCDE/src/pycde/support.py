@@ -1,7 +1,22 @@
+from __future__ import annotations
+
 from .circt import support
 from .circt import ir
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+  from .types import Type
+
+from typing import Dict, Optional
+
 import os
+
+
+def clog2(x: int) -> int:
+  """Return the ceiling log base 2 of x."""
+  if x == 0:
+    return 0
+  return (x - 1).bit_length()
 
 
 # PyCDE needs a custom version of this to support python classes.
@@ -27,6 +42,10 @@ def _obj_to_attribute(obj) -> ir.Attribute:
   if isinstance(obj, dict):
     attrs = {name: _obj_to_attribute(value) for name, value in obj.items()}
     return ir.DictAttr.get(attrs)
+
+  from .common import AppID
+  if isinstance(obj, AppID):
+    return obj._appid
   if hasattr(obj, "__dict__"):
     attrs = {
         name: _obj_to_attribute(value) for name, value in obj.__dict__.items()
@@ -36,20 +55,36 @@ def _obj_to_attribute(obj) -> ir.Attribute:
                   "This is required for parameters.")
 
 
+def obj_to_typed_attribute(obj: object, type: Type) -> ir.Attribute:
+  from .types import BitVectorType
+  if isinstance(type, BitVectorType):
+    return ir.IntegerAttr.get(type._type, obj)
+  raise ValueError(f"Type '{type}' conversion to attribute not supported yet.")
+
+
+def optional_dict_to_dict_attr(d: Optional[Dict]) -> ir.DictAttr:
+  """Convert a dictionary to a MLIR dictionary attribute."""
+  if d is None:
+    return ir.DictAttr.get({})
+  return ir.DictAttr.get({k: _obj_to_attribute(v) for k, v in d.items()})
+
+
 __dir__ = os.path.dirname(__file__)
-_local_files = set([os.path.join(__dir__, x) for x in os.listdir(__dir__)])
-_hidden_filenames = set(["functools.py"])
+_hidden_filenames = set(["functools.py", "support.py"])
 
 
 def get_user_loc() -> ir.Location:
   import traceback
+  stack_locs = []
   stack = reversed(traceback.extract_stack())
   for frame in stack:
     fn = os.path.split(frame.filename)[1]
-    if frame.filename in _local_files or fn in _hidden_filenames:
+    if fn in _hidden_filenames:
       continue
-    return ir.Location.file(frame.filename, frame.lineno, 0)
-  return ir.Location.unknown()
+    stack_locs.append(ir.Location.file(frame.filename, frame.lineno, 0))
+  if len(stack_locs) == 0:
+    return ir.Location.unknown()
+  return ir.Location.callsite(stack_locs[0], stack_locs[1:])
 
 
 def create_const_zero(type):

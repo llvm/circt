@@ -1,4 +1,17 @@
-name: Build, Test, and Install
+name: Build, Test, and Install (Native)
+description: |
+  This reusable workflow is intended to be used to build dynamic or mostly
+  static tools or CIRCT as a library.  This uses normal GitHub Actions runners
+  and does not farm out work to containers.
+
+  This is suitable if you are building Linux binaries or libraries for
+  relatively newer Linux distributions.  The GitHub Linux runners will all use
+  relatively new GNU C Library versions and these binaries will be usable for
+  most users, but not for companies using ancient GNU C Library versions (e.g.,
+  RHEL).
+
+  This also should be suitable for building macOS or Windows binaries or
+  libraries.
 
 on:
   workflow_dispatch:
@@ -8,11 +21,14 @@ on:
         required: true
         type: choice
         options:
+          - ubuntu-24.04
           - ubuntu-22.04
           - ubuntu-20.04
+          - macos-15-large
+          - macos-15
+          - macos-14-large
+          - macos-14
           - macos-13
-          - macos-12
-          - macos-11
           - windows-2022
           - windows-2019
       cmake_build_type:
@@ -42,12 +58,12 @@ on:
         options:
           - on
           - off
-      runTests:
+      run_tests:
         description: "Run tests"
         required: true
         type: boolean
         default: false
-      install:
+      install_target:
         description: "Install steps to run (empty if do not install)"
         required: false
         type: string
@@ -66,6 +82,9 @@ on:
           - clang-12
           - clang-13
           - clang-14
+          - clang-15
+          - clang-16
+          - clang-17
           - gcc
           - cl
         default: clang
@@ -80,7 +99,10 @@ on:
           - clang++-12
           - clang++-13
           - clang++-14
-          - gcc++
+          - clang++-15
+          - clang++-16
+          - clang++-17
+          - g++
           - cl
         default: clang++
   workflow_call:
@@ -101,11 +123,11 @@ on:
       llvm_force_enable_stats:
         required: true
         type: string
-      runTests:
+      run_tests:
         description: "If true, then run tests, otherwise skip tests"
         required: true
         type: boolean
-      install:
+      install_target:
         description: "Install steps to run"
         required: false
         type: string
@@ -129,7 +151,16 @@ jobs:
     runs-on: ${{ inputs.runner }}
     permissions:
       contents: write # Upload assets to release.
+    outputs:
+      cache-key-pattern: ${{ steps.cache-key.outputs.pattern }}
     steps:
+      - name: Generate cache key pattern
+        id: cache-key
+        shell: bash
+        run: |
+          CACHE_KEY="${{ inputs.runner }}-${{ inputs.cmake_c_compiler }}-${{ inputs.cmake_cxx_compiler }}-${{ inputs.cmake_build_type }}-${{ inputs.build_shared_libs }}-${{ inputs.llvm_enable_assertions }}-${{ inputs.llvm_force_enable_stats}}"
+          echo "pattern=$CACHE_KEY" >> $GITHUB_OUTPUT
+
       - name: Clone llvm/circt
         uses: actions/checkout@v3
         with:
@@ -162,7 +193,7 @@ jobs:
         if: runner.os != 'Windows' || inputs.cmake_build_type == 'release'
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ${{ inputs.runner }}-${{ inputs.cmake_c_compiler }}-${{ inputs.cmake_cxx_compiler }}-${{ inputs.cmake_build_type }}-${{ inputs.build_shared_libs }}-${{ inputs.llvm_enable_assertions }}-${{ inputs.llvm_force_enable_stats}}
+          key: ${{ steps.cache-key.outputs.pattern }}
           max-size: 500M
           variant: sccache
       - name: Configure sccache
@@ -177,23 +208,23 @@ jobs:
           ${{ steps.setup-windows.outputs.setup }}
           mkdir build
           cd build
-          cmake -G Ninja -S "$(pwd)/../llvm/llvm" $EXTRA_CMAKE_ARGS -DCMAKE_BUILD_TYPE=${{ inputs.cmake_build_type }} -DBUILD_SHARED_LIBS=${{ inputs.build_shared_libs }} -DLLVM_BUILD_TOOLS=ON -DLLVM_BUILD_EXAMPLES=OFF -DLLVM_ENABLE_ASSERTIONS=${{ inputs.llvm_enable_assertions }} -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_EXTERNAL_PROJECTS=circt -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=".." -DLLVM_STATIC_LINK_CXX_STDLIB=ON -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_PARALLEL_LINK_JOBS=1 -DLLVM_TARGETS_TO_BUILD="host" -DLLVM_FORCE_ENABLE_STATS=${{ inputs.llvm_force_enable_stats }} -DLLVM_ENABLE_ZSTD=OFF -DVERILATOR_DISABLE=ON -DLLVM_PARALLEL_LINK_JOBS=1 -DCIRCT_RELEASE_TAG_ENABLED=ON -DCIRCT_RELEASE_TAG=firtool -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF -DCMAKE_C_COMPILER=${{ inputs.cmake_c_compiler }} -DCMAKE_CXX_COMPILER=${{ inputs.cmake_cxx_compiler }} ${{ steps.configure-sccache.outputs.enable_sccache }} -DCMAKE_INSTALL_PREFIX="$(pwd)/../install" -DLLVM_INSTALL_UTILS=ON
+          cmake -G Ninja -S "$(pwd)/../llvm/llvm" $EXTRA_CMAKE_ARGS -DCMAKE_BUILD_TYPE=${{ inputs.cmake_build_type }} -DBUILD_SHARED_LIBS=${{ inputs.build_shared_libs }} -DLLVM_BUILD_TOOLS=ON -DLLVM_BUILD_EXAMPLES=OFF -DLLVM_ENABLE_ASSERTIONS=${{ inputs.llvm_enable_assertions }} -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_EXTERNAL_PROJECTS=circt -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=".." -DLLVM_STATIC_LINK_CXX_STDLIB=ON -DLLVM_PARALLEL_LINK_JOBS=1 -DLLVM_TARGETS_TO_BUILD="host" -DLLVM_FORCE_ENABLE_STATS=${{ inputs.llvm_force_enable_stats }} -DLLVM_ENABLE_ZSTD=OFF -DVERILATOR_DISABLE=ON -DCIRCT_RELEASE_TAG_ENABLED=ON -DCIRCT_RELEASE_TAG=firtool -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF -DCMAKE_C_COMPILER=${{ inputs.cmake_c_compiler }} -DCMAKE_CXX_COMPILER=${{ inputs.cmake_cxx_compiler }} ${{ steps.configure-sccache.outputs.enable_sccache }} -DCMAKE_INSTALL_PREFIX="$(pwd)/../install" -DLLVM_INSTALL_UTILS=ON -DCIRCT_SLANG_FRONTEND_ENABLED=ON
 # Optionally test
       - name: Test CIRCT
-        if: inputs.runTests
+        if: inputs.run_tests
         run: |
           ${{ steps.setup-windows.outputs.setup }}
           ninja -C build check-circt check-circt-unit
       - name: Install
-        if: inputs.install
+        if: inputs.install_target
         run: |
           ${{ steps.setup-windows.outputs.setup }}
-          ninja -C build ${{ inputs.install }}
+          ninja -C build ${{ inputs.install_target }}
           file install/*
           file install/bin/*
       - name: Name Install Directory
         id: name_dir
-        if: inputs.install
+        if: inputs.install_target
         shell: bash
         run: |
           BASE=$(git describe --tag)
@@ -231,24 +262,24 @@ jobs:
           echo sha256="$SHA256" >> $GITHUB_OUTPUT
       - name: Name Archive
         id: name_archive
-        if: inputs.install
+        if: inputs.install_target
         shell: bash
         run: |
           NAME=${{ inputs.package_name_prefix }}-${{ steps.name_dir.outputs.os }}-${{ steps.name_dir.outputs.arch }}.${{ steps.name_dir.outputs.archive }}
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
       - name: Package Binaries Linux and MacOS
-        if: inputs.install && ( runner.os == 'macOS' || runner.os == 'Linux' )
+        if: inputs.install_target && ( runner.os == 'macOS' || runner.os == 'Linux' )
         run: |
           mv install ${{ steps.name_dir.outputs.value }}
           ${{ steps.name_dir.outputs.tar }} ${{ steps.name_archive.outputs.name }} ${{ steps.name_dir.outputs.value }}
       - name: Package Binaries Windows
-        if: inputs.install && runner.os == 'Windows'
+        if: inputs.install_target && runner.os == 'Windows'
         shell: pwsh
         run: |
           mv install ${{ steps.name_dir.outputs.value }}
           Compress-Archive -Path ${{ steps.name_dir.outputs.value }} -DestinationPath ${{ steps.name_archive.outputs.name }}
       - name: Show Tarball
-        if: inputs.install
+        if: inputs.install_target
         shell: bash
         run: |
           ls -l ${{ steps.name_archive.outputs.name }}
@@ -256,15 +287,15 @@ jobs:
 
 # Upload build artifacts
       - name: Upload Binary (Non-Tag)
-        uses: actions/upload-artifact@v3
-        if: inputs.install && github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        if: inputs.install_target && github.ref_type != 'tag'
         with:
           name: ${{ steps.name_archive.outputs.name }}
           path: ${{ steps.name_archive.outputs.name }}
           retention-days: 7
       - name: Upload SHA256 (Non-Tag)
-        uses: actions/upload-artifact@v3
-        if: inputs.install && github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        if: inputs.install_target && github.ref_type != 'tag'
         with:
           name: ${{ steps.name_archive.outputs.name }}.sha256
           path: ${{ steps.name_archive.outputs.name }}.sha256
@@ -272,9 +303,19 @@ jobs:
 
       - name: Upload Binaries (Tag)
         uses: AButler/upload-release-assets@v3.0
-        if: inputs.install && github.ref_type == 'tag'
+        if: inputs.install_target && github.ref_type == 'tag'
         with:
           # The * will grab the .sha256 as well
           files: ${{ steps.name_archive.outputs.name }}*
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           release-tag: ${{ github.ref_name }} # Upload to release tag when manually run.
+
+  # Clean up cache after build completes
+  cleanup-cache:
+    needs: build-test-and-install
+    if: always() # Run even if build fails
+    uses: ./.github/workflows/cleanupCache.yml
+    permissions:
+      actions: write
+    with:
+      cache_key_pattern: ${{ needs.build-test-and-install.outputs.cache-key-pattern }}

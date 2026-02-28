@@ -7,9 +7,9 @@ firrtl.circuit "Issue1187"  {
   firrtl.module @Issue1187(in %divisor: !firrtl.uint<1>, out %result: !firrtl.uint<0>) {
     %dividend = firrtl.wire  : !firrtl.uint<0>
     %invalid_ui0 = firrtl.invalidvalue : !firrtl.uint<0>
-    firrtl.strictconnect %dividend, %invalid_ui0 : !firrtl.uint<0>
+    firrtl.matchingconnect %dividend, %invalid_ui0 : !firrtl.uint<0>
     %0 = firrtl.div %dividend, %divisor : (!firrtl.uint<0>, !firrtl.uint<1>) -> !firrtl.uint<0>
-    firrtl.strictconnect %result, %0 : !firrtl.uint<0>
+    firrtl.matchingconnect %result, %0 : !firrtl.uint<0>
   }
 }
 
@@ -22,6 +22,6 @@ firrtl.circuit "Issue4456"  {
   firrtl.module @Issue4456(in %i: !firrtl.sint<0>, out %o: !firrtl.uint<4>) {
     %c0_si4 = firrtl.constant 0 : !firrtl.sint<4>
     %0 = firrtl.cat %i, %c0_si4 : (!firrtl.sint<0>, !firrtl.sint<4>) -> !firrtl.uint<4>
-    firrtl.strictconnect %o, %0 : !firrtl.uint<4>
+    firrtl.matchingconnect %o, %0 : !firrtl.uint<4>
   }
 }

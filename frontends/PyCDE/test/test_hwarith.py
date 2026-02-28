@@ -2,7 +2,7 @@
 
 from pycde import Input, Output, generator, Module
 from pycde.testing import unittestmodule
-from pycde.types import types, UInt
+from pycde.types import Bits, SInt, UInt
 
 
 # CHECK: hw.module @InfixArith(in %in0 : si16, in %in1 : ui16)
@@ -16,8 +16,8 @@ from pycde.types import types, UInt
 # CHECK-NEXT:   hw.output
 @unittestmodule(run_passes=True)
 class InfixArith(Module):
-  in0 = Input(types.si16)
-  in1 = Input(types.ui16)
+  in0 = Input(SInt(16))
+  in1 = Input(UInt(16))
 
   @generator
   def construct(ports):
@@ -40,8 +40,8 @@ class InfixArith(Module):
 # CHECK-NEXT:  hw.output
 @unittestmodule(run_passes=True)
 class InfixLogic(Module):
-  in0 = Input(types.i16)
-  in1 = Input(types.i16)
+  in0 = Input(Bits(16))
+  in1 = Input(Bits(16))
 
   @generator
   def construct(ports):
@@ -60,8 +60,8 @@ class InfixLogic(Module):
 # CHECK-NEXT:    hw.output
 @unittestmodule(run_passes=True)
 class SignlessInfixComparison(Module):
-  in0 = Input(types.i16)
-  in1 = Input(types.i16)
+  in0 = Input(Bits(16))
+  in1 = Input(Bits(16))
 
   @generator
   def construct(ports):
@@ -82,8 +82,8 @@ class SignlessInfixComparison(Module):
 # CHECK-NEXT:    hw.output
 @unittestmodule(run_passes=False)
 class InfixComparison(Module):
-  in0 = Input(types.ui16)
-  in1 = Input(types.ui16)
+  in0 = Input(UInt(16))
+  in1 = Input(UInt(16))
 
   @generator
   def construct(ports):
@@ -106,9 +106,9 @@ class InfixComparison(Module):
 # CHECK-NEXT:    hw.output %3 {{({sv.namehint = ".*"} )?}}: i16
 @unittestmodule(run_passes=True)
 class Multiple(Module):
-  in0 = Input(types.si16)
-  in1 = Input(types.si16)
-  out0 = Output(types.i16)
+  in0 = Input(SInt(16))
+  in1 = Input(SInt(16))
+  out0 = Output(Bits(16))
 
   @generator
   def construct(ports):
@@ -119,17 +119,22 @@ class Multiple(Module):
 
 
 # CHECK:  hw.module @Casting(in %in0 : i16)
-# CHECK-NEXT:    %0 = hwarith.cast %in0 {{({sv.namehint = ".*"} )?}}: (i16) -> si16
-# CHECK-NEXT:    %1 = hwarith.cast %in0 {{({sv.namehint = ".*"} )?}}: (i16) -> ui16
-# CHECK-NEXT:    %2 = hwarith.cast %0 {{({sv.namehint = ".*"} )?}}: (si16) -> i16
-# CHECK-NEXT:    %3 = hwarith.cast %in0 {{({sv.namehint = ".*"} )?}}: (i16) -> si8
-# CHECK-NEXT:    %4 = hwarith.cast %in0 {{({sv.namehint = ".*"} )?}}: (i16) -> ui8
-# CHECK-NEXT:    %5 = hwarith.cast %0 {{({sv.namehint = ".*"} )?}}: (si16) -> i8
-# CHECK-NEXT:    %6 = hwarith.cast %0 {{({sv.namehint = ".*"} )?}}: (si16) -> si24
+# CHECK-NEXT:    [[R0:%.+]] = hwarith.cast %in0 {{({sv.namehint = ".*"} )?}}: (i16) -> si16
+# CHECK-NEXT:    [[R1:%.+]] = hwarith.cast %in0 {{({sv.namehint = ".*"} )?}}: (i16) -> ui16
+# CHECK-NEXT:    [[R2:%.+]] = hwarith.cast [[R0]] {{({sv.namehint = ".*"} )?}}: (si16) -> i16
+# CHECK-NEXT:    [[R11:%.+]] = comb.extract %in0 from 0 : (i16) -> i8
+# CHECK-NEXT:    [[R3:%.+]] = hwarith.cast [[R11]] {{({sv.namehint = ".*"} )?}}: (i8) -> si8
+# CHECK-NEXT:    [[R12:%.+]] = comb.extract %in0 from 0 : (i16) -> i8
+# CHECK-NEXT:    [[R4:%.+]] = hwarith.cast [[R12]] {{({sv.namehint = ".*"} )?}}: (i8) -> ui8
+# CHECK-NEXT:    [[R5:%.+]] = hwarith.cast [[R0]] {{({sv.namehint = ".*"} )?}}: (si16) -> i8
+# CHECK-NEXT:    [[R6:%.+]] = hwarith.cast [[R0]] {{({sv.namehint = ".*"} )?}}: (si16) -> si24
+# CHECK-NEXT:    [[Rc0_i16:%.+]] = hw.constant 0 : i16
+# CHECK-NEXT:    [[R9:%.+]] = comb.concat [[Rc0_i16]], %in0 {{({sv.namehint = ".*"} )?}}: i16, i16
+# CHECK-NEXT:    [[R10:%.+]] = hwarith.cast [[R9]] {{({sv.namehint = ".*"} )?}}: (i32) -> ui32
 # CHECK-NEXT:    hw.output
 @unittestmodule(run_passes=True)
 class Casting(Module):
-  in0 = Input(types.i16)
+  in0 = Input(Bits(16))
 
   @generator
   def construct(ports):
@@ -140,6 +145,7 @@ class Casting(Module):
     in0u8 = ports.in0.as_uint(8)
     in0s_i8 = in0s.as_bits(8)
     in0s_s24 = in0s.as_sint(24)
+    in0s_u32 = ports.in0.as_uint(32)
 
 
 # -----
@@ -153,9 +159,9 @@ class Casting(Module):
 # CHECK-NEXT:    hw.output %3 : i16
 @unittestmodule(generate=True, run_passes=True, debug=True)
 class Lowering(Module):
-  in0 = Input(types.i16)
-  in1 = Input(types.i16)
-  out0 = Output(types.i16)
+  in0 = Input(Bits(16))
+  in1 = Input(Bits(16))
+  out0 = Output(Bits(16))
 
   @generator
   def construct(ports):
@@ -180,8 +186,8 @@ class Lowering(Module):
 # CHECK-NEXT:     [[R11:%.+]] = hwarith.icmp eq %sin, [[R10]] : si16, ui1
 @unittestmodule()
 class Constants(Module):
-  uin = Input(types.ui16)
-  sin = Input(types.si16)
+  uin = Input(UInt(16))
+  sin = Input(SInt(16))
 
   @generator
   def construct(ports):

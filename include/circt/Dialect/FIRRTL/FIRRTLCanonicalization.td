@@ -16,6 +16,7 @@
 include "FIRRTLDeclarations.td"
 include "FIRRTLExpressions.td"
 include "FIRRTLStatements.td"
+include "FIRRTLIntrinsics.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/PatternBase.td"
 
@@ -47,6 +48,9 @@ def EqualTypes : Constraint<CPred<"areAnonymousTypesEquivalent($0.getType(), $1.
 // Constraint that enforces equal type sizes
 def EqualIntSize : Constraint<CPred<"type_cast<IntType>($0.getType()).getWidth() == type_cast<IntType>($1.getType()).getWidth()">>;
 
+// Constraint that enforces equal type signedness
+def EqualSigns : Constraint<CPred<"type_cast<IntType>($0.getType()).isSigned() == type_cast<IntType>($1.getType()).isSigned()">>;
+
 // sizeof(0) >= sizeof(1)
 def IntTypeWidthGEQ32 : Constraint<CPred<
   "type_cast<IntType>($0.getType()).getBitWidthOrSentinel() >= type_cast<IntType>($1.getType()).getBitWidthOrSentinel()">>;
@@ -72,6 +76,13 @@ def UIntTypes : Constraint<CPred<"type_isa<UIntType>($0.getType())">>;
 
 // Constraint that enforces types mismatches
 def mismatchTypes : Constraint<CPred<"!areAnonymousTypesEquivalent($0.getType(), $1.getType())">>;
+
+// Constraint that enforces types mismatches, ignoring const qualifiers
+def mismatchTypesIgnoringConst : Constraint<CPred<[{
+  !areAnonymousTypesEquivalent(
+    type_cast<FIRRTLBaseType>($0.getType()).getAllConstDroppedType(),
+    type_cast<FIRRTLBaseType>($1.getType()).getAllConstDroppedType())
+  }]>>;
 
 // Constraint that enforces types of known width
 def KnownWidth : Constraint<CPred<[{
@@ -116,6 +127,9 @@ def AllOneConstantOp : Constraint<CPred<"$0.getDefiningOp<ConstantOp>() && $0.ge
 // Delta between type widths
 def TypeWidthAdjust32 : NativeCodeCall<
   "$_builder.getI32IntegerAttr(type_cast<FIRRTLBaseType>($0.getType()).getBitWidthOrSentinel() - type_cast<FIRRTLBaseType>($1.getType()).getBitWidthOrSentinel())">;
+
+// Int 1 is one higher than int 2
+def AdjInt : Constraint<CPred<"$0.getValue() + 1 == $1.getValue()">>;
 
 /// Drop the writer to the first argument and passthrough the second
 def DropWrite : NativeCodeCall<"dropWrite($_builder, $0, $1)">;
@@ -191,16 +205,16 @@ def NotGt : Pat <
   (MoveNameHint $old, (LEQPrimOp $x, $y)),
   []>;
 
-// connect(a:t,b:t) -> strictconnect(a,b)
+// connect(a:t,b:t) -> matchingconnect(a,b)
 def ConnectSameType : Pat<
   (ConnectOp $dst, $src),
-  (StrictConnectOp $dst, $src),
+  (MatchingConnectOp $dst, $src),
   [(EqualTypes $dst, $src), (KnownWidth $dst)]>;
 
-// connect(a:t1,b:(t2<t1) -> strictconnect(a,(pad b))
+// connect(a:t1,b:(t2<t1) -> matchingconnect(a,(pad b))
 def ConnectExtension : Pat<
   (ConnectOp $dst, $src),
-  (StrictConnectOp $dst, (PadPrimOp $src,
+  (MatchingConnectOp $dst, (PadPrimOp $src,
     (NativeCodeCall<"type_cast<FIRRTLBaseType>($0.getType()).getBitWidthOrSentinel()"> $dst))),
   [(IntType $dst), (IntType $src), (KnownWidth $dst), (KnownWidth $src), (mismatchTypes $src, $dst)]>;
 
@@ -230,19 +244,19 @@ def extendAnd : Pat <
   (AndPrimOp:$old $lhs, $rhs),
   (MoveNameHint $old, (AndPrimOp (PadPrimOp $lhs, (TypeWidth32 $old)),
                                  (PadPrimOp $rhs, (TypeWidth32 $old)))),
-  [(KnownWidth $lhs), (KnownWidth $rhs), (mismatchTypes $lhs, $rhs)]>;
+  [(KnownWidth $lhs), (KnownWidth $rhs), (mismatchTypesIgnoringConst $lhs, $rhs)]>;
 
 def extendOr : Pat <
   (OrPrimOp:$old $lhs, $rhs),
   (MoveNameHint $old, (OrPrimOp (PadPrimOp $lhs, (TypeWidth32 $old)),
                                 (PadPrimOp $rhs, (TypeWidth32 $old)))),
-  [(KnownWidth $lhs), (KnownWidth $rhs), (mismatchTypes $lhs, $rhs)]>;
+  [(KnownWidth $lhs), (KnownWidth $rhs), (mismatchTypesIgnoringConst $lhs, $rhs)]>;
 
 def extendXor : Pat <
   (XorPrimOp:$old $lhs, $rhs),
   (MoveNameHint $old, (XorPrimOp (PadPrimOp $lhs, (TypeWidth32 $old)),
                                  (PadPrimOp $rhs, (TypeWidth32 $old)))),
-  [(KnownWidth $lhs), (KnownWidth $rhs), (mismatchTypes $lhs, $rhs)]>;
+  [(KnownWidth $lhs), (KnownWidth $rhs), (mismatchTypesIgnoringConst $lhs, $rhs)]>;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Move constants to the right
@@ -311,7 +325,7 @@ def SubFromZeroUnsigned : Pat <
 //sub(a,a) -> 0
 def SubOfSelf : Pat <
   (SubPrimOp:$old $x, $x),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), type_cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
+  (NativeCodeCall<"ConstantOp::create($_builder, $0.getLoc(), type_cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x)]>;
 
 // sub((pad a, n), b) -> pad(sub(a, b), n)
@@ -329,7 +343,7 @@ def SubOfPadR : Pat <
 // and(x, 0) -> 0, fold can't handle all cases
 def AndOfZero : Pat <
   (AndPrimOp:$old $x, (ConstantOp:$zcst $cst)),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), type_cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
+  (NativeCodeCall<"ConstantOp::create($_builder, $0.getLoc(), type_cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x), (ZeroConstantOp $zcst)]>;
 
 // and(x, -1) -> x, fold can't handle all cases
@@ -355,12 +369,12 @@ def AndOfPad : Pat <
 def AndOfAsSIntL : Pat<
   (AndPrimOp:$old (AsSIntPrimOp $x), $y),
   (MoveNameHint $old, (AndPrimOp $x, (AsUIntPrimOp $y))),
-  [(KnownWidth $x), (EqualIntSize $x, $y)]>;
+  [(IntTypes $x), (KnownWidth $x), (EqualIntSize $x, $y)]>;
 
 def AndOfAsSIntR : Pat<
   (AndPrimOp:$old $x, (AsSIntPrimOp $y)),
   (MoveNameHint $old, (AndPrimOp (AsUIntPrimOp $x), $y)),
-  [(KnownWidth $x), (EqualIntSize $x, $y)]>;
+  [(IntTypes $y), (KnownWidth $x), (EqualIntSize $x, $y)]>;
 
 // or(x, 0) -> x, fold can't handle all cases
 def OrOfZero : Pat <
@@ -371,7 +385,7 @@ def OrOfZero : Pat <
 // or(x, -1) -> -1, fold can't handle all cases
 def OrOfAllOne : Pat <
   (OrPrimOp:$old $x, (ConstantOp:$ocst $cst)),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), type_cast<IntType>($0.getType()), getIntOnesAttr($0.getType()))"> $old),
+  (NativeCodeCall<"ConstantOp::create($_builder, $0.getLoc(), type_cast<IntType>($0.getType()), getIntOnesAttr($0.getType()))"> $old),
   [(KnownWidth $x), (EqualTypes $x, $ocst), (AllOneConstantOp $ocst)]>;
 
 /// or(x,x) -> x, fold can't handle all cases
@@ -383,14 +397,14 @@ def OrOfSelf : Pat <
 /// or(x, pad(y, n)) -> cat(head(x), or(tail(x), y))
 def OrOfPad : Pat <
   (OrPrimOp:$old $x, (PadPrimOp:$pad $y, $n)),
-  (MoveNameHint $old, (CatPrimOp (HeadPrimOp $x, (TypeWidthAdjust32 $x, $y)),
-                                 (OrPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y))),
+  (MoveNameHint $old, (CatPrimOp (variadic (HeadPrimOp $x, (TypeWidthAdjust32 $x, $y)),
+                                                   (OrPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y)))),
   [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
 
 /// or(a, orr(x)) -> orr(cat(a, x))
 def OrOrr : Pat <
   (OrPrimOp:$old $a, (OrRPrimOp $x)),
-  (MoveNameHint $old, (OrRPrimOp (CatPrimOp (AsUIntPrimOp $a), (AsUIntPrimOp $x)))),
+  (MoveNameHint $old, (OrRPrimOp (CatPrimOp (variadic (AsUIntPrimOp $a), (AsUIntPrimOp $x))))),
   // No type extension in the Or
   [(IntTypeWidthLTX<2> $a)]>;
 
@@ -403,14 +417,14 @@ def XorOfZero : Pat <
 /// xor(x,x) -> 0, fold can't handle all cases
 def XorOfSelf : Pat <
   (XorPrimOp:$old $x, $x),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), type_cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
+  (NativeCodeCall<"ConstantOp::create($_builder, $0.getLoc(), type_cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x)]>;
 
 /// xor(x, pad(y, n)) -> cat(head(x), xor(tail(x), y))
 def XorOfPad : Pat <
   (XorPrimOp:$old $x, (PadPrimOp:$pad $y, $n)),
-  (MoveNameHint $old, (CatPrimOp (HeadPrimOp $x, (TypeWidthAdjust32 $x, $y)),
-                                 (XorPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y))),
+  (MoveNameHint $old, (CatPrimOp (variadic (HeadPrimOp $x, (TypeWidthAdjust32 $x, $y)),
+                                                   (XorPrimOp (TailPrimOp $x, (TypeWidthAdjust32 $x, $y)), $y)))),
   [(KnownWidth $x), (UIntType $x), (EqualTypes $x, $pad)]>;
 
 /// orr(asSInt(x)) -> orr(x)
@@ -425,18 +439,6 @@ def OrRasUInt : Pat <
   (MoveNameHint $old, (OrRPrimOp $x)),
   [(KnownWidth $x), (IntTypes $x)]>;
 
-/// orr(cat(0,x)) -> orr(x)
-def OrRCatZeroH : Pat <
-  (OrRPrimOp:$old (CatPrimOp $c, $x)),
-  (MoveNameHint $old, (OrRPrimOp $x)),
-  [(KnownWidth $x), (ZeroConstantOp $c)]>;
-
-/// orr(cat(x,0)) -> orr(x)
-def OrRCatZeroL : Pat <
-  (OrRPrimOp:$old (CatPrimOp $x, $c)),
-  (MoveNameHint $old, (OrRPrimOp $x)),
-  [(KnownWidth $x), (ZeroConstantOp $c)]>;
-
 /// orr(pad(x,n)) -> orr(x)
 def OrRPadU : Pat <
   (OrRPrimOp:$old (PadPrimOp:$pad $x, $n)),
@@ -445,14 +447,14 @@ def OrRPadU : Pat <
 
 /// orr(cat(y, orr(z))) -> orr(cat(y,z))
 def OrRCatOrR_left : Pat <
-  (OrRPrimOp:$old (CatPrimOp $y, (OrRPrimOp $z))),
-  (MoveNameHint $old, (OrRPrimOp (CatPrimOp $y, (AsUIntPrimOp $z)))),
+  (OrRPrimOp:$old (CatPrimOp (variadic $y, (OrRPrimOp $z)))),
+  (MoveNameHint $old, (OrRPrimOp (CatPrimOp (variadic $y, (AsUIntPrimOp $z))))),
   []>;
 
 /// orr(cat(orr(z),y)) -> orr(cat(z,y))
 def OrRCatOrR_right : Pat <
-  (OrRPrimOp:$old (CatPrimOp (OrRPrimOp $z), $y)),
-  (MoveNameHint $old, (OrRPrimOp (CatPrimOp (AsUIntPrimOp $z), $y))),
+  (OrRPrimOp:$old (CatPrimOp (variadic (OrRPrimOp $z), $y))),
+  (MoveNameHint $old, (OrRPrimOp (CatPrimOp (variadic (AsUIntPrimOp $z), $y)))),
   []>;
 
 /// xorr(asSInt(x)) -> xorr(x)
@@ -467,18 +469,6 @@ def XorRasUInt : Pat <
   (MoveNameHint $old, (XorRPrimOp $x)),
   [(KnownWidth $x), (IntTypes $x)]>;
 
-/// xorr(cat(0,x)) -> xorr(x)
-def XorRCatZeroH : Pat <
-  (XorRPrimOp:$old (CatPrimOp $c, $x)),
-  (MoveNameHint $old, (XorRPrimOp $x)),
-  [(KnownWidth $x), (IntTypes $x), (ZeroConstantOp $c)]>;
-
-/// xorr(cat(x,0)) -> xorr(x)
-def XorRCatZeroL : Pat <
-  (XorRPrimOp:$old (CatPrimOp $x, $c)),
-  (MoveNameHint $old, (XorRPrimOp $x)),
-  [(KnownWidth $x), (IntTypes $x), (ZeroConstantOp $c)]>;
-
 /// xorr(pad(x,n)) -> xorr(x)
 def XorRPadU : Pat <
   (XorRPrimOp:$old (PadPrimOp:$pad $x, $n)),
@@ -487,14 +477,14 @@ def XorRPadU : Pat <
 
 /// xorr(cat(y, xorr(z))) -> xorr(cat(y,z))
 def XorRCatXorR_left : Pat <
-  (XorRPrimOp:$old (CatPrimOp $y, (XorRPrimOp $z))),
-  (MoveNameHint $old, (XorRPrimOp (CatPrimOp $y, (AsUIntPrimOp $z)))),
+  (XorRPrimOp:$old (CatPrimOp (variadic $y, (XorRPrimOp $z)))),
+  (MoveNameHint $old, (XorRPrimOp (CatPrimOp (variadic $y, (AsUIntPrimOp $z))))),
   []>;
 
 /// xorr(cat(xorr(z),y)) -> xorr(cat(z,y))
 def XorRCatXorR_right : Pat <
-  (XorRPrimOp:$old (CatPrimOp (XorRPrimOp $z), $y)),
-  (MoveNameHint $old, (XorRPrimOp (CatPrimOp (AsUIntPrimOp $z), $y))),
+  (XorRPrimOp:$old (CatPrimOp (variadic (XorRPrimOp $z), $y))),
+  (MoveNameHint $old, (XorRPrimOp (CatPrimOp (variadic (AsUIntPrimOp $z), $y)))),
   []>;
 
 
@@ -510,34 +500,10 @@ def AndRasUInt : Pat <
   (MoveNameHint $old, (AndRPrimOp $x)),
   [(KnownWidth $x), (IntTypes $x)]>;
 
-/// andr(cat(*0*, x)) -> 0
-def AndRCatZeroL : Pat <
-  (AndRPrimOp:$old (CatPrimOp $z, $x)),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
-  [(NotAllOneConstantOp $z)]>;
-
-/// andr(cat(x, *0*)) -> 0
-def AndRCatZeroR : Pat <
-  (AndRPrimOp:$old (CatPrimOp $x, $z)),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), type_cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
-  [(NotAllOneConstantOp $z)]>;
-
-/// andr(cat(1, x)) -> andr(x)
-def AndRCatOneL : Pat <
-  (AndRPrimOp:$old (CatPrimOp $z, $x)),
-  (MoveNameHint $old, (AndRPrimOp $x)),
-  [(AllOneConstantOp $z)]>;
-
-/// andr(cat(x, 1)) -> andr(x)
-def AndRCatOneR : Pat <
-  (AndRPrimOp:$old (CatPrimOp $x, $z)),
-  (MoveNameHint $old, (AndRPrimOp $x)),
-  [(AllOneConstantOp $z)]>;
-
 /// andr(pad(x:U,n)) -> 0 (where pad is doing something)
 def AndRPadU : Pat <
   (AndRPrimOp:$old (PadPrimOp:$pad $x, $n)),
-  (NativeCodeCall<"$_builder.create<ConstantOp>($0.getLoc(), type_cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
+  (NativeCodeCall<"ConstantOp::create($_builder, $0.getLoc(), type_cast<IntType>($0.getType()), getIntZerosAttr($0.getType()))"> $old),
   [(KnownWidth $x), (UIntTypes $x), (IntTypeWidthGT32 $pad, $x)]>;
 
 /// andr(pad(x:S,n)) -> andr(x)
@@ -548,14 +514,14 @@ def AndRPadS : Pat <
 
 /// andr(cat(y, andr(z))) -> andr(cat(y,z))
 def AndRCatAndR_left : Pat <
-  (AndRPrimOp:$old (CatPrimOp $y, (AndRPrimOp $z))),
-  (MoveNameHint $old, (AndRPrimOp (CatPrimOp $y, (AsUIntPrimOp $z)))),
+  (AndRPrimOp:$old (CatPrimOp (variadic $y, (AndRPrimOp $z)))),
+  (MoveNameHint $old, (AndRPrimOp (CatPrimOp (variadic $y, (AsUIntPrimOp $z))))),
   []>;
 
 /// andr(cat(andr(z),y)) -> andr(cat(z,y))
 def AndRCatAndR_right : Pat <
-  (AndRPrimOp:$old (CatPrimOp (AndRPrimOp $z), $y)),
-  (MoveNameHint $old, (AndRPrimOp (CatPrimOp (AsUIntPrimOp $z), $y))),
+  (AndRPrimOp:$old (CatPrimOp (variadic (AndRPrimOp $z), $y))),
+  (MoveNameHint $old, (AndRPrimOp (CatPrimOp (variadic (AsUIntPrimOp $z), $y)))),
   []>;
 
 // bits(bits(x, ...), ...) -> bits(x, ...)
@@ -579,7 +545,7 @@ def BitsOfAsUInt : Pat<
   (MoveNameHint $old, (BitsPrimOp $x, $oHigh, $oLow)),
   [(KnownWidth $x)]>;
 
-// bits(asUInt) -> bits
+// bits(and(x, y)) -> and(bits(x), bits(y))
 def BitsOfAnd : Pat<
   (BitsPrimOp:$old (AndPrimOp $x, $y), I32Attr:$oHigh, I32Attr:$oLow),
   (MoveNameHint $old, (AndPrimOp (BitsPrimOp $x, $oHigh, $oLow), (BitsPrimOp $y, $oHigh, $oLow))),
@@ -622,14 +588,14 @@ def MuxSameFalse : Pat <
 
 // mux(cond, (Concat a, b), (Concat a, c)) -> Concat(a, mux(cond, b, c))
 def NarrowMuxLHS : Pat <
-  (MuxPrimOp:$old $cond, (CatPrimOp:$lhs $a, $b), (CatPrimOp:$rhs $a, $c)),
-  (MoveNameHint $old, (CatPrimOp $a, (MuxPrimOp $cond, $b, $c))),
+  (MuxPrimOp:$old $cond, (CatPrimOp:$lhs (variadic $a, $b)), (CatPrimOp:$rhs (variadic $a, $c))),
+  (MoveNameHint $old, (CatPrimOp (variadic $a, (MuxPrimOp $cond, $b, $c)))),
   [(EqualTypes $lhs, $rhs), (KnownWidth $lhs)]>;
 
 // mux(cond, (Concat a, b), (Concat c, b)) -> Concat(mux(cond, a, c), b)
 def NarrowMuxRHS : Pat <
-  (MuxPrimOp:$old $cond, (CatPrimOp:$lhs $a, $b), (CatPrimOp:$rhs $c, $b)),
-  (MoveNameHint $old, (CatPrimOp (MuxPrimOp $cond, $a, $c), $b)),
+  (MuxPrimOp:$old $cond, (CatPrimOp:$lhs (variadic $a, $b)), (CatPrimOp:$rhs (variadic $c, $b))),
+  (MoveNameHint $old, (CatPrimOp (variadic (MuxPrimOp $cond, $a, $c), $b))),
   [(EqualTypes $lhs, $rhs), (KnownWidth $lhs)]>;
 
 // mux(eq(a, b), a, b) -> b
@@ -655,7 +621,7 @@ def MuxPadSel : Pat<
   (MuxPrimOp:$old $cond, $a, $b),
   (MoveNameHint $old, (MuxPrimOp
     (ConstantOp
-      (NativeCodeCall<"$_builder.getUI32IntegerAttr(0)">),
+      (NativeCodeCall<"getIntZerosAttr($_builder.getType<UIntType>(1))">),
       (returnType "$_builder.getType<UIntType>(1)")),
     $a, $b)),
   [(IntTypeWidthLTX<1> $cond)]>;
@@ -665,7 +631,7 @@ def Mux2PadSel : Pat<
   (Mux2CellIntrinsicOp:$old $cond, $a, $b),
   (MoveNameHint $old, (Mux2CellIntrinsicOp
     (ConstantOp
-      (NativeCodeCall<"$_builder.getUI32IntegerAttr(0)">),
+      (NativeCodeCall<"getIntZerosAttr($_builder.getType<UIntType>(1))">),
       (returnType "$_builder.getType<UIntType>(1)")),
     $a, $b)),
   [(IntTypeWidthLTX<1> $cond)]>;
@@ -680,9 +646,21 @@ def Mux4PadSel : Pat<
   [(IntTypeWidthLTX<2> $cond)]>;
 
 def CatDoubleConst : Pat <
-  (CatPrimOp:$old $cst1, (CatPrimOp $cst2, $v)),
-  (MoveNameHint $old, (CatPrimOp (CatPrimOp $cst1, (AsUIntPrimOp $cst2)), (AsUIntPrimOp $v))),
+  (CatPrimOp:$old (variadic $cst1, (CatPrimOp (variadic $cst2, $v)))),
+  (MoveNameHint $old, (CatPrimOp (variadic (CatPrimOp (variadic $cst1, (AsUIntPrimOp $cst2))), (AsUIntPrimOp $v)))),
   [(KnownWidth $v), (AnyConstantOp $cst1), (AnyConstantOp $cst2)]>;
+
+// cat(asUint(x), asUint(y)) -> cat(x,y)
+def CatCast : Pat <
+  (CatPrimOp:$old (variadic (AsUIntPrimOp $x), (AsUIntPrimOp $y))),
+  (MoveNameHint $old, (CatPrimOp (variadic $x, $y))),
+  [(IntTypes $x), (IntTypes $y), (EqualSigns $x, $y)]>;
+
+// cat(bits a:b x, bits b+1:c x) -> bits( a:c x)
+def CatBitsBits : Pat <
+  (CatPrimOp:$old (variadic (BitsPrimOp $x, I32Attr:$hi, I32Attr:$mid), (BitsPrimOp $x, I32Attr:$mid2, I32Attr:$low))),
+  (MoveNameHint $old, (BitsPrimOp $x, $hi, $low)),
+  [(AdjInt $mid2, $mid)]>;
 
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
 def RegResetWithZeroReset : Pat<
@@ -717,5 +695,12 @@ def CVTUnSigned : Pat<
       (PadPrimOp $x,
         (NativeCodeCall<"$_builder.getI32IntegerAttr(type_cast<SIntType>($0.getType()).getBitWidthOrSentinel())"> $old)))),
   [(UIntType $x), (KnownWidth $old)]>;
+
+def AssertXWhenX : Pattern<(AssertOp $_, $x, $x, $_, $_, $_, $_, $_), []>;
+
+def AssumeXWhenX : Pattern<(AssumeOp $_, $x, $x, $_, $_, $_, $_, $_), []>;
+
+def UnclockedAssumeIntrinsicXWhenX
+    : Pattern<(UnclockedAssumeIntrinsicOp $x, $x, $_, $_, $_), []>;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

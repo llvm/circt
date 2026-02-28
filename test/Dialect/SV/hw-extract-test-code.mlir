@@ -12,11 +12,14 @@
 // CHECK-NOT: attributes
 // CHECK: hw.module private @issue1246_assert(in %clock : i1) attributes {comment = "VCS coverage exclude_file", emit.fragments = [@some_fragment], output_file = #hw.output_file<"dir3{{/|\\\\}}", excludeFromFileList, includeReplicatedOps>}
 // CHECK: sv.assert
-// CHECK: sv.error "Assertion failed"
-// CHECK: sv.error "assert:"
-// CHECK: sv.error "assertNotX:"
-// CHECK: sv.error "check [verif-library-assert] is included"
-// CHECK: sv.fatal 1
+// CHECK: sv.error.procedural "Assertion failed"
+// CHECK: sv.error.procedural "assert:"
+// CHECK: sv.error.procedural "assertNotX:"
+// CHECK: sv.error.procedural "check [verif-library-assert] is included"
+// CHECK: sv.func.call.procedural @fn
+// CHECK: sv.fwrite
+// CHECK: sv.fflush
+// CHECK: sv.fatal.procedural 1
 // CHECK: foo_assert
 // CHECK: hw.module private @issue1246_assume(in %clock : i1) attributes {
 // CHECK-SAME: comment = "VCS coverage exclude_file"
@@ -48,17 +51,22 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
   hw.module.extern @foo_cover(in %a : i1) attributes {"firrtl.extract.cover.extra"}
   hw.module.extern @foo_assume(in %a : i1) attributes {"firrtl.extract.assume.extra"}
   hw.module.extern @foo_assert(in %a : i1) attributes {"firrtl.extract.assert.extra"}
+  sv.func private @fn(out out : i32 {sv.func.explicitly_returned})
+
   hw.module @issue1246(in %clock: i1) attributes {emit.fragments = [@some_fragment]} {
     sv.always posedge %clock  {
       sv.ifdef.procedural @SYNTHESIS {
       } else  {
         sv.if %2937  {
           sv.assert %clock, immediate
-          sv.error "Assertion failed"
-          sv.error "assert:"
-          sv.error "assertNotX:"
-          sv.error "check [verif-library-assert] is included"
-          sv.fatal 1
+          sv.error.procedural "Assertion failed"
+          sv.error.procedural "assert:"
+          sv.error.procedural "assertNotX:"
+          sv.error.procedural "check [verif-library-assert] is included"
+          %out = sv.func.call.procedural @fn () : () -> (i32)
+          sv.fwrite %out, "foo"
+          sv.fflush fd %out
+          sv.fatal.procedural 1
           sv.assume %clock, immediate
           sv.cover %clock, immediate
         }
@@ -89,7 +97,7 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
     }
   }
   hw.module @Top(in %clock: i1) {
-    hw.instance "submodule" @AlreadyExtracted(clock: %clock: i1) -> () {doNotPrint = true}
+    hw.instance "submodule" @AlreadyExtracted(clock: %clock: i1) -> () {doNotPrint}
   }
 }
 
@@ -219,7 +227,7 @@ module {
   }
 
   hw.module private @InputOnlyBind(in %clock: i1, in %cond: i1) {
-    hw.instance "already_bound" sym @already_bound @AlreadyBound() -> () {doNotPrint = true}
+    hw.instance "already_bound" sym @already_bound @AlreadyBound() -> () {doNotPrint}
     sv.always posedge %clock  {
       sv.cover %cond, immediate
       sv.assert %cond, immediate
@@ -508,7 +516,7 @@ module {
 
   // CHECK-LABEL: hw.module private @AssertWrapper(in %clock : i1, in %a : i1, out b : i1) {
   // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert @Assert_assert
-  // CHECK-SAME:  doNotPrint = true
+  // CHECK-SAME:  doNotPrint
   hw.module private @AssertWrapper(in %clock: i1, in %a: i1, out b: i1) {
     hw.instance "a3" @Assert(clock: %clock: i1, a: %a: i1) -> ()
     hw.output %a: i1
@@ -521,11 +529,11 @@ module {
 
   // CHECK-LABEL: hw.module @Top(in %clock : i1, in %a : i1, in %b : i1) {
   // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert_0 @Assert_assert
-  // CHECK-SAME:  doNotPrint = true
+  // CHECK-SAME:  doNotPrint
   // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert @Assert_assert
-  // CHECK-SAME:  doNotPrint = true
+  // CHECK-SAME:  doNotPrint
   // CHECK-NEXT:  hw.instance "Assert_assert" sym @__ETC_Assert_assert_1 @Assert_assert
-  // CHECK-SAME:  doNotPrint = true
+  // CHECK-SAME:  doNotPrint
   // CHECK-NEXT:  hw.instance "should_not_be_inlined" @ShouldNotBeInlined
   // CHECK-NOT: doNotPrint
   hw.module @Top(in %clock: i1, in %a: i1, in %b: i1) {
@@ -602,5 +610,20 @@ hw.module @VerifOps(in %a : i1, in %b : i1) {
   verif.assert %true : i1
   verif.assume %true : i1
   verif.cover %true : i1
+  hw.output
+}
+
+// -----
+
+// Check that clocked verif ops are also extracted.
+
+// CHECK: hw.module private @ClockedVerifOps_assert
+// CHECK: hw.module private @ClockedVerifOps_assume
+// CHECK: hw.module private @ClockedVerifOps_cover
+hw.module @ClockedVerifOps(in %a : i1, in %en : i1, in %clock: i1) {
+  %true = hw.constant true
+  verif.clocked_assert %a if %en, posedge %clock : i1
+  verif.clocked_assume %a if %en, posedge %clock : i1
+  verif.clocked_cover %a if %en, posedge %clock : i1
   hw.output
 }

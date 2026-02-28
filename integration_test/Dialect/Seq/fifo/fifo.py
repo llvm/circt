@@ -20,6 +20,7 @@ async def initDut(dut):
 
 async def write(dut, value):
   dut.inp.value = value
+  assert dut.full.value == 0
   dut.wrEn.value = 1
   await clock(dut)
   dut.wrEn.value = 0
@@ -52,14 +53,21 @@ async def readWrite(dut, value):
   return data
 
 
-FIFO_DEPTH = 4
+FIFO_DEPTH = 6
 FIFO_ALMOST_FULL = 2
 FIFO_ALMOST_EMPTY = 1
 
 
+@cocotb.test()
 async def test_separate_read_write(dut):
-  # Run a test where we incrementally write and read values from 1 to FIFO_DEPTH values
-  for i in range(1, FIFO_DEPTH):
+  """Run a test where we incrementally write and read values from 1 to
+  FIFO_DEPTH values."""
+
+  dut.inp.value = 0
+  dut.rdEn.value = 0
+  dut.wrEn.value = 0
+  await initDut(dut)
+  for i in range(1, FIFO_DEPTH + 1):
     for j in range(i):
       await write(dut, 42 + j)
 
@@ -78,9 +86,16 @@ async def test_separate_read_write(dut):
     assert dut.empty.value == 1
 
 
+@cocotb.test()
 async def test_concurrent_read_write(dut):
-  # Fill up the FIFO halfway and concurrently read and write. Should be able
-  # to do this continuously.
+  """Fill up the FIFO halfway and concurrently read and write. Should be able
+  to do this continuously."""
+
+  dut.inp.value = 0
+  dut.rdEn.value = 0
+  dut.wrEn.value = 0
+  await initDut(dut)
+
   counter = 0
   for i in range(FIFO_DEPTH // 2):
     await write(dut, counter)
@@ -88,19 +103,8 @@ async def test_concurrent_read_write(dut):
 
   for i in range(FIFO_DEPTH * 2):
     expected_value = counter - FIFO_DEPTH // 2
-    print("expected_value: ", expected_value)
+    print(f"expected_value: {expected_value}")
     assert await readWrite(dut, counter) == expected_value
     assert dut.full.value == 0
     assert dut.empty.value == 0
     counter += 1
-
-
-@cocotb.test()
-async def test1(dut):
-  dut.inp.value = 0
-  dut.rdEn.value = 0
-  dut.wrEn.value = 0
-  await initDut(dut)
-
-  await test_separate_read_write(dut)
-  await test_concurrent_read_write(dut)

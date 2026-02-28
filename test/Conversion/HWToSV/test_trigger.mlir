@@ -9,3 +9,13 @@ hw.module @foo(in %trigger : i1, in %in : i32) {
       "some.user" (%arg0) : (i32) -> ()
   }
 }
+
+hw.module @bar(in %trigger : i1) {
+  // CHECK:       sv.always posedge %trigger {
+  // CHECK-NEXT:    "some.user"() : () -> ()
+  // CHECK-NEXT:  }
+  hw.triggered posedge %trigger {
+      "some.user"() : () -> ()
+  }
+
+}

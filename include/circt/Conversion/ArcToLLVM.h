@@ -13,6 +13,9 @@
 #include <memory>
 
 namespace circt {
+#define GEN_PASS_DECL_LOWERARCTOLLVM
+#include "circt/Conversion/Passes.h.inc"
+
 std::unique_ptr<OperationPass<ModuleOp>> createLowerArcToLLVMPass();
 } // namespace circt
 

@@ -16,6 +16,7 @@ hw.module @no_ports() {
 }
 
 // CHECK-LABEL: module Expressions(
+// CHECK-NEXT:    input  [7:0]  in8,
 // CHECK-NEXT:    input  [3:0]  in4,
 // CHECK-NEXT:    input         clock,
 // CHECK-NEXT:    output        out1a,
@@ -30,14 +31,16 @@ hw.module @no_ports() {
 // CHECK-NEXT:    output [15:0] out16,
 // CHECK-NEXT:                  out16s,
 // CHECK-NEXT:    output [16:0] sext17,
-// CHECK-NEXT:    output [1:0]  orvout
+// CHECK-NEXT:    output [1:0]  orvout,
+// CHECK-NEXT:    output [7:0]  out_reverse,
+// CHECK-NEXT:           [63:0] outTime,
+// CHECK-NEXT:           [31:0] outSTime
 // CHECK-NEXT:  );
-
-hw.module @Expressions(in %in4: i4, in %clock: i1,
+hw.module @Expressions(in %in8: i8, in %in4: i4, in %clock: i1,
   out out1a: i1, out out1b: i1, out out1c: i1,
   out out1d: i1, out out1e: i1, out out1f: i1, out out1g: i1,
-   out out4: i4, out out4s: i4, out out16: i16, out out16s: i16,
-   out sext17: i17, out orvout: i2) {
+  out out4: i4, out out4s: i4, out out16: i16, out out16s: i16,
+  out sext17: i17, out orvout: i2, out out_reverse: i8, out outTime: i64, out outSTime:i32) {
   %c1_i4 = hw.constant 1 : i4
   %c2_i4 = hw.constant 2 : i4
   %c3_i4 = hw.constant 3 : i4
@@ -82,6 +85,7 @@ hw.module @Expressions(in %in4: i4, in %clock: i1,
   %17 = comb.or %6, %5 : i2
   %18 = comb.concat %c0_i2, %in4 : i2, i4
 
+  // CHECK: wire [15:0] w2;
   // CHECK: assign w2 = {6'h0, in4, clock, clock, in4};
   // CHECK: assign w2 = {10'h0, {2'h0, in4} ^ {{..}}2{in4[3]}}, in4} ^ {6{clock}}};
   %tmp = comb.extract %in4 from 3 : (i4) -> i1
@@ -120,35 +124,45 @@ hw.module @Expressions(in %in4: i4, in %clock: i1,
   %w3 = sv.wire : !hw.inout<i16>
   %w3_use = sv.read_inout %w3 : !hw.inout<i16>
 
+  // CHECK-DAG: assign out1a = ^in4;
+  %p_res = comb.parity %in4 : i4
+  // CHECK-DAG: assign out1b = &in4;
+  %and_res = comb.icmp eq %in4, %c-1_i4 : i4
+  // CHECK-DAG: assign out1c = |in4;
+  %or_res = comb.icmp ne %in4, %c0_i4 : i4
 
- // CHECK: assign out1a = ^in4;
-  %0 = comb.parity %in4 : i4
-  // CHECK: assign out1b = &in4;
-  %1 = comb.icmp eq %in4, %c-1_i4 : i4
-  // CHECK: assign out1c = |in4;
-  %2 = comb.icmp ne %in4, %c0_i4 : i4
-
-  // CHECK: assign out1d = in4 === 4'h0;
+  // CHECK-DAG: assign out1d = in4 === 4'h0;
   %cmp3 = comb.icmp ceq %in4, %c0_i4 : i4
-  // CHECK: assign out1e = in4 !== 4'h0;
+  // CHECK-DAG: assign out1e = in4 !== 4'h0;
   %cmp4 = comb.icmp cne %in4, %c0_i4 : i4
-  // CHECK: assign out1f = in4 ==? 4'h0;
+  // CHECK-DAG: assign out1f = in4 ==? 4'h0;
   %cmp5 = comb.icmp weq %in4, %c0_i4 : i4
-  // CHECK: assign out1g = in4 !=? 4'h0;
+  // CHECK-DAG: assign out1g = in4 !=? 4'h0;
   %cmp6 = comb.icmp wne %in4, %c0_i4 : i4
 
-  // CHECK: assign out4s = $signed($signed(in4) >>> in4);
-  // CHECK: assign sext17 = {w3[15], w3};
+  // CHECK-DAG: assign out4s = $unsigned($signed($signed(in4) >>> in4));
+  // CHECK-DAG: assign sext17 = {w3[15], w3};
   %36 = comb.extract %w3_use from 15 : (i16) -> i1
   %35 = comb.concat %36, %w3_use : i1, i16
 
   // Variadic with name attribute lowers
-  // CHECK: assign orvout = in4[1:0] | in4[3:2] | in4[2:1];
+  // CHECK-DAG: assign orvout = in4[1:0] | in4[3:2] | in4[2:1];
   %orpre1 = comb.extract %in4 from 0 : (i4) -> i2
   %orpre2 = comb.extract %in4 from 2 : (i4) -> i2
   %orpre3 = comb.extract %in4 from 1 : (i4) -> i2
   %orv = comb.or %orpre1, %orpre2, %orpre3 {sv.namehint = "hintyhint"}: i2
-  hw.output %0, %1, %2, %cmp3, %cmp4, %cmp5, %cmp6, %w1_use, %11, %w2_use, %w3_use, %35, %orv : i1, i1, i1, i1, i1, i1, i1, i4, i4, i16, i16, i17, i2
+
+  // Test for comb.reverse
+  // CHECK-DAG: assign out_reverse = {<<{in8}};
+  %rev8 = comb.reverse %in8 : i8
+
+  // Time system functions
+  // CHECK-DAG: assign outTime = $time;
+  %time = sv.system.time : i64
+  // CHECK-DAG: assign outSTime = $stime;
+  %stime = sv.system.stime : i32
+
+  hw.output %p_res, %and_res, %or_res, %cmp3, %cmp4, %cmp5, %cmp6, %w1_use, %11, %w2_use, %w3_use, %35, %orv, %rev8, %time, %stime : i1, i1, i1, i1, i1, i1, i1, i4, i4, i16, i16, i17, i2, i8, i64, i32
 }
 
 // CHECK-LABEL: module Precedence(
@@ -489,7 +503,8 @@ hw.module @ArrayParamsInst() {
     uarr: %uarr : !hw.uarray<2 x i8>) -> ()
 }
 // CHECK:       wire [1:0][7:0] [[G0:_.*]] = '{8'h1, 8'h2};
-// CHECK:       wire [7:0]      [[G1:_.*]][0:1] = '{8'h1, 8'h2};
+// CHECK:       wire [7:0]      [[G1:_.*]][0:1];
+// CHECK:       assign [[G1]] = '{8'h1, 8'h2};
 // CHECK:       ArrayParams #(
 // CHECK:         .param(2)
 // CHECK:       ) arrays (
@@ -535,7 +550,7 @@ hw.module @Stop(in %clock: i1, in %reset: i1) {
       %0 = sv.verbatim.expr "`STOP_COND_" : () -> i1
       %1 = comb.and %0, %reset : i1
       sv.if %1  {
-        sv.fatal 1
+        sv.fatal.procedural 1
       }
     }
   }
@@ -557,7 +572,7 @@ hw.module @Print(in %clock: i1, in %reset: i1, in %a: i4, in %b: i4) {
   %0 = comb.concat %false, %a : i1, i4
   %1 = comb.shl %0, %c1_i5 : i5
   sv.always posedge %clock  {
-    %2 = sv.macro.ref @PRINTF_COND_() : () -> i1
+    %2 = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     %3 = comb.and %2, %reset : i1
     sv.if %3  {
       sv.fwrite %fd, "Hi %x %x\0A"(%1, %b) : i5, i4
@@ -697,7 +712,7 @@ hw.module @BindEmission() {
   // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
   // CHECK-NEXT:    BindEmissionInstance BindEmissionInstance ();
   // CHECK-NEXT: */
-  hw.instance "BindEmissionInstance" sym @__BindEmissionInstance__ @BindEmissionInstance() -> ()  {doNotPrint = true}
+  hw.instance "BindEmissionInstance" sym @__BindEmissionInstance__ @BindEmissionInstance() -> ()  {doNotPrint}
   hw.output
 }
 
@@ -708,7 +723,7 @@ hw.module @BindEmission2() {
   // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
   // CHECK-NEXT:    BindEmissionInstance BindEmissionInstance ();
   // CHECK-NEXT: */
-  hw.instance "BindEmissionInstance" sym @BindEmissionInstance @BindEmissionInstance() -> ()  {doNotPrint = true}
+  hw.instance "BindEmissionInstance" sym @BindEmissionInstance @BindEmissionInstance() -> ()  {doNotPrint}
   hw.output
 }
 
@@ -731,7 +746,7 @@ hw.module @bind_rename_port(in %.io_req_ready.output: i1, in %reset: i1 { hw.ver
 // CHECK-LABEL: module SiFive_MulDiv
 hw.module @SiFive_MulDiv(in %clock: i1, in %reset: i1, out io_req_ready: i1) {
   %false = hw.constant false
-  hw.instance "InvisibleBind_assert" sym @__ETC_SiFive_MulDiv_assert @bind_rename_port(".io_req_ready.output": %false: i1, reset: %reset: i1, clock: %clock: i1) -> () {doNotPrint = true}
+  hw.instance "InvisibleBind_assert" sym @__ETC_SiFive_MulDiv_assert @bind_rename_port(".io_req_ready.output": %false: i1, reset: %reset: i1, clock: %clock: i1) -> () {doNotPrint}
   hw.output %false : i1
   //      CHECK: bind_rename_port InvisibleBind_assert (
   // CHECK-NEXT:   ._io_req_ready_output (1'h0),
@@ -770,8 +785,22 @@ hw.module @W422_Foo() {
   hw.output
 }
 
+sv.macro.decl @MacroWithoutVerilogName
+sv.macro.decl @MacroWithVerilogName["A"]
+// CHECK-LABEL: module ModuleUsingMacroWithVerilogName(
+hw.module @ModuleUsingMacroWithVerilogName(in %a : i1) {
+  // CHECK: `ifdef MacroWithoutVerilogName
+  sv.ifdef @MacroWithoutVerilogName {
+    %b = hw.wire %a : i1
+  }
+  // CHECK: `ifdef A
+  sv.ifdef @MacroWithVerilogName {
+    %b = hw.wire %a : i1
+  }
+}
+
 hw.module @BindInterface() {
-  %bar = sv.interface.instance sym @__Interface__ {doNotPrint = true} : !sv.interface<@Interface>
+  %bar = sv.interface.instance sym @__Interface__ {doNotPrint} : !sv.interface<@Interface>
   hw.output
 }
 
@@ -786,3 +815,9 @@ sv.bind #hw.innerNameRef<@SiFive_MulDiv::@__ETC_SiFive_MulDiv_assert>
 // CHECK-NEXT:  ._io_req_ready_output (1'h0)
 // CHECK-NEXT:  .resetSignalName      (reset),
 // CHECK-NEXT:  .clock                (clock)
+
+// CHECK: `include "foo/bar"
+sv.include local "foo/bar"
+
+// CHECK: `include <foo/bar>
+sv.include system "foo/bar"

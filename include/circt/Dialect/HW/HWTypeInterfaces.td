@@ -78,4 +78,23 @@ def FieldIDTypeInterface : TypeInterface<"FieldIDTypeInterface"> {
   ];
 }
 
+def BitWidthTypeInterface : TypeInterface<"BitWidthTypeInterface"> {
+  let cppNamespace = "circt::hw";
+  let description = [{
+    Type interface for types that have a statically computable bit width.
+    This allows types from different dialects to participate in bit width
+    calculations, enabling operations like hw.bitcast to work with non-HW types.
+  }];
+
+  let methods = [
+    InterfaceMethod<[{
+      Return the hardware bit width of the type. Does not reflect any encoding,
+      padding, or storage scheme, just the bit (and wire width) of a
+      statically-sized type. Reflects the number of wires needed to transmit a
+      value of this type. Returns std::nullopt if the type's bit width cannot
+      be statically computed.
+    }], "std::optional<int64_t>", "getBitWidth">,
+  ];
+}
+
 #endif // CIRCT_DIALECT_HW_HWTYPEINTERFACES_TD

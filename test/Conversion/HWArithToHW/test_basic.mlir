@@ -243,13 +243,8 @@ hw.module @icmp(in %op0: i32, in %op1: i32, out sisi: i1, out siui: i1, out uisi
 // CHECK:   %[[UIUI_OUT:.*]] = comb.icmp ult %op0, %op1 : i32
   %uiui = hwarith.icmp lt %op0Unsigned, %op1Unsigned : ui32, ui32
 
-  %sisiOut = hwarith.cast %sisi : (ui1) -> i1
-  %siuiOut = hwarith.cast %siui : (ui1) -> i1
-  %uisiOut = hwarith.cast %uisi : (ui1) -> i1
-  %uiuiOut = hwarith.cast %uiui : (ui1) -> i1
-
 // CHECK:   hw.output %[[SISI_OUT]], %[[SIUI_OUT]], %[[UISI_OUT]], %[[UIUI_OUT]] : i1, i1, i1, i1
-  hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i1, i1, i1, i1
+  hw.output %sisi, %siui, %uisi, %uiui: i1, i1, i1, i1
 }
 
 // -----
@@ -285,13 +280,8 @@ hw.module @icmp_mixed_width(in %op0: i5, in %op1: i7, out sisi: i1, out siui: i1
 // CHECK:   %[[UIUI_OUT:.*]] = comb.icmp ult %[[OP0_PADDED]], %op1 : i7
   %uiui = hwarith.icmp lt %op0Unsigned, %op1Unsigned : ui5, ui7
 
-  %sisiOut = hwarith.cast %sisi : (ui1) -> i1
-  %siuiOut = hwarith.cast %siui : (ui1) -> i1
-  %uisiOut = hwarith.cast %uisi : (ui1) -> i1
-  %uiuiOut = hwarith.cast %uiui : (ui1) -> i1
-
 // CHECK:   hw.output %[[SISI_OUT]], %[[SIUI_OUT]], %[[UISI_OUT]], %[[UIUI_OUT]] : i1, i1, i1, i1
-  hw.output %sisiOut, %siuiOut, %uisiOut, %uiuiOut : i1, i1, i1, i1
+  hw.output %sisi, %siui, %uisi, %uiui: i1, i1, i1, i1
 }
 
 // -----
@@ -369,4 +359,39 @@ hw.module @wires () {
   %c0_ui2 = hwarith.constant 2 : ui2
   sv.assign %r52, %c0_ui2 : ui2
   sv.assign %r53, %c0_ui2 : ui2
+}
+
+// -----
+
+// CHECK:  hw.type_scope @pycde {
+// CHECK:    hw.typedecl @MMIOIntermediateCmd : !hw.struct<offset: i32>
+// CHECK:  }
+// CHECK:  hw.module @MMIOAxiReadWriteMux(out cmd : !hw.typealias<@pycde::@MMIOIntermediateCmd, !hw.struct<offset: i32>>) {
+// CHECK:    %c0_i32 = hw.constant 0 : i32
+// CHECK:    [[R0:%.+]] = hw.struct_create (%c0_i32) : !hw.typealias<@pycde::@MMIOIntermediateCmd, !hw.struct<offset: i32>>
+// CHECK:    hw.output [[R0]] : !hw.typealias<@pycde::@MMIOIntermediateCmd, !hw.struct<offset: i32>>
+// CHECK:  }
+
+hw.type_scope @pycde {
+  hw.typedecl @MMIOIntermediateCmd : !hw.struct<offset: ui32>
+}
+hw.module @MMIOAxiReadWriteMux(out cmd : !hw.typealias<@pycde::@MMIOIntermediateCmd, !hw.struct<offset: ui32>>) {
+  %2 = hw.constant 0 : i32
+  %3 = hwarith.cast %2 : (i32) -> ui32
+  %4 = hw.struct_create (%3) : !hw.typealias<@pycde::@MMIOIntermediateCmd, !hw.struct<offset: ui32>>
+  hw.output %4: !hw.typealias<@pycde::@MMIOIntermediateCmd, !hw.struct<offset: ui32>>
+}
+
+
+// -----
+// CHECK-LABEL:  hw.module @UnpackedArrayInout() {
+// CHECK-NEXT:     %vec_a = sv.reg : !hw.inout<uarray<16xi32>>
+// CHECK-NEXT:     %c0_i4 = hw.constant 0 : i4
+// CHECK-NEXT:     [[R0:%.+]] = sv.array_index_inout %vec_a[%c0_i4] : !hw.inout<uarray<16xi32>>, i4
+// CHECK-NEXT:     sv.read_inout [[R0]] : !hw.inout<i32>
+hw.module @UnpackedArrayInout() {
+    %vec_a = sv.reg : !hw.inout<uarray<16xsi32>>
+    %1 = hw.constant 0 : i4
+    %2 = sv.array_index_inout %vec_a[%1] : !hw.inout<uarray<16xsi32>>, i4
+    %3 = sv.read_inout %2 : !hw.inout<si32>
 }

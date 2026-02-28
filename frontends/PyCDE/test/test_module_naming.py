@@ -2,6 +2,7 @@
 
 import pycde
 import pycde.dialects.hw
+from pycde.types import Bit
 
 import sys
 
@@ -10,8 +11,8 @@ import sys
 def Parameterized(param):
 
   class TestModule(pycde.Module):
-    x = pycde.Input(pycde.types.i1)
-    y = pycde.Output(pycde.types.i1)
+    x = pycde.Input(Bit)
+    y = pycde.Output(Bit)
 
     @pycde.generator
     def construct(ports):
@@ -21,8 +22,8 @@ def Parameterized(param):
 
 
 class UnParameterized(pycde.Module):
-  x = pycde.Input(pycde.types.i1)
-  y = pycde.Output(pycde.types.i1)
+  x = pycde.Input(Bit)
+  y = pycde.Output(Bit)
 
   @pycde.generator
   def construct(ports):
@@ -35,7 +36,7 @@ class Test(pycde.Module):
 
   @pycde.generator
   def build(_):
-    c1 = pycde.dialects.hw.ConstantOp(pycde.types.i1, 1)
+    c1 = pycde.dialects.hw.ConstantOp(Bit, 1)
     Parameterized(1)(x=c1)
     Parameterized(1)(x=c1)
     Parameterized(2)(x=c1)

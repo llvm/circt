@@ -24,6 +24,9 @@ class Pass;
 
 namespace circt {
 
+#define GEN_PASS_DECL_CALYXNATIVE
+#include "circt/Conversion/Passes.h.inc"
+
 std::unique_ptr<mlir::Pass> createCalyxNativePass();
 
 } // namespace circt

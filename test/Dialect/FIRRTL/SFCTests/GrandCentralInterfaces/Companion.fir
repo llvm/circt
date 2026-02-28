@@ -2,6 +2,7 @@
 ; RUN: firtool %s --grand-central-companion-mode=drop | FileCheck %s --check-prefixes=DROP
 ; RUN: firtool %s --grand-central-companion-mode=bind | FileCheck %s --check-prefixes=BIND
 
+FIRRTL version 4.0.0
 circuit Foo : %[[
   {
     "class": "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",
@@ -18,7 +19,6 @@ circuit Foo : %[[
           "tpe": {
             "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
             "ref": {
-              "circuit": "Foo",
               "module": "Foo",
               "path": [],
               "ref": "a",
@@ -48,16 +48,16 @@ circuit Foo : %[[
 
     assert(clock, a, UInt<1>(1), "hello")
 
-  module Foo :
+  public module Foo :
     input clock: Clock
     input a_in: UInt<1>
 
     wire a: UInt<1>
-    a <= a_in
+    connect a, a_in
 
     inst companion of Companion
-    companion.clock <= clock
-    companion.a <= a
+    connect companion.clock, clock
+    connect companion.a, a
 
     ; INST:     module Foo
     ; INST-NOT: endmodule

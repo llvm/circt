@@ -6,11 +6,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
+#include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+namespace circt {
+namespace hw {
+#define GEN_PASS_DEF_FLATTENIO
+#include "circt/Dialect/HW/Passes.h.inc"
+} // namespace hw
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
@@ -39,6 +46,14 @@ static llvm::SmallVector<Type> getInnerTypes(hw::StructType t) {
 
 namespace {
 
+/// Flatten the given value ranges into a single vector of values.
+static SmallVector<Value> flattenValues(ArrayRef<ValueRange> values) {
+  SmallVector<Value> result;
+  for (const auto &vals : values)
+    llvm::append_range(result, vals);
+  return result;
+}
+
 // Replaces an output op with a new output with flattened (exploded) structs.
 struct OutputOpConversion : public OpConversionPattern<hw::OutputOp> {
   OutputOpConversion(TypeConverter &typeConverter, MLIRContext *context,
@@ -53,8 +68,31 @@ struct OutputOpConversion : public OpConversionPattern<hw::OutputOp> {
     // Flatten the operands.
     for (auto operand : adaptor.getOperands()) {
       if (auto structType = getStructType(operand.getType())) {
-        auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
-            op.getLoc(), getInnerTypes(structType), operand);
+        auto explodedStruct = hw::StructExplodeOp::create(
+            rewriter, op.getLoc(), getInnerTypes(structType), operand);
+        llvm::copy(explodedStruct.getResults(),
+                   std::back_inserter(convOperands));
+      } else {
+        convOperands.push_back(operand);
+      }
+    }
+
+    // And replace.
+    opVisited->insert(op->getParentOp());
+    rewriter.replaceOpWithNewOp<hw::OutputOp>(op, convOperands);
+    return success();
+  }
+
+  LogicalResult
+  matchAndRewrite(hw::OutputOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    llvm::SmallVector<Value> convOperands;
+
+    // Flatten the operands.
+    for (auto operand : flattenValues(adaptor.getOperands())) {
+      if (auto structType = getStructType(operand.getType())) {
+        auto explodedStruct = hw::StructExplodeOp::create(
+            rewriter, op.getLoc(), getInnerTypes(structType), operand);
         llvm::copy(explodedStruct.getResults(),
                    std::back_inserter(convOperands));
       } else {
@@ -78,7 +116,7 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
         externModules(externModules) {}
 
   LogicalResult
-  matchAndRewrite(hw::InstanceOp op, OpAdaptor adaptor,
+  matchAndRewrite(hw::InstanceOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto referencedMod = op.getReferencedModuleNameAttr();
     // If externModules is populated and this is an extern module instance,
@@ -89,10 +127,10 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
     auto loc = op.getLoc();
     // Flatten the operands.
     llvm::SmallVector<Value> convOperands;
-    for (auto operand : adaptor.getOperands()) {
+    for (auto operand : flattenValues(adaptor.getOperands())) {
       if (auto structType = getStructType(operand.getType())) {
-        auto explodedStruct = rewriter.create<hw::StructExplodeOp>(
-            loc, getInnerTypes(structType), operand);
+        auto explodedStruct = hw::StructExplodeOp::create(
+            rewriter, loc, getInnerTypes(structType), operand);
         llvm::copy(explodedStruct.getResults(),
                    std::back_inserter(convOperands));
       } else {
@@ -112,11 +150,11 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
 
     // Create the new instance with the flattened module, attributes will be
     // adjusted later.
-    auto newInstance = rewriter.create<hw::InstanceOp>(
-        loc, newResultTypes, op.getInstanceNameAttr(),
+    auto newInstance = hw::InstanceOp::create(
+        rewriter, loc, newResultTypes, op.getInstanceNameAttr(),
         FlatSymbolRefAttr::get(referencedMod), convOperands,
         op.getArgNamesAttr(), op.getResultNamesAttr(), op.getParametersAttr(),
-        op.getInnerSymAttr());
+        op.getInnerSymAttr(), op.getDoNotPrintAttr());
 
     // re-create any structs in the result.
     llvm::SmallVector<Value> convResults;
@@ -126,8 +164,8 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
       Type oldResultType = op.getResultTypes()[oldResultCntr];
       if (auto structType = getStructType(oldResultType)) {
         size_t nElements = structType.getElements().size();
-        auto implodedStruct = rewriter.create<hw::StructCreateOp>(
-            loc, structType,
+        auto implodedStruct = hw::StructCreateOp::create(
+            rewriter, loc, structType,
             newInstance.getResults().slice(resIndex, nElements));
         convResults.push_back(implodedStruct.getResult());
         resIndex += nElements - 1;
@@ -164,23 +202,42 @@ public:
         results.push_back(type);
       else {
         for (auto field : structType.getElements())
-
           results.push_back(field.type);
       }
       return success();
     });
 
+    // Materialize !hw.struct<a,b,...> to a, b, ... via. hw.explode. This
+    // situation may occur in case of hw.extern_module's with struct outputs.
+    addTargetMaterialization([](OpBuilder &builder, TypeRange resultTypes,
+                                ValueRange inputs, Location loc) {
+      if (inputs.size() != 1 && !isStructType(inputs[0].getType()))
+        return ValueRange();
+
+      auto explodeOp = hw::StructExplodeOp::create(builder, loc, inputs[0]);
+      return ValueRange(explodeOp.getResults());
+    });
     addTargetMaterialization([](OpBuilder &builder, hw::StructType type,
                                 ValueRange inputs, Location loc) {
-      auto result = builder.create<hw::StructCreateOp>(loc, type, inputs);
+      auto result = hw::StructCreateOp::create(builder, loc, type, inputs);
       return result.getResult();
     });
 
     addTargetMaterialization([](OpBuilder &builder, hw::TypeAliasType type,
                                 ValueRange inputs, Location loc) {
-      auto structType = getStructType(type);
-      assert(structType && "expected struct type");
-      auto result = builder.create<hw::StructCreateOp>(loc, structType, inputs);
+      auto result = hw::StructCreateOp::create(builder, loc, type, inputs);
+      return result.getResult();
+    });
+
+    // In the presence of hw.extern_module which takes struct arguments, we may
+    // have materialized struct explodes for said arguments (say, e.g., if the
+    // parent module of the hw.instance had structs in its input, and feeds
+    // these structs to the hw.instance).
+    // These struct explodes needs to be converted back to the original struct,
+    // which persist beyond the conversion.
+    addSourceMaterialization([](OpBuilder &builder, hw::StructType type,
+                                ValueRange inputs, Location loc) {
+      auto result = hw::StructCreateOp::create(builder, loc, type, inputs);
       return result.getResult();
     });
   }
@@ -393,9 +450,12 @@ static LogicalResult flattenOpsOfType(ModuleOp module, bool recursive,
     target.addDynamicallyLegalOp<hw::InstanceOp>([&](hw::InstanceOp op) {
       auto refName = op.getReferencedModuleName();
       return externModules.contains(refName) ||
-             llvm::none_of(op->getOperands(), [](auto operand) {
-               return isStructType(operand.getType());
-             });
+             (llvm::none_of(op->getOperands(),
+                            [](auto operand) {
+                              return isStructType(operand.getType());
+                            }) &&
+              llvm::none_of(op->getResultTypes(),
+                            [](auto result) { return isStructType(result); }));
     });
 
     DenseMap<Operation *, ArrayAttr> oldArgNames, oldResNames;
@@ -483,18 +543,14 @@ static bool flattenIO(ModuleOp module, bool recursive,
 
 namespace {
 
-class FlattenIOPass : public circt::hw::FlattenIOBase<FlattenIOPass> {
-public:
-  FlattenIOPass(bool recursiveFlag, bool flattenExternFlag, char join) {
-    recursive = recursiveFlag;
-    flattenExtern = flattenExternFlag;
-    joinChar = join;
-  }
+class FlattenIOPass : public circt::hw::impl::FlattenIOBase<FlattenIOPass> {
+  using Base::Base;
 
+public:
   void runOnOperation() override {
     ModuleOp module = getOperation();
     if (!flattenExtern) {
-      // Record the extern modules, donot flatten them.
+      // Record the extern modules, do not flatten them.
       for (auto m : module.getOps<hw::HWModuleExternOp>())
         externModules.insert(m.getModuleName());
       if (flattenIO<hw::HWModuleOp, hw::HWModuleGeneratedOp>(
@@ -513,14 +569,3 @@ private:
   StringSet<> externModules;
 };
 } // namespace
-
-//===----------------------------------------------------------------------===//
-// Pass initialization
-//===----------------------------------------------------------------------===//
-
-std::unique_ptr<Pass> circt::hw::createFlattenIOPass(bool recursiveFlag,
-                                                     bool flattenExternFlag,
-                                                     char joinChar) {
-  return std::make_unique<FlattenIOPass>(recursiveFlag, flattenExternFlag,
-                                         joinChar);
-}

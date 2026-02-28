@@ -146,10 +146,9 @@ LogicalResult instance_like_impl::verifyOutputs(
   return success();
 }
 
-LogicalResult
-instance_like_impl::verifyParameters(ArrayAttr parameters,
-                                     ArrayAttr moduleParameters,
-                                     const EmitErrorFn &emitError) {
+LogicalResult instance_like_impl::verifyParameters(
+    ArrayAttr parameters, ArrayAttr moduleParameters,
+    ArrayRef<Type> resolvedModParametersRefs, const EmitErrorFn &emitError) {
   // Check parameters match up.
   auto numParameters = parameters.size();
   if (numParameters != moduleParameters.size()) {
@@ -164,6 +163,7 @@ instance_like_impl::verifyParameters(ArrayAttr parameters,
   for (size_t i = 0; i != numParameters; ++i) {
     auto param = cast<ParamDeclAttr>(parameters[i]);
     auto modParam = cast<ParamDeclAttr>(moduleParameters[i]);
+    auto resolvedModParamType = resolvedModParametersRefs[i];
 
     auto paramName = param.getName();
     if (paramName != modParam.getName()) {
@@ -175,7 +175,7 @@ instance_like_impl::verifyParameters(ArrayAttr parameters,
       return failure();
     }
 
-    if (param.getType() != modParam.getType()) {
+    if (param.getType() != resolvedModParamType) {
       emitError([&](auto &diag) {
         diag << "parameter " << paramName << " should have type "
              << modParam.getType() << " but has type " << param.getType();
@@ -227,6 +227,7 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
       ArrayAttr::get(instance->getContext(), mod.getOutputNames());
 
   ArrayRef<Type> resolvedModInputTypesRef = getModuleType(module).getInputs();
+
   SmallVector<Type> resolvedModInputTypes;
   if (parameters) {
     if (failed(instance_like_impl::resolveParametricTypes(
@@ -235,6 +236,7 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
       return failure();
     resolvedModInputTypesRef = resolvedModInputTypes;
   }
+
   if (failed(instance_like_impl::verifyInputs(
           argNames, modArgNames, inputs.getTypes(), resolvedModInputTypesRef,
           emitError)))
@@ -256,10 +258,22 @@ LogicalResult instance_like_impl::verifyInstanceOfHWModule(
     return failure();
 
   if (parameters) {
+    auto modParameters = module->getAttrOfType<ArrayAttr>("parameters");
+    SmallVector<Type> rawModParameters, resolvedModParameters;
+    rawModParameters.reserve(modParameters.size());
+    resolvedModParameters.reserve(modParameters.size());
+    for (auto paramDecl : modParameters.getAsRange<ParamDeclAttr>())
+      rawModParameters.push_back(paramDecl.getType());
+
+    // resolve parameters
+    if (failed(instance_like_impl::resolveParametricTypes(
+            instance->getLoc(), parameters, rawModParameters,
+            resolvedModParameters, emitError)))
+      return failure();
+
     // Check that the parameters are consistent with the referenced module.
-    ArrayAttr modParameters = module->getAttrOfType<ArrayAttr>("parameters");
-    if (failed(instance_like_impl::verifyParameters(parameters, modParameters,
-                                                    emitError)))
+    if (failed(instance_like_impl::verifyParameters(
+            parameters, modParameters, resolvedModParameters, emitError)))
       return failure();
   }
 

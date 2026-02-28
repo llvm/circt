@@ -1,6 +1,7 @@
 // RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-inject-dut-hier))' -split-input-file %s | FileCheck %s
 
 // CHECK-LABEL: firrtl.circuit "Top"
+// CHECK-SAME:    {class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}
 firrtl.circuit "Top" attributes {
     annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}]
   } {
@@ -22,60 +23,29 @@ firrtl.circuit "Top" attributes {
 
 // -----
 
-// CHECK-LABEL: firrtl.circuit "NLARenaming"
-firrtl.circuit "NLARenaming" attributes {
-    annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}]
+firrtl.circuit "Top" attributes {
+    annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo", moveDut = true}]
   } {
-  // An NLA that is rooted at the DUT moves to the wrapper.
+  // CHECK:      firrtl.module private @DUT()
+  // CHECK-SAME:   class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
   //
-  // CHECK:      hw.hierpath private @nla_DUTRoot [@Foo::@sub, @Sub::@a]
-  hw.hierpath private @nla_DUTRoot [@DUT::@sub, @Sub::@a]
-
-  // NLAs that end at the DUT or a DUT port are unmodified.
-  //
-  // CHECK-NEXT: hw.hierpath private @[[nla_DUTLeafModule_clone:.+]] [@NLARenaming::@dut, @DUT]
-  // CHECK-NEXT: hw.hierpath private @nla_DUTLeafModule [@NLARenaming::@dut, @DUT::@Foo, @Foo]
-  // CHECK-NEXT: hw.hierpath private @nla_DUTLeafPort [@NLARenaming::@dut, @DUT::@in]
-  hw.hierpath private @nla_DUTLeafModule [@NLARenaming::@dut, @DUT]
-  hw.hierpath private @nla_DUTLeafPort [@NLARenaming::@dut, @DUT::@in]
-
-  // NLAs that end inside the DUT get an extra level of hierarchy.
-  //
-  // CHECK-NEXT: hw.hierpath private @nla_DUTLeafWire [@NLARenaming::@dut, @DUT::@[[inst_sym:.+]], @Foo::@w]
-  hw.hierpath private @nla_DUTLeafWire [@NLARenaming::@dut, @DUT::@w]
-
-  // An NLA that passes through the DUT gets an extra level of hierarchy.
-  //
-  // CHECK-NEXT: hw.hierpath private @nla_DUTPassthrough [@NLARenaming::@dut, @DUT::@[[inst_sym:.+]], @Foo::@sub, @Sub]
-  hw.hierpath private @nla_DUTPassthrough [@NLARenaming::@dut, @DUT::@sub, @Sub]
-  firrtl.module private @Sub() attributes {annotations = [{circt.nonlocal = @nla_DUTPassthrough, class = "nla_DUTPassthrough"}]} {
-    %a = firrtl.wire sym @a : !firrtl.uint<1>
-  }
-
   // CHECK:      firrtl.module private @Foo
-  // CHECK:      firrtl.module private @DUT
-  // CHECK-SAME:   {circt.nonlocal = @[[nla_DUTLeafModule_clone]], class = "nla_DUTLeafModule"}
-  // CHECK-NEXT:    firrtl.instance Foo sym @[[inst_sym]]
-  firrtl.module private @DUT(
-    in %in: !firrtl.uint<1> sym @in [{circt.nonlocal = @nla_DUTLeafPort, class = "nla_DUTLeafPort"}]
-  ) attributes {
-    annotations = [
-      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"},
-      {circt.nonlocal = @nla_DUTLeafModule, class = "nla_DUTLeafModule"}]}
-  {
-    %w = firrtl.wire sym @w {
-      annotations = [
-        {circt.nonlocal = @nla_DUTPassthrough, class = "nla_DUT_LeafWire"}]
-    } : !firrtl.uint<1>
-    firrtl.instance sub sym @sub @Sub()
-  }
-  firrtl.module @NLARenaming() {
-    %dut_in = firrtl.instance dut sym @dut @DUT(in in: !firrtl.uint<1>)
+  // CHECK-NEXT:   firrtl.instance DUT {{.+}} @DUT()
+  // CHECK-NEXT: }
+  firrtl.module private @DUT() attributes {annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
+
+  // CHECK:      firrtl.module @Top
+  // CHECK-NEXT:   firrtl.instance dut @Foo
+  firrtl.module @Top() {
+    firrtl.instance dut @DUT()
   }
 }
 
 // -----
 
+// Test renaming when `moveDut=false`.  (This is the default behavior and
+// doesn't need to be explicitly specified in the annotation.)
+//
 // CHECK-LABEL: firrtl.circuit "NLARenamingNewNLAs"
 firrtl.circuit "NLARenamingNewNLAs" attributes {
     annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}]
@@ -138,6 +108,130 @@ firrtl.circuit "NLARenamingNewNLAs" attributes {
 
 // -----
 
+// Test renaming when `moveDut=true`.  This test is a copy of the one above it.
+//
+// CHECK-LABEL: firrtl.circuit "NLARenamingMoveDutTrue"
+firrtl.circuit "NLARenamingMoveDutTrue" attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
+        name = "Foo",
+        moveDut = true
+      }
+    ]
+  } {
+  // An NLA that is rooted at the DUT moves to the WRAPPER.  However, because
+  // the WRAPPER is renamed to the name of the DUT, these NLAs do not change.
+  //
+  // CHECK:      hw.hierpath private @nla_DUTRoot [@DUT::@sub, @Sub]
+  // CHECK:      hw.hierpath private @nla_DUTRootRef [@DUT::@sub, @Sub::@a]
+  hw.hierpath private @nla_DUTRoot [@DUT::@sub, @Sub]
+  hw.hierpath private @nla_DUTRootRef [@DUT::@sub, @Sub::@a]
+
+  // NLAs that end at the DUT or a DUT port are changed to end on the WRAPPER.
+  // The WRAPPER takes the original DUT name.
+  //
+  // CHECK-NEXT: hw.hierpath private @nla_DUTLeafModule [@NLARenamingMoveDutTrue::@dut, @Foo::@DUT, @DUT]
+  // CHECK-NEXT: hw.hierpath private @nla_DUTLeafPort [@NLARenamingMoveDutTrue::@dut, @Foo::@DUT, @DUT]
+  hw.hierpath private @nla_DUTLeafModule [@NLARenamingMoveDutTrue::@dut, @DUT]
+  hw.hierpath private @nla_DUTLeafPort [@NLARenamingMoveDutTrue::@dut, @DUT]
+
+  // NLAs that end inside the DUT are moved to end inside the WRAPPER.  The
+  // WRAPPER takes the original DUT name.
+  //
+  // CHECK-NEXT: hw.hierpath private @nla_DUTLeafWire [@NLARenamingMoveDutTrue::@dut, @Foo::@[[inst_sym:.+]], @DUT]
+  hw.hierpath private @nla_DUTLeafWire [@NLARenamingMoveDutTrue::@dut, @DUT]
+
+  // An NLA that passes through the DUT gets an extra level of hierarchy that
+  // includes the WRAPPER.
+  //
+  // CHECK-NEXT: hw.hierpath private @nla_DUTPassthrough [@NLARenamingMoveDutTrue::@dut, @Foo::@[[inst_sym]], @DUT::@sub, @Sub]
+  hw.hierpath private @nla_DUTPassthrough [@NLARenamingMoveDutTrue::@dut, @DUT::@sub, @Sub]
+  firrtl.module private @Sub() attributes {annotations = [{circt.nonlocal = @nla_DUTPassthrough, class = "nla_DUTPassthrough"}]} {
+    %a = firrtl.wire sym @a : !firrtl.uint<1>
+  }
+
+  // CHECK:      firrtl.module private @DUT
+  // CHECK-SAME:   in %in{{.+}} [{circt.nonlocal = @nla_DUTLeafPort, class = "nla_DUTLeafPort"}]
+  // CHECK-NEXT:   %w = firrtl.wire
+  // CHECK-SAME:     {annotations = [{circt.nonlocal = @nla_DUTLeafWire, class = "nla_DUT_LeafWire"}]}
+
+  // CHECK:      firrtl.module private @Foo
+  // CHECK-NOT:    annotation
+  // CHECK-NEXT:   firrtl.instance DUT sym @[[inst_sym]]
+  firrtl.module private @DUT(
+    in %in: !firrtl.uint<1> [{circt.nonlocal = @nla_DUTLeafPort, class = "nla_DUTLeafPort"}]
+  ) attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"},
+      {circt.nonlocal = @nla_DUTLeafModule, class = "nla_DUTLeafModule"}]}
+  {
+    %w = firrtl.wire {
+      annotations = [
+        {circt.nonlocal = @nla_DUTLeafWire, class = "nla_DUT_LeafWire"}]
+    } : !firrtl.uint<1>
+    firrtl.instance sub sym @sub @Sub()
+  }
+  firrtl.module @NLARenamingMoveDutTrue() {
+    %dut_in = firrtl.instance dut sym @dut @DUT(in in: !firrtl.uint<1>)
+
+    firrtl.path reference distinct[0]<>
+  }
+}
+
+// -----
+
+// Test that an object model path is updated to point at the new DUT when in
+// `moveDut=true` mode.  This test is redundant with "NLARenamingNLA
+//
+// CHECK-LABEL: firrtl.circuit "ObjectModelDUT"
+firrtl.circuit "ObjectModelDUT" attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
+        name = "Foo",
+        moveDut = true
+      }
+    ]
+  } {
+
+  // CHECK: hw.hierpath private @nla [@ObjectModelDUT::@dut, @Foo::@[[wrapperSym:.+]], @DUT]
+  hw.hierpath private @nla [@ObjectModelDUT::@dut, @DUT]
+
+  // CHECK:      firrtl.module private @DUT()
+  // CHECK-SAME:   {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+  // CHECK-SAME:   {circt.nonlocal = @nla, class = "circt.tracker", id = distinct[0]<>}
+
+  // CHECK:     firrtl.module private @Foo()
+  // CHECK-NOT:   "sifive.enterprise.firrtl.MarkDUTAnnotation"
+  // CHECK-NOT:   circt.nonlocal
+  // CHECK-NOT: firrtl.module
+  // CHECK:       firrtl.instance {{.*}} sym @[[wrapperSym]] @DUT()
+  firrtl.module private @DUT() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      },
+      {
+        circt.nonlocal = @nla,
+        class = "circt.tracker",
+        id = distinct[0]<>
+      }
+    ]
+  } {}
+
+  // CHECK:     firrtl.module @ObjectModelDUT()
+  // CHECK-NOT: firrtl.module
+  // CHECK:       firrtl.path reference distinct[0]<>
+  firrtl.module @ObjectModelDUT() {
+    firrtl.instance dut sym @dut @DUT()
+    firrtl.path reference distinct[0]<>
+  }
+
+}
+
+// -----
+
 // CHECK-LABEL: firrtl.circuit "Refs"
 firrtl.circuit "Refs" attributes {
     annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}]
@@ -155,6 +249,32 @@ firrtl.circuit "Refs" attributes {
   }
   firrtl.module @Refs() {
     %dut_in, %dut_tap = firrtl.instance dut sym @dut @DUT(in in: !firrtl.uint<1>, out out: !firrtl.ref<uint<1>>)
+  }
+}
+
+// -----
+// https://github.com/llvm/circt/issues/8552
+// Check rwprobes are updated.
+
+// CHECK-LABEL: firrtl.circuit "RWProbe"
+firrtl.circuit "RWProbe" attributes {
+    annotations = [{class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation", name = "Foo"}]
+  } {
+
+  firrtl.module private @DUT(
+    in %in: !firrtl.uint<1>, out %out: !firrtl.rwprobe<uint<1>>
+  ) attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]}
+  {
+    %w = firrtl.wire sym @sym : !firrtl.uint<1>
+    // CHECK: ref.rwprobe <@Foo::@sym>
+    %rwp = firrtl.ref.rwprobe <@DUT::@sym> : !firrtl.rwprobe<uint<1>>
+    firrtl.ref.define %out, %rwp : !firrtl.rwprobe<uint<1>>
+  }
+  firrtl.module @RWProbe() {
+    %dut_in, %dut_tap = firrtl.instance dut sym @dut @DUT(in in: !firrtl.uint<1>, out out: !firrtl.rwprobe<uint<1>>)
   }
 }
 
@@ -180,4 +300,72 @@ firrtl.circuit "Properties" attributes {
   firrtl.module @Properties() {
     %dut_in, %dut_out = firrtl.instance dut sym @dut @DUT(in in: !firrtl.integer, out out: !firrtl.integer)
   }
+}
+
+// -----
+
+firrtl.circuit "PublicMoveDutFalse" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
+      name = "Foo",
+      moveDut = false
+    }
+  ]
+} {
+  // CHECK: firrtl.module private @Foo()
+  // CHECK: firrtl.module @DUT()
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]
+  } {}
+  firrtl.module @PublicMoveDutFalse() {
+    firrtl.instance dut @DUT()
+  }
+}
+
+// -----
+
+firrtl.circuit "PublicMoveDutTrue" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
+      name = "Foo",
+      moveDut = true
+    }
+  ]
+} {
+  // CHECK: firrtl.module @DUT()
+  // CHECK: firrtl.module private @Foo()
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]
+  } {}
+  firrtl.module @PublicMoveDutTrue() {
+    firrtl.instance dut @DUT()
+  }
+}
+
+// -----
+
+// CHECK: firrtl.circuit "Foo"
+firrtl.circuit "MoveDutMainModule" attributes{
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.InjectDUTHierarchyAnnotation",
+      name = "Foo",
+      moveDut = true
+    }
+  ]
+} {
+  // CHECK: firrtl.module @MoveDutMainModule()
+  firrtl.module @MoveDutMainModule() attributes {
+    annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
+    ]
+  } {}
+  // CHECK:      firrtl.module @Foo() {
+  // CHECK-NEXT:   firrtl.instance MoveDutMainModule {{.*}} @MoveDutMainModule()
 }

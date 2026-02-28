@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-imconstprop), canonicalize{top-down region-simplify}, firrtl.circuit(firrtl.module(firrtl-register-optimizer)))'  %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-imconstprop), canonicalize{top-down region-simplify=aggressive}, firrtl.circuit(firrtl.module(firrtl-register-optimizer)))'  %s | FileCheck %s
 // github.com/chipsalliance/firrtl: test/scala/firrtlTests/ConstantPropagationTests.scala
 
 //propagate constant inputs  
@@ -13,7 +13,7 @@ firrtl.circuit "ConstInput"   {
   // CHECK-LABEL: firrtl.module private @Child
   firrtl.module private @Child(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
     %0 = firrtl.and %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %out, %in0 :
+    // CHECK: firrtl.matchingconnect %out, %in0 :
     firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
@@ -23,7 +23,7 @@ firrtl.circuit "InstanceInput"   {
   // CHECK-LABEL: firrtl.module private @Bottom1
   firrtl.module private @Bottom1(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
       // CHECK: %c1_ui1 = firrtl.constant 1
-      // CHECK: firrtl.strictconnect %out, %c1_ui1
+      // CHECK: firrtl.matchingconnect %out, %c1_ui1
     firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK-LABEL: firrtl.module private @Child1
@@ -32,7 +32,7 @@ firrtl.circuit "InstanceInput"   {
     %b0_in, %b0_out = firrtl.instance b0 @Bottom1(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
     firrtl.connect %b0_in, %c1_ui : !firrtl.uint<1>, !firrtl.uint
     // CHECK: %[[C1:.+]] = firrtl.constant 1 :
-    // CHECK: firrtl.strictconnect %out, %[[C1]]
+    // CHECK: firrtl.matchingconnect %out, %[[C1]]
     firrtl.connect %out, %b0_out : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK-LABEL:  firrtl.module @InstanceInput
@@ -46,7 +46,7 @@ firrtl.circuit "InstanceInput"   {
     %0 = firrtl.and %b0_out, %b1_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     %1 = firrtl.and %0, %c_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK: %[[C0:.+]] = firrtl.constant 1 : !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %z, %[[C0]] : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %z, %[[C0]] : !firrtl.uint<1>
     firrtl.connect %z, %1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
@@ -55,7 +55,7 @@ firrtl.circuit "InstanceInput"   {
 firrtl.circuit "InstanceInput2"   {
   // CHECK-LABEL: firrtl.module private @Bottom2
   firrtl.module private @Bottom2(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-    // CHECK: firrtl.strictconnect %out, %in 
+    // CHECK: firrtl.matchingconnect %out, %in 
     firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
   }
  // CHECK-LABEL:  firrtl.module private @Child2
@@ -63,7 +63,7 @@ firrtl.circuit "InstanceInput2"   {
     %c1_ui = firrtl.constant 1 : !firrtl.uint
     %b0_in, %b0_out = firrtl.instance b0 @Bottom2(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
     firrtl.connect %b0_in, %c1_ui : !firrtl.uint<1>, !firrtl.uint
-    // CHECK: firrtl.strictconnect %out, %b0_out
+    // CHECK: firrtl.matchingconnect %out, %b0_out
     firrtl.connect %out, %b0_out : !firrtl.uint<1>, !firrtl.uint<1>
   }
  // CHECK-LABEL:  firrtl.module @InstanceInput2
@@ -76,7 +76,7 @@ firrtl.circuit "InstanceInput2"   {
     firrtl.connect %b1_in, %c1_ui : !firrtl.uint<1>, !firrtl.uint
     %0 = firrtl.and %b0_out, %b1_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     %1 = firrtl.and %0, %c_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-   // CHECK:  firrtl.strictconnect %z, %1
+   // CHECK:  firrtl.matchingconnect %z, %1
     firrtl.connect %z, %1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
@@ -91,7 +91,7 @@ firrtl.circuit "acrossWire"   {
     %0 = firrtl.mux(%x, %c0_ui1, %c0_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.connect %_z, %0 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: %[[C2:.+]] = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.strictconnect %y, %[[C2]] : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.matchingconnect %y, %[[C2]] : !firrtl.uint<1>
   }
 }
 
@@ -107,7 +107,7 @@ firrtl.circuit "constOutput"   {
     firrtl.connect %z, %0 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: %[[C3_0:.+]] = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK: %[[C3:.+]] = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %z, %[[C3:.+]] : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %z, %[[C3:.+]] : !firrtl.uint<1>
   }
 }
 
@@ -122,7 +122,7 @@ firrtl.circuit "optiMux"   {
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
     %0 = firrtl.mux(%c1_ui, %c0_ui2, %c0_ui4) : (!firrtl.uint, !firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
     // CHECK: %[[C4:.+]] = firrtl.constant 0 :
-    // CHECK: firrtl.strictconnect %z, %[[C4]]
+    // CHECK: firrtl.matchingconnect %z, %[[C4]]
     firrtl.connect %z, %0 : !firrtl.uint<4>, !firrtl.uint<4>
   }
 }
@@ -133,7 +133,7 @@ firrtl.circuit "divFold"   {
     %0 = firrtl.div %a, %a : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
     firrtl.connect %b, %0 : !firrtl.uint<8>, !firrtl.uint<8>
     // CHECK: %[[C5:.+]] = firrtl.constant 1 : !firrtl.uint<8>
-    // CHECK: firrtl.strictconnect %b, %[[C5]] : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %b, %[[C5]] : !firrtl.uint<8>
   }
 }
 
@@ -149,7 +149,7 @@ firrtl.circuit "padConstWire"   {
     %0 = firrtl.cat %_w_a, %_w_b : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<16>
     firrtl.connect %z, %0 : !firrtl.uint<16>, !firrtl.uint<16>
     // CHECK: %[[C6:.+]] = firrtl.constant 771 : !firrtl.uint<16>
-    // CHECK-NEXT: firrtl.strictconnect %z, %[[C6]] : !firrtl.uint<16>
+    // CHECK-NEXT: firrtl.matchingconnect %z, %[[C6]] : !firrtl.uint<16>
   }
 }
 
@@ -165,7 +165,7 @@ firrtl.circuit "padConstReg"   {
     %0 = firrtl.cat %r_a, %r_b : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<16>
     firrtl.connect %z, %0 : !firrtl.uint<16>, !firrtl.uint<16>
     // CHECK: %[[C6:.+]] = firrtl.constant 771 : !firrtl.uint<16>
-    // CHECK-NEXT: firrtl.strictconnect %z, %[[C6]] : !firrtl.uint<16>
+    // CHECK-NEXT: firrtl.matchingconnect %z, %[[C6]] : !firrtl.uint<16>
   }
 }
 
@@ -181,7 +181,7 @@ firrtl.circuit "padConstOut"   {
     %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
     %0 = firrtl.cat %c3_ui2, %c_x : (!firrtl.uint<2>, !firrtl.uint<8>) -> !firrtl.uint<10>
     // CHECK: %[[C8:.+]] = firrtl.constant 771 : !firrtl.uint<16>
-    // CHECK: firrtl.strictconnect %z, %[[C8]] : !firrtl.uint<16>
+    // CHECK: firrtl.matchingconnect %z, %[[C8]] : !firrtl.uint<16>
     firrtl.connect %z, %0 : !firrtl.uint<16>, !firrtl.uint<10>
   }
 }
@@ -193,7 +193,7 @@ firrtl.circuit "padConstIn"   {
     %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
     %0 = firrtl.cat %c3_ui2, %x : (!firrtl.uint<2>, !firrtl.uint<8>) -> !firrtl.uint<10>
     // CHECK: %[[C9:.+]] = firrtl.constant 771 : !firrtl.uint<16>
-    // CHECK: firrtl.strictconnect %y, %[[C9]] : !firrtl.uint<16>
+    // CHECK: firrtl.matchingconnect %y, %[[C9]] : !firrtl.uint<16>
     firrtl.connect %y, %0 : !firrtl.uint<16>, !firrtl.uint<10>
   }
   // CHECK-LABEL: firrtl.module @padConstIn
@@ -203,7 +203,7 @@ firrtl.circuit "padConstIn"   {
     firrtl.connect %c_x, %c3_ui2 : !firrtl.uint<8>, !firrtl.uint<2>
     firrtl.connect %z, %c_y : !firrtl.uint<16>, !firrtl.uint<16>
     // CHECK: %[[C10:.+]] = firrtl.constant 771 : !firrtl.uint<16>
-    // CHECK: firrtl.strictconnect %z, %[[C10]] : !firrtl.uint<16>
+    // CHECK: firrtl.matchingconnect %z, %[[C10]] : !firrtl.uint<16>
   }
 }
 
@@ -212,7 +212,7 @@ firrtl.circuit "removePad"   {
   // CHECK-LABEL: firrtl.module @removePad
   firrtl.module @removePad(in %x: !firrtl.uint<8>, out %z: !firrtl.uint<8>) {
     %0 = firrtl.pad %x, 6 : (!firrtl.uint<8>) -> !firrtl.uint<8>
-    // CHECK: firrtl.strictconnect %z, %x : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %z, %x : !firrtl.uint<8>
     firrtl.connect %z, %0 : !firrtl.uint<8>, !firrtl.uint<8>
   }
 }
@@ -227,8 +227,8 @@ firrtl.circuit "asyncReset"   {
     %0 = firrtl.mux(%en, %c0_ui4, %r) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<8>) -> !firrtl.uint<8>
     firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
-    // CHECK: firrtl.strictconnect %r, %0 : !firrtl.uint<8>
-    // CHECK: firrtl.strictconnect %z, %r : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %r, %0 : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %z, %r : !firrtl.uint<8>
   }
 }
 
@@ -241,7 +241,7 @@ firrtl.circuit "constReg2"   {
     firrtl.connect %r, %c-5_si4 : !firrtl.sint<8>, !firrtl.sint<4>
     firrtl.connect %z, %r : !firrtl.sint<8>, !firrtl.sint<8>
     // CHECK: %[[C12:.+]] = firrtl.constant -5 : !firrtl.sint<8>
-    // CHECK: firrtl.strictconnect %z, %[[C12]] : !firrtl.sint<8>
+    // CHECK: firrtl.matchingconnect %z, %[[C12]] : !firrtl.sint<8>
   }
 }
 
@@ -256,7 +256,7 @@ firrtl.circuit "SignTester"   {
     %1 = firrtl.mux(%c0_ui1, %c0_si3, %0) : (!firrtl.uint<1>, !firrtl.sint<3>, !firrtl.sint<3>) -> !firrtl.sint<3>
     firrtl.connect %ref, %1 : !firrtl.sint<3>, !firrtl.sint<3>
     // CHECK:  %[[C14:.+]] = firrtl.constant -3 : !firrtl.sint<3>
-    // CHECK:  firrtl.strictconnect %ref, %[[C14]] : !firrtl.sint<3>
+    // CHECK:  firrtl.matchingconnect %ref, %[[C14]] : !firrtl.sint<3>
   }
 }
 
@@ -268,7 +268,7 @@ firrtl.circuit "AddTester"   {
     %0 = firrtl.add %c-1_si1, %c-1_si1 : (!firrtl.sint<1>, !firrtl.sint<1>) -> !firrtl.sint<2>
     firrtl.connect %ref, %0 : !firrtl.sint<2>, !firrtl.sint<2>
     // CHECK:  %[[C15:.+]] = firrtl.constant -2 : !firrtl.sint<2>
-    // CHECK:  firrtl.strictconnect %ref, %[[C15]]
+    // CHECK:  firrtl.matchingconnect %ref, %[[C15]]
   }
 }
 
@@ -285,9 +285,9 @@ firrtl.circuit "ConstPropReductionTester"   {
     firrtl.connect %out3, %2 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK-DAG:  %[[C16:.+]] = firrtl.constant 0
     // CHECK-DAG:  %[[C17:.+]] = firrtl.constant 1
-    // CHECK:  firrtl.strictconnect %out1, %[[C16]]
-    // CHECK:  firrtl.strictconnect %out2, %[[C17]]
-    // CHECK:  firrtl.strictconnect %out3, %[[C17]]
+    // CHECK:  firrtl.matchingconnect %out1, %[[C16]]
+    // CHECK:  firrtl.matchingconnect %out2, %[[C17]]
+    // CHECK:  firrtl.matchingconnect %out3, %[[C17]]
   }
 }
 
@@ -303,7 +303,7 @@ firrtl.circuit "TailTester"   {
     %2 = firrtl.tail %_head_temp, 2 : (!firrtl.uint<3>) -> !firrtl.uint<1>
     firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK:  %[[C18:.+]] = firrtl.constant 0
-    // CHECK:  firrtl.strictconnect %out, %[[C18]]
+    // CHECK:  firrtl.matchingconnect %out, %[[C18]]
   }
 }
 
@@ -320,7 +320,7 @@ firrtl.circuit "TailTester2"   {
     %2 = firrtl.tail %_tail_temp, 4 : (!firrtl.uint<5>) -> !firrtl.uint<1>
     firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK:  %[[C21:.+]] = firrtl.constant 1
-    // CHECK:  firrtl.strictconnect %out, %[[C21]]
+    // CHECK:  firrtl.matchingconnect %out, %[[C21]]
   }
 }
 
@@ -335,7 +335,7 @@ firrtl.circuit "ZeroWidthAdd"   {
     %2 = firrtl.tail %1, 13 : (!firrtl.uint<20>) -> !firrtl.uint<7>
     firrtl.connect %y, %2 : !firrtl.uint<7>, !firrtl.uint<7>
     // CHECK:  %[[C20:.+]] = firrtl.constant 0
-    // CHECK:  firrtl.strictconnect %y, %[[C20]]
+    // CHECK:  firrtl.matchingconnect %y, %[[C20]]
   }
 }
 
@@ -349,7 +349,7 @@ firrtl.circuit "regConstReset"   {
     firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
     // CHECK: %[[C22:.+]] = firrtl.constant 11 
-    // CHECK: firrtl.strictconnect %z, %[[C22]]
+    // CHECK: firrtl.matchingconnect %z, %[[C22]]
   }
 }
 
@@ -368,7 +368,7 @@ firrtl.circuit "constPropRegMux"   {
   %2 = firrtl.xor %r1, %r2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: %[[C23:.+]] = firrtl.constant 1
-    // CHECK: firrtl.strictconnect %out, %[[C23]]
+    // CHECK: firrtl.matchingconnect %out, %[[C23]]
   }
 }
 
@@ -377,10 +377,10 @@ firrtl.circuit "uninitSelfReg"   {
   // CHECK-LABEL: firrtl.module @uninitSelfReg
   firrtl.module @uninitSelfReg(in %clock: !firrtl.clock, out %z: !firrtl.uint<8>) {
     %r = firrtl.reg %clock  :  !firrtl.clock, !firrtl.uint<8>
-    firrtl.strictconnect %r, %r : !firrtl.uint<8>
-    firrtl.strictconnect %z, %r : !firrtl.uint<8>
+    firrtl.matchingconnect %r, %r : !firrtl.uint<8>
+    firrtl.matchingconnect %z, %r : !firrtl.uint<8>
     // CHECK: %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
-    // CHECK: firrtl.strictconnect %z, %invalid_ui8 : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %z, %invalid_ui8 : !firrtl.uint<8>
   }
 
 //"Registers with ONLY constant reset" should "be replaced with that constant" in {
@@ -388,10 +388,10 @@ firrtl.circuit "uninitSelfReg"   {
   firrtl.module @constResetReg(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
     %c11_ui4 = firrtl.constant 11 : !firrtl.uint<8>
     %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
-    firrtl.strictconnect %r, %r : !firrtl.uint<8>
-    firrtl.strictconnect %z, %r : !firrtl.uint<8>
+    firrtl.matchingconnect %r, %r : !firrtl.uint<8>
+    firrtl.matchingconnect %z, %r : !firrtl.uint<8>
     // CHECK: %[[C11:.+]] = firrtl.constant 11 : !firrtl.uint<8>
-    // CHECK: firrtl.strictconnect %z, %[[C11]] : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %z, %[[C11]] : !firrtl.uint<8>
   }
 
 //"Registers with identical constant reset and connection" should "be replaced with that constant" in {
@@ -399,9 +399,9 @@ firrtl.circuit "uninitSelfReg"   {
   firrtl.module @regSameConstReset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
     %c11_ui4 = firrtl.constant 11 : !firrtl.uint<8>
     %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
-    firrtl.strictconnect %r, %c11_ui4 : !firrtl.uint<8>
-    firrtl.strictconnect %z, %r : !firrtl.uint<8>
+    firrtl.matchingconnect %r, %c11_ui4 : !firrtl.uint<8>
+    firrtl.matchingconnect %z, %r : !firrtl.uint<8>
     // CHECK: %[[C13:.+]] = firrtl.constant 11 : !firrtl.uint<8>
-    // CHECK: firrtl.strictconnect %z, %[[C13]] : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %z, %[[C13]] : !firrtl.uint<8>
   }
 }

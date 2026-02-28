@@ -39,7 +39,7 @@ class Backedge;
 ///   circt::BackedgeBuilder back(rewriter, loc);
 ///   circt::Backedge ready = back.get(rewriter.getI1Type());
 ///   // Use `ready` as a `Value`.
-///   auto addOp = rewriter.create<addOp>(loc, ready);
+///   auto addOp = addOp::create(rewriter, loc, ready);
 ///   // When the actual value is available,
 ///   ready.set(anotherOp.getResult(0));
 /// ```

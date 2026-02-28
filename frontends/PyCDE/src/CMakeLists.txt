@@ -26,27 +26,28 @@ declare_mlir_python_sources(PyCDESources
   pycde/dialects/hwarith.py
   pycde/support.py
   pycde/module.py
-  pycde/behavioral.py
   pycde/constructs.py
   pycde/common.py
   pycde/system.py
   pycde/devicedb.py
+  pycde/handshake.py
   pycde/instance.py
+  pycde/seq.py
   pycde/signals.py
   pycde/ndarray.py
   pycde/esi.py
   pycde/fsm.py
-  pycde/ibis.py
   pycde/testing.py
 
   pycde/bsp/__init__.py
   pycde/bsp/common.py
   pycde/bsp/cosim.py
+  pycde/bsp/dma.py
   pycde/bsp/xrt.py
   pycde/bsp/Makefile.xrt.mk
   pycde/bsp/xrt_package.tcl
-  pycde/bsp/xrt_api.py
   pycde/bsp/xrt.ini
+  pycde/bsp/xrt_vitis.cfg
   pycde/bsp/xsim.tcl
 )
 
@@ -86,17 +87,26 @@ add_mlir_python_modules(PyCDE
     PyCDE_CIRCTPythonCAPI
 )
 
+install(TARGETS PyCDE_CIRCTPythonCAPI
+  DESTINATION python_packages/pycde/circt/_mlir_libs
+  RUNTIME_DEPENDENCIES
+    PRE_EXCLUDE_REGEXES ".*"
+    PRE_INCLUDE_REGEXES ".*zlib.*"
+  COMPONENT PyCDE
+)
 add_dependencies(PyCDE PyCDE_CIRCTPythonModules)
 add_dependencies(install-PyCDE install-PyCDE_CIRCTPythonModules)
 
-install(IMPORTED_RUNTIME_ARTIFACTS PyCDE_CIRCTPythonCAPI
-  RUNTIME_DEPENDENCY_SET PyCDE_RUNTIME_DEPS
-  DESTINATION python_packages/pycde/circt/_mlir_libs
-  COMPONENT PyCDE
+# Copy ESIPrimitives.sv to both the build and install directories.
+# TODO: this won't work if ESIPrimitives has multiple source files. Figure out
+# how to handle this.
+set(esiprims "$<TARGET_PROPERTY:ESIPrimitives,SOURCE_DIR>/$<TARGET_PROPERTY:ESIPrimitives,SOURCES>")
+add_custom_command(TARGET PyCDE POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          ${esiprims}
+          ${PYCDE_PYTHON_PACKAGE_DIR}/pycde
 )
-install(RUNTIME_DEPENDENCY_SET PyCDE_RUNTIME_DEPS
-  DESTINATION python_packages/pycde/circt/_mlir_libs
-  PRE_EXCLUDE_REGEXES .*
-  PRE_INCLUDE_REGEXES capnp kj
+install(FILES ${esiprims}
+  DESTINATION python_packages/pycde
   COMPONENT PyCDE
 )

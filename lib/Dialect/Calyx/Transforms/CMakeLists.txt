@@ -7,6 +7,10 @@ add_circt_dialect_library(CIRCTCalyxTransforms
   RemoveCombGroups.cpp
   CalyxHelpers.cpp
   CalyxLoweringUtils.cpp
+  AffineParallelUnroll.cpp
+  AffineToSCF.cpp
+  AffinePloopUnparallelize.cpp
+  ExcludeExecuteRegionCanonicalize.cpp
 
   DEPENDS
   CIRCTCalyxTransformsIncGen
@@ -23,4 +27,5 @@ add_circt_dialect_library(CIRCTCalyxTransforms
   MLIRPass
   MLIRSCFDialect
   MLIRTransformUtils
+  MLIRAffineUtils
   )

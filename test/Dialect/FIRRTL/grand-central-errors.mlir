@@ -269,86 +269,6 @@ firrtl.circuit "InvalidField" attributes {
 
 // -----
 
-firrtl.circuit "MultiplyInstantiated" attributes {
-  annotations = [
-    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
-     defName = "Bar",
-     elements = [
-       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-        id = 42 : i64,
-        name = "baz"}],
-     id = 0 : i64},
-    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]}  {
-  // expected-error @below {{'firrtl.module' op is marked as a GrandCentral 'companion', but it is instantiated more than once}}
-  firrtl.module private @View_companion() attributes {
-    annotations = [
-      {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
-       defName = "Companion",
-       id = 0 : i64,
-       name = "View"}]} {
-    %0 = firrtl.constant 0 :!firrtl.uint<1>
-    %zero = firrtl.node  %0  {
-      annotations = [
-        {
-          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-          id = 42 : i64
-        }
-      ]
-    } : !firrtl.uint<1>
-  }
-  firrtl.module private @DUT() {
-    // expected-note @below {{it is instantiated here}}
-    firrtl.instance View_companion @View_companion()
-    // expected-note @below {{it is instantiated here}}
-    firrtl.instance View_companion @View_companion()
-  }
-  firrtl.module @MultiplyInstantiated() {
-    firrtl.instance dut @DUT()
-  }
-}
-
-// -----
-
-firrtl.circuit "NotInstantiated" attributes {
-  annotations = [
-    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
-     defName = "Bar",
-     elements = [
-       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-        id = 42 : i64,
-        name = "baz"}],
-     id = 0 : i64},
-    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-     directory = "gct-dir",
-     filename = "gct-dir/bindings.sv"}]}  {
-  // expected-error @below {{'firrtl.module' op is marked as a GrandCentral 'companion', but is never instantiated}}
-  firrtl.module private @View_companion() attributes {
-    annotations = [
-      {class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
-       defName = "Companion",
-       id = 0 : i64,
-       name = "View"}]} {
-    %0 = firrtl.constant 0 :!firrtl.uint<1>
-    %zero = firrtl.node  %0  {
-      annotations = [
-        {
-          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-          id = 42 : i64
-        }
-      ]
-    } : !firrtl.uint<1>
-  }
-  firrtl.module private @DUT() {
-  }
-  firrtl.module @NotInstantiated() {
-    firrtl.instance dut @DUT()
-  }
-}
-
-// -----
-
 firrtl.circuit "CompanionWithOutputs"
   attributes {annotations = [
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
@@ -372,39 +292,6 @@ firrtl.circuit "CompanionWithOutputs"
     firrtl.instance MyView_companion  @MyView_companion(out out: !firrtl.uint<32>)
   }
   firrtl.module @CompanionWithOutputs() {
-    firrtl.instance dut @DUT()
-  }
-}
-
-// -----
-
-firrtl.circuit "UnexpectedLayer"
-  attributes {annotations = [
-    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
-     defName = "Foo",
-     elements = [
-       {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
-        defName = "Bar",
-        elements = [],
-        name = "bar"}],
-     id = 0 : i64,
-     name = "MyView"}]}  {
-  firrtl.layer @A bind {}
-  firrtl.module private @MyView_companion()
-    attributes {annotations = [{
-      class = "sifive.enterprise.grandcentral.ViewAnnotation.companion",
-      id = 0 : i64,
-      name = "MyView"}]} {}
-  firrtl.module private @Foo() {}
-  firrtl.module private @DUT() {
-    firrtl.instance MyView_companion  @MyView_companion()
-    // expected-note @below {{the 'firrtl.layerblock' op is here}}
-    firrtl.layerblock @A {
-      // expected-error @below {{'firrtl.instance' op is instantiated under a 'firrtl.layerblock' op}}
-      firrtl.instance foo @Foo()
-    }
-  }
-  firrtl.module @UnexpectedLayer() {
     firrtl.instance dut @DUT()
   }
 }

@@ -1,6 +1,7 @@
 ; RUN: firtool %s --format=fir  --annotation-file %s.anno.json --verilog |  FileCheck %s
 ; XFAIL: true
 
+FIRRTL version 4.0.0
 circuit test:
   module memoryTest1:
     input clock: Clock
@@ -20,17 +21,17 @@ circuit test:
       read-under-write => undefined
 
     ; All of these are unified together
-    memory.r.clk <= clock
-    memory.r.en <= rEn
-    memory.r.addr <= rAddr
-    rData <= memory.r.data
+    connect memory.r.clk, clock
+    connect memory.r.en, rEn
+    connect memory.r.addr, rAddr
+    connect rData, memory.r.data
 
-    memory.w.clk <= clock
-    memory.w.en <= rEn
-    memory.w.addr <= rAddr
+    connect memory.w.clk, clock
+    connect memory.w.en, rEn
+    connect memory.w.addr, rAddr
     ; These two are split
-    memory.w.mask <= wMask
-    memory.w.data <= wData
+    connect memory.w.mask, wMask
+    connect memory.w.data, wData
 
   module memoryTest2:
     input clock: Clock
@@ -50,20 +51,20 @@ circuit test:
       read-under-write => undefined
 
     ; All of these are unified together
-    memory.r.clk <= clock
-    memory.r.en <= rEn
-    memory.r.addr <= rAddr
-    rData <= memory.r.data
+    connect memory.r.clk, clock
+    connect memory.r.en, rEn
+    connect memory.r.addr, rAddr
+    connect rData, memory.r.data
 
-    memory.w.clk <= clock
-    memory.w.en <= rEn
-    memory.w.addr <= rAddr
+    connect memory.w.clk, clock
+    connect memory.w.en, rEn
+    connect memory.w.addr, rAddr
     ; These two are split
-    memory.w.mask <= wMask
-    memory.w.data <= wData
+    connect memory.w.mask, wMask
+    connect memory.w.data, wData
 
 
-  module test: 
+  public module test:
     input clock: Clock
     input rAddr: UInt<4>
     input rEn: UInt<1>
@@ -73,20 +74,20 @@ circuit test:
 
 
     inst m of memoryTest1
-    m.clock <= clock
-    m.rAddr <= rAddr
-    m.rEn <= rEn
-    rData <= m.rData
-    m.wMask <= wMask
-    m.wData <= wData
+    connect m.clock, clock
+    connect m.rAddr, rAddr
+    connect m.rEn, rEn
+    connect rData, m.rData
+    connect m.wMask, wMask
+    connect m.wData, wData
 
     inst signed of memoryP
-    signed.clock <= clock
-    signed.rAddr <= rAddr
-    signed.rEn <= rEn
-    rData <= signed.rData
-    signed.wMask <= wMask
-    signed.wData <= wData
+    connect signed.clock, clock
+    connect signed.rAddr, rAddr
+    connect signed.rEn, rEn
+    connect rData, signed.rData
+    connect signed.wMask, wMask
+    connect signed.wData, wData
 
 
   module memoryP:
@@ -99,12 +100,12 @@ circuit test:
 
 
     inst m of memoryTest2
-    m.clock <= clock
-    m.rAddr <= rAddr
-    m.rEn <= rEn
-    rData <= m.rData
-    m.wMask <= wMask
-    m.wData <= wData
+    connect m.clock, clock
+    connect m.rAddr, rAddr
+    connect m.rEn, rEn
+    connect rData, m.rData
+    connect m.wMask, wMask
+    connect m.wData, wData
 
 ; CHECK-LABEL: module test
 ; CHECK: memoryP [[signed:.+]] (
@@ -115,15 +116,14 @@ circuit test:
 ; CHECK:      FILE "metadata/tb_seq_mems.json"
 ; CHECK:      [{"module_name":"memory","depth":16,"width":8,"masked":"true",
 ; CHECK-SAME: "read":"true","write":"true","readwrite":"false",
-; CHECK-SAME: "mask_granularity":8,"extra_ports":[],
+; CHECK-SAME: "ruw_behavior": "Undefined","mask_granularity":8,"extra_ports":[],
 ; CHECK-SAME: "hierarchy":["test.[[m]]"]}]
 
 ; CHECK:       FILE "metadata/seq_mems.json"
 ; CHECK:       [{"module_name":"memory","depth":16,"width":8,"masked":"true",
 ; CHECK-SAME:  "read":"true","write":"true","readwrite":"false",
-; CHECK-SAME:  "mask_granularity":8,"extra_ports":[],
+; CHECK-SAME:  "ruw_behavior": "Undefined","mask_granularity":8,"extra_ports":[],
 ; CHECK-SAME:  "hierarchy":["test.[[signed]].[[m]]"],
 ; CHECK-SAME:  "verification_only_data":{
 ; CHECK-SAME:  "test.[[signed]].[[m]]":{"baseAddress":1073741824,
 ; CHECK-SAME:  "dataBits":8,"eccBits":0,"eccIndices":[],"eccScheme":"none"}}}]
-

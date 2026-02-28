@@ -9,6 +9,42 @@ hw.module @namechange(in %casex: i4, out if: i4) {
   hw.output %casex : i4
 }
 
+"hw.module.extern"() <{module_type = !hw.modty<input A : i4, input B : i4, output Y : i5>, parameters = [], per_port_attrs = [], port_locs = [loc(unknown), loc(unknown), loc(unknown)], sym_name = "$add", verilogName = "\\$add"}> ({
+}) {comment = ""} : () -> ()
+
+// CHECK-LABEL: module moduleInstEscNameModExt
+// CHECK-NEXT:  input  [3:0] a,
+// CHECK-NEXT:               b,
+// CHECK-NEXT:  output [4:0] y
+// CHECK-NEXT: );
+hw.module @moduleInstEscNameModExt(in %a: i4, in %b: i4, out y: i5) {
+// CHECK:      \$add add (
+// CHECK-NEXT:   .A (a),
+// CHECK-NEXT:   .B (b),
+// CHECK-NEXT:   .Y (y)
+// CHECK-NEXT: );
+  %0 = hw.instance "add" @"$add"(A: %a: i4, B: %b: i4) -> (Y: i5)
+  hw.output %0 : i5
+}
+// CHECK-NEXT: endmodule
+
+"hw.module.extern"() <{module_type = !hw.modty<input A : i4, output Y : i5>, parameters = [], per_port_attrs = [], port_locs = [loc(unknown), loc(unknown)], sym_name = "$SOME>ELSE<[]", verilogName = "\\$SOME>ELSE<[]"}> ({
+}) {comment = ""} : () -> ()
+
+// CHECK-LABEL: module moduleInstEscNameModExt2
+// CHECK-NEXT:  input  [3:0] a,
+// CHECK-NEXT:  output [4:0] y
+// CHECK-NEXT: );
+hw.module @moduleInstEscNameModExt2(in %a: i4, out y: i5) {
+// CHECK:      \$SOME>ELSE<[]
+// CHECK-NEXT:   .A (a),
+// CHECK-NEXT:   .Y (y)
+// CHECK-NEXT: );
+  %0 = hw.instance "SOME>ELSE<[]" @"$SOME>ELSE<[]"(A: %a: i4) -> (Y: i5)
+  hw.output %0 : i5
+}
+// CHECK-NEXT: endmodule
+
 hw.module.extern @module_with_bool<bparam: i1>()
 
 // CHECK-LABEL: module parametersNameConflict
@@ -21,7 +57,7 @@ hw.module @parametersNameConflict<p2: i42 = 17, wire: i1>(in %p1: i8) {
 
   // CHECK: `ifdef SOMEMACRO
   sv.ifdef @SOMEMACRO {
-    // CHECK: localparam local_0 = wire_0;
+    // CHECK: localparam [0:0] local_0 = wire_0;
     %local = sv.localparam { value = #hw.param.decl.ref<"wire">: i1 } : i1
 
     // CHECK: assign myWire = wire_0;

@@ -11,20 +11,24 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/CalyxToFSM.h"
-#include "../PassDetail.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/FSM/FSMDialect.h"
 #include "circt/Dialect/FSM/FSMGraph.h"
 #include "circt/Dialect/FSM/FSMOps.h"
 #include "circt/Support/Namespace.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/TypeSwitch.h"
+
+namespace circt {
+#define GEN_PASS_DEF_CALYXTOFSM
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace mlir;
 using namespace circt;
 using namespace calyx;
 using namespace fsm;
-using namespace sv;
 
 namespace {
 
@@ -256,7 +260,7 @@ LogicalResult CompileFSMVisitor::visit(StateOp currentState, EnableOp enableOp,
   // callers iterating over nested ops safer.
   OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToStart(&currentState.getOutput().front());
-  builder.create<calyx::EnableOp>(enableOp.getLoc(), enableOp.getGroupName());
+  calyx::EnableOp::create(builder, enableOp.getLoc(), enableOp.getGroupName());
 
   if (nextState)
     graph.createTransition(builder, enableOp.getLoc(), currentState, nextState);
@@ -315,35 +319,35 @@ void CompileInvoke::lowerInvokeOp(InvokeOp invokeOp) {
   // Create a ConstantOp to assign a value to the go port.
   Operation *prevNode = component.getWiresOp().getOperation()->getPrevNode();
   builder.setInsertionPointAfter(prevNode);
-  hw::ConstantOp constantOp = builder.create<hw::ConstantOp>(
-      prevNode->getLoc(), builder.getI1Type(), 1);
+  hw::ConstantOp constantOp = hw::ConstantOp::create(
+      builder, prevNode->getLoc(), builder.getI1Type(), 1);
   Location loc = component.getWiresOp().getLoc();
 
   // Set the insertion point at the end of the wires block.
   builder.setInsertionPointToEnd(component.getWiresOp().getBodyBlock());
   std::string transitionName = getTransitionName(invokeOp);
-  GroupOp groupOp = builder.create<GroupOp>(loc, transitionName);
+  GroupOp groupOp = GroupOp::create(builder, loc, transitionName);
   builder.setInsertionPointToStart(groupOp.getBodyBlock());
   Value go = invokeOp.getInstGoValue();
 
   // Assign a value to the go port.
-  builder.create<AssignOp>(loc, go, constantOp);
+  AssignOp::create(builder, loc, go, constantOp);
   auto ports = invokeOp.getPorts();
   auto inputs = invokeOp.getInputs();
 
   // Generate a series of assignment operations from a list of parameters.
   for (auto [port, input] : llvm::zip(ports, inputs))
-    builder.create<AssignOp>(loc, port, input);
+    AssignOp::create(builder, loc, port, input);
   Value done = invokeOp.getInstDoneValue();
 
   // Generate a group_done operation with the instance's done port.
-  builder.create<calyx::GroupDoneOp>(loc, done);
+  calyx::GroupDoneOp::create(builder, loc, done);
   builder.setInsertionPointAfter(invokeOp.getOperation());
-  builder.create<EnableOp>(invokeOp.getLoc(), transitionName);
+  EnableOp::create(builder, invokeOp.getLoc(), transitionName);
   invokeOp.erase();
 }
 
-class CalyxToFSMPass : public CalyxToFSMBase<CalyxToFSMPass> {
+class CalyxToFSMPass : public circt::impl::CalyxToFSMBase<CalyxToFSMPass> {
 public:
   void runOnOperation() override;
 }; // end anonymous namespace
@@ -365,9 +369,8 @@ void CalyxToFSMPass::runOnOperation() {
   // outlining the FSM (materializing FSM I/O) at a later point.
   auto machineName = ("control_" + component.getName()).str();
   auto funcType = FunctionType::get(&getContext(), {}, {});
-  auto machine =
-      builder.create<MachineOp>(ctrlOp.getLoc(), machineName,
-                                /*initialState=*/"fsm_entry", funcType);
+  auto machine = MachineOp::create(builder, ctrlOp.getLoc(), machineName,
+                                   /*initialState=*/"fsm_entry", funcType);
   auto graph = FSMGraph(machine);
 
   SymbolCache sc;

@@ -4,4 +4,4 @@ mlir_tablegen(LECTransforms.capi.h.inc -gen-pass-capi-header --prefix LECTransfo
 mlir_tablegen(LECTransforms.capi.cpp.inc -gen-pass-capi-impl --prefix LECTransforms)
 add_public_tablegen_target(CIRCTLECTransformsIncGen)
 
-add_mlir_doc(Passes CIRCTLECPasses ./ -gen-pass-doc)
+add_circt_doc(Passes CIRCTLECPasses -gen-pass-doc)

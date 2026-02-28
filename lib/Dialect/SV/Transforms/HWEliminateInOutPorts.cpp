@@ -7,13 +7,22 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/PortConverter.h"
+#include "circt/Dialect/SV/SVDialect.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/PostOrderIterator.h"
+
+namespace circt {
+namespace sv {
+#define GEN_PASS_DEF_HWELIMINATEINOUTPORTS
+#include "circt/Dialect/SV/SVPasses.h.inc"
+} // namespace sv
+} // namespace circt
 
 using namespace circt;
 using namespace sv;
@@ -22,18 +31,13 @@ using namespace igraph;
 
 namespace {
 
-#define GEN_PASS_DEF_HWELIMINATEINOUTPORTS
-#include "circt/Dialect/SV/SVPasses.h.inc"
-
 struct HWEliminateInOutPortsPass
-    : public impl::HWEliminateInOutPortsBase<HWEliminateInOutPortsPass> {
+    : public circt::sv::impl::HWEliminateInOutPortsBase<
+          HWEliminateInOutPortsPass> {
   using HWEliminateInOutPortsBase<
       HWEliminateInOutPortsPass>::HWEliminateInOutPortsBase;
   void runOnOperation() override;
 };
-} // end anonymous namespace
-
-namespace {
 
 class HWInOutPortConversion : public PortConversion {
 public:
@@ -141,14 +145,14 @@ void HWInOutPortConversion::mapInputSignals(OpBuilder &b, Operation *inst,
     // Create a read_inout op at the instantiation point. This effectively
     // pushes the read_inout op from the module to the instantiation site.
     newOperands[readPort.argNum] =
-        b.create<ReadInOutOp>(inst->getLoc(), instValue).getResult();
+        ReadInOutOp::create(b, inst->getLoc(), instValue).getResult();
   }
 
   if (hasWriters()) {
     // Create a sv::AssignOp at the instantiation point. This effectively
     // pushes the write op from the module to the instantiation site.
     Value writeFromInsideMod = newResults[writePort.argNum];
-    b.create<sv::AssignOp>(inst->getLoc(), instValue, writeFromInsideMod);
+    sv::AssignOp::create(b, inst->getLoc(), instValue, writeFromInsideMod);
   }
 }
 

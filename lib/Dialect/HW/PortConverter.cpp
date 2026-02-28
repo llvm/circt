@@ -229,8 +229,8 @@ void PortConverterImpl::updateInstance(hw::InstanceOp inst) {
   assert(llvm::none_of(newOperands, [](Value v) { return !v; }));
   b.setInsertionPointAfter(inst);
   auto newInst =
-      b.create<InstanceOp>(mod, inst.getInstanceNameAttr(), newOperands,
-                           inst.getParameters(), inst.getInnerSymAttr());
+      InstanceOp::create(b, mod, inst.getInstanceNameAttr(), newOperands,
+                         inst.getParameters(), inst.getInnerSymAttr());
   newInst->setDialectAttrs(inst->getDialectAttrs());
 
   // Assign the backedges to the new results.

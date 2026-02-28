@@ -132,14 +132,33 @@ class AppID:
     return self._appid.index
 
   def __repr__(self) -> str:
+    if self.index is None:
+      return self.name
     return f"{self.name}[{self.index}]"
+
+
+class Constant:
+  """A constant value associated with a module. Gets added to the ESI system
+  manifest so it is accessible at runtime.
+
+  Example usage:
+
+  ```
+  def ExampleModule(Module):
+    const_name = Constant(UInt(16), 42)
+  ```
+  """
+
+  def __init__(self, type: Type, value: object):
+    self.type = type
+    self.value = value
 
 
 class _PyProxy:
   """Parent class for a Python object which has a corresponding IR op (i.e. a
   proxy class)."""
 
-  __slots__ = ["name"]
+  __slots__ = ["name", "__weakref__"]
 
   def __init__(self, name: str):
     self.name = name

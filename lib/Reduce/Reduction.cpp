@@ -40,12 +40,12 @@ PassReduction::PassReduction(MLIRContext *context, std::unique_ptr<Pass> pass,
   pm = std::make_unique<mlir::PassManager>(
       context, "builtin.module", mlir::OpPassManager::Nesting::Explicit);
   auto opName = pass->getOpName();
-  if (opName && opName->equals("firrtl.circuit"))
+  if (opName && *opName == "firrtl.circuit")
     pm->nest<firrtl::CircuitOp>().addPass(std::move(pass));
-  else if (opName && opName->equals("firrtl.module"))
+  else if (opName && *opName == "firrtl.module")
     pm->nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         std::move(pass));
-  else if (opName && opName->equals("hw.module"))
+  else if (opName && *opName == "hw.module")
     pm->nest<hw::HWModuleOp>().addPass(std::move(pass));
   else
     pm->addPass(std::move(pass));

@@ -10,20 +10,24 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/Naming.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+namespace firrtl {
+#define GEN_PASS_DEF_DROPNAME
+#include "circt/Dialect/FIRRTL/Passes.h.inc"
+} // namespace firrtl
+} // namespace circt
 
 using namespace circt;
 using namespace firrtl;
 
 namespace {
-struct DropNamesPass : public DropNameBase<DropNamesPass> {
-  DropNamesPass(PreserveValues::PreserveMode preserveMode) {
-    this->preserveMode = preserveMode;
-  }
+struct DropNamesPass : public circt::firrtl::impl::DropNameBase<DropNamesPass> {
+  using Base::Base;
 
   enum ModAction { Drop, Keep, Demote };
 
@@ -44,9 +48,10 @@ struct DropNamesPass : public DropNameBase<DropNamesPass> {
     } else if (preserveMode == PreserveValues::Named) {
       // Drop the name if it isn't considered meaningful.
       dropNamesIf(namesChanged, namesDropped, [](FNamableOp op) {
-        if (isUselessName(op.getName()))
+        auto name = op.getName();
+        if (isUselessName(name))
           return ModAction::Drop;
-        if (op.getName().starts_with("_"))
+        if (name.starts_with("_"))
           return ModAction::Demote;
         return ModAction::Keep;
       });
@@ -66,12 +71,14 @@ private:
   size_t dropNamesIf(size_t &namesChanged, size_t &namesDropped,
                      llvm::function_ref<ModAction(FNamableOp)> pred) {
     size_t changedNames = 0;
+    auto emptyNameAttr = StringAttr::get(&getContext(), "");
     auto droppableNameAttr =
         NameKindEnumAttr::get(&getContext(), NameKindEnum::DroppableName);
     getOperation()->walk([&](FNamableOp op) {
       switch (pred(op)) {
       case ModAction::Drop:
-        op.dropName();
+        op.setNameAttr(emptyNameAttr);
+        op.setNameKindAttr(droppableNameAttr);
         ++namesDropped;
         break;
       case ModAction::Demote:
@@ -87,8 +94,3 @@ private:
 };
 
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createDropNamesPass(PreserveValues::PreserveMode mode) {
-  return std::make_unique<DropNamesPass>(mode);
-}

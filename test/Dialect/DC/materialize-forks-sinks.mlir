@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline="builtin.module(func.func(dc-materialize-forks-sinks))" %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline="builtin.module(dc-materialize-forks-sinks)" %s | FileCheck %s
 
 // CHECK-LABEL:   func.func @testFork(
 // CHECK-SAME:                        %[[VAL_0:.*]]: !dc.token) -> (!dc.token, !dc.token, !dc.token) {
@@ -54,4 +54,12 @@ func.func @testUnusedArg(%t: !dc.token, %v : !dc.value<i1>) -> () {
 // CHECK:         }
 func.func @testForkOfValue(%v : !dc.value<i1>) -> (!dc.value<i1>, !dc.value<i1>) {
     return %v, %v : !dc.value<i1>, !dc.value<i1>
+}
+
+// CHECK-LABEL: hw.module @shouldNotChange(in %clk : !seq.clock, in %d : i32) {
+// CHECK-NEXT:    seq.compreg %d, %clk : i32
+// CHECK-NEXT:    seq.compreg %d, %clk : i32
+hw.module @shouldNotChange(in %clk: !seq.clock, in %d: i32) {
+  seq.compreg %d, %clk : i32
+  seq.compreg %d, %clk : i32
 }

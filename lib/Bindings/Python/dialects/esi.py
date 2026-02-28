@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Sequence, Type
 
 class ChannelSignaling:
   ValidReady = 0
-  FIFO0 = 1
+  FIFO = 1
 
 
 @_ods_cext.register_operation(_Dialect, replace=True)

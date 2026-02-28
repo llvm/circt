@@ -41,7 +41,8 @@ class PipelineBase<string mnemonic, list<Trait> traits = []> :
       "TypeRange":$dataOutputs,
       "ValueRange":$inputs,
       "ArrayAttr":$inputNames, "ArrayAttr":$outputNames,
-      "Value":$clock, "Value":$reset, "Value":$go,
+      "Value":$clock, "Value":$go,
+      CArg<"Value", "{}">:$reset,
       CArg<"Value", "{}">:$stall,
       CArg<"StringAttr", "{}">:$name,
       CArg<"ArrayAttr", "{}">:$stallability
@@ -58,7 +59,7 @@ class PipelineBase<string mnemonic, list<Trait> traits = []> :
   // 1. Inputs
   // 2. Stall (opt)
   // 3. Clock
-  // 4. Reset
+  // 4. Reset (opt)
   // 5. Go
   let extraClassDeclaration = extraModuleClassDeclaration # [{
     // Returns the entry stage of this pipeline.
@@ -70,6 +71,11 @@ class PipelineBase<string mnemonic, list<Trait> traits = []> :
     // Returns true if this pipeline has a stall signal.
     bool hasStall() {
       return static_cast<bool>(getStall());
+    }
+
+    // Returns true if this pipeline has a reset signal.
+    bool hasReset() {
+      return static_cast<bool>(getReset());
     }
 
     mlir::Block::BlockArgListType getInnerInputs() {
@@ -125,7 +131,7 @@ def UnscheduledPipelineOp : PipelineBase<"unscheduled", [
 
   let arguments = (ins
     OptionalAttr<StrAttr>:$name, Variadic<AnyType>:$inputs, Optional<I1>:$stall,
-    ClockType:$clock, I1:$reset, I1:$go, StrArrayAttr:$inputNames,
+    ClockType:$clock, Optional<I1>:$reset, I1:$go, StrArrayAttr:$inputNames,
     StrArrayAttr:$outputNames
   );
   let regions = (region SizedRegion<1>: $body);
@@ -179,7 +185,7 @@ def ScheduledPipelineOp : PipelineBase<"scheduled"> {
     OptionalAttr<StrAttr>:$name,
     Variadic<AnyType>:$inputs,
     Optional<I1>:$stall,
-    ClockType:$clock, I1:$reset, I1:$go,
+    ClockType:$clock, Optional<I1>:$reset, I1:$go,
     StrArrayAttr:$inputNames, StrArrayAttr:$outputNames,
     OptionalAttr<BoolArrayAttr>:$stallability
   );
@@ -238,6 +244,26 @@ def ScheduledPipelineOp : PipelineBase<"scheduled"> {
   }];
 }
 
+def SourceOp : Op<Pipeline_Dialect, "src", [
+  TypesMatchWith<"input and result types are equivalent", "input", "output", "$_self">,
+  HasParent<"ScheduledPipelineOp">,
+  ]> {
+  let summary = "Pipeline source operation";
+  let description = [{
+    The `pipeline.src` operation represents a source operation in a scheduled,
+    non-register materialized pipeline.
+    It is used as a canonicalization barrier to prevent cross-block canonicalization
+    of operations that are not allowed to be moved or mutated across pipeline
+    stages (i.e. MLIR blocks).
+
+    To facilitate this, the operation is _not_ marked as `Pure`.
+  }];
+  let arguments = (ins AnyType:$input);
+  let results = (outs AnyType:$output);
+  let assemblyFormat = [{
+    $input `:` type($input) attr-dict
+  }];
+}
 
 def StageOp : Op<Pipeline_Dialect, "stage", [
     AttrSizedOperandSegments,

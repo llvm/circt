@@ -17,14 +17,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
+#include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/Interfaces/CallInterfaces.h"
+#include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -32,6 +34,11 @@
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "prepare-for-emission"
+
+namespace circt {
+#define GEN_PASS_DEF_PREPAREFOREMISSION
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace circt;
 using namespace comb;
@@ -67,10 +74,8 @@ static bool shouldSpillWire(Operation &op, const LoweringOptions &options) {
 }
 
 static StringAttr getArgName(Operation *op, size_t idx) {
-  if (auto inst = dyn_cast<hw::InstanceOp>(op))
-    return inst.getArgumentName(idx);
-  else if (auto inst = dyn_cast<InstanceChoiceOp>(op))
-    return inst.getArgumentName(idx);
+  if (auto inst = dyn_cast<HWInstanceLike>(op))
+    return inst.getInputName(idx);
   return {};
 }
 
@@ -94,20 +99,50 @@ static void spillWiresForInstanceInputs(HWInstanceLike op) {
     else
       nameTmp += std::to_string(opNum);
 
-    auto newWire = builder.create<sv::WireOp>(src.getType(), nameTmp);
-    auto newWireRead = builder.create<ReadInOutOp>(newWire);
-    auto connect = builder.create<AssignOp>(newWire, src);
+    auto newWire = sv::WireOp::create(builder, src.getType(), nameTmp);
+    auto newWireRead = ReadInOutOp::create(builder, newWire);
+    auto connect = AssignOp::create(builder, newWire, src);
     newWireRead->moveBefore(op);
     connect->moveBefore(op);
     op->setOperand(opNum, newWireRead);
   }
 }
 
+// Introduces a wire to replace an output port SSA wire. If the operation
+// is in a procedural region, it creates a temporary logic, otherwise it
+// places a wire. The connecting op is inserted in the op's region.
+static void replacePortWithWire(ImplicitLocOpBuilder &builder, Operation *op,
+                                Value result, StringRef name) {
+
+  bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
+
+  Value newTarget;
+  if (isProcedural) {
+    newTarget = sv::LogicOp::create(builder, result.getType(),
+                                    builder.getStringAttr(name));
+  } else {
+    newTarget = sv::WireOp::create(builder, result.getType(), name);
+  }
+
+  while (!result.use_empty()) {
+    auto newRead = sv::ReadInOutOp::create(builder, newTarget);
+    OpOperand &use = *result.getUses().begin();
+    use.set(newRead);
+    newRead->moveBefore(use.getOwner());
+  }
+
+  Operation *connect;
+  if (isProcedural) {
+    connect = sv::BPAssignOp::create(builder, newTarget, result);
+  } else {
+    connect = sv::AssignOp::create(builder, newTarget, result);
+  }
+  connect->moveAfter(op);
+}
+
 static StringAttr getResName(Operation *op, size_t idx) {
-  if (auto inst = dyn_cast<hw::InstanceOp>(op))
-    return inst.getResultName(idx);
-  else if (auto inst = dyn_cast<InstanceChoiceOp>(op))
-    return inst.getResultName(idx);
+  if (auto inst = dyn_cast<HWInstanceLike>(op))
+    return inst.getOutputName(idx);
   return {};
 }
 
@@ -145,17 +180,44 @@ static void lowerInstanceResults(HWInstanceLike op) {
       nameTmp += n.getValue().str();
     else
       nameTmp += std::to_string(resNum);
-    Value newWire = builder.create<sv::WireOp>(result.getType(), nameTmp);
+    Value newWire = sv::WireOp::create(builder, result.getType(), nameTmp);
 
     while (!result.use_empty()) {
-      auto newWireRead = builder.create<ReadInOutOp>(newWire);
+      auto newWireRead = ReadInOutOp::create(builder, newWire);
       OpOperand &use = *result.getUses().begin();
       use.set(newWireRead);
       newWireRead->moveBefore(use.getOwner());
     }
 
-    auto connect = builder.create<AssignOp>(newWire, result);
+    auto connect = AssignOp::create(builder, newWire, result);
     connect->moveAfter(op);
+  }
+}
+
+// Ensure that each output of a function call is used only by a wire or reg.
+static void lowerFunctionCallResults(Operation *op) {
+  Block *block = op->getParentOfType<HWModuleLike>().getBodyBlock();
+  auto builder = ImplicitLocOpBuilder::atBlockBegin(op->getLoc(), block);
+  auto callee = op->getAttrOfType<FlatSymbolRefAttr>("callee");
+  assert(callee);
+  SmallString<32> nameTmp{"_", callee.getValue(), "_"};
+
+  auto namePrefixSize = nameTmp.size();
+
+  for (auto [i, result] : llvm::enumerate(op->getResults())) {
+    if (result.hasOneUse()) {
+      Operation *user = *result.getUsers().begin();
+      if (isa<BPAssignOp, AssignOp>(user)) {
+        // Move assign op after instance to resolve cyclic dependencies.
+        user->moveAfter(op);
+        continue;
+      }
+    }
+
+    nameTmp.resize(namePrefixSize);
+    // TODO: Use a result name as suffix.
+    nameTmp += std::to_string(i);
+    replacePortWithWire(builder, op, result, nameTmp);
   }
 }
 
@@ -184,9 +246,9 @@ static void lowerUsersToTemporaryWire(Operation &op,
 
     // If the op is in a procedural region, use logic op.
     if (isProceduralRegion)
-      newWire = builder.create<LogicOp>(wireElementType, name);
+      newWire = LogicOp::create(builder, wireElementType, name);
     else
-      newWire = builder.create<sv::WireOp>(wireElementType, name);
+      newWire = sv::WireOp::create(builder, wireElementType, name);
 
     // Replace all uses with newWire. Wrap in ReadInOutOp if required.
     while (!result.use_empty()) {
@@ -194,7 +256,7 @@ static void lowerUsersToTemporaryWire(Operation &op,
       if (isResultInOut) {
         use.set(newWire);
       } else {
-        auto newWireRead = builder.create<ReadInOutOp>(newWire);
+        auto newWireRead = ReadInOutOp::create(builder, newWire);
         use.set(newWireRead);
         newWireRead->moveBefore(use.getOwner());
       }
@@ -205,14 +267,14 @@ static void lowerUsersToTemporaryWire(Operation &op,
     ReadInOutOp resultRead;
 
     if (isResultInOut)
-      resultRead = builder.create<ReadInOutOp>(result);
+      resultRead = ReadInOutOp::create(builder, result);
 
     if (isProceduralRegion)
-      connect = builder.create<BPAssignOp>(
-          newWire, isResultInOut ? resultRead.getResult() : result);
+      connect = BPAssignOp::create(
+          builder, newWire, isResultInOut ? resultRead.getResult() : result);
     else
-      connect = builder.create<AssignOp>(
-          newWire, isResultInOut ? resultRead.getResult() : result);
+      connect = AssignOp::create(
+          builder, newWire, isResultInOut ? resultRead.getResult() : result);
 
     connect->moveAfter(&op);
     if (resultRead)
@@ -365,9 +427,9 @@ static Operation *rewriteAddWithNegativeConstant(comb::AddOp add,
   ImplicitLocOpBuilder builder(add.getLoc(), add);
 
   // Get the positive constant.
-  auto negCst = builder.create<hw::ConstantOp>(-rhsCst.getValue());
-  auto sub =
-      builder.create<comb::SubOp>(add.getOperand(0), negCst, add.getTwoState());
+  auto negCst = hw::ConstantOp::create(builder, -rhsCst.getValue());
+  auto sub = comb::SubOp::create(builder, add.getOperand(0), negCst,
+                                 add.getTwoState());
   add.getResult().replaceAllUsesWith(sub);
   add.erase();
   if (rhsCst.use_empty())
@@ -384,7 +446,7 @@ static Operation *lowerStructExplodeOp(hw::StructExplodeOp op) {
   for (auto [res, field] :
        llvm::zip(op.getResults(), structType.getElements())) {
     auto extract =
-        builder.create<hw::StructExtractOp>(op.getInput(), field.name);
+        hw::StructExtractOp::create(builder, op.getInput(), field.name);
     if (!firstOp)
       firstOp = extract;
     res.replaceAllUsesWith(extract);
@@ -431,16 +493,16 @@ static bool rewriteSideEffectingExpr(Operation *op) {
   // Scan to the top of the region tree to find out where to insert the reg.
   Operation *parentOp = findParentInNonProceduralRegion(op);
   OpBuilder builder(parentOp);
-  auto reg = builder.create<RegOp>(op->getLoc(), opValue.getType());
+  auto reg = RegOp::create(builder, op->getLoc(), opValue.getType());
 
   // Everything using the expr now uses a read_inout of the reg.
-  auto value = builder.create<ReadInOutOp>(op->getLoc(), reg);
+  auto value = ReadInOutOp::create(builder, op->getLoc(), reg);
   opValue.replaceAllUsesWith(value);
 
   // We assign the side effect expr to the reg immediately after that expression
   // is computed.
   builder.setInsertionPointAfter(op);
-  builder.create<BPAssignOp>(op->getLoc(), reg, opValue);
+  BPAssignOp::create(builder, op->getLoc(), reg, opValue);
   return true;
 }
 
@@ -653,7 +715,7 @@ static bool reuseExistingInOut(Operation *op, const LoweringOptions &options) {
   ImplicitLocOpBuilder builder(assign.getDest().getLoc(), op->getContext());
   for (OpOperand *use : uses) {
     builder.setInsertionPoint(use->getOwner());
-    auto read = builder.create<ReadInOutOp>(assign.getDest());
+    auto read = ReadInOutOp::create(builder, assign.getDest());
     use->set(read);
   }
   if (auto *destOp = assign.getDest().getDefiningOp())
@@ -717,8 +779,11 @@ bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
 /// After the legalization, we are able to know accurate verilog AST structures.
 /// So this function walks and prettifies verilog IR with a heuristic method
 /// specified by `options.wireSpillingHeuristic` based on the structures.
+/// Also move the declarations to the top of the block when
+/// `disallowDeclAssignments` is set.
 static void prettifyAfterLegalization(
-    Block &block, EmittedExpressionStateManager &expressionStateManager) {
+    Block &block, const LoweringOptions &options,
+    EmittedExpressionStateManager &expressionStateManager) {
   // TODO: Handle procedural regions as well.
   if (block.getParentOp()->hasTrait<ProceduralRegion>())
     return;
@@ -732,11 +797,20 @@ static void prettifyAfterLegalization(
     }
   }
 
-  for (auto &op : block) {
+  // Recursively process nested regions, and move declarations to the top of the
+  // block when `disallowDeclAssignments` is set.
+  Operation *insertionPoint = block.empty() ? nullptr : &block.front();
+  for (auto &op : llvm::make_early_inc_range(block)) {
     // If the operations has regions, visit each of the region bodies.
     for (auto &region : op.getRegions()) {
       if (!region.empty())
-        prettifyAfterLegalization(region.front(), expressionStateManager);
+        prettifyAfterLegalization(region.front(), options,
+                                  expressionStateManager);
+    }
+
+    if (options.disallowDeclAssignments && isMovableDeclaration(&op)) {
+      op.moveBefore(insertionPoint);
+      insertionPoint = op.getNextNode();
     }
   }
 }
@@ -790,12 +864,13 @@ static void applyWireLowerings(Block &block,
     ImplicitLocOpBuilder builder(hwWireOp.getLoc(), &block, declarePoint);
     Value decl;
     if (isProceduralRegion) {
-      decl = builder.create<LogicOp>(hwWireOp.getType(), hwWireOp.getNameAttr(),
-                                     hwWireOp.getInnerSymAttr());
-    } else {
       decl =
-          builder.create<sv::WireOp>(hwWireOp.getType(), hwWireOp.getNameAttr(),
-                                     hwWireOp.getInnerSymAttr());
+          LogicOp::create(builder, hwWireOp.getType(), hwWireOp.getNameAttr(),
+                          hwWireOp.getInnerSymAttr());
+    } else {
+      decl = sv::WireOp::create(builder, hwWireOp.getType(),
+                                hwWireOp.getNameAttr(),
+                                hwWireOp.getInnerSymAttr());
     }
 
     // Carry attributes over to the lowered operation.
@@ -811,9 +886,9 @@ static void applyWireLowerings(Block &block,
     if (assignPoint != declarePoint)
       builder.setInsertionPoint(&block, assignPoint);
     if (isProceduralRegion)
-      builder.create<BPAssignOp>(decl, hwWireOp.getInput());
+      BPAssignOp::create(builder, decl, hwWireOp.getInput());
     else
-      builder.create<AssignOp>(decl, hwWireOp.getInput());
+      AssignOp::create(builder, decl, hwWireOp.getInput());
 
     // Create the read. If we have created the assignment at a different point
     // than the declaration, reposition the builder to immediately after the
@@ -821,7 +896,7 @@ static void applyWireLowerings(Block &block,
     // assignment.
     if (assignPoint != declarePoint)
       builder.setInsertionPointAfterValue(decl);
-    auto readOp = builder.create<sv::ReadInOutOp>(decl);
+    auto readOp = sv::ReadInOutOp::create(builder, decl);
 
     // Replace the HW wire.
     hwWireOp.replaceAllUsesWith(readOp.getResult());
@@ -906,9 +981,12 @@ static LogicalResult legalizeHWModule(Block &block,
         spillWiresForInstanceInputs(inst);
     }
 
-    // If logic op is located in a procedural region, we have to move the logic
+    if (auto call = dyn_cast<mlir::CallOpInterface>(op))
+      lowerFunctionCallResults(call);
+
+    // If a reg or logic is located in a procedural region, we have to move the
     // op declaration to a valid program point.
-    if (isProceduralRegion && isa<LogicOp>(op)) {
+    if (isProceduralRegion && isa<LogicOp, RegOp>(op)) {
       if (options.disallowLocalVariables) {
         // When `disallowLocalVariables` is enabled, "automatic logic" is
         // prohibited so hoist the op to a non-procedural region.
@@ -970,15 +1048,15 @@ static LogicalResult legalizeHWModule(Block &block,
              llvm::zip(aggregateConstantOp.getFieldsAttr(),
                        structType.getElements())) {
           if (auto arrayAttr = dyn_cast<mlir::ArrayAttr>(value))
-            operands.push_back(
-                builder.create<hw::AggregateConstantOp>(field.type, arrayAttr));
+            operands.push_back(hw::AggregateConstantOp::create(
+                builder, field.type, arrayAttr));
           else
-            operands.push_back(builder.create<hw::ConstantOp>(
-                field.type, cast<mlir::IntegerAttr>(value)));
+            operands.push_back(hw::ConstantOp::create(
+                builder, field.type, cast<mlir::IntegerAttr>(value)));
         }
 
         auto structCreate =
-            builder.create<hw::StructCreateOp>(structType, operands);
+            hw::StructCreateOp::create(builder, structType, operands);
         aggregateConstantOp.getResult().replaceAllUsesWith(structCreate);
         // Reset the iterator.
         opIterator = std::next(op.getIterator());
@@ -998,25 +1076,57 @@ static LogicalResult legalizeHWModule(Block &block,
           cast<hw::StructType>(structCreateOp.getResult().getType());
       bool procedural = op.getParentOp()->hasTrait<ProceduralRegion>();
       if (procedural)
-        wireOp = builder.create<LogicOp>(structType);
+        wireOp = LogicOp::create(builder, structType);
       else
-        wireOp = builder.create<sv::WireOp>(structType);
+        wireOp = sv::WireOp::create(builder, structType);
 
       for (auto [input, field] :
            llvm::zip(structCreateOp.getInput(), structType.getElements())) {
         auto target =
-            builder.create<sv::StructFieldInOutOp>(wireOp, field.name);
+            sv::StructFieldInOutOp::create(builder, wireOp, field.name);
         if (procedural)
-          builder.create<BPAssignOp>(target, input);
+          BPAssignOp::create(builder, target, input);
         else
-          builder.create<AssignOp>(target, input);
+          AssignOp::create(builder, target, input);
       }
       // Have to create a separate read for each use to keep things legal.
       for (auto &use :
            llvm::make_early_inc_range(structCreateOp.getResult().getUses()))
-        use.set(builder.create<ReadInOutOp>(wireOp));
+        use.set(ReadInOutOp::create(builder, wireOp));
 
       structCreateOp.erase();
+      continue;
+    }
+
+    // Lower `hw.array_inject` to a temporary variable that contains a copy of
+    // the input array, with the injected index overwritten.
+    if (auto arrayInjectOp = dyn_cast<hw::ArrayInjectOp>(op)) {
+      bool procedural = op.getParentOp()->hasTrait<ProceduralRegion>();
+      ImplicitLocOpBuilder builder(op.getLoc(), &op);
+      Value decl;
+      if (procedural)
+        decl = LogicOp::create(builder, arrayInjectOp.getType());
+      else
+        decl = sv::RegOp::create(builder, arrayInjectOp.getType());
+      for (auto &use : llvm::make_early_inc_range(arrayInjectOp->getUses()))
+        use.set(ReadInOutOp::create(builder, decl));
+
+      // Make sure we have a procedural region where we can first copy the input
+      // array into `decl`, and then overwrite a single index.
+      if (!procedural) {
+        auto alwaysOp = sv::AlwaysCombOp::create(builder);
+        builder.setInsertionPointToStart(alwaysOp.getBodyBlock());
+      }
+
+      // Copy the input array into `decl`.
+      sv::BPAssignOp::create(builder, decl, arrayInjectOp.getInput());
+
+      // Overwrite the injected value.
+      auto target = sv::ArrayIndexInOutOp::create(builder, decl,
+                                                  arrayInjectOp.getIndex());
+      sv::BPAssignOp::create(builder, target, arrayInjectOp.getElement());
+
+      arrayInjectOp.erase();
       continue;
     }
 
@@ -1044,13 +1154,13 @@ static LogicalResult legalizeHWModule(Block &block,
         auto type = op.getOperand(1).getType();
         const auto *name = "_GEN_ARRAY_IDX";
         if (op.getParentOp()->hasTrait<ProceduralRegion>()) {
-          wireOp = builder.create<LogicOp>(type, name);
-          builder.create<BPAssignOp>(wireOp, op.getOperand(1));
+          wireOp = LogicOp::create(builder, type, name);
+          BPAssignOp::create(builder, wireOp, op.getOperand(1));
         } else {
-          wireOp = builder.create<sv::WireOp>(type, name);
-          builder.create<AssignOp>(wireOp, op.getOperand(1));
+          wireOp = sv::WireOp::create(builder, type, name);
+          AssignOp::create(builder, wireOp, op.getOperand(1));
         }
-        readOp = builder.create<ReadInOutOp>(wireOp);
+        readOp = ReadInOutOp::create(builder, wireOp);
       }
       op.setOperand(1, readOp);
 
@@ -1095,10 +1205,11 @@ static LogicalResult legalizeHWModule(Block &block,
 
     // Lower variadic fully-associative operations with more than two operands
     // into balanced operand trees so we can split long lines across multiple
-    // statements.
+    // statements. Variadic and full-associative operations with only one
+    // operand are replaced with its operand.
     // TODO: This is checking the Commutative property, which doesn't seem
     // right in general.  MLIR doesn't have a "fully associative" property.
-    if (op.getNumOperands() > 2 && op.getNumResults() == 1 &&
+    if (op.getNumOperands() != 2 && op.getNumResults() == 1 &&
         op.hasTrait<mlir::OpTrait::IsCommutative>() &&
         mlir::isMemoryEffectFree(&op) && op.getNumRegions() == 0 &&
         op.getNumSuccessors() == 0 &&
@@ -1113,7 +1224,8 @@ static LogicalResult legalizeHWModule(Block &block,
       op.erase();
 
       // Make sure we revisit the newly inserted operations.
-      opIterator = Block::iterator(newOps.front());
+      if (!newOps.empty())
+        opIterator = Block::iterator(newOps.front());
       continue;
     }
 
@@ -1246,11 +1358,37 @@ static LogicalResult legalizeHWModule(Block &block,
   return success();
 }
 
+static void fixUpEmptyModules(hw::HWEmittableModuleLike module) {
+  auto outputOp = dyn_cast<hw::OutputOp>(module.getBodyBlock()->begin());
+  if (!outputOp || outputOp->getNumOperands() > 0)
+    return; // Not empty so no need to fix up.
+  OpBuilder builder(module->getContext());
+  builder.setInsertionPoint(outputOp);
+  auto constant = hw::ConstantOp::create(builder, module.getLoc(),
+                                         builder.getBoolAttr(true));
+  auto wire = sv::WireOp::create(builder, module.getLoc(), builder.getI1Type());
+  sv::setSVAttributes(wire,
+                      sv::SVAttributeAttr::get(
+                          builder.getContext(),
+                          "This wire is added to avoid emitting empty modules. "
+                          "See `fixUpEmptyModules` lowering option in CIRCT.",
+                          /*emitAsComment=*/true));
+  sv::AssignOp::create(builder, module.getLoc(), wire, constant);
+}
+
 // NOLINTNEXTLINE(misc-no-recursion)
-LogicalResult ExportVerilog::prepareHWModule(hw::HWModuleOp module,
+LogicalResult ExportVerilog::prepareHWModule(hw::HWEmittableModuleLike module,
                                              const LoweringOptions &options) {
+  // If the module body is empty, just skip it.
+  if (!module.getBodyBlock())
+    return success();
+
   // Zero-valued logic pruning.
   pruneZeroValuedLogic(module);
+
+  // Fix up empty modules if necessary.
+  if (options.fixUpEmptyModules)
+    fixUpEmptyModules(module);
 
   // Legalization.
   if (failed(legalizeHWModule(*module.getBodyBlock(), options)))
@@ -1258,16 +1396,23 @@ LogicalResult ExportVerilog::prepareHWModule(hw::HWModuleOp module,
 
   EmittedExpressionStateManager expressionStateManager(options);
   // Spill wires to prettify verilog outputs.
-  prettifyAfterLegalization(*module.getBodyBlock(), expressionStateManager);
+  prettifyAfterLegalization(*module.getBodyBlock(), options,
+                            expressionStateManager);
+
   return success();
 }
 
 namespace {
 
 struct PrepareForEmissionPass
-    : public PrepareForEmissionBase<PrepareForEmissionPass> {
+    : public circt::impl::PrepareForEmissionBase<PrepareForEmissionPass> {
+
+  bool canScheduleOn(mlir::RegisteredOperationName opName) const final {
+    return opName.hasInterface<hw::HWEmittableModuleLike>();
+  }
+
   void runOnOperation() override {
-    HWModuleOp module = getOperation();
+    auto module = cast<hw::HWEmittableModuleLike>(getOperation());
     LoweringOptions options(cast<mlir::ModuleOp>(module->getParentOp()));
     if (failed(prepareHWModule(module, options)))
       signalPassFailure();
@@ -1275,7 +1420,3 @@ struct PrepareForEmissionPass
 };
 
 } // end anonymous namespace
-
-std::unique_ptr<mlir::Pass> circt::createPrepareForEmissionPass() {
-  return std::make_unique<PrepareForEmissionPass>();
-}

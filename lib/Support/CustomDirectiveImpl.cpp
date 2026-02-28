@@ -138,3 +138,46 @@ void circt::printKeywordBool(OpAsmPrinter &printer, Operation *op,
   else
     printer << falseKeyword;
 }
+
+ParseResult circt::parseVariadicInvertibleOperands(
+    OpAsmParser &parser,
+    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &operands, Type &resultType,
+    mlir::DenseBoolArrayAttr &inverted, NamedAttrList &attrDict) {
+  SmallVector<bool> inverts;
+
+  while (true) {
+    inverts.push_back(succeeded(parser.parseOptionalKeyword("not")));
+    operands.push_back(OpAsmParser::UnresolvedOperand());
+
+    if (parser.parseOperand(operands.back()))
+      return failure();
+    if (parser.parseOptionalComma())
+      break;
+  }
+
+  if (parser.parseOptionalAttrDict(attrDict) || parser.parseColon() ||
+      parser.parseCustomTypeWithFallback(resultType))
+    return failure();
+
+  inverted = parser.getBuilder().getDenseBoolArrayAttr(inverts);
+  return success();
+}
+
+void circt::printVariadicInvertibleOperands(OpAsmPrinter &printer,
+                                            Operation *op,
+                                            OperandRange operands,
+                                            Type resultType,
+                                            mlir::DenseBoolArrayAttr inverted,
+                                            DictionaryAttr attrDict) {
+
+  llvm::interleaveComma(llvm::zip(inverted.asArrayRef(), operands), printer,
+                        [&](auto &&pair) {
+                          auto [invert, input] = pair;
+                          if (invert)
+                            printer << "not ";
+                          printer << input;
+                        });
+  printer.printOptionalAttrDict(attrDict.getValue(), {"inverted"});
+  printer << " : ";
+  printer.printType(resultType);
+}

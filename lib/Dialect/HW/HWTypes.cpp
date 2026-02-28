@@ -22,6 +22,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/StorageUniquerSupport.h"
 #include "mlir/IR/Types.h"
+#include "mlir/Interfaces/MemorySlotInterfaces.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSet.h"
@@ -30,6 +31,13 @@
 using namespace circt;
 using namespace circt::hw;
 using namespace circt::hw::detail;
+
+static ParseResult parseHWArray(AsmParser &parser, Attribute &dim,
+                                Type &elementType);
+static void printHWArray(AsmPrinter &printer, Attribute dim, Type elementType);
+
+static ParseResult parseHWElementType(AsmParser &parser, Type &elementType);
+static void printHWElementType(AsmPrinter &printer, Type dim);
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/HW/HWTypes.cpp.inc"
@@ -100,41 +108,19 @@ bool circt::hw::isHWValueType(Type type) {
 /// value of this type. Returns -1 if the type is not known or cannot be
 /// statically computed.
 int64_t circt::hw::getBitWidth(mlir::Type type) {
-  return llvm::TypeSwitch<::mlir::Type, size_t>(type)
+  // Handle built-in types that don't implement the interface. Do this first
+  // since it is faster than downcasting to an interface.
+  return llvm::TypeSwitch<::mlir::Type, int64_t>(type)
       .Case<IntegerType>(
           [](IntegerType t) { return t.getIntOrFloatBitWidth(); })
-      .Case<ArrayType, UnpackedArrayType>([](auto a) {
-        int64_t elementBitWidth = getBitWidth(a.getElementType());
-        if (elementBitWidth < 0)
-          return elementBitWidth;
-        int64_t dimBitWidth = a.getNumElements();
-        if (dimBitWidth < 0)
-          return static_cast<int64_t>(-1L);
-        return (int64_t)a.getNumElements() * elementBitWidth;
-      })
-      .Case<StructType>([](StructType s) {
-        int64_t total = 0;
-        for (auto field : s.getElements()) {
-          int64_t fieldSize = getBitWidth(field.type);
-          if (fieldSize < 0)
-            return fieldSize;
-          total += fieldSize;
+      .Default([](Type type) -> int64_t {
+        // If type implements the BitWidthTypeInterface, use it.
+        if (auto iface = dyn_cast<BitWidthTypeInterface>(type)) {
+          std::optional<int64_t> width = iface.getBitWidth();
+          return width.has_value() ? *width : -1;
         }
-        return total;
-      })
-      .Case<UnionType>([](UnionType u) {
-        int64_t maxSize = 0;
-        for (auto field : u.getElements()) {
-          int64_t fieldSize = getBitWidth(field.type) + field.offset;
-          if (fieldSize > maxSize)
-            maxSize = fieldSize;
-        }
-        return maxSize;
-      })
-      .Case<EnumType>([](EnumType e) { return e.getBitWidth(); })
-      .Case<TypeAliasType>(
-          [](TypeAliasType t) { return getBitWidth(t.getCanonicalType()); })
-      .Default([](Type) { return -1; });
+        return -1;
+      });
 }
 
 /// Return true if the specified type contains known marker types like
@@ -161,7 +147,7 @@ bool circt::hw::hasHWInOutType(Type type) {
 /// Parse and print nested HW types nicely.  These helper methods allow eliding
 /// the "hw." prefix on array, inout, and other types when in a context that
 /// expects HW subelement types.
-static ParseResult parseHWElementType(Type &result, AsmParser &p) {
+static ParseResult parseHWElementType(AsmParser &p, Type &result) {
   // If this is an HW dialect type, then we don't need/want the !hw. prefix
   // redundantly specified.
   auto fullString = static_cast<DialectAsmParser &>(p).getFullSymbolSpec();
@@ -172,16 +158,18 @@ static ParseResult parseHWElementType(Type &result, AsmParser &p) {
   if (typeString.starts_with("array<") || typeString.starts_with("inout<") ||
       typeString.starts_with("uarray<") || typeString.starts_with("struct<") ||
       typeString.starts_with("typealias<") || typeString.starts_with("int<") ||
-      typeString.starts_with("enum<")) {
+      typeString.starts_with("enum<") || typeString.starts_with("union<")) {
     llvm::StringRef mnemonic;
-    auto parseResult = generatedTypeParser(p, &mnemonic, result);
-    return parseResult.has_value() ? success() : failure();
+    if (auto parseResult = generatedTypeParser(p, &mnemonic, result);
+        parseResult.has_value())
+      return *parseResult;
+    return p.emitError(p.getNameLoc(), "invalid type `") << typeString << "`";
   }
 
   return p.parseType(result);
 }
 
-static void printHWElementType(Type element, AsmPrinter &p) {
+static void printHWElementType(AsmPrinter &p, Type element) {
   if (succeeded(generatedTypePrinter(element, p)))
     return;
   p.printType(element);
@@ -396,6 +384,34 @@ StructType::getIndexAndSubfieldID(uint64_t fieldID) const {
   return {index, fieldID - elementFieldID};
 }
 
+std::optional<DenseMap<Attribute, Type>>
+hw::StructType::getSubelementIndexMap() const {
+  DenseMap<Attribute, Type> destructured;
+  for (auto [i, field] : llvm::enumerate(getElements()))
+    destructured.insert(
+        {IntegerAttr::get(IndexType::get(getContext()), i), field.type});
+  return destructured;
+}
+
+Type hw::StructType::getTypeAtIndex(Attribute index) const {
+  auto indexAttr = llvm::dyn_cast<IntegerAttr>(index);
+  if (!indexAttr)
+    return {};
+
+  return getSubTypeByFieldID(indexAttr.getInt()).first;
+}
+
+std::optional<int64_t> StructType::getBitWidth() const {
+  int64_t total = 0;
+  for (auto field : getElements()) {
+    int64_t fieldSize = hw::getBitWidth(field.type);
+    if (fieldSize < 0)
+      return std::nullopt;
+    total += fieldSize;
+  }
+  return total;
+}
+
 //===----------------------------------------------------------------------===//
 // Union Type
 //===----------------------------------------------------------------------===//
@@ -498,6 +514,19 @@ Type UnionType::getFieldType(mlir::StringRef fieldName) {
   return getFieldInfo(fieldName).type;
 }
 
+std::optional<int64_t> UnionType::getBitWidth() const {
+  int64_t maxSize = 0;
+  for (auto field : getElements()) {
+    int64_t fieldSize = hw::getBitWidth(field.type);
+    if (fieldSize < 0)
+      return std::nullopt;
+    fieldSize += field.offset;
+    if (fieldSize > maxSize)
+      maxSize = fieldSize;
+  }
+  return maxSize;
+}
+
 //===----------------------------------------------------------------------===//
 // Enum Type
 //===----------------------------------------------------------------------===//
@@ -536,10 +565,10 @@ std::optional<size_t> EnumType::indexOf(mlir::StringRef field) {
   return {};
 }
 
-size_t EnumType::getBitWidth() {
+std::optional<int64_t> EnumType::getBitWidth() const {
   auto w = getFields().size();
   if (w > 1)
-    return llvm::Log2_64_Ceil(getFields().size());
+    return llvm::Log2_64_Ceil(w);
   return 1;
 }
 
@@ -547,50 +576,36 @@ size_t EnumType::getBitWidth() {
 // ArrayType
 //===----------------------------------------------------------------------===//
 
-static LogicalResult parseArray(AsmParser &p, Attribute &dim, Type &inner) {
-  if (p.parseLess())
-    return failure();
-
+static ParseResult parseHWArray(AsmParser &p, Attribute &dim, Type &inner) {
   uint64_t dimLiteral;
   auto int64Type = p.getBuilder().getIntegerType(64);
 
-  if (auto res = p.parseOptionalInteger(dimLiteral); res.has_value())
+  if (auto res = p.parseOptionalInteger(dimLiteral); res.has_value()) {
+    if (failed(*res))
+      return failure();
     dim = p.getBuilder().getI64IntegerAttr(dimLiteral);
-  else if (!p.parseOptionalAttribute(dim, int64Type).has_value())
-    return failure();
+  } else if (auto res64 = p.parseOptionalAttribute(dim, int64Type);
+             res64.has_value()) {
+    if (failed(*res64))
+      return failure();
+  } else
+    return p.emitError(p.getNameLoc(), "expected integer");
 
   if (!isa<IntegerAttr, ParamExprAttr, ParamDeclRefAttr>(dim)) {
     p.emitError(p.getNameLoc(), "unsupported dimension kind in hw.array");
     return failure();
   }
 
-  if (p.parseXInDimensionList() || parseHWElementType(inner, p) ||
-      p.parseGreater())
+  if (p.parseXInDimensionList() || parseHWElementType(p, inner))
     return failure();
 
   return success();
 }
 
-Type ArrayType::parse(AsmParser &p) {
-  Attribute dim;
-  Type inner;
-
-  if (failed(parseArray(p, dim, inner)))
-    return Type();
-
-  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner, dim)))
-    return Type();
-
-  return get(inner.getContext(), inner, dim);
-}
-
-void ArrayType::print(AsmPrinter &p) const {
-  p << "<";
-  p.printAttributeWithoutType(getSizeAttr());
+static void printHWArray(AsmPrinter &p, Attribute dim, Type elementType) {
+  p.printAttributeWithoutType(dim);
   p << "x";
-  printHWElementType(getElementType(), p);
-  p << '>';
+  printHWElementType(p, elementType);
 }
 
 size_t ArrayType::getNumElements() const {
@@ -644,31 +659,32 @@ uint64_t ArrayType::getFieldID(uint64_t index) const {
   return 1 + index * (hw::FieldIdImpl::getMaxFieldID(getElementType()) + 1);
 }
 
+std::optional<DenseMap<Attribute, Type>>
+hw::ArrayType::getSubelementIndexMap() const {
+  DenseMap<Attribute, Type> destructured;
+  for (unsigned i = 0; i < getNumElements(); ++i)
+    destructured.insert(
+        {IntegerAttr::get(IndexType::get(getContext()), i), getElementType()});
+  return destructured;
+}
+
+Type hw::ArrayType::getTypeAtIndex(Attribute index) const {
+  return getElementType();
+}
+
+std::optional<int64_t> hw::ArrayType::getBitWidth() const {
+  auto elementBitWidth = hw::getBitWidth(getElementType());
+  if (elementBitWidth < 0)
+    return std::nullopt;
+  int64_t numElements = getNumElements();
+  if (numElements < 0)
+    return std::nullopt;
+  return numElements * elementBitWidth;
+}
+
 //===----------------------------------------------------------------------===//
 // UnpackedArrayType
 //===----------------------------------------------------------------------===//
-
-Type UnpackedArrayType::parse(AsmParser &p) {
-  Attribute dim;
-  Type inner;
-
-  if (failed(parseArray(p, dim, inner)))
-    return Type();
-
-  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner, dim)))
-    return Type();
-
-  return get(inner.getContext(), inner, dim);
-}
-
-void UnpackedArrayType::print(AsmPrinter &p) const {
-  p << "<";
-  p.printAttributeWithoutType(getSizeAttr());
-  p << "x";
-  printHWElementType(getElementType(), p);
-  p << '>';
-}
 
 LogicalResult
 UnpackedArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
@@ -723,27 +739,19 @@ uint64_t UnpackedArrayType::getFieldID(uint64_t index) const {
   return 1 + index * (hw::FieldIdImpl::getMaxFieldID(getElementType()) + 1);
 }
 
+std::optional<int64_t> UnpackedArrayType::getBitWidth() const {
+  auto elementBitWidth = hw::getBitWidth(getElementType());
+  if (elementBitWidth < 0)
+    return std::nullopt;
+  int64_t dimBitWidth = getNumElements();
+  if (dimBitWidth < 0)
+    return std::nullopt;
+  return (int64_t)getNumElements() * elementBitWidth;
+}
+
 //===----------------------------------------------------------------------===//
 // InOutType
 //===----------------------------------------------------------------------===//
-
-Type InOutType::parse(AsmParser &p) {
-  Type inner;
-  if (p.parseLess() || parseHWElementType(inner, p) || p.parseGreater())
-    return Type();
-
-  auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner)))
-    return Type();
-
-  return get(p.getContext(), inner);
-}
-
-void InOutType::print(AsmPrinter &p) const {
-  p << "<";
-  printHWElementType(getElementType(), p);
-  p << '>';
-}
 
 LogicalResult InOutType::verify(function_ref<InFlightDiagnostic()> emitError,
                                 Type innerType) {
@@ -809,9 +817,16 @@ TypedeclOp TypeAliasType::getTypeDecl(const HWSymbolCache &cache) {
   return typeScope.lookupSymbol<TypedeclOp>(ref.getLeafReference());
 }
 
-////////////////////////////////////////////////////////////////////////////////
+std::optional<int64_t> TypeAliasType::getBitWidth() const {
+  auto width = hw::getBitWidth(getCanonicalType());
+  if (width < 0)
+    return std::nullopt;
+  return width;
+}
+
+//===----------------------------------------------------------------------===//
 // ModuleType
-////////////////////////////////////////////////////////////////////////////////
+//===----------------------------------------------------------------------===//
 
 LogicalResult ModuleType::verify(function_ref<InFlightDiagnostic()> emitError,
                                  ArrayRef<ModulePort> ports) {
@@ -1090,9 +1105,9 @@ detail::ModuleTypeStorage::ModuleTypeStorage(ArrayRef<ModulePort> inPorts)
   }
 }
 
-////////////////////////////////////////////////////////////////////////////////
+//===----------------------------------------------------------------------===//
 // BoilerPlate
-////////////////////////////////////////////////////////////////////////////////
+//===----------------------------------------------------------------------===//
 
 void HWDialect::registerTypes() {
   addTypes<

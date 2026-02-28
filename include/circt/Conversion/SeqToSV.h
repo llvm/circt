@@ -18,6 +18,7 @@
 
 namespace circt {
 
+#define GEN_PASS_DECL_LOWERFIRMEM
 #define GEN_PASS_DECL_LOWERSEQTOSV
 #include "circt/Conversion/Passes.h.inc"
 

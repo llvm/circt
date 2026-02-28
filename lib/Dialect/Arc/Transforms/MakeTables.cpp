@@ -119,7 +119,7 @@ void MakeTablesPass::runOnArc(DefineOp defineOp) {
   SmallVector<Value> inputsToConcat(defineOp.getArguments());
   std::reverse(inputsToConcat.begin(), inputsToConcat.end());
   auto concatInputs = inputsToConcat.size() > 1
-                          ? builder.create<comb::ConcatOp>(inputsToConcat)
+                          ? comb::ConcatOp::create(builder, inputsToConcat)
                           : inputsToConcat[0];
 
   // Compute a lookup table for every output.
@@ -170,10 +170,10 @@ void MakeTablesPass::runOnArc(DefineOp defineOp) {
   // Create the table lookup ops.
   for (auto [table, outputOperand] :
        llvm::zip(tables, outputOp->getOpOperands())) {
-    auto array = builder.create<hw::AggregateConstantOp>(
-        ArrayType::get(outputOperand.get().getType(), numTableEntries),
+    auto array = hw::AggregateConstantOp::create(
+        builder, ArrayType::get(outputOperand.get().getType(), numTableEntries),
         builder.getArrayAttr(table));
-    outputOperand.set(builder.create<hw::ArrayGetOp>(array, concatInputs));
+    outputOperand.set(hw::ArrayGetOp::create(builder, array, concatInputs));
   }
 
   for (auto *op : tabularizedOps) {

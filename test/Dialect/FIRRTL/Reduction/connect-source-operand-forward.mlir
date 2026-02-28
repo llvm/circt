@@ -14,9 +14,9 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT:   %a = firrtl.wire  : !firrtl.uint<2>
     // CHECK-NEXT:   %b = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<2>
     // CHECK-NEXT:   %c = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<2>
-    // CHECK-NEXT:   firrtl.connect %a, %val : !firrtl.uint<2>, !firrtl.uint<2>
-    // CHECK-NEXT:   firrtl.connect %b, %val : !firrtl.uint<2>, !firrtl.uint<2>
-    // CHECK-NEXT:   firrtl.connect %c, %val : !firrtl.uint<2>, !firrtl.uint<2>
+    // CHECK-NEXT:   firrtl.connect %a, %val : !firrtl.uint<2>
+    // CHECK-NEXT:   firrtl.connect %b, %val : !firrtl.uint<2>
+    // CHECK-NEXT:   firrtl.connect %c, %val : !firrtl.uint<2>
     // CHECK-NEXT: }
   }
 }

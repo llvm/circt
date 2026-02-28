@@ -1,4 +1,4 @@
-//===- InstanceGraph.h - Instance graph -------------------------*- C++ -*-===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -16,6 +16,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
 #include "llvm/ADT/GraphTraits.h"
+#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/Support/DOTGraphTraits.h"
@@ -46,6 +47,10 @@ struct AddressIterator
                                                                      addrOf) {}
 };
 } // namespace detail
+
+//===----------------------------------------------------------------------===//
+// Instance Node
+//===----------------------------------------------------------------------===//
 
 class InstanceGraphNode;
 
@@ -93,6 +98,10 @@ private:
   InstanceRecord *nextUse = nullptr;
   InstanceRecord *prevUse = nullptr;
 };
+
+//===----------------------------------------------------------------------===//
+// Module Node
+//===----------------------------------------------------------------------===//
 
 /// This is a Node in the InstanceGraph.  Each node represents a Module in a
 /// Circuit.  Both external modules and regular modules can be represented by
@@ -183,6 +192,10 @@ private:
   friend class InstanceGraph;
 };
 
+//===----------------------------------------------------------------------===//
+// Instance Graph
+//===----------------------------------------------------------------------===//
+
 /// This graph tracks modules and where they are instantiated. This is intended
 /// to be used as a cached analysis on circuits.  This class can be used
 /// to walk the modules efficiently in a bottom-up or top-down order.
@@ -200,11 +213,30 @@ public:
   InstanceGraph(const InstanceGraph &) = delete;
   virtual ~InstanceGraph() = default;
 
-  /// Look up an InstanceGraphNode for a module.
-  InstanceGraphNode *lookup(ModuleOpInterface op);
+  /// Lookup an module by name. Returns null if no module with the given name
+  /// exists in the instance graph.
+  InstanceGraphNode *lookupOrNull(StringAttr name);
 
-  /// Lookup an module by name.
-  InstanceGraphNode *lookup(StringAttr name);
+  /// Look up an InstanceGraphNode for a module. Returns null if the module has
+  /// not been added to the instance graph.
+  InstanceGraphNode *lookupOrNull(ModuleOpInterface op) {
+    return lookup(op.getModuleNameAttr());
+  }
+
+  /// Look up an InstanceGraphNode for a module. Aborts if the module does not
+  /// exist.
+  InstanceGraphNode *lookup(ModuleOpInterface op) {
+    auto *node = lookupOrNull(op);
+    assert(node != nullptr && "Module not in InstanceGraph!");
+    return node;
+  }
+
+  /// Lookup an module by name. Aborts if the module does not exist.
+  InstanceGraphNode *lookup(StringAttr name) {
+    auto *node = lookupOrNull(name);
+    assert(node != nullptr && "Module not in InstanceGraph!");
+    return node;
+  }
 
   /// Lookup an InstanceGraphNode for a module.
   InstanceGraphNode *operator[](ModuleOpInterface op) { return lookup(op); }
@@ -234,6 +266,22 @@ public:
   using iterator = detail::AddressIterator<NodeList::iterator>;
   iterator begin() { return nodes.begin(); }
   iterator end() { return nodes.end(); }
+
+  /// Perform a post-order walk across the modules. Guaranteed to visit all
+  /// modules. Child modules are visited before their parent modules. If `Fn`
+  /// returns a `LogicalResult`, the walk can be interrupted by returning
+  /// `failure()` from the callback, in which case the overall walk will return
+  /// `failure()`.
+  template <typename Fn>
+  decltype(auto) walkPostOrder(Fn &&fn);
+
+  /// Perform an inverse-post-order walk across the modules. Guaranteed to visit
+  /// all modules. Child modules are visited before their parent modules. If
+  /// `Fn` returns a `LogicalResult`, the walk can be interrupted by returning
+  /// `failure()` from the callback, in which case the overall walk will return
+  /// `failure()`.
+  template <typename Fn>
+  decltype(auto) walkInversePostOrder(Fn &&fn);
 
   //===-------------------------------------------------------------------------
   // Methods to keep an InstanceGraph up to date.
@@ -276,11 +324,13 @@ protected:
   llvm::SmallVector<InstanceGraphNode *> inferredTopLevelNodes;
 };
 
+//===----------------------------------------------------------------------===//
+// Instance Paths
+//===----------------------------------------------------------------------===//
+
 struct InstancePathCache;
 
-/**
- * An instance path composed of a series of instances.
- */
+/// An instance path composed of a series of instances.
 class InstancePath final {
 public:
   InstancePath() = default;
@@ -302,6 +352,7 @@ public:
   InstanceOpInterface operator[](size_t idx) const { return path[idx]; }
   ArrayRef<InstanceOpInterface>::iterator begin() const { return path.begin(); }
   ArrayRef<InstanceOpInterface>::iterator end() const { return path.end(); }
+  ArrayRef<InstanceOpInterface> getPath() const { return path; }
   size_t size() const { return path.size(); }
   bool empty() const { return path.empty(); }
 
@@ -311,8 +362,9 @@ public:
   void print(llvm::raw_ostream &into) const;
 
 private:
-  // Only the path cache is allowed to create paths.
+  // Either path cache or DenseMapInfo is allowed to create paths.
   friend struct InstancePathCache;
+  friend struct llvm::DenseMapInfo<InstancePath>;
   InstancePath(ArrayRef<InstanceOpInterface> path) : path(path) {}
 
   ArrayRef<InstanceOpInterface> path;
@@ -324,7 +376,7 @@ inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
   return os;
 }
 
-/// A data structure that caches and provides absolute paths to module
+/// A data structure that caches and provides paths to module
 /// instances in the IR.
 struct InstancePathCache {
   /// The instance graph of the IR.
@@ -332,9 +384,13 @@ struct InstancePathCache {
 
   explicit InstancePathCache(InstanceGraph &instanceGraph)
       : instanceGraph(instanceGraph) {}
+
+  // Return all absolute paths from the top-level node to the given module.
   ArrayRef<InstancePath> getAbsolutePaths(ModuleOpInterface op);
-  ArrayRef<InstancePath> getAbsolutePaths(ModuleOpInterface op,
-                                          InstanceGraphNode *top);
+
+  // Return all relative paths from the given node to the given module.
+  ArrayRef<InstancePath> getRelativePaths(ModuleOpInterface op,
+                                          InstanceGraphNode *node);
 
   /// Replace an InstanceOp. This is required to keep the cache updated.
   void replaceInstance(InstanceOpInterface oldOp, InstanceOpInterface newOp);
@@ -345,18 +401,32 @@ struct InstancePathCache {
   /// Prepend an instance to a path.
   InstancePath prependInstance(InstanceOpInterface inst, InstancePath path);
 
+  /// Concatenate two paths.
+  InstancePath concatPath(InstancePath path1, InstancePath path2);
+
 private:
+  using PathsCache = DenseMap<Operation *, ArrayRef<InstancePath>>;
+  ArrayRef<InstancePath> getPaths(ModuleOpInterface op, InstanceGraphNode *top,
+                                  PathsCache &cache);
+
   /// An allocator for individual instance paths and entire path lists.
   llvm::BumpPtrAllocator allocator;
 
   /// Cached absolute instance paths.
-  DenseMap<Operation *, ArrayRef<InstancePath>> absolutePathsCache;
+  PathsCache absolutePathsCache;
+
+  /// Cached relative instance paths.
+  DenseMap<InstanceGraphNode *, PathsCache> relativePathsCache;
 };
 
 } // namespace igraph
 } // namespace circt
 
-// Graph traits for modules.
+//===----------------------------------------------------------------------===//
+// Graph Traits
+//===----------------------------------------------------------------------===//
+
+/// Graph traits for modules.
 template <>
 struct llvm::GraphTraits<circt::igraph::InstanceGraphNode *> {
   using NodeType = circt::igraph::InstanceGraphNode;
@@ -379,7 +449,7 @@ struct llvm::GraphTraits<circt::igraph::InstanceGraphNode *> {
   }
 };
 
-// Provide graph traits for iterating the modules in inverse order.
+/// Graph traits for iterating modules in inverse order.
 template <>
 struct llvm::GraphTraits<llvm::Inverse<circt::igraph::InstanceGraphNode *>> {
   using NodeType = circt::igraph::InstanceGraphNode;
@@ -404,7 +474,17 @@ struct llvm::GraphTraits<llvm::Inverse<circt::igraph::InstanceGraphNode *>> {
   }
 };
 
-// Graph traits for the common instance graph.
+/// Graph traits for the instance graph.
+///
+/// **Deprecated:** This uses `getTopLevelNode()` as the root node of the graph,
+/// which does not contain all modules in the instance graph. Instead, the
+/// behaviour is dependent on concrete subclasses of the instance graph. The HW
+/// and FIRRTL dialects define this to be variants of "the top module" and "all
+/// public modules", which is usually not what you want in a pass. You are more
+/// likely to want to visit _all_ modules in the IR in post order (children
+/// before parents), not just a subset of the modules depending on whether
+/// things are transitively instantiated. Use `walkPostOrder` or
+/// `walkInversePostOrder` on `InstanceGraph` instead.
 template <>
 struct llvm::GraphTraits<circt::igraph::InstanceGraph *>
     : public llvm::GraphTraits<circt::igraph::InstanceGraphNode *> {
@@ -443,6 +523,86 @@ struct llvm::DOTGraphTraits<circt::igraph::InstanceGraph *>
     auto *instanceRecord = *it.getCurrent();
     auto instanceOp = instanceRecord->getInstance();
     return ("label=" + instanceOp.getInstanceName()).str();
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// Graph Iterators
+//===----------------------------------------------------------------------===//
+
+namespace circt {
+namespace igraph {
+
+// These are defined out-of-line here since they need the graph traits to have
+// been defined.
+
+template <typename Fn>
+decltype(auto) InstanceGraph::walkPostOrder(Fn &&fn) {
+  constexpr bool fallible =
+      std::is_invocable_r_v<LogicalResult, Fn &, InstanceGraphNode &>;
+  DenseSet<InstanceGraphNode *> visited;
+  for (auto &root : nodes) {
+    for (auto *node : llvm::post_order_ext(&root, visited)) {
+      if constexpr (fallible) {
+        if (failed(fn(*node)))
+          return failure();
+      } else {
+        fn(*node);
+      }
+    }
+  }
+  if constexpr (fallible)
+    return success();
+}
+
+template <typename Fn>
+decltype(auto) InstanceGraph::walkInversePostOrder(Fn &&fn) {
+  constexpr bool fallible =
+      std::is_invocable_r_v<LogicalResult, Fn &, InstanceGraphNode &>;
+  DenseSet<InstanceGraphNode *> visited;
+  for (auto &root : nodes) {
+    for (auto *node : llvm::inverse_post_order_ext(&root, visited)) {
+      if constexpr (fallible) {
+        if (failed(fn(*node)))
+          return failure();
+      } else {
+        fn(*node);
+      }
+    }
+  }
+  if constexpr (fallible)
+    return success();
+}
+
+} // namespace igraph
+} // namespace circt
+
+//===----------------------------------------------------------------------===//
+// Dense Map Traits
+//===----------------------------------------------------------------------===//
+
+/// DenseMap traits for InstancePath.
+template <>
+struct llvm::DenseMapInfo<circt::igraph::InstancePath> {
+  using ArrayRefInfo =
+      llvm::DenseMapInfo<ArrayRef<circt::igraph::InstanceOpInterface>>;
+  static circt::igraph::InstancePath getEmptyKey() {
+    return circt::igraph::InstancePath(ArrayRefInfo::getEmptyKey());
+  }
+
+  static circt::igraph::InstancePath getTombstoneKey() {
+    return circt::igraph::InstancePath(ArrayRefInfo::getTombstoneKey());
+  }
+
+  static llvm::hash_code getHashValue(circt::igraph::InstancePath path) {
+    auto range =
+        llvm::map_range(path, [](auto op) { return op.getAsOpaquePointer(); });
+    return llvm::hash_combine_range(range.begin(), range.end());
+  }
+
+  static bool isEqual(circt::igraph::InstancePath lhs,
+                      circt::igraph::InstancePath rhs) {
+    return ArrayRefInfo::isEqual(lhs.getPath(), rhs.getPath());
   }
 };
 

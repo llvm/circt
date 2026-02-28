@@ -32,10 +32,6 @@ def InteropDialect : Dialect {
     solutions.
   }];
   let cppNamespace = "::circt::interop";
-
-  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
-  let usePropertiesForAttributes = 0;
-
 }
 
 //===----------------------------------------------------------------------===//
@@ -208,7 +204,7 @@ def ReturnOp : InteropOp<"return", [
   let arguments = (ins Variadic<AnyType>:$returnValues);
 
   let builders = [OpBuilder<(ins), [{
-    build($_builder, $_state, std::nullopt);
+    build($_builder, $_state, mlir::ValueRange());
   }]>];
 
   let assemblyFormat = "attr-dict ($returnValues^ `:` type($returnValues))?";

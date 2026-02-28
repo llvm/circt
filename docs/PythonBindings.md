@@ -10,14 +10,14 @@ CIRCT provides a `setup.py` script that take care of configuring and building LL
 
 ```
 $ cd circt
-$ pip install lib/Bindings/Python --use-feature=in-tree-build
+$ pip install lib/Bindings/Python
 ```
 
 If you just want to build the wheel, use the `pip wheel` command:
 
 ```
 $ cd circt
-$ pip wheel lib/Bindings/Python --use-feature=in-tree-build
+$ pip wheel lib/Bindings/Python
 ```
 
 This will create a `circt_core-<version>-<python version>-<platform>.whl` file in the root of the repo.
@@ -107,7 +107,7 @@ Running this script through `python3 silicon.py` should print the following MLIR
 
 ```mlir
 module {
-  hw.module @magic(%a: i42, %b: i42) -> (c: i42) {
+  hw.module @magic(in %a: i42, in %b: i42, out c: i42) {
     %0 = comb.xor %a, %b : i42
     hw.output %0 : i42
   }

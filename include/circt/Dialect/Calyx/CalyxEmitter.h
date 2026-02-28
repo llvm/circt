@@ -14,12 +14,13 @@
 #ifndef CIRCT_DIALECT_CALYX_CALYXEMITTER_H
 #define CIRCT_DIALECT_CALYX_CALYXEMITTER_H
 
+#include "circt/Support/LLVM.h"
+
 namespace llvm {
 class raw_ostream;
 } // namespace llvm
 
 namespace mlir {
-struct LogicalResult;
 class ModuleOp;
 } // namespace mlir
 

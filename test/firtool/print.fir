@@ -1,20 +1,75 @@
-; RUN: firtool %s --format=fir --ir-sv | FileCheck %s
+; RUN: firtool %s | FileCheck %s
+; RUN: firtool %s --extract-test-code | FileCheck --check-prefix=ETC %s
 
+FIRRTL version 5.1.0
+; CHECK: `ifndef SYNTHESIS
+; CHECK: `ifndef __CIRCT_LIB_LOGGING
+; CHECK-NEXT:   // CIRCT Logging Library
+; CHECK-NEXT:   package __circt_lib_logging;
+; CHECK-NEXT:     class FileDescriptor;
+; CHECK-NEXT:       static int global_id [string];
+; CHECK-NEXT:       static function int get(string name);
+; CHECK-NEXT:         if (global_id.exists(name) == 32'h0) begin
+; CHECK-NEXT:           global_id[name] = $fopen(name, "w");
+; CHECK-NEXT:           if (global_id[name] == 32'h0)
+; CHECK-NEXT:             $error("Failed to open file %s", name);
+; CHECK-NEXT:         end
+; CHECK-NEXT:         return global_id[name];
+; CHECK-NEXT:       endfunction
+; CHECK-NEXT:     endclass
+; CHECK-NEXT:   endpackage
+; CHECK-NEXT:   `define __CIRCT_LIB_LOGGING
+; CHECK-NEXT: `endif // not def __CIRCT_LIB_LOGGING
+; CHECK-NEXT: `endif // not def SYNTHESIS
 circuit PrintTest:
-  ; CHECK-LABEL: @PrintTest
-  module PrintTest :
+  ; CHECK-LABEL: module PrintTest
+  ; ETC-LABEL: module PrintTest_assert
+  ; ETC-LABEL: PrintTest
+  ; ETC-NOT: $fwrite
+  ; ETC-NOT: $fflush
+  public module PrintTest :
     input clock : Clock
     input cond : UInt<1>
-    input var : UInt<32>
-    printf(clock, cond, "test %d\n", var)
+    input a : UInt<8>
 
-    ; CHECK:      sv.ifdef  @SYNTHESIS {
-    ; CHECK-NEXT: } else {
-    ; CHECK-NEXT:   sv.always posedge %clock {
-    ; CHECK-NEXT:     [[PRINTF_COND:%.+]] = sv.macro.ref @PRINTF_COND_() : () -> i1
-    ; CHECK-NEXT:     [[COND:%.+]] = comb.and bin [[PRINTF_COND]], %cond : i1
-    ; CHECK-NEXT:     sv.if [[COND]] {
-    ; CHECK-NEXT:       sv.fwrite %c-2147483646_i32, "test %d\0A"(%var) : i32
-    ; CHECK-NEXT:     }
-    ; CHECK-NEXT:   }
-    ; CHECK-NEXT: }
+    ; CHECK: if ((`PRINTF_COND_) & cond) begin
+    ; CHECK: $fwrite(32'h80000002, "binary: %b %0b %8b\n", a, a, a);
+    printf(clock, cond, "binary: %b %0b %8b\n", a, a, a)
+
+    ; CHECK-NEXT: $fwrite(32'h80000002, "decimal: %d %0d %3d\n", a, a, a);
+    printf(clock, cond, "decimal: %d %0d %3d\n", a, a, a)
+
+    ; CHECK-NEXT: $fwrite(32'h80000002, "hexadecimal: %x %0x %2x\n", a, a, a);
+    printf(clock, cond, "hexadecimal: %x %0x %2x\n", a, a, a)
+
+    ; CHECK-NEXT: $fwrite(32'h80000002, "ASCII character: %c\n", a);
+    printf(clock, cond, "ASCII character: %c\n", a)
+
+    ; CHECK-NEXT: $fwrite(32'h80000002, "literals: %%\n");
+    printf(clock, cond, "literals: %%\n")
+
+    ; CHECK-NEXT: $fwrite(32'h80000002, "[%0t]: %m\n", $time);
+    ; CHECK-NEXT: end
+    printf(clock, cond, "[{{SimulationTime}}]: {{HierarchicalModuleName}}\n")
+
+    ; CHECK:      if (cond) begin
+    ; CHECK-NEXT: ___circt_lib_logging3A3AFileDescriptor3A3Aget_0_1 = __circt_lib_logging::FileDescriptor::get("test.txt");
+    ; CHECK-NEXT: $fwrite(___circt_lib_logging3A3AFileDescriptor3A3Aget_0_1, "hello");
+    fprintf(clock, cond, "test.txt", "hello")
+
+    ; CHECK-NEXT: ___circt_lib_logging3A3AFileDescriptor3A3Aget_0_0 = __circt_lib_logging::FileDescriptor::get($sformatf("%m%c.txt",
+    ; CHECK-NEXT:                                                                                                        8'h61));
+    ; CHECK-NEXT: $fwrite(___circt_lib_logging3A3AFileDescriptor3A3Aget_0_0,
+    ; CHECK-NEXT:         "[%0t]: static file name (w/ substitution)\n", $time);
+    node c = UInt<8>(97)
+    fprintf(clock, cond, "{{HierarchicalModuleName}}%c.txt", c, "[{{SimulationTime}}]: static file name (w/ substitution)\n")
+
+    ; CHECK-NEXT: $fflush(32'h80000002);
+    ; CHECK-NEXT: ___circt_lib_logging3A3AFileDescriptor3A3Aget_0 = __circt_lib_logging::FileDescriptor::get($sformatf("%0t%d.txt",
+    ; CHECK-NEXT:                                                                                                      $time,
+    ; CHECK-NEXT:                                                                                                      a));
+    fflush(clock, cond)
+
+    ; CHECK-NEXT: $fflush(___circt_lib_logging3A3AFileDescriptor3A3Aget_0);
+    ; CHECK-NEXT: end
+    fflush(clock, cond, "{{SimulationTime}}%d.txt", a);

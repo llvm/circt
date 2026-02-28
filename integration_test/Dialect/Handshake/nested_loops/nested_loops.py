@@ -26,7 +26,7 @@ async def sendMultiple(dut):
   # sum_{i = 0}^n (sum_{j=0}^i i) = 1/6 * (n^3 + 3n^2 + 2n)
   res = [(1 / 6) * (n**3 + 3 * n**2 + 2 * n) for n in range(N)]
 
-  out0Check = cocotb.start_soon(out0.checkOutputs(res))
+  out0Check = cocotb.start_soon(out0.checkOutputs(res, converter=float))
 
   for i in range(N):
     in0Send = cocotb.start_soon(in0.send(i))

@@ -1,4 +1,4 @@
-add_circt_library(CIRCTPipelineToHW
+add_circt_conversion_library(CIRCTPipelineToHW
   PipelineToHW.cpp
 
   DEPENDS

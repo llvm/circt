@@ -5,6 +5,7 @@ ssp.instance @missing_delay of "ChainingProblem" {
   library {
     operator_type @_0 [latency<0>]
   }
+  resource {}
   graph {}
 }
 
@@ -15,6 +16,7 @@ ssp.instance @negative_delay of "ChainingProblem" {
   library {
     operator_type @_0 [latency<0>, incDelay<-1.0>, outDelay<-1.0>]
   }
+  resource {}
   graph {}
 }
 
@@ -25,6 +27,7 @@ ssp.instance @inc_out_mismatch of "ChainingProblem" {
   library {
     operator_type @_0 [latency<0>, incDelay<1.0>, outDelay<2.0>]
   }
+  resource {}
   graph {}
 }
 
@@ -34,6 +37,7 @@ ssp.instance @no_stic of "ChainingProblem" {
   library {
     operator_type @_0 [latency<0>, incDelay<1.0>, outDelay<1.0>]
   }
+  resource {}
   graph {
     operation<@_0>() [t<0>] // expected-error {{Operation has no non-negative start time in cycle}}
   }
@@ -46,6 +50,7 @@ ssp.instance @precedence1 of "ChainingProblem" {
   library {
     operator_type @_0 [latency<0>, incDelay<1.0>, outDelay<1.0>]
   }
+  resource {}
   graph {
     %0 = operation<@_0>() [t<0>, z<1.1>]
     operation<@_0>(%0) [t<0>, z<2.0>]
@@ -60,6 +65,7 @@ ssp.instance @precedence2 of "ChainingProblem" {
     operator_type @_0 [latency<0>, incDelay<1.0>, outDelay<1.0>]
     operator_type @_3 [latency<3>, incDelay<2.5>, outDelay<3.75>]
   }
+  resource {}
   graph {
     %0 = operation<@_3>() [t<0>, z<0.0>]
     operation<@_0>(%0) [t<3>, z<3.0>]

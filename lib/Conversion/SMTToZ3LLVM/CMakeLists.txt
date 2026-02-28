@@ -8,12 +8,12 @@ add_circt_conversion_library(CIRCTSMTToZ3LLVM
   Core
 
   LINK_LIBS PUBLIC
-  CIRCTSMT
   CIRCTSupport
   MLIRLLVMCommonConversion
   MLIRSCFToControlFlow
   MLIRControlFlowToLLVM
   MLIRArithToLLVM
   MLIRFuncToLLVM
+  MLIRSMT
   MLIRTransforms
 )

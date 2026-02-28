@@ -10,6 +10,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/CAPI/IR.h"
@@ -28,6 +29,7 @@ DEFINE_C_API_PTR_METHODS(HWInstanceGraphNode, igraph::InstanceGraphNode)
 //===----------------------------------------------------------------------===//
 
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(HW, hw, HWDialect)
+void registerHWPasses() { registerPasses(); }
 
 //===----------------------------------------------------------------------===//
 // Type API.
@@ -127,6 +129,27 @@ MlirStringRef hwModuleTypeGetOutputName(MlirType type, intptr_t index) {
   return wrap(cast<ModuleType>(unwrap(type)).getOutputName(index));
 }
 
+void hwModuleTypeGetPort(MlirType type, intptr_t index, HWModulePort *ret) {
+  auto port = cast<ModuleType>(unwrap(type)).getPorts()[index];
+
+  HWModulePortDirection dir;
+  switch (port.dir) {
+  case ModulePort::Direction::Input:
+    dir = HWModulePortDirection::Input;
+    break;
+  case ModulePort::Direction::Output:
+    dir = HWModulePortDirection::Output;
+    break;
+  case ModulePort::Direction::InOut:
+    dir = HWModulePortDirection::InOut;
+    break;
+  }
+
+  ret->name = wrap(static_cast<Attribute>(port.name));
+  ret->type = wrap(port.type);
+  ret->dir = dir;
+}
+
 bool hwTypeIsAStructType(MlirType type) {
   return isa<StructType>(unwrap(type));
 }
@@ -166,6 +189,48 @@ HWStructFieldInfo hwStructTypeGetFieldNum(MlirType structType, unsigned idx) {
   HWStructFieldInfo ret;
   ret.name = wrap(cppField.name);
   ret.type = wrap(cppField.type);
+  return ret;
+}
+
+bool hwTypeIsAUnionType(MlirType type) { return isa<UnionType>(unwrap(type)); }
+
+MlirType hwUnionTypeGet(MlirContext ctx, intptr_t numElements,
+                        HWUnionFieldInfo const *elements) {
+  SmallVector<UnionType::FieldInfo> fieldInfos;
+  fieldInfos.reserve(numElements);
+  for (intptr_t i = 0; i < numElements; ++i) {
+    fieldInfos.push_back(
+        UnionType::FieldInfo{cast<StringAttr>(unwrap(elements[i].name)),
+                             unwrap(elements[i].type), elements[i].offset});
+  }
+  return wrap(UnionType::get(unwrap(ctx), fieldInfos));
+}
+
+MlirType hwUnionTypeGetField(MlirType unionType, MlirStringRef fieldName) {
+  UnionType ut = cast<UnionType>(unwrap(unionType));
+  return wrap(ut.getFieldType(unwrap(fieldName)));
+}
+
+MlirAttribute hwUnionTypeGetFieldIndex(MlirType unionType,
+                                       MlirStringRef fieldName) {
+  UnionType ut = cast<UnionType>(unwrap(unionType));
+  if (auto idx = ut.getFieldIndex(unwrap(fieldName)))
+    return wrap(IntegerAttr::get(IntegerType::get(ut.getContext(), 32), *idx));
+  return wrap(UnitAttr::get(ut.getContext()));
+}
+
+intptr_t hwUnionTypeGetNumFields(MlirType unionType) {
+  UnionType ut = cast<UnionType>(unwrap(unionType));
+  return ut.getElements().size();
+}
+
+HWUnionFieldInfo hwUnionTypeGetFieldNum(MlirType unionType, unsigned idx) {
+  UnionType ut = cast<UnionType>(unwrap(unionType));
+  auto cppField = ut.getElements()[idx];
+  HWUnionFieldInfo ret;
+  ret.name = wrap(cppField.name);
+  ret.type = wrap(cppField.type);
+  ret.offset = cppField.offset;
   return ret;
 }
 
@@ -215,6 +280,10 @@ bool hwAttrIsAInnerSymAttr(MlirAttribute attr) {
 
 MlirAttribute hwInnerSymAttrGet(MlirAttribute symName) {
   return wrap(InnerSymAttr::get(cast<StringAttr>(unwrap(symName))));
+}
+
+MlirAttribute hwInnerSymAttrGetEmpty(MlirContext ctx) {
+  return wrap(InnerSymAttr::get(unwrap(ctx)));
 }
 
 MlirAttribute hwInnerSymAttrGetSymName(MlirAttribute innerSymAttr) {
@@ -301,6 +370,11 @@ hwOutputFileGetFromFileName(MlirAttribute fileName, bool excludeFromFileList,
       excludeFromFileList, includeReplicatedOp));
 }
 
+MlirStringRef hwOutputFileGetFileName(MlirAttribute outputFile) {
+  auto outputFileAttr = cast<OutputFileAttr>(unwrap(outputFile));
+  return wrap(outputFileAttr.getFilename().getValue());
+}
+
 MLIR_CAPI_EXPORTED HWInstanceGraph hwInstanceGraphGet(MlirOperation operation) {
   return wrap(new InstanceGraph{unwrap(operation)});
 }
@@ -331,7 +405,7 @@ MLIR_CAPI_EXPORTED bool hwInstanceGraphNodeEqual(HWInstanceGraphNode lhs,
 
 MLIR_CAPI_EXPORTED MlirModule
 hwInstanceGraphNodeGetModule(HWInstanceGraphNode node) {
-  return wrap(dyn_cast<ModuleOp>(unwrap(node)->getModule()));
+  return wrap(dyn_cast<ModuleOp>(unwrap(node)->getModule().getOperation()));
 }
 
 MLIR_CAPI_EXPORTED MlirOperation

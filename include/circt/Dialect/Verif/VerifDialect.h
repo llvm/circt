@@ -9,10 +9,12 @@
 #ifndef CIRCT_DIALECT_VERIF_VERIFDIALECT_H
 #define CIRCT_DIALECT_VERIF_VERIFDIALECT_H
 
+#include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 
 #include "circt/Dialect/Verif/VerifDialect.h.inc"
+#include "circt/Dialect/Verif/VerifEnums.h.inc"
 
 #endif // CIRCT_DIALECT_VERIF_VERIFDIALECT_H

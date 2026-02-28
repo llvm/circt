@@ -20,23 +20,29 @@
 #include "circt/Conversion/CalyxToFSM.h"
 #include "circt/Conversion/CalyxToHW.h"
 #include "circt/Conversion/CombToArith.h"
+#include "circt/Conversion/CombToDatapath.h"
 #include "circt/Conversion/CombToSMT.h"
+#include "circt/Conversion/CombToSynth.h"
 #include "circt/Conversion/ConvertToArcs.h"
+#include "circt/Conversion/ConvertToLLVM.h"
+#include "circt/Conversion/CoreToFSM.h"
 #include "circt/Conversion/DCToHW.h"
-#include "circt/Conversion/ExportChiselInterface.h"
+#include "circt/Conversion/DatapathToComb.h"
+#include "circt/Conversion/DatapathToSMT.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/FIRRTLToHW.h"
+#include "circt/Conversion/FSMToCore.h"
 #include "circt/Conversion/FSMToSV.h"
 #include "circt/Conversion/HWArithToHW.h"
 #include "circt/Conversion/HWToBTOR2.h"
-#include "circt/Conversion/HWToLLHD.h"
 #include "circt/Conversion/HWToLLVM.h"
 #include "circt/Conversion/HWToSMT.h"
 #include "circt/Conversion/HWToSV.h"
 #include "circt/Conversion/HWToSystemC.h"
 #include "circt/Conversion/HandshakeToDC.h"
 #include "circt/Conversion/HandshakeToHW.h"
-#include "circt/Conversion/LLHDToLLVM.h"
+#include "circt/Conversion/ImportAIGER.h"
+#include "circt/Conversion/LTLToCore.h"
 #include "circt/Conversion/LoopScheduleToCalyx.h"
 #include "circt/Conversion/MooreToCore.h"
 #include "circt/Conversion/PipelineToHW.h"
@@ -44,6 +50,7 @@
 #include "circt/Conversion/SMTToZ3LLVM.h"
 #include "circt/Conversion/SeqToSV.h"
 #include "circt/Conversion/SimToSV.h"
+#include "circt/Conversion/SynthToComb.h"
 #include "circt/Conversion/VerifToSMT.h"
 #include "circt/Conversion/VerifToSV.h"
 #include "mlir/IR/DialectRegistry.h"
@@ -51,6 +58,10 @@
 #include "mlir/Pass/PassRegistry.h"
 
 namespace circt {
+
+// Generate pass declarations.
+#define GEN_PASS_DECL_CONVERTTOLLVM
+#include "circt/Conversion/Passes.h.inc"
 
 // Generate the code for registering conversion passes.
 #define GEN_PASS_REGISTRATION

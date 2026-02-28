@@ -41,3 +41,27 @@ hw.module @XMRRefD() {
 hw.module @XMRRefOp() {
   hw.instance_choice "foo" sym @foo option "bar" @XMRRefA or @XMRRefB if "B" or @XMRRefC if "C"() -> ()
 }
+
+// -----
+
+// expected-error @below {{inner symbol reference #hw.innerNameRef<@VerbatimInnerRef::@nonexistent> could not be found}}
+sv.verbatim "// {{0}}" {symbols = [#hw.innerNameRef<@VerbatimInnerRef::@nonexistent>]}
+hw.module @VerbatimInnerRef() {
+  hw.output
+}
+
+// -----
+
+// expected-error @below {{inner symbol reference #hw.innerNameRef<@VerbatimExprInnerRef::@nonexistent> could not be found}}
+%0 = sv.verbatim.expr "MACRO" : () -> i32 {symbols = [#hw.innerNameRef<@VerbatimExprInnerRef::@nonexistent>]}
+hw.module @VerbatimExprInnerRef() {
+  hw.output
+}
+
+// -----
+
+// expected-error @below {{inner symbol reference #hw.innerNameRef<@VerbatimExprSEInnerRef::@nonexistent> could not be found}}
+%0 = sv.verbatim.expr.se "MACRO" : () -> i32 {symbols = [#hw.innerNameRef<@VerbatimExprSEInnerRef::@nonexistent>]}
+hw.module @VerbatimExprSEInnerRef() {
+  hw.output
+}

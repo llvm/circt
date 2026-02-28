@@ -67,6 +67,10 @@ public:
   }
 };
 
+enum class FloatingPointStandard {
+  IEEE754,
+};
+
 /// The direction of a Component or Cell port. this is similar to the
 /// implementation found in the FIRRTL dialect.
 enum Direction { Input = 0, Output = 1 };

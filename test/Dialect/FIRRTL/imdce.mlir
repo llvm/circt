@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl-imdeadcodeelim)' --split-input-file -verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl-imdeadcodeelim)' --split-input-file --verify-diagnostics --allow-unregistered-dialect %s | FileCheck %s
 firrtl.circuit "top" {
   // In `dead_module`, %source is connected to %dest through several dead operations such as
   // node, wire, reg or rgereset. %dest is also dead at any instantiation, so check that
@@ -9,16 +9,16 @@ firrtl.circuit "top" {
     %dead_node = firrtl.node %source: !firrtl.uint<1>
 
     %dead_wire = firrtl.wire : !firrtl.uint<1>
-    firrtl.strictconnect %dead_wire, %dead_node : !firrtl.uint<1>
+    firrtl.matchingconnect %dead_wire, %dead_node : !firrtl.uint<1>
 
     %dead_reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
-    firrtl.strictconnect %dead_reg, %dead_wire : !firrtl.uint<1>
+    firrtl.matchingconnect %dead_reg, %dead_wire : !firrtl.uint<1>
 
     %dead_reg_reset = firrtl.regreset %clock, %reset, %dead_reg  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.strictconnect %dead_reg_reset, %dead_reg : !firrtl.uint<1>
+    firrtl.matchingconnect %dead_reg_reset, %dead_reg : !firrtl.uint<1>
 
     %not = firrtl.not %dead_reg_reset : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.strictconnect %dest, %not : !firrtl.uint<1>
+    firrtl.matchingconnect %dest, %not : !firrtl.uint<1>
   }
 
   // `%dontTouch` port has a symbol so it shouldn't be removed. `%sym_wire` also has a
@@ -26,10 +26,10 @@ firrtl.circuit "top" {
   // CHECK-LABEL: firrtl.module private @dontTouch(in %dontTouch: !firrtl.uint<1> sym @sym, in %source: !firrtl.uint<1>) {
   firrtl.module private @dontTouch(in %dontTouch: !firrtl.uint<1> sym @sym, in %source: !firrtl.uint<1>, in %dead: !firrtl.uint<1>) {
     // CHECK-NEXT: %sym_wire = firrtl.wire sym @sym2   : !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.strictconnect %sym_wire, %source : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.matchingconnect %sym_wire, %source : !firrtl.uint<1>
     // CHECK-NEXT: }
     %sym_wire = firrtl.wire sym @sym2 : !firrtl.uint<1>
-    firrtl.strictconnect %sym_wire, %source : !firrtl.uint<1>
+    firrtl.matchingconnect %sym_wire, %source : !firrtl.uint<1>
 
   }
 
@@ -49,29 +49,29 @@ firrtl.circuit "top" {
   firrtl.module @top(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>,
                      in %clock:!firrtl.clock, in %reset:!firrtl.uint<1>) {
     // CHECK-NEXT: %tmp = firrtl.node %source
-    // CHECK-NEXT: firrtl.strictconnect %dest, %tmp
+    // CHECK-NEXT: firrtl.matchingconnect %dest, %tmp
     %tmp = firrtl.node %source: !firrtl.uint<1>
-    firrtl.strictconnect %dest, %tmp : !firrtl.uint<1>
+    firrtl.matchingconnect %dest, %tmp : !firrtl.uint<1>
 
     // CHECK-NOT: @dead_module
     %source1, %dest1, %clock1, %reset1  = firrtl.instance dead_module @dead_module(in source: !firrtl.uint<1>, out dest: !firrtl.uint<1>, in clock:!firrtl.clock, in reset:!firrtl.uint<1>)
-    firrtl.strictconnect %source1, %source : !firrtl.uint<1>
-    firrtl.strictconnect %clock1, %clock : !firrtl.clock
-    firrtl.strictconnect %reset1, %reset : !firrtl.uint<1>
+    firrtl.matchingconnect %source1, %source : !firrtl.uint<1>
+    firrtl.matchingconnect %clock1, %clock : !firrtl.clock
+    firrtl.matchingconnect %reset1, %reset : !firrtl.uint<1>
 
     // Check that ports with dontTouch are not removed.
     // CHECK-NEXT: %testDontTouch_dontTouch, %testDontTouch_source = firrtl.instance testDontTouch @dontTouch(in dontTouch: !firrtl.uint<1>, in source: !firrtl.uint<1>)
-    // CHECK-NEXT: firrtl.strictconnect %testDontTouch_dontTouch, %source
-    // CHECK-NEXT: firrtl.strictconnect %testDontTouch_source, %source
+    // CHECK-NEXT: firrtl.matchingconnect %testDontTouch_dontTouch, %source
+    // CHECK-NEXT: firrtl.matchingconnect %testDontTouch_source, %source
     %testDontTouch_dontTouch, %testDontTouch_source,  %dead = firrtl.instance testDontTouch @dontTouch(in dontTouch: !firrtl.uint<1>, in source: !firrtl.uint<1>, in dead:!firrtl.uint<1>)
-    firrtl.strictconnect %testDontTouch_dontTouch, %source : !firrtl.uint<1>
-    firrtl.strictconnect %testDontTouch_source, %source : !firrtl.uint<1>
-    firrtl.strictconnect %dead, %source : !firrtl.uint<1>
+    firrtl.matchingconnect %testDontTouch_dontTouch, %source : !firrtl.uint<1>
+    firrtl.matchingconnect %testDontTouch_source, %source : !firrtl.uint<1>
+    firrtl.matchingconnect %dead, %source : !firrtl.uint<1>
 
     // CHECK-NEXT: %mem_source = firrtl.instance mem @mem(in source: !firrtl.uint<1>)
-    // CHECK-NEXT: firrtl.strictconnect %mem_source, %source : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.matchingconnect %mem_source, %source : !firrtl.uint<1>
     %mem_source  = firrtl.instance mem @mem(in source: !firrtl.uint<1>)
-    firrtl.strictconnect %mem_source, %source : !firrtl.uint<1>
+    firrtl.matchingconnect %mem_source, %source : !firrtl.uint<1>
     // CHECK-NEXT: }
   }
 }
@@ -82,13 +82,13 @@ firrtl.circuit "top" {
 firrtl.circuit "top"  {
   // CHECK-NOT: @Child1
   firrtl.module private @Child1(in %input: !firrtl.uint<1>, out %output: !firrtl.uint<1>) {
-    firrtl.strictconnect %output, %input : !firrtl.uint<1>
+    firrtl.matchingconnect %output, %input : !firrtl.uint<1>
   }
   // CHECK-NOT: @Child2
   firrtl.module private @Child2(in %input: !firrtl.uint<1>, in %clock: !firrtl.clock, out %output: !firrtl.uint<1>) {
     %r = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
-    firrtl.strictconnect %r, %input : !firrtl.uint<1>
-    firrtl.strictconnect %output, %r : !firrtl.uint<1>
+    firrtl.matchingconnect %r, %input : !firrtl.uint<1>
+    firrtl.matchingconnect %output, %r : !firrtl.uint<1>
   }
 
   // CHECK-LABEL: firrtl.module @top(in %clock: !firrtl.clock, in %input: !firrtl.uint<1>) {
@@ -96,11 +96,11 @@ firrtl.circuit "top"  {
   // expected-warning @below {{module `top` is empty but cannot be removed because the module is public}}
   firrtl.module @top(in %clock: !firrtl.clock, in %input: !firrtl.uint<1>) {
     %tile_input, %tile_output = firrtl.instance tile  @Child1(in input: !firrtl.uint<1>, out output: !firrtl.uint<1>)
-    firrtl.strictconnect %tile_input, %input : !firrtl.uint<1>
+    firrtl.matchingconnect %tile_input, %input : !firrtl.uint<1>
     %named = firrtl.node  %tile_output  : !firrtl.uint<1>
     %bar_input, %bar_clock, %bar_output = firrtl.instance bar  @Child2(in input: !firrtl.uint<1>, in clock: !firrtl.clock, out output: !firrtl.uint<1>)
-    firrtl.strictconnect %bar_clock, %clock : !firrtl.clock
-    firrtl.strictconnect %bar_input, %named : !firrtl.uint<1>
+    firrtl.matchingconnect %bar_clock, %clock : !firrtl.clock
+    firrtl.matchingconnect %bar_input, %named : !firrtl.uint<1>
   }
 }
 
@@ -112,19 +112,19 @@ firrtl.circuit "UnusedOutput"  {
   // CHECK-NOT:     out %c
   firrtl.module private @SingleDriver(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>) {
     // CHECK-NEXT: %[[c_wire:.+]] = firrtl.wire
-    // CHECK-NEXT: firrtl.strictconnect %b, %[[c_wire]]
-    firrtl.strictconnect %b, %c : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.matchingconnect %b, %[[c_wire]]
+    firrtl.matchingconnect %b, %c : !firrtl.uint<1>
     // CHECK-NEXT: %[[not_a:.+]] = firrtl.not %a
     %0 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.strictconnect %[[c_wire]], %[[not_a]]
-    firrtl.strictconnect %c, %0 : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.matchingconnect %[[c_wire]], %[[not_a]]
+    firrtl.matchingconnect %c, %0 : !firrtl.uint<1>
   }
   // CHECK-LABEL: @UnusedOutput
   firrtl.module @UnusedOutput(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
     // CHECK: %singleDriver_a, %singleDriver_b = firrtl.instance singleDriver
     %singleDriver_a, %singleDriver_b, %singleDriver_c = firrtl.instance singleDriver @SingleDriver(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>, out c: !firrtl.uint<1>)
-    firrtl.strictconnect %singleDriver_a, %a : !firrtl.uint<1>
-    firrtl.strictconnect %b, %singleDriver_b : !firrtl.uint<1>
+    firrtl.matchingconnect %singleDriver_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %singleDriver_b : !firrtl.uint<1>
   }
 }
 
@@ -176,14 +176,14 @@ firrtl.circuit "ForwardConstant" {
   // CHECK-NOT: Zero
   firrtl.module private @Zero(out %zero: !firrtl.uint<1>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    firrtl.strictconnect %zero, %c0_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %zero, %c0_ui1 : !firrtl.uint<1>
   }
   // CHECK-LABEL: @ForwardConstant
   firrtl.module @ForwardConstant(out %zero: !firrtl.uint<1>) {
     // CHECK: %c0_ui1 = firrtl.constant 0
     %sub_zero = firrtl.instance sub @Zero(out zero: !firrtl.uint<1>)
-    // CHECK-NEXT: firrtl.strictconnect %zero, %c0_ui1
-    firrtl.strictconnect %zero, %sub_zero : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.matchingconnect %zero, %c0_ui1
+    firrtl.matchingconnect %zero, %sub_zero : !firrtl.uint<1>
   }
 }
 
@@ -204,7 +204,7 @@ firrtl.circuit "RefPorts" {
   firrtl.module private @dead_ref_port(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>, out %ref_dest: !firrtl.probe<uint<1>>) {
     %ref_not = firrtl.ref.send %source: !firrtl.uint<1>
     firrtl.ref.define %ref_dest, %ref_not : !firrtl.probe<uint<1>>
-    firrtl.strictconnect %dest, %source : !firrtl.uint<1>
+    firrtl.matchingconnect %dest, %source : !firrtl.uint<1>
   }
 
   // CHECK: @live_ref
@@ -218,28 +218,28 @@ firrtl.circuit "RefPorts" {
     // Delete send's that aren't resolved, and check deletion of modules with ref ops + ports.
     // CHECK-NOT: @dead_ref_send
     %source1, %dest1 = firrtl.instance dead_ref_send @dead_ref_send(in source: !firrtl.uint<1>, out dest: !firrtl.probe<uint<1>>)
-    firrtl.strictconnect %source1, %source : !firrtl.uint<1>
+    firrtl.matchingconnect %source1, %source : !firrtl.uint<1>
 
     // Check that an unused resolve doesn't keep send alive, and test ref port removal.
     // CHECK: @dead_ref_port
     // CHECK-NOT: firrtl.ref
     %source2, %dest2, %ref_dest2 = firrtl.instance dead_ref_port @dead_ref_port(in source: !firrtl.uint<1>, out dest: !firrtl.uint<1>, out ref_dest: !firrtl.probe<uint<1>>)
-    firrtl.strictconnect %source2, %source : !firrtl.uint<1>
+    firrtl.matchingconnect %source2, %source : !firrtl.uint<1>
     %unused = firrtl.ref.resolve %ref_dest2 : !firrtl.probe<uint<1>>
-    firrtl.strictconnect %dest, %dest2 : !firrtl.uint<1>
+    firrtl.matchingconnect %dest, %dest2 : !firrtl.uint<1>
 
     // Check not deleted if live.
     // CHECK: @live_ref
     %source3, %dest3 = firrtl.instance live_ref @live_ref(in source: !firrtl.uint<1>, out dest: !firrtl.probe<uint<1>>)
-    firrtl.strictconnect %source3, %source : !firrtl.uint<1>
+    firrtl.matchingconnect %source3, %source : !firrtl.uint<1>
     // CHECK: firrtl.ref.resolve
     %dest3_resolved = firrtl.ref.resolve %dest3 : !firrtl.probe<uint<1>>
-    firrtl.strictconnect %dest, %dest3_resolved : !firrtl.uint<1>
+    firrtl.matchingconnect %dest, %dest3_resolved : !firrtl.uint<1>
 
     // Check dead resolve is deleted.
     // CHECK-NOT: dead_instance
     %source4, %dest4 = firrtl.instance dead_instance @live_ref(in source: !firrtl.uint<1>, out dest: !firrtl.probe<uint<1>>)
-    firrtl.strictconnect %source4, %source : !firrtl.uint<1>
+    firrtl.matchingconnect %source4, %source : !firrtl.uint<1>
     // CHECK-NOT: firrtl.ref.resolve
     %unused5 = firrtl.ref.resolve %dest4 : !firrtl.probe<uint<1>>
   }
@@ -307,11 +307,11 @@ firrtl.circuit "DeadInputPort"  {
   // CHECK-LABEL: firrtl.module @DeadInputPort
   firrtl.module @DeadInputPort(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
     // CHECK-NEXT: %0 = firrtl.wire
-    // CHECK-NEXT: firrtl.strictconnect %0, %a
-    // CHECK-NEXT: firrtl.strictconnect %b, %0
+    // CHECK-NEXT: firrtl.matchingconnect %0, %a
+    // CHECK-NEXT: firrtl.matchingconnect %b, %0
     %bar_a = firrtl.instance bar  @Bar(in a: !firrtl.uint<1>)
-    firrtl.strictconnect %bar_a, %a : !firrtl.uint<1>
-    firrtl.strictconnect %b, %bar_a : !firrtl.uint<1>
+    firrtl.matchingconnect %bar_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %bar_a : !firrtl.uint<1>
   }
 }
 
@@ -327,11 +327,11 @@ firrtl.circuit "DeleteInstance" {
   }
   firrtl.module private @SideEffect2(in %a: !firrtl.uint<1>, in %clock: !firrtl.clock) {
     %s1_a, %s1_clock = firrtl.instance s1 @SideEffect1(in a: !firrtl.uint<1>, in clock: !firrtl.clock)
-    firrtl.strictconnect %s1_a, %a : !firrtl.uint<1>
-    firrtl.strictconnect %s1_clock, %clock : !firrtl.clock
+    firrtl.matchingconnect %s1_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %s1_clock, %clock : !firrtl.clock
   }
   firrtl.module private @PassThrough(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
-    firrtl.strictconnect %b, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
   // CHECK-LABEL: DeleteInstance
   firrtl.module @DeleteInstance(in %a: !firrtl.uint<1>, in %clock: !firrtl.clock, out %b: !firrtl.uint<1>) {
@@ -343,52 +343,15 @@ firrtl.circuit "DeleteInstance" {
     %p1_a, %p1_b = firrtl.instance p1 @PassThrough(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
     %p2_a, %p2_b = firrtl.instance p2 @PassThrough(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>)
     %s_a, %s_clock = firrtl.instance s @SideEffect2(in a: !firrtl.uint<1>, in clock: !firrtl.clock)
-    // CHECK-NEXT: firrtl.strictconnect %s_a, %a : !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.strictconnect %s_clock, %clock : !firrtl.clock
-    // CHECK-NEXT: firrtl.strictconnect %p2_a, %a : !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.strictconnect %b, %p2_b : !firrtl.uint<1>
-    firrtl.strictconnect %s_a, %a : !firrtl.uint<1>
-    firrtl.strictconnect %s_clock, %clock : !firrtl.clock
-    firrtl.strictconnect %p1_a, %a : !firrtl.uint<1>
-    firrtl.strictconnect %p2_a, %a : !firrtl.uint<1>
-    firrtl.strictconnect %b, %p2_b : !firrtl.uint<1>
-  }
-}
-
-// -----
-firrtl.circuit "Top" {
-  // CHECK-NOT: @nla_1
-  // CHECK: @nla_2
-  hw.hierpath private @nla_1 [@Foo1::@dead, @EncodingModule]
-  hw.hierpath private @nla_2 [@Foo2::@live, @EncodingModule]
-  // CHECK-LABEL: private @EncodingModule
-  // CHECK-NOT: @nla_1
-  // CHECK-SAME: @nla_2
-  firrtl.module private @EncodingModule(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1> [{circt.nonlocal = @nla_1, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0 : i64, type = "OMReferenceTarget"}, {circt.nonlocal = @nla_2, class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1 : i64, type = "OMReferenceTarget"}]) {
-    firrtl.strictconnect %a, %in : !firrtl.uint<1>
-  }
-  // CHECK-NOT: @Foo1
-  firrtl.module private @Foo1(in %in: !firrtl.uint<1>) {
-    %c_in, %c_a = firrtl.instance c sym @dead @EncodingModule(in in: !firrtl.uint<1>, out a: !firrtl.uint<1>)
-    firrtl.strictconnect %c_in, %in : !firrtl.uint<1>
-  }
-  // CHECK-LABEL: @Foo2
-  firrtl.module private @Foo2(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1>) {
-    %c_in, %c_a = firrtl.instance c sym @live @EncodingModule(in in: !firrtl.uint<1>, out a: !firrtl.uint<1>)
-    firrtl.strictconnect %a, %c_a : !firrtl.uint<1>
-    firrtl.strictconnect %c_in, %in : !firrtl.uint<1>
-  }
-  // CHECK-LABEL: @Top
-  // CHECK-NOT: @Foo1
-  // CHECK-NOT: firrtl.strictconnect %foo1_in, %in
-  // CHECK: @Foo2
-  firrtl.module @Top(in %in: !firrtl.uint<1>, out %a: !firrtl.uint<1>) {
-    %foo1_in = firrtl.instance foo1 @Foo1(in in: !firrtl.uint<1>)
-    firrtl.strictconnect %foo1_in, %in : !firrtl.uint<1>
-    %foo2_in, %foo2_a = firrtl.instance foo2 @Foo2(in in: !firrtl.uint<1>, out a: !firrtl.uint<1>)
-    firrtl.strictconnect %a, %foo2_a : !firrtl.uint<1>
-    firrtl.strictconnect %foo2_in, %in : !firrtl.uint<1>
-
+    // CHECK-NEXT: firrtl.matchingconnect %s_a, %a : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.matchingconnect %s_clock, %clock : !firrtl.clock
+    // CHECK-NEXT: firrtl.matchingconnect %p2_a, %a : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.matchingconnect %b, %p2_b : !firrtl.uint<1>
+    firrtl.matchingconnect %s_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %s_clock, %clock : !firrtl.clock
+    firrtl.matchingconnect %p1_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %p2_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %p2_b : !firrtl.uint<1>
   }
 }
 
@@ -414,9 +377,9 @@ firrtl.circuit "Top" {
   // CHECK-LABEL: firrtl.module @Top
   firrtl.module @Top(in %in: !firrtl.uint<1>) {
     %c_in1, %c_in2, %c_in3 = firrtl.instance c sym @foo1 @Bar(in in1: !firrtl.uint<1>, in in2: !firrtl.uint<1>, in in3: !firrtl.uint<1>)
-    firrtl.strictconnect %c_in1, %in : !firrtl.uint<1>
-    firrtl.strictconnect %c_in2, %in : !firrtl.uint<1>
-    firrtl.strictconnect %c_in3, %in : !firrtl.uint<1>
+    firrtl.matchingconnect %c_in1, %in : !firrtl.uint<1>
+    firrtl.matchingconnect %c_in2, %in : !firrtl.uint<1>
+    firrtl.matchingconnect %c_in3, %in : !firrtl.uint<1>
     // CHECK: sv.verbatim "foo" {some = #hw.innerNameRef<@Top::@baz1>}
     sv.verbatim "foo" {some = #hw.innerNameRef<@Top::@baz1>}
     // Don't remove the instance if there is an unknown use of inner reference.
@@ -440,7 +403,7 @@ firrtl.circuit "Test" {
   // CHECK: firrtl.module private @Blah() {
   firrtl.module private @Blah(out %out : !firrtl.uint<1>) {
     %extmodule_out = firrtl.instance extmodule @ExtModule(out out : !firrtl.uint<1>)
-    firrtl.strictconnect %out, %extmodule_out : !firrtl.uint<1>
+    firrtl.matchingconnect %out, %extmodule_out : !firrtl.uint<1>
   }
   firrtl.module @Test() attributes {convention = #firrtl<convention scalarized>} {
     // CHECK: firrtl.instance blah interesting_name @Blah()
@@ -450,7 +413,7 @@ firrtl.circuit "Test" {
   // CHECK-NOT: firrtl.module private @Other
   firrtl.module private @Other(out %out : !firrtl.uint<1>) {
     %blah_out = firrtl.instance blah interesting_name @Blah(out out : !firrtl.uint<1>)
-    firrtl.strictconnect %out, %blah_out : !firrtl.uint<1>
+    firrtl.matchingconnect %out, %blah_out : !firrtl.uint<1>
   }
 }
 
@@ -535,7 +498,7 @@ firrtl.circuit "Issue5898" {
   firrtl.module @Issue5898(in %x: !firrtl.uint<5>, out %p: !firrtl.rwprobe<uint<5>>) {
     // CHECK: connect
     %w, %w_ref = firrtl.wire forceable : !firrtl.uint<5>, !firrtl.rwprobe<uint<5>>
-    firrtl.strictconnect %w, %x : !firrtl.uint<5>
+    firrtl.matchingconnect %w, %x : !firrtl.uint<5>
     firrtl.ref.define %p, %w_ref : !firrtl.rwprobe<uint<5>>
   }
 }
@@ -565,55 +528,175 @@ firrtl.circuit "DeadPublic" {
 }
 
 // -----
-// OMIR annotation should not block removal.
-//   - See: https://github.com/llvm/circt/issues/6199
+
+// Test that an operation with a nested block user will be removed (and not
+// crash).  This should work for both FIRRTL operations and non-FIRRTL
+// operations.
 //
-// CHECK-LABEL: firrtl.circuit "OMIRRemoval"
-firrtl.circuit "OMIRRemoval" {
-  firrtl.module @OMIRRemoval() {
-    // CHECK-NOT: %tmp_0
-    %tmp_0 = firrtl.wire {
-      annotations = [
-        {
-           class = "freechips.rocketchip.objectmodel.OMIRTracker",
-           id = 0 : i64,
-           type = "OMReferenceTarget"
-        }
-      ]} : !firrtl.uint<1>
+// CHECK-LABEL: "Foo"
+firrtl.circuit "Foo" {
+  firrtl.layer @A bind {}
+  sv.macro.decl @B["B"]
+  // CHECK-NOT: @Bar
+  firrtl.module private @Bar() {}
+  firrtl.module @Foo() {
+    // CHECK-LABEL: firrtl.layerblock @A
+    firrtl.layerblock @A {
+      // CHECK-NOT: firrtl.instance
+      firrtl.instance bar @Bar()
+      // CHECK-LABEL: sv.ifdef @B
+      sv.ifdef @B {
+        // CHECK-NOT: firrtl.instance
+        firrtl.instance bar2 @Bar()
+      }
+    }
+  }
+}
 
-    // CHECK-NOT: %tmp_1
-    %tmp_1 = firrtl.wire {
-      annotations = [
-        {
-           class = "freechips.rocketchip.objectmodel.OMIRTracker",
-           id = 1 : i64,
-           type = "OMMemberReferenceTarget"
-        }
-      ]} : !firrtl.uint<2>
+// -----
 
-    // CHECK-NOT: %tmp_2
-    %tmp_2 = firrtl.wire {
-      annotations = [
-        {
-           class = "freechips.rocketchip.objectmodel.OMIRTracker",
-           id = 3 : i64,
-           type = "OMMemberInstanceTarget"
-        }
-      ]} : !firrtl.uint<3>
+// CHECK-LABEL: "Foo"
+firrtl.circuit "Foo" {
+  firrtl.layer @A bind {}
+  // CHECK-LABEL: @Bar
+  // CHECK-NOT:     out %probe
+  firrtl.module private @Bar(
+    in %a: !firrtl.uint<1>,
+    out %b: !firrtl.uint<1>,
+    out %probe: !firrtl.probe<uint<1>, @A>
+  ) {
+    // CHECK:      firrtl.layerblock @A {
+    // CHECK-NEXT: }
+    firrtl.layerblock @A {
+      %1 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
+      %a_not = firrtl.node %1 : !firrtl.uint<1>
+      %2 = firrtl.ref.send %a_not : !firrtl.uint<1>
+      %3 = firrtl.ref.cast %2 : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>, @A>
+      firrtl.ref.define %probe, %3 : !firrtl.probe<uint<1>, @A>
+    }
+    // CHECK-NEXT: firrtl.matchingconnect %b, %a
+    firrtl.matchingconnect %b, %a : !firrtl.uint<1>
+  }
+  firrtl.module @Foo(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    %bar_a, %bar_b, %bar_probe = firrtl.instance bar @Bar(in a: !firrtl.uint<1>, out b: !firrtl.uint<1>, out probe: !firrtl.probe<uint<1>, @A>)
+    firrtl.matchingconnect %bar_a, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %bar_b : !firrtl.uint<1>
+  }
+}
 
-    // Adding one additional annotation will block removal.
-    //
-    // CHECK: %tmp_3
-    %tmp_3 = firrtl.wire {
-      annotations = [
-        {
-           class = "freechips.rocketchip.objectmodel.OMIRTracker",
-           id = 4 : i64,
-           type = "OMMemberInstanceTarget"
-        },
-        {
-           class = "circt.test"
-        }
-      ]} : !firrtl.uint<4>
+// -----
+
+// Modules referenced from unknown ops cannot be removed, even if they are empty
+// and all their instances have been deleted.
+// CHECK-LABEL: firrtl.circuit "FormalMarkerIsUse"
+firrtl.circuit "FormalMarkerIsUse" {
+  // expected-warning @below {{module `FormalMarkerIsUse` is empty but cannot be removed because the module is public}}
+  firrtl.module @FormalMarkerIsUse() {
+    // CHECK-NOT: firrtl.instance foo @Foo
+    // CHECK-NOT: firrtl.instance bar @Bar
+    firrtl.instance foo @Foo()
+    firrtl.instance bar @Bar()
+  }
+  // CHECK: firrtl.module private @Foo
+  // CHECK: firrtl.module private @Bar
+  // CHECK: firrtl.module private @Uninstantiated
+  firrtl.module private @Foo() {}
+  firrtl.module private @Bar() {}
+  firrtl.module private @Uninstantiated() {}
+  firrtl.formal @Test, @Foo {}
+  "some_unknown_dialect.op"() { magic = @Bar, other = @Uninstantiated } : () -> ()
+}
+
+// -----
+
+// Block arguments on operations that aren't modules, e.g. contracts, must not
+// crash the `firrtl::hasDontTouch` query.
+// CHECK-LABEL: firrtl.circuit "NonModuleBlockArgsMustNotCrash"
+firrtl.circuit "NonModuleBlockArgsMustNotCrash" {
+  firrtl.module @NonModuleBlockArgsMustNotCrash(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    %0 = firrtl.contract %a : !firrtl.uint<1> {
+    ^bb0(%arg0: !firrtl.uint<1>):
+      firrtl.int.verif.assert %arg0 : !firrtl.uint<1>
+    }
+    firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Test that domain associations are not incorrectly dropped.  I.e., a usage of
+// a port marks its associated domain ports as alive.
+//
+// See: https://github.com/llvm/circt/issues/9408
+//
+// CHECK-LABEL: firrtl.circuit "DomainInfo"
+firrtl.circuit "DomainInfo" {
+  firrtl.domain @ClockDomain
+  // CHECK: firrtl.module private @Bar
+  // CHECK-NOT: in %A
+  // CHECK-NOT: in %a
+  // CHECK-SAME: in %B
+  // CHECK-SAME: out %b
+  firrtl.module private @Bar(
+    in %A: !firrtl.domain of @ClockDomain,
+    in %a: !firrtl.uint<1> domains [%A],
+    in %B: !firrtl.domain of @ClockDomain,
+    out %b: !firrtl.uint<1> domains [%B]
+  ) {
+    %w = firrtl.wire: !firrtl.uint<1>
+    firrtl.matchingconnect %b, %w: !firrtl.uint<1>
+  }
+  firrtl.module @DomainInfo(
+    out %b: !firrtl.uint<1>
+  ) {
+    %bar_A, %bar_a, %bar_B, %bar_b = firrtl.instance bar @Bar(
+      in A: !firrtl.domain of @ClockDomain,
+      in a: !firrtl.uint<1> domains [A],
+      in B: !firrtl.domain of @ClockDomain,
+      out b: !firrtl.uint<1> domains [B]
+    )
+    firrtl.matchingconnect %b, %bar_b: !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Test that InstanceChoiceOp is handled conservatively by IMDCE.
+// All modules referenced by instance_choice should be kept alive, and all
+// ports should be preserved.
+
+// CHECK-LABEL: firrtl.circuit "InstanceChoiceTest"
+firrtl.circuit "InstanceChoiceTest" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+
+  // All these modules should be kept alive because they are referenced by instance_choice
+  // CHECK-LABEL: firrtl.module private @DefaultImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>)
+  firrtl.module private @DefaultImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    %0 = firrtl.constant 0 : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %out
+    firrtl.matchingconnect %out, %0 : !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module private @FPGAImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>)
+  firrtl.module private @FPGAImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    // Make sure DCE is applied locally in the instance choice module.
+    // CHECK-NOT: firrtl.wire
+    // CHECK: firrtl.matchingconnect %out
+    %wire = firrtl.wire : !firrtl.uint<8>
+    %0 = firrtl.constant 0 : !firrtl.uint<8>
+    firrtl.matchingconnect %wire, %wire : !firrtl.uint<8>
+    firrtl.matchingconnect %out, %0 : !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module @InstanceChoiceTest
+  firrtl.module @InstanceChoiceTest() {
+    // CHECK: %inst_in, %inst_out = firrtl.instance_choice inst @DefaultImpl alternatives @Platform
+    // CHECK-SAME: @FPGA -> @FPGAImpl
+    // CHECK-SAME: in in: !firrtl.uint<8>, out out: !firrtl.uint<8>
+    %inst_in, %inst_out = firrtl.instance_choice inst @DefaultImpl alternatives @Platform {
+      @FPGA -> @FPGAImpl
+    } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
   }
 }

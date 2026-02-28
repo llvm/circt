@@ -24,7 +24,8 @@ class Pass;
 
 namespace circt {
 
-std::unique_ptr<mlir::Pass> createHandshakeToDCPass();
+#define GEN_PASS_DECL_HANDSHAKETODC
+#include "circt/Conversion/Passes.h.inc"
 
 namespace handshaketodc {
 using ConvertedOps = DenseSet<Operation *>;
@@ -34,7 +35,7 @@ using ConvertedOps = DenseSet<Operation *>;
 // pattern that converts the container operation (e.g. `op`).
 // `configureTarget` can be provided to specialize legalization.
 LogicalResult runHandshakeToDC(
-    mlir::Operation *op,
+    mlir::Operation *op, HandshakeToDCOptions options,
     llvm::function_ref<void(TypeConverter &typeConverter,
                             ConvertedOps &convertedOps,
                             RewritePatternSet &patterns)>

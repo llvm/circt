@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl.module(firrtl-lint)))' --verify-diagnostics --split-input-file %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-lint))' --verify-diagnostics --split-input-file %s | FileCheck %s
 
 firrtl.circuit "lint_tests" {
   // CHECK: firrtl.module @lint_tests
@@ -27,6 +27,8 @@ firrtl.circuit "assert_const" {
     %true = firrtl.constant 1 : !firrtl.uint<1>
     // expected-note @below {{constant defined here}}
     %false = firrtl.constant 0 : !firrtl.uint<1>
+    // expected-error @below {{'firrtl.assert' op is guaranteed to fail simulation, as the predicate is constant false}}
+    firrtl.assert %clock, %false, %true, "valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
     // expected-error @below {{'firrtl.assert' op is guaranteed to fail simulation, as the predicate is constant false}}
     firrtl.assert %clock, %false, %true, "valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>  {eventControl = 0 : i32, isConcurrent = false}
   }
@@ -78,5 +80,50 @@ firrtl.layer @GroupFoo bind {}
       // expected-error @below {{op is guaranteed to fail simulation, as the predicate is a reset signal}}
       firrtl.int.verif.assert %0 : !firrtl.uint<1>
     }
+  }
+}
+
+// -----
+
+firrtl.circuit "XMRInDesign" {
+  hw.hierpath private @xmrPath [@XMRInDesign::@sym]
+  // expected-note @below {{op is instantiated in this module}}
+  firrtl.module @XMRInDesign() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    %a = firrtl.wire sym @sym : !firrtl.uint<1>
+    // expected-error @below {{is in the design. (Did you forget to put it under a layer?)}}
+    %0 = firrtl.xmr.deref @xmrPath : !firrtl.uint<1>
+    %b = firrtl.node %0 : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "XMRInDesignAndTestHarness" {
+  hw.hierpath private @xmrPath [@Foo::@sym]
+  // expected-note @below {{op is instantiated in this module}}
+  firrtl.module @Foo() {
+    %a = firrtl.wire sym @sym : !firrtl.uint<1>
+    // expected-error @below {{is in the design. (Did you forget to put it under a layer?)}}
+    %0 = firrtl.xmr.deref @xmrPath : !firrtl.uint<1>
+    %b = firrtl.node %0 : !firrtl.uint<1>
+  }
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    firrtl.instance foo @Foo()
+  }
+  firrtl.module @XMRInDesignAndTestHarness()  {
+    firrtl.instance dut @DUT()
+    firrtl.instance foo @Foo()
   }
 }

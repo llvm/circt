@@ -49,9 +49,9 @@ def FileOp : EmitOp<"file", [
     // Creates a file with a callback. While the callback is executed, the
     // insertion point of the builder is moved inside the body of the file op.
     OpBuilder<(ins "StringRef":$fileName, "StringRef":$symName,
-                    CArg<"llvm::function_ref<void()>">:$bodyCtor)>,
+                    CArg<"llvm::function_ref<void()>", "{}">:$bodyCtor)>,
     OpBuilder<(ins "StringAttr":$fileName,
-                    CArg<"llvm::function_ref<void()>">:$bodyCtor)>,
+                    CArg<"llvm::function_ref<void()>", "{}">:$bodyCtor)>,
     OpBuilder<(ins "const Twine &":$fileName,
                     CArg<"llvm::function_ref<void()>", "{}">:$bodyCtor), [{
       return build($_builder, $_state, $_builder.getStringAttr(fileName), bodyCtor);

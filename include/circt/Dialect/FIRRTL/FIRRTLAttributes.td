@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD
 
 include "FIRRTLDialect.td"
+include "FIRRTLTypes.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
 include "circt/Types.td"
 
@@ -34,6 +35,22 @@ def PortAnnotationsAttr : ArrayAttrBase<
             "::mlir::ArrayAttr,"
             "::mlir::DictionaryAttr>(attr);})">]>,
     "Port annotations attribute"> {
+  let constBuilderCall = "$_builder.getArrayAttr($0)";
+}
+
+//===----------------------------------------------------------------------===//
+// Domain-related attributes
+//===----------------------------------------------------------------------===//
+
+def DomainInfoAttr : ArrayAttrBase<
+    And<[
+      // Guarantee this is an ArrayAttr first
+      CPred<"llvm::isa<::mlir::ArrayAttr>($_self)">,
+      // Guarantee all elements are a FlatSymbolRefAttr or ArrayAttr.
+      CPred<"::llvm::all_of(cast<mlir::ArrayAttr>($_self), "
+            "[&](::mlir::Attribute attr) { return isa_and_nonnull<"
+            "::mlir::FlatSymbolRefAttr, ::mlir::ArrayAttr>(attr);})">]>,
+    "domain attributes must be an empty array or array-of-arrays"> {
   let constBuilderCall = "$_builder.getArrayAttr($0)";
 }
 
@@ -67,10 +84,6 @@ class AugmentedType<string name> : AttrDef<FIRRTLDialect, name> {
     ArrayAttr getElements() { return getUnderlying().getAs<ArrayAttr>("elements"); }
   }];
 
-  code hasPrefix = [{
-    StringAttr getPrefix() { return getUnderlying().getAs<StringAttr>("prefix"); }
-  }];
-
 }
 
 def AugmentedBundleType : AugmentedType<"AugmentedBundleType"> {
@@ -79,8 +92,7 @@ def AugmentedBundleType : AugmentedType<"AugmentedBundleType"> {
     defaultClassDeclaration #
     hasID #
     hasElements #
-    hasDefName #
-    hasPrefix # [{
+    hasDefName # [{
       bool isRoot() { return getID() != nullptr; }
     }];
   let mnemonic = "augmentedBundle";
@@ -100,44 +112,6 @@ def AugmentedGroundType : AugmentedType<"AugmentedGroundType"> {
   let mnemonic = "augmentedGround";
   let assemblyFormat = "`<` $underlying `>`";
 }
-
-def AugmentedStringType : AugmentedType<"AugmentedStringType"> {
-  let summary = "GrandCentral AugmentedStringType";
-  let extraClassDeclaration = hasName;
-  let mnemonic = "augmentedString";
-  let assemblyFormat = "`<` $underlying `>`";
-}
-def AugmentedBooleanType : AugmentedType<"AugmentedBooleanType"> {
-  let summary = "GrandCentral AugmentedBooleanType";
-  let extraClassDeclaration = hasName;
-  let mnemonic = "augmentedBoolean";
-  let assemblyFormat = "`<` $underlying `>`";
-}
-def AugmentedIntegerType : AugmentedType<"AugmentedIntegerType"> {
-  let summary = "GrandCentral AugmentedIntegerType";
-  let extraClassDeclaration = hasName;
-  let mnemonic = "augmentedInteger";
-  let assemblyFormat = "`<` $underlying `>`";
-}
-def AugmentedDoubleType : AugmentedType<"AugmentedDoubleType"> {
-  let summary = "GrandCentral AugmentedDoubleType";
-  let extraClassDeclaration = hasName;
-  let mnemonic = "augmentedDouble";
-  let assemblyFormat = "`<` $underlying `>`";
-}
-def AugmentedLiteralType : AugmentedType<"AugmentedLiteralType"> {
-  let summary = "GrandCentral AugmentedLiteralType";
-  let extraClassDeclaration = hasName;
-  let mnemonic = "augmentedLiteral";
-  let assemblyFormat = "`<` $underlying `>`";
-}
-def AugmentedDeletedType : AugmentedType<"AugmentedDeletedType"> {
-  let summary = "GrandCentral AugmentedDeletedType";
-  let extraClassDeclaration = hasName;
-  let mnemonic = "augmentedDeleted";
-  let assemblyFormat = "`<` $underlying `>`";
-}
-
 
 def ParamDeclAttr : AttrDef<FIRRTLDialect, "ParamDecl", [TypedAttrInterface]> {
   let summary = "Module or instance parameter definition";
@@ -208,32 +182,25 @@ def MemoryInitAttr : AttrDef<FIRRTLDialect, "MemoryInit"> {
  let assemblyFormat = "`<` $filename `,` $isBinary `,` $isInline `>`";
 }
 
-/// An attribute holding internal path for ref-type ports.
-def InternalPathAttr : AttrDef<FIRRTLDialect, "InternalPath"> {
-  let summary = "Internal path for ref-type ports";
-  let mnemonic = "internalpath";
-  let parameters = (ins OptionalParameter<"::mlir::StringAttr">:$path);
-  let assemblyFormat = "(`<` $path^ `>`)?";
-  let builders = [
-     AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$path), [{
-       return $_get(path.getContext(), path);
-     }]>,
-     AttrBuilder<(ins "::llvm::StringRef":$path), [{
-       return $_get($_ctxt, ::mlir::StringAttr::get($_ctxt, path));
-     }]>,
-     AttrBuilder<(ins), [{
-       return $_get($_ctxt, ::mlir::StringAttr());
-     }]>
-  ];
-}
-
-def InternalPathArrayAttr
-  : TypedArrayAttrBase<InternalPathAttr, "InternalPath array attribute">;
-
 //===----------------------------------------------------------------------===//
 // Miscellaneous attributes
 //===----------------------------------------------------------------------===//
 
 def LayerArrayAttr : TypedArrayRefAttrBase<SymbolRefAttr, "an array of layers">;
+
+def DomainFieldAttr : AttrDef<FIRRTLDialect, "DomainField"> {
+  let mnemonic = "domain.field";
+  let summary = "A single field of a domain";
+  let parameters = (
+    ins "::mlir::StringAttr":$name,
+        "::circt::firrtl::PropertyType":$type
+  );
+  let assemblyFormat = [{
+    `<` $name `,` $type `>`
+  }];
+}
+
+def DomainFieldArrayAttr :
+  TypedArrayAttrBase<DomainFieldAttr, "an array of domain fields">;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD

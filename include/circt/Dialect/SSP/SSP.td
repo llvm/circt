@@ -32,9 +32,6 @@ def SSPDialect : Dialect {
 
   let useDefaultAttributePrinterParser = true;
 
-  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
-  let usePropertiesForAttributes = 0;
-
   let extraClassDeclaration = [{
     /// Register all SSP attributes.
     void registerAttributes();

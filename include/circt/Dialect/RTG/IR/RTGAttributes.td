@@ -1,0 +1,187 @@
+//===- RTGAttributes.td - RTG attributes -------------------*- tablegen -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This describes the RTG attributes.
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef CIRCT_DIALECT_RTG_IR_RTGATTRIBUTES_TD
+#define CIRCT_DIALECT_RTG_IR_RTGATTRIBUTES_TD
+
+include "circt/Dialect/RTG/IR/RTGInterfaces.td"
+include "circt/Dialect/RTG/IR/RTGDialect.td"
+include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/Interfaces.td"
+
+class RTGAttrDef<string name, list<Trait> traits = []> 
+  : AttrDef<RTGDialect, name, traits>;
+
+def DefaultContextAttr : RTGAttrDef<"DefaultContext", [
+  DeclareAttrInterfaceMethods<ContextResourceAttrInterface>,
+]> {
+  let summary = "the default context of its type";
+  let description = [{
+    A target must specify a default value for each context resource type it
+    uses. The tests matched against that target then start in that context
+    initially and 'on_context' operations can be used to switch to another
+    context within a test. Essentially, this attribute is used within tests to
+    refer to the default context set in the target.
+  }];
+
+  let mnemonic = "default";
+  let parameters = (ins AttributeSelfTypeParameter<"">:$type);
+  let assemblyFormat = "";
+}
+
+def AnyContextAttr : RTGAttrDef<"AnyContext", [
+  DeclareAttrInterfaceMethods<ContextResourceAttrInterface>,
+]> {
+  let summary = "any single context of its type";
+  let description = [{
+    This attribute can be used to refer to any context of its type.
+  }];
+
+  let mnemonic = "any_context";
+  let parameters = (ins AttributeSelfTypeParameter<"">:$type);
+  let assemblyFormat = "";
+}
+
+// The accessor type is a pointer instead of a reference because references
+// cannot be reassigned (in the attribute 'construct' function).
+class DenseSetParameter<string setOf, string desc = "">
+    : AttrOrTypeParameter<"const ::llvm::DenseSet<" # setOf # "> *", desc> {
+  let allocator = [{
+    $_dst = new ($_allocator.allocate<DenseSet<}] # setOf # [{>>())
+      DenseSet<}] # setOf # [{>($_self->begin(), $_self->end());
+  }];
+  let cppStorageType = "::llvm::DenseSet<" # setOf # ">";
+}
+
+def SetAttr : RTGAttrDef<"Set", [
+  DeclareAttrInterfaceMethods<TypedAttrInterface>,
+]> {
+  let summary = "an unordered set of elements";
+
+  let parameters = (ins
+      AttributeSelfTypeParameter<"", "rtg::SetType">:$type,
+      DenseSetParameter<"TypedAttr", "elements">:$elements);
+
+  let builders = [
+    AttrBuilderWithInferredContext<
+      (ins "rtg::SetType":$type,
+           "const ::llvm::DenseSet<::mlir::TypedAttr> *":$elements), [{
+      return $_get(type.getContext(), type, elements);
+    }]>
+  ];
+
+  let mnemonic = "set";
+  let hasCustomAssemblyFormat = true;
+
+  let genVerifyDecl = true;
+}
+
+// The accessor type is a pointer instead of a reference because references
+// cannot be reassigned (in the attribute 'construct' function).
+class DenseMapParameter<string keyOf, string valueOf, string desc = "">
+    : AttrOrTypeParameter<
+        "const ::llvm::DenseMap<" # keyOf # ", " # valueOf # "> *", desc> {
+  let allocator =
+    "$_dst = new ($_allocator.allocate<DenseMap<" # keyOf # ", " # valueOf #
+    ">>()) DenseMap<" # keyOf # ", " # valueOf #
+    ">($_self->begin(), $_self->end());";
+  let cppStorageType = "::llvm::DenseMap<" # keyOf # ", " # valueOf # ">";
+}
+
+def MapAttr : RTGAttrDef<"Map", [
+  DeclareAttrInterfaceMethods<TypedAttrInterface>,
+]> {
+  let summary = "a map from keys to values";
+
+  let parameters = (ins
+      AttributeSelfTypeParameter<"", "rtg::MapType">:$type,
+      DenseMapParameter<"TypedAttr", "TypedAttr", "map entries">:$entries);
+
+  let builders = [
+    AttrBuilderWithInferredContext<
+      (ins "rtg::MapType":$type,
+           "const ::llvm::DenseMap<::mlir::TypedAttr, " #
+           "::mlir::TypedAttr> *":$entries), [{
+      return $_get(type.getContext(), type, entries);
+    }]>,
+    AttrBuilderWithInferredContext<
+      (ins "rtg::MapType":$type), [{
+      ::llvm::DenseMap<::mlir::TypedAttr, ::mlir::TypedAttr> entries;
+      return $_get(type.getContext(), type, &entries);
+    }]>
+  ];
+
+  let mnemonic = "map";
+  let hasCustomAssemblyFormat = true;
+
+  let genVerifyDecl = true;
+}
+
+def TupleAttr : RTGAttrDef<"Tuple", [
+  DeclareAttrInterfaceMethods<TypedAttrInterface>,
+]> {
+  let summary = "a tuple";
+
+  let parameters =
+      (ins ArrayRefParameter<"::mlir::TypedAttr", "elements">:$elements);
+
+  let mnemonic = "tuple";
+  let assemblyFormat = "`<` $elements `>`";
+}
+
+//===----------------------------------------------------------------------===//
+// Attributes for ISA targets
+//===----------------------------------------------------------------------===//
+
+class RTGISAAttrDef<string name, list<Trait> traits = []> 
+  : RTGAttrDef<name, traits> { let mnemonic = "isa." # !tolower(name); }
+
+def ImmediateAttr : RTGISAAttrDef<"Immediate", [
+  DeclareAttrInterfaceMethods<TypedAttrInterface>,
+]> {
+  let summary = "an ISA immediate value";
+  let description = [{
+    This represents an ISA immediate of arbitrary but fixed bit-width. The type
+    of this attribute must always be an `ImmediateType` of matching bit-width.
+  }];
+
+  let parameters = (ins "llvm::APInt":$value);
+
+  let hasCustomAssemblyFormat = true;
+  let genStorageClass = false;
+}
+
+def VirtualRegisterConfigAttr : RTGISAAttrDef<"VirtualRegisterConfig", [
+  DeclareAttrInterfaceMethods<TypedAttrInterface>,
+]> {
+  let summary = "an allowed register configuration for a virtual register";
+
+  let parameters = (ins ArrayRefParameter<"rtg::RegisterAttrInterface",
+                                          "allowed registers">:$allowedRegs);
+
+  let mnemonic = "virtual_register_config";
+  let assemblyFormat = "`[` $allowedRegs `]`";
+
+  let genVerifyDecl = true;
+}
+
+def LabelAttr : RTGISAAttrDef<"Label", [
+  DeclareAttrInterfaceMethods<TypedAttrInterface>,
+]> {
+  let summary = "an assembly label";
+
+  let parameters = (ins StringRefParameter<"">:$name);
+
+  let assemblyFormat = "`<` $name `>`";
+}
+
+#endif // CIRCT_DIALECT_RTG_IR_RTGATTRIBUTES_TD

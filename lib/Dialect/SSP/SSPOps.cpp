@@ -14,6 +14,7 @@
 #include "circt/Support/LLVM.h"
 
 #include "mlir/IR/Builders.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace circt;
 using namespace circt::ssp;
@@ -42,6 +43,10 @@ LogicalResult InstanceOp::verify() {
 // The verifier checks that exactly one of each of the container ops is present.
 OperatorLibraryOp InstanceOp::getOperatorLibrary() {
   return *getOps<OperatorLibraryOp>().begin();
+}
+
+ResourceLibraryOp InstanceOp::getResourceLibrary() {
+  return *getOps<ResourceLibraryOp>().begin();
 }
 
 DependenceGraphOp InstanceOp::getDependenceGraph() {
@@ -113,6 +118,26 @@ ParseResult OperationOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.parseCommaSeparatedList(AsmParser::Delimiter::Paren,
                                      parseDependenceSourceWithAttrDict))
     return failure();
+
+  if (succeeded(parser.parseOptionalKeyword("uses"))) {
+    SmallVector<Attribute> rsrcRefs;
+    auto parseOne = [&]() -> ParseResult {
+      SymbolRefAttr rsrcRef;
+      if (parser.parseAttribute(rsrcRef))
+        return parser.emitError(parser.getCurrentLocation(),
+                                "expected symbol reference inside uses[...]");
+      rsrcRefs.push_back(rsrcRef);
+      return success();
+    };
+    if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Square,
+                                       parseOne))
+      return failure();
+
+    auto linkedRsrcsAttr = builder.getAttr<LinkedResourceTypesAttr>(
+        builder.getArrayAttr(rsrcRefs));
+
+    alreadyParsed.push_back(linkedRsrcsAttr);
+  }
 
   if (!dependences.empty())
     result.addAttribute(builder.getStringAttr("dependences"),
@@ -197,6 +222,21 @@ void OperationOp::print(OpAsmPrinter &p) {
     });
   }
   p << ')';
+
+  if (ArrayAttr properties = getSspPropertiesAttr()) {
+    for (auto attr : properties) {
+      if (auto linkedRsrcs = dyn_cast<LinkedResourceTypesAttr>(attr)) {
+        auto rsrcList = linkedRsrcs.getValue();
+        if (!rsrcList.empty()) {
+          p << " uses[";
+          llvm::interleaveComma(
+              rsrcList, p, [&](Attribute rsrc) { p.printAttribute(rsrc); });
+          p << "]";
+        }
+        alreadyPrinted.push_back(linkedRsrcs);
+      }
+    }
+  }
 
   // Properties
   if (ArrayAttr properties = getSspPropertiesAttr()) {
@@ -303,6 +343,17 @@ LinkedOperatorTypeAttr OperationOp::getLinkedOperatorTypeAttr() {
         properties, [](Attribute a) { return isa<LinkedOperatorTypeAttr>(a); });
     if (it != properties.end())
       return cast<LinkedOperatorTypeAttr>(*it);
+  }
+  return {};
+}
+
+LinkedResourceTypesAttr OperationOp::getLinkedResourceTypesAttr() {
+  if (ArrayAttr properties = getSspPropertiesAttr()) {
+    const auto *it = llvm::find_if(properties, [](Attribute a) {
+      return isa<LinkedResourceTypesAttr>(a);
+    });
+    if (it != properties.end())
+      return cast<LinkedResourceTypesAttr>(*it);
   }
   return {};
 }

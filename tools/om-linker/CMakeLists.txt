@@ -14,6 +14,7 @@ target_link_libraries(om-linker PRIVATE
   CIRCTOMTransforms
   CIRCTSV
   CIRCTSupport
+  CIRCTVerif
 
   MLIRBytecodeReader
   MLIRBytecodeWriter

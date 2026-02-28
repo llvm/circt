@@ -15,8 +15,10 @@ hw.module @HasBeenResetAsync(in %clock: i1, in %reset: i1, out out: i1) {
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
-  // CHECK-NEXT: sv.always posedge %reset {
-  // CHECK-NEXT:   sv.passign %hasBeenResetReg, %true : i1
+  // CHECK-NEXT: sv.always posedge %clock, posedge %reset {
+  // CHECK-NEXT:   sv.if %reset {
+  // CHECK-NEXT:     sv.passign %hasBeenResetReg, %true : i1
+  // CHECK-NEXT:   }
   // CHECK-NEXT: }
 
   // CHECK-NEXT: [[REG:%.+]] = sv.read_inout %hasBeenResetReg

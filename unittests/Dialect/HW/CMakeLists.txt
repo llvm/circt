@@ -3,6 +3,7 @@ add_circt_unittest(CIRCTHWTests
   HWModuleTest.cpp
   InstanceGraphTest.cpp
   InstancePathTest.cpp
+  MaterializerTest.cpp
 )
 
 target_link_libraries(CIRCTHWTests

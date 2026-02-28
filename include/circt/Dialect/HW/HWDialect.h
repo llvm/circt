@@ -20,4 +20,10 @@
 // Pull in the dialect definition.
 #include "circt/Dialect/HW/HWDialect.h.inc"
 
+namespace circt::hw {
+/// HW dialect constant materialization commonly used by other dialects as well.
+Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
+                               Location loc);
+} // namespace circt::hw
+
 #endif // CIRCT_DIALECT_HW_HWDIALECT_H

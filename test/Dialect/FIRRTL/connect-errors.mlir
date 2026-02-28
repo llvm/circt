@@ -389,9 +389,9 @@ firrtl.module @test(in %a: !firrtl.enum<a: uint<1>>, out %b: !firrtl.enum<a: uin
 // Check that different data types causes the enumeration to not match.
 
 firrtl.circuit "test"  {
-firrtl.module @test(in %a: !firrtl.enum<a: uint<0>>, out %b: !firrtl.enum<b: uint<0>>) {
-  // expected-error @below {{type mismatch between destination '!firrtl.enum<b: uint<0>>' and source '!firrtl.enum<a: uint<0>>'}}
-  firrtl.connect %b, %a : !firrtl.enum<b: uint<0>>, !firrtl.enum<a: uint<0>>
+firrtl.module @test(in %a: !firrtl.enum<a>, out %b: !firrtl.enum<b>) {
+  // expected-error @below {{type mismatch between destination '!firrtl.enum<b>' and source '!firrtl.enum<a>'}}
+  firrtl.connect %b, %a : !firrtl.enum<b>, !firrtl.enum<a>
 }
 }
 
@@ -617,7 +617,7 @@ firrtl.module @test(in %index: !firrtl.uint<1>, out %out: !firrtl.const.vector<u
   %c = firrtl.constant 0 : !firrtl.uint<1>
   %d = firrtl.subaccess %out[%index] : !firrtl.const.vector<uint<1>, 1>, !firrtl.uint<1>
   // expected-error @+1 {{assignment to non-'const' subaccess of 'const' type is disallowed}}
-  firrtl.strictconnect %d, %c : !firrtl.uint<1>
+  firrtl.matchingconnect %d, %c : !firrtl.uint<1>
 }
 }
 
@@ -732,7 +732,7 @@ firrtl.module @test(in %p: !firrtl.uint<1>, out %out: !firrtl.const.bundle<a: ui
     %f = firrtl.subfield %out[a] : !firrtl.const.bundle<a: uint<1>>
     %c = firrtl.constant 0 : !firrtl.const.uint<1>
     // expected-error @+1 {{assignment to 'const' type '!firrtl.const.uint<1>' is dependent on a non-'const' condition}}
-    firrtl.strictconnect %f, %c : !firrtl.const.uint<1>
+    firrtl.matchingconnect %f, %c : !firrtl.const.uint<1>
   }
 }
 }
@@ -746,7 +746,7 @@ firrtl.module @test(in %p: !firrtl.uint<1>, out %out: !firrtl.const.vector<uint<
     %e = firrtl.subindex %out[0] : !firrtl.const.vector<uint<1>, 1>
     %c = firrtl.constant 0 : !firrtl.const.uint<1>
     // expected-error @+1 {{assignment to 'const' type '!firrtl.const.uint<1>' is dependent on a non-'const' condition}}
-    firrtl.strictconnect %e, %c : !firrtl.const.uint<1>
+    firrtl.matchingconnect %e, %c : !firrtl.const.uint<1>
   }
 }
 }

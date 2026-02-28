@@ -1,10 +1,12 @@
 // REQUIRES: iverilog,cocotb
 
+// RUN: rm -rf %t.dir && mkdir %t.dir
 // RUN: hlstool %s --dynamic-hw --buffering-strategy=cycles --verilog --lowering-options=disallowLocalVariables > %t.sv && \
-// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=matmul --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
+// RUN: circt-cocotb-driver.py --objdir=%t.dir --topLevel=top --pythonModule=matmul --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
+// RUN: rm -rf %t.dir && mkdir %t.dir
 // RUN: hlstool %s --dynamic-hw --buffering-strategy=all --verilog --lowering-options=disallowLocalVariables > %t.sv && \
-// RUN: circt-cocotb-driver.py --objdir=%T --topLevel=top --pythonModule=matmul --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
+// RUN: circt-cocotb-driver.py --objdir=%t.dir --topLevel=top --pythonModule=matmul --pythonFolder="%S,%S/.." %t.sv 2>&1 | FileCheck %s
 
 // CHECK: ** TEST
 // CHECK: ** TESTS=[[N:.*]] PASS=[[N]] FAIL=0 SKIP=0

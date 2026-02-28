@@ -9,19 +9,20 @@
 ; CHECK:   }
 ; CHECK: }
 
+FIRRTL version 4.0.0
 circuit StopAndFinishTest:
-  module StopAndFinishTest :
+  public module StopAndFinishTest :
     input clock : Clock
     input cond : UInt<1>
 
-    ; CHECK: [[STOP_COND:%.+]] = sv.macro.ref @STOP_COND_() : () -> i1
+    ; CHECK: [[STOP_COND:%.+]] = sv.macro.ref.expr @STOP_COND_() : () -> i1
     ; CHECK: [[COND:%.+]] = comb.and bin [[STOP_COND:%.+]], %cond : i1
     ; CHECK: sv.ifdef @SYNTHESIS {
     ; CHECK: } else {
     ; CHECK:   sv.always posedge %clock {
     ; CHECK:     sv.if [[COND]] {
     ; CHECK:       sv.finish 1
-    ; CHECK:       sv.fatal 1
+    ; CHECK:       sv.fatal.procedural 1
     ; CHECK:     }
     ; CHECK:   }
     ; CHECK: }

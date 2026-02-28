@@ -22,7 +22,9 @@ config.name = 'CIRCT'
 config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
 
 # suffixes: A list of file extensions to treat as test files.
-config.suffixes = ['.td', '.mlir', '.ll', '.fir', '.sv']
+config.suffixes = [
+    '.aag', '.td', '.mlir', '.lib', '.ll', '.fir', '.sv', '.test'
+]
 
 # test_source_root: The root path where tests are located.
 config.test_source_root = os.path.dirname(__file__)
@@ -51,26 +53,34 @@ config.test_exec_root = os.path.join(config.circt_obj_root, 'test')
 
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
+llvm_config.with_environment('PATH', config.mlir_tools_dir, append_path=True)
+llvm_config.with_environment('PATH', config.circt_tools_dir, append_path=True)
 
 tool_dirs = [
     config.circt_tools_dir, config.mlir_tools_dir, config.llvm_tools_dir
 ]
 tools = [
-    'arcilator', 'circt-as', 'circt-capi-ir-test', 'circt-capi-om-test',
-    'circt-capi-firrtl-test', 'circt-capi-firtool-test', 'circt-dis',
-    'circt-opt', 'circt-reduce', 'circt-translate', 'firtool', 'hlstool',
-    'om-linker', 'ibistool'
+    'arcilator', 'circt-as', 'circt-bmc', 'circt-capi-synth-test',
+    'circt-capi-ir-test', 'circt-capi-om-test', 'circt-capi-firrtl-test',
+    'circt-capi-firtool-test', 'circt-capi-rtg-test', 'circt-capi-rtgtest-test',
+    'circt-capi-support-test', 'circt-dis', 'circt-lec', 'circt-reduce',
+    'circt-synth', 'circt-test', 'circt-translate', 'domaintool', 'firld',
+    'firtool', 'hlstool', 'om-linker', 'kanagawatool'
 ]
+
+if "CIRCT_OPT_CHECK_IR_ROUNDTRIP" in os.environ:
+  tools.extend([
+      ToolSubst("circt-opt", "circt-opt --verify-roundtrip",
+                unresolved="fatal"),
+  ])
+else:
+  tools.extend(["circt-opt"])
 
 # Enable Verilator if it has been detected.
 if config.verilator_path != "":
   tool_dirs.append(os.path.dirname(config.verilator_path))
   tools.append('verilator')
   config.available_features.add('verilator')
-
-# Enable ESI's Capnp tests if they're supported.
-if config.esi_capnp != "":
-  config.available_features.add('capnp')
 
 if config.zlib == "1":
   config.available_features.add('zlib')
@@ -79,14 +89,10 @@ if config.zlib == "1":
 if config.scheduling_or_tools != "":
   config.available_features.add('or-tools')
 
-# Add llhd-sim if it is built.
-if config.llhd_sim_enabled:
-  config.available_features.add('llhd-sim')
-  tools.append('llhd-sim')
-
 # Add circt-verilog if the Slang frontend is enabled.
 if config.slang_frontend_enabled:
   config.available_features.add('slang')
   tools.append('circt-verilog')
+  tools.append('circt-verilog-lsp-server')
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)

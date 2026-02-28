@@ -19,13 +19,8 @@ def DCDialect : Dialect {
     handshaking semantics.
   }];
   let cppNamespace = "circt::dc";
-
   let useDefaultTypePrinterParser = 1;
   let dependentDialects = ["circt::esi::ESIDialect"];
-
-  // Opt-out of properties for now, must migrate by LLVM 19.  #5273.
-  let usePropertiesForAttributes = 0;
-
   let extraClassDeclaration = [{
     void registerTypes();
   }];

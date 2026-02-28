@@ -13,9 +13,11 @@
 #ifndef CIRCT_DIALECT_HW_HWOPINTERFACES_H
 #define CIRCT_DIALECT_HW_HWOPINTERFACES_H
 
+#include "circt/Dialect/Emit/EmitOpInterfaces.h"
 #include "circt/Dialect/HW/HWInstanceImplementation.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
+#include "circt/Support/FieldRef.h"
 #include "circt/Support/InstanceGraphInterface.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
@@ -29,8 +31,23 @@ void populateHWModuleLikeTypeConversionPattern(StringRef moduleLikeOpName,
                                                TypeConverter &converter);
 
 class InnerSymbolOpInterface;
-/// Verification hook for verifying InnerSym Attribute.
-LogicalResult verifyInnerSymAttr(InnerSymbolOpInterface op);
+/// Verification hook for verifying InnerSymbol-defining operations.
+LogicalResult verifyInnerSymOp(InnerSymbolOpInterface op);
+
+/// Verification hook for verifying InnerSymbol-defining operations.
+LogicalResult verifyPortInnerSymsIfPortList(Operation *op);
+
+// Verification hook for verifying an inner symbol attribute.
+// Variant accepting 'Type' is for per-field checking.
+// (for when the inner symbol points into fields of a type)
+LogicalResult
+verifyInnerSymAttr(InnerSymAttr innerSym, Type type,
+                   llvm::function_ref<InFlightDiagnostic()> emitError);
+inline LogicalResult
+verifyInnerSymAttr(InnerSymAttr innerSym,
+                   llvm::function_ref<InFlightDiagnostic()> emitError) {
+  return verifyInnerSymAttr(innerSym, {}, emitError);
+}
 
 namespace detail {
 LogicalResult verifyInnerRefNamespace(Operation *op);
@@ -90,7 +107,8 @@ public:
       return op->emitError(
           "InnerSymbolTable must have InnerRefNamespace parent");
 
-    return success();
+    // If also a PortList, walk and verify each port's inner symbol(s).
+    return ::circt::hw::verifyPortInnerSymsIfPortList(op);
   }
 };
 } // namespace OpTrait

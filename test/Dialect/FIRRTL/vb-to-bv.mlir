@@ -244,17 +244,17 @@ firrtl.circuit "Test" {
   firrtl.module @TestBasicConnects() {
     // CHECK: %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     // CHECK: %w0 = firrtl.wire : !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %w0, %c1_ui1 : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %w0, %c1_ui1 : !firrtl.uint<1>
     %c1 = firrtl.constant 1 : !firrtl.uint<1>
     %w0 = firrtl.wire : !firrtl.uint<1>
-    firrtl.strictconnect %w0, %c1 : !firrtl.uint<1>
+    firrtl.matchingconnect %w0, %c1 : !firrtl.uint<1>
 
     // CHECK: %w1 = firrtl.wire : !firrtl.bundle<a: bundle<>>
     // CHECK: %w2 = firrtl.wire : !firrtl.bundle<a: bundle<>>
-    // CHECK: firrtl.strictconnect %w1, %w2 : !firrtl.bundle<a: bundle<>>
+    // CHECK: firrtl.matchingconnect %w1, %w2 : !firrtl.bundle<a: bundle<>>
     %w1 = firrtl.wire : !firrtl.bundle<a: bundle<>>
     %w2 = firrtl.wire : !firrtl.bundle<a: bundle<>>
-    firrtl.strictconnect %w1, %w2 : !firrtl.bundle<a: bundle<>>
+    firrtl.matchingconnect %w1, %w2 : !firrtl.bundle<a: bundle<>>
 
     // CHECK: %w3 = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
     // CHECK: %w4 = firrtl.wire : !firrtl.bundle<a flip: uint<1>>
@@ -302,8 +302,8 @@ firrtl.circuit "Test" {
     %w9_a_b = firrtl.subfield %w9_a[b] : !firrtl.bundle<b flip: uint<8>>
     %w10_a_b = firrtl.subfield %w10_a[b] : !firrtl.bundle<b flip: uint<8>>
 
-    // CHECK: firrtl.strictconnect %1, %3 : !firrtl.uint<8>
-    firrtl.strictconnect %w9_a_b, %w10_a_b : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %1, %3 : !firrtl.uint<8>
+    firrtl.matchingconnect %w9_a_b, %w10_a_b : !firrtl.uint<8>
   }
 
   //===--------------------------------------------------------------------===//
@@ -316,12 +316,12 @@ firrtl.circuit "Test" {
     // CHECK: %0 = firrtl.subfield %b1[a] : !firrtl.bundle<a: uint<1>>
     // CHECK: %b2 = firrtl.wire : !firrtl.bundle<b: uint<1>>
     // CHECK: %1 = firrtl.subfield %b2[b] : !firrtl.bundle<b: uint<1>>
-    // CHECK: firrtl.strictconnect %0, %1 : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %0, %1 : !firrtl.uint<1>
     %b1 = firrtl.wire : !firrtl.bundle<a: uint<1>>
     %b2 = firrtl.wire : !firrtl.bundle<b: uint<1>>
     %a = firrtl.subfield %b1[a] : !firrtl.bundle<a: uint<1>>
     %b = firrtl.subfield %b2[b] : !firrtl.bundle<b: uint<1>>
-    firrtl.strictconnect %a, %b : !firrtl.uint<1>
+    firrtl.matchingconnect %a, %b : !firrtl.uint<1>
   }
 
   // CHECK-LABEL: @TestSubindex
@@ -334,7 +334,7 @@ firrtl.circuit "Test" {
     // CHECK: %0 = firrtl.subfield %port[a] : !firrtl.bundle<a flip: vector<uint<8>, 4>>
     // CHECK: %1 = firrtl.subindex %0[3] : !firrtl.vector<uint<8>, 4>
     // CHECK: %c7_ui8 = firrtl.constant 7 : !firrtl.uint<8>
-    // CHECK: firrtl.connect %1, %c7_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
+    // CHECK: firrtl.connect %1, %c7_ui8 : !firrtl.uint<8>
     %bundle = firrtl.subindex %port[3] : !firrtl.vector<bundle<a flip: uint<8>>, 4>
     %field  = firrtl.subfield %bundle[a] : !firrtl.bundle<a flip: uint<8>>
     %value  = firrtl.constant 7 : !firrtl.uint<8>
@@ -355,8 +355,8 @@ firrtl.circuit "Test" {
     %b1 = firrtl.subindex %v1[0] : !firrtl.vector<bundle<a: vector<uint<8>, 8>>, 2>
     %b2 = firrtl.subindex %v2[0] : !firrtl.vector<bundle<a: vector<uint<8>, 8>>, 2>
   
-    // CHECK: firrtl.strictconnect %3, %5 : !firrtl.vector<uint<8>, 8>
-    firrtl.strictconnect %b1, %b2 : !firrtl.bundle<a: vector<uint<8>, 8>>
+    // CHECK: firrtl.matchingconnect %3, %5 : !firrtl.vector<uint<8>, 8>
+    firrtl.matchingconnect %b1, %b2 : !firrtl.bundle<a: vector<uint<8>, 8>>
   }
 
   // CHECK-LABEL: TestSubaccess
@@ -369,8 +369,8 @@ firrtl.circuit "Test" {
     %dst = firrtl.wire : !firrtl.uint<8>
     // CHECK: %1 = firrtl.subaccess %0[%c0_ui8] : !firrtl.vector<uint<8>, 2>, !firrtl.uint<8>
     %src = firrtl.subaccess %v[%0] : !firrtl.vector<uint<8>, 2>, !firrtl.uint<8>
-    // CHECK: firrtl.strictconnect %dst, %1 : !firrtl.uint<8>
-    firrtl.strictconnect %dst, %src : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %dst, %1 : !firrtl.uint<8>
+    firrtl.matchingconnect %dst, %src : !firrtl.uint<8>
   }
 
   // CHECK-LABEL: TestSubaccess2
@@ -385,8 +385,8 @@ firrtl.circuit "Test" {
     %dst = firrtl.wire : !firrtl.uint<8>
     // CHECK: %1 = firrtl.subaccess %0[%c0_ui8_0] : !firrtl.vector<uint<8>, 2>, !firrtl.uint<8>
     %src = firrtl.subaccess %v[%i] : !firrtl.vector<uint<8>, 2>, !firrtl.uint<8>
-    // CHECK: firrtl.strictconnect %dst, %1 : !firrtl.uint<8>
-    firrtl.strictconnect %dst, %src : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %dst, %1 : !firrtl.uint<8>
+    firrtl.matchingconnect %dst, %src : !firrtl.uint<8>
   }
 
   // CHECK-LABEL: @TestPathCaching()
@@ -421,13 +421,13 @@ firrtl.circuit "Test" {
     // CHECK: %8 = firrtl.subfield %7[d] : !firrtl.bundle<c: uint<1>, d: uint<1>>
     // CHECK: %9 = firrtl.subfield %7[c] : !firrtl.bundle<c: uint<1>, d: uint<1>>
     // CHECK: %10 = firrtl.subfield %rhs[a] : !firrtl.bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>
-    // CHECK: firrtl.strictconnect %6, %10 : !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %4, %9 : !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %2, %8 : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %6, %10 : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %4, %9 : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %2, %8 : !firrtl.uint<1>
     %lhs_storage  = firrtl.wire : !firrtl.vector<bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>, 2>
     %lhs = firrtl.subindex %lhs_storage[0] : !firrtl.vector<bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>, 2>
     %rhs = firrtl.wire : !firrtl.bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>
-    firrtl.strictconnect %lhs, %rhs : !firrtl.bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>
+    firrtl.matchingconnect %lhs, %rhs : !firrtl.bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>
   }
 
   // CHECK-LABEL: @TestLhsExplodedWhenLhsHasFlips
@@ -461,11 +461,11 @@ firrtl.circuit "Test" {
     // CHECK: %6 = firrtl.subindex %5[0] : !firrtl.vector<uint<1>, 2>
     // CHECK: %7 = firrtl.bundlecreate %4, %2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.bundle<c: uint<1>, d: uint<1>>
     // CHECK: %8 = firrtl.bundlecreate %6, %7 : (!firrtl.uint<1>, !firrtl.bundle<c: uint<1>, d: uint<1>>) -> !firrtl.bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>
-    // CHECK: firrtl.strictconnect %lhs, %8 : !firrtl.bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>
+    // CHECK: firrtl.matchingconnect %lhs, %8 : !firrtl.bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>
     %lhs = firrtl.wire : !firrtl.bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>
     %rhs_storage = firrtl.wire : !firrtl.vector<bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>, 2>
     %rhs = firrtl.subindex %rhs_storage[0] : !firrtl.vector<bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>, 2>
-    firrtl.strictconnect %lhs, %rhs : !firrtl.bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>
+    firrtl.matchingconnect %lhs, %rhs : !firrtl.bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>
   }
 
   // CHECK-LABEL: @TestRhsExplodedWhenLhsHasFlips
@@ -510,14 +510,14 @@ firrtl.circuit "Test" {
     // CHECK: %11 = firrtl.subindex %10[0] : !firrtl.vector<uint<1>, 2>
     // CHECK: %12 = firrtl.subfield %v2[a] : !firrtl.bundle<a: vector<uint<1>, 2>, b: bundle<c: vector<uint<1>, 2>, d: vector<uint<1>, 2>>>
     // CHECK: %13 = firrtl.subindex %12[0] : !firrtl.vector<uint<1>, 2>
-    // CHECK: firrtl.strictconnect %6, %13 : !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %4, %11 : !firrtl.uint<1>
-    // CHECK: firrtl.strictconnect %2, %9 : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %6, %13 : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %4, %11 : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %2, %9 : !firrtl.uint<1>
     %v1 = firrtl.wire : !firrtl.vector<bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>, 2>
     %v2 = firrtl.wire : !firrtl.vector<bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>, 2>
     %b2 = firrtl.subindex %v1[0] : !firrtl.vector<bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>, 2>
     %b3 = firrtl.subindex %v2[0] : !firrtl.vector<bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>, 2>
-    firrtl.strictconnect %b2, %b3 : !firrtl.bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>
+    firrtl.matchingconnect %b2, %b3 : !firrtl.bundle<a: uint<1>, b: bundle<c: uint<1>, d: uint<1>>>
   }
 
   // firrtl.module @TestExplodedNode 
@@ -681,7 +681,7 @@ firrtl.circuit "Test" {
     // CHECK: %8 = firrtl.bundlecreate %6, %7 : (!firrtl.vector<uint<8>, 2>, !firrtl.vector<uint<16>, 2>) -> !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>
     %vector  = firrtl.vectorcreate %bundle1, %bundle2 : (!firrtl.bundle<a: uint<8>, b: uint<16>>, !firrtl.bundle<a: uint<8>, b: uint<16>>) -> !firrtl.vector<bundle<a: uint<8>, b: uint<16>>, 2>
     
-    // CHECK: firrtl.connect %out, %8 : !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>, !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>
+    // CHECK: firrtl.connect %out, %8 : !firrtl.bundle<a: vector<uint<8>, 2>, b: vector<uint<16>, 2>>
     firrtl.connect %out, %vector : !firrtl.vector<bundle<a: uint<8>, b: uint<16>>, 2>, !firrtl.vector<bundle<a: uint<8>, b: uint<16>>, 2>
   }
 
@@ -709,12 +709,12 @@ firrtl.circuit "Test" {
     // CHECK: %5 = firrtl.ref.resolve %1 : !firrtl.probe<uint<8>>
     // CHECK: %6 = firrtl.bundlecreate %4, %5 : (!firrtl.uint<4>, !firrtl.uint<8>) -> !firrtl.bundle<a: uint<4>, b: uint<8>>
     // CHECK: %w = firrtl.wire : !firrtl.bundle<a: uint<4>, b: uint<8>>
-    // CHECK: firrtl.strictconnect %w, %6 : !firrtl.bundle<a: uint<4>, b: uint<8>>
+    // CHECK: firrtl.matchingconnect %w, %6 : !firrtl.bundle<a: uint<4>, b: uint<8>>
     %vector_ref = firrtl.instance sender @RefSender(out port: !firrtl.probe<vector<bundle<a: uint<4>, b: uint<8>>, 2>>)
     %bundle_ref = firrtl.ref.sub     %vector_ref[1] : !firrtl.probe<vector<bundle<a: uint<4>, b: uint<8>>, 2>>
     %bundle_val = firrtl.ref.resolve %bundle_ref    : !firrtl.probe<bundle<a: uint<4>, b: uint<8>>>
     %w = firrtl.wire: !firrtl.bundle<a: uint<4>, b: uint<8>>
-    firrtl.strictconnect %w, %bundle_val : !firrtl.bundle<a: uint<4>, b: uint<8>>
+    firrtl.matchingconnect %w, %bundle_val : !firrtl.bundle<a: uint<4>, b: uint<8>>
   }
 
   //===--------------------------------------------------------------------===//

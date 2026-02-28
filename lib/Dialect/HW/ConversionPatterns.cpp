@@ -85,7 +85,8 @@ LogicalResult circt::doTypeConversion(Operation *op, ValueRange operands,
             newRegion->getArgumentTypes(), result)))
       return rewriter.notifyMatchFailure(op->getLoc(),
                                          "type conversion failed");
-    rewriter.applySignatureConversion(newRegion, result, typeConverter);
+    if (failed(rewriter.convertRegionTypes(newRegion, *typeConverter, &result)))
+      return failure();
   }
   rewriter.finalizeOpModification(newOp);
 

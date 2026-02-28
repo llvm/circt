@@ -5,10 +5,11 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, List, Optional, Set, Tuple, Dict
+import typing
 
-from .common import (AppID, Clock, Input, ModuleDecl, Output, PortError,
-                     _PyProxy, Reset)
-from .support import (get_user_loc, _obj_to_attribute, create_type_string,
+from .common import (AppID, Clock, Constant, Input, ModuleDecl, Output,
+                     PortError, _PyProxy, Reset)
+from .support import (get_user_loc, _obj_to_attribute, obj_to_typed_attribute,
                       create_const_zero)
 from .signals import ClockSignal, Signal, _FromCirctValue
 from .types import ClockType, Type, _FromCirctType
@@ -144,7 +145,7 @@ class PortProxyBase:
     if isinstance(signal, Signal):
       if port.type != signal.type:
         raise PortError(
-            f"Input port {port.name} expected type {port.type}, not {signal.type}"
+            f"Output port {port.name} expected type {port.type}, not {signal.type}"
         )
     else:
       signal = port.type(signal)
@@ -159,12 +160,13 @@ class PortProxyBase:
       self._set_output(idx, signal)
 
   def _check_unconnected_outputs(self):
-    unconnected_ports = []
+    unconnected_port_names = []
+    assert self._builder is not None
     for idx, value in enumerate(self._output_values):
       if value is None:
-        unconnected_ports.append(self._builder.outputs[idx][0])
-    if len(unconnected_ports) > 0:
-      raise support.UnconnectedSignalError(self._name, unconnected_ports)
+        unconnected_port_names.append(self._builder.outputs[idx].name)
+    if len(unconnected_port_names) > 0:
+      raise support.UnconnectedSignalError(self._name, unconnected_port_names)
 
   def _clear(self):
     """TL;DR: Downgrade a shotgun to a handgun.
@@ -220,6 +222,20 @@ class ModuleLikeBuilderBase(_PyProxy):
   def outputs(self) -> List[Output]:
     return [p for p in self.ports if isinstance(p, Output)]
 
+  @property
+  def circt_mod(self):
+    """Get the raw CIRCT operation for the module definition. DO NOT store the
+    returned value!!! It needs to get reaped after the current action (e.g.
+    instantiation, generation). Memory safety when interacting with native code
+    can be painful."""
+
+    from .system import System
+    sys: System = System.current()
+    ret = sys._op_cache.get_circt_mod(self)
+    if ret is None:
+      return sys._create_circt_mod(self)
+    return ret
+
   def go(self):
     """Execute the analysis and mutation to make a `ModuleLike` class operate
     as such."""
@@ -236,6 +252,7 @@ class ModuleLikeBuilderBase(_PyProxy):
     clock_ports = set()
     reset_ports = set()
     generators = {}
+    constants = {}
     num_inputs = 0
     num_outputs = 0
     for attr_name, attr in self.cls_dct.items():
@@ -272,11 +289,14 @@ class ModuleLikeBuilderBase(_PyProxy):
         ports.append(attr)
       elif isinstance(attr, Generator):
         generators[attr_name] = attr
+      elif isinstance(attr, Constant):
+        constants[attr_name] = attr
 
     self.ports = ports
     self.clocks = clock_ports
     self.resets = reset_ports
     self.generators = generators
+    self.constants = constants
 
   def create_port_proxy(self) -> PortProxyBase:
     """Create a proxy class for generators to use in order to access module
@@ -394,13 +414,37 @@ class ModuleLikeBuilderBase(_PyProxy):
         for k, v in meta.misc.items():
           meta_op.attributes[k] = _obj_to_attribute(v)
 
+  def create_op_common(self, sys, symbol):
+    """Do common work for creating a module-like op. This includes adding
+    metadata and adding parameters to the attributes."""
+
+    if hasattr(self.modcls, "metadata"):
+      meta = self.modcls.metadata
+      self.add_metadata(sys, symbol, meta)
+    else:
+      self.add_metadata(sys, symbol, None)
+
+    # If there are associated constants, add them to the manifest.
+    if len(self.constants) > 0:
+      constants_dict: Dict[str, ir.Attribute] = {}
+      for name, constant in self.constants.items():
+        constant_attr = obj_to_typed_attribute(constant.value, constant.type)
+        constants_dict[name] = constant_attr
+      with ir.InsertionPoint(sys.mod.body):
+        from .dialects.esi import esi
+        esi.SymbolConstantsOp(symbolRef=ir.FlatSymbolRefAttr.get(symbol),
+                              constants=ir.DictAttr.get(constants_dict))
+
+    if hasattr(self, "parameters") and self.parameters is not None:
+      self.attributes["pycde.parameters"] = self.parameters
+
   class GeneratorCtxt:
     """Provides an context which most genertors need."""
 
     def __init__(self, builder: ModuleLikeBuilderBase, ports: PortProxyBase, ip,
                  loc: ir.Location) -> None:
       self.bc = _BlockContext()
-      self.bb = BackedgeBuilder()
+      self.bb = BackedgeBuilder(builder.name)
       self.ip = ir.InsertionPoint(ip)
       self.loc = loc
       self.clk = None
@@ -451,32 +495,12 @@ class ModuleLikeType(type):
 class ModuleBuilder(ModuleLikeBuilderBase):
   """Defines how a `Module` gets built. Extend the base class and customize."""
 
-  @property
-  def circt_mod(self):
-    """Get the raw CIRCT operation for the module definition. DO NOT store the
-    returned value!!! It needs to get reaped after the current action (e.g.
-    instantiation, generation). Memory safety when interacting with native code
-    can be painful."""
-
-    from .system import System
-    sys: System = System.current()
-    ret = sys._op_cache.get_circt_mod(self)
-    if ret is None:
-      return sys._create_circt_mod(self)
-    return ret
-
   def create_op(self, sys, symbol):
     """Callback for creating a module op."""
 
-    if hasattr(self.modcls, "metadata"):
-      meta = self.modcls.metadata
-      self.add_metadata(sys, symbol, meta)
-    else:
-      self.add_metadata(sys, symbol, None)
+    self.create_op_common(sys, symbol)
 
     if len(self.generators) > 0:
-      if hasattr(self, "parameters") and self.parameters is not None:
-        self.attributes["pycde.parameters"] = self.parameters
       # If this Module has a generator, it's a real module.
       return hw.HWModuleOp(
           symbol,
@@ -530,13 +554,19 @@ class ModuleBuilder(ModuleLikeBuilderBase):
       elif signal is None:
         if len(self.generators) > 0:
           raise PortError(
-              f"Port {name} cannot be None (disconnected ports only allowed "
+              f"Port '{name}' cannot be None (disconnected ports only allowed "
               "on extern mods.")
+        if port.type.bitwidth < 0:
+          raise PortError(f"Port '{name}' cannot be None.")
         circt_inputs[name] = create_const_zero(port.type).value
       else:
         # If it's not a signal, assume the user wants to specify a constant and
         # try to convert it to a hardware constant.
-        circt_inputs[name] = port.type(signal).value
+        try:
+          circt_inputs[name] = port.type(signal).value
+        except Exception as e:
+          raise PortError(f"Input port '{name}' could not be converted to type "
+                          f"{port.type}: {e}")
 
     missing = list(
         filter(lambda name: name not in circt_inputs, port_input_lookup.keys()))
@@ -631,11 +661,12 @@ class Module(_PyProxy, metaclass=ModuleLikeType):
     cls._builder.print(out)
 
   @classmethod
-  def inputs(cls) -> List[Tuple[str, Type]]:
-    """Get a dictionary of input port names to signals."""
-    if cls._builder.inputs is None:
-      return []
+  def inputs(cls) -> List[Input]:
     return cls._builder.inputs
+
+  @classmethod
+  def outputs(cls) -> List[Output]:
+    return cls._builder.outputs
 
 
 class modparams:
@@ -668,7 +699,7 @@ class modparams:
   #   The result is cached in _MODULE_CACHE.
   #   - A simple (non-parameterized) module has been wrapped and the user wants
   #   to construct one. Just forward to the module class' constructor.
-  def __call__(self, *args, **kwargs):
+  def __call__(self, *args, **kwargs) -> typing.Type[Module]:
     assert self.func is not None
     param_values = self.sig.bind(*args, **kwargs)
     param_values.apply_defaults()
@@ -712,38 +743,42 @@ class ImportedModSpec(ModuleBuilder):
   # Creation callback that just moves the already build module into the System's
   # ModuleOp and returns it.
   def create_op(self, sys, symbol: str):
-    hw_module = self.modcls.hw_module
-
-    # TODO: deal with symbolrefs to this (potentially renamed) module symbol.
-    sys.mod.body.append(hw_module)
-
-    # Need to clear out the reference to ourselves so that we can release the
-    # raw reference to `hw_module`. It's safe to do so since unlike true PyCDE
-    # modules, this can only be run once during the import_mlir.
-    self.modcls.hw_module = None
-    return hw_module
+    assert False, "ImportedModSpec should not be used on imported modules."
 
 
-def import_hw_module(hw_module: hw.HWModuleOp):
+def import_hw_module(
+    sys,
+    hw_module: hw.HWModuleOp,
+    builder_type: type[ModuleBuilder] = ImportedModSpec) -> type[Module]:
   """Import a CIRCT module into PyCDE. Returns a standard Module subclass which
-  operates just like an external PyCDE module.
+  operates just like an external PyCDE module. If builder_type is specified, use
+  it as the module builder instead of the default `ImportedModSpec`.
 
   For now, the imported module name MUST NOT conflict with any other modules."""
 
   # Get the module name to use in the generated class and as the external name.
   name = ir.StringAttr(hw_module.name).value
+  mod_type = hw_module.type
 
   # Collect input and output ports as named Inputs and Outputs.
   modattrs = {}
-  for input_name, block_arg in hw_module.inputs().items():
-    modattrs[input_name] = Input(_FromCirctType(block_arg.type), input_name)
-  for output_name, output_type in hw_module.outputs().items():
+  for input_name, input_type in zip(mod_type.input_names, mod_type.input_types):
+    modattrs[input_name] = Input(_FromCirctType(input_type), input_name)
+  for output_name, output_type in zip(mod_type.output_names,
+                                      mod_type.output_types):
     modattrs[output_name] = Output(_FromCirctType(output_type), output_name)
-  modattrs["BuilderType"] = ImportedModSpec
-  modattrs["hw_module"] = hw_module
+  modattrs["BuilderType"] = builder_type
+
+  modattrs["add_metadata"] = staticmethod(
+      lambda meta, sys=sys: add_metadata(sys, name, meta))
 
   # Use the name and ports to construct a class object like what externmodule
   # would wrap.
   cls = type(name, (Module,), modattrs)
+  cls._builder = cls.BuilderType(cls, modattrs, hw_module.location)
+  cls._builder.go()
+
+  def add_metadata(sys, symbol: str, meta: Optional[Metadata]):
+    return cls._builder.add_metadata(sys, symbol, meta)
 
   return cls

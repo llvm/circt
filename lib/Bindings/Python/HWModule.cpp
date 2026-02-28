@@ -1,4 +1,4 @@
-//===- HWModule.cpp - HW API pybind module --------------------------------===//
+//===- HWModule.cpp - HW API nanobind module ------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,34 +6,36 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "DialectModules.h"
+#include "CIRCTModules.h"
 
 #include "circt-c/Dialect/HW.h"
 
 #include "mlir-c/BuiltinAttributes.h"
-#include "mlir/Bindings/Python/PybindAdaptors.h"
+#include "mlir/Bindings/Python/NanobindAdaptors.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include "PybindUtils.h"
+#include "NanobindUtils.h"
+#include "mlir-c/IR.h"
 #include "mlir-c/Support.h"
-#include <pybind11/pybind11.h>
-#include <pybind11/pytypes.h>
-#include <pybind11/stl.h>
-namespace py = pybind11;
+#include "mlir/Bindings/Python/IRCore.h"
+#include "mlir/Bindings/Python/NanobindAdaptors.h"
+#include <nanobind/nanobind.h>
+namespace nb = nanobind;
 
 using namespace circt;
-using namespace mlir::python::adaptors;
+using namespace mlir::python::nanobind_adaptors;
+using mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::DefaultingPyMlirContext;
 
 /// Populate the hw python module.
-void circt::python::populateDialectHWSubmodule(py::module &m) {
+void circt::python::populateDialectHWSubmodule(nb::module_ &m) {
   m.doc() = "HW dialect Python native extension";
 
   m.def("get_bitwidth", &hwGetBitWidth);
 
   mlir_type_subclass(m, "InOutType", hwTypeIsAInOut)
       .def_classmethod("get",
-                       [](py::object cls, MlirType innerType) {
+                       [](nb::object cls, MlirType innerType) {
                          return cls(hwInOutTypeGet(innerType));
                        })
       .def_property_readonly("element_type", [](MlirType self) {
@@ -42,7 +44,7 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
 
   mlir_type_subclass(m, "ArrayType", hwTypeIsAArrayType)
       .def_classmethod("get",
-                       [](py::object cls, MlirType elementType, intptr_t size) {
+                       [](nb::object cls, MlirType elementType, intptr_t size) {
                          return cls(hwArrayTypeGet(elementType, size));
                        })
       .def_property_readonly(
@@ -51,31 +53,31 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
       .def_property_readonly(
           "size", [](MlirType self) { return hwArrayTypeGetSize(self); });
 
-  py::enum_<HWModulePortDirection>(m, "ModulePortDirection")
+  nb::enum_<HWModulePortDirection>(m, "ModulePortDirection")
       .value("INPUT", HWModulePortDirection::Input)
       .value("OUTPUT", HWModulePortDirection::Output)
       .value("INOUT", HWModulePortDirection::InOut)
       .export_values();
 
-  py::class_<HWModulePort>(m, "ModulePort")
-      .def(py::init<MlirAttribute, MlirType, HWModulePortDirection>());
+  nb::class_<HWModulePort>(m, "ModulePort")
+      .def(nb::init<MlirAttribute, MlirType, HWModulePortDirection>());
 
   mlir_type_subclass(m, "ModuleType", hwTypeIsAModuleType)
       .def_classmethod(
           "get",
-          [](py::object cls, py::list pyModulePorts, MlirContext ctx) {
+          [](nb::object cls, nb::list pyModulePorts, MlirContext ctx) {
             std::vector<HWModulePort> modulePorts;
             for (auto pyModulePort : pyModulePorts)
-              modulePorts.push_back(pyModulePort.cast<HWModulePort>());
+              modulePorts.push_back(nb::cast<HWModulePort>(pyModulePort));
 
             return cls(
                 hwModuleTypeGet(ctx, modulePorts.size(), modulePorts.data()));
           },
-          py::arg("cls"), py::arg("ports"), py::arg("context") = py::none())
+          nb::arg("cls"), nb::arg("ports"), nb::arg("context") = nb::none())
       .def_property_readonly(
           "input_types",
           [](MlirType self) {
-            py::list inputTypes;
+            nb::list inputTypes;
             intptr_t numInputs = hwModuleTypeGetNumInputs(self);
             for (intptr_t i = 0; i < numInputs; ++i)
               inputTypes.append(hwModuleTypeGetInputType(self, i));
@@ -95,7 +97,7 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
       .def_property_readonly(
           "output_types",
           [](MlirType self) {
-            py::list outputTypes;
+            nb::list outputTypes;
             intptr_t numOutputs = hwModuleTypeGetNumOutputs(self);
             for (intptr_t i = 0; i < numOutputs; ++i)
               outputTypes.append(hwModuleTypeGetOutputType(self, i));
@@ -114,7 +116,7 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
   mlir_type_subclass(m, "ParamIntType", hwTypeIsAIntType)
       .def_classmethod(
           "get_from_param",
-          [](py::object cls, MlirContext ctx, MlirAttribute param) {
+          [](nb::object cls, MlirContext ctx, MlirAttribute param) {
             return cls(hwParamIntTypeGet(param));
           })
       .def_property_readonly("width", [](MlirType self) {
@@ -124,26 +126,35 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
   mlir_type_subclass(m, "StructType", hwTypeIsAStructType)
       .def_classmethod(
           "get",
-          [](py::object cls, py::list pyFieldInfos) {
+          [](nb::object cls, nb::list pyFieldInfos,
+             DefaultingPyMlirContext context) {
             llvm::SmallVector<HWStructFieldInfo> mlirFieldInfos;
-            MlirContext ctx;
+            MlirContext ctx = context.resolve().get();
 
             // Since we're just passing string refs to the type constructor,
             // copy them into a temporary vector to give them all new addresses.
             llvm::SmallVector<llvm::SmallString<8>> names;
             for (size_t i = 0, e = pyFieldInfos.size(); i < e; ++i) {
-              auto tuple = pyFieldInfos[i].cast<py::tuple>();
-              auto type = tuple[1].cast<MlirType>();
-              ctx = mlirTypeGetContext(type);
-              names.emplace_back(tuple[0].cast<std::string>());
+              auto tuple = nb::cast<nb::tuple>(pyFieldInfos[i]);
+              auto type = nb::cast<MlirType>(tuple[1]);
+              // Only override if the context is null.
+              if (mlirContextIsNull(ctx)) {
+                ctx = mlirTypeGetContext(type);
+              }
+              names.emplace_back(nb::cast<std::string>(tuple[0]));
               auto nameStringRef =
                   mlirStringRefCreate(names[i].data(), names[i].size());
               mlirFieldInfos.push_back(HWStructFieldInfo{
                   mlirIdentifierGet(ctx, nameStringRef), type});
             }
+            if (mlirContextIsNull(ctx)) {
+              throw std::invalid_argument(
+                  "StructType requires a context if no fields provided.");
+            }
             return cls(hwStructTypeGet(ctx, mlirFieldInfos.size(),
                                        mlirFieldInfos.data()));
-          })
+          },
+          nb::arg("cls"), nb::arg("fields"), nb::arg("context") = nb::none())
       .def("get_field",
            [](MlirType self, std::string fieldName) {
              return hwStructTypeGetField(
@@ -156,19 +167,69 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
            })
       .def("get_fields", [](MlirType self) {
         intptr_t num_fields = hwStructTypeGetNumFields(self);
-        py::list fields;
+        nb::list fields;
         for (intptr_t i = 0; i < num_fields; ++i) {
           auto field = hwStructTypeGetFieldNum(self, i);
           auto fieldName = mlirIdentifierStr(field.name);
           std::string name(fieldName.data, fieldName.length);
-          fields.append(py::make_tuple(name, field.type));
+          fields.append(nb::make_tuple(name, field.type));
+        }
+        return fields;
+      });
+
+  mlir_type_subclass(m, "UnionType", hwTypeIsAUnionType)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, nb::list pyFieldInfos) {
+            llvm::SmallVector<HWUnionFieldInfo> mlirFieldInfos;
+            MlirContext ctx;
+
+            // Since we're just passing string refs to the type constructor,
+            // copy them into a temporary vector to give them all new addresses.
+            llvm::SmallVector<llvm::SmallString<8>> names;
+            for (size_t i = 0, e = pyFieldInfos.size(); i < e; ++i) {
+              auto tuple = nb::cast<nb::tuple>(pyFieldInfos[i]);
+              if (tuple.size() < 3)
+                throw std::invalid_argument(
+                    "UnionType field info must be a tuple of (name, type, "
+                    "offset)");
+              auto type = nb::cast<MlirType>(tuple[1]);
+              size_t offset = nb::cast<size_t>(tuple[2]);
+              ctx = mlirTypeGetContext(type);
+              names.emplace_back(nb::cast<std::string>(tuple[0]));
+              auto nameStringRef =
+                  mlirStringRefCreate(names[i].data(), names[i].size());
+              mlirFieldInfos.push_back(HWUnionFieldInfo{
+                  mlirIdentifierGet(ctx, nameStringRef), type, offset});
+            }
+            return cls(hwUnionTypeGet(ctx, mlirFieldInfos.size(),
+                                      mlirFieldInfos.data()));
+          })
+      .def("get_field",
+           [](MlirType self, std::string fieldName) {
+             return hwUnionTypeGetField(
+                 self, mlirStringRefCreateFromCString(fieldName.c_str()));
+           })
+      .def("get_field_index",
+           [](MlirType self, const std::string &fieldName) {
+             return hwUnionTypeGetFieldIndex(
+                 self, mlirStringRefCreateFromCString(fieldName.c_str()));
+           })
+      .def("get_fields", [](MlirType self) {
+        intptr_t num_fields = hwUnionTypeGetNumFields(self);
+        nb::list fields;
+        for (intptr_t i = 0; i < num_fields; ++i) {
+          auto field = hwUnionTypeGetFieldNum(self, i);
+          auto fieldName = mlirIdentifierStr(field.name);
+          std::string name(fieldName.data, fieldName.length);
+          fields.append(nb::make_tuple(name, field.type, field.offset));
         }
         return fields;
       });
 
   mlir_type_subclass(m, "TypeAliasType", hwTypeIsATypeAliasType)
       .def_classmethod("get",
-                       [](py::object cls, std::string scope, std::string name,
+                       [](nb::object cls, std::string scope, std::string name,
                           MlirType innerType) {
                          return cls(hwTypeAliasTypeGet(
                              mlirStringRefCreateFromCString(scope.c_str()),
@@ -195,13 +256,13 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
   mlir_attribute_subclass(m, "ParamDeclAttr", hwAttrIsAParamDeclAttr)
       .def_classmethod(
           "get",
-          [](py::object cls, std::string name, MlirType type,
+          [](nb::object cls, std::string name, MlirType type,
              MlirAttribute value) {
             return cls(hwParamDeclAttrGet(
                 mlirStringRefCreateFromCString(name.c_str()), type, value));
           })
       .def_classmethod("get_nodefault",
-                       [](py::object cls, std::string name, MlirType type) {
+                       [](nb::object cls, std::string name, MlirType type) {
                          return cls(hwParamDeclAttrGet(
                              mlirStringRefCreateFromCString(name.c_str()), type,
                              MlirAttribute{nullptr}));
@@ -220,7 +281,7 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
   mlir_attribute_subclass(m, "ParamDeclRefAttr", hwAttrIsAParamDeclRefAttr)
       .def_classmethod(
           "get",
-          [](py::object cls, MlirContext ctx, std::string name) {
+          [](nb::object cls, MlirContext ctx, std::string name) {
             return cls(hwParamDeclRefAttrGet(
                 ctx, mlirStringRefCreateFromCString(name.c_str())));
           })
@@ -233,22 +294,26 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
       });
 
   mlir_attribute_subclass(m, "ParamVerbatimAttr", hwAttrIsAParamVerbatimAttr)
-      .def_classmethod("get", [](py::object cls, MlirAttribute text) {
+      .def_classmethod("get", [](nb::object cls, MlirAttribute text) {
         return cls(hwParamVerbatimAttrGet(text));
       });
 
   mlir_attribute_subclass(m, "OutputFileAttr", hwAttrIsAOutputFileAttr)
-      .def_classmethod("get_from_filename", [](py::object cls,
-                                               MlirAttribute fileName,
-                                               bool excludeFromFileList,
-                                               bool includeReplicatedOp) {
-        return cls(hwOutputFileGetFromFileName(fileName, excludeFromFileList,
-                                               includeReplicatedOp));
+      .def_classmethod(
+          "get_from_filename",
+          [](nb::object cls, MlirAttribute fileName, bool excludeFromFileList,
+             bool includeReplicatedOp) {
+            return cls(hwOutputFileGetFromFileName(
+                fileName, excludeFromFileList, includeReplicatedOp));
+          })
+      .def_property_readonly("filename", [](MlirAttribute self) {
+        MlirStringRef cStr = hwOutputFileGetFileName(self);
+        return std::string(cStr.data, cStr.length);
       });
 
   mlir_attribute_subclass(m, "InnerSymAttr", hwAttrIsAInnerSymAttr)
       .def_classmethod("get",
-                       [](py::object cls, MlirAttribute symName) {
+                       [](nb::object cls, MlirAttribute symName) {
                          return cls(hwInnerSymAttrGet(symName));
                        })
       .def_property_readonly("symName", [](MlirAttribute self) {
@@ -258,7 +323,7 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
   mlir_attribute_subclass(m, "InnerRefAttr", hwAttrIsAInnerRefAttr)
       .def_classmethod(
           "get",
-          [](py::object cls, MlirAttribute moduleName, MlirAttribute innerSym) {
+          [](nb::object cls, MlirAttribute moduleName, MlirAttribute innerSym) {
             return cls(hwInnerRefAttrGet(moduleName, innerSym));
           })
       .def_property_readonly(

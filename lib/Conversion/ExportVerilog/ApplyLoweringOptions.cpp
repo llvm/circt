@@ -10,26 +10,32 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../PassDetail.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Support/LoweringOptions.h"
+#include "mlir/Pass/Pass.h"
+
+namespace circt {
+#define GEN_PASS_DEF_TESTAPPLYLOWERINGOPTION
+#include "circt/Conversion/Passes.h.inc"
+} // namespace circt
 
 using namespace circt;
-
 namespace {
 
 struct TestApplyLoweringOptionPass
-    : public TestApplyLoweringOptionBase<TestApplyLoweringOptionPass> {
-  TestApplyLoweringOptionPass() = default;
+    : public circt::impl::TestApplyLoweringOptionBase<
+          TestApplyLoweringOptionPass> {
+  using Base::Base;
+
   void runOnOperation() override {
-    if (!options.hasValue()) {
+    if (!optionsString.hasValue()) {
       markAllAnalysesPreserved();
       return;
     }
-    LoweringOptions opts(options, [this](llvm::Twine tw) {
+    LoweringOptions opts(optionsString, [this](llvm::Twine tw) {
       getOperation().emitError(tw);
       signalPassFailure();
     });
@@ -37,7 +43,3 @@ struct TestApplyLoweringOptionPass
   }
 };
 } // namespace
-
-std::unique_ptr<mlir::Pass> circt::createTestApplyLoweringOptionPass() {
-  return std::make_unique<TestApplyLoweringOptionPass>();
-}

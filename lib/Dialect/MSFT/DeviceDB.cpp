@@ -89,10 +89,9 @@ PDPhysLocationOp PlacementDB::place(DynamicInstanceOp inst,
   StringAttr subPathAttr;
   if (!subPath.empty())
     subPathAttr = StringAttr::get(inst->getContext(), subPath);
-  PDPhysLocationOp locOp =
-      OpBuilder(inst.getBody())
-          .create<PDPhysLocationOp>(srcLoc, loc, subPathAttr,
-                                    FlatSymbolRefAttr());
+  auto builder = OpBuilder(inst.getBody());
+  PDPhysLocationOp locOp = PDPhysLocationOp::create(
+      builder, srcLoc, loc, subPathAttr, FlatSymbolRefAttr());
   if (succeeded(insertPlacement(locOp, locOp.getLoc())))
     return locOp;
   locOp->erase();
@@ -101,9 +100,9 @@ PDPhysLocationOp PlacementDB::place(DynamicInstanceOp inst,
 PDRegPhysLocationOp PlacementDB::place(DynamicInstanceOp inst,
                                        LocationVectorAttr locs,
                                        Location srcLoc) {
+  auto builder = OpBuilder(inst.getBody());
   PDRegPhysLocationOp locOp =
-      OpBuilder(inst.getBody())
-          .create<PDRegPhysLocationOp>(srcLoc, locs, FlatSymbolRefAttr());
+      PDRegPhysLocationOp::create(builder, srcLoc, locs, FlatSymbolRefAttr());
   for (PhysLocationAttr loc : locs.getLocs())
     if (failed(insertPlacement(locOp, loc))) {
       locOp->erase();
@@ -136,10 +135,10 @@ PDPhysRegionOp PlacementDB::placeIn(DynamicInstanceOp inst,
   StringAttr subPathAttr;
   if (!subPath.empty())
     subPathAttr = StringAttr::get(inst->getContext(), subPath);
-  PDPhysRegionOp regOp =
-      OpBuilder::atBlockEnd(&inst.getBody().front())
-          .create<PDPhysRegionOp>(srcLoc, FlatSymbolRefAttr::get(physregion),
-                                  subPathAttr, FlatSymbolRefAttr());
+  auto builder = OpBuilder::atBlockEnd(&inst.getBody().front());
+  PDPhysRegionOp regOp = PDPhysRegionOp::create(
+      builder, srcLoc, FlatSymbolRefAttr::get(physregion), subPathAttr,
+      FlatSymbolRefAttr());
   regionPlacements.push_back(regOp);
   return regOp;
 }

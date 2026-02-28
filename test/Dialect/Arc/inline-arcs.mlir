@@ -164,6 +164,33 @@ arc.define @ToBeRemoved3(%arg0: i32) -> i32 {
   arc.output %arg0 : i32
 }
 
+// Make sure that an uninlined arc that is called from an inlined call doesn't
+// get erroneously deleted while still referenced (regression test).
+
+hw.module @NestedArcCallIntoModuleCheck(in %arg0: i32, out out0: i32) {
+  %0 = arc.call @ArcCallingArc(%arg0) : (i32) -> i32
+  hw.output %0 : i32
+}
+
+// Here to make sure that ArcThatIsCalled is not deleted
+arc.define @CallerToBeRemoved(%arg0: i32) -> i32 {
+  %0 = arc.call @ArcThatIsCalled(%arg0) : (i32) -> i32
+  arc.output %arg0 : i32
+}
+
+arc.define @ArcCallingArc(%arg0: i32) -> i32 {
+  %0 = comb.and %arg0, %arg0 : i32
+  %1 = arc.call @ArcThatIsCalled(%0) : (i32) -> i32
+  arc.output %1 : i32
+}
+
+arc.define @ArcThatIsCalled(%arg0: i32) -> i32 {
+  %0 = comb.and %arg0, %arg0 : i32
+  %1 = comb.and %arg0, %arg0 : i32
+  %2 = comb.and %arg0, %arg0 : i32
+  arc.output %0 : i32
+}
+
 //--- onlyIntoArcs
 // RUN: circt-opt %t/onlyIntoArcs --arc-inline=into-arcs-only=1 | FileCheck %t/onlyIntoArcs
 

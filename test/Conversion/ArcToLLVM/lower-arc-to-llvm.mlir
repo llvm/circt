@@ -4,22 +4,27 @@
 // CHECK-SAME:    %arg0: !llvm.ptr
 // CHECK-SAME:    %arg1: !llvm.ptr
 // CHECK-SAME:    %arg2: !llvm.ptr
+// CHECK-SAME:    %arg3: i64
 // CHECK-SAME:  ) -> !llvm.struct<(
 // CHECK-SAME:    ptr
 // CHECK-SAME:    ptr
+// CHECK-SAME:    ptr
+// CHECK-SAME:    i64
 // CHECK-SAME:  )> {
 func.func @Types(
   %arg0: !arc.storage,
   %arg1: !arc.state<i1>,
-  %arg2: !arc.memory<4 x i7, i2>
+  %arg2: !arc.memory<4 x i7, i2>,
+  %arg3: !llhd.time
 ) -> (
   !arc.storage,
   !arc.state<i1>,
-  !arc.memory<4 x i7, i2>
+  !arc.memory<4 x i7, i2>,
+  !llhd.time
 ) {
-  return %arg0, %arg1, %arg2 : !arc.storage, !arc.state<i1>, !arc.memory<4 x i7, i2>
+  return %arg0, %arg1, %arg2, %arg3 : !arc.storage, !arc.state<i1>, !arc.memory<4 x i7, i2>, !llhd.time
   // CHECK: llvm.return
-  // CHECK-SAME: !llvm.struct<(ptr, ptr, ptr)>
+  // CHECK-SAME: !llvm.struct<(ptr, ptr, ptr, i64)>
 }
 // CHECK-NEXT: }
 
@@ -164,7 +169,7 @@ func.func @funcCallOp(%arg0: i32) -> (i32, i32) {
   // CHECK-NEXT: [[V1:%.+]] = llvm.extractvalue [[V0]][0] : !llvm.struct<(i32, i32)>
   // CHECK-NEXT: [[V2:%.+]] = llvm.extractvalue [[V0]][1] : !llvm.struct<(i32, i32)>
   %0:2 = func.call @dummyFuncCallee(%arg0) : (i32) -> (i32, i32)
-  // CHECK-NEXT: [[V3:%.+]] = llvm.mlir.undef : !llvm.struct<(i32, i32)>
+  // CHECK-NEXT: [[V3:%.+]] = llvm.mlir.poison : !llvm.struct<(i32, i32)>
   // CHECK-NEXT: [[V4:%.+]] = llvm.insertvalue [[V1]], [[V3]][0] : !llvm.struct<(i32, i32)>
   // CHECK-NEXT: [[V5:%.+]] = llvm.insertvalue [[V2]], [[V4]][1] : !llvm.struct<(i32, i32)>
   // CHECK-NEXT: llvm.return [[V5]] :
@@ -179,12 +184,17 @@ func.func @seqClocks(%clk1: !seq.clock, %clk2: !seq.clock) -> !seq.clock {
   %1 = seq.from_clock %clk2
   %2 = arith.xori %0, %1 : i1
   %3 = seq.to_clock %2
-  return %3 : !seq.clock
+  %4 = seq.clock_inv %3
+  %5 = seq.clock_gate %4, %0
+  return %5 : !seq.clock
 }
 // CHECK-LABEL: llvm.func @seqClocks
 //  CHECK-SAME: ([[CLK1:%.+]]: i1, [[CLK2:%.+]]: i1)
 //       CHECK: [[RES:%.+]] = llvm.xor [[CLK1]], [[CLK2]]
-//       CHECK: llvm.return [[RES]] : i1
+//       CHECK: [[TRUE:%.+]] = llvm.mlir.constant(true) : i1
+//       CHECK: [[RES1:%.+]] = llvm.xor [[RES]], [[TRUE]] : i1
+//       CHECK: [[RES2:%.+]] = llvm.and [[RES1]], [[CLK1]] : i1
+//       CHECK: llvm.return [[RES2]] : i1
 
 // CHECK-LABEL: llvm.func @ReadAggregates(
 // CHECK-SAME: %arg0: !llvm.ptr
@@ -221,4 +231,121 @@ func.func @WriteArray(%arg0: !arc.state<!hw.array<4xi1>>, %arg1: !hw.array<4xi1>
   arc.state_write %arg0 = %0 : <!hw.array<4xi1>>
   arc.state_write %arg0 = %arg1 : <!hw.array<4xi1>>
   return
+}
+
+// The LLVM IR does not like `i0` types. The lowering replaces all `i0` values
+// with constants to allow canonicalizers to elide i0 values as needed.
+// See https://github.com/llvm/circt/pull/8871.
+// CHECK-LABEL: llvm.func @DontCrashOnI0(
+func.func @DontCrashOnI0(%arg0: i1, %arg1: !hw.array<1xi42>) -> i42 {
+  // CHECK: [[STACK:%.+]] = llvm.alloca {{%.+}} x !llvm.array<1 x i42>
+  // CHECK: [[ZERO:%.+]] = llvm.mlir.constant(0 : i0) : i0
+  // CHECK: [[ZEXT:%.+]] = llvm.zext [[ZERO]] : i0 to i1
+  // CHECK: [[GEP:%.+]] = llvm.getelementptr [[STACK]][0, [[ZEXT]]] :
+  // CHECK: [[RESULT:%.+]] = llvm.load [[GEP]] : !llvm.ptr -> i42
+  // CHECK: llvm.return [[RESULT]]
+  %0 = comb.extract %arg0 from 0 : (i1) -> i0
+  %1 = hw.array_get %arg1[%0] : !hw.array<1xi42>, i0
+  return %1 : i42
+}
+
+// CHECK-LABEL: llvm.func @ExecuteEmpty
+func.func @ExecuteEmpty() {
+  // CHECK-NEXT: llvm.br [[BB:\^.+]]
+  // CHECK-NEXT: [[BB]]:
+  arc.execute {
+    // CHECK-NEXT: llvm.br [[BB:\^.+]]
+    arc.output
+  }
+  // CHECK-NEXT: [[BB]]:
+  // CHECK-NEXT: llvm.return
+  return
+}
+
+// CHECK-LABEL: llvm.func @ExecuteWithOperandsAndResults
+func.func @ExecuteWithOperandsAndResults(%arg0: i42, %arg1: !hw.array<4xi19>, %arg2: !arc.storage) {
+  // CHECK-NEXT: llvm.br [[BB:\^.+]](%arg0, %arg1, %arg2 : i42, !llvm.array<4 x i19>, !llvm.ptr)
+  // CHECK-NEXT: [[BB]]([[ARG0:%.+]]: i42, [[ARG1:%.+]]: !llvm.array<4 x i19>, [[ARG2:%.+]]: !llvm.ptr):
+  %4:3 = arc.execute (%arg0, %arg1, %arg2 : i42, !hw.array<4xi19>, !arc.storage) -> (i42, !hw.array<4xi19>, !arc.storage) {
+  ^bb0(%0: i42, %1: !hw.array<4xi19>, %2: !arc.storage):
+    // CHECK-NEXT: llvm.br [[BB:\^.+]]([[ARG2]] : !llvm.ptr)
+    cf.br ^bb1(%2 : !arc.storage)
+  ^bb1(%3: !arc.storage):
+    // CHECK-NEXT: [[BB]]([[ARG2:%.+]]: !llvm.ptr):
+    // CHECK-NEXT: llvm.br [[BB:\^.+]]([[ARG0]], [[ARG1]], [[ARG2]] : i42, !llvm.array<4 x i19>, !llvm.ptr)
+    arc.output %0, %1, %3 : i42, !hw.array<4xi19>, !arc.storage
+  }
+  // CHECK-NEXT: [[BB]]([[ARG0:%.+]]: i42, [[ARG1:%.+]]: !llvm.array<4 x i19>, [[ARG2:%.+]]: !llvm.ptr):
+  // CHECK-NEXT: llvm.call @Dummy([[ARG0:%.+]], [[ARG1:%.+]], [[ARG2:%.+]]) : (i42, !llvm.array<4 x i19>, !llvm.ptr) -> ()
+  call @Dummy(%4#0, %4#1, %4#2) : (i42, !hw.array<4xi19>, !arc.storage) -> ()
+  // CHECK-NEXT: llvm.return
+  return
+}
+
+// CHECK-LABEL: @issue9171
+func.func @issue9171(%arg0: !arc.state<!hw.array<4xi1>>, %idx: i2) -> (i1) {
+
+  // Load the array from memory
+  // CHECK-NEXT: [[ARRLD:%.+]]  = llvm.load %arg0 : !llvm.ptr -> !llvm.array<4 x i1>
+  // CHECK-NEXT: [[CCLTH:%.+]]  = builtin.unrealized_conversion_cast [[ARRLD]]
+  // CHECK-NEXT: [[CCHTL:%.+]]  = builtin.unrealized_conversion_cast [[CCLTH]]
+
+  // Spill the array value on the stack
+  // CHECK-NEXT: [[CST1:%.+]]   = llvm.mlir.constant(1 : i32) : i32
+  // CHECK-NEXT: [[ALLOCA:%.+]] = llvm.alloca [[CST1]] x !llvm.array<4 x i1>
+  // CHECK-NEXT: llvm.store [[CCHTL]], [[ALLOCA]] : !llvm.array<4 x i1>, !llvm.ptr
+
+  // Write the new value to memory
+  // CHECK:      [[CPTR:%.+]]   = llvm.mlir.addressof
+  // CHECK-NEXT: [[CARR:%.+]]   = llvm.load [[CPTR]] : !llvm.ptr -> !llvm.array<4 x i1>
+  // CHECK-NEXT: llvm.store [[CARR]], %arg0 : !llvm.array<4 x i1>, !llvm.ptr
+
+  // Load saved value from the stack
+  // CHECK-NEXT: [[IDX:%.+]]    = llvm.zext %arg1 : i2 to i3
+  // CHECK-NEXT: [[GPTR:%.+]]   = llvm.getelementptr [[ALLOCA]][0, [[IDX]]]
+  // CHECK-NEXT: [[LD:%.+]]     = llvm.load [[GPTR]]
+  // CHECK-NEXT: llvm.return [[LD]] : i1
+
+  %pre = arc.state_read %arg0 : <!hw.array<4xi1>>
+  %cst = hw.aggregate_constant [false, true, true, false] : !hw.array<4xi1>
+  arc.state_write %arg0 = %cst : <!hw.array<4xi1>>
+  %get = hw.array_get %pre[%idx] : !hw.array<4xi1>, i2
+  return %get : i1
+}
+
+// CHECK-LABEL: llvm.mlir.global
+// CHECK-SAME:  internal constant @[[NAMESYM:.+]]("fooModelName\00")
+// CHECK:  llvm.mlir.global external @arcRuntimeModel_fooModelSym() {addr_space = 0 : i32} : !llvm.struct<(i64, i64, ptr, ptr)> {
+// CHECK:    %0 = llvm.mlir.constant({{.+}} : i64) : i64
+// CHECK:    %1 = llvm.mlir.constant(1234567 : i64) : i64
+// CHECK:    %2 = llvm.mlir.addressof @[[NAMESYM]] : !llvm.ptr
+// CHECK:    %3 = llvm.mlir.zero : !llvm.ptr
+// CHECK:    %4 = llvm.mlir.poison : !llvm.struct<(i64, i64, ptr, ptr)>
+// CHECK:    %5 = llvm.insertvalue %0, %4[0] : !llvm.struct<(i64, i64, ptr, ptr)>
+// CHECK:    %6 = llvm.insertvalue %1, %5[1] : !llvm.struct<(i64, i64, ptr, ptr)>
+// CHECK:    %7 = llvm.insertvalue %2, %6[2] : !llvm.struct<(i64, i64, ptr, ptr)>
+// CHECK:    %8 = llvm.insertvalue %3, %7[3] : !llvm.struct<(i64, i64, ptr, ptr)>
+// CHECK:  }
+
+arc.runtime.model @arcRuntimeModel_fooModelSym "fooModelName" numStateBytes 1234567
+
+func.func private @Dummy(%arg0: i42, %arg1: !hw.array<4xi19>, %arg2: !arc.storage)
+
+
+// CHECK-LABEL: llvm.func @Time
+// CHECK-SAME: (%arg0: !llvm.ptr)
+// CHECK-SAME: -> !llvm.struct<(i64, i64, i64)>
+func.func @Time(%arg0: !arc.storage<42>) -> (i64, !llhd.time, i64) {
+  // CHECK-NEXT: [[TIME:%.+]] = llvm.load %arg0 : !llvm.ptr -> i64
+  // CHECK-NOT: int_to_time
+  // CHECK-NOT: time_to_int
+  %0 = arc.current_time %arg0 : !arc.storage<42>
+  %1 = llhd.int_to_time %0
+  %2 = llhd.time_to_int %1
+  // CHECK-NEXT: [[TMP1:%.+]] = llvm.mlir.poison : !llvm.struct<(i64, i64, i64)>
+  // CHECK-NEXT: [[TMP2:%.+]] = llvm.insertvalue [[TIME]], [[TMP1]][0]
+  // CHECK-NEXT: [[TMP3:%.+]] = llvm.insertvalue [[TIME]], [[TMP2]][1]
+  // CHECK-NEXT: [[TMP4:%.+]] = llvm.insertvalue [[TIME]], [[TMP3]][2]
+  // CHECK-NEXT: llvm.return [[TMP4]]
+  return %0, %1, %2 : i64, !llhd.time, i64
 }

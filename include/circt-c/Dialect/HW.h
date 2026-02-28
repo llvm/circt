@@ -32,6 +32,13 @@ struct HWStructFieldInfo {
 };
 typedef struct HWStructFieldInfo HWStructFieldInfo;
 
+struct HWUnionFieldInfo {
+  MlirIdentifier name;
+  MlirType type;
+  size_t offset;
+};
+typedef struct HWUnionFieldInfo HWUnionFieldInfo;
+
 enum HWModulePortDirection { Input, Output, InOut };
 typedef enum HWModulePortDirection HWModulePortDirection;
 
@@ -47,6 +54,7 @@ typedef struct HWModulePort HWModulePort;
 //===----------------------------------------------------------------------===//
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(HW, hw);
+MLIR_CAPI_EXPORTED void registerHWPasses(void);
 
 //===----------------------------------------------------------------------===//
 // Type API.
@@ -76,6 +84,9 @@ MLIR_CAPI_EXPORTED bool hwTypeIsAModuleType(MlirType type);
 
 /// If the type is an HW struct.
 MLIR_CAPI_EXPORTED bool hwTypeIsAStructType(MlirType);
+
+/// If the type is an HW union.
+MLIR_CAPI_EXPORTED bool hwTypeIsAUnionType(MlirType);
 
 /// If the type is an HW type alias.
 MLIR_CAPI_EXPORTED bool hwTypeIsATypeAliasType(MlirType);
@@ -123,6 +134,11 @@ MLIR_CAPI_EXPORTED MlirType hwModuleTypeGetOutputType(MlirType type,
 /// Get an HW module type's output name at a specific index.
 MLIR_CAPI_EXPORTED MlirStringRef hwModuleTypeGetOutputName(MlirType type,
                                                            intptr_t index);
+
+/// Get an HW module type's port info at a specific index.
+MLIR_CAPI_EXPORTED void hwModuleTypeGetPort(MlirType type, intptr_t index,
+                                            HWModulePort *ret);
+
 /// Creates an HW struct type in the context associated with the elements.
 MLIR_CAPI_EXPORTED MlirType hwStructTypeGet(MlirContext ctx,
                                             intptr_t numElements,
@@ -143,6 +159,22 @@ hwStructTypeGetFieldNum(MlirType structType, unsigned idx);
 
 MLIR_CAPI_EXPORTED intptr_t hwStructTypeGetNumFields(MlirType structType);
 
+/// Creates an HW union type in the context associated with the elements.
+MLIR_CAPI_EXPORTED MlirType hwUnionTypeGet(MlirContext ctx,
+                                           intptr_t numElements,
+                                           HWUnionFieldInfo const *elements);
+
+MLIR_CAPI_EXPORTED MlirType hwUnionTypeGetField(MlirType unionType,
+                                                MlirStringRef fieldName);
+
+MLIR_CAPI_EXPORTED MlirAttribute
+hwUnionTypeGetFieldIndex(MlirType unionType, MlirStringRef fieldName);
+
+MLIR_CAPI_EXPORTED HWUnionFieldInfo hwUnionTypeGetFieldNum(MlirType unionType,
+                                                           unsigned idx);
+
+MLIR_CAPI_EXPORTED intptr_t hwUnionTypeGetNumFields(MlirType unionType);
+
 MLIR_CAPI_EXPORTED MlirType hwTypeAliasTypeGet(MlirStringRef scope,
                                                MlirStringRef name,
                                                MlirType innerType);
@@ -161,6 +193,7 @@ MLIR_CAPI_EXPORTED MlirStringRef hwTypeAliasTypeGetScope(MlirType typeAlias);
 
 MLIR_CAPI_EXPORTED bool hwAttrIsAInnerSymAttr(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirAttribute hwInnerSymAttrGet(MlirAttribute symName);
+MLIR_CAPI_EXPORTED MlirAttribute hwInnerSymAttrGetEmpty(MlirContext ctx);
 MLIR_CAPI_EXPORTED MlirAttribute hwInnerSymAttrGetSymName(MlirAttribute);
 
 MLIR_CAPI_EXPORTED bool hwAttrIsAInnerRefAttr(MlirAttribute);
@@ -189,6 +222,8 @@ MLIR_CAPI_EXPORTED MlirAttribute hwParamVerbatimAttrGet(MlirAttribute text);
 MLIR_CAPI_EXPORTED bool hwAttrIsAOutputFileAttr(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirAttribute hwOutputFileGetFromFileName(
     MlirAttribute text, bool excludeFromFileList, bool includeReplicatedOp);
+MLIR_CAPI_EXPORTED MlirStringRef
+hwOutputFileGetFileName(MlirAttribute outputFile);
 
 //===----------------------------------------------------------------------===//
 // InstanceGraph API.

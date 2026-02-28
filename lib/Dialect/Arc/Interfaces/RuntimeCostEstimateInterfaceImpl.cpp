@@ -48,7 +48,7 @@ class CombRuntimeCostEstimateDialectInterface
       RuntimeCostEstimateDialectInterface;
 
   uint32_t getCostEstimate(mlir::Operation *op) const final {
-    assert(isa<CombDialect>(op->getDialect()));
+    assert(isa_and_nonnull<CombDialect>(op->getDialect()));
 
     return TypeSwitch<Operation *, uint32_t>(op)
         // ExtractOp is either lowered to shift+AND or only an AND operation.
@@ -78,7 +78,7 @@ class HWRuntimeCostEstimateDialectInterface
       RuntimeCostEstimateDialectInterface;
 
   uint32_t getCostEstimate(mlir::Operation *op) const final {
-    assert(circt::isa<HWDialect>(op->getDialect()));
+    assert(isa_and_nonnull<HWDialect>(op->getDialect()));
 
     return llvm::TypeSwitch<mlir::Operation *, uint32_t>(op)
         .Case<ConstantOp, EnumConstantOp, BitcastOp, AggregateConstantOp>(
@@ -97,7 +97,7 @@ class SCFRuntimeCostEstimateDialectInterface
       RuntimeCostEstimateDialectInterface;
 
   uint32_t getCostEstimate(mlir::Operation *op) const final {
-    assert(isa<scf::SCFDialect>(op->getDialect()));
+    assert(isa_and_nonnull<scf::SCFDialect>(op->getDialect()));
 
     return llvm::TypeSwitch<mlir::Operation *, uint32_t>(op)
         .Case<scf::YieldOp>([](auto op) { return 0; })

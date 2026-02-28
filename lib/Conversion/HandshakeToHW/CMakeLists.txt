@@ -1,4 +1,4 @@
-add_circt_library(CIRCTHandshakeToHW
+add_circt_conversion_library(CIRCTHandshakeToHW
   HandshakeToHW.cpp
 
   ADDITIONAL_HEADER_DIRS
@@ -12,7 +12,6 @@ add_circt_library(CIRCTHandshakeToHW
   CIRCTHW
   CIRCTESI
   CIRCTHandshake
-  CIRCTHandshakeTransforms
   MLIRIR
   MLIRPass
   MLIRArithDialect

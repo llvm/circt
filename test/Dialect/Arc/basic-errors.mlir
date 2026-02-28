@@ -402,30 +402,6 @@ hw.module @only_one_block_allowed(in %in0: i1, in %in1: i1, in %in2: i1, in %in3
 
 // -----
 
-hw.module @invalid_input_type(in %in0: vector<2xi1>, in %in1: vector<2xi1>, in %in2: vector<2xi1>, in %in3: vector<2xi1>, out out0: i1, out out1: i1) {
-  // expected-error @below {{input vector element type must be a signless integer}}
-  %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (vector<2xi1>, vector<2xi1>, vector<2xi1>, vector<2xi1>) -> (i1, i1) {
-  ^bb0(%arg0: vector<2xi1>, %arg1: vector<2xi1>):
-    %1 = vector.extract %arg0[0] : i1 from vector<2xi1>
-    arc.vectorize.return %1 : i1
-  }
-  hw.output %0#0, %0#1 : i1, i1
-}
-
-// -----
-
-hw.module @invalid_result_type(in %in0: i1, in %in1: i1, in %in2: i1, in %in3: i1, out out0: vector<2xi1>, out out1: vector<2xi1>) {
-  // expected-error @below {{may only return a vector type if boundary is already vectorized}}
-  %0:2 = arc.vectorize (%in0, %in1), (%in2, %in3) : (i1, i1, i1, i1) -> (vector<2xi1>, vector<2xi1>) {
-  ^bb0(%arg0: i1, %arg1: i1):
-    %cst = arith.constant dense<0> : vector<2xi1>
-    arc.vectorize.return %cst : vector<2xi1>
-  }
-  hw.output %0#0, %0#1 : vector<2xi1>, vector<2xi1>
-}
-
-// -----
-
 hw.module @input_operand_list_not_empty(out out0: i1, out out1: i1) {
   // expected-error @below {{there has to be at least one input vector}}
   %0:2 = arc.vectorize : () -> (i1, i1) {
@@ -548,3 +524,103 @@ hw.module @vectorize(in %in0: i4, in %in1: i4, out out0: i4) {
 
 // expected-error @below {{state type must have a known bit width}}
 func.func @InvalidStateType(%arg0: !arc.state<index>)
+
+// -----
+
+// expected-error @below {{initializer 'Bar' does not reference a valid function}}
+arc.model @Foo io !hw.modty<> initializer @Bar {
+^bb0(%arg0: !arc.storage<42>):
+}
+
+// -----
+
+// expected-error @below {{finalizer 'Bar' does not reference a valid function}}
+arc.model @Foo io !hw.modty<> finalizer @Bar {
+^bb0(%arg0: !arc.storage<42>):
+}
+
+// -----
+
+// expected-error @below {{initializer 'Bar' does not reference a valid function}}
+arc.model @Foo io !hw.modty<> initializer @Bar {
+^bb0(%arg0: !arc.storage<42>):
+}
+hw.module @Bar() {
+}
+
+// -----
+
+// expected-error @below {{finalizer 'Bar' does not reference a valid function}}
+arc.model @Foo io !hw.modty<> finalizer @Bar {
+^bb0(%arg0: !arc.storage<42>):
+}
+hw.module @Bar() {
+}
+
+// -----
+
+// expected-error @below {{initializer 'Bar' arguments must match arguments of model}}
+arc.model @Foo io !hw.modty<> initializer @Bar {
+^bb0(%arg0: !arc.storage<42>):
+}
+
+// expected-note @below {{initializer declared here:}}
+func.func @Bar(!arc.storage<24>) {
+^bb0(%arg0: !arc.storage<24>):
+  return
+}
+
+// -----
+
+// expected-error @below {{finalizer 'Bar' arguments must match arguments of model}}
+arc.model @Foo io !hw.modty<> finalizer @Bar {
+^bb0(%arg0: !arc.storage<42>):
+}
+
+// expected-note @below {{finalizer declared here:}}
+func.func @Bar(!arc.storage<24>) {
+^bb0(%arg0: !arc.storage<24>):
+  return
+}
+
+// -----
+
+hw.module @InvalidInitType(in %clock: !seq.clock, in %input: i7) {
+  %cst = hw.constant 0 : i8
+  // expected-error @below {{failed to verify that types of initial arguments match result types}}
+  %res = arc.state @Bar(%input) clock %clock initial (%cst: i8) latency 1 : (i7) -> i7
+}
+
+// -----
+
+// expected-error @below {{region with at least 1 blocks}}
+arc.execute {
+}
+
+// -----
+
+%0 = hw.constant 0 : i42
+// expected-error @below {{input type mismatch: input #0}}
+// expected-note @below {{expected type: 'i42'}}
+// expected-note @below {{actual type: 'i19'}}
+arc.execute (%0 : i42) {
+^bb0(%arg0: i19):
+  arc.output
+}
+
+// -----
+
+arc.execute -> (i42) {
+  // expected-error @below {{incorrect number of outputs: expected 1, but got 0}}
+  arc.output
+}
+
+// -----
+
+arc.execute -> (i42) {
+  %0 = hw.constant 0 : i19
+  // expected-error @below {{output type mismatch: output #0}}
+  // expected-note @below {{expected type: 'i42'}}
+  // expected-note @below {{actual type: 'i19'}}
+  arc.output %0 : i19
+}

@@ -66,8 +66,36 @@ def MapArithToCombPass : Pass<"map-arith-to-comb"> {
     Rather, it provides a simple way (mostly for testing purposes) to map
     `arith` operations.
   }];
-  let constructor = "circt::createMapArithToCombPass()";
+  let options = [
+    Option<"enableBestEffortLowering", "enable-best-effort-lowering",
+           "bool", /*default=*/"false",
+           "Enable best effort lowering of operations"
+           "(eg, existing arith operations that have no lowering stay as is)">
+  ];
+  
+  let constructor = "circt::createMapArithToCombPass(/*enableBestEffortLowering=*/false)";
   let dependentDialects = ["circt::hw::HWDialect, mlir::arith::ArithDialect, circt::comb::CombDialect"];
+}
+
+def ConvertIndexToUInt : Pass<"convert-index-to-uint", "::mlir::ModuleOp"> {
+  let summary = "Rewrite index-based switch comparisons into unsigned integer ops.";
+  let description = [{
+    Replace `arith.cmpi` operations whose operands are `index` values (often
+    produced when lowering `scf.index_switch`) with comparisons over the
+    original integer type so that downstream hardware mapping passes (e.g.
+    `--map-arith-to-comb`) do not encounter unsupported index-typed arithmetic.
+    The pass converts any associated index constants and erases the redundant
+    casts that become dead afterwards. For example, it rewrites:
+
+      `arith.cmpi eq, (arith.index_cast %v : i4 to index),
+                      (arith.constant 5 : index)`
+
+    into:
+
+      `arith.cmpi eq, %v, (arith.constant 5 : i4)`
+  }];
+  let constructor = "circt::createConvertIndexToUIntPass()";
+  let dependentDialects = ["mlir::arith::ArithDialect"];
 }
 
 def InsertMergeBlocks : Pass<"insert-merge-blocks", "::mlir::ModuleOp"> {
@@ -98,6 +126,96 @@ def MaximizeSSA : Pass<"maximize-ssa", "::mlir::ModuleOp"> {
     necessary to forward values to the block(s) where they are used.
   }];
   let constructor = "circt::createMaximizeSSAPass()";
+}
+
+def PrintOpCount : Pass<"print-op-count", "::mlir::ModuleOp"> {
+  let summary = "Print operation count analysis results";
+  let description = [{
+    This pass prints data on operation counts in a builtin.module.
+  }];
+  let constructor = "circt::createPrintOpCountPass()";
+  let options = [
+    Option<"emissionFormat", "emission-format",
+           "circt::OpCountEmissionFormat",
+           "circt::OpCountEmissionFormat::Readable",
+           "Specify the format to emit op count info in",
+           [{::llvm::cl::values(
+            clEnumValN(circt::OpCountEmissionFormat::Readable,
+              "readable", "Emit the data in human-readable form"),
+            clEnumValN(circt::OpCountEmissionFormat::ReadableSorted,
+              "readable-sorted", "Emit the data in human-readable form, sorted for output determinism"),
+            clEnumValN(circt::OpCountEmissionFormat::JSON,
+              "json", "Emit the data in JSON form")
+          )}]
+           >
+  ];
+}
+
+def MemoryBanking : Pass<"memory-banking", "::mlir::func::FuncOp"> {
+  let summary = "Partition the memories used in affine parallel loops into banks";
+  let constructor = "circt::createMemoryBankingPass()";
+  let options = [
+    ListOption<"bankingFactorsList", "factors", "unsigned",
+           "Use banking factors to partition all memories that don't have banking attributes."
+           "The elements specified in banking factors should be greater than 1;"
+           "The elements specified in banking factors will be paired with the ones specified in banking dimensions."
+           "In principle, the number of elements in banking factors should be equal to banking dimensions',"
+           "with a single exception case: there is one banking factor with zero banking dimensions.">,
+    ListOption<"bankingDimensionsList", "dimensions", "unsigned",
+           "The dimensions along which to bank the memory. If unspecified and"
+           "there is only one factor, the innermost dimension with size > 1 is used.">
+  ];
+  let dependentDialects = ["mlir::memref::MemRefDialect, mlir::scf::SCFDialect, mlir::affine::AffineDialect"];
+}
+
+def IndexSwitchToIf : Pass<"switch-to-if", "::mlir::ModuleOp"> {
+  let summary = "Index switch to if";
+  let description = [{
+      Transform `scf.index_switch` to a series of `scf.if` operations.
+      This is necessary for dialects that don't support switch statements, e.g., Calyx.
+      An example:
+      ```
+        %0 = scf.index_switch %cond -> i32
+          case 0 { ... }
+          case 1 { ... }
+          ...
+
+        =>
+
+        %c0 = arith.cmpi eq %0, 0
+        %c1 = arith.cmpi eq %0, 1
+        %0 = scf.if %c0 {
+         ...
+        } else {
+          %1 = scf.if %c1 {
+            ...
+          } else {
+            ...
+          }
+        }
+      ```
+  }];
+  let constructor = "circt::createIndexSwitchToIfPass()";
+  let dependentDialects = ["mlir::scf::SCFDialect"];
+}
+
+def HierarchicalRunner : Pass<"hierarchical-runner", "::mlir::ModuleOp"> {
+  let summary = "Run passes under hierarchy";
+  let description = [{
+    This pass runs a specified pipeline of passes on the hierarchy of modules
+    starting from a given top-level module. It allows for hierarchical
+    application of transformations, which can be useful for targeting specific
+    parts of a design or for applying different optimizations at different
+    levels of the module hierarchy.
+  }];
+  let options = [
+    Option<"pipelineStr", "pipeline", "std::string", "",
+           "The pipeline to run under hierarchy">,
+    Option<"topName", "top-name", "std::string", "",
+           "The name of the top-level module to run the pass on">,
+    Option<"includeBoundInstances", "include-bound-instances", "bool", "false",
+           "Whether to include bound instances in the hierarchy">
+  ];
 }
 
 #endif // CIRCT_TRANSFORMS_PASSES

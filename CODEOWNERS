@@ -5,12 +5,12 @@
 tools/arcilator @fabianschuiki @maerhart
 
 # Calyx
-**/Dialect/Calyx @rachitnigam @cgyurgyik @mikeurbach @andrewb1999
-**/Conversion/CalyxToFSM @mortbopet
-**/Conversion/CalyxToHW @mortbopet @mikeurbach
-**/Conversion/SCFToCalyx @mikeurbach @mortbopet
-**/Conversion/CalyxNative @rachitnigam
-**/Conversion/LoopScheduleToCalyx @andrewb1999 @mikeurbach
+**/Dialect/Calyx @rachitnigam @cgyurgyik @andrewb1999 @jiahanxie353
+**/Conversion/CalyxToFSM @rachitnigam @cgyurgyik @andrewb1999 @jiahanxie353
+**/Conversion/CalyxToHW @rachitnigam @cgyurgyik @andrewb1999 @jiahanxie353
+**/Conversion/SCFToCalyx @rachitnigam @cgyurgyik @andrewb1999 @jiahanxie353
+**/Conversion/CalyxNative @rachitnigam @cgyurgyik @andrewb1999 @jiahanxie353
+**/Conversion/LoopScheduleToCalyx @rachitnigam @cgyurgyik @andrewb1999 @jiahanxie353
 
 # Comb
 **/Dialect/Comb @darthscsi
@@ -22,9 +22,7 @@ tools/arcilator @fabianschuiki @maerhart
 **/Dialect/ESI @teqdruid
 
 # FIRRTL
-**/FIRRTL* @darthscsi @dtzSiFive @seldridge
-*/firtool @dtzSiFive
-libs/Firtool @dtzSiFive
+**/FIRRTL* @darthscsi @seldridge
 
 # FSM
 **/Dialect/FSM @mortbopet
@@ -34,13 +32,12 @@ libs/Firtool @dtzSiFive
 
 # LLHD
 **/LLHD* @fabianschuiki @maerhart
-tools/llhd-sim @fabianschuiki @maerhart
 
 # Pipeline
 **/Dialect/Pipeline @mortbopet
 
 # Handshake
-**/Handshake* @Dinistro @mortbopet @RamirezLucas
+**/Handshake* @Dinistro @mortbopet
 
 # HW
 **/Dialect/HW @darthscsi
@@ -48,23 +45,18 @@ tools/llhd-sim @fabianschuiki @maerhart
 # SMT
 **/Dialect/SMT @maerhart
 lib/Conversion/SMTToZ3LLVM @maerhart
-lib/Target/ExportSMTLIB @maerhart
 
 # SV
 **/Dialect/SV @darthscsi
 
-# Ibis
-**/Dialect/Ibis @teqdruid @mortbopet @blakep-msft
-
-## Conversions
-
-lib/Conversion/ExportVerilog @dtzSiFive
+# Kanagawa
+**/Dialect/Kanagawa @teqdruid @mortbopet @blakep-msft
 
 
 ## Infra
 
 # CI
-.github @teqdruid @dtzSiFive
+.github @teqdruid
 
 # PrettyPrinter
 **/Support/Pretty* @dtzSiFive

@@ -29,6 +29,14 @@ func.func @model_not_found() {
     arc.sim.instantiate @unknown as %model {}
     return
 }
+// -----
+
+func.func @model_and_runtime_not_found() {
+    // expected-error @+2 {{runtime model not found}}
+    // expected-error @+1 {{model not found}}
+    arc.sim.instantiate @unknown as %model runtime @unknown() {}
+    return
+}
 
 // -----
 
@@ -42,6 +50,17 @@ func.func @port_not_found() {
         %res = arc.sim.get_port %model, "unknown" : i8, !arc.sim.instance<@id>
         arc.sim.emit "use", %res : i8
     }
+    return
+}
+// -----
+
+hw.module @id(in %i: i8, in %j: i8, out o: i8) {
+    hw.output %i : i8
+}
+
+func.func @no_runtime_model() {
+    // expected-error @+1 {{referenced runtime model is not a RuntimeModelOp}}
+    arc.sim.instantiate @id as %model runtime @id() {}
     return
 }
 
@@ -101,6 +120,28 @@ func.func @set_port_not_input() {
     arc.sim.instantiate @id as %model {
         // expected-error @+1 {{'arc.sim.set_input' op port is not an input port}}
         arc.sim.set_input %model, "o" = %v : i8, !arc.sim.instance<@id>
+    }
+    return
+}
+
+// -----
+
+func.func @get_time_model_not_found() {
+    // expected-error @+1 {{model not found}}
+    arc.sim.instantiate @unknown as %model {
+        %t = arc.sim.get_time %model : !arc.sim.instance<@unknown>
+        arc.sim.emit "time", %t : i64
+    }
+    return
+}
+
+// -----
+
+func.func @set_time_model_not_found() {
+    // expected-error @+1 {{model not found}}
+    arc.sim.instantiate @unknown as %model {
+        %c0 = arith.constant 0 : i64
+        arc.sim.set_time %model, %c0 : !arc.sim.instance<@unknown>
     }
     return
 }

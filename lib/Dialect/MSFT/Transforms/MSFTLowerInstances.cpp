@@ -23,6 +23,13 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
+namespace circt {
+namespace msft {
+#define GEN_PASS_DEF_LOWERINSTANCES
+#include "circt/Dialect/MSFT/MSFTPasses.h.inc"
+} // namespace msft
+} // namespace circt
+
 using namespace circt;
 using namespace msft;
 
@@ -31,7 +38,8 @@ using namespace msft;
 //===----------------------------------------------------------------------===//
 
 namespace {
-struct LowerInstancesPass : public LowerInstancesBase<LowerInstancesPass> {
+struct LowerInstancesPass
+    : public circt::msft::impl::LowerInstancesBase<LowerInstancesPass> {
   void runOnOperation() override;
 
   LogicalResult lower(DynamicInstanceOp inst, InstanceHierarchyOp hier,
@@ -65,7 +73,7 @@ LogicalResult LowerInstancesPass::lower(DynamicInstanceOp inst,
 
     // Create a hierpath to replace us.
     ArrayAttr hierPath = inst.getPath();
-    ref = b.create<hw::HierPathOp>(inst.getLoc(), refSym, hierPath);
+    ref = hw::HierPathOp::create(b, inst.getLoc(), refSym, hierPath);
 
     // Add the new symbol to the symbol cache.
     topSyms.addDefinition(refSym, ref);

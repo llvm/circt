@@ -24,36 +24,3 @@ InstanceGraph::InstanceGraph(Operation *operation)
     : igraph::InstanceGraph(findCircuitOp(operation)) {
   topLevelNode = lookup(cast<CircuitOp>(getParent()).getNameAttr());
 }
-
-bool circt::firrtl::allUnder(ArrayRef<InstanceRecord *> nodes,
-                             InstanceGraphNode *top) {
-  DenseSet<InstanceGraphNode *> seen;
-  SmallVector<InstanceGraphNode *> worklist;
-  worklist.reserve(nodes.size());
-  seen.reserve(nodes.size());
-  seen.insert(top);
-  for (auto *n : nodes) {
-    auto *mod = n->getParent();
-    if (seen.insert(mod).second)
-      worklist.push_back(mod);
-  }
-
-  while (!worklist.empty()) {
-    auto *node = worklist.back();
-    worklist.pop_back();
-
-    assert(node != top);
-
-    // If reach top-level node we're not covered by 'top', return.
-    if (node->noUses())
-      return false;
-
-    // Otherwise, walk upwards.
-    for (auto *use : node->uses()) {
-      auto *mod = use->getParent();
-      if (seen.insert(mod).second)
-        worklist.push_back(mod);
-    }
-  }
-  return true;
-}

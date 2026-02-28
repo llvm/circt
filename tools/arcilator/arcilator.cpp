@@ -11,7 +11,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Conversion/ArcToLLVM.h"
 #include "circt/Conversion/CombToArith.h"
+#include "circt/Conversion/ConvertToArcs.h"
+#include "circt/Conversion/Passes.h"
 #include "circt/Conversion/SeqToSV.h"
 #include "circt/Dialect/Arc/ArcDialect.h"
 #include "circt/Dialect/Arc/ArcInterfaces.h"
@@ -19,12 +22,21 @@
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "circt/Dialect/Arc/ModelInfo.h"
 #include "circt/Dialect/Arc/ModelInfoExport.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Emit/EmitDialect.h"
+#include "circt/Dialect/Emit/EmitPasses.h"
+#include "circt/Dialect/HW/HWPasses.h"
+#include "circt/Dialect/LLHD/LLHDDialect.h"
+#include "circt/Dialect/OM/OMDialect.h"
+#include "circt/Dialect/OM/OMPasses.h"
+#include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
-#include "circt/InitAllDialects.h"
-#include "circt/InitAllPasses.h"
+#include "circt/Dialect/Sim/SimDialect.h"
+#include "circt/Dialect/Sim/SimPasses.h"
+#include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
+#include "circt/Tools/arcilator/pipelines.h"
 #include "mlir/Bytecode/BytecodeReader.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -32,7 +44,9 @@
 #include "mlir/Dialect/DLTI/DLTI.h"
 #include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Index/IR/IndexDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/LLVMIR/Transforms/InlinerInterfaceImpl.h"
 #include "mlir/Dialect/LLVMIR/Transforms/Passes.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
@@ -61,7 +75,12 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 
-#include <iostream>
+#ifdef ARCILATOR_ENABLE_JIT
+#define ARC_RUNTIME_JITBIND_FNDECL
+#include "circt/Dialect/Arc/Runtime/Common.h"
+#include "circt/Dialect/Arc/Runtime/JITBind.h"
+#endif
+
 #include <optional>
 
 using namespace mlir;
@@ -164,6 +183,22 @@ static llvm::cl::opt<bool> splitInputFile(
                    "chunk independently"),
     llvm::cl::init(false), llvm::cl::Hidden, llvm::cl::cat(mainCategory));
 
+static llvm::cl::opt<unsigned> splitFuncsThreshold(
+    "split-funcs-threshold",
+    llvm::cl::desc(
+        "Split large MLIR functions that occur above the given size threshold"),
+    llvm::cl::ValueOptional, llvm::cl::cat(mainCategory));
+
+static llvm::cl::opt<bool> asyncResetsAsSync(
+    "async-resets-as-sync",
+    llvm::cl::desc("Treat asynchronous firreg resets as synchronous"),
+    llvm::cl::init(false), llvm::cl::cat(mainCategory));
+
+static llvm::cl::opt<bool> traceTaps(
+    "trace-taps",
+    llvm::cl::desc("Insert trace instrumentation for observed values"),
+    llvm::cl::init(false), llvm::cl::cat(mainCategory));
+
 // Options to control early-out from pipeline.
 enum Until {
   UntilPreprocessing,
@@ -207,6 +242,38 @@ static llvm::cl::opt<std::string>
                                  "simulation to run when output is set to run"),
                   llvm::cl::init("entry"), llvm::cl::cat(mainCategory));
 
+static llvm::cl::list<std::string> sharedLibs{
+    "shared-libs", llvm::cl::desc("Libraries to link dynamically"),
+    llvm::cl::MiscFlags::CommaSeparated, llvm::cl::cat(mainCategory)};
+
+static llvm::cl::list<std::string>
+    jitArgs("args",
+            llvm::cl::desc("Arguments to pass to the JIT entry function"),
+            llvm::cl::ZeroOrMore, llvm::cl::CommaSeparated,
+            llvm::cl::cat(mainCategory));
+
+static llvm::cl::opt<bool>
+    noRuntime("no-runtime",
+              llvm::cl::desc("Don't emit calls to the runtime library"),
+              llvm::cl::init(false), llvm::cl::cat(mainCategory));
+
+static llvm::cl::opt<bool> noJitRuntime(
+    "no-jit-runtime",
+    llvm::cl::desc("Don't bind the statically linked JIT Runtime Library"),
+    llvm::cl::init(false), llvm::cl::cat(mainCategory));
+
+static llvm::cl::opt<std::string> extraRuntimeArgs(
+    "extra-runtime-args",
+    llvm::cl::desc(
+        "Extra arguments passed to the runtime library for JIT runs"),
+    llvm::cl::init(""), llvm::cl::cat(mainCategory));
+
+static llvm::cl::opt<std::string> jitVcdFile(
+    "jit-vcd-file",
+    llvm::cl::desc(
+        "Create a VCD trace for JIT runs and output it to the specified file"),
+    llvm::cl::init(""), llvm::cl::cat(mainCategory));
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -214,6 +281,45 @@ static llvm::cl::opt<std::string>
 static bool untilReached(Until until) {
   return until >= runUntilBefore || until > runUntilAfter;
 }
+
+#ifdef ARCILATOR_ENABLE_JIT
+
+// Manually bind the IR API of the ArcRuntime to the JIT execution engine
+
+template <typename PtrTy>
+static void bindExecutionEngineSymbol(llvm::orc::SymbolMap &symbolMap,
+                                      llvm::orc::MangleAndInterner &interner,
+                                      StringRef symName, PtrTy symTarget) {
+  symbolMap[interner(symName)] = {llvm::orc::ExecutorAddr::fromPtr(symTarget),
+                                  llvm::JITSymbolFlags::Exported};
+}
+
+static void bindArcRuntimeSymbols(ExecutionEngine &executionEngine) {
+  auto &runtimeCallbacks = runtime::getArcRuntimeAPICallbacks();
+  executionEngine.registerSymbols([&](llvm::orc::MangleAndInterner interner) {
+    llvm::orc::SymbolMap symbolMap;
+    bindExecutionEngineSymbol(symbolMap, interner,
+                              runtimeCallbacks.symNameAllocInstance,
+                              runtimeCallbacks.fnAllocInstance);
+    bindExecutionEngineSymbol(symbolMap, interner,
+                              runtimeCallbacks.symNameDeleteInstance,
+                              runtimeCallbacks.fnDeleteInstance);
+    bindExecutionEngineSymbol(symbolMap, interner,
+                              runtimeCallbacks.symNameOnEval,
+                              runtimeCallbacks.fnOnEval);
+    bindExecutionEngineSymbol(symbolMap, interner,
+                              runtimeCallbacks.symNameOnInitialized,
+                              runtimeCallbacks.fnOnInitialized);
+    bindExecutionEngineSymbol(symbolMap, interner,
+                              runtimeCallbacks.symNameFormat,
+                              runtimeCallbacks.fnFormat);
+    bindExecutionEngineSymbol(symbolMap, interner,
+                              runtimeCallbacks.symNameSwapTraceBuffer,
+                              runtimeCallbacks.fnSwapTraceBuffer);
+    return symbolMap;
+  });
+}
+#endif
 
 /// Populate a pass manager with the arc simulator pipeline for the given
 /// command line options. This pipeline lowers modules to the Arc dialect.
@@ -228,116 +334,52 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   // represented as intrinsic ops.
   if (untilReached(UntilPreprocessing))
     return;
-  pm.addPass(createLowerFirMemPass());
-  {
-    arc::AddTapsOptions opts;
-    opts.tapPorts = observePorts;
-    opts.tapWires = observeWires;
-    opts.tapNamedValues = observeNamedValues;
-    pm.addPass(arc::createAddTapsPass(opts));
-  }
-  pm.addPass(arc::createStripSVPass());
-  {
-    arc::InferMemoriesOptions opts;
-    opts.tapPorts = observePorts;
-    opts.tapMemories = observeMemories;
-    pm.addPass(arc::createInferMemoriesPass(opts));
-  }
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+
+  ArcPreprocessingOptions preprocessingOpt;
+  preprocessingOpt.observePorts = observePorts || !jitVcdFile.empty();
+  preprocessingOpt.observeWires = observeWires || !jitVcdFile.empty();
+  preprocessingOpt.observeNamedValues =
+      observeNamedValues || !jitVcdFile.empty();
+  preprocessingOpt.observeMemories = observeMemories;
+  preprocessingOpt.asyncResetsAsSync = asyncResetsAsSync;
+  populateArcPreprocessingPipeline(pm, preprocessingOpt);
 
   // Restructure the input from a `hw.module` hierarchy to a collection of arcs.
   if (untilReached(UntilArcConversion))
     return;
-  {
-    ConvertToArcsOptions opts;
-    opts.tapRegisters = observeRegisters;
-    pm.addPass(createConvertToArcsPass(opts));
-  }
-  if (shouldDedup)
-    pm.addPass(arc::createDedupPass());
-  pm.addPass(arc::createInlineModulesPass());
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+
+  ArcConversionOptions conversionOpt;
+  conversionOpt.observeRegisters = observeRegisters || !jitVcdFile.empty();
+  conversionOpt.shouldDedup = shouldDedup;
+  populateArcConversionPipeline(pm, conversionOpt);
 
   // Perform arc-level optimizations that are not specific to software
   // simulation.
   if (untilReached(UntilArcOpt))
     return;
-  pm.addPass(arc::createSplitLoopsPass());
-  if (shouldDedup)
-    pm.addPass(arc::createDedupPass());
-  {
-    arc::InferStatePropertiesOptions opts;
-    opts.detectEnables = shouldDetectEnables;
-    opts.detectResets = shouldDetectResets;
-    pm.addPass(arc::createInferStateProperties(opts));
-  }
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
-  if (shouldMakeLUTs)
-    pm.addPass(arc::createMakeTablesPass());
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
 
-  // Now some arguments may be unused because reset conditions are not passed as
-  // inputs anymore pm.addPass(arc::createRemoveUnusedArcArgumentsPass());
-  // Because we replace a lot of StateOp inputs with constants in the enable
-  // patterns we may be able to sink a lot of them
-  // TODO: maybe merge RemoveUnusedArcArguments with SinkInputs?
-  // pm.addPass(arc::createSinkInputsPass());
-  // pm.addPass(createCSEPass());
-  // pm.addPass(createSimpleCanonicalizerPass());
-  // Removing some muxes etc. may lead to additional dedup opportunities
-  // if (shouldDedup)
-  // pm.addPass(arc::createDedupPass());
+  ArcOptimizationOptions optimizationOpt;
+  optimizationOpt.shouldDetectEnables = shouldDetectEnables;
+  optimizationOpt.shouldDetectResets = shouldDetectResets;
+  optimizationOpt.shouldMakeLUTs = shouldMakeLUTs;
+  populateArcOptimizationPipeline(pm, optimizationOpt);
 
   // Lower stateful arcs into explicit state reads and writes.
   if (untilReached(UntilStateLowering))
     return;
-  pm.addPass(arc::createLowerStatePass());
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
 
-  // TODO: LowerClocksToFuncsPass might not properly consider scf.if operations
-  // (or nested regions in general) and thus errors out when muxes are also
-  // converted in the hw.module or arc.model
-  // TODO: InlineArcs seems to not properly handle scf.if operations, thus the
-  // following is commented out
-  // pm.addPass(arc::createMuxToControlFlowPass());
-
-  if (shouldInline) {
-    pm.addPass(arc::createInlineArcsPass());
-    pm.addPass(arc::createArcCanonicalizerPass());
-    pm.addPass(createCSEPass());
-  }
-
-  pm.addPass(arc::createGroupResetsAndEnablesPass());
-  pm.addPass(arc::createLegalizeStateUpdatePass());
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+  ArcStateLoweringOptions loweringOpt;
+  loweringOpt.shouldInline = shouldInline;
+  populateArcStateLoweringPipeline(pm, loweringOpt);
 
   // Allocate states.
   if (untilReached(UntilStateAlloc))
     return;
-  pm.addPass(arc::createLowerArcsToFuncsPass());
-  pm.nest<arc::ModelOp>().addPass(arc::createAllocateStatePass());
-  pm.addPass(arc::createLowerClocksToFuncsPass()); // no CSE between state alloc
-                                                   // and clock func lowering
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
-}
 
-/// Populate a pass manager with the Arc to LLVM pipeline for the given
-/// command line options. This pipeline lowers modules to LLVM IR.
-static void populateArcToLLVMPipeline(PassManager &pm) {
-  // Lower the arcs and update functions to LLVM.
-  if (untilReached(UntilLLVMLowering))
-    return;
-  pm.addPass(createConvertCombToArithPass());
-  pm.addPass(createLowerArcToLLVMPass());
-  pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+  ArcStateAllocationOptions allocationOpt;
+  allocationOpt.splitFuncsThreshold = splitFuncsThreshold;
+  allocationOpt.insertTraceTaps = traceTaps || !jitVcdFile.empty();
+  populateArcStateAllocationPipeline(pm, allocationOpt);
 }
 
 static LogicalResult processBuffer(
@@ -389,7 +431,24 @@ static LogicalResult processBuffer(
     pmLlvm.addInstrumentation(
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
             "arcilator"));
-  populateArcToLLVMPipeline(pmLlvm);
+
+  if (!untilReached(UntilLLVMLowering)) {
+    ArcToLLVMOptions opts;
+    opts.noRuntime = noRuntime;
+    std::string runtimeArgs;
+    if (!jitVcdFile.empty()) {
+      runtimeArgs += "vcd";
+      if (!extraRuntimeArgs.empty()) {
+        runtimeArgs += ';';
+        runtimeArgs += extraRuntimeArgs;
+      }
+    } else {
+      runtimeArgs = extraRuntimeArgs;
+    }
+    opts.extraRuntimeArgs = runtimeArgs;
+    opts.traceFileName = jitVcdFile;
+    populateArcToLLVMPipeline(pmLlvm, opts);
+  }
 
   if (printDebugInfo && outputFormat == OutputLLVM)
     pmLlvm.addPass(LLVM::createDIScopeForLLVMFuncOpPass());
@@ -400,6 +459,12 @@ static LogicalResult processBuffer(
 #ifdef ARCILATOR_ENABLE_JIT
   // Handle JIT execution.
   if (outputFormat == OutputRunJIT) {
+    auto tsJit = ts.nest("JIT");
+    if (runUntilBefore != UntilEnd || runUntilAfter != UntilEnd) {
+      llvm::errs() << "full pipeline must be run for JIT execution\n";
+      return failure();
+    }
+
     Operation *toCall = module->lookupSymbol(jitEntryPoint);
     if (!toCall) {
       llvm::errs() << "entry point not found: '" << jitEntryPoint << "'\n";
@@ -415,18 +480,39 @@ static LogicalResult processBuffer(
       return failure();
     }
 
-    if (toCallFunc.getNumArguments() != 0) {
+    unsigned numArgs = toCallFunc.getNumArguments();
+    if (numArgs) {
+      if (jitArgs.size() % numArgs != 0) {
+        llvm::errs() << "entry point '" << jitEntryPoint << "' has " << numArgs
+                     << " arguments, but provided " << jitArgs.size()
+                     << " arguments (not a multiple)\n";
+        return failure();
+      }
+      if (jitArgs.empty()) {
+        llvm::errs() << "entry point '" << jitEntryPoint
+                     << "' must have no arguments\n";
+        return failure();
+      }
+    } else if (!jitArgs.empty()) {
       llvm::errs() << "entry point '" << jitEntryPoint
-                   << "' must have no arguments\n";
+                   << "' has no arguments, but provided " << jitArgs.size()
+                   << "arguments\n";
       return failure();
     }
 
+    SmallVector<StringRef, 4> sharedLibraries(sharedLibs.begin(),
+                                              sharedLibs.end());
+
     mlir::ExecutionEngineOptions engineOptions;
     engineOptions.jitCodeGenOptLevel = llvm::CodeGenOptLevel::Aggressive;
-    engineOptions.transformer = mlir::makeOptimizingTransformer(
-        /*optLevel=*/3, /*sizeLevel=*/0,
-        /*targetMachine=*/nullptr);
+    std::function<llvm::Error(llvm::Module *)> transformer =
+        mlir::makeOptimizingTransformer(
+            /*optLevel=*/3, /*sizeLevel=*/0,
+            /*targetMachine=*/nullptr);
+    engineOptions.transformer = transformer;
+    engineOptions.sharedLibPaths = sharedLibraries;
 
+    auto tsCompile = tsJit.nest("Compile");
     auto executionEngine =
         mlir::ExecutionEngine::create(module.get(), engineOptions);
     if (!executionEngine) {
@@ -438,6 +524,9 @@ static LogicalResult processBuffer(
       return failure();
     }
 
+    if (!noJitRuntime)
+      bindArcRuntimeSymbols(**executionEngine);
+
     auto expectedFunc = (*executionEngine)->lookupPacked(jitEntryPoint);
     if (!expectedFunc) {
       llvm::handleAllErrors(
@@ -447,9 +536,61 @@ static LogicalResult processBuffer(
           });
       return failure();
     }
+    tsCompile.stop();
 
+    auto tsExecute = tsJit.nest("Execute");
     void (*simulationFunc)(void **) = *expectedFunc;
-    (*simulationFunc)(nullptr);
+
+    for (unsigned i = 0, e = jitArgs.size(); i < e; i += numArgs) {
+      std::vector<std::vector<uint64_t>> argsStorage;
+      SmallVector<void *> args;
+      argsStorage.reserve(numArgs);
+      args.reserve(numArgs);
+
+      // Repeated args are concatenated, so break apart in groups of multiples
+      // of args.
+      for (auto [val, arg] :
+           llvm::zip(llvm::make_range(jitArgs.begin() + i,
+                                      jitArgs.begin() + i + numArgs),
+                     toCallFunc.getArguments())) {
+        auto type = arg.getType();
+        if (!type.isIntOrIndex()) {
+          llvm::errs() << "argument " << arg.getArgNumber()
+                       << " of entry point '" << jitEntryPoint
+                       << "' is not an integer or index type\n";
+          return failure();
+        }
+
+        // TODO: This should probably be checking if DLTI is set on module.
+        unsigned width = type.isIndex() ? 64 : type.getIntOrFloatBitWidth();
+        APInt apVal(width, 0);
+        if (StringRef(val).getAsInteger(0, apVal)) {
+          llvm::errs() << "invalid integer argument: '" << val << "'\n";
+          return failure();
+        }
+        if (apVal.getBitWidth() > width) {
+          llvm::errs() << "integer argument '" << val << "' (required width "
+                       << apVal.getBitWidth() << ") is too large for type '"
+                       << type << "'\n";
+          return failure();
+        }
+
+        std::vector<uint64_t> argData;
+        unsigned numWords = apVal.getNumWords();
+        argData.resize(numWords);
+        const uint64_t *rawData = apVal.getRawData();
+        for (unsigned j = 0; j < numWords; ++j)
+          argData[j] = rawData[j];
+
+        argsStorage.push_back(std::move(argData));
+        args.push_back(argsStorage.back().data());
+      }
+
+      (*simulationFunc)(args.data());
+    }
+    // Handle the case without arguments as before.
+    if (jitArgs.empty())
+      (*simulationFunc)(nullptr);
 
     return success();
   }
@@ -550,21 +691,26 @@ static LogicalResult executeArcilator(MLIRContext &context) {
     comb::CombDialect,
     emit::EmitDialect,
     hw::HWDialect,
-    mlir::DLTIDialect,
-    mlir::LLVM::LLVMDialect,
+    llhd::LLHDDialect,
     mlir::arith::ArithDialect,
     mlir::cf::ControlFlowDialect,
+    mlir::DLTIDialect,
     mlir::func::FuncDialect,
+    mlir::index::IndexDialect,
+    mlir::LLVM::LLVMDialect,
     mlir::scf::SCFDialect,
     om::OMDialect,
     seq::SeqDialect,
-    sv::SVDialect
+    sim::SimDialect,
+    sv::SVDialect,
+    verif::VerifDialect
   >();
   // clang-format on
 
   arc::initAllExternalInterfaces(registry);
 
   mlir::func::registerInlinerExtension(registry);
+  mlir::LLVM::registerInlinerInterface(registry);
 
   mlir::registerBuiltinDialectTranslation(registry);
   mlir::registerLLVMDialectTranslation(registry);
@@ -603,6 +749,8 @@ int main(int argc, char **argv) {
 
     // Dialect passes:
     arc::registerPasses();
+    registerConvertToArcsPass();
+    registerLowerArcToLLVMPass();
   }
 
   // Register any pass manager command line options.

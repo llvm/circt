@@ -4,6 +4,10 @@ This document describes the available CIRCT passes and their contracts.
 
 [TOC]
 
+## General Passes
+
+[include "CIRCTGeneralPasses.md"]
+
 ## Conversion Passes
 
 [include "CIRCTConversionPasses.md"]
@@ -19,6 +23,10 @@ This document describes the available CIRCT passes and their contracts.
 ## Comb Dialect Passes
 
 [include "CombPasses.md"]
+
+## Datapath Dialect Passes
+
+[include "DatapathPasses.md"]
 
 ## DC Dialect Passes
 
@@ -44,9 +52,9 @@ This document describes the available CIRCT passes and their contracts.
 
 [include "HWPasses.md"]
 
-## Ibis Dialect Passes
+## Kanagawa Dialect Passes
 
-[include "IbisPasses.md"]
+[include "KanagawaPasses.md"]
 
 ## LLHD Dialect Passes
 
@@ -76,6 +84,18 @@ This document describes the available CIRCT passes and their contracts.
 
 [include "SVPasses.md"]
 
+## Synth Dialect Passes
+
+[include "SynthPasses.md"]
+
 ## SystemC Dialect Passes
 
 [include "SystemCPasses.md"]
+
+## LEC (logical equivalence checking) Passes
+
+[include "CIRCTLECPasses.md"]
+
+## BMC (bounded model checking) Passes
+
+[include "CIRCTBMCPasses.md"]

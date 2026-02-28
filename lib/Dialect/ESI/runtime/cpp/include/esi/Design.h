@@ -45,11 +45,15 @@ class Service;
 
 /// Represents either the top level or an instance of a hardware module.
 class HWModule {
+public:
+  HWModule(const HWModule &) = delete;
+  HWModule &operator=(const HWModule &) = delete;
+
 protected:
   HWModule(std::optional<ModuleInfo> info,
            std::vector<std::unique_ptr<Instance>> children,
            std::vector<services::Service *> services,
-           std::vector<std::unique_ptr<BundlePort>> &ports);
+           std::vector<std::unique_ptr<BundlePort>> &&ports);
 
 public:
   virtual ~HWModule() = default;
@@ -73,9 +77,25 @@ public:
     return ret;
   }
   /// Access the module's ports by ID.
-  const std::map<AppID, const BundlePort &> &getPorts() const {
-    return portIndex;
+  const std::map<AppID, BundlePort &> &getPorts() const { return portIndex; }
+  /// Access the services provided by this module.
+  const std::vector<services::Service *> &getServices() const {
+    return services;
   }
+
+  /// Master poll method. Calls the `poll` method on all locally owned ports and
+  /// the master `poll` method on all of the children. Returns true if any of
+  /// the `poll` calls returns true.
+  bool poll();
+
+  /// Attempt to resolve a path to a module instance. If a child is not found,
+  /// return null and set lastLookup to the path which wasn't found.
+  const HWModule *resolveInst(const AppIDPath &path,
+                              AppIDPath &lastLookup) const;
+
+  /// Attempt to resolve a path to a port. If a child or port is not found,
+  /// return null and set lastLookup to the path which wasn't found.
+  BundlePort *resolvePort(const AppIDPath &path, AppIDPath &lastLookup) const;
 
 protected:
   const std::optional<ModuleInfo> info;
@@ -83,7 +103,7 @@ protected:
   const std::map<AppID, Instance *> childIndex;
   const std::vector<services::Service *> services;
   const std::vector<std::unique_ptr<BundlePort>> ports;
-  const std::map<AppID, const BundlePort &> portIndex;
+  const std::map<AppID, BundlePort &> portIndex;
 };
 
 /// Subclass of `HWModule` which represents a submodule instance. Adds an AppID,
@@ -96,11 +116,12 @@ public:
   Instance(AppID id, std::optional<ModuleInfo> info,
            std::vector<std::unique_ptr<Instance>> children,
            std::vector<services::Service *> services,
-           std::vector<std::unique_ptr<BundlePort>> &ports)
-      : HWModule(info, std::move(children), services, ports), id(id) {}
+           std::vector<std::unique_ptr<BundlePort>> &&ports)
+      : HWModule(info, std::move(children), services, std::move(ports)),
+        id(id) {}
 
   /// Get the instance's ID, which it will always have.
-  const AppID getID() const { return id; }
+  AppID getID() const { return id; }
 
 protected:
   const AppID id;

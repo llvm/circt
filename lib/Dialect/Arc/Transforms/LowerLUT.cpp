@@ -64,69 +64,6 @@ private:
   SmallVector<IntegerAttr> table;
 };
 
-/// A wrapper around ConversionPattern that matches specifically on LutOp
-/// operations and hold a LutCalculator member variable that allows to compute
-/// the lookup-table entries and cache the result.
-class LutLoweringPattern : public ConversionPattern {
-public:
-  LutLoweringPattern(LutCalculator &lutCalculator, MLIRContext *context,
-                     mlir::PatternBenefit benefit = 1)
-      : ConversionPattern(LutOp::getOperationName(), benefit, context),
-        lutCalculator(lutCalculator) {}
-  LutLoweringPattern(LutCalculator &lutCalculator, TypeConverter &typeConverter,
-                     MLIRContext *context, mlir::PatternBenefit benefit = 1)
-      : ConversionPattern(typeConverter, LutOp::getOperationName(), benefit,
-                          context),
-        lutCalculator(lutCalculator) {}
-
-  /// Wrappers around the ConversionPattern methods that pass the LutOp
-  /// type and guarantee that the LutCalculator is up-to-date.
-  LogicalResult match(Operation *op) const final {
-    auto lut = cast<LutOp>(op);
-    if (failed(lutCalculator.computeTableEntries(lut)))
-      return failure();
-    return match(lut);
-  }
-  void rewrite(Operation *op, ArrayRef<Value> operands,
-               ConversionPatternRewriter &rewriter) const final {
-    rewrite(cast<LutOp>(op), LutOpAdaptor(operands, op->getAttrDictionary()),
-            rewriter);
-  }
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const final {
-    auto lut = cast<LutOp>(op);
-    if (failed(lutCalculator.computeTableEntries(lut)))
-      return failure();
-    return matchAndRewrite(lut, LutOpAdaptor(operands, op->getAttrDictionary()),
-                           rewriter);
-  }
-
-  /// Rewrite and Match methods that operate on the LutOp type. These must be
-  /// overridden by the derived pattern class.
-  virtual LogicalResult match(LutOp op) const {
-    llvm_unreachable("must override match or matchAndRewrite");
-  }
-  virtual void rewrite(LutOp op, LutOpAdaptor adaptor,
-                       ConversionPatternRewriter &rewriter) const {
-    llvm_unreachable("must override matchAndRewrite or a rewrite method");
-  }
-  virtual LogicalResult
-  matchAndRewrite(LutOp op, LutOpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const {
-    if (failed(match(op)))
-      return failure();
-    rewrite(op, adaptor, rewriter);
-    return success();
-  }
-
-protected:
-  LutCalculator &lutCalculator;
-
-private:
-  using ConversionPattern::matchAndRewrite;
-};
-
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -203,7 +140,7 @@ LogicalResult LutCalculator::computeTableEntries(LutOp lut) {
       for (int j = (1U << bw) - 1; j >= 0; j--) {
         Attribute foldAttr;
         if (!(foldAttr = dyn_cast<Attribute>(results[j][i])))
-          foldAttr = vals[results[j][i].get<Value>()][j];
+          foldAttr = vals[llvm::cast<Value>(results[j][i])][j];
         ref[j] = foldAttr;
       }
     }
@@ -233,7 +170,7 @@ void LutCalculator::getTableEntriesAsConstValues(
   DenseMap<IntegerAttr, Value> map;
   for (auto entry : table) {
     if (!map.count(entry))
-      map[entry] = builder.create<hw::ConstantOp>(lut.getLoc(), entry);
+      map[entry] = hw::ConstantOp::create(builder, lut.getLoc(), entry);
 
     tableEntries.push_back(map[entry]);
   }
@@ -261,12 +198,15 @@ namespace {
 /// integer that is shifed and truncated according to the lookup/index value.
 /// Encoding the lookup tables as intermediate values in the instruction stream
 /// should provide better performnace than loading from some global constant.
-struct LutToInteger : LutLoweringPattern {
-  using LutLoweringPattern::LutLoweringPattern;
+struct LutToInteger : OpConversionPattern<LutOp> {
+  LutToInteger(LutCalculator &calculator, MLIRContext *context)
+      : OpConversionPattern<LutOp>(context), lutCalculator(calculator) {}
 
   LogicalResult
   matchAndRewrite(LutOp lut, LutOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
+    if (failed(lutCalculator.computeTableEntries(lut)))
+      return failure();
 
     const uint32_t tableSize = lutCalculator.getTableSize();
     const uint32_t inputBw = lutCalculator.getInputBitWidth();
@@ -285,42 +225,49 @@ struct LutToInteger : LutLoweringPattern {
       result.insertBits(chunk, nextInsertion);
     }
 
-    Value table = rewriter.create<hw::ConstantOp>(lut.getLoc(), result);
+    Value table = hw::ConstantOp::create(rewriter, lut.getLoc(), result);
 
     // Zero-extend the lookup/index value to the same bit-width as the table,
     // because the shift operation requires both operands to have the same
     // bit-width.
-    Value zextValue = rewriter.create<hw::ConstantOp>(
-        lut->getLoc(), rewriter.getIntegerType(tableSize - inputBw), 0);
-    Value entryOffset = rewriter.create<comb::ConcatOp>(lut.getLoc(), zextValue,
-                                                        lut.getInputs());
-    Value resultBitWidth = rewriter.create<hw::ConstantOp>(
-        lut.getLoc(), entryOffset.getType(),
+    Value zextValue =
+        hw::ConstantOp::create(rewriter, lut->getLoc(),
+                               rewriter.getIntegerType(tableSize - inputBw), 0);
+    Value entryOffset = comb::ConcatOp::create(rewriter, lut.getLoc(),
+                                               zextValue, lut.getInputs());
+    Value resultBitWidth = hw::ConstantOp::create(
+        rewriter, lut.getLoc(), entryOffset.getType(),
         lut.getResult().getType().getIntOrFloatBitWidth());
-    Value lookupValue =
-        rewriter.create<comb::MulOp>(lut.getLoc(), entryOffset, resultBitWidth);
+    Value lookupValue = comb::MulOp::create(rewriter, lut.getLoc(), entryOffset,
+                                            resultBitWidth);
 
     // Shift the table and truncate to the bitwidth of the output value.
     Value shiftedTable =
-        rewriter.create<comb::ShrUOp>(lut->getLoc(), table, lookupValue);
-    const Value extracted = rewriter.create<comb::ExtractOp>(
-        lut.getLoc(), shiftedTable, 0,
+        comb::ShrUOp::create(rewriter, lut->getLoc(), table, lookupValue);
+    const Value extracted = comb::ExtractOp::create(
+        rewriter, lut.getLoc(), shiftedTable, 0,
         lut.getOutput().getType().getIntOrFloatBitWidth());
 
     rewriter.replaceOp(lut, extracted);
     return success();
   }
+
+  LutCalculator &lutCalculator;
 };
 
 /// Lower lookup-tables with a total size bigger than 256 bits to a constant
 /// array that is stored as constant global data and thus a lookup consists of a
 /// memory load at the correct offset of that global data frame.
-struct LutToArray : LutLoweringPattern {
-  using LutLoweringPattern::LutLoweringPattern;
+struct LutToArray : OpConversionPattern<LutOp> {
+  LutToArray(LutCalculator &calculator, MLIRContext *context)
+      : OpConversionPattern<LutOp>(context), lutCalculator(calculator) {}
 
   LogicalResult
   matchAndRewrite(LutOp lut, LutOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
+    if (failed(lutCalculator.computeTableEntries(lut)))
+      return failure();
+
     auto constants = lutCalculator.getRefToTableEntries();
     SmallVector<Attribute> constantAttrs(constants.begin(), constants.end());
     auto tableSize = lutCalculator.getTableSize();
@@ -329,17 +276,21 @@ struct LutToArray : LutLoweringPattern {
     if (tableSize <= 256)
       return failure();
 
-    Value table = rewriter.create<hw::AggregateConstantOp>(
-        lut.getLoc(), hw::ArrayType::get(lut.getType(), constantAttrs.size()),
+    Value table = hw::AggregateConstantOp::create(
+        rewriter, lut.getLoc(),
+        hw::ArrayType::get(lut.getType(), constantAttrs.size()),
         rewriter.getArrayAttr(constantAttrs));
-    Value lookupValue = rewriter.create<comb::ConcatOp>(
-        lut.getLoc(), rewriter.getIntegerType(inputBw), lut.getInputs());
+    Value lookupValue = comb::ConcatOp::create(rewriter, lut.getLoc(),
+                                               rewriter.getIntegerType(inputBw),
+                                               lut.getInputs());
     const Value extracted =
-        rewriter.create<hw::ArrayGetOp>(lut.getLoc(), table, lookupValue);
+        hw::ArrayGetOp::create(rewriter, lut.getLoc(), table, lookupValue);
 
     rewriter.replaceOp(lut, extracted);
     return success();
   }
+
+  LutCalculator &lutCalculator;
 };
 
 } // namespace
