@@ -267,6 +267,7 @@ struct ModuleVisitor : public BaseVisitor {
   // Skip ports which are already handled by the module itself.
   LogicalResult visit(const slang::ast::PortSymbol &) { return success(); }
   LogicalResult visit(const slang::ast::MultiPortSymbol &) { return success(); }
+  LogicalResult visit(const slang::ast::InterfacePortSymbol &) { return success(); }
 
   // Skip genvars.
   LogicalResult visit(const slang::ast::GenvarSymbol &genvarNode) {
@@ -282,12 +283,61 @@ struct ModuleVisitor : public BaseVisitor {
     return success();
   }
 
+  // Expand an interface instance into into individual variable/nets ops
+  // in the enclosing module.Each signal declared in the interface body becomes
+  // a separate op, named with the instance name as a prefix.
+  LogicalResult expandInterfaceInstance(const slang::ast::InstanceSymbol &instNode) {
+    auto prefix = (Twine(blockNamePrefix) + instNode.name + "_").str();
+    for (const auto &member : instNode.body.members()){
+      // Expand variables
+      if (const auto *var = member.as_if<slang::ast::VariableSymbol>()) {
+        auto loweredType = context.convertType(*var->getDeclaredType());
+        if (!loweredType)
+          return failure();
+        auto varOp = moore::VariableOp::create(
+          builder, loc,
+          moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
+          builder.getStringAttr(Twine(prefix) + StringRef(var->name)),
+          Value());
+        context.valueSymbols.insert(var, varOp);
+        continue;
+      }
+      // Expand nets
+      if (const auto *net = member.as_if<slang::ast::NetSymbol>()) {
+        auto loweredType = context.convertType(*net->getDeclaredType());
+        if (!loweredType)
+          return failure();
+        auto netKind = convertNetKind(net->netType.netKind);
+        if (netKind == moore::NetKind::Interconnected ||
+            netKind == moore::NetKind::UserDefined ||
+            netKind == moore::NetKind::UnKnown)
+          return mlir::emitError(loc, "unsupported net kind `")
+                 << net->netType.name << "`";
+        auto netOp = moore::NetOp::create(
+          builder, loc,
+          moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
+          builder.getStringAttr(Twine(prefix) + StringRef(net->name)), netKind,
+          Value());
+        context.valueSymbols.insert(net, netOp);
+        continue;
+      }
+      // Silently skip other members (modports, parameters , etc.)
+    }
+    return success();
+  }
+
   // Handle instances.
   LogicalResult visit(const slang::ast::InstanceSymbol &instNode) {
     using slang::ast::ArgumentDirection;
     using slang::ast::AssignmentExpression;
     using slang::ast::MultiPortSymbol;
     using slang::ast::PortSymbol;
+
+    // Interface instances are expanded inline into individual variable/net ops
+    // rather than creating a moore.instance op.
+    auto defKind = instNode.body.getDefinition().definitionKind;
+    if (defKind == slang::ast::DefinitionKind::Interface)
+      return expandInterfaceInstance(instNode);
 
     auto *moduleLowering = context.convertModuleHeader(&instNode.body);
     if (!moduleLowering)
@@ -431,6 +481,14 @@ struct ModuleVisitor : public BaseVisitor {
         continue;
       }
 
+      // Interface ports are handled separately via ifacePorts.
+      if (con->port.as_if<slang::ast::InterfacePortSymbol>()) {
+        // The flattened interface port values are resolved below using
+        // the ifacePorts vector and valueSymbols populated by
+        // expandInterfaceInstace.
+        continue;
+      }
+
       mlir::emitError(loc) << "unsupported instance port `" << con->port.name
                            << "` (" << slang::ast::toString(con->port.kind)
                            << ")";
@@ -449,6 +507,36 @@ struct ModuleVisitor : public BaseVisitor {
         outputValues.push_back(value);
       else
         inputValues.push_back(value);
+    }
+
+    // Resolve flattened interface port values. for each flattened port,
+    // look up the corresponding expanded variable/net in valueSymbols
+    // (populated by expandInterfaceInstance when the interface was 
+    // instantiated in this scope).
+    for(auto &fp : moduleLowering->ifacePorts) {
+      if (!fp.bodySym)
+        continue;
+      auto *valueSym = fp.bodySym->as_if<slang::ast::ValueSymbol>();
+      if (!valueSym) {
+        mlir::emitError(loc)
+            << "could not resolve interface port signal `" << fp.name << "`";
+        return failure();
+      }
+      Value val = context.valueSymbols.lookup(valueSym);
+      if (!val) {
+        mlir::emitError(loc)
+            << "unresolved interface port signal `" << fp.name << "`";
+        return failure();
+      }
+      if (fp.direction == hw::ModulePort::Output) {
+        outputValues.push_back(val);
+      } else {
+        // For input ports if the value is a ref (from variableOp/netOp),
+        // read it to get the rvalue
+        if (isa<moore::RefType>(val.getType()))
+          val = moore::ReadOp::create(builder, loc, val);
+        inputValues.push_back(val);
+      }
     }
 
     // Insert conversions for input ports.
@@ -722,10 +810,14 @@ LogicalResult Context::convertCompilation() {
   }
 
   // Prime the root definition worklist by adding all the top-level modules.
+  // Interfaces are not lowered as modules; they are expanded inline at each
+  // use site, so skip them here.
   SmallVector<const slang::ast::InstanceSymbol *> topInstances;
   for (auto *inst : root.topInstances)
-    if (!convertModuleHeader(&inst->body))
-      return failure();
+    if (inst->body.getDefinition().definitionKind !=
+        slang::ast::DefinitionKind::Interface)
+      if (!convertModuleHeader(&inst->body))
+        return failure();
 
   // Convert all the root module definitions.
   while (!moduleWorklist.empty()) {
@@ -838,9 +930,9 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   auto loc = convertLocation(module->location);
   OpBuilder::InsertionGuard g(builder);
 
-  // We only support modules and programs for now. Extension to interfaces
-  // should be trivial though, since they are essentially the same thing with
-  // only minor differences in semantics.
+  // We only support modules and programs here. Interfaces are handled
+  // separately by expanding them inline at each use site (see
+  // expandInterfaceInstance in ModuleVisitor)
   auto kind = module->getDefinition().definitionKind;
   if (kind != slang::ast::DefinitionKind::Module &&
       kind != slang::ast::DefinitionKind::Program) {
@@ -879,6 +971,80 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
       return success();
     };
 
+    // Lambda to handle interface ports by flattening them into individual
+    // signal ports. Uses modport directions if a modport is specified,
+    // otherwise treats all signals as inout (ref type)
+    auto handleIfacePort = [&](const slang::ast::InterfacePortSymbol &ifacePort) {
+      auto portLoc = convertLocation(ifacePort.location);
+      auto [connSym, modportSym] = ifacePort.getConnection();
+      auto portPrefix = (Twine(ifacePort.name) + "_").str();
+
+      if (modportSym) {
+        //Modport specified: iterate modport members for signal directions.
+        for (const auto &member : modportSym->members()) {
+          const auto *mpp = member.as_if<slang::ast::ModportPortSymbol>();
+          if (!mpp)
+            continue;
+          auto type = convertType(mpp->getType());
+          if (!type)
+            return failure();
+          auto name = builder.getStringAttr(Twine(portPrefix) + StringRef(mpp->name));
+          BlockArgument arg;
+          hw::ModulePort::Direction dir;
+          if (mpp->direction == ArgumentDirection::out) {
+            dir = hw::ModulePort::Output;
+            modulePorts.push_back({name, type, dir});
+            outputIdx++;
+          } else {
+            dir = hw::ModulePort::Input;
+            if (mpp->direction != ArgumentDirection::In)
+              type = moore::RefType::get(cast<moore::UnpackedType>(type));
+            modulePorts.push_back({name, type, dir});
+            arg = block->addArgument(type, portLoc);
+            inputIdx++;
+          }
+          lowering.ifacePorts.push_back(
+            {name, dir, type, portLoc, arg, &ifacePort,
+             mpp->internalSymbol});
+        }
+      } else {
+        // No modport: iterate interface body for all variables and nets.
+        // Treat them all as inout (input with ref type).
+        const auto *instSym = connSym->as_if<slang::ast::InstanceSymbol>();
+        if (!instSym) {
+          mlir::emitError(portLoc)
+              << "unsupported interface port connection for `"
+              << ifacePort.name << "`";
+          return failure();
+        }
+        for (const auto &member : instSym->body.members()) {
+          const slang::ast::Type *slangType = nullptr;
+          const slang::ast::Symbol *bodySym = nullptr;
+          if (const auto *var = member.as_if<slang::ast::VariableSymbol>()) {
+            slangType = &var->getType();
+            bodySym = var;
+          } else if (const auto *net = member.as_if<slang::ast::NetSymbol>()) {
+            slangType = &net->getType();
+            bodySym = net;
+          } else {
+            continue;
+          }
+          auto type = convertType(*slangType);
+          if (!type)
+            return failure();
+          auto name = builder.getStringAttr(Twine(portPrefix) + StringRef(bodySym->name));
+          auto refType = moore::RefType::get(cast<moore::UnpackedType>(type));
+          modulePorts.push_back({name, refType, hw::ModulePort::Input});
+          auto arg = block->addArgument(refType, portLoc);
+          indexIdx++;
+          lowering.ifacePorts.push_back(
+            {name,hw::ModulePort::Input, refType, portLoc, arg,
+             &ifacePort, bodySym});
+        }
+      }
+      return success();
+    };
+
     if (const auto *port = symbol->as_if<PortSymbol>()) {
       if (failed(handlePort(*port)))
         return {};
@@ -886,6 +1052,9 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
       for (auto *port : multiPort->ports)
         if (failed(handlePort(*port)))
           return {};
+    } else if (const auto *ifacePort = symbol->as_if<slang::ast::InterfacePortSymbol>) {
+      if (failed(handleIfacePort(*ifacePort)))
+        return {};
     } else {
       mlir::emitError(convertLocation(symbol->location))
           << "unsupported module port `" << symbol->name << "` ("
@@ -1008,6 +1177,37 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     if (port.ast.direction != slang::ast::ArgumentDirection::In)
       portArg = moore::ReadOp::create(builder, port.loc, port.arg);
     moore::ContinuousAssignOp::create(builder, port.loc, value, portArg);
+  }
+
+  // Handle flattened interface ports. For each flattened port, create an
+  // internal variable and wire it to the port. The variable is registered
+  // in valueSymbols so the module body can reference interface signals
+  for (auto &fp : lowering.ifacePorts) {
+    if(!fp.bodySym)
+      continue;
+    // Look up the body sym's value (populated by the module body visitor
+    // if the interface body symbol was visited, which it won't be since
+    // interface port don't have a body in the module).
+    // Instead, create a new variable for this flattened port signal.
+    auto *valueSym = fp.bodySym->as_if<slang::ast::ValueSymbol>();
+    if (!valueSym)
+      continue;
+    
+    if (fp.direction == hw::ModulePort::Output) {
+      // For output ports: create a variable, register it, and read it
+      // for the output terminator
+      auto varOp = moore::VariableOp::create(
+          builder, fp.loc,
+          moore::RefType::get(cast<moore::UnpackedType>(fp.type)),
+          fp.name, Value());
+      valueSymbols.insert(valueSym, varOp);
+      auto readVal = moore::ReadOp::create(builder, fp.loc, varOp);
+      outputs.push_back(readVal);
+    } else {
+      // For input ports: register the block argument so the module body
+      // can reference the interface signal
+      valueSymbols.insert(valueSym, fp.arg);
+    }
   }
 
   // Ensure the number of operands of this module's terminator and the number of
