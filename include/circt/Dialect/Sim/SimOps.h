@@ -29,6 +29,8 @@
 #include "circt/Dialect/Sim/SimOpInterfaces.h.inc"
 
 #define GET_OP_CLASSES
+#include "circt/Dialect/Sim/SimEnums.h.inc"
+
 #include "circt/Dialect/Sim/Sim.h.inc"
 
 namespace circt {
