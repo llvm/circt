@@ -1843,7 +1843,7 @@ def QueueSetOp : MooreOp<"queue.set", [
   }];
 }
 
-def QueueFromUnpackedArrayOp : MooreOp<"queue.from_up_array", [Pure]> {
+def QueueFromUnpackedArrayOp : MooreOp<"queue.from_unpacked_array", [Pure]> {
   let description = [{
     Creates a queue containing the elements of the given unpacked array.
 
