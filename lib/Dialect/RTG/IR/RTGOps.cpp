@@ -723,6 +723,14 @@ LogicalResult ValidateOp::verify() {
   return success();
 }
 
+bool ValidateOp::isSourceRegister(unsigned index) {
+  if (index == 0)
+    return isa<RegisterTypeInterface>(getRef().getType());
+  return false;
+}
+
+bool ValidateOp::isDestinationRegister(unsigned index) { return false; }
+
 //===----------------------------------------------------------------------===//
 // ArrayCreateOp
 //===----------------------------------------------------------------------===//
