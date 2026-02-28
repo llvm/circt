@@ -789,10 +789,6 @@ def QueueConvertBoundsOp : SimOp<"queue.conv_bounds", [Pure]> {
     
     If $result has a smaller bound than the size of $input, elements at the end
     of the queue will be discarded to ensure it fits within the space provided.
-
-    NB: if the bound of $result is greater than $input, this op will never
-    affect the elements within the queue. It will, however, affect the bounds
-    enforced in future insertions, so it must be preserved.
   }];
 
   let arguments = (ins QueueType:$input);
