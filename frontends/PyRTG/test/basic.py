@@ -198,26 +198,21 @@ def test1_args(config):
 # ELABORATED-NEXT: rtg.label external [[L1]]
 # ELABORATED-NEXT: [[L2:%.+]] = rtg.label_unique_decl [[L1STR]]
 # ELABORATED-NEXT: rtg.label local [[L2]]
-
 # ELABORATED-NEXT: rtg.label local [[L0]]
 # ELABORATED-NEXT: rtg.label local [[L2]]
-
 # ELABORATED-NEXT: [[LBL5:%.+]] = rtg.constant #rtg.isa.label<"L_5">
 # ELABORATED-NEXT: rtg.label local [[LBL5]]
 # ELABORATED-NEXT: [[LBL3:%.+]] = rtg.constant #rtg.isa.label<"L_3">
 # ELABORATED-NEXT: rtg.label local [[LBL3]]
-
 # ELABORATED-NEXT: rtg.label local [[L2]]
 # ELABORATED-NEXT: rtg.label local [[L0]]
-
-# ELABORATED-NEXT: rtg.label local [[L1]]
 # ELABORATED-NEXT: rtg.label local [[L1]]
 # ELABORATED-NEXT: [[L0_2:%.+]] = rtg.constant #rtg.isa.label<"l0">
 # ELABORATED-NEXT: rtg.label local [[L0_2]]
-
+# ELABORATED-NEXT: [[L0_3:%.+]] = rtg.constant #rtg.isa.label<"l0">
+# ELABORATED-NEXT: rtg.label local [[L0_3]]
 # ELABORATED-NEXT: [[L5:%.+]] = rtg.constant #rtg.isa.label<"s1">
 # ELABORATED-NEXT: rtg.label local [[L5]]
-
 # ELABORATED-NEXT: }
 
 # ASM-LABEL: Begin of test 'test2_labels
@@ -225,22 +220,16 @@ def test1_args(config):
 # ASM-NEXT: l0:
 # ASM-NEXT: .extern l1_0
 # ASM-NEXT: l1_1:
-
 # ASM-NEXT: l0:
 # ASM-NEXT: l1_1:
-
 # ASM-NEXT: L_5:
 # ASM-NEXT: L_3:
-
 # ASM-NEXT: l1_1:
 # ASM-NEXT: l0:
-
-# ASM-NEXT: l1_0:
 # ASM-NEXT: l1_0:
 # ASM-NEXT: l0:
-
+# ASM-NEXT: l0:
 # ASM-NEXT: s1:
-
 # ASM: End of test 'test2_labels
 
 

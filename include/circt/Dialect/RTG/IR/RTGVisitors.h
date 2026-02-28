@@ -69,9 +69,10 @@ public:
             // String ops
             StringConcatOp, IntFormatOp, ImmediateFormatOp, RegisterFormatOp,
             // Misc ops
-            CommentOp, ConstraintOp>([&](auto expr) -> ResultType {
-          return thisCast->visitOp(expr, args...);
-        })
+            CommentOp, ConstraintOp, RandomScopeOp>(
+            [&](auto expr) -> ResultType {
+              return thisCast->visitOp(expr, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           if (op->getDialect() ==
               op->getContext()->getLoadedDialect<RTGDialect>())
@@ -157,6 +158,7 @@ public:
   HANDLE(ImmediateFormatOp, Unhandled);
   HANDLE(RegisterFormatOp, Unhandled);
   HANDLE(StringToLabelOp, Unhandled);
+  HANDLE(RandomScopeOp, Unhandled);
 #undef HANDLE
 };
 

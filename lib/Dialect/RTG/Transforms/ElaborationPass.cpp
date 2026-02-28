@@ -42,43 +42,64 @@ using llvm::MapVector;
 
 #define DEBUG_TYPE "rtg-elaboration"
 
-//===----------------------------------------------------------------------===//
-// Uniform Distribution Helper
-//
-// Simplified version of
-// https://github.com/llvm/llvm-project/blob/main/libcxx/include/__random/uniform_int_distribution.h
-// We use our custom version here to get the same results when compiled with
-// different compiler versions and standard libraries.
-//===----------------------------------------------------------------------===//
+namespace {
+/// Helper class to generate random numbers supporting scopes of randomization.
+struct RngScope {
+  RngScope() = delete;
+  RngScope(const RngScope &) = delete;
+  RngScope &operator=(const RngScope &) = delete;
 
-static uint32_t computeMask(size_t w) {
-  size_t n = w / 32 + (w % 32 != 0);
-  size_t w0 = w / n;
-  return w0 > 0 ? uint32_t(~0) >> (32 - w0) : 0;
-}
+  RngScope(RngScope &&) = default;
+  RngScope &operator=(RngScope &&) = default;
 
-/// Get a number uniformly at random in the in specified range.
-static uint32_t getUniformlyInRange(std::mt19937 &rng, uint32_t a, uint32_t b) {
-  const uint32_t diff = b - a + 1;
-  if (diff == 1)
-    return a;
+  explicit RngScope(uint32_t seed) : rng(seed) {}
 
-  const uint32_t digits = std::numeric_limits<uint32_t>::digits;
-  if (diff == 0)
-    return rng();
+  //===--------------------------------------------------------------------===//
+  // Uniform Distribution Helper
+  //
+  // Simplified version of
+  // https://github.com/llvm/llvm-project/blob/main/libcxx/include/__random/uniform_int_distribution.h
+  // We use our custom version here to get the same results when compiled with
+  // different compiler versions and standard libraries.
+  //===--------------------------------------------------------------------===//
 
-  uint32_t width = digits - llvm::countl_zero(diff) - 1;
-  if ((diff & (std::numeric_limits<uint32_t>::max() >> (digits - width))) != 0)
-    ++width;
+  /// Get a number uniformly at random in the in specified range.
+  uint32_t getUniformlyInRange(uint32_t a, uint32_t b) {
+    const uint32_t diff = b - a + 1;
+    if (diff == 1)
+      return a;
 
-  uint32_t mask = computeMask(diff);
-  uint32_t u;
-  do {
-    u = rng() & mask;
-  } while (u >= diff);
+    const uint32_t digits = std::numeric_limits<uint32_t>::digits;
+    if (diff == 0)
+      return rng();
 
-  return u + a;
-}
+    uint32_t width = digits - llvm::countl_zero(diff) - 1;
+    if ((diff & (std::numeric_limits<uint32_t>::max() >> (digits - width))) !=
+        0)
+      ++width;
+
+    uint32_t mask = computeMask(diff);
+    uint32_t u;
+    do {
+      u = rng() & mask;
+    } while (u >= diff);
+
+    return u + a;
+  }
+
+  RngScope getNested() { return RngScope(rng()); }
+
+private:
+  uint32_t computeMask(size_t w) {
+    size_t n = w / 32 + (w % 32 != 0);
+    size_t w0 = w / n;
+    return w0 > 0 ? uint32_t(~0) >> (32 - w0) : 0;
+  }
+
+private:
+  std::mt19937 rng;
+};
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Elaborator Value
@@ -892,18 +913,19 @@ namespace {
 
 /// State that should be shared by all elaborator and materializer instances.
 struct SharedState {
-  SharedState(MLIRContext *ctxt, SymbolTable &table, unsigned seed)
-      : ctxt(ctxt), table(table), rng(seed) {}
+  SharedState(MLIRContext *ctxt, SymbolTable &table)
+      : ctxt(ctxt), table(table) {}
 
   MLIRContext *ctxt;
   SymbolTable &table;
-  std::mt19937 rng;
   Namespace names;
   Internalizer internalizer;
 };
 
 /// A collection of state per RTG test.
 struct TestState {
+  explicit TestState(unsigned seed) : rng(RngScope(seed)) {}
+
   /// The name of the test.
   StringAttr name;
 
@@ -912,6 +934,9 @@ struct TestState {
       std::pair<ContextResourceAttrInterface, ContextResourceAttrInterface>,
       SequenceStorage *>
       contextSwitches;
+
+  /// The root RNG scope for this test.
+  RngScope rng;
 };
 
 /// Construct an SSA value from a given elaborated value.
@@ -970,6 +995,10 @@ public:
     return res;
   }
 
+  bool isInPlace(Operation *op) const {
+    return builder.getBlock()->getParent() == op->getParentRegion();
+  }
+
   /// If `op` is not in the same region as the materializer insertion point, a
   /// clone is created at the materializer's insertion point by also
   /// materializing the `ElaboratorValue`s for each operand just before it.
@@ -992,7 +1021,7 @@ public:
         return op->emitOpError(
             "ops with results that have uses are not supported");
 
-    if (op->getParentRegion() == builder.getBlock()->getParent()) {
+    if (isInPlace(op)) {
       // We are doing in-place materialization, so mark all ops deleted until we
       // reach the one to be materialized and modify it in-place.
       deleteOpsUntil([&](auto iter) { return &*iter == op; });
@@ -1495,15 +1524,7 @@ public:
     if (set.empty())
       return op->emitError("cannot select from an empty set");
 
-    size_t selected;
-    if (auto intAttr =
-            op->getAttrOfType<IntegerAttr>("rtg.elaboration_custom_seed")) {
-      std::mt19937 customRng(intAttr.getInt());
-      selected = getUniformlyInRange(customRng, 0, set.size() - 1);
-    } else {
-      selected = getUniformlyInRange(sharedState.rng, 0, set.size() - 1);
-    }
-
+    size_t selected = testState.rng.getUniformlyInRange(0, set.size() - 1);
     state[op.getResult()] = set[selected];
     return DeletionKind::Delete;
   }
@@ -1611,13 +1632,7 @@ public:
       prefixSum.push_back({val, accumulator});
     }
 
-    auto customRng = sharedState.rng;
-    if (auto intAttr =
-            op->getAttrOfType<IntegerAttr>("rtg.elaboration_custom_seed")) {
-      customRng = std::mt19937(intAttr.getInt());
-    }
-
-    auto idx = getUniformlyInRange(customRng, 0, accumulator - 1);
+    auto idx = testState.rng.getUniformlyInRange(0, accumulator - 1);
     auto *iter = llvm::upper_bound(
         prefixSum, idx,
         [](uint32_t a, const std::pair<ElaboratorValue, uint32_t> &b) {
@@ -1755,22 +1770,45 @@ public:
     return DeletionKind::Delete;
   }
 
+  FailureOr<DeletionKind> visitOp(RandomScopeOp op) {
+    auto getNestedRng = [&]() -> RngScope {
+      if (op.getSeed())
+        return RngScope(op.getSeed()->getZExtValue());
+      return testState.rng.getNested();
+    };
+
+    RngScope nestedRng = getNestedRng();
+    std::swap(testState.rng, nestedRng);
+
+    // Elaborate the body region. The region has no arguments and yields values
+    // that become the results of this operation.
+    // We reuse the same elaborator for the nested region because we need access
+    // to the elaborated values outside the nested region (since it is not
+    // isolated from above) and we want to delete the random_scope operation
+    // entirely, thus don't need a new materializer instance.
+    SmallVector<ElaboratorValue> yieldedVals;
+    if (failed(elaborate(op.getBodyRegion(), {}, /*keepTerminator=*/false,
+                         yieldedVals)))
+      return failure();
+
+    // Restore the previous RNG scope.
+    std::swap(testState.rng, nestedRng);
+
+    // Map the results of the random_scope to the yielded values.
+    for (auto [res, out] : llvm::zip(op.getResults(), yieldedVals))
+      state[res] = out;
+
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(RandomNumberInRangeOp op) {
     size_t lower = get<size_t>(op.getLowerBound());
     size_t upper = get<size_t>(op.getUpperBound());
     if (lower > upper)
       return op->emitError("cannot select a number from an empty range");
 
-    if (auto intAttr =
-            op->getAttrOfType<IntegerAttr>("rtg.elaboration_custom_seed")) {
-      std::mt19937 customRng(intAttr.getInt());
-      state[op.getResult()] =
-          size_t(getUniformlyInRange(customRng, lower, upper));
-    } else {
-      state[op.getResult()] =
-          size_t(getUniformlyInRange(sharedState.rng, lower, upper));
-    }
-
+    state[op.getResult()] =
+        size_t(testState.rng.getUniformlyInRange(lower, upper));
     return DeletionKind::Delete;
   }
 
@@ -1917,7 +1955,8 @@ public:
     // isolated from above) and we want to materialize the region inline, thus
     // don't need a new materializer instance.
     SmallVector<ElaboratorValue> yieldedVals;
-    if (failed(elaborate(toElaborate, {}, yieldedVals)))
+    if (failed(
+            elaborate(toElaborate, {}, /*keepTerminator=*/false, yieldedVals)))
       return failure();
 
     // Map the results of the 'scf.if' to the yielded values.
@@ -1950,7 +1989,8 @@ public:
     SmallVector<ElaboratorValue> yieldedVals;
     for (size_t i = lowerBound; i < upperBound; i += step) {
       yieldedVals.clear();
-      if (failed(elaborate(op.getBodyRegion(), {}, yieldedVals)))
+      if (failed(elaborate(op.getBodyRegion(), {}, /*keepTerminator=*/false,
+                           yieldedVals)))
         return failure();
 
       // Prepare for the next iteration by updating the mapping of the nested
@@ -1966,10 +2006,6 @@ public:
          llvm::zip(op->getResults(), op.getRegionIterArgs()))
       state[res] = state.at(iterArg);
 
-    return DeletionKind::Delete;
-  }
-
-  FailureOr<DeletionKind> visitOp(scf::YieldOp op) {
     return DeletionKind::Delete;
   }
 
@@ -2286,14 +2322,14 @@ public:
             index::XOrOp, index::ShlOp, index::ShrUOp, index::MaxUOp,
             index::MinUOp, index::CmpOp,
             // SCF ops
-            scf::IfOp, scf::ForOp, scf::YieldOp>(
-            [&](auto op) { return visitOp(op); })
+            scf::IfOp, scf::ForOp>([&](auto op) { return visitOp(op); })
         .Default([&](Operation *op) { return RTGBase::dispatchOpVisitor(op); });
   }
 
   // NOLINTNEXTLINE(misc-no-recursion)
   LogicalResult elaborate(Region &region,
                           ArrayRef<ElaboratorValue> regionArguments,
+                          bool keepTerminator,
                           SmallVector<ElaboratorValue> &terminatorOperands) {
     if (region.getBlocks().size() > 1)
       return region.getParentOp()->emitOpError(
@@ -2304,7 +2340,8 @@ public:
       state[arg] = elabArg;
 
     Block *block = &region.front();
-    for (auto &op : *block) {
+    auto iter = keepTerminator ? *block : block->without_terminator();
+    for (auto &op : iter) {
       auto result = dispatchOpVisitor(&op);
       if (failed(result))
         return failure();
@@ -2327,9 +2364,14 @@ public:
       });
     }
 
-    if (region.front().mightHaveTerminator())
-      for (auto val : region.front().getTerminator()->getOperands())
+    if (!block->empty() && block->back().hasTrait<OpTrait::IsTerminator>()) {
+      auto *terminator = block->getTerminator();
+      for (auto val : terminator->getOperands())
         terminatorOperands.push_back(state.at(val));
+
+      if (!keepTerminator && materializer.isInPlace(terminator))
+        terminator->erase();
+    }
 
     return success();
   }
@@ -2384,7 +2426,7 @@ Materializer::elaborateSequence(const RandomizedSequenceStorage *seq,
   Elaborator elaborator(sharedState, testState, materializer, seq->context);
   SmallVector<ElaboratorValue> yieldedVals;
   if (failed(elaborator.elaborate(familyOp.getBodyRegion(), seq->sequence->args,
-                                  yieldedVals)))
+                                  /*keepTerminator=*/false, yieldedVals)))
     return {};
 
   seqOp.setSequenceType(
@@ -2483,12 +2525,15 @@ static bool onlyLegalToMaterializeInTarget(Type type) {
 
 LogicalResult ElaborationPass::elaborateModule(ModuleOp moduleOp,
                                                SymbolTable &table) {
-  SharedState state(moduleOp.getContext(), table, seed);
+  SharedState state(moduleOp.getContext(), table);
 
   // Update the name cache
   state.names.add(moduleOp);
 
   struct TargetElabResult {
+    TargetElabResult(DictType targetType, uint32_t seed)
+        : targetType(targetType), testState(seed) {}
+
     DictType targetType;
     SmallVector<ElaboratorValue> yields;
     TestState testState;
@@ -2500,8 +2545,9 @@ LogicalResult ElaborationPass::elaborateModule(ModuleOp moduleOp,
     LLVM_DEBUG(llvm::dbgs() << "=== Elaborating target @"
                             << targetOp.getSymName() << "\n\n");
 
-    auto &result = targetMap[targetOp.getSymNameAttr()];
-    result.targetType = targetOp.getTarget();
+    auto [it, inserted] = targetMap.try_emplace(targetOp.getSymNameAttr(),
+                                                targetOp.getTarget(), seed);
+    auto &result = it->second;
 
     SmallVector<ElaboratorValue> blockArgs;
     Materializer targetMaterializer(OpBuilder::atBlockBegin(targetOp.getBody()),
@@ -2510,6 +2556,7 @@ LogicalResult ElaborationPass::elaborateModule(ModuleOp moduleOp,
 
     // Elaborate the target
     if (failed(targetElaborator.elaborate(targetOp.getBodyRegion(), {},
+                                          /*keepTerminator=*/true,
                                           result.yields)))
       return failure();
 
@@ -2530,8 +2577,9 @@ LogicalResult ElaborationPass::elaborateModule(ModuleOp moduleOp,
                << " for target @" << *testOp.getTarget() << "\n\n");
 
     // Get the target for this test
-    auto targetResult = targetMap[testOp.getTargetAttr()];
-    TestState testState = targetResult.testState;
+    auto &targetResult = targetMap.at(testOp.getTargetAttr());
+    TestState testState(seed);
+    testState.contextSwitches = targetResult.testState.contextSwitches;
     testState.name = testOp.getSymNameAttr();
 
     SmallVector<ElaboratorValue> filteredYields;
@@ -2561,7 +2609,7 @@ LogicalResult ElaborationPass::elaborateModule(ModuleOp moduleOp,
     Elaborator elaborator(state, testState, materializer);
     SmallVector<ElaboratorValue> ignore;
     if (failed(elaborator.elaborate(testOp.getBodyRegion(), filteredYields,
-                                    ignore)))
+                                    /*keepTerminator=*/false, ignore)))
       return failure();
 
     materializer.finalize();

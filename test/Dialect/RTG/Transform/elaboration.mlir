@@ -52,10 +52,16 @@ rtg.test @setOperations(singleton = %none: index) {
   %set0 = rtg.set_create %0, %1, %0 : index
   %set1 = rtg.set_create %2, %0 : index
   %set = rtg.set_union %set0, %set1 : !rtg.set<index>
-  %4 = rtg.set_select_random %set : !rtg.set<index> {rtg.elaboration_custom_seed = 1}
+  %4 = rtg.random_scope seed 1 : index {
+    %tmp = rtg.set_select_random %set : !rtg.set<index>
+    rtg.yield %tmp : index
+  }
   %new_set = rtg.set_create %3, %4 : index
   %diff = rtg.set_difference %set, %new_set : !rtg.set<index>
-  %5 = rtg.set_select_random %diff : !rtg.set<index> {rtg.elaboration_custom_seed = 2}
+  %5 = rtg.random_scope seed 2 : index {
+    %tmp = rtg.set_select_random %diff : !rtg.set<index>
+    rtg.yield %tmp : index
+  }
   func.call @dummy1(%4, %5, %diff) : (index, index, !rtg.set<index>) -> ()
 
   // CHECK-NEXT: [[V3:%.+]] = rtg.constant 4 : index
@@ -112,12 +118,21 @@ rtg.test @bagOperations(singleton = %none: index) {
   %bag0 = rtg.bag_create (%seven x %0, %multiple x %1) : index
   %bag1 = rtg.bag_create (%one x %0) : index
   %bag = rtg.bag_union %bag0, %bag1 : !rtg.bag<index>
-  %2 = rtg.bag_select_random %bag : !rtg.bag<index> {rtg.elaboration_custom_seed = 3}
+  %2 = rtg.random_scope seed 3 : index {
+    %tmp = rtg.bag_select_random %bag : !rtg.bag<index>
+    rtg.yield %tmp : index
+  }
   %new_bag = rtg.bag_create (%one x %2) : index
   %diff = rtg.bag_difference %bag, %new_bag : !rtg.bag<index>
-  %3 = rtg.bag_select_random %diff : !rtg.bag<index> {rtg.elaboration_custom_seed = 4}
+  %3 = rtg.random_scope seed 4 : index {
+    %tmp = rtg.bag_select_random %diff : !rtg.bag<index>
+    rtg.yield %tmp : index
+  }
   %diff2 = rtg.bag_difference %bag, %new_bag inf : !rtg.bag<index>
-  %4 = rtg.bag_select_random %diff2 : !rtg.bag<index> {rtg.elaboration_custom_seed = 5}
+  %4 = rtg.random_scope seed 5 : index {
+    %tmp = rtg.bag_select_random %diff2 : !rtg.bag<index>
+    rtg.yield %tmp : index
+  }
   func.call @dummy4(%3, %4, %diff, %diff2) : (index, index, !rtg.bag<index>, !rtg.bag<index>) -> ()
 
   // CHECK-NEXT: [[SET:%.+]] = rtg.constant #rtg.set<2 : index, 3 : index> : !rtg.set<index>
@@ -560,16 +575,108 @@ rtg.test @labels(singleton = %none: index) {
 rtg.test @randomIntegers(singleton = %none: index) {
   %lower = index.constant 5
   %upper = index.constant 9
-  %0 = rtg.random_number_in_range [%lower, %upper] {rtg.elaboration_custom_seed=0}
+  %0 = rtg.random_scope seed 0 : index {
+    %tmp = rtg.random_number_in_range [%lower, %upper]
+    rtg.yield %tmp : index
+  }
   // CHECK-NEXT: [[V0:%.+]] = rtg.constant 5 : index
   // CHECK-NEXT: func.call @dummy2([[V0]])
   func.call @dummy2(%0) : (index) -> ()
 
-  %1 = rtg.random_number_in_range [%lower, %upper] {rtg.elaboration_custom_seed=3}
+  %1 = rtg.random_scope seed 3 : index {
+    %tmp = rtg.random_number_in_range [%lower, %upper]
+    rtg.yield %tmp : index
+  }
   // CHECK-NEXT: [[V1:%.+]] = rtg.constant 8 : index
   // CHECK-NEXT: func.call @dummy2([[V1]])
   func.call @dummy2(%1) : (index) -> ()
 }
+
+// CHECK-LABEL: rtg.test @nestedRandomScopes
+rtg.test @nestedRandomScopes(singleton = %none: index) {
+  %c0 = index.constant 0
+  %c100 = index.constant 100
+
+  %0 = rtg.random_scope seed 10 : index {
+    %outer = rtg.random_number_in_range [%c0, %c100]
+
+    %1 = rtg.random_scope : index {
+      %middle = rtg.random_number_in_range [%c0, %c100]
+
+      %2 = rtg.random_scope : index {
+        %inner = rtg.random_number_in_range [%c0, %c100]
+        rtg.yield %inner : index
+      }
+
+      %sum = index.add %middle, %2
+      rtg.yield %sum : index
+    }
+
+    %result = index.add %outer, %1
+    rtg.yield %result : index
+  }
+
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant 115 : index
+  // CHECK-NEXT: func.call @dummy2([[V0]])
+  func.call @dummy2(%0) : (index) -> ()
+}
+
+// CHECK-LABEL: rtg.test @testsUseSameSeed1
+rtg.test @testsUseSameSeed1(singleton = %none: index) {
+  %lower = index.constant 0
+  %upper = index.constant 100
+
+  %0 = rtg.random_number_in_range [%lower, %upper]
+  %1 = rtg.random_number_in_range [%lower, %upper]
+  %2 = rtg.random_number_in_range [%lower, %upper]
+  %3 = rtg.random_number_in_range [%lower, %upper]
+  %4 = rtg.random_number_in_range [%lower, %upper]
+
+  // CHECK-NEXT: [[R:%.+]] = rtg.constant 3 : index
+  // CHECK-NEXT: func.call @dummy2([[R]])
+  func.call @dummy2(%0) : (index) -> ()
+  // CHECK-NEXT: [[R:%.+]] = rtg.constant 28 : index
+  // CHECK-NEXT: func.call @dummy2([[R]])
+  func.call @dummy2(%1) : (index) -> ()
+  // CHECK-NEXT: [[R:%.+]] = rtg.constant 69 : index
+  // CHECK-NEXT: func.call @dummy2([[R]])
+  func.call @dummy2(%2) : (index) -> ()
+  // CHECK-NEXT: [[R:%.+]] = rtg.constant 18 : index
+  // CHECK-NEXT: func.call @dummy2([[R]])
+  func.call @dummy2(%3) : (index) -> ()
+  // CHECK-NEXT: [[R:%.+]] = rtg.constant 5 : index
+  // CHECK-NEXT: func.call @dummy2([[R]])
+  func.call @dummy2(%4) : (index) -> ()
+}
+
+// CHECK-LABEL: rtg.test @testsUseSameSeed2
+rtg.test @testsUseSameSeed2(singleton = %none: index) {
+  %lower = index.constant 0
+  %upper = index.constant 100
+
+  %0 = rtg.random_number_in_range [%lower, %upper]
+  %1 = rtg.random_number_in_range [%lower, %upper]
+  %2 = rtg.random_number_in_range [%lower, %upper]
+  %3 = rtg.random_number_in_range [%lower, %upper]
+  %4 = rtg.random_number_in_range [%lower, %upper]
+
+  // CHECK-NEXT: [[R:%.+]] = rtg.constant 3 : index
+  // CHECK-NEXT: func.call @dummy2([[R]])
+  func.call @dummy2(%0) : (index) -> ()
+  // CHECK-NEXT: [[R:%.+]] = rtg.constant 28 : index
+  // CHECK-NEXT: func.call @dummy2([[R]])
+  func.call @dummy2(%1) : (index) -> ()
+  // CHECK-NEXT: [[R:%.+]] = rtg.constant 69 : index
+  // CHECK-NEXT: func.call @dummy2([[R]])
+  func.call @dummy2(%2) : (index) -> ()
+  // CHECK-NEXT: [[R:%.+]] = rtg.constant 18 : index
+  // CHECK-NEXT: func.call @dummy2([[R]])
+  func.call @dummy2(%3) : (index) -> ()
+  // CHECK-NEXT: [[R:%.+]] = rtg.constant 5 : index
+  // CHECK-NEXT: func.call @dummy2([[R]])
+  func.call @dummy2(%4) : (index) -> ()
+}
+
 
 // CHECK-LABEL: rtg.test @contexts_contextCpu
 rtg.test @contexts(cpu0 = %cpu0: !rtgtest.cpu, cpu1 = %cpu1: !rtgtest.cpu) {
@@ -980,7 +1087,10 @@ rtg.test @strings(singleton = %none: index) {
   %0 = rtg.constant "hello" : !rtg.string
   %c4 = index.constant 4
   %c5 = index.constant 5
-  %1 = rtg.random_number_in_range [%c4, %c5] {rtg.elaboration_custom_seed=0}
+  %1 = rtg.random_scope seed 0 : index {
+    %tmp = rtg.random_number_in_range [%c4, %c5]
+    rtg.yield %tmp : index
+  }
   %3 = rtg.int_format %1
   %5 = rtg.string_concat %0, %3
   // CHECK-NEXT: [[V0:%.+]] = rtg.constant "hello4" : !rtg.string
@@ -991,7 +1101,10 @@ rtg.test @strings(singleton = %none: index) {
 // CHECK-LABEL: rtg.test @attributeToElabValueConversion
 rtg.test @attributeToElabValueConversion(singleton = %none: index) {
   %set = rtg.constant #rtg.set<2 : index, 3 : index, 4 : index> : !rtg.set<index>
-  %selected = rtg.set_select_random %set : !rtg.set<index> {rtg.elaboration_custom_seed=0}
+  %selected = rtg.random_scope seed 0 : index {
+    %tmp = rtg.set_select_random %set : !rtg.set<index>
+    rtg.yield %tmp : index
+  }
   // CHECK-NEXT: [[V0:%.+]] = rtg.constant 2 : index
   // CHECK-NEXT: func.call @dummy2([[V0]])
   func.call @dummy2(%selected) : (index) -> ()
