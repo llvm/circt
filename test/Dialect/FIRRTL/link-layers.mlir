@@ -18,18 +18,18 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Bar" {
   firrtl.module @Bar() {}
   firrtl.extmodule @Foo()
+  firrtl.layer @A1 bind {
+    firrtl.layer @A1B0 bind {}
+  }
   firrtl.layer @A0 bind {
     firrtl.layer @A0B0 bind {
-      firrtl.layer @A0B0C1 bind {
-      }
       firrtl.layer @A0B0C2 bind { 
+      }
+      firrtl.layer @A0B0C1 bind {
       }
     }
     firrtl.layer @A0B3 bind {
     }
-  }
-  firrtl.layer @A1 bind {
-    firrtl.layer @A1B0 bind {}
   }
 }
 
@@ -128,8 +128,8 @@ firrtl.circuit "Bottom" {
 firrtl.circuit "Foo" {
   // Declaration requires both @A and @B
   firrtl.extmodule @Bar() attributes {knownLayers = [@A, @B]}
-  firrtl.layer @A inline {}
   firrtl.layer @B inline {}
+  firrtl.layer @A inline {}
   firrtl.module @Foo() {
     firrtl.instance w @Bar()
   }
@@ -146,11 +146,11 @@ firrtl.circuit "Bar" {
   }
 }
 
-// CHECK:      firrtl.layer @A inline {
-// CHECK-NEXT:   firrtl.layer @ChildA inline {
-// CHECK-NEXT:   }
-// CHECK-NEXT: }
 // CHECK-NEXT: firrtl.layer @B inline {
 // CHECK-NEXT:   firrtl.layer @ChildB inline {
+// CHECK-NEXT:   }
+// CHECK-NEXT: }
+// CHECK:      firrtl.layer @A inline {
+// CHECK-NEXT:   firrtl.layer @ChildA inline {
 // CHECK-NEXT:   }
 // CHECK-NEXT: }
