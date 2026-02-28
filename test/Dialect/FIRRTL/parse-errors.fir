@@ -1936,7 +1936,7 @@ circuit Foo:
   public module Foo:
     output a: Integer
     ; expected-error @below {{unknown property expressions are a FIRRTL 5.1.0+ feature}}
-    propassign a, Unknown: Integer
+    propassign a, Unknown(Integer)
 
 ;// -----
 
@@ -1945,7 +1945,7 @@ circuit Foo:
   public module Foo:
     output a: Integer
     ; expected-error @below {{expected property type}}
-    propassign a, Unknown: UInt<1>
+    propassign a, Unknown(UInt<1>)
 
 ;// -----
 
