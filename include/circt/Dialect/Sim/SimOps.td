@@ -759,7 +759,7 @@ def QueueSetOp : SimOp<"queue.set", [Pure,
     to the end of the queue.
 
     If the index is otherwise out of bounds for the queue, the queue returned
-    is unchanged and a warning will be issued.
+    is unchanged.
   }];
 
   let arguments = (ins QueueType:$queue, I32:$index, HWNonInOutType:$item);
