@@ -34,6 +34,7 @@ hw.module @err(in %a: i0) {
 hw.module @err(in %a: i16) {
   // expected-error @+1 {{from bit too large for input}}
   %0 = comb.extract %a from 0xFFFFFFFF : (i16) -> i8
+}
 
 // -----
 
