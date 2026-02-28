@@ -3078,10 +3078,6 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                   return moore::QueuePopFrontOp::create(builder, loc, value);
                 return {};
               })
-          .Case("size",
-                [&]() -> Value {
-                  return moore::OpenUArraySizeOp::create(builder, loc, value);
-                })
           .Case("delete",
                 [&]() -> Value {
                   return moore::OpenUArrayDeleteOp::create(builder, loc, value);
