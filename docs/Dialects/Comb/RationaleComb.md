@@ -34,7 +34,7 @@ TODO: Simple integer types, eventually parametrically wide integer type
 
 Operations in the `comb` dialect support zero-width integers.  Any well-defined
 value of type `i0` is assumed to be of zero value, from which sign semantics
-can be infered for signed operations.  In particular, division on `i0` is
+can be inferred for signed operations.  In particular, division on `i0` is
 undefined, as it would only yield division by zero.  Similarly, replication of
 an `i0` value cannot yield a non-zero-width integer.
 
