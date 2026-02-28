@@ -21,7 +21,7 @@ add_circt_dialect_library(CIRCTSim
   CIRCTHW
   CIRCTSV
   MLIRSimIncGen
-
+  CIRCTSimEnumsIncGen
   LINK_COMPONENTS
   Support
 

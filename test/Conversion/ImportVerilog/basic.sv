@@ -4077,11 +4077,11 @@ endmodule
 // CHECK:           moore.procedure initial {
 // CHECK:               [[QR1:%.+]] = moore.read [[Q1]] : <queue<i32, 0>>
 // CHECK:               [[QR2:%.+]] = moore.read [[Q2]] : <queue<i32, 0>>
-// CHECK:               [[RES1:%.+]] = moore.queue_cmp eq [[QR1]], [[QR2]] : <i32, 0> -> i1
+// CHECK:               [[RES1:%.+]] = moore.queue.cmp eq [[QR1]], [[QR2]] : <i32, 0> -> i1
 // CHECK:               moore.blocking_assign [[R1]], [[RES1]] : i1
 // CHECK:               [[QR1:%.+]] = moore.read [[Q1]] : <queue<i32, 0>>
 // CHECK:               [[QR2:%.+]] = moore.read [[Q2]] : <queue<i32, 0>>
-// CHECK:               [[RES2:%.+]] = moore.queue_cmp ne [[QR1]], [[QR2]] : <i32, 0> -> i1
+// CHECK:               [[RES2:%.+]] = moore.queue.cmp ne [[QR1]], [[QR2]] : <i32, 0> -> i1
 // CHECK:               moore.blocking_assign [[R2]], [[RES2]] : i1
 // CHECK:               moore.return
 // CHECK:           }

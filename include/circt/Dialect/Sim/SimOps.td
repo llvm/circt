@@ -19,6 +19,7 @@ include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/EnumAttr.td"
 
 class SimOp<string mnemonic, list<Trait> traits = []> :
     Op<SimDialect, mnemonic, traits>;
@@ -605,6 +606,29 @@ def IntToStringOp: SimOp<"string.int_to_string", [Pure]> {
 //===----------------------------------------------------------------------===//
 // Queues
 //===----------------------------------------------------------------------===//
+
+def QueueCmpPredicateAttr : I64EnumAttr<
+    "QueueCmpPredicate",
+    "queue.cmp comparison predicate",
+    [I64EnumAttrCase<"eq", 0>,
+      I64EnumAttrCase<"ne", 1>]> {
+  let cppNamespace = "circt::sim";
+}
+
+def QueueCmpOp : SimOp<"queue.cmp", [Pure, Commutative, SameTypeOperands]> {
+  let summary = "Compares two queues";
+  let description = [{
+    Carries out a comparison on two queues.
+    Returns 1 if the comparison is true, and 0 if it is false.
+
+    Comparing for equality and inequality are both supported.
+  }];
+
+  let arguments = (ins QueueCmpPredicateAttr:$predicate, QueueType:$lhs, QueueType:$rhs);
+  let results = (outs I1:$result);
+
+  let assemblyFormat = "$predicate $lhs `,` $rhs attr-dict `:` type($lhs)";
+}
 
 def QueueEmptyOp : SimOp<"queue.empty", [Pure]> {
   let summary = "Creates an empty queue";

@@ -1343,7 +1343,7 @@ def UArrayCmpOp : MooreOp<"uarray_cmp", [
   }];  
 }
 
-def QueueCmpOp : MooreOp<"queue_cmp", [
+def QueueCmpOp : MooreOp<"queue.cmp", [
   Pure,
   Commutative,
   SameTypeOperands,
