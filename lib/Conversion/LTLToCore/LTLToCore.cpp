@@ -232,38 +232,48 @@ struct AssertLikeConversion : public OpConversionPattern<OpTy> {
       return cur;
     };
 
-    // Exact delay case: antecedent delayed by start cycles implies consequent now.
+    // Exact delay case: antecedent |-> ##start consequent
+    // If the antecedent was true `start` cycles ago, the consequent MUST be true now.
     if (length == 0) {
+      // 1. Remember the past: shift the antecedent through `start` registers.
       Value delayed = shift(loc, antecedent, clk, start, "ltl_delay");
+      
+      // 2. Boolean implication: A -> B is logically equivalent to NOT(A) OR B.
       Value notDelayed = comb::createOrFoldNot(loc, delayed, builder);
       auto orOp = comb::OrOp::create(builder, loc, ValueRange{notDelayed, delay.getInput()}, false);
       return orOp.getResult();
     }
 
-    // Bounded range case: if antecedent fires, consequent must hold at least
-    // once in [start, end] cycles. Use a pending-request monitor that clears
-    // when consequent is observed.
+    // Bounded window case: antecedent |-> ##[start:end] consequent
+    // A "pending token" is created when antecedent fires. It shifts forward each cycle.
+    // During the window [start, end], if the consequent is observed, the token is destroyed.
+    // If the token survives to the end of the window, the property was violated.
     Value notRight = comb::createOrFoldNot(loc, delay.getInput(), builder);
 
-    // Age 1 pending is the antecedent delayed by 1 cycle.
+    // Age 1 pending token is the antecedent delayed by 1 cycle.
     Value pending = shift(loc, antecedent, clk, 1, "ltl_delay");
     Value prev = pending;
 
     for (int64_t age = 1; age <= end; ++age) {
       Value nextVal;
       if (age == 1) {
+        // Just the initial delayed antecedent
         nextVal = prev;
       } else if (age < start) {
+        // Window not open yet: shift the token forward untouched
         nextVal = prev;
       } else {
+        // Window is open: erase the token if consequent is true right now (AND NOT(consequent))
         auto andOp = comb::AndOp::create(builder, loc, ValueRange{prev, notRight}, false);
         nextVal = andOp.getResult();
       }
       prev = createCompReg(loc, nextVal, clk, "ltl_window");
     }
 
-    // violation = pending_at_end AND NOT(consequent)
+    // Violation occurs if a token reaches the deadline (end) AND the consequent is still false.
     auto viol = comb::AndOp::create(builder, loc, ValueRange{prev, notRight}, false);
+    
+    // Asserts expect '1' for success, so we invert the violation signal.
     Value notViol = comb::createOrFoldNot(loc, viol.getResult(), builder);
     return notViol;
   }
