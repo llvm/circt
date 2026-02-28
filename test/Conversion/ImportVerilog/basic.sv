@@ -4165,3 +4165,56 @@ module ForkJoinTest ();
 		a = 8;
 	end
 endmodule
+
+//===----------------------------------------------------------------------===//
+// Interfaces
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: moore.module private @EmptyIface() {
+// CHECK:         moore.output
+// CHECK:       }
+interface EmptyIface;
+endinterface
+
+// CHECK-LABEL: moore.module @EmptyIfaceTop() {
+// CHECK:         moore.instance "ei" @EmptyIface() -> ()
+// CHECK:       }
+module EmptyIfaceTop;
+  EmptyIface ei();
+endmodule
+
+// CHECK-LABEL: moore.module private @SimpleIface() {
+// CHECK:         %data = moore.variable : <l8>
+// CHECK:         %valid = moore.variable : <l1>
+// CHECK:         %ready = moore.variable : <l1>
+// CHECK:         moore.output
+// CHECK:       }
+interface SimpleIface;
+  logic [7:0] data;
+  logic valid;
+  logic ready;
+endinterface
+
+// CHECK-LABEL: moore.module @SimpleIfaceTop() {
+// CHECK:         moore.instance "si" @SimpleIface() -> ()
+// CHECK:       }
+module SimpleIfaceTop;
+  SimpleIface si();
+endmodule
+
+// CHECK-LABEL: moore.module private @BusIface() {
+// CHECK:         %req = moore.variable : <l1>
+// CHECK:         %addr = moore.variable : <l8>
+// CHECK:         moore.output
+// CHECK:       }
+interface BusIface;
+  logic req;
+  logic [7:0] addr;
+endinterface
+
+// CHECK-LABEL: moore.module @UsesIface() {
+// CHECK:         moore.instance "bus" @BusIface() -> ()
+// CHECK:       }
+module UsesIface;
+  BusIface bus();
+endmodule
