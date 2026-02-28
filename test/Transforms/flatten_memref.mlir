@@ -325,3 +325,20 @@ module {
    %0 = memref.alloca() : memref<4x4xi32>
    return %0 : memref<4x4xi32>
  }
+// -----
+
+// Regression: flattening memref.global with dense_resource initializer should
+// not crash and should preserve the resource-backed initializer.
+module {
+  // CHECK-LABEL: module {
+  // CHECK: memref.global "private" constant @constant_4xi32_{{[0-9]+}} : memref<4xi32> = dense_resource<r0>
+  memref.global "private" constant @g : memref<2x2xi32> = dense_resource<r0>
+}
+
+{-#
+  dialect_resources: {
+    builtin: {
+      r0: "0x01000000020000000300000004000000"
+    }
+  }
+#-}

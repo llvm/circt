@@ -72,6 +72,7 @@ public:
   LogicalResult addMergeOps(ConversionPatternRewriter &rewriter);
   LogicalResult addBranchOps(ConversionPatternRewriter &rewriter);
   LogicalResult replaceCallOps(ConversionPatternRewriter &rewriter);
+  LogicalResult normalizeReinterpretCasts(ConversionPatternRewriter &rewriter);
 
   template <typename TSrcTerm, typename TDstTerm>
   LogicalResult setControlOnlyPath(ConversionPatternRewriter &rewriter,
@@ -196,40 +197,62 @@ LogicalResult lowerRegion(HandshakeLowering &hl, bool sourceConstants,
   //  non-deterministic merge-like operations.
   HandshakeLowering::MemRefToMemoryAccessOp memOps;
 
-  if (failed(
-          runPartialLowering(hl, &HandshakeLowering::replaceMemoryOps, memOps)))
+  if (failed(runPartialLowering(hl, &HandshakeLowering::normalizeReinterpretCasts))) {
+    hl.getRegion().getParentOp()->emitError("CFToHandshake stage failed: normalizeReinterpretCasts");
     return failure();
+  }
+  if (failed(
+          runPartialLowering(hl, &HandshakeLowering::replaceMemoryOps, memOps))) {
+    hl.getRegion().getParentOp()->emitError("CFToHandshake stage failed: replaceMemoryOps");
+    return failure();
+  }
   if (failed(runPartialLowering(
           hl, &HandshakeLowering::setControlOnlyPath<TSrcTerm, TDstTerm>,
-          entryCtrl)))
+          entryCtrl))) {
+    hl.getRegion().getParentOp()->emitError("CFToHandshake stage failed: setControlOnlyPath");
     return failure();
-  if (failed(runPartialLowering(hl, &HandshakeLowering::addMergeOps)))
+  }
+  if (failed(runPartialLowering(hl, &HandshakeLowering::addMergeOps))) {
+    hl.getRegion().getParentOp()->emitError("CFToHandshake stage failed: addMergeOps");
     return failure();
-  if (failed(runPartialLowering(hl, &HandshakeLowering::replaceCallOps)))
+  }
+  if (failed(runPartialLowering(hl, &HandshakeLowering::replaceCallOps))) {
+    hl.getRegion().getParentOp()->emitError("CFToHandshake stage failed: replaceCallOps");
     return failure();
-  if (failed(runPartialLowering(hl, &HandshakeLowering::addBranchOps)))
+  }
+  if (failed(runPartialLowering(hl, &HandshakeLowering::addBranchOps))) {
+    hl.getRegion().getParentOp()->emitError("CFToHandshake stage failed: addBranchOps");
     return failure();
+  }
 
   // The following passes modifies the dataflow graph to being safe for task
   // pipelining. In doing so, non-deterministic merge structures are replaced
   // for deterministic structures.
   if (!disableTaskPipelining) {
     if (failed(
-            runPartialLowering(hl, &HandshakeLowering::loopNetworkRewriting)))
+            runPartialLowering(hl, &HandshakeLowering::loopNetworkRewriting))) {
+      hl.getRegion().getParentOp()->emitError("CFToHandshake stage failed: loopNetworkRewriting");
       return failure();
+    }
     if (failed(
-            runPartialLowering(hl, &HandshakeLowering::feedForwardRewriting)))
+            runPartialLowering(hl, &HandshakeLowering::feedForwardRewriting))) {
+      hl.getRegion().getParentOp()->emitError("CFToHandshake stage failed: feedForwardRewriting");
       return failure();
+    }
   }
 
   if (failed(runPartialLowering(
-          hl, &HandshakeLowering::connectConstantsToControl, sourceConstants)))
+          hl, &HandshakeLowering::connectConstantsToControl, sourceConstants))) {
+    hl.getRegion().getParentOp()->emitError("CFToHandshake stage failed: connectConstantsToControl");
     return failure();
+  }
 
   bool lsq = false;
   if (failed(runPartialLowering(hl, &HandshakeLowering::connectToMemory, memOps,
-                                lsq)))
+                                lsq))) {
+    hl.getRegion().getParentOp()->emitError("CFToHandshake stage failed: connectToMemory");
     return failure();
+  }
 
   // Legalize the resulting regions, removing basic blocks and performing
   // any simple conversions.

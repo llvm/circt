@@ -82,6 +82,13 @@ If you want to only build a specific part, for example the `circt-opt` tool:
 ninja -C build bin/circt-opt
 ```
 
+Local nix workflow (recommended for this repo checkout):
+```sh
+./compile.sh
+```
+
+This wrapper always runs inside `nix develop .#circt` and builds `bin/circt-opt` from `build`, avoiding missing dependency issues when `ninja` is run directly outside the dev shell.
+
 or the `firtool` tool:
 ```sh
 ninja -C build bin/firtool
