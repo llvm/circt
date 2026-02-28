@@ -213,13 +213,14 @@ struct StmtVisitor {
       }
 
       // According to IEEE 1800-2023 Section 21.3.3 "Formatting data to a
-      // string" the first argument of $sformat is its output; the other
-      // arguments work like a FormatString.
+      // string" the first argument of $sformat/$swrite is its output; the
+      // other arguments work like a FormatString.
       // In Moore we only support writing to a location if it is a reference;
-      // However, Section 21.3.3 explains that the output of $sformat is
-      // assigned as if it were cast from a string literal (Section 5.9),
+      // However, Section 21.3.3 explains that the output of $sformat/$swrite
+      // is assigned as if it were cast from a string literal (Section 5.9),
       // so this implementation casts the string to the target value.
-      if (!call->getSubroutineName().compare("$sformat")) {
+      if (!call->getSubroutineName().compare("$sformat") ||
+          !call->getSubroutineName().compare("$swrite")) {
 
         // Use the first argument as the output location
         auto *lhsExpr = call->arguments().front();
