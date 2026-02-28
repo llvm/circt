@@ -4145,9 +4145,6 @@ module DynamicArrayDeleteTest;
   end
 endmodule
 
-
-
-
 // CHECK-LABEL: moore.module @ForkJoinTest() {
 // CHECK:         [[C0:%.+]] = moore.constant 0 : i32
 // CHECK:         [[V0:%.+]] = moore.variable [[C0]] : <i32>
