@@ -71,61 +71,76 @@ void verifyTypeCompatibility(const Type *portType) {
     if (std::string_view(portType->getID()) != T::_ESI_ID)
       throw std::runtime_error("ESI type mismatch: C++ type has _ESI_ID '" +
                                std::string(T::_ESI_ID) +
-                               "' but port type ID is '" + portType->getID() +
-                               "'");
+                               "' but port type is '" +
+                               portType->toString(/*oneLine=*/true) + "'");
   } else if constexpr (std::is_void_v<T>) {
     if (!dynamic_cast<const VoidType *>(portType))
       throw std::runtime_error("ESI type mismatch: expected VoidType for "
-                               "void, but port type ID is '" +
-                               portType->getID() + "'");
+                               "void, but port type is '" +
+                               portType->toString(/*oneLine=*/true) + "'");
   } else if constexpr (std::is_same_v<T, bool>) {
     // bool maps to signless i1, which is BitsType with width <= 1.
     auto *bits = dynamic_cast<const BitsType *>(portType);
     if (!bits || bits->getWidth() > 1)
       throw std::runtime_error(
           "ESI type mismatch: expected BitsType with width <= 1 for "
-          "bool, but port type ID is '" +
-          portType->getID() + "'");
+          "bool, but port type is '" +
+          portType->toString(/*oneLine=*/true) + "'");
   } else if constexpr (std::is_integral_v<T> && std::is_signed_v<T>) {
     auto *sint = dynamic_cast<const SIntType *>(portType);
     if (!sint)
       throw std::runtime_error(
           "ESI type mismatch: expected SIntType for signed integer, "
-          "but port type ID is '" +
-          portType->getID() + "'");
+          "but port type is '" +
+          portType->toString(/*oneLine=*/true) + "'");
     if (sint->getWidth() > sizeof(T) * 8)
       throw std::runtime_error(
           "ESI type mismatch: SIntType width " +
           std::to_string(sint->getWidth()) + " does not fit in " +
           std::to_string(sizeof(T) * 8) + "-bit signed integer");
+    // Require closest-size match: reject if a smaller C++ type would suffice.
+    if (sizeof(T) > 1 && sint->getWidth() <= (sizeof(T) / 2) * 8)
+      throw std::runtime_error("ESI type mismatch: SIntType width " +
+                               std::to_string(sint->getWidth()) +
+                               " should use a smaller C++ type than " +
+                               std::to_string(sizeof(T) * 8) + "-bit");
   } else if constexpr (std::is_integral_v<T> && std::is_unsigned_v<T>) {
     // Accept UIntType (uiM) or BitsType (iM, signless).
-    auto *uint_t = dynamic_cast<const UIntType *>(portType);
+    auto *uintPort = dynamic_cast<const UIntType *>(portType);
     auto *bits = dynamic_cast<const BitsType *>(portType);
-    if (!uint_t && !bits)
+    if (!uintPort && !bits)
       throw std::runtime_error(
           "ESI type mismatch: expected UIntType or BitsType for unsigned "
-          "integer, but port type ID is '" +
-          portType->getID() + "'");
-    uint64_t width = uint_t ? uint_t->getWidth() : bits->getWidth();
+          "integer, but port type is '" +
+          portType->toString(/*oneLine=*/true) + "'");
+    uint64_t width = uintPort ? uintPort->getWidth() : bits->getWidth();
     if (width > sizeof(T) * 8)
       throw std::runtime_error("ESI type mismatch: bit width " +
                                std::to_string(width) + " does not fit in " +
                                std::to_string(sizeof(T) * 8) +
                                "-bit unsigned integer");
+    // Require closest-size match: reject if a smaller C++ type would suffice.
+    if (sizeof(T) > 1 && width <= (sizeof(T) / 2) * 8)
+      throw std::runtime_error("ESI type mismatch: bit width " +
+                               std::to_string(width) +
+                               " should use a smaller C++ type than " +
+                               std::to_string(sizeof(T) * 8) + "-bit");
   } else {
     throw std::runtime_error(
         std::string("Cannot verify type compatibility for C++ type '") +
-        typeid(T).name() + "' against ESI port type '" + portType->getID() +
-        "'");
+        typeid(T).name() + "' against ESI port type '" +
+        portType->toString(/*oneLine=*/true) + "'");
   }
 }
 
 //===----------------------------------------------------------------------===//
-// TypedWritePort<T>
+// TypedWritePort<T, CheckValue>
+//
+// When CheckValue is true, write() and tryWrite() verify that the value fits
+// in the ESI port's actual bit width before sending.
 //===----------------------------------------------------------------------===//
 
-template <typename T>
+template <typename T, bool CheckValue = false>
 class TypedWritePort {
 public:
   explicit TypedWritePort(WriteChannelPort &port) : inner(port) {}
@@ -136,11 +151,15 @@ public:
   }
 
   void write(const T &data) {
+    if constexpr (CheckValue)
+      checkValueRange(data);
     // MessageData::from takes T& (non-const); safe to cast since it only reads.
     inner.write(MessageData::from(const_cast<T &>(data)));
   }
 
   bool tryWrite(const T &data) {
+    if constexpr (CheckValue)
+      checkValueRange(data);
     return inner.tryWrite(MessageData::from(const_cast<T &>(data)));
   }
 
@@ -153,6 +172,31 @@ public:
 
 private:
   WriteChannelPort &inner;
+
+  void checkValueRange(const T &data) {
+    static_assert(std::is_integral_v<T>,
+                  "Value range checking only supported for integral types");
+    auto *bvType = dynamic_cast<const BitVectorType *>(inner.getType());
+    if (!bvType)
+      return;
+    uint64_t width = bvType->getWidth();
+    if (width >= sizeof(T) * 8)
+      return; // Full-width; any value is valid.
+    if constexpr (std::is_signed_v<T>) {
+      int64_t minVal = -(int64_t(1) << (width - 1));
+      int64_t maxVal = (int64_t(1) << (width - 1)) - 1;
+      if (data < minVal || data > maxVal)
+        throw std::runtime_error("Value " + std::to_string(data) +
+                                 " out of range for " + std::to_string(width) +
+                                 "-bit signed type");
+    } else {
+      uint64_t maxVal = (uint64_t(1) << width) - 1;
+      if (static_cast<uint64_t>(data) > maxVal)
+        throw std::runtime_error("Value " + std::to_string(data) +
+                                 " out of range for " + std::to_string(width) +
+                                 "-bit unsigned type");
+    }
+  }
 };
 
 /// Specialization for void — write takes no data argument.
@@ -289,13 +333,12 @@ class TypedFunction {
 public:
   /// Implicit conversion from Function* (returned by getAs<>()).
   // NOLINTNEXTLINE(google-explicit-constructor)
-  TypedFunction(services::FuncService::Function *func) : inner(func) {
+  TypedFunction(services::FuncService::Function *func) : inner(func) {}
+
+  void connect() {
     if (!inner)
       throw std::runtime_error(
           "TypedFunction: null Function pointer (getAs failed or wrong type)");
-  }
-
-  void connect() {
     verifyTypeCompatibility<ArgT>(inner->getArgType());
     verifyTypeCompatibility<ResultT>(inner->getResultType());
     inner->connect();
@@ -322,13 +365,12 @@ template <typename ResultT>
 class TypedFunction<void, ResultT> {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
-  TypedFunction(services::FuncService::Function *func) : inner(func) {
+  TypedFunction(services::FuncService::Function *func) : inner(func) {}
+
+  void connect() {
     if (!inner)
       throw std::runtime_error(
           "TypedFunction: null Function pointer (getAs failed or wrong type)");
-  }
-
-  void connect() {
     verifyTypeCompatibility<void>(inner->getArgType());
     verifyTypeCompatibility<ResultT>(inner->getResultType());
     inner->connect();
@@ -356,13 +398,12 @@ template <typename ArgT>
 class TypedFunction<ArgT, void> {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
-  TypedFunction(services::FuncService::Function *func) : inner(func) {
+  TypedFunction(services::FuncService::Function *func) : inner(func) {}
+
+  void connect() {
     if (!inner)
       throw std::runtime_error(
           "TypedFunction: null Function pointer (getAs failed or wrong type)");
-  }
-
-  void connect() {
     verifyTypeCompatibility<ArgT>(inner->getArgType());
     verifyTypeCompatibility<void>(inner->getResultType());
     inner->connect();
@@ -386,13 +427,12 @@ template <>
 class TypedFunction<void, void> {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
-  TypedFunction(services::FuncService::Function *func) : inner(func) {
+  TypedFunction(services::FuncService::Function *func) : inner(func) {}
+
+  void connect() {
     if (!inner)
       throw std::runtime_error(
           "TypedFunction: null Function pointer (getAs failed or wrong type)");
-  }
-
-  void connect() {
     verifyTypeCompatibility<void>(inner->getArgType());
     verifyTypeCompatibility<void>(inner->getResultType());
     inner->connect();
@@ -424,14 +464,13 @@ template <typename ArgT, typename ResultT>
 class TypedCallback {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
-  TypedCallback(services::CallService::Callback *cb) : inner(cb) {
-    if (!inner)
-      throw std::runtime_error(
-          "TypedCallback: null Callback pointer (getAs failed or wrong type)");
-  }
+  TypedCallback(services::CallService::Callback *cb) : inner(cb) {}
 
   void connect(std::function<ResultT(const ArgT &)> callback,
                bool quick = false) {
+    if (!inner)
+      throw std::runtime_error(
+          "TypedCallback: null Callback pointer (getAs failed or wrong type)");
     verifyTypeCompatibility<ArgT>(inner->getArgType());
     verifyTypeCompatibility<ResultT>(inner->getResultType());
     inner->connect(
@@ -454,13 +493,12 @@ template <typename ResultT>
 class TypedCallback<void, ResultT> {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
-  TypedCallback(services::CallService::Callback *cb) : inner(cb) {
+  TypedCallback(services::CallService::Callback *cb) : inner(cb) {}
+
+  void connect(std::function<ResultT()> callback, bool quick = false) {
     if (!inner)
       throw std::runtime_error(
           "TypedCallback: null Callback pointer (getAs failed or wrong type)");
-  }
-
-  void connect(std::function<ResultT()> callback, bool quick = false) {
     verifyTypeCompatibility<void>(inner->getArgType());
     verifyTypeCompatibility<ResultT>(inner->getResultType());
     inner->connect(
@@ -483,13 +521,12 @@ template <typename ArgT>
 class TypedCallback<ArgT, void> {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
-  TypedCallback(services::CallService::Callback *cb) : inner(cb) {
+  TypedCallback(services::CallService::Callback *cb) : inner(cb) {}
+
+  void connect(std::function<void(const ArgT &)> callback, bool quick = false) {
     if (!inner)
       throw std::runtime_error(
           "TypedCallback: null Callback pointer (getAs failed or wrong type)");
-  }
-
-  void connect(std::function<void(const ArgT &)> callback, bool quick = false) {
     verifyTypeCompatibility<ArgT>(inner->getArgType());
     verifyTypeCompatibility<void>(inner->getResultType());
     inner->connect(
@@ -512,13 +549,12 @@ template <>
 class TypedCallback<void, void> {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
-  TypedCallback(services::CallService::Callback *cb) : inner(cb) {
+  TypedCallback(services::CallService::Callback *cb) : inner(cb) {}
+
+  void connect(std::function<void()> callback, bool quick = false) {
     if (!inner)
       throw std::runtime_error(
           "TypedCallback: null Callback pointer (getAs failed or wrong type)");
-  }
-
-  void connect(std::function<void()> callback, bool quick = false) {
     verifyTypeCompatibility<void>(inner->getArgType());
     verifyTypeCompatibility<void>(inner->getResultType());
     inner->connect(

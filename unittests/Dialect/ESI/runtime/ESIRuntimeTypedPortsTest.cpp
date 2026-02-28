@@ -43,9 +43,9 @@ TEST(TypedPortsTest, BoolTypeCompatibility) {
 }
 
 TEST(TypedPortsTest, SignedIntTypeCompatibility) {
-  // int32_t can hold si31 (width 31 < 32).
-  SIntType sint31("si31", 31);
-  EXPECT_NO_THROW(verifyTypeCompatibility<int32_t>(&sint31));
+  // int32_t can hold si17 (width 17, in range (16,32]).
+  SIntType sint17("si17", 17);
+  EXPECT_NO_THROW(verifyTypeCompatibility<int32_t>(&sint17));
 
   // si32 has width 32, which fits exactly in int32_t. Should pass.
   SIntType sint32("si32", 32);
@@ -55,13 +55,24 @@ TEST(TypedPortsTest, SignedIntTypeCompatibility) {
   SIntType sint33("si33", 33);
   EXPECT_THROW(verifyTypeCompatibility<int32_t>(&sint33), std::runtime_error);
 
+  // si16 fits in int32_t but a smaller type (int16_t) would suffice. Reject.
+  SIntType sint16("si16", 16);
+  EXPECT_THROW(verifyTypeCompatibility<int32_t>(&sint16), std::runtime_error);
+
+  // si8 is even smaller — also reject for int32_t.
+  SIntType sint8("si8", 8);
+  EXPECT_THROW(verifyTypeCompatibility<int32_t>(&sint8), std::runtime_error);
+
+  // But si8 should be fine for int8_t (closest match).
+  EXPECT_NO_THROW(verifyTypeCompatibility<int8_t>(&sint8));
+
   // UIntType should fail for signed C++ type.
   UIntType uint31("ui31", 31);
   EXPECT_THROW(verifyTypeCompatibility<int32_t>(&uint31), std::runtime_error);
 
-  // int64_t can hold si63.
-  SIntType sint63("si63", 63);
-  EXPECT_NO_THROW(verifyTypeCompatibility<int64_t>(&sint63));
+  // int64_t can hold si33 (width 33, in range (32,64]).
+  SIntType sint33b("si33", 33);
+  EXPECT_NO_THROW(verifyTypeCompatibility<int64_t>(&sint33b));
 
   // si64 fits exactly in int64_t. Should pass.
   SIntType sint64("si64", 64);
@@ -70,12 +81,15 @@ TEST(TypedPortsTest, SignedIntTypeCompatibility) {
   // si65 exceeds int64_t. Should fail.
   SIntType sint65("si65", 65);
   EXPECT_THROW(verifyTypeCompatibility<int64_t>(&sint65), std::runtime_error);
+
+  // si32 fits in int64_t but int32_t would suffice. Reject.
+  EXPECT_THROW(verifyTypeCompatibility<int64_t>(&sint32), std::runtime_error);
 }
 
 TEST(TypedPortsTest, UnsignedIntTypeCompatibility) {
-  // uint32_t can hold ui31 (width 31 < 32).
-  UIntType uint31("ui31", 31);
-  EXPECT_NO_THROW(verifyTypeCompatibility<uint32_t>(&uint31));
+  // uint32_t can hold ui17 (width 17, in range (16,32]).
+  UIntType uint17("ui17", 17);
+  EXPECT_NO_THROW(verifyTypeCompatibility<uint32_t>(&uint17));
 
   // ui32 has width 32, which fits exactly in uint32_t. Should pass.
   UIntType uint32_t_("ui32", 32);
@@ -85,9 +99,16 @@ TEST(TypedPortsTest, UnsignedIntTypeCompatibility) {
   UIntType uint33("ui33", 33);
   EXPECT_THROW(verifyTypeCompatibility<uint32_t>(&uint33), std::runtime_error);
 
+  // ui16 fits but uint16_t would suffice. Reject for uint32_t.
+  UIntType uint16_("ui16", 16);
+  EXPECT_THROW(verifyTypeCompatibility<uint32_t>(&uint16_), std::runtime_error);
+
+  // But ui16 should be fine for uint16_t.
+  EXPECT_NO_THROW(verifyTypeCompatibility<uint16_t>(&uint16_));
+
   // BitsType (signless iM) should also be accepted for unsigned.
-  BitsType bits31("i31", 31);
-  EXPECT_NO_THROW(verifyTypeCompatibility<uint32_t>(&bits31));
+  BitsType bits17("i17", 17);
+  EXPECT_NO_THROW(verifyTypeCompatibility<uint32_t>(&bits17));
 
   // BitsType with width 32 fits in uint32_t. Should pass.
   BitsType bits32("i32", 32);
@@ -97,9 +118,14 @@ TEST(TypedPortsTest, UnsignedIntTypeCompatibility) {
   BitsType bits33("i33", 33);
   EXPECT_THROW(verifyTypeCompatibility<uint32_t>(&bits33), std::runtime_error);
 
-  // uint64_t with ui63.
-  UIntType uint63("ui63", 63);
-  EXPECT_NO_THROW(verifyTypeCompatibility<uint64_t>(&uint63));
+  // BitsType width 8 should be rejected for uint32_t (uint8_t suffices).
+  BitsType bits8("i8", 8);
+  EXPECT_THROW(verifyTypeCompatibility<uint32_t>(&bits8), std::runtime_error);
+  EXPECT_NO_THROW(verifyTypeCompatibility<uint8_t>(&bits8));
+
+  // uint64_t with ui33 (in range (32,64]).
+  UIntType uint33b("ui33", 33);
+  EXPECT_NO_THROW(verifyTypeCompatibility<uint64_t>(&uint33b));
 
   // uint64_t with ui64 fits exactly. Should pass.
   UIntType uint64_t_("ui64", 64);
@@ -108,6 +134,10 @@ TEST(TypedPortsTest, UnsignedIntTypeCompatibility) {
   // uint64_t with ui65 exceeds. Should fail.
   UIntType uint65("ui65", 65);
   EXPECT_THROW(verifyTypeCompatibility<uint64_t>(&uint65), std::runtime_error);
+
+  // uint64_t with ui32 — uint32_t would suffice. Reject.
+  EXPECT_THROW(verifyTypeCompatibility<uint64_t>(&uint32_t_),
+               std::runtime_error);
 
   // SIntType should fail for unsigned C++ type.
   SIntType sint31("si31", 31);
@@ -251,9 +281,10 @@ public:
 // TypedFunction tests
 //===----------------------------------------------------------------------===//
 
-TEST(TypedPortsTest, TypedFunctionNullThrows) {
-  EXPECT_THROW((TypedFunction<uint32_t, uint16_t>(nullptr)),
-               std::runtime_error);
+TEST(TypedPortsTest, TypedFunctionNullThrowsAtConnect) {
+  // Null is accepted at construction but throws at connect().
+  TypedFunction<uint32_t, uint16_t> typed(nullptr);
+  EXPECT_THROW(typed.connect(), std::runtime_error);
 }
 
 TEST(TypedPortsTest, TypedFunctionConnectVerifiesTypes) {
