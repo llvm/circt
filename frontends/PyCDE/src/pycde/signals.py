@@ -773,18 +773,37 @@ class ChannelSignal(Signal):
   def reg(self, clk, rst=None, name=None):
     raise TypeError("Cannot register a channel")
 
-  def unwrap(self, readyOrRden):
+  def unwrap(
+      self,
+      readyOrRden: Optional[BitVectorSignal] = None) -> Tuple[Signal, Signal]:
+    """Unwrap a channel into its data and control signals.
+
+    For ValidReady channels, `readyOrRden` is the ready signal and must be
+    provided. Returns (data, valid).
+    For FIFO channels, `readyOrRden` is the read-enable signal and must be
+    provided. Returns (data, empty).
+    For ValidOnly channels, `readyOrRden` is ignored (no backpressure).
+    Returns (data, valid).
+    """
     from .dialects import esi
     signaling = self.type.signaling
     if signaling == ChannelSignaling.ValidReady:
+      if readyOrRden is None:
+        raise ValueError(
+            "ValidReady channels require a 'ready' signal to unwrap.")
       ready = Bit(readyOrRden)
       unwrap_op = esi.UnwrapValidReadyOp(self.type.inner_type, Bit, self.value,
                                          ready.value)
       return unwrap_op[0], unwrap_op[1]
     elif signaling == ChannelSignaling.FIFO:
+      if readyOrRden is None:
+        raise ValueError("FIFO channels require an 'rden' signal to unwrap.")
       rden = Bit(readyOrRden)
       wrap_op = esi.UnwrapFIFOOp(self.value, rden.value)
       return wrap_op[0], wrap_op[1]
+    elif signaling == ChannelSignaling.ValidOnly:
+      unwrap_op = esi.UnwrapValidOnlyOp(self.value)
+      return unwrap_op[0], unwrap_op[1]
     else:
       raise TypeError("Unknown signaling standard")
 
@@ -816,9 +835,18 @@ class ChannelSignal(Signal):
         ), res_type)
 
   def snoop(self) -> Tuple[Bits(1), Bits(1), Type]:
-    """Combinationally snoop on the internal signals of a channel."""
+    """Combinationally snoop on the internal signals of a channel.
+    For ValidReady, returns (valid, ready, data).
+    For ValidOnly, returns (valid, True, data) since there is no backpressure.
+    """
     from .dialects import esi
-    assert self.type.signaling == ChannelSignaling.ValidReady, "Only valid-ready channels can be snooped currently"
+    if self.type.signaling == ChannelSignaling.ValidOnly:
+      # Use SnoopTransactionOp which is protocol-agnostic and doesn't consume.
+      # For ValidOnly, transaction == valid (always ready).
+      snoop = esi.SnoopTransactionOp(self.value)
+      return snoop[0], Bits(1)(1), snoop[1]
+    assert self.type.signaling == ChannelSignaling.ValidReady, \
+        "Only valid-ready and valid-only channels can be snooped"
     snoop = esi.SnoopValidReadyOp(self.value)
     return snoop[0], snoop[1], snoop[2]
 
@@ -835,28 +863,43 @@ class ChannelSignal(Signal):
 
     from .constructs import Wire
     from .types import Bits, Channel
-    ready_wire = Wire(Bits(1))
-    data, valid = self.unwrap(ready_wire)
-    data = transform(data)
-    ret_chan, ready = Channel(data.type,
-                              signaling=self.type.signaling).wrap(data, valid)
-    ready_wire.assign(ready)
-    return ret_chan
+    signaling = self.type.signaling
+    if signaling == ChannelSignaling.ValidOnly:
+      data, valid = self.unwrap()
+      data = transform(data)
+      ret_chan, _ = Channel(data.type, signaling=signaling).wrap(data, valid)
+      return ret_chan
+    else:
+      ready_wire = Wire(Bits(1))
+      data, valid = self.unwrap(ready_wire)
+      data = transform(data)
+      ret_chan, ready = Channel(data.type,
+                                signaling=signaling).wrap(data, valid)
+      ready_wire.assign(ready)
+      return ret_chan
 
   def fork(self, clk, rst) -> Tuple[ChannelSignal, ChannelSignal]:
     """Fork the channel into two channels, returning the two new channels."""
     from .constructs import Wire
     from .types import Bits
-    both_ready = Wire(Bits(1))
-    both_ready.name = self.get_name() + "_fork_both_ready"
-    data, valid = self.unwrap(both_ready)
-    valid_gate = both_ready & valid
-    a, a_rdy = self.type.wrap(data, valid_gate)
-    b, b_rdy = self.type.wrap(data, valid_gate)
-    abuf = a.buffer(clk, rst, 1)
-    bbuf = b.buffer(clk, rst, 1)
-    both_ready.assign(a_rdy & b_rdy)
-    return abuf, bbuf
+    signaling = self.type.signaling
+    if signaling == ChannelSignaling.ValidOnly:
+      # ValidOnly: no backpressure, just duplicate data and valid.
+      data, valid = self.unwrap()
+      a, _ = self.type.wrap(data, valid)
+      b, _ = self.type.wrap(data, valid)
+      return a, b
+    else:
+      both_ready = Wire(Bits(1))
+      both_ready.name = self.get_name() + "_fork_both_ready"
+      data, valid = self.unwrap(both_ready)
+      valid_gate = both_ready & valid
+      a, a_rdy = self.type.wrap(data, valid_gate)
+      b, b_rdy = self.type.wrap(data, valid_gate)
+      abuf = a.buffer(clk, rst, 1)
+      bbuf = b.buffer(clk, rst, 1)
+      both_ready.assign(a_rdy & b_rdy)
+      return abuf, bbuf
 
   def wait_for_ready(self, other: ChannelSignal) -> ChannelSignal:
     """Return a channel which doesn't issue valid unless some other channel is

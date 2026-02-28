@@ -13,3 +13,10 @@ hw.module @TestDanglingValidReady() {
   %c0 = hw.constant 0 : i1
   %chanOutput, %ready = esi.wrap.vr %c0, %c0 : i1
 }
+
+// CHECK-LABEL:  hw.module @TestDanglingValidOnly() {
+// CHECK-NEXT:     hw.output
+hw.module @TestDanglingValidOnly() {
+  %c0 = hw.constant 0 : i1
+  %chanOutput = esi.wrap.vo %c0, %c0 : i1
+}
