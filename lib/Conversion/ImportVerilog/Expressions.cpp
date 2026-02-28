@@ -214,7 +214,6 @@ struct ExprVisitor {
     auto derefType = value.getType();
     if (isLvalue)
       derefType = cast<moore::RefType>(derefType).getNestedType();
-
     if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
              moore::QueueType, moore::AssocArrayType, moore::StringType,
              moore::OpenUnpackedArrayType>(derefType)) {
