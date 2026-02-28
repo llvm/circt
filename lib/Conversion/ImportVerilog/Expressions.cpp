@@ -2588,9 +2588,8 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
   // just need to convert the queue bounds.
   if (isa<moore::QueueType>(type) && isa<moore::QueueType>(value.getType()) &&
       cast<moore::QueueType>(type).getElementType() ==
-          cast<moore::QueueType>(value.getType()).getElementType()) {
-    return builder.createOrFold<moore::QueueConvertBoundsOp>(loc, type, value);
-  }
+          cast<moore::QueueType>(value.getType()).getElementType())
+    return builder.createOrFold<moore::QueueResizeOp>(loc, type, value);
 
   // Handle Real To Int conversion
   if (isa<moore::IntType>(type) && isa<moore::RealType>(value.getType())) {

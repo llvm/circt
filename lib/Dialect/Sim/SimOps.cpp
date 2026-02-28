@@ -580,11 +580,10 @@ OpFoldResult IntToStringOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
-LogicalResult QueueConvertBoundsOp::verify() {
+LogicalResult QueueResizeOp::verify() {
   if (cast<QueueType>(getInput().getType()).getElementType() !=
-      cast<QueueType>(getResult().getType()).getElementType()) {
+      cast<QueueType>(getResult().getType()).getElementType())
     return failure();
-  }
   return success();
 }
 

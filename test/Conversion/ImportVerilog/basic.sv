@@ -4074,7 +4074,7 @@ endmodule
 // CHECK:           [[Q2:%.+]] = moore.variable : <queue<i32, 10>>
 // CHECK:           moore.procedure initial {
 // CHECK:               [[QR1:%.+]] = moore.read [[Q1]] : <queue<i32, 0>>
-// CHECK:               [[CONV:%.+]] = moore.queue.conv_bounds [[QR1]] : <i32, 0> -> <i32, 10>
+// CHECK:               [[CONV:%.+]] = moore.queue.resize [[QR1]] : <i32, 0> -> <i32, 10>
 // CHECK:               moore.blocking_assign [[Q2]], [[CONV]] : queue<i32, 10>
 // CHECK:               moore.return
 // CHECK:           }

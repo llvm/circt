@@ -782,7 +782,7 @@ def QueueSliceOp : SimOp<"queue.slice", [Pure,
   let assemblyFormat = "$queue `from` $lowIdx `to` $highIdx attr-dict `:` type($queue)";
 }
 
-def QueueConvertBoundsOp : SimOp<"queue.conv_bounds", [Pure]> {
+def QueueResizeOp : SimOp<"queue.resize", [Pure]> {
   let description = [{
     Converts between two queues with different bounds, but the same element
     type.

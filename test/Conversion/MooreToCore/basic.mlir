@@ -1569,8 +1569,8 @@ func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: [[NEWQ:%.+]] = sim.queue.slice [[QR]] from %arg0 to %arg1 : <i32, 10>
   %newq = moore.dyn_queue_extract %qr from %arg0 to %arg1 : <i32, 10>, i32 -> queue<i32, 10>
 
-  // CHECK: [[DIFFB:%.+]] = sim.queue.conv_bounds [[QR]] : <i32, 10> -> <i32, 0>
-  %diffbounds = moore.queue.conv_bounds %qr : <i32, 10> -> <i32, 0>
+  // CHECK: [[DIFFB:%.+]] = sim.queue.resize [[QR]] : <i32, 10> -> <i32, 0>
+  %diffbounds = moore.queue.resize %qr : <i32, 10> -> <i32, 0>
   return
 }
 

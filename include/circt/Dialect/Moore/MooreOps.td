@@ -1766,7 +1766,7 @@ def DynExtractRefOp : MooreOp<"dyn_extract_ref", [Pure]> {
 // Queue Manipulation
 //===----------------------------------------------------------------------===//
 
-def QueueConvertBoundsOp : MooreOp<"queue.conv_bounds", [Pure]> {
+def QueueResizeOp : MooreOp<"queue.resize", [Pure]> {
   let description = [{
     Converts between two queues with different bounds, but the same element
     type.
