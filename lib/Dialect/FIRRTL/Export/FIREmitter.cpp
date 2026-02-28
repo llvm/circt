@@ -1704,8 +1704,9 @@ void Emitter::emitExpression(UnsafeDomainCastOp op) {
 }
 
 void Emitter::emitExpression(UnknownValueOp op) {
-  ps << "Unknown";
-  emitTypeWithColon(op.getType());
+  ps << "Unknown(";
+  emitType(op.getType());
+  ps << ")";
 }
 
 void Emitter::emitAttribute(MemDirAttr attr) {

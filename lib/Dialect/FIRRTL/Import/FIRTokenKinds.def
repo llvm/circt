@@ -107,7 +107,6 @@ TOK_KEYWORD(Reset)
 TOK_KEYWORD(SInt)
 TOK_KEYWORD(String)
 TOK_KEYWORD(UInt)
-TOK_KEYWORD(Unknown)
 TOK_KEYWORD(attach)
 TOK_KEYWORD(case)
 TOK_KEYWORD(circuit)
@@ -209,6 +208,7 @@ TOK_LPKEYWORD(Integer)
 TOK_LPKEYWORD(Bool)
 TOK_LPKEYWORD(Double)
 TOK_LPKEYWORD(List)
+TOK_LPKEYWORD(Unknown)
 
 // Keywords when followed by a '<'. These turn "foo" into
 // FIRToken::langle_foo enums.
