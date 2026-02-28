@@ -21,7 +21,6 @@
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/SymbolTable.h"
-#include "mlir/Pass/Pass.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
@@ -155,6 +154,66 @@ static LogicalResult mangleCircuitSymbols(CircuitOp circuit) {
   return success();
 }
 
+static void collectLayerSymbols(LayerOp layer,
+                                SmallVectorImpl<FlatSymbolRefAttr> &stack,
+                                llvm::DenseSet<Attribute> &layers) {
+  stack.push_back(FlatSymbolRefAttr::get(layer.getSymNameAttr()));
+  layers.insert(SymbolRefAttr::get(stack.front().getAttr(),
+                                   ArrayRef(stack).drop_front()));
+  for (auto child : layer.getOps<LayerOp>())
+    collectLayerSymbols(child, stack, layers);
+  stack.pop_back();
+}
+
+static void collectLayerSymbols(CircuitOp circuit,
+                                llvm::DenseSet<Attribute> &layers) {
+  SmallVector<FlatSymbolRefAttr> stack;
+  for (auto layer : circuit.getOps<LayerOp>())
+    collectLayerSymbols(layer, stack, layers);
+}
+
+static LogicalResult
+verifyKnownLayers(FExtModuleOp extModule,
+                  const llvm::DenseSet<Attribute> &availableLayers) {
+  auto knownLayersAttr = extModule.getKnownLayersAttr();
+  if (!knownLayersAttr)
+    return success();
+
+  SmallVector<Attribute> missingLayers;
+  for (auto attr : knownLayersAttr)
+    if (!availableLayers.contains(attr))
+      missingLayers.push_back(attr);
+
+  if (missingLayers.empty())
+    return success();
+
+  auto diag = extModule.emitOpError()
+              << "declares known layers that are not defined in the linked "
+                 "circuit: ";
+  llvm::interleaveComma(missingLayers, diag,
+                        [&](Attribute attr) { diag << attr; });
+  return failure();
+}
+
+static LogicalResult mergeLayer(LayerOp dst, LayerOp src) {
+  if (dst.getConvention() != src.getConvention())
+    return src.emitOpError("layer convention mismatch with existing layer");
+
+  SymbolTable dstSymbolTable(dst);
+
+  for (auto &op : llvm::make_early_inc_range(src.getBody().front())) {
+    if (auto srcChildLayer = dyn_cast<LayerOp>(op))
+      if (auto dstChildLayer = cast_if_present<LayerOp>(
+              dstSymbolTable.lookup(srcChildLayer.getNameAttr()))) {
+        if (failed(mergeLayer(dstChildLayer, srcChildLayer)))
+          return failure();
+        continue;
+      }
+    op.moveBefore(&dst.getBody().front(), dst.getBody().front().end());
+  }
+  return success();
+}
+
 /// Handles colliding symbols when merging circuits.
 ///
 /// This function resolves symbol collisions between operations in different
@@ -183,8 +242,10 @@ static LogicalResult mangleCircuitSymbols(CircuitOp circuit) {
 /// \note This workaround for empty parameters should ultimately be
 ///       removed once ODS is updated to properly support placeholder
 ///       declarations.
-static FailureOr<bool> handleCollidingOps(SymbolOpInterface collidingOp,
-                                          SymbolOpInterface incomingOp) {
+static FailureOr<bool>
+handleCollidingOps(SymbolOpInterface collidingOp, SymbolOpInterface incomingOp,
+                   const llvm::DenseSet<Attribute> &mergedLayers,
+                   const llvm::DenseSet<Attribute> &incomingLayers) {
   if (!collidingOp.isPublic())
     return collidingOp->emitOpError("should be a public symbol");
   if (!incomingOp.isPublic())
@@ -198,6 +259,12 @@ static FailureOr<bool> handleCollidingOps(SymbolOpInterface collidingOp,
       definition = incomingOp;
       declaration = collidingOp;
     }
+
+    auto extModule = cast<FExtModuleOp>(declaration);
+    const auto &layersToCheck =
+        (definition == incomingOp) ? incomingLayers : mergedLayers;
+    if (failed(verifyKnownLayers(extModule, layersToCheck)))
+      return failure();
 
     constexpr const StringRef attrsToCompare[] = {
         "portDirections", "portSymbols", "portNames", "portTypes", "layers"};
@@ -238,6 +305,14 @@ static FailureOr<bool> handleCollidingOps(SymbolOpInterface collidingOp,
     }
   }
 
+  if (isa<LayerOp>(collidingOp) && isa<LayerOp>(incomingOp)) {
+    if (failed(
+            mergeLayer(cast<LayerOp>(collidingOp), cast<LayerOp>(incomingOp))))
+      return failure();
+    incomingOp->erase();
+    return true;
+  }
+
   return failure();
 }
 
@@ -255,10 +330,15 @@ LogicalResult LinkCircuitsPass::mergeCircuits() {
                         StringAttr::get(&getContext(), baseCircuitName));
   SmallVector<Attribute> mergedAnnotations;
 
+  llvm::DenseSet<Attribute> mergedLayers;
+
   for (auto circuit : circuits) {
     if (!noMangle)
       if (failed(mangleCircuitSymbols(circuit)))
         return circuit->emitError("failed to mangle private symbol");
+
+    llvm::DenseSet<Attribute> incomingLayers;
+    collectLayerSymbols(circuit, incomingLayers);
 
     // TODO: other circuit attributes (such as enable_layers...)
     llvm::transform(circuit.getAnnotations().getValue(),
@@ -281,7 +361,8 @@ LogicalResult LinkCircuitsPass::mergeCircuits() {
       if (auto symbolOp = dyn_cast<SymbolOpInterface>(op))
         if (auto collidingOp = cast_if_present<SymbolOpInterface>(
                 mergedSymbolTable.lookup(symbolOp.getNameAttr()))) {
-          auto opErased = handleCollidingOps(collidingOp, symbolOp);
+          auto opErased = handleCollidingOps(collidingOp, symbolOp,
+                                             mergedLayers, incomingLayers);
           if (failed(opErased))
             return mergedCircuit->emitError("has colliding symbol " +
                                             symbolOp.getName() +
@@ -294,6 +375,7 @@ LogicalResult LinkCircuitsPass::mergeCircuits() {
                      mergedCircuit.getBodyBlock()->end());
     }
 
+    mergedLayers.insert(incomingLayers.begin(), incomingLayers.end());
     circuit->erase();
   }
 
