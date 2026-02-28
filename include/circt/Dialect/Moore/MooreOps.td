@@ -2325,6 +2325,24 @@ def FormatStringOp : MooreOp<"fmt.string", [Pure]> {
   }];
 }
 
+def FormatHierPathOp : MooreOp<"fmt.hier_path", [Pure]> {
+  let summary = "Hierarchical path format specifier";
+  let description = [{
+    Format string fragment that resolves to the hierarchical path of the module
+    instance containing this operation when printed. This corresponds to the
+    `%m` (or `%M` with escaped special characters) format specifier in
+    SystemVerilog.
+
+    See IEEE 1800-2017 § 21.2.1.6 "Hierarchical name format".
+
+    The `useEscapes` attribute distinguishes between `%m` (false) and `%M`
+    (true). When true, special characters in the path should be escaped.
+  }];
+  let arguments = (ins UnitAttr:$useEscapes);
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = "(`escaped` $useEscapes^)? attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // Builtin System Tasks and Functions
 //===----------------------------------------------------------------------===//

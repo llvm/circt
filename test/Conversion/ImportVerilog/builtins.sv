@@ -186,6 +186,19 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   // CHECK: moore.builtin.display [[TMP3]]
   $display("%f", r);
 
+  // IEEE 1800-2017 § 21.2.1.6 "Hierarchical name format"
+  // CHECK: [[TMP1:%.+]] = moore.fmt.hier_path
+  // CHECK-NOT: escaped
+  // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
+  // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
+  // CHECK: moore.builtin.display [[TMP3]]
+  $display("%m");
+  // CHECK: [[TMP1:%.+]] = moore.fmt.hier_path escaped
+  // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
+  // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
+  // CHECK: moore.builtin.display [[TMP3]]
+  $display("%M");
+
   // CHECK: [[TMP:%.+]] = moore.fmt.literal ""
   // CHECK: moore.builtin.severity info [[TMP]]
   $info;

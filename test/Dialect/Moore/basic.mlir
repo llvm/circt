@@ -442,6 +442,11 @@ func.func @FormatStrings(%arg0: !moore.format_string, %arg1: !moore.i42, %arg2: 
   moore.fmt.real float %arg2, align right fieldWidth 12 : f32
   // CHECK: moore.fmt.real exponential %arg3, align right fracDigits 5 : f64
   moore.fmt.real exponential %arg3, align right fracDigits 5 : f64
+
+  // CHECK: moore.fmt.hier_path
+  moore.fmt.hier_path
+  // CHECK: moore.fmt.hier_path escaped
+  moore.fmt.hier_path escaped
   return
 }
 

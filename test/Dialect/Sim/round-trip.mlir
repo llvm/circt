@@ -58,3 +58,12 @@ func.func @SimulationControl() {
   sim.pause quiet
   return
 }
+
+// CHECK-LABEL: func.func @FormatStrings
+func.func @FormatStrings() {
+  // CHECK: sim.fmt.hier_path
+  sim.fmt.hier_path
+  // CHECK: sim.fmt.hier_path escaped
+  sim.fmt.hier_path escaped
+  return
+}
