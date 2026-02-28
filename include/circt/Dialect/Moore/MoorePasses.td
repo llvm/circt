@@ -30,7 +30,11 @@ def SimplifyProcedures : Pass<"moore-simplify-procedures", "moore::SVModuleOp"> 
 }
 
 def SimplifyRefs : Pass<"moore-simplify-refs", "moore::SVModuleOp"> {
-    let summary = "Lower moore.concat_ref ops and moore.dyn_queue_ref_element";
+    let summary = [{
+      Split aggregate assignment left-hand-sides into multiple
+      simple assignments
+    }];
+
     let description = [{
       It has two purposes:
       - To disassemble the moore.concat_ref. Which is tricky to lower
