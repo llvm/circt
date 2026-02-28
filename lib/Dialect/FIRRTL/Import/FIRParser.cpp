@@ -2412,7 +2412,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
         parseUnsafeDomainCast(result))
       return failure();
     break;
-  case FIRToken::kw_Unknown:
+  case FIRToken::lp_Unknown:
     if (requireFeature(nextFIRVersion, "unknown property expressions") ||
         parseUnknownProperty(result))
       return failure();
@@ -2896,12 +2896,13 @@ ParseResult FIRStmtParser::parseUnsafeDomainCast(Value &result) {
 }
 
 ParseResult FIRStmtParser::parseUnknownProperty(Value &result) {
-  consumeToken(FIRToken::kw_Unknown);
-
   auto loc = getToken().getLoc();
+  consumeToken(FIRToken::lp_Unknown);
+  // The '(' has already been consumed by the lexer.
+
   PropertyType type;
-  if (parseToken(FIRToken::colon, "expected ':' in unknown property") ||
-      parsePropertyType(type, "expected property type"))
+  if (parsePropertyType(type, "expected property type") ||
+      parseToken(FIRToken::r_paren, "expected ')' in unknown property"))
     return failure();
 
   locationProcessor.setLoc(loc);

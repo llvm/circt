@@ -2291,13 +2291,13 @@ circuit UnknownProperties:
 
     ; CHECK:      %[[#INTEGER:]] = firrtl.unknown : !firrtl.integer
     ; CHECK-NEXT: firrtl.propassign %a, %[[#INTEGER]] : !firrtl.integer
-    propassign a, Unknown: Integer
+    propassign a, Unknown(Integer)
     ; CHECK:      %[[#STRING:]] = firrtl.unknown : !firrtl.string
     ; CHECK-NEXT: firrtl.propassign %b, %[[#STRING]] : !firrtl.string
-    propassign b, Unknown: String
+    propassign b, Unknown(String)
     ; CHECK:      %[[#INSTANCE:]] = firrtl.unknown : !firrtl.class<@Foo()>
     ; CHECK-NEXT: firrtl.propassign %c, %[[#INSTANCE]] : !firrtl.class<@Foo()>
-    propassign c, Unknown: Inst<Foo>
+    propassign c, Unknown(Inst<Foo>)
 
 ; // -----
 
@@ -2320,3 +2320,9 @@ circuit KeywordIdentifiers :
     ; CHECK: firrtl.constant -10
     connect UInt, UInt<8>(42)
     connect SInt, SInt<8>(-10)
+
+    ; Test Unknown as identifier
+    ; CHECK: %Unknown = firrtl.wire
+    wire Unknown : UInt<1>
+    ; CHECK: firrtl.constant 0
+    connect Unknown, UInt<1>(0)
