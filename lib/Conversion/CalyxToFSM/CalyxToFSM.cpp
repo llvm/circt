@@ -141,7 +141,7 @@ LogicalResult CompileFSMVisitor::visit(StateOp currentState, IfOp ifOp,
     Value branchTaken = cond;
     if (invert) {
       OpBuilder::InsertionGuard g(builder);
-      branchTaken = comb::createOrFoldNot(loc, branchTaken, builder);
+      branchTaken = comb::createOrFoldNot(builder, loc, branchTaken);
     }
 
     returnOp.setOperand(branchTaken);
@@ -242,7 +242,7 @@ LogicalResult CompileFSMVisitor::visit(StateOp currentState, WhileOp whileOp,
   nextStateTransition.ensureGuard(builder);
   builder.setInsertionPoint(nextStateTransition.getGuardReturn());
   nextStateTransition.getGuardReturn().setOperand(
-      comb::createOrFoldNot(loc, whileOp.getCond(), builder));
+      comb::createOrFoldNot(builder, loc, whileOp.getCond()));
   return success();
 }
 

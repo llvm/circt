@@ -1727,7 +1727,7 @@ struct SExtOpConversion : public OpConversionPattern<SExtOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto type = typeConverter->convertType(op.getType());
     auto value =
-        comb::createOrFoldSExt(op.getLoc(), adaptor.getInput(), type, rewriter);
+        comb::createOrFoldSExt(rewriter, op.getLoc(), adaptor.getInput(), type);
     rewriter.replaceOp(op, value);
     return success();
   }
