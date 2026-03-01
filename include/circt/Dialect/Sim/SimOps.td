@@ -935,6 +935,38 @@ def QueueConcatOp : SimOp<"queue.concat", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Dynamic Arrays
+//===----------------------------------------------------------------------===//
+
+def DynamicArrayEmptyOp : SimOp<"darray.empty", [Pure]> {
+  let summary = "Creates an empty dynamic array";
+  let description = [{
+    Creates an empty dyanmic array.
+  }];
+
+  let arguments = (ins);
+  let results = (outs DynamicArrayType:$out);
+
+  let assemblyFormat = "attr-dict `:` type($out)";
+}
+
+def DynamicArrayCreateOp: SimOp<"darray.create", [Pure, 
+OptionalTypesMatchWith<"result and init types must match",
+    "result", "init",
+    "$_self">]> {
+  let summary = "Creates a dynamic array";
+  let description = [{
+    Creates a dyanmic array given an initial size and an optional initializer parameter.
+  }];
+
+  let arguments = (ins I32:$initialSize, Optional<DynamicArrayType>:$init);
+  let results = (outs DynamicArrayType:$result);
+  let assemblyFormat = [{
+    $initialSize (`initial` $init^)? attr-dict `:` type($result)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//
 

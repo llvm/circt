@@ -15,6 +15,7 @@
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
+#include "circt/Dialect/Sim/SimTypes.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/ConversionPatternSet.h"
 #include "circt/Transforms/Passes.h"
@@ -35,6 +36,7 @@
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/Support/LogicalResult.h"
 
 namespace circt {
 #define GEN_PASS_DEF_CONVERTMOORETOCORE
@@ -770,6 +772,10 @@ static Value createZeroValue(Type type, Location loc,
   // Handle queues
   if (auto queueType = dyn_cast<sim::QueueType>(type))
     return sim::QueueEmptyOp::create(rewriter, loc, queueType);
+
+  // handle dynamic arrays
+  if (auto dynArrayType = dyn_cast<sim::DynamicArrayType>(type))
+    return sim::DynamicArrayEmptyOp::create(rewriter, loc, dynArrayType);
 
   // Otherwise try to create a zero integer and bitcast it to the result type.
   int64_t width = hw::getBitWidth(type);
@@ -2556,81 +2562,107 @@ struct QueueSetOpConversion : public OpConversionPattern<QueueSetOp> {
     rewriter.eraseOp(op);
     return success();
   }
-};
 
-struct QueueCmpOpConversion : public OpConversionPattern<QueueCmpOp> {
-  using OpConversionPattern::OpConversionPattern;
+  struct QueueCmpOpConversion : public OpConversionPattern<QueueCmpOp> {
+    using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult
-  matchAndRewrite(QueueCmpOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    // TODO: Right now Moore uses `UArrayCmpPredicate` for both queues/unpacked
-    // arrays - reasonable because, per SV spec, queues *are* a type of unpacked
-    // array). Once we support comparing unpacked arrays in core, it will make
-    // sense to rename `QueueCmpPredicate` to `UArrayCmpPredicate` and use it
-    // for both forms of comparisons.
+    LogicalResult
+    matchAndRewrite(QueueCmpOp op, OpAdaptor adaptor,
+                    ConversionPatternRewriter &rewriter) const override {
+      // TODO: Right now Moore uses `UArrayCmpPredicate` for both
+      // queues/unpacked arrays - reasonable because, per SV spec, queues *are*
+      // a type of unpacked array). Once we support comparing unpacked arrays in
+      // core, it will make sense to rename `QueueCmpPredicate` to
+      // `UArrayCmpPredicate` and use it for both forms of comparisons.
 
-    // Convert the UArrayCmpPredicate into a QueueCmpPredicate
-    auto unpackedPred = adaptor.getPredicateAttr().getValue();
-    sim::QueueCmpPredicate queuePred;
-    switch (unpackedPred) {
-    case circt::moore::UArrayCmpPredicate::eq:
-      queuePred = sim::QueueCmpPredicate::eq;
-      break;
-    case circt::moore::UArrayCmpPredicate::ne:
-      queuePred = sim::QueueCmpPredicate::ne;
-      break;
-    default:
-      llvm_unreachable(
-          "All unpacked array comparison predicates should be handled");
+      // Convert the UArrayCmpPredicate into a QueueCmpPredicate
+      auto unpackedPred = adaptor.getPredicateAttr().getValue();
+      sim::QueueCmpPredicate queuePred;
+      switch (unpackedPred) {
+      case circt::moore::UArrayCmpPredicate::eq:
+        queuePred = sim::QueueCmpPredicate::eq;
+        break;
+      case circt::moore::UArrayCmpPredicate::ne:
+        queuePred = sim::QueueCmpPredicate::ne;
+        break;
+      default:
+        llvm_unreachable(
+            "All unpacked array comparison predicates should be handled");
+      }
+
+      auto cmpPred = sim::QueueCmpPredicateAttr::get(getContext(), queuePred);
+
+      rewriter.replaceOpWithNewOp<sim::QueueCmpOp>(
+          op, cmpPred, adaptor.getLhs(), adaptor.getRhs());
+      return success();
     }
+  };
 
-    auto cmpPred = sim::QueueCmpPredicateAttr::get(getContext(), queuePred);
+  struct QueueFromUnpackedArrayOpConversion
+      : public OpConversionPattern<QueueFromUnpackedArrayOp> {
+    using OpConversionPattern::OpConversionPattern;
 
-    rewriter.replaceOpWithNewOp<sim::QueueCmpOp>(op, cmpPred, adaptor.getLhs(),
-                                                 adaptor.getRhs());
-    return success();
-  }
-};
+    LogicalResult
+    matchAndRewrite(QueueFromUnpackedArrayOp op, OpAdaptor adaptor,
+                    ConversionPatternRewriter &rewriter) const override {
+      rewriter.replaceOpWithNewOp<sim::QueueFromArrayOp>(
+          op, getTypeConverter()->convertType(op.getResult().getType()),
+          adaptor.getInput());
+      return success();
+    }
+  };
 
-struct QueueFromUnpackedArrayOpConversion
-    : public OpConversionPattern<QueueFromUnpackedArrayOp> {
-  using OpConversionPattern::OpConversionPattern;
+  struct QueueConcatOpConversion : public OpConversionPattern<QueueConcatOp> {
+    using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult
-  matchAndRewrite(QueueFromUnpackedArrayOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<sim::QueueFromArrayOp>(
-        op, getTypeConverter()->convertType(op.getResult().getType()),
-        adaptor.getInput());
-    return success();
-  }
-};
+    LogicalResult
+    matchAndRewrite(QueueConcatOp op, OpAdaptor adaptor,
+                    ConversionPatternRewriter &rewriter) const override {
+      rewriter.replaceOpWithNewOp<sim::QueueConcatOp>(
+          op, getTypeConverter()->convertType(op.getResult().getType()),
+          adaptor.getInputs());
+      return success();
+    }
+  };
 
-struct QueueConcatOpConversion : public OpConversionPattern<QueueConcatOp> {
-  using OpConversionPattern::OpConversionPattern;
+  struct DynamicArrayCreateOpConversion
+      : public OpConversionPattern<OpenUArrayCreateOp> {
+    using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult
-  matchAndRewrite(QueueConcatOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<sim::QueueConcatOp>(
-        op, getTypeConverter()->convertType(op.getResult().getType()),
-        adaptor.getInputs());
-    return success();
-  }
-};
+    LogicalResult
+    matchAndRewrite(OpenUArrayCreateOp op, OpAdaptor adaptor,
+                    ConversionPatternRewriter &rewriter) const override {
 
-struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
-  using OpConversionPattern::OpConversionPattern;
+      Type resultType = typeConverter->convertType(op.getResult().getType());
+      Value initialSize = adaptor.getInitialSize();
+      Value initExpr = adaptor.getInit();
 
-  LogicalResult
-  matchAndRewrite(DisplayBIOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<sim::PrintFormattedProcOp>(
-        op, adaptor.getMessage());
-    return success();
-  }
-};
+      sim::DynamicArrayCreateOp newOp;
+
+      if (initExpr) {
+        newOp = sim::DynamicArrayCreateOp::create(
+            rewriter, op->getLoc(), resultType, {initialSize, initExpr});
+      } else {
+        newOp = sim::DynamicArrayCreateOp::create(rewriter, op->getLoc(),
+                                                  resultType, initialSize);
+      }
+
+      rewriter.replaceOp(op, newOp);
+      return success();
+    };
+  };
+
+  struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
+    using OpConversionPattern::OpConversionPattern;
+
+    LogicalResult
+    matchAndRewrite(DisplayBIOp op, OpAdaptor adaptor,
+                    ConversionPatternRewriter &rewriter) const override {
+      rewriter.replaceOpWithNewOp<sim::PrintFormattedProcOp>(
+          op, adaptor.getMessage());
+      return success();
+    }
+  };
 
 } // namespace
 
@@ -2788,6 +2820,11 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return sim::QueueType::get(type.getContext(),
                                typeConverter.convertType(type.getElementType()),
                                type.getBound());
+  });
+
+  typeConverter.addConversion([&](OpenUnpackedArrayType type) {
+    return sim::DynamicArrayType::get(
+        type.getContext(), typeConverter.convertType(type.getElementType()));
   });
 
   typeConverter.addConversion([&](ArrayType type) -> std::optional<Type> {
@@ -3144,8 +3181,13 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     QueueSetOpConversion,
     QueueCmpOpConversion,
     QueueFromUnpackedArrayOpConversion,
-    QueueConcatOpConversion
-  >(typeConverter, patterns.getContext());
+    QueueConcatOpConversion,
+
+
+    // Dynamic array operations
+    DynamicArrayCreateOpConversion
+
+    >(typeConverter, patterns.getContext());
   // clang-format on
 
   // Structural operations
