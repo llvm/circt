@@ -604,4 +604,7 @@ def QueueRefType : SpecificRefType<QueueType>;
 /// Assoc Array references
 def AssocArrayRefType : SpecificRefType<AssocArrayType>;
 
+// Open unpacked array references:
+def OpenUnpackedArrayRefType: SpecificRefType<OpenUnpackedArrayType>;
+
 #endif // CIRCT_DIALECT_MOORE_MOORETYPES

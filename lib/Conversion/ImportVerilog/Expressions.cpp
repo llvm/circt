@@ -846,6 +846,25 @@ struct RvalueExprVisitor : public ExprVisitor {
     if (!rhs)
       return {};
 
+    
+    // Check for dynamic array assignment:
+    if(auto *select = expr.left().as_if<slang::ast::ElementSelectExpression>()) {
+      auto value = context.convertLvalueExpression(select->value());
+      auto vt = value.getType();
+      // Check if reference to unpacked array type:
+      if(
+        isa<moore::RefType>(vt) &&
+        isa<moore::OpenUnpackedArrayType>(cast<moore::RefType>(vt).getNestedType())
+      ) {
+        // auto array = context.convertLvalueExpression(const slang::ast::Expression &expr)
+        auto array = context.convertLvalueExpression(select->value());
+        auto idx = context.convertRvalueExpression(select->selector());
+        moore::OpenUArrayAssignOp::create(builder, loc, array, idx, rhs);
+      }
+
+      return rhs;
+    }
+
     // If this is a blocking assignment, we can insert the delay/wait ops of the
     // optional timing control directly in between computing the RHS and
     // executing the assignment.
