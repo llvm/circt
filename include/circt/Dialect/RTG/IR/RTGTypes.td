@@ -234,7 +234,7 @@ def ImmediateType : RTGISATypeDef<"Immediate", "immediate"> {
 }
 
 class ImmediateOfWidth<int width> : Type<
-  And<[CPred<"llvm::isa<::circt::rtg::ImmediateType>($_self)">,
+  And<[ImmediateType.predicate,
        CPred<"llvm::cast<::circt::rtg::ImmediateType>($_self).getWidth() == " #
              width>]>,
   "a " # width # "-bit immediate">,
