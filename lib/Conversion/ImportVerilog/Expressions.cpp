@@ -209,18 +209,19 @@ struct ExprVisitor {
       if (givenIndex.getType() != expectedIndexType) {
         mlir::emitError(loc)
             << "Incorrect index type: expected index type of "
-            << expectedIndexType
-            << " but was given "
-            << givenIndex.getType();
+            << expectedIndexType << " but was given " << givenIndex.getType();
       }
 
-      auto resultType = isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type)) : type;
+      auto resultType =
+          isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type))
+                   : type;
 
       if (isLvalue)
-        return moore::AssocArrayExtractRefOp::create(builder, loc, resultType, value, givenIndex);
+        return moore::AssocArrayExtractRefOp::create(builder, loc, resultType,
+                                                     value, givenIndex);
       else
-        return moore::AssocArrayExtractOp::create(builder, loc, resultType, value, givenIndex);
-
+        return moore::AssocArrayExtractOp::create(builder, loc, resultType,
+                                                  value, givenIndex);
     }
 
     auto resultType =
