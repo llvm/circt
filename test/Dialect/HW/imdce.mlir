@@ -470,4 +470,186 @@ module {
     %dead = hw.instance "dead_ext" @UnusedExternal(a: %x: i1) -> (b: i1)
     hw.output
   }
+
+  // ===== hw.instance_choice as HWInstanceLike =====
+  // - hw.instance_choice is HWInstanceLike
+  // - The pass must propagate all through options
+  // - Both choices are live
+
+  // LIVENESS-LABEL: hw.module private @ChoiceA
+  // LIVENESS-SAME: "op-liveness" = "LIVE"
+  // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  hw.module private @ChoiceA(in %x: i1, out y: i1) {
+    // LIVENESS: hw.output
+    // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+    hw.output %x : i1
+  }
+
+  // LIVENESS-LABEL: hw.module private @ChoiceB
+  // LIVENESS-SAME: "op-liveness" = "LIVE"
+  // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  hw.module private @ChoiceB(in %x: i1, out y: i1) {
+    // LIVENESS: hw.output
+    // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+    hw.output %x : i1
+  }
+
+  // LIVENESS-LABEL: hw.module public @InstanceChoiceUser
+  // LIVENESS-SAME: "op-liveness" = "LIVE"
+  // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  hw.module public @InstanceChoiceUser(in %a: i1, out result: i1) {
+    // LIVENESS: hw.instance_choice "choice_inst"
+    // LIVENESS-SAME: "op-liveness" = "LIVE"
+    // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+    %y = hw.instance_choice "choice_inst" option "opt" @ChoiceA or @ChoiceB if "B" (x: %a: i1) -> (y: i1)
+    // LIVENESS: hw.output
+    // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+    hw.output %y : i1
+  }
+
+  // ===== hw.instance_choice with extern choice: conservative liveness =====
+  // - When any choice targets a non-HWModuleOp HWModuleLike (hw.module.extern),
+  //   markInstanceLike takes the conservative path: the instance and all its
+  //   operands are marked alive regardless of output use.
+  // - @ChoiceNative's body becomes executable but its input stays DEAD because
+  //   no live instance result is ever traced back through it.
+
+  hw.module.extern private @ChoiceExtern(in %x: i1, out y: i1)
+
+  // LIVENESS-LABEL: hw.module private @ChoiceNative
+  // LIVENESS-SAME: "op-liveness" = "LIVE"
+  // LIVENESS-SAME: "val-liveness" = ["DEAD"]
+  hw.module private @ChoiceNative(in %x: i1, out y: i1) {
+    // LIVENESS: hw.output
+    // LIVENESS-SAME: "val-liveness" = ["DEAD"]
+    hw.output %x : i1
+  }
+
+  // LIVENESS-LABEL: hw.module public @MixedChoiceUser
+  // LIVENESS-SAME: "op-liveness" = "LIVE"
+  // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  hw.module public @MixedChoiceUser(in %a: i1) {
+    // LIVENESS: hw.instance_choice "mixed_inst"
+    // LIVENESS-SAME: "op-liveness" = "LIVE"
+    // LIVENESS-SAME: "val-liveness" = ["DEAD"]
+    %y = hw.instance_choice "mixed_inst" option "opt" @ChoiceNative or @ChoiceExtern if "ext" (x: %a: i1) -> (y: i1)
+    // LIVENESS: hw.output
+    // LIVENESS-SAME: "val-liveness" = []
+    hw.output
+  }
+
+  // ===== Side-effect ops reached via HWInstanceLike dispatch =====
+  // - markBlockExecutable dispatches to markInstanceLike for HWInstanceLike ops,
+  //   which in turn calls markBlockExecutable on each referenced module body.
+  // - A seq.firreg inside @SideEffectChoice forces its operands (%x, %clk)
+  //   and result alive via markUnknownSideEffectOp.
+  // - However, "se_inst" itself is never added to liveElements (its output is
+  //   unused and both choices are HWModuleOp, so the conservative extern path
+  //   is not taken). visitInstanceLike therefore never runs for "se_inst", so
+  //   the internal liveness of @SideEffectChoice does NOT propagate back to
+  //   the instance operands %a / %c in @SideEffectChoiceUser.
+
+  // LIVENESS-LABEL: hw.module private @SideEffectChoice
+  // LIVENESS-SAME: "op-liveness" = "LIVE"
+  // LIVENESS-SAME: "val-liveness" = ["LIVE", "LIVE"]
+  hw.module private @SideEffectChoice(in %x: i1, in %clk: !seq.clock, out y: i1) {
+    // LIVENESS: seq.firreg
+    // LIVENESS-SAME: "op-liveness" = "LIVE"
+    // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+    %r = seq.firreg %x clock %clk {firrtl.random_init_start = 0 : ui64} : i1
+    // LIVENESS: hw.output
+    // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+    hw.output %r : i1
+  }
+
+  // LIVENESS-LABEL: hw.module private @PureChoice
+  // LIVENESS-SAME: "op-liveness" = "LIVE"
+  // LIVENESS-SAME: "val-liveness" = ["DEAD", "DEAD"]
+  hw.module private @PureChoice(in %x: i1, in %clk: !seq.clock, out y: i1) {
+    // LIVENESS: hw.output
+    // LIVENESS-SAME: "val-liveness" = ["DEAD"]
+    hw.output %x : i1
+  }
+
+  // LIVENESS-LABEL: hw.module public @SideEffectChoiceUser
+  // LIVENESS-SAME: "op-liveness" = "LIVE"
+  // LIVENESS-SAME: "val-liveness" = ["DEAD", "DEAD"]
+  hw.module public @SideEffectChoiceUser(in %a: i1, in %c: !seq.clock) {
+    // LIVENESS: hw.instance_choice "se_inst"
+    // LIVENESS-SAME: "op-liveness" = "DEAD"
+    // LIVENESS-SAME: "val-liveness" = ["DEAD"]
+    %y = hw.instance_choice "se_inst" option "opt" @SideEffectChoice or @PureChoice if "P" (x: %a: i1, clk: %c: !seq.clock) -> (y: i1)
+    // LIVENESS: hw.output
+    // LIVENESS-SAME: "val-liveness" = []
+    hw.output
+  }
+
+  // ===== Dead instance does not propagate input liveness =====
+  // - @Gated is instantiated by both @GatedUser (live instance, output used)
+  //   and @GatedDead (dead instance, output discarded).
+  // - @Gated's %x is alive because visitValue propagates from the live result
+  //   of "g_live" back through @Gated's body terminator.
+  // - When %x is then visited as a block arg, the pass checks
+  //   liveElements.contains(instance) before back-propagating to the operand.
+  //   "g_dead" is not in liveElements, so %b in @GatedDead stays DEAD.
+
+  // LIVENESS-LABEL: hw.module private @Gated
+  // LIVENESS-SAME: "op-liveness" = "LIVE"
+  // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  hw.module private @Gated(in %x: i1, out y: i1) {
+    // LIVENESS: hw.output
+    // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+    hw.output %x : i1
+  }
+
+  // LIVENESS-LABEL: hw.module public @GatedUser
+  // LIVENESS-SAME: "op-liveness" = "LIVE"
+  // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  hw.module public @GatedUser(in %a: i1, out result: i1) {
+    // LIVENESS: hw.instance "g_live"
+    // LIVENESS-SAME: "op-liveness" = "LIVE"
+    // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+    %y = hw.instance "g_live" @Gated(x: %a: i1) -> (y: i1)
+    // LIVENESS: hw.output
+    // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+    hw.output %y : i1
+  }
+
+  // LIVENESS-LABEL: hw.module public @GatedDead
+  // LIVENESS-SAME: "op-liveness" = "LIVE"
+  // LIVENESS-SAME: "val-liveness" = ["DEAD"]
+  hw.module public @GatedDead(in %b: i1) {
+    // LIVENESS: hw.instance "g_dead"
+    // LIVENESS-SAME: "op-liveness" = "DEAD"
+    // LIVENESS-SAME: "val-liveness" = ["DEAD"]
+    %y = hw.instance "g_dead" @Gated(x: %b: i1) -> (y: i1)
+    // LIVENESS: hw.output
+    // LIVENESS-SAME: "val-liveness" = []
+    hw.output
+  }
+
+  // ===== HWModuleLike (extern): all instances conservatively alive =====
+  // - hw.module.extern implements HWModuleLike but not HWModuleOp.
+  // - markInstanceLike conservatively marks every instance of a non-HWModuleOp
+  //   target alive and marks all its operands alive, regardless of output use.
+  // - "ext_live" has its result consumed; "ext_dead" does not — both are LIVE.
+
+  hw.module.extern private @MultiExt(in %a: i1, out b: i1)
+
+  // LIVENESS-LABEL: hw.module public @MultiExtUser
+  // LIVENESS-SAME: "op-liveness" = "LIVE"
+  // LIVENESS-SAME: "val-liveness" = ["LIVE", "LIVE"]
+  hw.module public @MultiExtUser(in %x: i1, in %y: i1, out result: i1) {
+    // LIVENESS: hw.instance "ext_live"
+    // LIVENESS-SAME: "op-liveness" = "LIVE"
+    // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+    %b1 = hw.instance "ext_live" @MultiExt(a: %x: i1) -> (b: i1)
+    // LIVENESS: hw.instance "ext_dead"
+    // LIVENESS-SAME: "op-liveness" = "LIVE"
+    // LIVENESS-SAME: "val-liveness" = ["DEAD"]
+    %b2 = hw.instance "ext_dead" @MultiExt(a: %y: i1) -> (b: i1)
+    // LIVENESS: hw.output
+    // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+    hw.output %b1 : i1
+  }
 }

@@ -11,7 +11,6 @@
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
-#include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "circt/Support/Debug.h"
 #include "circt/Support/InstanceGraph.h"
 #include "circt/Support/LLVM.h"
@@ -26,17 +25,11 @@
 #include "mlir/IR/Value.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Support/LLVM.h"
-#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMapInfoVariant.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/Errc.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/Transforms/Utils/InstructionNamer.h"
 #include <variant>
-#include <vector>
 
 #define DEBUG_TYPE "hw-imdeadcodeelim"
 
@@ -58,7 +51,7 @@ struct HWIMDeadCodeElim
   void runOnOperation() override;
 
 private:
-  using ElementType = std::variant<Value, HWModuleLike, InstanceOp, HierPathOp>;
+  using ElementType = std::variant<Value, HWModuleLike, HWInstanceLike>;
 
   void markAlive(ElementType element) {
     if (!liveElements.insert(element).second)
@@ -66,8 +59,8 @@ private:
     worklist.push_back(element);
   }
 
-  bool isKnownAlive(InstanceOp instance) const {
-    return liveElements.count(instance);
+  bool isKnownAlive(HWInstanceLike instanceLike) const {
+    return liveElements.count(instanceLike);
   }
   bool isKnownAlive(Value value) const {
     assert(value && "null should not be used");
@@ -83,27 +76,20 @@ private:
   SmallVector<ElementType, 64> worklist;
   llvm::DenseSet<ElementType> liveElements;
 
-  circt::hw::InnerRefNamespace *innerRefNamespace;
-  mlir::SymbolTable *symbolTable;
   InstanceGraph *instanceGraph;
-  DenseMap<InstanceOp, SmallVector<HierPathOp>> instanceToHierPaths;
   DenseSet<Block *> executableBlocks;
 
   void markBlockExecutable(Block *block);
 
-  void visitInstanceOp(InstanceOp instance);
-  void visitHierPathOp(HierPathOp hierpath);
+  void visitInstanceLike(HWInstanceLike instanceLike);
   void visitValue(Value value);
 
-  void rewriteModuleSignature(HWModuleOp module);
-  void eraseEmptyModule(HWModuleOp module);
-  void rewriteModuleBody(HWModuleOp module);
-
   void markUnknownSideEffectOp(Operation *op);
-  void markInstanceOp(InstanceOp instance);
+  void markInstanceLike(HWInstanceLike instanceLike);
 
   void markBlockUndeletable(Operation *op) {
-    markAlive(op->getParentOfType<HWModuleOp>());
+
+    markAlive(op->getParentOfType<HWModuleLike>());
   }
 };
 } // namespace
@@ -132,47 +118,54 @@ void HWIMDeadCodeElim::markUnknownSideEffectOp(Operation *op) {
   markBlockUndeletable(op);
 }
 
-void HWIMDeadCodeElim::markInstanceOp(InstanceOp instance) {
-  // Get the module being referenced.
-  auto moduleNameAttr = instance.getModuleNameAttr().getAttr();
-  auto *node = instanceGraph->lookup(moduleNameAttr);
-  if (!node)
-    return;
-  auto op = node->getModule();
+void HWIMDeadCodeElim::markInstanceLike(HWInstanceLike instanceLike) {
 
-  if (instance.getInnerSym().has_value()) {
-    markAlive(instance);
-    if (auto module = dyn_cast<HWModuleOp>(*op))
-      markBlockExecutable(module.getBodyBlock());
-  }
+  auto moduleNames = instanceLike.getReferencedModuleNames();
+  for (auto moduleName : moduleNames) {
+    auto moduleNameAttr = mlir::StringAttr::get(&getContext(), moduleName);
+    auto *node = instanceGraph->lookup(moduleNameAttr);
 
-  // If this is an extmodule, just remember that any inputs and inouts are
-  // alive.
-  // Inputs are exactly what are passed into the module.
-  if (!isa<HWModuleOp>(op)) {
-    for (auto operand : instance->getOperands()) {
-      markAlive(operand);
+    if (!node)
+      continue;
+
+    auto op = node->getModule();
+
+    // If this is an extmodule, just remember that any inputs and inouts are
+    // alive.
+    // Inputs are exactly what are passed into the module.
+    if (!dyn_cast<HWModuleOp>(op.getOperation())) {
+      for (auto operand : instanceLike->getOperands())
+        markAlive(operand);
+
+      markAlive(instanceLike);
     }
-    markAlive(instance);
-    return;
-  }
 
-  // Otherwise this is a defined module.
-  auto fModule = cast<HWModuleOp>(op);
-  markBlockExecutable(fModule.getBodyBlock());
+    if (auto moduleLike = dyn_cast<HWModuleLike>(op.getOperation()))
+      markBlockExecutable(moduleLike.getBodyBlock());
+  }
 }
 
 void HWIMDeadCodeElim::markBlockExecutable(Block *block) {
+  if (!block)
+    return;
+
   if (!executableBlocks.insert(block).second)
     return; // Already executable.
 
-  auto hwmodule = dyn_cast<HWModuleOp>(block->getParentOp());
-  if (hwmodule && hwmodule.isPublic())
-    markAlive(hwmodule);
+  auto moduleLike = dyn_cast<HWModuleLike>(block->getParentOp());
+  // The only case when we do not mark the module alive automatically,
+  // is if it is a private HW module
+  auto module = dyn_cast<HWModuleOp>(moduleLike.getOperation());
+  if (!module)
+    markAlive(moduleLike);
+  else {
+    if (module.isPublic())
+      markAlive(module);
+  }
 
   for (auto &op : *block) {
-    if (auto instance = dyn_cast<InstanceOp>(op))
-      markInstanceOp(instance);
+    if (auto instance = dyn_cast<HWInstanceLike>(op))
+      markInstanceLike(instance);
     else if (hasUnknownSideEffect(&op)) {
       markUnknownSideEffectOp(&op);
       // Recursively mark any blocks contained within these operations as
@@ -183,56 +176,56 @@ void HWIMDeadCodeElim::markBlockExecutable(Block *block) {
     }
   }
 }
+/// Propagate liveness backwards through a HWInstanceLike op.
+/// For all possible ModuleLike's that is being instantiated,
+/// - If it is a HWModuleOp, mark outputs selectively based on
+///   their liveness in the module,
+/// - If it is a ModuleLike, but not a HWModuleOp, mark all inputs
+///   as alive.
+///   TODO: this might not be the best idea, since we can still trace
+///         out if something is actually used in a non HWModuleOp.
+void HWIMDeadCodeElim::visitInstanceLike(HWInstanceLike instanceLike) {
 
-void HWIMDeadCodeElim::visitInstanceOp(InstanceOp instance) {
+  auto moduleNames = instanceLike.getReferencedModuleNames();
+  for (StringRef moduleName : moduleNames) {
+    mlir::StringAttr moduleNameAttr =
+        mlir::StringAttr::get(&getContext(), moduleName);
 
-  auto moduleName = instance.getReferencedModuleNameAttr();
-  auto *moduleNode = instanceGraph->lookup(moduleName);
-  if (auto module = dyn_cast<HWModuleOp>(moduleNode->getModule())) {
+    auto *moduleNode = instanceGraph->lookup(moduleNameAttr);
 
-    if (instance.getInnerSym().has_value()) {
-      markAlive(module);
-    }
+    if (!moduleNode)
+      continue;
 
-    // Propagate liveness through hierpath.
-    for (auto hierPath : instanceToHierPaths[instance])
-      markAlive(hierPath);
+    // We apply exact argument liveness iff the module is HW native.
+    if (auto module =
+            dyn_cast<HWModuleOp>(moduleNode->getModule().getOperation())) {
 
-    // All block args are inputs
-    for (auto &blockArg : module.getBody().getArguments()) {
-      auto portIndex = blockArg.getArgNumber();
+      // All block args are inputs
+      for (auto blockArg : module.getBodyBlock()->getArguments()) {
+        auto portIndex = blockArg.getArgNumber();
 
-      if (isKnownAlive(blockArg))
-        markAlive(instance->getOperand(portIndex));
-    }
-  }
-
-  if (auto extModule = dyn_cast<HWModuleExternOp>(moduleNode->getModule())) {
-    markAlive(extModule);
-  }
-}
-
-void HWIMDeadCodeElim::visitHierPathOp(hw::HierPathOp hierPathOp) {
-  // If the hierpath is alive, mark all instances on the path alive.
-  for (auto path : hierPathOp.getNamepathAttr()) {
-    if (auto innerRef = dyn_cast<hw::InnerRefAttr>(path)) {
-      auto *op = innerRefNamespace->lookupOp(innerRef);
-
-      if (auto instance = dyn_cast_or_null<InstanceOp>(op)) {
-        markAlive(instance);
+        if (isKnownAlive(blockArg))
+          markAlive(instanceLike->getOperand(portIndex));
       }
+
+      continue;
     }
+
+    // Otherwise we mark all outputs as alive
+    if (auto extModule =
+            dyn_cast<HWModuleLike>(moduleNode->getModule().getOperation()))
+      markAlive(extModule);
   }
 }
 
 /// Propagate liveness through \p value.
-/// If value is a block arg, it means that it had been found
-/// live through propagating within a module, so we mark corresponding
-/// instance inputs as alive.
-/// If it is the result of an instance op, we mark the corresponding
-/// value in the body of the module as alive.
-/// Otherwise, we mark all operands of the operation defining `value`
-/// as alive.
+/// - If value is a block arg, it means that it had been found
+///   live through propagating within a module, so we mark corresponding
+///   instance inputs as alive.
+/// - If it is the result of an instance op, we mark the corresponding
+///   value in the body of the module as alive.
+/// - Otherwise, we mark all operands of the operation defining `value`
+///   as alive.
 void HWIMDeadCodeElim::visitValue(Value value) {
   assert(isKnownAlive(value) && "only alive values reach here");
 
@@ -240,13 +233,14 @@ void HWIMDeadCodeElim::visitValue(Value value) {
   // All arg block elements are inputs
   if (auto blockArg = dyn_cast<BlockArgument>(value)) {
     if (auto module =
-            dyn_cast<HWModuleOp>(blockArg.getParentBlock()->getParentOp())) {
+            dyn_cast<HWModuleLike>(blockArg.getParentBlock()->getParentOp())) {
 
       for (auto *instRec : instanceGraph->lookup(module)->uses()) {
         if (!instRec->getInstance())
           continue;
 
-        if (auto instance = dyn_cast<InstanceOp>(instRec->getInstance())) {
+        if (auto instance = dyn_cast<HWInstanceLike>(
+                instRec->getInstance().getOperation())) {
           if (liveElements.contains(instance))
             markAlive(instance->getOperand(blockArg.getArgNumber()));
         }
@@ -256,30 +250,36 @@ void HWIMDeadCodeElim::visitValue(Value value) {
 
   // Marking an instance port as alive propagates to the corresponding port of
   // the module.
-  if (auto instance = value.getDefiningOp<InstanceOp>()) {
+  if (auto instanceLike = value.getDefiningOp<HWInstanceLike>()) {
     auto instanceResult = cast<mlir::OpResult>(value);
     // Update the src, when it's an instance op.
-    auto moduleName = instance.getReferencedModuleNameAttr();
-    auto *node = instanceGraph->lookupOrNull(moduleName);
 
-    if (!node)
-      return;
+    // For each module that the instance could refer to,
+    // mark
+    auto moduleNames = instanceLike.getReferencedModuleNames();
+    for (StringRef moduleName : moduleNames) {
+      mlir::StringAttr moduleNameAttr =
+          mlir::StringAttr::get(&getContext(), moduleName);
+      auto *node = instanceGraph->lookupOrNull(moduleNameAttr);
 
-    Operation *moduleOp = node->getModule();
-    auto module = dyn_cast_or_null<HWModuleOp>(moduleOp);
+      if (!node)
+        continue;
 
-    // Propagate liveness only when a port is output.
-    if (!module)
-      return;
+      Operation *moduleOp = node->getModule().getOperation();
+      auto moduleLike = dyn_cast<HWModuleLike>(moduleOp);
 
-    markAlive(instance);
+      if (!moduleLike)
+        continue;
 
-    auto *moduleOutputOp = module.getBodyBlock()->getTerminator();
-    auto modulePortVal =
-        moduleOutputOp->getOperand(instanceResult.getResultNumber());
-    markAlive(modulePortVal);
+      if (!moduleLike.getBodyBlock())
+        continue;
+      auto *moduleOutputOp = moduleLike.getBodyBlock()->getTerminator();
+      auto modulePortVal =
+          moduleOutputOp->getOperand(instanceResult.getResultNumber());
+      markAlive(modulePortVal);
+      markAlive(instanceLike);
+    }
 
-    visitInstanceOp(instance);
     return;
   }
 
@@ -297,26 +297,32 @@ void HWIMDeadCodeElim::visitValue(Value value) {
 void HWIMDeadCodeElim::runOnOperation() {
 
   instanceGraph = &getAnalysis<hw::InstanceGraph>();
-  symbolTable = &getAnalysis<SymbolTable>();
-  auto &istc = getAnalysis<hw::InnerSymbolTableCollection>();
 
-  circt::hw::InnerRefNamespace theInnerRefNamespace{*symbolTable, istc};
-  innerRefNamespace = &theInnerRefNamespace;
-
-  for (auto module : getOperation().getOps<hw::HWModuleOp>()) {
-    // Mark the ports of public modules as alive.
-    if (module.isPublic()) {
-      markBlockExecutable(module.getBodyBlock());
-
-      // Do not mark inputs as alive, since they are only
-      // internally relevant.
-
-      // Mark all output values (i.e. SSA vals passed to hw.output) as alive
-      auto *moduleOutputOp = module.getBodyBlock()->getTerminator();
-      for (auto port : moduleOutputOp->getOperands()) {
-        markAlive(port);
-      }
+  for (auto moduleLike : getOperation().getOps<hw::HWModuleLike>()) {
+    // Any ModuleLike that is not a private module will be marked
+    // executable, and all its output ports alive.
+    if (auto module = dyn_cast<HWModuleOp>(moduleLike.getOperation())) {
+      if (!module.isPublic())
+        continue;
     }
+
+    if (!moduleLike.getBodyBlock())
+      continue;
+
+    markBlockExecutable(moduleLike.getBodyBlock());
+
+    // Do not mark inputs as alive, since they are only
+    // internally relevant.
+
+    // Mark all output values (i.e. SSA vals passed to hw.output) as alive
+    if (moduleLike.getBodyBlock() == nullptr ||
+        moduleLike.getBodyBlock()->empty())
+      continue;
+    auto *moduleOutputOp = moduleLike.getBodyBlock()->getTerminator();
+    if (!dyn_cast<OutputOp>(moduleOutputOp))
+      continue;
+    for (auto port : moduleOutputOp->getOperands())
+      markAlive(port);
   }
 
   // If an element changed liveness then propagate liveness through it.
@@ -324,12 +330,9 @@ void HWIMDeadCodeElim::runOnOperation() {
     auto v = worklist.pop_back_val();
     if (auto *value = std::get_if<Value>(&v)) {
       visitValue(*value);
-    } else if (auto *instance = std::get_if<InstanceOp>(&v)) {
-      visitInstanceOp(*instance);
-    } else if (auto *hierpath = std::get_if<hw::HierPathOp>(&v)) {
-      visitHierPathOp(*hierpath);
+    } else if (auto *instance = std::get_if<HWInstanceLike>(&v)) {
+      visitInstanceLike(*instance);
     } else if (auto *moduleLike = std::get_if<HWModuleLike>(&v)) {
-      // TODO: Maybe some processing could be done in ModuleOp's?
       continue;
     }
   }
@@ -348,7 +351,10 @@ void HWIMDeadCodeElim::runOnOperation() {
     };
 
     getOperation()->walk([&](Operation *op) {
-      if (auto module = dyn_cast<HWModuleOp>(op)) {
+      if (auto module = dyn_cast<HWModuleLike>(op)) {
+        if (!module.getBodyBlock())
+          return;
+
         op->setAttr("op-liveness",
                     getLiveness(isBlockExecutable(module.getBodyBlock())));
         op->setAttr("val-liveness",
@@ -362,7 +368,7 @@ void HWIMDeadCodeElim::runOnOperation() {
       }
 
       if (op->getNumResults()) {
-        if (auto instance = dyn_cast<InstanceOp>(op))
+        if (auto instance = dyn_cast<HWInstanceLike>(op))
           op->setAttr("op-liveness", getLiveness(isKnownAlive(instance)));
         else
           op->setAttr("op-liveness", getLiveness(!isAssumedDead(op)));
@@ -374,5 +380,4 @@ void HWIMDeadCodeElim::runOnOperation() {
   // Clean up data structures.
   executableBlocks.clear();
   liveElements.clear();
-  instanceToHierPaths.clear();
 }
