@@ -163,13 +163,6 @@ endmodule
 
 // -----
 function void foo;
-  int a[string];
-  // expected-error @below {{unsupported expression: element select into}}
-  a["foo"] = 1;
-endfunction
-
-// -----
-function void foo;
   struct packed { time t; } a;
   int b;
   // expected-error @below {{contains a time type}}
