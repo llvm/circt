@@ -105,7 +105,7 @@ struct LTLImplicationConversion
       return failure();
     /// A -> B = !A || B
     auto loc = op.getLoc();
-    auto notA = comb::createOrFoldNot(loc, adaptor.getAntecedent(), rewriter);
+    auto notA = comb::createOrFoldNot(rewriter, loc, adaptor.getAntecedent());
     auto orOp =
         comb::OrOp::create(rewriter, loc, notA, adaptor.getConsequent());
     rewriter.replaceOp(op, orOp);
@@ -123,7 +123,7 @@ struct LTLNotConversion : public OpConversionPattern<ltl::NotOp> {
     if (!isa<IntegerType>(op.getInput().getType()))
       return failure();
     auto loc = op.getLoc();
-    auto inverted = comb::createOrFoldNot(loc, adaptor.getInput(), rewriter);
+    auto inverted = comb::createOrFoldNot(rewriter, loc, adaptor.getInput());
     rewriter.replaceOp(op, inverted);
     return success();
   }

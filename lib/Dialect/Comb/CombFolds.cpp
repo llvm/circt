@@ -1377,9 +1377,9 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
   // Check for sext of the inverted value
   if (matchPattern(op.getResult(), m_Complement(m_Sext(m_Any(&base))))) {
     // Create negated sext: ~sext(x) = sext(~x)
-    auto negBase = createOrFoldNot(op.getLoc(), base, rewriter, true);
+    auto negBase = createOrFoldNot(rewriter, op.getLoc(), base, true);
     auto sextNegBase =
-        createOrFoldSExt(op.getLoc(), negBase, op.getType(), rewriter);
+        createOrFoldSExt(rewriter, op.getLoc(), negBase, op.getType());
     replaceOpAndCopyNamehint(rewriter, op, sextNegBase);
     return success();
   }
@@ -2215,7 +2215,7 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
       otherValue = subMux.getFalseValue();
     else if (subMux.getFalseValue() == commonValue) {
       otherValue = subMux.getTrueValue();
-      subCond = createOrFoldNot(op.getLoc(), subCond, rewriter);
+      subCond = createOrFoldNot(rewriter, op.getLoc(), subCond);
     } else {
       // We can't fold `mux(cond, a, mux(a, x, y))`.
       return false;
@@ -2223,7 +2223,7 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
 
     // Invert the outer cond if needed, and combine the mux conditions.
     if (!isTrueOperand)
-      cond = createOrFoldNot(op.getLoc(), cond, rewriter);
+      cond = createOrFoldNot(rewriter, op.getLoc(), cond);
     cond = rewriter.createOrFold<OrOp>(op.getLoc(), cond, subCond, false);
     replaceOpWithNewOpAndCopyNamehint<MuxOp>(rewriter, op, cond, commonValue,
                                              otherValue, op.getTwoState());
@@ -2234,7 +2234,7 @@ static bool foldCommonMuxValue(MuxOp op, bool isTrueOperand,
   // TrueOperand, And inverts for False operand.
   bool isaAndOp = isa<AndOp>(subExpr);
   if (isTrueOperand ^ isaAndOp)
-    cond = createOrFoldNot(op.getLoc(), cond, rewriter);
+    cond = createOrFoldNot(rewriter, op.getLoc(), cond);
 
   auto extendedCond =
       rewriter.createOrFold<ReplicateOp>(op.getLoc(), op.getType(), cond);
@@ -2452,7 +2452,7 @@ LogicalResult MuxRewriter::matchAndRewrite(MuxOp op,
     if (value.getBitWidth() == 1) {
       // mux(a, 0, b) -> and(~a, b) for single-bit values.
       if (value.isZero()) {
-        auto notCond = createOrFoldNot(op.getLoc(), op.getCond(), rewriter);
+        auto notCond = createOrFoldNot(rewriter, op.getLoc(), op.getCond());
         replaceOpWithNewOpAndCopyNamehint<AndOp>(rewriter, op, notCond,
                                                  op.getFalseValue(), false);
         return success();

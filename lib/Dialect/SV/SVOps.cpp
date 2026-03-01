@@ -615,7 +615,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
   // region if the condition is a 2-state operation.  This changes x prop
   // behavior so it needs to be guarded.
   if (is2StateExpression(op.getCond())) {
-    auto cond = comb::createOrFoldNot(op.getLoc(), op.getCond(), rewriter);
+    auto cond = comb::createOrFoldNot(rewriter, op.getLoc(), op.getCond());
     op.setOperand(cond);
 
     auto *thenBlock = op.getThenBlock(), *elseBlock = op.getElseBlock();

@@ -319,7 +319,7 @@ public:
         rewriter, loc, llvm::SmallVector<sv::EventControl>{},
         llvm::SmallVector<Value>{}, [&]() {
           sv::IfOp::create(
-              rewriter, loc, comb::createOrFoldNot(loc, clk, rewriter), [&]() {
+              rewriter, loc, comb::createOrFoldNot(rewriter, loc, clk), [&]() {
                 sv::PAssignOp::create(rewriter, loc, enableLatch, enable);
               });
         });

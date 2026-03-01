@@ -40,8 +40,8 @@ Value comb::createZExt(OpBuilder &builder, Location loc, Value value,
 
 /// Create a sign extension operation from a value of integer type to an equal
 /// or larger integer type.
-Value comb::createOrFoldSExt(Location loc, Value value, Type destTy,
-                             OpBuilder &builder) {
+Value comb::createOrFoldSExt(OpBuilder &builder, Location loc, Value value,
+                             Type destTy) {
   IntegerType valueType = dyn_cast<IntegerType>(value.getType());
   assert(valueType && isa<IntegerType>(destTy) &&
          valueType.getWidth() <= destTy.getIntOrFloatBitWidth() &&
@@ -58,20 +58,20 @@ Value comb::createOrFoldSExt(Location loc, Value value, Type destTy,
   return builder.createOrFold<ConcatOp>(loc, signBits, value);
 }
 
-Value comb::createOrFoldSExt(Value value, Type destTy,
-                             ImplicitLocOpBuilder &builder) {
-  return createOrFoldSExt(builder.getLoc(), value, destTy, builder);
+Value comb::createOrFoldSExt(ImplicitLocOpBuilder &builder, Value value,
+                             Type destTy) {
+  return createOrFoldSExt(builder, builder.getLoc(), value, destTy);
 }
 
-Value comb::createOrFoldNot(Location loc, Value value, OpBuilder &builder,
+Value comb::createOrFoldNot(OpBuilder &builder, Location loc, Value value,
                             bool twoState) {
   auto allOnes = hw::ConstantOp::create(builder, loc, value.getType(), -1);
   return builder.createOrFold<XorOp>(loc, value, allOnes, twoState);
 }
 
-Value comb::createOrFoldNot(Value value, ImplicitLocOpBuilder &builder,
+Value comb::createOrFoldNot(ImplicitLocOpBuilder &builder, Value value,
                             bool twoState) {
-  return createOrFoldNot(builder.getLoc(), value, builder, twoState);
+  return createOrFoldNot(builder, builder.getLoc(), value, twoState);
 }
 
 // Extract individual bits from a value
@@ -174,7 +174,7 @@ Value comb::createDynamicInject(OpBuilder &builder, Location loc, Value value,
   Value mask = hw::ConstantOp::create(
       builder, loc, APInt::getLowBitsSet(largeWidth, smallWidth));
   mask = builder.createOrFold<comb::ShlOp>(loc, mask, offset);
-  mask = createOrFoldNot(loc, mask, builder, true);
+  mask = createOrFoldNot(builder, loc, mask, true);
   value = builder.createOrFold<comb::AndOp>(loc, value, mask, twoState);
 
   // Zero-extend the replacement value, shift it up to the offset, and merge it
@@ -226,7 +226,7 @@ llvm::LogicalResult comb::convertSubToAdd(comb::SubOp subOp,
   // sub(lhs, rhs) => add(lhs, -rhs) => add(lhs, add(~rhs, 1))
   // => add(lhs, ~rhs, 1)
   auto notRhs =
-      comb::createOrFoldNot(subOp.getLoc(), rhs, rewriter, subOp.getTwoState());
+      comb::createOrFoldNot(rewriter, subOp.getLoc(), rhs, subOp.getTwoState());
   auto one =
       hw::ConstantOp::create(rewriter, subOp.getLoc(), subOp.getType(), 1);
   replaceOpWithNewOpAndCopyNamehint<comb::AddOp>(
