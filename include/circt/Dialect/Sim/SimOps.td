@@ -966,6 +966,22 @@ OptionalTypesMatchWith<"result and init types must match",
   }];
 }
 
+def DynamicArrayExtractOp: SimOp<"darray.extract", [Pure, 
+TypesMatchWith<"dynamic array and result types must match",
+      "dynArray", "result", "cast<DynamicArrayType>($_self).getElementType()">]> {
+  let summary = "Extracts an element from a dynamic array";
+  let description = [{
+    Extracts an element from a dynamic array at a specified index.
+    If the index is out of bounds, a runtime error will occur.
+  }];
+
+  let arguments = (ins DynamicArrayType:$dynArray, I32:$index);
+  let results = (outs HWNonInOutType:$result);
+  let assemblyFormat = [{
+    $dynArray `from` $index attr-dict `:` type($dynArray)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//

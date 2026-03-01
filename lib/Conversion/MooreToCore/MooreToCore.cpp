@@ -1345,6 +1345,14 @@ struct DynExtractOpConversion : public OpConversionPattern<DynExtractOp> {
                                                       adaptor.getInput(), idx);
 
       return success();
+    } else if(auto dynamicArrayType = dyn_cast<sim::DynamicArrayType>(inputType)) {
+      Value array = adaptor.getInput();
+      Value index = adaptor.getLowBit();
+
+      auto newOp = sim::DynamicArrayExtractOp::create(rewriter, op->getLoc(), {array, index});
+      rewriter.replaceOp(op, newOp);
+
+      return success();
     }
 
     return failure();
