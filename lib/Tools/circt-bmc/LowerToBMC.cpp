@@ -156,8 +156,12 @@ void LowerToBMCPass::runOnOperation() {
     verif::YieldOp::create(builder, loc, initClocks);
 
     // Update clocks each step. Each clock independently decides whether to
-    // toggle using a symbolic value, allowing the SMT solver to explore all
-    // possible asynchronous clock interleavings.
+    // toggle using a symbolic value. Instead of mechanically toggling the
+    // clock every cycle, XORing it with a `verif.symbolic_value` creates a
+    // non-deterministic SMT variable. This forces the underlying solver (e.g. Z3)
+    // to mathematically explore all possible asynchronous interleavings of
+    // multiple clocks, which is necessary to catch CDC (Clock Domain Crossing)
+    // violations.
     auto *loopBlock = builder.createBlock(&bmcOp.getLoop());
     builder.setInsertionPointToStart(loopBlock);
     for (unsigned i = 0; i < numClocks; ++i)
