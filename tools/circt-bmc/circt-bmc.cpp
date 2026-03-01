@@ -200,6 +200,12 @@ static LogicalResult executeBMC(MLIRContext &context) {
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
             "circt-bmc"));
 
+  // Lower verif.contract ops into verif.formal check blocks + apply-mode
+  // hw.modules.  LowerTests then converts verif.formal into hw.module,
+  // turning verif.symbolic_value ops into regular input ports that BMC
+  // treats as unconstrained solver variables.
+  pm.addPass(verif::createLowerContractsPass());
+
   pm.addPass(om::createStripOMPass());
   pm.addPass(emit::createStripEmitPass());
   pm.addPass(verif::createLowerTestsPass());
