@@ -2129,15 +2129,19 @@ def AssocArrayClearOp : MooreOp<"assoc_array.clear"> {
 // Dynamic Array Manipulation
 //===----------------------------------------------------------------------===//
 
-def OpenUArrayCreateOp: MooreOp<"open_uarray_create"> {
+def OpenUArrayCreateOp: MooreOp<"open_uarray_create", [
+    OptionalTypesMatchWith<"result and init types must match",
+    "result", "init",
+    "$_self">
+    ]> {
   let summary = "Create an open uarray given a type and size";
   let description = [{
       See IEEE 1800-2023 § 7.5.1 "New[]"
   }];
-  let arguments = (ins SimpleBitVectorType:$initialSize, Optional<OpenUnpackedArrayType>:$init);
+  let arguments = (ins TwoValuedI32:$initialSize, Optional<OpenUnpackedArrayType>:$init);
   let results = (outs OpenUnpackedArrayType:$result);
   let assemblyFormat = [{
-    $initialSize (`initial` $init^)? attr-dict `:` type($initialSize) (`,` type($init)^)? `->` type($result)
+    $initialSize (`initial` $init^)? attr-dict `:` type($initialSize) `->` type($result)
   }];
 }
 
