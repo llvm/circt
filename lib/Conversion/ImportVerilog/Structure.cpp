@@ -7,9 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
-#include "circt/Dialect/Moore/MooreOps.h"
 #include "slang/ast/Compilation.h"
-#include "slang/ast/statements/MiscStatements.h"
 #include "slang/ast/symbols/ClassSymbols.h"
 #include "llvm/ADT/ScopeExit.h"
 
