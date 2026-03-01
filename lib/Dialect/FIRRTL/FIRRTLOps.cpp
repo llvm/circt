@@ -4024,6 +4024,29 @@ LogicalResult ContractOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// OptionCaseOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+OptionCaseOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto caseMacro = getCaseMacroAttr();
+  if (!caseMacro)
+    return success();
+
+  // Verify that the referenced macro exists in the circuit.
+  auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
+  auto *refOp = symbolTable.lookupSymbolIn(circuitOp, caseMacro);
+  if (!refOp)
+    return emitOpError("case_macro references an undefined symbol: ")
+           << caseMacro;
+
+  if (!isa<sv::MacroDeclOp>(refOp))
+    return emitOpError("case_macro must reference a macro declaration");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ObjectOp
 //===----------------------------------------------------------------------===//
 

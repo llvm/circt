@@ -3346,3 +3346,25 @@ firrtl.circuit "NonExistentMacroSymbol" {
     } ()
   }
 }
+
+// -----
+firrtl.circuit "OptionCaseUndefinedMacro" {
+  firrtl.option @Platform {
+    // expected-error @below {{'firrtl.option_case' op case_macro references an undefined symbol: @NonExistentMacro}}
+    firrtl.option_case @FPGA {case_macro = @NonExistentMacro}
+  }
+
+  firrtl.module @OptionCaseUndefinedMacro() {}
+}
+
+// -----
+firrtl.circuit "OptionCaseWrongSymbolType" {
+  firrtl.module private @NotAMacro() {}
+
+  firrtl.option @Platform {
+    // expected-error @below {{'firrtl.option_case' op case_macro must reference a macro declaration}}
+    firrtl.option_case @FPGA {case_macro = @NotAMacro}
+  }
+
+  firrtl.module @OptionCaseWrongSymbolType() {}
+}

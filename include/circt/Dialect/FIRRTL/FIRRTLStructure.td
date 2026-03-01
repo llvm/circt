@@ -495,7 +495,8 @@ def OptionOp : FIRRTLOp<"option", [
 }
 
 def OptionCaseOp : FIRRTLOp<
-  "option_case", [Symbol, HasParent<"firrtl::OptionOp">]
+  "option_case", [Symbol, HasParent<"firrtl::OptionOp">,
+                  DeclareOpInterfaceMethods<SymbolUserOpInterface>]
 > {
   let summary = "A configuration option value definition";
   let description = [{
