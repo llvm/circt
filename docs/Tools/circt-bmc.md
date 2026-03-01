@@ -32,6 +32,10 @@ a `verif.assert` operation. Calling
 emit `Bound reached with no violations!`, as the property holds over the 10
 cycles checked.
 
+## Multi-Clock Support
+
+`circt-bmc` supports model checking designs with multiple independent clock domains, enabling the verification of Clock Domain Crossing (CDC) logic. When a module has multiple `!seq.clock` inputs, the BMC tool generates a non-deterministic loop where each clock independently decides whether to toggle at each step using a `verif.symbolic_value`. This allows the underlying SMT solver to explore all possible asynchronous clock interleavings, making it possible to catch metastability and data corruption bugs that only manifest at specific clock phases. 
+
 ## (Draft) Building a BMC tool
 
 For completeness, this section describes how a BMC (bounded model checking)

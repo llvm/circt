@@ -49,6 +49,7 @@ private:
   DenseMap<StringAttr, SmallVector<StringAttr>> addedInputNames;
   DenseMap<StringAttr, SmallVector<Type>> addedOutputs;
   DenseMap<StringAttr, SmallVector<StringAttr>> addedOutputNames;
+  DenseMap<StringAttr, SmallVector<unsigned>> addedClockPortIndices;
   DenseMap<StringAttr, SmallVector<Attribute>> initialValues;
 
   LogicalResult externalizeReg(HWModuleOp module, Operation *op, Twine regName,
@@ -80,16 +81,6 @@ void ExternalizeRegistersPass::runOnOperation() {
         continue;
 
       unsigned numRegs = 0;
-      bool foundClk = false;
-      for (auto ty : module.getInputTypes()) {
-        if (isa<seq::ClockType>(ty)) {
-          if (foundClk) {
-            module.emitError("modules with multiple clocks not yet supported");
-            return signalPassFailure();
-          }
-          foundClk = true;
-        }
-      }
       module->walk([&](Operation *op) {
         if (auto regOp = dyn_cast<seq::CompRegOp>(op)) {
           mlir::Attribute initState = {};
@@ -157,6 +148,8 @@ void ExternalizeRegistersPass::runOnOperation() {
               addedOutputs[instanceOp.getModuleNameAttr().getAttr()];
           auto newOutputNames =
               addedOutputNames[instanceOp.getModuleNameAttr().getAttr()];
+          auto childClockPortIndices =
+              addedClockPortIndices[instanceOp.getModuleNameAttr().getAttr()];
           addedInputs[module.getSymNameAttr()].append(newInputs);
           addedInputNames[module.getSymNameAttr()].append(newInputNames);
           addedOutputs[module.getSymNameAttr()].append(newOutputs);
@@ -184,6 +177,24 @@ void ExternalizeRegistersPass::runOnOperation() {
               instanceOp.getInputs(), builder.getArrayAttr(argNames),
               builder.getArrayAttr(resultNames), instanceOp.getParametersAttr(),
               instanceOp.getInnerSymAttr(), instanceOp.getDoNotPrintAttr());
+
+          for (auto [i, clockPortIdx] : llvm::enumerate(childClockPortIndices)) {
+            auto clockVal = newInst.getOperand(clockPortIdx);
+            auto nextVal = newInst.getResult(instanceOp->getNumResults() + i);
+            verif::ClockedByOp::create(builder, instanceOp.getLoc(), clockVal,
+                                       nextVal);
+            if (auto arg = dyn_cast<BlockArgument>(clockVal)) {
+              addedClockPortIndices[module.getSymNameAttr()].push_back(
+                  arg.getArgNumber());
+            } else {
+              // If the clock is not a block argument of the parent module, we
+              // cannot hoist this register's clock association as a direct
+              // module port. `externalizeReg` handles this error case during
+              // the initial externalization step. Here, we safely skip adding
+              // an invalid index to `addedClockPortIndices`.
+            }
+          }
+
           for (auto [output, name] :
                zip(newInst->getResults().take_back(newOutputs.size()),
                    newOutputNames))
@@ -233,6 +244,8 @@ LogicalResult ExternalizeRegistersPass::externalizeReg(
   addedInputNames[module.getSymNameAttr()].push_back(newInputName);
   addedOutputs[module.getSymNameAttr()].push_back(next.getType());
   addedOutputNames[module.getSymNameAttr()].push_back(newOutputName);
+  addedClockPortIndices[module.getSymNameAttr()].push_back(
+      cast<BlockArgument>(clock).getArgNumber());
 
   // Replace the register with newInput and newOutput
   auto newInput = module.appendInput(newInputName, regType).second;
@@ -247,9 +260,13 @@ LogicalResult ExternalizeRegistersPass::externalizeReg(
     auto mux = comb::MuxOp::create(builder, op->getLoc(), regType, reset,
                                    resetValue, next);
     module.appendOutput(newOutputName, mux);
+    builder.setInsertionPointAfter(mux);
+    verif::ClockedByOp::create(builder, op->getLoc(), clock, mux);
   } else {
     // No reset
     module.appendOutput(newOutputName, next);
+    OpBuilder bodyBuilder(module.getBody().front().getTerminator());
+    verif::ClockedByOp::create(bodyBuilder, op->getLoc(), clock, next);
   }
 
   return success();
