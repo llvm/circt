@@ -67,9 +67,9 @@ public:
   matchAndRewrite(arith::ExtSIOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     size_t outWidth = op.getType().getIntOrFloatBitWidth();
-    rewriter.replaceOp(op, comb::createOrFoldSExt(
-                               op.getLoc(), op.getOperand(),
-                               rewriter.getIntegerType(outWidth), rewriter));
+    rewriter.replaceOp(
+        op, comb::createOrFoldSExt(rewriter, op.getLoc(), op.getOperand(),
+                                   rewriter.getIntegerType(outWidth)));
     return success();
   }
 };

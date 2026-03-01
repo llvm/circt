@@ -2584,7 +2584,7 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
     }
 
     if (firrtl::type_cast<IntType>(sourceType).isSigned())
-      return comb::createOrFoldSExt(value, resultType, builder);
+      return comb::createOrFoldSExt(builder, value, resultType);
     auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
     return builder.createOrFold<comb::ConcatOp>(zero, value);
   };
@@ -2733,7 +2733,7 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value src, Type target) {
   // Extension follows the sign of the src value, not the destination.
   auto valueFIRType = type_cast<FIRRTLBaseType>(src.getType()).getPassiveType();
   if (type_cast<IntType>(valueFIRType).isSigned())
-    return comb::createOrFoldSExt(loweredSrc, loweredDstType, builder);
+    return comb::createOrFoldSExt(builder, loweredSrc, loweredDstType);
 
   auto zero = getOrCreateIntConstant(dstWidth - loweredSrcWidth, 0);
   return builder.createOrFold<comb::ConcatOp>(zero, loweredSrc);
@@ -2799,7 +2799,7 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
   auto valueFIRType =
       type_cast<FIRRTLBaseType>(value.getType()).getPassiveType();
   if (type_cast<IntType>(valueFIRType).isSigned())
-    return comb::createOrFoldSExt(result, resultType, builder);
+    return comb::createOrFoldSExt(builder, result, resultType);
 
   auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
   return builder.createOrFold<comb::ConcatOp>(zero, result);
@@ -5461,7 +5461,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       // Handle the `ifElseFatal` format, which does not emit an SVA but
       // rather a process that uses $error and $fatal to perform the checks.
       auto boolType = IntegerType::get(builder.getContext(), 1);
-      predicate = comb::createOrFoldNot(predicate, builder, /*twoState=*/true);
+      predicate = comb::createOrFoldNot(builder, predicate, /*twoState=*/true);
       predicate = builder.createOrFold<comb::AndOp>(enable, predicate, true);
 
       circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
@@ -5493,7 +5493,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       // Except for covers, combine them: enable & predicate
       if (!isCover) {
         auto notEnable =
-            comb::createOrFoldNot(enable, builder, /*twoState=*/true);
+            comb::createOrFoldNot(builder, enable, /*twoState=*/true);
         predicate =
             builder.createOrFold<comb::OrOp>(notEnable, predicate, true);
       } else {
@@ -5573,7 +5573,7 @@ LogicalResult FIRRTLLowering::visitStmt(UnclockedAssumeIntrinsicOp op) {
         StringAttr::get(builder.getContext(), "assume__" + label.getValue());
   auto predicate = getLoweredValue(op.getPredicate());
   auto enable = getLoweredValue(op.getEnable());
-  auto notEnable = comb::createOrFoldNot(enable, builder, /*twoState=*/true);
+  auto notEnable = comb::createOrFoldNot(builder, enable, /*twoState=*/true);
   predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate, true);
 
   SmallVector<Value> messageOps;

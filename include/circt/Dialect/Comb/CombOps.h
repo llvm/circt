@@ -54,14 +54,14 @@ Value createZExt(OpBuilder &builder, Location loc, Value value,
 
 /// Create a sign extension operation from a value of integer type to an equal
 /// or larger integer type.
-Value createOrFoldSExt(Location loc, Value value, Type destTy,
-                       OpBuilder &builder);
-Value createOrFoldSExt(Value value, Type destTy, ImplicitLocOpBuilder &builder);
+Value createOrFoldSExt(OpBuilder &builder, Location loc, Value value,
+                       Type destTy);
+Value createOrFoldSExt(ImplicitLocOpBuilder &builder, Value value, Type destTy);
 
 /// Create a ``Not'' gate on a value.
-Value createOrFoldNot(Location loc, Value value, OpBuilder &builder,
+Value createOrFoldNot(OpBuilder &builder, Location loc, Value value,
                       bool twoState = false);
-Value createOrFoldNot(Value value, ImplicitLocOpBuilder &builder,
+Value createOrFoldNot(ImplicitLocOpBuilder &builder, Value value,
                       bool twoState = false);
 
 /// Extract bits from a value.

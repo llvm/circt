@@ -86,8 +86,8 @@ public:
     fifoEmpty->setAttr("sv.namehint", rewriter.getStringAttr("fifo_empty"));
 
     // ====== Next-state count ======
-    auto notRdEn = comb::createOrFoldNot(loc, adaptor.getRdEn(), rewriter);
-    auto notWrEn = comb::createOrFoldNot(loc, adaptor.getWrEn(), rewriter);
+    auto notRdEn = comb::createOrFoldNot(rewriter, loc, adaptor.getRdEn());
+    auto notWrEn = comb::createOrFoldNot(rewriter, loc, adaptor.getWrEn());
     Value rdEnNandWrEn = comb::AndOp::create(rewriter, loc, notRdEn, notWrEn);
     Value rdEnAndNotWrEn =
         comb::AndOp::create(rewriter, loc, adaptor.getRdEn(), notWrEn);
@@ -124,7 +124,7 @@ public:
     // ====== Read/write pointers ======
     Value wrAndNotFull =
         comb::AndOp::create(rewriter, loc, adaptor.getWrEn(),
-                            comb::createOrFoldNot(loc, fifoFull, rewriter));
+                            comb::createOrFoldNot(rewriter, loc, fifoFull));
     auto addWrAddrPtrTc1 = comb::AddOp::create(rewriter, loc, wrAddr, ptrTc1);
 
     auto wrAddrNextNoRollover = comb::MuxOp::create(rewriter, loc, wrAndNotFull,
@@ -138,7 +138,7 @@ public:
         .getDefiningOp()
         ->setAttr("sv.namehint", rewriter.getStringAttr("fifo_wr_addr_next"));
 
-    auto notFifoEmpty = comb::createOrFoldNot(loc, fifoEmpty, rewriter);
+    auto notFifoEmpty = comb::createOrFoldNot(rewriter, loc, fifoEmpty);
     Value rdAndNotEmpty =
         comb::AndOp::create(rewriter, loc, adaptor.getRdEn(), notFifoEmpty);
     auto addRdAddrPtrTc1 = comb::AddOp::create(rewriter, loc, rdAddr, ptrTc1);
@@ -186,15 +186,15 @@ public:
     // ====== Protocol checks =====
     Value clkI1 = seq::FromClockOp::create(rewriter, loc, clk);
     Value notEmptyAndRden = comb::createOrFoldNot(
-        loc, comb::AndOp::create(rewriter, loc, adaptor.getRdEn(), fifoEmpty),
-        rewriter);
+        rewriter, loc,
+        comb::AndOp::create(rewriter, loc, adaptor.getRdEn(), fifoEmpty));
     verif::ClockedAssertOp::create(
         rewriter, loc, notEmptyAndRden, verif::ClockEdge::Pos, clkI1,
         /*enable=*/Value(),
         rewriter.getStringAttr("FIFO empty when read enabled"));
     Value notFullAndWren = comb::createOrFoldNot(
-        loc, comb::AndOp::create(rewriter, loc, adaptor.getWrEn(), fifoFull),
-        rewriter);
+        rewriter, loc,
+        comb::AndOp::create(rewriter, loc, adaptor.getWrEn(), fifoFull));
     verif::ClockedAssertOp::create(
         rewriter, loc, notFullAndWren, verif::ClockEdge::Pos, clkI1,
         /*enable=*/Value(),
