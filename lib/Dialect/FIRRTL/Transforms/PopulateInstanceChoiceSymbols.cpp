@@ -34,6 +34,13 @@ using namespace circt;
 using namespace firrtl;
 
 namespace {
+
+void getOptionCaseMacroName(StringAttr optionName, StringAttr caseName,
+                            SmallVectorImpl<char> &macroName) {
+  llvm::raw_svector_ostream os(macroName);
+  os << "__option__" << optionName.getValue() << "_" << caseName.getValue();
+}
+
 class PopulateInstanceChoiceSymbolsPass
     : public impl::PopulateInstanceChoiceSymbolsBase<
           PopulateInstanceChoiceSymbolsPass> {
@@ -100,10 +107,41 @@ void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
   OpBuilder builder(circuit.getContext());
   builder.setInsertionPointToStart(circuit.getBodyBlock());
 
-  llvm::DenseSet<StringAttr> createdMacros;
+  llvm::DenseSet<StringAttr> createdInstanceMacros;
   bool changed = false;
 
-  // Iterate through all instance choices.
+  // First, walk all OptionOps and assign case macros to OptionCaseOps.
+  for (auto optionOp : circuit.getOps<OptionOp>()) {
+    auto optionName = optionOp.getSymNameAttr();
+
+    for (auto caseOp : optionOp.getOps<OptionCaseOp>()) {
+      // Skip if already has a case macro.
+      if (caseOp.getCaseMacroAttr())
+        continue;
+
+      auto caseName = caseOp.getSymNameAttr();
+      SmallString<128> caseMacroName;
+      getOptionCaseMacroName(optionName, caseName, caseMacroName);
+
+      // Ensure global uniqueness using CircuitNamespace.
+      auto uniqueName = StringAttr::get(circuit.getContext(),
+                                        getNamespace().newName(caseMacroName));
+      auto caseMacro = FlatSymbolRefAttr::get(uniqueName);
+
+      // Set the case_macro attribute on the OptionCaseOp.
+      caseOp.setCaseMacroAttr(caseMacro);
+      changed = true;
+
+      // Create macro declaration.
+      sv::MacroDeclOp::create(builder, circuit.getLoc(), uniqueName);
+
+      LLVM_DEBUG(llvm::dbgs() << "Assigned case macro '" << uniqueName
+                              << "' to option case '" << caseName
+                              << "' in option '" << optionName << "'\n");
+    }
+  }
+
+  // Second, iterate through all instance choices and assign instance macros.
   instanceGraph.walkPostOrder([&](igraph::InstanceGraphNode &node) {
     auto module = dyn_cast<FModuleLike>(node.getModule().getOperation());
     if (!module)
@@ -118,8 +156,9 @@ void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
       if (!instanceMacro)
         continue;
       changed = true;
-      // Create macro declaration only if we haven't created it yet.
-      if (createdMacros.insert(instanceMacro.getAttr()).second)
+
+      // Create instance macro declaration only if we haven't created it yet.
+      if (createdInstanceMacros.insert(instanceMacro.getAttr()).second)
         sv::MacroDeclOp::create(builder, circuit.getLoc(),
                                 instanceMacro.getAttr());
     }
