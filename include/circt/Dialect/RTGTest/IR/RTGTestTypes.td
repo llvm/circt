@@ -37,20 +37,24 @@ def CPUType : RTGTestTypeDef<"CPU", [ContextResourceTypeInterface]> {
 def IntegerRegisterType : TypeDef<RTGTestDialect, "IntegerRegister", [
   DeclareTypeInterfaceMethods<RegisterTypeInterface>,
   DeclareTypeInterfaceMethods<ValidationTypeInterface>,
-]> {
+]>, RegisterTypeBase {
   let summary = "represents an integer register";
 
   let mnemonic = "ireg";
   let assemblyFormat = "";
+  
+  let binaryEncodingWidth = 5;
 }
 
 def FloatRegisterType : TypeDef<RTGTestDialect, "FloatRegister", [
   DeclareTypeInterfaceMethods<RegisterTypeInterface>,
-]> {
+]>, RegisterTypeBase {
   let summary = "represents a floating-point register";
 
   let mnemonic = "freg";
   let assemblyFormat = "";
+  
+  let binaryEncodingWidth = 5;
 }
 
 def RegisterType : AnyTypeOf<[IntegerRegisterType, FloatRegisterType]>;

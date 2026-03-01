@@ -193,4 +193,43 @@ def InstructionOpAdaptor : TraitList<[
   InstructionOpAdaptorTrait,
 ]>;
 
+//===----------------------------------------------------------------------===//
+// ISA Instruction Format Specification
+//===----------------------------------------------------------------------===//
+
+// Base class for operations that want auto-generated methods for ISA assembly
+// and binary emission from format-strings.
+class ISAInstructionFormat {
+  // Binary encoding format string.
+  // Syntax: "$operand[high:low] literal $operand ..."
+  // - $operand[high:low]: Extract bits [high:low] from operand (both inclusive)
+  // - $operand: Use full operand value. Supported are registers, immediates,
+  //             and labels
+  // - 0bXXX: Binary literal
+  // Example: "$imm[11:0] $rs 0b000 $rd[4:0]"
+  string isaBinaryFormat = "";
+
+  // Assembly format string.
+  // Syntax similar to MLIR's assemblyFormat:
+  // - `literal`: Literal string to emit
+  // - $operand: Operand reference
+  // - $mnemonic: Operation mnemonic (extracted from operation name)
+  // - signed($operand): Emit immediate as signed value
+  // - unsigned($operand): Emit immediate as unsigned value
+  // - Operands with AnyTypeOf<[ImmediateType, LabelType]> automatically
+  //   generate conditional code to handle both labels and immediates
+  // Example: "$mnemonic ` ` $rd `, ` signed($imm) `(` $rs `)`"
+  string isaAssemblyFormat = "";
+}
+
+//===----------------------------------------------------------------------===//
+// Register Type Base
+//===----------------------------------------------------------------------===//
+
+// Base class for register types that can be used in ISA instructions.
+class RegisterTypeBase {
+  // Number of bits needed to encode this register type in binary format.
+  int binaryEncodingWidth;
+}
+
 #endif // CIRCT_DIALECT_RTG_IR_RTGISAASSEMBLYINTERFACES_TD

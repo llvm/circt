@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "RTGInstructionFormat.h"
 #include "mlir/TableGen/GenInfo.h"
 #include "mlir/TableGen/Operator.h"
 #include "llvm/ADT/SmallVector.h"
@@ -24,8 +25,11 @@ using namespace llvm;
 using namespace mlir;
 using namespace mlir::tblgen;
 
-namespace {
+//===----------------------------------------------------------------------===//
+// Decorators
+//===----------------------------------------------------------------------===//
 
+namespace {
 // Helper class to represent a register effect decorator.
 class RegisterEffect : public Operator::VariableDecorator {
 public:
@@ -35,6 +39,11 @@ public:
     return var->getDef().isSubClassOf("RegisterEffect");
   }
 };
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// Code Generation
+//===----------------------------------------------------------------------===//
 
 // Generate the `isSourceRegister` and `isDestinationRegister` methods for an
 // operation based on its `SourceReg` and `DestReg` decorators.
@@ -120,13 +129,15 @@ static bool genRTGInstructionMethods(const RecordKeeper &records,
   llvm::emitSourceFileHeader("RTG Instruction Method Implementations", os,
                              records);
 
-  for (const Record *opDef : records.getAllDerivedDefinitions("Op"))
+  for (const Record *opDef : records.getAllDerivedDefinitions("Op")) {
     genRegisterAllocationMethodsForOp(opDef, os);
+
+    if (opDef->isSubClassOf("ISAInstructionFormat"))
+      circt::tblgen::genInstructionPrintMethods(opDef, os);
+  }
 
   return false;
 }
-
-} // namespace
 
 // Generator registration for RTG instruction-related methods.
 static mlir::GenRegistration
