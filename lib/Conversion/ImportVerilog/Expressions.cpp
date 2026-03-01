@@ -191,10 +191,36 @@ struct ExprVisitor {
       derefType = cast<moore::RefType>(derefType).getNestedType();
 
     if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
-             moore::QueueType>(derefType)) {
+             moore::QueueType, moore::AssocArrayType>(derefType)) {
       mlir::emitError(loc) << "unsupported expression: element select into "
                            << expr.value().type->toString() << "\n";
       return {};
+    }
+
+    // Associative Arrays are a special case so handle them separately.
+    if (isa<moore::AssocArrayType>(derefType)) {
+      auto assocArray = cast<moore::AssocArrayType>(derefType);
+      auto expectedIndexType = assocArray.getIndexType();
+      auto givenIndex = context.convertRvalueExpression(expr.selector());
+
+      if (!givenIndex)
+        return {};
+
+      if (givenIndex.getType() != expectedIndexType) {
+        mlir::emitError(loc)
+            << "Incorrect index type: expected index type of "
+            << expectedIndexType
+            << " but was given "
+            << givenIndex.getType();
+      }
+
+      auto resultType = isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type)) : type;
+
+      if (isLvalue)
+        return moore::AssocArrayExtractRefOp::create(builder, loc, resultType, value, givenIndex);
+      else
+        return moore::AssocArrayExtractOp::create(builder, loc, resultType, value, givenIndex);
+
     }
 
     auto resultType =

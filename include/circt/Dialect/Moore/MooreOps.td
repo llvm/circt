@@ -1929,6 +1929,42 @@ def ArrayCreateOp : MooreOp<"array_create", [Pure, SameTypeOperands]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Associative Array Manipulation
+//===----------------------------------------------------------------------===//
+
+def AssocArrayExtractOp : MooreOp<"assoc_array_extract", [Pure,
+    TypesMatchWith<"input and result types must match",
+    "input", "result", "cast<AssocArrayType>($_self).getElementType()">,
+    TypesMatchWith<"associative array index and given index must match",
+    "input", "index", "cast<AssocArrayType>($_self).getIndexType()">]> {
+  let description = [{
+    Extracts an element from an associative array.
+  }];
+  let arguments = (ins AssocArrayType:$input, UnpackedType:$index);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $input `[` $index `]` attr-dict `:`
+    type($input) `,` type($index) `->` type($result)
+  }];
+}
+
+def AssocArrayExtractRefOp : MooreOp<"assoc_array_extract_ref", 
+    [TypesMatchWith<"input reference and result reference types must match",
+    "input", "result", "RefType::get(cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getElementType())">,
+    TypesMatchWith<"associative array index and given index must match",
+    "input", "index", "cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getIndexType()">]> {
+  let description = [{
+  Extracts the reference to an element from an associative array.
+  }];
+  let arguments = (ins RefType:$input, UnpackedType:$index);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $input `[` $index `]` attr-dict `:`
+    type($input) `,` type($index) `->` type($result)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Struct Manipulation
 //===----------------------------------------------------------------------===//
 
