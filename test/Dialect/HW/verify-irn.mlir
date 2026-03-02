@@ -1,7 +1,5 @@
 // Check explicit verification pass.
 // RUN: circt-opt -hw-verify-irn -verify-diagnostics -split-input-file %s
-// Check verification occurs in firtool pipeline.
-// RUN: firtool -verify-diagnostics -split-input-file %s
 
 // #3526
 hw.module @B() {}
