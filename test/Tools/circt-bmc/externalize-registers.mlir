@@ -15,6 +15,7 @@ hw.module @comb(in %in0: i32, in %in1: i32, out out: i32) {
 // CHECK:      [[C0_I32:%.+]] = hw.constant 0 : i32
 // CHECK:      seq.yield [[C0_I32]]
 // CHECK:    }
+// CHECK:    verif.clocked_by [[CLK]] -> [[ADD]] : !seq.clock, i32
 // CHECK:    hw.output [[OLD_REG]], [[ADD]]
 // CHECK:  }
 hw.module @one_reg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32) {
@@ -29,6 +30,8 @@ hw.module @one_reg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32
 
 // CHECK:  hw.module @two_reg(in [[CLK:%.+]] : !seq.clock, in [[IN0:%.+]] : i32, in [[IN1:%.+]] : i32, in [[OLD_REG0:%.+]] : i32, in [[OLD_REG1:%.+]] : i32, out {{.+}} : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {initial_values = [unit, unit], num_regs = 2 : i32} {
 // CHECK:    [[ADD:%.+]] = comb.add [[IN0]], [[IN1]]
+// CHECK:    verif.clocked_by [[CLK]] -> [[ADD]] : !seq.clock, i32
+// CHECK:    verif.clocked_by [[CLK]] -> [[OLD_REG0]] : !seq.clock, i32
 // CHECK:    hw.output [[OLD_REG1]], [[ADD]], [[OLD_REG0]]
 // CHECK:  }
 hw.module @two_reg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32) {
@@ -40,6 +43,8 @@ hw.module @two_reg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32
 
 // CHECK:  hw.module @named_regs(in [[CLK:%.+]] : !seq.clock, in [[IN0:%.+]] : i32, in [[IN1:%.+]] : i32, in %firstreg_state : i32, in %secondreg_state : i32, out {{.+}} : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {initial_values = [unit, unit], num_regs = 2 : i32} {
 // CHECK:    [[ADD:%.+]] = comb.add [[IN0]], [[IN1]]
+// CHECK:    verif.clocked_by [[CLK]] -> [[ADD]] : !seq.clock, i32
+// CHECK:    verif.clocked_by [[CLK]] -> %firstreg_state : !seq.clock, i32
 // CHECK:    hw.output %secondreg_state, [[ADD]], %firstreg_state
 // CHECK:  }
 hw.module @named_regs(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32) {
@@ -51,6 +56,7 @@ hw.module @named_regs(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: 
 
 // CHECK:  hw.module @nested_reg(in [[CLK:%.+]] : !seq.clock, in [[IN0:%.+]] : i32, in [[IN1:%.+]] : i32, in [[OLD_REG:%.+]] : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {initial_values = [0 : i32], num_regs = 1 : i32} {
 // CHECK:    [[INSTOUT:%.+]], [[INSTREG:%.+]] = hw.instance "one_reg" @one_reg(clk: [[CLK]]: !seq.clock, in0: [[IN0]]: i32, in1: [[IN1]]: i32, {{.+}}: [[OLD_REG]]: i32) -> ({{.+}}: i32, {{.+}}: i32)
+// CHECK:    verif.clocked_by [[CLK]] -> [[INSTREG]] : !seq.clock, i32
 // CHECK:    hw.output [[INSTOUT]], [[INSTREG]]
 // CHECK:  }
 hw.module @nested_reg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32) {
@@ -60,6 +66,8 @@ hw.module @nested_reg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: 
 
 // CHECK:  hw.module @nested_nested_reg(in [[CLK:%.+]] : !seq.clock, in [[IN0:%.+]] : i32, in [[IN1:%.+]] : i32, in %single_reg_state : i32, in %top_reg_state : i32, out {{.+}} : i32, out single_reg_next : i32, out top_reg_next : i32) attributes {initial_values = [0 : i32, unit], num_regs = 2 : i32} {
 // CHECK:    [[INSTOUT:%.+]], [[INSTREG:%.+]] = hw.instance "nested_reg" @nested_reg(clk: [[CLK]]: !seq.clock, in0: [[IN0]]: i32, in1: [[IN1]]: i32, single_reg_state: %single_reg_state: i32) -> ({{.+}}: i32, single_reg_next: i32)
+// CHECK:    verif.clocked_by [[CLK]] -> [[INSTREG]] : !seq.clock, i32
+// CHECK:    verif.clocked_by [[CLK]] -> [[INSTOUT]] : !seq.clock, i32
 // CHECK:    hw.output %top_reg_state, [[INSTREG]], [[INSTOUT]]
 // CHECK:  }
 hw.module @nested_nested_reg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32) {
@@ -74,6 +82,9 @@ hw.module @nested_nested_reg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, ou
 // CHECK:      [[C42_I32:%.+]] = hw.constant 42 : i32
 // CHECK:      seq.yield [[C0_I32]], [[C42_I32]]
 // CHECK:    }
+// CHECK:    verif.clocked_by [[CLK]] -> [[IN]] : !seq.clock, i32
+// CHECK:    verif.clocked_by [[CLK]] -> [[IN]] : !seq.clock, i32
+// CHECK:    verif.clocked_by [[CLK]] -> [[IN]] : !seq.clock, i32
 // CHECK:    hw.output [[IN]], [[IN]], [[IN]]
 // CHECK:  }
 hw.module @different_initial_values(in %clk: !seq.clock, in %in : i32) {
@@ -91,6 +102,7 @@ hw.module @different_initial_values(in %clk: !seq.clock, in %in : i32) {
 // CHECK:  hw.module @reg_with_reset(in [[CLK:%.+]] : !seq.clock, in [[RST:%.+]] : i1, in [[IN:%.+]] : i32, in [[OLD_REG:%.+]] : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {initial_values = [unit], num_regs = 1 : i32} {
 // CHECK:    [[C0_I32:%.+]] = hw.constant 0 : i32
 // CHECK:    [[MUX:%.+]] = comb.mux [[RST]], [[C0_I32]], [[IN]] : i32
+// CHECK:    verif.clocked_by [[CLK]] -> [[MUX]] : !seq.clock, i32
 // CHECK:    hw.output [[OLD_REG]], [[MUX]]
 // CHECK:  }
 hw.module @reg_with_reset(in %clk: !seq.clock, in %rst: i1, in %in: i32, out out: i32) {
@@ -103,6 +115,7 @@ hw.module @reg_with_reset(in %clk: !seq.clock, in %rst: i1, in %in: i32, out out
 
 // CHECK:  hw.module @one_firreg(in [[CLK:%.+]] : !seq.clock, in [[IN0:%.+]] : i32, in [[IN1:%.+]] : i32, in [[OLD_REG:%.+]] : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {initial_values = [0 : i32], num_regs = 1 : i32} {
 // CHECK:    [[ADD:%.+]] = comb.add [[IN0]], [[IN1]]
+// CHECK:    verif.clocked_by [[CLK]] -> [[ADD]] : !seq.clock, i32
 // CHECK:    hw.output [[OLD_REG]], [[ADD]]
 // CHECK:  }
 hw.module @one_firreg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32) {
@@ -113,6 +126,8 @@ hw.module @one_firreg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: 
 
 // CHECK:  hw.module @compreg_and_firreg(in [[CLK:%.+]] : !seq.clock, in [[IN0:%.+]] : i32, in [[IN1:%.+]] : i32, in [[OLD_REG0:%.+]] : i32, in [[OLD_REG1:%.+]] : i32, out {{.+}} : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {initial_values = [unit, unit], num_regs = 2 : i32} {
 // CHECK:    [[ADD:%.+]] = comb.add [[IN0]], [[IN1]]
+// CHECK:    verif.clocked_by [[CLK]] -> [[ADD]] : !seq.clock, i32
+// CHECK:    verif.clocked_by [[CLK]] -> [[OLD_REG0]] : !seq.clock, i32
 // CHECK:    hw.output [[OLD_REG1]], [[ADD]], [[OLD_REG0]]
 // CHECK:  }
 hw.module @compreg_and_firreg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32) {
@@ -124,6 +139,8 @@ hw.module @compreg_and_firreg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, o
 
 // CHECK:  hw.module @named_firregs(in [[CLK:%.+]] : !seq.clock, in [[IN0:%.+]] : i32, in [[IN1:%.+]] : i32, in %firstreg_state : i32, in %secondreg_state : i32, out {{.+}} : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {initial_values = [unit, unit], num_regs = 2 : i32} {
 // CHECK:    [[ADD:%.+]] = comb.add [[IN0]], [[IN1]]
+// CHECK:    verif.clocked_by [[CLK]] -> [[ADD]] : !seq.clock, i32
+// CHECK:    verif.clocked_by [[CLK]] -> %firstreg_state : !seq.clock, i32
 // CHECK:    hw.output %secondreg_state, [[ADD]], %firstreg_state
 // CHECK:  }
 hw.module @named_firregs(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32) {
@@ -133,9 +150,22 @@ hw.module @named_firregs(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out ou
   hw.output %secondreg : i32
 }
 
+// Multi-clock: two registers on independent clocks are both externalized.
+// CHECK:  hw.module @two_clk_regs(in [[CLK0:%.+]] : !seq.clock, in [[CLK1:%.+]] : !seq.clock, in [[IN:%.+]] : i32, in [[REG0:%.+]] : i32, in [[REG1:%.+]] : i32, out {{.+}} : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {initial_values = [unit, unit], num_regs = 2 : i32} {
+// CHECK:    verif.clocked_by [[CLK0]] -> [[IN]] : !seq.clock, i32
+// CHECK:    verif.clocked_by [[CLK1]] -> [[REG0]] : !seq.clock, i32
+// CHECK:    hw.output [[REG1]], [[IN]], [[REG0]]
+// CHECK:  }
+hw.module @two_clk_regs(in %clk0: !seq.clock, in %clk1: !seq.clock, in %in: i32, out out: i32) {
+  %reg0 = seq.compreg %in,   %clk0 : i32
+  %reg1 = seq.compreg %reg0, %clk1 : i32
+  hw.output %reg1 : i32
+}
+
 // CHECK:  hw.module @firreg_with_sync_reset(in [[CLK:%.+]] : !seq.clock, in [[RST:%.+]] : i1, in [[IN:%.+]] : i32, in [[OLD_REG1:%.+]] : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {initial_values = [unit], num_regs = 1 : i32} {
 // CHECK:    [[C0_I32:%.+]] = hw.constant 0 : i32
 // CHECK:    [[MUX1:%.+]] = comb.mux [[RST]], [[C0_I32]], [[IN]] : i32
+// CHECK:    verif.clocked_by [[CLK]] -> [[MUX1]] : !seq.clock, i32
 // CHECK:    hw.output [[OLD_REG1]], [[MUX1]]
 // CHECK:  }
 hw.module @firreg_with_sync_reset(in %clk: !seq.clock, in %rst: i1, in %in: i32, out out: i32) {

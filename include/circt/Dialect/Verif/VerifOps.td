@@ -486,7 +486,7 @@ def SimulationOp : VerifOp<"simulation", [
 }
 
 def SymbolicValueOp : VerifOp<"symbolic_value", [
-  ParentOneOf<["verif::FormalOp", "hw::HWModuleOp"]>,
+  ParentOneOf<["verif::FormalOp", "hw::HWModuleOp", "verif::BoundedModelCheckingOp"]>,
 ]>{
   let summary = "Create a symbolic value for formal verification";
   let description = [{
@@ -497,6 +497,24 @@ def SymbolicValueOp : VerifOp<"symbolic_value", [
   }];
   let results = (outs Res<AnyType, "", [MemAlloc]>:$result);
   let assemblyFormat = "attr-dict `:` type($result)";
+}
+
+def ClockedByOp : VerifOp<"clocked_by"> {
+  let summary = "Records that a value is the next state of a register driven by a clock";
+  let description = [{
+    Emitted by ExternalizeRegisters for each externalized register. Associates the
+    clock SSA value that drove the original seq.compreg/firreg with the next-state
+    output value that replaced it. Used downstream by LowerToBMC and VerifToSMT to
+    correctly gate register state updates to the posedge of their respective clock.
+
+    This op solves the problem that MLIR attributes cannot reference SSA values:
+    by using a proper operation, both operands are first-class IR values that are
+    maintained correctly by all standard MLIR transformations (renaming, DCE, etc.).
+  }];
+  let arguments = (ins ClockType:$clock, AnyType:$nextState);
+  let assemblyFormat = [{
+    $clock `->` $nextState attr-dict `:` type($clock) `,` type($nextState)
+  }];
 }
 
 //===----------------------------------------------------------------------===//

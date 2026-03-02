@@ -124,68 +124,63 @@ void LowerToBMCPass::runOnOperation() {
     return signalPassFailure();
   }
 
-  // Check that there's only one clock input to the module
-  // TODO: supporting multiple clocks isn't too hard, an interleaving of clock
-  // toggles just needs to be generated
-  bool hasClk = false;
+  // Count top-level clock inputs. Each gets an independent toggle entry in the
+  // init/loop regions so the BMC explores all possible asynchronous clock
+  // interleavings. Struct-embedded clocks are not yet supported.
+  unsigned numClocks = 0;
   for (auto input : hwModule.getInputTypes()) {
     if (isa<seq::ClockType>(input)) {
-      if (hasClk) {
-        hwModule.emitError("designs with multiple clocks not yet supported");
-        return signalPassFailure();
-      }
-      hasClk = true;
+      ++numClocks;
     }
     if (auto hwStruct = dyn_cast<hw::StructType>(input)) {
       for (auto field : hwStruct.getElements()) {
         if (isa<seq::ClockType>(field.type)) {
-          if (hasClk) {
-            hwModule.emitError(
-                "designs with multiple clocks not yet supported");
-            return signalPassFailure();
-          }
-          hasClk = true;
+          hwModule.emitError(
+              "designs with struct-embedded clocks not yet supported");
+          return signalPassFailure();
         }
       }
     }
   }
   {
     OpBuilder::InsertionGuard guard(builder);
-    // Initialize clock to 0 if it exists, otherwise just yield nothing
-    // We initialize to 1 if we're in rising clocks only mode
+    // Initialize all clocks to 0 (or 1 in rising-clocks-only mode).
     auto *initBlock = builder.createBlock(&bmcOp.getInit());
     builder.setInsertionPointToStart(initBlock);
-    if (hasClk) {
+    SmallVector<Value> initClocks;
+    for (unsigned i = 0; i < numClocks; ++i) {
       auto initVal = hw::ConstantOp::create(builder, loc, builder.getI1Type(),
                                             risingClocksOnly ? 1 : 0);
-      auto toClk = seq::ToClockOp::create(builder, loc, initVal);
-      verif::YieldOp::create(builder, loc, ValueRange{toClk});
-    } else {
-      verif::YieldOp::create(builder, loc, ValueRange{});
+      initClocks.push_back(seq::ToClockOp::create(builder, loc, initVal));
     }
+    verif::YieldOp::create(builder, loc, initClocks);
 
-    // Toggle clock in loop region if it exists, otherwise just yield nothing
+    // Update clocks each step. Each clock independently decides whether to
+    // toggle using a symbolic value. Instead of mechanically toggling the
+    // clock every cycle, XORing it with a `verif.symbolic_value` creates a
+    // non-deterministic SMT variable. This forces the underlying solver (e.g.
+    // Z3) to mathematically explore all possible asynchronous interleavings of
+    // multiple clocks, which is necessary to catch CDC (Clock Domain Crossing)
+    // violations.
     auto *loopBlock = builder.createBlock(&bmcOp.getLoop());
     builder.setInsertionPointToStart(loopBlock);
-    if (hasClk) {
+    for (unsigned i = 0; i < numClocks; ++i)
       loopBlock->addArgument(seq::ClockType::get(ctx), loc);
-      if (risingClocksOnly) {
-        // In rising clocks only mode we don't need to toggle the clock
-        verif::YieldOp::create(builder, loc,
-                               ValueRange{loopBlock->getArgument(0)});
-      } else {
-        auto fromClk =
-            seq::FromClockOp::create(builder, loc, loopBlock->getArgument(0));
-        auto cNeg1 =
-            hw::ConstantOp::create(builder, loc, builder.getI1Type(), -1);
-        auto nClk = comb::XorOp::create(builder, loc, fromClk, cNeg1);
-        auto toClk = seq::ToClockOp::create(builder, loc, nClk);
-        // Only yield clock value
-        verif::YieldOp::create(builder, loc, ValueRange{toClk});
-      }
+    SmallVector<Value> nextClocks;
+    if (risingClocksOnly) {
+      // Rising-clocks-only mode: pass clocks through unchanged.
+      for (auto arg : loopBlock->getArguments())
+        nextClocks.push_back(arg);
     } else {
-      verif::YieldOp::create(builder, loc, ValueRange{});
+      for (auto arg : loopBlock->getArguments()) {
+        auto fromClk = seq::FromClockOp::create(builder, loc, arg);
+        auto toggle =
+            verif::SymbolicValueOp::create(builder, loc, builder.getI1Type());
+        auto nClk = comb::XorOp::create(builder, loc, fromClk, toggle);
+        nextClocks.push_back(seq::ToClockOp::create(builder, loc, nClk));
+      }
     }
+    verif::YieldOp::create(builder, loc, nextClocks);
   }
   bmcOp.getCircuit().takeBody(hwModule.getBody());
   hwModule->erase();

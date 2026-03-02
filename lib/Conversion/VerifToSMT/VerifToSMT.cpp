@@ -412,6 +412,7 @@ struct VerifBoundedModelCheckingOpConversion
 
     func::FuncOp initFuncOp, loopFuncOp, circuitFuncOp;
 
+    SmallVector<unsigned> regToClockArgIdx(numRegs);
     {
       OpBuilder::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointToEnd(
@@ -429,6 +430,41 @@ struct VerifBoundedModelCheckingOpConversion
       rewriter.inlineRegionBefore(op.getCircuit(),
                                   circuitFuncOp.getFunctionBody(),
                                   circuitFuncOp.end());
+
+      {
+        // Extract the clock-to-register mapping from verif.clocked_by ops.
+        // These ops were added by ExternalizeRegisters to associate each
+        // externalized register's next-state value with the specific clock
+        // that drives it. We need this mapping so we can correctly route
+        // We extract this mapping now and then immediately erase the
+        // verif.clocked_by ops because they are auxiliary metadata operations
+        // that the downstream SMT dialect converter does not know how to
+        // legalize.
+        auto &circuitBlock = circuitFuncOp.getBody().front();
+        auto *circuitYield = circuitBlock.getTerminator();
+        for (auto clockedBy : llvm::make_early_inc_range(
+                 circuitBlock.getOps<verif::ClockedByOp>())) {
+          auto nextState = clockedBy.getNextState();
+          auto clockArg = cast<BlockArgument>(clockedBy.getClock());
+          unsigned nextStateIdx = 0;
+          bool found = false;
+          for (auto [idx, operand] :
+               llvm::enumerate(circuitYield->getOperands())) {
+            if (operand == nextState) {
+              nextStateIdx = idx;
+              found = true;
+              break;
+            }
+          }
+          if (found) {
+            unsigned regIdx =
+                nextStateIdx - (circuitYield->getNumOperands() - numRegs);
+            regToClockArgIdx[regIdx] = clockArg.getArgNumber();
+          }
+          rewriter.eraseOp(clockedBy);
+        }
+      }
+
       auto funcOps = {&initFuncOp, &loopFuncOp, &circuitFuncOp};
       // initOutputTy is the same as loop output types
       auto outputTys = {initOutputTy, initOutputTy, circuitOutputTy};
@@ -600,20 +636,19 @@ struct VerifBoundedModelCheckingOpConversion
 
           // Only update the registers on a clock posedge unless in rising
           // clocks only mode
-          // TODO: this will also need changing with multiple clocks - currently
-          // it only accounts for the one clock case.
-          if (clockIndexes.size() == 1) {
-            SmallVector<Value> regInputs = circuitCallOuts.take_back(numRegs);
-            if (risingClocksOnly) {
-              // In rising clocks only mode we don't need to worry about whether
-              // there was a posedge
-              newDecls.append(regInputs);
-            } else {
-              auto clockIndex = clockIndexes[0];
-              auto oldClock = iterArgs[clockIndex];
-              // The clock is necessarily the first value returned by the loop
-              // region
-              auto newClock = loopVals[0];
+          SmallVector<Value> regInputs = circuitCallOuts.take_back(numRegs);
+          if (risingClocksOnly) {
+            // In rising clocks only mode we don't need to worry about whether
+            // there was a posedge
+            newDecls.append(regInputs);
+          } else {
+            // Map: clock circuit arg index -> isPosedge bool
+            DenseMap<unsigned, Value> isPosedgePerClock;
+            for (auto [i, clockIdx] : llvm::enumerate(clockIndexes)) {
+              auto oldClock = iterArgs[clockIdx];
+              // The clocks are necessarily the first values returned by the
+              // loop region
+              auto newClock = loopVals[i];
               auto oldClockLow = smt::BVNotOp::create(builder, loc, oldClock);
               auto isPosedgeBV =
                   smt::BVAndOp::create(builder, loc, oldClockLow, newClock);
@@ -621,20 +656,32 @@ struct VerifBoundedModelCheckingOpConversion
               auto trueBV = smt::BVConstantOp::create(builder, loc, 1, 1);
               auto isPosedge =
                   smt::EqOp::create(builder, loc, isPosedgeBV, trueBV);
-              auto regStates =
-                  iterArgs.take_front(circuitFuncOp.getNumArguments())
-                      .take_back(numRegs);
-              SmallVector<Value> nextRegStates;
-              for (auto [regState, regInput] :
-                   llvm::zip(regStates, regInputs)) {
-                // Create an ITE to calculate the next reg state
-                // TODO: we create a lot of ITEs here that will slow things down
-                // - these could be avoided by making init/loop regions concrete
-                nextRegStates.push_back(smt::IteOp::create(
-                    builder, loc, isPosedge, regInput, regState));
-              }
-              newDecls.append(nextRegStates);
+              isPosedgePerClock[clockIdx] = isPosedge;
             }
+
+            auto regStates =
+                iterArgs.take_front(circuitFuncOp.getNumArguments())
+                    .take_back(numRegs);
+            SmallVector<Value> nextRegStates;
+            for (unsigned regIdx = 0; regIdx < numRegs; ++regIdx) {
+              auto regInput = regInputs[regIdx];
+              auto regState = regStates[regIdx];
+              auto clockIdx = regToClockArgIdx[regIdx];
+              if (!isPosedgePerClock.count(clockIdx) && !clockIndexes.empty())
+                clockIdx = clockIndexes[0];
+              auto isPosedge = isPosedgePerClock[clockIdx];
+              // Create an ITE (If-Then-Else) to calculate the next reg state.
+              // For multi-clock designs, each register's next-state update is
+              // strictly gated by the specific `isPosedge` condition of the
+              // clock that drives it. If a register's specific clock didn't
+              // tick in this SMT frame, the ITE forces it to hold its previous
+              // state.
+              // TODO: we create a lot of ITEs here that will slow things down
+              // - these could be avoided by making init/loop regions concrete
+              nextRegStates.push_back(smt::IteOp::create(
+                  builder, loc, isPosedge, regInput, regState));
+            }
+            newDecls.append(nextRegStates);
           }
 
           // Add the rest of the loop state args
@@ -723,13 +770,6 @@ void ConvertVerifToSMTPass::runOnOperation() {
           for (auto argType : bmcOp.getCircuit().getArgumentTypes())
             if (isa<seq::ClockType>(argType))
               numClockArgs++;
-          // TODO: this can be removed once we have a way to associate reg
-          // ins/outs with clocks
-          if (numClockArgs > 1) {
-            op->emitError(
-                "only modules with one or zero clocks are currently supported");
-            return WalkResult::interrupt();
-          }
           SmallVector<mlir::Operation *> worklist;
           int numAssertions = 0;
           op->walk([&](Operation *curOp) {
