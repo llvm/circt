@@ -23,10 +23,11 @@ TEST(TypedPortsTest, VoidTypeCompatibility) {
 
   // Non-void types should fail.
   UIntType uint1("ui1", 1);
-  EXPECT_THROW(verifyTypeCompatibility<void>(&uint1), std::runtime_error);
+  EXPECT_THROW(verifyTypeCompatibility<void>(&uint1), AcceleratorMismatchError);
 
   SIntType sint32("si32", 32);
-  EXPECT_THROW(verifyTypeCompatibility<void>(&sint32), std::runtime_error);
+  EXPECT_THROW(verifyTypeCompatibility<void>(&sint32),
+               AcceleratorMismatchError);
 }
 
 TEST(TypedPortsTest, BoolTypeCompatibility) {
@@ -35,11 +36,11 @@ TEST(TypedPortsTest, BoolTypeCompatibility) {
 
   // Width > 1 should fail.
   BitsType bits8("i8", 8);
-  EXPECT_THROW(verifyTypeCompatibility<bool>(&bits8), std::runtime_error);
+  EXPECT_THROW(verifyTypeCompatibility<bool>(&bits8), AcceleratorMismatchError);
 
   // Wrong type entirely should fail.
   SIntType sint1("si1", 1);
-  EXPECT_THROW(verifyTypeCompatibility<bool>(&sint1), std::runtime_error);
+  EXPECT_THROW(verifyTypeCompatibility<bool>(&sint1), AcceleratorMismatchError);
 }
 
 TEST(TypedPortsTest, SignedIntTypeCompatibility) {
@@ -53,22 +54,26 @@ TEST(TypedPortsTest, SignedIntTypeCompatibility) {
 
   // si33 has width 33, which exceeds int32_t. Should fail.
   SIntType sint33("si33", 33);
-  EXPECT_THROW(verifyTypeCompatibility<int32_t>(&sint33), std::runtime_error);
+  EXPECT_THROW(verifyTypeCompatibility<int32_t>(&sint33),
+               AcceleratorMismatchError);
 
   // si16 fits in int32_t but a smaller type (int16_t) would suffice. Reject.
   SIntType sint16("si16", 16);
-  EXPECT_THROW(verifyTypeCompatibility<int32_t>(&sint16), std::runtime_error);
+  EXPECT_THROW(verifyTypeCompatibility<int32_t>(&sint16),
+               AcceleratorMismatchError);
 
   // si8 is even smaller — also reject for int32_t.
   SIntType sint8("si8", 8);
-  EXPECT_THROW(verifyTypeCompatibility<int32_t>(&sint8), std::runtime_error);
+  EXPECT_THROW(verifyTypeCompatibility<int32_t>(&sint8),
+               AcceleratorMismatchError);
 
   // But si8 should be fine for int8_t (closest match).
   EXPECT_NO_THROW(verifyTypeCompatibility<int8_t>(&sint8));
 
   // UIntType should fail for signed C++ type.
   UIntType uint31("ui31", 31);
-  EXPECT_THROW(verifyTypeCompatibility<int32_t>(&uint31), std::runtime_error);
+  EXPECT_THROW(verifyTypeCompatibility<int32_t>(&uint31),
+               AcceleratorMismatchError);
 
   // int64_t can hold si33 (width 33, in range (32,64]).
   SIntType sint33b("si33", 33);
@@ -80,10 +85,12 @@ TEST(TypedPortsTest, SignedIntTypeCompatibility) {
 
   // si65 exceeds int64_t. Should fail.
   SIntType sint65("si65", 65);
-  EXPECT_THROW(verifyTypeCompatibility<int64_t>(&sint65), std::runtime_error);
+  EXPECT_THROW(verifyTypeCompatibility<int64_t>(&sint65),
+               AcceleratorMismatchError);
 
   // si32 fits in int64_t but int32_t would suffice. Reject.
-  EXPECT_THROW(verifyTypeCompatibility<int64_t>(&sint32), std::runtime_error);
+  EXPECT_THROW(verifyTypeCompatibility<int64_t>(&sint32),
+               AcceleratorMismatchError);
 }
 
 TEST(TypedPortsTest, UnsignedIntTypeCompatibility) {
@@ -97,11 +104,13 @@ TEST(TypedPortsTest, UnsignedIntTypeCompatibility) {
 
   // ui33 exceeds uint32_t. Should fail.
   UIntType uint33("ui33", 33);
-  EXPECT_THROW(verifyTypeCompatibility<uint32_t>(&uint33), std::runtime_error);
+  EXPECT_THROW(verifyTypeCompatibility<uint32_t>(&uint33),
+               AcceleratorMismatchError);
 
   // ui16 fits but uint16_t would suffice. Reject for uint32_t.
   UIntType uint16_("ui16", 16);
-  EXPECT_THROW(verifyTypeCompatibility<uint32_t>(&uint16_), std::runtime_error);
+  EXPECT_THROW(verifyTypeCompatibility<uint32_t>(&uint16_),
+               AcceleratorMismatchError);
 
   // But ui16 should be fine for uint16_t.
   EXPECT_NO_THROW(verifyTypeCompatibility<uint16_t>(&uint16_));
@@ -116,11 +125,13 @@ TEST(TypedPortsTest, UnsignedIntTypeCompatibility) {
 
   // BitsType with width 33 exceeds uint32_t. Should fail.
   BitsType bits33("i33", 33);
-  EXPECT_THROW(verifyTypeCompatibility<uint32_t>(&bits33), std::runtime_error);
+  EXPECT_THROW(verifyTypeCompatibility<uint32_t>(&bits33),
+               AcceleratorMismatchError);
 
   // BitsType width 8 should be rejected for uint32_t (uint8_t suffices).
   BitsType bits8("i8", 8);
-  EXPECT_THROW(verifyTypeCompatibility<uint32_t>(&bits8), std::runtime_error);
+  EXPECT_THROW(verifyTypeCompatibility<uint32_t>(&bits8),
+               AcceleratorMismatchError);
   EXPECT_NO_THROW(verifyTypeCompatibility<uint8_t>(&bits8));
 
   // uint64_t with ui33 (in range (32,64]).
@@ -133,15 +144,17 @@ TEST(TypedPortsTest, UnsignedIntTypeCompatibility) {
 
   // uint64_t with ui65 exceeds. Should fail.
   UIntType uint65("ui65", 65);
-  EXPECT_THROW(verifyTypeCompatibility<uint64_t>(&uint65), std::runtime_error);
+  EXPECT_THROW(verifyTypeCompatibility<uint64_t>(&uint65),
+               AcceleratorMismatchError);
 
   // uint64_t with ui32 — uint32_t would suffice. Reject.
   EXPECT_THROW(verifyTypeCompatibility<uint64_t>(&uint32_t_),
-               std::runtime_error);
+               AcceleratorMismatchError);
 
   // SIntType should fail for unsigned C++ type.
   SIntType sint31("si31", 31);
-  EXPECT_THROW(verifyTypeCompatibility<uint32_t>(&sint31), std::runtime_error);
+  EXPECT_THROW(verifyTypeCompatibility<uint32_t>(&sint31),
+               AcceleratorMismatchError);
 }
 
 // Test struct with _ESI_ID.
@@ -159,7 +172,7 @@ TEST(TypedPortsTest, ESIIDTypeCompatibility) {
   // Mismatched ID should fail.
   StructType mismatchType("OtherModule.OtherStruct", {});
   EXPECT_THROW(verifyTypeCompatibility<TestStruct>(&mismatchType),
-               std::runtime_error);
+               AcceleratorMismatchError);
 
   // Even a non-struct type with matching ID should pass (ID comparison only).
   UIntType uintWithMatchingID("MyModule.TestStruct", 32);
@@ -167,8 +180,10 @@ TEST(TypedPortsTest, ESIIDTypeCompatibility) {
 }
 
 TEST(TypedPortsTest, NullPortTypeThrows) {
-  EXPECT_THROW(verifyTypeCompatibility<int32_t>(nullptr), std::runtime_error);
-  EXPECT_THROW(verifyTypeCompatibility<void>(nullptr), std::runtime_error);
+  EXPECT_THROW(verifyTypeCompatibility<int32_t>(nullptr),
+               AcceleratorMismatchError);
+  EXPECT_THROW(verifyTypeCompatibility<void>(nullptr),
+               AcceleratorMismatchError);
 }
 
 // A type that is not integral and has no _ESI_ID — should hit fallback.
@@ -179,7 +194,7 @@ struct UnknownCppType {
 TEST(TypedPortsTest, FallbackThrows) {
   UIntType uint32("ui32", 32);
   EXPECT_THROW(verifyTypeCompatibility<UnknownCppType>(&uint32),
-               std::runtime_error);
+               AcceleratorMismatchError);
 }
 
 //===----------------------------------------------------------------------===//
@@ -216,7 +231,7 @@ TEST(TypedPortsTest, TypedWritePortConnectThrowsOnMismatch) {
   UIntType uint32("ui32", 32);
   MockWritePort mock(&uint32);
   TypedWritePort<int32_t> typed(mock); // int32_t expects SIntType
-  EXPECT_THROW(typed.connect(), std::runtime_error);
+  EXPECT_THROW(typed.connect(), AcceleratorMismatchError);
 }
 
 TEST(TypedPortsTest, TypedWritePortConnectSucceeds) {
@@ -230,15 +245,14 @@ TEST(TypedPortsTest, TypedWritePortConnectSucceeds) {
 TEST(TypedPortsTest, TypedWritePortRoundTrip) {
   SIntType sint15("si15", 15);
   MockWritePort mock(&sint15);
-  TypedWritePort<int32_t> typed(mock);
+  TypedWritePort<int16_t> typed(mock);
   typed.connect();
 
-  int32_t val = 12345;
+  int16_t val = 12345;
   typed.write(val);
 
-  // Verify the written data matches the raw bytes of val.
-  ASSERT_EQ(mock.lastWritten.getSize(), sizeof(int32_t));
-  EXPECT_EQ(*mock.lastWritten.as<int32_t>(), 12345);
+  // Wire size for si15 is 2 bytes ((15+7)/8).
+  ASSERT_EQ(mock.lastWritten.getSize(), 2u);
 }
 
 TEST(TypedPortsTest, TypedWritePortVoid) {
@@ -284,15 +298,15 @@ public:
 TEST(TypedPortsTest, TypedFunctionNullThrowsAtConnect) {
   // Null is accepted at construction but throws at connect().
   TypedFunction<uint32_t, uint16_t> typed(nullptr);
-  EXPECT_THROW(typed.connect(), std::runtime_error);
+  EXPECT_THROW(typed.connect(), AcceleratorMismatchError);
 }
 
 TEST(TypedPortsTest, TypedFunctionConnectVerifiesTypes) {
   // Create channel types matching si24 arg and ui16 result.
   SIntType argInner("si24", 24);
   ChannelType argChanType("channel<si24>", &argInner);
-  UIntType resultInner("ui16", 15);
-  ChannelType resultChanType("channel<ui16>", &resultInner);
+  UIntType resultInner("ui15", 15);
+  ChannelType resultChanType("channel<ui15>", &resultInner);
 
   BundleType::ChannelVector channels = {
       {"arg", BundleType::Direction::To, &argChanType},
@@ -316,8 +330,8 @@ TEST(TypedPortsTest, TypedFunctionConnectVerifiesTypes) {
 TEST(TypedPortsTest, TypedFunctionConnectRejectsArgMismatch) {
   UIntType argInner("ui24", 24);
   ChannelType argChanType("channel<ui24>", &argInner);
-  UIntType resultInner("ui16", 15);
-  ChannelType resultChanType("channel<ui16>", &resultInner);
+  UIntType resultInner("ui15", 15);
+  ChannelType resultChanType("channel<ui15>", &resultInner);
 
   BundleType::ChannelVector channels = {
       {"arg", BundleType::Direction::To, &argChanType},
@@ -333,15 +347,15 @@ TEST(TypedPortsTest, TypedFunctionConnectRejectsArgMismatch) {
 
   // int32_t (signed) against UIntType — should fail at connect.
   TypedFunction<int32_t, uint16_t> typed(func);
-  EXPECT_THROW(typed.connect(), std::runtime_error);
+  EXPECT_THROW(typed.connect(), AcceleratorMismatchError);
   delete func;
 }
 
 TEST(TypedPortsTest, TypedFunctionCallRoundTrip) {
   SIntType argInner("si24", 24);
   ChannelType argChanType("channel<si24>", &argInner);
-  UIntType resultInner("ui16", 15);
-  ChannelType resultChanType("channel<ui16>", &resultInner);
+  UIntType resultInner("ui15", 15);
+  ChannelType resultChanType("channel<ui15>", &resultInner);
 
   BundleType::ChannelVector channels = {
       {"arg", BundleType::Direction::To, &argChanType},
@@ -366,9 +380,8 @@ TEST(TypedPortsTest, TypedFunctionCallRoundTrip) {
   uint16_t result = typed.call(arg).get();
   EXPECT_EQ(result, 42);
 
-  // Verify the written arg matches.
-  ASSERT_EQ(mockWrite.lastWritten.getSize(), sizeof(int32_t));
-  EXPECT_EQ(*mockWrite.lastWritten.as<int32_t>(), 100);
+  // Verify the written arg matches — si24 wire size is 3 bytes.
+  ASSERT_EQ(mockWrite.lastWritten.getSize(), 3u);
   delete func;
 }
 

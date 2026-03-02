@@ -27,14 +27,81 @@
 #include "esi/Types.h"
 
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <future>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <typeinfo>
 
 namespace esi {
+
+//===----------------------------------------------------------------------===//
+// AcceleratorMismatchError — thrown for type mismatches and port-not-found.
+//===----------------------------------------------------------------------===//
+
+class AcceleratorMismatchError : public std::runtime_error {
+public:
+  using std::runtime_error::runtime_error;
+};
+
+//===----------------------------------------------------------------------===//
+// Helpers: unwrap TypeAliasType and width-aware serialization.
+//===----------------------------------------------------------------------===//
+
+/// Unwrap TypeAliasType (possibly recursively) to get the underlying type.
+inline const Type *unwrapTypeAlias(const Type *t) {
+  while (auto *alias = dynamic_cast<const TypeAliasType *>(t))
+    t = alias->getInnerType();
+  return t;
+}
+
+/// Pack a C++ integral value into a MessageData with the correct wire byte
+/// count for the given port type ((bitWidth+7)/8). For non-integral T or
+/// non-BitVectorType ports, falls back to sizeof(T).
+template <typename T>
+MessageData toMessageData(const T &data, const Type *portType) {
+  if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
+    const Type *inner = unwrapTypeAlias(portType);
+    if (auto *bv = dynamic_cast<const BitVectorType *>(inner)) {
+      size_t wireBytes = (bv->getWidth() + 7) / 8;
+      std::vector<uint8_t> buf(wireBytes, 0);
+      std::memcpy(buf.data(), &data, std::min(wireBytes, sizeof(T)));
+      return MessageData(std::move(buf));
+    }
+  }
+  return MessageData(reinterpret_cast<const uint8_t *>(&data), sizeof(T));
+}
+
+/// Unpack a MessageData into a C++ integral value, handling the case where the
+/// wire byte count ((bitWidth+7)/8) differs from sizeof(T). Performs sign
+/// extension for signed types.
+template <typename T>
+T fromMessageData(const MessageData &msg, const Type *portType) {
+  if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
+    const Type *inner = unwrapTypeAlias(portType);
+    if (auto *bv = dynamic_cast<const BitVectorType *>(inner)) {
+      size_t wireBytes = (bv->getWidth() + 7) / 8;
+      if (msg.getSize() == wireBytes && wireBytes != sizeof(T)) {
+        T val = 0;
+        std::memcpy(&val, msg.getBytes(), std::min(wireBytes, sizeof(T)));
+        // Sign-extend for signed types if the MSB of the wire value is set.
+        if constexpr (std::is_signed_v<T>) {
+          uint64_t width = bv->getWidth();
+          if (width < sizeof(T) * 8 && wireBytes > 0) {
+            // Check sign bit.
+            if (msg.getBytes()[wireBytes - 1] & (1 << ((width - 1) % 8)))
+              val |= static_cast<T>(~T(0)) << width;
+          }
+        }
+        return val;
+      }
+    }
+  }
+  return *msg.as<T>();
+}
 
 //===----------------------------------------------------------------------===//
 // Type-trait: detect T::_ESI_ID (a static constexpr std::string_view).
@@ -60,73 +127,73 @@ inline constexpr bool has_esi_id_v = has_esi_id<T>::value;
 template <typename T>
 void verifyTypeCompatibility(const Type *portType) {
   if (!portType)
-    throw std::runtime_error("Port type is null");
+    throw AcceleratorMismatchError("Port type is null");
 
   // Unwrap TypeAliasType to get the inner type for verification.
-  if (auto *alias = dynamic_cast<const TypeAliasType *>(portType))
-    portType = alias->getInnerType();
+  portType = unwrapTypeAlias(portType);
 
   if constexpr (has_esi_id_v<T>) {
     // Highest priority: user-defined ESI ID string comparison.
     if (std::string_view(portType->getID()) != T::_ESI_ID)
-      throw std::runtime_error("ESI type mismatch: C++ type has _ESI_ID '" +
-                               std::string(T::_ESI_ID) +
-                               "' but port type is '" +
-                               portType->toString(/*oneLine=*/true) + "'");
+      throw AcceleratorMismatchError(
+          "ESI type mismatch: C++ type has _ESI_ID '" +
+          std::string(T::_ESI_ID) + "' but port type is '" +
+          portType->toString(/*oneLine=*/true) + "'");
   } else if constexpr (std::is_void_v<T>) {
     if (!dynamic_cast<const VoidType *>(portType))
-      throw std::runtime_error("ESI type mismatch: expected VoidType for "
-                               "void, but port type is '" +
-                               portType->toString(/*oneLine=*/true) + "'");
+      throw AcceleratorMismatchError("ESI type mismatch: expected VoidType for "
+                                     "void, but port type is '" +
+                                     portType->toString(/*oneLine=*/true) +
+                                     "'");
   } else if constexpr (std::is_same_v<T, bool>) {
     // bool maps to signless i1, which is BitsType with width <= 1.
     auto *bits = dynamic_cast<const BitsType *>(portType);
     if (!bits || bits->getWidth() > 1)
-      throw std::runtime_error(
+      throw AcceleratorMismatchError(
           "ESI type mismatch: expected BitsType with width <= 1 for "
           "bool, but port type is '" +
           portType->toString(/*oneLine=*/true) + "'");
   } else if constexpr (std::is_integral_v<T> && std::is_signed_v<T>) {
     auto *sint = dynamic_cast<const SIntType *>(portType);
     if (!sint)
-      throw std::runtime_error(
+      throw AcceleratorMismatchError(
           "ESI type mismatch: expected SIntType for signed integer, "
           "but port type is '" +
           portType->toString(/*oneLine=*/true) + "'");
     if (sint->getWidth() > sizeof(T) * 8)
-      throw std::runtime_error(
+      throw AcceleratorMismatchError(
           "ESI type mismatch: SIntType width " +
           std::to_string(sint->getWidth()) + " does not fit in " +
           std::to_string(sizeof(T) * 8) + "-bit signed integer");
     // Require closest-size match: reject if a smaller C++ type would suffice.
     if (sizeof(T) > 1 && sint->getWidth() <= (sizeof(T) / 2) * 8)
-      throw std::runtime_error("ESI type mismatch: SIntType width " +
-                               std::to_string(sint->getWidth()) +
-                               " should use a smaller C++ type than " +
-                               std::to_string(sizeof(T) * 8) + "-bit");
+      throw AcceleratorMismatchError("ESI type mismatch: SIntType width " +
+                                     std::to_string(sint->getWidth()) +
+                                     " should use a smaller C++ type than " +
+                                     std::to_string(sizeof(T) * 8) + "-bit");
   } else if constexpr (std::is_integral_v<T> && std::is_unsigned_v<T>) {
     // Accept UIntType (uiM) or BitsType (iM, signless).
     auto *uintPort = dynamic_cast<const UIntType *>(portType);
     auto *bits = dynamic_cast<const BitsType *>(portType);
     if (!uintPort && !bits)
-      throw std::runtime_error(
+      throw AcceleratorMismatchError(
           "ESI type mismatch: expected UIntType or BitsType for unsigned "
           "integer, but port type is '" +
           portType->toString(/*oneLine=*/true) + "'");
     uint64_t width = uintPort ? uintPort->getWidth() : bits->getWidth();
     if (width > sizeof(T) * 8)
-      throw std::runtime_error("ESI type mismatch: bit width " +
-                               std::to_string(width) + " does not fit in " +
-                               std::to_string(sizeof(T) * 8) +
-                               "-bit unsigned integer");
+      throw AcceleratorMismatchError(
+          "ESI type mismatch: bit width " + std::to_string(width) +
+          " does not fit in " + std::to_string(sizeof(T) * 8) +
+          "-bit unsigned integer");
     // Require closest-size match: reject if a smaller C++ type would suffice.
     if (sizeof(T) > 1 && width <= (sizeof(T) / 2) * 8)
-      throw std::runtime_error("ESI type mismatch: bit width " +
-                               std::to_string(width) +
-                               " should use a smaller C++ type than " +
-                               std::to_string(sizeof(T) * 8) + "-bit");
+      throw AcceleratorMismatchError("ESI type mismatch: bit width " +
+                                     std::to_string(width) +
+                                     " should use a smaller C++ type than " +
+                                     std::to_string(sizeof(T) * 8) + "-bit");
   } else {
-    throw std::runtime_error(
+    throw AcceleratorMismatchError(
         std::string("Cannot verify type compatibility for C++ type '") +
         typeid(T).name() + "' against ESI port type '" +
         portType->toString(/*oneLine=*/true) + "'");
@@ -143,40 +210,44 @@ void verifyTypeCompatibility(const Type *portType) {
 template <typename T, bool CheckValue = false>
 class TypedWritePort {
 public:
-  explicit TypedWritePort(WriteChannelPort &port) : inner(port) {}
+  explicit TypedWritePort(WriteChannelPort &port) : inner(&port) {}
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  TypedWritePort(WriteChannelPort *port) : inner(port) {}
 
   void connect(const ChannelPort::ConnectOptions &opts = {}) {
-    verifyTypeCompatibility<T>(inner.getType());
-    inner.connect(opts);
+    if (!inner)
+      throw AcceleratorMismatchError("TypedWritePort: null port pointer");
+    verifyTypeCompatibility<T>(inner->getType());
+    inner->connect(opts);
   }
 
   void write(const T &data) {
     if constexpr (CheckValue)
       checkValueRange(data);
-    // MessageData::from takes T& (non-const); safe to cast since it only reads.
-    inner.write(MessageData::from(const_cast<T &>(data)));
+    inner->write(toMessageData(data, inner->getType()));
   }
 
   bool tryWrite(const T &data) {
     if constexpr (CheckValue)
       checkValueRange(data);
-    return inner.tryWrite(MessageData::from(const_cast<T &>(data)));
+    return inner->tryWrite(toMessageData(data, inner->getType()));
   }
 
-  bool flush() { return inner.flush(); }
-  void disconnect() { inner.disconnect(); }
-  bool isConnected() const { return inner.isConnected(); }
+  bool flush() { return inner->flush(); }
+  void disconnect() { inner->disconnect(); }
+  bool isConnected() const { return inner && inner->isConnected(); }
 
-  WriteChannelPort &raw() { return inner; }
-  const WriteChannelPort &raw() const { return inner; }
+  WriteChannelPort &raw() { return *inner; }
+  const WriteChannelPort &raw() const { return *inner; }
 
 private:
-  WriteChannelPort &inner;
+  WriteChannelPort *inner;
 
   void checkValueRange(const T &data) {
     static_assert(std::is_integral_v<T>,
                   "Value range checking only supported for integral types");
-    auto *bvType = dynamic_cast<const BitVectorType *>(inner.getType());
+    const Type *pt = unwrapTypeAlias(inner->getType());
+    auto *bvType = dynamic_cast<const BitVectorType *>(pt);
     if (!bvType)
       return;
     uint64_t width = bvType->getWidth();
@@ -186,15 +257,15 @@ private:
       int64_t minVal = -(int64_t(1) << (width - 1));
       int64_t maxVal = (int64_t(1) << (width - 1)) - 1;
       if (data < minVal || data > maxVal)
-        throw std::runtime_error("Value " + std::to_string(data) +
-                                 " out of range for " + std::to_string(width) +
-                                 "-bit signed type");
+        throw AcceleratorMismatchError(
+            "Value " + std::to_string(data) + " out of range for " +
+            std::to_string(width) + "-bit signed type");
     } else {
       uint64_t maxVal = (uint64_t(1) << width) - 1;
       if (static_cast<uint64_t>(data) > maxVal)
-        throw std::runtime_error("Value " + std::to_string(data) +
-                                 " out of range for " + std::to_string(width) +
-                                 "-bit unsigned type");
+        throw AcceleratorMismatchError(
+            "Value " + std::to_string(data) + " out of range for " +
+            std::to_string(width) + "-bit unsigned type");
     }
   }
 };
@@ -203,32 +274,36 @@ private:
 template <>
 class TypedWritePort<void> {
 public:
-  explicit TypedWritePort(WriteChannelPort &port) : inner(port) {}
+  explicit TypedWritePort(WriteChannelPort &port) : inner(&port) {}
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  TypedWritePort(WriteChannelPort *port) : inner(port) {}
 
   void connect(const ChannelPort::ConnectOptions &opts = {}) {
-    verifyTypeCompatibility<void>(inner.getType());
-    inner.connect(opts);
+    if (!inner)
+      throw AcceleratorMismatchError("TypedWritePort: null port pointer");
+    verifyTypeCompatibility<void>(inner->getType());
+    inner->connect(opts);
   }
 
   void write() {
     uint8_t zero = 0;
-    inner.write(MessageData(&zero, 1));
+    inner->write(MessageData(&zero, 1));
   }
 
   bool tryWrite() {
     uint8_t zero = 0;
-    return inner.tryWrite(MessageData(&zero, 1));
+    return inner->tryWrite(MessageData(&zero, 1));
   }
 
-  bool flush() { return inner.flush(); }
-  void disconnect() { inner.disconnect(); }
-  bool isConnected() const { return inner.isConnected(); }
+  bool flush() { return inner->flush(); }
+  void disconnect() { inner->disconnect(); }
+  bool isConnected() const { return inner && inner->isConnected(); }
 
-  WriteChannelPort &raw() { return inner; }
-  const WriteChannelPort &raw() const { return inner; }
+  WriteChannelPort &raw() { return *inner; }
+  const WriteChannelPort &raw() const { return *inner; }
 
 private:
-  WriteChannelPort &inner;
+  WriteChannelPort *inner;
 };
 
 //===----------------------------------------------------------------------===//
@@ -238,86 +313,100 @@ private:
 template <typename T>
 class TypedReadPort {
 public:
-  explicit TypedReadPort(ReadChannelPort &port) : inner(port) {}
+  explicit TypedReadPort(ReadChannelPort &port) : inner(&port) {}
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  TypedReadPort(ReadChannelPort *port) : inner(port) {}
 
   void connect(const ChannelPort::ConnectOptions &opts = {}) {
-    verifyTypeCompatibility<T>(inner.getType());
-    inner.connect(opts);
+    if (!inner)
+      throw AcceleratorMismatchError("TypedReadPort: null port pointer");
+    verifyTypeCompatibility<T>(inner->getType());
+    inner->connect(opts);
   }
 
-  void connect(std::function<bool(T)> callback,
+  void connect(std::function<bool(const T &)> callback,
                const ChannelPort::ConnectOptions &opts = {}) {
-    verifyTypeCompatibility<T>(inner.getType());
-    inner.connect([cb = std::move(callback)](
-                      MessageData data) -> bool { return cb(*data.as<T>()); },
-                  opts);
+    if (!inner)
+      throw AcceleratorMismatchError("TypedReadPort: null port pointer");
+    verifyTypeCompatibility<T>(inner->getType());
+    const Type *pt = inner->getType();
+    inner->connect(
+        [cb = std::move(callback), pt](MessageData data) -> bool {
+          return cb(fromMessageData<T>(data, pt));
+        },
+        opts);
   }
 
   T read() {
     MessageData outData;
-    inner.read(outData);
-    return *outData.as<T>();
+    inner->read(outData);
+    return fromMessageData<T>(outData, inner->getType());
   }
 
   std::future<T> readAsync() {
-    auto innerFuture = inner.readAsync();
+    const Type *pt = inner->getType();
+    auto innerFuture = inner->readAsync();
     return std::async(std::launch::deferred,
-                      [f = std::move(innerFuture)]() mutable -> T {
+                      [f = std::move(innerFuture), pt]() mutable -> T {
                         MessageData data = f.get();
-                        return *data.as<T>();
+                        return fromMessageData<T>(data, pt);
                       });
   }
 
-  void disconnect() { inner.disconnect(); }
-  bool isConnected() const { return inner.isConnected(); }
+  void disconnect() { inner->disconnect(); }
+  bool isConnected() const { return inner && inner->isConnected(); }
 
-  ReadChannelPort &raw() { return inner; }
-  const ReadChannelPort &raw() const { return inner; }
+  ReadChannelPort &raw() { return *inner; }
+  const ReadChannelPort &raw() const { return *inner; }
 
 private:
-  ReadChannelPort &inner;
+  ReadChannelPort *inner;
 };
 
 /// Specialization for void — read discards data and returns nothing.
 template <>
 class TypedReadPort<void> {
 public:
-  explicit TypedReadPort(ReadChannelPort &port) : inner(port) {}
+  explicit TypedReadPort(ReadChannelPort &port) : inner(&port) {}
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  TypedReadPort(ReadChannelPort *port) : inner(port) {}
 
   void connect(const ChannelPort::ConnectOptions &opts = {}) {
-    verifyTypeCompatibility<void>(inner.getType());
-    inner.connect(opts);
+    if (!inner)
+      throw AcceleratorMismatchError("TypedReadPort: null port pointer");
+    verifyTypeCompatibility<void>(inner->getType());
+    inner->connect(opts);
   }
 
   void connect(std::function<bool()> callback,
                const ChannelPort::ConnectOptions &opts = {}) {
-    verifyTypeCompatibility<void>(inner.getType());
-    inner.connect(
+    if (!inner)
+      throw AcceleratorMismatchError("TypedReadPort: null port pointer");
+    verifyTypeCompatibility<void>(inner->getType());
+    inner->connect(
         [cb = std::move(callback)](MessageData) -> bool { return cb(); }, opts);
   }
 
   void read() {
     MessageData outData;
-    inner.read(outData);
-    // Discard data.
+    inner->read(outData);
   }
 
   std::future<void> readAsync() {
-    auto innerFuture = inner.readAsync();
-    return std::async(std::launch::deferred,
-                      [f = std::move(innerFuture)]() mutable -> void {
-                        f.get(); // Discard data.
-                      });
+    auto innerFuture = inner->readAsync();
+    return std::async(
+        std::launch::deferred,
+        [f = std::move(innerFuture)]() mutable -> void { f.get(); });
   }
 
-  void disconnect() { inner.disconnect(); }
-  bool isConnected() const { return inner.isConnected(); }
+  void disconnect() { inner->disconnect(); }
+  bool isConnected() const { return inner && inner->isConnected(); }
 
-  ReadChannelPort &raw() { return inner; }
-  const ReadChannelPort &raw() const { return inner; }
+  ReadChannelPort &raw() { return *inner; }
+  const ReadChannelPort &raw() const { return *inner; }
 
 private:
-  ReadChannelPort &inner;
+  ReadChannelPort *inner;
 };
 
 //===----------------------------------------------------------------------===//
@@ -337,7 +426,7 @@ public:
 
   void connect() {
     if (!inner)
-      throw std::runtime_error(
+      throw AcceleratorMismatchError(
           "TypedFunction: null Function pointer (getAs failed or wrong type)");
     verifyTypeCompatibility<ArgT>(inner->getArgType());
     verifyTypeCompatibility<ResultT>(inner->getResultType());
@@ -345,11 +434,13 @@ public:
   }
 
   std::future<ResultT> call(const ArgT &arg) {
-    auto f = inner->call(MessageData::from(const_cast<ArgT &>(arg)));
+    const Type *argType = inner->getArgType();
+    const Type *resType = inner->getResultType();
+    auto f = inner->call(toMessageData(arg, argType));
     return std::async(std::launch::deferred,
-                      [fut = std::move(f)]() mutable -> ResultT {
+                      [fut = std::move(f), resType]() mutable -> ResultT {
                         MessageData data = fut.get();
-                        return *data.as<ResultT>();
+                        return fromMessageData<ResultT>(data, resType);
                       });
   }
 
@@ -369,7 +460,7 @@ public:
 
   void connect() {
     if (!inner)
-      throw std::runtime_error(
+      throw AcceleratorMismatchError(
           "TypedFunction: null Function pointer (getAs failed or wrong type)");
     verifyTypeCompatibility<void>(inner->getArgType());
     verifyTypeCompatibility<ResultT>(inner->getResultType());
@@ -378,11 +469,12 @@ public:
 
   std::future<ResultT> call() {
     uint8_t zero = 0;
+    const Type *resType = inner->getResultType();
     auto f = inner->call(MessageData(&zero, 1));
     return std::async(std::launch::deferred,
-                      [fut = std::move(f)]() mutable -> ResultT {
+                      [fut = std::move(f), resType]() mutable -> ResultT {
                         MessageData data = fut.get();
-                        return *data.as<ResultT>();
+                        return fromMessageData<ResultT>(data, resType);
                       });
   }
 
@@ -402,7 +494,7 @@ public:
 
   void connect() {
     if (!inner)
-      throw std::runtime_error(
+      throw AcceleratorMismatchError(
           "TypedFunction: null Function pointer (getAs failed or wrong type)");
     verifyTypeCompatibility<ArgT>(inner->getArgType());
     verifyTypeCompatibility<void>(inner->getResultType());
@@ -410,7 +502,7 @@ public:
   }
 
   std::future<void> call(const ArgT &arg) {
-    auto f = inner->call(MessageData::from(const_cast<ArgT &>(arg)));
+    auto f = inner->call(toMessageData(arg, inner->getArgType()));
     return std::async(std::launch::deferred,
                       [fut = std::move(f)]() mutable -> void { fut.get(); });
   }
@@ -431,7 +523,7 @@ public:
 
   void connect() {
     if (!inner)
-      throw std::runtime_error(
+      throw AcceleratorMismatchError(
           "TypedFunction: null Function pointer (getAs failed or wrong type)");
     verifyTypeCompatibility<void>(inner->getArgType());
     verifyTypeCompatibility<void>(inner->getResultType());
@@ -469,14 +561,16 @@ public:
   void connect(std::function<ResultT(const ArgT &)> callback,
                bool quick = false) {
     if (!inner)
-      throw std::runtime_error(
+      throw AcceleratorMismatchError(
           "TypedCallback: null Callback pointer (getAs failed or wrong type)");
     verifyTypeCompatibility<ArgT>(inner->getArgType());
     verifyTypeCompatibility<ResultT>(inner->getResultType());
     inner->connect(
-        [cb = std::move(callback)](const MessageData &argData) -> MessageData {
-          ResultT result = cb(*argData.as<ArgT>());
-          return MessageData::from(result);
+        [cb = std::move(callback), argType = inner->getArgType(),
+         resType = inner->getResultType()](
+            const MessageData &argData) -> MessageData {
+          ResultT result = cb(fromMessageData<ArgT>(argData, argType));
+          return toMessageData(result, resType);
         },
         quick);
   }
@@ -497,14 +591,15 @@ public:
 
   void connect(std::function<ResultT()> callback, bool quick = false) {
     if (!inner)
-      throw std::runtime_error(
+      throw AcceleratorMismatchError(
           "TypedCallback: null Callback pointer (getAs failed or wrong type)");
     verifyTypeCompatibility<void>(inner->getArgType());
     verifyTypeCompatibility<ResultT>(inner->getResultType());
     inner->connect(
-        [cb = std::move(callback)](const MessageData &) -> MessageData {
+        [cb = std::move(callback),
+         resType = inner->getResultType()](const MessageData &) -> MessageData {
           ResultT result = cb();
-          return MessageData::from(result);
+          return toMessageData(result, resType);
         },
         quick);
   }
@@ -525,14 +620,16 @@ public:
 
   void connect(std::function<void(const ArgT &)> callback, bool quick = false) {
     if (!inner)
-      throw std::runtime_error(
+      throw AcceleratorMismatchError(
           "TypedCallback: null Callback pointer (getAs failed or wrong type)");
     verifyTypeCompatibility<ArgT>(inner->getArgType());
     verifyTypeCompatibility<void>(inner->getResultType());
     inner->connect(
-        [cb = std::move(callback)](const MessageData &argData) -> MessageData {
-          cb(*argData.as<ArgT>());
-          return MessageData();
+        [cb = std::move(callback), argType = inner->getArgType()](
+            const MessageData &argData) -> MessageData {
+          cb(fromMessageData<ArgT>(argData, argType));
+          uint8_t zero = 0;
+          return MessageData(&zero, 1);
         },
         quick);
   }
@@ -553,14 +650,15 @@ public:
 
   void connect(std::function<void()> callback, bool quick = false) {
     if (!inner)
-      throw std::runtime_error(
+      throw AcceleratorMismatchError(
           "TypedCallback: null Callback pointer (getAs failed or wrong type)");
     verifyTypeCompatibility<void>(inner->getArgType());
     verifyTypeCompatibility<void>(inner->getResultType());
     inner->connect(
         [cb = std::move(callback)](const MessageData &) -> MessageData {
           cb();
-          return MessageData();
+          uint8_t zero = 0;
+          return MessageData(&zero, 1);
         },
         quick);
   }
