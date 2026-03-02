@@ -10,6 +10,9 @@
 firrtl.circuit "Foo" {
   firrtl.layer @A bind {
   }
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
   // CHECK:      @Corge
   // CHECK-NEXT:   isDut: false
   // CHECK-NEXT:   anyInstanceUnderDut: false
@@ -18,6 +21,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   allInstancesUnderEffectiveDut: false
   // CHECK-NEXT:   anyInstanceUnderLayer: true
   // CHECK-NEXT:   allInstancesUnderLayer: false
+  // CHECK:        anyInstanceInInstanceChoice: true
   firrtl.module private @Corge() {}
   // CHECK:      @Quz
   // CHECK-NEXT:   isDut: false
@@ -27,6 +31,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   allInstancesUnderEffectiveDut: false
   // CHECK-NEXT:   anyInstanceUnderLayer: true
   // CHECK-NEXT:   allInstancesUnderLayer: true
+  // CHECK:        anyInstanceInInstanceChoice: false
   firrtl.module private @Quz() {}
   // CHECK:      @Qux
   // CHECK-NEXT:   isDut: false
@@ -36,6 +41,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   allInstancesUnderEffectiveDut: false
   // CHECK-NEXT:   anyInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
+  // CHECK:        anyInstanceInInstanceChoice: true
   firrtl.module private @Qux() {}
   // CHECK:      @Baz
   // CHECK-NEXT:   isDut: false
@@ -45,6 +51,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   allInstancesUnderEffectiveDut: true
   // CHECK-NEXT:   anyInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
+  // CHECK:        anyInstanceInInstanceChoice: false
   firrtl.module private @Baz() {}
   // CHECK:      @Bar
   // CHECK-NEXT:   isDut: true
@@ -54,6 +61,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   allInstancesUnderEffectiveDut: true
   // CHECK-NEXT:   anyInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
+  // CHECK:        anyInstanceInInstanceChoice: false
   firrtl.module private @Bar() attributes {
     annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
@@ -70,12 +78,17 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   allInstancesUnderEffectiveDut: false
   // CHECK-NEXT:   anyInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
+  // CHECK:        anyInstanceInInstanceChoice: false
   firrtl.module @Foo() {
     firrtl.instance bar @Bar()
-    firrtl.instance qux @Qux()
+    firrtl.instance_choice qux @Qux alternatives @Platform {
+      @FPGA -> @Corge
+    } ()
     firrtl.layerblock @A {
       firrtl.instance quz @Quz()
-      firrtl.instance corge @Corge()
+      firrtl.instance_choice corge @Corge alternatives @Platform {
+        @FPGA -> @Corge
+      } ()
     }
     firrtl.instance corge2 @Corge()
   }
@@ -98,6 +111,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   allInstancesUnderEffectiveDut: true
   // CHECK-NEXT:   anyInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
+  // CHECK:        anyInstanceInInstanceChoice: false
   firrtl.module @Foo() {}
 }
 
