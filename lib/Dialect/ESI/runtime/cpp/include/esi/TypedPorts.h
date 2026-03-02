@@ -58,15 +58,21 @@ inline const Type *unwrapTypeAlias(const Type *t) {
   return t;
 }
 
-/// Pack a C++ integral value into a MessageData with the correct wire byte
-/// count for the given port type ((bitWidth+7)/8). For non-integral T or
-/// non-BitVectorType ports, falls back to sizeof(T).
+/// Compute the wire byte count for a port type. Returns 0 if not a
+/// BitVectorType (meaning sizeof(T) should be used instead).
+inline size_t getWireBytes(const Type *portType) {
+  const Type *inner = unwrapTypeAlias(portType);
+  if (auto *bv = dynamic_cast<const BitVectorType *>(inner))
+    return (bv->getWidth() + 7) / 8;
+  return 0;
+}
+
+/// Pack a C++ integral value into a MessageData with the given wire byte count.
+/// If wireBytes is 0, falls back to sizeof(T).
 template <typename T>
-MessageData toMessageData(const T &data, const Type *portType) {
+MessageData toMessageData(const T &data, size_t wireBytes) {
   if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
-    const Type *inner = unwrapTypeAlias(portType);
-    if (auto *bv = dynamic_cast<const BitVectorType *>(inner)) {
-      size_t wireBytes = (bv->getWidth() + 7) / 8;
+    if (wireBytes > 0 && wireBytes != sizeof(T)) {
       std::vector<uint8_t> buf(wireBytes, 0);
       std::memcpy(buf.data(), &data, std::min(wireBytes, sizeof(T)));
       return MessageData(std::move(buf));
@@ -75,29 +81,23 @@ MessageData toMessageData(const T &data, const Type *portType) {
   return MessageData(reinterpret_cast<const uint8_t *>(&data), sizeof(T));
 }
 
-/// Unpack a MessageData into a C++ integral value, handling the case where the
-/// wire byte count ((bitWidth+7)/8) differs from sizeof(T). Performs sign
-/// extension for signed types.
+/// Unpack a MessageData into a C++ integral value with the given wire byte
+/// count. If the wire size differs from sizeof(T), copies available bytes into
+/// a zero-initialized value and sign-extends for signed types.
 template <typename T>
-T fromMessageData(const MessageData &msg, const Type *portType) {
+T fromMessageData(const MessageData &msg, size_t wireBytes) {
   if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
-    const Type *inner = unwrapTypeAlias(portType);
-    if (auto *bv = dynamic_cast<const BitVectorType *>(inner)) {
-      size_t wireBytes = (bv->getWidth() + 7) / 8;
-      if (msg.getSize() == wireBytes && wireBytes != sizeof(T)) {
-        T val = 0;
-        std::memcpy(&val, msg.getBytes(), std::min(wireBytes, sizeof(T)));
-        // Sign-extend for signed types if the MSB of the wire value is set.
-        if constexpr (std::is_signed_v<T>) {
-          uint64_t width = bv->getWidth();
-          if (width < sizeof(T) * 8 && wireBytes > 0) {
-            // Check sign bit.
-            if (msg.getBytes()[wireBytes - 1] & (1 << ((width - 1) % 8)))
-              val |= static_cast<T>(~T(0)) << width;
-          }
-        }
-        return val;
+    if (wireBytes > 0 && msg.getSize() == wireBytes && wireBytes != sizeof(T)) {
+      // Start with all-ones for signed negative values, all-zeros otherwise.
+      // Check sign bit of the wire data to decide.
+      bool negative = false;
+      if constexpr (std::is_signed_v<T>) {
+        if (wireBytes > 0 && (msg.getBytes()[wireBytes - 1] & 0x80))
+          negative = true;
       }
+      T val = negative ? static_cast<T>(-1) : static_cast<T>(0);
+      std::memcpy(&val, msg.getBytes(), std::min(wireBytes, sizeof(T)));
+      return val;
     }
   }
   return *msg.as<T>();
@@ -218,19 +218,20 @@ public:
     if (!inner)
       throw AcceleratorMismatchError("TypedWritePort: null port pointer");
     verifyTypeCompatibility<T>(inner->getType());
+    wireBytes_ = getWireBytes(inner->getType());
     inner->connect(opts);
   }
 
   void write(const T &data) {
     if constexpr (CheckValue)
       checkValueRange(data);
-    inner->write(toMessageData(data, inner->getType()));
+    inner->write(toMessageData(data, wireBytes_));
   }
 
   bool tryWrite(const T &data) {
     if constexpr (CheckValue)
       checkValueRange(data);
-    return inner->tryWrite(toMessageData(data, inner->getType()));
+    return inner->tryWrite(toMessageData(data, wireBytes_));
   }
 
   bool flush() { return inner->flush(); }
@@ -242,6 +243,7 @@ public:
 
 private:
   WriteChannelPort *inner;
+  size_t wireBytes_ = 0;
 
   void checkValueRange(const T &data) {
     static_assert(std::is_integral_v<T>,
@@ -321,6 +323,7 @@ public:
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
     verifyTypeCompatibility<T>(inner->getType());
+    wireBytes_ = getWireBytes(inner->getType());
     inner->connect(opts);
   }
 
@@ -329,10 +332,11 @@ public:
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
     verifyTypeCompatibility<T>(inner->getType());
-    const Type *pt = inner->getType();
+    wireBytes_ = getWireBytes(inner->getType());
+    size_t wb = wireBytes_;
     inner->connect(
-        [cb = std::move(callback), pt](MessageData data) -> bool {
-          return cb(fromMessageData<T>(data, pt));
+        [cb = std::move(callback), wb](MessageData data) -> bool {
+          return cb(fromMessageData<T>(data, wb));
         },
         opts);
   }
@@ -340,16 +344,16 @@ public:
   T read() {
     MessageData outData;
     inner->read(outData);
-    return fromMessageData<T>(outData, inner->getType());
+    return fromMessageData<T>(outData, wireBytes_);
   }
 
   std::future<T> readAsync() {
-    const Type *pt = inner->getType();
+    size_t wb = wireBytes_;
     auto innerFuture = inner->readAsync();
     return std::async(std::launch::deferred,
-                      [f = std::move(innerFuture), pt]() mutable -> T {
+                      [f = std::move(innerFuture), wb]() mutable -> T {
                         MessageData data = f.get();
-                        return fromMessageData<T>(data, pt);
+                        return fromMessageData<T>(data, wb);
                       });
   }
 
@@ -361,6 +365,7 @@ public:
 
 private:
   ReadChannelPort *inner;
+  size_t wireBytes_ = 0;
 };
 
 /// Specialization for void — read discards data and returns nothing.
@@ -430,17 +435,18 @@ public:
           "TypedFunction: null Function pointer (getAs failed or wrong type)");
     verifyTypeCompatibility<ArgT>(inner->getArgType());
     verifyTypeCompatibility<ResultT>(inner->getResultType());
+    argWireBytes_ = getWireBytes(inner->getArgType());
+    resWireBytes_ = getWireBytes(inner->getResultType());
     inner->connect();
   }
 
   std::future<ResultT> call(const ArgT &arg) {
-    const Type *argType = inner->getArgType();
-    const Type *resType = inner->getResultType();
-    auto f = inner->call(toMessageData(arg, argType));
+    size_t rwb = resWireBytes_;
+    auto f = inner->call(toMessageData(arg, argWireBytes_));
     return std::async(std::launch::deferred,
-                      [fut = std::move(f), resType]() mutable -> ResultT {
+                      [fut = std::move(f), rwb]() mutable -> ResultT {
                         MessageData data = fut.get();
-                        return fromMessageData<ResultT>(data, resType);
+                        return fromMessageData<ResultT>(data, rwb);
                       });
   }
 
@@ -449,6 +455,8 @@ public:
 
 private:
   services::FuncService::Function *inner;
+  size_t argWireBytes_ = 0;
+  size_t resWireBytes_ = 0;
 };
 
 /// Partial specialization: void argument, typed result.
@@ -498,11 +506,12 @@ public:
           "TypedFunction: null Function pointer (getAs failed or wrong type)");
     verifyTypeCompatibility<ArgT>(inner->getArgType());
     verifyTypeCompatibility<void>(inner->getResultType());
+    argWireBytes_ = getWireBytes(inner->getArgType());
     inner->connect();
   }
 
   std::future<void> call(const ArgT &arg) {
-    auto f = inner->call(toMessageData(arg, inner->getArgType()));
+    auto f = inner->call(toMessageData(arg, argWireBytes_));
     return std::async(std::launch::deferred,
                       [fut = std::move(f)]() mutable -> void { fut.get(); });
   }
@@ -512,6 +521,7 @@ public:
 
 private:
   services::FuncService::Function *inner;
+  size_t argWireBytes_ = 0;
 };
 
 /// Full specialization: void argument, void result.
@@ -595,11 +605,11 @@ public:
           "TypedCallback: null Callback pointer (getAs failed or wrong type)");
     verifyTypeCompatibility<void>(inner->getArgType());
     verifyTypeCompatibility<ResultT>(inner->getResultType());
+    size_t rwb = getWireBytes(inner->getResultType());
     inner->connect(
-        [cb = std::move(callback),
-         resType = inner->getResultType()](const MessageData &) -> MessageData {
+        [cb = std::move(callback), rwb](const MessageData &) -> MessageData {
           ResultT result = cb();
-          return toMessageData(result, resType);
+          return toMessageData(result, rwb);
         },
         quick);
   }
