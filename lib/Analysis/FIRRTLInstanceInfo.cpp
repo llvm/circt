@@ -159,6 +159,16 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
       } else
         attributes.inInstanceChoice.mergeIn(parentAttrs.inInstanceChoice);
 
+      // Update inInstanceChoice.
+      if (auto instanceChoiceOp =
+              useIt->template getInstance<InstanceChoiceOp>()) {
+        attributes.inInstanceChoice.mergeIn(true);
+        if (instanceChoiceOp->template getParentOfType<LayerBlockOp>() ||
+            instanceChoiceOp->template getParentOfType<sv::IfDefOp>())
+          underLayer = true;
+      } else
+        attributes.inInstanceChoice.mergeIn(parentAttrs.inInstanceChoice);
+
       if (!isGCCompanion) {
         if (underLayer)
           attributes.underLayer.mergeIn(true);
