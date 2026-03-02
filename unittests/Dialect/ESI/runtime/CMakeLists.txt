@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED YES)
 add_circt_unittest(CIRCTESIRuntimeTests
     ESIRuntimeTest.cpp
     ESIRuntimeValuesTest.cpp
+    ESIRuntimeTypedPortsTest.cpp
 )
 
 target_link_libraries(CIRCTESIRuntimeTests PRIVATE

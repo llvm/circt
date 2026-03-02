@@ -96,6 +96,22 @@ def test_loopback_cpp_codegen(mode: str, tmp_path: Path, host: str, port: int,
       f"--- stdout ---\n{result.stdout}\n"
       f"--- stderr ---\n{result.stderr}")
 
+  LOOPBACK_EXPECTED = [
+      "depth: 0x5",
+      "loopback i8 ok: 0x5a",
+      "struct func ok: b=-7 x=-6 y=-7",
+      "odd struct func ok: a=2749 b=-20 p=10 q=-5 r0=4 r1=6",
+      "array func ok: -3 -2",
+  ]
+
+  LOOPBACK_TYPED_EXPECTED = LOOPBACK_EXPECTED[:1] + [
+      "loopback i8 ok: 0x5a",
+      "sint4 loopback ok: pos=5 neg=-3",
+      "struct func ok: b=-7 x=-6 y=-7",
+      "odd struct func ok: a=2749 b=-20 p=10 q=-5 r0=4 r1=6",
+      "array func ok: -3 -2",
+  ]
+
   # Run the C++ test binary and verify output (CPP-TEST checks).
   result = subprocess.run(
       [str(build_dir / "loopback_test"), "cosim", f"{host}:{port}"],
@@ -103,13 +119,30 @@ def test_loopback_cpp_codegen(mode: str, tmp_path: Path, host: str, port: int,
       capture_output=True,
       text=True,
   )
-  check_lines(result.stdout, [
-      "depth: 0x5",
-      "loopback i8 ok: 0x5a",
-      "struct func ok: b=-7 x=-6 y=-7",
-      "odd struct func ok: a=2749 b=-20 p=10 q=-5 r0=4 r1=6",
-      "array func ok: -3 -2",
-  ])
+  check_lines(result.stdout, LOOPBACK_EXPECTED)
+
+  # Also build and run the typed-port variant (loopback_typed_test) which
+  # exercises TypedWritePort, TypedReadPort, and TypedFunction wrappers.
+  # Only done for a single codegen mode to avoid redundant work.
+  if mode == "from_manifest":
+    result = subprocess.run(
+        ["cmake", "--build",
+         str(build_dir), "--target", "loopback_typed_test"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"cmake build (typed) failed (rc={result.returncode}):\n"
+        f"--- stdout ---\n{result.stdout}\n"
+        f"--- stderr ---\n{result.stderr}")
+
+    result = subprocess.run(
+        [str(build_dir / "loopback_typed_test"), "cosim", f"{host}:{port}"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    check_lines(result.stdout, LOOPBACK_TYPED_EXPECTED)
 
 
 @cosim_test(HW_DIR / "loopback.py")

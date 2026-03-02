@@ -149,3 +149,29 @@ if (UNIX AND _esi_runtime_lib_dir)
   set_target_properties(loopback_test PROPERTIES
     BUILD_RPATH "${_esi_runtime_lib_dir}")
 endif()
+
+# Typed-port variant of the loopback test, using TypedWritePort/TypedReadPort
+# and TypedFunction from TypedPorts.h.
+add_executable(loopback_typed_test
+  "${CMAKE_CURRENT_SOURCE_DIR}/loopback_typed.cpp")
+set_target_properties(loopback_typed_test PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+target_include_directories(loopback_typed_test PRIVATE
+  "${LOOPBACK_GENERATED_DIR}"
+  "${CLI11_INCLUDE_DIR}")
+
+if (ESI_RUNTIME_TARGET)
+  target_link_libraries(loopback_typed_test PRIVATE
+    "${ESI_RUNTIME_TARGET}")
+else()
+  target_include_directories(loopback_typed_test PRIVATE
+    "${ESI_RUNTIME_INCLUDE_DIR}")
+  target_link_libraries(loopback_typed_test PRIVATE
+    "${ESI_RUNTIME_LIB}")
+endif()
+
+if (UNIX AND _esi_runtime_lib_dir)
+  set_target_properties(loopback_typed_test PROPERTIES
+    BUILD_RPATH "${_esi_runtime_lib_dir}")
+endif()

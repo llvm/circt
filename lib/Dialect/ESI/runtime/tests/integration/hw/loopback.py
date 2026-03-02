@@ -215,6 +215,23 @@ class CallableFunc1(Module):
     result_wire.assign(result_chan)
 
 
+class LoopbackSInt4(Module):
+  """Loopback a si4 value: returns the input unchanged."""
+
+  @generator
+  def construct(ports):
+    result_wire = Wire(Channel(SInt(4)))
+    args = esi.FuncService.get_call_chans(AppID("sint4Func"),
+                                          arg_type=SInt(4),
+                                          result=result_wire)
+
+    ready = Wire(Bits(1))
+    arg_data, valid = args.unwrap(ready)
+    result_chan, result_ready = Channel(SInt(4)).wrap(arg_data, valid)
+    ready.assign(result_ready)
+    result_wire.assign(result_chan)
+
+
 class Top(Module):
   clk = Clock()
   rst = Reset()
@@ -225,6 +242,7 @@ class Top(Module):
     Loopback(clk=ports.clk, appid=AppID("loopback_inst", 1))
     MemoryAccess1(clk=ports.clk, rst=ports.rst)
     CallableFunc1()
+    LoopbackSInt4()
     LoopbackStruct()
     LoopbackOddStruct()
     LoopbackArray()

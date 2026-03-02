@@ -146,6 +146,7 @@ set(ESICppRuntimeHeaders
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Ports.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Services.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/TypedPorts.h
 )
 set(ESICppRuntimeBackendHeaders
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Trace.h
