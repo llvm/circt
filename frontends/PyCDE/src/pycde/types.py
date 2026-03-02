@@ -687,10 +687,12 @@ class Channel(Type):
   SignalingNames = {
       ChannelSignaling.ValidReady: "ValidReady",
       ChannelSignaling.FIFO: "FIFO",
+      ChannelSignaling.ValidOnly: "ValidOnly",
   }
   SignalingBitwidth = {
       ChannelSignaling.ValidReady: 2,
       ChannelSignaling.FIFO: 2,
+      ChannelSignaling.ValidOnly: 1,
   }
 
   def __new__(cls,
@@ -757,6 +759,17 @@ class Channel(Type):
       empty = Bits(1)(valid_or_empty)
       wrap_op = esi.WrapFIFOOp(self._type, Bit, value.value, empty.value)
       return wrap_op[0], wrap_op[1]
+    elif signaling == ChannelSignaling.ValidOnly:
+      if not isinstance(value, Signal):
+        value = self.inner_type(value)
+      elif value.type != self.inner_type:
+        raise TypeError(
+            f"Expected signal of type {self.inner_type}, got {value.type}")
+      valid = Bits(1)(valid_or_empty)
+      wrap_op = esi.WrapValidOnlyOp(value.value, valid.value)
+      # ValidOnly has no backpressure — return a constant true ready signal.
+      # wrap_op is a single-result op that PyCDE auto-coerces to ChannelSignal.
+      return wrap_op, Bits(1)(1)
     else:
       raise TypeError("Unknown signaling standard")
 

@@ -35,11 +35,16 @@ def ChannelSignalingValidReady : I32EnumAttrCase<"ValidReady", 0>;
 // FIFO interface with a read latency of zero. Very similiar to valid-ready, but
 // cannot assert ready if data is not available.
 def ChannelSignalingFIFO      : I32EnumAttrCase<"FIFO",      1>;
+// Valid-only signaling. Like ValidReady but without the ready backpressure
+// signal. Fire-and-forget: the sender asserts valid and the receiver must
+// accept the data.
+def ChannelSignalingValidOnly : I32EnumAttrCase<"ValidOnly",  2>;
 
 def ChannelSignaling : I32EnumAttr<
     "ChannelSignaling",
     "ESI channel wire signaling standard",
-    [ChannelSignalingValidReady, ChannelSignalingFIFO]>{
+    [ChannelSignalingValidReady, ChannelSignalingFIFO,
+     ChannelSignalingValidOnly]>{
   let cppNamespace = "::circt::esi";
 }
 
@@ -242,6 +247,51 @@ def UnwrapFIFOOp : ESI_Op<"unwrap.fifo", [
 
   let extraClassDeclaration = [{
     static LogicalResult mergeAndErase(UnwrapFIFOOp, WrapFIFOOp, PatternRewriter&);
+  }];
+}
+
+def WrapValidOnlyOp : ESI_Op<"wrap.vo", [
+    DeclareOpInterfaceMethods<InferTypeOpInterface>,
+    DeclareOpInterfaceMethods<ChannelOpInterface>
+  ]> {
+  let summary = "Wrap a value into an ESI port with valid-only signaling";
+  let description = [{
+    Wrap data with a valid bit into a ValidOnly ESI channel. Unlike
+    ValidReady, there is no ready backpressure signal. The sender fires
+    data whenever valid is asserted; the receiver must accept it.
+  }];
+
+  let arguments = (ins AnyType:$rawInput, I1:$valid);
+  let results = (outs ChannelType:$chanOutput);
+  let hasCanonicalizeMethod = 1;
+
+  let assemblyFormat = [{
+    $rawInput `,` $valid attr-dict `:` type($rawInput)
+  }];
+}
+
+def UnwrapValidOnlyOp : ESI_Op<"unwrap.vo", [
+    DeclareOpInterfaceMethods<InferTypeOpInterface>,
+    DeclareOpInterfaceMethods<ChannelOpInterface>
+  ]> {
+  let summary = "Unwrap a value from a valid-only ESI port";
+  let description = [{
+    Unwrap a ValidOnly channel into data and valid signals. There is no
+    ready input since ValidOnly has no backpressure.
+  }];
+
+  let arguments = (ins ChannelType:$chanInput);
+  let results = (outs AnyType:$rawOutput, I1:$valid);
+  let hasCanonicalizeMethod = true;
+  let hasVerifier = 1;
+
+  let assemblyFormat = [{
+    $chanInput attr-dict `:` qualified(type($chanInput))
+  }];
+
+  let extraClassDeclaration = [{
+    static LogicalResult mergeAndErase(UnwrapValidOnlyOp, WrapValidOnlyOp,
+                                       PatternRewriter&);
   }];
 }
 

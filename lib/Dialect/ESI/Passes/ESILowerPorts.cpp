@@ -94,6 +94,28 @@ private:
   PortInfo rdenPort, emptyPort, dataPort;
 };
 
+/// Implement the Valid-only signaling standard (no backpressure).
+class ValidOnly : public ESISignalingStandad {
+public:
+  ValidOnly(PortConverterImpl &converter, hw::PortInfo origPort)
+      : ESISignalingStandad(converter, origPort), validPort(origPort) {}
+
+  void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                       SmallVectorImpl<Value> &newOperands,
+                       ArrayRef<Backedge> newResults) override;
+  void mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                        SmallVectorImpl<Value> &newOperands,
+                        ArrayRef<Backedge> newResults) override;
+
+private:
+  void buildInputSignals() override;
+  void buildOutputSignals() override;
+
+  // Keep around information about the port numbers of the relevant ports and
+  // use that later to update the instances.
+  PortInfo validPort, dataPort;
+};
+
 class ESIPortConversionBuilder : public PortConversionBuilder {
 public:
   using PortConversionBuilder::PortConversionBuilder;
@@ -109,6 +131,9 @@ public:
 
           if (signaling == ChannelSignaling::FIFO)
             return {std::make_unique<FIFO>(converter, port)};
+
+          if (signaling == ChannelSignaling::ValidOnly)
+            return {std::make_unique<ValidOnly>(converter, port)};
 
           auto error = converter.getModule().emitOpError(
                            "encountered unknown signaling standard on port '")
@@ -297,6 +322,78 @@ void FIFO::mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
       newResults[dataPort.argNum], newResults[emptyPort.argNum]);
   inst->getResult(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
   newOperands[rdenPort.argNum] = wrap.getRden();
+}
+
+//===----------------------------------------------------------------------===//
+// ValidOnly signaling standard implementation.
+//===----------------------------------------------------------------------===//
+
+void ValidOnly::buildInputSignals() {
+  Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
+
+  StringRef inSuffix =
+      getStringAttributeOr(converter.getModule(), extModPortInSuffix, "");
+  StringRef validSuffix(getStringAttributeOr(converter.getModule(),
+                                             extModPortValidSuffix, "_valid"));
+
+  // When we find one, add a data and valid signal to the new args.
+  Value data = converter.createNewInput(
+      origPort, inSuffix, cast<esi::ChannelType>(origPort.type).getInner(),
+      dataPort);
+  Value valid =
+      converter.createNewInput(origPort, validSuffix + inSuffix, i1, validPort);
+
+  if (body) {
+    ImplicitLocOpBuilder b(origPort.loc, body, body->begin());
+    auto wrap = WrapValidOnlyOp::create(b, data, valid);
+    body->getArgument(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
+  }
+  // No ready/rden output port for ValidOnly.
+}
+
+void ValidOnly::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                                SmallVectorImpl<Value> &newOperands,
+                                ArrayRef<Backedge> newResults) {
+  auto unwrap = UnwrapValidOnlyOp::create(b, inst->getLoc(),
+                                          inst->getOperand(origPort.argNum));
+  newOperands[dataPort.argNum] = unwrap.getRawOutput();
+  newOperands[validPort.argNum] = unwrap.getValid();
+}
+
+void ValidOnly::buildOutputSignals() {
+  Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
+
+  Value data, valid;
+  if (body) {
+    auto *terminator = body->getTerminator();
+    ImplicitLocOpBuilder b(origPort.loc, terminator);
+
+    auto unwrap =
+        UnwrapValidOnlyOp::create(b, terminator->getOperand(origPort.argNum));
+    data = unwrap.getRawOutput();
+    valid = unwrap.getValid();
+  }
+
+  // New outputs.
+  StringRef outSuffix =
+      getStringAttributeOr(converter.getModule(), extModPortOutSuffix, "");
+  StringRef validSuffix = getStringAttributeOr(converter.getModule(),
+                                               extModPortValidSuffix, "_valid");
+  converter.createNewOutput(origPort, outSuffix,
+                            cast<esi::ChannelType>(origPort.type).getInner(),
+                            data, dataPort);
+  converter.createNewOutput(origPort, validSuffix + outSuffix, i1, valid,
+                            validPort);
+  // No ready/rden input port for ValidOnly.
+}
+
+void ValidOnly::mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
+                                 SmallVectorImpl<Value> &newOperands,
+                                 ArrayRef<Backedge> newResults) {
+  auto wrap =
+      WrapValidOnlyOp::create(b, inst->getLoc(), newResults[dataPort.argNum],
+                              newResults[validPort.argNum]);
+  inst->getResult(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
 }
 
 namespace {
