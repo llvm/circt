@@ -15,13 +15,18 @@ pip install --upgrade pip setuptools nanobind pytest
 # Install PyCDE from PyPI (prereleases needed to match HEAD).
 pip install --pre pycde
 
+# System prerequisites for cosim: gRPC and protobuf C++ libraries must be
+# installed (e.g., apt install libgrpc++-dev libprotobuf-dev protobuf-compiler-grpc
+# on Debian/Ubuntu, or via vcpkg/brew). These are required by CMake's
+# find_package(gRPC) and find_package(Protobuf) when ESI_COSIM=ON.
+
 # Configure and build the ESI runtime (with cosim).
 cd lib/Dialect/ESI/runtime
 cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DESI_COSIM=ON
 ninja -C build ESIRuntime
 ```
 
-This builds: `ESICppRuntime` (shared lib), `CosimBackend`, `CosimRpc`, `EsiCosimDpiServer`, `esitester`, `esiquery`, the Python native extension (`esiCppAccel`), and the Python package under `build/python/esiaccel/`.
+This builds: `ESICppRuntime` (shared lib), `CosimBackend`, `CosimRpc`, `EsiCosimDpiServer`, `esiquery`, the Python native extension (`esiCppAccel`), and the Python package under `build/python/esiaccel/`. The `esitester` tool is not part of the `ESIRuntime` target; build it separately with `ninja -C build esitester` if you need it.
 
 ### Running the integration pytests
 
@@ -66,7 +71,7 @@ The GTest-based unit tests live in `unittests/Dialect/ESI/runtime/` and require 
 ### ESI Type system (`Types.h`)
 - `Type` is the root class; `getID()` returns a unique string -- the MLIR type string in the case of pycde generation of the manifest, `toString()` returns a human-readable form.
 - `TypeAliasType` wraps another type with a name — always unwrap (possibly recursively) before type-checking.
-- `BitVectorType` is the parent of `BitsType` (signless), `SIntType`, `UIntType`. Use `getWidth()` for bit width.
+- `BitVectorType` is the parent of `BitsType` (signless) and `IntegerType`; `IntegerType` is the parent of `SIntType` and `UIntType`. Use `getWidth()` for bit width.
 - `VoidType` serializes as 1 byte (zero) by convention since all cosim messages must have data and that's persisted to include DMA engines. This may change in the future.
 - Wire byte count for integral types: `(bitWidth + 7) / 8`.
 
