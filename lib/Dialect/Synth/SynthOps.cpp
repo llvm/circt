@@ -68,15 +68,96 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
   // TODO: Implement maj(x, 1, 1) = 1, maj(x, 0, 0) = 0
 
   SmallVector<APInt, 3> inputValues;
-  for (auto input : adaptor.getInputs()) {
+  SmallVector<size_t, 3> nonConstantValues;
+  for (auto [i, input] : llvm::enumerate(adaptor.getInputs())) {
     auto attr = llvm::dyn_cast_or_null<IntegerAttr>(input);
-    if (!attr)
-      return {};
-    inputValues.push_back(attr.getValue());
+    if (attr)
+      inputValues.push_back(attr.getValue());
+    else
+      nonConstantValues.push_back(i);
   }
 
-  auto result = evaluate(inputValues);
-  return IntegerAttr::get(getType(), result);
+  if (nonConstantValues.size() == 0)
+    return IntegerAttr::get(getType(), evaluate(inputValues));
+
+  if (getNumOperands() != 3)
+    return {};
+
+  auto getConstant = [&](unsigned index) -> std::optional<llvm::APInt> {
+    APInt value;
+    if (mlir::matchPattern(getInputs()[index], mlir::m_ConstantInt(&value)))
+      return isInverted(index) ? ~value : value;
+    return std::nullopt;
+  };
+  if (nonConstantValues.size() == 1) {
+    auto k = nonConstantValues[0]; // for 3 operands
+    auto i = (k + 1) % 3;
+    auto j = (k + 2) % 3;
+    auto c1 = getConstant(i);
+    auto c2 = getConstant(j);
+    // x 0 0 -> 0
+    // x 1 1 -> 1
+    // x 0 ~0 -> x
+    // x 1 ~1 -> x
+    // x ~1 ~1 -> ~1 -> 0
+    // ~x 0 0 -> ~x  no fold
+    // ~x 0 ~1 -> 0
+    if (c1 == c2) {
+      if (isInverted(i) != isInverted(j)) {
+        if (isInverted(i))
+          return getOperand(j);
+        else
+          return getOperand(i);
+      }
+      if (isInverted(i)) {
+        // return the inverted value
+        auto value = cast<IntegerAttr>(adaptor.getInputs()[i]).getValue();
+        value = ~value;
+        return IntegerAttr::get(
+            IntegerType::get(getContext(), value.getBitWidth()), value);
+      } else
+        return getOperand(i);
+    } else {
+      if (isInverted(k)) {
+        (*this)->setOperands({getOperand(i)});
+        (*this).setInverted({true});
+        return getResult();
+      } else
+        return getOperand(k);
+    }
+  }
+  // else if (nonConstantValues.size() == 2) {
+  //   // x x 1 -> x
+  //   // x ~x 1 -> 1
+  //   // ~x ~x 1 -> ~x
+  //   auto k = 3 - (nonConstantValues[0] + nonConstantValues[1]);
+  //   auto i = nonConstantValues[0];
+  //   auto j = nonConstantValues[1];
+  //   auto c1 = adaptor.getInputs()[i];
+  //   auto c2 = adaptor.getInputs()[j];
+  //   if (c1 == c2) {
+  //     // x ~x
+  //     if (isInverted(i) != isInverted(j)) {
+  //       if (!isInverted(k))
+  //         return getOperand(k);
+  //       auto value = cast<IntegerAttr>(adaptor.getInputs()[k]).getValue();
+  //       value = ~value;
+  //       return IntegerAttr::get(
+  //           IntegerType::get(getContext(), value.getBitWidth()), value);
+  //     } else if (isInverted(i) == isInverted(j)) {
+  //       // x x const
+  //       if (!isInverted(i))
+  //         return getOperand(i);
+  //       // ~x ~x
+  //        if (isInverted(i)) {
+  //         (*this)->setOperands({getOperand(i)});
+  //         (*this).setInverted({true});
+  //         return getResult();
+  //       //}
+  //     }
+  //   }
+  // }
+  return {};
 }
 
 LogicalResult MajorityInverterOp::canonicalize(MajorityInverterOp op,
@@ -100,7 +181,6 @@ LogicalResult MajorityInverterOp::canonicalize(MajorityInverterOp op,
       return op.isInverted(index) ? ~value : value;
     return std::nullopt;
   };
-
   // Replace the op with the idx-th operand (inverted if necessary).
   auto replaceWithIndex = [&](int index) {
     bool inverted = op.isInverted(index);
@@ -125,21 +205,6 @@ LogicalResult MajorityInverterOp::canonicalize(MajorityInverterOp op,
         if (op.isInverted(i) != op.isInverted(j))
           return replaceWithIndex(k);
         return replaceWithIndex(i);
-      }
-
-      // If i and j are constant.
-      if (auto c1 = getConstant(i)) {
-        if (auto c2 = getConstant(j)) {
-          // If both constants are equal, we can fold.
-          if (*c1 == *c2) {
-            rewriter.replaceOpWithNewOp<hw::ConstantOp>(
-                op, op.getType(), mlir::IntegerAttr::get(op.getType(), *c1));
-            return success();
-          }
-          // If constants are complementary, we can fold.
-          if (*c1 == ~*c2)
-            return replaceWithIndex(k);
-        }
       }
     }
   }
