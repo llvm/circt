@@ -133,15 +133,6 @@ public:
   bool shouldEnableDebugInfo() const { return enableDebugInfo; }
   bool shouldIgnoreReadEnableMemories() const { return ignoreReadEnableMem; }
   bool shouldConvertVecOfBundle() const { return vbToBV; }
-  bool shouldEtcDisableInstanceExtraction() const {
-    return etcDisableInstanceExtraction;
-  }
-  bool shouldEtcDisableRegisterExtraction() const {
-    return etcDisableRegisterExtraction;
-  }
-  bool shouldEtcDisableModuleInlining() const {
-    return etcDisableModuleInlining;
-  }
   bool shouldStripDebugInfo() const { return stripDebugInfo; }
   bool shouldStripFirDebugInfo() const { return stripFirDebugInfo; }
   bool shouldExportModuleHierarchy() const { return exportModuleHierarchy; }
@@ -157,7 +148,6 @@ public:
   bool shouldAddVivadoRAMAddressConflictSynthesisBugWorkaround() const {
     return addVivadoRAMAddressConflictSynthesisBugWorkaround;
   }
-  bool shouldExtractTestCode() const { return extractTestCode; }
   bool shouldFixupEICGWrapper() const { return fixupEICGWrapper; }
   bool shouldDisableCSEinClasses() const { return disableCSEinClasses; }
   bool shouldSelectDefaultInstanceChoice() const {
@@ -287,11 +277,6 @@ public:
     return *this;
   }
 
-  FirtoolOptions &setExtractTestCode(bool value) {
-    extractTestCode = value;
-    return *this;
-  }
-
   FirtoolOptions &setIgnoreReadEnableMem(bool value) {
     ignoreReadEnableMem = value;
     return *this;
@@ -324,21 +309,6 @@ public:
 
   FirtoolOptions &setEmitSeparateAlwaysBlocks(bool value) {
     emitSeparateAlwaysBlocks = value;
-    return *this;
-  }
-
-  FirtoolOptions &setEtcDisableInstanceExtraction(bool value) {
-    etcDisableInstanceExtraction = value;
-    return *this;
-  }
-
-  FirtoolOptions &setEtcDisableRegisterExtraction(bool value) {
-    etcDisableRegisterExtraction = value;
-    return *this;
-  }
-
-  FirtoolOptions &setEtcDisableModuleInlining(bool value) {
-    etcDisableModuleInlining = value;
     return *this;
   }
 
@@ -463,7 +433,6 @@ private:
   std::string blackBoxRootPath;
   bool replSeqMem;
   std::string replSeqMemFile;
-  bool extractTestCode;
   bool ignoreReadEnableMem;
   RandomKind disableRandom;
   std::string outputAnnotationFilename;
@@ -471,9 +440,6 @@ private:
   bool addMuxPragmas;
   firrtl::VerificationFlavor verificationFlavor;
   bool emitSeparateAlwaysBlocks;
-  bool etcDisableInstanceExtraction;
-  bool etcDisableRegisterExtraction;
-  bool etcDisableModuleInlining;
   bool addVivadoRAMAddressConflictSynthesisBugWorkaround;
   std::string ckgModuleName;
   std::string ckgInputName;
