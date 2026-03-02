@@ -1088,6 +1088,46 @@ struct StmtVisitor {
     return success();
   }
 
+  // Handle procedural continuous assignment.
+  LogicalResult visit(const slang::ast::ProceduralAssignStatement &assignNode) {
+    const auto &expr =
+        assignNode.assignment.as<slang::ast::AssignmentExpression>();
+
+    auto lhs = context.convertLvalueExpression(expr.left());
+    if (!lhs)
+      return failure();
+
+    auto rhs = context.convertRvalueExpression(
+        expr.right(), cast<moore::RefType>(lhs.getType()).getNestedType());
+    if (!rhs)
+      return failure();
+
+    if (assignNode.isForce) {
+      moore::ProceduralContinuousForceOp::create(builder, loc, lhs, rhs);
+    } else {
+      // TODO: prohibit net-type lhs
+      moore::ProceduralContinuousAssignOp::create(builder, loc, lhs, rhs);
+    }
+
+    return success();
+  }
+
+  // Handle procedural continuous deassignment.
+  LogicalResult
+  visit(const slang::ast::ProceduralDeassignStatement &deassignNode) {
+    auto lhs = context.convertLvalueExpression(deassignNode.lvalue);
+    if (!lhs)
+      return failure();
+
+    if (deassignNode.isRelease) {
+      moore::ProceduralContinuousReleaseOp::create(builder, loc, lhs);
+    } else {
+      moore::ProceduralContinuousDeassignOp::create(builder, loc, lhs);
+    }
+
+    return success();
+  }
+
   /// Emit an error for all other statements.
   template <typename T>
   LogicalResult visit(T &&stmt) {
