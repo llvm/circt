@@ -607,7 +607,7 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang)
     install(TARGETS slang_slang EXPORT CIRCTTargets)
   else()
-    find_package(slang 9.1 REQUIRED)
+    find_package(slang 10.0 REQUIRED)
   endif()
 endif()
 
