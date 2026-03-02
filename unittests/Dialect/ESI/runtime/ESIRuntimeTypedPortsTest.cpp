@@ -255,6 +255,50 @@ TEST(TypedPortsTest, TypedWritePortRoundTrip) {
   ASSERT_EQ(mock.lastWritten.getSize(), 2u);
 }
 
+TEST(TypedPortsTest, SignExtensionNonByteAligned) {
+  // Test fromMessageData sign extension for non-byte-aligned widths.
+  // si4 value -1 is wire 0x0F (4 bits: 1111). Sign bit is bit 3.
+  {
+    SIntType si4("si4", 4);
+    WireInfo wi = getWireInfo(&si4);
+    EXPECT_EQ(wi.bytes, 1u);
+    EXPECT_EQ(wi.bitWidth, 4u);
+    uint8_t wire = 0x0F; // -1 in si4
+    MessageData msg(&wire, 1);
+    int32_t val = fromMessageData<int32_t>(msg, wi);
+    EXPECT_EQ(val, -1);
+  }
+  // si4 value 7 is wire 0x07 (4 bits: 0111). Positive, no sign extension.
+  {
+    SIntType si4("si4", 4);
+    WireInfo wi = getWireInfo(&si4);
+    uint8_t wire = 0x07;
+    MessageData msg(&wire, 1);
+    int32_t val = fromMessageData<int32_t>(msg, wi);
+    EXPECT_EQ(val, 7);
+  }
+  // si22 value -1 is wire {0xFF, 0xFF, 0x3F} (22 bits all 1s).
+  // Sign bit is bit 21 = bit 5 of byte 2, mask 0x20.
+  {
+    SIntType si22("si22", 22);
+    WireInfo wi = getWireInfo(&si22);
+    EXPECT_EQ(wi.bytes, 3u);
+    uint8_t wire[3] = {0xFF, 0xFF, 0x3F};
+    MessageData msg(wire, 3);
+    int32_t val = fromMessageData<int32_t>(msg, wi);
+    EXPECT_EQ(val, -1);
+  }
+  // si22 positive value: 0x1FFFFF (all data bits 1, sign bit 0)
+  {
+    SIntType si22("si22", 22);
+    WireInfo wi = getWireInfo(&si22);
+    uint8_t wire[3] = {0xFF, 0xFF, 0x1F}; // bit 21 = 0
+    MessageData msg(wire, 3);
+    int32_t val = fromMessageData<int32_t>(msg, wi);
+    EXPECT_EQ(val, 0x1FFFFF); // 2097151
+  }
+}
+
 TEST(TypedPortsTest, TypedWritePortVoid) {
   VoidType voidType("void");
   MockWritePort mock(&voidType);

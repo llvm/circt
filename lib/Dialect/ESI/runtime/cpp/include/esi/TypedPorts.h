@@ -95,16 +95,20 @@ template <typename T>
 T fromMessageData(const MessageData &msg, WireInfo wi) {
   if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
     if (wi.bytes > 0 && msg.getSize() == wi.bytes && wi.bytes != sizeof(T)) {
-      bool negative = false;
-      if constexpr (std::is_signed_v<T>) {
-        // The sign bit is at position (bitWidth-1) within the wire data.
-        size_t signByte = (wi.bitWidth - 1) / 8;
-        uint8_t signMask = uint8_t(1) << ((wi.bitWidth - 1) % 8);
-        if (signByte < wi.bytes && (msg.getBytes()[signByte] & signMask))
-          negative = true;
-      }
-      T val = negative ? static_cast<T>(-1) : static_cast<T>(0);
+      // Copy wire bytes into a zero-initialized value.
+      T val = 0;
       std::memcpy(&val, msg.getBytes(), std::min(wi.bytes, sizeof(T)));
+      // Sign-extend for signed types if the sign bit is set.
+      if constexpr (std::is_signed_v<T>) {
+        size_t signBit = wi.bitWidth - 1;
+        size_t signByte = signBit / 8;
+        uint8_t signMask = uint8_t(1) << (signBit % 8);
+        if (signByte < wi.bytes && (msg.getBytes()[signByte] & signMask)) {
+          // Set all bits above the sign bit to 1.
+          if (wi.bitWidth < sizeof(T) * 8)
+            val |= static_cast<T>(~T(0)) << wi.bitWidth;
+        }
+      }
       return val;
     }
   }
