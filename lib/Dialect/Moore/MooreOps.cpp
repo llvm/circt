@@ -1772,6 +1772,41 @@ LogicalResult QueueResizeOp::verify() {
   if (cast<QueueType>(getInput().getType()).getElementType() !=
       cast<QueueType>(getResult().getType()).getElementType())
     return failure();
+
+  return success();
+}
+
+LogicalResult QueueFromUnpackedArrayOp::verify() {
+  // Verify the source and result have the same element type
+  auto queueElementType =
+      cast<QueueType>(getResult().getType()).getElementType();
+
+  auto arrayElementType =
+      cast<UnpackedArrayType>(getInput().getType()).getElementType();
+
+  if (queueElementType != arrayElementType) {
+    return emitOpError()
+           << "Queue element type doesn't match unpacked array element type";
+  }
+
+  return success();
+}
+
+LogicalResult QueueConcatOp::verify() {
+  // Verify the element types of all concatenated queues equal that of the
+  // result queue.
+  // We do not require the queue bounds to match.
+  auto resultElType = cast<QueueType>(getResult().getType()).getElementType();
+
+  for (Value input : getInputs()) {
+    auto inpElType = cast<QueueType>(input.getType()).getElementType();
+    if (inpElType != resultElType) {
+      return emitOpError() << "Queue element type " << inpElType
+                           << " doesn't match result element type "
+                           << resultElType;
+    }
+  }
+
   return success();
 }
 
