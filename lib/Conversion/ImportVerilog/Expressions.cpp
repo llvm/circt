@@ -7,8 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Moore/MooreTypes.h"
 #include "mlir/IR/Operation.h"
+#include "mlir/IR/TypeRange.h"
 #include "mlir/IR/Value.h"
 #include "slang/ast/EvalContext.h"
 #include "slang/ast/SystemSubroutine.h"
@@ -178,6 +180,20 @@ struct ExprVisitor {
     return context.convertRvalueExpression(expr);
   }
 
+  Value visit(const slang::ast::NewArrayExpression &expr) {
+    Type type = context.convertType(*expr.type);
+    Value initialSize = context.convertRvalueExpression(
+      expr.sizeExpr(), context.convertType(*expr.sizeExpr().type));
+
+    if(expr.initExpr() == nullptr) {
+      return moore::OpenUArrayCreateOp::create(builder, loc, type, initialSize);
+    } else {
+      Value initExpr = context.convertRvalueExpression(
+      *expr.initExpr(), context.convertType(*expr.initExpr()->type));
+      return moore::OpenUArrayCreateOp::create(builder, loc, type, {initialSize, initExpr});
+    }
+  }
+
   /// Handle single bit selections.
   Value visit(const slang::ast::ElementSelectExpression &expr) {
     auto type = context.convertType(*expr.type);
@@ -189,9 +205,9 @@ struct ExprVisitor {
     auto derefType = value.getType();
     if (isLvalue)
       derefType = cast<moore::RefType>(derefType).getNestedType();
-
-    if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
-             moore::QueueType>(derefType)) {
+    if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType, moore::OpenUnpackedArrayType,
+      moore::QueueType>(
+            derefType)) {
       mlir::emitError(loc) << "unsupported expression: element select into "
                            << expr.value().type->toString() << "\n";
       return {};
@@ -2851,6 +2867,9 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                   if (isa<moore::QueueType>(value.getType())) {
                     return moore::QueueSizeBIOp::create(builder, loc, value);
                   }
+                  if(isa<moore::OpenUnpackedArrayType>(value.getType())) {
+                    return moore::OpenUArraySizeOp::create(builder, loc, value);  
+                  }
                   return {};
                 })
           .Case("tolower",
@@ -2876,6 +2895,12 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                   return moore::QueuePopFrontOp::create(builder, loc, value);
                 return {};
               })
+          .Case("delete",
+                [&]() -> Value {
+                  return moore::OpenUArrayDeleteOp::create(builder, loc, value);
+                })
+          
+          
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
 }

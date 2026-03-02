@@ -4098,8 +4098,81 @@ module QueueUnboundedLiteralTest;
     end
 endmodule
 
+ // CHECK-LABEL: moore.module @DynamicArrayInitializeTest() {
+ // CHECK: [[ARR1:%.+]] = moore.variable : <open_uarray<i8>>
+ // CHECK: [[ARR2:%.+]] = moore.variable : <open_uarray<i8>>
+ // CHECK: moore.procedure initial {
+ // CHECK:   [[C4A:%.+]] = moore.constant 4 : i32
+ // CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C4A]] : i32 -> <i8>
+ // CHECK:   moore.blocking_assign [[ARR1]], [[A1]] : open_uarray<i8>
+  // CHECK:  [[C4B:%.+]] = moore.constant 4 : i32
+ // CHECK:   [[R1:%.+]] = moore.read [[ARR1]] : <open_uarray<i8>>
+ // CHECK:   [[A2:%.+]] = moore.open_uarray_create [[C4B]] initial [[R1]] : i32, !moore.open_uarray<i8> -> <i8>
+ // CHECK:   moore.blocking_assign [[ARR2]], [[A2]] : open_uarray<i8>
+ // CHECK:   moore.return
+ // CHECK: }
+ // CHECK: moore.output
+ // CHECK: }
+
+module DynamicArrayInitializeTest;
+
+  bit [7:0] arr1[];
+  bit [7:0] arr2[];
+
+  initial begin
+    arr1 = new [ 4 ];
+    arr2 = new [ 4 ](arr1);
+  end
+endmodule
+
+// CHECK-LABEL: moore.module @DynamicArraySizeTest() {
+// CHECK: [[ARR:%.+]] = moore.variable : <open_uarray<i8>>
+// CHECK: [[X:%.+]] = moore.variable : <i32>
+// CHECK: moore.procedure initial {
+// CHECK:   [[C12:%.+]] = moore.constant 12 : i32
+// CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C12]] : i32 -> <i8>
+// CHECK:   moore.blocking_assign [[ARR]], [[A1]] : open_uarray<i8>
+// CHECK:   [[R1:%.+]] = moore.read [[ARR]] : <open_uarray<i8>>
+// CHECK:   [[SZ:%.+]] = moore.open_uarray_size [[R1]] : <i8> -> i32
+// CHECK:   moore.blocking_assign [[X]], [[SZ]] : i32
+// CHECK:   moore.return
+// CHECK: }
+// CHECK: moore.output
+// CHECK: }
 
 
+module DynamicArraySizeTest;
+  bit [7:0] arr[];
+  int x;
+
+  initial begin
+    arr = new [ 12 ];
+    x = arr.size;
+  end
+endmodule
+
+
+// CHECK-LABEL: moore.module @DynamicArrayDeleteTest() {
+// CHECK: [[ARR:%.+]] = moore.variable : <open_uarray<i8>>
+// CHECK: moore.procedure initial {
+// CHECK:   [[C10:%.+]] = moore.constant 10 : i32
+// CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C10]] : i32 -> <i8>
+// CHECK:   moore.blocking_assign [[ARR]], [[A1]] : open_uarray<i8>
+// CHECK:   [[R1:%.+]] = moore.read [[ARR]] : <open_uarray<i8>>
+// CHECK:   [[DEL:%.+]] = moore.open_uarray_delete [[R1]] : <i8>
+// CHECK:   moore.return
+// CHECK: }
+// CHECK: moore.output
+// CHECK: }
+
+module DynamicArrayDeleteTest;
+  bit [7:0] arr[];
+
+  initial begin
+    arr = new [ 10 ];
+    arr.delete;
+  end
+endmodule
 
 // CHECK-LABEL: moore.module @ForkJoinTest() {
 // CHECK:         [[C0:%.+]] = moore.constant 0 : i32
