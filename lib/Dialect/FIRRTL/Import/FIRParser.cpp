@@ -275,6 +275,9 @@ struct FIRParser {
   template <typename T>
   ParseResult parseOptionalWidth(T &result);
 
+  // Parse 'intLit' '>' assuming '<' was already consumed.
+  ParseResult parseWidth(int32_t &result);
+
   // Parse the 'id' grammar, which is an identifier or an allowed keyword.
   ParseResult parseId(StringRef &result, const Twine &message);
   ParseResult parseId(StringAttr &result, const Twine &message);
@@ -702,6 +705,18 @@ ParseResult FIRParser::parseOptionalWidth(T &result) {
   return success();
 }
 
+/// Parse a width specifier: intLit '>'
+/// This is used when the '<' has already been consumed.
+ParseResult FIRParser::parseWidth(int32_t &result) {
+  auto widthLoc = getToken().getLoc();
+  if (parseIntLit(result, "expected width") ||
+      parseToken(FIRToken::greater, "expected '>'"))
+    return failure();
+  if (result < 0)
+    return emitError(widthLoc, "invalid width specifier"), failure();
+  return success();
+}
+
 /// id  ::= Id | keywordAsId
 ///
 /// Parse the 'id' grammar, which is an identifier or an allowed keyword.  On
@@ -1016,22 +1031,41 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     break;
 
   case FIRToken::kw_UInt:
+    consumeToken(FIRToken::kw_UInt);
+    // Width is not present since langle_UInt would have been lexed instead.
+    result = UIntType::get(getContext(), -1);
+    break;
+
   case FIRToken::kw_SInt:
-  case FIRToken::kw_Analog: {
+    consumeToken(FIRToken::kw_SInt);
+    // Width is not present since langle_SInt would have been lexed instead.
+    result = SIntType::get(getContext(), -1);
+    break;
+
+  case FIRToken::kw_Analog:
+    consumeToken(FIRToken::kw_Analog);
+    // Width is not present since langle_Analog would have been lexed instead.
+    result = AnalogType::get(getContext(), -1);
+    break;
+
+  case FIRToken::langle_UInt:
+  case FIRToken::langle_SInt:
+  case FIRToken::langle_Analog: {
+    // The '<' has already been consumed by the lexer, so we need to parse
+    // the mandatory width and the trailing '>'.
     auto kind = getToken().getKind();
     consumeToken();
 
-    // Parse a width specifier if present.
     int32_t width;
-    if (parseOptionalWidth(width))
+    if (parseWidth(width))
       return failure();
 
-    if (kind == FIRToken::kw_SInt)
+    if (kind == FIRToken::langle_SInt)
       result = SIntType::get(getContext(), width);
-    else if (kind == FIRToken::kw_UInt)
+    else if (kind == FIRToken::langle_UInt)
       result = UIntType::get(getContext(), width);
     else {
-      assert(kind == FIRToken::kw_Analog);
+      assert(kind == FIRToken::langle_Analog);
       result = AnalogType::get(getContext(), width);
     }
     break;
@@ -1219,6 +1253,22 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     if (requireFeature({4, 0, 0}, "Lists") || parseListType(result))
       return failure();
     break;
+
+  case FIRToken::langle_List: {
+    // The '<' has already been consumed by the lexer, so we need to parse
+    // the element type and the trailing '>'.
+    if (requireFeature({4, 0, 0}, "Lists"))
+      return failure();
+    consumeToken();
+
+    PropertyType elementType;
+    if (parsePropertyType(elementType, "expected List element type") ||
+        parseToken(FIRToken::greater, "expected '>' in List type"))
+      return failure();
+
+    result = ListType::get(getContext(), elementType);
+    break;
+  }
   }
 
   // Handle postfix vector sizes.
@@ -1959,7 +2009,9 @@ private:
   ParseResult parsePostFixFieldId(Value &result);
   ParseResult parsePostFixIntSubscript(Value &result);
   ParseResult parsePostFixDynamicSubscript(Value &result);
-  ParseResult parseIntegerLiteralExp(Value &result);
+  ParseResult
+  parseIntegerLiteralExp(Value &result, std::optional<bool> isSigned = {},
+                         std::optional<int32_t> allocatedWidth = {});
   ParseResult parseListExp(Value &result);
   ParseResult parseListConcatExp(Value &result);
   ParseResult parseCatExp(Value &result);
@@ -2227,19 +2279,34 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
 
-  case FIRToken::kw_UInt:
-  case FIRToken::kw_SInt:
+  case FIRToken::langle_UInt:
+  case FIRToken::langle_SInt: {
+    // The '<' has already been consumed by the lexer, so we need to parse
+    // the mandatory width and '>'.
+    bool isSigned = getToken().is(FIRToken::langle_SInt);
+    consumeToken();
+    int32_t width;
+    if (parseWidth(width))
+      return failure();
+
+    // Now parse the '(' intLit ')' part.
+    if (parseIntegerLiteralExp(result, isSigned, width))
+      return failure();
+    break;
+  }
+
+  case FIRToken::lp_UInt:
+  case FIRToken::lp_SInt:
     if (parseIntegerLiteralExp(result))
       return failure();
     break;
-  case FIRToken::kw_String: {
+  case FIRToken::lp_String: {
     if (requireFeature({3, 1, 0}, "Strings"))
       return failure();
     locationProcessor.setLoc(getToken().getLoc());
-    consumeToken(FIRToken::kw_String);
+    consumeToken(FIRToken::lp_String);
     StringRef spelling;
-    if (parseToken(FIRToken::l_paren, "expected '(' in String expression") ||
-        parseGetSpelling(spelling) ||
+    if (parseGetSpelling(spelling) ||
         parseToken(FIRToken::string,
                    "expected string literal in String expression") ||
         parseToken(FIRToken::r_paren, "expected ')' in String expression"))
@@ -2249,14 +2316,13 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
         builder, attr, builder.getType<StringType>(), attr);
     break;
   }
-  case FIRToken::kw_Integer: {
+  case FIRToken::lp_Integer: {
     if (requireFeature({3, 1, 0}, "Integers"))
       return failure();
     locationProcessor.setLoc(getToken().getLoc());
-    consumeToken(FIRToken::kw_Integer);
+    consumeToken(FIRToken::lp_Integer);
     APInt value;
-    if (parseToken(FIRToken::l_paren, "expected '(' in Integer expression") ||
-        parseIntLit(value, "expected integer literal in Integer expression") ||
+    if (parseIntLit(value, "expected integer literal in Integer expression") ||
         parseToken(FIRToken::r_paren, "expected ')' in Integer expression"))
       return failure();
     APSInt apint(value, /*isUnsigned=*/false);
@@ -2265,13 +2331,11 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
         builder.getType<FIntegerType>(), apint);
     break;
   }
-  case FIRToken::kw_Bool: {
+  case FIRToken::lp_Bool: {
     if (requireFeature(missingSpecFIRVersion, "Bools"))
       return failure();
     locationProcessor.setLoc(getToken().getLoc());
-    consumeToken(FIRToken::kw_Bool);
-    if (parseToken(FIRToken::l_paren, "expected '(' in Bool expression"))
-      return failure();
+    consumeToken(FIRToken::lp_Bool);
     bool value;
     if (consumeIf(FIRToken::kw_true))
       value = true;
@@ -2286,13 +2350,11 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
         builder, attr, builder.getType<BoolType>(), value);
     break;
   }
-  case FIRToken::kw_Double: {
+  case FIRToken::lp_Double: {
     if (requireFeature(missingSpecFIRVersion, "Doubles"))
       return failure();
     locationProcessor.setLoc(getToken().getLoc());
-    consumeToken(FIRToken::kw_Double);
-    if (parseToken(FIRToken::l_paren, "expected '(' in Double expression"))
-      return failure();
+    consumeToken(FIRToken::lp_Double);
     auto spelling = getTokenSpelling();
     if (parseToken(FIRToken::floatingpoint,
                    "expected floating point in Double expression") ||
@@ -2308,7 +2370,8 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
         builder, attr, builder.getType<DoubleType>(), attr);
     break;
   }
-  case FIRToken::kw_List: {
+  case FIRToken::lp_List:
+  case FIRToken::langle_List: {
     if (requireFeature({4, 0, 0}, "Lists"))
       return failure();
     if (isLeadingStmt)
@@ -2359,6 +2422,13 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     // try them.
   case FIRToken::identifier: // exp ::= id
   case FIRToken::literal_identifier:
+  case FIRToken::kw_UInt:
+  case FIRToken::kw_SInt:
+  case FIRToken::kw_String:
+  case FIRToken::kw_Integer:
+  case FIRToken::kw_Bool:
+  case FIRToken::kw_Double:
+  case FIRToken::kw_List:
   default: {
     StringRef name;
     auto loc = getToken().getLoc();
@@ -2596,17 +2666,48 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result) {
 
 /// integer-literal-exp ::= 'UInt' optional-width '(' intLit ')'
 ///                     ::= 'SInt' optional-width '(' intLit ')'
-ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
-  bool isSigned = getToken().is(FIRToken::kw_SInt);
+///
+/// If isSigned and allocatedWidth are provided, it means the type and width
+/// were already parsed (e.g., from a langle_UInt token) and should be used
+/// instead of parsing them from the token stream.
+ParseResult
+FIRStmtParser::parseIntegerLiteralExp(Value &result,
+                                      std::optional<bool> isSignedOpt,
+                                      std::optional<int32_t> allocatedWidth) {
   auto loc = getToken().getLoc();
-  consumeToken();
 
-  // Parse a width specifier if present.
+  // Determine signedness and whether '(' was already consumed.
+  bool isSigned;
+  bool hasLParen;
+  if (isSignedOpt) {
+    // Signedness was provided by caller (from langle_ token).
+    isSigned = *isSignedOpt;
+    hasLParen = false;
+  } else {
+    // Determine from current token (lp_ token).
+    isSigned = getToken().is(FIRToken::lp_SInt);
+    hasLParen = getToken().isAny(FIRToken::lp_UInt, FIRToken::lp_SInt);
+    consumeToken();
+  }
+
+  // Parse a width specifier if not already provided.
   int32_t width;
   APInt value;
-  if (parseOptionalWidth(width) ||
-      parseToken(FIRToken::l_paren, "expected '(' in integer expression") ||
-      parseIntLit(value, "expected integer value") ||
+
+  if (allocatedWidth) {
+    width = *allocatedWidth;
+  } else {
+    if (parseOptionalWidth(width))
+      return failure();
+  }
+
+  // If we consumed an lp_ token, the '(' was already consumed by the lexer.
+  // Otherwise, we need to parse it.
+  if (!hasLParen &&
+      parseToken(FIRToken::l_paren, "expected '(' in integer expression"))
+    return failure();
+
+  if (parseIntLit(value, "expected integer value") ||
       parseToken(FIRToken::r_paren, "expected ')' in integer expression"))
     return failure();
 
@@ -2640,13 +2741,24 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
 /// list-exp ::= list-type '(' exp* ')'
 ParseResult FIRStmtParser::parseListExp(Value &result) {
   auto loc = getToken().getLoc();
-  FIRRTLType type;
-  if (parseListType(type))
-    return failure();
-  auto listType = type_cast<ListType>(type);
-  auto elementType = listType.getElementType();
+  bool hasLAngle = getToken().is(FIRToken::langle_List);
+  bool hasLParen = getToken().is(FIRToken::lp_List);
+  consumeToken();
 
-  if (parseToken(FIRToken::l_paren, "expected '(' in List expression"))
+  PropertyType elementType;
+  // If we consumed a langle_ token, the '<' was already consumed by the lexer.
+  if (!hasLAngle && parseToken(FIRToken::less, "expected '<' in List type"))
+    return failure();
+
+  if (parsePropertyType(elementType, "expected List element type") ||
+      parseToken(FIRToken::greater, "expected '>' in List type"))
+    return failure();
+
+  auto listType = ListType::get(getContext(), elementType);
+
+  // If we consumed an lp_ token, the '(' was already consumed by the lexer.
+  if (!hasLParen &&
+      parseToken(FIRToken::l_paren, "expected '(' in List expression"))
     return failure();
 
   SmallVector<Value, 3> operands;

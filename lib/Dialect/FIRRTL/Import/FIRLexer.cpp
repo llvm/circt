@@ -419,6 +419,19 @@ FIRToken FIRLexer::lexIdentifierOrKeyword(const char *tokStart) {
     }
   }
 
+  // Check to see if this is a keyword followed by '<' character.
+  if (*curPtr == '<') {
+    FIRToken::Kind kind = llvm::StringSwitch<FIRToken::Kind>(spelling)
+#define TOK_LESSKEYWORD(SPELLING) .Case(#SPELLING, FIRToken::langle_##SPELLING)
+#include "FIRTokenKinds.def"
+                              .Default(FIRToken::identifier);
+#undef TOK_LESSKEYWORD
+    if (kind != FIRToken::identifier) {
+      ++curPtr;
+      return formToken(kind, tokStart);
+    }
+  }
+
   // See if the identifier is a keyword.  By default, it is an identifier.
   FIRToken::Kind kind = llvm::StringSwitch<FIRToken::Kind>(spelling)
 #define TOK_KEYWORD(SPELLING) .Case(#SPELLING, FIRToken::kw_##SPELLING)
