@@ -763,6 +763,31 @@ def QueueInsertOp : SimOp<"queue.insert", [Pure,
   let assemblyFormat = "$item `into` $queue `at` $index attr-dict `:` type($queue)";
 }
 
+def QueueSetOp : SimOp<"queue.set", [Pure,
+    TypesMatchWith<"queue and item types must match",
+      "queue", "item", "cast<QueueType>($_self).getElementType()">,
+    AllTypesMatch<["queue", "outQueue"]>]> {
+
+  let summary = "Overwrite an element at a position within a queue.";
+  let description = [{
+    Overwrites the element at $index with $item, returning an updated queue.
+
+
+    If the index is equal to the length of the queue, the operation adds $item
+    to the end of the queue.
+
+    If the index is otherwise out of bounds for the queue, the queue returned
+    is unchanged.
+  }];
+
+  let arguments = (ins QueueType:$queue, I32:$index, HWNonInOutType:$item);
+  let results = (outs QueueType:$outQueue);
+
+  let assemblyFormat = [{
+    $queue `[` $index `]` `=` $item attr-dict `:` type($queue)
+  }];
+}
+
 // Likewise, TODO for 4-valued ints. (see above)
 def QueueGetOp : SimOp<"queue.get", [Pure,
    TypesMatchWith<"queue and item types must match",
