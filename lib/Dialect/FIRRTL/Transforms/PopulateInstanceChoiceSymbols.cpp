@@ -38,7 +38,7 @@ namespace {
 void getOptionCaseMacroName(StringAttr optionName, StringAttr caseName,
                             SmallVectorImpl<char> &macroName) {
   llvm::raw_svector_ostream os(macroName);
-  os << "__option__" << optionName.getValue() << "_" << caseName.getValue();
+  os << "__option_" << optionName.getValue() << "_" << caseName.getValue();
 }
 
 class PopulateInstanceChoiceSymbolsPass
