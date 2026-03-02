@@ -41,9 +41,9 @@ rtg.test @immediates(singleton = %none: index) {
 // Test the set operations and passing a sequence to another one via argument
 // CHECK-LABEL: rtg.test @setOperations
 rtg.test @setOperations(singleton = %none: index) {
-  // CHECK-NEXT: [[V0:%.+]] = rtg.constant 2 : index
-  // CHECK-NEXT: [[V1:%.+]] = rtg.constant 3 : index
-  // CHECK-NEXT: [[V2:%.+]] = rtg.constant #rtg.set<3 : index, 4 : index> : !rtg.set<index>
+  // CHECK-DAG: [[V0:%.+]] = rtg.constant 3 : index
+  // CHECK-DAG: [[V1:%.+]] = rtg.constant 4 : index
+  // CHECK-DAG: [[V2:%.+]] = rtg.constant #rtg.set<2 : index, 4 : index> : !rtg.set<index>
   // CHECK-NEXT: func.call @dummy1([[V0]], [[V1]], [[V2]]) :
   %0 = index.constant 2
   %1 = index.constant 3
@@ -64,9 +64,9 @@ rtg.test @setOperations(singleton = %none: index) {
   }
   func.call @dummy1(%4, %5, %diff) : (index, index, !rtg.set<index>) -> ()
 
-  // CHECK-NEXT: [[V3:%.+]] = rtg.constant 4 : index
-  // CHECK-NEXT: [[V4:%.+]] = rtg.constant 1 : index
-  // CHECK-NEXT: [[V5:%.+]] = rtg.bag_create ([[V4]] x [[V3]], [[V4]] x [[V0]]) : index
+  // CHECK-DAG: [[V3:%.+]] = rtg.constant 2 : index
+  // CHECK-DAG: [[V4:%.+]] = rtg.constant 1 : index
+  // CHECK-NEXT: [[V5:%.+]] = rtg.bag_create ([[V4]] x [[V1]], [[V4]] x [[V3]]) : index
   // CHECK-NEXT: func.call @dummy12([[V5]]) : (!rtg.bag<index>)
   %6 = rtg.set_convert_to_bag %set1 : !rtg.set<index>
   func.call @dummy12(%6) : (!rtg.bag<index>) -> ()
@@ -103,13 +103,13 @@ rtg.test @setCartesianProduct(singleton = %none: index) {
 
 // CHECK-LABEL: rtg.test @bagOperations
 rtg.test @bagOperations(singleton = %none: index) {
-  // CHECK-NEXT: [[V0:%.+]] = rtg.constant 2 : index
-  // CHECK-NEXT: [[V1:%.+]] = rtg.constant 8 : index
-  // CHECK-NEXT: [[V2:%.+]] = rtg.constant 3 : index
-  // CHECK-NEXT: [[V3:%.+]] = rtg.constant 7 : index
+  // CHECK-DAG: [[V0:%.+]] = rtg.constant 2 : index
+  // CHECK-DAG: [[V1:%.+]] = rtg.constant 8 : index
+  // CHECK-DAG: [[V2:%.+]] = rtg.constant 3 : index
+  // CHECK-DAG: [[V3:%.+]] = rtg.constant 7 : index
   // CHECK-NEXT: [[V4:%.+]] = rtg.bag_create ([[V1]] x [[V0]], [[V3]] x [[V2]]) : index
   // CHECK-NEXT: [[V5:%.+]] = rtg.bag_create ([[V1]] x [[V0]]) : index
-  // CHECK-NEXT: func.call @dummy4([[V0]], [[V0]], [[V4]], [[V5]]) :
+  // CHECK-NEXT: func.call @dummy4([[V2]], [[V0]], [[V4]], [[V5]]) :
   %multiple = index.constant 8
   %seven = index.constant 7
   %one = index.constant 1
@@ -202,7 +202,7 @@ rtg.test @sequenceSubstitution(singleton = %none: index) {
   %0 = index.constant 0
   %1 = rtg.get_sequence @seq0 : !rtg.sequence<index>
   %2 = rtg.substitute_sequence %1(%0) : !rtg.sequence<index>
-  %3 = rtg.randomize_sequence %2 
+  %3 = rtg.randomize_sequence %2
   rtg.embed_sequence %3
 }
 
@@ -579,7 +579,7 @@ rtg.test @randomIntegers(singleton = %none: index) {
     %tmp = rtg.random_number_in_range [%lower, %upper]
     rtg.yield %tmp : index
   }
-  // CHECK-NEXT: [[V0:%.+]] = rtg.constant 5 : index
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant 9 : index
   // CHECK-NEXT: func.call @dummy2([[V0]])
   func.call @dummy2(%0) : (index) -> ()
 
@@ -587,7 +587,7 @@ rtg.test @randomIntegers(singleton = %none: index) {
     %tmp = rtg.random_number_in_range [%lower, %upper]
     rtg.yield %tmp : index
   }
-  // CHECK-NEXT: [[V1:%.+]] = rtg.constant 8 : index
+  // CHECK-NEXT: [[V1:%.+]] = rtg.constant 7 : index
   // CHECK-NEXT: func.call @dummy2([[V1]])
   func.call @dummy2(%1) : (index) -> ()
 }
@@ -616,7 +616,7 @@ rtg.test @nestedRandomScopes(singleton = %none: index) {
     rtg.yield %result : index
   }
 
-  // CHECK-NEXT: [[V0:%.+]] = rtg.constant 115 : index
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant 126 : index
   // CHECK-NEXT: func.call @dummy2([[V0]])
   func.call @dummy2(%0) : (index) -> ()
 }
@@ -632,19 +632,18 @@ rtg.test @testsUseSameSeed1(singleton = %none: index) {
   %3 = rtg.random_number_in_range [%lower, %upper]
   %4 = rtg.random_number_in_range [%lower, %upper]
 
-  // CHECK-NEXT: [[R:%.+]] = rtg.constant 3 : index
+  // CHECK-NEXT: [[R:%.+]] = rtg.constant 44 : index
   // CHECK-NEXT: func.call @dummy2([[R]])
   func.call @dummy2(%0) : (index) -> ()
-  // CHECK-NEXT: [[R:%.+]] = rtg.constant 28 : index
+  // CHECK-NEXT: [[R:%.+]] = rtg.constant 47 : index
   // CHECK-NEXT: func.call @dummy2([[R]])
   func.call @dummy2(%1) : (index) -> ()
-  // CHECK-NEXT: [[R:%.+]] = rtg.constant 69 : index
+  // CHECK-NEXT: [[R:%.+]] = rtg.constant 64 : index
   // CHECK-NEXT: func.call @dummy2([[R]])
   func.call @dummy2(%2) : (index) -> ()
-  // CHECK-NEXT: [[R:%.+]] = rtg.constant 18 : index
+  // CHECK-NEXT: [[R:%.+]] = rtg.constant 67 : index
   // CHECK-NEXT: func.call @dummy2([[R]])
   func.call @dummy2(%3) : (index) -> ()
-  // CHECK-NEXT: [[R:%.+]] = rtg.constant 5 : index
   // CHECK-NEXT: func.call @dummy2([[R]])
   func.call @dummy2(%4) : (index) -> ()
 }
@@ -660,19 +659,18 @@ rtg.test @testsUseSameSeed2(singleton = %none: index) {
   %3 = rtg.random_number_in_range [%lower, %upper]
   %4 = rtg.random_number_in_range [%lower, %upper]
 
-  // CHECK-NEXT: [[R:%.+]] = rtg.constant 3 : index
+  // CHECK-NEXT: [[R:%.+]] = rtg.constant 44 : index
   // CHECK-NEXT: func.call @dummy2([[R]])
   func.call @dummy2(%0) : (index) -> ()
-  // CHECK-NEXT: [[R:%.+]] = rtg.constant 28 : index
+  // CHECK-NEXT: [[R:%.+]] = rtg.constant 47 : index
   // CHECK-NEXT: func.call @dummy2([[R]])
   func.call @dummy2(%1) : (index) -> ()
-  // CHECK-NEXT: [[R:%.+]] = rtg.constant 69 : index
+  // CHECK-NEXT: [[R:%.+]] = rtg.constant 64 : index
   // CHECK-NEXT: func.call @dummy2([[R]])
   func.call @dummy2(%2) : (index) -> ()
-  // CHECK-NEXT: [[R:%.+]] = rtg.constant 18 : index
+  // CHECK-NEXT: [[R:%.+]] = rtg.constant 67 : index
   // CHECK-NEXT: func.call @dummy2([[R]])
   func.call @dummy2(%3) : (index) -> ()
-  // CHECK-NEXT: [[R:%.+]] = rtg.constant 5 : index
   // CHECK-NEXT: func.call @dummy2([[R]])
   func.call @dummy2(%4) : (index) -> ()
 }
@@ -1057,24 +1055,24 @@ rtg.test @opsHandlingSymbolicOperands(singleton = %none: index) {
   %i1 = index.bool.constant false
   %idx = index.constant 0
   %init = rtg.constant #rtg.isa.immediate<32, 0>
-  
+
   // CHECK-NEXT: [[VAL:%.+]] = rtg.validate [[REG]], [[INIT]], "symbolic_idx" : !rtgtest.ireg -> !rtg.isa.immediate<32> loc("sym_loc")
   %val = rtg.validate %reg, %init, "symbolic_idx" : !rtgtest.ireg -> !rtg.isa.immediate<32> loc("sym_loc")
-  
+
   // CHECK-NEXT: func.call @dummy15([[VAL]])
   %arr = rtg.array_create %val, %init : !rtg.isa.immediate<32>
   %ext1 = rtg.array_extract %arr[%idx] : !rtg.array<!rtg.isa.immediate<32>>
   func.call @dummy15(%ext1) : (!rtg.isa.immediate<32>) -> ()
-  
+
   // CHECK-NEXT: func.call @dummy15([[VAL]])
   %tuple = rtg.tuple_create %val, %init : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>
   %ext2 = rtg.tuple_extract %tuple at 0 : !rtg.tuple<!rtg.isa.immediate<32>, !rtg.isa.immediate<32>>
   func.call @dummy15(%ext2) : (!rtg.isa.immediate<32>) -> ()
-  
+
   // CHECK-NEXT: func.call @dummy15([[VAL]])
   %selected = arith.select %i1, %init, %val : !rtg.isa.immediate<32>
   func.call @dummy15(%selected) : (!rtg.isa.immediate<32>) -> ()
-  
+
   // CHECK-NEXT: func.call @dummy15([[VAL]])
   %arr2 = rtg.array_create %init, %init : !rtg.isa.immediate<32>
   %arr3 = rtg.array_inject %arr2[%idx], %val : !rtg.array<!rtg.isa.immediate<32>>

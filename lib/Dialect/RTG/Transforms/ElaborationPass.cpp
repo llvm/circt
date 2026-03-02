@@ -69,16 +69,11 @@ struct RngScope {
     if (diff == 1)
       return a;
 
-    const uint32_t digits = std::numeric_limits<uint32_t>::digits;
     if (diff == 0)
       return rng();
 
-    uint32_t width = digits - llvm::countl_zero(diff) - 1;
-    if ((diff & (std::numeric_limits<uint32_t>::max() >> (digits - width))) !=
-        0)
-      ++width;
-
-    uint32_t mask = computeMask(diff);
+    uint32_t mask =
+        std::numeric_limits<uint32_t>::max() >> (32 - llvm::Log2_32_Ceil(diff));
     uint32_t u;
     do {
       u = rng() & mask;
@@ -88,13 +83,6 @@ struct RngScope {
   }
 
   RngScope getNested() { return RngScope(rng()); }
-
-private:
-  uint32_t computeMask(size_t w) {
-    size_t n = w / 32 + (w % 32 != 0);
-    size_t w0 = w / n;
-    return w0 > 0 ? uint32_t(~0) >> (32 - w0) : 0;
-  }
 
 private:
   std::mt19937 rng;
