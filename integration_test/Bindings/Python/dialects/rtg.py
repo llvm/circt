@@ -146,38 +146,6 @@ with Context() as ctx, Location.unknown():
     rtg.ConstantOp(rtgtest.RegA4Attr.get())
     # CHECK: rtg.constant #rtgtest.a5
     rtg.ConstantOp(rtgtest.RegA5Attr.get())
-    # CHECK: rtg.constant #rtgtest.a6
-    rtg.ConstantOp(rtgtest.RegA6Attr.get())
-    # CHECK: rtg.constant #rtgtest.a7
-    rtg.ConstantOp(rtgtest.RegA7Attr.get())
-    # CHECK: rtg.constant #rtgtest.s2
-    rtg.ConstantOp(rtgtest.RegS2Attr.get())
-    # CHECK: rtg.constant #rtgtest.s3
-    rtg.ConstantOp(rtgtest.RegS3Attr.get())
-    # CHECK: rtg.constant #rtgtest.s4
-    rtg.ConstantOp(rtgtest.RegS4Attr.get())
-    # CHECK: rtg.constant #rtgtest.s5
-    rtg.ConstantOp(rtgtest.RegS5Attr.get())
-    # CHECK: rtg.constant #rtgtest.s6
-    rtg.ConstantOp(rtgtest.RegS6Attr.get())
-    # CHECK: rtg.constant #rtgtest.s7
-    rtg.ConstantOp(rtgtest.RegS7Attr.get())
-    # CHECK: rtg.constant #rtgtest.s8
-    rtg.ConstantOp(rtgtest.RegS8Attr.get())
-    # CHECK: rtg.constant #rtgtest.s9
-    rtg.ConstantOp(rtgtest.RegS9Attr.get())
-    # CHECK: rtg.constant #rtgtest.s10
-    rtg.ConstantOp(rtgtest.RegS10Attr.get())
-    # CHECK: rtg.constant #rtgtest.s11
-    rtg.ConstantOp(rtgtest.RegS11Attr.get())
-    # CHECK: rtg.constant #rtgtest.t3
-    rtg.ConstantOp(rtgtest.RegT3Attr.get())
-    # CHECK: rtg.constant #rtgtest.t4
-    rtg.ConstantOp(rtgtest.RegT4Attr.get())
-    # CHECK: rtg.constant #rtgtest.t5
-    rtg.ConstantOp(rtgtest.RegT5Attr.get())
-    # CHECK: rtg.constant #rtgtest.t6
-    rtg.ConstantOp(rtgtest.RegT6Attr.get())
 
   print(m)
 

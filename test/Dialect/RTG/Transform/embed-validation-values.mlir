@@ -7,12 +7,12 @@
 rtg.test @embed_value() {
   // CHECK-TEST0-NEXT: [[REG:%.+]] = rtg.constant #rtgtest.t0
   // CHECK-TEST0-NEXT: [[V0:%.+]] = rtg.constant #rtg.isa.immediate<32, 8192>
-  // CHECK-TEST0-NEXT: rtgtest.rv32i.lui [[REG]], [[V0]] :
+  // CHECK-TEST0-NEXT: rtgtest.immediate_instr [[REG]], [[V0]]
   // CHECK-TEST0-NEXT: }
   %reg = rtg.constant #rtgtest.t0
   %imm = rtg.constant #rtg.isa.immediate<32, 0x1000>
   %exp_val = rtg.validate %reg, %imm, "id1" : !rtgtest.ireg -> !rtg.isa.immediate<32>
-  rtgtest.rv32i.lui %reg, %exp_val : !rtg.isa.immediate<32>
+  rtgtest.immediate_instr %reg, %exp_val
 }
 
 //--- test1.mlir
@@ -33,7 +33,7 @@ rtg.test @duplicate_id_in_file_error() {
   %reg = rtg.constant #rtgtest.t0
   %imm = rtg.constant #rtg.isa.immediate<32, 0x1000>
   %exp_val = rtg.validate %reg, %imm, "id1" : !rtgtest.ireg -> !rtg.isa.immediate<32>
-  rtgtest.rv32i.lui %reg, %exp_val : !rtg.isa.immediate<32>
+  rtgtest.immediate_instr %reg, %exp_val
 }
 
 //--- test3.mlir
@@ -44,7 +44,7 @@ rtg.test @no_value_for_id_error() {
   %reg = rtg.constant #rtgtest.t0
   %imm = rtg.constant #rtg.isa.immediate<32, 0x1000>
   %exp_val = rtg.validate %reg, %imm, "id1" : !rtgtest.ireg -> !rtg.isa.immediate<32>
-  rtgtest.rv32i.lui %reg, %exp_val : !rtg.isa.immediate<32>
+  rtgtest.immediate_instr %reg, %exp_val
 }
 
 //--- test4.mlir
@@ -56,8 +56,8 @@ rtg.test @duplicate_validate_id_error() {
   %exp_val = rtg.validate %reg, %imm, "id1" : !rtgtest.ireg -> !rtg.isa.immediate<32>
   // expected-error @below {{at least two validate ops have the same ID: "id1"}}
   %exp_val2 = rtg.validate %reg, %imm, "id1" : !rtgtest.ireg -> !rtg.isa.immediate<32>
-  rtgtest.rv32i.lui %reg, %exp_val : !rtg.isa.immediate<32>
-  rtgtest.rv32i.lui %reg, %exp_val2 : !rtg.isa.immediate<32>
+  rtgtest.immediate_instr %reg, %exp_val
+  rtgtest.immediate_instr %reg, %exp_val2
 }
 
 //--- test5.mlir
@@ -68,11 +68,11 @@ rtg.test @unmached_validate_stays() {
   // CHECK-TEST5-NEXT: [[REG:%.+]] = rtg.constant #rtgtest.t0
   // CHECK-TEST5-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<32, 4096>
   // CHECK-TEST5-NEXT: [[VAL:%.+]] = rtg.validate [[REG]], [[IMM]], "id10" : !rtgtest.ireg -> !rtg.isa.immediate<32>
-  // CHECK-TEST5-NEXT: rtgtest.rv32i.lui [[REG]], [[VAL]] : !rtg.isa.immediate<32>
+  // CHECK-TEST5-NEXT: rtgtest.immediate_instr [[REG]], [[VAL]]
   %reg = rtg.constant #rtgtest.t0
   %imm = rtg.constant #rtg.isa.immediate<32, 0x1000>
   %exp_val = rtg.validate %reg, %imm, "id10" : !rtgtest.ireg -> !rtg.isa.immediate<32>
-  rtgtest.rv32i.lui %reg, %exp_val : !rtg.isa.immediate<32>
+  rtgtest.immediate_instr %reg, %exp_val
 }
 
 //--- test6.mlir
@@ -84,9 +84,9 @@ rtg.test @embed_value() {
   // CHECK-TEST6-NEXT: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<32, 4>
   // CHECK-TEST6-NEXT: [[V2:%.+]] = rtg.constant #rtg.isa.immediate<32, 5>
   // CHECK-TEST6-NEXT: [[V0:%.+]] = rtg.constant #rtg.isa.immediate<32, 8192>
-  // CHECK-TEST6-NEXT: rtgtest.rv32i.lui [[REG]], [[V0]] :
-  // CHECK-TEST6-NEXT: rtgtest.rv32i.lui [[REG]], [[V1]] :
-  // CHECK-TEST6-NEXT: rtgtest.rv32i.lui [[REG]], [[V2]] :
+  // CHECK-TEST6-NEXT: rtgtest.immediate_instr [[REG]], [[V0]]
+  // CHECK-TEST6-NEXT: rtgtest.immediate_instr [[REG]], [[V1]]
+  // CHECK-TEST6-NEXT: rtgtest.immediate_instr [[REG]], [[V2]]
   // CHECK-TEST6-NEXT: }
   %0 = rtg.constant #rtgtest.t0
   %1 = rtg.constant #rtg.isa.immediate<32, 1>
@@ -95,9 +95,9 @@ rtg.test @embed_value() {
   %4 = rtg.constant #rtg.isa.immediate<32, 4>
   %5 = rtg.constant #rtg.isa.immediate<32, 5>
   %6:3 = rtg.validate %0, %1, "id1" (%2, %3 else %4, %5 : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
-  rtgtest.rv32i.lui %0, %6#0 : !rtg.isa.immediate<32>
-  rtgtest.rv32i.lui %0, %6#1 : !rtg.isa.immediate<32>
-  rtgtest.rv32i.lui %0, %6#2 : !rtg.isa.immediate<32>
+  rtgtest.immediate_instr %0, %6#0
+  rtgtest.immediate_instr %0, %6#1
+  rtgtest.immediate_instr %0, %6#2
 }
 
 //--- test7.mlir
@@ -107,9 +107,9 @@ rtg.test @embed_value() {
 rtg.test @embed_value() {
   // CHECK-TEST7-NEXT: [[REG:%.+]] = rtg.constant #rtgtest.t0
   // CHECK-TEST7-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<32, 4096>
-  // CHECK-TEST7-NEXT: rtgtest.rv32i.lui [[REG]], [[IMM]] : !rtg.isa.immediate<32>
+  // CHECK-TEST7-NEXT: rtgtest.immediate_instr [[REG]], [[IMM]]
   %reg = rtg.constant #rtgtest.t0
   %imm = rtg.constant #rtg.isa.immediate<32, 0x1000>
   %exp_val = rtg.validate %reg, %imm, "id1" : !rtgtest.ireg -> !rtg.isa.immediate<32>
-  rtgtest.rv32i.lui %reg, %exp_val : !rtg.isa.immediate<32>
+  rtgtest.immediate_instr %reg, %exp_val
 }

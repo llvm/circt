@@ -7,19 +7,18 @@ rtg.test @test0() {
     // CHECK-DAG: [[V1:%.+]] = rtg.constant #rtgtest.s1
     // CHECK-DAG: [[V2:%.+]] = rtg.constant #rtgtest.ra
     // CHECK-DAG: [[V3:%.+]] = rtg.constant #rtgtest.s0
-    // CHECK: rtgtest.rv32i.jalr [[V0]], [[V2]]
-    // CHECK: rtgtest.rv32i.jalr [[V1]], [[V0]]
-    // CHECK: rtgtest.rv32i.jalr [[V3]], [[V1]]
-    // CHECK: rtgtest.rv32i.jalr [[V2]], [[V3]]
+    // CHECK: rtgtest.two_register_instr [[V0]], [[V2]]
+    // CHECK: rtgtest.two_register_instr [[V1]], [[V0]]
+    // CHECK: rtgtest.two_register_instr [[V3]], [[V1]]
+    // CHECK: rtgtest.two_register_instr [[V2]], [[V3]]
     %0 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
     %1 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
     %2 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
     %3 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
-    %imm = rtg.constant #rtg.isa.immediate<12, 0>
-    rtgtest.rv32i.jalr %0, %2, %imm
-    rtgtest.rv32i.jalr %1, %0, %imm
-    rtgtest.rv32i.jalr %3, %1, %imm
-    rtgtest.rv32i.jalr %2, %3, %imm
+    rtgtest.two_register_instr %0, %2
+    rtgtest.two_register_instr %1, %0
+    rtgtest.two_register_instr %3, %1
+    rtgtest.two_register_instr %2, %3
   }
 }
 
@@ -30,19 +29,18 @@ rtg.test @withFixedRegs() {
     // CHECK: [[V1:%.+]] = rtg.constant #rtgtest.s1
     // CHECK: [[V2:%.+]] = rtg.constant #rtgtest.s0
     // CHECK: [[V3:%.+]] = rtg.constant #rtgtest.ra
-    // CHECK: rtgtest.rv32i.jalr [[V0]], [[V2]]
-    // CHECK: rtgtest.rv32i.jalr [[V1]], [[V0]]
-    // CHECK: rtgtest.rv32i.jalr [[V3]], [[V1]]
-    // CHECK: rtgtest.rv32i.jalr [[V2]], [[V3]]
+    // CHECK: rtgtest.two_register_instr [[V0]], [[V2]]
+    // CHECK: rtgtest.two_register_instr [[V1]], [[V0]]
+    // CHECK: rtgtest.two_register_instr [[V3]], [[V1]]
+    // CHECK: rtgtest.two_register_instr [[V2]], [[V3]]
     %0 = rtg.constant #rtgtest.ra
     %1 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
     %2 = rtg.constant #rtgtest.s0
     %3 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
-    %imm = rtg.constant #rtg.isa.immediate<12, 0>
-    rtgtest.rv32i.jalr %0, %2, %imm
-    rtgtest.rv32i.jalr %1, %0, %imm
-    rtgtest.rv32i.jalr %3, %1, %imm
-    rtgtest.rv32i.jalr %2, %3, %imm
+    rtgtest.two_register_instr %0, %2
+    rtgtest.two_register_instr %1, %0
+    rtgtest.two_register_instr %3, %1
+    rtgtest.two_register_instr %2, %3
   }
 }
 
@@ -53,7 +51,7 @@ rtg.test @validation() {
     %default = rtg.constant #rtg.isa.immediate<32, 0>
     // CHECK: rtg.validate
     %0 = rtg.validate %reg, %default, "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
-    rtgtest.rv32i.lui %reg, %0 : !rtg.isa.immediate<32>
+    rtgtest.immediate_instr %reg, %0
   }
 }
 
@@ -63,12 +61,11 @@ rtg.test @spilling() {
   rtg.isa.segment text {
     // expected-note @below {{cannot choose 'ra' because of overlapping live-range with this register}}
     %0 = rtg.virtual_reg [#rtgtest.ra]
-    %imm = rtg.constant #rtg.isa.immediate<12, 0>
     // expected-error @below {{no register available for allocation within constraints}}
     %1 = rtg.virtual_reg [#rtgtest.ra]
     // expected-note @below {{live range starts here}}
     // expected-note @below {{live range ends here}}
-    rtgtest.rv32i.jalr %0, %1, %imm
+    rtgtest.two_register_instr %0, %1
   }
 }
 
@@ -79,13 +76,12 @@ rtg.test @nonOverlappingRanges() {
   rtg.isa.segment text {
     // CHECK: [[V0:%.+]] = rtg.constant #rtgtest.ra
     // CHECK: [[V1:%.+]] = rtg.constant #rtgtest.ra
-    // CHECK: rtgtest.rv32i.jalr [[V0]]
-    // CHECK: rtgtest.rv32i.jalr [[V1]]
+    // CHECK: rtgtest.two_register_instr [[V0]]
+    // CHECK: rtgtest.two_register_instr [[V1]]
     %0 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
     %1 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
-    %imm = rtg.constant #rtg.isa.immediate<12, 0>
-    rtgtest.rv32i.jalr %0, %0, %imm
-    rtgtest.rv32i.jalr %1, %1, %imm
+    rtgtest.two_register_instr %0, %0
+    rtgtest.two_register_instr %1, %1
   }
 }
 
@@ -101,9 +97,9 @@ rtg.test @registerConstraintsMultipleDependents() {
     // CHECK: [[V8:%.+]] = rtg.isa.index_to_register [[V6]]
     // CHECK: [[V3:%.+]] = rtg.constant #rtgtest.a0
     // CHECK: [[V4:%.+]] = rtg.constant #rtgtest.a1
-    // CHECK: rtgtest.rv32i.add [[V3]], [[V4]], [[V4]]
-    // CHECK: rtgtest.rv32i.add [[V0]], [[V7]], [[V8]]
-    // CHECK: rtgtest.rv32i.add [[V3]], [[V3]], [[V3]]
+    // CHECK: rtgtest.two_register_instr [[V3]], [[V4]]
+    // CHECK: rtgtest.three_register_instr [[V0]], [[V7]], [[V8]]
+    // CHECK: rtgtest.two_register_instr [[V3]], [[V3]]
     %0 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1, #rtgtest.a2]
     %idx = rtg.isa.register_to_index %0 : !rtgtest.ireg
     %c1 = index.constant 1
@@ -113,9 +109,9 @@ rtg.test @registerConstraintsMultipleDependents() {
     %2 = rtg.isa.index_to_register %idx2 : !rtgtest.ireg
     %3 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1, #rtgtest.a2]
     %4 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1, #rtgtest.a2]
-    rtgtest.rv32i.add %3, %4, %4
-    rtgtest.rv32i.add %0, %1, %2
-    rtgtest.rv32i.add %3, %3, %3
+    rtgtest.two_register_instr %3, %4
+    rtgtest.three_register_instr %0, %1, %2
+    rtgtest.two_register_instr %3, %3
   }
 }
 
@@ -124,23 +120,23 @@ rtg.test @multipleSegments() {
   rtg.isa.segment data {
     // Data segments are not visited
     %data_reg = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0]
-    rtgtest.rv32i.add %data_reg, %data_reg, %data_reg
+    rtgtest.two_register_instr %data_reg, %data_reg
   }
   rtg.isa.segment text {
     // CHECK: [[V0:%.+]] = rtg.constant #rtgtest.ra
     %0 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0]
     // CHECK: [[V1:%.+]] = rtg.constant #rtgtest.s0
     %1 = rtg.virtual_reg [#rtgtest.s0, #rtgtest.s1]
-    // CHECK: rtgtest.rv32i.add [[V0]], [[V0]], [[V1]]
-    rtgtest.rv32i.add %0, %0, %1
+    // CHECK: rtgtest.two_register_instr [[V0]], [[V1]]
+    rtgtest.two_register_instr %0, %1
   }
   rtg.isa.segment text {
     // CHECK: [[V0:%.+]] = rtg.constant #rtgtest.ra
     %0 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0]
     // CHECK: [[V1:%.+]] = rtg.constant #rtgtest.s0
     %1 = rtg.virtual_reg [#rtgtest.s0, #rtgtest.s1]
-    // CHECK: rtgtest.rv32i.add [[V0]], [[V0]], [[V1]]
-    rtgtest.rv32i.add %0, %0, %1
+    // CHECK: rtgtest.two_register_instr [[V0]], [[V1]]
+    rtgtest.two_register_instr %0, %1
   }
 }
 
@@ -151,23 +147,23 @@ rtg.test @noUsers() {
     %unused = rtg.virtual_reg [#rtgtest.ra]
     // CHECK: [[V0:%.+]] = rtg.constant #rtgtest.ra
     %0 = rtg.virtual_reg [#rtgtest.ra]
-    // CHECK: rtgtest.rv32i.add [[V0]], [[V0]], [[V0]]
-    rtgtest.rv32i.add %0, %0, %0
+    // CHECK: rtgtest.two_register_instr [[V0]], [[V0]]
+    rtgtest.two_register_instr %0, %0
   }
 }
 
 // CHECK-LABEL: @constraintOpSuccess
 rtg.test @constraintOpSuccess() {
   rtg.isa.segment text {
-    // CHECK: [[V0:%.+]] = rtg.constant #rtgtest.s2
-    %0 = rtg.virtual_reg [#rtgtest.s1, #rtgtest.s2]
+    // CHECK: [[V0:%.+]] = rtg.constant #rtgtest.a0
+    %0 = rtg.virtual_reg [#rtgtest.s1, #rtgtest.a0]
     %idx = rtg.isa.register_to_index %0 : !rtgtest.ireg
     %c0 = index.constant 0
     %c2 = index.constant 2
     %mod2 = index.remu %idx, %c2
     %even = index.cmp eq(%mod2, %c0)
     rtg.constraint %even
-    rtgtest.rv32i.add %0, %0, %0
+    rtgtest.two_register_instr %0, %0
   }
 }
 
@@ -189,11 +185,11 @@ rtg.test @registerConstraintsMultipleDependents() {
     // expected-error @below {{no register available for allocation within constraints}}
     %3 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1, #rtgtest.a2]
     %4 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1, #rtgtest.a2]
-    rtgtest.rv32i.add %0, %1, %2
+    rtgtest.three_register_instr %0, %1, %2
     // expected-note @below {{live range starts here}}
     // expected-note @below {{live range ends here}}
-    rtgtest.rv32i.add %0, %4, %3
-    rtgtest.rv32i.add %0, %1, %2
+    rtgtest.three_register_instr %0, %4, %3
+    rtgtest.three_register_instr %0, %1, %2
   }
 }
 
@@ -212,6 +208,6 @@ rtg.test @constraintViolation() {
     rtg.constraint %is_impossible
     // expected-note @below {{live range starts here}}
     // expected-note @below {{live range ends here}}
-    rtgtest.rv32i.add %0, %0, %0
+    rtgtest.two_register_instr %0, %0
   }
 }

@@ -1,27 +1,27 @@
 // RUN: circt-opt --rtg-inline-sequences=fail-on-remaining=true --split-input-file --verify-diagnostics --mlir-print-debuginfo --mlir-print-local-scope %s | FileCheck %s
 
 rtg.sequence @seq0() {
-  rtgtest.rv32i.ebreak
-  rtgtest.rv32i.ebreak
+  rtgtest.zero_operand_instr {a}
+  rtgtest.zero_operand_instr {a}
 }
 
 rtg.sequence @seq1() {
-  rtgtest.rv32i.ecall
-  rtgtest.rv32i.ecall
+  rtgtest.zero_operand_instr {b}
+  rtgtest.zero_operand_instr {b}
 }
 
 // CHECK-LABEL: @inlineSequences
 rtg.test @inlineSequences() {
-  // CHECK-NEXT: rtgtest.rv32i.ecall
-  // CHECK-NEXT: rtgtest.rv32i.ebreak loc("loc_0")
-  // CHECK-NEXT: rtgtest.rv32i.ebreak loc("loc_0")
-  // CHECK-NEXT: rtgtest.rv32i.ecall
+  // CHECK-NEXT: rtgtest.zero_operand_instr {b}
+  // CHECK-NEXT: rtgtest.zero_operand_instr {a} loc("loc_0")
+  // CHECK-NEXT: rtgtest.zero_operand_instr {a} loc("loc_0")
+  // CHECK-NEXT: rtgtest.zero_operand_instr {b}
   // CHECK-NEXT: }
   %0 = rtg.get_sequence @seq0 : !rtg.sequence
   %1 = rtg.randomize_sequence %0
-  rtgtest.rv32i.ecall
+  rtgtest.zero_operand_instr {b}
   rtg.embed_sequence %1 loc("loc_0")
-  rtgtest.rv32i.ecall
+  rtgtest.zero_operand_instr {b}
 }
 
 // CHECK-LABEL: @interleaveSequences
@@ -31,26 +31,26 @@ rtg.test @interleaveSequences() {
   %2 = rtg.randomize_sequence %0
   %3 = rtg.randomize_sequence %1
 
-  // CHECK-NEXT: rtgtest.rv32i.ebreak
-  // CHECK-NEXT: rtgtest.rv32i.ebreak
-  // CHECK-NEXT: rtgtest.rv32i.ecall
-  // CHECK-NEXT: rtgtest.rv32i.ecall
+  // CHECK-NEXT: rtgtest.zero_operand_instr {a}
+  // CHECK-NEXT: rtgtest.zero_operand_instr {a}
+  // CHECK-NEXT: rtgtest.zero_operand_instr {b}
+  // CHECK-NEXT: rtgtest.zero_operand_instr {b}
   %4 = rtg.interleave_sequences %2, %3 batch 2
   rtg.embed_sequence %4
 
-  // CHECK-NEXT: rtgtest.rv32i.ebreak
-  // CHECK-NEXT: rtgtest.rv32i.ecall
-  // CHECK-NEXT: rtgtest.rv32i.ebreak
-  // CHECK-NEXT: rtgtest.rv32i.ecall
+  // CHECK-NEXT: rtgtest.zero_operand_instr {a}
+  // CHECK-NEXT: rtgtest.zero_operand_instr {b}
+  // CHECK-NEXT: rtgtest.zero_operand_instr {a}
+  // CHECK-NEXT: rtgtest.zero_operand_instr {b}
   %5 = rtg.interleave_sequences %2, %3
   rtg.embed_sequence %5
 
-  // CHECK-NEXT: rtgtest.rv32i.ebreak
-  // CHECK-NEXT: rtgtest.rv32i.ecall
-  // CHECK-NEXT: rtgtest.rv32i.ecall
-  // CHECK-NEXT: rtgtest.rv32i.ecall
-  // CHECK-NEXT: rtgtest.rv32i.ebreak
-  // CHECK-NEXT: rtgtest.rv32i.ecall
+  // CHECK-NEXT: rtgtest.zero_operand_instr {a}
+  // CHECK-NEXT: rtgtest.zero_operand_instr {b}
+  // CHECK-NEXT: rtgtest.zero_operand_instr {b}
+  // CHECK-NEXT: rtgtest.zero_operand_instr {b}
+  // CHECK-NEXT: rtgtest.zero_operand_instr {a}
+  // CHECK-NEXT: rtgtest.zero_operand_instr {b}
   %6 = rtg.interleave_sequences %2, %3
   %7 = rtg.interleave_sequences %6, %3
   rtg.embed_sequence %7
@@ -61,8 +61,7 @@ rtg.test @interleaveSequences() {
 rtg.sequence @nested0() {
   %ra = rtg.constant #rtgtest.ra
   %sp = rtg.constant #rtgtest.s0
-  %imm = rtg.constant #rtg.isa.immediate<12, 1>
-  rtgtest.rv32i.jalr %ra, %sp, %imm
+  rtgtest.two_register_instr %ra, %sp
 }
 
 rtg.sequence @nested1() {
@@ -71,45 +70,39 @@ rtg.sequence @nested1() {
   rtg.embed_sequence %1
   %ra = rtg.constant #rtgtest.ra
   %sp = rtg.constant #rtgtest.sp
-  %imm = rtg.constant #rtg.isa.immediate<12, 0>
-  rtgtest.rv32i.jalr %ra, %sp, %imm
+  rtgtest.two_register_instr %ra, %sp
 }
 
 // CHECK-LABEL: @nestedSequences()
 rtg.test @nestedSequences() {
   // CHECK-NEXT: [[RA0:%.+]] = rtg.constant #rtgtest.ra : !rtgtest.ireg
   // CHECK-NEXT: [[S0:%.+]] = rtg.constant #rtgtest.s0 : !rtgtest.ireg
-  // CHECK-NEXT: [[IMM1:%.+]] = rtg.constant #rtg.isa.immediate<12, 1>
-  // CHECK-NEXT: rtgtest.rv32i.jalr [[RA0]], [[S0]], [[IMM1]]
+  // CHECK-NEXT: rtgtest.two_register_instr [[RA0]], [[S0]]
   // CHECK-NEXT: [[RA1:%.+]] = rtg.constant #rtgtest.ra : !rtgtest.ireg
   // CHECK-NEXT: [[SP:%.+]] = rtg.constant #rtgtest.sp : !rtgtest.ireg
-  // CHECK-NEXT: [[IMM0:%.+]] = rtg.constant #rtg.isa.immediate<12, 0>
-  // CHECK-NEXT: rtgtest.rv32i.jalr [[RA1]], [[SP]], [[IMM0]]
+  // CHECK-NEXT: rtgtest.two_register_instr [[RA1]], [[SP]]
   %0 = rtg.get_sequence @nested1 : !rtg.sequence
   %1 = rtg.randomize_sequence %0
   rtg.embed_sequence %1
 }
 
-rtg.sequence @seqWithArgs(%imm: !rtg.isa.immediate<12>, %seq: !rtg.randomized_sequence) {
+rtg.sequence @seqWithArgs(%seq: !rtg.randomized_sequence) {
   %sp = rtg.constant #rtgtest.sp
-  rtgtest.rv32i.jalr %sp, %sp, %imm
+  rtgtest.two_register_instr %sp, %sp
   rtg.embed_sequence %seq
 }
 
 // CHECK-LABEL: @substitutions
 rtg.test @substitutions() {
-  // CHECK-NEXT: [[IMM0:%.+]] = rtg.constant #rtg.isa.immediate<12, 0> : !rtg.isa.immediate<12>
   // CHECK-NEXT: [[SP:%.+]] = rtg.constant #rtgtest.sp : !rtgtest.ireg
-  // CHECK-NEXT: rtgtest.rv32i.jalr [[SP]], [[SP]], [[IMM0]]
+  // CHECK-NEXT: rtgtest.two_register_instr [[SP]], [[SP]]
   // CHECK-NEXT: [[RA:%.+]] = rtg.constant #rtgtest.ra : !rtgtest.ireg
   // CHECK-NEXT: [[S0:%.+]] = rtg.constant #rtgtest.s0 : !rtgtest.ireg
-  // CHECK-NEXT: [[IMM1:%.+]] = rtg.constant #rtg.isa.immediate<12, 1> : !rtg.isa.immediate<12>
-  // CHECK-NEXT: rtgtest.rv32i.jalr [[RA]], [[S0]], [[IMM1]]
-  %imm = rtg.constant #rtg.isa.immediate<12, 0>
-  %0 = rtg.get_sequence @seqWithArgs : !rtg.sequence<!rtg.isa.immediate<12>, !rtg.randomized_sequence>
+  // CHECK-NEXT: rtgtest.two_register_instr [[RA]], [[S0]]
+  %0 = rtg.get_sequence @seqWithArgs : !rtg.sequence<!rtg.randomized_sequence>
   %1 = rtg.get_sequence @nested0 : !rtg.sequence
   %2 = rtg.randomize_sequence %1
-  %3 = rtg.substitute_sequence %0(%imm, %2) : !rtg.sequence<!rtg.isa.immediate<12>, !rtg.randomized_sequence>
+  %3 = rtg.substitute_sequence %0(%2) : !rtg.sequence<!rtg.randomized_sequence>
   %4 = rtg.randomize_sequence %3
   rtg.embed_sequence %4
 }
@@ -118,8 +111,8 @@ rtg.test @substitutions() {
 rtg.test @nestedRegion() {
   // CHECK-NEXT: scf.execute_region {
   scf.execute_region {
-    // CHECK-NEXT: rtgtest.rv32i.ebreak
-    // CHECK-NEXT: rtgtest.rv32i.ebreak
+    // CHECK-NEXT: rtgtest.zero_operand_instr {a}
+    // CHECK-NEXT: rtgtest.zero_operand_instr {a}
     // CHECK-NEXT: scf.yield
     %0 = rtg.get_sequence @seq0 : !rtg.sequence
     %1 = rtg.randomize_sequence %0

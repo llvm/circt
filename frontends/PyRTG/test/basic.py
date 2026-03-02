@@ -294,58 +294,44 @@ def test2_labels(config):
 # MLIR-NEXT: [[V0:%.+]] = rtg.constant #rtg.isa.immediate<32, 286331153> : !rtg.isa.immediate<32>
 # MLIR-NEXT: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<32, -2147483648> : !rtg.isa.immediate<32>
 # MLIR-NEXT: [[V2:%.+]] = rtg.constant #rtg.isa.immediate<32, 2147483647> : !rtg.isa.immediate<32>
-# MLIR-NEXT: %idx2097151 = index.constant 2097151
+# MLIR-NEXT: %idx4294967295 = index.constant 4294967295
 # MLIR-NEXT: %idx0 = index.constant 0
-# MLIR-NEXT: [[IMM32:%.+]] = rtg.constant #rtg.isa.immediate<32, 32>
-# MLIR-NEXT: [[IMM21:%.+]] = rtg.constant #rtg.isa.immediate<21, 16>
-# MLIR-NEXT: [[IMM13:%.+]] = rtg.constant #rtg.isa.immediate<13, 9>
-# MLIR-NEXT: [[T2:%.+]] = rtg.constant #rtgtest.t2 : !rtgtest.ireg
-# MLIR-NEXT: [[IMM5:%.+]] = rtg.constant #rtg.isa.immediate<5, 4>
-# MLIR-NEXT: [[T1:%.+]] = rtg.constant #rtgtest.t1 : !rtgtest.ireg
-# MLIR-NEXT: [[IMM12:%.+]] = rtg.constant #rtg.isa.immediate<12, 8>
 # MLIR-NEXT: [[T0:%.+]] = rtg.constant #rtgtest.t0 : !rtgtest.ireg
-# MLIR-NEXT: [[VREG:%.+]] = rtg.virtual_reg [#rtgtest.t0 : !rtgtest.ireg, #rtgtest.t1 : !rtgtest.ireg, #rtgtest.t2 : !rtgtest.ireg, #rtgtest.t3 : !rtgtest.ireg, #rtgtest.t4 : !rtgtest.ireg, #rtgtest.t5 : !rtgtest.ireg, #rtgtest.t6 : !rtgtest.ireg, #rtgtest.a7 : !rtgtest.ireg, #rtgtest.a6 : !rtgtest.ireg, #rtgtest.a5 : !rtgtest.ireg, #rtgtest.a4 : !rtgtest.ireg, #rtgtest.a3 : !rtgtest.ireg, #rtgtest.a2 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg, #rtgtest.a0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg, #rtgtest.s2 : !rtgtest.ireg, #rtgtest.s3 : !rtgtest.ireg, #rtgtest.s4 : !rtgtest.ireg, #rtgtest.s5 : !rtgtest.ireg, #rtgtest.s6 : !rtgtest.ireg, #rtgtest.s7 : !rtgtest.ireg, #rtgtest.s8 : !rtgtest.ireg, #rtgtest.s9 : !rtgtest.ireg, #rtgtest.s10 : !rtgtest.ireg, #rtgtest.s11 : !rtgtest.ireg, #rtgtest.s0 : !rtgtest.ireg, #rtgtest.ra : !rtgtest.ireg, #rtgtest.sp : !rtgtest.ireg]
-# MLIR-NEXT: rtgtest.rv32i.addi [[VREG]], [[T0]], [[IMM12]]
-# MLIR-NEXT: rtgtest.rv32i.slli [[VREG]], [[T1]], [[IMM5]]
-# MLIR-NEXT: rtgtest.rv32i.beq [[VREG]], [[T2]], [[IMM13]] : !rtg.isa.immediate<13>
-# MLIR-NEXT: rtgtest.rv32i.jal [[VREG]], [[IMM21]] : !rtg.isa.immediate<21>
-# MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[IMM32]] : !rtg.isa.immediate<32>
-# MLIR-NEXT: [[RND:%.+]] = rtg.random_number_in_range [%idx0, %idx2097151]
+# MLIR-NEXT: [[IMM32:%.+]] = rtg.constant #rtg.isa.immediate<32, 3>
+# MLIR-NEXT: [[VREG:%.+]] = rtg.virtual_reg [#rtgtest.t0 : !rtgtest.ireg, #rtgtest.t1 : !rtgtest.ireg, #rtgtest.t2 : !rtgtest.ireg, #rtgtest.a5 : !rtgtest.ireg, #rtgtest.a4 : !rtgtest.ireg, #rtgtest.a3 : !rtgtest.ireg, #rtgtest.a2 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg, #rtgtest.a0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg, #rtgtest.s0 : !rtgtest.ireg, #rtgtest.ra : !rtgtest.ireg, #rtgtest.sp : !rtgtest.ireg]
+# MLIR-NEXT: rtgtest.immediate_instr [[VREG]], [[IMM32]]
+# MLIR-NEXT: rtgtest.two_register_instr [[VREG]], [[T0]]
+# MLIR-NEXT: [[RND:%.+]] = rtg.random_number_in_range [%idx0, %idx4294967295]
 # MLIR-NEXT: [[RND_IMM:%.+]] = rtg.isa.int_to_immediate [[RND]]
-# MLIR-NEXT: rtgtest.rv32i.jal [[VREG]], [[RND_IMM]] : !rtg.isa.immediate<21>
-# MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[V0]] : !rtg.isa.immediate<32>
-# MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[V2]] : !rtg.isa.immediate<32>
-# MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[V1]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtgtest.immediate_instr [[VREG]], [[RND_IMM]]
+# MLIR-NEXT: rtgtest.immediate_instr [[VREG]], [[V0]]
+# MLIR-NEXT: rtgtest.immediate_instr [[VREG]], [[V2]]
+# MLIR-NEXT: rtgtest.immediate_instr [[VREG]], [[V1]]
 # MLIR-NEXT: }
 
 
 @test(Singleton)
 def test3_registers_and_immediates(config):
   vreg = IntegerRegister.virtual()
-  imm12 = Immediate(12, 8)
-  rtgtest.ADDI(vreg, IntegerRegister.t0(), imm12)
-  rtgtest.SLLI(vreg, IntegerRegister.t1(), Immediate(5, 4))
-  rtgtest.BEQ(vreg, IntegerRegister.t2(), Immediate(13, 9))
-  rtgtest.JAL(vreg, Immediate(21, 16))
-  rtgtest.AUIPC(vreg, Immediate(32, 32))
-  rtgtest.JAL(vreg, Immediate.random(21))
+  rtgtest.ImmediateInstrOp(vreg, Immediate(32, 3))
+  rtgtest.TwoRegisterInstrOp(vreg, IntegerRegister.t0())
+  rtgtest.ImmediateInstrOp(vreg, Immediate.random(32))
   imm4 = Immediate(4, 1)
-  rtgtest.AUIPC(vreg, imm4.replicate(8))
-  rtgtest.AUIPC(vreg, Immediate.smax(32))
-  rtgtest.AUIPC(vreg, Immediate.smin(32))
+  rtgtest.ImmediateInstrOp(vreg, imm4.replicate(8))
+  rtgtest.ImmediateInstrOp(vreg, Immediate.smax(32))
+  rtgtest.ImmediateInstrOp(vreg, Immediate.smin(32))
 
 
 # MLIR-LABEL: rtg.test @test4_integer_to_immediate()
 # MLIR-NEXT: [[V0:%.+]] = rtg.constant
 # MLIR-NEXT: [[V1:%.+]] = index.constant 2
-# MLIR-NEXT: [[V2:%.+]] = rtg.isa.int_to_immediate [[V1]] : !rtg.isa.immediate<12>
-# MLIR-NEXT: rtgtest.rv32i.addi [[V0]], [[V0]], [[V2]]
+# MLIR-NEXT: [[V2:%.+]] = rtg.isa.int_to_immediate [[V1]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtgtest.immediate_instr [[V0]], [[V2]]
 
 
 @test(Singleton)
 def test4_integer_to_immediate(config):
-  rtgtest.ADDI(IntegerRegister.t0(), IntegerRegister.t0(),
-               Immediate(12, Integer(2)))
+  rtgtest.ImmediateInstrOp(IntegerRegister.t0(), Immediate(32, Integer(2)))
 
 
 # MLIR-LABEL: rtg.test @test6_memories
@@ -355,13 +341,13 @@ def test4_integer_to_immediate(config):
 # MLIR-NEXT: [[MEM:%.+]] = rtg.isa.memory_alloc %mem_blk, [[IDX8]], [[IDX4]] : !rtg.isa.memory_block<32>
 # MLIR-NEXT: [[SIZE:%.+]] = rtg.isa.memory_size [[MEM]] : !rtg.isa.memory<32>
 # MLIR-NEXT: [[IMM:%.+]] = rtg.isa.int_to_immediate [[SIZE]] : !rtg.isa.immediate<32>
-# MLIR-NEXT: rtgtest.rv32i.auipc [[REG]], [[IMM]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtgtest.immediate_instr [[REG]], [[IMM]]
 
 
 @test(Tgt2)
 def test6_memories(config):
   mem = Memory.alloc(config.mem_blk, size=8, align=4)
-  rtgtest.AUIPC(IntegerRegister.t0(), Immediate(32, mem.size()))
+  rtgtest.ImmediateInstrOp(IntegerRegister.t0(), Immediate(32, mem.size()))
 
 
 # MLIR-LABEL: rtg.test @test7_bools

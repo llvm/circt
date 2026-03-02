@@ -72,22 +72,6 @@ def RegA2Attr   : IntegerRegisterAttrBase<"RegA2", "a2", 12>;
 def RegA3Attr   : IntegerRegisterAttrBase<"RegA3", "a3", 13>;
 def RegA4Attr   : IntegerRegisterAttrBase<"RegA4", "a4", 14>;
 def RegA5Attr   : IntegerRegisterAttrBase<"RegA5", "a5", 15>;
-def RegA6Attr   : IntegerRegisterAttrBase<"RegA6", "a6", 16>;
-def RegA7Attr   : IntegerRegisterAttrBase<"RegA7", "a7", 17>;
-def RegS2Attr   : IntegerRegisterAttrBase<"RegS2", "s2", 18>;
-def RegS3Attr   : IntegerRegisterAttrBase<"RegS3", "s3", 19>;
-def RegS4Attr   : IntegerRegisterAttrBase<"RegS4", "s4", 20>;
-def RegS5Attr   : IntegerRegisterAttrBase<"RegS5", "s5", 21>;
-def RegS6Attr   : IntegerRegisterAttrBase<"RegS6", "s6", 22>;
-def RegS7Attr   : IntegerRegisterAttrBase<"RegS7", "s7", 23>;
-def RegS8Attr   : IntegerRegisterAttrBase<"RegS8", "s8", 24>;
-def RegS9Attr   : IntegerRegisterAttrBase<"RegS9", "s9", 25>;
-def RegS10Attr  : IntegerRegisterAttrBase<"RegS10", "s10", 26>;
-def RegS11Attr  : IntegerRegisterAttrBase<"RegS11", "s11", 27>;
-def RegT3Attr   : IntegerRegisterAttrBase<"RegT3", "t3", 28>;
-def RegT4Attr   : IntegerRegisterAttrBase<"RegT4", "t4", 29>;
-def RegT5Attr   : IntegerRegisterAttrBase<"RegT5", "t5", 30>;
-def RegT6Attr   : IntegerRegisterAttrBase<"RegT6", "t6", 31>;
 
 class FloatRegisterAttrBase<string cppName, string name, int classIndex>
   : RTGTestAttrDef<cppName, [RegisterAttrInterface]> {

@@ -32,13 +32,7 @@ class IntegerRegister(Value):
             rtgtest.RegT0Attr.get(),
             rtgtest.RegT1Attr.get(),
             rtgtest.RegT2Attr.get(),
-            rtgtest.RegT3Attr.get(),
-            rtgtest.RegT4Attr.get(),
-            rtgtest.RegT5Attr.get(),
-            rtgtest.RegT6Attr.get(),
             # Function arguments in reverse order
-            rtgtest.RegA7Attr.get(),
-            rtgtest.RegA6Attr.get(),
             rtgtest.RegA5Attr.get(),
             rtgtest.RegA4Attr.get(),
             rtgtest.RegA3Attr.get(),
@@ -47,16 +41,6 @@ class IntegerRegister(Value):
             rtgtest.RegA0Attr.get(),
             # Callee saved temporaries
             rtgtest.RegS1Attr.get(),
-            rtgtest.RegS2Attr.get(),
-            rtgtest.RegS3Attr.get(),
-            rtgtest.RegS4Attr.get(),
-            rtgtest.RegS5Attr.get(),
-            rtgtest.RegS6Attr.get(),
-            rtgtest.RegS7Attr.get(),
-            rtgtest.RegS8Attr.get(),
-            rtgtest.RegS9Attr.get(),
-            rtgtest.RegS10Attr.get(),
-            rtgtest.RegS11Attr.get(),
             # Some special registers last
             rtgtest.RegS0Attr.get(),
             rtgtest.RegRaAttr.get(),
@@ -110,54 +94,6 @@ class IntegerRegister(Value):
 
   def a5() -> IntegerRegister:
     return rtg.ConstantOp(rtgtest.RegA5Attr.get())
-
-  def a6() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegA6Attr.get())
-
-  def a7() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegA7Attr.get())
-
-  def s2() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS2Attr.get())
-
-  def s3() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS3Attr.get())
-
-  def s4() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS4Attr.get())
-
-  def s5() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS5Attr.get())
-
-  def s6() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS6Attr.get())
-
-  def s7() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS7Attr.get())
-
-  def s8() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS8Attr.get())
-
-  def s9() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS9Attr.get())
-
-  def s10() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS10Attr.get())
-
-  def s11() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegS11Attr.get())
-
-  def t3() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegT3Attr.get())
-
-  def t4() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegT4Attr.get())
-
-  def t5() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegT5Attr.get())
-
-  def t6() -> IntegerRegister:
-    return rtg.ConstantOp(rtgtest.RegT6Attr.get())
 
   def to_string(self) -> String:
     """
