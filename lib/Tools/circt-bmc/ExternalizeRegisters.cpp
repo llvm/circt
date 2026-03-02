@@ -178,7 +178,8 @@ void ExternalizeRegistersPass::runOnOperation() {
               builder.getArrayAttr(resultNames), instanceOp.getParametersAttr(),
               instanceOp.getInnerSymAttr(), instanceOp.getDoNotPrintAttr());
 
-          for (auto [i, clockPortIdx] : llvm::enumerate(childClockPortIndices)) {
+          for (auto [i, clockPortIdx] :
+               llvm::enumerate(childClockPortIndices)) {
             auto clockVal = newInst.getOperand(clockPortIdx);
             auto nextVal = newInst.getResult(instanceOp->getNumResults() + i);
             verif::ClockedByOp::create(builder, instanceOp.getLoc(), clockVal,

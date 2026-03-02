@@ -438,11 +438,12 @@ struct VerifBoundedModelCheckingOpConversion
         // that drives it. We need this mapping so we can correctly route
         // We extract this mapping now and then immediately erase the
         // verif.clocked_by ops because they are auxiliary metadata operations
-        // that the downstream SMT dialect converter does not know how to legalize.
+        // that the downstream SMT dialect converter does not know how to
+        // legalize.
         auto &circuitBlock = circuitFuncOp.getBody().front();
         auto *circuitYield = circuitBlock.getTerminator();
-        for (auto clockedBy :
-             llvm::make_early_inc_range(circuitBlock.getOps<verif::ClockedByOp>())) {
+        for (auto clockedBy : llvm::make_early_inc_range(
+                 circuitBlock.getOps<verif::ClockedByOp>())) {
           auto nextState = clockedBy.getNextState();
           auto clockArg = cast<BlockArgument>(clockedBy.getClock());
           unsigned nextStateIdx = 0;
@@ -670,10 +671,11 @@ struct VerifBoundedModelCheckingOpConversion
                 clockIdx = clockIndexes[0];
               auto isPosedge = isPosedgePerClock[clockIdx];
               // Create an ITE (If-Then-Else) to calculate the next reg state.
-              // For multi-clock designs, each register's next-state update is strictly
-              // gated by the specific `isPosedge` condition of the clock that drives it.
-              // If a register's specific clock didn't tick in this SMT frame, the ITE
-              // forces it to hold its previous state.
+              // For multi-clock designs, each register's next-state update is
+              // strictly gated by the specific `isPosedge` condition of the
+              // clock that drives it. If a register's specific clock didn't
+              // tick in this SMT frame, the ITE forces it to hold its previous
+              // state.
               // TODO: we create a lot of ITEs here that will slow things down
               // - these could be avoided by making init/loop regions concrete
               nextRegStates.push_back(smt::IteOp::create(
