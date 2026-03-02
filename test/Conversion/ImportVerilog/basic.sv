@@ -4099,6 +4099,53 @@ module QueueUnboundedLiteralTest;
 endmodule
 
 
+// CHECK-LABEL: moore.module @ContinuousProceduralAssign(in %clear : !moore.l1, in %preset : !moore.l1) {
+module ContinuousProceduralAssign (
+  input clear, 
+  input preset
+);
+  
+  // CHECK: [[Q:%.+]] = moore.variable : <l1>
+  logic q;
+
+  always @(clear or preset)
+    if (!clear)
+      // CHECK:       [[ZERO:%.+]] = moore.constant 0 : l1
+      // CHECK: moore.procedural_assign [[Q]], [[ZERO]] : l1
+      assign q = 0;
+    else if (!preset)
+      // CHECK:       [[ONE:%.+]] = moore.constant 1 : l1
+      // CHECK: moore.procedural_assign [[Q]], [[ONE]] : l1
+      assign q = 1;
+    else
+      // CHECK: moore.procedural_deassign [[Q]] : <l1>
+      deassign q;
+
+endmodule
+
+// CHECK-LABEL: moore.module @ContinuousProceduralForce(in %clear : !moore.l1, in %preset : !moore.l1) {
+module ContinuousProceduralForce (
+  input clear, 
+  input preset
+);
+  
+  // CHECK: [[Q:%.+]] = moore.variable : <l1>
+  logic q;
+
+  always @(clear or preset)
+    if (!clear)
+      // CHECK:       [[ZERO:%.+]] = moore.constant 0 : l1
+      // CHECK: moore.force [[Q]], [[ZERO]] : l1
+      force q = 0;
+    else if (!preset)
+      // CHECK:       [[ONE:%.+]] = moore.constant 1 : l1
+      // CHECK: moore.force [[Q]], [[ONE]] : l1
+      force q = 1;
+    else
+      // CHECK: moore.release [[Q]] : <l1>
+      release q;
+
+endmodule
 
 
 // CHECK-LABEL: moore.module @ForkJoinTest() {

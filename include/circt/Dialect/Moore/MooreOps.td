@@ -390,6 +390,14 @@ class DelayedAssignOpBase<string mnemonic, list<Trait> traits = []> :
   }];
 }
 
+class DeassignOpBase<string mnemonic, list<Trait> traits = []> : 
+    MooreOp<mnemonic, traits> {
+  let arguments = (ins RefType:$dst);
+  let assemblyFormat = [{
+    $dst attr-dict `:` type($dst)
+  }];
+}
+
 // Continuous assignment
 
 def ContinuousAssignOp : AssignOpBase<"assign", [HasParent<"SVModuleOp">]> {
@@ -456,6 +464,68 @@ def DelayedNonBlockingAssignOp :
 
     See the `moore.nonblocking_assign` op.
     See IEEE 1800-2017 § 9.4.5 "Intra-assignment timing controls".
+  }];
+}
+
+// Procedural continuous assignment
+
+def ProceduralContinuousAssignOp : AssignOpBase<"procedural_assign", [
+    HasParent<"ProcedureOp">
+  ]> {
+  let summary = "Procedural continuous assignment (keyword: assign)";
+  let description = [{
+    A continuous assignment in procedure scope, such as `assign x = y;`, which
+    continuously drives the value on the right-hand side onto the LHS.
+
+    LHS of assignment is a variable reference or a concatenation of variables.
+
+    See IEEE 1800-2023 § 10.6.1 "The assign and deassign procedural statements".
+  }];
+}
+
+def ProceduralContinuousForceOp : AssignOpBase<"force", [
+    HasParent<"ProcedureOp">
+  ]> {
+  let summary = "Procedural continuous assignment (keyword: force)";
+  let description = [{
+    A continuous assignment in procedure scope, such as `force x = y;`, which
+    continuously drives the value on the right-hand side onto the LHS.
+
+    LHS of assignment is a variable reference, a net, a constant bit-select or 
+    part-select of a vector net, or a concatenation of these.
+
+    It overrides an `assign` procedural continuous assignment.
+
+    See IEEE 1800-2023 § 10.6.2 "The force and release procedural statements".
+  }];
+}
+
+def ProceduralContinuousDeassignOp : DeassignOpBase<"procedural_deassign", [
+    HasParent<"ProcedureOp">
+  ]> {
+  let summary = "Procedural continuous deassignment (keyword: deassign)";
+  let description = [{
+    Deassignment of a continuous assignment in procedure scope, such as `deassign x;`.
+    
+    The value of the variable shall remain the same until the variable is assigned a
+    new value (through a procedural or procedural continuous assignment).
+
+    See IEEE 1800-2023 § 10.6.1 "The assign and deassign procedural statements".
+  }];
+}
+
+def ProceduralContinuousReleaseOp : DeassignOpBase<"release", [
+    HasParent<"ProcedureOp">
+  ]> {
+  let summary = "Procedural continuous deassignment (keyword: release)";
+  let description = [{
+    Deassignment of a continuous assignment in procedure scope, such as `release x;`.
+    
+    If the variable is driven by a continuous assignment or currently has an active 
+    `assign` procedural continuous assignment, then it shall re-establish that 
+    assignment. Otherwise, 
+
+    See IEEE 1800-2023 § 10.6.2 "The force and release procedural statements".
   }];
 }
 
