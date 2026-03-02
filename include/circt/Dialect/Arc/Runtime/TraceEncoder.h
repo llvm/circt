@@ -34,9 +34,12 @@ namespace circt::arc::runtime::impl {
 /// Helper for marking time steps within a trace buffer
 struct TraceBufferMarker {
   TraceBufferMarker() = delete;
-  explicit TraceBufferMarker(uint32_t offset) : offset(offset), numSteps(1) {}
+  explicit TraceBufferMarker(uint32_t offset, uint64_t simTime)
+      : offset(offset), simTime(simTime), numSteps(1) {}
   /// Offset within the buffer in number of elements
   uint32_t offset;
+  /// Simulation time in femtoseconds at this marker
+  uint64_t simTime;
   /// Number of time steps to advance at the given offset
   uint32_t numSteps;
 };
@@ -65,6 +68,8 @@ public:
   uint32_t size = 0;
   /// Time step of the buffer's first entry
   int64_t firstStep = -1;
+  /// Simulation time in femtoseconds at the buffer's first entry
+  uint64_t firstSimTime = 0;
   /// Time step markers
   std::vector<TraceBufferMarker> stepMarkers;
 
@@ -75,6 +80,7 @@ public:
   void clear() {
     size = 0;
     firstStep = -1;
+    firstSimTime = 0;
     stepMarkers.clear();
   }
 
@@ -149,6 +155,8 @@ private:
 
   /// Current simulation time step
   int64_t timeStep;
+  /// Current simulation time in femtoseconds
+  uint64_t simTime;
 
   /// Trace encoder worker thread. If empty, tracing is disabled.
   std::optional<std::thread> worker;
