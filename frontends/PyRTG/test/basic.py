@@ -206,11 +206,10 @@ def test1_args(config):
 # ELABORATED-NEXT: rtg.label local [[LBL3]]
 # ELABORATED-NEXT: rtg.label local [[L2]]
 # ELABORATED-NEXT: rtg.label local [[L0]]
-# ELABORATED-NEXT: rtg.label local [[L1]]
 # ELABORATED-NEXT: [[L0_2:%.+]] = rtg.constant #rtg.isa.label<"l0">
 # ELABORATED-NEXT: rtg.label local [[L0_2]]
-# ELABORATED-NEXT: [[L0_3:%.+]] = rtg.constant #rtg.isa.label<"l0">
-# ELABORATED-NEXT: rtg.label local [[L0_3]]
+# ELABORATED-NEXT: rtg.label local [[L1]]
+# ELABORATED-NEXT: rtg.label local [[L1]]
 # ELABORATED-NEXT: [[L5:%.+]] = rtg.constant #rtg.isa.label<"s1">
 # ELABORATED-NEXT: rtg.label local [[L5]]
 # ELABORATED-NEXT: }
@@ -226,9 +225,9 @@ def test1_args(config):
 # ASM-NEXT: L_3:
 # ASM-NEXT: l1_1:
 # ASM-NEXT: l0:
+# ASM-NEXT: l0:
 # ASM-NEXT: l1_0:
-# ASM-NEXT: l0:
-# ASM-NEXT: l0:
+# ASM-NEXT: l1_0:
 # ASM-NEXT: s1:
 # ASM: End of test 'test2_labels
 
