@@ -3603,6 +3603,12 @@ private:
   /// location information tracking.
   SmallPtrSetImpl<Operation *> &emittedOps;
 
+  /// Current clock context from enclosing ltl.clock op. Used to verify that
+  /// ltl.delay ops have consistent clocks, since SVA does not support
+  /// per-delay clocks.
+  Value currentClock;
+  std::optional<ltl::ClockEdge> currentEdge;
+
   /// Tokens buffered for inserting casts/parens after emitting children.
   SmallVector<Token> localTokens;
 
@@ -3752,6 +3758,34 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::IntersectOp op) {
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::DelayOp op) {
+  // Check if the delay's clock is a placeholder (hw.constant true).
+  // A placeholder clock means the clock was never inferred — this is an error
+  // at emission time since SVA requires a real clock. See the DelayOp docs in
+  // LTLOps.td and the InferLTLClocks pass.
+  Value delayClock = op.getClock();
+  bool isPlaceholder = false;
+  if (auto constOp = delayClock.getDefiningOp<hw::ConstantOp>()) {
+    auto value = constOp.getValue();
+    isPlaceholder = value.getBitWidth() == 1 && value.isOne();
+  }
+  if (isPlaceholder) {
+    emitOpError(op, "delay has a placeholder clock (hw.constant true) that "
+                    "was never replaced with a real clock; run "
+                    "--ltl-infer-clocks or provide an explicit clock");
+  }
+
+  // Verify that the delay's clock matches the enclosing clock context.
+  // SVA does not support per-delay clocks; all delays inherit from the
+  // enclosing @(edge clock) specification.
+  if (!isPlaceholder && currentClock) {
+    if (delayClock != currentClock) {
+      emitOpError(op, "delay clock does not match enclosing clock; "
+                      "SVA does not support per-delay clocks");
+    } else if (currentEdge && op.getEdge() != *currentEdge) {
+      emitOpError(op, "delay clock edge does not match enclosing clock edge");
+    }
+  }
+
   ps << "##";
   if (auto length = op.getLength()) {
     if (*length == 0) {
@@ -3907,7 +3941,18 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::ClockOp op) {
     ps << ")";
   });
   ps << PP::space;
+
+  // Set the clock context for nested property emission.
+  // Save and restore to handle nested clock ops correctly.
+  Value savedClock = currentClock;
+  auto savedEdge = currentEdge;
+  currentClock = op.getClock();
+  currentEdge = op.getEdge();
+
   emitNestedProperty(op.getInput(), PropertyPrecedence::Clocking);
+
+  currentClock = savedClock;
+  currentEdge = savedEdge;
   return {PropertyPrecedence::Clocking};
 }
 
