@@ -103,6 +103,16 @@ struct TypeVisitor {
         cast<moore::UnpackedType>(innerType));
   }
 
+  Type visit(const slang::ast::DPIOpenArrayType &type) {
+    auto innerType = type.elementType.visit(*this);
+    if (!innerType)
+      return {};
+    if (type.isPacked)
+      return moore::OpenArrayType::get(cast<moore::PackedType>(innerType));
+    return moore::OpenUnpackedArrayType::get(
+        cast<moore::UnpackedType>(innerType));
+  }
+
   // Handle type defs.
   Type visit(const slang::ast::TypeAliasType &type) {
     // Simply return the underlying type.
