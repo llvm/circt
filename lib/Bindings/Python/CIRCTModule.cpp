@@ -73,6 +73,7 @@ static void registerPasses() {
 }
 
 NB_MODULE(_circt, m) {
+  nb::module_::import_(MAKE_MLIR_PYTHON_QUALNAME("ir"));
   m.doc() = "CIRCT Python Native Extension";
   registerPasses();
   llvm::sys::PrintStackTraceOnErrorSignal(/*argv=*/"");
