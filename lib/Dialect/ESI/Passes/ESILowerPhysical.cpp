@@ -190,7 +190,7 @@ FIFOLowering::matchAndRewrite(FIFOOp op, OpAdaptor adaptor,
              ChannelSignaling::ValidOnly) {
     auto unwrapVO = UnwrapValidOnlyOp::create(rewriter, loc, chanInput);
     rawData = unwrapVO.getRawOutput();
-    dataNotAvailable = comb::createOrFoldNot(loc, unwrapVO.getValid(), rewriter,
+    dataNotAvailable = comb::createOrFoldNot(rewriter, loc, unwrapVO.getValid(),
                                              /*twoState=*/true);
     dataNotAvailable.getDefiningOp()->setAttr(
         "sv.namehint", rewriter.getStringAttr("dataNotAvailable"));
@@ -238,7 +238,7 @@ FIFOLowering::matchAndRewrite(FIFOOp op, OpAdaptor adaptor,
   } else if (outputType.getSignaling() == ChannelSignaling::ValidOnly) {
     // ValidOnly output: wrap with valid signal, always read from FIFO when
     // data is available (no backpressure).
-    auto notEmpty = comb::createOrFoldNot(loc, seqFifo.getEmpty(), rewriter,
+    auto notEmpty = comb::createOrFoldNot(rewriter, loc, seqFifo.getEmpty(),
                                           /*twoState=*/true);
     auto wrap =
         WrapValidOnlyOp::create(rewriter, loc, seqFifo.getOutput(), notEmpty);
