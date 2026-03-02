@@ -207,6 +207,10 @@ struct GlobalOpConversion : public OpConversionPattern<memref::GlobalOp> {
     auto cstAttr =
         llvm::dyn_cast_or_null<DenseElementsAttr>(op.getConstantInitValue());
 
+    if (!cstAttr)
+        return rewriter.notifyMatchFailure(
+            op, "memref.global has non-dense or missing constant initializer");
+    
     SmallVector<Attribute> flattenedVals;
     for (auto attr : cstAttr.getValues<Attribute>())
       flattenedVals.push_back(attr);
