@@ -15,6 +15,13 @@
 
 #include "esi/Utils.h"
 
+#ifdef __GNUG__
+#include <cstdlib>
+#include <cxxabi.h>
+#include <memory>
+
+#endif
+
 static constexpr char Table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                 "abcdefghijklmnopqrstuvwxyz"
                                 "0123456789+/";
@@ -48,4 +55,17 @@ void esi::utils::encodeBase64(const void *dataIn, size_t size,
     buffer[j + 2] = Table[(x >> 6) & 63];
     buffer[j + 3] = '=';
   }
+}
+
+std::string esi::utils::demangle(const std::type_info &ti) {
+#ifdef __GNUG__
+  int status = 0;
+  std::unique_ptr<char, void (*)(void *)> res{
+      abi::__cxa_demangle(ti.name(), nullptr, nullptr, &status), std::free};
+  return (status == 0) ? res.get() : ti.name();
+#elif defined(_MSC_VER)
+  return ti.name(); // MSVC already provides demangled names with typeid
+#else
+  return ti.name(); // Default: no demangling
+#endif
 }
