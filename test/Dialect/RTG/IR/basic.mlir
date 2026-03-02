@@ -352,3 +352,19 @@ rtg.test @registerConversion(idx = %arg0: index, reg = %arg1: !rtgtest.ireg) {
   rtg.isa.index_to_register %arg0 : !rtgtest.ireg
   rtg.isa.register_to_index %arg1 : !rtgtest.ireg
 }
+
+// CHECK-LABEL: rtg.test @randomScope
+rtg.test @randomScope() {
+  // CHECK: %{{.*}}:2 = rtg.random_scope attributes {rtg.test = 0 : i64} : index, index {
+  %0:2 = rtg.random_scope attributes {rtg.test = 0 : i64} : index, index {
+    %low = index.constant 0
+    %high = index.constant 100
+    %1 = rtg.random_number_in_range [%low, %high]
+    // CHECK: rtg.yield %{{.*}}, %{{.*}} : index, index
+    rtg.yield %1, %1 : index, index
+  }
+
+  // CHECK: rtg.random_scope {
+  // CHECK-NEXT: }
+  rtg.random_scope {}
+}
