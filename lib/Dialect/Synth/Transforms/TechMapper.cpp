@@ -128,14 +128,24 @@ struct TechLibraryPattern : public CutRewritePattern {
   llvm::FailureOr<Operation *> rewrite(mlir::OpBuilder &builder,
                                        CutEnumerator &enumerator,
                                        const Cut &cut) const override {
+    const auto &network = enumerator.getLogicNetwork();
     // Create a new instance of the module
+    SmallVector<unsigned> permutedInputIndices;
+    cut.getPermutatedInputIndices(npnClass, permutedInputIndices);
+
     SmallVector<Value> inputs;
-    cut.getPermutatedInputs(npnClass, inputs);
+    inputs.reserve(permutedInputIndices.size());
+    for (unsigned idx : permutedInputIndices) {
+      assert(idx < cut.inputs.size() && "input permutation index out of range");
+      inputs.push_back(network.getValue(cut.inputs[idx]));
+    }
+
+    auto *rootOp = network.getGate(cut.getRootIndex()).getOperation();
+    assert(rootOp && "cut root must be a valid operation");
 
     // TODO: Give a better name to the instance
-    auto instanceOp =
-        hw::InstanceOp::create(builder, cut.getRoot()->getLoc(), module,
-                               "mapped", ArrayRef<Value>(inputs));
+    auto instanceOp = hw::InstanceOp::create(builder, rootOp->getLoc(), module,
+                                             "mapped", ArrayRef<Value>(inputs));
     return instanceOp.getOperation();
   }
 
