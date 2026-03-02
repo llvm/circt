@@ -467,6 +467,9 @@ struct ExprVisitor {
       }
       return moore::StringConcatOp::create(builder, loc, operands);
     }
+    if (expr.type->isQueue()) {
+      return handleQueueConcat(expr);
+    }
     for (auto *operand : expr.operands()) {
       // Handle empty replications like `{0{...}}` which may occur within
       // concatenations. Slang assigns them a `void` type which we can check for
@@ -486,6 +489,79 @@ struct ExprVisitor {
       return moore::ConcatRefOp::create(builder, loc, operands);
     else
       return moore::ConcatOp::create(builder, loc, operands);
+  }
+
+  // Handles a `ConcatenationExpression` which produces a queue as a result.
+  // Intuitively, queue concatenations are the same as unpacked array
+  // concatenations. However, because queues may vary in size, we can't
+  // just convert each argument to a simple bit vector.
+  Value handleQueueConcat(const slang::ast::ConcatenationExpression &expr) {
+    SmallVector<Value> operands;
+
+    auto queueType =
+        cast<moore::QueueType>(context.convertType(*expr.type, loc));
+    auto elementType = queueType.getElementType();
+
+    // Strategy:
+    // QueueConcatOp only takes queues, so other types must be converted to
+    // queues.
+    // - Unpacked arrays have a conversion to queues via
+    // `QueueFromUnpackedArrayOp`.
+    // - For individual elements, we create a new queue for each contiguous
+    // sequence of elements, and add this to the QueueConcatOp.
+
+    // The current contiguous sequence of individual elements.
+    Value contigElements;
+
+    for (auto *operand : expr.operands()) {
+      bool isSingleElement =
+          context.convertType(*operand->type, loc) == elementType;
+
+      // If the subsequent operand is not a single element, add the current
+      // sequence of contiguous elements to the QueueConcatOp
+      if (!isSingleElement && contigElements) {
+        operands.push_back(moore::ReadOp::create(builder, loc, contigElements));
+        contigElements = {};
+      }
+
+      assert(!isLvalue && "checked by Slang");
+      auto value = convertLvalueOrRvalueExpression(*operand);
+      if (!value)
+        return {};
+
+      // If value is an element of the queue, create an empty queue and add
+      // that element.
+      if (value.getType() == elementType) {
+        auto queueRefType =
+            moore::RefType::get(context.getContext(), queueType);
+
+        if (!contigElements) {
+          contigElements =
+              moore::VariableOp::create(builder, loc, queueRefType, {}, {});
+        }
+        moore::QueuePushBackOp::create(builder, loc, contigElements, value);
+        continue;
+      }
+
+      // Otherwise, the value should be directly convertible to a queue type.
+      // If the type is a queue type with the same element type, skip this step,
+      // since we don't need to cast things like queue<T, 10> to queue<T, 0>,
+      // - QueueConcatOp doesn't mind the queue bounds.
+      if (!(isa<moore::QueueType>(value.getType()) &&
+            cast<moore::QueueType>(value.getType()).getElementType() ==
+                elementType)) {
+        value = context.materializeConversion(queueType, value, false,
+                                              value.getLoc());
+      }
+
+      operands.push_back(value);
+    }
+
+    if (contigElements) {
+      operands.push_back(moore::ReadOp::create(builder, loc, contigElements));
+    }
+
+    return moore::QueueConcatOp::create(builder, loc, queueType, operands);
   }
 
   /// Handle member accesses.
@@ -2582,6 +2658,19 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
   if (isa<moore::FormatStringType>(type) &&
       isa<moore::StringType>(value.getType())) {
     return builder.createOrFold<moore::FormatStringOp>(loc, value);
+  }
+
+  // Convert from UnpackedArrayType to QueueType
+  if (isa<moore::QueueType>(type) &&
+      isa<moore::UnpackedArrayType>(value.getType())) {
+    auto queueElType = dyn_cast<moore::QueueType>(type).getElementType();
+    auto unpackedArrayElType =
+        dyn_cast<moore::UnpackedArrayType>(value.getType()).getElementType();
+
+    if (queueElType == unpackedArrayElType) {
+      return builder.createOrFold<moore::QueueFromUnpackedArrayOp>(loc, type,
+                                                                   value);
+    }
   }
 
   // Handle Real To Int conversion
