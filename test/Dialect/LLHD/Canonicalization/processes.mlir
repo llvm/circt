@@ -36,6 +36,22 @@ hw.module @InlineCombinational(in %a: i42, in %b: i42, in %c: i8917, out u: i42,
   hw.output %0, %1 : i42, i9001
 }
 
+// CHECK-LABEL: hw.module @InlineCombinationalVerif(
+hw.module @InlineCombinationalVerif(in %a: i1, in %b: i1, in %c: i1, out u: i1, out
+v: i3) {
+  // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %a, %b
+  // CHECK-NEXT: verif.assert [[TMP1]] label "" : i1
+  // CHECK-NEXT: [[TMP2:%.+]] = comb.concat %a, %b, %c
+  // CHECK-NEXT: hw.output [[TMP1]], [[TMP2]]
+  %0, %1 = llhd.combinational -> i1, i3 {
+    %2 = comb.xor %a, %b : i1
+    verif.assert %2 label "" : i1
+    %3 = comb.concat %a, %b, %c : i1, i1, i1
+    llhd.yield %2, %3 : i1, i3
+  }
+  hw.output %0, %1 : i1, i3
+}
+
 // CHECK-LABEL: hw.module @IgnoreMultiBlockHalt
 hw.module @IgnoreMultiBlockHalt(in %a : i1, in %b : i1, out v1 : i1, out v2 : i1) {
   // CHECK: llhd.halt %a, %a

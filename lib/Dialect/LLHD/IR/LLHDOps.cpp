@@ -10,6 +10,7 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinDialect.h"
@@ -765,14 +766,36 @@ LogicalResult ProcessOp::canonicalize(ProcessOp op, PatternRewriter &rewriter) {
 LogicalResult CombinationalOp::canonicalize(CombinationalOp op,
                                             PatternRewriter &rewriter) {
   // Inline the combinational region if it consists of a single block and
-  // contains no side-effecting operations.
-  if (op.getBody().hasOneBlock() && isMemoryEffectFree(op)) {
-    auto &block = op.getBody().front();
-    auto *terminator = block.getTerminator();
-    rewriter.inlineBlockBefore(&block, op, ValueRange{});
-    rewriter.replaceOp(op, terminator->getOperands());
-    rewriter.eraseOp(terminator);
-    return success();
+  // contains no side-effecting operations, exception for verif assert like
+  // operations.
+  // The exception can be made because the verif ops are linked to the values
+  // via their operands and do not rely on the activation of the
+  // CombinationalOp environment.
+  if (op.getBody().hasOneBlock()) {
+    bool hasUnwantedEffects = false;
+    op.getBody().walk([&](Operation *inner) {
+      if (isa<circt::verif::AssertOp, verif::AssumeOp, verif::CoverOp>(inner))
+        return WalkResult::advance();
+      if (auto memInterface = dyn_cast<MemoryEffectOpInterface>(inner)) {
+        if (!memInterface.hasNoEffect()) {
+          hasUnwantedEffects = true;
+          return WalkResult::interrupt();
+        }
+      } else if (!inner->hasTrait<OpTrait::HasRecursiveMemoryEffects>()) {
+        hasUnwantedEffects = true;
+        return WalkResult::interrupt();
+      }
+      return WalkResult::advance();
+    });
+
+    if (!hasUnwantedEffects) {
+      auto &block = op.getBody().front();
+      auto *terminator = block.getTerminator();
+      rewriter.inlineBlockBefore(&block, op, ValueRange{});
+      rewriter.replaceOp(op, terminator->getOperands());
+      rewriter.eraseOp(terminator);
+      return success();
+    }
   }
   return failure();
 }
