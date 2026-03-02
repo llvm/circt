@@ -2010,7 +2010,7 @@ private:
   ParseResult parsePostFixIntSubscript(Value &result);
   ParseResult parsePostFixDynamicSubscript(Value &result);
   ParseResult
-  parseIntegerLiteralExp(Value &result, std::optional<bool> isSigned = {},
+  parseIntegerLiteralExp(Value &result, bool isSigned,
                          std::optional<int32_t> allocatedWidth = {});
   ParseResult parseListExp(Value &result);
   ParseResult parseListConcatExp(Value &result);
@@ -2296,8 +2296,11 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
   }
 
   case FIRToken::lp_UInt:
+    if (parseIntegerLiteralExp(result, /*isSigned=*/false))
+      return failure();
+    break;
   case FIRToken::lp_SInt:
-    if (parseIntegerLiteralExp(result))
+    if (parseIntegerLiteralExp(result, /*isSigned=*/true))
       return failure();
     break;
   case FIRToken::lp_String: {
@@ -2667,28 +2670,18 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result) {
 /// integer-literal-exp ::= 'UInt' optional-width '(' intLit ')'
 ///                     ::= 'SInt' optional-width '(' intLit ')'
 ///
-/// If isSigned and allocatedWidth are provided, it means the type and width
-/// were already parsed (e.g., from a langle_UInt token) and should be used
-/// instead of parsing them from the token stream.
+/// If allocatedWidth is provided, it means the width was already parsed
+/// (e.g., from a langle_UInt token) and should be used instead of parsing
+/// it from the token stream.
 ParseResult
-FIRStmtParser::parseIntegerLiteralExp(Value &result,
-                                      std::optional<bool> isSignedOpt,
+FIRStmtParser::parseIntegerLiteralExp(Value &result, bool isSigned,
                                       std::optional<int32_t> allocatedWidth) {
   auto loc = getToken().getLoc();
 
-  // Determine signedness and whether '(' was already consumed.
-  bool isSigned;
-  bool hasLParen;
-  if (isSignedOpt) {
-    // Signedness was provided by caller (from langle_ token).
-    isSigned = *isSignedOpt;
-    hasLParen = false;
-  } else {
-    // Determine from current token (lp_ token).
-    isSigned = getToken().is(FIRToken::lp_SInt);
-    hasLParen = getToken().isAny(FIRToken::lp_UInt, FIRToken::lp_SInt);
+  // Determine if '(' was already consumed by the lexer.
+  bool hasLParen = getToken().isAny(FIRToken::lp_UInt, FIRToken::lp_SInt);
+  if (hasLParen)
     consumeToken();
-  }
 
   // Parse a width specifier if not already provided.
   int32_t width;
