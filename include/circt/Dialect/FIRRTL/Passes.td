@@ -921,18 +921,12 @@ def PopulateInstanceChoiceSymbols : Pass<"firrtl-populate-instance-choice-symbol
 }
 
 def CheckInstanceChoice : Pass<"firrtl-check-instance-choice", "firrtl::CircuitOp"> {
-  let summary = "Check for nested instance choices with different options";
+  let summary = "Check for nested instance choices";
   let description = [{
-    This pass checks that no path from a public module contains nested instance
-    choices with different options (conjunction is banned). On any single path,
-    you can only go through instance choices of the same option. However,
-    reaching the same module through different options on different paths is
-    allowed (disjunction is OK).
+    This pass checks that there are no nested instance choices in the design.
+    A module that is instantiated via an instance choice operation cannot
+    contain any instance choice operations itself.
   }];
-  let options = [
-    Option<"dumpInfo", "dump-info", "bool", "false",
-           "Dump instance choice information for testing">
-  ];
 }
 
 def InferDomains : Pass<"firrtl-infer-domains", "firrtl::CircuitOp"> {
