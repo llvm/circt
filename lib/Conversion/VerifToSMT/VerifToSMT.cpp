@@ -481,7 +481,15 @@ struct VerifBoundedModelCheckingOpConversion
           continue;
         }
       }
-      inputDecls.push_back(smt::DeclareFunOp::create(rewriter, loc, newTy));
+      // Give a meaningful name prefix based on the argument's role.
+      std::string name;
+      if (curIndex >= oldCircuitInputTy.size() - numRegs)
+        name = ("reg_" + Twine(curIndex - (oldCircuitInputTy.size() - numRegs)))
+                   .str();
+      else
+        name = ("input_" + Twine(curIndex)).str();
+      inputDecls.push_back(smt::DeclareFunOp::create(
+          rewriter, loc, newTy, rewriter.getStringAttr(name)));
     }
 
     auto numStateArgs = initVals.size() - initIndex;
@@ -588,14 +596,18 @@ struct VerifBoundedModelCheckingOpConversion
           size_t loopIndex = 0;
           // Collect decls to yield at end of iteration
           SmallVector<Value> newDecls;
+          size_t inputIdx = 0;
           for (auto [oldTy, newTy] :
                llvm::zip(TypeRange(oldCircuitInputTy).drop_back(numRegs),
                          TypeRange(circuitInputTy).drop_back(numRegs))) {
-            if (isa<seq::ClockType>(oldTy))
+            if (isa<seq::ClockType>(oldTy)) {
               newDecls.push_back(loopVals[loopIndex++]);
-            else
-              newDecls.push_back(
-                  smt::DeclareFunOp::create(builder, loc, newTy));
+            } else {
+              auto name = ("input_" + Twine(inputIdx)).str();
+              newDecls.push_back(smt::DeclareFunOp::create(
+                  builder, loc, newTy, builder.getStringAttr(name)));
+            }
+            ++inputIdx;
           }
 
           // Only update the registers on a clock posedge unless in rising
