@@ -82,6 +82,50 @@ LogicalResult WrapFIFOOp::canonicalize(WrapFIFOOp op,
       op, "could not find corresponding unwrap for wrap");
 }
 
+//===----------------------------------------------------------------------===//
+// ValidOnly wrap / unwrap canonicalization.
+//===----------------------------------------------------------------------===//
+
+LogicalResult UnwrapValidOnlyOp::mergeAndErase(UnwrapValidOnlyOp unwrap,
+                                               WrapValidOnlyOp wrap,
+                                               PatternRewriter &rewriter) {
+  if (unwrap && wrap) {
+    rewriter.replaceOp(unwrap, {wrap.getRawInput(), wrap.getValid()});
+    rewriter.eraseOp(wrap);
+    return success();
+  }
+  return failure();
+}
+
+LogicalResult UnwrapValidOnlyOp::canonicalize(UnwrapValidOnlyOp op,
+                                              PatternRewriter &rewriter) {
+  auto wrap =
+      dyn_cast_or_null<WrapValidOnlyOp>(op.getChanInput().getDefiningOp());
+  if (succeeded(UnwrapValidOnlyOp::mergeAndErase(op, wrap, rewriter)))
+    return success();
+  return failure();
+}
+
+LogicalResult WrapValidOnlyOp::canonicalize(WrapValidOnlyOp op,
+                                            PatternRewriter &rewriter) {
+  // If the channel has no users, just erase.
+  if (op.getChanOutput().use_empty()) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+  // If the sole consumer is an unwrap, merge and erase.
+  if (!op.getChanOutput().hasOneUse())
+    return rewriter.notifyMatchFailure(
+        op, "channel output doesn't have exactly one use");
+  auto unwrap = dyn_cast_or_null<UnwrapValidOnlyOp>(
+      op.getChanOutput().getUses().begin()->getOwner());
+  if (succeeded(UnwrapValidOnlyOp::mergeAndErase(unwrap, op, rewriter)))
+    return success();
+  return rewriter.notifyMatchFailure(
+      op, "could not find corresponding unwrap for wrap");
+}
+
 OpFoldResult WrapWindow::fold(FoldAdaptor) {
   if (auto unwrap = dyn_cast_or_null<UnwrapWindow>(getFrame().getDefiningOp()))
     return unwrap.getWindow();

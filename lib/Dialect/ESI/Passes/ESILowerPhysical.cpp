@@ -77,6 +77,14 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
         hw::ConstantOp::create(rewriter, loc, rewriter.getBoolAttr(true))));
   }
 
+  // ValidOnly signaling must be converted to ValidReady (always ready).
+  if (inputType.getSignaling() == ChannelSignaling::ValidOnly) {
+    auto unwrap = UnwrapValidOnlyOp::create(rewriter, loc, stageInput);
+    auto wrap = WrapValidReadyOp::create(rewriter, loc, unwrap.getRawOutput(),
+                                         unwrap.getValid());
+    stageInput = wrap.getChanOutput();
+  }
+
   // Expand 'abstract' buffer into 'physical' stages.
   auto stages = buffer.getStagesAttr();
   uint64_t numStages = 1;
@@ -114,6 +122,19 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
     empty.setValue(comb::XorOp::create(
         rewriter, loc, unwrap.getValid(),
         hw::ConstantOp::create(rewriter, loc, rewriter.getBoolAttr(true))));
+    output = wrap.getChanOutput();
+  }
+
+  // If the output is ValidOnly, convert back from ValidReady.
+  if (outputType.getSignaling() == ChannelSignaling::ValidOnly) {
+    BackedgeBuilder bb(rewriter, loc);
+    // Always ready since ValidOnly has no backpressure.
+    auto alwaysReady =
+        hw::ConstantOp::create(rewriter, loc, rewriter.getI1Type(), 1);
+    auto unwrap =
+        UnwrapValidReadyOp::create(rewriter, loc, stageInput, alwaysReady);
+    auto wrap = WrapValidOnlyOp::create(rewriter, loc, unwrap.getRawOutput(),
+                                        unwrap.getValid());
     output = wrap.getChanOutput();
   }
 
@@ -166,9 +187,17 @@ FIFOLowering::matchAndRewrite(FIFOOp op, OpAdaptor adaptor,
     auto unwrapPull = UnwrapFIFOOp::create(rewriter, loc, chanInput, inputEn);
     rawData = unwrapPull.getData();
     dataNotAvailable = unwrapPull.getEmpty();
+  } else if (chanInput.getType().getSignaling() ==
+             ChannelSignaling::ValidOnly) {
+    auto unwrapVO = UnwrapValidOnlyOp::create(rewriter, loc, chanInput);
+    rawData = unwrapVO.getRawOutput();
+    dataNotAvailable = comb::createOrFoldNot(loc, unwrapVO.getValid(), rewriter,
+                                             /*twoState=*/true);
+    dataNotAvailable.getDefiningOp()->setAttr(
+        "sv.namehint", rewriter.getStringAttr("dataNotAvailable"));
   } else {
     return rewriter.notifyMatchFailure(
-        op, "only supports ValidReady and FIFO signaling");
+        op, "only supports ValidReady, FIFO, and ValidOnly signaling");
   }
 
   Backedge outputRdEn = bb.get(i1);
@@ -207,8 +236,19 @@ FIFOLowering::matchAndRewrite(FIFOOp op, OpAdaptor adaptor,
                            seqFifo.getOutput(), seqFifo.getEmpty());
     output = wrap.getChanOutput();
     outputRdEn.setValue(wrap.getRden());
+  } else if (outputType.getSignaling() == ChannelSignaling::ValidOnly) {
+    // ValidOnly output: wrap with valid signal, always read from FIFO when
+    // data is available (no backpressure).
+    auto notEmpty = comb::createOrFoldNot(loc, seqFifo.getEmpty(), rewriter,
+                                          /*twoState=*/true);
+    auto wrap =
+        WrapValidOnlyOp::create(rewriter, loc, seqFifo.getOutput(), notEmpty);
+    output = wrap.getChanOutput();
+    // Always read when not empty since there's no backpressure.
+    outputRdEn.setValue(notEmpty);
   } else {
-    return rewriter.notifyMatchFailure(op, "only supports ValidReady and FIFO");
+    return rewriter.notifyMatchFailure(
+        op, "only supports ValidReady, FIFO, and ValidOnly");
   }
 
   rewriter.replaceOp(op, output);

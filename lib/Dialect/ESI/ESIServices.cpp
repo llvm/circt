@@ -107,15 +107,14 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
     for (BundledChannel ch : bundleType.getChannels()) {
       if (ch.direction == ChannelDirection::to) {
         ChannelType fromHostType = ch.type;
-        if (fromHostType.getSignaling() == ChannelSignaling::FIFO)
-          fromHostType = b.getType<ChannelType>(fromHostType.getInner(),
-                                                ChannelSignaling::ValidReady,
-                                                fromHostType.getDataDelay());
+        fromHostType = b.getType<ChannelType>(fromHostType.getInner(),
+                                              ChannelSignaling::ValidReady,
+                                              fromHostType.getDataDelay());
         auto cosim = CosimFromHostEndpointOp::create(
             b, loc, fromHostType, clk, rst,
             toStringAttr(req.getRelativeAppIDPathAttr(), ch.name));
         mlir::TypedValue<ChannelType> fromHost = cosim.getFromHost();
-        if (fromHostType.getSignaling() == ChannelSignaling::FIFO)
+        if (ch.type.getSignaling() != ChannelSignaling::ValidReady)
           fromHost = ChannelBufferOp::create(
                          b, loc, ch.type, clk, rst, fromHost,
                          /*stages=*/b.getIntegerAttr(b.getI64Type(), 1),
@@ -136,7 +135,7 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
       if (ch.direction == ChannelDirection::from) {
         Value fromChannel = pack.getFromChannels()[chanIdx++];
         auto chType = cast<ChannelType>(fromChannel.getType());
-        if (chType.getSignaling() == ChannelSignaling::FIFO) {
+        if (chType.getSignaling() != ChannelSignaling::ValidReady) {
           auto cosimType = b.getType<ChannelType>(chType.getInner(),
                                                   ChannelSignaling::ValidReady,
                                                   chType.getDataDelay());
