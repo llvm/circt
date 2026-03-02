@@ -427,7 +427,7 @@ void circt::populateVerilogToMoorePipeline(OpPassManager &pm) {
   {
     // Perform module-specific transformations.
     auto &modulePM = pm.nest<moore::SVModuleOp>();
-    modulePM.addPass(moore::createLowerConcatRefPass());
+    modulePM.addPass(moore::createSimplifyRefsPass());
     // TODO: Enable the following once it not longer interferes with @(...)
     // event control checks. The introduced dummy variables make the event
     // control observe a static local variable that never changes, instead of
