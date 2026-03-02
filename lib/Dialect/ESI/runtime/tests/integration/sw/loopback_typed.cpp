@@ -139,6 +139,36 @@ static void runArrayFunc(Accelerator *accel) {
   std::cout << "array func ok: " << (int)low << " " << (int)high << "\n";
 }
 
+static void runSInt4Loopback(Accelerator *accel) {
+  AppIDPath lastLookup;
+  BundlePort *port = accel->resolvePort({AppID("sint4Func")}, lastLookup);
+  if (!port)
+    throw std::runtime_error("No sint4Func port found");
+
+  // Use TypedFunction<int8_t, int8_t> for si4 → si4 loopback.
+  // si4 fits in int8_t (width 4 <= 8). Tests sign extension of small widths.
+  TypedFunction<int8_t, int8_t> func =
+      port->getAs<services::FuncService::Function>();
+  func.connect();
+
+  // Test positive value.
+  int8_t posArg = 5;
+  int8_t posResult = func.call(posArg).get();
+  if (posResult != posArg)
+    throw std::runtime_error("sint4 loopback positive mismatch: got " +
+                             std::to_string(posResult));
+
+  // Test negative value (-3, which is 0x0D in si4 wire format).
+  int8_t negArg = -3;
+  int8_t negResult = func.call(negArg).get();
+  if (negResult != negArg)
+    throw std::runtime_error("sint4 loopback negative mismatch: got " +
+                             std::to_string(negResult));
+
+  std::cout << "sint4 loopback ok: pos=" << (int)posResult
+            << " neg=" << (int)negResult << "\n";
+}
+
 int main(int argc, const char *argv[]) {
   CliParser cli("loopback-typed-cpp");
   cli.description(
@@ -160,6 +190,7 @@ int main(int argc, const char *argv[]) {
               << std::dec << "\n";
 
     runLoopbackI8(accel);
+    runSInt4Loopback(accel);
     runStructFunc(accel);
     runOddStructFunc(accel);
     runArrayFunc(accel);

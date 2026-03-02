@@ -104,6 +104,14 @@ def test_loopback_cpp_codegen(mode: str, tmp_path: Path, host: str, port: int,
       "array func ok: -3 -2",
   ]
 
+  LOOPBACK_TYPED_EXPECTED = LOOPBACK_EXPECTED[:1] + [
+      "loopback i8 ok: 0x5a",
+      "sint4 loopback ok: pos=5 neg=-3",
+      "struct func ok: b=-7 x=-6 y=-7",
+      "odd struct func ok: a=2749 b=-20 p=10 q=-5 r0=4 r1=6",
+      "array func ok: -3 -2",
+  ]
+
   # Run the C++ test binary and verify output (CPP-TEST checks).
   result = subprocess.run(
       [str(build_dir / "loopback_test"), "cosim", f"{host}:{port}"],
@@ -134,8 +142,7 @@ def test_loopback_cpp_codegen(mode: str, tmp_path: Path, host: str, port: int,
         capture_output=True,
         text=True,
     )
-    check_lines(result.stdout, LOOPBACK_EXPECTED)
-
+    check_lines(result.stdout, LOOPBACK_TYPED_EXPECTED)
 
 @cosim_test(HW_DIR / "loopback.py")
 class TestLoopbackQuery:

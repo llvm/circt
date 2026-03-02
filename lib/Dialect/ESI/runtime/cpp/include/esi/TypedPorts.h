@@ -94,7 +94,8 @@ MessageData toMessageData(const T &data, WireInfo wi) {
 template <typename T>
 T fromMessageData(const MessageData &msg, WireInfo wi) {
   if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
-    if (wi.bytes > 0 && msg.getSize() == wi.bytes && wi.bytes != sizeof(T)) {
+    if (wi.bytes > 0 && msg.getSize() == wi.bytes &&
+        wi.bitWidth < sizeof(T) * 8) {
       // Copy wire bytes into a zero-initialized value.
       T val = 0;
       std::memcpy(&val, msg.getBytes(), std::min(wi.bytes, sizeof(T)));
