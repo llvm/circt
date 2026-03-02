@@ -271,10 +271,6 @@ struct FIRParser {
   // Parse 'verLit' into specified value
   ParseResult parseVersionLit(const Twine &message);
 
-  // Parse ('<' intLit '>')? setting result to -1 if not present.
-  template <typename T>
-  ParseResult parseOptionalWidth(T &result);
-
   // Parse 'intLit' '>' assuming '<' was already consumed.
   ParseResult parseWidth(int32_t &result);
 
@@ -682,26 +678,6 @@ ParseResult FIRParser::parseVersionLit(const Twine &message) {
     return emitError() << "FIRRTL version must be >=" << minimumFIRVersion,
            failure();
   consumeToken(FIRToken::version);
-  return success();
-}
-
-// optional-width ::= ('<' intLit '>')?
-//
-// This returns with result equal to -1 if not present.
-template <typename T>
-ParseResult FIRParser::parseOptionalWidth(T &result) {
-  if (!consumeIf(FIRToken::less))
-    return result = -1, success();
-
-  // Parse a width specifier if present.
-  auto widthLoc = getToken().getLoc();
-  if (parseIntLit(result, "expected width") ||
-      parseToken(FIRToken::greater, "expected >"))
-    return failure();
-
-  if (result < 0)
-    return emitError(widthLoc, "invalid width specifier"), failure();
-
   return success();
 }
 
@@ -2684,15 +2660,8 @@ FIRStmtParser::parseIntegerLiteralExp(Value &result, bool isSigned,
     consumeToken();
 
   // Parse a width specifier if not already provided.
-  int32_t width;
+  int32_t width = allocatedWidth.value_or(-1);
   APInt value;
-
-  if (allocatedWidth) {
-    width = *allocatedWidth;
-  } else {
-    if (parseOptionalWidth(width))
-      return failure();
-  }
 
   // If we consumed an lp_ token, the '(' was already consumed by the lexer.
   // Otherwise, we need to parse it.
