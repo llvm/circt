@@ -4098,8 +4098,24 @@ module QueueUnboundedLiteralTest;
     end
 endmodule
 
-
-
+// CHECK-LABEL: moore.module @QueueResizeTest() {
+// CHECK:           [[Q1:%.+]] = moore.variable : <queue<i32, 0>>
+// CHECK:           [[Q2:%.+]] = moore.variable : <queue<i32, 10>>
+// CHECK:           moore.procedure initial {
+// CHECK:               [[QR1:%.+]] = moore.read [[Q1]] : <queue<i32, 0>>
+// CHECK:               [[CONV:%.+]] = moore.queue.resize [[QR1]] : <i32, 0> -> <i32, 10>
+// CHECK:               moore.blocking_assign [[Q2]], [[CONV]] : queue<i32, 10>
+// CHECK:               moore.return
+// CHECK:           }
+// CHECK:           moore.output
+// CHECK:       }
+module QueueResizeTest;
+    int q1[$];
+    int q2[$:10];
+    initial begin
+      q2 = q1;
+    end
+endmodule
 
 // CHECK-LABEL: moore.module @ForkJoinTest() {
 // CHECK:         [[C0:%.+]] = moore.constant 0 : i32
@@ -4158,7 +4174,6 @@ endmodule
 // CHECK          }
 // CHECK          moore.output
 // CHECK        }
-
 module ForkJoinTest ();
 	int a = 0;
 	int b = 0;

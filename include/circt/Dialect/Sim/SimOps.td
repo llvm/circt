@@ -800,6 +800,23 @@ def QueueSliceOp : SimOp<"queue.slice", [Pure,
   let assemblyFormat = "$queue `from` $lowIdx `to` $highIdx attr-dict `:` type($queue)";
 }
 
+def QueueResizeOp : SimOp<"queue.resize", [Pure]> {
+  let description = [{
+    Converts between two queues with different bounds, but the same element
+    type.
+    
+    If $result has a smaller bound than the size of $input, elements at the end
+    of the queue will be discarded to ensure it fits within the space provided.
+  }];
+
+  let arguments = (ins QueueType:$input);
+  let results = (outs QueueType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//
