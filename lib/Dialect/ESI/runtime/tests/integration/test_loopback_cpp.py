@@ -144,6 +144,7 @@ def test_loopback_cpp_codegen(mode: str, tmp_path: Path, host: str, port: int,
     )
     check_lines(result.stdout, LOOPBACK_TYPED_EXPECTED)
 
+
 @cosim_test(HW_DIR / "loopback.py")
 class TestLoopbackQuery:
   """Tests for esiquery against the loopback design."""
