@@ -212,16 +212,13 @@ struct ExprVisitor {
             << expectedIndexType << " but was given " << givenIndex.getType();
       }
 
-      auto resultType =
-          isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type))
-                   : type;
-
       if (isLvalue)
-        return moore::AssocArrayExtractRefOp::create(builder, loc, resultType,
-                                                     value, givenIndex);
-      else
-        return moore::AssocArrayExtractOp::create(builder, loc, resultType,
-                                                  value, givenIndex);
+        return moore::AssocArrayExtractRefOp::create(
+            builder, loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
+            value, givenIndex);
+
+      return moore::AssocArrayExtractOp::create(builder, loc, type, value,
+                                                givenIndex);
     }
 
     auto resultType =

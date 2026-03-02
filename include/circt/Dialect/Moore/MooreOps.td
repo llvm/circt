@@ -2010,7 +2010,7 @@ def ArrayCreateOp : MooreOp<"array_create", [Pure, SameTypeOperands]> {
 //===----------------------------------------------------------------------===//
 
 def AssocArrayExtractOp : MooreOp<"assoc_array_extract", [Pure,
-    TypesMatchWith<"input and result types must match",
+    TypesMatchWith<"input's element type must match result type",
     "input", "result", "cast<AssocArrayType>($_self).getElementType()">,
     TypesMatchWith<"associative array index and given index must match",
     "input", "index", "cast<AssocArrayType>($_self).getIndexType()">]> {
