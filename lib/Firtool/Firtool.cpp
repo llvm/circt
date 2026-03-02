@@ -61,6 +61,9 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeOption(
       {/*selectDefaultInstanceChoice*/ opt
            .shouldSelectDefaultInstanceChoice()}));
+
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckInstanceChoice());
+
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerSignatures());
 
   // This pass is _not_ idempotent.  It preserves its controlling annotation for
