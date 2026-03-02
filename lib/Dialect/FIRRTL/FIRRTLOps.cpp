@@ -475,6 +475,18 @@ static LogicalResult checkLayerCompatibility(
 }
 
 //===----------------------------------------------------------------------===//
+// Helper Functions
+//===----------------------------------------------------------------------===//
+
+StringAttr circt::firrtl::getOptionCaseMacroName(StringAttr optionName,
+                                                 StringAttr caseName) {
+  SmallString<128> macroName;
+  llvm::raw_svector_ostream os(macroName);
+  os << "__option__" << optionName.getValue() << "_" << caseName.getValue();
+  return StringAttr::get(optionName.getContext(), os.str());
+}
+
+//===----------------------------------------------------------------------===//
 // CircuitOp
 //===----------------------------------------------------------------------===//
 
