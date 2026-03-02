@@ -1182,6 +1182,9 @@ struct RvalueExprVisitor : public ExprVisitor {
       else if (isa<moore::StringType>(lhs.getType()))
         return moore::StringCmpOp::create(
             builder, loc, moore::StringCmpPredicate::eq, lhs, rhs);
+      else if (isa<moore::QueueType>(lhs.getType()))
+        return moore::QueueCmpOp::create(
+            builder, loc, moore::UArrayCmpPredicate::eq, lhs, rhs);
       else
         return createBinary<moore::EqOp>(lhs, rhs);
     case BinaryOperator::Inequality:
@@ -1191,6 +1194,9 @@ struct RvalueExprVisitor : public ExprVisitor {
       else if (isa<moore::StringType>(lhs.getType()))
         return moore::StringCmpOp::create(
             builder, loc, moore::StringCmpPredicate::ne, lhs, rhs);
+      else if (isa<moore::QueueType>(lhs.getType()))
+        return moore::QueueCmpOp::create(
+            builder, loc, moore::UArrayCmpPredicate::ne, lhs, rhs);
       else
         return createBinary<moore::NeOp>(lhs, rhs);
     case BinaryOperator::CaseEquality:
