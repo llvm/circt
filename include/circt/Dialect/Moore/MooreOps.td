@@ -2041,6 +2041,31 @@ def AssocArrayExtractRefOp : MooreOp<"assoc_array_extract_ref",
   }];
 }
 
+def AssocArrayDeleteOp : MooreOp<"assoc_array.delete"> {
+  let summary = "Delete the index and element within the associative array";
+  let description = [{
+      See IEEE 1800-2023 § 7.9.2 "Delete()"
+  }];
+  let arguments = (ins AssocArrayRefType:$assoc_array, UnpackedType:$index);
+  let results = (outs);
+  let assemblyFormat = [{
+    `index` $index `from` $assoc_array attr-dict `:` type($assoc_array) `[` type($index) `]`
+  }];
+}
+
+def AssocArrayClearOp : MooreOp<"assoc_array.clear"> {
+  let summary = "Clear all elements from the given associative array";
+  let description = [{
+      See IEEE 1800-2023 § 7.9.2 "Delete()", the case where no index is supplied.
+  }];
+
+  let arguments = (ins AssocArrayRefType:$assoc_array);
+  let results = (outs);
+  let assemblyFormat = [{
+    $assoc_array attr-dict `:` type($assoc_array)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Struct Manipulation
 //===----------------------------------------------------------------------===//

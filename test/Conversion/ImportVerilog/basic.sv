@@ -4292,3 +4292,21 @@ module AssocArrayExtractTest;
     end
 endmodule
 
+// CHECK-LABEL: moore.module @AssocArrayManipulationTest() {
+// CHECK:           [[AA:%.+]] = moore.variable : <assoc_array<i32, i32>>
+// CHECK:           moore.procedure initial {
+// CHECK:             [[C0:%.+]] = moore.constant 0 : i32
+// CHECK:             moore.assoc_array.delete index [[C0]] from [[AA]] : <assoc_array<i32, i32>>[i32]
+// CHECK:             moore.assoc_array.clear [[AA]] : <assoc_array<i32, i32>>
+// CHECK:             moore.return
+// CHECK:           }
+// CHECK:           moore.output
+// CHECK:         }
+module AssocArrayManipulationTest;
+    int aa[int];
+    initial begin
+        aa.delete(0);
+        aa.delete();
+    end
+endmodule
+

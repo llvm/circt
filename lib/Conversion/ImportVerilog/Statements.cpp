@@ -1044,6 +1044,25 @@ struct StmtVisitor {
       return false;
     }
 
+    // Associative array tasks
+    if (args.size() >= 1 && args[0]->type->isAssociativeArray()) {
+      auto assocArray = context.convertLvalueExpression(*args[0]);
+
+      // `delete` has two functions: If there is an index passed, then it deletes
+      // that specific element, otherwise, it clears the entire associative array.
+      if (subroutine.name == "delete") {
+        if (args.size() == 1) {
+          moore::AssocArrayClearOp::create(builder, loc, assocArray);
+          return true;
+        }
+        if (args.size() == 2) {
+          auto index = context.convertRvalueExpression(*args[1]);
+          moore::AssocArrayDeleteOp::create(builder, loc, assocArray, index);
+          return true;
+        }
+      }
+    }
+
     // Give up on any other system tasks. These will be tried again as an
     // expression later.
     return false;
