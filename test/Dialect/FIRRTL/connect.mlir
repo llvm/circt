@@ -4,32 +4,32 @@
 firrtl.circuit "reset0" {
 
 // Reset destination.
-firrtl.module @reset0(in %a : !firrtl.uint<1>, out %b : !firrtl.reset) {
+firrtl.module @reset0(in %a : !firrtl.uint<1>, out %b : !firrtl.inferredreset) {
   // CHECK: firrtl.connect %b, %a
-  firrtl.connect %b, %a : !firrtl.reset, !firrtl.uint<1>
+  firrtl.connect %b, %a : !firrtl.inferredreset, !firrtl.uint<1>
 }
 
-firrtl.module @reset1(in %a : !firrtl.asyncreset, out %b : !firrtl.reset) {
+firrtl.module @reset1(in %a : !firrtl.asyncreset, out %b : !firrtl.inferredreset) {
   // CHECK: firrtl.connect %b, %a
-  firrtl.connect %b, %a : !firrtl.reset, !firrtl.asyncreset
+  firrtl.connect %b, %a : !firrtl.inferredreset, !firrtl.asyncreset
 }
 
 /// Reset types can be connected to Reset, UInt<1>, or AsyncReset types.
 
 // Reset source.
-firrtl.module @reset2(in %a : !firrtl.reset, out %b : !firrtl.reset) {
+firrtl.module @reset2(in %a : !firrtl.inferredreset, out %b : !firrtl.inferredreset) {
   // CHECK: firrtl.connect %b, %a
-  firrtl.connect %b, %a : !firrtl.reset, !firrtl.reset
+  firrtl.connect %b, %a : !firrtl.inferredreset, !firrtl.inferredreset
 }
 
-firrtl.module @reset3(in %a : !firrtl.reset, out %b : !firrtl.uint<1>) {
+firrtl.module @reset3(in %a : !firrtl.inferredreset, out %b : !firrtl.uint<1>) {
   // CHECK: firrtl.connect %b, %a
-  firrtl.connect %b, %a : !firrtl.uint<1>, !firrtl.reset
+  firrtl.connect %b, %a : !firrtl.uint<1>, !firrtl.inferredreset
 }
 
-firrtl.module @reset4(in %a : !firrtl.reset, out %b : !firrtl.asyncreset) {
+firrtl.module @reset4(in %a : !firrtl.inferredreset, out %b : !firrtl.asyncreset) {
   // CHECK: firrtl.connect %b, %a
-  firrtl.connect %b, %a : !firrtl.asyncreset, !firrtl.reset
+  firrtl.connect %b, %a : !firrtl.asyncreset, !firrtl.inferredreset
 }
 
 // AsyncReset source.
@@ -146,9 +146,9 @@ firrtl.module @ConstClock(in %in : !firrtl.const.clock, out %out : !firrtl.const
   firrtl.connect %out, %in : !firrtl.const.clock, !firrtl.const.clock
 }
 
-firrtl.module @ConstReset(in %in : !firrtl.const.reset, out %out : !firrtl.const.reset) {
-  // CHECK: firrtl.connect %out, %in : !firrtl.const.reset
-  firrtl.connect %out, %in : !firrtl.const.reset, !firrtl.const.reset
+firrtl.module @ConstReset(in %in : !firrtl.const.inferredreset, out %out : !firrtl.const.inferredreset) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.const.inferredreset
+  firrtl.connect %out, %in : !firrtl.const.inferredreset, !firrtl.const.inferredreset
 }
 
 firrtl.module @ConstAsyncReset(in %in : !firrtl.const.asyncreset, out %out : !firrtl.const.asyncreset) {
@@ -191,9 +191,9 @@ firrtl.module @ConstToNonConstClock(in %in : !firrtl.const.clock, out %out : !fi
   firrtl.connect %out, %in : !firrtl.clock, !firrtl.const.clock
 }
 
-firrtl.module @ConstToNonConstReset(in %in : !firrtl.const.reset, out %out : !firrtl.reset) {
-  // CHECK: firrtl.connect %out, %in : !firrtl.reset, !firrtl.const.reset
-  firrtl.connect %out, %in : !firrtl.reset, !firrtl.const.reset
+firrtl.module @ConstToNonConstReset(in %in : !firrtl.const.inferredreset, out %out : !firrtl.inferredreset) {
+  // CHECK: firrtl.connect %out, %in : !firrtl.inferredreset, !firrtl.const.inferredreset
+  firrtl.connect %out, %in : !firrtl.inferredreset, !firrtl.const.inferredreset
 }
 
 firrtl.module @ConstToNonConstAsyncReset(in %in : !firrtl.const.asyncreset, out %out : !firrtl.asyncreset) {

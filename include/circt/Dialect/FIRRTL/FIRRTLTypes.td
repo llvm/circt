@@ -99,9 +99,11 @@ def SizedPassiveType : FIRRTLDialectType<And<[SizedType.predicate,PassiveType.pr
     "::circt::firrtl::FIRRTLBaseType">;
 def SizedPassiveOrForeignType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
 
+def InferredResetType : FIRRTLDialectAliasTypeHelper<"InferredResetType", "inferred reset type">;
+
 def AsyncResetType : FIRRTLDialectAliasTypeHelper<"AsyncResetType", "async reset type">;
 
-def ResetType : FIRRTLDialectAliasTypeHelper<"ResetType", "reset type">;
+def SyncResetType : FIRRTLDialectAliasTypeHelper<"SyncResetType", "sync reset type">;
 
 def RefType : FIRRTLDialectTypeHelper<"RefType", "reference type">;
 

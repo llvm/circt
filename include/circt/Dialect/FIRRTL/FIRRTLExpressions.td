@@ -123,7 +123,7 @@ def SpecialConstantOp : FIRRTLOp<"specialconstant",
 
   let arguments = (ins BoolAttr:$value);
   let results = (outs
-    AnyTypeOf<[ClockType, ResetType, AsyncResetType]>:$result);
+    AnyTypeOf<[ClockType, InferredResetType, SyncResetType, AsyncResetType]>:$result);
 
   let hasCustomAssemblyFormat = 1;
   let hasFolder = 1;
@@ -761,7 +761,8 @@ let hasCanonicalizer=1 in {
 }
 def AsAsyncResetPrimOp
   : UnaryPrimOp<"asAsyncReset", OneBitCastableType, AsyncResetType>;
-def AsResetPrimOp : UnaryPrimOp<"asReset", UInt1Type, ResetType>;
+def AsSyncResetPrimOp : UnaryPrimOp<"asSyncReset", UInt1Type, SyncResetType>;
+def AsInferredResetPrimOp : UnaryPrimOp<"asInferredReset", UInt1Type, InferredResetType>;
 def AsClockPrimOp : UnaryPrimOp<"asClock", OneBitCastableType, ClockType>;
 def NegPrimOp : UnaryPrimOp<"neg", IntType, SIntType>;
 let hasCanonicalizer = true in

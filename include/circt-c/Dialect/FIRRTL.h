@@ -146,17 +146,23 @@ MLIR_CAPI_EXPORTED bool firrtlTypeIsAClock(MlirType type);
 /// Creates a clock type.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetClock(MlirContext ctx);
 
-/// Checks if this type is a reset type.
-MLIR_CAPI_EXPORTED bool firrtlTypeIsAReset(MlirType type);
+/// Checks if this type is an inferredreset type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsAnInferredReset(MlirType type);
 
-/// Creates a reset type.
-MLIR_CAPI_EXPORTED MlirType firrtlTypeGetReset(MlirContext ctx);
+/// Creates an inferred reset type.
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetInferredReset(MlirContext ctx);
 
 /// Checks if this type is an async reset type.
-MLIR_CAPI_EXPORTED bool firrtlTypeIsAAsyncReset(MlirType type);
+MLIR_CAPI_EXPORTED bool firrtlTypeIsAnAsyncReset(MlirType type);
 
 /// Creates an async reset type.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetAsyncReset(MlirContext ctx);
+
+/// Checks if this type is a sync reset type.
+MLIR_CAPI_EXPORTED bool firrtlTypeIsASyncReset(MlirType type);
+
+/// Creates a sync reset type.
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetSyncReset(MlirContext ctx);
 
 /// Checks if this type is an analog type.
 MLIR_CAPI_EXPORTED bool firrtlTypeIsAAnalog(MlirType type);

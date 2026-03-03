@@ -46,7 +46,7 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: input path : Path
     // CHECK-NEXT: input list : List<List<Path>>
     in %a00: !firrtl.clock,
-    in %a01: !firrtl.reset,
+    in %a01: !firrtl.inferredreset,
     in %a02: !firrtl.asyncreset,
     in %a03: !firrtl.uint,
     in %a04: !firrtl.sint,
@@ -76,7 +76,7 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: module Statements :
-  firrtl.module private @Statements(in %ui1: !firrtl.uint<1>, in %someAddr: !firrtl.uint<8>, in %someClock: !firrtl.clock, in %someReset: !firrtl.reset, out %someOut: !firrtl.uint<1>, out %ref: !firrtl.probe<uint<1>>) {
+  firrtl.module private @Statements(in %ui1: !firrtl.uint<1>, in %someAddr: !firrtl.uint<8>, in %someClock: !firrtl.clock, in %someReset: !firrtl.inferredreset, out %someOut: !firrtl.uint<1>, out %ref: !firrtl.probe<uint<1>>) {
     // CHECK: when ui1 :
     // CHECK:   skip
     firrtl.when %ui1 : !firrtl.uint<1> {
@@ -107,7 +107,7 @@ firrtl.circuit "Foo" {
     // CHECK: reg someReg : UInt<1>, someClock
     %someReg = firrtl.reg %someClock : !firrtl.clock, !firrtl.uint<1>
     // CHECK: regreset someReg2 : UInt<1>, someClock, someReset, ui1
-    %someReg2 = firrtl.regreset %someClock, %someReset, %ui1 : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
+    %someReg2 = firrtl.regreset %someClock, %someReset, %ui1 : !firrtl.clock, !firrtl.inferredreset, !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: node someNode = ui1
     %someNode = firrtl.node %ui1 : !firrtl.uint<1>
     // CHECK: stop(someClock, ui1, 42) : foo
@@ -115,9 +115,9 @@ firrtl.circuit "Foo" {
     // CHECK: skip
     firrtl.skip
     // CHECK: printf(someClock, ui1, "some\n magic\"stuff\"") : foo
-    firrtl.printf %someClock, %ui1, "some\n magic\"stuff\"" {name = "foo"} (%ui1, %someReset) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.reset
+    firrtl.printf %someClock, %ui1, "some\n magic\"stuff\"" {name = "foo"} (%ui1, %someReset) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.inferredreset
     // CHECK: fprintf(someClock, ui1, "test%d.txt", ui1, "some\n magic\"stuff\"") : foo
-    firrtl.fprintf %someClock, %ui1, "test%d.txt"(%ui1), "some\n magic\"stuff\"" (%ui1, %someReset) {name = "foo"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.reset
+    firrtl.fprintf %someClock, %ui1, "test%d.txt"(%ui1), "some\n magic\"stuff\"" (%ui1, %someReset) {name = "foo"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.inferredreset
     // CHECK: assert(someClock, ui1, ui1, "msg") : foo
     // CHECK: assume(someClock, ui1, ui1, "msg") : foo
     // CHECK: cover(someClock, ui1, ui1, "msg") : foo
@@ -143,10 +143,10 @@ firrtl.circuit "Foo" {
 
     // CHECK: connect unknownReset, knownReset
     %knownReset = firrtl.wire : !firrtl.asyncreset
-    %unknownReset = firrtl.wire : !firrtl.reset
+    %unknownReset = firrtl.wire : !firrtl.inferredreset
     %resetCast = firrtl.resetCast %knownReset :
-      (!firrtl.asyncreset) -> !firrtl.reset
-    firrtl.matchingconnect %unknownReset, %resetCast : !firrtl.reset
+      (!firrtl.asyncreset) -> !firrtl.inferredreset
+    firrtl.matchingconnect %unknownReset, %resetCast : !firrtl.inferredreset
 
     // CHECK: attach(an0, an1)
     %an0 = firrtl.wire : !firrtl.analog<1>
@@ -171,10 +171,10 @@ firrtl.circuit "Foo" {
     // CHECK: node k6 = UInt<1>(0)
     %4 = firrtl.specialconstant 0 : !firrtl.clock
     %5 = firrtl.specialconstant 0 : !firrtl.asyncreset
-    %6 = firrtl.specialconstant 0 : !firrtl.reset
+    %6 = firrtl.specialconstant 0 : !firrtl.inferredreset
     %k4 = firrtl.node %4 : !firrtl.clock
     %k5 = firrtl.node %5 : !firrtl.asyncreset
-    %k6 = firrtl.node %6 : !firrtl.reset
+    %k6 = firrtl.node %6 : !firrtl.inferredreset
 
     // CHECK: wire bundle : { a : UInt, flip b : UInt }
     // CHECK: wire vector : UInt[42]
@@ -262,7 +262,7 @@ firrtl.circuit "Foo" {
     %asSIntPrimOp_tmp = firrtl.asSInt %x : (!firrtl.uint) -> !firrtl.sint
     %asUIntPrimOp_tmp = firrtl.asUInt %x : (!firrtl.uint) -> !firrtl.uint
     %asAsyncResetPrimOp_tmp = firrtl.asAsyncReset %x : (!firrtl.uint) -> !firrtl.asyncreset
-    %asResetPrimOp_tmp = firrtl.asReset %ui1 : (!firrtl.uint<1>) -> !firrtl.reset
+    %asResetPrimOp_tmp = firrtl.asInferredReset %ui1 : (!firrtl.uint<1>) -> !firrtl.inferredreset
     %asClockPrimOp_tmp = firrtl.asClock %x : (!firrtl.uint) -> !firrtl.clock
     %cvtPrimOp_tmp = firrtl.cvt %x : (!firrtl.uint) -> !firrtl.sint
     %negPrimOp_tmp = firrtl.neg %x : (!firrtl.uint) -> !firrtl.sint
@@ -273,7 +273,7 @@ firrtl.circuit "Foo" {
     %asSIntPrimOp = firrtl.node %asSIntPrimOp_tmp : !firrtl.sint
     %asUIntPrimOp = firrtl.node %asUIntPrimOp_tmp : !firrtl.uint
     %asAsyncResetPrimOp = firrtl.node %asAsyncResetPrimOp_tmp : !firrtl.asyncreset
-    %asResetPrimOp = firrtl.node %asResetPrimOp_tmp : !firrtl.reset
+    %asResetPrimOp = firrtl.node %asResetPrimOp_tmp : !firrtl.inferredreset
     %asClockPrimOp = firrtl.node %asClockPrimOp_tmp : !firrtl.clock
     %cvtPrimOp = firrtl.node %cvtPrimOp_tmp : !firrtl.sint
     %negPrimOp = firrtl.node %negPrimOp_tmp : !firrtl.sint
@@ -474,7 +474,7 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: input a11 : const UInt[42]
     // CHECK-NEXT: output b0 : const UInt<42>
     in %a00: !firrtl.const.clock,
-    in %a01: !firrtl.const.reset,
+    in %a01: !firrtl.const.inferredreset,
     in %a02: !firrtl.const.asyncreset,
     in %a03: !firrtl.const.uint,
     in %a04: !firrtl.const.sint,
@@ -516,7 +516,7 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: output `12` : Probe<UInt<1>>
     // CHECK-NEXT: output `13` : RWProbe<UInt<1>>
     in %_0: !firrtl.clock,
-    in %_1: !firrtl.reset,
+    in %_1: !firrtl.inferredreset,
     in %_2: !firrtl.asyncreset,
     in %_3: !firrtl.uint<1>,
     in %_4: !firrtl.sint,
@@ -543,7 +543,7 @@ firrtl.circuit "Foo" {
     %_15, %_15_ref = firrtl.reg %_0 forceable {name = "15"} :
       !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
     %_16 = firrtl.regreset %_0, %_1, %_3 {name = "16"} :
-      !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
+      !firrtl.clock, !firrtl.inferredreset, !firrtl.uint<1>, !firrtl.uint<1>
     %_17 = firrtl.node %_3 {name = "17"} : !firrtl.uint<1>
 
     // CHECK:      connect `9`.`1`, `9`.`0`

@@ -251,8 +251,9 @@ void testTypeDiscriminantsAndQueries(MlirContext ctx) {
   assert(firrtlTypeIsAUInt(firrtlTypeGetUInt(ctx, 32)));
   assert(firrtlTypeIsASInt(firrtlTypeGetSInt(ctx, 32)));
   assert(firrtlTypeIsAClock(firrtlTypeGetClock(ctx)));
-  assert(firrtlTypeIsAReset(firrtlTypeGetReset(ctx)));
-  assert(firrtlTypeIsAAsyncReset(firrtlTypeGetAsyncReset(ctx)));
+  assert(firrtlTypeIsAnInferredReset(firrtlTypeGetInferredReset(ctx)));
+  assert(firrtlTypeIsASyncReset(firrtlTypeGetSyncReset(ctx)));
+  assert(firrtlTypeIsAnAsyncReset(firrtlTypeGetAsyncReset(ctx)));
   assert(firrtlTypeIsAAnalog(firrtlTypeGetAnalog(ctx, 32)));
   assert(firrtlTypeIsAVector(
       firrtlTypeGetVector(ctx, firrtlTypeGetUInt(ctx, 32), 4)));
@@ -276,10 +277,14 @@ void testTypeDiscriminantsAndQueries(MlirContext ctx) {
       firrtlTypeGetConstType(firrtlTypeGetUInt(ctx, 32), true), false)));
   assert(!firrtlTypeIsAUInt(firrtlTypeGetSInt(ctx, 32)));
   assert(!firrtlTypeIsASInt(firrtlTypeGetUInt(ctx, 32)));
-  assert(!firrtlTypeIsAClock(firrtlTypeGetReset(ctx)));
-  assert(!firrtlTypeIsAReset(firrtlTypeGetClock(ctx)));
-  assert(!firrtlTypeIsAAsyncReset(firrtlTypeGetReset(ctx)));
-  assert(!firrtlTypeIsAAnalog(firrtlTypeGetReset(ctx)));
+  assert(!firrtlTypeIsAClock(firrtlTypeGetInferredReset(ctx)));
+  assert(!firrtlTypeIsAClock(firrtlTypeGetSyncReset(ctx)));
+  assert(!firrtlTypeIsAClock(firrtlTypeGetAsyncReset(ctx)));
+  assert(!firrtlTypeIsAnInferredReset(firrtlTypeGetClock(ctx)));
+  assert(!firrtlTypeIsAnAsyncReset(firrtlTypeGetClock(ctx)));
+  assert(!firrtlTypeIsASyncReset(firrtlTypeGetClock(ctx)));
+  assert(!firrtlTypeIsAnAsyncReset(firrtlTypeGetInferredReset(ctx)));
+  assert(!firrtlTypeIsAAnalog(firrtlTypeGetInferredReset(ctx)));
   assert(!firrtlTypeIsABundle(openBundle));
   assert(!firrtlTypeIsAOpenBundle(bundle));
   assert(!firrtlTypeIsARef(firrtlTypeGetAnyRef(ctx)));
@@ -298,7 +303,7 @@ void testTypeDiscriminantsAndQueries(MlirContext ctx) {
   assert(firrtlTypeGetBitWidth(firrtlTypeGetUInt(ctx, 32), false) == 32);
   assert(firrtlTypeGetBitWidth(firrtlTypeGetSInt(ctx, 32), false) == 32);
   assert(firrtlTypeGetBitWidth(firrtlTypeGetClock(ctx), false) == 1);
-  assert(firrtlTypeGetBitWidth(firrtlTypeGetReset(ctx), false) == 1);
+  assert(firrtlTypeGetBitWidth(firrtlTypeGetInferredReset(ctx), false) == 1);
   assert(firrtlTypeGetBitWidth(bundle, false) == 96);
   assert(firrtlTypeGetBitWidth(bundleContainsFlip, false) == -1);
   assert(firrtlTypeGetBitWidth(bundleContainsFlip, true) == 96);

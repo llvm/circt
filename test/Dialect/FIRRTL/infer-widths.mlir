@@ -219,7 +219,8 @@ firrtl.circuit "Foo" {
     %7 = firrtl.asUInt %3 : (!firrtl.asyncreset) -> !firrtl.uint<1>
     %8 = firrtl.asClock %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.clock
     %9 = firrtl.asAsyncReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
-    %10 = firrtl.asReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.reset
+    %10 = firrtl.asInferredReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.inferredreset
+    %11 = firrtl.asSyncReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.syncreset
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     %c2_si3 = firrtl.constant 2 : !firrtl.sint<3>
     firrtl.connect %0, %c1_ui2 : !firrtl.uint, !firrtl.uint<2>

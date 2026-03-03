@@ -54,18 +54,18 @@ firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.analog) {
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(in %a : !firrtl.reset, out %b : !firrtl.uint<2>) {
-  // expected-error @+1 {{type mismatch between destination '!firrtl.uint<2>' and source '!firrtl.reset'}}
-  firrtl.connect %b, %a : !firrtl.uint<2>, !firrtl.reset
+firrtl.module @test(in %a : !firrtl.inferredreset, out %b : !firrtl.uint<2>) {
+  // expected-error @+1 {{type mismatch between destination '!firrtl.uint<2>' and source '!firrtl.inferredreset'}}
+  firrtl.connect %b, %a : !firrtl.uint<2>, !firrtl.inferredreset
 }
 }
 
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(in %a : !firrtl.reset, out %b : !firrtl.sint<1>) {
-  // expected-error @+1 {{type mismatch between destination '!firrtl.sint<1>' and source '!firrtl.reset'}}
-  firrtl.connect %b, %a : !firrtl.sint<1>, !firrtl.reset
+firrtl.module @test(in %a : !firrtl.inferredreset, out %b : !firrtl.sint<1>) {
+  // expected-error @+1 {{type mismatch between destination '!firrtl.sint<1>' and source '!firrtl.inferredreset'}}
+  firrtl.connect %b, %a : !firrtl.sint<1>, !firrtl.inferredreset
 }
 }
 
@@ -74,18 +74,18 @@ firrtl.module @test(in %a : !firrtl.reset, out %b : !firrtl.sint<1>) {
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(in %a : !firrtl.uint<2>, out %b : !firrtl.reset) {
-  // expected-error @+1 {{type mismatch between destination '!firrtl.reset' and source '!firrtl.uint<2>'}}
-  firrtl.connect %b, %a : !firrtl.reset, !firrtl.uint<2>
+firrtl.module @test(in %a : !firrtl.uint<2>, out %b : !firrtl.inferredreset) {
+  // expected-error @+1 {{type mismatch between destination '!firrtl.inferredreset' and source '!firrtl.uint<2>'}}
+  firrtl.connect %b, %a : !firrtl.inferredreset, !firrtl.uint<2>
 }
 }
 
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(in %a : !firrtl.sint<1>, out %b : !firrtl.reset) {
-  // expected-error @+1 {{type mismatch between destination '!firrtl.reset' and source '!firrtl.sint<1>'}}
-  firrtl.connect %b, %a : !firrtl.reset, !firrtl.sint<1>
+firrtl.module @test(in %a : !firrtl.sint<1>, out %b : !firrtl.inferredreset) {
+  // expected-error @+1 {{type mismatch between destination '!firrtl.inferredreset' and source '!firrtl.sint<1>'}}
+  firrtl.connect %b, %a : !firrtl.inferredreset, !firrtl.sint<1>
 }
 }
 

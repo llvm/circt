@@ -54,7 +54,7 @@ static size_t knownWidths(Type type) {
             return *v;
           return 0;
         })
-        .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
+        .Case<ClockType, InferredResetType, AsyncResetType, SyncResetType>([](Type) { return 1; })
         .Default([&](auto t) { return 0; });
   };
   return getWidth(type);

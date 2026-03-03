@@ -20,8 +20,8 @@ firrtl.module @Intrinsics(in %ui : !firrtl.uint, in %clock: !firrtl.clock, in %u
   // CHECK-NEXT: firrtl.int.isX %ui : !firrtl.uint
   %isx = firrtl.int.isX %ui : !firrtl.uint
 
-  // CHECK-NEXT: firrtl.asReset %ui1 : (!firrtl.uint<1>) -> !firrtl.reset
-  %reset = firrtl.asReset %ui1 : (!firrtl.uint<1>) -> !firrtl.reset
+  // CHECK-NEXT: firrtl.asInferredReset %ui1 : (!firrtl.uint<1>) -> !firrtl.inferredreset
+  %reset = firrtl.asInferredReset %ui1 : (!firrtl.uint<1>) -> !firrtl.inferredreset
 
   // CHECK-NEXT: firrtl.int.plusargs.test "foo"
   // CHECK-NEXT: firrtl.int.plusargs.value "bar" : !firrtl.uint<5>
@@ -215,11 +215,11 @@ firrtl.module @FormatString() {
 // CHECK-LABEL: firrtl.module @Fprintf
 firrtl.module @Fprintf(
   in %clock : !firrtl.clock,
-  in %reset : !firrtl.reset,
+  in %reset : !firrtl.inferredreset,
   in %a : !firrtl.uint<1>
 ) {
-  // CHECK-NEXT: firrtl.fprintf %clock, %a, "test%d.txt"(%a), "%x, %b"(%a, %reset) {name = "foo"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.reset
-  firrtl.fprintf %clock, %a, "test%d.txt"(%a), "%x, %b"(%a, %reset) {name = "foo"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.reset
+  // CHECK-NEXT: firrtl.fprintf %clock, %a, "test%d.txt"(%a), "%x, %b"(%a, %reset) {name = "foo"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.inferredreset
+  firrtl.fprintf %clock, %a, "test%d.txt"(%a), "%x, %b"(%a, %reset) {name = "foo"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.inferredreset
 }
 
 // CHECK-LABEL: firrtl.domain @ClockDomain

@@ -160,9 +160,9 @@ firrtl.circuit "ResetToI1" attributes {
   }
   ]} {
   firrtl.module private @Bar() {
-    %y = firrtl.wire interesting_name : !firrtl.reset
-    %invalid_reset = firrtl.invalidvalue : !firrtl.reset
-    firrtl.matchingconnect %y, %invalid_reset : !firrtl.reset
+    %y = firrtl.wire interesting_name : !firrtl.inferredreset
+    %invalid_reset = firrtl.invalidvalue : !firrtl.inferredreset
+    firrtl.matchingconnect %y, %invalid_reset : !firrtl.inferredreset
   }
   // CHECK-LABEL: module @ResetToI1
   firrtl.module @ResetToI1() {

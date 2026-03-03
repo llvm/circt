@@ -91,18 +91,33 @@ def ClockTypeImpl : FIRRTLImplType<"Clock"> {
   }];
 }
 
-def ResetTypeImpl : FIRRTLImplType<"Reset"> {
-  let summary = "Reset Signal";
+def InferredResetTypeImpl : FIRRTLImplType<"InferredReset"> {
+  let summary = "Inferred Reset Signal";
   let parameters = (ins "bool":$isConst);
   let storageClass = "FIRRTLBaseTypeStorage";
-  let typeName = "firrtl.reset";
+  let typeName = "firrtl.inferredreset";
   let builders = [
     TypeBuilder<(ins), [{
       return $_get($_ctxt, false);
     }]>
   ];
   let extraClassDeclaration = [{
-    ResetType getConstType(bool isConst) const;
+    InferredResetType getConstType(bool isConst) const;
+  }];
+}
+
+def SyncResetTypeImpl : FIRRTLImplType<"SyncReset"> {
+  let summary = "SyncReset signal";
+  let parameters = (ins "bool":$isConst);
+  let storageClass = "FIRRTLBaseTypeStorage";
+  let typeName = "firrtl.syncreset";
+  let builders = [
+    TypeBuilder<(ins), [{
+      return $_get($_ctxt, false);
+    }]>
+  ];
+  let extraClassDeclaration = [{
+    SyncResetType getConstType(bool isConst) const;
   }];
 }
 

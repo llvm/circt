@@ -59,7 +59,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
   ; CHECK-LABEL: firrtl.module private @types(
   module types :
     input c: Clock         ; CHECK: %c: !firrtl.clock,
-    input r: Reset         ; CHECK: %r: !firrtl.reset,
+    input r: Reset         ; CHECK: %r: !firrtl.inferredreset,
     input ar: AsyncReset   ; CHECK: %ar: !firrtl.asyncreset,
     input a: Analog        ; CHECK: %a: !firrtl.analog,
     input a8: Analog<8>    ; CHECK: %a8: !firrtl.analog<8>,
@@ -76,7 +76,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
   module stmts :
     input reset : UInt<1>         ; CHECK: in %reset: !firrtl.uint<1>,
     input reset_async: AsyncReset ; CHECK: in %reset_async: !firrtl.asyncreset,
-    input reset_abstract: Reset   ; CHECK: in %reset_abstract: !firrtl.reset,
+    input reset_abstract: Reset   ; CHECK: in %reset_abstract: !firrtl.inferredreset,
     input clock : Clock           ; CHECK: in %clock: !firrtl.clock,
     output auto : UInt<1>         ; CHECK: out %auto: !firrtl.uint<1>,
     output auto11 : UInt<11>      ; CHECK: out %auto11: !firrtl.uint<11>,
@@ -147,7 +147,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     node check_u2 = asUInt(s8)
     ; CHECK: firrtl.asUInt %a8 : (!firrtl.analog<8>) -> !firrtl.uint<8>
     node check_u3 = asUInt(a8)
-    ; CHECK: firrtl.asUInt %reset_abstract : (!firrtl.reset) -> !firrtl.uint<1>
+    ; CHECK: firrtl.asUInt %reset_abstract : (!firrtl.inferredreset) -> !firrtl.uint<1>
     node check_u5 = asUInt(reset_abstract)
     ; CHECK: firrtl.asUInt %reset_async : (!firrtl.asyncreset) -> !firrtl.uint<1>
     node check_u6 = asUInt(reset_async)
@@ -160,7 +160,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     node check_s2 = asSInt(s8)
     ; CHECK: firrtl.asSInt %a8 : (!firrtl.analog<8>) -> !firrtl.sint<8>
     node check_s3 = asSInt(a8)
-    ; CHECK: firrtl.asSInt %reset_abstract : (!firrtl.reset) -> !firrtl.sint<1>
+    ; CHECK: firrtl.asSInt %reset_abstract : (!firrtl.inferredreset) -> !firrtl.sint<1>
     node check_s5 = asSInt(reset_abstract)
     ; CHECK: firrtl.asSInt %reset_async : (!firrtl.asyncreset) -> !firrtl.sint<1>
     node check_s6 = asSInt(reset_async)
@@ -173,12 +173,12 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     node check_ar2 = asAsyncReset(s1)
     ; CHECK: firrtl.asAsyncReset %a1 : (!firrtl.analog<1>) -> !firrtl.asyncreset
     node check_ar3 = asAsyncReset(a1)
-    ; CHECK: firrtl.asAsyncReset %reset_abstract : (!firrtl.reset) -> !firrtl.asyncreset
+    ; CHECK: firrtl.asAsyncReset %reset_abstract : (!firrtl.inferredreset) -> !firrtl.asyncreset
     node check_ar4 = asAsyncReset(reset_abstract)
     ; CHECK: firrtl.asAsyncReset %reset_async : (!firrtl.asyncreset) -> !firrtl.asyncreset
     node check_ar5 = asAsyncReset(reset_async)
 
-    ; CHECK: firrtl.asReset %reset : (!firrtl.uint<1>) -> !firrtl.reset
+    ; CHECK: firrtl.asInferredReset %reset : (!firrtl.uint<1>) -> !firrtl.inferredreset
     node check_r0 = asReset(reset)
 
     ; CHECK: firrtl.asClock %clock : (!firrtl.clock) -> !firrtl.clock
@@ -189,7 +189,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     node check_c2 = asClock(s1)
     ; CHECK: firrtl.asClock %a1 : (!firrtl.analog<1>) -> !firrtl.clock
     node check_c3 = asClock(a1)
-    ; CHECK: firrtl.asClock %reset_abstract : (!firrtl.reset) -> !firrtl.clock
+    ; CHECK: firrtl.asClock %reset_abstract : (!firrtl.inferredreset) -> !firrtl.clock
     node check_c4 = asClock(reset_abstract)
     ; CHECK: firrtl.asClock %reset_async : (!firrtl.asyncreset) -> !firrtl.clock
     node check_c5 = asClock(reset_async)
@@ -885,7 +885,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     ; CHECK: %[[c1:.*]] = firrtl.constant 1 : !firrtl.const.uint
     ; CHECK-NEXT: %[[c2:.*]] = firrtl.resetCast %[[c1]]
     ; CHECK-NEXT: %[[c3:.*]] = firrtl.constCast %[[c2]]
-    ; CHECK-NEXT: firrtl.matchingconnect %out, %[[c3]] : !firrtl.reset
+    ; CHECK-NEXT: firrtl.matchingconnect %out, %[[c3]] : !firrtl.inferredreset
 
 
   ; CHECK-LABEL: @resetBundle
@@ -896,11 +896,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     connect b, a
     ; CHECK: %1 = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<1>, b: asyncreset>
     ; CHECK: %[[r1:.*]] = firrtl.resetCast %1
-    ; CHECK: firrtl.matchingconnect %0, %[[r1]] : !firrtl.reset
-    ; CHECK: %3 = firrtl.subfield %b[b] : !firrtl.bundle<a: reset, b: reset>
+    ; CHECK: firrtl.matchingconnect %0, %[[r1]] : !firrtl.inferredreset
+    ; CHECK: %3 = firrtl.subfield %b[b] : !firrtl.bundle<a: inferredreset, b: inferredreset>
     ; CHECK: %4 = firrtl.subfield %a[b] : !firrtl.bundle<a: uint<1>, b: asyncreset>
     ; CHECK: %[[r4:.*]] = firrtl.resetCast %4
-    ; CHECK: firrtl.matchingconnect %3, %[[r4]] : !firrtl.reset
+    ; CHECK: firrtl.matchingconnect %3, %[[r4]] : !firrtl.inferredreset
 
   module LargeMem :
     input clock : Clock
@@ -1145,10 +1145,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
 
   ; CHECK-LABEL: @RWProbeUninferredReset(
   module RWProbeUninferredReset:
-    ; CHECK: in %in: !firrtl.bundle<a: reset> sym [<@[[IN_SYM:.+]],1,public>],
+    ; CHECK: in %in: !firrtl.bundle<a: inferredreset> sym [<@[[IN_SYM:.+]],1,public>],
     input in : {a : Reset}
     output p : RWProbe<Reset>
-    ; CHECK:  firrtl.ref.rwprobe <@RWProbeUninferredReset::@[[IN_SYM]]> : !firrtl.rwprobe<reset>
+    ; CHECK:  firrtl.ref.rwprobe <@RWProbeUninferredReset::@[[IN_SYM]]> : !firrtl.rwprobe<inferredreset>
     define p = rwprobe(in.a)
 
   ; CHECK-LABEL: module private @ProbeInvalidate
@@ -1180,7 +1180,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
   ; CHECK-LABEL: firrtl.module private @ConstTypes(
   module ConstTypes:
     input c: const Clock         ; CHECK: %c: !firrtl.const.clock,
-    input r: const Reset         ; CHECK: %r: !firrtl.const.reset,
+    input r: const Reset         ; CHECK: %r: !firrtl.const.inferredreset,
     input ar: const AsyncReset   ; CHECK: %ar: !firrtl.const.asyncreset,
     input a: const Analog        ; CHECK: %a: !firrtl.const.analog,
     input a8: const Analog<8>    ; CHECK: %a8: !firrtl.const.analog<8>,

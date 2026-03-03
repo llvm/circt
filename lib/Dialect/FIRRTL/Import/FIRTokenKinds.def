@@ -205,7 +205,7 @@ TOK_LPKEYWORD_PRIM(and, AndPrimOp, 2, 0, FIRVersion(0, 0, 0), "Base")
 TOK_LPKEYWORD_PRIM(andr, AndRPrimOp, 1, 0, FIRVersion(0, 0, 0), "Base")
 TOK_LPKEYWORD_PRIM(asAsyncReset, AsAsyncResetPrimOp, 1, 0, FIRVersion(0, 0, 0),
                    "Base")
-TOK_LPKEYWORD_PRIM(asReset, AsResetPrimOp, 1, 0, missingSpecFIRVersion,
+TOK_LPKEYWORD_PRIM(asReset, AsInferredResetPrimOp, 1, 0, missingSpecFIRVersion,
                    "reset casts")
 TOK_LPKEYWORD_PRIM(asClock, AsClockPrimOp, 1, 0, FIRVersion(0, 0, 0), "Base")
 TOK_LPKEYWORD_PRIM(asSInt, AsSIntPrimOp, 1, 0, FIRVersion(0, 0, 0), "Base")

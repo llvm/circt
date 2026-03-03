@@ -176,7 +176,7 @@ firrtl.module @Foo() {
 firrtl.circuit "Foo" {
 firrtl.module @Foo() {
   // expected-error @+1 {{special constants can only be 0 or 1}}
-  firrtl.specialconstant 2 : !firrtl.reset
+  firrtl.specialconstant 2 : !firrtl.inferredreset
 }
 }
 
@@ -1745,9 +1745,9 @@ firrtl.circuit "BitcastNonConstToConstContaining" {
 
 // Uninferred reset cast non-const to const
 firrtl.circuit "UninferredWidthCastNonConstToConst" {
-  firrtl.module @UninferredWidthCastNonConstToConst(in %a: !firrtl.reset) {
+  firrtl.module @UninferredWidthCastNonConstToConst(in %a: !firrtl.inferredreset) {
     // expected-error @+1 {{operand constness must match}}
-    %b = firrtl.resetCast %a : (!firrtl.reset) -> !firrtl.const.asyncreset
+    %b = firrtl.resetCast %a : (!firrtl.inferredreset) -> !firrtl.const.asyncreset
   }
 }
 
@@ -1832,7 +1832,7 @@ firrtl.circuit "EnumUninferredWidth" {
 
 firrtl.circuit "EnumUninferredReset" {
   // expected-error @+1 {{enum field "a" has uninferred reset}}
-  firrtl.module @EnumUninferredReset(in %enum : !firrtl.enum<a: reset>) { }
+  firrtl.module @EnumUninferredReset(in %enum : !firrtl.enum<a: inferredreset>) { }
 }
 
 // -----
@@ -2899,11 +2899,11 @@ firrtl.circuit "SimulationPortDirection3" {
 
 firrtl.circuit "SimulationPortType0" {
   firrtl.extmodule @SimulationPortType0()
-  // expected-error @below {{op target @Foo port "clock" must be a '!firrtl.clock', got '!firrtl.reset' instead}}
+  // expected-error @below {{op target @Foo port "clock" must be a '!firrtl.clock', got '!firrtl.inferredreset' instead}}
   firrtl.simulation @foo, @Foo {}
   // expected-note @below {{target defined here}}
   firrtl.extmodule @Foo(
-    in clock: !firrtl.reset,
+    in clock: !firrtl.inferredreset,
     in init: !firrtl.uint<1>,
     out done: !firrtl.uint<1>,
     out success: !firrtl.uint<1>
@@ -2914,12 +2914,12 @@ firrtl.circuit "SimulationPortType0" {
 
 firrtl.circuit "SimulationPortType1" {
   firrtl.extmodule @SimulationPortType1()
-  // expected-error @below {{op target @Foo port "init" must be a '!firrtl.uint<1>', got '!firrtl.reset' instead}}
+  // expected-error @below {{op target @Foo port "init" must be a '!firrtl.uint<1>', got '!firrtl.inferredreset' instead}}
   firrtl.simulation @foo, @Foo {}
   // expected-note @below {{target defined here}}
   firrtl.extmodule @Foo(
     in clock: !firrtl.clock,
-    in init: !firrtl.reset,
+    in init: !firrtl.inferredreset,
     out done: !firrtl.uint<1>,
     out success: !firrtl.uint<1>
   )
@@ -2929,13 +2929,13 @@ firrtl.circuit "SimulationPortType1" {
 
 firrtl.circuit "SimulationPortType2" {
   firrtl.extmodule @SimulationPortType2()
-  // expected-error @below {{op target @Foo port "done" must be a '!firrtl.uint<1>', got '!firrtl.reset' instead}}
+  // expected-error @below {{op target @Foo port "done" must be a '!firrtl.uint<1>', got '!firrtl.inferredreset' instead}}
   firrtl.simulation @foo, @Foo {}
   // expected-note @below {{target defined here}}
   firrtl.extmodule @Foo(
     in clock: !firrtl.clock,
     in init: !firrtl.uint<1>,
-    out done: !firrtl.reset,
+    out done: !firrtl.inferredreset,
     out success: !firrtl.uint<1>
   )
 }
@@ -2944,14 +2944,14 @@ firrtl.circuit "SimulationPortType2" {
 
 firrtl.circuit "SimulationPortType3" {
   firrtl.extmodule @SimulationPortType3()
-  // expected-error @below {{op target @Foo port "success" must be a '!firrtl.uint<1>', got '!firrtl.reset' instead}}
+  // expected-error @below {{op target @Foo port "success" must be a '!firrtl.uint<1>', got '!firrtl.inferredreset' instead}}
   firrtl.simulation @foo, @Foo {}
   // expected-note @below {{target defined here}}
   firrtl.extmodule @Foo(
     in clock: !firrtl.clock,
     in init: !firrtl.uint<1>,
     out done: !firrtl.uint<1>,
-    out success: !firrtl.reset
+    out success: !firrtl.inferredreset
   )
 }
 

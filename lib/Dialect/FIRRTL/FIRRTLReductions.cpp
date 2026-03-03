@@ -889,14 +889,14 @@ struct AnnotationRemover : public Reduction {
   NLARemover nlaRemover;
 };
 
-/// A reduction pattern that replaces ResetType with UInt<1> across an entire
+/// A reduction pattern that replaces InferredResetType with SyncResetType across an entire
 /// circuit. This walks all operations in the circuit and replaces ResetType in
 /// results, block arguments, and attributes.
 struct SimplifyResets : public OpReduction<CircuitOp> {
   uint64_t match(CircuitOp circuit) override {
     uint64_t numResets = 0;
     AttrTypeWalker walker;
-    walker.addWalk([&](ResetType type) { ++numResets; });
+    walker.addWalk([&](InferredResetType type) { ++numResets; });
 
     circuit.walk([&](Operation *op) {
       for (auto result : op->getResults())
@@ -914,12 +914,12 @@ struct SimplifyResets : public OpReduction<CircuitOp> {
   }
 
   LogicalResult rewrite(CircuitOp circuit) override {
-    auto uint1Type = UIntType::get(circuit->getContext(), 1, false);
-    auto constUint1Type = UIntType::get(circuit->getContext(), 1, true);
+    auto syncResetType = SyncResetType::get(circuit->getContext(), false);
+    auto constSyncResetType = SyncResetType::get(circuit->getContext(), true);
 
     AttrTypeReplacer replacer;
-    replacer.addReplacement([&](ResetType type) {
-      return type.isConst() ? constUint1Type : uint1Type;
+    replacer.addReplacement([&](InferredResetType type) {
+      return type.isConst() ? constSyncResetType : syncResetType;
     });
     replacer.recursivelyReplaceElementsIn(circuit, /*replaceAttrs=*/true,
                                           /*replaceLocs=*/false,
@@ -1827,7 +1827,7 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
           auto newName = firrtl::FIRRTLTypeSwitch<Type, StringRef>(port.type)
                              .Case<firrtl::ClockType>(
                                  [&](auto a) { return ns.newName("clk"); })
-                             .Case<firrtl::ResetType, firrtl::AsyncResetType>(
+                             .Case<firrtl::InferredResetType, firrtl::AsyncResetType, firrtl::SyncResetType>(
                                  [&](auto a) { return ns.newName("rst"); })
                              .Case<firrtl::RefType>(
                                  [&](auto a) { return ns.newName("ref"); })

@@ -15,8 +15,8 @@ firrtl.module @ConstAnalog(in %a: !firrtl.const.analog<2>) {}
 // CHECK-LABEL: firrtl.module @ConstClock(in %a: !firrtl.const.clock) {
 firrtl.module @ConstClock(in %a: !firrtl.const.clock) {}
 
-// CHECK-LABEL: firrtl.module @ConstReset(in %a: !firrtl.const.reset) {
-firrtl.module @ConstReset(in %a: !firrtl.const.reset) {}
+// CHECK-LABEL: firrtl.module @ConstReset(in %a: !firrtl.const.inferredreset) {
+firrtl.module @ConstReset(in %a: !firrtl.const.inferredreset) {}
 
 // CHECK-LABEL: firrtl.module @ConstAsyncReset(in %a: !firrtl.const.asyncreset) {
 firrtl.module @ConstAsyncReset(in %a: !firrtl.const.asyncreset) {}

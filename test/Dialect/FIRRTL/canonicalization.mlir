@@ -7,7 +7,7 @@ firrtl.layer @A bind {}
 // CHECK-LABEL: firrtl.module @Casts
 firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
     in %clock : !firrtl.clock, in %asyncreset : !firrtl.asyncreset,
-    in %inreset : !firrtl.reset, out %outreset : !firrtl.reset,
+    in %inreset : !firrtl.inferredreset, out %outreset : !firrtl.inferredreset,
     out %out_ui1 : !firrtl.uint<1>, out %out_si1 : !firrtl.sint<1>,
     out %out_clock : !firrtl.clock, out %out_asyncreset : !firrtl.asyncreset,
     out %out2_si1 : !firrtl.sint<1>, out %out2_ui1 : !firrtl.uint<1>) {
@@ -46,9 +46,9 @@ firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
   // CHECK: firrtl.matchingconnect %out_asyncreset, %c1_asyncreset : !firrtl.asyncreset
   %7 = firrtl.asAsyncReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
   firrtl.connect %out_asyncreset, %7 : !firrtl.asyncreset, !firrtl.asyncreset
-  // CHECK: firrtl.matchingconnect %outreset, %inreset : !firrtl.reset
-  %8 = firrtl.resetCast %inreset : (!firrtl.reset) -> !firrtl.reset
-  firrtl.matchingconnect %outreset, %8 : !firrtl.reset
+  // CHECK: firrtl.matchingconnect %outreset, %inreset : !firrtl.inferredreset
+  %8 = firrtl.resetCast %inreset : (!firrtl.inferredreset) -> !firrtl.inferredreset
+  firrtl.matchingconnect %outreset, %8 : !firrtl.inferredreset
 
   // Transparent
   // CHECK: firrtl.matchingconnect %out2_si1, %si1
@@ -2866,8 +2866,8 @@ firrtl.module @constReg5(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, i
 }
 
 // Should not crash when the reset value is a block argument.
-firrtl.module @constReg7(in %v: !firrtl.uint<1>, in %clock: !firrtl.clock, in %reset: !firrtl.reset) {
-  %r = firrtl.regreset %clock, %reset, %v  : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<4>
+firrtl.module @constReg7(in %v: !firrtl.uint<1>, in %clock: !firrtl.clock, in %reset: !firrtl.inferredreset) {
+  %r = firrtl.regreset %clock, %reset, %v  : !firrtl.clock, !firrtl.inferredreset, !firrtl.uint<1>, !firrtl.uint<4>
 }
 
 // Check that firrtl.regreset reset mux folding doesn't respects
@@ -3729,7 +3729,7 @@ firrtl.module @Issue5650(in %io_y: !firrtl.uint<1>, out %io_x: !firrtl.uint<1>) 
 }
 
 // CHECK-LABEL: @HasBeenReset
-firrtl.module @HasBeenReset(in %clock: !firrtl.clock, in %reset1: !firrtl.uint<1>, in %reset2: !firrtl.asyncreset, in %reset3: !firrtl.reset) {
+firrtl.module @HasBeenReset(in %clock: !firrtl.clock, in %reset1: !firrtl.uint<1>, in %reset2: !firrtl.asyncreset, in %reset3: !firrtl.inferredreset) {
   // CHECK-NEXT: %c0_clock = firrtl.specialconstant 0
   // CHECK-NEXT: %c1_clock = firrtl.specialconstant 1
   // CHECK-NEXT: %c0_ui1 = firrtl.constant 0
@@ -3737,8 +3737,8 @@ firrtl.module @HasBeenReset(in %clock: !firrtl.clock, in %reset1: !firrtl.uint<1
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %c0_asyncreset = firrtl.specialconstant 0 : !firrtl.asyncreset
   %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.asyncreset
-  %c0_reset = firrtl.specialconstant 0 : !firrtl.reset
-  %c1_reset = firrtl.specialconstant 1 : !firrtl.reset
+  %c0_reset = firrtl.specialconstant 0 : !firrtl.inferredreset
+  %c1_reset = firrtl.specialconstant 1 : !firrtl.inferredreset
   %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
   %c1_clock = firrtl.specialconstant 1 : !firrtl.clock
 
@@ -3752,8 +3752,8 @@ firrtl.module @HasBeenReset(in %clock: !firrtl.clock, in %reset1: !firrtl.uint<1
   %r1 = firrtl.int.has_been_reset %clock, %c1_ui1 : !firrtl.uint<1>
   %r2 = firrtl.int.has_been_reset %clock, %c0_asyncreset : !firrtl.asyncreset
   %r3 = firrtl.int.has_been_reset %clock, %c1_asyncreset : !firrtl.asyncreset
-  %r4 = firrtl.int.has_been_reset %clock, %c0_reset : !firrtl.reset
-  %r5 = firrtl.int.has_been_reset %clock, %c1_reset : !firrtl.reset
+  %r4 = firrtl.int.has_been_reset %clock, %c0_reset : !firrtl.inferredreset
+  %r5 = firrtl.int.has_been_reset %clock, %c1_reset : !firrtl.inferredreset
   %constResetS0 = firrtl.node sym @constResetS0 %r0 : !firrtl.uint<1>
   %constResetS1 = firrtl.node sym @constResetS1 %r1 : !firrtl.uint<1>
   %constResetA0 = firrtl.node sym @constResetA0 %r2 : !firrtl.uint<1>
@@ -3775,8 +3775,8 @@ firrtl.module @HasBeenReset(in %clock: !firrtl.clock, in %reset1: !firrtl.uint<1
   %c1 = firrtl.int.has_been_reset %c1_clock, %reset1 : !firrtl.uint<1>
   %c2 = firrtl.int.has_been_reset %c0_clock, %reset2 : !firrtl.asyncreset
   %c3 = firrtl.int.has_been_reset %c1_clock, %reset2 : !firrtl.asyncreset
-  %c4 = firrtl.int.has_been_reset %c0_clock, %reset3 : !firrtl.reset
-  %c5 = firrtl.int.has_been_reset %c1_clock, %reset3 : !firrtl.reset
+  %c4 = firrtl.int.has_been_reset %c0_clock, %reset3 : !firrtl.inferredreset
+  %c5 = firrtl.int.has_been_reset %c1_clock, %reset3 : !firrtl.inferredreset
   %constClockS0 = firrtl.node sym @constClockS0 %c0 : !firrtl.uint<1>
   %constClockS1 = firrtl.node sym @constClockS1 %c1 : !firrtl.uint<1>
   %constClockA0 = firrtl.node sym @constClockA0 %c2 : !firrtl.uint<1>
@@ -3958,19 +3958,19 @@ firrtl.module @Domains(
 }
 
 // CHECK-LABEL: firrtl.module @ResetCast
-firrtl.module @ResetCast(out %a0: !firrtl.reset, out %a1: !firrtl.reset) {
-  // CHECK-DAG: [[R0:%.+]] = firrtl.specialconstant 0 : !firrtl.reset
-  // CHECK-DAG: [[R1:%.+]] = firrtl.specialconstant 1 : !firrtl.reset
+firrtl.module @ResetCast(out %a0: !firrtl.inferredreset, out %a1: !firrtl.inferredreset) {
+  // CHECK-DAG: [[R0:%.+]] = firrtl.specialconstant 0 : !firrtl.inferredreset
+  // CHECK-DAG: [[R1:%.+]] = firrtl.specialconstant 1 : !firrtl.inferredreset
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
   // CHECK: firrtl.matchingconnect %a0, [[R0]]
-  %0 = firrtl.asReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.reset
-  firrtl.matchingconnect %a0, %0 : !firrtl.reset
+  %0 = firrtl.asInferredReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.inferredreset
+  firrtl.matchingconnect %a0, %0 : !firrtl.inferredreset
 
   // CHECK: firrtl.matchingconnect %a1, [[R1]]
-  %1 = firrtl.asReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.reset
-  firrtl.matchingconnect %a1, %1 : !firrtl.reset
+  %1 = firrtl.asInferredReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.inferredreset
+  firrtl.matchingconnect %a1, %1 : !firrtl.inferredreset
 }
 
 }

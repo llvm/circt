@@ -111,13 +111,13 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: @HasBeenReset
-  firrtl.module @HasBeenReset(in %clock: !firrtl.clock, in %reset1: !firrtl.uint<1>, in %reset2: !firrtl.asyncreset, in %reset3: !firrtl.reset) {
+  firrtl.module @HasBeenReset(in %clock: !firrtl.clock, in %reset1: !firrtl.uint<1>, in %reset2: !firrtl.asyncreset, in %reset3: !firrtl.inferredreset) {
     // CHECK-NEXT: firrtl.int.has_been_reset %clock, %reset1 : !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.has_been_reset %clock, %reset2 : !firrtl.asyncreset
-    // CHECK-NEXT: firrtl.int.has_been_reset %clock, %reset3 : !firrtl.reset
+    // CHECK-NEXT: firrtl.int.has_been_reset %clock, %reset3 : !firrtl.inferredreset
     firrtl.int.generic "circt_has_been_reset"  %clock, %reset1 : (!firrtl.clock, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.int.generic "circt_has_been_reset"  %clock, %reset2 : (!firrtl.clock, !firrtl.asyncreset) -> !firrtl.uint<1>
-    firrtl.int.generic "circt_has_been_reset"  %clock, %reset3 : (!firrtl.clock, !firrtl.reset) -> !firrtl.uint<1>
+    firrtl.int.generic "circt_has_been_reset"  %clock, %reset3 : (!firrtl.clock, !firrtl.inferredreset) -> !firrtl.uint<1>
   }
 
   // CHECK-LABEL: firrtl.module @ChiselVerif(

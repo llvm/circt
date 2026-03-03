@@ -10,8 +10,8 @@ firrtl.circuit "A" {
   // CHECK-NEXT: firrtl.module private @Bar
   // CHECK-SAME:   in %clk: !firrtl.clock
   // CHECK-SAME:   in %clk_0: !firrtl.clock
-  // CHECK-SAME:   in %rst: !firrtl.reset
-  // CHECK-SAME:   in %rst_0: !firrtl.reset
+  // CHECK-SAME:   in %rst: !firrtl.inferredreset
+  // CHECK-SAME:   in %rst_0: !firrtl.inferredreset
   // CHECK-SAME:   out %ref: !firrtl.probe<uint<1>>
   // CHECK-SAME:   out %ref_0: !firrtl.rwprobe<uint<1>>
   // CHECK-SAME:   in %a: !firrtl.uint<1>
@@ -19,8 +19,8 @@ firrtl.circuit "A" {
   firrtl.module private @B(
     in %clock: !firrtl.clock,
     in %clock2: !firrtl.clock,
-    in %reset: !firrtl.reset,
-    in %reset2: !firrtl.reset,
+    in %reset: !firrtl.inferredreset,
+    in %reset2: !firrtl.inferredreset,
     out %someProbe: !firrtl.probe<uint<1>>,
     out %someOtherProbe: !firrtl.rwprobe<uint<1>>,
     in %x: !firrtl.uint<1>,
@@ -31,7 +31,7 @@ firrtl.circuit "A" {
     // CHECK-SAME:   {name = "reg"}
     %derp = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.const.uint<1>
-    %herp = firrtl.regreset %clock, %reset, %c1_ui1 : !firrtl.clock, !firrtl.reset, !firrtl.const.uint<1>, !firrtl.uint<1>
+    %herp = firrtl.regreset %clock, %reset, %c1_ui1 : !firrtl.clock, !firrtl.inferredreset, !firrtl.const.uint<1>, !firrtl.uint<1>
   }
   // CHECK:      firrtl.module @Foo
   // CHECK-SAME:   in %clk: !firrtl.clock
@@ -60,8 +60,8 @@ firrtl.circuit "A" {
       %b_x, %b_y = firrtl.instance b @B(
         in clock: !firrtl.clock,
         in clock2: !firrtl.clock,
-        in reset: !firrtl.reset,
-        in reset2: !firrtl.reset,
+        in reset: !firrtl.inferredreset,
+        in reset2: !firrtl.inferredreset,
         out someProbe: !firrtl.probe<uint<1>>,
         out someOtherProbe: !firrtl.rwprobe<uint<1>>,
         in x: !firrtl.uint<1>,

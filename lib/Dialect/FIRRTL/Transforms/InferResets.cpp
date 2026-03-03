@@ -179,7 +179,7 @@ static Value createZeroValue(ImplicitLocOpBuilder &builder, FIRRTLBaseType type,
             }
             return wireOp.getResult();
           })
-          .Case<ResetType, AnalogType>(
+          .Case<InferredResetType, AnalogType>(
               [&](auto type) { return InvalidValueOp::create(builder, type); })
           .Default([](auto) {
             llvm_unreachable("switch handles all types");
@@ -990,7 +990,7 @@ void InferResetsPass::traceResets(Type dstType, Value dst, unsigned dstID,
   auto srcBase = type_dyn_cast<FIRRTLBaseType>(srcType);
   if (!dstBase || !srcBase)
     return;
-  if (!type_isa<ResetType>(dstBase) && !type_isa<ResetType>(srcBase))
+  if (!type_isa<InferredResetType>(dstBase) && !type_isa<InferredResetType>(srcBase))
     return;
 
   FieldRef dstField(dst, dstID);
@@ -1150,7 +1150,7 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
     if (!isa<BlockArgument>(value) &&
         !isa_and_nonnull<WireOp, RegOp, RegResetOp, InstanceOp, InvalidValueOp,
                          ConstCastOp, RefCastOp, UninferredResetCastOp,
-                         RWProbeOp, AsResetPrimOp>(value.getDefiningOp()))
+                         RWProbeOp, AsInferredResetPrimOp>(value.getDefiningOp()))
       continue;
     if (updateReset(signal.field, resetType)) {
       for (auto user : value.getUsers())
@@ -1164,13 +1164,16 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
       } else if (auto uncast = value.getDefiningOp<UninferredResetCastOp>()) {
         uncast.replaceAllUsesWith(uncast.getInput());
         uncast.erase();
-      } else if (auto asResetOp = value.getDefiningOp<AsResetPrimOp>()) {
-        // Remove `asReset` casts for sync resets, or replace them with an
-        // `asAsyncReset` cast for async resets.
+      } else if (auto asResetOp = value.getDefiningOp<AsInferredResetPrimOp>()) {
+        // Replace `asReset` casts with an `asAsyncReset` cast for async resets,
+        // or an `asSyncReset` cast for sync resets.
         Value result = asResetOp.getInput();
         if (type_isa<AsyncResetType>(resetType)) {
           ImplicitLocOpBuilder builder(asResetOp.getLoc(), asResetOp);
           result = AsAsyncResetPrimOp::create(builder, asResetOp.getInput());
+        } else if (type_isa<SyncResetType>(resetType)) {
+          ImplicitLocOpBuilder builder(asResetOp.getLoc(), asResetOp);
+          result = AsSyncResetPrimOp::create(builder, asResetOp.getInput());
         }
         asResetOp.replaceAllUsesWith(result);
         asResetOp.erase();
@@ -1948,7 +1951,7 @@ LogicalResult InferResetsPass::verifyNoAbstractReset() {
   for (FModuleLike module :
        getOperation().getBodyBlock()->getOps<FModuleLike>()) {
     for (PortInfo port : module.getPorts()) {
-      if (getBaseOfType<ResetType>(port.type)) {
+      if (getBaseOfType<InferredResetType>(port.type)) {
         auto diag = emitError(port.loc)
                     << "a port \"" << port.getName()
                     << "\" with abstract reset type was unable to be "

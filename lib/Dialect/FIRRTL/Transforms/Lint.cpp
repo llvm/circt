@@ -85,7 +85,7 @@ private:
                << "constant defined here";
 
     if (auto reset = predicate.getDefiningOp<firrtl::AsUIntPrimOp>())
-      if (firrtl::type_isa<ResetType, AsyncResetType>(
+      if (firrtl::type_isa<InferredResetType, AsyncResetType, SyncResetType>(
               reset.getInput().getType()))
         return op->emitOpError("is guaranteed to fail simulation, as the "
                                "predicate is a reset signal")

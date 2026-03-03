@@ -66,18 +66,26 @@ MlirType firrtlTypeGetClock(MlirContext ctx) {
   return wrap(ClockType::get(unwrap(ctx)));
 }
 
-bool firrtlTypeIsAReset(MlirType type) { return isa<ResetType>(unwrap(type)); }
+bool firrtlTypeIsAnInferredReset(MlirType type) { return isa<InferredResetType>(unwrap(type)); }
 
-MlirType firrtlTypeGetReset(MlirContext ctx) {
-  return wrap(ResetType::get(unwrap(ctx)));
+MlirType firrtlTypeGetInferredReset(MlirContext ctx) {
+  return wrap(InferredResetType::get(unwrap(ctx)));
 }
 
-bool firrtlTypeIsAAsyncReset(MlirType type) {
+bool firrtlTypeIsAnAsyncReset(MlirType type) {
   return isa<AsyncResetType>(unwrap(type));
 }
 
 MlirType firrtlTypeGetAsyncReset(MlirContext ctx) {
   return wrap(AsyncResetType::get(unwrap(ctx)));
+}
+
+bool firrtlTypeIsASyncReset(MlirType type) {
+  return isa<SyncResetType>(unwrap(type));
+}
+
+MlirType firrtlTypeGetSyncReset(MlirContext ctx) {
+  return wrap(SyncResetType::get(unwrap(ctx)));
 }
 
 bool firrtlTypeIsAAnalog(MlirType type) {

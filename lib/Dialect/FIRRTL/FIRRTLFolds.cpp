@@ -1064,7 +1064,23 @@ OpFoldResult AsAsyncResetPrimOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
-OpFoldResult AsResetPrimOp::fold(FoldAdaptor adaptor) {
+OpFoldResult AsSyncResetPrimOp::fold(FoldAdaptor adaptor) {
+  // No effect.
+  if (getInput().getType() == getType())
+    return getInput();
+
+  // Constant fold.
+  if (auto cst = getConstant(adaptor.getInput()))
+    return BoolAttr::get(getContext(), cst->getBoolValue());
+  return {};
+}
+
+OpFoldResult AsInferredResetPrimOp::fold(FoldAdaptor adaptor) {
+  // No effect.
+  if (getInput().getType() == getType())
+    return getInput();
+
+  // Constant fold.
   if (auto cst = getConstant(adaptor.getInput()))
     return BoolAttr::get(getContext(), cst->getBoolValue());
   return {};

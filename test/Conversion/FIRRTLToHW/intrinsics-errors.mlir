@@ -25,11 +25,11 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.reset, out %hbr: !firrtl.uint<1>) {
+  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.inferredreset, out %hbr: !firrtl.uint<1>) {
     // expected-error @below {{uninferred reset passed to 'has_been_reset'; requires sync or async reset}}
-    // expected-note @below {{reset is of type '!firrtl.reset', should be '!firrtl.uint<1>' or '!firrtl.asyncreset'}}
+    // expected-note @below {{reset is of type '!firrtl.inferredreset', should be '!firrtl.uint<1>' or '!firrtl.asyncreset'}}
     // expected-error @below {{couldn't handle this operation}}
-    %0 = firrtl.int.has_been_reset %clock, %reset : !firrtl.reset
+    %0 = firrtl.int.has_been_reset %clock, %reset : !firrtl.inferredreset
     firrtl.matchingconnect %hbr, %0 : !firrtl.uint<1>
   }
 }

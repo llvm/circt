@@ -188,7 +188,7 @@ struct Emitter {
   HANDLE(AsSIntPrimOp, "asSInt");
   HANDLE(AsUIntPrimOp, "asUInt");
   HANDLE(AsAsyncResetPrimOp, "asAsyncReset");
-  HANDLE(AsResetPrimOp, "asReset");
+  HANDLE(AsInferredResetPrimOp, "asReset");
   HANDLE(AsClockPrimOp, "asClock");
   HANDLE(CvtPrimOp, "cvt");
   HANDLE(NegPrimOp, "neg");
@@ -1437,7 +1437,7 @@ void Emitter::emitExpression(Value value) {
           OrPrimOp, XorPrimOp, LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp,
           EQPrimOp, NEQPrimOp, DShlPrimOp, DShlwPrimOp, DShrPrimOp,
           // Unary
-          AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsResetPrimOp,
+          AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsSyncResetPrimOp, AsInferredResetPrimOp,
           AsClockPrimOp, CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp,
           XorRPrimOp,
           // Miscellaneous
@@ -1481,9 +1481,14 @@ void Emitter::emitExpression(SpecialConstantOp op) {
         emitInner();
         ps << ")";
       })
-      .Case<ResetType>([&](auto type) { emitInner(); })
+      .Case<InferredResetType>([&](auto type) { emitInner(); })
       .Case<AsyncResetType>([&](auto type) {
         ps << "asAsyncReset(";
+        emitInner();
+        ps << ")";
+      })
+      .Case<SyncResetType>([&](auto type) {
+        ps << "asSyncReset(";
         emitInner();
         ps << ")";
       });
@@ -1743,8 +1748,9 @@ void Emitter::emitType(Type type, bool includeConst) {
   // TODO: Emit type decl for type alias.
   FIRRTLTypeSwitch<Type>(type)
       .Case<ClockType>([&](auto) { ps << "Clock"; })
-      .Case<ResetType>([&](auto) { ps << "Reset"; })
+      .Case<InferredResetType>([&](auto) { ps << "Reset"; })
       .Case<AsyncResetType>([&](auto) { ps << "AsyncReset"; })
+      .Case<SyncResetType>([&](auto) { ps << "UInt<1>"; })
       .Case<UIntType>([&](auto type) {
         ps << "UInt";
         emitWidth(type.getWidth());

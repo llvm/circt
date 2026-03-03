@@ -982,6 +982,7 @@ static void erasePorts(FModuleLike op, const llvm::BitVector &portIndices) {
   ArrayRef<Attribute> portSyms = op.getPortSymbols();
   ArrayRef<Attribute> portLocs = op.getPortLocations();
   ArrayRef<Attribute> portDomains = op.getDomainInfo();
+  (void)portDomains;
   auto numPorts = op.getNumPorts();
   (void)numPorts;
   assert(portDirections.size() == numPorts);
@@ -4623,8 +4624,10 @@ void InvalidValueOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
       name = ("invalid_analog" + Twine(width)).str();
   } else if (type_isa<AsyncResetType>(getType()))
     name = "invalid_asyncreset";
-  else if (type_isa<ResetType>(getType()))
-    name = "invalid_reset";
+  else if (type_isa<SyncResetType>(getType()))
+    name = "invalid_syncreset";
+  else if (type_isa<InferredResetType>(getType()))
+    name = "invalid_inferredreset";
   else if (type_isa<ClockType>(getType()))
     name = "invalid_clock";
   else
@@ -4789,8 +4792,10 @@ void SpecialConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   auto type = getType();
   if (type_isa<ClockType>(type)) {
     specialName << "_clock";
-  } else if (type_isa<ResetType>(type)) {
-    specialName << "_reset";
+  } else if (type_isa<InferredResetType>(type)) {
+    specialName << "_inferredreset";
+  } else if (type_isa<SyncResetType>(type)) {
+    specialName << "_syncreset";
   } else if (type_isa<AsyncResetType>(type)) {
     specialName << "_asyncreset";
   }
@@ -5805,12 +5810,26 @@ FIRRTLType AsAsyncResetPrimOp::inferReturnType(FIRRTLType input,
   return AsyncResetType::get(input.getContext(), base.isConst());
 }
 
-FIRRTLType AsResetPrimOp::inferReturnType(FIRRTLType input,
+FIRRTLType AsSyncResetPrimOp::inferReturnType(FIRRTLType input,
                                           std::optional<Location> loc) {
   auto base = type_dyn_cast<FIRRTLBaseType>(input);
   if (!base)
     return emitInferRetTypeError(loc, "operand must be a scalar base type");
-  return ResetType::get(input.getContext(), base.isConst());
+  int32_t width = base.getBitWidthOrSentinel();
+  if (width == -2 || width == 0 || width > 1)
+    return emitInferRetTypeError(loc, "operand must be single bit scalar type");
+  return SyncResetType::get(input.getContext(), base.isConst());
+}
+
+FIRRTLType AsInferredResetPrimOp::inferReturnType(FIRRTLType input,
+                                          std::optional<Location> loc) {
+  auto base = type_dyn_cast<FIRRTLBaseType>(input);
+  if (!base)
+    return emitInferRetTypeError(loc, "operand must be a scalar base type");
+  int32_t width = base.getBitWidthOrSentinel();
+  if (width == -2 || width == 0 || width > 1)
+    return emitInferRetTypeError(loc, "operand must be single bit scalar type");
+  return InferredResetType::get(input.getContext(), base.isConst());
 }
 
 FIRRTLType AsClockPrimOp::inferReturnType(FIRRTLType input,
@@ -6544,7 +6563,10 @@ void SizeOfIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void AsAsyncResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-void AsResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+void AsSyncResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+void AsInferredResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 void AsClockPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

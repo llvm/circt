@@ -15,14 +15,14 @@
 firrtl.circuit "top" {
   // expected-error @+2 {{reset network "reset0" simultaneously connected to async and sync resets}}
   // expected-note @+1 {{majority of connections to this reset are async}}
-  firrtl.module @top(in %reset0: !firrtl.asyncreset, in %reset1: !firrtl.uint<1>, out %out: !firrtl.reset) {
-    %w0 = firrtl.wire : !firrtl.reset
-    %w1 = firrtl.wire : !firrtl.reset
-    firrtl.connect %w0, %reset0 : !firrtl.reset, !firrtl.asyncreset
+  firrtl.module @top(in %reset0: !firrtl.asyncreset, in %reset1: !firrtl.uint<1>, out %out: !firrtl.inferredreset) {
+    %w0 = firrtl.wire : !firrtl.inferredreset
+    %w1 = firrtl.wire : !firrtl.inferredreset
+    firrtl.connect %w0, %reset0 : !firrtl.inferredreset, !firrtl.asyncreset
     // expected-note @+1 {{sync drive here:}}
-    firrtl.connect %w1, %reset1 : !firrtl.reset, !firrtl.uint<1>
-    firrtl.connect %out, %w0 : !firrtl.reset, !firrtl.reset
-    firrtl.connect %out, %w1 : !firrtl.reset, !firrtl.reset
+    firrtl.connect %w1, %reset1 : !firrtl.inferredreset, !firrtl.uint<1>
+    firrtl.connect %out, %w0 : !firrtl.inferredreset, !firrtl.inferredreset
+    firrtl.connect %out, %w1 : !firrtl.inferredreset, !firrtl.inferredreset
   }
 }
 
@@ -31,19 +31,19 @@ firrtl.circuit "top" {
 firrtl.circuit "top" {
   // expected-error @+2 {{reset network "reset2" simultaneously connected to async and sync resets}}
   // expected-note @+1 {{majority of connections to this reset are async}}
-  firrtl.module @top(in %reset0: !firrtl.asyncreset, in %reset1: !firrtl.asyncreset, in %reset2: !firrtl.uint<1>, in %en: !firrtl.uint<1>, out %out: !firrtl.reset) {
-    %w0 = firrtl.wire : !firrtl.reset
-    %w1 = firrtl.wire : !firrtl.reset
-    %w2 = firrtl.wire : !firrtl.reset
-    firrtl.connect %w0, %reset0 : !firrtl.reset, !firrtl.asyncreset
-    firrtl.connect %w1, %reset1 : !firrtl.reset, !firrtl.asyncreset
+  firrtl.module @top(in %reset0: !firrtl.asyncreset, in %reset1: !firrtl.asyncreset, in %reset2: !firrtl.uint<1>, in %en: !firrtl.uint<1>, out %out: !firrtl.inferredreset) {
+    %w0 = firrtl.wire : !firrtl.inferredreset
+    %w1 = firrtl.wire : !firrtl.inferredreset
+    %w2 = firrtl.wire : !firrtl.inferredreset
+    firrtl.connect %w0, %reset0 : !firrtl.inferredreset, !firrtl.asyncreset
+    firrtl.connect %w1, %reset1 : !firrtl.inferredreset, !firrtl.asyncreset
     // expected-note @+1 {{sync drive here:}}
-    firrtl.connect %w2, %reset2 : !firrtl.reset, !firrtl.uint<1>
-    firrtl.connect %out, %w2 : !firrtl.reset, !firrtl.reset
+    firrtl.connect %w2, %reset2 : !firrtl.inferredreset, !firrtl.uint<1>
+    firrtl.connect %out, %w2 : !firrtl.inferredreset, !firrtl.inferredreset
     firrtl.when %en : !firrtl.uint<1>  {
-      firrtl.connect %out, %w0 : !firrtl.reset, !firrtl.reset
+      firrtl.connect %out, %w0 : !firrtl.inferredreset, !firrtl.inferredreset
     } else  {
-      firrtl.connect %out, %w1 : !firrtl.reset, !firrtl.reset
+      firrtl.connect %out, %w1 : !firrtl.inferredreset, !firrtl.inferredreset
     }
   }
 }
@@ -53,15 +53,15 @@ firrtl.circuit "top" {
 firrtl.circuit "top" {
   // expected-error @+2 {{reset network "reset0" simultaneously connected to async and sync resets}}
   // expected-note @+1 {{majority of connections to this reset are async}}
-  firrtl.module @top(in %reset0: !firrtl.asyncreset, in %reset1: !firrtl.uint<1>, in %en: !firrtl.uint<1>, out %out: !firrtl.reset) {
-    %w1 = firrtl.wire : !firrtl.reset
-    %w2 = firrtl.wire : !firrtl.reset
-    firrtl.connect %w1, %reset0 : !firrtl.reset, !firrtl.asyncreset
+  firrtl.module @top(in %reset0: !firrtl.asyncreset, in %reset1: !firrtl.uint<1>, in %en: !firrtl.uint<1>, out %out: !firrtl.inferredreset) {
+    %w1 = firrtl.wire : !firrtl.inferredreset
+    %w2 = firrtl.wire : !firrtl.inferredreset
+    firrtl.connect %w1, %reset0 : !firrtl.inferredreset, !firrtl.asyncreset
     // expected-note @+1 {{sync drive here:}}
-    firrtl.connect %w2, %reset1 : !firrtl.reset, !firrtl.uint<1>
-    firrtl.connect %out, %w1 : !firrtl.reset, !firrtl.reset
+    firrtl.connect %w2, %reset1 : !firrtl.inferredreset, !firrtl.uint<1>
+    firrtl.connect %out, %w1 : !firrtl.inferredreset, !firrtl.inferredreset
     firrtl.when %en : !firrtl.uint<1>  {
-      firrtl.connect %out, %w2 : !firrtl.reset, !firrtl.reset
+      firrtl.connect %out, %w2 : !firrtl.inferredreset, !firrtl.inferredreset
     }
   }
 }
@@ -72,10 +72,10 @@ firrtl.circuit "top" {
   // expected-error @+2 {{reset network "in" simultaneously connected to async and sync resets}}
   // expected-note @+1 {{majority of connections to this reset are async}}
   firrtl.module @top(in %in: !firrtl.asyncreset, out %out: !firrtl.uint<1>) {
-    %w = firrtl.wire  : !firrtl.reset
-    firrtl.connect %w, %in : !firrtl.reset, !firrtl.asyncreset
+    %w = firrtl.wire  : !firrtl.inferredreset
+    firrtl.connect %w, %in : !firrtl.inferredreset, !firrtl.asyncreset
     // expected-note @+1 {{sync drive here:}}
-    firrtl.connect %out, %w : !firrtl.uint<1>, !firrtl.reset
+    firrtl.connect %out, %w : !firrtl.uint<1>, !firrtl.inferredreset
   }
 }
 
@@ -85,10 +85,10 @@ firrtl.circuit "top"   {
   // expected-error @+2 {{reset network "in" simultaneously connected to async and sync resets}}
   // expected-note @+1 {{majority of connections to this reset are async}}
   firrtl.module @top(in %in: !firrtl.uint<1>, out %out: !firrtl.asyncreset) {
-    %w = firrtl.wire  : !firrtl.reset
+    %w = firrtl.wire  : !firrtl.inferredreset
     // expected-note @+1 {{sync drive here:}}
-    firrtl.connect %w, %in : !firrtl.reset, !firrtl.uint<1>
-    firrtl.connect %out, %w : !firrtl.asyncreset, !firrtl.reset
+    firrtl.connect %w, %in : !firrtl.inferredreset, !firrtl.uint<1>
+    firrtl.connect %out, %w : !firrtl.asyncreset, !firrtl.inferredreset
   }
 }
 
@@ -97,25 +97,25 @@ firrtl.circuit "top"   {
 firrtl.circuit "top" {
   // expected-error @+2 {{reset network never driven with concrete type}}
   // expected-note @+1 {{here: }}
-  firrtl.module @top(in %in: !firrtl.bundle<foo: reset>, out %out: !firrtl.reset) {
+  firrtl.module @top(in %in: !firrtl.bundle<foo: inferredreset>, out %out: !firrtl.inferredreset) {
     // expected-note @+1 {{here: }}
-    %0 = firrtl.subfield %in[foo] : !firrtl.bundle<foo: reset>
-    firrtl.connect %out, %0 : !firrtl.reset, !firrtl.reset
+    %0 = firrtl.subfield %in[foo] : !firrtl.bundle<foo: inferredreset>
+    firrtl.connect %out, %0 : !firrtl.inferredreset, !firrtl.inferredreset
   }
 }
 
 // -----
 // Should not allow ResetType as an ExtModule output
 firrtl.circuit "top" {
-  firrtl.extmodule @ext(out out: !firrtl.bundle<foo: reset>)
+  firrtl.extmodule @ext(out out: !firrtl.bundle<foo: inferredreset>)
   // expected-note @+1 {{here: }}
-  firrtl.module @top(out %out: !firrtl.reset) {
+  firrtl.module @top(out %out: !firrtl.inferredreset) {
     // expected-error @+2 {{reset network never driven with concrete type}}
     // expected-note @+1 {{here: }}
-    %e_out = firrtl.instance e @ext(out out: !firrtl.bundle<foo: reset>)
+    %e_out = firrtl.instance e @ext(out out: !firrtl.bundle<foo: inferredreset>)
     // expected-note @+1 {{here: }}
-    %0 = firrtl.subfield %e_out[foo] : !firrtl.bundle<foo: reset>
-    firrtl.connect %out, %0 : !firrtl.reset, !firrtl.reset
+    %0 = firrtl.subfield %e_out[foo] : !firrtl.bundle<foo: inferredreset>
+    firrtl.connect %out, %0 : !firrtl.inferredreset, !firrtl.inferredreset
   }
 }
 
@@ -124,12 +124,12 @@ firrtl.circuit "top" {
 firrtl.circuit "top" {
   // expected-error @+2 {{reset network "out[]" simultaneously connected to async and sync resets}}
   // expected-note @+1 {{majority of connections to this reset are async}}
-  firrtl.module @top(in %reset0: !firrtl.asyncreset, in %reset1: !firrtl.uint<1>, out %out: !firrtl.vector<reset, 2>) {
-    %0 = firrtl.subindex %out[0] : !firrtl.vector<reset, 2>
-    %1 = firrtl.subindex %out[1] : !firrtl.vector<reset, 2>
-    firrtl.connect %0, %reset0 : !firrtl.reset, !firrtl.asyncreset
+  firrtl.module @top(in %reset0: !firrtl.asyncreset, in %reset1: !firrtl.uint<1>, out %out: !firrtl.vector<inferredreset, 2>) {
+    %0 = firrtl.subindex %out[0] : !firrtl.vector<inferredreset, 2>
+    %1 = firrtl.subindex %out[1] : !firrtl.vector<inferredreset, 2>
+    firrtl.connect %0, %reset0 : !firrtl.inferredreset, !firrtl.asyncreset
     // expected-note @+1 {{sync drive here:}}
-    firrtl.connect %1, %reset1 : !firrtl.reset, !firrtl.uint<1>
+    firrtl.connect %1, %reset1 : !firrtl.inferredreset, !firrtl.uint<1>
   }
 }
 
@@ -138,15 +138,15 @@ firrtl.circuit "top" {
 firrtl.circuit "top" {
   // expected-error @+2 {{reset network "in0" simultaneously connected to async and sync resets}}
   // expected-note @+1 {{majority of connections to this reset are async}}
-  firrtl.module @top(in %in0: !firrtl.asyncreset, in %in1: !firrtl.uint<1>, out %out0: !firrtl.reset, out %out1: !firrtl.reset) {
-    %w = firrtl.wire  : !firrtl.reset
-    %invalid_reset = firrtl.invalidvalue : !firrtl.reset
-    firrtl.connect %w, %invalid_reset : !firrtl.reset, !firrtl.reset
-    firrtl.connect %out0, %w : !firrtl.reset, !firrtl.reset
-    firrtl.connect %out1, %w : !firrtl.reset, !firrtl.reset
-    firrtl.connect %out0, %in0 : !firrtl.reset, !firrtl.asyncreset
+  firrtl.module @top(in %in0: !firrtl.asyncreset, in %in1: !firrtl.uint<1>, out %out0: !firrtl.inferredreset, out %out1: !firrtl.inferredreset) {
+    %w = firrtl.wire  : !firrtl.inferredreset
+    %invalid_reset = firrtl.invalidvalue : !firrtl.inferredreset
+    firrtl.connect %w, %invalid_reset : !firrtl.inferredreset, !firrtl.inferredreset
+    firrtl.connect %out0, %w : !firrtl.inferredreset, !firrtl.inferredreset
+    firrtl.connect %out1, %w : !firrtl.inferredreset, !firrtl.inferredreset
+    firrtl.connect %out0, %in0 : !firrtl.inferredreset, !firrtl.asyncreset
     // expected-note @+1 {{sync drive here:}}
-    firrtl.connect %out1, %in1 : !firrtl.reset, !firrtl.uint<1>
+    firrtl.connect %out1, %in1 : !firrtl.inferredreset, !firrtl.uint<1>
   }
 }
 
@@ -180,14 +180,14 @@ firrtl.circuit "top" {
 firrtl.circuit "top" {
   firrtl.module @top() {
    // expected-error @below {{'FullResetAnnotation' with resetType == 'async' must target async reset, but targets '!firrtl.uint<1>'}}
-    %innerReset = firrtl.wire {annotations = [{class = "circt.FullResetAnnotation", resetType = "async"}]} : !firrtl.reset
-    %invalid = firrtl.invalidvalue : !firrtl.reset
-    firrtl.matchingconnect %innerReset, %invalid : !firrtl.reset
+    %innerReset = firrtl.wire {annotations = [{class = "circt.FullResetAnnotation", resetType = "async"}]} : !firrtl.inferredreset
+    %invalid = firrtl.invalidvalue : !firrtl.inferredreset
+    firrtl.matchingconnect %innerReset, %invalid : !firrtl.inferredreset
 
     // expected-error @below {{'FullResetAnnotation' with resetType == 'sync' must target sync reset, but targets '!firrtl.asyncreset'}}
-    %innerReset2 = firrtl.wire {annotations = [{class = "circt.FullResetAnnotation", resetType = "sync"}]} : !firrtl.reset
+    %innerReset2 = firrtl.wire {annotations = [{class = "circt.FullResetAnnotation", resetType = "sync"}]} : !firrtl.inferredreset
     %asyncWire = firrtl.wire : !firrtl.asyncreset
-    firrtl.connect %innerReset2, %asyncWire : !firrtl.reset, !firrtl.asyncreset
+    firrtl.connect %innerReset2, %asyncWire : !firrtl.inferredreset, !firrtl.asyncreset
   }
 }
 
@@ -278,7 +278,7 @@ firrtl.circuit "Top" {
 firrtl.circuit "UninferredReset" {
   // expected-error @+2 {{a port "reset" with abstract reset type was unable to be inferred by InferResets}}
   // expected-note @+1 {{the module with this uninferred reset port was defined here}}
-  firrtl.module @UninferredReset(in %reset: !firrtl.reset) {}
+  firrtl.module @UninferredReset(in %reset: !firrtl.inferredreset) {}
 }
 
 // -----
@@ -287,7 +287,7 @@ firrtl.circuit "UninferredRefReset" {
   firrtl.module @UninferredRefReset() {}
   // expected-error @+2 {{a port "reset" with abstract reset type was unable to be inferred by InferResets}}
   // expected-note @+1 {{the module with this uninferred reset port was defined here}}
-  firrtl.module private @UninferredRefResetPriv(out %reset: !firrtl.probe<reset>) {}
+  firrtl.module private @UninferredRefResetPriv(out %reset: !firrtl.probe<inferredreset>) {}
 }
 
 // -----
