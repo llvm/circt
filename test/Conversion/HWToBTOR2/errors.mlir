@@ -28,7 +28,7 @@ hw.module @reg_with_argument_initial(in %clk: !seq.clock, in %in: i32, in %init:
 
 hw.module @dual_clock_error(in %clk : !seq.clock, in %clk1 : !seq.clock) {
   %clk0 = seq.from_clock %clk
-// expected-error @below {{Mutli-clock designs are not supported!}}
+// expected-error @below {{Multi-clock designs are not supported!}}
   %clk_1 = seq.from_clock %clk1 
 }
 
