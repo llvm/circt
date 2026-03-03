@@ -7,6 +7,7 @@ add_tablegen(circt-tblgen CIRCT
   circt-tblgen.cpp
   FIRRTLAnnotationsGen.cpp
   FIRRTLIntrinsicsGen.cpp
+  RTGInstructionMethodsGen.cpp
 )
 
 target_link_libraries(circt-tblgen

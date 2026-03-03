@@ -51,8 +51,8 @@ def ImplicitConstraintTestOp : RTGTestOp<"implicit_constraint_op", [
 class InstFormatIOpBase<string mnemonic, int opcode7, int funct3>
   : RTGTestOp<"rv32i." # mnemonic, [InstructionOpAdaptor]> {
 
-  let arguments = (ins IntegerRegisterType:$rd,
-                       IntegerRegisterType:$rs,
+  let arguments = (ins Arg<IntegerRegisterType, "", [DestReg]>:$rd,
+                       Arg<IntegerRegisterType, "", [SourceReg]>:$rs,
                        ImmediateOfWidth<12>:$imm);
 
   let assemblyFormat = "$rd `,` $rs `,` $imm attr-dict";
@@ -116,8 +116,8 @@ class InstFormatIImmOpBase<string mnemonic, int opcode7, int funct12>
 class InstFormatBOpBase<string mnemonic, int opcode7, int funct3>
   : RTGTestOp<"rv32i." # mnemonic, [InstructionOpAdaptor]> {
 
-  let arguments = (ins IntegerRegisterType:$rs1,
-                       IntegerRegisterType:$rs2,
+  let arguments = (ins Arg<IntegerRegisterType, "", [SourceReg]>:$rs1,
+                       Arg<IntegerRegisterType, "", [SourceReg]>:$rs2,
                        AnyTypeOf<[ImmediateOfWidth<13>, LabelType]>:$imm);
 
   let assemblyFormat = [{
@@ -173,9 +173,9 @@ class InstFormatBOpBase<string mnemonic, int opcode7, int funct3>
 class InstFormatROpBase<string mnemonic, int opcode7, int funct3, int funct7>
   : RTGTestOp<"rv32i." # mnemonic, [InstructionOpAdaptor]> {
 
-  let arguments = (ins IntegerRegisterType:$rd,
-                       IntegerRegisterType:$rs1,
-                       IntegerRegisterType:$rs2);
+  let arguments = (ins Arg<IntegerRegisterType, "", [DestReg]>:$rd,
+                       Arg<IntegerRegisterType, "", [SourceReg]>:$rs1,
+                       Arg<IntegerRegisterType, "", [SourceReg]>:$rs2);
 
   let assemblyFormat = "$rd `,` $rs1 `,` $rs2 attr-dict";
 
@@ -217,8 +217,8 @@ class InstFormatROpBase<string mnemonic, int opcode7, int funct3, int funct7>
 class InstFormatSOpBase<string mnemonic, int opcode7, int funct3>
   : RTGTestOp<"rv32i." # mnemonic, [InstructionOpAdaptor]> {
 
-  let arguments = (ins IntegerRegisterType:$rs1,
-                       IntegerRegisterType:$rs2,
+  let arguments = (ins Arg<IntegerRegisterType, "", [SourceReg]>:$rs1,
+                       Arg<IntegerRegisterType, "", [SourceReg]>:$rs2,
                        ImmediateOfWidth<12>:$imm);
 
   let assemblyFormat = "$rs1 `,` $rs2 `,` $imm attr-dict";
@@ -262,7 +262,7 @@ class InstFormatSOpBase<string mnemonic, int opcode7, int funct3>
 class InstFormatUOpBase<string mnemonic, int opcode7>
   : RTGTestOp<"rv32i." # mnemonic, [InstructionOpAdaptor]> {
 
-  let arguments = (ins IntegerRegisterType:$rd,
+  let arguments = (ins Arg<IntegerRegisterType, "", [DestReg]>:$rd,
                        AnyTypeOf<[ImmediateOfWidth<32>, LabelType]>:$imm);
 
   let assemblyFormat = "$rd `,` $imm `:` type($imm) attr-dict";
@@ -307,7 +307,7 @@ class InstFormatUOpBase<string mnemonic, int opcode7>
 class InstFormatJOpBase<string mnemonic, int opcode7>
   : RTGTestOp<"rv32i." # mnemonic, [InstructionOpAdaptor]> {
 
-  let arguments = (ins IntegerRegisterType:$rd,
+  let arguments = (ins Arg<IntegerRegisterType, "", [DestReg]>:$rd,
                        AnyTypeOf<[ImmediateOfWidth<21>, LabelType]>:$imm);
 
   let assemblyFormat = "$rd `,` $imm `:` type($imm) attr-dict";
@@ -355,8 +355,8 @@ class InstFormatJOpBase<string mnemonic, int opcode7>
 class InstFormatIAOpBase<string mnemonic, int opcode7, int funct3>
   : RTGTestOp<"rv32i." # mnemonic, [InstructionOpAdaptor]> {
 
-  let arguments = (ins IntegerRegisterType:$rd,
-                       IntegerRegisterType:$rs,
+  let arguments = (ins Arg<IntegerRegisterType, "", [DestReg]>:$rd,
+                       Arg<IntegerRegisterType, "", [SourceReg]>:$rs,
                        ImmediateOfWidth<12>:$imm);
 
   let assemblyFormat = "$rd `,` $rs `,` $imm attr-dict";
@@ -399,8 +399,8 @@ class InstFormatShiftOpBase<string mnemonic, int opcode7,
                             int funct3, int funct7>
   : RTGTestOp<"rv32i." # mnemonic, [InstructionOpAdaptor]> {
 
-  let arguments = (ins IntegerRegisterType:$rd,
-                       IntegerRegisterType:$rs,
+  let arguments = (ins Arg<IntegerRegisterType, "", [DestReg]>:$rd,
+                       Arg<IntegerRegisterType, "", [SourceReg]>:$rs,
                        ImmediateOfWidth<5>:$imm);
 
   let assemblyFormat = "$rd `,` $rs `,` $imm attr-dict";
@@ -444,7 +444,8 @@ class InstFormatShiftOpBase<string mnemonic, int opcode7,
 
 def RV32I_LA : RTGTestOp<"rv32i.la", [InstructionOpAdaptor]> {
 
-  let arguments = (ins IntegerRegisterType:$rd, ISAMemory:$mem);
+  let arguments = (ins Arg<IntegerRegisterType, "", [DestReg]>:$rd, 
+                       ISAMemory:$mem);
 
   let assemblyFormat = "$rd `,` $mem `:` type($mem) attr-dict";
 
