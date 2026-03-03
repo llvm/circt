@@ -850,7 +850,7 @@ def QueueFromArrayOp : SimOp<"queue.from_array", [Pure]> {
   let description = [{
     Creates a queue containing the elements of the given array.
 
-    The queue and unpacked array must have the same element type.
+    The queue and array must have the same element type.
 
     If the queue type has bounds, any elements outside the bounds will be
     discarded.
@@ -874,7 +874,7 @@ def QueueConcatOp : SimOp<"queue.concat", [Pure]> {
     All queues must have the same element type, but the bounds may differ.
 
     If the total length of the inputs doesn't fit into the queue bound of
-    $result, then the excess elements are discarded at the end of the queue.
+    $result, then the excess elements at the end of the queue are discarded.
   }];
   let arguments = (ins Variadic<QueueType>:$inputs);
   let results = (outs QueueType:$result);
