@@ -6117,8 +6117,7 @@ ParseResult FIRCircuitParser::parseOptionDecl(CircuitOp circuit) {
       return emitError(loc)
              << "duplicate option case definition '" << id << "'";
 
-    OptionCaseOp::create(builder, caseInfo.getLoc(), id,
-                         /*case_macro=*/nullptr);
+    OptionCaseOp::create(builder, caseInfo.getLoc(), id);
   }
 
   return success();

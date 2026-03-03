@@ -513,6 +513,12 @@ def OptionCaseOp : FIRRTLOp<
   let assemblyFormat = [{
     $sym_name attr-dict
   }];
+
+  let builders = [
+    OpBuilder<(ins "StringRef":$sym_name), [{
+      build($_builder, $_state, $_builder.getStringAttr(sym_name), nullptr);
+    }]>
+  ];
 }
 
 def FormalOp : FIRRTLOp<"formal", [
