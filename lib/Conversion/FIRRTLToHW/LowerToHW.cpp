@@ -1159,13 +1159,14 @@ void FIRRTLModuleLowering::emitInstanceChoiceIncludes(
   builder.setInsertionPointToEnd(topLevelModule.getBody());
   Namespace circuitNamespace;
   circuitNamespace.add(topLevelModule);
+  igraph::InstanceGraph instanceGraph(topLevelModule);
 
   // Find all public modules
   for (auto module : topLevelModule.getOps<hw::HWModuleOp>()) {
     if (!module.isPublic())
       continue;
 
-    auto *rootNode = loweringState.getInstanceGraph().lookup(module);
+    auto *rootNode = instanceGraph.lookup(module);
     assert(rootNode && "Public module not found in instance graph");
 
     auto publicModuleName = module.getModuleNameAttr();
