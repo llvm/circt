@@ -1040,7 +1040,7 @@ public:
         // Make sure that the design only contains one clock
         .Case<seq::FromClockOp>([&](auto expr) {
           if (++nclocks > 1UL) {
-            op->emitOpError("Mutli-clock designs are not supported!");
+            op->emitOpError("Multi-clock designs are not supported!");
             return signalPassFailure();
           }
         })
