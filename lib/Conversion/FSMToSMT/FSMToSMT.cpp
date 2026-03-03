@@ -60,9 +60,9 @@ private:
   };
 
   Transition getTransitionRegions(fsm::TransitionOp t, int from,
-                                  SmallVector<std::string> &states,
+                                  SmallVector<StringRef> &states,
                                   Location &loc) {
-    std::string nextState = t.getNextState().str();
+    StringRef nextState = t.getNextState();
     Transition tr = {from, insertStates(states, nextState)};
     if (t.hasGuard())
       tr.guard = &t.getGuard();
@@ -75,12 +75,11 @@ private:
     return tr;
   }
 
-  static int insertStates(SmallVector<std::string> &states,
-                          llvm::StringRef st) {
+  static int insertStates(SmallVector<StringRef> &states, llvm::StringRef st) {
     for (auto [id, s] : llvm::enumerate(states))
       if (s == st)
         return id;
-    states.push_back(st.str()); // materialize once, stored in vector
+    states.push_back(st); // materialize once, stored in vector
     return states.size() - 1;
   }
 
@@ -248,12 +247,12 @@ LogicalResult MachineOpConverter::dispatch() {
   // the activation of each state
   SmallVector<Value> stateFunctions;
   // Store the name of each state
-  SmallVector<std::string> states;
+  SmallVector<StringRef> states;
   // Store the output region of each state
   SmallVector<std::pair<Region *, int>> outputOfStateId;
 
   // Get FSM initial state and store it in the states vector
-  std::string initialState = machineOp.getInitialState().str();
+  StringRef initialState = machineOp.getInitialState();
   insertStates(states, initialState);
 
   // Only outputs and variables belong in the state function's domain, since the
@@ -271,7 +270,7 @@ LogicalResult MachineOpConverter::dispatch() {
     auto funTy = b.getType<smt::SMTFuncType>(stateFunDomain, rangeTy);
     auto acFun = smt::DeclareFunOp::create(b, loc, funTy, funName);
     stateFunctions.push_back(acFun);
-    auto fromState = insertStates(states, stateOp.getName().str());
+    auto fromState = insertStates(states, stateOp.getName());
     outputOfStateId.push_back({&stateOp.getOutput(), fromState});
   }
 
@@ -282,7 +281,7 @@ LogicalResult MachineOpConverter::dispatch() {
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
     if (stateOp.getTransitions().empty())
       continue;
-    std::string stateName = stateOp.getName().str();
+    StringRef stateName = stateOp.getName();
     auto fromState = insertStates(states, stateName);
     for (auto tr :
          stateOp.getTransitions().front().getOps<fsm::TransitionOp>()) {
