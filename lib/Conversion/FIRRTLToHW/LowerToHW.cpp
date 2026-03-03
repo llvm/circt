@@ -3982,6 +3982,14 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
         "instance choice with inner sym cannot be lowered");
     return failure();
   }
+
+  // Require instance_macro to be set before lowering
+  FlatSymbolRefAttr instanceMacro = oldInstanceChoice.getInstanceMacroAttr();
+  if (!instanceMacro)
+    return oldInstanceChoice->emitOpError(
+        "must have instance_macro attribute set before "
+        "lowering");
+
   // Get all the target modules
   auto moduleNames = oldInstanceChoice.getModuleNamesAttr();
   auto caseNames = oldInstanceChoice.getCaseNamesAttr();
