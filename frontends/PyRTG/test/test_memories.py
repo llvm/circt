@@ -10,8 +10,8 @@ class Target(Config):
 
 
 # CHECK-LABEL: Begin of test 'test0_Target'
-# CHECK-NEXT: la t0, 0
-# CHECK-NEXT: la t1, 8
+# CHECK-NEXT: memory_instr t0, 0
+# CHECK-NEXT: memory_instr t1, 8
 # CHECK-NEXT: End of test 'test0_Target'
 
 
@@ -20,5 +20,5 @@ def test0(config):
   mem0 = Memory.alloc(config.mem_blk, 8, 4)
   mem1 = Memory.alloc(config.mem_blk, 8, 4)
 
-  rtgtest.LA(IntegerRegister.t0(), mem0)
-  rtgtest.LA(IntegerRegister.t1(), mem1)
+  rtgtest.MemoryInstrOp(IntegerRegister.t0(), mem0)
+  rtgtest.MemoryInstrOp(IntegerRegister.t1(), mem1)

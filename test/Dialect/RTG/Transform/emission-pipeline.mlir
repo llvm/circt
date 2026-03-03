@@ -45,8 +45,8 @@
 // ASM: unique_1:
 // ASM: # End of test 'test_labels'
 // ASM: # Begin of test 'test_registers'
-// ASM: jalr
-// ASM: jalr
+// ASM: two_register_instr
+// ASM: two_register_instr
 // ASM: # End of test 'test_registers'
 
 rtg.test @test_labels() {
@@ -63,8 +63,7 @@ rtg.test @test_labels() {
 rtg.test @test_registers() {
   %vreg0 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
   %vreg1 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
-  %imm = rtg.constant #rtg.isa.immediate<12, 0> : !rtg.isa.immediate<12>
-  rtgtest.rv32i.jalr %vreg0, %vreg1, %imm
-  rtgtest.rv32i.jalr %vreg1, %vreg0, %imm
+  rtgtest.two_register_instr %vreg0, %vreg1
+  rtgtest.two_register_instr %vreg1, %vreg0
 }
 

@@ -102,38 +102,6 @@ IntegerRegisterType::getRegisterAttrForClassIndex(MLIRContext *ctx,
     return RegA4Attr::get(ctx);
   case 15:
     return RegA5Attr::get(ctx);
-  case 16:
-    return RegA6Attr::get(ctx);
-  case 17:
-    return RegA7Attr::get(ctx);
-  case 18:
-    return RegS2Attr::get(ctx);
-  case 19:
-    return RegS3Attr::get(ctx);
-  case 20:
-    return RegS4Attr::get(ctx);
-  case 21:
-    return RegS5Attr::get(ctx);
-  case 22:
-    return RegS6Attr::get(ctx);
-  case 23:
-    return RegS7Attr::get(ctx);
-  case 24:
-    return RegS8Attr::get(ctx);
-  case 25:
-    return RegS9Attr::get(ctx);
-  case 26:
-    return RegS10Attr::get(ctx);
-  case 27:
-    return RegS11Attr::get(ctx);
-  case 28:
-    return RegT3Attr::get(ctx);
-  case 29:
-    return RegT4Attr::get(ctx);
-  case 30:
-    return RegT5Attr::get(ctx);
-  case 31:
-    return RegT6Attr::get(ctx);
   }
   return {};
 }

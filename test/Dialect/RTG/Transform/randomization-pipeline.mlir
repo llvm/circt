@@ -18,12 +18,12 @@ rtg.target @target : !rtg.dict<mem_blk: !rtg.isa.memory_block<32>> {
 // CHECK-LABEL: rtg.test @test_memories_target
 // CHECK-SAME: template "test_memories" target @target
 // CHECK: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<32, 0> : !rtg.isa.immediate<32>
-// CHECK: rtgtest.rv32i.la {{%.+}}, [[IMM]] : !rtg.isa.immediate<32>
+// CHECK: rtgtest.memory_instr {{%.+}}, [[IMM]] : !rtg.isa.immediate<32>
 rtg.test @test_memories(mem_blk = %mem_blk: !rtg.isa.memory_block<32>) {
   %idx4 = index.constant 4
   %0 = rtg.isa.memory_alloc %mem_blk, %idx4, %idx4 : !rtg.isa.memory_block<32>
   %reg = rtg.virtual_reg [#rtgtest.t0, #rtgtest.t1, #rtgtest.t2]
-  rtgtest.rv32i.la %reg, %0 : !rtg.isa.memory<32>
+  rtgtest.memory_instr %reg, %0 : !rtg.isa.memory<32>
 }
 
 // Test 2: Sequence inlining - sequences are inlined into tests
@@ -32,12 +32,10 @@ rtg.test @test_memories(mem_blk = %mem_blk: !rtg.isa.memory_block<32>) {
 // CHECK-NOT: rtg.randomize_sequence
 // CHECK-NOT: rtg.embed_sequence
 // CHECK: [[REG:%.+]] = rtg.constant #rtgtest.t0
-// CHECK: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<12, 42>
-// CHECK: rtgtest.rv32i.addi [[REG]], [[REG]], [[IMM]]
+// CHECK: rtgtest.two_register_instr [[REG]], [[REG]]
 rtg.sequence @seq() {
   %reg = rtg.constant #rtgtest.t0 : !rtgtest.ireg
-  %imm = rtg.constant #rtg.isa.immediate<12, 42> : !rtg.isa.immediate<12>
-  "rtgtest.rv32i.addi"(%reg, %reg, %imm) : (!rtgtest.ireg, !rtgtest.ireg, !rtg.isa.immediate<12>) -> ()
+  rtgtest.two_register_instr %reg, %reg
 }
 
 rtg.test @test_sequences() {
