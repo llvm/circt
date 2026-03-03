@@ -45,8 +45,7 @@ hw.module @permutation(in %a: i1, in %b: i1, in %c: i1, in %d: i1, out result: i
 
 // CHECK-LABEL: hw.module @permutation_test(in %p : i1, in %q : i1, in %r : i1, in %s : i1, out result : i1) {
 hw.module @permutation_test(in %p: i1, in %q: i1, in %r: i1, in %s: i1, out result: i1) {
-    // {a -> s, b -> p, c -> q, d -> r}
-    // CHECK-NEXT: hw.instance "{{.+}}" @permutation(a: %s: i1, b: %p: i1, c: %q: i1, d: %r: i1) -> (result: i1) {test.arrival_times = [1]}
+    // CHECK-NEXT: %[[r0:.+]] = hw.instance "{{.+}}" @permutation(a: %r: i1, b: %p: i1, c: %s: i1, d: %q: i1) -> (result: i1) {test.arrival_times = [1]}
     %0 = synth.aig.and_inv %s, not %p : i1
     %1 = synth.aig.and_inv %q, not %r : i1
     %2 = synth.aig.and_inv %0, not %1 : i1
@@ -70,7 +69,7 @@ hw.module @and_inv_5_test(in %a : i1, in %b : i1, in %c : i1, in %d : i1, in %e:
     %5 = synth.aig.and_inv not %b, %e : i1
     %6 = synth.aig.and_inv %5, %c : i1
     %7 = synth.aig.and_inv %6, %4 : i1
-    // CHECK-NEXT: %[[result_1:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv_5(a: %b: i1, b: %e: i1, c: %a: i1, d: %c: i1, e: %d: i1)
+    // CHECK-NEXT: %[[result_1:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv_5(a: %d: i1, b: %e: i1, c: %c: i1, d: %a: i1, e: %b: i1)
     
     hw.output %3, %7 : i1, i1
     // CHECK-NEXT: hw.output %[[result_0]], %[[result_1]] : i1, i1
@@ -153,7 +152,7 @@ hw.module @extract_concat_test(in %data : i4, in %ctrl : i2, out result : i3) {
     // CHECK-NEXT: %[[ctrl1:.+]] = comb.extract %ctrl from 1
     // CHECK-NEXT: %[[and0:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv(a: %[[bit0]]: i1, b: %[[bit1]]: i1) -> (result: i1) {test.arrival_times = [1]}
     // CHECK-NEXT: %[[and1:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv_n(a: %[[ctrl0]]: i1, b: %[[bit2]]: i1) -> (result: i1) {test.arrival_times = [1]}
-    // CHECK-NEXT: %[[out0:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv(a: %[[and0]]: i1, b: %[[ctrl0]]: i1) -> (result: i1) {test.arrival_times = [2]}
+    // CHECK-NEXT: %[[out0:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv(a: %[[ctrl0]]: i1, b: %[[and0]]: i1) -> (result: i1) {test.arrival_times = [2]}
     // CHECK-NEXT: %[[out1:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv_n(a: %[[and0]]: i1, b: %[[and1]]: i1) -> (result: i1) {test.arrival_times = [2]}
     // CHECK-NEXT: %[[out2:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv(a: %[[bit3]]: i1, b: %[[ctrl1]]: i1) -> (result: i1) {test.arrival_times = [1]}
     // CHECK-NEXT: %[[result:.+]] = comb.concat %[[out2]], %[[out1]], %[[out0]] : i1, i1, i1

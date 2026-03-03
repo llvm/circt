@@ -25,6 +25,7 @@
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/Allocator.h"
 #include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/raw_ostream.h"
 #include <memory>
@@ -359,7 +360,6 @@ public:
   /// Get the arrival time of signals through this pattern.
   DelayType getArrivalTime(unsigned outputIndex) const;
   ArrayRef<DelayType> getArrivalTimes() const;
-  DelayType getWorstOutputArrivalTime() const;
 
   /// Get the library pattern that was matched.
   const CutRewritePattern *getPattern() const;
@@ -392,50 +392,79 @@ class Cut {
 
   std::optional<MatchedPattern> matchedPattern;
 
+  /// Root index in LogicNetwork (0 indicates no root for a trivial cut).
+  /// The root node produces the output of the cut.
+  uint32_t rootIndex = 0;
+
+  /// Operand cuts used to create this cut (for lazy TT computation).
+  /// Stored to enable fast incremental truth table computation after
+  /// duplicate removal. Using raw pointers is safe since cuts are allocated
+  /// via bump allocator and live for the duration of enumeration.
+  llvm::SmallVector<const Cut *, 3> operandCuts;
+
 public:
   /// External inputs to this cut (cut boundary).
-  /// These are the values that flow into the cut from outside.
-  llvm::SmallSetVector<mlir::Value, 4> inputs;
-
-  /// Operations contained within this cut.
-  /// Stored in topological order with the root operation at the end.
-  llvm::SmallSetVector<mlir::Operation *, 4> operations;
+  /// Stored as LogicNetwork indices for efficient operations.
+  llvm::SmallVector<uint32_t, 6> inputs;
 
   /// Check if this cut represents a trivial cut.
-  /// A trivial cut has no internal operations and exactly one input.
+  /// A trivial cut has no root operation and exactly one input.
   bool isTrivialCut() const;
 
-  /// Get the root operation of this cut.
-  /// The root operation produces the output of the cut.
-  mlir::Operation *getRoot() const;
+  /// Get the root index in the LogicNetwork.
+  uint32_t getRootIndex() const { return rootIndex; }
 
-  void dump(llvm::raw_ostream &os) const;
+  /// Set the root index of this cut.
+  void setRootIndex(uint32_t idx) { rootIndex = idx; }
 
-  /// Merge this cut with another cut to form a new cut.
-  /// The new cut combines the operations from both cuts with the given root.
-  Cut mergeWith(const Cut &other, Operation *root) const;
-  Cut reRoot(Operation *root) const;
+  /// Check if this cut dominates another cut.
+  bool dominates(const Cut &other) const;
+
+  /// Check if this cut dominates another sorted input set.
+  bool dominates(ArrayRef<uint32_t> otherInputs) const;
+
+  void dump(llvm::raw_ostream &os, const LogicNetwork &network) const;
 
   /// Get the number of inputs to this cut.
   unsigned getInputSize() const;
 
-  /// Get the number of operations in this cut.
-  unsigned getCutSize() const;
-
   /// Get the number of outputs from root operation.
-  unsigned getOutputSize() const;
+  unsigned getOutputSize(const LogicNetwork &network) const;
 
   /// Get the truth table for this cut.
   /// The truth table represents the boolean function computed by this cut.
-  const BinaryTruthTable &getTruthTable() const;
+  const std::optional<BinaryTruthTable> &getTruthTable() const {
+    return truthTable;
+  }
+
+  /// Compute and cache the truth table for this cut using the LogicNetwork.
+  void computeTruthTable(const LogicNetwork &network);
+
+  /// Compute truth table using fast incremental method from operand cuts.
+  /// This is much faster than simulation-based computation.
+  /// Requires that operand cuts have already been set via setOperandCuts.
+  void computeTruthTableFromOperands(const LogicNetwork &network);
+
+  /// Set the truth table directly (used for incremental computation).
+  void setTruthTable(BinaryTruthTable tt) { truthTable.emplace(std::move(tt)); }
+
+  /// Set operand cuts for lazy truth table computation.
+  void setOperandCuts(ArrayRef<const Cut *> cuts) {
+    operandCuts.assign(cuts.begin(), cuts.end());
+  }
+
+  /// Get operand cuts (for fast TT computation).
+  ArrayRef<const Cut *> getOperandCuts() const { return operandCuts; }
 
   /// Get the NPN canonical form for this cut.
   /// This is used for efficient pattern matching against library components.
   const NPNClass &getNPNClass() const;
 
   /// Get the permutated inputs for this cut based on the given pattern NPN.
-  void getPermutatedInputs(const NPNClass &patternNPN,
-                           SmallVectorImpl<Value> &permutedInputs) const;
+  /// Returns indices into the inputs vector.
+  void
+  getPermutatedInputIndices(const NPNClass &patternNPN,
+                            SmallVectorImpl<unsigned> &permutedIndices) const;
 
   /// Get arrival times for each input of this cut.
   /// Returns failure if any input doesn't have a valid matched pattern.
@@ -466,7 +495,7 @@ public:
 /// results.
 class CutSet {
 private:
-  llvm::SmallVector<Cut, 4> cuts; ///< Collection of cuts for this node
+  llvm::SmallVector<Cut *, 12> cuts; ///< Collection of cuts for this node
   Cut *bestCut = nullptr;
   bool isFrozen = false; ///< Whether cut set is finalized
 
@@ -479,25 +508,20 @@ public:
 
   /// Finalize the cut set by removing duplicates and selecting the best
   /// pattern.
-  ///
-  /// This method:
-  /// 1. Removes duplicate cuts based on inputs and root operation
-  /// 2. Limits the number of cuts to prevent exponential growth
-  /// 3. Matches each cut against available patterns
-  /// 4. Selects the best pattern based on the optimization strategy
   void finalize(
       const CutRewriterOptions &options,
-      llvm::function_ref<std::optional<MatchedPattern>(const Cut &)> matchCut);
+      llvm::function_ref<std::optional<MatchedPattern>(const Cut &)> matchCut,
+      const LogicNetwork &logicNetwork);
 
   /// Get the number of cuts in this set.
   unsigned size() const;
 
-  /// Add a new cut to this set.
+  /// Add a new cut to this set using bump allocator.
   /// NOTE: The cut set must not be frozen
-  void addCut(Cut cut);
+  void addCut(Cut *cut);
 
   /// Get read-only access to all cuts in this set.
-  ArrayRef<Cut> getCuts() const;
+  ArrayRef<Cut *> getCuts() const;
 };
 
 /// Configuration options for the cut-based rewriting algorithm.
@@ -558,38 +582,49 @@ public:
       llvm::function_ref<std::optional<MatchedPattern>(const Cut &)> matchCut =
           [](const Cut &) { return std::nullopt; });
 
-  /// Create a new cut set for a value.
-  /// The value must not already have a cut set.
-  CutSet *createNewCutSet(Value value);
+  /// Create a new cut set for an index.
+  /// The index must not already have a cut set.
+  CutSet *createNewCutSet(uint32_t index);
 
-  /// Get the cut set for a specific value.
+  /// Get the cut set for a specific index.
   /// If not found, it means no cuts have been generated for this value yet.
   /// In that case return a trivial cut set.
-  const CutSet *getCutSet(Value value);
+  const CutSet *getCutSet(uint32_t index);
 
-  /// Move ownership of all cut sets to caller.
-  /// After calling this, the enumerator is left in an empty state.
-  llvm::MapVector<Value, std::unique_ptr<CutSet>> takeVector();
+  /// Clear all cut sets and return them as a vector.
+  /// Note: CutSets remain owned by the allocator and are invalidated on
+  /// clear().
+  llvm::SmallVector<std::pair<uint32_t, CutSet *>> takeCutSets();
 
   /// Clear all cut sets and reset the enumerator.
   void clear();
 
   void dump() const;
-  const llvm::MapVector<Value, std::unique_ptr<CutSet>> &getCutSets() const {
+
+  /// Get cut sets (indexed by LogicNetwork index).
+  const llvm::DenseMap<uint32_t, CutSet *> &getCutSets() const {
     return cutSets;
   }
 
-private:
-  /// Visit a single operation and generate cuts for it.
-  LogicalResult visit(Operation *op);
+  /// Get the processing order.
+  ArrayRef<uint32_t> getProcessingOrder() const { return processingOrder; }
 
+private:
   /// Visit a combinational logic operation and generate cuts.
   /// This handles the core cut enumeration logic for operations
   /// like AND, OR, XOR, etc.
-  LogicalResult visitLogicOp(Operation *logicOp);
+  LogicalResult visitLogicOp(uint32_t nodeIndex);
 
-  /// Maps values to their associated cut sets.
-  llvm::MapVector<Value, std::unique_ptr<CutSet>> cutSets;
+  /// Maps indices to their associated cut sets.
+  /// CutSets are allocated from the bump allocator.
+  llvm::DenseMap<uint32_t, CutSet *> cutSets;
+
+  /// Typed bump allocators for fast allocation with destructors.
+  llvm::SpecificBumpPtrAllocator<Cut> cutAllocator;
+  llvm::SpecificBumpPtrAllocator<CutSet> cutSetAllocator;
+
+  /// Indices in processing order.
+  llvm::SmallVector<uint32_t> processingOrder;
 
   /// Configuration options for cut enumeration.
   const CutRewriterOptions &options;
@@ -598,8 +633,7 @@ private:
   /// Set during enumeration and used when finalizing cut sets.
   llvm::function_ref<std::optional<MatchedPattern>(const Cut &)> matchCut;
 
-  /// Flat logic network representation for efficient simulation.
-  /// Built during cut enumeration and used for truth table computation.
+  /// Flat logic network representation used during enumeration/rewrite.
   LogicNetwork logicNetwork;
 
 public:

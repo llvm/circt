@@ -9,7 +9,7 @@
 
 // LUT-NEXT:   %[[C_0:.+]] = comb.truth_table %[[A_0]], %[[B_0]] -> [false, true, true, false]
 // LUT-SAME:   test.arrival_times = [1]
-// LUT-NEXT:   %[[C_1:.+]] = comb.truth_table %[[B_1]], %[[A_1]], %[[A_0]], %[[B_0]] ->  [false, false, false, true, true, true, true, false, true, true, true, false, false, false, false, true]
+// LUT-NEXT:   %[[C_1:.+]] = comb.truth_table %[[A_1]], %[[A_0]], %[[B_1]], %[[B_0]] -> [false, false, true, true, false, true, true, false, true, true, false, false, true, false, false, true]
 // LUT-SAME:   test.arrival_times = [1]
 // LUT-NEXT:   %[[C_2:.+]] = comb.concat %[[C_1]], %[[C_0]] : i1, i1
 // LUT-NEXT:   hw.output %[[C_2]] : i2
