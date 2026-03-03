@@ -3620,6 +3620,59 @@ private:
 };
 } // end anonymous namespace
 
+/// Check if a clock value is a placeholder (hw.constant true).  FIRRTL's
+/// FIRRTLToHW lowering uses `hw.constant true` as a placeholder clock for
+/// delays that lack an enclosing clock context.  InferLTLClocks resolves most
+/// of these, but delays without any enclosing `ltl.clock` retain the
+/// placeholder.
+static bool isPlaceholderClock(Value clock) {
+  if (auto constOp = clock.getDefiningOp<hw::ConstantOp>()) {
+    auto value = constOp.getValue();
+    return value.getBitWidth() == 1 && value.isOne();
+  }
+  return false;
+}
+
+/// Walk a property tree and find the clock/edge from the first ltl.delay op
+/// that has a real (non-placeholder) clock.  Returns nullopt if no such delay
+/// exists or if the property already has an enclosing ltl.clock.
+static std::optional<std::pair<Value, ltl::ClockEdge>>
+extractDelayClockFromProperty(Value property) {
+  DenseSet<Operation *> visited;
+  SmallVector<Value> worklist;
+  worklist.push_back(property);
+
+  while (!worklist.empty()) {
+    Value val = worklist.pop_back_val();
+    auto *op = val.getDefiningOp();
+    if (!op || visited.contains(op))
+      continue;
+    visited.insert(op);
+
+    // If there's an ltl.clock op, the user already specified the clock.
+    if (isa<ltl::ClockOp>(op))
+      return std::nullopt;
+
+    if (auto delayOp = dyn_cast<ltl::DelayOp>(op)) {
+      // Skip delays with placeholder clocks — the FIRRTL source had no
+      // enclosing clock context.
+      if (!isPlaceholderClock(delayOp.getClock()))
+        return std::make_pair(delayOp.getClock(), delayOp.getEdge());
+      // Continue searching through the delay's input in case an inner
+      // subtree has a real clock.
+      worklist.push_back(delayOp.getInput());
+      continue;
+    }
+
+    // Recurse into operands of LTL ops.
+    if (isa<ltl::SequenceType, ltl::PropertyType>(val.getType())) {
+      for (Value operand : op->getOperands())
+        worklist.push_back(operand);
+    }
+  }
+  return std::nullopt;
+}
+
 // Emits a disable signal and its containing property.
 // This function can be called from withing another emission process in which
 // case we don't need to check that the local tokens are empty.
@@ -3648,6 +3701,27 @@ void PropertyEmitter::emitAssertPropertyBody(
     PropertyPrecedence parenthesizeIfLooserThan) {
   assert(localTokens.empty());
 
+  // If the property tree contains ltl.delay ops with explicit clocks but no
+  // enclosing ltl.clock, hoist the clock to the outermost level as
+  // @(edge clock), since SVA requires clocks at the property level.
+  if (auto clockInfo = extractDelayClockFromProperty(property)) {
+    auto [clock, edge] = *clockInfo;
+    auto svaEdge = edge == ltl::ClockEdge::Pos   ? sv::EventControl::AtPosEdge
+                   : edge == ltl::ClockEdge::Neg ? sv::EventControl::AtNegEdge
+                                                 : sv::EventControl::AtEdge;
+    ps << "@(";
+    ps.scopedBox(PP::ibox2, [&] {
+      ps << PPExtString(stringifyEventControl(svaEdge)) << PP::space;
+      emitNestedProperty(clock, PropertyPrecedence::Lowest);
+      ps << ")";
+    });
+    ps << PP::space;
+
+    // Set clock context so delay validation can check consistency.
+    currentClock = clock;
+    currentEdge = edge;
+  }
+
   emitAssertPropertyDisable(property, disable, parenthesizeIfLooserThan);
 
   // If we are not using an external token buffer provided through the
@@ -3669,6 +3743,13 @@ void PropertyEmitter::emitAssertPropertyBody(
     ps << ")";
   });
   ps << PP::space;
+
+  // Set clock context so delay consistency checks work.
+  currentClock = clock;
+  auto ltlEdge = event == sv::EventControl::AtPosEdge   ? ltl::ClockEdge::Pos
+                 : event == sv::EventControl::AtNegEdge ? ltl::ClockEdge::Neg
+                                                        : ltl::ClockEdge::Both;
+  currentEdge = ltlEdge;
 
   // Emit the rest of the body
   emitAssertPropertyDisable(property, disable, parenthesizeIfLooserThan);
@@ -3758,26 +3839,12 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::IntersectOp op) {
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::DelayOp op) {
-  // Check if the delay's clock is a placeholder (hw.constant true).
-  // A placeholder clock means the clock was never inferred — this is an error
-  // at emission time since SVA requires a real clock. See the DelayOp docs in
-  // LTLOps.td and the InferLTLClocks pass.
-  Value delayClock = op.getClock();
-  bool isPlaceholder = false;
-  if (auto constOp = delayClock.getDefiningOp<hw::ConstantOp>()) {
-    auto value = constOp.getValue();
-    isPlaceholder = value.getBitWidth() == 1 && value.isOne();
-  }
-  if (isPlaceholder) {
-    emitOpError(op, "delay has a placeholder clock (hw.constant true) that "
-                    "was never replaced with a real clock; run "
-                    "--ltl-infer-clocks or provide an explicit clock");
-  }
-
   // Verify that the delay's clock matches the enclosing clock context.
   // SVA does not support per-delay clocks; all delays inherit from the
-  // enclosing @(edge clock) specification.
-  if (!isPlaceholder && currentClock) {
+  // enclosing @(edge clock) specification.  Placeholder clocks should have
+  // been resolved by InferLTLClocks before reaching ExportVerilog.
+  Value delayClock = op.getClock();
+  if (currentClock) {
     if (delayClock != currentClock) {
       emitOpError(op, "delay clock does not match enclosing clock; "
                       "SVA does not support per-delay clocks");
