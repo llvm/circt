@@ -1956,6 +1956,8 @@ firrtl.circuit "InstanceChoiceTest" {
     firrtl.option_case @FPGA
   }
 
+  sv.macro.decl @InstanceChoiceTest_inst
+
   firrtl.module private @ModuleDefault(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
     firrtl.matchingconnect %out, %in : !firrtl.uint<8>
   }
@@ -1973,7 +1975,7 @@ firrtl.circuit "InstanceChoiceTest" {
     // CHECK: %[[INST_FPGA:.+]] = hw.instance "inst_FPGA" @ModuleFPGA
     // CHECK: sv.assign %[[WIRE]], %[[INST_FPGA]]
     // CHECK: hw.output %[[READ]]
-    %inst_in, %inst_out = firrtl.instance_choice inst @ModuleDefault alternatives @Opt { @FPGA -> @ModuleFPGA } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    %inst_in, %inst_out = firrtl.instance_choice inst {instance_macro = @InstanceChoiceTest_inst} @ModuleDefault alternatives @Opt { @FPGA -> @ModuleFPGA } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.matchingconnect %inst_in, %in : !firrtl.uint<8>
     firrtl.matchingconnect %out, %inst_out : !firrtl.uint<8>
   }
