@@ -124,18 +124,17 @@ void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
       getOptionCaseMacroName(optionName, caseName, caseMacroName);
 
       // Ensure global uniqueness using CircuitNamespace.
-      auto uniqueName = StringAttr::get(circuit.getContext(),
-                                        getNamespace().newName(caseMacroName));
-      auto caseMacro = FlatSymbolRefAttr::get(uniqueName);
+      auto caseMacro = FlatSymbolRefAttr::get(
+          circuit.getContext(), getNamespace().newName(caseMacroName));
 
       // Set the case_macro attribute on the OptionCaseOp.
       caseOp.setCaseMacroAttr(caseMacro);
       changed = true;
 
       // Create macro declaration.
-      sv::MacroDeclOp::create(builder, circuit.getLoc(), uniqueName);
+      sv::MacroDeclOp::create(builder, circuit.getLoc(), caseMacro.getValue());
 
-      LLVM_DEBUG(llvm::dbgs() << "Assigned case macro '" << uniqueName
+      LLVM_DEBUG(llvm::dbgs() << "Assigned case macro '" << caseMacro.getValue()
                               << "' to option case '" << caseName
                               << "' in option '" << optionName << "'\n");
     }
