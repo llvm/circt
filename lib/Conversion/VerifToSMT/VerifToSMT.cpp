@@ -459,6 +459,7 @@ struct VerifBoundedModelCheckingOpConversion
     // <wasViolated>
     // Get list of clock indexes in circuit args
     size_t initIndex = 0;
+    size_t regStartIdx = oldCircuitInputTy.size() - numRegs;
     SmallVector<Value> inputDecls;
     SmallVector<int> clockIndexes;
     for (auto [curIndex, oldTy, newTy] :
@@ -468,9 +469,8 @@ struct VerifBoundedModelCheckingOpConversion
         clockIndexes.push_back(curIndex);
         continue;
       }
-      if (curIndex >= oldCircuitInputTy.size() - numRegs) {
-        auto initVal =
-            initialValues[curIndex - oldCircuitInputTy.size() + numRegs];
+      if (curIndex >= regStartIdx) {
+        auto initVal = initialValues[curIndex - regStartIdx];
         if (auto initIntAttr = dyn_cast<IntegerAttr>(initVal)) {
           const auto &cstInt = initIntAttr.getValue();
           assert(cstInt.getBitWidth() ==
@@ -483,9 +483,8 @@ struct VerifBoundedModelCheckingOpConversion
       }
       // Give a meaningful name prefix based on the argument's role.
       std::string name;
-      if (curIndex >= oldCircuitInputTy.size() - numRegs)
-        name = ("reg_" + Twine(curIndex - (oldCircuitInputTy.size() - numRegs)))
-                   .str();
+      if (curIndex >= regStartIdx)
+        name = ("reg_" + Twine(curIndex - regStartIdx)).str();
       else
         name = ("input_" + Twine(curIndex)).str();
       inputDecls.push_back(smt::DeclareFunOp::create(
@@ -596,10 +595,9 @@ struct VerifBoundedModelCheckingOpConversion
           size_t loopIndex = 0;
           // Collect decls to yield at end of iteration
           SmallVector<Value> newDecls;
-          size_t inputIdx = 0;
-          for (auto [oldTy, newTy] :
-               llvm::zip(TypeRange(oldCircuitInputTy).drop_back(numRegs),
-                         TypeRange(circuitInputTy).drop_back(numRegs))) {
+          for (auto [inputIdx, oldTy, newTy] :
+               llvm::enumerate(TypeRange(oldCircuitInputTy).drop_back(numRegs),
+                               TypeRange(circuitInputTy).drop_back(numRegs))) {
             if (isa<seq::ClockType>(oldTy)) {
               newDecls.push_back(loopVals[loopIndex++]);
             } else {
@@ -607,7 +605,6 @@ struct VerifBoundedModelCheckingOpConversion
               newDecls.push_back(smt::DeclareFunOp::create(
                   builder, loc, newTy, builder.getStringAttr(name)));
             }
-            ++inputIdx;
           }
 
           // Only update the registers on a clock posedge unless in rising
