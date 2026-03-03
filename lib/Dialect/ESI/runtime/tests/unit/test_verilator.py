@@ -12,6 +12,8 @@ from pathlib import Path
 from unittest import mock
 from unittest.mock import MagicMock
 
+import pytest
+
 # ---------------------------------------------------------------------------
 # Provide a comprehensive mock for the native extension so we can import the
 # pure-Python cosim modules without a full C++ build.
@@ -113,11 +115,8 @@ class TestFindVerilatorRoot:
       os.environ.pop("VERILATOR_ROOT", None)
       with mock.patch("shutil.which", return_value=None):
         v = _make_verilator()
-        try:
+        with pytest.raises(RuntimeError):
           v._find_verilator_root()
-          assert False, "Expected RuntimeError"
-        except RuntimeError:
-          pass
 
 
 class TestWriteCmake:
@@ -162,8 +161,5 @@ class TestRunCommand:
 
   def test_gui_raises(self):
     v = _make_verilator()
-    try:
+    with pytest.raises(RuntimeError):
       v.run_command(gui=True)
-      assert False, "Expected RuntimeError"
-    except RuntimeError:
-      pass

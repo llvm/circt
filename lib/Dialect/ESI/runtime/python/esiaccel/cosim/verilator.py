@@ -121,9 +121,10 @@ class Verilator(Simulator):
     inc = str(include_dir)
     vltstd = str(include_dir / "vltstd")
 
-    defs = f"TOP_MODULE={self.sources.top}"
+    defs = [f"TOP_MODULE={self.sources.top}"]
     if self.debug:
-      defs += "\n  TRACE"
+      defs.append("TRACE")
+    defs_str = "\n  ".join(defs)
 
     # Link DPI shared objects by full path.
     dpi_link = ""
@@ -150,7 +151,7 @@ target_include_directories({exe_name} PRIVATE
 )
 
 target_compile_definitions({exe_name} PRIVATE
-  {defs}
+  {defs_str}
 )
 
 find_package(Threads REQUIRED)
