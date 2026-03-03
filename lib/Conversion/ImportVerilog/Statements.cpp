@@ -1048,8 +1048,9 @@ struct StmtVisitor {
     if (args.size() >= 1 && args[0]->type->isAssociativeArray()) {
       auto assocArray = context.convertLvalueExpression(*args[0]);
 
-      // `delete` has two functions: If there is an index passed, then it deletes
-      // that specific element, otherwise, it clears the entire associative array.
+      // `delete` has two functions: If there is an index passed, then it
+      // deletes that specific element, otherwise, it clears the entire
+      // associative array.
       if (subroutine.name == "delete") {
         if (args.size() == 1) {
           moore::AssocArrayClearOp::create(builder, loc, assocArray);
