@@ -21,27 +21,28 @@ circuit Counter :
     intrinsic(circt_verif_assert, ltl_clock, hbr)
 
 ; CHECK:  1 sort bitvec 1
-; CHECK:  2 input 1 reset
-; CHECK:  3 sort bitvec 32
-; CHECK:  4 state 3 count
-; CHECK:  5 constd 1 0
-; CHECK:  6 state 1 hbr
-; CHECK:  7 init 1 6 5
-; CHECK:  8 constd 3 1
-; CHECK:  9 constd 3 10
-; CHECK:  10 constd 3 22
-; CHECK:  11 constd 3 0
-; CHECK:  12 eq 1 4 10
-; CHECK:  13 add 3 4 8
-; CHECK:  14 ite 3 12 11 13
-; CHECK:  15 neq 1 4 9
-; CHECK:  16 constd 1 -1
-; CHECK:  17 or 1 2 6
-; CHECK:  18 xor 1 2 16
-; CHECK:  19 and 1 6 18
-; CHECK:  20 implies 1 19 15
-; CHECK:  21 not 1 20
-; CHECK:  22 bad 21
-; CHECK:  23 ite 3 2 11 14
-; CHECK:  24 next 3 4 23
-; CHECK:  25 next 1 6 17
+; CHECK:  2 input 1 clock
+; CHECK:  3 input 1 reset
+; CHECK:  4 sort bitvec 32
+; CHECK:  5 state 4 count
+; CHECK:  6 constd 1 0
+; CHECK:  7 state 1 hbr
+; CHECK:  8 init 1 7 6
+; CHECK:  9 constd 4 1
+; CHECK:  10 constd 4 10
+; CHECK:  11 constd 4 22
+; CHECK:  12 constd 4 0
+; CHECK:  13 eq 1 5 11
+; CHECK:  14 add 4 5 9
+; CHECK:  15 ite 4 13 12 14
+; CHECK:  16 neq 1 5 10
+; CHECK:  17 constd 1 -1
+; CHECK:  18 or 1 3 7
+; CHECK:  19 xor 1 3 17
+; CHECK:  20 and 1 7 19
+; CHECK:  21 implies 1 20 16
+; CHECK:  22 not 1 21
+; CHECK:  23 bad 22
+; CHECK:  24 ite 4 3 12 15
+; CHECK:  25 next 4 5 24
+; CHECK:  26 next 1 7 18
