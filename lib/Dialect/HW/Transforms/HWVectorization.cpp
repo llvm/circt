@@ -115,10 +115,10 @@ public:
 
     // Phase 2: for each integer output, attempt vectorization strategies in
     // order of increasing complexity:
-    //   (a) Linear   – direct wire-through  → drop the concat entirely
-    //   (b) Reverse  – mirror permutation   → comb.reverse
-    //   (c) Mix      – arbitrary bijection  → extract + concat chunks
-    //   (d) Structural – isomorphic scalar cones → wide AND/OR/XOR/MUX
+    //   (a) Linear   – direct wire-through  -> drop the concat entirely
+    //   (b) Reverse  – mirror permutation   -> comb.reverse
+    //   (c) Mix      – arbitrary bijection  -> extract + concat chunks
+    //   (d) Structural – isomorphic scalar cones -> wide AND/OR/XOR/MUX
     for (Value oldOutputVal : outputOp->getOperands()) {
       auto type = dyn_cast<IntegerType>(oldOutputVal.getType());
       if (!type)
@@ -161,7 +161,8 @@ public:
 
       // 2. If it wasn't vectorized (or if it has multiple sources), try
       // Structural.
-      if (!transformed && canVectorizeStructurally(oldOutputVal)) {
+      if (!transformed && !hasCrossBitDependencies(oldOutputVal) &&
+          canVectorizeStructurally(oldOutputVal)) {
         rewriter.setInsertionPointAfterValue(oldOutputVal);
 
         unsigned width = cast<IntegerType>(oldOutputVal.getType()).getWidth();
@@ -189,126 +190,211 @@ private:
   llvm::DenseMap<Value, BitArray> bitArrays;
   hw::HWModuleOp module;
 
-  // Returns true if `output` can be replaced by a single wide operation.
+  /// Analyzes the logic cones of all bit lanes to detect illegal cross-bit
+  /// dependencies in O(bitWidth + N) time.
+  bool hasCrossBitDependencies(mlir::Value outputVal) {
+    unsigned bitWidth = cast<IntegerType>(outputVal.getType()).getWidth();
+
+    llvm::DenseSet<mlir::Value> visitedUnsafe; // Accumulate unsafe values.
+    llvm::SmallVector<mlir::Value> worklist;
+
+    for (unsigned i = 0; i < bitWidth; ++i) {
+      llvm::DenseSet<mlir::Value> visitedLocal;
+      mlir::Value bitSource = findBitSource(outputVal, i);
+      if (!bitSource)
+        continue;
+
+      worklist.push_back(bitSource);
+      while (!worklist.empty()) {
+        auto top = worklist.pop_back_val();
+        if (isSafeSharedValue(top))
+          continue; // don't add to the set.
+        if (!visitedLocal.insert(top).second)
+          continue; // Arriving multiple time in the same iteration is fine.
+        // If it's already visited, there is a depencency
+        if (!visitedUnsafe.insert(top).second)
+          return true;
+        if (auto *op = top.getDefiningOp()) {
+          for (auto operand : op->getOperands())
+            worklist.push_back(operand);
+        }
+      }
+    }
+    return false;
+  }
+
+  /// Determines if a shared value is safe for vectorization. Only constants
+  /// and block arguments are safe to share between bit lanes. Any intermediate
+  /// operation is considered unsafe as it may introduce cross-lane
+  /// dependencies.
+  bool isSafeSharedValue(mlir::Value val) {
+    return val &&
+           (isa<BlockArgument>(val) || val.getDefiningOp<hw::ConstantOp>());
+  }
+
+  /// Checks if a logic cone is composed of structurally equivalent slices
+  /// that can be merged into a vector operation.
   ///
-  /// The check succeeds when every bit slice i of `output` is produced by a
-  /// subgraph that is isomorphic to the bit-0 subgraph up to a uniform
-  /// bit-index offset of i (see areSubgraphsEquivalent).
+  /// The check succeeds when every bit slice i of the output is produced by a
+  /// subgraph that is isomorphic to the bit-0 subgraph (slice0).
   bool canVectorizeStructurally(Value output) {
-    unsigned width = cast<IntegerType>(output.getType()).getWidth();
-
-    // A 1-bit value is already scalar; nothing to vectorize.
-    if (width <= 1)
+    unsigned bitWidth = cast<IntegerType>(output.getType()).getWidth();
+    if (bitWidth <= 1)
       return false;
 
-    Value slice0 = findBitSource(output, 0);
-    if (!slice0)
+    Value slice0Val = findBitSource(output, 0);
+    if (!slice0Val)
       return false;
 
-    // Compare each bit slice N against the base slice 0 to ensure isomorphism.
-    for (unsigned i = 1; i < width; ++i) {
-      Value sliceN = findBitSource(output, i);
-      if (!sliceN)
+    Value slice1Val = findBitSource(output, 1);
+    if (!slice1Val)
+      return false;
+
+    auto extract0 = slice0Val.getDefiningOp<comb::ExtractOp>();
+    auto extract1 = slice1Val.getDefiningOp<comb::ExtractOp>();
+
+    if (!extract0 || !extract1 || extract0.getInput() != extract1.getInput()) {
+      for (unsigned i = 1; i < bitWidth; ++i) {
+        Value sliceNVal = findBitSource(output, i);
+        if (!sliceNVal || !sliceNVal.getDefiningOp())
+          return false;
+        llvm::DenseMap<mlir::Value, mlir::Value> map;
+        if (!areSubgraphsEquivalent(slice0Val, sliceNVal, i, 1, map)) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    int stride = (int)extract1.getLowBit() - (int)extract0.getLowBit();
+
+    for (unsigned i = 1; i < bitWidth; ++i) {
+      Value sliceNVal = findBitSource(output, i);
+      if (!sliceNVal || !sliceNVal.getDefiningOp())
         return false;
 
-      DenseMap<Value, Value> map;
-      if (!areSubgraphsEquivalent(slice0, sliceN, i, map))
+      llvm::DenseMap<mlir::Value, mlir::Value> map;
+      if (!areSubgraphsEquivalent(slice0Val, sliceNVal, i, stride, map)) {
         return false;
+      }
     }
     return true;
   }
 
-  /// Recursively checks whether subgraph `b` is isomorphic to subgraph `a`
-  /// under the assumption that all ExtractOp low-bit indices in `b` are
-  /// exactly `index` greater than those in `a`.
+  /// Recursively compares two subgraphs to determine if they are isomorphic
+  /// with respect to a constant bit-stride.
   ///
-  /// Shared control values (block arguments, constants) are treated as
-  /// identical across all bit lanes.
-  ///
-  /// `map` caches already-verified pairs (a → b) to avoid redundant traversal
-  /// and to handle DAGs (values with multiple uses) correctly.
-  bool areSubgraphsEquivalent(Value a, Value b, unsigned index,
-                              DenseMap<Value, Value> &map) {
+  /// It assumes that all ExtractOp low-bit indices in the second subgraph
+  /// are exactly (sliceIndex * stride) greater than those in the first.
+  /// Caches results in slice0ToNMap to handle DAGs efficiently.
+  bool areSubgraphsEquivalent(Value slice0Val, Value sliceNVal,
+                              unsigned sliceIndex, int stride,
+                              DenseMap<Value, Value> &slice0ToNMap) {
 
-    // If `a` was already mapped, verify it points to the same `b`.
-    if (map.count(a))
-      return map[a] == b;
+    if (slice0ToNMap.count(slice0Val))
+      return slice0ToNMap[slice0Val] == sliceNVal;
 
-    Operation *opA = a.getDefiningOp();
-    Operation *opB = b.getDefiningOp();
+    Operation *op0 = slice0Val.getDefiningOp();
+    Operation *opN = sliceNVal.getDefiningOp();
 
-    // Leaf case: ExtractOp – same source, low-bit shifted by `index`.
-    if (auto exA = dyn_cast_or_null<comb::ExtractOp>(opA)) {
-      auto exB = dyn_cast_or_null<comb::ExtractOp>(opB);
-      if (!exB || exA.getInput() != exB.getInput())
-        return false;
+    if (auto extract0 = dyn_cast_or_null<comb::ExtractOp>(op0)) {
+      auto extractN = dyn_cast_or_null<comb::ExtractOp>(opN);
 
-      // The bit index in slice N must be exactly `index` ahead of slice 0.
-      if (exB.getLowBit() != exA.getLowBit() + (int)index)
-        return false;
+      if (extractN && extract0.getInput() == extractN.getInput() &&
+          extractN.getLowBit() ==
+              static_cast<unsigned>(static_cast<int>(extract0.getLowBit()) +
+                                    static_cast<int>(sliceIndex) * stride)) {
+        slice0ToNMap[slice0Val] = sliceNVal;
+        return true;
+      }
+      return false;
+    }
 
-      map[a] = b;
+    if (slice0Val == sliceNVal && (mlir::isa<BlockArgument>(slice0Val) ||
+                                   mlir::isa<hw::ConstantOp>(op0))) {
+      slice0ToNMap[slice0Val] = sliceNVal;
       return true;
     }
 
-    // Leaf case: block arguments and constants are considered equivalent when
-    // they are the *exact same* SSA value (shared across all bit lanes, e.g.,
-    // a mux select signal).
-    if (!opA && !opB) {
-      map[a] = b;
-      return true;
-    }
-
-    // Interior node: both must be the same operation kind with the same arity.
-    if (!opA || !opB || opA->getName() != opB->getName() ||
-        opA->getNumOperands() != opB->getNumOperands())
+    if (!op0 || !opN || op0->getName() != opN->getName() ||
+        op0->getNumOperands() != opN->getNumOperands())
       return false;
 
-    // Recurse into all operand pairs.
-    for (unsigned i = 0; i < opA->getNumOperands(); ++i)
-      if (!areSubgraphsEquivalent(opA->getOperand(i), opB->getOperand(i), index,
-                                  map))
+    for (unsigned i = 0; i < op0->getNumOperands(); ++i) {
+      if (!areSubgraphsEquivalent(op0->getOperand(i), opN->getOperand(i),
+                                  sliceIndex, stride, slice0ToNMap))
         return false;
+    }
 
-    map[a] = b;
+    slice0ToNMap[slice0Val] = sliceNVal;
     return true;
   }
 
-  /// Traverses ConcatOps to locate the defining 1-bit Value for `bitIndex`
-  /// within `vectorVal`.
+  /// Traverses through ConcatOps and basic logic gates to locate the
+  /// original 1-bit source for a specific bit index.
   ///
-  /// Returns nullptr if the bit cannot be traced to a concrete 1-bit source
-  /// (e.g., the concat is not fully decomposed into 1-bit pieces).
+  /// Returns the 1-bit Value or nullptr if the bit cannot be traced back
+  /// to a concrete scalar source
   Value findBitSource(Value vectorVal, unsigned bitIndex) {
 
-    // A 1-bit block argument is its own source at index 0.
-    if (auto arg = dyn_cast<BlockArgument>(vectorVal))
-      return arg.getType().isInteger(1) && bitIndex == 0 ? arg : nullptr;
-
-    Operation *op = vectorVal.getDefiningOp();
-    if (!op)
-      return nullptr;
-
-    // Decompose ConcatOp: comb.concat lists operands MSB→LSB, so we walk
-    // them and track the cumulative bit offset from LSB upward.
-    if (auto concat = dyn_cast<comb::ConcatOp>(op)) {
-      // `cur` starts at the total width and decreases as we peel off operands.
-      unsigned cur = cast<IntegerType>(vectorVal.getType()).getWidth();
-      for (Value operand : concat.getInputs()) {
-        unsigned w = cast<IntegerType>(operand.getType()).getWidth();
-        cur -= w;
-        // `bitIndex` falls inside this operand's range [cur, cur+w].
-        if (bitIndex >= cur && bitIndex < cur + w)
-          return findBitSource(operand, bitIndex - cur);
-      }
+    if (auto blockArg = dyn_cast<BlockArgument>(vectorVal)) {
+      if (blockArg.getType().isInteger(1))
+        return blockArg;
       return nullptr;
     }
 
-    // Any other 1-bit result (AND, OR, XOR, MUX, …) is its own source at
-    // bit position 0.
-    if (op->getNumResults() == 1 && op->getResult(0).getType().isInteger(1) &&
-        bitIndex == 0)
+    Operation *op = vectorVal.getDefiningOp();
+
+    if (op->getNumResults() == 1 && op->getResult(0).getType().isInteger(1)) {
       return op->getResult(0);
+    }
+
+    if (auto concat = dyn_cast<comb::ConcatOp>(op)) {
+      unsigned currentBit = cast<IntegerType>(vectorVal.getType()).getWidth();
+      for (Value operand : concat.getInputs()) {
+        unsigned operandWidth = cast<IntegerType>(operand.getType()).getWidth();
+        currentBit -= operandWidth;
+        if (bitIndex >= currentBit && bitIndex < currentBit + operandWidth) {
+          return findBitSource(operand, bitIndex - currentBit);
+        }
+      }
+    } else if (auto orOp = dyn_cast<comb::OrOp>(op)) {
+      if (orOp.getNumOperands() != 2)
+        return nullptr;
+
+      Value lhs = orOp.getInputs()[0];
+      Value rhs = orOp.getInputs()[1];
+
+      if (auto constRhs =
+              dyn_cast_or_null<hw::ConstantOp>(rhs.getDefiningOp())) {
+        if (!constRhs.getValue()[bitIndex])
+          return findBitSource(lhs, bitIndex);
+      }
+
+      if (auto constLhs =
+              dyn_cast_or_null<hw::ConstantOp>(lhs.getDefiningOp())) {
+        if (!constLhs.getValue()[bitIndex])
+          return findBitSource(rhs, bitIndex);
+      }
+    } else if (auto andOp = dyn_cast<comb::AndOp>(op)) {
+      if (andOp.getNumOperands() != 2)
+        return nullptr;
+
+      Value lhs = andOp.getInputs()[0];
+      Value rhs = andOp.getInputs()[1];
+
+      if (auto constRhs =
+              dyn_cast_or_null<hw::ConstantOp>(rhs.getDefiningOp())) {
+        if (constRhs.getValue()[bitIndex])
+          return findBitSource(lhs, bitIndex);
+      }
+
+      if (auto constLhs =
+              dyn_cast_or_null<hw::ConstantOp>(lhs.getDefiningOp())) {
+        if (constLhs.getValue()[bitIndex])
+          return findBitSource(rhs, bitIndex);
+      }
+    }
 
     return nullptr;
   }
@@ -337,8 +423,7 @@ private:
 
     // Base case: a 1-bit constant or block argument (e.g., a shared selector)
     // must be broadcast to all `width` lanes via comb.replicate.
-    if (isa<BlockArgument>(scalarRoot) ||
-        isa<hw::ConstantOp>(scalarRoot.getDefiningOp())) {
+    if (isSafeSharedValue(scalarRoot)) {
       if (cast<IntegerType>(scalarRoot.getType()).getWidth() == 1)
         return comb::ReplicateOp::create(b, scalarRoot.getLoc(),
                                          b.getIntegerType(width), scalarRoot);
@@ -355,7 +440,7 @@ private:
     for (Value operand : op->getOperands()) {
       Value v = vectorizeSubgraph(b, operand, width, map);
       if (!v)
-        return nullptr;
+        return map[scalarRoot] = nullptr;
       ops.push_back(v);
     }
 
@@ -369,13 +454,9 @@ private:
       result = comb::OrOp::create(b, op->getLoc(), vecTy, ops);
     else if (isa<comb::XorOp>(op))
       result = comb::XorOp::create(b, op->getLoc(), vecTy, ops);
-    else if (isa<comb::MuxOp>(op)) {
-      Value sel = op->getOperand(0);
-      Value trueVal = vectorizeSubgraph(b, op->getOperand(1), width, map);
-      Value falseVal = vectorizeSubgraph(b, op->getOperand(2), width, map);
-      if (!trueVal || !falseVal)
-        return nullptr;
-      result = comb::MuxOp::create(b, op->getLoc(), sel, trueVal, falseVal);
+    else if (auto muxOp = dyn_cast<comb::MuxOp>(op)) {
+      Value sel = muxOp.getCond();
+      result = comb::MuxOp::create(b, muxOp.getLoc(), sel, ops[1], ops[2]);
     } else
       // Unsupported op kind; signal failure to the caller.
       return nullptr;
