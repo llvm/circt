@@ -673,7 +673,7 @@ firrtl.circuit "Foo" {
     %strings_and_empty = firrtl.list.create %strings, %empty : !firrtl.list<list<string>>
     firrtl.propassign %list, %strings_and_empty : !firrtl.list<list<string>>
 
-    // CHECK: propassign unknownString, Unknown : String
+    // CHECK: propassign unknownString, Unknown(String)
     %2 = firrtl.unknown : !firrtl.string
     firrtl.propassign %unknownString, %2 : !firrtl.string
   }
