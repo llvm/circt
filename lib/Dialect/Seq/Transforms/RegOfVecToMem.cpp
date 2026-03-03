@@ -196,7 +196,6 @@ bool RegOfVecToMemPass::createFirMemory(MemoryPattern &pattern) {
 
   auto fixZeroWidthAddr = [&](Value addr) -> Value {
     if (addr.getType().getIntOrFloatBitWidth() == 0) {
-      printf("width 0!\n");
       return hw::ConstantOp::create(builder,
                                     mlir::IntegerType::get(&getContext(), 1), 0)
           .getResult();

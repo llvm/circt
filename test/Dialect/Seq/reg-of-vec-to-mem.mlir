@@ -50,6 +50,26 @@ hw.module @simple_mem(in %clk : i1, in %addr : i2, in %data : i8, in %we : i1, o
 // CHECK-NOT: hw.array_get
 // CHECK-NOT: hw.array_inject
 
+
+hw.module @single_el_mem(in %clk : i1, in %addr : i0, in %data : i8, in %we : i1) {
+    %clock = seq.to_clock %clk
+    %read = hw.array_get %msingel[%addr] : !hw.array<1xi8>, i0
+    %write = hw.array_inject %msingel[%addr], %data : !hw.array<1xi8>, i0
+    %next = comb.mux %we, %write, %msingel : !hw.array<1xi8>
+    %msingel = seq.firreg %next clock %clock : !hw.array<1xi8>
+}
+
+// CHECK: %[[clock:.+]] = seq.to_clock %clk
+// CHECK: %mem = seq.firmem 0, 1, undefined, undefined : <1 x 8, mask 1>
+// CHECK: %[[TRUE:.+]] = hw.constant true
+// CHECK: %[[FALSE:.+]] = hw.constant false
+// CHECK: %[[READ:.+]] = seq.firmem.read_port %mem[%[[FALSE]]], clock %[[clock]] enable %[[TRUE]]
+// CHECK: %[[FALSE:.+]] = hw.constant false
+// CHECK: seq.firmem.write_port %mem[%[[FALSE]]] = %data, clock %[[clock]] enable %we
+// CHECK-NOT: seq.firreg %{{.*}} : !hw.array<8192xi46>
+// CHECK-NOT: hw.array_get
+// CHECK-NOT: hw.array_inject
+
 // Test that transformation is skipped when mux has multiple uses
 // CHECK-LABEL: hw.module @shared_mux_test(
 hw.module @shared_mux_test(in %clk: i1, in %addr: i2, in %data: i8, in %we: i1, out other_out: !hw.array<4xi8>) {
