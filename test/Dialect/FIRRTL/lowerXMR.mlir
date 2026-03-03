@@ -828,7 +828,7 @@ firrtl.circuit "InstanceChoiceProbe" {
     } (out probe: !firrtl.probe<uint<8>>)
 
     %0 = firrtl.ref.resolve %inst_probe : !firrtl.probe<uint<8>>
-    // CHECK: %[[VERBATIM:.+]] = firrtl.verbatim.expr "{{[{][{]}}0}}" : () -> !firrtl.uint<8> {symbols = [@__targetref_InstanceChoiceProbe_inst_probe]}
+    // CHECK: %[[VERBATIM:.+]] = firrtl.verbatim.expr "`__targetref_InstanceChoiceProbe_inst_probe" : () -> !firrtl.uint<8>
     firrtl.matchingconnect %out, %0 : !firrtl.uint<8>
     // CHECK: firrtl.matchingconnect %out, %[[VERBATIM]]
   }
@@ -873,7 +873,7 @@ firrtl.circuit "InstanceChoiceRefSub" {
 
     %sub = firrtl.ref.sub %inst_probe[1] : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>
     %0 = firrtl.ref.resolve %sub : !firrtl.probe<uint<2>>
-    // CHECK: %{{.+}} = firrtl.verbatim.expr "{{[{][{]}}0}}.b" : () -> !firrtl.uint<2> {symbols = [@__targetref_InstanceChoiceRefSub_inst_probe]}
+    // CHECK: %{{.+}} = firrtl.verbatim.expr "`__targetref_InstanceChoiceRefSub_inst_probe.b" : () -> !firrtl.uint<2>
     firrtl.matchingconnect %out, %0 : !firrtl.uint<2>
     // CHECK: firrtl.matchingconnect %out, %{{.+}}
   }

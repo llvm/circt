@@ -644,44 +644,13 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
       result = XMRDerefOp::create(builder, resolve.getType(), ref, str);
     } else {
       // No hierpath (e.g., InstanceChoiceOp): the suffix contains the complete
-      // XMR as a macro reference in the form `macroname.suffix.
-      // Parse to extract macro and suffix, then construct {{0}}.suffix format.
-      // FIXME: Avoid parsing here and also VerbatimExprOp entirely.
-      StringRef xmrPath = str ? str.getValue() : "";
-      SmallVector<Attribute> symbols;
-      SmallString<128> formatString;
-
-      // Assume format is always `macroname or `macroname.suffix
-      assert(xmrPath.starts_with("`") &&
-             "Expected macro reference to start with backtick");
-
-      // Find the dot that separates macro from suffix
-      size_t dotPos = xmrPath.find('.', 1);
-      StringRef macroName;
-      StringRef suffix;
-
-      if (dotPos == StringRef::npos) {
-        // No suffix: `macroname
-        macroName = xmrPath.drop_front(1);
-        suffix = "";
-      } else {
-        // Has suffix: `macroname.suffix
-        macroName = xmrPath.slice(1, dotPos);
-        suffix = xmrPath.substr(dotPos); // includes the leading dot
-      }
-
-      // Add macro as symbol reference
-      symbols.push_back(
-          FlatSymbolRefAttr::get(builder.getStringAttr(macroName)));
-
-      // Build format string: "{{0}}" or "{{0}}.suffix"
-      formatString.append("{{0}}");
-      if (!suffix.empty())
-        formatString.append(suffix);
-
-      result = VerbatimExprOp::create(builder, resolve.getType(), formatString,
-                                      /*substitutions=*/{},
-                                      /*symbols=*/symbols);
+      // XMR as a macro reference. Just use it directly in a verbatim
+      // expression.
+      assert(str && "Expected non-null string for instance choice ref");
+      result =
+          VerbatimExprOp::create(builder, resolve.getType(), str.getValue(),
+                                 /*substitutions=*/{},
+                                 /*symbols=*/{});
     }
     resolve.getResult().replaceAllUsesWith(result);
     return success();
