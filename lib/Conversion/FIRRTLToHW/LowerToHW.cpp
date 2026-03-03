@@ -251,10 +251,12 @@ struct CircuitLoweringState {
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
                        firrtl::VerificationFlavor verificationFlavor,
-                       InstanceGraph &instanceGraph, NLATable *nlaTable)
+                       InstanceGraph &instanceGraph, NLATable *nlaTable,
+                       const InstanceChoiceMacroTable &macroTable)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
         enableAnnotationWarning(enableAnnotationWarning),
-        verificationFlavor(verificationFlavor), nlaTable(nlaTable) {
+        verificationFlavor(verificationFlavor), nlaTable(nlaTable),
+        macroTable(macroTable) {
     auto *context = circuitOp.getContext();
 
     // Get the testbench output directory.
@@ -465,6 +467,32 @@ private:
     macroDeclNames.insert(name);
   }
 
+  /// Information about an instance choice for a specific option case.
+  struct LoweredInstanceChoice {
+    StringAttr parentModule;
+    // The instance macro (macro name) for this instance choice
+    FlatSymbolRefAttr instanceMacro;
+    hw::InstanceOp hwInstance;
+  };
+
+  using OptionAndCase = std::pair<StringAttr, StringAttr>;
+
+  // Map from moduleName to (optionName, caseName) to list of instance choices.
+  DenseMap<StringAttr,
+           DenseMap<OptionAndCase, SmallVector<LoweredInstanceChoice>>>
+      instanceChoicesByModuleAndCase;
+  std::mutex instanceChoicesMutex;
+
+  void addInstanceChoiceForCase(StringAttr optionName, StringAttr caseName,
+                                StringAttr parentModule,
+                                FlatSymbolRefAttr instanceMacro,
+                                hw::InstanceOp hwInstance) {
+    OptionAndCase innerKey{optionName, caseName};
+    std::unique_lock<std::mutex> lock(instanceChoicesMutex);
+    instanceChoicesByModuleAndCase[parentModule][innerKey].push_back(
+        {parentModule, instanceMacro, hwInstance});
+  }
+
   /// The list of fragments on which the modules rely. Must be set outside the
   /// parallelized module lowering since module type reads access it.
   DenseMap<hw::HWModuleOp, SetVector<Attribute>> fragments;
@@ -559,6 +587,9 @@ private:
   // emit.files for additional sources for verbatim extmodules
   llvm::StringMap<emit::FileOp> emitFilesByFileName;
   llvm::sys::SmartMutex<true> emitFilesMutex;
+
+  // Instance choice macro table for looking up option case macros
+  const InstanceChoiceMacroTable &macroTable;
 };
 
 void CircuitLoweringState::processRemainingAnnotations(
@@ -624,6 +655,14 @@ struct FIRRTLModuleLowering
 
 private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
+  void emitInstanceChoiceIncludes(mlir::ModuleOp circuit,
+                                  CircuitLoweringState &loweringState);
+  static void emitInstanceChoiceIncludeFile(
+      OpBuilder &builder, ModuleOp circuit, StringAttr publicModuleName,
+      StringAttr optionName, StringAttr caseName,
+      ArrayRef<CircuitLoweringState::LoweredInstanceChoice> instances,
+      Namespace &circuitNamespace, const InstanceChoiceMacroTable &macroTable);
+
   LogicalResult lowerPorts(ArrayRef<PortInfo> firrtlPorts,
                            SmallVectorImpl<hw::PortInfo> &ports,
                            Operation *moduleOp, StringRef moduleName,
@@ -694,7 +733,8 @@ void FIRRTLModuleLowering::runOnOperation() {
   // if lowering failed.
   CircuitLoweringState state(circuit, enableAnnotationWarning,
                              verificationFlavor, getAnalysis<InstanceGraph>(),
-                             &getAnalysis<NLATable>());
+                             &getAnalysis<NLATable>(),
+                             getAnalysis<InstanceChoiceMacroTable>());
 
   SmallVector<Operation *, 32> opsToProcess;
 
@@ -866,6 +906,11 @@ void FIRRTLModuleLowering::runOnOperation() {
   // Emit all the macros and preprocessor gunk at the start of the file.
   lowerFileHeader(circuit, state);
 
+  // Emit global include files for instance choice options.
+  // Make sure to call after `lowerFileHeader` so that symbols generated for
+  // instance choices don't conflict with the macros defined in the header.
+  emitInstanceChoiceIncludes(getOperation(), state);
+
   // Now that the modules are moved over, remove the Circuit.
   circuit.erase();
 }
@@ -1012,6 +1057,144 @@ endpackage
         emitGuardedDefine("STOP_COND", "STOP_COND_", "(`STOP_COND)", "1");
       });
     });
+  }
+}
+
+/// Helper function to emit a single instance choice include file for a given
+/// (option, case) combination.
+void FIRRTLModuleLowering::emitInstanceChoiceIncludeFile(
+    OpBuilder &builder, mlir::ModuleOp circuit, StringAttr publicModuleName,
+    StringAttr optionName, StringAttr caseName,
+    ArrayRef<CircuitLoweringState::LoweredInstanceChoice> instances,
+    Namespace &circuitNamespace, const InstanceChoiceMacroTable &macroTable) {
+  // If no instances, don't emit anything.
+  if (instances.empty())
+    return;
+
+  // Filename format: targets_<PublicModule>_<Option>_<Case>.svh
+  SmallString<128> includeFileName;
+  {
+    llvm::raw_svector_ostream os(includeFileName);
+    os << "targets_" << publicModuleName.getValue() << "_"
+       << optionName.getValue() << "_" << caseName.getValue() << ".svh";
+  }
+
+  // Create the emit.file operation at the top level
+  auto fileSymbolName = circuitNamespace.newName(includeFileName);
+
+  auto emitFile = emit::FileOp::create(builder, circuit.getLoc(),
+                                       includeFileName, fileSymbolName);
+  OpBuilder::InsertionGuard g(builder);
+  builder.setInsertionPointToStart(&emitFile.getBodyRegion().front());
+
+  // Add header comment
+  {
+    SmallString<256> headerComment;
+    llvm::raw_svector_ostream os(headerComment);
+    os << "// Specialization file for public module: "
+       << publicModuleName.getValue() << "\n";
+    os << "// Option: " << optionName.getValue()
+       << ", Case: " << caseName.getValue() << "\n";
+    emit::VerbatimOp::create(builder, circuit.getLoc(),
+                             builder.getStringAttr(headerComment));
+  }
+
+  // Define the global option case macro to avoid conflicts
+  // `ifndef <optionCaseMacro>
+  //  `define <optionCaseMacro>
+  // `endif
+  auto optionCaseMacroRef = macroTable.getMacro(optionName, caseName);
+  sv::IfDefOp::create(
+      builder, circuit.getLoc(), optionCaseMacroRef, [&]() {},
+      [&]() {
+        sv::MacroDefOp::create(builder, circuit.getLoc(), optionCaseMacroRef);
+      });
+
+  // Emit instance name macros for all instances in this module
+  for (auto info : instances) {
+    auto innerSym = info.hwInstance.getInnerSymAttr();
+    assert(innerSym && "expected instance to have inner symbol");
+    // Error checking: macro must not already be set
+    // `ifdef <instanceMacroName>
+    //  `ERROR<instanceMacroName>__must__not__be__set
+    // `else
+    //  `define <instanceMacroName> <InnerRef to instance>
+    // `endif
+    SmallString<256> errorMessage;
+    {
+      llvm::raw_svector_ostream os(errorMessage);
+      os << info.instanceMacro.getAttr().getValue() << "__must__not__be__set";
+    }
+
+    sv::IfDefOp::create(
+        builder, circuit.getLoc(), info.instanceMacro,
+        [&]() {
+          sv::MacroErrorOp::create(builder, circuit.getLoc(),
+                                   builder.getStringAttr(errorMessage));
+        },
+        [&]() {
+          SmallVector<Attribute> attrs;
+          attrs.push_back(
+              hw::InnerRefAttr::get(info.parentModule, innerSym.getSymName()));
+          auto attr = ArrayAttr::get(builder.getContext(), attrs);
+          sv::MacroDefOp::create(builder, circuit.getLoc(), info.instanceMacro,
+                                 builder.getStringAttr("{{0}}"), attr);
+        });
+  }
+
+  // Set output file attribute .svh files should be excluded from file list
+  auto outputFileAttr = hw::OutputFileAttr::getFromFilename(
+      builder.getContext(), includeFileName, /*excludeFromFileList=*/true);
+  emitFile->setAttr("output_file", outputFileAttr);
+}
+
+/// Creates one include file per public module and option case following the
+/// FIRRTL ABI spec.
+void FIRRTLModuleLowering::emitInstanceChoiceIncludes(
+    mlir::ModuleOp topLevelModule, CircuitLoweringState &loweringState) {
+  if (loweringState.instanceChoicesByModuleAndCase.empty())
+    return;
+
+  OpBuilder builder(&getContext());
+  builder.setInsertionPointToEnd(topLevelModule.getBody());
+  Namespace circuitNamespace;
+  circuitNamespace.add(topLevelModule);
+
+  // Find all public modules
+  for (auto module : topLevelModule.getOps<hw::HWModuleOp>()) {
+    if (!module.isPublic())
+      continue;
+
+    auto *rootNode = loweringState.getInstanceGraph().lookup(module);
+    assert(rootNode && "Public module not found in instance graph");
+
+    auto publicModuleName = module.getModuleNameAttr();
+
+    // Collect all instance choices reachable from this public module
+    // Grouped by (optionName, caseName)
+    DenseMap<CircuitLoweringState::OptionAndCase,
+             SmallVector<CircuitLoweringState::LoweredInstanceChoice>>
+        choicesInHierarchy;
+
+    // Walk all modules reachable from this public module
+    for (auto *node : llvm::post_order(rootNode)) {
+      auto it = loweringState.instanceChoicesByModuleAndCase.find(
+          node->getModule().getModuleNameAttr());
+      if (it == loweringState.instanceChoicesByModuleAndCase.end())
+        continue;
+
+      // Accumulate all instance choices from this module
+      for (auto &[key, instances] : it->second)
+        choicesInHierarchy[key].append(instances.begin(), instances.end());
+    }
+
+    // Emit one include file for each (option, case) combination
+    for (auto key : loweringState.macroTable.getKeys())
+      emitInstanceChoiceIncludeFile(builder, topLevelModule, publicModuleName,
+                                    /*optionName=*/key.first,
+                                    /*caseName=*/key.second,
+                                    choicesInHierarchy.lookup(key),
+                                    circuitNamespace, loweringState.macroTable);
   }
 }
 
@@ -4029,12 +4212,12 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
       return failure();
   }
 
+  auto optionName = oldInstanceChoice.getOptionNameAttr();
+
   // Lambda to create an instance for a given module and assign outputs to wires
   auto createInstanceAndAssign = [&](Operation *oldMod,
-                                     StringRef suffix) -> LogicalResult {
+                                     StringRef suffix) -> hw::InstanceOp {
     auto *newMod = circuitState.getNewModule(oldMod);
-    if (!newMod)
-      return oldInstanceChoice->emitOpError("could not find lowered module");
 
     ArrayAttr parameters;
     if (auto oldExtModule = dyn_cast<FExtModuleOp>(oldMod))
@@ -4049,39 +4232,71 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
     }
     auto instNameAttr = builder.getStringAttr(instName);
 
-    // Create the instance
+    auto [innerSym, innerSymName] = getOrAddInnerSym(
+        oldInstanceChoice.getContext(), /*attr=*/nullptr, 0,
+        [&]() -> hw::InnerSymbolNamespace & { return moduleNamespace; });
+
     auto inst = hw::InstanceOp::create(builder, newMod, instNameAttr,
-                                       inputOperands, parameters,
-                                       /*innerSym=*/nullptr);
+                                       inputOperands, parameters, innerSym);
 
     // Assign instance outputs to the wires
     for (unsigned i = 0; i < inst.getNumResults(); ++i)
       sv::AssignOp::create(builder, outputWires[i], inst.getResult(i));
-    return success();
+
+    return inst;
   };
 
-  // Create instance for the default module
-  if (failed(createInstanceAndAssign(defaultModule, "default")))
-    return failure();
+  // Build macro names and module list for nested ifdefs
+  SmallVector<StringAttr> macroNames;
+  SmallVector<Operation *> altModules;
 
-  // Create instances for all alternative modules
-  for (size_t i = 0; i < caseNames.size(); ++i) {
-    auto caseSymRef = cast<SymbolRefAttr>(caseNames[i]);
-    auto caseName = caseSymRef.getLeafReference();
+  for (size_t i = 0, e = caseNames.size(); i < e; ++i) {
+    auto caseName = cast<SymbolRefAttr>(caseNames[i]).getLeafReference();
     auto targetModuleRef = cast<FlatSymbolRefAttr>(moduleNames[i + 1]);
 
-    Operation *altModule = circuitState.getInstanceGraph()
-                               .lookup(targetModuleRef.getAttr())
-                               ->getModule();
-    if (!altModule)
-      return oldInstanceChoice->emitOpError(
-                 "could not find alternative module [")
-             << targetModuleRef << "] referenced by instance choice";
+    altModules.push_back(circuitState.getInstanceGraph()
+                             .lookup(targetModuleRef.getAttr())
+                             ->getModule());
 
-    // Create instance with case name as suffix
-    if (failed(createInstanceAndAssign(altModule, caseName.getValue())))
-      return failure();
+    // Get the macro name for this option case using InstanceChoiceMacroTable
+    auto optionCaseMacroRef =
+        circuitState.macroTable.getMacro(optionName, caseName);
+    if (!optionCaseMacroRef)
+      return oldInstanceChoice->emitOpError(
+          "failed to get macro for option case");
+    macroNames.push_back(optionCaseMacroRef.getAttr());
   }
+
+  // Use the helper function to create nested ifdefs and register instances
+  sv::createNestedIfDefs(
+      macroNames,
+      /*ifdefCtor=*/
+      [&](StringRef macro, std::function<void()> thenCtor,
+          std::function<void()> elseCtor) {
+        addToIfDefBlock(macro, std::move(thenCtor), std::move(elseCtor));
+      },
+      [&](size_t index) {
+        auto caseSymRef =
+            cast<SymbolRefAttr>(caseNames[index]).getLeafReference();
+        auto inst =
+            createInstanceAndAssign(altModules[index], caseSymRef.getValue());
+        circuitState.addInstanceChoiceForCase(optionName, caseSymRef,
+                                              theModule.getNameAttr(),
+                                              instanceMacro, inst);
+      },
+      [&]() {
+        auto inst = createInstanceAndAssign(defaultModule, "default");
+        // Define the instance macro for the default case.
+        sv::IfDefOp::create(
+            builder, inst.getLoc(), instanceMacro, [&]() {},
+            [&]() {
+              auto array = builder.getArrayAttr(
+                  {hw::InnerRefAttr::get(theModule.getNameAttr(),
+                                         inst.getInnerSymAttr().getSymName())});
+              sv::MacroDefOp::create(builder, inst.getLoc(), instanceMacro,
+                                     builder.getStringAttr("{{0}}"), array);
+            });
+      });
 
   return success();
 }
