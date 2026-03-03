@@ -202,7 +202,6 @@ private:
   ParseResult parseUnaryExpr(Value &result);
 
   InFlightDiagnostic emitError(llvm::SMLoc loc, const Twine &message) const;
-  InFlightDiagnostic emitWarning(llvm::SMLoc loc, const Twine &message) const;
 };
 
 //===----------------------------------------------------------------------===//
@@ -410,11 +409,6 @@ InFlightDiagnostic ExpressionParser::emitError(llvm::SMLoc loc,
   return mlir::emitError(lexer.translateLocation(loc), message);
 }
 
-InFlightDiagnostic ExpressionParser::emitWarning(llvm::SMLoc loc,
-                                                 const Twine &message) const {
-  return mlir::emitWarning(lexer.translateLocation(loc), message);
-}
-
 // Parsed result of a Liberty group
 struct LibertyGroup {
   StringRef name;
@@ -487,8 +481,6 @@ private:
 
   // Attribute parsing
   ParseResult parseAttribute(Attribute &result);
-  static ParseResult parseAttribute(Attribute &result, OpBuilder &builder,
-                                    StringRef attr);
 
   // Expression parsing
   ParseResult parseExpression(Value &result, StringRef expr,
@@ -937,17 +929,6 @@ ParseResult LibertyParser::parseStatement(LibertyGroup &parent) {
   return emitError(nameTok.location, "expected ':' or '('");
 }
 
-ParseResult LibertyParser::parseAttribute(Attribute &result, OpBuilder &builder,
-                                          StringRef attr) {
-  double val;
-  if (!attr.getAsDouble(val)) {
-    result = builder.getF64FloatAttr(val);
-  } else {
-    // Keep as string if not a valid number
-    result = builder.getStringAttr(attr);
-  }
-  return success();
-}
 // Parse an attribute value, which can be:
 // - A string: "value"
 // - A number: 1.23
