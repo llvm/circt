@@ -459,6 +459,7 @@ struct VerifBoundedModelCheckingOpConversion
     // <wasViolated>
     // Get list of clock indexes in circuit args
     size_t initIndex = 0;
+    size_t regStartIdx = oldCircuitInputTy.size() - numRegs;
     SmallVector<Value> inputDecls;
     SmallVector<int> clockIndexes;
     for (auto [curIndex, oldTy, newTy] :
@@ -468,9 +469,8 @@ struct VerifBoundedModelCheckingOpConversion
         clockIndexes.push_back(curIndex);
         continue;
       }
-      if (curIndex >= oldCircuitInputTy.size() - numRegs) {
-        auto initVal =
-            initialValues[curIndex - oldCircuitInputTy.size() + numRegs];
+      if (curIndex >= regStartIdx) {
+        auto initVal = initialValues[curIndex - regStartIdx];
         if (auto initIntAttr = dyn_cast<IntegerAttr>(initVal)) {
           const auto &cstInt = initIntAttr.getValue();
           assert(cstInt.getBitWidth() ==
@@ -481,7 +481,14 @@ struct VerifBoundedModelCheckingOpConversion
           continue;
         }
       }
-      inputDecls.push_back(smt::DeclareFunOp::create(rewriter, loc, newTy));
+      // Give a meaningful name prefix based on the argument's role.
+      std::string name;
+      if (curIndex >= regStartIdx)
+        name = ("reg_" + Twine(curIndex - regStartIdx)).str();
+      else
+        name = ("input_" + Twine(curIndex)).str();
+      inputDecls.push_back(smt::DeclareFunOp::create(
+          rewriter, loc, newTy, rewriter.getStringAttr(name)));
     }
 
     auto numStateArgs = initVals.size() - initIndex;
@@ -588,14 +595,16 @@ struct VerifBoundedModelCheckingOpConversion
           size_t loopIndex = 0;
           // Collect decls to yield at end of iteration
           SmallVector<Value> newDecls;
-          for (auto [oldTy, newTy] :
-               llvm::zip(TypeRange(oldCircuitInputTy).drop_back(numRegs),
-                         TypeRange(circuitInputTy).drop_back(numRegs))) {
-            if (isa<seq::ClockType>(oldTy))
+          for (auto [inputIdx, oldTy, newTy] :
+               llvm::enumerate(TypeRange(oldCircuitInputTy).drop_back(numRegs),
+                               TypeRange(circuitInputTy).drop_back(numRegs))) {
+            if (isa<seq::ClockType>(oldTy)) {
               newDecls.push_back(loopVals[loopIndex++]);
-            else
-              newDecls.push_back(
-                  smt::DeclareFunOp::create(builder, loc, newTy));
+            } else {
+              auto name = ("input_" + Twine(inputIdx)).str();
+              newDecls.push_back(smt::DeclareFunOp::create(
+                  builder, loc, newTy, builder.getStringAttr(name)));
+            }
           }
 
           // Only update the registers on a clock posedge unless in rising
