@@ -21,6 +21,8 @@
 #include "circt/Support/TruthTable.h"
 #include "mlir/IR/Operation.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/LogicalResult.h"
@@ -59,6 +61,228 @@ class CutRewriter;
 class CutEnumerator;
 struct CutRewritePattern;
 struct CutRewriterOptions;
+class LogicNetwork;
+
+//===----------------------------------------------------------------------===//
+// Logic Network Data Structures (Flat IR for efficient cut enumeration)
+//===----------------------------------------------------------------------===//
+
+/// Edge representation in the logic network.
+/// Similar to mockturtle's signal, this encodes both a node index and inversion
+/// in a single 32-bit value. The LSB indicates whether the signal is inverted.
+struct Signal {
+  uint32_t data = 0;
+
+  Signal() = default;
+  Signal(uint32_t index, bool inverted)
+      : data((index << 1) | (inverted ? 1 : 0)) {}
+  explicit Signal(uint32_t raw) : data(raw) {}
+
+  /// Get the node index (without the inversion bit).
+  uint32_t getIndex() const { return data >> 1; }
+
+  /// Check if this edge is inverted.
+  bool isInverted() const { return data & 1; }
+
+  /// Get the raw data (index << 1 | inverted).
+  uint32_t getRaw() const { return data; }
+
+  Signal flipInversion() const { return Signal(getIndex(), !isInverted()); }
+
+  /// Create an inverted version of this edge.
+  Signal operator!() const { return Signal(data ^ 1); }
+
+  bool operator==(const Signal &other) const { return data == other.data; }
+  bool operator!=(const Signal &other) const { return data != other.data; }
+  bool operator<(const Signal &other) const { return data < other.data; }
+};
+
+/// Represents a single gate/node in the flat logic network.
+/// This structure is designed to be cache-friendly and supports up to 3 inputs
+/// (sufficient for AND, XOR, MAJ gates). For nodes with fewer inputs, unused
+/// edges have index 0 (constant 0 node).
+///
+/// Special indices:
+///   - Index 0: Constant 0
+///   - Index 1: Constant 1
+///
+/// It uses 8 bytes for operation pointer + enum, 12 bytes for edges = 20
+/// bytes per gate.
+struct LogicNetworkGate {
+  /// Kind of logic gate.
+  enum Kind : uint8_t {
+    Constant = 0, ///< Constant 0/1 node (index 0 = const0, index 1 = const1)
+    PrimaryInput = 1, ///< Primary input to the network
+    And2 = 2,         ///< AND gate (2-input, aig::AndInverterOp)
+    Xor2 = 3,         ///< XOR gate (2-input)
+    Maj3 = 4,         ///< Majority gate (3-input, mig::MajOp)
+    Identity = 5      ///< Identity gate (used for 1-input inverter)
+  };
+
+  /// Operation pointer and kind packed together.
+  /// The kind is stored in the low bits of the pointer.
+  llvm::PointerIntPair<Operation *, 3, Kind> opAndKind;
+
+  /// Fanin edges (up to 3 inputs). For AND gates, only edges[0] and edges[1]
+  /// are used. For MAJ gates, all three are used. For PrimaryInput/Constant,
+  /// none are used. The inversion bit is encoded in each edge.
+  Signal edges[3];
+
+  LogicNetworkGate() : opAndKind(nullptr, Constant), edges{} {}
+  LogicNetworkGate(Operation *op, Kind kind,
+                   llvm::ArrayRef<Signal> operands = {})
+      : opAndKind(op, kind), edges{} {
+    assert(operands.size() <= 3 && "Too many operands for LogicNetworkGate");
+    for (size_t i = 0; i < operands.size(); ++i)
+      edges[i] = operands[i];
+  }
+
+  /// Get the kind of this gate.
+  Kind getKind() const { return opAndKind.getInt(); }
+
+  /// Get the operation pointer (nullptr for constants).
+  Operation *getOperation() const { return opAndKind.getPointer(); }
+
+  /// Get the number of fanin edges based on kind.
+  unsigned getNumFanins() const {
+    switch (getKind()) {
+    case Constant:
+    case PrimaryInput:
+      return 0;
+    case And2:
+    case Xor2:
+      return 2;
+    case Maj3:
+      return 3;
+    case Identity:
+      return 1;
+    }
+    llvm_unreachable("Unknown gate kind");
+  }
+
+  /// Check if this is a logic gate that can be part of a cut.
+  bool isLogicGate() const {
+    Kind k = getKind();
+    return k == And2 || k == Xor2 || k == Maj3 || k == Identity;
+  }
+
+  /// Check if this should always be a cut input (PI or constant).
+  bool isAlwaysCutInput() const {
+    Kind k = getKind();
+    return k == PrimaryInput || k == Constant;
+  }
+};
+
+/// Flat logic network representation for efficient cut enumeration.
+///
+/// This class provides a mockturtle-style flat representation of the
+/// combinational logic network. Each value in the MLIR IR is assigned a unique
+/// index, and gates are stored in a contiguous vector for cache efficiency.
+///
+/// The network supports:
+/// - O(1) lookup of gate information by index
+/// - Compact representation with inversion encoded in edges
+/// - Efficient simulation and truth table computation
+///
+/// Special reserved indices:
+///   - Index 0: Constant 0
+///   - Index 1: Constant 1
+class LogicNetwork {
+public:
+  /// Special constant indices.
+  static constexpr uint32_t kConstant0 = 0;
+  static constexpr uint32_t kConstant1 = 1;
+
+  ArrayRef<LogicNetworkGate> getGates() const { return gates; }
+
+  LogicNetwork() {
+    // Reserve index 0 for constant 0 and index 1 for constant 1
+    gates.emplace_back(nullptr, LogicNetworkGate::Constant);
+    gates.emplace_back(nullptr, LogicNetworkGate::Constant);
+    // indexToValue needs placeholders for constants
+    indexToValue.push_back(Value()); // const0
+    indexToValue.push_back(Value()); // const1
+  }
+
+  /// Get a LogicEdge representing constant 0.
+  static Signal getConstant0() { return Signal(kConstant0, false); }
+
+  /// Get a LogicEdge representing constant 1 (constant 0 inverted).
+  static Signal getConstant1() { return Signal(kConstant0, true); }
+
+  /// Get or create an index for a value.
+  /// If the value doesn't have an index yet, assigns one and returns the index.
+  uint32_t getOrCreateIndex(Value value);
+
+  /// Get the raw index for a value. Asserts if value is not found.
+  /// Note: This returns only the index, not a Signal with inversion info.
+  /// Use hasIndex() to check existence first, or use getOrCreateIndex().
+  uint32_t getIndex(Value value) const;
+
+  /// Check if a value has been indexed.
+  bool hasIndex(Value value) const;
+
+  /// Get the value for a given raw index. Asserts if index is out of bounds.
+  /// Returns null Value for constant indices (0 and 1).
+  Value getValue(uint32_t index) const;
+
+  /// Fill values for the given raw indices.
+  void getValues(ArrayRef<uint32_t> indices,
+                 SmallVectorImpl<Value> &values) const;
+
+  /// Get a Signal for a value.
+  /// Asserts if value not found - use hasIndex() first if unsure.
+  Signal getSignal(Value value, bool inverted) const {
+    return Signal(getIndex(value), inverted);
+  }
+
+  /// Get or create a Signal for a value.
+  Signal getOrCreateSignal(Value value, bool inverted) {
+    return Signal(getOrCreateIndex(value), inverted);
+  }
+
+  /// Get the value for a given Signal (extracts index from Signal).
+  Value getValue(Signal signal) const { return getValue(signal.getIndex()); }
+
+  /// Get the gate at a given index.
+  const LogicNetworkGate &getGate(uint32_t index) const { return gates[index]; }
+
+  /// Get mutable reference to gate at index.
+  LogicNetworkGate &getGate(uint32_t index) { return gates[index]; }
+
+  /// Get the total number of nodes in the network.
+  size_t size() const { return gates.size(); }
+
+  /// Add a primary input to the network.
+  uint32_t addPrimaryInput(Value value);
+
+  /// Add a gate with explicit result value and operand signals.
+  uint32_t addGate(Operation *op, LogicNetworkGate::Kind kind, Value result,
+                   llvm::ArrayRef<Signal> operands = {});
+
+  /// Add a gate using op->getResult(0) as the result value.
+  uint32_t addGate(Operation *op, LogicNetworkGate::Kind kind,
+                   llvm::ArrayRef<Signal> operands = {}) {
+    return addGate(op, kind, op->getResult(0), operands);
+  }
+
+  /// Build the logic network from a region/block in topological order.
+  /// Returns failure if the IR is not in a valid form.
+  LogicalResult buildFromBlock(Block *block);
+
+  /// Clear the network and reset to initial state.
+  void clear();
+
+private:
+  /// Map from MLIR Value to network index.
+  llvm::DenseMap<Value, uint32_t> valueToIndex;
+
+  /// Map from network index to MLIR Value.
+  llvm::SmallVector<Value> indexToValue;
+
+  /// Vector of all gates in the network.
+  llvm::SmallVector<LogicNetworkGate> gates;
+};
 
 /// Result of matching a cut against a pattern.
 ///
@@ -373,6 +597,17 @@ private:
   /// Function to match cuts against available patterns.
   /// Set during enumeration and used when finalizing cut sets.
   llvm::function_ref<std::optional<MatchedPattern>(const Cut &)> matchCut;
+
+  /// Flat logic network representation for efficient simulation.
+  /// Built during cut enumeration and used for truth table computation.
+  LogicNetwork logicNetwork;
+
+public:
+  /// Get the logic network (read-only).
+  const LogicNetwork &getLogicNetwork() const { return logicNetwork; }
+
+  /// Get the logic network (mutable).
+  LogicNetwork &getLogicNetwork() { return logicNetwork; }
 };
 
 /// Base class for cut rewriting patterns used in combinational logic
