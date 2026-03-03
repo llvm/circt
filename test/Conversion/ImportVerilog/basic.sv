@@ -2344,6 +2344,82 @@ task automatic ImplicitEventControlExamples();
   end
 endtask
 
+// CHECK-LABEL: moore.module @WaitStatementTest() {
+// CHECK:         [[C0:%.+]] = moore.constant 0 : i32
+// CHECK:         [[C1:%.+]] = moore.constant 0 : l32
+// CHECK:         [[C2:%.+]] = moore.constant 0 : l1
+// CHECK:         [[V0:%.+]] = moore.variable [[C2]] : <l1>
+// CHECK:         [[C3:%.+]] = moore.constant 1 : i32
+// CHECK:         [[C4:%.+]] = moore.constant 1 : l32
+// CHECK:         [[C5:%.+]] = moore.constant 1 : l1
+// CHECK:         [[V1:%.+]] = moore.net wire [[C5]] : <l1>
+// CHECK:         [[C6:%.+]] = moore.constant 0 : i32
+// CHECK:         [[C7:%.+]] = moore.constant 0 : l32
+// CHECK:         [[C8:%.+]] = moore.constant 0 : l1
+// CHECK:         [[V2:%.+]] = moore.variable [[C8]] : <l1>
+// CHECK:         moore.procedure initial {
+// CHECK:           [[C9:%.+]] = moore.constant 10 : i32
+// CHECK:           [[C10:%.+]] = moore.constant 10 : i64
+// CHECK:           [[C11:%.+]] = moore.constant 10 : l64
+// CHECK:           [[C12:%.+]] = moore.constant 100000 : l64
+// CHECK:           [[C13:%.+]] = moore.constant 1000000 : l64
+// CHECK:           [[CT0:%.+]] = moore.constant_time 1000000 fs
+// CHECK:           moore.wait_delay [[CT0]]
+// CHECK:           [[C14:%.+]] = moore.constant 1 : i32
+// CHECK:           [[C15:%.+]] = moore.constant 1 : l32
+// CHECK:           [[C16:%.+]] = moore.constant 1 : l1
+// CHECK:           moore.blocking_assign [[V2]], [[C16]] : l1
+// CHECK:           moore.return
+// CHECK:         }
+// CHECK:         moore.procedure initial {
+// CHECK:           moore.wait_level {
+// CHECK:             [[R0:%.+]] = moore.read [[V2]] : <l1>
+// CHECK:             moore.detect_level [[R0]] : l1
+// CHECK:           }
+// CHECK:           [[C17:%.+]] = moore.constant 10 : i32
+// CHECK:           [[C18:%.+]] = moore.constant 10 : i64
+// CHECK:           [[C19:%.+]] = moore.constant 10 : l64
+// CHECK:           [[C20:%.+]] = moore.constant 100000 : l64
+// CHECK:           [[C21:%.+]] = moore.constant 1000000 : l64
+// CHECK:           [[CT1:%.+]] = moore.constant_time 1000000 fs
+// CHECK:           moore.wait_delay [[CT1]]
+// CHECK:           [[R1:%.+]] = moore.read [[V1]] : <l1>
+// CHECK:           moore.blocking_assign [[V0]], [[R1]] : l1
+// CHECK:           moore.return
+// CHECK:         }
+// CHECK:         moore.procedure initial {
+// CHECK:           moore.wait_level {
+// CHECK:             [[R2:%.+]] = moore.read [[V0]] : <l1>
+// CHECK:             moore.detect_level [[R2]] : l1
+// CHECK:           }
+// CHECK:           [[C22:%.+]] = moore.constant 0 : i32
+// CHECK:           [[C23:%.+]] = moore.constant 0 : l32
+// CHECK:           [[C24:%.+]] = moore.constant 0 : l1
+// CHECK:           moore.blocking_assign [[V2]], [[C24]] : l1
+// CHECK:           moore.return
+// CHECK:         }
+// CHECK:         moore.output
+// CHECK:       }
+
+module WaitStatementTest();
+	reg a = 0;
+	wire b = 1;
+	reg enable = 0;
+
+	initial begin
+		#10 enable = 1;
+	end
+
+	initial begin
+		wait (enable) #10 a = b;
+	end
+	
+	initial begin
+		wait (a);
+		enable = 0;
+	end
+endmodule
+
 // CHECK-LABEL: moore.module @ImmediateAssert(in %clk : !moore.l1) 
 module ImmediateAssert(input clk);
   // CHECK: [[CLK:%.+]] = moore.net name "clk" wire : <l1>
@@ -4263,6 +4339,66 @@ module ForkJoinTest ();
 		a = 8;
 	end
 endmodule
+
+// CHECK-LABEL: moore.module @WaitForkTest() {
+// CHECK:  [[C0:%.+]] = moore.constant 0 : i32
+// CHECK:  [[V0:%.+]] = moore.variable [[C0]] : <i32>
+// CHECK:  [[C1:%.+]] = moore.constant 0 : i32
+// CHECK:  [[V1:%.+]] = moore.variable [[C1]] : <i32>
+// CHECK:  moore.procedure initial {
+// CHECK:    moore.fork join_none {
+// CHECK:      [[C2:%.+]] = moore.constant 10 : i32
+// CHECK:      [[C3:%.+]] = moore.constant 10 : i64
+// CHECK:      [[C4:%.+]] = moore.constant 10 : l64
+// CHECK:      [[C5:%.+]] = moore.constant 100000 : l64
+// CHECK:      [[C6:%.+]] = moore.constant 1000000 : l64
+// CHECK:      [[CT0:%.+]] = moore.constant_time 1000000 fs
+// CHECK:      moore.wait_delay [[CT0]]
+// CHECK:      [[C7:%.+]] = moore.constant 1 : i32
+// CHECK:      moore.blocking_assign [[V0]], [[C7]] : i32
+// CHECK:      moore.complete
+// CHECK:    }, {
+// CHECK:      [[C8:%.+]] = moore.constant 20 : i32
+// CHECK:      [[C9:%.+]] = moore.constant 20 : i64
+// CHECK:      [[C10:%.+]] = moore.constant 20 : l64
+// CHECK:      [[C11:%.+]] = moore.constant 100000 : l64
+// CHECK:      [[C12:%.+]] = moore.constant 2000000 : l64
+// CHECK:      [[CT1:%.+]] = moore.constant_time 2000000 fs
+// CHECK:      moore.wait_delay [[CT1]]
+// CHECK:      [[C13:%.+]] = moore.constant 0 : i32
+// CHECK:      moore.blocking_assign [[V1]], [[C13]] : i32
+// CHECK:      moore.complete
+// CHECK:    }
+// CHECK:    [[C14:%.+]] = moore.constant 1 : i32
+// CHECK:    moore.blocking_assign [[V1]], [[C14]] : i32
+// CHECK:    moore.wait_fork
+// CHECK:    moore.return
+// CHECK:  }
+// CHECK:  moore.output
+// CHECK:}
+
+module WaitForkTest();
+  int a = 0;
+  int b = 0;
+
+  initial begin
+	  fork
+		  begin
+			  #10
+			  a = 1;
+		  end
+		  begin
+			  #20
+			  b = 0;
+		  end
+	  join_none
+	  b = 1;
+	  wait fork;
+  end
+endmodule
+
+
+
 
 // CHECK-LABEL: moore.module @AssocArrayExtractTest() {
 // CHECK:           [[AA:%.+]] = moore.variable : <assoc_array<i32, string>>
