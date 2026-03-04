@@ -26,6 +26,14 @@ using namespace circt;
 
 LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
                                                     const FirtoolOptions &opt) {
+  // Configure built-in pass manager verification based on mode.
+  if (!opt.isVerificationModeAll())
+    pm.enableVerifier(false);
+
+  // Run initial verification for "default" mode.
+  if (opt.isVerificationModeDefault())
+    pm.addPass(createVerifierPass());
+
   pm.nest<firrtl::CircuitOp>().addPass(
       firrtl::createCheckRecursiveInstantiation());
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckLayers());
@@ -38,6 +46,10 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
       {/*ignoreAnnotationClassless=*/opt.shouldDisableClasslessAnnotations(),
        /*ignoreAnnotationUnknown=*/opt.shouldDisableUnknownAnnotations(),
        /*noRefTypePorts=*/opt.shouldLowerNoRefTypePortAnnotations()}));
+
+  // Run verifiers after annotation handlers run.
+  if (opt.isVerificationModeDefault())
+    pm.addPass(createVerifierPass());
 
   if (opt.shouldEnableDebugInfo())
     pm.nest<firrtl::CircuitOp>().addNestedPass<firrtl::FModuleOp>(
@@ -99,6 +111,11 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
        /*replSeqMemFile=*/opt.shouldIgnoreReadEnableMemories()}));
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResets());
+
+  // Run verifiers after InferResets, as the full asynchronous reset transform
+  // is relying on verification.
+  if (opt.isVerificationModeDefault())
+    pm.addPass(createVerifierPass());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDropConst());
 
@@ -293,7 +310,8 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerDPI());
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerDomains());
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerClasses());
-  pm.nest<firrtl::CircuitOp>().addPass(om::createVerifyObjectFieldsPass());
+  if (opt.isVerificationModeAll())
+    pm.nest<firrtl::CircuitOp>().addPass(om::createVerifyObjectFieldsPass());
 
   // Check for static asserts.
   pm.nest<firrtl::CircuitOp>().addPass(circt::firrtl::createLint(
@@ -309,11 +327,12 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
     modulePM.addPass(createSimpleCanonicalizerPass());
   }
 
-  // Check inner symbols and inner refs.
-  pm.addPass(hw::createVerifyInnerRefNamespace());
-
-  // Check OM object fields.
-  pm.addPass(om::createVerifyObjectFieldsPass());
+  if (opt.isVerificationModeAll()) {
+    // Check inner symbols and inner refs.
+    pm.addPass(hw::createVerifyInnerRefNamespace());
+    // Check OM object fields.
+    pm.addPass(om::createVerifyObjectFieldsPass());
+  }
 
   // Run the verif op verification pass
   pm.addNestedPass<hw::HWModuleOp>(verif::createVerifyClockedAssertLikePass());
@@ -367,11 +386,12 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
         /*mergeAlwaysBlocks=*/!opt.shouldEmitSeparateAlwaysBlocks()));
   }
 
-  // Check inner symbols and inner refs.
-  pm.addPass(hw::createVerifyInnerRefNamespace());
-
   // Check OM object fields.
-  pm.addPass(om::createVerifyObjectFieldsPass());
+  if (opt.isVerificationModeAll()) {
+    // Check inner symbols and inner refs.
+    pm.addPass(hw::createVerifyInnerRefNamespace());
+    pm.addPass(om::createVerifyObjectFieldsPass());
+  }
 
   return success();
 }
@@ -380,7 +400,6 @@ namespace detail {
 LogicalResult
 populatePrepareForExportVerilog(mlir::PassManager &pm,
                                 const firtool::FirtoolOptions &opt) {
-
   // Run the verif op verification pass
   pm.addNestedPass<hw::HWModuleOp>(verif::createVerifyClockedAssertLikePass());
 
@@ -406,11 +425,12 @@ populatePrepareForExportVerilog(mlir::PassManager &pm,
   if (opt.shouldExportModuleHierarchy())
     pm.addPass(sv::createHWExportModuleHierarchyPass());
 
-  // Check inner symbols and inner refs.
-  pm.addPass(hw::createVerifyInnerRefNamespace());
-
-  // Check OM object fields.
-  pm.addPass(om::createVerifyObjectFieldsPass());
+  if (opt.isVerificationModeAll()) {
+    // Check inner symbols and inner refs.
+    pm.addPass(hw::createVerifyInnerRefNamespace());
+    // Check OM object fields.
+    pm.addPass(om::createVerifyObjectFieldsPass());
+  }
 
   return success();
 }
@@ -807,6 +827,23 @@ struct FirtoolCmdOptions {
   llvm::cl::opt<bool> lintXmrsInDesign{
       "lint-xmrs-in-design", llvm::cl::desc("Lint XMRs in the design"),
       llvm::cl::init(false)};
+
+  //===----------------------------------------------------------------------===
+  // Verification options
+  //===----------------------------------------------------------------------===
+
+  llvm::cl::opt<firtool::FirtoolOptions::VerificationMode> verificationMode{
+      "verify", llvm::cl::desc("Specify when to run verification"),
+      llvm::cl::values(
+          clEnumValN(firtool::FirtoolOptions::VerificationMode::All, "all",
+                     "Run the verifier after each transformation pass"),
+          clEnumValN(firtool::FirtoolOptions::VerificationMode::Default,
+                     "default",
+                     "Run the verifier at required points in the pipeline"),
+          clEnumValN(firtool::FirtoolOptions::VerificationMode::None, "none",
+                     "Do not run the verifier")),
+      llvm::cl::init(firtool::FirtoolOptions::VerificationMode::Default),
+      llvm::cl::Hidden};
 };
 } // namespace
 
@@ -847,7 +884,8 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       symbolicValueLowering(verif::SymbolicValueLowering::ExtModule),
       disableWireElimination(false), lintStaticAsserts(true),
       lintXmrsInDesign(true), emitAllBindFiles(false),
-      inlineInputOnlyModules(false), domainMode(DomainMode::Disable) {
+      inlineInputOnlyModules(false), domainMode(DomainMode::Disable),
+      verificationMode(VerificationMode::Default) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
@@ -902,4 +940,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   emitAllBindFiles = clOptions->emitAllBindFiles;
   inlineInputOnlyModules = clOptions->inlineInputOnlyModules;
   domainMode = clOptions->domainMode;
+  verificationMode = clOptions->verificationMode;
 }

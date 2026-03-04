@@ -46,6 +46,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Verifier.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassInstrumentation.h"
@@ -200,11 +201,6 @@ static cl::opt<OutputFormatKind> outputFormat(
                    "directory with -o=<dir>)"),
         clEnumValN(OutputDisabled, "disable-output", "Do not output anything")),
     cl::init(OutputVerilog), cl::cat(mainCategory));
-
-static cl::opt<bool>
-    verifyPasses("verify-each",
-                 cl::desc("Run the verifier after each transformation pass"),
-                 cl::init(true), cl::cat(mainCategory));
 
 static cl::list<std::string> inputAnnotationFilenames(
     "annotation-file", cl::desc("Optional input annotation file"),
@@ -468,7 +464,6 @@ static LogicalResult processBuffer(
 
   // Apply any pass manager command line options.
   PassManager pm(&context);
-  pm.enableVerifier(verifyPasses);
   pm.enableTiming(ts);
   if (verbosePassExecutions)
     pm.addInstrumentation(
