@@ -132,8 +132,9 @@ class Simulator:
       sources: SourceFiles describing RTL/DPI inputs.
       run_dir: Directory where build/run artifacts are placed.
       debug: Enable cosim debug mode.
-      save_waveform: When True and debug=True, dump simulator waveforms to FST
-        format. Requires debug to be enabled.
+      save_waveform: When True and debug=True, dump simulator waveforms to a
+        waveform file. The exact format depends on the backend (e.g. FST for
+        Verilator, VCD for Questa). Requires debug to be enabled.
       run_stdout_callback: Line-based callback for runtime stdout.
       run_stderr_callback: Line-based callback for runtime stderr.
       compile_stdout_callback: Line-based callback for compile stdout.
@@ -233,6 +234,16 @@ class Simulator:
     """Return the command to run the simulation."""
     assert False, "Must be implemented by subclass"
 
+  @property
+  def waveform_extension(self) -> str:
+    """File extension for waveform dumps.
+
+    Subclasses should override if their format differs.  The Verilator C++
+    driver writes FST (via ``VerilatedFstC``); the generic SV driver uses
+    ``$dumpfile/$dumpvars`` which produces VCD.
+    """
+    return ".vcd"
+
   def run_proc(self, gui: bool = False) -> SimProcess:
     """Run the simulation process. Returns the Popen object and the port which
       the simulation is listening on.
@@ -261,7 +272,8 @@ class Simulator:
         # Slow the simulation down to one tick per millisecond.
         simEnv["DEBUG_PERIOD"] = "1"
       if self.save_waveform:
-        waveform_file = (self.run_dir / "cosim_waveform.fst").resolve()
+        waveform_file = (self.run_dir /
+                         f"cosim_waveform{self.waveform_extension}").resolve()
         simEnv["SAVE_WAVE"] = str(waveform_file)
     rcmd = self.run_command(gui)
     # Start process with asynchronous output capture.

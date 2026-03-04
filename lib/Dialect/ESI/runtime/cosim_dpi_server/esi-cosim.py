@@ -58,7 +58,7 @@ def __main__(args):
   argparser.add_argument(
       "--save-waveform",
       action="store_true",
-      help="Save waveform dumps (FST format). Requires --debug.")
+      help="Save waveform dumps (format depends on simulator). Requires --debug.")
   argparser.add_argument("--gui",
                          action="store_true",
                          help="Run the simulator in GUI mode (if supported).")

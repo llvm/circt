@@ -87,6 +87,11 @@ class Verilator(Simulator):
     cmd += [str(p) for p in self.sources.rtl_sources]
     return [cmd]
 
+  @property
+  def waveform_extension(self) -> str:
+    """Verilator's C++ driver uses ``VerilatedFstC`` — FST format."""
+    return ".fst"
+
   def run_command(self, gui: bool):
     if gui:
       raise RuntimeError("Verilator does not support GUI mode.")

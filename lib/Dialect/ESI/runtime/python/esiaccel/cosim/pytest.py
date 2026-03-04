@@ -157,7 +157,7 @@ class CosimPytestConfig:
     test_name: Name of the test function or method.
     pytest_run_id: Unique identifier for the pytest run (e.g., "pytest-12345").
     xdist_worker_id: ID of the xdist worker if running under pytest-xdist (e.g., "gw0").
-    save_waveform: If True, dump waveform to FST file. Requires debug=True.
+    save_waveform: If True, dump waveform file. Format depends on backend. Requires debug=True.
   """
 
   source_generator: SourceGeneratorArg
@@ -696,8 +696,9 @@ def cosim_test(
       directories are kept by default; set ``ESIACCEL_PYTEST_DELETE_TMP_DIR=true``
       to delete them. When using the system temp directory, defaults to True
       (delete to avoid clutter). Always False when debug mode is enabled.
-    save_waveform: Whether to save waveform dumps (FST format). Requires debug
-      mode to be enabled. Defaults to the value of the
+    save_waveform: Whether to save waveform dumps (format depends on the
+      simulator backend, e.g. FST for Verilator, VCD for Questa). Requires
+      debug mode to be enabled. Defaults to the value of the
       ``ESIACCEL_PYTEST_SAVE_WAVEFORM`` environment variable if set, otherwise
       False.
   """
@@ -707,7 +708,12 @@ def cosim_test(
   if tmp_dir_root is None:
     tmp_dir_root = _get_env_path("ESIACCEL_PYTEST_TMP_DIR")
   if delete_tmp_dir is None:
-    delete_tmp_dir = _get_env_bool("ESIACCEL_PYTEST_DELETE_TMP_DIR", True)
+    # When using a custom tmp_dir_root (provided explicitly or via env),
+    # keep directories by default for debugging.  When using the system
+    # temp directory, delete them by default.  The env var overrides either.
+    default_delete = tmp_dir_root is None
+    delete_tmp_dir = _get_env_bool("ESIACCEL_PYTEST_DELETE_TMP_DIR",
+                                   default_delete)
   if save_waveform is None:
     save_waveform = _get_env_bool("ESIACCEL_PYTEST_SAVE_WAVEFORM", False)
 
