@@ -998,6 +998,19 @@ AllTypesMatch<["dynArray", "result"]>]> {
   }];
 }
 
+def DynamicArrayDeleteOp: SimOp<"darray.delete", [Pure,
+AllTypesMatch<["dynArray", "result"]>]> {
+  let summary = "Deletes a dynamic array";
+  let description = [{
+    Deletes a dynamic array. Returns an empty dynamic array.
+  }];
+  let arguments = (ins DynamicArrayType:$dynArray);
+  let results = (outs DynamicArrayType:$result);
+  let assemblyFormat = [{
+    $dynArray attr-dict `:` type($dynArray)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//

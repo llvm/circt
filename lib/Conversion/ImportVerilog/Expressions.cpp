@@ -846,17 +846,17 @@ struct RvalueExprVisitor : public ExprVisitor {
     if (!rhs)
       return {};
 
-    
     // Check for dynamic array assignment:
-    if(auto *select = expr.left().as_if<slang::ast::ElementSelectExpression>()) {
+    if (auto *select =
+            expr.left().as_if<slang::ast::ElementSelectExpression>()) {
       auto value = context.convertLvalueExpression(select->value());
       auto vt = value.getType();
       // Check if reference to unpacked array type:
-      if(
-        isa<moore::RefType>(vt) &&
-        isa<moore::OpenUnpackedArrayType>(cast<moore::RefType>(vt).getNestedType())
-      ) {
-        // auto array = context.convertLvalueExpression(const slang::ast::Expression &expr)
+      if (isa<moore::RefType>(vt) &&
+          isa<moore::OpenUnpackedArrayType>(
+              cast<moore::RefType>(vt).getNestedType())) {
+        // auto array = context.convertLvalueExpression(const
+        // slang::ast::Expression &expr)
         auto array = context.convertLvalueExpression(select->value());
         auto idx = context.convertRvalueExpression(select->selector());
         moore::OpenUArrayAssignOp::create(builder, loc, array, idx, rhs);
@@ -1839,16 +1839,16 @@ struct RvalueExprVisitor : public ExprVisitor {
       return fmtValue.value();
     }
 
-    // Queue ops take their parameter as a reference
-    // So do AssocArray ops
-    bool isByRefOp = args.size() >= 1 &&
-                     ((args[0]->type->isQueue() && subroutine.name != "size") ||
-                      args[0]->type->isAssociativeArray());
+    // Queue ops / dynamic array ops take their parameter as a reference
 
-    // Associative Array Traversal Ops require value2 to be refs
-    bool secondArgIsByRef =
-        args.size() >= 1 &&
-        (args[0]->type->isAssociativeArray() && subroutine.name != "exists");
+    bool isByRefQueueOp = args.size() >= 1 && args[0]->type->isQueue() &&
+                          subroutine.name != "size";
+
+    bool isByRefDynArrayOp = args.size() == 1 &&
+                             args[0]->type->isDynamicallySizedArray() &&
+                             subroutine.name == "delete";
+
+    bool isByRefOp = isByRefQueueOp || isByRefDynArrayOp;
 
     // Call the conversion function with the appropriate arity. These return one
     // of the following:

@@ -2258,10 +2258,10 @@ def OpenUArraySizeOp: MooreOp<"open_uarray_size"> {
   let description = [{
       See IEEE 1800-2023 § 7.5.2 "Size()"
   }];
-  let arguments = (ins OpenUnpackedArrayType:$arr);
+  let arguments = (ins OpenUnpackedArrayType:$array);
   let results = (outs TwoValuedI32:$result);
   let assemblyFormat = [{
-    $arr attr-dict `:` type($arr) `->` type($result)
+    $array attr-dict `:` type($array) `->` type($result)
   }]; 
 }
 
@@ -2270,10 +2270,10 @@ def OpenUArrayDeleteOp: MooreOp<"open_uarray_delete"> {
   let description = [{
       See IEEE 1800-2023 § 7.5.3 "Delete()"
   }];
-  let arguments = (ins OpenUnpackedArrayType:$arr);
+  let arguments = (ins OpenUnpackedArrayRefType:$array);
   let results = (outs VoidType);
   let assemblyFormat = [{
-    $arr attr-dict `:` type($arr)
+    $array attr-dict `:` type($array)
   }];
 }
 

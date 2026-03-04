@@ -2570,6 +2570,47 @@ struct DynamicArrayCreateOpConversion
   };
 };
 
+struct OpenUArrayAssignOpConversion
+    : public OpConversionPattern<OpenUArrayAssignOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(OpenUArrayAssignOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    probeRefAndDriveWithResult(
+        rewriter, op->getLoc(), adaptor.getArray(), [&](Value dynArray) {
+          auto assignOp = sim::DynamicArrayAssignOp::create(
+              rewriter, op->getLoc(), dynArray, adaptor.getIdx(),
+              adaptor.getValue());
+          return assignOp.getResult();
+        });
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct OpenUArrayDeleteOpConversion
+    : public OpConversionPattern<OpenUArrayDeleteOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(OpenUArrayDeleteOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    probeRefAndDriveWithResult(rewriter, op->getLoc(), adaptor.getArray(),
+                               [&](Value dynArray) {
+                                 auto delOp = sim::DynamicArrayDeleteOp::create(
+                                     rewriter, op->getLoc(), dynArray);
+                                 return delOp.getResult();
+                               });
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -3220,7 +3261,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
 
     // Dynamic array operations
     OpenUArrayCreateOpConversion,
-    OpenUArrayAssignOpConversion
+    OpenUArrayAssignOpConversion,
+    OpenUArrayDeleteOpConversion
 
     >(typeConverter, patterns.getContext());
   // clang-format on
