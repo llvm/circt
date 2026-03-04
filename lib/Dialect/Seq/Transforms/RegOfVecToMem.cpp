@@ -207,8 +207,9 @@ bool RegOfVecToMemPass::createFirMemory(MemoryPattern &pattern) {
   };
 
   // Create read port
+  auto readAddr = fixZeroWidthAddr(pattern.readAddr);
   Value readData = FirMemReadOp::create(
-      builder, firMem, fixZeroWidthAddr(pattern.readAddr), pattern.clock,
+      builder, firMem, readAddr, pattern.clock,
       /*enable=*/hw::ConstantOp::create(builder, builder.getI1Type(), 1));
 
   LLVM_DEBUG(llvm::dbgs() << "  Created read port\n"
@@ -216,9 +217,9 @@ bool RegOfVecToMemPass::createFirMemory(MemoryPattern &pattern) {
 
   Value mask;
   // Create write port
-  FirMemWriteOp::create(builder, firMem, fixZeroWidthAddr(pattern.writeAddr),
-                        pattern.clock, pattern.writeEnable, pattern.writeData,
-                        mask);
+  auto writeAddr = fixZeroWidthAddr(pattern.writeAddr);
+  FirMemWriteOp::create(builder, firMem, writeAddr, pattern.clock,
+                        pattern.writeEnable, pattern.writeData, mask);
 
   LLVM_DEBUG(llvm::dbgs() << "  Created write port\n");
 
