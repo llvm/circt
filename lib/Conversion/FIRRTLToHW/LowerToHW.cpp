@@ -474,7 +474,6 @@ private:
   /// Information about an instance choice for a specific option case.
   struct LoweredInstanceChoice {
     StringAttr parentModule;
-    // The instance macro (macro name) for this instance choice
     FlatSymbolRefAttr instanceMacro;
     hw::InstanceOp hwInstance;
   };

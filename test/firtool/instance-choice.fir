@@ -34,7 +34,7 @@ circuit top:
     instchoice proc of DefaultTarget, Platform:
       FPGA => FPGATarget
 
-    printf(clk, UInt<1>(1), "resul: %d\n", proc.result)
+    printf(clk, UInt<1>(1), "result: %d\n", proc.result)
 ; CHECK-LABEL: // ----- 8< ----- FILE "targets_top_Platform_FPGA.svh" ----- 8< -----
 ; CHECK:       `ifndef [[OPTION_NAME]]
 ; CHECK-NEXT:    `define [[OPTION_NAME]]
@@ -44,5 +44,3 @@ circuit top:
 ; CHECK-NEXT:  `else 
 ; CHECK-NEXT:    `define [[TARGET_NAME]] proc_FPGA
 ; CHECK-NEXT:  `endif
-
-
