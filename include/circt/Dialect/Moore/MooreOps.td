@@ -2041,7 +2041,9 @@ def AssocArrayExtractRefOp : MooreOp<"assoc_array_extract_ref",
   }];
 }
 
-def AssocArrayDeleteOp : MooreOp<"assoc_array.delete"> {
+def AssocArrayDeleteOp : MooreOp<"assoc_array.delete", 
+    [TypesMatchWith<"associative array index and given index must match",
+    "assoc_array", "index", "cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getIndexType()">]> {
   let summary = "Delete the index and element within the associative array";
   let description = [{
       See IEEE 1800-2023 § 7.9.2 "Delete()"
