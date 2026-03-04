@@ -116,6 +116,7 @@ class Simulator:
                sources: SourceFiles,
                run_dir: Path,
                debug: bool,
+               save_waveform: bool = False,
                run_stdout_callback: Optional[Callable[[str], None]] = None,
                run_stderr_callback: Optional[Callable[[str], None]] = None,
                compile_stdout_callback: Optional[Callable[[str], None]] = None,
@@ -131,6 +132,8 @@ class Simulator:
       sources: SourceFiles describing RTL/DPI inputs.
       run_dir: Directory where build/run artifacts are placed.
       debug: Enable cosim debug mode.
+      save_waveform: When True and debug=True, dump simulator waveforms to FST
+        format. Requires debug to be enabled.
       run_stdout_callback: Line-based callback for runtime stdout.
       run_stderr_callback: Line-based callback for runtime stderr.
       compile_stdout_callback: Line-based callback for compile stdout.
@@ -143,6 +146,7 @@ class Simulator:
     self.sources = sources
     self.run_dir = run_dir
     self.debug = debug
+    self.save_waveform = save_waveform
     self.macro_definitions = macro_definitions
 
     # Unified list of any log file handles we opened.
@@ -251,10 +255,14 @@ class Simulator:
     # Run the simulation.
     simEnv = Simulator.get_env()
     if self.debug:
-      simEnv["COSIM_DEBUG_FILE"] = "cosim_debug.log"
+      debug_file = (self.run_dir / "cosim_debug.log").resolve()
+      simEnv["COSIM_DEBUG_FILE"] = str(debug_file)
       if "DEBUG_PERIOD" not in simEnv:
         # Slow the simulation down to one tick per millisecond.
         simEnv["DEBUG_PERIOD"] = "1"
+      if self.save_waveform:
+        waveform_file = (self.run_dir / "cosim_waveform.fst").resolve()
+        simEnv["SAVE_WAVE"] = str(waveform_file)
     rcmd = self.run_command(gui)
     # Start process with asynchronous output capture.
     proc, threads = self._start_process_with_callbacks(
@@ -383,14 +391,17 @@ class Simulator:
         simProc.force_stop()
 
 
-def get_simulator(name: str, sources: SourceFiles, rundir: Path,
-                  debug: bool) -> Simulator:
+def get_simulator(name: str,
+                  sources: SourceFiles,
+                  rundir: Path,
+                  debug: bool,
+                  save_waveform: bool = False) -> Simulator:
   name = name.lower()
   if name == "verilator":
     from .verilator import Verilator
-    return Verilator(sources, rundir, debug)
+    return Verilator(sources, rundir, debug, save_waveform=save_waveform)
   elif name == "questa":
     from .questa import Questa
-    return Questa(sources, rundir, debug)
+    return Questa(sources, rundir, debug, save_waveform=save_waveform)
   else:
     raise ValueError(f"Unknown simulator: {name}")
