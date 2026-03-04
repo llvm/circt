@@ -155,8 +155,8 @@ public:
   /// (This is done to save unnecessary state cleanup of a pass-private
   /// utility.)
   hw::HierPathOp applyUpdates() {
-    // Delete an NLA which is either dead or has been made local.
-    if (isLocal() || isDead()) {
+    // Delete an NLA which is dead.
+    if (isDead()) {
       nla.erase();
       return nullptr;
     }
@@ -174,30 +174,36 @@ public:
       SmallVector<Attribute> namepath;
       StringAttr lastMod;
 
-      // Root of the namepath.
-      if (!inlinedSymbols.test(1))
+      // Root of the namepath. If we're flattening at the root (flattenPoint ==
+      // 0) or the next module has been inlined, set lastMod to root and skip
+      // adding to the namepath. Otherwise, add the root with its inner ref.
+      if (flattenPoint == 0 || !inlinedSymbols.test(1)) {
         lastMod = root;
-      else
+      } else {
         namepath.push_back(InnerRefAttr::get(root, lookupRename(root)));
+      }
 
       // Everything in the middle of the namepath (excluding the root and leaf).
-      for (signed i = 1, e = inlinedSymbols.size() - 1; i != e; ++i) {
-        if (i == flattenPoint) {
-          lastMod = nla.modPart(i);
-          break;
-        }
-
-        if (!inlinedSymbols.test(i + 1)) {
-          if (!lastMod)
+      // Skip this loop if we're flattening at the root.
+      if (flattenPoint != 0) {
+        for (signed i = 1, e = inlinedSymbols.size() - 1; i != e; ++i) {
+          if (i == flattenPoint) {
             lastMod = nla.modPart(i);
-          continue;
-        }
+            break;
+          }
 
-        // Update the inner symbol if it has been renamed.
-        auto modPart = lastMod ? lastMod : nla.modPart(i);
-        auto refPart = lookupRename(modPart, i);
-        namepath.push_back(InnerRefAttr::get(modPart, refPart));
-        lastMod = {};
+          if (!inlinedSymbols.test(i + 1)) {
+            if (!lastMod)
+              lastMod = nla.modPart(i);
+            continue;
+          }
+
+          // Update the inner symbol if it has been renamed.
+          auto modPart = lastMod ? lastMod : nla.modPart(i);
+          auto refPart = lookupRename(modPart, i);
+          namepath.push_back(InnerRefAttr::get(modPart, refPart));
+          lastMod = {};
+        }
       }
 
       // Leaf of the namepath.
@@ -261,39 +267,48 @@ public:
       os << "firrtl.nla @" << sym.getValue() << " [";
 
       StringAttr lastMod;
-      // Root of the namepath.
-      if (!x.inlinedSymbols.test(1))
+      bool needsComma = false;
+
+      // Root of the namepath. If we're flattening at the root (flattenPoint ==
+      // 0) or the next module has been inlined, set lastMod to root and skip
+      // adding to the output. Otherwise, write the root with its inner ref.
+      if (x.flattenPoint == 0 || !x.inlinedSymbols.test(1)) {
         lastMod = root;
-      else
+      } else {
         writePathSegment(root, x.lookupRename(root));
+        needsComma = true;
+      }
 
       // Everything in the middle of the namepath (excluding the root and leaf).
-      bool needsComma = false;
-      for (signed i = 1, e = x.inlinedSymbols.size() - 1; i != e; ++i) {
-        if (i == x.flattenPoint) {
-          lastMod = x.nla.modPart(i);
-          break;
-        }
-
-        if (!x.inlinedSymbols.test(i + 1)) {
-          if (!lastMod)
+      // Skip this loop if we're flattening at the root.
+      if (x.flattenPoint != 0) {
+        for (signed i = 1, e = x.inlinedSymbols.size() - 1; i != e; ++i) {
+          if (i == x.flattenPoint) {
             lastMod = x.nla.modPart(i);
-          continue;
-        }
+            break;
+          }
 
-        if (needsComma)
-          os << ", ";
-        auto modPart = lastMod ? lastMod : x.nla.modPart(i);
-        auto refPart = x.nla.refPart(i);
-        if (x.renames.count(modPart))
-          refPart = x.renames[modPart];
-        writePathSegment(modPart, refPart);
-        needsComma = true;
-        lastMod = {};
+          if (!x.inlinedSymbols.test(i + 1)) {
+            if (!lastMod)
+              lastMod = x.nla.modPart(i);
+            continue;
+          }
+
+          if (needsComma)
+            os << ", ";
+          auto modPart = lastMod ? lastMod : x.nla.modPart(i);
+          auto refPart = x.nla.refPart(i);
+          if (x.renames.count(modPart))
+            refPart = x.renames[modPart];
+          writePathSegment(modPart, refPart);
+          needsComma = true;
+          lastMod = {};
+        }
       }
 
       // Leaf of the namepath.
-      os << ", ";
+      if (needsComma)
+        os << ", ";
       auto modPart = lastMod ? lastMod : x.nla.modPart(x.size - 1);
       auto refPart = x.nla.refPart(x.size - 1);
       if (x.renames.count(modPart))
