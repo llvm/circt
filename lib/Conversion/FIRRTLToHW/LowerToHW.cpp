@@ -4224,14 +4224,13 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
       instName += "_";
       instName += suffix;
     }
-    auto instNameAttr = builder.getStringAttr(instName);
 
-    auto [innerSym, innerSymName] = getOrAddInnerSym(
-        oldInstanceChoice.getContext(), /*attr=*/nullptr, 0,
+    auto inst =
+        hw::InstanceOp::create(builder, newMod, builder.getStringAttr(instName),
+                               inputOperands, parameters, nullptr);
+    (void)getOrAddInnerSym(
+        hw::InnerSymTarget(inst.getOperation()),
         [&]() -> hw::InnerSymbolNamespace & { return moduleNamespace; });
-
-    auto inst = hw::InstanceOp::create(builder, newMod, instNameAttr,
-                                       inputOperands, parameters, innerSym);
 
     // Assign instance outputs to the wires
     for (unsigned i = 0; i < inst.getNumResults(); ++i)
