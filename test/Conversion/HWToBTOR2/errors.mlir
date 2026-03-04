@@ -76,3 +76,11 @@ hw.module @multi_clk_always(in %clk : !seq.clock, in %clk1 : !seq.clock) {
   sv.always posedge %1 {
   }
 }
+
+// -----
+
+hw.module @multi_clk_always(in %clk : !seq.clock) {
+  // expected-error @below {{This pass only supports seq.from_clock results being used by sv.always and verif.clocked_assert operations.}}
+  %0 = seq.from_clock %clk
+  %1 = comb.and %0, %0 : i1
+}
