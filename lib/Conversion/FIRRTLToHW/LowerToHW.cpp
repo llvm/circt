@@ -1082,8 +1082,9 @@ void FIRRTLModuleLowering::emitInstanceChoiceIncludeFile(
   }
 
   // Create the emit.file operation at the top level
-  auto emitFile = emit::FileOp::create(builder, circuit.getLoc(),
-                                       includeFileName, circuitNamespace.newName(includeFileName));
+  auto emitFile =
+      emit::FileOp::create(builder, circuit.getLoc(), includeFileName,
+                           circuitNamespace.newName(includeFileName));
   OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToStart(&emitFile.getBodyRegion().front());
 
@@ -1092,8 +1093,8 @@ void FIRRTLModuleLowering::emitInstanceChoiceIncludeFile(
     SmallString<256> headerComment;
     llvm::raw_svector_ostream os(headerComment);
     os << "// Specialization file for public module: "
-       << publicModuleName.getValue() << "\n";
-    os << "// Option: " << optionName.getValue()
+       << publicModuleName.getValue() << "\n"
+       << "// Option: " << optionName.getValue()
        << ", Case: " << caseName.getValue() << "\n";
     emit::VerbatimOp::create(builder, circuit.getLoc(),
                              builder.getStringAttr(headerComment));
@@ -1142,7 +1143,8 @@ void FIRRTLModuleLowering::emitInstanceChoiceIncludeFile(
 
   // Set output file attribute .svh files should be excluded from file list
   emitFile->setAttr("output_file", hw::OutputFileAttr::getFromFilename(
-      builder.getContext(), includeFileName, /*excludeFromFileList=*/true));
+                                       builder.getContext(), includeFileName,
+                                       /*excludeFromFileList=*/true));
 }
 
 /// Creates one include file per public module and option case following the
