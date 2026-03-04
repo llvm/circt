@@ -4059,6 +4059,7 @@ endmodule
 // CHECK:           }
 // CHECK:           moore.output
 // CHECK:         }
+
 module QueueExtractRangeTest;
     logic [31:0] q[$];
     logic [31:0] q2[$];

@@ -2105,7 +2105,6 @@ def OpenUArrayDeleteOp: MooreOp<"open_uarray_delete"> {
   let results = (outs VoidType);
   let assemblyFormat = [{
     $arr attr-dict `:` type($arr)
->>>>>>> 1bde934b12 ([ImportVerilog] Add dynamic array creation + 'size' and 'length' instructions to the moore dialect)
   }];
 }
 

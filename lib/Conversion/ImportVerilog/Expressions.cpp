@@ -201,7 +201,8 @@ struct ExprVisitor {
     if (isLvalue)
       derefType = cast<moore::RefType>(derefType).getNestedType();
     if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
-             moore::OpenUnpackedArrayType, moore::AssocArrayType>(derefType)) {
+             moore::QueueType, moore::OpenUnpackedArrayType,
+             moore::AssocArrayType>(derefType)) {
       mlir::emitError(loc) << "unsupported expression: element select into "
                            << expr.value().type->toString() << "\n";
       return {};
