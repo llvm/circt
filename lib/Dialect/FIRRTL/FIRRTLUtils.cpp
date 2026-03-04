@@ -1225,14 +1225,10 @@ circt::firrtl::InstanceChoiceMacroTable::InstanceChoiceMacroTable(
       if ((operation = dyn_cast<CircuitOp>(&op)))
         break;
 
-  auto circuit = cast<CircuitOp>(operation);
-  for (auto option : circuit.getOps<OptionOp>()) {
-    for (auto optionCase : option.getOps<OptionCaseOp>()) {
-      auto optionName = option.getSymNameAttr();
-      auto caseName = optionCase.getSymNameAttr();
-      cache[{optionName, caseName}] = optionCase.getCaseMacroAttr();
-    }
-  }
+  for (auto option : cast<CircuitOp>(operation).getOps<OptionOp>())
+    for (auto optionCase : option.getOps<OptionCaseOp>())
+      cache[{option.getSymNameAttr(), optionCase.getSymNameAttr()}] =
+          optionCase.getCaseMacroAttr();
 }
 
 FlatSymbolRefAttr

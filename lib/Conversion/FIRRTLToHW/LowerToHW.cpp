@@ -1082,10 +1082,8 @@ void FIRRTLModuleLowering::emitInstanceChoiceIncludeFile(
   }
 
   // Create the emit.file operation at the top level
-  auto fileSymbolName = circuitNamespace.newName(includeFileName);
-
   auto emitFile = emit::FileOp::create(builder, circuit.getLoc(),
-                                       includeFileName, fileSymbolName);
+                                       includeFileName, circuitNamespace.newName(includeFileName));
   OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToStart(&emitFile.getBodyRegion().front());
 
@@ -1143,9 +1141,8 @@ void FIRRTLModuleLowering::emitInstanceChoiceIncludeFile(
   }
 
   // Set output file attribute .svh files should be excluded from file list
-  auto outputFileAttr = hw::OutputFileAttr::getFromFilename(
-      builder.getContext(), includeFileName, /*excludeFromFileList=*/true);
-  emitFile->setAttr("output_file", outputFileAttr);
+  emitFile->setAttr("output_file", hw::OutputFileAttr::getFromFilename(
+      builder.getContext(), includeFileName, /*excludeFromFileList=*/true));
 }
 
 /// Creates one include file per public module and option case following the
@@ -4246,16 +4243,14 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
   SmallVector<StringAttr> macroNames;
   SmallVector<Operation *> altModules;
   for (size_t i = 0, e = caseNames.size(); i < e; ++i) {
-    auto caseName = cast<SymbolRefAttr>(caseNames[i]).getLeafReference();
-    auto targetModuleRef = cast<FlatSymbolRefAttr>(moduleNames[i + 1]);
-
-    altModules.push_back(circuitState.getInstanceGraph()
-                             .lookup(targetModuleRef.getAttr())
-                             ->getModule());
+    altModules.push_back(
+        circuitState.getInstanceGraph()
+            .lookup(cast<FlatSymbolRefAttr>(moduleNames[i + 1]).getAttr())
+            ->getModule());
 
     // Get the macro name for this option case using InstanceChoiceMacroTable.
-    auto optionCaseMacroRef =
-        circuitState.macroTable.getMacro(optionName, caseName);
+    auto optionCaseMacroRef = circuitState.macroTable.getMacro(
+        optionName, cast<SymbolRefAttr>(caseNames[i]).getLeafReference());
     if (!optionCaseMacroRef)
       return oldInstanceChoice->emitOpError(
           "failed to get macro for option case");
@@ -4273,11 +4268,9 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
       [&](size_t index) {
         auto caseSymRef =
             cast<SymbolRefAttr>(caseNames[index]).getLeafReference();
-        auto inst =
-            createInstanceAndAssign(altModules[index], caseSymRef.getValue());
-        circuitState.addInstanceChoiceForCase(optionName, caseSymRef,
-                                              theModule.getNameAttr(),
-                                              instanceMacro, inst);
+        circuitState.addInstanceChoiceForCase(
+            optionName, caseSymRef, theModule.getNameAttr(), instanceMacro,
+            createInstanceAndAssign(altModules[index], caseSymRef.getValue()));
       },
       [&]() {
         auto inst = createInstanceAndAssign(defaultModule, "default");
@@ -4285,11 +4278,12 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
         sv::IfDefOp::create(
             builder, inst.getLoc(), instanceMacro, [&]() {},
             [&]() {
-              auto array = builder.getArrayAttr(
-                  {hw::InnerRefAttr::get(theModule.getNameAttr(),
-                                         inst.getInnerSymAttr().getSymName())});
-              sv::MacroDefOp::create(builder, inst.getLoc(), instanceMacro,
-                                     builder.getStringAttr("{{0}}"), array);
+              sv::MacroDefOp::create(
+                  builder, inst.getLoc(), instanceMacro,
+                  builder.getStringAttr("{{0}}"),
+                  builder.getArrayAttr({hw::InnerRefAttr::get(
+                      theModule.getNameAttr(),
+                      inst.getInnerSymAttr().getSymName())}));
             });
       });
 
