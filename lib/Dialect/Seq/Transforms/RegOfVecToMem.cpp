@@ -194,6 +194,9 @@ bool RegOfVecToMemPass::createFirMemory(MemoryPattern &pattern) {
       /*init=*/seq::FirMemInitAttr{}, /*prefix=*/StringAttr{},
       /*outputFile=*/Attribute{});
 
+  // FIRRTL currently uses a 1-bit address for a single element memory,
+  // however HW arrays use 0-bit addresses. To bridge this gap, create a 1-bit
+  // address equal to 0 if our address is 0-bit.
   auto fixZeroWidthAddr = [&](Value addr) -> Value {
     if (addr.getType().getIntOrFloatBitWidth() == 0) {
       return hw::ConstantOp::create(builder,
