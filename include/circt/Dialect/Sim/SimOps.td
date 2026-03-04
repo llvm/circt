@@ -982,6 +982,22 @@ TypesMatchWith<"dynamic array and result types must match",
   }];
 }
 
+def DynamicArrayAssignOp: SimOp<"darray.assign", [Pure,
+TypesMatchWith<"dynamic array and result types must match",
+      "dynArray", "value", "cast<DynamicArrayType>($_self).getElementType()">,
+AllTypesMatch<["dynArray", "result"]>]> {
+  let summary = "Performs an assignment to an index of a dynamic array";
+  let description = [{
+    Assigns a given value to a given index of a dynamic array.
+    This instruction returns the modified version of the dynamic array.
+  }];
+  let arguments = (ins DynamicArrayType:$dynArray, I32:$index, HWNonInOutType:$value);
+  let results = (outs DynamicArrayType:$result);
+  let assemblyFormat = [{
+    $value `to` $dynArray `[`$index `]` attr-dict `:` type($dynArray)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//

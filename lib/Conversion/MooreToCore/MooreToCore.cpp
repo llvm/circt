@@ -1345,11 +1345,13 @@ struct DynExtractOpConversion : public OpConversionPattern<DynExtractOp> {
                                                       adaptor.getInput(), idx);
 
       return success();
-    } else if(auto dynamicArrayType = dyn_cast<sim::DynamicArrayType>(inputType)) {
+    } else if (auto dynamicArrayType =
+                   dyn_cast<sim::DynamicArrayType>(inputType)) {
       Value array = adaptor.getInput();
       Value index = adaptor.getLowBit();
 
-      auto newOp = sim::DynamicArrayExtractOp::create(rewriter, op->getLoc(), {array, index});
+      auto newOp = sim::DynamicArrayExtractOp::create(rewriter, op->getLoc(),
+                                                      {array, index});
       rewriter.replaceOp(op, newOp);
 
       return success();
@@ -2541,16 +2543,41 @@ struct QueueDeleteOpConversion : public OpConversionPattern<QueueDeleteOp> {
   };
 };
 
-struct QueueResizeOpConversion : public OpConversionPattern<QueueResizeOp> {
+struct DynamicArrayCreateOpConversion
+    : public OpConversionPattern<OpenUArrayCreateOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(QueueResizeOp op, OpAdaptor adaptor,
+  matchAndRewrite(OpenUArrayCreateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
 
-    rewriter.replaceOpWithNewOp<sim::QueueResizeOp>(
-        op, getTypeConverter()->convertType(op.getResult().getType()),
-        adaptor.getInput());
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    Value initialSize = adaptor.getInitialSize();
+    Value initExpr = adaptor.getInit();
+
+    sim::DynamicArrayCreateOp newOp;
+
+    if (initExpr) {
+      newOp = sim::DynamicArrayCreateOp::create(
+          rewriter, op->getLoc(), resultType, {initialSize, initExpr});
+    } else {
+      newOp = sim::DynamicArrayCreateOp::create(rewriter, op->getLoc(),
+                                                resultType, initialSize);
+    }
+
+    rewriter.replaceOp(op, newOp);
+    return success();
+  };
+};
+
+struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(DisplayBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::PrintFormattedProcOp>(
+        op, adaptor.getMessage());
     return success();
   }
 };
@@ -2671,7 +2698,6 @@ struct QueueSetOpConversion : public OpConversionPattern<QueueSetOp> {
       return success();
     }
   };
-
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -3193,7 +3219,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
 
 
     // Dynamic array operations
-    DynamicArrayCreateOpConversion
+    OpenUArrayCreateOpConversion,
+    OpenUArrayAssignOpConversion
 
     >(typeConverter, patterns.getContext());
   // clang-format on
