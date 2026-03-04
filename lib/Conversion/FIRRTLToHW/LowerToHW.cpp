@@ -268,9 +268,13 @@ struct CircuitLoweringState {
     }
 
     for (auto &op : *circuitOp.getBodyBlock()) {
-      if (auto module = dyn_cast<FModuleLike>(op))
+      if (auto module = dyn_cast<FModuleLike>(op)) {
         if (AnnotationSet::removeAnnotations(module, markDUTAnnoClass))
           dut = module;
+
+        // Pre-allocate the entry for this module.
+        instanceChoicesByModuleAndCase.try_emplace(module.getModuleNameAttr());
+      }
     }
 
     // Figure out which module is the DUT and TestHarness.  If there is no
@@ -481,15 +485,13 @@ private:
   DenseMap<StringAttr,
            DenseMap<OptionAndCase, SmallVector<LoweredInstanceChoice>>>
       instanceChoicesByModuleAndCase;
-  std::mutex instanceChoicesMutex;
 
   void addInstanceChoiceForCase(StringAttr optionName, StringAttr caseName,
                                 StringAttr parentModule,
                                 FlatSymbolRefAttr instanceMacro,
                                 hw::InstanceOp hwInstance) {
     OptionAndCase innerKey{optionName, caseName};
-    std::unique_lock<std::mutex> lock(instanceChoicesMutex);
-    instanceChoicesByModuleAndCase[parentModule][innerKey].push_back(
+    instanceChoicesByModuleAndCase.at(parentModule)[innerKey].push_back(
         {parentModule, instanceMacro, hwInstance});
   }
 
@@ -1166,36 +1168,31 @@ void FIRRTLModuleLowering::emitInstanceChoiceIncludes(
     if (!module.isPublic())
       continue;
 
-    auto *rootNode = instanceGraph.lookup(module);
-    assert(rootNode && "Public module not found in instance graph");
-
-    auto publicModuleName = module.getModuleNameAttr();
-
-    // Collect all instance choices reachable from this public module
-    // Grouped by (optionName, caseName)
+    // Collect all instance choices reachable from this public module.
+    // Grouped by (optionName, caseName).
     DenseMap<CircuitLoweringState::OptionAndCase,
              SmallVector<CircuitLoweringState::LoweredInstanceChoice>>
         choicesInHierarchy;
 
-    // Walk all modules reachable from this public module
-    for (auto *node : llvm::post_order(rootNode)) {
+    // Walk all modules reachable from this public module and accumulate all
+    // instance choices from each module.
+    for (auto *node : llvm::post_order(instanceGraph.lookup(module))) {
       auto it = loweringState.instanceChoicesByModuleAndCase.find(
           node->getModule().getModuleNameAttr());
       if (it == loweringState.instanceChoicesByModuleAndCase.end())
         continue;
 
-      // Accumulate all instance choices from this module
       for (auto &[key, instances] : it->second)
         choicesInHierarchy[key].append(instances.begin(), instances.end());
     }
 
     // Emit one include file for each (option, case) combination
     for (auto key : loweringState.macroTable.getKeys())
-      emitInstanceChoiceIncludeFile(builder, topLevelModule, publicModuleName,
-                                    /*optionName=*/key.first,
-                                    /*caseName=*/key.second,
-                                    choicesInHierarchy.lookup(key),
-                                    circuitNamespace, loweringState.macroTable);
+      emitInstanceChoiceIncludeFile(
+          builder, topLevelModule, module.getModuleNameAttr(),
+          /*optionName=*/key.first,
+          /*caseName=*/key.second, choicesInHierarchy.lookup(key),
+          circuitNamespace, loweringState.macroTable);
   }
 }
 
@@ -4247,10 +4244,9 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
     return inst;
   };
 
-  // Build macro names and module list for nested ifdefs
+  // Build macro names and module list for nested ifdefs.
   SmallVector<StringAttr> macroNames;
   SmallVector<Operation *> altModules;
-
   for (size_t i = 0, e = caseNames.size(); i < e; ++i) {
     auto caseName = cast<SymbolRefAttr>(caseNames[i]).getLeafReference();
     auto targetModuleRef = cast<FlatSymbolRefAttr>(moduleNames[i + 1]);
@@ -4259,7 +4255,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
                              .lookup(targetModuleRef.getAttr())
                              ->getModule());
 
-    // Get the macro name for this option case using InstanceChoiceMacroTable
+    // Get the macro name for this option case using InstanceChoiceMacroTable.
     auto optionCaseMacroRef =
         circuitState.macroTable.getMacro(optionName, caseName);
     if (!optionCaseMacroRef)
@@ -4268,7 +4264,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
     macroNames.push_back(optionCaseMacroRef.getAttr());
   }
 
-  // Use the helper function to create nested ifdefs and register instances
+  // Use the helper function to create nested ifdefs and register instances.
   sv::createNestedIfDefs(
       macroNames,
       /*ifdefCtor=*/
