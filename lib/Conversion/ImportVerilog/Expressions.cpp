@@ -183,6 +183,12 @@ struct ExprVisitor {
 
     // TODO: Handle 'initExpr' if it exists
 
+    if (expr.initExpr()) {
+      mlir::emitError(loc)
+          << "unsupported expression: array `new` with initializer\n";
+      return {};
+    }
+
     Value initialSize = context.convertRvalueExpression(
         expr.sizeExpr(), context.convertType(*expr.sizeExpr().type));
 
