@@ -25,7 +25,7 @@ Typical usage::
 from __future__ import annotations
 
 import contextlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import functools
 import inspect
 import logging
@@ -59,6 +59,84 @@ _DEFAULT_WARN_PATTERN = re.compile(r"\bwarn(ing)?\b", re.IGNORECASE)
 _DEFAULT_TIMEOUT_S: float = 120.0
 
 
+def _get_env_bool(var_name: str, default: bool) -> bool:
+  """Read a boolean environment variable.
+
+  Args:
+    var_name: Name of the environment variable to read.
+    default: Default value if the variable is not set.
+
+  Returns:
+    The boolean value of the environment variable, or the default value.
+  """
+  value = os.environ.get(var_name)
+  if value is None:
+    return default
+  return value.lower() in ("true", "1", "yes", "on")
+
+
+def _get_env_path(var_name: str) -> Optional[Path]:
+  """Read a path environment variable.
+
+  Args:
+    var_name: Name of the environment variable to read.
+
+  Returns:
+    The path value of the environment variable, or None if not set.
+  """
+  value = os.environ.get(var_name)
+  return Path(value) if value else None
+
+
+def _get_pytest_run_id() -> str:
+  """Get a unique identifier for this pytest invocation.
+
+  For normal runs, uses the current process PID (the pytest process itself).
+  For xdist workers, uses the parent PID (the main pytest controller) so that
+  all workers share the same top-level run directory.
+  """
+  if os.environ.get("PYTEST_XDIST_WORKER"):
+    # Worker process — use parent (the main pytest controller) for grouping.
+    return f"pytest-{os.getppid()}"
+  return f"pytest-{os.getpid()}"
+
+
+def _get_xdist_worker_id() -> Optional[str]:
+  """Get the xdist worker ID if running under pytest-xdist.
+
+  Returns the worker ID (e.g., "gw0", "gw1") or None if not using xdist.
+  """
+  return os.environ.get("PYTEST_XDIST_WORKER")
+
+
+def _get_test_dir_name(config: CosimPytestConfig) -> str:
+  """Build a test directory path including pytest run ID and xdist worker (if present).
+
+  For class-based tests with xdist: "pytest-{pid}/gw{n}/ClassName/test_method".
+  For class-based tests without xdist: "pytest-{pid}/ClassName/test_method".
+  For function tests with xdist: "pytest-{pid}/gw{n}/test_function".
+  For function tests without xdist: "pytest-{pid}/test_function".
+  """
+  parts = []
+
+  if config.pytest_run_id:
+    parts.append(config.pytest_run_id)
+
+  if config.xdist_worker_id:
+    parts.append(config.xdist_worker_id)
+
+  if config.class_name:
+    parts.append(config.class_name)
+
+  if config.test_name:
+    parts.append(config.test_name)
+
+  if not parts:
+    return "unknown-test"
+
+  return "/".join(parts)
+
+
 @dataclass(frozen=True)
 class CosimPytestConfig:
   """Immutable configuration for a single cosim test or test class.
@@ -73,6 +151,13 @@ class CosimPytestConfig:
     timeout_s: Maximum wall-clock seconds before the test is killed.
     failure_matcher: Pattern applied to simulator output to detect errors.
     warning_matcher: Pattern applied to simulator output to detect warnings.
+    tmp_dir_root: Root directory for temporary directories. If None, uses system temp.
+    delete_tmp_dir: If True, delete temporary directories after test completion.
+    class_name: Name of the test class (for class-based tests). None for function tests.
+    test_name: Name of the test function or method.
+    pytest_run_id: Unique identifier for the pytest run (e.g., "pytest-12345").
+    xdist_worker_id: ID of the xdist worker if running under pytest-xdist (e.g., "gw0").
+    save_waveform: If True, dump waveform file. Format depends on backend. Requires debug=True.
   """
 
   source_generator: SourceGeneratorArg
@@ -83,6 +168,13 @@ class CosimPytestConfig:
   timeout_s: float = _DEFAULT_TIMEOUT_S
   failure_matcher: Optional[LogMatcher] = _DEFAULT_FAILURE_PATTERN
   warning_matcher: Optional[LogMatcher] = _DEFAULT_WARN_PATTERN
+  tmp_dir_root: Optional[Path] = None
+  delete_tmp_dir: bool = True
+  class_name: Optional[str] = None
+  test_name: Optional[str] = None
+  pytest_run_id: Optional[str] = None
+  xdist_worker_id: Optional[str] = None
+  save_waveform: bool = False
 
 
 @dataclass
@@ -184,7 +276,8 @@ def _create_simulator(config: CosimPytestConfig, sources_dir: Path,
   hw_dir = sources_dir / "hw"
   sources.add_dir(hw_dir if hw_dir.exists() else sources_dir)
 
-  return get_simulator(config.simulator, sources, run_dir, config.debug)
+  return get_simulator(config.simulator, sources, run_dir, config.debug,
+                       config.save_waveform)
 
 
 def _run_hw_script(script_path: Union[str, Path], config: CosimPytestConfig,
@@ -307,7 +400,15 @@ def _compile_once_for_class(config: CosimPytestConfig) -> _ClassCompileCache:
   The resulting ``_ClassCompileCache`` is reused by each test method to avoid
   redundant compilations.
   """
-  compile_root = Path(tempfile.mkdtemp(prefix="esi-pytest-class-compile-"))
+  # When using a custom tmp dir, create directories directly under it for easier debugging.
+  # When using the system temp dir, use mkdtemp for automatic isolation.
+  if config.tmp_dir_root is not None:
+    # Organize using hierarchical naming: pytest-{pid}/[gw{n}/]ClassName/__compile__
+    test_dir = _get_test_dir_name(config)
+    compile_root = config.tmp_dir_root / test_dir / "__compile__"
+    compile_root.mkdir(parents=True, exist_ok=True)
+  else:
+    compile_root = Path(tempfile.mkdtemp(prefix="esi-pytest-class-compile-",))
   try:
     sources_dir = _generate_sources(config, compile_root)
     compile_dir = compile_root / "compile"
@@ -318,7 +419,7 @@ def _compile_once_for_class(config: CosimPytestConfig) -> _ClassCompileCache:
       raise RuntimeError(f"Simulator compile failed with exit code {rc}")
     return _ClassCompileCache(sources_dir=sources_dir, compile_dir=compile_dir)
   except Exception:
-    if not config.debug:
+    if config.delete_tmp_dir and not config.debug:
       shutil.rmtree(compile_root, ignore_errors=True)
     raise
 
@@ -353,11 +454,20 @@ def _run_child(
   sim_proc = None
   sim = None
   run_root = None
+  run_dir = None
   try:
-    run_root = Path(tempfile.mkdtemp(prefix="esi-pytest-run-"))
+    # When using a custom tmp dir, create directories directly under it for easier debugging.
+    # When using the system temp dir, use mkdtemp for automatic isolation.
+    if config.tmp_dir_root is not None:
+      # Organize under test class and function names for easy identification
+      test_dir = _get_test_dir_name(config)
+      run_root = config.tmp_dir_root / test_dir
+      run_root.mkdir(parents=True, exist_ok=True)
+    else:
+      run_root = Path(tempfile.mkdtemp(prefix="esi-pytest-run-",))
     if class_cache is None:
       sources_dir = _generate_sources(config, run_root)
-      run_dir = run_root / f"run-{os.getpid()}"
+      run_dir = run_root
       sim = _create_simulator(config, sources_dir, run_dir)
       sim._run_stdout_cb = on_stdout
       sim._run_stderr_cb = on_stderr
@@ -369,7 +479,7 @@ def _run_child(
         raise RuntimeError(f"Simulator compile failed with exit code {rc}")
     else:
       sources_dir = class_cache.sources_dir
-      run_dir = run_root / f"run-{os.getpid()}"
+      run_dir = run_root
       sim = _create_simulator(config, sources_dir, run_dir)
       sim._run_stdout_cb = on_stdout
       sim._run_stderr_cb = on_stderr
@@ -414,7 +524,10 @@ def _run_child(
     result_pipe.close()
     if sim_proc is not None and sim_proc.proc.poll() is None:
       sim_proc.force_stop()
-    if run_root is not None and not config.debug:
+    # When a custom tmp_dir_root is set, keep directories by default for debugging.
+    # When using system temp, delete by default to avoid clutter.
+    should_delete = config.delete_tmp_dir and not config.debug
+    if run_root is not None and should_delete:
       shutil.rmtree(run_root, ignore_errors=True)
     # Force-exit the forked child.  Non-daemon threads spawned by gRPC (or
     # other native libraries) can prevent a normal exit even after all Python
@@ -491,11 +604,13 @@ def _decorate_function(
     class_cache_getter: Optional[Callable[[], _ClassCompileCache]] = None,
 ) -> Callable[..., Any]:
   """Wrap a single test function so it runs inside ``_run_isolated``."""
+  # Set the test name in the config
+  test_config = replace(config, test_name=target.__name__)
 
   @functools.wraps(target)
   def _wrapper(*args, **kwargs):
     cache = class_cache_getter() if class_cache_getter is not None else None
-    _run_isolated(target, config, args, kwargs, class_cache=cache)
+    _run_isolated(target, test_config, args, kwargs, class_cache=cache)
 
   setattr(_wrapper, "__signature__", _visible_signature(target))
   return _wrapper
@@ -508,13 +623,15 @@ def _decorate_class(target_cls: type, config: CosimPytestConfig) -> type:
   the resulting artifacts are shared across all methods via a thread-safe
   cache.
   """
+  # Set the class name in the config for all methods
+  class_config = replace(config, class_name=target_cls.__name__)
   lock = threading.Lock()
   cache_holder: dict[str, _ClassCompileCache] = {}
 
   def _get_cache() -> _ClassCompileCache:
     with lock:
       if "cache" not in cache_holder:
-        cache_holder["cache"] = _compile_once_for_class(config)
+        cache_holder["cache"] = _compile_once_for_class(class_config)
     return cache_holder["cache"]
 
   for name, member in list(vars(target_cls).items()):
@@ -522,7 +639,9 @@ def _decorate_class(target_cls: type, config: CosimPytestConfig) -> type:
       setattr(
           target_cls,
           name,
-          _decorate_function(member, config, class_cache_getter=_get_cache),
+          _decorate_function(member,
+                             class_config,
+                             class_cache_getter=_get_cache),
       )
   return target_cls
 
@@ -532,10 +651,13 @@ def cosim_test(
     args: Sequence[str] = ("{tmp_dir}",),
     simulator: str = "verilator",
     top: str = "ESI_Cosim_Top",
-    debug: bool = False,
+    debug: Optional[bool] = None,
     timeout_s: float = _DEFAULT_TIMEOUT_S,
     failure_matcher: Optional[LogMatcher] = _DEFAULT_FAILURE_PATTERN,
     warning_matcher: Optional[LogMatcher] = _DEFAULT_WARN_PATTERN,
+    tmp_dir_root: Optional[Path] = None,
+    delete_tmp_dir: Optional[bool] = None,
+    save_waveform: Optional[bool] = None,
 ):
   """Decorator that turns a function or class into a cosimulation test.
 
@@ -555,11 +677,57 @@ def cosim_test(
         with the temporary build directory.
     simulator: Simulator backend (default ``"verilator"``).
     top: Top-level module name.
-    debug: Enable verbose simulator output.
+    debug: Enable verbose simulator output. Defaults to the value of the
+      ``ESIACCEL_PYTEST_DEBUG`` environment variable if set, otherwise False.
     timeout_s: Wall-clock timeout in seconds (default 120).
     failure_matcher: Pattern to detect errors in simulator output.
     warning_matcher: Pattern to detect warnings in simulator output.
+    tmp_dir_root: Root directory for temporary test files. Defaults to the value
+      of the ``ESIACCEL_PYTEST_TMP_DIR`` environment variable if set, otherwise
+      uses the system temporary directory. Run directories are organized in a
+      hierarchy to avoid collisions during parallel execution:
+
+      - Normal run: ``pytest-{pid}/ClassName/test_method/`` or
+        ``pytest-{pid}/test_function/``
+      - xdist parallel: ``pytest-{pid}/gw0/ClassName/test_method/`` (gw0, gw1, etc.
+        for different workers)
+    delete_tmp_dir: Whether to delete temporary directories after test
+      completion. When tmp_dir_root is set (custom debugging directory),
+      directories are kept by default; set ``ESIACCEL_PYTEST_DELETE_TMP_DIR=true``
+      to delete them. When using the system temp directory, defaults to True
+      (delete to avoid clutter). Always False when debug mode is enabled.
+    save_waveform: Whether to save waveform dumps (format depends on the
+      simulator backend, e.g. FST for Verilator, VCD for Questa). Requires
+      debug mode to be enabled. Defaults to the value of the
+      ``ESIACCEL_PYTEST_SAVE_WAVEFORM`` environment variable if set, otherwise
+      False.
   """
+  # Use environment variables as defaults if not explicitly provided
+  if debug is None:
+    debug = _get_env_bool("ESIACCEL_PYTEST_DEBUG", False)
+  if tmp_dir_root is None:
+    tmp_dir_root = _get_env_path("ESIACCEL_PYTEST_TMP_DIR")
+  if delete_tmp_dir is None:
+    # When using a custom tmp_dir_root (provided explicitly or via env),
+    # keep directories by default for debugging.  When using the system
+    # temp directory, delete them by default.  The env var overrides either.
+    default_delete = tmp_dir_root is None
+    delete_tmp_dir = _get_env_bool("ESIACCEL_PYTEST_DELETE_TMP_DIR",
+                                   default_delete)
+  if save_waveform is None:
+    save_waveform = _get_env_bool("ESIACCEL_PYTEST_SAVE_WAVEFORM", False)
+
+  # Waveform dumping requires debug mode
+  if save_waveform and not debug:
+    _logger.warning(
+        "save_waveform requires debug mode to be enabled; disabling waveform dumping"
+    )
+    save_waveform = False
+
+  # Get the pytest run ID for unique test isolation
+  pytest_run_id = _get_pytest_run_id()
+  xdist_worker_id = _get_xdist_worker_id()
+
   config = CosimPytestConfig(
       source_generator=source_generator,
       args=args,
@@ -569,6 +737,11 @@ def cosim_test(
       timeout_s=timeout_s,
       failure_matcher=failure_matcher,
       warning_matcher=warning_matcher,
+      tmp_dir_root=tmp_dir_root,
+      delete_tmp_dir=delete_tmp_dir,
+      pytest_run_id=pytest_run_id,
+      xdist_worker_id=xdist_worker_id,
+      save_waveform=save_waveform,
   )
 
   def _decorator(target):
