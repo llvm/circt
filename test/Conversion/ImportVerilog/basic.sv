@@ -4197,7 +4197,7 @@ endmodule
  // CHECK:   moore.blocking_assign [[ARR1]], [[A1]] : open_uarray<i8>
   // CHECK:  [[C4B:%.+]] = moore.constant 4 : i32
  // CHECK:   [[R1:%.+]] = moore.read [[ARR1]] : <open_uarray<i8>>
- // CHECK:   [[A2:%.+]] = moore.open_uarray_create [[C4B]] initial [[R1]] : i32, !moore.open_uarray<i8> -> <i8>
+ // CHECK:   [[A2:%.+]] = moore.open_uarray_create [[C4B]] initial [[R1]] : i32 -> <i8>
  // CHECK:   moore.blocking_assign [[ARR2]], [[A2]] : open_uarray<i8>
  // CHECK:   moore.return
  // CHECK: }
@@ -4248,8 +4248,7 @@ endmodule
 // CHECK:   [[C10:%.+]] = moore.constant 10 : i32
 // CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C10]] : i32 -> <i8>
 // CHECK:   moore.blocking_assign [[ARR]], [[A1]] : open_uarray<i8>
-// CHECK:   [[R1:%.+]] = moore.read [[ARR]] : <open_uarray<i8>>
-// CHECK:   [[DEL:%.+]] = moore.open_uarray_delete [[R1]] : <i8>
+// CHECK:   [[DEL:%.+]] = moore.open_uarray_delete [[ARR]] : <open_uarray<i8>>
 // CHECK:   moore.return
 // CHECK: }
 // CHECK: moore.output
@@ -4325,6 +4324,7 @@ endmodule
 // CHECK:           }
 // CHECK:           moore.output
 // CHECK:         }
+
 module QueueConcatTest;
     int q1[$:5];
     int arr [0:10];
@@ -4334,7 +4334,32 @@ module QueueConcatTest;
       // `arr` to a queue, then create a temporary queue with 1,2,
       // then finally append them all
       qres = { 1, q1, arr, 1, 2};
-    end
+end
+endmodule
+
+// CHECK-LABEL: moore.module @DynamicArrayAssignTest() {
+// CHECK: [[ARR:%.+]] = moore.variable : <open_uarray<i8>>
+// CHECK: moore.procedure initial {
+// CHECK:   [[C10:%.+]] = moore.constant 10 : i32
+// CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C10]] : i32 -> <i8>
+// CHECK:   moore.blocking_assign [[ARR]], [[A1]] : open_uarray<i8>
+// CHECK:   [[C1:%.+]] = moore.constant 1 : i32
+// CHECK:   [[R:%.+]] = moore.dyn_extract_ref [[ARR]] from [[C1]] : <open_uarray<i8>>, i32 -> <i8>
+// CHECK:   [[C10I8:%.+]] = moore.constant 10 : i8
+// CHECK:   [[C1B:%.+]] = moore.constant 1 : i32
+// CHECK:   moore.open_uarray_assign [[C10I8]] to [[ARR]][[[C1B]]] : <open_uarray<i8>>
+// CHECK:   moore.return
+// CHECK: }
+// CHECK: moore.output
+// CHECK: }
+
+module DynamicArrayAssignTest;
+  bit [7:0] arr[];
+
+  initial begin
+    arr = new [10];
+    arr[1] = 10;
+  end
 endmodule
 
 // CHECK-LABEL: moore.module @QueueCmpTest() {
