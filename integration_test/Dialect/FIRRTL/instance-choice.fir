@@ -8,7 +8,7 @@
 ; -------------------------------------- Test 1: Invalid includes
 ; RUN: not verilator %t/targets_top_Platform_ASIC.svh %t/targets_top_Platform_FPGA.svh %t/top.sv %t/ASICTarget.sv %t/FPGATarget.sv %t/DefaultTarget.sv --lint-only --top-module top 2>&1 | FileCheck %s --check-prefix=ERROR
 ; RUN: not verilator %t/top.sv %t/ASICTarget.sv %t/FPGATarget.sv %t/DefaultTarget.sv %t/targets_top_Platform_ASIC.svh --cc --sv --exe --build -o %t.default.exe --top-module top 2>&1 | FileCheck %s --check-prefix=ERROR
-; ERROR: must__not__be__set
+; ERROR: must_not_be_set
 
 ; -------------------------------------- Test 2: ASIC target
 ; RUN: verilator %driver %t/targets_top_Platform_ASIC.svh %t/top.sv %t/ASICTarget.sv %t/FPGATarget.sv %t/DefaultTarget.sv --cc --sv --exe --build -o %t.asic.exe --top-module top

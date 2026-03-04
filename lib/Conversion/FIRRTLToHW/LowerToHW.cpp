@@ -1116,31 +1116,29 @@ void FIRRTLModuleLowering::emitInstanceChoiceIncludeFile(
   for (auto info : instances) {
     auto innerSym = info.hwInstance.getInnerSymAttr();
     assert(innerSym && "expected instance to have inner symbol");
-    // Error checking: macro must not already be set
-    // `ifdef <instanceMacroName>
-    //  `ERROR<instanceMacroName>__must__not__be__set
-    // `else
-    //  `define <instanceMacroName> <InnerRef to instance>
-    // `endif
-    SmallString<256> errorMessage;
-    {
-      llvm::raw_svector_ostream os(errorMessage);
-      os << info.instanceMacro.getAttr().getValue() << "__must__not__be__set";
-    }
 
     sv::IfDefOp::create(
         builder, circuit.getLoc(), info.instanceMacro,
         [&]() {
+          // Error checking: macro must not already be set
+          // `ifdef <instanceMacroName>
+          //  `ERROR<instanceMacroName>__must__not__be__set
+          // `else
+          //  `define <instanceMacroName> <InnerRef to instance>
+          // `endif
+          SmallString<256> errorMessage;
+          llvm::raw_svector_ostream os(errorMessage);
+          os << info.instanceMacro.getAttr().getValue() << "_must_not_be_set";
           sv::MacroErrorOp::create(builder, circuit.getLoc(),
                                    builder.getStringAttr(errorMessage));
         },
         [&]() {
-          SmallVector<Attribute> attrs;
-          attrs.push_back(
-              hw::InnerRefAttr::get(info.parentModule, innerSym.getSymName()));
-          auto attr = ArrayAttr::get(builder.getContext(), attrs);
-          sv::MacroDefOp::create(builder, circuit.getLoc(), info.instanceMacro,
-                                 builder.getStringAttr("{{0}}"), attr);
+          sv::MacroDefOp::create(
+              builder, circuit.getLoc(), info.instanceMacro,
+              builder.getStringAttr("{{0}}"),
+              ArrayAttr::get(builder.getContext(),
+                             ArrayRef<Attribute>(hw::InnerRefAttr::get(
+                                 info.parentModule, innerSym.getSymName()))));
         });
   }
 
