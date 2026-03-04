@@ -557,11 +557,7 @@ private:
   // has been generated
   int64_t requireSort(mlir::Type type) {
     // Start by figuring out what sort needs to be generated
-    int64_t width;
-    if (isa<seq::ClockType>(type))
-      width = 1;
-    else
-      width = hw::getBitWidth(type);
+    int64_t width = hw::getBitWidth(type);
 
     // Sanity check: getBitWidth can technically return -1 it is a type with
     // no width (like a clock). This shouldn't be allowed as width is required
@@ -691,7 +687,7 @@ public:
     // Separate the inputs from outputs and generate the first btor2 lines for
     // input declaration We only consider ports with an explicit bit-width (so
     // ignore clocks and immutables)
-    if (port.isInput() && !isa<seq::ImmutableType>(port.type)) {
+    if (port.isInput() && !isa<seq::ClockType, seq::ImmutableType>(port.type)) {
       // Generate the associated btor declaration for the inputs
       StringRef iName = port.getName();
 
@@ -1072,13 +1068,13 @@ public:
   }
 
   void visit(seq::FromClockOp op) {
-    // This is a cast that we don't care about in BTOR2, so we just reuse the
-    // operand's LID
-    auto existingLID = getOpLID(op.getInput());
-    // Check that we haven't somehow got a value that doesn't have a
-    // corresponding LID
-    assert(existingLID != noLID);
-    opLIDMap[op] = existingLID;
+    for (auto *user : op->getResult(0).getUsers()) {
+      if (!isa<sv::AlwaysOp, verif::ClockedAssertOp>(user)) {
+        op->emitError("This pass only supports seq.from_clock results being "
+                      "used by sv.always and verif.clocked_assert operations.");
+        signalPassFailure();
+      }
+    }
   }
 
   // Tail method that handles all operations that weren't handled by previous

@@ -18,25 +18,24 @@ circuit Counter :
     assert(clock, neq(count, UInt<4>(0ha)), en, "Counter reached 10!")
 
 ; CHECK:  1 sort bitvec 1
-; CHECK:  2 input 1 clock
-; CHECK:  3 input 1 reset
-; CHECK:  4 input 1 en
-; CHECK:  5 sort bitvec 32
-; CHECK:  6 state 5 count
-; CHECK:  7 constd 5 1
-; CHECK:  8 constd 5 10
-; CHECK:  9 constd 5 22
-; CHECK:  10 constd 5 0
-; CHECK:  11 eq 1 6 9
-; CHECK:  12 and 1 11 4
-; CHECK:  13 ite 5 12 10 6
-; CHECK:  14 neq 1 6 9
-; CHECK:  15 and 1 14 4
-; CHECK:  16 add 5 6 7
-; CHECK:  17 ite 5 15 16 13
-; CHECK:  18 neq 1 6 8
-; CHECK:  19 implies 1 4 18
-; CHECK:  20 not 1 19
-; CHECK:  21 bad 20
-; CHECK:  22 ite 5 3 10 17
-; CHECK:  23 next 5 6 22
+; CHECK:  2 input 1 reset
+; CHECK:  3 input 1 en
+; CHECK:  4 sort bitvec 32
+; CHECK:  5 state 4 count
+; CHECK:  6 constd 4 1
+; CHECK:  7 constd 4 10
+; CHECK:  8 constd 4 22
+; CHECK:  9 constd 4 0
+; CHECK:  10 eq 1 5 8
+; CHECK:  11 and 1 10 3
+; CHECK:  12 ite 4 11 9 5
+; CHECK:  13 neq 1 5 8
+; CHECK:  14 and 1 13 3
+; CHECK:  15 add 4 5 6
+; CHECK:  16 ite 4 14 15 12
+; CHECK:  17 neq 1 5 7
+; CHECK:  18 implies 1 3 17
+; CHECK:  19 not 1 18
+; CHECK:  20 bad 19
+; CHECK:  21 ite 4 2 9 16
+; CHECK:  22 next 4 5 21
