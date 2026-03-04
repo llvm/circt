@@ -852,7 +852,10 @@ struct RvalueExprVisitor : public ExprVisitor {
       auto value = context.convertLvalueExpression(select->value());
       auto vt = value.getType();
       // Check if reference to unpacked array type:
+<<<<<<< HEAD
 
+=======
+>>>>>>> 61b81addb7 (Fixed formatting)
       if (isa<moore::RefType>(vt) &&
           isa<moore::OpenUnpackedArrayType>(
               cast<moore::RefType>(vt).getNestedType())) {
