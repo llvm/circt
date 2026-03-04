@@ -6,12 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Support/Version.h"
 #include "mlir/TableGen/GenInfo.h"
 #include "mlir/Tools/mlir-tblgen/MlirTblgenMain.h"
+#include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/TableGen/Record.h"
 
 using namespace llvm;
 using namespace mlir;
+using namespace circt;
 
 // Generator that prints records.
 static GenRegistration
@@ -21,4 +24,10 @@ static GenRegistration
                    return false;
                  });
 
-int main(int argc, char **argv) { return MlirTblgenMain(argc, argv); }
+int main(int argc, char **argv) {
+  // Set the bug report message to indicate users should file issues on
+  // llvm/circt and not llvm/llvm-project.
+  setBugReportMsg(circtBugReportMsg);
+
+  return MlirTblgenMain(argc, argv);
+}
