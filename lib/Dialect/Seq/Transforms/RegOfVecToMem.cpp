@@ -206,6 +206,7 @@ bool RegOfVecToMemPass::createFirMemory(MemoryPattern &pattern) {
     return addr;
   };
 
+  // Create read port
   Value readData = FirMemReadOp::create(
       builder, firMem, fixZeroWidthAddr(pattern.readAddr), pattern.clock,
       /*enable=*/hw::ConstantOp::create(builder, builder.getI1Type(), 1));
@@ -264,7 +265,8 @@ void RegOfVecToMemPass::runOnOperation() {
   // Erase all marked operations
   for (auto *op : opsToErase) {
     LLVM_DEBUG(llvm::dbgs()
-               << "Erasing operation: " << *op << " number of uses:" << "\n");
+               << "Erasing operation: " << *op << " number of uses:"
+               << "\n");
     op->dropAllUses();
     op->erase();
   }
