@@ -1011,6 +1011,18 @@ AllTypesMatch<["dynArray", "result"]>]> {
   }];
 }
 
+def DynamicArraySizeOp: SimOp<"darray.size", [Pure]> {
+  let summary = "Returns the size of a dynamic array";
+  let description = [{
+    Returns the size of a dynamic array.
+  }];
+  let arguments = (ins DynamicArrayType:$dynArray);
+  let results = (outs I32:$size);
+  let assemblyFormat = [{
+    $dynArray attr-dict `:` type($dynArray)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//
