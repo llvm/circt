@@ -83,13 +83,13 @@ static DelayType simulateBalancedTree(ArrayRef<DelayType> arrivalTimes) {
 /// Build balanced AND tree.
 ValueWithArrivalTime
 buildBalancedAndTree(OpBuilder &builder, Location loc,
-                     SmallVectorImpl<ValueWithArrivalTime> &nodes) {
+                     SmallVectorImpl<ValueWithArrivalTime> &nodes,
+                     size_t &valueNumbering) {
   assert(!nodes.empty());
 
   if (nodes.size() == 1)
     return nodes[0];
 
-  size_t num = nodes.size();
   auto result = buildBalancedTreeWithArrivalTimes<ValueWithArrivalTime>(
       nodes, [&](const auto &n1, const auto &n2) {
         Value v = aig::AndInverterOp::create(builder, loc, n1.getValue(),
@@ -97,7 +97,7 @@ buildBalancedAndTree(OpBuilder &builder, Location loc,
                                              n2.isInverted());
         return ValueWithArrivalTime(
             v, std::max(n1.getArrivalTime(), n2.getArrivalTime()) + 1, false,
-            num++);
+            valueNumbering++);
       });
   return result;
 }
@@ -107,21 +107,22 @@ Value buildBalancedSOP(OpBuilder &builder, Location loc, const SOPForm &sop,
                        ArrayRef<Value> inputs,
                        ArrayRef<DelayType> inputArrivalTimes) {
   SmallVector<ValueWithArrivalTime, expectedISOPInputs> productTerms, literals;
+  size_t valueNumbering = 0;
 
-  size_t num = 0;
   for (const auto &cube : sop.cubes) {
-    for (unsigned i = 0; i < sop.numVars; ++i) {
+    for (unsigned i = 0; i < sop.numVars; ++i)
       if (cube.hasLiteral(i))
         literals.push_back(ValueWithArrivalTime(
-            inputs[i], inputArrivalTimes[i], cube.isLiteralInverted(i), num++));
-    }
+            inputs[i], inputArrivalTimes[i], cube.isLiteralInverted(i),
+            /*valueNumbering=*/valueNumbering++));
 
     if (literals.empty())
       continue;
 
     // Get product term, and flip the inversion to construct OR afterwards.
     productTerms.push_back(
-        buildBalancedAndTree(builder, loc, literals).flipInversion());
+        buildBalancedAndTree(builder, loc, literals, valueNumbering)
+            .flipInversion());
 
     literals.clear();
   }
@@ -129,7 +130,8 @@ Value buildBalancedSOP(OpBuilder &builder, Location loc, const SOPForm &sop,
   assert(!productTerms.empty() && "No product terms");
 
   auto andOfInverted =
-      buildBalancedAndTree(builder, loc, productTerms).flipInversion();
+      buildBalancedAndTree(builder, loc, productTerms, valueNumbering)
+          .flipInversion();
   // Let's invert the output.
   if (andOfInverted.isInverted())
     return aig::AndInverterOp::create(builder, loc, andOfInverted.getValue(),
