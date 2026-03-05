@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "RTGInstructionUtils.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/TableGen/Operator.h"
 #include "llvm/Support/Allocator.h"
@@ -21,15 +22,6 @@
 namespace circt {
 namespace tblgen {
 namespace rtg {
-
-//===----------------------------------------------------------------------===//
-// Operand Type Classification
-//===----------------------------------------------------------------------===//
-
-/// Classification of operand types in RTG instructions.
-/// Used to distinguish between different kinds of operands during code
-/// generation and validation.
-enum class OperandType { Register, Immediate, Label };
 
 //===----------------------------------------------------------------------===//
 // Format AST
@@ -109,14 +101,10 @@ public:
   /// The set of possible operand types for this operand.
   /// Only valid after `resolveOperands()` has been called on the context.
   /// An operand may have multiple possible types, e.g., if `AnyTypeOf` is used.
-  DenseSet<OperandType> kinds;
+  OperandTypeSet kinds;
   /// The parent node of this operand node. 'nullptr' if this is a top-level
   /// operand.
   FormatNode *parent = nullptr;
-  /// The binary encoding width for register operands.
-  /// Only valid after `resolveOperands()` has been called and if this is a
-  /// register operand. Set to -1 if not a register or not yet resolved.
-  int registerBinaryEncodingWidth = -1;
 
 private:
   SmallString<32> name;

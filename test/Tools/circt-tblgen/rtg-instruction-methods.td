@@ -17,6 +17,8 @@ class TestOp<string mnemonic, list<Trait> traits = []> :
 def TestRegType : TypeDef<RTGDialect, "TestReg">, RegisterTypeBase {
   let mnemonic = "test_reg";
   let binaryEncodingWidth = 5;
+  let pythonName = "TestReg";
+  let pythonTypeName = "TestRegType";
 }
 
 def Test1_BasicRegisterOp : TestOp<"basic_register"> {
@@ -96,7 +98,7 @@ def Test4_ImmSlicingOp : TestOp<"imm_slicing"> {
 // CHECK-NEXT:  void ImmSlicingOp::printInstructionBinary(llvm::raw_ostream &os, FoldAdaptor adaptor) {
 // CHECK-NEXT:    llvm::APInt imm = cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue();
 // CHECK-NEXT:    llvm::APInt rd = llvm::APInt(5, cast<rtg::RegisterAttrInterface>(adaptor.getRd()).getClassIndex());
-// CHECK-EMPTY:  
+// CHECK-EMPTY:
 // CHECK-NEXT:    llvm::APInt binary = llvm::APInt::getZero(0);
 // CHECK-NEXT:    binary = binary.concat(imm.extractBits(8, 12));
 // CHECK-NEXT:    binary = binary.concat(imm.extractBits(1, 11));
@@ -104,7 +106,7 @@ def Test4_ImmSlicingOp : TestOp<"imm_slicing"> {
 // CHECK-NEXT:    binary = binary.concat(imm.extractBits(1, 0));
 // CHECK-NEXT:    binary = binary.concat(rd);
 // CHECK-NEXT:    binary = binary.concat(llvm::APInt(7, 55));
-// CHECK-EMPTY:  
+// CHECK-EMPTY:
 // CHECK-NEXT:    llvm::SmallVector<char> str;
 // CHECK-NEXT:    binary.toStringUnsigned(str, 16);
 // CHECK-NEXT:    os << str;
@@ -170,10 +172,10 @@ def Test7_SignedImmediateOp : TestOp<"signed_immediate"> {
 // CHECK-NEXT:    os << " ";
 // CHECK-NEXT:    os << cast<rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
 // CHECK-NEXT:    os << ", ";
-// CHECK-NEXT:    { 
-// CHECK-NEXT:      SmallVector<char> strBuf; 
-// CHECK-NEXT:      cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue().toStringSigned(strBuf); 
-// CHECK-NEXT:      os << strBuf; 
+// CHECK-NEXT:    {
+// CHECK-NEXT:      SmallVector<char> strBuf;
+// CHECK-NEXT:      cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue().toStringSigned(strBuf);
+// CHECK-NEXT:      os << strBuf;
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 // CHECK-EMPTY:
@@ -212,10 +214,10 @@ def Test9_AnyTypeRegOrImmOp : TestOp<"anytype_reg_or_imm"> {
 // CHECK-NEXT:    if (auto reg = dyn_cast<rtg::RegisterAttrInterface>(adaptor.getSrc())) {
 // CHECK-NEXT:      os << reg.getRegisterAssembly();
 // CHECK-NEXT:    } else if (auto imm = dyn_cast<rtg::ImmediateAttr>(adaptor.getSrc())) {
-// CHECK-NEXT:      { 
-// CHECK-NEXT:        SmallVector<char> strBuf; 
-// CHECK-NEXT:        imm.getValue().toStringUnsigned(strBuf); 
-// CHECK-NEXT:        os << strBuf; 
+// CHECK-NEXT:      {
+// CHECK-NEXT:        SmallVector<char> strBuf;
+// CHECK-NEXT:        imm.getValue().toStringUnsigned(strBuf);
+// CHECK-NEXT:        os << strBuf;
 // CHECK-NEXT:      }
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
@@ -243,7 +245,7 @@ def Test10_SingleBitSliceOp : TestOp<"single_bit_slice"> {
 // CHECK-EMPTY:
 // CHECK-NEXT:  void SingleBitSliceOp::printInstructionBinary(llvm::raw_ostream &os, FoldAdaptor adaptor) {
 // CHECK-NEXT:    llvm::APInt imm = cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue();
-// CHECK-EMPTY:  
+// CHECK-EMPTY:
 // CHECK-NEXT:    llvm::APInt binary = llvm::APInt::getZero(0);
 // CHECK-NEXT:    binary = binary.concat(imm.extractBits(1, 7));
 // CHECK-NEXT:    binary = binary.concat(imm.extractBits(1, 0));
