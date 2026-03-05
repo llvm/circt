@@ -88,9 +88,6 @@ static void genRegisterAllocationMethodsForOp(const Record *opDef,
     }
   }
 
-  if (sourceIndices.empty() && destIndices.empty() && op.getNumArgs() > 0)
-    return;
-
   StringRef className = op.getCppClassName();
 
   // Generate isSourceRegister method
