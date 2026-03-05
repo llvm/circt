@@ -310,9 +310,9 @@ static Value truncateToMemoryWidth(Location loc, OpBuilder &b, Value v,
   if (addrWidth == 0) {
     // Arith doesn't support i0, just create a constant i0 with control
     // dependency on the value.
-    auto ctrl = b.create<handshake::JoinOp>(loc, v).getResult();
-    return b.create<handshake::ConstantOp>(
-        loc, b.getIntegerType(0), b.getIntegerAttr(b.getIntegerType(0), 0),
+    auto ctrl = handshake::JoinOp::create(b, loc, v).getResult();
+    return handshake::ConstantOp::create(
+        b, loc, b.getIntegerType(0), b.getIntegerAttr(b.getIntegerType(0), 0),
         ctrl);
   }
   return arith::IndexCastOp::create(b, loc, b.getIntegerType(addrWidth), v);
