@@ -756,8 +756,8 @@ bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
   // to a wire.
   if (op.hasOneUse()) {
     auto *singleUser = *op.getUsers().begin();
-    if (isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp, hw::InstanceOp,
-            hw::InstanceChoiceOp>(singleUser))
+    if (isa<hw::OutputOp, sv::AssignOp, sv::BPAssignOp, hw::InstanceOp>(
+            singleUser))
       return false;
 
     // If the single user is bitcast, we check the same property for the bitcast

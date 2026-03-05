@@ -162,8 +162,7 @@ void HWParameterizeConstantPortsPass::processModule(
   // Update all instances of this module
   for (auto *instRecord : node->uses()) {
     auto inst = dyn_cast<InstanceOp>(instRecord->getInstance().getOperation());
-    // Skip non-InstanceOp users (e.g., InstanceChoiceOp or other instance-like
-    // operations).
+    // Skip non-InstanceOp users (e.g., other instance-like operations).
     if (!inst)
       continue;
 
