@@ -2007,7 +2007,7 @@ firrtl.circuit "InstanceChoiceTest" {
     firrtl.instance_choice inst {instance_macro = @InstanceChoiceTop_inst} @Bar alternatives @Power { @Low -> @Baz } ()
   }
 
-  // CHECK-LABEL: emit.file "targets_InstanceChoiceUnit_Opt_FPGA.svh"
+  // CHECK-LABEL: emit.file "targets-InstanceChoiceUnit-Opt-FPGA.svh"
   // CHECK-NEXT:    emit.verbatim "// Specialization file for public module: InstanceChoiceUnit\0A// Option: Opt, Case: FPGA\0A"
   // CHECK-NEXT:       sv.ifdef @__option__Opt_FPGA {
   // CHECK-NEXT:    } else {
@@ -2018,11 +2018,11 @@ firrtl.circuit "InstanceChoiceTest" {
   // CHECK-NEXT:    } else {
   // CHECK-NEXT:      sv.macro.def @InstanceChoiceUnit_inst "{{[{][{]}}0{{[}][}]}}"([#hw.innerNameRef<@InstanceChoiceUnit::@{{.+}}>])
   // CHECK-NEXT:    }
-  // CHECK-NEXT:  } {output_file = #hw.output_file<"targets_InstanceChoiceUnit_Opt_FPGA.svh", excludeFromFileList>}
+  // CHECK-NEXT:  } {output_file = #hw.output_file<"targets-InstanceChoiceUnit-Opt-FPGA.svh", excludeFromFileList>}
 
-  // CHECK-LABEL: emit.file "targets_InstanceChoiceTest_Opt_FPGA.svh"
+  // CHECK-LABEL: emit.file "targets-InstanceChoiceTest-Opt-FPGA.svh"
   // CHECK:         sv.macro.def @InstanceChoiceUnit_inst
 
-  // CHECK-LABEL: emit.file "targets_InstanceChoiceTest_Power_Low.svh"
+  // CHECK-LABEL: emit.file "targets-InstanceChoiceTest-Power-Low.svh"
   // CHECK:         sv.macro.def @InstanceChoiceTop_inst
 }

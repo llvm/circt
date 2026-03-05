@@ -1076,8 +1076,8 @@ void FIRRTLModuleLowering::emitInstanceChoiceIncludeFile(
   SmallString<128> includeFileName;
   {
     llvm::raw_svector_ostream os(includeFileName);
-    os << "targets_" << publicModuleName.getValue() << "_"
-       << optionName.getValue() << "_" << caseName.getValue() << ".svh";
+    os << "targets-" << publicModuleName.getValue() << "-"
+       << optionName.getValue() << "-" << caseName.getValue() << ".svh";
   }
 
   // Create the emit.file operation at the top level
