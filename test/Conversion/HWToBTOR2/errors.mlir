@@ -108,3 +108,13 @@ hw.module @to_clock_reuse(in %a : i1, in %b : i1) {
   // expected-error @below {{This pass only supports seq.to_clock operations that take a top-level input as their argument.}}
   %1 = seq.to_clock %0
 }
+
+// -----
+
+hw.module @to_clock_reuse(in %a : i1, in %b : i1, in %c : i32) {
+  %0 = seq.to_clock %a
+  %1 = seq.to_clock %b
+  %2 = seq.compreg %c, %0 : i32
+  // expected-error @below {{Multi-clock designs are not currently supported.}}
+  %3 = seq.compreg %c, %1 : i32
+}
