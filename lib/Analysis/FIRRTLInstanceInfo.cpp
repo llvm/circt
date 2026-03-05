@@ -31,6 +31,12 @@
 using namespace circt;
 using namespace firrtl;
 
+bool InstanceInfo::isInstanceUnderLayer(InstanceOp inst) {
+  return inst.getLowerToBind() || inst.getDoNotPrint() ||
+         inst->getParentOfType<LayerBlockOp>() ||
+         inst->getParentOfType<sv::IfDefOp>();
+}
+
 bool InstanceInfo::LatticeValue::isUnknown() const { return kind == Unknown; }
 
 bool InstanceInfo::LatticeValue::isConstant() const { return kind == Constant; }
@@ -139,12 +145,8 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
 
       // Update underLayer.
       bool underLayer = false;
-      if (auto instanceOp = useIt->template getInstance<InstanceOp>()) {
-        if (instanceOp.getLowerToBind() || instanceOp.getDoNotPrint() ||
-            instanceOp->template getParentOfType<LayerBlockOp>() ||
-            instanceOp->template getParentOfType<sv::IfDefOp>())
-          underLayer = true;
-      }
+      if (auto instanceOp = useIt->template getInstance<InstanceOp>())
+        underLayer = InstanceInfo::isInstanceUnderLayer(instanceOp);
 
       if (!isGCCompanion) {
         if (underLayer)
