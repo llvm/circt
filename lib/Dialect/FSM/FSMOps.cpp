@@ -55,6 +55,11 @@ StateOp MachineOp::getInitialStateOp() {
   return dyn_cast_or_null<StateOp>(lookupSymbol(getInitialState()));
 }
 
+size_t MachineOp::getNumStates() {
+  auto stateOps = getBody().getOps<StateOp>();
+  return std::distance(stateOps.begin(), stateOps.end());
+}
+
 StringAttr MachineOp::getArgName(size_t i) {
   if (auto args = getArgNames())
     return cast<StringAttr>((*args)[i]);
