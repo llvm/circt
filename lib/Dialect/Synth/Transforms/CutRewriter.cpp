@@ -655,7 +655,7 @@ static void removeDuplicateAndNonMinimalCuts(SmallVectorImpl<Cut *> &cuts) {
   };
   // Sort by size, then lexicographically by inputs. This enables cheap exact
   // duplicate elimination and tighter candidate filtering for subset checks.
-  std::sort(cuts.begin(), cuts.end(), [](const Cut *a, const Cut *b) {
+  std::stable_sort(cuts.begin(), cuts.end(), [](const Cut *a, const Cut *b) {
     if (a->getInputSize() != b->getInputSize())
       return a->getInputSize() < b->getInputSize();
     return std::lexicographical_compare(a->inputs.begin(), a->inputs.end(),
@@ -840,15 +840,6 @@ CutSet *CutEnumerator::createNewCutSet(uint32_t index) {
   auto [cutSetPtr, inserted] = cutSets.try_emplace(index, cutSet);
   assert(inserted && "Cut set already exists for this index");
   return cutSetPtr->second;
-}
-
-llvm::SmallVector<std::pair<uint32_t, CutSet *>> CutEnumerator::takeCutSets() {
-  llvm::SmallVector<std::pair<uint32_t, CutSet *>> result;
-  result.reserve(cutSets.size());
-  for (auto &[idx, cutSet] : cutSets)
-    result.emplace_back(idx, cutSet);
-  cutSets.clear();
-  return result;
 }
 
 void CutEnumerator::clear() {

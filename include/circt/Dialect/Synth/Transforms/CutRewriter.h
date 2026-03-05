@@ -591,11 +591,6 @@ public:
   /// In that case return a trivial cut set.
   const CutSet *getCutSet(uint32_t index);
 
-  /// Clear all cut sets and return them as a vector.
-  /// Note: CutSets remain owned by the allocator and are invalidated on
-  /// clear().
-  llvm::SmallVector<std::pair<uint32_t, CutSet *>> takeCutSets();
-
   /// Clear all cut sets and reset the enumerator.
   void clear();
 
