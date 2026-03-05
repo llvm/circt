@@ -998,7 +998,7 @@ public:
     // Typeswitch is used here because other seq types will be supported
     // like all operations relating to memories and CompRegs
     TypeSwitch<Operation *, void>(op)
-        .Case<seq::FirRegOp, seq::CompRegOp, seq::FromClockOp>(
+        .Case<seq::FirRegOp, seq::CompRegOp, seq::FromClockOp, seq::ToClockOp>(
             [&](auto expr) { visit(expr); })
         .Default([&](auto expr) { visitUnsupportedOp(op); });
   }
@@ -1087,6 +1087,22 @@ public:
     }
   }
 
+  void visit(seq::ToClockOp op) {
+    // Make sure this value is top-level
+    if (!isa<BlockArgument>(op.getInput())) {
+      op->emitError("This pass only supports seq.to_clock operations that take "
+                    "a top-level input as their argument.");
+    }
+    // Make sure this clock is never used by anything other than a register so
+    // we can safely make it implicit
+    for (auto *user : op->getResult(0).getUsers())
+      if (!isa<seq::FirRegOp, seq::CompRegOp>(user)) {
+        op->emitError("This pass only supports seq.to_clock results being "
+                      "used by seq.firreg and seq.compreg operations.");
+        signalPassFailure();
+      }
+  }
+
   // Tail method that handles all operations that weren't handled by previous
   // visitors. Here we simply make the pass fail or ignore the op
   void visitUnsupportedOp(Operation *op) {
@@ -1121,6 +1137,25 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
   getOperation().walk([&](hw::HWModuleOp module) {
     // Start by extracting the inputs and generating appropriate instructions
     for (auto &port : module.getPortList()) {
+      // Check whether the port is used as a clock
+      if (port.isInput()) {
+        auto portVal = module.getArgumentForInput(port.argNum);
+        auto usedAsClock =
+            llvm::any_of(portVal.getUsers(), [](Operation *user) {
+              return isa<seq::ToClockOp>(user);
+            });
+        if (usedAsClock) {
+          // If it's used as a clock, it can't be used anywhere else (as clocks
+          // are implicit in BTOR2)
+          if (portVal.getNumUses() > 1) {
+            module.emitError(
+                "Inputs converted to clocks may only have one user.");
+            return signalPassFailure();
+          }
+          // Ports used as clocks should be implicit so don't visit them
+          continue;
+        }
+      }
       visit(port);
     }
 
