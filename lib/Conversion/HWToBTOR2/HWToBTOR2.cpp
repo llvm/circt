@@ -63,7 +63,7 @@ private:
 
   // Create a counter that attributes a unique id to each generated btor2 line
   size_t lid = 1; // btor2 line identifiers usually start at 1
-  size_t nclocks = 0;
+  Value foundClock;
 
   // Create maps to keep track of lid associations
   // We need these in order to reference results as operands in btor2
@@ -574,7 +574,7 @@ private:
   // transition system conversion
   void finalizeRegVisit(Operation *op) {
     int64_t width;
-    Value next, reset, resetVal;
+    Value next, reset, resetVal, clk;
 
     // Extract the operands depending on the register type
     if (auto reg = dyn_cast<seq::CompRegOp>(op)) {
@@ -582,14 +582,25 @@ private:
       next = reg.getInput();
       reset = reg.getReset();
       resetVal = reg.getResetValue();
+      clk = reg.getClk();
     } else if (auto reg = dyn_cast<seq::FirRegOp>(op)) {
       width = hw::getBitWidth(reg.getType());
       next = reg.getNext();
       reset = reg.getReset();
       resetVal = reg.getResetValue();
+      clk = reg.getClk();
     } else {
       op->emitError("Invalid register operation !");
       return;
+    }
+
+    if (foundClock) {
+      if (clk != foundClock) {
+        op->emitError("Multi-clock designs are not currently supported.");
+        return;
+      }
+    } else {
+      foundClock = clk;
     }
 
     genSort("bitvec", width);
@@ -877,6 +888,41 @@ public:
     genConstraint(expr);
   }
 
+  // Our only concern with an AlwaysOp is that it follows clocking constraints
+  void visitSV(sv::AlwaysOp op) {
+    if (op.getEvents().size() > 1) {
+      op->emitError("Multiple events in sv.always are not supported.");
+      return signalPassFailure();
+    }
+
+    auto cond = op.getCondition(0);
+
+    if (cond.event != sv::EventControl::AtPosEdge) {
+      op->emitError("Only posedge clocking is supported in sv.always.");
+      return signalPassFailure();
+    }
+
+    if (isa<BlockArgument>(cond.value) ||
+        !isa<seq::FromClockOp>(cond.value.getDefiningOp())) {
+      op->emitError("This pass only currently supports sv.always ops that use "
+                    "a top-level seq.clock input (converted using "
+                    "seq.from_clock) as their clock.");
+      return signalPassFailure();
+    }
+
+    // By now we know that the condition is a clock signal coming from a
+    // seq.from_clock op
+    auto clk = cond.value.getDefiningOp()->getOperand(0);
+    if (foundClock) {
+      if (clk != foundClock) {
+        op->emitError("Multi-clock designs are not currently supported.");
+        return signalPassFailure();
+      }
+    } else {
+      foundClock = clk;
+    }
+  }
+
   void visitSV(Operation *op) { visitInvalidSV(op); }
 
   // Once SV Ops are visited, we need to check for seq ops
@@ -952,7 +998,8 @@ public:
     // Typeswitch is used here because other seq types will be supported
     // like all operations relating to memories and CompRegs
     TypeSwitch<Operation *, void>(op)
-        .Case<seq::FirRegOp, seq::CompRegOp>([&](auto expr) { visit(expr); })
+        .Case<seq::FirRegOp, seq::CompRegOp, seq::FromClockOp>(
+            [&](auto expr) { visit(expr); })
         .Default([&](auto expr) { visitUnsupportedOp(op); });
   }
 
@@ -1020,6 +1067,16 @@ public:
     regOps.push_back(reg);
   }
 
+  void visit(seq::FromClockOp op) {
+    for (auto *user : op->getResult(0).getUsers()) {
+      if (!isa<sv::AlwaysOp, verif::ClockedAssertOp>(user)) {
+        op->emitError("This pass only supports seq.from_clock results being "
+                      "used by sv.always and verif.clocked_assert operations.");
+        signalPassFailure();
+      }
+    }
+  }
+
   // Tail method that handles all operations that weren't handled by previous
   // visitors. Here we simply make the pass fail or ignore the op
   void visitUnsupportedOp(Operation *op) {
@@ -1029,21 +1086,13 @@ public:
         // All explicitly ignored operations are defined here
         .Case<sv::MacroDefOp, sv::MacroDeclOp, sv::VerbatimOp,
               sv::VerbatimExprOp, sv::VerbatimExprSEOp, sv::IfOp, sv::IfDefOp,
-              sv::IfDefProceduralOp, sv::AlwaysOp, sv::AlwaysCombOp,
-              seq::InitialOp, sv::AlwaysFFOp, seq::InitialOp, seq::YieldOp,
-              hw::OutputOp, hw::HWModuleOp,
+              sv::IfDefProceduralOp, sv::AlwaysCombOp, seq::InitialOp,
+              sv::AlwaysFFOp, seq::InitialOp, seq::YieldOp, hw::OutputOp,
+              hw::HWModuleOp,
               // Specifically ignore printfs, as we can't do anything with them
               // in btor2
               verif::FormatVerilogStringOp, verif::PrintOp>(
             [&](auto expr) { ignore(op); })
-
-        // Make sure that the design only contains one clock
-        .Case<seq::FromClockOp>([&](auto expr) {
-          if (++nclocks > 1UL) {
-            op->emitOpError("Multi-clock designs are not supported!");
-            return signalPassFailure();
-          }
-        })
 
         // Anything else is considered unsupported and might cause a wrong
         // behavior if ignored, so an error is thrown
