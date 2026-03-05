@@ -1009,7 +1009,12 @@ public:
   void visit(seq::FirRegOp reg) {
     // Start by retrieving the register's name and width
     StringRef regName = reg.getName();
-    int64_t w = requireSort(reg.getType());
+    auto type = reg.getType();
+    if (!isa<mlir::IntegerType>(type)) {
+      reg.emitError("Only integer typed seq.firregs are supported in BTOR2.");
+      return signalPassFailure();
+    }
+    int64_t w = requireSort(type);
 
     // Generate state instruction (represents the register declaration)
     genState(reg, w, regName);
@@ -1024,7 +1029,12 @@ public:
   void visit(seq::CompRegOp reg) {
     // Start by retrieving the register's name and width
     StringRef regName = reg.getName().value();
-    int64_t w = requireSort(reg.getType());
+    auto type = reg.getType();
+    if (!isa<mlir::IntegerType>(type)) {
+      reg.emitError("Only integer typed seq.compregs are supported in BTOR2.");
+      return signalPassFailure();
+    }
+    int64_t w = requireSort(type);
 
     // Check for initial values which must be emitted before the state in
     // btor2

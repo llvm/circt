@@ -34,6 +34,20 @@ hw.module @dual_clock_error(in %in : i32, in %clk : !seq.clock, in %clk1 : !seq.
 
 // -----
 
+hw.module @non_int_reg(in %clk : !seq.clock) {
+  // expected-error @below {{Only integer typed seq.compregs are supported in BTOR2.}}
+  %0 = seq.compreg %clk, %clk : !seq.clock
+}
+
+// -----
+
+hw.module @non_int_reg(in %clk : !seq.clock) {
+  // expected-error @below {{Only integer typed seq.firregs are supported in BTOR2.}}
+  %0 = seq.firreg %clk clock %clk : !seq.clock
+}
+
+// -----
+
 hw.module @nullary_variadic() {
   // expected-error @below {{variadic operations with no operands are not supported}}
   "comb.concat"() : () -> (i0)
