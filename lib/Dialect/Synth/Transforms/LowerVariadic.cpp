@@ -19,7 +19,11 @@
 #include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
+#include "mlir/IR/Block.h"
 #include "mlir/IR/OpDefinition.h"
+#include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/Casting.h"
 
 #define DEBUG_TYPE "synth-lower-variadic"
 
@@ -93,6 +97,81 @@ static LogicalResult replaceWithBalancedTree(
   return success();
 }
 
+// Returns if an operation is a subset of the other.
+static bool isOpSubsetOf(aig::AndInverterOp sub, aig::AndInverterOp super) {
+  if (sub->getNumOperands() > super->getNumOperands())
+    return false;
+
+  SmallVector<bool> matched(super->getNumOperands(), false);
+  // All sub operands need to be in super.
+  for (size_t i = 0, e = sub.getNumOperands(); i < e; ++i) {
+    bool found = false;
+    for (size_t j = 0, e2 = super.getNumOperands(); j < e2; ++j) {
+      if (matched[j])
+        continue;
+
+      if (sub->getOperand(i) == super.getOperand(j) &&
+          sub.isInverted(i) == super.isInverted(j)) {
+        matched[j] = true;
+        found = true;
+        break;
+      }
+    }
+    if (!found)
+      return false;
+  }
+  return true;
+}
+
+static void simplifyWithExistingOperations(aig::AndInverterOp op,
+                                           mlir::IRRewriter &rewriter) {
+  mlir::Block *block = op->getBlock();
+  for (Operation &otherOp : *block) {
+    if (&otherOp == op.getOperation())
+      continue;
+
+    auto otherAIG = llvm::dyn_cast<aig::AndInverterOp>(otherOp);
+    if (!otherAIG)
+      continue;
+
+    if (isOpSubsetOf(otherAIG, op)) {
+      SmallVector<Value> newOperands;
+      SmallVector<bool> newInversions;
+
+      SmallVector<bool> isPartAsSubset(op.getNumOperands(), false);
+
+      // Find the operands that match.
+      for (size_t i = 0; i < otherAIG.getNumOperands(); ++i) {
+        for (size_t j = 0; j < op.getNumOperands(); ++j) {
+          if (!isPartAsSubset[j] &&
+              otherAIG.getOperand(i) == op.getOperand(j) &&
+              otherAIG.isInverted(i) == op.isInverted(j)) {
+            isPartAsSubset[j] = true;
+            break;
+          }
+        }
+      }
+      // Build the list of operands that are not shared.
+      for (size_t i = 0; i < op->getNumOperands(); ++i) {
+        if (!isPartAsSubset[i]) {
+          newOperands.push_back(op->getOperand(i));
+          newInversions.push_back(op.isInverted(i));
+        }
+      }
+
+      newOperands.push_back(otherAIG.getResult());
+      newInversions.push_back(false);
+
+      rewriter.modifyOpInPlace(op, [&]() {
+        op.getOperation()->setOperands(newOperands);
+        op->setAttr("inversions", rewriter.getBoolArrayAttr(newInversions));
+      });
+      // We found a first match, not necessarily the best one.
+      break;
+    }
+  }
+}
+
 void LowerVariadicPass::runOnOperation() {
   // Topologically sort operations in graph regions to ensure operands are
   // defined before uses.
@@ -144,6 +223,7 @@ void LowerVariadicPass::runOnOperation() {
 
     // Handle AndInverterOp specially to preserve inversion flags.
     if (auto andInverterOp = dyn_cast<aig::AndInverterOp>(op)) {
+      simplifyWithExistingOperations(andInverterOp, rewriter);
       auto result = replaceWithBalancedTree(
           analysis, rewriter, op,
           // Check if each operand is inverted.
