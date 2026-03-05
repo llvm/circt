@@ -35,7 +35,7 @@ circuit top:
       FPGA => FPGATarget
 
     printf(clk, UInt<1>(1), "result: %d\n", proc.result)
-; CHECK-LABEL: // ----- 8< ----- FILE "targets_top_Platform_FPGA.svh" ----- 8< -----
+; CHECK-LABEL: // ----- 8< ----- FILE "targets-top-Platform-FPGA.svh" ----- 8< -----
 ; CHECK:       `ifndef [[OPTION_NAME]]
 ; CHECK-NEXT:    `define [[OPTION_NAME]]
 ; CHECK-NEXT:  `endif
