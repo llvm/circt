@@ -84,3 +84,27 @@ hw.module @from_clock_comb(in %clk : !seq.clock) {
   %0 = seq.from_clock %clk
   %1 = comb.and %0, %0 : i1
 }
+
+// -----
+
+// expected-error @below {{Inputs converted to clocks may only have one user.}}
+hw.module @to_clock_and_comb(in %a : i1) {
+  %0 = seq.to_clock %a
+  %1 = comb.and %a, %a : i1
+}
+
+// -----
+
+hw.module @to_clock_reuse(in %a : i1) {
+  // expected-error @below {{This pass only supports seq.to_clock results being used by seq.firreg and seq.compreg operations.}}
+  %0 = seq.to_clock %a
+  %1 = seq.from_clock %0
+}
+
+// -----
+
+hw.module @to_clock_reuse(in %a : i1, in %b : i1) {
+  %0 = comb.and %a, %b : i1
+  // expected-error @below {{This pass only supports seq.to_clock operations that take a top-level input as their argument.}}
+  %1 = seq.to_clock %0
+}
