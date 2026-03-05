@@ -1,5 +1,5 @@
 add_circt_dialect(RTG rtg)
-add_circt_doc(RTG Dialects/RTGOps -gen-op-doc)
+add_circt_doc(RTG Dialects/RTGOps -gen-op-doc -dialect rtg)
 add_circt_doc(RTG Dialects/RTGTypes -gen-typedef-doc -dialect rtg)
 
 set(LLVM_TARGET_DEFINITIONS RTG.td)

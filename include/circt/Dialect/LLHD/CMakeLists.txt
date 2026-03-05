@@ -1,6 +1,6 @@
 add_circt_dialect(LLHD llhd)
 add_circt_dialect_doc(LLHD llhd)
-add_circt_doc(LLHDOps Dialects/LLHDOps -gen-op-doc)
+add_circt_doc(LLHDOps Dialects/LLHDOps -gen-op-doc -dialect llhd)
 add_circt_doc(LLHDTypes Dialects/LLHDTypes -gen-typedef-doc -dialect llhd)
 add_circt_doc(LLHDTypes Dialects/LLHDAttributes -gen-attrdef-doc -dialect llhd)
 add_circt_doc(LLHDPasses LLHDPasses -gen-pass-doc)
