@@ -25,7 +25,7 @@ of LLVM discord server.
 for more information.
 
 3) Contribute code.  CIRCT follows all of the LLVM Policies: you can create pull
-requests for the CIRCT repository, and gain commit access using the [standard LLVM policies](https://llvm.org/docs/DeveloperPolicy.html#obtaining-commit-access).
+requests for the CIRCT repository, and gain commit access using the [standard LLVM policies](https://llvm.org/docs/DeveloperPolicy.html#obtaining-commit-access). See our [Developer Policy](docs/DeveloperPolicy.md) and [AI Tool Use Policy](docs/AIToolPolicy.md) for more details.
 
 ## Motivation
 
