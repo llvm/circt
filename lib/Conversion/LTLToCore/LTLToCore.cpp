@@ -177,9 +177,12 @@ struct LTLPastOpConversion : public OpConversionPattern<ltl::PastOp> {
     Value cur = adaptor.getInput();
     auto clock =
         seq::ToClockOp::create(rewriter, op.getLoc(), adaptor.getClk());
-    for (size_t i = 0; i < op.getDelay(); i++)
-      cur = seq::CompRegOp::create(rewriter, op.getLoc(), cur, clock);
-    rewriter.replaceOp(op, cur);
+    Value ce =
+        hw::ConstantOp::create(rewriter, op.getLoc(), rewriter.getI1Type(), 1);
+    auto shiftreg =
+        seq::ShiftRegOp::create(rewriter, op.getLoc(), op.getDelayAttr(), cur,
+                                clock, ce, {}, {}, {}, {}, {});
+    rewriter.replaceOp(op, shiftreg);
     return success();
   }
 };
