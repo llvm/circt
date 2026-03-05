@@ -168,7 +168,7 @@ class InstFormatShiftOpBase<string mnemonic, string opcode7,
 def RV32I_LA : InstrFormatOp<"rv32i.la", [InstructionOpAdaptor]> {
 
   let arguments = (ins Arg<IntegerRegisterType, "", [DestReg]>:$rd,
-                       ISAMemory:$mem);
+                       ISAMemoryWithAddressWidth<32>:$mem);
 
   let assemblyFormat = "$rd `,` $mem `:` type($mem) attr-dict";
   let isaAssemblyFormat = "mnemonic ` ` $rd `, ` unsigned($mem)";
