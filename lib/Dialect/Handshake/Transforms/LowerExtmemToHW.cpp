@@ -312,8 +312,8 @@ static Value truncateToMemoryWidth(Location loc, OpBuilder &b, Value v,
     // dependency on the value.
     auto ctrl = b.create<handshake::JoinOp>(loc, v).getResult();
     return b.create<handshake::ConstantOp>(
-      loc, b.getIntegerType(0), b.getIntegerAttr(b.getIntegerType(0), 0),
-      ctrl);
+        loc, b.getIntegerType(0), b.getIntegerAttr(b.getIntegerType(0), 0),
+        ctrl);
   }
   return arith::IndexCastOp::create(b, loc, b.getIntegerType(addrWidth), v);
 }
