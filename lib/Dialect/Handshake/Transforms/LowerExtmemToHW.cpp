@@ -307,6 +307,14 @@ static Value truncateToMemoryWidth(Location loc, OpBuilder &b, Value v,
                                    MemRefType memRefType) {
   assert(isa<IndexType>(v.getType()) && "Expected an index-typed value");
   auto addrWidth = llvm::Log2_64_Ceil(memRefType.getShape().front());
+  if (addrWidth == 0) {
+    // Arith doesn't support i0, just create a constant i0 with control
+    // dependency on the value.
+    auto ctrl = b.create<handshake::JoinOp>(loc, v).getResult();
+    return b.create<handshake::ConstantOp>(
+      loc, b.getIntegerType(0), b.getIntegerAttr(b.getIntegerType(0), 0),
+      ctrl);
+  }
   return arith::IndexCastOp::create(b, loc, b.getIntegerType(addrWidth), v);
 }
 
