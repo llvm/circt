@@ -25,6 +25,7 @@
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 #include "circt/Support/Passes.h"
@@ -362,6 +363,7 @@ int main(int argc, char **argv) {
     circt::comb::CombDialect,
     circt::emit::EmitDialect,
     circt::hw::HWDialect,
+    circt::ltl::LTLDialect,
     circt::om::OMDialect,
     circt::seq::SeqDialect,
     mlir::smt::SMTDialect,
