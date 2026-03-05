@@ -1029,21 +1029,38 @@ public:
     // Check for initial values which must be emitted before the state in
     // btor2
     auto init = reg.getInitialValue();
+    auto resetVal = reg.getResetValue();
 
     // If there's an initial value, we need to generate a constant for the
     // initial value, then declare the state, then generate the init statement
     // (BTOR2 parsers are picky about it being in this order)
-    if (init) {
-      if (!init.getDefiningOp<seq::InitialOp>()) {
-        reg->emitError(
-            "Initial value must be emitted directly by a seq.initial op");
-        return;
+    auto shouldInitReset = assumeInitReset && resetVal;
+    // We should create an init statement either if we have an initial value or
+    // if we assume an initial reset
+    if (init || shouldInitReset) {
+      hw::ConstantOp initialConstant;
+      // Assuming an initial reset takes priority over an initial value if
+      // both are present
+      if (shouldInitReset) {
+        initialConstant = resetVal.getDefiningOp<hw::ConstantOp>();
+        if (!initialConstant) {
+          reg->emitError(
+              "Reset value must be emitted directly by a hw.constant "
+              "op when --assume-init-reset is in use.");
+          return;
+        }
+      } else {
+        if (!init.getDefiningOp<seq::InitialOp>()) {
+          reg->emitError(
+              "Initial value must be emitted directly by a seq.initial op");
+          return;
+        }
+        // Check that the initial value is a non-null constant
+        initialConstant = circt::seq::unwrapImmutableValue(init)
+                              .getDefiningOp<hw::ConstantOp>();
+        if (!initialConstant)
+          reg->emitError("initial value must be constant");
       }
-      // Check that the initial value is a non-null constant
-      auto initialConstant = circt::seq::unwrapImmutableValue(init)
-                                 .getDefiningOp<hw::ConstantOp>();
-      if (!initialConstant)
-        reg->emitError("initial value must be constant");
 
       // Visit the initial Value to generate the constant
       dispatchTypeOpVisitor(initialConstant);
