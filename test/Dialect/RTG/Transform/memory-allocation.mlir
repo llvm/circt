@@ -147,7 +147,6 @@ rtg.test @test_truncate_error(mem_blk = %mem_blk: !rtg.isa.memory_block<8>) targ
   // expected-error @below {{cannot truncate APInt because value is too big to fit}}
   %0 = rtg.isa.memory_alloc %mem_blk, %idx256, %idx4 : !rtg.isa.memory_block<8>
   %reg = rtg.constant #rtgtest.t0
-  rtgtest.rv32i.la %reg, %0 : !rtg.isa.memory<8>
 }
 
 // -----

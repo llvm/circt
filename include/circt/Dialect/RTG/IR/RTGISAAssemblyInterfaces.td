@@ -230,6 +230,10 @@ class ISAInstructionFormat {
 class RegisterTypeBase {
   // Number of bits needed to encode this register type in binary format.
   int binaryEncodingWidth;
+  // Python class name representing this register.
+  string pythonName;
+  // Python class name representing the type of this register.
+  string pythonTypeName;
 }
 
 #endif // CIRCT_DIALECT_RTG_IR_RTGISAASSEMBLYINTERFACES_TD

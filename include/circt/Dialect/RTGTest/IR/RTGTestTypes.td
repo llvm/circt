@@ -44,6 +44,8 @@ def IntegerRegisterType : TypeDef<RTGTestDialect, "IntegerRegister", [
   let assemblyFormat = "";
   
   let binaryEncodingWidth = 5;
+  let pythonName = "IntegerRegister";
+  let pythonTypeName = "IntegerRegisterType";
 }
 
 def FloatRegisterType : TypeDef<RTGTestDialect, "FloatRegister", [
@@ -55,6 +57,8 @@ def FloatRegisterType : TypeDef<RTGTestDialect, "FloatRegister", [
   let assemblyFormat = "";
   
   let binaryEncodingWidth = 5;
+  let pythonName = "FloatRegister";
+  let pythonTypeName = "FloatRegisterType";
 }
 
 def RegisterType : AnyTypeOf<[IntegerRegisterType, FloatRegisterType]>;
