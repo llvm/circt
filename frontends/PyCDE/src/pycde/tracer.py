@@ -15,16 +15,15 @@ _SKIP_OPS = frozenset(("CACHE", "NOP", "PRECALL"))
 _STORE_OPS = frozenset(("STORE_FAST", "STORE_NAME", "STORE_DEREF"))
 
 # Instructions that load a variable (local, global, closure, or module-level).
-_LOAD_OPS = frozenset(
-    ("LOAD_FAST", "LOAD_GLOBAL", "LOAD_DEREF", "LOAD_NAME", "LOAD_FAST_CHECK",
-     "LOAD_FAST_BORROW"))
+_LOAD_OPS = frozenset(("LOAD_FAST", "LOAD_GLOBAL", "LOAD_DEREF", "LOAD_NAME",
+                       "LOAD_FAST_CHECK", "LOAD_FAST_BORROW"))
 
 # Instructions that load a constant value (int/str literal for subscripts).
 _LOAD_CONST_OPS = frozenset(("LOAD_CONST", "LOAD_SMALL_INT"))
 
 # Combined load instructions (Python 3.13+) that load two values at once.
-_COMBINED_LOAD_OPS = frozenset(("LOAD_FAST_LOAD_FAST",
-                                "LOAD_FAST_BORROW_LOAD_FAST_BORROW"))
+_COMBINED_LOAD_OPS = frozenset(
+    ("LOAD_FAST_LOAD_FAST", "LOAD_FAST_BORROW_LOAD_FAST_BORROW"))
 
 # PyCDE-internal modules where auto-naming from variable names IS desired.
 # Code in any other pycde.* module is considered "internal plumbing" and will
@@ -90,23 +89,23 @@ def get_var_name(depth=1, skip_pycde=False):
     if call_idx is not None:
       # Scan forward for the first meaningful instruction after the CALL.
       for j in range(call_idx + 1, len(instructions)):
-          next_inst = instructions[j]
-          if next_inst.opname in _STORE_OPS:
-            name = next_inst.argval
-            # Exclude the bare "_" throwaway variable.
-            if name == "_":
-              return None
-            return name
-          if next_inst.opname in _SKIP_OPS:
-            continue
-          # Check for subscript store: LOAD (container) LOAD (key) STORE_SUBSCR
-          # Also handle combined instructions like LOAD_FAST_LOAD_FAST (3.13+).
-          if next_inst.opname in _LOAD_OPS:
-            return _try_subscript_name(instructions, j)
-          if next_inst.opname in _COMBINED_LOAD_OPS:
-            return _try_combined_subscript_name(next_inst, instructions, j)
-          # Any other instruction means this isn't a simple assignment.
-          return None
+        next_inst = instructions[j]
+        if next_inst.opname in _STORE_OPS:
+          name = next_inst.argval
+          # Exclude the bare "_" throwaway variable.
+          if name == "_":
+            return None
+          return name
+        if next_inst.opname in _SKIP_OPS:
+          continue
+        # Check for subscript store: LOAD (container) LOAD (key) STORE_SUBSCR
+        # Also handle combined instructions like LOAD_FAST_LOAD_FAST (3.13+).
+        if next_inst.opname in _LOAD_OPS:
+          return _try_subscript_name(instructions, j)
+        if next_inst.opname in _COMBINED_LOAD_OPS:
+          return _try_combined_subscript_name(next_inst, instructions, j)
+        # Any other instruction means this isn't a simple assignment.
+        return None
     return None
   except Exception:
     return None

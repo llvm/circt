@@ -1,4 +1,4 @@
-# RUN: %PYTHON% -m pytest %s -v
+# RUN: %PYTHON% %s
 
 #  Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 #  See https://llvm.org/LICENSE.txt for license information.
@@ -24,9 +24,9 @@ class TestGetVarName(unittest.TestCase):
     my_signal = _create()
     self.assertEqual(my_signal, "my_signal")
 
-  def test_no_assignment(self):
-    result = _create()  # this IS an assignment, but test POP_TOP separately
-    self.assertIsNotNone(result)
+  def test_simple_assignment_returns_name(self):
+    result = _create()
+    self.assertEqual(result, "result")
 
   def test_bare_discard(self):
     """Bare _ should be excluded."""

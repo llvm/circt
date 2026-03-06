@@ -2,7 +2,6 @@
 
 from pycde import (Clock, Output, Input, Module, generator, System)
 from pycde.dialects import comb
-from pycde.testing import unittestmodule
 from pycde.types import Bits
 
 import sys
