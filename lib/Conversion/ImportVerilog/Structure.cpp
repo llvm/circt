@@ -376,11 +376,6 @@ struct ModuleVisitor : public BaseVisitor {
           }
           continue;
         }
-
-        default:
-          return mlir::emitError(loc)
-                 << "unsupported port `" << port->name << "` ("
-                 << slang::ast::toString(port->kind) << ")";
         }
       }
 
