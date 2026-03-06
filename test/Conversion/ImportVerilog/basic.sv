@@ -4348,6 +4348,27 @@ module AssocArrayManipulationTest;
     end
 endmodule
 
+<<<<<<< HEAD
+=======
+// CHECK-LABEL: moore.module @AssocArraySizeTest() {
+// CHECK:           [[AA:%.+]] = moore.variable : <assoc_array<i32, i32>>
+// CHECK:           moore.procedure initial {
+// CHECK:             moore.assoc_array.size [[AA]] : <assoc_array<i32, i32>>
+// CHECK:             moore.assoc_array.size [[AA]] : <assoc_array<i32, i32>>
+// CHECK:             moore.return
+// CHECK:           }
+// CHECK:           moore.output
+// CHECK:         }
+module AssocArraySizeTest;
+    int aa[int];
+    initial begin
+        aa.size();
+        aa.num();
+    end
+endmodule
+
+
+>>>>>>> 7cd99797d (Implemented Size() and Num())
 // Test that DPI-C imported functions are emitted as extern declarations
 
 // CHECK:  func.func private @void_dpi(!moore.i32)
