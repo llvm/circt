@@ -638,6 +638,11 @@ def ConvertHWToBTOR2 : Pass<"convert-hw-to-btor2", "mlir::ModuleOp"> {
   let constructor = "circt::createConvertHWToBTOR2Pass()";
   let dependentDialects = ["hw::HWDialect", "sv::SVDialect", "comb::CombDialect",
                            "seq::SeqDialect"];
+  let options =
+    [Option<"assumeInitReset", "assume-init-reset", "bool", "false",
+            "Assume registers have been reset (i.e., initialize them to their"
+            "reset value)">];
+
 }
 
 //===----------------------------------------------------------------------===//
