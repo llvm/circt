@@ -4085,6 +4085,13 @@ endmodule
 // CHECK:               [[IDXSUM:%.+]] = moore.add [[Q1LASTIDX]], [[Q2LASTEL]] : i32
 // CHECK:               [[RESVAL:%.+]] = moore.dyn_queue_extract [[QR1]] from [[IDXSUM]] to [[IDXSUM]] : <i32, 0>, i32 -> i32
 // CHECK:               moore.blocking_assign [[RES]], [[RESVAL]] : i32
+// CHECK:               [[QR1:%.+]] = moore.read [[Q1]] : <queue<i32, 0>>
+// CHECK:               [[THREE:%.+]] = moore.constant 3 : i32
+// CHECK:               [[Q1SIZE:%.+]] = moore.builtin.size [[QR1]] : <i32, 0>
+// CHECK:               [[ONE:%.+]] = moore.constant 1 : i32
+// CHECK:               [[Q1LASTIDX:%.+]] = moore.sub [[Q1SIZE]], [[ONE]] : i32
+// CHECK:               [[Q1RNGSEL:%.+]] = moore.dyn_queue_extract [[QR1]] from [[THREE]] to [[Q1LASTIDX]] : <i32, 0>, i32 -> queue<i32, 0>
+// CHECK:               moore.blocking_assign [[Q2]], [[Q1RNGSEL]] : queue<i32, 0>
 // CHECK:               moore.return
 // CHECK:           }
 // CHECK:           moore.output
@@ -4095,6 +4102,7 @@ module QueueUnboundedLiteralTest;
     int res;
     initial begin
       res = q1[$ + q2[$]];
+      q2 = q1[3:$];
     end
 endmodule
 
