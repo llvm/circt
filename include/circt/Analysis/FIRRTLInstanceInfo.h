@@ -28,6 +28,15 @@ class InstanceInfo {
 public:
   explicit InstanceInfo(Operation *op, mlir::AnalysisManager &am);
 
+  /// Return true if an instance op should be considered "under a layer" for the
+  /// purposes of metadata emission and other analyses. This includes instances
+  /// that are:
+  /// - Under a LayerBlockOp
+  /// - Under an sv::IfDefOp
+  /// - Marked with getLowerToBind()
+  /// - Marked with getDoNotPrint()
+  static bool isInstanceUnderLayer(InstanceOp inst);
+
   /// A lattice value to record the value of a property.
   class LatticeValue {
 

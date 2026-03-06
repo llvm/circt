@@ -1213,3 +1213,29 @@ circt::firrtl::parseFormatString(mlir::OpBuilder &builder, mlir::Location loc,
   formatStringResult = builder.getStringAttr(validatedFormatString);
   return mlir::success();
 }
+
+//===----------------------------------------------------------------------===//
+// Instance choice option case macro name utilities.
+//===----------------------------------------------------------------------===//
+
+circt::firrtl::InstanceChoiceMacroTable::InstanceChoiceMacroTable(
+    Operation *operation) {
+  if (auto mod = dyn_cast<mlir::ModuleOp>(operation))
+    for (auto &op : *mod.getBody())
+      if ((operation = dyn_cast<CircuitOp>(&op)))
+        break;
+
+  for (auto option : cast<CircuitOp>(operation).getOps<OptionOp>())
+    for (auto optionCase : option.getOps<OptionCaseOp>())
+      cache[{option.getSymNameAttr(), optionCase.getSymNameAttr()}] =
+          optionCase.getCaseMacroAttr();
+}
+
+FlatSymbolRefAttr
+circt::firrtl::InstanceChoiceMacroTable::getMacro(StringAttr optionName,
+                                                  StringAttr caseName) const {
+  auto it = cache.find({optionName, caseName});
+  if (it == cache.end())
+    return {};
+  return it->second;
+}

@@ -20,6 +20,8 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HierPathCache.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -50,6 +52,9 @@ struct ObjectModelIR {
       : context(circtOp->getContext()), circtOp(circtOp),
         circtNamespace(CircuitNamespace(circtOp)),
         instancePathCache(InstancePathCache(instanceGraph)),
+        hierPathCache(&circtNamespace,
+                      OpBuilder::InsertPoint(circtOp.getBodyBlock(),
+                                             circtOp.getBodyBlock()->begin())),
         instanceInfo(instanceInfo), moduleNamespaces(moduleNamespaces) {}
 
   // Add the tracker annotation to the op and get a PathOp to the op.
@@ -257,7 +262,6 @@ struct ObjectModelIR {
         return StringConstantOp::create(builderOM, strConstant);
       return {};
     };
-    auto nlaBuilder = OpBuilder::atBlockBegin(circtOp.getBodyBlock());
 
     auto memPaths = instancePathCache.getAbsolutePaths(mem);
     SmallVector<Value> memoryHierPaths;
@@ -309,11 +313,8 @@ struct ObjectModelIR {
         PathOp pathRef;
         if (!namepath.empty()) {
           // This is a path that is in the design.
-          auto nla = hw::HierPathOp::create(
-              nlaBuilder, mem->getLoc(),
-              nlaBuilder.getStringAttr(circtNamespace.newName("memNLA")),
-              nlaBuilder.getArrayAttr(namepath));
-          nla.setVisibility(SymbolTable::Visibility::Private);
+          auto nla = hierPathCache.getOrCreatePath(
+              ArrayAttr::get(context, namepath), mem->getLoc(), "memHier");
           pathRef = createPathRef(preExtractedLeafInstance, nla, builderOM);
         } else {
           // This is a path _not_ in the design.
@@ -464,12 +465,8 @@ struct ObjectModelIR {
         // The path op will refer to the leaf instance in the path (and not the
         // actual DUT module!!).
         auto leafInst = dutPath.leaf();
-        auto nlaBuilder = OpBuilder::atBlockBegin(circtOp.getBodyBlock());
-        auto nla = hw::HierPathOp::create(
-            nlaBuilder, dutMod->getLoc(),
-            nlaBuilder.getStringAttr(circtNamespace.newName("dutNLA")),
-            nlaBuilder.getArrayAttr(namepath));
-        nla.setVisibility(SymbolTable::Visibility::Private);
+        auto nla = hierPathCache.getOrCreatePath(
+            ArrayAttr::get(context, namepath), dutMod->getLoc(), "dutNLA");
         // Create the path ref op and record it.
         pathOpsToDut.emplace_back(createPathRef(leafInst, nla, builder));
       }
@@ -494,6 +491,7 @@ struct ObjectModelIR {
   CircuitOp circtOp;
   CircuitNamespace circtNamespace;
   InstancePathCache instancePathCache;
+  hw::HierPathCache hierPathCache;
   InstanceInfo &instanceInfo;
   /// Cached module namespaces.
   DenseMap<Operation *, hw::InnerSymbolNamespace> &moduleNamespaces;
@@ -553,6 +551,8 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
     Attribute symbol;
     if (auto module = dyn_cast<FModuleLike>(op))
       symbol = FlatSymbolRefAttr::get(module);
+    else if (auto hierPath = dyn_cast<hw::HierPathOp>(op))
+      symbol = FlatSymbolRefAttr::get(hierPath);
     else
       symbol = firrtl::getInnerRefTo(
           op, [&](auto mod) -> hw::InnerSymbolNamespace & {
@@ -651,43 +651,50 @@ CreateSiFiveMetadataPass::emitMemoryMetadata(ObjectModelIR &omir) {
       });
       // Record all the hierarchy names.
       jsonStream.attributeArray("hierarchy", [&] {
-        // Get the absolute path for the parent memory, to create the
-        // hierarchy names.
-        auto paths = omir.instancePathCache.getAbsolutePaths(mem);
-        for (auto p : paths) {
+        // Iterate over all paths to the memory relative to the effective DUT.
+        auto dutMod = instanceInfo->getEffectiveDut();
+        auto *dutNode = omir.instancePathCache.instanceGraph.lookup(dutMod);
+        for (auto p : omir.instancePathCache.getRelativePaths(mem, dutNode)) {
           if (p.empty())
             continue;
 
           // Only include the memory paths that are in the design.  This means
-          // that the path has to both include the design and not be under a
-          // layer.
-          auto dutMod = instanceInfo->getEffectiveDut();
-          bool inDut = false, underLayer = false;
-          for (auto inst : p) {
-            auto parent = inst->getParentOfType<FModuleOp>();
-            inDut |= parent == dutMod;
-            if (inst->getParentOfType<LayerBlockOp>())
-              underLayer = true;
-          }
-          if (!inDut || underLayer)
+          // that the path must not be under a layer.
+          if (llvm::any_of(p, [](igraph::InstanceOpInterface inst) {
+                if (auto instanceOp = dyn_cast<InstanceOp>(inst.getOperation()))
+                  return InstanceInfo::isInstanceUnderLayer(instanceOp);
+                return false;
+              }))
             continue;
 
-          auto top = p.top();
-          std::string hierName =
-              addSymbolToVerbatimOp(top->getParentOfType<FModuleOp>(),
-                                    jsonSymbols)
-                  .c_str();
-          auto finalInst = p.leaf();
+          // Build the namepath for the hierpath.  The path should go from the
+          // DUT to the final instance (the instance that contains the memory).
+          SmallVector<Attribute> namepath;
           for (auto inst : llvm::drop_end(p)) {
-            auto parentModule = inst->getParentOfType<FModuleOp>();
-            if (instanceInfo->getDut() == parentModule)
-              hierName =
-                  addSymbolToVerbatimOp(parentModule, jsonSymbols).c_str();
-
-            hierName = hierName + "." +
-                       addSymbolToVerbatimOp(inst, jsonSymbols).c_str();
+            auto instRef = firrtl::getInnerRefTo(
+                inst, [&](auto mod) -> hw::InnerSymbolNamespace & {
+                  return getModuleNamespace(mod);
+                });
+            namepath.push_back(instRef);
           }
-          hierName += ("." + finalInst.getInstanceName()).str();
+
+          // Build a manual hierarchical path using a doublet/triplet format:
+          //
+          // {{<root>}}.({{<path>}}.)?{{<leaf>}}
+          //
+          // Here <root> is the DUT module symbol, <path> is a `hw.hierpath` op
+          // (if needed), and <leaf> is the final instance name.
+          SmallString<64> hierName;
+          hierName.append(addSymbolToVerbatimOp(dutMod, jsonSymbols));
+          hierName.append(".");
+          if (!namepath.empty()) {
+            auto nla = omir.hierPathCache.getOrCreatePath(
+                ArrayAttr::get(mem->getContext(), namepath), mem->getLoc(),
+                "memHier");
+            hierName.append(addSymbolToVerbatimOp(nla, jsonSymbols));
+            hierName.append(".");
+          }
+          hierName.append(p.leaf().getInstanceName());
 
           jsonStream.value(hierName);
         }

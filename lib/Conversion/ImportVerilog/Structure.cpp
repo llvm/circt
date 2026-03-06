@@ -1256,6 +1256,14 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
   if (lowering->capturesFinalized || lowering->isConverting)
     return success();
 
+  // DPI-C imported functions are extern declarations with no Verilog body.
+  // Leave the func.func without a body region so it survives as an external
+  // symbol and calls to it are not eliminated.
+  if (subroutine.flags.has(slang::ast::MethodFlags::DPIImport)) {
+    lowering->capturesFinalized = true;
+    return success();
+  }
+
   const bool isMethod = (subroutine.thisVar != nullptr);
 
   ValueSymbolScope scope(valueSymbols);

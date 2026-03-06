@@ -39,7 +39,7 @@ circuit Foo : %[[
     input writeAddr : UInt<3>
     input writeData : UInt<32>
 
-    ; REPL-FIR:     firrtl.instance mem sym @{{[^ ]+}} {annotations = [{circt.nonlocal = @memNLA, class = "circt.tracker", id = distinct[0]<>}]} @prefix1_mem
+    ; REPL-FIR:     firrtl.instance mem sym @{{[^ ]+}} {annotations = [{circt.nonlocal = @memHier, class = "circt.tracker", id = distinct[0]<>}]} @prefix1_mem
     ; REPL-HW:      hw.instance "mem" sym @{{[^ ]+}} @prefix1_mem
     ; SIM-FIR:      firrtl.mem
     ; SIM-FIR-SAME:   name = "mem"
@@ -85,7 +85,7 @@ circuit Foo : %[[
     input writeData : UInt<32>
 
     ; REPL-FIR:     firrtl.module private @Baz
-    ; REPL-FIR-NEXT:     firrtl.instance mem sym @sym {annotations = [{circt.nonlocal = @memNLA_0, class = "circt.tracker", id = distinct[1]<>}]} @prefix2_mem
+    ; REPL-FIR-NEXT:     firrtl.instance mem sym @sym {annotations = [{circt.nonlocal = @memHier_0, class = "circt.tracker", id = distinct[1]<>}]} @prefix2_mem
     ; REPL-HW:      hw.instance "mem" sym @{{[^ ]+}} @prefix2_mem
     ; SIM-FIR:      firrtl.mem
     ; SIM-FIR-SAME:   name = "mem"
