@@ -52,6 +52,12 @@ jobs:
           fetch-depth: 1
           submodules: true
 
+      - name: Install dependencies
+        run: |
+          set -o errexit
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r frontends/PyCDE/python/requirements.txt
+
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
