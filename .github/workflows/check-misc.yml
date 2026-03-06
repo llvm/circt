@@ -1,0 +1,29 @@
+name: Miscellaneous Checks
+
+# Run miscellaneous checks on pull requests and pushes to main
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-slang-valgrind-markers:
+    name: Check Slang Tests Have Valgrind Markers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CIRCT
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+
+      - name: Check test directory
+        run: python3 utils/find_slang_tests_without_valgrind.py test
+
+      - name: Check integration_test directory
+        run: python3 utils/find_slang_tests_without_valgrind.py integration_test
+
