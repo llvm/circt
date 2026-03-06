@@ -38,6 +38,7 @@
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/GlobPattern.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
@@ -109,6 +110,20 @@ struct Options {
   cl::list<std::string> runners{"r", cl::desc("Use a specific set of runners"),
                                 cl::value_desc("name"),
                                 cl::MiscFlags::CommaSeparated, cl::cat(cat)};
+
+  cl::list<std::string> includeFilters{
+      "f", cl::desc("Include filter (<glob> or <path>=<glob>)"),
+      cl::value_desc("filter"), cl::cat(testCat)};
+
+  cl::alias includeFiltersAlias{"include", cl::aliasopt(includeFilters),
+                                cl::desc("Alias for -f")};
+
+  cl::list<std::string> excludeFilters{
+      "x", cl::desc("Exclude filter (<glob> or <path>=<glob>)"),
+      cl::value_desc("filter"), cl::cat(testCat)};
+
+  cl::alias excludeFiltersAlias{"exclude", cl::aliasopt(excludeFilters),
+                                cl::desc("Alias for -x")};
 
   cl::opt<bool> ignoreContracts{
       "ignore-contracts",
@@ -471,6 +486,124 @@ LogicalResult TestSuite::discoverTest(Test &&test, Operation *op) {
 
   tests.push_back(std::move(test));
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Test Filtering
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// A parsed test filter, used for the `-f` (include) and `-x` (exclude) CLI
+/// options. Filters can match by test name or attribute value.
+struct TestFilter {
+  enum Kind { Name, AttrValue };
+  Kind kind;
+  std::string attrPath;
+  llvm::GlobPattern pattern;
+};
+} // namespace
+
+/// Parse a filter string into a `TestFilter`. The string is one of:
+/// - `<glob>` — match test name
+/// - `<path>=<glob>` — attribute value matches glob
+static FailureOr<TestFilter> parseFilter(StringRef filter) {
+  auto eqPos = filter.find('=');
+  if (eqPos == StringRef::npos) {
+    TestFilter f;
+    f.kind = TestFilter::Name;
+    auto pat = llvm::GlobPattern::create(filter);
+    if (!pat) {
+      WithColor::error() << "invalid filter glob '" << filter
+                         << "': " << toString(pat.takeError()) << "\n";
+      return failure();
+    }
+    f.pattern = std::move(*pat);
+    return f;
+  }
+
+  auto path = filter.take_front(eqPos);
+  auto value = filter.drop_front(eqPos + 1);
+  TestFilter f;
+  f.kind = TestFilter::AttrValue;
+  f.attrPath = path.str();
+  auto pat = llvm::GlobPattern::create(value);
+  if (!pat) {
+    WithColor::error() << "invalid filter glob '" << value
+                       << "': " << toString(pat.takeError()) << "\n";
+    return failure();
+  }
+  f.pattern = std::move(*pat);
+  return f;
+}
+
+/// Walk a dotted attribute path (e.g., `config.backend`) through nested
+/// `DictionaryAttr`s, returning the leaf attribute or `nullptr`.
+static Attribute walkAttrPath(DictionaryAttr dict, StringRef path) {
+  while (!path.empty()) {
+    auto [segment, rest] = path.split('.');
+    auto attr = dict.get(segment);
+    if (!attr)
+      return nullptr;
+    if (rest.empty())
+      return attr;
+    dict = dyn_cast<DictionaryAttr>(attr);
+    if (!dict)
+      return nullptr;
+    path = rest;
+  }
+  return nullptr;
+}
+
+/// Convert an attribute to a string for glob matching.
+static std::string stringifyAttrValue(Attribute attr) {
+  if (auto s = dyn_cast<StringAttr>(attr))
+    return s.getValue().str();
+  if (auto b = dyn_cast<BoolAttr>(attr))
+    return b.getValue() ? "true" : "false";
+  if (auto i = dyn_cast<IntegerAttr>(attr)) {
+    SmallString<16> str;
+    i.getValue().toString(str, 10, /*Signed=*/true);
+    return std::string(str);
+  }
+  if (auto f = dyn_cast<FloatAttr>(attr)) {
+    SmallString<16> str;
+    f.getValue().toString(str);
+    return std::string(str);
+  }
+  std::string str;
+  llvm::raw_string_ostream os(str);
+  attr.print(os);
+  return str;
+}
+
+/// Check whether a test matches a given filter.
+static bool matchFilter(const Test &test, TestFilter &filter) {
+  switch (filter.kind) {
+  case TestFilter::Name:
+    return filter.pattern.match(test.name.getValue());
+  case TestFilter::AttrValue:
+    if (auto leaf = walkAttrPath(test.attrs, filter.attrPath))
+      return filter.pattern.match(stringifyAttrValue(leaf));
+    return false;
+  }
+  return false;
+}
+
+/// Apply include and exclude filters to the tests in the suite. A test is kept
+/// if it matches any include filter (or none are specified) and matches no
+/// exclude filter.
+static void applyFilters(TestSuite &suite,
+                         MutableArrayRef<TestFilter> includeFilters,
+                         MutableArrayRef<TestFilter> excludeFilters) {
+  for (auto &test : suite.tests) {
+    if (!includeFilters.empty() && !llvm::any_of(includeFilters, [&](auto &f) {
+          return matchFilter(test, f);
+        }))
+      test.ignore = true;
+    if (llvm::any_of(excludeFilters,
+                     [&](auto &f) { return matchFilter(test, f); }))
+      test.ignore = true;
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -963,12 +1096,34 @@ static LogicalResult executeWithHandler(MLIRContext *context,
     return success();
   }
 
+  // Parse include and exclude filters.
+  SmallVector<TestFilter> includeFilters, excludeFilters;
+  for (auto &filter : opts.includeFilters) {
+    auto parsed = parseFilter(filter);
+    if (failed(parsed))
+      return failure();
+    includeFilters.push_back(std::move(*parsed));
+  }
+  for (auto &filter : opts.excludeFilters) {
+    auto parsed = parseFilter(filter);
+    if (failed(parsed))
+      return failure();
+    excludeFilters.push_back(std::move(*parsed));
+  }
+
   // Discover all tests in the input.
   TestSuite suite(context, opts.listIgnored);
   if (failed(suite.discoverInModule(*module)))
     return failure();
   if (suite.tests.empty()) {
     llvm::errs() << "no tests discovered\n";
+    return success();
+  }
+
+  // Apply filters.
+  applyFilters(suite, includeFilters, excludeFilters);
+  if (suite.tests.empty()) {
+    llvm::errs() << "all tests excluded by filters\n";
     return success();
   }
 
