@@ -38,16 +38,15 @@ public:
     auto &instanceInfo = getAnalysis<InstanceInfo>();
     auto &instanceGraph = getAnalysis<InstanceGraph>();
 
-    // Check for nested instance choices by walking all modules
     for (auto module : circuit.getOps<FModuleOp>()) {
-      // Skip modules that are not instantiated within an instance choice
+      // Skip modules that are not instantiated within an instance choice.
       if (!instanceInfo.anyInstanceInInstanceChoice(module))
         continue;
 
-      // Find the instance graph node for this module
       auto *node = instanceGraph.lookup(module.getModuleNameAttr());
       assert(node && "module not found in instance graph");
-      // Walk the children
+
+      // Walk the children.
       for (auto *child : *node) {
         auto childOp = child->getInstance();
         if (!isa<InstanceChoiceOp>(childOp))
