@@ -126,3 +126,4 @@ fsm.machine @priority_test() -> (i1) attributes {initialState = "start"} {
     }
   }
   }
+  
