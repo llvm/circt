@@ -570,6 +570,23 @@ private:
     return width;
   }
 
+  // Calls the right function to fetch `next` operand
+  Value extractRegNext(seq::CompRegOp reg) const { return reg.getInput(); }
+  Value extractRegNext(seq::FirRegOp reg) const { return reg.getNext(); }
+
+  // Extracts the arguments from a given register op
+  template <typename RegT>
+  void extractRegArgs(RegT reg, int64_t &width, Value &next, Value &reset,
+                      Value &resetVal, Value &clk) const {
+    width = hw::getBitWidth(reg.getType());
+    reset = reg.getReset();
+    resetVal = reg.getResetValue();
+    clk = reg.getClk();
+
+    // Next is weird: same input, different function
+    next = extractRegNext(reg);
+  }
+
   // Generates the transitions required to finalize the register to state
   // transition system conversion
   void finalizeRegVisit(Operation *op) {
@@ -577,23 +594,21 @@ private:
     Value next, reset, resetVal, clk;
 
     // Extract the operands depending on the register type
-    if (auto reg = dyn_cast<seq::CompRegOp>(op)) {
-      width = hw::getBitWidth(reg.getType());
-      next = reg.getInput();
-      reset = reg.getReset();
-      resetVal = reg.getResetValue();
-      clk = reg.getClk();
-    } else if (auto reg = dyn_cast<seq::FirRegOp>(op)) {
-      width = hw::getBitWidth(reg.getType());
-      next = reg.getNext();
-      reset = reg.getReset();
-      resetVal = reg.getResetValue();
-      clk = reg.getClk();
-    } else {
-      op->emitError("Invalid register operation !");
-      return;
-    }
+    auto extract = TypeSwitch<Operation *, LogicalResult>(op)
+                       .Case<seq::CompRegOp, seq::FirRegOp>([&](auto reg) {
+                         extractRegArgs(reg, width, next, reset, resetVal, clk);
+                         return success();
+                       })
+                       .Default([&](auto) {
+                         op->emitError("Invalid register operation !");
+                         return failure();
+                       });
 
+    // Exit if an invalid register op was detected
+    if (failed(extract))
+      return;
+
+    // Check for multiple clocks
     if (foundClock) {
       if (clk != foundClock) {
         op->emitError("Multi-clock designs are not currently supported.");
