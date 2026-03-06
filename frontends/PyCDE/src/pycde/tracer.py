@@ -25,10 +25,6 @@ _LOAD_CONST_OPS = frozenset(("LOAD_CONST", "LOAD_SMALL_INT"))
 _COMBINED_LOAD_OPS = frozenset(
     ("LOAD_FAST_LOAD_FAST", "LOAD_FAST_BORROW_LOAD_FAST_BORROW"))
 
-# Standard library modules whose frames should be skipped when walking up to
-# find user code (e.g. functools.singledispatchmethod inserts a _method frame).
-_SKIP_MODULES = frozenset(("functools", "abc"))
-
 # PyCDE-internal modules where auto-naming from variable names IS desired.
 # Code in any other pycde.* module is considered "internal plumbing" and will
 # be skipped when skip_pycde is True.
@@ -60,8 +56,8 @@ def get_var_name(depth=1, skip_pycde=False):
   determine whether the result of the current call is being assigned to a
   simple local variable. Returns the variable name as a string, or None.
 
-  This deliberately returns None for attribute stores, subscript stores, tuple
-  unpacking, and any other non-trivial assignment target.
+  This deliberately returns None for attribute stores, tuple unpacking, and any
+  other non-trivial assignment target.
 
   If skip_pycde is True, returns None when the target frame belongs to pycde
   internal code (but NOT for modules on the allowlist like pycde.constructs
