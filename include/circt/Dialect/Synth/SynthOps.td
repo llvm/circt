@@ -134,4 +134,26 @@ def AndInverterOp : SynthOp<"aig.and_inv", [SameOperandsAndResultType, Pure]> {
   let cppNamespace = "::circt::synth::aig";
 }
 
+def ChoiceOp : SynthOp<"choice", [SameOperandsAndResultType, Pure]> {
+  let summary = "Synth choice operation";
+  let description = [{
+    The `synth.choice` operation represents a set of structurally equivalent
+    choices, corresponding to the choice nodes introduced in "Reducing
+    Structural Bias in Technology Mapping" (ICCAD 2005, S. Chatterjee et al.).
+
+    A compiler may assume all operands are equivalent and replace the operation
+    with any one of them at any point in the pipeline.
+
+    Example:
+    ```mlir
+      %r1 = synth.choice %a, %b : i1
+      %r2 = synth.choice %a, %b, %c : i16
+    ```
+  }];
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs AnyType:$result);
+  let hasVerifier = 1;
+  let assemblyFormat = "$inputs attr-dict `:` type($result)";
+}
+
 #endif // CIRCT_DIALECT_SYNTH_SYNTHOPS_TD
