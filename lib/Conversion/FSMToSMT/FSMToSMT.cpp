@@ -515,6 +515,8 @@ LogicalResult MachineOpConverter::dispatch() {
                     b, loc, b.getType<smt::BitVectorType>(1), newOp->getOperand(0));
 
                 prevGuardVal = bv1toSmtBool(b, loc, castVal.getResult(0));
+                
+                // Assert that the previous guard is false
                 Value negVal = smt::NotOp::create(b, loc, prevGuardVal);
                 guardVal = smt::AndOp::create(b, loc, guardVal, negVal);
                 newOp->erase();
