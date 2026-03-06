@@ -58,6 +58,10 @@ static bool checkType(const Record &typeRec, StringRef name) {
 // NOLINTNEXTLINE(misc-no-recursion)
 void tblgen::rtg::classifyOperandType(const Record &typeRec,
                                       OperandTypeSet &kinds) {
+  // Look through OpVariable's to their constraint.
+  if (typeRec.isSubClassOf("OpVariable"))
+    return classifyOperandType(*typeRec.getValueAsDef("constraint"), kinds);
+
   if (checkType(typeRec, "LabelType"))
     return kinds.appendAndUnique(Label());
   if (checkType(typeRec, "ImmediateType"))

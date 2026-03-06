@@ -255,3 +255,16 @@ def Test10_SingleBitSliceOp : TestOp<"single_bit_slice"> {
 // CHECK-NEXT:    binary.toStringUnsigned(str, 16);
 // CHECK-NEXT:    os << str;
 // CHECK-NEXT:  }
+
+def Test11_TypeVariableOp : TestOp<"type_variable"> {
+  Type regType = TestRegType;
+
+  let arguments = (ins Arg<regType, "", [DestReg]>:$rd);
+  let isaAssemblyFormat = "mnemonic ` ` $rd";
+}
+// CHECK-EMPTY:
+// CHECK-NEXT:  void TypeVariableOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
+// CHECK-NEXT:    os << getOperationName().rsplit('.').second;
+// CHECK-NEXT:    os << " ";
+// CHECK-NEXT:    os << cast<rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
+// CHECK-NEXT:  }
