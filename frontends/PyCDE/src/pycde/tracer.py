@@ -16,10 +16,15 @@ _STORE_OPS = frozenset(("STORE_FAST", "STORE_NAME", "STORE_DEREF"))
 
 # Instructions that load a variable (local, global, closure, or module-level).
 _LOAD_OPS = frozenset(
-    ("LOAD_FAST", "LOAD_GLOBAL", "LOAD_DEREF", "LOAD_NAME", "LOAD_FAST_CHECK"))
+    ("LOAD_FAST", "LOAD_GLOBAL", "LOAD_DEREF", "LOAD_NAME", "LOAD_FAST_CHECK",
+     "LOAD_FAST_BORROW"))
+
+# Instructions that load a constant value (int/str literal for subscripts).
+_LOAD_CONST_OPS = frozenset(("LOAD_CONST", "LOAD_SMALL_INT"))
 
 # Combined load instructions (Python 3.13+) that load two values at once.
-_COMBINED_LOAD_OPS = frozenset(("LOAD_FAST_LOAD_FAST",))
+_COMBINED_LOAD_OPS = frozenset(("LOAD_FAST_LOAD_FAST",
+                                "LOAD_FAST_BORROW_LOAD_FAST_BORROW"))
 
 # PyCDE-internal modules where auto-naming from variable names IS desired.
 # Code in any other pycde.* module is considered "internal plumbing" and will
@@ -72,11 +77,19 @@ def get_var_name(depth=1, skip_pycde=False):
     lasti = frame.f_lasti
     instructions = _get_instructions(frame.f_code)
 
-    # Find the instruction at the current offset (the CALL that invoked us).
+    # Find the instruction at or just before f_lasti.  In Python 3.11-3.12,
+    # f_lasti can point into a CACHE instruction gap that dis.get_instructions()
+    # hides by default, so we find the last real instruction at offset <= lasti
+    # and scan forward from the one after it.
+    call_idx = None
     for i, inst in enumerate(instructions):
-      if inst.offset == lasti:
-        # Scan forward for the first meaningful instruction after the CALL.
-        for j in range(i + 1, len(instructions)):
+      if inst.offset <= lasti:
+        call_idx = i
+      else:
+        break
+    if call_idx is not None:
+      # Scan forward for the first meaningful instruction after the CALL.
+      for j in range(call_idx + 1, len(instructions)):
           next_inst = instructions[j]
           if next_inst.opname in _STORE_OPS:
             name = next_inst.argval
@@ -114,7 +127,7 @@ def _try_subscript_name(instructions, container_idx):
       key_inst = instructions[k]
       if key_inst.opname in _SKIP_OPS:
         continue
-      if key_inst.opname == "LOAD_CONST":
+      if key_inst.opname in _LOAD_CONST_OPS:
         # int or string literal subscript
         key_val = key_inst.argval
         if isinstance(key_val, (int, str)):
