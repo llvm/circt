@@ -613,6 +613,9 @@ class ArraySignal(Signal):
       v = hw.ArrayGetOp(self.value, idx)
       if self.name and isinstance(idx, int):
         v.name = self.name + f"__{idx}"
+      var_name = get_var_name(depth=2)
+      if var_name is not None:
+        _apply_auto_name(v, var_name)
       return v
 
   @__getitem__.register(slice)
@@ -630,6 +633,9 @@ class ArraySignal(Signal):
       ret = hw.ArraySliceOp(self.value, idxs[0], ret_type)
       if self.name is not None:
         ret.name = f"{self.name}_{idxs[0]}upto{idxs[1]}"
+      var_name = get_var_name(depth=2)
+      if var_name is not None:
+        _apply_auto_name(ret, var_name)
       return ret
 
   def slice(self, low_idx: Union[int, BitVectorSignal],
@@ -725,6 +731,9 @@ class StructSignal(Signal):
         v = hw.StructExtractOp(self.value, attr)
         if self.name:
           v.name = f"{self.name}__{attr}"
+        var_name = get_var_name(depth=1)
+        if var_name is not None:
+          _apply_auto_name(v, var_name)
         return v
     raise AttributeError(f"{type(self)} object has no attribute '{attr}'")
 

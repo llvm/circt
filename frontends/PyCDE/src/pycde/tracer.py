@@ -25,6 +25,10 @@ _LOAD_CONST_OPS = frozenset(("LOAD_CONST", "LOAD_SMALL_INT"))
 _COMBINED_LOAD_OPS = frozenset(
     ("LOAD_FAST_LOAD_FAST", "LOAD_FAST_BORROW_LOAD_FAST_BORROW"))
 
+# Standard library modules whose frames should be skipped when walking up to
+# find user code (e.g. functools.singledispatchmethod inserts a _method frame).
+_SKIP_MODULES = frozenset(("functools", "abc"))
+
 # PyCDE-internal modules where auto-naming from variable names IS desired.
 # Code in any other pycde.* module is considered "internal plumbing" and will
 # be skipped when skip_pycde is True.
