@@ -5,6 +5,7 @@ requires = [
   "wheel",
   "cmake>=3.23,<4",
   "ninja>=1.10",
+  "executing",
 
   # MLIR build depends.
   "numpy",
@@ -42,7 +43,7 @@ name = "pycde"
 dynamic = ["version"]
 description = "Python CIRCT Design Entry"
 authors = [{ name = "John Demme", email = "John.Demme@microsoft.com" }]
-dependencies = ['numpy']
+dependencies = ['numpy', 'executing']
 requires-python = ">=3.10"
 
 [project.urls]
