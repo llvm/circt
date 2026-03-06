@@ -18,8 +18,10 @@
 
 #include "esi/Logging.h"
 #include "esi/Types.h"
+#include "esi/Utils.h"
 
 #include <exception>
+#include <format>
 #include <map>
 #include <memory>
 #include <vector>
@@ -51,6 +53,30 @@ public:
     if (auto f = types.find(id); f != types.end())
       return f->second.get();
     return std::nullopt;
+  }
+
+  /// Generic helper to check for existing types in the context and register new
+  /// ones. Returns an existing type if one with the same ID exists (casting to
+  /// the expected type), otherwise creates a new one.
+  template <typename T, typename... Args>
+  const T *getOrCreateType(Type::ID id, Args &&...args) {
+    std::optional<const esi::Type *> existing = getType(id);
+    if (existing) {
+      const Type *existingPtr = existing.value();
+      const auto *existingType = dynamic_cast<const T *>(existingPtr);
+      if (!existingType) {
+        throw std::runtime_error(
+            std::format("Type ID '{}' already registered with a different "
+                        "type. Expected '{}' but got '{}'",
+                        id, utils::demangle(typeid(T)),
+                        utils::demangle(typeid(*existingPtr))));
+      }
+      return existingType;
+    }
+
+    auto *newType = new T(id, std::forward<Args>(args)...);
+    registerType(newType);
+    return newType;
   }
 
   /// Register a type with the context. Takes ownership of the pointer type.
