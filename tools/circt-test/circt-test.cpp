@@ -111,6 +111,10 @@ struct Options {
                                 cl::value_desc("name"),
                                 cl::MiscFlags::CommaSeparated, cl::cat(cat)};
 
+  cl::list<std::string> configFiles{
+      "c", cl::desc("Config file (may be specified multiple times)"),
+      cl::value_desc("file"), cl::cat(cat)};
+
   cl::list<std::string> includeFilters{
       "f", cl::desc("Include filter (<glob> or <path>=<glob>)"),
       cl::value_desc("filter"), cl::cat(testCat)};
@@ -195,10 +199,10 @@ void formatDuration(raw_ostream &os, Clock::duration duration) {
 // Runners
 //===----------------------------------------------------------------------===//
 
-namespace {
 /// The various kinds of test that can be executed.
 enum class TestKind { Formal, Simulation };
 
+namespace {
 /// A program that can run tests.
 class Runner {
 public:
@@ -242,10 +246,18 @@ public:
   std::vector<Runner> runners;
 
   RunnerSuite(MLIRContext *context) : context(context) {}
+  void addRunner(Runner runner);
   void addDefaultRunners();
   LogicalResult resolve();
 };
 } // namespace
+
+/// Add a runner to the suite. If a runner with the same name already exists, it
+/// is replaced.
+void RunnerSuite::addRunner(Runner runner) {
+  llvm::erase_if(runners, [&](auto &r) { return r.name == runner.name; });
+  runners.push_back(std::move(runner));
+}
 
 /// Add the default runners to the suite. These are the runners that are defined
 /// as part of CIRCT.
@@ -315,6 +327,121 @@ LogicalResult RunnerSuite::resolve() {
     // Check if the program actually exists at that path.
     runner.available = llvm::sys::fs::can_execute(runner.binaryPath);
   });
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Config Files
+//===----------------------------------------------------------------------===//
+
+/// Deserialize a TestKind from a JSON string ("formal" or "simulation").
+static bool fromJSON(const llvm::json::Value &value, TestKind &result,
+                     llvm::json::Path path) {
+  auto str = value.getAsString();
+  if (!str) {
+    path.report("expected string");
+    return false;
+  }
+  if (*str == "formal")
+    result = TestKind::Formal;
+  else if (*str == "simulation")
+    result = TestKind::Simulation;
+  else {
+    path.report("expected `formal` or `simulation`");
+    return false;
+  }
+  return true;
+}
+
+/// Helper struct for deserializing a runner from JSON.
+struct RunnerSchema {
+  std::string name;
+  std::string binary;
+  TestKind kind;
+  bool readsMLIR = false;
+};
+
+/// Helper struct for deserializing the config file from JSON.
+struct ConfigSchema {
+  std::vector<RunnerSchema> runners;
+  std::optional<bool> useDefaultRunners;
+};
+
+static bool fromJSON(const llvm::json::Value &value, RunnerSchema &result,
+                     llvm::json::Path path) {
+  llvm::json::ObjectMapper om(value, path);
+  return om && om.map("name", result.name) && om.map("binary", result.binary) &&
+         om.map("kind", result.kind) &&
+         om.mapOptional("reads_mlir", result.readsMLIR);
+}
+
+static bool fromJSON(const llvm::json::Value &value, ConfigSchema &result,
+                     llvm::json::Path path) {
+  llvm::json::ObjectMapper om(value, path);
+  return om && om.mapOptional("runners", result.runners) &&
+         om.mapOptional("useDefaultRunners", result.useDefaultRunners);
+}
+
+namespace {
+/// Aggregated configuration from one or more config files. Each call to
+/// `parse` merges a config file's settings into this struct: runners
+/// accumulate, and later `useDefaultRunners` values override earlier ones.
+///
+/// This struct is distinct from `ConfigSchema` to separate checking the JSON
+/// input against a schema from actually building up the internal data structure
+/// to represent the config.
+struct Config {
+  /// Runners defined in config files.
+  std::vector<Runner> runners;
+  /// Whether to use the built-in default runners.
+  bool useDefaultRunners = true;
+
+  /// Parse a JSON config file and merge its settings into this config.
+  LogicalResult parse(StringRef path, MLIRContext *context);
+};
+} // namespace
+
+/// Parse a JSON config file and merge its settings into this config. The file
+/// may contain a `runners` array with runner objects and a `useDefaultRunners`
+/// boolean.
+LogicalResult Config::parse(StringRef path, MLIRContext *context) {
+  auto bufferOrErr = llvm::MemoryBuffer::getFile(path);
+  if (auto ec = bufferOrErr.getError()) {
+    WithColor::error() << "could not open config file `" << path
+                       << "`: " << ec.message() << "\n";
+    return failure();
+  }
+
+  auto json = llvm::json::parse(bufferOrErr.get()->getBuffer());
+  if (!json) {
+    WithColor::error() << "could not parse config file `" << path
+                       << "`: " << toString(json.takeError()) << "\n";
+    return failure();
+  }
+
+  // Deserialize the JSON into a ConfigSchema.
+  llvm::json::Path::Root root("");
+  ConfigSchema schema;
+  if (!fromJSON(*json, schema, root)) {
+    WithColor::error() << "config file `" << path
+                       << "`: " << toString(root.getError()) << "\n";
+    return failure();
+  }
+
+  // Merge `useDefaultRunners`. Later configs override earlier ones.
+  if (schema.useDefaultRunners)
+    useDefaultRunners = *schema.useDefaultRunners;
+
+  // Convert runner schemas into Runner objects.
+  for (auto &rs : schema.runners) {
+    Runner runner;
+    runner.name = StringAttr::get(context, rs.name);
+    runner.binary = rs.binary;
+    runner.kind = rs.kind;
+    runner.readsMLIR = rs.readsMLIR;
+    runners.push_back(std::move(runner));
+  }
+
   return success();
 }
 
@@ -1299,9 +1426,22 @@ static LogicalResult executeWithHandler(MLIRContext *context,
 /// available, all dialects have been registered, and all command line options
 /// have been parsed.
 static LogicalResult execute(MLIRContext *context) {
-  // Discover all available test runners.
+  // Parse config files.
+  Config config;
+  for (auto &configFile : opts.configFiles)
+    if (failed(config.parse(configFile, context)))
+      return failure();
+
+  // Build the runner suite from the config. Add built-in default runners
+  // unless suppressed by a config file, then add config-sourced runners.
+  // Config runners with the same name as an earlier runner replace it.
   RunnerSuite runnerSuite(context);
-  runnerSuite.addDefaultRunners();
+  if (config.useDefaultRunners)
+    runnerSuite.addDefaultRunners();
+  for (auto &runner : config.runners)
+    runnerSuite.addRunner(std::move(runner));
+
+  // Resolve runner binary paths.
   if (failed(runnerSuite.resolve()))
     return failure();
 
