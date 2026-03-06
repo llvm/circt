@@ -32,18 +32,6 @@ static std::string getGetterName(StringRef operandName) {
   return getterName;
 }
 
-// Find an operand by name in the operation's arguments
-static const NamedTypeConstraint *findOperand(const Operator &op,
-                                              StringRef operandName) {
-  for (auto arg : op.getArgs()) {
-    if (auto *operand = dyn_cast<NamedTypeConstraint *>(arg)) {
-      if (operand->name == operandName)
-        return operand;
-    }
-  }
-  return nullptr;
-}
-
 //===----------------------------------------------------------------------===//
 // FormatParser Implementation
 //===----------------------------------------------------------------------===//
@@ -251,41 +239,11 @@ void FormatParser::parseAndAppendToContext(llvm::SMLoc loc, StringRef format) {
 // Resolve Operands
 //===----------------------------------------------------------------------===//
 
-// Helper to classify a type and add it to the kinds set
-// NOLINTNEXTLINE(misc-no-recursion)
-static void classifyAndAddType(const llvm::Record &typeDef,
-                               DenseSet<OperandType> &kinds) {
-  StringRef typeName = typeDef.getName();
-
-  if (typeName == "LabelType" || typeDef.isSubClassOf("LabelType")) {
-    kinds.insert(OperandType::Label);
-    return;
-  }
-
-  if (typeName == "ImmediateType" || typeName == "ImmediateOfWidth" ||
-      typeDef.isSubClassOf("ImmediateType") ||
-      typeDef.isSubClassOf("ImmediateOfWidth")) {
-    kinds.insert(OperandType::Immediate);
-    return;
-  }
-
-  if (typeDef.isSubClassOf("RegisterTypeBase")) {
-    kinds.insert(OperandType::Register);
-    return;
-  }
-
-  if (typeName == "AnyTypeOf" || typeDef.isSubClassOf("AnyTypeOf")) {
-    auto allowedTypes = typeDef.getValueAsListOfDefs("allowedTypes");
-    for (const llvm::Record *allowedType : allowedTypes)
-      classifyAndAddType(*allowedType, kinds);
-  }
-}
-
 // Resolve the operand types and fill in the 'kinds' field of the
 // OperandNode.
 static void resolveOperand(ASTContext &ctx, OperandNode *operandNode) {
   const NamedTypeConstraint *namedOperand =
-      findOperand(ctx.getOp(), operandNode->getName());
+      findOperandByName(ctx.getOp(), operandNode->getName());
   if (!namedOperand)
     PrintFatalError(operandNode->getLoc(),
                     "unknown operand '$" + operandNode->getName() + "'");
@@ -295,18 +253,13 @@ static void resolveOperand(ASTContext &ctx, OperandNode *operandNode) {
     return;
 
   const llvm::Record &typeDef = namedOperand->constraint.getDef();
-  classifyAndAddType(typeDef, operandNode->kinds);
+  classifyOperandType(typeDef, operandNode->kinds);
 
   if (operandNode->kinds.empty())
     PrintFatalError(operandNode->getLoc(),
                     "failed to classify ISA type for operand '" +
                         operandNode->getName() + "' with type '" +
                         typeDef.getName() + "'");
-
-  if (operandNode->kinds.contains(OperandType::Register) &&
-      typeDef.isSubClassOf("RegisterTypeBase"))
-    operandNode->registerBinaryEncodingWidth =
-        typeDef.getValueAsInt("binaryEncodingWidth");
 }
 
 //===----------------------------------------------------------------------===//
@@ -335,7 +288,7 @@ static void verifyAssemblyFormat(ASTContext &ctx, BinaryLiteralNode *node) {
 static void verifyAssemblyFormat(ASTContext &ctx, OperandNode *node) {
   resolveOperand(ctx, node);
 
-  if (node->kinds.contains(OperandType::Immediate)) {
+  if (node->kinds.contains<Immediate, AnyImmediate>()) {
     if (!isa_and_nonnull<SignednessNode>(node->parent))
       PrintFatalError(node->getLoc(),
                       "immediate operand '$" + node->getName() +
@@ -350,12 +303,12 @@ static void verifyAssemblyFormat(ASTContext &ctx, SignednessNode *node) {
   // Check that wrapped operands are immediates
   if (operandNode->kinds.size() == 1) {
     OperandType kind = *operandNode->kinds.begin();
-    if (kind == OperandType::Label)
+    if (std::holds_alternative<Label>(kind))
       PrintFatalError(operandNode->getLoc(),
                       "label operand '$" + operandNode->getName() +
                           "' cannot be wrapped in signed() or unsigned()");
 
-    if (kind == OperandType::Register)
+    if (std::holds_alternative<Register>(kind))
       PrintFatalError(operandNode->getLoc(),
                       "register operand '$" + operandNode->getName() +
                           "' cannot be wrapped in signed() or unsigned()");
@@ -403,22 +356,23 @@ void BinaryFormatGen::genDecl(OperandNode *node) {
         node->getLoc(),
         "more than 2 operand types per operand not supported in binary format");
 
-  if (node->kinds.size() == 2 && !node->kinds.contains(OperandType::Label))
+  if (node->kinds.size() == 2 && !node->kinds.contains<Label>())
     PrintFatalError(node->getLoc(),
                     "one of the operand types must be a label in binary format "
                     "if there are 2 operand types possible");
 
-  if (node->kinds.contains(OperandType::Label))
+  if (node->kinds.contains<Label>())
     os << "  assert(!isa<rtg::LabelAttr>(adaptor." << getterName
        << "()) && \"labels not supported in binary format\");\n";
 
   if (decls.insert(node->getName()).second) {
     os << "  llvm::APInt " << node->getName();
-    if (node->kinds.contains(OperandType::Register))
-      os << " = llvm::APInt(" << node->registerBinaryEncodingWidth
+    if (node->kinds.contains<Register>())
+      os << " = llvm::APInt("
+         << std::get<Register>(node->kinds[0]).binaryEncodingWidth
          << ", cast<rtg::RegisterAttrInterface>(adaptor." + getterName +
                 "()).getClassIndex());\n";
-    else if (node->kinds.contains(OperandType::Immediate))
+    else if (node->kinds.contains<Immediate, AnyImmediate>())
       os << " = cast<rtg::ImmediateAttr>(adaptor." + getterName +
                 "()).getValue();\n";
     else
@@ -444,7 +398,7 @@ static bool hasOperandThatIsLabelOnly(ASTContext &ctx) {
   return llvm::any_of(ctx.nodes(), [](const FormatNode *node) {
     if (auto *operandNode = dyn_cast<OperandNode>(node)) {
       return operandNode->kinds.size() == 1 &&
-             operandNode->kinds.contains(OperandType::Label);
+             operandNode->kinds.contains<Label>();
     }
     return false;
   });
@@ -560,19 +514,19 @@ void AssemblyFormatGen::gen(OperandNode *node) {
 
   os << "  ";
 
-  if (node->kinds.contains(OperandType::Label)) {
+  if (node->kinds.contains<Label>()) {
     if (needsDynCast && !isFirst)
       os << "  } else ";
     printLabel(os, getterName, needsDynCast);
     isFirst = false;
   }
-  if (node->kinds.contains(OperandType::Register)) {
+  if (node->kinds.contains<Register>()) {
     if (needsDynCast && !isFirst)
       os << "  } else ";
     printRegister(os, getterName, needsDynCast);
     isFirst = false;
   }
-  if (node->kinds.contains(OperandType::Immediate)) {
+  if (node->kinds.contains<Immediate>()) {
     assert(node->parent != nullptr &&
            "verifiers must make sure immediate operands are wrapped in "
            "signedness node");

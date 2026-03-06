@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "RTGInstructionFormat.h"
+#include "RTGInstructionUtils.h"
 #include "mlir/TableGen/GenInfo.h"
 #include "mlir/TableGen/Operator.h"
 #include "llvm/ADT/SmallVector.h"
@@ -24,22 +25,7 @@
 using namespace llvm;
 using namespace mlir;
 using namespace mlir::tblgen;
-
-//===----------------------------------------------------------------------===//
-// Decorators
-//===----------------------------------------------------------------------===//
-
-namespace {
-// Helper class to represent a register effect decorator.
-class RegisterEffect : public Operator::VariableDecorator {
-public:
-  StringRef getEffectName() const { return def->getValueAsString("effect"); }
-
-  static bool classof(const Operator::VariableDecorator *var) {
-    return var->getDef().isSubClassOf("RegisterEffect");
-  }
-};
-} // namespace
+using namespace circt::tblgen::rtg;
 
 //===----------------------------------------------------------------------===//
 // Code Generation
@@ -52,19 +38,7 @@ static void genRegisterAllocationMethodsForOp(const Record *opDef,
   Operator op(opDef);
 
   // Check if this op implements RegisterAllocationOpInterface
-  bool hasInterface = false;
-  for (const auto &trait : op.getTraits()) {
-    if (auto *iTrait = dyn_cast<InterfaceTrait>(&trait)) {
-      std::string traitName = iTrait->getFullyQualifiedTraitName();
-      if (traitName.find("circt::rtg::RegisterAllocationOpInterface") !=
-          std::string::npos) {
-        hasInterface = true;
-        break;
-      }
-    }
-  }
-
-  if (!hasInterface)
+  if (!hasRegisterAllocationOpInterface(op))
     return;
 
   // Collect source and destination register indices

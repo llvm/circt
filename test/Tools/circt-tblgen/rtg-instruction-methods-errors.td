@@ -27,8 +27,6 @@
 // NOTE: extra space to add run commands without having to change the source locations in each test
 
 
-
-
 include "circt/Dialect/RTG/IR/RTGISAAssemblyInterfaces.td"
 include "circt/Dialect/RTG/IR/RTGTypes.td"
 include "mlir/IR/OpBase.td"
@@ -42,6 +40,8 @@ class TestOp<string mnemonic> : Op<TestDialect, mnemonic, [InstructionOpInterfac
 
 def TestRegType : Type<CPred<"true">, "test register">, RegisterTypeBase {
   let binaryEncodingWidth = 5;
+  let pythonName = "TestReg";
+  let pythonTypeName = "TestRegType";
 }
 
 #ifdef TEST_IMM_NO_WRAPPER
