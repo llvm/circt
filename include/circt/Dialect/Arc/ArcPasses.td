@@ -182,6 +182,28 @@ def LowerArcsToFuncs : Pass<"arc-lower-arcs-to-funcs", "mlir::ModuleOp"> {
   let dependentDialects = ["mlir::func::FuncDialect", "mlir::LLVM::LLVMDialect"];
 }
 
+def LowerProcesses : Pass<"arc-lower-processes", "mlir::ModuleOp"> {
+  let summary = "Lower LLHD processes into Arc state and control flow";
+  let description = [{
+    This pass lowers `llhd.process` operations into Arc state allocations and
+    control flow. Each process is transformed into:
+    - State allocations for resume_time (i64), resume_block (i16), and proc_result
+    - Control flow using scf.if, scf.execute_region, and cf.switch
+    - Lowering of llhd.wait and llhd.halt terminators
+
+    Only basic processes with time-based delays are supported. Processes with
+    block operands on llhd.wait or unsupported LLHD operations are rejected.
+  }];
+  let constructor = "circt::arc::createLowerProcessesPass()";
+  let dependentDialects = [
+    "arc::ArcDialect",
+    "mlir::arith::ArithDialect",
+    "mlir::cf::ControlFlowDialect",
+    "mlir::scf::SCFDialect",
+    "comb::CombDialect"
+  ];
+}
+
 def LowerClocksToFuncs : Pass<"arc-lower-clocks-to-funcs", "mlir::ModuleOp"> {
   let summary = "Lower clock trees into functions";
   let constructor = "circt::arc::createLowerClocksToFuncsPass()";

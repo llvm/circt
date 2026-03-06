@@ -512,7 +512,6 @@ def SigStructExtractOp : LLHDOp<"sig.struct_extract", [
 //===----------------------------------------------------------------------===//
 
 def ProcessOp : LLHDOp<"process", [
-  HasParent<"hw::HWModuleOp">,
   NoRegionArguments,
   ProceduralRegion,
   RecursiveMemoryEffects,

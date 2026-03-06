@@ -13,6 +13,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   LowerArcsToFuncs.cpp
   LowerClocksToFuncs.cpp
   LowerLUT.cpp
+  LowerProcesses.cpp
   LowerState.cpp
   LowerVectorizations.cpp
   LowerVerifSimulations.cpp

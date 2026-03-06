@@ -108,6 +108,9 @@ void circt::populateArcStateLoweringPipeline(
     OpPassManager &pm, const ArcStateLoweringOptions &options) {
   pm.addPass(arc::createLowerStatePass());
 
+  // Lower LLHD processes to Arc state operations
+  pm.addPass(arc::createLowerProcessesPass());
+
   // TODO: LowerClocksToFuncsPass might not properly consider scf.if operations
   // (or nested regions in general) and thus errors out when muxes are also
   // converted in the hw.module or arc.model
