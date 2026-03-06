@@ -28,7 +28,7 @@ def Test1_BasicRegisterOp : TestOp<"basic_register"> {
 // CHECK-LABEL: void BasicRegisterOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
 // CHECK-NEXT:    os << getOperationName().rsplit('.').second;
 // CHECK-NEXT:    os << " ";
-// CHECK-NEXT:    os << cast<rtg::RegisterAttrInterface>(adaptor.getRs()).getRegisterAssembly();
+// CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRs()).getRegisterAssembly();
 // CHECK-NEXT:  }
 // CHECK-EMPTY:
 // CHECK-NEXT:  void BasicRegisterOp::printInstructionBinary(llvm::raw_ostream &os, FoldAdaptor adaptor) {
@@ -44,9 +44,9 @@ def Test2_MultipleRegistersOp : TestOp<"multiple_registers"> {
 // CHECK-NEXT:  void MultipleRegistersOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
 // CHECK-NEXT:    os << getOperationName().rsplit('.').second;
 // CHECK-NEXT:    os << " ";
-// CHECK-NEXT:    os << cast<rtg::RegisterAttrInterface>(adaptor.getRs1()).getRegisterAssembly();
+// CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRs1()).getRegisterAssembly();
 // CHECK-NEXT:    os << ", ";
-// CHECK-NEXT:    os << cast<rtg::RegisterAttrInterface>(adaptor.getRs2()).getRegisterAssembly();
+// CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRs2()).getRegisterAssembly();
 // CHECK-NEXT:  }
 // CHECK-EMPTY:
 // CHECK-NEXT:  void MultipleRegistersOp::printInstructionBinary(llvm::raw_ostream &os, FoldAdaptor adaptor) {
@@ -61,11 +61,11 @@ def Test3_AnyTypeImmOrLabelOp : TestOp<"anytype_imm_or_label"> {
 // CHECK-NEXT:  void AnyTypeImmOrLabelOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
 // CHECK-NEXT:    os << getOperationName().rsplit('.').second;
 // CHECK-NEXT:    os << " ";
-// CHECK-NEXT:    if (auto label = dyn_cast<rtg::LabelAttr>(adaptor.getOffset())) {
+// CHECK-NEXT:    if (auto label = ::llvm::dyn_cast<::circt::rtg::LabelAttr>(adaptor.getOffset())) {
 // CHECK-NEXT:      os << label.getName();
-// CHECK-NEXT:    } else if (auto imm = dyn_cast<rtg::ImmediateAttr>(adaptor.getOffset())) {
+// CHECK-NEXT:    } else if (auto imm = ::llvm::dyn_cast<::circt::rtg::ImmediateAttr>(adaptor.getOffset())) {
 // CHECK-NEXT:      {
-// CHECK-NEXT:        SmallVector<char> strBuf;
+// CHECK-NEXT:        ::llvm::SmallVector<char> strBuf;
 // CHECK-NEXT:        imm.getValue().toStringUnsigned(strBuf);
 // CHECK-NEXT:        os << strBuf;
 // CHECK-NEXT:      }
@@ -86,20 +86,20 @@ def Test4_ImmSlicingOp : TestOp<"imm_slicing"> {
 // CHECK-NEXT:  void ImmSlicingOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
 // CHECK-NEXT:    os << getOperationName().rsplit('.').second;
 // CHECK-NEXT:    os << " ";
-// CHECK-NEXT:    os << cast<rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
+// CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
 // CHECK-NEXT:    os << ", ";
 // CHECK-NEXT:    {
-// CHECK-NEXT:      SmallVector<char> strBuf;
-// CHECK-NEXT:      cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue().toStringUnsigned(strBuf);
+// CHECK-NEXT:      ::llvm::SmallVector<char> strBuf;
+// CHECK-NEXT:      ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getImm()).getValue().toStringUnsigned(strBuf);
 // CHECK-NEXT:      os << strBuf;
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 // CHECK-EMPTY:
 // CHECK-NEXT:  void ImmSlicingOp::printInstructionBinary(llvm::raw_ostream &os, FoldAdaptor adaptor) {
-// CHECK-NEXT:    llvm::APInt imm = cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue();
-// CHECK-NEXT:    llvm::APInt rd = llvm::APInt(5, cast<rtg::RegisterAttrInterface>(adaptor.getRd()).getClassIndex());
+// CHECK-NEXT:    ::llvm::APInt imm = ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getImm()).getValue();
+// CHECK-NEXT:    ::llvm::APInt rd = ::llvm::APInt(5, ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRd()).getClassIndex());
 // CHECK-EMPTY:
-// CHECK-NEXT:    llvm::APInt binary = llvm::APInt::getZero(0);
+// CHECK-NEXT:    ::llvm::APInt binary = llvm::APInt::getZero(0);
 // CHECK-NEXT:    binary = binary.concat(imm.extractBits(8, 12));
 // CHECK-NEXT:    binary = binary.concat(imm.extractBits(1, 11));
 // CHECK-NEXT:    binary = binary.concat(imm.extractBits(10, 1));
@@ -107,7 +107,7 @@ def Test4_ImmSlicingOp : TestOp<"imm_slicing"> {
 // CHECK-NEXT:    binary = binary.concat(rd);
 // CHECK-NEXT:    binary = binary.concat(llvm::APInt(7, 55));
 // CHECK-EMPTY:
-// CHECK-NEXT:    llvm::SmallVector<char> str;
+// CHECK-NEXT:    ::llvm::SmallVector<char> str;
 // CHECK-NEXT:    binary.toStringUnsigned(str, 16);
 // CHECK-NEXT:    os << str;
 // CHECK-NEXT:  }
@@ -120,7 +120,7 @@ def Test5_LabelOnlyOp : TestOp<"label_only"> {
 // CHECK-NEXT:  void LabelOnlyOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
 // CHECK-NEXT:    os << getOperationName().rsplit('.').second;
 // CHECK-NEXT:    os << " ";
-// CHECK-NEXT:    os << cast<rtg::LabelAttr>(adaptor.getTarget()).getName();
+// CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::LabelAttr>(adaptor.getTarget()).getName();
 // CHECK-NEXT:  }
 // CHECK-EMPTY:
 // CHECK-NEXT:  void LabelOnlyOp::printInstructionBinary(llvm::raw_ostream &os, FoldAdaptor adaptor) {
@@ -138,25 +138,25 @@ def Test6_MixedRegSlicingOp : TestOp<"mixed_reg_slicing"> {
 // CHECK-NEXT:  void MixedRegSlicingOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
 // CHECK-NEXT:    os << getOperationName().rsplit('.').second;
 // CHECK-NEXT:    os << " ";
-// CHECK-NEXT:    os << cast<rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
+// CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
 // CHECK-NEXT:    os << ", ";
-// CHECK-NEXT:    os << cast<rtg::RegisterAttrInterface>(adaptor.getRs1()).getRegisterAssembly();
+// CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRs1()).getRegisterAssembly();
 // CHECK-NEXT:    os << ", ";
-// CHECK-NEXT:    os << cast<rtg::RegisterAttrInterface>(adaptor.getRs2()).getRegisterAssembly();
+// CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRs2()).getRegisterAssembly();
 // CHECK-NEXT:  }
 // CHECK-EMPTY:
 // CHECK-NEXT:  void MixedRegSlicingOp::printInstructionBinary(llvm::raw_ostream &os, FoldAdaptor adaptor) {
-// CHECK-NEXT:    llvm::APInt rs1 = llvm::APInt(5, cast<rtg::RegisterAttrInterface>(adaptor.getRs1()).getClassIndex());
-// CHECK-NEXT:    llvm::APInt rs2 = llvm::APInt(5, cast<rtg::RegisterAttrInterface>(adaptor.getRs2()).getClassIndex());
-// CHECK-NEXT:    llvm::APInt rd = llvm::APInt(5, cast<rtg::RegisterAttrInterface>(adaptor.getRd()).getClassIndex());
+// CHECK-NEXT:    ::llvm::APInt rs1 = ::llvm::APInt(5, ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRs1()).getClassIndex());
+// CHECK-NEXT:    ::llvm::APInt rs2 = ::llvm::APInt(5, ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRs2()).getClassIndex());
+// CHECK-NEXT:    ::llvm::APInt rd = ::llvm::APInt(5, ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRd()).getClassIndex());
 // CHECK-EMPTY:
-// CHECK-NEXT:    llvm::APInt binary = llvm::APInt::getZero(0);
+// CHECK-NEXT:    ::llvm::APInt binary = llvm::APInt::getZero(0);
 // CHECK-NEXT:    binary = binary.concat(rs1.extractBits(4, 0));
 // CHECK-NEXT:    binary = binary.concat(rs2);
 // CHECK-NEXT:    binary = binary.concat(rd.extractBits(3, 2));
 // CHECK-NEXT:    binary = binary.concat(llvm::APInt(3, 7));
 // CHECK-EMPTY:
-// CHECK-NEXT:    llvm::SmallVector<char> str;
+// CHECK-NEXT:    ::llvm::SmallVector<char> str;
 // CHECK-NEXT:    binary.toStringUnsigned(str, 16);
 // CHECK-NEXT:    os << str;
 // CHECK-NEXT:  }
@@ -170,11 +170,11 @@ def Test7_SignedImmediateOp : TestOp<"signed_immediate"> {
 // CHECK-NEXT:  void SignedImmediateOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
 // CHECK-NEXT:    os << getOperationName().rsplit('.').second;
 // CHECK-NEXT:    os << " ";
-// CHECK-NEXT:    os << cast<rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
+// CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
 // CHECK-NEXT:    os << ", ";
 // CHECK-NEXT:    {
-// CHECK-NEXT:      SmallVector<char> strBuf;
-// CHECK-NEXT:      cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue().toStringSigned(strBuf);
+// CHECK-NEXT:      ::llvm::SmallVector<char> strBuf;
+// CHECK-NEXT:      ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getImm()).getValue().toStringSigned(strBuf);
 // CHECK-NEXT:      os << strBuf;
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
@@ -193,7 +193,7 @@ def Test8_StringLiteralOp : TestOp<"string_literal"> {
 // CHECK-NEXT:    os << getOperationName().rsplit('.').second;
 // CHECK-NEXT:    os << " ";
 // CHECK-NEXT:    os << "0x";
-// CHECK-NEXT:    os << cast<rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
+// CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
 // CHECK-NEXT:  }
 // CHECK-EMPTY:
 // CHECK-NEXT:  void StringLiteralOp::printInstructionBinary(llvm::raw_ostream &os, FoldAdaptor adaptor) {
@@ -209,13 +209,13 @@ def Test9_AnyTypeRegOrImmOp : TestOp<"anytype_reg_or_imm"> {
 // CHECK-NEXT:  void AnyTypeRegOrImmOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
 // CHECK-NEXT:    os << getOperationName().rsplit('.').second;
 // CHECK-NEXT:    os << " ";
-// CHECK-NEXT:    os << cast<rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
+// CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
 // CHECK-NEXT:    os << ", ";
-// CHECK-NEXT:    if (auto reg = dyn_cast<rtg::RegisterAttrInterface>(adaptor.getSrc())) {
+// CHECK-NEXT:    if (auto reg = ::llvm::dyn_cast<::circt::rtg::RegisterAttrInterface>(adaptor.getSrc())) {
 // CHECK-NEXT:      os << reg.getRegisterAssembly();
-// CHECK-NEXT:    } else if (auto imm = dyn_cast<rtg::ImmediateAttr>(adaptor.getSrc())) {
+// CHECK-NEXT:    } else if (auto imm = ::llvm::dyn_cast<::circt::rtg::ImmediateAttr>(adaptor.getSrc())) {
 // CHECK-NEXT:      {
-// CHECK-NEXT:        SmallVector<char> strBuf;
+// CHECK-NEXT:        ::llvm::SmallVector<char> strBuf;
 // CHECK-NEXT:        imm.getValue().toStringUnsigned(strBuf);
 // CHECK-NEXT:        os << strBuf;
 // CHECK-NEXT:      }
@@ -237,21 +237,21 @@ def Test10_SingleBitSliceOp : TestOp<"single_bit_slice"> {
 // CHECK-NEXT:    os << getOperationName().rsplit('.').second;
 // CHECK-NEXT:    os << " ";
 // CHECK-NEXT:    {
-// CHECK-NEXT:    SmallVector<char> strBuf;
-// CHECK-NEXT:    cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue().toStringUnsigned(strBuf);
+// CHECK-NEXT:    ::llvm::SmallVector<char> strBuf;
+// CHECK-NEXT:    ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getImm()).getValue().toStringUnsigned(strBuf);
 // CHECK-NEXT:    os << strBuf;
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 // CHECK-EMPTY:
 // CHECK-NEXT:  void SingleBitSliceOp::printInstructionBinary(llvm::raw_ostream &os, FoldAdaptor adaptor) {
-// CHECK-NEXT:    llvm::APInt imm = cast<rtg::ImmediateAttr>(adaptor.getImm()).getValue();
+// CHECK-NEXT:    ::llvm::APInt imm = ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getImm()).getValue();
 // CHECK-EMPTY:
-// CHECK-NEXT:    llvm::APInt binary = llvm::APInt::getZero(0);
+// CHECK-NEXT:    ::llvm::APInt binary = llvm::APInt::getZero(0);
 // CHECK-NEXT:    binary = binary.concat(imm.extractBits(1, 7));
 // CHECK-NEXT:    binary = binary.concat(imm.extractBits(1, 0));
 // CHECK-NEXT:    binary = binary.concat(llvm::APInt(2, 3));
 // CHECK-EMPTY:
-// CHECK-NEXT:    llvm::SmallVector<char> str;
+// CHECK-NEXT:    ::llvm::SmallVector<char> str;
 // CHECK-NEXT:    binary.toStringUnsigned(str, 16);
 // CHECK-NEXT:    os << str;
 // CHECK-NEXT:  }

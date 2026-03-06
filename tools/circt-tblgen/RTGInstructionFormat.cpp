@@ -362,19 +362,19 @@ void BinaryFormatGen::genDecl(OperandNode *node) {
                     "if there are 2 operand types possible");
 
   if (node->kinds.contains<Label>())
-    os << "  assert(!isa<rtg::LabelAttr>(adaptor." << getterName
-       << "()) && \"labels not supported in binary format\");\n";
+    os << "  assert(!::llvm::isa<::circt::rtg::LabelAttr>(adaptor."
+       << getterName << "()) && \"labels not supported in binary format\");\n";
 
   if (decls.insert(node->getName()).second) {
-    os << "  llvm::APInt " << node->getName();
+    os << "  ::llvm::APInt " << node->getName();
     if (node->kinds.contains<Register>())
-      os << " = llvm::APInt("
+      os << " = ::llvm::APInt("
          << std::get<Register>(node->kinds[0]).binaryEncodingWidth
-         << ", cast<rtg::RegisterAttrInterface>(adaptor." + getterName +
-                "()).getClassIndex());\n";
+         << ", ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor."
+         << getterName << "()).getClassIndex());\n";
     else if (node->kinds.contains<Immediate, AnyImmediate>())
-      os << " = cast<rtg::ImmediateAttr>(adaptor." + getterName +
-                "()).getValue();\n";
+      os << " = ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor."
+         << getterName << "()).getValue();\n";
     else
       PrintFatalError(node->getLoc(),
                       "unsupported operand type in binary format");
@@ -423,7 +423,7 @@ void BinaryFormatGen::genInstructionMethod(ASTContext &ctx,
   }
 
   os << "\n";
-  os << "  llvm::APInt binary = llvm::APInt::getZero(0);\n";
+  os << "  ::llvm::APInt binary = llvm::APInt::getZero(0);\n";
 
   for (auto *node : ctx.nodes()) {
     TypeSwitch<FormatNode *>(node)
@@ -434,7 +434,7 @@ void BinaryFormatGen::genInstructionMethod(ASTContext &ctx,
   }
 
   os << "\n";
-  os << "  llvm::SmallVector<char> str;\n";
+  os << "  ::llvm::SmallVector<char> str;\n";
   os << "  binary.toStringUnsigned(str, 16);\n";
   os << "  os << str;\n";
   os << "}\n\n";
@@ -448,11 +448,11 @@ void BinaryFormatGen::genInstructionMethod(ASTContext &ctx,
 static void printLabel(raw_ostream &os, StringRef getterName,
                        bool needsDynCast) {
   if (needsDynCast) {
-    os << "if (auto label = dyn_cast<rtg::LabelAttr>(adaptor." << getterName
-       << "())) {\n";
+    os << "if (auto label = ::llvm::dyn_cast<::circt::rtg::LabelAttr>(adaptor."
+       << getterName << "())) {\n";
     os << "    os << label.getName();\n";
   } else {
-    os << "os << cast<rtg::LabelAttr>(adaptor." << getterName
+    os << "os << ::llvm::cast<::circt::rtg::LabelAttr>(adaptor." << getterName
        << "()).getName();\n";
   }
 }
@@ -461,12 +461,13 @@ static void printLabel(raw_ostream &os, StringRef getterName,
 static void printRegister(raw_ostream &os, StringRef getterName,
                           bool needsDynCast) {
   if (needsDynCast) {
-    os << "if (auto reg = dyn_cast<rtg::RegisterAttrInterface>(adaptor."
+    os << "if (auto reg = "
+          "::llvm::dyn_cast<::circt::rtg::RegisterAttrInterface>(adaptor."
        << getterName << "())) {\n";
     os << "    os << reg.getRegisterAssembly();\n";
   } else {
-    os << "os << cast<rtg::RegisterAttrInterface>(adaptor." << getterName
-       << "()).getRegisterAssembly();\n";
+    os << "os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor."
+       << getterName << "()).getRegisterAssembly();\n";
   }
 }
 
@@ -474,18 +475,19 @@ static void printRegister(raw_ostream &os, StringRef getterName,
 static void printImmediate(raw_ostream &os, StringRef getterName, bool isSigned,
                            bool needsDynCast) {
   if (needsDynCast) {
-    os << "if (auto imm = dyn_cast<rtg::ImmediateAttr>(adaptor." << getterName
-       << "())) {\n";
+    os << "if (auto imm = "
+          "::llvm::dyn_cast<::circt::rtg::ImmediateAttr>(adaptor."
+       << getterName << "())) {\n";
     os << "    {\n";
-    os << "      SmallVector<char> strBuf;\n";
+    os << "      ::llvm::SmallVector<char> strBuf;\n";
     os << "      imm.getValue().toString" << (isSigned ? "Signed" : "Unsigned")
        << "(strBuf);\n";
     os << "      os << strBuf;\n";
     os << "    }\n";
   } else {
     os << "{\n";
-    os << "    SmallVector<char> strBuf;\n";
-    os << "    cast<rtg::ImmediateAttr>(adaptor." << getterName
+    os << "    ::llvm::SmallVector<char> strBuf;\n";
+    os << "    ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor." << getterName
        << "()).getValue().toString" << (isSigned ? "Signed" : "Unsigned")
        << "(strBuf);\n";
     os << "    os << strBuf;\n";
