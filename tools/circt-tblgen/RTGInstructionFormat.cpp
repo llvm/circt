@@ -63,27 +63,35 @@ bool FormatParser::tryConsume(StringRef str, bool skipWhitespaceFirst) {
   return false;
 }
 
-int64_t FormatParser::parseIntLiteral() {
-  skipWhitespace();
-
+bool FormatParser::tryParseUIntLiteral(uint64_t &value) {
   size_t start = pos;
-  auto loc = getLoc();
+  size_t savedPos = pos;
 
-  // Check for optional negative sign
-  if (pos < input.size() && input[pos] == '-')
-    ++pos;
-
-  size_t digitStart = pos;
   while (pos < input.size() && isdigit(input[pos]))
     ++pos;
 
-  if (pos == digitStart)
-    PrintFatalError(loc, "expected integer literal");
+  if (pos == start) {
+    // No digits found, restore position
+    pos = savedPos;
+    return false;
+  }
 
   StringRef numStr = input.substr(start, pos - start);
-  int64_t value;
-  if (numStr.getAsInteger(0, value))
-    PrintFatalError(loc, "invalid integer literal '" + numStr + "'");
+  if (numStr.getAsInteger(10, value)) {
+    // Invalid integer, restore position
+    pos = savedPos;
+    return false;
+  }
+
+  return true;
+}
+
+uint64_t FormatParser::parseUIntLiteral() {
+  auto loc = getLoc();
+  uint64_t value;
+
+  if (!tryParseUIntLiteral(value))
+    PrintFatalError(loc, "expected unsigned integer literal");
 
   return value;
 }
@@ -156,6 +164,26 @@ FormatNode *FormatParser::parseOptionalBinaryLiteral() {
   return ctx.create<BinaryLiteralNode>(loc, value);
 }
 
+FormatNode *FormatParser::parseOptionalDecimalLiteral() {
+  auto loc = getLoc();
+
+  // Try to parse the bit width (decimal number before 'd')
+  uint64_t width;
+  if (!tryParseUIntLiteral(width))
+    return nullptr;
+
+  if (!tryConsume("d", false))
+    return nullptr;
+
+  uint64_t value = parseUIntLiteral();
+
+  if (!llvm::isUIntN(width, value))
+    PrintFatalError(loc, "decimal literal value " + Twine(value) +
+                             " does not fit in " + Twine(width) + " bits");
+
+  return ctx.create<BinaryLiteralNode>(loc, APInt(width, value));
+}
+
 FormatNode *FormatParser::parseOptionalSignednessSpecifier() {
   auto loc = getLoc();
   bool isSigned = false;
@@ -190,14 +218,10 @@ bool FormatParser::parseOptionalSlice(int64_t &highBit, int64_t &lowBit) {
   if (!tryConsume("[", false))
     return false;
 
-  highBit = parseIntLiteral();
-  lowBit = tryConsume(":") ? parseIntLiteral() : highBit;
+  highBit = parseUIntLiteral();
+  lowBit = tryConsume(":") ? parseUIntLiteral() : highBit;
 
   consume("]");
-
-  if (highBit < 0 || lowBit < 0) {
-    PrintFatalError(loc, "slice bits must be non-negative");
-  }
 
   if (highBit < lowBit)
     PrintFatalError(loc, "high bit (" + Twine(highBit) +
@@ -218,6 +242,8 @@ void FormatParser::parseAndAppendToContext(llvm::SMLoc loc, StringRef format) {
       node = parseOptionalSignednessSpecifier();
     if (!node)
       node = parseOptionalBinaryLiteral();
+    if (!node)
+      node = parseOptionalDecimalLiteral();
     if (!node)
       node = parseOptionalStringLiteral();
     if (!node)

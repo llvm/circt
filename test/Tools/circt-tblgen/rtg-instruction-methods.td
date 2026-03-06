@@ -255,3 +255,18 @@ def Test10_SingleBitSliceOp : TestOp<"single_bit_slice"> {
 // CHECK-NEXT:    binary.toStringUnsigned(str, 16);
 // CHECK-NEXT:    os << str;
 // CHECK-NEXT:  }
+
+def Test11_DecimalLiteralOp : TestOp<"decimal_literal"> {
+  let isaBinaryFormat = "3d1 7d55";
+  let isaAssemblyFormat = "`decimal-literal`";
+}
+// CHECK-EMPTY:
+// CHECK-NEXT:  void DecimalLiteralOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
+// CHECK-NEXT:    os << "decimal-literal";
+// CHECK-NEXT:  }
+// CHECK-EMPTY:
+// CHECK-NEXT:  void DecimalLiteralOp::printInstructionBinary(llvm::raw_ostream &os, FoldAdaptor adaptor) {
+// CHECK-EMPTY:
+// CHECK-NEXT:    ::llvm::APInt binary = llvm::APInt::getZero(0);
+// CHECK-NEXT:    binary = binary.concat(llvm::APInt(3, 1));
+// CHECK-NEXT:    binary = binary.concat(llvm::APInt(7, 55));
