@@ -1,6 +1,5 @@
 // RUN: circt-opt -convert-fsm-to-smt %s | FileCheck %s
 
-// RUN: circt-opt -convert-fsm-to-smt %s | FileCheck %s
 
 // CHECK: module {
 // CHECK-NEXT:   smt.solver() : () -> () {
