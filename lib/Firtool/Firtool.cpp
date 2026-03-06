@@ -452,6 +452,8 @@ LogicalResult firtool::populateHWToBTOR2(mlir::PassManager &pm,
                                          const FirtoolOptions &opt,
                                          llvm::raw_ostream &os) {
   pm.addNestedPass<hw::HWModuleOp>(circt::createLowerLTLToCorePass());
+  // LTLToCore can generate shiftregs which should be lowered before emission
+  pm.addNestedPass<hw::HWModuleOp>(circt::seq::createLowerSeqShiftRegPass());
   pm.addNestedPass<hw::HWModuleOp>(circt::verif::createPrepareForFormalPass());
   pm.addPass(circt::hw::createFlattenModules());
   pm.addPass(circt::createConvertHWToBTOR2Pass(os));
