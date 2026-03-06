@@ -1063,9 +1063,11 @@ struct StmtVisitor {
         }
       }
 
-      // `size` and `num` returns the number of elements in the associative array
-      // `num` also uses `AssocArraySizeOp` since it is functionally identical
-      if ((subroutine.name == "size" || subroutine.name == "num") && args.size() == 1) {
+      // `size` and `num` returns the number of elements in the associative
+      // array `num` also uses `AssocArraySizeOp` since it is functionally
+      // identical
+      if ((subroutine.name == "size" || subroutine.name == "num") &&
+          args.size() == 1) {
         moore::AssocArraySizeOp::create(builder, loc, assocArray);
         return true;
       }
