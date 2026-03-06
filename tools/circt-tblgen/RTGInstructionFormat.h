@@ -327,6 +327,10 @@ struct FormatParser {
   /// \return A BinaryLiteralNode if found, nullptr otherwise
   FormatNode *parseOptionalBinaryLiteral();
 
+  /// Parses decimal literals in the form "3d1" (3-bit decimal with value 1).
+  /// \return A BinaryLiteralNode if found, nullptr otherwise
+  FormatNode *parseOptionalDecimalLiteral();
+
   /// Parses "signed($operand)" or "unsigned($operand)" wrappers.
   /// \return A SignednessNode if found, nullptr otherwise
   FormatNode *parseOptionalSignednessSpecifier();
@@ -354,9 +358,13 @@ struct FormatParser {
   /// \return True if the string was consumed, false otherwise
   bool tryConsume(StringRef str, bool skipWhitespaceFirst = true);
 
-  /// Parse an integer literal at the current position.
-  /// \return The parsed integer value
-  int64_t parseIntLiteral();
+  /// Try to parse an unsigned integer literal at the current position.
+  /// \return True if an unsigned integer was parsed, false otherwise
+  bool tryParseUIntLiteral(uint64_t &value);
+
+  /// Parse an unsigned integer literal at the current position.
+  /// \return The parsed unsigned integer value
+  uint64_t parseUIntLiteral();
 
   /// Parses identifiers like "$rs" or "$imm".
   /// \return The identifier without the leading "$"

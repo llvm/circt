@@ -23,9 +23,9 @@
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_EMPTY_OPERAND_NAME 2>&1 | FileCheck %s --check-prefix=EMPTY_OPERAND_NAME
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_MISSING_CLOSING_BRACKET 2>&1 | FileCheck %s --check-prefix=MISSING_CLOSING_BRACKET
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_ANYTYPE_MUST_CONTAIN_LABEL 2>&1 | FileCheck %s --check-prefix=ANYTYPE_MUST_CONTAIN_LABEL
+// RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_DECIMAL_LITERAL_OVERFLOW 2>&1 | FileCheck %s --check-prefix=DECIMAL_LITERAL_OVERFLOW
 
 // NOTE: extra space to add run commands without having to change the source locations in each test
-
 
 include "circt/Dialect/RTG/IR/RTGISAAssemblyInterfaces.td"
 include "circt/Dialect/RTG/IR/RTGTypes.td"
@@ -125,7 +125,7 @@ def ErrorMalformedBitSliceOp : TestOp<"error_malformed_bit_slice"> {
   let isaBinaryFormat = "$imm[:5] 0b1111";
   let isaAssemblyFormat = "mnemonic ` ` signed($imm)";
 }
-// MALFORMED_BIT_SLICE: rtg-instruction-methods-errors.td:125:31: error: expected integer literal
+// MALFORMED_BIT_SLICE: rtg-instruction-methods-errors.td:125:31: error: expected unsigned integer literal
 #endif
 
 #ifdef TEST_UNTERMINATED_BACKTICK
@@ -174,7 +174,7 @@ def ErrorNegativeBitSliceOp : TestOp<"error_negative_bit_slice"> {
   let isaBinaryFormat = "$imm[-1:5] 0b1111";
   let isaAssemblyFormat = "mnemonic ` ` signed($imm)";
 }
-// NEGATIVE_BIT_SLICE: rtg-instruction-methods-errors.td:174:30: error: slice bits must be non-negative
+// NEGATIVE_BIT_SLICE: rtg-instruction-methods-errors.td:174:31: error: expected unsigned integer literal
 #endif
 
 #ifdef TEST_MNEMONIC_IN_BINARY
@@ -254,4 +254,13 @@ def ErrorAnyTypeMustContainLabelOp : TestOp<"error_anytype_must_contain_label"> 
   let isaAssemblyFormat = "mnemonic ` ` unsigned($src)";
 }
 // ANYTYPE_MUST_CONTAIN_LABEL: rtg-instruction-methods-errors.td:253:26: error: one of the operand types must be a label in binary format if there are 2 operand types possible
+#endif
+
+#ifdef TEST_DECIMAL_LITERAL_OVERFLOW
+def ErrorDecimalLiteralOverflowOp : TestOp<"error_decimal_literal_overflow"> {
+  let arguments = (ins TestRegType:$reg);
+  let isaBinaryFormat = "$reg 3d15";
+  let isaAssemblyFormat = "mnemonic ` ` $reg";
+}
+// DECIMAL_LITERAL_OVERFLOW: rtg-instruction-methods-errors.td:262:31: error: decimal literal value 15 does not fit in 3 bits
 #endif
