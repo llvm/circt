@@ -796,6 +796,15 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.read %s1
     // CHECK: moore.string.concat ([[TMP1]], [[TMP2]])
     concatstr = {s, s1};
+    // String indexing with i32 index (no conversion needed)
+    // CHECK: moore.string.get {{%.+}}[{{%.+}}]
+    m = s1[c];
+    // String indexing with logic index (conversion to i32 needed)
+    // CHECK: [[M_READ:%.+]] = moore.read %m
+    // CHECK: [[ZEXT:%.+]] = moore.zext [[M_READ]] : l4 -> l32
+    // CHECK: [[CONV:%.+]] = moore.logic_to_int [[ZEXT]]
+    // CHECK: moore.string.get {{%.+}}[[[CONV]]]
+    m = s[m];
     // CHECK: [[TMP1:%.+]] = moore.read %d
     // CHECK: [[TMP2:%.+]] = moore.read %e
     // CHECK: moore.concat [[TMP1]], [[TMP2]] : (!moore.l32, !moore.l32) -> l64

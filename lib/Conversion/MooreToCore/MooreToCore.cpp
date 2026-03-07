@@ -2251,6 +2251,18 @@ struct StringConcatOpConversion : public OpConversionPattern<StringConcatOp> {
   }
 };
 
+struct StringGetOpConversion : public OpConversionPattern<StringGetOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StringGetOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::StringGetOp>(op, adaptor.getStr(),
+                                                  adaptor.getIndex());
+    return success();
+  }
+};
+
 struct QueueSizeBIOpConversion : public OpConversionPattern<QueueSizeBIOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -2972,6 +2984,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     // Dynamic string operations
     StringLenOpConversion,
     StringConcatOpConversion,
+    StringGetOpConversion,
 
     // Queue operations
     QueueSizeBIOpConversion,
