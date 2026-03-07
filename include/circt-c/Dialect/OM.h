@@ -206,6 +206,18 @@ omEvaluatorValueIsAReference(OMEvaluatorValue evaluatorValue);
 MLIR_CAPI_EXPORTED OMEvaluatorValue
 omEvaluatorValueGetReferenceValue(OMEvaluatorValue evaluatorValue);
 
+/// Query if the EvaluatorValue is Unknown.
+MLIR_CAPI_EXPORTED bool
+omEvaluatorValueIsUnknown(OMEvaluatorValue evaluatorValue);
+
+/// Create an Unknown EvaluatorValue with the given type.
+MLIR_CAPI_EXPORTED OMEvaluatorValue omEvaluatorUnknownGet(MlirContext context,
+                                                          MlirType type);
+
+/// Get the type of an EvaluatorValue.
+MLIR_CAPI_EXPORTED MlirType
+omEvaluatorValueGetType(OMEvaluatorValue evaluatorValue);
+
 //===----------------------------------------------------------------------===//
 // ReferenceAttr API
 //===----------------------------------------------------------------------===//
