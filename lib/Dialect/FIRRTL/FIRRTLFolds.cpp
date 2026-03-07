@@ -3777,5 +3777,3 @@ OpFoldResult UnsafeDomainCastOp::fold(FoldAdaptor adaptor) {
 
   return {};
 }
-
-

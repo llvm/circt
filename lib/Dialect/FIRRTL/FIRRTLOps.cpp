@@ -1927,8 +1927,8 @@ static LogicalResult verifyPortSymbolUses(FModuleLike module,
         auto expectedType = getInstanceTypeForDomain(domainOp);
         if (domainType != expectedType)
           return mlir::emitError(module.getPortLocation(i))
-                 << "domain port '" << module.getPortName(i)
-                 << "' has type " << domainType << " which does not match "
+                 << "domain port '" << module.getPortName(i) << "' has type "
+                 << domainType << " which does not match "
                  << "the domain definition, expected " << expectedType;
       }
     }
@@ -7312,8 +7312,7 @@ DomainCreateAnonOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
-ParseResult DomainCreateOp::parse(OpAsmParser &parser,
-                                  OperationState &result) {
+ParseResult DomainCreateOp::parse(OpAsmParser &parser, OperationState &result) {
   Type resultType;
   if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
       parser.parseType(resultType))

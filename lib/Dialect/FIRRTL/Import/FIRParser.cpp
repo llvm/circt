@@ -4121,8 +4121,8 @@ ParseResult FIRStmtParser::parseDomainInstantiation() {
            << "unknown domain '" << domainKind.getValue() << "'";
 
   auto domainOp = lookup->second;
-  auto domainType = DomainType::get(FlatSymbolRefAttr::get(domainOp.getNameAttr()),
-                                    domainOp.getFieldsAttr());
+  auto domainType = DomainType::get(
+      FlatSymbolRefAttr::get(domainOp.getNameAttr()), domainOp.getFieldsAttr());
   auto result = builder.create<DomainCreateOp>(
       domainType, instanceName, FlatSymbolRefAttr::get(domainKind));
 
@@ -5837,10 +5837,11 @@ ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
   }
 
   auto builder = circuit.getBodyBuilder();
-  auto domainOp =
-      DomainOp::create(builder, info.getLoc(), name, builder.getArrayAttr(fields));
+  auto domainOp = DomainOp::create(builder, info.getLoc(), name,
+                                   builder.getArrayAttr(fields));
 
-  // Stash the domain name -> op in the constants, so we can resolve Domain types.
+  // Stash the domain name -> op in the constants, so we can resolve Domain
+  // types.
   getConstants().domainMap[name.getValue()] = domainOp;
 
   return success();
