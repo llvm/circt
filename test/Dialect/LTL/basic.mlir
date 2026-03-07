@@ -2,6 +2,7 @@
 
 %true = hw.constant true
 %c0_i8 = hw.constant 0 : i8
+%clk = hw.constant true
 
 //===----------------------------------------------------------------------===//
 // Types
@@ -53,8 +54,12 @@ unrealized_conversion_cast %p3 : !ltl.property to index
 
 // CHECK: ltl.delay {{%.+}}, 0 : !ltl.sequence
 // CHECK: ltl.delay {{%.+}}, 42, 1337 : !ltl.sequence
+// CHECK: ltl.clocked_delay {{%.+}}, posedge, {{%.+}}, 0 : !ltl.sequence
+// CHECK: ltl.clocked_delay {{%.+}}, posedge, {{%.+}}, 42, 1337 : !ltl.sequence
 ltl.delay %s, 0 : !ltl.sequence
 ltl.delay %s, 42, 1337 : !ltl.sequence
+ltl.clocked_delay %clk, posedge, %s, 0 : !ltl.sequence
+ltl.clocked_delay %clk, posedge, %s, 42, 1337 : !ltl.sequence
 
 // CHECK: ltl.concat {{%.+}} : !ltl.sequence
 // CHECK: ltl.concat {{%.+}}, {{%.+}} : !ltl.sequence, !ltl.sequence

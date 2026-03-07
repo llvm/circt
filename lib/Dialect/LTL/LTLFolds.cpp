@@ -79,19 +79,38 @@ LogicalResult IntersectOp::canonicalize(IntersectOp op,
 // DelayOp
 //===----------------------------------------------------------------------===//
 
-OpFoldResult DelayOp::fold(FoldAdaptor adaptor) {
+template <typename DelayLikeOp, typename FoldAdaptorT>
+static OpFoldResult foldDelayLike(DelayLikeOp op, FoldAdaptorT adaptor) {
   // delay(s, 0, 0) -> s
   if (adaptor.getDelay() == 0 && adaptor.getLength() == 0 &&
-      isa<SequenceType>(getInput().getType()))
-    return getInput();
+      isa<SequenceType>(op.getInput().getType()))
+    return op.getInput();
 
   return {};
+}
+
+OpFoldResult DelayOp::fold(FoldAdaptor adaptor) {
+  return foldDelayLike(*this, adaptor);
 }
 
 void DelayOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                           MLIRContext *context) {
   results.add<patterns::NestedDelays>(results.getContext());
   results.add<patterns::MoveDelayIntoConcat>(results.getContext());
+}
+
+//===----------------------------------------------------------------------===//
+// ClockedDelayOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ClockedDelayOp::fold(FoldAdaptor adaptor) {
+  return foldDelayLike(*this, adaptor);
+}
+
+void ClockedDelayOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                 MLIRContext *context) {
+  results.add<patterns::NestedClockedDelays>(results.getContext());
+  results.add<patterns::MoveClockedDelayIntoConcat>(results.getContext());
 }
 
 //===----------------------------------------------------------------------===//

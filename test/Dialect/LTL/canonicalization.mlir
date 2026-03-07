@@ -25,8 +25,8 @@ func.func @DelayFolds(%arg0: !ltl.sequence, %arg1: i1) {
 
   // delay(delay(s, 1, N), 2) -> delay(s, 3)
   // N is dropped
-  // CHECK-NEXT: ltl.delay %arg0, 3 :
-  // CHECK-NEXT: ltl.delay %arg0, 3 :
+  // CHECK-NEXT: ltl.delay {{%.+}}, 3 :
+  // CHECK-NEXT: ltl.delay {{%.+}}, 3 :
   // CHECK-NEXT: call
   // CHECK-NEXT: call
   %3 = ltl.delay %arg0, 1, 0 : !ltl.sequence
@@ -61,6 +61,97 @@ func.func @DelayFolds(%arg0: !ltl.sequence, %arg1: i1) {
   %14 = ltl.delay %12, 3, 5 : !ltl.sequence
   call @Seq(%13) : (!ltl.sequence) -> ()
   call @Seq(%14) : (!ltl.sequence) -> ()
+  return
+}
+
+// CHECK-LABEL: @ClockedDelayFolds
+// CHECK-SAME: (%[[S:.+]]: !ltl.sequence, %[[I:.+]]: i1, %[[CLK:.+]]: i1)
+func.func @ClockedDelayFolds(%arg0: !ltl.sequence, %arg1: i1, %clk: i1) {
+  // clocked_delay(clk, posedge, s, 0, 0) -> s
+  // clocked_delay(clk, posedge, i, 0, 0) -> clocked_delay(clk, posedge, i, 0, 0)
+  // CHECK-NEXT: ltl.clocked_delay %[[CLK]], posedge, %[[I]], 0, 0 : i1
+  // CHECK-NEXT: call @Seq(%[[S]])
+  // CHECK-NEXT: call @Seq({{%.+}})
+  %0 = ltl.clocked_delay %clk, posedge, %arg0, 0, 0 : !ltl.sequence
+  %n0 = ltl.clocked_delay %clk, posedge, %arg1, 0, 0 : i1
+  call @Seq(%0) : (!ltl.sequence) -> ()
+  call @Seq(%n0) : (!ltl.sequence) -> ()
+
+  // Nested clocked delays with same clock/edge: merge delays
+  // clocked_delay(clk, posedge, clocked_delay(clk, posedge, s, 1), 2)
+  //   -> clocked_delay(clk, posedge, s, 3)
+  // CHECK-NEXT: ltl.clocked_delay %[[CLK]], posedge, %[[S]], 3 :
+  // CHECK-NEXT: call
+  %1 = ltl.clocked_delay %clk, posedge, %arg0, 1 : !ltl.sequence
+  %2 = ltl.clocked_delay %clk, posedge, %1, 2 : !ltl.sequence
+  call @Seq(%2) : (!ltl.sequence) -> ()
+
+  // Inner has length, outer does not: length dropped
+  // clocked_delay(clk, posedge, clocked_delay(clk, posedge, s, 1, 42), 2)
+  //   -> clocked_delay(clk, posedge, s, 3)
+  // CHECK-NEXT: ltl.clocked_delay %[[CLK]], posedge, %[[S]], 3 :
+  // CHECK-NEXT: call
+  %3 = ltl.clocked_delay %clk, posedge, %arg0, 1, 42 : !ltl.sequence
+  %4 = ltl.clocked_delay %clk, posedge, %3, 2 : !ltl.sequence
+  call @Seq(%4) : (!ltl.sequence) -> ()
+
+  // Outer has length, inner does not: length dropped
+  // clocked_delay(clk, posedge, clocked_delay(clk, posedge, s, 1), 2, 5)
+  //   -> clocked_delay(clk, posedge, s, 3)
+  // CHECK-NEXT: ltl.clocked_delay %[[CLK]], posedge, %[[S]], 3 :
+  // CHECK-NEXT: call
+  %5 = ltl.clocked_delay %clk, posedge, %arg0, 1 : !ltl.sequence
+  %6 = ltl.clocked_delay %clk, posedge, %5, 2, 5 : !ltl.sequence
+  call @Seq(%6) : (!ltl.sequence) -> ()
+
+  // Both have length: lengths merged
+  // clocked_delay(clk, posedge, clocked_delay(clk, posedge, s, 1, 2), 3, 5)
+  //   -> clocked_delay(clk, posedge, s, 4, 7)
+  // CHECK-NEXT: ltl.clocked_delay %[[CLK]], posedge, %[[S]], 4, 7 :
+  // CHECK-NEXT: call
+  %7 = ltl.clocked_delay %clk, posedge, %arg0, 1, 2 : !ltl.sequence
+  %8 = ltl.clocked_delay %clk, posedge, %7, 3, 5 : !ltl.sequence
+  call @Seq(%8) : (!ltl.sequence) -> ()
+
+  // Both have length, outer length is 0: no drop
+  // clocked_delay(clk, posedge, clocked_delay(clk, posedge, s, 1, 2), 3, 0)
+  //   -> clocked_delay(clk, posedge, s, 4, 2)
+  // CHECK-NEXT: ltl.clocked_delay %[[CLK]], posedge, %[[S]], 4, 2 :
+  // CHECK-NEXT: call
+  %9 = ltl.clocked_delay %clk, posedge, %arg0, 1, 2 : !ltl.sequence
+  %10 = ltl.clocked_delay %clk, posedge, %9, 3, 0 : !ltl.sequence
+  call @Seq(%10) : (!ltl.sequence) -> ()
+
+  // Different edge: should NOT merge
+  // CHECK-NEXT: ltl.clocked_delay %[[CLK]], posedge, %[[S]], 1 :
+  // CHECK-NEXT: ltl.clocked_delay %[[CLK]], negedge, {{%.+}}, 2 :
+  // CHECK-NEXT: call
+  %11 = ltl.clocked_delay %clk, posedge, %arg0, 1 : !ltl.sequence
+  %12 = ltl.clocked_delay %clk, negedge, %11, 2 : !ltl.sequence
+  call @Seq(%12) : (!ltl.sequence) -> ()
+
+  // Different clock: should NOT merge
+  // CHECK-NEXT: ltl.clocked_delay %[[CLK]], posedge, %[[S]], 1 :
+  // CHECK-NEXT: ltl.clocked_delay %[[I]], posedge, {{%.+}}, 2 :
+  // CHECK-NEXT: call
+  %13 = ltl.clocked_delay %clk, posedge, %arg0, 1 : !ltl.sequence
+  %14 = ltl.clocked_delay %arg1, posedge, %13, 2 : !ltl.sequence
+  call @Seq(%14) : (!ltl.sequence) -> ()
+
+  return
+}
+
+// CHECK-LABEL: @ClockedDelayIntoConcatFolds
+// CHECK-SAME: (%[[S0:.+]]: !ltl.sequence, %[[S1:.+]]: !ltl.sequence, %[[CLK:.+]]: i1)
+func.func @ClockedDelayIntoConcatFolds(%arg0: !ltl.sequence, %arg1: !ltl.sequence, %clk: i1) {
+  // clocked_delay(clk, posedge, concat(s0, s1), N, M)
+  //   -> concat(clocked_delay(clk, posedge, s0, N, M), s1)
+  // CHECK-NEXT: [[TMP:%.+]] = ltl.clocked_delay %[[CLK]], posedge, %[[S0]], 2, 3 :
+  // CHECK-NEXT: ltl.concat [[TMP]], %[[S1]] :
+  // CHECK-NEXT: call
+  %0 = ltl.concat %arg0, %arg1 : !ltl.sequence, !ltl.sequence
+  %1 = ltl.clocked_delay %clk, posedge, %0, 2, 3 : !ltl.sequence
+  call @Seq(%1) : (!ltl.sequence) -> ()
   return
 }
 

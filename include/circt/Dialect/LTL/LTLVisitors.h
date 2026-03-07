@@ -21,8 +21,8 @@ public:
   ResultType dispatchLTLVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<AndOp, OrOp, DelayOp, ConcatOp, RepeatOp, NotOp,
-                       ImplicationOp, UntilOp, EventuallyOp, ClockOp,
+        .template Case<AndOp, OrOp, DelayOp, ClockedDelayOp, ConcatOp, RepeatOp,
+                       NotOp, ImplicationOp, UntilOp, EventuallyOp, ClockOp,
                        IntersectOp, NonConsecutiveRepeatOp, GoToRepeatOp,
                        BooleanConstantOp>([&](auto op) -> ResultType {
           return thisCast->visitLTL(op, args...);
@@ -52,6 +52,7 @@ public:
   HANDLE(AndOp, Unhandled);
   HANDLE(OrOp, Unhandled);
   HANDLE(DelayOp, Unhandled);
+  HANDLE(ClockedDelayOp, Unhandled);
   HANDLE(ConcatOp, Unhandled);
   HANDLE(RepeatOp, Unhandled);
   HANDLE(NotOp, Unhandled);
