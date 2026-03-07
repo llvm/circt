@@ -118,11 +118,6 @@ StringRef FormatParser::parseIdentifier() {
   return name;
 }
 
-FormatNode *FormatParser::parseOptionalMnemonic() {
-  auto loc = getLoc();
-  return tryConsume("mnemonic") ? ctx.create<MnemonicNode>(loc) : nullptr;
-}
-
 FormatNode *FormatParser::parseOptionalOperand() {
   auto loc = getLoc();
   if (!tryConsume("$"))
@@ -241,9 +236,7 @@ bool FormatParser::parseOptionalSlice(int64_t &highBit, int64_t &lowBit) {
 }
 
 FormatNode *FormatParser::parseNextNode() {
-  FormatNode *node = parseOptionalMnemonic();
-  if (!node)
-    node = parseOptionalSignednessSpecifier();
+  FormatNode *node = parseOptionalSignednessSpecifier();
   if (!node)
     node = parseOptionalIfThenElse();
   if (!node)
@@ -399,12 +392,6 @@ static void resolveOperand(ASTContext &ctx, OperandNode *operandNode) {
 // Verification
 //===----------------------------------------------------------------------===//
 
-void Verifier::verify(MnemonicNode *node) {
-  if (isBinary)
-    PrintFatalError(node->getLoc(),
-                    "binary format cannot contain " + node->getDesc());
-}
-
 void Verifier::verify(StringLiteralNode *node) {
   if (isBinary)
     PrintFatalError(node->getLoc(),
@@ -490,9 +477,8 @@ void Verifier::verify(CustomDirective *node) {
 
 void Verifier::dispatch(FormatNode *node) {
   TypeSwitch<FormatNode *>(node)
-      .Case<StringLiteralNode, MnemonicNode, BinaryLiteralNode, OperandNode,
-            SignednessNode, IfThenElseNode, CustomDirective>(
-          [&](auto *node) { verify(node); })
+      .Case<StringLiteralNode, BinaryLiteralNode, OperandNode, SignednessNode,
+            IfThenElseNode, CustomDirective>([&](auto *node) { verify(node); })
       .Default([](auto *node) {
         PrintFatalError(node->getLoc(), "unhandled format node");
       });
@@ -750,10 +736,6 @@ void AssemblyFormatGen::gen(StringLiteralNode *node) {
   os << "os << \"" << node->getLiteral() << "\";\n";
 }
 
-void AssemblyFormatGen::gen(MnemonicNode *node) {
-  os << "os << getOperationName().rsplit('.').second;\n";
-}
-
 void AssemblyFormatGen::gen(SignednessNode *node) {
   OperandNode *operandNode = node->getOperand();
   gen(operandNode);
@@ -809,8 +791,8 @@ void AssemblyFormatGen::gen(CustomDirective *node) {
 
 void AssemblyFormatGen::dispatch(FormatNode *node) {
   TypeSwitch<FormatNode *>(node)
-      .Case<MnemonicNode, StringLiteralNode, SignednessNode, OperandNode,
-            IfThenElseNode, CustomDirective>([&](auto *node) { gen(node); });
+      .Case<StringLiteralNode, SignednessNode, OperandNode, IfThenElseNode,
+            CustomDirective>([&](auto *node) { gen(node); });
 }
 
 // Helper function to collect all fallible custom directives from the AST
