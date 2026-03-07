@@ -267,7 +267,9 @@ struct ModuleVisitor : public BaseVisitor {
   // Skip ports which are already handled by the module itself.
   LogicalResult visit(const slang::ast::PortSymbol &) { return success(); }
   LogicalResult visit(const slang::ast::MultiPortSymbol &) { return success(); }
-  LogicalResult visit(const slang::ast::InterfacePortSymbol &) { return success(); }
+  LogicalResult visit(const slang::ast::InterfacePortSymbol &) { 
+    return success(); 
+  }
 
   // Skip genvars.
   LogicalResult visit(const slang::ast::GenvarSymbol &genvarNode) {
@@ -286,19 +288,20 @@ struct ModuleVisitor : public BaseVisitor {
   // Expand an interface instance into into individual variable/nets ops
   // in the enclosing module.Each signal declared in the interface body becomes
   // a separate op, named with the instance name as a prefix.
-  LogicalResult expandInterfaceInstance(const slang::ast::InstanceSymbol &instNode) {
+  LogicalResult 
+  expandInterfaceInstance(const slang::ast::InstanceSymbol &instNode) {
     auto prefix = (Twine(blockNamePrefix) + instNode.name + "_").str();
-    for (const auto &member : instNode.body.members()){
+    for (const auto &member : instNode.body.members()) {
       // Expand variables
       if (const auto *var = member.as_if<slang::ast::VariableSymbol>()) {
         auto loweredType = context.convertType(*var->getDeclaredType());
         if (!loweredType)
           return failure();
         auto varOp = moore::VariableOp::create(
-          builder, loc,
-          moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
-          builder.getStringAttr(Twine(prefix) + StringRef(var->name)),
-          Value());
+            builder, loc,
+            moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
+            builder.getStringAttr(Twine(prefix) + StringRef(var->name)),
+            Value());
         context.valueSymbols.insert(var, varOp);
         continue;
       }
@@ -314,10 +317,10 @@ struct ModuleVisitor : public BaseVisitor {
           return mlir::emitError(loc, "unsupported net kind `")
                  << net->netType.name << "`";
         auto netOp = moore::NetOp::create(
-          builder, loc,
-          moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
-          builder.getStringAttr(Twine(prefix) + StringRef(net->name)), netKind,
-          Value());
+            builder, loc,
+            moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
+            builder.getStringAttr(Twine(prefix) + StringRef(net->name)), netKind,
+            Value());
         context.valueSymbols.insert(net, netOp);
         continue;
       }
@@ -518,7 +521,7 @@ struct ModuleVisitor : public BaseVisitor {
     // look up the corresponding expanded variable/net in valueSymbols
     // (populated by expandInterfaceInstance when the interface was 
     // instantiated in this scope).
-    for(auto &fp : moduleLowering->ifacePorts) {
+    for (auto &fp : moduleLowering->ifacePorts) {
       if (!fp.bodySym)
         continue;
       auto *valueSym = fp.bodySym->as_if<slang::ast::ValueSymbol>();
@@ -979,13 +982,14 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
     // Lambda to handle interface ports by flattening them into individual
     // signal ports. Uses modport directions if a modport is specified,
     // otherwise treats all signals as inout (ref type)
-    auto handleIfacePort = [&](const slang::ast::InterfacePortSymbol &ifacePort) {
+    auto handleIfacePort = [&](const slang::ast::InterfacePortSymbol 
+                                    &ifacePort) {
       auto portLoc = convertLocation(ifacePort.location);
       auto [connSym, modportSym] = ifacePort.getConnection();
       auto portPrefix = (Twine(ifacePort.name) + "_").str();
 
       if (modportSym) {
-        //Modport specified: iterate modport members for signal directions.
+        // Modport specified: iterate modport members for signal directions.
         for (const auto &member : modportSym->members()) {
           const auto *mpp = member.as_if<slang::ast::ModportPortSymbol>();
           if (!mpp)
@@ -993,7 +997,8 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
           auto type = convertType(mpp->getType());
           if (!type)
             return failure();
-          auto name = builder.getStringAttr(Twine(portPrefix) + StringRef(mpp->name));
+          auto name = 
+              builder.getStringAttr(Twine(portPrefix) + StringRef(mpp->name));
           BlockArgument arg;
           hw::ModulePort::Direction dir;
           if (mpp->direction == ArgumentDirection::Out) {
@@ -1009,8 +1014,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
             inputIdx++;
           }
           lowering.ifacePorts.push_back(
-            {name, dir, type, portLoc, arg, &ifacePort,
-             mpp->internalSymbol});
+            {name, dir, type, portLoc, arg, &ifacePort, mpp->internalSymbol});
         }
       } else {
         // No modport: iterate interface body for all variables and nets.
@@ -1018,8 +1022,8 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
         const auto *instSym = connSym->as_if<slang::ast::InstanceSymbol>();
         if (!instSym) {
           mlir::emitError(portLoc)
-              << "unsupported interface port connection for `"
-              << ifacePort.name << "`";
+              << "unsupported interface port connection for `" << ifacePort.name 
+              << "`";
           return failure();
         }
         for (const auto &member : instSym->body.members()) {
@@ -1037,14 +1041,14 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
           auto type = convertType(*slangType);
           if (!type)
             return failure();
-          auto name = builder.getStringAttr(Twine(portPrefix) + StringRef(bodySym->name));
+          auto name = builder.getStringAttr(Twine(portPrefix) + 
+                                            StringRef(bodySym->name));
           auto refType = moore::RefType::get(cast<moore::UnpackedType>(type));
           modulePorts.push_back({name, refType, hw::ModulePort::Input});
           auto arg = block->addArgument(refType, portLoc);
           inputIdx++;
-          lowering.ifacePorts.push_back(
-            {name,hw::ModulePort::Input, refType, portLoc, arg,
-             &ifacePort, bodySym});
+          lowering.ifacePorts.push_back({name, hw::ModulePort::Input, refType, 
+                                         portLoc, arg, &ifacePort, bodySym});
         }
       }
       return success();
@@ -1057,7 +1061,8 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
       for (auto *port : multiPort->ports)
         if (failed(handlePort(*port)))
           return {};
-    } else if (const auto *ifacePort = symbol->as_if<slang::ast::InterfacePortSymbol>()) {
+    } else if (const auto *ifacePort = 
+                   symbol->as_if<slang::ast::InterfacePortSymbol>()) {
       if (failed(handleIfacePort(*ifacePort)))
         return {};
     } else {
@@ -1188,7 +1193,7 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
   // internal variable and wire it to the port. The variable is registered
   // in valueSymbols so the module body can reference interface signals
   for (auto &fp : lowering.ifacePorts) {
-    if(!fp.bodySym)
+    if (!fp.bodySym)
       continue;
     // Look up the body sym's value (populated by the module body visitor
     // if the interface body symbol was visited, which it won't be since
@@ -1203,8 +1208,8 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
       // for the output terminator
       auto varOp = moore::VariableOp::create(
           builder, fp.loc,
-          moore::RefType::get(cast<moore::UnpackedType>(fp.type)),
-          fp.name, Value());
+          moore::RefType::get(cast<moore::UnpackedType>(fp.type)), fp.name, 
+          Value());
       valueSymbols.insert(valueSym, varOp);
       auto readVal = moore::ReadOp::create(builder, fp.loc, varOp);
       outputs.push_back(readVal);
