@@ -260,13 +260,73 @@ def Test11_DecimalLiteralOp : TestOp<"decimal_literal"> {
   let isaBinaryFormat = "3d1 7d55";
   let isaAssemblyFormat = "`decimal-literal`";
 }
-// CHECK-EMPTY:
-// CHECK-NEXT:  void DecimalLiteralOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
-// CHECK-NEXT:    os << "decimal-literal";
-// CHECK-NEXT:  }
-// CHECK-EMPTY:
-// CHECK-NEXT:  void DecimalLiteralOp::printInstructionBinary(llvm::raw_ostream &os, FoldAdaptor adaptor) {
-// CHECK-EMPTY:
-// CHECK-NEXT:    ::llvm::APInt binary = llvm::APInt::getZero(0);
+// CHECK-LABEL:  void DecimalLiteralOp::printInstructionBinary
+// CHECK:    ::llvm::APInt binary = llvm::APInt::getZero(0);
 // CHECK-NEXT:    binary = binary.concat(llvm::APInt(3, 1));
 // CHECK-NEXT:    binary = binary.concat(llvm::APInt(7, 55));
+
+def Test12_IfThenElseBothBranchesOp : TestOp<"if_then_else_both"> {
+  let arguments = (ins ImmediateOfWidth<1>:$cond,
+                       Arg<TestRegType, "", [DestReg]>:$rd,
+                       Arg<TestRegType, "", [DestReg]>:$rs);
+  let isaBinaryFormat = "if $cond then ($rd 0b11) else ($rd $rs 0b00)";
+  let isaAssemblyFormat = "mnemonic ` ` if $cond then (`+` $rd) else (`-` $rd $rs)";
+}
+// CHECK-LABEL:  void IfThenElseBothBranchesOp::printInstructionAssembly
+// CHECK-NEXT:    os << getOperationName().rsplit('.').second;
+// CHECK-NEXT:    os << " ";
+// CHECK-NEXT:    ::llvm::APInt cond = ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getCond()).getValue();
+// CHECK-NEXT:    if (cond.isOne()) {
+// CHECK-NEXT:      os << "+";
+// CHECK-NEXT:      os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
+// CHECK-NEXT:    } else {
+// CHECK-NEXT:      os << "-";
+// CHECK-NEXT:      os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
+// CHECK-NEXT:      os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRs()).getRegisterAssembly();
+// CHECK-NEXT:    }
+// CHECK-NEXT:  }
+
+// CHECK-LABEL:  void IfThenElseBothBranchesOp::printInstructionBinary
+// CHECK-NEXT:    ::llvm::APInt cond = ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getCond()).getValue();
+// CHECK-NEXT:    ::llvm::APInt rd = ::llvm::APInt(5, ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRd()).getClassIndex());
+// CHECK-NEXT:    ::llvm::APInt rs = ::llvm::APInt(5, ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRs()).getClassIndex());
+// CHECK-EMPTY:
+// CHECK-NEXT:    ::llvm::APInt binary = llvm::APInt::getZero(0);
+// CHECK-NEXT:    if (cond.isOne()) {
+// CHECK-NEXT:      binary = binary.concat(rd);
+// CHECK-NEXT:      binary = binary.concat(llvm::APInt(2, 3));
+// CHECK-NEXT:    } else {
+// CHECK-NEXT:      binary = binary.concat(rd);
+// CHECK-NEXT:      binary = binary.concat(rs);
+// CHECK-NEXT:      binary = binary.concat(llvm::APInt(2, 0));
+// CHECK-NEXT:    }
+
+def Test13_IfThenOnlyOp : TestOp<"if_then_only"> {
+  let arguments = (ins ImmediateOfWidth<1>:$cond,
+                       Arg<TestRegType, "", [DestReg]>:$rd);
+  let isaAssemblyFormat = "mnemonic ` ` if $cond then (`opt:` $rd) else ()";
+}
+// CHECK-LABEL:  void IfThenOnlyOp::printInstructionAssembly
+// CHECK-NEXT:    os << getOperationName().rsplit('.').second;
+// CHECK-NEXT:    os << " ";
+// CHECK-NEXT:    ::llvm::APInt cond = ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getCond()).getValue();
+// CHECK-NEXT:    if (cond.isOne()) {
+// CHECK-NEXT:      os << "opt:";
+// CHECK-NEXT:      os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
+// CHECK-NEXT:    }
+// CHECK-NEXT:  }
+
+def Test14_IfElseOnlyOp : TestOp<"if_else_only"> {
+  let arguments = (ins ImmediateOfWidth<1>:$cond,
+                       Arg<TestRegType, "", [DestReg]>:$rd);
+  let isaAssemblyFormat = "mnemonic ` ` if $cond else (`alt:` $rd)";
+}
+// CHECK-LABEL:  void IfElseOnlyOp::printInstructionAssembly
+// CHECK-NEXT:    os << getOperationName().rsplit('.').second;
+// CHECK-NEXT:    os << " ";
+// CHECK-NEXT:    ::llvm::APInt cond = ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getCond()).getValue();
+// CHECK-NEXT:    if (cond.isZero()) {
+// CHECK-NEXT:      os << "alt:";
+// CHECK-NEXT:      os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
+// CHECK-NEXT:    }
+// CHECK-NEXT:  }
