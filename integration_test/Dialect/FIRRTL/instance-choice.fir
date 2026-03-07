@@ -25,6 +25,11 @@
 ; RUN: %t.default.exe --cycles 1 2>&1 | FileCheck %s --check-prefix=DEFAULT
 ; DEFAULT: result:       0
 
+; -------------------------------------- Test 5: Configuration file
+; RUN: echo '`include "targets-top-Platform-FPGA.svh"' > %t/user-config.svh
+; RUN: verilator %driver %t/top.sv %t/ASICTarget.sv %t/FPGATarget.sv %t/DefaultTarget.sv --cc --sv --exe --build -o %t.config.exe --top-module top -DFIRRTL_CONFIGURATION_FILE=user-config.svh -I%t
+; RUN: %t.config.exe --cycles 1 2>&1 | FileCheck %s --check-prefix=CONFIGFILE
+; CONFIGFILE: result:       20
 
 FIRRTL version 5.1.0
 circuit top:

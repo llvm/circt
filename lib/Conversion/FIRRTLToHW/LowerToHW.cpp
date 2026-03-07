@@ -221,6 +221,7 @@ struct CircuitLoweringState {
   std::atomic<bool> usedAssertVerboseCond{false};
   std::atomic<bool> usedStopCond{false};
   std::atomic<bool> usedFileDescriptorLib{false};
+  std::atomic<bool> usedConfiguration{false};
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
                        firrtl::VerificationFlavor verificationFlavor,
@@ -1019,6 +1020,28 @@ endpackage
              "to stop conditions.");
       emitGuard("STOP_COND_", [&]() {
         emitGuardedDefine("STOP_COND", "STOP_COND_", "(`STOP_COND)", "1");
+      });
+    });
+  }
+
+  // Create a fragment for FIRRTL configuration file include. It enables users
+  // to manage all options through single file.
+  // (e.g. -DFIRRTL_CONFIGURATION_FILE=configuration.svh)
+  if (state.usedConfiguration) {
+    sv::MacroDeclOp::create(b, "FIRRTL_CONFIGURATION_FILE");
+    sv::MacroDeclOp::create(b, "FIRRTL_CONFIGURATION_FILE_");
+    emit::FragmentOp::create(b, "FIRRTL_CONFIGURATION_FRAGMENT", [&] {
+      sv::IfDefOp::create(b, "FIRRTL_CONFIGURATION_FILE", [&]() {
+        sv::IfDefOp::create(
+            b, "FIRRTL_CONFIGURATION_FILE_", [] {},
+            [&]() {
+              StringRef body = R"(`define FIRRTL_CONFIGURATION_INCLUDED
+`define _STRINGIFY(x) `"x`"
+`include `_STRINGIFY(`FIRRTL_CONFIGURATION_FILE)
+`undef _STRINGIFY)";
+              sv::MacroDefOp::create(b, "FIRRTL_CONFIGURATION_FILE_", "");
+              sv::VerbatimOp::create(b, body);
+            });
       });
     });
   }
@@ -4129,6 +4152,11 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
     return oldInstanceChoice->emitOpError(
         "must have instance_macro attribute set before "
         "lowering");
+
+  // Mark that we're using configuration and add the fragment to the module
+  // containing this instance choice.
+  circuitState.usedConfiguration = true;
+  circuitState.addFragment(theModule, "FIRRTL_CONFIGURATION_FRAGMENT");
 
   // Get all the target modules
   auto moduleNames = oldInstanceChoice.getModuleNamesAttr();
