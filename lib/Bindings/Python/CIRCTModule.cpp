@@ -46,6 +46,7 @@
 #include "mlir/Bindings/Python/NanobindAdaptors.h"
 
 #include "llvm-c/ErrorHandling.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Signals.h"
 
 #include "NanobindUtils.h"
