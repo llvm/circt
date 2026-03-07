@@ -49,7 +49,7 @@ struct FlattenedIfacePort {
   const slang::ast::InterfacePortSymbol *origin;
   /// the interface body member (VariableSymbol , NetSymbol)
   const slang::ast::Symbol *bodySym;
-}
+};
 
 /// Module lowering information.
 struct ModuleLowering {
