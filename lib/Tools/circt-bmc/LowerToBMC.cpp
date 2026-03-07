@@ -190,6 +190,12 @@ void LowerToBMCPass::runOnOperation() {
   bmcOp.getCircuit().takeBody(hwModule.getBody());
   hwModule->erase();
 
+  // Erase leftover hw.module/hw.module.extern ops (e.g., apply-mode modules
+  // from contract lowering) that would cause ConvertHWToSMT to fail.
+  for (auto &op : llvm::make_early_inc_range(moduleOp.getOps()))
+    if (isa<hw::HWModuleOp, hw::HWModuleExternOp>(op))
+      op.erase();
+
   // Define global string constants to print on success/failure
   auto createUniqueStringGlobal = [&](StringRef str) -> FailureOr<Value> {
     Location loc = moduleOp.getLoc();
