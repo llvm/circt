@@ -150,6 +150,62 @@ static void addPossibleValues(llvm::SetVector<size_t> &possibleValues,
   addPossibleValuesImpl(possibleValues, v, visited);
 }
 
+/// Simplify action blocks by propagating guard conditions.
+/// If the guard returns a condition derived from block arguments (direct,
+/// NOT, or AND thereof), replace those arguments within the action region
+/// with constants. Subsequent canonicalization folds the resulting
+/// constant-conditioned muxes and other ops.
+static void simplifyActionWithGuard(TransitionOp transition,
+                                    OpBuilder &builder) {
+  Region &guardRegion = transition.getGuard();
+  Region &actionRegion = transition.getAction();
+
+  if (guardRegion.empty() || actionRegion.empty())
+    return;
+
+  auto guardReturn =
+      dyn_cast<fsm::ReturnOp>(guardRegion.front().getTerminator());
+  if (!guardReturn)
+    return;
+
+  // Collect block arguments known to be true or false from the guard.
+  SmallVector<std::pair<Value, bool>> knownConditions;
+
+  SmallVector<Value> worklist;
+  worklist.push_back(guardReturn.getOperand());
+
+  while (!worklist.empty()) {
+    Value cond = worklist.pop_back_val();
+
+    if (isa<BlockArgument>(cond)) {
+      knownConditions.push_back({cond, true});
+    } else if (auto xorOp = cond.getDefiningOp<XorOp>()) {
+      if (xorOp.isBinaryNot()) {
+        Value inner = xorOp.getOperand(0);
+        if (isa<BlockArgument>(inner))
+          knownConditions.push_back({inner, false});
+      }
+    } else if (auto andOp = cond.getDefiningOp<AndOp>()) {
+      for (Value operand : andOp.getOperands())
+        worklist.push_back(operand);
+    }
+  }
+
+  if (knownConditions.empty())
+    return;
+
+  // Replace uses of known-value arguments in the action region with
+  // constants so that canonicalization can fold dependent ops.
+  for (auto [condValue, isTrue] : knownConditions) {
+    builder.setInsertionPointToStart(&actionRegion.front());
+    auto constOp = hw::ConstantOp::create(builder, condValue.getLoc(),
+                                          condValue.getType(), isTrue ? 1 : 0);
+    condValue.replaceUsesWithIf(constOp.getResult(), [&](OpOperand &use) {
+      return actionRegion.isAncestor(use.getOwner()->getParentRegion());
+    });
+  }
+}
+
 /// Checks if a value is a constant or a tree of muxes with constant leaves.
 /// Uses an iterative approach with a visited set to handle cycles.
 static bool isConstantOrConstantTree(Value value) {
@@ -807,15 +863,14 @@ public:
             clonedRegOp->erase();
           }
 
-          FrozenRewritePatternSet patterns(opBuilder.getContext());
           GreedyRewriteConfig config;
           SmallVector<Operation *> opsToProcess;
           actionRegion.walk([&](Operation *op) { opsToProcess.push_back(op); });
           config.setScope(&actionRegion);
 
           bool changed = false;
-          if (failed(applyOpPatternsGreedily(opsToProcess, patterns, config,
-                                             &changed)))
+          if (failed(applyOpPatternsGreedily(opsToProcess, frozenPatterns,
+                                             config, &changed)))
             return failure();
 
           // hw.module uses graph regions that allow cycles. By this point
@@ -857,6 +912,26 @@ public:
         if (failed(applyOpPatternsGreedily(transitionOps, frozenPatterns,
                                            config2, &changed))) {
           return failure();
+        }
+
+        // Propagate guard conditions into action blocks to eliminate
+        // redundant muxes. The guard already checks the transition
+        // condition, so the action block can assume it holds.
+        for (TransitionOp transition :
+             stateOp.getTransitions().getOps<TransitionOp>()) {
+          simplifyActionWithGuard(transition, opBuilder);
+        }
+
+        // Re-canonicalize after guard propagation to clean up dead ops.
+        {
+          SmallVector<Operation *> postOps;
+          stateOp.getTransitions().walk(
+              [&](Operation *op) { postOps.push_back(op); });
+          GreedyRewriteConfig postConfig;
+          postConfig.setScope(&stateOp.getTransitions());
+          if (failed(applyOpPatternsGreedily(postOps, frozenPatterns,
+                                             postConfig, &changed)))
+            return failure();
         }
 
         for (TransitionOp transition :
