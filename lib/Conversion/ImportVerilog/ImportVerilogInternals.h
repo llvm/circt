@@ -38,10 +38,24 @@ struct PortLowering {
   BlockArgument arg;
 };
 
+/// Lowering information for a single signal flattened from an interface port.
+struct FlattenedIfacePort {
+  StringAttr name;
+  hw::ModulePort::Direction direction;
+  mlir::Type type;
+  Location loc;
+  BlockArgument arg;
+  /// the origin interface port symbol this was flattened from.
+  const slang::ast::InterfacePortSymbol *origin;
+  /// the interface body member (VariableSymbol , NetSymbol)
+  const slang::ast::Symbol *bodySym;
+};
+
 /// Module lowering information.
 struct ModuleLowering {
   moore::SVModuleOp op;
   SmallVector<PortLowering> ports;
+  SmallVector<FlattenedIfacePort> ifacePorts;
   DenseMap<const slang::syntax::SyntaxNode *, const slang::ast::PortSymbol *>
       portsBySyntaxNode;
 };
