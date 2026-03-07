@@ -2068,6 +2068,18 @@ def AssocArrayClearOp : MooreOp<"assoc_array.clear"> {
   }];
 }
 
+def AssocArraySizeOp : MooreOp<"assoc_array.size"> {
+  let summary = "Return the number of elements in an associative array";
+  let description = [{
+    See IEEE 1800-2023 § 7.9.1 "Size()". Returns the number of elements in an associative array.
+    According to spec the returned size fits an `int`.
+  }];
+
+  let arguments = (ins AssocArrayRefType:$assoc_array);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = "$assoc_array `:` type($assoc_array) attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // Struct Manipulation
 //===----------------------------------------------------------------------===//
