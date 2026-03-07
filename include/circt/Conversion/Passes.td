@@ -68,18 +68,6 @@ def LegalizeAnonEnums : Pass<"legalize-anon-enums", "mlir::ModuleOp"> {
   ];
 }
 
-def HWLowerInstanceChoices : Pass<"hw-lower-instance-choices",
-                                  "mlir::ModuleOp"> {
-  let summary = "Prepare the collateral for instance choice emission";
-  let description = [{
-    This pass runs as part of verilog emission.
-    It introduces the macros & file lists to which instance choices lower to.
-  }];
-  let dependentDialects = [
-    "circt::sv::SVDialect", "circt::hw::HWDialect"
-  ];
-}
-
 def PrepareForEmission : Pass<"prepare-for-emission"> {
   let summary = "Prepare IR for ExportVerilog";
   let description = [{
