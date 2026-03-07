@@ -191,7 +191,8 @@ struct ExprVisitor {
       derefType = cast<moore::RefType>(derefType).getNestedType();
 
     if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
-             moore::QueueType, moore::AssocArrayType>(derefType)) {
+             moore::QueueType, moore::AssocArrayType, moore::StringType>(
+            derefType)) {
       mlir::emitError(loc) << "unsupported expression: element select into "
                            << expr.value().type->toString() << "\n";
       return {};
@@ -219,6 +220,23 @@ struct ExprVisitor {
 
       return moore::AssocArrayExtractOp::create(builder, loc, type, value,
                                                 givenIndex);
+    }
+
+    // Handle string indexing.
+    if (isa<moore::StringType>(derefType)) {
+      if (isLvalue) {
+        mlir::emitError(loc) << "string index assignment not supported";
+        return {};
+      }
+
+      // Convert the index to an rvalue with the required type (TwoValuedI32).
+      auto i32Type = moore::IntType::getInt(builder.getContext(), 32);
+      auto index = context.convertRvalueExpression(expr.selector(), i32Type);
+      if (!index)
+        return {};
+
+      // Create the StringGetOp operation.
+      return moore::StringGetOp::create(builder, loc, value, index);
     }
 
     auto resultType =
@@ -3014,8 +3032,8 @@ Context::convertSystemCallArity2(const slang::ast::SystemSubroutine &subroutine,
       llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
           .Case("getc",
                 [&]() -> Value {
-                  return moore::StringGetCOp::create(builder, loc, value1,
-                                                     value2);
+                  return moore::StringGetOp::create(builder, loc, value1,
+                                                    value2);
                 })
           .Case("$urandom_range",
                 [&]() -> Value {

@@ -1525,6 +1525,15 @@ func.func @StringOperations(%arg0: !moore.i32, %arg1: !moore.string, %arg2: !moo
   return
 }
 
+// CHECK-LABEL: func.func @StringIndexing
+// CHECK-SAME: %arg0: !sim.dstring
+// CHECK-SAME: %arg1: i32
+func.func @StringIndexing(%arg0: !moore.string, %arg1: !moore.i32) {
+  // CHECK: sim.string.get %arg0[%arg1]
+  %0 = moore.string.get %arg0[%arg1]
+  return
+}
+
 // CHECK-LABEL func.func @QueueOperations
 func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: [[EMPTY:%.+]] = sim.queue.empty : <i32, 10>

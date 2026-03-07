@@ -620,6 +620,32 @@ def IntToStringOp: SimOp<"string.int_to_string", [Pure]> {
   let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
 }
 
+def StringGetOp : SimOp<"string.get", [Pure]> {
+  let summary = "Get a character from a string at a given index";
+  let description = [{
+    Returns the character (byte) at the specified index within a dynamic string.
+    The index is zero-based, where 0 refers to the first character.
+
+    If the index is negative or greater than or equal to the string length,
+    the behavior follows IEEE 1800-2023 § 6.16, which specifies that accessing
+    an out-of-bounds index returns 0 (null character).
+
+    Example:
+    ```mlir
+    %str = sim.string.literal "Hello"
+    %idx = hw.constant 1 : i32
+    %char = sim.string.get %str[%idx] : i8  // Returns 'e' (0x65)
+    ```
+  }];
+
+  let arguments = (ins DynamicStringType:$str, I32:$index);
+  let results = (outs I8:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$str `[` $index `]` attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // Queues
 //===----------------------------------------------------------------------===//

@@ -3067,7 +3067,7 @@ def StringToLowerOp : StringBuiltin<"tolower"> {
   let assemblyFormat = "$str attr-dict";
 }
 
-def StringGetCOp : StringBuiltin<"getc"> {
+def StringGetOp : StringBuiltin<"get"> {
   let summary = "Get a character from a string";
   let description = [{
     Returns the character at the specified index in the given string.
