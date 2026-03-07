@@ -4,6 +4,7 @@
 
 from . import tests
 from . import core
+from .core import Value, Type
 from .tests import test, embed_comment, report_success, report_failure
 from .labels import Label, LabelType
 from .rtg import rtg
@@ -17,7 +18,7 @@ from .bags import Bag, BagType
 from .sequences import sequence, Sequence, SequenceType, RandomizedSequence, RandomizedSequenceType
 from .configs import config, Param, PythonParam, Config
 from .immediates import Immediate, ImmediateType
-from .resources import IntegerRegister, IntegerRegisterType
+from .resources import IntegerRegister, IntegerRegisterType, FloatRegister, FloatRegisterType
 from .arrays import Array, ArrayType
 from .contexts import CPUCore, CPUCoreType
 from .control_flow import If, Else, EndIf, For, Foreach
