@@ -190,3 +190,44 @@ function Foo;
   // expected-error @below {{unsupported system call `$fwrite`}}
   $fwrite(32'h0, "%x", a);
 endfunction
+
+// -----
+module Foo();
+	int v = 1;
+
+  // expected-error @+2 {{cannot mix continuous and procedural assignments to variable 'v'}}
+  // expected-note @-3 {{also assigned here}}
+	assign v = 12;
+endmodule
+
+// -----
+module Foo;
+	int v;
+
+  // expected-error @+3 {{cannot have multiple continuous assignments to variable 'v'}}
+  // expected-note @below {{also assigned here}}
+	assign v = 12;
+	assign v = 13;
+endmodule
+
+// -----
+module Foo;
+	wire clk = 0;
+	int v;
+
+  // expected-error @+3 {{cannot mix continuous and procedural assignments to variable 'v'}}
+  // expected-note @below {{also assigned here}}
+	assign v = 12;
+	always @(posedge clk) v <= ~v;
+endmodule
+
+// -----
+module Foo();
+	wire clk = 0;
+	int v;
+
+  // expected-error @+3 {{cannot mix continuous and procedural assignments to variable 'v'}}
+  // expected-note @below {{also assigned here}}
+	always @(posedge clk) v <= ~v;
+	assign v = 12;
+endmodule
