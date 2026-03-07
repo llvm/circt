@@ -111,7 +111,7 @@ hw.module @Choice(in %a: i2, in %b: i2, in %c: i2, out f: i2, out g: i2) {
   // CHECK-NEXT: %[[CH0:.+]] = synth.choice %[[A0]], %[[B0]], %[[C0]]
   // CHECK-NEXT: %[[CH1:.+]] = synth.choice %[[A1]], %[[B1]], %[[C1]]
   // CHECK-NEXT: %[[CONCAT1:.+]] = comb.concat %[[CH1]], %[[CH0]]
-  // CHECK:      %[[CONCAT2:.+]] = comb.concat %false, %true : i1, i1
+  // CHECK:      %[[CONCAT2:.+]] = comb.concat %false, %true
   // CHECK-NEXT: hw.output %[[CONCAT1]], %[[CONCAT2]]
   hw.output %0, %1 : i2, i2
 }
