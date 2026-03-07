@@ -607,11 +607,38 @@ def FStringImpl : FIRRTLImplType<"FString", [], "::circt::firrtl::FIRRTLType" > 
   let typeName = "firrtl.fstring";
 }
 
-def DomainTypeImpl : FIRRTLImplType<"Domain", [], "::circt::firrtl::FIRRTLType"> {
-  let summary = "A domain type";
-  let parameters = (ins);
-  let genStorageClass = true;
+def DomainTypeImpl : FIRRTLImplType<"Domain", [
+  DeclareTypeInterfaceMethods<FieldIDTypeInterface>], "::circt::firrtl::FIRRTLType"> {
+  let summary = [{
+    An instance of a domain.
+
+    Example:
+    ```mlir
+    !firrtl.domain<@ClockDomain>
+    ```
+  }];
+  let parameters = (ins
+    "FlatSymbolRefAttr":$name,
+    "ArrayAttr":$fields
+  );
+  let genStorageClass = false;
   let typeName = "firrtl.domain";
+  let genAccessors = false;
+  let builders = [
+    TypeBuilderWithInferredContext<(ins
+      "FlatSymbolRefAttr":$name,
+      "ArrayAttr":$fields
+    )>
+  ];
+  let extraClassDeclaration = [{
+    StringRef getName() const;
+    FlatSymbolRefAttr getNameAttr() const;
+
+    ArrayAttr getFields() const;
+    size_t getNumFields() const { return getFields().size(); }
+    DomainFieldAttr getField(size_t index) const;
+    std::optional<uint64_t> getFieldIndex(StringRef fieldName) const;
+  }];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD
