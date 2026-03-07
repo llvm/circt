@@ -306,3 +306,31 @@ def ErrorIfBothBranchesEmptyOp : TestOp<"error_if_both_branches_empty"> {
 }
 // IF_BOTH_BRANCHES_EMPTY2: rtg-instruction-methods-errors.td:305:50: error: expected 'then' or 'else' after 'if' condition
 #endif
+
+// RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_CUSTOM_MISSING_FUNCTION_NAME 2>&1 | FileCheck %s --check-prefix=CUSTOM_MISSING_FUNCTION_NAME
+#ifdef TEST_CUSTOM_MISSING_FUNCTION_NAME
+def ErrorCustomMissingFunctionNameOp : TestOp<"error_custom_missing_function_name"> {
+  let arguments = (ins TestRegType:$reg);
+  let isaAssemblyFormat = "mnemonic ` ` custom<>($reg)";
+}
+// CUSTOM_MISSING_FUNCTION_NAME: rtg-instruction-methods-errors.td:314:41: error: expected function name after 'custom<'
+#endif
+
+// RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_CUSTOM_INVALID_ARG 2>&1 | FileCheck %s --check-prefix=CUSTOM_INVALID_ARG
+#ifdef TEST_CUSTOM_INVALID_ARG
+def ErrorCustomInvalidArgOp : TestOp<"error_custom_invalid_arg"> {
+  let arguments = (ins TestRegType:$reg);
+  let isaAssemblyFormat = "mnemonic ` ` custom<MyParser>(mnemonic)";
+}
+// CUSTOM_INVALID_ARG: rtg-instruction-methods-errors.td:323:58: error: expected operand in custom directive arguments
+#endif
+
+// RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_FALLIBLE_CUSTOM_IN_BINARY 2>&1 | FileCheck %s --check-prefix=FALLIBLE_CUSTOM_IN_BINARY
+#ifdef TEST_FALLIBLE_CUSTOM_IN_BINARY
+def ErrorFallibleCustomInBinaryOp : TestOp<"error_fallible_custom_in_binary"> {
+  let arguments = (ins TestRegType:$reg);
+  let isaBinaryFormat = "custom<MyParser>?($reg)";
+  let isaAssemblyFormat = "mnemonic ` ` $reg";
+}
+// FALLIBLE_CUSTOM_IN_BINARY: rtg-instruction-methods-errors.td:332:26: error: fallible custom directive ('?') cannot be used in binary format
+#endif

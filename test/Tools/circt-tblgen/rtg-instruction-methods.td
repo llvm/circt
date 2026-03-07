@@ -114,6 +114,7 @@ def Test4_ImmSlicingOp : TestOp<"imm_slicing"> {
 
 def Test5_LabelOnlyOp : TestOp<"label_only"> {
   let arguments = (ins LabelType:$target);
+  let isaBinaryFormat = "$target";
   let isaAssemblyFormat = "mnemonic ` ` $target";
 }
 // CHECK-EMPTY:
@@ -330,3 +331,58 @@ def Test14_IfElseOnlyOp : TestOp<"if_else_only"> {
 // CHECK-NEXT:      os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
+
+def Test17_CustomDirectiveOp : TestOp<"custom_directive"> {
+  let arguments = (ins Arg<TestRegType, "", [SourceReg]>:$rs1,
+                       Arg<TestRegType, "", [SourceReg]>:$rd,
+                       ImmediateOfWidth<12>:$imm);
+  let isaBinaryFormat = "custom<myFunc1>($rs1 $rd)";
+  let isaAssemblyFormat = "custom<myFunc2>($rs1 $imm)";
+}
+// CHECK-LABEL:  void CustomDirectiveOp::printInstructionAssembly
+// CHECK-NEXT:    myFunc2(adaptor.getRs1(), adaptor.getImm(), os);
+
+// CHECK-LABEL:  void CustomDirectiveOp::printInstructionBinary
+// CHECK:    binary = binary.concat(myFunc1(adaptor.getRs1(), adaptor.getRd()));
+
+def Test18_CustomDirectiveNoArgumentOp : TestOp<"custom_directive_no_argument"> {
+  let isaAssemblyFormat = "custom<myFunc3>()";
+}
+// CHECK-LABEL:  void CustomDirectiveNoArgumentOp::printInstructionAssembly
+// CHECK: myFunc3(os);
+
+def Test19_FallibleCustomDirectiveOp : TestOp<"fallible_custom_directive"> {
+  let arguments = (ins Arg<TestRegType, "", [SourceReg]>:$rs1,
+                       ImmediateOfWidth<12>:$imm);
+  let isaAssemblyFormat = "custom<myFallibleFunc>?($rs1 $imm)";
+}
+// CHECK-LABEL:  void FallibleCustomDirectiveOp::printInstructionAssembly
+// CHECK-NEXT:    if (!myFallibleFuncPossible(adaptor.getRs1(), adaptor.getImm())) {
+// CHECK-NEXT:      os << ".word 0x";
+// CHECK-NEXT:      printInstructionBinary(os, adaptor);
+// CHECK-NEXT:      return;
+// CHECK-NEXT:    }
+// CHECK-NEXT:    myFallibleFunc(adaptor.getRs1(), adaptor.getImm(), os);
+
+def Test20_FallibleCustomDirectiveNoArgumentOp : TestOp<"fallible_custom_directive_no_argument"> {
+  let isaAssemblyFormat = "custom<myFallibleFunc2>?() ` ` custom<myFallibleFunc3>?()";
+}
+// CHECK-LABEL:  void FallibleCustomDirectiveNoArgumentOp::printInstructionAssembly
+// CHECK-NEXT:    if (!myFallibleFunc2Possible() || !myFallibleFunc3Possible()) {
+// CHECK-NEXT:      os << ".word 0x";
+// CHECK-NEXT:      printInstructionBinary(os, adaptor);
+// CHECK-NEXT:      return;
+// CHECK-NEXT:    }
+// CHECK-NEXT:    myFallibleFunc2(os);
+// CHECK-NEXT:    os << " ";
+// CHECK-NEXT:    myFallibleFunc3(os);
+
+// Test: Operand only used in custom directive should NOT get a declaration
+def Test21_CustomDirectiveOnlyOp : TestOp<"custom_directive_only"> {
+  let arguments = (ins Arg<TestRegType, "", [SourceReg]>:$rs1);
+  let isaBinaryFormat = "custom<encodeReg>($rs1)";
+  let isaAssemblyFormat = "custom<printReg>($rs1)";
+}
+// CHECK-LABEL:  void CustomDirectiveOnlyOp::printInstructionBinary
+// CHECK-NOT:     ::llvm::APInt rs1
+// CHECK:         binary = binary.concat(encodeReg(adaptor.getRs1()));
