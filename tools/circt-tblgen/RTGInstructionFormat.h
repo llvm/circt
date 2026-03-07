@@ -45,7 +45,9 @@ public:
     /// A signedness wrapper (signed()/unsigned())
     SignednessSpecifier,
     /// An if-then-else conditional construct
-    IfThenElse
+    IfThenElse,
+    /// A custom directive (custom<FunctionName>(...))
+    Custom
   };
 
   FormatNode(Kind kind, llvm::SMLoc loc, StringRef desc)
@@ -246,6 +248,35 @@ private:
   SmallVector<FormatNode *> elseBranch;
 };
 
+/// Represents a custom directive in an instruction format. Allows calling
+/// custom C++ functions.
+class CustomDirective : public FormatNode {
+public:
+  CustomDirective(llvm::SMLoc loc, StringRef functionName,
+                  SmallVector<OperandNode *> arguments, bool isFallible = false)
+      : FormatNode(Kind::Custom, loc, "custom directive"),
+        functionName(functionName), arguments(std::move(arguments)),
+        fallible(isFallible) {}
+
+  /// Get the custom function name.
+  StringRef getFunctionName() const { return functionName; }
+
+  /// Get the list of operand arguments.
+  ArrayRef<OperandNode *> getArguments() const { return arguments; }
+
+  /// Check if this is a fallible custom directive (has '?' suffix).
+  bool isFallible() const { return fallible; }
+
+  static bool classof(const FormatNode *elem) {
+    return elem->getKind() == Kind::Custom;
+  }
+
+private:
+  SmallString<64> functionName;
+  SmallVector<OperandNode *> arguments;
+  bool fallible;
+};
+
 /// Context for managing the format AST for a single instruction operation.
 /// Provides memory allocation for AST nodes and maintains the list of root
 /// nodes in the format specification. Each ASTContext is associated with
@@ -311,6 +342,7 @@ private:
   void gen(OperandNode *node);
   void gen(SignednessNode *node);
   void gen(IfThenElseNode *node);
+  void gen(CustomDirective *node);
   void dispatch(FormatNode *node);
 
   mlir::raw_indented_ostream &os;
@@ -332,6 +364,7 @@ private:
   void gen(BinaryLiteralNode *node);
   void gen(OperandNode *node);
   void gen(IfThenElseNode *node);
+  void gen(CustomDirective *node);
   void dispatch(FormatNode *node);
   // Generate variable declarations.
   void genDecl(OperandNode *node);
@@ -387,6 +420,12 @@ struct FormatParser {
   /// Either 'then ()' or 'else ()' may be omitted, but not both.
   /// \return An IfThenElseNode if found, nullptr otherwise
   FormatNode *parseOptionalIfThenElse();
+
+  /// Parses custom directives in the form:
+  /// "custom<FunctionName>($arg1 $arg2 ...)"
+  /// where FunctionName is a C++ function name and arguments are operands.
+  /// \return A CustomDirective if found, nullptr otherwise
+  FormatNode *parseOptionalCustomDirective();
 
   /// Parses bit slices like "[11:0]" or "[5]" (single bit).
   /// \param highBit Output parameter for the high bit (inclusive)
@@ -472,6 +511,7 @@ private:
   void verify(MnemonicNode *node);
   void verify(StringLiteralNode *node);
   void verify(SignednessNode *node);
+  void verify(CustomDirective *node);
   void dispatch(FormatNode *node);
 
 private:

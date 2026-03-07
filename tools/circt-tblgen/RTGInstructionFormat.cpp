@@ -247,6 +247,8 @@ FormatNode *FormatParser::parseNextNode() {
   if (!node)
     node = parseOptionalIfThenElse();
   if (!node)
+    node = parseOptionalCustomDirective();
+  if (!node)
     node = parseOptionalBinaryLiteral();
   if (!node)
     node = parseOptionalDecimalLiteral();
@@ -256,7 +258,8 @@ FormatNode *FormatParser::parseNextNode() {
     node = parseOptionalOperand();
   if (!node)
     PrintFatalError(getLoc(),
-                    "unexpected character '" + Twine(input[pos]) + "'");
+                    "unexpected character '" +
+                        Twine(input[std::min(pos, input.size() - 1)]) + "'");
 
   // Elements in the format are separated by a space.
   if (!isAtScopeEnd())
@@ -306,6 +309,46 @@ FormatNode *FormatParser::parseOptionalIfThenElse() {
   auto *node = ctx.create<IfThenElseNode>(loc, condition, std::move(thenBranch),
                                           std::move(elseBranch));
   condition->parent = node;
+  return node;
+}
+
+FormatNode *FormatParser::parseOptionalCustomDirective() {
+  auto loc = getLoc();
+  if (!tryConsume("custom<"))
+    return nullptr;
+
+  StringRef functionName = parseIdentifier();
+  consume(">", false);
+
+  // Check for optional '?' suffix to indicate fallible directive
+  bool isFallible = tryConsume("?", false);
+
+  consume("(", false);
+
+  SmallVector<OperandNode *> arguments;
+  while (!tryConsume(")")) {
+    FormatNode *argNode = parseOptionalOperand();
+    if (!argNode)
+      PrintFatalError(getLoc(),
+                      "expected operand in custom directive arguments");
+
+    auto *operandNode = cast<OperandNode>(argNode);
+    arguments.push_back(operandNode);
+
+    // Arguments are separated by spaces, but the last one is followed by ')'
+    if (!tryConsume(")")) {
+      consume(" ");
+      continue;
+    }
+    break;
+  }
+
+  auto *node = ctx.create<CustomDirective>(loc, functionName,
+                                           std::move(arguments), isFallible);
+
+  for (auto *arg : node->getArguments())
+    arg->parent = node;
+
   return node;
 }
 
@@ -401,7 +444,8 @@ void Verifier::verify(OperandNode *node) {
   resolveOperand(ctx, node);
 
   if (!isBinary && node->kinds.contains<Immediate, AnyImmediate>()) {
-    if (!isa_and_nonnull<SignednessNode, IfThenElseNode>(node->parent))
+    if (!isa_and_nonnull<SignednessNode, IfThenElseNode, CustomDirective>(
+            node->parent))
       PrintFatalError(node->getLoc(),
                       "immediate operand '$" + node->getName() +
                           "' must be wrapped in signed() or unsigned()");
@@ -431,10 +475,24 @@ void Verifier::verify(SignednessNode *node) {
   }
 }
 
+void Verifier::verify(CustomDirective *node) {
+  if (node->getFunctionName().empty())
+    PrintFatalError(node->getLoc(), "expected function name after 'custom<'");
+
+  if (isBinary && node->isFallible())
+    PrintFatalError(node->getLoc(),
+                    "fallible custom directive ('?') cannot be used in binary "
+                    "format");
+
+  for (auto *arg : node->getArguments())
+    verify(arg);
+}
+
 void Verifier::dispatch(FormatNode *node) {
   TypeSwitch<FormatNode *>(node)
       .Case<StringLiteralNode, MnemonicNode, BinaryLiteralNode, OperandNode,
-            SignednessNode, IfThenElseNode>([&](auto *node) { verify(node); })
+            SignednessNode, IfThenElseNode, CustomDirective>(
+          [&](auto *node) { verify(node); })
       .Default([](auto *node) {
         PrintFatalError(node->getLoc(), "unhandled format node");
       });
@@ -572,9 +630,19 @@ void BinaryFormatGen::gen(IfThenElseNode *node) {
       os);
 }
 
+void BinaryFormatGen::gen(CustomDirective *node) {
+  os << "binary = binary.concat(" << node->getFunctionName() << "(";
+  for (auto [i, arg] : llvm::enumerate(node->getArguments())) {
+    if (i > 0)
+      os << ", ";
+    os << "adaptor." << getGetterName(arg->getName()) << "()";
+  }
+  os << "));\n";
+}
+
 void BinaryFormatGen::dispatch(FormatNode *node) {
   TypeSwitch<FormatNode *>(node)
-      .Case<BinaryLiteralNode, OperandNode, IfThenElseNode>(
+      .Case<BinaryLiteralNode, OperandNode, IfThenElseNode, CustomDirective>(
           [&](auto *node) { gen(node); })
       .Default([](auto *node) {
         PrintFatalError(node->getLoc(), "unhandled format node");
@@ -732,10 +800,60 @@ void AssemblyFormatGen::gen(IfThenElseNode *node) {
       os);
 }
 
+void AssemblyFormatGen::gen(CustomDirective *node) {
+  os << node->getFunctionName() << "(";
+  for (auto *arg : node->getArguments())
+    os << "adaptor." << getGetterName(arg->getName()) << "(), ";
+  os << "os);\n";
+}
+
 void AssemblyFormatGen::dispatch(FormatNode *node) {
   TypeSwitch<FormatNode *>(node)
       .Case<MnemonicNode, StringLiteralNode, SignednessNode, OperandNode,
-            IfThenElseNode>([&](auto *node) { gen(node); });
+            IfThenElseNode, CustomDirective>([&](auto *node) { gen(node); });
+}
+
+// Helper function to collect all fallible custom directives from the AST
+static void collectFallibleCustomDirectives(
+    FormatNode *node, SmallVectorImpl<CustomDirective *> &fallibleDirectives) {
+  if (auto *custom = dyn_cast<CustomDirective>(node)) {
+    if (custom->isFallible())
+      fallibleDirectives.push_back(custom);
+  } else if (auto *ifNode = dyn_cast<IfThenElseNode>(node)) {
+    for (auto *child : ifNode->getThenBranch())
+      collectFallibleCustomDirectives(child, fallibleDirectives);
+    for (auto *child : ifNode->getElseBranch())
+      collectFallibleCustomDirectives(child, fallibleDirectives);
+  }
+}
+
+static void genFallibleCustomDirectiveChecks(ASTContext &ctx,
+                                             mlir::raw_indented_ostream &os) {
+  SmallVector<CustomDirective *> fallibleDirectives;
+  for (auto *node : ctx.nodes())
+    collectFallibleCustomDirectives(node, fallibleDirectives);
+
+  if (!fallibleDirectives.empty()) {
+    os << "if (";
+    for (auto [i, directive] : llvm::enumerate(fallibleDirectives)) {
+      if (i > 0)
+        os << " || ";
+      os << "!" << directive->getFunctionName() << "Possible(";
+      for (auto [j, arg] : llvm::enumerate(directive->getArguments())) {
+        if (j > 0)
+          os << ", ";
+        os << "adaptor." << getGetterName(arg->getName()) << "()";
+      }
+      os << ")";
+    }
+    os << ") {\n";
+    os.indent();
+    os << "os << \".word 0x\";\n";
+    os << "printInstructionBinary(os, adaptor);\n";
+    os << "return;\n";
+    os.unindent();
+    os << "}\n";
+  }
 }
 
 void AssemblyFormatGen::genInstructionMethod(ASTContext &ctx,
@@ -748,6 +866,8 @@ void AssemblyFormatGen::genInstructionMethod(ASTContext &ctx,
         "adaptor)";
 
   auto scope = os.scope(" {\n", "}\n\n");
+
+  genFallibleCustomDirectiveChecks(ctx, os);
 
   for (auto *node : ctx.nodes())
     dispatch(node);
