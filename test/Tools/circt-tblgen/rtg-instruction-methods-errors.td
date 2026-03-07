@@ -19,54 +19,54 @@ def TestRegType : Type<CPred<"true">, "test register">, RegisterTypeBase {
 #ifdef TEST_IMM_NO_WRAPPER
 def ErrorImmNoWrapperOp : TestOp<"error_imm_no_wrapper"> {
   let arguments = (ins ImmediateOfWidth<12>:$imm);
-  let isaAssemblyFormat = "mnemonic ` ` $imm";
+  let isaAssemblyFormat = "$imm";
 }
-// IMM_NO_WRAPPER: rtg-instruction-methods-errors.td:22:41: error: immediate operand '$imm' must be wrapped in signed() or unsigned()
+// IMM_NO_WRAPPER: rtg-instruction-methods-errors.td:22:28: error: immediate operand '$imm' must be wrapped in signed() or unsigned()
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_LABEL_SIGNED 2>&1 | FileCheck %s --check-prefix=LABEL_SIGNED
 #ifdef TEST_LABEL_SIGNED
 def ErrorLabelSignedOp : TestOp<"error_label_signed"> {
   let arguments = (ins LabelType:$label);
-  let isaAssemblyFormat = "mnemonic ` ` signed($label)";
+  let isaAssemblyFormat = "signed($label)";
 }
-// LABEL_SIGNED: rtg-instruction-methods-errors.td:31:48: error: label operand '$label' cannot be wrapped in signed() or unsigned()
+// LABEL_SIGNED: rtg-instruction-methods-errors.td:31:35: error: label operand '$label' cannot be wrapped in signed() or unsigned()
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_LABEL_UNSIGNED 2>&1 | FileCheck %s --check-prefix=LABEL_UNSIGNED
 #ifdef TEST_LABEL_UNSIGNED
 def ErrorLabelUnsignedOp : TestOp<"error_label_unsigned"> {
   let arguments = (ins LabelType:$label);
-  let isaAssemblyFormat = "mnemonic ` ` unsigned($label)";
+  let isaAssemblyFormat = "unsigned($label)";
 }
-// LABEL_UNSIGNED: rtg-instruction-methods-errors.td:40:50: error: label operand '$label' cannot be wrapped in signed() or unsigned()
+// LABEL_UNSIGNED: rtg-instruction-methods-errors.td:40:37: error: label operand '$label' cannot be wrapped in signed() or unsigned()
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_REG_SIGNED 2>&1 | FileCheck %s --check-prefix=REG_SIGNED
 #ifdef TEST_REG_SIGNED
 def ErrorRegSignedOp : TestOp<"error_reg_signed"> {
   let arguments = (ins TestRegType:$reg);
-  let isaAssemblyFormat = "mnemonic ` ` signed($reg)";
+  let isaAssemblyFormat = "signed($reg)";
 }
-// REG_SIGNED: rtg-instruction-methods-errors.td:49:48: error: register operand '$reg' cannot be wrapped in signed() or unsigned()
+// REG_SIGNED: rtg-instruction-methods-errors.td:49:35: error: register operand '$reg' cannot be wrapped in signed() or unsigned()
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_REG_UNSIGNED 2>&1 | FileCheck %s --check-prefix=REG_UNSIGNED
 #ifdef TEST_REG_UNSIGNED
 def ErrorRegUnsignedOp : TestOp<"error_reg_unsigned"> {
   let arguments = (ins TestRegType:$reg);
-  let isaAssemblyFormat = "mnemonic ` ` unsigned($reg)";
+  let isaAssemblyFormat = "unsigned($reg)";
 }
-// REG_UNSIGNED: rtg-instruction-methods-errors.td:58:50: error: register operand '$reg' cannot be wrapped in signed() or unsigned()
+// REG_UNSIGNED: rtg-instruction-methods-errors.td:58:37: error: register operand '$reg' cannot be wrapped in signed() or unsigned()
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_UNKNOWN_OPERAND_ASM 2>&1 | FileCheck %s --check-prefix=UNKNOWN_OPERAND_ASM
 #ifdef TEST_UNKNOWN_OPERAND_ASM
 def ErrorUnknownOperandAsmOp : TestOp<"error_unknown_operand_asm"> {
   let arguments = (ins TestRegType:$reg);
-  let isaAssemblyFormat = "mnemonic ` ` $unknown";
+  let isaAssemblyFormat = "$unknown";
 }
-// UNKNOWN_OPERAND_ASM: rtg-instruction-methods-errors.td:67:41: error: unknown operand '$unknown'
+// UNKNOWN_OPERAND_ASM: rtg-instruction-methods-errors.td:67:28: error: unknown operand '$unknown'
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_UNKNOWN_OPERAND_BIN 2>&1 | FileCheck %s --check-prefix=UNKNOWN_OPERAND_BIN
@@ -74,7 +74,7 @@ def ErrorUnknownOperandAsmOp : TestOp<"error_unknown_operand_asm"> {
 def ErrorUnknownOperandBinOp : TestOp<"error_unknown_operand_bin"> {
   let arguments = (ins TestRegType:$reg);
   let isaBinaryFormat = "$unknown 0b1111";
-  let isaAssemblyFormat = "mnemonic ` ` $reg";
+  let isaAssemblyFormat = "$reg";
 }
 // UNKNOWN_OPERAND_BIN: rtg-instruction-methods-errors.td:76:26: error: unknown operand '$unknown'
 #endif
@@ -84,7 +84,7 @@ def ErrorUnknownOperandBinOp : TestOp<"error_unknown_operand_bin"> {
 def ErrorInvalidBitSliceOp : TestOp<"error_invalid_bit_slice"> {
   let arguments = (ins ImmediateOfWidth<12>:$imm);
   let isaBinaryFormat = "$imm[5:10] 0b1111";
-  let isaAssemblyFormat = "mnemonic ` ` signed($imm)";
+  let isaAssemblyFormat = "signed($imm)";
 }
 // INVALID_BIT_SLICE: rtg-instruction-methods-errors.td:86:30: error: high bit (5) must be >= low bit (10)
 #endif
@@ -94,7 +94,7 @@ def ErrorInvalidBitSliceOp : TestOp<"error_invalid_bit_slice"> {
 def ErrorInvalidBinaryLiteralOp : TestOp<"error_invalid_binary_literal"> {
   let arguments = (ins TestRegType:$reg);
   let isaBinaryFormat = "$reg 0b10102";
-  let isaAssemblyFormat = "mnemonic ` ` $reg";
+  let isaAssemblyFormat = "$reg";
 }
 // INVALID_BINARY_LITERAL: rtg-instruction-methods-errors.td:96:37: error: invalid character ('2') after binary literal
 #endif
@@ -104,7 +104,7 @@ def ErrorInvalidBinaryLiteralOp : TestOp<"error_invalid_binary_literal"> {
 def ErrorMalformedBitSliceOp : TestOp<"error_malformed_bit_slice"> {
   let arguments = (ins ImmediateOfWidth<12>:$imm);
   let isaBinaryFormat = "$imm[:5] 0b1111";
-  let isaAssemblyFormat = "mnemonic ` ` signed($imm)";
+  let isaAssemblyFormat = "signed($imm)";
 }
 // MALFORMED_BIT_SLICE: rtg-instruction-methods-errors.td:106:31: error: expected unsigned integer literal
 #endif
@@ -113,45 +113,45 @@ def ErrorMalformedBitSliceOp : TestOp<"error_malformed_bit_slice"> {
 #ifdef TEST_UNTERMINATED_BACKTICK
 def ErrorUnterminatedBacktickOp : TestOp<"error_unterminated_backtick"> {
   let arguments = (ins TestRegType:$reg);
-  let isaAssemblyFormat = "mnemonic ` unterminated";
+  let isaAssemblyFormat = "` unterminated";
 }
-// UNTERMINATED_BACKTICK: rtg-instruction-methods-errors.td:116:37: error: unterminated backtick literal
+// UNTERMINATED_BACKTICK: rtg-instruction-methods-errors.td:116:28: error: unterminated backtick literal
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_MISSING_CLOSING_PAREN 2>&1 | FileCheck %s --check-prefix=MISSING_CLOSING_PAREN
 #ifdef TEST_MISSING_CLOSING_PAREN
 def ErrorMissingClosingParenOp : TestOp<"error_missing_closing_paren"> {
   let arguments = (ins ImmediateOfWidth<12>:$imm);
-  let isaAssemblyFormat = "mnemonic ` ` signed($imm";
+  let isaAssemblyFormat = "signed($imm";
 }
-// MISSING_CLOSING_PAREN: rtg-instruction-methods-errors.td:125:52: error: expected ')'
+// MISSING_CLOSING_PAREN: rtg-instruction-methods-errors.td:125:39: error: expected ')'
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_UNEXPECTED_CHAR 2>&1 | FileCheck %s --check-prefix=UNEXPECTED_CHAR
 #ifdef TEST_UNEXPECTED_CHAR
 def ErrorUnexpectedCharOp : TestOp<"error_unexpected_char"> {
   let arguments = (ins TestRegType:$reg);
-  let isaAssemblyFormat = "mnemonic @ $reg";
+  let isaAssemblyFormat = "@ $reg";
 }
-// UNEXPECTED_CHAR: rtg-instruction-methods-errors.td:134:37: error: unexpected character '@'
+// UNEXPECTED_CHAR: rtg-instruction-methods-errors.td:134:28: error: unexpected character '@'
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_MISSING_OPERAND_AFTER_SIGNED 2>&1 | FileCheck %s --check-prefix=MISSING_OPERAND_AFTER_SIGNED
 #ifdef TEST_MISSING_OPERAND_AFTER_SIGNED
 def ErrorMissingOperandAfterSignedOp : TestOp<"error_missing_operand_after_signed"> {
   let arguments = (ins ImmediateOfWidth<12>:$imm);
-  let isaAssemblyFormat = "mnemonic ` ` signed()";
+  let isaAssemblyFormat = "signed()";
 }
-// MISSING_OPERAND_AFTER_SIGNED: rtg-instruction-methods-errors.td:143:48: error: expected operand after 'signed' specifier
+// MISSING_OPERAND_AFTER_SIGNED: rtg-instruction-methods-errors.td:143:35: error: expected operand after 'signed' specifier
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_MISSING_OPERAND_AFTER_UNSIGNED 2>&1 | FileCheck %s --check-prefix=MISSING_OPERAND_AFTER_UNSIGNED
 #ifdef TEST_MISSING_OPERAND_AFTER_UNSIGNED
 def ErrorMissingOperandAfterUnsignedOp : TestOp<"error_missing_operand_after_unsigned"> {
   let arguments = (ins ImmediateOfWidth<12>:$imm);
-  let isaAssemblyFormat = "mnemonic ` ` unsigned()";
+  let isaAssemblyFormat = "unsigned()";
 }
-// MISSING_OPERAND_AFTER_UNSIGNED: rtg-instruction-methods-errors.td:152:50: error: expected operand after 'unsigned' specifier
+// MISSING_OPERAND_AFTER_UNSIGNED: rtg-instruction-methods-errors.td:152:37: error: expected operand after 'unsigned' specifier
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_NEGATIVE_BIT_SLICE 2>&1 | FileCheck %s --check-prefix=NEGATIVE_BIT_SLICE
@@ -159,19 +159,9 @@ def ErrorMissingOperandAfterUnsignedOp : TestOp<"error_missing_operand_after_uns
 def ErrorNegativeBitSliceOp : TestOp<"error_negative_bit_slice"> {
   let arguments = (ins ImmediateOfWidth<12>:$imm);
   let isaBinaryFormat = "$imm[-1:5] 0b1111";
-  let isaAssemblyFormat = "mnemonic ` ` signed($imm)";
+  let isaAssemblyFormat = "signed($imm)";
 }
 // NEGATIVE_BIT_SLICE: rtg-instruction-methods-errors.td:161:31: error: expected unsigned integer literal
-#endif
-
-// RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_MNEMONIC_IN_BINARY 2>&1 | FileCheck %s --check-prefix=MNEMONIC_IN_BINARY
-#ifdef TEST_MNEMONIC_IN_BINARY
-def ErrorMnemonicInBinaryOp : TestOp<"error_mnemonic_in_binary"> {
-  let arguments = (ins TestRegType:$reg);
-  let isaBinaryFormat = "mnemonic $reg";
-  let isaAssemblyFormat = "mnemonic ` ` $reg";
-}
-// MNEMONIC_IN_BINARY: rtg-instruction-methods-errors.td:171:26: error: binary format cannot contain 'mnemonic' keyword
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_STRING_LITERAL_IN_BINARY 2>&1 | FileCheck %s --check-prefix=STRING_LITERAL_IN_BINARY
@@ -179,9 +169,9 @@ def ErrorMnemonicInBinaryOp : TestOp<"error_mnemonic_in_binary"> {
 def ErrorStringLiteralInBinaryOp : TestOp<"error_string_literal_in_binary"> {
   let arguments = (ins TestRegType:$reg);
   let isaBinaryFormat = "`hello` $reg";
-  let isaAssemblyFormat = "mnemonic ` ` $reg";
+  let isaAssemblyFormat = "$reg";
 }
-// STRING_LITERAL_IN_BINARY: rtg-instruction-methods-errors.td:181:26: error: binary format cannot contain string literal
+// STRING_LITERAL_IN_BINARY: rtg-instruction-methods-errors.td:171:26: error: binary format cannot contain string literal
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_SIGNEDNESS_IN_BINARY 2>&1 | FileCheck %s --check-prefix=SIGNEDNESS_IN_BINARY
@@ -189,9 +179,9 @@ def ErrorStringLiteralInBinaryOp : TestOp<"error_string_literal_in_binary"> {
 def ErrorSignednessInBinaryOp : TestOp<"error_signedness_in_binary"> {
   let arguments = (ins ImmediateOfWidth<12>:$imm);
   let isaBinaryFormat = "signed($imm) 0b1111";
-  let isaAssemblyFormat = "mnemonic ` ` signed($imm)";
+  let isaAssemblyFormat = "signed($imm)";
 }
-// SIGNEDNESS_IN_BINARY: rtg-instruction-methods-errors.td:191:26: error: binary format cannot contain signed()/unsigned()
+// SIGNEDNESS_IN_BINARY: rtg-instruction-methods-errors.td:181:26: error: binary format cannot contain signed()/unsigned()
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_BINARY_LITERAL_IN_ASSEMBLY 2>&1 | FileCheck %s --check-prefix=BINARY_LITERAL_IN_ASSEMBLY
@@ -199,9 +189,9 @@ def ErrorSignednessInBinaryOp : TestOp<"error_signedness_in_binary"> {
 def ErrorBinaryLiteralInAssemblyOp : TestOp<"error_binary_literal_in_assembly"> {
   let arguments = (ins TestRegType:$reg);
   let isaBinaryFormat = "$reg 0b1111";
-  let isaAssemblyFormat = "mnemonic ` ` 0b1010 $reg";
+  let isaAssemblyFormat = "0b1010 $reg";
 }
-// BINARY_LITERAL_IN_ASSEMBLY: rtg-instruction-methods-errors.td:202:41: error: assembly format cannot contain binary literals
+// BINARY_LITERAL_IN_ASSEMBLY: rtg-instruction-methods-errors.td:192:28: error: assembly format cannot contain binary literals
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_FAILED_TO_CLASSIFY 2>&1 | FileCheck %s --check-prefix=FAILED_TO_CLASSIFY
@@ -211,25 +201,25 @@ def FailedToClassifyOp : TestOp<"error_failed_to_classify"> {
   let isaBinaryFormat = "$imm";
   let isaAssemblyFormat = "$imm";
 }
-// FAILED_TO_CLASSIFY: rtg-instruction-methods-errors.td:212:28: error: failed to classify ISA type for operand 'imm' with type 'I1'
+// FAILED_TO_CLASSIFY: rtg-instruction-methods-errors.td:202:28: error: failed to classify ISA type for operand 'imm' with type 'I1'
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_MISSING_SPACE 2>&1 | FileCheck %s --check-prefix=MISSING_SPACE
 #ifdef TEST_MISSING_SPACE
 def ErrorMissingSpaceOp : TestOp<"error_missing_space"> {
   let arguments = (ins TestRegType:$reg1, TestRegType:$reg2);
-  let isaAssemblyFormat = "mnemonic ` ` $reg1$reg2";
+  let isaAssemblyFormat = "$reg1$reg2";
 }
-// MISSING_SPACE: rtg-instruction-methods-errors.td:221:46: error: expected ' '
+// MISSING_SPACE: rtg-instruction-methods-errors.td:211:33: error: expected ' '
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_EMPTY_OPERAND_NAME 2>&1 | FileCheck %s --check-prefix=EMPTY_OPERAND_NAME
 #ifdef TEST_EMPTY_OPERAND_NAME
 def ErrorEmptyOperandNameOp : TestOp<"error_empty_operand_name"> {
   let arguments = (ins TestRegType:$reg);
-  let isaAssemblyFormat = "mnemonic ` ` $ ` ` $reg";
+  let isaAssemblyFormat = "$ ` ` $reg";
 }
-// EMPTY_OPERAND_NAME: rtg-instruction-methods-errors.td:230:41: error: unknown operand '$'
+// EMPTY_OPERAND_NAME: rtg-instruction-methods-errors.td:220:28: error: unknown operand '$'
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_MISSING_CLOSING_BRACKET 2>&1 | FileCheck %s --check-prefix=MISSING_CLOSING_BRACKET
@@ -237,9 +227,9 @@ def ErrorEmptyOperandNameOp : TestOp<"error_empty_operand_name"> {
 def ErrorMissingClosingBracketOp : TestOp<"error_missing_closing_bracket"> {
   let arguments = (ins ImmediateOfWidth<12>:$imm);
   let isaBinaryFormat = "$imm[11:5 0b1111";
-  let isaAssemblyFormat = "mnemonic ` ` signed($imm)";
+  let isaAssemblyFormat = "signed($imm)";
 }
-// MISSING_CLOSING_BRACKET: rtg-instruction-methods-errors.td:239:35: error: expected ']'
+// MISSING_CLOSING_BRACKET: rtg-instruction-methods-errors.td:229:35: error: expected ']'
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_ANYTYPE_MUST_CONTAIN_LABEL 2>&1 | FileCheck %s --check-prefix=ANYTYPE_MUST_CONTAIN_LABEL
@@ -247,9 +237,9 @@ def ErrorMissingClosingBracketOp : TestOp<"error_missing_closing_bracket"> {
 def ErrorAnyTypeMustContainLabelOp : TestOp<"error_anytype_must_contain_label"> {
   let arguments = (ins AnyTypeOf<[TestRegType, ImmediateOfWidth<5>]>:$src);
   let isaBinaryFormat = "$src 0b1010";
-  let isaAssemblyFormat = "mnemonic ` ` unsigned($src)";
+  let isaAssemblyFormat = "unsigned($src)";
 }
-// ANYTYPE_MUST_CONTAIN_LABEL: rtg-instruction-methods-errors.td:249:26: error: one of the operand types must be a label in binary format if there are 2 operand types possible
+// ANYTYPE_MUST_CONTAIN_LABEL: rtg-instruction-methods-errors.td:239:26: error: one of the operand types must be a label in binary format if there are 2 operand types possible
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_DECIMAL_LITERAL_OVERFLOW 2>&1 | FileCheck %s --check-prefix=DECIMAL_LITERAL_OVERFLOW
@@ -257,72 +247,63 @@ def ErrorAnyTypeMustContainLabelOp : TestOp<"error_anytype_must_contain_label"> 
 def ErrorDecimalLiteralOverflowOp : TestOp<"error_decimal_literal_overflow"> {
   let arguments = (ins TestRegType:$reg);
   let isaBinaryFormat = "$reg 3d15";
-  let isaAssemblyFormat = "mnemonic ` ` $reg";
+  let isaAssemblyFormat = "$reg";
 }
-// DECIMAL_LITERAL_OVERFLOW: rtg-instruction-methods-errors.td:259:31: error: decimal literal value 15 does not fit in 3 bits
+// DECIMAL_LITERAL_OVERFLOW: rtg-instruction-methods-errors.td:249:31: error: decimal literal value 15 does not fit in 3 bits
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_IF_BOTH_BRANCHES_EMPTY 2>&1 | FileCheck %s --check-prefix=IF_BOTH_BRANCHES_EMPTY
 #ifdef TEST_IF_BOTH_BRANCHES_EMPTY
 def ErrorIfBothBranchesEmptyOp : TestOp<"error_if_both_branches_empty"> {
   let arguments = (ins ImmediateOfWidth<1>:$cond, TestRegType:$reg);
-  let isaAssemblyFormat = "mnemonic ` ` if $cond then () else ()";
+  let isaAssemblyFormat = "if $cond then () else ()";
 }
-// IF_BOTH_BRANCHES_EMPTY: rtg-instruction-methods-errors.td:269:41: error: if-then-else must have at least one of 'then' or 'else' branch
+// IF_BOTH_BRANCHES_EMPTY: rtg-instruction-methods-errors.td:259:28: error: if-then-else must have at least one of 'then' or 'else' branch
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_IF_MISSING_THEN_PAREN 2>&1 | FileCheck %s --check-prefix=IF_MISSING_THEN_PAREN
 #ifdef TEST_IF_MISSING_THEN_PAREN
 def ErrorIfMissingThenParenOp : TestOp<"error_if_missing_then_paren"> {
   let arguments = (ins ImmediateOfWidth<1>:$cond, TestRegType:$reg);
-  let isaAssemblyFormat = "mnemonic ` ` if $cond then $reg else ()";
+  let isaAssemblyFormat = "if $cond then $reg else ()";
 }
-// IF_MISSING_THEN_PAREN: rtg-instruction-methods-errors.td:278:54: error: expected '('
+// IF_MISSING_THEN_PAREN: rtg-instruction-methods-errors.td:268:41: error: expected '('
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_IF_MISSING_ELSE_PAREN 2>&1 | FileCheck %s --check-prefix=IF_MISSING_ELSE_PAREN
 #ifdef TEST_IF_MISSING_ELSE_PAREN
 def ErrorIfMissingElseParenOp : TestOp<"error_if_missing_else_paren"> {
   let arguments = (ins ImmediateOfWidth<1>:$cond, TestRegType:$reg);
-  let isaAssemblyFormat = "mnemonic ` ` if $cond then () else $reg";
+  let isaAssemblyFormat = "if $cond then () else $reg";
 }
-// IF_MISSING_ELSE_PAREN: rtg-instruction-methods-errors.td:287:62: error: expected '('
+// IF_MISSING_ELSE_PAREN: rtg-instruction-methods-errors.td:277:49: error: expected '('
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_IF_MISSING_OPERAND 2>&1 | FileCheck %s --check-prefix=IF_MISSING_OPERAND
 #ifdef TEST_IF_MISSING_OPERAND
 def ErrorIfMissingOperandOp : TestOp<"error_if_missing_operand"> {
   let arguments = (ins ImmediateOfWidth<1>:$cond, TestRegType:$reg);
-  let isaAssemblyFormat = "mnemonic ` ` if then ($reg) else ()";
+  let isaAssemblyFormat = "if then ($reg) else ()";
 }
-// IF_MISSING_OPERAND: rtg-instruction-methods-errors.td:296:44: error: expected operand after 'if' keyword
+// IF_MISSING_OPERAND: rtg-instruction-methods-errors.td:286:31: error: expected operand after 'if' keyword
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_IF_BOTH_BRANCHES_EMPTY2 2>&1 | FileCheck %s --check-prefix=IF_BOTH_BRANCHES_EMPTY2
 #ifdef TEST_IF_BOTH_BRANCHES_EMPTY2
 def ErrorIfBothBranchesEmptyOp : TestOp<"error_if_both_branches_empty"> {
   let arguments = (ins ImmediateOfWidth<1>:$cond, TestRegType:$reg);
-  let isaAssemblyFormat = "mnemonic ` ` if $cond `end`";
+  let isaAssemblyFormat = "if $cond `end`";
 }
-// IF_BOTH_BRANCHES_EMPTY2: rtg-instruction-methods-errors.td:305:50: error: expected 'then' or 'else' after 'if' condition
+// IF_BOTH_BRANCHES_EMPTY2: rtg-instruction-methods-errors.td:295:37: error: expected 'then' or 'else' after 'if' condition
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_CUSTOM_MISSING_FUNCTION_NAME 2>&1 | FileCheck %s --check-prefix=CUSTOM_MISSING_FUNCTION_NAME
 #ifdef TEST_CUSTOM_MISSING_FUNCTION_NAME
 def ErrorCustomMissingFunctionNameOp : TestOp<"error_custom_missing_function_name"> {
   let arguments = (ins TestRegType:$reg);
-  let isaAssemblyFormat = "mnemonic ` ` custom<>($reg)";
+  let isaAssemblyFormat = "custom<>($reg)";
 }
-// CUSTOM_MISSING_FUNCTION_NAME: rtg-instruction-methods-errors.td:314:41: error: expected function name after 'custom<'
-#endif
-
-// RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_CUSTOM_INVALID_ARG 2>&1 | FileCheck %s --check-prefix=CUSTOM_INVALID_ARG
-#ifdef TEST_CUSTOM_INVALID_ARG
-def ErrorCustomInvalidArgOp : TestOp<"error_custom_invalid_arg"> {
-  let arguments = (ins TestRegType:$reg);
-  let isaAssemblyFormat = "mnemonic ` ` custom<MyParser>(mnemonic)";
-}
-// CUSTOM_INVALID_ARG: rtg-instruction-methods-errors.td:323:58: error: expected operand in custom directive arguments
+// CUSTOM_MISSING_FUNCTION_NAME: rtg-instruction-methods-errors.td:304:28: error: expected function name after 'custom<'
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_FALLIBLE_CUSTOM_IN_BINARY 2>&1 | FileCheck %s --check-prefix=FALLIBLE_CUSTOM_IN_BINARY
@@ -330,7 +311,7 @@ def ErrorCustomInvalidArgOp : TestOp<"error_custom_invalid_arg"> {
 def ErrorFallibleCustomInBinaryOp : TestOp<"error_fallible_custom_in_binary"> {
   let arguments = (ins TestRegType:$reg);
   let isaBinaryFormat = "custom<MyParser>?($reg)";
-  let isaAssemblyFormat = "mnemonic ` ` $reg";
+  let isaAssemblyFormat = "$reg";
 }
-// FALLIBLE_CUSTOM_IN_BINARY: rtg-instruction-methods-errors.td:332:26: error: fallible custom directive ('?') cannot be used in binary format
+// FALLIBLE_CUSTOM_IN_BINARY: rtg-instruction-methods-errors.td:313:26: error: fallible custom directive ('?') cannot be used in binary format
 #endif

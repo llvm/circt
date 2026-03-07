@@ -62,7 +62,8 @@ class InstFormatIOpBase<string mnemonic, string opcode7, string funct3>
 
   let assemblyFormat = "$rd `,` $rs `,` $imm attr-dict";
   let isaBinaryFormat = "$imm $rs " # funct3 # " $rd " # opcode7;
-  let isaAssemblyFormat = "mnemonic ` ` $rd `, ` signed($imm) `(` $rs `)`";
+  let isaAssemblyFormat =
+    "`" # mnemonic # " ` $rd `, ` signed($imm) `(` $rs `)`";
 }
 
 class InstFormatIImmOpBase<string mnemonic, string opcode7, string funct12>
@@ -70,7 +71,7 @@ class InstFormatIImmOpBase<string mnemonic, string opcode7, string funct12>
 
   let assemblyFormat = "attr-dict";
   let isaBinaryFormat = funct12 # " 0b0000000000000 " # opcode7;
-  let isaAssemblyFormat = "mnemonic";
+  let isaAssemblyFormat = "`" # mnemonic # "`";
 }
 
 class InstFormatBOpBase<string mnemonic, string opcode7, string funct3>
@@ -85,7 +86,8 @@ class InstFormatBOpBase<string mnemonic, string opcode7, string funct3>
   }];
   let isaBinaryFormat = "$imm[12] $imm[10:5] $rs2 $rs1 " # funct3 #
                         " $imm[4:1] $imm[11] " # opcode7;
-  let isaAssemblyFormat = "mnemonic ` ` $rs1 `, ` $rs2 `, ` unsigned($imm)";
+  let isaAssemblyFormat =
+    "`" # mnemonic # " ` $rs1 `, ` $rs2 `, ` unsigned($imm)";
 }
 
 class InstFormatROpBase<string mnemonic, string opcode7, string funct3, string funct7>
@@ -97,7 +99,7 @@ class InstFormatROpBase<string mnemonic, string opcode7, string funct3, string f
 
   let assemblyFormat = "$rd `,` $rs1 `,` $rs2 attr-dict";
   let isaBinaryFormat = funct7 # " $rs2 $rs1 " # funct3 # " $rd " # opcode7;
-  let isaAssemblyFormat = "mnemonic ` ` $rd `, ` $rs1 `, ` $rs2";
+  let isaAssemblyFormat = "`" # mnemonic # " ` $rd `, ` $rs1 `, ` $rs2";
 }
 
 class InstFormatSOpBase<string mnemonic, string opcode7, string funct3>
@@ -110,7 +112,8 @@ class InstFormatSOpBase<string mnemonic, string opcode7, string funct3>
   let assemblyFormat = "$rs1 `,` $rs2 `,` $imm attr-dict";
   let isaBinaryFormat = "$imm[11:5] $rs2 $rs1 " # funct3 #
                         " $imm[4:0] " # opcode7;
-  let isaAssemblyFormat = "mnemonic ` ` $rs1 `, ` signed($imm) `(` $rs2 `)`";
+  let isaAssemblyFormat =
+    "`" # mnemonic # " ` $rs1 `, ` signed($imm) `(` $rs2 `)`";
 }
 
 class InstFormatUOpBase<string mnemonic, string opcode7>
@@ -121,7 +124,7 @@ class InstFormatUOpBase<string mnemonic, string opcode7>
 
   let assemblyFormat = "$rd `,` $imm `:` type($imm) attr-dict";
   let isaBinaryFormat = "$imm[31:12] $rd " # opcode7;
-  let isaAssemblyFormat = "mnemonic ` ` $rd `, ` unsigned($imm)";
+  let isaAssemblyFormat = "`" # mnemonic # " ` $rd `, ` unsigned($imm)";
 }
 
 class InstFormatJOpBase<string mnemonic, string opcode7>
@@ -133,7 +136,7 @@ class InstFormatJOpBase<string mnemonic, string opcode7>
   let assemblyFormat = "$rd `,` $imm `:` type($imm) attr-dict";
   let isaBinaryFormat =
     "$imm[20] $imm[10:1] $imm[11] $imm[19:12] $rd " # opcode7;
-  let isaAssemblyFormat = "mnemonic ` ` $rd `, ` signed($imm)";
+  let isaAssemblyFormat = "`" # mnemonic # " ` $rd `, ` signed($imm)";
 }
 
 class InstFormatIAOpBase<string mnemonic, string opcode7, string funct3>
@@ -147,7 +150,7 @@ class InstFormatIAOpBase<string mnemonic, string opcode7, string funct3>
 
   // Auto-generated binary and assembly methods
   let isaBinaryFormat = "$imm $rs " # funct3 # " $rd " # opcode7;
-  let isaAssemblyFormat = "mnemonic ` ` $rd `, ` $rs `, ` signed($imm)";
+  let isaAssemblyFormat = "`" # mnemonic # " ` $rd `, ` $rs `, ` signed($imm)";
 }
 
 class InstFormatShiftOpBase<string mnemonic, string opcode7,
@@ -160,7 +163,8 @@ class InstFormatShiftOpBase<string mnemonic, string opcode7,
 
   let assemblyFormat = "$rd `,` $rs `,` $imm attr-dict";
   let isaBinaryFormat = funct7 # " $imm $rs " # funct3 # " $rd " # opcode7;
-  let isaAssemblyFormat = "mnemonic ` ` $rd `, ` $rs `, ` unsigned($imm)";
+  let isaAssemblyFormat =
+    "`" # mnemonic # " ` $rd `, ` $rs `, ` unsigned($imm)";
 }
 
 //===- Instructions -------------------------------------------------------===//
@@ -171,7 +175,7 @@ def RV32I_LA : InstrFormatOp<"rv32i.la", [InstructionOpAdaptor]> {
                        ISAMemoryWithAddressWidth<32>:$mem);
 
   let assemblyFormat = "$rd `,` $mem `:` type($mem) attr-dict";
-  let isaAssemblyFormat = "mnemonic ` ` $rd `, ` unsigned($mem)";
+  let isaAssemblyFormat = "`la ` $rd `, ` unsigned($mem)";
 }
 
 def RV32I_LUI       : InstFormatUOpBase<"lui",   "0b0110111">;
