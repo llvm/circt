@@ -7,28 +7,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HW/HWInstanceGraph.h"
-#include "circt/Dialect/HW/HWModuleGraph.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
-#include "circt/Support/Debug.h"
-#include "circt/Support/InstanceGraph.h"
-#include "circt/Support/LLVM.h"
-#include "mlir/IR/Attributes.h"
-#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
-#include "mlir/IR/Iterators.h"
-#include "mlir/IR/MLIRContext.h"
-#include "mlir/IR/OpDefinition.h"
-#include "mlir/IR/Operation.h"
-#include "mlir/IR/Types.h"
-#include "mlir/IR/Value.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
-#include "mlir/Support/LLVM.h"
 #include "llvm/ADT/DenseMapInfoVariant.h"
-#include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/Support/Casting.h"
 #include <variant>
 
 #define DEBUG_TYPE "hw-imdeadcodeelim"
@@ -120,10 +105,9 @@ void HWIMDeadCodeElim::markUnknownSideEffectOp(Operation *op) {
 
 void HWIMDeadCodeElim::markInstanceLike(HWInstanceLike instanceLike) {
 
-  auto moduleNames = instanceLike.getReferencedModuleNames();
-  for (auto moduleName : moduleNames) {
-    auto moduleNameAttr = mlir::StringAttr::get(&getContext(), moduleName);
-    auto *node = instanceGraph->lookup(moduleNameAttr);
+  for (StringAttr moduleName :
+       instanceLike.getReferencedModuleNamesAttr().getAsRange<StringAttr>()) {
+    auto *node = instanceGraph->lookup(moduleName);
 
     if (!node)
       continue;
@@ -186,12 +170,9 @@ void HWIMDeadCodeElim::markBlockExecutable(Block *block) {
 ///         out if something is actually used in a non HWModuleOp.
 void HWIMDeadCodeElim::visitInstanceLike(HWInstanceLike instanceLike) {
 
-  auto moduleNames = instanceLike.getReferencedModuleNames();
-  for (StringRef moduleName : moduleNames) {
-    mlir::StringAttr moduleNameAttr =
-        mlir::StringAttr::get(&getContext(), moduleName);
-
-    auto *moduleNode = instanceGraph->lookup(moduleNameAttr);
+  for (mlir::StringAttr moduleName :
+       instanceLike.getReferencedModuleNamesAttr().getAsRange<StringAttr>()) {
+    auto *moduleNode = instanceGraph->lookup(moduleName);
 
     if (!moduleNode)
       continue;
@@ -256,11 +237,9 @@ void HWIMDeadCodeElim::visitValue(Value value) {
 
     // For each module that the instance could refer to,
     // mark
-    auto moduleNames = instanceLike.getReferencedModuleNames();
-    for (StringRef moduleName : moduleNames) {
-      mlir::StringAttr moduleNameAttr =
-          mlir::StringAttr::get(&getContext(), moduleName);
-      auto *node = instanceGraph->lookupOrNull(moduleNameAttr);
+    for (mlir::StringAttr moduleName :
+         instanceLike.getReferencedModuleNamesAttr().getAsRange<StringAttr>()) {
+      auto *node = instanceGraph->lookupOrNull(moduleName);
 
       if (!node)
         continue;
@@ -315,8 +294,7 @@ void HWIMDeadCodeElim::runOnOperation() {
     // internally relevant.
 
     // Mark all output values (i.e. SSA vals passed to hw.output) as alive
-    if (moduleLike.getBodyBlock() == nullptr ||
-        moduleLike.getBodyBlock()->empty())
+    if (moduleLike.getBodyBlock()->empty())
       continue;
     auto *moduleOutputOp = moduleLike.getBodyBlock()->getTerminator();
     if (!dyn_cast<OutputOp>(moduleOutputOp))
