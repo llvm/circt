@@ -43,16 +43,16 @@ def test_instruction(config):
   rs1 = IntegerRegister.t0()
   imm = Immediate(12, 42)
 
-  # CHECK: rtgtest.rv32i.addi %
+  # CHECK: rtgtest.addi %
   rd = ADD1(rs1, imm)
   assert rd is not None
 
-  # CHECK: rtgtest.rv32i.addi %
+  # CHECK: rtgtest.addi %
   rd = IntegerRegister.virtual()
   result = ADD1(rd, rs1, imm)
   assert result is None
 
-  # CHECK: rtgtest.rv32i.add %
+  # CHECK: rtgtest.add %
   results = ADD3(rs1)
   assert isinstance(results, list)
   assert len(results) == 2
