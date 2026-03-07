@@ -955,20 +955,20 @@ firrtl.circuit "DPICycle" {
 // Test that domain.anon and connections are preserved.
 firrtl.circuit "DomainPreservation" {
   firrtl.domain @ClockDomain
-  firrtl.extmodule private @Bar(in A: !firrtl.domain of @ClockDomain)
+  firrtl.extmodule private @Bar(in A: !firrtl.domain<@ClockDomain>)
 
   // CHECK-LABEL: firrtl.module @DomainPreservation
   firrtl.module @DomainPreservation() {
-    // CHECK: %a = firrtl.wire : !firrtl.domain
-    %a = firrtl.wire : !firrtl.domain
+    // CHECK: %a = firrtl.wire : !firrtl.domain<@ClockDomain>
+    %a = firrtl.wire : !firrtl.domain<@ClockDomain>
     // CHECK: %bar_A = firrtl.instance bar @Bar
-    %bar_A = firrtl.instance bar @Bar(in A: !firrtl.domain of @ClockDomain)
-    // CHECK: firrtl.domain.define %bar_A, %a
-    firrtl.domain.define %bar_A, %a
-    // CHECK: %0 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
-    %0 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
-    // CHECK: firrtl.domain.define %a, %0
-    firrtl.domain.define %a, %0
+    %bar_A = firrtl.instance bar @Bar(in A: !firrtl.domain<@ClockDomain>)
+    // CHECK: firrtl.domain.define %bar_A, %a : !firrtl.domain<@ClockDomain>
+    firrtl.domain.define %bar_A, %a : !firrtl.domain<@ClockDomain>
+    // CHECK: %0 = firrtl.domain.anon : !firrtl.domain<@ClockDomain>
+    %0 = firrtl.domain.anon : !firrtl.domain<@ClockDomain>
+    // CHECK: firrtl.domain.define %a, %0 : !firrtl.domain<@ClockDomain>
+    firrtl.domain.define %a, %0 : !firrtl.domain<@ClockDomain>
   }
 }
 

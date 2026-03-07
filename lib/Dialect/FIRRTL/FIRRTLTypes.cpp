@@ -166,7 +166,20 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
       })
       .Case<AnyRefType>([&](AnyRefType type) { os << "anyref"; })
       .Case<FStringType>([&](auto) { os << "fstring"; })
-      .Case<DomainType>([&](auto) { os << "domain"; })
+      .Case<DomainType>([&](DomainType type) {
+        os << "domain<";
+        os.printSymbolName(type.getName());
+        if (type.getNumFields() > 0) {
+          os << "(";
+          llvm::interleaveComma(type.getFields(), os, [&](Attribute attr) {
+            auto field = cast<DomainFieldAttr>(attr);
+            os << field.getName().getValue() << ": ";
+            os.printType(field.getType());
+          });
+          os << ")";
+        }
+        os << ">";
+      })
       .Default([&](auto) { anyFailed = true; });
   return failure(anyFailed);
 }
@@ -540,7 +553,46 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     return result = FStringType::get(context), success();
   }
   if (name == "domain") {
-    return result = DomainType::get(context), success();
+    // Parse: !firrtl.domain<@SymbolName> or
+    //        !firrtl.domain<@SymbolName(name: type, ...)>
+    if (parser.parseLess())
+      return failure();
+
+    StringAttr domainName;
+    if (parser.parseSymbolName(domainName))
+      return failure();
+
+    SmallVector<Attribute> fields;
+    if (succeeded(parser.parseOptionalLParen())) {
+      // Parse field list: name: type, name: type, ...
+      auto parseField = [&]() -> ParseResult {
+        std::string fieldNameStr;
+        Type fieldTypeRaw;
+        if (parser.parseKeywordOrString(&fieldNameStr) || parser.parseColon() ||
+            parser.parseType(fieldTypeRaw))
+          return failure();
+
+        auto fieldType = dyn_cast<PropertyType>(fieldTypeRaw);
+        if (!fieldType)
+          return parser.emitError(parser.getCurrentLocation(),
+                                  "expected property type");
+
+        auto fieldName = StringAttr::get(parser.getContext(), fieldNameStr);
+        fields.push_back(
+            DomainFieldAttr::get(parser.getContext(), fieldName, fieldType));
+        return success();
+      };
+
+      if (parser.parseCommaSeparatedList(parseField) || parser.parseRParen())
+        return failure();
+    }
+
+    if (parser.parseGreater())
+      return failure();
+
+    result = DomainType::get(FlatSymbolRefAttr::get(domainName),
+                             ArrayAttr::get(parser.getContext(), fields));
+    return success();
   }
 
   return {};
@@ -1410,8 +1462,9 @@ struct circt::firrtl::detail::BundleTypeStorage
 
   BundleTypeStorage(ArrayRef<BundleType::BundleElement> elements, bool isConst)
       : detail::FIRRTLBaseTypeStorage(isConst),
-        elements(elements.begin(), elements.end()),
-        props{true, false, false, isConst, false, false, false} {
+        elements(elements.begin(), elements.end()), props{true,    false, false,
+                                                          isConst, false, false,
+                                                          false} {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
     for (auto &element : elements) {
@@ -1677,8 +1730,9 @@ struct circt::firrtl::detail::OpenBundleTypeStorage : mlir::TypeStorage {
 
   OpenBundleTypeStorage(ArrayRef<OpenBundleType::BundleElement> elements,
                         bool isConst)
-      : elements(elements.begin(), elements.end()),
-        props{true, false, false, isConst, false, false, false},
+      : elements(elements.begin(), elements.end()), props{true,    false, false,
+                                                          isConst, false, false,
+                                                          false},
         isConst(static_cast<char>(isConst)) {
     uint64_t fieldID = 0;
     fieldIDs.reserve(elements.size());
@@ -2766,6 +2820,111 @@ ParseResult ClassType::parseInterface(AsmParser &parser, ClassType &result) {
 
   result = ClassType::get(FlatSymbolRefAttr::get(className), elements);
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// DomainType
+//===----------------------------------------------------------------------===//
+
+namespace circt {
+namespace firrtl {
+namespace detail {
+struct DomainTypeStorage : public TypeStorage {
+  using KeyTy = std::pair<FlatSymbolRefAttr, ArrayAttr>;
+
+  DomainTypeStorage(FlatSymbolRefAttr name, ArrayAttr fields)
+      : name(name), fields(fields) {}
+
+  bool operator==(const KeyTy &key) const {
+    return key.first == name && key.second == fields;
+  }
+
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine(key.first, key.second);
+  }
+
+  static DomainTypeStorage *construct(TypeStorageAllocator &allocator,
+                                      const KeyTy &key) {
+    return new (allocator.allocate<DomainTypeStorage>())
+        DomainTypeStorage(key.first, key.second);
+  }
+
+  FlatSymbolRefAttr name;
+  ArrayAttr fields;
+};
+} // namespace detail
+} // namespace firrtl
+} // namespace circt
+
+DomainType DomainType::get(FlatSymbolRefAttr name, ArrayAttr fields) {
+  return Base::get(name.getContext(), name, fields);
+}
+
+StringRef DomainType::getName() const { return getNameAttr().getValue(); }
+
+FlatSymbolRefAttr DomainType::getNameAttr() const { return getImpl()->name; }
+
+ArrayAttr DomainType::getFields() const { return getImpl()->fields; }
+
+DomainFieldAttr DomainType::getField(size_t index) const {
+  assert(index < getNumFields() && "index out of bounds");
+  return cast<DomainFieldAttr>(getFields()[index]);
+}
+
+std::optional<uint64_t> DomainType::getFieldIndex(StringRef fieldName) const {
+  for (const auto [i, attr] : llvm::enumerate(getFields())) {
+    auto field = cast<DomainFieldAttr>(attr);
+    if (fieldName == field.getName())
+      return i;
+  }
+  return {};
+}
+
+std::pair<Type, uint64_t>
+DomainType::getSubTypeByFieldID(uint64_t fieldID) const {
+  if (fieldID == 0)
+    return {*this, 0};
+
+  // Domain fields don't have sub-fieldIDs, so fieldID directly maps to field
+  // index
+  if (fieldID > getNumFields())
+    return {Type(), fieldID};
+
+  return {getField(fieldID - 1).getType(), 0};
+}
+
+uint64_t DomainType::getMaxFieldID() const {
+  // Each field gets one fieldID
+  return getNumFields();
+}
+
+std::pair<uint64_t, bool>
+DomainType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
+  // Domain fields are flat, so projection is simple
+  if (index >= getNumFields())
+    return {0, false};
+
+  uint64_t childFieldID = index + 1;
+  return {0, fieldID == childFieldID};
+}
+
+uint64_t DomainType::getFieldID(uint64_t index) const {
+  // Domain fields are flat, so fieldID is just index + 1
+  assert(index < getNumFields() && "index out of bounds");
+  return index + 1;
+}
+
+uint64_t DomainType::getIndexForFieldID(uint64_t fieldID) const {
+  // Domain fields are flat, so index is just fieldID - 1
+  assert(fieldID > 0 && fieldID <= getNumFields() && "fieldID out of bounds");
+  return fieldID - 1;
+}
+
+std::pair<uint64_t, uint64_t>
+DomainType::getIndexAndSubfieldID(uint64_t fieldID) const {
+  // Domain fields are flat (no sub-fields), so subfieldID is always 0
+  assert(fieldID > 0 && fieldID <= getNumFields() && "fieldID out of bounds");
+  return {fieldID - 1, 0};
 }
 
 //===----------------------------------------------------------------------===//

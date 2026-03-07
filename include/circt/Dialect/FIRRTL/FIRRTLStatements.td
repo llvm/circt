@@ -127,7 +127,7 @@ def DomainDefineOp
   }];
   let arguments = (ins DomainType:$dest, DomainType:$src);
   let hasVerifier = 1;
-  let assemblyFormat = "$dest `,` $src  attr-dict";
+  let assemblyFormat = "$dest `,` $src attr-dict `:` type($dest)";
   let extraClassDeclaration = [{
     static ConnectBehaviorKind getConnectBehaviorKind() {
       return ConnectBehaviorKind::StaticSingleConnect;

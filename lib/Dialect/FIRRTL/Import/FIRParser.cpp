@@ -88,6 +88,9 @@ struct SharedParserConstants {
   /// A map from identifiers to class ops.
   llvm::DenseMap<StringRef, ClassLike> classMap;
 
+  /// A map from identifiers to domain ops.
+  llvm::DenseMap<StringRef, DomainOp> domainMap;
+
   /// An empty array attribute.
   const ArrayAttr emptyArrayAttr;
 
@@ -1051,7 +1054,23 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     if (requireFeature(missingSpecFIRVersion, "domains"))
       return failure();
     consumeToken();
-    result = DomainType::get(getContext());
+
+    // Parse: Domain of SymbolName
+    auto loc = getToken().getLoc();
+    StringRef domainKindStr;
+    if (parseToken(FIRToken::kw_of, "expected 'of' after Domain type") ||
+        parseId(domainKindStr, "expected domain kind"))
+      return failure();
+
+    // Look up the domain to get its fields
+    const auto &domainMap = getConstants().domainMap;
+    auto lookup = domainMap.find(domainKindStr);
+    if (lookup == domainMap.end())
+      return emitError(loc) << "unknown domain '" << domainKindStr << "'";
+
+    auto domainOp = lookup->second;
+    result = DomainType::get(FlatSymbolRefAttr::get(domainOp.getNameAttr()),
+                             domainOp.getFieldsAttr());
     break;
   }
 
@@ -4094,8 +4113,18 @@ ParseResult FIRStmtParser::parseDomainInstantiation() {
     return failure();
 
   // Create the domain instance
+  // Look up the domain to get its fields
+  const auto &domainMap = getConstants().domainMap;
+  auto lookup = domainMap.find(domainKind.getValue());
+  if (lookup == domainMap.end())
+    return emitError(startTok.getLoc())
+           << "unknown domain '" << domainKind.getValue() << "'";
+
+  auto domainOp = lookup->second;
+  auto domainType = DomainType::get(FlatSymbolRefAttr::get(domainOp.getNameAttr()),
+                                    domainOp.getFieldsAttr());
   auto result = builder.create<DomainCreateOp>(
-      instanceName, FlatSymbolRefAttr::get(domainKind));
+      domainType, instanceName, FlatSymbolRefAttr::get(domainKind));
 
   // Add to symbol table
   return moduleContext.addSymbolEntry(instanceName.getValue(), result,
@@ -5623,12 +5652,9 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
       return failure();
     Attribute domainInfoElement = {};
     size_t portIdx = resultPorts.size();
-    if (isa<DomainType>(type)) {
-      StringAttr domainKind;
-      if (parseToken(FIRToken::kw_of, "expected 'of' after Domain type port") ||
-          parseId(domainKind, "expected domain kind"))
-        return failure();
-      domainInfoElement = FlatSymbolRefAttr::get(domainKind);
+    if (auto domainType = dyn_cast<DomainType>(type)) {
+      // The domain symbol is already parsed and stored in the type
+      domainInfoElement = domainType.getNameAttr();
     } else {
       if (getToken().is(FIRToken::kw_domains))
         if (parseDomains(domainNames[portIdx], nameToIndex))
@@ -5811,7 +5837,11 @@ ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
   }
 
   auto builder = circuit.getBodyBuilder();
-  DomainOp::create(builder, info.getLoc(), name, builder.getArrayAttr(fields));
+  auto domainOp =
+      DomainOp::create(builder, info.getLoc(), name, builder.getArrayAttr(fields));
+
+  // Stash the domain name -> op in the constants, so we can resolve Domain types.
+  getConstants().domainMap[name.getValue()] = domainOp;
 
   return success();
 }

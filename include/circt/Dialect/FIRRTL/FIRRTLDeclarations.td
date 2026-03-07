@@ -816,13 +816,18 @@ def DomainCreateAnonOp
                [ParentOneOf<["firrtl::ContractOp", "firrtl::FModuleOp",
                              "firrtl::LayerBlockOp", "firrtl::MatchOp",
                              "firrtl::WhenOp", "sv::IfDefOp"]>,
-                DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-                DeclareOpInterfaceMethods<InferTypeOpInterface>,
+                DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "Create an anonymous domain, without parameters set";
   let arguments = (ins FlatSymbolRefAttr:$domain);
   let results = (outs Res<DomainType, "", [MemAlloc]>:$result);
-  let assemblyFormat = [{ attr-dict `:` type($result) `of` $domain }];
+  let hasCustomAssemblyFormat = 1;
+
+  let builders = [
+    OpBuilder<(ins "DomainType":$type), [{
+      build($_builder, $_state, type, type.getNameAttr());
+    }]>
+  ];
 }
 
 def DomainCreateOp : FIRRTLOp<"domain.create", [
@@ -830,7 +835,6 @@ def DomainCreateOp : FIRRTLOp<"domain.create", [
                  "firrtl::LayerBlockOp", "firrtl::MatchOp",
                  "firrtl::WhenOp", "sv::IfDefOp"]>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-    DeclareOpInterfaceMethods<InferTypeOpInterface>,
     HasCustomSSAName
 ]> {
   let summary = "Create a named domain instance";
@@ -841,14 +845,18 @@ def DomainCreateOp : FIRRTLOp<"domain.create", [
 
     Example:
     ```mlir
-    %my_clock = firrtl.domain.create : !firrtl.domain of @ClockDomain
+    %my_clock = firrtl.domain.create : !firrtl.domain<@ClockDomain>
     ```
   }];
   let arguments = (ins StrAttr:$name, FlatSymbolRefAttr:$domain);
   let results = (outs Res<DomainType, "", [MemAlloc]>:$result);
-  let assemblyFormat = [{
-    custom<ImplicitSSAName>($name) attr-dict `:` type($result) `of` $domain
-  }];
+  let hasCustomAssemblyFormat = 1;
+
+  let builders = [
+    OpBuilder<(ins "DomainType":$type, "StringAttr":$name), [{
+      build($_builder, $_state, type, name, type.getNameAttr());
+    }]>
+  ];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLDECLARATIONS_TD

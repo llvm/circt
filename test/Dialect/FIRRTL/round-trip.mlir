@@ -237,97 +237,114 @@ firrtl.domain @PowerDomain [
 ]
 
 firrtl.module @DomainsSubmodule(
-  in %A: !firrtl.domain of @ClockDomain,
+  in %A: !firrtl.domain<@ClockDomain>,
   in %a: !firrtl.uint<1> domains [%A]
 ) {}
 
 // CHECK-LABEL: firrtl.module @Domains(
-// CHECK-SAME:    in %A: !firrtl.domain
-// CHECK-SAME:    in %B: !firrtl.domain
+// CHECK-SAME:    in %A: !firrtl.domain<@ClockDomain>
+// CHECK-SAME:    in %B: !firrtl.domain<@ClockDomain>
 // CHECK-SAME:    in %a: !firrtl.uint<1> domains [%A]
 // CHECK-SAME:    out %b: !firrtl.uint<1> domains [%B]
 // CHECK-SAME:    in %c: !firrtl.uint<1> domains [%C]
-// CHECK-SAME:    in %C: !firrtl.domain
+// CHECK-SAME:    in %C: !firrtl.domain<@ClockDomain>
 firrtl.module @Domains(
-  in %A: !firrtl.domain of @ClockDomain,
-  in %B: !firrtl.domain of @ClockDomain,
+  in %A: !firrtl.domain<@ClockDomain>,
+  in %B: !firrtl.domain<@ClockDomain>,
   in %a: !firrtl.uint<1> domains [%A],
   out %b: !firrtl.uint<1> domains [%B],
   in %c: !firrtl.uint<1> domains [%C],
-  in %C: !firrtl.domain of @ClockDomain
+  in %C: !firrtl.domain<@ClockDomain>
 ) {
-  // CHECK: %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>
-  %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>
+  // CHECK: %0 = firrtl.unsafe_domain_cast %a domains[%B] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain>]
+  %0 = firrtl.unsafe_domain_cast %a domains[%B] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain>]
   firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
 
   // CHECK:      %foo_A, %foo_a = firrtl.instance foo @DomainsSubmodule(
-  // CHECK-SAME:   in A: !firrtl.domain of @ClockDomain
+  // CHECK-SAME:   in A: !firrtl.domain<@ClockDomain>
   // CHECK-SAME:   in a: !firrtl.uint<1> domains [A]
   %foo_A, %foo_a = firrtl.instance foo @DomainsSubmodule(
-    in A: !firrtl.domain of @ClockDomain,
+    in A: !firrtl.domain<@ClockDomain>,
     in a: !firrtl.uint<1> domains [A]
   )
 }
 
 // CHECK-LABEL: firrtl.module @AnonymousDomains
-// CHECK-SAME:    in %arg0: !firrtl.domain
+// CHECK-SAME:    in %arg0: !firrtl.domain<@ClockDomain>
 // CHECK-SAME:    in %a: !firrtl.uint<1> domains [%arg0]
 // CHECK-SAME:    portNames = ["", "a"]
 firrtl.module @AnonymousDomains(
-  in %arg0: !firrtl.domain of @ClockDomain,
+  in %arg0: !firrtl.domain<@ClockDomain>,
   in %a: !firrtl.uint<1> domains [%arg0]
 ) attributes {
   portNames = ["", "a"]
 } {
-  // CHECK: %0 = firrtl.unsafe_domain_cast %a domains %arg0 : !firrtl.uint<1>
-  %0 = firrtl.unsafe_domain_cast %a domains %arg0 : !firrtl.uint<1>
+  // CHECK: %0 = firrtl.unsafe_domain_cast %a domains[%arg0] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain>]
+  %0 = firrtl.unsafe_domain_cast %a domains[%arg0] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain>]
+}
+
+// Test domain types with fields
+// CHECK-LABEL: firrtl.module @DomainTypesWithFields(
+// CHECK-SAME:    in %simple: !firrtl.domain<@ClockDomain>
+// CHECK-SAME:    in %fielded: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+// CHECK-SAME:    out %fielded_out: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+firrtl.module @DomainTypesWithFields(
+  in %simple: !firrtl.domain<@ClockDomain>,
+  in %fielded: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>,
+  out %fielded_out: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+) {
+  // CHECK: %my_domain = firrtl.domain.create : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+  %my_domain = firrtl.domain.create : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+
+  // CHECK: firrtl.domain.define %fielded_out, %fielded : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+  firrtl.domain.define %fielded_out, %fielded : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
 }
 
 // CHECK-LABEL: firrtl.module @DomainDefine
 firrtl.module @DomainDefine(
-  in  %x : !firrtl.domain of @ClockDomain,
-  out %y : !firrtl.domain of @ClockDomain
+  in  %x : !firrtl.domain<@ClockDomain>,
+  out %y : !firrtl.domain<@ClockDomain>
 ) {
-  // CHECK: firrtl.domain.define %y, %x
-  firrtl.domain.define %y, %x
+  // CHECK: firrtl.domain.define %y, %x : !firrtl.domain<@ClockDomain>
+  firrtl.domain.define %y, %x : !firrtl.domain<@ClockDomain>
 }
 
-firrtl.module private @DefaultTargetWithDomain(in %A: !firrtl.domain of @ClockDomain, in %clock: !firrtl.clock domains [%A]) {}
-firrtl.module private @FPGATargetWithDomain(in %A: !firrtl.domain of @ClockDomain, in %clock: !firrtl.clock domains [%A]) {}
-firrtl.module private @ASICTargetWithDomain(in %A: !firrtl.domain of @ClockDomain, in %clock: !firrtl.clock domains [%A]) {}
+firrtl.module private @DefaultTargetWithDomain(in %A: !firrtl.domain<@ClockDomain>, in %clock: !firrtl.clock domains [%A]) {}
+firrtl.module private @FPGATargetWithDomain(in %A: !firrtl.domain<@ClockDomain>, in %clock: !firrtl.clock domains [%A]) {}
+firrtl.module private @ASICTargetWithDomain(in %A: !firrtl.domain<@ClockDomain>, in %clock: !firrtl.clock domains [%A]) {}
 
 // CHECK-LABEL: firrtl.module @InstanceChoiceWithDomain
-firrtl.module @InstanceChoiceWithDomain(in %A: !firrtl.domain of @ClockDomain, in %clock: !firrtl.clock domains [%A]) {
+firrtl.module @InstanceChoiceWithDomain(in %A: !firrtl.domain<@ClockDomain>, in %clock: !firrtl.clock domains [%A]) {
   // CHECK:      %inst_A, %inst_clock = firrtl.instance_choice inst interesting_name @DefaultTargetWithDomain alternatives @Platform
-  // CHECK-SAME:   { @FPGA -> @FPGATargetWithDomain, @ASIC -> @ASICTargetWithDomain } (in A: !firrtl.domain of @ClockDomain, in clock: !firrtl.clock domains [A])
+  // CHECK-SAME:   { @FPGA -> @FPGATargetWithDomain, @ASIC -> @ASICTargetWithDomain } (in A: !firrtl.domain<@ClockDomain>, in clock: !firrtl.clock domains [A])
   %inst_A, %inst_clock = firrtl.instance_choice inst interesting_name @DefaultTargetWithDomain alternatives @Platform
-    { @FPGA -> @FPGATargetWithDomain, @ASIC -> @ASICTargetWithDomain } (in A: !firrtl.domain of @ClockDomain, in clock: !firrtl.clock domains [A])
+    { @FPGA -> @FPGATargetWithDomain, @ASIC -> @ASICTargetWithDomain } (in A: !firrtl.domain<@ClockDomain>, in clock: !firrtl.clock domains [A])
   firrtl.matchingconnect %inst_clock, %clock : !firrtl.clock
-  firrtl.domain.define %inst_A, %A
+  firrtl.domain.define %inst_A, %A : !firrtl.domain<@ClockDomain>
 }
 
 // CHECK-LABEL: firrtl.module @CreateAnonDomain
-firrtl.extmodule @CreateAnonDomainChild(in A: !firrtl.domain of @ClockDomain)
+firrtl.extmodule @CreateAnonDomainChild(in A: !firrtl.domain<@ClockDomain>)
 firrtl.module @CreateAnonDomain() {
-  // CHECK-NEXT: %0 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
-  %0 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+  // CHECK-NEXT: %0 = firrtl.domain.anon : !firrtl.domain<@ClockDomain>
+  %0 = firrtl.domain.anon : !firrtl.domain<@ClockDomain>
   %child_A = firrtl.instance child @CreateAnonDomainChild(
-    in A: !firrtl.domain of @ClockDomain
+    in A: !firrtl.domain<@ClockDomain>
   )
-  // CHECK: firrtl.domain.define %child_A, %0
-  firrtl.domain.define %child_A, %0
+  // CHECK: firrtl.domain.define %child_A, %0 : !firrtl.domain<@ClockDomain>
+  firrtl.domain.define %child_A, %0 : !firrtl.domain<@ClockDomain>
 }
 
 // CHECK-LABEL: firrtl.module @CreateDomain
-firrtl.extmodule @CreateDomainChild(in A: !firrtl.domain of @ClockDomain)
+firrtl.extmodule @CreateDomainChild(in A: !firrtl.domain<@ClockDomain>)
 firrtl.module @CreateDomain() {
-  // CHECK-NEXT: %my_domain = firrtl.domain.create : !firrtl.domain of @ClockDomain
-  %my_domain = firrtl.domain.create : !firrtl.domain of @ClockDomain
+  // CHECK-NEXT: %my_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain>
+  %my_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain>
   %child_A = firrtl.instance child @CreateDomainChild(
-    in A: !firrtl.domain of @ClockDomain
+    in A: !firrtl.domain<@ClockDomain>
   )
-  // CHECK: firrtl.domain.define %child_A, %my_domain
-  firrtl.domain.define %child_A, %my_domain
+  // CHECK: firrtl.domain.define %child_A, %my_domain : !firrtl.domain<@ClockDomain>
+  firrtl.domain.define %child_A, %my_domain : !firrtl.domain<@ClockDomain>
 }
 
 }

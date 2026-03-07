@@ -259,7 +259,6 @@ def PrintfOperandType : FIRRTLDialectType<
 
 def DomainType : FIRRTLDialectTypeHelper<
   "DomainType",
-  "a domain type">,
-  BuildableType<"::circt::firrtl::DomainType::get($_builder.getContext())">;
+  "a domain type">;
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPES_TD

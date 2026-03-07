@@ -37,6 +37,7 @@ struct BaseTypeAliasStorage;
 struct OpenBundleTypeStorage;
 struct OpenVectorTypeStorage;
 struct ClassTypeStorage;
+struct DomainTypeStorage;
 } // namespace detail.
 
 class AnyRefType;
@@ -57,6 +58,7 @@ class LHSType;
 class PropertyType;
 class StringType;
 class FIntegerType;
+class DomainFieldAttr;
 class ListType;
 class PathType;
 class BoolType;
@@ -370,6 +372,8 @@ struct ClassElement {
 inline llvm::hash_code hash_value(const ClassElement &element) {
   return llvm::hash_combine(element.name, element.type, element.direction);
 }
+
+
 
 //===----------------------------------------------------------------------===//
 // Type helpers

@@ -8,12 +8,12 @@ firrtl.circuit "Foo" {
   firrtl.domain @ClockDomain
   firrtl.domain @PowerDomain
   firrtl.module @Foo(
-    in %in: !firrtl.domain of @ClockDomain,
-    out %out: !firrtl.domain of @PowerDomain
+    in %in: !firrtl.domain<@ClockDomain>,
+    out %out: !firrtl.domain<@PowerDomain>
   ) {
     %w = firrtl.wire : !firrtl.domain
     // expected-error @below {{could not determine domain-type of destination}}
-    firrtl.domain.define %w, %in
-    firrtl.domain.define %out, %w
+    firrtl.domain.define %w, %in : !firrtl.domain<@ClockDomain>
+    firrtl.domain.define %out, %w : !firrtl.domain<@ClockDomain>
   }
 }

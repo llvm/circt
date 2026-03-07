@@ -47,24 +47,12 @@ using namespace circt;
 using namespace firrtl;
 using namespace chirrtl;
 
+// Forward declarations
+static DomainType getInstanceTypeForDomain(DomainOp domainOp);
+
 //===----------------------------------------------------------------------===//
 // Utilities
 //===----------------------------------------------------------------------===//
-
-/// Helper to print domain kind: " of @Symbol"
-static void printDomainKind(OpAsmPrinter &p, FlatSymbolRefAttr domainKind) {
-  p << " of " << domainKind;
-}
-
-/// Helper to parse domain kind: "of @Symbol"
-static ParseResult parseDomainKind(OpAsmParser &parser,
-                                   FlatSymbolRefAttr &domainKind) {
-  StringAttr domainName;
-  if (parser.parseKeyword("of") || parser.parseSymbolName(domainName))
-    return failure();
-  domainKind = FlatSymbolRefAttr::get(domainName);
-  return success();
-}
 
 /// Remove elements from the input array corresponding to set bits in
 /// `indicesToDrop`, returning the elements not mentioned.
@@ -1306,7 +1294,9 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
     // Print domain information.
     if (!domainInfo.empty()) {
       if (auto domainKind = dyn_cast<FlatSymbolRefAttr>(domainInfo[i])) {
-        printDomainKind(p, domainKind);
+        // For domain ports, the symbol is already in the type, so we don't
+        // print it again. The domainInfo is only used internally.
+        // printDomainKind(p, domainKind);
       } else {
         auto domains = cast<ArrayAttr>(domainInfo[i]);
         if (!domains.empty()) {
@@ -1433,11 +1423,9 @@ static ParseResult parseModulePorts(
     // the domain information later.
     Attribute domainInfo;
     if (supportsDomains) {
-      if (isa<DomainType>(portType)) {
-        FlatSymbolRefAttr domainKind;
-        if (parseDomainKind(parser, domainKind))
-          return failure();
-        domainInfo = domainKind;
+      if (auto domainType = dyn_cast<DomainType>(portType)) {
+        // The domain symbol is already in the type, extract it
+        domainInfo = domainType.getNameAttr();
       } else if (succeeded(parser.parseOptionalKeyword("domains"))) {
         auto result = parser.parseCommaSeparatedList(
             OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
@@ -1925,14 +1913,24 @@ static LogicalResult verifyPortSymbolUses(FModuleLike module,
       continue;
     }
 
-    if (isa<DomainType>(type)) {
+    if (auto domainType = dyn_cast<DomainType>(type)) {
       auto domainInfo = module.getDomainInfoAttrForPort(i);
-      if (auto kind = dyn_cast<FlatSymbolRefAttr>(domainInfo))
-        if (!dyn_cast_or_null<DomainOp>(
-                symbolTable.lookupSymbolIn(circuitOp, kind)))
+      if (auto kind = dyn_cast<FlatSymbolRefAttr>(domainInfo)) {
+        auto domainOp = dyn_cast_or_null<DomainOp>(
+            symbolTable.lookupSymbolIn(circuitOp, kind));
+        if (!domainOp)
           return mlir::emitError(module.getPortLocation(i))
                  << "domain port '" << module.getPortName(i)
                  << "' has undefined domain kind '" << kind.getValue() << "'";
+
+        // Verify that the domain type matches the domain definition
+        auto expectedType = getInstanceTypeForDomain(domainOp);
+        if (domainType != expectedType)
+          return mlir::emitError(module.getPortLocation(i))
+                 << "domain port '" << module.getPortName(i)
+                 << "' has type " << domainType << " which does not match "
+                 << "the domain definition, expected " << expectedType;
+      }
     }
   }
 
@@ -2088,6 +2086,11 @@ ClassType firrtl::detail::getInstanceTypeForClassLike(ClassLike classOp) {
                         classOp.getPortDirection(i)});
   auto name = FlatSymbolRefAttr::get(classOp.getNameAttr());
   return ClassType::get(name, elements);
+}
+
+DomainType getInstanceTypeForDomain(DomainOp domainOp) {
+  auto name = FlatSymbolRefAttr::get(domainOp.getNameAttr());
+  return DomainType::get(name, domainOp.getFieldsAttr());
 }
 
 template <typename OpTy>
@@ -7269,6 +7272,29 @@ LogicalResult BindOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 // Domain operations
 //===----------------------------------------------------------------------===//
 
+ParseResult DomainCreateAnonOp::parse(OpAsmParser &parser,
+                                      OperationState &result) {
+  Type resultType;
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(resultType))
+    return failure();
+
+  auto domainType = dyn_cast<DomainType>(resultType);
+  if (!domainType)
+    return parser.emitError(parser.getCurrentLocation(),
+                            "expected domain type");
+
+  result.addAttribute("domain", domainType.getNameAttr());
+  result.addTypes(resultType);
+  return success();
+}
+
+void DomainCreateAnonOp::print(OpAsmPrinter &p) {
+  p.printOptionalAttrDict((*this)->getAttrs(), {"domain"});
+  p << " : ";
+  p.printStrippedAttrOrType(getResult().getType());
+}
+
 LogicalResult
 DomainCreateAnonOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
@@ -7284,6 +7310,38 @@ DomainCreateAnonOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
                          << "' which is not a domain";
 
   return success();
+}
+
+ParseResult DomainCreateOp::parse(OpAsmParser &parser,
+                                  OperationState &result) {
+  Type resultType;
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(resultType))
+    return failure();
+
+  auto domainType = dyn_cast<DomainType>(resultType);
+  if (!domainType)
+    return parser.emitError(parser.getCurrentLocation(),
+                            "expected domain type");
+
+  result.addAttribute("domain", domainType.getNameAttr());
+
+  // Infer the name from the SSA name if not provided
+  if (!result.attributes.get("name")) {
+    auto resultName = parser.getResultName(0).first;
+    if (!resultName.empty() && isdigit(resultName[0]))
+      resultName = "";
+    result.addAttribute("name", parser.getBuilder().getStringAttr(resultName));
+  }
+
+  result.addTypes(resultType);
+  return success();
+}
+
+void DomainCreateOp::print(OpAsmPrinter &p) {
+  p.printOptionalAttrDict((*this)->getAttrs(), {"domain", "name"});
+  p << " : ";
+  p.printStrippedAttrOrType(getResult().getType());
 }
 
 void DomainCreateOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
