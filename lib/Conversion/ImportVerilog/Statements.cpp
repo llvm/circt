@@ -823,13 +823,14 @@ struct StmtVisitor {
     auto loc = context.convertLocation(stmt.sourceRange);
 
     // Check for a `disable iff` expression:
-    // The DisableIff construct can only occcur at the top level of an assertion
-    // and cannot be nested within properties.
-    // Hence we only need to detect if the top level assertion expression
-    // has type DisableIff, negate the `disable` expression, then pass it to
-    // the `enable` parameter of AssertOp/AssumeOp.
+    // The DisableIff construct can only occcur at the outermost level of an
+    // assertion and cannot be nested within properties.
+    // Hence we only need to detect if the top level assertion expression has
+    // type DisableIff. (or, if the top level expression is
+    // ClockingAssertionExpr, check for DisableIff inside that).
     Value enable;
     Value property;
+    // Find the outermost propertySpec that isn't ClockingAssertionExpr
     const slang::ast::AssertionExpr *propertySpec;
     const slang::ast::ClockingAssertionExpr *clocking =
         stmt.propertySpec.as_if<slang::ast::ClockingAssertionExpr>();
@@ -841,12 +842,14 @@ struct StmtVisitor {
 
     if (auto *disableIff =
             propertySpec->as_if<slang::ast::DisableIffAssertionExpr>()) {
+      // Lower disableIff by negating it and passing as the "enable" operand
+      // to the verif.assert/verif.assume instructions.
       auto disableCond = context.convertRvalueExpression(disableIff->condition);
       auto enableCond = moore::NotOp::create(builder, loc, disableCond);
 
       enable = context.convertToI1(enableCond);
 
-      // Add back clocking declaration:
+      // Add back the outer `ClockingAssertionExpr` if there is one.
       if (clocking) {
         auto clockingExpr = slang::ast::ClockingAssertionExpr(
             clocking->clocking, disableIff->expr);
