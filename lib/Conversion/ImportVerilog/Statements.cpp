@@ -15,6 +15,7 @@
 #include "slang/ast/SemanticFacts.h"
 #include "slang/ast/Statement.h"
 #include "slang/ast/SystemSubroutine.h"
+#include "slang/ast/expressions/AssertionExpr.h"
 #include "llvm/ADT/ScopeExit.h"
 
 using namespace mlir;
@@ -829,13 +830,30 @@ struct StmtVisitor {
     // the `enable` parameter of AssertOp/AssumeOp.
     Value enable;
     Value property;
+    const slang::ast::AssertionExpr *propertySpec;
+    const slang::ast::ClockingAssertionExpr *clocking =
+        stmt.propertySpec.as_if<slang::ast::ClockingAssertionExpr>();
+    if (clocking) {
+      propertySpec = &(clocking->expr);
+    } else {
+      propertySpec = &(stmt.propertySpec);
+    }
+
     if (auto *disableIff =
-            stmt.propertySpec.as_if<slang::ast::DisableIffAssertionExpr>()) {
+            propertySpec->as_if<slang::ast::DisableIffAssertionExpr>()) {
       auto disableCond = context.convertRvalueExpression(disableIff->condition);
       auto enableCond = moore::NotOp::create(builder, loc, disableCond);
 
       enable = context.convertToI1(enableCond);
-      property = context.convertAssertionExpression(disableIff->expr, loc);
+
+      // Add back clocking declaration:
+      if (clocking) {
+        auto clockingExpr = slang::ast::ClockingAssertionExpr(
+            clocking->clocking, disableIff->expr);
+        property = context.convertAssertionExpression(clockingExpr, loc);
+      } else {
+        property = context.convertAssertionExpression(disableIff->expr, loc);
+      }
     } else {
       property = context.convertAssertionExpression(stmt.propertySpec, loc);
     }
