@@ -4526,51 +4526,116 @@ endmodule
 // Interfaces
 //===----------------------------------------------------------------------===//
 
-// CHECK-LABEL: moore.module private @EmptyIface() {
-// CHECK:         moore.output
-// CHECK:       }
-interface EmptyIface;
-endinterface
-
-// CHECK-LABEL: moore.module @EmptyIfaceTop() {
-// CHECK:         moore.instance "ei" @EmptyIface() -> ()
-// CHECK:       }
-module EmptyIfaceTop;
-  EmptyIface ei();
-endmodule
-
-// CHECK-LABEL: moore.module private @SimpleIface() {
-// CHECK:         %data = moore.variable : <l8>
-// CHECK:         %valid = moore.variable : <l1>
-// CHECK:         %ready = moore.variable : <l1>
-// CHECK:         moore.output
-// CHECK:       }
-interface SimpleIface;
+// Test A: Interface instantiation in module body expands to variables.
+interface IfaceVars;
   logic [7:0] data;
   logic valid;
-  logic ready;
 endinterface
 
-// CHECK-LABEL: moore.module @SimpleIfaceTop() {
-// CHECK:         moore.instance "si" @SimpleIface() -> ()
-// CHECK:       }
-module SimpleIfaceTop;
-  SimpleIface si();
-endmodule
-
-// CHECK-LABEL: moore.module private @BusIface() {
-// CHECK:         %req = moore.variable : <l1>
-// CHECK:         %addr = moore.variable : <l8>
+// CHECK-LABEL: moore.module @ExpandsIface() {
+// CHECK:         %bus_data = moore.variable : <l8>
+// CHECK:         %bus_valid = moore.variable : <l1>
 // CHECK:         moore.output
 // CHECK:       }
-interface BusIface;
+module ExpandsIface;
+  IfaceVars bus();
+endmodule
+
+// Test B: Interface port with modport flattens to output ports.
+interface IfaceModport;
+  logic [7:0] data;
+  logic valid;
+  modport master(output data, output valid);
+endinterface
+
+// CHECK-LABEL: moore.module private @HasModport(out bus_data : !moore.l8, out bus_valid : !moore.l1) {
+// CHECK:         %bus_data = moore.variable : <l8>
+// CHECK:         [[D:%.+]] = moore.read %bus_data : <l8>
+// CHECK:         %bus_valid = moore.variable : <l1>
+// CHECK:         [[V:%.+]] = moore.read %bus_valid : <l1>
+// CHECK:         moore.output [[D]], [[V]] : !moore.l8, !moore.l1
+// CHECK:       }
+module HasModport(IfaceModport.master bus);
+endmodule
+
+// CHECK-LABEL: moore.module @TopModport() {
+// CHECK:         %ifc_data = moore.variable : <l8>
+// CHECK:         %ifc_valid = moore.variable : <l1>
+// CHECK:         %sub.bus_data, %sub.bus_valid = moore.instance "sub" @HasModport() -> (bus_data: !moore.l8, bus_valid: !moore.l1)
+// CHECK:         moore.assign %ifc_data, %sub.bus_data : l8
+// CHECK:         moore.assign %ifc_valid, %sub.bus_valid : l1
+// CHECK:         moore.output
+// CHECK:       }
+module TopModport;
+  IfaceModport ifc();
+  HasModport sub(.bus(ifc));
+endmodule
+
+// Test C: Interface port without modport flattens to ref-typed input ports.
+interface IfaceNoModport;
   logic req;
   logic [7:0] addr;
 endinterface
 
-// CHECK-LABEL: moore.module @UsesIface() {
-// CHECK:         moore.instance "bus" @BusIface() -> ()
+// CHECK-LABEL: moore.module private @HasNoModport(in %bus_req : !moore.ref<l1>, in %bus_addr : !moore.ref<l8>) {
+// CHECK:         moore.output
 // CHECK:       }
-module UsesIface;
-  BusIface bus();
+module HasNoModport(IfaceNoModport bus);
+endmodule
+
+// CHECK-LABEL: moore.module @TopNoModport() {
+// CHECK:         %ifc_req = moore.variable : <l1>
+// CHECK:         %ifc_addr = moore.variable : <l8>
+// CHECK:         moore.instance "sub" @HasNoModport
+// CHECK:         moore.output
+// CHECK:       }
+module TopNoModport;
+  IfaceNoModport ifc();
+  HasNoModport sub(.bus(ifc));
+endmodule
+
+// Test D: Interface with nets expands to moore.net ops.
+interface IfaceNets;
+  wire [3:0] sig;
+  wire en;
+endinterface
+
+// CHECK-LABEL: moore.module @ExpandsIfaceNets() {
+// CHECK:         %bus_sig = moore.net wire : <l4>
+// CHECK:         %bus_en = moore.net wire : <l1>
+// CHECK:         moore.output
+// CHECK:       }
+module ExpandsIfaceNets;
+  IfaceNets bus();
+endmodule
+
+// Test E: Module with multiple interface ports.
+interface IfaceA;
+  logic [7:0] x;
+  modport drv(output x);
+endinterface
+
+interface IfaceB;
+  logic y;
+  modport rcv(input y);
+endinterface
+
+// CHECK-LABEL: moore.module private @MultiIfacePorts(out a_x : !moore.l8, in %b_y : !moore.l1) {
+// CHECK:         %a_x = moore.variable : <l8>
+// CHECK:         [[RX:%.+]] = moore.read %a_x : <l8>
+// CHECK:         moore.output [[RX]] : !moore.l8
+// CHECK:       }
+module MultiIfacePorts(IfaceA.drv a, IfaceB.rcv b);
+endmodule
+
+// CHECK-LABEL: moore.module @TopMultiIface() {
+// CHECK:         %ia_x = moore.variable : <l8>
+// CHECK:         %ib_y = moore.variable : <l1>
+// CHECK:         moore.instance "dut" @MultiIfacePorts
+// CHECK:         moore.output
+// CHECK:       }
+module TopMultiIface;
+  IfaceA ia();
+  IfaceB ib();
+  MultiIfacePorts dut(.a(ia), .b(ib));
 endmodule

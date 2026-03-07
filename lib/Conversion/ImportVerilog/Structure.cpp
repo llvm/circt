@@ -308,9 +308,9 @@ struct ModuleVisitor : public BaseVisitor {
         if (!loweredType)
           return failure();
         auto netKind = convertNetKind(net->netType.netKind);
-        if (netKind == moore::NetKind::Interconnected ||
+        if (netKind == moore::NetKind::Interconnect ||
             netKind == moore::NetKind::UserDefined ||
-            netKind == moore::NetKind::UnKnown)
+            netKind == moore::NetKind::Unknown)
           return mlir::emitError(loc, "unsupported net kind `")
                  << net->netType.name << "`";
         auto netOp = moore::NetOp::create(
@@ -991,7 +991,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
           auto name = builder.getStringAttr(Twine(portPrefix) + StringRef(mpp->name));
           BlockArgument arg;
           hw::ModulePort::Direction dir;
-          if (mpp->direction == ArgumentDirection::out) {
+          if (mpp->direction == ArgumentDirection::Out) {
             dir = hw::ModulePort::Output;
             modulePorts.push_back({name, type, dir});
             outputIdx++;
@@ -1036,7 +1036,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
           auto refType = moore::RefType::get(cast<moore::UnpackedType>(type));
           modulePorts.push_back({name, refType, hw::ModulePort::Input});
           auto arg = block->addArgument(refType, portLoc);
-          indexIdx++;
+          inputIdx++;
           lowering.ifacePorts.push_back(
             {name,hw::ModulePort::Input, refType, portLoc, arg,
              &ifacePort, bodySym});
@@ -1052,7 +1052,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
       for (auto *port : multiPort->ports)
         if (failed(handlePort(*port)))
           return {};
-    } else if (const auto *ifacePort = symbol->as_if<slang::ast::InterfacePortSymbol>) {
+    } else if (const auto *ifacePort = symbol->as_if<slang::ast::InterfacePortSymbol>()) {
       if (failed(handleIfacePort(*ifacePort)))
         return {};
     } else {
