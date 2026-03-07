@@ -842,6 +842,48 @@ def QueueResizeOp : SimOp<"queue.resize", [Pure]> {
   let hasVerifier = 1;
 }
 
+// FIXME: Currently, unpacked arrays are lowered to the hw::ArrayType,
+// whereas ideally they would be lowered to hw::UnpackedArrayType, it's just
+// that this type hasn't had any ops defined yet.
+// When we switch over to hw::UnpackedArrayType, switch this op too.
+def QueueFromArrayOp : SimOp<"queue.from_array", [Pure]> {
+  let description = [{
+    Creates a queue containing the elements of the given array.
+
+    The queue and array must have the same element type.
+
+    If the queue type has bounds, any elements outside the bounds will be
+    discarded.
+  }];
+
+  let arguments = (ins ArrayType:$input);
+  let results = (outs QueueType:$result);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
+def QueueConcatOp : SimOp<"queue.concat", [Pure]> {
+  let summary = "Concatenate queues";
+  let description = [{
+    Concatenates an arbitrary number of queues into one larger queue.
+    The queues are joined from left to right.
+
+    All queues must have the same element type, but the bounds may differ.
+
+    If the total length of the inputs doesn't fit into the queue bound of
+    $result, then the excess elements at the end of the queue are discarded.
+  }];
+  let arguments = (ins Variadic<QueueType>:$inputs);
+  let results = (outs QueueType:$result);
+  let assemblyFormat = [{
+    ` ` `(` $inputs `)` attr-dict `:` `(` type($inputs) `)` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//

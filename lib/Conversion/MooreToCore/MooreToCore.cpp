@@ -2475,6 +2475,34 @@ struct QueueSetOpConversion : public OpConversionPattern<QueueSetOp> {
   }
 };
 
+struct QueueFromUnpackedArrayOpConversion
+    : public OpConversionPattern<QueueFromUnpackedArrayOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(QueueFromUnpackedArrayOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::QueueFromArrayOp>(
+        op, getTypeConverter()->convertType(op.getResult().getType()),
+        adaptor.getInput());
+    return success();
+  }
+};
+
+struct QueueConcatOpConversion : public OpConversionPattern<QueueConcatOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(QueueConcatOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::QueueConcatOp>(
+        op, getTypeConverter()->convertType(op.getResult().getType()),
+        adaptor.getInputs());
+
+    return success();
+  }
+};
+
 struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -2984,7 +3012,9 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     QueueClearOpConversion,
     DynQueueExtractOpConversion,
     QueueResizeOpConversion,
-    QueueSetOpConversion
+    QueueSetOpConversion,
+    QueueFromUnpackedArrayOpConversion,
+    QueueConcatOpConversion
   >(typeConverter, patterns.getContext());
   // clang-format on
 
