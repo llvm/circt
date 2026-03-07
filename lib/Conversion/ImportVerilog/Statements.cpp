@@ -15,7 +15,6 @@
 #include "slang/ast/SemanticFacts.h"
 #include "slang/ast/Statement.h"
 #include "slang/ast/SystemSubroutine.h"
-#include "slang/ast/expressions/AssertionExpr.h"
 #include "llvm/ADT/ScopeExit.h"
 
 using namespace mlir;
