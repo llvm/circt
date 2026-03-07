@@ -41,8 +41,8 @@ hw.module @comb(in %in0: i32, in %in1: i32, out out: i32) attributes {num_regs =
 // CHECK1:    } loop {
 // CHECK1:    ^bb0([[CLK:%.+]]: !seq.clock):
 // CHECK1:      [[FROM_CLK:%.+]] = seq.from_clock [[CLK]]
-// CHECK1:      [[TRUE:%.+]] = hw.constant true
-// CHECK1:      [[NCLK:%.+]] = comb.xor [[FROM_CLK]], [[TRUE]]
+// CHECK1:      [[TOGGLE:%.+]] = verif.symbolic_value : i1
+// CHECK1:      [[NCLK:%.+]] = comb.xor [[FROM_CLK]], [[TOGGLE]]
 // CHECK1:      [[NEW_CLOCK:%.+]] = seq.to_clock [[NCLK]]
 // CHECK1:      verif.yield [[NEW_CLOCK]]
 // CHECK1:    } circuit {
@@ -50,6 +50,7 @@ hw.module @comb(in %in0: i32, in %in1: i32, out out: i32) attributes {num_regs =
 // CHECK1:      [[OP0:%.+]] = comb.add [[ARG1]], [[ARG2]]
 // CHECK1:      [[OP2:%.+]] = comb.icmp eq [[OP0]], [[ARG1]]
 // CHECK1:      verif.assert [[OP2]]
+// CHECK1:      verif.clocked_by [[CLK]] -> [[OP0]] : !seq.clock, i32
 // CHECK1:      verif.yield [[ARG3]], [[OP0]]
 // CHECK1:    }
 // CHECK1:    [[SSTR_ADDR:%.+]] = llvm.mlir.addressof [[SSTR:@.+]] : !llvm.ptr
@@ -74,6 +75,7 @@ hw.module @seq(in %clk : !seq.clock, in %in0 : i32, in %in1 : i32, in %reg_state
   %0 = comb.add %in0, %in1 : i32
   %1 = comb.icmp eq %0, %in0 : i32
   verif.assert %1 : i1
+  verif.clocked_by %clk -> %0 : !seq.clock, i32
   hw.output %reg_state, %0 : i32, i32
 }
 
@@ -88,13 +90,14 @@ hw.module @seq(in %clk : !seq.clock, in %in0 : i32, in %in1 : i32, in %reg_state
 // CHECK2:    } loop {
 // CHECK2:    ^bb0([[CLK:%.+]]: !seq.clock):
 // CHECK2:      [[FROM_CLK:%.+]] = seq.from_clock [[CLK]]
-// CHECK2:      [[TRUE:%.+]] = hw.constant true
-// CHECK2:      [[NCLK:%.+]] = comb.xor [[FROM_CLK]], [[TRUE]]
+// CHECK2:      [[TOGGLE:%.+]] = verif.symbolic_value : i1
+// CHECK2:      [[NCLK:%.+]] = comb.xor [[FROM_CLK]], [[TOGGLE]]
 // CHECK2:      [[NEW_CLOCK:%.+]] = seq.to_clock [[NCLK]]
 // CHECK2:      verif.yield [[NEW_CLOCK]]
 // CHECK2:    } circuit {
 // CHECK2:    ^bb0([[CLK:%.+]]: !seq.clock, [[ARG1:%.+]]: i32, [[ARG2:%.+]]: i32, [[ARG3:%.+]]: i32):
 // CHECK2:      [[OP0:%.+]] = comb.add [[ARG1]], [[ARG2]]
+// CHECK2:      verif.clocked_by [[CLK]] -> [[OP0]] : !seq.clock, i32
 // CHECK2:      [[OP2:%.+]] = comb.icmp eq [[OP0]], [[ARG1]]
 // CHECK2:      verif.assert [[OP2]]
 // CHECK2:      verif.yield [[ARG3]], [[OP0]]
@@ -111,5 +114,6 @@ hw.module @nondominance(in %clk : !seq.clock, in %in0 : i32, in %in1 : i32, in %
   %0 = comb.icmp eq %1, %in0 : i32
   %1 = comb.add %in0, %in1 : i32
   verif.assert %0 : i1
+  verif.clocked_by %clk -> %1 : !seq.clock, i32
   hw.output %reg_state, %1 : i32, i32
 }
