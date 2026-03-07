@@ -9,6 +9,7 @@ add_tablegen(circt-tblgen CIRCT
   FIRRTLIntrinsicsGen.cpp
   RTGInstructionFormat.cpp
   RTGInstructionMethodsGen.cpp
+  RTGInstructionPythonWrappers.cpp
   RTGInstructionUtils.cpp
 )
 

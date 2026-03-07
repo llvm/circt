@@ -53,6 +53,31 @@ declare_mlir_python_sources(PyRTGToolSources
 )
 
 ################################################################################
+# Generate Python wrappers for RTGTest instruction operations
+################################################################################
+
+set(LLVM_TARGET_DEFINITIONS ${CIRCT_SOURCE_DIR}/include/circt/Dialect/RTGTest/IR/RTGTest.td)
+tablegen(CIRCT rtgtest_instructions.py
+  -gen-rtg-instruction-python-wrappers
+  --return-val-func=get_virtual_reg
+  --op-prefix=rtgtest
+  --header-file=${CMAKE_CURRENT_SOURCE_DIR}/rtgtest_instructions_header.py
+  -I ${CIRCT_SOURCE_DIR}/include
+  -I ${CIRCT_SOURCE_DIR}/llvm/mlir/include
+  DEPENDS 
+    circt-tblgen
+    ${CMAKE_CURRENT_SOURCE_DIR}/rtgtest_instructions_header.py
+)
+add_public_tablegen_target(PyRTGTestInstructionWrappersGen)
+
+declare_mlir_python_sources(PyRTGSources.Generated
+  ROOT_DIR "${CMAKE_CURRENT_BINARY_DIR}"
+  ADD_TO_PARENT PyRTGSources
+  SOURCES
+    rtgtest_instructions.py
+)
+
+################################################################################
 # Build composite binaries
 ################################################################################
 
