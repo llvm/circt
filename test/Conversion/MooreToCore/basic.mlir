@@ -1591,10 +1591,10 @@ func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   %qr2 = moore.read %q2 : <!moore.queue<i32, 10>>
 
   // CHECK: [[CMPR:%.+]] = sim.queue.cmp eq [[QR]], [[QR2]] : <i32, 10>
-  moore.queue.cmp eq %qr, %qr2 : <i32, 10> -> i1
+  moore.queue.cmp eq %qr, %qr2 : <i32, 10>
 
   // CHECK: [[CMPR:%.+]] = sim.queue.cmp ne [[QR]], [[QR2]] : <i32, 10>
-  moore.queue.cmp ne %qr, %qr2 : <i32, 10> -> i1
+  moore.queue.cmp ne %qr, %qr2 : <i32, 10>
   return
 }
 

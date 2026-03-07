@@ -1359,7 +1359,7 @@ def QueueCmpOp : MooreOp<"queue.cmp", [
   );
   let results = (outs BitType:$result);
   let assemblyFormat = [{
-    $predicate $lhs `,` $rhs attr-dict `:` type($lhs) `->` type($result)
+    $predicate $lhs `,` $rhs attr-dict `:` type($lhs)
   }];  
 }
 
