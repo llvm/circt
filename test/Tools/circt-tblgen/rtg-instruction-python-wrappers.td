@@ -162,3 +162,27 @@ def Test11_TwoUnionArgsOp : TestOp<"two_union_args"> {
 // CHECK-NEXT:   else:
 // CHECK-NEXT:     return two_union_args_imm12_testreg(dst, src)
 // CHECK-EMPTY:
+
+def Test12_AndKeywordOp : TestOp<"and"> {
+  let arguments = (ins Arg<TestRegType, "", [SourceReg]>:$rs);
+}
+// CHECK-NEXT: @instruction(args=[(TestRegType(), SideEffect.READ)])
+// CHECK-NEXT: def and_(rs: TestReg):
+// CHECK-NEXT:   AndKeywordOp(rs)
+// CHECK-EMPTY:
+
+def Test13_LeadingDigitOp : TestOp<"1add"> {
+  let arguments = (ins Arg<TestRegType, "", [SourceReg]>:$rs);
+}
+// CHECK-NEXT: @instruction(args=[(TestRegType(), SideEffect.READ)])
+// CHECK-NEXT: def _1add(rs: TestReg):
+// CHECK-NEXT:   LeadingDigitOp(rs)
+// CHECK-EMPTY:
+
+def Test14_SpecialCharsOp : TestOp<"load#word"> {
+  let arguments = (ins Arg<TestRegType, "", [SourceReg]>:$rs);
+}
+// CHECK-NEXT: @instruction(args=[(TestRegType(), SideEffect.READ)])
+// CHECK-NEXT: def load_word(rs: TestReg):
+// CHECK-NEXT:   SpecialCharsOp(rs)
+// CHECK-EMPTY:
