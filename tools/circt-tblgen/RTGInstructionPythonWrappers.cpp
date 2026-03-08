@@ -17,6 +17,8 @@
 #include "mlir/TableGen/Operator.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TableGen/Error.h"
 #include "llvm/TableGen/Record.h"
@@ -25,6 +27,23 @@ using namespace llvm;
 using namespace mlir;
 using namespace mlir::tblgen;
 using namespace circt::tblgen::rtg;
+
+//===----------------------------------------------------------------------===//
+// CLI Arguments
+//===----------------------------------------------------------------------===//
+
+static cl::OptionCategory
+    rtgPythonWrapperCat("Options for -gen-rtg-instruction-python-wrappers");
+
+static cl::opt<std::string> returnValFunc(
+    "return-val-func",
+    cl::desc("Return value function name for @instruction decorator"),
+    cl::cat(rtgPythonWrapperCat));
+
+static cl::opt<std::string>
+    headerFile("header-file",
+               cl::desc("Path to file containing header to prepend to output"),
+               cl::cat(rtgPythonWrapperCat));
 
 //===----------------------------------------------------------------------===//
 // Helpers
@@ -170,7 +189,8 @@ static void sanitizePythonFunctionName(std::string &name) {
 static void emitInstructionDecorator(ArrayRef<OperandType> operandTypes,
                                      ArrayRef<SideEffect> operandSideEffects,
                                      raw_ostream &os) {
-  os << "@instruction(args=[";
+  os << "@instruction(return_val_func=" << returnValFunc << ",\n";
+  os << "             args=[";
 
   llvm::interleaveComma(llvm::zip(operandTypes, operandSideEffects), os,
                         [&](auto tyAndSideEffect) {
@@ -219,11 +239,11 @@ static void emitFunctionSignature(StringRef opMnemonic,
   os << "):\n";
 }
 
-static void emitFunctionBody(StringRef opClassName,
+static void emitFunctionBody(const Operator &op,
                              ArrayRef<OperandType> combination,
                              ArrayRef<StringRef> operandNames,
                              raw_ostream &os) {
-  os << "  " << opClassName << "(";
+  os << "  " << op.getDialectName() << "." << op.getCppClassName() << "(";
   llvm::interleaveComma(operandNames, os);
   os << ")\n";
 }
@@ -366,12 +386,11 @@ static void genPythonWrapperForOp(const Operator &op, raw_ostream &os) {
   }
 
   auto opMnemonic = getFunctionName(op);
-  auto opClassName = op.getCppClassName();
   for (const auto &combination : combinations) {
     emitInstructionDecorator(combination, operandSideEffect, os);
     emitFunctionSignature(opMnemonic, combination, unionOperandIndices,
                           operandNames, os);
-    emitFunctionBody(opClassName, combination, operandNames, os);
+    emitFunctionBody(op, combination, operandNames, os);
     os << "\n";
   }
 
@@ -385,6 +404,24 @@ static void genPythonWrapperForOp(const Operator &op, raw_ostream &os) {
 
 static bool genRTGInstructionPythonWrappers(const RecordKeeper &records,
                                             raw_ostream &os) {
+  if (returnValFunc.empty()) {
+    llvm::errs() << "error: --return-val-func is required for "
+                    "-gen-rtg-instruction-python-wrappers\n";
+    return true;
+  }
+
+  // Emit header file if specified
+  if (!headerFile.empty()) {
+    auto fileOrErr = MemoryBuffer::getFile(headerFile);
+    if (std::error_code ec = fileOrErr.getError()) {
+      llvm::errs() << "error: Failed to open header file '" << headerFile
+                   << "': " << ec.message() << "\n";
+      return true;
+    }
+    os << fileOrErr.get()->getBuffer();
+    os << "\n";
+  }
+
   for (const Record *opDef : records.getAllDerivedDefinitions("Op"))
     genPythonWrapperForOp(Operator(opDef), os);
 
