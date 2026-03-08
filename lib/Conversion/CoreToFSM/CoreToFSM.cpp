@@ -153,50 +153,37 @@ static void addPossibleValues(llvm::SetVector<size_t> &possibleValues,
 /// Checks if two values compute the same function structurally.
 /// Values defined outside their respective regions (e.g., machine block
 /// arguments or fsm.variable results) are compared by SSA identity.
-/// Values defined by operations within their regions are compared by operation
-/// name, attributes, result index, and recursive operand comparison.
+/// Values defined by operations within their regions are compared using
+/// MLIR's OperationEquivalence with a custom equivalence callback.
 static bool areStructurallyEquivalent(Value a, Value b, Region &regionA,
                                       Region &regionB) {
-  // Same SSA value (e.g., both reference the same machine block argument
-  // or fsm.variable result).
   if (a == b)
     return true;
 
   Operation *opA = a.getDefiningOp();
   Operation *opB = b.getDefiningOp();
-
-  // Block arguments must be identical (already checked above).
   if (!opA || !opB)
     return false;
 
   bool aIsLocal = regionA.isAncestor(opA->getParentRegion());
   bool bIsLocal = regionB.isAncestor(opB->getParentRegion());
-
-  // Both external: must be the same value (already checked above).
-  if (!aIsLocal && !bIsLocal)
-    return false;
-
-  // One local, one external: cannot be equivalent.
   if (aIsLocal != bIsLocal)
     return false;
+  if (!aIsLocal)
+    return false;
 
-  // Both local: compare structurally.
-  if (opA->getName() != opB->getName())
-    return false;
-  if (opA->getAttrDictionary() != opB->getAttrDictionary())
-    return false;
-  if (opA->getNumOperands() != opB->getNumOperands())
-    return false;
+  // Both local: compare result index and delegate structural comparison
+  // to MLIR's OperationEquivalence.
   if (cast<OpResult>(a).getResultNumber() !=
       cast<OpResult>(b).getResultNumber())
     return false;
 
-  for (unsigned i = 0; i < opA->getNumOperands(); ++i) {
-    if (!areStructurallyEquivalent(opA->getOperand(i), opB->getOperand(i),
-                                   regionA, regionB))
-      return false;
-  }
-  return true;
+  return OperationEquivalence::isEquivalentTo(
+      opA, opB,
+      [&](Value lhs, Value rhs) -> LogicalResult {
+        return success(areStructurallyEquivalent(lhs, rhs, regionA, regionB));
+      },
+      /*markEquivalent=*/nullptr, OperationEquivalence::Flags::IgnoreLocations);
 }
 
 /// Replace values in the action region that are structurally equivalent to
