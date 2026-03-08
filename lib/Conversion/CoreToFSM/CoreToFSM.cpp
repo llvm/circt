@@ -150,11 +150,126 @@ static void addPossibleValues(llvm::SetVector<size_t> &possibleValues,
   addPossibleValuesImpl(possibleValues, v, visited);
 }
 
+/// Checks if two values compute the same function structurally.
+/// Values defined outside their respective regions (e.g., machine block
+/// arguments or fsm.variable results) are compared by SSA identity.
+/// Values defined by operations within their regions are compared by operation
+/// name, attributes, result index, and recursive operand comparison.
+static bool areStructurallyEquivalent(Value a, Value b, Region &regionA,
+                                      Region &regionB) {
+  // Same SSA value (e.g., both reference the same machine block argument
+  // or fsm.variable result).
+  if (a == b)
+    return true;
+
+  Operation *opA = a.getDefiningOp();
+  Operation *opB = b.getDefiningOp();
+
+  // Block arguments must be identical (already checked above).
+  if (!opA || !opB)
+    return false;
+
+  bool aIsLocal = regionA.isAncestor(opA->getParentRegion());
+  bool bIsLocal = regionB.isAncestor(opB->getParentRegion());
+
+  // Both external: must be the same value (already checked above).
+  if (!aIsLocal && !bIsLocal)
+    return false;
+
+  // One local, one external: cannot be equivalent.
+  if (aIsLocal != bIsLocal)
+    return false;
+
+  // Both local: compare structurally.
+  if (opA->getName() != opB->getName())
+    return false;
+  if (opA->getAttrDictionary() != opB->getAttrDictionary())
+    return false;
+  if (opA->getNumOperands() != opB->getNumOperands())
+    return false;
+  if (cast<OpResult>(a).getResultNumber() !=
+      cast<OpResult>(b).getResultNumber())
+    return false;
+
+  for (unsigned i = 0; i < opA->getNumOperands(); ++i) {
+    if (!areStructurallyEquivalent(opA->getOperand(i), opB->getOperand(i),
+                                   regionA, regionB))
+      return false;
+  }
+  return true;
+}
+
+/// Replace values in the action region that are structurally equivalent to
+/// guardExpr with a boolean constant.
+static void replaceStructuralMatches(Value guardExpr, bool isTrue,
+                                     Region &guardRegion, Region &actionRegion,
+                                     OpBuilder &builder, Location loc) {
+  bool guardIsExternal =
+      !guardExpr.getDefiningOp() ||
+      !guardRegion.isAncestor(guardExpr.getDefiningOp()->getParentRegion());
+
+  if (guardIsExternal) {
+    // The guard expression is an external value (e.g., a machine block
+    // argument). Replace its uses in the action region directly.
+    builder.setInsertionPointToStart(&actionRegion.front());
+    auto constOp = hw::ConstantOp::create(builder, loc, guardExpr.getType(),
+                                          isTrue ? 1 : 0);
+    guardExpr.replaceUsesWithIf(constOp.getResult(), [&](OpOperand &use) {
+      return actionRegion.isAncestor(use.getOwner()->getParentRegion());
+    });
+  } else {
+    // The guard expression is computed by operations inside the guard region.
+    // Find structurally equivalent expressions in the action region.
+    SmallVector<Value> matches;
+    actionRegion.walk([&](Operation *op) {
+      for (Value result : op->getResults()) {
+        if (result.getType().isInteger(1) &&
+            areStructurallyEquivalent(guardExpr, result, guardRegion,
+                                      actionRegion))
+          matches.push_back(result);
+      }
+    });
+    if (!matches.empty()) {
+      builder.setInsertionPointToStart(&actionRegion.front());
+      auto constOp = hw::ConstantOp::create(builder, loc, builder.getI1Type(),
+                                            isTrue ? 1 : 0);
+      for (Value match : matches)
+        match.replaceAllUsesWith(constOp.getResult());
+    }
+
+    // Handle ICmp predicate inversion: canonicalization may transform
+    // xor(icmp eq, true) into icmp ne (and vice versa). If the guard contains
+    // icmp P(X, Y), find icmp !P(X, Y) in the action and replace with the
+    // opposite boolean value.
+    if (auto guardIcmp = guardExpr.getDefiningOp<ICmpOp>()) {
+      ICmpPredicate negPred =
+          ICmpOp::getNegatedPredicate(guardIcmp.getPredicate());
+      SmallVector<Value> negMatches;
+      actionRegion.walk([&](ICmpOp actionIcmp) {
+        if (actionIcmp.getPredicate() == negPred &&
+            areStructurallyEquivalent(guardIcmp.getLhs(), actionIcmp.getLhs(),
+                                      guardRegion, actionRegion) &&
+            areStructurallyEquivalent(guardIcmp.getRhs(), actionIcmp.getRhs(),
+                                      guardRegion, actionRegion))
+          negMatches.push_back(actionIcmp.getResult());
+      });
+      if (!negMatches.empty()) {
+        builder.setInsertionPointToStart(&actionRegion.front());
+        auto constOp = hw::ConstantOp::create(builder, loc, builder.getI1Type(),
+                                              !isTrue ? 1 : 0);
+        for (Value match : negMatches)
+          match.replaceAllUsesWith(constOp.getResult());
+      }
+    }
+  }
+}
+
 /// Simplify action blocks by propagating guard conditions.
-/// If the guard returns a condition derived from block arguments (direct,
-/// NOT, or AND thereof), replace those arguments within the action region
-/// with constants. Subsequent canonicalization folds the resulting
-/// constant-conditioned muxes and other ops.
+/// When a transition is taken, its guard condition is known to be true.
+/// This function finds expressions in the action region that are structurally
+/// identical to the guard condition and replaces them with constant true.
+/// It also handles NOT (xor with true) and AND decomposition to propagate
+/// additional known values.
 static void simplifyActionWithGuard(TransitionOp transition,
                                     OpBuilder &builder) {
   Region &guardRegion = transition.getGuard();
@@ -168,42 +283,42 @@ static void simplifyActionWithGuard(TransitionOp transition,
   if (!guardReturn)
     return;
 
-  // Collect block arguments known to be true or false from the guard.
-  SmallVector<std::pair<Value, bool>> knownConditions;
+  Location loc = guardReturn.getLoc();
+  Value guardCondition = guardReturn.getOperand();
 
-  SmallVector<Value> worklist;
-  worklist.push_back(guardReturn.getOperand());
+  // Collect (expression, isTrue) pairs to propagate into the action.
+  SmallVector<std::pair<Value, bool>> guardFacts;
+
+  // Use a worklist to decompose AND expressions.
+  SmallVector<std::pair<Value, bool>> worklist;
+  worklist.push_back({guardCondition, true});
 
   while (!worklist.empty()) {
-    Value cond = worklist.pop_back_val();
+    auto [cond, isTrue] = worklist.pop_back_val();
+    guardFacts.push_back({cond, isTrue});
 
-    if (isa<BlockArgument>(cond)) {
-      knownConditions.push_back({cond, true});
-    } else if (auto xorOp = cond.getDefiningOp<XorOp>()) {
-      if (xorOp.isBinaryNot()) {
-        Value inner = xorOp.getOperand(0);
-        if (isa<BlockArgument>(inner))
-          knownConditions.push_back({inner, false});
+    // Decompose NOT: xor(E, true) means E has the opposite truth value.
+    if (auto xorOp = cond.getDefiningOp<XorOp>()) {
+      if (xorOp.isBinaryNot() &&
+          guardRegion.isAncestor(xorOp->getParentRegion()))
+        guardFacts.push_back({xorOp.getOperand(0), !isTrue});
+    }
+
+    // Decompose AND: if the AND is true, each operand is true.
+    if (isTrue) {
+      if (auto andOp = cond.getDefiningOp<AndOp>()) {
+        if (guardRegion.isAncestor(andOp->getParentRegion())) {
+          for (Value operand : andOp.getOperands())
+            worklist.push_back({operand, true});
+        }
       }
-    } else if (auto andOp = cond.getDefiningOp<AndOp>()) {
-      for (Value operand : andOp.getOperands())
-        worklist.push_back(operand);
     }
   }
 
-  if (knownConditions.empty())
-    return;
-
-  // Replace uses of known-value arguments in the action region with
-  // constants so that canonicalization can fold dependent ops.
-  for (auto [condValue, isTrue] : knownConditions) {
-    builder.setInsertionPointToStart(&actionRegion.front());
-    auto constOp = hw::ConstantOp::create(builder, condValue.getLoc(),
-                                          condValue.getType(), isTrue ? 1 : 0);
-    condValue.replaceUsesWithIf(constOp.getResult(), [&](OpOperand &use) {
-      return actionRegion.isAncestor(use.getOwner()->getParentRegion());
-    });
-  }
+  // Replace structurally equivalent expressions in the action region.
+  for (auto [guardExpr, isTrue] : guardFacts)
+    replaceStructuralMatches(guardExpr, isTrue, guardRegion, actionRegion,
+                             builder, loc);
 }
 
 /// Checks if a value is a constant or a tree of muxes with constant leaves.
