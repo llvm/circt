@@ -135,18 +135,15 @@ static void emitInstructionDecorator(ArrayRef<OperandType> operandTypes,
                                      raw_ostream &os) {
   os << "@instruction(args=[";
 
-  bool first = true;
-  for (auto [ty, sideEffect] : llvm::zip(operandTypes, operandSideEffects)) {
-    if (!first)
-      os << ", ";
-    os << "(";
-    emitPythonTypeExpr(ty, os);
-    os << ", ";
-    emitSideEffect(sideEffect, os);
-    os << ")";
-
-    first = false;
-  }
+  llvm::interleaveComma(llvm::zip(operandTypes, operandSideEffects), os,
+                        [&](auto tyAndSideEffect) {
+                          auto [ty, sideEffect] = tyAndSideEffect;
+                          os << "(";
+                          emitPythonTypeExpr(ty, os);
+                          os << ", ";
+                          emitSideEffect(sideEffect, os);
+                          os << ")";
+                        });
 
   os << "])\n";
 }
@@ -174,14 +171,12 @@ static void emitFunctionSignature(StringRef opMnemonic,
 
   os << "def " << name << "(";
 
-  for (auto [i, name, ty] : llvm::enumerate(operandNames, combination)) {
-    if (i != 0)
-      os << ", ";
-
-    os << name;
-    os << ": ";
-    emitPythonTypeHint(ty, os);
-  }
+  llvm::interleaveComma(llvm::zip(operandNames, combination), os,
+                        [&](auto nameAndType) {
+                          auto [name, ty] = nameAndType;
+                          os << name << ": ";
+                          emitPythonTypeHint(ty, os);
+                        });
 
   os << "):\n";
 }
@@ -191,13 +186,7 @@ static void emitFunctionBody(StringRef opClassName,
                              ArrayRef<StringRef> operandNames,
                              raw_ostream &os) {
   os << "  " << opClassName << "(";
-
-  for (auto [i, name] : llvm::enumerate(operandNames)) {
-    if (i != 0)
-      os << ", ";
-    os << name;
-  }
-
+  llvm::interleaveComma(operandNames, os);
   os << ")\n";
 }
 
@@ -227,6 +216,80 @@ generateTypeCombinations(ArrayRef<OperandTypeSet> operandKinds,
       }
     }
     combinations = std::move(newCombinations);
+  }
+}
+
+static void
+emitDispatcherSignature(StringRef opMnemonic,
+                        ArrayRef<SmallVector<OperandType>> combinations,
+                        ArrayRef<StringRef> operandNames, raw_ostream &os) {
+  assert(combinations.size() > 0 && "Expected at least one signature option");
+
+  std::string funcName = opMnemonic.str();
+  os << "def " << funcName << "(";
+
+  // Transpose combinations to get all types for each operand position
+  SmallVector<OperandTypeSet> operandTypes(combinations[0].size());
+  for (const auto &combination : combinations) {
+    for (auto [i, type] : llvm::enumerate(combination)) {
+      operandTypes[i].appendAndUnique(type);
+    }
+  }
+
+  auto emitArgument = [&](auto nameAndTypes) {
+    auto [name, types] = nameAndTypes;
+    os << name << ": ";
+
+    if (types.size() == 1) {
+      emitPythonTypeHint(types[0], os);
+      return;
+    }
+
+    // Generate Union[Type1, Type2, ...]
+    os << "Union[";
+    llvm::interleaveComma(types, os,
+                          [&](auto ty) { emitPythonTypeHint(ty, os); });
+    os << "]";
+  };
+  llvm::interleaveComma(llvm::zip(operandNames, operandTypes), os,
+                        emitArgument);
+
+  os << "):\n";
+}
+
+static void emitDispatcherBody(StringRef opMnemonic,
+                               ArrayRef<SmallVector<OperandType>> combinations,
+                               ArrayRef<size_t> unionOperandIndices,
+                               ArrayRef<StringRef> operandNames,
+                               raw_ostream &os) {
+  for (auto [i, combination] : llvm::enumerate(combinations)) {
+    if (i == 0)
+      os << "  if ";
+    else if (i < combinations.size() - 1)
+      os << "  elif ";
+    else
+      os << "  else:\n";
+
+    if (i < combinations.size() - 1) {
+      auto comb = combination;
+      llvm::interleave(
+          unionOperandIndices, os,
+          [&](auto opIdx) {
+            os << "isinstance(" << operandNames[opIdx] << ", ";
+            emitPythonTypeHint(comb[opIdx], os);
+            os << ")";
+          },
+          " and ");
+      os << ":\n";
+    }
+
+    std::string name = opMnemonic.str();
+    for (auto k : unionOperandIndices)
+      name += getTypeSuffix(combination[k]);
+
+    os << "    return " << name << "(";
+    llvm::interleaveComma(operandNames, os);
+    os << ")\n";
   }
 }
 
@@ -268,6 +331,13 @@ static void genPythonWrapperForOp(const Operator &op, raw_ostream &os) {
     emitFunctionSignature(opMnemonic, combination, unionOperandIndices,
                           operandNames, os);
     emitFunctionBody(opClassName, combination, operandNames, os);
+    os << "\n";
+  }
+
+  if (combinations.size() > 1) {
+    emitDispatcherSignature(opMnemonic, combinations, operandNames, os);
+    emitDispatcherBody(opMnemonic, combinations, unionOperandIndices,
+                       operandNames, os);
     os << "\n";
   }
 }

@@ -107,6 +107,12 @@ def Test9_UnionWithRegisterOp : TestOp<"union_with_register"> {
 // CHECK-NEXT: def union_with_register_imm12(rd: TestReg, src: Immediate):
 // CHECK-NEXT:   UnionWithRegisterOp(rd, src)
 // CHECK-EMPTY:
+// CHECK-NEXT: def union_with_register(rd: TestReg, src: Union[TestReg, Immediate]):
+// CHECK-NEXT:   if isinstance(src, TestReg):
+// CHECK-NEXT:     return union_with_register_testreg(rd, src)
+// CHECK-NEXT:   else:
+// CHECK-NEXT:     return union_with_register_imm12(rd, src)
+// CHECK-EMPTY:
 
 def Test10_MultiRegisterUnionOp : TestOp<"multi_register_union"> {
   let arguments = (ins AnyTypeOf<[TestRegType, TestFloatRegType]>:$reg);
@@ -118,6 +124,12 @@ def Test10_MultiRegisterUnionOp : TestOp<"multi_register_union"> {
 // CHECK-NEXT: @instruction(args=[(TestRegType(), SideEffect.READ_WRITE)])
 // CHECK-NEXT: def multi_register_union_testreg(reg: TestReg):
 // CHECK-NEXT:   MultiRegisterUnionOp(reg)
+// CHECK-EMPTY:
+// CHECK-NEXT: def multi_register_union(reg: Union[TestFloatReg, TestReg]):
+// CHECK-NEXT:   if isinstance(reg, TestFloatReg):
+// CHECK-NEXT:     return multi_register_union_testfloatreg(reg)
+// CHECK-NEXT:   else:
+// CHECK-NEXT:     return multi_register_union_testreg(reg)
 // CHECK-EMPTY:
 
 def Test11_TwoUnionArgsOp : TestOp<"two_union_args"> {
@@ -139,4 +151,14 @@ def Test11_TwoUnionArgsOp : TestOp<"two_union_args"> {
 // CHECK-NEXT: @instruction(args=[(ImmediateType(12), SideEffect.WRITE), (TestRegType(), SideEffect.READ_WRITE)])
 // CHECK-NEXT: def two_union_args_imm12_testreg(dst: Immediate, src: TestReg):
 // CHECK-NEXT:   TwoUnionArgsOp(dst, src)
+// CHECK-EMPTY:
+// CHECK-NEXT: def two_union_args(dst: Union[TestReg, Immediate], src: Union[TestFloatReg, TestReg]):
+// CHECK-NEXT:   if isinstance(dst, TestReg) and isinstance(src, TestFloatReg):
+// CHECK-NEXT:     return two_union_args_testreg_testfloatreg(dst, src)
+// CHECK-NEXT:   elif isinstance(dst, TestReg) and isinstance(src, TestReg):
+// CHECK-NEXT:     return two_union_args_testreg_testreg(dst, src)
+// CHECK-NEXT:   elif isinstance(dst, Immediate) and isinstance(src, TestFloatReg):
+// CHECK-NEXT:     return two_union_args_imm12_testfloatreg(dst, src)
+// CHECK-NEXT:   else:
+// CHECK-NEXT:     return two_union_args_imm12_testreg(dst, src)
 // CHECK-EMPTY:
