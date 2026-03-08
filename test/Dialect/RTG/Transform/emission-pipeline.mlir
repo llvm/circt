@@ -64,7 +64,7 @@ rtg.test @test_registers() {
   %vreg0 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
   %vreg1 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
   %imm = rtg.constant #rtg.isa.immediate<12, 0> : !rtg.isa.immediate<12>
-  rtgtest.rv32i.jalr %vreg0, %vreg1, %imm
-  rtgtest.rv32i.jalr %vreg1, %vreg0, %imm
+  rtgtest.jalr %vreg0, %vreg1, %imm
+  rtgtest.jalr %vreg1, %vreg0, %imm
 }
 
