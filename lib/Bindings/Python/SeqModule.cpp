@@ -9,7 +9,7 @@
 #include "CIRCTModules.h"
 
 #include "circt-c/Dialect/Seq.h"
-#include "mlir/Bindings/Python/NanobindAdaptors.h"
+#include "mlir/Bindings/Python/IRCore.h"
 
 #include "NanobindUtils.h"
 #include "mlir-c/Support.h"
@@ -18,75 +18,117 @@
 namespace nb = nanobind;
 
 using namespace circt;
-using namespace mlir::python::nanobind_adaptors;
+using mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::DefaultingPyMlirContext;
+using mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteType;
+using mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyMlirContext;
+
+struct PyClockType : PyConcreteType<PyClockType> {
+  static constexpr IsAFunctionTy isaFunction = seqTypeIsAClock;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      seqClockTypeGetTypeID;
+  static constexpr const char *pyClassName = "ClockType";
+  using Base::Base;
+
+  static void bindDerived(ClassTy &c) {
+    c.def_static(
+        "get",
+        [](DefaultingPyMlirContext ctx) {
+          return PyClockType(ctx->getRef(), seqClockTypeGet(ctx->get()));
+        },
+        nb::arg("context").none() = nb::none());
+  }
+};
+
+struct PyImmutableType : PyConcreteType<PyImmutableType> {
+  static constexpr IsAFunctionTy isaFunction = seqTypeIsAImmutable;
+  static constexpr const char *pyClassName = "ImmutableType";
+  using Base::Base;
+
+  static void bindDerived(ClassTy &c) {
+    c.def_static("get", [](MlirType innerType) {
+      auto type = seqImmutableTypeGet(innerType);
+      return PyImmutableType(
+          PyMlirContext::forContext(mlirTypeGetContext(type)), type);
+    });
+    c.def_prop_ro("inner_type", [](PyImmutableType &self) {
+      return seqImmutableTypeGetInnerType(self);
+    });
+  }
+};
+
+struct PyHLMemType : PyConcreteType<PyHLMemType> {
+  static constexpr IsAFunctionTy isaFunction = seqTypeIsAHLMem;
+  static constexpr const char *pyClassName = "HLMemType";
+  using Base::Base;
+
+  static void bindDerived(ClassTy &c) {
+    c.def_static(
+        "get",
+        [](std::vector<int64_t> shape, MlirType elementType,
+           DefaultingPyMlirContext ctx) {
+          return PyHLMemType(ctx->getRef(),
+                             seqHLMemTypeGet(ctx->get(), shape.size(),
+                                             shape.data(), elementType));
+        },
+        nb::arg("shape"), nb::arg("element_type"),
+        nb::arg("context").none() = nb::none());
+    c.def_prop_ro("element_type", [](PyHLMemType &self) {
+      return seqHLMemTypeGetElementType(self);
+    });
+    c.def_prop_ro("rank",
+                  [](PyHLMemType &self) { return seqHLMemTypeGetRank(self); });
+    c.def_prop_ro("shape", [](PyHLMemType &self) {
+      intptr_t rank = seqHLMemTypeGetRank(self);
+      const int64_t *shapePtr = seqHLMemTypeGetShape(self);
+      nb::list result;
+      for (intptr_t i = 0; i < rank; ++i)
+        result.append(shapePtr[i]);
+      return result;
+    });
+  }
+};
+
+struct PyFirMemType : PyConcreteType<PyFirMemType> {
+  static constexpr IsAFunctionTy isaFunction = seqTypeIsAFirMem;
+  static constexpr const char *pyClassName = "FirMemType";
+  using Base::Base;
+
+  static void bindDerived(ClassTy &c) {
+    c.def_static(
+        "get",
+        [](uint64_t depth, uint32_t width, std::optional<uint32_t> maskWidth,
+           DefaultingPyMlirContext ctx) {
+          const uint32_t *maskPtr = nullptr;
+          uint32_t maskVal = 0;
+          if (maskWidth.has_value()) {
+            maskVal = maskWidth.value();
+            maskPtr = &maskVal;
+          }
+          return PyFirMemType(ctx->getRef(), seqFirMemTypeGet(ctx->get(), depth,
+                                                              width, maskPtr));
+        },
+        nb::arg("depth"), nb::arg("width"), nb::arg("mask_width") = nb::none(),
+        nb::arg("context").none() = nb::none());
+    c.def_prop_ro("depth", [](PyFirMemType &self) {
+      return seqFirMemTypeGetDepth(self);
+    });
+    c.def_prop_ro("width", [](PyFirMemType &self) {
+      return seqFirMemTypeGetWidth(self);
+    });
+    c.def_prop_ro("mask_width", [](PyFirMemType &self) -> nb::object {
+      if (seqFirMemTypeHasMask(self))
+        return nb::cast(seqFirMemTypeGetMaskWidth(self));
+      return nb::none();
+    });
+  }
+};
 
 /// Populate the seq python module.
 void circt::python::populateDialectSeqSubmodule(nb::module_ &m) {
   m.doc() = "Seq dialect Python native extension";
 
-  mlir_type_subclass(m, "ClockType", seqTypeIsAClock)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, MlirContext ctx) {
-            return cls(seqClockTypeGet(ctx));
-          },
-          nb::arg("cls"), nb::arg("context") = nb::none());
-
-  mlir_type_subclass(m, "ImmutableType", seqTypeIsAImmutable)
-      .def_classmethod("get",
-                       [](nb::object cls, MlirType innerType) {
-                         return cls(seqImmutableTypeGet(innerType));
-                       })
-      .def_property_readonly("inner_type", [](MlirType self) {
-        return seqImmutableTypeGetInnerType(self);
-      });
-
-  mlir_type_subclass(m, "HLMemType", seqTypeIsAHLMem)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, std::vector<int64_t> shape, MlirType elementType,
-             MlirContext ctx) {
-            return cls(
-                seqHLMemTypeGet(ctx, shape.size(), shape.data(), elementType));
-          },
-          nb::arg("cls"), nb::arg("shape"), nb::arg("element_type"),
-          nb::arg("context") = nb::none())
-      .def_property_readonly(
-          "element_type",
-          [](MlirType self) { return seqHLMemTypeGetElementType(self); })
-      .def_property_readonly(
-          "rank", [](MlirType self) { return seqHLMemTypeGetRank(self); })
-      .def_property_readonly("shape", [](MlirType self) {
-        intptr_t rank = seqHLMemTypeGetRank(self);
-        const int64_t *shapePtr = seqHLMemTypeGetShape(self);
-        nb::list result;
-        for (intptr_t i = 0; i < rank; ++i)
-          result.append(shapePtr[i]);
-        return result;
-      });
-
-  mlir_type_subclass(m, "FirMemType", seqTypeIsAFirMem)
-      .def_classmethod(
-          "get",
-          [](nb::object cls, uint64_t depth, uint32_t width,
-             std::optional<uint32_t> maskWidth, MlirContext ctx) {
-            const uint32_t *maskPtr = nullptr;
-            uint32_t maskVal = 0;
-            if (maskWidth.has_value()) {
-              maskVal = maskWidth.value();
-              maskPtr = &maskVal;
-            }
-            return cls(seqFirMemTypeGet(ctx, depth, width, maskPtr));
-          },
-          nb::arg("cls"), nb::arg("depth"), nb::arg("width"),
-          nb::arg("mask_width") = nb::none(), nb::arg("context") = nb::none())
-      .def_property_readonly(
-          "depth", [](MlirType self) { return seqFirMemTypeGetDepth(self); })
-      .def_property_readonly(
-          "width", [](MlirType self) { return seqFirMemTypeGetWidth(self); })
-      .def_property_readonly("mask_width", [](MlirType self) -> nb::object {
-        if (seqFirMemTypeHasMask(self))
-          return nb::cast(seqFirMemTypeGetMaskWidth(self));
-        return nb::none();
-      });
+  PyClockType::bind(m);
+  PyImmutableType::bind(m);
+  PyHLMemType::bind(m);
+  PyFirMemType::bind(m);
 }

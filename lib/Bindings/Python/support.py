@@ -89,66 +89,41 @@ def type_to_pytype(t) -> ir.Type:
     return t
 
   from .dialects import esi, hw, seq, rtg, rtgtest
-  if isinstance(t, ir.IntegerType):
-    return ir.IntegerType(t)
-  if isinstance(t, ir.NoneType):
-    return ir.NoneType(t)
-  if isinstance(t, ir.TupleType):
-    return ir.TupleType(t)
-  if hw.ArrayType.isinstance(t):
-    return hw.ArrayType(t)
-  if hw.StructType.isinstance(t):
-    return hw.StructType(t)
-  if hw.UnionType.isinstance(t):
-    return hw.UnionType(t)
-  if hw.TypeAliasType.isinstance(t):
-    return hw.TypeAliasType(t)
-  if hw.InOutType.isinstance(t):
-    return hw.InOutType(t)
-  if seq.ClockType.isinstance(t):
-    return seq.ClockType(t)
-  if esi.ChannelType.isinstance(t):
-    return esi.ChannelType(t)
-  if esi.AnyType.isinstance(t):
-    return esi.AnyType(t)
-  if esi.BundleType.isinstance(t):
-    return esi.BundleType(t)
-  if esi.ListType.isinstance(t):
-    return esi.ListType(t)
-  if esi.WindowType.isinstance(t):
-    return esi.WindowType(t)
-  if esi.WindowFrameType.isinstance(t):
-    return esi.WindowFrameType(t)
-  if esi.WindowFieldType.isinstance(t):
-    return esi.WindowFieldType(t)
-  if rtg.LabelType.isinstance(t):
-    return rtg.LabelType(t)
-  if rtg.SetType.isinstance(t):
-    return rtg.SetType(t)
-  if rtg.BagType.isinstance(t):
-    return rtg.BagType(t)
-  if rtg.SequenceType.isinstance(t):
-    return rtg.SequenceType(t)
-  if rtg.RandomizedSequenceType.isinstance(t):
-    return rtg.RandomizedSequenceType(t)
-  if rtg.DictType.isinstance(t):
-    return rtg.DictType(t)
-  if rtg.ImmediateType.isinstance(t):
-    return rtg.ImmediateType(t)
-  if rtg.ArrayType.isinstance(t):
-    return rtg.ArrayType(t)
-  if rtg.MemoryType.isinstance(t):
-    return rtg.MemoryType(t)
-  if rtg.MemoryBlockType.isinstance(t):
-    return rtg.MemoryBlockType(t)
-  if rtg.TupleType.isinstance(t):
-    return rtg.TupleType(t)
-  if rtg.StringType.isinstance(t):
-    return rtg.StringType(t)
-  if rtgtest.IntegerRegisterType.isinstance(t):
-    return rtgtest.IntegerRegisterType(t)
-  if rtgtest.CPUType.isinstance(t):
-    return rtgtest.CPUType(t)
+
+  for type_cls in [
+      ir.IntegerType,
+      ir.NoneType,
+      ir.TupleType,
+      hw.ArrayType,
+      hw.StructType,
+      hw.UnionType,
+      hw.TypeAliasType,
+      hw.InOutType,
+      seq.ClockType,
+      esi.ChannelType,
+      esi.AnyType,
+      esi.BundleType,
+      esi.ListType,
+      esi.WindowType,
+      esi.WindowFrameType,
+      esi.WindowFieldType,
+      rtg.LabelType,
+      rtg.SetType,
+      rtg.BagType,
+      rtg.SequenceType,
+      rtg.RandomizedSequenceType,
+      rtg.DictType,
+      rtg.ImmediateType,
+      rtg.ArrayType,
+      rtg.MemoryType,
+      rtg.MemoryBlockType,
+      rtg.TupleType,
+      rtg.StringType,
+      rtgtest.IntegerRegisterType,
+      rtgtest.CPUType,
+  ]:
+    if isinstance(t, type_cls):
+      return t
 
   raise TypeError(f"Cannot convert {repr(t)} to python type")
 
@@ -173,7 +148,7 @@ def attribute_to_var(attr):
     return ir.BoolAttr(attr).value
   if isinstance(attr, ir.IntegerAttr):
     return ir.IntegerAttr(attr).value
-  if hw.InnerSymAttr.isinstance(attr):
+  if isinstance(attr, hw.InnerSymAttr):
     return ir.StringAttr(hw.InnerSymAttr(attr).symName).value
   if isinstance(attr, ir.StringAttr):
     return ir.StringAttr(attr).value
@@ -187,16 +162,16 @@ def attribute_to_var(attr):
   if isinstance(attr, ir.DictAttr):
     dict = ir.DictAttr(attr)
     return {i.name: attribute_to_var(i.attr) for i in dict}
-  if om.ReferenceAttr.isinstance(attr):
+  if isinstance(attr, om.ReferenceAttr):
     return attribute_to_var(om.ReferenceAttr(attr).inner_ref)
-  if hw.InnerRefAttr.isinstance(attr):
+  if isinstance(attr, hw.InnerRefAttr):
     ref = hw.InnerRefAttr(attr)
     return (ir.StringAttr(ref.module).value, ir.StringAttr(ref.name).value)
-  if om.ListAttr.isinstance(attr):
+  if isinstance(attr, om.ListAttr):
     return list(map(attribute_to_var, om.ListAttr(attr)))
-  if om.OMIntegerAttr.isinstance(attr):
+  if isinstance(attr, om.OMIntegerAttr):
     return int(str(om.OMIntegerAttr(attr)))
-  if om.PathAttr.isinstance(attr):
+  if isinstance(attr, om.PathAttr):
     return om.PathAttr(attr).value
 
   raise TypeError(f"Cannot convert {repr(attr)} to python value")

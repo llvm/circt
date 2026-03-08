@@ -12,7 +12,7 @@
 #include "mlir-c/BuiltinAttributes.h"
 #include "mlir-c/BuiltinTypes.h"
 #include "mlir-c/IR.h"
-#include "mlir/Bindings/Python/NanobindAdaptors.h"
+#include "mlir/Bindings/Python/IRCore.h"
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/variant.h>
 #include <nanobind/stl/vector.h>
@@ -20,7 +20,9 @@ namespace nb = nanobind;
 
 using namespace mlir;
 using namespace mlir::python;
-using namespace mlir::python::nanobind_adaptors;
+using ::mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteAttribute;
+using ::mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteType;
+using ::mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyMlirContext;
 
 namespace {
 
@@ -103,7 +105,7 @@ struct Path {
   }
 
 private:
-  // The underlying CAPI value.
+  // The underlying CAPI value
   OMEvaluatorValue value;
 };
 
@@ -392,6 +394,108 @@ OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result,
 
 } // namespace
 
+//===----------------------------------------------------------------------===//
+// Attribute types
+//===----------------------------------------------------------------------===//
+
+struct PyReferenceAttr : PyConcreteAttribute<PyReferenceAttr> {
+  static constexpr IsAFunctionTy isaFunction = omAttrIsAReferenceAttr;
+  static constexpr const char *pyClassName = "ReferenceAttr";
+  using Base::Base;
+
+  static void bindDerived(ClassTy &c) {
+    c.def_prop_ro("inner_ref", [](PyReferenceAttr &self) {
+      return omReferenceAttrGetInnerRef(self);
+    });
+  }
+};
+
+struct PyOMIntegerAttr : PyConcreteAttribute<PyOMIntegerAttr> {
+  static constexpr IsAFunctionTy isaFunction = omAttrIsAIntegerAttr;
+  static constexpr const char *pyClassName = "OMIntegerAttr";
+  using Base::Base;
+
+  static void bindDerived(ClassTy &c) {
+    c.def_static("get", [](MlirAttribute intVal) {
+      auto attr = omIntegerAttrGet(intVal);
+      return PyOMIntegerAttr(
+          PyMlirContext::forContext(mlirAttributeGetContext(attr)), attr);
+    });
+    c.def_prop_ro("integer", [](PyOMIntegerAttr &self) {
+      return omIntegerAttrGetInt(self);
+    });
+    c.def("__str__", [](PyOMIntegerAttr &self) {
+      MlirStringRef str = omIntegerAttrToString(self);
+      return std::string(str.data, str.length);
+    });
+  }
+};
+
+struct PyListAttr : PyConcreteAttribute<PyListAttr> {
+  static constexpr IsAFunctionTy isaFunction = omAttrIsAListAttr;
+  static constexpr const char *pyClassName = "ListAttr";
+  using Base::Base;
+
+  static void bindDerived(ClassTy &c) {
+    c.def("__getitem__", &omListAttrGetElement);
+    c.def("__len__", &omListAttrGetNumElements);
+    c.def("__iter__",
+          [](MlirAttribute arr) { return PyListAttrIterator(arr); });
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// Type types
+//===----------------------------------------------------------------------===//
+
+struct PyOMAnyType : PyConcreteType<PyOMAnyType> {
+  static constexpr IsAFunctionTy isaFunction = omTypeIsAAnyType;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction = omAnyTypeGetTypeID;
+  static constexpr const char *pyClassName = "AnyType";
+  using Base::Base;
+};
+
+struct PyClassType : PyConcreteType<PyClassType> {
+  static constexpr IsAFunctionTy isaFunction = omTypeIsAClassType;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction = omClassTypeGetTypeID;
+  static constexpr const char *pyClassName = "ClassType";
+  using Base::Base;
+
+  static void bindDerived(ClassTy &c) {
+    c.def_prop_ro("name", [](PyClassType &self) {
+      MlirStringRef name = mlirIdentifierStr(omClassTypeGetName(self));
+      return std::string(name.data, name.length);
+    });
+  }
+};
+
+struct PyBasePathType : PyConcreteType<PyBasePathType> {
+  static constexpr IsAFunctionTy isaFunction = omTypeIsAFrozenBasePathType;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      omFrozenBasePathTypeGetTypeID;
+  static constexpr const char *pyClassName = "BasePathType";
+  using Base::Base;
+};
+
+struct PyOMListType : PyConcreteType<PyOMListType> {
+  static constexpr IsAFunctionTy isaFunction = omTypeIsAListType;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction = omListTypeGetTypeID;
+  static constexpr const char *pyClassName = "ListType";
+  using Base::Base;
+
+  static void bindDerived(ClassTy &c) {
+    c.def_prop_ro("element_type", omListTypeGetElementType);
+  }
+};
+
+struct PyPathType : PyConcreteType<PyPathType> {
+  static constexpr IsAFunctionTy isaFunction = omTypeIsAFrozenPathType;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      omFrozenPathTypeGetTypeID;
+  static constexpr const char *pyClassName = "PathType";
+  using Base::Base;
+};
+
 /// Populate the OM Python module.
 void circt::python::populateDialectOMSubmodule(nb::module_ &m) {
   m.doc() = "OM dialect Python native extension";
@@ -435,53 +539,14 @@ void circt::python::populateDialectOMSubmodule(nb::module_ &m) {
       .def("__hash__", &Object::getHash, "Get object hash")
       .def("__eq__", &Object::eq, "Check if two objects are same");
 
-  // Add the ReferenceAttr definition
-  mlir_attribute_subclass(m, "ReferenceAttr", omAttrIsAReferenceAttr)
-      .def_property_readonly("inner_ref", [](MlirAttribute self) {
-        return omReferenceAttrGetInnerRef(self);
-      });
-
-  // Add the IntegerAttr definition
-  mlir_attribute_subclass(m, "OMIntegerAttr", omAttrIsAIntegerAttr)
-      .def_classmethod("get",
-                       [](nb::object cls, MlirAttribute intVal) {
-                         return cls(omIntegerAttrGet(intVal));
-                       })
-      .def_property_readonly(
-          "integer",
-          [](MlirAttribute self) { return omIntegerAttrGetInt(self); })
-      .def("__str__", [](MlirAttribute self) {
-        MlirStringRef str = omIntegerAttrToString(self);
-        return std::string(str.data, str.length);
-      });
-
-  // Add the OMListAttr definition
-  mlir_attribute_subclass(m, "ListAttr", omAttrIsAListAttr)
-      .def("__getitem__", &omListAttrGetElement)
-      .def("__len__", &omListAttrGetNumElements)
-      .def("__iter__",
-           [](MlirAttribute arr) { return PyListAttrIterator(arr); });
+  PyReferenceAttr::bind(m);
+  PyOMIntegerAttr::bind(m);
+  PyListAttr::bind(m);
   PyListAttrIterator::bind(m);
 
-  // Add the AnyType class definition.
-  mlir_type_subclass(m, "AnyType", omTypeIsAAnyType, omAnyTypeGetTypeID);
-
-  // Add the ClassType class definition.
-  mlir_type_subclass(m, "ClassType", omTypeIsAClassType, omClassTypeGetTypeID)
-      .def_property_readonly("name", [](MlirType type) {
-        MlirStringRef name = mlirIdentifierStr(omClassTypeGetName(type));
-        return std::string(name.data, name.length);
-      });
-
-  // Add the BasePathType class definition.
-  mlir_type_subclass(m, "BasePathType", omTypeIsAFrozenBasePathType,
-                     omFrozenBasePathTypeGetTypeID);
-
-  // Add the ListType class definition.
-  mlir_type_subclass(m, "ListType", omTypeIsAListType, omListTypeGetTypeID)
-      .def_property_readonly("element_type", omListTypeGetElementType);
-
-  // Add the PathType class definition.
-  mlir_type_subclass(m, "PathType", omTypeIsAFrozenPathType,
-                     omFrozenPathTypeGetTypeID);
+  PyOMAnyType::bind(m);
+  PyClassType::bind(m);
+  PyBasePathType::bind(m);
+  PyOMListType::bind(m);
+  PyPathType::bind(m);
 }
