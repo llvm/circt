@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, MemoryBlock, Memory, String, report_failure, embed_comment
+from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, FloatRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, MemoryBlock, Memory, String, report_failure, embed_comment
 
 # MLIR-LABEL: rtg.target @Singleton : !rtg.dict<>
 # MLIR-NEXT: }
@@ -558,3 +558,18 @@ def test95_string_format(config):
                     Immediate(8, 171), 4))
   embed_comment(
       String.format(String("hello"), "world", String("test"), delimiter="-"))
+
+
+# ASM-LABEL: Begin of test 'test96_float_registers
+# ASM-NEXT: # f0=f0{{$}}
+# ASM: End of test 'test96_float_registers
+
+
+@test(Singleton)
+def test96_float_registers(config):
+  f0 = FloatRegister.f0()
+  f0_str = f0.to_string()
+  embed_comment(String("f0=") + f0_str)
+
+  vreg = FloatRegister.virtual()
+  vreg.to_string()

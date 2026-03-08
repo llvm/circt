@@ -13,7 +13,7 @@ from .strings import String
 
 class IntegerRegister(Value):
   """
-  Represents a RISC-V integer register. Use the static properties to access the
+  Represents an integer register. Use the static properties to access the
   registers. 'virtual' returns a virtual register that will be resolved to a
   concrete register in the register allocation pass after randomization.
   """
@@ -183,3 +183,52 @@ class IntegerRegisterType(Type):
 
   def _codegen(self):
     return rtgtest.IntegerRegisterType.get()
+
+
+class FloatRegister(Value):
+  """
+  Represents a floating-point register. Use the static properties to access the
+  registers. 'virtual' returns a virtual register that will be resolved to a
+  concrete register in the register allocation pass after randomization.
+  """
+
+  def __init__(self, value: ir.Value) -> FloatRegister:
+    """
+    For library internal use only.
+    """
+
+    self._value = value
+
+  def virtual() -> FloatRegister:
+    return rtg.VirtualRegisterOp(
+        rtg.VirtualRegisterConfigAttr.get([
+            rtgtest.RegF0Attr.get(),
+        ]))
+
+  def f0() -> FloatRegister:
+    return rtg.ConstantOp(rtgtest.RegF0Attr.get())
+
+  def to_string(self) -> String:
+    """
+    Formats this register as a string.
+    """
+
+    return rtg.RegisterFormatOp(self)
+
+  def _get_ssa_value(self) -> ir.Value:
+    return self._value
+
+  def get_type(self) -> Type:
+    return FloatRegisterType()
+
+
+class FloatRegisterType(Type):
+  """
+  Represents the type of floating-point registers.
+  """
+
+  def __eq__(self, other) -> bool:
+    return isinstance(other, FloatRegisterType)
+
+  def _codegen(self):
+    return rtgtest.FloatRegisterType.get()
