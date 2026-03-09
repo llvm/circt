@@ -442,16 +442,7 @@ void circt::python::populateDialectOMSubmodule(nb::module_ &m) {
   nb::class_<Unknown>(m, "Unknown")
       .def(nb::init<MlirType>(), nb::arg("type"))
       .def_prop_ro("type", &Unknown::getType)
-      .def("__repr__",
-           [](const Unknown &u) {
-             PyPrintAccumulator printAccum;
-             printAccum.parts.append("Unknown(");
-             mlirTypePrint(u.getType(), printAccum.getCallback(),
-                           printAccum.getUserData());
-             printAccum.parts.append(")");
-             return printAccum.join();
-           })
-      .def("__str__", [](const Unknown &u) {
+      .def("__repr__", [](const Unknown &u) {
         PyPrintAccumulator printAccum;
         printAccum.parts.append("Unknown(");
         mlirTypePrint(u.getType(), printAccum.getCallback(),
