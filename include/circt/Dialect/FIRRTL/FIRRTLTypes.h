@@ -373,8 +373,6 @@ inline llvm::hash_code hash_value(const ClassElement &element) {
   return llvm::hash_combine(element.name, element.type, element.direction);
 }
 
-
-
 //===----------------------------------------------------------------------===//
 // Type helpers
 //===----------------------------------------------------------------------===//
