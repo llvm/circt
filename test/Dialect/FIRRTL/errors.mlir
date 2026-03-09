@@ -3193,7 +3193,7 @@ firrtl.circuit "Top" {
   firrtl.domain @PowerDomain
   // expected-note @below {{prior use here}}
   firrtl.module @Top(in %i: !firrtl.domain<@ClockDomain()>, out %o : !firrtl.domain<@PowerDomain()>) {
-    // expected-error @below {{use of value}}
+    // expected-error @below {{use of value '%i' expects different type than prior uses}}
     firrtl.domain.define %o, %i : !firrtl.domain<@PowerDomain()>
   }
 }
