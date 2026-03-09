@@ -428,6 +428,9 @@ struct FormatParser {
   /// \return True if the string was consumed, false otherwise
   bool tryConsume(StringRef str, bool skipWhitespaceFirst = true);
 
+  /// Consume all but at least one whitespace character at the current position.
+  void consumeAtLeastOneWhitespace();
+
   /// Try to parse an unsigned integer literal at the current position.
   /// \return True if an unsigned integer was parsed, false otherwise
   bool tryParseUIntLiteral(uint64_t &value);
@@ -445,6 +448,9 @@ struct FormatParser {
 
   /// Check if the current position is at the end of a scope.
   bool isAtScopeEnd();
+
+  /// Check if a character is whitespace.
+  bool isWhitespace(char c);
 
   /// Get the current source location in the input string.
   /// \return The current source location for error reporting

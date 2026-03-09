@@ -354,3 +354,65 @@ def Test22_AnyImmediateOp : TestOp<"any_immediate"> {
 //      CHECK:   ::llvm::SmallVector<char> strBuf;
 // CHECK-NEXT:   ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getImm()).getValue().toStringSigned(strBuf);
 // CHECK-NEXT:   os << strBuf;
+
+def Test23_MultipleSpacesOp : TestOp<"multiple_spaces"> {
+  let isaAssemblyFormat = "`  ` \t  `,  `";
+}
+// CHECK-LABEL:  void MultipleSpacesOp::printInstructionAssembly
+// CHECK-NEXT:    os << "  ";
+// CHECK-NEXT:    os << ",  ";
+
+def Test24_MultiLineFormatOp : TestOp<"multi_line_format"> {
+  let isaBinaryFormat = [{
+    0b001 
+    0b010
+    0b011
+  }];
+  let isaAssemblyFormat = "`a`\n`b`\n";
+}
+// CHECK-LABEL:  void MultiLineFormatOp::printInstructionAssembly
+// CHECK-NEXT:    os << "a";
+// CHECK-NEXT:    os << "b";
+
+// CHECK-LABEL:  void MultiLineFormatOp::printInstructionBinary
+//      CHECK:    binary = binary.concat(llvm::APInt(3, 1));
+// CHECK-NEXT:    binary = binary.concat(llvm::APInt(3, 2));
+// CHECK-NEXT:    binary = binary.concat(llvm::APInt(3, 3));
+
+// Test: Binary literal followed by tab
+def Test25_BinaryLiteralTabOp : TestOp<"binary_literal_tab"> {
+  let isaBinaryFormat = "0b111  0b000";
+  let isaAssemblyFormat = "` `";
+}
+// CHECK-LABEL:  void BinaryLiteralTabOp::printInstructionBinary
+// CHECK:         binary = binary.concat(llvm::APInt(3, 7));
+// CHECK-NEXT:    binary = binary.concat(llvm::APInt(3, 0));
+
+def Test26_IfThenElseNewlinesOp : TestOp<"if_then_else_newlines"> {
+  let arguments = (ins ImmediateOfWidth<1>:$cond);
+  let isaAssemblyFormat = "if\n$cond\nthen\n(`a`\n`b`)\nelse\n( `c` )";
+}
+// CHECK-LABEL:  void IfThenElseNewlinesOp::printInstructionAssembly
+// CHECK:         ::llvm::APInt cond = ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getCond()).getValue();
+// CHECK:         if (cond.isOne()) {
+// CHECK-NEXT:      os << "a";
+// CHECK-NEXT:      os << "b";
+// CHECK-NEXT:    } else {
+// CHECK-NEXT:      os << "c";
+
+def Test27_CustomDirectiveNewlinesOp : TestOp<"custom_directive_newlines"> {
+  let arguments = (ins Arg<TestRegType, "", [SourceReg]>:$rs1,
+                       Arg<TestRegType, "", [SourceReg]>:$rs2);
+  let isaAssemblyFormat = "custom<myFunc>($rs1\n$rs2)";
+}
+// CHECK-LABEL:  void CustomDirectiveNewlinesOp::printInstructionAssembly
+// CHECK:         myFunc(adaptor.getRs1(), adaptor.getRs2(), os);
+
+def Test28_SignednessNewlineOp : TestOp<"signedness_newline"> {
+  let arguments = (ins ImmediateOfWidth<12>:$imm);
+  let isaAssemblyFormat = "` `\nsigned($imm)";
+}
+// CHECK-LABEL:  void SignednessNewlineOp::printInstructionAssembly
+// CHECK-NEXT:    os << " ";
+// CHECK:         ::llvm::SmallVector<char> strBuf;
+// CHECK-NEXT:    ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getImm()).getValue().toStringSigned(strBuf);
