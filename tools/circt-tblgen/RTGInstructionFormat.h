@@ -14,6 +14,7 @@
 
 #include "RTGInstructionUtils.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Support/IndentedOstream.h"
 #include "mlir/TableGen/Operator.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/TableGen/Error.h"
@@ -42,7 +43,9 @@ public:
     /// The mnemonic keyword placeholder
     Mnemonic,
     /// A signedness wrapper (signed()/unsigned())
-    SignednessSpecifier
+    SignednessSpecifier,
+    /// An if-then-else conditional construct
+    IfThenElse
   };
 
   FormatNode(Kind kind, llvm::SMLoc loc, StringRef desc)
@@ -207,6 +210,42 @@ private:
   OperandNode *operand;
 };
 
+/// Represents an if-then-else conditional construct in an instruction format.
+/// Allows conditional emission of format elements based on a 1-bit immediate
+/// condition value. Either the then or else branch may be empty, but not both.
+class IfThenElseNode : public FormatNode {
+public:
+  IfThenElseNode(llvm::SMLoc loc, OperandNode *condition,
+                 SmallVector<FormatNode *> thenBranch,
+                 SmallVector<FormatNode *> elseBranch)
+      : FormatNode(Kind::IfThenElse, loc, "if-then-else"), condition(condition),
+        thenBranch(std::move(thenBranch)), elseBranch(std::move(elseBranch)) {}
+
+  /// Get the condition operand (must be a 1-bit immediate).
+  OperandNode *getCondition() const { return condition; }
+
+  /// Get the then branch nodes.
+  ArrayRef<FormatNode *> getThenBranch() const { return thenBranch; }
+
+  /// Get the else branch nodes.
+  ArrayRef<FormatNode *> getElseBranch() const { return elseBranch; }
+
+  /// Check if the then branch is empty.
+  bool isThenBranchEmpty() const { return thenBranch.empty(); }
+
+  /// Check if the else branch is empty.
+  bool isElseBranchEmpty() const { return elseBranch.empty(); }
+
+  static bool classof(const FormatNode *elem) {
+    return elem->getKind() == Kind::IfThenElse;
+  }
+
+private:
+  OperandNode *condition;
+  SmallVector<FormatNode *> thenBranch;
+  SmallVector<FormatNode *> elseBranch;
+};
+
 /// Context for managing the format AST for a single instruction operation.
 /// Provides memory allocation for AST nodes and maintains the list of root
 /// nodes in the format specification. Each ASTContext is associated with
@@ -262,7 +301,7 @@ struct FormatGen {
 struct AssemblyFormatGen : public FormatGen {
   /// Construct an assembly format generator.
   /// \param os Output stream to write generated code to
-  explicit AssemblyFormatGen(raw_ostream &os) : os(os) {}
+  explicit AssemblyFormatGen(mlir::raw_indented_ostream &os) : os(os) {}
 
   void genInstructionMethod(ASTContext &ctx, StringRef opClassName) override;
 
@@ -271,8 +310,10 @@ private:
   void gen(MnemonicNode *node);
   void gen(OperandNode *node);
   void gen(SignednessNode *node);
+  void gen(IfThenElseNode *node);
+  void dispatch(FormatNode *node);
 
-  raw_ostream &os;
+  mlir::raw_indented_ostream &os;
 };
 
 /// Code generator for binary format encoding methods.
@@ -282,19 +323,23 @@ private:
 struct BinaryFormatGen : public FormatGen {
   /// Construct a binary format generator.
   /// \param os Output stream to write generated code to
-  explicit BinaryFormatGen(raw_ostream &os) : os(os) {}
+  explicit BinaryFormatGen(mlir::raw_indented_ostream &os) : os(os) {}
 
   void genInstructionMethod(ASTContext &ctx, StringRef opClassName) override;
 
 private:
+  // genDecl of all nodes must have been called before any gen() is called.
   void gen(BinaryLiteralNode *node);
-  // genDecl must have been called before gen() is called.
   void gen(OperandNode *node);
-  // Generate variable declarations for an operand node.
+  void gen(IfThenElseNode *node);
+  void dispatch(FormatNode *node);
+  // Generate variable declarations.
   void genDecl(OperandNode *node);
+  void genDecl(IfThenElseNode *node);
+  void dispatchDecl(FormatNode *node);
 
   DenseSet<StringRef> decls;
-  raw_ostream &os;
+  mlir::raw_indented_ostream &os;
 };
 
 /// Parser for instruction format strings.
@@ -335,6 +380,14 @@ struct FormatParser {
   /// \return A SignednessNode if found, nullptr otherwise
   FormatNode *parseOptionalSignednessSpecifier();
 
+  /// Parses if-then-else constructs in the form:
+  /// "if <cond> then (<then>) else (<else>)"
+  /// where <cond> is a 1-bit immediate operand, and <then>/<else> are
+  /// space-separated lists of format nodes.
+  /// Either 'then ()' or 'else ()' may be omitted, but not both.
+  /// \return An IfThenElseNode if found, nullptr otherwise
+  FormatNode *parseOptionalIfThenElse();
+
   /// Parses bit slices like "[11:0]" or "[5]" (single bit).
   /// \param highBit Output parameter for the high bit (inclusive)
   /// \param lowBit Output parameter for the low bit (inclusive)
@@ -370,6 +423,12 @@ struct FormatParser {
   /// \return The identifier without the leading "$"
   StringRef parseIdentifier();
 
+  /// Parse the next node in the format string.
+  FormatNode *parseNextNode();
+
+  /// Check if the current position is at the end of a scope.
+  bool isAtScopeEnd();
+
   /// Get the current source location in the input string.
   /// \return The current source location for error reporting
   llvm::SMLoc getLoc();
@@ -381,29 +440,44 @@ private:
   llvm::SMLoc loc;
 };
 
-/// Verify that a format AST is valid for assembly format generation.
-/// Checks that:
-/// - The format does not contain binary literals (only valid in binary
-///   formats)
-/// - The format does not contain operand bit slicing (only valid in binary
-///   formats)
-/// - Immediate operands are wrapped in signed()/unsigned() specifiers
-/// - Label and register operands are not wrapped in signedness specifiers
-///
-/// Must be called after resolveOperands() has been called on the context.
-/// \param ctx The AST context to verify
-void verifyAssemblyFormat(ASTContext &ctx);
+/// Verifier for instruction format ASTs.
+class Verifier {
+public:
+  explicit Verifier(ASTContext &ctx, bool isBinary)
+      : ctx(ctx), isBinary(isBinary) {}
 
-/// Verify that a format AST is valid for binary format generation.
-/// Checks that:
-/// - The format does not contain mnemonics (only valid in assembly formats)
-/// - The format does not contain string literals (only valid in assembly
-///   formats)
-/// - The format does not contain signedness specifiers (only valid in assembly
-///   formats)
-///
-/// \param ctx The AST context to verify
-void verifyBinaryFormat(ASTContext &ctx);
+  /// Verify that a format AST is valid for binary format generation.
+  /// Checks that:
+  /// - The format does not contain mnemonics (only valid in assembly formats)
+  /// - The format does not contain string literals (only valid in assembly
+  ///   formats)
+  /// - The format does not contain signedness specifiers (only valid in
+  /// assembly
+  ///   formats)
+  static void verifyAsBinary(ASTContext &ctx);
+  /// Verify that a format AST is valid for assembly format generation.
+  /// Checks that:
+  /// - The format does not contain binary literals (only valid in binary
+  ///   formats)
+  /// - The format does not contain operand bit slicing (only valid in binary
+  ///   formats)
+  /// - Immediate operands are wrapped in signed()/unsigned() specifiers
+  /// - Label and register operands are not wrapped in signedness specifiers
+  static void verifyAsAssembly(ASTContext &ctx);
+
+private:
+  void verify(BinaryLiteralNode *node);
+  void verify(OperandNode *node);
+  void verify(IfThenElseNode *node);
+  void verify(MnemonicNode *node);
+  void verify(StringLiteralNode *node);
+  void verify(SignednessNode *node);
+  void dispatch(FormatNode *node);
+
+private:
+  ASTContext &ctx;
+  bool isBinary;
+};
 
 /// Generate print and encoding methods for an instruction format operation.
 /// This is the main entry point for generating code from an instruction
