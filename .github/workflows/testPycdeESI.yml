@@ -56,7 +56,7 @@ jobs:
         run: |
           set -o errexit
           whoami
-          apt upddate
+          apt update
           apt install -y python3-venv
           python3 -m venv venv
           source venv/bin/activate
