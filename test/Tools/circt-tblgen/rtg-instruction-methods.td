@@ -345,3 +345,12 @@ def Test21_CustomDirectiveOnlyOp : TestOp<"custom_directive_only"> {
 // CHECK-LABEL:  void CustomDirectiveOnlyOp::printInstructionBinary
 // CHECK-NOT:     ::llvm::APInt rs1
 // CHECK:         binary = binary.concat(encodeReg(adaptor.getRs1()));
+
+def Test22_AnyImmediateOp : TestOp<"any_immediate"> {
+  let arguments = (ins ImmediateType:$imm);
+  let isaAssemblyFormat = "signed($imm)";
+}
+// CHECK-LABEL: void AnyImmediateOp::printInstructionAssembly
+//      CHECK:   ::llvm::SmallVector<char> strBuf;
+// CHECK-NEXT:   ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getImm()).getValue().toStringSigned(strBuf);
+// CHECK-NEXT:   os << strBuf;
