@@ -75,7 +75,7 @@ circuit Foo:
     ; CHECK-SAME: alternatives @Platform {
     ; CHECK-SAME:   @FPGA -> @FPGATargetWithDomain,
     ; CHECK-SAME:   @ASIC -> @ASICTargetWithDomain
-    ; CHECK-SAME: } (in A: !firrtl.domain<@ClockDomain>, in clock: !firrtl.clock domains [A])
+    ; CHECK-SAME: } (in A: !firrtl.domain<@ClockDomain()>, in clock: !firrtl.clock domains [A])
     ; DEFAULT: firrtl.instance inst @DefaultTargetWithDomain
     ; FPGA:    firrtl.instance inst @FPGATargetWithDomain
     ; ASIC:    firrtl.instance inst @ASICTargetWithDomain

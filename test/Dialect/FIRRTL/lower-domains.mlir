@@ -22,7 +22,7 @@ firrtl.circuit "Foo" {
   // CHECK-SAME:    out %A_out: !firrtl.class<@ClockDomain_out(
   // CHECK-SAME:    in %a: !firrtl.uint<1> [{class = "circt.tracker", id = distinct[0]<>}]
   firrtl.module @Foo(
-    in %A: !firrtl.domain<@ClockDomain>,
+    in %A: !firrtl.domain<@ClockDomain()>,
     in %a: !firrtl.uint<1> domains [%A]
     // CHECK:      %A_object = firrtl.object @ClockDomain
     // CHECK-NEXT: %[[domainInfo_in:.+]] = firrtl.object.subfield %A_object[domainInfo_in]
@@ -60,8 +60,8 @@ firrtl.circuit "Foo" {
   // CHECK-SAME:    out %B_out: !firrtl.class<@ResetDomain_out(
   // CHECK-SAME:    in %a: !firrtl.uint<1> [{class = "circt.tracker", id = distinct[0]<>}]
   firrtl.module @Foo(
-    in %A: !firrtl.domain<@ClockDomain>,
-    in %B: !firrtl.domain<@ResetDomain>,
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %B: !firrtl.domain<@ResetDomain()>,
     in %a: !firrtl.uint<1> domains [%A, %B]
   ) {
     // CHECK:      %A_object = firrtl.object @ClockDomain
@@ -100,8 +100,8 @@ firrtl.circuit "Foo" {
   // CHECK-SAME:  in %b3:
   // CHECK-SAME:  in %b4:
   firrtl.module @Foo(
-    in %A: !firrtl.domain<@ClockDomain>,
-    in %B: !firrtl.domain<@ClockDomain>,
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %B: !firrtl.domain<@ClockDomain()>,
     in %a0: !firrtl.uint<1> domains [%A],
     in %a1: !firrtl.uint<1> domains [%A],
     in %a2: !firrtl.uint<1> domains [%A],
@@ -126,11 +126,11 @@ firrtl.circuit "Foo" {
   // CHECK-SAME:  in %b3:
   // CHECK-SAME:  in %b4:
   firrtl.module @Bar(
-    in %A: !firrtl.domain<@ClockDomain>,
+    in %A: !firrtl.domain<@ClockDomain()>,
     in %a0: !firrtl.uint<1> domains [%A],
     in %a1: !firrtl.uint<1> domains [%A],
     in %a2: !firrtl.uint<1> domains [%A],
-    in %B: !firrtl.domain<@ClockDomain>,
+    in %B: !firrtl.domain<@ClockDomain()>,
     in %b0: !firrtl.uint<1> domains [%B],
     in %b1: !firrtl.uint<1> domains [%B],
     in %b2: !firrtl.uint<1> domains [%B],
@@ -154,8 +154,8 @@ firrtl.circuit "Foo" {
   // CHECK-SAME:    out %b: !firrtl.uint<1>
   // CHECK-SAME:      id = distinct[1]
   firrtl.module @Foo(
-    in %A: !firrtl.domain<@ClockDomain>,
-    out %B: !firrtl.domain<@ClockDomain>,
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %B: !firrtl.domain<@ClockDomain()>,
     in %a: !firrtl.uint<1> domains [%A],
     out %b: !firrtl.uint<1> domains [%B]
   ) {
@@ -177,9 +177,9 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: firrtl.propassign %B_out, %B_object :
     //
     // CHECK-NEXT: firrtl.propassign %[[domainInfo_in]], %A :
-    firrtl.domain.define %B, %A : !firrtl.domain<@ClockDomain>
+    firrtl.domain.define %B, %A : !firrtl.domain<@ClockDomain()>
     // CHECK-NEXT: firrtl.matchingconnect %b, %a
-    %0 = firrtl.unsafe_domain_cast %a domains[%B] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain>]
+    %0 = firrtl.unsafe_domain_cast %a domains[%B] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
     firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
   }
 }
@@ -198,8 +198,8 @@ firrtl.circuit "Foo" {
   // CHECK-SAME:    out %b: !firrtl.uint<1>
   // CHECK-SAME:      id = distinct[1]
   firrtl.module @Foo(
-    in %A: !firrtl.domain<@ClockDomain>,
-    out %B: !firrtl.domain<@ClockDomain>,
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %B: !firrtl.domain<@ClockDomain()>,
     in %a: !firrtl.uint<1> domains [%A],
     out %b: !firrtl.uint<1> domains [%B]
   ) {
@@ -223,15 +223,15 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: firrtl.propassign %B_out, %B_object :
     //
     // CHECK-NEXT: firrtl.propassign %[[domainInfo_in]], %A :
-    %w0 = firrtl.wire : !firrtl.domain<@ClockDomain>
-    %w1 = firrtl.wire : !firrtl.domain<@ClockDomain>
-    %w2 = firrtl.wire : !firrtl.domain<@ClockDomain>
-    firrtl.domain.define %w0, %A : !firrtl.domain<@ClockDomain>
-    firrtl.domain.define %w1, %w0 : !firrtl.domain<@ClockDomain>
-    firrtl.domain.define %w2, %w1 : !firrtl.domain<@ClockDomain>
-    firrtl.domain.define %B, %w2 : !firrtl.domain<@ClockDomain>
+    %w0 = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    %w1 = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    %w2 = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    firrtl.domain.define %w0, %A : !firrtl.domain<@ClockDomain()>
+    firrtl.domain.define %w1, %w0 : !firrtl.domain<@ClockDomain()>
+    firrtl.domain.define %w2, %w1 : !firrtl.domain<@ClockDomain()>
+    firrtl.domain.define %B, %w2 : !firrtl.domain<@ClockDomain()>
     // CHECK-NEXT: firrtl.matchingconnect %b, %a
-    %0 = firrtl.unsafe_domain_cast %a domains[%B] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain>]
+    %0 = firrtl.unsafe_domain_cast %a domains[%B] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
     firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
     // CHECK-NOT: firrtl.wire
   }
@@ -244,23 +244,23 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
   firrtl.domain @ClockDomain
   firrtl.extmodule @Bar(
-    in a: !firrtl.domain<@ClockDomain>,
-    in b: !firrtl.domain<@ClockDomain>
+    in a: !firrtl.domain<@ClockDomain()>,
+    in b: !firrtl.domain<@ClockDomain()>
   )
   // CHECK-LABEL: firrtl.module @Foo
   firrtl.module @Foo(
-    in %a: !firrtl.domain<@ClockDomain>
+    in %a: !firrtl.domain<@ClockDomain()>
   ) {
     %bar_a, %bar_b = firrtl.instance bar @Bar(
-      in a: !firrtl.domain<@ClockDomain>,
-      in b: !firrtl.domain<@ClockDomain>
+      in a: !firrtl.domain<@ClockDomain()>,
+      in b: !firrtl.domain<@ClockDomain()>
     )
-    %wire = firrtl.wire : !firrtl.domain<@ClockDomain>
-    firrtl.domain.define %wire, %a : !firrtl.domain<@ClockDomain>
+    %wire = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    firrtl.domain.define %wire, %a : !firrtl.domain<@ClockDomain()>
     // CHECK:      firrtl.propassign %bar_a, %a
     // CHECK-NEXT: firrtl.propassign %bar_b, %a
-    firrtl.domain.define %bar_a, %wire : !firrtl.domain<@ClockDomain>
-    firrtl.domain.define %bar_b, %wire : !firrtl.domain<@ClockDomain>
+    firrtl.domain.define %bar_a, %wire : !firrtl.domain<@ClockDomain()>
+    firrtl.domain.define %bar_b, %wire : !firrtl.domain<@ClockDomain()>
   }
 }
 
@@ -270,28 +270,28 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
   firrtl.domain @ClockDomain
   firrtl.extmodule @Bar(
-    in A: !firrtl.domain<@ClockDomain>,
+    in A: !firrtl.domain<@ClockDomain()>,
     in a: !firrtl.uint<1> domains [A]
   )
   firrtl.extmodule @Baz(
-    out A: !firrtl.domain<@ClockDomain>,
+    out A: !firrtl.domain<@ClockDomain()>,
     out a: !firrtl.uint<1> domains [A]
   )
   // CHECK-LABEL: firrtl.module @Foo()
   firrtl.module @Foo() {
     // CHECK-NEXT: %bar_A, %bar_A_out, %bar_a = firrtl.instance bar @Bar
     %bar_A, %bar_a = firrtl.instance bar @Bar(
-      in A: !firrtl.domain<@ClockDomain>,
+      in A: !firrtl.domain<@ClockDomain()>,
       in a: !firrtl.uint<1> domains [A]
     )
     // CHECK-NEXT: %baz_A_out, %baz_a = firrtl.instance baz @Baz
     %baz_A, %baz_a = firrtl.instance baz @Baz(
-      out A: !firrtl.domain<@ClockDomain>,
+      out A: !firrtl.domain<@ClockDomain()>,
       out a: !firrtl.uint<1> domains [A]
     )
     // CHECK-NEXT: %[[#domainInfo_out:]] = firrtl.object.subfield %baz_A_out[domainInfo_out] :
     // CHECK-NEXT: firrtl.propassign %bar_A, %[[#domainInfo_out]] :
-    firrtl.domain.define %bar_A, %baz_A : !firrtl.domain<@ClockDomain>
+    firrtl.domain.define %bar_A, %baz_A : !firrtl.domain<@ClockDomain()>
     // CHECK-NEXT: firrtl.matchingconnect %bar_a, %baz_a :
     firrtl.matchingconnect %bar_a, %baz_a : !firrtl.uint<1>
   }
@@ -303,20 +303,20 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
   firrtl.domain @ClockDomain
   firrtl.extmodule @Bar(
-    in A: !firrtl.domain<@ClockDomain>,
+    in A: !firrtl.domain<@ClockDomain()>,
     in a: !firrtl.uint<1> domains [A]
   )
   // CHECK-LABEL: firrtl.module @Foo()
   firrtl.module @Foo() {
     // CHECK-NEXT: %bar_A, %bar_A_out, %bar_a = firrtl.instance bar @Bar
     %bar_A, %bar_a = firrtl.instance bar @Bar(
-      in A: !firrtl.domain<@ClockDomain>,
+      in A: !firrtl.domain<@ClockDomain()>,
       in a: !firrtl.uint<1> domains [A]
     )
     // CHECK-NEXT: %[[#UNKNOWN:]] = firrtl.unknown : !firrtl.class<@ClockDomain()>
-    %anon = firrtl.domain.anon : !firrtl.domain<@ClockDomain>
+    %anon = firrtl.domain.anon : !firrtl.domain<@ClockDomain()>
     // CHECK-NEXT: firrtl.propassign %bar_A, %[[#UNKNOWN]]
-    firrtl.domain.define %bar_A, %anon : !firrtl.domain<@ClockDomain>
+    firrtl.domain.define %bar_A, %anon : !firrtl.domain<@ClockDomain()>
   }
 }
 
@@ -333,7 +333,7 @@ firrtl.circuit "Foo" {
   // CHECK-NOT:     in %A: !firrtl.class<@ClockDomain()>
   // CHECK-SAME:    out %A_out: !firrtl.class<@ClockDomain_out(
   firrtl.module @Foo(
-    out %A: !firrtl.domain<@ClockDomain>,
+    out %A: !firrtl.domain<@ClockDomain()>,
     in %a: !firrtl.uint<1> domains [%A]
   ) {
     // CHECK:      %A_object = firrtl.object @ClockDomain
@@ -356,7 +356,7 @@ firrtl.circuit "Foo" {
   // CHECK-SAME:    out %A_out: !firrtl.class<@ClockDomain_out(
   // CHECK-SAME:    in %a: !firrtl.uint<1>
   firrtl.module @Bar(
-    in %A: !firrtl.domain<@ClockDomain>,
+    in %A: !firrtl.domain<@ClockDomain()>,
     in %a: !firrtl.uint<1> domains [%A]
   ) {}
   // CHECK-LABEL: firrtl.module @Foo(
@@ -364,7 +364,7 @@ firrtl.circuit "Foo" {
   // CHECK-SAME:    out %A_out: !firrtl.class<@ClockDomain_out(
   // CHECK-SAME:    in %a: !firrtl.uint<1>
   firrtl.module @Foo(
-    in %A: !firrtl.domain<@ClockDomain>,
+    in %A: !firrtl.domain<@ClockDomain()>,
     in %a: !firrtl.uint<1> domains [%A]
   ) {
     // CHECK:      firrtl.instance bar @Bar(
@@ -372,11 +372,11 @@ firrtl.circuit "Foo" {
     // CHECK-SAME:   out A_out: !firrtl.class<@ClockDomain_out(
     // CHECK-SAME:   in a: !firrtl.uint<1>
     %bar_A, %bar_a = firrtl.instance bar @Bar(
-      in A: !firrtl.domain<@ClockDomain>,
+      in A: !firrtl.domain<@ClockDomain()>,
       in a: !firrtl.uint<1> domains[A]
     )
     // CHECK:        firrtl.propassign %bar_A, %A
-    firrtl.domain.define %bar_A, %A : !firrtl.domain<@ClockDomain>
+    firrtl.domain.define %bar_A, %A : !firrtl.domain<@ClockDomain()>
     firrtl.matchingconnect %bar_a, %a : !firrtl.uint<1>
   }
 }
@@ -387,30 +387,30 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
   firrtl.domain @ClockDomain
   firrtl.module @Bar(
-    in %A: !firrtl.domain<@ClockDomain>,
+    in %A: !firrtl.domain<@ClockDomain()>,
     in %a: !firrtl.uint<1> domains [%A]
   ) {}
   // CHECK-LABEL: firrtl.module @Foo(
   firrtl.module @Foo(
-    in %A: !firrtl.domain<@ClockDomain>,
+    in %A: !firrtl.domain<@ClockDomain()>,
     in %a: !firrtl.uint<1> domains [%A]
   ) {
     %bar1_A, %bar1_a = firrtl.instance bar1 @Bar(
-      in A: !firrtl.domain<@ClockDomain>,
+      in A: !firrtl.domain<@ClockDomain()>,
       in a: !firrtl.uint<1> domains[A]
     )
     // CHECK-NOT:    firrtl.domain.define
     // CHECK:        firrtl.propassign %bar1_A, %A
-    firrtl.domain.define %bar1_A, %A : !firrtl.domain<@ClockDomain>
+    firrtl.domain.define %bar1_A, %A : !firrtl.domain<@ClockDomain()>
     firrtl.matchingconnect %bar1_a, %a : !firrtl.uint<1>
     %bar2_A, %bar2_a = firrtl.instance bar2 @Bar(
-      in A: !firrtl.domain<@ClockDomain>,
+      in A: !firrtl.domain<@ClockDomain()>,
       in a: !firrtl.uint<1> domains[A]
     )
     // CHECK-NOT:    firrtl.domain.define
     // CHECK:        firrtl.propassign %bar2_A, %A
     // CHECK-NOT:    firrtl.domain.define
-    firrtl.domain.define %bar2_A, %A : !firrtl.domain<@ClockDomain>
+    firrtl.domain.define %bar2_A, %A : !firrtl.domain<@ClockDomain()>
     firrtl.matchingconnect %bar2_a, %a : !firrtl.uint<1>
   }
 }
@@ -421,22 +421,22 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
   firrtl.domain @ClockDomain
   firrtl.extmodule @Bar(
-    out A: !firrtl.domain<@ClockDomain>,
+    out A: !firrtl.domain<@ClockDomain()>,
     out a: !firrtl.uint<1> domains [A]
   )
   // CHECK-LABEL: firrtl.module @Foo(
   firrtl.module @Foo(
-    out %A: !firrtl.domain<@ClockDomain>,
+    out %A: !firrtl.domain<@ClockDomain()>,
     out %a: !firrtl.uint<1> domains [%A],
-    out %B: !firrtl.domain<@ClockDomain>,
+    out %B: !firrtl.domain<@ClockDomain()>,
     out %b: !firrtl.uint<1> domains [%B]
   ) {
     %bar_A, %bar_a = firrtl.instance bar @Bar(
-      out A: !firrtl.domain<@ClockDomain>,
+      out A: !firrtl.domain<@ClockDomain()>,
       out a: !firrtl.uint<1> domains[A]
     )
-    firrtl.domain.define %A, %bar_A : !firrtl.domain<@ClockDomain>
-    firrtl.domain.define %B, %bar_A : !firrtl.domain<@ClockDomain>
+    firrtl.domain.define %A, %bar_A : !firrtl.domain<@ClockDomain()>
+    firrtl.domain.define %B, %bar_A : !firrtl.domain<@ClockDomain()>
     firrtl.matchingconnect %a, %bar_a : !firrtl.uint<1>
     firrtl.matchingconnect %b, %bar_a : !firrtl.uint<1>
     // CHECK:      %[[A_domainInfo_in:.+]] = firrtl.object.subfield %A_object[domainInfo_in]
@@ -457,7 +457,7 @@ firrtl.circuit "Foo" {
   // CHECK-SAME:    out A_out: !firrtl.class<@ClockDomain_out(
   // CHECK-SAME:    in a: !firrtl.uint<1>
   firrtl.extmodule @Bar(
-    in A: !firrtl.domain<@ClockDomain>,
+    in A: !firrtl.domain<@ClockDomain()>,
     in a: !firrtl.uint<1> domains [A]
   )
   firrtl.module @Foo(
@@ -486,15 +486,15 @@ firrtl.circuit "Foo" {
   firrtl.domain @ClockDomain
   // CHECK-LABEL: firrtl.module @Foo
   firrtl.module @Foo(
-    in %A: !firrtl.domain<@ClockDomain>,
+    in %A: !firrtl.domain<@ClockDomain()>,
     in %a: !firrtl.uint<1> domains [%A],
-    in %B: !firrtl.domain<@ClockDomain>,
+    in %B: !firrtl.domain<@ClockDomain()>,
     out %b: !firrtl.uint<1> domains [%B]
   ) {
     // CHECK-NOT: firrtl.unsafe_domain_cast
     // CHECK: firrtl.matchingconnect %b, %a
     // CHECK-NOT: firrtl.unsafe_domain_cast
-    %0 = firrtl.unsafe_domain_cast %a domains[%B] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain>]
+    %0 = firrtl.unsafe_domain_cast %a domains[%B] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
     firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
   }
 }
@@ -507,25 +507,25 @@ firrtl.circuit "DeadDomainOps" {
   // CHECK-LABEL: firrtl.module @DeadDomainOps
   // CHECK-NOT: firrtl.wire
   // CHECK-NOT: firrtl.domain.define
-  // CHECK-NOT: firrtl.domain.anon : !firrtl.domain<@ClockDomain>
+  // CHECK-NOT: firrtl.domain.anon : !firrtl.domain<@ClockDomain()>
   // CHECK-NOT: firrtl.unknown
   firrtl.module @DeadDomainOps(
   ) {
     // A lone, undriven wire.
-    %a = firrtl.wire : !firrtl.domain<@ClockDomain>
+    %a = firrtl.wire : !firrtl.domain<@ClockDomain()>
 
     // One wire that drives another.
-    %b = firrtl.wire : !firrtl.domain<@ClockDomain>
-    %c = firrtl.wire : !firrtl.domain<@ClockDomain>
-    firrtl.domain.define %b, %c : !firrtl.domain<@ClockDomain>
+    %b = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    %c = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    firrtl.domain.define %b, %c : !firrtl.domain<@ClockDomain()>
 
     // A lone anonymous domain.
-    %d = firrtl.domain.anon : !firrtl.domain<@ClockDomain>
+    %d = firrtl.domain.anon : !firrtl.domain<@ClockDomain()>
 
     // A wire driven by an anonymous domain.
-    %e = firrtl.wire : !firrtl.domain<@ClockDomain>
-    %f = firrtl.domain.anon : !firrtl.domain<@ClockDomain>
-    firrtl.domain.define %e, %f : !firrtl.domain<@ClockDomain>
+    %e = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    %f = firrtl.domain.anon : !firrtl.domain<@ClockDomain()>
+    firrtl.domain.define %e, %f : !firrtl.domain<@ClockDomain()>
   }
 }
 
@@ -539,7 +539,7 @@ firrtl.circuit "ZeroWidthPort" {
   firrtl.domain @ClockDomain
   // CHECK-LABEL: firrtl.module @ZeroWidthPort(
   firrtl.module @ZeroWidthPort(
-    in %A: !firrtl.domain<@ClockDomain>,
+    in %A: !firrtl.domain<@ClockDomain()>,
     in %a: !firrtl.uint<0> domains [%A]
   ) {
     // CHECK:      %[[associations_in:.+]] = firrtl.object.subfield %A_object[associations_in]
@@ -560,7 +560,7 @@ firrtl.circuit "DomainCreate" {
   // CHECK-LABEL: firrtl.module @DomainCreate(
   // CHECK-SAME:    out %A_out: !firrtl.class<@ClockDomain_out(
   firrtl.module @DomainCreate(
-    out %A: !firrtl.domain<@ClockDomain>
+    out %A: !firrtl.domain<@ClockDomain()>
   ) {
     // CHECK:      %A_object = firrtl.object @ClockDomain_out
     // CHECK-NEXT: %[[domainInfo_in:.+]] = firrtl.object.subfield %A_object[domainInfo_in]
@@ -570,8 +570,8 @@ firrtl.circuit "DomainCreate" {
     // CHECK-NEXT: firrtl.propassign %A_out, %A_object :
     // CHECK-NEXT: %my_domain = firrtl.object @ClockDomain()
     // CHECK-NEXT: firrtl.propassign %[[domainInfo_in]], %my_domain
-    %my_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain>
-    firrtl.domain.define %A, %my_domain : !firrtl.domain<@ClockDomain>
+    %my_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
+    firrtl.domain.define %A, %my_domain : !firrtl.domain<@ClockDomain()>
   }
 }
 
@@ -583,7 +583,7 @@ firrtl.circuit "DeadDomainCreate" {
   // CHECK-LABEL: firrtl.module @DeadDomainCreate() {
   // CHECK-NEXT:  }
   firrtl.module @DeadDomainCreate() {
-    %my_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain>
+    %my_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
   }
 }
 

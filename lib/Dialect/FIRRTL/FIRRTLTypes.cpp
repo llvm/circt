@@ -169,15 +169,13 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
       .Case<DomainType>([&](DomainType type) {
         os << "domain<";
         os.printSymbolName(type.getName());
-        if (type.getNumFields() > 0) {
-          os << "(";
-          llvm::interleaveComma(type.getFields(), os, [&](Attribute attr) {
-            auto field = cast<DomainFieldAttr>(attr);
-            os << field.getName().getValue() << ": ";
-            os.printType(field.getType());
-          });
-          os << ")";
-        }
+        os << "(";
+        llvm::interleaveComma(type.getFields(), os, [&](Attribute attr) {
+          auto field = cast<DomainFieldAttr>(attr);
+          os << field.getName().getValue() << ": ";
+          os.printType(field.getType());
+        });
+        os << ")";
         os << ">";
       })
       .Default([&](auto) { anyFailed = true; });
@@ -558,40 +556,14 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     if (parser.parseLess())
       return failure();
 
-    StringAttr domainName;
-    if (parser.parseSymbolName(domainName))
+    DomainType domainType;
+    if (DomainType::parseInterface(parser, domainType))
       return failure();
-
-    SmallVector<Attribute> fields;
-    if (succeeded(parser.parseOptionalLParen())) {
-      // Parse field list: name: type, name: type, ...
-      auto parseField = [&]() -> ParseResult {
-        std::string fieldNameStr;
-        Type fieldTypeRaw;
-        if (parser.parseKeywordOrString(&fieldNameStr) || parser.parseColon() ||
-            parser.parseType(fieldTypeRaw))
-          return failure();
-
-        auto fieldType = dyn_cast<PropertyType>(fieldTypeRaw);
-        if (!fieldType)
-          return parser.emitError(parser.getCurrentLocation(),
-                                  "expected property type");
-
-        auto fieldName = StringAttr::get(parser.getContext(), fieldNameStr);
-        fields.push_back(
-            DomainFieldAttr::get(parser.getContext(), fieldName, fieldType));
-        return success();
-      };
-
-      if (parser.parseCommaSeparatedList(parseField) || parser.parseRParen())
-        return failure();
-    }
 
     if (parser.parseGreater())
       return failure();
 
-    result = DomainType::get(FlatSymbolRefAttr::get(domainName),
-                             ArrayAttr::get(parser.getContext(), fields));
+    result = domainType;
     return success();
   }
 
@@ -2783,46 +2755,116 @@ ClassType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
                         fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
+namespace {
+/// Helper to parse interface-like types (ClassType, DomainType).
+/// This encapsulates the common pattern of parsing @SymbolName(field, field,
+/// ...)
+struct InterfaceParser {
+  AsmParser &parser;
+
+  InterfaceParser(AsmParser &parser) : parser(parser) {}
+
+  /// Parse the common structure: @SymbolName(field, field, ...)
+  template <typename FieldContainer>
+  ParseResult parse(
+      function_ref<ParseResult(FieldContainer &, AsmParser &parser)> parseField,
+      StringAttr &symbolName, FieldContainer &fields) {
+
+    if (parser.parseSymbolName(symbolName))
+      return failure();
+
+    // Parse required parentheses
+    if (parser.parseLParen())
+      return failure();
+
+    // Check for empty list (immediate closing paren)
+    if (failed(parser.parseOptionalRParen())) {
+      auto parseElement = [&]() -> ParseResult {
+        return parseField(fields, parser);
+      };
+
+      if (parser.parseCommaSeparatedList(parseElement) || parser.parseRParen())
+        return failure();
+    }
+
+    return success();
+  }
+};
+} // namespace
+
 ParseResult ClassType::parseInterface(AsmParser &parser, ClassType &result) {
-  StringAttr className;
-  if (parser.parseSymbolName(className))
-    return failure();
+  InterfaceParser helper(parser);
 
+  auto parseField = [](SmallVector<ClassElement> &elements,
+                       AsmParser &parser) -> ParseResult {
+    // Parse port direction.
+    Direction direction;
+    if (succeeded(parser.parseOptionalKeyword("out")))
+      direction = Direction::Out;
+    else if (succeeded(parser.parseKeyword("in", "or 'out'")))
+      direction = Direction::In;
+    else
+      return failure();
+
+    // Parse port name.
+    std::string keyword;
+    if (parser.parseKeywordOrString(&keyword))
+      return failure();
+    StringAttr name = StringAttr::get(parser.getContext(), keyword);
+
+    // Parse port type.
+    Type type;
+    if (parser.parseColonType(type))
+      return failure();
+
+    elements.emplace_back(name, type, direction);
+    return success();
+  };
+
+  StringAttr symbolName;
   SmallVector<ClassElement> elements;
-  if (parser.parseCommaSeparatedList(
-          OpAsmParser::Delimiter::Paren, [&]() -> ParseResult {
-            // Parse port direction.
-            Direction direction;
-            if (succeeded(parser.parseOptionalKeyword("out")))
-              direction = Direction::Out;
-            else if (succeeded(parser.parseKeyword("in", "or 'out'")))
-              direction = Direction::In;
-            else
-              return failure();
-
-            // Parse port name.
-            std::string keyword;
-            if (parser.parseKeywordOrString(&keyword))
-              return failure();
-            StringAttr name = StringAttr::get(parser.getContext(), keyword);
-
-            // Parse port type.
-            Type type;
-            if (parser.parseColonType(type))
-              return failure();
-
-            elements.emplace_back(name, type, direction);
-            return success();
-          }))
+  if (helper.parse<SmallVector<ClassElement>>(parseField, symbolName, elements))
     return failure();
 
-  result = ClassType::get(FlatSymbolRefAttr::get(className), elements);
+  result = ClassType::get(FlatSymbolRefAttr::get(symbolName), elements);
   return success();
 }
 
 //===----------------------------------------------------------------------===//
 // DomainType
 //===----------------------------------------------------------------------===//
+
+ParseResult DomainType::parseInterface(AsmParser &parser, DomainType &result) {
+  InterfaceParser helper(parser);
+
+  auto parseField = [](SmallVector<Attribute> &fields,
+                       AsmParser &parser) -> ParseResult {
+    std::string fieldNameStr;
+    Type fieldTypeRaw;
+    if (parser.parseKeywordOrString(&fieldNameStr) || parser.parseColon() ||
+        parser.parseType(fieldTypeRaw))
+      return failure();
+
+    auto fieldType = dyn_cast<PropertyType>(fieldTypeRaw);
+    if (!fieldType)
+      return parser.emitError(parser.getCurrentLocation(),
+                              "expected property type");
+
+    auto fieldName = StringAttr::get(parser.getContext(), fieldNameStr);
+    fields.push_back(
+        DomainFieldAttr::get(parser.getContext(), fieldName, fieldType));
+    return success();
+  };
+
+  StringAttr symbolName;
+  SmallVector<Attribute> fields;
+  if (helper.parse<SmallVector<Attribute>>(parseField, symbolName, fields))
+    return failure();
+
+  result = DomainType::get(FlatSymbolRefAttr::get(symbolName),
+                           ArrayAttr::get(parser.getContext(), fields));
+  return success();
+}
 
 namespace circt {
 namespace firrtl {

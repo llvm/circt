@@ -1490,62 +1490,62 @@ firrtl.circuit "DiscardableAttributes" {
 firrtl.circuit "Domains" {
   firrtl.domain @ClockDomain
   // CHECK:      firrtl.module @Module
-  // CHECK-SAME:   in %A: !firrtl.domain<@ClockDomain>
+  // CHECK-SAME:   in %A: !firrtl.domain<@ClockDomain()>
   // CHECK-SAME:   in %a_a: !firrtl.uint<1> domains [%A]
   // CHECK-SAME:   in %a_c: !firrtl.uint<1> domains [%A]
   // CHECK-SAME:   in %b_a: !firrtl.uint<1> domains [%B]
   // CHECK-SAME:   in %b_c: !firrtl.uint<1> domains [%B]
-  // CHECK-SAME:   in %B: !firrtl.domain<@ClockDomain>
+  // CHECK-SAME:   in %B: !firrtl.domain<@ClockDomain()>
   firrtl.module @Module(
-    in %A : !firrtl.domain<@ClockDomain>,
+    in %A : !firrtl.domain<@ClockDomain()>,
     in %a : !firrtl.bundle<a: uint<1>, b: bundle<>, c: uint<1>> domains [%A],
     in %b : !firrtl.bundle<a: uint<1>, b: bundle<>, c: uint<1>> domains [%B],
-    in %B : !firrtl.domain<@ClockDomain>
+    in %B : !firrtl.domain<@ClockDomain()>
   ) {
   }
 
   // CHECK:      firrtl.extmodule @ExtModule
-  // CHECK-SAME:   in A: !firrtl.domain<@ClockDomain>
+  // CHECK-SAME:   in A: !firrtl.domain<@ClockDomain()>
   // CHECK-SAME:   in a_a: !firrtl.uint<1> domains [A]
   // CHECK-SAME:   in a_c: !firrtl.uint<1> domains [A]
   // CHECK-SAME:   in b_a: !firrtl.uint<1> domains [B]
   // CHECK-SAME:   in b_c: !firrtl.uint<1> domains [B]
-  // CHECK-SAME:   in B: !firrtl.domain<@ClockDomain>
+  // CHECK-SAME:   in B: !firrtl.domain<@ClockDomain()>
   firrtl.extmodule @ExtModule(
-    in A : !firrtl.domain<@ClockDomain>,
+    in A : !firrtl.domain<@ClockDomain()>,
     in a : !firrtl.bundle<a: uint<1>, b: bundle<>, c: uint<1>> domains [A],
     in b : !firrtl.bundle<a: uint<1>, b: bundle<>, c: uint<1>> domains [B],
-    in B : !firrtl.domain<@ClockDomain>
+    in B : !firrtl.domain<@ClockDomain()>
   )
 
 
   // CHECK: firrtl.module @Domains
   firrtl.module @Domains() {
     // CHECK-NEXT: firrtl.instance module @Module(
-    // CHECK-SAME:   in A: !firrtl.domain<@ClockDomain>
+    // CHECK-SAME:   in A: !firrtl.domain<@ClockDomain()>
     // CHECK-SAME:   in a_a: !firrtl.uint<1> domains [A]
     // CHECK-SAME:   in a_c: !firrtl.uint<1> domains [A]
     // CHECK-SAME:   in b_a: !firrtl.uint<1> domains [B]
     // CHECK-SAME:   in b_c: !firrtl.uint<1> domains [B]
-    // CHECK-SAME:   in B: !firrtl.domain<@ClockDomain>
+    // CHECK-SAME:   in B: !firrtl.domain<@ClockDomain()>
     %module_A, %module_a, %module_b, %module_B = firrtl.instance module @Module(
-      in A : !firrtl.domain<@ClockDomain>,
+      in A : !firrtl.domain<@ClockDomain()>,
       in a : !firrtl.bundle<a: uint<1>, b: bundle<>, c: uint<1>> domains [A],
       in b : !firrtl.bundle<a: uint<1>, b: bundle<>, c: uint<1>> domains [B],
-      in B : !firrtl.domain<@ClockDomain>
+      in B : !firrtl.domain<@ClockDomain()>
     )
     // CHECK-NEXT: firrtl.instance extmodule @ExtModule(
-    // CHECK-SAME:   in A: !firrtl.domain<@ClockDomain>
+    // CHECK-SAME:   in A: !firrtl.domain<@ClockDomain()>
     // CHECK-SAME:   in a_a: !firrtl.uint<1> domains [A]
     // CHECK-SAME:   in a_c: !firrtl.uint<1> domains [A]
     // CHECK-SAME:   in b_a: !firrtl.uint<1> domains [B]
     // CHECK-SAME:   in b_c: !firrtl.uint<1> domains [B]
-    // CHECK-SAME:   in B: !firrtl.domain<@ClockDomain>
+    // CHECK-SAME:   in B: !firrtl.domain<@ClockDomain()>
     %extmodule_A, %extmodule_a, %extmodule_b, %extmodule_B = firrtl.instance extmodule @ExtModule(
-      in A : !firrtl.domain<@ClockDomain>,
+      in A : !firrtl.domain<@ClockDomain()>,
       in a : !firrtl.bundle<a: uint<1>, b: bundle<>, c: uint<1>> domains [A],
       in b : !firrtl.bundle<a: uint<1>, b: bundle<>, c: uint<1>> domains [B],
-      in B : !firrtl.domain<@ClockDomain>
+      in B : !firrtl.domain<@ClockDomain()>
     )
   }
 }

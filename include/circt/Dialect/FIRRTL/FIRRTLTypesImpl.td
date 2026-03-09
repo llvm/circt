@@ -631,6 +631,10 @@ def DomainTypeImpl : FIRRTLImplType<"Domain", [
     )>
   ];
   let extraClassDeclaration = [{
+    /// Helper to parse this type as a domain interface.
+    static ParseResult parseInterface(
+      AsmParser &parser, DomainType &result);
+
     StringRef getName() const;
     FlatSymbolRefAttr getNameAttr() const;
 

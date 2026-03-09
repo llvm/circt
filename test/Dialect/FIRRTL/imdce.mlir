@@ -638,9 +638,9 @@ firrtl.circuit "DomainInfo" {
   // CHECK-SAME: in %B
   // CHECK-SAME: out %b
   firrtl.module private @Bar(
-    in %A: !firrtl.domain<@ClockDomain>,
+    in %A: !firrtl.domain<@ClockDomain()>,
     in %a: !firrtl.uint<1> domains [%A],
-    in %B: !firrtl.domain<@ClockDomain>,
+    in %B: !firrtl.domain<@ClockDomain()>,
     out %b: !firrtl.uint<1> domains [%B]
   ) {
     %w = firrtl.wire: !firrtl.uint<1>
@@ -650,9 +650,9 @@ firrtl.circuit "DomainInfo" {
     out %b: !firrtl.uint<1>
   ) {
     %bar_A, %bar_a, %bar_B, %bar_b = firrtl.instance bar @Bar(
-      in A: !firrtl.domain<@ClockDomain>,
+      in A: !firrtl.domain<@ClockDomain()>,
       in a: !firrtl.uint<1> domains [A],
-      in B: !firrtl.domain<@ClockDomain>,
+      in B: !firrtl.domain<@ClockDomain()>,
       out b: !firrtl.uint<1> domains [B]
     )
     firrtl.matchingconnect %b, %bar_b: !firrtl.uint<1>

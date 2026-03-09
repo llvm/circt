@@ -6,9 +6,9 @@ firrtl.circuit "DomainCrossOnPort" {
   // expected-note @below {{in module "DomainCrossOnPort"}}
   firrtl.module @DomainCrossOnPort(
     // expected-note @below {{associated with "ClockDomain" port "A"}}
-    in %A: !firrtl.domain<@ClockDomain>,
+    in %A: !firrtl.domain<@ClockDomain()>,
     // expected-note @below {{associated with "ClockDomain" port "B"}}
-    in %B: !firrtl.domain<@ClockDomain>,
+    in %B: !firrtl.domain<@ClockDomain()>,
     // expected-error @below {{duplicate "ClockDomain" association for port "p"}}
     in %p: !firrtl.uint<1> domains [%A, %B]
   ) {}
@@ -18,8 +18,8 @@ firrtl.circuit "DomainCrossOnPort" {
 firrtl.circuit "IllegalDomainCrossing" {
   firrtl.domain @ClockDomain
   firrtl.module @IllegalDomainCrossing(
-    in %A: !firrtl.domain<@ClockDomain>,
-    in %B: !firrtl.domain<@ClockDomain>,
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %B: !firrtl.domain<@ClockDomain()>,
     // expected-note @below {{2nd operand has domains: [ClockDomain: A]}}
     in %a: !firrtl.uint<1> domains [%A],
     // expected-note @below {{1st operand has domains: [ClockDomain: B]}}
@@ -34,8 +34,8 @@ firrtl.circuit "IllegalDomainCrossing" {
 firrtl.circuit "IllegalDomainCrossing" {
   firrtl.domain @ClockDomain
   firrtl.module @IllegalDomainCrossing(
-    in %A: !firrtl.domain<@ClockDomain>,
-    in %B: !firrtl.domain<@ClockDomain>,
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %B: !firrtl.domain<@ClockDomain()>,
     // expected-note @below {{2nd operand has domains: [ClockDomain: A]}}
     in %a: !firrtl.uint<1> domains [%A],
     // expected-note @below {{1st operand has domains: [ClockDomain: B]}}
@@ -62,9 +62,9 @@ firrtl.circuit "Top" {
   // expected-note @below {{in extmodule "Top"}}
   firrtl.extmodule @Top(
     // expected-note @below {{associated with "ClockDomain" port "D1"}}
-    in D1 : !firrtl.domain<@ClockDomain>,
+    in D1 : !firrtl.domain<@ClockDomain()>,
     // expected-note @below {{associated with "ClockDomain" port "D2"}}
-    in D2 : !firrtl.domain<@ClockDomain>,
+    in D2 : !firrtl.domain<@ClockDomain()>,
     // expected-error @below {{duplicate "ClockDomain" association for port "i"}}
     in i: !firrtl.uint<1> domains [D1, D2]
   )
@@ -77,15 +77,15 @@ firrtl.circuit "DoubleExportOfDomain" {
   // expected-note @below {{in module "DoubleExportOfDomain"}}
   firrtl.module @DoubleExportOfDomain(
     // expected-note @below {{candidate association "DI"}}
-    in  %DI : !firrtl.domain<@ClockDomain>,
+    in  %DI : !firrtl.domain<@ClockDomain()>,
     // expected-note @below {{candidate association "DO"}}
-    out %DO : !firrtl.domain<@ClockDomain>,
+    out %DO : !firrtl.domain<@ClockDomain()>,
     in  %i  : !firrtl.uint<1> domains [%DO],
     // expected-error @below {{ambiguous "ClockDomain" association for port "o"}}
     out %o  : !firrtl.uint<1> domains []
   ) {
     // DI and DO are aliases
-    firrtl.domain.define %DO, %DI : !firrtl.domain<@ClockDomain>
+    firrtl.domain.define %DO, %DI : !firrtl.domain<@ClockDomain()>
 
     // o is on same domain as i
     firrtl.matchingconnect %o, %i : !firrtl.uint<1>
@@ -96,22 +96,22 @@ firrtl.circuit "DoubleExportOfDomain" {
 firrtl.circuit "DoubleExportOfDomain" {
   firrtl.domain @ClockDomain
 
-  firrtl.extmodule @Generator(out D: !firrtl.domain<@ClockDomain>)
+  firrtl.extmodule @Generator(out D: !firrtl.domain<@ClockDomain()>)
 
   // expected-note @below {{in module "DoubleExportOfDomain"}}
   firrtl.module @DoubleExportOfDomain(
     // expected-note @below {{candidate association "D1"}}
-    out %D1 : !firrtl.domain<@ClockDomain>,
+    out %D1 : !firrtl.domain<@ClockDomain()>,
     // expected-note @below {{candidate association "D2"}}
-    out %D2 : !firrtl.domain<@ClockDomain>,
+    out %D2 : !firrtl.domain<@ClockDomain()>,
     in  %i  : !firrtl.uint<1> domains [%D1],
     // expected-error @below {{ambiguous "ClockDomain" association for port "o"}}
     out %o  : !firrtl.uint<1> domains []
   ) {
-    %gen_D = firrtl.instance gen @Generator(out D: !firrtl.domain<@ClockDomain>)
+    %gen_D = firrtl.instance gen @Generator(out D: !firrtl.domain<@ClockDomain()>)
     // DI and DO are aliases
-    firrtl.domain.define %D1, %gen_D : !firrtl.domain<@ClockDomain>
-    firrtl.domain.define %D2, %gen_D : !firrtl.domain<@ClockDomain>
+    firrtl.domain.define %D1, %gen_D : !firrtl.domain<@ClockDomain()>
+    firrtl.domain.define %D2, %gen_D : !firrtl.domain<@ClockDomain()>
 
     // o is on same domain as i
     firrtl.matchingconnect %o, %i : !firrtl.uint<1>
@@ -157,8 +157,8 @@ firrtl.circuit "MultipleErrors" {
     in  %a: !firrtl.uint<1> domains [%A],
     // expected-note @below {{1st operand has domains: [ClockDomain: B]}}
     out %b: !firrtl.uint<1> domains [%B],
-    in  %A: !firrtl.domain<@ClockDomain>,
-    in  %B: !firrtl.domain<@ClockDomain>
+    in  %A: !firrtl.domain<@ClockDomain()>,
+    in  %B: !firrtl.domain<@ClockDomain()>
   ) {
     // expected-error @below {{illegal domain crossing in operation}}
     firrtl.matchingconnect %b, %a : !firrtl.uint<1>
@@ -170,8 +170,8 @@ firrtl.circuit "MultipleErrors" {
     in  %a: !firrtl.uint<1> domains [%A],
     // expected-note @below {{1st operand has domains: [ClockDomain: B]}}
     out %b: !firrtl.uint<1> domains [%B],
-    in  %A: !firrtl.domain<@ClockDomain>,
-    in  %B: !firrtl.domain<@ClockDomain>
+    in  %A: !firrtl.domain<@ClockDomain()>,
+    in  %B: !firrtl.domain<@ClockDomain()>
   ) {
     // expected-error @below {{illegal domain crossing in operation}}
     firrtl.matchingconnect %b, %a : !firrtl.uint<1>
@@ -180,21 +180,21 @@ firrtl.circuit "MultipleErrors" {
   firrtl.module @MultipleErrors(
     in  %a: !firrtl.uint<1> domains [%A],
     out %b: !firrtl.uint<1> domains [%B],
-    in  %A: !firrtl.domain<@ClockDomain>,
-    in  %B: !firrtl.domain<@ClockDomain>
+    in  %A: !firrtl.domain<@ClockDomain()>,
+    in  %B: !firrtl.domain<@ClockDomain()>
   ) {
     %inst1_a, %inst1_b, %inst1_A, %inst1_B = firrtl.instance inst1 @M1(
       in  a: !firrtl.uint<1> domains [A],
       out b: !firrtl.uint<1> domains [B],
-      in  A: !firrtl.domain<@ClockDomain>,
-      in  B: !firrtl.domain<@ClockDomain>
+      in  A: !firrtl.domain<@ClockDomain()>,
+      in  B: !firrtl.domain<@ClockDomain()>
     ) 
 
     %inst2_a, %inst2_b, %inst2_A, %inst2_B = firrtl.instance inst2 @M2(
       in  a: !firrtl.uint<1> domains [A],
       out b: !firrtl.uint<1> domains [B],
-      in  A: !firrtl.domain<@ClockDomain>,
-      in  B: !firrtl.domain<@ClockDomain>
+      in  A: !firrtl.domain<@ClockDomain()>,
+      in  B: !firrtl.domain<@ClockDomain()>
     ) 
 
     // unreported domain crossing here: we skip checking this module because
