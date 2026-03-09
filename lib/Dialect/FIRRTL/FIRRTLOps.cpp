@@ -4007,13 +4007,15 @@ RegResetOp::computeDataFlow() {
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
 
 LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto refType = type_dyn_cast<RefType>(getType(0));
-  if (!refType)
-    return success();
+  if (auto refType = type_dyn_cast<RefType>(getType(0)))
+    return verifyProbeType(
+        refType, getLoc(), getOperation()->getParentOfType<CircuitOp>(),
+        symbolTable, Twine("'") + getOperationName() + "' op is");
 
-  return verifyProbeType(
-      refType, getLoc(), getOperation()->getParentOfType<CircuitOp>(),
-      symbolTable, Twine("'") + getOperationName() + "' op is");
+  if (auto domainType = type_dyn_cast<DomainType>(getType(0)))
+    return domainType.verifySymbolUses(getOperation(), symbolTable);
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -7290,7 +7292,9 @@ DomainCreateAnonOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError() << "references symbol '" << domainAttr
                          << "' which is not a domain";
 
-  return success();
+  // Verify that the result type matches the domain definition
+  auto domainType = getResult().getType();
+  return domainType.verifySymbolUses(getOperation(), symbolTable);
 }
 
 void DomainCreateOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -7311,7 +7315,9 @@ DomainCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError() << "references symbol '" << domainAttr
                          << "' which is not a domain";
 
-  return success();
+  // Verify that the result type matches the domain definition
+  auto domainType = getResult().getType();
+  return domainType.verifySymbolUses(getOperation(), symbolTable);
 }
 
 //===----------------------------------------------------------------------===//

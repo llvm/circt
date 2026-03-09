@@ -3398,3 +3398,43 @@ firrtl.circuit "DomainTypeWrongFields" {
     in %dom: !firrtl.domain<@MyDomain(voltage: !firrtl.string)>
   ) {}
 }
+
+// -----
+
+firrtl.circuit "WireDomainTypeMismatch" {
+  firrtl.domain @ClockDomain [
+    #firrtl.domain.field<"name", !firrtl.string>
+  ]
+
+  firrtl.module @WireDomainTypeMismatch() {
+    // expected-error @below {{domain type '!firrtl.domain<@ClockDomain()>' does not match the domain definition, expected '!firrtl.domain<@ClockDomain(name: !firrtl.string)>'}}
+    %w = firrtl.wire : !firrtl.domain<@ClockDomain()>
+  }
+}
+
+// -----
+
+firrtl.circuit "DomainCreateTypeMismatch" {
+  firrtl.domain @PowerDomain [
+    #firrtl.domain.field<"voltage", !firrtl.integer>,
+    #firrtl.domain.field<"frequency", !firrtl.integer>
+  ]
+
+  firrtl.module @DomainCreateTypeMismatch() {
+    // expected-error @below {{domain type '!firrtl.domain<@PowerDomain(voltage: !firrtl.integer)>' does not match the domain definition, expected '!firrtl.domain<@PowerDomain(voltage: !firrtl.integer, frequency: !firrtl.integer)>'}}
+    %d = firrtl.domain.create : !firrtl.domain<@PowerDomain(voltage: !firrtl.integer)>
+  }
+}
+
+// -----
+
+firrtl.circuit "DomainAnonTypeMismatch" {
+  firrtl.domain @SimpleDomain [
+    #firrtl.domain.field<"id", !firrtl.integer>
+  ]
+
+  firrtl.module @DomainAnonTypeMismatch() {
+    // expected-error @below {{domain type '!firrtl.domain<@SimpleDomain()>' does not match the domain definition, expected '!firrtl.domain<@SimpleDomain(id: !firrtl.integer)>'}}
+    %d = firrtl.domain.anon : !firrtl.domain<@SimpleDomain()>
+  }
+}

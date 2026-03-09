@@ -2967,6 +2967,31 @@ DomainType::getIndexAndSubfieldID(uint64_t fieldID) const {
   return {fieldID - 1, 0};
 }
 
+LogicalResult
+DomainType::verifySymbolUses(Operation *op,
+                             SymbolTableCollection &symbolTable) const {
+  // Find the circuit op to look up the domain definition
+  auto circuitOp = op->getParentOfType<CircuitOp>();
+  if (!circuitOp)
+    return op->emitError() << "domain type used outside of a circuit";
+
+  // Look up the domain definition
+  auto domainOp = dyn_cast_or_null<DomainOp>(
+      symbolTable.lookupSymbolIn(circuitOp, getNameAttr()));
+  if (!domainOp)
+    return op->emitError() << "domain type references undefined domain '"
+                           << getName() << "'";
+
+  // Verify that the domain type matches the domain definition
+  auto expectedType = DomainType::get(getNameAttr(), domainOp.getFieldsAttr());
+  if (*this != expectedType)
+    return op->emitError() << "domain type " << *this
+                           << " does not match the domain definition, expected "
+                           << expectedType;
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // FIRRTLDialect
 //===----------------------------------------------------------------------===//

@@ -642,6 +642,10 @@ def DomainTypeImpl : FIRRTLImplType<"Domain", [
     size_t getNumFields() const { return getFields().size(); }
     DomainFieldAttr getField(size_t index) const;
     std::optional<uint64_t> getFieldIndex(StringRef fieldName) const;
+
+    /// Verify that this domain type matches the domain definition.
+    LogicalResult verifySymbolUses(Operation *op,
+                                   SymbolTableCollection &symbolTable) const;
   }];
 }
 
