@@ -270,6 +270,11 @@ hw.module @aggregate_const(out o : !hw.array<1x!seq.clock>) {
   %0 = hw.aggregate_constant [#seq<clock_constant high> : !seq.clock] : !hw.array<1x!seq.clock>
   hw.output %0 : !hw.array<1x!seq.clock>
 }
- hw.module @hiimped(in %a : !hw.hiz<i3>, in %b : i3, out %c : i3) {
-  %d = hw.hiz.read %a : i3
+ // CHECK-LABEL: hw.module @hiimped(in %a : !hw.hiz<i3>, in %b : i3, in %cond : i1, out c : i3) {
+ hw.module @hiimped(in %a : !hw.hiz<i3>, in %b : i3, in %cond : i1, out c : i3) {
+  // CHECK-NEXT: [[RES:%.+]] = hw.hiz.read %a : <i3>
+  %d = hw.hiz.read %a : !hw.hiz<i3>
+  // CHECK-NEXT: hw.hiz.drive %a %cond %b : <i3>
+  hw.hiz.drive %a %cond %b : !hw.hiz<i3>
+  hw.output %d : i3
  }
