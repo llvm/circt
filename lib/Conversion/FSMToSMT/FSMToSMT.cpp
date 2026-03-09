@@ -505,25 +505,19 @@ LogicalResult MachineOpConverter::dispatch() {
           // false
           Value prevGuardVal;
           for (auto &op : transition1.guard.value()->front()) {
-            if (isa<verif::AssertOp>(op)) {
-              // Ignore assertions in guard regions
-              op.emitWarning("Assertions in guard regions are ignored.");
+            if (isa<fsm::ReturnOp>(op)) {
+              // Cast the guard value to an SMT boolean type
+              auto castVal = mlir::UnrealizedConversionCastOp::create(
+                  b, loc, b.getType<smt::BitVectorType>(1),
+                  mapping.lookup(op.getOperand(0)));
+
+              prevGuardVal = bv1toSmtBool(b, loc, castVal.getResult(0));
+
+              // Assert that the previous guard is false
+              Value negVal = smt::NotOp::create(b, loc, prevGuardVal);
+              guardVal = smt::AndOp::create(b, loc, guardVal, negVal);
             } else {
-              auto *newOp = b.clone(op, mapping);
-              // Retrieve the guard value
-              if (isa<fsm::ReturnOp>(newOp)) {
-                // Cast the guard value to an SMT boolean type
-                auto castVal = mlir::UnrealizedConversionCastOp::create(
-                    b, loc, b.getType<smt::BitVectorType>(1),
-                    newOp->getOperand(0));
-
-                prevGuardVal = bv1toSmtBool(b, loc, castVal.getResult(0));
-
-                // Assert that the previous guard is false
-                Value negVal = smt::NotOp::create(b, loc, prevGuardVal);
-                guardVal = smt::AndOp::create(b, loc, guardVal, negVal);
-                newOp->erase();
-              }
+              b.clone(op, mapping);
             }
           }
         }
