@@ -542,6 +542,24 @@ firrtl.circuit "CombMemPerFieldSym" {
 
 // -----
 
+firrtl.circuit "InstMultipleSyms" {
+  firrtl.module @Empty() {}
+  firrtl.module @InstMultipleSyms() {
+    // expected-error @below {{op has more than one symbol defined: 'x', 'y'}}
+    firrtl.instance empty sym [<@x,0,public>,<@y,0,public>] @Empty()
+  }
+}
+
+// -----
+
+firrtl.circuit "PortMultSymbol" {
+   // expected-error @below {{verification of inner symbols failed on port 0 with name "x": cannot assign multiple symbol names to the field id 0}}
+  firrtl.module @PortMultSymbol(in %x : !firrtl.uint<5>) attributes { portSymbols = [#hw<innerSym[<@foo,0,public>,<@bar,0,public>]>] } {
+  }
+}
+
+// -----
+
 firrtl.circuit "SeqMemInvalidReturnType" {
   firrtl.module @SeqMemInvalidReturnType() {
     // expected-error @+1 {{'chirrtl.seqmem' op result #0 must be a behavioral memory, but got '!firrtl.uint<1>'}}
@@ -562,7 +580,7 @@ firrtl.circuit "SeqMemNonPassiveReturnType" {
 
 firrtl.circuit "SeqMemPerFieldSym" {
   firrtl.module @SeqMemPerFieldSym() {
-    // expected-error @below {{op does not support per-field inner symbols}}
+    // expected-error @below {{does not support per-field inner symbols, but has inner symbol 'x' with non-zero field id 1}}
     %mem = chirrtl.seqmem sym [<@x,1,public>] Undefined : !chirrtl.cmemory<bundle<a: uint<1>>, 1>
   }
 }
@@ -1009,7 +1027,7 @@ firrtl.circuit "EnumNonExaustive" {
 
 firrtl.circuit "InnerSymAttr" {
   firrtl.module @InnerSymAttr() {
-    // expected-error @+1 {{cannot assign multiple symbol names to the field id:'2'}}
+    // expected-error @+1 {{cannot assign multiple symbol names to the field id 2}}
     %w3 = firrtl.wire sym [<@w3,2,public>,<@x2,2,private>,<@syh2,0,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
   }
 }
@@ -1018,7 +1036,7 @@ firrtl.circuit "InnerSymAttr" {
 
 firrtl.circuit "InnerSymAttr2" {
   firrtl.module @InnerSymAttr2() {
-    // expected-error @+1 {{cannot reuse symbol name:'w3'}}
+    // expected-error @+1 {{cannot reuse symbol name 'w3'}}
     %w4 = firrtl.wire sym [<@w3,1,public>,<@w3,2,private>,<@syh2,0,public>] : !firrtl.bundle<a: uint<1>, b: uint<1>, c: uint<1>, d: uint<1>>
   }
 }
@@ -2299,7 +2317,7 @@ firrtl.circuit "InvalidDouble" {
 
 firrtl.circuit "InvalidInnerSymTooHigh" {
   firrtl.module @InvalidInnerSymTooHigh () {
-    // expected-error @below {{field id:'1' is greater than the maximum field id:'0'}}
+    // expected-error @below {{field id 1 is greater than the maximum field id 0}}
     %w = firrtl.wire sym [<@"test",1,public>] : !firrtl.uint<5>
   }
 }
@@ -2308,7 +2326,7 @@ firrtl.circuit "InvalidInnerSymTooHigh" {
 
 firrtl.circuit "InvalidInnerSymDupe" {
   firrtl.module @InvalidInnerSymDupe() {
-    // expected-error @below {{op cannot assign multiple symbol names to the field id:'0'}}
+    // expected-error @below {{op cannot assign multiple symbol names to the field id 0}}
     %w = firrtl.wire sym [<@"foo",0,public>,<@"bar",0,public>] : !firrtl.uint<5>
   }
 }
@@ -2517,6 +2535,21 @@ firrtl.circuit "Top" {
     firrtl.instance_choice foo {layers = [@A]} @Foo alternatives @O {
       @C -> @Bar
     } ()
+  }
+}
+
+// -----
+
+firrtl.circuit "IntmoduleWithInstanceChoice" {
+  firrtl.option @Opt {
+    firrtl.option_case @A
+  }
+
+  firrtl.intmodule @test(in i: !firrtl.clock, out size: !firrtl.uint<32>) attributes {intrinsic = "circt.sizeof"}
+
+  firrtl.module @IntmoduleWithInstanceChoice() {
+    // expected-error @below {{intmodule must be instantiated with instance op, not via 'firrtl.instance_choice'}}
+    %i1, %size = firrtl.instance_choice inst interesting_name @test alternatives @Opt { @A -> @test }(in i: !firrtl.clock, out size: !firrtl.uint<32>)
   }
 }
 
@@ -2736,7 +2769,7 @@ firrtl.circuit "SimulationTargetInvalid" {
 
 firrtl.circuit "SimulationPortCount" {
   firrtl.extmodule @SimulationPortCount()
-  // expected-error @below {{op target @Foo must have 4 ports, got 0 instead}}
+  // expected-error @below {{op target @Foo must have at least 4 ports, got 0 instead}}
   firrtl.simulation @foo, @Foo {}
   // expected-note @below {{target defined here}}
   firrtl.extmodule @Foo()
@@ -2919,6 +2952,22 @@ firrtl.circuit "SimulationPortType3" {
     in init: !firrtl.uint<1>,
     out done: !firrtl.uint<1>,
     out success: !firrtl.reset
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationExtraHardwarePort" {
+  firrtl.extmodule @SimulationExtraHardwarePort()
+  // expected-error @below {{op target @Foo port 4 may only be a property type, got '!firrtl.uint<8>' instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>,
+    in extra: !firrtl.uint<8>
   )
 }
 
@@ -3228,19 +3277,94 @@ firrtl.circuit "WrongInstanceChoiceDomainInfo" {
 
 // -----
 
-firrtl.circuit "AnonDomainPointingAtNonDomain" {
-  firrtl.extmodule @Foo()
+firrtl.circuit "UndefinedDomainInAnonDomain" {
   firrtl.module @UndefinedDomainInAnonDomain() {
-    // expected-error @below {{references undefined domain '@Foo'}}
+    // expected-error @below {{references undefined symbol '@Foo'}}
     %0 = firrtl.domain.anon : !firrtl.domain of @Foo
   }
 }
 
 // -----
 
-firrtl.circuit "UndefinedDomainInAnonDomain" {
-  firrtl.module @UndefinedDomainInAnonDomain() {
-    // expected-error @below {{references undefined domain '@Foo'}}
+firrtl.circuit "AnonDomainPointingAtNonDomain" {
+  firrtl.extmodule @Foo()
+  firrtl.module @AnonDomainPointingAtNonDomain() {
+    // expected-error @below {{references symbol '@Foo' which is not a domain}}
     %0 = firrtl.domain.anon : !firrtl.domain of @Foo
   }
+}
+
+// -----
+
+firrtl.circuit "UndefinedDomainInCreateDomain" {
+  firrtl.module @UndefinedDomainInCreateDomain() {
+    // expected-error @below {{references undefined symbol '@Foo'}}
+    %my_domain = firrtl.domain.create : !firrtl.domain of @Foo
+  }
+}
+
+// -----
+
+firrtl.circuit "CreateDomainPointingAtNonDomain" {
+  firrtl.extmodule @Foo()
+  firrtl.module @CreateDomainPointingAtNonDomain() {
+    // expected-error @below {{references symbol '@Foo' which is not a domain}}
+    %my_domain = firrtl.domain.create : !firrtl.domain of @Foo
+  }
+}
+
+// -----
+
+firrtl.circuit "UnknownValueReferencesUnknownClass" {
+  firrtl.module @UnknownValueReferencesUnknownClass() {
+    // expected-error @below {{refers to non-existent class ("Missing")}}
+    %0 = firrtl.unknown : !firrtl.class<@Missing()>
+  }
+}
+
+// -----
+
+firrtl.circuit "UnknownValueReferencesNonClass" {
+  firrtl.extmodule @Foo()
+  firrtl.module @UnknownValueReferencesNonClass() {
+    // expected-error @below {{refers to a non-class type ("Foo")}}
+    %0 = firrtl.unknown : !firrtl.class<@Foo()>
+  }
+}
+
+// -----
+firrtl.circuit "NonExistentMacroSymbol" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+
+  firrtl.module @Foo() {}
+  firrtl.module @Choice() {
+    // expected-error @below {{'firrtl.instance_choice' op instance_macro @__target_Platform_Choice_inst does not exist}}
+    firrtl.instance_choice inst {instance_macro = @__target_Platform_Choice_inst} @Foo alternatives @Platform {
+      @FPGA -> @Foo
+    } ()
+  }
+}
+
+// -----
+firrtl.circuit "OptionCaseUndefinedMacro" {
+  firrtl.option @Platform {
+    // expected-error @below {{'firrtl.option_case' op case_macro references an undefined symbol: @NonExistentMacro}}
+    firrtl.option_case @FPGA {case_macro = @NonExistentMacro}
+  }
+
+  firrtl.module @OptionCaseUndefinedMacro() {}
+}
+
+// -----
+firrtl.circuit "OptionCaseWrongSymbolType" {
+  firrtl.module private @NotAMacro() {}
+
+  firrtl.option @Platform {
+    // expected-error @below {{'firrtl.option_case' op case_macro must reference a macro declaration}}
+    firrtl.option_case @FPGA {case_macro = @NotAMacro}
+  }
+
+  firrtl.module @OptionCaseWrongSymbolType() {}
 }

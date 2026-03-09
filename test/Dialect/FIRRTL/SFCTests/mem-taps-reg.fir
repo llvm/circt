@@ -51,12 +51,12 @@ circuit Top : %[[
 
 ; CHECK:      module Top(
 ; CHECK-NOT:  module
-; CHECK:        wire [7:0] memTap_0 = Top.dut.rf_0_probe;
-; CHECK-NEXT:   wire [7:0] memTap_1 = Top.dut.rf_1_probe;
-; CHECK-NEXT:   wire [7:0] memTap_2 = Top.dut.rf_2_probe;
-; CHECK-NEXT:   wire [7:0] memTap_3 = Top.dut.rf_3_probe;
-; CHECK-NEXT:   wire [7:0] memTap_4 = Top.dut.rf_4_probe;
-; CHECK-NEXT:   wire [7:0] memTap_5 = Top.dut.rf_5_probe;
-; CHECK-NEXT:   wire [7:0] memTap_6 = Top.dut.rf_6_probe;
-; CHECK-NEXT:   wire [7:0] memTap_7 = Top.dut.rf_7_probe;
+; CHECK:        wire [7:0] memTap_0 = Top.dut.rf_0;
+; CHECK-NEXT:   wire [7:0] memTap_1 = Top.dut.rf_1;
+; CHECK-NEXT:   wire [7:0] memTap_2 = Top.dut.rf_2;
+; CHECK-NEXT:   wire [7:0] memTap_3 = Top.dut.rf_3;
+; CHECK-NEXT:   wire [7:0] memTap_4 = Top.dut.rf_4;
+; CHECK-NEXT:   wire [7:0] memTap_5 = Top.dut.rf_5;
+; CHECK-NEXT:   wire [7:0] memTap_6 = Top.dut.rf_6;
+; CHECK-NEXT:   wire [7:0] memTap_7 = Top.dut.rf_7;
 ; CHECK:      endmodule

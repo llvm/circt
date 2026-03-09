@@ -53,9 +53,8 @@ void LowerValidateToLabelsPass::runOnOperation() {
     OpBuilder builder(validateOp);
     auto intrinsicLabel = validateOp.getRef().getType().getIntrinsicLabel(
         reg, validateOp.getId().value());
-    Value lbl = rtg::LabelDeclOp::create(
-        builder, loc, StringAttr::get(&getContext(), intrinsicLabel),
-        ValueRange());
+    Value lbl = rtg::ConstantOp::create(
+        builder, loc, rtg::LabelAttr::get(&getContext(), intrinsicLabel));
     rtg::LabelOp::create(builder, loc, rtg::LabelVisibility::global, lbl);
     validateOp.getValue().replaceAllUsesWith(validateOp.getDefaultValue());
     validateOp.getValues().replaceAllUsesWith(

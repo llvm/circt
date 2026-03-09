@@ -10,10 +10,6 @@ requires = [
   "numpy",
   "nanobind>=2.2",
   "PyYAML",
-
-  # PyCDE depends
-  "cocotb>=1.6.2",
-  "cocotb-test>=0.2.2",
 ]
 build-backend = "setuptools.build_meta"
 
@@ -47,7 +43,7 @@ dynamic = ["version"]
 description = "Python CIRCT Design Entry"
 authors = [{ name = "John Demme", email = "John.Demme@microsoft.com" }]
 dependencies = ['numpy']
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 
 [project.urls]
 "Homepage" = "https://circt.llvm.org/docs/PyCDE/"

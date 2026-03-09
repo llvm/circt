@@ -20,7 +20,7 @@
 ##===----------------------------------------------------------------------===##
 
 CMD=${1:-"./utils/run-tests-docker.sh"}
-VER=${2:-"v19.2"}
+VER=${2:-"v20"}
 REPO_ROOT=$(cd "$(dirname "$BASH_SOURCE[0]")/.." && pwd)
 
 cd $REPO_ROOT

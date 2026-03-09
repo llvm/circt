@@ -1,18 +1,16 @@
 // REQUIRES: libz3
 // REQUIRES: circt-lec-jit
 
-// RUN: circt-opt %s --convert-synth-to-comb -o %t.comb.mlir
-
-// RUN: circt-synth %s -o %t1.mlir -convert-to-comb
+// RUN: circt-synth %s -o %t1.mlir
 // RUN: cat %t1.mlir | FileCheck %s
-// RUN: circt-lec %t1.mlir %t.comb.mlir -c1=mul -c2=mul --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_MUL_TECHMAP
+// RUN: circt-lec %t1.mlir %s -c1=mul -c2=mul --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_MUL_TECHMAP
 
 // COMB_MUL_TECHMAP: c1 == c2
 
 // RUN: circt-synth %s -o %t.lut.mlir --top mul --lower-to-k-lut 6
 // RUN: cat %t.lut.mlir | FileCheck %s --check-prefix=LUT
-// RUN: circt-opt -convert-synth-to-comb -lower-comb %t.lut.mlir -o %t2.mlir
-// RUN: circt-lec %t2.mlir %t.comb.mlir -c1=mul -c2=mul --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_MUL_LUT
+// RUN: circt-opt -lower-comb %t.lut.mlir -o %t2.mlir
+// RUN: circt-lec %t2.mlir %s -c1=mul -c2=mul --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_MUL_LUT
 
 // COMB_MUL_LUT: c1 == c2
 

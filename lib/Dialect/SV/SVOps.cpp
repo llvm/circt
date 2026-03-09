@@ -108,6 +108,28 @@ verifyMacroIdentSymbolUses(Operation *op, FlatSymbolRefAttr attr,
 }
 
 //===----------------------------------------------------------------------===//
+// VerbatimOp
+//===----------------------------------------------------------------------===//
+
+/// Helper function to verify inner refs in symbols array for verbatim ops.
+static LogicalResult verifyVerbatimSymbols(Operation *op, ArrayAttr symbols,
+                                           hw::InnerRefNamespace &ns) {
+  // Verify each symbol reference in the symbols array
+  for (auto symbol : symbols) {
+    if (auto innerRef = dyn_cast<hw::InnerRefAttr>(symbol)) {
+      if (!ns.lookup(innerRef))
+        return op->emitError() << "inner symbol reference " << innerRef
+                               << " could not be found";
+    }
+  }
+  return success();
+}
+
+LogicalResult VerbatimOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  return verifyVerbatimSymbols(getOperation(), getSymbols(), ns);
+}
+
+//===----------------------------------------------------------------------===//
 // VerbatimExprOp
 //===----------------------------------------------------------------------===//
 
@@ -133,9 +155,17 @@ void VerbatimExprOp::getAsmResultNames(
   getVerbatimExprAsmResultNames(getOperation(), std::move(setNameFn));
 }
 
+LogicalResult VerbatimExprOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  return verifyVerbatimSymbols(getOperation(), getSymbols(), ns);
+}
+
 void VerbatimExprSEOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
   getVerbatimExprAsmResultNames(getOperation(), std::move(setNameFn));
+}
+
+LogicalResult VerbatimExprSEOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  return verifyVerbatimSymbols(getOperation(), getSymbols(), ns);
 }
 
 //===----------------------------------------------------------------------===//
@@ -457,6 +487,42 @@ LogicalResult IfDefOp::canonicalize(IfDefOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
+// Helper functions
+//===----------------------------------------------------------------------===//
+
+void circt::sv::createNestedIfDefs(
+    ArrayRef<StringAttr> macroSymbols,
+    llvm::function_ref<void(StringAttr, std::function<void()>,
+                            std::function<void()>)>
+        ifdefCtor,
+    llvm::function_ref<void(size_t)> thenCtor,
+    llvm::function_ref<void()> defaultCtor) {
+
+  // Helper function to recursively build nested ifdefs
+  std::function<void(size_t)> buildNested = [&](size_t index) {
+    if (index >= macroSymbols.size()) {
+      // Base case: we've processed all macros, call the default
+      if (defaultCtor)
+        defaultCtor();
+      return;
+    }
+
+    // Create an ifdef for the current macro
+    ifdefCtor(
+        macroSymbols[index],
+        /*thenCtor=*/
+        [&, index]() {
+          if (thenCtor)
+            thenCtor(index);
+        },
+        /*elseCtor=*/
+        [&, index]() { buildNested(index + 1); });
+  };
+
+  buildNested(0);
+}
+
+//===----------------------------------------------------------------------===//
 // IfDefProceduralOp
 //===----------------------------------------------------------------------===//
 
@@ -585,7 +651,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
   // region if the condition is a 2-state operation.  This changes x prop
   // behavior so it needs to be guarded.
   if (is2StateExpression(op.getCond())) {
-    auto cond = comb::createOrFoldNot(op.getLoc(), op.getCond(), rewriter);
+    auto cond = comb::createOrFoldNot(rewriter, op.getLoc(), op.getCond());
     op.setOperand(cond);
 
     auto *thenBlock = op.getThenBlock(), *elseBlock = op.getElseBlock();

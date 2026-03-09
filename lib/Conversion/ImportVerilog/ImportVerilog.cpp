@@ -12,7 +12,7 @@
 
 #include "ImportVerilogInternals.h"
 #include "circt/Conversion/MooreToCore.h"
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
+#include "circt/Dialect/LLHD/LLHDPasses.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
 #include "circt/Transforms/Passes.h"
@@ -215,6 +215,12 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
 
   for (const auto &libExt : options.libExts)
     driver.sourceLoader.addSearchExtension(libExt);
+
+  for (const auto &[i, f] : llvm::enumerate(options.libraryFiles)) {
+    // Include a space to avoid conflicts with explicitly-specified names.
+    auto libName = "library " + std::to_string(i);
+    driver.sourceLoader.addLibraryFiles(libName, f);
+  }
 
   for (const auto &includeDir : options.includeDirs)
     if (driver.sourceManager.addUserDirectories(includeDir))
@@ -421,7 +427,7 @@ void circt::populateVerilogToMoorePipeline(OpPassManager &pm) {
   {
     // Perform module-specific transformations.
     auto &modulePM = pm.nest<moore::SVModuleOp>();
-    modulePM.addPass(moore::createLowerConcatRefPass());
+    modulePM.addPass(moore::createSimplifyRefsPass());
     // TODO: Enable the following once it not longer interferes with @(...)
     // event control checks. The introduced dummy variables make the event
     // control observe a static local variable that never changes, instead of
@@ -466,7 +472,9 @@ void circt::populateLlhdToCorePipeline(
   // registers.
   auto &modulePM = pm.nest<hw::HWModuleOp>();
   // See https://github.com/llvm/circt/issues/8804.
-  // modulePM.addPass(mlir::createSROA());
+  if (options.sroa) {
+    modulePM.addPass(mlir::createSROA());
+  }
   modulePM.addPass(llhd::createMem2RegPass());
   modulePM.addPass(llhd::createHoistSignalsPass());
   modulePM.addPass(llhd::createDeseqPass());

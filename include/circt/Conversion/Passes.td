@@ -386,6 +386,46 @@ def ConvertFSMToSV : Pass<"convert-fsm-to-sv", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// FSMToSMT
+//===----------------------------------------------------------------------===//
+
+def ConvertFSMToSMT : Pass<"convert-fsm-to-smt", "mlir::ModuleOp"> {
+  let summary = "Converts FSMs to SMT models that can be used to check" 
+    "safety properties";
+  let constructor = "circt::createConvertFSMToSMTPass()";
+  let dependentDialects = ["circt::comb::CombDialect", "mlir::smt::SMTDialect",
+                           "circt::verif::VerifDialect"];
+  let options = [Option<"withTime", "with-time", "bool", "false",
+                        "Whether to include a time parameter in the predicates"
+                        "created to represent states">,
+                  Option<"timeWidth", "time-width", "int", "8",
+                        "Bitwidth of time parameter">,
+  ];
+}
+
+//===----------------------------------------------------------------------===//
+// CoreToFSM
+//===----------------------------------------------------------------------===//
+
+
+def ConvertCoreToFSM : Pass<"convert-core-to-fsm", "mlir::ModuleOp"> {
+  let summary = "Convert Core to FSM";
+  let description = [{
+    This pass extracts FSM structure from an RTL netlist. State registers
+    can be specified explicitly via the `state-regs` option, or they will
+    be inferred as registers whose names contain "state".
+  }];
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect",
+                           "circt::seq::SeqDialect", "circt::fsm::FSMDialect"];
+  let options = [
+    ListOption<"stateRegs", "state-regs", "std::string",
+               "Comma-separated list of names of registers to use as state"
+               "registers. If not specified, registers with names containing"
+               "'state' are used.">
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTLToHW
 //===----------------------------------------------------------------------===//
 
@@ -598,6 +638,11 @@ def ConvertHWToBTOR2 : Pass<"convert-hw-to-btor2", "mlir::ModuleOp"> {
   let constructor = "circt::createConvertHWToBTOR2Pass()";
   let dependentDialects = ["hw::HWDialect", "sv::SVDialect", "comb::CombDialect",
                            "seq::SeqDialect"];
+  let options =
+    [Option<"assumeInitReset", "assume-init-reset", "bool", "false",
+            "Assume registers have been reset (i.e., initialize them to their"
+            "reset value)">];
+
 }
 
 //===----------------------------------------------------------------------===//
@@ -841,7 +886,7 @@ def ConvertCombToSynth : Pass<"convert-comb-to-synth", "hw::HWModuleOp"> {
 //===----------------------------------------------------------------------===//
 // ConvertSynthToComb
 //===----------------------------------------------------------------------===//
-def ConvertSynthToComb: Pass<"convert-synth-to-comb", "hw::HWModuleOp"> {
+def ConvertSynthToComb: Pass<"convert-synth-to-comb"> {
   let summary = "Lower Synth ops to Comb ops";
   let description = [{
     This pass converts Synth operations to Comb operations. This is mostly

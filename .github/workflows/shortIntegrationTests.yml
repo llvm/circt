@@ -16,6 +16,11 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+# Cancel previous CI builds when a new push occurs to the same PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Build CIRCT and run its tests using a Docker container with all the
   # integration testing prerequisite installed.
@@ -31,7 +36,7 @@ jobs:
     outputs:
       cache-key-pattern: ${{ steps.cache-key.outputs.pattern }}
     container:
-      image: ghcr.io/circt/images/circt-integration-test:v19.2
+      image: ghcr.io/circt/images/circt-integration-test:v20
       volumes:
         - /mnt:/__w/circt
     strategy:
@@ -97,7 +102,7 @@ jobs:
             -DLLVM_USE_SPLIT_DWARF=ON \
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
-            -DLLVM_LIT_ARGS="-v --show-unsupported" \
+            -DLLVM_LIT_ARGS="-v --show-unsupported --timeout 300" \
             -DCIRCT_SLANG_FRONTEND_ENABLED=ON
 
             # Temporarily disable ESI runtime builds until we work out the Abseil conflict (#7236).

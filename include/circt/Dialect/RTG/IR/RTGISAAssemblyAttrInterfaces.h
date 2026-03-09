@@ -14,7 +14,6 @@
 #ifndef CIRCT_DIALECT_RTG_IR_RTGISAASSEMBLYATTRINTERFACES_H
 #define CIRCT_DIALECT_RTG_IR_RTGISAASSEMBLYATTRINTERFACES_H
 
-#include "circt/Dialect/RTG/IR/RTGISAAssemblyTypeInterfaces.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributeInterfaces.h"
 #include "llvm/ADT/APInt.h"

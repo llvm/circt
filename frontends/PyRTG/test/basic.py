@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, embed_comment, MemoryBlock, Memory
+from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, FloatRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, MemoryBlock, Memory, String, report_failure, embed_comment
 
 # MLIR-LABEL: rtg.target @Singleton : !rtg.dict<>
 # MLIR-NEXT: }
@@ -28,10 +28,9 @@ class Tgt0(Config):
 
 
 # MLIR-LABEL: rtg.target @Tgt1 : !rtg.dict<entry0: index, entry1: !rtg.isa.label>
-# MLIR-NEXT: [[C0:%.+]] = index.constant 0
-# MLIR-NEXT: [[LBL:%.+]] = rtg.label_decl "l0"
-# MLIR-NEXT: rtg.yield [[C0]], [[LBL]] : index, !rtg.isa.label
-# MLIR-NEXT: }
+# MLIR-DAG: [[C0:%.+]] = index.constant 0
+# MLIR-DAG: [[LBL:%.+]] = rtg.constant #rtg.isa.label<"l0">
+# MLIR: rtg.yield [[C0]], [[LBL]] : index, !rtg.isa.label
 
 
 @config
@@ -70,7 +69,8 @@ class Tgt2(Config):
 # MLIR-NEXT: [[ARR5:%.+]] = rtg.array_create [[IDX2]], [[IDX1]] : index
 # MLIR-NEXT: [[ARR6:%.+]] = rtg.array_inject [[ARR5]][[[IDX1]]], [[IDX3]] : !rtg.array<index>
 # MLIR-NEXT: [[SIZE:%.+]] = rtg.array_size [[ARR6]] : !rtg.array<index>
-# MLIR-NEXT: rtg.yield [[RES0]], [[ARR1]], [[ARR4]], [[SIZE]] : index, !rtg.array<!rtg.array<index>>, !rtg.array<!rtg.array<index>>, index
+# MLIR-NEXT: [[ARR7:%.+]] = rtg.array_create [[IDX1]], [[IDX2]], [[IDX3]] : index
+# MLIR-NEXT: rtg.yield [[RES0]], [[ARR1]], [[ARR4]], [[SIZE]], [[ARR7]] : index, !rtg.array<!rtg.array<index>>, !rtg.array<!rtg.array<index>>, index, !rtg.array<index>
 
 
 @config
@@ -85,6 +85,8 @@ class Tgt4(Config):
   ], ArrayType(IntegerType())))
   arr3 = Param(loader=lambda: Array.create([Integer(2), Integer(
       1)], IntegerType()).set(1, Integer(3)).size())
+  arr4 = Param(loader=lambda: Array.create([Integer(1), Integer(2)],
+                                           IntegerType()).append(Integer(3)))
 
 
 @sequence([SetType(TupleType([IntegerType(), BoolType()]))])
@@ -108,16 +110,19 @@ def test0(config):
 
 
 # MLIR-LABEL: rtg.test @test1_args
-# MLIR-SAME: (entry0 = [[SET:%.+]]: !rtg.set<index>)
+# MLIR-SAME: (entry0 = [[SET:%.+]]: !rtg.set<index>{{.*}})
+# MLIR-NEXT: [[STR0:%.+]] = rtg.constant "L_" : !rtg.string
 # MLIR-NEXT: [[RAND:%.+]] = rtg.set_select_random [[SET]] : !rtg.set<index>
-# MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", [[RAND]]
-# MLIR-NEXT: rtg.label local
+# MLIR-NEXT: [[INT_AS_STR:%.+]] = rtg.int_format [[RAND]]
+# MLIR-NEXT: [[STR:%.+]] = rtg.string_concat [[STR0]], [[INT_AS_STR]]
+# MLIR-NEXT: [[LBL:%.+]] = rtg.string_to_label [[STR]]
+# MLIR-NEXT: rtg.label local [[LBL]]
 # MLIR-NEXT: }
 
 # ELABORATED-LABEL: rtg.test @test1_args_Tgt0
-# CHECK: rtg.label_decl "L_0"
-# CHECK-NEXT: rtg.label local
-# CHECK-NEXT: }
+# ELABORATED: [[LBL:%.+]] = rtg.constant #rtg.isa.label<"L_0">
+# ELABORATED-NEXT: rtg.label local [[LBL]]
+# ELABORATED-NEXT: }
 
 # ASM-LABEL: Begin of test 'test1_args
 # ASM-NEXT: L_0:
@@ -127,17 +132,18 @@ def test0(config):
 @test(Tgt0)
 def test1_args(config):
   i = config.entry0.get_random()
-  Label.declare(r"L_{{0}}", i).place()
+  Label.declare(String("L_") + i.to_string()).place()
 
 
 # MLIR-LABEL: rtg.test @test2_labels
-# MLIR-NEXT: index.constant 5
-# MLIR-NEXT: index.constant 3
-# MLIR-NEXT: index.constant 2
-# MLIR-NEXT: index.constant 1
-# MLIR-NEXT: [[L0:%.+]] = rtg.label_decl "l0"
-# MLIR-NEXT: [[L1:%.+]] = rtg.label_unique_decl "l1"
-# MLIR-NEXT: [[L2:%.+]] = rtg.label_unique_decl "l1"
+# MLIR-DAG: index.constant 2
+# MLIR-DAG: index.constant 1
+# MLIR-DAG: [[L0:%.+]] = rtg.constant #rtg.isa.label<"l0">
+# MLIR-DAG: [[STR:%.+]] = rtg.constant "l1" : !rtg.string
+# MLIR-DAG: [[LBL5:%.+]] = rtg.constant #rtg.isa.label<"L_5">
+# MLIR-DAG: [[LBL3:%.+]] = rtg.constant #rtg.isa.label<"L_3">
+# MLIR-NEXT: [[L1:%.+]] = rtg.label_unique_decl [[STR]]
+# MLIR-NEXT: [[L2:%.+]] = rtg.label_unique_decl [[STR]]
 # MLIR-NEXT: rtg.label global [[L0]]
 # MLIR-NEXT: rtg.label external [[L1]]
 # MLIR-NEXT: rtg.label local [[L2]]
@@ -153,10 +159,8 @@ def test1_args(config):
 # MLIR-NEXT: [[RL1:%.+]] = rtg.set_select_random [[SET2_MINUS_SET0]] : !rtg.set<!rtg.isa.label>
 # MLIR-NEXT: rtg.label local [[RL1]]
 
-# MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", %idx5
-# MLIR-NEXT: rtg.label local
-# MLIR-NEXT: rtg.label_decl "L_{{[{][{]0[}][}]}}", %idx3
-# MLIR-NEXT: rtg.label local
+# MLIR-NEXT: rtg.label local [[LBL5]]
+# MLIR-NEXT: rtg.label local [[LBL3]]
 
 # MLIR-NEXT: [[BAG0:%.+]] = rtg.bag_create (%idx2 x [[L0:%.+]], %idx1 x [[L1:%.+]]) : !rtg.isa.label
 # MLIR-NEXT: [[BAG1:%.+]] = rtg.bag_create (%idx1 x [[L2:%.+]]) : !rtg.isa.label
@@ -184,38 +188,30 @@ def test1_args(config):
 # MLIR-NEXT: [[RAND4:%.+]] = rtg.randomize_sequence [[SEQ1]]
 # MLIR-NEXT: rtg.embed_sequence [[RAND4]]
 
-# MLIR-NEXT: rtg.comment "this is a comment"
-
 # MLIR-NEXT: }
 
 # ELABORATED-LABEL: rtg.test @test2_labels
-# ELABORATED-NEXT: [[L0:%.+]] = rtg.label_decl "l0"
+# ELABORATED-NEXT: [[L0:%.+]] = rtg.constant #rtg.isa.label<"l0">
 # ELABORATED-NEXT: rtg.label global [[L0]]
-# ELABORATED-NEXT: [[L1:%.+]] = rtg.label_decl "l1_0"
+# ELABORATED-NEXT: [[L1STR:%.+]] = rtg.constant "l1"
+# ELABORATED-NEXT: [[L1:%.+]] = rtg.label_unique_decl [[L1STR]]
 # ELABORATED-NEXT: rtg.label external [[L1]]
-# ELABORATED-NEXT: [[L2:%.+]] = rtg.label_decl "l1_1"
+# ELABORATED-NEXT: [[L2:%.+]] = rtg.label_unique_decl [[L1STR]]
 # ELABORATED-NEXT: rtg.label local [[L2]]
-
 # ELABORATED-NEXT: rtg.label local [[L0]]
 # ELABORATED-NEXT: rtg.label local [[L2]]
-
-# ELABORATED-NEXT: rtg.label_decl "L_5"
-# ELABORATED-NEXT: rtg.label local
-# ELABORATED-NEXT: rtg.label_decl "L_3"
-# ELABORATED-NEXT: rtg.label local
-
-# ELABORATED-NEXT: rtg.label local
-# ELABORATED-NEXT: rtg.label local
-
-# ELABORATED-NEXT: rtg.label local [[L1]]
-# ELABORATED-NEXT: rtg.label local [[L1]]
+# ELABORATED-NEXT: [[LBL5:%.+]] = rtg.constant #rtg.isa.label<"L_5">
+# ELABORATED-NEXT: rtg.label local [[LBL5]]
+# ELABORATED-NEXT: [[LBL3:%.+]] = rtg.constant #rtg.isa.label<"L_3">
+# ELABORATED-NEXT: rtg.label local [[LBL3]]
+# ELABORATED-NEXT: rtg.label local [[L2]]
 # ELABORATED-NEXT: rtg.label local [[L0]]
-
-# ELABORATED-NEXT: [[L5:%.+]] = rtg.label_decl "s1"
+# ELABORATED-NEXT: [[L0_2:%.+]] = rtg.constant #rtg.isa.label<"l0">
+# ELABORATED-NEXT: rtg.label local [[L0_2]]
+# ELABORATED-NEXT: rtg.label local [[L1]]
+# ELABORATED-NEXT: rtg.label local [[L1]]
+# ELABORATED-NEXT: [[L5:%.+]] = rtg.constant #rtg.isa.label<"s1">
 # ELABORATED-NEXT: rtg.label local [[L5]]
-
-# ELABORATED-NEXT: rtg.comment "this is a comment"
-
 # ELABORATED-NEXT: }
 
 # ASM-LABEL: Begin of test 'test2_labels
@@ -223,24 +219,16 @@ def test1_args(config):
 # ASM-NEXT: l0:
 # ASM-NEXT: .extern l1_0
 # ASM-NEXT: l1_1:
-
 # ASM-NEXT: l0:
 # ASM-NEXT: l1_1:
-
 # ASM-NEXT: L_5:
 # ASM-NEXT: L_3:
-
 # ASM-NEXT: l1_1:
 # ASM-NEXT: l0:
-
-# ASM-NEXT: l1_0:
-# ASM-NEXT: l1_0:
 # ASM-NEXT: l0:
-
+# ASM-NEXT: l1_0:
+# ASM-NEXT: l1_0:
 # ASM-NEXT: s1:
-
-# ASM-NEXT: # this is a comment
-
 # ASM: End of test 'test2_labels
 
 
@@ -267,9 +255,9 @@ def test2_labels(config):
   sub = Integer(1) - Integer(2)
   add = (sub & Integer(4) | Integer(3) ^ Integer(5))
   add += sub
-  l3 = Label.declare(r"L_{{0}}", add)
+  l3 = Label.declare(String("L_") + add.to_string())
   l3.place()
-  l4 = Label.declare(r"L_{{0}}", 3)
+  l4 = Label.declare("L_3")
   l4.place()
 
   bag0 = Bag.create((2, l0), (1, l1))
@@ -289,10 +277,11 @@ def test2_labels(config):
 
   seq1()
 
-  embed_comment("this is a comment")
-
 
 # MLIR-LABEL: rtg.test @test3_registers_and_immediates()
+# MLIR-NEXT: [[V0:%.+]] = rtg.constant #rtg.isa.immediate<32, 286331153> : !rtg.isa.immediate<32>
+# MLIR-NEXT: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<32, -2147483648> : !rtg.isa.immediate<32>
+# MLIR-NEXT: [[V2:%.+]] = rtg.constant #rtg.isa.immediate<32, 2147483647> : !rtg.isa.immediate<32>
 # MLIR-NEXT: %idx2097151 = index.constant 2097151
 # MLIR-NEXT: %idx0 = index.constant 0
 # MLIR-NEXT: [[IMM32:%.+]] = rtg.constant #rtg.isa.immediate<32, 32>
@@ -304,14 +293,17 @@ def test2_labels(config):
 # MLIR-NEXT: [[IMM12:%.+]] = rtg.constant #rtg.isa.immediate<12, 8>
 # MLIR-NEXT: [[T0:%.+]] = rtg.constant #rtgtest.t0 : !rtgtest.ireg
 # MLIR-NEXT: [[VREG:%.+]] = rtg.virtual_reg [#rtgtest.t0 : !rtgtest.ireg, #rtgtest.t1 : !rtgtest.ireg, #rtgtest.t2 : !rtgtest.ireg, #rtgtest.t3 : !rtgtest.ireg, #rtgtest.t4 : !rtgtest.ireg, #rtgtest.t5 : !rtgtest.ireg, #rtgtest.t6 : !rtgtest.ireg, #rtgtest.a7 : !rtgtest.ireg, #rtgtest.a6 : !rtgtest.ireg, #rtgtest.a5 : !rtgtest.ireg, #rtgtest.a4 : !rtgtest.ireg, #rtgtest.a3 : !rtgtest.ireg, #rtgtest.a2 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg, #rtgtest.a0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg, #rtgtest.s2 : !rtgtest.ireg, #rtgtest.s3 : !rtgtest.ireg, #rtgtest.s4 : !rtgtest.ireg, #rtgtest.s5 : !rtgtest.ireg, #rtgtest.s6 : !rtgtest.ireg, #rtgtest.s7 : !rtgtest.ireg, #rtgtest.s8 : !rtgtest.ireg, #rtgtest.s9 : !rtgtest.ireg, #rtgtest.s10 : !rtgtest.ireg, #rtgtest.s11 : !rtgtest.ireg, #rtgtest.s0 : !rtgtest.ireg, #rtgtest.ra : !rtgtest.ireg, #rtgtest.sp : !rtgtest.ireg]
-# MLIR-NEXT: rtgtest.rv32i.addi [[VREG]], [[T0]], [[IMM12]]
-# MLIR-NEXT: rtgtest.rv32i.slli [[VREG]], [[T1]], [[IMM5]]
-# MLIR-NEXT: rtgtest.rv32i.beq [[VREG]], [[T2]], [[IMM13]] : !rtg.isa.immediate<13>
-# MLIR-NEXT: rtgtest.rv32i.jal [[VREG]], [[IMM21]] : !rtg.isa.immediate<21>
-# MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[IMM32]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtgtest.addi [[VREG]], [[T0]], [[IMM12]]
+# MLIR-NEXT: rtgtest.slli [[VREG]], [[T1]], [[IMM5]]
+# MLIR-NEXT: rtgtest.beq [[VREG]], [[T2]], [[IMM13]] : !rtg.isa.immediate<13>
+# MLIR-NEXT: rtgtest.jal [[VREG]], [[IMM21]] : !rtg.isa.immediate<21>
+# MLIR-NEXT: rtgtest.auipc [[VREG]], [[IMM32]] : !rtg.isa.immediate<32>
 # MLIR-NEXT: [[RND:%.+]] = rtg.random_number_in_range [%idx0, %idx2097151]
 # MLIR-NEXT: [[RND_IMM:%.+]] = rtg.isa.int_to_immediate [[RND]]
-# MLIR-NEXT: rtgtest.rv32i.jal [[VREG]], [[RND_IMM]] : !rtg.isa.immediate<21>
+# MLIR-NEXT: rtgtest.jal [[VREG]], [[RND_IMM]] : !rtg.isa.immediate<21>
+# MLIR-NEXT: rtgtest.auipc [[VREG]], [[V0]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtgtest.auipc [[VREG]], [[V2]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtgtest.auipc [[VREG]], [[V1]] : !rtg.isa.immediate<32>
 # MLIR-NEXT: }
 
 
@@ -325,13 +317,17 @@ def test3_registers_and_immediates(config):
   rtgtest.JAL(vreg, Immediate(21, 16))
   rtgtest.AUIPC(vreg, Immediate(32, 32))
   rtgtest.JAL(vreg, Immediate.random(21))
+  imm4 = Immediate(4, 1)
+  rtgtest.AUIPC(vreg, imm4.replicate(8))
+  rtgtest.AUIPC(vreg, Immediate.smax(32))
+  rtgtest.AUIPC(vreg, Immediate.smin(32))
 
 
 # MLIR-LABEL: rtg.test @test4_integer_to_immediate()
 # MLIR-NEXT: [[V0:%.+]] = rtg.constant
 # MLIR-NEXT: [[V1:%.+]] = index.constant 2
 # MLIR-NEXT: [[V2:%.+]] = rtg.isa.int_to_immediate [[V1]] : !rtg.isa.immediate<12>
-# MLIR-NEXT: rtgtest.rv32i.addi [[V0]], [[V0]], [[V2]]
+# MLIR-NEXT: rtgtest.addi [[V0]], [[V0]], [[V2]]
 
 
 @test(Singleton)
@@ -347,7 +343,7 @@ def test4_integer_to_immediate(config):
 # MLIR-NEXT: [[MEM:%.+]] = rtg.isa.memory_alloc %mem_blk, [[IDX8]], [[IDX4]] : !rtg.isa.memory_block<32>
 # MLIR-NEXT: [[SIZE:%.+]] = rtg.isa.memory_size [[MEM]] : !rtg.isa.memory<32>
 # MLIR-NEXT: [[IMM:%.+]] = rtg.isa.int_to_immediate [[SIZE]] : !rtg.isa.immediate<32>
-# MLIR-NEXT: rtgtest.rv32i.auipc [[REG]], [[IMM]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtgtest.auipc [[REG]], [[IMM]] : !rtg.isa.immediate<32>
 
 
 @test(Tgt2)
@@ -404,6 +400,32 @@ def test8_random_integer(config):
   int_consumer(Integer.random(config.a, config.b))
 
 
+# MLIR-LABEL: rtg.test @test9_integer_arithmetic_ops
+# MLIR: rtg.substitute_sequence {{.*}}(%true)
+# MLIR: rtg.substitute_sequence {{.*}}(%true)
+# MLIR: rtg.substitute_sequence {{.*}}(%true)
+# MLIR: rtg.substitute_sequence {{.*}}(%true)
+# MLIR: rtg.substitute_sequence {{.*}}(%true)
+# MLIR: rtg.substitute_sequence {{.*}}(%true)
+# MLIR: rtg.substitute_sequence {{.*}}(%true)
+# MLIR: rtg.substitute_sequence {{.*}}(%true)
+
+
+@test(TwoIntegers)
+def test9_integer_arithmetic_ops(config):
+  a = Integer(10)
+  b = Integer(3)
+
+  consumer(a * b == Integer(30))
+  consumer(a // b == Integer(3))
+  consumer(a / b == Integer(4))
+  consumer(a % b == Integer(1))
+  consumer(a << Integer(2) == Integer(40))
+  consumer(a >> Integer(2) == Integer(2))
+  consumer(a.max(b) == Integer(10))
+  consumer(a.min(b) == Integer(3))
+
+
 # MLIR-LABEL: rtg.test @test90_tuples
 # MLIR-NEXT: [[V0:%.+]] = rtg.tuple_create %a, %b : index, i1
 # MLIR-NEXT: rtg.tuple_extract [[V0]] at 1 : !rtg.tuple<index, i1>
@@ -455,7 +477,7 @@ class PythonParams(Config):
 
 
 # MLIR-LABEL: rtg.test @test92_python_params
-# MLIR-NEXT: [[LBL:%.+]] = rtg.label_decl "python_64"
+# MLIR-NEXT: [[LBL:%.+]] = rtg.constant #rtg.isa.label<"python_64">
 # MLIR-NEXT: rtg.label local [[LBL]]
 
 
@@ -484,7 +506,7 @@ def test93_immediate_ops(config):
 
 
 # MLIR-LABEL: rtg.sequence @seq0
-# MLIR-SAME: ([[SET:%.+]]: !rtg.set<!rtg.isa.label>)
+# MLIR-SAME: ([[SET:%.+]]: !rtg.set<!rtg.isa.label>{{.*}})
 # MLIR-NEXT: [[LABEL:%.+]] = rtg.set_select_random [[SET]]
 # MLIR-NEXT: rtg.label local [[LABEL]]
 # MLIR-NEXT: }
@@ -496,7 +518,7 @@ def seq0(set: Set):
 
 
 # MLIR-LABEL: rtg.sequence @seq1
-# MLIR-NEXT: [[LABEL:%.+]] = rtg.label_decl "s1"
+# MLIR-NEXT: [[LABEL:%.+]] = rtg.constant #rtg.isa.label<"s1">
 # MLIR-NEXT: rtg.label local [[LABEL]]
 # MLIR-NEXT: }
 
@@ -504,3 +526,50 @@ def seq0(set: Set):
 @sequence([])
 def seq1():
   Label.declare("s1").place()
+
+
+# ASM-LABEL: Begin of test 'test94_to_string
+# ASM-NEXT: # imm=0x2A{{$}}
+# ASM-NEXT: # reg=t0{{$}}
+# ASM: End of test 'test94_to_string
+
+
+@test(Singleton)
+def test94_to_string(config):
+  imm = Immediate(12, 42)
+  imm_str = imm.to_string()
+  embed_comment(String("imm=") + imm_str)
+
+  reg = IntegerRegister.t0()
+  reg_str = reg.to_string()
+  embed_comment(String("reg=") + reg_str)
+
+
+# ASM-LABEL: Begin of test 'test95_string_format
+# ASM-NEXT: # hello 42 t2 0xAB 4{{$}}
+# ASM-NEXT: # hello-world-test{{$}}
+# ASM: End of test 'test95_string_format
+
+
+@test(Singleton)
+def test95_string_format(config):
+  embed_comment(
+      String.format(String("hello"), Integer(42), IntegerRegister.t2(),
+                    Immediate(8, 171), 4))
+  embed_comment(
+      String.format(String("hello"), "world", String("test"), delimiter="-"))
+
+
+# ASM-LABEL: Begin of test 'test96_float_registers
+# ASM-NEXT: # f0=f0{{$}}
+# ASM: End of test 'test96_float_registers
+
+
+@test(Singleton)
+def test96_float_registers(config):
+  f0 = FloatRegister.f0()
+  f0_str = f0.to_string()
+  embed_comment(String("f0=") + f0_str)
+
+  vreg = FloatRegister.virtual()
+  vreg.to_string()

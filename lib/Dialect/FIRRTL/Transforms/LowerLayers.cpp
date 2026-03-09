@@ -222,7 +222,8 @@ class LowerLayersPass
 
   /// Safely build a new module with a given namehint.  This handles geting a
   /// lock to modify the top-level circuit.
-  FModuleOp buildNewModule(OpBuilder &builder, LayerBlockOp layerBlock);
+  FModuleOp buildNewModule(OpBuilder &builder, LayerBlockOp layerBlock,
+                           ArrayRef<PortInfo> ports);
 
   /// Strip layer colors from the module's interface.
   FailureOr<InnerRefMap> runOnModuleLike(FModuleLike moduleLike);
@@ -296,14 +297,15 @@ class LowerLayersPass
 /// generated if there are conflicts with the namehint in the circuit-level
 /// namespace.
 FModuleOp LowerLayersPass::buildNewModule(OpBuilder &builder,
-                                          LayerBlockOp layerBlock) {
+                                          LayerBlockOp layerBlock,
+                                          ArrayRef<PortInfo> ports) {
   auto location = layerBlock.getLoc();
   auto namehint = layerBlockGlobals.lookup(layerBlock).moduleName;
   llvm::sys::SmartScopedLock<true> instrumentationLock(*circuitMutex);
   FModuleOp newModule = FModuleOp::create(
       builder, location, builder.getStringAttr(namehint),
-      ConventionAttr::get(builder.getContext(), Convention::Internal),
-      ArrayRef<PortInfo>{}, ArrayAttr{});
+      ConventionAttr::get(builder.getContext(), Convention::Internal), ports,
+      ArrayAttr{});
   if (auto dir = getOutputFile(layerBlock.getLayerNameAttr())) {
     assert(dir.isDirectory());
     newModule->setAttr("output_file", dir);
@@ -399,17 +401,9 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
                                                InnerRefMap &innerRefMap) {
   hw::InnerSymbolNamespace ns(moduleOp);
 
-  // A cache of values to nameable ops that can be used
-  DenseMap<Value, Operation *> nodeCache;
-
   // Get or create a node op for a value captured by a layer block.
   auto getOrCreateNodeOp = [&](Value operand,
-                               ImplicitLocOpBuilder &builder) -> Operation * {
-    // Use the cache hit.
-    auto *nodeOp = nodeCache.lookup(operand);
-    if (nodeOp)
-      return nodeOp;
-
+                               ImplicitLocOpBuilder &builder) -> NodeOp {
     // Create a new node.  Put it in the cache and use it.
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointAfterValue(operand);
@@ -424,17 +418,19 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       } else if (auto opName = definingOp->getAttrOfType<StringAttr>("name")) {
         nameHint.append(opName);
       }
+      nameHint.append("_layer_probe");
     }
-    return nodeOp = NodeOp::create(builder, operand.getLoc(), operand,
-                                   nameHint.empty() ? "_layer_probe"
-                                                    : StringRef(nameHint));
+
+    return NodeOp::create(builder, operand.getLoc(), operand,
+                          StringRef(nameHint));
   };
 
   // Determine the replacement for an operand within the current region.  Keep a
   // densemap of replacements around to avoid creating the same hardware
   // multiple times.
   DenseMap<Value, Value> replacements;
-  auto getReplacement = [&](Operation *user, Value value) -> Value {
+  std::function<Value(Operation *, Value)> getReplacement =
+      [&](Operation *user, Value value) -> Value {
     auto it = replacements.find(value);
     if (it != replacements.end())
       return it->getSecond();
@@ -465,15 +461,46 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       return replacement;
     }
 
+    // If the value is an instance input port, recurse on its driver instead.
+    // Instance input ports have special flow semantics (sink flow but can be
+    // read from). By recursing on the driver, we avoid creating a node for the
+    // instance port itself and instead directly XMR reference the driver,
+    // creating an intermediary node to dereference if the driver cannot support
+    // an inner symbol. This avoids creating intermediary nodes unless
+    // absolutely required while also avoiding dead code.
+    if (isa_and_present<InstanceOp, InstanceChoiceOp>(definingOp)) {
+      bool isInstanceInputPort =
+          TypeSwitch<Operation *, bool>(definingOp)
+              .Case<InstanceOp, InstanceChoiceOp>([&](auto instOp) {
+                for (auto [idx, result] : llvm::enumerate(instOp.getResults()))
+                  if (result == value)
+                    return instOp.getPortDirection(idx) == Direction::In;
+                return false;
+              })
+              .Default(false);
+
+      if (isInstanceInputPort) {
+        if (auto driver = getDriverFromConnect(value)) {
+          // Recurse on the driver to get its replacement. The connect stays
+          // as-is (driver -> instance port) in the original module.
+          replacement = getReplacement(user, driver);
+          replacements.insert({value, replacement});
+          return replacement;
+        }
+      }
+    }
+
     // Determine the replacement value for the captured operand.  There are
     // three cases that can occur:
     //
     // 1. Capturing something zero-width.  Create a zero-width constant zero.
-    // 2. Capture an expression or instance port.  Drop a node and XMR deref
-    //    that.
-    // 3. Capture something that can handle an inner sym.  XMR deref that.
+    // 2. Capture something that can handle an inner sym.  Add the inner sym if
+    //    it doesn't exist and XMRderef that.
+    // 3. Capture something that can't handle an inner sym.  Add a node and XMR
+    //    deref the node.
     //
-    // Note: (3) can be either an operation or a _module_ port.
+    // The handling of (2) and (3) is diffuse in the code below due to needing
+    // to split things based on whether a value has a defining operation or not.
     auto baseType = type_cast<FIRRTLBaseType>(value.getType());
     if (baseType && baseType.getBitWidthOrSentinel() == 0) {
       OpBuilder::InsertionGuard guard(localBuilder);
@@ -482,18 +509,27 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
           value.getType(), ConstantOp::create(localBuilder, zeroUIntType,
                                               getIntZerosAttr(zeroUIntType)));
     } else {
-      auto *definingOp = value.getDefiningOp();
       hw::InnerRefAttr innerRef;
-      if (definingOp) {
-        // Always create a node.  This is a trade-off between optimizations and
-        // dead code.  By adding the node, this allows the original path to be
-        // better optimized, but will leave dead code in the design.  If the
-        // node is not created, then the output is less optimized.  Err on the
-        // side of dead code.  This dead node _may_ be eventually inlined by
-        // `ExportVerilog`.  However, this is not guaranteed.
-        definingOp = getOrCreateNodeOp(value, localBuilder);
-        innerRef = getInnerRefTo(
-            definingOp, [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+      if (auto *definingOp = value.getDefiningOp()) {
+        // Check if the operation can support an inner symbol and targets a
+        // specific result.
+        auto innerSymOp = dyn_cast<hw::InnerSymbolOpInterface>(definingOp);
+        if (innerSymOp && innerSymOp.getTargetResultIndex()) {
+          // The operation can support an inner symbol, so add one directly.
+          innerRef = getInnerRefTo(
+              innerSymOp,
+              [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+        } else {
+          // The operation cannot support an inner symbol, or it has multiple
+          // results and doesn't target a specific result, so create a node
+          // and XMR deref the node.
+          auto node = getOrCreateNodeOp(value, localBuilder);
+          innerRef = getInnerRefTo(
+              node, [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+          auto newValue = node.getResult();
+          value.replaceAllUsesExcept(newValue, node);
+          value = newValue;
+        }
       } else {
         auto portIdx = cast<BlockArgument>(value).getArgNumber();
         innerRef = getInnerRefTo(
@@ -525,7 +561,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
   // A map of instance ops to modules that this pass creates.  This is used to
   // check if this was an instance that we created and to do fast module
   // dereferencing (avoiding a symbol table).
-  DenseMap<InstanceOp, FModuleOp> createdInstances;
+  DenseMap<Operation *, FModuleOp> createdInstances;
 
   // Check that the preconditions for this pass are met.  Reject any ops which
   // must have been removed before this runs.
@@ -540,9 +576,84 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     return success();
   };
 
+  // Utility to determine the domain type of some value.  This looks backwards
+  // through connections to find the source driver in the module and gets the
+  // domain type of that.  This is necessary as intermediary wires do not track
+  // domain information.
+  //
+  // This cannot use `getModuleScopedDriver` because this can be called while
+  // `LayerBlockOp`s have temporarily gained block arguments while they are
+  // being migrated to modules.  This is worked around by caching the known
+  // domain kinds of earlier-visited `WireOp`s to avoid needing to look through
+  // these non-`ModuleOp` block arguments.
+  //
+  // TODO: Simplify this once wires have domain kind information [1].
+  //
+  // [1]: https://github.com/llvm/circt/issues/9398
+  DenseMap<Operation *, Attribute> domainMap;
+  auto getDomain = [&domainMap](Value value,
+                                Attribute &domain) -> LogicalResult {
+    SmallVector<Operation *> wires;
+
+    // Use iteration as this is recursive over the IR.  `value` is changed for
+    // each iteration.
+    while (!domain) {
+      if (auto arg = dyn_cast<BlockArgument>(value)) {
+        domain = cast<FModuleLike>(arg.getOwner()->getParentOp())
+                     .getDomainInfoAttrForPort(arg.getArgNumber());
+        continue;
+      }
+
+      auto result =
+          TypeSwitch<Operation *, LogicalResult>(value.getDefiningOp())
+              .Case<WireOp>([&](WireOp op) {
+                auto it = domainMap.find(op);
+                if (it != domainMap.end()) {
+                  domain = it->getSecond();
+                  return success();
+                }
+                for (auto *user : op->getUsers()) {
+                  auto connect = dyn_cast<FConnectLike>(user);
+                  if (!connect || connect.getDest() != value)
+                    continue;
+                  value = connect.getSrc();
+                  wires.push_back(op);
+                  return success();
+                }
+                emitError(value.getLoc())
+                    << "unable to determine domain kind for source likely "
+                       "indicating a "
+                       "violation of static-single-connect";
+                return failure();
+              })
+              .Case<InstanceOp>([&](auto op) {
+                domain =
+                    op.getPortDomain(cast<OpResult>(value).getResultNumber());
+                return success();
+              })
+              .Case<DomainCreateAnonOp>([&](auto op) {
+                domain = op.getDomainAttr();
+                return success();
+              })
+              .Default([&](auto op) {
+                op->emitOpError() << "unhandled domain source in 'LowerLayers";
+                return failure();
+              });
+      if (failed(result))
+        return failure();
+    }
+
+    // Update the `domainMap` with wire/domain information.
+    for (auto *wire : wires)
+      domainMap[wire] = domain;
+
+    return success();
+  };
+
   // Post-order traversal that expands a layer block into its parent. Because of
   // the pass precondition that this runs _after_ `LowerXMR`, not much has to
-  // happen here.  All of the following do happen, though:
+  // happen here, other than for domain information.  All of the following do
+  // happen, though:
   //
   // 1. Any layer coloring is stripped.
   // 2. Layers with Inline convention are converted to SV ifdefs.
@@ -555,6 +666,8 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
   // 5. Keep track of special ops (ops with inner symbols or verbatims) which
   //    need to have something updated because of the new instance hierarchy
   //    being created.
+  // 6. Any captured domain information result in input/output ports being
+  //    created and these being hooked up when new modules are instantiated.
   //
   // Remember, this is post-order, in-order.  Child layer blocks are visited
   // before parents.  Any nested regions _within_ the layer block are also
@@ -585,6 +698,109 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 
     // After this point, we are dealing with a bind convention layer block.
     assert(layer.getConvention() == LayerConvention::Bind);
+
+    // Utilities and mutable state that results from creating ports.  Due to the
+    // way in which this pass works and its phase ordering, the only types of
+    // ports that can be created are domain type ports.
+    SmallVector<PortInfo> ports;
+    SmallVector<Value> connectValues;
+    Namespace portNs;
+
+    // Create an input port for a domain-type operand.  The source is not in the
+    // current layer block.
+    auto createInputPort = [&](Value src, Location loc) -> LogicalResult {
+      Attribute domain;
+      if (failed(getDomain(src, domain)))
+        return failure();
+
+      StringAttr name;
+      auto [nameHint, rootKnown] = getFieldName(FieldRef(src, 0), true);
+      if (rootKnown)
+        name = StringAttr::get(src.getContext(), portNs.newName(nameHint));
+      else
+        name = StringAttr::get(src.getContext(), portNs.newName("anonDomain"));
+      PortInfo port(
+          /*name=*/name,
+          /*type=*/src.getType(),
+          /*dir=*/Direction::In,
+          /*symName=*/{},
+          /*location=*/loc,
+          /*annos=*/{},
+          /*domains=*/domain);
+      ports.push_back(port);
+      connectValues.push_back(src);
+      BlockArgument replacement =
+          layerBlock.getBody()->addArgument(port.type, port.loc);
+      src.replaceUsesWithIf(replacement, [&](OpOperand &use) {
+        auto *user = use.getOwner();
+        if (!layerBlock->isAncestor(user))
+          return false;
+        // Replace if the connection source is the src and if the destination is
+        // _not_ in this layer block.  If the destination is a spilled or
+        // to-be-spilled instance, then do not replace this connection as it
+        // will _later_ be spilled.
+        if (auto connectLike = dyn_cast<FConnectLike>(user)) {
+          auto *destDefiningOp = connectLike.getDest().getDefiningOp();
+          return connectLike.getSrc() == src &&
+                 !createdInstances.contains(destDefiningOp);
+        }
+        return false;
+      });
+      return success();
+    };
+
+    // Set the location intelligently.  Use the location of the capture if this
+    // is a port created for forwarding from a parent layer block to a nested
+    // layer block.  Otherwise, use unknown.
+    auto getPortLoc = [&](Value port) -> Location {
+      Location loc = UnknownLoc::get(port.getContext());
+      if (auto *destOp = port.getDefiningOp())
+        if (auto instOp = dyn_cast<InstanceOp>(destOp)) {
+          auto modOpIt = createdInstances.find(instOp);
+          if (modOpIt != createdInstances.end()) {
+            auto portNum = cast<OpResult>(port).getResultNumber();
+            loc = modOpIt->getSecond().getPortLocation(portNum);
+          }
+        }
+      return loc;
+    };
+
+    // Source is in the current layer block.  The destination is not in the
+    // current layer block.
+    auto createOutputPort = [&](Value src, Value dest) -> LogicalResult {
+      Attribute domain;
+      if (failed(getDomain(src, domain)))
+        return failure();
+
+      StringAttr name;
+      auto [nameHint, rootKnown] = getFieldName(FieldRef(src, 0), true);
+      if (rootKnown)
+        name = StringAttr::get(src.getContext(), portNs.newName(nameHint));
+      else
+        name = StringAttr::get(src.getContext(), portNs.newName("anonDomain"));
+      PortInfo port(
+          /*name=*/name,
+          /*type=*/src.getType(),
+          /*dir=*/Direction::Out,
+          /*symName=*/{},
+          /*location=*/getPortLoc(dest),
+          /*annos=*/{},
+          /*domains=*/domain);
+      ports.push_back(port);
+      connectValues.push_back(dest);
+      BlockArgument replacement =
+          layerBlock.getBody()->addArgument(port.type, port.loc);
+      dest.replaceUsesWithIf(replacement, [&](OpOperand &use) {
+        auto *user = use.getOwner();
+        if (!layerBlock->isAncestor(user))
+          return false;
+        // Replace connection destinations.
+        if (auto connectLike = dyn_cast<FConnectLike>(user))
+          return connectLike.getDest() == dest;
+        return false;
+      });
+      return success();
+    };
 
     // Clear the replacements so that none are re-used across layer blocks.
     replacements.clear();
@@ -715,6 +931,48 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         return WalkResult::advance();
       }
 
+      // Handle domain define ops.  The destination must be within the current
+      // layer block.  The source may be outside it.  These, unlike other XMR
+      // captures, need to create ports as there is no XMR representation for
+      // domains.  When creating these, look through any intermediate wires as
+      // these need to know the domain kind when creating the port and wires do
+      // not presently have this.
+      //
+      // TODO: Stop looking through wires when wires support domain info [1].
+      //
+      // [1]: https://github.com/llvm/circt/issues/9398
+      if (auto domainDefineOp = dyn_cast<DomainDefineOp>(op)) {
+        auto src = domainDefineOp.getSrc();
+        auto dest = domainDefineOp.getDest();
+        auto srcInLayerBlock = isAncestorOfValueOwner(layerBlock, src);
+        auto destInLayerBlock = isAncestorOfValueOwner(layerBlock, dest);
+
+        if (srcInLayerBlock) {
+          // The source and destination are in the current block.  Do nothing.
+          if (destInLayerBlock)
+            return WalkResult::advance();
+          // The source is in the current layer block, but the destination is
+          // outside it.  This is not possible except in situations where we
+          // have moved an instance out of the layer block.  I.e., this is due
+          // to a child layer (which has already been processed) capturing
+          // something from the current layer block.
+          return WalkResult(createOutputPort(src, dest));
+        }
+
+        // The source is _not_ in the current block.  Create an input domain
+        // type port with the right kind.  To find the right kind, we need to
+        // look through wires to the original source.
+        if (destInLayerBlock)
+          return WalkResult(createInputPort(src, domainDefineOp.getLoc()));
+
+        // The source and destination are outside the layer block.  Bubble this
+        // up.  Note: this code is only reachable for situations where a prior
+        // instance, created from a bind layer has been bubbled up. This flavor
+        // of construction is otherwise illegal.
+        domainDefineOp->moveBefore(layerBlock);
+        return WalkResult::advance();
+      }
+
       // Handle captures.  For any captured operands, convert them to a suitable
       // replacement value.  The `getReplacement` function will automatically
       // reuse values whenever possible.
@@ -752,14 +1010,23 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     }
 
     // Create the new module.  This grabs a lock to modify the circuit.
-    FModuleOp newModule = buildNewModule(builder, layerBlock);
+    FModuleOp newModule = buildNewModule(builder, layerBlock, ports);
+    newModule.getBody().takeBody(layerBlock.getRegion());
     SymbolTable::setSymbolVisibility(newModule,
                                      SymbolTable::Visibility::Private);
-    newModule.getBody().takeBody(layerBlock.getRegion());
 
     LLVM_DEBUG({
       llvm::dbgs() << "      New Module: "
                    << layerBlockGlobals.lookup(layerBlock).moduleName << "\n";
+      llvm::dbgs() << "        ports:\n";
+      for (size_t i = 0, e = ports.size(); i != e; ++i) {
+        auto port = ports[i];
+        auto value = connectValues[i];
+        llvm::dbgs() << "          - name: " << port.getName() << "\n"
+                     << "            type: " << port.type << "\n"
+                     << "            direction: " << port.direction << "\n"
+                     << "            value: " << value << "\n";
+      }
     });
 
     // Replace the original layer block with an instance.  Hook up the
@@ -780,6 +1047,12 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         /*annotations=*/ArrayRef<Attribute>{},
         /*portAnnotations=*/ArrayRef<Attribute>{}, /*lowerToBind=*/false,
         /*doNotPrint=*/true, innerSym);
+    for (auto [lhs, rhs] : llvm::zip(instanceOp.getResults(), connectValues))
+      if (instanceOp.getPortDirection(lhs.getResultNumber()) == Direction::In)
+        DomainDefineOp::create(builder, builder.getUnknownLoc(), lhs, rhs);
+      else {
+        DomainDefineOp::create(builder, builder.getUnknownLoc(), rhs, lhs);
+      }
 
     auto outputFile = outputFileForLayer(moduleOp.getModuleNameAttr(),
                                          layerBlock.getLayerName());
@@ -959,7 +1232,6 @@ void LowerLayersPass::buildBindFile(CircuitNamespace &ns,
 void LowerLayersPass::preprocessModule(CircuitNamespace &ns,
                                        InstanceGraphNode *node,
                                        FModuleOp module) {
-
   OpBuilder b(&getContext());
   b.setInsertionPointAfter(module);
 
@@ -1005,8 +1277,8 @@ void LowerLayersPass::preprocessModule(CircuitNamespace &ns,
       layersRequiringBindFiles.insert(layer);
   }
 
-  // Build the bindfiles for any layer seen under this module. The bindfiles are
-  // emitted in the order which they are declared, for readability.
+  // Build the bindfiles for any layer seen under this module. The bindfiles
+  // are emitted in the order which they are declared, for readability.
   for (auto [sym, layer] : symbolToLayer)
     if (layersRequiringBindFiles.contains(layer))
       buildBindFile(ns, node, b, sym, layer);

@@ -20,6 +20,9 @@ firrtl.module @Intrinsics(in %ui : !firrtl.uint, in %clock: !firrtl.clock, in %u
   // CHECK-NEXT: firrtl.int.isX %ui : !firrtl.uint
   %isx = firrtl.int.isX %ui : !firrtl.uint
 
+  // CHECK-NEXT: firrtl.asReset %ui1 : (!firrtl.uint<1>) -> !firrtl.reset
+  %reset = firrtl.asReset %ui1 : (!firrtl.uint<1>) -> !firrtl.reset
+
   // CHECK-NEXT: firrtl.int.plusargs.test "foo"
   // CHECK-NEXT: firrtl.int.plusargs.value "bar" : !firrtl.uint<5>
   %foo_found = firrtl.int.plusargs.test "foo"
@@ -155,6 +158,17 @@ firrtl.module @PropertyListOps() {
   %concat = firrtl.list.concat %l0, %l1 : !firrtl.list<integer>
 }
 
+firrtl.class @UnknownValueChild() {}
+// CHECK-LABEL: firrtl.module @UnknownValueOp
+firrtl.module @UnknownValueOp() {
+  // CHECK-NEXT: %0 = firrtl.unknown : !firrtl.integer
+  %0 = firrtl.unknown : !firrtl.integer
+  // CHECK-NEXT: %1 = firrtl.unknown : !firrtl.string
+  %1 = firrtl.unknown : !firrtl.string
+  // CHECK-NEXT: %2 = firrtl.unknown : !firrtl.class<@UnknownValueChild()>
+  %2 = firrtl.unknown : !firrtl.class<@UnknownValueChild()>
+}
+
 firrtl.formal @myFormalTestA, @Top {}
 firrtl.formal @myFormalTestB, @Top {bound = 42 : i19}
 firrtl.formal @myFormalTestC, @Top {} attributes {foo}
@@ -168,6 +182,18 @@ firrtl.extmodule @SimulationTop(
   in init: !firrtl.uint<1>,
   out done: !firrtl.uint<1>,
   out success: !firrtl.uint<1>
+)
+
+// Simulation targets may have additional property ports
+firrtl.simulation @mySimulationTestWithProps, @SimulationTopWithProps {}
+
+firrtl.extmodule @SimulationTopWithProps(
+  in clock: !firrtl.clock,
+  in init: !firrtl.uint<1>,
+  out done: !firrtl.uint<1>,
+  out success: !firrtl.uint<1>,
+  in someProp: !firrtl.string,
+  out anotherProp: !firrtl.integer
 )
 
 firrtl.module @Contracts(in %a: !firrtl.uint<42>, in %b: !firrtl.bundle<x: uint<1337>>) {
@@ -290,6 +316,18 @@ firrtl.module @CreateAnonDomain() {
   )
   // CHECK: firrtl.domain.define %child_A, %0
   firrtl.domain.define %child_A, %0
+}
+
+// CHECK-LABEL: firrtl.module @CreateDomain
+firrtl.extmodule @CreateDomainChild(in A: !firrtl.domain of @ClockDomain)
+firrtl.module @CreateDomain() {
+  // CHECK-NEXT: %my_domain = firrtl.domain.create : !firrtl.domain of @ClockDomain
+  %my_domain = firrtl.domain.create : !firrtl.domain of @ClockDomain
+  %child_A = firrtl.instance child @CreateDomainChild(
+    in A: !firrtl.domain of @ClockDomain
+  )
+  // CHECK: firrtl.domain.define %child_A, %my_domain
+  firrtl.domain.define %child_A, %my_domain
 }
 
 }

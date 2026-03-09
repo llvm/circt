@@ -1,0 +1,9 @@
+{
+  "runners": [
+    {
+      "name": "runB",
+      "binary": "true",
+      "kind": "simulation"
+    }
+  ]
+}

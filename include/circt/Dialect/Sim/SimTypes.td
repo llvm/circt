@@ -26,4 +26,50 @@ def FormatStringType : SimTypeDef<"FormatString"> {
   }];
 }
 
+def DynamicStringType : SimTypeDef<"DynamicString"> {
+  let mnemonic = "dstring";
+
+  let summary = "String type with variable length"; 
+  let description = [{
+    The dynamic string type represents a string with a variable length that is 
+    only known at runtime. The contents of the string are held as an array of
+    `i8` bytes. The interpretation of these bytes as a concrete character 
+    encoding is undefined, but treating the bytes as a UTF-8 string is 
+    recommended. A string's length must fit into an `i64`.
+    
+    Even though practical lowerings of this type likely have to hold the string
+    contents in dynamically-allocated heap memory, *this type has value
+    semantics*. If the same string SSA value is passed to multiple users, any
+    mutation performed by one user is not visible to other users.
+  }];
+}
+
+def QueueType : SimTypeDef<"Queue"> {
+  let mnemonic = "queue";
+  let summary = "a queue type"; 
+  let description = [{
+    An ordered container of elements with an optional upper bound 
+    on the number of elements that it can hold. If this bound is 0, then the
+    queue has unrestricted capacity.
+
+    Even though practical lowerings of this type likely have to hold the queue
+    contents in dynamically-allocated heap memory, *this type has value
+    semantics*.
+  }];
+
+  let parameters = (ins
+    "::mlir::Type":$elementType,
+    "unsigned":$bound
+  );
+  let assemblyFormat = [{
+    `<` $elementType `,` $bound `>`
+  }];
+  let builders = [
+    AttrBuilderWithInferredContext<
+      (ins "Type":$elementType, "unsigned":$bound), [{
+        return $_get(elementType.getContext(), elementType, bound);
+      }]>
+  ];
+}
+
 #endif // CIRCT_DIALECT_SIM_SIMTYPES_TD

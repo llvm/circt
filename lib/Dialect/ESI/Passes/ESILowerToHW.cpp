@@ -128,7 +128,8 @@ public:
 LogicalResult NullSourceOpLowering::matchAndRewrite(
     NullSourceOp nullop, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
-  auto innerType = cast<ChannelType>(nullop.getOut().getType()).getInner();
+  auto chanType = cast<ChannelType>(nullop.getOut().getType());
+  auto innerType = chanType.getInner();
   Location loc = nullop.getLoc();
   int64_t width = hw::getBitWidth(innerType);
   if (width == -1)
@@ -139,79 +140,124 @@ LogicalResult NullSourceOpLowering::matchAndRewrite(
   auto zero =
       hw::ConstantOp::create(rewriter, loc, rewriter.getIntegerType(width), 0);
   auto typedZero = hw::BitcastOp::create(rewriter, loc, innerType, zero);
-  auto wrap = WrapValidReadyOp::create(rewriter, loc, typedZero, valid);
-  wrap->setAttr("name", rewriter.getStringAttr("nullsource"));
-  rewriter.replaceOp(nullop, {wrap.getChanOutput()});
+
+  if (chanType.getSignaling() == ChannelSignaling::ValidOnly) {
+    auto wrap = WrapValidOnlyOp::create(rewriter, loc, typedZero, valid);
+    wrap->setAttr("name", rewriter.getStringAttr("nullsource"));
+    rewriter.replaceOp(nullop, {wrap.getChanOutput()});
+  } else {
+    auto wrap = WrapValidReadyOp::create(rewriter, loc, typedZero, valid);
+    wrap->setAttr("name", rewriter.getStringAttr("nullsource"));
+    rewriter.replaceOp(nullop, {wrap.getChanOutput()});
+  }
   return success();
 }
 
 namespace {
-/// Eliminate back-to-back wrap-unwraps to reduce the number of ESI channels.
-struct RemoveWrapUnwrap : public ConversionPattern {
+/// Eliminate a WrapValidOnlyOp and its consumer UnwrapValidOnlyOp.
+struct RemoveWrapValidOnlyOp : public OpConversionPattern<WrapValidOnlyOp> {
 public:
-  RemoveWrapUnwrap(MLIRContext *context)
-      : ConversionPattern(MatchAnyOpTypeTag(), /*benefit=*/1, context) {}
+  using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+  matchAndRewrite(WrapValidOnlyOp wrap, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Value valid, ready, data;
-    WrapValidReadyOp wrap = dyn_cast<WrapValidReadyOp>(op);
-    UnwrapValidReadyOp unwrap = dyn_cast<UnwrapValidReadyOp>(op);
-    if (wrap) {
-      if (ChannelType::hasNoConsumers(wrap.getChanOutput())) {
-        auto c1 = hw::ConstantOp::create(rewriter, wrap.getLoc(),
-                                         rewriter.getI1Type(), 1);
-        rewriter.replaceOp(wrap, {nullptr, c1});
-        return success();
-      }
-
-      if (!ChannelType::hasOneConsumer(wrap.getChanOutput()))
-        return rewriter.notifyMatchFailure(
-            wrap, "This conversion only supports wrap-unwrap back-to-back. "
-                  "Wrap didn't have exactly one use.");
-      if (!(unwrap = dyn_cast<UnwrapValidReadyOp>(
-                ChannelType::getSingleConsumer(wrap.getChanOutput())
-                    ->getOwner())))
-        return rewriter.notifyMatchFailure(
-            wrap, "This conversion only supports wrap-unwrap back-to-back. "
-                  "Could not find 'unwrap'.");
-
-      data = operands[0];
-      valid = operands[1];
-      ready = unwrap.getReady();
-    } else if (unwrap) {
-      Operation *defOp = operands[0].getDefiningOp();
-      if (!defOp)
-        return rewriter.notifyMatchFailure(
-            unwrap, "unwrap input is not defined by an op");
-      wrap = dyn_cast<WrapValidReadyOp>(defOp);
-      if (!wrap)
-        return rewriter.notifyMatchFailure(
-            operands[0].getDefiningOp(),
-            "This conversion only supports wrap-unwrap back-to-back. "
-            "Could not find 'wrap'.");
-      valid = wrap.getValid();
-      data = wrap.getRawInput();
-      ready = operands[1];
-    } else {
-      return failure();
+    if (ChannelType::hasNoConsumers(wrap.getChanOutput())) {
+      rewriter.eraseOp(wrap);
+      return success();
     }
-
     if (!ChannelType::hasOneConsumer(wrap.getChanOutput()))
-      return rewriter.notifyMatchFailure(wrap, [](Diagnostic &d) {
-        d << "This conversion only supports wrap-unwrap back-to-back. "
-             "Wrap didn't have exactly one use.";
-      });
-    rewriter.replaceOp(wrap, {nullptr, ready});
-    rewriter.replaceOp(unwrap, {data, valid});
+      return rewriter.notifyMatchFailure(
+          wrap, "ValidOnly wrap didn't have exactly one consumer.");
+    auto unwrap = dyn_cast<UnwrapValidOnlyOp>(
+        ChannelType::getSingleConsumer(wrap.getChanOutput())->getOwner());
+    if (!unwrap)
+      return rewriter.notifyMatchFailure(
+          wrap, "ValidOnly wrap consumer is not an unwrap.vo.");
+    rewriter.replaceOp(unwrap, {adaptor.getRawInput(), adaptor.getValid()});
+    rewriter.eraseOp(wrap);
+    return success();
+  }
+};
+
+/// Eliminate an UnwrapValidOnlyOp by finding its producing WrapValidOnlyOp.
+struct RemoveUnwrapValidOnlyOp : public OpConversionPattern<UnwrapValidOnlyOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UnwrapValidOnlyOp unwrap, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto wrap = dyn_cast_or_null<WrapValidOnlyOp>(
+        adaptor.getChanInput().getDefiningOp());
+    if (!wrap)
+      return rewriter.notifyMatchFailure(
+          unwrap, "unwrap.vo input must come from a wrap.vo.");
+    if (!ChannelType::hasOneConsumer(wrap.getChanOutput()))
+      return rewriter.notifyMatchFailure(
+          wrap, "ValidOnly wrap didn't have exactly one consumer.");
+    rewriter.replaceOp(unwrap, {wrap.getRawInput(), wrap.getValid()});
+    rewriter.eraseOp(wrap);
+    return success();
+  }
+};
+
+/// Eliminate a WrapValidReadyOp and its consumer UnwrapValidReadyOp.
+struct RemoveWrapValidReadyOp : public OpConversionPattern<WrapValidReadyOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(WrapValidReadyOp wrap, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (ChannelType::hasNoConsumers(wrap.getChanOutput())) {
+      auto c1 = hw::ConstantOp::create(rewriter, wrap.getLoc(),
+                                       rewriter.getI1Type(), 1);
+      rewriter.replaceOp(wrap, {nullptr, c1});
+      return success();
+    }
+    if (!ChannelType::hasOneConsumer(wrap.getChanOutput()))
+      return rewriter.notifyMatchFailure(
+          wrap, "Wrap didn't have exactly one consumer.");
+    auto unwrap = dyn_cast<UnwrapValidReadyOp>(
+        ChannelType::getSingleConsumer(wrap.getChanOutput())->getOwner());
+    if (!unwrap)
+      return rewriter.notifyMatchFailure(wrap,
+                                         "Wrap consumer is not an unwrap.vr.");
+    rewriter.replaceOp(wrap, {nullptr, unwrap.getReady()});
+    rewriter.replaceOp(unwrap, {adaptor.getRawInput(), adaptor.getValid()});
+    return success();
+  }
+};
+
+/// Eliminate an UnwrapValidReadyOp by finding its producing WrapValidReadyOp.
+struct RemoveUnwrapValidReadyOp
+    : public OpConversionPattern<UnwrapValidReadyOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UnwrapValidReadyOp unwrap, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto wrap = dyn_cast_or_null<WrapValidReadyOp>(
+        adaptor.getChanInput().getDefiningOp());
+    if (!wrap)
+      return rewriter.notifyMatchFailure(
+          unwrap, "unwrap.vr input must come from a wrap.vr.");
+    if (!ChannelType::hasOneConsumer(wrap.getChanOutput()))
+      return rewriter.notifyMatchFailure(
+          wrap, "Wrap didn't have exactly one consumer.");
+    rewriter.replaceOp(wrap, {nullptr, adaptor.getReady()});
+    rewriter.replaceOp(unwrap, {wrap.getRawInput(), wrap.getValid()});
     return success();
   }
 };
 } // anonymous namespace
 
 namespace {
-/// Eliminate snoop operations in wrap-unwrap pairs.
+/// Eliminate snoop operations by extracting signals from wrap operations.
+/// After ESI ports lowering, channels always come from wraps and are consumed
+/// by unwraps (or have no consumers). This pattern leverages that invariant.
 struct RemoveSnoopOp : public OpConversionPattern<SnoopValidReadyOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
@@ -226,28 +272,41 @@ public:
     auto wrap = dyn_cast<WrapValidReadyOp>(defOp);
     if (!wrap)
       return rewriter.notifyMatchFailure(
-          defOp, "This conversion only supports wrap-unwrap back-to-back. "
-                 "Could not find 'wrap'.");
+          defOp, "Snoop input must be a wrap.vr operation");
+
+    // Get valid and data directly from the wrap
+    Value valid = wrap.getValid();
+    Value data = wrap.getRawInput();
+
+    // For ready: check if there's an unwrap consumer
+    Value ready;
     auto *unwrapOpOperand =
         ChannelType::getSingleConsumer(wrap.getChanOutput());
-    if (!unwrapOpOperand)
-      return rewriter.notifyMatchFailure(
-          defOp, "This conversion only supports wrap-unwrap back-to-back. "
-                 "Could sole consumer.");
-    auto unwrap = dyn_cast<UnwrapValidReadyOp>(unwrapOpOperand->getOwner());
-    if (!unwrap)
-      return rewriter.notifyMatchFailure(
-          defOp, "This conversion only supports wrap-unwrap back-to-back. "
-                 "Could not find 'unwrap'.");
-    rewriter.replaceOp(
-        op, {wrap.getValid(), unwrap.getReady(), wrap.getRawInput()});
+
+    if (unwrapOpOperand &&
+        isa<UnwrapValidReadyOp>(unwrapOpOperand->getOwner())) {
+      // There's an unwrap - use its ready signal
+      auto unwrap = cast<UnwrapValidReadyOp>(unwrapOpOperand->getOwner());
+      ready = unwrap.getReady();
+    } else {
+      // No consumer: synthesize a constant false ready signal
+      // (nothing is ready to consume this channel)
+      assert(!unwrapOpOperand &&
+             "Expected no consumer or consumer should be an unwrap");
+      ready = hw::ConstantOp::create(rewriter, op.getLoc(),
+                                     rewriter.getI1Type(), 0);
+    }
+
+    rewriter.replaceOp(op, {valid, ready, data});
     return success();
   }
 };
 } // anonymous namespace
 
 namespace {
-/// Eliminate snoop transaction operations in wrap-unwrap pairs.
+/// Eliminate snoop transaction operations by extracting signals from wrap
+/// operations. After ESI ports lowering, channels always come from wraps
+/// and are consumed by unwraps (or have no consumers).
 struct RemoveSnoopTransactionOp
     : public OpConversionPattern<SnoopTransactionOp> {
 public:
@@ -263,55 +322,81 @@ public:
 
     // Handle ValidReady signaling
     if (auto wrapVR = dyn_cast<WrapValidReadyOp>(defOp)) {
+      Value data = wrapVR.getRawInput();
+      Value valid = wrapVR.getValid();
+
+      // Find ready signal
+      Value ready;
       auto *unwrapOpOperand =
           ChannelType::getSingleConsumer(wrapVR.getChanOutput());
-      if (!unwrapOpOperand)
-        return rewriter.notifyMatchFailure(
-            defOp, "This conversion only supports wrap-unwrap back-to-back. "
-                   "Could not find sole consumer.");
-      auto unwrapVR = dyn_cast<UnwrapValidReadyOp>(unwrapOpOperand->getOwner());
-      if (!unwrapVR)
-        return rewriter.notifyMatchFailure(
-            defOp, "This conversion only supports wrap-unwrap back-to-back. "
-                   "Could not find 'unwrap'.");
+
+      if (unwrapOpOperand &&
+          isa<UnwrapValidReadyOp>(unwrapOpOperand->getOwner())) {
+        // There's an unwrap - use its ready signal
+        auto unwrapVR = cast<UnwrapValidReadyOp>(unwrapOpOperand->getOwner());
+        ready = unwrapVR.getReady();
+      } else {
+        // No consumer: transaction never happens (valid && false)
+        assert(!unwrapOpOperand &&
+               "Expected no consumer or consumer should be an unwrap");
+        ready = hw::ConstantOp::create(rewriter, op.getLoc(),
+                                       rewriter.getI1Type(), 0);
+      }
 
       // Create transaction signal as valid AND ready
-      auto validAndReady = comb::AndOp::create(
-          rewriter, op.getLoc(), wrapVR.getValid(), unwrapVR.getReady());
+      auto transaction =
+          comb::AndOp::create(rewriter, op.getLoc(), valid, ready);
 
-      rewriter.replaceOp(op, {validAndReady, wrapVR.getRawInput()});
+      rewriter.replaceOp(op, {transaction, data});
       return success();
     }
 
     // Handle FIFO signaling
     if (auto wrapFIFO = dyn_cast<WrapFIFOOp>(defOp)) {
+      Value data = wrapFIFO.getData();
+      Value empty = wrapFIFO.getEmpty();
+
+      // Find rden signal
+      Value rden;
       auto *unwrapOpOperand =
           ChannelType::getSingleConsumer(wrapFIFO.getChanOutput());
-      if (!unwrapOpOperand)
-        return rewriter.notifyMatchFailure(
-            defOp, "This conversion only supports wrap-unwrap back-to-back. "
-                   "Could not find sole consumer.");
-      auto unwrapFIFO = dyn_cast<UnwrapFIFOOp>(unwrapOpOperand->getOwner());
-      if (!unwrapFIFO)
-        return rewriter.notifyMatchFailure(
-            defOp, "This conversion only supports wrap-unwrap back-to-back. "
-                   "Could not find 'unwrap'.");
+
+      if (unwrapOpOperand && isa<UnwrapFIFOOp>(unwrapOpOperand->getOwner())) {
+        // There's an unwrap - use its rden signal
+        auto unwrapFIFO = cast<UnwrapFIFOOp>(unwrapOpOperand->getOwner());
+        rden = unwrapFIFO.getRden();
+      } else {
+        // No consumer: never reading
+        assert(!unwrapOpOperand &&
+               "Expected no consumer or consumer should be an unwrap");
+        rden = hw::ConstantOp::create(rewriter, op.getLoc(),
+                                      rewriter.getI1Type(), 0);
+      }
 
       // Create transaction signal as !empty AND rden
       auto notEmpty = comb::XorOp::create(
-          rewriter, op.getLoc(), wrapFIFO.getEmpty(),
+          rewriter, op.getLoc(), empty,
           hw::ConstantOp::create(rewriter, op.getLoc(),
                                  rewriter.getBoolAttr(true)));
-      auto transaction = comb::AndOp::create(rewriter, op.getLoc(), notEmpty,
-                                             unwrapFIFO.getRden());
+      auto transaction =
+          comb::AndOp::create(rewriter, op.getLoc(), notEmpty, rden);
 
-      rewriter.replaceOp(op, {transaction, wrapFIFO.getData()});
+      rewriter.replaceOp(op, {transaction, data});
+      return success();
+    }
+
+    // Handle ValidOnly signaling
+    if (auto wrapVO = dyn_cast<WrapValidOnlyOp>(defOp)) {
+      Value data = wrapVO.getRawInput();
+      Value valid = wrapVO.getValid();
+      // For ValidOnly, transaction == valid (always ready, no backpressure).
+      rewriter.replaceOp(op, {valid, data});
       return success();
     }
 
     return rewriter.notifyMatchFailure(
-        defOp, "This conversion only supports wrap-unwrap back-to-back for "
-               "ValidReady and FIFO signaling.");
+        defOp,
+        "Snoop input must be a wrap.vr, wrap.fifo, or wrap.vo operation");
   }
 };
 } // anonymous namespace
@@ -800,7 +885,8 @@ void ESItoHWPass::runOnOperation() {
   pass1Target.addLegalDialect<SVDialect>();
   pass1Target.addLegalDialect<seq::SeqDialect>();
   pass1Target.addLegalOp<WrapValidReadyOp, UnwrapValidReadyOp, WrapFIFOOp,
-                         UnwrapFIFOOp, WrapWindow, UnwrapWindow>();
+                         UnwrapFIFOOp, WrapValidOnlyOp, UnwrapValidOnlyOp,
+                         WrapWindow, UnwrapWindow>();
   pass1Target.addLegalOp<SnoopTransactionOp, SnoopValidReadyOp>();
 
   pass1Target.addIllegalOp<WrapSVInterfaceOp, UnwrapSVInterfaceOp>();
@@ -838,7 +924,7 @@ void ESItoHWPass::runOnOperation() {
   pass2Target.addLegalDialect<SVDialect>();
   pass2Target.addIllegalOp<SnoopTransactionOp, SnoopValidReadyOp>();
   pass2Target.addLegalOp<WrapValidReadyOp, UnwrapValidReadyOp, WrapFIFOOp,
-                         UnwrapFIFOOp>();
+                         UnwrapFIFOOp, WrapValidOnlyOp, UnwrapValidOnlyOp>();
   RewritePatternSet pass2Patterns(ctxt);
   pass2Patterns.insert<RemoveSnoopOp>(ctxt);
   pass2Patterns.insert<RemoveSnoopTransactionOp>(ctxt);
@@ -859,7 +945,12 @@ void ESItoHWPass::runOnOperation() {
   RewritePatternSet pass3Patterns(ctxt);
   pass3Patterns.insert<CanonicalizerOpLowering<UnwrapFIFOOp>>(ctxt);
   pass3Patterns.insert<CanonicalizerOpLowering<WrapFIFOOp>>(ctxt);
-  pass3Patterns.insert<RemoveWrapUnwrap>(ctxt);
+  pass3Patterns.insert<CanonicalizerOpLowering<UnwrapValidOnlyOp>>(ctxt);
+  pass3Patterns.insert<CanonicalizerOpLowering<WrapValidOnlyOp>>(ctxt);
+  pass3Patterns.insert<RemoveWrapValidOnlyOp>(ctxt);
+  pass3Patterns.insert<RemoveUnwrapValidOnlyOp>(ctxt);
+  pass3Patterns.insert<RemoveWrapValidReadyOp>(ctxt);
+  pass3Patterns.insert<RemoveUnwrapValidReadyOp>(ctxt);
   if (failed(
           applyPartialConversion(top, pass3Target, std::move(pass3Patterns))))
     signalPassFailure();

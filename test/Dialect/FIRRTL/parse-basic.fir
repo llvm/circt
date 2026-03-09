@@ -178,6 +178,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     ; CHECK: firrtl.asAsyncReset %reset_async : (!firrtl.asyncreset) -> !firrtl.asyncreset
     node check_ar5 = asAsyncReset(reset_async)
 
+    ; CHECK: firrtl.asReset %reset : (!firrtl.uint<1>) -> !firrtl.reset
+    node check_r0 = asReset(reset)
+
     ; CHECK: firrtl.asClock %clock : (!firrtl.clock) -> !firrtl.clock
     node check_c0 = asClock(clock)
     ; CHECK: firrtl.asClock %reset : (!firrtl.uint<1>) -> !firrtl.clock
@@ -380,8 +383,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     ; CHECK: firrtl.attach %a8, %a8, %a8 :
     attach (a8, a8, a8)
 
-    wire pred: UInt <1>
-    wire en: UInt <1>
+    wire pred: UInt<1>
+    wire en: UInt<1>
     connect pred, eq(i8, i8)
     connect en, not(reset)
     ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false}
@@ -1766,6 +1769,22 @@ circuit KnownLayers:
   ; CHECK-SAME: layers = [@A, @B]
   extmodule ExtModuleWithKnownLayerAndEnabledLayers enablelayer A knownlayer A enablelayer B knownlayer B.C:
 
+  ; CHECK: firrtl.extmodule private @ExtModuleWithRequirements(in clk: !firrtl.clock)
+  ; CHECK-SAME: externalRequirements = ["libdv", "vcs>=202505"]
+  extmodule ExtModuleWithRequirements requires "libdv", "vcs>=202505":
+    input clk: Clock
+
+  ; Test multiple requires keywords (like knownlayer)
+  ; CHECK: firrtl.extmodule private @ExtModuleWithMultipleRequires()
+  ; CHECK-SAME: externalRequirements = ["lib1", "lib2", "lib3"]
+  extmodule ExtModuleWithMultipleRequires requires "lib1" requires "lib2", "lib3":
+
+  ; Test intermixed knownlayer and requires
+  ; CHECK: firrtl.extmodule private @ExtModuleWithKnownLayersAndRequires()
+  ; CHECK-SAME: externalRequirements = ["libfoo", "libbar"]
+  ; CHECK-SAME: knownLayers = [@A, @B]
+  extmodule ExtModuleWithKnownLayersAndRequires knownlayer A requires "libfoo" knownlayer B requires "libbar":
+
   public module KnownLayers enablelayer A enablelayer B.C:
     ; CHECK: firrtl.instance ext1 interesting_name @ExtModuleWithKnownLayers()
     inst ext1 of ExtModuleWithKnownLayers
@@ -2238,3 +2257,72 @@ circuit Domains:
 
     ; CHECK: firrtl.domain.define %C, %foo_A
     domain_define C = foo.A
+
+;// -----
+FIRRTL version 5.1.0
+circuit DomainCreate:
+  domain ClockDomain:
+
+  extmodule Child:
+    input A: Domain of ClockDomain
+
+  ; CHECK-LABEL: firrtl.module @DomainCreate
+  public module DomainCreate:
+    ; CHECK: %my_clock = firrtl.domain.create : !firrtl.domain of @ClockDomain
+    domain my_clock of ClockDomain
+
+    ; CHECK: %child_A = firrtl.instance child interesting_name @Child(in A: !firrtl.domain of @ClockDomain)
+    inst child of Child
+
+    ; CHECK: firrtl.domain.define %child_A, %my_clock
+    domain_define child.A = my_clock
+
+;// -----
+FIRRTL version 6.0.0
+circuit UnknownProperties:
+  class Foo:
+    skip
+
+  ; CHECK-LABEL: firrtl.module @UnknownProperties
+  public module UnknownProperties:
+    output a: Integer
+    output b: String
+    output c: Inst<Foo>
+
+    ; CHECK:      %[[#INTEGER:]] = firrtl.unknown : !firrtl.integer
+    ; CHECK-NEXT: firrtl.propassign %a, %[[#INTEGER]] : !firrtl.integer
+    propassign a, Unknown(Integer)
+    ; CHECK:      %[[#STRING:]] = firrtl.unknown : !firrtl.string
+    ; CHECK-NEXT: firrtl.propassign %b, %[[#STRING]] : !firrtl.string
+    propassign b, Unknown(String)
+    ; CHECK:      %[[#INSTANCE:]] = firrtl.unknown : !firrtl.class<@Foo()>
+    ; CHECK-NEXT: firrtl.propassign %c, %[[#INSTANCE]] : !firrtl.class<@Foo()>
+    propassign c, Unknown(Inst<Foo>)
+
+; // -----
+
+; Test that keywords can be used as identifiers when not followed by '(' or '<'
+; and as expressions when followed by '(' or '<'
+
+FIRRTL version 4.0.0
+circuit KeywordIdentifiers :
+  public module KeywordIdentifiers :
+    ; CHECK-LABEL: firrtl.module @KeywordIdentifiers
+
+    ; Test UInt and SInt as identifiers
+    ; CHECK: %UInt = firrtl.wire
+    ; CHECK: %SInt = firrtl.wire
+    wire UInt : UInt<8>
+    wire SInt : SInt<8>
+
+    ; Test UInt<>() and SInt<>() as expressions
+    ; CHECK: firrtl.constant 42
+    ; CHECK: firrtl.constant -10
+    connect UInt, UInt<8>(42)
+    connect SInt, SInt<8>(-10)
+
+    ; Test Unknown as identifier
+    ; CHECK: %Unknown = firrtl.wire
+    wire Unknown : UInt<1>
+    ; CHECK: firrtl.constant 0
+    connect Unknown, UInt<1>(0)

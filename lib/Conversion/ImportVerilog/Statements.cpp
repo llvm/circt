@@ -7,7 +7,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Moore/MooreOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/Diagnostics.h"
 #include "slang/ast/Compilation.h"
+#include "slang/ast/SemanticFacts.h"
+#include "slang/ast/Statement.h"
 #include "slang/ast/SystemSubroutine.h"
 #include "llvm/ADT/ScopeExit.h"
 
@@ -48,7 +54,7 @@ struct StmtVisitor {
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&stepBlock, &exitBlock});
-    auto done = llvm::make_scope_exit([&] { context.loopStack.pop_back(); });
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
     const auto &iter = loopDim.loopVar;
     auto type = context.convertType(*iter->getDeclaredType());
@@ -77,7 +83,11 @@ struct StmtVisitor {
     if (!cond)
       return failure();
     cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
-    cond = moore::ToBuiltinBoolOp::create(builder, loc, cond);
+    if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+        ty && ty.getDomain() == Domain::FourValued) {
+      cond = moore::LogicToIntOp::create(builder, loc, cond);
+    }
+    cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
     cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
 
     builder.setInsertionPointToEnd(&bodyBlock);
@@ -144,9 +154,48 @@ struct StmtVisitor {
     return success();
   }
 
-  // Inline `begin ... end` blocks into the parent.
+  // Process slang BlockStatements. These comprise all standard `begin ... end`
+  // blocks as well as `fork ... join` constructs. Standard blocks can have
+  // their contents extracted directly, however fork-join blocks require special
+  // handling.
   LogicalResult visit(const slang::ast::BlockStatement &stmt) {
-    return context.convertStatement(stmt.body);
+    moore::JoinKind kind;
+    switch (stmt.blockKind) {
+    case slang::ast::StatementBlockKind::Sequential:
+      // Inline standard `begin ... end` blocks into the parent.
+      return context.convertStatement(stmt.body);
+    case slang::ast::StatementBlockKind::JoinAll:
+      kind = moore::JoinKind::Join;
+      break;
+    case slang::ast::StatementBlockKind::JoinAny:
+      kind = moore::JoinKind::JoinAny;
+      break;
+    case slang::ast::StatementBlockKind::JoinNone:
+      kind = moore::JoinKind::JoinNone;
+      break;
+    }
+
+    // Slang stores all threads of a fork-join block inside a `StatementList`.
+    // This cannot be visited normally due to the need to make each statement a
+    // separate thread so must be converted here.
+    auto &threadList = stmt.body.as<slang::ast::StatementList>();
+    unsigned int threadCount = threadList.list.size();
+
+    auto forkOp = moore::ForkJoinOp::create(builder, loc, kind, threadCount);
+    OpBuilder::InsertionGuard guard(builder);
+
+    int i = 0;
+    for (auto *thread : threadList.list) {
+      auto &tBlock = forkOp->getRegion(i).emplaceBlock();
+      builder.setInsertionPointToStart(&tBlock);
+      // Populate thread operator with thread body and finish with a thread
+      // terminator.
+      if (failed(context.convertStatement(*thread)))
+        return failure();
+      moore::CompleteOp::create(builder, loc);
+      i++;
+    }
+    return success();
   }
 
   // Handle expression statements.
@@ -164,13 +213,14 @@ struct StmtVisitor {
       }
 
       // According to IEEE 1800-2023 Section 21.3.3 "Formatting data to a
-      // string" the first argument of $sformat is its output; the other
-      // arguments work like a FormatString.
+      // string" the first argument of $sformat/$swrite is its output; the
+      // other arguments work like a FormatString.
       // In Moore we only support writing to a location if it is a reference;
-      // However, Section 21.3.3 explains that the output of $sformat is
-      // assigned as if it were cast from a string literal (Section 5.9),
+      // However, Section 21.3.3 explains that the output of $sformat/$swrite
+      // is assigned as if it were cast from a string literal (Section 5.9),
       // so this implementation casts the string to the target value.
-      if (!call->getSubroutineName().compare("$sformat")) {
+      if (!call->getSubroutineName().compare("$sformat") ||
+          !call->getSubroutineName().compare("$swrite")) {
 
         // Use the first argument as the output location
         auto *lhsExpr = call->arguments().front();
@@ -259,7 +309,11 @@ struct StmtVisitor {
         allConds = cond;
     }
     assert(allConds && "slang guarantees at least one condition");
-    allConds = moore::ToBuiltinBoolOp::create(builder, loc, allConds);
+    if (auto ty = dyn_cast<moore::IntType>(allConds.getType());
+        ty && ty.getDomain() == Domain::FourValued) {
+      allConds = moore::LogicToIntOp::create(builder, loc, allConds);
+    }
+    allConds = moore::ToBuiltinIntOp::create(builder, loc, allConds);
 
     // Create the blocks for the true and false branches, and the exit block.
     Block &exitBlock = createBlock();
@@ -349,7 +403,11 @@ struct StmtVisitor {
           mlir::emitError(loc, "unsupported set membership case statement");
           return failure();
         }
-        cond = moore::ToBuiltinBoolOp::create(builder, itemLoc, cond);
+        if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+            ty && ty.getDomain() == Domain::FourValued) {
+          cond = moore::LogicToIntOp::create(builder, loc, cond);
+        }
+        cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
 
         // If the condition matches, branch to the match block. Otherwise
         // continue checking the next expression in a new block.
@@ -460,7 +518,7 @@ struct StmtVisitor {
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&stepBlock, &exitBlock});
-    auto done = llvm::make_scope_exit([&] { context.loopStack.pop_back(); });
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
     // Generate the loop condition check.
     builder.setInsertionPointToEnd(&checkBlock);
@@ -468,7 +526,11 @@ struct StmtVisitor {
     if (!cond)
       return failure();
     cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
-    cond = moore::ToBuiltinBoolOp::create(builder, loc, cond);
+    if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+        ty && ty.getDomain() == Domain::FourValued) {
+      cond = moore::LogicToIntOp::create(builder, loc, cond);
+    }
+    cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
     cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
 
     // Generate the loop body.
@@ -521,12 +583,16 @@ struct StmtVisitor {
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&stepBlock, &exitBlock});
-    auto done = llvm::make_scope_exit([&] { context.loopStack.pop_back(); });
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
     // Generate the loop condition check.
     builder.setInsertionPointToEnd(&checkBlock);
     auto cond = builder.createOrFold<moore::BoolCastOp>(loc, currentCount);
-    cond = moore::ToBuiltinBoolOp::create(builder, loc, cond);
+    if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+        ty && ty.getDomain() == Domain::FourValued) {
+      cond = moore::LogicToIntOp::create(builder, loc, cond);
+    }
+    cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
     cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
 
     // Generate the loop body.
@@ -569,7 +635,7 @@ struct StmtVisitor {
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&checkBlock, &exitBlock});
-    auto done = llvm::make_scope_exit([&] { context.loopStack.pop_back(); });
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
     // Generate the loop condition check.
     builder.setInsertionPointToEnd(&checkBlock);
@@ -577,7 +643,11 @@ struct StmtVisitor {
     if (!cond)
       return failure();
     cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
-    cond = moore::ToBuiltinBoolOp::create(builder, loc, cond);
+    if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+        ty && ty.getDomain() == Domain::FourValued) {
+      cond = moore::LogicToIntOp::create(builder, loc, cond);
+    }
+    cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
     cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
 
     // Generate the loop body.
@@ -615,7 +685,7 @@ struct StmtVisitor {
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&bodyBlock, &exitBlock});
-    auto done = llvm::make_scope_exit([&] { context.loopStack.pop_back(); });
+    llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
     // Generate the loop body.
     builder.setInsertionPointToEnd(&bodyBlock);
@@ -707,7 +777,11 @@ struct StmtVisitor {
     }
 
     // Regard assertion statements with an action block as the "if-else".
-    cond = moore::ToBuiltinBoolOp::create(builder, loc, cond);
+    if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+        ty && ty.getDomain() == Domain::FourValued) {
+      cond = moore::LogicToIntOp::create(builder, loc, cond);
+    }
+    cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
 
     // Create the blocks for the true and false branches, and the exit block.
     Block &exitBlock = createBlock();
@@ -746,7 +820,26 @@ struct StmtVisitor {
   // Handle concurrent assertion statements.
   LogicalResult visit(const slang::ast::ConcurrentAssertionStatement &stmt) {
     auto loc = context.convertLocation(stmt.sourceRange);
-    auto property = context.convertAssertionExpression(stmt.propertySpec, loc);
+
+    // Check for a `disable iff` expression:
+    // The DisableIff construct can only occcur at the top level of an assertion
+    // and cannot be nested within properties.
+    // Hence we only need to detect if the top level assertion expression
+    // has type DisableIff, negate the `disable` expression, then pass it to
+    // the `enable` parameter of AssertOp/AssumeOp.
+    Value enable;
+    Value property;
+    if (auto *disableIff =
+            stmt.propertySpec.as_if<slang::ast::DisableIffAssertionExpr>()) {
+      auto disableCond = context.convertRvalueExpression(disableIff->condition);
+      auto enableCond = moore::NotOp::create(builder, loc, disableCond);
+
+      enable = context.convertToI1(enableCond);
+      property = context.convertAssertionExpression(disableIff->expr, loc);
+    } else {
+      property = context.convertAssertionExpression(stmt.propertySpec, loc);
+    }
+
     if (!property)
       return failure();
 
@@ -754,10 +847,10 @@ struct StmtVisitor {
     if (stmt.ifTrue && stmt.ifTrue->as_if<slang::ast::EmptyStatement>()) {
       switch (stmt.assertionKind) {
       case slang::ast::AssertionKind::Assert:
-        verif::AssertOp::create(builder, loc, property, Value(), StringAttr{});
+        verif::AssertOp::create(builder, loc, property, enable, StringAttr{});
         return success();
       case slang::ast::AssertionKind::Assume:
-        verif::AssumeOp::create(builder, loc, property, Value(), StringAttr{});
+        verif::AssumeOp::create(builder, loc, property, enable, StringAttr{});
         return success();
       default:
         break;
@@ -913,6 +1006,62 @@ struct StmtVisitor {
         setTerminated();
       }
       return true;
+    }
+
+    // Queue Tasks
+
+    if (args.size() >= 1 && args[0]->type->isQueue()) {
+      auto queue = context.convertLvalueExpression(*args[0]);
+
+      // `delete` has two functions: If there is an index passed, then it
+      // deletes that specific element, otherwise, it clears the entire queue.
+      if (subroutine.name == "delete") {
+        if (args.size() == 1) {
+          moore::QueueClearOp::create(builder, loc, queue);
+          return true;
+        }
+        if (args.size() == 2) {
+          auto index = context.convertRvalueExpression(*args[1]);
+          moore::QueueDeleteOp::create(builder, loc, queue, index);
+          return true;
+        }
+      } else if (subroutine.name == "insert" && args.size() == 3) {
+        auto index = context.convertRvalueExpression(*args[1]);
+        auto item = context.convertRvalueExpression(*args[2]);
+
+        moore::QueueInsertOp::create(builder, loc, queue, index, item);
+        return true;
+      } else if (subroutine.name == "push_back" && args.size() == 2) {
+        auto item = context.convertRvalueExpression(*args[1]);
+        moore::QueuePushBackOp::create(builder, loc, queue, item);
+        return true;
+      } else if (subroutine.name == "push_front" && args.size() == 2) {
+        auto item = context.convertRvalueExpression(*args[1]);
+        moore::QueuePushFrontOp::create(builder, loc, queue, item);
+        return true;
+      }
+
+      return false;
+    }
+
+    // Associative array tasks
+    if (args.size() >= 1 && args[0]->type->isAssociativeArray()) {
+      auto assocArray = context.convertLvalueExpression(*args[0]);
+
+      // `delete` has two functions: If there is an index passed, then it
+      // deletes that specific element, otherwise, it clears the entire
+      // associative array.
+      if (subroutine.name == "delete") {
+        if (args.size() == 1) {
+          moore::AssocArrayClearOp::create(builder, loc, assocArray);
+          return true;
+        }
+        if (args.size() == 2) {
+          auto index = context.convertRvalueExpression(*args[1]);
+          moore::AssocArrayDeleteOp::create(builder, loc, assocArray, index);
+          return true;
+        }
+      }
     }
 
     // Give up on any other system tasks. These will be tried again as an

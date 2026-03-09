@@ -339,7 +339,7 @@ public:
   auto invokeWithStringOS(Callable &&c) {
     SmallString<BufferLen> ss;
     llvm::raw_svector_ostream ssos(ss);
-    auto flush = llvm::make_scope_exit([&]() {
+    llvm::scope_exit flush([&]() {
       if (!ss.empty())
         *this << ss;
     });
@@ -366,7 +366,7 @@ public:
   template <typename T, typename Callable>
   auto scopedBox(T &&t, Callable &&c, Token close = EndToken()) {
     *this << std::forward<T>(t);
-    auto done = llvm::make_scope_exit([&]() { *this << close; });
+    llvm::scope_exit done([&]() { *this << close; });
     return std::invoke(std::forward<Callable>(c));
   }
 };

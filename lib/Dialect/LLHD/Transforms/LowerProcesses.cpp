@@ -7,8 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
+#include "circt/Dialect/LLHD/LLHDPasses.h"
 #include "mlir/Analysis/Liveness.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Transforms/RegionUtils.h"
@@ -19,7 +19,7 @@
 namespace circt {
 namespace llhd {
 #define GEN_PASS_DEF_LOWERPROCESSESPASS
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h.inc"
+#include "circt/Dialect/LLHD/LLHDPasses.h.inc"
 } // namespace llhd
 } // namespace circt
 
@@ -96,6 +96,11 @@ bool Lowering::matchControlFlow() {
   if (!waitOp.getDestOperands().empty()) {
     LLVM_DEBUG(llvm::dbgs() << "Skipping process " << processOp.getLoc()
                             << ": wait op has destination operands\n");
+    return false;
+  }
+  if (waitOp.getDelay()) {
+    LLVM_DEBUG(llvm::dbgs() << "Skipping process " << processOp.getLoc()
+                            << ": wait op has delay\n");
     return false;
   }
 

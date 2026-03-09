@@ -761,6 +761,7 @@ let hasCanonicalizer=1 in {
 }
 def AsAsyncResetPrimOp
   : UnaryPrimOp<"asAsyncReset", OneBitCastableType, AsyncResetType>;
+def AsResetPrimOp : UnaryPrimOp<"asReset", UInt1Type, ResetType>;
 def AsClockPrimOp : UnaryPrimOp<"asClock", OneBitCastableType, ClockType>;
 def NegPrimOp : UnaryPrimOp<"neg", IntType, SIntType>;
 let hasCanonicalizer = true in
@@ -1270,6 +1271,7 @@ def FIntegerConstantOp : FIRRTLOp<"integer", [Pure, ConstantLike]> {
   let results = (outs FIntegerType:$result);
   let hasFolder = 1;
   let hasCustomAssemblyFormat = true;
+  let hasVerifier = true;
 }
 
 def UnresolvedPathOp : FIRRTLOp<"unresolved_path", [Pure]> {
@@ -1447,6 +1449,22 @@ def IntegerShlOp : IntegerBinaryPrimOp<"integer.shl"> {
                                          !firrtl.integer
     ```
   }];
+}
+
+def UnknownValueOp : FIRRTLOp<"unknown", [
+  Pure,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+]> {
+  let summary = "A property with an unknown value used to tie-off connections";
+  let description = [{
+    An operation that is used to tie-off property connections where we do not
+    care about the value.
+
+    This lowers to an `om::UnknownOp`.
+  }];
+  let arguments = (ins);
+  let results = (outs PropertyType:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
 }
 
 //===----------------------------------------------------------------------===//

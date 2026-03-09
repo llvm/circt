@@ -54,13 +54,6 @@ void LowerToBMCPass::runOnOperation() {
     return signalPassFailure();
   }
 
-  // TODO: Check whether instances contain properties to check
-  if (hwModule.getOps<verif::AssertOp>().empty() &&
-      hwModule.getOps<hw::InstanceOp>().empty()) {
-    hwModule.emitError("no property provided to check in module");
-    return signalPassFailure();
-  }
-
   if (!sortTopologically(&hwModule.getBodyRegion().front())) {
     hwModule->emitError("could not resolve cycles in module");
     return signalPassFailure();
@@ -229,6 +222,7 @@ void LowerToBMCPass::runOnOperation() {
   auto formatString =
       LLVM::SelectOp::create(builder, loc, bmcOp.getResult(),
                              successStrAddr.value(), failureStrAddr.value());
+
   LLVM::CallOp::create(builder, loc, printfFunc.value(),
                        ValueRange{formatString});
   func::ReturnOp::create(builder, loc);

@@ -1824,7 +1824,7 @@ void GrandCentralPass::runOnOperation() {
   SmallVector<Annotation> worklist;
   bool removalError = false;
   AnnotationSet::removeAnnotations(circuitOp, [&](Annotation anno) {
-    if (anno.isClass(augmentedBundleTypeClass)) {
+    if (anno.isClass(augmentedBundleTypeAnnoClass)) {
       // If we are in "Instantiate" companion mode, then we don't need to
       // create the interface, so we can skip adding it to the worklist.  This
       // is a janky hack for situations where you want to synthesize assertion
@@ -1836,7 +1836,7 @@ void GrandCentralPass::runOnOperation() {
       ++numAnnosRemoved;
       return true;
     }
-    if (anno.isClass(extractGrandCentralClass)) {
+    if (anno.isClass(extractGrandCentralAnnoClass)) {
       if (maybeExtractInfo) {
         emitCircuitError("more than one 'ExtractGrandCentralAnnotation' was "
                          "found, but exactly one must be provided");
@@ -1982,7 +1982,7 @@ void GrandCentralPass::runOnOperation() {
     TypeSwitch<Operation *>(op)
         .Case<RegOp, RegResetOp, WireOp, NodeOp>([&](auto op) {
           AnnotationSet::removeAnnotations(op, [&](Annotation annotation) {
-            if (!annotation.isClass(augmentedGroundTypeClass))
+            if (!annotation.isClass(augmentedGroundTypeAnnoClass))
               return false;
             auto maybeID = getID(op, annotation);
             if (!maybeID)
@@ -1999,7 +1999,7 @@ void GrandCentralPass::runOnOperation() {
         .Case<InstanceOp>([&](auto op) {
           AnnotationSet::removePortAnnotations(op, [&](unsigned i,
                                                        Annotation annotation) {
-            if (!annotation.isClass(augmentedGroundTypeClass))
+            if (!annotation.isClass(augmentedGroundTypeAnnoClass))
               return false;
             op.emitOpError()
                 << "is marked as an interface element, but this should be "
@@ -2010,7 +2010,7 @@ void GrandCentralPass::runOnOperation() {
         })
         .Case<MemOp>([&](auto op) {
           AnnotationSet::removeAnnotations(op, [&](Annotation annotation) {
-            if (!annotation.isClass(augmentedGroundTypeClass))
+            if (!annotation.isClass(augmentedGroundTypeAnnoClass))
               return false;
             op.emitOpError()
                 << "is marked as an interface element, but this does not make "
@@ -2021,7 +2021,7 @@ void GrandCentralPass::runOnOperation() {
           });
           AnnotationSet::removePortAnnotations(
               op, [&](unsigned i, Annotation annotation) {
-                if (!annotation.isClass(augmentedGroundTypeClass))
+                if (!annotation.isClass(augmentedGroundTypeAnnoClass))
                   return false;
                 op.emitOpError()
                     << "has port '" << i
@@ -2036,7 +2036,7 @@ void GrandCentralPass::runOnOperation() {
           // Handle annotations on the ports.
           AnnotationSet::removePortAnnotations(op, [&](unsigned i,
                                                        Annotation annotation) {
-            if (!annotation.isClass(augmentedGroundTypeClass))
+            if (!annotation.isClass(augmentedGroundTypeAnnoClass))
               return false;
             auto maybeID = getID(op, annotation);
             if (!maybeID)

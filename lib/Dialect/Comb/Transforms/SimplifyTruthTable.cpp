@@ -15,6 +15,7 @@
 #include "circt/Dialect/Comb/CombPasses.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/Naming.h"
+#include "circt/Support/TruthTable.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Transforms/WalkPatternRewriteDriver.h"
 #include "llvm/Support/LogicalResult.h"
@@ -50,7 +51,6 @@ struct SimplifyTruthTable : public OpRewritePattern<TruthTableOp> {
     const auto inputs = op.getInputs();
     const auto table = op.getLookupTable();
     size_t numInputs = inputs.size();
-    size_t tableSize = table.size();
 
     if (numInputs <= 1)
       return failure();
@@ -58,59 +58,51 @@ struct SimplifyTruthTable : public OpRewritePattern<TruthTableOp> {
     // Check if all table entries are the same (constant output)
     bool allSame = llvm::all_equal(table);
     if (allSame) {
-      bool firstValue = cast<BoolAttr>(table[0]).getValue();
+      bool firstValue = table[0];
       auto constOp =
           hw::ConstantOp::create(rewriter, op.getLoc(), APInt(1, firstValue));
       replaceOpAndCopyNamehint(rewriter, op, constOp);
       return success();
     }
 
-    // Detect if the truth table depends only on one of the inputs.
-    // For each input bit, we test whether flipping only that input bit changes
-    // the output value of the truth table at any point.
-    SmallVector<bool> dependsOn(numInputs, false);
+    // Convert truth table to APInt for cofactor computation
+    APInt truthTable(table.size(), 0);
+    for (size_t i = 0; i < table.size(); ++i)
+      truthTable.setBitVal(i, table[i]);
+
+    // Use cofactors to detect which inputs the function depends on
+    // A function depends on variable i if its cofactors differ
+    // The cofactor function uses bit position indexing (LSB=0),
+    // but inputs are indexed with input 0 being the MSB in the truth table
     int dependentInput = -1;
     unsigned numDependencies = 0;
+    APInt negativeCofactor, positiveCofactor;
 
-    for (size_t idx = 0; idx < tableSize; ++idx) {
-      bool currentValue = cast<BoolAttr>(table[idx]).getValue();
+    for (size_t bitPos = 0; bitPos < numInputs; ++bitPos) {
+      std::tie(negativeCofactor, positiveCofactor) =
+          computeCofactors(truthTable, numInputs, bitPos);
 
-      for (size_t bitPos = 0; bitPos < numInputs; ++bitPos) {
-        // Skip if we already know this input matters
-        if (dependsOn[bitPos])
-          continue;
+      // If cofactors differ, the function depends on this variable
+      if (negativeCofactor != positiveCofactor) {
+        // Convert bit position to input index: bitPos 0 (LSB) = last input
+        dependentInput = numInputs - 1 - bitPos;
+        numDependencies++;
 
-        // Calculate the index of the entry with the bit in question flipped
-        size_t bitPositionInTable = numInputs - 1 - bitPos;
-        size_t flippedIdx = idx ^ (1ull << bitPositionInTable);
-        bool flippedValue = cast<BoolAttr>(table[flippedIdx]).getValue();
-
-        // If flipping this bit changes the output, this input is a dependency
-        if (currentValue != flippedValue) {
-          dependsOn[bitPos] = true;
-          dependentInput = bitPos;
-          numDependencies++;
-
-          // Exit early if we already found more than one dependency
-          if (numDependencies > 1)
-            break;
-        }
+        // Exit early if we found more than one dependency
+        if (numDependencies > 1)
+          break;
       }
-
-      // Exit early from outer loop if we found more than one dependency
-      if (numDependencies > 1)
-        break;
     }
 
     // Only simplify if exactly one input dependency found
     if (numDependencies != 1)
       return failure();
 
-    // Determine if the truth table is identity or inverted by checking the
-    // output when the dependent input is 1 (all other inputs at 0)
+    // Determine if the truth table is identity or inverted
+    // Check the output when the dependent input is 1 (all other inputs at 0)
     size_t bitPositionInTable = numInputs - 1 - dependentInput;
     size_t idxWhen1 = 1ull << bitPositionInTable;
-    bool isIdentity = cast<BoolAttr>(table[idxWhen1]).getValue();
+    bool isIdentity = table[idxWhen1];
 
     // Replace with the input or a simpler truth table for negation
     Value input = inputs[dependentInput];
@@ -121,8 +113,7 @@ struct SimplifyTruthTable : public OpRewritePattern<TruthTableOp> {
       // Inverted case: replace with a single-input truth table for negation
       // This avoids introducing comb.xor, which is useful for LUT mapping
       replaceOpWithNewOpAndCopyNamehint<TruthTableOp>(
-          rewriter, op, ValueRange{input},
-          rewriter.getBoolArrayAttr({true, false}));
+          rewriter, op, ValueRange{input}, ArrayRef<bool>{true, false});
     }
     return success();
   }

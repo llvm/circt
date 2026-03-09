@@ -7,13 +7,24 @@ from enum import Enum
 from typing import *
 from jinja2 import Environment, DictLoader, select_autoescape
 
-header_cpp_template = """#include "arcilator-runtime.h"
+header_cpp_template = """// Enable this option when linking against libCIRCTArcRuntime
+// #define ARC_USE_COMPILED_RUNTIME_LIB
+
+#ifdef ARC_USE_COMPILED_RUNTIME_LIB
+#include "circt/Dialect/Arc/Runtime/ArcRuntime.h"
+#include "circt/Dialect/Arc/Runtime/Common.h"
+#endif
+#include "arcilator-runtime.h"
+
 {% for model in models %}
 extern "C" {
 {% if model.initialFnSym %}
 void {{ model.name }}_initial(void* state);
 {% endif %}
 void {{ model.name }}_eval(void* state);
+#ifdef ARC_USE_COMPILED_RUNTIME_LIB
+extern ArcRuntimeModelInfo arcRuntimeModel_{{ model.name }};
+#endif
 }
 
 class {{ model.name }}Layout {
@@ -54,15 +65,50 @@ public:
 
 class {{ model.name }} {
 public:
+
+#ifndef ARC_USE_COMPILED_RUNTIME_LIB
   std::vector<uint8_t> storage;
+#else
+  ArcState *runtimeInstance;
+  uint8_t *storage;
+#endif
+
   {{ model.name }}View view;
 
-  {{ model.name }}() : storage({{ model.name }}Layout::numStateBytes, 0), view(&storage[0]) {
+#ifdef ARC_USE_COMPILED_RUNTIME_LIB
+  explicit {{ model.name }}(const char* runtimeArgs = nullptr)  :
+    runtimeInstance(arcRuntimeAllocateInstance(&arcRuntimeModel_{{ model.name }}, runtimeArgs)),
+    storage(runtimeInstance->modelState),
+    view(&storage[0])
+  {
+{% if model.initialFnSym %}
+    {{ model.initialFnSym }}(&storage[0]);
+{% endif %}
+    arcRuntimeOnInitialized(runtimeInstance);
+  }
+
+  ~{{ model.name }}() {
+    arcRuntimeDeleteInstance(runtimeInstance);
+    storage = nullptr;
+    runtimeInstance = nullptr;
+  }
+#else // ARC_USE_COMPILED_RUNTIME_LIB
+  {{ model.name }}() :
+    storage({{ model.name }}Layout::numStateBytes, 0), view(&storage[0])
+  {
 {% if model.initialFnSym %}
     {{ model.initialFnSym }}(&storage[0]);
 {% endif %}
   }
-  void eval() { {{ model.name }}_eval(&storage[0]); }
+#endif // ARC_USE_COMPILED_RUNTIME_LIB
+
+  void eval() {
+#ifdef ARC_USE_COMPILED_RUNTIME_LIB
+    arcRuntimeOnEval(runtimeInstance);
+#endif
+    {{ model.name }}_eval(&storage[0]);
+  }
+
   ValueChangeDump<{{ model.name }}Layout> vcd(std::basic_ostream<char> &os) {
     ValueChangeDump<{{ model.name }}Layout> vcd(os, &storage[0]);
     vcd.writeHeader();

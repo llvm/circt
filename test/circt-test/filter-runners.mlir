@@ -1,14 +1,12 @@
 // RUN: circt-test --dry-run %s | FileCheck %s
 
-// Since we only have formal runners at the moment, only the formal tests should run.
-
 // CHECK: TestA:
 verif.formal @TestA {} {}
 
 // CHECK: TestB:
 verif.formal @TestB {} {}
 
-// CHECK-NOT: TestC:
+// CHECK: TestC:
 verif.simulation @TestC {} {
 ^bb0(%clock: !seq.clock, %init: i1):
   %0 = hw.constant true

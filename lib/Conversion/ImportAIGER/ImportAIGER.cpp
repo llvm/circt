@@ -29,10 +29,12 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/LEB128.h"
 #include "llvm/Support/SMLoc.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cctype>
+#include <limits>
 #include <string>
 
 using namespace mlir;
@@ -96,13 +98,8 @@ public:
   /// Check if we're at end of file
   bool isAtEOF() const { return curPtr >= curBuffer.end(); }
 
-  /// Read a single byte for binary parsing
-  ParseResult readByte(unsigned char &byte) {
-    if (curPtr >= curBuffer.end())
-      return failure();
-    byte = *curPtr++;
-    return success();
-  }
+  /// Read a LEB128 encoded unsigned integer
+  ParseResult readLEB128(unsigned &result);
 
   /// Get current location
   SMLoc getCurrentLoc() const { return SMLoc::getFromPointer(curPtr); }
@@ -367,6 +364,18 @@ AIGERToken AIGERLexer::peekToken() {
   return token;
 }
 
+ParseResult AIGERLexer::readLEB128(unsigned &result) {
+  unsigned len;
+  uint64_t value =
+      llvm::decodeULEB128(reinterpret_cast<const uint8_t *>(curPtr), &len,
+                          reinterpret_cast<const uint8_t *>(curBuffer.end()));
+  if (len == 0 || value > std::numeric_limits<unsigned>::max())
+    return failure();
+  curPtr += len;
+  result = static_cast<unsigned>(value);
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // AIGERParser Implementation
 //===----------------------------------------------------------------------===//
@@ -394,34 +403,7 @@ ParseResult AIGERParser::parseNumber(unsigned &result, SMLoc *loc) {
 }
 
 ParseResult AIGERParser::parseBinaryNumber(unsigned &result) {
-  // AIGER binary format uses variable-length encoding
-  // Each byte has 7 data bits and 1 continuation bit (MSB)
-  // If continuation bit is set, more bytes follow
-
-  result = 0;
-  unsigned shift = 0;
-
-  while (true) {
-    unsigned char byte;
-    if (lexer.readByte(byte))
-      return emitError("unexpected end of file in binary number");
-
-    LLVM_DEBUG(llvm::dbgs() << "Read byte: 0x" << llvm::utohexstr(byte) << " ("
-                            << (unsigned)byte << ")\n");
-
-    result |= (byte & 0x7F) << shift;
-
-    if ((byte & 0x80) == 0) { // No continuation bit
-      LLVM_DEBUG(llvm::dbgs() << "Decoded binary number: " << result << "\n");
-      break;
-    }
-
-    shift += 7;
-    if (shift >= 32) // Prevent overflow
-      return emitError("binary number too large");
-  }
-
-  return success();
+  return lexer.readLEB128(result);
 }
 
 ParseResult AIGERParser::parseHeader() {

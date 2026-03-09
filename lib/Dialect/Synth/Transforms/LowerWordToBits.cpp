@@ -43,7 +43,7 @@ using namespace synth;
 
 /// Check if an operation should be lowered to bit-level operations.
 static bool shouldLowerOperation(Operation *op) {
-  return isa<aig::AndInverterOp, mig::MajorityInverterOp, comb::AndOp,
+  return isa<ChoiceOp, aig::AndInverterOp, mig::MajorityInverterOp, comb::AndOp,
              comb::OrOp, comb::XorOp, comb::MuxOp>(op);
 }
 
@@ -184,6 +184,13 @@ const llvm::KnownBits &BitBlaster::computeKnownBits(Value value) {
                (operandsKnownBits[0] & operandsKnownBits[2]) |
                (operandsKnownBits[1] & operandsKnownBits[2]);
     }
+  } else if (auto choice = dyn_cast<ChoiceOp>(op)) {
+    result = computeKnownBits(choice.getInputs().front());
+    for (auto input : choice.getInputs().drop_front()) {
+      auto known = computeKnownBits(input);
+      result.One |= known.One;
+      result.Zero |= known.Zero;
+    }
   } else {
     // For other operations, use the standard known bits computation
     // TODO: This is not optimal as it has a depth limit and does not check
@@ -250,6 +257,13 @@ ArrayRef<Value> BitBlaster::lowerValueToBits(Value value) {
   }
 
   return TypeSwitch<Operation *, ArrayRef<Value>>(op)
+      .Case<ChoiceOp>([&](ChoiceOp op) {
+        auto createOp = [&](OpBuilder &builder, ValueRange operands) {
+          return builder.createOrFold<ChoiceOp>(
+              op.getLoc(), operands[0].getType(), operands);
+        };
+        return lowerOp(op, createOp);
+      })
       .Case<aig::AndInverterOp, mig::MajorityInverterOp>(
           [&](auto op) { return lowerInvertibleOperations(op); })
       .Case<comb::AndOp, comb::OrOp, comb::XorOp>(

@@ -176,3 +176,17 @@ moore.global_variable @Foo : !moore.i9001
 moore.global_variable @Foo : !moore.i42 init {
   llvm.unreachable
 }
+
+// -----
+
+// UnionCreateOp verifier: input type mismatch
+%0 = moore.constant 42 : i16
+// expected-error @below {{op input type '!moore.i16' does not match union field 'x' type '!moore.i32'}}
+moore.union_create %0 {fieldName = "x"} : !moore.i16 -> union<{x: i32, y: i32}>
+
+// -----
+
+// UnionCreateOp verifier: field not found
+%0 = moore.constant 42 : i32
+// expected-error @below {{op field 'z' not found in union type}}
+moore.union_create %0 {fieldName = "z"} : !moore.i32 -> union<{x: i32, y: i32}>

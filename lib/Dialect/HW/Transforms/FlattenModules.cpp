@@ -247,7 +247,7 @@ void FlattenModulesPass::runOnOperation() {
       // Only inline private `HWModuleOp`s (no extern or generated modules).
       auto module =
           dyn_cast_or_null<HWModuleOp>(node->getModule().getOperation());
-      if (!module || !module.isPrivate())
+      if (!module || (!module.isPrivate() && !this->inlinePublic))
         continue;
 
       // Do not inline a module if it is targeted by a module NLA.

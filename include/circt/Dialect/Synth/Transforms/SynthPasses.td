@@ -140,6 +140,67 @@ def PrintLongestPathAnalysis
                            "circt::synth::SynthDialect"];
 }
 
+def PrintResourceUsageAnalysis
+    : Pass<"synth-print-resource-usage-analysis", "mlir::ModuleOp"> {
+  let summary = "Print resource usage analysis results";
+  let description = [{
+    This pass performs resource usage analysis on circuits containing Synth,
+    Comb, Seq, and HW dialect operations, and outputs resource utilization
+    information.
+
+    The analysis computes both local and total resource usage across module
+    hierarchies. Local usage counts resources directly in a module, while total
+    usage includes all resources from child module instances.
+
+    JSON format (--emit-json):
+      [
+        {
+          "moduleName": "<module_name>",
+          "local": {
+            "<operation_name>": <count>,
+            ...
+          },
+          "total": {
+            "<operation_name>": <count>,
+            ...
+          },
+          "instances": [
+            {
+              "instanceName": "<instance_name>",
+              "moduleName": "<child_module_name>",
+              "usage": {
+                "moduleName": "<child_module_name>",
+                "local": { ... },
+                "total": { ... },
+                "instances": [ ... ]
+              }
+            },
+            ...
+          ]
+        },
+        ...
+      ]
+
+    The JSON schema is recursive: each module's "instances" array contains
+    objects with a "usage" field that has the same structure as the top-level
+    module object (moduleName, local, total, instances). This allows the full
+    module hierarchy to be represented.
+
+    - "local": Resources used directly in this module (not including children)
+    - "total": Resources including all child instances (sum of local + children)
+    - "instances": Array of child module instances with their full usage data
+
+    When --top-module-name is empty, the pass analyzes all inferred top-level
+    modules and outputs results for each in the top-level JSON array.
+  }];
+  let options = [Option<"outputFile", "output-file", "std::string", "\"-\"",
+                        "Output file for analysis results (use '-' for stdout)">,
+                 Option<"emitJSON", "emit-json", "bool", "false",
+                        "Output analysis results in JSON format">,
+                 Option<"topModuleName", "top-module-name", "std::string", "",
+                        "Name of the top module to analyze">];
+}
+
 class ExternalSolverPass<string name> : Pass<name, "hw::HWModuleOp"> {
   list<Option> baseOptions = [Option<"continueOnFailure", "continue-on-failure",
                                      "bool", "false",
@@ -199,6 +260,22 @@ def MaximumAndCover : Pass<"synth-maximum-and-cover", "hw::HWModuleOp"> {
     This pass performs maximum AND-cover optimization by collapsing single-fanout
     and-inverter ops into their users
   }];
+}
+
+def SOPBalancing : CutRewriterPassBase<"synth-sop-balancing", "hw::HWModuleOp"> {
+  let summary = "SOP (Sum-of-Products) balancing for delay optimization";
+  let description = [{
+    This pass optimizes delay by restructuring the logic network using balanced
+    sum-of-products expressions. It enumerates cuts, derives their SOP
+    representation, and selects the best cut based on delay and area.
+
+    The algorithm is based on "Delay Optimization Using SOP Balancing" by
+    Mishchenko et al. (ICCAD 2011).
+  }];
+  let options =
+      baseOptions#[Option<"maxCutInputSize", "max-cut-input-size", "unsigned",
+                          /*default=*/"6", "Maximum number of inputs per cut">];
+  let dependentDialects = ["synth::SynthDialect", "comb::CombDialect"];
 }
 
 #endif // CIRCT_DIALECT_SYNTH_TRANSFORMS_PASSES_TD

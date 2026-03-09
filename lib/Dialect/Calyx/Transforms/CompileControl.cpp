@@ -128,7 +128,7 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
     auto eqCmp =
         comb::ICmpOp::create(builder, wires->getLoc(), comb::ICmpPredicate::eq,
                              fsmOut, fsmCurrentState, false);
-    auto notDone = comb::createOrFoldNot(wires->getLoc(), doneOpValue, builder);
+    auto notDone = comb::createOrFoldNot(builder, wires->getLoc(), doneOpValue);
     auto groupGoGuard =
         comb::AndOp::create(builder, wires->getLoc(), eqCmp, notDone, false);
 

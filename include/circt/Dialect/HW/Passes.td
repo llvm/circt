@@ -65,6 +65,8 @@ def FlattenModules : Pass<"hw-flatten-modules", "mlir::ModuleOp"> {
            "Maximum number of operations for a module to be considered small">,
     Option<"inlineWithState", "hw-inline-with-state", "bool", "false",
            "Allow inlining of modules that contain state (seq.firreg operations)">,
+    Option<"inlinePublic", "hw-inline-public", "bool", "false",
+           "Inline public modules as well as private ones">,
     Option<"inlineAll", "hw-inline-all", "bool", "true",
            "Inline all private modules regardless of heuristics (default behavior)">
   ];
@@ -111,6 +113,15 @@ def HWAggregateToComb : Pass<"hw-aggregate-to-comb", "hw::HWModuleOp"> {
   let dependentDialects = ["comb::CombDialect"];
 }
 
+def HWVectorization : Pass<"hw-vectorization", "hw::HWModuleOp"> {
+  let summary = "Vectorizes bit-level operations in HW dialect";
+  let description = [{
+   This pass performs structural vectorization of hardware modules,
+    merging scalar bit-level assignments into vectorized operations.
+  }];
+  let dependentDialects = ["circt::comb::CombDialect", "circt::hw::HWDialect"];
+}
+
 def HWParameterizeConstantPorts : Pass<"hw-parameterize-constant-ports",
                                        "mlir::ModuleOp"> {
   let summary = "Parametize constant ports on private modules";
@@ -147,5 +158,20 @@ def HWBypassInnerSymbols : Pass<"hw-bypass-inner-symbols", "hw::HWModuleOp"> {
               "Number of inner symbols moved from ports to wires">
   ];
 }
+
+def HWConvertBitcasts : Pass<"hw-convert-bitcasts", "mlir::ModuleOp"> {
+  let summary = "Convert hw.bitcast operations to bit extracts and concats";
+  let description = [{
+    This passes attempts to convert `hw.bitcast` operations on HW aggregates to
+    functionally identical sequences of explicit aggregate and bit-access
+    operations. It currently supports `!hw.array` and `!hw.struct` types.
+  }];
+  let options = [
+    Option<"allowPartialConversion", "allow-partial-conversion", "bool",
+           "false", "Ignore bitcasts involving unsupported types">
+  ];
+  let dependentDialects = ["comb::CombDialect"];
+}
+
 
 #endif // CIRCT_DIALECT_HW_PASSES_TD

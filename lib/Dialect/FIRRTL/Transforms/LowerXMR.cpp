@@ -170,9 +170,25 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
                 return success();
               }
             // Get an InnerRefAttr to the value being sent.
+            auto *xmrDefOp = xmrDef.getDefiningOp();
 
-            // Add a node, don't need to have symbol on defining operation,
-            // just a way to send out the value.
+            // Add the symbol directly if the operation targets a specific
+            // result. This ensures that operations like InstanceOp and MemOp,
+            // which have inner symbols that target the operation itself (not a
+            // specific result), still get nodes created to distinguish which
+            // result is being referenced.
+            if (auto innerSymOp =
+                    dyn_cast_or_null<hw::InnerSymbolOpInterface>(xmrDefOp))
+              if (innerSymOp.getTargetResultIndex()) {
+                addReachingSendsEntry(send.getResult(), getInnerRefTo(xmrDef));
+                markForRemoval(send);
+                return success();
+              }
+
+            // The operation cannot support an inner symbol, or it has
+            // multiple results and doesn't target a specific result, so
+            // create a node and replace all uses of the original value with
+            // the node (except the node itself).
             ImplicitLocOpBuilder b(xmrDef.getLoc(), &getContext());
             b.setInsertionPointAfterValue(xmrDef);
             SmallString<32> opName;
@@ -184,7 +200,7 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
                 rootKnown) {
               opName = name + "_probe";
               nameKind = NameKindEnum::InterestingName;
-            } else if (auto *xmrDefOp = xmrDef.getDefiningOp()) {
+            } else if (xmrDefOp) {
               // Inspect "name" directly for ops that aren't named by above.
               // (e.g., firrtl.constant)
               if (auto name = xmrDefOp->getAttrOfType<StringAttr>("name")) {
@@ -192,7 +208,20 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
                 nameKind = NameKindEnum::InterestingName;
               }
             }
-            xmrDef = NodeOp::create(b, xmrDef, opName, nameKind).getResult();
+            auto node = NodeOp::create(b, xmrDef, opName, nameKind);
+            auto newValue = node.getResult();
+            // Replace all uses except the node itself and except when the value
+            // is the destination of a connect (operand 0). We need to preserve
+            // connect destinations to maintain proper flow semantics.
+            xmrDef.replaceUsesWithIf(newValue, [&](OpOperand &operand) {
+              if (operand.getOwner() == node.getOperation())
+                return false;
+              if (isa<FConnectLike>(operand.getOwner()) &&
+                  operand.getOperandNumber() == 0)
+                return false;
+              return true;
+            });
+            xmrDef = newValue;
 
             // Create a new entry for this RefSendOp. The path is currently
             // local.

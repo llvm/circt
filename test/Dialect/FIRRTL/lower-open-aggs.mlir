@@ -340,3 +340,36 @@ firrtl.circuit "DomainInfo" {
   ) {
   }
 }
+
+// -----
+
+// Test that domain info is correctly updated when port indices change due to
+// bundle expansion.
+// CHECK-LABEL: circuit "DomainInfoIndexUpdate"
+firrtl.circuit "DomainInfoIndexUpdate" {
+  firrtl.domain @D
+  // CHECK:      firrtl.extmodule @Ext(
+  // CHECK-SAME:   out bundle_a: !firrtl.probe<uint<1>>,
+  // CHECK-SAME:   out bundle_b: !firrtl.probe<uint<1>>,
+  // CHECK-SAME:   in reset: !firrtl.asyncreset domains [domain],
+  // CHECK-SAME:   in domain: !firrtl.domain of @D)
+  firrtl.extmodule @Ext(
+    out bundle: !firrtl.openbundle<a: probe<uint<1>>, b: probe<uint<1>>>,
+    in reset: !firrtl.asyncreset domains [domain],
+    in domain: !firrtl.domain of @D
+  )
+
+  // CHECK:      firrtl.module @DomainInfoIndexUpdate
+  firrtl.module @DomainInfoIndexUpdate() {
+    // CHECK: %ext_bundle_a, %ext_bundle_b, %ext_reset, %ext_domain = firrtl.instance ext @Ext(
+    // CHECK-SAME: out bundle_a: !firrtl.probe<uint<1>>,
+    // CHECK-SAME: out bundle_b: !firrtl.probe<uint<1>>,
+    // CHECK-SAME: in reset: !firrtl.asyncreset domains [domain],
+    // CHECK-SAME: in domain: !firrtl.domain of @D)
+    %bundle, %reset, %domain = firrtl.instance ext @Ext(
+      out bundle: !firrtl.openbundle<a: probe<uint<1>>, b: probe<uint<1>>>,
+      in reset: !firrtl.asyncreset domains [domain],
+      in domain: !firrtl.domain of @D
+    )
+  }
+}

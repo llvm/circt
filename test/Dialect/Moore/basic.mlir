@@ -135,6 +135,10 @@ moore.module @Expressions(
   in %d: !moore.l32,
   // CHECK-SAME: in [[X:%[^:]+]] : !moore.i1
   in %x: !moore.i1,
+  // CHECK-SAME: in [[BA:%[^:]+]] : i1
+  in %ba : i1,
+  // CHECK-SAME: in [[BB:%[^:]+]] : i32
+  in %bb : i32,
 
   // CHECK-SAME: in [[ARRAY1:%[^:]+]] : !moore.uarray<4 x i8>
   in %array1: !moore.uarray<4 x i8>,
@@ -195,8 +199,14 @@ moore.module @Expressions(
   moore.logic_to_int %c : l32
   // CHECK: moore.int_to_logic [[A]] : i32
   moore.int_to_logic %a : i32
-  // CHECK: moore.to_builtin_bool [[X]] : i1
-  moore.to_builtin_bool %x : i1
+  // CHECK: moore.to_builtin_int [[X]] : i1
+  moore.to_builtin_int %x : i1
+  // CHECK: moore.to_builtin_int [[A]] : i32
+  moore.to_builtin_int %a : i32
+  // CHECK: moore.from_builtin_int [[BA]] : i1
+  moore.from_builtin_int %ba : i1
+  // CHECK: moore.from_builtin_int [[BB]] : i32
+  moore.from_builtin_int %bb : i32
 
   // CHECK: moore.neg [[A]] : i32
   moore.neg %a : i32
@@ -394,7 +404,7 @@ func.func @WaitDelay(%arg0: !moore.time) {
 
 // CHECK-LABEL: func.func @FormatStrings
 // CHECK-SAME: %arg0: !moore.format_string
-func.func @FormatStrings(%arg0: !moore.format_string, %arg1: !moore.i42) {
+func.func @FormatStrings(%arg0: !moore.format_string, %arg1: !moore.i42, %arg2: !moore.f32, %arg3: !moore.f64) {
   // CHECK: moore.fmt.literal "hello"
   moore.fmt.literal "hello"
   // CHECK: moore.fmt.concat ()
@@ -421,6 +431,22 @@ func.func @FormatStrings(%arg0: !moore.format_string, %arg1: !moore.i42) {
   moore.fmt.int hex_lower %arg1, align left, pad zero width 42 : i42
   // CHECK: moore.fmt.int hex_upper %arg1, align left, pad zero width 42 : i42
   moore.fmt.int hex_upper %arg1, align left, pad zero width 42 : i42
+
+  // CHECK: moore.fmt.real float %arg2, align left : f32
+  moore.fmt.real float %arg2, align left : f32
+  // CHECK: moore.fmt.real exponential %arg3, align left : f64
+  moore.fmt.real exponential %arg3, align left : f64
+  // CHECK: moore.fmt.real general %arg3, align right fieldWidth 9 fracDigits 8 : f64
+  moore.fmt.real general %arg3, align right fieldWidth 9 fracDigits 8 : f64
+  // CHECK: moore.fmt.real float %arg2, align right fieldWidth 12 : f32
+  moore.fmt.real float %arg2, align right fieldWidth 12 : f32
+  // CHECK: moore.fmt.real exponential %arg3, align right fracDigits 5 : f64
+  moore.fmt.real exponential %arg3, align right fracDigits 5 : f64
+
+  // CHECK: moore.fmt.hier_path
+  moore.fmt.hier_path
+  // CHECK: moore.fmt.hier_path escaped
+  moore.fmt.hier_path escaped
   return
 }
 
@@ -520,5 +546,19 @@ func.func @StringConversion(%a: !moore.i32, %b: !moore.string) {
   moore.int_to_string %a : i32
   // CHECK: moore.string_to_int [[B]] : i32
   moore.string_to_int %b : i32
+  return
+}
+
+// CHECK-LABEL: func.func @StringOperations
+func.func @StringOperations(%arg0 : !moore.string, %arg1 : !moore.string) {
+  // CHECK: moore.string.concat ()
+  moore.string.concat ()
+  // CHECK: moore.string.concat (%arg0)
+  moore.string.concat (%arg0)
+  // CHECK: moore.string.concat (%arg0, %arg1)
+  moore.string.concat (%arg0, %arg1)
+  // CHECK: moore.string.len %arg0
+  moore.string.len %arg0
+
   return
 }

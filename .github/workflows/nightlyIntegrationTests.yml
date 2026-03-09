@@ -19,7 +19,7 @@ jobs:
     # John and re-run the job.
     runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds", "linux"]
     container:
-      image: ghcr.io/circt/images/circt-integration-test:v19.2
+      image: ghcr.io/circt/images/circt-integration-test:v20
       volumes:
         - /mnt:/__w/circt
     strategy:

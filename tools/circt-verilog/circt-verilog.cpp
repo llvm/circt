@@ -17,8 +17,8 @@
 #include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/LLHD/IR/LLHDDialect.h"
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
+#include "circt/Dialect/LLHD/LLHDDialect.h"
+#include "circt/Dialect/LLHD/LLHDPasses.h"
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
@@ -133,6 +133,11 @@ struct CLOptions {
       "detect-memories",
       cl::desc("Detect memories and lower them to `seq.firmem`"),
       cl::init(true), cl::cat(cat)};
+
+  cl::opt<bool> sroa{
+      "sroa",
+      cl::desc("Destructure arrays and structs into individual signals."),
+      cl::init(false), cl::cat(cat)};
 
   //===--------------------------------------------------------------------===//
   // Include paths
@@ -289,6 +294,7 @@ static void populatePasses(PassManager &pm) {
     return;
   LlhdToCorePipelineOptions options;
   options.detectMemories = opts.detectMemories;
+  options.sroa = opts.sroa;
   populateLlhdToCorePipeline(pm, options);
 }
 

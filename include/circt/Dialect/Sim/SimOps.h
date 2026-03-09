@@ -26,6 +26,8 @@
 #include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 
+#include "circt/Dialect/Sim/SimOpInterfaces.h.inc"
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/Sim/Sim.h.inc"
 
@@ -44,6 +46,12 @@ static inline mlir::Value getFormattedValue(mlir::Operation *fmtOp) {
   if (auto fmt = llvm::dyn_cast_or_null<circt::sim::FormatHexOp>(fmtOp))
     return fmt.getValue();
   if (auto fmt = llvm::dyn_cast_or_null<circt::sim::FormatCharOp>(fmtOp))
+    return fmt.getValue();
+  if (auto fmt = llvm::dyn_cast_or_null<circt::sim::FormatGeneralOp>(fmtOp))
+    return fmt.getValue();
+  if (auto fmt = llvm::dyn_cast_or_null<circt::sim::FormatFloatOp>(fmtOp))
+    return fmt.getValue();
+  if (auto fmt = llvm::dyn_cast_or_null<circt::sim::FormatScientificOp>(fmtOp))
     return fmt.getValue();
   return {};
 }

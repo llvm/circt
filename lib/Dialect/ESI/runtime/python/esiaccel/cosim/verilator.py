@@ -19,6 +19,7 @@ class Verilator(Simulator):
       sources: SourceFiles,
       run_dir: Path,
       debug: bool,
+      save_waveform: bool = False,
       run_stdout_callback: Optional[Callable[[str], None]] = None,
       run_stderr_callback: Optional[Callable[[str], None]] = None,
       compile_stdout_callback: Optional[Callable[[str], None]] = None,
@@ -30,6 +31,7 @@ class Verilator(Simulator):
         sources=sources,
         run_dir=run_dir,
         debug=debug,
+        save_waveform=save_waveform,
         run_stdout_callback=run_stdout_callback,
         run_stderr_callback=run_stderr_callback,
         compile_stdout_callback=compile_stdout_callback,
@@ -84,6 +86,11 @@ class Verilator(Simulator):
       cmd += ["-LDFLAGS", " ".join(["-l" + so for so in self.sources.dpi_so])]
     cmd += [str(p) for p in self.sources.rtl_sources]
     return [cmd]
+
+  @property
+  def waveform_extension(self) -> str:
+    """Verilator's C++ driver uses ``VerilatedFstC`` — FST format."""
+    return ".fst"
 
   def run_command(self, gui: bool):
     if gui:

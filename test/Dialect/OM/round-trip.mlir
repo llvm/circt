@@ -37,7 +37,7 @@ om.class @Gadget(%green_1: i8, %green_2: i32) -> (green_1: i8, green_2: i32) {
   // CHECK: om.class.fields %green_1, %green_2 : i8, i32
   om.class.fields %green_1, %green_2 : i8, i32
 }
- 
+
 // CHECK-LABEL: om.class @Empty
 om.class @Empty() {
   om.class.fields
@@ -278,6 +278,21 @@ om.class @IntegerArithmetic() {
 
   // CHECK: om.integer.shl %0, %1 : !om.integer
   %5 = om.integer.shl %0, %1 : !om.integer
+
+  om.class.fields
+}
+
+om.class @UnknownValueObject(%a: i8) {
+  om.class.fields
+}
+
+// CHECK-LABEL: @UnknownValue(
+om.class @UnknownValue() {
+  // CHECK-NEXT: %0 = om.unknown : i8
+  %0 = om.unknown : i8
+
+  // CHECK-NEXT: %1 = om.object @UnknownValueObject(%0) : (i8) -> !om.class.type<@UnknownValueObject>
+  %1 = om.object @UnknownValueObject(%0) : (i8) -> !om.class.type<@UnknownValueObject>
 
   om.class.fields
 }

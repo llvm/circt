@@ -179,8 +179,6 @@ hw.module @partial_product_booth_zext(in %a : i3, in %b : i3, out pp0 : i6, out 
   // FORCE-BOOTH-NEXT: %[[ROW0A:.*]] = comb.and %[[RB0]], %[[A]] : i4
   // FORCE-BOOTH-NEXT: %[[ROW0:.*]] = comb.or bin %[[ROW02A]], %[[ROW0A]] : i4
   // FORCE-BOOTH-NEXT: %[[NROW0:.*]] = comb.xor bin %[[ROW0]], %[[RB1]] : i4
-  // FORCE-BOOTH-NEXT: %[[SEXTB1:.*]] = comb.replicate %[[B1]] : (i1) -> i2
-  // FORCE-BOOTH-NEXT: %[[PP0:.*]] = comb.concat %[[SEXTB1]], %[[NROW0]] : i2, i4
   // FORCE-BOOTH-NEXT: %[[B2XORB1:.*]] = comb.xor bin %[[B2]], %[[B1]] : i1
   // FORCE-BOOTH-NEXT: %[[B2B1:.*]] = comb.and %[[B2]], %[[B1]] : i1
   // FORCE-BOOTH-NEXT: %[[RB2XORB1:.*]] = comb.replicate %[[B2XORB1]] : (i1) -> i4
@@ -189,6 +187,8 @@ hw.module @partial_product_booth_zext(in %a : i3, in %b : i3, out pp0 : i6, out 
   // FORCE-BOOTH-NEXT: %[[ROW1A:.*]] = comb.and %[[RB2XORB1]], %[[A]] : i4
   // FORCE-BOOTH-NEXT: %[[ROW1:.*]] = comb.or bin %[[ROW12A]], %[[ROW1A]] : i4
   // FORCE-BOOTH-NEXT: %[[PP1:.*]] = comb.concat %[[ROW1]], %false, %[[B1]] : i4, i1, i1
+  // FORCE-BOOTH-NEXT: %[[SEXTB1:.*]] = comb.replicate %[[B1]] : (i1) -> i2
+  // FORCE-BOOTH-NEXT: %[[PP0:.*]] = comb.concat %[[SEXTB1]], %[[NROW0]] : i2, i4
   // FORCE-BOOTH-NEXT: hw.output %[[PP0]], %[[PP1]], %c0_i6 : i6, i6, i6
   %c0_i3 = hw.constant 0 : i3
   %0 = comb.concat %c0_i3, %a : i3, i3

@@ -94,6 +94,15 @@ func.func @test_comb_parity(%arg0: i32) -> i1 {
   return %0 : i1
 }
 
+// CHECK-LABEL: llvm.func @test_comb_reverse
+func.func @test_comb_reverse(%arg0: i32) -> i32 {
+  // Reverse should use llvm.intr.bitreverse (no Comb->Arith pattern exists)
+  // CHECK: %{{.*}} = llvm.intr.bitreverse(%arg0) : (i32) -> i32
+  // CHECK: llvm.return
+  %0 = comb.reverse %arg0 : i32
+  return %0 : i32
+}
+
 // CHECK-LABEL: llvm.func @test_comb_shifts
 func.func @test_comb_shifts(%arg0: i32, %arg1: i32) -> (i32, i32, i32) {
   // Test shift operations (converted via Comb->Arith->LLVM)
@@ -170,6 +179,29 @@ func.func @test_control_flow(%cond: i1, %arg0: i32) -> i32 {
     %1 = comb.mul %arg0, %arg0 : i32
     scf.yield %1 : i32
   }
+  return %result : i32
+}
+
+// CHECK-LABEL: llvm.func @test_hw_constant
+func.func @test_hw_constant() -> i32 {
+  // Test that hw.constant is converted to llvm.mlir.constant
+  // hw.constant -> arith.constant (via CombToArith) -> llvm.mlir.constant (via ArithToLLVM)
+  // CHECK: %[[C42:.*]] = llvm.mlir.constant(42 : i32) : i32
+  // CHECK: llvm.return %[[C42]]
+  %0 = hw.constant 42 : i32
+  return %0 : i32
+}
+
+// CHECK-LABEL: llvm.func @test_hw_constant_with_ops
+func.func @test_hw_constant_with_ops() -> i32 {
+  // Test that hw.constant works with other operations
+  // CHECK: %[[C10:.*]] = llvm.mlir.constant(10 : i32) : i32
+  // CHECK: %[[C20:.*]] = llvm.mlir.constant(20 : i32) : i32
+  // CHECK: %[[C30:.*]] = llvm.mlir.constant(30 : i32) : i32
+  // CHECK: llvm.return %[[C30]]
+  %c10 = hw.constant 10 : i32
+  %c20 = hw.constant 20 : i32
+  %result = comb.add %c10, %c20 : i32
   return %result : i32
 }
 

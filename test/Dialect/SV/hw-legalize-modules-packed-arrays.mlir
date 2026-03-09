@@ -76,7 +76,7 @@ hw.module @array_create_get_default(in %arg0: i8, in %arg1: i8, in %arg2: i8, in
     // CHECK:   sv.if %1  {
     %cond = comb.icmp eq %2, %arg2 : i8
     sv.if %cond {
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
   }
 }
@@ -116,7 +116,7 @@ hw.module @array_muxed_create_get_default(in %arg0: i8, in %arg1: i8, in %arg2: 
     // CHECK: sv.if %4  {
     %cond = comb.icmp eq %2, %arg2 : i8
     sv.if %cond {
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
   }
 }
@@ -152,7 +152,7 @@ hw.module @array_create_concat_get_default(in %arg0: i8, in %arg1: i8, in %arg2:
     // CHECK:   sv.if %1  {
     %cond = comb.icmp eq %2, %arg2 : i8
     sv.if %cond {
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
   }
 }

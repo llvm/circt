@@ -106,7 +106,7 @@ class HWModule:
     }
 
   @property
-  def services(self) -> List[cpp.AppID]:
+  def services(self) -> List[cpp.Service]:
     return self.cpp_hwmodule.services
 
 

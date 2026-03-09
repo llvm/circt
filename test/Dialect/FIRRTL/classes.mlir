@@ -15,7 +15,7 @@ firrtl.circuit "Classes" {
     firrtl.propassign %out_str, %in_str : !firrtl.string
   }
 
-  // CHECK-LABEL: firrtl.module @ModuleWithObjectPort(in %in: !firrtl.class<@StringPassThru(in in_str: !firrtl.string, out out_str: !firrtl.string)>) 
+  // CHECK-LABEL: firrtl.module @ModuleWithObjectPort(in %in: !firrtl.class<@StringPassThru(in in_str: !firrtl.string, out out_str: !firrtl.string)>)
   firrtl.module @ModuleWithObjectPort(in %in: !firrtl.class<@StringPassThru(in in_str: !firrtl.string, out out_str: !firrtl.string)>) {}
 
   // CHECK-LABEL: firrtl.class @EmptyClass()
@@ -79,11 +79,12 @@ firrtl.circuit "Classes" {
   // CHECK-LABEL: firrtl.extclass @MyExtClass(out val: !firrtl.string)
   firrtl.extclass @MyExtClass(out val: !firrtl.string)
 
-  // CHECK-LABEL: firrtl.module @UserOfExtClass(out %port: !firrtl.class<@MyExtClass(out val: !firrtl.string)>) 
+  // CHECK-LABEL: firrtl.module @UserOfExtClass(out %port: !firrtl.class<@MyExtClass(out val: !firrtl.string)>)
   firrtl.module @UserOfExtClass(out %port: !firrtl.class<@MyExtClass(out val: !firrtl.string)>) {
     // CHECK: %0 = firrtl.object @MyExtClass(out val: !firrtl.string)
     // CHECK: firrtl.propassign %port, %0 : !firrtl.class<@MyExtClass(out val: !firrtl.string)>
     %0 = firrtl.object @MyExtClass(out val: !firrtl.string)
     firrtl.propassign %port, %0 : !firrtl.class<@MyExtClass(out val: !firrtl.string)>
   }
+
 }

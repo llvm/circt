@@ -1,5 +1,9 @@
 add_circt_dialect(Arc arc)
-add_circt_dialect_doc(Arc arc)
+add_circt_doc(Arc Dialects/ArcOps -gen-op-doc)
+add_circt_doc(ArcTypes Dialects/ArcTypes -gen-typedef-doc -dialect arc)
+add_circt_doc(ArcAttributes Dialects/ArcAttributes -gen-attrdef-doc -dialect arc)
+add_circt_doc(Arc Dialects/ArcEnums -gen-enum-doc -dialect arc)
+add_circt_doc(ArcInterfaces Dialects/ArcInterfaces -gen-op-interface-docs)
 
 set(LLVM_TARGET_DEFINITIONS ArcPasses.td)
 mlir_tablegen(ArcPasses.h.inc -gen-pass-decls)
@@ -13,6 +17,11 @@ mlir_tablegen(ArcEnums.h.inc -gen-enum-decls)
 mlir_tablegen(ArcEnums.cpp.inc -gen-enum-defs)
 add_public_tablegen_target(CIRCTArcEnumsIncGen)
 add_dependencies(circt-headers CIRCTArcEnumsIncGen)
+
+mlir_tablegen(ArcAttributes.h.inc -gen-attrdef-decls -attrdefs-dialect=arc)
+mlir_tablegen(ArcAttributes.cpp.inc -gen-attrdef-defs -attrdefs-dialect=arc)
+add_public_tablegen_target(CIRCTArcAttributesIncGen)
+add_dependencies(circt-headers CIRCTArcAttributesIncGen)
 
 set(LLVM_TARGET_DEFINITIONS ArcInterfaces.td)
 mlir_tablegen(ArcInterfaces.h.inc -gen-op-interface-decls)

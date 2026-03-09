@@ -7,8 +7,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Moore/MooreTypes.h"
+#include "mlir/IR/Operation.h"
+#include "mlir/IR/Value.h"
 #include "slang/ast/EvalContext.h"
 #include "slang/ast/SystemSubroutine.h"
+#include "slang/ast/types/AllTypes.h"
 #include "slang/syntax/AllSyntax.h"
 #include "llvm/ADT/ScopeExit.h"
 
@@ -103,8 +107,27 @@ static Value visitClassProperty(Context &context,
                                 const slang::ast::ClassPropertySymbol &expr) {
   auto loc = context.convertLocation(expr.location);
   auto builder = context.builder;
-
   auto type = context.convertType(expr.getType());
+  auto fieldTy = cast<moore::UnpackedType>(type);
+  auto fieldRefTy = moore::RefType::get(fieldTy);
+
+  if (expr.lifetime == slang::ast::VariableLifetime::Static) {
+
+    // Variable may or may not have been hoisted already. Hoist if not.
+    if (!context.globalVariables.lookup(&expr)) {
+      if (failed(context.convertGlobalVariable(expr))) {
+        return {};
+      }
+    }
+    // Try the static variable after it has been hoisted.
+    if (auto globalOp = context.globalVariables.lookup(&expr))
+      return moore::GetGlobalVariableOp::create(builder, loc, globalOp);
+
+    mlir::emitError(loc) << "Failed to access static member variable "
+                         << expr.name << " as a global variable";
+    return {};
+  }
+
   // Get the scope's implicit this variable
   mlir::Value instRef = context.getImplicitThisRef();
   if (!instRef) {
@@ -114,8 +137,6 @@ static Value visitClassProperty(Context &context,
   }
 
   auto fieldSym = mlir::FlatSymbolRefAttr::get(builder.getContext(), expr.name);
-  auto fieldTy = cast<moore::UnpackedType>(type);
-  auto fieldRefTy = moore::RefType::get(fieldTy);
 
   moore::ClassHandleType classTy =
       cast<moore::ClassHandleType>(instRef.getType());
@@ -168,11 +189,36 @@ struct ExprVisitor {
     auto derefType = value.getType();
     if (isLvalue)
       derefType = cast<moore::RefType>(derefType).getNestedType();
-    if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType>(
-            derefType)) {
+
+    if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
+             moore::QueueType, moore::AssocArrayType>(derefType)) {
       mlir::emitError(loc) << "unsupported expression: element select into "
                            << expr.value().type->toString() << "\n";
       return {};
+    }
+
+    // Associative Arrays are a special case so handle them separately.
+    if (isa<moore::AssocArrayType>(derefType)) {
+      auto assocArray = cast<moore::AssocArrayType>(derefType);
+      auto expectedIndexType = assocArray.getIndexType();
+      auto givenIndex = context.convertRvalueExpression(expr.selector());
+
+      if (!givenIndex)
+        return {};
+
+      if (givenIndex.getType() != expectedIndexType) {
+        mlir::emitError(loc)
+            << "Incorrect index type: expected index type of "
+            << expectedIndexType << " but was given " << givenIndex.getType();
+      }
+
+      if (isLvalue)
+        return moore::AssocArrayExtractRefOp::create(
+            builder, loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
+            value, givenIndex);
+
+      return moore::AssocArrayExtractOp::create(builder, loc, type, value,
+                                                givenIndex);
     }
 
     auto resultType =
@@ -185,23 +231,81 @@ struct ExprVisitor {
 
       auto lowBit = constValue->integer().as<uint32_t>().value();
       if (isLvalue)
-        return moore::ExtractRefOp::create(builder, loc, resultType, value,
-                                           range.translateIndex(lowBit));
+        return llvm::TypeSwitch<Type, Value>(derefType)
+            .Case<moore::QueueType>([&](moore::QueueType) {
+              mlir::emitError(loc)
+                  << "Unexpected LValue extract on Queue Type!";
+              return Value();
+            })
+            .Default([&](Type) {
+              return moore::ExtractRefOp::create(builder, loc, resultType,
+                                                 value,
+                                                 range.translateIndex(lowBit));
+            });
       else
-        return moore::ExtractOp::create(builder, loc, resultType, value,
-                                        range.translateIndex(lowBit));
+        return llvm::TypeSwitch<Type, Value>(derefType)
+            .Case<moore::QueueType>([&](moore::QueueType) {
+              mlir::emitError(loc)
+                  << "Unexpected RValue extract on Queue Type!";
+              return Value();
+            })
+            .Default([&](Type) {
+              return moore::ExtractOp::create(builder, loc, resultType, value,
+                                              range.translateIndex(lowBit));
+            });
     }
 
+    // Save the queue which is being indexed: this allows us to handle the `$`
+    // operator, which evaluates to the last valid index in the queue.
+    Value savedQueue = context.currentQueue;
+    llvm::scope_exit restoreQueue([&] { context.currentQueue = savedQueue; });
+    if (isa<moore::QueueType>(derefType)) {
+      // For QueueSizeBIOp, we need a byvalue queue, so if the queue is an
+      // lvalue (because we're assigning to it), we need to dereference it
+      if (isa<moore::RefType>(value.getType())) {
+        context.currentQueue = moore::ReadOp::create(builder, loc, value);
+      } else {
+        context.currentQueue = value;
+      }
+    }
     auto lowBit = context.convertRvalueExpression(expr.selector());
+
     if (!lowBit)
       return {};
     lowBit = getSelectIndex(context, loc, lowBit, range);
     if (isLvalue)
-      return moore::DynExtractRefOp::create(builder, loc, resultType, value,
-                                            lowBit);
+      return llvm::TypeSwitch<Type, Value>(derefType)
+          .Case<moore::QueueType>([&](moore::QueueType) {
+            return moore::DynQueueRefElementOp::create(builder, loc, resultType,
+                                                       value, lowBit);
+          })
+          .Default([&](Type) {
+            return moore::DynExtractRefOp::create(builder, loc, resultType,
+                                                  value, lowBit);
+          });
+
     else
-      return moore::DynExtractOp::create(builder, loc, resultType, value,
-                                         lowBit);
+      return llvm::TypeSwitch<Type, Value>(derefType)
+          .Case<moore::QueueType>([&](moore::QueueType) {
+            return moore::DynQueueExtractOp::create(builder, loc, resultType,
+                                                    value, lowBit, lowBit);
+          })
+          .Default([&](Type) {
+            return moore::DynExtractOp::create(builder, loc, resultType, value,
+                                               lowBit);
+          });
+  }
+
+  /// Handle null assignments to variables.
+  /// Compare with IEEE 1800-2023 Table 6-7 - Default variable initial values
+  Value visit(const slang::ast::NullLiteral &expr) {
+    auto type = context.convertType(*expr.type);
+    if (isa<moore::ClassHandleType, moore::ChandleType, moore::EventType,
+            moore::NullType>(type))
+      return moore::NullOp::create(builder, loc);
+    mlir::emitError(loc) << "No null value definition found for value of type "
+                         << type;
+    return {};
   }
 
   /// Handle range bit selections.
@@ -211,6 +315,41 @@ struct ExprVisitor {
     if (!type || !value)
       return {};
 
+    auto derefType = value.getType();
+    if (isLvalue)
+      derefType = cast<moore::RefType>(derefType).getNestedType();
+
+    if (isa<moore::QueueType>(derefType)) {
+      return handleQueueRangeSelectExpressions(expr, type, value);
+    }
+    return handleArrayRangeSelectExpressions(expr, type, value);
+  }
+
+  // Handles range selections into queues, in which neither bound needs to be
+  // constant
+  Value handleQueueRangeSelectExpressions(
+      const slang::ast::RangeSelectExpression &expr, Type type, Value value) {
+    Value savedQueue = context.currentQueue;
+    llvm::scope_exit restoreQueue([&] { context.currentQueue = savedQueue; });
+    context.currentQueue = value;
+
+    auto lowerIdx = context.convertRvalueExpression(expr.left());
+    auto upperIdx = context.convertRvalueExpression(expr.right());
+    auto resultType =
+        isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type)) : type;
+
+    if (isLvalue) {
+      mlir::emitError(loc) << "queue lvalue range selections are not supported";
+      return {};
+    }
+    return moore::DynQueueExtractOp::create(builder, loc, resultType, value,
+                                            lowerIdx, upperIdx);
+  }
+
+  // Handles range selections into arrays, which currently require a constant
+  // upper bound
+  Value handleArrayRangeSelectExpressions(
+      const slang::ast::RangeSelectExpression &expr, Type type, Value value) {
     std::optional<int32_t> constLeft;
     std::optional<int32_t> constRight;
     if (auto *constant = expr.left().getConstant())
@@ -341,6 +480,24 @@ struct ExprVisitor {
   /// Handle concatenations.
   Value visit(const slang::ast::ConcatenationExpression &expr) {
     SmallVector<Value> operands;
+    if (expr.type->isString()) {
+      for (auto *operand : expr.operands()) {
+        assert(!isLvalue && "checked by Slang");
+        auto value = convertLvalueOrRvalueExpression(*operand);
+        if (!value)
+          return {};
+        value = context.materializeConversion(
+            moore::StringType::get(context.getContext()), value, false,
+            value.getLoc());
+        if (!value)
+          return {};
+        operands.push_back(value);
+      }
+      return moore::StringConcatOp::create(builder, loc, operands);
+    }
+    if (expr.type->isQueue()) {
+      return handleQueueConcat(expr);
+    }
     for (auto *operand : expr.operands()) {
       // Handle empty replications like `{0{...}}` which may occur within
       // concatenations. Slang assigns them a `void` type which we can check for
@@ -360,6 +517,79 @@ struct ExprVisitor {
       return moore::ConcatRefOp::create(builder, loc, operands);
     else
       return moore::ConcatOp::create(builder, loc, operands);
+  }
+
+  // Handles a `ConcatenationExpression` which produces a queue as a result.
+  // Intuitively, queue concatenations are the same as unpacked array
+  // concatenations. However, because queues may vary in size, we can't
+  // just convert each argument to a simple bit vector.
+  Value handleQueueConcat(const slang::ast::ConcatenationExpression &expr) {
+    SmallVector<Value> operands;
+
+    auto queueType =
+        cast<moore::QueueType>(context.convertType(*expr.type, loc));
+    auto elementType = queueType.getElementType();
+
+    // Strategy:
+    // QueueConcatOp only takes queues, so other types must be converted to
+    // queues.
+    // - Unpacked arrays have a conversion to queues via
+    // `QueueFromUnpackedArrayOp`.
+    // - For individual elements, we create a new queue for each contiguous
+    // sequence of elements, and add this to the QueueConcatOp.
+
+    // The current contiguous sequence of individual elements.
+    Value contigElements;
+
+    for (auto *operand : expr.operands()) {
+      bool isSingleElement =
+          context.convertType(*operand->type, loc) == elementType;
+
+      // If the subsequent operand is not a single element, add the current
+      // sequence of contiguous elements to the QueueConcatOp
+      if (!isSingleElement && contigElements) {
+        operands.push_back(moore::ReadOp::create(builder, loc, contigElements));
+        contigElements = {};
+      }
+
+      assert(!isLvalue && "checked by Slang");
+      auto value = convertLvalueOrRvalueExpression(*operand);
+      if (!value)
+        return {};
+
+      // If value is an element of the queue, create an empty queue and add
+      // that element.
+      if (value.getType() == elementType) {
+        auto queueRefType =
+            moore::RefType::get(context.getContext(), queueType);
+
+        if (!contigElements) {
+          contigElements =
+              moore::VariableOp::create(builder, loc, queueRefType, {}, {});
+        }
+        moore::QueuePushBackOp::create(builder, loc, contigElements, value);
+        continue;
+      }
+
+      // Otherwise, the value should be directly convertible to a queue type.
+      // If the type is a queue type with the same element type, skip this step,
+      // since we don't need to cast things like queue<T, 10> to queue<T, 0>,
+      // - QueueConcatOp doesn't mind the queue bounds.
+      if (!(isa<moore::QueueType>(value.getType()) &&
+            cast<moore::QueueType>(value.getType()).getElementType() ==
+                elementType)) {
+        value = context.materializeConversion(queueType, value, false,
+                                              value.getLoc());
+      }
+
+      operands.push_back(value);
+    }
+
+    if (contigElements) {
+      operands.push_back(moore::ReadOp::create(builder, loc, contigElements));
+    }
+
+    return moore::QueueConcatOp::create(builder, loc, queueType, operands);
   }
 
   /// Handle member accesses.
@@ -410,33 +640,60 @@ struct ExprVisitor {
         return {};
       auto targetTy = cast<moore::ClassHandleType>(valTy);
 
-      // We need to pick the closest ancestor that declares a property with the
-      // relevant name. System Verilog explicitly enforces lexical shadowing, as
-      // shown in IEEE 1800-2023 Section 8.14 "Overridden members".
-      auto upcastTargetTy =
-          context.getAncestorClassWithProperty(targetTy, expr.member.name, loc);
-      if (!upcastTargetTy)
-        return {};
+      // `MemberAccessExpression`s may refer to either variables that may or may
+      // not be compile time constants, or to class parameters which are always
+      // elaboration-time constant.
+      //
+      // We distinguish these cases, and materialize a runtime member access
+      // for variables, but force constant conversion for parameter accesses.
+      //
+      // Also see this discussion:
+      // https://github.com/MikePopoloski/slang/issues/1641
 
-      // Convert the class handle to the required target type for property
-      // shadowing purposes.
-      Value baseVal =
-          context.convertRvalueExpression(expr.value(), upcastTargetTy);
-      if (!baseVal)
-        return {};
+      if (expr.member.kind != slang::ast::SymbolKind::Parameter) {
 
-      // @field and result type !moore.ref<T>.
-      auto fieldSym =
-          mlir::FlatSymbolRefAttr::get(builder.getContext(), expr.member.name);
-      auto fieldRefTy = moore::RefType::get(cast<moore::UnpackedType>(type));
+        // We need to pick the closest ancestor that declares a property with
+        // the relevant name. System Verilog explicitly enforces lexical
+        // shadowing, as shown in IEEE 1800-2023 Section 8.14 "Overridden
+        // members".
+        moore::ClassHandleType upcastTargetTy =
+            context.getAncestorClassWithProperty(targetTy, expr.member.name,
+                                                 loc);
+        if (!upcastTargetTy)
+          return {};
 
-      // Produce a ref to the class property from the (possibly upcast) handle.
-      Value fieldRef = moore::ClassPropertyRefOp::create(
-          builder, loc, fieldRefTy, baseVal, fieldSym);
+        // Convert the class handle to the required target type for property
+        // shadowing purposes.
+        Value baseVal =
+            context.convertRvalueExpression(expr.value(), upcastTargetTy);
+        if (!baseVal)
+          return {};
 
-      // If we need an RValue, read the reference, otherwise return
-      return isLvalue ? fieldRef
-                      : moore::ReadOp::create(builder, loc, fieldRef);
+        // @field and result type !moore.ref<T>.
+        auto fieldSym = mlir::FlatSymbolRefAttr::get(builder.getContext(),
+                                                     expr.member.name);
+        auto fieldRefTy = moore::RefType::get(cast<moore::UnpackedType>(type));
+
+        // Produce a ref to the class property from the (possibly upcast)
+        // handle.
+        Value fieldRef = moore::ClassPropertyRefOp::create(
+            builder, loc, fieldRefTy, baseVal, fieldSym);
+
+        // If we need an RValue, read the reference, otherwise return
+        return isLvalue ? fieldRef
+                        : moore::ReadOp::create(builder, loc, fieldRef);
+      }
+
+      slang::ConstantValue constVal;
+      if (auto param = expr.member.as_if<slang::ast::ParameterSymbol>()) {
+        constVal = param->getValue();
+        if (auto value = context.materializeConstant(constVal, *expr.type, loc))
+          return value;
+      }
+
+      mlir::emitError(loc) << "Parameter " << expr.member.name
+                           << " has no constant value";
+      return {};
     }
 
     mlir::emitError(loc, "expression of type ")
@@ -842,6 +1099,35 @@ struct RvalueExprVisitor : public ExprVisitor {
     }
   }
 
+  Value visitHandleBOp(const slang::ast::BinaryExpression &expr) {
+    // Convert operands to the chosen target type.
+    auto lhs = context.convertRvalueExpression(expr.left());
+    if (!lhs)
+      return {};
+    auto rhs = context.convertRvalueExpression(expr.right());
+    if (!rhs)
+      return {};
+
+    using slang::ast::BinaryOperator;
+    switch (expr.op) {
+
+    case BinaryOperator::Equality:
+      return moore::HandleEqOp::create(builder, loc, lhs, rhs);
+    case BinaryOperator::Inequality:
+      return moore::HandleNeOp::create(builder, loc, lhs, rhs);
+    case BinaryOperator::CaseEquality:
+      return moore::HandleCaseEqOp::create(builder, loc, lhs, rhs);
+    case BinaryOperator::CaseInequality:
+      return moore::HandleCaseNeOp::create(builder, loc, lhs, rhs);
+
+    default:
+      mlir::emitError(loc)
+          << "Binary operator " << slang::ast::toString(expr.op)
+          << " not supported with class handle valued operands!\n";
+      return {};
+    }
+  }
+
   Value visitRealBOp(const slang::ast::BinaryExpression &expr) {
     // Convert operands to the chosen target type.
     auto lhs = context.convertRvalueExpression(expr.left());
@@ -926,6 +1212,15 @@ struct RvalueExprVisitor : public ExprVisitor {
     // If either arg is real-typed, treat as real BOp.
     if (rhsFloatType || lhsFloatType)
       return visitRealBOp(expr);
+
+    // Check whether we are comparing against a Class Handle or CHandle
+    const auto rhsIsClass = expr.right().type->isClass();
+    const auto lhsIsClass = expr.left().type->isClass();
+    const auto rhsIsChandle = expr.right().type->isCHandle();
+    const auto lhsIsChandle = expr.left().type->isCHandle();
+    // If either arg is class handle-typed, treat as class handle BOp.
+    if (rhsIsClass || lhsIsClass || rhsIsChandle || lhsIsChandle)
+      return visitHandleBOp(expr);
 
     auto lhs = context.convertRvalueExpression(expr.left());
     if (!lhs)
@@ -1447,17 +1742,18 @@ struct RvalueExprVisitor : public ExprVisitor {
     // $rose, $fell, $stable, $changed, and $past are only valid in
     // the context of properties and assertions. Those are treated in the
     // LTLDialect; treat them there instead.
-    bool isAssertionCall =
-        llvm::StringSwitch<bool>(subroutine.name)
-            .Cases({"$rose", "$fell", "$stable", "$past"}, true)
-            .Default(false);
+    bool isAssertionCall = llvm::StringSwitch<bool>(subroutine.name)
+                               .Cases({"$rose", "$fell", "$stable", "$changed",
+                                       "$past", "$sampled"},
+                                      true)
+                               .Default(false);
 
     if (isAssertionCall)
       return context.convertAssertionCallExpression(expr, info, loc);
 
     auto args = expr.arguments();
 
-    FailureOr<Value> result;
+    FailureOr<Value> result = Value{};
     Value value;
     Value value2;
 
@@ -1476,6 +1772,10 @@ struct RvalueExprVisitor : public ExprVisitor {
       return fmtValue.value();
     }
 
+    // Queue ops take their parameter as a reference
+    bool isByRefOp = args.size() >= 1 && args[0]->type->isQueue() &&
+                     subroutine.name != "size";
+
     // Call the conversion function with the appropriate arity. These return one
     // of the following:
     //
@@ -1488,14 +1788,16 @@ struct RvalueExprVisitor : public ExprVisitor {
       break;
 
     case (1):
-      value = context.convertRvalueExpression(*args[0]);
+      value = isByRefOp ? context.convertLvalueExpression(*args[0])
+                        : context.convertRvalueExpression(*args[0]);
       if (!value)
         return {};
       result = context.convertSystemCallArity1(subroutine, loc, value);
       break;
 
     case (2):
-      value = context.convertRvalueExpression(*args[0]);
+      value = isByRefOp ? context.convertLvalueExpression(*args[0])
+                        : context.convertRvalueExpression(*args[0]);
       value2 = context.convertRvalueExpression(*args[1]);
       if (!value || !value2)
         return {};
@@ -1784,6 +2086,19 @@ struct RvalueExprVisitor : public ExprVisitor {
     return context.convertAssertionExpression(expr.body, loc);
   }
 
+  Value visit(const slang::ast::UnboundedLiteral &expr) {
+    assert(context.getIndexedQueue() &&
+           "slang checks $ only used within queue index expression");
+
+    // Compute queue size and subtract one to get the last element
+    auto queueSize =
+        moore::QueueSizeBIOp::create(builder, loc, context.getIndexedQueue());
+    auto one = moore::ConstantOp::create(builder, loc, queueSize.getType(), 1);
+    auto lastElement = moore::SubOp::create(builder, loc, queueSize, one);
+
+    return lastElement;
+  }
+
   // A new class expression can stand for one of two things:
   // 1) A call to the `new` method (ctor) of a class made outside the scope of
   // the class
@@ -1846,8 +2161,8 @@ struct RvalueExprVisitor : public ExprVisitor {
         // Pass the newObj as the implicit this argument of the ctor.
         auto savedThis = context.currentThisRef;
         context.currentThisRef = newObj;
-        auto restoreThis =
-            llvm::make_scope_exit([&] { context.currentThisRef = savedThis; });
+        llvm::scope_exit restoreThis(
+            [&] { context.currentThisRef = savedThis; });
         // Emit a call to ctor
         if (!visitCall(*callConstructor, *subroutine))
           return {};
@@ -2376,6 +2691,26 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
     return builder.createOrFold<moore::FormatStringOp>(loc, value);
   }
 
+  // If converting between two queue types of the same element type, then we
+  // just need to convert the queue bounds.
+  if (isa<moore::QueueType>(type) && isa<moore::QueueType>(value.getType()) &&
+      cast<moore::QueueType>(type).getElementType() ==
+          cast<moore::QueueType>(value.getType()).getElementType())
+    return builder.createOrFold<moore::QueueResizeOp>(loc, type, value);
+
+  // Convert from UnpackedArrayType to QueueType
+  if (isa<moore::QueueType>(type) &&
+      isa<moore::UnpackedArrayType>(value.getType())) {
+    auto queueElType = dyn_cast<moore::QueueType>(type).getElementType();
+    auto unpackedArrayElType =
+        dyn_cast<moore::UnpackedArrayType>(value.getType()).getElementType();
+
+    if (queueElType == unpackedArrayElType) {
+      return builder.createOrFold<moore::QueueFromUnpackedArrayOp>(loc, type,
+                                                                   value);
+    }
+  }
+
   // Handle Real To Int conversion
   if (isa<moore::IntType>(type) && isa<moore::RealType>(value.getType())) {
     auto twoValInt = builder.createOrFold<moore::RealToIntOp>(
@@ -2605,6 +2940,11 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                 [&]() -> Value {
                   return moore::RandomBIOp::create(builder, loc, value);
                 })
+          .Case("$urandom_range",
+                [&]() -> Value {
+                  return moore::UrandomrangeBIOp::create(builder, loc, value,
+                                                         nullptr);
+                })
           .Case("$realtobits",
                 [&]() -> Value {
                   return moore::RealtobitsBIOp::create(builder, loc, value);
@@ -2633,10 +2973,36 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                 [&]() -> Value {
                   return moore::StringToUpperOp::create(builder, loc, value);
                 })
+          .Case("size",
+                [&]() -> Value {
+                  if (isa<moore::QueueType>(value.getType())) {
+                    return moore::QueueSizeBIOp::create(builder, loc, value);
+                  }
+                  return {};
+                })
           .Case("tolower",
                 [&]() -> Value {
                   return moore::StringToLowerOp::create(builder, loc, value);
                 })
+          .Case(
+              "pop_back",
+              [&]() -> Value {
+                if (isa<moore::RefType>(value.getType()) &&
+                    isa<moore::QueueType>(
+                        cast<moore::RefType>(value.getType()).getNestedType()))
+                  return moore::QueuePopBackOp::create(builder, loc, value);
+
+                return {};
+              })
+          .Case(
+              "pop_front",
+              [&]() -> Value {
+                if (isa<moore::RefType>(value.getType()) &&
+                    isa<moore::QueueType>(
+                        cast<moore::RefType>(value.getType()).getNestedType()))
+                  return moore::QueuePopFrontOp::create(builder, loc, value);
+                return {};
+              })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
 }
@@ -2650,6 +3016,11 @@ Context::convertSystemCallArity2(const slang::ast::SystemSubroutine &subroutine,
                 [&]() -> Value {
                   return moore::StringGetCOp::create(builder, loc, value1,
                                                      value2);
+                })
+          .Case("$urandom_range",
+                [&]() -> Value {
+                  return moore::UrandomrangeBIOp::create(builder, loc, value1,
+                                                         value2);
                 })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();

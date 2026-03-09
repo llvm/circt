@@ -11,6 +11,8 @@ firrtl.circuit "Test" {
   }
   firrtl.layer @B bind {}
 
+  firrtl.domain @ClockDomain
+
   firrtl.extmodule @Foo(out o : !firrtl.probe<uint<1>, @A>) attributes {knownLayers=[@A]}
 
   //===--------------------------------------------------------------------===//
@@ -97,6 +99,33 @@ firrtl.circuit "Test" {
     }
   }
 
+  // CHECK:      hw.hierpath private @[[CaptureCaching_c1_ui1_path:.+]] [@CaptureCaching::@[[CaptureCaching_c1_ui1_sym:.+]]]
+  // CHECK-NEXT: firrtl.module private @CaptureCaching_A_B() {
+  // CHECK-NEXT:   %[[c1_ui1:.+]] = firrtl.xmr.deref @[[CaptureCaching_c1_ui1_path]] : !firrtl.uint<1>
+  // CHECK-NEXT:   firrtl.not %[[c1_ui1]]
+  // CHECK-NEXT:   firrtl.not %[[c1_ui1]]
+  // CHECK-NEXT: }
+  // CHECK-NEXT: firrtl.module private @CaptureCaching_A() {
+  // CHECK-NEXT:   %[[c1_ui1:.+]] = firrtl.xmr.deref @[[CaptureCaching_c1_ui1_path]] : !firrtl.uint<1>
+  // CHECK-NEXT:   firrtl.not %[[c1_ui1]]
+  // CHECK-NEXT:   firrtl.not %[[c1_ui1]]
+  // CHECK-NEXT: }
+  // CHECK-NEXT: firrtl.module @CaptureCaching() {
+  // CHECK-NEXT:   %c1_ui1 = firrtl.constant 1
+  // CHECK-NEXT:   firrtl.node sym @[[CaptureCaching_c1_ui1_sym]]
+  // CHECK-NEXT: }
+  firrtl.module @CaptureCaching() {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.layerblock @A {
+      %0 = firrtl.not %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+      %1 = firrtl.not %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+      firrtl.layerblock @A::@B {
+        %2 = firrtl.not %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+        %3 = firrtl.not %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+      }
+    }
+  }
+
   // CHECK: hw.hierpath private @[[CapturePort_port_path:.+]] [@CapturePort::@[[CapturePort_port_sym:.+]]]
   // CHECK: firrtl.module private @CapturePort_A() {
   // CHECK:   %[[port:.+]] = firrtl.xmr.deref @[[CapturePort_port_path]] : !firrtl.uint<1>
@@ -118,8 +147,7 @@ firrtl.circuit "Test" {
   // CHECK-NEXT:   firrtl.connect %b, %[[a]] : !firrtl.uint<1>
   // CHECK-NEXT: }
   // CHECK-NEXT: firrtl.module @CaptureConnect() {
-  // CHECK-NEXT:   %a = firrtl.wire : !firrtl.uint<1>
-  // CHECK-NEXT:   %a_0 = firrtl.node sym @[[CaptureConnect_a_sym]] %a {name = "a"} : !firrtl.uint<1>
+  // CHECK-NEXT:   %a = firrtl.wire sym @[[CaptureConnect_a_sym]] : !firrtl.uint<1>
   // CHECK-NEXT:   firrtl.instance {{.+}} sym @{{.+}} {doNotPrint, output_file = #hw.output_file<"layers-CaptureConnect-A.sv", excludeFromFileList>} @CaptureConnect_A()
   // CHECK-NEXT: }
   firrtl.module @CaptureConnect() {
@@ -127,6 +155,24 @@ firrtl.circuit "Test" {
     firrtl.layerblock @A {
       %b = firrtl.wire : !firrtl.uint<1>
       firrtl.connect %b, %a : !firrtl.uint<1>, !firrtl.uint<1>
+    }
+  }
+
+  // CHECK:      hw.hierpath private @[[CaptureForceable_a_path:.+]] [@CaptureForceable::@[[CaptureForceable_a_sym:.+]]]
+  // CHECK-NEXT: firrtl.module private @CaptureForceable_A()
+  // CHECK-NEXT:   %[[a:.+]] = firrtl.xmr.deref @[[CaptureForceable_a_path]] : !firrtl.uint<1>
+  // CHECK-NEXT:   %b = firrtl.wire : !firrtl.uint<1>
+  // CHECK-NEXT:   firrtl.matchingconnect %b, %[[a]] : !firrtl.uint<1>
+  // CHECK-NEXT: }
+  // CHECK-NEXT: firrtl.module @CaptureForceable() {
+  // CHECK-NEXT:   %a, %a_ref = firrtl.wire sym @[[CaptureForceable_a_sym]] forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+  // CHECK-NEXT:   firrtl.instance {{.+}} sym @{{.+}} {doNotPrint, output_file = #hw.output_file<"layers-CaptureForceable-A.sv", excludeFromFileList>} @CaptureForceable_A()
+  // CHECK-NEXT: }
+  firrtl.module @CaptureForceable() {
+    %a, %a_ref = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+    firrtl.layerblock @A {
+      %b = firrtl.wire : !firrtl.uint<1>
+      firrtl.matchingconnect %b, %a : !firrtl.uint<1>
     }
   }
 
@@ -153,8 +199,7 @@ firrtl.circuit "Test" {
   // CHECK-NEXT:   %1 = firrtl.node %0 : !firrtl.uint<1>
   // CHECK-NEXT: }
   // CHECK-NEXT: firrtl.module private @NestedCapture_A() {
-  // CHECK-NEXT:   %x = firrtl.wire : !firrtl.uint<1>
-  // CHECK-NEXT:   %x_0 = firrtl.node sym @[[NestedCapture_a_sym]] %x {name = "x"}
+  // CHECK-NEXT:   %x = firrtl.wire sym @[[NestedCapture_a_sym]] : !firrtl.uint<1>
   // CHECK-NEXT: }
   // CHECK-NEXT: firrtl.module @NestedCapture() {
   // CHECK-NEXT:   firrtl.instance {{.+}} {doNotPrint, output_file = #hw.output_file<"layers-NestedCapture-A-B.sv", excludeFromFileList>} @NestedCapture_A_B()
@@ -178,8 +223,7 @@ firrtl.circuit "Test" {
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
   // CHECK-NEXT: firrtl.module @WhenUnderLayer() {
-  // CHECK-NEXT:   %x = firrtl.wire : !firrtl.uint<1>
-  // CHECK-NEXT:   %x_0 = firrtl.node sym @[[WhenUnderLayer_x_sym]] %x {name = "x"}
+  // CHECK-NEXT:   %x = firrtl.wire sym @[[WhenUnderLayer_x_sym]] : !firrtl.uint<1>
   // CHECK-NEXT:   firrtl.instance {{.+}} sym @{{.+}} {doNotPrint, output_file = #hw.output_file<"layers-WhenUnderLayer-A.sv", excludeFromFileList>} @WhenUnderLayer_A
   // CHECK-NEXT: }
   firrtl.module @WhenUnderLayer() {
@@ -204,8 +248,7 @@ firrtl.circuit "Test" {
   // CHECK-NEXT:   %0 = firrtl.subaccess %a[%b]
   // CHECK-NEXT:   %1 = firrtl.subindex %0[0]
   // CHECK-NEXT:   %2 = firrtl.subfield %1[a]
-  // CHECK-NEXT:   %3 = firrtl.node %2 :
-  // CHECK-NEXT:   %_layer_probe = firrtl.node sym @[[SubOpsInLayerBlock_sub_sym]] %3
+  // CHECK-NEXT:   %3 = firrtl.node sym @[[SubOpsInLayerBlock_sub_sym]] %2 :
   firrtl.module @SubOpsInLayerBlock(
     in %a: !firrtl.vector<vector<bundle<a: uint<1>, b flip: uint<2>>, 2>, 2>,
     in %b: !firrtl.uint<1>
@@ -276,8 +319,7 @@ firrtl.circuit "Test" {
   // CHECK-NEXT:     %b = firrtl.node %1
 
   // CHECK:      firrtl.module @CaptureWhen2(
-  // CHECK-NEXT:   %a = firrtl.wire
-  // CHECK-NEXT:   %a_0 = firrtl.node {{.*}} %a
+  // CHECK-NEXT:   %a = firrtl.wire {{.*}}
   // CHECK-NEXT:   firrtl.instance a
   firrtl.module @CaptureWhen2(in %cond: !firrtl.uint<1>) {
     %a = firrtl.wire : !firrtl.uint<1>
@@ -317,8 +359,8 @@ firrtl.circuit "Test" {
   //
   // CHECK:      firrtl.module @InstancePortCapture() {
   // CHECK-NEXT:   %ext_a, %ext_b = firrtl.instance ext @InstancePortCapture_ext
-  // CHECK-NEXT:   %ext_b_0 = firrtl.node sym @[[InstancePortCapture_ext_b_sym]] %ext_b {name = "ext_b"}
-  // CHECK-NEXT:   %ext_a_1 = firrtl.node sym @[[InstancePortCapture_ext_a_sym]] %ext_a {name = "ext_a"}
+  // CHECK-NEXT:   %ext_b_layer_probe = firrtl.node sym @[[InstancePortCapture_ext_b_sym]] %ext_b
+  // CHECK-NEXT:   %ext_a_layer_probe = firrtl.node sym @[[InstancePortCapture_ext_a_sym]] %ext_a
   // CHECK-NEXT:   firrtl.instance {{.*}}
   // CHECK-NEXT: }
   firrtl.extmodule @InstancePortCapture_ext(
@@ -333,6 +375,200 @@ firrtl.circuit "Test" {
     firrtl.layerblock @A {
       %a = firrtl.node %ext_a : !firrtl.uint<1>
       %b = firrtl.node %ext_b : !firrtl.uint<1>
+    }
+  }
+
+  // Instance input port capture with connect - tests that instance input ports
+  // that are both captured in a layerblock and connected to outside the
+  // layerblock maintain correct flow semantics. When an instance input port is
+  // captured, the pass recurses on the driver to create the XMR reference. This
+  // test covers two scenarios:
+  // 1. Driver is an operation that can't support an inner symbol (invalidvalue)
+  //    - A node is created from the driver and the XMR references the node
+  // 2. Driver is a module port (block argument) that can support an inner symbol
+  //    - No node is created; the XMR references the module port directly
+  //
+  // CHECK:      hw.hierpath private @[[path_reset:.+]] [@InstanceInputPortCapture::@[[sym_reset:.+]]]
+  // CHECK-NEXT: hw.hierpath private @[[path_clock:.+]] [@InstanceInputPortCapture::@[[sym_clock:.+]]]
+  // CHECK-NEXT: firrtl.module private @InstanceInputPortCapture_A() {
+  // CHECK-NEXT:   %[[xmr_clock:.+]] = firrtl.xmr.deref @[[path_clock]]
+  // CHECK-NEXT:   %[[xmr_reset:.+]] = firrtl.xmr.deref @[[path_reset]]
+  // CHECK-NEXT:   %wire_reset = firrtl.wire
+  // CHECK-NEXT:   firrtl.matchingconnect %wire_reset, %[[xmr_reset]]
+  // CHECK-NEXT:   %wire_clock = firrtl.wire
+  // CHECK-NEXT:   firrtl.matchingconnect %wire_clock, %[[xmr_clock]]
+  // CHECK-NEXT: }
+  //
+  // CHECK:      firrtl.module @InstanceInputPortCapture(
+  // CHECK-SAME:   in %clock: !firrtl.clock sym @[[sym_clock]]
+  // CHECK-NEXT:   %ext_reset, %ext_clock = firrtl.instance ext @InstanceInputPortCapture_ext
+  // CHECK:        %invalid_asyncreset = firrtl.invalidvalue
+  // CHECK-NEXT:   %_layer_probe = firrtl.node sym @[[sym_reset]] %invalid_asyncreset
+  // CHECK-NEXT:   firrtl.matchingconnect %ext_reset, %_layer_probe
+  // CHECK-NEXT:   firrtl.matchingconnect %ext_clock, %clock
+  // CHECK-NEXT: }
+  firrtl.extmodule @InstanceInputPortCapture_ext(
+    in reset: !firrtl.asyncreset,
+    in clock: !firrtl.clock
+  )
+  firrtl.module @InstanceInputPortCapture(
+    in %clock: !firrtl.clock
+  ) {
+    %ext_reset, %ext_clock = firrtl.instance ext @InstanceInputPortCapture_ext(
+      in reset: !firrtl.asyncreset,
+      in clock: !firrtl.clock
+    )
+    firrtl.layerblock @A {
+      %wire_reset = firrtl.wire : !firrtl.asyncreset
+      firrtl.matchingconnect %wire_reset, %ext_reset : !firrtl.asyncreset
+      %wire_clock = firrtl.wire : !firrtl.clock
+      firrtl.matchingconnect %wire_clock, %ext_clock : !firrtl.clock
+    }
+    %invalid_asyncreset = firrtl.invalidvalue : !firrtl.asyncreset
+    firrtl.matchingconnect %ext_reset, %invalid_asyncreset : !firrtl.asyncreset
+    firrtl.matchingconnect %ext_clock, %clock : !firrtl.clock
+  }
+
+  // Test that a single domain type capture works.
+  //
+  // CHECK:      firrtl.module private @DomainCapture_A(
+  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %a = firrtl.wire
+  // CHECK-NEXT:   firrtl.domain.define %a, %A
+  //
+  // CHECK:      firrtl.module @DomainCapture(
+  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %a_A = firrtl.instance a {{.*}} @DomainCapture_A(
+  // CHECK-NEXT:   firrtl.domain.define %a_A, %A
+  firrtl.module @DomainCapture(
+    in %A: !firrtl.domain of @ClockDomain
+  ) {
+    firrtl.layerblock @A {
+      %a = firrtl.wire : !firrtl.domain
+      firrtl.domain.define %a, %A
+    }
+  }
+
+  // Test that a layer capture from a nested layer works.  This is specifically
+  // checking that an unnuecessary intermediary module/instance with squiggled
+  // ports isn't created.
+  //
+  // CHECK:      firrtl.module private @DomainCaptureTwoLevels_A_B(
+  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %a = firrtl.wire
+  // CHECK-NEXT:   firrtl.domain.define %a, %A
+  //
+  // CHECK-NOT:  firrtl.module private @DomainCaptureTwoLevels_A(
+  //
+  // CHECK:      firrtl.module @DomainCaptureTwoLevels(
+  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %a_b_A = firrtl.instance a_b {{.*}} @DomainCaptureTwoLevels_A_B(
+  // CHECK-NEXT:   firrtl.domain.define %a_b_A, %A
+  firrtl.module @DomainCaptureTwoLevels(
+    in %A: !firrtl.domain of @ClockDomain
+  ) {
+    firrtl.layerblock @A {
+      firrtl.layerblock @A::@B {
+        %a = firrtl.wire : !firrtl.domain
+        firrtl.domain.define %a, %A
+      }
+    }
+  }
+
+  // CHECK:      firrtl.module private @DomainCaptureChildCapturesParent_A_B(
+  // CHECK-SAME:   in %anonDomain: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %a = firrtl.wire
+  // CHECK-NEXT:   firrtl.domain.define %a, %anonDomain
+  //
+  // CHECK:      firrtl.module private @DomainCaptureChildCapturesParent_A(
+  // CHECK-SAME:   out %anonDomain: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %0 = firrtl.domain.anon
+  // CHECK-NEXT:   firrtl.domain.define %anonDomain, %0
+  //
+  // CHECK:      firrtl.module @DomainCaptureChildCapturesParent(
+  //
+  // CHECK-NEXT:   %a_b_anonDomain = firrtl.instance a_b {{.*}} @DomainCaptureChildCapturesParent_A_B
+  // CHECK-NEXT:   %a_anonDomain = firrtl.instance a {{.*}} @DomainCaptureChildCapturesParent_A
+  // CHECK-NEXT:   firrtl.domain.define %a_b_anonDomain, %a_anonDomain
+  firrtl.module @DomainCaptureChildCapturesParent(
+    in %A: !firrtl.domain of @ClockDomain
+  ) {
+    firrtl.layerblock @A {
+      %0 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+      firrtl.layerblock @A::@B {
+        %a = firrtl.wire : !firrtl.domain
+        firrtl.domain.define %a, %0
+      }
+    }
+  }
+
+  // CHECK:      firrtl.module private @DomainCaptureInterleaved_A_B(
+  // CHECK-SAME:   in %b: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %a = firrtl.wire : !firrtl.domain
+  // CHECK-NEXT:   firrtl.domain.define %a, %b
+  //
+  // CHECK:      firrtl.module private @DomainCaptureInterleaved_A(
+  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  // CHECK-SAME:   out %b: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %b_0 = firrtl.wire {name = "b"} : !firrtl.domain
+  // CHECK-NEXT:   firrtl.domain.define %b_0, %A
+  // CHECK-NEXT:   firrtl.domain.define %b, %b_0
+  //
+  // CHECK:      firrtl.module @DomainCaptureInterleaved(
+  //
+  // CHECK-NEXT:   %a_b_b = firrtl.instance a_b {{.*}} @DomainCaptureInterleaved_A_B
+  // CHECK-NEXT:   %a_A, %a_b = firrtl.instance a {{.*}} @DomainCaptureInterleaved_A
+  // CHECK-NEXT:   firrtl.domain.define %a_A, %A
+  // CHECK-NEXT:   firrtl.domain.define %a_b_b, %a_b
+  firrtl.module @DomainCaptureInterleaved(
+    in %A: !firrtl.domain of @ClockDomain
+  ) {
+    firrtl.layerblock @A {
+      %b = firrtl.wire : !firrtl.domain
+      firrtl.domain.define %b, %A
+      firrtl.layerblock @A::@B {
+        %a = firrtl.wire : !firrtl.domain
+        firrtl.domain.define %a, %b
+      }
+    }
+  }
+
+  // CHECK:      firrtl.module private @DomainCaptureInterleaved2_A_B(
+  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %wire = firrtl.wire : !firrtl.domain
+  // CHECK-NEXT:   firrtl.domain.define %wire, %A
+  //
+  // CHECK:      firrtl.module private @DomainCaptureInterleaved2_A(
+  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  //
+  // CHECK-NEXT:   %b = firrtl.wire : !firrtl.domain
+  // CHECK-NEXT:   firrtl.domain.define %b, %A
+  //
+  // CHECK:      firrtl.module @DomainCaptureInterleaved2(
+  //
+  // CHECK-NEXT:   %a_b_A = firrtl.instance a_b {{.*}} @DomainCaptureInterleaved2_A_B
+  // CHECK-NEXT:   firrtl.domain.define %a_b_A, %A
+  // CHECK-NEXT:   %a_A = firrtl.instance a {{.*}} @DomainCaptureInterleaved2_A
+  // CHECK-NEXT:   firrtl.domain.define %a_A, %A
+  firrtl.module @DomainCaptureInterleaved2(
+    in %A: !firrtl.domain of @ClockDomain
+  ) {
+    firrtl.layerblock @A {
+      %b = firrtl.wire : !firrtl.domain
+      firrtl.domain.define %b, %A
+      firrtl.layerblock @A::@B {
+        %wire = firrtl.wire : !firrtl.domain
+        firrtl.domain.define %wire, %A
+      }
     }
   }
 
@@ -487,8 +723,7 @@ firrtl.circuit "Simple" {
 // CHECK-NEXT:   %0 = firrtl.xmr.deref @[[Simple_A_c_path]]
 // CHECK-NEXT:   %1 = firrtl.xmr.deref @[[Simple_b_path]]
 // CHECK-NEXT:   %bb = firrtl.node %1
-// CHECK-NEXT:   %cc = firrtl.node %0
-// CHECK-NEXT:   %cc_0 = firrtl.node sym @[[Simple_A_B_cc_sym]] %cc {name = "cc"}
+// CHECK-NEXT:   %cc = firrtl.node sym @[[Simple_A_B_cc_sym]] %0
 // CHECK-NEXT: }
 //
 // CHECK: hw.hierpath private @[[Simple_a_path:.+]] [@Simple::@[[Simple_a_sym:.+]]]
@@ -496,15 +731,12 @@ firrtl.circuit "Simple" {
 // CHECK:      firrtl.module private @Simple_A() {
 // CHECK-NEXT:   %0 = firrtl.xmr.deref @[[Simple_a_path]]
 // CHECK-NEXT:   %aa = firrtl.node %0
-// CHECK-NEXT:   %c = firrtl.wire
-// CHECK-NEXT:   %c_0 = firrtl.node sym @[[Simple_A_c_sym]] %c {name = "c"}
+// CHECK-NEXT:   %c = firrtl.wire sym @[[Simple_A_c_sym]]
 // CHECK-NEXT: }
 //
 // CHECK:      firrtl.module @Simple() {
-// CHECK-NEXT:   %a = firrtl.wire
-// CHECK-NEXT:   %a_0 = firrtl.node sym @[[Simple_a_sym]] %a {name = "a"}
-// CHECK-NEXT:   %b = firrtl.wire
-// CHECK-NEXT:   %b_1 = firrtl.node sym @[[Simple_b_sym]] %b {name = "b"}
+// CHECK-NEXT:   %a = firrtl.wire sym @[[Simple_a_sym]]
+// CHECK-NEXT:   %b = firrtl.wire sym @[[Simple_b_sym]]
 // CHECK-NEXT:   firrtl.instance a_b_c sym @a_b_c {doNotPrint, output_file = #hw.output_file<"layers-Simple-A-B-C.sv", excludeFromFileList>} @Simple_A_B_C()
 // CHECK-NEXT:   firrtl.instance a_b sym @a_b {doNotPrint, output_file = #hw.output_file<"layers-Simple-A-B.sv", excludeFromFileList>} @Simple_A_B()
 // CHECK-NEXT:   firrtl.instance a sym @a {doNotPrint, output_file = #hw.output_file<"layers-Simple-A.sv", excludeFromFileList>} @Simple_A()

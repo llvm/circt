@@ -22,3 +22,10 @@ hw.module @test_maj(in %a: i32, in %b: i32, in %c: i32, out out0: i32) {
   %0 = synth.mig.maj_inv %a, not %b, %c : i32
   hw.output %0 : i32
 }
+
+// CHECK-LABEL: @test_choice
+hw.module @test_choice(in %a: i32, in %b: i32, in %c: i32, out out0: i32) {
+  // CHECK: hw.output %a : i32
+  %0 = synth.choice %a, %b, %c : i32
+  hw.output %0 : i32
+}

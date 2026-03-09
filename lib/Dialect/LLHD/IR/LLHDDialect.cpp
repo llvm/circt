@@ -10,10 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/LLHD/IR/LLHDDialect.h"
+#include "circt/Dialect/LLHD/LLHDDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/LLHD/IR/LLHDTypes.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
+#include "circt/Dialect/LLHD/LLHDTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/Transforms/InliningUtils.h"
@@ -55,10 +55,14 @@ void LLHDDialect::initialize() {
 
   addOperations<
 #define GET_OP_LIST
-#include "circt/Dialect/LLHD/IR/LLHD.cpp.inc"
+#include "circt/Dialect/LLHD/LLHD.cpp.inc"
       >();
 
   addInterfaces<LLHDInlinerInterface>();
+
+  mlir::DialectRegistry registry;
+  registerDestructableIntegerExternalModel(registry);
+  getContext()->appendDialectRegistry(registry);
 }
 
 Operation *LLHDDialect::materializeConstant(OpBuilder &builder, Attribute value,
@@ -72,4 +76,4 @@ Operation *LLHDDialect::materializeConstant(OpBuilder &builder, Attribute value,
   return nullptr;
 }
 
-#include "circt/Dialect/LLHD/IR/LLHDDialect.cpp.inc"
+#include "circt/Dialect/LLHD/LLHDDialect.cpp.inc"

@@ -241,6 +241,8 @@ void testTypeDiscriminantsAndQueries(MlirContext ctx) {
   MlirType cls = firrtlTypeGetClass(
       ctx, mlirFlatSymbolRefAttrGet(ctx, mlirStringRefCreateFromCString("cls")),
       ARRAY_SIZE(classElements), classElements);
+  MlirAttribute layer =
+      mlirFlatSymbolRefAttrGet(ctx, mlirStringRefCreateFromCString("layer"));
 
   assert(firrtlTypeIsConst(
       firrtlTypeGetConstType(firrtlTypeGetUInt(ctx, 32), true)));
@@ -257,6 +259,8 @@ void testTypeDiscriminantsAndQueries(MlirContext ctx) {
   assert(firrtlTypeIsABundle(bundle));
   assert(firrtlTypeIsAOpenBundle(openBundle));
   assert(firrtlTypeIsARef(firrtlTypeGetRef(firrtlTypeGetClock(ctx), false)));
+  assert(firrtlTypeIsARef(
+      firrtlTypeGetColoredRef(firrtlTypeGetClock(ctx), false, layer)));
   assert(firrtlTypeIsAAnyRef(firrtlTypeGetAnyRef(ctx)));
   assert(firrtlTypeIsAInteger(firrtlTypeGetInteger(ctx)));
   assert(firrtlTypeIsADouble(firrtlTypeGetDouble(ctx)));
@@ -281,6 +285,8 @@ void testTypeDiscriminantsAndQueries(MlirContext ctx) {
   assert(!firrtlTypeIsARef(firrtlTypeGetAnyRef(ctx)));
   assert(
       !firrtlTypeIsAAnyRef(firrtlTypeGetRef(firrtlTypeGetClock(ctx), false)));
+  assert(!firrtlTypeIsAAnyRef(
+      firrtlTypeGetColoredRef(firrtlTypeGetClock(ctx), false, layer)));
   assert(!firrtlTypeIsAInteger(firrtlTypeGetDouble(ctx)));
   assert(!firrtlTypeIsADouble(firrtlTypeGetString(ctx)));
   assert(!firrtlTypeIsAString(firrtlTypeGetBoolean(ctx)));

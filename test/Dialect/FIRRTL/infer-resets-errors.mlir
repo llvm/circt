@@ -257,7 +257,6 @@ firrtl.circuit "Top" {
     firrtl.connect %inst_clock, %clock : !firrtl.clock, !firrtl.clock
   }
   firrtl.module @Other(in %clock: !firrtl.clock) attributes {annotations = [{class = "circt.ExcludeFromFullResetAnnotation"}]} {
-    // expected-note @+1 {{instance 'other/inst' is in no reset domain}}
     %inst_clock = firrtl.instance inst @Foo(in clock: !firrtl.clock)
     firrtl.connect %inst_clock, %clock : !firrtl.clock, !firrtl.clock
   }
@@ -296,3 +295,4 @@ firrtl.circuit "Top" {
   // expected-error @+1 {{'FullResetAnnotation' requires resetType == 'sync' | 'async', but got resetType == "potato"}}
   firrtl.module @Top(in %reset: !firrtl.asyncreset) attributes {portAnnotations = [[{class = "circt.FullResetAnnotation", resetType = "potato"}]]} {}
 }
+

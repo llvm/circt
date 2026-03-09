@@ -35,6 +35,8 @@ static void dumpType(std::ostream &os, const esi::Type *type, int level = 0,
     os << "void";
   } else if (dynamic_cast<const esi::AnyType *>(type)) {
     os << "any";
+  } else if (auto *aliasType = dynamic_cast<const esi::TypeAliasType *>(type)) {
+    os << aliasType->getName();
   } else if (auto *structType = dynamic_cast<const esi::StructType *>(type)) {
     os << "struct {";
     const auto &fields = structType->getFields();
@@ -159,6 +161,18 @@ MutableBitVector VoidType::serialize(const std::any &obj) const {
   // By convention, void is represented by a single byte of value 0.
   MutableBitVector bv(8);
   return bv;
+}
+
+void TypeAliasType::ensureValid(const std::any &obj) const {
+  innerType->ensureValid(obj);
+}
+
+MutableBitVector TypeAliasType::serialize(const std::any &obj) const {
+  return innerType->serialize(obj);
+}
+
+std::any TypeAliasType::deserialize(BitVector &data) const {
+  return innerType->deserialize(data);
 }
 
 void BitsType::ensureValid(const std::any &obj) const {

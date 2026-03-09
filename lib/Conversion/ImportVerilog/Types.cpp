@@ -103,6 +103,16 @@ struct TypeVisitor {
         cast<moore::UnpackedType>(innerType));
   }
 
+  Type visit(const slang::ast::DPIOpenArrayType &type) {
+    auto innerType = type.elementType.visit(*this);
+    if (!innerType)
+      return {};
+    if (type.isPacked)
+      return moore::OpenArrayType::get(cast<moore::PackedType>(innerType));
+    return moore::OpenUnpackedArrayType::get(
+        cast<moore::UnpackedType>(innerType));
+  }
+
   // Handle type defs.
   Type visit(const slang::ast::TypeAliasType &type) {
     // Simply return the underlying type.
@@ -167,7 +177,7 @@ struct TypeVisitor {
   }
 
   Type visit(const slang::ast::ClassType &type) {
-    if (failed(context.convertClassDeclaration(type)))
+    if (failed(context.buildClassProperties(type)))
       return {};
     auto *lowering = context.declareClass(type);
     if (!lowering) {
@@ -178,6 +188,10 @@ struct TypeVisitor {
     mlir::StringAttr symName = lowering->op.getSymNameAttr();
     mlir::FlatSymbolRefAttr symRef = mlir::FlatSymbolRefAttr::get(symName);
     return moore::ClassHandleType::get(context.getContext(), symRef);
+  }
+
+  Type visit(const slang::ast::NullType &type) {
+    return moore::NullType::get(context.getContext());
   }
 
   Type visit(const slang::ast::EventType &type) {

@@ -111,6 +111,19 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
         return rtgArrayTypeGetElementType(self);
       });
 
+  mlir_type_subclass(m, "MapType", rtgTypeIsAMap)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirType keyType, MlirType valueType) {
+            return cls(rtgMapTypeGet(keyType, valueType));
+          },
+          nb::arg("self"), nb::arg("key_type"), nb::arg("value_type"))
+      .def_property_readonly(
+          "key_type", [](MlirType self) { return rtgMapTypeGetKeyType(self); })
+      .def_property_readonly("value_type", [](MlirType self) {
+        return rtgMapTypeGetValueType(self);
+      });
+
   mlir_type_subclass(m, "TupleType", rtgTypeIsATuple)
       .def_classmethod(
           "get",
@@ -127,6 +140,14 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
           fields.push_back(rtgTupleTypeGetFieldType(self, i));
         return fields;
       });
+
+  mlir_type_subclass(m, "StringType", rtgTypeIsAString)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirContext ctxt) {
+            return cls(rtgStringTypeGet(ctxt));
+          },
+          nb::arg("self"), nb::arg("ctxt") = nullptr);
 
   // Types for ISA targets
   //===--------------------------------------------------------------------===//
@@ -192,6 +213,38 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
           },
           nb::arg("self"), nb::arg("type"), nb::arg("ctxt") = nullptr);
 
+  mlir_attribute_subclass(m, "MapAttr", rtgAttrIsAMap)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirType mapType,
+             const std::vector<std::pair<MlirAttribute, MlirAttribute>>
+                 &entries,
+             MlirContext ctxt) {
+            std::vector<MlirAttribute> keys;
+            std::vector<MlirAttribute> values;
+            for (auto entry : entries) {
+              keys.push_back(entry.first);
+              values.push_back(entry.second);
+            }
+            return cls(rtgMapAttrGet(ctxt, mapType, keys.size(), keys.data(),
+                                     values.data()));
+          },
+          nb::arg("self"), nb::arg("map_type"),
+          nb::arg("entries") =
+              std::vector<std::pair<MlirAttribute, MlirAttribute>>(),
+          nb::arg("ctxt") = nullptr)
+      .def(
+          "lookup",
+          [](MlirAttribute self, MlirAttribute key) {
+            auto val = rtgMapAttrLookup(self, key);
+            if (mlirAttributeIsNull(val))
+              return nb::none();
+            return nb::cast(val);
+          },
+          nb::arg("key"),
+          "Look up the value associated with the given key. Returns None if "
+          "the key is not found.");
+
   // Attributes for ISA targets
   //===--------------------------------------------------------------------===//
 
@@ -246,5 +299,19 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
              i < numRegs; ++i)
           regs.push_back(rtgVirtualRegisterConfigAttrGetRegister(self, i));
         return regs;
+      });
+
+  mlir_attribute_subclass(m, "LabelAttr", rtgAttrIsALabel)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, const std::string &name, MlirContext ctxt) {
+            MlirStringRef nameRef =
+                mlirStringRefCreate(name.data(), name.size());
+            return cls(rtgLabelAttrGet(ctxt, nameRef));
+          },
+          nb::arg("self"), nb::arg("name"), nb::arg("ctxt") = nullptr)
+      .def_property_readonly("name", [](MlirAttribute self) {
+        MlirStringRef name = rtgLabelAttrGetName(self);
+        return nb::str(name.data, name.length);
       });
 }

@@ -9,6 +9,7 @@
 #ifndef CIRCT_DIALECT_LTL_LTLOPS_TD
 #define CIRCT_DIALECT_LTL_LTLOPS_TD
 
+include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/LTL/LTLDialect.td"
 include "circt/Dialect/LTL/LTLTypes.td"
 include "mlir/IR/EnumAttr.td"
@@ -104,19 +105,40 @@ def DelayOp : LTLOp<"delay", [Pure]> {
   }];
 }
 
-def PastOp : LTLOp<"past", [Pure]> {
+def PastOp : LTLOp<"past", [TypesMatchWith<"input and result types must match",
+    "input", "result", "$_self">,
+    Pure]> {
   let arguments = (ins
-    I1:$input,
-    I64Attr:$delay);
-  let results = (outs LTLSequenceType:$result);
+    HWIntegerType:$input,
+    I64Attr:$delay,
+    Optional<I1>:$clk);
+  let results = (outs HWIntegerType:$result);
   let assemblyFormat = [{
-    $input `,` $delay attr-dict `:` type($input)
+    $input `,` $delay (`clk` $clk^)? attr-dict `:` type($input)
   }];
 
   let summary = "Observe the sequence $delay cycles earlier.";
   let description = [{
       Semantically works like `ltl.delay %seq, -$delay, 0`
   }];
+}
+
+def SampledOp : LTLOp<"sampled", [TypesMatchWith<"expression and sampledValue types must match",
+    "expression", "sampledValue", "$_self">,
+    Pure]> {
+  let summary = "`$sampled` system function to sample a value";
+  let description = [{
+    Sample a value using System Verilog sampling semantics (see IEEE 1800–2023 $16.5.1 
+    "Sampling" for more information).
+
+    A use of `$sampled` is to safely read the value of a net/variable in a
+    concurrent assertion action block such that the value will be the same as
+    the value used when the assertion is triggered.  See IEEE 1800–2023 $16.9.3 "Sampled 
+    value functions" for more information.
+  }];
+  let arguments = (ins AnyType:$expression);
+  let results = (outs AnyType:$sampledValue);
+  let assemblyFormat = "$expression attr-dict `:` qualified(type($expression))";
 }
 
 def ConcatOp : LTLOp<"concat", [Pure]> {

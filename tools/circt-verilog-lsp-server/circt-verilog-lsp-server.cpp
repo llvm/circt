@@ -12,15 +12,21 @@
 
 #include "circt/Tools/circt-verilog-lsp-server/CirctVerilogLspServerMain.h"
 
+#include "circt/Support/Version.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/LSP/Logging.h"
 #include "llvm/Support/LSP/Transport.h"
+#include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Program.h"
 
 using namespace llvm::lsp;
 
 int main(int argc, char **argv) {
+  // Set the bug report message to indicate users should file issues on
+  // llvm/circt and not llvm/llvm-project.
+  llvm::setBugReportMsg(circt::circtBugReportMsg);
+
   //===--------------------------------------------------------------------===//
   // LSP options
   //===--------------------------------------------------------------------===//

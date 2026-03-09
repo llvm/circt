@@ -171,3 +171,11 @@ om.class @A(%arg: i1) -> (a: i1) {
   // expected-error @+1 {{'om.class.fields' op size of field_locs (2) does not match number of fields (1)}}
   om.class.fields %arg : i1 field_locs([loc("loc0"), loc("loc1")])
 }
+
+// -----
+
+om.class@A() -> () {
+  // expected-error @+1 {{'om.unknown' op refers to non-existant class ("NonExistant")}}
+  %0 = om.unknown : !om.class.type<@NonExistant>
+  om.class.fields
+}

@@ -61,6 +61,14 @@ def ArrayCreateOp : HWOp<"array_create", [Pure, SameTypeOperands]> {
     %array = hw.array_create %a, %b, %c : i4
     ```
 
+    Optionally, the result type can be explicitly specified to support type
+    aliases:
+
+    ```
+    // Create an array with a type alias result
+    %array = hw.array_create %a, %b : i4 -> !MyArrayAlias
+    ```
+
     See the HW-SV rationale document for details on operand ordering.
   }];
 

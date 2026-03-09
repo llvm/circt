@@ -131,8 +131,8 @@ void testEvaluator(MlirContext ctx) {
 
   // Test instantiation success.
 
-  OMEvaluatorValue actualParam = omEvaluatorValueFromPrimitive(
-      omIntegerAttrGet(mlirIntegerAttrGet(mlirIntegerTypeGet(ctx, 8), 42)));
+  OMEvaluatorValue actualParam = omEvaluatorValueFromPrimitive(omIntegerAttrGet(
+      mlirIntegerAttrGet(mlirIntegerTypeSignedGet(ctx, 8), 42)));
 
   OMEvaluatorValue object =
       omEvaluatorInstantiate(evaluator, className, 1, &actualParam);
@@ -176,7 +176,7 @@ void testEvaluator(MlirContext ctx) {
 
   MlirAttribute fieldValue = omEvaluatorValueGetPrimitive(field);
 
-  // CHECK: #om.integer<42 : i8> : !om.integer
+  // CHECK: #om.integer<42 : si8> : !om.integer
   mlirAttributeDump(fieldValue);
 
   // Test get field success for child object.

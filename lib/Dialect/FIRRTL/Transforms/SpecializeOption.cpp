@@ -68,13 +68,10 @@ struct SpecializeOptionPass
             auto it = selected.find(inst.getOptionNameAttr());
             FlatSymbolRefAttr target;
             if (it == selected.end()) {
-              if (!selectDefaultInstanceChoice) {
-                inst.emitError("missing specialization for option ")
-                    << inst.getOptionNameAttr();
-                failed = true;
+              if (selectDefaultInstanceChoice)
+                target = inst.getDefaultTargetAttr();
+              else
                 return;
-              }
-              target = inst.getDefaultTargetAttr();
             } else
               target = inst.getTargetOrDefaultAttr(it->second);
 
@@ -95,6 +92,12 @@ struct SpecializeOptionPass
 
     bool analysisPreserved = numInstances == 0;
     circuit->walk([&](OptionOp optionOp) {
+      // When selectDefaultInstanceChoice is true, all instance choices are
+      // specialized (either to a selected case or to the default), so we can
+      // erase all options. Otherwise, only erase options that were selected.
+      if (!selectDefaultInstanceChoice &&
+          !selected.contains(optionOp.getSymNameAttr()))
+        return;
       optionOp->erase();
       analysisPreserved = false;
     });

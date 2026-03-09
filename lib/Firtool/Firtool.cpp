@@ -48,6 +48,9 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLowerIntrinsics());
 
+  if (auto mode = FirtoolOptions::toInferDomainsPassMode(opt.getDomainMode()))
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferDomains({*mode}));
+
   return success();
 }
 
@@ -233,6 +236,11 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
 LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
                                              const FirtoolOptions &opt,
                                              StringRef inputFilename) {
+  // Populate instance macros for instance choice operations before lowering to
+  // HW.
+  pm.nest<firrtl::CircuitOp>().addPass(
+      firrtl::createPopulateInstanceChoiceSymbols());
+
   // Run layersink immediately before LowerXMR. LowerXMR will "freeze" the
   // location of probed objects by placing symbols on them. Run layersink first
   // so that probed objects can be sunk if possible.
@@ -323,12 +331,6 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
   pm.addPass(verif::createLowerTestsPass());
   pm.addPass(
       verif::createLowerSymbolicValuesPass({opt.getSymbolicValueLowering()}));
-
-  if (opt.shouldExtractTestCode())
-    pm.addPass(sv::createSVExtractTestCodePass(
-        opt.shouldEtcDisableInstanceExtraction(),
-        opt.shouldEtcDisableRegisterExtraction(),
-        opt.shouldEtcDisableModuleInlining()));
 
   pm.addPass(seq::createExternalizeClockGatePass(opt.getClockGateOptions()));
   pm.addPass(circt::createLowerSimToSVPass());
@@ -624,10 +626,6 @@ struct FirtoolCmdOptions {
       "repl-seq-mem-file", llvm::cl::desc("File name for seq mem metadata"),
       llvm::cl::init("")};
 
-  llvm::cl::opt<bool> extractTestCode{
-      "extract-test-code", llvm::cl::desc("Run the extract test code pass"),
-      llvm::cl::init(false)};
-
   llvm::cl::opt<bool> ignoreReadEnableMem{
       "ignore-read-enable-mem",
       llvm::cl::desc("Ignore the read enable signal, instead of "
@@ -683,21 +681,6 @@ struct FirtoolCmdOptions {
       llvm::cl::desc(
           "Prevent always blocks from being merged and emit constructs into "
           "separate always blocks whenever possible"),
-      llvm::cl::init(false)};
-
-  llvm::cl::opt<bool> etcDisableInstanceExtraction{
-      "etc-disable-instance-extraction",
-      llvm::cl::desc("Disable extracting instances only that feed test code"),
-      llvm::cl::init(false)};
-
-  llvm::cl::opt<bool> etcDisableRegisterExtraction{
-      "etc-disable-register-extraction",
-      llvm::cl::desc("Disable extracting registers that only feed test code"),
-      llvm::cl::init(false)};
-
-  llvm::cl::opt<bool> etcDisableModuleInlining{
-      "etc-disable-module-inlining",
-      llvm::cl::desc("Disable inlining modules that only feed test code"),
       llvm::cl::init(false)};
 
   llvm::cl::opt<bool> addVivadoRAMAddressConflictSynthesisBugWorkaround{
@@ -780,6 +763,22 @@ struct FirtoolCmdOptions {
       "inline-input-only-modules", llvm::cl::desc("Inline input-only modules"),
       llvm::cl::init(false)};
 
+  llvm::cl::opt<firtool::FirtoolOptions::DomainMode> domainMode{
+      "domain-mode", llvm::cl::desc("Enable domain inference and checking"),
+      llvm::cl::init(firtool::FirtoolOptions::DomainMode::Strip),
+      llvm::cl::values(
+          clEnumValN(firtool::FirtoolOptions::DomainMode::Check, "check",
+                     "Check domains without inference"),
+          clEnumValN(firtool::FirtoolOptions::DomainMode::Disable, "disable",
+                     "Disable domain checking"),
+          clEnumValN(firtool::FirtoolOptions::DomainMode::Infer, "infer",
+                     "Check domains with inference for private modules"),
+          clEnumValN(firtool::FirtoolOptions::DomainMode::InferAll, "infer-all",
+                     "Check domains with inference for both public and private "
+                     "modules"),
+          clEnumValN(firtool::FirtoolOptions::DomainMode::Strip, "strip",
+                     "Erase all domain information"))};
+
   //===----------------------------------------------------------------------===
   // Lint options
   //===----------------------------------------------------------------------===
@@ -814,16 +813,14 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       preserveMode(firrtl::PreserveValues::None), enableDebugInfo(false),
       buildMode(BuildModeRelease), disableLayerSink(false),
       disableOptimization(false), vbToBV(false), noDedup(false),
-      useNewInferWidths(false), dedupClasses(true),
-      companionMode(firrtl::CompanionMode::Bind),
-      disableAggressiveMergeConnections(false), lowerMemories(false),
-      blackBoxRootPath(""), replSeqMem(false), replSeqMemFile(""),
-      extractTestCode(false), ignoreReadEnableMem(false),
+      dedupClasses(true), companionMode(firrtl::CompanionMode::Bind),
+      noViews(false), disableAggressiveMergeConnections(false),
+      lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
+      replSeqMemFile(""), ignoreReadEnableMem(false),
       disableRandom(RandomKind::None), outputAnnotationFilename(""),
       enableAnnotationWarning(false), addMuxPragmas(false),
       verificationFlavor(firrtl::VerificationFlavor::None),
-      emitSeparateAlwaysBlocks(false), etcDisableInstanceExtraction(false),
-      etcDisableRegisterExtraction(false), etcDisableModuleInlining(false),
+      emitSeparateAlwaysBlocks(false),
       addVivadoRAMAddressConflictSynthesisBugWorkaround(false),
       ckgModuleName("EICG_wrapper"), ckgInputName("in"), ckgOutputName("out"),
       ckgEnableName("en"), ckgTestEnableName("test_en"), ckgInstName("ckg"),
@@ -833,7 +830,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       symbolicValueLowering(verif::SymbolicValueLowering::ExtModule),
       disableWireElimination(false), lintStaticAsserts(true),
       lintXmrsInDesign(true), emitAllBindFiles(false),
-      inlineInputOnlyModules(false) {
+      inlineInputOnlyModules(false), domainMode(DomainMode::Disable) {
   if (!clOptions.isConstructed())
     return;
   outputFilename = clOptions->outputFilename;
@@ -859,7 +856,6 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   blackBoxRootPath = clOptions->blackBoxRootPath;
   replSeqMem = clOptions->replSeqMem;
   replSeqMemFile = clOptions->replSeqMemFile;
-  extractTestCode = clOptions->extractTestCode;
   ignoreReadEnableMem = clOptions->ignoreReadEnableMem;
   disableRandom = clOptions->disableRandom;
   outputAnnotationFilename = clOptions->outputAnnotationFilename;
@@ -867,9 +863,6 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   addMuxPragmas = clOptions->addMuxPragmas;
   verificationFlavor = clOptions->verificationFlavor;
   emitSeparateAlwaysBlocks = clOptions->emitSeparateAlwaysBlocks;
-  etcDisableInstanceExtraction = clOptions->etcDisableInstanceExtraction;
-  etcDisableRegisterExtraction = clOptions->etcDisableRegisterExtraction;
-  etcDisableModuleInlining = clOptions->etcDisableModuleInlining;
   addVivadoRAMAddressConflictSynthesisBugWorkaround =
       clOptions->addVivadoRAMAddressConflictSynthesisBugWorkaround;
   ckgModuleName = clOptions->ckgModuleName;
@@ -888,4 +881,5 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   lintXmrsInDesign = clOptions->lintXmrsInDesign;
   emitAllBindFiles = clOptions->emitAllBindFiles;
   inlineInputOnlyModules = clOptions->inlineInputOnlyModules;
+  domainMode = clOptions->domainMode;
 }

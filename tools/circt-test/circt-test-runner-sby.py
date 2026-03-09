@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import argparse
+import os
 import shlex
 import subprocess
 import sys
 
 parser = argparse.ArgumentParser()
 parser.add_argument("verilog")
-parser.add_argument("-t", "--test")
-parser.add_argument("-d", "--directory")
+parser.add_argument("-t", "--test", required=True)
+parser.add_argument("-d", "--directory", required=True)
 parser.add_argument("-m", "--mode")
-parser.add_argument("-k", "--depth")
+parser.add_argument("-k", "--depth", type=int)
 args = parser.parse_args()
 
 directory = Path(args.directory)
@@ -36,25 +37,48 @@ for task in tasks:
   --
 """
 
+# Collect the source files to be read in.
+source_files = []
+if source_path.is_dir():
+  with open(source_path / "filelist.f", "r") as filelist:
+    for line in filelist:
+      # Ignore empty lines in the file list.
+      line = line.strip()
+      if not line:
+        continue
+
+      # Ignore non-Verilog files. This is an ugly hack, but sometimes C/C++/Rust
+      # files get mixed into the filelist.
+      p = Path(line)
+      if p.suffix not in (".v", ".sv", ".vh", ".svh"):
+        continue
+
+      if not p.is_absolute():
+        p = source_path / p
+      source_files.append(p)
+else:
+  source_files.append(source_path)
+
+read_commands = ""
+for sf in source_files:
+  read_commands += f"read -formal {sf.absolute()}\n"
+
 # Generate the SymbiYosys script.
 script = """
-  [tasks]
-  {tasks}
+[tasks]
+{tasks}
 
 {options}
 
-  [engines]
-  smtbmc z3
+[engines]
+smtbmc z3
 
-  [script]
-  read -formal {source_path_name}
-  prep -top {test}
-
-  [files]
-  {source_path}
+[script]
+{read_commands}
+prep -top {test}
 """.format(tasks='\n  '.join(tasks),
            options=options,
-           source_path_name=source_path.name,
+           read_commands=read_commands,
            test=args.test,
            source_path=source_path)
 with open(script_path, "w") as f:

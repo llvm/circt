@@ -189,11 +189,6 @@ void circtFirtoolOptionsSetReplSeqMemFile(CirctFirtoolFirtoolOptions options,
   unwrap(options)->setReplSeqMemFile(unwrap(value));
 }
 
-void circtFirtoolOptionsSetExtractTestCode(CirctFirtoolFirtoolOptions options,
-                                           bool value) {
-  unwrap(options)->setExtractTestCode(value);
-}
-
 void circtFirtoolOptionsSetIgnoreReadEnableMem(
     CirctFirtoolFirtoolOptions options, bool value) {
   unwrap(options)->setIgnoreReadEnableMem(value);
@@ -244,21 +239,6 @@ void circtFirtoolOptionsSetVerificationFlavor(
 void circtFirtoolOptionsSetEmitSeparateAlwaysBlocks(
     CirctFirtoolFirtoolOptions options, bool value) {
   unwrap(options)->setEmitSeparateAlwaysBlocks(value);
-}
-
-void circtFirtoolOptionsSetEtcDisableInstanceExtraction(
-    CirctFirtoolFirtoolOptions options, bool value) {
-  unwrap(options)->setEtcDisableInstanceExtraction(value);
-}
-
-void circtFirtoolOptionsSetEtcDisableRegisterExtraction(
-    CirctFirtoolFirtoolOptions options, bool value) {
-  unwrap(options)->setEtcDisableRegisterExtraction(value);
-}
-
-void circtFirtoolOptionsSetEtcDisableModuleInlining(
-    CirctFirtoolFirtoolOptions options, bool value) {
-  unwrap(options)->setEtcDisableModuleInlining(value);
 }
 
 void circtFirtoolOptionsSetAddVivadoRAMAddressConflictSynthesisBugWorkaround(
@@ -315,6 +295,26 @@ void circtFirtoolOptionsSetDisableCSEinClasses(
 void circtFirtoolOptionsSetSelectDefaultInstanceChoice(
     CirctFirtoolFirtoolOptions options, bool value) {
   unwrap(options)->setSelectDefaultInstanceChoice(value);
+}
+
+void circtFirtoolOptionsSetDomainMode(CirctFirtoolFirtoolOptions options,
+                                      CirctFirtoolDomainMode value) {
+  firtool::FirtoolOptions::DomainMode converted;
+  switch (value) {
+  case CIRCT_FIRTOOL_DOMAIN_MODE_DISABLE:
+    converted = firtool::FirtoolOptions::DomainMode::Disable;
+    break;
+  case CIRCT_FIRTOOL_DOMAIN_MODE_CHECK:
+    converted = firtool::FirtoolOptions::DomainMode::Check;
+    break;
+  case CIRCT_FIRTOOL_DOMAIN_MODE_INFER:
+    converted = firtool::FirtoolOptions::DomainMode::Infer;
+    break;
+  case CIRCT_FIRTOOL_DOMAIN_MODE_INFER_ALL:
+    converted = firtool::FirtoolOptions::DomainMode::InferAll;
+    break;
+  }
+  unwrap(options)->setDomainMode(converted);
 }
 
 //===----------------------------------------------------------------------===//

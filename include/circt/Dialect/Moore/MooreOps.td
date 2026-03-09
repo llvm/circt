@@ -644,6 +644,87 @@ def ConstantRealOp : MooreOp<"constant_real", [
   let assemblyFormat = "$value attr-dict";
 }
 
+
+//===----------------------------------------------------------------------===//
+// Null Op
+//===----------------------------------------------------------------------===//
+
+def NullOp : MooreOp<"null", [Pure]> {
+  let summary = "SystemVerilog literal constant `null`";
+  let description = [{
+    Represents the SystemVerilog literal constant `null`, which is a valid
+    primary and constant_primary in IEEE 1800-2023.
+
+    The result type must be a null-able handle-like type (e.g., a class handle,
+    virtual interface, event, chandle). Verification enforces this to prevent
+    mis-modeling `null` as a numeric constant.
+  }];
+
+  let results = (outs NullType:$result);
+  let assemblyFormat = [{
+     attr-dict
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// Handle Comparison Ops
+//===----------------------------------------------------------------------===//
+
+class HandleEqOpBase<string mnemonic> : MooreOp<mnemonic, [
+  Pure,
+  Commutative
+]> {
+  let description = [{
+    Compares two handle-typed (ChandleType, ClassHandleType) operands and
+    returns a single bit 0 or 1 result. If both operands correspond to the same
+    memory address, the two operands are considered equal (`eq` returns 1, `ne`
+    returns 0). If the handles are not identical, or both null, the two operands
+    are considered not equal (`eq` returns 0, `ne` returns 1). 
+
+    See IEEE 1800-2023 § 8.4 "Objects (class instances)".
+  }];
+  let arguments = (ins NullableType:$lhs, NullableType:$rhs);
+  let results = (outs BitType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` type($lhs) `:` type($rhs) `->` type($result)
+  }];
+}
+
+def HandleEqOp : HandleEqOpBase<"handle_eq"> {
+  let summary = "Handle equality";
+}
+def HandleNeOp : HandleEqOpBase<"handle_ne"> {
+  let summary = "Handle inequality";
+}
+
+class HandleCaseEqOpBase<string mnemonic> : MooreOp<mnemonic, [
+  Pure,
+  Commutative
+]> {
+  let description = [{
+    Compares two handle-typed (ChandleType, ClassHandleType) operands and
+    returns a single bit 0 or 1 result. `case_eq` corresponds to the `===`
+    operator and `case_ne` to the `!==` operator. If the handles are not
+    identical, or both null, the two operands are considered not equal (`eq`
+    returns 0, `ne` returns 1). 
+
+    See IEEE 1800-2023 § 8.4 "Objects (class instances)".
+  }];
+  let arguments = (ins NullableType:$lhs, NullableType:$rhs);
+  let results = (outs BitType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs)
+  }];
+}
+
+def HandleCaseEqOp : HandleCaseEqOpBase<"handle_case_eq"> {
+  let summary = "Case equality for handle types";
+}
+def HandleCaseNeOp : HandleCaseEqOpBase<"handle_case_ne"> {
+  let summary = "Case inequality for handle types";
+}
+
+
 //===----------------------------------------------------------------------===//
 // Casting
 //===----------------------------------------------------------------------===//
@@ -731,13 +812,35 @@ def IntToLogicOp : MooreOp<"int_to_logic", [
   let hasFolder = 1;
 }
 
-def ToBuiltinBoolOp : MooreOp<"to_builtin_bool", [Pure]> {
-  let summary = "Convert a `!moore.l1` or `!moore.i1` to a builtin `i1`";
+def ToBuiltinIntOp : MooreOp<"to_builtin_int", [Pure,
+  TypesMatchWith<"result is builtin integer matching input type",
+    "input", "result", [{
+    IntegerType::get($_self.getContext(), cast<IntType>($_self).getWidth())
+  }]>
+]> {  let summary = "Convert a `!moore.i<n>` to a builtin `i<n>`";
   let description = [{
-    Maps `X` and `Z` to 0, and passes through 1 and 0 unchanged.
+    Casts from a two-valued Moore integer to a builtin integer.
   }];
-  let arguments = (ins AnySingleBitType:$input);
-  let results = (outs I1:$result);
+  let arguments = (ins TwoValuedIntType:$input);
+  let results = (outs AnyInteger:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input)
+  }];
+}
+
+def FromBuiltinIntOp : MooreOp<"from_builtin_int", [Pure,
+  TypesMatchWith<"result is Moore integer matching input type",
+    "input", "result", [{
+    moore::IntType::get($_self.getContext(),
+      cast<IntegerType>($_self).getIntOrFloatBitWidth(),
+        Domain::TwoValued)
+  }]>
+]> {  let summary = "Convert a builtin `i<n>` to a `!moore.i<n>`";
+  let description = [{
+    Casts from a builtin integer to a two-valued Moore integer.
+  }];
+  let arguments = (ins AnyInteger:$input);
+  let results = (outs TwoValuedIntType:$result);
   let assemblyFormat = [{
     $input attr-dict `:` type($input)
   }];
@@ -1660,6 +1763,235 @@ def DynExtractRefOp : MooreOp<"dyn_extract_ref", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Queue Manipulation
+//===----------------------------------------------------------------------===//
+
+def QueueResizeOp : MooreOp<"queue.resize", [Pure]> {
+  let description = [{
+    Converts between two queues with different bounds, but the same element
+    type.
+    
+    If $result has a smaller bound than the size of $input, elements at the end
+    of the queue will be discarded to ensure it fits within the space provided.
+  }];
+
+  let arguments = (ins QueueType:$input);
+  let results = (outs QueueType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
+def DynQueueExtractOp : MooreOp<"dyn_queue_extract", [Pure,
+  AllTypesMatch<["lowerIdx", "upperIdx"]>]> {
+  let description = [{
+    Extracts the elements of a queue from `lowerIdx` to `upperIdx` inclusive.
+    This creates a new queue, unless a single element is selected, in which
+    case that element is returned directly.
+
+    If either index is out of bounds (or has x/z values), the out of bounds
+    elements will result in a special value as defined by the element type
+    in IEEE 1800-2023 § 7.4.5, Table 7-1.
+  }];
+  let arguments = (ins QueueType:$input, UnpackedType:$lowerIdx,
+    UnpackedType:$upperIdx);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $input `from` $lowerIdx `to` $upperIdx attr-dict `:`
+    type($input) `,` type($lowerIdx) `->` type($result)
+  }];
+
+  let hasVerifier = 1;
+}
+
+def DynQueueRefElementOp : MooreOp<"dyn_queue_ref_element", [Pure]> {
+  let description = [{
+    Extracts a reference to the element `index` of `input`.
+
+    If the index is out of bounds (or has x/z values), reading the reference
+    will result in a special value as defined by the element type in
+    IEEE 1800-2023 § 7.4.5, Table 7-1, and writing it has no effect.
+  }];
+  let arguments = (ins RefType:$input, UnpackedType:$index);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $input `from` $index attr-dict `:`
+    type($input) `,` type($index) `->` type($result)
+  }];
+}
+
+def QueueSetOp : MooreOp<"queue.set", [
+    TypesMatchWith<"queue and item types must match",
+    "queue", "item",
+    "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">
+    ]> {
+  let summary = "Overwrite an element at a position within a queue.";
+  let description = [{
+    This op allows the element at an index within a queue to be overwritten
+    with some new value.
+    
+    If the index is out of bounds for the queue, it does nothing and a warning
+    is generated, unless the index is equal to the length of the queue,
+    in which case this operation adds $item to the end of the queue.
+  }];
+  let arguments = (ins QueueRefType:$queue, TwoValuedI32:$index,
+    UnpackedType:$item);
+  let results = (outs);
+  let assemblyFormat = [{
+    $queue `[` $index `]` `=` $item attr-dict `:` type($queue)
+  }];
+}
+
+def QueueFromUnpackedArrayOp : MooreOp<"queue.from_unpacked_array", [Pure]> {
+  let description = [{
+    Creates a queue containing the elements of the given unpacked array.
+
+    The queue and unpacked array must have the same element type.
+
+    If the queue type has bounds, any elements outside the bounds will be
+    discarded.
+  }];
+
+  let arguments = (ins UnpackedArrayType:$input);
+  let results = (outs QueueType:$result);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
+def QueueConcatOp : MooreOp<"queue.concat", [Pure]> {
+  let summary = "Concatenate queues";
+  let description = [{
+    Concatenates an arbitrary number of queues into one larger queue.
+    The queues are joined from left to right.
+
+    All queues must have the same element type, but the bounds may differ.
+
+    If the total length of the inputs doesn't fit into the queue bound of
+    $result, then the excess elements are discarded at the end of the queue.
+  }];
+  let arguments = (ins Variadic<QueueType>:$inputs);
+  let results = (outs QueueType:$result);
+  let assemblyFormat = [{
+    ` ` `(` $inputs `)` attr-dict `:` `(` type($inputs) `)` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
+def QueueInsertOp : MooreOp<"queue.insert", [
+    TypesMatchWith<"queue and item types must match",
+    "queue", "item",
+    "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">
+    ]> {
+  let summary = "Insert an element at an arbitrary position within a queue";
+  let description = [{
+      See IEEE 1800-2023 § 7.10.2.2 "Insert()"
+  }];
+  let arguments = (ins QueueRefType:$queue, TwoValuedI32:$index,
+    UnpackedType:$item);
+  let results = (outs);
+  let assemblyFormat = [{
+    $item `into` $queue `at` $index attr-dict `:` type($queue)
+  }];
+}
+
+def QueueDeleteOp : MooreOp<"queue.delete"> {
+  let summary = "Delete an element from an arbitrary position within a queue";
+  let description = [{
+      See IEEE 1800-2023 § 7.10.2.3 "Delete()", specifically the case where an
+      index parameter is supplied.
+  }];
+  let arguments = (ins QueueRefType:$queue, TwoValuedI32:$index);
+  let results = (outs);
+  let assemblyFormat = [{
+    `index` $index `of` $queue attr-dict `:` type($queue)
+  }];
+}
+
+def QueueClearOp : MooreOp<"queue.clear"> {
+  let summary = "Clear all elements from the given queue";
+  let description = [{
+      See IEEE 1800-2023 § 7.10.2.3 "Delete()", the case where no index is
+      supplied.
+  }];
+
+  let arguments = (ins QueueRefType:$queue);
+  let results = (outs);
+  let assemblyFormat = [{
+    $queue attr-dict `:` type($queue)
+  }];
+}
+
+def QueuePushBackOp : MooreOp<"push_back", [
+    TypesMatchWith<"queue and element types must match",
+    "queue", "element",
+    "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">
+    ]> {
+  let summary = "Push an element to the back of a queue";
+  let description = [{
+    See IEEE 1800-2023 § 7.10.2.7 "Push_back()"
+  }];
+  let arguments = (ins QueueRefType:$queue, UnpackedType:$element);
+  let results = (outs);
+  let assemblyFormat = [{
+    $element `into` $queue attr-dict `:` type($queue)
+  }];
+}
+
+def QueuePushFrontOp : MooreOp<"push_front", [
+    TypesMatchWith<"queue and element types must match",
+    "queue", "element",
+    "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">
+    ]> {
+  let summary = "Push an element to the front of a queue";
+  let description = [{
+    See IEEE 1800-2023 § 7.10.2.6 "Push_front()"
+  }];
+  let arguments = (ins QueueRefType:$queue, UnpackedType:$element);
+  let results = (outs);
+  let assemblyFormat = [{
+    $element `into` $queue attr-dict `:` type($queue)
+  }];
+}
+
+
+def QueuePopBackOp : MooreOp<"pop_back", [
+    TypesMatchWith<"queue and element types must match",
+    "queue", "result",
+    "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">
+    ]> {
+  let summary = "Return and remove an element from the back of a queue";
+  let description = [{
+    See IEEE 1800-2023 § 7.10.2.4 "Pop_back()"
+  }];
+  let arguments = (ins QueueRefType:$queue);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    `from` $queue attr-dict `:` type($queue)
+  }];
+}
+
+def QueuePopFrontOp : MooreOp<"pop_front", [
+    TypesMatchWith<"queue and element types must match",
+    "queue", "result",
+    "cast<QueueType>(cast<RefType>($_self).getNestedType()).getElementType()">
+    ]> {
+  let summary = "Return and remove an element from the front of a queue";
+  let description = [{
+    See IEEE 1800-2023 § 7.10.2.5 "Pop_front()"
+  }];
+  let arguments = (ins QueueRefType:$queue);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    `from` $queue attr-dict `:` type($queue)
+  }];
+}
+
+
+//===----------------------------------------------------------------------===//
 // Array Manipulation
 //===----------------------------------------------------------------------===//
 
@@ -1671,6 +2003,69 @@ def ArrayCreateOp : MooreOp<"array_create", [Pure, SameTypeOperands]> {
     $elements attr-dict `:` type($elements) `->` type($result)
   }];
   let hasVerifier = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// Associative Array Manipulation
+//===----------------------------------------------------------------------===//
+
+def AssocArrayExtractOp : MooreOp<"assoc_array_extract", [Pure,
+    TypesMatchWith<"input's element type must match result type",
+    "input", "result", "cast<AssocArrayType>($_self).getElementType()">,
+    TypesMatchWith<"associative array index and given index must match",
+    "input", "index", "cast<AssocArrayType>($_self).getIndexType()">]> {
+  let description = [{
+    Extracts an element from an associative array.
+  }];
+  let arguments = (ins AssocArrayType:$input, UnpackedType:$index);
+  let results = (outs UnpackedType:$result);
+  let assemblyFormat = [{
+    $input `[` $index `]` attr-dict `:`
+    type($input) `,` type($index) `->` type($result)
+  }];
+}
+
+def AssocArrayExtractRefOp : MooreOp<"assoc_array_extract_ref", 
+    [TypesMatchWith<"input reference and result reference types must match",
+    "input", "result", "RefType::get(cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getElementType())">,
+    TypesMatchWith<"associative array index and given index must match",
+    "input", "index", "cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getIndexType()">]> {
+  let description = [{
+  Extracts the reference to an element from an associative array.
+  }];
+  let arguments = (ins RefType:$input, UnpackedType:$index);
+  let results = (outs RefType:$result);
+  let assemblyFormat = [{
+    $input `[` $index `]` attr-dict `:`
+    type($input) `,` type($index) `->` type($result)
+  }];
+}
+
+def AssocArrayDeleteOp : MooreOp<"assoc_array.delete", 
+    [TypesMatchWith<"associative array index and given index must match",
+    "assoc_array", "index", "cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getIndexType()">]> {
+  let summary = "Delete the index and element within the associative array";
+  let description = [{
+      See IEEE 1800-2023 § 7.9.2 "Delete()"
+  }];
+  let arguments = (ins AssocArrayRefType:$assoc_array, UnpackedType:$index);
+  let results = (outs);
+  let assemblyFormat = [{
+    `index` $index `from` $assoc_array attr-dict `:` type($assoc_array) `[` type($index) `]`
+  }];
+}
+
+def AssocArrayClearOp : MooreOp<"assoc_array.clear"> {
+  let summary = "Clear all elements from the given associative array";
+  let description = [{
+      See IEEE 1800-2023 § 7.9.2 "Delete()", the case where no index is supplied.
+  }];
+
+  let arguments = (ins AssocArrayRefType:$assoc_array);
+  let results = (outs);
+  let assemblyFormat = [{
+    $assoc_array attr-dict `:` type($assoc_array)
+  }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -2030,13 +2425,19 @@ def FormatRealOp : MooreOp<"fmt.real", [Pure]> {
   See IEEE 1800-2017 § 21.2.1.2 "Format specifications".
   }];
   let arguments = (ins
-  RealType:$value,
-  RealFormatAttr:$format
+    RealType:$value,
+    RealFormatAttr:$format,
+    IntAlignAttr:$alignment,
+    OptionalAttr<I32Attr>:$fieldWidth,
+    OptionalAttr<I32Attr>:$fracDigits
   );
   let results = (outs FormatStringType:$result);
   let assemblyFormat = [{
-      $format $value `,`
-      attr-dict `:` type($value)
+    $format $value `,`
+    `align` $alignment
+    (`fieldWidth` $fieldWidth^)?
+    (`fracDigits` $fracDigits^)?
+    attr-dict `:` type($value)
   }];
 }
 
@@ -2062,6 +2463,24 @@ def FormatStringOp : MooreOp<"fmt.string", [Pure]> {
     (`,` `padding` $padding^)?
     attr-dict
   }];
+}
+
+def FormatHierPathOp : MooreOp<"fmt.hier_path", [Pure]> {
+  let summary = "Hierarchical path format specifier";
+  let description = [{
+    Format string fragment that resolves to the hierarchical path of the module
+    instance containing this operation when printed. This corresponds to the
+    `%m` (or `%M` with escaped special characters) format specifier in
+    SystemVerilog.
+
+    See IEEE 1800-2017 § 21.2.1.6 "Hierarchical name format".
+
+    The `useEscapes` attribute distinguishes between `%m` (false) and `%M`
+    (true). When true, special characters in the path should be escaped.
+  }];
+  let arguments = (ins UnitAttr:$useEscapes);
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = "(`escaped` $useEscapes^)? attr-dict";
 }
 
 //===----------------------------------------------------------------------===//
@@ -2177,6 +2596,25 @@ def UrandomBIOp : Builtin<"urandom"> {
   let arguments = (ins Optional<TwoValuedI32>:$seed);
   let results = (outs TwoValuedI32:$result);
   let assemblyFormat = "($seed^)? attr-dict";
+}
+
+def UrandomrangeBIOp : Builtin<"urandom_range"> {
+  let summary = "Generate a pseudo-random unsigned integer within provided range";
+  let description = [{
+    Corresponds to the `urandom_range()` system function. Returns a 32-bit 
+    pseudo-random integer. The minimum value is optional; when not provided, it 
+    is treated as 0. If the minimum value is provided and larger than the maximum 
+    value, the minimum value is treated as the maximum, aand vice versa.
+
+    See IEEE 1800-2023 $ 18.13.2 "$urandom_range()".
+  }];
+
+  let arguments = (ins
+    TwoValuedI32:$maxval,
+    Optional<TwoValuedI32>:$minval
+  );
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = "$maxval ($minval^)? attr-dict";
 }
 
 //===----------------------------------------------------------------------===//
@@ -2409,6 +2847,25 @@ def AtanhBIOp : RealMathFunc<"atanh"> {
 }
 
 //===----------------------------------------------------------------------===//
+// Size
+//===----------------------------------------------------------------------===//
+
+def QueueSizeBIOp : Builtin<"size"> {
+  let summary = "Return the number of elements in a queue";
+  let description = [{
+    Corresponds to the `size` system function. Returns the number of items in a queue.
+    According to spec the returned size fits an `int`.
+
+    See IEEE 1800-2023 § 7.10.2.1 "Size()".
+  }];
+
+  // Optional positional attribute for the seed
+  let arguments = (ins QueueType:$queue);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = "$queue `:` type($queue) attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
 // Classes
 //===----------------------------------------------------------------------===//
 
@@ -2618,6 +3075,75 @@ def StringGetCOp : StringBuiltin<"getc"> {
   let arguments = (ins StringType:$str, TwoValuedI32:$index);
   let results = (outs TwoValuedI8:$result);
   let assemblyFormat = "$str `[` $index `]` attr-dict";
+}
+
+def StringConcatOp : StringBuiltin<"concat"> {
+  let summary = "Concatenate strings";
+  let description = [{
+    Concatenates an arbitrary number of strings into one larger string. The 
+    strings are concatenated from left to right, with the first operand 
+    appearing at the left start of the result string, and the last operand 
+    appearing at the right end. Produces an empty string if no inputs are 
+    provided.
+  }];
+  let arguments = (ins Variadic<StringType>:$inputs);
+  let results = (outs StringType:$result);
+  let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
+}
+
+
+//===----------------------------------------------------------------------===//
+// Forking
+//===----------------------------------------------------------------------===//
+
+def CompleteOp : MooreOp<"complete", [
+  Pure, Terminator, HasParent<"ForkJoinOp">
+]> {
+  let summary = "Complete execution of a thread";
+  let description = [{
+    Complete execution of a thread, ending the forked process and notifying
+    the parent process
+  }];
+
+  // TODO: Add field to store location of parent process to signal
+
+  let assemblyFormat = [{ attr-dict }];
+}
+
+
+def Join: I32EnumAttrCase<"Join", 0, "join_all">;
+def JoinAny: I32EnumAttrCase<"JoinAny", 1, "join_any">;
+def JoinNone: I32EnumAttrCase<"JoinNone", 2, "join_none">;
+
+def JoinKindAttr: I32EnumAttr<"JoinKind", "Join kind", [Join, JoinAny, JoinNone]>{
+  let cppNamespace = "circt::moore";
+}
+
+def ForkJoinOp : MooreOp<"fork", [
+  HasOnlyGraphRegion,
+  NoTerminator
+]> {
+  let summary = "Create separate threads";
+  let description = [{
+    Forks execution to create one thread for each block inside the `body` region.
+    The main process resumes progress according to the kind of join operation used:
+
+    - `join_all` will not allow the main process to continue until all forked processes
+      have completed.
+    
+    - `join_any` will allow the main process to continue once any one of the forked
+      processes completes.
+
+    - `join_none` will continue executing the main process without waiting.
+  }];
+
+  let arguments = (ins JoinKindAttr:$kind);
+  let results = (outs);
+  let regions = (region VariadicRegion<MinSizedRegion<1>>:$body);
+
+  let assemblyFormat = [{
+    $kind attr-dict-with-keyword $body
+  }];
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS

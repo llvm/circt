@@ -1,9 +1,8 @@
 // REQUIRES: libz3
 // REQUIRES: circt-lec-jit
 
-// RUN: circt-opt %s -convert-synth-to-comb -o %t.before.mlir
-// RUN: circt-opt %s -synth-lower-variadic -convert-synth-to-comb -o %t.after.mlir
-// RUN: circt-lec %t.before.mlir %t.after.mlir -c1=AndInverter -c2=AndInverter --shared-libs=%libz3 | FileCheck %s --check-prefix=AND_INVERTER_LEC
+// RUN: circt-opt %s -synth-lower-variadic -o %t.after.mlir
+// RUN: circt-lec %s %t.after.mlir -c1=AndInverter -c2=AndInverter --shared-libs=%libz3 | FileCheck %s --check-prefix=AND_INVERTER_LEC
 // AND_INVERTER_LEC: c1 == c2
 hw.module @AndInverter(in %a: i2, in %b: i2, in %c: i2, in %d: i2, in %e: i2, in %f: i2, in %g: i2, out o1: i2) {
   %0 = synth.aig.and_inv %d, not %e : i2
@@ -12,7 +11,7 @@ hw.module @AndInverter(in %a: i2, in %b: i2, in %c: i2, in %d: i2, in %e: i2, in
   hw.output %2 : i2
 }
 
-// RUN: circt-lec %t.before.mlir %t.after.mlir -c1=VariadicCombOps -c2=VariadicCombOps --shared-libs=%libz3 | FileCheck %s --check-prefix=VARIADIC_COMB_OPS_LEC
+// RUN: circt-lec %s %t.after.mlir -c1=VariadicCombOps -c2=VariadicCombOps --shared-libs=%libz3 | FileCheck %s --check-prefix=VARIADIC_COMB_OPS_LEC
 // VARIADIC_COMB_OPS_LEC: c1 == c2
 hw.module @VariadicCombOps(in %a: i2, in %b: i2, in %c: i2, in %d: i2, in %e: i2, in %f: i2, 
                            out out_and: i2, out out_or: i2, out out_xor: i2) {

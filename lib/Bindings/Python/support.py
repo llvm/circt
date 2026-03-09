@@ -89,11 +89,11 @@ def type_to_pytype(t) -> ir.Type:
     return t
 
   from .dialects import esi, hw, seq, rtg, rtgtest
-  if ir.IntegerType.isinstance(t):
+  if isinstance(t, ir.IntegerType):
     return ir.IntegerType(t)
-  if ir.NoneType.isinstance(t):
+  if isinstance(t, ir.NoneType):
     return ir.NoneType(t)
-  if ir.TupleType.isinstance(t):
+  if isinstance(t, ir.TupleType):
     return ir.TupleType(t)
   if hw.ArrayType.isinstance(t):
     return hw.ArrayType(t)
@@ -143,8 +143,12 @@ def type_to_pytype(t) -> ir.Type:
     return rtg.MemoryBlockType(t)
   if rtg.TupleType.isinstance(t):
     return rtg.TupleType(t)
+  if rtg.StringType.isinstance(t):
+    return rtg.StringType(t)
   if rtgtest.IntegerRegisterType.isinstance(t):
     return rtgtest.IntegerRegisterType(t)
+  if rtgtest.FloatRegisterType.isinstance(t):
+    return rtgtest.FloatRegisterType(t)
   if rtgtest.CPUType.isinstance(t):
     return rtgtest.CPUType(t)
 
@@ -167,22 +171,22 @@ def attribute_to_var(attr):
     return attr.value
 
   from .dialects import hw, om
-  if ir.BoolAttr.isinstance(attr):
+  if isinstance(attr, ir.BoolAttr):
     return ir.BoolAttr(attr).value
-  if ir.IntegerAttr.isinstance(attr):
+  if isinstance(attr, ir.IntegerAttr):
     return ir.IntegerAttr(attr).value
   if hw.InnerSymAttr.isinstance(attr):
     return ir.StringAttr(hw.InnerSymAttr(attr).symName).value
-  if ir.StringAttr.isinstance(attr):
+  if isinstance(attr, ir.StringAttr):
     return ir.StringAttr(attr).value
-  if ir.FlatSymbolRefAttr.isinstance(attr):
+  if isinstance(attr, ir.FlatSymbolRefAttr):
     return ir.FlatSymbolRefAttr(attr).value
-  if ir.TypeAttr.isinstance(attr):
+  if isinstance(attr, ir.TypeAttr):
     return ir.TypeAttr(attr).value
-  if ir.ArrayAttr.isinstance(attr):
+  if isinstance(attr, ir.ArrayAttr):
     arr = ir.ArrayAttr(attr)
     return [attribute_to_var(x) for x in arr]
-  if ir.DictAttr.isinstance(attr):
+  if isinstance(attr, ir.DictAttr):
     dict = ir.DictAttr(attr)
     return {i.name: attribute_to_var(i.attr) for i in dict}
   if om.ReferenceAttr.isinstance(attr):

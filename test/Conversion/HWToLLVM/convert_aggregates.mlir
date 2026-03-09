@@ -1,31 +1,5 @@
 // RUN: circt-opt %s --convert-hw-to-llvm=spill-arrays-early=false | FileCheck %s
 
-// CHECK-LABEL: @convertBitcast
-func.func @convertBitcast(%arg0 : i32, %arg1: !hw.array<2xi32>, %arg2: !hw.struct<foo: i32, bar: i32>) {
-  // CHECK-NEXT: %[[AARG2:.*]] = builtin.unrealized_conversion_cast %arg2 : !hw.struct<foo: i32, bar: i32> to !llvm.struct<(i32, i32)>
-  // CHECK-NEXT: %[[AARG1:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<2xi32> to !llvm.array<2 x i32>
-
-  // CHECK-NEXT: %[[ONE1:.*]] = llvm.mlir.constant(1 : i32) : i32
-  // CHECK-NEXT: %[[A1:.*]] = llvm.alloca %[[ONE1]] x i32 {alignment = 4 : i64} : (i32) -> !llvm.ptr
-  // CHECK-NEXT: llvm.store %arg0, %[[A1]] : i32, !llvm.ptr
-  // CHECK-NEXT: llvm.load %[[A1]] : !llvm.ptr -> !llvm.array<4 x i8>
-  %0 = hw.bitcast %arg0 : (i32) -> !hw.array<4xi8>
-
-  // CHECK-NEXT: %[[ONE2:.*]] = llvm.mlir.constant(1 : i32) : i32
-  // CHECK-NEXT: %[[A2:.*]] = llvm.alloca %[[ONE2]] x !llvm.array<2 x i32> {alignment = 4 : i64} : (i32) -> !llvm.ptr
-  // CHECK-NEXT: llvm.store %[[AARG1]], %[[A2]] : !llvm.array<2 x i32>, !llvm.ptr
-  // CHECK-NEXT: llvm.load %[[A2]] : !llvm.ptr -> i64
-  %1 = hw.bitcast %arg1 : (!hw.array<2xi32>) -> i64
-
-  // CHECK-NEXT: %[[ONE3:.*]] = llvm.mlir.constant(1 : i32) : i32
-  // CHECK-NEXT: %[[A3:.*]] = llvm.alloca %[[ONE3]] x !llvm.struct<(i32, i32)> {alignment = 4 : i64} : (i32) -> !llvm.ptr
-  // CHECK-NEXT: llvm.store %[[AARG2]], %[[A3]] : !llvm.struct<(i32, i32)>, !llvm.ptr
-  // CHECK-NEXT: llvm.load %[[A3]] : !llvm.ptr -> i64
-  %2 = hw.bitcast %arg2 : (!hw.struct<foo: i32, bar: i32>) -> i64
-
-  return
-}
-
 // CHECK-LABEL: @convertArray
 func.func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>, %arg2: i32, %arg3: i32, %arg4: i32, %arg5: i32) {
   // CHECK-NEXT: %[[CAST0:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<2xi32> to !llvm.array<2 x i32>

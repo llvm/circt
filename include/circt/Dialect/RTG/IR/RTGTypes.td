@@ -148,6 +148,38 @@ def ArrayType : RTGTypeDef<"Array"> {
   ];
 }
 
+def MapType : RTGTypeDef<"Map"> {
+  let summary = "a map from keys to values";
+  let description = [{
+    This type represents a standard map/dictionary datastructure. It does not
+    make any assumptions about the underlying implementation. Thus a hash map,
+    tree map, etc. can be used in a backend. It does not guarentee deterministic
+    iteration.
+  }];
+
+  let parameters = (ins "::mlir::Type":$keyType, "::mlir::Type":$valueType);
+
+  let mnemonic = "map";
+  let assemblyFormat = "`<` $keyType `->` $valueType `>`";
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "::mlir::Type":$keyType,
+                                        "::mlir::Type":$valueType),
+      "return $_get(keyType.getContext(), keyType, valueType);">,
+  ];
+}
+
+class MapTypeOf<Type keyType, Type valueType> : Type<
+  And<[
+    MapType.predicate,
+    SubstLeaves<"$_self", "llvm::cast<rtg::MapType>($_self).getKeyType()",
+                keyType.predicate>,
+    SubstLeaves<"$_self", "llvm::cast<rtg::MapType>($_self).getValueType()",
+                valueType.predicate>
+  ]>,
+  "map of " # keyType.summary # " keys to " # valueType.summary # " values",
+  "::circt::rtg::MapType">;
+
 def TupleType : RTGTypeDef<"Tuple"> {
   let summary = "a tuple of zero or more fields";
   let description = [{
@@ -161,6 +193,13 @@ def TupleType : RTGTypeDef<"Tuple"> {
 
   let mnemonic = "tuple";
   let assemblyFormat = "(`<` $fieldTypes^ `>`)?";
+}
+
+def StringType : RTGTypeDef<"String"> {
+  let summary = "a string type";
+
+  let mnemonic = "string";
+  let assemblyFormat = "";
 }
 
 //===----------------------------------------------------------------------===//
@@ -195,12 +234,14 @@ def ImmediateType : RTGISATypeDef<"Immediate", "immediate"> {
 }
 
 class ImmediateOfWidth<int width> : Type<
-  And<[CPred<"llvm::isa<::circt::rtg::ImmediateType>($_self)">,
+  And<[ImmediateType.predicate,
        CPred<"llvm::cast<::circt::rtg::ImmediateType>($_self).getWidth() == " #
              width>]>,
   "a " # width # "-bit immediate">,
   BuildableType<"::circt::rtg::ImmediateType::get($_builder.getContext(), " #
-                width # ")">;
+                width # ")"> {
+  int immWidth = width;
+}
 
 def MemoryType : RTGISATypeDef<"Memory", "memory"> {
   let summary = "handle to a memory";
@@ -212,6 +253,16 @@ def MemoryType : RTGISATypeDef<"Memory", "memory"> {
 
   let parameters = (ins "uint32_t":$addressWidth);
   let assemblyFormat = "`<` $addressWidth `>`";
+}
+
+class MemoryWithAddressWidth<int width> : Type<
+  And<[MemoryType.predicate,
+       CPred<"llvm::cast<::circt::rtg::MemoryType>($_self).getAddressWidth() == " #
+             width>]>,
+  "a " # width # "-bit addressable memory">,
+  BuildableType<"::circt::rtg::MemoryType::get($_builder.getContext(), " #
+                width # ")"> {
+  int addressWidth = width;
 }
 
 def MemoryBlockType : RTGISATypeDef<"MemoryBlock", "memory_block"> {
@@ -229,5 +280,10 @@ def MemoryBlockType : RTGISATypeDef<"MemoryBlock", "memory_block"> {
 }
 
 def ISAMemory : AnyTypeOf<[MemoryType, ImmediateType, LabelType]>;
+
+class ISAMemoryWithAddressWidth<int width> : AnyTypeOf<[
+  MemoryWithAddressWidth<width>,
+  ImmediateOfWidth<width>,
+  LabelType]>;
 
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD

@@ -1,8 +1,8 @@
 // REQUIRES: libz3
 // REQUIRES: circt-lec-jit
 
-// RUN: circt-opt %s --convert-synth-to-comb -o %t1.mlir
-// RUN: circt-opt %s --synth-maximum-and-cover --convert-synth-to-comb -o %t2.mlir
+// RUN: circt-opt %s -o %t1.mlir
+// RUN: circt-opt %s --synth-maximum-and-cover -o %t2.mlir
 
 // RUN: circt-lec %t1.mlir %t2.mlir -c1=MaxCover1 -c2=MaxCover1 --shared-libs=%libz3 | FileCheck %s --check-prefix=MAX_COVER_1
 // MAX_COVER_1: c1 == c2

@@ -12,8 +12,8 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
+#include "circt/Dialect/LLHD/LLHDPasses.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "llhd-sig2reg"
@@ -21,7 +21,7 @@
 namespace circt {
 namespace llhd {
 #define GEN_PASS_DEF_SIG2REG
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h.inc"
+#include "circt/Dialect/LLHD/LLHDPasses.h.inc"
 } // namespace llhd
 } // namespace circt
 
@@ -271,7 +271,9 @@ public:
             interval.low.min);
         read = builder.createOrFold<hw::BitcastOp>(
             loc, interval.value.getType(), read);
-        interval.value.replaceAllUsesWith(read);
+        if (read != interval.value) {
+          interval.value.replaceAllUsesWith(read);
+        }
         continue;
       }
 
@@ -282,7 +284,9 @@ public:
           loc, builder.getIntegerType(interval.bitwidth), read, 0);
       read = builder.createOrFold<hw::BitcastOp>(loc, interval.value.getType(),
                                                  read);
-      interval.value.replaceAllUsesWith(read);
+      if (read != interval.value) {
+        interval.value.replaceAllUsesWith(read);
+      }
     }
 
     // Delete all operations operating on signal values.

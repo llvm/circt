@@ -36,6 +36,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/LEB128.h"
 #include "llvm/Support/raw_ostream.h"
 #include <string>
 
@@ -160,9 +161,6 @@ private:
 
   /// Get or assign a literal for a value
   unsigned getLiteral(Object obj, bool inverted = false);
-
-  /// Helper method to write unsigned LEB128 encoded integers
-  void writeUnsignedLEB128(unsigned value);
 };
 
 } // anonymous namespace
@@ -313,8 +311,8 @@ LogicalResult AIGERExporter::writeAndGates() {
       assert(rhs0Literal >= rhs1Literal && "rhs0Literal >= rhs1Literal");
 
       // Write deltas using variable-length encoding
-      writeUnsignedLEB128(delta0);
-      writeUnsignedLEB128(delta1);
+      encodeULEB128(delta0, os);
+      encodeULEB128(delta1, os);
     }
   } else {
     // ASCII format - no need for structural hashing
@@ -720,15 +718,4 @@ void circt::aiger::registerExportAIGERTranslation() {
         registry.insert<synth::SynthDialect, hw::HWDialect, seq::SeqDialect,
                         comb::CombDialect>();
       });
-}
-
-// Helper method to write unsigned LEB128 encoded integers
-void AIGERExporter::writeUnsignedLEB128(unsigned value) {
-  do {
-    uint8_t byte = value & 0x7f;
-    value >>= 7;
-    if (value != 0)
-      byte |= 0x80; // Set high bit if more bytes follow
-    os.write(reinterpret_cast<char *>(&byte), 1);
-  } while (value != 0);
 }

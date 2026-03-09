@@ -203,6 +203,8 @@ add_circt_public_c_api_library(CIRCTCAPIFSM
   CIRCTFSM
   CIRCTFSMTransforms
   CIRCTFSMToSV
+  CIRCTFSMToSMT
+  CIRCTCoreToFSM
   CIRCTFSMToCore
 )
 
