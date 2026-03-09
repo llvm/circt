@@ -759,7 +759,7 @@ void AssemblyFormatGen::gen(OperandNode *node) {
     printRegister(os, getterName, needsDynCast);
     isFirst = false;
   }
-  if (node->kinds.contains<Immediate>()) {
+  if (node->kinds.contains<Immediate, AnyImmediate>()) {
     assert(node->parent != nullptr &&
            "verifiers must make sure immediate operands are wrapped in "
            "signedness node");
