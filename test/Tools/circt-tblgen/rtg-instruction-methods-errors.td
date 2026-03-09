@@ -209,7 +209,7 @@ def ErrorMissingSpaceOp : TestOp<"error_missing_space"> {
   let arguments = (ins TestRegType:$reg1, TestRegType:$reg2);
   let isaAssemblyFormat = "$reg1$reg2";
 }
-// MISSING_SPACE: [[@LINE-2]]:33: error: expected ' '
+// MISSING_SPACE: [[@LINE-2]]:33: error: expected whitespace
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_EMPTY_OPERAND_NAME 2>&1 | FileCheck %s --check-prefix=EMPTY_OPERAND_NAME

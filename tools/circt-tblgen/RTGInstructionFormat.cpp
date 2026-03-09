@@ -40,9 +40,19 @@ SMLoc FormatParser::getLoc() {
   return SMLoc::getFromPointer(loc.getPointer() + pos);
 }
 
+bool FormatParser::isWhitespace(char c) {
+  return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
 void FormatParser::skipWhitespace() {
-  while (pos < input.size() && (input[pos] == ' ' || input[pos] == '\t'))
+  while (pos < input.size() && isWhitespace(input[pos]))
     ++pos;
+}
+
+void FormatParser::consumeAtLeastOneWhitespace() {
+  if (pos >= input.size() || !isWhitespace(input[pos]))
+    PrintFatalError(getLoc(), "expected whitespace");
+  skipWhitespace();
 }
 
 void FormatParser::consume(StringRef str, bool skipWhitespaceFirst) {
@@ -52,13 +62,11 @@ void FormatParser::consume(StringRef str, bool skipWhitespaceFirst) {
 }
 
 bool FormatParser::tryConsume(StringRef str, bool skipWhitespaceFirst) {
-  auto savedPos = pos;
+  assert(!str.empty() && "cannot consume empty string");
+  assert(llvm::none_of(str, [&](char c) { return isWhitespace(c); }) &&
+         "string to consume must not be whitespace");
 
-  // In case the user tries to consume whitespace.
-  if (input.substr(pos).starts_with(str)) {
-    pos += str.size();
-    return true;
-  }
+  auto savedPos = pos;
 
   if (skipWhitespaceFirst)
     skipWhitespace();
@@ -160,7 +168,7 @@ FormatNode *FormatParser::parseOptionalBinaryLiteral() {
     return nullptr;
 
   // Check for invalid characters after the binary digits
-  if (!isAtScopeEnd() && input[pos] != ' ')
+  if (!isAtScopeEnd() && !isWhitespace(input[pos]))
     PrintFatalError(getLoc(), "invalid character ('" +
                                   input.substr(pos, pos + 1) +
                                   "') after binary literal");
@@ -194,10 +202,10 @@ FormatNode *FormatParser::parseOptionalSignednessSpecifier() {
   bool isSigned = false;
   StringRef specifierName;
 
-  if (tryConsume("signed(", false)) {
+  if (tryConsume("signed(")) {
     isSigned = true;
     specifierName = "'signed'";
-  } else if (tryConsume("unsigned(", false)) {
+  } else if (tryConsume("unsigned(")) {
     isSigned = false;
     specifierName = "'unsigned'";
   } else {
@@ -254,10 +262,9 @@ FormatNode *FormatParser::parseNextNode() {
                     "unexpected character '" +
                         Twine(input[std::min(pos, input.size() - 1)]) + "'");
 
-  // Elements in the format are separated by a space.
+  // Elements in the format are separated by whitespace.
   if (!isAtScopeEnd())
-    consume(" ");
-  skipWhitespace();
+    consumeAtLeastOneWhitespace();
 
   return node;
 }
@@ -267,7 +274,7 @@ FormatNode *FormatParser::parseOptionalIfThenElse() {
   if (!tryConsume("if"))
     return nullptr;
 
-  consume(" ");
+  consumeAtLeastOneWhitespace();
 
   // Parse the condition operand (must be a 1-bit immediate)
   FormatNode *condNode = parseOptionalOperand();
@@ -276,7 +283,7 @@ FormatNode *FormatParser::parseOptionalIfThenElse() {
 
   auto *condition = cast<OperandNode>(condNode);
 
-  consume(" ");
+  consumeAtLeastOneWhitespace();
 
   SmallVector<FormatNode *> thenBranch;
   bool hasThen = tryConsume("then");
@@ -328,9 +335,10 @@ FormatNode *FormatParser::parseOptionalCustomDirective() {
     auto *operandNode = cast<OperandNode>(argNode);
     arguments.push_back(operandNode);
 
-    // Arguments are separated by spaces, but the last one is followed by ')'
+    // Arguments are separated by whitespace, but the last one is followed by
+    // ')'
     if (!tryConsume(")")) {
-      consume(" ");
+      consumeAtLeastOneWhitespace();
       continue;
     }
     break;
