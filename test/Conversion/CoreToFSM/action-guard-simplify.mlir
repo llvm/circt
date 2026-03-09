@@ -4,11 +4,6 @@
 // When the guard ensures an external input condition holds, the action block
 // should use the simplified value directly instead of wrapping it in a mux.
 
-// The module has:
-// - "state" register: 1-bit FSM state
-// - "counter" register: variable that increments when x is true (in state 0)
-// Both state and counter transitions are guarded by the same condition (x).
-
 // CHECK-LABEL: fsm.machine @action_guard_simplify
 // CHECK-SAME: (%[[X:.*]]: i1) -> i2
 // CHECK-SAME: attributes {initialState = "state_0"}
