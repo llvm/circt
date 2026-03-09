@@ -30,7 +30,7 @@ namespace rtg {
 
 /// Base class for all format AST nodes.
 /// Represents a single element in an instruction format specification,
-/// such as operands, literals, mnemonics, or signedness specifiers.
+/// such as operands, literals, or signedness specifiers.
 class FormatNode {
 public:
   enum class Kind {
@@ -40,8 +40,6 @@ public:
     BinaryLiteral,
     /// A string literal (e.g., `add`)
     StringLiteral,
-    /// The mnemonic keyword placeholder
-    Mnemonic,
     /// A signedness wrapper (signed()/unsigned())
     SignednessSpecifier,
     /// An if-then-else conditional construct
@@ -164,21 +162,6 @@ public:
 
 private:
   SmallString<32> str;
-};
-
-/// Represents the mnemonic placeholder in an assembly format.
-/// The 'mnemonic' keyword in a format specification is replaced with the
-/// actual instruction mnemonic (e.g., "add", "sub", "lw") during code
-/// generation.
-struct MnemonicNode : public FormatNode {
-  /// Construct a mnemonic node.
-  /// \param loc Source location in the TableGen file
-  MnemonicNode(llvm::SMLoc loc)
-      : FormatNode(Kind::Mnemonic, loc, "'mnemonic' keyword") {}
-
-  static bool classof(const FormatNode *elem) {
-    return elem->getKind() == Kind::Mnemonic;
-  }
 };
 
 /// Represents a signedness specifier for an operand in an assembly format.
@@ -338,7 +321,6 @@ struct AssemblyFormatGen : public FormatGen {
 
 private:
   void gen(StringLiteralNode *node);
-  void gen(MnemonicNode *node);
   void gen(OperandNode *node);
   void gen(SignednessNode *node);
   void gen(IfThenElseNode *node);
@@ -387,10 +369,6 @@ struct FormatParser {
   /// \param loc Source location of the format string in the TableGen file
   /// \param format The format string to parse
   void parseAndAppendToContext(llvm::SMLoc loc, StringRef format);
-
-  /// Parses the "mnemonic" keyword in the format.
-  /// \return A MnemonicNode if found, nullptr otherwise
-  FormatNode *parseOptionalMnemonic();
 
   /// Parses operand references like "$rs" or "$imm[11:0]" with optional bit
   /// slicing. Does not resolve the MLIR type of the operand.
@@ -487,7 +465,6 @@ public:
 
   /// Verify that a format AST is valid for binary format generation.
   /// Checks that:
-  /// - The format does not contain mnemonics (only valid in assembly formats)
   /// - The format does not contain string literals (only valid in assembly
   ///   formats)
   /// - The format does not contain signedness specifiers (only valid in
@@ -508,7 +485,6 @@ private:
   void verify(BinaryLiteralNode *node);
   void verify(OperandNode *node);
   void verify(IfThenElseNode *node);
-  void verify(MnemonicNode *node);
   void verify(StringLiteralNode *node);
   void verify(SignednessNode *node);
   void verify(CustomDirective *node);

@@ -23,11 +23,9 @@ def TestRegType : TypeDef<RTGDialect, "TestReg">, RegisterTypeBase {
 
 def Test1_BasicRegisterOp : TestOp<"basic_register"> {
   let arguments = (ins Arg<TestRegType, "", [SourceReg]>:$rs);
-  let isaAssemblyFormat = "mnemonic ` ` $rs";
+  let isaAssemblyFormat = "$rs";
 }
 // CHECK-LABEL: void BasicRegisterOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
-// CHECK-NEXT:    os << getOperationName().rsplit('.').second;
-// CHECK-NEXT:    os << " ";
 // CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRs()).getRegisterAssembly();
 // CHECK-NEXT:  }
 // CHECK-EMPTY:
@@ -38,12 +36,10 @@ def Test1_BasicRegisterOp : TestOp<"basic_register"> {
 def Test2_MultipleRegistersOp : TestOp<"multiple_registers"> {
   let arguments = (ins Arg<TestRegType, "", [SourceReg]>:$rs1,
                        Arg<TestRegType, "", [SourceReg]>:$rs2);
-  let isaAssemblyFormat = "mnemonic ` ` $rs1 `, ` $rs2";
+  let isaAssemblyFormat = "$rs1 `, ` $rs2";
 }
 // CHECK-EMPTY:
 // CHECK-NEXT:  void MultipleRegistersOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
-// CHECK-NEXT:    os << getOperationName().rsplit('.').second;
-// CHECK-NEXT:    os << " ";
 // CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRs1()).getRegisterAssembly();
 // CHECK-NEXT:    os << ", ";
 // CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRs2()).getRegisterAssembly();
@@ -55,12 +51,10 @@ def Test2_MultipleRegistersOp : TestOp<"multiple_registers"> {
 
 def Test3_AnyTypeImmOrLabelOp : TestOp<"anytype_imm_or_label"> {
   let arguments = (ins AnyTypeOf<[ImmediateOfWidth<13>, LabelType]>:$offset);
-  let isaAssemblyFormat = "mnemonic ` ` unsigned($offset)";
+  let isaAssemblyFormat = "unsigned($offset)";
 }
 // CHECK-EMPTY:
 // CHECK-NEXT:  void AnyTypeImmOrLabelOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
-// CHECK-NEXT:    os << getOperationName().rsplit('.').second;
-// CHECK-NEXT:    os << " ";
 // CHECK-NEXT:    if (auto label = ::llvm::dyn_cast<::circt::rtg::LabelAttr>(adaptor.getOffset())) {
 // CHECK-NEXT:      os << label.getName();
 // CHECK-NEXT:    } else if (auto imm = ::llvm::dyn_cast<::circt::rtg::ImmediateAttr>(adaptor.getOffset())) {
@@ -80,12 +74,10 @@ def Test4_ImmSlicingOp : TestOp<"imm_slicing"> {
   let arguments = (ins ImmediateOfWidth<20>:$imm,
                        Arg<TestRegType, "", [DestReg]>:$rd);
   let isaBinaryFormat = "$imm[19:12] $imm[11:11] $imm[10:1] $imm[0:0] $rd 0b0110111";
-  let isaAssemblyFormat = "mnemonic ` ` $rd `, ` unsigned($imm)";
+  let isaAssemblyFormat = "$rd `, ` unsigned($imm)";
 }
 // CHECK-EMPTY:
 // CHECK-NEXT:  void ImmSlicingOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
-// CHECK-NEXT:    os << getOperationName().rsplit('.').second;
-// CHECK-NEXT:    os << " ";
 // CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
 // CHECK-NEXT:    os << ", ";
 // CHECK-NEXT:    {
@@ -115,12 +107,10 @@ def Test4_ImmSlicingOp : TestOp<"imm_slicing"> {
 def Test5_LabelOnlyOp : TestOp<"label_only"> {
   let arguments = (ins LabelType:$target);
   let isaBinaryFormat = "$target";
-  let isaAssemblyFormat = "mnemonic ` ` $target";
+  let isaAssemblyFormat = "$target";
 }
 // CHECK-EMPTY:
 // CHECK-NEXT:  void LabelOnlyOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
-// CHECK-NEXT:    os << getOperationName().rsplit('.').second;
-// CHECK-NEXT:    os << " ";
 // CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::LabelAttr>(adaptor.getTarget()).getName();
 // CHECK-NEXT:  }
 // CHECK-EMPTY:
@@ -133,12 +123,10 @@ def Test6_MixedRegSlicingOp : TestOp<"mixed_reg_slicing"> {
                        Arg<TestRegType, "", [SourceReg]>:$rs2,
                        Arg<TestRegType, "", [DestReg]>:$rd);
   let isaBinaryFormat = "$rs1[3:0] $rs2 $rd[4:2] 0b111";
-  let isaAssemblyFormat = "mnemonic ` ` $rd `, ` $rs1 `, ` $rs2";
+  let isaAssemblyFormat = "$rd `, ` $rs1 `, ` $rs2";
 }
 // CHECK-EMPTY:
 // CHECK-NEXT:  void MixedRegSlicingOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
-// CHECK-NEXT:    os << getOperationName().rsplit('.').second;
-// CHECK-NEXT:    os << " ";
 // CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
 // CHECK-NEXT:    os << ", ";
 // CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRs1()).getRegisterAssembly();
@@ -163,16 +151,11 @@ def Test6_MixedRegSlicingOp : TestOp<"mixed_reg_slicing"> {
 // CHECK-NEXT:  }
 
 def Test7_SignedImmediateOp : TestOp<"signed_immediate"> {
-  let arguments = (ins ImmediateOfWidth<12>:$imm,
-                       Arg<TestRegType, "", [DestReg]>:$rd);
-  let isaAssemblyFormat = "mnemonic ` ` $rd `, ` signed($imm)";
+  let arguments = (ins ImmediateOfWidth<12>:$imm);
+  let isaAssemblyFormat = "signed($imm)";
 }
 // CHECK-EMPTY:
 // CHECK-NEXT:  void SignedImmediateOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
-// CHECK-NEXT:    os << getOperationName().rsplit('.').second;
-// CHECK-NEXT:    os << " ";
-// CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
-// CHECK-NEXT:    os << ", ";
 // CHECK-NEXT:    {
 // CHECK-NEXT:      ::llvm::SmallVector<char> strBuf;
 // CHECK-NEXT:      ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getImm()).getValue().toStringSigned(strBuf);
@@ -186,15 +169,12 @@ def Test7_SignedImmediateOp : TestOp<"signed_immediate"> {
 
 // Test: String literal in assembly format
 def Test8_StringLiteralOp : TestOp<"string_literal"> {
-  let arguments = (ins Arg<TestRegType, "", [DestReg]>:$rd);
-  let isaAssemblyFormat = "mnemonic ` ` `0x` $rd";
+  let isaAssemblyFormat = "` ` `0x`";
 }
 // CHECK-EMPTY:
 // CHECK-NEXT:  void StringLiteralOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
-// CHECK-NEXT:    os << getOperationName().rsplit('.').second;
 // CHECK-NEXT:    os << " ";
 // CHECK-NEXT:    os << "0x";
-// CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
 // CHECK-NEXT:  }
 // CHECK-EMPTY:
 // CHECK-NEXT:  void StringLiteralOp::printInstructionBinary(llvm::raw_ostream &os, FoldAdaptor adaptor) {
@@ -204,14 +184,10 @@ def Test8_StringLiteralOp : TestOp<"string_literal"> {
 def Test9_AnyTypeRegOrImmOp : TestOp<"anytype_reg_or_imm"> {
   let arguments = (ins Arg<TestRegType, "", [DestReg]>:$rd,
                        AnyTypeOf<[TestRegType, ImmediateOfWidth<5>]>:$src);
-  let isaAssemblyFormat = "mnemonic ` ` $rd `, ` unsigned($src)";
+  let isaAssemblyFormat = "unsigned($src)";
 }
 // CHECK-EMPTY:
 // CHECK-NEXT:  void AnyTypeRegOrImmOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
-// CHECK-NEXT:    os << getOperationName().rsplit('.').second;
-// CHECK-NEXT:    os << " ";
-// CHECK-NEXT:    os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor.getRd()).getRegisterAssembly();
-// CHECK-NEXT:    os << ", ";
 // CHECK-NEXT:    if (auto reg = ::llvm::dyn_cast<::circt::rtg::RegisterAttrInterface>(adaptor.getSrc())) {
 // CHECK-NEXT:      os << reg.getRegisterAssembly();
 // CHECK-NEXT:    } else if (auto imm = ::llvm::dyn_cast<::circt::rtg::ImmediateAttr>(adaptor.getSrc())) {
@@ -231,20 +207,9 @@ def Test9_AnyTypeRegOrImmOp : TestOp<"anytype_reg_or_imm"> {
 def Test10_SingleBitSliceOp : TestOp<"single_bit_slice"> {
   let arguments = (ins ImmediateOfWidth<8>:$imm);
   let isaBinaryFormat = "$imm[7] $imm[0] 0b11";
-  let isaAssemblyFormat = "mnemonic ` ` unsigned($imm)";
+  let isaAssemblyFormat = "unsigned($imm)";
 }
-// CHECK-EMPTY:
-// CHECK-NEXT:  void SingleBitSliceOp::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor adaptor) {
-// CHECK-NEXT:    os << getOperationName().rsplit('.').second;
-// CHECK-NEXT:    os << " ";
-// CHECK-NEXT:    {
-// CHECK-NEXT:    ::llvm::SmallVector<char> strBuf;
-// CHECK-NEXT:    ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getImm()).getValue().toStringUnsigned(strBuf);
-// CHECK-NEXT:    os << strBuf;
-// CHECK-NEXT:    }
-// CHECK-NEXT:  }
-// CHECK-EMPTY:
-// CHECK-NEXT:  void SingleBitSliceOp::printInstructionBinary(llvm::raw_ostream &os, FoldAdaptor adaptor) {
+// CHECK-LABEL:  void SingleBitSliceOp::printInstructionBinary
 // CHECK-NEXT:    ::llvm::APInt imm = ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getImm()).getValue();
 // CHECK-EMPTY:
 // CHECK-NEXT:    ::llvm::APInt binary = llvm::APInt::getZero(0);
@@ -271,11 +236,9 @@ def Test12_IfThenElseBothBranchesOp : TestOp<"if_then_else_both"> {
                        Arg<TestRegType, "", [DestReg]>:$rd,
                        Arg<TestRegType, "", [DestReg]>:$rs);
   let isaBinaryFormat = "if $cond then ($rd 0b11) else ($rd $rs 0b00)";
-  let isaAssemblyFormat = "mnemonic ` ` if $cond then (`+` $rd) else (`-` $rd $rs)";
+  let isaAssemblyFormat = "if $cond then (`+` $rd) else (`-` $rd $rs)";
 }
 // CHECK-LABEL:  void IfThenElseBothBranchesOp::printInstructionAssembly
-// CHECK-NEXT:    os << getOperationName().rsplit('.').second;
-// CHECK-NEXT:    os << " ";
 // CHECK-NEXT:    ::llvm::APInt cond = ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getCond()).getValue();
 // CHECK-NEXT:    if (cond.isOne()) {
 // CHECK-NEXT:      os << "+";
@@ -305,11 +268,9 @@ def Test12_IfThenElseBothBranchesOp : TestOp<"if_then_else_both"> {
 def Test13_IfThenOnlyOp : TestOp<"if_then_only"> {
   let arguments = (ins ImmediateOfWidth<1>:$cond,
                        Arg<TestRegType, "", [DestReg]>:$rd);
-  let isaAssemblyFormat = "mnemonic ` ` if $cond then (`opt:` $rd) else ()";
+  let isaAssemblyFormat = "if $cond then (`opt:` $rd) else ()";
 }
 // CHECK-LABEL:  void IfThenOnlyOp::printInstructionAssembly
-// CHECK-NEXT:    os << getOperationName().rsplit('.').second;
-// CHECK-NEXT:    os << " ";
 // CHECK-NEXT:    ::llvm::APInt cond = ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getCond()).getValue();
 // CHECK-NEXT:    if (cond.isOne()) {
 // CHECK-NEXT:      os << "opt:";
@@ -320,11 +281,9 @@ def Test13_IfThenOnlyOp : TestOp<"if_then_only"> {
 def Test14_IfElseOnlyOp : TestOp<"if_else_only"> {
   let arguments = (ins ImmediateOfWidth<1>:$cond,
                        Arg<TestRegType, "", [DestReg]>:$rd);
-  let isaAssemblyFormat = "mnemonic ` ` if $cond else (`alt:` $rd)";
+  let isaAssemblyFormat = "if $cond else (`alt:` $rd)";
 }
 // CHECK-LABEL:  void IfElseOnlyOp::printInstructionAssembly
-// CHECK-NEXT:    os << getOperationName().rsplit('.').second;
-// CHECK-NEXT:    os << " ";
 // CHECK-NEXT:    ::llvm::APInt cond = ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor.getCond()).getValue();
 // CHECK-NEXT:    if (cond.isZero()) {
 // CHECK-NEXT:      os << "alt:";
