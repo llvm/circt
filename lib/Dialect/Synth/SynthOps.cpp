@@ -110,12 +110,6 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
     // ~x 0 0 -> ~x  no fold
     // ~x 0 ~1 -> 0
     if (c1 == c2) {
-      if (isInverted(i) != isInverted(j)) {
-        if (isInverted(i))
-          return getOperand(j);
-        else
-          return getOperand(i);
-      }
       if (isInverted(i)) {
         // return the inverted value
         auto value = cast<IntegerAttr>(adaptor.getInputs()[i]).getValue();
@@ -133,37 +127,6 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
         return getOperand(k);
     }
   }
-  // else if (nonConstantValues.size() == 2) {
-  //   // x x 1 -> x
-  //   // x ~x 1 -> 1
-  //   // ~x ~x 1 -> ~x
-  //   auto k = 3 - (nonConstantValues[0] + nonConstantValues[1]);
-  //   auto i = nonConstantValues[0];
-  //   auto j = nonConstantValues[1];
-  //   auto c1 = adaptor.getInputs()[i];
-  //   auto c2 = adaptor.getInputs()[j];
-  //   if (c1 == c2) {
-  //     // x ~x
-  //     if (isInverted(i) != isInverted(j)) {
-  //       if (!isInverted(k))
-  //         return getOperand(k);
-  //       auto value = cast<IntegerAttr>(adaptor.getInputs()[k]).getValue();
-  //       value = ~value;
-  //       return IntegerAttr::get(
-  //           IntegerType::get(getContext(), value.getBitWidth()), value);
-  //     } else if (isInverted(i) == isInverted(j)) {
-  //       // x x const
-  //       if (!isInverted(i))
-  //         return getOperand(i);
-  //       // ~x ~x
-  //        if (isInverted(i)) {
-  //         (*this)->setOperands({getOperand(i)});
-  //         (*this).setInverted({true});
-  //         return getResult();
-  //       //}
-  //     }
-  //   }
-  // }
   return {};
 }
 
