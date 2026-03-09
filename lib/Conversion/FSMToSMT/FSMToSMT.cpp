@@ -260,7 +260,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
   // The domain should not be empty
   if (stateFunDomain.empty())
-    return solver.emitError("At least one variable or output is required. ");
+    return solver.emitError("At least one variable or output is required.");
 
   // For each state, declare one SMT function: `F_state(outs, vars, [time]) ->
   // Bool`, returning `true`  when `state` is activated.
