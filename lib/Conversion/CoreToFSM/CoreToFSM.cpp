@@ -186,70 +186,69 @@ static bool areStructurallyEquivalent(Value a, Value b, Region &regionA,
       /*markEquivalent=*/nullptr, OperationEquivalence::Flags::IgnoreLocations);
 }
 
-/// Replace values in the action region that are structurally equivalent to
-/// guardExpr with a boolean constant.
-static void replaceStructuralMatches(Value guardExpr, bool isTrue,
-                                     Region &guardRegion, Region &actionRegion,
-                                     OpBuilder &builder, Location loc) {
-  bool guardIsExternal =
-      !guardExpr.getDefiningOp() ||
-      !guardRegion.isAncestor(guardExpr.getDefiningOp()->getParentRegion());
+/// RewritePattern that folds expressions in an action region that are
+/// structurally equivalent to guard conditions into boolean constants.
 
-  if (guardIsExternal) {
-    // The guard expression is an external value (e.g., a machine block
-    // argument). Replace its uses in the action region directly.
-    builder.setInsertionPointToStart(&actionRegion.front());
-    auto constOp = hw::ConstantOp::create(builder, loc, guardExpr.getType(),
-                                          isTrue ? 1 : 0);
-    guardExpr.replaceUsesWithIf(constOp.getResult(), [&](OpOperand &use) {
-      return actionRegion.isAncestor(use.getOwner()->getParentRegion());
-    });
-  } else {
-    // The guard expression is computed by operations inside the guard region.
-    // Find structurally equivalent expressions in the action region.
-    SmallVector<Value> matches;
-    actionRegion.walk([&](Operation *op) {
-      for (Value result : op->getResults()) {
-        if (result.getType().isInteger(1) &&
-            areStructurallyEquivalent(guardExpr, result, guardRegion,
+class GuardConditionFoldPattern : public RewritePattern {
+public:
+  GuardConditionFoldPattern(MLIRContext *ctx,
+                            ArrayRef<std::pair<Value, bool>> guardFacts,
+                            Region &guardRegion, Region &actionRegion)
+      : RewritePattern(MatchAnyOpTypeTag(), /*benefit=*/10, ctx),
+        guardFacts(guardFacts.begin(), guardFacts.end()),
+        guardRegion(guardRegion), actionRegion(actionRegion) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (!actionRegion.isAncestor(op->getParentRegion()))
+      return failure();
+
+    for (Value result : op->getResults()) {
+      if (!result.getType().isInteger(1) || result.use_empty())
+        continue;
+
+      for (auto [guardExpr, isTrue] : guardFacts) {
+        // Direct structural match.
+        if (areStructurallyEquivalent(guardExpr, result, guardRegion,
                                       actionRegion))
-          matches.push_back(result);
-      }
-    });
-    if (!matches.empty()) {
-      builder.setInsertionPointToStart(&actionRegion.front());
-      auto constOp = hw::ConstantOp::create(builder, loc, builder.getI1Type(),
-                                            isTrue ? 1 : 0);
-      for (Value match : matches)
-        match.replaceAllUsesWith(constOp.getResult());
-    }
+          return replaceWithConstant(result, isTrue, op, rewriter);
 
-    // Handle ICmp predicate inversion: canonicalization may transform
-    // xor(icmp eq, true) into icmp ne (and vice versa). If the guard contains
-    // icmp P(X, Y), find icmp !P(X, Y) in the action and replace with the
-    // opposite boolean value.
-    if (auto guardIcmp = guardExpr.getDefiningOp<ICmpOp>()) {
-      ICmpPredicate negPred =
-          ICmpOp::getNegatedPredicate(guardIcmp.getPredicate());
-      SmallVector<Value> negMatches;
-      actionRegion.walk([&](ICmpOp actionIcmp) {
-        if (actionIcmp.getPredicate() == negPred &&
-            areStructurallyEquivalent(guardIcmp.getLhs(), actionIcmp.getLhs(),
-                                      guardRegion, actionRegion) &&
-            areStructurallyEquivalent(guardIcmp.getRhs(), actionIcmp.getRhs(),
-                                      guardRegion, actionRegion))
-          negMatches.push_back(actionIcmp.getResult());
-      });
-      if (!negMatches.empty()) {
-        builder.setInsertionPointToStart(&actionRegion.front());
-        auto constOp = hw::ConstantOp::create(builder, loc, builder.getI1Type(),
-                                              !isTrue ? 1 : 0);
-        for (Value match : negMatches)
-          match.replaceAllUsesWith(constOp.getResult());
+        // ICmp predicate inversion: if the guard contains icmp P(X, Y),
+        // find icmp !P(X, Y) in the action and replace with !isTrue.
+        if (auto guardIcmp = guardExpr.getDefiningOp<ICmpOp>()) {
+          if (auto actionIcmp = dyn_cast<ICmpOp>(op)) {
+            if (actionIcmp.getPredicate() ==
+                    ICmpOp::getNegatedPredicate(guardIcmp.getPredicate()) &&
+                areStructurallyEquivalent(guardIcmp.getLhs(),
+                                          actionIcmp.getLhs(), guardRegion,
+                                          actionRegion) &&
+                areStructurallyEquivalent(guardIcmp.getRhs(),
+                                          actionIcmp.getRhs(), guardRegion,
+                                          actionRegion))
+              return replaceWithConstant(result, !isTrue, op, rewriter);
+          }
+        }
       }
     }
+    return failure();
   }
-}
+
+private:
+  LogicalResult replaceWithConstant(Value result, bool constVal, Operation *op,
+                                    PatternRewriter &rewriter) const {
+    rewriter.setInsertionPointToStart(&actionRegion.front());
+    Value c = hw::ConstantOp::create(rewriter, op->getLoc(),
+                                     rewriter.getI1Type(), constVal ? 1 : 0);
+    rewriter.replaceAllUsesWith(result, c);
+    if (op->use_empty())
+      rewriter.eraseOp(op);
+    return success();
+  }
+
+  SmallVector<std::pair<Value, bool>> guardFacts;
+  Region &guardRegion;
+  Region &actionRegion;
+};
 
 /// Simplify action blocks by propagating guard conditions.
 /// When a transition is taken, its guard condition is known to be true.
@@ -302,10 +301,33 @@ static void simplifyActionWithGuard(TransitionOp transition,
     }
   }
 
-  // Replace structurally equivalent expressions in the action region.
-  for (auto [guardExpr, isTrue] : guardFacts)
-    replaceStructuralMatches(guardExpr, isTrue, guardRegion, actionRegion,
-                             builder, loc);
+  // Replace external guard values (block args or ops outside guard region)
+  // directly via replaceUsesWithIf.
+  for (auto [guardExpr, isTrue] : guardFacts) {
+    bool guardIsExternal =
+        !guardExpr.getDefiningOp() ||
+        !guardRegion.isAncestor(guardExpr.getDefiningOp()->getParentRegion());
+    if (guardIsExternal) {
+      builder.setInsertionPointToStart(&actionRegion.front());
+      auto constOp = hw::ConstantOp::create(builder, loc, guardExpr.getType(),
+                                            isTrue ? 1 : 0);
+      guardExpr.replaceUsesWithIf(constOp.getResult(), [&](OpOperand &use) {
+        return actionRegion.isAncestor(use.getOwner()->getParentRegion());
+      });
+    }
+  }
+
+  // Use pattern rewriter for internal guard expression folding.
+  MLIRContext *ctx = transition.getContext();
+  RewritePatternSet patterns(ctx);
+  patterns.add<GuardConditionFoldPattern>(ctx, guardFacts, guardRegion,
+                                          actionRegion);
+  SmallVector<Operation *> actionOps;
+  actionRegion.walk([&](Operation *op) { actionOps.push_back(op); });
+  GreedyRewriteConfig config;
+  config.setScope(&actionRegion);
+  (void)applyOpPatternsGreedily(
+      actionOps, FrozenRewritePatternSet(std::move(patterns)), config);
 }
 
 /// Checks if a value is a constant or a tree of muxes with constant leaves.
@@ -1020,9 +1042,8 @@ public:
         // redundant muxes. The guard already checks the transition
         // condition, so the action block can assume it holds.
         for (TransitionOp transition :
-             stateOp.getTransitions().getOps<TransitionOp>()) {
+             stateOp.getTransitions().getOps<TransitionOp>())
           simplifyActionWithGuard(transition, opBuilder);
-        }
 
         // Re-canonicalize after guard propagation to clean up dead ops.
         {
