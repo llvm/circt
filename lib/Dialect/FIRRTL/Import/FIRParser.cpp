@@ -4123,8 +4123,7 @@ ParseResult FIRStmtParser::parseDomainInstantiation() {
   auto domainOp = lookup->second;
   auto domainType = DomainType::get(
       FlatSymbolRefAttr::get(domainOp.getNameAttr()), domainOp.getFieldsAttr());
-  auto result = builder.create<DomainCreateOp>(
-      domainType, instanceName, FlatSymbolRefAttr::get(domainKind));
+  auto result = builder.create<DomainCreateOp>(domainType, instanceName);
 
   // Add to symbol table
   return moduleContext.addSymbolEntry(instanceName.getValue(), result,

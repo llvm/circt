@@ -7272,27 +7272,8 @@ LogicalResult BindOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 // Domain operations
 //===----------------------------------------------------------------------===//
 
-ParseResult DomainCreateAnonOp::parse(OpAsmParser &parser,
-                                      OperationState &result) {
-  Type resultType;
-  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.parseType(resultType))
-    return failure();
-
-  auto domainType = dyn_cast<DomainType>(resultType);
-  if (!domainType)
-    return parser.emitError(parser.getCurrentLocation(),
-                            "expected domain type");
-
-  result.addAttribute("domain", domainType.getNameAttr());
-  result.addTypes(resultType);
-  return success();
-}
-
-void DomainCreateAnonOp::print(OpAsmPrinter &p) {
-  p.printOptionalAttrDict((*this)->getAttrs(), {"domain"});
-  p << " : ";
-  p.printStrippedAttrOrType(getResult().getType());
+void DomainCreateAnonOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
 }
 
 LogicalResult
@@ -7310,37 +7291,6 @@ DomainCreateAnonOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
                          << "' which is not a domain";
 
   return success();
-}
-
-ParseResult DomainCreateOp::parse(OpAsmParser &parser, OperationState &result) {
-  Type resultType;
-  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.parseType(resultType))
-    return failure();
-
-  auto domainType = dyn_cast<DomainType>(resultType);
-  if (!domainType)
-    return parser.emitError(parser.getCurrentLocation(),
-                            "expected domain type");
-
-  result.addAttribute("domain", domainType.getNameAttr());
-
-  // Infer the name from the SSA name if not provided
-  if (!result.attributes.get("name")) {
-    auto resultName = parser.getResultName(0).first;
-    if (!resultName.empty() && isdigit(resultName[0]))
-      resultName = "";
-    result.addAttribute("name", parser.getBuilder().getStringAttr(resultName));
-  }
-
-  result.addTypes(resultType);
-  return success();
-}
-
-void DomainCreateOp::print(OpAsmPrinter &p) {
-  p.printOptionalAttrDict((*this)->getAttrs(), {"domain", "name"});
-  p << " : ";
-  p.printStrippedAttrOrType(getResult().getType());
 }
 
 void DomainCreateOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {

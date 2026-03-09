@@ -816,18 +816,25 @@ def DomainCreateAnonOp
                [ParentOneOf<["firrtl::ContractOp", "firrtl::FModuleOp",
                              "firrtl::LayerBlockOp", "firrtl::MatchOp",
                              "firrtl::WhenOp", "sv::IfDefOp"]>,
-                DeclareOpInterfaceMethods<SymbolUserOpInterface>
+                DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+                HasCustomSSAName
 ]> {
   let summary = "Create an anonymous domain, without parameters set";
-  let arguments = (ins FlatSymbolRefAttr:$domain);
+  let arguments = (ins StrAttr:$name);
   let results = (outs Res<DomainType, "", [MemAlloc]>:$result);
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{
+    custom<ImplicitSSAName>(attr-dict) `:` type($result)
+  }];
 
-  let builders = [
-    OpBuilder<(ins "DomainType":$type), [{
-      build($_builder, $_state, type, type.getNameAttr());
-    }]>
-  ];
+  let extraClassDeclaration = [{
+    FlatSymbolRefAttr getDomainAttr() {
+      return getResult().getType().getNameAttr();
+    }
+
+    StringRef getDomain() {
+      return getDomainAttr().getValue();
+    }
+  }];
 }
 
 def DomainCreateOp : FIRRTLOp<"domain.create", [
@@ -848,15 +855,21 @@ def DomainCreateOp : FIRRTLOp<"domain.create", [
     %my_clock = firrtl.domain.create : !firrtl.domain<@ClockDomain>
     ```
   }];
-  let arguments = (ins StrAttr:$name, FlatSymbolRefAttr:$domain);
+  let arguments = (ins StrAttr:$name);
   let results = (outs Res<DomainType, "", [MemAlloc]>:$result);
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{
+    custom<ImplicitSSAName>($name) attr-dict `:` type($result)
+  }];
 
-  let builders = [
-    OpBuilder<(ins "DomainType":$type, "StringAttr":$name), [{
-      build($_builder, $_state, type, name, type.getNameAttr());
-    }]>
-  ];
+  let extraClassDeclaration = [{
+    FlatSymbolRefAttr getDomainAttr() {
+      return getResult().getType().getNameAttr();
+    }
+
+    StringRef getDomain() {
+      return getDomainAttr().getValue();
+    }
+  }];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLDECLARATIONS_TD
