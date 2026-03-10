@@ -560,8 +560,6 @@ LogicalResult LowerModule::lowerModule() {
       }
 
       // Replace a named domain create with an object instantiation.
-      // TODO: The object's fields are all connected to unknown values. This is
-      // a temporary solution while support for domains is being brought online.
       if (auto createDomain = dyn_cast<DomainCreateOp>(walkOp)) {
         auto noUser = llvm::all_of(createDomain->getUsers(), [&](auto *user) {
           return operationsToErase.contains(user) ||
@@ -580,15 +578,17 @@ LogicalResult LowerModule::lowerModule() {
         instanceGraph.lookup(op)->addInstance(object,
                                               instanceGraph.lookup(classIn));
 
+        // Get field values from the DomainCreateOp
+        auto fieldValues = createDomain.getFieldValues();
+        size_t fieldIdx = 0;
+
         for (auto [idx, port] : llvm::enumerate(classIn.getPorts())) {
           if (port.direction == Direction::Out)
             continue;
           auto subfield = ObjectSubfieldOp::create(
               builder, createDomain.getLoc(), object, idx);
-          auto unknown =
-              UnknownValueOp::create(builder, createDomain.getLoc(), port.type);
           PropAssignOp::create(builder, createDomain.getLoc(), subfield,
-                               unknown);
+                               fieldValues[fieldIdx++]);
         }
 
         createDomain.replaceAllUsesWith(UnrealizedConversionCastOp::create(

@@ -570,7 +570,7 @@ firrtl.circuit "DomainCreate" {
     // CHECK-NEXT: firrtl.propassign %A_out, %A_object :
     // CHECK-NEXT: %my_domain = firrtl.object @ClockDomain()
     // CHECK-NEXT: firrtl.propassign %[[domainInfo_in]], %my_domain
-    %my_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
+    %my_domain = firrtl.domain.create : () -> !firrtl.domain<@ClockDomain()>
     firrtl.domain.define %A, %my_domain : !firrtl.domain<@ClockDomain()>
   }
 }
@@ -583,7 +583,7 @@ firrtl.circuit "DeadDomainCreate" {
   // CHECK-LABEL: firrtl.module @DeadDomainCreate() {
   // CHECK-NEXT:  }
   firrtl.module @DeadDomainCreate() {
-    %my_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
+    %my_domain = firrtl.domain.create : () -> !firrtl.domain<@ClockDomain()>
   }
 }
 
@@ -602,14 +602,83 @@ firrtl.circuit "DomainCreateWithFields" {
     out %A: !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
   ) {
     // CHECK:      %A_object = firrtl.object @ClockDomain_out
-    // CHECK:      %my_domain = firrtl.object @ClockDomain(
+    // CHECK:      %[[unknown_name:.+]] = firrtl.unknown : !firrtl.string
+    // CHECK-NEXT: %[[unknown_period:.+]] = firrtl.unknown : !firrtl.integer
+    // CHECK-NEXT: %my_domain = firrtl.object @ClockDomain(
     // CHECK-NEXT: %[[name_in:.+]] = firrtl.object.subfield %my_domain[name_in]
-    // CHECK-NEXT: %[[unknown_name:.+]] = firrtl.unknown : !firrtl.string
     // CHECK-NEXT: firrtl.propassign %[[name_in]], %[[unknown_name]]
     // CHECK-NEXT: %[[period_in:.+]] = firrtl.object.subfield %my_domain[period_in]
-    // CHECK-NEXT: %[[unknown_period:.+]] = firrtl.unknown : !firrtl.integer
     // CHECK-NEXT: firrtl.propassign %[[period_in]], %[[unknown_period]]
-    %my_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+    %unknown_name = firrtl.unknown : !firrtl.string
+    %unknown_period = firrtl.unknown : !firrtl.integer
+    %my_domain = firrtl.domain.create(%unknown_name, %unknown_period) : (!firrtl.string, !firrtl.integer) -> !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+    firrtl.domain.define %A, %my_domain : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+  }
+}
+
+// -----
+
+// Test domain create with field values provided as constants.
+firrtl.circuit "DomainCreateWithConstantFieldValues" {
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"name", !firrtl.string>, #firrtl.domain.field<"period", !firrtl.integer>]
+  // CHECK-LABEL: firrtl.module @DomainCreateWithConstantFieldValues(
+  firrtl.module @DomainCreateWithConstantFieldValues(
+    out %A: !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+  ) {
+    // CHECK:      %A_object = firrtl.object @ClockDomain_out
+    // CHECK:      %[[name_const:.+]] = firrtl.string "MyClock"
+    // CHECK-NEXT: %[[period_const:.+]] = firrtl.integer 42
+    // CHECK-NEXT: %my_domain = firrtl.object @ClockDomain(
+    // CHECK-NEXT: %[[name_in:.+]] = firrtl.object.subfield %my_domain[name_in]
+    // CHECK-NEXT: firrtl.propassign %[[name_in]], %[[name_const]]
+    // CHECK-NEXT: %[[period_in:.+]] = firrtl.object.subfield %my_domain[period_in]
+    // CHECK-NEXT: firrtl.propassign %[[period_in]], %[[period_const]]
+    %name = firrtl.string "MyClock"
+    %period = firrtl.integer 42
+    %my_domain = firrtl.domain.create(%name, %period) : (!firrtl.string, !firrtl.integer) -> !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+    firrtl.domain.define %A, %my_domain : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+  }
+}
+
+// -----
+
+// Test domain create with field values from input ports.
+firrtl.circuit "DomainCreateWithPortValues" {
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"name", !firrtl.string>, #firrtl.domain.field<"period", !firrtl.integer>]
+  // CHECK-LABEL: firrtl.module @DomainCreateWithPortValues(
+  firrtl.module @DomainCreateWithPortValues(
+    in %clk_name: !firrtl.string,
+    in %clk_period: !firrtl.integer,
+    out %A: !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+  ) {
+    // CHECK:      %my_domain = firrtl.object @ClockDomain(
+    // CHECK-NEXT: %[[name_in:.+]] = firrtl.object.subfield %my_domain[name_in]
+    // CHECK-NEXT: firrtl.propassign %[[name_in]], %clk_name
+    // CHECK-NEXT: %[[period_in:.+]] = firrtl.object.subfield %my_domain[period_in]
+    // CHECK-NEXT: firrtl.propassign %[[period_in]], %clk_period
+    %my_domain = firrtl.domain.create(%clk_name, %clk_period) : (!firrtl.string, !firrtl.integer) -> !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+    firrtl.domain.define %A, %my_domain : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+  }
+}
+
+// -----
+
+// Test domain create with mixed constant and port values.
+firrtl.circuit "DomainCreateWithMixedValues" {
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"name", !firrtl.string>, #firrtl.domain.field<"period", !firrtl.integer>]
+  // CHECK-LABEL: firrtl.module @DomainCreateWithMixedValues(
+  firrtl.module @DomainCreateWithMixedValues(
+    in %clk_period: !firrtl.integer,
+    out %A: !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+  ) {
+    // CHECK:      %[[name_const:.+]] = firrtl.string "FastClock"
+    // CHECK-NEXT: %my_domain = firrtl.object @ClockDomain(
+    // CHECK-NEXT: %[[name_in:.+]] = firrtl.object.subfield %my_domain[name_in]
+    // CHECK-NEXT: firrtl.propassign %[[name_in]], %[[name_const]]
+    // CHECK-NEXT: %[[period_in:.+]] = firrtl.object.subfield %my_domain[period_in]
+    // CHECK-NEXT: firrtl.propassign %[[period_in]], %clk_period
+    %name = firrtl.string "FastClock"
+    %my_domain = firrtl.domain.create(%name, %clk_period) : (!firrtl.string, !firrtl.integer) -> !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
     firrtl.domain.define %A, %my_domain : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
   }
 }

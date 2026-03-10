@@ -1058,7 +1058,7 @@ firrtl.circuit "Foo" {
   // CHECK-LABEL: module NamedDomains :
   firrtl.module @NamedDomains() {
     // CHECK-NEXT: domain my_clock of ClockDomain
-    %my_clock = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
+    %my_clock = firrtl.domain.create : () -> !firrtl.domain<@ClockDomain()>
     // CHECK-NEXT: inst foo of NamedDomains_Foo
     %foo_A = firrtl.instance foo @NamedDomains_Foo(
       in A: !firrtl.domain<@ClockDomain()>

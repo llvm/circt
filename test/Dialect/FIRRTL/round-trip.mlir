@@ -293,8 +293,14 @@ firrtl.module @DomainTypesWithFields(
   in %fielded: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>,
   out %fielded_out: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
 ) {
-  // CHECK: %my_domain = firrtl.domain.create : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
-  %my_domain = firrtl.domain.create : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+  // CHECK: %[[name:.+]] = firrtl.string "VDD"
+  // CHECK: %[[voltage:.+]] = firrtl.integer 1800
+  // CHECK: %[[alwaysOn:.+]] = firrtl.bool true
+  // CHECK: %my_domain = firrtl.domain.create (%[[name]], %[[voltage]], %[[alwaysOn]]) : (!firrtl.string, !firrtl.integer, !firrtl.bool) -> !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+  %name = firrtl.string "VDD"
+  %voltage = firrtl.integer 1800
+  %alwaysOn = firrtl.bool true
+  %my_domain = firrtl.domain.create(%name, %voltage, %alwaysOn) : (!firrtl.string, !firrtl.integer, !firrtl.bool) -> !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
 
   // CHECK: firrtl.domain.define %fielded_out, %fielded : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
   firrtl.domain.define %fielded_out, %fielded : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
@@ -338,8 +344,8 @@ firrtl.module @CreateAnonDomain() {
 // CHECK-LABEL: firrtl.module @CreateDomain
 firrtl.extmodule @CreateDomainChild(in A: !firrtl.domain<@ClockDomain()>)
 firrtl.module @CreateDomain() {
-  // CHECK-NEXT: %my_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
-  %my_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
+  // CHECK-NEXT: %my_domain = firrtl.domain.create : () -> !firrtl.domain<@ClockDomain()>
+  %my_domain = firrtl.domain.create : () -> !firrtl.domain<@ClockDomain()>
   %child_A = firrtl.instance child @CreateDomainChild(
     in A: !firrtl.domain<@ClockDomain()>
   )

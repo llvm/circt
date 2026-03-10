@@ -7265,6 +7265,35 @@ DomainCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return domainType.verifySymbolUses(getOperation(), symbolTable);
 }
 
+LogicalResult DomainCreateOp::verify() {
+  // Get the field definitions from the result type
+  auto domainType = getResult().getType();
+  auto fields = domainType.getFields();
+  auto fieldValues = getFieldValues();
+
+  // Check that the number of field values matches the number of fields
+  if (fieldValues.size() != fields.size())
+    return emitOpError() << "has " << fieldValues.size()
+                         << " field value(s) but domain '"
+                         << domainType.getName() << "' expects "
+                         << fields.size() << " field(s)";
+
+  // Check that each field value type matches the corresponding field type
+  for (size_t i = 0; i < fields.size(); ++i) {
+    auto fieldAttr = cast<DomainFieldAttr>(fields[i]);
+    auto expectedType = fieldAttr.getType();
+    auto actualType = fieldValues[i].getType();
+
+    if (expectedType != actualType) {
+      return emitOpError() << "field value " << i << " has type " << actualType
+                           << " but domain field '" << fieldAttr.getName()
+                           << "' expects type " << expectedType;
+    }
+  }
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//

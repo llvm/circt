@@ -2279,7 +2279,7 @@ circuit DomainCreate:
 
   ; CHECK-LABEL: firrtl.module @DomainCreate
   public module DomainCreate:
-    ; CHECK: %my_clock = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
+    ; CHECK: %my_clock = firrtl.domain.create : () -> !firrtl.domain<@ClockDomain()>
     domain my_clock of ClockDomain
 
     ; CHECK: %child_A = firrtl.instance child interesting_name @Child(in A: !firrtl.domain<@ClockDomain()>)

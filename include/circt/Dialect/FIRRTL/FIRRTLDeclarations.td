@@ -852,14 +852,26 @@ def DomainCreateOp : FIRRTLOp<"domain.create", [
 
     Example:
     ```mlir
-    %my_clock = firrtl.domain.create : !firrtl.domain<@ClockDomain>
+    %my_clock = firrtl.domain.create : !firrtl.domain of @ClockDomain
+    ```
+
+    With field values:
+    ```mlir
+    %name = firrtl.string "A"
+    %period = firrtl.integer 42
+    %my_clock = firrtl.domain.create(%name, %period) : (!firrtl.string, !firrtl.integer) -> !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
     ```
   }];
-  let arguments = (ins StrAttr:$name);
+  let arguments = (ins
+    StrAttr:$name,
+    Variadic<PropertyType>:$fieldValues
+  );
   let results = (outs Res<DomainType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
-    custom<ImplicitSSAName>($name) attr-dict `:` type($result)
+    custom<ImplicitSSAName>($name) (`(` $fieldValues^ `)`)? attr-dict `:` functional-type($fieldValues, $result)
   }];
+
+  let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     FlatSymbolRefAttr getDomainAttr() {
