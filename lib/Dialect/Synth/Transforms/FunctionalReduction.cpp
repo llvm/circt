@@ -405,7 +405,7 @@ struct FunctionalReductionPass
     }
 
     FunctionalReductionSolver fcSolver(module, numRandomPatterns, seed,
-                                      testTransformation);
+                                       testTransformation);
     auto stats = fcSolver.run();
     if (failed(stats))
       return signalPassFailure();
