@@ -2939,19 +2939,49 @@ DomainType::verifySymbolUses(Operation *op,
   if (!circuitOp)
     return op->emitError() << "domain type used outside of a circuit";
 
-  // Look up the domain definition
-  auto domainOp = dyn_cast_or_null<DomainOp>(
-      symbolTable.lookupSymbolIn(circuitOp, getName()));
-  if (!domainOp)
-    return op->emitError() << "domain type references undefined domain '"
+  // Check that the symbol exists
+  auto *symbol = symbolTable.lookupSymbolIn(circuitOp, getName());
+  if (!symbol)
+    return op->emitError() << "domain type references undefined symbol '"
                            << getName().getValue() << "'";
 
-  // Verify that the domain type matches the domain definition
-  auto expectedType = DomainType::get(getName(), domainOp.getFieldsAttr());
-  if (*this != expectedType)
-    return op->emitError() << "domain type " << *this
-                           << " does not match the domain definition, expected "
-                           << expectedType;
+  // Check that the symbol is a domain
+  auto domainOp = dyn_cast<DomainOp>(symbol);
+  if (!domainOp)
+    return op->emitError() << "domain type references symbol '"
+                           << getName().getValue()
+                           << "' which is not a domain";
+
+  // Verify that the domain type fields match the domain definition
+  auto expectedFields = domainOp.getFieldsAttr();
+  auto actualFields = getFields();
+
+  // Check field count
+  if (actualFields.size() != expectedFields.size())
+    return op->emitError() << "domain type has " << actualFields.size()
+                           << " fields but domain definition has "
+                           << expectedFields.size() << " fields";
+
+  // Check each field
+  for (size_t i = 0; i < actualFields.size(); ++i) {
+    auto actualField = cast<DomainFieldAttr>(actualFields[i]);
+    auto expectedField = cast<DomainFieldAttr>(expectedFields[i]);
+
+    // Check field name
+    if (actualField.getName() != expectedField.getName())
+      return op->emitError() << "domain type field " << i << " has name '"
+                             << actualField.getName().getValue()
+                             << "' but domain definition expects '"
+                             << expectedField.getName().getValue() << "'";
+
+    // Check field type
+    if (actualField.getType() != expectedField.getType())
+      return op->emitError() << "domain type field '"
+                             << actualField.getName().getValue()
+                             << "' has type " << actualField.getType()
+                             << " but domain definition expects "
+                             << expectedField.getType();
+  }
 
   return success();
 }

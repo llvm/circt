@@ -3407,7 +3407,7 @@ firrtl.circuit "WireDomainTypeMismatch" {
   ]
 
   firrtl.module @WireDomainTypeMismatch() {
-    // expected-error @below {{domain type '!firrtl.domain<@ClockDomain()>' does not match the domain definition, expected '!firrtl.domain<@ClockDomain(name: !firrtl.string)>'}}
+    // expected-error @below {{domain type has 0 fields but domain definition has 1 fields}}
     %w = firrtl.wire : !firrtl.domain<@ClockDomain()>
   }
 }
@@ -3421,7 +3421,7 @@ firrtl.circuit "DomainCreateTypeMismatch" {
   ]
 
   firrtl.module @DomainCreateTypeMismatch() {
-    // expected-error @below {{domain type '!firrtl.domain<@PowerDomain(voltage: !firrtl.integer)>' does not match the domain definition, expected '!firrtl.domain<@PowerDomain(voltage: !firrtl.integer, frequency: !firrtl.integer)>'}}
+    // expected-error @below {{domain type has 1 fields but domain definition has 2 fields}}
     %d = firrtl.domain.create : !firrtl.domain<@PowerDomain(voltage: !firrtl.integer)>
   }
 }
@@ -3434,7 +3434,7 @@ firrtl.circuit "DomainAnonTypeMismatch" {
   ]
 
   firrtl.module @DomainAnonTypeMismatch() {
-    // expected-error @below {{domain type '!firrtl.domain<@SimpleDomain()>' does not match the domain definition, expected '!firrtl.domain<@SimpleDomain(id: !firrtl.integer)>'}}
+    // expected-error @below {{domain type has 0 fields but domain definition has 1 fields}}
     %d = firrtl.domain.anon : !firrtl.domain<@SimpleDomain()>
   }
 }
