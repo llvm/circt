@@ -612,9 +612,13 @@ def DomainTypeImpl : FIRRTLImplType<"Domain", [
   let summary = [{
     An instance of a domain.
 
-    Example:
+    Examples:
     ```mlir
-    !firrtl.domain<@ClockDomain>
+    // Domain without fields
+    !firrtl.domain<@ClockDomain()>
+
+    // Domain with fields
+    !firrtl.domain<@PowerDomain(voltage: !firrtl.integer, frequency: !firrtl.integer)>
     ```
   }];
   let parameters = (ins
