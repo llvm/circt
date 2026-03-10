@@ -317,7 +317,7 @@ void FunctionalReductionSolver::mergeEquivalentNodes() {
                                           representative.getType(), operands);
     stats.numMergedNodes += members.size() + 1;
     representative.replaceAllUsesExcept(choice, choice);
-    for (auto value : provenEquivSet.second)
+    for (auto value : members)
       value.replaceAllUsesExcept(choice, choice);
   }
 
