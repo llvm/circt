@@ -1,6 +1,6 @@
 // RUN: circt-opt -convert-fsm-to-smt %s | FileCheck %s
 
-// CHECK:      module {
+// CHECK: module {
 // CHECK-NEXT:   smt.solver() : () -> () {
 // CHECK-NEXT:     [[C0_I8:%.+]] = hw.constant 0 : i8
 // CHECK-NEXT:     [[C50_I8:%.+]] = hw.constant 50 : i8
@@ -20,15 +20,15 @@
 // CHECK-NEXT:     }
 // CHECK-NEXT:     smt.assert [[FORALL0]]
 // CHECK-NEXT:     [[FORALL1:%.+]] = smt.forall {
-// CHECK-NEXT:     ^bb0([[ARG3:%.+]]: !smt.bv<8>, [[ARG4:%.+]]: !smt.bv<8>, [[ARG5:%.+]]: !smt.bv<8>, [[ARG6:%.+]]: !smt.bv<32>):
-// CHECK-NEXT:       [[FUN1:%.+]] = smt.apply_func [[F_S0]]([[ARG5]], [[ARG6]]) : !smt.func<(!smt.bv<8>, !smt.bv<32>) !smt.bool>
-// CHECK-NEXT:       [[CAST3:%.+]] = builtin.unrealized_conversion_cast [[ARG3]] : !smt.bv<8> to i8
+// CHECK-NEXT:     ^bb0([[ARG0_1:%.+]]: !smt.bv<8>, [[ARG1_1:%.+]]: !smt.bv<8>, [[ARG2_1:%.+]]: !smt.bv<8>, [[ARG6:%.+]]: !smt.bv<32>):
+// CHECK-NEXT:       [[FUN1:%.+]] = smt.apply_func [[F_S0]]([[ARG2_1]], [[ARG6]]) : !smt.func<(!smt.bv<8>, !smt.bv<32>) !smt.bool>
+// CHECK-NEXT:       [[CAST3:%.+]] = builtin.unrealized_conversion_cast [[ARG0_1]] : !smt.bv<8> to i8
 // CHECK-NEXT:       [[CAST4:%.+]] = builtin.unrealized_conversion_cast [[ARG6]] : !smt.bv<32> to i32
-// CHECK-NEXT:       [[CAST5:%.+]] = builtin.unrealized_conversion_cast [[ARG4]] : !smt.bv<8> to i8
+// CHECK-NEXT:       [[CAST5:%.+]] = builtin.unrealized_conversion_cast [[ARG1_1]] : !smt.bv<8> to i8
 // CHECK-NEXT:       [[CAST6:%.+]] = builtin.unrealized_conversion_cast [[ARG6]] : !smt.bv<32> to i32
 // CHECK-NEXT:       [[CAST7:%.+]] = builtin.unrealized_conversion_cast [[C0_I8]] : i8 to !smt.bv<8>
 // CHECK-NEXT:       [[FUN2:%.+]] = smt.apply_func [[F_S1]]([[CAST7]], [[ARG6]]) : !smt.func<(!smt.bv<8>, !smt.bv<32>) !smt.bool>
-// CHECK-NEXT:       [[CAST8:%.+]] = builtin.unrealized_conversion_cast [[ARG3]] : !smt.bv<8> to i8
+// CHECK-NEXT:       [[CAST8:%.+]] = builtin.unrealized_conversion_cast [[ARG0_1]] : !smt.bv<8> to i8
 // CHECK-NEXT:       [[CAST9:%.+]] = builtin.unrealized_conversion_cast [[ARG6]] : !smt.bv<32> to i32
 // CHECK-NEXT:       [[TRUE_0:%.+]] = smt.constant true
 // CHECK-NEXT:       [[CMP0:%.+]] = comb.icmp ult [[CAST8]], [[C50_I8]] : i8
