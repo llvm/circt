@@ -31,8 +31,8 @@
 // CHECK-NEXT:      [[C1:%.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
 // CHECK-NEXT:      [[EQ1:%.+]] = smt.eq [[CAST8]], [[C1]] : !smt.bv<1>
 // CHECK-NEXT:      [[AND1:%.+]] = smt.and [[FUN1]], [[EQ1]]
-// CHECK-NEXT:      [[IMP1:%.+]] = smt.implies [[AND1]], [[FUN2]]
-// CHECK-NEXT:      smt.yield [[IMP1]] : !smt.bool
+// CHECK-NEXT:      [[IMPLIES0:%.+]] = smt.implies [[AND1]], [[FUN2]]
+// CHECK-NEXT:      smt.yield [[IMPLIES0]] : !smt.bool
 // CHECK-NEXT:    }
 // CHECK-NEXT:    smt.assert [[FORALL1]]
 // CHECK-NEXT:    [[FORALL2:%.+]] = smt.forall {
@@ -50,8 +50,8 @@
 // CHECK-NEXT:      [[C2:%.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
 // CHECK-NEXT:      [[EQ2:%.+]] = smt.eq [[CAST15]], [[C2]] : !smt.bv<1>
 // CHECK-NEXT:      [[AND2:%.+]] = smt.and [[FUN3]], [[EQ2]]
-// CHECK-NEXT:      [[IMP2:%.+]] = smt.implies [[AND2]], [[FUN4]]
-// CHECK-NEXT:      smt.yield [[IMP2]] : !smt.bool
+// CHECK-NEXT:      [[IMPLIES1:%.+]] = smt.implies [[AND2]], [[FUN4]]
+// CHECK-NEXT:      smt.yield [[IMPLIES1]] : !smt.bool
 // CHECK-NEXT:    }
 // CHECK-NEXT:    smt.assert [[FORALL2]]
 // CHECK-NEXT:  }
