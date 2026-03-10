@@ -5648,8 +5648,9 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
     Attribute domainInfoElement = {};
     size_t portIdx = resultPorts.size();
     if (auto domainType = dyn_cast<DomainType>(type)) {
-      // The domain symbol is already parsed and stored in the type
-      domainInfoElement = domainType.getName();
+      // Domain information is now stored in the type itself.
+      // Domain type ports have no associations.
+      domainInfoElement = ArrayAttr::get(getContext(), {});
     } else {
       if (getToken().is(FIRToken::kw_domains))
         if (parseDomains(domainNames[portIdx], nameToIndex))

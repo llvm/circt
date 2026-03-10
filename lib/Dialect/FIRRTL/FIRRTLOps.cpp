@@ -1288,21 +1288,18 @@ printModulePorts(OpAsmPrinter &p, Block *block, ArrayRef<bool> portDirections,
       }
     }
 
-    // Print domain information.
+    // Print domain associations.
+    // Domain information is now stored in the DomainType itself, not in
+    // domainInfo. The domainInfo array only contains associations
+    // (ArrayAttr<IntegerAttr>).
     if (!domainInfo.empty()) {
-      if (auto domainKind = dyn_cast<FlatSymbolRefAttr>(domainInfo[i])) {
-        // For domain ports, the symbol is already in the type, so we don't
-        // print it again. The domainInfo is only used internally.
-        // printDomainKind(p, domainKind);
-      } else {
-        auto domains = cast<ArrayAttr>(domainInfo[i]);
-        if (!domains.empty()) {
-          p << " domains [";
-          llvm::interleaveComma(domains, p, [&](Attribute attr) {
-            p << getSsaName(cast<IntegerAttr>(attr).getUInt());
-          });
-          p << "]";
-        }
+      auto domains = cast<ArrayAttr>(domainInfo[i]);
+      if (!domains.empty()) {
+        p << " domains [";
+        llvm::interleaveComma(domains, p, [&](Attribute attr) {
+          p << getSsaName(cast<IntegerAttr>(attr).getUInt());
+        });
+        p << "]";
       }
     }
 
@@ -1413,16 +1410,14 @@ static ParseResult parseModulePorts(
       portSyms.push_back(innerSymAttr);
     }
 
-    // Parse optional port domain information if it exists.  At this point, this
-    // will be something if this is a domain port or null if domain associations
-    // could exist.  We don't know how to resolve the names of the domains at
-    // this point, so this is only building up the information necessary to add
-    // the domain information later.
-    Attribute domainInfo;
+    // Parse optional port domain associations if they exist. Domain
+    // information is now stored in the DomainType itself, so we only parse
+    // associations here.
+    Attribute domainInfo = ArrayAttr::get(context, {});
     if (supportsDomains) {
       if (auto domainType = dyn_cast<DomainType>(portType)) {
-        // The domain symbol is already in the type, extract it
-        domainInfo = domainType.getName();
+        // Domain type ports have no associations stored in domainInfo.
+        domainInfo = ArrayAttr::get(context, {});
       } else if (succeeded(parser.parseOptionalKeyword("domains"))) {
         auto result = parser.parseCommaSeparatedList(
             OpAsmParser::Delimiter::Square, [&]() -> ParseResult {
@@ -1444,6 +1439,9 @@ static ParseResult parseModulePorts(
             });
         if (failed(result))
           return failure();
+        // Set to nullptr to indicate this needs to be filled in later from
+        // domainStrings.
+        domainInfo = nullptr;
       }
     }
     domains.push_back(domainInfo);
@@ -1911,23 +1909,10 @@ static LogicalResult verifyPortSymbolUses(FModuleLike module,
     }
 
     if (auto domainType = dyn_cast<DomainType>(type)) {
-      auto domainInfo = module.getDomainInfoAttrForPort(i);
-      if (auto kind = dyn_cast<FlatSymbolRefAttr>(domainInfo)) {
-        auto domainOp = dyn_cast_or_null<DomainOp>(
-            symbolTable.lookupSymbolIn(circuitOp, kind));
-        if (!domainOp)
-          return mlir::emitError(module.getPortLocation(i))
-                 << "domain port '" << module.getPortName(i)
-                 << "' has undefined domain kind '" << kind.getValue() << "'";
-
-        // Verify that the domain type matches the domain definition
-        auto expectedType = DomainType::getFromDomainOp(domainOp);
-        if (domainType != expectedType)
-          return mlir::emitError(module.getPortLocation(i))
-                 << "domain port '" << module.getPortName(i) << "' has type "
-                 << domainType << " which does not match "
-                 << "the domain definition, expected " << expectedType;
-      }
+      if (failed(
+              domainType.verifySymbolUses(module.getOperation(), symbolTable)))
+        return failure();
+      continue;
     }
   }
 
@@ -4400,45 +4385,13 @@ LogicalResult PropAssignOp::verify() {
   return success();
 }
 
-template <typename T>
-static FlatSymbolRefAttr getDomainTypeNameOfResult(T op, size_t i) {
-  auto info = op.getDomainInfo();
-  if (info.empty())
-    return {};
-  return dyn_cast<FlatSymbolRefAttr>(info[i]);
-}
-
 static FlatSymbolRefAttr getDomainTypeName(Value value) {
-  if (!isa<DomainType>(value.getType()))
+  auto domainType = dyn_cast<DomainType>(value.getType());
+  if (!domainType)
     return {};
 
-  if (auto arg = dyn_cast<BlockArgument>(value)) {
-    auto *parent = arg.getOwner()->getParentOp();
-    if (auto module = dyn_cast<FModuleLike>(parent)) {
-      auto info = module.getDomainInfo();
-      if (info.empty())
-        return {};
-      auto attr = info[arg.getArgNumber()];
-      return dyn_cast<FlatSymbolRefAttr>(attr);
-    }
-
-    return {};
-  }
-
-  if (auto result = dyn_cast<OpResult>(value)) {
-    auto *op = result.getDefiningOp();
-    if (auto instance = dyn_cast<InstanceOp>(op))
-      return getDomainTypeNameOfResult(instance, result.getResultNumber());
-    if (auto instance = dyn_cast<InstanceChoiceOp>(op))
-      return getDomainTypeNameOfResult(instance, result.getResultNumber());
-    if (auto anonDomain = dyn_cast<DomainCreateAnonOp>(op))
-      return anonDomain.getDomainAttr();
-    if (auto domain = dyn_cast<DomainCreateOp>(op))
-      return domain.getDomainAttr();
-    return {};
-  }
-
-  return {};
+  // Domain information is now stored in the type itself
+  return domainType.getName();
 }
 
 LogicalResult DomainDefineOp::verify() {

@@ -1822,7 +1822,9 @@ void Emitter::emitType(Type type, bool includeConst) {
         emitType(type.getElementType());
         ps << ">";
       })
-      .Case<DomainType>([&](DomainType type) { ps << "Domain"; })
+      .Case<DomainType>([&](DomainType type) {
+        ps << "Domain of " << PPExtString(type.getName().getValue());
+      })
       .Default([&](auto type) {
         llvm_unreachable("all types should be implemented");
       });

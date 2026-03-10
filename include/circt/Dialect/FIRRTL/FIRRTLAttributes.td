@@ -46,11 +46,11 @@ def DomainInfoAttr : ArrayAttrBase<
     And<[
       // Guarantee this is an ArrayAttr first
       CPred<"llvm::isa<::mlir::ArrayAttr>($_self)">,
-      // Guarantee all elements are a FlatSymbolRefAttr or ArrayAttr.
+      // Guarantee all elements are ArrayAttr (associations only).
       CPred<"::llvm::all_of(cast<mlir::ArrayAttr>($_self), "
             "[&](::mlir::Attribute attr) { return isa_and_nonnull<"
-            "::mlir::FlatSymbolRefAttr, ::mlir::ArrayAttr>(attr);})">]>,
-    "domain attributes must be an empty array or array-of-arrays"> {
+            "::mlir::ArrayAttr>(attr);})">]>,
+    "domain associations must be an empty array or array-of-arrays"> {
   let constBuilderCall = "$_builder.getArrayAttr($0)";
 }
 

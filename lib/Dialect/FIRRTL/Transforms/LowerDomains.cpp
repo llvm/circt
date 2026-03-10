@@ -351,10 +351,12 @@ LogicalResult LowerModule::lowerModule() {
     auto port = cast<PortInfo>(ports[i]);
 
     // Mark domain type ports for removal.  Add information to `domainInfo`.
-    if (auto domain = dyn_cast_or_null<FlatSymbolRefAttr>(port.domains)) {
+    // Domain information is now stored in the type itself.
+    if (auto domainType = dyn_cast<DomainType>(port.type)) {
       eraseVector.set(i);
 
       // Instantiate a domain object with association information.
+      auto domain = domainType.getName();
       auto [classIn, classOut] = domainToClasses.at(domain.getAttr());
 
       indexToDomain[i] = port.direction == Direction::In
