@@ -14,7 +14,7 @@
 // CHECK-NEXT:      [[C0_BV2:%.+]] = smt.bv.constant #smt.bv<0> : !smt.bv<2>
 // CHECK-NEXT:      [[FUN0:%.+]] = smt.apply_func [[F_A]]([[C0_BV2]]) : !smt.func<(!smt.bv<2>) !smt.bool>
 // CHECK-NEXT:      smt.yield [[FUN0]] : !smt.bool
-// CHECK-NEXT:    }
+// CHECK-NEXT:    } 
 // CHECK-NEXT:    smt.assert [[FORALL0]]
 // CHECK-NEXT:    [[FORALL1:%.+]] = smt.forall {
 // CHECK-NEXT:    ^bb0([[ARG2:%.+]]: !smt.bv<1>, [[ARG3:%.+]]: !smt.bv<1>, [[ARG4:%.+]]: !smt.bv<2>):

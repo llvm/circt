@@ -64,5 +64,4 @@ fsm.machine @fsm2() -> (i1) attributes {initialState = "s0"} {
         fsm.output %f : i1 
     } transitions { 
     }
-
 }
