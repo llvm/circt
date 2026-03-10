@@ -180,14 +180,15 @@ struct LTLPastOpConversion : public OpConversionPattern<ltl::PastOp> {
         return failure();
       // Find the first clock, looking at inputs then at to_clock operations
       auto module = op->getParentOfType<HWModuleOp>();
-      hw::PortInfo *clockPort = nullptr;
-      for (auto &port : module.getPortList())
+      std::optional<size_t> clockArgNum;
+      for (auto &port : module.getPortList()) {
         if (port.isInput() && isa<seq::ClockType>(port.type)) {
-          clockPort = &port;
+          clockArgNum = port.argNum;
           break;
         }
-      if (clockPort) {
-        clock = module.getArgumentForInput(clockPort->argNum);
+      }
+      if (clockArgNum) {
+        clock = module.getArgumentForInput(*clockArgNum);
       } else {
         // If there are no clock ports, we try to_clock operations
         auto toClockOps = module.getOps<seq::ToClockOp>();
