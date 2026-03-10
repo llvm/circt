@@ -421,6 +421,7 @@ LogicalResult MachineOpConverter::dispatch() {
     // Extract values from structured binding to avoid C++20 extension warnings
     // when capturing in lambdas
     const auto &currentTransition = transition;
+    const auto &currentTransId = transId;
 
     // return a SmallVector of updated SMT values as arguments of the arriving
     // state function
@@ -518,7 +519,8 @@ LogicalResult MachineOpConverter::dispatch() {
       // ensure that a transition is taken if none of the previous transitions
       // from the same state can be taken.
       for (auto [transId1, transition1] : llvm::enumerate(transitions)) {
-        if (transition1.from == transition.from && transId1 < transId) {
+        if (transition1.from == currentTransition.from &&
+            transId1 < currentTransId) {
           Value prevGuardVal;
           if (transition1.guard.has_value()) {
             for (auto &op : transition1.guard.value()->front()) {
