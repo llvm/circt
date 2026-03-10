@@ -2879,6 +2879,151 @@ LogicalResult CoverPropertyOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// MacroInstanceOp
+//===----------------------------------------------------------------------===//
+
+void MacroInstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  hw::instance_like_impl::getAsmResultNames(
+      setNameFn, getInstanceName(), getResultNames(), getResults());
+}
+
+std::optional<size_t> MacroInstanceOp::getTargetResultIndex() {
+  // Instance operations don't have a target result.
+  return std::nullopt;
+}
+
+void MacroInstanceOp::getValues(SmallVectorImpl<Value> &values,
+                                const hw::ModulePortInfo &mpi) {
+  size_t inputPort = 0, resultPort = 0;
+  values.resize(mpi.size());
+  auto results = getResults();
+  auto inputs = getInputs();
+  for (auto [idx, port] : llvm::enumerate(mpi))
+    if (mpi.at(idx).isOutput())
+      values[idx] = results[resultPort++];
+    else
+      values[idx] = inputs[inputPort++];
+}
+
+LogicalResult
+MacroInstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Verify that the macro exists.
+  auto macro = symbolTable.lookupNearestSymbolFrom<MacroDeclOp>(
+      *this, getMacroNameAttr());
+  if (!macro)
+    return emitError("cannot find macro declaration '")
+           << getMacroName() << "'";
+
+  // Verify that all candidate modules exist and have compatible signatures.
+  for (Attribute name : getModuleNamesAttr()) {
+    if (failed(hw::instance_like_impl::verifyInstanceOfHWModule(
+            *this, cast<FlatSymbolRefAttr>(name), getInputs(), getResultTypes(),
+            getArgNames(), getResultNames(), ArrayAttr{}, symbolTable))) {
+      return failure();
+    }
+  }
+  return success();
+}
+
+ParseResult MacroInstanceOp::parse(OpAsmParser &parser,
+                                   OperationState &result) {
+  StringAttr instanceNameAttr;
+  FlatSymbolRefAttr macroNameAttr;
+  SmallVector<Attribute> moduleNames;
+  SmallVector<OpAsmParser::UnresolvedOperand, 4> inputsOperands;
+  SmallVector<Type, 1> inputsTypes, allResultTypes;
+  ArrayAttr argNames, resultNames;
+  auto noneType = parser.getBuilder().getType<NoneType>();
+
+  // Parse instance name.
+  if (parser.parseAttribute(instanceNameAttr, noneType, "instanceName",
+                            result.attributes))
+    return failure();
+
+  // Parse optional inner_sym.
+  hw::InnerSymAttr innerSymAttr;
+  if (succeeded(parser.parseOptionalKeyword("sym"))) {
+    if (parser.parseCustomAttributeWithFallback(
+            innerSymAttr, noneType, hw::InnerSymbolTable::getInnerSymbolAttrName(),
+            result.attributes))
+      return failure();
+  }
+
+  // Parse macro name.
+  if (parser.parseAttribute(macroNameAttr, noneType, "macroName",
+                            result.attributes))
+    return failure();
+
+  // Parse module names array [@moduleName1, @moduleName2, ...].
+  if (parser.parseLSquare())
+    return failure();
+
+  do {
+    FlatSymbolRefAttr moduleName;
+    if (parser.parseAttribute(moduleName))
+      return failure();
+    moduleNames.push_back(moduleName);
+  } while (succeeded(parser.parseOptionalComma()));
+
+  if (parser.parseRSquare())
+    return failure();
+
+  result.addAttribute("moduleNames",
+                      ArrayAttr::get(parser.getContext(), moduleNames));
+
+  // Parse input port list.
+  llvm::SMLoc inputsOperandsLoc = parser.getCurrentLocation();
+  if (parseInputPortList(parser, inputsOperands, inputsTypes, argNames) ||
+      parser.resolveOperands(inputsOperands, inputsTypes, inputsOperandsLoc,
+                             result.operands))
+    return failure();
+
+  // Parse arrow and output port list.
+  if (parser.parseArrow() ||
+      parseOutputPortList(parser, allResultTypes, resultNames) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  result.addAttribute("argNames", argNames);
+  result.addAttribute("resultNames", resultNames);
+  result.addTypes(allResultTypes);
+  return success();
+}
+
+void MacroInstanceOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  p.printAttributeWithoutType(getInstanceNameAttr());
+  if (auto attr = getInnerSymAttr()) {
+    p << " sym ";
+    attr.print(p);
+  }
+  p << ' ';
+  p.printAttributeWithoutType(getMacroNameAttr());
+  p << " [";
+  llvm::interleaveComma(getModuleNames(), p, [&](Attribute attr) {
+    p.printAttributeWithoutType(attr);
+  });
+  p << "]";
+  printInputPortList(p, *this, getInputs(), getInputs().getTypes(),
+                     getArgNames());
+  p << " -> ";
+  printOutputPortList(p, *this, getResultTypes(), getResultNames());
+
+  p.printOptionalAttrDict(
+      (*this)->getAttrs(),
+      /*elidedAttrs=*/{"instanceName", hw::InnerSymbolTable::getInnerSymbolAttrName(),
+                       "macroName", "moduleNames", "argNames", "resultNames"});
+}
+
+LogicalResult MacroInstanceOp::verify() {
+  // Verify that at least one candidate module is provided.
+  if (getModuleNames().empty())
+    return emitError("must have at least one candidate module");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

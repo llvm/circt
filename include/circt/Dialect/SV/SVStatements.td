@@ -1202,6 +1202,67 @@ def ReturnOp : SVOp<"return",
 }
 
 //===----------------------------------------------------------------------===//
+// Macro instance operation
+//===----------------------------------------------------------------------===//
+
+def MacroInstanceOp : SVOp<"macro_instance", [
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface>,
+    DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>,
+    NonProceduralOp
+]> {
+  let summary = "Create an instance of a module selected by a macro";
+  let description = [{
+    This represents an instance of a module where the actual module to
+    instantiate is determined by a macro. The macro must be defined and
+    point to one of the candidate modules listed in the operation.
+
+    The candidate modules must all have compatible port signatures.
+
+    Example:
+    ```mlir
+    %c = sv.macro_instance "foo" @Macro [@A, @B] (a: %a: i1, b: %b: i4) -> (c: i5)
+    ```
+
+    This will emit Verilog like:
+    ```verilog
+    `Macro foo (
+      .a(a),
+      .b(b),
+      .c(c)
+    );
+    ```
+  }];
+
+  let arguments = (ins StrAttr:$instanceName,
+                       FlatSymbolRefAttr:$macroName,
+                       FlatSymbolRefArrayAttr:$moduleNames,
+                       Variadic<AnyType>:$inputs,
+                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
+  let results = (outs Variadic<AnyType>:$results);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  let extraClassDeclaration = [{
+    /// Return the name of the first candidate module.
+    StringAttr getFirstModuleNameAttr() {
+      return llvm::cast<FlatSymbolRefAttr>(getModuleNamesAttr()[0]).getAttr();
+    }
+
+    /// Return the values for the port in port order.
+    void getValues(SmallVectorImpl<Value> &values, const hw::ModulePortInfo &mpi);
+
+    /// InstanceGraphInstanceOpInterface: Return the referenced module names.
+    ArrayAttr getReferencedModuleNamesAttr() {
+      return getModuleNamesAttr();
+    }
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // SV output control.
 //===----------------------------------------------------------------------===//
 

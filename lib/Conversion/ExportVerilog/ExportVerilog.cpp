@@ -4050,6 +4050,7 @@ private:
   LogicalResult visitSV(ReleaseOp op);
   LogicalResult visitSV(AliasOp op);
   LogicalResult visitSV(InterfaceInstanceOp op);
+  LogicalResult visitSV(MacroInstanceOp op);
   LogicalResult emitOutputLikeOp(Operation *op, const ModulePortInfo &ports);
   LogicalResult visitStmt(OutputOp op);
 
@@ -4373,7 +4374,7 @@ LogicalResult StmtEmitter::emitOutputLikeOp(Operation *op,
     // directly when the instance is emitted.
     // Keep synced with countStatements() and visitStmt(InstanceOp).
     if (operand.hasOneUse() && operand.getDefiningOp() &&
-        isa<InstanceOp>(operand.getDefiningOp())) {
+        isa<InstanceOp, sv::MacroInstanceOp>(operand.getDefiningOp())) {
       ++operandIndex;
       continue;
     }
@@ -5572,6 +5573,48 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     ps << "*/";
     setPendingNewline();
   }
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(MacroInstanceOp op) {
+  // Emit SV attributes.
+  emitSVAttributes(op);
+  startStatement();
+  ps.addCallback({op, true});
+
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  // Get the module port info from the first candidate module.
+  auto firstModuleName = op.getFirstModuleNameAttr();
+  auto *referencedModule = state.symbolCache.getDefinition(firstModuleName);
+  if (!referencedModule) {
+    emitOpError(op, "cannot find referenced module");
+    return failure();
+  }
+
+  auto referencedModuleLike = cast<hw::HWModuleLike>(referencedModule);
+
+  // Emit the macro reference as the module name.
+  // This emits: `MACRO_NAME instance_name (
+  auto *macroDeclOp = state.symbolCache.getDefinition(op.getMacroNameAttr().getAttr());
+  if (!macroDeclOp) {
+    emitOpError(op, "cannot find macro declaration");
+    return failure();
+  }
+
+  auto macroDecl = cast<MacroDeclOp>(macroDeclOp);
+  ps << "`" << macroDecl.getMacroIdentifier();
+  ps << PP::nbsp << PPExtString(op.getInstanceName());
+
+  // Emit the port list using the same logic as regular instances.
+  ModulePortInfo modPortInfo(referencedModuleLike.getPortList());
+  SmallVector<Value> instPortValues(modPortInfo.size());
+  op.getValues(instPortValues, modPortInfo);
+  emitInstancePortList(op, modPortInfo, instPortValues);
+
+  ps.addCallback({op, false});
+  emitLocationInfoAndNewLine(ops);
   return success();
 }
 
