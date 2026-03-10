@@ -1797,8 +1797,10 @@ struct RvalueExprVisitor : public ExprVisitor {
     }
 
     // Queue ops take their parameter as a reference
-    bool isByRefOp = args.size() >= 1 && args[0]->type->isQueue() &&
-                     subroutine.name != "size";
+    // So do AssocArray ops
+    bool isByRefOp = args.size() >= 1 &&
+                     ((args[0]->type->isQueue() && subroutine.name != "size") ||
+                      args[0]->type->isAssociativeArray());
 
     // Call the conversion function with the appropriate arity. These return one
     // of the following:
@@ -3001,6 +3003,22 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                 [&]() -> Value {
                   if (isa<moore::QueueType>(value.getType())) {
                     return moore::QueueSizeBIOp::create(builder, loc, value);
+                  }
+                  if (isa<moore::RefType>(value.getType()) &&
+                      isa<moore::AssocArrayType>(
+                          cast<moore::RefType>(value.getType())
+                              .getNestedType())) {
+                    return moore::AssocArraySizeOp::create(builder, loc, value);
+                  }
+                  return {};
+                })
+          .Case("num",
+                [&]() -> Value {
+                  if (isa<moore::RefType>(value.getType()) &&
+                      isa<moore::AssocArrayType>(
+                          cast<moore::RefType>(value.getType())
+                              .getNestedType())) {
+                    return moore::AssocArraySizeOp::create(builder, loc, value);
                   }
                   return {};
                 })
