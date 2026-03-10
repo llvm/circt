@@ -56,7 +56,7 @@ emit.file "filename" {
 // expected-error @below {{cannot inline test with used arguments}}
 rtg.test @test(imm = %imm: !rtg.isa.immediate<32>) {
   %reg = rtg.constant #rtgtest.t0
-  rtgtest.rv32i.lui %reg, %imm : !rtg.isa.immediate<32>
+  rtgtest.lui %reg, %imm : !rtg.isa.immediate<32>
 }
 
 emit.file "filename" {

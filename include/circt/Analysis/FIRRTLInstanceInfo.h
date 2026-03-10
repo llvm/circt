@@ -118,6 +118,10 @@ public:
     /// is deemed to be in the design except those which are explicitly
     /// verification code.
     InstanceInfo::LatticeValue inEffectiveDesign;
+
+    /// Indicates if this module is instantiated within (or transitively within)
+    /// an instance choice operation.
+    InstanceInfo::LatticeValue inInstanceChoice;
   };
 
   //===--------------------------------------------------------------------===//
@@ -191,6 +195,12 @@ public:
   /// Return true if all instances of this module are within (or transitively
   /// withiin) the effective design.
   bool allInstancesInEffectiveDesign(igraph::ModuleOpInterface op);
+
+  /// Return true if any instance of this module is within (or transitively
+  /// within) an instance choice.
+  /// Note: allInstancesInInstanceChoice is intentionally not provided because
+  /// that property is relative to the public module.
+  bool anyInstanceInInstanceChoice(igraph::ModuleOpInterface op);
 
 private:
   /// Stores circuit-level attributes.

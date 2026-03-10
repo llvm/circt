@@ -32,18 +32,6 @@ static std::string getGetterName(StringRef operandName) {
   return getterName;
 }
 
-// Find an operand by name in the operation's arguments
-static const NamedTypeConstraint *findOperand(const Operator &op,
-                                              StringRef operandName) {
-  for (auto arg : op.getArgs()) {
-    if (auto *operand = dyn_cast<NamedTypeConstraint *>(arg)) {
-      if (operand->name == operandName)
-        return operand;
-    }
-  }
-  return nullptr;
-}
-
 //===----------------------------------------------------------------------===//
 // FormatParser Implementation
 //===----------------------------------------------------------------------===//
@@ -52,9 +40,19 @@ SMLoc FormatParser::getLoc() {
   return SMLoc::getFromPointer(loc.getPointer() + pos);
 }
 
+bool FormatParser::isWhitespace(char c) {
+  return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
 void FormatParser::skipWhitespace() {
-  while (pos < input.size() && (input[pos] == ' ' || input[pos] == '\t'))
+  while (pos < input.size() && isWhitespace(input[pos]))
     ++pos;
+}
+
+void FormatParser::consumeAtLeastOneWhitespace() {
+  if (pos >= input.size() || !isWhitespace(input[pos]))
+    PrintFatalError(getLoc(), "expected whitespace");
+  skipWhitespace();
 }
 
 void FormatParser::consume(StringRef str, bool skipWhitespaceFirst) {
@@ -64,6 +62,12 @@ void FormatParser::consume(StringRef str, bool skipWhitespaceFirst) {
 }
 
 bool FormatParser::tryConsume(StringRef str, bool skipWhitespaceFirst) {
+  assert(!str.empty() && "cannot consume empty string");
+  assert(llvm::none_of(str, [&](char c) { return isWhitespace(c); }) &&
+         "string to consume must not be whitespace");
+
+  auto savedPos = pos;
+
   if (skipWhitespaceFirst)
     skipWhitespace();
 
@@ -72,30 +76,40 @@ bool FormatParser::tryConsume(StringRef str, bool skipWhitespaceFirst) {
     return true;
   }
 
+  // Do not advance the position if we were not able to consume the string.
+  pos = savedPos;
   return false;
 }
 
-int64_t FormatParser::parseIntLiteral() {
-  skipWhitespace();
-
+bool FormatParser::tryParseUIntLiteral(uint64_t &value) {
   size_t start = pos;
-  auto loc = getLoc();
+  size_t savedPos = pos;
 
-  // Check for optional negative sign
-  if (pos < input.size() && input[pos] == '-')
-    ++pos;
-
-  size_t digitStart = pos;
   while (pos < input.size() && isdigit(input[pos]))
     ++pos;
 
-  if (pos == digitStart)
-    PrintFatalError(loc, "expected integer literal");
+  if (pos == start) {
+    // No digits found, restore position
+    pos = savedPos;
+    return false;
+  }
 
   StringRef numStr = input.substr(start, pos - start);
-  int64_t value;
-  if (numStr.getAsInteger(0, value))
-    PrintFatalError(loc, "invalid integer literal '" + numStr + "'");
+  if (numStr.getAsInteger(10, value)) {
+    // Invalid integer, restore position
+    pos = savedPos;
+    return false;
+  }
+
+  return true;
+}
+
+uint64_t FormatParser::parseUIntLiteral() {
+  auto loc = getLoc();
+  uint64_t value;
+
+  if (!tryParseUIntLiteral(value))
+    PrintFatalError(loc, "expected unsigned integer literal");
 
   return value;
 }
@@ -110,11 +124,6 @@ StringRef FormatParser::parseIdentifier() {
   pos = nameEnd;
 
   return name;
-}
-
-FormatNode *FormatParser::parseOptionalMnemonic() {
-  auto loc = getLoc();
-  return tryConsume("mnemonic") ? ctx.create<MnemonicNode>(loc) : nullptr;
 }
 
 FormatNode *FormatParser::parseOptionalOperand() {
@@ -159,7 +168,7 @@ FormatNode *FormatParser::parseOptionalBinaryLiteral() {
     return nullptr;
 
   // Check for invalid characters after the binary digits
-  if (pos < input.size() && input[pos] != ' ')
+  if (!isAtScopeEnd() && !isWhitespace(input[pos]))
     PrintFatalError(getLoc(), "invalid character ('" +
                                   input.substr(pos, pos + 1) +
                                   "') after binary literal");
@@ -168,15 +177,35 @@ FormatNode *FormatParser::parseOptionalBinaryLiteral() {
   return ctx.create<BinaryLiteralNode>(loc, value);
 }
 
+FormatNode *FormatParser::parseOptionalDecimalLiteral() {
+  auto loc = getLoc();
+
+  // Try to parse the bit width (decimal number before 'd')
+  uint64_t width;
+  if (!tryParseUIntLiteral(width))
+    return nullptr;
+
+  if (!tryConsume("d", false))
+    return nullptr;
+
+  uint64_t value = parseUIntLiteral();
+
+  if (!llvm::isUIntN(width, value))
+    PrintFatalError(loc, "decimal literal value " + Twine(value) +
+                             " does not fit in " + Twine(width) + " bits");
+
+  return ctx.create<BinaryLiteralNode>(loc, APInt(width, value));
+}
+
 FormatNode *FormatParser::parseOptionalSignednessSpecifier() {
   auto loc = getLoc();
   bool isSigned = false;
   StringRef specifierName;
 
-  if (tryConsume("signed(", false)) {
+  if (tryConsume("signed(")) {
     isSigned = true;
     specifierName = "'signed'";
-  } else if (tryConsume("unsigned(", false)) {
+  } else if (tryConsume("unsigned(")) {
     isSigned = false;
     specifierName = "'unsigned'";
   } else {
@@ -202,20 +231,126 @@ bool FormatParser::parseOptionalSlice(int64_t &highBit, int64_t &lowBit) {
   if (!tryConsume("[", false))
     return false;
 
-  highBit = parseIntLiteral();
-  lowBit = tryConsume(":") ? parseIntLiteral() : highBit;
+  highBit = parseUIntLiteral();
+  lowBit = tryConsume(":") ? parseUIntLiteral() : highBit;
 
   consume("]");
-
-  if (highBit < 0 || lowBit < 0) {
-    PrintFatalError(loc, "slice bits must be non-negative");
-  }
 
   if (highBit < lowBit)
     PrintFatalError(loc, "high bit (" + Twine(highBit) +
                              ") must be >= low bit (" + Twine(lowBit) + ")");
 
   return true;
+}
+
+FormatNode *FormatParser::parseNextNode() {
+  FormatNode *node = parseOptionalSignednessSpecifier();
+  if (!node)
+    node = parseOptionalIfThenElse();
+  if (!node)
+    node = parseOptionalCustomDirective();
+  if (!node)
+    node = parseOptionalBinaryLiteral();
+  if (!node)
+    node = parseOptionalDecimalLiteral();
+  if (!node)
+    node = parseOptionalStringLiteral();
+  if (!node)
+    node = parseOptionalOperand();
+  if (!node)
+    PrintFatalError(getLoc(),
+                    "unexpected character '" +
+                        Twine(input[std::min(pos, input.size() - 1)]) + "'");
+
+  // Elements in the format are separated by whitespace.
+  if (!isAtScopeEnd())
+    consumeAtLeastOneWhitespace();
+
+  return node;
+}
+
+FormatNode *FormatParser::parseOptionalIfThenElse() {
+  auto loc = getLoc();
+  if (!tryConsume("if"))
+    return nullptr;
+
+  consumeAtLeastOneWhitespace();
+
+  // Parse the condition operand (must be a 1-bit immediate)
+  FormatNode *condNode = parseOptionalOperand();
+  if (!condNode)
+    PrintFatalError(getLoc(), "expected operand after 'if' keyword");
+
+  auto *condition = cast<OperandNode>(condNode);
+
+  consumeAtLeastOneWhitespace();
+
+  SmallVector<FormatNode *> thenBranch;
+  bool hasThen = tryConsume("then");
+  if (hasThen) {
+    consume("(");
+
+    while (!tryConsume(")"))
+      thenBranch.push_back(parseNextNode());
+  }
+
+  SmallVector<FormatNode *> elseBranch;
+  bool hasElse = tryConsume("else");
+  if (hasElse) {
+    consume("(");
+
+    while (!tryConsume(")"))
+      elseBranch.push_back(parseNextNode());
+  }
+
+  if (!hasThen && !hasElse)
+    PrintFatalError(getLoc(), "expected 'then' or 'else' after 'if' condition");
+
+  auto *node = ctx.create<IfThenElseNode>(loc, condition, std::move(thenBranch),
+                                          std::move(elseBranch));
+  condition->parent = node;
+  return node;
+}
+
+FormatNode *FormatParser::parseOptionalCustomDirective() {
+  auto loc = getLoc();
+  if (!tryConsume("custom<"))
+    return nullptr;
+
+  StringRef functionName = parseIdentifier();
+  consume(">", false);
+
+  // Check for optional '?' suffix to indicate fallible directive
+  bool isFallible = tryConsume("?", false);
+
+  consume("(", false);
+
+  SmallVector<OperandNode *> arguments;
+  while (!tryConsume(")")) {
+    FormatNode *argNode = parseOptionalOperand();
+    if (!argNode)
+      PrintFatalError(getLoc(),
+                      "expected operand in custom directive arguments");
+
+    auto *operandNode = cast<OperandNode>(argNode);
+    arguments.push_back(operandNode);
+
+    // Arguments are separated by whitespace, but the last one is followed by
+    // ')'
+    if (!tryConsume(")")) {
+      consumeAtLeastOneWhitespace();
+      continue;
+    }
+    break;
+  }
+
+  auto *node = ctx.create<CustomDirective>(loc, functionName,
+                                           std::move(arguments), isFallible);
+
+  for (auto *arg : node->getArguments())
+    arg->parent = node;
+
+  return node;
 }
 
 void FormatParser::parseAndAppendToContext(llvm::SMLoc loc, StringRef format) {
@@ -225,67 +360,24 @@ void FormatParser::parseAndAppendToContext(llvm::SMLoc loc, StringRef format) {
   this->loc = loc;
 
   while (pos < input.size()) {
-    FormatNode *node = parseOptionalMnemonic();
-    if (!node)
-      node = parseOptionalSignednessSpecifier();
-    if (!node)
-      node = parseOptionalBinaryLiteral();
-    if (!node)
-      node = parseOptionalStringLiteral();
-    if (!node)
-      node = parseOptionalOperand();
-    if (!node)
-      PrintFatalError(getLoc(),
-                      "unexpected character '" + Twine(input[pos]) + "'");
-
-    // Elements in the format are separated by a space.
-    if (pos < input.size())
-      consume(" ", false);
-    skipWhitespace();
-
+    auto *node = parseNextNode();
     ctx.addNode(node);
   }
+}
+
+bool FormatParser::isAtScopeEnd() {
+  return pos >= input.size() || input[pos] == ')';
 }
 
 //===----------------------------------------------------------------------===//
 // Resolve Operands
 //===----------------------------------------------------------------------===//
 
-// Helper to classify a type and add it to the kinds set
-// NOLINTNEXTLINE(misc-no-recursion)
-static void classifyAndAddType(const llvm::Record &typeDef,
-                               DenseSet<OperandType> &kinds) {
-  StringRef typeName = typeDef.getName();
-
-  if (typeName == "LabelType" || typeDef.isSubClassOf("LabelType")) {
-    kinds.insert(OperandType::Label);
-    return;
-  }
-
-  if (typeName == "ImmediateType" || typeName == "ImmediateOfWidth" ||
-      typeDef.isSubClassOf("ImmediateType") ||
-      typeDef.isSubClassOf("ImmediateOfWidth")) {
-    kinds.insert(OperandType::Immediate);
-    return;
-  }
-
-  if (typeDef.isSubClassOf("RegisterTypeBase")) {
-    kinds.insert(OperandType::Register);
-    return;
-  }
-
-  if (typeName == "AnyTypeOf" || typeDef.isSubClassOf("AnyTypeOf")) {
-    auto allowedTypes = typeDef.getValueAsListOfDefs("allowedTypes");
-    for (const llvm::Record *allowedType : allowedTypes)
-      classifyAndAddType(*allowedType, kinds);
-  }
-}
-
 // Resolve the operand types and fill in the 'kinds' field of the
 // OperandNode.
 static void resolveOperand(ASTContext &ctx, OperandNode *operandNode) {
   const NamedTypeConstraint *namedOperand =
-      findOperand(ctx.getOp(), operandNode->getName());
+      findOperandByName(ctx.getOp(), operandNode->getName());
   if (!namedOperand)
     PrintFatalError(operandNode->getLoc(),
                     "unknown operand '$" + operandNode->getName() + "'");
@@ -295,136 +387,217 @@ static void resolveOperand(ASTContext &ctx, OperandNode *operandNode) {
     return;
 
   const llvm::Record &typeDef = namedOperand->constraint.getDef();
-  classifyAndAddType(typeDef, operandNode->kinds);
+  classifyOperandType(typeDef, operandNode->kinds);
 
   if (operandNode->kinds.empty())
     PrintFatalError(operandNode->getLoc(),
                     "failed to classify ISA type for operand '" +
                         operandNode->getName() + "' with type '" +
                         typeDef.getName() + "'");
-
-  if (operandNode->kinds.contains(OperandType::Register) &&
-      typeDef.isSubClassOf("RegisterTypeBase"))
-    operandNode->registerBinaryEncodingWidth =
-        typeDef.getValueAsInt("binaryEncodingWidth");
 }
 
 //===----------------------------------------------------------------------===//
-// Binary Format Verification
+// Verification
 //===----------------------------------------------------------------------===//
 
-void circt::tblgen::rtg::verifyBinaryFormat(ASTContext &ctx) {
-  for (auto *node : ctx.nodes()) {
-    if (isa<MnemonicNode, StringLiteralNode, SignednessNode>(node))
-      PrintFatalError(node->getLoc(),
-                      "binary format cannot contain " + node->getDesc());
-    if (auto *operandNode = dyn_cast<OperandNode>(node))
-      resolveOperand(ctx, operandNode);
-  }
+void Verifier::verify(StringLiteralNode *node) {
+  if (isBinary)
+    PrintFatalError(node->getLoc(),
+                    "binary format cannot contain " + node->getDesc());
 }
 
-//===----------------------------------------------------------------------===//
-// Assembly Format Verification
-//===----------------------------------------------------------------------===//
+void Verifier::verify(IfThenElseNode *node) {
+  if (node->isThenBranchEmpty() && node->isElseBranchEmpty())
+    PrintFatalError(
+        node->getLoc(),
+        "if-then-else must have at least one of 'then' or 'else' branch");
 
-static void verifyAssemblyFormat(ASTContext &ctx, BinaryLiteralNode *node) {
+  OperandNode *condition = node->getCondition();
+  verify(condition);
+
+  if (condition->kinds.size() != 1 || !condition->kinds.contains<Immediate>() ||
+      std::get<Immediate>(condition->kinds[0]).bitWidth != 1)
+    PrintFatalError(condition->getLoc(), "if-then-else condition operand '$" +
+                                             condition->getName() +
+                                             "' must be a 1-bit immediate");
+
+  for (auto *child : node->getThenBranch())
+    dispatch(child);
+  for (auto *child : node->getElseBranch())
+    dispatch(child);
+}
+
+void Verifier::verify(BinaryLiteralNode *node) {
+  if (isBinary)
+    return;
+
   PrintFatalError(node->getLoc(),
                   "assembly format cannot contain binary literals");
 }
 
-static void verifyAssemblyFormat(ASTContext &ctx, OperandNode *node) {
+void Verifier::verify(OperandNode *node) {
   resolveOperand(ctx, node);
 
-  if (node->kinds.contains(OperandType::Immediate)) {
-    if (!isa_and_nonnull<SignednessNode>(node->parent))
+  if (!isBinary && node->kinds.contains<Immediate, AnyImmediate>()) {
+    if (!isa_and_nonnull<SignednessNode, IfThenElseNode, CustomDirective>(
+            node->parent))
       PrintFatalError(node->getLoc(),
                       "immediate operand '$" + node->getName() +
                           "' must be wrapped in signed() or unsigned()");
   }
 }
 
-static void verifyAssemblyFormat(ASTContext &ctx, SignednessNode *node) {
+void Verifier::verify(SignednessNode *node) {
+  if (isBinary)
+    PrintFatalError(node->getLoc(),
+                    "binary format cannot contain " + node->getDesc());
+
   OperandNode *operandNode = node->getOperand();
-  resolveOperand(ctx, operandNode);
+  verify(operandNode);
 
   // Check that wrapped operands are immediates
   if (operandNode->kinds.size() == 1) {
     OperandType kind = *operandNode->kinds.begin();
-    if (kind == OperandType::Label)
+    if (std::holds_alternative<Label>(kind))
       PrintFatalError(operandNode->getLoc(),
                       "label operand '$" + operandNode->getName() +
                           "' cannot be wrapped in signed() or unsigned()");
 
-    if (kind == OperandType::Register)
+    if (std::holds_alternative<Register>(kind))
       PrintFatalError(operandNode->getLoc(),
                       "register operand '$" + operandNode->getName() +
                           "' cannot be wrapped in signed() or unsigned()");
   }
 }
 
-void circt::tblgen::rtg::verifyAssemblyFormat(ASTContext &ctx) {
-  for (auto *node : ctx.nodes()) {
-    TypeSwitch<FormatNode *>(node)
-        .Case<BinaryLiteralNode, OperandNode, SignednessNode>(
-            [&](auto *node) { ::verifyAssemblyFormat(ctx, node); })
-        .Case<StringLiteralNode, MnemonicNode>(
-            [&](auto *node) { /*Nothing to do*/ })
-        .Default([](auto *node) {
-          PrintFatalError(node->getLoc(), "unhandled format node");
-        });
-  }
+void Verifier::verify(CustomDirective *node) {
+  if (node->getFunctionName().empty())
+    PrintFatalError(node->getLoc(), "expected function name after 'custom<'");
+
+  if (isBinary && node->isFallible())
+    PrintFatalError(node->getLoc(),
+                    "fallible custom directive ('?') cannot be used in binary "
+                    "format");
+
+  for (auto *arg : node->getArguments())
+    verify(arg);
+}
+
+void Verifier::dispatch(FormatNode *node) {
+  TypeSwitch<FormatNode *>(node)
+      .Case<StringLiteralNode, BinaryLiteralNode, OperandNode, SignednessNode,
+            IfThenElseNode, CustomDirective>([&](auto *node) { verify(node); })
+      .Default([](auto *node) {
+        PrintFatalError(node->getLoc(), "unhandled format node");
+      });
+}
+
+void Verifier::verifyAsBinary(ASTContext &ctx) {
+  Verifier verifier(ctx, true);
+
+  for (auto *node : ctx.nodes())
+    verifier.dispatch(node);
+}
+
+void Verifier::verifyAsAssembly(ASTContext &ctx) {
+  Verifier verifier(ctx, false);
+
+  for (auto *node : ctx.nodes())
+    verifier.dispatch(node);
 }
 
 //===----------------------------------------------------------------------===//
 // BinaryFormatGen Implementation
 //===----------------------------------------------------------------------===//
 
-static void genUnsupportedInstructionBinaryMethod(llvm::raw_ostream &os,
-                                                  StringRef opClassName) {
+static void
+genIfThenElse(IfThenElseNode *node, const DenseSet<StringRef> &decls,
+              const std::function<void(ArrayRef<FormatNode *>)> &callback,
+              mlir::raw_indented_ostream &os) {
+  auto name = node->getCondition()->getName();
+  if (!decls.contains(name))
+    os << "::llvm::APInt " << name
+       << " = ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor."
+       << getGetterName(name) << "()).getValue();\n";
+
+  os << "if (" << name;
+  if (!node->isThenBranchEmpty() && !node->isElseBranchEmpty()) {
+    os << ".isOne())";
+    callback(node->getThenBranch());
+    os << " else";
+    callback(node->getElseBranch());
+  } else if (!node->isThenBranchEmpty()) {
+    os << ".isOne())";
+    callback(node->getThenBranch());
+  } else if (!node->isElseBranchEmpty()) {
+    os << ".isZero())";
+    callback(node->getElseBranch());
+  }
+  os << "\n";
+}
+
+static void
+genUnsupportedInstructionBinaryMethod(mlir::raw_indented_ostream &os,
+                                      StringRef opClassName) {
   os << "void " << opClassName
-     << "::printInstructionBinary(llvm::raw_ostream &os, FoldAdaptor adaptor) "
-        "{\n";
-  os << "  assert(false && \"binary not supported\");\n";
-  os << "}\n\n";
+     << "::printInstructionBinary(llvm::raw_ostream &os, FoldAdaptor adaptor)";
+  auto scope = os.scope(" {\n", "}\n\n");
+  os << "assert(false && \"binary not supported\");\n";
 }
 
 void BinaryFormatGen::gen(BinaryLiteralNode *node) {
   SmallVector<char> str;
   node->getValue().toStringUnsigned(str);
-  os << "  binary = binary.concat(llvm::APInt(" << node->getWidth() << ", "
-     << str << "));\n";
+  os << "binary = binary.concat(llvm::APInt(" << node->getWidth() << ", " << str
+     << "));\n";
 }
 
 void BinaryFormatGen::genDecl(OperandNode *node) {
   std::string getterName = getGetterName(node->getName());
+  assert(!node->kinds.empty() && "must have been resolved");
 
   if (node->kinds.size() > 2)
     PrintFatalError(
         node->getLoc(),
         "more than 2 operand types per operand not supported in binary format");
 
-  if (node->kinds.size() == 2 && !node->kinds.contains(OperandType::Label))
+  if (node->kinds.size() == 2 && !node->kinds.contains<Label>())
     PrintFatalError(node->getLoc(),
                     "one of the operand types must be a label in binary format "
                     "if there are 2 operand types possible");
 
-  if (node->kinds.contains(OperandType::Label))
-    os << "  assert(!isa<rtg::LabelAttr>(adaptor." << getterName
+  if (node->kinds.contains<Label>())
+    os << "assert(!::llvm::isa<::circt::rtg::LabelAttr>(adaptor." << getterName
        << "()) && \"labels not supported in binary format\");\n";
 
   if (decls.insert(node->getName()).second) {
-    os << "  llvm::APInt " << node->getName();
-    if (node->kinds.contains(OperandType::Register))
-      os << " = llvm::APInt(" << node->registerBinaryEncodingWidth
-         << ", cast<rtg::RegisterAttrInterface>(adaptor." + getterName +
-                "()).getClassIndex());\n";
-    else if (node->kinds.contains(OperandType::Immediate))
-      os << " = cast<rtg::ImmediateAttr>(adaptor." + getterName +
-                "()).getValue();\n";
+    os << "::llvm::APInt " << node->getName();
+    if (node->kinds.contains<Register>())
+      os << " = ::llvm::APInt("
+         << std::get<Register>(node->kinds[0]).binaryEncodingWidth
+         << ", ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor."
+         << getterName << "()).getClassIndex());\n";
+    else if (node->kinds.contains<Immediate, AnyImmediate>())
+      os << " = ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor."
+         << getterName << "()).getValue();\n";
     else
       PrintFatalError(node->getLoc(),
                       "unsupported operand type in binary format");
   }
+}
+
+void BinaryFormatGen::genDecl(IfThenElseNode *node) {
+  genDecl(node->getCondition());
+  for (auto *child : node->getThenBranch())
+    dispatchDecl(child);
+  for (auto *child : node->getElseBranch())
+    dispatchDecl(child);
+}
+
+void BinaryFormatGen::dispatchDecl(FormatNode *node) {
+  TypeSwitch<FormatNode *>(node)
+      .Case<OperandNode, IfThenElseNode>([&](auto *node) { genDecl(node); })
+      .Default([](auto *node) { /*Nothing to do*/ });
 }
 
 void BinaryFormatGen::gen(OperandNode *node) {
@@ -432,19 +605,49 @@ void BinaryFormatGen::gen(OperandNode *node) {
          "must have been declared in genDecl");
 
   if (node->hasBitSlice()) {
-    os << "  binary = binary.concat(" << node->getName() << ".extractBits("
+    os << "binary = binary.concat(" << node->getName() << ".extractBits("
        << node->getBitWidth() << ", " << node->getLowBit() << "));\n";
     return;
   }
 
-  os << "  binary = binary.concat(" << node->getName() << ");\n";
+  os << "binary = binary.concat(" << node->getName() << ");\n";
+}
+
+void BinaryFormatGen::gen(IfThenElseNode *node) {
+  genIfThenElse(
+      node, decls,
+      [&](auto nodes) {
+        auto scope = os.scope(" {\n", "}");
+        for (auto *child : nodes)
+          dispatch(child);
+      },
+      os);
+}
+
+void BinaryFormatGen::gen(CustomDirective *node) {
+  os << "binary = binary.concat(" << node->getFunctionName() << "(";
+  for (auto [i, arg] : llvm::enumerate(node->getArguments())) {
+    if (i > 0)
+      os << ", ";
+    os << "adaptor." << getGetterName(arg->getName()) << "()";
+  }
+  os << "));\n";
+}
+
+void BinaryFormatGen::dispatch(FormatNode *node) {
+  TypeSwitch<FormatNode *>(node)
+      .Case<BinaryLiteralNode, OperandNode, IfThenElseNode, CustomDirective>(
+          [&](auto *node) { gen(node); })
+      .Default([](auto *node) {
+        PrintFatalError(node->getLoc(), "unhandled format node");
+      });
 }
 
 static bool hasOperandThatIsLabelOnly(ASTContext &ctx) {
   return llvm::any_of(ctx.nodes(), [](const FormatNode *node) {
     if (auto *operandNode = dyn_cast<OperandNode>(node)) {
       return operandNode->kinds.size() == 1 &&
-             operandNode->kinds.contains(OperandType::Label);
+             operandNode->kinds.contains<Label>();
     }
     return false;
   });
@@ -453,37 +656,30 @@ static bool hasOperandThatIsLabelOnly(ASTContext &ctx) {
 void BinaryFormatGen::genInstructionMethod(ASTContext &ctx,
                                            StringRef opClassName) {
   // Make sure the format is valid for binary method generation.
-  verifyBinaryFormat(ctx);
+  Verifier::verifyAsBinary(ctx);
 
   // Label operands cannot be supported in binary format.
   if (hasOperandThatIsLabelOnly(ctx))
     return genUnsupportedInstructionBinaryMethod(os, opClassName);
 
   os << "void " << opClassName
-     << "::printInstructionBinary(llvm::raw_ostream &os, FoldAdaptor adaptor) "
-        "{\n";
+     << "::printInstructionBinary(llvm::raw_ostream &os, FoldAdaptor adaptor)";
 
-  for (auto *node : ctx.nodes()) {
-    if (auto *operandNode = dyn_cast<OperandNode>(node))
-      genDecl(operandNode);
-  }
+  auto scope = os.scope(" {\n", "}\n\n");
 
-  os << "\n";
-  os << "  llvm::APInt binary = llvm::APInt::getZero(0);\n";
-
-  for (auto *node : ctx.nodes()) {
-    TypeSwitch<FormatNode *>(node)
-        .Case<BinaryLiteralNode, OperandNode>([&](auto *node) { gen(node); })
-        .Default([](auto *node) {
-          PrintFatalError(node->getLoc(), "unhandled format node");
-        });
-  }
+  for (auto *node : ctx.nodes())
+    dispatchDecl(node);
 
   os << "\n";
-  os << "  llvm::SmallVector<char> str;\n";
-  os << "  binary.toStringUnsigned(str, 16);\n";
-  os << "  os << str;\n";
-  os << "}\n\n";
+  os << "::llvm::APInt binary = llvm::APInt::getZero(0);\n";
+
+  for (auto *node : ctx.nodes())
+    dispatch(node);
+
+  os << "\n";
+  os << "::llvm::SmallVector<char> str;\n";
+  os << "binary.toStringUnsigned(str, 16);\n";
+  os << "os << str;\n";
 }
 
 //===----------------------------------------------------------------------===//
@@ -491,60 +687,61 @@ void BinaryFormatGen::genInstructionMethod(ASTContext &ctx,
 //===----------------------------------------------------------------------===//
 
 /// Helper to print a label operand.
-static void printLabel(raw_ostream &os, StringRef getterName,
+static void printLabel(mlir::raw_indented_ostream &os, StringRef getterName,
                        bool needsDynCast) {
   if (needsDynCast) {
-    os << "if (auto label = dyn_cast<rtg::LabelAttr>(adaptor." << getterName
-       << "())) {\n";
-    os << "    os << label.getName();\n";
+    os << "if (auto label = ::llvm::dyn_cast<::circt::rtg::LabelAttr>(adaptor."
+       << getterName << "())) {\n";
+    auto scope = os.scope();
+    os << "os << label.getName();\n";
   } else {
-    os << "os << cast<rtg::LabelAttr>(adaptor." << getterName
+    os << "os << ::llvm::cast<::circt::rtg::LabelAttr>(adaptor." << getterName
        << "()).getName();\n";
   }
 }
 
 /// Helper to print a register operand.
-static void printRegister(raw_ostream &os, StringRef getterName,
+static void printRegister(mlir::raw_indented_ostream &os, StringRef getterName,
                           bool needsDynCast) {
   if (needsDynCast) {
-    os << "if (auto reg = dyn_cast<rtg::RegisterAttrInterface>(adaptor."
+    os << "if (auto reg = "
+          "::llvm::dyn_cast<::circt::rtg::RegisterAttrInterface>(adaptor."
        << getterName << "())) {\n";
-    os << "    os << reg.getRegisterAssembly();\n";
+    auto scope = os.scope();
+    os << "os << reg.getRegisterAssembly();\n";
   } else {
-    os << "os << cast<rtg::RegisterAttrInterface>(adaptor." << getterName
-       << "()).getRegisterAssembly();\n";
+    os << "os << ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor."
+       << getterName << "()).getRegisterAssembly();\n";
   }
 }
 
 /// Helper to print an immediate operand with signedness.
-static void printImmediate(raw_ostream &os, StringRef getterName, bool isSigned,
-                           bool needsDynCast) {
+static void printImmediate(mlir::raw_indented_ostream &os, StringRef getterName,
+                           bool isSigned, bool needsDynCast) {
   if (needsDynCast) {
-    os << "if (auto imm = dyn_cast<rtg::ImmediateAttr>(adaptor." << getterName
-       << "())) {\n";
-    os << "    {\n";
-    os << "      SmallVector<char> strBuf;\n";
-    os << "      imm.getValue().toString" << (isSigned ? "Signed" : "Unsigned")
-       << "(strBuf);\n";
-    os << "      os << strBuf;\n";
-    os << "    }\n";
+    os << "if (auto imm = "
+          "::llvm::dyn_cast<::circt::rtg::ImmediateAttr>(adaptor."
+       << getterName << "()))";
+    auto scope = os.scope(" {\n", "}\n");
+    {
+      auto scope = os.scope("{\n", "}\n");
+      os << "::llvm::SmallVector<char> strBuf;\n";
+      os << "imm.getValue().toString" << (isSigned ? "Signed" : "Unsigned")
+         << "(strBuf);\n";
+      os << "os << strBuf;\n";
+    }
   } else {
-    os << "{\n";
-    os << "    SmallVector<char> strBuf;\n";
-    os << "    cast<rtg::ImmediateAttr>(adaptor." << getterName
+    auto scope = os.scope("{\n", "}\n");
+    os << "::llvm::SmallVector<char> strBuf;\n";
+    os << "::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor." << getterName
        << "()).getValue().toString" << (isSigned ? "Signed" : "Unsigned")
        << "(strBuf);\n";
-    os << "    os << strBuf;\n";
-    os << "  }\n";
+    os << "os << strBuf;\n";
   }
 }
 
 void AssemblyFormatGen::gen(StringLiteralNode *node) {
-  os << "  os << \"" << node->getLiteral() << "\";\n";
-}
-
-void AssemblyFormatGen::gen(MnemonicNode *node) {
-  os << "  os << getOperationName().rsplit('.').second;\n";
+  os << "os << \"" << node->getLiteral() << "\";\n";
 }
 
 void AssemblyFormatGen::gen(SignednessNode *node) {
@@ -558,51 +755,112 @@ void AssemblyFormatGen::gen(OperandNode *node) {
   bool needsDynCast = node->kinds.size() > 1;
   bool isFirst = true;
 
-  os << "  ";
-
-  if (node->kinds.contains(OperandType::Label)) {
+  if (node->kinds.contains<Label>()) {
     if (needsDynCast && !isFirst)
-      os << "  } else ";
+      os << "} else ";
     printLabel(os, getterName, needsDynCast);
     isFirst = false;
   }
-  if (node->kinds.contains(OperandType::Register)) {
+  if (node->kinds.contains<Register>()) {
     if (needsDynCast && !isFirst)
-      os << "  } else ";
+      os << "} else ";
     printRegister(os, getterName, needsDynCast);
     isFirst = false;
   }
-  if (node->kinds.contains(OperandType::Immediate)) {
+  if (node->kinds.contains<Immediate, AnyImmediate>()) {
     assert(node->parent != nullptr &&
            "verifiers must make sure immediate operands are wrapped in "
            "signedness node");
     bool isSigned = cast<SignednessNode>(node->parent)->isSigned();
     if (needsDynCast && !isFirst)
-      os << "  } else ";
+      os << "} else ";
     printImmediate(os, getterName, isSigned, needsDynCast);
     isFirst = false;
   }
+}
 
-  if (needsDynCast)
-    os << "  }\n";
+void AssemblyFormatGen::gen(IfThenElseNode *node) {
+  genIfThenElse(
+      node, {},
+      [&](auto nodes) {
+        auto scope = os.scope(" {\n", "}");
+        for (auto *child : nodes)
+          dispatch(child);
+      },
+      os);
+}
+
+void AssemblyFormatGen::gen(CustomDirective *node) {
+  os << node->getFunctionName() << "(";
+  for (auto *arg : node->getArguments())
+    os << "adaptor." << getGetterName(arg->getName()) << "(), ";
+  os << "os);\n";
+}
+
+void AssemblyFormatGen::dispatch(FormatNode *node) {
+  TypeSwitch<FormatNode *>(node)
+      .Case<StringLiteralNode, SignednessNode, OperandNode, IfThenElseNode,
+            CustomDirective>([&](auto *node) { gen(node); });
+}
+
+// Helper function to collect all fallible custom directives from the AST
+static void collectFallibleCustomDirectives(
+    FormatNode *node, SmallVectorImpl<CustomDirective *> &fallibleDirectives) {
+  if (auto *custom = dyn_cast<CustomDirective>(node)) {
+    if (custom->isFallible())
+      fallibleDirectives.push_back(custom);
+  } else if (auto *ifNode = dyn_cast<IfThenElseNode>(node)) {
+    for (auto *child : ifNode->getThenBranch())
+      collectFallibleCustomDirectives(child, fallibleDirectives);
+    for (auto *child : ifNode->getElseBranch())
+      collectFallibleCustomDirectives(child, fallibleDirectives);
+  }
+}
+
+static void genFallibleCustomDirectiveChecks(ASTContext &ctx,
+                                             mlir::raw_indented_ostream &os) {
+  SmallVector<CustomDirective *> fallibleDirectives;
+  for (auto *node : ctx.nodes())
+    collectFallibleCustomDirectives(node, fallibleDirectives);
+
+  if (!fallibleDirectives.empty()) {
+    os << "if (";
+    for (auto [i, directive] : llvm::enumerate(fallibleDirectives)) {
+      if (i > 0)
+        os << " || ";
+      os << "!" << directive->getFunctionName() << "Possible(";
+      for (auto [j, arg] : llvm::enumerate(directive->getArguments())) {
+        if (j > 0)
+          os << ", ";
+        os << "adaptor." << getGetterName(arg->getName()) << "()";
+      }
+      os << ")";
+    }
+    os << ") {\n";
+    os.indent();
+    os << "os << \".word 0x\";\n";
+    os << "printInstructionBinary(os, adaptor);\n";
+    os << "return;\n";
+    os.unindent();
+    os << "}\n";
+  }
 }
 
 void AssemblyFormatGen::genInstructionMethod(ASTContext &ctx,
                                              StringRef opClassName) {
   // Make sure the format is valid for assembly method generation.
-  verifyAssemblyFormat(ctx);
+  Verifier::verifyAsAssembly(ctx);
 
   os << "void " << opClassName
      << "::printInstructionAssembly(llvm::raw_ostream &os, FoldAdaptor "
-        "adaptor) {\n";
+        "adaptor)";
 
-  for (auto *node : ctx.nodes()) {
-    TypeSwitch<FormatNode *>(node)
-        .Case<MnemonicNode, StringLiteralNode, SignednessNode, OperandNode>(
-            [&](auto *node) { gen(node); });
-  }
+  auto scope = os.scope(" {\n", "}\n\n");
 
-  os << "}\n\n";
+  genFallibleCustomDirectiveChecks(ctx, os);
+
+  for (auto *node : ctx.nodes())
+    dispatch(node);
 }
 
 //===----------------------------------------------------------------------===//
@@ -626,22 +884,24 @@ void circt::tblgen::rtg::genInstructionPrintMethods(const llvm::Record *opDef,
   StringRef binaryFormat = opDef->getValueAsString("isaBinaryFormat");
   StringRef assemblyFormat = opDef->getValueAsString("isaAssemblyFormat");
 
+  mlir::raw_indented_ostream indentedOS(os);
+
   if (assemblyFormat.empty())
     PrintFatalError(assemblyFormatVal->getLoc(),
                     "ISA assembly format must not be empty");
 
   auto loc = llvm::SMLoc::getFromPointer(
       assemblyFormatVal->getLoc().getPointer() + 21);
-  AssemblyFormatGen assemblyGen(os);
+  AssemblyFormatGen assemblyGen(indentedOS);
   genInstructionMethod(assemblyGen, loc, op, assemblyFormat);
 
   if (binaryFormat.empty()) {
-    genUnsupportedInstructionBinaryMethod(os, op.getCppClassName());
+    genUnsupportedInstructionBinaryMethod(indentedOS, op.getCppClassName());
     return;
   }
 
   loc =
       llvm::SMLoc::getFromPointer(binaryFormatVal->getLoc().getPointer() + 19);
-  BinaryFormatGen binaryGen(os);
+  BinaryFormatGen binaryGen(indentedOS);
   genInstructionMethod(binaryGen, loc, op, binaryFormat);
 }
