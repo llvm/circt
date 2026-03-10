@@ -58,8 +58,8 @@
 // CHECK-NEXT:       [[CAST19:%.+]] = builtin.unrealized_conversion_cast [[ARG3_2]] : !smt.bv<32> to i32
 // CHECK-NEXT:       [[TRUE_1:%.+]] = smt.constant true
 // CHECK-NEXT:       [[AND2:%.+]] = smt.and [[FUN3]], [[TRUE_1]]
-// CHECK-NEXT:       [[IMP2:%.+]] = smt.implies [[AND2]], [[FUN4]]
-// CHECK-NEXT:       smt.yield [[IMP2]] : !smt.bool
+// CHECK-NEXT:       [[IMPLIES1:%.+]] = smt.implies [[AND2]], [[FUN4]]
+// CHECK-NEXT:       smt.yield [[IMPLIES1]] : !smt.bool
 // CHECK-NEXT:     }
 // CHECK-NEXT:     smt.assert [[FORALL2]]
 // CHECK-NEXT:     [[FORALL3:%.+]] = smt.forall {
