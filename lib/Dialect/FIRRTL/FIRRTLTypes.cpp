@@ -168,7 +168,7 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
       .Case<FStringType>([&](auto) { os << "fstring"; })
       .Case<DomainType>([&](DomainType type) {
         os << "domain<";
-        os.printSymbolName(type.getName());
+        os.printSymbolName(type.getName().getValue());
         os << "(";
         llvm::interleaveComma(type.getFields(), os, [&](Attribute attr) {
           auto field = cast<DomainFieldAttr>(attr);
@@ -2866,45 +2866,9 @@ ParseResult DomainType::parseInterface(AsmParser &parser, DomainType &result) {
   return success();
 }
 
-namespace circt {
-namespace firrtl {
-namespace detail {
-struct DomainTypeStorage : public TypeStorage {
-  using KeyTy = std::pair<FlatSymbolRefAttr, ArrayAttr>;
-
-  DomainTypeStorage(FlatSymbolRefAttr name, ArrayAttr fields)
-      : name(name), fields(fields) {}
-
-  bool operator==(const KeyTy &key) const {
-    return key.first == name && key.second == fields;
-  }
-
-  static llvm::hash_code hashKey(const KeyTy &key) {
-    return llvm::hash_combine(key.first, key.second);
-  }
-
-  static DomainTypeStorage *construct(TypeStorageAllocator &allocator,
-                                      const KeyTy &key) {
-    return new (allocator.allocate<DomainTypeStorage>())
-        DomainTypeStorage(key.first, key.second);
-  }
-
-  FlatSymbolRefAttr name;
-  ArrayAttr fields;
-};
-} // namespace detail
-} // namespace firrtl
-} // namespace circt
-
 DomainType DomainType::get(FlatSymbolRefAttr name, ArrayAttr fields) {
   return Base::get(name.getContext(), name, fields);
 }
-
-StringRef DomainType::getName() const { return getNameAttr().getValue(); }
-
-FlatSymbolRefAttr DomainType::getNameAttr() const { return getImpl()->name; }
-
-ArrayAttr DomainType::getFields() const { return getImpl()->fields; }
 
 DomainFieldAttr DomainType::getField(size_t index) const {
   assert(index < getNumFields() && "index out of bounds");
@@ -2977,13 +2941,13 @@ DomainType::verifySymbolUses(Operation *op,
 
   // Look up the domain definition
   auto domainOp = dyn_cast_or_null<DomainOp>(
-      symbolTable.lookupSymbolIn(circuitOp, getNameAttr()));
+      symbolTable.lookupSymbolIn(circuitOp, getName()));
   if (!domainOp)
     return op->emitError() << "domain type references undefined domain '"
-                           << getName() << "'";
+                           << getName().getValue() << "'";
 
   // Verify that the domain type matches the domain definition
-  auto expectedType = DomainType::get(getNameAttr(), domainOp.getFieldsAttr());
+  auto expectedType = DomainType::get(getName(), domainOp.getFieldsAttr());
   if (*this != expectedType)
     return op->emitError() << "domain type " << *this
                            << " does not match the domain definition, expected "

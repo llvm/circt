@@ -625,9 +625,9 @@ def DomainTypeImpl : FIRRTLImplType<"Domain", [
     "FlatSymbolRefAttr":$name,
     "ArrayAttr":$fields
   );
-  let genStorageClass = false;
+  let genStorageClass = true;
   let typeName = "firrtl.domain";
-  let genAccessors = false;
+  let genAccessors = true;
   let builders = [
     TypeBuilderWithInferredContext<(ins
       "FlatSymbolRefAttr":$name,
@@ -639,10 +639,6 @@ def DomainTypeImpl : FIRRTLImplType<"Domain", [
     static ParseResult parseInterface(
       AsmParser &parser, DomainType &result);
 
-    StringRef getName() const;
-    FlatSymbolRefAttr getNameAttr() const;
-
-    ArrayAttr getFields() const;
     size_t getNumFields() const { return getFields().size(); }
     DomainFieldAttr getField(size_t index) const;
     std::optional<uint64_t> getFieldIndex(StringRef fieldName) const;

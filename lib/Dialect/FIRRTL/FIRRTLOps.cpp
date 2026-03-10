@@ -1425,7 +1425,7 @@ static ParseResult parseModulePorts(
     if (supportsDomains) {
       if (auto domainType = dyn_cast<DomainType>(portType)) {
         // The domain symbol is already in the type, extract it
-        domainInfo = domainType.getNameAttr();
+        domainInfo = domainType.getName();
       } else if (succeeded(parser.parseOptionalKeyword("domains"))) {
         auto result = parser.parseCommaSeparatedList(
             OpAsmParser::Delimiter::Square, [&]() -> ParseResult {

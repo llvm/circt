@@ -828,7 +828,7 @@ def DomainCreateAnonOp
 
   let extraClassDeclaration = [{
     FlatSymbolRefAttr getDomainAttr() {
-      return getResult().getType().getNameAttr();
+      return getResult().getType().getName();
     }
 
     StringRef getDomain() {
@@ -863,7 +863,7 @@ def DomainCreateOp : FIRRTLOp<"domain.create", [
 
   let extraClassDeclaration = [{
     FlatSymbolRefAttr getDomainAttr() {
-      return getResult().getType().getNameAttr();
+      return getResult().getType().getName();
     }
 
     StringRef getDomain() {
