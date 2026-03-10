@@ -72,20 +72,20 @@
 // CHECK-NEXT:       [[C_1_BV1_0:%.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
 // CHECK-NEXT:       [[EQ1:%.+]] = smt.eq [[CAST23]], [[C_1_BV1_0]] : !smt.bv<1>
 // CHECK-NEXT:       [[FUN5:%.+]] = smt.apply_func [[F_S0]]([[ARG1_3]], [[ARG2_3]]) : !smt.func<(!smt.bv<8>, !smt.bv<32>) !smt.bool>
-// CHECK-NEXT:       [[IMP3:%.+]] = smt.implies [[FUN5]], [[EQ1]]
-// CHECK-NEXT:       smt.yield [[IMP3]] : !smt.bool
+// CHECK-NEXT:       [[IMPLIES2:%.+]] = smt.implies [[FUN5]], [[EQ1]]
+// CHECK-NEXT:       smt.yield [[IMPLIES2]] : !smt.bool
 // CHECK-NEXT:     }
 // CHECK-NEXT:     smt.assert [[FORALL3]]
 // CHECK-NEXT:     [[FORALL4:%.+]] = smt.forall {
-// CHECK-NEXT:     ^bb0([[ARG14:%.+]]: !smt.bv<8>, [[ARG15:%.+]]: !smt.bv<8>, [[ARG16:%.+]]: !smt.bv<32>):
-// CHECK-NEXT:       [[CAST24:%.+]] = builtin.unrealized_conversion_cast [[ARG14]] : !smt.bv<8> to i8
-// CHECK-NEXT:       [[CAST25:%.+]] = builtin.unrealized_conversion_cast [[ARG16]] : !smt.bv<32> to i32
+// CHECK-NEXT:     ^bb0([[ARG0_4:%.+]]: !smt.bv<8>, [[ARG1_4:%.+]]: !smt.bv<8>, [[ARG2_4:%.+]]: !smt.bv<32>):
+// CHECK-NEXT:       [[CAST24:%.+]] = builtin.unrealized_conversion_cast [[ARG0_4]] : !smt.bv<8> to i8
+// CHECK-NEXT:       [[CAST25:%.+]] = builtin.unrealized_conversion_cast [[ARG2_4]] : !smt.bv<32> to i32
 // CHECK-NEXT:       [[TRUE_3:%.+]] = smt.constant true
 // CHECK-NEXT:       [[CAST26:%.+]] = builtin.unrealized_conversion_cast [[TRUE]] : i1 to !smt.bv<1>
 // CHECK-NEXT:       [[CAST27:%.+]] = builtin.unrealized_conversion_cast [[CAST26]] : !smt.bv<1> to !smt.bv<1>
 // CHECK-NEXT:       [[C4:%.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
 // CHECK-NEXT:       [[EQ4:%.+]] = smt.eq [[CAST27]], [[C4]] : !smt.bv<1>
-// CHECK-NEXT:       [[FUN6:%.+]] = smt.apply_func [[F_S0]]([[ARG15]], [[ARG16]]) : !smt.func<(!smt.bv<8>, !smt.bv<32>) !smt.bool>
+// CHECK-NEXT:       [[FUN6:%.+]] = smt.apply_func [[F_S0]]([[ARG1_4]], [[ARG2_4]]) : !smt.func<(!smt.bv<8>, !smt.bv<32>) !smt.bool>
 // CHECK-NEXT:       [[IMP4:%.+]] = smt.implies [[FUN6]], [[EQ4]]
 // CHECK-NEXT:       smt.yield [[IMP4]] : !smt.bool
 // CHECK-NEXT:     }
