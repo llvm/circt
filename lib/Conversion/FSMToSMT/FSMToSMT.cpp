@@ -500,25 +500,35 @@ LogicalResult MachineOpConverter::dispatch() {
       // ensure that a transition is taken if none of the previous transitions
       // from the same state can be taken.
       for (auto [transId1, transition1] : llvm::enumerate(transitions)) {
-        if (transition1.from == transition.from && transId1 < transId) {
+        if (transition1.from == transition.from ) {
           // ensure that previous transition's guard from the same state is
           // false
-          Value prevGuardVal;
-          for (auto &op : transition1.guard.value()->front()) {
-            if (isa<fsm::ReturnOp>(op)) {
-              // Cast the guard value to an SMT boolean type
-              auto castVal = mlir::UnrealizedConversionCastOp::create(
-                  b, loc, b.getType<smt::BitVectorType>(1),
-                  mapping.lookup(op.getOperand(0)));
+          if (transId1 < transId) {
+            Value prevGuardVal;
+            if (transition1.guard.has_value()) {
+              for (auto &op : transition1.guard.value()->front()) {
+                if (isa<fsm::ReturnOp>(op)) {
+                  // Cast the guard value to an SMT boolean type
+                  auto castVal = mlir::UnrealizedConversionCastOp::create(
+                      b, loc, b.getType<smt::BitVectorType>(1),
+                      mapping.lookup(op.getOperand(0)));
 
-              prevGuardVal = bv1toSmtBool(b, loc, castVal.getResult(0));
+                  prevGuardVal = bv1toSmtBool(b, loc, castVal.getResult(0));
 
-              // Assert that the previous guard is false
-              Value negVal = smt::NotOp::create(b, loc, prevGuardVal);
-              guardVal = smt::AndOp::create(b, loc, guardVal, negVal);
+                  // Assert that the previous guard is false
+                  Value negVal = smt::NotOp::create(b, loc, prevGuardVal);
+                  guardVal = smt::AndOp::create(b, loc, guardVal, negVal);
+                } else {
+                  b.clone(op, mapping);
+                }
+              }
             } else {
-              b.clone(op, mapping);
+              // If a transition has an empty guard region we assume the guard to be true
+              Value negVal = smt::NotOp::create(b, loc, smt::BoolConstantOp::create(b, loc, true));
+              guardVal = smt::AndOp::create(b, loc, guardVal, negVal);
             }
+          } else if (transId1 != transId && !transition1.guard.has_value()) {
+            guardVal = smt::AndOp::create(b, loc, guardVal, smt::BoolConstantOp::create(b, loc, false));
           }
         }
       }
