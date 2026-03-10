@@ -1,0 +1,159 @@
+//===----------------------------------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file defines incremental SAT solvers with an IPASIR-style interface.
+//
+//===----------------------------------------------------------------------===//
+
+#include "circt/Support/SATSolver.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/SMTAPI.h"
+
+#include <cassert>
+#include <cstdlib>
+#include <string>
+
+namespace circt {
+
+namespace {
+
+#if LLVM_WITH_Z3
+class Z3SATSolver : public IncrementalSATSolver {
+public:
+  Z3SATSolver() : solver(llvm::CreateZ3Solver()) {}
+
+  ~Z3SATSolver() override { clearSolveScope(); }
+
+  void add(int lit) override {
+    clearSolveScope();
+    if (lit == 0) {
+      addClauseInternal(clauseBuf);
+      clauseBuf.clear();
+      return;
+    }
+
+    const int absLit = std::abs(lit);
+    if (absLit > maxVariable)
+      reserveVars(absLit);
+
+    clauseBuf.push_back(lit);
+  }
+
+  void assume(int lit) override {
+    clearSolveScope();
+    if (lit == 0)
+      return;
+    assumptions.push_back(lit);
+  }
+
+  Result solve() override {
+    clearSolveScope();
+    solver->push();
+    solveScopeActive = true;
+    for (int lit : assumptions)
+      solver->addConstraint(literalToExpr(lit));
+    assumptions.clear();
+    auto result = solver->check();
+    if (result == std::optional<bool>(true)) {
+      lastResult = kSAT;
+      return kSAT;
+    }
+    if (result == std::optional<bool>(false)) {
+      lastResult = kUNSAT;
+      return kUNSAT;
+    }
+    lastResult = kUNKNOWN;
+    return kUNKNOWN;
+  }
+
+  int val(int v) const override {
+    if (lastResult != kSAT || v <= 0 || v > maxVariable)
+      return 0;
+    llvm::APSInt value(llvm::APInt(1, 0), true);
+    if (!solver->getInterpretation(variables[v - 1], value))
+      return 0;
+    if (value != 0)
+      return v;
+    return -v;
+  }
+
+  void reserveVars(int maxVar) override {
+    if (maxVar <= maxVariable)
+      return;
+    while (static_cast<int>(variables.size()) < maxVar)
+      newVariable();
+    maxVariable = maxVar;
+  }
+
+private:
+  void clearSolveScope() {
+    if (!solveScopeActive)
+      return;
+    solver->pop();
+    solveScopeActive = false;
+    lastResult = kUNKNOWN;
+  }
+
+  int newVariable() {
+    int varIndex = static_cast<int>(variables.size()) + 1;
+    std::string name = "v" + std::to_string(varIndex);
+    variables.push_back(solver->mkSymbol(name.c_str(), solver->getBoolSort()));
+    return varIndex;
+  }
+
+  llvm::SMTExprRef literalToExpr(int lit) {
+    int absLit = std::abs(lit);
+    // Ensure variable exists for this literal.
+    reserveVars(absLit);
+    auto *variable = variables[absLit - 1];
+    return lit > 0 ? variable : solver->mkNot(variable);
+  }
+
+  void addClauseInternal(llvm::ArrayRef<int> lits) {
+    if (lits.empty()) {
+      solver->addConstraint(solver->mkBoolean(false));
+      return;
+    }
+
+    llvm::SMTExprRef clause = nullptr;
+    for (int lit : lits) {
+      if (lit == 0)
+        continue;
+      auto *expr = literalToExpr(lit);
+      clause = clause ? solver->mkOr(clause, expr) : expr;
+    }
+
+    if (!clause) {
+      solver->addConstraint(solver->mkBoolean(false));
+      return;
+    }
+
+    solver->addConstraint(clause);
+  }
+
+  llvm::SMTSolverRef solver;
+  llvm::SmallVector<llvm::SMTExprRef> variables;
+  llvm::SmallVector<int> assumptions, clauseBuf;
+  int maxVariable = 0;
+  Result lastResult = kUNKNOWN;
+  bool solveScopeActive = false;
+};
+#endif // LLVM_WITH_Z3
+
+} // namespace
+
+std::unique_ptr<IncrementalSATSolver> createZ3SATSolver() {
+#if LLVM_WITH_Z3
+  return std::make_unique<Z3SATSolver>();
+#else
+  return {};
+#endif
+}
+
+} // namespace circt
