@@ -66,6 +66,7 @@ class DoubleType;
 class BaseTypeAliasType;
 class FStringType;
 class DomainType;
+class DomainOp;
 
 /// A collection of bits indicating the recursive properties of a type.
 struct RecursiveTypeProperties {

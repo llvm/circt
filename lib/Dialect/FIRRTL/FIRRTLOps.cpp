@@ -52,8 +52,7 @@ using namespace chirrtl;
 //===----------------------------------------------------------------------===//
 
 static DomainType getInstanceTypeForDomain(DomainOp domainOp) {
-  auto name = FlatSymbolRefAttr::get(domainOp.getNameAttr());
-  return DomainType::get(name, domainOp.getFieldsAttr());
+  return DomainType::getFromDomainOp(domainOp);
 }
 
 /// Remove elements from the input array corresponding to set bits in

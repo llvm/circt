@@ -1024,8 +1024,7 @@ static void ensureSolved(const DomainInfo &info, Namespace &ns,
   auto domainName = domainDecl.getNameAttr();
 
   auto portName = StringAttr::get(context, ns.newName(domainName.getValue()));
-  auto portType = DomainType::get(FlatSymbolRefAttr::get(domainName),
-                                  ArrayAttr::get(context, {}));
+  auto portType = DomainType::getFromDomainOp(domainDecl);
   auto portDirection = Direction::In;
   auto portSym = StringAttr();
   auto portLoc = loc;
@@ -1059,8 +1058,7 @@ static void ensureExported(const DomainInfo &info, Namespace &ns,
   auto domainName = domainDecl.getNameAttr();
 
   auto portName = StringAttr::get(context, ns.newName(domainName.getValue()));
-  auto portType = DomainType::get(FlatSymbolRefAttr::get(domainName),
-                                  ArrayAttr::get(context, {}));
+  auto portType = DomainType::getFromDomainOp(domainDecl);
   auto portDirection = Direction::Out;
   auto portSym = StringAttr();
   auto portLoc = value.getLoc();
@@ -1289,8 +1287,9 @@ static LogicalResult updateInstance(const DomainInfo &info,
       auto *term = getTermForDomain(allocator, table, port);
       if (auto *var = dyn_cast<VariableTerm>(term)) {
         auto name = getDomainPortTypeName(op.getDomainInfo(), i);
-        auto domainType = DomainType::get(FlatSymbolRefAttr::get(name),
-                                          ArrayAttr::get(op.getContext(), {}));
+        auto domainTypeID = info.getDomainTypeID(name);
+        auto domainDecl = info.getDomain(domainTypeID);
+        auto domainType = DomainType::getFromDomainOp(domainDecl);
         auto anon = DomainCreateAnonOp::create(builder, loc, domainType, name);
         solve(var, allocator.allocVal(anon));
         DomainDefineOp::create(builder, loc, port, anon);

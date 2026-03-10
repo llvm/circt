@@ -2870,6 +2870,11 @@ DomainType DomainType::get(FlatSymbolRefAttr name, ArrayAttr fields) {
   return Base::get(name.getContext(), name, fields);
 }
 
+DomainType DomainType::getFromDomainOp(DomainOp domainOp) {
+  auto name = FlatSymbolRefAttr::get(domainOp.getNameAttr());
+  return DomainType::get(name, domainOp.getFieldsAttr());
+}
+
 DomainFieldAttr DomainType::getField(size_t index) const {
   assert(index < getNumFields() && "index out of bounds");
   return cast<DomainFieldAttr>(getFields()[index]);

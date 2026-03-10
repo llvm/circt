@@ -639,6 +639,9 @@ def DomainTypeImpl : FIRRTLImplType<"Domain", [
     static ParseResult parseInterface(
       AsmParser &parser, DomainType &result);
 
+    /// Construct a DomainType from a DomainOp definition.
+    static DomainType getFromDomainOp(DomainOp domainOp);
+
     size_t getNumFields() const { return getFields().size(); }
     DomainFieldAttr getField(size_t index) const;
     std::optional<uint64_t> getFieldIndex(StringRef fieldName) const;
