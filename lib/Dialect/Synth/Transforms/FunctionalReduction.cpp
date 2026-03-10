@@ -23,7 +23,9 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallVector.h"
@@ -34,7 +36,7 @@
 
 #define DEBUG_TYPE "synth-functional-reduction"
 
-static constexpr llvm::StringRef kTestClassAttrName =
+static constexpr llvm::StringLiteral kTestClassAttrName =
     "synth.test.fc_equiv_class";
 
 namespace circt {
@@ -71,7 +73,7 @@ public:
     unsigned numUnknown = 0;
     unsigned numMergedNodes = 0;
   };
-  Stats run();
+  mlir::FailureOr<Stats> run();
 
 private:
   // Phase 1: Collect i1 values and run simulation
@@ -273,8 +275,7 @@ void FunctionalReductionSolver::verifyCandidates() {
     auto representative = members.front();
     auto &provenMembers = provenEquivalences[representative];
     // Representative is the canonical node for this class.
-    for (size_t mIdx = 1; mIdx < members.size(); ++mIdx) {
-      auto member = members[mIdx];
+    for (auto member : llvm::ArrayRef<Value>(members).drop_front()) {
       EquivResult result = verifyEquivalence(representative, member);
       if (result == EquivResult::Proved) {
         stats.numProvedEquiv++;
@@ -328,19 +329,17 @@ void FunctionalReductionSolver::mergeEquivalentNodes() {
 // Main Functional Reduction algorithm
 //===----------------------------------------------------------------------===//
 
-typename FunctionalReductionSolver::Stats FunctionalReductionSolver::run() {
+mlir::FailureOr<FunctionalReductionSolver::Stats>
+FunctionalReductionSolver::run() {
   LLVM_DEBUG(
       llvm::dbgs() << "FunctionalReduction: Starting functional reduction with "
                    << numPatterns << " simulation patterns\n");
   // Topologically sort the values
 
   if (failed(circt::synth::topologicallySortLogicNetwork(module))) {
-    LLVM_DEBUG(
-        llvm::dbgs()
-        << "FunctionalReduction: Failed to topologically sort logic network\n");
     module->emitError()
         << "FunctionalReduction: Failed to topologically sort logic network";
-    return stats;
+    return failure();
   }
 
   // Phase 1: Collect values and run simulation
@@ -406,10 +405,12 @@ struct FunctionalReductionPass
     }
 
     FunctionalReductionSolver fcSolver(module, numRandomPatterns, seed,
-                                       testTransformation);
+                                      testTransformation);
     auto stats = fcSolver.run();
-    updateStats(stats);
-    if (stats.numMergedNodes == 0)
+    if (failed(stats))
+      return signalPassFailure();
+    updateStats(*stats);
+    if (stats->numMergedNodes == 0)
       markAllAnalysesPreserved();
   }
 };
