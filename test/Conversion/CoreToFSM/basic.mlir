@@ -65,3 +65,11 @@ hw.module @self_referential(in %clk : !seq.clock, in %rst : i1, out output : i1)
     %state = seq.compreg name "state" %state, %clk reset %rst, %c0_i1 : i1
     hw.output %c0_i1 : i1
 }
+
+// Make sure that both of these registers are assumed to start at 0:
+// CHECK: fsm.machine @regs_without_reset() attributes {initialState = "state_0"}
+// CHECK: %{{.*}} = fsm.variable "var" {initValue = false} : i1
+hw.module @regs_without_reset(in %clk : !seq.clock) {
+    %state = seq.compreg name "state" %state, %clk : i1
+    %var = seq.compreg name "var" %state, %clk : i1
+}
