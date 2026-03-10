@@ -58,6 +58,10 @@ private:
     std::optional<Region *> action;
     std::optional<Region *> output;
   };
+  
+  // Store all the functions `F_state(outs, vars, [time]) -> Bool` describing
+  // the activation of each state
+  SmallVector<std::pair<int, Value>> stateFunctions;
 
   Transition getTransitionRegions(fsm::TransitionOp t, int from,
                                   SmallVector<StringRef> &states,
@@ -133,8 +137,7 @@ private:
   }
 
   Value
-  getStateFunction(const SmallVector<std::pair<int, Value>> &stateFunctions,
-                   int stateId) {
+  getStateFunction(int stateId) {
     for (auto sf : stateFunctions)
       if (sf.first == stateId)
         return sf.second;
@@ -249,9 +252,6 @@ LogicalResult MachineOpConverter::dispatch() {
 
   // Store all the transitions state0 -> state1 in the FSM
   SmallVector<MachineOpConverter::Transition> transitions;
-  // Store all the functions `F_state(outs, vars, [time]) -> Bool` describing
-  // the activation of each state
-  SmallVector<std::pair<int, Value>> stateFunctions;
   // Store the name of each state
   SmallVector<StringRef> states;
   // Store the output region of each state
@@ -398,7 +398,7 @@ LogicalResult MachineOpConverter::dispatch() {
         }
 
         return smt::ApplyFuncOp::create(
-            b, loc, getStateFunction(stateFunctions, 0), initialCondition);
+            b, loc, getStateFunction(0), initialCondition);
       });
 
   // Assert initial condition
@@ -575,7 +575,7 @@ LogicalResult MachineOpConverter::dispatch() {
           // Apply the starting-state function to the starting variables and
           // outputs
           auto lhs = smt::ApplyFuncOp::create(
-              b, loc, getStateFunction(stateFunctions, currentTransition.from),
+              b, loc, getStateFunction(currentTransition.from),
               startingFunArgs);
 
           // Update the variables according to the action region
@@ -608,7 +608,7 @@ LogicalResult MachineOpConverter::dispatch() {
           }
 
           auto rhs = smt::ApplyFuncOp::create(
-              b, loc, getStateFunction(stateFunctions, currentTransition.to),
+              b, loc, getStateFunction(currentTransition.to),
               arrivingFunArgs);
 
           // If there is a guard, compute its value with the variable and
@@ -659,7 +659,7 @@ LogicalResult MachineOpConverter::dispatch() {
                 //  Convert to SMT boolean type
                 auto toBool = bv1toSmtBool(b, loc, castVal.getResult(0));
                 auto inState = smt::ApplyFuncOp::create(
-                    b, loc, getStateFunction(stateFunctions, pa.stateId),
+                    b, loc, getStateFunction(pa.stateId),
                     forallQuantified.drop_front(numArgs));
 
                 // Produce an implication `F_state(outs, vars, [time]) ->
