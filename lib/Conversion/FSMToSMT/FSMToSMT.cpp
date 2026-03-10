@@ -58,7 +58,7 @@ private:
     std::optional<Region *> action;
     std::optional<Region *> output;
   };
-  
+
   // Store all the functions `F_state(outs, vars, [time]) -> Bool` describing
   // the activation of each state
   SmallVector<std::pair<int, Value>> stateFunctions;
@@ -136,8 +136,7 @@ private:
                              smt::BVConstantOp::create(b, loc, 1, 1));
   }
 
-  Value
-  getStateFunction(int stateId) {
+  Value getStateFunction(int stateId) {
     for (auto sf : stateFunctions)
       if (sf.first == stateId)
         return sf.second;
@@ -397,8 +396,8 @@ LogicalResult MachineOpConverter::dispatch() {
           }
         }
 
-        return smt::ApplyFuncOp::create(
-            b, loc, getStateFunction(0), initialCondition);
+        return smt::ApplyFuncOp::create(b, loc, getStateFunction(0),
+                                        initialCondition);
       });
 
   // Assert initial condition
@@ -608,8 +607,7 @@ LogicalResult MachineOpConverter::dispatch() {
           }
 
           auto rhs = smt::ApplyFuncOp::create(
-              b, loc, getStateFunction(currentTransition.to),
-              arrivingFunArgs);
+              b, loc, getStateFunction(currentTransition.to), arrivingFunArgs);
 
           // If there is a guard, compute its value with the variable and
           // argument values at the starting state
