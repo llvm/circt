@@ -3064,6 +3064,16 @@ Context::convertSystemCallArity2(const slang::ast::SystemSubroutine &subroutine,
                   return moore::UrandomrangeBIOp::create(builder, loc, value1,
                                                          value2);
                 })
+          .Case(
+              "exists",
+              [&]() -> Value {
+                if (isa<moore::RefType>(value1.getType()) &&
+                    isa<moore::AssocArrayType>(
+                        cast<moore::RefType>(value1.getType()).getNestedType()))
+                  return moore::AssocArrayExistsOp::create(builder, loc, value1,
+                                                           value2);
+                return {};
+              })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
 }
