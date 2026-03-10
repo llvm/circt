@@ -89,7 +89,9 @@ def LowerVariadic : Pass<"synth-lower-variadic", "hw::HWModuleOp"> {
     ListOption<"opNames", "op-names", "std::string",
                "Specify operation names to lower (empty means all)">,
     Option<"timingAware", "timing-aware", "bool", "true",
-           "Lower operators with timing information">
+           "Lower operators with timing information">,
+    Option<"reuseSubsets", "reuse-subsets", "bool", /*default=*/"false",
+           "Reuse existing logic subsets to minimize area">
   ];
   let dependentDialects = [
     "circt::comb::CombDialect", "circt::hw::HWDialect",

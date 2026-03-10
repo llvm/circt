@@ -22,8 +22,14 @@
 #include "mlir/IR/Block.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/Value.h"
+#include "mlir/Support/LLVM.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/Error.h"
+#include "llvm/Support/raw_ostream.h"
+#include <iterator>
+#include <vector>
 
 #define DEBUG_TYPE "synth-lower-variadic"
 
@@ -97,78 +103,83 @@ static LogicalResult replaceWithBalancedTree(
   return success();
 }
 
-// Returns if an operation is a subset of the other.
-static bool isOpSubsetOf(aig::AndInverterOp sub, aig::AndInverterOp super) {
-  if (sub->getNumOperands() > super->getNumOperands())
-    return false;
+using OperandKey = std::vector<std::pair<mlir::Value, bool>>;
 
-  SmallVector<bool> matched(super->getNumOperands(), false);
-  // All sub operands need to be in super.
-  for (size_t i = 0, e = sub.getNumOperands(); i < e; ++i) {
-    bool found = false;
-    for (size_t j = 0, e2 = super.getNumOperands(); j < e2; ++j) {
-      if (matched[j])
-        continue;
+// Struct for ordering the andInverterOp operations we have already seen
+struct OperandPairLess {
+  bool operator()(const std::pair<mlir::Value, bool> &lhs,
+                  const std::pair<mlir::Value, bool> &rhs) const {
+    if (lhs.first != rhs.first) {
+      auto lhsArg = llvm::dyn_cast<mlir::BlockArgument>(lhs.first);
+      auto rhsArg = llvm::dyn_cast<mlir::BlockArgument>(rhs.first);
+      if (lhsArg && rhsArg)
+        return lhsArg.getArgNumber() < rhsArg.getArgNumber();
+      if (lhsArg)
+        return true;
+      if (rhsArg)
+        return false;
 
-      if (sub->getOperand(i) == super.getOperand(j) &&
-          sub.isInverted(i) == super.isInverted(j)) {
-        matched[j] = true;
-        found = true;
-        break;
-      }
+      auto *lhsOp = lhs.first.getDefiningOp();
+      auto *rhsOp = rhs.first.getDefiningOp();
+      return lhsOp->isBeforeInBlock(rhsOp);
     }
-    if (!found)
-      return false;
+    return lhs.second < rhs.second;
   }
-  return true;
+};
+
+// Ordering of a vector of andInverterOp operations
+struct OperandKeyLess {
+  bool operator()(const OperandKey &lhs, const OperandKey &rhs) const {
+    // std::lexicographical_compare is the standard way to compare two vectors
+    return std::lexicographical_compare(lhs.begin(), lhs.end(), rhs.begin(),
+                                        rhs.end(), OperandPairLess());
+  }
+};
+
+static OperandKey getSortedOperandKey(aig::AndInverterOp op) {
+  OperandKey key;
+  for (size_t i = 0, e = op.getNumOperands(); i < e; ++i) {
+    key.emplace_back(op.getOperand(i), op.isInverted(i));
+  }
+  std::sort(key.begin(), key.end(), OperandPairLess());
+  return key;
 }
 
-static void simplifyWithExistingOperations(aig::AndInverterOp op,
-                                           mlir::IRRewriter &rewriter) {
-  mlir::Block *block = op->getBlock();
-  for (Operation &otherOp : *block) {
-    if (&otherOp == op.getOperation())
-      continue;
+static void simplifyWithExistingOperations(
+    aig::AndInverterOp op, mlir::IRRewriter &rewriter,
+    std::map<OperandKey, Value, OperandKeyLess> &seenExpressions) {
 
-    auto otherAIG = llvm::dyn_cast<aig::AndInverterOp>(otherOp);
-    if (!otherAIG)
-      continue;
+  if (op.getNumOperands() <= 2)
+    return;
 
-    if (isOpSubsetOf(otherAIG, op)) {
-      SmallVector<Value> newOperands;
-      SmallVector<bool> newInversions;
+  OperandKey allOperands = getSortedOperandKey(op);
+  mlir::SmallVector<Value> newValues;
+  mlir::SmallVector<bool> newInversions;
 
-      SmallVector<bool> isPartAsSubset(op.getNumOperands(), false);
+  for (auto it = allOperands.begin(); it != allOperands.end(); ++it) {
+    // Look at the remaining operands from 'it' to the end
+    OperandKey remaining(it, allOperands.end());
 
-      // Find the operands that match.
-      for (size_t i = 0; i < otherAIG.getNumOperands(); ++i) {
-        for (size_t j = 0; j < op.getNumOperands(); ++j) {
-          if (!isPartAsSubset[j] &&
-              otherAIG.getOperand(i) == op.getOperand(j) &&
-              otherAIG.isInverted(i) == op.isInverted(j)) {
-            isPartAsSubset[j] = true;
-            break;
-          }
-        }
-      }
-      // Build the list of operands that are not shared.
-      for (size_t i = 0; i < op->getNumOperands(); ++i) {
-        if (!isPartAsSubset[i]) {
-          newOperands.push_back(op->getOperand(i));
-          newInversions.push_back(op.isInverted(i));
-        }
-      }
-
-      newOperands.push_back(otherAIG.getResult());
+    auto match = seenExpressions.find(remaining);
+    if (match != seenExpressions.end() && match->second != op.getResult()) {
+      newValues.push_back(match->second);
       newInversions.push_back(false);
 
-      rewriter.modifyOpInPlace(op, [&]() {
-        op.getOperation()->setOperands(newOperands);
-        op->setAttr("inversions", rewriter.getBoolArrayAttr(newInversions));
-      });
-      // We found a first match, not necessarily the best one.
+      // We found a match that covers everything from 'it' to the end,
+      // so we can stop searching.
       break;
     }
+
+    // No match, add it to the new list of values and inversions.
+    newValues.push_back(it->first);
+    newInversions.push_back(it->second);
+  }
+
+  if (newValues.size() < allOperands.size()) {
+    rewriter.modifyOpInPlace(op, [&]() {
+      op.getOperation()->setOperands(newValues);
+      op.setInverted(newInversions);
+    });
   }
 }
 
@@ -210,6 +221,26 @@ void LowerVariadicPass::runOnOperation() {
   mlir::IRRewriter rewriter(&getContext());
   rewriter.setListener(analysis);
 
+  // To be used in  simplifyWithExistingOperations.
+  std::map<OperandKey, Value, OperandKeyLess> seenExpressions;
+  // Simplify exising andInverterOps by reusing operations.
+  if (reuseSubsets) {
+    // First collect all the andInverterOp operations in the block.
+    for (auto &op : moduleOp.getBodyBlock()->getOperations()) {
+      if (auto andInverterOp = llvm::dyn_cast<aig::AndInverterOp>(op)) {
+        OperandKey key = getSortedOperandKey(andInverterOp);
+        seenExpressions[key] = andInverterOp.getResult();
+      }
+    }
+    // Now try to replace operations with subsets.
+    for (auto &op : moduleOp.getBodyBlock()->getOperations()) {
+      if (auto andInverterOp = llvm::dyn_cast<aig::AndInverterOp>(op)) {
+        simplifyWithExistingOperations(andInverterOp, rewriter,
+                                       seenExpressions);
+      }
+    }
+  }
+
   // FIXME: Currently only top-level operations are lowered due to the lack of
   //        topological sorting in across nested regions.
   for (auto &opRef :
@@ -223,7 +254,6 @@ void LowerVariadicPass::runOnOperation() {
 
     // Handle AndInverterOp specially to preserve inversion flags.
     if (auto andInverterOp = dyn_cast<aig::AndInverterOp>(op)) {
-      simplifyWithExistingOperations(andInverterOp, rewriter);
       auto result = replaceWithBalancedTree(
           analysis, rewriter, op,
           // Check if each operand is inverted.
@@ -238,7 +268,6 @@ void LowerVariadicPass::runOnOperation() {
           });
       if (failed(result))
         return signalPassFailure();
-      continue;
     }
 
     // Handle commutative operations (and, or, xor, mul, add, etc.) using
