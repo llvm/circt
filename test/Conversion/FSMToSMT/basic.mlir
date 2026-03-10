@@ -78,7 +78,8 @@ fsm.machine @alternating() -> (i8) attributes {initialState = "A"} {
 // TIME:       [[CAST1:%.+]] = builtin.unrealized_conversion_cast [[C1_I8]] : i8 to !smt.bv<8>
 // TIME:       [[C1_BV5:%.+]] = smt.bv.constant #smt.bv<1> : !smt.bv<8>
 // TIME:       [[ADD0:%.+]] = smt.bv.add [[ARG1_1]], [[C1_BV5]] : !smt.bv<8>
-// TIME:       [[FUN2:%.+]] = smt.apply_func [[F_B]]([[CAST1]], [[ADD0]]) : !smt.func<(!smt.bv<8>, !smt.bv<8>) !smt.bool>
+// TIME:       [[FUN2:%.+]] = smt.apply_func [[F_B]]([[CAST1]], [[ADD0]]) : !smt.func<(!smt.bv<8>, !smt.bv<8>) !smt.
+// TIME: bool>
 // TIME:       [[TRUE1:%.+]] = smt.constant true
 // TIME:       [[AND1:%.+]] = smt.and [[FUN1]], [[TRUE1]]
 // TIME:       [[IMPLIES0:%.+]] = smt.implies [[AND1]], [[FUN2]]
