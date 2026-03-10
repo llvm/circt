@@ -36,14 +36,14 @@
 // CHECK-NEXT:    }
 // CHECK-NEXT:    smt.assert [[FORALL1]]
 // CHECK-NEXT:    [[FORALL2:%.+]] = smt.forall {
-// CHECK-NEXT:    ^bb0([[ARG5:%.+]]: !smt.bv<1>, [[ARG6:%.+]]: !smt.bv<1>, [[ARG7:%.+]]: !smt.bv<2>):
-// CHECK-NEXT:      [[FUN3:%.+]] = smt.apply_func [[F_B]]([[ARG7]]) : !smt.func<(!smt.bv<2>) !smt.bool>
-// CHECK-NEXT:      [[CAST9:%.+]] = builtin.unrealized_conversion_cast [[ARG5]] : !smt.bv<1> to i1
-// CHECK-NEXT:      [[CAST10:%.+]] = builtin.unrealized_conversion_cast [[ARG7]] : !smt.bv<2> to i2
+// CHECK-NEXT:    ^bb0([[ARG0_2:%.+]]: !smt.bv<1>, [[ARG1_2:%.+]]: !smt.bv<1>, [[ARG2_2:%.+]]: !smt.bv<2>):
+// CHECK-NEXT:      [[FUN3:%.+]] = smt.apply_func [[F_B]]([[ARG2_2]]) : !smt.func<(!smt.bv<2>) !smt.bool>
+// CHECK-NEXT:      [[CAST9:%.+]] = builtin.unrealized_conversion_cast [[ARG0_2]] : !smt.bv<1> to i1
+// CHECK-NEXT:      [[CAST10:%.+]] = builtin.unrealized_conversion_cast [[ARG2_2]] : !smt.bv<2> to i2
 // CHECK-NEXT:      [[CAST11:%.+]] = builtin.unrealized_conversion_cast [[C_1_I2]] : i2 to !smt.bv<2>
 // CHECK-NEXT:      [[FUN4:%.+]] = smt.apply_func [[F_A]]([[CAST11]]) : !smt.func<(!smt.bv<2>) !smt.bool>
-// CHECK-NEXT:      [[CAST12:%.+]] = builtin.unrealized_conversion_cast [[ARG5]] : !smt.bv<1> to i1
-// CHECK-NEXT:      [[CAST13:%.+]] = builtin.unrealized_conversion_cast [[ARG7]] : !smt.bv<2> to i2
+// CHECK-NEXT:      [[CAST12:%.+]] = builtin.unrealized_conversion_cast [[ARG0_2]] : !smt.bv<1> to i1
+// CHECK-NEXT:      [[CAST13:%.+]] = builtin.unrealized_conversion_cast [[ARG2_2]] : !smt.bv<2> to i2
 // CHECK-NEXT:      [[TRUE2:%.+]] = smt.constant true
 // CHECK-NEXT:      [[CAST14:%.+]] = builtin.unrealized_conversion_cast [[CAST12]] : i1 to !smt.bv<1>
 // CHECK-NEXT:      [[CAST15:%.+]] = builtin.unrealized_conversion_cast [[CAST14]] : !smt.bv<1> to !smt.bv<1>
