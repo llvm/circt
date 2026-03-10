@@ -83,11 +83,11 @@
 // CHECK-NEXT:       [[TRUE_3:%.+]] = smt.constant true
 // CHECK-NEXT:       [[CAST26:%.+]] = builtin.unrealized_conversion_cast [[TRUE]] : i1 to !smt.bv<1>
 // CHECK-NEXT:       [[CAST27:%.+]] = builtin.unrealized_conversion_cast [[CAST26]] : !smt.bv<1> to !smt.bv<1>
-// CHECK-NEXT:       [[C4:%.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
-// CHECK-NEXT:       [[EQ4:%.+]] = smt.eq [[CAST27]], [[C4]] : !smt.bv<1>
+// CHECK-NEXT:       [[C_1_BV1_1:%.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
+// CHECK-NEXT:       [[EQ2:%.+]] = smt.eq [[CAST27]], [[C_1_BV1_1]] : !smt.bv<1>
 // CHECK-NEXT:       [[FUN6:%.+]] = smt.apply_func [[F_S0]]([[ARG1_4]], [[ARG2_4]]) : !smt.func<(!smt.bv<8>, !smt.bv<32>) !smt.bool>
-// CHECK-NEXT:       [[IMP4:%.+]] = smt.implies [[FUN6]], [[EQ4]]
-// CHECK-NEXT:       smt.yield [[IMP4]] : !smt.bool
+// CHECK-NEXT:       [[IMPLIES3:%.+]] = smt.implies [[FUN6]], [[EQ2]]
+// CHECK-NEXT:       smt.yield [[IMPLIES3]] : !smt.bool
 // CHECK-NEXT:     }
 // CHECK-NEXT:     smt.assert [[FORALL4]]
 // CHECK-NEXT:   }
