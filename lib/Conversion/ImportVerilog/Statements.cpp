@@ -833,11 +833,10 @@ struct StmtVisitor {
     const slang::ast::AssertionExpr *propertySpec;
     const slang::ast::ClockingAssertionExpr *clocking =
         stmt.propertySpec.as_if<slang::ast::ClockingAssertionExpr>();
-    if (clocking) {
+    if (clocking)
       propertySpec = &(clocking->expr);
-    } else {
+    else
       propertySpec = &(stmt.propertySpec);
-    }
 
     if (auto *disableIff =
             propertySpec->as_if<slang::ast::DisableIffAssertionExpr>()) {
