@@ -480,7 +480,7 @@ LogicalResult MachineOpConverter::dispatch() {
       // Clone all the operations in the guard region except for `ReturnOp` and
       // `AssertOp,
       if (currentTransition.guard.has_value()) {
-      for (auto &op : currentTransition.guard.value()->front()) {
+        for (auto &op : currentTransition.guard.value()->front()) {
           if (isa<verif::AssertOp>(op)) {
             // Ignore assertions in guard regions
             op.emitWarning("Assertions in guard regions are ignored.");
@@ -490,7 +490,8 @@ LogicalResult MachineOpConverter::dispatch() {
             if (isa<fsm::ReturnOp>(newOp)) {
               // Cast the guard value to an SMT boolean type
               auto castVal = mlir::UnrealizedConversionCastOp::create(
-                  b, loc, b.getType<smt::BitVectorType>(1), newOp->getOperand(0));
+                  b, loc, b.getType<smt::BitVectorType>(1),
+                  newOp->getOperand(0));
 
               guardVal = bv1toSmtBool(b, loc, castVal.getResult(0));
               newOp->erase();
@@ -528,7 +529,6 @@ LogicalResult MachineOpConverter::dispatch() {
                 b, loc, smt::BoolConstantOp::create(b, loc, true));
             guardVal = smt::AndOp::create(b, loc, guardVal, negVal);
           }
-          
         }
       }
 
