@@ -2954,8 +2954,7 @@ DomainType::verifySymbolUses(Operation *op,
   auto domainOp = dyn_cast<DomainOp>(symbol);
   if (!domainOp)
     return op->emitError() << "domain type references symbol '"
-                           << getName().getValue()
-                           << "' which is not a domain";
+                           << getName().getValue() << "' which is not a domain";
 
   // Verify that the domain type fields match the domain definition
   auto expectedFields = domainOp.getFieldsAttr();
@@ -2981,11 +2980,10 @@ DomainType::verifySymbolUses(Operation *op,
 
     // Check field type
     if (actualField.getType() != expectedField.getType())
-      return op->emitError() << "domain type field '"
-                             << actualField.getName().getValue()
-                             << "' has type " << actualField.getType()
-                             << " but domain definition expects "
-                             << expectedField.getType();
+      return op->emitError()
+             << "domain type field '" << actualField.getName().getValue()
+             << "' has type " << actualField.getType()
+             << " but domain definition expects " << expectedField.getType();
   }
 
   return success();
