@@ -47,12 +47,14 @@ using namespace circt;
 using namespace firrtl;
 using namespace chirrtl;
 
-// Forward declarations
-static DomainType getInstanceTypeForDomain(DomainOp domainOp);
-
 //===----------------------------------------------------------------------===//
 // Utilities
 //===----------------------------------------------------------------------===//
+
+static DomainType getInstanceTypeForDomain(DomainOp domainOp) {
+  auto name = FlatSymbolRefAttr::get(domainOp.getNameAttr());
+  return DomainType::get(name, domainOp.getFieldsAttr());
+}
 
 /// Remove elements from the input array corresponding to set bits in
 /// `indicesToDrop`, returning the elements not mentioned.
@@ -2086,11 +2088,6 @@ ClassType firrtl::detail::getInstanceTypeForClassLike(ClassLike classOp) {
                         classOp.getPortDirection(i)});
   auto name = FlatSymbolRefAttr::get(classOp.getNameAttr());
   return ClassType::get(name, elements);
-}
-
-DomainType getInstanceTypeForDomain(DomainOp domainOp) {
-  auto name = FlatSymbolRefAttr::get(domainOp.getNameAttr());
-  return DomainType::get(name, domainOp.getFieldsAttr());
 }
 
 template <typename OpTy>
