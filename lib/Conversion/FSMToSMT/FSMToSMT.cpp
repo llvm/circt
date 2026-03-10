@@ -521,7 +521,7 @@ LogicalResult MachineOpConverter::dispatch() {
                 // Assert that the previous guard is false
                 Value negVal = smt::NotOp::create(b, loc, prevGuardVal);
                 guardVal = smt::AndOp::create(b, loc, guardVal, negVal);
-              } else {
+              } else if (!isa<verif::AssertOp>(op)) {
                 b.clone(op, mapping);
               }
             }
