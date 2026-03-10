@@ -59,7 +59,7 @@ jobs:
           apt update
           apt install -y python3-venv
           python3 -m venv venv
-          source venv/bin/activate
+          . venv/bin/activate
           pip install --upgrade pip
           pip install -r frontends/PyCDE/python/requirements.txt
 
@@ -81,7 +81,7 @@ jobs:
           BUILD_SHARED: ${{ matrix.build-shared }}
           BUILD_TYPE: ${{ matrix.build-type }}
         run: |
-          source venv/bin/activate
+          . venv/bin/activate
           export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
           mkdir build && cd build
           # In order for ccache to be effective, these flags should be kept in sync with nighly.
@@ -107,21 +107,21 @@ jobs:
 
       - name: Test CIRCT
         run: |
-          source venv/bin/activate
+          . venv/bin/activate
           ninja -C build check-circt -j$(nproc)
       - name: Test PyCDE
         run: |
-          source venv/bin/activate
+          . venv/bin/activate
           ninja -C build check-pycde -j$(nproc)
       # The PyCDE integration tests exercise the ESI runtime.
       - name: Test PyCDE and ESI runtime integration
         run: |
-          source venv/bin/activate
+          . venv/bin/activate
           ninja -C build check-pycde-integration -j$(nproc)
 
       - name: Test ESI runtime (pytest)
         run: |
-          source venv/bin/activate
+          . venv/bin/activate
           # Install the ESI C++ runtime into the esiaccel Python package tree
           # so that cmake-based tests can find headers, libraries, and the
           # esiaccelConfig.cmake.
