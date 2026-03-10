@@ -36,7 +36,9 @@ fsm.machine @alternating() -> (i8) attributes {initialState = "A"} {
 // NO-TIME:      [[FUN1:%.+]] = smt.apply_func [[F_A]]([[ARG0_1]]) : !smt.func<(!smt.bv<8>) !smt.bool>
 // NO-TIME:      [[CAST1:%.+]] = builtin.unrealized_conversion_cast [[C1_I8]] : i8 to !smt.bv<8>
 // NO-TIME:      [[FUN2:%.+]] = smt.apply_func [[F_B]]([[CAST1]]) : !smt.func<(!smt.bv<8>) !smt.bool>
-// NO-TIME:      [[IMPLIES0:%.+]] = smt.implies [[FUN1]], [[FUN2]]
+// NO-TIME:      [[TRUE1:%.+]] = smt.constant true
+// NO-TIME:      [[AND1:%.+]] = smt.and [[FUN1]], [[TRUE1]]
+// NO-TIME:      [[IMPLIES0:%.+]] = smt.implies [[AND1]], [[FUN2]]
 // NO-TIME:      smt.yield [[IMPLIES0]] : !smt.bool
 // NO-TIME:    }
 // NO-TIME:    smt.assert [[FORALL1]]
@@ -45,7 +47,9 @@ fsm.machine @alternating() -> (i8) attributes {initialState = "A"} {
 // NO-TIME:      [[FUN3:%.+]] = smt.apply_func [[F_B]]([[ARG0_2]]) : !smt.func<(!smt.bv<8>) !smt.bool>
 // NO-TIME:      [[CAST2:%.+]] = builtin.unrealized_conversion_cast [[C0_I8]] : i8 to !smt.bv<8>
 // NO-TIME:      [[FUN4:%.+]] = smt.apply_func [[F_A]]([[CAST2]]) : !smt.func<(!smt.bv<8>) !smt.bool>
-// NO-TIME:      [[IMPLIES1:%.+]] = smt.implies [[FUN3]], [[FUN4]]
+// NO-TIME:      [[TRUE2:%.+]] = smt.constant true
+// NO-TIME:      [[AND2:%.+]] = smt.and [[FUN3]], [[TRUE2]]
+// NO-TIME:      [[IMPLIES1:%.+]] = smt.implies [[AND2]], [[FUN4]]
 // NO-TIME:      smt.yield [[IMPLIES1]] : !smt.bool
 // NO-TIME:    }
 // NO-TIME:    smt.assert [[FORALL2]]
@@ -75,7 +79,9 @@ fsm.machine @alternating() -> (i8) attributes {initialState = "A"} {
 // TIME:       [[C1_BV5:%.+]] = smt.bv.constant #smt.bv<1> : !smt.bv<8>
 // TIME:       [[ADD0:%.+]] = smt.bv.add [[ARG1_1]], [[C1_BV5]] : !smt.bv<8>
 // TIME:       [[FUN2:%.+]] = smt.apply_func [[F_B]]([[CAST1]], [[ADD0]]) : !smt.func<(!smt.bv<8>, !smt.bv<8>) !smt.bool>
-// TIME:       [[IMPLIES0:%.+]] = smt.implies [[FUN1]], [[FUN2]]
+// TIME:       [[TRUE1:%.+]] = smt.constant true
+// TIME:       [[AND1:%.+]] = smt.and [[FUN1]], [[TRUE1]]
+// TIME:       [[IMPLIES0:%.+]] = smt.implies [[AND1]], [[FUN2]]
 // TIME:       smt.yield [[IMPLIES0]] : !smt.bool
 // TIME:     }
 // TIME:     smt.assert [[FORALL1]]
@@ -87,7 +93,9 @@ fsm.machine @alternating() -> (i8) attributes {initialState = "A"} {
 // TIME:       [[C1_BV5_0:%.+]] = smt.bv.constant #smt.bv<1> : !smt.bv<8>
 // TIME:       [[ADD1:%.+]] = smt.bv.add [[ARG1_2]], [[C1_BV5_0]] : !smt.bv<8>
 // TIME:       [[FUN4:%.+]] = smt.apply_func [[F_A]]([[CAST2]], [[ADD1]]) : !smt.func<(!smt.bv<8>, !smt.bv<8>) !smt.bool>
-// TIME:       [[IMPLIES1:%.+]] = smt.implies [[FUN3]], [[FUN4]]
+// TIME:       [[TRUE2:%.+]] = smt.constant true
+// TIME:       [[AND2:%.+]] = smt.and [[FUN3]], [[TRUE2]]
+// TIME:       [[IMPLIES1:%.+]] = smt.implies [[AND2]], [[FUN4]]
 // TIME:       smt.yield [[IMPLIES1]] : !smt.bool
 // TIME:     }
 // TIME:     smt.assert [[FORALL2]]
