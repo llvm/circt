@@ -822,8 +822,8 @@ struct StmtVisitor {
     auto loc = context.convertLocation(stmt.sourceRange);
 
     // Check for a `disable iff` expression:
-    // The DisableIff construct can only occcur at the outermost level of an
-    // assertion and cannot be nested within properties.
+    // `disable iff` can only appear at the outermost property that is asserted,
+    // and can never be nested.
     // Hence we only need to detect if the top level assertion expression has
     // type DisableIff. (or, if the top level expression is
     // ClockingAssertionExpr, check for DisableIff inside that).
