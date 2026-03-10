@@ -45,6 +45,12 @@ static cl::opt<std::string>
                cl::desc("Path to file containing header to prepend to output"),
                cl::cat(rtgPythonWrapperCat));
 
+static cl::opt<std::string>
+    extension("extension",
+              cl::desc("Only generate wrappers for instructions with "
+                       "matching extension field"),
+              cl::cat(rtgPythonWrapperCat));
+
 //===----------------------------------------------------------------------===//
 // Helpers
 //===----------------------------------------------------------------------===//
@@ -357,6 +363,12 @@ static void genPythonWrapperForOp(const Operator &op, raw_ostream &os) {
   // Skip operations that do not implement InstructionOpInterface
   if (!hasInstructionOpInterface(op))
     return;
+
+  if (!extension.empty()) {
+    auto opExtension = op.getDef().getValueAsOptionalString("extension");
+    if (!opExtension || *opExtension != extension)
+      return;
+  }
 
   SmallVector<OperandTypeSet> operandKinds;
   SmallVector<SideEffect> operandSideEffect;

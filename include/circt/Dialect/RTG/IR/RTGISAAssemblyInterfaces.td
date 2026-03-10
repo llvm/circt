@@ -220,6 +220,9 @@ class ISAInstructionFormat {
   //   generate conditional code to handle both labels and immediates
   // Example: "$mnemonic ` ` $rd `, ` signed($imm) `(` $rs `)`"
   string isaAssemblyFormat = "";
+
+  /// ISA extension/namespace this instruction belongs to.
+  string extension = "";
 }
 
 //===----------------------------------------------------------------------===//

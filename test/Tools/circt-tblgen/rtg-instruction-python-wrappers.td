@@ -217,3 +217,15 @@ def Test14_SpecialCharsOp : TestOp<"load#word"> {
 // CHECK-NEXT: def load_word(rs: TestReg):
 // CHECK-NEXT:   test.SpecialCharsOp(rs)
 // CHECK-EMPTY:
+
+#ifdef TEST_EXTENSION_FILTER
+// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func --extension=nonexistent -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_EXTENSION_FILTER 2>&1 | FileCheck %s --check-prefix=NO-MATCH --allow-empty
+// NO-MATCH-NOT: @instruction
+
+// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func --extension=extension_name -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_EXTENSION_FILTER 2>&1 | FileCheck %s --check-prefix=EXTENSION-MATCH
+// EXTENSION-MATCH: @instruction
+
+def FilterTestOp : TestOp<"filter_test">, ISAInstructionFormat {
+  let extension = "extension_name";
+}
+#endif
