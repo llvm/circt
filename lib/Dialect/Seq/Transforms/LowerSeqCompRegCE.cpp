@@ -50,17 +50,19 @@ public:
 
     // Create the new compreg to replace the compreg.ce
     auto compreg = seq::CompRegOp::create(
-        rewriter, op.getLoc(), mux, adaptor.getClk(), adaptor.getReset(),
-        adaptor.getResetValue(), name, adaptor.getInitialValue());
+        rewriter, op.getLoc(), mux, adaptor.getClk(), name, adaptor.getReset(),
+        adaptor.getResetValue(), adaptor.getInitialValue(),
+        op.getInnerSymAttr());
 
     rewriter.replaceOp(op, compreg);
     return success();
-  };
+  }
+};
 
-  struct LowerSeqCompRegCEPass
-      : public circt::seq::impl::LowerSeqCompRegCEBase<LowerSeqCompRegCEPass> {
-    void runOnOperation() override;
-  };
+struct LowerSeqCompRegCEPass
+    : public circt::seq::impl::LowerSeqCompRegCEBase<LowerSeqCompRegCEPass> {
+  void runOnOperation() override;
+};
 
 } // namespace
 
