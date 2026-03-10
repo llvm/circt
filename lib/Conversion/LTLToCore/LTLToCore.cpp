@@ -167,16 +167,39 @@ struct LTLOrOpConversion : public OpConversionPattern<ltl::OrOp> {
 };
 
 struct LTLPastOpConversion : public OpConversionPattern<ltl::PastOp> {
-  using OpConversionPattern<ltl::PastOp>::OpConversionPattern;
+  LTLPastOpConversion(MLIRContext *context, bool assumeFirstClock)
+      : OpConversionPattern<ltl::PastOp>(context),
+        assumeFirstClock(assumeFirstClock) {}
 
   LogicalResult
   matchAndRewrite(ltl::PastOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (!adaptor.getClk())
-      return failure();
+    Value clock;
+    if (!adaptor.getClk()) {
+      if (!assumeFirstClock)
+        return failure();
+      // Find the first clock, looking at inputs then at to_clock operations
+      auto module = op->getParentOfType<HWModuleOp>();
+      hw::PortInfo *clockPort = nullptr;
+      for (auto &port : module.getPortList())
+        if (port.isInput() && isa<seq::ClockType>(port.type)) {
+          clockPort = &port;
+          break;
+        }
+      if (clockPort) {
+        clock = module.getArgumentForInput(clockPort->argNum);
+      } else {
+        // If there are no clock ports, we try to_clock operations
+        auto toClockOps = module.getOps<seq::ToClockOp>();
+        if (toClockOps.empty())
+          return failure();
+        clock = (*toClockOps.begin()).getResult();
+      }
+    } else {
+      clock = seq::ToClockOp::create(rewriter, op.getLoc(), adaptor.getClk());
+    }
+
     Value cur = adaptor.getInput();
-    auto clock =
-        seq::ToClockOp::create(rewriter, op.getLoc(), adaptor.getClk());
     Value ce =
         hw::ConstantOp::create(rewriter, op.getLoc(), rewriter.getI1Type(), 1);
     auto shiftreg =
@@ -185,6 +208,8 @@ struct LTLPastOpConversion : public OpConversionPattern<ltl::PastOp> {
     rewriter.replaceOp(op, shiftreg);
     return success();
   }
+
+  bool assumeFirstClock;
 };
 
 } // namespace
@@ -205,16 +230,18 @@ struct LowerLTLToCorePass
 void LowerLTLToCorePass::runOnOperation() {
   // Emit an explicit error for unsupported past ops, rather than a confusing
   // 'failed to legalize' error
-  auto res = getOperation().walk([&](ltl::PastOp op) {
-    if (!op.getClk()) {
-      op.emitError(
-          "ltl.past operations without a clock operand are not supported.");
-      return WalkResult::interrupt();
-    }
-    return WalkResult::advance();
-  });
-  if (res.wasInterrupted())
-    return signalPassFailure();
+  if (!assumeFirstClock) {
+    auto res = getOperation().walk([&](ltl::PastOp op) {
+      if (!op.getClk()) {
+        op.emitError(
+            "ltl.past operations without a clock operand are not supported.");
+        return WalkResult::interrupt();
+      }
+      return WalkResult::advance();
+    });
+    if (res.wasInterrupted())
+      return signalPassFailure();
+  }
 
   // Set target dialects: We don't want to see any ltl or verif that might
   // come from an AssertProperty left in the result
@@ -286,10 +313,10 @@ void LowerLTLToCorePass::runOnOperation() {
 
   // Create the operation rewrite patters
   RewritePatternSet patterns(&getContext());
-  patterns
-      .add<HasBeenResetOpConversion, LTLImplicationConversion, LTLNotConversion,
-           LTLAndOpConversion, LTLOrOpConversion, LTLPastOpConversion>(
-          converter, patterns.getContext());
+  patterns.add<HasBeenResetOpConversion, LTLImplicationConversion,
+               LTLNotConversion, LTLAndOpConversion, LTLOrOpConversion>(
+      converter, patterns.getContext());
+  patterns.add<LTLPastOpConversion>(patterns.getContext(), assumeFirstClock);
   // Apply the conversions
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
@@ -301,8 +328,8 @@ void LowerLTLToCorePass::runOnOperation() {
       return;
     Value prop = op->getOperand(0);
     if (auto cast = prop.getDefiningOp<UnrealizedConversionCastOp>()) {
-      // Make sure that the cast is from an i1, not something random that was in
-      // the input
+      // Make sure that the cast is from an i1, not something random that was
+      // in the input
       if (auto intType = dyn_cast<IntegerType>(cast.getOperandTypes()[0]);
           intType && intType.getWidth() == 1)
         op->setOperand(0, cast.getInputs()[0]);

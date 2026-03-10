@@ -660,6 +660,11 @@ def LowerLTLToCore : Pass<"lower-ltl-to-core", "hw::HWModuleOp"> {
     "hw::HWDialect", "sv::SVDialect", "comb::CombDialect",
     "seq::SeqDialect"
   ];
+  let options =
+    [Option<"assumeFirstClock", "assume-first-clock", "bool", "false",
+            "Assume that implicitly clocked LTL operations are clocked by the"
+            "first clock argument, or failing that, the first seq.to_clock"
+            "operation in their parent hw.module.">];
 }
 
 //===----------------------------------------------------------------------===//
