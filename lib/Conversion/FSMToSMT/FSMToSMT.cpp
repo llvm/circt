@@ -138,8 +138,6 @@ private:
     for (auto sf : stateFunctions)
       if (sf.first == stateId)
         return sf.second;
-    llvm::outs() << "State function for state id " << stateId
-                 << " not found.\n";
     llvm_unreachable("State function could not be found.");
   }
 
