@@ -15,6 +15,16 @@
 
 include "mlir/Pass/PassBase.td"
 
+def LowerSeqCompRegCE : Pass<"lower-seq-compreg-ce", "hw::HWModuleOp"> {
+  let summary = "Lower seq.compreg.ce to seq.compreg";
+  let description = [{
+    Lowers seq.compreg.ce to a seq.compreg with the clock enable signal
+    built into the next logic, i.e. `next := mux(clock_enable, next, current)`
+  }];
+  let constructor = "circt::seq::createLowerSeqCompRegCEPass()";
+  let dependentDialects = ["circt::comb::CombDialect"];
+}
+
 def LowerSeqFIFO : Pass<"lower-seq-fifo", "hw::HWModuleOp"> {
   let summary = "Lower seq.fifo ops";
   let constructor = "circt::seq::createLowerSeqFIFOPass()";
