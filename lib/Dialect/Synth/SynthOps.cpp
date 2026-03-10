@@ -110,14 +110,8 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
     // ~x 0 0 -> ~x  no fold
     // ~x 0 ~1 -> 0
     if (c1 == c2) {
-      if (isInverted(i)) {
-        // return the inverted value
-        auto value = cast<IntegerAttr>(adaptor.getInputs()[i]).getValue();
-        value = ~value;
-        return IntegerAttr::get(
-            IntegerType::get(getContext(), value.getBitWidth()), value);
-      } else
-        return getOperand(i);
+      return IntegerAttr::get(IntegerType::get(getContext(), c1->getBitWidth()),
+                              c1.value());
     } else {
       if (isInverted(k)) {
         (*this)->setOperands({getOperand(i)});
