@@ -43,15 +43,10 @@ public:
         comb::MuxOp::create(rewriter, op.getLoc(), adaptor.getClockEnable(),
                             adaptor.getInput(), op.getResult());
 
-    // Extract name if there is one
-    StringAttr name;
-    if (op.getName().has_value())
-      name = rewriter.getStringAttr(op.getName().value());
-
     // Create the new compreg to replace the compreg.ce
     auto compreg = seq::CompRegOp::create(
-        rewriter, op.getLoc(), mux, adaptor.getClk(), name, adaptor.getReset(),
-        adaptor.getResetValue(), adaptor.getInitialValue(),
+        rewriter, op.getLoc(), mux, adaptor.getClk(), op.getNameAttr(),
+        adaptor.getReset(), adaptor.getResetValue(), adaptor.getInitialValue(),
         op.getInnerSymAttr());
 
     rewriter.replaceOp(op, compreg);
