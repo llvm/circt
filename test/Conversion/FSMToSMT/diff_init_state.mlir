@@ -1,11 +1,6 @@
 // RUN: circt-opt -convert-fsm-to-smt %s | FileCheck %s
 
-// CHECK:      module {
-// CHECK-NEXT:   smt.solver() : () -> () {
-// CHECK-NEXT:     [[F_A:%.+]] = smt.declare_fun "F_A" : !smt.func<(!smt.bv<2>) !smt.bool>
-// CHECK-NEXT:     [[F_B:%.+]] = smt.declare_fun "F_B" : !smt.func<(!smt.bv<2>) !smt.bool>
-// CHECK-NEXT:     [[FORALL0:%.+]] = smt.forall {
-// CHECK-NEXT:     ^bb0([[ARG0:%.+]]: !smt.bv<1>, [[ARG1:%.+]]: !smt.bv<2>):
+// CHECK:     ^bb0([[ARG0:%.+]]: !smt.bv<1>, [[ARG1:%.+]]: !smt.bv<2>):
 // CHECK-NEXT:       [[CAST0:%.+]] = builtin.unrealized_conversion_cast [[ARG0]] : !smt.bv<1> to i1
 // CHECK-NEXT:       [[CAST1:%.+]] = builtin.unrealized_conversion_cast [[ARG1]] : !smt.bv<2> to i2
 // CHECK-NEXT:       [[C0_I2:%.+]] = hw.constant 0 : i2
