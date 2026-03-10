@@ -37,3 +37,21 @@ firrtl.circuit "ForwardThroughRegs" {
     dbg.variable "reg1", %reg1 : !firrtl.uint<42>
   }
 }
+
+firrtl.circuit "LayerblockCrossBlock" {
+  firrtl.layer @A bind {
+  }
+  // CHECK-LABEL: firrtl.module @LayerblockCrossBlock
+  firrtl.module @LayerblockCrossBlock() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %wire = firrtl.wire : !firrtl.probe<uint<1>, @A>
+    firrtl.layerblock @A {
+      %wire_0 = firrtl.wire {name = "wire"} : !firrtl.uint<1>
+      // This should not crash when connect-forwarder checks cross-block ordering
+      firrtl.matchingconnect %wire_0, %c0_ui1 : !firrtl.uint<1>
+      %0 = firrtl.ref.send %wire_0 : !firrtl.uint<1>
+      %1 = firrtl.ref.cast %0 : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>, @A>
+      firrtl.ref.define %wire, %1 : !firrtl.probe<uint<1>, @A>
+    }
+  }
+}

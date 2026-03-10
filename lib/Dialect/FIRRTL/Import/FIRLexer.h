@@ -35,6 +35,7 @@ public:
 #define TOK_PUNCTUATION(NAME, SPELLING) NAME,
 #define TOK_KEYWORD(SPELLING) kw_##SPELLING,
 #define TOK_LPKEYWORD(SPELLING) lp_##SPELLING,
+#define TOK_LESSKEYWORD(SPELLING) langle_##SPELLING,
 #include "FIRTokenKinds.def"
   };
 

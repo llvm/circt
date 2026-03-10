@@ -480,21 +480,33 @@ class ArraySliceOp(ArraySliceOp):
 class ArrayCreateOp(ArrayCreateOp):
 
   @staticmethod
-  def create(elements):
+  def create(elements, result_type: Type = None):
     if not elements:
       raise ValueError("Cannot 'create' an array of length zero")
     vals = []
-    type = None
+    element_type = None
     for i, arg in enumerate(elements):
       arg_val = support.get_value(arg)
       vals.append(arg_val)
-      if type is None:
-        type = arg_val.type
-      elif type != arg_val.type:
+      if element_type is None:
+        element_type = arg_val.type
+      elif element_type != arg_val.type:
         raise TypeError(
-            f"Argument {i} has a different element type ({arg_val.type}) than the element type of the array ({type})"
+            f"Argument {i} has a different element type ({arg_val.type}) than the element type of the array ({element_type})"
         )
-    return hw.ArrayCreateOp(hw.ArrayType.get(type, len(vals)), vals)
+    self_type = hw.ArrayType.get(element_type, len(elements))
+    if result_type is not None:
+      if isinstance(result_type, hw.TypeAliasType):
+        if result_type.inner_type != self_type:
+          raise TypeError(
+              f"result type:\n\t{result_type.inner_type}\nmust match generated array type:\n\t{self_type}"
+          )
+      elif result_type != self_type:
+        raise TypeError(
+            f"result type:\n\t{result_type}\nmust match generated array type:\n\t{self_type}"
+        )
+      self_type = result_type
+    return hw.ArrayCreateOp(self_type, vals)
 
 
 @_ods_cext.register_operation(_Dialect, replace=True)

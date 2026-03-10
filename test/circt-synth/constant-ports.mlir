@@ -1,5 +1,5 @@
-// RUN: circt-synth %s --enable-parameterize-constant-ports -output-longest-path=- -top Top  | FileCheck %s
-// RUN: circt-synth %s -output-longest-path=- -top Top  | FileCheck %s --check-prefix CHECK-NO-PARAM
+// RUN: circt-synth %s --enable-parameterize-constant-ports -analysis-output=- -top Top  | FileCheck %s
+// RUN: circt-synth %s -analysis-output=- -top Top  | FileCheck %s --check-prefix CHECK-NO-PARAM
 
 // CHECK: Maximum path delay: 9
 // CHECK-NO-PARAM: Maximum path delay: 10

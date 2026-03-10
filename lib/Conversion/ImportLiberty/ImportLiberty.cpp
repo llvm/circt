@@ -202,7 +202,6 @@ private:
   ParseResult parseUnaryExpr(Value &result);
 
   InFlightDiagnostic emitError(llvm::SMLoc loc, const Twine &message) const;
-  InFlightDiagnostic emitWarning(llvm::SMLoc loc, const Twine &message) const;
 };
 
 //===----------------------------------------------------------------------===//
@@ -330,14 +329,19 @@ ParseResult ExpressionParser::parseXorExpr(Value &result) {
 }
 
 /// Parse AND expressions with highest precedence.
-/// AndExpr -> UnaryExpr { ('*'|'&') UnaryExpr }
+/// AndExpr -> UnaryExpr { ('*'|'&'|implicit) UnaryExpr }
 /// This implements left-associative parsing: A * B * C becomes (A * B) * C
+/// Space between expressions is treated as implicit AND.
 ParseResult ExpressionParser::parseAndExpr(Value &result) {
   Value lhs;
   if (parseUnaryExpr(lhs))
     return failure();
-  while (peek().kind == TokenKind::AND) {
-    auto loc = consume().loc;
+  while (peek().kind == TokenKind::AND ||
+         (peek().kind == TokenKind::ID || peek().kind == TokenKind::LPAREN ||
+          peek().kind == TokenKind::PREFIX_NOT)) {
+    auto loc = peek().loc;
+    if (peek().kind == TokenKind::AND)
+      consume();
     Value rhs;
     if (parseUnaryExpr(rhs))
       return failure();
@@ -403,11 +407,6 @@ ParseResult ExpressionParser::parseUnaryExpr(Value &result) {
 InFlightDiagnostic ExpressionParser::emitError(llvm::SMLoc loc,
                                                const Twine &message) const {
   return mlir::emitError(lexer.translateLocation(loc), message);
-}
-
-InFlightDiagnostic ExpressionParser::emitWarning(llvm::SMLoc loc,
-                                                 const Twine &message) const {
-  return mlir::emitWarning(lexer.translateLocation(loc), message);
 }
 
 // Parsed result of a Liberty group
@@ -482,8 +481,6 @@ private:
 
   // Attribute parsing
   ParseResult parseAttribute(Attribute &result);
-  static ParseResult parseAttribute(Attribute &result, OpBuilder &builder,
-                                    StringRef attr);
 
   // Expression parsing
   ParseResult parseExpression(Value &result, StringRef expr,
@@ -751,7 +748,9 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group,
   SmallVector<const LibertyGroup *> pinGroups;
   llvm::DenseSet<StringAttr> seenPins;
 
-  // First pass: gather ports
+  // First pass: gather ports and count output pins without "function"
+  // attribute.
+  size_t numOutputPinMissingFunction = 0;
   for (const auto &sub : group.subGroups) {
     if (sub->name != "pin")
       continue;
@@ -768,6 +767,8 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group,
     std::optional<hw::ModulePort::Direction> dir;
     SmallVector<NamedAttribute> pinAttrs;
 
+    // Track if this pin has a "function" attribute (only relevant for outputs).
+    bool functionExist = false;
     for (const auto &attr : sub->attrs) {
       if (attr.name == "direction") {
         if (auto val = dyn_cast<StringAttr>(attr.value)) {
@@ -786,11 +787,18 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group,
         }
         continue;
       }
+
+      if (attr.name == "function")
+        functionExist = true;
+
       pinAttrs.push_back(builder.getNamedAttr(attr.name, attr.value));
     }
 
     if (!dir)
       return emitError(sub->loc, "pin direction must be specified");
+
+    if (dir == hw::ModulePort::Direction::Output && !functionExist)
+      ++numOutputPinMissingFunction;
 
     llvm::StringMap<SmallVector<Attribute>> subGroups;
     for (const auto &child : sub->subGroups) {
@@ -824,6 +832,27 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group,
   }
 
   auto loc = lexer.translateLocation(group.loc);
+  auto numOutput = ports.size() - inputIdx;
+
+  // Decide whether to create hw.module (with logic) or hw.module.extern (black
+  // box) based on whether output pins have "function" attributes.
+  // All outputs must either have "function" or all must lack it.
+
+  // Mixed case: some outputs have "function", others don't - error.
+  if (numOutputPinMissingFunction != 0 &&
+      numOutputPinMissingFunction != numOutput)
+    return emitError(group.loc, "cell '")
+           << cellNameAttr.getValue()
+           << "' has mixed output pins with and without "
+              "'function' attribute";
+
+  // All outputs lack "function": emit as hw.module.extern (black box).
+  if (numOutputPinMissingFunction == numOutput) {
+    hw::HWModuleExternOp::create(builder, loc, cellNameAttr, ports);
+    return success();
+  }
+
+  // All outputs have "function": emit as hw.module with logic.
   auto moduleOp = hw::HWModuleOp::create(builder, loc, cellNameAttr, ports);
 
   OpBuilder::InsertionGuard guard(builder);
@@ -850,8 +879,7 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group,
       continue;
     const LibertyGroup *pg = *it;
     auto attrPair = pg->getAttribute("function");
-    if (!attrPair.first)
-      return emitError(pg->loc, "expected function attribute");
+    assert(attrPair.first && "output pin missing function attribute");
     Value val;
     if (parseExpression(val, cast<StringAttr>(attrPair.first).getValue(),
                         portValues, attrPair.second))
@@ -932,17 +960,6 @@ ParseResult LibertyParser::parseStatement(LibertyGroup &parent) {
   return emitError(nameTok.location, "expected ':' or '('");
 }
 
-ParseResult LibertyParser::parseAttribute(Attribute &result, OpBuilder &builder,
-                                          StringRef attr) {
-  double val;
-  if (!attr.getAsDouble(val)) {
-    result = builder.getF64FloatAttr(val);
-  } else {
-    // Keep as string if not a valid number
-    result = builder.getStringAttr(attr);
-  }
-  return success();
-}
 // Parse an attribute value, which can be:
 // - A string: "value"
 // - A number: 1.23

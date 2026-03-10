@@ -105,6 +105,15 @@ Type circt::om::IntegerAttr::getType() {
   return OMIntegerType::get(getContext());
 }
 
+LogicalResult circt::om::IntegerAttr::verify(
+    llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
+    mlir::IntegerAttr value) {
+  if (value.getType().isUnsignedInteger())
+    return emitError() << "integers must be signed";
+
+  return success();
+}
+
 void circt::om::OMDialect::registerAttributes() {
   addAttributes<
 #define GET_ATTRDEF_LIST

@@ -201,7 +201,8 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
       LayerArrayAttr:$knownLayers,
       DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
       DefaultValuedAttr<LayerArrayAttr, "{}">:$layers,
-      DefaultValuedAttr<ArrayRefAttr, "{}">:$domainInfo);
+      DefaultValuedAttr<ArrayRefAttr, "{}">:$domainInfo,
+      DefaultValuedAttr<ArrayAttr, "{}">:$externalRequirements);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -211,11 +212,13 @@ def FExtModuleOp : FIRRTLModuleLike<"extmodule"> {
       "ArrayAttr":$knownLayers, CArg<"StringRef", "StringRef()">:$defnamAttr,
       CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
       CArg<"ArrayAttr", "ArrayAttr()">:$parameters,
-      CArg<"ArrayAttr", "ArrayAttr()">:$layers)>];
+      CArg<"ArrayAttr", "ArrayAttr()">:$layers,
+      CArg<"ArrayAttr", "ArrayAttr()">:$externalRequirements)>];
 
   let extraModuleClassDeclaration = [{
     void getAsmBlockArgumentNames(mlir::Region &region,
                                   mlir::OpAsmSetValueNameFn setNameFn);
+    StringAttr getExtModuleNameAttr();
     StringRef getExtModuleName();
   }];
 
@@ -492,19 +495,30 @@ def OptionOp : FIRRTLOp<"option", [
 }
 
 def OptionCaseOp : FIRRTLOp<
-  "option_case", [Symbol, HasParent<"firrtl::OptionOp">]
+  "option_case", [Symbol, HasParent<"firrtl::OptionOp">,
+                  DeclareOpInterfaceMethods<SymbolUserOpInterface>]
 > {
   let summary = "A configuration option value definition";
   let description = [{
     `firrtl.option_case` defines an acceptable value to be provided for an
     option. Ops reference it to define their behavior when this case is active.
+
+    The `case_macro` attribute stores the macro symbol used in generated Verilog
+    to guard code for this option case (e.g., `__option__Platform_FPGA`).
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       OptionalAttr<FlatSymbolRefAttr>:$case_macro);
   let results = (outs);
   let assemblyFormat = [{
     $sym_name attr-dict
   }];
+
+  let builders = [
+    OpBuilder<(ins "StringRef":$sym_name), [{
+      build($_builder, $_state, $_builder.getStringAttr(sym_name), nullptr);
+    }]>
+  ];
 }
 
 def FormalOp : FIRRTLOp<"formal", [

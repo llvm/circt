@@ -24,3 +24,15 @@ handshake.func @main(%arg0: index, %arg1: index, %v: i32, %mem : memref<10xi32>,
   %finCtrl = join %stCtrl, %ldCtrl : none, none
   return %finCtrl : none
 }
+
+// CHECK-LABEL: handshake.func @i0
+// CHECK: %[[JOIN:.*]] = join
+// CHECK: constant %[[JOIN]] {value = 0 : i0} : i0
+handshake.func @i0(%c : memref<1xi32>) {
+  %0 = source
+  %addr = constant %0 {value = 0 : index} : index
+  %data = constant %0 {value = 0 : i32} : i32
+  %2 = extmemory[ld = 0, st = 1] (%c : memref<1xi32>) (%data, %addr) {id = 2 : i32} : (i32, index) -> none
+  return
+}
+

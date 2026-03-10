@@ -8,6 +8,8 @@
 
 #include "slang/ast/expressions/AssertionExpr.h"
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Support/LLVM.h"
@@ -87,7 +89,8 @@ struct AssertionExprVisitor {
     auto valueType = value.getType();
     // For assertion instances the value is already the expected type, convert
     // boolean value
-    if (!mlir::isa<ltl::SequenceType, ltl::PropertyType>(valueType)) {
+    if (!mlir::isa<ltl::SequenceType, ltl::PropertyType, mlir::IntegerType>(
+            valueType)) {
       value = context.convertToI1(value);
     }
     if (!value)
@@ -294,57 +297,112 @@ struct AssertionExprVisitor {
 } // namespace
 
 FailureOr<Value> Context::convertAssertionSystemCallArity1(
-    const slang::ast::SystemSubroutine &subroutine, Location loc, Value value) {
+    const slang::ast::SystemSubroutine &subroutine, Location loc, Value value,
+    Type originalType) {
 
   auto systemCallRes =
       llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
+          .Case("$sampled",
+                [&]() -> Value {
+                  Value sampled = ltl::SampledOp::create(builder, loc, value);
+                  // Cast back to Moore integers so Moore ops can use the result
+                  // if needed
+                  if (auto ty = dyn_cast<moore::IntType>(originalType)) {
+                    sampled =
+                        moore::FromBuiltinIntOp::create(builder, loc, sampled);
+                    if (ty.getDomain() == Domain::FourValued)
+                      sampled =
+                          moore::IntToLogicOp::create(builder, loc, sampled);
+                  }
+                  return sampled;
+                })
           // Translate $fell to ¬x[0] ∧ x[-1]
           .Case("$fell",
                 [&]() -> Value {
                   auto current = value;
                   auto past =
-                      ltl::PastOp::create(builder, loc, value, 1).getResult();
-                  auto notCurrent =
-                      ltl::NotOp::create(builder, loc, current).getResult();
-                  auto pastAndNotCurrent =
-                      ltl::AndOp::create(builder, loc, {notCurrent, past})
+                      ltl::PastOp::create(builder, loc, value, 1, Value{})
                           .getResult();
-                  return pastAndNotCurrent;
+                  Value fell = comb::ICmpOp::create(builder, loc,
+                                                    comb::ICmpPredicate::ugt,
+                                                    past, current, false);
+                  if (auto ty = dyn_cast<moore::IntType>(originalType)) {
+                    fell = moore::FromBuiltinIntOp::create(builder, loc, fell);
+                    if (ty.getDomain() == Domain::FourValued) {
+                      fell = moore::IntToLogicOp::create(builder, loc, fell);
+                    }
+                  }
+                  return fell;
                 })
           // Translate $rose to x[0] ∧ ¬x[-1]
           .Case("$rose",
                 [&]() -> Value {
                   auto past =
-                      ltl::PastOp::create(builder, loc, value, 1).getResult();
-                  auto notPast =
-                      ltl::NotOp::create(builder, loc, past).getResult();
-                  auto current = value;
-                  auto notPastAndCurrent =
-                      ltl::AndOp::create(builder, loc, {current, notPast})
+                      ltl::PastOp::create(builder, loc, value, 1, Value{})
                           .getResult();
-                  return notPastAndCurrent;
+                  auto current = value;
+                  Value rose = comb::ICmpOp::create(builder, loc,
+                                                    comb::ICmpPredicate::ult,
+                                                    past, current, false);
+                  if (auto ty = dyn_cast<moore::IntType>(originalType)) {
+                    rose = moore::FromBuiltinIntOp::create(builder, loc, rose);
+                    if (ty.getDomain() == Domain::FourValued) {
+                      rose = moore::IntToLogicOp::create(builder, loc, rose);
+                    }
+                  }
+                  return rose;
                 })
-          // Translate $stable to ( x[0] ∧ x[-1] ) ⋁ ( ¬x[0] ∧ ¬x[-1] )
-          .Case("$stable",
+          // Translate $changed to ( ¬x[0] ∧ x[-1] ) ⋁ ( x[0] ∧ ¬x[-1] )
+          .Case("$changed",
                 [&]() -> Value {
                   auto past =
-                      ltl::PastOp::create(builder, loc, value, 1).getResult();
-                  auto notPast =
-                      ltl::NotOp::create(builder, loc, past).getResult();
+                      ltl::PastOp::create(builder, loc, value, 1, Value{})
+                          .getResult();
                   auto current = value;
-                  auto notCurrent =
-                      ltl::NotOp::create(builder, loc, value).getResult();
-                  auto pastAndCurrent =
-                      ltl::AndOp::create(builder, loc, {current, past})
-                          .getResult();
-                  auto notPastAndNotCurrent =
-                      ltl::AndOp::create(builder, loc, {notCurrent, notPast})
-                          .getResult();
-                  auto stable =
-                      ltl::OrOp::create(builder, loc,
-                                        {pastAndCurrent, notPastAndNotCurrent})
-                          .getResult();
-                  return stable;
+                  Value changed = comb::ICmpOp::create(builder, loc,
+                                                       comb::ICmpPredicate::ne,
+                                                       past, current, false);
+                  if (auto ty = dyn_cast<moore::IntType>(originalType)) {
+                    changed =
+                        moore::FromBuiltinIntOp::create(builder, loc, changed);
+                    if (ty.getDomain() == Domain::FourValued) {
+                      changed =
+                          moore::IntToLogicOp::create(builder, loc, changed);
+                    }
+                  }
+                  return changed;
+                })
+          // Translate $stable to ( x[0] ∧ x[-1] ) ⋁ ( ¬x[0] ∧ ¬x[-1] )
+          .Case(
+              "$stable",
+              [&]() -> Value {
+                auto past = ltl::PastOp::create(builder, loc, value, 1, Value{})
+                                .getResult();
+                auto current = value;
+                Value stable =
+                    comb::ICmpOp::create(builder, loc, comb::ICmpPredicate::eq,
+                                         past, current, false);
+                if (auto ty = dyn_cast<moore::IntType>(originalType)) {
+                  stable =
+                      moore::FromBuiltinIntOp::create(builder, loc, stable);
+                  if (ty.getDomain() == Domain::FourValued) {
+                    stable = moore::IntToLogicOp::create(builder, loc, stable);
+                  }
+                }
+                return stable;
+              })
+          .Case("$past",
+                [&]() -> Value {
+                  Value past =
+                      ltl::PastOp::create(builder, loc, value, 1, Value{});
+                  // Cast back to Moore integers so Moore ops can use the result
+                  // if needed
+                  if (auto ty = dyn_cast<moore::IntType>(originalType)) {
+                    past = moore::FromBuiltinIntOp::create(builder, loc, past);
+                    if (ty.getDomain() == Domain::FourValued)
+                      past = moore::IntToLogicOp::create(builder, loc, past);
+                  }
+                  return past;
                 })
           .Default([&]() -> Value { return {}; });
   return systemCallRes();
@@ -359,15 +417,30 @@ Value Context::convertAssertionCallExpression(
 
   FailureOr<Value> result;
   Value value;
-  Value boolVal;
+  Value intVal;
+  Type originalType;
+  moore::IntType valTy;
 
   switch (args.size()) {
   case (1):
     value = this->convertRvalueExpression(*args[0]);
-    boolVal = builder.createOrFold<moore::ToBuiltinBoolOp>(loc, value);
-    if (!boolVal)
+    originalType = value.getType();
+    valTy = dyn_cast<moore::IntType>(value.getType());
+    if (!valTy) {
+      mlir::emitError(loc) << "expected integer argument for system call `"
+                           << subroutine.name << "`";
       return {};
-    result = this->convertAssertionSystemCallArity1(subroutine, loc, boolVal);
+    }
+    // If the value is four-valued, we need to map it to two-valued before we
+    // cast it to a builtin int
+    if (valTy.getDomain() == Domain::FourValued) {
+      value = builder.createOrFold<moore::LogicToIntOp>(loc, value);
+    }
+    intVal = builder.createOrFold<moore::ToBuiltinIntOp>(loc, value);
+    if (!intVal)
+      return {};
+    result = this->convertAssertionSystemCallArity1(subroutine, loc, intVal,
+                                                    originalType);
     break;
 
   default:
@@ -394,11 +467,14 @@ Value Context::convertAssertionExpression(const slang::ast::AssertionExpr &expr,
 Value Context::convertToI1(Value value) {
   if (!value)
     return {};
+  auto loc = value.getLoc();
   auto type = dyn_cast<moore::IntType>(value.getType());
   if (!type || type.getBitSize() != 1) {
-    mlir::emitError(value.getLoc(), "expected a 1-bit integer");
+    mlir::emitError(loc, "expected a 1-bit integer");
     return {};
   }
-
-  return moore::ToBuiltinBoolOp::create(builder, value.getLoc(), value);
+  if (type.getDomain() == Domain::FourValued) {
+    value = moore::LogicToIntOp::create(builder, loc, value);
+  }
+  return moore::ToBuiltinIntOp::create(builder, loc, value);
 }

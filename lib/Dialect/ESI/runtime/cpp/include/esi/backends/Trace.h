@@ -58,7 +58,8 @@ public:
   ~TraceAccelerator() override;
 
   /// Parse the connection string and instantiate the accelerator. Format is:
-  /// "<mode>:<manifest path>[:<traceFile>]".
+  /// "<mode>SEP<manifest path>[SEP<traceFile>]" where SEP is ':' on Unix
+  /// and ';' on Windows (to avoid conflicts with drive letters).
   static std::unique_ptr<AcceleratorConnection>
   connect(Context &, std::string connectionString);
 

@@ -1799,7 +1799,16 @@ ParseResult ArrayCreateOp::parse(OpAsmParser &parser, OperationState &result) {
   if (operands.size() == 0)
     return parser.emitError(inputOperandsLoc,
                             "Cannot construct an array of length 0");
-  result.addTypes({ArrayType::get(elemType, operands.size())});
+
+  // Check for optional result type: " -> <type>"
+  Type resultType;
+  if (parser.parseOptionalArrow().succeeded()) {
+    if (parser.parseType(resultType))
+      return failure();
+    result.addTypes(resultType);
+  } else {
+    result.addTypes({ArrayType::get(elemType, operands.size())});
+  }
 
   for (auto operand : operands)
     if (parser.resolveOperand(operand, elemType, result.operands))
@@ -1812,6 +1821,12 @@ void ArrayCreateOp::print(OpAsmPrinter &p) {
   p.printOperands(getInputs());
   p.printOptionalAttrDict((*this)->getAttrs());
   p << " : " << getInputs()[0].getType();
+
+  // Print optional result type if it's not the default constructed type
+  Type expectedType =
+      ArrayType::get(getInputs()[0].getType(), getInputs().size());
+  if (getType() != expectedType)
+    p << " -> " << getType();
 }
 
 void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
@@ -1826,7 +1841,7 @@ void ArrayCreateOp::build(OpBuilder &b, OperationState &state,
 }
 
 LogicalResult ArrayCreateOp::verify() {
-  unsigned returnSize = cast<ArrayType>(getType()).getNumElements();
+  unsigned returnSize = hw::type_cast<ArrayType>(getType()).getNumElements();
   if (getInputs().size() != returnSize)
     return failure();
   return success();

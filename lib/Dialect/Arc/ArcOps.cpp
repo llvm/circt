@@ -213,6 +213,38 @@ LogicalResult StateOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// StateWriteOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+StateWriteOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  if (!getTraceTapModel().has_value())
+    return success();
+
+  auto modelOp = symbolTable.lookupNearestSymbolFrom<ModelOp>(
+      getOperation(), getTraceTapModelAttr());
+  if (!modelOp)
+    return emitOpError() << "`" << getTraceTapModelAttr()
+                         << "` does not reference a valid `arc.model`";
+  if (!modelOp.getTraceTaps())
+    return emitOpError() << "referenced model has no trace metadata";
+  if (modelOp.getTraceTapsAttr().size() <= *getTraceTapIndex())
+    return emitOpError() << "tap index exceeds model's tap array";
+  auto tapAttr =
+      cast<TraceTapAttr>(modelOp.getTraceTapsAttr()[*getTraceTapIndex()]);
+  if (tapAttr.getSigType().getValue() != getValue().getType())
+    return emitOpError() << "incorrect signal type in referenced tap attribute";
+
+  return success();
+}
+
+LogicalResult StateWriteOp::verify() {
+  if (getTraceTapIndex().has_value() == getTraceTapModel().has_value())
+    return success();
+  return emitOpError() << "must specify both a trace tap model and index";
+}
+
+//===----------------------------------------------------------------------===//
 // CallOp
 //===----------------------------------------------------------------------===//
 
@@ -662,6 +694,40 @@ SimGetPortOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult SimStepOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *moduleOp = getSupportedModuleOp(
+      symbolTable, getOperation(),
+      llvm::cast<SimModelInstanceType>(getInstance().getType())
+          .getModel()
+          .getAttr());
+  if (!moduleOp)
+    return failure();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SimGetTimeOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+SimGetTimeOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *moduleOp = getSupportedModuleOp(
+      symbolTable, getOperation(),
+      llvm::cast<SimModelInstanceType>(getInstance().getType())
+          .getModel()
+          .getAttr());
+  if (!moduleOp)
+    return failure();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SimSetTimeOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+SimSetTimeOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   Operation *moduleOp = getSupportedModuleOp(
       symbolTable, getOperation(),
       llvm::cast<SimModelInstanceType>(getInstance().getType())

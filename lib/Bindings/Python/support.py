@@ -143,8 +143,12 @@ def type_to_pytype(t) -> ir.Type:
     return rtg.MemoryBlockType(t)
   if rtg.TupleType.isinstance(t):
     return rtg.TupleType(t)
+  if rtg.StringType.isinstance(t):
+    return rtg.StringType(t)
   if rtgtest.IntegerRegisterType.isinstance(t):
     return rtgtest.IntegerRegisterType(t)
+  if rtgtest.FloatRegisterType.isinstance(t):
+    return rtgtest.FloatRegisterType(t)
   if rtgtest.CPUType.isinstance(t):
     return rtgtest.CPUType(t)
 

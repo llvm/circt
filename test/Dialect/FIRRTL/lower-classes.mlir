@@ -611,3 +611,67 @@ firrtl.circuit "MissingConversionCastRegression" {
   firrtl.class private @Bar() {
   }
 }
+
+// Test that external modules with the same defname:
+//
+// 1. create only one class
+// 2. drop property ports from both external modules
+//
+// See: https://github.com/llvm/circt/issues/9468
+//
+// CHECK-LABEL: firrtl.circuit "SameDefname"
+firrtl.circuit "SameDefname" {
+  // CHECK:      firrtl.extmodule @Bar_1
+  // CHECK-NOT:    in a: !firrtl.integer
+  // CHECK-SAME:   out b: !firrtl.uint<1>
+  firrtl.extmodule @Bar_1<WIDTH: ui32 = 1>(
+    in a: !firrtl.integer,
+    out b: !firrtl.uint<1>
+  ) attributes {defname = "Bar"}
+  // CHECK:      firrtl.extmodule @Bar_2
+  // CHECK-NOT:    in a: !firrtl.integer
+  // CHECK-SAME:   out b: !firrtl.uint<2>
+  firrtl.extmodule @Bar_2<WIDTH: ui32 = 2>(
+    in a: !firrtl.integer,
+    out b: !firrtl.uint<2>
+  ) attributes {defname = "Bar"}
+  // CHECK:      om.class.extern @Bar_Class(
+  // CHECK-SAME:   %basepath: !om.basepath
+  // CHECK-SAME:   %a: !om.integer
+  firrtl.module @SameDefname() {
+    %bar_1_a, %bar_1_b = firrtl.instance bar_1 @Bar_1(
+      in a: !firrtl.integer,
+      out b: !firrtl.uint<1>
+    )
+    %bar_2_a, %bar_2_b = firrtl.instance bar_2 @Bar_2(
+      in a: !firrtl.integer,
+      out b: !firrtl.uint<2>
+    )
+    %0 = firrtl.integer 0
+    firrtl.propassign %bar_1_a, %0 : !firrtl.integer
+    firrtl.propassign %bar_2_a, %0 : !firrtl.integer
+  }
+}
+
+firrtl.circuit "UnknownValue" {
+  // Simple class for testing unknown object references
+  firrtl.class private @SimpleClass(out %value: !firrtl.integer) {
+    %0 = firrtl.integer 42
+    firrtl.propassign %value, %0 : !firrtl.integer
+  }
+
+  // CHECK-LABEL: om.class @UnknownValue_Class
+  // CHECK-SAME: -> (a: !om.integer, b: !om.string, c: !om.class.type<@SimpleClass>)
+  firrtl.module @UnknownValue(out %a: !firrtl.integer, out %b: !firrtl.string, out %c: !firrtl.class<@SimpleClass(out value: !firrtl.integer)>) {
+    // CHECK: %[[UNKNOWN_INT:.+]] = om.unknown : !om.integer
+    %0 = firrtl.unknown : !firrtl.integer
+    firrtl.propassign %a, %0 : !firrtl.integer
+    // CHECK: %[[UNKNOWN_STR:.+]] = om.unknown : !om.string
+    %1 = firrtl.unknown : !firrtl.string
+    firrtl.propassign %b, %1 : !firrtl.string
+    // CHECK: %[[UNKNOWN_OBJ:.+]] = om.unknown : !om.class.type<@SimpleClass>
+    %2 = firrtl.unknown : !firrtl.class<@SimpleClass(out value: !firrtl.integer)>
+    firrtl.propassign %c, %2 : !firrtl.class<@SimpleClass(out value: !firrtl.integer)>
+    // CHECK: om.class.fields %[[UNKNOWN_INT]], %[[UNKNOWN_STR]], %[[UNKNOWN_OBJ]] : !om.integer, !om.string, !om.class.type<@SimpleClass>
+  }
+}

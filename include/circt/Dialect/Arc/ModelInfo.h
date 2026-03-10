@@ -51,7 +51,7 @@ struct ModelInfo {
 
 struct ModelInfoAnalysis {
   explicit ModelInfoAnalysis(Operation *container);
-  llvm::DenseMap<ModelOp, ModelInfo> infoMap;
+  llvm::MapVector<ModelOp, ModelInfo> infoMap;
 };
 
 /// Collects information about states within the provided Arc model storage

@@ -663,21 +663,21 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     sv.if [[TMP2]] {
     // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.macro.ref.expr @ASSERT_VERBOSE_COND_
     // CHECK-NEXT:       sv.if [[ASSERT_VERBOSE_COND]] {
-    // CHECK-NEXT:         sv.error "assert1 %d, %d"(%value, %false) : i42, i1
+    // CHECK-NEXT:         sv.error.procedural "assert1 %d, %d"(%value, %false) : i42, i1
     // CHECK-NEXT:       }
     // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref.expr @STOP_COND_
     // CHECK-NEXT:       sv.if [[STOP_COND]] {
-    // CHECK-NEXT:         sv.fatal
+    // CHECK-NEXT:         sv.fatal.procedural
     // CHECK-NEXT:       }
     // CHECK-NEXT:     }
     // CHECK-NEXT:     sv.if [[TMP4]] {
     // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.macro.ref.expr @ASSERT_VERBOSE_COND_
     // CHECK-NEXT:       sv.if [[ASSERT_VERBOSE_COND]] {
-    // CHECK-NEXT:         sv.error "assert2 %d"([[SIGNEDVAL]]) : i24
+    // CHECK-NEXT:         sv.error.procedural "assert2 %d"([[SIGNEDVAL]]) : i24
     // CHECK-NEXT:       }
     // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.macro.ref.expr @STOP_COND_
     // CHECK-NEXT:       sv.if [[STOP_COND]] {
-    // CHECK-NEXT:         sv.fatal
+    // CHECK-NEXT:         sv.fatal.procedural
     // CHECK-NEXT:       }
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
@@ -708,7 +708,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK: %[[TIME:.+]] = sv.system.time
     // CHECK:      sv.if %ASSERT_VERBOSE_COND_ {
-    // CHECK-NEXT:   sv.error "In %m at %0t, value = %d"(%[[TIME]], %value) : i64, i42
+    // CHECK-NEXT:   sv.error.procedural "In %m at %0t, value = %d"(%[[TIME]], %value) : i64, i42
     %time2 = firrtl.fstring.time : !firrtl.fstring
     %hier2 = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
     firrtl.assert %clock, %cond, %enable, "In {{}} at {{}}, value = %d"(%hier2, %time2, %value) : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.fstring, !firrtl.fstring, !firrtl.uint<42> {format = "ifElseFatal", isConcurrent = true}
@@ -1929,4 +1929,100 @@ firrtl.circuit "Foo" {
     dbg.variable "c", %c : !firrtl.uint<42>
     dbg.variable "d", %d : !firrtl.uint<1337>
   }
+}
+
+// -----
+
+// Test that externalRequirements is transferred from
+// firrtl.extmodule to hw.module.extern during lowering.
+firrtl.circuit "ExternalRequirements" {
+  // CHECK-LABEL: hw.module.extern @ExtMod()
+  // CHECK-SAME: circt.external_requirements = ["lib1", "lib2"]
+  firrtl.extmodule @ExtMod() attributes {
+    externalRequirements = ["lib1", "lib2"]
+  }
+  firrtl.module @ExternalRequirements() {
+    firrtl.instance ext @ExtMod()
+  }
+}
+
+// -----
+
+// Test that instance_choice is lowered
+firrtl.circuit "InstanceChoiceTest" {
+  // CHECK-NOT: firrtl.option
+  // CHECK-NOT: firrtl.option_case
+  sv.macro.decl @__option__Opt_FPGA
+  sv.macro.decl @__option__Power_Low
+  firrtl.option @Opt {
+    firrtl.option_case @FPGA { case_macro = @__option__Opt_FPGA }
+  }
+
+  firrtl.option @Power {
+    firrtl.option_case @Low { case_macro = @__option__Power_Low }
+  }
+
+  sv.macro.decl @InstanceChoiceUnit_inst
+  sv.macro.decl @InstanceChoiceTop_inst
+
+  firrtl.module private @ModuleDefault(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    firrtl.matchingconnect %out, %in : !firrtl.uint<8>
+  }
+
+  firrtl.module private @ModuleFPGA(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    firrtl.matchingconnect %out, %in : !firrtl.uint<8>
+  }
+
+  firrtl.module private @Bar() {}
+  firrtl.module private @Baz() {}
+
+  // CHECK-LABEL: hw.module @InstanceChoiceUnit
+  firrtl.module @InstanceChoiceUnit(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    // CHECK:      %[[WIRE:.+]] = sv.wire
+    // CHECK:      %[[READ:.+]] = sv.read_inout %[[WIRE]]
+    // CHECK:      sv.ifdef @__option__Opt_FPGA {
+    // CHECK-NEXT:   %{{.+}} = hw.instance "inst_FPGA" sym @{{.+}} @ModuleFPGA
+    // CHECK-NEXT:   sv.assign %[[WIRE]]
+    // CHECK-NEXT: } else {
+    // CHECK-NEXT:   {{.+}} = hw.instance "inst_default" sym @{{.+}} @ModuleDefault
+    // CHECK-NEXT:   sv.assign %[[WIRE]]
+    // CHECK-NEXT:   sv.ifdef @InstanceChoiceUnit_inst
+    // CHECK-NEXT:   } else {
+    // CHECK-NEXT:     sv.macro.def @InstanceChoiceUnit_inst
+    // CHECK-SAME:     ([#hw.innerNameRef<@InstanceChoiceUnit::@{{.+}}>])
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    // CHECK: hw.output %[[READ]]
+    %inst_in, %inst_out = firrtl.instance_choice inst {instance_macro = @InstanceChoiceUnit_inst} @ModuleDefault alternatives @Opt { @FPGA -> @ModuleFPGA } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    firrtl.matchingconnect %inst_in, %in : !firrtl.uint<8>
+    firrtl.matchingconnect %out, %inst_out : !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: hw.module @InstanceChoiceTest
+  firrtl.module @InstanceChoiceTest(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    %inst_in, %inst_out = firrtl.instance inst @InstanceChoiceUnit (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+
+    firrtl.matchingconnect %inst_in, %in : !firrtl.uint<8>
+    firrtl.matchingconnect %out, %inst_out : !firrtl.uint<8>
+    firrtl.instance_choice inst {instance_macro = @InstanceChoiceTop_inst} @Bar alternatives @Power { @Low -> @Baz } ()
+  }
+
+  // CHECK-LABEL: emit.file "targets-InstanceChoiceUnit-Opt-FPGA.svh"
+  // CHECK-NEXT:    emit.verbatim "// Specialization file for public module: InstanceChoiceUnit\0A// Option: Opt, Case: FPGA\0A"
+  // CHECK-NEXT:       sv.ifdef @__option__Opt_FPGA {
+  // CHECK-NEXT:    } else {
+  // CHECK-NEXT:       sv.macro.def @__option__Opt_FPGA ""
+  // CHECK-NEXT:    }
+  // CHECK-NEXT:    sv.ifdef @InstanceChoiceUnit_inst {
+  // CHECK-NEXT:      sv.macro.error
+  // CHECK-NEXT:    } else {
+  // CHECK-NEXT:      sv.macro.def @InstanceChoiceUnit_inst "{{[{][{]}}0{{[}][}]}}"([#hw.innerNameRef<@InstanceChoiceUnit::@{{.+}}>])
+  // CHECK-NEXT:    }
+  // CHECK-NEXT:  } {output_file = #hw.output_file<"targets-InstanceChoiceUnit-Opt-FPGA.svh", excludeFromFileList>}
+
+  // CHECK-LABEL: emit.file "targets-InstanceChoiceTest-Opt-FPGA.svh"
+  // CHECK:         sv.macro.def @InstanceChoiceUnit_inst
+
+  // CHECK-LABEL: emit.file "targets-InstanceChoiceTest-Power-Low.svh"
+  // CHECK:         sv.macro.def @InstanceChoiceTop_inst
 }

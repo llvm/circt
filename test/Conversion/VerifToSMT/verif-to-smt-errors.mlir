@@ -59,6 +59,28 @@ hw.module @OneAssertion(in %x: i1) {
 
 // -----
 
+func.func @multiple_asserting_funcs_bmc() -> (i1) {
+  // expected-error @below {{bounded model checking problems with multiple assertions are not yet correctly handled - instead, you can assert the conjunction of your assertions}}
+  %bmc = verif.bmc bound 10 num_regs 0 initial_values []
+  init {}
+  loop {}
+  circuit {
+  ^bb0(%arg0: i32, %arg1: i1, %arg2: i1):
+    func.call @OneAssertion(%arg1) : (i1) -> ()
+    func.call @OneAssertion(%arg2) : (i1) -> ()
+    %sum = comb.add %arg0, %arg0 : i32
+    verif.yield %sum : i32
+  }
+  func.return %bmc : i1
+}
+
+func.func @OneAssertion(%x: i1) {
+  verif.assert %x : i1
+  func.return
+}
+
+// -----
+
 func.func @no_assertions() -> (i1) {
   // expected-warning @below {{no property provided to check in module - will trivially find no violations.}}
   %bmc = verif.bmc bound 10 num_regs 0 initial_values []

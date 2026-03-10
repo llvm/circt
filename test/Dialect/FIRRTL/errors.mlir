@@ -2540,6 +2540,21 @@ firrtl.circuit "Top" {
 
 // -----
 
+firrtl.circuit "IntmoduleWithInstanceChoice" {
+  firrtl.option @Opt {
+    firrtl.option_case @A
+  }
+
+  firrtl.intmodule @test(in i: !firrtl.clock, out size: !firrtl.uint<32>) attributes {intrinsic = "circt.sizeof"}
+
+  firrtl.module @IntmoduleWithInstanceChoice() {
+    // expected-error @below {{intmodule must be instantiated with instance op, not via 'firrtl.instance_choice'}}
+    %i1, %size = firrtl.instance_choice inst interesting_name @test alternatives @Opt { @A -> @test }(in i: !firrtl.clock, out size: !firrtl.uint<32>)
+  }
+}
+
+// -----
+
 firrtl.circuit "DPI" {
   firrtl.module @DPI(in %clock : !firrtl.clock, in %enable : !firrtl.uint<1>, in %in_0: !firrtl.uint<4>, in %in_1: !firrtl.uint) {
     // expected-error @below {{unknown width is not allowed for DPI}}
@@ -3262,19 +3277,94 @@ firrtl.circuit "WrongInstanceChoiceDomainInfo" {
 
 // -----
 
-firrtl.circuit "AnonDomainPointingAtNonDomain" {
-  firrtl.extmodule @Foo()
+firrtl.circuit "UndefinedDomainInAnonDomain" {
   firrtl.module @UndefinedDomainInAnonDomain() {
-    // expected-error @below {{references undefined domain '@Foo'}}
+    // expected-error @below {{references undefined symbol '@Foo'}}
     %0 = firrtl.domain.anon : !firrtl.domain of @Foo
   }
 }
 
 // -----
 
-firrtl.circuit "UndefinedDomainInAnonDomain" {
-  firrtl.module @UndefinedDomainInAnonDomain() {
-    // expected-error @below {{references undefined domain '@Foo'}}
+firrtl.circuit "AnonDomainPointingAtNonDomain" {
+  firrtl.extmodule @Foo()
+  firrtl.module @AnonDomainPointingAtNonDomain() {
+    // expected-error @below {{references symbol '@Foo' which is not a domain}}
     %0 = firrtl.domain.anon : !firrtl.domain of @Foo
   }
+}
+
+// -----
+
+firrtl.circuit "UndefinedDomainInCreateDomain" {
+  firrtl.module @UndefinedDomainInCreateDomain() {
+    // expected-error @below {{references undefined symbol '@Foo'}}
+    %my_domain = firrtl.domain.create : !firrtl.domain of @Foo
+  }
+}
+
+// -----
+
+firrtl.circuit "CreateDomainPointingAtNonDomain" {
+  firrtl.extmodule @Foo()
+  firrtl.module @CreateDomainPointingAtNonDomain() {
+    // expected-error @below {{references symbol '@Foo' which is not a domain}}
+    %my_domain = firrtl.domain.create : !firrtl.domain of @Foo
+  }
+}
+
+// -----
+
+firrtl.circuit "UnknownValueReferencesUnknownClass" {
+  firrtl.module @UnknownValueReferencesUnknownClass() {
+    // expected-error @below {{refers to non-existent class ("Missing")}}
+    %0 = firrtl.unknown : !firrtl.class<@Missing()>
+  }
+}
+
+// -----
+
+firrtl.circuit "UnknownValueReferencesNonClass" {
+  firrtl.extmodule @Foo()
+  firrtl.module @UnknownValueReferencesNonClass() {
+    // expected-error @below {{refers to a non-class type ("Foo")}}
+    %0 = firrtl.unknown : !firrtl.class<@Foo()>
+  }
+}
+
+// -----
+firrtl.circuit "NonExistentMacroSymbol" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+
+  firrtl.module @Foo() {}
+  firrtl.module @Choice() {
+    // expected-error @below {{'firrtl.instance_choice' op instance_macro @__target_Platform_Choice_inst does not exist}}
+    firrtl.instance_choice inst {instance_macro = @__target_Platform_Choice_inst} @Foo alternatives @Platform {
+      @FPGA -> @Foo
+    } ()
+  }
+}
+
+// -----
+firrtl.circuit "OptionCaseUndefinedMacro" {
+  firrtl.option @Platform {
+    // expected-error @below {{'firrtl.option_case' op case_macro references an undefined symbol: @NonExistentMacro}}
+    firrtl.option_case @FPGA {case_macro = @NonExistentMacro}
+  }
+
+  firrtl.module @OptionCaseUndefinedMacro() {}
+}
+
+// -----
+firrtl.circuit "OptionCaseWrongSymbolType" {
+  firrtl.module private @NotAMacro() {}
+
+  firrtl.option @Platform {
+    // expected-error @below {{'firrtl.option_case' op case_macro must reference a macro declaration}}
+    firrtl.option_case @FPGA {case_macro = @NotAMacro}
+  }
+
+  firrtl.module @OptionCaseWrongSymbolType() {}
 }

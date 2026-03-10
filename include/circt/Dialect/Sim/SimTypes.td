@@ -44,4 +44,32 @@ def DynamicStringType : SimTypeDef<"DynamicString"> {
   }];
 }
 
+def QueueType : SimTypeDef<"Queue"> {
+  let mnemonic = "queue";
+  let summary = "a queue type"; 
+  let description = [{
+    An ordered container of elements with an optional upper bound 
+    on the number of elements that it can hold. If this bound is 0, then the
+    queue has unrestricted capacity.
+
+    Even though practical lowerings of this type likely have to hold the queue
+    contents in dynamically-allocated heap memory, *this type has value
+    semantics*.
+  }];
+
+  let parameters = (ins
+    "::mlir::Type":$elementType,
+    "unsigned":$bound
+  );
+  let assemblyFormat = [{
+    `<` $elementType `,` $bound `>`
+  }];
+  let builders = [
+    AttrBuilderWithInferredContext<
+      (ins "Type":$elementType, "unsigned":$bound), [{
+        return $_get(elementType.getContext(), elementType, bound);
+      }]>
+  ];
+}
+
 #endif // CIRCT_DIALECT_SIM_SIMTYPES_TD

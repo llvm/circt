@@ -167,7 +167,7 @@ static LogicalResult convert(ClockedTerminateOp op, PatternRewriter &rewriter) {
   if (op.getSuccess())
     rewriter.replaceOpWithNewOp<sv::FinishOp>(op, op.getVerbose());
   else
-    rewriter.replaceOpWithNewOp<sv::FatalOp>(op, op.getVerbose());
+    rewriter.replaceOpWithNewOp<sv::FatalProceduralOp>(op, op.getVerbose());
   return success();
 }
 
@@ -180,7 +180,7 @@ static LogicalResult convert(TerminateOp op, PatternRewriter &rewriter) {
   if (op.getSuccess())
     rewriter.replaceOpWithNewOp<sv::FinishOp>(op, op.getVerbose());
   else
-    rewriter.replaceOpWithNewOp<sv::FatalOp>(op, op.getVerbose());
+    rewriter.replaceOpWithNewOp<sv::FatalProceduralOp>(op, op.getVerbose());
   return success();
 }
 

@@ -691,6 +691,27 @@ IntegerShlOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
 }
 
 //===----------------------------------------------------------------------===//
+// UnknownValueOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult circt::om::UnknownValueOp::verifySymbolUses(
+    SymbolTableCollection &symbolTable) {
+
+  // Unknown values of non-class type don't need to be verified.
+  auto classType = dyn_cast<ClassType>(getType());
+  if (!classType)
+    return success();
+
+  // Verify the referred to ClassOp exists.
+  auto className = classType.getClassName();
+  if (symbolTable.lookupNearestSymbolFrom<ClassLike>(*this, className))
+    return success();
+
+  return emitOpError() << "refers to non-existant class (\""
+                       << className.getValue() << "\")";
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

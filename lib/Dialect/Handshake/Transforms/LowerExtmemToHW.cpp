@@ -192,7 +192,7 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
 
   // Maintain the arguments which each memory will add to the inner module
   // instance.
-  llvm::SmallVector<llvm::OwningArrayRef<Value>> instanceArgsForMem;
+  llvm::SmallVector<llvm::SmallVector<Value>> instanceArgsForMem;
 
   for (auto [i, memType] : argReplacements) {
 
@@ -242,7 +242,7 @@ LogicalResult HandshakeLowerExtmemToHWPass::wrapESI(
       ++resIdx;
     }
 
-    instanceArgsForMem.emplace_back(instanceArgsFromThisMem);
+    instanceArgsForMem.emplace_back(std::move(instanceArgsFromThisMem));
   }
 
   // Stitch together arguments from the top-level ESI wrapper and the instance
@@ -307,6 +307,14 @@ static Value truncateToMemoryWidth(Location loc, OpBuilder &b, Value v,
                                    MemRefType memRefType) {
   assert(isa<IndexType>(v.getType()) && "Expected an index-typed value");
   auto addrWidth = llvm::Log2_64_Ceil(memRefType.getShape().front());
+  if (addrWidth == 0) {
+    // Arith doesn't support i0, just create a constant i0 with control
+    // dependency on the value.
+    auto ctrl = handshake::JoinOp::create(b, loc, v).getResult();
+    return handshake::ConstantOp::create(
+        b, loc, b.getIntegerType(0), b.getIntegerAttr(b.getIntegerType(0), 0),
+        ctrl);
+  }
   return arith::IndexCastOp::create(b, loc, b.getIntegerType(addrWidth), v);
 }
 

@@ -31,6 +31,7 @@
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/pair.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/tuple.h>
 #include <nanobind/stl/unique_ptr.h>
 #include <nanobind/stl/vector.h>
 #if defined(__GNUC__)
@@ -134,6 +135,12 @@ NB_MODULE(esiCppAccel, m) {
       .def(nb::init<const Type::ID &>(), nb::arg("id"));
   nb::class_<AnyType, Type>(m, "AnyType")
       .def(nb::init<const Type::ID &>(), nb::arg("id"));
+  nb::class_<TypeAliasType, Type>(m, "TypeAliasType")
+      .def(nb::init<const Type::ID &, std::string, const Type *>(),
+           nb::arg("id"), nb::arg("name"), nb::arg("inner_type"))
+      .def_prop_ro("name", &TypeAliasType::getName)
+      .def_prop_ro("inner", &TypeAliasType::getInnerType,
+                   nb::rv_policy::reference);
   nb::class_<BitVectorType, Type>(m, "BitVectorType")
       .def(nb::init<const Type::ID &, uint64_t>(), nb::arg("id"),
            nb::arg("width"))

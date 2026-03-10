@@ -116,10 +116,10 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
 // CHECK:    [[BMC:%.+]] = smt.solver
 // CHECK:      [[INIT:%.+]]:2 = func.call @bmc_init()
 // CHECK:      smt.push 1
-// CHECK:      [[F0:%.+]] = smt.declare_fun : !smt.bv<32>
-// CHECK:      [[F1:%.+]] = smt.declare_fun : !smt.bv<32>
+// CHECK:      [[F0:%.+]] = smt.declare_fun "input_1" : !smt.bv<32>
+// CHECK:      [[F1:%.+]] = smt.declare_fun "reg_0" : !smt.bv<32>
 // CHECK:      [[C42_BV32:%.+]] = smt.bv.constant #smt.bv<42> : !smt.bv<32>
-// CHECK:      [[ARRAYFUN:%.+]] = smt.declare_fun : !smt.array<[!smt.bv<1> -> !smt.bv<32>]>
+// CHECK:      [[ARRAYFUN:%.+]] = smt.declare_fun "reg_2" : !smt.array<[!smt.bv<1> -> !smt.bv<32>]>
 // CHECK:      [[C0_I32:%.+]] = arith.constant 0 : i32
 // CHECK:      [[C1_I32:%.+]] = arith.constant 1 : i32
 // CHECK:      [[C10_I32:%.+]] = arith.constant 10 : i32
@@ -139,7 +139,7 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
 // CHECK:        }
 // CHECK:        [[ORI:%.+]] = arith.ori [[SMTCHECK]], [[ARG7]]
 // CHECK:        [[LOOP:%.+]]:2 = func.call @bmc_loop([[ARG1]], [[ARG6]])
-// CHECK:        [[F2:%.+]] = smt.declare_fun : !smt.bv<32>
+// CHECK:        [[F2:%.+]] = smt.declare_fun "input_1" : !smt.bv<32>
 // CHECK:        [[OLDCLOCKLOW:%.+]] = smt.bv.not [[ARG1]]
 // CHECK:        [[BVPOSEDGE:%.+]] = smt.bv.and [[OLDCLOCKLOW]], [[LOOP]]#0
 // CHECK:        [[BVTRUE:%.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
@@ -190,7 +190,7 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
 // CHECK1:        [[SMTCHECK:%.+]] = smt.check
 // CHECK1:        [[ORI:%.+]] = arith.ori [[SMTCHECK]], {{%.*}}
 // CHECK1:        [[LOOP:%.+]]:2 = func.call @bmc_loop({{%.*}}, {{%.*}})
-// CHECK1:        [[F:%.+]] = smt.declare_fun : !smt.bv<32>
+// CHECK1:        [[F:%.+]] = smt.declare_fun "input_1" : !smt.bv<32>
 // CHECK1:        scf.yield [[LOOP]]#0, [[F]], [[CIRCUIT]]#1, [[CIRCUIT]]#2, [[CIRCUIT]]#3, [[LOOP]]#1, [[ORI]]
 
 func.func @test_bmc() -> (i1) {

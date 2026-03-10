@@ -53,8 +53,10 @@ void AnnotateInputOnlyModulesPass::runOnOperation() {
   bool changed = false;
   auto &instanceInfo = getAnalysis<InstanceInfo>();
   for (auto module : circuit.getOps<FModuleOp>()) {
-    // Input only modules.
-    if (!instanceInfo.anyInstanceInEffectiveDesign(module) || module.isPublic())
+    // Inline input only modules in design.
+    // Don't inline if the module is public or has a layer enabled.
+    if (!instanceInfo.anyInstanceInEffectiveDesign(module) ||
+        module.isPublic() || !module.getLayers().empty())
       continue;
 
     // Check if the module has only input ports (no output ports)

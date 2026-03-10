@@ -79,6 +79,8 @@ hw.module @preset(in %clock : !seq.clock, in %reset : i1, in %next : i32) {
   %a = seq.firreg %next clock %clock preset 0 : i32
   // CHECK: %b = seq.firreg %next clock %clock preset 0 {sv.namehint = "x"} : i32
   %b = seq.firreg %next clock %clock preset 0 {sv.namehint = "x"} : i32
+  // CHECK: %c = seq.firreg %next clock %clock preset 4294967295 : i32
+  %c = seq.firreg %next clock %clock preset 4294967295 : i32
 }
 
 hw.module @clock_dividers(in %clock: !seq.clock) {

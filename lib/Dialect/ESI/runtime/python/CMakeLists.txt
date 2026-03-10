@@ -9,6 +9,7 @@ set(ESIPythonRuntimeSources
   esiaccel/types.py
   esiaccel/utils.py
   esiaccel/cosim/questa.py
+  esiaccel/cosim/pytest.py
   esiaccel/cosim/simulator.py
   esiaccel/cosim/verilator.py
 )
@@ -48,6 +49,10 @@ if(Python3_FOUND)
     if (WHEEL_BUILD)
       message (FATAL_ERROR "nanobind is required for a wheel build.")
     endif()
+  elseif(MSVC AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+    # On MSVC in Debug mode, nanobind's CRT mismatch causes linking issues
+    # with the Python import library. Disable the Python module entirely.
+    message(WARNING "Disabling ESI Python API in MSVC Debug mode due to nanobind CRT incompatibility.")
   else()
     # Compile nanobind module and copy to the correct python directory.
     nanobind_add_module(esiCppAccel
@@ -60,6 +65,7 @@ if(Python3_FOUND)
       target_link_options(esiCppAccel PRIVATE
         -static-libstdc++
         -static-libgcc
+        -Wl,--exclude-libs,ALL
       )
     endif()
 

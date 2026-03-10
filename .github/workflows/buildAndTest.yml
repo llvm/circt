@@ -8,6 +8,11 @@ on:
     types: [assigned, opened, synchronize, reopened]
   workflow_dispatch:
 
+# Cancel previous CI builds when a new push occurs to the same PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Do sanity check (clang-format and python-format) first.
   sanity-check:
@@ -93,6 +98,13 @@ jobs:
           if [[ ! -z $files ]]; then
             yapf --diff $files
           fi
+
+      # Check that test files with "REQUIRES: slang" have "// UNSUPPORTED: valgrind"
+      - name: slang-valgrind-check
+        if: ${{ always() }}
+        run: |
+          python3 utils/find_slang_tests_without_valgrind.py test
+          python3 utils/find_slang_tests_without_valgrind.py integration_test
 
       # Upload the format patches to an artifact (zip'd) associated
       # with the workflow run. Only run this on a failure.

@@ -73,6 +73,10 @@ struct SynthOptimizationPipelineOptions
       *this, "disable-word-to-bits",
       llvm::cl::desc("Disable LowerWordToBits pass"), llvm::cl::init(false)};
 
+  PassOptions::Option<bool> disableSOPBalancing{
+      *this, "disable-sop-balancing",
+      llvm::cl::desc("Disable SOPBalancing pass"), llvm::cl::init(true)};
+
   PassOptions::Option<bool> timingAware{
       *this, "timing-aware",
       llvm::cl::desc("Lower operators in a timing-aware fashion"),

@@ -71,6 +71,8 @@ enum class CompanionMode {
 
 /// The mode for the InferDomains pass.
 enum class InferDomainsMode {
+  /// Erase domains from the input circuit.
+  Strip,
   /// Check domains without inference.
   Check,
   /// Check domains with inference for private modules.

@@ -561,7 +561,7 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     FetchContent_Declare(
       slang
       GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
-      GIT_TAG v9.1
+      GIT_TAG v10.0
       GIT_SHALLOW ON
     )
     set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
@@ -607,7 +607,7 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang)
     install(TARGETS slang_slang EXPORT CIRCTTargets)
   else()
-    find_package(slang 9.1 REQUIRED)
+    find_package(slang 10.0 REQUIRED)
   endif()
 endif()
 
@@ -628,6 +628,12 @@ endif()
 if (CIRCT_INCLUDE_TESTS)
   add_definitions(-DCIRCT_INCLUDE_TESTS)
 endif()
+
+# Add circt-tblgen early, since it sets a few variables needed by other parts of
+# the project.
+add_subdirectory(tools/circt-tblgen)
+set(CIRCT_TABLEGEN_EXE "${CIRCT_TABLEGEN_EXE}" CACHE INTERNAL "")
+set(CIRCT_TABLEGEN_TARGET "${CIRCT_TABLEGEN_TARGET}" CACHE INTERNAL "")
 
 add_subdirectory(include/circt)
 add_subdirectory(lib)
@@ -652,7 +658,7 @@ if (CIRCT_INCLUDE_DOCS)
 endif()
 
 install(DIRECTORY include/circt include/circt-c
-  DESTINATION include
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
   COMPONENT circt-headers
   FILES_MATCHING
   PATTERN "*.def"
@@ -664,7 +670,7 @@ install(DIRECTORY include/circt include/circt-c
   )
 
 install(DIRECTORY ${CIRCT_INCLUDE_DIR}/circt ${CIRCT_INCLUDE_DIR}/circt-c
-  DESTINATION include
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
   COMPONENT circt-headers
   FILES_MATCHING
   PATTERN "*.def"

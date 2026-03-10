@@ -281,3 +281,18 @@ om.class @IntegerArithmetic() {
 
   om.class.fields
 }
+
+om.class @UnknownValueObject(%a: i8) {
+  om.class.fields
+}
+
+// CHECK-LABEL: @UnknownValue(
+om.class @UnknownValue() {
+  // CHECK-NEXT: %0 = om.unknown : i8
+  %0 = om.unknown : i8
+
+  // CHECK-NEXT: %1 = om.object @UnknownValueObject(%0) : (i8) -> !om.class.type<@UnknownValueObject>
+  %1 = om.object @UnknownValueObject(%0) : (i8) -> !om.class.type<@UnknownValueObject>
+
+  om.class.fields
+}

@@ -162,33 +162,6 @@ static Value castFromFIRRTLType(Value val, Type type,
   return val;
 }
 
-/// Move a ExtractTestCode related annotation from annotations to an attribute.
-static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
-                          StringRef annoClass, StringRef attrBase) {
-  auto anno = annos.getAnnotation(annoClass);
-  auto *ctx = top.getContext();
-  if (!anno)
-    return;
-  if (auto dir = anno.getMember<StringAttr>("directory")) {
-    SmallVector<NamedAttribute> old;
-    for (auto i : top->getAttrs())
-      old.push_back(i);
-    old.emplace_back(
-        StringAttr::get(ctx, attrBase),
-        hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue(), true, true));
-    top->setAttrs(old);
-  }
-  if (auto file = anno.getMember<StringAttr>("filename")) {
-    SmallVector<NamedAttribute> old;
-    for (auto i : top->getAttrs())
-      old.push_back(i);
-    old.emplace_back(StringAttr::get(ctx, attrBase + ".bindfile"),
-                     hw::OutputFileAttr::getFromFilename(
-                         ctx, file.getValue(), /*excludeFromFileList=*/true));
-    top->setAttrs(old);
-  }
-}
-
 static unsigned getBitWidthFromVectorSize(unsigned size) {
   return size == 1 ? 1 : llvm::Log2_64_Ceil(size);
 }
@@ -251,10 +224,12 @@ struct CircuitLoweringState {
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
                        firrtl::VerificationFlavor verificationFlavor,
-                       InstanceGraph &instanceGraph, NLATable *nlaTable)
+                       InstanceGraph &instanceGraph, NLATable *nlaTable,
+                       const InstanceChoiceMacroTable &macroTable)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
         enableAnnotationWarning(enableAnnotationWarning),
-        verificationFlavor(verificationFlavor), nlaTable(nlaTable) {
+        verificationFlavor(verificationFlavor), nlaTable(nlaTable),
+        macroTable(macroTable) {
     auto *context = circuitOp.getContext();
 
     // Get the testbench output directory.
@@ -266,9 +241,13 @@ struct CircuitLoweringState {
     }
 
     for (auto &op : *circuitOp.getBodyBlock()) {
-      if (auto module = dyn_cast<FModuleLike>(op))
-        if (AnnotationSet::removeAnnotations(module, dutAnnoClass))
+      if (auto module = dyn_cast<FModuleLike>(op)) {
+        if (AnnotationSet::removeAnnotations(module, markDUTAnnoClass))
           dut = module;
+
+        // Pre-allocate the entry for this module.
+        instanceChoicesByModuleAndCase.try_emplace(module.getModuleNameAttr());
+      }
     }
 
     // Figure out which module is the DUT and TestHarness.  If there is no
@@ -465,6 +444,29 @@ private:
     macroDeclNames.insert(name);
   }
 
+  /// Information about an instance choice for a specific option case.
+  struct LoweredInstanceChoice {
+    StringAttr parentModule;
+    FlatSymbolRefAttr instanceMacro;
+    hw::InstanceOp hwInstance;
+  };
+
+  using OptionAndCase = std::pair<StringAttr, StringAttr>;
+
+  // Map from moduleName to (optionName, caseName) to list of instance choices.
+  DenseMap<StringAttr,
+           DenseMap<OptionAndCase, SmallVector<LoweredInstanceChoice>>>
+      instanceChoicesByModuleAndCase;
+
+  void addInstanceChoiceForCase(StringAttr optionName, StringAttr caseName,
+                                StringAttr parentModule,
+                                FlatSymbolRefAttr instanceMacro,
+                                hw::InstanceOp hwInstance) {
+    OptionAndCase innerKey{optionName, caseName};
+    instanceChoicesByModuleAndCase.at(parentModule)[innerKey].push_back(
+        {parentModule, instanceMacro, hwInstance});
+  }
+
   /// The list of fragments on which the modules rely. Must be set outside the
   /// parallelized module lowering since module type reads access it.
   DenseMap<hw::HWModuleOp, SetVector<Attribute>> fragments;
@@ -559,6 +561,9 @@ private:
   // emit.files for additional sources for verbatim extmodules
   llvm::StringMap<emit::FileOp> emitFilesByFileName;
   llvm::sys::SmartMutex<true> emitFilesMutex;
+
+  // Instance choice macro table for looking up option case macros
+  const InstanceChoiceMacroTable &macroTable;
 };
 
 void CircuitLoweringState::processRemainingAnnotations(
@@ -586,25 +591,24 @@ void CircuitLoweringState::processRemainingAnnotations(
             // If the accompanying pass runs on the HW dialect, then LowerToHW
             // should have consumed and processed these into an attribute on the
             // output.
-            dontObfuscateModuleAnnoClass, noDedupAnnoClass,
+            noDedupAnnoClass,
             // The following are inspected (but not consumed) by FIRRTL/GCT
             // passes that have all run by now. Since no one is responsible for
             // consuming these, they will linger around and can be ignored.
-            dutAnnoClass, metadataDirectoryAttrName,
-            elaborationArtefactsDirectoryAnnoClass, testBenchDirAnnoClass,
+            markDUTAnnoClass, metadataDirAnnoClass, testBenchDirAnnoClass,
             // This annotation is used to mark which external modules are
             // imported blackboxes from the BlackBoxReader pass.
             blackBoxAnnoClass,
             // This annotation is used by several GrandCentral passes.
-            extractGrandCentralClass,
+            extractGrandCentralAnnoClass,
             // The following will be handled while lowering the verification
             // ops.
-            extractAssertAnnoClass, extractAssumeAnnoClass,
+            extractAssertionsAnnoClass, extractAssumptionsAnnoClass,
             extractCoverageAnnoClass,
             // The following will be handled after lowering FModule ops, since
             // they are still needed on the circuit until after lowering
             // FModules.
-            moduleHierAnnoClass, testHarnessHierAnnoClass,
+            moduleHierarchyAnnoClass, testHarnessHierarchyAnnoClass,
             blackBoxTargetDirAnnoClass))
       continue;
 
@@ -625,6 +629,14 @@ struct FIRRTLModuleLowering
 
 private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
+  void emitInstanceChoiceIncludes(mlir::ModuleOp circuit,
+                                  CircuitLoweringState &loweringState);
+  static void emitInstanceChoiceIncludeFile(
+      OpBuilder &builder, ModuleOp circuit, StringAttr publicModuleName,
+      StringAttr optionName, StringAttr caseName,
+      ArrayRef<CircuitLoweringState::LoweredInstanceChoice> instances,
+      Namespace &circuitNamespace, const InstanceChoiceMacroTable &macroTable);
+
   LogicalResult lowerPorts(ArrayRef<PortInfo> firrtlPorts,
                            SmallVectorImpl<hw::PortInfo> &ports,
                            Operation *moduleOp, StringRef moduleName,
@@ -695,20 +707,12 @@ void FIRRTLModuleLowering::runOnOperation() {
   // if lowering failed.
   CircuitLoweringState state(circuit, enableAnnotationWarning,
                              verificationFlavor, getAnalysis<InstanceGraph>(),
-                             &getAnalysis<NLATable>());
+                             &getAnalysis<NLATable>(),
+                             getAnalysis<InstanceChoiceMacroTable>());
 
   SmallVector<Operation *, 32> opsToProcess;
 
   AnnotationSet circuitAnno(circuit);
-  moveVerifAnno(getOperation(), circuitAnno, extractAssertAnnoClass,
-                "firrtl.extract.assert");
-  moveVerifAnno(getOperation(), circuitAnno, extractAssumeAnnoClass,
-                "firrtl.extract.assume");
-  moveVerifAnno(getOperation(), circuitAnno, extractCoverageAnnoClass,
-                "firrtl.extract.cover");
-  circuitAnno.removeAnnotationsWithClass(
-      extractAssertAnnoClass, extractAssumeAnnoClass, extractCoverageAnnoClass);
-
   state.processRemainingAnnotations(circuit, circuitAnno);
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across. If any module fails to lower, return early.
@@ -775,6 +779,10 @@ void FIRRTLModuleLowering::runOnOperation() {
               opsToProcess.push_back(fileOp);
               return success();
             })
+            .Case<OptionOp, OptionCaseOp>([&](auto) {
+              // Option operations are removed after lowering instance choices.
+              return success();
+            })
             .Default([&](Operation *op) {
               // We don't know what this op is.  If it has no illegal FIRRTL
               // types, we can forward the operation.  Otherwise, we emit an
@@ -797,7 +805,7 @@ void FIRRTLModuleLowering::runOnOperation() {
   SmallVector<Attribute> dutHierarchyFiles;
   SmallVector<Attribute> testHarnessHierarchyFiles;
   circuitAnno.removeAnnotations([&](Annotation annotation) {
-    if (annotation.isClass(moduleHierAnnoClass)) {
+    if (annotation.isClass(moduleHierarchyAnnoClass)) {
       auto file = hw::OutputFileAttr::getFromFilename(
           &getContext(),
           annotation.getMember<StringAttr>("filename").getValue(),
@@ -805,7 +813,7 @@ void FIRRTLModuleLowering::runOnOperation() {
       dutHierarchyFiles.push_back(file);
       return true;
     }
-    if (annotation.isClass(testHarnessHierAnnoClass)) {
+    if (annotation.isClass(testHarnessHierarchyAnnoClass)) {
       auto file = hw::OutputFileAttr::getFromFilename(
           &getContext(),
           annotation.getMember<StringAttr>("filename").getValue(),
@@ -861,6 +869,11 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // Emit all the macros and preprocessor gunk at the start of the file.
   lowerFileHeader(circuit, state);
+
+  // Emit global include files for instance choice options.
+  // Make sure to call after `lowerFileHeader` so that symbols generated for
+  // instance choices don't conflict with the macros defined in the header.
+  emitInstanceChoiceIncludes(getOperation(), state);
 
   // Now that the modules are moved over, remove the Circuit.
   circuit.erase();
@@ -1008,6 +1021,137 @@ endpackage
         emitGuardedDefine("STOP_COND", "STOP_COND_", "(`STOP_COND)", "1");
       });
     });
+  }
+}
+
+/// Helper function to emit a single instance choice include file for a given
+/// (option, case) combination.
+void FIRRTLModuleLowering::emitInstanceChoiceIncludeFile(
+    OpBuilder &builder, mlir::ModuleOp circuit, StringAttr publicModuleName,
+    StringAttr optionName, StringAttr caseName,
+    ArrayRef<CircuitLoweringState::LoweredInstanceChoice> instances,
+    Namespace &circuitNamespace, const InstanceChoiceMacroTable &macroTable) {
+  // If no instances, don't emit anything.
+  if (instances.empty())
+    return;
+
+  // Filename format: targets_<PublicModule>_<Option>_<Case>.svh
+  SmallString<128> includeFileName;
+  {
+    llvm::raw_svector_ostream os(includeFileName);
+    os << "targets-" << publicModuleName.getValue() << "-"
+       << optionName.getValue() << "-" << caseName.getValue() << ".svh";
+  }
+
+  // Create the emit.file operation at the top level
+  auto emitFile =
+      emit::FileOp::create(builder, circuit.getLoc(), includeFileName,
+                           circuitNamespace.newName(includeFileName));
+  OpBuilder::InsertionGuard g(builder);
+  builder.setInsertionPointToStart(&emitFile.getBodyRegion().front());
+
+  // Add header comment
+  {
+    SmallString<256> headerComment;
+    llvm::raw_svector_ostream os(headerComment);
+    os << "// Specialization file for public module: "
+       << publicModuleName.getValue() << "\n"
+       << "// Option: " << optionName.getValue()
+       << ", Case: " << caseName.getValue() << "\n";
+    emit::VerbatimOp::create(builder, circuit.getLoc(),
+                             builder.getStringAttr(headerComment));
+  }
+
+  // Define the global option case macro to avoid conflicts
+  // `ifndef <optionCaseMacro>
+  //  `define <optionCaseMacro>
+  // `endif
+  auto optionCaseMacroRef = macroTable.getMacro(optionName, caseName);
+  sv::IfDefOp::create(
+      builder, circuit.getLoc(), optionCaseMacroRef, [&]() {},
+      [&]() {
+        sv::MacroDefOp::create(builder, circuit.getLoc(), optionCaseMacroRef);
+      });
+
+  // Emit instance name macros for all instances in this module
+  for (auto info : instances) {
+    auto innerSym = info.hwInstance.getInnerSymAttr();
+    assert(innerSym && "expected instance to have inner symbol");
+
+    sv::IfDefOp::create(
+        builder, circuit.getLoc(), info.instanceMacro,
+        [&]() {
+          // Error checking: macro must not already be set
+          // `ifdef <instanceMacroName>
+          //  `ERROR<instanceMacroName>__must__not__be__set
+          // `else
+          //  `define <instanceMacroName> <InnerRef to instance>
+          // `endif
+          SmallString<256> errorMessage;
+          llvm::raw_svector_ostream os(errorMessage);
+          os << info.instanceMacro.getAttr().getValue() << "_must_not_be_set";
+          sv::MacroErrorOp::create(builder, circuit.getLoc(),
+                                   builder.getStringAttr(errorMessage));
+        },
+        [&]() {
+          sv::MacroDefOp::create(
+              builder, circuit.getLoc(), info.instanceMacro,
+              builder.getStringAttr("{{0}}"),
+              ArrayAttr::get(builder.getContext(),
+                             ArrayRef<Attribute>(hw::InnerRefAttr::get(
+                                 info.parentModule, innerSym.getSymName()))));
+        });
+  }
+
+  // Set output file attribute .svh files should be excluded from file list
+  emitFile->setAttr("output_file", hw::OutputFileAttr::getFromFilename(
+                                       builder.getContext(), includeFileName,
+                                       /*excludeFromFileList=*/true));
+}
+
+/// Creates one include file per public module and option case following the
+/// FIRRTL ABI spec.
+void FIRRTLModuleLowering::emitInstanceChoiceIncludes(
+    mlir::ModuleOp topLevelModule, CircuitLoweringState &loweringState) {
+  if (loweringState.instanceChoicesByModuleAndCase.empty())
+    return;
+
+  OpBuilder builder(&getContext());
+  builder.setInsertionPointToEnd(topLevelModule.getBody());
+  Namespace circuitNamespace;
+  circuitNamespace.add(topLevelModule);
+  igraph::InstanceGraph instanceGraph(topLevelModule);
+
+  // Find all public modules
+  for (auto module : topLevelModule.getOps<hw::HWModuleOp>()) {
+    if (!module.isPublic())
+      continue;
+
+    // Collect all instance choices reachable from this public module.
+    // Grouped by (optionName, caseName).
+    DenseMap<CircuitLoweringState::OptionAndCase,
+             SmallVector<CircuitLoweringState::LoweredInstanceChoice>>
+        choicesInHierarchy;
+
+    // Walk all modules reachable from this public module and accumulate all
+    // instance choices from each module.
+    for (auto *node : llvm::post_order(instanceGraph.lookup(module))) {
+      auto it = loweringState.instanceChoicesByModuleAndCase.find(
+          node->getModule().getModuleNameAttr());
+      if (it == loweringState.instanceChoicesByModuleAndCase.end())
+        continue;
+
+      for (auto &[key, instances] : it->second)
+        choicesInHierarchy[key].append(instances.begin(), instances.end());
+    }
+
+    // Emit one include file for each (option, case) combination
+    for (auto key : loweringState.macroTable.getKeys())
+      emitInstanceChoiceIncludeFile(
+          builder, topLevelModule, module.getModuleNameAttr(),
+          /*optionName=*/key.first,
+          /*caseName=*/key.second, choicesInHierarchy.lookup(key),
+          circuitNamespace, loweringState.macroTable);
   }
 }
 
@@ -1332,9 +1476,15 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   bool hasOutputPort =
       llvm::any_of(firrtlPorts, [&](auto p) { return p.isOutput(); });
   if (!hasOutputPort &&
-      AnnotationSet::removeAnnotations(oldModule, verifBlackBoxAnnoClass) &&
+      AnnotationSet::removeAnnotations(oldModule,
+                                       internalVerifBlackBoxAnnoClass) &&
       loweringState.isInDUT(oldModule))
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
+
+  // Transfer external requirements
+  if (auto extReqs = oldModule.getExternalRequirements();
+      extReqs && !extReqs.empty())
+    newModule->setAttr("circt.external_requirements", extReqs);
 
   if (handleForceNameAnnos(oldModule, annos, loweringState))
     return {};
@@ -1383,9 +1533,15 @@ sv::SVVerbatimModuleOp FIRRTLModuleLowering::lowerVerbatimExtModule(
   bool hasOutputPort =
       llvm::any_of(firrtlPorts, [&](auto p) { return p.isOutput(); });
   if (!hasOutputPort &&
-      AnnotationSet::removeAnnotations(oldModule, verifBlackBoxAnnoClass) &&
+      AnnotationSet::removeAnnotations(oldModule,
+                                       internalVerifBlackBoxAnnoClass) &&
       loweringState.isInDUT(oldModule))
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
+
+  // Transfer external requirements
+  if (auto extReqs = oldModule.getExternalRequirements();
+      extReqs && !extReqs.empty())
+    newModule->setAttr("circt.external_requirements", extReqs);
 
   if (handleForceNameAnnos(oldModule, annos, loweringState))
     return {};
@@ -1462,7 +1618,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   // Transform module annotations
   AnnotationSet annos(oldModule);
 
-  if (annos.removeAnnotation(verifBlackBoxAnnoClass))
+  if (annos.removeAnnotation(internalVerifBlackBoxAnnoClass))
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
 
   // If this is in the test harness, make sure it goes to the test directory.
@@ -1852,6 +2008,13 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
     return attr;
   }
 
+  /// Prepare input operands for instance creation. Processes port information
+  /// and creates backedges for input ports and wires for inout ports.
+  /// Returns failure if any port type cannot be lowered.
+  LogicalResult prepareInstanceOperands(ArrayRef<PortInfo> portInfo,
+                                        Operation *instanceOp,
+                                        SmallVectorImpl<Value> &inputOperands);
+
   void runWithInsertionPointAtEndOfBlock(const std::function<void(void)> &fn,
                                          Region &region);
 
@@ -1917,6 +2080,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitDecl(RegResetOp op);
   LogicalResult visitDecl(MemOp op);
   LogicalResult visitDecl(InstanceOp oldInstance);
+  LogicalResult visitDecl(InstanceChoiceOp oldInstanceChoice);
   LogicalResult visitDecl(VerbatimWireOp op);
   LogicalResult visitDecl(ContractOp op);
 
@@ -2560,7 +2724,7 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
     }
 
     if (firrtl::type_cast<IntType>(sourceType).isSigned())
-      return comb::createOrFoldSExt(value, resultType, builder);
+      return comb::createOrFoldSExt(builder, value, resultType);
     auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
     return builder.createOrFold<comb::ConcatOp>(zero, value);
   };
@@ -2709,7 +2873,7 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value src, Type target) {
   // Extension follows the sign of the src value, not the destination.
   auto valueFIRType = type_cast<FIRRTLBaseType>(src.getType()).getPassiveType();
   if (type_cast<IntType>(valueFIRType).isSigned())
-    return comb::createOrFoldSExt(loweredSrc, loweredDstType, builder);
+    return comb::createOrFoldSExt(builder, loweredSrc, loweredDstType);
 
   auto zero = getOrCreateIntConstant(dstWidth - loweredSrcWidth, 0);
   return builder.createOrFold<comb::ConcatOp>(zero, loweredSrc);
@@ -2775,7 +2939,7 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
   auto valueFIRType =
       type_cast<FIRRTLBaseType>(value.getType()).getPassiveType();
   if (type_cast<IntType>(valueFIRType).isSigned())
-    return comb::createOrFoldSExt(result, resultType, builder);
+    return comb::createOrFoldSExt(builder, result, resultType);
 
   auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
   return builder.createOrFold<comb::ConcatOp>(zero, result);
@@ -3814,6 +3978,64 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   return success();
 }
 
+LogicalResult
+FIRRTLLowering::prepareInstanceOperands(ArrayRef<PortInfo> portInfo,
+                                        Operation *instanceOp,
+                                        SmallVectorImpl<Value> &inputOperands) {
+
+  for (size_t portIndex = 0, e = portInfo.size(); portIndex != e; ++portIndex) {
+    auto &port = portInfo[portIndex];
+    auto portType = lowerType(port.type);
+    if (!portType) {
+      instanceOp->emitOpError("could not lower type of port ") << port.name;
+      return failure();
+    }
+
+    // Drop zero bit input/inout ports.
+    if (portType.isInteger(0))
+      continue;
+
+    // We wire outputs up after creating the instance.
+    if (port.isOutput())
+      continue;
+
+    auto portResult = instanceOp->getResult(portIndex);
+    assert(portResult && "invalid IR, couldn't find port");
+
+    // Replace the input port with a backedge.  If it turns out that this port
+    // is never driven, an uninitialized wire will be materialized at the end.
+    if (port.isInput()) {
+      inputOperands.push_back(createBackedge(portResult, portType));
+      continue;
+    }
+
+    // If the result has an analog type and is used only by attach op, try
+    // eliminating a temporary wire by directly using an attached value.
+    if (type_isa<AnalogType>(portResult.getType()) && portResult.hasOneUse()) {
+      if (auto attach = dyn_cast<AttachOp>(*portResult.getUsers().begin())) {
+        if (auto source = getSingleNonInstanceOperand(attach)) {
+          auto loweredResult = getPossiblyInoutLoweredValue(source);
+          inputOperands.push_back(loweredResult);
+          (void)setLowering(portResult, loweredResult);
+          continue;
+        }
+      }
+    }
+
+    // Create a wire for each inout operand, so there is something to connect
+    // to. The instance becomes the sole driver of this wire.
+    auto wire = sv::WireOp::create(builder, portType,
+                                   "." + port.getName().str() + ".wire");
+
+    // Know that the argument FIRRTL value is equal to this wire, allowing
+    // connects to it to be lowered.
+    (void)setLowering(portResult, wire);
+    inputOperands.push_back(wire);
+  }
+
+  return success();
+}
+
 LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   Operation *oldModule =
       oldInstance.getReferencedModule(circuitState.getInstanceGraph());
@@ -3835,65 +4057,11 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   // module.
   SmallVector<PortInfo, 8> portInfo = cast<FModuleLike>(oldModule).getPorts();
 
-  // Build an index from the name attribute to an index into portInfo, so we
-  // can do efficient lookups.
-  llvm::SmallDenseMap<Attribute, unsigned> portIndicesByName;
-  for (unsigned portIdx = 0, e = portInfo.size(); portIdx != e; ++portIdx)
-    portIndicesByName[portInfo[portIdx].name] = portIdx;
-
   // Ok, get ready to create the new instance operation.  We need to prepare
   // input operands.
   SmallVector<Value, 8> operands;
-  for (size_t portIndex = 0, e = portInfo.size(); portIndex != e; ++portIndex) {
-    auto &port = portInfo[portIndex];
-    auto portType = lowerType(port.type);
-    if (!portType) {
-      oldInstance->emitOpError("could not lower type of port ") << port.name;
-      return failure();
-    }
-
-    // Drop zero bit input/inout ports.
-    if (portType.isInteger(0))
-      continue;
-
-    // We wire outputs up after creating the instance.
-    if (port.isOutput())
-      continue;
-
-    auto portResult = oldInstance.getResult(portIndex);
-    assert(portResult && "invalid IR, couldn't find port");
-
-    // Replace the input port with a backedge.  If it turns out that this port
-    // is never driven, an uninitialized wire will be materialized at the end.
-    if (port.isInput()) {
-      operands.push_back(createBackedge(portResult, portType));
-      continue;
-    }
-
-    // If the result has an analog type and is used only by attach op, try
-    // eliminating a temporary wire by directly using an attached value.
-    if (type_isa<AnalogType>(portResult.getType()) && portResult.hasOneUse()) {
-      if (auto attach = dyn_cast<AttachOp>(*portResult.getUsers().begin())) {
-        if (auto source = getSingleNonInstanceOperand(attach)) {
-          auto loweredResult = getPossiblyInoutLoweredValue(source);
-          operands.push_back(loweredResult);
-          (void)setLowering(portResult, loweredResult);
-          continue;
-        }
-      }
-    }
-
-    // Create a wire for each inout operand, so there is something to connect
-    // to. The instance becomes the sole driver of this wire.
-    auto wire = sv::WireOp::create(builder, portType,
-                                   "." + port.getName().str() + ".wire");
-
-    // Know that the argument FIRRTL value is equal to this wire, allowing
-    // connects to it to be lowered.
-    (void)setLowering(portResult, wire);
-
-    operands.push_back(wire);
-  }
+  if (failed(prepareInstanceOperands(portInfo, oldInstance, operands)))
+    return failure();
 
   // If this instance is destined to be lowered to a bind, generate a symbol
   // for it and generate a bind op.  Enter the bind into global
@@ -3945,6 +4113,143 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     (void)setLowering(oldPortResult, resultVal);
     ++resultNo;
   }
+  return success();
+}
+
+LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
+  if (oldInstanceChoice.getInnerSymAttr()) {
+    oldInstanceChoice->emitOpError(
+        "instance choice with inner sym cannot be lowered");
+    return failure();
+  }
+
+  // Require instance_macro to be set before lowering
+  FlatSymbolRefAttr instanceMacro = oldInstanceChoice.getInstanceMacroAttr();
+  if (!instanceMacro)
+    return oldInstanceChoice->emitOpError(
+        "must have instance_macro attribute set before "
+        "lowering");
+
+  // Get all the target modules
+  auto moduleNames = oldInstanceChoice.getModuleNamesAttr();
+  auto caseNames = oldInstanceChoice.getCaseNamesAttr();
+
+  // Get the default module.
+  auto defaultModuleName = oldInstanceChoice.getDefaultTargetAttr();
+  auto *defaultModuleNode =
+      circuitState.getInstanceGraph().lookup(defaultModuleName.getAttr());
+
+  Operation *defaultModule = defaultModuleNode->getModule();
+
+  // Get port information from the default module (all alternatives must have
+  // same ports).
+  SmallVector<PortInfo, 8> portInfo =
+      cast<FModuleLike>(defaultModule).getPorts();
+
+  // Prepare input operands.
+  SmallVector<Value, 8> inputOperands;
+  if (failed(
+          prepareInstanceOperands(portInfo, oldInstanceChoice, inputOperands)))
+    return failure();
+
+  // Create wires for output ports.
+  SmallVector<sv::WireOp, 8> outputWires;
+  StringRef wirePrefix = oldInstanceChoice.getInstanceName();
+  for (size_t portIndex = 0, e = portInfo.size(); portIndex != e; ++portIndex) {
+    auto &port = portInfo[portIndex];
+    if (port.isInput())
+      continue;
+    auto portType = lowerType(port.type);
+    if (!portType || portType.isInteger(0))
+      continue;
+    auto wire = sv::WireOp::create(
+        builder, portType, wirePrefix.str() + "." + port.getName().str());
+    outputWires.push_back(wire);
+    if (failed(setLowering(oldInstanceChoice.getResult(portIndex), wire)))
+      return failure();
+  }
+
+  auto optionName = oldInstanceChoice.getOptionNameAttr();
+
+  // Lambda to create an instance for a given module and assign outputs to wires
+  auto createInstanceAndAssign = [&](Operation *oldMod,
+                                     StringRef suffix) -> hw::InstanceOp {
+    auto *newMod = circuitState.getNewModule(oldMod);
+
+    ArrayAttr parameters;
+    if (auto oldExtModule = dyn_cast<FExtModuleOp>(oldMod))
+      parameters = getHWParameters(oldExtModule, /*ignoreValues=*/false);
+
+    // Create instance name with suffix
+    SmallString<64> instName;
+    instName = oldInstanceChoice.getInstanceName();
+    if (!suffix.empty()) {
+      instName += "_";
+      instName += suffix;
+    }
+
+    auto inst =
+        hw::InstanceOp::create(builder, newMod, builder.getStringAttr(instName),
+                               inputOperands, parameters, nullptr);
+    (void)getOrAddInnerSym(
+        hw::InnerSymTarget(inst.getOperation()),
+        [&]() -> hw::InnerSymbolNamespace & { return moduleNamespace; });
+
+    // Assign instance outputs to the wires
+    for (unsigned i = 0; i < inst.getNumResults(); ++i)
+      sv::AssignOp::create(builder, outputWires[i], inst.getResult(i));
+
+    return inst;
+  };
+
+  // Build macro names and module list for nested ifdefs.
+  SmallVector<StringAttr> macroNames;
+  SmallVector<Operation *> altModules;
+  for (size_t i = 0, e = caseNames.size(); i < e; ++i) {
+    altModules.push_back(
+        circuitState.getInstanceGraph()
+            .lookup(cast<FlatSymbolRefAttr>(moduleNames[i + 1]).getAttr())
+            ->getModule());
+
+    // Get the macro name for this option case using InstanceChoiceMacroTable.
+    auto optionCaseMacroRef = circuitState.macroTable.getMacro(
+        optionName, cast<SymbolRefAttr>(caseNames[i]).getLeafReference());
+    if (!optionCaseMacroRef)
+      return oldInstanceChoice->emitOpError(
+          "failed to get macro for option case");
+    macroNames.push_back(optionCaseMacroRef.getAttr());
+  }
+
+  // Use the helper function to create nested ifdefs and register instances.
+  sv::createNestedIfDefs(
+      macroNames,
+      /*ifdefCtor=*/
+      [&](StringRef macro, std::function<void()> thenCtor,
+          std::function<void()> elseCtor) {
+        addToIfDefBlock(macro, std::move(thenCtor), std::move(elseCtor));
+      },
+      [&](size_t index) {
+        auto caseSymRef =
+            cast<SymbolRefAttr>(caseNames[index]).getLeafReference();
+        circuitState.addInstanceChoiceForCase(
+            optionName, caseSymRef, theModule.getNameAttr(), instanceMacro,
+            createInstanceAndAssign(altModules[index], caseSymRef.getValue()));
+      },
+      [&]() {
+        auto inst = createInstanceAndAssign(defaultModule, "default");
+        // Define the instance macro for the default case.
+        sv::IfDefOp::create(
+            builder, inst.getLoc(), instanceMacro, [&]() {},
+            [&]() {
+              sv::MacroDefOp::create(
+                  builder, inst.getLoc(), instanceMacro,
+                  builder.getStringAttr("{{0}}"),
+                  builder.getArrayAttr({hw::InnerRefAttr::get(
+                      theModule.getNameAttr(),
+                      inst.getInnerSymAttr().getSymName())}));
+            });
+      });
+
   return success();
 }
 
@@ -5331,7 +5636,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       // Handle the `ifElseFatal` format, which does not emit an SVA but
       // rather a process that uses $error and $fatal to perform the checks.
       auto boolType = IntegerType::get(builder.getContext(), 1);
-      predicate = comb::createOrFoldNot(predicate, builder, /*twoState=*/true);
+      predicate = comb::createOrFoldNot(builder, predicate, /*twoState=*/true);
       predicate = builder.createOrFold<comb::AndOp>(enable, predicate, true);
 
       circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
@@ -5347,10 +5652,12 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
             addIfProceduralBlock(
                 sv::MacroRefExprOp::create(builder, boolType,
                                            "ASSERT_VERBOSE_COND_"),
-                [&]() { sv::ErrorOp::create(builder, message, messageOps); });
+                [&]() {
+                  sv::ErrorProceduralOp::create(builder, message, messageOps);
+                });
             addIfProceduralBlock(
                 sv::MacroRefExprOp::create(builder, boolType, "STOP_COND_"),
-                [&]() { sv::FatalOp::create(builder); });
+                [&]() { sv::FatalProceduralOp::create(builder); });
           });
         });
       });
@@ -5361,7 +5668,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       // Except for covers, combine them: enable & predicate
       if (!isCover) {
         auto notEnable =
-            comb::createOrFoldNot(enable, builder, /*twoState=*/true);
+            comb::createOrFoldNot(builder, enable, /*twoState=*/true);
         predicate =
             builder.createOrFold<comb::OrOp>(notEnable, predicate, true);
       } else {
@@ -5441,7 +5748,7 @@ LogicalResult FIRRTLLowering::visitStmt(UnclockedAssumeIntrinsicOp op) {
         StringAttr::get(builder.getContext(), "assume__" + label.getValue());
   auto predicate = getLoweredValue(op.getPredicate());
   auto enable = getLoweredValue(op.getEnable());
-  auto notEnable = comb::createOrFoldNot(enable, builder, /*twoState=*/true);
+  auto notEnable = comb::createOrFoldNot(builder, enable, /*twoState=*/true);
   predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate, true);
 
   SmallVector<Value> messageOps;

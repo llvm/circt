@@ -12,8 +12,8 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
+#include "circt/Dialect/LLHD/LLHDPasses.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "llhd-sig2reg"
@@ -21,7 +21,7 @@
 namespace circt {
 namespace llhd {
 #define GEN_PASS_DEF_SIG2REG
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h.inc"
+#include "circt/Dialect/LLHD/LLHDPasses.h.inc"
 } // namespace llhd
 } // namespace circt
 

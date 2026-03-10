@@ -33,9 +33,13 @@ library(test) {
 // -----
 
 library(test) {
-  cell(C) {
-    pin(Z) { // expected-error {{expected function attribute}}
+  cell(C) { // expected-error {{cell 'C' has mixed output pins with and without 'function' attribute}}
+    pin(Z) {
       direction: output;
+    }
+    pin(Z2) {
+      direction: output;
+      function: "A * B";
     }
   }
 }

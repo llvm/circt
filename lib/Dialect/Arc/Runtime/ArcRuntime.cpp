@@ -17,6 +17,7 @@
 #include "circt/Dialect/Arc/Runtime/Common.h"
 #include "circt/Dialect/Arc/Runtime/FmtDescriptor.h"
 #include "circt/Dialect/Arc/Runtime/IRInterface.h"
+#include "circt/Dialect/Arc/Runtime/Internal.h"
 #include "circt/Dialect/Arc/Runtime/ModelInstance.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -36,23 +37,17 @@
 
 using namespace circt::arc::runtime;
 
-[[noreturn]] static void internalError(const char *message) {
-  std::cerr << "[ArcRuntime] Internal Error: " << message << std::endl;
-  assert(false && "ArcRuntime Internal Error");
-  abort();
-}
-
-static inline ModelInstance *getModelInstance(ArcState *instance) {
+static inline impl::ModelInstance *getModelInstance(const ArcState *instance) {
   assert(instance->impl != nullptr && "Instance is null");
-  return reinterpret_cast<ModelInstance *>(instance->impl);
+  return reinterpret_cast<impl::ModelInstance *>(instance->impl);
 }
 
 ArcState *arcRuntimeAllocateInstance(const ArcRuntimeModelInfo *model,
                                      const char *args) {
   if (model->apiVersion != ARC_RUNTIME_API_VERSION) {
-    internalError("API version mismatch.\nMake sure to use an ArcRuntime "
-                  "release matching "
-                  "the arcilator version used to build the hardware model.");
+    impl::fatalError("API version mismatch.\nMake sure to use an ArcRuntime "
+                     "release matching "
+                     "the arcilator version used to build the hardware model.");
     return nullptr;
   }
 
@@ -60,31 +55,35 @@ ArcState *arcRuntimeAllocateInstance(const ArcRuntimeModelInfo *model,
       calloc(1, sizeof(ArcState) + model->numStateBytes));
   assert(reinterpret_cast<intptr_t>(&statePtr->modelState[0]) % 16 == 0 &&
          "Simulation state must be 16 byte aligned");
-  statePtr->impl = new ModelInstance(model, args, statePtr);
+  statePtr->impl = new impl::ModelInstance(model, args, statePtr);
   statePtr->magic = ARC_RUNTIME_MAGIC;
   return statePtr;
 }
 
 void arcRuntimeDeleteInstance(ArcState *instance) {
   if (instance->impl)
-    delete reinterpret_cast<ModelInstance *>(instance->impl);
+    delete reinterpret_cast<impl::ModelInstance *>(instance->impl);
   free(instance);
 }
 
 uint64_t arcRuntimeGetAPIVersion() { return ARC_RUNTIME_API_VERSION; }
 
 void arcRuntimeOnEval(ArcState *instance) {
-  getModelInstance(instance)->onEval();
+  getModelInstance(instance)->onEval(instance);
+}
+
+void arcRuntimeOnInitialized(ArcState *instance) {
+  getModelInstance(instance)->onInitialized(instance);
 }
 
 ArcState *arcRuntimeGetStateFromModelState(uint8_t *modelState,
                                            uint64_t offset) {
   if (!modelState)
-    internalError("State pointer is null");
+    impl::fatalError("State pointer is null");
   uint8_t *modPtr = static_cast<uint8_t *>(modelState) - offset;
   ArcState *statePtr = reinterpret_cast<ArcState *>(modPtr - sizeof(ArcState));
   if (statePtr->magic != ARC_RUNTIME_MAGIC)
-    internalError("Incorrect magic number for state");
+    impl::fatalError("Incorrect magic number for state");
   return statePtr;
 }
 
@@ -98,6 +97,10 @@ uint8_t *arcRuntimeIR_allocInstance(const ArcRuntimeModelInfo *model,
 
 void arcRuntimeIR_onEval(uint8_t *modelState) {
   arcRuntimeOnEval(arcRuntimeGetStateFromModelState(modelState, 0));
+}
+
+void arcRuntimeIR_onInitialized(uint8_t *modelState) {
+  arcRuntimeOnInitialized(arcRuntimeGetStateFromModelState(modelState, 0));
 }
 
 void arcRuntimeIR_deleteInstance(uint8_t *modelState) {
@@ -189,12 +192,22 @@ void arcRuntimeIR_format(const FmtDescriptor *fmt, ...) {
   va_end(args);
 }
 
+uint64_t *arcRuntimeIR_swapTraceBuffer(const uint8_t *modelState) {
+  auto *modPtr = static_cast<const uint8_t *>(modelState);
+  auto *statePtr =
+      reinterpret_cast<const ArcState *>(modPtr - sizeof(ArcState));
+  if (statePtr->magic != ARC_RUNTIME_MAGIC)
+    impl::fatalError("Incorrect magic number for state");
+  return getModelInstance(statePtr)->swapTraceBuffer();
+}
+
 #ifdef ARC_RUNTIME_JIT_BIND
 namespace circt::arc::runtime {
 
 static const APICallbacks apiCallbacksGlobal{
     &arcRuntimeIR_allocInstance, &arcRuntimeIR_deleteInstance,
-    &arcRuntimeIR_onEval, &arcRuntimeIR_format};
+    &arcRuntimeIR_onEval,        &arcRuntimeIR_onInitialized,
+    &arcRuntimeIR_format,        &arcRuntimeIR_swapTraceBuffer};
 
 const APICallbacks &getArcRuntimeAPICallbacks() { return apiCallbacksGlobal; }
 

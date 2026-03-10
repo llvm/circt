@@ -104,7 +104,16 @@ struct FormatStringParser {
     auto specifierLower = std::tolower(specifier);
 
     // Special handling for format specifiers that consume no argument.
-    if (specifierLower == 'm' || specifierLower == 'l')
+    // %m/%M prints the hierarchical path of the module instance.
+    if (specifierLower == 'm') {
+      bool useEscapes = std::isupper(specifier);
+      fragments.push_back(
+          moore::FormatHierPathOp::create(builder, loc, useEscapes));
+      return success();
+    }
+
+    // %l prints the library and cell name of the scope; not yet supported.
+    if (specifierLower == 'l')
       return mlir::emitError(loc)
              << "unsupported format specifier `" << fullSpecifier << "`";
 

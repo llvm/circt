@@ -204,7 +204,7 @@ struct ConvertCmpToAdd : public OpRewritePattern<comb::ICmpOp> {
     SmallVector<Value> rhsExtend;
     for (auto addend : rhsAddends) {
       auto ext = comb::createZExt(rewriter, op.getLoc(), addend, width + 1);
-      auto negatedAddend = comb::createOrFoldNot(op.getLoc(), ext, rewriter);
+      auto negatedAddend = comb::createOrFoldNot(rewriter, op.getLoc(), ext);
       rhsExtend.push_back(negatedAddend);
     }
 
@@ -222,7 +222,7 @@ struct ConvertCmpToAdd : public OpRewritePattern<comb::ICmpOp> {
       return success();
     }
 
-    auto notOp = comb::createOrFoldNot(op.getLoc(), msb, rewriter);
+    auto notOp = comb::createOrFoldNot(rewriter, op.getLoc(), msb);
     rewriter.replaceOp(op, notOp);
     return success();
   }

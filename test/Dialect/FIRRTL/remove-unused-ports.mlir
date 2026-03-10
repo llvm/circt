@@ -180,3 +180,21 @@ firrtl.circuit "UnusedOutput"  {
     firrtl.matchingconnect %b, %singleDriver_b : !firrtl.uint<1>
   }
 }
+
+// -----
+
+// Test that probe types (ref types) are handled correctly when removing unused ports.
+// Probe types are not FIRRTLBaseType and cannot be invalidated with InvalidValueOp.
+firrtl.circuit "ProbeTypes" {
+  // CHECK-LABEL: firrtl.module @ProbeTypes
+  firrtl.module @ProbeTypes() {
+    // CHECK: firrtl.instance Bar @Bar()
+    %Bar_ref = firrtl.instance Bar @Bar(out ref: !firrtl.probe<clock>)
+  }
+
+  // The unused probe output port should be removed without crashing.
+  // CHECK-LABEL: firrtl.module private @Bar() {
+  // CHECK-NEXT: }
+  firrtl.module private @Bar(out %ref: !firrtl.probe<clock>) {
+  }
+}

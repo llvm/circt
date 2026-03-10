@@ -15,7 +15,6 @@ circuit RegUnderInlineLayer:
 
     ; CHECK: `ifdef layer$A
     ; CHECK:   reg  myreg;
-    ; CHECK:   wire myreg_probe = myreg;
     ; CHECK:   always @(posedge clock) begin
     ; CHECK:     if (reset)
     ; CHECK:       myreg <= 1'h0;
@@ -55,7 +54,6 @@ circuit RegUnderInlineLayer:
     ; CHECK: `ifdef layer$A
     ; CHECK:   `ifdef layer$A$B
     ; CHECK:     reg  myreg;
-    ; CHECK:     wire myreg_probe = myreg;
     ; CHECK:     always @(posedge clock) begin
     ; CHECK:       if (reset)
     ; CHECK:         myreg <= 1'h0;
@@ -96,7 +94,6 @@ circuit RegUnderInlineLayer:
   ; CHECK: module RegUnderInlineLayer_A();
   ; CHECK:   `ifdef layer$A$B
   ; CHECK:     reg  myreg;
-  ; CHECK:     wire myreg_probe = myreg;
   ; CHECK:     always @(posedge RegUnderInlineLayer.clock) begin
   ; CHECK:       if (RegUnderInlineLayer.reset)
   ; CHECK:         myreg <= 1'h0;

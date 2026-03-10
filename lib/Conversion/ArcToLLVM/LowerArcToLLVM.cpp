@@ -15,7 +15,10 @@
 #include "circt/Dialect/Arc/Runtime/Common.h"
 #include "circt/Dialect/Arc/Runtime/FmtDescriptor.h"
 #include "circt/Dialect/Arc/Runtime/JITBind.h"
+#include "circt/Dialect/Arc/Runtime/TraceTaps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
+#include "circt/Dialect/LLHD/LLHDTypes.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Support/ConversionPatternSet.h"
@@ -155,6 +158,48 @@ struct StateWriteOpLowering : public OpConversionPattern<arc::StateWriteOp> {
     return success();
   }
 };
+
+//===----------------------------------------------------------------------===//
+// Time Operations Lowering
+//===----------------------------------------------------------------------===//
+
+struct CurrentTimeOpLowering : public OpConversionPattern<arc::CurrentTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(arc::CurrentTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    // Time is stored at offset 0 in storage (no offset needed).
+    Value ptr = adaptor.getStorage();
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, rewriter.getI64Type(), ptr);
+    return success();
+  }
+};
+
+// `llhd.int_to_time` is a no-op
+struct IntToTimeOpLowering : public OpConversionPattern<llhd::IntToTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(llhd::IntToTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOp(op, adaptor.getInput());
+    return success();
+  }
+};
+
+// `llhd.time_to_int` is a no-op
+struct TimeToIntOpLowering : public OpConversionPattern<llhd::TimeToIntOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(llhd::TimeToIntOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOp(op, adaptor.getInput());
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// Memory and Storage Lowering
+//===----------------------------------------------------------------------===//
 
 struct AllocMemoryOpLowering : public OpConversionPattern<arc::AllocMemoryOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -462,6 +507,12 @@ struct SimInstantiateOpLowering
                            ValueRange{allocated});
     }
 
+    // Call the runtime's 'onInitialized' function if present.
+    if (useRuntime)
+      LLVM::CallOp::create(rewriter, loc, TypeRange{},
+                           runtime::APICallbacks::symNameOnInitialized,
+                           {allocated});
+
     // Execute the body.
     rewriter.inlineBlockBefore(&adaptor.getBody().getBlocks().front(), op,
                                {allocated});
@@ -571,6 +622,36 @@ struct SimStepOpLowering : public ModelAwarePattern<arc::SimStepOp> {
     rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, mlir::TypeRange(), evalFunc,
                                               adaptor.getInstance());
 
+    return success();
+  }
+};
+
+// Loads the simulation time (i64 femtoseconds) from byte offset 0 in the
+// model instance's state storage.
+struct SimGetTimeOpLowering : public OpConversionPattern<arc::SimGetTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(arc::SimGetTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    // Time is stored at offset 0 in the instance storage.
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, rewriter.getI64Type(),
+                                              adaptor.getInstance());
+    return success();
+  }
+};
+
+// Stores the simulation time (i64 femtoseconds) to byte offset 0 in the
+// model instance's state storage.
+struct SimSetTimeOpLowering : public OpConversionPattern<arc::SimSetTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(arc::SimSetTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    // Time is stored at offset 0 in the instance storage.
+    rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getTime(),
+                                               adaptor.getInstance());
     return success();
   }
 };
@@ -947,32 +1028,173 @@ static LogicalResult convert(arc::ExecuteOp op, arc::ExecuteOp::Adaptor adaptor,
 // Runtime Implementation
 //===----------------------------------------------------------------------===//
 
+template <typename T, typename = std::enable_if_t<std::is_integral<T>::value>>
+static LLVM::GlobalOp
+buildGlobalConstantIntArray(OpBuilder &builder, Location loc, Twine symName,
+                            SmallVectorImpl<T> &data,
+                            unsigned alignment = alignof(T)) {
+  auto intType = builder.getIntegerType(8 * sizeof(T));
+  Attribute denseAttr = mlir::DenseElementsAttr::get(
+      mlir::RankedTensorType::get({(int64_t)data.size()}, intType),
+      llvm::ArrayRef(data));
+  auto globalOp = LLVM::GlobalOp::create(
+      builder, loc, LLVM::LLVMArrayType::get(intType, data.size()),
+      /*isConstant=*/true, LLVM::Linkage::Internal,
+      builder.getStringAttr(symName), denseAttr);
+  globalOp.setAlignmentAttr(builder.getI64IntegerAttr(alignment));
+  return globalOp;
+}
+
+// Construct a raw constant byte array from a vector of struct values
+template <typename T>
+static LLVM::GlobalOp
+buildGlobalConstantRuntimeStructArray(OpBuilder &builder, Location loc,
+                                      Twine symName,
+                                      SmallVectorImpl<T> &array) {
+  assert(!array.empty());
+  static_assert(std::is_standard_layout<T>(),
+                "Runtime struct must have standard layout");
+  int64_t numBytes = sizeof(T) * array.size();
+  Attribute denseAttr = mlir::DenseElementsAttr::get(
+      mlir::RankedTensorType::get({numBytes}, builder.getI8Type()),
+      llvm::ArrayRef(reinterpret_cast<uint8_t *>(array.data()), numBytes));
+  auto globalOp = LLVM::GlobalOp::create(
+      builder, loc, LLVM::LLVMArrayType::get(builder.getI8Type(), numBytes),
+      /*isConstant=*/true, LLVM::Linkage::Internal,
+      builder.getStringAttr(symName), denseAttr, alignof(T));
+  return globalOp;
+}
+
 struct RuntimeModelOpLowering
     : public OpConversionPattern<arc::RuntimeModelOp> {
   using OpConversionPattern::OpConversionPattern;
 
   static constexpr uint64_t runtimeApiVersion = ARC_RUNTIME_API_VERSION;
 
+  // Build the constant ArcModelTraceInfo struct and its members
+  LLVM::GlobalOp
+  buildTraceInfoStruct(arc::RuntimeModelOp &op,
+                       ConversionPatternRewriter &rewriter) const {
+    if (!op.getTraceTaps().has_value() || op.getTraceTaps()->empty())
+      return {};
+    // Construct the array of tap names/aliases
+    SmallVector<char> namesArray;
+    SmallVector<ArcTraceTap> tapArray;
+    tapArray.reserve(op.getTraceTaps()->size());
+    for (auto attr : op.getTraceTapsAttr()) {
+      auto tap = cast<TraceTapAttr>(attr);
+      assert(!tap.getNames().empty() &&
+             "Expected trace tap to have at least one name");
+      for (auto alias : tap.getNames()) {
+        auto aliasStr = cast<StringAttr>(alias);
+        namesArray.append(aliasStr.begin(), aliasStr.end());
+        namesArray.push_back('\0');
+      }
+      ArcTraceTap tapStruct;
+      tapStruct.stateOffset = tap.getStateOffset();
+      tapStruct.nameOffset = namesArray.size() - 1;
+      tapStruct.typeBits = tap.getSigType().getValue().getIntOrFloatBitWidth();
+      tapStruct.reserved = 0;
+      tapArray.emplace_back(tapStruct);
+    }
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    auto namesGlobal = buildGlobalConstantIntArray(
+        rewriter, op.getLoc(), "_arc_tap_names_" + op.getName(), namesArray);
+    auto traceTapsArrayGlobal = buildGlobalConstantRuntimeStructArray(
+        rewriter, op.getLoc(), "_arc_trace_taps_" + op.getName(), tapArray);
+
+    //
+    //  struct ArcModelTraceInfo {
+    //    uint64_t numTraceTaps;
+    //    struct ArcTraceTap *traceTaps;
+    //    const char *traceTapNames;
+    //    uint64_t traceBufferCapacity;
+    //  };
+    //
+    auto traceInfoStructType = LLVM::LLVMStructType::getLiteral(
+        getContext(),
+        {rewriter.getI64Type(), ptrTy, ptrTy, rewriter.getI64Type()});
+    static_assert(sizeof(ArcModelTraceInfo) == 32 &&
+                  "Unexpected size of ArcModelTraceInfo struct");
+
+    auto globalSymName =
+        rewriter.getStringAttr("_arc_trace_info_" + op.getName());
+    auto traceInfoGlobalOp = LLVM::GlobalOp::create(
+        rewriter, op.getLoc(), traceInfoStructType,
+        /*isConstant=*/false, LLVM::Linkage::Internal, globalSymName,
+        Attribute{}, alignof(ArcModelTraceInfo));
+    OpBuilder::InsertionGuard g(rewriter);
+
+    // Struct Initializer
+    Region &initRegion = traceInfoGlobalOp.getInitializerRegion();
+    Block *initBlock = rewriter.createBlock(&initRegion);
+    rewriter.setInsertionPointToStart(initBlock);
+
+    auto numTraceTapsCst = LLVM::ConstantOp::create(
+        rewriter, op.getLoc(), rewriter.getI64IntegerAttr(tapArray.size()));
+    auto traceTapArrayAddr =
+        LLVM::AddressOfOp::create(rewriter, op.getLoc(), traceTapsArrayGlobal);
+    auto tapNameArrayAddr =
+        LLVM::AddressOfOp::create(rewriter, op.getLoc(), namesGlobal);
+    auto bufferCapacityCst = LLVM::ConstantOp::create(
+        rewriter, op.getLoc(),
+        rewriter.getI64IntegerAttr(runtime::defaultTraceBufferCapacity));
+
+    Value initStruct =
+        LLVM::PoisonOp::create(rewriter, op.getLoc(), traceInfoStructType);
+
+    // Field: uint64_t numTraceTaps
+    initStruct =
+        LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
+                                    numTraceTapsCst, ArrayRef<int64_t>{0});
+    static_assert(offsetof(ArcModelTraceInfo, numTraceTaps) == 0,
+                  "Unexpected offset of field numTraceTaps");
+    // Field: struct ArcTraceTap *traceTaps
+    initStruct =
+        LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
+                                    traceTapArrayAddr, ArrayRef<int64_t>{1});
+    static_assert(offsetof(ArcModelTraceInfo, traceTaps) == 8,
+                  "Unexpected offset of field traceTaps");
+    // Field: const char *traceTapNames
+    initStruct =
+        LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
+                                    tapNameArrayAddr, ArrayRef<int64_t>{2});
+    static_assert(offsetof(ArcModelTraceInfo, traceTapNames) == 16,
+                  "Unexpected offset of field traceTapNames");
+    // Field: uint64_t traceBufferCapacity
+    initStruct =
+        LLVM::InsertValueOp::create(rewriter, op.getLoc(), initStruct,
+                                    bufferCapacityCst, ArrayRef<int64_t>{3});
+    static_assert(offsetof(ArcModelTraceInfo, traceBufferCapacity) == 24,
+                  "Unexpected offset of field traceBufferCapacity");
+    LLVM::ReturnOp::create(rewriter, op.getLoc(), initStruct);
+
+    return traceInfoGlobalOp;
+  }
+
   // Create a global LLVM struct containing the RuntimeModel metadata
   LogicalResult
   matchAndRewrite(arc::RuntimeModelOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
 
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto modelInfoStructType = LLVM::LLVMStructType::getLiteral(
-        getContext(), {rewriter.getI64Type(), rewriter.getI64Type(),
-                       LLVM::LLVMPointerType::get(getContext())});
-    static_assert(sizeof(ArcRuntimeModelInfo) == 24 &&
+        getContext(),
+        {rewriter.getI64Type(), rewriter.getI64Type(), ptrTy, ptrTy});
+    static_assert(sizeof(ArcRuntimeModelInfo) == 32 &&
                   "Unexpected size of ArcRuntimeModelInfo struct");
 
-    // Construct the Model Name String GlobalOp
     rewriter.setInsertionPoint(op);
+    auto traceInfoGlobal = buildTraceInfoStruct(op, rewriter);
+
+    // Construct the Model Name String GlobalOp
     SmallVector<char, 16> modNameArray(op.getName().begin(),
                                        op.getName().end());
     modNameArray.push_back('\0');
     auto nameGlobalType =
         LLVM::LLVMArrayType::get(rewriter.getI8Type(), modNameArray.size());
-    SmallString<16> globalSymName{"_arc_mod_name_"};
-    globalSymName.append(op.getName());
+    auto globalSymName =
+        rewriter.getStringAttr("_arc_mod_name_" + op.getName());
     auto nameGlobal = LLVM::GlobalOp::create(
         rewriter, op.getLoc(), nameGlobalType, /*isConstant=*/true,
         LLVM::Linkage::Internal,
@@ -998,6 +1220,13 @@ struct RuntimeModelOpLowering
                                                      op.getNumStateBytesAttr());
     auto nameAddr =
         LLVM::AddressOfOp::create(rewriter, op.getLoc(), nameGlobal);
+    Value traceInfoPtr;
+    if (traceInfoGlobal)
+      traceInfoPtr =
+          LLVM::AddressOfOp::create(rewriter, op.getLoc(), traceInfoGlobal);
+    else
+      traceInfoPtr = LLVM::ZeroOp::create(rewriter, op.getLoc(), ptrTy);
+
     Value initStruct =
         LLVM::PoisonOp::create(rewriter, op.getLoc(), modelInfoStructType);
 
@@ -1017,6 +1246,11 @@ struct RuntimeModelOpLowering
                                              nameAddr, ArrayRef<int64_t>{2});
     static_assert(offsetof(ArcRuntimeModelInfo, modelName) == 16,
                   "Unexpected offset of field modelName");
+    // Field: struct ArcModelTraceInfo *traceInfo
+    initStruct = LLVM::InsertValueOp::create(
+        rewriter, op.getLoc(), initStruct, traceInfoPtr, ArrayRef<int64_t>{3});
+    static_assert(offsetof(ArcRuntimeModelInfo, traceInfo) == 24,
+                  "Unexpected offset of field traceInfo");
 
     LLVM::ReturnOp::create(rewriter, op.getLoc(), initStruct);
 
@@ -1102,6 +1336,10 @@ void LowerArcToLLVMPass::runOnOperation() {
   converter.addConversion([&](sim::FormatStringType type) {
     return LLVM::LLVMPointerType::get(type.getContext());
   });
+  converter.addConversion([&](llhd::TimeType type) {
+    // LLHD time is represented as i64 femtoseconds.
+    return IntegerType::get(type.getContext(), 64);
+  });
 
   // Setup the conversion patterns.
   ConversionPatternSet patterns(&getContext(), converter);
@@ -1139,6 +1377,8 @@ void LowerArcToLLVMPass::runOnOperation() {
     AllocStorageOpLowering,
     ClockGateOpLowering,
     ClockInvOpLowering,
+    CurrentTimeOpLowering,
+    IntToTimeOpLowering,
     MemoryReadOpLowering,
     MemoryWriteOpLowering,
     ModelOpLowering,
@@ -1146,9 +1386,12 @@ void LowerArcToLLVMPass::runOnOperation() {
     ReplaceOpWithInputPattern<seq::FromClockOp>,
     RuntimeModelOpLowering,
     SeqConstClockLowering,
+    SimGetTimeOpLowering,
+    SimSetTimeOpLowering,
     StateReadOpLowering,
     StateWriteOpLowering,
     StorageGetOpLowering,
+    TimeToIntOpLowering,
     ZeroCountOpLowering
   >(converter, &getContext());
   // clang-format on

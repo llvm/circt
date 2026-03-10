@@ -3,7 +3,7 @@
 ; RUN: cat %t/ref_Top.sv | FileCheck %s
 
 ; CHECK:      `define ref_Top_direct_probe _GEN{{(_[[0-9]+])?}}
-; CHECK-NEXT: `define ref_Top_inner_x_probe inner.x_probe
+; CHECK-NEXT: `define ref_Top_inner_x_probe inner.x
 ; CHECK-NEXT: `define ref_Top_inner_y_probe _GEN{{(_[0-9]+])?}}
 ; CHECK-NEXT: `define ref_Top_keyword_probe _GEN{{(_[[0-9]+])?}}
 

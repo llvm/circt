@@ -31,7 +31,7 @@ namespace circt {
 namespace om {
 
 namespace evaluator {
-struct EvaluatorValue;
+class EvaluatorValue;
 
 /// A value of an object in memory. It is either a composite Object, or a
 /// primitive Attribute. Further refinement is expected.
@@ -45,19 +45,36 @@ using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
 /// Enables the shared_from_this functionality so Evaluator Value pointers can
 /// be passed through the CAPI and unwrapped back into C++ smart pointers with
 /// the appropriate reference count.
-struct EvaluatorValue : std::enable_shared_from_this<EvaluatorValue> {
+class EvaluatorValue : public std::enable_shared_from_this<EvaluatorValue> {
+public:
   // Implement LLVM RTTI.
-  enum class Kind { Attr, Object, List, Reference, BasePath, Path, Unknown };
+  enum class Kind { Attr, Object, List, Reference, BasePath, Path };
   EvaluatorValue(MLIRContext *ctx, Kind kind, Location loc)
       : kind(kind), ctx(ctx), loc(loc) {}
   Kind getKind() const { return kind; }
   MLIRContext *getContext() const { return ctx; }
 
   // Return true the value is fully evaluated.
+  // Unknown values are considered fully evaluated.
   bool isFullyEvaluated() const { return fullyEvaluated; }
   void markFullyEvaluated() {
     assert(!fullyEvaluated && "should not mark twice");
     fullyEvaluated = true;
+  }
+
+  /// Return true if the value is unknown (has unknown in its fan-in).
+  /// A value is unknown if it depends on an UnknownValueOp or if any of its
+  /// inputs are unknown. Unknown values propagate through operations.
+  bool isUnknown() const { return unknown; }
+
+  /// Mark this value as unknown.
+  /// This also marks the value as fully evaluated if it isn't already, since
+  /// unknown values are considered fully evaluated. This maintains the
+  /// invariant that unknown implies fullyEvaluated.
+  void markUnknown() {
+    unknown = true;
+    if (!fullyEvaluated)
+      markFullyEvaluated();
   }
 
   /// Return the associated MLIR context.
@@ -85,12 +102,14 @@ private:
   Location loc;
   bool fullyEvaluated = false;
   bool finalized = false;
+  bool unknown = false;
 };
 
 /// Values which can be used as pointers to different values.
 /// ReferenceValue is replaced with its element and erased at the end of
 /// evaluation.
-struct ReferenceValue : EvaluatorValue {
+class ReferenceValue : public EvaluatorValue {
+public:
   ReferenceValue(Type type, Location loc)
       : EvaluatorValue(type.getContext(), Kind::Reference, loc), value(nullptr),
         type(type) {}
@@ -129,7 +148,8 @@ private:
 };
 
 /// Values which can be directly representable by MLIR attributes.
-struct AttributeValue : EvaluatorValue {
+class AttributeValue : public EvaluatorValue {
+public:
   Attribute getAttr() const { return attr; }
   template <typename AttrTy>
   AttrTy getAs() const {
@@ -189,7 +209,8 @@ static inline LogicalResult finalizeEvaluatorValue(EvaluatorValuePtr &value) {
 }
 
 /// A List which contains variadic length of elements with the same type.
-struct ListValue : EvaluatorValue {
+class ListValue : public EvaluatorValue {
+public:
   ListValue(om::ListType type, SmallVector<EvaluatorValuePtr> elements,
             Location loc)
       : EvaluatorValue(type.getContext(), Kind::List, loc), type(type),
@@ -225,18 +246,19 @@ private:
 };
 
 /// A composite Object, which has a type and fields.
-struct ObjectValue : EvaluatorValue {
-  ObjectValue(om::ClassOp cls, ObjectFields fields, Location loc)
+class ObjectValue : public EvaluatorValue {
+public:
+  ObjectValue(om::ClassLike cls, ObjectFields fields, Location loc)
       : EvaluatorValue(cls.getContext(), Kind::Object, loc), cls(cls),
         fields(std::move(fields)) {
     markFullyEvaluated();
   }
 
   // Partially evaluated value.
-  ObjectValue(om::ClassOp cls, Location loc)
+  ObjectValue(om::ClassLike cls, Location loc)
       : EvaluatorValue(cls.getContext(), Kind::Object, loc), cls(cls) {}
 
-  om::ClassOp getClassOp() const { return cls; }
+  om::ClassLike getClassOp() const { return cls; }
   const auto &getFields() const { return fields; }
 
   void setFields(llvm::SmallDenseMap<StringAttr, EvaluatorValuePtr> newFields) {
@@ -246,9 +268,9 @@ struct ObjectValue : EvaluatorValue {
 
   /// Return the type of the value, which is a ClassType.
   om::ClassType getObjectType() const {
-    auto clsConst = const_cast<ClassOp &>(cls);
-    return ClassType::get(clsConst.getContext(),
-                          FlatSymbolRefAttr::get(clsConst.getNameAttr()));
+    auto clsNonConst = const_cast<om::ClassLike &>(cls);
+    return ClassType::get(clsNonConst.getContext(),
+                          FlatSymbolRefAttr::get(clsNonConst.getSymNameAttr()));
   }
 
   Type getType() const { return getObjectType(); }
@@ -271,12 +293,13 @@ struct ObjectValue : EvaluatorValue {
   LogicalResult finalizeImpl();
 
 private:
-  om::ClassOp cls;
+  om::ClassLike cls;
   llvm::SmallDenseMap<StringAttr, EvaluatorValuePtr> fields;
 };
 
 /// A Basepath value.
-struct BasePathValue : EvaluatorValue {
+class BasePathValue : public EvaluatorValue {
+public:
   BasePathValue(MLIRContext *context);
 
   /// Create a path value representing a basepath.
@@ -300,7 +323,8 @@ private:
 };
 
 /// A Path value.
-struct PathValue : EvaluatorValue {
+class PathValue : public EvaluatorValue {
+public:
   /// Create a path value representing a regular path.
   PathValue(om::TargetKindAttr targetKind, om::PathAttr path, StringAttr module,
             StringAttr ref, StringAttr field, Location loc);
@@ -337,27 +361,6 @@ private:
   StringAttr field;
 };
 
-/// An unknown value.  This is used by users of the evaluator to mark object
-/// parameters that they do not care to evaluate or about values which it fans
-/// out to.  Pratically, a user is expected to set the parameters they care
-/// about to non-unknown values and the ones they don't to unknown.  The results
-/// that are computable given this configuration will then be non-unknown.
-struct UnknownValue : EvaluatorValue {
-  /// Create a value representing unknown information.  This value is _always_
-  /// fully evaluated and finalized.  There is no further processing required.
-  UnknownValue(MLIRContext *ctx, Location loc)
-      : EvaluatorValue(ctx, Kind::Unknown, loc) {
-    markFullyEvaluated();
-    (void)finalize();
-  };
-
-  static bool classof(const EvaluatorValue *e) {
-    return e->getKind() == Kind::Unknown;
-  }
-
-  LogicalResult finalizeImpl() { return success(); }
-};
-
 } // namespace evaluator
 
 using Object = evaluator::ObjectValue;
@@ -369,7 +372,8 @@ getEvaluatorValuesFromAttributes(MLIRContext *context,
 
 /// An Evaluator, which is constructed with an IR module and can instantiate
 /// Objects. Further refinement is expected.
-struct Evaluator {
+class Evaluator {
+public:
   /// Construct an Evaluator with an IR module.
   Evaluator(ModuleOp mod);
 
@@ -445,6 +449,8 @@ private:
   FailureOr<evaluator::EvaluatorValuePtr>
   evaluateEmptyPath(FrozenEmptyPathOp op, ActualParameters actualParams,
                     Location loc);
+  FailureOr<evaluator::EvaluatorValuePtr>
+  evaluateUnknownValue(UnknownValueOp op, Location loc);
 
   FailureOr<ActualParameters>
   createParametersFromOperands(ValueRange range, ActualParameters actualParams,
@@ -482,10 +488,12 @@ operator<<(mlir::Diagnostic &diag,
     diag << "BasePath()";
   else if (llvm::isa<evaluator::PathValue>(&evaluatorValue))
     diag << "Path()";
-  else if (llvm::isa<evaluator::UnknownValue>(&evaluatorValue))
-    diag << "Unknown()";
   else
     assert(false && "unhandled evaluator value");
+
+  // Add unknown marker if the value is unknown
+  if (evaluatorValue.isUnknown())
+    diag << " [unknown]";
   return diag;
 }
 

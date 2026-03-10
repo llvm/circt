@@ -959,8 +959,19 @@ OpFoldResult IntegerMulOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult IntegerShrOp::fold(FoldAdaptor adaptor) {
-  // TODO: implement constant folding, etc.
-  // Tracked in https://github.com/llvm/circt/issues/6725.
+  if (auto rhsCst = getConstant(adaptor.getRhs())) {
+    if (auto lhsCst = getConstant(adaptor.getLhs())) {
+
+      return IntegerAttr::get(IntegerType::get(getContext(),
+                                               lhsCst->getBitWidth(),
+                                               IntegerType::Signed),
+                              lhsCst->ashr(*rhsCst));
+    }
+
+    if (rhsCst->isZero())
+      return getLhs();
+  }
+
   return {};
 }
 
@@ -969,9 +980,10 @@ OpFoldResult IntegerShlOp::fold(FoldAdaptor adaptor) {
     // Constant folding
     if (auto lhsCst = getConstant(adaptor.getLhs()))
 
-      return IntegerAttr::get(
-          IntegerType::get(getContext(), lhsCst->getBitWidth()),
-          lhsCst->shl(*rhsCst));
+      return IntegerAttr::get(IntegerType::get(getContext(),
+                                               lhsCst->getBitWidth(),
+                                               IntegerType::Signed),
+                              lhsCst->shl(*rhsCst));
 
     // integer.shl(x, 0) -> x
     if (rhsCst->isZero())
@@ -1049,6 +1061,12 @@ OpFoldResult AsAsyncResetPrimOp::fold(FoldAdaptor adaptor) {
   if (auto cst = getConstant(adaptor.getInput()))
     return BoolAttr::get(getContext(), cst->getBoolValue());
 
+  return {};
+}
+
+OpFoldResult AsResetPrimOp::fold(FoldAdaptor adaptor) {
+  if (auto cst = getConstant(adaptor.getInput()))
+    return BoolAttr::get(getContext(), cst->getBoolValue());
   return {};
 }
 

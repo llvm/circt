@@ -635,7 +635,7 @@ LogicalResult CircuitOp::verifyRegions() {
   for (auto &op : *getBodyBlock()) {
     // Verify modules.
     if (auto moduleOp = dyn_cast<FModuleOp>(op)) {
-      if (AnnotationSet(moduleOp).hasAnnotation(dutAnnoClass))
+      if (AnnotationSet(moduleOp).hasAnnotation(markDUTAnnoClass))
         dutModules.push_back(moduleOp);
       continue;
     }
@@ -668,6 +668,7 @@ Block *CircuitOp::getBodyBlock() { return &getBody().front(); }
 
 static SmallVector<PortInfo> getPortImpl(FModuleLike module) {
   SmallVector<PortInfo> results;
+  results.reserve(module.getNumPorts());
   ArrayRef<Attribute> domains = module.getDomainInfo();
   for (unsigned i = 0, e = module.getNumPorts(); i < e; ++i) {
     results.push_back({module.getPortNameAttr(i), module.getPortType(i),
@@ -1071,11 +1072,15 @@ void buildModuleLike(OpBuilder &builder, OperationState &result,
 
   // Record the names of the arguments if present.
   SmallVector<Direction, 4> portDirections;
-  SmallVector<Attribute, 4> portNames;
-  SmallVector<Attribute, 4> portTypes;
-  SmallVector<Attribute, 4> portSyms;
-  SmallVector<Attribute, 4> portLocs;
-  SmallVector<Attribute, 4> portDomains;
+  SmallVector<Attribute, 4> portNames, portTypes, portSyms, portLocs,
+      portDomains;
+  portDirections.reserve(ports.size());
+  portNames.reserve(ports.size());
+  portTypes.reserve(ports.size());
+  portSyms.reserve(ports.size());
+  portLocs.reserve(ports.size());
+  portDomains.reserve(ports.size());
+
   for (const auto &port : ports) {
     portDirections.push_back(port.direction);
     portNames.push_back(port.name);
@@ -1163,7 +1168,8 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ConventionAttr convention,
                          ArrayRef<PortInfo> ports, ArrayAttr knownLayers,
                          StringRef defnameAttr, ArrayAttr annotations,
-                         ArrayAttr parameters, ArrayAttr layers) {
+                         ArrayAttr parameters, ArrayAttr layers,
+                         ArrayAttr externalRequirements) {
   buildModule<FExtModuleOp>(builder, result, name, ports, annotations, layers);
   auto &properties = result.getOrAddProperties<Properties>();
   properties.setConvention(convention);
@@ -1175,6 +1181,8 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
   if (!parameters)
     parameters = builder.getArrayAttr({});
   properties.setParameters(parameters);
+  if (externalRequirements)
+    properties.setExternalRequirements(externalRequirements);
 }
 
 void FIntModuleOp::build(OpBuilder &builder, OperationState &result,
@@ -1577,6 +1585,11 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
     if (layers.empty())
       omittedAttrs.push_back("layers");
 
+  // If there are no external requirements, then omit the empty array.
+  if (auto extReqs = op->getAttrOfType<ArrayAttr>("externalRequirements"))
+    if (extReqs.empty())
+      omittedAttrs.push_back("externalRequirements");
+
   p.printOptionalAttrDictWithKeyword(op->getAttrs(), omittedAttrs);
 }
 
@@ -1977,6 +1990,12 @@ void FExtModuleOp::getAsmBlockArgumentNames(
   getAsmBlockArgumentNamesImpl(getOperation(), region, setNameFn);
 }
 
+StringAttr FExtModuleOp::getExtModuleNameAttr() {
+  if (auto defnameAttr = getDefnameAttr(); defnameAttr && !defnameAttr.empty())
+    return defnameAttr;
+  return getNameAttr();
+}
+
 StringRef FExtModuleOp::getExtModuleName() {
   if (auto defname = getDefname(); defname && !defname->empty())
     return *defname;
@@ -2222,6 +2241,7 @@ void ClassOp::build(::mlir::OpBuilder &odsBuilder,
                     mlir::ArrayRef<mlir::Type> fieldTypes) {
 
   SmallVector<PortInfo, 10> ports;
+  ports.reserve(fieldNames.size() * 2);
   for (auto [fieldName, fieldType] : llvm::zip(fieldNames, fieldTypes)) {
     ports.emplace_back(odsBuilder.getStringAttr(fieldName + "_in"), fieldType,
                        Direction::In);
@@ -2529,9 +2549,13 @@ void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
   // Gather the result types.
   SmallVector<Type> newResultTypes;
   SmallVector<Direction> newPortDirections;
-  SmallVector<Attribute> newPortNames;
-  SmallVector<Attribute> newPortAnnotations;
-  SmallVector<Attribute> newDomainInfo;
+  SmallVector<Attribute> newPortNames, newPortAnnotations, newDomainInfo;
+  newResultTypes.reserve(ports.size());
+  newPortDirections.reserve(ports.size());
+  newPortNames.reserve(ports.size());
+  newPortAnnotations.reserve(ports.size());
+  newDomainInfo.reserve(ports.size());
+
   for (auto &p : ports) {
     newResultTypes.push_back(p.type);
     newPortDirections.push_back(p.direction);
@@ -2678,9 +2702,20 @@ InstanceOp InstanceOp::cloneWithInsertedPorts(
   newPortAnnos.reserve(newPortCount);
   newDomainInfo.reserve(newPortCount);
 
+  // Build the complete index map from old port indices to new port indices
+  // before processing any ports. This is necessary so that
+  // fixDomainInfoInsertions can correctly update domain references for newly
+  // inserted ports.
   SmallVector<unsigned> indexMap(oldPortCount);
-
   size_t inserted = 0;
+  for (size_t i = 0; i < oldPortCount; ++i) {
+    while (inserted < numInsertions && insertions[inserted].first <= i)
+      ++inserted;
+    indexMap[i] = i + inserted;
+  }
+
+  // Now process the ports, using the complete indexMap.
+  inserted = 0;
   for (size_t i = 0; i < oldPortCount; ++i) {
     while (inserted < numInsertions) {
       auto &[index, info] = insertions[inserted];
@@ -2701,8 +2736,9 @@ InstanceOp InstanceOp::cloneWithInsertedPorts(
     newPortNames.push_back(getPortNameAttr(i));
     newPortTypes.push_back(getType(i));
     newPortAnnos.push_back(getPortAnnotation(i));
-    newDomainInfo.push_back(getDomainInfo()[i]);
-    indexMap[i] = i + inserted;
+    auto domains =
+        fixDomainInfoInsertions(context, getDomainInfo()[i], indexMap);
+    newDomainInfo.push_back(domains);
   }
 
   while (inserted < numInsertions) {
@@ -2871,7 +2907,8 @@ void InstanceChoiceOp::build(
     OpBuilder &builder, OperationState &result, FModuleLike defaultModule,
     ArrayRef<std::pair<OptionCaseOp, FModuleLike>> cases, StringRef name,
     NameKindEnum nameKind, ArrayRef<Attribute> annotations,
-    ArrayRef<Attribute> portAnnotations, StringAttr innerSym) {
+    ArrayRef<Attribute> portAnnotations, StringAttr innerSym,
+    FlatSymbolRefAttr instanceMacro) {
   // Gather the result types.
   SmallVector<Type> resultTypes;
   for (Attribute portType : defaultModule.getPortTypes())
@@ -2910,11 +2947,61 @@ void InstanceChoiceOp::build(
                defaultModule.getPortNamesAttr(), domainInfoAttr,
                builder.getArrayAttr(annotations), portAnnotationsAttr,
                defaultModule.getLayersAttr(),
-               innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
+               innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
+               instanceMacro);
+}
+
+void InstanceChoiceOp::build(OpBuilder &builder, OperationState &odsState,
+                             ArrayRef<PortInfo> ports, ArrayAttr moduleNames,
+                             ArrayAttr caseNames, StringRef name,
+                             NameKindEnum nameKind, ArrayAttr annotations,
+                             ArrayAttr layers, hw::InnerSymAttr innerSym,
+                             FlatSymbolRefAttr instanceMacro) {
+  // Gather the result types and port information from PortInfo.
+  SmallVector<Type> newResultTypes;
+  SmallVector<bool> newPortDirections;
+  SmallVector<Attribute> newPortNames, newPortAnnotations, newDomainInfo;
+  newPortDirections.reserve(ports.size());
+  newResultTypes.reserve(ports.size());
+  newPortAnnotations.reserve(ports.size());
+  newDomainInfo.reserve(ports.size());
+  newPortNames.reserve(ports.size());
+  for (auto &p : ports) {
+    newResultTypes.push_back(p.type);
+    // Convert Direction to bool (true = output, false = input)
+    newPortDirections.push_back(p.direction == Direction::Out);
+    newPortNames.push_back(p.name);
+    newPortAnnotations.push_back(p.annotations.getArrayAttr());
+    if (p.domains)
+      newDomainInfo.push_back(p.domains);
+    else
+      newDomainInfo.push_back(builder.getArrayAttr({}));
+  }
+
+  return build(builder, odsState, newResultTypes, moduleNames, caseNames, name,
+               nameKind, newPortDirections, builder.getArrayAttr(newPortNames),
+               builder.getArrayAttr(newDomainInfo), annotations,
+               builder.getArrayAttr(newPortAnnotations), layers.getValue(),
+               innerSym, instanceMacro);
 }
 
 std::optional<size_t> InstanceChoiceOp::getTargetResultIndex() {
   return std::nullopt;
+}
+
+StringRef InstanceChoiceOp::getInstanceName() { return getName(); }
+
+StringAttr InstanceChoiceOp::getInstanceNameAttr() { return getNameAttr(); }
+
+ArrayAttr InstanceChoiceOp::getReferencedModuleNamesAttr() {
+  // Convert FlatSymbolRefAttr array to StringAttr array
+  auto moduleNames = getModuleNamesAttr();
+  SmallVector<Attribute> moduleNameStrings;
+  moduleNameStrings.reserve(moduleNames.size());
+  for (auto moduleName : moduleNames)
+    moduleNameStrings.push_back(cast<FlatSymbolRefAttr>(moduleName).getAttr());
+
+  return ArrayAttr::get(getContext(), moduleNameStrings);
 }
 
 void InstanceChoiceOp::print(OpAsmPrinter &p) {
@@ -3103,9 +3190,17 @@ LogicalResult
 InstanceChoiceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto caseNames = getCaseNamesAttr();
   for (auto moduleName : getModuleNamesAttr()) {
-    if (failed(instance_like_impl::verifyReferencedModule(
-            *this, symbolTable, cast<FlatSymbolRefAttr>(moduleName))))
+    auto moduleNameRef = cast<FlatSymbolRefAttr>(moduleName);
+    if (failed(instance_like_impl::verifyReferencedModule(*this, symbolTable,
+                                                          moduleNameRef)))
       return failure();
+
+    // Check that the referenced module is not an intmodule.
+    auto referencedModule =
+        symbolTable.lookupNearestSymbolFrom<FModuleLike>(*this, moduleNameRef);
+    if (isa<FIntModuleOp>(referencedModule))
+      return emitOpError("intmodule must be instantiated with instance op, "
+                         "not via 'firrtl.instance_choice'");
   }
 
   auto root = cast<SymbolRefAttr>(caseNames[0]).getRootReference();
@@ -3124,6 +3219,11 @@ InstanceChoiceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       return emitOpError() << "option " << refRoot
                            << " does not contain option case " << ref;
   }
+
+  if (auto instanceMacro = getInstanceMacroAttr())
+    if (!symbolTable.lookupNearestSymbolFrom(*this, instanceMacro))
+      return emitOpError() << "instance_macro " << instanceMacro
+                           << " does not exist";
 
   return success();
 }
@@ -3173,9 +3273,20 @@ InstanceChoiceOp InstanceChoiceOp::cloneWithInsertedPorts(
   newPortAnnos.reserve(newPortCount);
   newDomainInfo.reserve(newPortCount);
 
+  // Build the complete index map from old port indices to new port indices
+  // before processing any ports. This is necessary so that
+  // fixDomainInfoInsertions can correctly update domain references for newly
+  // inserted ports.
   SmallVector<unsigned> indexMap(oldPortCount);
-
   size_t inserted = 0;
+  for (size_t i = 0; i < oldPortCount; ++i) {
+    while (inserted < numInsertions && insertions[inserted].first <= i)
+      ++inserted;
+    indexMap[i] = i + inserted;
+  }
+
+  // Now process the ports, using the complete indexMap.
+  inserted = 0;
   for (size_t i = 0; i < oldPortCount; ++i) {
     while (inserted < numInsertions) {
       auto &[index, info] = insertions[inserted];
@@ -3196,8 +3307,9 @@ InstanceChoiceOp InstanceChoiceOp::cloneWithInsertedPorts(
     newPortNames.push_back(getPortNameAttr(i));
     newPortTypes.push_back(getType(i));
     newPortAnnos.push_back(getPortAnnotations()[i]);
-    newDomainInfo.push_back(getDomainInfo()[i]);
-    indexMap[i] = i + inserted;
+    auto domains =
+        fixDomainInfoInsertions(context, getDomainInfo()[i], indexMap);
+    newDomainInfo.push_back(domains);
   }
 
   while (inserted < numInsertions) {
@@ -3219,7 +3331,8 @@ InstanceChoiceOp InstanceChoiceOp::cloneWithInsertedPorts(
       direction::packAttribute(context, newPortDirections),
       ArrayAttr::get(context, newPortNames),
       ArrayAttr::get(context, newDomainInfo), getAnnotationsAttr(),
-      ArrayAttr::get(context, newPortAnnos), getLayers(), getInnerSymAttr());
+      ArrayAttr::get(context, newPortAnnos), getLayers(), getInnerSymAttr(),
+      getInstanceMacroAttr());
 
   if (auto outputFile = (*this)->getAttr("output_file"))
     clone->setAttr("output_file", outputFile);
@@ -3258,7 +3371,7 @@ InstanceChoiceOp::cloneWithErasedPorts(const llvm::BitVector &erasures) {
       direction::packAttribute(getContext(), newPortDirections),
       ArrayAttr::get(getContext(), newPortNames), newPortDomains,
       getAnnotationsAttr(), ArrayAttr::get(getContext(), newPortAnnotations),
-      getLayers(), getInnerSymAttr());
+      getLayers(), getInnerSymAttr(), getInstanceMacroAttr());
 
   if (auto outputFile = (*this)->getAttr("output_file"))
     clone->setAttr("output_file", outputFile);
@@ -3911,6 +4024,29 @@ LogicalResult ContractOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// OptionCaseOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+OptionCaseOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto caseMacro = getCaseMacroAttr();
+  if (!caseMacro)
+    return success();
+
+  // Verify that the referenced macro exists in the circuit.
+  auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
+  auto *refOp = symbolTable.lookupSymbolIn(circuitOp, caseMacro);
+  if (!refOp)
+    return emitOpError("case_macro references an undefined symbol: ")
+           << caseMacro;
+
+  if (!isa<sv::MacroDeclOp>(refOp))
+    return emitOpError("case_macro must reference a macro declaration");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ObjectOp
 //===----------------------------------------------------------------------===//
 
@@ -3956,8 +4092,6 @@ Operation *ObjectOp::getReferencedOperation(const SymbolTable &symtbl) {
 StringRef ObjectOp::getInstanceName() { return getName(); }
 
 StringAttr ObjectOp::getInstanceNameAttr() { return getNameAttr(); }
-
-StringRef ObjectOp::getReferencedModuleName() { return getClassName(); }
 
 StringAttr ObjectOp::getReferencedModuleNameAttr() {
   return getClassNameAttr();
@@ -4302,6 +4436,8 @@ static FlatSymbolRefAttr getDomainTypeName(Value value) {
       return getDomainTypeNameOfResult(instance, result.getResultNumber());
     if (auto anonDomain = dyn_cast<DomainCreateAnonOp>(op))
       return anonDomain.getDomainAttr();
+    if (auto domain = dyn_cast<DomainCreateOp>(op))
+      return domain.getDomainAttr();
     return {};
   }
 
@@ -4793,6 +4929,13 @@ Attribute AggregateConstantOp::getAttributeFromFieldID(uint64_t fieldID) {
   return value;
 }
 
+LogicalResult FIntegerConstantOp::verify() {
+  auto i = getValueAttr();
+  if (!i.getType().isSignedInteger())
+    return emitOpError("value must be signed");
+  return success();
+}
+
 void FIntegerConstantOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printAttributeWithoutType(getValueAttr());
@@ -4873,6 +5016,28 @@ LogicalResult VectorCreateOp::verify() {
             elemTy, type_cast<FIRRTLBaseType>(getOperand(i).getType())))
       return emitOpError("type of element doesn't match vector element");
   // TODO: check flow
+  return success();
+}
+
+LogicalResult
+UnknownValueOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Unknown values of non-class type don't need to be verified.
+  auto classType = dyn_cast<ClassType>(getType());
+  if (!classType)
+    return success();
+
+  auto className = classType.getNameAttr();
+  // Verify that the symbol exists.
+  Operation *op = symbolTable.lookupNearestSymbolFrom(*this, className);
+  if (!op)
+    return emitOpError() << "refers to non-existent class ("
+                         << className.getAttr() << ")";
+
+  // Verify that the symbol is on a classlike.
+  if (!isa<ClassLike>(op))
+    return emitOpError() << "refers to a non-class type ("
+                         << className.getAttr() << ")";
+
   return success();
 }
 
@@ -5698,6 +5863,14 @@ FIRRTLType AsAsyncResetPrimOp::inferReturnType(FIRRTLType input,
   return AsyncResetType::get(input.getContext(), base.isConst());
 }
 
+FIRRTLType AsResetPrimOp::inferReturnType(FIRRTLType input,
+                                          std::optional<Location> loc) {
+  auto base = type_dyn_cast<FIRRTLBaseType>(input);
+  if (!base)
+    return emitInferRetTypeError(loc, "operand must be a scalar base type");
+  return ResetType::get(input.getContext(), base.isConst());
+}
+
 FIRRTLType AsClockPrimOp::inferReturnType(FIRRTLType input,
                                           std::optional<Location> loc) {
   return ClockType::get(input.getContext(), isConst(input));
@@ -6429,6 +6602,9 @@ void SizeOfIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void AsAsyncResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
+void AsResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
 void AsClockPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
@@ -7096,9 +7272,37 @@ LogicalResult BindOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 LogicalResult
 DomainCreateAnonOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
-  auto domain = getDomainAttr();
-  if (!symbolTable.lookupSymbolIn<DomainOp>(circuitOp, domain))
-    return emitOpError() << "references undefined domain '" << domain << "'";
+  auto domainAttr = getDomainAttr();
+
+  auto *symbol = symbolTable.lookupSymbolIn(circuitOp, domainAttr);
+  if (!symbol)
+    return emitOpError() << "references undefined symbol '" << domainAttr
+                         << "'";
+
+  if (!isa<DomainOp>(symbol))
+    return emitOpError() << "references symbol '" << domainAttr
+                         << "' which is not a domain";
+
+  return success();
+}
+
+void DomainCreateOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+LogicalResult
+DomainCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto circuitOp = getOperation()->getParentOfType<CircuitOp>();
+  auto domainAttr = getDomainAttr();
+
+  auto *symbol = symbolTable.lookupSymbolIn(circuitOp, domainAttr);
+  if (!symbol)
+    return emitOpError() << "references undefined symbol '" << domainAttr
+                         << "'";
+
+  if (!isa<DomainOp>(symbol))
+    return emitOpError() << "references symbol '" << domainAttr
+                         << "' which is not a domain";
 
   return success();
 }

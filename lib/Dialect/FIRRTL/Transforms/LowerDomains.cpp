@@ -44,6 +44,8 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/OM/OMOps.h"
+#include "circt/Dialect/OM/OMTypes.h"
 #include "circt/Support/Debug.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -418,6 +420,15 @@ LogicalResult LowerModule::lowerModule() {
       continue;
     }
 
+    // If the port is zero-width, then we don't need annotation trackers.
+    // LowerToHW removes zero-width ports and it will error if there are inner
+    // symbols on zero-width things it is trying to remove.
+    if (auto firrtlType = type_dyn_cast<FIRRTLType>(port.type))
+      if (hasZeroBitWidth(firrtlType)) {
+        portAnnotations.push_back(port.annotations.getArrayAttr());
+        continue;
+      }
+
     SmallVector<Annotation> newAnnotations;
     DistinctAttr id;
     for (auto indexAttr : domainAttr.getAsRange<IntegerAttr>()) {
@@ -518,9 +529,70 @@ LogicalResult LowerModule::lowerModule() {
         return WalkResult::advance();
       }
 
-      // Track anonymous domains for later traversal and erasure.
+      // Replace an anonymous domain with an anoymous value op and a conversion.
+      // Only do this if the domain has users that won't be deleted.  Otherwise,
+      // erase it.
       if (auto anonDomain = dyn_cast<DomainCreateAnonOp>(walkOp)) {
-        conversionsToErase.insert(anonDomain);
+        // Short circuit erasure.
+        auto noUser = llvm::all_of(anonDomain->getUsers(), [&](auto *user) {
+          return operationsToErase.contains(user) ||
+                 conversionsToErase.contains(user);
+        });
+        if (noUser) {
+          conversionsToErase.insert(anonDomain);
+          return WalkResult::advance();
+        }
+
+        // The op has at least one use.  Replace it.  This changes the type, so
+        // wrap this in a cast.  The cast will be removed later.
+        OpBuilder builder(anonDomain);
+        auto classIn =
+            domainToClasses.at(anonDomain.getDomainAttr().getAttr()).input;
+        anonDomain.replaceAllUsesWith(UnrealizedConversionCastOp::create(
+            builder, anonDomain.getLoc(), {anonDomain.getType()},
+            {UnknownValueOp::create(builder, anonDomain.getLoc(),
+                                    classIn.getInstanceType())
+                 .getResult()}));
+        anonDomain.erase();
+        return WalkResult::advance();
+      }
+
+      // Replace a named domain create with an object instantiation.
+      // TODO: The object's fields are all connected to unknown values. This is
+      // a temporary solution while support for domains is being brought online.
+      if (auto createDomain = dyn_cast<DomainCreateOp>(walkOp)) {
+        auto noUser = llvm::all_of(createDomain->getUsers(), [&](auto *user) {
+          return operationsToErase.contains(user) ||
+                 conversionsToErase.contains(user);
+        });
+        if (noUser) {
+          conversionsToErase.insert(createDomain);
+          return WalkResult::advance();
+        }
+
+        OpBuilder builder(createDomain);
+        auto classIn =
+            domainToClasses.at(createDomain.getDomainAttr().getAttr()).input;
+        auto object = ObjectOp::create(builder, createDomain.getLoc(), classIn,
+                                       createDomain.getNameAttr());
+        instanceGraph.lookup(op)->addInstance(object,
+                                              instanceGraph.lookup(classIn));
+
+        for (auto [idx, port] : llvm::enumerate(classIn.getPorts())) {
+          if (port.direction == Direction::Out)
+            continue;
+          auto subfield = ObjectSubfieldOp::create(
+              builder, createDomain.getLoc(), object, idx);
+          auto unknown =
+              UnknownValueOp::create(builder, createDomain.getLoc(), port.type);
+          PropAssignOp::create(builder, createDomain.getLoc(), subfield,
+                               unknown);
+        }
+
+        createDomain.replaceAllUsesWith(UnrealizedConversionCastOp::create(
+            builder, createDomain.getLoc(), {createDomain.getType()},
+            {object.getResult()}));
+        createDomain.erase();
         return WalkResult::advance();
       }
 
@@ -543,12 +615,13 @@ LogicalResult LowerModule::lowerModule() {
       //     firrtl.domain.define %dst, %a     // <- to-be-deleted when visited
       if (auto wireOp = dyn_cast<WireOp>(walkOp)) {
         if (type_isa<DomainType>(wireOp.getResult().getType())) {
-          Value src, dst;
+          Value src;
+          SmallVector<Value> dsts;
           DomainDefineOp lastDefineOp;
           for (auto *user : llvm::make_early_inc_range(wireOp->getUsers())) {
-            if (src && dst)
-              break;
             auto domainDefineOp = dyn_cast<DomainDefineOp>(user);
+            if (operationsToErase.contains(domainDefineOp))
+              continue;
             if (!domainDefineOp) {
               auto diag = wireOp.emitOpError()
                           << "cannot be lowered by `LowerDomains` because it "
@@ -559,20 +632,22 @@ LogicalResult LowerModule::lowerModule() {
             if (!lastDefineOp || lastDefineOp->isBeforeInBlock(domainDefineOp))
               lastDefineOp = domainDefineOp;
             if (wireOp == domainDefineOp.getSrc().getDefiningOp())
-              dst = domainDefineOp.getDest();
+              dsts.push_back(domainDefineOp.getDest());
             else
               src = domainDefineOp.getSrc();
             operationsToErase.insert(domainDefineOp);
           }
           conversionsToErase.insert(wireOp);
+
           // If this wire is dead or undriven, then there's nothing to do.
-          if (!src || !dst)
+          if (!src || dsts.empty())
             return WalkResult::advance();
           // Insert a domain define that removes the need for the wire.  This is
           // inserted just before the latest domain define involving the wire.
           // This is done to prevent unnecessary permutations of the IR.
           OpBuilder builder(lastDefineOp);
-          DomainDefineOp::create(builder, builder.getUnknownLoc(), dst, src);
+          for (auto dst : llvm::reverse(dsts))
+            DomainDefineOp::create(builder, builder.getUnknownLoc(), dst, src);
         }
         return WalkResult::advance();
       }
@@ -585,9 +660,9 @@ LogicalResult LowerModule::lowerModule() {
       // There are only two possibilities for kinds of `DomainDefineOp`s that we
       // can see a this point: the destination is always a conversion cast and
       // the source is _either_ (1) a conversion cast if the source is a module
-      // or instance port or (2) an anonymous domain op.  This relies on the
-      // earlier "canonicalization" that erased `WireOp`s to leave only
-      // `DomainDefineOp`s.
+      // or instance port or (2) an anonymous domain op or a domain create op.
+      // This relies on the earlier "canonicalization" that erased `WireOp`s to
+      // leave only `DomainDefineOp`s.
       auto *src = defineOp.getSrc().getDefiningOp();
       auto dest = dyn_cast<UnrealizedConversionCastOp>(
           defineOp.getDest().getDefiningOp());
@@ -602,7 +677,7 @@ LogicalResult LowerModule::lowerModule() {
         OpBuilder builder(defineOp);
         PropAssignOp::create(builder, defineOp.getLoc(), dest.getOperand(0),
                              srcCast.getOperand(0));
-      } else if (!isa<DomainCreateAnonOp>(src)) {
+      } else if (!isa<DomainCreateAnonOp, DomainCreateOp>(src)) {
         auto diag = defineOp.emitOpError()
                     << "has a source which cannot be lowered by 'LowerDomains'";
         diag.attachNote(src->getLoc()) << "unsupported source is here";

@@ -245,6 +245,46 @@ UnwrapFIFOOp::inferReturnTypes(MLIRContext *context, std::optional<Location>,
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// ValidOnly wrap / unwrap.
+//===----------------------------------------------------------------------===//
+
+circt::esi::ChannelType WrapValidOnlyOp::channelType() {
+  return cast<circt::esi::ChannelType>(getChanOutput().getType());
+}
+
+LogicalResult
+WrapValidOnlyOp::inferReturnTypes(MLIRContext *context, std::optional<Location>,
+                                  ValueRange operands, DictionaryAttr,
+                                  mlir::OpaqueProperties, mlir::RegionRange,
+                                  SmallVectorImpl<Type> &inferredResulTypes) {
+  auto chanType = ChannelType::get(context, operands[0].getType(),
+                                   ChannelSignaling::ValidOnly, 0);
+  inferredResulTypes.push_back(chanType);
+  return success();
+}
+
+circt::esi::ChannelType UnwrapValidOnlyOp::channelType() {
+  return cast<circt::esi::ChannelType>(getChanInput().getType());
+}
+
+LogicalResult UnwrapValidOnlyOp::verify() {
+  if (getChanInput().getType().getSignaling() != ChannelSignaling::ValidOnly)
+    return emitOpError("only supports ValidOnly signaling");
+  return success();
+}
+
+LogicalResult UnwrapValidOnlyOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location>, ValueRange operands,
+    DictionaryAttr, mlir::OpaqueProperties, mlir::RegionRange,
+    SmallVectorImpl<Type> &inferredResulTypes) {
+  inferredResulTypes.push_back(
+      cast<ChannelType>(operands[0].getType()).getInner());
+  inferredResulTypes.push_back(
+      IntegerType::get(context, 1, IntegerType::Signless));
+  return success();
+}
+
 /// If 'iface' looks like an ESI interface, return the inner data type.
 static Type getEsiDataType(circt::sv::InterfaceOp iface) {
   using namespace circt::sv;

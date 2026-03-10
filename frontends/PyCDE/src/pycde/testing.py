@@ -15,7 +15,7 @@ def print_info(msg_fmt: str, *args: Signal):
   from .dialects import sv
   from .circt.ir import StringAttr
   subs = [arg.value for arg in args]
-  sv.InfoOp(subs, message=StringAttr.get(msg_fmt))
+  sv.InfoProceduralOp(subs, message=StringAttr.get(msg_fmt))
 
 
 def unittestmodule(generate=True,

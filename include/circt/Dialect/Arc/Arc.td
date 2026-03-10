@@ -11,6 +11,7 @@
 
 include "mlir/IR/OpBase.td"
 
+include "circt/Dialect/Arc/ArcAttributes.td"
 include "circt/Dialect/Arc/ArcDialect.td"
 include "circt/Dialect/Arc/ArcTypes.td"
 include "circt/Dialect/Arc/ArcOps.td"

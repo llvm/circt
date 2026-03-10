@@ -32,11 +32,20 @@ config.test_source_root = os.path.dirname(__file__)
 config.test_exec_root = os.path.join(config.circt_obj_root, 'test')
 
 config.substitutions.append(('%PATH%', config.environment['PATH']))
+config.substitutions.append(('%host_cxx', config.host_cxx))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 config.substitutions.append(('%shlibdir', config.circt_shlib_dir))
 config.substitutions.append(('%INC%', config.circt_include_dir))
 config.substitutions.append(('%PYTHON%', f'"{config.python_executable}"'))
 config.substitutions.append(('%CIRCT_SOURCE%', config.circt_src_root))
+# Paths used by CMake-based C++ tests to locate runtime headers and libraries.
+esi_runtime_root = config.esi_runtime_path
+if not esi_runtime_root:
+  candidate = os.path.join(config.circt_obj_root,
+                           'tools/circt/lib/Dialect/ESI/runtime')
+  if os.path.isdir(candidate):
+    esi_runtime_root = candidate
+config.substitutions.append(('%ESI_RUNTIME_PATH%', esi_runtime_root))
 
 llvm_config.with_system_environment(['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
 

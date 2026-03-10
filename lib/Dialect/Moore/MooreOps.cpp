@@ -1010,12 +1010,20 @@ LogicalResult UnionCreateOp::verify() {
   return TypeSwitch<Type, LogicalResult>(getType())
       .Case<UnionType, UnpackedUnionType>([this](auto &type) {
         auto members = type.getMembers();
-        auto resultType = getType();
+        auto inputType = getInput().getType();
         auto fieldName = getFieldName();
         for (const auto &member : members)
-          if (member.name == fieldName && member.type == resultType)
+          if (member.name == fieldName && member.type == inputType)
             return success();
-        emitOpError("input type must match the union field type");
+        for (const auto &member : members) {
+          if (member.name == fieldName) {
+            emitOpError() << "input type " << inputType
+                          << " does not match union field '" << fieldName
+                          << "' type " << member.type;
+            return failure();
+          }
+        }
+        emitOpError() << "field '" << fieldName << "' not found in union type";
         return failure();
       })
       .Default([this](auto &) {
@@ -1744,6 +1752,60 @@ VTableEntryOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!defined)
     return emitOpError()
            << "Parent class does not point to any implementation!";
+
+  return success();
+}
+
+LogicalResult DynQueueExtractOp::verify() {
+  auto elementType = cast<QueueType>(getInput().getType()).getElementType();
+
+  // If the result type indicates we are extracting a single element,
+  // the upper/lower indexes should be the same register.
+  if (getResult().getType() == elementType && getLowerIdx() != getUpperIdx()) {
+    return failure();
+  }
+
+  return success();
+}
+
+LogicalResult QueueResizeOp::verify() {
+  if (cast<QueueType>(getInput().getType()).getElementType() !=
+      cast<QueueType>(getResult().getType()).getElementType())
+    return failure();
+
+  return success();
+}
+
+LogicalResult QueueFromUnpackedArrayOp::verify() {
+  // Verify the source and result have the same element type
+  auto queueElementType =
+      cast<QueueType>(getResult().getType()).getElementType();
+
+  auto arrayElementType =
+      cast<UnpackedArrayType>(getInput().getType()).getElementType();
+
+  if (queueElementType != arrayElementType) {
+    return emitOpError()
+           << "Queue element type doesn't match unpacked array element type";
+  }
+
+  return success();
+}
+
+LogicalResult QueueConcatOp::verify() {
+  // Verify the element types of all concatenated queues equal that of the
+  // result queue.
+  // We do not require the queue bounds to match.
+  auto resultElType = cast<QueueType>(getResult().getType()).getElementType();
+
+  for (Value input : getInputs()) {
+    auto inpElType = cast<QueueType>(input.getType()).getElementType();
+    if (inpElType != resultElType) {
+      return emitOpError() << "Queue element type " << inpElType
+                           << " doesn't match result element type "
+                           << resultElType;
+    }
+  }
 
   return success();
 }

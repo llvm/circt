@@ -587,15 +587,42 @@ def StateReadOp : ArcOp<"state_read", [
 def StateWriteOp : ArcOp<"state_write", [
   MemoryEffects<[MemWrite]>,
   StateAndValueTypesMatch<"state", "value">,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "Update a state's value";
   let arguments = (ins
     StateType:$state,
     AnyType:$value,
-    Optional<I1>:$condition
-  );
+    Optional<I1>:$condition,
+    OptionalAttr<FlatSymbolRefAttr>:$traceTapModel,
+    OptionalAttr<UI64Attr>:$traceTapIndex);
   let assemblyFormat = [{
-    $state `=` $value (`if` $condition^)? attr-dict `:` type($state)
+    $state `=` $value (`if` $condition^)?
+    (`tap` $traceTapModel`[`$traceTapIndex^`]` )? attr-dict `:` type($state)
+  }];
+  let hasVerifier = true;
+  let builders = [
+    OpBuilder<(ins  "mlir::Value":$state,
+                    "mlir::Value":$value,
+                    "mlir::Value":$condition), [{
+      build($_builder, $_state, state, value, condition,
+              mlir::FlatSymbolRefAttr{}, mlir::IntegerAttr{});
+    }]>
+  ];
+}
+
+def CurrentTimeOp : ArcOp<"current_time", [
+  MemoryEffects<[MemRead]>
+]> {
+  let summary = "Read the current simulation time";
+  let description = [{
+    Reads the current simulation time from the model's storage. The time is
+    represented as an `i64` value in femtoseconds.
+  }];
+  let arguments = (ins StorageType:$storage);
+  let results = (outs I64:$time);
+  let assemblyFormat = [{
+    $storage attr-dict `:` qualified(type($storage))
   }];
 }
 
@@ -707,6 +734,37 @@ def SimEmitValueOp : ArcOp<"sim.emit"> {
   let assemblyFormat = [{ $valueName `,` $value attr-dict `:` type($value) }];
 }
 
+def SimGetTimeOp : ArcOp<"sim.get_time", [
+  MemoryEffects<[MemRead]>,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Gets the current simulation time of the model instance";
+  let description = [{
+    Gets the current simulation time of the given model instance. The time is
+    represented as an `i64` value in femtoseconds.
+  }];
+  let arguments = (ins SimModelInstance:$instance);
+  let results = (outs I64:$time);
+  let assemblyFormat = [{
+    $instance attr-dict `:` qualified(type($instance))
+  }];
+}
+
+def SimSetTimeOp : ArcOp<"sim.set_time", [
+  MemoryEffects<[MemWrite]>,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Sets the simulation time of the model instance";
+  let description = [{
+    Sets the simulation time of the given model instance. The time is
+    represented as an `i64` value in femtoseconds.
+  }];
+  let arguments = (ins SimModelInstance:$instance, I64:$time);
+  let assemblyFormat = [{
+    $instance `,` $time attr-dict `:` qualified(type($instance))
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Miscellaneous
 //===----------------------------------------------------------------------===//
@@ -734,13 +792,15 @@ def ModelOp : ArcOp<"model", [
   let arguments = (ins SymbolNameAttr:$sym_name,
                        TypeAttrOf<ModuleType>:$io,
                        OptionalAttr<FlatSymbolRefAttr>:$initialFn,
-                       OptionalAttr<FlatSymbolRefAttr>:$finalFn);
+                       OptionalAttr<FlatSymbolRefAttr>:$finalFn,
+                       OptionalAttr<TraceTapArrayAttr>:$traceTaps);
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{
     $sym_name `io` $io
     (`initializer` $initialFn^)?
     (`finalizer` $finalFn^)?
+    (`traceTaps` $traceTaps^)?
     attr-dict-with-keyword $body
   }];
 
@@ -964,12 +1024,15 @@ def RuntimeModelOp : ArcOp<"runtime.model", [
     - name: Name of the model
     - numStateBytes: Number of bytes required to store the model's internal
         state
+    - traceTaps: Traced signal metadata
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
                        StrAttr:$name,
-                       I64Attr:$numStateBytes);
+                       I64Attr:$numStateBytes,
+                       OptionalAttr<TraceTapArrayAttr>:$traceTaps);
   let assemblyFormat = [{
-    $sym_name $name `numStateBytes` $numStateBytes attr-dict
+    $sym_name $name `numStateBytes` $numStateBytes
+    (`traceTaps` $traceTaps^)? attr-dict
   }];
 }
 

@@ -52,6 +52,48 @@ Value getValueSource(Value val, bool lookThroughWires, bool lookThroughNodes,
 Value getModuleScopedDriver(Value val, bool lookThroughWires,
                             bool lookThroughNodes, bool lookThroughCasts);
 
+//===----------------------------------------------------------------------===//
+// TieOffCache
+//===----------------------------------------------------------------------===//
+
+/// Helper class to cache tie-off values for different FIRRTL types.
+/// This avoids creating duplicate InvalidValueOp or UnknownValueOp for the
+/// same type.
+class TieOffCache {
+public:
+  TieOffCache(ImplicitLocOpBuilder &builder) : builder(builder) {}
+
+  /// Get or create an InvalidValueOp for the given base type.
+  Value getInvalid(FIRRTLBaseType type);
+
+  /// Get or create an UnknownValueOp for the given property type.
+  Value getUnknown(PropertyType type);
+
+private:
+  ImplicitLocOpBuilder &builder;
+  SmallDenseMap<Type, Value, 8> cache;
+};
+
+// Instance choice option case macro name utilities.
+class InstanceChoiceMacroTable {
+public:
+  InstanceChoiceMacroTable(Operation *op);
+
+  // Get the macro for an option case. Return null if it doesn't exist.
+  FlatSymbolRefAttr getMacro(StringAttr optionName, StringAttr caseName) const;
+
+  // Get all option/case pairs in the IR occurrence order.
+  auto getKeys() const { return cache.keys(); }
+
+private:
+  // Option/Case -> Macro Symbol
+  llvm::MapVector<std::pair<StringAttr, StringAttr>, FlatSymbolRefAttr> cache;
+};
+
+//===----------------------------------------------------------------------===//
+// Template utilities
+//===----------------------------------------------------------------------===//
+
 /// Return true if a value is module-scoped driven by a value of a specific
 /// type.
 template <typename A, typename... B>

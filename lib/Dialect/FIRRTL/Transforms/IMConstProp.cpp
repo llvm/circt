@@ -203,7 +203,7 @@ struct IMConstPropPass
   void markOverdefined(Value value) {
     FieldRef fieldRef = getOrCacheFieldRefFromValue(value);
     auto firrtlType = type_dyn_cast<FIRRTLType>(value.getType());
-    if (!firrtlType || type_isa<PropertyType>(firrtlType)) {
+    if (!firrtlType || type_isa<PropertyType, DomainType>(firrtlType)) {
       markOverdefined(fieldRef);
       return;
     }
@@ -263,7 +263,7 @@ struct IMConstPropPass
     if (!type_isa<FIRRTLType>(result.getType()))
       return mergeLatticeValue(fieldRefResult, fieldRefFrom);
     // Special-handle PropertyType's, walkGroundType's doesn't support.
-    if (type_isa<PropertyType>(result.getType()))
+    if (type_isa<PropertyType, DomainType>(result.getType()))
       return mergeLatticeValue(fieldRefResult, fieldRefFrom);
     walkGroundTypes(type_cast<FIRRTLType>(result.getType()),
                     [&](uint64_t fieldID, auto, auto) {
@@ -317,6 +317,7 @@ struct IMConstPropPass
   void markInvalidValueOp(InvalidValueOp invalid);
   void markAggregateConstantOp(AggregateConstantOp constant);
   void markInstanceOp(InstanceOp instance);
+  void markInstanceChoiceOp(InstanceChoiceOp instance);
   void markObjectOp(ObjectOp object);
   template <typename OpTy>
   void markConstantValueOp(OpTy op);
@@ -452,7 +453,7 @@ LatticeValue IMConstPropPass::getExtendedLatticeValue(FieldRef value,
     return result;
 
   // No extOrTrunc for property types.  Return what we have.
-  if (isa<PropertyType>(destType))
+  if (isa<PropertyType, DomainType>(destType))
     return result;
 
   auto constant = result.getConstant();
@@ -513,6 +514,8 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
         .Case<InvalidValueOp>(
             [&](auto invalid) { markInvalidValueOp(invalid); })
         .Case<InstanceOp>([&](auto instance) { markInstanceOp(instance); })
+        .Case<InstanceChoiceOp>(
+            [&](auto instance) { markInstanceChoiceOp(instance); })
         .Case<ObjectOp>([&](auto obj) { markObjectOp(obj); })
         .Case<MemOp>([&](auto mem) { markMemOp(mem); })
         .Case<LayerBlockOp>(
@@ -560,7 +563,7 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
         if (!firrtlType)
           continue;
         // Special-handle PropertyType's, walkGroundTypes doesn't support.
-        if (type_isa<PropertyType>(firrtlType)) {
+        if (type_isa<PropertyType, DomainType>(firrtlType)) {
           fieldRefToUsers[fieldRef].push_back(&op);
           continue;
         }
@@ -664,6 +667,29 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
 void IMConstPropPass::markObjectOp(ObjectOp obj) {
   // Mark overdefined for now, not supported.
   markOverdefined(obj);
+}
+
+void IMConstPropPass::markInstanceChoiceOp(InstanceChoiceOp instance) {
+  // Mark all results as overdefined.
+  // TODO: Handle instance choice ops by merging lattice values of all possible
+  //       choices.
+  for (auto result : instance.getResults())
+    markOverdefined(result);
+
+  // Mark all referenced modules as executable and mark all ports as
+  // overdefined.
+  for (auto moduleName : instance.getModuleNamesAttr()) {
+    Operation *op =
+        instanceGraph->lookup(cast<FlatSymbolRefAttr>(moduleName).getAttr())
+            ->getModule();
+
+    if (auto fModule = dyn_cast<FModuleOp>(op)) {
+      markBlockExecutable(fModule.getBodyBlock());
+      // Mark all ports overdefined.
+      for (auto port : fModule.getBodyBlock()->getArguments())
+        markOverdefined(port);
+    }
+  }
 }
 
 static std::optional<uint64_t>
@@ -783,13 +809,9 @@ void IMConstPropPass::visitConnectLike(FConnectLike connect,
           srcValue);
     }
 
-    // Driving a memory result is ignored because these are always treated
-    // as overdefined.
-    if (dest.getDefiningOp<MemOp>())
-      return;
-
-    // For now, don't support const prop into object fields.
-    if (isa_and_nonnull<ObjectSubfieldOp>(dest.getDefiningOp()))
+    // Skip unsupported ops that are already marked as overdefined.
+    if (isa_and_nonnull<InstanceChoiceOp, MemOp, ObjectSubfieldOp>(
+            dest.getDefiningOp()))
       return;
 
     connect.emitError("connectlike operation unhandled by IMConstProp")
@@ -1061,7 +1083,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
           if (op->use_empty() &&
               (wouldOpBeTriviallyDead(op) || isDeletableWireOrRegOrNode(op))) {
             LLVM_DEBUG(
-                { logger.getOStream() << debugPrefix << " : " << op << "\n"; });
+                { logger.getOStream() << debugPrefix << " : " << *op << "\n"; });
             ++numErasedOp;
             op->erase();
             return true;

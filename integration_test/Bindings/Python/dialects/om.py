@@ -36,13 +36,13 @@ with Context() as ctx, Location.unknown():
     om.class @Test(%param: !om.integer) -> (field: !om.integer, child: !om.class.type<@Child>, reference: !om.ref, list: !om.list<!om.string>, nest: !om.class.type<@Nest>, true: i1, false: i1) {
       %sym = om.constant #om.ref<<@Root::@x>> : !om.ref
 
-      %c_14 = om.constant #om.integer<14> : !om.integer
+      %c_14 = om.constant #om.integer<14 : si32> : !om.integer
       %0 = om.object @Child(%c_14) : (!om.integer) -> !om.class.type<@Child>
 
 
       %list = om.constant #om.list<!om.string, ["X" : !om.string, "Y" : !om.string]> : !om.list<!om.string>
 
-      %c_15 = om.constant #om.integer<15> : !om.integer
+      %c_15 = om.constant #om.integer<15 : si32> : !om.integer
       %1 = om.object @Child(%c_15) : (!om.integer) -> !om.class.type<@Child>
       %list_child = om.list_create %0, %1: !om.class.type<@Child>
       %2 = om.object @Nest(%list_child) : (!om.list<!om.class.type<@Child>>) -> !om.class.type<@Nest>
@@ -232,17 +232,6 @@ except TypeError as e:
 with Context() as ctx:
   circt.register_dialects(ctx)
 
-  # Signless
-  int_attr1 = om.OMIntegerAttr.get(
-      IntegerAttr.get(IntegerType.get_signless(64), 42))
-  # CHECK: 42
-  print(str(int_attr1))
-
-  int_attr2 = om.OMIntegerAttr.get(
-      IntegerAttr.get(IntegerType.get_signless(64), -42))
-  # CHECK: 18446744073709551574
-  print(str(int_attr2))
-
   # Signed
   int_attr3 = om.OMIntegerAttr.get(
       IntegerAttr.get(IntegerType.get_signed(64), 42))
@@ -254,17 +243,6 @@ with Context() as ctx:
   # CHECK: -42
   print(str(int_attr4))
 
-  # Unsigned
-  int_attr5 = om.OMIntegerAttr.get(
-      IntegerAttr.get(IntegerType.get_unsigned(64), 42))
-  # CHECK: 42
-  print(str(int_attr5))
-
-  int_attr6 = om.OMIntegerAttr.get(
-      IntegerAttr.get(IntegerType.get_unsigned(64), -42))
-  # CHECK: 18446744073709551574
-  print(str(int_attr6))
-
   # Test AnyType
   any_type = Type.parse("!om.any")
   assert isinstance(any_type, om.AnyType)
@@ -273,3 +251,62 @@ with Context() as ctx:
   list_type = Type.parse("!om.list<!om.any>")
   assert isinstance(list_type, om.ListType)
   assert isinstance(list_type.element_type, om.AnyType)
+
+  # Test partial evaluation with multiple inputs and outputs
+  module = Module.parse("""
+  module {
+    om.class @PartialEval(
+      %in0: !om.integer,
+      %in1: !om.integer,
+      %in2: !om.integer,
+      %in3: i1
+    ) -> (
+      out0: !om.integer,
+      out1: !om.integer,
+      out2: !om.integer,
+      out3: !om.integer,
+      out4: i1,
+      out5: i1
+    ) {
+      // out0: known constant
+      %c42 = om.constant #om.integer<42 : i32> : !om.integer
+
+      // out1: known input (in0)
+
+      // out2: unknown input (in1) propagated through arithmetic
+      %sum = om.integer.add %in1, %c42 : !om.integer
+
+      // out3: depends on unknown input (in2) and known input (in0)
+      %prod = om.integer.mul %in0, %in2 : !om.integer
+
+      // out4: known boolean constant
+      %true = om.constant true
+
+      // out5: unknown boolean input (in3)
+
+      om.class.fields %c42, %in0, %sum, %prod, %true, %in3 :
+        !om.integer, !om.integer, !om.integer, !om.integer, i1, i1
+    }
+  }
+  """)
+
+  evaluator = om.Evaluator(module)
+  om_integer_type = Type.parse("!om.integer")
+  i1_type = Type.parse("i1")
+
+  # Instantiate with mix of known and unknown inputs
+  obj = evaluator.instantiate("PartialEval", 100, om.Unknown(om_integer_type),
+                              om.Unknown(om_integer_type), om.Unknown(i1_type))
+
+  # CHECK: out0 (constant): 42
+  print(f"out0 (constant): {obj.out0}")
+  # CHECK: out1 (known input): 100
+  print(f"out1 (known input): {obj.out1}")
+  # CHECK: out2 (unknown input): Unknown(!om.integer)
+  print(f"out2 (unknown input): {obj.out2}")
+  # CHECK: out3 (depends on unknown): Unknown(!om.integer)
+  print(f"out3 (depends on unknown): {obj.out3}")
+  # CHECK: out4 (constant bool): True
+  print(f"out4 (constant bool): {obj.out4}")
+  # CHECK: out5 (unknown bool): Unknown(i1)
+  print(f"out5 (unknown bool): {obj.out5}")

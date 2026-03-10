@@ -26,8 +26,10 @@ def AddTaps : Pass<"arc-add-taps", "mlir::ModuleOp"> {
 
 def AllocateState : Pass<"arc-allocate-state", "arc::ModelOp"> {
   let summary = "Allocate and layout the global simulation state";
-  let constructor = "circt::arc::createAllocateStatePass()";
   let dependentDialects = ["arc::ArcDialect"];
+  let options = [Option<"insertTraceTaps", "trace-taps", "bool", "false",
+                        "Insert TraceTap attributes for signal tracing">,
+  ];
 }
 
 def ArcCanonicalizer : Pass<"arc-canonicalizer", "mlir::ModuleOp"> {
@@ -146,10 +148,12 @@ def InferStateProperties : Pass<"arc-infer-state-properties",
 
 def InsertRuntime : Pass<"arc-insert-runtime", "mlir::ModuleOp"> {
   let summary = "Insert structs and function calls for the ArcRuntime library";
-  let dependentDialects = ["mlir::LLVM::LLVMDialect"];
+  let dependentDialects = ["mlir::LLVM::LLVMDialect",  "mlir::scf::SCFDialect"];
   let options = [
     Option<"extraArgs", "extra-args", "std::string", "",
-     "Extra arguments passed to the runtime when creating simulation instances">
+     "Extra arguments passed to the runtime when creating simulation instances">,
+    Option<"traceFileName", "trace-file", "std::string", "",
+     "Output file name for signal trace">
   ];
 }
 

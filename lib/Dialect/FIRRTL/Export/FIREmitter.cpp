@@ -67,6 +67,7 @@ struct Emitter {
                       StringAttr moduleName, DictionaryAttr params);
   void emitEnabledLayers(ArrayRef<Attribute> layers);
   void emitKnownLayers(ArrayRef<Attribute> layers);
+  void emitRequirements(ArrayRef<Attribute> requirements);
   void emitParamAssign(ParamDeclAttr param, Operation *op,
                        std::optional<PPExtString> wordBeforeLHS = std::nullopt);
   void emitParamValue(Attribute value, Operation *op);
@@ -111,6 +112,7 @@ struct Emitter {
   void emitStatement(LayerBlockOp op);
   void emitStatement(GenericIntrinsicOp op);
   void emitStatement(DomainCreateAnonOp op);
+  void emitStatement(DomainCreateOp op);
 
   template <class T>
   void emitVerifStatement(T op, StringRef mnemonic);
@@ -143,6 +145,7 @@ struct Emitter {
   void emitExpression(GenericIntrinsicOp op);
   void emitExpression(CatPrimOp op);
   void emitExpression(UnsafeDomainCastOp op);
+  void emitExpression(UnknownValueOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -160,7 +163,7 @@ struct Emitter {
   void emitExpression(ShlPrimOp op) { emitPrimExpr("shl", op, op.getAmount()); }
   void emitExpression(ShrPrimOp op) { emitPrimExpr("shr", op, op.getAmount()); }
 
-  void emitExpression(TimeOp op){};
+  void emitExpression(TimeOp op) {}
 
   // Funnel all ops without attrs into `emitPrimExpr`.
 #define HANDLE(OPTYPE, MNEMONIC)                                               \
@@ -186,6 +189,7 @@ struct Emitter {
   HANDLE(AsSIntPrimOp, "asSInt");
   HANDLE(AsUIntPrimOp, "asUInt");
   HANDLE(AsAsyncResetPrimOp, "asAsyncReset");
+  HANDLE(AsResetPrimOp, "asReset");
   HANDLE(AsClockPrimOp, "asClock");
   HANDLE(CvtPrimOp, "cvt");
   HANDLE(NegPrimOp, "neg");
@@ -390,7 +394,7 @@ private:
     SymbolTable symbolTable;
     hw::InnerSymbolTableCollection istc;
     hw::InnerRefNamespace irn{symbolTable, istc};
-    SymInfos(Operation *op) : symbolTable(op), istc(op){};
+    SymInfos(Operation *op) : symbolTable(op), istc(op) {}
   };
   std::optional<std::reference_wrapper<SymInfos>> symInfos;
 
@@ -454,6 +458,18 @@ void Emitter::emitKnownLayers(ArrayRef<Attribute> layers) {
     emitSymbol(cast<SymbolRefAttr>(layer));
     ps << PP::end;
   }
+}
+
+void Emitter::emitRequirements(ArrayRef<Attribute> requirements) {
+  if (requirements.empty())
+    return;
+  ps << PP::space;
+  ps.cbox(2, IndentStyle::Block);
+  ps << "requires" << PP::space;
+  llvm::interleaveComma(requirements, ps, [&](Attribute req) {
+    ps.writeQuotedEscaped(cast<StringAttr>(req).getValue());
+  });
+  ps << PP::end;
 }
 
 void Emitter::emitParamAssign(ParamDeclAttr param, Operation *op,
@@ -563,6 +579,8 @@ void Emitter::emitModule(FExtModuleOp op) {
   ps << "extmodule " << PPExtString(legalize(op.getNameAttr()));
   emitKnownLayers(op.getKnownLayers());
   emitEnabledLayers(op.getLayers());
+  if (auto reqs = op.getExternalRequirements())
+    emitRequirements(reqs.getValue());
   ps << PP::nbsp << ":" << PP::end;
   emitLocation(op);
 
@@ -753,7 +771,7 @@ void Emitter::emitStatementsInBlock(Block &block) {
               CombMemOp, MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp,
               DomainDefineOp, RefDefineOp, RefForceOp, RefForceInitialOp,
               RefReleaseOp, RefReleaseInitialOp, LayerBlockOp,
-              GenericIntrinsicOp, DomainCreateAnonOp>(
+              GenericIntrinsicOp, DomainCreateAnonOp, DomainCreateOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           startStatement();
@@ -1399,6 +1417,15 @@ void Emitter::emitStatement(DomainCreateAnonOp op) {
   // These ops are not emitted.
 }
 
+void Emitter::emitStatement(DomainCreateOp op) {
+  startStatement();
+  auto name = legalize(op.getNameAttr());
+  addValueName(op.getResult(), name);
+  ps << "domain " << PPExtString(name) << " of "
+     << PPExtString(op.getDomainAttr().getValue());
+  emitLocationAndNewLine(op);
+}
+
 void Emitter::emitExpression(Value value) {
   // Handle the trivial case where we already have a name for this value which
   // we can use.
@@ -1420,13 +1447,15 @@ void Emitter::emitExpression(Value value) {
           OrPrimOp, XorPrimOp, LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp,
           EQPrimOp, NEQPrimOp, DShlPrimOp, DShlwPrimOp, DShrPrimOp,
           // Unary
-          AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsClockPrimOp,
-          CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
+          AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsResetPrimOp,
+          AsClockPrimOp, CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp,
+          XorRPrimOp,
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
           UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
+          UnknownValueOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions
@@ -1672,6 +1701,12 @@ void Emitter::emitExpression(UnsafeDomainCastOp op) {
   interleaveComma(op.getOperands(),
                   [&](Value operand) { emitExpression(operand); });
   ps << ")" << PP::end;
+}
+
+void Emitter::emitExpression(UnknownValueOp op) {
+  ps << "Unknown(";
+  emitType(op.getType());
+  ps << ")";
 }
 
 void Emitter::emitAttribute(MemDirAttr attr) {

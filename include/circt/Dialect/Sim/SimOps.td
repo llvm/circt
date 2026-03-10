@@ -19,6 +19,7 @@ include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/EnumAttr.td"
 
 class SimOp<string mnemonic, list<Trait> traits = []> :
     Op<SimDialect, mnemonic, traits>;
@@ -433,6 +434,24 @@ def FormatCharOp : SimOp<"fmt.char",
   let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
 }
 
+def FormatHierPathOp : SimOp<"fmt.hier_path", [Pure]> {
+  let summary = "Hierarchical path format specifier";
+  let description = [{
+    Format string fragment that resolves to the hierarchical path of the module
+    instance containing this operation when printed. This corresponds to the
+    `%m` (or `%M` with escaped special characters) format specifier in
+    SystemVerilog.
+
+    See IEEE 1800-2017 § 21.2.1.6 "Hierarchical name format".
+
+    The `useEscapes` attribute distinguishes between `%m` (false) and `%M`
+    (true). When true, special characters in the path should be escaped.
+  }];
+  let arguments = (ins UnitAttr:$useEscapes);
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = "(`escaped` $useEscapes^)? attr-dict";
+}
+
 def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
   let summary = "Concatenate format strings";
   let description = [{
@@ -571,6 +590,306 @@ def StringConcatOp : SimOp<"string.concat", [Pure]> {
   let results = (outs DynamicStringType:$result);
 
   let hasFolder = true;
+}
+
+def IntToStringOp: SimOp<"string.int_to_string", [Pure]> {
+  let summary = "Convert an integer into a string";
+  let description = [{
+    Converts an integer value to a string following Verilog semantics, where
+    string literals are represented as right-aligned bitvectors.
+    
+    The operation reads the integer byte-by-byte, interpreting each non-zero
+    byte as an ASCII character. Zero-valued bytes are skipped and
+    not included in the output string. See Sec 6.16 of the standard saying
+    "A string variable shall not contain the special character "\0". 
+    Assigning the value 0 to a string character shall be ignored"
+    
+    Example:
+      Consider the hex value 0x00_00_00_48_00_00_6C_6F
+      Reading from MSB to LSB and filtering out null bytes:
+        - 0x48 = 'H'
+        - 0x6C = 'l'
+        - 0x6F = 'o'
+      This produces the string "Hlo", not "\0\0\0H\0\0lo".
+  }];
+
+  let arguments = (ins AnyInteger:$input);
+  let results = (outs DynamicStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
+}
+
+def StringGetOp : SimOp<"string.get", [Pure]> {
+  let summary = "Get a character from a string at a given index";
+  let description = [{
+    Returns the character (byte) at the specified index within a dynamic string.
+    The index is zero-based, where 0 refers to the first character.
+
+    If the index is negative or greater than or equal to the string length,
+    the behavior follows IEEE 1800-2023 § 6.16, which specifies that accessing
+    an out-of-bounds index returns 0 (null character).
+
+    Example:
+    ```mlir
+    %str = sim.string.literal "Hello"
+    %idx = hw.constant 1 : i32
+    %char = sim.string.get %str[%idx] : i8  // Returns 'e' (0x65)
+    ```
+  }];
+
+  let arguments = (ins DynamicStringType:$str, I32:$index);
+  let results = (outs I8:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$str `[` $index `]` attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// Queues
+//===----------------------------------------------------------------------===//
+
+def QueueCmpPredicateAttr : I64EnumAttr<
+    "QueueCmpPredicate",
+    "queue.cmp comparison predicate",
+    [I64EnumAttrCase<"eq", 0>,
+      I64EnumAttrCase<"ne", 1>]> {
+  let cppNamespace = "circt::sim";
+}
+
+def QueueCmpOp : SimOp<"queue.cmp", [Pure, Commutative, SameTypeOperands]> {
+  let summary = "Compares two queues";
+  let description = [{
+    Carries out a comparison on two queues.
+    Returns 1 if the comparison is true, and 0 if it is false.
+
+    Comparing for equality and inequality are both supported.
+  }];
+
+  let arguments = (ins QueueCmpPredicateAttr:$predicate, QueueType:$lhs, QueueType:$rhs);
+  let results = (outs I1:$result);
+
+  let assemblyFormat = "$predicate $lhs `,` $rhs attr-dict `:` type($lhs)";
+}
+
+def QueueEmptyOp : SimOp<"queue.empty", [Pure]> {
+  let summary = "Creates an empty queue";
+  let description = [{
+    Creates an empty queue, which is the default value
+    for a variable holding a queue.
+  }];
+
+  let arguments = (ins);
+  let results = (outs QueueType:$outqueue);
+
+  let assemblyFormat = "attr-dict `:` type($outqueue)";
+}
+
+def QueueSizeOp : SimOp<"queue.size", [Pure]> {
+  let summary = "Length of a queue";
+  let description = [{
+    Returns the length of a queue as an `i64` value.
+  }];
+
+  let arguments = (ins QueueType:$queue);
+  let results = (outs I64:$result);
+
+  let assemblyFormat = "$queue attr-dict `:` type($queue)";
+}
+
+def QueuePushBackOp : SimOp<"queue.push_back", [Pure,
+    TypesMatchWith<"queue and element types must match",
+    "queue", "element", "cast<QueueType>($_self).getElementType()">,
+    AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Push an element to the end of a queue";
+  let description = [{
+    Adds an element to the end of the queue. If the queue is a bounded queue
+    which is full, then this has no effect.
+  }];
+
+  let arguments = (ins QueueType:$queue, HWNonInOutType:$element);
+  let results = (outs QueueType:$outQueue);
+
+  let assemblyFormat = "$element `into` $queue attr-dict `:` type($queue)";
+}
+
+def QueuePushFrontOp : SimOp<"queue.push_front", [Pure,
+TypesMatchWith<"queue and element types must match",
+    "queue", "element", "cast<QueueType>($_self).getElementType()">,
+AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Push an element to the front of a queue";
+  let description = [{
+    Adds an element to the front of the queue. If the queue is a bounded 
+    queue which is full, then this will erase the final element of the queue,
+    as to keep the queue within-bounds.
+  }];
+
+  let arguments = (ins QueueType:$queue, HWNonInOutType:$element);
+  let results = (outs QueueType:$outQueue);
+
+  let assemblyFormat = "$element `into` $queue attr-dict `:` type($queue)";
+}
+
+def QueuePopBackOp : SimOp<"queue.pop_back", [Pure,
+TypesMatchWith<"queue and popped types must match",
+    "queue", "popped", "cast<QueueType>($_self).getElementType()">,
+AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Removes the last element of a queue";
+  let description = [{
+    Removes an element from the back of a queue.
+
+    If the queue is empty, this has no effect, and the value of `popped`
+    will be the same as obtained by reading a non-existent array element
+    from an array with the same element type,
+    as described in IEEE 1800-2023 § 7.10.2.5 "Pop_back()".
+  }];
+
+  let arguments = (ins QueueType:$queue);
+  let results = (outs QueueType:$outQueue, HWNonInOutType:$popped);
+
+  let assemblyFormat = "`from` $queue attr-dict `:` type($queue)";
+}
+
+def QueuePopFrontOp : SimOp<"queue.pop_front", [Pure,
+TypesMatchWith<"queue and popped types must match",
+    "queue", "popped", "cast<QueueType>($_self).getElementType()">,
+AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Removes the first element of a queue";
+  let description = [{
+    Removes an element from the front of a queue.
+    
+    If the queue is empty, this has no effect, and the value of `popped`
+    will be the same as obtained by reading a non-existent array element
+    from an array with the same element type,
+    as described in IEEE 1800-2023 § 7.10.2.4 "Pop_front()".
+  }];
+
+  let arguments = (ins QueueType:$queue);
+  let results = (outs QueueType:$outQueue, HWNonInOutType:$popped);
+
+  let assemblyFormat = "`from` $queue attr-dict `:` type($queue)";
+}
+
+// TODO: The `index` parameter should in-fact be a 4-valued integer.
+// These are, as of writing, unsupported by the core dialects.
+// Any unknown bit within `index` should result in `queue.delete` having
+// no effect on the queue per IEEE 1800-2023 § 7.10.2.3 "Delete()"
+def QueueDeleteOp : SimOp<"queue.delete", [Pure,
+    AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Deletes an element from a queue";
+  let description = [{
+    Deletes the queue element at the position `index`. Does nothing if `index`
+    is negative or greater than or equal to the length of the queue.
+  }];
+
+  let arguments = (ins QueueType:$queue, I32:$index);
+  let results = (outs QueueType:$outQueue);
+
+  let assemblyFormat = "`index` $index `of` $queue attr-dict `:` type($queue)";
+}
+
+// Likewise, TODO for 4-valued ints.
+// See IEEE 1800-2023 § 7.10.2.2 "Insert()"
+def QueueInsertOp : SimOp<"queue.insert", [Pure,
+    TypesMatchWith<"queue and item types must match",
+      "queue", "item", "cast<QueueType>($_self).getElementType()">,
+    AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Insert an element at an arbitrary position within the queue";
+  let description = [{
+    Inserts an element at the given index within the queue. Any elements
+    at this index or later will be shifted forward one position. If this results in
+    the last item in the queue being outside the bounds, it is discarded.
+
+    If `index` is negative or greater than the queue length, this does nothing.
+    Note that an index equal to the queue length will simply push `item` to the
+    end of the queue.
+  }];
+
+  let arguments = (ins QueueType:$queue, I32:$index, HWNonInOutType:$item);
+  let results = (outs QueueType:$outQueue);
+
+  let assemblyFormat = "$item `into` $queue `at` $index attr-dict `:` type($queue)";
+}
+
+def QueueSetOp : SimOp<"queue.set", [Pure,
+    TypesMatchWith<"queue and item types must match",
+      "queue", "item", "cast<QueueType>($_self).getElementType()">,
+    AllTypesMatch<["queue", "outQueue"]>]> {
+
+  let summary = "Overwrite an element at a position within a queue.";
+  let description = [{
+    Overwrites the element at $index with $item, returning an updated queue.
+
+
+    If the index is equal to the length of the queue, the operation adds $item
+    to the end of the queue.
+
+    If the index is otherwise out of bounds for the queue, the queue returned
+    is unchanged.
+  }];
+
+  let arguments = (ins QueueType:$queue, I32:$index, HWNonInOutType:$item);
+  let results = (outs QueueType:$outQueue);
+
+  let assemblyFormat = [{
+    $queue `[` $index `]` `=` $item attr-dict `:` type($queue)
+  }];
+}
+
+// Likewise, TODO for 4-valued ints. (see above)
+def QueueGetOp : SimOp<"queue.get", [Pure,
+   TypesMatchWith<"queue and item types must match",
+      "queue", "result", "cast<QueueType>($_self).getElementType()">]> {
+  let summary = "Returns an indexed element of the queue";
+
+  let description = [{
+    Returns the element at position `index` within the queue.
+
+    If the index is negative or greater than or equal to the queue length,
+    this returns a value as indicated in Table 7-1 of IEEE 1800-2023 § 7.4.5
+  }];
+
+  let arguments = (ins QueueType:$queue, I32:$index);
+  let results = (outs HWNonInOutType:$result);
+
+  let assemblyFormat = "$index `of` $queue attr-dict `:` type($queue)";
+}
+
+def QueueSliceOp : SimOp<"queue.slice", [Pure,
+  AllTypesMatch<["queue", "result"]>]> {
+  let summary = "Returns a range of elements from a queue";
+
+  let description = [{
+    Returns the elements from index `lowIdx` of the `queue` to `highIdx` inclusive,
+    copied into a new queue.
+
+    If either index is out of bounds, the out of bounds elements within the selection
+    will have a special value as defined by the element type in IEEE 1800-2023 § 7.4.5, Table 7-1.
+  }];
+
+  let arguments = (ins QueueType:$queue, I32:$lowIdx, I32:$highIdx);
+  let results = (outs QueueType:$result);
+
+  let assemblyFormat = "$queue `from` $lowIdx `to` $highIdx attr-dict `:` type($queue)";
+}
+
+def QueueResizeOp : SimOp<"queue.resize", [Pure]> {
+  let description = [{
+    Converts between two queues with different bounds, but the same element
+    type.
+    
+    If $result has a smaller bound than the size of $input, elements at the end
+    of the queue will be discarded to ensure it fits within the space provided.
+  }];
+
+  let arguments = (ins QueueType:$input);
+  let results = (outs QueueType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//

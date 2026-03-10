@@ -1,6 +1,10 @@
 // UNSUPPORTED: system-windows
 // RUN: circt-reduce %s --include=module-internal-name-sanitizer --include=module-name-sanitizer --test /usr/bin/env --test-arg true --keep-best=0 | FileCheck %s
 
+// Test that module-name-sanitizer reduction works with both InstanceOp and ObjectOp.
+// This should not crash when the ModuleNameSanitizer tries to rename modules
+// that are instantiated via firrtl.object operations.
+
 // CHECK-LABEL: firrtl.circuit "Foo"
 firrtl.circuit "A" {
   // CHECK-NEXT: firrtl.module private @Bar
@@ -63,5 +67,10 @@ firrtl.circuit "A" {
         in x: !firrtl.uint<1>,
         out y: !firrtl.uint<1>
       )
+    // CHECK: %Baz = firrtl.object @Baz()
+    %obj = firrtl.object @MyClass()
+  }
+  // CHECK: firrtl.class @Baz() {
+  firrtl.class @MyClass() {
   }
 }

@@ -1828,6 +1828,63 @@ hw.module @cantCombineOppositeNonBinCmpIntoConstant(in %tag_0: i4, in %tag_1: i4
             i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i4, i4
 }
 
+// Ensure canonicalization is not confused by i0.
+// CHECK-LABEL: hw.module @i0checks
+// CHECK-SAME: in %[[I32_VAL:[^ ]*]] : i32, in %[[I1_VAL:[^ ]*]] : i1, in %[[I0_VAL:[^ ]*]] : i0
+// CHECK-DAG: %[[FALSE:.*]] = hw.constant false
+// CHECK-DAG: %[[ZERO:.*]] = hw.constant 0 : i0
+// CHECK-DAG: %[[CONCAT:.*]] = comb.concat %[[I0_VAL]], %[[I32_VAL]] : i0, i32
+// CHECK-DAG: %[[CONCAT_REVERSE:.*]] = comb.concat %[[I32_VAL]], %[[I0_VAL]] : i32, i0
+// CHECK-DAG: %[[CONCAT_REMAINS:.*]] = comb.concat %[[I32_VAL]], %[[I0_VAL]], %i1_val : i32, i0, i1
+// CHECK-DAG: %[[CONCAT_ITSELF:.*]] = comb.concat %[[I0_VAL]], %[[ZERO]] : i0, i0
+// CHECK-DAG: %[[DIVS:.*]] = comb.divs %[[I0_VAL]], %[[ZERO]] : i0
+// CHECK-DAG: %[[DIVU:.*]] = comb.divu %[[I0_VAL]], %[[ZERO]] : i0
+// CHECK-DAG: %[[ICMP_EQ:.*]] = comb.icmp eq %[[I0_VAL]], %[[ZERO]] : i0
+// CHECK-DAG: %[[ICMP_NE:.*]] = comb.icmp ne %[[I0_VAL]], %[[ZERO]] : i0
+// CHECK-DAG: %[[MODS:.*]] = comb.mods %[[I0_VAL]], %[[ZERO]] : i0
+// CHECK-DAG: %[[MODU:.*]] = comb.modu %[[I0_VAL]], %[[ZERO]] : i0
+// CHECK-DAG: hw.output %[[I0_VAL]], %[[I0_VAL]], %[[ZERO]], %[[ZERO]], %[[I0_VAL]], %[[ZERO]], %[[CONCAT]], %[[CONCAT_REVERSE]], %[[CONCAT_REMAINS]], %[[CONCAT_ITSELF]], %[[DIVS]], %[[DIVU]], %[[ICMP_EQ]], %[[ICMP_NE]], %[[MODS]], %[[MODU]], %[[FALSE]], %[[ZERO]], %[[ZERO]], %[[I0_VAL]], %[[I0_VAL]], %[[I0_VAL]] : i0, i0, i0, i0, i0, i0, i32, i32, i33, i0, i0, i0, i1, i1, i0, i0, i1, i0, i0, i0, i0, i0
+hw.module @i0checks(in %i32_val: i32, in %i1_val: i1, in %i0_val: i0, out add: i0, out sub: i0, out mul: i0, out or: i0, out xor: i0, out and: i0, out concat: i32, out concat_reverse: i32, out concat_remains: i33, out concat_itself: i0, out divs: i0, out divu: i0, out icmp_eq: i1, out icmp_ne: i1, out mods: i0, out modu: i0, out parity: i1, out replicate: i0, out extract: i0, out shl: i0, out shrs: i0, out shru: i0) {
+  %zero = hw.constant 0 : i0
+
+  %add = comb.add %i0_val, %zero : i0
+  %sub = comb.sub %i0_val, %zero : i0
+  %mul = comb.mul %i0_val, %zero : i0
+
+  %or = comb.or %i0_val, %zero : i0
+  %xor = comb.xor %i0_val, %zero : i0
+  %and = comb.and %i0_val, %zero : i0
+
+  %concat = comb.concat %i0_val, %i32_val : i0, i32
+  %concat_reverse = comb.concat %i32_val, %i0_val : i32, i0
+  %concat_remains = comb.concat %i32_val, %i0_val, %i1_val : i32, i0, i1
+  %concat_itself = comb.concat %i0_val, %zero : i0, i0
+
+  %divs = comb.divs %i0_val, %zero : i0
+  %divu = comb.divu %i0_val, %zero : i0
+
+  %icmp_eq = comb.icmp eq %i0_val, %zero : i0
+  %icmp_ne = comb.icmp ne %i0_val, %zero : i0
+
+  %mods = comb.mods %i0_val, %zero : i0
+  %modu = comb.modu %i0_val, %zero : i0
+
+  %parity = comb.parity %zero : i0
+  %replicate = comb.replicate %zero : (i0) -> i0
+  %extract = comb.extract %zero from 0 : (i0) -> i0
+
+  %shl = comb.shl %i0_val, %zero : i0
+  %shrs = comb.shrs %i0_val, %zero : i0
+  %shru = comb.shru %i0_val, %zero : i0
+
+  hw.output %add, %sub, %mul, %or, %xor, %and, %concat,
+            %concat_reverse, %concat_remains, %concat_itself,
+            %divs, %divu, %icmp_eq, %icmp_ne, %mods, %modu,
+            %parity, %replicate, %extract, %shl, %shrs, %shru :
+            i0, i0, i0, i0, i0, i0, i32, i32, i33, i0, i0,
+            i0, i1, i1, i0, i0, i1, i0, i0, i0, i0, i0
+}
+
 // CHECK-LABEL: hw.module @mul_0
 hw.module @mul_0(in %arg0: i0, in %arg1: i0, out out: i0) {
   // CHECK: %[[C0:.+]] = hw.constant 0 : i0
@@ -2039,4 +2096,35 @@ hw.module @issue9403(in %sel: i1, out out1: ui1) {
   %false = hwarith.constant 0 : ui1
   %mux1 = comb.mux %sel, %true, %false : ui1
   hw.output %mux1 : ui1
+}
+
+// CHECK-LABEL: @notSext
+// ~sext(a) -> sext(~a)
+hw.module @notSext(in %a : i3, out negsext : i8) {
+  // CHECK-NEXT: %c-1_i3 = hw.constant -1 : i3
+  // CHECK-NEXT: %[[NOTA:.+]] = comb.xor bin %a, %c-1_i3 : i3
+  // CHECK-NEXT: %[[NOTASIGN:.+]] = comb.extract %[[NOTA]] from 2 : (i3) -> i1
+  // CHECK-NEXT: %[[SIGNBITS:.+]] = comb.replicate %[[NOTASIGN]] : (i1) -> i5
+  // CHECK-NEXT: %[[NEGSEXT:.+]] = comb.concat %[[SIGNBITS]], %[[NOTA]] : i5, i3
+  // CHECK-NEXT: hw.output %[[NEGSEXT]] : i8
+  %c-1_i8 = hw.constant -1 : i8
+  // sext(a)
+  %0 = comb.extract %a from 2 : (i3) -> i1
+  %1 = comb.replicate %0 : (i1) -> i5
+  %2 = comb.concat %1, %a : i5, i3
+  // ~sext(a)
+  %3 = comb.xor %2, %c-1_i8 : i8
+  hw.output %3 : i8
+}
+
+// CHECK-LABEL: hw.module private @SextMatcherBlockArguments
+// Test that SextMatcher doesn't crash on block arguments (module ports)
+hw.module private @SextMatcherBlockArguments(in %a : i6, in %b : i2, in %c : i27) {
+  %c-1_i35 = hw.constant -1 : i35
+  %0 = comb.concat %a, %c, %b : i6, i27, i2
+  %wire = hw.wire %0  : i35
+  %1 = comb.xor bin %wire, %c-1_i35 : i35
+  %2 = comb.extract %1 from 34 : (i35) -> i1
+  %3 = comb.extract %1 from 26 : (i35) -> i1
+  hw.output
 }

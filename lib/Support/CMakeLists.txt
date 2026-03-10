@@ -12,13 +12,13 @@ add_circt_library(CIRCTSupport
   JSON.cpp
   LoweringOptions.cpp
   Naming.cpp
-  NPNClass.cpp
   ParsingUtils.cpp
   Passes.cpp
   Path.cpp
   PrettyPrinter.cpp
   PrettyPrinterHelpers.cpp
   SymCache.cpp
+  TruthTable.cpp
   ValueMapper.cpp
   "${VERSION_CPP}"
 
