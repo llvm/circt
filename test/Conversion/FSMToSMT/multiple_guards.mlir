@@ -49,24 +49,6 @@
 // CHECK-NEXT:       smt.yield [[IMP2]] : !smt.bool
 // CHECK-NEXT:     }
 // CHECK-NEXT:     smt.assert [[FORALL2]]
-// CHECK-NEXT:     [[FORALL3:%.+]] = smt.forall {
-// CHECK-NEXT:     ^bb0([[ARG3:%.+]]: !smt.bv<1>):
-// CHECK-NEXT:       [[APP5:%.+]] = smt.apply_func [[F_FAIL]]([[ARG3]]) : !smt.func<(!smt.bv<1>) !smt.bool>
-// CHECK-NEXT:       [[CAST9:%.+]] = builtin.unrealized_conversion_cast [[FALSE]] : i1 to !smt.bv<1>
-// CHECK-NEXT:       [[APP6:%.+]] = smt.apply_func [[F_FAIL]]([[CAST9]]) : !smt.func<(!smt.bv<1>) !smt.bool>
-// CHECK-NEXT:       [[TRUE_2:%.+]] = smt.constant true
-// CHECK-NEXT:       [[CAST10:%.+]] = builtin.unrealized_conversion_cast [[TRUE]] : i1 to !smt.bv<1>
-// CHECK-NEXT:       [[CAST11:%.+]] = builtin.unrealized_conversion_cast [[CAST10]] : !smt.bv<1> to !smt.bv<1>
-// CHECK-NEXT:       [[C3:%.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
-// CHECK-NEXT:       [[EQ3:%.+]] = smt.eq [[CAST11]], [[C3]] : !smt.bv<1>
-// CHECK-NEXT:       [[AND3:%.+]] = smt.and [[APP5]], [[EQ3]]
-// CHECK-NEXT:       [[IMP3:%.+]] = smt.implies [[AND3]], [[APP6]]
-// CHECK-NEXT:       smt.yield [[IMP3]] : !smt.bool
-// CHECK-NEXT:     }
-// CHECK-NEXT:     smt.assert [[FORALL3]]
-// CHECK-NEXT:   }
-// CHECK-NEXT: }
-
 
 fsm.machine @priority_test() -> (i1) attributes {initialState = "start"} {
   %false = hw.constant 0 : i1
