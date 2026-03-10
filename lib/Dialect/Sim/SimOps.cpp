@@ -622,7 +622,7 @@ LogicalResult QueueFromArrayOp::verify() {
 
   if (queueElementType != arrayElementType) {
     return emitOpError() << "sim::Queue element type " << queueElementType
-                         << "doesn't match hw::ArrayType element type "
+                         << " doesn't match hw::ArrayType element type "
                          << arrayElementType;
   }
 
@@ -637,8 +637,8 @@ LogicalResult QueueConcatOp::verify() {
   for (Value input : getInputs()) {
     auto inpElType = cast<QueueType>(input.getType()).getElementType();
     if (inpElType != resultElType) {
-      return emitOpError() << "Queue element type " << inpElType
-                           << " doesn't match result Queue element type "
+      return emitOpError() << "sim::Queue element type " << inpElType
+                           << " doesn't match result sim::Queue element type "
                            << resultElType;
     }
   }
