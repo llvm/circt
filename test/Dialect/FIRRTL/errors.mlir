@@ -3374,67 +3374,65 @@ firrtl.circuit "OptionCaseWrongSymbolType" {
 // -----
 
 firrtl.circuit "DomainTypeMismatch" {
-  firrtl.domain @SimpleDomain
-  firrtl.domain @FieldedDomain [
-    #firrtl.domain.field<"voltage", !firrtl.integer>,
-    #firrtl.domain.field<"frequency", !firrtl.integer>
+  firrtl.domain @A
+  firrtl.domain @B [
+    #firrtl.domain.field<"voltage", !firrtl.integer>
   ]
 
   firrtl.module @DomainTypeMismatch(
-    // expected-error @below {{domain port 'fielded' has type '!firrtl.domain<@FieldedDomain()>' which does not match the domain definition, expected '!firrtl.domain<@FieldedDomain(voltage: !firrtl.integer, frequency: !firrtl.integer)>'}}
-    in %fielded: !firrtl.domain<@FieldedDomain()>
+    // expected-error @below {{domain port 'fielded' has type '!firrtl.domain<@B()>' which does not match the domain definition, expected '!firrtl.domain<@B(voltage: !firrtl.integer)>'}}
+    in %fielded: !firrtl.domain<@B()>
   ) {}
 }
 
 // -----
 
 firrtl.circuit "DomainTypeWrongFields" {
-  firrtl.domain @MyDomain [
+  firrtl.domain @A [
     #firrtl.domain.field<"voltage", !firrtl.integer>
   ]
 
   firrtl.module @DomainTypeWrongFields(
-    // expected-error @below {{domain port 'dom' has type '!firrtl.domain<@MyDomain(voltage: !firrtl.string)>' which does not match the domain definition, expected '!firrtl.domain<@MyDomain(voltage: !firrtl.integer)>'}}
-    in %dom: !firrtl.domain<@MyDomain(voltage: !firrtl.string)>
+    // expected-error @below {{domain port 'dom' has type '!firrtl.domain<@A(voltage: !firrtl.string)>' which does not match the domain definition, expected '!firrtl.domain<@A(voltage: !firrtl.integer)>'}}
+    in %dom: !firrtl.domain<@A(voltage: !firrtl.string)>
   ) {}
 }
 
 // -----
 
 firrtl.circuit "WireDomainTypeMismatch" {
-  firrtl.domain @ClockDomain [
+  firrtl.domain @A [
     #firrtl.domain.field<"name", !firrtl.string>
   ]
 
   firrtl.module @WireDomainTypeMismatch() {
     // expected-error @below {{domain type has 0 fields but domain definition has 1 fields}}
-    %w = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    %w = firrtl.wire : !firrtl.domain<@A()>
   }
 }
 
 // -----
 
 firrtl.circuit "DomainCreateTypeMismatch" {
-  firrtl.domain @PowerDomain [
-    #firrtl.domain.field<"voltage", !firrtl.integer>,
-    #firrtl.domain.field<"frequency", !firrtl.integer>
+  firrtl.domain @B [
+    #firrtl.domain.field<"voltage", !firrtl.integer>
   ]
 
   firrtl.module @DomainCreateTypeMismatch() {
-    // expected-error @below {{domain type has 1 fields but domain definition has 2 fields}}
-    %d = firrtl.domain.create : !firrtl.domain<@PowerDomain(voltage: !firrtl.integer)>
+    // expected-error @below {{domain type has 0 fields but domain definition has 1 fields}}
+    %d = firrtl.domain.create : !firrtl.domain<@B()>
   }
 }
 
 // -----
 
 firrtl.circuit "DomainAnonTypeMismatch" {
-  firrtl.domain @SimpleDomain [
+  firrtl.domain @A [
     #firrtl.domain.field<"id", !firrtl.integer>
   ]
 
   firrtl.module @DomainAnonTypeMismatch() {
     // expected-error @below {{domain type has 0 fields but domain definition has 1 fields}}
-    %d = firrtl.domain.anon : !firrtl.domain<@SimpleDomain()>
+    %d = firrtl.domain.anon : !firrtl.domain<@A()>
   }
 }

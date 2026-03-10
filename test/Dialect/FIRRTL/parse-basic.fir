@@ -2261,27 +2261,25 @@ circuit Domains:
 ;// -----
 FIRRTL version 5.1.0
 circuit DomainWithFields:
-  ; CHECK-LABEL: firrtl.domain @SimpleDomain
-  domain SimpleDomain:
+  ; CHECK-LABEL: firrtl.domain @A
+  domain A:
 
-  ; CHECK-LABEL: firrtl.domain @FieldedDomain [
+  ; CHECK-LABEL: firrtl.domain @B [
   ; CHECK-SAME:    #firrtl.domain.field<"voltage", !firrtl.integer>
-  ; CHECK-SAME:    #firrtl.domain.field<"frequency", !firrtl.integer>
   ; CHECK-SAME:  ]
-  domain FieldedDomain:
+  domain B:
     voltage : Integer
-    frequency : Integer
 
   ; CHECK-LABEL: firrtl.module @DomainWithFields
-  ; CHECK-SAME:    in %simple: !firrtl.domain<@SimpleDomain()>
-  ; CHECK-SAME:    in %fielded: !firrtl.domain<@FieldedDomain(voltage: !firrtl.integer, frequency: !firrtl.integer)>
-  ; CHECK-SAME:    out %fielded_out: !firrtl.domain<@FieldedDomain(voltage: !firrtl.integer, frequency: !firrtl.integer)>
+  ; CHECK-SAME:    in %simple: !firrtl.domain<@A()>
+  ; CHECK-SAME:    in %fielded: !firrtl.domain<@B(voltage: !firrtl.integer)>
+  ; CHECK-SAME:    out %fielded_out: !firrtl.domain<@B(voltage: !firrtl.integer)>
   public module DomainWithFields:
-    input simple: Domain of SimpleDomain
-    input fielded: Domain of FieldedDomain
-    output fielded_out: Domain of FieldedDomain
+    input simple: Domain of A
+    input fielded: Domain of B
+    output fielded_out: Domain of B
 
-    ; CHECK: firrtl.domain.define %fielded_out, %fielded : !firrtl.domain<@FieldedDomain(voltage: !firrtl.integer, frequency: !firrtl.integer)>
+    ; CHECK: firrtl.domain.define %fielded_out, %fielded : !firrtl.domain<@B(voltage: !firrtl.integer)>
     domain_define fielded_out = fielded
 
 ;// -----
