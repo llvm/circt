@@ -500,7 +500,7 @@ LogicalResult MachineOpConverter::dispatch() {
       // ensure that a transition is taken if none of the previous transitions
       // from the same state can be taken.
       for (auto [transId1, transition1] : llvm::enumerate(transitions)) {
-        if (transition1.from == transition.from ) {
+        if (transition1.from == transition.from) {
           // ensure that previous transition's guard from the same state is
           // false
           if (transId1 < transId) {
@@ -523,12 +523,15 @@ LogicalResult MachineOpConverter::dispatch() {
                 }
               }
             } else {
-              // If a transition has an empty guard region we assume the guard to be true
-              Value negVal = smt::NotOp::create(b, loc, smt::BoolConstantOp::create(b, loc, true));
+              // If a transition has an empty guard region we assume the guard
+              // to be true
+              Value negVal = smt::NotOp::create(
+                  b, loc, smt::BoolConstantOp::create(b, loc, true));
               guardVal = smt::AndOp::create(b, loc, guardVal, negVal);
             }
           } else if (transId1 != transId && !transition1.guard.has_value()) {
-            guardVal = smt::AndOp::create(b, loc, guardVal, smt::BoolConstantOp::create(b, loc, false));
+            guardVal = smt::AndOp::create(
+                b, loc, guardVal, smt::BoolConstantOp::create(b, loc, false));
           }
         }
       }
