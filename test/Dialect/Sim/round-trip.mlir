@@ -67,3 +67,16 @@ func.func @FormatStrings() {
   sim.fmt.hier_path escaped
   return
 }
+
+// CHECK-LABEL: func.func @DynamicStrings
+func.func @DynamicStrings(%idx: i32) {
+  // CHECK: sim.string.literal "Hello"
+  %str = sim.string.literal "Hello"
+  // CHECK: sim.string.length
+  %len = sim.string.length %str
+  // CHECK: sim.string.concat
+  %concat = sim.string.concat (%str, %str)
+  // CHECK: sim.string.get
+  %char = sim.string.get %str[%idx]
+  return
+}

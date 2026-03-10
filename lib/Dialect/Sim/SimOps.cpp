@@ -580,6 +580,32 @@ OpFoldResult IntToStringOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+//===----------------------------------------------------------------------===//
+// StringGetOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult StringGetOp::fold(FoldAdaptor adaptor) {
+  auto strAttr = cast_or_null<StringAttr>(adaptor.getStr());
+  auto indexAttr = cast_or_null<IntegerAttr>(adaptor.getIndex());
+  if (!strAttr || !indexAttr)
+    return {};
+
+  auto str = strAttr.getValue();
+  int64_t index = indexAttr.getValue().getSExtValue();
+
+  // Out-of-bounds access returns 0 (null character) per IEEE 1800-2023 § 6.16
+  if (index < 0 || index >= static_cast<int64_t>(str.size()))
+    return IntegerAttr::get(getType(), 0);
+
+  // Return the character at the specified index
+  uint8_t ch = static_cast<uint8_t>(str[index]);
+  return IntegerAttr::get(getType(), ch);
+}
+
+//===----------------------------------------------------------------------===//
+// QueueResizeOp
+//===----------------------------------------------------------------------===//
+
 LogicalResult QueueResizeOp::verify() {
   if (cast<QueueType>(getInput().getType()).getElementType() !=
       cast<QueueType>(getResult().getType()).getElementType())
