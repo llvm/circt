@@ -3380,8 +3380,8 @@ firrtl.circuit "DomainTypeMismatch" {
   ]
 
   firrtl.module @DomainTypeMismatch(
-    // expected-error @below {{domain port 'fielded' has type '!firrtl.domain<@B()>' which does not match the domain definition, expected '!firrtl.domain<@B(voltage: !firrtl.integer)>'}}
-    in %fielded: !firrtl.domain<@B()>
+    // expected-error @below {{domain port 'b' has type '!firrtl.domain<@B()>' which does not match the domain definition, expected '!firrtl.domain<@B(voltage: !firrtl.integer)>'}}
+    in %b: !firrtl.domain<@B()>
   ) {}
 }
 
@@ -3393,8 +3393,8 @@ firrtl.circuit "DomainTypeWrongFields" {
   ]
 
   firrtl.module @DomainTypeWrongFields(
-    // expected-error @below {{domain port 'dom' has type '!firrtl.domain<@A(voltage: !firrtl.string)>' which does not match the domain definition, expected '!firrtl.domain<@A(voltage: !firrtl.integer)>'}}
-    in %dom: !firrtl.domain<@A(voltage: !firrtl.string)>
+    // expected-error @below {{domain port 'a' has type '!firrtl.domain<@A(voltage: !firrtl.string)>' which does not match the domain definition, expected '!firrtl.domain<@A(voltage: !firrtl.integer)>'}}
+    in %a: !firrtl.domain<@A(voltage: !firrtl.string)>
   ) {}
 }
 
@@ -3414,13 +3414,13 @@ firrtl.circuit "WireDomainTypeMismatch" {
 // -----
 
 firrtl.circuit "DomainCreateTypeMismatch" {
-  firrtl.domain @B [
+  firrtl.domain @A [
     #firrtl.domain.field<"voltage", !firrtl.integer>
   ]
 
   firrtl.module @DomainCreateTypeMismatch() {
     // expected-error @below {{domain type has 0 fields but domain definition has 1 fields}}
-    %d = firrtl.domain.create : !firrtl.domain<@B()>
+    %d = firrtl.domain.create : !firrtl.domain<@A()>
   }
 }
 

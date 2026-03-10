@@ -2223,6 +2223,7 @@ circuit Domains:
 
   module Foo:
     input A: Domain of ClockDomain
+    input B: Domain of PowerDomain
     input a: UInt<1> domains [A]
 
   ; CHECK-LABEL: firrtl.module @Domains
@@ -2232,6 +2233,8 @@ circuit Domains:
   ; CHECK-SAME:    in %ab: !firrtl.uint<1> domains [%A, %B]
   ; CHECK-SAME:    in %d: !firrtl.uint<1> domains [%D]
   ; CHECK-SAME:    in %D: !firrtl.domain<@ClockDomain()>
+  ; CHECK-SAME:    in %E: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+  ; CHECK-SAME:    out %F: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
   public module Domains:
     input A: Domain of ClockDomain
     input B: Domain of ClockDomain
@@ -2241,6 +2244,8 @@ circuit Domains:
     ; Test that domains can be used in associations before they are parsed.
     input d: UInt<1> domains [D]
     input D: Domain of ClockDomain
+    input E: Domain of PowerDomain
+    output F: Domain of PowerDomain
 
     ; CHECK: %{{.*}} = firrtl.unsafe_domain_cast %a : !firrtl.uint<1>
     node noDomains = unsafe_domain_cast(a)
@@ -2249,38 +2254,20 @@ circuit Domains:
     ; CHECK: %{{.*}} = firrtl.unsafe_domain_cast %a domains[%A, %B] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@ClockDomain()>]
     node twoDomains = unsafe_domain_cast(a, A, B)
 
-    ; CHECK %foo_A, %foo_a = firrtl.instance foo @Foo(in A: !firrtl.domain<@ClockDomain()>, in a: !firrtl.uint<1> domains [A])
+    ; CHECK: %foo_A, %foo_B, %foo_a = firrtl.instance foo interesting_name @Foo(in A: !firrtl.domain<@ClockDomain()>, in B: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>, in a: !firrtl.uint<1> domains [A])
     inst foo of Foo
 
     ; CHECK: firrtl.domain.define %foo_A, %A : !firrtl.domain<@ClockDomain()>
     domain_define foo.A = A
 
+    ; CHECK: firrtl.domain.define %foo_B, %E : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+    domain_define foo.B = E
+
     ; CHECK: firrtl.domain.define %C, %foo_A : !firrtl.domain<@ClockDomain()>
     domain_define C = foo.A
 
-;// -----
-FIRRTL version 5.1.0
-circuit DomainWithFields:
-  ; CHECK-LABEL: firrtl.domain @A
-  domain A:
-
-  ; CHECK-LABEL: firrtl.domain @B [
-  ; CHECK-SAME:    #firrtl.domain.field<"voltage", !firrtl.integer>
-  ; CHECK-SAME:  ]
-  domain B:
-    voltage : Integer
-
-  ; CHECK-LABEL: firrtl.module @DomainWithFields
-  ; CHECK-SAME:    in %simple: !firrtl.domain<@A()>
-  ; CHECK-SAME:    in %fielded: !firrtl.domain<@B(voltage: !firrtl.integer)>
-  ; CHECK-SAME:    out %fielded_out: !firrtl.domain<@B(voltage: !firrtl.integer)>
-  public module DomainWithFields:
-    input simple: Domain of A
-    input fielded: Domain of B
-    output fielded_out: Domain of B
-
-    ; CHECK: firrtl.domain.define %fielded_out, %fielded : !firrtl.domain<@B(voltage: !firrtl.integer)>
-    domain_define fielded_out = fielded
+    ; CHECK: firrtl.domain.define %F, %E : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+    domain_define F = E
 
 ;// -----
 FIRRTL version 5.1.0
