@@ -12,7 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "RTGInstructionUtils.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Support/IndentedOstream.h"
 #include "mlir/TableGen/Operator.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/TableGen/Error.h"
@@ -23,21 +25,12 @@ namespace tblgen {
 namespace rtg {
 
 //===----------------------------------------------------------------------===//
-// Operand Type Classification
-//===----------------------------------------------------------------------===//
-
-/// Classification of operand types in RTG instructions.
-/// Used to distinguish between different kinds of operands during code
-/// generation and validation.
-enum class OperandType { Register, Immediate, Label };
-
-//===----------------------------------------------------------------------===//
 // Format AST
 //===----------------------------------------------------------------------===//
 
 /// Base class for all format AST nodes.
 /// Represents a single element in an instruction format specification,
-/// such as operands, literals, mnemonics, or signedness specifiers.
+/// such as operands, literals, or signedness specifiers.
 class FormatNode {
 public:
   enum class Kind {
@@ -47,10 +40,12 @@ public:
     BinaryLiteral,
     /// A string literal (e.g., `add`)
     StringLiteral,
-    /// The mnemonic keyword placeholder
-    Mnemonic,
     /// A signedness wrapper (signed()/unsigned())
-    SignednessSpecifier
+    SignednessSpecifier,
+    /// An if-then-else conditional construct
+    IfThenElse,
+    /// A custom directive (custom<FunctionName>(...))
+    Custom
   };
 
   FormatNode(Kind kind, llvm::SMLoc loc, StringRef desc)
@@ -109,14 +104,10 @@ public:
   /// The set of possible operand types for this operand.
   /// Only valid after `resolveOperands()` has been called on the context.
   /// An operand may have multiple possible types, e.g., if `AnyTypeOf` is used.
-  DenseSet<OperandType> kinds;
+  OperandTypeSet kinds;
   /// The parent node of this operand node. 'nullptr' if this is a top-level
   /// operand.
   FormatNode *parent = nullptr;
-  /// The binary encoding width for register operands.
-  /// Only valid after `resolveOperands()` has been called and if this is a
-  /// register operand. Set to -1 if not a register or not yet resolved.
-  int registerBinaryEncodingWidth = -1;
 
 private:
   SmallString<32> name;
@@ -173,21 +164,6 @@ private:
   SmallString<32> str;
 };
 
-/// Represents the mnemonic placeholder in an assembly format.
-/// The 'mnemonic' keyword in a format specification is replaced with the
-/// actual instruction mnemonic (e.g., "add", "sub", "lw") during code
-/// generation.
-struct MnemonicNode : public FormatNode {
-  /// Construct a mnemonic node.
-  /// \param loc Source location in the TableGen file
-  MnemonicNode(llvm::SMLoc loc)
-      : FormatNode(Kind::Mnemonic, loc, "'mnemonic' keyword") {}
-
-  static bool classof(const FormatNode *elem) {
-    return elem->getKind() == Kind::Mnemonic;
-  }
-};
-
 /// Represents a signedness specifier for an operand in an assembly format.
 /// Wraps an operand to indicate whether it should be printed as signed or
 /// unsigned (e.g., signed($imm) or unsigned($imm)).
@@ -217,6 +193,71 @@ public:
 private:
   bool isSgnd;
   OperandNode *operand;
+};
+
+/// Represents an if-then-else conditional construct in an instruction format.
+/// Allows conditional emission of format elements based on a 1-bit immediate
+/// condition value. Either the then or else branch may be empty, but not both.
+class IfThenElseNode : public FormatNode {
+public:
+  IfThenElseNode(llvm::SMLoc loc, OperandNode *condition,
+                 SmallVector<FormatNode *> thenBranch,
+                 SmallVector<FormatNode *> elseBranch)
+      : FormatNode(Kind::IfThenElse, loc, "if-then-else"), condition(condition),
+        thenBranch(std::move(thenBranch)), elseBranch(std::move(elseBranch)) {}
+
+  /// Get the condition operand (must be a 1-bit immediate).
+  OperandNode *getCondition() const { return condition; }
+
+  /// Get the then branch nodes.
+  ArrayRef<FormatNode *> getThenBranch() const { return thenBranch; }
+
+  /// Get the else branch nodes.
+  ArrayRef<FormatNode *> getElseBranch() const { return elseBranch; }
+
+  /// Check if the then branch is empty.
+  bool isThenBranchEmpty() const { return thenBranch.empty(); }
+
+  /// Check if the else branch is empty.
+  bool isElseBranchEmpty() const { return elseBranch.empty(); }
+
+  static bool classof(const FormatNode *elem) {
+    return elem->getKind() == Kind::IfThenElse;
+  }
+
+private:
+  OperandNode *condition;
+  SmallVector<FormatNode *> thenBranch;
+  SmallVector<FormatNode *> elseBranch;
+};
+
+/// Represents a custom directive in an instruction format. Allows calling
+/// custom C++ functions.
+class CustomDirective : public FormatNode {
+public:
+  CustomDirective(llvm::SMLoc loc, StringRef functionName,
+                  SmallVector<OperandNode *> arguments, bool isFallible = false)
+      : FormatNode(Kind::Custom, loc, "custom directive"),
+        functionName(functionName), arguments(std::move(arguments)),
+        fallible(isFallible) {}
+
+  /// Get the custom function name.
+  StringRef getFunctionName() const { return functionName; }
+
+  /// Get the list of operand arguments.
+  ArrayRef<OperandNode *> getArguments() const { return arguments; }
+
+  /// Check if this is a fallible custom directive (has '?' suffix).
+  bool isFallible() const { return fallible; }
+
+  static bool classof(const FormatNode *elem) {
+    return elem->getKind() == Kind::Custom;
+  }
+
+private:
+  SmallString<64> functionName;
+  SmallVector<OperandNode *> arguments;
+  bool fallible;
 };
 
 /// Context for managing the format AST for a single instruction operation.
@@ -274,17 +315,19 @@ struct FormatGen {
 struct AssemblyFormatGen : public FormatGen {
   /// Construct an assembly format generator.
   /// \param os Output stream to write generated code to
-  explicit AssemblyFormatGen(raw_ostream &os) : os(os) {}
+  explicit AssemblyFormatGen(mlir::raw_indented_ostream &os) : os(os) {}
 
   void genInstructionMethod(ASTContext &ctx, StringRef opClassName) override;
 
 private:
   void gen(StringLiteralNode *node);
-  void gen(MnemonicNode *node);
   void gen(OperandNode *node);
   void gen(SignednessNode *node);
+  void gen(IfThenElseNode *node);
+  void gen(CustomDirective *node);
+  void dispatch(FormatNode *node);
 
-  raw_ostream &os;
+  mlir::raw_indented_ostream &os;
 };
 
 /// Code generator for binary format encoding methods.
@@ -294,19 +337,24 @@ private:
 struct BinaryFormatGen : public FormatGen {
   /// Construct a binary format generator.
   /// \param os Output stream to write generated code to
-  explicit BinaryFormatGen(raw_ostream &os) : os(os) {}
+  explicit BinaryFormatGen(mlir::raw_indented_ostream &os) : os(os) {}
 
   void genInstructionMethod(ASTContext &ctx, StringRef opClassName) override;
 
 private:
+  // genDecl of all nodes must have been called before any gen() is called.
   void gen(BinaryLiteralNode *node);
-  // genDecl must have been called before gen() is called.
   void gen(OperandNode *node);
-  // Generate variable declarations for an operand node.
+  void gen(IfThenElseNode *node);
+  void gen(CustomDirective *node);
+  void dispatch(FormatNode *node);
+  // Generate variable declarations.
   void genDecl(OperandNode *node);
+  void genDecl(IfThenElseNode *node);
+  void dispatchDecl(FormatNode *node);
 
   DenseSet<StringRef> decls;
-  raw_ostream &os;
+  mlir::raw_indented_ostream &os;
 };
 
 /// Parser for instruction format strings.
@@ -322,10 +370,6 @@ struct FormatParser {
   /// \param format The format string to parse
   void parseAndAppendToContext(llvm::SMLoc loc, StringRef format);
 
-  /// Parses the "mnemonic" keyword in the format.
-  /// \return A MnemonicNode if found, nullptr otherwise
-  FormatNode *parseOptionalMnemonic();
-
   /// Parses operand references like "$rs" or "$imm[11:0]" with optional bit
   /// slicing. Does not resolve the MLIR type of the operand.
   /// \return An OperandNode if found, nullptr otherwise
@@ -339,9 +383,27 @@ struct FormatParser {
   /// \return A BinaryLiteralNode if found, nullptr otherwise
   FormatNode *parseOptionalBinaryLiteral();
 
+  /// Parses decimal literals in the form "3d1" (3-bit decimal with value 1).
+  /// \return A BinaryLiteralNode if found, nullptr otherwise
+  FormatNode *parseOptionalDecimalLiteral();
+
   /// Parses "signed($operand)" or "unsigned($operand)" wrappers.
   /// \return A SignednessNode if found, nullptr otherwise
   FormatNode *parseOptionalSignednessSpecifier();
+
+  /// Parses if-then-else constructs in the form:
+  /// "if <cond> then (<then>) else (<else>)"
+  /// where <cond> is a 1-bit immediate operand, and <then>/<else> are
+  /// space-separated lists of format nodes.
+  /// Either 'then ()' or 'else ()' may be omitted, but not both.
+  /// \return An IfThenElseNode if found, nullptr otherwise
+  FormatNode *parseOptionalIfThenElse();
+
+  /// Parses custom directives in the form:
+  /// "custom<FunctionName>($arg1 $arg2 ...)"
+  /// where FunctionName is a C++ function name and arguments are operands.
+  /// \return A CustomDirective if found, nullptr otherwise
+  FormatNode *parseOptionalCustomDirective();
 
   /// Parses bit slices like "[11:0]" or "[5]" (single bit).
   /// \param highBit Output parameter for the high bit (inclusive)
@@ -366,13 +428,29 @@ struct FormatParser {
   /// \return True if the string was consumed, false otherwise
   bool tryConsume(StringRef str, bool skipWhitespaceFirst = true);
 
-  /// Parse an integer literal at the current position.
-  /// \return The parsed integer value
-  int64_t parseIntLiteral();
+  /// Consume all but at least one whitespace character at the current position.
+  void consumeAtLeastOneWhitespace();
+
+  /// Try to parse an unsigned integer literal at the current position.
+  /// \return True if an unsigned integer was parsed, false otherwise
+  bool tryParseUIntLiteral(uint64_t &value);
+
+  /// Parse an unsigned integer literal at the current position.
+  /// \return The parsed unsigned integer value
+  uint64_t parseUIntLiteral();
 
   /// Parses identifiers like "$rs" or "$imm".
   /// \return The identifier without the leading "$"
   StringRef parseIdentifier();
+
+  /// Parse the next node in the format string.
+  FormatNode *parseNextNode();
+
+  /// Check if the current position is at the end of a scope.
+  bool isAtScopeEnd();
+
+  /// Check if a character is whitespace.
+  bool isWhitespace(char c);
 
   /// Get the current source location in the input string.
   /// \return The current source location for error reporting
@@ -385,29 +463,43 @@ private:
   llvm::SMLoc loc;
 };
 
-/// Verify that a format AST is valid for assembly format generation.
-/// Checks that:
-/// - The format does not contain binary literals (only valid in binary
-///   formats)
-/// - The format does not contain operand bit slicing (only valid in binary
-///   formats)
-/// - Immediate operands are wrapped in signed()/unsigned() specifiers
-/// - Label and register operands are not wrapped in signedness specifiers
-///
-/// Must be called after resolveOperands() has been called on the context.
-/// \param ctx The AST context to verify
-void verifyAssemblyFormat(ASTContext &ctx);
+/// Verifier for instruction format ASTs.
+class Verifier {
+public:
+  explicit Verifier(ASTContext &ctx, bool isBinary)
+      : ctx(ctx), isBinary(isBinary) {}
 
-/// Verify that a format AST is valid for binary format generation.
-/// Checks that:
-/// - The format does not contain mnemonics (only valid in assembly formats)
-/// - The format does not contain string literals (only valid in assembly
-///   formats)
-/// - The format does not contain signedness specifiers (only valid in assembly
-///   formats)
-///
-/// \param ctx The AST context to verify
-void verifyBinaryFormat(ASTContext &ctx);
+  /// Verify that a format AST is valid for binary format generation.
+  /// Checks that:
+  /// - The format does not contain string literals (only valid in assembly
+  ///   formats)
+  /// - The format does not contain signedness specifiers (only valid in
+  /// assembly
+  ///   formats)
+  static void verifyAsBinary(ASTContext &ctx);
+  /// Verify that a format AST is valid for assembly format generation.
+  /// Checks that:
+  /// - The format does not contain binary literals (only valid in binary
+  ///   formats)
+  /// - The format does not contain operand bit slicing (only valid in binary
+  ///   formats)
+  /// - Immediate operands are wrapped in signed()/unsigned() specifiers
+  /// - Label and register operands are not wrapped in signedness specifiers
+  static void verifyAsAssembly(ASTContext &ctx);
+
+private:
+  void verify(BinaryLiteralNode *node);
+  void verify(OperandNode *node);
+  void verify(IfThenElseNode *node);
+  void verify(StringLiteralNode *node);
+  void verify(SignednessNode *node);
+  void verify(CustomDirective *node);
+  void dispatch(FormatNode *node);
+
+private:
+  ASTContext &ctx;
+  bool isBinary;
+};
 
 /// Generate print and encoding methods for an instruction format operation.
 /// This is the main entry point for generating code from an instruction

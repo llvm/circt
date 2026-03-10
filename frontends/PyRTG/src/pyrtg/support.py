@@ -42,6 +42,9 @@ def _FromCirctValue(value: ir.Value) -> Value:
   if isinstance(type, rtgtest.IntegerRegisterType):
     from .resources import IntegerRegister
     return IntegerRegister(value)
+  if isinstance(type, rtgtest.FloatRegisterType):
+    from .resources import FloatRegister
+    return FloatRegister(value)
   if isinstance(type, rtgtest.CPUType):
     from .contexts import CPUCore
     return CPUCore(value)

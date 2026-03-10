@@ -63,15 +63,12 @@ private:
                                   SmallVector<StringRef> &states,
                                   Location &loc) {
     StringRef nextState = t.getNextState();
-    Transition tr = {from, insertStates(states, nextState)};
+    Transition tr = {from, insertStates(states, nextState), std::nullopt,
+                     std::nullopt, std::nullopt};
     if (t.hasGuard())
       tr.guard = &t.getGuard();
-    else
-      tr.guard = std::nullopt;
     if (t.hasAction())
       tr.action = &t.getAction();
-    else
-      tr.action = std::nullopt;
     return tr;
   }
 
@@ -261,6 +258,10 @@ LogicalResult MachineOpConverter::dispatch() {
   for (auto i = numArgs; i < quantifiedTypes.size(); i++)
     stateFunDomain.push_back(quantifiedTypes[i]);
 
+  // The domain should not be empty
+  if (stateFunDomain.empty())
+    return solver.emitError("At least one variable or output is required.");
+
   // For each state, declare one SMT function: `F_state(outs, vars, [time]) ->
   // Bool`, returning `true`  when `state` is activated.
   for (auto stateOp : machineOp.front().getOps<fsm::StateOp>()) {
@@ -409,6 +410,9 @@ LogicalResult MachineOpConverter::dispatch() {
   // implication.
 
   for (auto [transId, transition] : llvm::enumerate(transitions)) {
+    // Extract values from structured binding to avoid C++20 extension warnings
+    // when capturing in lambdas
+    const auto &currentTransition = transition;
 
     // return a SmallVector of updated SMT values as arguments of the arriving
     // state function
@@ -426,9 +430,9 @@ LogicalResult MachineOpConverter::dispatch() {
       for (size_t i = 0; i < numVars; i++)
         castUpdatedVars.push_back(actionArgsOutsVarsVals[numArgs + numOut + i]);
 
-      if (transition.action.has_value()) {
+      if (currentTransition.action.has_value()) {
 
-        auto *actionReg = transition.action.value();
+        auto *actionReg = currentTransition.action.value();
 
         IRMapping mapping = createIRMapping(fsmToCast, constMapper);
 
@@ -479,7 +483,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
       // Clone all the operations in the guard region except for `ReturnOp` and
       // `AssertOp,
-      for (auto &op : transition.guard.value()->front()) {
+      for (auto &op : currentTransition.guard.value()->front()) {
         if (isa<verif::AssertOp>(op)) {
           // Ignore assertions in guard regions
           op.emitWarning("Assertions in guard regions are ignored.");
@@ -507,7 +511,7 @@ LogicalResult MachineOpConverter::dispatch() {
       SmallVector<std::pair<mlir::Value, mlir::Value>> fsmToCast = mapSmtToFsm(
           loc, b, outputArgsOutsVarsVals, numArgs, numOut, fsmArgs, fsmVars);
       SmallVector<Value> castOutputVars;
-      auto *outputReg = transition.output.value();
+      auto *outputReg = currentTransition.output.value();
       IRMapping mapping = createIRMapping(fsmToCast, constMapper);
 
       // Clone each operation in the output region except for `OutputOp`,
@@ -516,7 +520,7 @@ LogicalResult MachineOpConverter::dispatch() {
       for (auto &op : outputReg->front()) {
         if (isa<verif::AssertOp>(op)) {
           // Store the assertion operations, with a pointer to the region
-          assertions.push_back({transition.to, outputReg});
+          assertions.push_back({currentTransition.to, outputReg});
         } else {
           auto *newOp = b.clone(op, mapping);
           // Retrieve all the operands of the output operation
@@ -562,7 +566,7 @@ LogicalResult MachineOpConverter::dispatch() {
           // Apply the starting-state function to the starting variables and
           // outputs
           auto lhs = smt::ApplyFuncOp::create(
-              b, loc, stateFunctions[transition.from], startingFunArgs);
+              b, loc, stateFunctions[currentTransition.from], startingFunArgs);
 
           // Update the variables according to the action region
           auto updatedCastVals = action(startingArgsOutsVars);
@@ -571,7 +575,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
           // Depending on the updated variables, compute the output values at
           // the arriving state
-          if (transition.output.has_value()) {
+          if (currentTransition.output.has_value()) {
             auto outputCastVals = output(arrivingArgsOutsVars);
 
             // Add the output values to the arriving-state function inputs
@@ -594,11 +598,11 @@ LogicalResult MachineOpConverter::dispatch() {
           }
 
           auto rhs = smt::ApplyFuncOp::create(
-              b, loc, stateFunctions[transition.to], arrivingFunArgs);
+              b, loc, stateFunctions[currentTransition.to], arrivingFunArgs);
 
           // If there is a guard, compute its value with the variable and
           // argument values at the starting state
-          if (transition.guard.has_value()) {
+          if (currentTransition.guard.has_value()) {
             auto guardVal = guard(startingArgsOutsVars);
             auto guardedlhs = smt::AndOp::create(b, loc, lhs, guardVal);
             return smt::ImpliesOp::create(b, loc, guardedlhs, rhs);

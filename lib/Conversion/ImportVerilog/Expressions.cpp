@@ -329,6 +329,10 @@ struct ExprVisitor {
   // constant
   Value handleQueueRangeSelectExpressions(
       const slang::ast::RangeSelectExpression &expr, Type type, Value value) {
+    Value savedQueue = context.currentQueue;
+    llvm::scope_exit restoreQueue([&] { context.currentQueue = savedQueue; });
+    context.currentQueue = value;
+
     auto lowerIdx = context.convertRvalueExpression(expr.left());
     auto upperIdx = context.convertRvalueExpression(expr.right());
     auto resultType =
@@ -2083,6 +2087,9 @@ struct RvalueExprVisitor : public ExprVisitor {
   }
 
   Value visit(const slang::ast::UnboundedLiteral &expr) {
+    assert(context.getIndexedQueue() &&
+           "slang checks $ only used within queue index expression");
+
     // Compute queue size and subtract one to get the last element
     auto queueSize =
         moore::QueueSizeBIOp::create(builder, loc, context.getIndexedQueue());

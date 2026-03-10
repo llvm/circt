@@ -166,6 +166,27 @@ struct LTLOrOpConversion : public OpConversionPattern<ltl::OrOp> {
   }
 };
 
+struct LTLPastOpConversion : public OpConversionPattern<ltl::PastOp> {
+  using OpConversionPattern<ltl::PastOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ltl::PastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (!adaptor.getClk())
+      return failure();
+    Value cur = adaptor.getInput();
+    auto clock =
+        seq::ToClockOp::create(rewriter, op.getLoc(), adaptor.getClk());
+    Value ce =
+        hw::ConstantOp::create(rewriter, op.getLoc(), rewriter.getI1Type(), 1);
+    auto shiftreg =
+        seq::ShiftRegOp::create(rewriter, op.getLoc(), op.getDelayAttr(), cur,
+                                clock, ce, {}, {}, {}, {}, {});
+    rewriter.replaceOp(op, shiftreg);
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -182,6 +203,18 @@ struct LowerLTLToCorePass
 
 // Simply applies the conversion patterns defined above
 void LowerLTLToCorePass::runOnOperation() {
+  // Emit an explicit error for unsupported past ops, rather than a confusing
+  // 'failed to legalize' error
+  auto res = getOperation().walk([&](ltl::PastOp op) {
+    if (!op.getClk()) {
+      op.emitError(
+          "ltl.past operations without a clock operand are not supported.");
+      return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
+  });
+  if (res.wasInterrupted())
+    return signalPassFailure();
 
   // Set target dialects: We don't want to see any ltl or verif that might
   // come from an AssertProperty left in the result
@@ -193,6 +226,7 @@ void LowerLTLToCorePass::runOnOperation() {
   target.addLegalDialect<ltl::LTLDialect>();
   target.addLegalDialect<verif::VerifDialect>();
   target.addIllegalOp<verif::HasBeenResetOp>();
+  target.addIllegalOp<ltl::PastOp>();
 
   auto isLegal = [](Operation *op) {
     auto hasNonAssertUsers = std::any_of(
@@ -252,9 +286,10 @@ void LowerLTLToCorePass::runOnOperation() {
 
   // Create the operation rewrite patters
   RewritePatternSet patterns(&getContext());
-  patterns.add<HasBeenResetOpConversion, LTLImplicationConversion,
-               LTLNotConversion, LTLAndOpConversion, LTLOrOpConversion>(
-      converter, patterns.getContext());
+  patterns
+      .add<HasBeenResetOpConversion, LTLImplicationConversion, LTLNotConversion,
+           LTLAndOpConversion, LTLOrOpConversion, LTLPastOpConversion>(
+          converter, patterns.getContext());
   // Apply the conversions
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))

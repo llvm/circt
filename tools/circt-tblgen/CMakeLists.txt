@@ -9,6 +9,7 @@ add_tablegen(circt-tblgen CIRCT
   FIRRTLIntrinsicsGen.cpp
   RTGInstructionFormat.cpp
   RTGInstructionMethodsGen.cpp
+  RTGInstructionUtils.cpp
 )
 
 target_link_libraries(circt-tblgen

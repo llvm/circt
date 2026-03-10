@@ -4085,6 +4085,13 @@ endmodule
 // CHECK:               [[IDXSUM:%.+]] = moore.add [[Q1LASTIDX]], [[Q2LASTEL]] : i32
 // CHECK:               [[RESVAL:%.+]] = moore.dyn_queue_extract [[QR1]] from [[IDXSUM]] to [[IDXSUM]] : <i32, 0>, i32 -> i32
 // CHECK:               moore.blocking_assign [[RES]], [[RESVAL]] : i32
+// CHECK:               [[QR1:%.+]] = moore.read [[Q1]] : <queue<i32, 0>>
+// CHECK:               [[THREE:%.+]] = moore.constant 3 : i32
+// CHECK:               [[Q1SIZE:%.+]] = moore.builtin.size [[QR1]] : <i32, 0>
+// CHECK:               [[ONE:%.+]] = moore.constant 1 : i32
+// CHECK:               [[Q1LASTIDX:%.+]] = moore.sub [[Q1SIZE]], [[ONE]] : i32
+// CHECK:               [[Q1RNGSEL:%.+]] = moore.dyn_queue_extract [[QR1]] from [[THREE]] to [[Q1LASTIDX]] : <i32, 0>, i32 -> queue<i32, 0>
+// CHECK:               moore.blocking_assign [[Q2]], [[Q1RNGSEL]] : queue<i32, 0>
 // CHECK:               moore.return
 // CHECK:           }
 // CHECK:           moore.output
@@ -4095,6 +4102,7 @@ module QueueUnboundedLiteralTest;
     int res;
     initial begin
       res = q1[$ + q2[$]];
+      q2 = q1[3:$];
     end
 endmodule
 
@@ -4170,6 +4178,7 @@ module QueueConcatTest;
       qres = { 1, q1, arr, 1, 2};
     end
 endmodule
+
 
 // CHECK-LABEL: moore.module @ForkJoinTest() {
 // CHECK:         [[C0:%.+]] = moore.constant 0 : i32
@@ -4264,6 +4273,7 @@ module ForkJoinTest ();
 	end
 endmodule
 
+
 // CHECK-LABEL: moore.module @AssocArrayExtractTest() {
 // CHECK:           [[AA:%.+]] = moore.variable : <assoc_array<i32, string>>
 // CHECK:           [[AAE:%.+]] = moore.variable : <i32>
@@ -4309,7 +4319,6 @@ module AssocArrayManipulationTest;
         aa.delete();
     end
 endmodule
-
 
 // Test that DPI-C imported functions are emitted as extern declarations
 
@@ -4398,3 +4407,44 @@ module OpenArrayCallTest(input logic clock);
   end
 endmodule
 
+
+//===----------------------------------------------------------------------===//
+// Unconnected Ports
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: moore.module private @InOutRefUnconnected(in %a : !moore.l1, out b : !moore.l1, in %c : !moore.ref<l1>, in %d : !moore.ref<l1>) {
+// CHECK:         moore.net name "a" wire : <l1>
+// CHECK:         [[B:%.+]] = moore.net wire : <l1>
+// CHECK:         [[C:%.+]] = moore.net name "c" wire : <l1>
+// CHECK:         [[D:%.+]] = moore.variable name "d" : <l1>
+// CHECK:         [[RB:%.+]] = moore.read [[B]] : <l1>
+// CHECK:         [[RC:%.+]] = moore.read %c : <l1>
+// CHECK:         moore.assign [[C]], [[RC]] : l1
+// CHECK:         [[RD:%.+]] = moore.read %d : <l1>
+// CHECK:         moore.assign [[D]], [[RD]] : l1
+// CHECK:         moore.output [[RB]] : !moore.l1
+// CHECK:       }
+module InOutRefUnconnected(
+  input a,
+  output b,
+  inout logic c,
+  ref logic d
+);
+endmodule
+
+// CHECK-LABEL: moore.module @UnconnectedPortsTop() {
+// CHECK:         [[A:%.+]] = moore.net wire : <l1>
+// CHECK:         [[RA:%.+]] = moore.read [[A]] : <l1>
+// CHECK:         [[C:%.+]] = moore.net wire : <l1>
+// CHECK:         [[D:%.+]] = moore.variable : <l1>
+// CHECK:         moore.instance "p4" @InOutRefUnconnected(a: [[RA]]: !moore.l1, c: [[C]]: !moore.ref<l1>, d: [[D]]: !moore.ref<l1>) -> (b: !moore.l1)
+// CHECK:         moore.output
+// CHECK:       }
+module UnconnectedPortsTop;
+  InOutRefUnconnected p4(
+    .a(), // Unconnected input
+    .b(), // Unconnected output
+    .c(), // Unconnected inout
+    .d()  // Unconnected ref
+  );
+endmodule

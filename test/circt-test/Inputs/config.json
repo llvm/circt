@@ -1,0 +1,9 @@
+{
+  "runners": [
+    {
+      "name": "custom",
+      "binary": "true",
+      "kind": "formal"
+    }
+  ]
+}

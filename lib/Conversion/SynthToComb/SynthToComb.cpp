@@ -32,6 +32,17 @@ using namespace comb;
 
 namespace {
 
+struct SynthChoiceOpConversion : OpConversionPattern<synth::ChoiceOp> {
+  using OpConversionPattern<synth::ChoiceOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(synth::ChoiceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Use the first input as the output, and ignore the rest.
+    rewriter.replaceOp(op, adaptor.getInputs().front());
+    return success();
+  }
+};
+
 struct SynthAndInverterOpConversion
     : OpConversionPattern<synth::aig::AndInverterOp> {
   using OpConversionPattern<synth::aig::AndInverterOp>::OpConversionPattern;
@@ -120,8 +131,8 @@ struct ConvertSynthToCombPass
 } // namespace
 
 static void populateSynthToCombConversionPatterns(RewritePatternSet &patterns) {
-  patterns.add<SynthAndInverterOpConversion, SynthMajorityInverterOpConversion>(
-      patterns.getContext());
+  patterns.add<SynthChoiceOpConversion, SynthAndInverterOpConversion,
+               SynthMajorityInverterOpConversion>(patterns.getContext());
 }
 
 void ConvertSynthToCombPass::runOnOperation() {
