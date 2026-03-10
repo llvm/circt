@@ -38,8 +38,8 @@ fsm.machine @alternating() -> (i8) attributes {initialState = "A"} {
 // NO-TIME:      [[FUN2:%.+]] = smt.apply_func [[F_B]]([[CAST1]]) : !smt.func<(!smt.bv<8>) !smt.bool>
 // NO-TIME:      [[TRUE1:%.+]] = smt.constant true
 // NO-TIME:      [[AND1:%.+]] = smt.and [[FUN1]], [[TRUE1]]
-// NO-TIME:      [[IMP1:%.+]] = smt.implies [[AND1]], [[FUN2]]
-// NO-TIME:      smt.yield [[IMP1]] : !smt.bool
+// NO-TIME:      [[IMPLIES0:%.+]] = smt.implies [[AND1]], [[FUN2]]
+// NO-TIME:      smt.yield [[IMPLIES0]] : !smt.bool
 // NO-TIME:    }
 // NO-TIME:    smt.assert [[FORALL1]]
 // NO-TIME:    [[FORALL2:%.+]] = smt.forall {
@@ -49,8 +49,8 @@ fsm.machine @alternating() -> (i8) attributes {initialState = "A"} {
 // NO-TIME:      [[FUN4:%.+]] = smt.apply_func [[F_A]]([[CAST2]]) : !smt.func<(!smt.bv<8>) !smt.bool>
 // NO-TIME:      [[TRUE2:%.+]] = smt.constant true
 // NO-TIME:      [[AND2:%.+]] = smt.and [[FUN3]], [[TRUE2]]
-// NO-TIME:      [[IMP2:%.+]] = smt.implies [[AND2]], [[FUN4]]
-// NO-TIME:      smt.yield [[IMP2]] : !smt.bool
+// NO-TIME:      [[IMPLIES1:%.+]] = smt.implies [[AND2]], [[FUN4]]
+// NO-TIME:      smt.yield [[IMPLIES1]] : !smt.bool
 // NO-TIME:    }
 // NO-TIME:    smt.assert [[FORALL2]]
 // NO-TIME:  }
@@ -79,8 +79,8 @@ fsm.machine @alternating() -> (i8) attributes {initialState = "A"} {
 // TIME:       [[FUN2:%.+]] = smt.apply_func [[F_B]]([[CAST1]], [[ADD1]]) : !smt.func<(!smt.bv<8>, !smt.bv<8>) !smt.bool>
 // TIME:       [[TRUE1:%.+]] = smt.constant true
 // TIME:       [[AND1:%.+]] = smt.and [[FUN1]], [[TRUE1]]
-// TIME:       [[IMP1:%.+]] = smt.implies [[AND1]], [[FUN2]]
-// TIME:       smt.yield [[IMP1]] : !smt.bool
+// TIME:       [[IMPLIES0:%.+]] = smt.implies [[AND1]], [[FUN2]]
+// TIME:       smt.yield [[IMPLIES0]] : !smt.bool
 // TIME:     }
 // TIME:     smt.assert [[FORALL1]]
 // TIME:     [[FORALL2:%.+]] = smt.forall {
@@ -92,8 +92,8 @@ fsm.machine @alternating() -> (i8) attributes {initialState = "A"} {
 // TIME:       [[FUN4:%.+]] = smt.apply_func [[F_A]]([[CAST2]], [[ADD2]]) : !smt.func<(!smt.bv<8>, !smt.bv<8>) !smt.bool>
 // TIME:       [[TRUE2:%.+]] = smt.constant true
 // TIME:       [[AND2:%.+]] = smt.and [[FUN3]], [[TRUE2]]
-// TIME:       [[IMP2:%.+]] = smt.implies [[AND2]], [[FUN4]]
-// TIME:       smt.yield [[IMP2]] : !smt.bool
+// TIME:       [[IMPLIES1:%.+]] = smt.implies [[AND2]], [[FUN4]]
+// TIME:       smt.yield [[IMPLIES1]] : !smt.bool
 // TIME:     }
 // TIME:     smt.assert [[FORALL2]]
 // TIME:   }
