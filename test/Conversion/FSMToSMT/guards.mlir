@@ -12,17 +12,17 @@
 // CHECK-NEXT:       [[CAST1:%.+]] = builtin.unrealized_conversion_cast [[ARG1]] : !smt.bv<2> to i2
 // CHECK-NEXT:       [[C0_I2:%.+]] = hw.constant 0 : i2
 // CHECK-NEXT:       [[C0_BV2:%.+]] = smt.bv.constant #smt.bv<0> : !smt.bv<2>
-// CHECK-NEXT:       [[APP0:%.+]] = smt.apply_func [[F_A]]([[C0_BV2]]) : !smt.func<(!smt.bv<2>) !smt.bool>
-// CHECK-NEXT:       smt.yield [[APP0]] : !smt.bool
+// CHECK-NEXT:       [[FUN0:%.+]] = smt.apply_func [[F_A]]([[C0_BV2]]) : !smt.func<(!smt.bv<2>) !smt.bool>
+// CHECK-NEXT:       smt.yield [[FUN0]] : !smt.bool
 // CHECK-NEXT:     }
 // CHECK-NEXT:     smt.assert [[FORALL0]]
 // CHECK-NEXT:     [[FORALL1:%.+]] = smt.forall {
 // CHECK-NEXT:     ^bb0([[ARG2:%.+]]: !smt.bv<1>, [[ARG3:%.+]]: !smt.bv<1>, [[ARG4:%.+]]: !smt.bv<2>):
-// CHECK-NEXT:       [[APP1:%.+]] = smt.apply_func [[F_A]]([[ARG4]]) : !smt.func<(!smt.bv<2>) !smt.bool>
+// CHECK-NEXT:       [[FUN1:%.+]] = smt.apply_func [[F_A]]([[ARG4]]) : !smt.func<(!smt.bv<2>) !smt.bool>
 // CHECK-NEXT:       [[CAST2:%.+]] = builtin.unrealized_conversion_cast [[ARG2]] : !smt.bv<1> to i1
 // CHECK-NEXT:       [[CAST3:%.+]] = builtin.unrealized_conversion_cast [[ARG4]] : !smt.bv<2> to i2
 // CHECK-NEXT:       [[CAST4:%.+]] = builtin.unrealized_conversion_cast [[C1_I2]] : i2 to !smt.bv<2>
-// CHECK-NEXT:       [[APP2:%.+]] = smt.apply_func [[F_B]]([[CAST4]]) : !smt.func<(!smt.bv<2>) !smt.bool>
+// CHECK-NEXT:       [[FUN2:%.+]] = smt.apply_func [[F_B]]([[CAST4]]) : !smt.func<(!smt.bv<2>) !smt.bool>
 // CHECK-NEXT:       [[CAST5:%.+]] = builtin.unrealized_conversion_cast [[ARG2]] : !smt.bv<1> to i1
 // CHECK-NEXT:       [[CAST6:%.+]] = builtin.unrealized_conversion_cast [[ARG4]] : !smt.bv<2> to i2
 // CHECK-NEXT:       [[TRUE1:%.+]] = smt.constant true
@@ -30,18 +30,18 @@
 // CHECK-NEXT:       [[CAST8:%.+]] = builtin.unrealized_conversion_cast [[CAST7]] : !smt.bv<1> to !smt.bv<1>
 // CHECK-NEXT:       [[C1:%.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
 // CHECK-NEXT:       [[EQ1:%.+]] = smt.eq [[CAST8]], [[C1]] : !smt.bv<1>
-// CHECK-NEXT:       [[AND1:%.+]] = smt.and [[APP1]], [[EQ1]]
-// CHECK-NEXT:       [[IMP1:%.+]] = smt.implies [[AND1]], [[APP2]]
+// CHECK-NEXT:       [[AND1:%.+]] = smt.and [[FUN1]], [[EQ1]]
+// CHECK-NEXT:       [[IMP1:%.+]] = smt.implies [[AND1]], [[FUN2]]
 // CHECK-NEXT:       smt.yield [[IMP1]] : !smt.bool
 // CHECK-NEXT:     }
 // CHECK-NEXT:     smt.assert [[FORALL1]]
 // CHECK-NEXT:     [[FORALL2:%.+]] = smt.forall {
 // CHECK-NEXT:     ^bb0([[ARG5:%.+]]: !smt.bv<1>, [[ARG6:%.+]]: !smt.bv<1>, [[ARG7:%.+]]: !smt.bv<2>):
-// CHECK-NEXT:       [[APP3:%.+]] = smt.apply_func [[F_B]]([[ARG7]]) : !smt.func<(!smt.bv<2>) !smt.bool>
+// CHECK-NEXT:       [[FUN3:%.+]] = smt.apply_func [[F_B]]([[ARG7]]) : !smt.func<(!smt.bv<2>) !smt.bool>
 // CHECK-NEXT:       [[CAST9:%.+]] = builtin.unrealized_conversion_cast [[ARG5]] : !smt.bv<1> to i1
 // CHECK-NEXT:       [[CAST10:%.+]] = builtin.unrealized_conversion_cast [[ARG7]] : !smt.bv<2> to i2
 // CHECK-NEXT:       [[CAST11:%.+]] = builtin.unrealized_conversion_cast [[C_1_I2]] : i2 to !smt.bv<2>
-// CHECK-NEXT:       [[APP4:%.+]] = smt.apply_func [[F_A]]([[CAST11]]) : !smt.func<(!smt.bv<2>) !smt.bool>
+// CHECK-NEXT:       [[FUN4:%.+]] = smt.apply_func [[F_A]]([[CAST11]]) : !smt.func<(!smt.bv<2>) !smt.bool>
 // CHECK-NEXT:       [[CAST12:%.+]] = builtin.unrealized_conversion_cast [[ARG5]] : !smt.bv<1> to i1
 // CHECK-NEXT:       [[CAST13:%.+]] = builtin.unrealized_conversion_cast [[ARG7]] : !smt.bv<2> to i2
 // CHECK-NEXT:       [[TRUE2:%.+]] = smt.constant true
@@ -49,8 +49,8 @@
 // CHECK-NEXT:       [[CAST15:%.+]] = builtin.unrealized_conversion_cast [[CAST14]] : !smt.bv<1> to !smt.bv<1>
 // CHECK-NEXT:       [[C2:%.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
 // CHECK-NEXT:       [[EQ2:%.+]] = smt.eq [[CAST15]], [[C2]] : !smt.bv<1>
-// CHECK-NEXT:       [[AND2:%.+]] = smt.and [[APP3]], [[EQ2]]
-// CHECK-NEXT:       [[IMP2:%.+]] = smt.implies [[AND2]], [[APP4]]
+// CHECK-NEXT:       [[AND2:%.+]] = smt.and [[FUN3]], [[EQ2]]
+// CHECK-NEXT:       [[IMP2:%.+]] = smt.implies [[AND2]], [[FUN4]]
 // CHECK-NEXT:       smt.yield [[IMP2]] : !smt.bool
 // CHECK-NEXT:     }
 // CHECK-NEXT:     smt.assert [[FORALL2]]
