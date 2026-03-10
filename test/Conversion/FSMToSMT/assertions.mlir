@@ -47,9 +47,9 @@
 // CHECK-NEXT:       [[FUN3:%.+]] = smt.apply_func [[F_S1]]([[ARG2_2]], [[ARG3_2]]) : !smt.func<(!smt.bv<8>, !smt.bv<32>) !smt.bool>
 // CHECK-NEXT:       [[CAST12:%.+]] = builtin.unrealized_conversion_cast [[ARG0_2]] : !smt.bv<8> to i8
 // CHECK-NEXT:       [[CAST13:%.+]] = builtin.unrealized_conversion_cast [[ARG3_2]] : !smt.bv<32> to i32
-// CHECK-NEXT:       [[ADD2:%.+]] = comb.add [[CAST13]], [[C1_I32]] : i32
-// CHECK-NEXT:       [[ICMP2:%.+]] = comb.icmp ult [[ADD2]], [[C50_I32]] : i32
-// CHECK-NEXT:       [[CAST14:%.+]] = builtin.unrealized_conversion_cast [[ADD2]] : i32 to !smt.bv<32>
+// CHECK-NEXT:       [[ADD0:%.+]] = comb.add [[CAST13]], [[C1_I32]] : i32
+// CHECK-NEXT:       [[ICMP2:%.+]] = comb.icmp ult [[ADD0]], [[C50_I32]] : i32
+// CHECK-NEXT:       [[CAST14:%.+]] = builtin.unrealized_conversion_cast [[ADD0]] : i32 to !smt.bv<32>
 // CHECK-NEXT:       [[CAST15:%.+]] = builtin.unrealized_conversion_cast [[ARG1_2]] : !smt.bv<8> to i8
 // CHECK-NEXT:       [[CAST16:%.+]] = builtin.unrealized_conversion_cast [[CAST14]] : !smt.bv<32> to i32
 // CHECK-NEXT:       [[CAST17:%.+]] = builtin.unrealized_conversion_cast [[CAST15]] : i8 to !smt.bv<8>
