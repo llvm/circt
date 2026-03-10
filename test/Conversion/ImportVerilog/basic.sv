@@ -796,6 +796,15 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.read %s1
     // CHECK: moore.string.concat ([[TMP1]], [[TMP2]])
     concatstr = {s, s1};
+    // String indexing with i32 index (no conversion needed)
+    // CHECK: moore.string.get {{%.+}}[{{%.+}}]
+    m = s1[c];
+    // String indexing with logic index (conversion to i32 needed)
+    // CHECK: [[M_READ:%.+]] = moore.read %m
+    // CHECK: [[ZEXT:%.+]] = moore.zext [[M_READ]] : l4 -> l32
+    // CHECK: [[CONV:%.+]] = moore.logic_to_int [[ZEXT]]
+    // CHECK: moore.string.get {{%.+}}[[[CONV]]]
+    m = s[m];
     // CHECK: [[TMP1:%.+]] = moore.read %d
     // CHECK: [[TMP2:%.+]] = moore.read %e
     // CHECK: moore.concat [[TMP1]], [[TMP2]] : (!moore.l32, !moore.l32) -> l64
@@ -4179,6 +4188,34 @@ module QueueConcatTest;
     end
 endmodule
 
+// CHECK-LABEL: moore.module @QueueCmpTest() {
+// CHECK:           [[Q1:%.+]] = moore.variable : <queue<i32, 0>>
+// CHECK:           [[Q2:%.+]] = moore.variable : <queue<i32, 0>>
+// CHECK:           [[R1:%.+]] = moore.variable : <i1>
+// CHECK:           [[R2:%.+]] = moore.variable : <i1>
+// CHECK:           moore.procedure initial {
+// CHECK:               [[QR1:%.+]] = moore.read [[Q1]] : <queue<i32, 0>>
+// CHECK:               [[QR2:%.+]] = moore.read [[Q2]] : <queue<i32, 0>>
+// CHECK:               [[RES1:%.+]] = moore.queue.cmp eq [[QR1]], [[QR2]] : <i32, 0>
+// CHECK:               moore.blocking_assign [[R1]], [[RES1]] : i1
+// CHECK:               [[QR1:%.+]] = moore.read [[Q1]] : <queue<i32, 0>>
+// CHECK:               [[QR2:%.+]] = moore.read [[Q2]] : <queue<i32, 0>>
+// CHECK:               [[RES2:%.+]] = moore.queue.cmp ne [[QR1]], [[QR2]] : <i32, 0>
+// CHECK:               moore.blocking_assign [[R2]], [[RES2]] : i1
+// CHECK:               moore.return
+// CHECK:           }
+// CHECK:           moore.output
+// CHECK:         }
+module QueueCmpTest;
+    int q1[$];
+    int q2[$];
+    bit r1;
+    bit r2;
+    initial begin
+      r1 = (q1 == q2);
+      r2 = (q1 != q2);
+    end
+endmodule
 
 // CHECK-LABEL: moore.module @ForkJoinTest() {
 // CHECK:         [[C0:%.+]] = moore.constant 0 : i32
@@ -4319,6 +4356,29 @@ module AssocArrayManipulationTest;
         aa.delete();
     end
 endmodule
+
+// CHECK-LABEL: moore.module @AssocArraySizeTest() {
+// CHECK:           [[AA:%.+]] = moore.variable : <assoc_array<i32, i32>>
+// CHECK:           [[B1:%.+]] = moore.variable : <i32>
+// CHECK:           [[B2:%.+]] = moore.variable : <i32>
+// CHECK:           moore.procedure initial {
+// CHECK:             [[S1:%.+]] = moore.assoc_array.size [[AA]] : <assoc_array<i32, i32>>
+// CHECK              moore.blocking_assign [[B1]], [[S1]] : i32
+// CHECK:             [[S2:%.+]] = moore.assoc_array.size [[AA]] : <assoc_array<i32, i32>>
+// CHECK              moore.blocking_assign [[B2]], [[S2]] : i32
+// CHECK:             moore.return
+// CHECK:           }
+// CHECK:           moore.output
+// CHECK:         }
+module AssocArraySizeTest;
+    int aa[int];
+    int b1, b2;
+    initial begin
+        b1 = aa.size();
+        b2 = aa.num();
+    end
+endmodule
+
 
 // Test that DPI-C imported functions are emitted as extern declarations
 

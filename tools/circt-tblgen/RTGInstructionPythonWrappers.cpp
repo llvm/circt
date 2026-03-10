@@ -1,0 +1,286 @@
+//===----------------------------------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file implements generation of Python instruction wrappers from RTG
+// instruction definitions. It generates Python functions decorated with
+// @instruction that wrap MLIR operations.
+//
+//===----------------------------------------------------------------------===//
+
+#include "RTGInstructionUtils.h"
+#include "mlir/TableGen/GenInfo.h"
+#include "mlir/TableGen/Operator.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/TableGen/Error.h"
+#include "llvm/TableGen/Record.h"
+
+using namespace llvm;
+using namespace mlir;
+using namespace mlir::tblgen;
+using namespace circt::tblgen::rtg;
+
+//===----------------------------------------------------------------------===//
+// Helpers
+//===----------------------------------------------------------------------===//
+
+namespace {
+enum class SideEffect {
+  READ,
+  WRITE,
+  READ_WRITE,
+};
+} // namespace
+
+static SideEffect getSideEffectForOperand(const Operator &op, unsigned argIndex,
+                                          const OperandTypeSet &kinds) {
+  auto arg = op.getArg(argIndex);
+  auto *operand = dyn_cast<NamedTypeConstraint *>(arg);
+  if (!operand)
+    PrintFatalError(op.getLoc(), "Expected operand to be a type constraint");
+
+  if (kinds.contains<Register>()) {
+    bool hasSourceReg = isSourceRegister(op, argIndex);
+    bool hasDestReg = isDestinationRegister(op, argIndex);
+    if (hasSourceReg == hasDestReg)
+      return SideEffect::READ_WRITE;
+    if (hasDestReg)
+      return SideEffect::WRITE;
+    if (hasSourceReg)
+      return SideEffect::READ;
+  } else if (kinds.contains<Immediate, AnyImmediate, Label>()) {
+    return SideEffect::READ;
+  } else if (kinds.contains<Memory, AnyMemory>()) {
+    return SideEffect::READ_WRITE;
+  }
+
+  PrintFatalError(op.getLoc(),
+                  "Unsupported operand type for instruction operand type");
+}
+
+static std::string getTypeSuffix(OperandType type) {
+  if (std::holds_alternative<Immediate>(type)) {
+    auto imm = std::get<Immediate>(type);
+    return "_imm" + std::to_string(imm.bitWidth);
+  }
+  if (std::holds_alternative<Label>(type))
+    return "_lbl";
+  if (std::holds_alternative<Memory>(type)) {
+    auto mem = std::get<Memory>(type);
+    return "_mem" + std::to_string(mem.addressWidth);
+  }
+  if (std::holds_alternative<Register>(type)) {
+    auto reg = std::get<Register>(type);
+    return "_" + reg.name.lower();
+  }
+
+  PrintFatalError("Unsupported type for instruction operand type");
+}
+
+static void emitPythonTypeHint(OperandType type, raw_ostream &os) {
+  if (std::holds_alternative<Immediate>(type) ||
+      std::holds_alternative<AnyImmediate>(type))
+    os << "Immediate";
+  else if (std::holds_alternative<Label>(type))
+    os << "Label";
+  else if (std::holds_alternative<Memory>(type) ||
+           std::holds_alternative<AnyMemory>(type))
+    os << "Memory";
+  else if (std::holds_alternative<Register>(type))
+    os << std::get<Register>(type).name;
+  else
+    PrintFatalError("Unsupported type for instruction operand type");
+}
+
+static void emitPythonTypeExpr(OperandType type, raw_ostream &os) {
+  if (std::holds_alternative<Immediate>(type))
+    os << "ImmediateType(" << std::get<Immediate>(type).bitWidth << ")";
+  else if (std::holds_alternative<Label>(type))
+    os << "LabelType()";
+  else if (std::holds_alternative<Memory>(type))
+    os << "MemoryType(" << std::get<Memory>(type).addressWidth << ")";
+  else if (std::holds_alternative<Register>(type))
+    os << std::get<Register>(type).typeName << "()";
+  else
+    PrintFatalError("Unsupported type for instruction operand type");
+}
+
+static void emitSideEffect(SideEffect sideEffect, raw_ostream &os) {
+  os << "SideEffect.";
+  switch (sideEffect) {
+  case SideEffect::READ:
+    os << "READ";
+    break;
+  case SideEffect::WRITE:
+    os << "WRITE";
+    break;
+  case SideEffect::READ_WRITE:
+    os << "READ_WRITE";
+    break;
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// Python Code Generation
+//===----------------------------------------------------------------------===//
+
+static void emitInstructionDecorator(ArrayRef<OperandType> operandTypes,
+                                     ArrayRef<SideEffect> operandSideEffects,
+                                     raw_ostream &os) {
+  os << "@instruction(args=[";
+
+  bool first = true;
+  for (auto [ty, sideEffect] : llvm::zip(operandTypes, operandSideEffects)) {
+    if (!first)
+      os << ", ";
+    os << "(";
+    emitPythonTypeExpr(ty, os);
+    os << ", ";
+    emitSideEffect(sideEffect, os);
+    os << ")";
+
+    first = false;
+  }
+
+  os << "])\n";
+}
+
+static std::string getFunctionName(const Operator &op) {
+  // TODO: get this from a tablegen field directly instead of inferring it from
+  // the op name
+  std::string opName = op.getOperationName();
+  size_t dotPos = opName.find_last_of('.');
+  std::string mnemonic = opName;
+  if (dotPos != std::string::npos)
+    mnemonic = opName.substr(dotPos + 1);
+
+  return mnemonic;
+}
+
+static void emitFunctionSignature(StringRef opMnemonic,
+                                  ArrayRef<OperandType> combination,
+                                  ArrayRef<size_t> unionOperandIndices,
+                                  ArrayRef<StringRef> operandNames,
+                                  raw_ostream &os) {
+  std::string name = opMnemonic.str();
+  for (auto i : unionOperandIndices)
+    name += getTypeSuffix(combination[i]);
+
+  os << "def " << name << "(";
+
+  for (auto [i, name, ty] : llvm::enumerate(operandNames, combination)) {
+    if (i != 0)
+      os << ", ";
+
+    os << name;
+    os << ": ";
+    emitPythonTypeHint(ty, os);
+  }
+
+  os << "):\n";
+}
+
+static void emitFunctionBody(StringRef opClassName,
+                             ArrayRef<OperandType> combination,
+                             ArrayRef<StringRef> operandNames,
+                             raw_ostream &os) {
+  os << "  " << opClassName << "(";
+
+  for (auto [i, name] : llvm::enumerate(operandNames)) {
+    if (i != 0)
+      os << ", ";
+    os << name;
+  }
+
+  os << ")\n";
+}
+
+static void
+generateTypeCombinations(ArrayRef<OperandTypeSet> operandKinds,
+                         SmallVector<SmallVector<OperandType>> &combinations) {
+  if (operandKinds.empty()) {
+    combinations.push_back({});
+    return;
+  }
+
+  // Initialize with the first operand's kinds
+  for (auto kind : operandKinds[0])
+    combinations.push_back({kind});
+
+  // Iteratively build the cartesian product
+  for (size_t i = 1; i < operandKinds.size(); ++i) {
+    const auto &currentKinds = operandKinds[i];
+    assert(!currentKinds.empty() && "expected non-empty operand kinds");
+
+    SmallVector<SmallVector<OperandType>> newCombinations;
+    for (const auto &existingCombination : combinations) {
+      for (OperandType newKind : currentKinds) {
+        SmallVector<OperandType> newCombination = existingCombination;
+        newCombination.push_back(newKind);
+        newCombinations.push_back(std::move(newCombination));
+      }
+    }
+    combinations = std::move(newCombinations);
+  }
+}
+
+static void genPythonWrapperForOp(const Operator &op, raw_ostream &os) {
+  // Skip operations that do not implement InstructionOpInterface
+  if (!hasInstructionOpInterface(op))
+    return;
+
+  SmallVector<OperandTypeSet> operandKinds;
+  SmallVector<SideEffect> operandSideEffect;
+  SmallVector<StringRef> operandNames;
+
+  for (auto [i, arg] : llvm::enumerate(op.getArgs())) {
+    if (auto *operand = dyn_cast<NamedTypeConstraint *>(arg)) {
+      auto &kinds = operandKinds.emplace_back();
+      classifyOperandType(operand->constraint.getDef(), kinds);
+      if (kinds.empty())
+        PrintFatalError(op.getLoc(), "failed to classify operand type for '" +
+                                         operand->name + "'");
+      operandSideEffect.emplace_back(getSideEffectForOperand(op, i, kinds));
+      operandNames.emplace_back(operand->name);
+    }
+  }
+
+  // Generate all type combinations
+  SmallVector<SmallVector<OperandType>> combinations;
+  generateTypeCombinations(operandKinds, combinations);
+
+  SmallVector<size_t> unionOperandIndices;
+  for (auto [i, kinds] : llvm::enumerate(operandKinds)) {
+    if (kinds.size() > 1)
+      unionOperandIndices.push_back(i);
+  }
+
+  auto opMnemonic = getFunctionName(op);
+  auto opClassName = op.getCppClassName();
+  for (const auto &combination : combinations) {
+    emitInstructionDecorator(combination, operandSideEffect, os);
+    emitFunctionSignature(opMnemonic, combination, unionOperandIndices,
+                          operandNames, os);
+    emitFunctionBody(opClassName, combination, operandNames, os);
+    os << "\n";
+  }
+}
+
+static bool genRTGInstructionPythonWrappers(const RecordKeeper &records,
+                                            raw_ostream &os) {
+  for (const Record *opDef : records.getAllDerivedDefinitions("Op"))
+    genPythonWrapperForOp(Operator(opDef), os);
+
+  return false;
+}
+
+static mlir::GenRegistration
+    genRTGInstructionMethodsReg("gen-rtg-instruction-python-wrappers",
+                                "Generate Python wrappers for RTG instructions",
+                                genRTGInstructionPythonWrappers);

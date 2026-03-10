@@ -66,7 +66,7 @@ void tblgen::rtg::classifyOperandType(const Record &typeRec,
     return kinds.appendAndUnique(Immediate(typeRec.getValueAsInt("immWidth")));
   if (checkType(typeRec, "MemoryType"))
     return kinds.appendAndUnique(AnyMemory());
-  if (checkType(typeRec, "MemoryTypeWithAddressWidth"))
+  if (checkType(typeRec, "MemoryWithAddressWidth"))
     return kinds.appendAndUnique(Memory(typeRec.getValueAsInt("addressWidth")));
   if (checkType(typeRec, "RegisterTypeBase"))
     return kinds.appendAndUnique(

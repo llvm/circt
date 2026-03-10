@@ -533,6 +533,6 @@ function void StringBuiltins(string string_in, int int_in);
   dummyD(string_in.toupper());
   // CHECK: [[LEN:%.+]] = moore.string.tolower [[STR]]
   dummyD(string_in.tolower());
-  // CHECK: [[CHAR:%.+]] = moore.string.getc [[STR]]{{\[}}[[INT]]]
+  // CHECK: [[CHAR:%.+]] = moore.string.get [[STR]]{{\[}}[[INT]]]
   dummyE(string_in.getc(int_in));
 endfunction

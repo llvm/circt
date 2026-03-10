@@ -191,7 +191,8 @@ struct ExprVisitor {
       derefType = cast<moore::RefType>(derefType).getNestedType();
 
     if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
-             moore::QueueType, moore::AssocArrayType>(derefType)) {
+             moore::QueueType, moore::AssocArrayType, moore::StringType>(
+            derefType)) {
       mlir::emitError(loc) << "unsupported expression: element select into "
                            << expr.value().type->toString() << "\n";
       return {};
@@ -219,6 +220,23 @@ struct ExprVisitor {
 
       return moore::AssocArrayExtractOp::create(builder, loc, type, value,
                                                 givenIndex);
+    }
+
+    // Handle string indexing.
+    if (isa<moore::StringType>(derefType)) {
+      if (isLvalue) {
+        mlir::emitError(loc) << "string index assignment not supported";
+        return {};
+      }
+
+      // Convert the index to an rvalue with the required type (TwoValuedI32).
+      auto i32Type = moore::IntType::getInt(builder.getContext(), 32);
+      auto index = context.convertRvalueExpression(expr.selector(), i32Type);
+      if (!index)
+        return {};
+
+      // Create the StringGetOp operation.
+      return moore::StringGetOp::create(builder, loc, value, index);
     }
 
     auto resultType =
@@ -1286,6 +1304,9 @@ struct RvalueExprVisitor : public ExprVisitor {
       else if (isa<moore::StringType>(lhs.getType()))
         return moore::StringCmpOp::create(
             builder, loc, moore::StringCmpPredicate::eq, lhs, rhs);
+      else if (isa<moore::QueueType>(lhs.getType()))
+        return moore::QueueCmpOp::create(
+            builder, loc, moore::UArrayCmpPredicate::eq, lhs, rhs);
       else
         return createBinary<moore::EqOp>(lhs, rhs);
     case BinaryOperator::Inequality:
@@ -1295,6 +1316,9 @@ struct RvalueExprVisitor : public ExprVisitor {
       else if (isa<moore::StringType>(lhs.getType()))
         return moore::StringCmpOp::create(
             builder, loc, moore::StringCmpPredicate::ne, lhs, rhs);
+      else if (isa<moore::QueueType>(lhs.getType()))
+        return moore::QueueCmpOp::create(
+            builder, loc, moore::UArrayCmpPredicate::ne, lhs, rhs);
       else
         return createBinary<moore::NeOp>(lhs, rhs);
     case BinaryOperator::CaseEquality:
@@ -1773,8 +1797,10 @@ struct RvalueExprVisitor : public ExprVisitor {
     }
 
     // Queue ops take their parameter as a reference
-    bool isByRefOp = args.size() >= 1 && args[0]->type->isQueue() &&
-                     subroutine.name != "size";
+    // So do AssocArray ops
+    bool isByRefOp = args.size() >= 1 &&
+                     ((args[0]->type->isQueue() && subroutine.name != "size") ||
+                      args[0]->type->isAssociativeArray());
 
     // Call the conversion function with the appropriate arity. These return one
     // of the following:
@@ -2978,6 +3004,22 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                   if (isa<moore::QueueType>(value.getType())) {
                     return moore::QueueSizeBIOp::create(builder, loc, value);
                   }
+                  if (isa<moore::RefType>(value.getType()) &&
+                      isa<moore::AssocArrayType>(
+                          cast<moore::RefType>(value.getType())
+                              .getNestedType())) {
+                    return moore::AssocArraySizeOp::create(builder, loc, value);
+                  }
+                  return {};
+                })
+          .Case("num",
+                [&]() -> Value {
+                  if (isa<moore::RefType>(value.getType()) &&
+                      isa<moore::AssocArrayType>(
+                          cast<moore::RefType>(value.getType())
+                              .getNestedType())) {
+                    return moore::AssocArraySizeOp::create(builder, loc, value);
+                  }
                   return {};
                 })
           .Case("tolower",
@@ -3014,8 +3056,8 @@ Context::convertSystemCallArity2(const slang::ast::SystemSubroutine &subroutine,
       llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
           .Case("getc",
                 [&]() -> Value {
-                  return moore::StringGetCOp::create(builder, loc, value1,
-                                                     value2);
+                  return moore::StringGetOp::create(builder, loc, value1,
+                                                    value2);
                 })
           .Case("$urandom_range",
                 [&]() -> Value {

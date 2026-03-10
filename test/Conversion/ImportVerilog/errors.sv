@@ -190,3 +190,13 @@ function Foo;
   // expected-error @below {{unsupported system call `$fwrite`}}
   $fwrite(32'h0, "%x", a);
 endfunction
+
+// -----
+module Foo;
+  string s;
+  byte b;
+  initial begin
+    // expected-error @below {{string index assignment not supported}}
+    s[0] = b;
+  end
+endmodule

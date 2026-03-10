@@ -1525,6 +1525,15 @@ func.func @StringOperations(%arg0: !moore.i32, %arg1: !moore.string, %arg2: !moo
   return
 }
 
+// CHECK-LABEL: func.func @StringIndexing
+// CHECK-SAME: %arg0: !sim.dstring
+// CHECK-SAME: %arg1: i32
+func.func @StringIndexing(%arg0: !moore.string, %arg1: !moore.i32) {
+  // CHECK: sim.string.get %arg0[%arg1]
+  %0 = moore.string.get %arg0[%arg1]
+  return
+}
+
 // CHECK-LABEL func.func @QueueOperations
 func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: [[EMPTY:%.+]] = sim.queue.empty : <i32, 10>
@@ -1583,6 +1592,18 @@ func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
 
   // CHECK: [[DIFFB:%.+]] = sim.queue.resize [[QR]] : <i32, 10> -> <i32, 0>
   %diffbounds = moore.queue.resize %qr : <i32, 10> -> <i32, 0>
+  // CHECK: [[EMPTY:%.+]] = sim.queue.empty : <i32, 10>
+  // CHECK: [[Q:%.+]] = llhd.sig [[EMPTY]] : !sim.queue<i32, 10>
+  %q2 = moore.variable : <!moore.queue<i32, 10>>
+
+  // CHECK: [[QR2:%.+]] = llhd.prb [[Q]]
+  %qr2 = moore.read %q2 : <!moore.queue<i32, 10>>
+
+  // CHECK: [[CMPR:%.+]] = sim.queue.cmp eq [[QR]], [[QR2]] : <i32, 10>
+  moore.queue.cmp eq %qr, %qr2 : <i32, 10>
+
+  // CHECK: [[CMPR:%.+]] = sim.queue.cmp ne [[QR]], [[QR2]] : <i32, 10>
+  moore.queue.cmp ne %qr, %qr2 : <i32, 10>
   return
 }
 

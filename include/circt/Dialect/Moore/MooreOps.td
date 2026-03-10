@@ -1343,6 +1343,26 @@ def UArrayCmpOp : MooreOp<"uarray_cmp", [
   }];  
 }
 
+def QueueCmpOp : MooreOp<"queue.cmp", [
+  Pure,
+  Commutative,
+  SameTypeOperands,
+]> {
+  let description = [{
+    Performs an elementwise comparison of two queues. This is the equivalent
+    of the op above, but for queues. (which are just resizeable unpacked arrays)
+  }];
+  let arguments = (ins 
+    UArrayCmpPredicateAttr:$predicate,
+    QueueType:$lhs,
+    QueueType:$rhs
+  );
+  let results = (outs BitType:$result);
+  let assemblyFormat = [{
+    $predicate $lhs `,` $rhs attr-dict `:` type($lhs)
+  }];  
+}
+
 def StringCmpOp : MooreOp<"string_cmp", [
   Pure,
   SameTypeOperands
@@ -2066,6 +2086,18 @@ def AssocArrayClearOp : MooreOp<"assoc_array.clear"> {
   let assemblyFormat = [{
     $assoc_array attr-dict `:` type($assoc_array)
   }];
+}
+
+def AssocArraySizeOp : MooreOp<"assoc_array.size"> {
+  let summary = "Return the number of elements in an associative array";
+  let description = [{
+    See IEEE 1800-2023 § 7.9.1 "Size()". Returns the number of elements in an associative array.
+    According to spec the returned size fits an `int`.
+  }];
+
+  let arguments = (ins AssocArrayRefType:$assoc_array);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = "$assoc_array `:` type($assoc_array) attr-dict";
 }
 
 //===----------------------------------------------------------------------===//
@@ -3067,7 +3099,7 @@ def StringToLowerOp : StringBuiltin<"tolower"> {
   let assemblyFormat = "$str attr-dict";
 }
 
-def StringGetCOp : StringBuiltin<"getc"> {
+def StringGetOp : StringBuiltin<"get"> {
   let summary = "Get a character from a string";
   let description = [{
     Returns the character at the specified index in the given string.
