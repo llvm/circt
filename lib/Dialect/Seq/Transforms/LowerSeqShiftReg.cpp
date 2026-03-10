@@ -50,9 +50,9 @@ public:
     for (size_t i = 0; i < op.getNumElements(); ++i) {
       // Needs to be initialized or will sefault on shiftregisters with
       // generated ssa names
-      StringAttr name = rewriter.getStringAttr("_sh" + Twine(i + 1));
-      if (baseName.has_value())
-        name = rewriter.getStringAttr(baseName.value() + "_sh" + Twine(i + 1));
+      StringAttr name =
+          rewriter.getStringAttr(baseName.value_or("") + "_sh" + Twine(i + 1));
+
       in = seq::CompRegClockEnabledOp::create(
           rewriter, op.getLoc(), in, adaptor.getClk(), adaptor.getClockEnable(),
           adaptor.getReset(), adaptor.getResetValue(), name, init);
