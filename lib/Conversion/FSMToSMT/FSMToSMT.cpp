@@ -475,7 +475,7 @@ LogicalResult MachineOpConverter::dispatch() {
 
       IRMapping mapping = createIRMapping(fsmToCast, constMapper);
 
-      Value guardVal = smt::BoolConstantOp::create(b, loc, true);
+      Value guardVal;
 
       // Clone all the operations in the guard region except for `ReturnOp` and
       // `AssertOp,
@@ -498,7 +498,10 @@ LogicalResult MachineOpConverter::dispatch() {
             }
           }
         }
+      } else {
+        guardVal = smt::BoolConstantOp::create(b, loc, true);
       }
+      
       // We prioritize transitions depending on their order in the FSM, and
       // ensure that a transition is taken if none of the previous transitions
       // from the same state can be taken.

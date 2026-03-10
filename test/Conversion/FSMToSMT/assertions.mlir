@@ -30,7 +30,6 @@
 // CHECK-NEXT:       [[FUN2:%.+]] = smt.apply_func [[F_S1]]([[CAST7]], [[ARG3_1]]) : !smt.func<(!smt.bv<8>, !smt.bv<32>) !smt.bool>
 // CHECK-NEXT:       [[CAST8:%.+]] = builtin.unrealized_conversion_cast [[ARG0_1]] : !smt.bv<8> to i8
 // CHECK-NEXT:       [[CAST9:%.+]] = builtin.unrealized_conversion_cast [[ARG3_1]] : !smt.bv<32> to i32
-// CHECK-NEXT:       [[TRUE_0:%.+]] = smt.constant true
 // CHECK-NEXT:       [[ICMP0:%.+]] = comb.icmp ult [[CAST8]], [[C50_I8]] : i8
 // CHECK-NEXT:       [[ICMP1:%.+]] = comb.icmp ugt [[CAST8]], [[C0_I8]] : i8
 // CHECK-NEXT:       [[CAST10:%.+]] = builtin.unrealized_conversion_cast [[ICMP1]] : i1 to !smt.bv<1>

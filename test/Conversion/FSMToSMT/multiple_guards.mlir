@@ -18,7 +18,6 @@
 // CHECK-NEXT:       [[APP1:%.+]] = smt.apply_func [[F_START]]([[ARG1]]) : !smt.func<(!smt.bv<1>) !smt.bool>
 // CHECK-NEXT:       [[CAST1:%.+]] = builtin.unrealized_conversion_cast [[FALSE]] : i1 to !smt.bv<1>
 // CHECK-NEXT:       [[APP2:%.+]] = smt.apply_func [[F_START]]([[CAST1]]) : !smt.func<(!smt.bv<1>) !smt.bool>
-// CHECK-NEXT:       [[TRUE_0:%.+]] = smt.constant true
 // CHECK-NEXT:       [[CAST2:%.+]] = builtin.unrealized_conversion_cast [[TRUE]] : i1 to !smt.bv<1>
 // CHECK-NEXT:       [[CAST3:%.+]] = builtin.unrealized_conversion_cast [[CAST2]] : !smt.bv<1> to !smt.bv<1>
 // CHECK-NEXT:       [[C1:%.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
@@ -33,7 +32,6 @@
 // CHECK-NEXT:       [[APP3:%.+]] = smt.apply_func [[F_START]]([[ARG2]]) : !smt.func<(!smt.bv<1>) !smt.bool>
 // CHECK-NEXT:       [[CAST4:%.+]] = builtin.unrealized_conversion_cast [[FALSE]] : i1 to !smt.bv<1>
 // CHECK-NEXT:       [[APP4:%.+]] = smt.apply_func [[F_FAIL]]([[CAST4]]) : !smt.func<(!smt.bv<1>) !smt.bool>
-// CHECK-NEXT:       [[TRUE_1:%.+]] = smt.constant true
 // CHECK-NEXT:       [[CAST5:%.+]] = builtin.unrealized_conversion_cast [[TRUE]] : i1 to !smt.bv<1>
 // CHECK-NEXT:       [[CAST6:%.+]] = builtin.unrealized_conversion_cast [[CAST5]] : !smt.bv<1> to !smt.bv<1>
 // CHECK-NEXT:       [[C2:%.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
