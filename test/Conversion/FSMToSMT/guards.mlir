@@ -28,8 +28,8 @@
 // CHECK-NEXT:      [[TRUE1:%.+]] = smt.constant true
 // CHECK-NEXT:      [[CAST7:%.+]] = builtin.unrealized_conversion_cast [[CAST5]] : i1 to !smt.bv<1>
 // CHECK-NEXT:      [[CAST8:%.+]] = builtin.unrealized_conversion_cast [[CAST7]] : !smt.bv<1> to !smt.bv<1>
-// CHECK-NEXT:      [[C1:%.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
-// CHECK-NEXT:      [[EQ0:%.+]] = smt.eq [[CAST8]], [[C1]] : !smt.bv<1>
+// CHECK-NEXT:      [[C_1_BV1:%.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
+// CHECK-NEXT:      [[EQ0:%.+]] = smt.eq [[CAST8]], [[C_1_BV1]] : !smt.bv<1>
 // CHECK-NEXT:      [[AND1:%.+]] = smt.and [[FUN1]], [[EQ0]]
 // CHECK-NEXT:      [[IMPLIES0:%.+]] = smt.implies [[AND1]], [[FUN2]]
 // CHECK-NEXT:      smt.yield [[IMPLIES0]] : !smt.bool
