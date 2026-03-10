@@ -210,5 +210,8 @@ hw.module @action_guard_and(in %clk : !seq.clock, in %rst : i1, in %x : i1, in %
 // Guard is not(and(x, y)); cannot determine x individually.
 // CHECK:   fsm.transition @state_0 guard {
 // CHECK:   } action {
-// CHECK:     fsm.update %[[COUNTER4]],
+// CHECK:     %[[COUNTER_PLUS_1:.*]] = comb.add %[[COUNTER4]], %c1_i2 : i2
+// CHECK:     %[[NOT_X:.*]] = comb.xor %arg0, %true : i1
+// CHECK:     %[[COUNTER_IF_X:.*]] = comb.mux %[[NOT_X]], %[[COUNTER4]], %[[COUNTER_PLUS_1]] : i2
+// CHECK:     fsm.update %[[COUNTER4]], %[[COUNTER_IF_X]]
 // CHECK:   }
