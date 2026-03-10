@@ -448,11 +448,19 @@ LogicalResult firtool::populateFinalizeIR(mlir::PassManager &pm,
   return success();
 }
 
+/// BTOR2 emission pipeline, triggered with `--btor2` flag.
 LogicalResult firtool::populateHWToBTOR2(mlir::PassManager &pm,
                                          const FirtoolOptions &opt,
                                          llvm::raw_ostream &os) {
-  pm.addNestedPass<hw::HWModuleOp>(circt::createLowerLTLToCorePass());
-  pm.addNestedPass<hw::HWModuleOp>(circt::verif::createPrepareForFormalPass());
+  auto &mpm = pm.nest<hw::HWModuleOp>();
+  // Lower all supported `ltl` ops
+  mpm.addPass(circt::createLowerLTLToCorePass());
+  // LTLToCore can generate shiftreg which should be lowered before emission
+  mpm.addPass(circt::seq::createLowerSeqShiftRegPass());
+  // ShiftReg Lowering generates compreg.ce, which we don't support, so lower
+  mpm.addPass(circt::seq::createLowerSeqCompRegCEPass());
+  // Do final formal specific lowerings, e.g. inline wires eagerly
+  mpm.addPass(circt::verif::createPrepareForFormalPass());
   pm.addPass(circt::hw::createFlattenModules());
   pm.addPass(circt::createConvertHWToBTOR2Pass(os));
   return success();

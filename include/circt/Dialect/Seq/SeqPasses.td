@@ -22,7 +22,7 @@ def LowerSeqCompRegCE : Pass<"lower-seq-compreg-ce", "hw::HWModuleOp"> {
     built into the next logic, i.e. `next := mux(clock_enable, next, current)`
   }];
   let constructor = "circt::seq::createLowerSeqCompRegCEPass()";
-  let dependentDialects = ["circt::comb::CombDialect"];
+  let dependentDialects = ["circt::comb::CombDialect, circt::hw::HWDialect"];
 }
 
 def LowerSeqFIFO : Pass<"lower-seq-fifo", "hw::HWModuleOp"> {
