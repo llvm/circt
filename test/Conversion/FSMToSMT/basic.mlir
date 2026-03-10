@@ -56,17 +56,17 @@ fsm.machine @alternating() -> (i8) attributes {initialState = "A"} {
 // NO-TIME:  }
 // NO-TIME: }
 
-// TIME:      module {
+// TIME: module {
 // TIME:   smt.solver() : () -> () {
 // TIME:     [[C0_I8:%.+]] = hw.constant 0 : i8
 // TIME:     [[C1_I8:%.+]] = hw.constant 1 : i8
 // TIME:     [[F_A:%.+]] = smt.declare_fun "F_A" : !smt.func<(!smt.bv<8>, !smt.bv<8>) !smt.bool>
 // TIME:     [[F_B:%.+]] = smt.declare_fun "F_B" : !smt.func<(!smt.bv<8>, !smt.bv<8>) !smt.bool>
 // TIME:     [[FORALL0:%.+]] = smt.forall {
-// TIME:     ^bb0([[ARG0:%.+]]: !smt.bv<8>, [[ARG0_1:%.+]]: !smt.bv<8>):
+// TIME:     ^bb0([[ARG0:%.+]]: !smt.bv<8>, [[ARG1:%.+]]: !smt.bv<8>):
 // TIME:       [[CAST0:%.+]] = builtin.unrealized_conversion_cast [[C0_I8]] : i8 to !smt.bv<8>
-// TIME:       [[C0_BV8:%.+]] = smt.bv.constant #smt.bv<0> : !smt.bv<8>
-// TIME:       [[FUN0:%.+]] = smt.apply_func [[F_A]]([[CAST0]], [[C0_BV8]]) : !smt.func<(!smt.bv<8>, !smt.bv<8>) !smt.bool>
+// TIME:       [[C0_BV5:%.+]] = smt.bv.constant #smt.bv<0> : !smt.bv<8>
+// TIME:       [[FUN0:%.+]] = smt.apply_func [[F_A]]([[CAST0]], [[C0_BV5]]) : !smt.func<(!smt.bv<8>, !smt.bv<8>) !smt.bool>
 // TIME:       smt.yield [[FUN0]] : !smt.bool
 // TIME:     }
 // TIME:     smt.assert [[FORALL0]]
