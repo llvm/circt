@@ -2475,6 +2475,41 @@ struct QueueSetOpConversion : public OpConversionPattern<QueueSetOp> {
   }
 };
 
+struct QueueCmpOpConversion : public OpConversionPattern<QueueCmpOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(QueueCmpOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // TODO: Right now Moore uses `UArrayCmpPredicate` for both queues/unpacked
+    // arrays - reasonable because, per SV spec, queues *are* a type of unpacked
+    // array). Once we support comparing unpacked arrays in core, it will make
+    // sense to rename `QueueCmpPredicate` to `UArrayCmpPredicate` and use it
+    // for both forms of comparisons.
+
+    // Convert the UArrayCmpPredicate into a QueueCmpPredicate
+    auto unpackedPred = adaptor.getPredicateAttr().getValue();
+    sim::QueueCmpPredicate queuePred;
+    switch (unpackedPred) {
+    case circt::moore::UArrayCmpPredicate::eq:
+      queuePred = sim::QueueCmpPredicate::eq;
+      break;
+    case circt::moore::UArrayCmpPredicate::ne:
+      queuePred = sim::QueueCmpPredicate::ne;
+      break;
+    default:
+      llvm_unreachable(
+          "All unpacked array comparison predicates should be handled");
+    }
+
+    auto cmpPred = sim::QueueCmpPredicateAttr::get(getContext(), queuePred);
+
+    rewriter.replaceOpWithNewOp<sim::QueueCmpOp>(op, cmpPred, adaptor.getLhs(),
+                                                 adaptor.getRhs());
+    return success();
+  }
+};
+
 struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -2984,7 +3019,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     QueueClearOpConversion,
     DynQueueExtractOpConversion,
     QueueResizeOpConversion,
-    QueueSetOpConversion
+    QueueSetOpConversion,
+    QueueCmpOpConversion
   >(typeConverter, patterns.getContext());
   // clang-format on
 
