@@ -126,6 +126,43 @@ static void emitSideEffect(SideEffect sideEffect, raw_ostream &os) {
   }
 }
 
+static void sanitizePythonFunctionName(std::string &name) {
+  static const char *pythonKeywords[] = {
+      "and", "as", "assert", "async", "await", "break", "class", "continue",
+      "def", "del", "elif", "else", "except", "False", "finally", "for", "from",
+      "global", "if", "import", "in", "is", "lambda", "None", "nonlocal", "not",
+      "or", "pass", "raise", "return", "True", "try", "while", "with", "yield",
+      // Also include common built-in names that shouldn't be shadowed
+      "callable", "issubclass", "type"};
+
+  if (name.empty())
+    PrintFatalError("Empty string is not a valid Python identifier");
+
+  // Replace non-alphanumeric characters (except underscore) with underscores
+  for (char &ch : name) {
+    if (!llvm::isAlnum(ch) && ch != '_')
+      ch = '_';
+  }
+
+  // Handle the case where all characters were replaced (result is all
+  // underscores)
+  if (llvm::all_of(name, [](char ch) { return ch == '_'; }))
+    PrintFatalError(
+        "String contains no valid characters for Python identifier");
+
+  // Prepend underscore if the name starts with a digit
+  if (llvm::isDigit(name[0]))
+    name = "_" + name;
+
+  // Append underscore if the name is a Python keyword
+  for (const char *keyword : pythonKeywords) {
+    if (name == keyword) {
+      name.push_back('_');
+      break;
+    }
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Python Code Generation
 //===----------------------------------------------------------------------===//
@@ -168,6 +205,7 @@ static void emitFunctionSignature(StringRef opMnemonic,
   std::string name = opMnemonic.str();
   for (auto i : unionOperandIndices)
     name += getTypeSuffix(combination[i]);
+  sanitizePythonFunctionName(name);
 
   os << "def " << name << "(";
 
@@ -226,6 +264,7 @@ emitDispatcherSignature(StringRef opMnemonic,
   assert(combinations.size() > 0 && "Expected at least one signature option");
 
   std::string funcName = opMnemonic.str();
+  sanitizePythonFunctionName(funcName);
   os << "def " << funcName << "(";
 
   // Transpose combinations to get all types for each operand position
@@ -286,6 +325,7 @@ static void emitDispatcherBody(StringRef opMnemonic,
     std::string name = opMnemonic.str();
     for (auto k : unionOperandIndices)
       name += getTypeSuffix(combination[k]);
+    sanitizePythonFunctionName(name);
 
     os << "    return " << name << "(";
     llvm::interleaveComma(operandNames, os);
@@ -310,6 +350,7 @@ static void genPythonWrapperForOp(const Operator &op, raw_ostream &os) {
         PrintFatalError(op.getLoc(), "failed to classify operand type for '" +
                                          operand->name + "'");
       operandSideEffect.emplace_back(getSideEffectForOperand(op, i, kinds));
+      // Operand names are already sanitized or rejected by TableGen
       operandNames.emplace_back(operand->name);
     }
   }
