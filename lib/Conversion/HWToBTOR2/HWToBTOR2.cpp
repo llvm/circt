@@ -570,23 +570,6 @@ private:
     return width;
   }
 
-  // Calls the right function to fetch `next` operand
-  Value extractRegNext(seq::CompRegOp reg) const { return reg.getInput(); }
-  Value extractRegNext(seq::FirRegOp reg) const { return reg.getNext(); }
-
-  // Extracts the arguments from a given register op
-  template <typename RegT>
-  void extractRegArgs(RegT reg, int64_t &width, Value &next, Value &reset,
-                      Value &resetVal, Value &clk) const {
-    width = hw::getBitWidth(reg.getType());
-    reset = reg.getReset();
-    resetVal = reg.getResetValue();
-    clk = reg.getClk();
-
-    // Next is weird: same input, different function
-    next = extractRegNext(reg);
-  }
-
   // Generates the transitions required to finalize the register to state
   // transition system conversion
   void finalizeRegVisit(Operation *op) {
@@ -594,21 +577,23 @@ private:
     Value next, reset, resetVal, clk;
 
     // Extract the operands depending on the register type
-    auto extract = TypeSwitch<Operation *, LogicalResult>(op)
-                       .Case<seq::CompRegOp, seq::FirRegOp>([&](auto reg) {
-                         extractRegArgs(reg, width, next, reset, resetVal, clk);
-                         return success();
-                       })
-                       .Default([&](auto) {
-                         op->emitError("Invalid register operation !");
-                         return failure();
-                       });
-
-    // Exit if an invalid register op was detected
-    if (failed(extract))
+    if (auto reg = dyn_cast<seq::CompRegOp>(op)) {
+      width = hw::getBitWidth(reg.getType());
+      next = reg.getInput();
+      reset = reg.getReset();
+      resetVal = reg.getResetValue();
+      clk = reg.getClk();
+    } else if (auto reg = dyn_cast<seq::FirRegOp>(op)) {
+      width = hw::getBitWidth(reg.getType());
+      next = reg.getNext();
+      reset = reg.getReset();
+      resetVal = reg.getResetValue();
+      clk = reg.getClk();
+    } else {
+      op->emitError("Invalid register operation !");
       return;
+    }
 
-    // Check for multiple clocks
     if (foundClock) {
       if (clk != foundClock) {
         op->emitError("Multi-clock designs are not currently supported.");
@@ -1054,21 +1039,38 @@ public:
     // Check for initial values which must be emitted before the state in
     // btor2
     auto init = reg.getInitialValue();
+    auto resetVal = reg.getResetValue();
 
     // If there's an initial value, we need to generate a constant for the
     // initial value, then declare the state, then generate the init statement
     // (BTOR2 parsers are picky about it being in this order)
-    if (init) {
-      if (!init.getDefiningOp<seq::InitialOp>()) {
-        reg->emitError(
-            "Initial value must be emitted directly by a seq.initial op");
-        return;
+    auto shouldInitReset = assumeInitReset && resetVal;
+    // We should create an init statement either if we have an initial value or
+    // if we assume an initial reset
+    if (init || shouldInitReset) {
+      hw::ConstantOp initialConstant;
+      // Assuming an initial reset takes priority over an initial value if
+      // both are present
+      if (shouldInitReset) {
+        initialConstant = resetVal.getDefiningOp<hw::ConstantOp>();
+        if (!initialConstant) {
+          reg->emitError(
+              "Reset value must be emitted directly by a hw.constant "
+              "op when --assume-init-reset is in use.");
+          return;
+        }
+      } else {
+        if (!init.getDefiningOp<seq::InitialOp>()) {
+          reg->emitError(
+              "Initial value must be emitted directly by a seq.initial op");
+          return;
+        }
+        // Check that the initial value is a non-null constant
+        initialConstant = circt::seq::unwrapImmutableValue(init)
+                              .getDefiningOp<hw::ConstantOp>();
+        if (!initialConstant)
+          reg->emitError("initial value must be constant");
       }
-      // Check that the initial value is a non-null constant
-      auto initialConstant = circt::seq::unwrapImmutableValue(init)
-                                 .getDefiningOp<hw::ConstantOp>();
-      if (!initialConstant)
-        reg->emitError("initial value must be constant");
 
       // Visit the initial Value to generate the constant
       dispatchTypeOpVisitor(initialConstant);
