@@ -51,10 +51,6 @@ using namespace chirrtl;
 // Utilities
 //===----------------------------------------------------------------------===//
 
-static DomainType getInstanceTypeForDomain(DomainOp domainOp) {
-  return DomainType::getFromDomainOp(domainOp);
-}
-
 /// Remove elements from the input array corresponding to set bits in
 /// `indicesToDrop`, returning the elements not mentioned.
 template <typename T>
@@ -1925,7 +1921,7 @@ static LogicalResult verifyPortSymbolUses(FModuleLike module,
                  << "' has undefined domain kind '" << kind.getValue() << "'";
 
         // Verify that the domain type matches the domain definition
-        auto expectedType = getInstanceTypeForDomain(domainOp);
+        auto expectedType = DomainType::getFromDomainOp(domainOp);
         if (domainType != expectedType)
           return mlir::emitError(module.getPortLocation(i))
                  << "domain port '" << module.getPortName(i) << "' has type "
