@@ -56,17 +56,24 @@ class Verilator(Simulator):
     """Locate VERILATOR_ROOT for runtime includes and sources.
 
     Checks the ``VERILATOR_ROOT`` environment variable first, then attempts
-    to derive the root from the location of ``verilator_bin``."""
+    to derive the root from the location of ``verilator_bin``.  Supports both
+    source-tree layouts (``$ROOT/include/verilated.h``) and system package
+    layouts (``$PREFIX/share/verilator/include/verilated.h``)."""
     if "VERILATOR_ROOT" in os.environ:
       root = Path(os.environ["VERILATOR_ROOT"])
       if root.is_dir():
         return root
-    # verilator_bin is typically in $VERILATOR_ROOT/bin/
+    # verilator_bin is typically in $PREFIX/bin/
     verilator_bin_path = shutil.which(self.verilator_bin)
     if verilator_bin_path:
-      root = Path(verilator_bin_path).resolve().parent.parent
-      if (root / "include" / "verilated.h").exists():
-        return root
+      prefix = Path(verilator_bin_path).resolve().parent.parent
+      # Source-tree layout: $VERILATOR_ROOT/bin/verilator_bin
+      if (prefix / "include" / "verilated.h").exists():
+        return prefix
+      # System package layout: $PREFIX/share/verilator/include/verilated.h
+      pkg_root = prefix / "share" / "verilator"
+      if (pkg_root / "include" / "verilated.h").exists():
+        return pkg_root
     raise RuntimeError(
         "Cannot find VERILATOR_ROOT. Set the VERILATOR_ROOT environment "
         "variable or ensure verilator_bin is in PATH.")
@@ -127,6 +134,8 @@ class Verilator(Simulator):
         include_dir / "verilated.cpp",
         include_dir / "verilated_threads.cpp",
     ]
+    if self.sources.dpi_so:
+      runtime_sources.append(include_dir / "verilated_dpi.cpp")
     if self.debug:
       runtime_sources.append(include_dir / "verilated_fst_c.cpp")
 
