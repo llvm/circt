@@ -658,7 +658,15 @@ public:
     llvm::DenseMap<Value, int> initialStateMap;
     for (seq::CompRegOp reg : moduleOp.getOps<seq::CompRegOp>()) {
       Value resetValue = reg.getResetValue();
-      auto definingConstant = resetValue.getDefiningOp<hw::ConstantOp>();
+      hw::ConstantOp definingConstant;
+      if (resetValue) {
+        definingConstant = resetValue.getDefiningOp<hw::ConstantOp>();
+      } else {
+        // Assume that registers without a reset start at 0
+        reg.emitWarning("Assuming register with no reset starts with value 0");
+        definingConstant =
+            hw::ConstantOp::create(opBuilder, reg.getLoc(), reg.getType(), 0);
+      }
       if (!definingConstant) {
         reg->emitError(
             "cannot find defining constant for reset value of register");
@@ -691,7 +699,16 @@ public:
     llvm::MapVector<seq::CompRegOp, VariableOp> variableMap;
     for (seq::CompRegOp varReg : variableRegs) {
       TypedValue<Type> initialValue = varReg.getResetValue();
-      auto definingConstant = initialValue.getDefiningOp<hw::ConstantOp>();
+      hw::ConstantOp definingConstant;
+      if (initialValue) {
+        definingConstant = initialValue.getDefiningOp<hw::ConstantOp>();
+      } else {
+        // Assume that registers without a reset start at 0
+        varReg.emitWarning(
+            "Assuming register with no reset starts with value 0");
+        definingConstant = hw::ConstantOp::create(opBuilder, varReg.getLoc(),
+                                                  varReg.getType(), 0);
+      }
       if (!definingConstant) {
         varReg->emitError("cannot find defining constant for reset value of "
                           "variable register");

@@ -102,3 +102,12 @@ hw.module @cyclic_muxes(in %clk : !seq.clock, in %rst : i1, out output : i1) {
     %mux2 = comb.mux %state, %mux1, %rst : i1
     hw.output %c0_i1 : i1
 }
+
+// -----
+
+hw.module @regs_without_reset(in %clk : !seq.clock) {
+    // expected-warning @below {{Assuming register with no reset starts with value 0}}
+    %state = seq.compreg name "state" %state, %clk : i1
+    // expected-warning @below {{Assuming register with no reset starts with value 0}}
+    %var = seq.compreg name "var" %state, %clk : i1
+}
