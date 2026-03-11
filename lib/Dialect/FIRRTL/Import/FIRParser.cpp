@@ -4118,9 +4118,7 @@ ParseResult FIRStmtParser::parseDomainInstantiation() {
     return emitError(startTok.getLoc())
            << "unknown domain '" << domainKind.getValue() << "'";
 
-  auto domainOp = lookup->second;
-  auto domainType = DomainType::get(
-      FlatSymbolRefAttr::get(domainOp.getNameAttr()), domainOp.getFieldsAttr());
+  auto domainType = DomainType::getFromDomainOp(lookup->second);
   auto result = builder.create<DomainCreateOp>(domainType, instanceName);
 
   // Add to symbol table
