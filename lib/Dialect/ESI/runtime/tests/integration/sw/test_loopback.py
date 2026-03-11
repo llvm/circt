@@ -116,6 +116,15 @@ def test_cosim_loopback(conn: AcceleratorConnection) -> None:
   run(conn)
 
 
+def test_cosim_loopback_make_fallback(monkeypatch) -> None:
+  """Run the loopback test using the ``make`` fallback (no cmake/ninja)."""
+  from esiaccel.cosim.verilator import Verilator
+  monkeypatch.setattr(Verilator, "_use_cmake", property(lambda self: False))
+  # Delegate to the already-decorated cosim test.  The monkeypatch is
+  # inherited by the forked child process.
+  test_cosim_loopback()
+
+
 if __name__ == "__main__":
   platform = sys.argv[1]
   connstr = sys.argv[2]
