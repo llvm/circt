@@ -2,6 +2,11 @@
 # with Slang must be built accordingly.
 set(CMAKE_CXX_STANDARD 20)
 
+# Fix an issue with CMake's precompiled headers mechanism. Headers would be
+# precompiled for the CIRCT's language setting (C++17), which would then break
+# here where we're locally changing language version.
+set(CMAKE_DISABLE_PRECOMPILE_HEADERS ON)
+
 # For ABI compatibility, define the SLANG_DEBUG macro in debug builds. Slang
 # sets this internally. If we don't set this here as well, header-defined things
 # like the destructor of `Driver`, which is generated in ImportVerilog's
