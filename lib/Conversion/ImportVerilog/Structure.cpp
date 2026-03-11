@@ -295,8 +295,7 @@ struct ModuleVisitor : public BaseVisitor {
 
     for (const auto &member : instNode.body.members()) {
       // Error on nested interface instances.
-      if (const auto *nestedInst =
-              member.as_if<slang::ast::InstanceSymbol>()) {
+      if (const auto *nestedInst = member.as_if<slang::ast::InstanceSymbol>()) {
         if (nestedInst->body.getDefinition().definitionKind ==
             slang::ast::DefinitionKind::Interface)
           return mlir::emitError(loc)
@@ -552,8 +551,7 @@ struct ModuleVisitor : public BaseVisitor {
       auto ifaceIt = context.interfaceInstances.find(connInst);
       if (ifaceIt == context.interfaceInstances.end()) {
         mlir::emitError(loc)
-            << "interface instance `" << connInst->name
-            << "` was not expanded";
+            << "interface instance `" << connInst->name << "` was not expanded";
         return failure();
       }
       auto &ifaceLowering = *ifaceIt->second;
