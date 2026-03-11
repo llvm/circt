@@ -215,3 +215,27 @@ hw.module @action_guard_and(in %clk : !seq.clock, in %rst : i1, in %x : i1, in %
 // CHECK:     %[[COUNTER_IF_X:.*]] = comb.mux %[[NOT_X]], %[[COUNTER4]], %[[COUNTER_PLUS_1]] : i2
 // CHECK:     fsm.update %[[COUNTER4]], %[[COUNTER_IF_X]]
 // CHECK:   }
+
+// -----
+
+// Regression test: when a guard simplifies to a constant (e.g., an unconditional
+// transition), the action block may also contain the same constant. Without the
+// fix to skip hw::ConstantOp in GuardConditionFoldPattern, the greedy rewriter
+// would infinitely replace the constant with an identical constant.
+
+// CHECK-LABEL: fsm.machine @constant_guard_no_hang
+hw.module @constant_guard_no_hang(in %clk : !seq.clock, in %rst : i1, in %x : i1, out count : i2) {
+    %c0_i2 = hw.constant 0 : i2
+    %c1_i2 = hw.constant 1 : i2
+    %false = hw.constant false
+    %true = hw.constant true
+    %state_is_0 = comb.xor %state, %true : i1
+    %go_to_1 = comb.and %x, %state_is_0 : i1
+    %next_state = comb.mux %state, %false, %go_to_1 : i1
+    %state = seq.compreg name "state" %next_state, %clk reset %rst, %false : i1
+    %counter_plus_1 = comb.add %counter, %c1_i2 : i2
+    %not_x = comb.xor %x, %true : i1
+    %next_counter = comb.mux %not_x, %counter_plus_1, %counter : i2
+    %counter = seq.compreg name "counter" %next_counter, %clk reset %rst, %c0_i2 : i2
+    hw.output %counter : i2
+}
