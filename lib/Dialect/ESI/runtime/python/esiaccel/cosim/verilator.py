@@ -14,7 +14,8 @@ class Verilator(Simulator):
   """Run and compile funcs for Verilator.
 
   Calls ``verilator_bin`` directly (bypassing the Perl wrapper) to generate
-  C++ from RTL, then builds the simulation executable with CMake + Ninja."""
+  C++ from RTL, then builds the simulation executable with CMake + Ninja.
+  Falls back to ``make`` when cmake/ninja are not available."""
 
   DefaultDriver = CosimCollateralDir / "driver.cpp"
 
@@ -78,13 +79,25 @@ class Verilator(Simulator):
         "Cannot find VERILATOR_ROOT. Set the VERILATOR_ROOT environment "
         "variable or ensure verilator_bin is in PATH.")
 
+  @property
+  def _use_cmake(self) -> bool:
+    """True when both cmake and ninja are available on PATH."""
+    return shutil.which("cmake") is not None and \
+        shutil.which("ninja") is not None
+
   def compile_commands(self) -> List[List[str]]:
     """Return the commands for the full compile flow.
 
-    The returned list contains three commands that are run sequentially:
+    When cmake and ninja are available the returned list contains three
+    commands run sequentially:
       1. ``verilator_bin`` – generates C++ from RTL.
       2. ``cmake`` – configures the C++ build (Ninja generator).
-      3. ``ninja`` – builds the simulation executable."""
+      3. ``ninja`` – builds the simulation executable.
+
+    Otherwise falls back to two commands:
+      1. ``verilator_bin --exe`` – generates C++ and a Makefile.
+      2. ``make`` – builds via the generated Makefile.
+    """
     cmd: List[str] = [
         self.verilator_bin,
         "--cc",
@@ -114,13 +127,28 @@ class Verilator(Simulator):
           "--trace-fst", "--trace-params", "--trace-structs",
           "--trace-underscore"
       ]
+
+    if self._use_cmake:
+      cmd += [str(p) for p in self.sources.rtl_sources]
+      build_dir = str(Path.cwd() / "obj_dir" / "cmake_build")
+      cmake_cmd = ["cmake", "-G", "Ninja", "-S", build_dir, "-B", build_dir]
+      ninja_cmd = ["ninja", "-C", build_dir]
+      return [cmd, cmake_cmd, ninja_cmd]
+
+    # -- make fallback --
+    # Let verilator generate a Makefile with --exe so it includes the
+    # driver, CFLAGS, and LDFLAGS directly.
+    cmd += ["--exe", str(Verilator.DefaultDriver)]
+    cflags = ["-DTOP_MODULE=" + self.sources.top]
+    if self.debug:
+      cflags.append("-DTRACE")
+    cmd += ["-CFLAGS", " ".join(cflags)]
+    if self.sources.dpi_so:
+      cmd += ["-LDFLAGS", " ".join(["-l" + so for so in self.sources.dpi_so])]
     cmd += [str(p) for p in self.sources.rtl_sources]
-
-    build_dir = str(Path.cwd() / "obj_dir" / "cmake_build")
-    cmake_cmd = ["cmake", "-G", "Ninja", "-S", build_dir, "-B", build_dir]
-    ninja_cmd = ["ninja", "-C", build_dir]
-
-    return [cmd, cmake_cmd, ninja_cmd]
+    top = self.sources.top
+    make_cmd = ["make", "-C", "obj_dir", "-f", f"V{top}.mk", "-j"]
+    return [cmd, make_cmd]
 
   def _write_cmake(self, obj_dir: Path) -> Path:
     """Write a CMakeLists.txt for building the verilated simulation.
@@ -189,15 +217,21 @@ target_link_libraries({exe_name} PRIVATE
     return build_dir
 
   def compile(self) -> int:
-    """Set VERILATOR_ROOT, write the CMakeLists.txt, then delegate to the base
-    class which runs all commands from :meth:`compile_commands`."""
+    """Set VERILATOR_ROOT, write the CMakeLists.txt (if using cmake), then
+    delegate to the base class which runs all commands from
+    :meth:`compile_commands`."""
     verilator_root = self._find_verilator_root()
     os.environ["VERILATOR_ROOT"] = str(verilator_root)
-    self._write_cmake(Path.cwd() / "obj_dir")
+    if self._use_cmake:
+      self._write_cmake(Path.cwd() / "obj_dir")
     return super().compile()
 
   def run_command(self, gui: bool):
     if gui:
       raise RuntimeError("Verilator does not support GUI mode.")
-    exe = Path.cwd() / "obj_dir" / "cmake_build" / ("V" + self.sources.top)
+    exe_name = "V" + self.sources.top
+    if self._use_cmake:
+      exe = Path.cwd() / "obj_dir" / "cmake_build" / exe_name
+    else:
+      exe = Path.cwd() / "obj_dir" / exe_name
     return [str(exe)]
