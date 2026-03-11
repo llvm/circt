@@ -2100,6 +2100,23 @@ def AssocArraySizeOp : MooreOp<"assoc_array.size"> {
   let assemblyFormat = "$assoc_array `:` type($assoc_array) attr-dict";
 }
 
+
+def AssocArrayExistsOp : MooreOp<"assoc_array.exists", 
+    [TypesMatchWith<"associative array index and given index must match",
+    "assoc_array", "index", "cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getIndexType()">]> {
+  let summary = "Check if an element exists at a given index in an associative array";
+  let description = [{
+    See IEEE 1800-2023 § 7.9.3 "Size()". Returns 1 if the element exists at the given index
+    in the given associative array, otherwise return 0.
+    According to spec the returned size fits an `int`.
+  }];
+  let arguments = (ins AssocArrayRefType:$assoc_array, UnpackedType:$index);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = [{
+    $index `in` $assoc_array attr-dict `:` type($assoc_array) `[` type($index) `]`
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Struct Manipulation
 //===----------------------------------------------------------------------===//

@@ -4392,6 +4392,22 @@ module AssocArraySizeTest;
     end
 endmodule
 
+// CHECK-LABEL: moore.module @AssocArrayExistsTest() {
+// CHECK:           [[AA:%.+]] = moore.variable : <assoc_array<i32, i32>>
+// CHECK:           moore.procedure initial {
+// CHECK:             [[C0:%.+]] = moore.constant 0 : i32
+// CHECK:             [[S1:%.+]] = moore.assoc_array.exists [[C0]] in [[AA]] : <assoc_array<i32, i32>>[i32]
+// CHECK:             moore.return
+// CHECK:           }
+// CHECK:           moore.output
+// CHECK:         }
+module AssocArrayExistsTest;
+    int aa[int];
+    initial begin
+        aa.exists(0);
+    end
+endmodule
+
 
 // Test that DPI-C imported functions are emitted as extern declarations
 
