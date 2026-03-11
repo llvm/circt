@@ -51,3 +51,16 @@ hw.module @dpi_call(in %clock : !seq.clock, in %in: i1) {
   // expected-error @below {{callee must be 'sim.dpi.func' or 'func.func' but got 'hw.module.extern'}}
   %0, %1 = sim.func.dpi.call @non_func(%in) : (i1) -> (i1, i1)
 }
+
+// -----
+
+hw.module @queue_concat(in %q1: !sim.queue<i32, 0>, in %q2: !sim.queue<i16, 0>) {
+  // expected-error @below {{'sim.queue.concat' op sim::Queue element type 'i16' doesn't match result sim::Queue element type 'i32'}}
+  sim.queue.concat (%q1, %q2) : (!sim.queue<i32, 0>, !sim.queue<i16, 0>) <i32, 5>
+}
+
+hw.module @queue_from_array(in %uparr: !hw.array<5xi33>) {
+  // expected-error @below {{'sim.queue.from_array' op sim::Queue element type 'i32' doesn't match hw::ArrayType element type 'i33'}}
+  sim.queue.from_array %uparr : !hw.array<5xi33> -> <i32, 0>
+}
+

@@ -613,6 +613,39 @@ LogicalResult QueueResizeOp::verify() {
   return success();
 }
 
+LogicalResult QueueFromArrayOp::verify() {
+  auto queueElementType =
+      cast<QueueType>(getResult().getType()).getElementType();
+
+  auto arrayElementType =
+      cast<hw::ArrayType>(getInput().getType()).getElementType();
+
+  if (queueElementType != arrayElementType) {
+    return emitOpError() << "sim::Queue element type " << queueElementType
+                         << " doesn't match hw::ArrayType element type "
+                         << arrayElementType;
+  }
+
+  return success();
+}
+
+LogicalResult QueueConcatOp::verify() {
+  // Verify the element types of all concatenated queues equal that of the
+  // result queue. (but not the bounds)
+  auto resultElType = cast<QueueType>(getResult().getType()).getElementType();
+
+  for (Value input : getInputs()) {
+    auto inpElType = cast<QueueType>(input.getType()).getElementType();
+    if (inpElType != resultElType) {
+      return emitOpError() << "sim::Queue element type " << inpElType
+                           << " doesn't match result sim::Queue element type "
+                           << resultElType;
+    }
+  }
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
