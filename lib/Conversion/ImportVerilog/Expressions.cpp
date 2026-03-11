@@ -1803,7 +1803,7 @@ struct RvalueExprVisitor : public ExprVisitor {
                       args[0]->type->isAssociativeArray());
 
     // Associative Array Traversal Ops require value2 to be refs
-    bool isByRefArgument =
+    bool secondArgIsByRef =
         args.size() >= 1 &&
         (args[0]->type->isAssociativeArray() && subroutine.name != "exists");
 
@@ -1829,8 +1829,8 @@ struct RvalueExprVisitor : public ExprVisitor {
     case (2):
       value = isByRefOp ? context.convertLvalueExpression(*args[0])
                         : context.convertRvalueExpression(*args[0]);
-      value2 = isByRefArgument ? context.convertLvalueExpression(*args[1])
-                               : context.convertRvalueExpression(*args[1]);
+      value2 = secondArgIsByRef ? context.convertLvalueExpression(*args[1])
+                                : context.convertRvalueExpression(*args[1]);
       if (!value || !value2)
         return {};
       result = context.convertSystemCallArity2(subroutine, loc, value, value2);
