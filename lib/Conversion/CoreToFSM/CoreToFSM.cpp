@@ -203,6 +203,11 @@ public:
     if (!actionRegion.isAncestor(op->getParentRegion()))
       return failure();
 
+    // Skip constants — replacing a constant with an identical constant
+    // creates an infinite loop in the greedy rewriter.
+    if (isa<hw::ConstantOp>(op))
+      return failure();
+
     for (Value result : op->getResults()) {
       if (!result.getType().isInteger(1) || result.use_empty())
         continue;
