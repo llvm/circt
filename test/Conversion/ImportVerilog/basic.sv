@@ -2395,11 +2395,7 @@ module WaitStatementTest();
 	reg enable = 0;
 
 	initial begin
-		#10 enable = 1;
-	end
-
-	initial begin
-		wait (enable) #10 a = b;
+		wait (enable) a = b;
 	end
 	
 	initial begin
