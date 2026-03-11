@@ -1159,14 +1159,9 @@ public:
           return signalPassFailure();
         });
   }
-};
-} // end anonymous namespace
 
-void ConvertHWToBTOR2Pass::runOnOperation() {
-  // Btor2 does not have the concept of modules or module
-  // hierarchies, so we assume that no nested modules exist at this point.
-  // This greatly simplifies translation.
-  getOperation().walk([&](hw::HWModuleOp module) {
+  /// Prepares and visits all of the ports in a module
+  LogicalResult visitPorts(hw::HWModuleOp module) {
     // Start by extracting the inputs and generating appropriate instructions
     for (auto &port : module.getPortList()) {
       // Check whether the port is used as a clock
@@ -1182,16 +1177,35 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
           if (portVal.getNumUses() > 1) {
             module.emitError(
                 "Inputs converted to clocks may only have one user.");
-            return signalPassFailure();
+            return failure();
           }
           // Ports used as clocks should be implicit so don't visit them
           continue;
         }
       }
+      // Once ready, run actual port visitor
       visit(port);
     }
+    return success();
+  }
 
-    // Previsit all registers in the module in order to avoid dependency cycles
+  /// Checks if a given operation is a supported modulelike
+  template <typename T>
+  bool isSuportedModule(T module) {
+    bool supported = isa<hw::HWModuleOp, verif::FormalOp>(module);
+    if (!supported)
+      module.emitError("Unsupported module type!");
+    return supported;
+  }
+
+  /// Previsits all registers in a given module (avoids dependency cycles)
+  template <typename T>
+  LogicalResult preVisitRegs(T module) {
+    // Sanity check
+    if (!isSuportedModule(module))
+      return failure();
+
+    // Find all supported registers and visit them
     module.walk([&](Operation *op) {
       TypeSwitch<Operation *, void>(op)
           .Case<seq::FirRegOp, seq::CompRegOp>([&](auto reg) {
@@ -1201,12 +1215,22 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
           .Default([&](auto expr) {});
     });
 
+    return success();
+  }
+
+  /// Visits all of the regular operations in our module
+  template <typename T>
+  LogicalResult visitBodyOps(T module) {
+    // Sanity check
+    if (!isSuportedModule(module))
+      return failure();
+
     // Visit all of the operations in our module
     module.walk([&](Operation *op) {
       // Check: instances are not (yet) supported
       if (isa<hw::InstanceOp>(op)) {
         op->emitOpError("not supported in BTOR2 conversion");
-        return;
+        return signalPassFailure();
       }
 
       // Don't process ops that have already been emitted
@@ -1220,7 +1244,8 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
       while (!worklist.empty()) {
         auto &[op, operandIt] = worklist.back();
         if (operandIt == op->operand_end()) {
-          // All of the operands have been emitted, it is safe to emit our op
+          // All of the operands have been emitted, it is safe to emit our
+          // op
           dispatchTypeOpVisitor(op);
 
           // Record that our op has been emitted
@@ -1229,8 +1254,8 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
           continue;
         }
 
-        // Send the operands of our op to the worklist in case they are still
-        // un-emitted
+        // Send the operands of our op to the worklist in case they are
+        // still un-emitted
         Value operand = *(operandIt++);
         auto *defOp = operand.getDefiningOp();
 
@@ -1242,16 +1267,51 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
         // wasn't handled
         if (!worklist.insert({defOp, defOp->operand_begin()}).second) {
           defOp->emitError("dependency cycle");
-          return;
+          return signalPassFailure();
         }
       }
     });
 
-    // Iterate through the registers and generate the `next` instructions
-    for (size_t i = 0; i < regOps.size(); ++i) {
-      finalizeRegVisit(regOps[i]);
+    return success();
+  }
+
+  /// Handles the core logic of the pass, in a generic manner
+  template <typename T>
+  LogicalResult handleTopLevel(T module) {
+    if (isa<hw::HWModuleOp>(module)) {
+      // Start by extracting the inputs and generating appropriate instructions
+      if (failed(visitPorts(module)))
+        return failure();
     }
+    // Previsit all registers in the module in order to avoid dependency
+    // cycles
+    if (failed(preVisitRegs(module)))
+      return failure();
+
+    // Visit all of the operations in our module
+    if (failed(visitBodyOps(module)))
+      return failure();
+
+    // Iterate through the registers and generate the `next` instructions
+    for (size_t i = 0; i < regOps.size(); ++i)
+      finalizeRegVisit(regOps[i]);
+
+    return success();
+  }
+};
+} // end anonymous namespace
+
+void ConvertHWToBTOR2Pass::runOnOperation() {
+  // Btor2 does not have the concept of modules or module
+  // hierarchies, so we assume that no nested modules exist at this point.
+  // This greatly simplifies translation.
+  // We also consider hw::HWModuleOp and verif::FormalOp as the same
+  auto top = getOperation();
+  top.walk([&](hw::HWModuleOp module) {
+    if (failed(handleTopLevel(module)))
+      return signalPassFailure();
   });
+
   // Clear data structures to allow for pass reuse
   sortToLIDMap.clear();
   constToLIDMap.clear();
