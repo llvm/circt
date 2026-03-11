@@ -49,8 +49,9 @@ struct GenericLUT : public CutRewritePattern {
 
   std::optional<MatchResult> match(CutEnumerator &enumerator,
                                    const Cut &cut) const override {
+    const auto &network = enumerator.getLogicNetwork();
     // This pattern can implement any cut with at most k inputs
-    if (cut.getInputSize() > k || cut.getOutputSize() != 1)
+    if (cut.getInputSize() > k || cut.getOutputSize(network) != 1)
       return std::nullopt;
 
     // Create match result with a reference to cached delays
@@ -61,13 +62,17 @@ struct GenericLUT : public CutRewritePattern {
   llvm::FailureOr<Operation *> rewrite(mlir::OpBuilder &rewriter,
                                        CutEnumerator &enumerator,
                                        const Cut &cut) const override {
+    const auto &network = enumerator.getLogicNetwork();
     // NOTE: Don't use NPN since it's unnecessary.
-    auto truthTable = cut.getTruthTable();
+    const auto &truthTableOpt = cut.getTruthTable();
+    if (!truthTableOpt)
+      return failure();
+    const auto &truthTable = *truthTableOpt;
     LLVM_DEBUG({
       llvm::dbgs() << "Rewriting cut with " << cut.getInputSize()
                    << " inputs and " << cut.getInputSize()
                    << " operations to a generic LUT with " << k << " inputs.\n";
-      cut.dump(llvm::dbgs());
+      cut.dump(llvm::dbgs(), network);
       llvm::dbgs() << "Truth table details:\n";
       truthTable.dump(llvm::dbgs());
     });
@@ -78,11 +83,17 @@ struct GenericLUT : public CutRewritePattern {
       lutTable.push_back(truthTable.table[i]);
 
     // Reverse the inputs to match the LUT input order
-    SmallVector<Value> lutInputs(cut.inputs.rbegin(), cut.inputs.rend());
+    SmallVector<Value> lutInputs;
+    lutInputs.reserve(cut.inputs.size());
+    for (auto i : llvm::reverse(cut.inputs))
+      lutInputs.push_back(network.getValue(i));
+
+    auto *rootOp = network.getGate(cut.getRootIndex()).getOperation();
+    assert(rootOp && "cut root must be a valid operation");
 
     // Generate comb.truth table operation.
-    auto truthTableOp = comb::TruthTableOp::create(
-        rewriter, cut.getRoot()->getLoc(), lutInputs, lutTable);
+    auto truthTableOp = comb::TruthTableOp::create(rewriter, rootOp->getLoc(),
+                                                   lutInputs, lutTable);
 
     // Replace the root operation with the truth table operation
     return truthTableOp.getOperation();

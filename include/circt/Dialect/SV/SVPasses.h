@@ -27,14 +27,9 @@ std::unique_ptr<mlir::Pass> createHWCleanupPass(bool mergeAlwaysBlocks = true);
 std::unique_ptr<mlir::Pass> createHWStubExternalModulesPass();
 std::unique_ptr<mlir::Pass> createHWLegalizeModulesPass();
 std::unique_ptr<mlir::Pass> createSVTraceIVerilogPass();
-std::unique_ptr<mlir::Pass> createHWLowerInstanceChoices();
 std::unique_ptr<mlir::Pass> createHWGeneratorCalloutPass();
 std::unique_ptr<mlir::Pass> createHWEliminateInOutPortsPass(
     const HWEliminateInOutPortsOptions &options = {});
-std::unique_ptr<mlir::Pass>
-createSVExtractTestCodePass(bool disableInstanceExtraction = false,
-                            bool disableRegisterExtraction = false,
-                            bool disableModuleInlining = false);
 std::unique_ptr<mlir::Pass> createHWExportModuleHierarchyPass();
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

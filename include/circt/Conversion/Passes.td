@@ -68,18 +68,6 @@ def LegalizeAnonEnums : Pass<"legalize-anon-enums", "mlir::ModuleOp"> {
   ];
 }
 
-def HWLowerInstanceChoices : Pass<"hw-lower-instance-choices",
-                                  "mlir::ModuleOp"> {
-  let summary = "Prepare the collateral for instance choice emission";
-  let description = [{
-    This pass runs as part of verilog emission.
-    It introduces the macros & file lists to which instance choices lower to.
-  }];
-  let dependentDialects = [
-    "circt::sv::SVDialect", "circt::hw::HWDialect"
-  ];
-}
-
 def PrepareForEmission : Pass<"prepare-for-emission"> {
   let summary = "Prepare IR for ExportVerilog";
   let description = [{
@@ -386,6 +374,24 @@ def ConvertFSMToSV : Pass<"convert-fsm-to-sv", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// FSMToSMT
+//===----------------------------------------------------------------------===//
+
+def ConvertFSMToSMT : Pass<"convert-fsm-to-smt", "mlir::ModuleOp"> {
+  let summary = "Converts FSMs to SMT models that can be used to check" 
+    "safety properties";
+  let constructor = "circt::createConvertFSMToSMTPass()";
+  let dependentDialects = ["circt::comb::CombDialect", "mlir::smt::SMTDialect",
+                           "circt::verif::VerifDialect"];
+  let options = [Option<"withTime", "with-time", "bool", "false",
+                        "Whether to include a time parameter in the predicates"
+                        "created to represent states">,
+                  Option<"timeWidth", "time-width", "int", "8",
+                        "Bitwidth of time parameter">,
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // CoreToFSM
 //===----------------------------------------------------------------------===//
 
@@ -620,6 +626,11 @@ def ConvertHWToBTOR2 : Pass<"convert-hw-to-btor2", "mlir::ModuleOp"> {
   let constructor = "circt::createConvertHWToBTOR2Pass()";
   let dependentDialects = ["hw::HWDialect", "sv::SVDialect", "comb::CombDialect",
                            "seq::SeqDialect"];
+  let options =
+    [Option<"assumeInitReset", "assume-init-reset", "bool", "false",
+            "Assume registers have been reset (i.e., initialize them to their"
+            "reset value)">];
+
 }
 
 //===----------------------------------------------------------------------===//
@@ -637,6 +648,11 @@ def LowerLTLToCore : Pass<"lower-ltl-to-core", "hw::HWModuleOp"> {
     "hw::HWDialect", "sv::SVDialect", "comb::CombDialect",
     "seq::SeqDialect"
   ];
+  let options =
+    [Option<"assumeFirstClock", "assume-first-clock", "bool", "false",
+            "Assume that implicitly clocked LTL operations are clocked by the"
+            "first clock argument, or failing that, the first seq.to_clock"
+            "operation in their parent hw.module.">];
 }
 
 //===----------------------------------------------------------------------===//

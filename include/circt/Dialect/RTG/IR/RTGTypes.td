@@ -234,12 +234,14 @@ def ImmediateType : RTGISATypeDef<"Immediate", "immediate"> {
 }
 
 class ImmediateOfWidth<int width> : Type<
-  And<[CPred<"llvm::isa<::circt::rtg::ImmediateType>($_self)">,
+  And<[ImmediateType.predicate,
        CPred<"llvm::cast<::circt::rtg::ImmediateType>($_self).getWidth() == " #
              width>]>,
   "a " # width # "-bit immediate">,
   BuildableType<"::circt::rtg::ImmediateType::get($_builder.getContext(), " #
-                width # ")">;
+                width # ")"> {
+  int immWidth = width;
+}
 
 def MemoryType : RTGISATypeDef<"Memory", "memory"> {
   let summary = "handle to a memory";
@@ -251,6 +253,16 @@ def MemoryType : RTGISATypeDef<"Memory", "memory"> {
 
   let parameters = (ins "uint32_t":$addressWidth);
   let assemblyFormat = "`<` $addressWidth `>`";
+}
+
+class MemoryWithAddressWidth<int width> : Type<
+  And<[MemoryType.predicate,
+       CPred<"llvm::cast<::circt::rtg::MemoryType>($_self).getAddressWidth() == " #
+             width>]>,
+  "a " # width # "-bit addressable memory">,
+  BuildableType<"::circt::rtg::MemoryType::get($_builder.getContext(), " #
+                width # ")"> {
+  int addressWidth = width;
 }
 
 def MemoryBlockType : RTGISATypeDef<"MemoryBlock", "memory_block"> {
@@ -268,5 +280,10 @@ def MemoryBlockType : RTGISATypeDef<"MemoryBlock", "memory_block"> {
 }
 
 def ISAMemory : AnyTypeOf<[MemoryType, ImmediateType, LabelType]>;
+
+class ISAMemoryWithAddressWidth<int width> : AnyTypeOf<[
+  MemoryWithAddressWidth<width>,
+  ImmediateOfWidth<width>,
+  LabelType]>;
 
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD

@@ -157,7 +157,7 @@ circuit TestHarness:
 
 ; MLIR_OUT:  om.class @MemorySchema(%basepath: !om.basepath, %name_in: !om.string, %depth_in: !om.integer, %width_in: !om.integer, %maskBits_in: !om.integer, %readPorts_in: !om.integer, %writePorts_in: !om.integer, %readwritePorts_in: !om.integer, %writeLatency_in: !om.integer, %readLatency_in: !om.integer, %ruwBehavior_in: !om.string, %hierarchy_in: !om.list<!om.path>, %inDut_in: i1, %extraPorts_in: !om.list<!om.class.type<@ExtraPortsMemorySchema>>, %preExtInstName_in: !om.list<!om.string>)  -> (name: !om.string, depth: !om.integer, width: !om.integer, maskBits: !om.integer, readPorts: !om.integer, writePorts: !om.integer, readwritePorts: !om.integer, writeLatency: !om.integer, readLatency: !om.integer, ruwBehavior: !om.string, hierarchy: !om.list<!om.path>, inDut: i1, extraPorts: !om.list<!om.class.type<@ExtraPortsMemorySchema>>, preExtInstName: !om.list<!om.string>)
 ; MLIR_OUT:    om.class.fields %name_in, %depth_in, %width_in, %maskBits_in, %readPorts_in, %writePorts_in, %readwritePorts_in, %writeLatency_in, %readLatency_in, %ruwBehavior_in, %hierarchy_in, %inDut_in, %extraPorts_in, %preExtInstName_in : !om.string, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.string, !om.list<!om.path>, i1, !om.list<!om.class.type<@ExtraPortsMemorySchema>>, !om.list<!om.string>
-; MLIR_OUT-DAG: om.path_create instance %basepath @memNLA
+; MLIR_OUT-DAG: om.path_create instance %basepath @memHier
 ; MLIR_OUT-DAG: om.list_create
 ; MLIR_OUT-DAG: [[OBJ1:%.+]] = om.object @MemorySchema
 ; MLIR_OUT-DAG: om.constant "foo_m_ext" : !om.string
@@ -165,13 +165,13 @@ circuit TestHarness:
 ; MLIR_OUT-DAG: om.constant #om.integer<8 : si32> : !om.integer
 ; MLIR_OUT-DAG: om.constant #om.integer<1 : si32> : !om.integer
 ; MLIR_OUT-DAG: om.constant #om.integer<0 : si32> : !om.integer
-; MLIR_OUT-DAG: om.path_create instance %basepath @memNLA_0
+; MLIR_OUT-DAG: om.path_create instance %basepath @memHier_0
 ; MLIR_OUT-DAG: om.list_create
 ; MLIR_OUT-DAG: [[OBJ2:%.+]] = om.object @MemorySchema
 ; MLIR_OUT-DAG: om.constant "bar_m_ext" : !om.string
 ; MLIR_OUT-DAG: om.constant #om.integer<2 : si64> : !om.integer
-; MLIR_OUT-DAG: om.path_create instance %basepath @memNLA_1
-; MLIR_OUT-DAG: om.path_create instance %basepath @memNLA_2
+; MLIR_OUT-DAG: om.path_create instance %basepath @memHier_1
+; MLIR_OUT-DAG: om.path_create instance %basepath @memHier_2
 ; MLIR_OUT-DAG: om.list_create
 ; MLIR_OUT-DAG: [[OBJ3:%.+]] = om.object @MemorySchema
 ; MLIR_OUT-DAG: om.constant "baz_m_ext" : !om.string

@@ -303,8 +303,9 @@ firrtl.circuit "NLAInlining" {
   // CHECK-NEXT: hw.hierpath private @nla1 [@NLAInlining::@bar, @Bar]
   // CHECK-NEXT: hw.hierpath private @nla2 [@NLAInlining::@bar, @Bar::@a]
   // CHECK-NEXT: hw.hierpath private @nla3 [@NLAInlining::@bar, @Bar::@port]
+  // CHECK-NEXT: hw.hierpath private @nla5 [@NLAInlining::@b]
+  // CHECK-NEXT: hw.hierpath private @nla6 [@NLAInlining::@port]
   // CHECK-NOT:  hw.hierpath private @nla4
-  // CHECK-NOT:  hw.hierpath private @nla5
   hw.hierpath private @nla1 [@NLAInlining::@foo, @Foo::@bar, @Bar]
   hw.hierpath private @nla2 [@NLAInlining::@foo, @Foo::@bar, @Bar::@a]
   hw.hierpath private @nla3 [@NLAInlining::@foo, @Foo::@bar, @Bar::@port]
@@ -383,8 +384,8 @@ firrtl.circuit "NLAInliningNotMainRoot" {
 firrtl.circuit "NLAFlattening" {
   // CHECK-NEXT: hw.hierpath private @nla1 [@NLAFlattening::@foo, @Foo::@a]
   // CHECK-NEXT: hw.hierpath private @nla2 [@NLAFlattening::@foo, @Foo::@port]
+  // CHECK-NEXT: hw.hierpath private @nla4 [@Foo::@b]
   // CHECK-NOT:  hw.hierpath private @nla3
-  // CHECK-NOT:  hw.hierpath private @nla4
   hw.hierpath private @nla1 [@NLAFlattening::@foo, @Foo::@bar, @Bar::@baz, @Baz::@a]
   hw.hierpath private @nla2 [@NLAFlattening::@foo, @Foo::@bar, @Bar::@baz, @Baz::@port]
   hw.hierpath private @nla3 [@NLAFlattening::@foo, @Foo::@bar, @Bar::@baz, @Baz]
@@ -1431,7 +1432,7 @@ firrtl.circuit "FormalMarkerIsUse" {
 // -----
 
 firrtl.circuit "RemoveNonLocalFromLocal" {
-  // CHECK-NOT: @dutNLA
+  // CHECK: hw.hierpath private @dutNLA [@RemoveNonLocalFromLocal::@sym]
   hw.hierpath private @dutNLA [@RemoveNonLocalFromLocal::@sym]
   firrtl.module @Bar() {}
   // CHECK-LABEL: firrtl.module @RemoveNonLocalFromLocal
@@ -1571,5 +1572,55 @@ firrtl.circuit "InstanceChoiceWithFlattening" {
     // After flattening, instance_choice should be inlined but still reference @ImplA
     // CHECK: firrtl.instance_choice level1_level2_inst @ImplA
     firrtl.instance level1 @Level1()
+  }
+}
+
+// -----
+
+// Test that NLAs are correctly updated when flattening.
+//
+// CHECK-LABEL: firrtl.circuit "FlattenAtRoot"
+firrtl.circuit "FlattenAtRoot" {
+  // CHECK: hw.hierpath private @nla [@Foo::@b]
+  hw.hierpath private @nla [@Foo::@bar, @Bar::@b]
+  // CHECK: firrtl.module @Bar
+  firrtl.module @Bar() {
+    // CHECK: %b = firrtl.wire sym @b {annotations = [{class = "nla"}]}
+    %b = firrtl.wire sym @b {annotations = [{circt.nonlocal = @nla, class = "nla"}]} : !firrtl.uint<1>
+  }
+  // CHECK: firrtl.module @Foo
+  firrtl.module @Foo() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
+    // CHECK: %bar_b = firrtl.wire sym @b {annotations = [{class = "nla"}]}
+    firrtl.instance bar sym @bar @Bar()
+  }
+  // CHECK: firrtl.module @FlattenAtRoot
+  firrtl.module @FlattenAtRoot() {
+    firrtl.instance foo sym @foo @Foo()
+    // CHECK: sv.xmr.ref @nla : !hw.inout<i1>
+    %xmr = sv.xmr.ref @nla : !hw.inout<i1>
+  }
+}
+
+// -----
+
+// Test that hierarchical paths are correctly update when inlining.  This is the
+// same, conceptually, as the previous `FlattenAtRoot` test.
+//
+// CHECK-LABEL: firrtl.circuit "InlineBothModules"
+firrtl.circuit "InlineBothModules" {
+  // CHECK: hw.hierpath @path [@InlineBothModules::@sym_0]
+  hw.hierpath @path [@Foo::@bar, @Bar::@sym]
+  firrtl.module private @Bar() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %w = firrtl.wire sym @sym {annotations = [{circt.nonlocal = @path, class = "test"}]} : !firrtl.uint<5>
+  }
+  firrtl.module private @Foo() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance b sym @bar @Bar()
+  }
+  // CHECK: firrtl.module @InlineBothModules
+  firrtl.module @InlineBothModules() {
+    // CHECK: %foo_b_w = firrtl.wire sym @sym_0 {annotations = [{class = "test"}]}
+    firrtl.instance foo @Foo()
+    // CHECK: sv.xmr.ref @path : !hw.inout<i5>
+    %xmr = sv.xmr.ref @path : !hw.inout<i5>
   }
 }

@@ -12,6 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "RTGInstructionFormat.h"
+#include "RTGInstructionUtils.h"
 #include "mlir/TableGen/GenInfo.h"
 #include "mlir/TableGen/Operator.h"
 #include "llvm/ADT/SmallVector.h"
@@ -23,18 +25,11 @@
 using namespace llvm;
 using namespace mlir;
 using namespace mlir::tblgen;
+using namespace circt::tblgen::rtg;
 
-namespace {
-
-// Helper class to represent a register effect decorator.
-class RegisterEffect : public Operator::VariableDecorator {
-public:
-  StringRef getEffectName() const { return def->getValueAsString("effect"); }
-
-  static bool classof(const Operator::VariableDecorator *var) {
-    return var->getDef().isSubClassOf("RegisterEffect");
-  }
-};
+//===----------------------------------------------------------------------===//
+// Code Generation
+//===----------------------------------------------------------------------===//
 
 // Generate the `isSourceRegister` and `isDestinationRegister` methods for an
 // operation based on its `SourceReg` and `DestReg` decorators.
@@ -43,19 +38,7 @@ static void genRegisterAllocationMethodsForOp(const Record *opDef,
   Operator op(opDef);
 
   // Check if this op implements RegisterAllocationOpInterface
-  bool hasInterface = false;
-  for (const auto &trait : op.getTraits()) {
-    if (auto *iTrait = dyn_cast<InterfaceTrait>(&trait)) {
-      std::string traitName = iTrait->getFullyQualifiedTraitName();
-      if (traitName.find("circt::rtg::RegisterAllocationOpInterface") !=
-          std::string::npos) {
-        hasInterface = true;
-        break;
-      }
-    }
-  }
-
-  if (!hasInterface)
+  if (!hasRegisterAllocationOpInterface(op))
     return;
 
   // Collect source and destination register indices
@@ -78,9 +61,6 @@ static void genRegisterAllocationMethodsForOp(const Record *opDef,
       }
     }
   }
-
-  if (sourceIndices.empty() && destIndices.empty() && op.getNumArgs() > 0)
-    return;
 
   StringRef className = op.getCppClassName();
 
@@ -120,13 +100,15 @@ static bool genRTGInstructionMethods(const RecordKeeper &records,
   llvm::emitSourceFileHeader("RTG Instruction Method Implementations", os,
                              records);
 
-  for (const Record *opDef : records.getAllDerivedDefinitions("Op"))
+  for (const Record *opDef : records.getAllDerivedDefinitions("Op")) {
     genRegisterAllocationMethodsForOp(opDef, os);
+
+    if (opDef->isSubClassOf("ISAInstructionFormat"))
+      circt::tblgen::rtg::genInstructionPrintMethods(opDef, os);
+  }
 
   return false;
 }
-
-} // namespace
 
 // Generator registration for RTG instruction-related methods.
 static mlir::GenRegistration

@@ -90,3 +90,16 @@ hw.module @Or(in %a: i1, in %b: i1, in %c: !ltl.property, in %clk: i1) {
   %or3 = ltl.or %b, %c : i1, !ltl.property
   verif.assert %or3 : !ltl.property
 }
+
+// CHECK: hw.module @Past(in [[A:%.+]] : i32, in [[CLK:%.+]] : i1)
+// CHECK: [[TOCLK1:%.+]] = seq.to_clock [[CLK]]
+// CHECK: [[TRUE:%.+]] = hw.constant true
+// CHECK: [[REG1:%.+]] = seq.shiftreg[1] [[A]], [[TOCLK1]], [[TRUE]] : i32
+// CHECK: [[TOCLK2:%.+]] = seq.to_clock [[CLK]]
+// CHECK: [[TRUE1:%.+]] = hw.constant true
+// CHECK: [[REG2:%.+]] = seq.shiftreg[5] [[A]], [[TOCLK2]], [[TRUE1]] : i32
+
+hw.module @Past(in %a: i32, in %clk: i1) {
+  ltl.past %a, 1 clk %clk : i32
+  ltl.past %a, 5 clk %clk : i32
+}

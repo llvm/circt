@@ -83,13 +83,13 @@ static DelayType simulateBalancedTree(ArrayRef<DelayType> arrivalTimes) {
 /// Build balanced AND tree.
 ValueWithArrivalTime
 buildBalancedAndTree(OpBuilder &builder, Location loc,
-                     SmallVectorImpl<ValueWithArrivalTime> &nodes) {
+                     SmallVectorImpl<ValueWithArrivalTime> &nodes,
+                     size_t &valueNumbering) {
   assert(!nodes.empty());
 
   if (nodes.size() == 1)
     return nodes[0];
 
-  size_t num = nodes.size();
   auto result = buildBalancedTreeWithArrivalTimes<ValueWithArrivalTime>(
       nodes, [&](const auto &n1, const auto &n2) {
         Value v = aig::AndInverterOp::create(builder, loc, n1.getValue(),
@@ -97,7 +97,7 @@ buildBalancedAndTree(OpBuilder &builder, Location loc,
                                              n2.isInverted());
         return ValueWithArrivalTime(
             v, std::max(n1.getArrivalTime(), n2.getArrivalTime()) + 1, false,
-            num++);
+            valueNumbering++);
       });
   return result;
 }
@@ -107,21 +107,22 @@ Value buildBalancedSOP(OpBuilder &builder, Location loc, const SOPForm &sop,
                        ArrayRef<Value> inputs,
                        ArrayRef<DelayType> inputArrivalTimes) {
   SmallVector<ValueWithArrivalTime, expectedISOPInputs> productTerms, literals;
+  size_t valueNumbering = 0;
 
-  size_t num = 0;
   for (const auto &cube : sop.cubes) {
-    for (unsigned i = 0; i < sop.numVars; ++i) {
+    for (unsigned i = 0; i < sop.numVars; ++i)
       if (cube.hasLiteral(i))
         literals.push_back(ValueWithArrivalTime(
-            inputs[i], inputArrivalTimes[i], cube.isLiteralInverted(i), num++));
-    }
+            inputs[i], inputArrivalTimes[i], cube.isLiteralInverted(i),
+            /*valueNumbering=*/valueNumbering++));
 
     if (literals.empty())
       continue;
 
     // Get product term, and flip the inversion to construct OR afterwards.
     productTerms.push_back(
-        buildBalancedAndTree(builder, loc, literals).flipInversion());
+        buildBalancedAndTree(builder, loc, literals, valueNumbering)
+            .flipInversion());
 
     literals.clear();
   }
@@ -129,7 +130,8 @@ Value buildBalancedSOP(OpBuilder &builder, Location loc, const SOPForm &sop,
   assert(!productTerms.empty() && "No product terms");
 
   auto andOfInverted =
-      buildBalancedAndTree(builder, loc, productTerms).flipInversion();
+      buildBalancedAndTree(builder, loc, productTerms, valueNumbering)
+          .flipInversion();
   // Let's invert the output.
   if (andOfInverted.isInverted())
     return aig::AndInverterOp::create(builder, loc, andOfInverted.getValue(),
@@ -182,10 +184,11 @@ struct SOPBalancingPattern : public CutRewritePattern {
 
   std::optional<MatchResult> match(CutEnumerator &enumerator,
                                    const Cut &cut) const override {
-    if (cut.isTrivialCut() || cut.getOutputSize() != 1)
+    const auto &network = enumerator.getLogicNetwork();
+    if (cut.isTrivialCut() || cut.getOutputSize(network) != 1)
       return std::nullopt;
 
-    const auto &tt = cut.getTruthTable();
+    const auto &tt = *cut.getTruthTable();
     const SOPForm &sop = sopCache.getOrCompute(tt.table, tt.numInputs);
     if (sop.cubes.empty())
       return std::nullopt;
@@ -213,7 +216,8 @@ struct SOPBalancingPattern : public CutRewritePattern {
 
   FailureOr<Operation *> rewrite(OpBuilder &builder, CutEnumerator &enumerator,
                                  const Cut &cut) const override {
-    const auto &tt = cut.getTruthTable();
+    const auto &network = enumerator.getLogicNetwork();
+    const auto &tt = *cut.getTruthTable();
     const SOPForm &sop = sopCache.getOrCompute(tt.table, tt.numInputs);
     LLVM_DEBUG({
       llvm::dbgs() << "Rewriting SOP:\n";
@@ -223,16 +227,22 @@ struct SOPBalancingPattern : public CutRewritePattern {
     SmallVector<DelayType, expectedISOPInputs> arrivalTimes;
     if (failed(cut.getInputArrivalTimes(enumerator, arrivalTimes)))
       return failure();
+
     // Construct the fused location.
     SetVector<Location> inputLocs;
-    inputLocs.insert(cut.getRoot()->getLoc());
-    for (auto input : cut.inputs)
+    auto *rootOp = network.getGate(cut.getRootIndex()).getOperation();
+    assert(rootOp && "cut root must be a valid operation");
+    inputLocs.insert(rootOp->getLoc());
+
+    SmallVector<Value> inputValues;
+    network.getValues(cut.inputs, inputValues);
+    for (auto input : inputValues)
       inputLocs.insert(input.getLoc());
 
     auto loc = builder.getFusedLoc(inputLocs.getArrayRef());
 
-    Value result = buildBalancedSOP(builder, loc, sop, cut.inputs.getArrayRef(),
-                                    arrivalTimes);
+    Value result =
+        buildBalancedSOP(builder, loc, sop, inputValues, arrivalTimes);
 
     auto *op = result.getDefiningOp();
     if (!op)

@@ -38,6 +38,7 @@
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/GlobPattern.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
@@ -110,6 +111,24 @@ struct Options {
                                 cl::value_desc("name"),
                                 cl::MiscFlags::CommaSeparated, cl::cat(cat)};
 
+  cl::list<std::string> configFiles{
+      "c", cl::desc("Config file (may be specified multiple times)"),
+      cl::value_desc("file"), cl::cat(cat)};
+
+  cl::list<std::string> includeFilters{
+      "f", cl::desc("Include filter (<glob> or <path>=<glob>)"),
+      cl::value_desc("filter"), cl::cat(testCat)};
+
+  cl::alias includeFiltersAlias{"include", cl::aliasopt(includeFilters),
+                                cl::desc("Alias for -f")};
+
+  cl::list<std::string> excludeFilters{
+      "x", cl::desc("Exclude filter (<glob> or <path>=<glob>)"),
+      cl::value_desc("filter"), cl::cat(testCat)};
+
+  cl::alias excludeFiltersAlias{"exclude", cl::aliasopt(excludeFilters),
+                                cl::desc("Alias for -x")};
+
   cl::opt<bool> ignoreContracts{
       "ignore-contracts",
       cl::desc("Do not use contracts to simplify and parallelize tests"),
@@ -180,10 +199,10 @@ void formatDuration(raw_ostream &os, Clock::duration duration) {
 // Runners
 //===----------------------------------------------------------------------===//
 
-namespace {
 /// The various kinds of test that can be executed.
 enum class TestKind { Formal, Simulation };
 
+namespace {
 /// A program that can run tests.
 class Runner {
 public:
@@ -227,10 +246,18 @@ public:
   std::vector<Runner> runners;
 
   RunnerSuite(MLIRContext *context) : context(context) {}
+  void addRunner(Runner runner);
   void addDefaultRunners();
   LogicalResult resolve();
 };
 } // namespace
+
+/// Add a runner to the suite. If a runner with the same name already exists, it
+/// is replaced.
+void RunnerSuite::addRunner(Runner runner) {
+  llvm::erase_if(runners, [&](auto &r) { return r.name == runner.name; });
+  runners.push_back(std::move(runner));
+}
 
 /// Add the default runners to the suite. These are the runners that are defined
 /// as part of CIRCT.
@@ -300,6 +327,121 @@ LogicalResult RunnerSuite::resolve() {
     // Check if the program actually exists at that path.
     runner.available = llvm::sys::fs::can_execute(runner.binaryPath);
   });
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Config Files
+//===----------------------------------------------------------------------===//
+
+/// Deserialize a TestKind from a JSON string ("formal" or "simulation").
+static bool fromJSON(const llvm::json::Value &value, TestKind &result,
+                     llvm::json::Path path) {
+  auto str = value.getAsString();
+  if (!str) {
+    path.report("expected string");
+    return false;
+  }
+  if (*str == "formal")
+    result = TestKind::Formal;
+  else if (*str == "simulation")
+    result = TestKind::Simulation;
+  else {
+    path.report("expected `formal` or `simulation`");
+    return false;
+  }
+  return true;
+}
+
+/// Helper struct for deserializing a runner from JSON.
+struct RunnerSchema {
+  std::string name;
+  std::string binary;
+  TestKind kind;
+  bool readsMLIR = false;
+};
+
+/// Helper struct for deserializing the config file from JSON.
+struct ConfigSchema {
+  std::vector<RunnerSchema> runners;
+  std::optional<bool> useDefaultRunners;
+};
+
+static bool fromJSON(const llvm::json::Value &value, RunnerSchema &result,
+                     llvm::json::Path path) {
+  llvm::json::ObjectMapper om(value, path);
+  return om && om.map("name", result.name) && om.map("binary", result.binary) &&
+         om.map("kind", result.kind) &&
+         om.mapOptional("reads_mlir", result.readsMLIR);
+}
+
+static bool fromJSON(const llvm::json::Value &value, ConfigSchema &result,
+                     llvm::json::Path path) {
+  llvm::json::ObjectMapper om(value, path);
+  return om && om.mapOptional("runners", result.runners) &&
+         om.mapOptional("useDefaultRunners", result.useDefaultRunners);
+}
+
+namespace {
+/// Aggregated configuration from one or more config files. Each call to
+/// `parse` merges a config file's settings into this struct: runners
+/// accumulate, and later `useDefaultRunners` values override earlier ones.
+///
+/// This struct is distinct from `ConfigSchema` to separate checking the JSON
+/// input against a schema from actually building up the internal data structure
+/// to represent the config.
+struct Config {
+  /// Runners defined in config files.
+  std::vector<Runner> runners;
+  /// Whether to use the built-in default runners.
+  bool useDefaultRunners = true;
+
+  /// Parse a JSON config file and merge its settings into this config.
+  LogicalResult parse(StringRef path, MLIRContext *context);
+};
+} // namespace
+
+/// Parse a JSON config file and merge its settings into this config. The file
+/// may contain a `runners` array with runner objects and a `useDefaultRunners`
+/// boolean.
+LogicalResult Config::parse(StringRef path, MLIRContext *context) {
+  auto bufferOrErr = llvm::MemoryBuffer::getFile(path);
+  if (auto ec = bufferOrErr.getError()) {
+    WithColor::error() << "could not open config file `" << path
+                       << "`: " << ec.message() << "\n";
+    return failure();
+  }
+
+  auto json = llvm::json::parse(bufferOrErr.get()->getBuffer());
+  if (!json) {
+    WithColor::error() << "could not parse config file `" << path
+                       << "`: " << toString(json.takeError()) << "\n";
+    return failure();
+  }
+
+  // Deserialize the JSON into a ConfigSchema.
+  llvm::json::Path::Root root("");
+  ConfigSchema schema;
+  if (!fromJSON(*json, schema, root)) {
+    WithColor::error() << "config file `" << path
+                       << "`: " << toString(root.getError()) << "\n";
+    return failure();
+  }
+
+  // Merge `useDefaultRunners`. Later configs override earlier ones.
+  if (schema.useDefaultRunners)
+    useDefaultRunners = *schema.useDefaultRunners;
+
+  // Convert runner schemas into Runner objects.
+  for (auto &rs : schema.runners) {
+    Runner runner;
+    runner.name = StringAttr::get(context, rs.name);
+    runner.binary = rs.binary;
+    runner.kind = rs.kind;
+    runner.readsMLIR = rs.readsMLIR;
+    runners.push_back(std::move(runner));
+  }
+
   return success();
 }
 
@@ -471,6 +613,124 @@ LogicalResult TestSuite::discoverTest(Test &&test, Operation *op) {
 
   tests.push_back(std::move(test));
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Test Filtering
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// A parsed test filter, used for the `-f` (include) and `-x` (exclude) CLI
+/// options. Filters can match by test name or attribute value.
+struct TestFilter {
+  enum Kind { Name, AttrValue };
+  Kind kind;
+  std::string attrPath;
+  llvm::GlobPattern pattern;
+};
+} // namespace
+
+/// Parse a filter string into a `TestFilter`. The string is one of:
+/// - `<glob>` — match test name
+/// - `<path>=<glob>` — attribute value matches glob
+static FailureOr<TestFilter> parseFilter(StringRef filter) {
+  auto eqPos = filter.find('=');
+  if (eqPos == StringRef::npos) {
+    TestFilter f;
+    f.kind = TestFilter::Name;
+    auto pat = llvm::GlobPattern::create(filter);
+    if (!pat) {
+      WithColor::error() << "invalid filter glob '" << filter
+                         << "': " << toString(pat.takeError()) << "\n";
+      return failure();
+    }
+    f.pattern = std::move(*pat);
+    return f;
+  }
+
+  auto path = filter.take_front(eqPos);
+  auto value = filter.drop_front(eqPos + 1);
+  TestFilter f;
+  f.kind = TestFilter::AttrValue;
+  f.attrPath = path.str();
+  auto pat = llvm::GlobPattern::create(value);
+  if (!pat) {
+    WithColor::error() << "invalid filter glob '" << value
+                       << "': " << toString(pat.takeError()) << "\n";
+    return failure();
+  }
+  f.pattern = std::move(*pat);
+  return f;
+}
+
+/// Walk a dotted attribute path (e.g., `config.backend`) through nested
+/// `DictionaryAttr`s, returning the leaf attribute or `nullptr`.
+static Attribute walkAttrPath(DictionaryAttr dict, StringRef path) {
+  while (!path.empty()) {
+    auto [segment, rest] = path.split('.');
+    auto attr = dict.get(segment);
+    if (!attr)
+      return nullptr;
+    if (rest.empty())
+      return attr;
+    dict = dyn_cast<DictionaryAttr>(attr);
+    if (!dict)
+      return nullptr;
+    path = rest;
+  }
+  return nullptr;
+}
+
+/// Convert an attribute to a string for glob matching.
+static std::string stringifyAttrValue(Attribute attr) {
+  if (auto s = dyn_cast<StringAttr>(attr))
+    return s.getValue().str();
+  if (auto b = dyn_cast<BoolAttr>(attr))
+    return b.getValue() ? "true" : "false";
+  if (auto i = dyn_cast<IntegerAttr>(attr)) {
+    SmallString<16> str;
+    i.getValue().toString(str, 10, /*Signed=*/true);
+    return std::string(str);
+  }
+  if (auto f = dyn_cast<FloatAttr>(attr)) {
+    SmallString<16> str;
+    f.getValue().toString(str);
+    return std::string(str);
+  }
+  std::string str;
+  llvm::raw_string_ostream os(str);
+  attr.print(os);
+  return str;
+}
+
+/// Check whether a test matches a given filter.
+static bool matchFilter(const Test &test, TestFilter &filter) {
+  switch (filter.kind) {
+  case TestFilter::Name:
+    return filter.pattern.match(test.name.getValue());
+  case TestFilter::AttrValue:
+    if (auto leaf = walkAttrPath(test.attrs, filter.attrPath))
+      return filter.pattern.match(stringifyAttrValue(leaf));
+    return false;
+  }
+  return false;
+}
+
+/// Apply include and exclude filters to the tests in the suite. A test is kept
+/// if it matches any include filter (or none are specified) and matches no
+/// exclude filter.
+static void applyFilters(TestSuite &suite,
+                         MutableArrayRef<TestFilter> includeFilters,
+                         MutableArrayRef<TestFilter> excludeFilters) {
+  for (auto &test : suite.tests) {
+    if (!includeFilters.empty() && !llvm::any_of(includeFilters, [&](auto &f) {
+          return matchFilter(test, f);
+        }))
+      test.ignore = true;
+    if (llvm::any_of(excludeFilters,
+                     [&](auto &f) { return matchFilter(test, f); }))
+      test.ignore = true;
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -963,12 +1223,34 @@ static LogicalResult executeWithHandler(MLIRContext *context,
     return success();
   }
 
+  // Parse include and exclude filters.
+  SmallVector<TestFilter> includeFilters, excludeFilters;
+  for (auto &filter : opts.includeFilters) {
+    auto parsed = parseFilter(filter);
+    if (failed(parsed))
+      return failure();
+    includeFilters.push_back(std::move(*parsed));
+  }
+  for (auto &filter : opts.excludeFilters) {
+    auto parsed = parseFilter(filter);
+    if (failed(parsed))
+      return failure();
+    excludeFilters.push_back(std::move(*parsed));
+  }
+
   // Discover all tests in the input.
   TestSuite suite(context, opts.listIgnored);
   if (failed(suite.discoverInModule(*module)))
     return failure();
   if (suite.tests.empty()) {
     llvm::errs() << "no tests discovered\n";
+    return success();
+  }
+
+  // Apply filters.
+  applyFilters(suite, includeFilters, excludeFilters);
+  if (suite.tests.empty()) {
+    llvm::errs() << "all tests excluded by filters\n";
     return success();
   }
 
@@ -1144,9 +1426,22 @@ static LogicalResult executeWithHandler(MLIRContext *context,
 /// available, all dialects have been registered, and all command line options
 /// have been parsed.
 static LogicalResult execute(MLIRContext *context) {
-  // Discover all available test runners.
+  // Parse config files.
+  Config config;
+  for (auto &configFile : opts.configFiles)
+    if (failed(config.parse(configFile, context)))
+      return failure();
+
+  // Build the runner suite from the config. Add built-in default runners
+  // unless suppressed by a config file, then add config-sourced runners.
+  // Config runners with the same name as an earlier runner replace it.
   RunnerSuite runnerSuite(context);
-  runnerSuite.addDefaultRunners();
+  if (config.useDefaultRunners)
+    runnerSuite.addDefaultRunners();
+  for (auto &runner : config.runners)
+    runnerSuite.addRunner(std::move(runner));
+
+  // Resolve runner binary paths.
   if (failed(runnerSuite.resolve()))
     return failure();
 

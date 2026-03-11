@@ -572,7 +572,7 @@ firrtl.circuit "Foo" {
 
 // (1) OM Info -----------------------------------------------------------------
 // CHECK-LABEL:         firrtl.circuit "Foo"
-// CHECK:                 hw.hierpath private @[[memPathSym:.+]] [@Bar::@baz, @Baz::@m]
+// CHECK:               hw.hierpath private @[[memHierSym:.+]] [@Bar::@baz, @Baz::@m]
 
 // CHECK-LABEL:         firrtl.module @Baz()
 // CHECK-NEXT:            firrtl.instance m
@@ -672,9 +672,9 @@ firrtl.circuit "Foo" {
 // CHECK-SAME:                }
 // CHECK-SAME:              ]
 // CHECK-SAME:              \22hierarchy\22: [
-// CHECK-SAME{LITERAL}:       \22{{3}}.{{4}}.{{5}}.m_ext\22
+// CHECK-SAME{LITERAL}:       \22{{1}}.{{2}}.m_ext\22
 // CHECK-SAME:              ]
-// CHECK-SAME:              symbols = [@m_ext, @Foo, #hw.innerNameRef<@Foo::@bar>, @Bar, #hw.innerNameRef<@Bar::@baz>, #hw.innerNameRef<@Baz::@m>]
+// CHECK-SAME:              symbols = [@m_ext, @Bar, @[[memHierSym]]]
 
 // (3) Configuration File ------------------------------------------------------
 
@@ -1044,8 +1044,8 @@ firrtl.circuit "Foo" {
 // Hierarchical paths are added for the two paths in the design.
 //
 // CHECK-LABEL:         firrtl.circuit "Foo"
-// CHECK-DAG:             hw.hierpath private @[[hierPath_m1:.+]] [@Bar::@m1]
-// CHECK-DAG:             hw.hierpath private @[[hierPath_m2_1:.+]] [@Bar::@m2_1]
+// CHECK-DAG:             hw.hierpath private @memHier [@Bar::@m1]
+// CHECK-DAG:             hw.hierpath private @memHier_0 [@Bar::@m2_1]
 //
 // Trackers are added only for instances in the design.
 //
@@ -1056,10 +1056,10 @@ firrtl.circuit "Foo" {
 //
 // CHECK-LABEL:         firrtl.module @Bar()
 // CHECK-NEXT:            firrtl.instance m1
-// CHECK-SAME:              {circt.nonlocal = @[[hierPath_m1]], class = "circt.tracker", id = distinct[[[#m1Id:]]]<>}
+// CHECK-SAME:              {circt.nonlocal = @memHier, class = "circt.tracker", id = distinct[[[#m1Id:]]]<>}
 // CHECK-SAME:              @m1_ext()
 // CHECK-NEXT:            firrtl.instance m2_1
-// CHECK-SAME:              {circt.nonlocal = @[[hierPath_m2_1]], class = "circt.tracker", id = distinct[[[#m2_1Id:]]]<>}
+// CHECK-SAME:              {circt.nonlocal = @memHier_0, class = "circt.tracker", id = distinct[[[#m2_1Id:]]]<>}
 // CHECK-SAME:              @m2_ext()
 // CHECK-NEXT:            firrtl.layerblock @A {
 // CHECK-NEXT:              firrtl.instance m2_2
@@ -1093,11 +1093,10 @@ firrtl.circuit "Foo" {
 // CHECK-LABEL:         emit.file "metadata{{/|\\\\}}seq_mems.json"
 // CHECK-NEXT:            sv.verbatim "[
 // CHECK-SAME:              \22hierarchy\22: [
-// CHECK-SAME{LITERAL}:       \22{{3}}.{{4}}.m\22
-// CHECK-SAME{LITERAL}:       \22{{3}}.{{6}}.m\22
+// CHECK-SAME{LITERAL}:       \22{{1}}.{{2}}.m\22
+// CHECK-SAME{LITERAL}:       \22{{1}}.{{4}}.m\22
 // CHECK-SAME:              ]
-// The regex `{{(@|\#)[^,]+,}}` is matching a symbol or inner name ref.
-// CHECK-SAME:              symbols = [{{(@|\#)[^,]+,}} {{(@|\#)[^,]+,}} {{(@|\#)[^,]+,}} @Bar, #hw.innerNameRef<@Bar::@m1>, {{(@|\#)[^,]+,}} #hw.innerNameRef<@Bar::@m2_1>
+// CHECK-SAME:              symbols = [@m1, @Bar, @{{[a-zA-Z0-9_]+}}, @m2, @{{[a-zA-Z0-9_]+}}]
 
 // (3) Configuration File ------------------------------------------------------
 // CHECK-LABEL:         emit.file "mems.conf"
@@ -1254,3 +1253,43 @@ firrtl.circuit "RUWNew" {
 // CHECK-LABEL:         emit.file "mems.conf"
 // CHECK-NEXT:            sv.verbatim
 // CHECK-SAME:            ruw New
+
+// -----
+
+// Test that an intermediary module on the path to a memory that is not in the
+// design will not cause an inner symbol to be created on that intermediary
+// module.
+//
+// CHECK-LABEL: firrtl.circuit "NoInnerSymsOnIntermediaryInstances"
+firrtl.circuit "NoInnerSymsOnIntermediaryInstances" {
+  firrtl.layer @A bind {}
+  firrtl.memmodule private @Baz() attributes {
+    dataWidth = 8 : ui32,
+    depth = 16 : ui64,
+    extraPorts = [],
+    maskBits = 1 : ui32,
+    numReadPorts = 1 : ui32,
+    numWritePorts = 0 : ui32,
+    numReadWritePorts = 0 : ui32,
+    readLatency = 1 : ui32,
+    writeLatency = 1 : ui32
+  }
+  firrtl.module private @Bar() {
+    firrtl.instance mem @Baz()
+  }
+  firrtl.module @Foo() {
+    firrtl.layerblock @A {
+      firrtl.instance bar @Bar()
+    }
+  }
+  firrtl.module @NoInnerSymsOnIntermediaryInstances() attributes {
+    annotations = [
+      {
+        class = "sifive.enterprise.firrtl.MarkDUTAnnotation"
+      }
+    ]
+  } {
+    // CHECK: firrtl.instance foo @Foo()
+    firrtl.instance foo @Foo()
+  }
+}

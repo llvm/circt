@@ -3948,8 +3948,8 @@ void NameCollector::collectNames(Block &block) {
     // Instances have an instance name to recognize but we don't need to look
     // at the result values since wires used by instances should be traversed
     // anyway.
-    if (isa<InstanceOp, InstanceChoiceOp, InterfaceInstanceOp,
-            FuncCallProceduralOp, FuncCallOp>(op))
+    if (isa<InstanceOp, InterfaceInstanceOp, FuncCallProceduralOp, FuncCallOp>(
+            op))
       continue;
     if (isa<ltl::LTLDialect, debug::DebugDialect>(op.getDialect()))
       continue;
@@ -4054,7 +4054,6 @@ private:
   LogicalResult visitStmt(OutputOp op);
 
   LogicalResult visitStmt(InstanceOp op);
-  LogicalResult visitStmt(InstanceChoiceOp op);
   void emitInstancePortList(Operation *op, ModulePortInfo &modPortInfo,
                             ArrayRef<Value> instPortValues);
 
@@ -4374,7 +4373,7 @@ LogicalResult StmtEmitter::emitOutputLikeOp(Operation *op,
     // directly when the instance is emitted.
     // Keep synced with countStatements() and visitStmt(InstanceOp).
     if (operand.hasOneUse() && operand.getDefiningOp() &&
-        isa<InstanceOp, InstanceChoiceOp>(operand.getDefiningOp())) {
+        isa<InstanceOp>(operand.getDefiningOp())) {
       ++operandIndex;
       continue;
     }
@@ -5573,29 +5572,6 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     ps << "*/";
     setPendingNewline();
   }
-  return success();
-}
-
-LogicalResult StmtEmitter::visitStmt(InstanceChoiceOp op) {
-  startStatement();
-  Operation *choiceMacroDeclOp = state.symbolCache.getDefinition(
-      op->getAttrOfType<FlatSymbolRefAttr>("hw.choiceTarget"));
-
-  ps << "`" << PPExtString(getSymOpName(choiceMacroDeclOp)) << PP::nbsp
-     << PPExtString(getSymOpName(op));
-
-  Operation *defaultModuleOp =
-      state.symbolCache.getDefinition(op.getDefaultModuleNameAttr());
-  ModulePortInfo modPortInfo(cast<PortList>(defaultModuleOp).getPortList());
-  SmallVector<Value> instPortValues(modPortInfo.size());
-  op.getValues(instPortValues, modPortInfo);
-  emitInstancePortList(op, modPortInfo, instPortValues);
-
-  SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
-  ps.addCallback({op, false});
-  emitLocationInfoAndNewLine(ops);
-
   return success();
 }
 
@@ -7193,8 +7169,6 @@ static LogicalResult exportVerilogImpl(ModuleOp module, llvm::raw_ostream &os) {
 
 LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   LoweringOptions options(module);
-  if (failed(lowerHWInstanceChoices(module)))
-    return failure();
   SmallVector<HWEmittableModuleLike> modulesToPrepare;
   module.walk(
       [&](HWEmittableModuleLike op) { modulesToPrepare.push_back(op); });
@@ -7214,7 +7188,6 @@ struct ExportVerilogPass
     // Prepare the ops in the module for emission.
     mlir::OpPassManager preparePM("builtin.module");
     preparePM.addPass(createLegalizeAnonEnums());
-    preparePM.addPass(createHWLowerInstanceChoices());
     auto &modulePM = preparePM.nestAny();
     modulePM.addPass(createPrepareForEmission());
     if (failed(runPipeline(preparePM, getOperation())))
@@ -7372,8 +7345,6 @@ static LogicalResult exportSplitVerilogImpl(ModuleOp module,
 
 LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   LoweringOptions options(module);
-  if (failed(lowerHWInstanceChoices(module)))
-    return failure();
   SmallVector<HWEmittableModuleLike> modulesToPrepare;
   module.walk(
       [&](HWEmittableModuleLike op) { modulesToPrepare.push_back(op); });
@@ -7395,7 +7366,6 @@ struct ExportSplitVerilogPass
   void runOnOperation() override {
     // Prepare the ops in the module for emission.
     mlir::OpPassManager preparePM("builtin.module");
-    preparePM.addPass(createHWLowerInstanceChoices());
 
     auto &modulePM = preparePM.nest<hw::HWModuleOp>();
     modulePM.addPass(createPrepareForEmission());

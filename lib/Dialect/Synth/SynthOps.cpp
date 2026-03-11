@@ -21,11 +21,18 @@
 
 using namespace mlir;
 using namespace circt;
+using namespace circt::synth;
 using namespace circt::synth::mig;
 using namespace circt::synth::aig;
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Synth/Synth.cpp.inc"
+
+LogicalResult ChoiceOp::verify() {
+  if (getNumOperands() < 1)
+    return emitOpError("requires at least one operand");
+  return success();
+}
 
 LogicalResult MajorityInverterOp::verify() {
   if (getNumOperands() % 2 != 1)

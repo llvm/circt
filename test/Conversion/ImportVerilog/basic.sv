@@ -796,6 +796,15 @@ module Expressions;
     // CHECK: [[TMP2:%.+]] = moore.read %s1
     // CHECK: moore.string.concat ([[TMP1]], [[TMP2]])
     concatstr = {s, s1};
+    // String indexing with i32 index (no conversion needed)
+    // CHECK: moore.string.get {{%.+}}[{{%.+}}]
+    m = s1[c];
+    // String indexing with logic index (conversion to i32 needed)
+    // CHECK: [[M_READ:%.+]] = moore.read %m
+    // CHECK: [[ZEXT:%.+]] = moore.zext [[M_READ]] : l4 -> l32
+    // CHECK: [[CONV:%.+]] = moore.logic_to_int [[ZEXT]]
+    // CHECK: moore.string.get {{%.+}}[[[CONV]]]
+    m = s[m];
     // CHECK: [[TMP1:%.+]] = moore.read %d
     // CHECK: [[TMP2:%.+]] = moore.read %e
     // CHECK: moore.concat [[TMP1]], [[TMP2]] : (!moore.l32, !moore.l32) -> l64
@@ -4140,6 +4149,13 @@ endmodule
 // CHECK:               [[IDXSUM:%.+]] = moore.add [[Q1LASTIDX]], [[Q2LASTEL]] : i32
 // CHECK:               [[RESVAL:%.+]] = moore.dyn_queue_extract [[QR1]] from [[IDXSUM]] to [[IDXSUM]] : <i32, 0>, i32 -> i32
 // CHECK:               moore.blocking_assign [[RES]], [[RESVAL]] : i32
+// CHECK:               [[QR1:%.+]] = moore.read [[Q1]] : <queue<i32, 0>>
+// CHECK:               [[THREE:%.+]] = moore.constant 3 : i32
+// CHECK:               [[Q1SIZE:%.+]] = moore.builtin.size [[QR1]] : <i32, 0>
+// CHECK:               [[ONE:%.+]] = moore.constant 1 : i32
+// CHECK:               [[Q1LASTIDX:%.+]] = moore.sub [[Q1SIZE]], [[ONE]] : i32
+// CHECK:               [[Q1RNGSEL:%.+]] = moore.dyn_queue_extract [[QR1]] from [[THREE]] to [[Q1LASTIDX]] : <i32, 0>, i32 -> queue<i32, 0>
+// CHECK:               moore.blocking_assign [[Q2]], [[Q1RNGSEL]] : queue<i32, 0>
 // CHECK:               moore.return
 // CHECK:           }
 // CHECK:           moore.output
@@ -4150,6 +4166,7 @@ module QueueUnboundedLiteralTest;
     int res;
     initial begin
       res = q1[$ + q2[$]];
+      q2 = q1[3:$];
     end
 endmodule
 
@@ -4223,6 +4240,35 @@ module QueueConcatTest;
       // `arr` to a queue, then create a temporary queue with 1,2,
       // then finally append them all
       qres = { 1, q1, arr, 1, 2};
+    end
+endmodule
+
+// CHECK-LABEL: moore.module @QueueCmpTest() {
+// CHECK:           [[Q1:%.+]] = moore.variable : <queue<i32, 0>>
+// CHECK:           [[Q2:%.+]] = moore.variable : <queue<i32, 0>>
+// CHECK:           [[R1:%.+]] = moore.variable : <i1>
+// CHECK:           [[R2:%.+]] = moore.variable : <i1>
+// CHECK:           moore.procedure initial {
+// CHECK:               [[QR1:%.+]] = moore.read [[Q1]] : <queue<i32, 0>>
+// CHECK:               [[QR2:%.+]] = moore.read [[Q2]] : <queue<i32, 0>>
+// CHECK:               [[RES1:%.+]] = moore.queue.cmp eq [[QR1]], [[QR2]] : <i32, 0>
+// CHECK:               moore.blocking_assign [[R1]], [[RES1]] : i1
+// CHECK:               [[QR1:%.+]] = moore.read [[Q1]] : <queue<i32, 0>>
+// CHECK:               [[QR2:%.+]] = moore.read [[Q2]] : <queue<i32, 0>>
+// CHECK:               [[RES2:%.+]] = moore.queue.cmp ne [[QR1]], [[QR2]] : <i32, 0>
+// CHECK:               moore.blocking_assign [[R2]], [[RES2]] : i1
+// CHECK:               moore.return
+// CHECK:           }
+// CHECK:           moore.output
+// CHECK:         }
+module QueueCmpTest;
+    int q1[$];
+    int q2[$];
+    bit r1;
+    bit r2;
+    initial begin
+      r1 = (q1 == q2);
+      r2 = (q1 != q2);
     end
 endmodule
 
@@ -4384,3 +4430,172 @@ module AssocArrayExtractTest;
     end
 endmodule
 
+// CHECK-LABEL: moore.module @AssocArrayManipulationTest() {
+// CHECK:           [[AA:%.+]] = moore.variable : <assoc_array<i32, i32>>
+// CHECK:           moore.procedure initial {
+// CHECK:             [[C0:%.+]] = moore.constant 0 : i32
+// CHECK:             moore.assoc_array.delete index [[C0]] from [[AA]] : <assoc_array<i32, i32>>[i32]
+// CHECK:             moore.assoc_array.clear [[AA]] : <assoc_array<i32, i32>>
+// CHECK:             moore.return
+// CHECK:           }
+// CHECK:           moore.output
+// CHECK:         }
+module AssocArrayManipulationTest;
+    int aa[int];
+    initial begin
+        aa.delete(0);
+        aa.delete();
+    end
+endmodule
+
+// CHECK-LABEL: moore.module @AssocArraySizeTest() {
+// CHECK:           [[AA:%.+]] = moore.variable : <assoc_array<i32, i32>>
+// CHECK:           [[B1:%.+]] = moore.variable : <i32>
+// CHECK:           [[B2:%.+]] = moore.variable : <i32>
+// CHECK:           moore.procedure initial {
+// CHECK:             [[S1:%.+]] = moore.assoc_array.size [[AA]] : <assoc_array<i32, i32>>
+// CHECK              moore.blocking_assign [[B1]], [[S1]] : i32
+// CHECK:             [[S2:%.+]] = moore.assoc_array.size [[AA]] : <assoc_array<i32, i32>>
+// CHECK              moore.blocking_assign [[B2]], [[S2]] : i32
+// CHECK:             moore.return
+// CHECK:           }
+// CHECK:           moore.output
+// CHECK:         }
+module AssocArraySizeTest;
+    int aa[int];
+    int b1, b2;
+    initial begin
+        b1 = aa.size();
+        b2 = aa.num();
+    end
+endmodule
+
+
+// Test that DPI-C imported functions are emitted as extern declarations
+
+// CHECK:  func.func private @void_dpi(!moore.i32)
+// CHECK-NOT: return
+
+// CHECK:  func.func private @nonvoid_dpi(!moore.i32) -> !moore.i32
+// CHECK-NOT: return
+
+// CHECK:  func.func private @dpi_with_output(!moore.i32, !moore.ref<i32>)
+// CHECK-NOT: return
+
+import "DPI-C" function void void_dpi(input int a);
+import "DPI-C" function int nonvoid_dpi(input int a);
+import "DPI-C" function void dpi_with_output(input int a, output int b);
+
+// CHECK-LABEL: moore.module @DpiCallTest
+module DpiCallTest(input int in_val, output int out_val);
+  int result;
+
+  // CHECK: func.call @void_dpi
+  // CHECK: func.call @nonvoid_dpi
+  // CHECK: func.call @dpi_with_output
+
+  always_comb begin
+    void_dpi(in_val);
+    result = nonvoid_dpi(in_val);
+    dpi_with_output(in_val, result);
+  end
+
+  assign out_val = result;
+endmodule
+
+// --- chandle type: maps to !moore.chandle at Moore level ---
+
+import "DPI-C" function chandle chandle_init(input int size);
+import "DPI-C" function void chandle_tick(input chandle ctx, input int a);
+
+// CHECK: func.func private @chandle_init(!moore.i32) -> !moore.chandle
+// CHECK: func.func private @chandle_tick(!moore.chandle, !moore.i32)
+
+// CHECK-LABEL: moore.module @ChandleTest
+module ChandleTest(input logic clock, input int in_val);
+  chandle ctx;
+
+  initial begin
+    ctx = chandle_init(32);
+  end
+
+  always @(posedge clock) begin
+    chandle_tick(ctx, in_val);
+  end
+endmodule
+
+// Test that DPI-C open array types (byte[], int[]) are converted to
+// Moore open array types (!moore.open_uarray<T>).
+
+// CHECK: func.func private @process_data(!moore.open_uarray<i8>)
+import "DPI-C" function void process_data(input byte data[]);
+
+// CHECK: func.func private @read_write(!moore.open_uarray<i8>, !moore.ref<open_uarray<i8>>)
+import "DPI-C" function void read_write(input byte wd[], output byte rd[]);
+
+// CHECK: func.func private @int_array_fn(!moore.open_uarray<i32>)
+import "DPI-C" function void int_array_fn(input int data[]);
+
+// CHECK: func.func private @packed_bits_fn(!moore.open_array<i1>)
+import "DPI-C" function void packed_bits_fn(input bit [] data);
+
+// CHECK-LABEL: moore.module @OpenArrayCallTest
+module OpenArrayCallTest(input logic clock);
+  byte mydata[];
+  byte result[];
+  int idata[];
+  bit [7:0] pdata;
+
+  // CHECK: func.call @process_data
+  // CHECK: func.call @read_write
+  // CHECK: func.call @int_array_fn
+  // CHECK: func.call @packed_bits_fn
+  always @(posedge clock) begin
+    process_data(mydata);
+    read_write(mydata, result);
+    int_array_fn(idata);
+    packed_bits_fn(pdata);
+  end
+endmodule
+
+
+//===----------------------------------------------------------------------===//
+// Unconnected Ports
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: moore.module private @InOutRefUnconnected(in %a : !moore.l1, out b : !moore.l1, in %c : !moore.ref<l1>, in %d : !moore.ref<l1>) {
+// CHECK:         moore.net name "a" wire : <l1>
+// CHECK:         [[B:%.+]] = moore.net wire : <l1>
+// CHECK:         [[C:%.+]] = moore.net name "c" wire : <l1>
+// CHECK:         [[D:%.+]] = moore.variable name "d" : <l1>
+// CHECK:         [[RB:%.+]] = moore.read [[B]] : <l1>
+// CHECK:         [[RC:%.+]] = moore.read %c : <l1>
+// CHECK:         moore.assign [[C]], [[RC]] : l1
+// CHECK:         [[RD:%.+]] = moore.read %d : <l1>
+// CHECK:         moore.assign [[D]], [[RD]] : l1
+// CHECK:         moore.output [[RB]] : !moore.l1
+// CHECK:       }
+module InOutRefUnconnected(
+  input a,
+  output b,
+  inout logic c,
+  ref logic d
+);
+endmodule
+
+// CHECK-LABEL: moore.module @UnconnectedPortsTop() {
+// CHECK:         [[A:%.+]] = moore.net wire : <l1>
+// CHECK:         [[RA:%.+]] = moore.read [[A]] : <l1>
+// CHECK:         [[C:%.+]] = moore.net wire : <l1>
+// CHECK:         [[D:%.+]] = moore.variable : <l1>
+// CHECK:         moore.instance "p4" @InOutRefUnconnected(a: [[RA]]: !moore.l1, c: [[C]]: !moore.ref<l1>, d: [[D]]: !moore.ref<l1>) -> (b: !moore.l1)
+// CHECK:         moore.output
+// CHECK:       }
+module UnconnectedPortsTop;
+  InOutRefUnconnected p4(
+    .a(), // Unconnected input
+    .b(), // Unconnected output
+    .c(), // Unconnected inout
+    .d()  // Unconnected ref
+  );
+endmodule

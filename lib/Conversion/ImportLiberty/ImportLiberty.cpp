@@ -748,7 +748,9 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group,
   SmallVector<const LibertyGroup *> pinGroups;
   llvm::DenseSet<StringAttr> seenPins;
 
-  // First pass: gather ports
+  // First pass: gather ports and count output pins without "function"
+  // attribute.
+  size_t numOutputPinMissingFunction = 0;
   for (const auto &sub : group.subGroups) {
     if (sub->name != "pin")
       continue;
@@ -765,6 +767,8 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group,
     std::optional<hw::ModulePort::Direction> dir;
     SmallVector<NamedAttribute> pinAttrs;
 
+    // Track if this pin has a "function" attribute (only relevant for outputs).
+    bool functionExist = false;
     for (const auto &attr : sub->attrs) {
       if (attr.name == "direction") {
         if (auto val = dyn_cast<StringAttr>(attr.value)) {
@@ -783,11 +787,18 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group,
         }
         continue;
       }
+
+      if (attr.name == "function")
+        functionExist = true;
+
       pinAttrs.push_back(builder.getNamedAttr(attr.name, attr.value));
     }
 
     if (!dir)
       return emitError(sub->loc, "pin direction must be specified");
+
+    if (dir == hw::ModulePort::Direction::Output && !functionExist)
+      ++numOutputPinMissingFunction;
 
     llvm::StringMap<SmallVector<Attribute>> subGroups;
     for (const auto &child : sub->subGroups) {
@@ -821,6 +832,27 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group,
   }
 
   auto loc = lexer.translateLocation(group.loc);
+  auto numOutput = ports.size() - inputIdx;
+
+  // Decide whether to create hw.module (with logic) or hw.module.extern (black
+  // box) based on whether output pins have "function" attributes.
+  // All outputs must either have "function" or all must lack it.
+
+  // Mixed case: some outputs have "function", others don't - error.
+  if (numOutputPinMissingFunction != 0 &&
+      numOutputPinMissingFunction != numOutput)
+    return emitError(group.loc, "cell '")
+           << cellNameAttr.getValue()
+           << "' has mixed output pins with and without "
+              "'function' attribute";
+
+  // All outputs lack "function": emit as hw.module.extern (black box).
+  if (numOutputPinMissingFunction == numOutput) {
+    hw::HWModuleExternOp::create(builder, loc, cellNameAttr, ports);
+    return success();
+  }
+
+  // All outputs have "function": emit as hw.module with logic.
   auto moduleOp = hw::HWModuleOp::create(builder, loc, cellNameAttr, ports);
 
   OpBuilder::InsertionGuard guard(builder);
@@ -847,8 +879,7 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group,
       continue;
     const LibertyGroup *pg = *it;
     auto attrPair = pg->getAttribute("function");
-    if (!attrPair.first)
-      return emitError(pg->loc, "expected function attribute");
+    assert(attrPair.first && "output pin missing function attribute");
     Value val;
     if (parseExpression(val, cast<StringAttr>(attrPair.first).getValue(),
                         portValues, attrPair.second))

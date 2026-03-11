@@ -601,4 +601,7 @@ def ClassHandleRefType : SpecificRefType<ClassHandleType>;
 /// Queue references
 def QueueRefType : SpecificRefType<QueueType>;
 
+/// Assoc Array references
+def AssocArrayRefType : SpecificRefType<AssocArrayType>;
+
 #endif // CIRCT_DIALECT_MOORE_MOORETYPES

@@ -1381,6 +1381,26 @@ def UArrayCmpOp : MooreOp<"uarray_cmp", [
   }];  
 }
 
+def QueueCmpOp : MooreOp<"queue.cmp", [
+  Pure,
+  Commutative,
+  SameTypeOperands,
+]> {
+  let description = [{
+    Performs an elementwise comparison of two queues. This is the equivalent
+    of the op above, but for queues. (which are just resizeable unpacked arrays)
+  }];
+  let arguments = (ins 
+    UArrayCmpPredicateAttr:$predicate,
+    QueueType:$lhs,
+    QueueType:$rhs
+  );
+  let results = (outs BitType:$result);
+  let assemblyFormat = [{
+    $predicate $lhs `,` $rhs attr-dict `:` type($lhs)
+  }];  
+}
+
 def StringCmpOp : MooreOp<"string_cmp", [
   Pure,
   SameTypeOperands
@@ -2077,6 +2097,45 @@ def AssocArrayExtractRefOp : MooreOp<"assoc_array_extract_ref",
     $input `[` $index `]` attr-dict `:`
     type($input) `,` type($index) `->` type($result)
   }];
+}
+
+def AssocArrayDeleteOp : MooreOp<"assoc_array.delete", 
+    [TypesMatchWith<"associative array index and given index must match",
+    "assoc_array", "index", "cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getIndexType()">]> {
+  let summary = "Delete the index and element within the associative array";
+  let description = [{
+      See IEEE 1800-2023 § 7.9.2 "Delete()"
+  }];
+  let arguments = (ins AssocArrayRefType:$assoc_array, UnpackedType:$index);
+  let results = (outs);
+  let assemblyFormat = [{
+    `index` $index `from` $assoc_array attr-dict `:` type($assoc_array) `[` type($index) `]`
+  }];
+}
+
+def AssocArrayClearOp : MooreOp<"assoc_array.clear"> {
+  let summary = "Clear all elements from the given associative array";
+  let description = [{
+      See IEEE 1800-2023 § 7.9.2 "Delete()", the case where no index is supplied.
+  }];
+
+  let arguments = (ins AssocArrayRefType:$assoc_array);
+  let results = (outs);
+  let assemblyFormat = [{
+    $assoc_array attr-dict `:` type($assoc_array)
+  }];
+}
+
+def AssocArraySizeOp : MooreOp<"assoc_array.size"> {
+  let summary = "Return the number of elements in an associative array";
+  let description = [{
+    See IEEE 1800-2023 § 7.9.1 "Size()". Returns the number of elements in an associative array.
+    According to spec the returned size fits an `int`.
+  }];
+
+  let arguments = (ins AssocArrayRefType:$assoc_array);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = "$assoc_array `:` type($assoc_array) attr-dict";
 }
 
 //===----------------------------------------------------------------------===//
@@ -3078,7 +3137,7 @@ def StringToLowerOp : StringBuiltin<"tolower"> {
   let assemblyFormat = "$str attr-dict";
 }
 
-def StringGetCOp : StringBuiltin<"getc"> {
+def StringGetOp : StringBuiltin<"get"> {
   let summary = "Get a character from a string";
   let description = [{
     Returns the character at the specified index in the given string.

@@ -132,6 +132,10 @@ LogicalResult InlineCallsPass::runOnRegion(Region &region,
         return failure();
       }
 
+      // Skip extern declarations (e.g. DPI-C imports) — nothing to inline.
+      if (funcOp.isDeclaration())
+        continue;
+
       // Ensure that we are not recursively inlining a function, which would
       // just expand infinitely in the IR.
       if (!callStack.insert(funcOp))

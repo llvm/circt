@@ -350,11 +350,32 @@ struct ModuleVisitor : public BaseVisitor {
         case ArgumentDirection::Out:
           continue;
 
-        // TODO: Mark Inout port as unsupported and it will be supported later.
-        default:
-          return mlir::emitError(loc)
-                 << "unsupported port `" << port->name << "` ("
-                 << slang::ast::toString(port->kind) << ")";
+        case ArgumentDirection::InOut:
+        case ArgumentDirection::Ref: {
+          auto refType = moore::RefType::get(
+              cast<moore::UnpackedType>(context.convertType(port->getType())));
+
+          if (const auto *net =
+                  port->internalSymbol->as_if<slang::ast::NetSymbol>()) {
+            auto netOp = moore::NetOp::create(
+                builder, loc, refType,
+                StringAttr::get(builder.getContext(), net->name),
+                convertNetKind(net->netType.netKind), nullptr);
+            portValues.insert({port, netOp});
+          } else if (const auto *var =
+                         port->internalSymbol
+                             ->as_if<slang::ast::VariableSymbol>()) {
+            auto varOp = moore::VariableOp::create(
+                builder, loc, refType,
+                StringAttr::get(builder.getContext(), var->name), nullptr);
+            portValues.insert({port, varOp});
+          } else {
+            return mlir::emitError(loc)
+                   << "unsupported internal symbol for unconnected port `"
+                   << port->name << "`";
+          }
+          continue;
+        }
         }
       }
 
@@ -1229,6 +1250,14 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
   // (recursive/re-entrant calls) stop here.
   if (lowering->capturesFinalized || lowering->isConverting)
     return success();
+
+  // DPI-C imported functions are extern declarations with no Verilog body.
+  // Leave the func.func without a body region so it survives as an external
+  // symbol and calls to it are not eliminated.
+  if (subroutine.flags.has(slang::ast::MethodFlags::DPIImport)) {
+    lowering->capturesFinalized = true;
+    return success();
+  }
 
   const bool isMethod = (subroutine.thisVar != nullptr);
 

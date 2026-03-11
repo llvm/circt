@@ -31,6 +31,12 @@
 using namespace circt;
 using namespace firrtl;
 
+bool InstanceInfo::isInstanceUnderLayer(InstanceOp inst) {
+  return inst.getLowerToBind() || inst.getDoNotPrint() ||
+         inst->getParentOfType<LayerBlockOp>() ||
+         inst->getParentOfType<sv::IfDefOp>();
+}
+
 bool InstanceInfo::LatticeValue::isUnknown() const { return kind == Unknown; }
 
 bool InstanceInfo::LatticeValue::isConstant() const { return kind == Constant; }
@@ -104,6 +110,7 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
     attributes.inDesign.mergeIn(isDut(moduleOp));
     attributes.inEffectiveDesign.mergeIn(isEffectiveDut(moduleOp) || !hasDut());
     attributes.underLayer.mergeIn(false);
+    attributes.inInstanceChoice.mergeIn(false);
   }
 
   // Visit modules in reverse post-order (visit parents before children) to
@@ -139,12 +146,18 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
 
       // Update underLayer.
       bool underLayer = false;
-      if (auto instanceOp = useIt->template getInstance<InstanceOp>()) {
-        if (instanceOp.getLowerToBind() || instanceOp.getDoNotPrint() ||
-            instanceOp->template getParentOfType<LayerBlockOp>() ||
-            instanceOp->template getParentOfType<sv::IfDefOp>())
+      if (auto instanceOp = useIt->template getInstance<InstanceOp>())
+        underLayer = InstanceInfo::isInstanceUnderLayer(instanceOp);
+
+      // Update inInstanceChoice.
+      if (auto instanceChoiceOp =
+              useIt->template getInstance<InstanceChoiceOp>()) {
+        attributes.inInstanceChoice.mergeIn(true);
+        if (instanceChoiceOp->template getParentOfType<LayerBlockOp>() ||
+            instanceChoiceOp->template getParentOfType<sv::IfDefOp>())
           underLayer = true;
-      }
+      } else
+        attributes.inInstanceChoice.mergeIn(parentAttrs.inInstanceChoice);
 
       if (!isGCCompanion) {
         if (underLayer)
@@ -194,7 +207,9 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
           << llvm::indent(6) << "underLayer: " << attributes.underLayer << "\n"
           << llvm::indent(6) << "inDesign: " << attributes.inDesign << "\n"
           << llvm::indent(6)
-          << "inEffectiveDesign: " << attributes.inEffectiveDesign << "\n";
+          << "inEffectiveDesign: " << attributes.inEffectiveDesign << "\n"
+          << llvm::indent(6)
+          << "inInstanceChoice: " << attributes.inInstanceChoice << "\n";
     });
   });
 }
@@ -272,4 +287,10 @@ bool InstanceInfo::anyInstanceInEffectiveDesign(igraph::ModuleOpInterface op) {
 bool InstanceInfo::allInstancesInEffectiveDesign(igraph::ModuleOpInterface op) {
   auto inEffectiveDesign = getModuleAttributes(op).inEffectiveDesign;
   return inEffectiveDesign.isConstant() && inEffectiveDesign.getConstant();
+}
+
+bool InstanceInfo::anyInstanceInInstanceChoice(igraph::ModuleOpInterface op) {
+  auto inInstanceChoice = getModuleAttributes(op).inInstanceChoice;
+  return inInstanceChoice.isMixed() ||
+         (inInstanceChoice.isConstant() && inInstanceChoice.getConstant());
 }

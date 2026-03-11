@@ -13,6 +13,7 @@
 #include "mlir-c/BuiltinTypes.h"
 #include "mlir-c/IR.h"
 #include "mlir/Bindings/Python/NanobindAdaptors.h"
+#include "mlir/Bindings/Python/NanobindUtils.h"
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/variant.h>
 #include <nanobind/stl/vector.h>
@@ -29,6 +30,16 @@ struct Object;
 struct BasePath;
 struct Path;
 
+/// Represents a value that is not known because it is an unsupplied input, or
+/// derived from unsupplied inputs.
+struct Unknown {
+  Unknown(MlirType type) : type(type) {}
+  MlirType getType() const { return type; }
+
+private:
+  MlirType type;
+};
+
 /// These are the Python types that are represented by the different primitive
 /// OMEvaluatorValues as Attributes.
 using PythonPrimitive = std::variant<nb::int_, nb::float_, nb::str, nb::bool_,
@@ -41,7 +52,7 @@ using PythonPrimitive = std::variant<nb::int_, nb::float_, nb::str, nb::bool_,
 /// is tried first, then we can hit an assert inside the MLIR codebase.
 struct None {};
 using PythonValue =
-    std::variant<None, Object, List, BasePath, Path, PythonPrimitive>;
+    std::variant<None, Object, List, BasePath, Path, Unknown, PythonPrimitive>;
 
 /// Map an opaque OMEvaluatorValue into a python value.
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result);
@@ -362,6 +373,9 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   if (omEvaluatorValueIsAPath(result))
     return Path(result);
 
+  if (omEvaluatorValueIsUnknown(result))
+    return Unknown(omEvaluatorValueGetType(result));
+
   if (omEvaluatorValueIsAReference(result))
     return omEvaluatorValueToPythonValue(
         omEvaluatorValueGetReferenceValue(result));
@@ -384,6 +398,9 @@ OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result,
 
   if (auto *object = std::get_if<Object>(&result))
     return object->getValue();
+
+  if (auto *unknown = std::get_if<Unknown>(&result))
+    return omEvaluatorUnknownGet(ctx, unknown->getType());
 
   auto primitive = std::get<PythonPrimitive>(result);
   return omEvaluatorValueFromPrimitive(
@@ -420,6 +437,19 @@ void circt::python::populateDialectOMSubmodule(nb::module_ &m) {
   nb::class_<Path>(m, "Path")
       .def(nb::init<Path>(), nb::arg("path"))
       .def("__str__", &Path::dunderStr);
+
+  // Add the Unknown sentinel class definition.
+  nb::class_<Unknown>(m, "Unknown")
+      .def(nb::init<MlirType>(), nb::arg("type"))
+      .def_prop_ro("type", &Unknown::getType)
+      .def("__repr__", [](const Unknown &u) {
+        PyPrintAccumulator printAccum;
+        printAccum.parts.append("Unknown(");
+        mlirTypePrint(u.getType(), printAccum.getCallback(),
+                      printAccum.getUserData());
+        printAccum.parts.append(")");
+        return printAccum.join();
+      });
 
   // Add the Object class definition.
   nb::class_<Object>(m, "Object")

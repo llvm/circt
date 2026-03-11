@@ -259,8 +259,66 @@ getModulePortInfo(const TypeConverter &typeConverter, SVModuleOp op) {
           hw::PortInfo({{port.name, portTy, port.dir}, inputNum++, {}}));
     }
   }
-
   return hw::ModulePortInfo(ports);
+}
+
+struct DpiArrayCastInfo {
+  bool isRef = false;
+  bool isOpen = false;
+  bool isPacked = false;
+  Type elementType;
+};
+
+static std::optional<DpiArrayCastInfo> getDpiArrayCastInfo(Type type) {
+  DpiArrayCastInfo info;
+  if (auto refType = dyn_cast<RefType>(type)) {
+    info.isRef = true;
+    type = refType.getNestedType();
+  }
+
+  if (auto arrayType = dyn_cast<ArrayType>(type)) {
+    info.isPacked = true;
+    info.elementType = arrayType.getElementType();
+    return info;
+  }
+  if (auto arrayType = dyn_cast<OpenArrayType>(type)) {
+    info.isOpen = true;
+    info.isPacked = true;
+    info.elementType = arrayType.getElementType();
+    return info;
+  }
+  if (auto arrayType = dyn_cast<UnpackedArrayType>(type)) {
+    info.elementType = arrayType.getElementType();
+    return info;
+  }
+  if (auto arrayType = dyn_cast<OpenUnpackedArrayType>(type)) {
+    info.isOpen = true;
+    info.elementType = arrayType.getElementType();
+    return info;
+  }
+  return std::nullopt;
+}
+
+static bool hasOpenArrayBoundaryType(Type type) {
+  if (isa<OpenArrayType, OpenUnpackedArrayType>(type))
+    return true;
+  if (auto refType = dyn_cast<RefType>(type))
+    return isa<OpenArrayType, OpenUnpackedArrayType>(refType.getNestedType());
+  return false;
+}
+
+static bool isSupportedDpiOpenArrayCast(Type source, Type target) {
+  auto sourceInfo = getDpiArrayCastInfo(source);
+  auto targetInfo = getDpiArrayCastInfo(target);
+  if (!sourceInfo || !targetInfo)
+    return false;
+  // note: We currently don't support converting from open array to non-open
+  // array, even if the element types match, because there is no size
+  // information for the open array.
+  return sourceInfo->isRef == targetInfo->isRef &&
+         sourceInfo->isPacked == targetInfo->isPacked &&
+         sourceInfo->elementType == targetInfo->elementType &&
+         (targetInfo->isOpen && !sourceInfo->isOpen);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1641,8 +1699,21 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
     }
     int64_t inputBw = hw::getBitWidth(adaptor.getInput().getType());
     int64_t resultBw = hw::getBitWidth(resultType);
-    if (inputBw == -1 || resultBw == -1)
+    if (inputBw == -1 || resultBw == -1) {
+      if (isSupportedDpiOpenArrayCast(op.getInput().getType(),
+                                      op.getResult().getType())) {
+        rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(
+            op, resultType, adaptor.getInput());
+        return success();
+      }
+      if (hasOpenArrayBoundaryType(op.getInput().getType()) ||
+          hasOpenArrayBoundaryType(op.getResult().getType())) {
+        op.emitError("unsupported DPI open-array conversion from ")
+            << op.getInput().getType() << " to " << op.getResult().getType();
+        return failure();
+      }
       return failure();
+    }
 
     Value input = rewriter.createOrFold<hw::BitcastOp>(
         loc, rewriter.getIntegerType(inputBw), adaptor.getInput());
@@ -2251,6 +2322,18 @@ struct StringConcatOpConversion : public OpConversionPattern<StringConcatOp> {
   }
 };
 
+struct StringGetOpConversion : public OpConversionPattern<StringGetOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StringGetOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::StringGetOp>(op, adaptor.getStr(),
+                                                  adaptor.getIndex());
+    return success();
+  }
+};
+
 struct QueueSizeBIOpConversion : public OpConversionPattern<QueueSizeBIOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -2475,6 +2558,41 @@ struct QueueSetOpConversion : public OpConversionPattern<QueueSetOp> {
   }
 };
 
+struct QueueCmpOpConversion : public OpConversionPattern<QueueCmpOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(QueueCmpOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // TODO: Right now Moore uses `UArrayCmpPredicate` for both queues/unpacked
+    // arrays - reasonable because, per SV spec, queues *are* a type of unpacked
+    // array). Once we support comparing unpacked arrays in core, it will make
+    // sense to rename `QueueCmpPredicate` to `UArrayCmpPredicate` and use it
+    // for both forms of comparisons.
+
+    // Convert the UArrayCmpPredicate into a QueueCmpPredicate
+    auto unpackedPred = adaptor.getPredicateAttr().getValue();
+    sim::QueueCmpPredicate queuePred;
+    switch (unpackedPred) {
+    case circt::moore::UArrayCmpPredicate::eq:
+      queuePred = sim::QueueCmpPredicate::eq;
+      break;
+    case circt::moore::UArrayCmpPredicate::ne:
+      queuePred = sim::QueueCmpPredicate::ne;
+      break;
+    default:
+      llvm_unreachable(
+          "All unpacked array comparison predicates should be handled");
+    }
+
+    auto cmpPred = sim::QueueCmpPredicateAttr::get(getContext(), queuePred);
+
+    rewriter.replaceOpWithNewOp<sim::QueueCmpOp>(op, cmpPred, adaptor.getLhs(),
+                                                 adaptor.getRhs());
+    return success();
+  }
+};
+
 struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -2661,6 +2779,15 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
         return {};
       });
 
+  typeConverter.addConversion([&](OpenArrayType type) -> std::optional<Type> {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
+
+  typeConverter.addConversion(
+      [&](OpenUnpackedArrayType type) -> std::optional<Type> {
+        return LLVM::LLVMPointerType::get(type.getContext());
+      });
+
   typeConverter.addConversion([&](StructType type) -> std::optional<Type> {
     SmallVector<hw::StructType::FieldInfo> fields;
     for (auto field : type.getMembers()) {
@@ -2740,6 +2867,8 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   });
 
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
+    if (isa<OpenArrayType, OpenUnpackedArrayType>(type.getNestedType()))
+      return LLVM::LLVMPointerType::get(type.getContext());
     if (auto innerType = typeConverter.convertType(type.getNestedType()))
       return llhd::RefType::get(innerType);
     return {};
@@ -2972,6 +3101,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     // Dynamic string operations
     StringLenOpConversion,
     StringConcatOpConversion,
+    StringGetOpConversion,
 
     // Queue operations
     QueueSizeBIOpConversion,
@@ -2984,7 +3114,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     QueueClearOpConversion,
     DynQueueExtractOpConversion,
     QueueResizeOpConversion,
-    QueueSetOpConversion
+    QueueSetOpConversion,
+    QueueCmpOpConversion
   >(typeConverter, patterns.getContext());
   // clang-format on
 

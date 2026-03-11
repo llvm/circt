@@ -278,4 +278,44 @@ def SOPBalancing : CutRewriterPassBase<"synth-sop-balancing", "hw::HWModuleOp"> 
   let dependentDialects = ["synth::SynthDialect", "comb::CombDialect"];
 }
 
+def FunctionalReduction : Pass<"synth-functional-reduction", "hw::HWModuleOp"> {
+  let summary = "Functional reduction by simulation-guided candidate merging";
+  let description = [{
+    This pass performs functional reduction for single-bit `synth` logic. It
+    runs random-pattern simulation to build candidate equivalence classes for
+    `i1` values with matching signatures, then uses a SAT solver to verify
+    each candidate pair before materializing the proven equivalences with
+    `synth.choice` operations.
+
+    See "FRAIGs: A Unifying Representation for Logic Synthesis and Verification,
+    Tech. Rep., 2005" by Mishchenko et al. for details on the underlying
+    algorithm.
+  }];
+
+  let options = [
+    Option<"testTransformation", "test-transformation", "bool", "false",
+           "Enable test transformation mode. In this mode, candidates are "
+           "verified only when both values in a pair carry matching "
+           "`synth.test.functional_reduction_equivalence_class` attributes.">,
+    Option<"numRandomPatterns", "num-random-patterns", "unsigned", "4096",
+           "Number of random simulation patterns (must be a positive multiple of 64; "
+           "each pattern is one bit in a 64-bit word)">,
+    Option<"seed", "seed", "unsigned", "0",
+           "Seed for random pattern generation">
+  ];
+  let statistics = [
+    Statistic<"numEquivClasses", "num-equiv-classes",
+              "Number of non-trivial equivalence classes after simulation">,
+    Statistic<"numProvedEquiv", "num-proved-equiv",
+              "Number of equivalences proven by SAT">,
+    Statistic<"numDisprovedEquiv", "num-disproved-equiv",
+              "Number of equivalences disproved by SAT (CEX found)">,
+    Statistic<"numUnknown", "num-unknown",
+              "Number of SAT calls hitting resource limit (UNKNOWN)">,
+    Statistic<"numMergedNodes", "num-merged-nodes",
+              "Number of nodes merged due to functional equivalence">
+  ];
+  let dependentDialects = ["synth::SynthDialect"];
+}
+
 #endif // CIRCT_DIALECT_SYNTH_TRANSFORMS_PASSES_TD
