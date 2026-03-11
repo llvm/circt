@@ -162,12 +162,12 @@ void circt::python::populateDialectESISubmodule(nb::module_ &m) {
                   std::string name = nb::cast<std::string>(t[0]);
                   return CirctESIBundleTypeBundleChannel{
                       mlirIdentifierGet(ctxt, mlirStringRefCreate(
-                                                   name.data(), name.length())),
+                                                  name.data(), name.length())),
                       (uint32_t)nb::cast<ChannelDirection>(t[1]),
                       nb::cast<MlirType>(t[2])};
                 }));
             return cls(circtESIBundleTypeGet(ctxt, channels.size(),
-                                              channels.data(), resettable));
+                                             channels.data(), resettable));
           },
           nb::arg("cls"), nb::arg("channels"), nb::arg("resettable"),
           nb::arg("ctxt") = nullptr)

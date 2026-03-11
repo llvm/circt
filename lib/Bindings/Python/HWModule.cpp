@@ -62,7 +62,8 @@ void circt::python::populateDialectHWSubmodule(nb::module_ &m) {
   nb::class_<HWModulePort>(m, "ModulePort")
       .def(nb::init<MlirAttribute, MlirType, HWModulePortDirection>());
 
-  mlir_type_subclass(m, "ModuleType", hwTypeIsAModuleType, hwModuleTypeGetTypeID)
+  mlir_type_subclass(m, "ModuleType", hwTypeIsAModuleType,
+                     hwModuleTypeGetTypeID)
       .def_classmethod(
           "get",
           [](nb::object cls, nb::list pyModulePorts, MlirContext ctx) {
@@ -123,7 +124,8 @@ void circt::python::populateDialectHWSubmodule(nb::module_ &m) {
         return hwParamIntTypeGetWidthAttr(self);
       });
 
-  mlir_type_subclass(m, "StructType", hwTypeIsAStructType, hwStructTypeGetTypeID)
+  mlir_type_subclass(m, "StructType", hwTypeIsAStructType,
+                     hwStructTypeGetTypeID)
       .def_classmethod(
           "get",
           [](nb::object cls, nb::list pyFieldInfos,
@@ -227,7 +229,8 @@ void circt::python::populateDialectHWSubmodule(nb::module_ &m) {
         return fields;
       });
 
-  mlir_type_subclass(m, "TypeAliasType", hwTypeIsATypeAliasType, hwTypeAliasTypeGetTypeID)
+  mlir_type_subclass(m, "TypeAliasType", hwTypeIsATypeAliasType,
+                     hwTypeAliasTypeGetTypeID)
       .def_classmethod("get",
                        [](nb::object cls, std::string scope, std::string name,
                           MlirType innerType) {
@@ -253,7 +256,8 @@ void circt::python::populateDialectHWSubmodule(nb::module_ &m) {
         return std::string(cStr.data, cStr.length);
       });
 
-  mlir_attribute_subclass(m, "ParamDeclAttr", hwAttrIsAParamDeclAttr, hwParamDeclAttrGetTypeID)
+  mlir_attribute_subclass(m, "ParamDeclAttr", hwAttrIsAParamDeclAttr,
+                          hwParamDeclAttrGetTypeID)
       .def_classmethod(
           "get",
           [](nb::object cls, std::string name, MlirType type,
@@ -278,7 +282,8 @@ void circt::python::populateDialectHWSubmodule(nb::module_ &m) {
         return std::string(cStr.data, cStr.length);
       });
 
-  mlir_attribute_subclass(m, "ParamDeclRefAttr", hwAttrIsAParamDeclRefAttr, hwParamDeclRefAttrGetTypeID)
+  mlir_attribute_subclass(m, "ParamDeclRefAttr", hwAttrIsAParamDeclRefAttr,
+                          hwParamDeclRefAttrGetTypeID)
       .def_classmethod(
           "get",
           [](nb::object cls, MlirContext ctx, std::string name) {
@@ -293,12 +298,14 @@ void circt::python::populateDialectHWSubmodule(nb::module_ &m) {
         return std::string(cStr.data, cStr.length);
       });
 
-  mlir_attribute_subclass(m, "ParamVerbatimAttr", hwAttrIsAParamVerbatimAttr, hwParamVerbatimAttrGetTypeID)
+  mlir_attribute_subclass(m, "ParamVerbatimAttr", hwAttrIsAParamVerbatimAttr,
+                          hwParamVerbatimAttrGetTypeID)
       .def_classmethod("get", [](nb::object cls, MlirAttribute text) {
         return cls(hwParamVerbatimAttrGet(text));
       });
 
-  mlir_attribute_subclass(m, "OutputFileAttr", hwAttrIsAOutputFileAttr, hwOutputFileAttrGetTypeID)
+  mlir_attribute_subclass(m, "OutputFileAttr", hwAttrIsAOutputFileAttr,
+                          hwOutputFileAttrGetTypeID)
       .def_classmethod(
           "get_from_filename",
           [](nb::object cls, MlirAttribute fileName, bool excludeFromFileList,
@@ -311,7 +318,8 @@ void circt::python::populateDialectHWSubmodule(nb::module_ &m) {
         return std::string(cStr.data, cStr.length);
       });
 
-  mlir_attribute_subclass(m, "InnerSymAttr", hwAttrIsAInnerSymAttr, hwInnerSymAttrGetTypeID)
+  mlir_attribute_subclass(m, "InnerSymAttr", hwAttrIsAInnerSymAttr,
+                          hwInnerSymAttrGetTypeID)
       .def_classmethod("get",
                        [](nb::object cls, MlirAttribute symName) {
                          return cls(hwInnerSymAttrGet(symName));
@@ -320,7 +328,8 @@ void circt::python::populateDialectHWSubmodule(nb::module_ &m) {
         return hwInnerSymAttrGetSymName(self);
       });
 
-  mlir_attribute_subclass(m, "InnerRefAttr", hwAttrIsAInnerRefAttr, hwInnerRefAttrGetTypeID)
+  mlir_attribute_subclass(m, "InnerRefAttr", hwAttrIsAInnerRefAttr,
+                          hwInnerRefAttrGetTypeID)
       .def_classmethod(
           "get",
           [](nb::object cls, MlirAttribute moduleName, MlirAttribute innerSym) {

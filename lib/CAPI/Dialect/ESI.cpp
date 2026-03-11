@@ -57,9 +57,7 @@ uint64_t circtESIChannelGetDataDelay(MlirType channelType) {
 bool circtESITypeIsAnAnyType(MlirType type) {
   return isa<AnyType>(unwrap(type));
 }
-MlirTypeID circtESIAnyTypeGetTypeID() {
-  return wrap(AnyType::getTypeID());
-}
+MlirTypeID circtESIAnyTypeGetTypeID() { return wrap(AnyType::getTypeID()); }
 MlirType circtESIAnyTypeGet(MlirContext ctxt) {
   return wrap(AnyType::get(unwrap(ctxt)));
 }
@@ -68,9 +66,7 @@ bool circtESITypeIsAListType(MlirType type) {
   return isa<ListType>(unwrap(type));
 }
 
-MlirTypeID circtESIListTypeGetTypeID() {
-  return wrap(ListType::getTypeID());
-}
+MlirTypeID circtESIListTypeGetTypeID() { return wrap(ListType::getTypeID()); }
 
 MlirType circtESIListTypeGet(MlirType inner) {
   auto cppInner = unwrap(inner);
