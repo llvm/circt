@@ -203,7 +203,7 @@ public:
     if (!actionRegion.isAncestor(op->getParentRegion()))
       return failure();
 
-    // Skip constants — replacing a constant with an identical constant
+    // Skip constants because replacing a constant with an identical constant
     // creates an infinite loop in the greedy rewriter.
     if (isa<hw::ConstantOp>(op))
       return failure();
