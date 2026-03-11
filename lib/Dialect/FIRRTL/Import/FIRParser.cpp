@@ -1068,9 +1068,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     if (lookup == domainMap.end())
       return emitError(loc) << "unknown domain '" << domainKindStr << "'";
 
-    auto domainOp = lookup->second;
-    result = DomainType::get(FlatSymbolRefAttr::get(domainOp.getNameAttr()),
-                             domainOp.getFieldsAttr());
+    result = DomainType::getFromDomainOp(lookup->second);
     break;
   }
 
