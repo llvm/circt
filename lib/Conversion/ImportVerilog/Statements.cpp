@@ -1111,6 +1111,7 @@ struct StmtVisitor {
   // Handle `wait` statements
   LogicalResult visit(const slang::ast::WaitStatement &stmt) {
     auto waitOp = moore::WaitLevelOp::create(builder, loc);
+{
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToStart(&waitOp.getBody().emplaceBlock());
     auto cond = context.convertRvalueExpression(stmt.cond);
@@ -1118,9 +1119,8 @@ struct StmtVisitor {
       return failure();
     cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
     moore::DetectLevelOp::create(builder, loc, cond);
-
+}
     // Handle optional post-wait operation as if it were a separate statement
-    guard.~InsertionGuard();
     if (failed(context.convertStatement(stmt.stmt)))
       return failure();
 
