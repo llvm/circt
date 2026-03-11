@@ -1,4 +1,4 @@
-// RUN: circt-opt --infer-contracts %s | FileCheck %s
+// RUN: circt-opt --combine-assert-like --infer-contracts %s | FileCheck %s
 
 // CHECK-LABEL: hw.module @AssertOnly
 // CHECK-NEXT:   %c3_i42 = hw.constant 3 : i42

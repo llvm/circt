@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
@@ -30,20 +31,20 @@ namespace {
 struct InferContractsPass
     : verif::impl::InferContractsPassBase<InferContractsPass> {
 
+  /// It is assumed that `combine-assert-like` was run before this pass.
   /// For all modules (hw::HWModuleOp and verif::FormalOp)
   /// that don't already define a contract:
-  /// 1. Accumulate all of the conditions from the assertions found in the
-  /// region into a single conjuction, this will become the postcondition of the
-  /// contract-
-  /// 2. Accumulate all of the conditions from the assumptions found in the
-  /// region that condition over the inputs of the module (block arguments for
-  /// hw::HWModuleOp, verif.symbolic_value for the verif::FromalOp), this
-  /// conjunction will become the preconditions of the contract.
+  /// 1. Find the accumulated assertion for that block and replace it
+  /// 2. Find the accumulated assumptions for this region that condition over
+  /// the inputs of the module (block arguments for hw::HWModuleOp,
+  /// verif.symbolic_value for the verif::FromalOp), this conjunction will
+  /// become the preconditions of the contract.
   void runOnOperation() override;
 };
 
 /// Given an assert or an assume operation, convert them into a contract
-static Operation *convertAssertLike(OpBuilder &builder, RequireLike op,
+template <typename T>
+static Operation *convertAssertLike(OpBuilder &builder, T op,
                                     IRMapping &mapping) {
   StringAttr labelAttr = op.getLabelAttr();
 
@@ -54,21 +55,32 @@ static Operation *convertAssertLike(OpBuilder &builder, RequireLike op,
   auto loc = op.getLoc();
   auto property = mapping.lookup(op.getProperty());
 
-  if ((isa<EnsureOp>(op) && !assumeContract) ||
-      (isa<RequireOp>(op) && assumeContract))
-    return AssertOp::create(builder, loc, property, enableValue, labelAttr);
-  if ((isa<EnsureOp>(op) && assumeContract) ||
-      (isa<RequireOp>(op) && !assumeContract))
-    return AssumeOp::create(builder, loc, property, enableValue, labelAttr);
   return nullptr;
 }
 
 template <typename T>
 /// Generic runner, only supports `hw::HWModuleOp` and `verif::FormalOp`.
-LogicalResult run(T op, ModuleOp mlirModuleOp) {
+LogicalResult run(T modop, ModuleOp mlirModuleOp) {
   // Sanity check: Only support HwModules and Formal Ops
-  if (!(isa<hw::HWModuleOp>(op) || isa<verif::FormalOp>(op)))
+  if (!(isa<hw::HWModuleOp>(modop) || isa<verif::FormalOp>(modop)))
     return failure();
+
+  // Check if a contract is already defined; if so fail
+  modop.walk([&](verif::ContractOp cnt) {
+    return failure("Inference is only supported when no contract is present.");
+  });
+
+  // Create mapping and builder
+  IRMapping mapping;
+  OpBuilder builder(modop);
+
+  // Convert all assertlike ops into contracts
+  modop.walk([&](Operation *op) {
+    TypeSwitch<Operations *, void>(op)
+        .Case<verif::AssertOp, verif::AssumeOp>(
+            [&](auto assop) { convertAssertLike(builder, assop, mapping); })
+        .Default([&](auto) {});
+  });
 
   return success();
 }
