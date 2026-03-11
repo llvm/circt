@@ -285,14 +285,25 @@ struct ModuleVisitor : public BaseVisitor {
     return success();
   }
 
-  // Expand an interface instance into into individual variable/nets ops
-  // in the enclosing module.Each signal declared in the interface body becomes
+  // Expand an interface instance into individual variable/net ops
+  // in the enclosing module. Each signal declared in the interface body becomes
   // a separate op, named with the instance name as a prefix.
   LogicalResult
   expandInterfaceInstance(const slang::ast::InstanceSymbol &instNode) {
     auto prefix = (Twine(blockNamePrefix) + instNode.name + "_").str();
+    auto lowering = std::make_unique<InterfaceLowering>();
+
     for (const auto &member : instNode.body.members()) {
-      // Expand variables
+      // Error on nested interface instances.
+      if (const auto *nestedInst =
+              member.as_if<slang::ast::InstanceSymbol>()) {
+        if (nestedInst->body.getDefinition().definitionKind ==
+            slang::ast::DefinitionKind::Interface)
+          return mlir::emitError(loc)
+                 << "nested interface instances are not supported: `"
+                 << nestedInst->name << "` inside `" << instNode.name << "`";
+      }
+      // Expand variables.
       if (const auto *var = member.as_if<slang::ast::VariableSymbol>()) {
         auto loweredType = context.convertType(*var->getDeclaredType());
         if (!loweredType)
@@ -302,7 +313,7 @@ struct ModuleVisitor : public BaseVisitor {
             moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
             builder.getStringAttr(Twine(prefix) + StringRef(var->name)),
             Value());
-        context.valueSymbols.insert(var, varOp);
+        lowering->expandedMembers[var] = varOp;
         continue;
       }
       // Expand nets
@@ -321,11 +332,13 @@ struct ModuleVisitor : public BaseVisitor {
             moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
             builder.getStringAttr(Twine(prefix) + StringRef(net->name)),
             netKind, Value());
-        context.valueSymbols.insert(net, netOp);
+        lowering->expandedMembers[net] = netOp;
         continue;
       }
       // Silently skip other members (modports, parameters , etc.)
     }
+
+    context.interfaceInstances[&instNode] = std::move(lowering);
     return success();
   }
 
@@ -357,6 +370,11 @@ struct ModuleVisitor : public BaseVisitor {
     // ports with their corresponding connection.
     SmallDenseMap<const PortSymbol *, Value> portValues;
     portValues.reserve(moduleType.getNumPorts());
+
+    // Map each InterfacePortSymbol to the connected interface instance.
+    SmallDenseMap<const slang::ast::InterfacePortSymbol *,
+                  const slang::ast::InstanceSymbol *>
+        ifaceConnMap;
 
     for (const auto *con : instNode.getPortConnections()) {
       const auto *expr = con->getExpression();
@@ -484,11 +502,15 @@ struct ModuleVisitor : public BaseVisitor {
         continue;
       }
 
-      // Interface ports are handled separately via ifacePorts.
-      if (con->port.as_if<slang::ast::InterfacePortSymbol>()) {
-        // The flattened interface port values are resolved below using
-        // the ifacePorts vector and valueSymbols populated by
-        // expandInterfaceInstace.
+      // Interface ports: record the connected interface instance for later
+      // resolution via InterfaceLowering.
+      if (const auto *ifacePort =
+              con->port.as_if<slang::ast::InterfacePortSymbol>()) {
+        auto ifaceConn = con->getIfaceConn();
+        const auto *connInst =
+            ifaceConn.first->as_if<slang::ast::InstanceSymbol>();
+        if (connInst)
+          ifaceConnMap[ifacePort] = connInst;
         continue;
       }
 
@@ -512,30 +534,42 @@ struct ModuleVisitor : public BaseVisitor {
         inputValues.push_back(value);
     }
 
-    // Resolve flattened interface port values. for each flattened port,
-    // look up the corresponding expanded variable/net in valueSymbols
-    // (populated by expandInterfaceInstance when the interface was
-    // instantiated in this scope).
+    // Resolve flattened interface port values. For each flattened port,
+    // look up the connected interface instance's InterfaceLowering and
+    // find the body member's expanded SSA value.
     for (auto &fp : moduleLowering->ifacePorts) {
-      if (!fp.bodySym)
+      if (!fp.bodySym || !fp.origin)
         continue;
-      auto *valueSym = fp.bodySym->as_if<slang::ast::ValueSymbol>();
-      if (!valueSym) {
+      // Find which interface instance is connected to this port.
+      auto it = ifaceConnMap.find(fp.origin);
+      if (it == ifaceConnMap.end()) {
         mlir::emitError(loc)
-            << "could not resolve interface port signal `" << fp.name << "`";
+            << "no interface connection for port `" << fp.name << "`";
         return failure();
       }
-      Value val = context.valueSymbols.lookup(valueSym);
-      if (!val) {
+      const auto *connInst = it->second;
+      // Look up the InterfaceLowering for that instance.
+      auto ifaceIt = context.interfaceInstances.find(connInst);
+      if (ifaceIt == context.interfaceInstances.end()) {
+        mlir::emitError(loc)
+            << "interface instance `" << connInst->name
+            << "` was not expanded";
+        return failure();
+      }
+      auto &ifaceLowering = *ifaceIt->second;
+      // Find the expanded SSA value for this body member.
+      auto valIt = ifaceLowering.expandedMembers.find(fp.bodySym);
+      if (valIt == ifaceLowering.expandedMembers.end()) {
         mlir::emitError(loc)
             << "unresolved interface port signal `" << fp.name << "`";
         return failure();
       }
+      Value val = valIt->second;
       if (fp.direction == hw::ModulePort::Output) {
         outputValues.push_back(val);
       } else {
-        // For input ports if the value is a ref (from variableOp/netOp),
-        // read it to get the rvalue
+        // For input ports, if the value is a ref (from VariableOp/NetOp),
+        // read it to get the rvalue.
         if (isa<moore::RefType>(val.getType()))
           val = moore::ReadOp::create(builder, loc, val);
         inputValues.push_back(val);

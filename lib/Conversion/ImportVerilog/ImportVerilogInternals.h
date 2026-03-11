@@ -51,6 +51,12 @@ struct FlattenedIfacePort {
   const slang::ast::Symbol *bodySym;
 };
 
+/// Lowering information for an expanded interface instance. Maps each interface
+/// body member to its expanded SSA value (moore.variable or moore.net).
+struct InterfaceLowering {
+  DenseMap<const slang::ast::Symbol *, Value> expandedMembers;
+};
+
 /// Module lowering information.
 struct ModuleLowering {
   moore::SVModuleOp op;
@@ -289,6 +295,12 @@ struct Context {
   DenseMap<const slang::ast::InstanceBodySymbol *,
            std::unique_ptr<ModuleLowering>>
       modules;
+
+  /// Expanded interface instances, keyed by the InstanceSymbol pointer.
+  /// Each entry maps body members to their expanded SSA values.
+  DenseMap<const slang::ast::InstanceSymbol *,
+           std::unique_ptr<InterfaceLowering>>
+      interfaceInstances;
   /// A list of modules for which the header has been created, but the body has
   /// not been converted yet.
   std::queue<const slang::ast::InstanceBodySymbol *> moduleWorklist;
