@@ -11,6 +11,7 @@
 
 include "circt/Dialect/Arc/ArcDialect.td"
 include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/OpBase.td"
 
 class ArcTypeDef<string name> : TypeDef<ArcDialect, name> { }
 

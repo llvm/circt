@@ -11,6 +11,7 @@
 
 include "circt/Dialect/Sim/SimDialect.td"
 include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/OpBase.td"
 
 class SimTypeDef<string name> : TypeDef<SimDialect, name> { }
 
