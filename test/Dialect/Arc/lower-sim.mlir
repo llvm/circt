@@ -12,12 +12,14 @@ module {
   // CHECK-LABEL: llvm.func @full
   func.func @full() {
     %c = arith.constant 24 : i8
+    %tstep = arith.constant 321 : i64
 
     // CHECK: %[[format_str2_ptr:.*]] = llvm.mlir.addressof @[[format_str2]] : !llvm.ptr
     // CHECK: %[[format_str_ptr:.*]] = llvm.mlir.addressof @[[format_str]] : !llvm.ptr
     // CHECK-DAG: %[[c:.*]] = llvm.mlir.constant(24 : i8)
     // CHECK-DAG: %[[zero:.*]] = llvm.mlir.constant(0 : i8)
     // CHECK-DAG: %[[size:.*]] = llvm.mlir.constant(11 : i64)
+    // CHECK-DAG: %[[tstep:.*]] = llvm.mlir.constant(321 : i64)
     // CHECK-DAG: %[[state:.*]] = llvm.call @malloc(%[[size:.*]]) :
     // CHECK: "llvm.intr.memset"(%[[state]], %[[zero]], %[[size]]) <{isVolatile = false}>
     arc.sim.instantiate @id as %model {
@@ -31,6 +33,12 @@ module {
 
       // CHECK-NEXT: llvm.call @id_eval(%[[state]])
       arc.sim.step %model : !arc.sim.instance<@id>
+
+      // CHECK-NEXT: llvm.call @id_eval(%[[state]])
+      // CHECK-NEXT: %[[told:.*]] = llvm.load %[[state]] : !llvm.ptr -> i64
+      // CHECK-NEXT: %[[tnew:.*]] = llvm.add %[[told]], %[[tstep]] : i64
+      // CHECK-NEXT: llvm.store %[[tnew]], %[[state]] : i64, !llvm.ptr
+      arc.sim.step %model by %tstep : !arc.sim.instance<@id>
 
       // CHECK-NEXT: %[[o_ptr:.*]] = llvm.getelementptr %[[state]][10] : (!llvm.ptr) -> !llvm.ptr, i8
       // CHECK-NEXT: %[[result:.*]] = llvm.load %[[o_ptr]] : !llvm.ptr -> i8
