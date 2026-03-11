@@ -43,7 +43,14 @@ class Verilator(Simulator):
     )
     self.verilator_bin = "verilator_bin"
     if "VERILATOR_PATH" in os.environ:
-      self.verilator_bin = os.environ["VERILATOR_PATH"]
+      vpath = os.environ["VERILATOR_PATH"]
+      # Backwards compatibility: if the env var points to the Perl wrapper,
+      # redirect to verilator_bin.
+      basename = Path(vpath).stem
+      if basename == "verilator":
+        self.verilator_bin = str(Path(vpath).parent / "verilator_bin")
+      else:
+        self.verilator_bin = vpath
 
   def _find_verilator_root(self) -> Path:
     """Locate VERILATOR_ROOT for runtime includes and sources.
@@ -65,10 +72,12 @@ class Verilator(Simulator):
         "variable or ensure verilator_bin is in PATH.")
 
   def compile_commands(self) -> List[List[str]]:
-    """Return the verilator_bin command for generating C++ from RTL.
+    """Return the commands for the full compile flow.
 
-    This only produces the Verilated C++ source files; the actual C++ build
-    is handled separately by :meth:`compile` via CMake + Ninja."""
+    The returned list contains three commands that are run sequentially:
+      1. ``verilator_bin`` – generates C++ from RTL.
+      2. ``cmake`` – configures the C++ build (Ninja generator).
+      3. ``ninja`` – builds the simulation executable."""
     cmd: List[str] = [
         self.verilator_bin,
         "--cc",
@@ -99,7 +108,12 @@ class Verilator(Simulator):
           "--trace-underscore"
       ]
     cmd += [str(p) for p in self.sources.rtl_sources]
-    return [cmd]
+
+    build_dir = str(Path.cwd() / "obj_dir" / "cmake_build")
+    cmake_cmd = ["cmake", "-G", "Ninja", "-S", build_dir, "-B", build_dir]
+    ninja_cmd = ["ninja", "-C", build_dir]
+
+    return [cmd, cmake_cmd, ninja_cmd]
 
   def _write_cmake(self, obj_dir: Path) -> Path:
     """Write a CMakeLists.txt for building the verilated simulation.
@@ -166,72 +180,12 @@ target_link_libraries({exe_name} PRIVATE
     return build_dir
 
   def compile(self) -> int:
-    """Compile RTL sources with verilator_bin, then build with CMake + Ninja."""
-    self.run_dir.mkdir(parents=True, exist_ok=True)
-    env = Simulator.get_env()
-
-    # Ensure VERILATOR_ROOT is in the environment for verilator_bin.
+    """Set VERILATOR_ROOT, write the CMakeLists.txt, then delegate to the base
+    class which runs all commands from :meth:`compile_commands`."""
     verilator_root = self._find_verilator_root()
-    env["VERILATOR_ROOT"] = str(verilator_root)
-
-    # Step 1: Run verilator_bin to generate C++ from Verilog/SystemVerilog.
-    for cmd in self.compile_commands():
-      ret = self._start_process_with_callbacks(
-          cmd,
-          env=env,
-          cwd=None,
-          stdout_cb=self._compile_stdout_cb,
-          stderr_cb=self._compile_stderr_cb,
-          wait=True)
-      if isinstance(ret, int) and ret != 0:
-        print("====== Verilator compilation failure")
-        if self.UsesStderr:
-          if self._compile_stderr_log is not None:
-            self._compile_stderr_log.seek(0)
-            print(self._compile_stderr_log.read())
-        else:
-          if self._compile_stdout_log is not None:
-            self._compile_stdout_log.seek(0)
-            print(self._compile_stdout_log.read())
-        return ret
-
-    # Step 2: Write a CMakeLists.txt and build the simulation executable.
-    obj_dir = Path.cwd() / "obj_dir"
-    build_dir = self._write_cmake(obj_dir)
-
-    # Step 3: Configure with CMake (Ninja generator).
-    cmake_cmd = ["cmake", "-G", "Ninja", "."]
-    ret = self._start_process_with_callbacks(
-        cmake_cmd,
-        env=env,
-        cwd=build_dir,
-        stdout_cb=self._compile_stdout_cb,
-        stderr_cb=self._compile_stderr_cb,
-        wait=True)
-    if isinstance(ret, int) and ret != 0:
-      print("====== CMake configuration failure")
-      if self._compile_stderr_log is not None:
-        self._compile_stderr_log.seek(0)
-        print(self._compile_stderr_log.read())
-      return ret
-
-    # Step 4: Build with Ninja.
-    ninja_cmd = ["ninja"]
-    ret = self._start_process_with_callbacks(
-        ninja_cmd,
-        env=env,
-        cwd=build_dir,
-        stdout_cb=self._compile_stdout_cb,
-        stderr_cb=self._compile_stderr_cb,
-        wait=True)
-    if isinstance(ret, int) and ret != 0:
-      print("====== Ninja build failure")
-      if self._compile_stderr_log is not None:
-        self._compile_stderr_log.seek(0)
-        print(self._compile_stderr_log.read())
-      return ret
-
-    return 0
+    os.environ["VERILATOR_ROOT"] = str(verilator_root)
+    self._write_cmake(Path.cwd() / "obj_dir")
+    return super().compile()
 
   def run_command(self, gui: bool):
     if gui:

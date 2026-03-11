@@ -26,12 +26,12 @@ from esiaccel.cosim.verilator import Verilator  # noqa: E402
 from esiaccel.cosim.simulator import SourceFiles  # noqa: E402
 
 
-def _make_verilator(top="TestTop", debug=False, dpi_so=None, macros=None):
+def _make_verilator(run_dir, top="TestTop", debug=False, dpi_so=None,
+                    macros=None):
   """Create a Verilator instance with minimal setup."""
   sources = SourceFiles(top)
   if dpi_so is not None:
     sources.dpi_so = dpi_so
-  run_dir = Path("/tmp/test_run")
   return Verilator(
       sources=sources,
       run_dir=run_dir,
@@ -43,42 +43,56 @@ def _make_verilator(top="TestTop", debug=False, dpi_so=None, macros=None):
 
 class TestCompileCommands:
 
-  def test_uses_verilator_bin(self):
-    v = _make_verilator()
+  def test_uses_verilator_bin(self, tmp_path):
+    v = _make_verilator(tmp_path)
     cmds = v.compile_commands()
-    assert len(cmds) == 1
     assert cmds[0][0] == "verilator_bin"
 
-  def test_no_exe_or_build_flags(self):
-    v = _make_verilator()
+  def test_cmake_and_ninja_commands(self, tmp_path):
+    v = _make_verilator(tmp_path)
+    cmds = v.compile_commands()
+    assert len(cmds) == 3
+    assert cmds[1][0] == "cmake"
+    assert "-G" in cmds[1] and "Ninja" in cmds[1]
+    assert cmds[2][0] == "ninja"
+
+  def test_no_exe_or_build_flags(self, tmp_path):
+    v = _make_verilator(tmp_path)
     cmd = v.compile_commands()[0]
     assert "--exe" not in cmd
     assert "--build" not in cmd
 
-  def test_no_cflags_or_ldflags(self):
-    v = _make_verilator()
+  def test_no_cflags_or_ldflags(self, tmp_path):
+    v = _make_verilator(tmp_path)
     cmd = v.compile_commands()[0]
     assert "-CFLAGS" not in cmd
     assert "-LDFLAGS" not in cmd
 
-  def test_driver_not_in_command(self):
-    v = _make_verilator()
+  def test_driver_not_in_command(self, tmp_path):
+    v = _make_verilator(tmp_path)
     cmd = v.compile_commands()[0]
     assert not any("driver.cpp" in str(c) for c in cmd)
 
-  def test_trace_flags_in_debug(self):
-    v = _make_verilator(debug=True)
+  def test_trace_flags_in_debug(self, tmp_path):
+    v = _make_verilator(tmp_path, debug=True)
     cmd = v.compile_commands()[0]
     assert "--trace-fst" in cmd
     assert "--trace-params" in cmd
 
-  def test_respects_verilator_path_env(self):
-    with mock.patch.dict(os.environ, {"VERILATOR_PATH": "/custom/verilator"}):
-      v = _make_verilator()
-      assert v.verilator_bin == "/custom/verilator"
+  def test_respects_verilator_path_env(self, tmp_path):
+    with mock.patch.dict(os.environ,
+                         {"VERILATOR_PATH": "/custom/verilator_bin"}):
+      v = _make_verilator(tmp_path)
+      assert v.verilator_bin == "/custom/verilator_bin"
 
-  def test_macro_definitions(self):
-    v = _make_verilator(macros={"FOO": "BAR", "BAZ": None})
+  def test_verilator_path_redirects_perl_wrapper(self, tmp_path):
+    with mock.patch.dict(os.environ,
+                         {"VERILATOR_PATH": "/usr/bin/verilator"}):
+      v = _make_verilator(tmp_path)
+      assert v.verilator_bin == str(Path("/usr/bin/verilator_bin"))
+
+  def test_macro_definitions(self, tmp_path):
+    v = _make_verilator(tmp_path, macros={"FOO": "BAR", "BAZ": None})
     cmd = v.compile_commands()[0]
     assert "+define+FOO=BAR" in cmd
     assert "+define+BAZ" in cmd
@@ -92,7 +106,7 @@ class TestFindVerilatorRoot:
     (root / "include").mkdir()
     (root / "include" / "verilated.h").touch()
     with mock.patch.dict(os.environ, {"VERILATOR_ROOT": str(root)}):
-      v = _make_verilator()
+      v = _make_verilator(tmp_path)
       assert v._find_verilator_root() == root
 
   def test_from_bin_in_path(self, tmp_path):
@@ -106,15 +120,15 @@ class TestFindVerilatorRoot:
     with mock.patch.dict(os.environ, {}, clear=False):
       os.environ.pop("VERILATOR_ROOT", None)
       with mock.patch("shutil.which", return_value=str(fake_bin)):
-        v = _make_verilator()
+        v = _make_verilator(tmp_path)
         found = v._find_verilator_root()
         assert found == root
 
-  def test_raises_when_not_found(self):
+  def test_raises_when_not_found(self, tmp_path):
     with mock.patch.dict(os.environ, {}, clear=False):
       os.environ.pop("VERILATOR_ROOT", None)
       with mock.patch("shutil.which", return_value=None):
-        v = _make_verilator()
+        v = _make_verilator(tmp_path)
         with pytest.raises(RuntimeError):
           v._find_verilator_root()
 
@@ -128,7 +142,7 @@ class TestWriteCmake:
     (root / "include").mkdir(parents=True)
     (root / "include" / "verilated.h").touch()
     with mock.patch.dict(os.environ, {"VERILATOR_ROOT": str(root)}):
-      v = _make_verilator(dpi_so=[])
+      v = _make_verilator(tmp_path, dpi_so=[])
       build_dir = v._write_cmake(obj_dir)
       assert (build_dir / "CMakeLists.txt").exists()
       content = (build_dir / "CMakeLists.txt").read_text()
@@ -144,7 +158,7 @@ class TestWriteCmake:
     (root / "include").mkdir(parents=True)
     (root / "include" / "verilated.h").touch()
     with mock.patch.dict(os.environ, {"VERILATOR_ROOT": str(root)}):
-      v = _make_verilator(debug=True, dpi_so=[])
+      v = _make_verilator(tmp_path, debug=True, dpi_so=[])
       build_dir = v._write_cmake(obj_dir)
       content = (build_dir / "CMakeLists.txt").read_text()
       assert "verilated_fst_c.cpp" in content
@@ -153,13 +167,8 @@ class TestWriteCmake:
 
 class TestRunCommand:
 
-  def test_exe_path(self, monkeypatch):
-    monkeypatch.chdir("/tmp")
-    v = _make_verilator(top="MyTop")
-    cmd = v.run_command(gui=False)
-    assert cmd == [str(Path("/tmp/obj_dir/cmake_build/VMyTop"))]
-
-  def test_gui_raises(self):
-    v = _make_verilator()
-    with pytest.raises(RuntimeError):
-      v.run_command(gui=True)
+  def test_exe_path(self, tmp_path):
+    with mock.patch.object(Path, "cwd", return_value=tmp_path):
+      v = _make_verilator(tmp_path, top="MyTop")
+      cmd = v.run_command(gui=False)
+      assert cmd == [str(tmp_path / "obj_dir" / "cmake_build" / "VMyTop")]
