@@ -66,7 +66,7 @@ class HostComms:
 # CHECK:         %req = esi.bundle.unpack %chanOutput from [[B0]] : !esi.bundle<[!esi.channel<i16> from "resp", !esi.channel<i24> to "req"]>
 # CHECK:         %rawOutput, %valid = esi.unwrap.vr %req, %ready : i24
 # CHECK:         [[R0:%.+]] = comb.extract %rawOutput from 0 : (i24) -> i16
-# CHECK:         %chanOutput, %ready = esi.wrap.vr [[R0]], %valid : i16
+# CHECK:         %chanOutput, %ready = esi.wrap.vr [[R0]], %valid {sv.namehint = "loopback"} : i16
 @unittestmodule(print=True)
 class LoopbackInOutTop(Module):
   clk = Clock()
@@ -129,7 +129,7 @@ class LoopbackCoercedCall(Module):
 # CHECK-NEXT:     %arg = esi.bundle.unpack [[R2]] from [[R0]] : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16, FIFO> from "result"]>
 # CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %arg, %ready : i24
 # CHECK-NEXT:     [[R1:%.+]] = comb.extract %rawOutput from 0 : (i24) -> i16
-# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R1]], %valid : i16
+# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R1]], %valid {sv.namehint = "loopback_src"} : i16
 # CHECK-NEXT:     hw.output
 # CHECK-NEXT:   }
 # CHECK-NEXT:   esi.service.std.func @_FuncService

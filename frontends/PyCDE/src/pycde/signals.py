@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from .support import get_user_loc, _obj_to_value_infer_type
+from .tracer import get_var_name
 from .types import (Array, Bit, Bits, Bundle, BundledChannel, Channel,
                     ChannelDirection, ChannelSignaling, Type)
 
@@ -25,6 +26,29 @@ def _FromCirctValue(value: ir.Value, type: Type | None = None) -> Signal:
   if type is None:
     type = _FromCirctType(value.type)
   return type._get_value_class()(value, type)
+
+
+def _apply_auto_name(signal: Signal, name: str) -> Signal:
+  """Apply an auto-derived name to a signal. In normal mode, sets sv.namehint.
+  In debug mode, wraps the signal with hw.wire with a symbol to create an
+  optimization barrier that preserves the name in the output Verilog."""
+  from .system import System
+  try:
+    system = System.current()
+    is_debug = system.debug
+  except RuntimeError:
+    is_debug = False
+
+  if is_debug:
+    from .module import _BlockContext
+    from .circt.dialects import hw as raw_hw
+    sym_name = _BlockContext.current().uniquify_symbol(name)
+    inner_sym = raw_hw.InnerSymAttr.get(ir.StringAttr.get(sym_name))
+    wire_op = raw_hw.WireOp(signal.value, name=name, inner_sym=inner_sym)
+    signal.value = wire_op.result
+  else:
+    signal.name = name
+  return signal
 
 
 class Signal:
@@ -589,6 +613,9 @@ class ArraySignal(Signal):
       v = hw.ArrayGetOp(self.value, idx)
       if self.name and isinstance(idx, int):
         v.name = self.name + f"__{idx}"
+      var_name = get_var_name(depth=2)
+      if var_name is not None:
+        _apply_auto_name(v, var_name)
       return v
 
   @__getitem__.register(slice)
@@ -606,6 +633,9 @@ class ArraySignal(Signal):
       ret = hw.ArraySliceOp(self.value, idxs[0], ret_type)
       if self.name is not None:
         ret.name = f"{self.name}_{idxs[0]}upto{idxs[1]}"
+      var_name = get_var_name(depth=2)
+      if var_name is not None:
+        _apply_auto_name(ret, var_name)
       return ret
 
   def slice(self, low_idx: Union[int, BitVectorSignal],
@@ -701,6 +731,9 @@ class StructSignal(Signal):
         v = hw.StructExtractOp(self.value, attr)
         if self.name:
           v.name = f"{self.name}__{attr}"
+        var_name = get_var_name(depth=1)
+        if var_name is not None:
+          _apply_auto_name(v, var_name)
         return v
     raise AttributeError(f"{type(self)} object has no attribute '{attr}'")
 
@@ -1222,8 +1255,14 @@ def wrap_opviews_with_values(dialect, module_name, excluded=[]):
           # Return the wrapped values, if any.
           converted_results = tuple(
               _FromCirctValue(res) for res in created.results)
-          return converted_results[0] if len(
-              converted_results) == 1 else converted_results
+          if len(converted_results) == 1:
+            signal = converted_results[0]
+            if signal.name is None:
+              var_name = get_var_name(depth=1, skip_pycde=True)
+              if var_name is not None:
+                _apply_auto_name(signal, var_name)
+            return signal
+          return converted_results
 
         return create
 
