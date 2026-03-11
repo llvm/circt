@@ -575,6 +575,8 @@ def WaitLevelOp : MooreOp<"wait_level", [
     the condition is true, execution resumes after the `moore.wait_level` operation.
     If the condition is false, the current process remains suspended until a signal
     change causes the body to be run again.
+
+    See IEEE 1800-2017 § 9.4.3 "Level-sensitive event control".
   }];
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
@@ -589,6 +591,8 @@ def DetectLevelOp : MooreOp<"detect_level", [
   let description = [{
     The `moore.detect_level` op is used inside the body of a `moore.wait_level`
     to check if the specified condition is true.
+
+    See IEEE 1800-2017 § 9.4.2 "Event control".
   }];
   let arguments = (ins AnySingleBitType:$condition);
   let assemblyFormat = [{
