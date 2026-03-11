@@ -817,12 +817,24 @@ def DomainCreateAnonOp
                              "firrtl::LayerBlockOp", "firrtl::MatchOp",
                              "firrtl::WhenOp", "sv::IfDefOp"]>,
                 DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-                DeclareOpInterfaceMethods<InferTypeOpInterface>,
+                HasCustomSSAName
 ]> {
   let summary = "Create an anonymous domain, without parameters set";
-  let arguments = (ins FlatSymbolRefAttr:$domain);
+  let arguments = (ins StrAttr:$name);
   let results = (outs Res<DomainType, "", [MemAlloc]>:$result);
-  let assemblyFormat = [{ attr-dict `:` type($result) `of` $domain }];
+  let assemblyFormat = [{
+    custom<ImplicitSSAName>(attr-dict) `:` type($result)
+  }];
+
+  let extraClassDeclaration = [{
+    FlatSymbolRefAttr getDomainAttr() {
+      return getResult().getType().getName();
+    }
+
+    StringRef getDomain() {
+      return getDomainAttr().getValue();
+    }
+  }];
 }
 
 def DomainCreateOp : FIRRTLOp<"domain.create", [
@@ -830,7 +842,6 @@ def DomainCreateOp : FIRRTLOp<"domain.create", [
                  "firrtl::LayerBlockOp", "firrtl::MatchOp",
                  "firrtl::WhenOp", "sv::IfDefOp"]>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-    DeclareOpInterfaceMethods<InferTypeOpInterface>,
     HasCustomSSAName
 ]> {
   let summary = "Create a named domain instance";
@@ -841,13 +852,23 @@ def DomainCreateOp : FIRRTLOp<"domain.create", [
 
     Example:
     ```mlir
-    %my_clock = firrtl.domain.create : !firrtl.domain of @ClockDomain
+    %my_clock = firrtl.domain.create : !firrtl.domain<@ClockDomain>
     ```
   }];
-  let arguments = (ins StrAttr:$name, FlatSymbolRefAttr:$domain);
+  let arguments = (ins StrAttr:$name);
   let results = (outs Res<DomainType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
-    custom<ImplicitSSAName>($name) attr-dict `:` type($result) `of` $domain
+    custom<ImplicitSSAName>($name) attr-dict `:` type($result)
+  }];
+
+  let extraClassDeclaration = [{
+    FlatSymbolRefAttr getDomainAttr() {
+      return getResult().getType().getName();
+    }
+
+    StringRef getDomain() {
+      return getDomainAttr().getValue();
+    }
   }];
 }
 

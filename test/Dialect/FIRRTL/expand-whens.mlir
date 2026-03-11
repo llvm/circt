@@ -565,10 +565,10 @@ firrtl.domain @ClockDomain
 // CHECK-LABEL: @domaindefine
 // Note: There's nothing to check here, just that this doesn't error.
 firrtl.module @domaindefine(
-  in %A : !firrtl.domain of @ClockDomain,
-  out %B : !firrtl.domain of @ClockDomain
+  in %A : !firrtl.domain<@ClockDomain()>,
+  out %B : !firrtl.domain<@ClockDomain()>
 ) {
-  firrtl.domain.define %B, %A
+  firrtl.domain.define %B, %A : !firrtl.domain<@ClockDomain()>
 }
 
 // CHECK-LABEL: @WhenCForce

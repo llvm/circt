@@ -1790,7 +1790,7 @@ def UnsafeDomainCastOp :
   let arguments = (ins PassiveType:$input, Variadic<DomainType>:$domains);
   let results = (outs PassiveType:$result);
   let assemblyFormat = [{
-    $input (`domains` $domains^)? attr-dict-with-keyword `:` qualified(type($input))
+    $input (`domains` `[` $domains^ `]`)? attr-dict-with-keyword `:` qualified(type($input)) (`domains` `[` qualified(type($domains))^ `]`)?
   }];
   let hasFolder = 1;
 }

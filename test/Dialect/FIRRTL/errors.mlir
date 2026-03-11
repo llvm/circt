@@ -3066,7 +3066,7 @@ firrtl.circuit "XMRDerefOpTargetsNonHierPath" {
 firrtl.circuit "UndefinedDomainKind" {
   firrtl.module @UndefinedDomainKind(
     // expected-error @below {{domain port 'A' has undefined domain kind 'ClockDomain'}}
-    in %A: !firrtl.domain of @ClockDomain
+    in %A: !firrtl.domain<@ClockDomain()>
   ) {}
 }
 
@@ -3076,7 +3076,7 @@ firrtl.circuit "WrongDomainKind" {
   firrtl.module @ClockDomain() {}
   firrtl.module @UndefinedDomainKind(
     // expected-error @below {{domain port 'A' has undefined domain kind 'ClockDomain'}}
-    in %A: !firrtl.domain of @ClockDomain
+    in %A: !firrtl.domain<@ClockDomain()>
   ) {}
 }
 
@@ -3086,7 +3086,7 @@ firrtl.circuit "DomainInfoNotArray" {
   firrtl.domain @ClockDomain
   // expected-error @below {{requires valid port domains}}
   firrtl.module @WrongDomainPortInfo(
-    in %A: !firrtl.domain of @ClockDomain
+    in %A: !firrtl.domain<@ClockDomain()>
   ) attributes {domainInfo = 0 : i32} {}
 }
 
@@ -3096,7 +3096,7 @@ firrtl.circuit "DomainInfoWrongSize" {
   firrtl.domain @ClockDomain
   // expected-error @below {{requires 2 port domains, but has 1}}
   firrtl.module @WrongDomainPortInfo(
-    in %A: !firrtl.domain of @ClockDomain,
+    in %A: !firrtl.domain<@ClockDomain()>,
     in %a: !firrtl.uint<1>
   ) attributes {domainInfo = [@ClockDomain]} {}
 }
@@ -3107,7 +3107,7 @@ firrtl.circuit "WrongDomainPortInfo" {
   firrtl.domain @ClockDomain
   // expected-error @below {{domain information for domain port 'A' must be a 'FlatSymbolRefAttr'}}
   firrtl.module @WrongDomainPortInfo(
-    in %A: !firrtl.domain of @ClockDomain
+    in %A: !firrtl.domain<@ClockDomain()>
   ) attributes {domainInfo = [0 : i32]} {}
 }
 
@@ -3158,13 +3158,13 @@ firrtl.circuit "DomainAssociationOOB" {
 firrtl.circuit "Top" {
   firrtl.domain @ClockDomain
   firrtl.module @Top(
-    in  %i: !firrtl.domain of @ClockDomain,
-    out %o: !firrtl.domain of @ClockDomain
+    in  %i: !firrtl.domain<@ClockDomain()>,
+    out %o: !firrtl.domain<@ClockDomain()>
   ) {
     // expected-error @below {{destination cannot be driven by multiple operations}}
-    firrtl.domain.define %o, %i
+    firrtl.domain.define %o, %i : !firrtl.domain<@ClockDomain()>
     // expected-note @below {{other driver is here}}
-    firrtl.domain.define %o, %i
+    firrtl.domain.define %o, %i : !firrtl.domain<@ClockDomain()>
   }
 }
 
@@ -3174,13 +3174,13 @@ firrtl.circuit "Top" {
 
 firrtl.circuit "Top" {
   firrtl.domain @ClockDomain
-  firrtl.extmodule @Ext(in i: !firrtl.domain of @ClockDomain)
-  firrtl.module @Top(in %i: !firrtl.domain of @ClockDomain) {
-    %ext_i = firrtl.instance ext @Ext(in  i: !firrtl.domain of @ClockDomain)
+  firrtl.extmodule @Ext(in i: !firrtl.domain<@ClockDomain()>)
+  firrtl.module @Top(in %i: !firrtl.domain<@ClockDomain()>) {
+    %ext_i = firrtl.instance ext @Ext(in  i: !firrtl.domain<@ClockDomain()>)
     // expected-error @below {{destination cannot be driven by multiple operations}}
-    firrtl.domain.define %ext_i, %i
+    firrtl.domain.define %ext_i, %i : !firrtl.domain<@ClockDomain()>
     // expected-note @below {{other driver is here}}
-    firrtl.domain.define %ext_i, %i
+    firrtl.domain.define %ext_i, %i : !firrtl.domain<@ClockDomain()>
   }
 }
 
@@ -3191,9 +3191,10 @@ firrtl.circuit "Top" {
 firrtl.circuit "Top" {
   firrtl.domain @ClockDomain
   firrtl.domain @PowerDomain
-  firrtl.module @Top(in %i: !firrtl.domain of @ClockDomain, out %o : !firrtl.domain of @PowerDomain) {
-    // expected-error @below {{source domain type @ClockDomain does not match destination domain type @PowerDomain}}
-    firrtl.domain.define %o, %i
+  // expected-note @below {{prior use here}}
+  firrtl.module @Top(in %i: !firrtl.domain<@ClockDomain()>, out %o : !firrtl.domain<@PowerDomain()>) {
+    // expected-error @below {{use of value '%i' expects different type than prior uses}}
+    firrtl.domain.define %o, %i : !firrtl.domain<@PowerDomain()>
   }
 }
 
@@ -3204,10 +3205,11 @@ firrtl.circuit "Top" {
 firrtl.circuit "Top" {
   firrtl.domain @ClockDomain
   firrtl.domain @PowerDomain
-  firrtl.module @Top(out %o : !firrtl.domain of @PowerDomain) {
-    %i = "test"() : () -> !firrtl.domain
-    // expected-error @below {{could not determine domain-type of source}}
-    firrtl.domain.define %o, %i
+  firrtl.module @Top(out %o : !firrtl.domain<@PowerDomain()>) {
+    // expected-note @below {{prior use here}}
+    %i = "test"() : () -> !firrtl.domain<@ClockDomain()>
+    // expected-error @below {{use of value}}
+    firrtl.domain.define %o, %i : !firrtl.domain<@PowerDomain()>
   }
 }
 
@@ -3238,15 +3240,15 @@ firrtl.circuit "WrongInstanceDomainInfo" {
   firrtl.domain @ClockDomain
   // expected-note @below {{original module declared here}}
   firrtl.module @Foo(
-    in %A : !firrtl.domain of @ClockDomain,
-    in %B : !firrtl.domain of @ClockDomain,
+    in %A : !firrtl.domain<@ClockDomain()>,
+    in %B : !firrtl.domain<@ClockDomain()>,
     in %a : !firrtl.uint<1> domains [%A]
   ) {}
   firrtl.module @WrongInstanceDomainInfo() {
   // expected-error @below {{op domain info for "a" must be '[0 : ui32]', but got '[1 : ui32]'}}
     %foo_A, %foo_B, %foo_a = firrtl.instance foo @Foo(
-      in A : !firrtl.domain of @ClockDomain,
-      in B : !firrtl.domain of @ClockDomain,
+      in A : !firrtl.domain<@ClockDomain()>,
+      in B : !firrtl.domain<@ClockDomain()>,
       in a : !firrtl.uint<1> domains [B]
     )
   }
@@ -3261,15 +3263,15 @@ firrtl.circuit "WrongInstanceChoiceDomainInfo" {
   firrtl.domain @ClockDomain
   // expected-note @below {{original module declared here}}
   firrtl.module @Foo(
-    in %A : !firrtl.domain of @ClockDomain,
-    in %B : !firrtl.domain of @ClockDomain,
+    in %A : !firrtl.domain<@ClockDomain()>,
+    in %B : !firrtl.domain<@ClockDomain()>,
     in %a : !firrtl.uint<1> domains [%A]
   ) {}
   firrtl.module @WrongInstanceChoiceDomainInfo() {
     // expected-error @below {{op domain info for "a" must be '[0 : ui32]', but got '[1 : ui32]'}}
     %foo_A, %foo_B, %foo_a = firrtl.instance_choice foo @Foo alternatives @Platform { @FPGA -> @Foo } (
-      in A : !firrtl.domain of @ClockDomain,
-      in B : !firrtl.domain of @ClockDomain,
+      in A : !firrtl.domain<@ClockDomain()>,
+      in B : !firrtl.domain<@ClockDomain()>,
       in a : !firrtl.uint<1> domains [B]
     )
   }
@@ -3280,7 +3282,7 @@ firrtl.circuit "WrongInstanceChoiceDomainInfo" {
 firrtl.circuit "UndefinedDomainInAnonDomain" {
   firrtl.module @UndefinedDomainInAnonDomain() {
     // expected-error @below {{references undefined symbol '@Foo'}}
-    %0 = firrtl.domain.anon : !firrtl.domain of @Foo
+    %0 = firrtl.domain.anon : !firrtl.domain<@Foo()>
   }
 }
 
@@ -3290,7 +3292,7 @@ firrtl.circuit "AnonDomainPointingAtNonDomain" {
   firrtl.extmodule @Foo()
   firrtl.module @AnonDomainPointingAtNonDomain() {
     // expected-error @below {{references symbol '@Foo' which is not a domain}}
-    %0 = firrtl.domain.anon : !firrtl.domain of @Foo
+    %0 = firrtl.domain.anon : !firrtl.domain<@Foo()>
   }
 }
 
@@ -3299,7 +3301,7 @@ firrtl.circuit "AnonDomainPointingAtNonDomain" {
 firrtl.circuit "UndefinedDomainInCreateDomain" {
   firrtl.module @UndefinedDomainInCreateDomain() {
     // expected-error @below {{references undefined symbol '@Foo'}}
-    %my_domain = firrtl.domain.create : !firrtl.domain of @Foo
+    %my_domain = firrtl.domain.create : !firrtl.domain<@Foo()>
   }
 }
 
@@ -3309,7 +3311,7 @@ firrtl.circuit "CreateDomainPointingAtNonDomain" {
   firrtl.extmodule @Foo()
   firrtl.module @CreateDomainPointingAtNonDomain() {
     // expected-error @below {{references symbol '@Foo' which is not a domain}}
-    %my_domain = firrtl.domain.create : !firrtl.domain of @Foo
+    %my_domain = firrtl.domain.create : !firrtl.domain<@Foo()>
   }
 }
 
@@ -3367,4 +3369,70 @@ firrtl.circuit "OptionCaseWrongSymbolType" {
   }
 
   firrtl.module @OptionCaseWrongSymbolType() {}
+}
+
+// -----
+
+firrtl.circuit "DomainTypeMismatch" {
+  firrtl.domain @A
+  firrtl.domain @B [
+    #firrtl.domain.field<"voltage", !firrtl.integer>
+  ]
+
+  firrtl.module @DomainTypeMismatch(
+    // expected-error @below {{domain port 'b' has type '!firrtl.domain<@B()>' which does not match the domain definition, expected '!firrtl.domain<@B(voltage: !firrtl.integer)>'}}
+    in %b: !firrtl.domain<@B()>
+  ) {}
+}
+
+// -----
+
+firrtl.circuit "DomainTypeWrongFields" {
+  firrtl.domain @A [
+    #firrtl.domain.field<"voltage", !firrtl.integer>
+  ]
+
+  firrtl.module @DomainTypeWrongFields(
+    // expected-error @below {{domain port 'a' has type '!firrtl.domain<@A(voltage: !firrtl.string)>' which does not match the domain definition, expected '!firrtl.domain<@A(voltage: !firrtl.integer)>'}}
+    in %a: !firrtl.domain<@A(voltage: !firrtl.string)>
+  ) {}
+}
+
+// -----
+
+firrtl.circuit "WireDomainTypeMismatch" {
+  firrtl.domain @A [
+    #firrtl.domain.field<"name", !firrtl.string>
+  ]
+
+  firrtl.module @WireDomainTypeMismatch() {
+    // expected-error @below {{domain type has 0 fields but domain definition has 1 fields}}
+    %w = firrtl.wire : !firrtl.domain<@A()>
+  }
+}
+
+// -----
+
+firrtl.circuit "DomainCreateTypeMismatch" {
+  firrtl.domain @A [
+    #firrtl.domain.field<"voltage", !firrtl.integer>
+  ]
+
+  firrtl.module @DomainCreateTypeMismatch() {
+    // expected-error @below {{domain type has 0 fields but domain definition has 1 fields}}
+    %d = firrtl.domain.create : !firrtl.domain<@A()>
+  }
+}
+
+// -----
+
+firrtl.circuit "DomainAnonTypeMismatch" {
+  firrtl.domain @A [
+    #firrtl.domain.field<"id", !firrtl.integer>
+  ]
+
+  firrtl.module @DomainAnonTypeMismatch() {
+    // expected-error @below {{domain type has 0 fields but domain definition has 1 fields}}
+    %d = firrtl.domain.anon : !firrtl.domain<@A()>
+  }
 }
