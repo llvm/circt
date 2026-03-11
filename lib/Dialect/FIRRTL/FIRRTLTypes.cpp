@@ -553,14 +553,9 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
   if (name == "domain") {
     // Parse: !firrtl.domain<@SymbolName> or
     //        !firrtl.domain<@SymbolName(name: type, ...)>
-    if (parser.parseLess())
-      return failure();
-
     DomainType domainType;
-    if (DomainType::parseInterface(parser, domainType))
-      return failure();
-
-    if (parser.parseGreater())
+    if (parser.parseLess() || DomainType::parseInterface(parser, domainType) ||
+        parser.parseGreater())
       return failure();
 
     result = domainType;
