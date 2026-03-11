@@ -562,6 +562,44 @@ def DetectEventOp : MooreOp<"detect_event", [
   }];
 }
 
+def WaitLevelOp : MooreOp<"wait_level", [
+  SingleBlock,
+  NoTerminator
+]> {
+  let summary = "Suspend execution until a condition is true";
+  let description = [{
+    The `moore.wait_level` op suspends execution of the current process until
+    its body signals that a given condition is true. Conceptually, the body of
+    this op is executed once immediately, and again whenever any potentially
+    relevant signal has changed. If the contained `moore.detect_level` op determines
+    the condition is true, execution resumes after the `moore.wait_level` operation.
+    If the condition is false, the current process remains suspended until a signal
+    change causes the body to be run again.
+
+    See IEEE 1800-2017 § 9.4.3 "Level-sensitive event control".
+  }];
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    attr-dict-with-keyword $body
+  }];
+}
+
+def DetectLevelOp : MooreOp<"detect_level", [
+  HasParent<"WaitLevelOp">
+]> {
+  let summary = "Check if a condition is true";
+  let description = [{
+    The `moore.detect_level` op is used inside the body of a `moore.wait_level`
+    to check if the specified condition is true.
+
+    See IEEE 1800-2017 § 9.4.2 "Event control".
+  }];
+  let arguments = (ins AnySingleBitType:$condition);
+  let assemblyFormat = [{
+    $condition attr-dict `:` type($condition)
+  }];
+}
+
 def WaitDelayOp : MooreOp<"wait_delay"> {
   let summary = "Suspend execution for a given amount of time";
   let description = [{
@@ -3193,6 +3231,21 @@ def ForkJoinOp : MooreOp<"fork", [
   let assemblyFormat = [{
     $kind attr-dict-with-keyword $body
   }];
+}
+
+// TODO: The mechanics of tracking child processes and signalling completion
+// at core dialect level are yet to be decided. This op may need to be
+// extended later to facilitate lowering to the eventual representation.
+def WaitForkOp : MooreOp<"wait_fork"> {
+  let summary = "Wait for child processes to complete";
+  let description = [{
+    Suspends execution of the current process until all its immediate
+    child processes have completed or been disabled. Non-immediate
+    descendant processes are not considered and the process may resume
+    even if these are still active.
+  }];
+
+  let assemblyFormat = [{ attr-dict }];
 }
 
 #endif // CIRCT_DIALECT_MOORE_MOOREOPS
