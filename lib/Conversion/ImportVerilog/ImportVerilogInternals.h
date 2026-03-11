@@ -297,10 +297,16 @@ struct Context {
       modules;
 
   /// Expanded interface instances, keyed by the InstanceSymbol pointer.
-  /// Each entry maps body members to their expanded SSA values.
-  DenseMap<const slang::ast::InstanceSymbol *,
-           std::unique_ptr<InterfaceLowering>>
-      interfaceInstances;
+  /// Each entry maps body members to their expanded SSA values. Scoped
+  /// per-module so entries are cleaned up when a module's conversion ends.
+  using InterfaceInstances =
+      llvm::ScopedHashTable<const slang::ast::InstanceSymbol *,
+                            InterfaceLowering *>;
+  using InterfaceInstanceScope = InterfaceInstances::ScopeTy;
+  InterfaceInstances interfaceInstances;
+  /// Owning storage for InterfaceLowering objects
+  /// because ScopedHashTable stores values by copy.
+  SmallVector<std::unique_ptr<InterfaceLowering>> interfaceInstanceStorage;
   /// A list of modules for which the header has been created, but the body has
   /// not been converted yet.
   std::queue<const slang::ast::InstanceBodySymbol *> moduleWorklist;

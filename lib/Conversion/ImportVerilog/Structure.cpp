@@ -337,7 +337,9 @@ struct ModuleVisitor : public BaseVisitor {
       // Silently skip other members (modports, parameters , etc.)
     }
 
-    context.interfaceInstances[&instNode] = std::move(lowering);
+    context.interfaceInstanceStorage.push_back(std::move(lowering));
+    context.interfaceInstances.insert(
+        &instNode, context.interfaceInstanceStorage.back().get());
     return success();
   }
 
@@ -548,16 +550,15 @@ struct ModuleVisitor : public BaseVisitor {
       }
       const auto *connInst = it->second;
       // Look up the InterfaceLowering for that instance.
-      auto ifaceIt = context.interfaceInstances.find(connInst);
-      if (ifaceIt == context.interfaceInstances.end()) {
+      auto *ifaceLowering = context.interfaceInstances.lookup(connInst);
+      if (!ifaceLowering) {
         mlir::emitError(loc)
             << "interface instance `" << connInst->name << "` was not expanded";
         return failure();
       }
-      auto &ifaceLowering = *ifaceIt->second;
       // Find the expanded SSA value for this body member.
-      auto valIt = ifaceLowering.expandedMembers.find(fp.bodySym);
-      if (valIt == ifaceLowering.expandedMembers.end()) {
+      auto valIt = ifaceLowering->expandedMembers.find(fp.bodySym);
+      if (valIt == ifaceLowering->expandedMembers.end()) {
         mlir::emitError(loc)
             << "unresolved interface port signal `" << fp.name << "`";
         return failure();
@@ -1160,6 +1161,7 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
   builder.setInsertionPointToEnd(lowering.op.getBody());
 
   ValueSymbolScope scope(valueSymbols);
+  InterfaceInstanceScope ifaceScope(interfaceInstances);
 
   // Keep track of the local time scale. `getTimeScale` automatically looks
   // through parent scopes to find the time scale effective locally.
