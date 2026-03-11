@@ -38,10 +38,30 @@ struct PortLowering {
   BlockArgument arg;
 };
 
+/// Lowering information for a single signal flattened from an interface port.
+struct FlattenedIfacePort {
+  StringAttr name;
+  hw::ModulePort::Direction direction;
+  mlir::Type type;
+  Location loc;
+  BlockArgument arg;
+  /// the origin interface port symbol this was flattened from.
+  const slang::ast::InterfacePortSymbol *origin;
+  /// the interface body member (VariableSymbol , NetSymbol)
+  const slang::ast::Symbol *bodySym;
+};
+
+/// Lowering information for an expanded interface instance. Maps each interface
+/// body member to its expanded SSA value (moore.variable or moore.net).
+struct InterfaceLowering {
+  DenseMap<const slang::ast::Symbol *, Value> expandedMembers;
+};
+
 /// Module lowering information.
 struct ModuleLowering {
   moore::SVModuleOp op;
   SmallVector<PortLowering> ports;
+  SmallVector<FlattenedIfacePort> ifacePorts;
   DenseMap<const slang::syntax::SyntaxNode *, const slang::ast::PortSymbol *>
       portsBySyntaxNode;
 };
@@ -275,6 +295,18 @@ struct Context {
   DenseMap<const slang::ast::InstanceBodySymbol *,
            std::unique_ptr<ModuleLowering>>
       modules;
+
+  /// Expanded interface instances, keyed by the InstanceSymbol pointer.
+  /// Each entry maps body members to their expanded SSA values. Scoped
+  /// per-module so entries are cleaned up when a module's conversion ends.
+  using InterfaceInstances =
+      llvm::ScopedHashTable<const slang::ast::InstanceSymbol *,
+                            InterfaceLowering *>;
+  using InterfaceInstanceScope = InterfaceInstances::ScopeTy;
+  InterfaceInstances interfaceInstances;
+  /// Owning storage for InterfaceLowering objects
+  /// because ScopedHashTable stores values by copy.
+  SmallVector<std::unique_ptr<InterfaceLowering>> interfaceInstanceStorage;
   /// A list of modules for which the header has been created, but the body has
   /// not been converted yet.
   std::queue<const slang::ast::InstanceBodySymbol *> moduleWorklist;

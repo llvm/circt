@@ -200,3 +200,18 @@ module Foo;
     s[0] = b;
   end
 endmodule
+
+// -----
+interface Inner;
+  logic x;
+endinterface
+
+interface Outer;
+  Inner nested();
+  logic y;
+endinterface
+
+module UsesOuter;
+  // expected-error @below {{nested interface instances are not supported: `nested` inside `o`}}
+  Outer o();
+endmodule

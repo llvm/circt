@@ -4624,3 +4624,169 @@ module UnconnectedPortsTop;
     .d()  // Unconnected ref
   );
 endmodule
+
+//===----------------------------------------------------------------------===//
+// Interfaces
+//===----------------------------------------------------------------------===//
+
+// Test A: Interface instantiation in module body expands to variables.
+interface IfaceVars;
+  logic [7:0] data;
+  logic valid;
+endinterface
+
+// CHECK-LABEL: moore.module @ExpandsIface() {
+// CHECK:         %bus_data = moore.variable : <l8>
+// CHECK:         %bus_valid = moore.variable : <l1>
+// CHECK:         moore.output
+// CHECK:       }
+module ExpandsIface;
+  IfaceVars bus();
+endmodule
+
+// Test B: Interface port with modport flattens to output ports.
+interface IfaceModport;
+  logic [7:0] data;
+  logic valid;
+  modport master(output data, output valid);
+endinterface
+
+// CHECK-LABEL: moore.module private @HasModport(out bus_data : !moore.l8, out bus_valid : !moore.l1) {
+// CHECK:         %bus_data = moore.variable : <l8>
+// CHECK:         [[D:%.+]] = moore.read %bus_data : <l8>
+// CHECK:         %bus_valid = moore.variable : <l1>
+// CHECK:         [[V:%.+]] = moore.read %bus_valid : <l1>
+// CHECK:         moore.output [[D]], [[V]] : !moore.l8, !moore.l1
+// CHECK:       }
+module HasModport(IfaceModport.master bus);
+endmodule
+
+// CHECK-LABEL: moore.module @TopModport() {
+// CHECK:         %ifc_data = moore.variable : <l8>
+// CHECK:         %ifc_valid = moore.variable : <l1>
+// CHECK:         %sub.bus_data, %sub.bus_valid = moore.instance "sub" @HasModport() -> (bus_data: !moore.l8, bus_valid: !moore.l1)
+// CHECK:         moore.assign %ifc_data, %sub.bus_data : l8
+// CHECK:         moore.assign %ifc_valid, %sub.bus_valid : l1
+// CHECK:         moore.output
+// CHECK:       }
+module TopModport;
+  IfaceModport ifc();
+  HasModport sub(.bus(ifc));
+endmodule
+
+// Test C: Interface port without modport flattens to ref-typed input ports.
+interface IfaceNoModport;
+  logic req;
+  logic [7:0] addr;
+endinterface
+
+// CHECK-LABEL: moore.module private @HasNoModport(in %bus_req : !moore.ref<l1>, in %bus_addr : !moore.ref<l8>) {
+// CHECK:         moore.output
+// CHECK:       }
+module HasNoModport(IfaceNoModport bus);
+endmodule
+
+// CHECK-LABEL: moore.module @TopNoModport() {
+// CHECK:         %ifc_req = moore.variable : <l1>
+// CHECK:         %ifc_addr = moore.variable : <l8>
+// CHECK:         moore.instance "sub" @HasNoModport(bus_req: [[REQ:%.+]]: !moore.ref<l1>, bus_addr: [[ADDR:%.+]]: !moore.ref<l8>) -> ()
+// CHECK:         moore.output
+// CHECK:       }
+module TopNoModport;
+  IfaceNoModport ifc();
+  HasNoModport sub(.bus(ifc));
+endmodule
+
+// Test D: Interface with nets expands to moore.net ops.
+interface IfaceNets;
+  wire [3:0] sig;
+  wire en;
+endinterface
+
+// CHECK-LABEL: moore.module @ExpandsIfaceNets() {
+// CHECK:         %bus_sig = moore.net wire : <l4>
+// CHECK:         %bus_en = moore.net wire : <l1>
+// CHECK:         moore.output
+// CHECK:       }
+module ExpandsIfaceNets;
+  IfaceNets bus();
+endmodule
+
+// Test E: Module with multiple interface ports.
+interface IfaceA;
+  logic [7:0] x;
+  modport drv(output x);
+endinterface
+
+interface IfaceB;
+  logic y;
+  modport rcv(input y);
+endinterface
+
+// CHECK-LABEL: moore.module private @MultiIfacePorts(out a_x : !moore.l8, in %b_y : !moore.l1) {
+// CHECK:         %a_x = moore.variable : <l8>
+// CHECK:         [[RX:%.+]] = moore.read %a_x : <l8>
+// CHECK:         moore.output [[RX]] : !moore.l8
+// CHECK:       }
+module MultiIfacePorts(IfaceA.drv a, IfaceB.rcv b);
+endmodule
+
+// CHECK-LABEL: moore.module @TopMultiIface() {
+// CHECK:         %ia_x = moore.variable : <l8>
+// CHECK:         %ib_y = moore.variable : <l1>
+// CHECK:         %dut.a_x = moore.instance "dut" @MultiIfacePorts(b_y: [[BY:%.+]]: !moore.l1) -> (a_x: !moore.l8)
+// CHECK:         moore.assign %ia_x, %dut.a_x : l8
+// CHECK:         moore.output
+// CHECK:       }
+module TopMultiIface;
+  IfaceA ia();
+  IfaceB ib();
+  MultiIfacePorts dut(.a(ia), .b(ib));
+endmodule
+
+// Test F: Two instances of the same interface type in one module.
+// CHECK-LABEL: moore.module @TwoInstances() {
+// CHECK:         %bus1_data = moore.variable : <l8>
+// CHECK:         %bus1_valid = moore.variable : <l1>
+// CHECK:         %bus2_data = moore.variable : <l8>
+// CHECK:         %bus2_valid = moore.variable : <l1>
+// CHECK:         moore.output
+// CHECK:       }
+module TwoInstances;
+  IfaceVars bus1();
+  IfaceVars bus2();
+endmodule
+
+// Test G: Two ports of the same interface type on one module.
+// CHECK-LABEL: moore.module private @TwoPortsSameType(out a_data : !moore.l8, out a_valid : !moore.l1, out b_data : !moore.l8, out b_valid : !moore.l1) {
+// CHECK:         %a_data = moore.variable : <l8>
+// CHECK:         [[AD:%.+]] = moore.read %a_data : <l8>
+// CHECK:         %a_valid = moore.variable : <l1>
+// CHECK:         [[AV:%.+]] = moore.read %a_valid : <l1>
+// CHECK:         %b_data = moore.variable : <l8>
+// CHECK:         [[BD:%.+]] = moore.read %b_data : <l8>
+// CHECK:         %b_valid = moore.variable : <l1>
+// CHECK:         [[BV:%.+]] = moore.read %b_valid : <l1>
+// CHECK:         moore.output [[AD]], [[AV]], [[BD]], [[BV]] : !moore.l8, !moore.l1, !moore.l8, !moore.l1
+// CHECK:       }
+module TwoPortsSameType(IfaceModport.master a, IfaceModport.master b);
+endmodule
+
+
+// CHECK-LABEL: moore.module @TopTwoPorts() {
+// CHECK:         %i1_data = moore.variable : <l8>
+// CHECK:         %i1_valid = moore.variable : <l1>
+// CHECK:         %i2_data = moore.variable : <l8>
+// CHECK:         %i2_valid = moore.variable : <l1>
+// CHECK:         %dut.a_data, %dut.a_valid, %dut.b_data, %dut.b_valid = moore.instance "dut" @TwoPortsSameType() -> (a_data: !moore.l8, a_valid: !moore.l1, b_data: !moore.l8, b_valid: !moore.l1)
+// CHECK:         moore.assign %i1_data, %dut.a_data : l8
+// CHECK:         moore.assign %i1_valid, %dut.a_valid : l1
+// CHECK:         moore.assign %i2_data, %dut.b_data : l8
+// CHECK:         moore.assign %i2_valid, %dut.b_valid : l1
+// CHECK:         moore.output
+// CHECK:       }
+module TopTwoPorts;
+  IfaceModport i1();
+  IfaceModport i2();
+  TwoPortsSameType dut(.a(i1), .b(i2));
+endmodule
