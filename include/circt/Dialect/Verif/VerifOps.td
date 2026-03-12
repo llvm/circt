@@ -487,6 +487,7 @@ def SimulationOp : VerifOp<"simulation", [
 
 def SymbolicValueOp : VerifOp<"symbolic_value", [
   ParentOneOf<["verif::FormalOp", "hw::HWModuleOp"]>,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
 ]>{
   let summary = "Create a symbolic value for formal verification";
   let description = [{
