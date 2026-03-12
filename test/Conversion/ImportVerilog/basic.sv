@@ -3959,6 +3959,14 @@ module Events;
   initial @(e) dummyA();
 endmodule
 
+
+// CHECK-LABEL: moore.class.classdecl @Foo implements [@Bar]
+interface class Bar #(parameter int N); endclass
+
+parameter N = 1;
+class Foo implements Bar#(N); endclass
+
+
 // CHECK-LABEL:   moore.class.classdecl @nullableClass {
 // CHECK:  }
 
