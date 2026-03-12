@@ -4418,11 +4418,11 @@ endmodule
 // CHECK:             [[AAR:%.+]] = moore.read [[AA]] : <assoc_array<i32, string>>
 // CHECK:             [[CA1:%.+]] = moore.constant_string "a" : i8
 // CHECK:             [[ITS1:%.+]] = moore.int_to_string [[CA1]] : i8
-// CHECK:             [[E0:%.+]] = moore.assoc_array_extract [[AAR]][[[ITS1]]] : <i32, string>, string -> i32
+// CHECK:             [[E0:%.+]] = moore.assoc_array_extract [[AAR]][[[ITS1]]] : <i32, string>
 // CHECK:             moore.blocking_assign [[AAE]], [[E0]] : i32
 // CHECK:             [[CA2:%.+]] = moore.constant_string "a" : i8
 // CHECK:             [[ITS2:%.+]] = moore.int_to_string [[CA2]] : i8
-// CHECK:             [[R0:%.+]] = moore.assoc_array_extract_ref [[AA]][[[ITS2]]] : <assoc_array<i32, string>>, string -> <i32>
+// CHECK:             [[R0:%.+]] = moore.assoc_array_extract_ref [[AA]][[[ITS2]]] : <assoc_array<i32, string>>
 // CHECK:             [[AAER:%.+]] = moore.read [[AAE]] : <i32>
 // CHECK:             moore.blocking_assign [[R0]], [[AAER]] : i32
 // CHECK:             moore.return
@@ -4443,7 +4443,7 @@ endmodule
 // CHECK:           [[AA:%.+]] = moore.variable : <assoc_array<i32, i32>>
 // CHECK:           moore.procedure initial {
 // CHECK:             [[C0:%.+]] = moore.constant 0 : i32
-// CHECK:             moore.assoc_array.delete index [[C0]] from [[AA]] : <assoc_array<i32, i32>>[i32]
+// CHECK:             moore.assoc_array.delete index [[C0]] from [[AA]] : <assoc_array<i32, i32>>
 // CHECK:             moore.assoc_array.clear [[AA]] : <assoc_array<i32, i32>>
 // CHECK:             moore.return
 // CHECK:           }
@@ -4483,7 +4483,7 @@ endmodule
 // CHECK:           [[AA:%.+]] = moore.variable : <assoc_array<i32, i32>>
 // CHECK:           moore.procedure initial {
 // CHECK:             [[C0:%.+]] = moore.constant 0 : i32
-// CHECK:             [[S1:%.+]] = moore.assoc_array.exists [[C0]] in [[AA]] : <assoc_array<i32, i32>>[i32]
+// CHECK:             [[S1:%.+]] = moore.assoc_array.exists [[C0]] in [[AA]] : <assoc_array<i32, i32>>
 // CHECK:             moore.return
 // CHECK:           }
 // CHECK:           moore.output
