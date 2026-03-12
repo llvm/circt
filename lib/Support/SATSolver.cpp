@@ -60,22 +60,18 @@ public:
       solver->addConstraint(literalToExpr(lit));
     assumptions.clear();
     auto result = solver->check();
-    if (result == std::optional<bool>(true)) {
-      lastResult = kSAT;
-      return kSAT;
-    }
-    if (result == std::optional<bool>(false)) {
-      lastResult = kUNSAT;
-      return kUNSAT;
-    }
-    lastResult = kUNKNOWN;
-    return kUNKNOWN;
+    if (!result)
+      return lastResult = kUNKNOWN;
+    return lastResult = (*result ? kSAT : kUNSAT);
   }
 
   int val(int v) const override {
     if (lastResult != kSAT || v <= 0 || v > maxVariable)
       return 0;
     llvm::APSInt value(llvm::APInt(1, 0), true);
+    // Z3 returns an interpretation for all variables, even those not involved
+    // in the problem. If the variable is not involved, return 0 to indicate
+    // "undefined" rather than a potentially misleading true/false value.
     if (!solver->getInterpretation(variables[v - 1], value))
       return 0;
     if (value != 0)

@@ -13,6 +13,7 @@
 using namespace circt;
 
 TEST(SatSolverTest, UnitClauseAndAssumption) {
+  // -DLLVM_ENABLE_Z3_SOLVER=ON is required to run this test.
   auto solver = createZ3SATSolver();
   if (!solver)
     GTEST_SKIP() << "Z3 is not available in this build.";
@@ -35,6 +36,7 @@ TEST(SatSolverTest, UnitClauseAndAssumption) {
 }
 
 TEST(SatSolverTest, AssumptionsAreScopedToSolve) {
+  // -DLLVM_ENABLE_Z3_SOLVER=On is required to run this test.
   auto solver = createZ3SATSolver();
   if (!solver)
     GTEST_SKIP() << "Z3 is not available in this build.";
