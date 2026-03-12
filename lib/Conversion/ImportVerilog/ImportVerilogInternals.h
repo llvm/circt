@@ -253,20 +253,11 @@ struct Context {
       moore::IntFormat defaultFormat = moore::IntFormat::Decimal,
       bool appendNewline = false);
 
-  /// Convert system function calls only have arity-0.
-  FailureOr<Value>
-  convertSystemCallArity0(const slang::ast::SystemSubroutine &subroutine,
-                          Location loc);
-
-  /// Convert system function calls only have arity-1.
-  FailureOr<Value>
-  convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
-                          Location loc, Value value);
-
-  /// Convert system function calls with arity-2.
-  FailureOr<Value>
-  convertSystemCallArity2(const slang::ast::SystemSubroutine &subroutine,
-                          Location loc, Value value1, Value value2);
+  /// Convert system function calls. Returns a null `Value` on failure after
+  /// emitting an error.
+  Value convertSystemCall(const slang::ast::SystemSubroutine &subroutine,
+                          Location loc,
+                          std::span<const slang::ast::Expression *const> args);
 
   /// Convert system function calls within properties and assertion with a
   /// single argument.
