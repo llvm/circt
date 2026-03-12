@@ -334,6 +334,17 @@ void SimulationOp::getAsmBlockArgumentNames(Region &region,
 }
 
 //===----------------------------------------------------------------------===//
+// SymbolicValueOp
+//===----------------------------------------------------------------------===//
+
+void SymbolicValueOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the op has an optional 'name' attribute, use it.
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (nameAttr && !nameAttr.getValue().empty())
+    setNameFn(getResult(), nameAttr.getValue());
+}
+
+//===----------------------------------------------------------------------===//
 // Generated code
 //===----------------------------------------------------------------------===//
 

@@ -84,8 +84,8 @@ void assumeContractHolds(OpBuilder &builder, IRMapping &mapping,
   // the contract ops into the worklist, by default the clone logic replaces
   // contract ops with the assume variant
   for (auto result : contract.getResults()) {
-    auto sym =
-        SymbolicValueOp::create(builder, result.getLoc(), result.getType());
+    auto sym = SymbolicValueOp::create(builder, result.getLoc(),
+                                       result.getType(), StringAttr({}));
     mapping.map(result, sym);
   }
   auto &contractOps = contract.getBody().front().getOperations();
@@ -107,8 +107,8 @@ void buildOpsToClone(OpBuilder &builder, IRMapping &mapping, Operation *op,
       workList.push(definingOp);
     } else {
       // Create symbolic values for arguments
-      auto sym = verif::SymbolicValueOp::create(builder, operand.getLoc(),
-                                                operand.getType());
+      auto sym = verif::SymbolicValueOp::create(
+          builder, operand.getLoc(), operand.getType(), StringAttr({}));
       mapping.map(operand, sym);
     }
   }
@@ -189,8 +189,8 @@ LogicalResult inlineContract(ContractOp &contract, OpBuilder &builder,
   if (assumeContract) {
     // Create symbolic values for results
     for (auto result : contract.getResults()) {
-      auto sym =
-          SymbolicValueOp::create(builder, result.getLoc(), result.getType());
+      auto sym = SymbolicValueOp::create(builder, result.getLoc(),
+                                         result.getType(), StringAttr({}));
       mapping.map(result, sym);
     }
   } else {
