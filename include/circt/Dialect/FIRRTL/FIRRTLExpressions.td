@@ -1832,15 +1832,7 @@ def DomainSubfieldOp : FIRRTLOp<"domain.subfield", [
 
     /// Create a DomainSubfieldOp with the given parameters.
     static DomainSubfieldOp create(OpBuilder &builder, Type resultType,
-                                   Value base, unsigned fieldIndex) {
-      OperationState state(builder.getUnknownLoc(),
-                           DomainSubfieldOp::getOperationName());
-      state.addOperands(base);
-      state.addAttribute("fieldIndex",
-                         builder.getI32IntegerAttr(fieldIndex));
-      state.addTypes(resultType);
-      return cast<DomainSubfieldOp>(builder.create(state));
-    }
+                                   Value base, unsigned fieldIndex);
 
     /// Get the field name for this field index
     StringAttr getFieldName();

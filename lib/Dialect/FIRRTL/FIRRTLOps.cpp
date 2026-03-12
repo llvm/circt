@@ -7377,6 +7377,16 @@ Type DomainSubfieldOp::inferReturnType(ValueRange operands,
                          loc);
 }
 
+DomainSubfieldOp DomainSubfieldOp::create(OpBuilder &builder, Type resultType,
+                                          Value base, unsigned fieldIndex) {
+  OperationState state(builder.getUnknownLoc(),
+                       DomainSubfieldOp::getOperationName());
+  state.addOperands(base);
+  state.addAttribute("fieldIndex", builder.getI32IntegerAttr(fieldIndex));
+  state.addTypes(resultType);
+  return cast<DomainSubfieldOp>(builder.create(state));
+}
+
 LogicalResult DomainSubfieldOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> location, ValueRange operands,
     DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
