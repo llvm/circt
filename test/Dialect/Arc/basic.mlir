@@ -423,6 +423,9 @@ func.func @SimGetSetTime() {
     %0 = arc.sim.get_time %model : !arc.sim.instance<@TimeTestModule>
     // CHECK: arc.sim.set_time %{{.*}}, %{{.*}} : !arc.sim.instance<@TimeTestModule>
     arc.sim.set_time %model, %0 : !arc.sim.instance<@TimeTestModule>
+    // CHECK: arc.sim.step %{{.*}} by %{{.*}} : !arc.sim.instance<@TimeTestModule>
+    %tstep = arith.constant 123 : i64
+    arc.sim.step %model by %tstep : !arc.sim.instance<@TimeTestModule>
   }
   return
 }

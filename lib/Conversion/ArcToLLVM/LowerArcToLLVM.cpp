@@ -617,6 +617,18 @@ struct SimStepOpLowering : public ModelAwarePattern<arc::SimStepOp> {
                               .getModel()
                               .getValue();
 
+    if (adaptor.getTimePostIncrement()) {
+      // Increment time after step
+      OpBuilder::InsertionGuard g(rewriter);
+      rewriter.setInsertionPointAfter(op);
+      auto oldTime =
+          arc::SimGetTimeOp::create(rewriter, op.getLoc(), op.getInstance());
+      auto newTime = LLVM::AddOp::create(rewriter, op.getLoc(), oldTime,
+                                         adaptor.getTimePostIncrement());
+      arc::SimSetTimeOp::create(rewriter, op.getLoc(), op.getInstance(),
+                                newTime);
+    }
+
     StringAttr evalFunc =
         rewriter.getStringAttr(evalSymbolFromModelName(modelName));
     rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, mlir::TypeRange(), evalFunc,
