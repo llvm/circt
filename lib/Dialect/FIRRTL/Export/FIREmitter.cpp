@@ -1822,7 +1822,9 @@ void Emitter::emitType(Type type, bool includeConst) {
         emitType(type.getElementType());
         ps << ">";
       })
-      .Case<DomainType>([&](DomainType type) { ps << "Domain"; })
+      .Case<DomainType>([&](DomainType type) {
+        ps << "Domain of " << PPExtString(type.getName().getValue());
+      })
       .Default([&](auto type) {
         llvm_unreachable("all types should be implemented");
       });
@@ -1831,21 +1833,16 @@ void Emitter::emitType(Type type, bool includeConst) {
 void Emitter::emitDomains(Attribute attr, ArrayRef<PortInfo> ports) {
   if (!attr)
     return;
-  if (auto domains = dyn_cast<ArrayAttr>(attr)) {
-    if (domains.empty())
-      return;
-    ps << " domains [";
-    ps.scopedBox(PP::ibox0, [&]() {
-      interleaveComma(domains, [&](Attribute attr) {
-        ps.addAsString(
-            ports[cast<IntegerAttr>(attr).getUInt()].name.getValue());
-      });
-      ps << "]";
+  auto domains = cast<ArrayAttr>(attr);
+  if (domains.empty())
+    return;
+  ps << " domains [";
+  ps.scopedBox(PP::ibox0, [&]() {
+    interleaveComma(domains, [&](Attribute attr) {
+      ps.addAsString(ports[cast<IntegerAttr>(attr).getUInt()].name.getValue());
     });
-  } else {
-    auto kind = cast<FlatSymbolRefAttr>(attr);
-    ps << " of " << PPExtString(kind.getValue());
-  }
+    ps << "]";
+  });
 }
 
 /// Emit a location as `@[<filename> <line>:<column>]` annotation, including a
