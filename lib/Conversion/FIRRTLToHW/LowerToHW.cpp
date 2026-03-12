@@ -1905,18 +1905,11 @@ FIRRTLModuleLowering::lowerFormalBody(verif::FormalOp newOp,
   auto newModule = cast<hw::HWModuleOp>(loweringState.getNewModule(oldModule));
 
   // Create a symbolic input for every input of the lowered module.
-  CircuitNamespace ns;
-  ns.add(oldModule.getParentOp());
   SmallVector<Value> symbolicInputs;
-  for (auto arg : newModule.getBody().getArguments()) {
-    // Generate a random name to track the symbolic values
-    StringAttr name =
-        StringAttr::get(newModule.getContext(),
-                        ns.newName(moduleName.getValue() +
-                                   ("_in_" + Twine(arg.getArgNumber()))));
+  for (auto arg : newModule.getBody().getArguments())
     symbolicInputs.push_back(verif::SymbolicValueOp::create(
-        builder, arg.getLoc(), arg.getType(), name));
-  }
+        builder, arg.getLoc(), arg.getType(),
+        newModule.getArgName(arg.getArgNumber())));
 
   // Instantiate the module with the given symbolic inputs.
   hw::InstanceOp::create(builder, newOp.getLoc(), newModule,
