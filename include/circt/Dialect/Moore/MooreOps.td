@@ -2222,7 +2222,7 @@ def AssocArrayPrevOp : MooreOp<"assoc_array.prev",
     value of the previous index in the associative array}];
   let description = [{
     See IEEE 1800-2023 § 7.9.7 "Prev()". Assigns to the given index variable 
-    the value of the preious index in the associative array. 
+    the value of the previous index in the associative array. 
     Returns 1 if there is a previous index in the associative array,
     otherwise returns 0.
     According to spec the returned size fits an `int`.
