@@ -616,7 +616,9 @@ static LogicalResult processBuffer(
     auto llvmModule = mlir::translateModuleToLLVMIR(module.get(), llvmContext);
     if (!llvmModule)
       return failure();
-    llvmModule->print(outputFile.value()->os(), nullptr);
+    llvmModule->print(outputFile.value()->os(), nullptr,
+                      /*ShouldPreserveUseListOrder=*/false,
+                      /*IsForDebug=*/false);
     return success();
   }
 
