@@ -1795,4 +1795,60 @@ def UnsafeDomainCastOp :
   let hasFolder = 1;
 }
 
+def DomainSubfieldOp : FIRRTLOp<"domain.subfield", [
+    Pure,
+    DeclareOpInterfaceMethods<InferTypeOpInterface>
+]> {
+  let summary = "Extract a field value from a domain instance";
+  let description = [{
+    Extracts a property value from a domain instance by field index.
+
+    Example:
+    ```mlir
+    %name_str = firrtl.string "ClkA"
+    %period_int = firrtl.integer 100
+    %domain = firrtl.domain.create(%name_str, %period_int) : (!firrtl.string, !firrtl.integer) -> !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+    %extracted_name = firrtl.domain.subfield %domain[name] : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+    %extracted_period = firrtl.domain.subfield %domain[period] : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+    ```
+  }];
+
+  let arguments = (ins DomainType:$input, I32Attr:$fieldIndex);
+  let results = (outs PropertyType:$result);
+
+  let hasCustomAssemblyFormat = true;
+  let hasVerifier = false;
+
+  let extraClassDeclaration = [{
+    /// Infer the return type of this operation.
+    static Type inferReturnType(Type inType, uint32_t fieldIndex,
+                                std::optional<Location> loc);
+
+    static Type inferReturnType(ValueRange operands,
+                                mlir::DictionaryAttr attrs,
+                                mlir::OpaqueProperties properties,
+                                mlir::RegionRange regions,
+                                std::optional<Location> loc) {
+      Adaptor adaptor(operands, attrs, properties, regions);
+      return inferReturnType(adaptor.getInput().getType(),
+                             adaptor.getFieldIndex(), loc);
+    }
+
+    /// Create a DomainSubfieldOp with the given parameters.
+    static DomainSubfieldOp create(OpBuilder &builder, Type resultType,
+                                   Value base, unsigned fieldIndex) {
+      OperationState state(builder.getUnknownLoc(),
+                           DomainSubfieldOp::getOperationName());
+      state.addOperands(base);
+      state.addAttribute("fieldIndex",
+                         builder.getI32IntegerAttr(fieldIndex));
+      state.addTypes(resultType);
+      return cast<DomainSubfieldOp>(builder.create(state));
+    }
+
+    /// Get the field name for this field index
+    StringAttr getFieldName();
+  }];
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD

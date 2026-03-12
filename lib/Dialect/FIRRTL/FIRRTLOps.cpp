@@ -7338,6 +7338,92 @@ LogicalResult DomainCreateOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// DomainSubfieldOp
+//===----------------------------------------------------------------------===//
+
+StringAttr DomainSubfieldOp::getFieldName() {
+  auto domainType = getInput().getType();
+  auto fields = domainType.getFields();
+  auto index = getFieldIndex();
+
+  if (index >= fields.size())
+    return {};
+
+  return cast<DomainFieldAttr>(fields[index]).getName();
+}
+
+Type DomainSubfieldOp::inferReturnType(Type inType, uint32_t fieldIndex,
+                                       std::optional<Location> loc) {
+  auto domainType = dyn_cast<DomainType>(inType);
+  if (!domainType)
+    return emitInferRetTypeError(loc, "base value is not a domain");
+
+  auto fields = domainType.getFields();
+  if (fieldIndex >= fields.size())
+    return emitInferRetTypeError(
+        loc, "field index ", fieldIndex,
+        +" is greater than the number of fields in the domain");
+
+  return cast<DomainFieldAttr>(fields[fieldIndex]).getType();
+}
+
+LogicalResult DomainSubfieldOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<Type> &inferredReturnTypes) {
+  Adaptor adaptor(operands, attributes, properties, regions);
+  auto resultType = inferReturnType(adaptor.getInput().getType(),
+                                    adaptor.getFieldIndex(), location);
+  if (!resultType)
+    return failure();
+  inferredReturnTypes.push_back(resultType);
+  return success();
+}
+
+void DomainSubfieldOp::print(OpAsmPrinter &p) {
+  p << ' ' << getInput() << "[";
+  p.printKeywordOrString(getFieldName());
+  p << "]";
+  p.printOptionalAttrDict((*this)->getAttrs(), {"fieldIndex"});
+  p << " : " << getInput().getType();
+}
+
+ParseResult DomainSubfieldOp::parse(OpAsmParser &parser,
+                                    OperationState &result) {
+  auto *context = parser.getContext();
+
+  OpAsmParser::UnresolvedOperand input;
+  std::string fieldName;
+  DomainType inputType;
+
+  if (parser.parseOperand(input) || parser.parseLSquare() ||
+      parser.parseKeywordOrString(&fieldName) || parser.parseRSquare() ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(inputType) ||
+      parser.resolveOperand(input, inputType, result.operands))
+    return failure();
+
+  // Find the field index for the field name using DomainType helper
+  auto fieldIndex = inputType.getFieldIndex(fieldName);
+  if (!fieldIndex)
+    return parser.emitError(parser.getNameLoc(),
+                            "unknown field '" + fieldName + "' in domain type");
+
+  // Add the field index attribute
+  result.addAttribute(
+      "fieldIndex",
+      IntegerAttr::get(IntegerType::get(context, 32), *fieldIndex));
+
+  // Infer the result type
+  auto resultType = inferReturnType(inputType, *fieldIndex, std::nullopt);
+  if (!resultType)
+    return failure();
+
+  result.addTypes(resultType);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TblGen Generated Logic.
 //===----------------------------------------------------------------------===//
 
