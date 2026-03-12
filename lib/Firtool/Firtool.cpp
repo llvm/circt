@@ -328,7 +328,7 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
   pm.addPass(
       verif::createLowerSymbolicValuesPass({opt.getSymbolicValueLowering()}));
 
-  pm.addPass(seq::createExternalizeClockGatePass(opt.getClockGateOptions()));
+  pm.addPass(seq::createExternalizeClockGate(opt.getClockGateOptions()));
   pm.addPass(circt::createLowerSimToSVPass());
   pm.addPass(circt::createLowerSeqToSVPass(
       {/*disableRegRandomization=*/!opt.isRandomEnabled(
@@ -338,7 +338,7 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
        /*emitSeparateAlwaysBlocks=*/
        opt.shouldEmitSeparateAlwaysBlocks()}));
   pm.addNestedPass<hw::HWModuleOp>(createLowerVerifToSVPass());
-  pm.addPass(seq::createHWMemSimImplPass(
+  pm.addPass(seq::createHWMemSimImpl(
       {/*disableMemRandomization=*/!opt.isRandomEnabled(
            FirtoolOptions::RandomKind::Mem),
        /*disableRegRandomization=*/
@@ -456,9 +456,9 @@ LogicalResult firtool::populateHWToBTOR2(mlir::PassManager &pm,
   // Lower all supported `ltl` ops
   mpm.addPass(circt::createLowerLTLToCorePass());
   // LTLToCore can generate shiftreg which should be lowered before emission
-  mpm.addPass(circt::seq::createLowerSeqShiftRegPass());
+  mpm.addPass(circt::seq::createLowerSeqShiftReg());
   // ShiftReg Lowering generates compreg.ce, which we don't support, so lower
-  mpm.addPass(circt::seq::createLowerSeqCompRegCEPass());
+  mpm.addPass(circt::seq::createLowerSeqCompRegCE());
   // Do final formal specific lowerings, e.g. inline wires eagerly
   mpm.addPass(circt::verif::createPrepareForFormalPass());
   pm.addPass(circt::hw::createFlattenModules());

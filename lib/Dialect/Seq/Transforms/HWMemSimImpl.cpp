@@ -779,8 +779,3 @@ void HWMemSimImplPass::runOnOperation() {
   if (!anythingChanged)
     markAllAnalysesPreserved();
 }
-
-std::unique_ptr<Pass>
-circt::seq::createHWMemSimImplPass(const HWMemSimImplOptions &options) {
-  return std::make_unique<HWMemSimImplPass>(options);
-}
