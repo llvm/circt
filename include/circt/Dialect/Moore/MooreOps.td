@@ -2159,7 +2159,7 @@ def AssocArrayFirstOp : MooreOp<"assoc_array.first",
     "assoc_array", "index",
     "RefType::get(cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getIndexType())">]> {
   let summary = [{Assigns to the given index variable the 
-    value of the first index in the associative array"}];
+    value of the first index in the associative array}];
   let description = [{
     See IEEE 1800-2023 § 7.9.4 "First()". Assigns to the given index variable
     the value of the first index in the associative array. 
