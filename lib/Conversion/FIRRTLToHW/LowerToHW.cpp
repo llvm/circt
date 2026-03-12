@@ -1905,7 +1905,8 @@ FIRRTLModuleLowering::lowerFormalBody(verif::FormalOp newOp,
   auto newModule = cast<hw::HWModuleOp>(loweringState.getNewModule(oldModule));
 
   // Create a symbolic input for every input of the lowered module.
-  Namespace ns;
+  CircuitNamespace ns;
+  ns.add(oldModule.getParentOp());
   SmallVector<Value> symbolicInputs;
   for (auto arg : newModule.getBody().getArguments()) {
     // Generate a random name to track the symbolic values
