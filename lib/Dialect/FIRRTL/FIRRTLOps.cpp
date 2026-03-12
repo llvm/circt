@@ -7373,8 +7373,8 @@ Type DomainSubfieldOp::inferReturnType(ValueRange operands,
                                        mlir::RegionRange regions,
                                        std::optional<Location> loc) {
   Adaptor adaptor(operands, attrs, properties, regions);
-  return inferReturnType(adaptor.getInput().getType(),
-                         adaptor.getFieldIndex(), loc);
+  return inferReturnType(adaptor.getInput().getType(), adaptor.getFieldIndex(),
+                         loc);
 }
 
 LogicalResult DomainSubfieldOp::inferReturnTypes(
