@@ -868,7 +868,7 @@ def DomainCreateOp : FIRRTLOp<"domain.create", [
   );
   let results = (outs Res<DomainType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
-    custom<ImplicitSSAName>($name) (`(` $fieldValues^ `)`)? attr-dict `:` functional-type($fieldValues, $result)
+    custom<ImplicitSSAName>($name) (`(` $fieldValues^ `)`)? attr-dict `:` custom<FieldsFromDomain>(ref($fieldValues), type($fieldValues), type($result))
   }];
 
   let hasVerifier = 1;

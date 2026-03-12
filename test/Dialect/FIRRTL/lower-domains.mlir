@@ -570,7 +570,7 @@ firrtl.circuit "DomainCreate" {
     // CHECK-NEXT: firrtl.propassign %A_out, %A_object :
     // CHECK-NEXT: %my_domain = firrtl.object @ClockDomain()
     // CHECK-NEXT: firrtl.propassign %[[domainInfo_in]], %my_domain
-    %my_domain = firrtl.domain.create : () -> !firrtl.domain<@ClockDomain()>
+    %my_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
     firrtl.domain.define %A, %my_domain : !firrtl.domain<@ClockDomain()>
   }
 }
@@ -583,7 +583,7 @@ firrtl.circuit "DeadDomainCreate" {
   // CHECK-LABEL: firrtl.module @DeadDomainCreate() {
   // CHECK-NEXT:  }
   firrtl.module @DeadDomainCreate() {
-    %my_domain = firrtl.domain.create : () -> !firrtl.domain<@ClockDomain()>
+    %my_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
   }
 }
 
@@ -611,7 +611,7 @@ firrtl.circuit "DomainCreateWithFields" {
     // CHECK-NEXT: firrtl.propassign %[[period_in]], %[[unknown_period]]
     %unknown_name = firrtl.unknown : !firrtl.string
     %unknown_period = firrtl.unknown : !firrtl.integer
-    %my_domain = firrtl.domain.create(%unknown_name, %unknown_period) : (!firrtl.string, !firrtl.integer) -> !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+    %my_domain = firrtl.domain.create(%unknown_name, %unknown_period) : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
     firrtl.domain.define %A, %my_domain : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
   }
 }
@@ -635,7 +635,7 @@ firrtl.circuit "DomainCreateWithConstantFieldValues" {
     // CHECK-NEXT: firrtl.propassign %[[period_in]], %[[period_const]]
     %name = firrtl.string "MyClock"
     %period = firrtl.integer 42
-    %my_domain = firrtl.domain.create(%name, %period) : (!firrtl.string, !firrtl.integer) -> !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+    %my_domain = firrtl.domain.create(%name, %period) : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
     firrtl.domain.define %A, %my_domain : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
   }
 }
@@ -656,7 +656,7 @@ firrtl.circuit "DomainCreateWithPortValues" {
     // CHECK-NEXT: firrtl.propassign %[[name_in]], %clk_name
     // CHECK-NEXT: %[[period_in:.+]] = firrtl.object.subfield %my_domain[period_in]
     // CHECK-NEXT: firrtl.propassign %[[period_in]], %clk_period
-    %my_domain = firrtl.domain.create(%clk_name, %clk_period) : (!firrtl.string, !firrtl.integer) -> !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+    %my_domain = firrtl.domain.create(%clk_name, %clk_period) : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
     firrtl.domain.define %A, %my_domain : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
   }
 }
@@ -678,7 +678,7 @@ firrtl.circuit "DomainCreateWithMixedValues" {
     // CHECK-NEXT: %[[period_in:.+]] = firrtl.object.subfield %my_domain[period_in]
     // CHECK-NEXT: firrtl.propassign %[[period_in]], %clk_period
     %name = firrtl.string "FastClock"
-    %my_domain = firrtl.domain.create(%name, %clk_period) : (!firrtl.string, !firrtl.integer) -> !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+    %my_domain = firrtl.domain.create(%name, %clk_period) : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
     firrtl.domain.define %A, %my_domain : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
   }
 }

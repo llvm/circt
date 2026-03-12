@@ -6430,6 +6430,48 @@ static void printFIRRTLImplicitSSAName(OpAsmPrinter &p, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
+// FieldsFromDomain Custom Directive
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseFieldsFromDomain(
+    OpAsmParser &parser,
+    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &fieldValues,
+    SmallVectorImpl<Type> &fieldTypes, Type &resultType) {
+  // Parse the domain type.
+  if (parser.parseType(resultType))
+    return failure();
+
+  auto domainType = dyn_cast<DomainType>(resultType);
+  if (!domainType)
+    return parser.emitError(parser.getCurrentLocation(),
+                            "expected domain type");
+
+  // Extract the field types from the domain type.
+  auto fields = domainType.getFields();
+
+  // Validate that the number of field values matches the domain.
+  if (fieldValues.size() != fields.size())
+    return parser.emitError(parser.getCurrentLocation(),
+                            "number of field values (" +
+                                Twine(fieldValues.size()) +
+                                ") does not match domain field count (" +
+                                Twine(fields.size()) + ")");
+
+  // Populate the field types from the domain definition.
+  fieldTypes.reserve(fields.size());
+  for (auto field : fields)
+    fieldTypes.push_back(cast<DomainFieldAttr>(field).getType());
+
+  return success();
+}
+
+static void printFieldsFromDomain(OpAsmPrinter &p, Operation *op,
+                                  OperandRange fieldValues,
+                                  TypeRange fieldTypes, Type resultType) {
+  p << resultType;
+}
+
+//===----------------------------------------------------------------------===//
 // MemOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 
