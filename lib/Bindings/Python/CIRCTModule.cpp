@@ -70,7 +70,7 @@ static void registerPasses() {
   registerSynthesisPipeline();
   mlirRegisterCIRCTConversionPasses();
   mlirRegisterCIRCTTransformsPasses();
-  mlirRegisterTransformsCSE();
+  mlirRegisterTransformsCSEPass();
 }
 
 NB_MODULE(_circt, m) {
