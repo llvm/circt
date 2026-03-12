@@ -859,7 +859,7 @@ def DomainCreateOp : FIRRTLOp<"domain.create", [
     ```mlir
     %name = firrtl.string "A"
     %period = firrtl.integer 42
-    %my_clock = firrtl.domain.create(%name, %period) : (!firrtl.string, !firrtl.integer) -> !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+    %my_clock = firrtl.domain.create(%name, %period) : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
     ```
   }];
   let arguments = (ins
