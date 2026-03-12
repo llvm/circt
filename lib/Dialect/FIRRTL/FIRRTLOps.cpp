@@ -7326,11 +7326,12 @@ LogicalResult DomainCreateOp::verify() {
     auto expectedType = fieldAttr.getType();
     auto actualType = fieldValues[i].getType();
 
-    if (expectedType != actualType) {
-      return emitOpError() << "field value " << i << " has type " << actualType
-                           << " but domain field '" << fieldAttr.getName()
-                           << "' expects type " << expectedType;
-    }
+    if (expectedType == actualType)
+      continue;
+
+    return emitOpError() << "field value " << i << " has type " << actualType
+                         << " but domain field '" << fieldAttr.getName()
+                         << "' expects type " << expectedType;
   }
 
   return success();
