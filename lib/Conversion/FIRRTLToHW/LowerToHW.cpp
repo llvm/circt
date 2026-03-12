@@ -908,8 +908,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    sv::IfDefOp::create(
-        b, guard, [] {}, body);
+    sv::IfDefOp::create(b, guard, [] {}, body);
   };
 
   if (state.usedFileDescriptorLib) {
@@ -1907,8 +1906,8 @@ FIRRTLModuleLowering::lowerFormalBody(verif::FormalOp newOp,
   // Create a symbolic input for every input of the lowered module.
   SmallVector<Value> symbolicInputs;
   for (auto arg : newModule.getBody().getArguments())
-    symbolicInputs.push_back(
-        verif::SymbolicValueOp::create(builder, arg.getLoc(), arg.getType()));
+    symbolicInputs.push_back(verif::SymbolicValueOp::create(
+        builder, arg.getLoc(), arg.getType(), StringAttr({})));
 
   // Instantiate the module with the given symbolic inputs.
   hw::InstanceOp::create(builder, newOp.getLoc(), newModule,
@@ -3271,8 +3270,7 @@ void FIRRTLLowering::addToAlwaysBlock(
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = sv::IfOp::create(
-            builder, reset, [] {}, [] {});
+        insideIfOp = sv::IfOp::create(builder, reset, [] {}, [] {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};

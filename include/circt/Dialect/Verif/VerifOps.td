@@ -495,8 +495,10 @@ def SymbolicValueOp : VerifOp<"symbolic_value", [
     symbolic values that violate asserts or make covers true. This value is not
     fixed - the value taken can vary arbitrarily between timesteps.
   }];
+  
+  let arguments = (ins OptionalAttr<StrAttr>:$name);
   let results = (outs Res<AnyType, "", [MemAlloc]>:$result);
-  let assemblyFormat = "attr-dict `:` type($result)";
+  let assemblyFormat = "`` custom<ImplicitSSAName>($name) attr-dict `:` type($result)";
 }
 
 //===----------------------------------------------------------------------===//
