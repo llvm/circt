@@ -1807,7 +1807,7 @@ def DomainSubfieldOp : FIRRTLOp<"domain.subfield", [
     ```mlir
     %name_str = firrtl.string "ClkA"
     %period_int = firrtl.integer 100
-    %domain = firrtl.domain.create(%name_str, %period_int) : (!firrtl.string, !firrtl.integer) -> !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+    %domain = firrtl.domain.create(%name_str, %period_int) : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
     %extracted_name = firrtl.domain.subfield %domain[name] : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
     %extracted_period = firrtl.domain.subfield %domain[period] : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
     ```
