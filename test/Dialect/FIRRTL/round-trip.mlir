@@ -296,7 +296,7 @@ firrtl.module @DomainTypesWithFields(
   // CHECK: %[[name:.+]] = firrtl.string "VDD"
   // CHECK: %[[voltage:.+]] = firrtl.integer 1800
   // CHECK: %[[alwaysOn:.+]] = firrtl.bool true
-  // CHECK: %my_domain = firrtl.domain.create (%[[name]], %[[voltage]], %[[alwaysOn]]) : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+  // CHECK: %my_domain = firrtl.domain.create(%[[name]], %[[voltage]], %[[alwaysOn]]) : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
   %name = firrtl.string "VDD"
   %voltage = firrtl.integer 1800
   %alwaysOn = firrtl.bool true
