@@ -227,7 +227,3 @@ void LowerSeqFIFOPass::runOnOperation() {
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
 }
-
-std::unique_ptr<Pass> circt::seq::createLowerSeqFIFOPass() {
-  return std::make_unique<LowerSeqFIFOPass>();
-}

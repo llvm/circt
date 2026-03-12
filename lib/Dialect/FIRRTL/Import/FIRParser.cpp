@@ -4091,7 +4091,7 @@ ParseResult FIRStmtParser::parsePathExp(Value &result) {
   return success();
 }
 
-/// domain_instantiation ::= 'domain' id 'of' id info?
+/// domain_instantiation ::= 'domain' id 'of' id ('(' exp (',' exp)* ')')? info?
 ParseResult FIRStmtParser::parseDomainInstantiation() {
   auto startTok = consumeToken(FIRToken::kw_domain);
 
@@ -4107,7 +4107,7 @@ ParseResult FIRStmtParser::parseDomainInstantiation() {
   if (requireFeature(missingSpecFIRVersion, "domains", startTok.getLoc()) ||
       parseId(instanceName, "expected domain instance name") ||
       parseToken(FIRToken::kw_of, "expected 'of' after domain instance name") ||
-      parseId(domainKind, "expected domain type name") || parseOptionalInfo())
+      parseId(domainKind, "expected domain type name"))
     return failure();
 
   // Create the domain instance
@@ -4119,7 +4119,26 @@ ParseResult FIRStmtParser::parseDomainInstantiation() {
            << "unknown domain '" << domainKind.getValue() << "'";
 
   auto domainType = DomainType::getFromDomainOp(lookup->second);
-  auto result = builder.create<DomainCreateOp>(domainType, instanceName);
+
+  // Parse optional field values
+  SmallVector<Value> fieldValues;
+  if (consumeIf(FIRToken::l_paren)) {
+    // Parse comma-separated list of expressions
+    if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
+          Value value;
+          if (parseExp(value, "expected field value expression"))
+            return failure();
+          fieldValues.push_back(value);
+          return success();
+        }))
+      return failure();
+  }
+
+  if (parseOptionalInfo())
+    return failure();
+
+  auto result =
+      DomainCreateOp::create(builder, domainType, instanceName, fieldValues);
 
   // Add to symbol table
   return moduleContext.addSymbolEntry(instanceName.getValue(), result,
@@ -5648,8 +5667,9 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
     Attribute domainInfoElement = {};
     size_t portIdx = resultPorts.size();
     if (auto domainType = dyn_cast<DomainType>(type)) {
-      // The domain symbol is already parsed and stored in the type
-      domainInfoElement = domainType.getName();
+      // Domain information is now stored in the type itself.
+      // Domain type ports have no associations.
+      domainInfoElement = ArrayAttr::get(getContext(), {});
     } else {
       if (getToken().is(FIRToken::kw_domains))
         if (parseDomains(domainNames[portIdx], nameToIndex))

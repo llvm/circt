@@ -1059,6 +1059,11 @@ firrtl.circuit "Foo" {
   firrtl.module @NamedDomains() {
     // CHECK-NEXT: domain my_clock of ClockDomain
     %my_clock = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
+    %0 = firrtl.string "a"
+    %1 = firrtl.integer 1
+    %2 = firrtl.bool true
+    // CHECK: domain p of PowerDomain(String("a"), Integer(1), Bool(true))
+    %p = firrtl.domain.create(%0, %1, %2) : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
     // CHECK-NEXT: inst foo of NamedDomains_Foo
     %foo_A = firrtl.instance foo @NamedDomains_Foo(
       in A: !firrtl.domain<@ClockDomain()>

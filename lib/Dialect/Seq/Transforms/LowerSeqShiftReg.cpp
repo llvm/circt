@@ -83,7 +83,3 @@ void LowerSeqShiftRegPass::runOnOperation() {
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
 }
-
-std::unique_ptr<Pass> circt::seq::createLowerSeqShiftRegPass() {
-  return std::make_unique<LowerSeqShiftRegPass>();
-}

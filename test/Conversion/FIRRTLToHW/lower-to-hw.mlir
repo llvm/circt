@@ -1862,13 +1862,13 @@ firrtl.circuit "Foo" {
   }
   // CHECK: verif.formal @MyTest1
   // CHECK-SAME: {hello = 42 : i64} {
-  // CHECK-NEXT: [[A:%.+]] = verif.symbolic_value : i42
-  // CHECK-NEXT: hw.instance "Foo" @Foo(a: [[A]]: i42) -> (z: i42)
+  // CHECK-NEXT: %Foo_in_0 = verif.symbolic_value : i42
+  // CHECK-NEXT: hw.instance "Foo" @Foo(a: %Foo_in_0: i42) -> (z: i42)
   firrtl.formal @MyTest1, @Foo {hello = 42 : i64}
   // CHECK: verif.formal @MyTest2
   // CHECK-SAME: {world = "abc"} {
-  // CHECK-NEXT: [[A:%.+]] = verif.symbolic_value : i42
-  // CHECK-NEXT: hw.instance "Foo" @Foo(a: [[A]]: i42) -> (z: i42)
+  // CHECK-NEXT: %Foo_in_0 = verif.symbolic_value : i42
+  // CHECK-NEXT: hw.instance "Foo" @Foo(a: %Foo_in_0: i42) -> (z: i42)
   firrtl.formal @MyTest2, @Foo {world = "abc"}
 }
 

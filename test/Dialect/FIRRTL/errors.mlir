@@ -3064,8 +3064,8 @@ firrtl.circuit "XMRDerefOpTargetsNonHierPath" {
 // -----
 
 firrtl.circuit "UndefinedDomainKind" {
+  // expected-error @below {{domain type references undefined symbol 'ClockDomain'}}
   firrtl.module @UndefinedDomainKind(
-    // expected-error @below {{domain port 'A' has undefined domain kind 'ClockDomain'}}
     in %A: !firrtl.domain<@ClockDomain()>
   ) {}
 }
@@ -3074,8 +3074,8 @@ firrtl.circuit "UndefinedDomainKind" {
 
 firrtl.circuit "WrongDomainKind" {
   firrtl.module @ClockDomain() {}
+  // expected-error @below {{domain type references symbol 'ClockDomain' which is not a domain}}
   firrtl.module @UndefinedDomainKind(
-    // expected-error @below {{domain port 'A' has undefined domain kind 'ClockDomain'}}
     in %A: !firrtl.domain<@ClockDomain()>
   ) {}
 }
@@ -3084,7 +3084,7 @@ firrtl.circuit "WrongDomainKind" {
 
 firrtl.circuit "DomainInfoNotArray" {
   firrtl.domain @ClockDomain
-  // expected-error @below {{requires valid port domains}}
+  // expected-error @below {{requires valid port domain associations}}
   firrtl.module @WrongDomainPortInfo(
     in %A: !firrtl.domain<@ClockDomain()>
   ) attributes {domainInfo = 0 : i32} {}
@@ -3094,18 +3094,18 @@ firrtl.circuit "DomainInfoNotArray" {
 
 firrtl.circuit "DomainInfoWrongSize" {
   firrtl.domain @ClockDomain
-  // expected-error @below {{requires 2 port domains, but has 1}}
+  // expected-error @below {{requires 2 port domain associations, but has 1}}
   firrtl.module @WrongDomainPortInfo(
     in %A: !firrtl.domain<@ClockDomain()>,
     in %a: !firrtl.uint<1>
-  ) attributes {domainInfo = [@ClockDomain]} {}
+  ) attributes {domainInfo = [[]]} {}
 }
 
 // -----
 
 firrtl.circuit "WrongDomainPortInfo" {
   firrtl.domain @ClockDomain
-  // expected-error @below {{domain information for domain port 'A' must be a 'FlatSymbolRefAttr'}}
+  // expected-error @below {{domain associations for port 'A' must be an 'ArrayAttr'}}
   firrtl.module @WrongDomainPortInfo(
     in %A: !firrtl.domain<@ClockDomain()>
   ) attributes {domainInfo = [0 : i32]} {}
@@ -3113,9 +3113,19 @@ firrtl.circuit "WrongDomainPortInfo" {
 
 // -----
 
+firrtl.circuit "DomainPortWithNonEmptyAssociations" {
+  firrtl.domain @ClockDomain
+  // expected-error @below {{domain type port 'A' must have empty domain associations}}
+  firrtl.module @DomainPortWithNonEmptyAssociations(
+    in %A: !firrtl.domain<@ClockDomain()>
+  ) attributes {domainInfo = [[0 : ui32]]} {}
+}
+
+// -----
+
 firrtl.circuit "WrongNonDomainPortInfoType" {
   firrtl.domain @ClockDomain
-  // expected-error @below {{domain information for non-domain port 'a' must be an 'ArrayAttr'}}
+  // expected-error @below {{domain associations for port 'a' must be an 'ArrayAttr'}}
   firrtl.module @WrongNonDomainPortInfoType(
     in %a: !firrtl.uint<1>
   ) attributes {domainInfo = ["hello"]} {}
@@ -3125,7 +3135,7 @@ firrtl.circuit "WrongNonDomainPortInfoType" {
 
 firrtl.circuit "WrongNonDomainPortInfoElementType" {
   firrtl.domain @ClockDomain
-  // expected-error @below {{domain information for non-domain port 'a' must be an 'ArrayAttr<IntegerAttr>'}}
+  // expected-error @below {{domain associations for port 'a' must be an 'ArrayAttr<IntegerAttr>'}}
   firrtl.module @WrongNonDomainPortInfoElementType(
     in %a: !firrtl.uint<1>
   ) attributes {domainInfo = [["hello"]]} {}
@@ -3379,8 +3389,8 @@ firrtl.circuit "DomainTypeMismatch" {
     #firrtl.domain.field<"voltage", !firrtl.integer>
   ]
 
+  // expected-error @below {{domain type has 0 fields but domain definition has 1 fields}}
   firrtl.module @DomainTypeMismatch(
-    // expected-error @below {{domain port 'b' has type '!firrtl.domain<@B()>' which does not match the domain definition, expected '!firrtl.domain<@B(voltage: !firrtl.integer)>'}}
     in %b: !firrtl.domain<@B()>
   ) {}
 }
@@ -3392,8 +3402,8 @@ firrtl.circuit "DomainTypeWrongFields" {
     #firrtl.domain.field<"voltage", !firrtl.integer>
   ]
 
+  // expected-error @below {{domain type field 'voltage' has type '!firrtl.string' but domain definition expects '!firrtl.integer'}}
   firrtl.module @DomainTypeWrongFields(
-    // expected-error @below {{domain port 'a' has type '!firrtl.domain<@A(voltage: !firrtl.string)>' which does not match the domain definition, expected '!firrtl.domain<@A(voltage: !firrtl.integer)>'}}
     in %a: !firrtl.domain<@A(voltage: !firrtl.string)>
   ) {}
 }
@@ -3434,5 +3444,44 @@ firrtl.circuit "DomainAnonTypeMismatch" {
   firrtl.module @DomainAnonTypeMismatch() {
     // expected-error @below {{domain type has 0 fields but domain definition has 1 fields}}
     %d = firrtl.domain.anon : !firrtl.domain<@A()>
+  }
+}
+
+// -----
+
+// Test verification: wrong number of field values (too few).
+firrtl.circuit "DomainCreateWrongFieldCountTooFew" {
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"name", !firrtl.string>, #firrtl.domain.field<"period", !firrtl.integer>]
+  firrtl.module @DomainCreateWrongFieldCountTooFew() {
+    %name = firrtl.string "MyClock"
+    %my_domain = firrtl.domain.create(%name) : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+  // expected-error @+1 {{number of field values (1) does not match domain field count (2)}}
+  }
+}
+
+// -----
+
+// Test verification: wrong number of field values (too many).
+firrtl.circuit "DomainCreateWrongFieldCountTooMany" {
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"name", !firrtl.string>]
+  firrtl.module @DomainCreateWrongFieldCountTooMany() {
+    %name = firrtl.string "MyClock"
+    %period = firrtl.integer 42
+    %my_domain = firrtl.domain.create(%name, %period) : !firrtl.domain<@ClockDomain(name: !firrtl.string)>
+  // expected-error @+1 {{number of field values (2) does not match domain field count (1)}}
+  }
+}
+
+// -----
+
+// Test verification: wrong field type.
+firrtl.circuit "DomainCreateWrongFieldType" {
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"name", !firrtl.string>, #firrtl.domain.field<"period", !firrtl.integer>]
+  firrtl.module @DomainCreateWrongFieldType() {
+    %name = firrtl.string "MyClock"
+    // expected-note @+1 {{prior use here}}
+    %period = firrtl.string "not an integer"
+    %my_domain = firrtl.domain.create(%name, %period) : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+    // expected-error @-1 {{use of value '%period' expects different type than prior uses: '!firrtl.integer' vs '!firrtl.string'}}
   }
 }

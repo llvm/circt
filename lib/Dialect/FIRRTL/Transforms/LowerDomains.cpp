@@ -351,10 +351,12 @@ LogicalResult LowerModule::lowerModule() {
     auto port = cast<PortInfo>(ports[i]);
 
     // Mark domain type ports for removal.  Add information to `domainInfo`.
-    if (auto domain = dyn_cast_or_null<FlatSymbolRefAttr>(port.domains)) {
+    // Domain information is now stored in the type itself.
+    if (auto domainType = dyn_cast<DomainType>(port.type)) {
       eraseVector.set(i);
 
       // Instantiate a domain object with association information.
+      auto domain = domainType.getName();
       auto [classIn, classOut] = domainToClasses.at(domain.getAttr());
 
       indexToDomain[i] = port.direction == Direction::In
@@ -558,8 +560,6 @@ LogicalResult LowerModule::lowerModule() {
       }
 
       // Replace a named domain create with an object instantiation.
-      // TODO: The object's fields are all connected to unknown values. This is
-      // a temporary solution while support for domains is being brought online.
       if (auto createDomain = dyn_cast<DomainCreateOp>(walkOp)) {
         auto noUser = llvm::all_of(createDomain->getUsers(), [&](auto *user) {
           return operationsToErase.contains(user) ||
@@ -578,15 +578,17 @@ LogicalResult LowerModule::lowerModule() {
         instanceGraph.lookup(op)->addInstance(object,
                                               instanceGraph.lookup(classIn));
 
+        // Get field values from the DomainCreateOp
+        auto fieldValues = createDomain.getFieldValues();
+        size_t fieldIdx = 0;
+
         for (auto [idx, port] : llvm::enumerate(classIn.getPorts())) {
           if (port.direction == Direction::Out)
             continue;
           auto subfield = ObjectSubfieldOp::create(
               builder, createDomain.getLoc(), object, idx);
-          auto unknown =
-              UnknownValueOp::create(builder, createDomain.getLoc(), port.type);
           PropAssignOp::create(builder, createDomain.getLoc(), subfield,
-                               unknown);
+                               fieldValues[fieldIdx++]);
         }
 
         createDomain.replaceAllUsesWith(UnrealizedConversionCastOp::create(

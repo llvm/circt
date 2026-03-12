@@ -1421,8 +1421,19 @@ void Emitter::emitStatement(DomainCreateOp op) {
   startStatement();
   auto name = legalize(op.getNameAttr());
   addValueName(op.getResult(), name);
-  ps << "domain " << PPExtString(name) << " of "
-     << PPExtString(op.getDomainAttr().getValue());
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "domain " << PPExtString(name) << " of "
+       << PPExtString(op.getDomainAttr().getValue());
+
+    auto fieldValues = op.getFieldValues();
+    if (fieldValues.empty())
+      return;
+
+    ps << "(" << PP::ibox0;
+    interleaveComma(fieldValues, [&](auto value) { emitExpression(value); });
+    ps << ")" << PP::end;
+  });
+
   emitLocationAndNewLine(op);
 }
 
@@ -1822,7 +1833,9 @@ void Emitter::emitType(Type type, bool includeConst) {
         emitType(type.getElementType());
         ps << ">";
       })
-      .Case<DomainType>([&](DomainType type) { ps << "Domain"; })
+      .Case<DomainType>([&](DomainType type) {
+        ps << "Domain of " << PPExtString(type.getName().getValue());
+      })
       .Default([&](auto type) {
         llvm_unreachable("all types should be implemented");
       });
@@ -1831,21 +1844,16 @@ void Emitter::emitType(Type type, bool includeConst) {
 void Emitter::emitDomains(Attribute attr, ArrayRef<PortInfo> ports) {
   if (!attr)
     return;
-  if (auto domains = dyn_cast<ArrayAttr>(attr)) {
-    if (domains.empty())
-      return;
-    ps << " domains [";
-    ps.scopedBox(PP::ibox0, [&]() {
-      interleaveComma(domains, [&](Attribute attr) {
-        ps.addAsString(
-            ports[cast<IntegerAttr>(attr).getUInt()].name.getValue());
-      });
-      ps << "]";
+  auto domains = cast<ArrayAttr>(attr);
+  if (domains.empty())
+    return;
+  ps << " domains [";
+  ps.scopedBox(PP::ibox0, [&]() {
+    interleaveComma(domains, [&](Attribute attr) {
+      ps.addAsString(ports[cast<IntegerAttr>(attr).getUInt()].name.getValue());
     });
-  } else {
-    auto kind = cast<FlatSymbolRefAttr>(attr);
-    ps << " of " << PPExtString(kind.getValue());
-  }
+    ps << "]";
+  });
 }
 
 /// Emit a location as `@[<filename> <line>:<column>]` annotation, including a

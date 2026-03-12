@@ -28,6 +28,7 @@
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifVisitors.h"
+#include "circt/Support/Namespace.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -103,6 +104,9 @@ private:
   // Constants used during the conversion
   static constexpr size_t noLID = -1UL;
   [[maybe_unused]] static constexpr int64_t noWidth = -1L;
+
+  // Tracks symbols in use to avoid naming conflicts
+  Namespace symbolNamespace;
 
   /// Field helper functions
 public:
@@ -533,7 +537,7 @@ private:
     // Build and return the state instruction
     os << opLID << " "
        << "state"
-       << " " << sid << " " << name << "\n";
+       << " " << sid << " " << symbolNamespace.newName(name) << "\n";
   }
 
   // Generates a next instruction, given a width, a state LID, and a next

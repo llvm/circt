@@ -25,16 +25,13 @@ module {
     %ff = arith.constant 0xFF : i8
     %false = arith.constant 0 : i1
     %true = arith.constant 1 : i1
+    %tstep = arith.constant 10 : i64
     %t0 = arith.constant 10 : i64
     %t1 = arith.constant 20 : i64
     %t2 = arith.constant 30 : i64
     %t3 = arith.constant 40 : i64
     %t4 = arith.constant 50 : i64
     %t5 = arith.constant 60 : i64
-    %t6 = arith.constant 70 : i64
-    %t7 = arith.constant 80 : i64
-    %t8 = arith.constant 90 : i64
-    %t9 = arith.constant 100 : i64
 
     arc.sim.instantiate @shiftreg as %model {
       arc.sim.set_time %model, %t0 : !arc.sim.instance<@shiftreg>
@@ -69,26 +66,22 @@ module {
 
       arc.sim.set_time %model, %t5 : !arc.sim.instance<@shiftreg>
       arc.sim.set_input %model, "clock" = %true : i1, !arc.sim.instance<@shiftreg>
-      arc.sim.step %model : !arc.sim.instance<@shiftreg>
-      arc.sim.set_time %model, %t6 : !arc.sim.instance<@shiftreg>
+      arc.sim.step %model by %tstep : !arc.sim.instance<@shiftreg>
       arc.sim.set_input %model, "clock" = %false : i1, !arc.sim.instance<@shiftreg>
-      arc.sim.step %model : !arc.sim.instance<@shiftreg>
+      arc.sim.step %model by %tstep : !arc.sim.instance<@shiftreg>
       %res3 = arc.sim.get_port %model, "dout" : i8, !arc.sim.instance<@shiftreg>
       arc.sim.emit "output", %res3 : i8
 
-      arc.sim.set_time %model, %t7 : !arc.sim.instance<@shiftreg>
       arc.sim.set_input %model, "clock" = %true : i1, !arc.sim.instance<@shiftreg>
-      arc.sim.step %model : !arc.sim.instance<@shiftreg>
-      arc.sim.set_time %model, %t8 : !arc.sim.instance<@shiftreg>
+      arc.sim.step %model by %tstep : !arc.sim.instance<@shiftreg>
       arc.sim.set_input %model, "clock" = %false : i1, !arc.sim.instance<@shiftreg>
-      arc.sim.step %model : !arc.sim.instance<@shiftreg>
+      arc.sim.step %model by %tstep : !arc.sim.instance<@shiftreg>
       %res4 = arc.sim.get_port %model, "dout" : i8, !arc.sim.instance<@shiftreg>
       arc.sim.emit "output", %res4 : i8
-
-      arc.sim.set_time %model, %t9 : !arc.sim.instance<@shiftreg>
     }
     return
   }
+
 }
 
 // VCD-LABEL: $version
