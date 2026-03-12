@@ -104,6 +104,9 @@ private:
   static constexpr size_t noLID = -1UL;
   [[maybe_unused]] static constexpr int64_t noWidth = -1L;
 
+  // Tracks symbols in use to avoid naming conflicts
+  SmallVector<std::string> usedSymbols;
+
   /// Field helper functions
 public:
   // Checks if an operation was declared
@@ -530,10 +533,20 @@ private:
     // Retrieve the lid associated with the sort (sid)
     size_t sid = sortToLIDMap.at(width);
 
+    // Convert name into something with ownership so we can safely modify it and
+    // store it
+    auto nameStr = name.str();
+    auto suffix = 0;
+    // Make sure the name is unique in this scope
+    while (llvm::is_contained(usedSymbols, nameStr)) {
+      nameStr = name.str() + "_" + std::to_string(suffix++);
+    }
+    usedSymbols.push_back(nameStr);
+
     // Build and return the state instruction
     os << opLID << " "
        << "state"
-       << " " << sid << " " << name << "\n";
+       << " " << sid << " " << nameStr << "\n";
   }
 
   // Generates a next instruction, given a width, a state LID, and a next
