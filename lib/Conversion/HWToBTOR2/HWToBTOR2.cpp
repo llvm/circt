@@ -998,6 +998,11 @@ public:
   void visitVerif(verif::AssumeOp op) { visitAssumeLike(op); }
   void visitVerif(verif::ClockedAssumeOp op) { visitAssumeLike(op); }
 
+  // Symbolic values get handled the same way as block arguments
+  void visitVerif(verif::SymbolicValueOp op) {
+    // TODO
+  }
+
   // Error out on most unhandled verif ops
   void visitUnhandledVerif(Operation *op) {
     op->emitError("not supported in btor2!");
