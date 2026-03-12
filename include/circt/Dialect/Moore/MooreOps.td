@@ -2170,7 +2170,7 @@ def AssocArrayFirstOp : MooreOp<"assoc_array.first",
   let arguments = (ins AssocArrayRefType:$assoc_array, RefType:$index);
   let results = (outs TwoValuedI32:$result);
   let assemblyFormat = [{
-    `to` $index `from` $assoc_array attr-dict `:` type($assoc_array) `[` type($index) `]`
+    `to` $index `from` $assoc_array attr-dict `:` type($assoc_array)
   }];
 }
 
@@ -2190,7 +2190,7 @@ def AssocArrayLastOp : MooreOp<"assoc_array.last",
   let arguments = (ins AssocArrayRefType:$assoc_array, RefType:$index);
   let results = (outs TwoValuedI32:$result);
   let assemblyFormat = [{
-    `to` $index `from` $assoc_array attr-dict `:` type($assoc_array) `[` type($index) `]`
+    `to` $index `from` $assoc_array attr-dict `:` type($assoc_array)
   }];
 }
 
@@ -2210,7 +2210,7 @@ def AssocArrayNextOp : MooreOp<"assoc_array.next",
   let arguments = (ins AssocArrayRefType:$assoc_array, RefType:$index);
   let results = (outs TwoValuedI32:$result);
   let assemblyFormat = [{
-    `to` $index `from` $assoc_array attr-dict `:` type($assoc_array) `[` type($index) `]`
+    `to` $index `from` $assoc_array attr-dict `:` type($assoc_array)
   }];
 }
 
@@ -2230,7 +2230,7 @@ def AssocArrayPrevOp : MooreOp<"assoc_array.prev",
   let arguments = (ins AssocArrayRefType:$assoc_array, RefType:$index);
   let results = (outs TwoValuedI32:$result);
   let assemblyFormat = [{
-    `to` $index `from` $assoc_array attr-dict `:` type($assoc_array) `[` type($index) `]`
+    `to` $index `from` $assoc_array attr-dict `:` type($assoc_array)
   }];
 }
 

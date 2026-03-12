@@ -4508,13 +4508,13 @@ endmodule
 // CHECK:           [[B:%.+]] = moore.variable : <i32>
 // CHECK:           [[I:%.+]] = moore.variable : <i32>
 // CHECK:           moore.procedure initial {
-// CHECK:             [[S1:%.+]] = moore.assoc_array.first to [[I]] from [[AA]] : <assoc_array<i32, i32>>[<i32>]
+// CHECK:             [[S1:%.+]] = moore.assoc_array.first to [[I]] from [[AA]] : <assoc_array<i32, i32>>
 // CHECK              moore.blocking_assign [[B]], [[S1]] : i32
-// CHECK:             [[S2:%.+]] = moore.assoc_array.last to [[I]] from [[AA]] : <assoc_array<i32, i32>>[<i32>]
+// CHECK:             [[S2:%.+]] = moore.assoc_array.last to [[I]] from [[AA]] : <assoc_array<i32, i32>>
 // CHECK              moore.blocking_assign [[B]], [[S2]] : i32
-// CHECK:             [[S3:%.+]] = moore.assoc_array.next to [[I]] from [[AA]] : <assoc_array<i32, i32>>[<i32>]
+// CHECK:             [[S3:%.+]] = moore.assoc_array.next to [[I]] from [[AA]] : <assoc_array<i32, i32>>
 // CHECK              moore.blocking_assign [[B]], [[S3]] : i32
-// CHECK:             [[S4:%.+]] = moore.assoc_array.prev to [[I]] from [[AA]] : <assoc_array<i32, i32>>[<i32>]
+// CHECK:             [[S4:%.+]] = moore.assoc_array.prev to [[I]] from [[AA]] : <assoc_array<i32, i32>>
 // CHECK              moore.blocking_assign [[B]], [[S4]] : i32
 // CHECK:             moore.return
 // CHECK:           }
