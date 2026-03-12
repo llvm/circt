@@ -557,6 +557,18 @@ private:
        << " " << sid << " " << regLID << " " << nextLID << "\n";
   }
 
+  // Generates a delimiter comment to mark the start or end of a module given a
+  // module symbol
+  template <typename ST>
+  void genModuleComment(ST name, bool end = false) {
+    if (end)
+      os << "; END OF MODULE:" << name << "\n"
+         << "; **************************************"
+         << "\n";
+    else
+      os << "; START OF MODULE:" << name << "\n";
+  }
+
   // Verifies that the sort required for the given operation's btor2 emission
   // has been generated
   int64_t requireSort(mlir::Type type) {
@@ -1301,6 +1313,11 @@ public:
   /// Handles the core logic of the pass, in a generic manner
   template <typename T>
   LogicalResult handleTopLevel(T module) {
+    // Generate the start comment for the module
+    auto module_name = module.getSymName().str();
+    genModuleComment(module_name);
+
+    // Check for block arguments
     if (isa<hw::HWModuleOp>(module)) {
       // Start by extracting the inputs and generating appropriate instructions
       if (failed(visitPorts(module)))
@@ -1318,6 +1335,9 @@ public:
     // Iterate through the registers and generate the `next` instructions
     for (size_t i = 0; i < regOps.size(); ++i)
       finalizeRegVisit(regOps[i]);
+
+    // Generate ending comment
+    genModuleComment(module_name, true);
 
     return success();
   }
