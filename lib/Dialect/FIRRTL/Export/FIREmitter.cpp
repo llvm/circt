@@ -1425,19 +1425,13 @@ void Emitter::emitStatement(DomainCreateOp op) {
     ps << "domain " << PPExtString(name) << " of "
        << PPExtString(op.getDomainAttr().getValue());
 
-    // Emit field values if present
     auto fieldValues = op.getFieldValues();
-    if (!fieldValues.empty()) {
-      ps << "(" << PP::ibox0;
-      bool first = true;
-      for (auto value : fieldValues) {
-        if (!first)
-          ps << "," << PP::space;
-        emitExpression(value);
-        first = false;
-      }
-      ps << ")" << PP::end;
-    }
+    if (fieldValues.empty())
+      return;
+
+    ps << "(" << PP::ibox0;
+    interleaveComma(fieldValues, [&](auto value) { emitExpression(value); });
+    ps << ")" << PP::end;
   });
 
   emitLocationAndNewLine(op);
