@@ -2078,8 +2078,7 @@ def AssocArrayExtractOp : MooreOp<"assoc_array_extract", [Pure,
   let arguments = (ins AssocArrayType:$input, UnpackedType:$index);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    $input `[` $index `]` attr-dict `:`
-    type($input) `,` type($index) `->` type($result)
+    $input `[` $index `]` attr-dict `:` type($input)
   }];
 }
 
@@ -2095,7 +2094,7 @@ def AssocArrayExtractRefOp : MooreOp<"assoc_array_extract_ref",
   let results = (outs RefType:$result);
   let assemblyFormat = [{
     $input `[` $index `]` attr-dict `:`
-    type($input) `,` type($index) `->` type($result)
+    type($input)
   }];
 }
 
@@ -2109,7 +2108,7 @@ def AssocArrayDeleteOp : MooreOp<"assoc_array.delete",
   let arguments = (ins AssocArrayRefType:$assoc_array, UnpackedType:$index);
   let results = (outs);
   let assemblyFormat = [{
-    `index` $index `from` $assoc_array attr-dict `:` type($assoc_array) `[` type($index) `]`
+    `index` $index `from` $assoc_array attr-dict `:` type($assoc_array)
   }];
 }
 
@@ -2151,7 +2150,7 @@ def AssocArrayExistsOp : MooreOp<"assoc_array.exists",
   let arguments = (ins AssocArrayRefType:$assoc_array, UnpackedType:$index);
   let results = (outs TwoValuedI32:$result);
   let assemblyFormat = [{
-    $index `in` $assoc_array attr-dict `:` type($assoc_array) `[` type($index) `]`
+    $index `in` $assoc_array attr-dict `:` type($assoc_array)
   }];
 }
 
