@@ -4120,7 +4120,7 @@ ParseResult FIRStmtParser::parseDomainInstantiation() {
 
   auto domainType = DomainType::getFromDomainOp(lookup->second);
   auto result =
-      builder.create<DomainCreateOp>(domainType, instanceName, ValueRange{});
+      DomainCreateOp::create(builder, domainType, instanceName, ValueRange{});
 
   // Add to symbol table
   return moduleContext.addSymbolEntry(instanceName.getValue(), result,
