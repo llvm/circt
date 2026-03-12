@@ -338,7 +338,7 @@ void SimulationOp::getAsmBlockArgumentNames(Region &region,
 //===----------------------------------------------------------------------===//
 
 void SymbolicValueOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  // If the wire has an optional 'name' attribute, use it.
+  // If the op has an optional 'name' attribute, use it.
   auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
   if (nameAttr && !nameAttr.getValue().empty())
     setNameFn(getResult(), nameAttr.getValue());
