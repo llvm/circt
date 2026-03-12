@@ -14,6 +14,9 @@ module {
     //CHECK:    [[REG2NID:[0-9]+]] state [[NID6]] count2
     //CHECK-NOT: [[INITCONST]] constd [[NID6]] 0
     //CHECK:    [[INIT:[0-9]+]] init [[NID6]] [[REG2NID]] [[INITCONST]]
+    // CHECK: {{[0-9]+}} state [[NID6]] my_reg
+    // CHECK: {{[0-9]+}} state [[NID6]] my_reg_0
+    // CHECK: {{[0-9]+}} state [[NID6]] my_reg_1
 
     //CHECK:    [[NID3:[0-9]+]] sort bitvec 28
     //CHECK:    [[NID4:[0-9]+]] constd [[NID3]] 0 
@@ -42,6 +45,11 @@ module {
 
     %count = seq.compreg %9, %clock reset %reset, %c0_i32 initial %init : i32
     %count2 = seq.compreg %9, %clock reset %reset, %c0_i32 initial %init : i32
+
+    // Check that compregs with the same name attribute have their symbols unique-ified
+    %myreg1 = seq.compreg name "my_reg"  %9, %clock : i32
+    %myreg2 = seq.compreg name "my_reg"  %9, %clock : i32
+    %myreg3 = seq.compreg name "my_reg"  %9, %clock : i32
 
     //CHECK:    [[NID13:[0-9]+]] eq [[NID0]] [[NID12]] [[NID7]]
     %1 = comb.icmp bin eq %count, %c22_i32 : i32
