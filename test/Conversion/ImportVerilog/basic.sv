@@ -4503,6 +4503,35 @@ module AssocArrayExistsTest;
     end
 endmodule
 
+// CHECK-LABEL: moore.module @AssocArrayTraversalTest() {
+// CHECK:           [[AA:%.+]] = moore.variable : <assoc_array<i32, i32>>
+// CHECK:           [[B:%.+]] = moore.variable : <i32>
+// CHECK:           [[I:%.+]] = moore.variable : <i32>
+// CHECK:           moore.procedure initial {
+// CHECK:             [[S1:%.+]] = moore.assoc_array.first to [[I]] from [[AA]] : <assoc_array<i32, i32>>
+// CHECK              moore.blocking_assign [[B]], [[S1]] : i32
+// CHECK:             [[S2:%.+]] = moore.assoc_array.last to [[I]] from [[AA]] : <assoc_array<i32, i32>>
+// CHECK              moore.blocking_assign [[B]], [[S2]] : i32
+// CHECK:             [[S3:%.+]] = moore.assoc_array.next to [[I]] from [[AA]] : <assoc_array<i32, i32>>
+// CHECK              moore.blocking_assign [[B]], [[S3]] : i32
+// CHECK:             [[S4:%.+]] = moore.assoc_array.prev to [[I]] from [[AA]] : <assoc_array<i32, i32>>
+// CHECK              moore.blocking_assign [[B]], [[S4]] : i32
+// CHECK:             moore.return
+// CHECK:           }
+// CHECK:           moore.output
+// CHECK:         }
+module AssocArrayTraversalTest;
+    int aa[int];
+    int b;
+    int i;
+    initial begin
+        b = aa.first(i);
+        b = aa.last(i);
+        b = aa.next(i);
+        b = aa.prev(i);
+    end
+endmodule
+
 
 // Test that DPI-C imported functions are emitted as extern declarations
 

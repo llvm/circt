@@ -2154,6 +2154,86 @@ def AssocArrayExistsOp : MooreOp<"assoc_array.exists",
   }];
 }
 
+def AssocArrayFirstOp : MooreOp<"assoc_array.first", 
+    [TypesMatchWith<"associative array index type and given index type must match",
+    "assoc_array", "index",
+    "RefType::get(cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getIndexType())">]> {
+  let summary = [{Assigns to the given index variable the 
+    value of the first index in the associative array}];
+  let description = [{
+    See IEEE 1800-2023 § 7.9.4 "First()". Assigns to the given index variable
+    the value of the first index in the associative array. 
+    Returns 0 if the associative array is empty, 
+    otherwise return 1.
+    According to spec the returned size fits an `int`.
+  }];
+  let arguments = (ins AssocArrayRefType:$assoc_array, RefType:$index);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = [{
+    `to` $index `from` $assoc_array attr-dict `:` type($assoc_array)
+  }];
+}
+
+def AssocArrayLastOp : MooreOp<"assoc_array.last", 
+    [TypesMatchWith<"associative array index type and given index type must match",
+    "assoc_array", "index",
+    "RefType::get(cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getIndexType())">]> {
+  let summary = [{Assigns to the given index variable the 
+    value of the last index in the associative array}];
+  let description = [{
+    See IEEE 1800-2023 § 7.9.5 "Last()". Assigns to the given index variable
+    the value of the last index in the associative array. 
+    Returns 0 if the associative array is empty,
+    otherwise return 1.
+    According to spec the returned size fits an `int`.
+  }];
+  let arguments = (ins AssocArrayRefType:$assoc_array, RefType:$index);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = [{
+    `to` $index `from` $assoc_array attr-dict `:` type($assoc_array)
+  }];
+}
+
+def AssocArrayNextOp : MooreOp<"assoc_array.next", 
+    [TypesMatchWith<"associative array index type and given index type must match",
+    "assoc_array", "index",
+    "RefType::get(cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getIndexType())">]> {
+  let summary = [{Assigns to the given index variable the
+    value of the next index in the associative array}];
+  let description = [{
+    See IEEE 1800-2023 § 7.9.6 "Next()". Assigns to the given index variable
+    the value of the next index in the associative array. 
+    Returns 1 if there is a next index in the associative array,
+    otherwise returns 0.
+    According to spec the returned size fits an `int`.
+  }];
+  let arguments = (ins AssocArrayRefType:$assoc_array, RefType:$index);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = [{
+    `to` $index `from` $assoc_array attr-dict `:` type($assoc_array)
+  }];
+}
+
+def AssocArrayPrevOp : MooreOp<"assoc_array.prev", 
+    [TypesMatchWith<"associative array index type and given index type must match",
+    "assoc_array", "index",
+    "RefType::get(cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getIndexType())">]> {
+  let summary = [{Assigns to the given index variable the
+    value of the previous index in the associative array}];
+  let description = [{
+    See IEEE 1800-2023 § 7.9.7 "Prev()". Assigns to the given index variable 
+    the value of the previous index in the associative array. 
+    Returns 1 if there is a previous index in the associative array,
+    otherwise returns 0.
+    According to spec the returned size fits an `int`.
+  }];
+  let arguments = (ins AssocArrayRefType:$assoc_array, RefType:$index);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = [{
+    `to` $index `from` $assoc_array attr-dict `:` type($assoc_array)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Struct Manipulation
 //===----------------------------------------------------------------------===//

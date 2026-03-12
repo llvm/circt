@@ -1802,6 +1802,11 @@ struct RvalueExprVisitor : public ExprVisitor {
                      ((args[0]->type->isQueue() && subroutine.name != "size") ||
                       args[0]->type->isAssociativeArray());
 
+    // Associative Array Traversal Ops require value2 to be refs
+    bool secondArgIsByRef =
+        args.size() >= 1 &&
+        (args[0]->type->isAssociativeArray() && subroutine.name != "exists");
+
     // Call the conversion function with the appropriate arity. These return one
     // of the following:
     //
@@ -1824,7 +1829,8 @@ struct RvalueExprVisitor : public ExprVisitor {
     case (2):
       value = isByRefOp ? context.convertLvalueExpression(*args[0])
                         : context.convertRvalueExpression(*args[0]);
-      value2 = context.convertRvalueExpression(*args[1]);
+      value2 = secondArgIsByRef ? context.convertLvalueExpression(*args[1])
+                                : context.convertRvalueExpression(*args[1]);
       if (!value || !value2)
         return {};
       result = context.convertSystemCallArity2(subroutine, loc, value, value2);
@@ -3072,6 +3078,46 @@ Context::convertSystemCallArity2(const slang::ast::SystemSubroutine &subroutine,
                         cast<moore::RefType>(value1.getType()).getNestedType()))
                   return moore::AssocArrayExistsOp::create(builder, loc, value1,
                                                            value2);
+                return {};
+              })
+          .Case(
+              "first",
+              [&]() -> Value {
+                if (isa<moore::RefType>(value1.getType()) &&
+                    isa<moore::AssocArrayType>(
+                        cast<moore::RefType>(value1.getType()).getNestedType()))
+                  return moore::AssocArrayFirstOp::create(builder, loc, value1,
+                                                          value2);
+                return {};
+              })
+          .Case(
+              "last",
+              [&]() -> Value {
+                if (isa<moore::RefType>(value1.getType()) &&
+                    isa<moore::AssocArrayType>(
+                        cast<moore::RefType>(value1.getType()).getNestedType()))
+                  return moore::AssocArrayLastOp::create(builder, loc, value1,
+                                                         value2);
+                return {};
+              })
+          .Case(
+              "next",
+              [&]() -> Value {
+                if (isa<moore::RefType>(value1.getType()) &&
+                    isa<moore::AssocArrayType>(
+                        cast<moore::RefType>(value1.getType()).getNestedType()))
+                  return moore::AssocArrayNextOp::create(builder, loc, value1,
+                                                         value2);
+                return {};
+              })
+          .Case(
+              "prev",
+              [&]() -> Value {
+                if (isa<moore::RefType>(value1.getType()) &&
+                    isa<moore::AssocArrayType>(
+                        cast<moore::RefType>(value1.getType()).getNestedType()))
+                  return moore::AssocArrayPrevOp::create(builder, loc, value1,
+                                                         value2);
                 return {};
               })
           .Default([&]() -> Value { return {}; });
