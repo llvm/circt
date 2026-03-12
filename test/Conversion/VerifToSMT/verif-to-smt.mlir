@@ -217,6 +217,9 @@ func.func @test_bmc() -> (i1) {
     %0 = comb.add %arg0, %state0 : i32
     // %state0 is the result of a seq.compreg taking %0 as input
     %2 = comb.xor %state0, %c-1_i32 : i32
+    verif.clocked_by %clk -> %0 : !seq.clock, i32
+    verif.clocked_by %clk -> %state1 : !seq.clock, i32
+    verif.clocked_by %clk -> %state2 : !seq.clock, !hw.array<2xi32>
     verif.yield %2, %0, %state1, %state2 : i32, i32, i32, !hw.array<2xi32>
   }
   func.return %bmc : i1
@@ -242,6 +245,7 @@ func.func @large_initial_value() -> (i1) {
   ^bb0(%clk: !seq.clock, %arg0: i65):
     %true = hw.constant true
     verif.assert %true : i1
+    verif.clocked_by %clk -> %arg0 : !seq.clock, i65
     verif.yield %arg0 : i65
   }
   func.return %bmc : i1
@@ -456,4 +460,36 @@ func.func @multi_nondet() -> () {
     verif.yield %cc, %cc : i32, i32
   }
   return
+}
+
+// -----
+
+// CHECK-LABEL: func.func @multi_clock_bmc
+// CHECK:       [[LOOP:%.+]]:2 = func.call @bmc_loop
+// CHECK:       [[NOTC0:%.+]] = smt.bv.not {{%.+}} : !smt.bv<1>
+// CHECK:       [[AND0:%.+]] = smt.bv.and [[NOTC0]], [[LOOP]]#0
+// CHECK:       [[TRUE:%.+]] = smt.bv.constant #smt.bv<-1> : !smt.bv<1>
+// CHECK:       [[POSEDGE0:%.+]] = smt.eq [[AND0]], [[TRUE]]
+// CHECK:       [[NOTC1:%.+]] = smt.bv.not {{%.+}} : !smt.bv<1>
+// CHECK:       [[AND1:%.+]] = smt.bv.and [[NOTC1]], [[LOOP]]#1
+// CHECK:       [[POSEDGE1:%.+]] = smt.eq [[AND1]], [[TRUE]]
+// CHECK:       [[ITE0:%.+]] = smt.ite [[POSEDGE0]],
+// CHECK:       [[ITE1:%.+]] = smt.ite [[POSEDGE1]],
+
+func.func @multi_clock_bmc() -> i1 {
+  %bmc = verif.bmc bound 10 num_regs 2 initial_values [0 : i32, 0 : i32] attributes {reg_clock_indices = [0 : i32, 1 : i32]} init {
+    %clk = seq.const_clock low
+    verif.yield %clk, %clk : !seq.clock, !seq.clock
+  } loop {
+  ^bb0(%clk0: !seq.clock, %clk1: !seq.clock):
+    verif.yield %clk0, %clk1: !seq.clock, !seq.clock
+  } circuit {
+  ^bb0(%clk0: !seq.clock, %clk1: !seq.clock, %state0: i32, %state1: i32):
+    %true = hw.constant true
+    verif.assert %true : i1
+    verif.clocked_by %clk0 -> %state0 : !seq.clock, i32
+    verif.clocked_by %clk1 -> %state1 : !seq.clock, i32
+    verif.yield %state0, %state1 : i32, i32
+  }
+  return %bmc : i1
 }
