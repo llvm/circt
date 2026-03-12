@@ -223,6 +223,9 @@ class ISAInstructionFormat {
 
   /// ISA extension/namespace this instruction belongs to.
   string extension = "";
+
+  // XLENs this instruction is valid for.
+  list<int> xlen = [];
 }
 
 //===----------------------------------------------------------------------===//
