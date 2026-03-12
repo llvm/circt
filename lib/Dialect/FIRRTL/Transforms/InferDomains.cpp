@@ -48,16 +48,6 @@ using DomainValue = mlir::TypedValue<DomainType>;
 
 using PortInsertions = SmallVector<std::pair<unsigned, PortInfo>>;
 
-/// From a domain info attribute, get the domain-type of a domain value at
-/// index i.
-// Get the domain name from a DomainType, or nullptr if not a DomainType.
-static StringAttr getDomainTypeName(Type type) {
-  auto domainType = dyn_cast<DomainType>(type);
-  if (!domainType)
-    return nullptr;
-  return domainType.getName().getAttr();
-}
-
 /// From a domain info attribute, get the row of associated domains for a
 /// hardware value at index i.
 static auto getPortDomainAssociation(ArrayAttr info, size_t i) {
@@ -114,51 +104,26 @@ public:
   size_t getNumDomains() const { return domainTable.size(); }
   DomainOp getDomain(DomainTypeID id) const { return domainTable[id.index]; }
 
-  DomainTypeID getDomainTypeID(StringAttr name) const {
-    return typeIDTable.at(name);
-  }
+  DomainTypeID getDomainTypeID(Type type) const { return typeIDTable.at(type); }
 
-  DomainTypeID getDomainTypeID(FlatSymbolRefAttr ref) const {
-    return getDomainTypeID(ref.getAttr());
-  }
-
-  // For FModuleLike operations
   DomainTypeID getDomainTypeID(FModuleLike module, size_t i) const {
-    auto name = getDomainTypeName(module.getPortType(i));
-    return getDomainTypeID(name);
+    return getDomainTypeID(module.getPortType(i));
   }
 
-  // For instance operations (InstanceOp, InstanceChoiceOp)
-  DomainTypeID getDomainTypeID(InstanceOp op, size_t i) const {
-    auto name = getDomainTypeName(op.getResult(i).getType());
-    return getDomainTypeID(name);
-  }
-
-  DomainTypeID getDomainTypeID(InstanceChoiceOp op, size_t i) const {
-    auto name = getDomainTypeName(op.getResult(i).getType());
-    return getDomainTypeID(name);
+  DomainTypeID getDomainTypeID(FInstanceLike op, size_t i) const {
+    return getDomainTypeID(op->getResult(i).getType());
   }
 
   DomainTypeID getDomainTypeID(DomainValue value) const {
-    if (auto arg = dyn_cast<BlockArgument>(value)) {
-      auto *block = arg.getOwner();
-      auto *owner = block->getParentOp();
-      auto moduleOp = cast<FModuleOp>(owner);
-      auto i = arg.getArgNumber();
-      return getDomainTypeID(moduleOp, i);
-    }
-
-    auto result = dyn_cast<OpResult>(value);
-    auto name = getDomainTypeName(result.getType());
-    return getDomainTypeID(name);
+    return getDomainTypeID(value.getType());
   }
 
 private:
   void processDomain(DomainOp op) {
     auto index = domainTable.size();
-    auto name = op.getNameAttr();
+    auto domainType = DomainType::getFromDomainOp(op);
     domainTable.push_back(op);
-    typeIDTable.insert({name, {index}});
+    typeIDTable.insert({domainType, {index}});
   }
 
   void processCircuit(CircuitOp circuit) {
@@ -169,8 +134,8 @@ private:
   /// A map from domain type ID to op.
   SmallVector<DomainOp> domainTable;
 
-  /// A map from domain name to type ID.
-  DenseMap<StringAttr, DomainTypeID> typeIDTable;
+  /// A map from domain type to type ID.
+  DenseMap<Type, DomainTypeID> typeIDTable;
 };
 
 /// Information about the changes made to the interface of a moduleOp, which can
@@ -1294,10 +1259,10 @@ static LogicalResult updateInstance(const DomainInfo &info,
       auto loc = port.getLoc();
       auto *term = getTermForDomain(allocator, table, port);
       if (auto *var = dyn_cast<VariableTerm>(term)) {
-        auto name = getDomainTypeName(op.getResult(i).getType());
-        auto domainTypeID = info.getDomainTypeID(name);
+        auto domainType = cast<DomainType>(op.getResult(i).getType());
+        auto domainTypeID = info.getDomainTypeID(domainType);
         auto domainDecl = info.getDomain(domainTypeID);
-        auto domainType = DomainType::getFromDomainOp(domainDecl);
+        auto name = domainDecl.getNameAttr();
         auto anon = DomainCreateAnonOp::create(builder, loc, domainType, name);
         solve(var, allocator.allocVal(anon));
         DomainDefineOp::create(builder, loc, port, anon);
