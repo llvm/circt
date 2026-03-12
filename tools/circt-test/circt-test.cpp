@@ -96,6 +96,18 @@ struct Options {
       cl::desc("Print command for each test to stdout instead of executing it"),
       cl::init(false), cl::cat(testCat)};
 
+  cl::opt<std::string> trace{
+      "trace",
+      cl::desc(
+          "Emit waveforms in the given comma-separated formats.\n"
+          "Not all formats are available for all simulators.\n"
+          "First supported format in the list or simulator's default is used.\n"
+          "Available formats:\n"
+          "- auto: Use simulator's default format\n"
+          "- vcd: Value Change Dump (Verilator)\n"
+          "- fst: Fast Simulation Trace (Verilator)"),
+      cl::value_desc("formats"), cl::init(""), cl::cat(testCat)};
+
   cl::opt<unsigned> numThreads{
       "j", cl::value_desc("N"),
       cl::desc("Number of tests to run in parallel\n"
@@ -1145,6 +1157,12 @@ static TestStatus executeTest(Test &test, RunnerSuite &runnerSuite,
     SmallString<8> str;
     depthInt.getValue().toStringUnsigned(str);
     args.push_back(argsSaver.save(str.str()));
+  }
+
+  // Pass trace preferences to simulation runners.
+  if (!opts.trace.empty() && runner->kind == TestKind::Simulation) {
+    args.push_back("--trace");
+    args.push_back(opts.trace);
   }
 
   // If we are doing a dry run, store the command we would run in the test's
