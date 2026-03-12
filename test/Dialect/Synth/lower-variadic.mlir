@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --synth-lower-variadic --split-input-file | FileCheck %s --check-prefixes=COMMON,TIMING
 // RUN: circt-opt %s --synth-lower-variadic=timing-aware=false --split-input-file | FileCheck %s --check-prefixes=COMMON,NO-TIMING
+// RUN: circt-opt %s --synth-lower-variadic=reuse-subsets=true | FileCheck %s
 // COMMON-LABEL: hw.module @Basic
 hw.module @Basic(in %a: i2, in %b: i2, in %c: i2, in %d: i2, in %e: i2, out f: i2) {
   // COMMON-NEXT: %[[RES0:.+]] = synth.aig.and_inv not %a, %b : i2
@@ -72,7 +73,6 @@ hw.module @Issue9115(in %a : i16, in %b : i16, in %c : i16, in %d : i16, out pro
   hw.output %0 : i16
 }
 
-// RUN: circt-opt %s  --synth-lower-variadic=reuse-subsets=true | FileCheck %s
 // COMMON-LABEL: hw.module @SharingHeuristic
 hw.module @SharingHeuristic(in %in0 : i1, in %in1 : i1, in %in2 : i1, in %in3 : i1, in %in4 : i1, out out1 : i1, out out2 : i1) {
   

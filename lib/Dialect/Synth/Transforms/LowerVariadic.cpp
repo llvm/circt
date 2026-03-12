@@ -105,6 +105,38 @@ static LogicalResult replaceWithBalancedTree(
 
 using OperandKey = std::vector<std::pair<mlir::Value, bool>>;
 
+namespace llvm {
+template <>
+struct DenseMapInfo<OperandKey> {
+  static OperandKey getEmptyKey() {
+    // Return a vector containing the mlir::Value empty key
+    return {{DenseMapInfo<mlir::Value>::getEmptyKey(), false}};
+  }
+
+  static OperandKey getTombstoneKey() {
+    // Return a vector containing the mlir::Value tombstone key
+    return {{DenseMapInfo<mlir::Value>::getTombstoneKey(), false}};
+  }
+
+  static unsigned getHashValue(const OperandKey &val) {
+    llvm::hash_code hash = 0;
+    // Iteratively combine the hash of each pair in the vector
+    for (const auto &pair : val) {
+      hash = llvm::hash_combine(
+          hash, DenseMapInfo<mlir::Value>::getHashValue(pair.first),
+          pair.second);
+    }
+    return static_cast<unsigned>(hash);
+  }
+
+  static bool isEqual(const OperandKey &lhs, const OperandKey &rhs) {
+    // std::vector and std::pair already implement operator==,
+    // which does a deep equality check of the elements.
+    return lhs == rhs;
+  }
+};
+} // namespace llvm
+
 // Struct for ordering the andInverterOp operations we have already seen
 struct OperandPairLess {
   bool operator()(const std::pair<mlir::Value, bool> &lhs,
@@ -127,15 +159,6 @@ struct OperandPairLess {
   }
 };
 
-// Ordering of a vector of andInverterOp operations
-struct OperandKeyLess {
-  bool operator()(const OperandKey &lhs, const OperandKey &rhs) const {
-    // std::lexicographical_compare is the standard way to compare two vectors
-    return std::lexicographical_compare(lhs.begin(), lhs.end(), rhs.begin(),
-                                        rhs.end(), OperandPairLess());
-  }
-};
-
 static OperandKey getSortedOperandKey(aig::AndInverterOp op) {
   OperandKey key;
   for (size_t i = 0, e = op.getNumOperands(); i < e; ++i) {
@@ -147,7 +170,7 @@ static OperandKey getSortedOperandKey(aig::AndInverterOp op) {
 
 static void simplifyWithExistingOperations(
     aig::AndInverterOp op, mlir::IRRewriter &rewriter,
-    std::map<OperandKey, Value, OperandKeyLess> &seenExpressions) {
+    llvm::DenseMap<OperandKey, mlir::Value> &seenExpressions) {
 
   if (op.getNumOperands() <= 2)
     return;
@@ -222,7 +245,7 @@ void LowerVariadicPass::runOnOperation() {
   rewriter.setListener(analysis);
 
   // To be used in  simplifyWithExistingOperations.
-  std::map<OperandKey, Value, OperandKeyLess> seenExpressions;
+  llvm::DenseMap<OperandKey, mlir::Value> seenExpressions;
   // Simplify exising andInverterOps by reusing operations.
   if (reuseSubsets) {
     // First collect all the andInverterOp operations in the block.
