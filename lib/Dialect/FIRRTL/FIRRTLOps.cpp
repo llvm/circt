@@ -6430,6 +6430,48 @@ static void printFIRRTLImplicitSSAName(OpAsmPrinter &p, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
+// FieldsFromDomain Custom Directive
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseFieldsFromDomain(
+    OpAsmParser &parser,
+    SmallVectorImpl<OpAsmParser::UnresolvedOperand> &fieldValues,
+    SmallVectorImpl<Type> &fieldTypes, Type &resultType) {
+  // Parse the domain type.
+  if (parser.parseType(resultType))
+    return failure();
+
+  auto domainType = dyn_cast<DomainType>(resultType);
+  if (!domainType)
+    return parser.emitError(parser.getCurrentLocation(),
+                            "expected domain type");
+
+  // Extract the field types from the domain type.
+  auto fields = domainType.getFields();
+
+  // Validate that the number of field values matches the domain.
+  if (fieldValues.size() != fields.size())
+    return parser.emitError(parser.getCurrentLocation(),
+                            "number of field values (" +
+                                Twine(fieldValues.size()) +
+                                ") does not match domain field count (" +
+                                Twine(fields.size()) + ")");
+
+  // Populate the field types from the domain definition.
+  fieldTypes.reserve(fields.size());
+  for (auto field : fields)
+    fieldTypes.push_back(cast<DomainFieldAttr>(field).getType());
+
+  return success();
+}
+
+static void printFieldsFromDomain(OpAsmPrinter &p, Operation *op,
+                                  OperandRange fieldValues,
+                                  TypeRange fieldTypes, Type resultType) {
+  p << resultType;
+}
+
+//===----------------------------------------------------------------------===//
 // MemOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 
@@ -7263,6 +7305,36 @@ DomainCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // Verify that the result type matches the domain definition
   auto domainType = getResult().getType();
   return domainType.verifySymbolUses(getOperation(), symbolTable);
+}
+
+LogicalResult DomainCreateOp::verify() {
+  // Get the field definitions from the result type
+  auto domainType = getResult().getType();
+  auto fields = domainType.getFields();
+  auto fieldValues = getFieldValues();
+
+  // Check that the number of field values matches the number of fields
+  if (fieldValues.size() != fields.size())
+    return emitOpError() << "has " << fieldValues.size()
+                         << " field value(s) but domain '"
+                         << domainType.getName() << "' expects "
+                         << fields.size() << " field(s)";
+
+  // Check that each field value type matches the corresponding field type
+  for (size_t i = 0; i < fields.size(); ++i) {
+    auto fieldAttr = cast<DomainFieldAttr>(fields[i]);
+    auto expectedType = fieldAttr.getType();
+    auto actualType = fieldValues[i].getType();
+
+    if (expectedType == actualType)
+      continue;
+
+    return emitOpError() << "field value " << i << " has type " << actualType
+                         << " but domain field '" << fieldAttr.getName()
+                         << "' expects type " << expectedType;
+  }
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

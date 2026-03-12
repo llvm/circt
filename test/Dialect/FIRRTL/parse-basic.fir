@@ -2289,6 +2289,23 @@ circuit DomainCreate:
     domain_define child.A = my_clock
 
 ;// -----
+FIRRTL version 5.1.0
+circuit DomainCreateWithFields:
+  domain PowerDomain:
+    name: String
+    voltage: Integer
+    alwaysOn: Bool
+
+  ; CHECK-LABEL: firrtl.module @DomainCreateWithFields
+  public module DomainCreateWithFields:
+    input alwaysOn: Bool
+
+    ; CHECK: %[[NAME:.+]] = firrtl.string "FastClock"
+    ; CHECK: %[[VOLTAGE:.+]] = firrtl.integer 1000
+    ; CHECK: %powerDomain = firrtl.domain.create(%[[NAME]], %[[VOLTAGE]], %alwaysOn) : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+    domain powerDomain of PowerDomain(String("FastClock"), Integer(1000), alwaysOn)
+
+;// -----
 FIRRTL version 6.0.0
 circuit UnknownProperties:
   class Foo:

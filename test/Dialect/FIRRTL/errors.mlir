@@ -3446,3 +3446,42 @@ firrtl.circuit "DomainAnonTypeMismatch" {
     %d = firrtl.domain.anon : !firrtl.domain<@A()>
   }
 }
+
+// -----
+
+// Test verification: wrong number of field values (too few).
+firrtl.circuit "DomainCreateWrongFieldCountTooFew" {
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"name", !firrtl.string>, #firrtl.domain.field<"period", !firrtl.integer>]
+  firrtl.module @DomainCreateWrongFieldCountTooFew() {
+    %name = firrtl.string "MyClock"
+    %my_domain = firrtl.domain.create(%name) : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+  // expected-error @+1 {{number of field values (1) does not match domain field count (2)}}
+  }
+}
+
+// -----
+
+// Test verification: wrong number of field values (too many).
+firrtl.circuit "DomainCreateWrongFieldCountTooMany" {
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"name", !firrtl.string>]
+  firrtl.module @DomainCreateWrongFieldCountTooMany() {
+    %name = firrtl.string "MyClock"
+    %period = firrtl.integer 42
+    %my_domain = firrtl.domain.create(%name, %period) : !firrtl.domain<@ClockDomain(name: !firrtl.string)>
+  // expected-error @+1 {{number of field values (2) does not match domain field count (1)}}
+  }
+}
+
+// -----
+
+// Test verification: wrong field type.
+firrtl.circuit "DomainCreateWrongFieldType" {
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"name", !firrtl.string>, #firrtl.domain.field<"period", !firrtl.integer>]
+  firrtl.module @DomainCreateWrongFieldType() {
+    %name = firrtl.string "MyClock"
+    // expected-note @+1 {{prior use here}}
+    %period = firrtl.string "not an integer"
+    %my_domain = firrtl.domain.create(%name, %period) : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+    // expected-error @-1 {{use of value '%period' expects different type than prior uses: '!firrtl.integer' vs '!firrtl.string'}}
+  }
+}

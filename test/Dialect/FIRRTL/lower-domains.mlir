@@ -589,27 +589,22 @@ firrtl.circuit "DeadDomainCreate" {
 
 // -----
 
-// Test domain create with a domain that has fields.
-firrtl.circuit "DomainCreateWithFields" {
-  // CHECK-LABEL: firrtl.class @ClockDomain(
-  // CHECK-SAME:    in %name_in: !firrtl.string
-  // CHECK-SAME:    out %name_out: !firrtl.string
-  // CHECK-SAME:    in %period_in: !firrtl.integer
-  // CHECK-SAME:    out %period_out: !firrtl.integer
+// Test domain create with mixed constant and port values.
+firrtl.circuit "DomainCreateWithMixedValues" {
   firrtl.domain @ClockDomain [#firrtl.domain.field<"name", !firrtl.string>, #firrtl.domain.field<"period", !firrtl.integer>]
-  // CHECK-LABEL: firrtl.module @DomainCreateWithFields(
-  firrtl.module @DomainCreateWithFields(
+  // CHECK-LABEL: firrtl.module @DomainCreateWithMixedValues(
+  firrtl.module @DomainCreateWithMixedValues(
+    in %clk_period: !firrtl.integer,
     out %A: !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
   ) {
-    // CHECK:      %A_object = firrtl.object @ClockDomain_out
-    // CHECK:      %my_domain = firrtl.object @ClockDomain(
+    // CHECK:      %[[name_const:.+]] = firrtl.string "FastClock"
+    // CHECK-NEXT: %my_domain = firrtl.object @ClockDomain(
     // CHECK-NEXT: %[[name_in:.+]] = firrtl.object.subfield %my_domain[name_in]
-    // CHECK-NEXT: %[[unknown_name:.+]] = firrtl.unknown : !firrtl.string
-    // CHECK-NEXT: firrtl.propassign %[[name_in]], %[[unknown_name]]
+    // CHECK-NEXT: firrtl.propassign %[[name_in]], %[[name_const]]
     // CHECK-NEXT: %[[period_in:.+]] = firrtl.object.subfield %my_domain[period_in]
-    // CHECK-NEXT: %[[unknown_period:.+]] = firrtl.unknown : !firrtl.integer
-    // CHECK-NEXT: firrtl.propassign %[[period_in]], %[[unknown_period]]
-    %my_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
+    // CHECK-NEXT: firrtl.propassign %[[period_in]], %clk_period
+    %name = firrtl.string "FastClock"
+    %my_domain = firrtl.domain.create(%name, %clk_period) : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
     firrtl.domain.define %A, %my_domain : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
   }
 }
