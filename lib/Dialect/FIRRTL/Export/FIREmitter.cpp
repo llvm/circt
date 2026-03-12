@@ -1421,8 +1421,25 @@ void Emitter::emitStatement(DomainCreateOp op) {
   startStatement();
   auto name = legalize(op.getNameAttr());
   addValueName(op.getResult(), name);
-  ps << "domain " << PPExtString(name) << " of "
-     << PPExtString(op.getDomainAttr().getValue());
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "domain " << PPExtString(name) << " of "
+       << PPExtString(op.getDomainAttr().getValue());
+
+    // Emit field values if present
+    auto fieldValues = op.getFieldValues();
+    if (!fieldValues.empty()) {
+      ps << "(" << PP::ibox0;
+      bool first = true;
+      for (auto value : fieldValues) {
+        if (!first)
+          ps << "," << PP::space;
+        emitExpression(value);
+        first = false;
+      }
+      ps << ")" << PP::end;
+    }
+  });
+
   emitLocationAndNewLine(op);
 }
 
