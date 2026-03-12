@@ -15,24 +15,12 @@
 
 #include "circt/Dialect/Seq/SeqEnums.h"
 #include "mlir/Pass/Pass.h"
-#include "llvm/ADT/StringRef.h"
 
 namespace circt {
 namespace seq {
 
-#define GEN_PASS_DECL_EXTERNALIZECLOCKGATE
-#define GEN_PASS_DECL_HWMEMSIMIMPL
+#define GEN_PASS_DECL
 #include "circt/Dialect/Seq/SeqPasses.h.inc"
-
-std::unique_ptr<mlir::Pass> createLowerSeqCompRegCEPass();
-std::unique_ptr<mlir::Pass> createLowerSeqHLMemPass();
-std::unique_ptr<mlir::Pass>
-createExternalizeClockGatePass(const ExternalizeClockGateOptions &options = {});
-std::unique_ptr<mlir::Pass> createLowerSeqFIFOPass();
-std::unique_ptr<mlir::Pass>
-createHWMemSimImplPass(const HWMemSimImplOptions &options = {});
-std::unique_ptr<mlir::Pass> createLowerSeqShiftRegPass();
-std::unique_ptr<mlir::Pass> createRegOfVecToMem();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
