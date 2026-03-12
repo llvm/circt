@@ -7,7 +7,7 @@ from __future__ import annotations
 from ._om_ops_gen import *
 from .._mlir_libs._circt._om import AnyType, Evaluator as BaseEvaluator, Object as BaseObject, List as BaseList, BasePath as BaseBasePath, BasePathType, Path, PathType, ClassType, ReferenceAttr, ListAttr, ListType, OMIntegerAttr, Unknown
 
-from ..ir import Attribute, Diagnostic, DiagnosticSeverity, Module, StringAttr, IntegerAttr, IntegerType
+from ..ir import Attribute, Diagnostic, DiagnosticSeverity, Module, StringAttr, IntegerAttr, IntegerType, SymbolTable
 from ..support import attribute_to_var, var_to_attribute
 
 import sys
@@ -130,6 +130,9 @@ class Evaluator(BaseEvaluator):
 
     # Attach our Diagnostic handler.
     mod.context.attach_diagnostic_handler(self._handle_diagnostic)
+
+    # Create a SymbolTable for this Evaluator.
+    self.symbol_table = SymbolTable(mod.operation)
 
   def instantiate(self, cls: str, *args: Any) -> Object:
     """Instantiate an Object with a class name and actual parameters."""

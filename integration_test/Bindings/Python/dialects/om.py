@@ -3,7 +3,7 @@
 
 import circt
 from circt.dialects import om
-from circt.ir import Context, InsertionPoint, Location, Module, IntegerAttr, IntegerType, Type
+from circt.ir import Context, InsertionPoint, Location, Module, IntegerAttr, IntegerType, Type, SymbolTable
 from circt.support import var_to_attribute
 
 from dataclasses import dataclass
@@ -105,6 +105,13 @@ with Context() as ctx, Location.unknown():
   """)
 
   evaluator = om.Evaluator(module)
+
+# Test symbol_table.
+
+assert isinstance(evaluator.symbol_table, SymbolTable)
+
+# CHECK: om.class @Test
+print(evaluator.symbol_table["Test"])
 
 # Test instantiate failure.
 
