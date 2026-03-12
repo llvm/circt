@@ -1828,11 +1828,7 @@ def DomainSubfieldOp : FIRRTLOp<"domain.subfield", [
                                 mlir::DictionaryAttr attrs,
                                 mlir::OpaqueProperties properties,
                                 mlir::RegionRange regions,
-                                std::optional<Location> loc) {
-      Adaptor adaptor(operands, attrs, properties, regions);
-      return inferReturnType(adaptor.getInput().getType(),
-                             adaptor.getFieldIndex(), loc);
-    }
+                                std::optional<Location> loc);
 
     /// Create a DomainSubfieldOp with the given parameters.
     static DomainSubfieldOp create(OpBuilder &builder, Type resultType,

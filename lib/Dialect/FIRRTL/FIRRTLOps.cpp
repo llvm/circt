@@ -7367,6 +7367,16 @@ Type DomainSubfieldOp::inferReturnType(Type inType, uint32_t fieldIndex,
   return cast<DomainFieldAttr>(fields[fieldIndex]).getType();
 }
 
+Type DomainSubfieldOp::inferReturnType(ValueRange operands,
+                                       mlir::DictionaryAttr attrs,
+                                       mlir::OpaqueProperties properties,
+                                       mlir::RegionRange regions,
+                                       std::optional<Location> loc) {
+  Adaptor adaptor(operands, attrs, properties, regions);
+  return inferReturnType(adaptor.getInput().getType(),
+                         adaptor.getFieldIndex(), loc);
+}
+
 LogicalResult DomainSubfieldOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> location, ValueRange operands,
     DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
