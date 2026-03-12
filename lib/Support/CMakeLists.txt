@@ -17,6 +17,7 @@ add_circt_library(CIRCTSupport
   Path.cpp
   PrettyPrinter.cpp
   PrettyPrinterHelpers.cpp
+  SATSolver.cpp
   SymCache.cpp
   TruthTable.cpp
   ValueMapper.cpp
