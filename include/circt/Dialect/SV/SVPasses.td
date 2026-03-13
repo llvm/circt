@@ -29,7 +29,6 @@ def HWCleanup : Pass<"hw-cleanup", "hw::HWModuleOp"> {
            "true", "Allow always and always_ff blocks to be merged">
   ];
 
-  let constructor = "circt::sv::createHWCleanupPass()";
 }
 
 def HWLegalizeModules : Pass<"hw-legalize-modules", "hw::HWModuleOp"> {
@@ -42,7 +41,6 @@ def HWLegalizeModules : Pass<"hw-legalize-modules", "hw::HWModuleOp"> {
       constructs.
   }];
 
-  let constructor = "circt::sv::createHWLegalizeModulesPass()";
 }
 
 def PrettifyVerilog : Pass<"prettify-verilog", "hw::HWModuleOp"> {
@@ -55,7 +53,6 @@ def PrettifyVerilog : Pass<"prettify-verilog", "hw::HWModuleOp"> {
       it is self contained.
   }];
 
-  let constructor = "circt::sv::createPrettifyVerilogPass()";
 }
 
 def HWStubExternalModules : Pass<"hw-stub-external-modules",
@@ -66,7 +63,6 @@ def HWStubExternalModules : Pass<"hw-stub-external-modules",
       useful for linting to eliminate missing file errors.
   }];
 
-  let constructor = "circt::sv::createHWStubExternalModulesPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
 }
 
@@ -76,8 +72,6 @@ def HWGeneratorCalloutPass : Pass<"hw-generator-callout", "ModuleOp"> {
     This pass calls an external program for all the hw.module.generated nodes,
     following the description in the hw.generator.schema node.
   }];
-  let constructor = "circt::sv::createHWGeneratorCalloutPass()";
-
   let options = [
     Option<"schemaName", "schema-name", "std::string",
                 "", "Name of the schema to process">,
@@ -95,7 +89,6 @@ def SVTraceIVerilog : Pass<"sv-trace-iverilog", "ModuleOp"> {
     tracing in an iverilog simulation.
   }];
 
-  let constructor = "circt::sv::createSVTraceIVerilogPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
   let options = [
     Option<"topOnly", "top-only", "bool", "true",
@@ -116,7 +109,6 @@ def HWExportModuleHierarchy : Pass<"hw-export-module-hierarchy",
     sv.verbatim ops with the output_file attribute.
   }];
 
-  let constructor = "circt::sv::createHWExportModuleHierarchyPass()";
   let dependentDialects = ["circt::emit::EmitDialect", "circt::sv::SVDialect"];
 }
 
@@ -129,7 +121,6 @@ def HWEliminateInOutPorts : Pass<"hw-eliminate-inout-ports",
     input and output ports at the using module, and subsequently moving the
     inout read- and writes to the instantiation site.
   }];
-  let constructor = "circt::sv::createHWEliminateInOutPortsPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
   let options = [
     Option<"readSuffix", "read-suffix", "std::string", "\"_rd\"",

@@ -291,15 +291,15 @@ static void loadHWLoweringPipeline(OpPassManager &pm) {
   pm.nest<hw::HWModuleOp>().addPass(circt::seq::createLowerSeqHLMem());
   pm.addPass(seq::createHWMemSimImpl());
   pm.addPass(circt::createLowerSeqToSVPass());
-  pm.nest<hw::HWModuleOp>().addPass(sv::createHWCleanupPass());
+  pm.nest<hw::HWModuleOp>().addPass(sv::createHWCleanup());
 
   // Legalize unsupported operations within the modules.
-  pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
+  pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModules());
   pm.addPass(createSimpleCanonicalizerPass());
 
   // Tidy up the IR to improve verilog emission quality.
   auto &modulePM = pm.nest<hw::HWModuleOp>();
-  modulePM.addPass(sv::createPrettifyVerilogPass());
+  modulePM.addPass(sv::createPrettifyVerilog());
 }
 
 // --------------------------------------------------------------------------
@@ -367,7 +367,7 @@ static LogicalResult doHLSFlowDynamic(
   addIRLevel(IRLevel::SV, [&]() { loadHWLoweringPipeline(pm); });
 
   if (traceIVerilog)
-    pm.addPass(circt::sv::createSVTraceIVerilogPass());
+    pm.addPass(circt::sv::createSVTraceIVerilog());
 
   if (loweringOptions.getNumOccurrences())
     loweringOptions.setAsAttribute(module);
