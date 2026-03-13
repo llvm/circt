@@ -10,25 +10,63 @@ on:
         required: true
         default: false
         type: boolean
+      cibw-build:
+        description: 'Which wheel target to build (workflow_dispatch only)'
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - cp310-manylinux_x86_64
+          - cp313-manylinux_x86_64
+          - cp314-manylinux_x86_64
   schedule:
     - cron: 0 12 * * 1
 
 jobs:
+  select_matrix:
+    name: Select wheel matrix
+    runs-on: ubuntu-22.04
+    if: github.repository == 'llvm/circt'
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set matrix
+        id: set-matrix
+        uses: actions/github-script@v7
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CIBW_BUILD: ${{ inputs.cibw-build }}
+        with:
+          script: |
+            const allTargets = [
+              "cp310-manylinux_x86_64",
+              "cp313-manylinux_x86_64",
+              "cp314-manylinux_x86_64",
+            ];
+
+            const selectedTargets =
+              process.env.EVENT_NAME !== "workflow_dispatch" || process.env.CIBW_BUILD === "all"
+                ? allTargets
+                : [process.env.CIBW_BUILD];
+
+            const matrix = {
+              config: selectedTargets.map((target) => ({
+                os: "ubuntu-22.04",
+                cibw_build: target,
+              })),
+            };
+
+            core.setOutput("matrix", JSON.stringify(matrix));
+
   build_wheels:
     name: Build wheels with ${{ matrix.config.cibw_build }}
     runs-on: ${{ matrix.config.os }}
     if: github.repository == 'llvm/circt'
+    needs: select_matrix
     strategy:
       fail-fast: false
-      matrix:
-        config:
-          - os: ubuntu-22.04
-            cibw_build: cp310-manylinux_x86_64
-          - os: ubuntu-22.04
-            cibw_build: cp313-manylinux_x86_64
-          - os: ubuntu-22.04
-            cibw_build: cp314-manylinux_x86_64
-
+      matrix: ${{ fromJSON(needs.select_matrix.outputs.matrix) }}
     steps:
       - name: Get CIRCT
         uses: actions/checkout@v3
