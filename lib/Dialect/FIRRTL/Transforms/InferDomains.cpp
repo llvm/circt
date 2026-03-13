@@ -1448,11 +1448,11 @@ static LogicalResult stripModule(FModuleLike op) {
               op.erasePorts(erasures);
               return WalkResult::advance();
             })
-            .Case<DomainDefineOp, DomainCreateAnonOp, DomainCreateOp>(
-                [](Operation *op) {
-                  op->erase();
-                  return WalkResult::advance();
-                })
+            .Case<DomainDefineOp, DomainCreateAnonOp, DomainCreateOp,
+                  DomainSubfieldOp>([](Operation *op) {
+              op->erase();
+              return WalkResult::advance();
+            })
             .Case<UnsafeDomainCastOp>([](UnsafeDomainCastOp op) {
               op.replaceAllUsesWith(op.getInput());
               op.erase();
