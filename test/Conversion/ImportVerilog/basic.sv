@@ -4852,6 +4852,27 @@ module TopTwoPorts;
   TwoPortsSameType dut(.a(i1), .b(i2));
 endmodule
 
+// The test from sv-test
+interface test_bus;
+  logic test_pad;
+endinterface: test_bus
+
+// CHECK-LABEL: moore.module private @sub(in %iface_test_pad : !moore.ref<l1>) {
+// CHECK:         moore.output
+// CHECK:       }
+module sub(test_bus iface);
+endmodule
+
+// CHECK-LABEL: moore.module @top() {
+// CHECK:         %iface_test_pad = moore.variable : <l1>
+// CHECK:         moore.instance "sub" @sub(iface_test_pad: %iface_test_pad: !moore.ref<l1>) -> ()
+// CHECK:         moore.output
+// CHECK:       }
+module top;
+   test_bus iface();
+   sub sub (.iface);
+endmodule
+
 // CHECK-LABEL: moore.module @DynamicArrayInitializeTest() {
 // CHECK: [[ARR:%.+]] = moore.variable : <open_uarray<i8>>
 // CHECK: moore.procedure initial {
@@ -4920,3 +4941,4 @@ module DynamicArrayDeleteTest;
   end
 
 endmodule
+
