@@ -72,7 +72,6 @@ llvm::APInt MajorityInverterOp::evaluate(ArrayRef<APInt> inputs) {
 }
 
 OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
-  // TODO: Implement maj(x, 1, 1) = 1, maj(x, 0, 0) = 0
 
   SmallVector<APInt, 3> inputValues;
   SmallVector<size_t, 3> nonConstantValues;
@@ -102,13 +101,9 @@ OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
     auto j = (k + 2) % 3;
     auto c1 = getConstant(i);
     auto c2 = getConstant(j);
-    // x 0 0 -> 0
-    // x 1 1 -> 1
-    // x 0 ~0 -> x
-    // x 1 ~1 -> x
-    // x ~1 ~1 -> ~1 -> 0
-    // ~x 0 0 -> ~x  no fold
-    // ~x 0 ~1 -> 0
+    // x c c -> c
+    // x c !c -> x
+    // x ~c ~c -> ~c
     if (c1 == c2) {
       return IntegerAttr::get(IntegerType::get(getContext(), c1->getBitWidth()),
                               c1.value());
