@@ -1183,7 +1183,7 @@ public:
               sv::VerbatimExprOp, sv::VerbatimExprSEOp, sv::IfOp, sv::IfDefOp,
               sv::IfDefProceduralOp, sv::AlwaysCombOp, seq::InitialOp,
               sv::AlwaysFFOp, seq::InitialOp, seq::YieldOp, hw::OutputOp,
-              hw::HWModuleOp,
+              hw::HWModuleOp, verif::FormalOp,
               // Specifically ignore printfs, as we can't do anything with them
               // in btor2
               verif::FormatVerilogStringOp, verif::PrintOp>(
@@ -1312,6 +1312,17 @@ public:
     return success();
   }
 
+  /// Clear all data structures to allow for pass reuse
+  void clearData() {
+    sortToLIDMap.clear();
+    constToLIDMap.clear();
+    opLIDMap.clear();
+    inputLIDs.clear();
+    regOps.clear();
+    handledOps.clear();
+    worklist.clear();
+  }
+
   /// Handles the core logic of the pass, in a generic manner
   template <typename T>
   LogicalResult handleTopLevel(T module) {
@@ -1327,6 +1338,9 @@ public:
     // Iterate through the registers and generate the `next` instructions
     for (size_t i = 0; i < regOps.size(); ++i)
       finalizeRegVisit(regOps[i]);
+
+    // Clear data structures to allow for pass reuse
+    clearData();
 
     return success();
   }
@@ -1370,13 +1384,7 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
   });
 
   // Clear data structures to allow for pass reuse
-  sortToLIDMap.clear();
-  constToLIDMap.clear();
-  opLIDMap.clear();
-  inputLIDs.clear();
-  regOps.clear();
-  handledOps.clear();
-  worklist.clear();
+  clearData();
 }
 
 // Constructor with a custom ostream
