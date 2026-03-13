@@ -1448,9 +1448,19 @@ static LogicalResult stripModule(FModuleLike op) {
               op.erasePorts(erasures);
               return WalkResult::advance();
             })
-            .Case<DomainDefineOp, DomainCreateAnonOp, DomainCreateOp,
-                  DomainSubfieldOp>([](Operation *op) {
-              op->erase();
+            .Case<DomainDefineOp, DomainCreateAnonOp, DomainCreateOp>(
+                [](Operation *op) {
+                  op->erase();
+                  return WalkResult::advance();
+                })
+            .Case<DomainSubfieldOp>([](DomainSubfieldOp op) {
+              if (!op->use_empty()) {
+                OpBuilder builder(op);
+                op.replaceAllUsesWith(
+                    UnknownValueOp::create(builder, op.getLoc(), op.getType())
+                        .getResult());
+              }
+              op.erase();
               return WalkResult::advance();
             })
             .Case<UnsafeDomainCastOp>([](UnsafeDomainCastOp op) {

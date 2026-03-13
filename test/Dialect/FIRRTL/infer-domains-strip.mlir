@@ -79,4 +79,16 @@ firrtl.circuit "StripDomains" {
     %extracted_voltage = firrtl.domain.subfield %my_domain[voltage] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer)>
     firrtl.domain.define %D, %my_domain : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer)>
   }
+
+  // Test that domain subfield with non-domain users is replaced with unknown value.
+  // CHECK-LABEL: firrtl.module @StripDomainSubfieldWithUse(out %x: !firrtl.integer) {
+  // CHECK-NEXT:    %[[UNKNOWN:.+]] = firrtl.unknown : !firrtl.integer
+  // CHECK-NEXT:    firrtl.propassign %x, %[[UNKNOWN]] : !firrtl.integer
+  // CHECK-NEXT:  }
+  firrtl.module @StripDomainSubfieldWithUse(
+      in %D: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer)>,
+      out %x: !firrtl.integer) {
+    %voltage = firrtl.domain.subfield %D[voltage] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer)>
+    firrtl.propassign %x, %voltage : !firrtl.integer
+  }
 }
