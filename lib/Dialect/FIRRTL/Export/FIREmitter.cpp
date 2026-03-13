@@ -128,6 +128,7 @@ struct Emitter {
   void emitExpression(SubindexOp op);
   void emitExpression(SubaccessOp op);
   void emitExpression(OpenSubfieldOp op);
+  void emitExpression(DomainSubfieldOp op);
   void emitExpression(OpenSubindexOp op);
   void emitExpression(RefResolveOp op);
   void emitExpression(RefSendOp op);
@@ -1452,7 +1453,7 @@ void Emitter::emitExpression(Value value) {
       .Case<
           // Basic expressions
           ConstantOp, SpecialConstantOp, SubfieldOp, SubindexOp, SubaccessOp,
-          OpenSubfieldOp, OpenSubindexOp,
+          OpenSubfieldOp, OpenSubindexOp, DomainSubfieldOp,
           // Binary
           AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
           OrPrimOp, XorPrimOp, LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp,
@@ -1537,6 +1538,12 @@ void Emitter::emitExpression(OpenSubfieldOp op) {
   auto type = op.getInput().getType();
   emitExpression(op.getInput());
   ps << "." << legalize(type.getElementNameAttr(op.getFieldIndex()));
+}
+
+// NOLINTNEXTLINE(misc-no-recursion)
+void Emitter::emitExpression(DomainSubfieldOp op) {
+  emitExpression(op.getInput());
+  ps << "." << legalize(op.getFieldName());
 }
 
 void Emitter::emitExpression(OpenSubindexOp op) {

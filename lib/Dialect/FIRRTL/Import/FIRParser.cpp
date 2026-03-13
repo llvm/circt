@@ -2573,8 +2573,11 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
       indexV = bundle.getElementIndex(fieldName);
     else if (auto klass = type_dyn_cast<ClassType>(type))
       indexV = klass.getElementIndex(fieldName);
+    else if (auto domain = type_dyn_cast<DomainType>(type))
+      indexV = domain.getFieldIndex(fieldName);
     else
-      return emitError(loc, "subfield requires bundle or object operand ");
+      return emitError(loc,
+                       "subfield requires bundle, object, or domain operand ");
     if (!indexV)
       return emitError(loc, "unknown field '" + fieldName + "' in type ")
              << result.getType();
@@ -2585,6 +2588,8 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
       subResult = emitCachedSubAccess<RefSubOp>(result, indexNo, loc);
     else if (type_isa<ClassType>(type))
       subResult = emitCachedSubAccess<ObjectSubfieldOp>(result, indexNo, loc);
+    else if (type_isa<DomainType>(type))
+      subResult = emitCachedSubAccess<DomainSubfieldOp>(result, indexNo, loc);
     else if (type_isa<BundleType>(type))
       subResult = emitCachedSubAccess<SubfieldOp>(result, indexNo, loc);
     else
