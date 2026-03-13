@@ -578,7 +578,3 @@ void PrettifyVerilogPass::runOnOperation() {
   if (!anythingChanged)
     markAllAnalysesPreserved();
 }
-
-std::unique_ptr<Pass> circt::sv::createPrettifyVerilogPass() {
-  return std::make_unique<PrettifyVerilogPass>();
-}

@@ -478,7 +478,3 @@ void HWLegalizeModulesPass::runOnOperation() {
   if (!anythingChanged)
     markAllAnalysesPreserved();
 }
-
-std::unique_ptr<Pass> circt::sv::createHWLegalizeModulesPass() {
-  return std::make_unique<HWLegalizeModulesPass>();
-}
