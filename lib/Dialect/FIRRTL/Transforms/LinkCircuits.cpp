@@ -88,7 +88,9 @@ static LogicalResult mangleCircuitSymbols(CircuitOp circuit) {
     if (!symbolOp)
       continue;
 
-    if (symbolOp.isPrivate())
+    // Skip mangling for extmodules: they are declarations of external entities
+    // whose names must be preserved for cross-circuit linking resolution.
+    if (symbolOp.isPrivate() && !isa<FExtModuleOp>(symbolOp))
       if (failed(manglePrivateSymbol(symbolOp)))
         return failure();
   }
@@ -214,24 +216,14 @@ static LogicalResult mergeLayer(LayerOp dst, LayerOp src) {
   return success();
 }
 
-/// Handles colliding symbols when merging circuits.
+/// Resolves symbol collisions during circuit merging. Handles:
 ///
-/// This function resolves symbol collisions between operations in different
-/// circuits during the linking process. It handles three specific cases:
-///
-/// 1. Identical extmodules: When two extmodules have identical attributes, the
-///    incoming one is removed as they are duplicates.
-///
-/// 2. Extmodule declaration + module definition: When an extmodule
-///    (declaration) collides with a module (definition), the declaration is
-///    removed in favor of the definition if their attributes match.
-///
-/// 3. Extmodule with empty parameters (Zaozi workaround): When two extmodules
-///    collide and one has empty parameters, the one without parameters
-///    (placeholder declaration) is removed. This handles a limitation in
-///    Zaozi's module generation where placeholder extmodule declarations are
-///    created from instance ops without knowing the actual parameters or
-///    defname.
+/// 1. Extmodule + module: declaration is removed in favor of the definition
+///    if their port attributes match. The definition must be public.
+/// 2. Identical extmodules: duplicates are removed.
+/// 3. Extmodule with empty parameters: the placeholder (without parameters)
+///    is removed in favor of the fully-parameterized one.
+/// 4. Layers: recursively merged.
 ///
 /// \param collidingOp The operation already present in the merged circuit
 /// \param incomingOp The operation being added from another circuit
@@ -239,18 +231,12 @@ static LogicalResult mergeLayer(LayerOp dst, LayerOp src) {
 ///         success with false if collidingOp was erased, or failure if the
 ///         collision cannot be resolved
 ///
-/// \note This workaround for empty parameters should ultimately be
-///       removed once ODS is updated to properly support placeholder
-///       declarations.
+/// \note The empty parameters workaround (case 3) should be removed once ODS
+///       is updated to properly support placeholder declarations.
 static FailureOr<bool>
 handleCollidingOps(SymbolOpInterface collidingOp, SymbolOpInterface incomingOp,
                    const llvm::DenseSet<Attribute> &mergedLayers,
                    const llvm::DenseSet<Attribute> &incomingLayers) {
-  if (!collidingOp.isPublic())
-    return collidingOp->emitOpError("should be a public symbol");
-  if (!incomingOp.isPublic())
-    return incomingOp->emitOpError("should be a public symbol");
-
   if ((isa<FExtModuleOp>(collidingOp) && isa<FModuleOp>(incomingOp)) ||
       (isa<FExtModuleOp>(incomingOp) && isa<FModuleOp>(collidingOp))) {
     auto definition = collidingOp;
@@ -259,6 +245,9 @@ handleCollidingOps(SymbolOpInterface collidingOp, SymbolOpInterface incomingOp,
       definition = incomingOp;
       declaration = collidingOp;
     }
+
+    if (!definition.isPublic())
+      return definition->emitOpError("should be a public symbol");
 
     auto extModule = cast<FExtModuleOp>(declaration);
     const auto &layersToCheck =

@@ -58,7 +58,7 @@ firrtl.circuit "Bar" {
 
 // CHECK-LABEL: firrtl.circuit "Foo"
 firrtl.circuit "Foo" {
-  firrtl.extmodule @Bar() attributes {knownLayers = [@A::@C]}
+  firrtl.extmodule private @Bar() attributes {knownLayers = [@A::@C]}
   firrtl.layer @A bind {
     firrtl.layer @B bind {}
     firrtl.layer @C bind {}
@@ -86,7 +86,7 @@ firrtl.circuit "Bar" {
 
 // CHECK-LABEL: firrtl.circuit "Foo"
 firrtl.circuit "Foo" {
-  firrtl.extmodule @Middle() attributes {knownLayers = [@L]}
+  firrtl.extmodule private @Middle() attributes {knownLayers = [@L]}
   firrtl.layer @L bind {
     firrtl.layer @Top bind {}
   }
@@ -96,7 +96,7 @@ firrtl.circuit "Foo" {
 }
 
 firrtl.circuit "Middle" {
-  firrtl.extmodule @Bottom() attributes {knownLayers = [@L]}
+  firrtl.extmodule private @Bottom() attributes {knownLayers = [@L]}
   firrtl.layer @L bind {
     firrtl.layer @Mid bind {}
   }
@@ -127,7 +127,7 @@ firrtl.circuit "Bottom" {
 // Test case: verify that multiple known layers are correctly checked and merged.
 firrtl.circuit "Foo" {
   // Declaration requires both @A and @B
-  firrtl.extmodule @Bar() attributes {knownLayers = [@A, @B]}
+  firrtl.extmodule private @Bar() attributes {knownLayers = [@A, @B]}
   firrtl.layer @B inline {}
   firrtl.layer @A inline {}
   firrtl.module @Foo() {
