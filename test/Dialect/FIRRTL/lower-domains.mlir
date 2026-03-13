@@ -608,3 +608,27 @@ firrtl.circuit "DomainCreateWithMixedValues" {
     firrtl.domain.define %A, %my_domain : !firrtl.domain<@ClockDomain(name: !firrtl.string, period: !firrtl.integer)>
   }
 }
+
+// -----
+
+// Test that domain subfield operations are properly lowered to object subfield.
+// This tests both used and unused domain subfield operations.
+firrtl.circuit "DomainSubfield" {
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"id", !firrtl.integer>]
+  // CHECK-LABEL: firrtl.module @DomainSubfield(
+  firrtl.module @DomainSubfield(
+    in %A: !firrtl.domain<@ClockDomain(id: !firrtl.integer)>,
+    out %B: !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
+  ) {
+    // CHECK:      %A_object = firrtl.object @ClockDomain_out
+    // CHECK:      %[[id_out:.+]] = firrtl.object.subfield %A[id_out]
+    // CHECK:      %b = firrtl.object @ClockDomain
+    // CHECK:      %[[id_in:.+]] = firrtl.object.subfield %b[id_in]
+    // CHECK-NEXT: firrtl.propassign %[[id_in]], %[[id_out]]
+    // CHECK:      %[[unused:.+]] = firrtl.object.subfield %A[id_out]
+    %id = firrtl.domain.subfield %A["id"] : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
+    %b = firrtl.domain.create(%id) : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
+    firrtl.domain.define %B, %b : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
+    %unused = firrtl.domain.subfield %A["id"] : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
+  }
+}

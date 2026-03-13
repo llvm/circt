@@ -598,6 +598,68 @@ LogicalResult LowerModule::lowerModule() {
         return WalkResult::advance();
       }
 
+      // Replace a domain subfield with an object subfield.
+      if (auto subfieldOp = dyn_cast<DomainSubfieldOp>(walkOp)) {
+        // The input should be a conversion cast wrapping an object or a class
+        // value (e.g., a port).
+        auto *inputOp = subfieldOp.getInput().getDefiningOp();
+        if (!inputOp) {
+          subfieldOp.emitOpError(
+              "has an input that is not defined by an operation");
+          return WalkResult::interrupt();
+        }
+
+        auto conversionCast = dyn_cast<UnrealizedConversionCastOp>(inputOp);
+        if (!conversionCast || conversionCast.getNumOperands() != 1) {
+          subfieldOp.emitOpError(
+              "has an input that is not a conversion cast with one operand");
+          return WalkResult::interrupt();
+        }
+
+        // Get the domain type to look up the class.
+        auto domainType = dyn_cast<DomainType>(subfieldOp.getInput().getType());
+        if (!domainType) {
+          subfieldOp.emitOpError("input is not a domain type");
+          return WalkResult::interrupt();
+        }
+
+        // Find the output port index for this field.
+        auto classIn = domainToClasses.at(domainType.getName().getAttr()).input;
+        auto fieldIndex = subfieldOp.getFieldIndex();
+        unsigned outputPortIndex = 0;
+        unsigned currentFieldIndex = 0;
+        bool found = false;
+        for (auto [idx, port] : llvm::enumerate(classIn.getPorts())) {
+          if (port.direction == Direction::In)
+            continue;
+          if (currentFieldIndex == fieldIndex) {
+            outputPortIndex = idx;
+            found = true;
+            break;
+          }
+          currentFieldIndex++;
+        }
+
+        if (!found) {
+          subfieldOp.emitOpError("field index ")
+              << fieldIndex << " not found in class type";
+          return WalkResult::interrupt();
+        }
+
+        // Create an object subfield to extract the field value.
+        OpBuilder builder(subfieldOp);
+        auto objectSubfield = ObjectSubfieldOp::create(
+            builder, subfieldOp.getLoc(), conversionCast.getOperand(0),
+            outputPortIndex);
+
+        // Mark the conversion cast for deletion.
+        conversionsToErase.insert(conversionCast);
+
+        subfieldOp.replaceAllUsesWith(objectSubfield.getResult());
+        subfieldOp.erase();
+        return WalkResult::advance();
+      }
+
       // If we see a WireOp of a domain type, then we want to erase it.  To do
       // this, find what is driving it and what it is driving and then replace
       // that triplet of operations with a single domain define inserted before
