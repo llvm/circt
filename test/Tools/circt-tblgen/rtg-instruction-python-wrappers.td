@@ -229,3 +229,25 @@ def FilterTestOp : TestOp<"filter_test">, ISAInstructionFormat {
   let extension = "extension_name";
 }
 #endif
+
+#ifdef TEST_XLEN_FILTER
+// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func --xlen=128 -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_XLEN_FILTER 2>&1 | FileCheck %s --check-prefix=XLEN-NO-MATCH --allow-empty
+// XLEN-NO-MATCH-NOT: xlen_filter_test_both
+// XLEN-NO-MATCH-NOT: xlen_filter_test_32_only
+
+// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func --xlen=32 -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_XLEN_FILTER 2>&1 | FileCheck %s --check-prefix=XLEN-MATCH
+// XLEN-MATCH-DAG: xlen_filter_test_both
+// XLEN-MATCH-DAG: xlen_filter_test_32_only
+
+// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func --xlen=32,64 -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_XLEN_FILTER 2>&1 | FileCheck %s --check-prefix=XLEN-BOTH-MATCH
+// XLEN-BOTH-MATCH: xlen_filter_test_both
+// XLEN-BOTH-MATCH-NOT: xlen_filter_test_32_only
+
+def XlenFilterTestBothOp : TestOp<"xlen_filter_test_both">, ISAInstructionFormat {
+  let xlen = [32, 64];
+}
+
+def XlenFilterTest32OnlyOp : TestOp<"xlen_filter_test_32_only">, ISAInstructionFormat {
+  let xlen = [32];
+}
+#endif

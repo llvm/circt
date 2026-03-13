@@ -51,6 +51,11 @@ static cl::opt<std::string>
                        "matching extension field"),
               cl::cat(rtgPythonWrapperCat));
 
+static cl::list<int> xlen("xlen",
+                          cl::desc("Only generate wrappers for instructions "
+                                   "valid on all specified xlens"),
+                          cl::cat(rtgPythonWrapperCat), cl::CommaSeparated);
+
 //===----------------------------------------------------------------------===//
 // Helpers
 //===----------------------------------------------------------------------===//
@@ -368,6 +373,19 @@ static void genPythonWrapperForOp(const Operator &op, raw_ostream &os) {
     auto opExtension = op.getDef().getValueAsOptionalString("extension");
     if (!opExtension || *opExtension != extension)
       return;
+  }
+
+  // If the xlen filter is enabled, check if the instruction is valid on all
+  // specified xlens.
+  if (!xlen.empty()) {
+    if (!op.getDef().getValue("xlen"))
+      return;
+    auto opXlenList = op.getDef().getValueAsListOfInts("xlen");
+    for (int requiredXlen : xlen) {
+      if (llvm::none_of(opXlenList,
+                        [&](int64_t val) { return val == requiredXlen; }))
+        return;
+    }
   }
 
   SmallVector<OperandTypeSet> operandKinds;
