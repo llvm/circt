@@ -34,6 +34,12 @@ LogicalResult ChoiceOp::verify() {
   return success();
 }
 
+OpFoldResult ChoiceOp::fold(FoldAdaptor adaptor) {
+  if (adaptor.getInputs().size() == 1)
+    return getOperand(0);
+  return {};
+}
+
 LogicalResult MajorityInverterOp::verify() {
   if (getNumOperands() % 2 != 1)
     return emitOpError("requires an odd number of operands");

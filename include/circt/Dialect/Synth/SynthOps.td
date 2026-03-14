@@ -153,6 +153,7 @@ def ChoiceOp : SynthOp<"choice", [SameOperandsAndResultType, Pure]> {
   let arguments = (ins Variadic<AnyType>:$inputs);
   let results = (outs AnyType:$result);
   let hasVerifier = 1;
+  let hasFolder = 1;
   let assemblyFormat = "$inputs attr-dict `:` type($result)";
 }
 
