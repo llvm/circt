@@ -103,7 +103,7 @@ static LogicalResult replaceWithBalancedTree(
   return success();
 }
 
-using OperandKey = std::vector<std::pair<mlir::Value, bool>>;
+using OperandKey = llvm::SmallVector<std::pair<mlir::Value, bool>>;
 
 namespace llvm {
 template <>
@@ -161,9 +161,9 @@ struct OperandPairLess {
 
 static OperandKey getSortedOperandKey(aig::AndInverterOp op) {
   OperandKey key;
-  for (size_t i = 0, e = op.getNumOperands(); i < e; ++i) {
+  for (size_t i = 0, e = op.getNumOperands(); i < e; ++i)
     key.emplace_back(op.getOperand(i), op.isInverted(i));
-  }
+
   std::sort(key.begin(), key.end(), OperandPairLess());
   return key;
 }
@@ -244,10 +244,9 @@ void LowerVariadicPass::runOnOperation() {
   mlir::IRRewriter rewriter(&getContext());
   rewriter.setListener(analysis);
 
-  // To be used in  simplifyWithExistingOperations.
-  llvm::DenseMap<OperandKey, mlir::Value> seenExpressions;
   // Simplify exising andInverterOps by reusing operations.
   if (reuseSubsets) {
+    llvm::DenseMap<OperandKey, mlir::Value> seenExpressions;
     // First collect all the andInverterOp operations in the block.
     for (auto &op : moduleOp.getBodyBlock()->getOperations()) {
       if (auto andInverterOp = llvm::dyn_cast<aig::AndInverterOp>(op)) {
