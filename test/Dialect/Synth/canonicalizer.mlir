@@ -133,3 +133,10 @@ hw.module @parameter<in: i8> (in %a: i8, out o1: i8) {
   %1 = synth.mig.maj_inv %0, %a, %param : i8
   hw.output %1 : i8
 }
+
+// CHECK-LABEL: hw.module @choice_single_operand
+hw.module @choice_single_operand(in %a: i4, out o: i4) {
+  // CHECK-NEXT: hw.output %a : i4
+  %0 = synth.choice %a : i4
+  hw.output %0 : i4
+}
