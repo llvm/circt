@@ -183,13 +183,6 @@ struct ExprVisitor {
   Value visit(const slang::ast::NewArrayExpression &expr) {
     Type type = context.convertType(*expr.type);
 
-    // TODO: Handle 'initExpr' if it exists
-    if (expr.initExpr()) {
-      mlir::emitError(loc)
-          << "unsupported expression: array `new` with initializer\n";
-      return {};
-    }
-
     Value initialSize = context.convertRvalueExpression(
         expr.sizeExpr(), context.convertType(*expr.sizeExpr().type));
 
@@ -852,10 +845,6 @@ struct RvalueExprVisitor : public ExprVisitor {
       auto value = context.convertLvalueExpression(select->value());
       auto vt = value.getType();
       // Check if reference to unpacked array type:
-<<<<<<< HEAD
-
-=======
->>>>>>> 61b81addb7 (Fixed formatting)
       if (isa<moore::RefType>(vt) &&
           isa<moore::OpenUnpackedArrayType>(
               cast<moore::RefType>(vt).getNestedType())) {
@@ -1840,16 +1829,19 @@ struct RvalueExprVisitor : public ExprVisitor {
       return fmtValue.value();
     }
 
-    // Queue ops / dynamic array ops take their parameter as a reference
+    // Queue ops / dynamic array ops / assoc array ops take their parameter as a
+    // reference
 
-    bool isByRefQueueOp = args.size() >= 1 && args[0]->type->isQueue() &&
-                          subroutine.name != "size";
+    bool isByRefOp = args.size() >= 1 &&
+                     ((args[0]->type->isQueue() && subroutine.name != "size") ||
+                      (args[0]->type->isDynamicallySizedArray() &&
+                       subroutine.name != "size") ||
+                      args[0]->type->isAssociativeArray());
 
-    bool isByRefDynArrayOp = args.size() == 1 &&
-                             args[0]->type->isDynamicallySizedArray() &&
-                             subroutine.name == "delete";
-
-    bool isByRefOp = isByRefQueueOp || isByRefDynArrayOp;
+    // Associative Array Traversal Ops require value2 to be refs
+    bool secondArgIsByRef =
+        args.size() >= 1 &&
+        (args[0]->type->isAssociativeArray() && subroutine.name != "exists");
 
     // Call the conversion function with the appropriate arity. These return one
     // of the following:
