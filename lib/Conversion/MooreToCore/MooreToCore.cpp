@@ -15,7 +15,6 @@
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
-#include "circt/Dialect/Sim/SimTypes.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/ConversionPatternSet.h"
 #include "circt/Transforms/Passes.h"
@@ -36,7 +35,6 @@
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/IR/DerivedTypes.h"
-#include "llvm/Support/LogicalResult.h"
 
 namespace circt {
 #define GEN_PASS_DEF_CONVERTMOORETOCORE
