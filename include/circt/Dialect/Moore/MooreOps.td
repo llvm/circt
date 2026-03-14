@@ -2249,7 +2249,7 @@ def OpenUArrayCreateOp: MooreOp<"open_uarray_create", [
   let arguments = (ins TwoValuedI32:$initialSize, Optional<OpenUnpackedArrayType>:$init);
   let results = (outs OpenUnpackedArrayType:$result);
   let assemblyFormat = [{
-    $initialSize (`initial` $init^)? attr-dict `:` type($initialSize) `->` type($result)
+    $initialSize (`initial` $init^)? attr-dict `:` type($result)
   }];
 }
 
@@ -2261,7 +2261,7 @@ def OpenUArraySizeOp: MooreOp<"open_uarray_size"> {
   let arguments = (ins OpenUnpackedArrayType:$array);
   let results = (outs TwoValuedI32:$result);
   let assemblyFormat = [{
-    $array attr-dict `:` type($array) `->` type($result)
+    $array attr-dict `:` type($array)
   }]; 
 }
 

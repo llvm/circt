@@ -4840,11 +4840,11 @@ endmodule
  // CHECK: [[ARR2:%.+]] = moore.variable : <open_uarray<i8>>
  // CHECK: moore.procedure initial {
  // CHECK:   [[C4A:%.+]] = moore.constant 4 : i32
- // CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C4A]] : i32 -> <i8>
+ // CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C4A]] : <i8>
  // CHECK:   moore.blocking_assign [[ARR1]], [[A1]] : open_uarray<i8>
   // CHECK:  [[C4B:%.+]] = moore.constant 4 : i32
  // CHECK:   [[R1:%.+]] = moore.read [[ARR1]] : <open_uarray<i8>>
- // CHECK:   [[A2:%.+]] = moore.open_uarray_create [[C4B]] initial [[R1]] : i32 -> <i8>
+ // CHECK:   [[A2:%.+]] = moore.open_uarray_create [[C4B]] initial [[R1]] : <i8>
  // CHECK:   moore.blocking_assign [[ARR2]], [[A2]] : open_uarray<i8>
  // CHECK:   moore.return
  // CHECK: }
@@ -4867,10 +4867,10 @@ endmodule
 // CHECK: [[X:%.+]] = moore.variable : <i32>
 // CHECK: moore.procedure initial {
 // CHECK:   [[C12:%.+]] = moore.constant 12 : i32
-// CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C12]] : i32 -> <i8>
+// CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C12]] : <i8>
 // CHECK:   moore.blocking_assign [[ARR]], [[A1]] : open_uarray<i8>
 // CHECK:   [[R1:%.+]] = moore.read [[ARR]] : <open_uarray<i8>>
-// CHECK:   [[SZ:%.+]] = moore.open_uarray_size [[R1]] : <i8> -> i32
+// CHECK:   [[SZ:%.+]] = moore.open_uarray_size [[R1]] : <i8>
 // CHECK:   moore.blocking_assign [[X]], [[SZ]] : i32
 // CHECK:   moore.return
 // CHECK: }
@@ -4893,7 +4893,7 @@ endmodule
 // CHECK: [[ARR:%.+]] = moore.variable : <open_uarray<i8>>
 // CHECK: moore.procedure initial {
 // CHECK:   [[C10:%.+]] = moore.constant 10 : i32
-// CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C10]] : i32 -> <i8>
+// CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C10]] : <i8>
 // CHECK:   moore.blocking_assign [[ARR]], [[A1]] : open_uarray<i8>
 // CHECK:   [[DEL:%.+]] = moore.open_uarray_delete [[ARR]] : <open_uarray<i8>>
 // CHECK:   moore.return
@@ -4914,7 +4914,7 @@ endmodule
 // CHECK: [[ARR:%.+]] = moore.variable : <open_uarray<i8>>
 // CHECK: moore.procedure initial {
 // CHECK:   [[C10:%.+]] = moore.constant 10 : i32
-// CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C10]] : i32 -> <i8>
+// CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C10]] : <i8>
 // CHECK:   moore.blocking_assign [[ARR]], [[A1]] : open_uarray<i8>
 // CHECK:   [[C1:%.+]] = moore.constant 1 : i32
 // CHECK:   [[R:%.+]] = moore.dyn_extract_ref [[ARR]] from [[C1]] : <open_uarray<i8>>, i32 -> <i8>
