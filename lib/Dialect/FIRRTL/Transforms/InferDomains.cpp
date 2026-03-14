@@ -857,14 +857,24 @@ static LogicalResult processOp(const DomainInfo &info, TermAllocator &allocator,
     return success();
 
   VariableIDTable idTable;
-  auto diag = op->emitOpError("failed to propagate source to destination");
+  auto diag =
+      op->emitOpError("domain definition conflicts with inferred domain");
+
+  // Get the destination domain name for better error message
+  auto [dstName, _] = getFieldName(FieldRef(dst, 0), false);
+
   auto &note1 = diag.attachNote();
-  note1 << "destination has underlying value: ";
+  note1 << "destination domain '" << dstName << "' was inferred to be: ";
   render(info, note1, idTable, dstTerm);
 
   auto &note2 = diag.attachNote(src.getLoc());
-  note2 << "source has underlying value: ";
+  note2 << "but is being explicitly defined as: ";
   render(info, note2, idTable, srcTerm);
+
+  // Add explanatory note
+  auto &note3 = diag.attachNote();
+  note3 << "this would create an illegal domain crossing";
+
   return failure();
 }
 
@@ -880,6 +890,14 @@ static LogicalResult processOp(const DomainInfo &info, TermAllocator &allocator,
     return processOp(info, allocator, table, cast);
   if (auto def = dyn_cast<DomainDefineOp>(op))
     return processOp(info, allocator, table, def);
+  if (auto create = dyn_cast<DomainCreateOp>(op)) {
+    processDomainDefinition(allocator, table, create);
+    return success();
+  }
+  if (auto createAnon = dyn_cast<DomainCreateAnonOp>(op)) {
+    processDomainDefinition(allocator, table, createAnon);
+    return success();
+  }
 
   // For all other operations (including connections), propagate domains from
   // operands to results. This is a conservative approach - all operands and
