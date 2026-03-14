@@ -740,7 +740,3 @@ void DedupPass::replaceArcWith(DefineOp oldArc, DefineOp newArc,
   arcByName.erase(oldArc.getSymNameAttr());
   oldArc->erase();
 }
-
-std::unique_ptr<Pass> arc::createDedupPass() {
-  return std::make_unique<DedupPass>();
-}

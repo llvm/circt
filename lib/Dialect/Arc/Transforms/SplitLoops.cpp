@@ -423,7 +423,3 @@ LogicalResult SplitLoopsPass::ensureNoLoops() {
   }
   return success();
 }
-
-std::unique_ptr<Pass> arc::createSplitLoopsPass() {
-  return std::make_unique<SplitLoopsPass>();
-}

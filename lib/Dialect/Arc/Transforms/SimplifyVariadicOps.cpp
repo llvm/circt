@@ -122,7 +122,3 @@ void SimplifyVariadicOpsPass::simplifyOp(Operation *op) {
   op->erase();
   ++numOpsSimplified;
 }
-
-std::unique_ptr<Pass> arc::createSimplifyVariadicOpsPass() {
-  return std::make_unique<SimplifyVariadicOpsPass>();
-}

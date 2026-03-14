@@ -824,7 +824,3 @@ void ArcCanonicalizerPass::runOnOperation() {
   (void)mlir::applyPatternsGreedily(getOperation(), std::move(patterns),
                                     config);
 }
-
-std::unique_ptr<mlir::Pass> arc::createArcCanonicalizerPass() {
-  return std::make_unique<ArcCanonicalizerPass>();
-}

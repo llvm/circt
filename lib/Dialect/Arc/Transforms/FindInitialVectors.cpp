@@ -273,7 +273,3 @@ void FindInitialVectorsPass::runOnOperation() {
   biggestSeedVector = stat.bigSeedVec;
   numOfVectorsCreated = stat.vecCreated;
 }
-
-std::unique_ptr<Pass> arc::createFindInitialVectorsPass() {
-  return std::make_unique<FindInitialVectorsPass>();
-}
