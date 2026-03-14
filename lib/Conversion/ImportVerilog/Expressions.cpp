@@ -7,10 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
-#include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Moore/MooreTypes.h"
 #include "mlir/IR/Operation.h"
-#include "mlir/IR/TypeRange.h"
 #include "mlir/IR/Value.h"
 #include "slang/ast/EvalContext.h"
 #include "slang/ast/SystemSubroutine.h"
