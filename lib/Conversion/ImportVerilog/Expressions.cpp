@@ -3027,11 +3027,22 @@ Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
                   if (isa<moore::QueueType>(value.getType())) {
                     return moore::QueueSizeBIOp::create(builder, loc, value);
                   }
+                  if (isa<moore::OpenUnpackedArrayType>(value.getType())) {
+                    return moore::OpenUArraySizeOp::create(builder, loc, value);
+                  }
                   if (isa<moore::RefType>(value.getType()) &&
                       isa<moore::AssocArrayType>(
                           cast<moore::RefType>(value.getType())
                               .getNestedType())) {
                     return moore::AssocArraySizeOp::create(builder, loc, value);
+                  }
+                  return {};
+                })
+          .Case("delete",
+                [&]() -> Value {
+                  if (isa<moore::OpenUnpackedArrayType>(value.getType())) {
+                    return moore::OpenUArrayDeleteOp::create(builder, loc,
+                                                             value);
                   }
                   return {};
                 })
