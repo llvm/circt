@@ -617,11 +617,7 @@ LogicalResult LowerModule::lowerModule() {
         }
 
         // Get the domain type to look up the class.
-        auto domainType = dyn_cast<DomainType>(subfieldOp.getInput().getType());
-        if (!domainType) {
-          subfieldOp.emitOpError("input is not a domain type");
-          return WalkResult::interrupt();
-        }
+        auto domainType = cast<DomainType>(subfieldOp.getInput().getType());
 
         // Find the output port index for this field.
         auto classIn = domainToClasses.at(domainType.getName().getAttr()).input;
