@@ -4099,6 +4099,7 @@ ParseResult FIRStmtParser::parsePathExp(Value &result) {
 /// domain_instantiation ::= 'domain' id 'of' id ('(' exp (',' exp)* ')')? info?
 ParseResult FIRStmtParser::parseDomainInstantiation() {
   auto startTok = consumeToken(FIRToken::kw_domain);
+  auto startLoc = startTok.getLoc();
 
   // If this was actually the start of a connect or something else handle that.
   if (auto isExpr = parseExpWithLeadingKeyword(startTok))
@@ -4109,7 +4110,7 @@ ParseResult FIRStmtParser::parseDomainInstantiation() {
   StringAttr instanceName;
   StringAttr domainKind;
 
-  if (requireFeature(missingSpecFIRVersion, "domains", startTok.getLoc()) ||
+  if (requireFeature(missingSpecFIRVersion, "domains", startLoc) ||
       parseId(instanceName, "expected domain instance name") ||
       parseToken(FIRToken::kw_of, "expected 'of' after domain instance name") ||
       parseId(domainKind, "expected domain type name"))
@@ -4142,6 +4143,7 @@ ParseResult FIRStmtParser::parseDomainInstantiation() {
   if (parseOptionalInfo())
     return failure();
 
+  locationProcessor.setLoc(startLoc);
   auto result =
       DomainCreateOp::create(builder, domainType, instanceName, fieldValues);
 
