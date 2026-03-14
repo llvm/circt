@@ -75,15 +75,51 @@ struct DatapathCompressOpConversion : mlir::OpRewritePattern<CompressOp> {
                   mlir::PatternRewriter &rewriter) const override {
     Location loc = op.getLoc();
     auto inputs = op.getOperands();
+    auto width = inputs[0].getType().getIntOrFloatBitWidth();
 
-    SmallVector<SmallVector<Value>> addends;
-    for (auto input : inputs) {
-      addends.push_back(
-          extractBits(rewriter, input)); // Extract bits from each input
+    // Special case: compress(a, b, const_1) with exactly 3 inputs where one
+    // input is the constant 1. This pattern arises from sub → add(a, ~b, 1).
+    // Check that both results feed a single comb.add(carry, save), then
+    // replace compress + add together with comb.add(a, b, const_1) so the
+    // downstream prefix adder can bake carry_in=1 directly into g[0].
+    if (inputs.size() == 3) {
+      for (unsigned i = 0; i < 3; ++i) {
+        auto constOp = inputs[i].getDefiningOp<hw::ConstantOp>();
+        if (!constOp || !constOp.getValue().isOne())
+          continue;
+        // Both compress results must have exactly one use and share the same
+        // downstream comb.add(carry, save).
+        Value carry = op->getResult(0), save = op->getResult(1);
+        if (!carry.hasOneUse() || !save.hasOneUse())
+          break;
+        auto *carryUser = carry.getUses().begin()->getOwner();
+        auto *saveUser = save.getUses().begin()->getOwner();
+        if (carryUser != saveUser)
+          break;
+        auto addOp = dyn_cast<comb::AddOp>(carryUser);
+        if (!addOp || addOp.getInputs().size() != 2)
+          break;
+        // Replace compress(a, b, 1) + add(carry, save) with add(a, b, const_1).
+        // The const_1 tells CombToSynth to synthesize a prefix adder with
+        // carry_in=1 baked into g[0], avoiding a separate Wallace tree stage.
+        SmallVector<Value> operands;
+        for (unsigned j = 0; j < 3; ++j)
+          if (j != i)
+            operands.push_back(inputs[j]);
+        Value sum = comb::AddOp::create(
+            rewriter, loc,
+            ValueRange{operands[0], operands[1], inputs[i]}, true);
+        rewriter.replaceOp(addOp, sum);
+        rewriter.eraseOp(op);
+        return success();
+      }
     }
 
-    // Compressor tree reduction
-    auto width = inputs[0].getType().getIntOrFloatBitWidth();
+    // General case: Wallace tree reduction.
+    SmallVector<SmallVector<Value>> addends;
+    for (auto input : inputs)
+      addends.push_back(extractBits(rewriter, input));
+
     auto targetAddends = op.getNumResults();
     datapath::CompressorTree comp(width, addends, loc);
 
