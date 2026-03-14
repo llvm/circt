@@ -30,9 +30,7 @@ using namespace arc;
 
 namespace {
 struct StripSVPass : public arc::impl::StripSVBase<StripSVPass> {
-  explicit StripSVPass(bool asyncResetsAsSync) {
-    this->asyncResetsAsSync = asyncResetsAsSync;
-  }
+  using Base::Base;
   void runOnOperation() override;
   SmallVector<Operation *> opsToDelete;
   SmallPtrSet<StringAttr, 4> clockGateModuleNames;
@@ -181,8 +179,4 @@ void StripSVPass::runOnOperation() {
   }
   for (auto *op : opsToDelete)
     op->erase();
-}
-
-std::unique_ptr<Pass> arc::createStripSVPass(bool asyncResetsAsSync) {
-  return std::make_unique<StripSVPass>(asyncResetsAsSync);
 }
