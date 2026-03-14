@@ -4163,10 +4163,26 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
     auto portType = lowerType(port.type);
     if (!portType || portType.isInteger(0))
       continue;
+
+    // Clock types cannot be used as inout element types. Use i1 instead and
+    // convert to/from clock when reading/writing.
+    Type wireType = portType;
+    if (isa<seq::ClockType>(portType))
+      wireType = builder.getIntegerType(1);
+
     auto wire = sv::WireOp::create(
-        builder, portType, wirePrefix.str() + "." + port.getName().str());
+        builder, wireType, wirePrefix.str() + "." + port.getName().str());
     outputWires.push_back(wire);
-    if (failed(setLowering(oldInstanceChoice.getResult(portIndex), wire)))
+
+    // If this is a clock type, we need to read the i1 wire and convert it to
+    // a clock.
+    Value wireValue = wire;
+    if (isa<seq::ClockType>(portType)) {
+      auto readWire = getReadValue(wire);
+      wireValue = seq::ToClockOp::create(builder, readWire);
+    }
+
+    if (failed(setLowering(oldInstanceChoice.getResult(portIndex), wireValue)))
       return failure();
   }
 
@@ -4197,8 +4213,14 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
         [&]() -> hw::InnerSymbolNamespace & { return moduleNamespace; });
 
     // Assign instance outputs to the wires
-    for (unsigned i = 0; i < inst.getNumResults(); ++i)
-      sv::AssignOp::create(builder, outputWires[i], inst.getResult(i));
+    for (unsigned i = 0; i < inst.getNumResults(); ++i) {
+      Value result = inst.getResult(i);
+      // If the result is a clock type, convert it to i1 before assigning to the
+      // wire.
+      if (isa<seq::ClockType>(result.getType()))
+        result = getNonClockValue(result);
+      sv::AssignOp::create(builder, outputWires[i], result);
+    }
 
     return inst;
   };
