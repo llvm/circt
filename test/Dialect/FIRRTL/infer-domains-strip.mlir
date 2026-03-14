@@ -6,6 +6,12 @@ firrtl.circuit "StripDomains" {
   // CHECK-NOT: firrtl.domain @ClockDomain
   firrtl.domain @ClockDomain
 
+  // CHECK-NOT: firrtl.domain @PowerDomain
+  firrtl.domain @PowerDomain [
+    #firrtl.domain.field<"name", !firrtl.string>,
+    #firrtl.domain.field<"voltage", !firrtl.integer>
+  ]
+
   // CHECK-LABEL: firrtl.extmodule @Extmodule1(out x: !firrtl.uint<1>)
   firrtl.extmodule @Extmodule1(out D: !firrtl.domain<@ClockDomain()>, out x: !firrtl.uint<1> domains [D])
 
@@ -59,5 +65,30 @@ firrtl.circuit "StripDomains" {
   firrtl.module @StripNamedDomain(out %D: !firrtl.domain<@ClockDomain()>) {
     %my_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
     firrtl.domain.define %D, %my_domain : !firrtl.domain<@ClockDomain()>
+  }
+
+  // CHECK-LABEL: firrtl.module @StripDomainSubfield() {
+  // CHECK-NEXT:    %[[NAME:.+]] = firrtl.string "VDD"
+  // CHECK-NEXT:    %[[VOLTAGE:.+]] = firrtl.integer 1800
+  // CHECK-NEXT:  }
+  firrtl.module @StripDomainSubfield(out %D: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer)>) {
+    %name = firrtl.string "VDD"
+    %voltage = firrtl.integer 1800
+    %my_domain = firrtl.domain.create(%name, %voltage) : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer)>
+    %extracted_name = firrtl.domain.subfield %my_domain[name] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer)>
+    %extracted_voltage = firrtl.domain.subfield %my_domain[voltage] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer)>
+    firrtl.domain.define %D, %my_domain : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer)>
+  }
+
+  // Test that domain subfield with non-domain users is replaced with unknown value.
+  // CHECK-LABEL: firrtl.module @StripDomainSubfieldWithUse(out %x: !firrtl.integer) {
+  // CHECK-NEXT:    %[[UNKNOWN:.+]] = firrtl.unknown : !firrtl.integer
+  // CHECK-NEXT:    firrtl.propassign %x, %[[UNKNOWN]] : !firrtl.integer
+  // CHECK-NEXT:  }
+  firrtl.module @StripDomainSubfieldWithUse(
+      in %D: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer)>,
+      out %x: !firrtl.integer) {
+    %voltage = firrtl.domain.subfield %D[voltage] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer)>
+    firrtl.propassign %x, %voltage : !firrtl.integer
   }
 }
