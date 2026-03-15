@@ -27,8 +27,6 @@ namespace hw {
 /// between the two states.
 class HWSymbolCache : public SymbolCacheBase {
 public:
-  static constexpr size_t invalidPort = std::numeric_limits<size_t>::max();
-
   class Item {
   public:
     Item(mlir::Operation *op) : op(op), port(invalidPort) {}
@@ -78,6 +76,7 @@ public:
   void freeze() { isFrozen = true; }
 
 private:
+  static constexpr size_t invalidPort = std::numeric_limits<size_t>::max();
   Item lookupInner(InnerRefAttr attr) const {
     assert(isFrozen && "cannot read from this cache until it is frozen");
     auto it = symbolCache.find(attr);
