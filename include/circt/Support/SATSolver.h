@@ -13,9 +13,144 @@
 #ifndef CIRCT_SUPPORT_SATSOLVER_H
 #define CIRCT_SUPPORT_SATSOLVER_H
 
+#include "llvm/ADT/ArrayRef.h"
 #include <memory>
 
 namespace circt {
+template <typename T>
+struct HeapScore;
+
+/// A max-heap over ids into an external storage vector.
+///
+/// The heap keeps a reverse map from id to heap slot so callers can update the
+/// score of an existing id without inserting duplicates. Scores are supplied by
+/// a stateless policy type. This is an indexed heap: the caller owns the
+/// underlying objects in `storage`, while the heap only stores integer ids into
+/// that storage. If the caller mutates an element in `storage` in a way that
+/// changes its score, it must call `increase(id)` before relying on heap order
+/// again.
+///
+/// This data structure design is inspired by MiniSat's `minisat/mtl/Heap.h`.
+template <typename T, typename ScoreFn = HeapScore<T>>
+class IndexedMaxHeap {
+public:
+  explicit IndexedMaxHeap(llvm::SmallVectorImpl<T> &storage)
+      : storage(storage) {}
+
+  void resize(unsigned size) {
+    if (positions.size() < size)
+      positions.resize(size, kInvalidIndex);
+  }
+
+  bool empty() const { return heap.empty(); }
+
+  bool contains(unsigned id) const {
+    return id < positions.size() && positions[id] != kInvalidIndex;
+  }
+
+  /// Remove all heap entries while keeping the underlying storage untouched.
+  void clear() {
+    heap.clear();
+    std::fill(positions.begin(), positions.end(), kInvalidIndex);
+  }
+
+  /// Insert `id` if it is not already present.
+  ///
+  /// This heap treats ids as stable identities; duplicates are ignored instead
+  /// of creating multiple entries for the same object.
+  void insert(unsigned id) {
+    if (contains(id))
+      return;
+    resize(id + 1);
+    positions[id] = heap.size();
+    heap.push_back(id);
+    siftUp(positions[id]);
+  }
+
+  /// Restore heap order after the score for an existing `id` increased.
+  ///
+  /// This only moves the entry upward. Callers should use this when the score
+  /// policy is monotonic in the "better" direction, such as SAT variable
+  /// activity bumps. Mutating a stored element without calling `increase(id)`
+  /// leaves the heap order stale.
+  void increase(unsigned id) {
+    if (contains(id))
+      siftUp(positions[id]);
+  }
+
+  /// Remove and return the highest-scoring id.
+  unsigned pop() {
+    assert(!empty() && "cannot pop from empty heap");
+    unsigned top = heap.front();
+    positions[top] = kInvalidIndex;
+    if (heap.size() == 1) {
+      heap.pop_back();
+      return top;
+    }
+
+    // Move the last entry to the root and sift down to restore heap order.
+    heap.front() = heap.back();
+    positions[heap.front()] = 0;
+    heap.pop_back();
+    siftDown(0);
+    return top;
+  }
+
+private:
+  static constexpr unsigned kInvalidIndex = ~0u;
+
+  /// Compute the ordering score for one heap entry.
+  double score(unsigned id) const { return ScoreFn{}(storage[id]); }
+
+  /// Swap two heap slots and keep the reverse index in sync.
+  void swapHeapEntries(unsigned lhs, unsigned rhs) {
+    std::swap(heap[lhs], heap[rhs]);
+    positions[heap[lhs]] = lhs;
+    positions[heap[rhs]] = rhs;
+  }
+
+  /// Bubble one entry toward the root until the heap property is restored.
+  void siftUp(unsigned index) {
+    unsigned elem = heap[index];
+    double elemScore = score(elem);
+    while (index > 0) {
+      unsigned parent = (index - 1) / 2;
+      if (score(heap[parent]) >= elemScore)
+        break;
+      swapHeapEntries(index, parent);
+      index = parent;
+    }
+    assert(heap[index] == elem && "siftUp must preserve the promoted element");
+  }
+
+  /// Push one entry toward the leaves until the heap property is restored.
+  void siftDown(unsigned index) {
+    unsigned elem = heap[index];
+    double elemScore = score(elem);
+    unsigned heapSize = heap.size();
+    while (true) {
+      unsigned child = 2 * index + 1;
+      if (child >= heapSize)
+        break;
+      if (child + 1 < heapSize && score(heap[child + 1]) > score(heap[child]))
+        ++child;
+      if (elemScore >= score(heap[child]))
+        break;
+      swapHeapEntries(index, child);
+      index = child;
+    }
+    assert(heap[index] == elem && "siftDown must preserve the demoted element");
+  }
+
+  /// The caller-owned objects indexed by heap ids.
+  llvm::SmallVectorImpl<T> &storage;
+
+  /// Binary heap of ids ordered by descending score.
+  llvm::SmallVector<unsigned, 0> heap;
+
+  /// Reverse map from id to heap slot, or `InvalidIndex` if absent.
+  llvm::SmallVector<unsigned, 0> positions;
+};
 
 /// Abstract interface for incremental SAT solvers with an IPASIR-style API.
 class IncrementalSATSolver {
