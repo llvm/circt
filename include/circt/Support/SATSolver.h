@@ -20,20 +20,20 @@ namespace circt {
 template <typename T>
 struct HeapScore;
 
-/// A max-heap over ids into an external storage vector.
+/// A max-heap of ids into caller-owned storage.
 ///
-/// The heap keeps a reverse map from id to heap slot so callers can update the
-/// score of an existing id without inserting duplicates. Scores are supplied by
-/// a stateless policy type. This is an indexed heap: the caller owns the
-/// underlying objects in `storage`, while the heap only stores integer ids into
-/// that storage. If the caller mutates an element in `storage` in a way that
-/// changes its score, it must call `increase(id)` before relying on heap order
-/// again.
+/// The heap stores only integer ids and keeps a reverse map from each id to its
+/// heap slot. That lets callers update an existing entry without creating
+/// duplicates. Scores come from a stateless policy type. If a caller changes an
+/// element in `storage` in a way that raises its score, it must call
+/// `increase(id)` to restore heap order.
 ///
 /// This data structure design is inspired by MiniSat's `minisat/mtl/Heap.h`.
 template <typename T, typename ScoreFn = HeapScore<T>>
 class IndexedMaxHeap {
 public:
+  // Create an empty heap referencing caller-owned storage. Caller must keep
+  // storage alive; heap is empty until insert() is used.
   explicit IndexedMaxHeap(llvm::SmallVectorImpl<T> &storage)
       : storage(storage) {}
 
