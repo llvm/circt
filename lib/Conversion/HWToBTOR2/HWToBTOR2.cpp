@@ -1223,23 +1223,21 @@ public:
   }
 
   /// Checks if a given operation is a supported modulelike
-  template <typename T>
-  bool isSuportedModule(T module) {
+  bool isSuportedModule(Operation *module) {
     bool supported = isa<hw::HWModuleOp, verif::FormalOp>(module);
     if (!supported)
-      module.emitError("Unsupported module type!");
+      module->emitError("Unsupported module type!");
     return supported;
   }
 
   /// Previsits all registers in a given module (avoids dependency cycles)
-  template <typename T>
-  LogicalResult preVisitRegs(T module) {
+  LogicalResult preVisitRegs(Operation *module) {
     // Sanity check
     if (!isSuportedModule(module))
       return failure();
 
     // Find all supported registers and visit them
-    module.walk([&](Operation *op) {
+    module->walk([&](Operation *op) {
       TypeSwitch<Operation *, void>(op)
           .Case<seq::FirRegOp, seq::CompRegOp>([&](auto reg) {
             visit(reg);
@@ -1252,14 +1250,13 @@ public:
   }
 
   /// Visits all of the regular operations in our module
-  template <typename T>
-  LogicalResult visitBodyOps(T module) {
+  LogicalResult visitBodyOps(Operation *module) {
     // Sanity check
     if (!isSuportedModule(module))
       return failure();
 
     // Visit all of the operations in our module
-    module.walk([&](Operation *op) {
+    module->walk([&](Operation *op) {
       // Check: instances are not (yet) supported
       if (isa<hw::InstanceOp>(op)) {
         op->emitOpError("not supported in BTOR2 conversion");
@@ -1320,8 +1317,7 @@ public:
   }
 
   /// Handles the core logic of the pass, in a generic manner
-  template <typename T>
-  LogicalResult handleTopLevel(T module) {
+  LogicalResult handleTopLevel(Operation *module) {
     // Previsit all registers in the module in order to avoid dependency
     // cycles
     if (failed(preVisitRegs(module)))
@@ -1350,38 +1346,26 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
   // We also consider hw::HWModuleOp and verif::FormalOp as the same
   auto top = getOperation();
   top.walk([&](Operation *op) {
-    TypeSwitch<Operation *, void>(op)
-        .Case<hw::HWModuleOp>([&](auto module) {
-          // Generate the start comment for the module
-          auto module_name = module.getSymName();
-          genModuleComment(module_name);
+    // Skip all non-module or formal ops
+    if (!isa<hw::HWModuleOp, verif::FormalOp>(op))
+      return;
 
-          // Start by extracting the inputs and generating appropriate
-          // instructions
-          if (failed(visitPorts(module)))
-            return signalPassFailure();
+    // Generate the start comment for the module
+    auto module_name = SymbolTable::getSymbolName(op);
+    genModuleComment(module_name);
 
-          // Handle the rest
-          if (failed(handleTopLevel(module)))
-            return signalPassFailure();
+    // Start by extracting the inputs and generating appropriate
+    // instructions when block arguments exist
+    if (auto module = dyn_cast<hw::HWModuleOp>(op))
+      if (failed(visitPorts(module)))
+        return signalPassFailure();
 
-          // Generate ending comment
-          genModuleComment(module_name, true);
-        })
-        .Case<verif::FormalOp>([&](auto module) {
-          // Generate the start comment for the module
-          auto module_name = module.getSymName();
-          genModuleComment(module_name);
+    // Handle the rest
+    if (failed(handleTopLevel(op)))
+      return signalPassFailure();
 
-          // FormalOp does not have any block arguments so can be supported
-          // simply
-          if (failed(handleTopLevel(module)))
-            return signalPassFailure();
-
-          // Generate ending comment
-          genModuleComment(module_name, true);
-        })
-        .Default([&](auto) {});
+    // Generate ending comment
+    genModuleComment(module_name, true);
   });
 
   // Clear data structures to allow for pass reuse
