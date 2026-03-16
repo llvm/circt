@@ -2122,7 +2122,7 @@ def AssocArrayClearOp : MooreOp<"assoc_array.clear"> {
   let results = (outs);
   let assemblyFormat = [{
     $assoc_array attr-dict `:` type($assoc_array)
-    }];
+  }];
 }
 
 def AssocArraySizeOp : MooreOp<"assoc_array.size"> {
