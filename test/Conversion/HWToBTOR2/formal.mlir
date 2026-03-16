@@ -22,19 +22,19 @@ module {
   /// should work alongside hw.module ops
 
   // CHECK: [[I32_:[0-9]+]] sort bitvec 32
-  // CHECK: [[A_:[0-9]+]] input [[I32_]] a
-  // CHECK: [[B_:[0-9]+]] input [[I32_]] b
-  // CHECK: [[C_:[0-9]+]] input [[I32_]] c
-  // CHECK: [[ADD_:[0-9]+]] add [[I32_]] [[A_]] [[B_]]
+  // CHECK: [[X:[0-9]+]] input [[I32_]] x
+  // CHECK: [[Y:[0-9]+]] input [[I32_]] y
+  // CHECK: [[Z:[0-9]+]] input [[I32_]] z
+  // CHECK: [[SUB:[0-9]+]] sub [[I32_]] [[X]] [[Y]]
   // CHECK: [[I1_:[0-9]+]] sort bitvec 1
-  // CHECK: [[RES_:[0-9]+]] eq [[I1_]] [[ADD_]] [[C_]]
+  // CHECK: [[RES_:[0-9]+]] eq [[I1_]] [[SUB]] [[Z]]
   // CHECK: [[NOT_:[0-9]+]] not [[I1_]] [[RES_]]
   // CHECK: [[BAD_:[0-9]+]] bad [[NOT_]]
-  hw.module @bar(in %a : i32) {
-    %b = verif.symbolic_value : i32
-    %c = verif.symbolic_value : i32
-    %res = comb.add %a, %b : i32 
-    %cond = comb.icmp eq %res, %c : i32
+  hw.module @bar(in %x : i32) {
+    %y = verif.symbolic_value : i32
+    %z = verif.symbolic_value : i32
+    %res = comb.sub %x, %y : i32 
+    %cond = comb.icmp eq %res, %z : i32
     verif.assert %cond : i1
   }
 }

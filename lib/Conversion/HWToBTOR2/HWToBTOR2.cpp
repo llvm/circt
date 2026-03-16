@@ -1351,8 +1351,8 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
       return;
 
     // Generate the start comment for the module
-    auto module_name = SymbolTable::getSymbolName(op);
-    genModuleComment(module_name);
+    auto moduleName = SymbolTable::getSymbolName(op);
+    genModuleComment(moduleName);
 
     // Start by extracting the inputs and generating appropriate
     // instructions when block arguments exist
@@ -1365,7 +1365,7 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
       return signalPassFailure();
 
     // Generate ending comment
-    genModuleComment(module_name, true);
+    genModuleComment(moduleName, true);
   });
 
   // Clear data structures to allow for pass reuse
