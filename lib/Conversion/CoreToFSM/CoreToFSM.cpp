@@ -448,7 +448,8 @@ static void generateConcatenatedValues(
     currentResults = std::move(nextResults);
   }
 
-  finalPossibleValues = std::move(currentResults);
+  for (size_t val : currentResults)
+    finalPossibleValues.insert(val);
 }
 
 static llvm::MapVector<Value, int> intToRegMap(SmallVector<seq::CompRegOp> v,
