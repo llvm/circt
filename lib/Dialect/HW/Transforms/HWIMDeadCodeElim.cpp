@@ -117,7 +117,7 @@ void HWIMDeadCodeElim::markInstanceLike(HWInstanceLike instanceLike) {
     // If this is an extmodule, just remember that any inputs and inouts are
     // alive.
     // Inputs are exactly what are passed into the module.
-    if (!dyn_cast<HWModuleOp>(op.getOperation())) {
+    if (!isa<HWModuleOp>(op.getOperation())) {
       for (auto operand : instanceLike->getOperands())
         markAlive(operand);
 
@@ -142,10 +142,8 @@ void HWIMDeadCodeElim::markBlockExecutable(Block *block) {
   auto module = dyn_cast<HWModuleOp>(moduleLike.getOperation());
   if (!module)
     markAlive(moduleLike);
-  else {
-    if (module.isPublic())
-      markAlive(module);
-  }
+  else if (module.isPublic())
+    markAlive(module);
 
   for (auto &op : *block) {
     if (auto instance = dyn_cast<HWInstanceLike>(op))
