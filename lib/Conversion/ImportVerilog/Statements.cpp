@@ -178,14 +178,25 @@ struct StmtVisitor {
     // Slang stores all threads of a fork-join block inside a `StatementList`.
     // This cannot be visited normally due to the need to make each statement a
     // separate thread so must be converted here.
-    auto &threadList = stmt.body.as<slang::ast::StatementList>();
-    unsigned int threadCount = threadList.list.size();
+    auto *threadList = stmt.body.as_if<slang::ast::StatementList>();
+    unsigned int threadCount = threadList ? threadList->list.size() : 1;
 
     auto forkOp = moore::ForkJoinOp::create(builder, loc, kind, threadCount);
     OpBuilder::InsertionGuard guard(builder);
 
+    // When only a single statement is present, Slang does not create a
+    // `StatementList`.
+    if (!threadList) {
+      auto &tBlock = forkOp->getRegion(0).emplaceBlock();
+      builder.setInsertionPointToStart(&tBlock);
+      if (failed(context.convertStatement(stmt.body)))
+        return failure();
+      moore::CompleteOp::create(builder, loc);
+      return success();
+    }
+
     int i = 0;
-    for (auto *thread : threadList.list) {
+    for (auto *thread : threadList->list) {
       auto &tBlock = forkOp->getRegion(i).emplaceBlock();
       builder.setInsertionPointToStart(&tBlock);
       // Populate thread operator with thread body and finish with a thread

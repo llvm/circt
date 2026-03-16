@@ -4416,7 +4416,30 @@ module WaitForkTest();
   end
 endmodule
 
+// CHECK-LABEL: moore.module @ForkJoinWithSingleStmt
+// CHECK:         [[VAR_A:%.+]] = moore.variable : <i32>
+// CHECK:         moore.procedure initial {
+// CHECK:           moore.fork join_all {
+// CHECK:         [[CONST_1:%.+]] = moore.constant 1 : i32
+// CHECK:             moore.blocking_assign [[VAR_A]], [[CONST_1]] : i32
+// CHECK:             moore.complete
+// CHECK:           }
+// CHECK:           moore.fork join_all
+// CHECK:           moore.return
+// CHECK:         }
+// CHECK:         moore.output
+// CHECK:       }
+module ForkJoinWithSingleStmt;
+  int a;
+  initial begin
+    fork 
+      a = 1;
+    join
 
+    fork
+    join
+  end
+endmodule
 
 
 // CHECK-LABEL: moore.module @AssocArrayExtractTest() {
