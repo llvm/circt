@@ -300,10 +300,10 @@ static std::optional<DpiArrayCastInfo> getDpiArrayCastInfo(Type type) {
 }
 
 static bool hasOpenArrayBoundaryType(Type type) {
-  if (isa<OpenArrayType, OpenUnpackedArrayType>(type))
+  if (isa<OpenArrayType>(type))
     return true;
   if (auto refType = dyn_cast<RefType>(type))
-    return isa<OpenArrayType, OpenUnpackedArrayType>(refType.getNestedType());
+    return isa<OpenArrayType>(refType.getNestedType());
   return false;
 }
 
@@ -770,6 +770,10 @@ static Value createZeroValue(Type type, Location loc,
   // Handle queues
   if (auto queueType = dyn_cast<sim::QueueType>(type))
     return sim::QueueEmptyOp::create(rewriter, loc, queueType);
+
+  // handle dynamic arrays
+  if (auto dynArrayType = dyn_cast<sim::DynamicArrayType>(type))
+    return sim::DynamicArrayEmptyOp::create(rewriter, loc, dynArrayType);
 
   // Otherwise try to create a zero integer and bitcast it to the result type.
   int64_t width = hw::getBitWidth(type);
@@ -1337,6 +1341,16 @@ struct DynExtractOpConversion : public OpConversionPattern<DynExtractOp> {
       else
         rewriter.replaceOpWithNewOp<hw::ArraySliceOp>(op, resultType,
                                                       adaptor.getInput(), idx);
+
+      return success();
+    } else if (auto dynamicArrayType =
+                   dyn_cast<sim::DynamicArrayType>(inputType)) {
+      Value array = adaptor.getInput();
+      Value index = adaptor.getLowBit();
+
+      auto newOp = sim::DynamicArrayExtractOp::create(rewriter, op->getLoc(),
+                                                      {array, index});
+      rewriter.replaceOp(op, newOp);
 
       return success();
     }
@@ -2541,6 +2555,88 @@ struct QueueResizeOpConversion : public OpConversionPattern<QueueResizeOp> {
   }
 };
 
+struct OpenUArrayCreateOpConversion
+    : public OpConversionPattern<OpenUArrayCreateOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(OpenUArrayCreateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    Value initialSize = adaptor.getInitialSize();
+    Value initExpr = adaptor.getInit();
+
+    sim::DynamicArrayCreateOp newOp;
+
+    if (initExpr) {
+      newOp = sim::DynamicArrayCreateOp::create(
+          rewriter, op->getLoc(), resultType, {initialSize, initExpr});
+    } else {
+      newOp = sim::DynamicArrayCreateOp::create(rewriter, op->getLoc(),
+                                                resultType, initialSize);
+    }
+
+    rewriter.replaceOp(op, newOp);
+    return success();
+  };
+};
+
+struct OpenUArrayAssignOpConversion
+    : public OpConversionPattern<OpenUArrayAssignOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(OpenUArrayAssignOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    probeRefAndDriveWithResult(
+        rewriter, op->getLoc(), adaptor.getArray(), [&](Value dynArray) {
+          auto assignOp = sim::DynamicArrayAssignOp::create(
+              rewriter, op->getLoc(), dynArray, adaptor.getIdx(),
+              adaptor.getValue());
+          return assignOp.getResult();
+        });
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct OpenUArrayDeleteOpConversion
+    : public OpConversionPattern<OpenUArrayDeleteOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(OpenUArrayDeleteOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    probeRefAndDriveWithResult(rewriter, op->getLoc(), adaptor.getArray(),
+                               [&](Value dynArray) {
+                                 auto delOp = sim::DynamicArrayDeleteOp::create(
+                                     rewriter, op->getLoc(), dynArray);
+                                 return delOp.getResult();
+                               });
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct OpenUArraySizeOpConversion
+    : public OpConversionPattern<OpenUArraySizeOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(OpenUArraySizeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto newOp = sim::DynamicArraySizeOp::create(rewriter, op->getLoc(),
+                                                 adaptor.getArray());
+    rewriter.replaceOp(op, newOp);
+    return success();
+  }
+};
+
 struct QueueSetOpConversion : public OpConversionPattern<QueueSetOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -2564,11 +2660,11 @@ struct QueueCmpOpConversion : public OpConversionPattern<QueueCmpOp> {
   LogicalResult
   matchAndRewrite(QueueCmpOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // TODO: Right now Moore uses `UArrayCmpPredicate` for both queues/unpacked
-    // arrays - reasonable because, per SV spec, queues *are* a type of unpacked
-    // array). Once we support comparing unpacked arrays in core, it will make
-    // sense to rename `QueueCmpPredicate` to `UArrayCmpPredicate` and use it
-    // for both forms of comparisons.
+    // TODO: Right now Moore uses `UArrayCmpPredicate` for both
+    // queues/unpacked arrays - reasonable because, per SV spec, queues *are*
+    // a type of unpacked array). Once we support comparing unpacked arrays in
+    // core, it will make sense to rename `QueueCmpPredicate` to
+    // `UArrayCmpPredicate` and use it for both forms of comparisons.
 
     // Convert the UArrayCmpPredicate into a QueueCmpPredicate
     auto unpackedPred = adaptor.getPredicateAttr().getValue();
@@ -2631,7 +2727,6 @@ struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
     return success();
   }
 };
-
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -2790,6 +2885,11 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
                                type.getBound());
   });
 
+  typeConverter.addConversion([&](OpenUnpackedArrayType type) {
+    return sim::DynamicArrayType::get(
+        type.getContext(), typeConverter.convertType(type.getElementType()));
+  });
+
   typeConverter.addConversion([&](ArrayType type) -> std::optional<Type> {
     if (auto elementType = typeConverter.convertType(type.getElementType()))
       return hw::ArrayType::get(elementType, type.getSize());
@@ -2809,11 +2909,6 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([&](OpenArrayType type) -> std::optional<Type> {
     return LLVM::LLVMPointerType::get(type.getContext());
   });
-
-  typeConverter.addConversion(
-      [&](OpenUnpackedArrayType type) -> std::optional<Type> {
-        return LLVM::LLVMPointerType::get(type.getContext());
-      });
 
   typeConverter.addConversion([&](StructType type) -> std::optional<Type> {
     SmallVector<hw::StructType::FieldInfo> fields;
@@ -2894,7 +2989,7 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   });
 
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
-    if (isa<OpenArrayType, OpenUnpackedArrayType>(type.getNestedType()))
+    if (isa<OpenArrayType>(type.getNestedType()))
       return LLVM::LLVMPointerType::get(type.getContext());
     if (auto innerType = typeConverter.convertType(type.getNestedType()))
       return llhd::RefType::get(innerType);
@@ -3144,8 +3239,16 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     QueueSetOpConversion,
     QueueCmpOpConversion,
     QueueFromUnpackedArrayOpConversion,
-    QueueConcatOpConversion
-  >(typeConverter, patterns.getContext());
+    QueueConcatOpConversion,
+
+
+    // Dynamic array operations
+    OpenUArrayCreateOpConversion,
+    OpenUArrayAssignOpConversion,
+    OpenUArrayDeleteOpConversion,
+    OpenUArraySizeOpConversion
+
+    >(typeConverter, patterns.getContext());
   // clang-format on
 
   // Structural operations

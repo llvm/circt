@@ -935,6 +935,95 @@ def QueueConcatOp : SimOp<"queue.concat", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Dynamic Arrays
+//===----------------------------------------------------------------------===//
+
+def DynamicArrayEmptyOp : SimOp<"darray.empty", [Pure]> {
+  let summary = "Creates an empty dynamic array";
+  let description = [{
+    Creates an empty dyanmic array.
+  }];
+
+  let arguments = (ins);
+  let results = (outs DynamicArrayType:$out);
+
+  let assemblyFormat = "attr-dict `:` type($out)";
+}
+
+def DynamicArrayCreateOp: SimOp<"darray.create", [Pure, 
+OptionalTypesMatchWith<"result and init types must match",
+    "result", "init",
+    "$_self">]> {
+  let summary = "Creates a dynamic array";
+  let description = [{
+    Creates a dyanmic array given an initial size and an optional initializer parameter.
+  }];
+
+  let arguments = (ins I32:$initialSize, Optional<DynamicArrayType>:$init);
+  let results = (outs DynamicArrayType:$result);
+  let assemblyFormat = [{
+    $initialSize (`initial` $init^)? attr-dict `:` type($result)
+  }];
+}
+
+def DynamicArrayExtractOp: SimOp<"darray.extract", [Pure, 
+TypesMatchWith<"dynamic array and result types must match",
+      "dynArray", "result", "cast<DynamicArrayType>($_self).getElementType()">]> {
+  let summary = "Extracts an element from a dynamic array";
+  let description = [{
+    Extracts an element from a dynamic array at a specified index.
+    If the index is out of bounds, a runtime error will occur.
+  }];
+
+  let arguments = (ins DynamicArrayType:$dynArray, I32:$index);
+  let results = (outs HWNonInOutType:$result);
+  let assemblyFormat = [{
+    $dynArray `from` $index attr-dict `:` type($dynArray)
+  }];
+}
+
+def DynamicArrayAssignOp: SimOp<"darray.assign", [Pure,
+TypesMatchWith<"dynamic array and result types must match",
+      "dynArray", "value", "cast<DynamicArrayType>($_self).getElementType()">,
+AllTypesMatch<["dynArray", "result"]>]> {
+  let summary = "Performs an assignment to an index of a dynamic array";
+  let description = [{
+    Assigns a given value to a given index of a dynamic array.
+    This instruction returns the modified version of the dynamic array.
+  }];
+  let arguments = (ins DynamicArrayType:$dynArray, I32:$index, HWNonInOutType:$value);
+  let results = (outs DynamicArrayType:$result);
+  let assemblyFormat = [{
+    $value `to` $dynArray `[`$index `]` attr-dict `:` type($dynArray)
+  }];
+}
+
+def DynamicArrayDeleteOp: SimOp<"darray.delete", [Pure,
+AllTypesMatch<["dynArray", "result"]>]> {
+  let summary = "Deletes a dynamic array";
+  let description = [{
+    Deletes a dynamic array. Returns an empty dynamic array.
+  }];
+  let arguments = (ins DynamicArrayType:$dynArray);
+  let results = (outs DynamicArrayType:$result);
+  let assemblyFormat = [{
+    $dynArray attr-dict `:` type($dynArray)
+  }];
+}
+
+def DynamicArraySizeOp: SimOp<"darray.size", [Pure]> {
+  let summary = "Returns the size of a dynamic array";
+  let description = [{
+    Returns the size of a dynamic array.
+  }];
+  let arguments = (ins DynamicArrayType:$dynArray);
+  let results = (outs I32:$size);
+  let assemblyFormat = [{
+    $dynArray attr-dict `:` type($dynArray)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//
 

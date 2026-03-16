@@ -4140,6 +4140,7 @@ endmodule
 // CHECK:           }
 // CHECK:           moore.output
 // CHECK:         }
+
 module QueueExtractRangeTest;
     logic [31:0] q[$];
     logic [31:0] q2[$];
@@ -4177,6 +4178,7 @@ endmodule
 // CHECK:           }
 // CHECK:           moore.output
 // CHECK:         }
+
 module QueueUnboundedLiteralTest;
     int q1[$];
     int q2[$];
@@ -4198,6 +4200,7 @@ endmodule
 // CHECK:           }
 // CHECK:           moore.output
 // CHECK:       }
+
 module QueueResizeTest;
     int q1[$];
     int q2[$:10];
@@ -4217,6 +4220,7 @@ endmodule
 // CHECK:           }
 // CHECK:           moore.output
 // CHECK:         }
+
 module QueueToUnpackedArrayTest;
     int q1[$:5];
     int arr[0:10];
@@ -4248,6 +4252,7 @@ endmodule
 // CHECK:           }
 // CHECK:           moore.output
 // CHECK:         }
+
 module QueueConcatTest;
     int q1[$:5];
     int arr [0:10];
@@ -4257,7 +4262,7 @@ module QueueConcatTest;
       // `arr` to a queue, then create a temporary queue with 1,2,
       // then finally append them all
       qres = { 1, q1, arr, 1, 2};
-    end
+end
 endmodule
 
 // CHECK-LABEL: moore.module @QueueCmpTest() {
@@ -4278,6 +4283,7 @@ endmodule
 // CHECK:           }
 // CHECK:           moore.output
 // CHECK:         }
+
 module QueueCmpTest;
     int q1[$];
     int q2[$];
@@ -4346,6 +4352,7 @@ endmodule
 // CHECK          }
 // CHECK          moore.output
 // CHECK        }
+
 module ForkJoinTest ();
 	int a = 0;
 	int b = 0;
@@ -4849,4 +4856,104 @@ module TopTwoPorts;
   IfaceModport i1();
   IfaceModport i2();
   TwoPortsSameType dut(.a(i1), .b(i2));
+endmodule
+
+ // CHECK-LABEL: moore.module @DynamicArrayInitializeTest() {
+ // CHECK: [[ARR1:%.+]] = moore.variable : <open_uarray<i8>>
+ // CHECK: [[ARR2:%.+]] = moore.variable : <open_uarray<i8>>
+ // CHECK: moore.procedure initial {
+ // CHECK:   [[C4A:%.+]] = moore.constant 4 : i32
+ // CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C4A]] : <i8>
+ // CHECK:   moore.blocking_assign [[ARR1]], [[A1]] : open_uarray<i8>
+  // CHECK:  [[C4B:%.+]] = moore.constant 4 : i32
+ // CHECK:   [[R1:%.+]] = moore.read [[ARR1]] : <open_uarray<i8>>
+ // CHECK:   [[A2:%.+]] = moore.open_uarray_create [[C4B]] initial [[R1]] : <i8>
+ // CHECK:   moore.blocking_assign [[ARR2]], [[A2]] : open_uarray<i8>
+ // CHECK:   moore.return
+ // CHECK: }
+ // CHECK: moore.output
+ // CHECK: }
+
+module DynamicArrayInitializeTest;
+
+  bit [7:0] arr1[];
+  bit [7:0] arr2[];
+
+  initial begin
+    arr1 = new [ 4 ];
+    arr2 = new [ 4 ](arr1);
+  end
+endmodule
+
+// CHECK-LABEL: moore.module @DynamicArraySizeTest() {
+// CHECK: [[ARR:%.+]] = moore.variable : <open_uarray<i8>>
+// CHECK: [[X:%.+]] = moore.variable : <i32>
+// CHECK: moore.procedure initial {
+// CHECK:   [[C12:%.+]] = moore.constant 12 : i32
+// CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C12]] : <i8>
+// CHECK:   moore.blocking_assign [[ARR]], [[A1]] : open_uarray<i8>
+// CHECK:   [[R1:%.+]] = moore.read [[ARR]] : <open_uarray<i8>>
+// CHECK:   [[SZ:%.+]] = moore.open_uarray_size [[R1]] : <i8>
+// CHECK:   moore.blocking_assign [[X]], [[SZ]] : i32
+// CHECK:   moore.return
+// CHECK: }
+// CHECK: moore.output
+// CHECK: }
+
+
+module DynamicArraySizeTest;
+  bit [7:0] arr[];
+  int x;
+
+  initial begin
+    arr = new [ 12 ];
+    x = arr.size;
+  end
+endmodule
+
+
+// CHECK-LABEL: moore.module @DynamicArrayDeleteTest() {
+// CHECK: [[ARR:%.+]] = moore.variable : <open_uarray<i8>>
+// CHECK: moore.procedure initial {
+// CHECK:   [[C10:%.+]] = moore.constant 10 : i32
+// CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C10]] : <i8>
+// CHECK:   moore.blocking_assign [[ARR]], [[A1]] : open_uarray<i8>
+// CHECK:   [[DEL:%.+]] = moore.open_uarray_delete [[ARR]] : <open_uarray<i8>>
+// CHECK:   moore.return
+// CHECK: }
+// CHECK: moore.output
+// CHECK: }
+
+module DynamicArrayDeleteTest;
+  bit [7:0] arr[];
+
+  initial begin
+    arr = new [ 10 ];
+    arr.delete;
+  end
+endmodule
+
+// CHECK-LABEL: moore.module @DynamicArrayAssignTest() {
+// CHECK: [[ARR:%.+]] = moore.variable : <open_uarray<i8>>
+// CHECK: moore.procedure initial {
+// CHECK:   [[C10:%.+]] = moore.constant 10 : i32
+// CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C10]] : <i8>
+// CHECK:   moore.blocking_assign [[ARR]], [[A1]] : open_uarray<i8>
+// CHECK:   [[C1:%.+]] = moore.constant 1 : i32
+// CHECK:   [[R:%.+]] = moore.dyn_extract_ref [[ARR]] from [[C1]] : <open_uarray<i8>>, i32 -> <i8>
+// CHECK:   [[C10I8:%.+]] = moore.constant 10 : i8
+// CHECK:   [[C1B:%.+]] = moore.constant 1 : i32
+// CHECK:   moore.open_uarray_assign [[C10I8]] to [[ARR]][[[C1B]]] : <open_uarray<i8>>
+// CHECK:   moore.return
+// CHECK: }
+// CHECK: moore.output
+// CHECK: }
+
+module DynamicArrayAssignTest;
+  bit [7:0] arr[];
+
+  initial begin
+    arr = new [10];
+    arr[1] = 10;
+  end
 endmodule

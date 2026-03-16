@@ -73,4 +73,23 @@ def QueueType : SimTypeDef<"Queue"> {
   ];
 }
 
+def DynamicArrayType : SimTypeDef<"DynamicArray"> {
+  let mnemonic = "darray";
+  let summary = "a dynamic array type"; 
+  let description = [{
+    An ordered array of elements with a dynamic size.
+
+    Even though practical lowerings of this type likely have to hold the array
+    contents in dynamically-allocated heap memory, *this type has value
+    semantics*.
+  }];
+
+  let parameters = (ins
+    "::mlir::Type":$elementType
+  );
+  let assemblyFormat = [{
+    `<` $elementType `>`
+  }];
+}
+
 #endif // CIRCT_DIALECT_SIM_SIMTYPES_TD

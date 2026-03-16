@@ -2122,7 +2122,7 @@ def AssocArrayClearOp : MooreOp<"assoc_array.clear"> {
   let results = (outs);
   let assemblyFormat = [{
     $assoc_array attr-dict `:` type($assoc_array)
-  }];
+    }];
 }
 
 def AssocArraySizeOp : MooreOp<"assoc_array.size"> {
@@ -2136,7 +2136,6 @@ def AssocArraySizeOp : MooreOp<"assoc_array.size"> {
   let results = (outs TwoValuedI32:$result);
   let assemblyFormat = "$assoc_array `:` type($assoc_array) attr-dict";
 }
-
 
 def AssocArrayExistsOp : MooreOp<"assoc_array.exists", 
     [TypesMatchWith<"associative array index and given index must match",
@@ -2231,6 +2230,66 @@ def AssocArrayPrevOp : MooreOp<"assoc_array.prev",
   let results = (outs TwoValuedI32:$result);
   let assemblyFormat = [{
     `to` $index `from` $assoc_array attr-dict `:` type($assoc_array)
+    }];
+}
+
+//===----------------------------------------------------------------------===//
+// Dynamic Array Manipulation
+//===----------------------------------------------------------------------===//
+
+def OpenUArrayCreateOp: MooreOp<"open_uarray_create", [
+    OptionalTypesMatchWith<"result and init types must match",
+    "result", "init",
+    "$_self">
+    ]> {
+  let summary = "Create an open uarray given a type and size";
+  let description = [{
+      See IEEE 1800-2023 § 7.5.1 "New[]"
+  }];
+  let arguments = (ins TwoValuedI32:$initialSize, Optional<OpenUnpackedArrayType>:$init);
+  let results = (outs OpenUnpackedArrayType:$result);
+  let assemblyFormat = [{
+    $initialSize (`initial` $init^)? attr-dict `:` type($result)
+  }];
+}
+
+def OpenUArraySizeOp: MooreOp<"open_uarray_size"> {
+  let summary = "Fetch the size of a given open uarray";
+  let description = [{
+      See IEEE 1800-2023 § 7.5.2 "Size()"
+  }];
+  let arguments = (ins OpenUnpackedArrayType:$array);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = [{
+    $array attr-dict `:` type($array)
+  }]; 
+}
+
+def OpenUArrayDeleteOp: MooreOp<"open_uarray_delete"> {
+  let summary = "Delete a given open uarray";
+  let description = [{
+      See IEEE 1800-2023 § 7.5.3 "Delete()"
+  }];
+  let arguments = (ins OpenUnpackedArrayRefType:$array);
+  let results = (outs VoidType);
+  let assemblyFormat = [{
+    $array attr-dict `:` type($array)
+  }];
+}
+
+def OpenUArrayAssignOp: MooreOp<"open_uarray_assign", [
+  TypesMatchWith<"queue and element types must match",
+    "array", "value",
+    "cast<OpenUnpackedArrayType>(cast<RefType>($_self).getNestedType()).getElementType()">
+]> {
+  let summary = "Perform an assignment to an index of an open unpacked array";
+  let description = [{
+      See IEEE 1800-2023 § 7.5.3 "Delete()"
+  }];
+  let arguments = (ins OpenUnpackedArrayRefType:$array, TwoValuedI32:$idx, UnpackedType:$value);
+  let results = (outs);
+  let assemblyFormat = [{
+    $value `to` $array `[` $idx `]` attr-dict `:` type($array)
   }];
 }
 
