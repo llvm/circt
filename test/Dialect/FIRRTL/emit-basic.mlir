@@ -1051,19 +1051,36 @@ firrtl.circuit "Foo" {
     %end = firrtl.wire : !firrtl.uint<1>
   }
 
-  // Test that named domain create ops are emitted.
+  // Test that named domain create ops and domain subfield are emitted.
   firrtl.extmodule @NamedDomains_Foo(
     in A: !firrtl.domain<@ClockDomain()>
   )
   // CHECK-LABEL: module NamedDomains :
-  firrtl.module @NamedDomains() {
+  firrtl.module @NamedDomains(
+    // CHECK-NEXT: output n : String
+    // CHECK-NEXT: output v : Integer
+    // CHECK-NEXT: output a : Bool
+    out %n: !firrtl.string,
+    out %v: !firrtl.integer,
+    out %a: !firrtl.bool
+  ) {
+    // CHECK-NEXT: {{^$}}
     // CHECK-NEXT: domain my_clock of ClockDomain
     %my_clock = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
     %0 = firrtl.string "a"
     %1 = firrtl.integer 1
     %2 = firrtl.bool true
-    // CHECK: domain p of PowerDomain(String("a"), Integer(1), Bool(true))
+    // CHECK-NEXT: domain p of PowerDomain(String("a"), Integer(1), Bool(true))
     %p = firrtl.domain.create(%0, %1, %2) : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+    // CHECK-NEXT: propassign n, p.name
+    %p_name = firrtl.domain.subfield %p[name] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+    firrtl.propassign %n, %p_name : !firrtl.string
+    // CHECK-NEXT: propassign v, p.voltage
+    %p_voltage = firrtl.domain.subfield %p[voltage] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+    firrtl.propassign %v, %p_voltage : !firrtl.integer
+    // CHECK-NEXT: propassign a, p.alwaysOn
+    %p_alwaysOn = firrtl.domain.subfield %p[alwaysOn] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+    firrtl.propassign %a, %p_alwaysOn : !firrtl.bool
     // CHECK-NEXT: inst foo of NamedDomains_Foo
     %foo_A = firrtl.instance foo @NamedDomains_Foo(
       in A: !firrtl.domain<@ClockDomain()>

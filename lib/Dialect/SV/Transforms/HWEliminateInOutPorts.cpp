@@ -233,8 +233,3 @@ void HWEliminateInOutPortsPass::runOnOperation() {
     }
   }
 }
-
-std::unique_ptr<Pass> circt::sv::createHWEliminateInOutPortsPass(
-    const HWEliminateInOutPortsOptions &options) {
-  return std::make_unique<HWEliminateInOutPortsPass>(options);
-}

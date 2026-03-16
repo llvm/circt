@@ -10,25 +10,58 @@ on:
         required: true
         default: false
         type: boolean
+      cibw-build:
+        description: 'Which wheel target to build (workflow_dispatch only)'
+        default: all
+        type: choice
+        options:
+          - all
+          - cp310-manylinux_x86_64
+          - cp313-manylinux_x86_64
+          - cp314-manylinux_x86_64
   schedule:
     - cron: 0 12 * * 1
 
 jobs:
+  select_matrix:
+    name: Select wheel matrix
+    runs-on: ubuntu-22.04
+    if: github.repository == 'llvm/circt'
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set matrix
+        id: set-matrix
+        run: |
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" || "${{ inputs.cibw-build }}" == "all" ]]; then
+            matrix='{
+              "config": [
+                {"os":"ubuntu-22.04","cibw_build":"cp310-manylinux_x86_64"},
+                {"os":"ubuntu-22.04","cibw_build":"cp313-manylinux_x86_64"},
+                {"os":"ubuntu-22.04","cibw_build":"cp314-manylinux_x86_64"}
+              ]
+            }'
+          else
+            matrix='{
+              "config": [
+                {"os":"ubuntu-22.04","cibw_build":"${{ inputs.cibw-build }}"}
+              ]
+            }'
+          fi
+          {
+            echo "matrix<<EOF"
+            echo "$matrix"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
   build_wheels:
     name: Build wheels with ${{ matrix.config.cibw_build }}
     runs-on: ${{ matrix.config.os }}
     if: github.repository == 'llvm/circt'
+    needs: select_matrix
     strategy:
       fail-fast: false
-      matrix:
-        config:
-          - os: ubuntu-22.04
-            cibw_build: cp310-manylinux_x86_64
-          - os: ubuntu-22.04
-            cibw_build: cp313-manylinux_x86_64
-          - os: ubuntu-22.04
-            cibw_build: cp314-manylinux_x86_64
-
+      matrix: ${{ fromJSON(needs.select_matrix.outputs.matrix) }}
     steps:
       - name: Get CIRCT
         uses: actions/checkout@v3

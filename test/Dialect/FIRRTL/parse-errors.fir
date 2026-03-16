@@ -107,7 +107,7 @@ circuit subfield_of_ground_type :
   public module subfield_of_ground_type :
     input a: UInt<1>
     output b: UInt<1>
-    ; expected-error @+1 {{subfield requires bundle or object operand}}
+    ; expected-error @+1 {{subfield requires bundle, object, or domain operand}}
     connect b, a.a
 
 ;// -----

@@ -61,7 +61,3 @@ void HWStubExternalModulesPass::runOnOperation() {
       module.erase();
     }
 }
-
-std::unique_ptr<Pass> circt::sv::createHWStubExternalModulesPass() {
-  return std::make_unique<HWStubExternalModulesPass>();
-}

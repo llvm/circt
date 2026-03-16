@@ -136,7 +136,3 @@ void LowerArcsToFuncsPass::runOnOperation() {
   if (failed(lowerToFuncs()))
     return signalPassFailure();
 }
-
-std::unique_ptr<Pass> arc::createLowerArcsToFuncsPass() {
-  return std::make_unique<LowerArcsToFuncsPass>();
-}

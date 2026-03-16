@@ -181,7 +181,3 @@ void MakeTablesPass::runOnArc(DefineOp defineOp) {
     op->erase();
   }
 }
-
-std::unique_ptr<Pass> arc::createMakeTablesPass() {
-  return std::make_unique<MakeTablesPass>();
-}

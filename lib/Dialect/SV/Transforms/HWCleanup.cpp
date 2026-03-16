@@ -101,6 +101,7 @@ static void mergeRegions(Region *region1, Region *region2) {
 
 namespace {
 struct HWCleanupPass : public circt::sv::impl::HWCleanupBase<HWCleanupPass> {
+  using Base::Base;
   using sv::impl::HWCleanupBase<HWCleanupPass>::mergeAlwaysBlocks;
 
   void runOnOperation() override;
@@ -247,10 +248,4 @@ void HWCleanupPass::runOnProceduralRegion(Region &region) {
     if (op.getNumRegions() != 0)
       runOnRegionsInOp(op);
   }
-}
-
-std::unique_ptr<Pass> circt::sv::createHWCleanupPass(bool mergeAlwaysBlocks) {
-  auto pass = std::make_unique<HWCleanupPass>();
-  pass->mergeAlwaysBlocks = mergeAlwaysBlocks;
-  return pass;
 }

@@ -1453,6 +1453,16 @@ static LogicalResult stripModule(FModuleLike op) {
                   op->erase();
                   return WalkResult::advance();
                 })
+            .Case<DomainSubfieldOp>([](DomainSubfieldOp op) {
+              if (!op->use_empty()) {
+                OpBuilder builder(op);
+                op.replaceAllUsesWith(
+                    UnknownValueOp::create(builder, op.getLoc(), op.getType())
+                        .getResult());
+              }
+              op.erase();
+              return WalkResult::advance();
+            })
             .Case<UnsafeDomainCastOp>([](UnsafeDomainCastOp op) {
               op.replaceAllUsesWith(op.getInput());
               op.erase();

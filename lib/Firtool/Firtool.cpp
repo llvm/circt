@@ -357,8 +357,8 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
     modulePM.addPass(mlir::createCSEPass());
     modulePM.addPass(createSimpleCanonicalizerPass());
     modulePM.addPass(mlir::createCSEPass());
-    modulePM.addPass(sv::createHWCleanupPass(
-        /*mergeAlwaysBlocks=*/!opt.shouldEmitSeparateAlwaysBlocks()));
+    modulePM.addPass(sv::createHWCleanup(
+        {/*mergeAlwaysBlocks=*/!opt.shouldEmitSeparateAlwaysBlocks()}));
   }
 
   // Check inner symbols and inner refs.
@@ -379,11 +379,11 @@ populatePrepareForExportVerilog(mlir::PassManager &pm,
   pm.addNestedPass<hw::HWModuleOp>(verif::createVerifyClockedAssertLikePass());
 
   // Legalize unsupported operations within the modules.
-  pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
+  pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModules());
 
   // Tidy up the IR to improve verilog emission quality.
   if (!opt.shouldDisableOptimization())
-    pm.nest<hw::HWModuleOp>().addPass(sv::createPrettifyVerilogPass());
+    pm.nest<hw::HWModuleOp>().addPass(sv::createPrettifyVerilog());
 
   if (opt.shouldStripFirDebugInfo())
     pm.addPass(circt::createStripDebugInfoWithPredPass([](mlir::Location loc) {
@@ -398,7 +398,7 @@ populatePrepareForExportVerilog(mlir::PassManager &pm,
 
   // Emit module and testbench hierarchy JSON files.
   if (opt.shouldExportModuleHierarchy())
-    pm.addPass(sv::createHWExportModuleHierarchyPass());
+    pm.addPass(sv::createHWExportModuleHierarchy());
 
   // Check inner symbols and inner refs.
   pm.addPass(hw::createVerifyInnerRefNamespace());

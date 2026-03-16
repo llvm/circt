@@ -1045,6 +1045,25 @@ public:
     return signalPassFailure();
   }
 
+  // Symbolic values get handled the same way as block arguments.
+  // The one difference if that we treat them as regular opertions rather than
+  // block arguments, i.e. we don't need to special case store these inputLIDs
+  // and can simply store them in opLIDs like the other operations.
+  void visitVerif(verif::SymbolicValueOp op) {
+    // Retrieve name, make sure it's unique
+    auto name = symbolNamespace.newName(op.getName().value_or(""));
+
+    // Guarantees that a sort will exist for the generation of this symbolic
+    // value's translation into btor2
+    int64_t w = requireSort(op.getType());
+
+    // Store and generate a new lid
+    size_t inlid = setOpLID(op.getOperation());
+
+    // Generate the input in btor2
+    genInput(inlid, w, name);
+  }
+
   // Dispatch next visitors
   void visitInvalidVerif(Operation *op) { visit(op); }
 

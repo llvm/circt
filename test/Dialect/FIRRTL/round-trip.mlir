@@ -353,4 +353,23 @@ firrtl.module @CreateDomain() {
   firrtl.domain.define %child_A, %my_domain : !firrtl.domain<@ClockDomain()>
 }
 
+// CHECK-LABEL: firrtl.module @DomainSubfield
+firrtl.module @DomainSubfield() {
+  // CHECK-NEXT: firrtl.string "FastClock"
+  %name = firrtl.string "FastClock"
+  // CHECK-NEXT: firrtl.integer 1800
+  %voltage = firrtl.integer 1800
+  // CHECK-NEXT: firrtl.bool true
+  %alwaysOn = firrtl.bool true
+
+  // CHECK-NEXT: firrtl.domain.create{{.*}}: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+  %domain = firrtl.domain.create (%name, %voltage, %alwaysOn) : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+
+  // CHECK-NEXT: firrtl.domain.subfield{{.*}}[name] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+  %extracted_name = firrtl.domain.subfield %domain[name] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+
+  // CHECK-NEXT: firrtl.domain.subfield{{.*}}[voltage] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+  %extracted_voltage = firrtl.domain.subfield %domain[voltage] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+}
+
 }
