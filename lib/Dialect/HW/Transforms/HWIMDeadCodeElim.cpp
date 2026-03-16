@@ -117,7 +117,7 @@ void HWIMDeadCodeElim::markInstanceLike(HWInstanceLike instanceLike) {
     // If this is an extmodule, just remember that any inputs and inouts are
     // alive.
     // Inputs are exactly what are passed into the module.
-    if (!isa<HWModuleOp>(op.getOperation())) {
+    if (!dyn_cast<HWModuleOp>(op.getOperation())) {
       for (auto operand : instanceLike->getOperands())
         markAlive(operand);
 
