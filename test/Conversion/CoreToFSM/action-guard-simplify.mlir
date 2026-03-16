@@ -262,9 +262,8 @@ hw.module @guard_fold_preserves_update_variable(in %clk : !seq.clock, in %rst : 
     %next_flag = comb.xor %flag, %true : i1
     hw.output %flag : i1
 }
-
 // The guard for state_0 -> state_1 is %flag itself. Guard folding should
-// replace uses of %flag with true in the action *values*, but the first
+// replace uses of %flag with true in the action values, but the first
 // operand of fsm.update must remain %flag (the variable reference).
 // CHECK: fsm.state @state_0
 // CHECK:   fsm.transition @state_1 guard {
