@@ -40,10 +40,12 @@ static void addOpName(SmallVectorImpl<std::string> &ops) {
   (ops.push_back(AllowedOpTy::getOperationName().str()), ...);
 }
 template <typename... OpToLowerTy>
-static std::unique_ptr<Pass> createLowerVariadicPass(bool timingAware) {
+static std::unique_ptr<Pass>
+createLowerVariadicPass(bool timingAware, bool reuseSubsets = false) {
   LowerVariadicOptions options;
   addOpName<OpToLowerTy...>(options.opNames);
   options.timingAware = timingAware;
+  options.reuseSubsets = reuseSubsets;
   return createLowerVariadic(options);
 }
 void circt::synth::buildCombLoweringPipeline(
@@ -81,7 +83,9 @@ void circt::synth::buildCombLoweringPipeline(
   if (options.targetIR.getValue() == TargetIR::AIG) {
     // For AIG, lower variadic XoR since AIG cannot keep variadic
     // representation.
-    pm.addPass(createLowerVariadicPass<comb::XorOp>(options.timingAware));
+    pm.addPass(createLowerVariadicPass<comb::XorOp>(
+        options.timingAware,
+        options.synthesisStrategy == OptimizationStrategyArea));
   } else if (options.targetIR.getValue() == TargetIR::MIG) {
     // For MIG, lower variadic And, Or, and Xor since MIG cannot keep variadic
     // representation.
