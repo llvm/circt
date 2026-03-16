@@ -52,3 +52,15 @@ hw.module @mux(in %cond: i1, in %high: !hw.array<2xi4>, in %low: !hw.array<2xi4>
   %0 = comb.mux %cond, %high, %low : !hw.array<2xi4>
   hw.output %0 : !hw.array<2xi4>
 }
+
+// CHECK-LABEL: @mig_to_aig
+hw.module @mig_to_aig(in %x: i1, in %y: i1, in %z: i1, out out: i1) {
+  // CHECK-NEXT: %[[XY:.+]] = synth.aig.and_inv %x, not %y : i1
+  // CHECK-NEXT: %[[XZ:.+]] = synth.aig.and_inv %x, %z : i1
+  // CHECK-NEXT: %[[YZ:.+]] = synth.aig.and_inv not %y, %z : i1
+  // CHECK-NEXT: %[[NOR:.+]] = synth.aig.and_inv not %[[XY]], not %[[XZ]], not %[[YZ]] : i1
+  // CHECK-NEXT: %[[OR:.+]] = synth.aig.and_inv not %[[NOR]] : i1
+  // CHECK-NEXT: hw.output %[[OR]] : i1
+  %0 = synth.mig.maj_inv %x, not %y, %z : i1
+  hw.output %0 : i1
+}
