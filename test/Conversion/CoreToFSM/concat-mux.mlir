@@ -5,11 +5,6 @@
 // Without the fix, generateConcatenatedValues overwrote previously accumulated
 // possible values via std::move, producing only 2 states instead of 3.
 
-// The next-state logic is: mux(b, 3, concat(a, 0))
-//   b=1 -> next = 3 (0b011)
-//   b=0 -> next = concat(a, 00) = {0, 4}
-// The full set of reachable values is {0, 3, 4}, giving 3 states.
-
 // CHECK-LABEL: fsm.machine @concat_mux
 // CHECK: fsm.state @state_0
 // CHECK: fsm.state @state_3
