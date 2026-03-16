@@ -239,3 +239,36 @@ hw.module @constant_guard_no_hang(in %clk : !seq.clock, in %rst : i1, in %x : i1
     %counter = seq.compreg name "counter" %next_counter, %clk reset %rst, %c0_i2 : i2
     hw.output %counter : i2
 }
+
+// -----
+
+// Regression test: when a boolean fsm.variable is used directly as a guard
+// condition, guard-constant folding must not replace the variable operand
+// (first operand) of fsm.update with a constant.
+
+// CHECK-LABEL: fsm.machine @guard_fold_preserves_update_variable
+// CHECK-SAME: () -> i1
+// CHECK: %[[FLAG:.*]] = fsm.variable "flag" {initValue = false} : i1
+hw.module @guard_fold_preserves_update_variable(in %clk : !seq.clock, in %rst : i1, out out : i1) {
+    %false = hw.constant false
+    %true = hw.constant true
+    %state = seq.compreg name "state" %next_state, %clk reset %rst, %false : i1
+    %flag = seq.compreg name "flag" %next_flag, %clk reset %rst, %false : i1
+    %state_is_0 = comb.xor %state, %true : i1
+    %go_to_1 = comb.and %flag, %state_is_0 : i1
+    %not_flag = comb.xor %flag, %true : i1
+    %stay_at_0 = comb.and %state_is_0, %not_flag : i1
+    %next_state = comb.mux %stay_at_0, %false, %go_to_1 : i1
+    %next_flag = comb.xor %flag, %true : i1
+    hw.output %flag : i1
+}
+
+// The guard for state_0 -> state_1 is %flag itself. Guard folding should
+// replace uses of %flag with true in the action *values*, but the first
+// operand of fsm.update must remain %flag (the variable reference).
+// CHECK: fsm.state @state_0
+// CHECK:   fsm.transition @state_1 guard {
+// CHECK:     fsm.return %[[FLAG]]
+// CHECK:   } action {
+// CHECK:     fsm.update %[[FLAG]],
+// CHECK:   }
