@@ -110,9 +110,26 @@ static bool genRTGInstructionMethods(const RecordKeeper &records,
   return false;
 }
 
+static bool genRTGInstructionList(const RecordKeeper &records,
+                                  raw_ostream &os) {
+  for (const Record *opDef : records.getAllDerivedDefinitions("Op")) {
+    if (opDef->isSubClassOf("ISAInstructionFormat")) {
+      Operator op(opDef);
+      os << op.getOperationName() << ",\n";
+    }
+  }
+
+  return false;
+}
+
 // Generator registration for RTG instruction-related methods.
 static mlir::GenRegistration
     genRTGInstructionMethodsReg("gen-rtg-instruction-methods",
                                 "Generate RTG instruction-related methods from "
                                 "decorators",
                                 genRTGInstructionMethods);
+
+static mlir::GenRegistration genRTGInstructionListReg(
+    "gen-rtg-instruction-list",
+    "Generate a comma-separated list of all instructions",
+    genRTGInstructionList);
