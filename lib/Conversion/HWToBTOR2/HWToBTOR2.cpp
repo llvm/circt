@@ -559,20 +559,12 @@ private:
 
   // Generates a delimiter comment to mark the start or end of a module given a
   // module symbol
-  template <typename ST>
-  void genModuleComment(ST name, bool end = false) {
-    if (end)
-      os << "; **************************************"
-         << "\n"
-         << "; END OF MODULE: " << name << "\n"
-         << "; **************************************"
-         << "\n";
-    else
-      os << "; **************************************"
-         << "\n"
-         << "; START OF MODULE: " << name << "\n"
-         << "; **************************************"
-         << "\n";
+  void genModuleComment(StringRef name, bool end = false) {
+    os << "; **************************************"
+       << "\n"
+       << "; " << (end ? "END" : "START") << " OF MODULE: " << name << "\n"
+       << "; **************************************"
+       << "\n";
   }
 
   // Verifies that the sort required for the given operation's btor2 emission
@@ -1376,34 +1368,39 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
   // This greatly simplifies translation.
   // We also consider hw::HWModuleOp and verif::FormalOp as the same
   auto top = getOperation();
-  top.walk([&](hw::HWModuleOp module) {
-    // Generate the start comment for the module
-    auto module_name = module.getSymName().str();
-    genModuleComment(module_name);
+  top.walk([&](Operation *op) {
+    TypeSwitch<Operation *, void>(op)
+        .Case<hw::HWModuleOp>([&](auto module) {
+          // Generate the start comment for the module
+          auto module_name = module.getSymName();
+          genModuleComment(module_name);
 
-    // Start by extracting the inputs and generating appropriate instructions
-    if (failed(visitPorts(module)))
-      return signalPassFailure();
+          // Start by extracting the inputs and generating appropriate
+          // instructions
+          if (failed(visitPorts(module)))
+            return signalPassFailure();
 
-    // Handle the rest
-    if (failed(handleTopLevel(module)))
-      return signalPassFailure();
+          // Handle the rest
+          if (failed(handleTopLevel(module)))
+            return signalPassFailure();
 
-    // Generate ending comment
-    genModuleComment(module_name, true);
-  });
+          // Generate ending comment
+          genModuleComment(module_name, true);
+        })
+        .Case<verif::FormalOp>([&](auto module) {
+          // Generate the start comment for the module
+          auto module_name = module.getSymName();
+          genModuleComment(module_name);
 
-  top.walk([&](verif::FormalOp module) {
-    // Generate the start comment for the module
-    auto module_name = module.getSymName().str();
-    genModuleComment(module_name);
+          // FormalOp does not have any block arguments so can be supported
+          // simply
+          if (failed(handleTopLevel(module)))
+            return signalPassFailure();
 
-    // FormalOp does not have any block arguments so can be supported simply
-    if (failed(handleTopLevel(module)))
-      return signalPassFailure();
-
-    // Generate ending comment
-    genModuleComment(module_name, true);
+          // Generate ending comment
+          genModuleComment(module_name, true);
+        })
+        .Default([&](auto));
   });
 
   // Clear data structures to allow for pass reuse
