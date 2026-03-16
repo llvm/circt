@@ -1,5 +1,6 @@
 // RUN: circt-opt %s --synth-lower-variadic --split-input-file | FileCheck %s --check-prefixes=COMMON,TIMING
 // RUN: circt-opt %s --synth-lower-variadic=timing-aware=false --split-input-file | FileCheck %s --check-prefixes=COMMON,NO-TIMING
+// RUN: circt-opt %s --synth-lower-variadic=reuse-subsets=true | FileCheck %s
 // COMMON-LABEL: hw.module @Basic
 hw.module @Basic(in %a: i2, in %b: i2, in %c: i2, in %d: i2, in %e: i2, out f: i2) {
   // COMMON-NEXT: %[[RES0:.+]] = synth.aig.and_inv not %a, %b : i2
@@ -71,3 +72,21 @@ hw.module @Issue9115(in %a : i16, in %b : i16, in %c : i16, in %d : i16, out pro
   // COMMON-NEXT: comb.mul %c, %[[TMP]] : i16
   hw.output %0 : i16
 }
+
+// COMMON-LABEL: hw.module @SharingHeuristic
+hw.module @SharingHeuristic(in %in0 : i1, in %in1 : i1, in %in2 : i1, in %in3 : i1, in %in4 : i1, out out1 : i1, out out2 : i1) {
+  
+  // These represent the subset tree (out2)
+  // CHECK: %[[N0:.+]] = synth.aig.and_inv %in1, %in2
+  // CHECK: %[[N1:.+]] = synth.aig.and_inv %in3, %in4
+  // CHECK: %[[SUBSET_RES:.+]] = synth.aig.and_inv %[[N0]], %[[N1]]
+  %out2 = synth.aig.and_inv %in1, %in2, %in3, %in4 : i1
+
+  // out1 should now just use the SUBSET_RES directly
+  // CHECK: %[[OUT1_ROOT:.+]] = synth.aig.and_inv %in0, %[[SUBSET_RES]]
+  %out1 = synth.aig.and_inv %in0, %in1, %in2, %in3, %in4 : i1
+
+  // CHECK: hw.output %[[OUT1_ROOT]], %[[SUBSET_RES]]
+  hw.output %out1, %out2 : i1, i1
+}
+
