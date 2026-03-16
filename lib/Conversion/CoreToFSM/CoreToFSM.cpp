@@ -317,7 +317,14 @@ static void simplifyActionWithGuard(TransitionOp transition,
       auto constOp = hw::ConstantOp::create(builder, loc, guardExpr.getType(),
                                             isTrue ? 1 : 0);
       guardExpr.replaceUsesWithIf(constOp.getResult(), [&](OpOperand &use) {
-        return actionRegion.isAncestor(use.getOwner()->getParentRegion());
+        if (!actionRegion.isAncestor(use.getOwner()->getParentRegion()))
+          return false;
+        // Never replace the variable operand of fsm.update because that is the
+        // assignment target, not a value to be folded.
+        if (auto updateOp = dyn_cast<UpdateOp>(use.getOwner()))
+          if (use.getOperandNumber() == 0)
+            return false;
+        return true;
       });
     }
   }
