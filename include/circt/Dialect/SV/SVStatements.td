@@ -1202,6 +1202,155 @@ def ReturnOp : SVOp<"return",
 }
 
 //===----------------------------------------------------------------------===//
+// Macro module operation
+//===----------------------------------------------------------------------===//
+
+def MacroModuleOp : SVOp<"macro.module", [
+    Symbol,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+    DeclareOpInterfaceMethods<HWModuleLike>,
+    OpAsmOpInterface,
+    SingleBlock,
+    NoTerminator,
+    NoRegionArguments,
+    HasParent<"mlir::ModuleOp">
+]> {
+  let summary = "External module configurable via macro";
+  let description = [{
+    This represents an external module declaration where the actual module
+    to instantiate is determined by a macro at elaboration time.
+
+    The macro must be defined and point to a module with compatible ports.
+
+    Example:
+    ```mlir
+    sv.macro.decl @WHICH_MODULE
+    sv.macro.module @MyModule macro @WHICH_MODULE(in %a: i1, out c: i1)
+
+    %inst = hw.instance "foo" @MyModule(a: %a: i1)
+    ```
+    ```verilog
+    `WHICH_MODULE foo (.a(a), .c(c));
+    ```
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       FlatSymbolRefAttr:$macroName,
+                       TypeAttrOf<ModuleType>:$module_type,
+                       OptionalAttr<DictArrayAttr>:$per_port_attrs,
+                       OptionalAttr<LocationArrayAttr>:$port_locs,
+                       ParamDeclArrayAttr:$parameters);
+  let results = (outs);
+  let regions = (region AnyRegion:$body);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name, "FlatSymbolRefAttr":$macroName,
+                   "ArrayRef<hw::PortInfo>":$ports,
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
+  ];
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  let extraClassDeclaration = [{
+    StringAttr getNameAttr() {
+      return (*this)->getAttrOfType<StringAttr>(
+          ::mlir::SymbolTable::getSymbolAttrName());
+    }
+
+    StringRef getName() {
+      return getNameAttr().getValue();
+    }
+
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn) {}
+
+    size_t getNumPorts() { return getModuleType().getNumPorts(); }
+    size_t getNumInputPorts() { return getModuleType().getNumInputs(); }
+    size_t getNumOutputPorts() { return getModuleType().getNumOutputs(); }
+    size_t getPortIdForInputId(size_t idx) {
+      return getModuleType().getPortIdForInputId(idx);
+    }
+    size_t getPortIdForOutputId(size_t idx) {
+      return getModuleType().getPortIdForOutputId(idx);
+    }
+
+    ::circt::hw::PortInfo getPort(size_t idx);
+    SmallVector<::circt::hw::PortInfo> getPortList();
+  }];
+  let extraClassDefinition = [{
+    SmallVector<::circt::hw::PortInfo> $cppClass::getPortList() {
+      SmallVector<::circt::hw::PortInfo> results;
+      auto locs = getPortLocs();
+      auto attrs = getPerPortAttrs();
+      for (auto [index, port] : llvm::enumerate(getModuleType().getPorts())) {
+        ::circt::hw::PortInfo portInfo;
+        portInfo.name = port.name;
+        portInfo.dir = port.dir;
+        portInfo.type = port.type;
+        if (locs && index < locs->size())
+          portInfo.loc = cast<LocationAttr>((*locs)[index]);
+        if (attrs && index < attrs->size())
+          portInfo.attrs = cast<DictionaryAttr>((*attrs)[index]);
+        results.push_back(portInfo);
+      }
+      return results;
+    }
+
+    ::circt::hw::PortInfo $cppClass::getPort(size_t idx) {
+      return getPortList()[idx];
+    }
+
+    hw::ModuleType $cppClass::getHWModuleType() {
+      return getModuleType();
+    }
+
+    ArrayRef<Attribute> $cppClass::getAllPortAttrs() {
+      if (auto attrs = getPerPortAttrs())
+        return attrs->getValue();
+      return {};
+    }
+
+    void $cppClass::setAllPortAttrs(ArrayRef<Attribute> attrs) {
+      setPerPortAttrsAttr(ArrayAttr::get(getContext(), attrs));
+    }
+
+    void $cppClass::removeAllPortAttrs() {
+      removePerPortAttrsAttr();
+    }
+
+    SmallVector<Location> $cppClass::getAllPortLocs() {
+      SmallVector<Location> locs;
+      if (auto portLocs = getPortLocs()) {
+        for (auto loc : *portLocs)
+          locs.push_back(cast<Location>(loc));
+      } else {
+        locs.resize(getModuleType().getNumPorts(),
+                    UnknownLoc::get(getContext()));
+      }
+      return locs;
+    }
+
+    void $cppClass::setAllPortLocsAttrs(ArrayRef<Attribute> locs) {
+      setPortLocsAttr(ArrayAttr::get(getContext(), locs));
+    }
+
+    void $cppClass::setHWModuleType(hw::ModuleType type) {
+      setModuleTypeAttr(TypeAttr::get(type));
+    }
+
+    void $cppClass::setAllPortNames(ArrayRef<Attribute> names) {
+      auto type = getModuleType();
+      SmallVector<hw::ModulePort> ports;
+      for (auto [idx, port] : llvm::enumerate(type.getPorts()))
+        ports.push_back({cast<StringAttr>(names[idx]), port.type, port.dir});
+      setHWModuleType(hw::ModuleType::get(getContext(), ports));
+    }
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // SV output control.
 //===----------------------------------------------------------------------===//
 

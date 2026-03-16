@@ -19,6 +19,7 @@ include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
+include "circt/Dialect/HW/HWAttributes.td"
 include "circt/Dialect/SV/SVDialect.td"
 
 // Base class for the operation in this dialect.

@@ -2879,6 +2879,117 @@ LogicalResult CoverPropertyOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// MacroModuleOp
+//===----------------------------------------------------------------------===//
+
+void MacroModuleOp::build(OpBuilder &builder, OperationState &result,
+                          StringAttr name, FlatSymbolRefAttr macroName,
+                          ArrayRef<hw::PortInfo> ports,
+                          ArrayRef<NamedAttribute> attributes) {
+  result.addAttribute(SymbolTable::getSymbolAttrName(), name);
+  result.addAttribute("macroName", macroName);
+
+  SmallVector<hw::ModulePort> modulePorts;
+  SmallVector<Attribute> portLocs;
+  SmallVector<Attribute> portAttrs;
+  for (auto port : ports) {
+    modulePorts.push_back({port.name, port.type, port.dir});
+    portLocs.push_back(port.loc ? LocationAttr(port.loc)
+                                : LocationAttr(builder.getUnknownLoc()));
+    portAttrs.push_back(port.attrs ? port.attrs
+                                   : builder.getDictionaryAttr({}));
+  }
+  auto type = hw::ModuleType::get(builder.getContext(), modulePorts);
+  result.addAttribute("module_type", TypeAttr::get(type));
+  result.addAttribute("port_locs", builder.getArrayAttr(portLocs));
+  result.addAttribute("per_port_attrs", builder.getArrayAttr(portAttrs));
+  result.addAttribute("parameters", builder.getArrayAttr({}));
+  result.addAttributes(attributes);
+  result.addRegion();
+}
+
+LogicalResult
+MacroModuleOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto macro = symbolTable.lookupNearestSymbolFrom<MacroDeclOp>(
+      *this, getMacroNameAttr());
+  if (!macro)
+    return emitError("cannot find macro declaration '")
+           << getMacroName() << "'";
+  return success();
+}
+
+ParseResult MacroModuleOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto &builder = parser.getBuilder();
+
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  FlatSymbolRefAttr macroNameAttr;
+  if (parser.parseKeyword("macro") ||
+      parser.parseAttribute(macroNameAttr, builder.getNoneType(), "macroName",
+                            result.attributes))
+    return failure();
+
+  SmallVector<hw::module_like_impl::PortParse> ports;
+  TypeAttr modType;
+  if (hw::module_like_impl::parseModuleSignature(parser, ports, modType))
+    return failure();
+  result.addAttribute("module_type", modType);
+
+  SmallVector<Attribute> portAttrs, portLocs;
+  for (auto &port : ports) {
+    portLocs.push_back(builder.getUnknownLoc());
+    portAttrs.push_back(port.attrs ? port.attrs
+                                   : builder.getDictionaryAttr({}));
+  }
+  result.addAttribute("per_port_attrs", builder.getArrayAttr(portAttrs));
+  result.addAttribute("port_locs", builder.getArrayAttr(portLocs));
+  result.addAttribute("parameters", builder.getArrayAttr({}));
+
+  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
+    return failure();
+
+  result.addRegion();
+  return success();
+}
+
+void MacroModuleOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  p.printSymbolName(getSymName());
+  p << " macro ";
+  p.printAttributeWithoutType(getMacroNameAttr());
+
+  auto modType = getModuleType();
+  p << "(";
+  llvm::interleaveComma(modType.getPorts(), p, [&](auto port) {
+    p << (port.dir == hw::ModulePort::Direction::Input ? "in %" : "out ");
+    p.printKeywordOrString(port.name.getValue());
+    p << " : ";
+    p.printType(port.type);
+  });
+  p << ")";
+
+  SmallVector<StringRef> omittedAttrs = {
+      SymbolTable::getSymbolAttrName(), "module_type", "per_port_attrs",
+      "port_locs", "macroName", "parameters"};
+  p.printOptionalAttrDictWithKeyword((*this)->getAttrs(), omittedAttrs);
+}
+
+LogicalResult MacroModuleOp::verify() {
+  auto modType = getModuleType();
+  auto portLocs = getPortLocs();
+  auto portAttrs = getPerPortAttrs();
+
+  if (portLocs && portLocs->size() != modType.getNumPorts())
+    return emitError("port_locs size doesn't match module type");
+  if (portAttrs && portAttrs->size() != modType.getNumPorts())
+    return emitError("per_port_attrs size doesn't match module type");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
