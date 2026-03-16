@@ -319,7 +319,7 @@ static void simplifyActionWithGuard(TransitionOp transition,
       guardExpr.replaceUsesWithIf(constOp.getResult(), [&](OpOperand &use) {
         if (!actionRegion.isAncestor(use.getOwner()->getParentRegion()))
           return false;
-        // Never replace the variable operand of fsm.update — that is the
+        // Never replace the variable operand of fsm.update because that is the
         // assignment target, not a value to be folded.
         if (auto updateOp = dyn_cast<UpdateOp>(use.getOwner()))
           if (use.getOperandNumber() == 0)
