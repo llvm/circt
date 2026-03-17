@@ -86,8 +86,8 @@ firrtl.circuit "Top" {
 firrtl.circuit "Top" {
   // CHECK: hw.hierpath private @[[path:[a-zA-Z0-9_]+]] [@Top::@bar, @Bar::@barXMR, @XmrSrcMod::@[[xmrSym:[a-zA-Z0-9_]+]]]
   firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1>, out %_a: !firrtl.probe<uint<1>>) {
-    // CHECK: firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1>) {
-    // CHECK-NEXT: firrtl.node sym @[[xmrSym]]
+    // CHECK: firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<1> sym @[[xmrSym]]) {
+    // CHECK-NEXT: }
     %1 = firrtl.ref.send %pa : !firrtl.uint<1>
     firrtl.ref.define %_a, %1 : !firrtl.probe<uint<1>>
   }
@@ -554,9 +554,9 @@ firrtl.circuit "RefABI" {
 firrtl.circuit "BasicRefSub" {
   // CHECK:  hw.hierpath private @[[XMRPATH:.+]] [@BasicRefSub::@[[C_SYM:[^,]+]], @Child::@[[REF_SYM:[^,]+]]]
   // CHECK-LABEL: firrtl.module private @Child
-  // CHECK-SAME: in %in: !firrtl.bundle<a: uint<1>, b: uint<2>>)
+  // CHECK-SAME: in %in: !firrtl.bundle<a: uint<1>, b: uint<2>> sym @[[REF_SYM]])
   firrtl.module private @Child(in %in : !firrtl.bundle<a: uint<1>, b: uint<2>>, out %out : !firrtl.probe<uint<2>>) {
-    // CHECK-NEXT: firrtl.node sym @[[REF_SYM]] interesting_name %in
+    // CHECK-NEXT: }
     %ref = firrtl.ref.send %in : !firrtl.bundle<a: uint<1>, b: uint<2>>
     %sub = firrtl.ref.sub %ref[1] : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>
     firrtl.ref.define %out, %sub : !firrtl.probe<uint<2>>
@@ -734,8 +734,7 @@ firrtl.circuit "RefSubOutputPort" {
 // CHECK-LABEL: "WireProbe"
 firrtl.circuit "WireProbe" {
   // CHECK: hierpath {{.*}} [@WireProbe::@[[SYM:[^ ]+]]]
-  // CHECK: @WireProbe(in %x: !firrtl.uint<5>) {
-  // CHECK-NEXT: firrtl.node sym @[[SYM]]
+  // CHECK: @WireProbe(in %x: !firrtl.uint<5> sym @[[SYM]]) {
   // CHECK-NEXT: }
   firrtl.module @WireProbe(in %x: !firrtl.uint<5>, out %p: !firrtl.probe<uint<5>>) {
     // CHECK-NOT: firrtl.wire
