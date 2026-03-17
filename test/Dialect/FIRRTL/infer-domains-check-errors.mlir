@@ -63,7 +63,7 @@ firrtl.circuit "UndrivenInstanceChoiceDomainPort" {
   firrtl.extmodule @Bar(in c : !firrtl.domain<@ClockDomain()>)
 
   firrtl.module @UndrivenInstanceChoiceDomainPort() {
-    // expected-note  @+2 {{in instance_choice "inst"}} 
+    // expected-note  @+2 {{in instance_choice "inst"}}
     // expected-error @+1 {{undriven domain port "c"}}
     %inst_c = firrtl.instance_choice inst @Foo alternatives @Option { @X -> @Bar } (in c : !firrtl.domain<@ClockDomain()>)
   }

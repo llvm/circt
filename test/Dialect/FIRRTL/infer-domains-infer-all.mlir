@@ -274,7 +274,7 @@ firrtl.circuit "ConstantInMultipleDomains" {
     %x_A, %x_i = firrtl.instance x @Foo(in A: !firrtl.domain<@ClockDomain()>, in i: !firrtl.uint<1> domains [A])
     firrtl.domain.define %x_A, %A : !firrtl.domain<@ClockDomain()>
     firrtl.matchingconnect %x_i, %c0_ui1 : !firrtl.uint<1>
-    
+
     %y_A, %y_i = firrtl.instance y @Foo(in A: !firrtl.domain<@ClockDomain()>, in i: !firrtl.uint<1> domains [A])
     firrtl.domain.define %y_A, %B : !firrtl.domain<@ClockDomain()>
     firrtl.matchingconnect %y_i, %c0_ui1 : !firrtl.uint<1>
