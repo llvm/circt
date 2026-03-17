@@ -4140,6 +4140,7 @@ endmodule
 // CHECK:           }
 // CHECK:           moore.output
 // CHECK:         }
+
 module QueueExtractRangeTest;
     logic [31:0] q[$];
     logic [31:0] q2[$];
@@ -4849,4 +4850,73 @@ module TopTwoPorts;
   IfaceModport i1();
   IfaceModport i2();
   TwoPortsSameType dut(.a(i1), .b(i2));
+endmodule
+
+// CHECK-LABEL: moore.module @DynamicArrayInitializeTest() {
+// CHECK: [[ARR:%.+]] = moore.variable : <open_uarray<i8>>
+// CHECK: moore.procedure initial {
+// CHECK:   [[C4:%.+]] = moore.constant 4 : i32
+// CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C4]] : i32 -> <i8>
+// CHECK:   moore.blocking_assign [[ARR]], [[A1]] : open_uarray<i8>
+// CHECK:   moore.return
+// CHECK: }
+// CHECK: moore.output
+// CHECK: }
+
+module DynamicArrayInitializeTest;
+
+  bit [7:0] arr[];
+
+  initial begin
+    arr = new [ 4 ];
+  end
+endmodule
+
+// CHECK-LABEL: moore.module @DynamicArraySizeTest() {
+// CHECK: [[ARR:%.+]] = moore.variable : <open_uarray<i8>>
+// CHECK: [[X:%.+]] = moore.variable : <i32>
+// CHECK: moore.procedure initial {
+// CHECK:   [[C12:%.+]] = moore.constant 12 : i32
+// CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C12]] : i32 -> <i8>
+// CHECK:   moore.blocking_assign [[ARR]], [[A1]] : open_uarray<i8>
+// CHECK:   [[R1:%.+]] = moore.read [[ARR]] : <open_uarray<i8>>
+// CHECK:   [[SZ:%.+]] = moore.open_uarray_size [[R1]] : <i8>
+// CHECK:   moore.blocking_assign [[X]], [[SZ]] : i32
+// CHECK:   moore.return
+// CHECK: }
+// CHECK: moore.output
+// CHECK: }
+
+module DynamicArraySizeTest;
+  bit [7:0] arr[];
+  int x;
+
+  initial begin
+    arr = new [12];
+    x = arr.size;
+  end
+endmodule
+
+// CHECK-LABEL: moore.module @DynamicArrayDeleteTest() {
+// CHECK: [[ARR:%.+]] = moore.variable : <open_uarray<i8>>
+// CHECK: moore.procedure initial {
+// CHECK:   [[C4:%.+]] = moore.constant 4 : i32
+// CHECK:   [[A1:%.+]] = moore.open_uarray_create [[C4]] : i32 -> <i8>
+// CHECK:   moore.blocking_assign [[ARR]], [[A1]] : open_uarray<i8>
+// CHECK:   [[R1:%.+]] = moore.read [[ARR]] : <open_uarray<i8>>
+// CHECK:   [[DEL:%.+]] = moore.open_uarray_delete [[R1]] : <i8>
+// CHECK:   moore.return
+// CHECK: }
+// CHECK: moore.output
+// CHECK: }
+
+module DynamicArrayDeleteTest;
+
+  bit [7:0] arr[];
+
+  initial begin
+    arr = new [4];
+    arr.delete();
+  end
+
 endmodule
