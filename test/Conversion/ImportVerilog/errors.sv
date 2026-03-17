@@ -181,7 +181,7 @@ endfunction
 module Foo;
   logic a;
   string b;
-  // expected-error @below {{expected integer argument for system call `$past`}}
+  // expected-error @below {{expected integer argument for `$past`}}
   assert property (@(posedge a) $past(b));
 endmodule
 
