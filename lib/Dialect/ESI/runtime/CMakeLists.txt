@@ -458,3 +458,6 @@ install(FILES ${ESICppRuntimeBackendHeaders}
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/esi/backends
   COMPONENT ESIRuntime
 )
+
+# C++ unit tests (self-contained, no CIRCT/LLVM dependency).
+add_subdirectory(tests/cpp)

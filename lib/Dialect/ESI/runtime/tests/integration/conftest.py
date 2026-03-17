@@ -18,10 +18,7 @@ ROOT_DIR = Path(__file__).resolve().parent
 HW_DIR = ROOT_DIR / "hw"
 SW_DIR = ROOT_DIR / "sw"
 
-
-def get_runtime_root() -> Path:
-  import esiaccel
-  return Path(esiaccel.__file__).resolve().parent.parent.parent
+from tests.conftest import get_runtime_root  # noqa: F401 – re-exported
 
 
 def require_tool(tool: str) -> None:
