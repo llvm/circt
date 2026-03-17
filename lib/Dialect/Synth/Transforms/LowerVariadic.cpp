@@ -290,6 +290,7 @@ void LowerVariadicPass::runOnOperation() {
           });
       if (failed(result))
         return signalPassFailure();
+      continue;
     }
 
     // Handle commutative operations (and, or, xor, mul, add, etc.) using
