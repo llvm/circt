@@ -557,6 +557,16 @@ private:
        << " " << sid << " " << regLID << " " << nextLID << "\n";
   }
 
+  // Generates a delimiter comment to mark the start or end of a module given a
+  // module symbol
+  void genModuleComment(StringRef name, bool end = false) {
+    os << "; **************************************"
+       << "\n"
+       << "; " << (end ? "END" : "START") << " OF MODULE: " << name << "\n"
+       << "; **************************************"
+       << "\n";
+  }
+
   // Verifies that the sort required for the given operation's btor2 emission
   // has been generated
   int64_t requireSort(mlir::Type type) {
@@ -1002,12 +1012,6 @@ public:
   void visitVerif(verif::AssumeOp op) { visitAssumeLike(op); }
   void visitVerif(verif::ClockedAssumeOp op) { visitAssumeLike(op); }
 
-  // Error out on most unhandled verif ops
-  void visitUnhandledVerif(Operation *op) {
-    op->emitError("not supported in btor2!");
-    return signalPassFailure();
-  }
-
   // Symbolic values get handled the same way as block arguments.
   // The one difference if that we treat them as regular opertions rather than
   // block arguments, i.e. we don't need to special case store these inputLIDs
@@ -1025,6 +1029,12 @@ public:
 
     // Generate the input in btor2
     genInput(inlid, w, name);
+  }
+
+  // Error out on most unhandled verif ops
+  void visitUnhandledVerif(Operation *op) {
+    op->emitError("not supported in btor2!");
+    return signalPassFailure();
   }
 
   // Dispatch next visitors
@@ -1169,7 +1179,7 @@ public:
               sv::VerbatimExprOp, sv::VerbatimExprSEOp, sv::IfOp, sv::IfDefOp,
               sv::IfDefProceduralOp, sv::AlwaysCombOp, seq::InitialOp,
               sv::AlwaysFFOp, seq::InitialOp, seq::YieldOp, hw::OutputOp,
-              hw::HWModuleOp,
+              hw::HWModuleOp, verif::FormalOp,
               // Specifically ignore printfs, as we can't do anything with them
               // in btor2
               verif::FormatVerilogStringOp, verif::PrintOp>(
@@ -1182,14 +1192,9 @@ public:
           return signalPassFailure();
         });
   }
-};
-} // end anonymous namespace
 
-void ConvertHWToBTOR2Pass::runOnOperation() {
-  // Btor2 does not have the concept of modules or module
-  // hierarchies, so we assume that no nested modules exist at this point.
-  // This greatly simplifies translation.
-  getOperation().walk([&](hw::HWModuleOp module) {
+  /// Prepares and visits all of the ports in a module
+  LogicalResult visitPorts(hw::HWModuleOp module) {
     // Start by extracting the inputs and generating appropriate instructions
     for (auto &port : module.getPortList()) {
       // Check whether the port is used as a clock
@@ -1205,17 +1210,34 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
           if (portVal.getNumUses() > 1) {
             module.emitError(
                 "Inputs converted to clocks may only have one user.");
-            return signalPassFailure();
+            return failure();
           }
           // Ports used as clocks should be implicit so don't visit them
           continue;
         }
       }
+      // Once ready, run actual port visitor
       visit(port);
     }
+    return success();
+  }
 
-    // Previsit all registers in the module in order to avoid dependency cycles
-    module.walk([&](Operation *op) {
+  /// Checks if a given operation is a supported modulelike
+  bool isSuportedModule(Operation *module) {
+    bool supported = isa<hw::HWModuleOp, verif::FormalOp>(module);
+    if (!supported)
+      module->emitError("Unsupported module type!");
+    return supported;
+  }
+
+  /// Previsits all registers in a given module (avoids dependency cycles)
+  LogicalResult preVisitRegs(Operation *module) {
+    // Sanity check
+    if (!isSuportedModule(module))
+      return failure();
+
+    // Find all supported registers and visit them
+    module->walk([&](Operation *op) {
       TypeSwitch<Operation *, void>(op)
           .Case<seq::FirRegOp, seq::CompRegOp>([&](auto reg) {
             visit(reg);
@@ -1224,12 +1246,21 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
           .Default([&](auto expr) {});
     });
 
+    return success();
+  }
+
+  /// Visits all of the regular operations in our module
+  LogicalResult visitBodyOps(Operation *module) {
+    // Sanity check
+    if (!isSuportedModule(module))
+      return failure();
+
     // Visit all of the operations in our module
-    module.walk([&](Operation *op) {
+    module->walk([&](Operation *op) {
       // Check: instances are not (yet) supported
       if (isa<hw::InstanceOp>(op)) {
         op->emitOpError("not supported in BTOR2 conversion");
-        return;
+        return signalPassFailure();
       }
 
       // Don't process ops that have already been emitted
@@ -1243,7 +1274,8 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
       while (!worklist.empty()) {
         auto &[op, operandIt] = worklist.back();
         if (operandIt == op->operand_end()) {
-          // All of the operands have been emitted, it is safe to emit our op
+          // All of the operands have been emitted, it is safe to emit our
+          // op
           dispatchTypeOpVisitor(op);
 
           // Record that our op has been emitted
@@ -1252,8 +1284,8 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
           continue;
         }
 
-        // Send the operands of our op to the worklist in case they are still
-        // un-emitted
+        // Send the operands of our op to the worklist in case they are
+        // still un-emitted
         Value operand = *(operandIt++);
         auto *defOp = operand.getDefiningOp();
 
@@ -1265,24 +1297,79 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
         // wasn't handled
         if (!worklist.insert({defOp, defOp->operand_begin()}).second) {
           defOp->emitError("dependency cycle");
-          return;
+          return signalPassFailure();
         }
       }
     });
 
+    return success();
+  }
+
+  /// Clear all data structures to allow for pass reuse
+  void clearData() {
+    sortToLIDMap.clear();
+    constToLIDMap.clear();
+    opLIDMap.clear();
+    inputLIDs.clear();
+    regOps.clear();
+    handledOps.clear();
+    worklist.clear();
+  }
+
+  /// Handles the core logic of the pass, in a generic manner
+  LogicalResult handleTopLevel(Operation *module) {
+    // Previsit all registers in the module in order to avoid dependency
+    // cycles
+    if (failed(preVisitRegs(module)))
+      return failure();
+
+    // Visit all of the operations in our module
+    if (failed(visitBodyOps(module)))
+      return failure();
+
     // Iterate through the registers and generate the `next` instructions
-    for (size_t i = 0; i < regOps.size(); ++i) {
+    for (size_t i = 0; i < regOps.size(); ++i)
       finalizeRegVisit(regOps[i]);
-    }
+
+    // Clear data structures to allow for pass reuse
+    clearData();
+
+    return success();
+  }
+};
+} // end anonymous namespace
+
+void ConvertHWToBTOR2Pass::runOnOperation() {
+  // Btor2 does not have the concept of modules or module
+  // hierarchies, so we assume that no nested modules exist at this point.
+  // This greatly simplifies translation.
+  // We also consider hw::HWModuleOp and verif::FormalOp as the same
+  auto top = getOperation();
+  top.walk([&](Operation *op) {
+    // Skip all non-module or formal ops
+    if (!isa<hw::HWModuleOp, verif::FormalOp>(op))
+      return;
+
+    // Generate the start comment for the module
+    auto moduleName = SymbolTable::getSymbolName(op);
+    genModuleComment(moduleName);
+
+    // Start by extracting the inputs and generating appropriate
+    // instructions when block arguments exist
+    if (auto module = dyn_cast<hw::HWModuleOp>(op))
+      if (failed(visitPorts(module)))
+        return signalPassFailure();
+
+    // Handle the rest
+    if (failed(handleTopLevel(op)))
+      return signalPassFailure();
+
+    // Generate ending comment
+    genModuleComment(moduleName, true);
   });
+
   // Clear data structures to allow for pass reuse
-  sortToLIDMap.clear();
-  constToLIDMap.clear();
-  opLIDMap.clear();
-  inputLIDs.clear();
-  regOps.clear();
-  handledOps.clear();
-  worklist.clear();
+  clearData();
 }
 
 // Constructor with a custom ostream
