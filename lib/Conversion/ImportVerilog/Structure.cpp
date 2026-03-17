@@ -568,8 +568,8 @@ struct ModuleVisitor : public BaseVisitor {
         outputValues.push_back(val);
       } else {
         // For input ports, if the value is a ref (from VariableOp/NetOp),
-        // read it to get the rvalue.
-        if (isa<moore::RefType>(val.getType()))
+        // read it to get the rvalue, unless the port itself expects a ref.
+        if (isa<moore::RefType>(val.getType()) && !isa<moore::RefType>(fp.type))
           val = moore::ReadOp::create(builder, loc, val);
         inputValues.push_back(val);
       }

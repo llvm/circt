@@ -418,7 +418,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       } else if (auto opName = definingOp->getAttrOfType<StringAttr>("name")) {
         nameHint.append(opName);
       }
-      nameHint.append("_layer_probe");
+      nameHint.append("_layerCapture");
     }
 
     return NodeOp::create(builder, operand.getLoc(), operand,

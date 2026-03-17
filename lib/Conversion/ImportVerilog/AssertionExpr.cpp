@@ -431,6 +431,7 @@ Value Context::convertAssertionCallExpression(
                            << subroutine.name << "`";
       return {};
     }
+
     // If the value is four-valued, we need to map it to two-valued before we
     // cast it to a builtin int
     if (valTy.getDomain() == Domain::FourValued) {

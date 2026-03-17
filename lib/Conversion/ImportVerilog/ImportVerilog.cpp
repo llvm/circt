@@ -26,6 +26,7 @@
 #include "llvm/ADT/Hashing.h"
 #include "llvm/Support/SourceMgr.h"
 
+#include "slang/analysis/AnalysisManager.h"
 #include "slang/diagnostics/DiagnosticClient.h"
 #include "slang/driver/Driver.h"
 #include "slang/parsing/Preprocessor.h"
@@ -274,6 +275,11 @@ LogicalResult ImportDriver::importVerilog(ModuleOp module) {
   // Elaborate the input.
   auto compileTimer = ts.nest("Verilog elaboration");
   auto compilation = driver.createCompilation();
+
+  // Semantic analysis
+  auto analysisTimer = ts.nest("Semantic analysis");
+  driver.runAnalysis(*compilation);
+
   for (auto &diag : compilation->getAllDiagnostics())
     driver.diagEngine.issue(diag);
   if (!parseSuccess || driver.diagEngine.getNumErrors() > 0)
