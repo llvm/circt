@@ -337,7 +337,8 @@ public:
     foreachSubelement(builder, op.getResult(), fn);
   }
 
-  void visitDecl(InstanceOp op) {
+  template <typename OpTy>
+  void visitInstanceDecl(OpTy op) {
     // Track any instance inputs which need to be connected to for init
     // coverage.
     for (const auto &result : llvm::enumerate(op.getResults()))
@@ -346,6 +347,9 @@ public:
       else
         declareSinks(result.value(), Flow::Sink);
   }
+
+  void visitDecl(InstanceOp op) { visitInstanceDecl(op); }
+  void visitDecl(InstanceChoiceOp op) { visitInstanceDecl(op); }
 
   void visitDecl(ObjectOp op) {
     declareSinks(op, Flow::Source, /*local=*/true);
