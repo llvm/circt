@@ -580,15 +580,15 @@ LogicalResult LowerModule::lowerModule() {
 
         // Get field values from the DomainCreateOp
         auto fieldValues = createDomain.getFieldValues();
-        size_t fieldIdx = 0;
 
-        for (auto [idx, port] : llvm::enumerate(classIn.getPorts())) {
-          if (port.direction == Direction::Out)
-            continue;
+        // Each domain field is lowered to an input port (fieldIdx * 2) and an
+        // output port (fieldIdx * 2 + 1). Assign field values to input ports.
+        for (auto [fieldIdx, fieldValue] : llvm::enumerate(fieldValues)) {
+          auto inputPortIdx = fieldIdx * 2;
           auto subfield = ObjectSubfieldOp::create(
-              builder, createDomain.getLoc(), object, idx);
+              builder, createDomain.getLoc(), object, inputPortIdx);
           PropAssignOp::create(builder, createDomain.getLoc(), subfield,
-                               fieldValues[fieldIdx++]);
+                               fieldValue);
         }
 
         createDomain.replaceAllUsesWith(UnrealizedConversionCastOp::create(
@@ -616,31 +616,10 @@ LogicalResult LowerModule::lowerModule() {
           return WalkResult::interrupt();
         }
 
-        // Get the domain type to look up the class.
-        auto domainType = cast<DomainType>(subfieldOp.getInput().getType());
-
-        // Find the output port index for this field.
-        auto classIn = domainToClasses.at(domainType.getName().getAttr()).input;
+        // Each domain field is lowered to an input port (fieldIdx * 2) and an
+        // output port (fieldIdx * 2 + 1). Get the output port for this field.
         auto fieldIndex = subfieldOp.getFieldIndex();
-        unsigned outputPortIndex = 0;
-        unsigned currentFieldIndex = 0;
-        bool found = false;
-        for (auto [idx, port] : llvm::enumerate(classIn.getPorts())) {
-          if (port.direction == Direction::In)
-            continue;
-          if (currentFieldIndex == fieldIndex) {
-            outputPortIndex = idx;
-            found = true;
-            break;
-          }
-          currentFieldIndex++;
-        }
-
-        if (!found) {
-          subfieldOp.emitOpError("field index ")
-              << fieldIndex << " not found in class type";
-          return WalkResult::interrupt();
-        }
+        auto outputPortIndex = fieldIndex * 2 + 1;
 
         // Create an object subfield to extract the field value.
         OpBuilder builder(subfieldOp);
