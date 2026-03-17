@@ -629,23 +629,23 @@ firrtl.circuit "DomainSubfield" {
     // CHECK:      %[[b_out:.+]] = firrtl.object.subfield %A[b_out]
     // CHECK:      %[[c_out:.+]] = firrtl.object.subfield %A[c_out]
     // CHECK:      %[[d_out:.+]] = firrtl.object.subfield %A[d_out]
-    // CHECK:      %b = firrtl.object @ClockDomain
-    // CHECK:      %[[a_in:.+]] = firrtl.object.subfield %b[a_in]
+    // CHECK:      %C = firrtl.object @ClockDomain
+    // CHECK:      %[[a_in:.+]] = firrtl.object.subfield %C[a_in]
     // CHECK-NEXT: firrtl.propassign %[[a_in]], %[[a_out]]
-    // CHECK:      %[[b_in:.+]] = firrtl.object.subfield %b[b_in]
+    // CHECK:      %[[b_in:.+]] = firrtl.object.subfield %C[b_in]
     // CHECK-NEXT: firrtl.propassign %[[b_in]], %[[b_out]]
-    // CHECK:      %[[c_in:.+]] = firrtl.object.subfield %b[c_in]
+    // CHECK:      %[[c_in:.+]] = firrtl.object.subfield %C[c_in]
     // CHECK-NEXT: firrtl.propassign %[[c_in]], %[[c_out]]
-    // CHECK:      %[[d_in:.+]] = firrtl.object.subfield %b[d_in]
+    // CHECK:      %[[d_in:.+]] = firrtl.object.subfield %C[d_in]
     // CHECK-NEXT: firrtl.propassign %[[d_in]], %[[d_out]]
     // CHECK:      %[[unused_a:.+]] = firrtl.object.subfield %A[a_out]
     // CHECK:      %[[unused_c:.+]] = firrtl.object.subfield %A[c_out]
     %a = firrtl.domain.subfield %A["a"] : !firrtl.domain<@ClockDomain(a: !firrtl.integer, b: !firrtl.integer, c: !firrtl.integer, d: !firrtl.integer)>
-    %b_val = firrtl.domain.subfield %A["b"] : !firrtl.domain<@ClockDomain(a: !firrtl.integer, b: !firrtl.integer, c: !firrtl.integer, d: !firrtl.integer)>
+    %b = firrtl.domain.subfield %A["b"] : !firrtl.domain<@ClockDomain(a: !firrtl.integer, b: !firrtl.integer, c: !firrtl.integer, d: !firrtl.integer)>
     %c = firrtl.domain.subfield %A["c"] : !firrtl.domain<@ClockDomain(a: !firrtl.integer, b: !firrtl.integer, c: !firrtl.integer, d: !firrtl.integer)>
     %d = firrtl.domain.subfield %A["d"] : !firrtl.domain<@ClockDomain(a: !firrtl.integer, b: !firrtl.integer, c: !firrtl.integer, d: !firrtl.integer)>
-    %b = firrtl.domain.create(%a, %b_val, %c, %d) : !firrtl.domain<@ClockDomain(a: !firrtl.integer, b: !firrtl.integer, c: !firrtl.integer, d: !firrtl.integer)>
-    firrtl.domain.define %B, %b : !firrtl.domain<@ClockDomain(a: !firrtl.integer, b: !firrtl.integer, c: !firrtl.integer, d: !firrtl.integer)>
+    %C = firrtl.domain.create(%a, %b, %c, %d) : !firrtl.domain<@ClockDomain(a: !firrtl.integer, b: !firrtl.integer, c: !firrtl.integer, d: !firrtl.integer)>
+    firrtl.domain.define %B, %C : !firrtl.domain<@ClockDomain(a: !firrtl.integer, b: !firrtl.integer, c: !firrtl.integer, d: !firrtl.integer)>
     %unused_a = firrtl.domain.subfield %A["a"] : !firrtl.domain<@ClockDomain(a: !firrtl.integer, b: !firrtl.integer, c: !firrtl.integer, d: !firrtl.integer)>
     %unused_c = firrtl.domain.subfield %A["c"] : !firrtl.domain<@ClockDomain(a: !firrtl.integer, b: !firrtl.integer, c: !firrtl.integer, d: !firrtl.integer)>
   }
