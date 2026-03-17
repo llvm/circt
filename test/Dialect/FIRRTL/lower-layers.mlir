@@ -359,8 +359,8 @@ firrtl.circuit "Test" {
   //
   // CHECK:      firrtl.module @InstancePortCapture() {
   // CHECK-NEXT:   %ext_a, %ext_b = firrtl.instance ext @InstancePortCapture_ext
-  // CHECK-NEXT:   %ext_b_layer_probe = firrtl.node sym @[[InstancePortCapture_ext_b_sym]] %ext_b
-  // CHECK-NEXT:   %ext_a_layer_probe = firrtl.node sym @[[InstancePortCapture_ext_a_sym]] %ext_a
+  // CHECK-NEXT:   %ext_b_layerCapture = firrtl.node sym @[[InstancePortCapture_ext_b_sym]] %ext_b
+  // CHECK-NEXT:   %ext_a_layerCapture = firrtl.node sym @[[InstancePortCapture_ext_a_sym]] %ext_a
   // CHECK-NEXT:   firrtl.instance {{.*}}
   // CHECK-NEXT: }
   firrtl.extmodule @InstancePortCapture_ext(
@@ -403,8 +403,8 @@ firrtl.circuit "Test" {
   // CHECK-SAME:   in %clock: !firrtl.clock sym @[[sym_clock]]
   // CHECK-NEXT:   %ext_reset, %ext_clock = firrtl.instance ext @InstanceInputPortCapture_ext
   // CHECK:        %invalid_asyncreset = firrtl.invalidvalue
-  // CHECK-NEXT:   %_layer_probe = firrtl.node sym @[[sym_reset]] %invalid_asyncreset
-  // CHECK-NEXT:   firrtl.matchingconnect %ext_reset, %_layer_probe
+  // CHECK-NEXT:   %_layerCapture = firrtl.node sym @[[sym_reset]] %invalid_asyncreset
+  // CHECK-NEXT:   firrtl.matchingconnect %ext_reset, %_layerCapture
   // CHECK-NEXT:   firrtl.matchingconnect %ext_clock, %clock
   // CHECK-NEXT: }
   firrtl.extmodule @InstanceInputPortCapture_ext(
@@ -813,7 +813,7 @@ firrtl.circuit "CaptureHardwareMultipleTimes" {
   // CHECK: }
   // CHECK: firrtl.module @CaptureSrcTwice() {
   // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-  // CHECK:   %_layer_probe = firrtl.node sym @[[sym]] %c0_ui1 : !firrtl.uint<1>
+  // CHECK:   %_layerCapture = firrtl.node sym @[[sym]] %c0_ui1 : !firrtl.uint<1>
   // CHECK:   firrtl.instance {{.+}} @[[A]]
   // CHECK: }
   firrtl.module @CaptureSrcTwice() {
