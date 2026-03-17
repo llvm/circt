@@ -129,6 +129,12 @@ struct CLOptions {
       cl::desc("Interpret `always @(*)` as `always_comb`"), cl::init(true),
       cl::cat(cat)};
 
+  cl::opt<bool> emitMooreDPICall{
+      "emit-moore-dpi-call",
+      cl::desc(
+          "Emit DPI-imported declarations and call sites as Moore DPI ops"),
+      cl::init(false), cl::cat(cat)};
+
   cl::opt<bool> detectMemories{
       "detect-memories",
       cl::desc("Detect memories and lower them to `seq.firmem`"),
@@ -317,6 +323,7 @@ static LogicalResult executeWithSources(MLIRContext *context,
     options.mode = ImportVerilogOptions::Mode::OnlyParse;
   options.debugInfo = opts.debugInfo;
   options.lowerAlwaysAtStarAsComb = opts.lowerAlwaysAtStarAsComb;
+  options.emitMooreDPICall = opts.emitMooreDPICall;
 
   options.includeDirs = opts.includeDirs;
   options.includeSystemDirs = opts.includeSystemDirs;

@@ -15,6 +15,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/MapVector.h"
@@ -22,6 +23,55 @@
 using namespace mlir;
 using namespace circt;
 using namespace sim;
+
+static DictionaryAttr getDPIArgAttr(ArrayAttr attrs, unsigned index) {
+  if (!attrs || index >= attrs.size())
+    return {};
+  return dyn_cast_or_null<DictionaryAttr>(attrs[index]);
+}
+
+static bool hasExplicitReturnAttr(ArrayAttr attrs, unsigned index,
+                                  StringRef attrName) {
+  auto argAttr = getDPIArgAttr(attrs, index);
+  return argAttr && argAttr.getAs<UnitAttr>(attrName);
+}
+
+static bool isExplicitReturnPort(hw::ModuleType moduleType, ArrayAttr attrs,
+                                 unsigned index, StringRef attrName) {
+  auto port = moduleType.getPorts()[index];
+  return port.dir == hw::ModulePort::Direction::Output &&
+         hasExplicitReturnAttr(attrs, index, attrName);
+}
+
+static bool hasCallByReferenceAttr(ArrayAttr attrs, unsigned index,
+                                   StringRef attrName) {
+  auto argAttr = getDPIArgAttr(attrs, index);
+  return argAttr && argAttr.getAs<UnitAttr>(attrName);
+}
+
+static bool isSupportedByReferenceDPIType(Type type) {
+  return isa<LLVM::LLVMPointerType>(type);
+}
+
+static void getDPICallTypes(hw::ModuleType moduleType, ArrayAttr attrs,
+                            SmallVectorImpl<Type> &inputs,
+                            SmallVectorImpl<Type> &results,
+                            StringRef explicitReturnAttrName) {
+  for (auto [index, port] : llvm::enumerate(moduleType.getPorts())) {
+    bool isCallByReference = hasCallByReferenceAttr(
+        attrs, index, DPIFuncOp::getByReferenceAttrName());
+    if (port.dir == hw::ModulePort::Direction::Input ||
+        port.dir == hw::ModulePort::Direction::InOut || isCallByReference)
+      inputs.push_back(port.type);
+    if (isExplicitReturnPort(moduleType, attrs, index, explicitReturnAttrName))
+      results.push_back(port.type);
+    else if (port.dir == hw::ModulePort::Direction::Output &&
+             !isCallByReference)
+      results.push_back(port.type);
+    else if (port.dir == hw::ModulePort::Direction::InOut && !isCallByReference)
+      results.push_back(port.type);
+  }
+}
 
 static StringAttr formatIntegersByRadix(MLIRContext *ctx, unsigned radix,
                                         const Attribute &value,
@@ -150,6 +200,69 @@ ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
+Type DPIFuncOp::getExplicitlyReturnedType() {
+  auto moduleType = getModuleType();
+  if (!getPerArgumentAttrsAttr() || moduleType.getNumPorts() == 0)
+    return {};
+  unsigned lastPort = moduleType.getNumPorts() - 1;
+  if (isExplicitReturnPort(moduleType, getPerArgumentAttrsAttr(), lastPort,
+                           getExplicitlyReturnedAttrName()))
+    return moduleType.getPorts()[lastPort].type;
+  return {};
+}
+
+bool DPIFuncOp::isCallByReferencePort(unsigned index) {
+  auto attrs = getPerArgumentAttrsAttr();
+  return attrs && index < attrs.size() &&
+         hasCallByReferenceAttr(attrs, index, getByReferenceAttrName());
+}
+
+SmallVector<Type> DPIFuncOp::getDPICallInputTypes() {
+  SmallVector<Type> inputs, results;
+  getDPICallTypes(getModuleType(), getPerArgumentAttrsAttr(), inputs, results,
+                  getExplicitlyReturnedAttrName());
+  return inputs;
+}
+
+SmallVector<Type> DPIFuncOp::getDPICallResultTypes() {
+  SmallVector<Type> inputs, results;
+  getDPICallTypes(getModuleType(), getPerArgumentAttrsAttr(), inputs, results,
+                  getExplicitlyReturnedAttrName());
+  return results;
+}
+
+LogicalResult DPIFuncOp::verify() {
+  auto moduleType = getModuleType();
+  auto attrs = getPerArgumentAttrsAttr();
+  if (!attrs)
+    return success();
+  if (attrs.size() != moduleType.getNumPorts())
+    return emitOpError("must have one per-argument attribute entry per port");
+
+  unsigned explicitReturnCount = 0;
+  for (auto [index, port] : llvm::enumerate(moduleType.getPorts())) {
+    bool isCallByReference = isCallByReferencePort(index);
+    if (isCallByReference && port.dir == hw::ModulePort::Direction::Input)
+      return emitOpError("by-reference DPI ports must not have 'in' direction");
+    if (isCallByReference && !isSupportedByReferenceDPIType(port.type))
+      return emitOpError("by-reference DPI ports must use !llvm.ptr type");
+
+    if (!hasExplicitReturnAttr(attrs, index, getExplicitlyReturnedAttrName()))
+      continue;
+    ++explicitReturnCount;
+    if (port.dir != hw::ModulePort::Direction::Output)
+      return emitOpError("explicitly returned port must have 'out' direction");
+    if (index != moduleType.getNumPorts() - 1)
+      return emitOpError("explicitly returned port must be the final port");
+    if (isCallByReference)
+      return emitOpError(
+          "explicitly returned port must not be passed by reference");
+  }
+  if (explicitReturnCount > 1)
+    return emitOpError("must have at most one explicitly returned port");
+  return success();
+}
+
 LogicalResult
 sim::DPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto referencedOp =
@@ -157,9 +270,30 @@ sim::DPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!referencedOp)
     return emitError("cannot find function declaration '")
            << getCallee() << "'";
-  if (isa<func::FuncOp, sim::DPIFuncOp>(referencedOp))
+  if (auto dpiFunc = dyn_cast<sim::DPIFuncOp>(referencedOp)) {
+    auto expectedInputs = dpiFunc.getDPICallInputTypes();
+    auto expectedResults = dpiFunc.getDPICallResultTypes();
+    if (getInputs().size() != expectedInputs.size())
+      return emitError("expects ")
+             << expectedInputs.size() << " DPI operands, but got "
+             << getInputs().size();
+    if (getResults().size() != expectedResults.size())
+      return emitError("expects ")
+             << expectedResults.size() << " DPI results, but got "
+             << getResults().size();
+    for (auto [operand, expectedType] : llvm::zip(getInputs(), expectedInputs))
+      if (operand.getType() != expectedType)
+        return emitError("operand type mismatch: expected ")
+               << expectedType << ", but got " << operand.getType();
+    for (auto [result, expectedType] : llvm::zip(getResults(), expectedResults))
+      if (result.getType() != expectedType)
+        return emitError("result type mismatch: expected ")
+               << expectedType << ", but got " << result.getType();
     return success();
-  return emitError("callee must be 'sim.dpi.func' or 'func.func' but got '")
+  }
+  if (isa<func::FuncOp>(referencedOp))
+    return success();
+  return emitError("callee must be 'sim.func.dpi' or 'func.func' but got '")
          << referencedOp->getName() << "'";
 }
 

@@ -58,8 +58,17 @@ def DPIFuncOp : SimOp<"func.dpi",
   let regions = (region AnyRegion:$body);
 
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 
   let extraClassDeclaration = [{
+    static mlir::StringRef getExplicitlyReturnedAttrName() {
+      return "sim.func.explicitly_returned";
+    }
+
+    static mlir::StringRef getByReferenceAttrName() {
+      return "sim.func.dpi.byref";
+    }
+
     mlir::FunctionType getFunctionType() {
       return getModuleType().getFuncType();
     }
@@ -85,6 +94,11 @@ def DPIFuncOp : SimOp<"func.dpi",
     void setResAttrsAttr(mlir::ArrayAttr args) {}
     mlir::Attribute removeArgAttrsAttr() { return nullptr; }
     mlir::Attribute removeResAttrsAttr() { return nullptr; }
+
+    mlir::Type getExplicitlyReturnedType();
+    bool isCallByReferencePort(unsigned index);
+    llvm::SmallVector<mlir::Type> getDPICallInputTypes();
+    llvm::SmallVector<mlir::Type> getDPICallResultTypes();
   }];
 }
 

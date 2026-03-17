@@ -74,30 +74,46 @@ LogicalResult LowerDPIFuncPass::lowerDPIFuncOp(sim::DPIFuncOp simFunc,
                                                SymbolTable &symbolTable) {
   ImplicitLocOpBuilder builder(simFunc.getLoc(), simFunc);
   auto moduleType = simFunc.getModuleType();
+  auto explicitReturnType = simFunc.getExplicitlyReturnedType();
 
   llvm::SmallVector<Type> dpiFunctionArgumentTypes;
-  for (auto arg : moduleType.getPorts()) {
-    // TODO: Support a non-integer type.
-    if (!arg.type.isInteger())
+  for (auto [index, arg] : llvm::enumerate(moduleType.getPorts())) {
+    bool isCallByReference = simFunc.isCallByReferencePort(index);
+
+    // TODO: Support additional non-integer types beyond the pointer-shaped
+    // open-array ABI path.
+    if (!arg.type.isInteger() &&
+        !(isa<LLVM::LLVMPointerType>(arg.type) &&
+          (arg.dir == hw::ModulePort::Input || isCallByReference)))
       return simFunc->emitError()
              << "non-integer type argument is unsupported now";
 
     if (arg.dir == hw::ModulePort::Input)
       dpiFunctionArgumentTypes.push_back(arg.type);
-    else
+    else if (arg.dir == hw::ModulePort::Direction::InOut ||
+             arg.dir == hw::ModulePort::Direction::Output) {
+      if (explicitReturnType && index == moduleType.getNumPorts() - 1)
+        continue;
       // Output must be passed by a reference.
       dpiFunctionArgumentTypes.push_back(
           LLVM::LLVMPointerType::get(arg.type.getContext()));
+    }
   }
 
-  auto funcType = builder.getFunctionType(dpiFunctionArgumentTypes, {});
+  auto funcType = builder.getFunctionType(
+      dpiFunctionArgumentTypes,
+      explicitReturnType ? TypeRange{explicitReturnType} : TypeRange{});
   func::FuncOp func;
 
   // Look up func.func by verilog name since the function name is equal to the
   // symbol name in MLIR
   if (auto verilogName = simFunc.getVerilogName()) {
     func = symbolTable.lookup<func::FuncOp>(*verilogName);
-    // TODO: Check if function type matches.
+    if (func && func.getFunctionType() != funcType)
+      return simFunc.emitOpError()
+             << "references existing func.func @" << *verilogName
+             << " with incompatible type " << func.getFunctionType()
+             << "; expected " << funcType;
   }
 
   // If a referred function is not in the same module, create an external
@@ -116,21 +132,28 @@ LogicalResult LowerDPIFuncPass::lowerDPIFuncOp(sim::DPIFuncOp simFunc,
   auto funcOp = func::FuncOp::create(
       builder,
       loweringState.nameSpace.newName(simFunc.getSymName() + "_wrapper"),
-      moduleType.getFuncType());
+      builder.getFunctionType(simFunc.getDPICallInputTypes(),
+                              simFunc.getDPICallResultTypes()));
 
   // Map old symbol to a new func op.
   loweringState.dpiFuncDeclMapping[simFunc.getSymNameAttr()] = funcOp;
 
   builder.setInsertionPointToStart(funcOp.addEntryBlock());
   SmallVector<Value> functionInputs;
-  SmallVector<LLVM::AllocaOp> functionOutputAllocas;
+  SmallVector<std::pair<Type, Value>> wrapperOutputAllocas;
+  Value explicitReturnValue;
 
   size_t inputIndex = 0;
-  for (auto arg : moduleType.getPorts()) {
-    if (arg.dir == hw::ModulePort::InOut)
-      return funcOp->emitError() << "inout is currently not supported";
-
+  for (auto [index, arg] : llvm::enumerate(moduleType.getPorts())) {
+    bool isExplicitReturn =
+        explicitReturnType && index == moduleType.getNumPorts() - 1;
+    bool isCallByReference = simFunc.isCallByReferencePort(index);
     if (arg.dir == hw::ModulePort::Input) {
+      functionInputs.push_back(funcOp.getArgument(inputIndex));
+      ++inputIndex;
+    } else if (isExplicitReturn) {
+      continue;
+    } else if (isCallByReference) {
       functionInputs.push_back(funcOp.getArgument(inputIndex));
       ++inputIndex;
     } else {
@@ -139,17 +162,27 @@ LogicalResult LowerDPIFuncPass::lowerDPIFuncOp(sim::DPIFuncOp simFunc,
           LLVM::ConstantOp::create(builder, builder.getI64IntegerAttr(1));
       auto alloca = LLVM::AllocaOp::create(
           builder, builder.getType<LLVM::LLVMPointerType>(), arg.type, one);
-      functionInputs.push_back(alloca);
-      functionOutputAllocas.push_back(alloca);
+      if (arg.dir == hw::ModulePort::InOut) {
+        LLVM::StoreOp::create(builder, funcOp.getArgument(inputIndex), alloca);
+        ++inputIndex;
+      }
+
+      if (!isExplicitReturn)
+        functionInputs.push_back(alloca);
+      wrapperOutputAllocas.push_back({arg.type, alloca});
     }
   }
 
-  func::CallOp::create(builder, func, functionInputs);
+  auto call = func::CallOp::create(builder, func, functionInputs);
+  if (explicitReturnType)
+    explicitReturnValue = call.getResult(0);
 
   SmallVector<Value> results;
-  for (auto functionOutputAlloca : functionOutputAllocas)
-    results.push_back(LLVM::LoadOp::create(
-        builder, functionOutputAlloca.getElemType(), functionOutputAlloca));
+  results.reserve(wrapperOutputAllocas.size() + (explicitReturnValue ? 1 : 0));
+  for (auto [type, alloca] : wrapperOutputAllocas)
+    results.push_back(LLVM::LoadOp::create(builder, type, alloca));
+  if (explicitReturnValue)
+    results.push_back(explicitReturnValue);
 
   func::ReturnOp::create(builder, results);
 
@@ -168,8 +201,9 @@ LogicalResult LowerDPIFuncPass::lowerDPI() {
       return failure();
 
   op.walk([&](sim::DPICallOp op) {
-    auto func = state.dpiFuncDeclMapping.at(op.getCalleeAttr().getAttr());
-    op.setCallee(func.getSymNameAttr());
+    auto it = state.dpiFuncDeclMapping.find(op.getCalleeAttr().getAttr());
+    if (it != state.dpiFuncDeclMapping.end())
+      op.setCallee(it->second.getSymNameAttr());
   });
   return success();
 }

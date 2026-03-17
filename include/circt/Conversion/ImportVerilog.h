@@ -56,6 +56,10 @@ struct ImportVerilogOptions {
   /// Interpret `always @(*)` as `always_comb`.
   bool lowerAlwaysAtStarAsComb = true;
 
+  /// Emit DPI-imported declarations and call sites as `moore.func.dpi` and
+  /// `moore.func.dpi.call` instead of `func.func` and `func.call`.
+  bool emitMooreDPICall = false;
+
   //===--------------------------------------------------------------------===//
   // Include paths
   //===--------------------------------------------------------------------===//

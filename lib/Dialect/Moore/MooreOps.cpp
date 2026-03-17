@@ -15,7 +15,9 @@
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/Moore/MooreAttributes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
+#include "circt/Support/ParsingUtils.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -24,6 +26,159 @@
 using namespace circt;
 using namespace circt::moore;
 using namespace mlir;
+
+static DictionaryAttr getDPIArgAttr(ArrayAttr attrs, unsigned index) {
+  if (!attrs || index >= attrs.size())
+    return {};
+  return dyn_cast_or_null<DictionaryAttr>(attrs[index]);
+}
+
+static bool hasExplicitReturnAttr(ArrayAttr attrs, unsigned index,
+                                  StringRef attrName) {
+  auto argAttr = getDPIArgAttr(attrs, index);
+  return argAttr && argAttr.getAs<UnitAttr>(attrName);
+}
+
+static bool isExplicitReturnPort(hw::ModuleType moduleType, ArrayAttr attrs,
+                                 unsigned index, StringRef attrName) {
+  auto port = moduleType.getPorts()[index];
+  return port.dir == hw::ModulePort::Direction::Output &&
+         hasExplicitReturnAttr(attrs, index, attrName);
+}
+
+static bool isByReferenceDPIOpenArrayType(Type type) {
+  auto refType = dyn_cast<RefType>(type);
+  return refType &&
+         isa<OpenArrayType, OpenUnpackedArrayType>(refType.getNestedType());
+}
+
+static bool isByReferenceDPIOpenArrayPort(hw::ModuleType moduleType,
+                                          unsigned index) {
+  auto port = moduleType.getPorts()[index];
+  return port.dir != hw::ModulePort::Direction::Input &&
+         isByReferenceDPIOpenArrayType(port.type);
+}
+
+static void getDPICallTypes(hw::ModuleType moduleType, ArrayAttr attrs,
+                            SmallVectorImpl<Type> &inputs,
+                            SmallVectorImpl<Type> &results,
+                            StringRef explicitReturnAttrName) {
+  for (auto [index, port] : llvm::enumerate(moduleType.getPorts())) {
+    bool isByReferenceOpenArray =
+        isByReferenceDPIOpenArrayPort(moduleType, index);
+    if (port.dir == hw::ModulePort::Direction::Input ||
+        port.dir == hw::ModulePort::Direction::InOut || isByReferenceOpenArray)
+      inputs.push_back(port.type);
+    if (isExplicitReturnPort(moduleType, attrs, index, explicitReturnAttrName))
+      results.push_back(port.type);
+    else if (port.dir == hw::ModulePort::Direction::Output &&
+             !isByReferenceOpenArray)
+      results.push_back(port.type);
+    else if (port.dir == hw::ModulePort::Direction::InOut &&
+             !isByReferenceOpenArray)
+      results.push_back(port.type);
+  }
+}
+
+static ParseResult parseMooreDirection(OpAsmParser &parser,
+                                       hw::ModulePort::Direction &dir) {
+  StringRef keyword;
+  if (failed(parser.parseKeyword(&keyword)))
+    return parser.emitError(parser.getCurrentLocation(),
+                            "expected port direction");
+  if (keyword == "in")
+    dir = hw::ModulePort::Direction::Input;
+  else if (keyword == "out")
+    dir = hw::ModulePort::Direction::Output;
+  else if (keyword == "inout")
+    dir = hw::ModulePort::Direction::InOut;
+  else
+    return parser.emitError(parser.getCurrentLocation(),
+                            "unknown port direction '")
+           << keyword << "'";
+  return success();
+}
+
+static ParseResult parseOptionalKeywordOrString(OpAsmParser &parser,
+                                                std::string &result,
+                                                bool &found) {
+  StringRef keyword;
+  if (succeeded(parser.parseOptionalKeyword(&keyword))) {
+    result = keyword.str();
+    found = true;
+    return success();
+  }
+  if (succeeded(parser.parseOptionalString(&result)))
+    found = true;
+  return success();
+}
+
+static ParseResult parseMooreDPIPort(OpAsmParser &parser,
+                                     hw::module_like_impl::PortParse &result) {
+  if (parseMooreDirection(parser, result.direction))
+    return failure();
+
+  if (result.direction == hw::ModulePort::Direction::Output) {
+    auto irLoc = parser.getCurrentLocation();
+    if (parser.parseKeywordOrString(&result.rawName) ||
+        parser.parseColonType(result.type))
+      return failure();
+
+    NamedAttrList attrs;
+    if (failed(parser.parseOptionalAttrDict(attrs)))
+      return failure();
+    result.attrs = attrs.getDictionary(parser.getContext());
+
+    std::optional<Location> maybeLoc;
+    if (failed(parser.parseOptionalLocationSpecifier(maybeLoc)))
+      return failure();
+    result.sourceLoc = maybeLoc ? *maybeLoc : parser.getEncodedSourceLoc(irLoc);
+    return success();
+  }
+
+  if (parser.parseOperand(result.ssaName, /*allowResultNumber=*/false))
+    return failure();
+
+  bool foundName = false;
+  if (parseOptionalKeywordOrString(parser, result.rawName, foundName) ||
+      parser.parseColonType(result.type))
+    return failure();
+  if (!foundName)
+    result.rawName =
+        parsing_util::getNameFromSSA(parser.getContext(), result.ssaName.name)
+            .str();
+
+  NamedAttrList attrs;
+  if (failed(parser.parseOptionalAttrDict(attrs)) ||
+      failed(parser.parseOptionalLocationSpecifier(result.sourceLoc)))
+    return failure();
+  result.attrs = attrs.getDictionary(parser.getContext());
+  return success();
+}
+
+static ParseResult
+parseMooreDPIPortList(OpAsmParser &parser,
+                      SmallVectorImpl<hw::module_like_impl::PortParse> &ports,
+                      TypeAttr &modType) {
+  auto *context = parser.getContext();
+  auto parseOnePort = [&]() -> ParseResult {
+    return parseMooreDPIPort(parser, ports.emplace_back());
+  };
+  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                     parseOnePort, " in port list"))
+    return failure();
+
+  SmallVector<hw::ModulePort> modulePorts;
+  modulePorts.reserve(ports.size());
+  for (auto &port : ports) {
+    modulePorts.push_back(
+        {StringAttr::get(context, port.rawName), port.type, port.direction});
+    if (!port.sourceLoc)
+      port.sourceLoc = parser.getEncodedSourceLoc(port.ssaName.location);
+  }
+  modType = TypeAttr::get(hw::ModuleType::get(context, modulePorts));
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // SVModuleOp
@@ -69,8 +224,7 @@ ParseResult SVModuleOp::parse(OpAsmParser &parser, OperationState &result) {
   // Parse the ports.
   SmallVector<hw::module_like_impl::PortParse> ports;
   TypeAttr modType;
-  if (failed(
-          hw::module_like_impl::parseModuleSignature(parser, ports, modType)))
+  if (failed(parseMooreDPIPortList(parser, ports, modType)))
     return failure();
   result.addAttribute(getModuleTypeAttrName(result.name), modType);
 
@@ -1808,6 +1962,163 @@ LogicalResult QueueConcatOp::verify() {
   }
 
   return success();
+}
+
+ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto builder = parser.getBuilder();
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  SmallVector<hw::module_like_impl::PortParse> ports;
+  TypeAttr modType;
+  if (failed(parseMooreDPIPortList(parser, ports, modType)))
+    return failure();
+
+  result.addAttribute(DPIFuncOp::getModuleTypeAttrName(result.name), modType);
+
+  auto unknownLoc = builder.getUnknownLoc();
+  SmallVector<Attribute> attrs, locs;
+  auto nonEmptyLocs = [unknownLoc](Attribute attr) {
+    return attr && cast<Location>(attr) != unknownLoc;
+  };
+
+  for (auto &port : ports) {
+    attrs.push_back(port.attrs ? port.attrs : builder.getDictionaryAttr({}));
+    locs.push_back(port.sourceLoc ? Location(*port.sourceLoc) : unknownLoc);
+  }
+
+  result.addAttribute(DPIFuncOp::getPerArgumentAttrsAttrName(result.name),
+                      builder.getArrayAttr(attrs));
+  result.addRegion();
+
+  if (llvm::any_of(locs, nonEmptyLocs))
+    result.addAttribute(DPIFuncOp::getArgumentLocsAttrName(result.name),
+                        builder.getArrayAttr(locs));
+
+  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
+    return failure();
+
+  return success();
+}
+
+Type DPIFuncOp::getExplicitlyReturnedType() {
+  auto moduleType = getModuleType();
+  if (!getPerArgumentAttrsAttr() || moduleType.getNumPorts() == 0)
+    return {};
+  unsigned lastPort = moduleType.getNumPorts() - 1;
+  if (isExplicitReturnPort(moduleType, getPerArgumentAttrsAttr(), lastPort,
+                           getExplicitlyReturnedAttrName()))
+    return moduleType.getPorts()[lastPort].type;
+  return {};
+}
+
+SmallVector<Type> DPIFuncOp::getDPICallInputTypes() {
+  SmallVector<Type> inputs, results;
+  getDPICallTypes(getModuleType(), getPerArgumentAttrsAttr(), inputs, results,
+                  getExplicitlyReturnedAttrName());
+  return inputs;
+}
+
+SmallVector<Type> DPIFuncOp::getDPICallResultTypes() {
+  SmallVector<Type> inputs, results;
+  getDPICallTypes(getModuleType(), getPerArgumentAttrsAttr(), inputs, results,
+                  getExplicitlyReturnedAttrName());
+  return results;
+}
+
+LogicalResult DPIFuncOp::verify() {
+  auto moduleType = getModuleType();
+  auto attrs = getPerArgumentAttrsAttr();
+  if (!attrs)
+    return success();
+  if (attrs.size() != moduleType.getNumPorts())
+    return emitOpError("must have one per-argument attribute entry per port");
+
+  unsigned explicitReturnCount = 0;
+  for (auto [index, port] : llvm::enumerate(moduleType.getPorts())) {
+    bool isPlainOpenArray =
+        isa<OpenArrayType, OpenUnpackedArrayType>(port.type);
+    bool isByReferenceOpenArray = isByReferenceDPIOpenArrayType(port.type);
+    if (port.dir == hw::ModulePort::Direction::Input && isByReferenceOpenArray)
+      return emitOpError("input DPI open-array ports must not use moore.ref");
+    if (port.dir != hw::ModulePort::Direction::Input && isPlainOpenArray)
+      return emitOpError("non-input DPI open-array ports must use moore.ref");
+
+    if (!hasExplicitReturnAttr(attrs, index, getExplicitlyReturnedAttrName()))
+      continue;
+    ++explicitReturnCount;
+    if (port.dir != hw::ModulePort::Direction::Output)
+      return emitOpError("explicitly returned port must have 'out' direction");
+    if (index != moduleType.getNumPorts() - 1)
+      return emitOpError("explicitly returned port must be the final port");
+  }
+  if (explicitReturnCount > 1)
+    return emitOpError("must have at most one explicitly returned port");
+  return success();
+}
+
+void DPIFuncOp::print(OpAsmPrinter &p) {
+  DPIFuncOp op = *this;
+  auto funcName =
+      op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
+          .getValue();
+  p << ' ';
+
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+  p.printSymbolName(funcName);
+  hw::module_like_impl::printModuleSignatureNew(
+      p, op->getRegion(0), op.getModuleType(),
+      getPerArgumentAttrsAttr()
+          ? ArrayRef<Attribute>(getPerArgumentAttrsAttr().getValue())
+          : ArrayRef<Attribute>{},
+      getArgumentLocs() ? SmallVector<Location>(
+                              getArgumentLocs().value().getAsRange<Location>())
+                        : ArrayRef<Location>{});
+
+  mlir::function_interface_impl::printFunctionAttributes(
+      p, op,
+      {visibilityAttrName, getModuleTypeAttrName(),
+       getPerArgumentAttrsAttrName(), getArgumentLocsAttrName()});
+}
+
+LogicalResult
+FuncDPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto referencedOp =
+      symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr());
+  if (!referencedOp)
+    return emitError("cannot find function declaration '")
+           << getCallee() << "'";
+  if (auto dpiFunc = dyn_cast<DPIFuncOp>(referencedOp)) {
+    auto expectedInputs = dpiFunc.getDPICallInputTypes();
+    auto expectedResults = dpiFunc.getDPICallResultTypes();
+    if (getInputs().size() != expectedInputs.size())
+      return emitError("expects ")
+             << expectedInputs.size() << " DPI operands, but got "
+             << getInputs().size();
+    if (getResults().size() != expectedResults.size())
+      return emitError("expects ")
+             << expectedResults.size() << " DPI results, but got "
+             << getResults().size();
+    for (auto [operand, expectedType] : llvm::zip(getInputs(), expectedInputs))
+      if (operand.getType() != expectedType)
+        return emitError("operand type mismatch: expected ")
+               << expectedType << ", but got " << operand.getType();
+    for (auto [result, expectedType] : llvm::zip(getResults(), expectedResults))
+      if (result.getType() != expectedType)
+        return emitError("result type mismatch: expected ")
+               << expectedType << ", but got " << result.getType();
+    return success();
+  }
+  if (isa<func::FuncOp>(referencedOp))
+    return success();
+  return emitError("callee must be 'moore.func.dpi' or 'func.func' but got '")
+         << referencedOp->getName() << "'";
 }
 
 //===----------------------------------------------------------------------===//

@@ -1287,7 +1287,7 @@ Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
   // Check if there already is a declaration for this function.
   auto &lowering = functions[&subroutine];
   if (lowering) {
-    if (!lowering->op)
+    if (!lowering->op && !lowering->dpiOp)
       return {};
     return lowering.get();
   }
@@ -1374,6 +1374,67 @@ getFunctionSignature(Context &context,
   return funcType;
 }
 
+struct DPISignature {
+  hw::ModuleType moduleType;
+  ArrayAttr perArgumentAttrs;
+};
+
+static bool isDPIOpenArrayType(Type type) {
+  return isa<moore::OpenArrayType, moore::OpenUnpackedArrayType>(type);
+}
+
+static FailureOr<DPISignature>
+getDPISignature(Context &context,
+                const slang::ast::SubroutineSymbol &subroutine) {
+  using slang::ast::ArgumentDirection;
+
+  SmallVector<hw::ModulePort> ports;
+  SmallVector<Attribute> perArgumentAttrs;
+  Builder builder(context.getContext());
+  ports.reserve(subroutine.getArguments().size() +
+                (!subroutine.getReturnType().isVoid() ? 1 : 0));
+  perArgumentAttrs.reserve(ports.capacity());
+
+  for (const auto *arg : subroutine.getArguments()) {
+    auto type = context.convertType(arg->getType());
+    if (!type)
+      return failure();
+    hw::ModulePort::Direction dir;
+    switch (arg->direction) {
+    case ArgumentDirection::In:
+      dir = hw::ModulePort::Direction::Input;
+      break;
+    case ArgumentDirection::InOut:
+    case ArgumentDirection::Ref:
+      dir = hw::ModulePort::Direction::InOut;
+      break;
+    case ArgumentDirection::Out:
+      dir = hw::ModulePort::Direction::Output;
+      break;
+    }
+    if (dir != hw::ModulePort::Direction::Input && isDPIOpenArrayType(type))
+      type = moore::RefType::get(cast<moore::UnpackedType>(type));
+    ports.push_back(
+        {StringAttr::get(context.getContext(), arg->name), type, dir});
+    perArgumentAttrs.push_back(
+        builder.getDictionaryAttr(ArrayRef<NamedAttribute>{}));
+  }
+
+  if (!subroutine.getReturnType().isVoid()) {
+    auto type = context.convertType(subroutine.getReturnType());
+    if (!type)
+      return failure();
+    ports.push_back({StringAttr::get(context.getContext(), "return"), type,
+                     hw::ModulePort::Direction::Output});
+    perArgumentAttrs.push_back(builder.getDictionaryAttr(
+        {builder.getNamedAttr(moore::DPIFuncOp::getExplicitlyReturnedAttrName(),
+                              builder.getUnitAttr())}));
+  }
+
+  return DPISignature{hw::ModuleType::get(context.getContext(), ports),
+                      ArrayAttr::get(context.getContext(), perArgumentAttrs)};
+}
+
 /// Convert a function and its arguments to a function declaration in the IR.
 /// This does not convert the function body.
 FunctionLowering *
@@ -1396,15 +1457,36 @@ Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
   auto funcTy = getFunctionSignature(*this, subroutine, extraParams);
   if (!funcTy)
     return nullptr;
-  auto funcOp = mlir::func::FuncOp::create(builder, loc, qualifiedName, funcTy);
+  lowering->functionType = funcTy;
 
-  SymbolTable::setSymbolVisibility(funcOp, SymbolTable::Visibility::Private);
-  orderedRootOps.insert(it, {subroutine.location, funcOp});
-  lowering->op = funcOp;
+  Operation *insertedOp = nullptr;
+  if (options.emitMooreDPICall && !subroutine.thisVar &&
+      subroutine.flags.has(slang::ast::MethodFlags::DPIImport)) {
+    auto dpiSig = getDPISignature(*this, subroutine);
+    if (failed(dpiSig))
+      return nullptr;
+    auto dpiOp = moore::DPIFuncOp::create(
+        builder, loc, qualifiedName, dpiSig->moduleType,
+        dpiSig->perArgumentAttrs, /*argument_locs=*/ArrayAttr(),
+        StringAttr::get(getContext(), subroutine.name), StringAttr());
+    SymbolTable::setSymbolVisibility(dpiOp, SymbolTable::Visibility::Private);
+    lowering->functionType =
+        FunctionType::get(getContext(), dpiOp.getDPICallInputTypes(),
+                          dpiOp.getDPICallResultTypes());
+    lowering->dpiOp = dpiOp;
+    insertedOp = dpiOp;
+    symbolTable.insert(dpiOp);
+  } else {
+    auto funcOp =
+        mlir::func::FuncOp::create(builder, loc, qualifiedName, funcTy);
 
-  // Add the function to the symbol table of the MLIR module, which uniquifies
-  // its name.
-  symbolTable.insert(funcOp);
+    SymbolTable::setSymbolVisibility(funcOp, SymbolTable::Visibility::Private);
+    lowering->op = funcOp;
+    insertedOp = funcOp;
+    symbolTable.insert(funcOp);
+  }
+
+  orderedRootOps.insert(it, {subroutine.location, insertedOp});
   functions[&subroutine] = std::move(lowering);
 
   return functions[&subroutine].get();
@@ -1510,7 +1592,7 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
   // !moore.class<@C>
   if (isMethod) {
     auto thisLoc = convertLocation(subroutine.location);
-    auto thisType = lowering->op.getFunctionType().getInput(0);
+    auto thisType = lowering->getFunctionType().getInput(0);
     auto thisArg = block.addArgument(thisType, thisLoc);
 
     // Bind `this` so NamedValue/MemberAccess can find it.
@@ -1518,7 +1600,7 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
   }
 
   // Add user-defined block arguments
-  auto inputs = lowering->op.getFunctionType().getInputs();
+  auto inputs = lowering->getFunctionType().getInputs();
   auto astArgs = subroutine.getArguments();
   auto valInputs = llvm::ArrayRef<Type>(inputs).drop_front(isMethod ? 1 : 0);
 
@@ -1683,8 +1765,8 @@ Context::finalizeFunctionBodyCaptures(FunctionLowering &lowering) {
   MLIRContext *ctx = getContext();
 
   // Build new input type list: existing inputs + capture ref types.
-  SmallVector<Type> newInputs(lowering.op.getFunctionType().getInputs().begin(),
-                              lowering.op.getFunctionType().getInputs().end());
+  SmallVector<Type> newInputs(lowering.getFunctionType().getInputs().begin(),
+                              lowering.getFunctionType().getInputs().end());
 
   for (Value cap : lowering.captures) {
     // Expect captures to be refs.
@@ -1697,8 +1779,9 @@ Context::finalizeFunctionBodyCaptures(FunctionLowering &lowering) {
   }
 
   // Results unchanged.
-  auto newFuncTy = FunctionType::get(
-      ctx, newInputs, lowering.op.getFunctionType().getResults());
+  auto newFuncTy = FunctionType::get(ctx, newInputs,
+                                     lowering.getFunctionType().getResults());
+  lowering.functionType = newFuncTy;
   lowering.op.setFunctionType(newFuncTy);
 
   // Add the new block arguments to the entry block.

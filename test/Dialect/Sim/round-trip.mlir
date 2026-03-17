@@ -8,8 +8,10 @@ hw.module @plusargs_value() {
   %1, %2 = sim.plusargs.value "bar" : i5
 }
 
-// CHECK-LABEL: sim.func.dpi @dpi(out arg0 : i1, in %arg1 : i1, out arg2 : i1)
-sim.func.dpi @dpi(out arg0: i1, in %arg1: i1, out arg2: i1)
+// CHECK-LABEL: sim.func.dpi @dpi(out arg0 : i1, in %arg1 : i1, out ret : i1 {sim.func.explicitly_returned})
+sim.func.dpi @dpi(out arg0: i1, in %arg1: i1, out ret: i1 {sim.func.explicitly_returned})
+// CHECK-LABEL: sim.func.dpi @dpi_inout(in %arg0 : i1, inout %arg1 : i1)
+sim.func.dpi @dpi_inout(in %arg0: i1, inout %arg1: i1)
 func.func private @func(%arg1: i1) -> (i1, i1)
 
 // CHECK-LABEL: hw.module @dpi_call
@@ -22,6 +24,8 @@ hw.module @dpi_call(in %clock : !seq.clock, in %enable : i1, in %in: i1) {
   %4, %5 = sim.func.dpi.call @func(%in) enable %enable : (i1) -> (i1, i1)
   // CHECK: sim.func.dpi.call @func(%in) : (i1) -> (i1, i1)
   %6, %7 = sim.func.dpi.call @func(%in) : (i1) -> (i1, i1)
+  // CHECK: sim.func.dpi.call @dpi_inout(%in, %in) : (i1, i1) -> i1
+  %8 = sim.func.dpi.call @dpi_inout(%in, %in) : (i1, i1) -> i1
 }
 
 // CHECK-LABEL: hw.module @GraphSimulationControl

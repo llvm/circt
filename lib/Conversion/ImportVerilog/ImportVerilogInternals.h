@@ -69,10 +69,26 @@ struct ModuleLowering {
 /// Function lowering information.
 struct FunctionLowering {
   mlir::func::FuncOp op;
+  moore::DPIFuncOp dpiOp;
+  FunctionType functionType;
   llvm::SmallVector<Value, 4> captures;
   llvm::DenseMap<Value, unsigned> captureIndex;
   bool capturesFinalized = false;
   bool isConverting = false;
+
+  StringAttr getSymNameAttr() {
+    return op ? op.getSymNameAttr() : dpiOp.getSymNameAttr();
+  }
+
+  StringRef getSymName() { return getSymNameAttr().getValue(); }
+
+  FunctionType getFunctionType() const { return functionType; }
+
+  Location getLoc() { return op ? op.getLoc() : dpiOp.getLoc(); }
+
+  InFlightDiagnostic emitError(const Twine &message = {}) {
+    return (op ? op.getOperation() : dpiOp.getOperation())->emitError(message);
+  }
 };
 
 // Class lowering information.

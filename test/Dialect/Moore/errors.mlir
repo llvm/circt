@@ -179,6 +179,26 @@ moore.global_variable @Foo : !moore.i42 init {
 
 // -----
 
+// expected-error @below {{input DPI open-array ports must not use moore.ref}}
+moore.func.dpi @dpi_bad_input_open(in %arg : !moore.ref<open_uarray<i8>>)
+
+// -----
+
+// expected-error @below {{non-input DPI open-array ports must use moore.ref}}
+moore.func.dpi @dpi_bad_output_open(out arg : !moore.open_uarray<i8>)
+
+// -----
+
+// expected-error @below {{explicitly returned port must have 'out' direction}}
+moore.func.dpi @dpi_bad_return_dir(in %arg : !moore.i1 {moore.func.explicitly_returned})
+
+// -----
+
+// expected-error @below {{explicitly returned port must be the final port}}
+moore.func.dpi @dpi_bad_return(out ret : !moore.i1 {moore.func.explicitly_returned}, out other : !moore.i1)
+
+// -----
+
 // UnionCreateOp verifier: input type mismatch
 %0 = moore.constant 42 : i16
 // expected-error @below {{op input type '!moore.i16' does not match union field 'x' type '!moore.i32'}}

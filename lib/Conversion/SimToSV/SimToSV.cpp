@@ -269,6 +269,30 @@ struct LowerDPIFunc {
                     ArrayRef<StringAttr> dpiCallees) const;
 };
 
+static ArrayAttr convertDPIPortAttrsForSV(MLIRContext *context,
+                                          ArrayAttr attrs) {
+  if (!attrs)
+    return {};
+
+  Builder builder(context);
+  SmallVector<Attribute> convertedAttrs;
+  convertedAttrs.reserve(attrs.size());
+  for (auto attr : attrs.getAsRange<DictionaryAttr>()) {
+    NamedAttrList newAttrs;
+    for (auto namedAttr : attr) {
+      auto name = namedAttr.getName();
+      if (name == sim::DPIFuncOp::getExplicitlyReturnedAttrName())
+        name =
+            builder.getStringAttr(sv::FuncOp::getExplicitlyReturnedAttrName());
+      else if (name == sim::DPIFuncOp::getByReferenceAttrName())
+        continue;
+      newAttrs.append(name, namedAttr.getValue());
+    }
+    convertedAttrs.push_back(newAttrs.getDictionary(context));
+  }
+  return ArrayAttr::get(context, convertedAttrs);
+}
+
 void LowerDPIFunc::lower(sim::DPIFuncOp func) {
   ImplicitLocOpBuilder builder(func.getLoc(), func);
   ArrayAttr inputLocsAttr, outputLocsAttr;
@@ -284,10 +308,11 @@ void LowerDPIFunc::lower(sim::DPIFuncOp func) {
     outputLocsAttr = builder.getArrayAttr(outputLocs);
   }
 
-  auto svFuncDecl =
-      sv::FuncOp::create(builder, func.getSymNameAttr(), func.getModuleType(),
-                         func.getPerArgumentAttrsAttr(), inputLocsAttr,
-                         outputLocsAttr, func.getVerilogNameAttr());
+  auto svFuncDecl = sv::FuncOp::create(
+      builder, func.getSymNameAttr(), func.getModuleType(),
+      convertDPIPortAttrsForSV(builder.getContext(),
+                               func.getPerArgumentAttrsAttr()),
+      inputLocsAttr, outputLocsAttr, func.getVerilogNameAttr());
   // DPI function is a declaration so it must be a private function.
   svFuncDecl.setPrivate();
   auto name = builder.getStringAttr(nameSpace.newName(
