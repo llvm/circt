@@ -19,12 +19,6 @@ module Foo;
   // CHECK-NEXT: }
   final foo();
 
-  // CHECK:      moore.procedure always {
-  // CHECK-NEXT:   func.call @foo
-  // CHECK-NEXT:   moore.return
-  // CHECK-NEXT: }
-  always foo();
-
   // CHECK:      moore.procedure always_comb {
   // CHECK-NEXT:   func.call @foo
   // CHECK-NEXT:   moore.return

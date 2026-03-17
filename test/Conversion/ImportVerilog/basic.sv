@@ -2494,28 +2494,47 @@ module ConcurrentAssert(input clk);
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
-  // CHECK: verif.assert [[CONV_A]] : i1
-  assert property (a);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[CONV_A]], posedge [[CONV_CLK]] : i1
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
+  assert property (@(posedge clk) a);
 
   // Sequence Concat
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
   // CHECK: [[REPEAT_OP:%.+]] = ltl.repeat [[CONV_A]], 1 : i1
-  // CHECK: verif.assert [[REPEAT_OP]] : !ltl.sequence
-  assert property (a [+]);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[REPEAT_OP]], posedge [[CONV_CLK]] : !ltl.sequence
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
+  assert property (@(posedge clk) a [+]);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
   // CHECK: [[NONCONCATREPEAT_OP:%.+]] = ltl.non_consecutive_repeat [[CONV_A]], 2, 0 : i1
-  // CHECK: verif.assert [[NONCONCATREPEAT_OP]] : !ltl.sequence
-  assert property (a [= 2]);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[NONCONCATREPEAT_OP]], posedge [[CONV_CLK]] : !ltl.sequence
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
+  assert property (@(posedge clk) a [= 2]);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
   // CHECK: [[GOTO_OP:%.+]] = ltl.goto_repeat [[CONV_A]], 2, 2 : i1
-  // CHECK: verif.assert [[GOTO_OP]] : !ltl.sequence
-  assert property (a [-> 2:4]);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[GOTO_OP]], posedge [[CONV_CLK]] : !ltl.sequence
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
+  assert property (@(posedge clk) a [-> 2:4]);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
@@ -2525,8 +2544,13 @@ module ConcurrentAssert(input clk);
   // CHECK: [[CONV_B:%.+]] = moore.to_builtin_int [[READ_B_INT]] : i1
   // CHECK: [[DELAY_B:%.+]] = ltl.delay [[CONV_B]], 0, 0 : i1
   // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_A]], [[DELAY_B]] : !ltl.sequence, !ltl.sequence
-  // CHECK: verif.assert [[CONCAT_OP]] : !ltl.sequence
-  assert property (a ##0 b);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[CONCAT_OP]], posedge [[CONV_CLK]] : !ltl.sequence
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
+  assert property (@(posedge clk) a ##0 b);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
@@ -2539,46 +2563,81 @@ module ConcurrentAssert(input clk);
   // CHECK: [[CONV_A2:%.+]] = moore.to_builtin_int [[READ_A2]] : i1
   // CHECK: [[DELAY_A2:%.+]] = ltl.delay [[CONV_A2]], 3, 2 : i1
   // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_A]], [[DELAY_B]], [[DELAY_A2]] : !ltl.sequence, !ltl.sequence, !ltl.sequence
-  // CHECK: verif.assert [[CONCAT_OP]] : !ltl.sequence
-  assert property (a ##[+] b ##[3:5] a);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[CONCAT_OP]], posedge [[CONV_CLK]] : !ltl.sequence
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
+  assert property (@(posedge clk) a ##[+] b ##[3:5] a);
+
 
   // Unary
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
   // CHECK: [[NOT_OP:%.+]] = ltl.not [[CONV_A]] : i1
-  // CHECK: verif.assert [[NOT_OP]] : !ltl.property
-  assert property (not a);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[NOT_OP]], posedge [[CONV_CLK]] : !ltl.property
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.property
+  assert property (@(posedge clk) not a);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
   // CHECK: [[EVEN_OP:%.+]] = ltl.eventually [[CONV_A]] : i1
-  // CHECK: verif.assert [[EVEN_OP]] : !ltl.property
-  assert property (s_eventually a);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[EVEN_OP]], posedge [[CONV_CLK]] : !ltl.property
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.property
+  assert property (@(posedge clk) s_eventually a);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
   // CHECK: [[REPEAT_OP:%.+]] = ltl.repeat [[CONV_A]], 0 : i1
-  // CHECK: verif.assert [[REPEAT_OP]] : !ltl.sequence
-  assert property (always a);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[REPEAT_OP]], posedge [[CONV_CLK]] : !ltl.sequence
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
+  assert property (@(posedge clk) always a);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
   // CHECK: [[REPEAT_OP:%.+]] = ltl.repeat [[CONV_A]], 2, 1 : i1
-  // CHECK: verif.assert [[REPEAT_OP]] : !ltl.sequence
-  assert property (always [2:3] a);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[REPEAT_OP]], posedge [[CONV_CLK]] : !ltl.sequence
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
+  assert property (@(posedge clk) always [2:3] a);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
   // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
-  // CHECK: verif.assert [[DELAY_OP]] : !ltl.sequence
-  assert property (nexttime a);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[DELAY_OP]], posedge [[CONV_CLK]] : !ltl.sequence
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
+  assert property (@(posedge clk) nexttime a);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
   // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 5, 0 : i1
-  // CHECK: verif.assert [[DELAY_OP]] : !ltl.sequence
-  assert property (nexttime [5] a);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[DELAY_OP]], posedge [[CONV_CLK]] : !ltl.sequence
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
+  assert property (@(posedge clk) nexttime [5] a);
+
 
   // Binary
   // CHECK-NOT: moore.procedure always
@@ -2588,8 +2647,13 @@ module ConcurrentAssert(input clk);
   // CHECK: [[READ_B_INT:%.+]] = moore.logic_to_int [[READ_B]] : l1
   // CHECK: [[CONV_B:%.+]] = moore.to_builtin_int [[READ_B_INT]] : i1
   // CHECK: [[AND_OP:%.+]] = ltl.and [[CONV_A]], [[CONV_B]] : i1, i1
-  // CHECK: verif.assert [[AND_OP]] : i1
-  assert property (a and b);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[AND_OP]], posedge [[CONV_CLK]] : i1
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
+  assert property (@(posedge clk) a and b);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
@@ -2597,8 +2661,13 @@ module ConcurrentAssert(input clk);
   // CHECK: [[READ_B_INT:%.+]] = moore.logic_to_int [[READ_B]] : l1
   // CHECK: [[CONV_B:%.+]] = moore.to_builtin_int [[READ_B_INT]] : i1
   // CHECK: [[OR_OP:%.+]] = ltl.or [[CONV_A]], [[CONV_B]] : i1, i1
-  // CHECK: verif.assert [[OR_OP]] : i1
-  assert property (a or b);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[OR_OP]], posedge [[CONV_CLK]] : i1
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
+  assert property (@(posedge clk) a or b);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
@@ -2606,8 +2675,13 @@ module ConcurrentAssert(input clk);
   // CHECK: [[READ_B_INT:%.+]] = moore.logic_to_int [[READ_B]] : l1
   // CHECK: [[CONV_B:%.+]] = moore.to_builtin_int [[READ_B_INT]] : i1
   // CHECK: [[INTER_OP:%.+]] = ltl.intersect [[CONV_A]], [[CONV_B]] : i1, i1
-  // CHECK: verif.assert [[INTER_OP]] : i1
-  assert property (a intersect b);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[INTER_OP]], posedge [[CONV_CLK]] : i1
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
+  assert property (@(posedge clk) a intersect b);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
@@ -2616,8 +2690,13 @@ module ConcurrentAssert(input clk);
   // CHECK: [[CONV_B:%.+]] = moore.to_builtin_int [[READ_B_INT]] : i1
   // CHECK: [[REPEAT_A:%.+]] = ltl.repeat [[CONV_A]], 0 : i1
   // CHECK: [[INTER_OP:%.+]] = ltl.intersect [[REPEAT_A]], [[CONV_B]] : !ltl.sequence, i1
-  // CHECK: verif.assert [[INTER_OP]] : !ltl.sequence
-  assert property (a throughout b);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[INTER_OP]], posedge [[CONV_CLK]] : !ltl.sequence
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
+  assert property (@(posedge clk) a throughout b);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
@@ -2630,8 +2709,13 @@ module ConcurrentAssert(input clk);
   // CHECK: [[DELAY_A:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
   // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_RT]], [[DELAY_A]], [[CONST_T]] : !ltl.sequence, !ltl.sequence, i1
   // CHECK: [[INTER_OP:%.+]] = ltl.intersect [[CONCAT_OP]], [[CONV_B]] : !ltl.sequence, i1
-  // CHECK: verif.assert [[INTER_OP]] : !ltl.sequence
-  assert property (a within b);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[INTER_OP]], posedge [[CONV_CLK]] : !ltl.sequence
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
+  assert property (@(posedge clk) a within b);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
@@ -2642,8 +2726,13 @@ module ConcurrentAssert(input clk);
   // CHECK: [[NOT_OP:%.+]] = ltl.not [[OR_OP]] : i1
   // CHECK: [[AND_OP:%.+]] = ltl.and [[CONV_A]], [[CONV_B]] : i1, i1
   // CHECK: [[IFF:%.+]] = ltl.or [[NOT_OP]], [[AND_OP]] : !ltl.property, i1
-  // CHECK: verif.assert [[IFF]] : !ltl.property
-  assert property (a iff b);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[IFF]], posedge [[CONV_CLK]] : !ltl.property
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.property
+  assert property (@(posedge clk) a iff b);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
@@ -2651,8 +2740,13 @@ module ConcurrentAssert(input clk);
   // CHECK: [[READ_B_INT:%.+]] = moore.logic_to_int [[READ_B]] : l1
   // CHECK: [[CONV_B:%.+]] = moore.to_builtin_int [[READ_B_INT]] : i1
   // CHECK: [[UNTIL_OP:%.+]] = ltl.until [[CONV_A]], [[CONV_B]] : i1, i1
-  // CHECK: verif.assert [[UNTIL_OP]] : !ltl.property
-  assert property (a until b);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[UNTIL_OP]], posedge [[CONV_CLK]] : !ltl.property
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.property
+  assert property (@(posedge clk) a until b);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
@@ -2663,8 +2757,13 @@ module ConcurrentAssert(input clk);
   // CHECK: [[AND_OP:%.+]] = ltl.and [[CONV_A]], [[CONV_B]] : i1, i1
   // CHECK: [[NOT_OP:%.+]] = ltl.not [[UNTIL_OP]] : !ltl.property
   // CHECK: [[OR_OP:%.+]] = ltl.or [[NOT_OP]], [[AND_OP]] : !ltl.property, i1
-  // CHECK: verif.assert [[OR_OP]] : !ltl.property
-  assert property (a until_with b);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[OR_OP]], posedge [[CONV_CLK]] : !ltl.property
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.property
+  assert property (@(posedge clk) a until_with b);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
@@ -2673,8 +2772,13 @@ module ConcurrentAssert(input clk);
   // CHECK: [[CONV_B:%.+]] = moore.to_builtin_int [[READ_B_INT]] : i1
   // CHECK: [[NOT_OP:%.+]] = ltl.not [[CONV_A]] : i1
   // CHECK: [[OR_OP:%.+]] = ltl.or [[NOT_OP]], [[CONV_B]] : !ltl.property, i1
-  // CHECK: verif.assert [[OR_OP]] : !ltl.property
-  assert property (a implies b);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[OR_OP]], posedge [[CONV_CLK]] : !ltl.property
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.property
+  assert property (@(posedge clk) a implies b);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
@@ -2682,8 +2786,13 @@ module ConcurrentAssert(input clk);
   // CHECK: [[READ_B_INT:%.+]] = moore.logic_to_int [[READ_B]] : l1
   // CHECK: [[CONV_B:%.+]] = moore.to_builtin_int [[READ_B_INT]] : i1
   // CHECK: [[IMPLICATION_OP:%.+]] = ltl.implication [[CONV_A]], [[CONV_B]] : i1, i1
-  // CHECK: verif.assert [[IMPLICATION_OP]] : !ltl.property
-  assert property (a |-> b);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[IMPLICATION_OP]], posedge [[CONV_CLK]] : !ltl.property
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.property
+  assert property (@(posedge clk) a |-> b);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
@@ -2694,8 +2803,13 @@ module ConcurrentAssert(input clk);
   // CHECK: [[DELAY_OP:%.+]] = ltl.delay [[CONV_A]], 1, 0 : i1
   // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_OP]], [[CONST_T]] : !ltl.sequence, i1
   // CHECK: [[IMPLICATION_OP:%.+]] = ltl.implication [[CONCAT_OP]], [[CONV_B]] : !ltl.sequence, i1
-  // CHECK: verif.assert [[IMPLICATION_OP]] : !ltl.property
-  assert property (a |=> b);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[IMPLICATION_OP]], posedge [[CONV_CLK]] : !ltl.property
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.property
+  assert property (@(posedge clk) a |=> b);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
@@ -2705,8 +2819,13 @@ module ConcurrentAssert(input clk);
   // CHECK: [[NOT_OP:%.+]] = ltl.not [[CONV_B]] : i1
   // CHECK: [[IMPLICATION_OP:%.+]] = ltl.implication [[CONV_A]], [[NOT_OP]] : i1, !ltl.property
   // CHECK: [[NOT_IMPLI_OP:%.+]] = ltl.not [[IMPLICATION_OP]] : !ltl.property
-  // CHECK: verif.assert [[NOT_IMPLI_OP]] : !ltl.property
-  assert property (a #-# b);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[NOT_IMPLI_OP]], posedge [[CONV_CLK]] : !ltl.property
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.property
+  assert property (@(posedge clk) a #-# b);
+
   // CHECK-NOT: moore.procedure always
   // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
@@ -2719,8 +2838,12 @@ module ConcurrentAssert(input clk);
   // CHECK: [[CONCAT_OP:%.+]] = ltl.concat [[DELAY_OP]], [[CONST_T]] : !ltl.sequence, i1
   // CHECK: [[IMPLICATION_OP:%.+]] = ltl.implication [[CONCAT_OP]], [[NOT_OP]] : !ltl.sequence, !ltl.property
   // CHECK: [[NOT_IMPLI_OP:%.+]] = ltl.not [[IMPLICATION_OP]] : !ltl.property
-  // CHECK: verif.assert [[NOT_IMPLI_OP]] : !ltl.property
-  assert property (a #=# b);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[NOT_IMPLI_OP]], posedge [[CONV_CLK]] : !ltl.property
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.property
+  assert property (@(posedge clk) a #=# b);
 
   // Clocking
   // CHECK-NOT: moore.procedure always
@@ -2743,11 +2866,15 @@ module ConcurrentAssert(input clk);
   // CHECK: [[B:%.+]] = moore.to_builtin_int [[TMP_INT]] : i1
   // CHECK: [[DB:%.+]] = ltl.delay [[B]], 1, 0 : i1
   // CHECK: [[RES:%.+]] = ltl.concat [[DA]], [[DB]] : !ltl.sequence, !ltl.sequence
-  // CHECK: verif.assert [[RES]] : !ltl.sequence
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[RES]], posedge [[CONV_CLK]] : !ltl.sequence
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
   sequence s1;
     a ##1 b;
   endsequence
-  assert property (s1);
+  assert property (@(posedge clk) s1);
 
   // CHECK-NOT: moore.procedure always {
   // CHECK: [[TMP:%.+]] = moore.read %b : <l1>
@@ -2761,11 +2888,15 @@ module ConcurrentAssert(input clk);
   // CHECK: [[OP3:%.+]] = ltl.delay [[B]], 1, 0 : i1
   // CHECK: [[OP4:%.+]] = ltl.concat [[OP2]], [[OP3]], [[TRUE]] : !ltl.sequence, !ltl.sequence, i1
   // CHECK: [[RES:%.+]] = ltl.intersect [[OP4]], [[A]] : !ltl.sequence, i1
-  // CHECK: verif.assert [[RES]] : !ltl.sequence
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[RES]], posedge [[CONV_CLK]] : !ltl.sequence
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
   sequence s2(x, y);
     x within y;
   endsequence
-  assert property (s2(b, a));
+  assert property (@(posedge clk) s2(b, a));
 
   // CHECK-NOT: moore.procedure always {
   // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
@@ -2780,11 +2911,15 @@ module ConcurrentAssert(input clk);
   // CHECK: [[TMP_INT:%.+]] = moore.logic_to_int [[TMP]] : l1
   // CHECK: [[B2:%.+]] = moore.to_builtin_int [[TMP_INT]] : i1
   // CHECK: [[RES:%.+]] = ltl.implication [[OP1]], [[B2]] : !ltl.sequence, i1
-  // CHECK: verif.assert [[RES]] : !ltl.property
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[RES]], posedge [[CONV_CLK]] : !ltl.property
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.property
   property p1;
     s1 |-> b;
   endproperty
-  assert property (p1);
+  assert property (@(posedge clk) p1);
 
   // CHECK-NOT: moore.procedure always {
   // CHECK: [[TMP:%.+]] = moore.read %a : <i1>
@@ -2822,11 +2957,15 @@ module ConcurrentAssert(input clk);
   // CHECK: [[OP13:%.+]] = ltl.delay [[OP10]], 1, 0 : !ltl.sequence
   // CHECK: [[OP14:%.+]] = ltl.concat [[OP13]], [[TRUE2]] : !ltl.sequence, i1
   // CHECK: [[RES:%.+]] = ltl.implication [[OP14]], [[OP12]] : !ltl.sequence, !ltl.property
-  // CHECK: verif.assert [[RES]] : !ltl.property
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[RES]], posedge [[CONV_CLK]] : !ltl.property
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.property
   property p2(x, y);
     s2(x, y) |=> p1;
   endproperty
-  assert property (p2(a, s2(a, b)));
+  assert property (@(posedge clk) p2(a, s2(a, b)));
 
   // CHECK-NOT: moore.procedure always {
   // CHECK: [[READ_B:%.+]] = moore.read %b : <l1>
@@ -2835,8 +2974,12 @@ module ConcurrentAssert(input clk);
   // CHECK: [[CONV_2_ENABLE:%.+]] = moore.to_builtin_int [[CONV_1_ENABLE]] : i1
   // CHECK: [[READ_A:%.+]] = moore.read %a : <i1>
   // CHECK: [[CONV_A:%.+]] = moore.to_builtin_int [[READ_A]] : i1
-  // CHECK: verif.assert [[CONV_A]] if [[CONV_2_ENABLE]] : i1
-  assert property (disable iff (b) a);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[CONV_A]], posedge [[CONV_CLK]] : i1
+  // CHECK: verif.assert [[CLK_OP]] if [[CONV_2_ENABLE]] : !ltl.sequence
+  assert property (@(posedge clk) disable iff (b) a);
 
   // CHECK-NOT: moore.procedure always {
   // CHECK: [[READ_A:%.+]] = moore.read %a : <i1>
@@ -2845,8 +2988,12 @@ module ConcurrentAssert(input clk);
   // CHECK: [[READ_B:%.+]] = moore.read %b : <l1>
   // CHECK: [[CONV_1_B:%.+]] = moore.logic_to_int [[READ_B]] : l1
   // CHECK: [[CONV_2_B:%.+]] = moore.to_builtin_int [[CONV_1_B]] : i1
-  // CHECK: verif.assert [[CONV_2_B]] if [[ENABLE_CONV]] : i1
-  assert property (disable iff (a) b);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[CONV_2_B]], posedge [[CONV_CLK]] : i1
+  // CHECK: verif.assert [[CLK_OP]] if [[ENABLE_CONV]] : !ltl.sequence
+  assert property (@(posedge clk) disable iff (a) b);
 
   // CHECK-NOT: moore.procedure always {
   // CHECK: [[READ_A:%.+]] = moore.read %a : <i1>
@@ -2855,8 +3002,12 @@ module ConcurrentAssert(input clk);
   // CHECK: [[READ_B:%.+]] = moore.read %b : <l1>
   // CHECK: [[CONV_1_B:%.+]] = moore.logic_to_int [[READ_B]] : l1
   // CHECK: [[CONV_2_B:%.+]] = moore.to_builtin_int [[CONV_1_B]] : i1
-  // CHECK: verif.assume [[CONV_2_B]] if [[ENABLE_CONV]] : i1
-  assume property (disable iff (a) b);
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[CONV_2_B]], posedge [[CONV_CLK]] : i1
+  // CHECK: verif.assume [[CLK_OP]] if [[ENABLE_CONV]] : !ltl.sequence
+  assume property (@(posedge clk) disable iff (a) b);
 
   // CHECK-NOT: moore.procedure always {
   // CHECK: [[READ_A:%.+]] = moore.read %a : <i1>
@@ -3389,8 +3540,10 @@ endfunction
 module ContinuousAssignment;
   // CHECK-NEXT: [[A:%.+]] = moore.variable
   // CHECK-NEXT: [[B:%.+]] = moore.variable
+  // CHECK-NEXT: [[C:%.+]] = moore.variable
   bit [41:0] a;
   bit [41:0] b;
+  bit [41:0] c;
 
   // CHECK-NEXT: [[TMP:%.+]] = moore.read [[B]]
   // CHECK-NEXT: [[NOTB:%.+]] = moore.not [[TMP]]
@@ -3400,8 +3553,8 @@ module ContinuousAssignment;
   // CHECK-NEXT: [[TMP:%.+]] = moore.read [[B]]
   // CHECK-NEXT: [[NOTB:%.+]] = moore.not [[TMP]]
   // CHECK-NEXT: [[TIME:%.+]] = moore.constant_time 1000000 fs
-  // CHECK-NEXT: moore.delayed_assign [[A]], [[NOTB]], [[TIME]]
-  assign #1ns a = ~b;
+  // CHECK-NEXT: moore.delayed_assign [[C]], [[NOTB]], [[TIME]]
+  assign #1ns c = ~b;
 endmodule
 
 // CHECK-LABEL: func.func private @BlockingAssignment(
