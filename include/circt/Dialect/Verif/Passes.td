@@ -46,6 +46,40 @@ def CombineAssertLikePass : Pass<"combine-assert-like", "hw::HWModuleOp"> {
   }];
 }
 
+def FoldAssumePass : Pass<"fold-assume", "mlir::ModuleOp"> {
+  let summary = "Folds all assumes into the enable signal of an assert.";
+  let description = [{
+    Implements assumes manually by combining all of them into a knowledge caucus, that
+    is then used as the antecedant of every assertion within the same region. This 
+    assumes that `combine-assert-like` is run prior to running this pass, as it will 
+    fail if there is more than one assertion and one assumption per block. 
+    E.g., 
+
+    ```mlir
+    // [...]
+    verif.assume %conjoinedPred : i1
+    // [...]
+    verif.assert %cond : i1
+    ```
+    is converted to
+    ```mlir  
+    // [...]
+    // [...]
+    verif.assert %cond if %conjoinedPred : i1
+    ```
+
+    This is a semantically preserving transformation in the formal back-ends as 
+    assumes have the following underlying semantics:
+
+                            {a0, ..., ak} ∈ A
+      -------------------------------------------------------------------------
+      Γ; A ⊢ assume {a0, ... ak}; assert a -> assert ((a0 and .. and ak) => a)
+    
+    Therefore, assertions become trivial when assumptions do no hold for a concrete value, 
+    making them equivalent to an enable signal.
+  }];
+}
+
 def PrepareForFormalPass : Pass<"prepare-for-formal", "hw::HWModuleOp"> {
   let summary = "Prepares a given top-level circuit for formal verification";
   let description = [{
