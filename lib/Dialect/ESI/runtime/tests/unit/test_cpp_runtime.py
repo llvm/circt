@@ -18,7 +18,6 @@ The entire module is skipped when the binary cannot be found.
 from __future__ import annotations
 
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -76,11 +75,19 @@ def _list_tests() -> list[str]:
       capture_output=True,
       text=True,
   )
+  if result.returncode != 0:
+    pytest.fail(
+        f"Failed to list gtest cases (rc={result.returncode}):\n"
+        f"--- stdout ---\n{result.stdout}\n"
+        f"--- stderr ---\n{result.stderr}",
+        pytrace=False,
+    )
   tests: list[str] = []
   suite = ""
   for line in result.stdout.splitlines():
     # Suite header line ends with '.', e.g. "ESITypesTest."
-    if re.match(r"^\w.*\.$", line.rstrip()):
+    # Use a non-indent check so parameterized suites like "Suite/0." also match.
+    if not line.startswith(" ") and line.rstrip().endswith("."):
       suite = line.strip()
     # Individual test line is indented, e.g. "  VoidTypeSerialization"
     elif line.startswith("  "):

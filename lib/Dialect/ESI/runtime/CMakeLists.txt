@@ -460,4 +460,7 @@ install(FILES ${ESICppRuntimeBackendHeaders}
 )
 
 # C++ unit tests (self-contained, no CIRCT/LLVM dependency).
-add_subdirectory(tests/cpp)
+option(BUILD_TESTING "Build ESI runtime C++ unit tests" ON)
+if(BUILD_TESTING)
+  add_subdirectory(tests/cpp)
+endif()
