@@ -1,4 +1,5 @@
 // REQUIRES: slang
+// UNSUPPORTED: valgrind
 
 // Test that --emit-moore-dpi-call causes DPI calls to go through
 // moore.func.dpi.call instead of func.call during ImportVerilog lowering.
