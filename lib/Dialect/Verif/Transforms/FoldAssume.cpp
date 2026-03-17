@@ -33,6 +33,11 @@ using namespace verif;
 using namespace hw;
 
 namespace {
+
+/// Keep track of assumptions and assertions on a per block basis
+llvm::SmallDenseMap<Block *, llvm::SmallVector<Operation *>> assertsToErase;
+llvm::SmallDenseMap<Block *, llvm::SmallVector<Operation *>> assumesToErase;
+
 /// Implements assumes manually by combining all of them into a knowledge
 /// caucus, that is then used as the antecedant of every assertion within the
 /// same region. This assumes that `combine-assert-like` is run prior to running
