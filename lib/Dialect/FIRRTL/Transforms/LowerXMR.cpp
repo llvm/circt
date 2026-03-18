@@ -169,6 +169,15 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
                 markForRemoval(send);
                 return success();
               }
+
+            // If the value is a block argument (port), add an inner symbol
+            // directly to the port instead of creating a node.
+            if (isa<BlockArgument>(xmrDef)) {
+              addReachingSendsEntry(send.getResult(), getInnerRefTo(xmrDef));
+              markForRemoval(send);
+              return success();
+            }
+
             // Get an InnerRefAttr to the value being sent.
             auto *xmrDefOp = xmrDef.getDefiningOp();
 

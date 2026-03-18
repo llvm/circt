@@ -5,9 +5,9 @@
 FIRRTL version 5.0.0
 circuit Top:
   ; INLINE-NOT: module InputOnly
-  ; INLINE: `define ref_Top_probe input_probe
+  ; INLINE: `define ref_Top_probe input_0
   ; CHECK: module InputOnly
-  ; CHECK:  `define ref_Top_probe input_only.input_probe
+  ; CHECK:  `define ref_Top_probe input_only.input_0
   module InputOnly:
     ; Non-hardware ports must not be counted as output
     input input: UInt<1>
