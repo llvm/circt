@@ -1,16 +1,14 @@
-// RUN: domaintool --module Foo --domain ClockDomain,A,10 --domain ClockDomain,B,20 --assign 0 --assign 1 %s | FileCheck %s --check-prefixes=CHECK,DEFAULT
-// RUN: domaintool --module Foo --domain ClockDomain,A,10 --domain ClockDomain,B,20 --assign 0 --assign 1 --sifive-clock-domain-async=A %s | FileCheck %s --check-prefixes=CHECK,ASYNC
-// RUN: domaintool --module Foo --domain ClockDomain,A,10 --domain ClockDomain,B,20 --assign 0 --assign 1 --sifive-clock-domain-static=A %s | FileCheck %s --check-prefixes=CHECK,STATIC
+// RUN: domaintool --module Foo --domain ClockDomain,A --domain ClockDomain,B --assign 0 --assign 1 %s | FileCheck %s --check-prefixes=CHECK,DEFAULT
+// RUN: domaintool --module Foo --domain ClockDomain,A --domain ClockDomain,B --assign 0 --assign 1 --sifive-clock-domain-async=A %s | FileCheck %s --check-prefixes=CHECK,ASYNC
+// RUN: domaintool --module Foo --domain ClockDomain,A --domain ClockDomain,B --assign 0 --assign 1 --sifive-clock-domain-static=A %s | FileCheck %s --check-prefixes=CHECK,STATIC
 
 om.class @ClockDomain(
   %basepath: !om.frozenbasepath,
-  %name_in: !om.string,
-  %period_in: !om.integer
+  %name_in: !om.string
 )  -> (
-  name_out: !om.string,
-  period_out: !om.integer
+  name_out: !om.string
 ) {
-  om.class.fields %name_in, %period_in : !om.string, !om.integer
+  om.class.fields %name_in : !om.string
 }
 
 om.class @ClockDomain_out(
@@ -58,26 +56,26 @@ om.class @Foo_Class(
 // DEFAULT-NEXT:   "clocks": [
 // DEFAULT-NEXT:     {
 // DEFAULT-NEXT:       "name_pattern": "A",
-// DEFAULT-NEXT:       "define_period": 10,
+// DEFAULT-NEXT:       "define_period": "A_PERIOD",
 // DEFAULT-NEXT:       "clock_relationships": []
 // DEFAULT-NEXT:     },
 // DEFAULT-NEXT:     {
 // DEFAULT-NEXT:       "name_pattern": "B",
-// DEFAULT-NEXT:       "define_period": 20,
+// DEFAULT-NEXT:       "define_period": "B_PERIOD",
 // DEFAULT-NEXT:       "clock_relationships": []
 // DEFAULT-NEXT:     }
 // DEFAULT-NEXT:   ],
 // ASYNC-NEXT:     "clocks": [
 // ASYNC-NEXT:       {
 // ASYNC-NEXT:         "name_pattern": "B",
-// ASYNC-NEXT:         "define_period": 20,
+// ASYNC-NEXT:         "define_period": "B_PERIOD",
 // ASYNC-NEXT:         "clock_relationships": []
 // ASYNC-NEXT:       }
 // ASYNC-NEXT:     ],
 // STATIC-NEXT:    "clocks": [
 // STATIC-NEXT:      {
 // STATIC-NEXT:        "name_pattern": "B",
-// STATIC-NEXT:        "define_period": 20,
+// STATIC-NEXT:        "define_period": "B_PERIOD",
 // STATIC-NEXT:        "clock_relationships": []
 // STATIC-NEXT:      }
 // STATIC-NEXT:    ],
