@@ -181,14 +181,11 @@ void FoldAssumePass::runOnOperation() {
 
     // At this point we can just walk the internal ops
     module->walk([&](Operation *op) {
-      TypeSwitch<Operation *>(op)
-          .Case<verif::AssumeOp, verif::AssumeOp>([&](auto) {
-            // Group all assertlikes per block
-            if (failed(findAssertlikes(op, isa<verif::AssertOp>(op) ? asserts
-                                                                    : assumes)))
-              return signalPassFailure();
-          })
-          .Default([&](auto) { /* Skip */ });
+      if (isa<verif::AssumeOp, verif::AssumeOp>(op))
+        // Group all assertlikes per block
+        if (failed(findAssertlikes(op, isa<verif::AssertOp>(op) ? asserts
+                                                                : assumes)))
+          return signalPassFailure();
     });
 
     // Fold all assumes into their block's assert
