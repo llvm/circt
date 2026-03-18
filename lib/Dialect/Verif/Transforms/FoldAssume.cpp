@@ -73,6 +73,11 @@ private:
       llvm::SmallDenseMap<Block *, llvm::SmallVector<Operation *>> &ops) {
     Block *blk = defop->getBlock();
 
+    // Ignore assertlikes that contain ltl properties
+    if (isa<ltl::PropertyType, ltl::SequenceType>(
+            defop->getOperand(0).getType()))
+      return success();
+
     // Check what type op this is (assert or asssume)
     auto opName = (isa<verif::AssertOp>(defop) ? "asserts" : "assumes");
 
@@ -125,8 +130,8 @@ private:
               it != asserts.end() && it->getSecond().size() > 0) {
             auto const &assertOps = it->getSecond();
 
-            // We should fail here if multiple assertions were stored, as we do
-            // not fold the assumption into every assertion in the block
+            // We should fail here if multiple assertions were stored, as we
+            // do not fold the assumption into every assertion in the block
             if (assertOps.size() > 1) {
               assertOps.back()->emitError(
                   "Multiple assertions found in the current block! Run "
@@ -151,8 +156,8 @@ private:
               assertOp->erase();
             }
           } else {
-            // If no matching assertion was found, make a trivial assertion and
-            // set the enable signal with the assumption's condition, i.e.
+            // If no matching assertion was found, make a trivial assertion
+            // and set the enable signal with the assumption's condition, i.e.
             // create `assert 1 if %cond`
             auto tConst =
                 hw::ConstantOp::create(builder, loc, IntegerAttr::get(i1, 1));
