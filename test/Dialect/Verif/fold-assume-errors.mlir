@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --fold-assume --verify-diagnostics 
+// RUN: circt-opt %s --fold-assume --split-input-file --verify-diagnostics 
 
 hw.module @ManyAssumes(in %a: i42, in %b: i42, out z: i42) {
   %0 = comb.add bin %a, %b : i42

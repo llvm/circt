@@ -46,7 +46,7 @@ def CombineAssertLikePass : Pass<"combine-assert-like", "hw::HWModuleOp"> {
   }];
 }
 
-def FoldAssumePass : Pass<"fold-assume", "mlir::ModuleOp"> {
+def FoldAssumePass : Pass<"fold-assume"> { 
   let summary = "Folds all assumes into the enable signal of an assert.";
   let description = [{
     Implements assumes manually by combining all of them into a knowledge caucus, that

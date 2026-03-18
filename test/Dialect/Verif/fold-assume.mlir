@@ -1,4 +1,4 @@
-// RUN: circt-opt --fold-assume %s | FileCheck %s
+// RUN: circt-opt --fold-assume --split-input-file %s | FileCheck %s
 
 // CHECK-LABEL: hw.module @basic
 // CHECK-NEXT:   [[TMP0:%.+]] = comb.add bin %a, %b : i42

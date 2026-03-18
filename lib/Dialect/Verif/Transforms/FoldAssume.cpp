@@ -32,10 +32,6 @@ using namespace mlir;
 
 namespace {
 
-/// Keep track of assumptions and assertions on a per block basis
-llvm::SmallDenseMap<Block *, llvm::SmallVector<Operation *>> asserts;
-llvm::SmallDenseMap<Block *, llvm::SmallVector<Operation *>> assumes;
-
 /// Implements assumes manually by combining all of them into a knowledge
 /// caucus, that is then used as the antecedant of every assertion within the
 /// same region. This assumes that `combine-assert-like` is run prior to running
@@ -63,9 +59,20 @@ llvm::SmallDenseMap<Block *, llvm::SmallVector<Operation *>> assumes;
 /// Therefore, assertions become trivial when assumptions do no hold for a
 /// concrete value, making them equivalent to an enable signal.
 struct FoldAssumePass : verif::impl::FoldAssumePassBase<FoldAssumePass> {
+
+  /// Only allow scheduling on verif::FormalOp and hw::HWModuleOp
+  bool canScheduleOn(RegisteredOperationName opInfo) const override {
+    return opInfo.getIdentifier() == "hw::HWModuleOp" ||
+           opInfo.getIdentifier() == "verif::FormalOp";
+  }
+
   void runOnOperation() override;
 
 private:
+  /// Keep track of assumptions and assertions on a per block basis
+  llvm::SmallDenseMap<Block *, llvm::SmallVector<Operation *>> asserts;
+  llvm::SmallDenseMap<Block *, llvm::SmallVector<Operation *>> assumes;
+
   /// Checks if thee current assertion/assumption is found multiple times in the
   /// block. If no other is found, save this assumption/assertion.
   LogicalResult findAssertlikes(
@@ -78,16 +85,13 @@ private:
             defop->getOperand(0).getType()))
       return success();
 
-    // Check what type op this is (assert or asssume)
-    auto opName = (isa<verif::AssertOp>(defop) ? "asserts" : "assumes");
-
     // Make sure the block doesn't have any other entries
     if (auto it = ops.find(blk); it != ops.end())
       if ((it->getSecond().size() > 0)) {
-        defop->emitError(
-            "Multiple " + Twine(opName) +
-            " found in the current block! Run `--combine-assert-like` " +
-            "before running --fold-assume.");
+        defop->emitError()
+            << "Multiple " << defop->getName()
+            << " found in the current block! Run `--combine-assert-like` "
+            << "before running --fold-assume.";
         return failure();
       }
 
@@ -100,75 +104,74 @@ private:
   /// modules' opbuilder.
   LogicalResult foldAssumesIntoAsserts(OpBuilder &builder) {
     // boolean type
-    auto i1 = IntegerType::get(builder.getContext(), 1);
+    auto i1 = builder.getI1Type();
     // For each assume, find the assert from the same block and augment it's
     // enable signal with the assume's condition.
     for (auto [blk, ops] : assumes) {
       // Check if the block had any assumptions
-      if (ops.size() > 0) {
+      if (ops.size() == 0)
+        continue;
 
-        // We should fail here if multiple assumptions were stored, we do
-        // not accumulate the assumptions, as that is done by
-        // verif::CombineAssertLikePass
-        if (ops.size() > 1) {
-          ops.back()->emitError(
-              "Multiple assuptions found in the current block! Run "
+      // We should fail here if multiple assumptions were stored, we do
+      // not accumulate the assumptions, as that is done by
+      // verif::CombineAssertLikePass
+      if (ops.size() > 1) {
+        ops.back()->emitError(
+            "Multiple assuptions found in the current block! Run "
+            "`--combine-assert-like` before running --fold-assume.");
+        return failure();
+      }
+
+      // Should be an assumption
+      auto assumeOp = cast<verif::AssumeOp>(ops.front());
+      Location loc = assumeOp.getLoc();
+      Value cond = assumeOp.getProperty();
+
+      // Add new ops after the assumption
+      builder.setInsertionPoint(ops.front());
+
+      // Look for a matching assertion, make that list is non-empty
+      if (auto it = asserts.find(blk);
+          it != asserts.end() && it->getSecond().size() > 0) {
+        auto const &assertOps = it->getSecond();
+
+        // We should fail here if multiple assertions were stored, as we
+        // do not fold the assumption into every assertion in the block
+        if (assertOps.size() > 1) {
+          assertOps.back()->emitError(
+              "Multiple assertions found in the current block! Run "
               "`--combine-assert-like` before running --fold-assume.");
           return failure();
         }
 
-        // Should be an assumption
-        if (auto assumeOp = dyn_cast<verif::AssumeOp>(ops.front())) {
-          Location loc = assumeOp.getLoc();
-          Value cond = assumeOp.getProperty();
+        // Make sure the op is actually an assertion
+        if (auto assertOp = dyn_cast<verif::AssertOp>(assertOps.front())) {
+          builder.setInsertionPoint(assertOps.front());
+          Location assertLoc = assertOp.getLoc();
+          Value en = assertOp.getEnable();
 
-          // Add new ops after the assumption
-          builder.setInsertionPoint(ops.front());
+          // Replace the enable signal with the assumption condition
+          verif::AssertOp::create(
+              builder, assertLoc, assertOp.getProperty(),
+              // Conjoin enable signal with condition if needed
+              en ? comb::AndOp::create(builder, assertLoc, en, cond) : cond,
+              /*label=*/{});
 
-          // Look for a matching assertion, make that list is non-empty
-          if (auto it = asserts.find(blk);
-              it != asserts.end() && it->getSecond().size() > 0) {
-            auto const &assertOps = it->getSecond();
-
-            // We should fail here if multiple assertions were stored, as we
-            // do not fold the assumption into every assertion in the block
-            if (assertOps.size() > 1) {
-              assertOps.back()->emitError(
-                  "Multiple assertions found in the current block! Run "
-                  "`--combine-assert-like` before running --fold-assume.");
-              return failure();
-            }
-
-            // Make sure the op is actually an assertion
-            if (auto assertOp = dyn_cast<verif::AssertOp>(assertOps.front())) {
-              builder.setInsertionPoint(assertOps.front());
-              Location assertLoc = assertOp.getLoc();
-              Value en = assertOp.getEnable();
-
-              // Replace the enable signal with the assumption condition
-              verif::AssertOp::create(
-                  builder, assertLoc, assertOp.getProperty(),
-                  // Conjoin enable signal with condition if needed
-                  en ? comb::AndOp::create(builder, assertLoc, en, cond) : cond,
-                  /*label=*/{});
-
-              // Remove the old op
-              assertOp->erase();
-            }
-          } else {
-            // If no matching assertion was found, make a trivial assertion
-            // and set the enable signal with the assumption's condition, i.e.
-            // create `assert 1 if %cond`
-            auto tConst =
-                hw::ConstantOp::create(builder, loc, IntegerAttr::get(i1, 1));
-            verif::AssertOp::create(builder, loc, tConst, /*enable=*/cond,
-                                    /*label=*/{});
-          }
-
-          // Delete the assumption
-          assumeOp->erase();
+          // Remove the old op
+          assertOp->erase();
         }
+      } else {
+        // If no matching assertion was found, make a trivial assertion
+        // and set the enable signal with the assumption's condition, i.e.
+        // create `assert 1 if %cond`
+        auto tConst =
+            hw::ConstantOp::create(builder, loc, IntegerAttr::get(i1, 1));
+        verif::AssertOp::create(builder, loc, tConst, /*enable=*/cond,
+                                /*label=*/{});
       }
+
+      // Delete the assumption
+      assumeOp->erase();
     }
     // Only succeed if all blocks were converted
     return success();
@@ -177,31 +180,33 @@ private:
 } // namespace
 
 void FoldAssumePass::runOnOperation() {
-  auto mlirModule = getOperation();
-  OpBuilder builder(mlirModule);
+  Operation *module = getOperation();
+  OpBuilder builder(module);
 
-  // Walks over both supported top-level ops (hw::HWModuleOp and
-  // verif::FormalOp) and dispatches the internal matcher on assume ops
-  mlirModule.walk([&](Operation *module) {
-    // Skip any non-module-like op
-    if (!isa<hw::HWModuleOp, verif::FormalOp>(module))
-      return;
+  // dispatches the internal matcher on assume ops
+  // Skip any non-module-like op
+  if (!isa<hw::HWModuleOp, verif::FormalOp>(module))
+    return;
 
-    // At this point we can just walk the internal ops
-    module->walk([&](Operation *op) {
-      if (isa<verif::AssumeOp, verif::AssertOp>(op))
-        // Group all assertlikes per block
-        if (failed(findAssertlikes(op, isa<verif::AssertOp>(op) ? asserts
-                                                                : assumes)))
-          return signalPassFailure();
-    });
-
-    // Fold all assumes into their block's assert
-    if (failed(foldAssumesIntoAsserts(builder)))
-      return signalPassFailure();
-
-    // Clear data structures in between modules
-    asserts.clear();
-    assumes.clear();
+  // At this point we can just walk the internal ops
+  WalkResult wr = module->walk([&](Operation *op) {
+    if (isa<verif::AssumeOp, verif::AssertOp>(op))
+      // Group all assertlikes per block
+      if (failed(findAssertlikes(op,
+                                 isa<verif::AssertOp>(op) ? asserts : assumes)))
+        return WalkResult::interrupt();
+    return WalkResult::advance();
   });
+
+  // Check if the walk failed
+  if (wr.wasInterrupted())
+    return signalPassFailure();
+
+  // Fold all assumes into their block's assert
+  if (failed(foldAssumesIntoAsserts(builder)))
+    return signalPassFailure();
+
+  // Clear data structures in between modules
+  asserts.clear();
+  assumes.clear();
 }
