@@ -309,8 +309,7 @@ def FMemModuleOp : FIRRTLModuleLike<"memmodule"> {
                    "uint32_t":$writeLatency, "uint64_t":$depth,
                    CArg<"firrtl::RUWBehavior",
                     "firrtl::RUWBehavior::Undefined">:$ruw,
-                   CArg<"firrtl::MemoryInitAttr",
-                    "{}">:$init,
+                   CArg<"firrtl::MemoryInitAttr", "{}">:$init,
                    CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
                    CArg<"ArrayAttr", "ArrayAttr()">:$layers)>
   ];

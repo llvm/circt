@@ -1305,6 +1305,8 @@ firrtl.circuit "NoInnerSymsOnIntermediaryInstances" {
 
 // -----
 
+// Test emission of metadata for memory initialization files.
+
 firrtl.circuit "MemInitHex" {
   firrtl.memmodule private @mInit() attributes {
     dataWidth = 8 : ui32,
