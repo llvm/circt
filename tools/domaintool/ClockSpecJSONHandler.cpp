@@ -51,7 +51,6 @@ struct Relationship {
 
 struct Clock {
   StringRef namePattern;
-  uint64_t definePeriod;
   SmallVector<Relationship> relationships;
 };
 
@@ -124,16 +123,8 @@ public:
 
       // Otherwise, this is a normal clock association.  Add the clock and
       // populate the associations.
-      clocks.push_back(
-          {/*namePattern=*/name,
-           /*define_period=*/
-           cast<om::IntegerAttr>(cast<om::evaluator::AttributeValue>(
-                                     objectValue->getField("period_out")->get())
-                                     ->getAttr())
-               .getValue()
-               .getValue()
-               .getZExtValue(),
-           /*relationships=*/{}});
+      clocks.push_back({/*namePattern=*/name,
+                        /*relationships=*/{}});
 
       for (auto &association : associations) {
         if (auto *p = dyn_cast<om::evaluator::PathValue>(association.get())) {
@@ -161,8 +152,10 @@ public:
       json.attributeArray("clocks", [&] {
         for (auto clock : clocks) {
           json.object([&] {
-            json.attribute("name_pattern", clock.namePattern);
-            json.attribute("define_period", clock.definePeriod);
+            auto &name = clock.namePattern;
+            json.attribute("name_pattern", name);
+            json.attribute("define_period",
+                           (Twine(name.upper()) + "_PERIOD").str());
             json.attributeArray("clock_relationships", [&] {
               // TODO: Implement this.
             });
