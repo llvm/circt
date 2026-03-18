@@ -131,4 +131,5 @@ jobs:
           export PYTHONPATH="$PWD/build/tools/circt/python_packages/pycde:$PWD/build/tools/circt/lib/Dialect/ESI/runtime/python"
           export PATH="$PWD/build/bin:$PATH"
           export LD_LIBRARY_PATH="$PWD/build/lib:$LD_LIBRARY_PATH"
+          ninja -C build ESIRuntimeCppTests -j$(nproc)
           python3 -m pytest lib/Dialect/ESI/runtime/tests/ -v --log-cli-level=INFO
