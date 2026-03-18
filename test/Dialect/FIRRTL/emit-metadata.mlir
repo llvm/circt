@@ -1330,7 +1330,8 @@ firrtl.circuit "MemInitHex" {
 }
 
 //------------------------------------------------------------------ (1) OM Info
-// CHECK-LABEL:         firrtl.class @MemoryMetadata({{.*$}}
+// CHECK-LABEL:       firrtl.circuit "MemInitHex"
+// CHECK:               firrtl.class @MemoryMetadata({{.*$}}
 // CHECK:                 %[[memoryObject:.+]] = firrtl.object @MemorySchema
 // CHECK:                 %[[#a:]] = firrtl.list.create
 // CHECK-NEXT:            %[[#b:]] = firrtl.string "some_hex_init.mem"
@@ -1384,7 +1385,8 @@ firrtl.circuit "MemInitBin" {
 }
 
 //------------------------------------------------------------------ (1) OM Info
-// CHECK-LABEL:         firrtl.class @MemoryMetadata({{.*$}}
+// CHECK-LABEL:       firrtl.circuit "MemInitBin"
+// CHECK:               firrtl.class @MemoryMetadata({{.*$}}
 // CHECK:                 %[[memoryObject:.+]] = firrtl.object @MemorySchema
 // CHECK:                 %[[#a:]] = firrtl.list.create
 // CHECK-NEXT:            %[[#b:]] = firrtl.string "some_bin_init.mem"
