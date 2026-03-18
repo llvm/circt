@@ -178,6 +178,38 @@ struct ExprVisitor {
     return context.convertRvalueExpression(expr);
   }
 
+  /// Materialize the rvalue of a symbol, regardless of whether it is backed by
+  /// a local reference, global variable, or class property.
+  Value materializeSymbolRvalue(const slang::ast::ValueSymbol &sym) {
+    if (auto value = context.valueSymbols.lookup(&sym)) {
+      if (isa<moore::RefType>(value.getType())) {
+        auto readOp = moore::ReadOp::create(builder, loc, value);
+        if (context.rvalueReadCallback)
+          context.rvalueReadCallback(readOp);
+        return readOp.getResult();
+      }
+      return value;
+    }
+
+    if (auto globalOp = context.globalVariables.lookup(&sym)) {
+      auto ref = moore::GetGlobalVariableOp::create(builder, loc, globalOp);
+      auto readOp = moore::ReadOp::create(builder, loc, ref);
+      if (context.rvalueReadCallback)
+        context.rvalueReadCallback(readOp);
+      return readOp.getResult();
+    }
+
+    if (auto *const property = sym.as_if<slang::ast::ClassPropertySymbol>()) {
+      auto fieldRef = visitClassProperty(context, *property);
+      auto readOp = moore::ReadOp::create(builder, loc, fieldRef);
+      if (context.rvalueReadCallback)
+        context.rvalueReadCallback(readOp);
+      return readOp.getResult();
+    }
+
+    return {};
+  }
+
   Value visit(const slang::ast::NewArrayExpression &expr) {
     Type type = context.convertType(*expr.type);
 
@@ -636,6 +668,32 @@ struct ExprVisitor {
     auto *valueType = expr.value().type.get();
     auto memberName = builder.getStringAttr(expr.member.name);
 
+    // Handle virtual interfaces. We represent virtual interface handles as a
+    // Moore struct containing references to interface members. Member access
+    // returns the stored reference directly (for lvalues) or reads it (for
+    // rvalues).
+    if (valueType->isVirtualInterface()) {
+      auto memberType = dyn_cast<moore::UnpackedType>(type);
+      if (!memberType) {
+        mlir::emitError(loc)
+            << "unsupported virtual interface member type: " << type;
+        return {};
+      }
+      auto resultRefType = moore::RefType::get(memberType);
+
+      // Always use the rvalue of the base handle to avoid creating
+      // ref<ref<T>> for lvalue member access.
+      Value base = context.convertRvalueExpression(expr.value());
+      if (!base)
+        return {};
+
+      auto memberRef = moore::StructExtractOp::create(
+          builder, loc, resultRefType, memberName, base);
+      if (isLvalue)
+        return memberRef;
+      return moore::ReadOp::create(builder, loc, memberRef);
+    }
+
     // Handle structs.
     if (valueType->isStruct()) {
       auto resultType =
@@ -782,6 +840,43 @@ struct RvalueExprVisitor : public ExprVisitor {
       return moore::ReadOp::create(builder, loc, fieldRef).getResult();
     }
 
+    // Slang may resolve `vif.member` accesses (with `vif` being a virtual
+    // interface handle) directly to a NamedValueExpression for `member`.
+    // Reconstruct the virtual interface access by consulting the mapping
+    // populated at declaration sites.
+    if (auto access = context.virtualIfaceMembers.lookup(&expr.symbol);
+        access.base) {
+      auto type = context.convertType(*expr.type);
+      if (!type)
+        return {};
+      auto memberType = dyn_cast<moore::UnpackedType>(type);
+      if (!memberType) {
+        mlir::emitError(loc)
+            << "unsupported virtual interface member type: " << type;
+        return {};
+      }
+
+      Value base = materializeSymbolRvalue(*access.base);
+      if (!base) {
+        auto d = mlir::emitError(loc, "unknown name `")
+                 << access.base->name << "`";
+        d.attachNote(context.convertLocation(access.base->location))
+            << "no rvalue generated for virtual interface base";
+        return {};
+      }
+
+      auto fieldName = access.fieldName
+                           ? access.fieldName
+                           : builder.getStringAttr(expr.symbol.name);
+      auto memberRefType = moore::RefType::get(memberType);
+      auto memberRef = moore::StructExtractOp::create(
+          builder, loc, memberRefType, fieldName, base);
+      auto readOp = moore::ReadOp::create(builder, loc, memberRef);
+      if (context.rvalueReadCallback)
+        context.rvalueReadCallback(readOp);
+      return readOp.getResult();
+    }
+
     // Try to materialize constant values directly.
     auto constant = context.evaluateConstant(expr);
     if (auto value = context.materializeConstant(constant, *expr.type, loc))
@@ -814,6 +909,22 @@ struct RvalueExprVisitor : public ExprVisitor {
              << expr.symbol.name << "`";
     d.attachNote(hierLoc) << "no rvalue generated for "
                           << slang::ast::toString(expr.symbol.kind);
+    return {};
+  }
+
+  // Handle arbitrary symbol references. Slang uses this expression to represent
+  // "real" interface instances in virtual interface assignments.
+  Value visit(const slang::ast::ArbitrarySymbolExpression &expr) {
+    const auto &canonTy = expr.type->getCanonicalType();
+    if (const auto *vi = canonTy.as_if<slang::ast::VirtualInterfaceType>()) {
+      auto value = context.materializeVirtualInterfaceValue(*vi, loc);
+      if (failed(value))
+        return {};
+      return *value;
+    }
+
+    mlir::emitError(loc) << "unsupported arbitrary symbol expression of type "
+                         << expr.type->toString();
     return {};
   }
 
@@ -2206,6 +2317,35 @@ struct LvalueExprVisitor : public ExprVisitor {
     if (auto *const property =
             expr.symbol.as_if<slang::ast::ClassPropertySymbol>()) {
       return visitClassProperty(context, *property);
+    }
+
+    if (auto access = context.virtualIfaceMembers.lookup(&expr.symbol);
+        access.base) {
+      auto type = context.convertType(*expr.type);
+      if (!type)
+        return {};
+      auto memberType = dyn_cast<moore::UnpackedType>(type);
+      if (!memberType) {
+        mlir::emitError(loc)
+            << "unsupported virtual interface member type: " << type;
+        return {};
+      }
+
+      Value base = materializeSymbolRvalue(*access.base);
+      if (!base) {
+        auto d = mlir::emitError(loc, "unknown name `")
+                 << access.base->name << "`";
+        d.attachNote(context.convertLocation(access.base->location))
+            << "no rvalue generated for virtual interface base";
+        return {};
+      }
+
+      auto fieldName = access.fieldName
+                           ? access.fieldName
+                           : builder.getStringAttr(expr.symbol.name);
+      auto memberRefType = moore::RefType::get(memberType);
+      return moore::StructExtractOp::create(builder, loc, memberRefType,
+                                            fieldName, base);
     }
 
     auto d = mlir::emitError(loc, "unknown name `") << expr.symbol.name << "`";

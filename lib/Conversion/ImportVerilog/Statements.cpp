@@ -298,6 +298,10 @@ struct StmtVisitor {
         builder.getStringAttr(var.name), initial);
     context.valueSymbols.insertIntoScope(context.valueSymbols.getCurScope(),
                                          &var, varOp);
+    const auto &canonTy = var.getType().getCanonicalType();
+    if (const auto *vi = canonTy.as_if<slang::ast::VirtualInterfaceType>())
+      if (failed(context.registerVirtualInterfaceMembers(var, *vi, loc)))
+        return failure();
     return success();
   }
 
