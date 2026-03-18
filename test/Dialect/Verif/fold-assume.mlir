@@ -46,20 +46,16 @@ verif.formal @formal {} {
 
 // CHECK-LABEL: hw.module @noAssert
 // CHECK-NEXT:   [[TMP0:%.+]] = comb.add bin %a, %b : i42
-// CHECK-NEXT:   %c0_i42 = hw.constant 0 : i42
-// CHECK-NEXT:   [[TMP1:%.+]] = comb.icmp bin uge %a, %c0_i42 : i42
-// CHECK-NEXT:   [[TMP2:%.+]] = comb.icmp bin uge %b, %c0_i42 : i42
-// CHECK-NEXT:   verif.assert [[TMP2]] if [[TMP1]] : i1
+// CHECK-NEXT:   [[TMP1:%.+]] = comb.icmp bin uge %a, %b : i42
+// CHECK-NEXT:   [[C1:%.+]] = hw.constant true
+// CHECK-NEXT:   verif.assert [[C1]] if [[TMP1]] : i1
 // CHECK-NEXT:   hw.output [[TMP0]] : i42
 // CHECK-NEXT: }
 
 hw.module @noAssert(in %a: i42, in %b: i42, out z: i42) {
   %0 = comb.add bin %a, %b : i42
-  %c0_i42 = hw.constant 0 : i42
-  %1 = comb.icmp bin uge %a, %c0_i42 : i42
-  %2 = comb.icmp bin uge %b, %c0_i42 : i42
+  %1 = comb.icmp bin uge %a, %b : i42
   verif.assume %1 : i1
-  verif.assert %2 : i1
   hw.output %0 : i42
 }
 

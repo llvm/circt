@@ -122,8 +122,8 @@ private:
           Location loc = assumeOp.getLoc();
           Value cond = assumeOp.getProperty();
 
-          // Add new ops at the end of the block
-          builder.setInsertionPointToEnd(blk);
+          // Add new ops after the assumption
+          builder.setInsertionPoint(ops.front());
 
           // Look for a matching assertion, make that list is non-empty
           if (auto it = asserts.find(blk);
