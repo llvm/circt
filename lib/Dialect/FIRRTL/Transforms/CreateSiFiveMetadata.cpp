@@ -108,8 +108,8 @@ struct ObjectModelIR {
 
     StringRef memInitFields[3] = {"filename", "isBinary", "isInline"};
 
-    memInitFileClass = builderOM.create<ClassOp>("MemoryInitFileSchema",
-                                                 memInitFields, memInitType);
+    memInitFileClass = ClassOp::create(builderOM, "MemoryInitFileSchema",
+                                       memInitFields, memInitType);
 
     mlir::Type classFieldTypes[15] = {
         StringType::get(context),
@@ -373,8 +373,7 @@ struct ObjectModelIR {
     auto extraPorts = ListCreateOp::create(
         builderOM, memorySchemaClass.getPortType(24), extraPortsList);
 
-    SmallVector<Value, 1> memInitFileOpt;
-    ClassType memInitFileType;
+    SmallVector<Value, 1> memInitFileVec;
     if (mem.getInit().has_value()) {
       auto filename = createConstField(mem.getInit()->getFilename());
       auto isBinary = createConstField(
@@ -382,18 +381,17 @@ struct ObjectModelIR {
       auto isInline = createConstField(
           BoolAttr::get(context, mem.getInit()->getIsInline()));
       auto memInitFileObj =
-          builderOM.create<ObjectOp>(memInitFileClass, "initFile");
-      memInitFileType = memInitFileObj.getType();
-      auto inPort = builderOM.create<ObjectSubfieldOp>(memInitFileObj, 0);
-      builderOM.create<PropAssignOp>(inPort, filename);
-      inPort = builderOM.create<ObjectSubfieldOp>(memInitFileObj, 2);
-      builderOM.create<PropAssignOp>(inPort, isBinary);
-      inPort = builderOM.create<ObjectSubfieldOp>(memInitFileObj, 4);
-      builderOM.create<PropAssignOp>(inPort, isInline);
-      memInitFileOpt.push_back(memInitFileObj);
+          ObjectOp::create(builderOM, memInitFileClass, "initFile");
+      auto inPort = ObjectSubfieldOp::create(builderOM, memInitFileObj, 0);
+      PropAssignOp::create(builderOM, inPort, filename);
+      inPort = ObjectSubfieldOp::create(builderOM, memInitFileObj, 2);
+      PropAssignOp::create(builderOM, inPort, isBinary);
+      inPort = ObjectSubfieldOp::create(builderOM, memInitFileObj, 4);
+      PropAssignOp::create(builderOM, inPort, isInline);
+      memInitFileVec.push_back(memInitFileObj);
     }
-    auto memInitFile = builderOM.create<ListCreateOp>(
-        memorySchemaClass.getPortType(28), memInitFileOpt);
+    auto memInitFile = ListCreateOp::create(
+        builderOM, memorySchemaClass.getPortType(28), memInitFileVec);
 
     for (auto field : llvm::enumerate(memoryParamNames)) {
       auto propVal = createConstField(
