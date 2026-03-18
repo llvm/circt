@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/raw_ostream.h"
@@ -83,6 +84,22 @@ public:
                                        objectValue->getField("name_out")->get())
                                        ->getAttr())
                       .getValue();
+
+      // Insert this domain into its own equivalence class.  Then, if this has a
+      // specified "synchronousTo" relationship to a different domain, merge
+      // this domain into that different domain.
+      syncEquivalenceClasses.insert(name);
+      auto synchronousTo =
+          cast<StringAttr>(
+              cast<om::evaluator::AttributeValue>(
+                  objectValue->getField("synchronousTo_out")->get())
+                  ->getAttr())
+              .getValue();
+      if (!synchronousTo.empty()) {
+        syncEquivalenceClasses.insert(synchronousTo);
+        syncEquivalenceClasses.unionSets(synchronousTo, name);
+      }
+
       // Add to async ports if the name matches a provided option.
       bool isAsync =
           llvm::any_of(options::sifiveClockDomainAsync,
@@ -143,6 +160,9 @@ public:
     if (failed)
       return failure();
 
+    // Populate clock relationships based on equivalence class leaders
+    populateClockRelationships();
+
     return success();
   }
 
@@ -150,14 +170,19 @@ public:
     json::OStream json(os, /*indentSize=*/2);
     json.object([&] {
       json.attributeArray("clocks", [&] {
-        for (auto clock : clocks) {
+        for (auto &clock : clocks) {
           json.object([&] {
             auto &name = clock.namePattern;
             json.attribute("name_pattern", name);
             json.attribute("define_period",
                            (Twine(name.upper()) + "_PERIOD").str());
             json.attributeArray("clock_relationships", [&] {
-              // TODO: Implement this.
+              for (auto &rel : clock.relationships) {
+                json.object([&] {
+                  json.attribute("name_pattern", rel.namePattern);
+                  json.attribute("relationship", "sync");
+                });
+              }
             });
           });
         }
@@ -195,13 +220,38 @@ public:
     asyncPorts.clear();
     staticPorts.clear();
     syncPorts.clear();
+    syncEquivalenceClasses = EquivalenceClasses<StringRef>();
   };
 
 private:
+  /// Populate clock relationships based on equivalence class leaders.  If a
+  /// domain's leader is not itself, it has a sync relationship to the leader.
+  void populateClockRelationships() {
+    for (auto &clock : clocks) {
+      auto &name = clock.namePattern;
+
+      // Find the leader of this domain's equivalence class
+      auto leaderIter = syncEquivalenceClasses.findLeader(name);
+      if (leaderIter == syncEquivalenceClasses.member_end())
+        continue;
+
+      StringRef leader = *leaderIter;
+
+      // If this domain is not the leader, add a sync relationship to the leader
+      if (name != leader)
+        clock.relationships.push_back({leader, RelationshipKind::Sync});
+    }
+  }
+
   SmallVector<Clock> clocks;
   SmallVector<StringRef> asyncPorts;
   SmallVector<StringRef> staticPorts;
   MapVector<StringRef, SynchronousData> syncPorts;
+
+  // Equivalence classes tracking all domains that are synchronous to each other
+  // through the transitive closure of synchronousTo relationships.  The leader
+  // of each equivalence class represents the root synchronous domain.
+  EquivalenceClasses<StringRef> syncEquivalenceClasses;
 };
 
 static bool registeredClockSpecJSONHandler = [] {
