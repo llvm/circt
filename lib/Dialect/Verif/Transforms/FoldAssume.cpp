@@ -80,8 +80,8 @@ private:
     if (auto it = ops.find(blk); it != ops.end())
       if ((it->getSecond().size() > 0)) {
         defop->emitError(
-            "Multiple" + Twine(opName) +
-            "found in the current block! Run `--combine-assert-like` " +
+            "Multiple " + Twine(opName) +
+            " found in the current block! Run `--combine-assert-like` " +
             "before running --fold-assume.");
         return failure();
       }
@@ -159,6 +159,9 @@ private:
             verif::AssertOp::create(builder, loc, tConst, /*enable=*/cond,
                                     /*label=*/{});
           }
+
+          // Delete the assumption
+          assumeOp->erase();
         }
       }
     }
@@ -181,7 +184,7 @@ void FoldAssumePass::runOnOperation() {
 
     // At this point we can just walk the internal ops
     module->walk([&](Operation *op) {
-      if (isa<verif::AssumeOp, verif::AssumeOp>(op))
+      if (isa<verif::AssumeOp, verif::AssertOp>(op))
         // Group all assertlikes per block
         if (failed(findAssertlikes(op, isa<verif::AssertOp>(op) ? asserts
                                                                 : assumes)))
