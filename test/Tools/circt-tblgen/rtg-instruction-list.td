@@ -1,4 +1,4 @@
-// RUN: circt-tblgen -gen-rtg-instruction-list -I %S/../../../include -I %S/../../../llvm/mlir/include %s | FileCheck %s
+// RUN: circt-tblgen -gen-rtg-instruction-list -I %circt_src_include_dir -I %mlir_src_include_dir %s | FileCheck %s
 
 include "mlir/IR/OpBase.td"
 include "mlir/IR/AttrTypeBase.td"

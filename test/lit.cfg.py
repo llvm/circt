@@ -35,6 +35,9 @@ config.test_exec_root = os.path.join(config.circt_obj_root, 'test')
 config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 config.substitutions.append(('%shlibdir', config.circt_shlib_dir))
+config.substitutions.append(
+    ('%circt_src_include_dir', config.circt_include_dir))
+config.substitutions.append(('%mlir_src_include_dir', config.mlir_include_dir))
 
 llvm_config.with_system_environment(['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
 
