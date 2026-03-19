@@ -757,22 +757,22 @@ firrtl.option @Platform {
   firrtl.option_case @FPGA
 }
 
-firrtl.module @TargetModule(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
-  firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
-}
+firrtl.extmodule @TargetModule(in a : !firrtl.uint<1>)
 
 // CHECK-LABEL: firrtl.module @instance_choice_test
-firrtl.module @instance_choice_test(in %p : !firrtl.uint<1>, in %v : !firrtl.uint<1>) {
-  // CHECK: %inst_in, %inst_out = firrtl.instance_choice inst @TargetModule
-  %inst_in, %inst_out = firrtl.instance_choice inst @TargetModule alternatives @Platform {
+firrtl.module @instance_choice_test(in %a : !firrtl.uint<1>,
+                                    in %b : !firrtl.uint<1>,
+                                    in %p : !firrtl.uint<1>) {
+  // CHECK: %inst_a = firrtl.instance_choice inst @TargetModule
+  %inst_a = firrtl.instance_choice inst @TargetModule alternatives @Platform {
     @FPGA -> @TargetModule
-  } (in in : !firrtl.uint<1>, out out : !firrtl.uint<1>)
-  // CHECK:      %[[MUX:.+]] = firrtl.mux(%p, %inst_out, %v)
-  // CHECK-NEXT: firrtl.connect %inst_in, %[[MUX]]
+  } (in a : !firrtl.uint<1>)
+  // CHECK:      %[[MUX:.+]] = firrtl.mux(%p, %a, %b)
+  // CHECK-NEXT: firrtl.connect %inst_a, %[[MUX]]
   firrtl.when %p : !firrtl.uint<1> {
-    firrtl.connect %inst_in, %inst_out : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %inst_a, %a  : !firrtl.uint<1>, !firrtl.uint<1>
   } else {
-    firrtl.connect %inst_in, %v : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %inst_a, %b : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 

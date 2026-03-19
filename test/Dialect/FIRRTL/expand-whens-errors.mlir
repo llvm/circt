@@ -267,16 +267,13 @@ firrtl.option @Platform {
   firrtl.option_case @FPGA
 }
 
-firrtl.module @TargetModule(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
-  firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
-}
+firrtl.extmodule @TargetModule(in a : !firrtl.uint<1>)
 
-firrtl.module @instance_choice_test(in %clock : !firrtl.clock) {
-  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-  // expected-error @below {{sink "inst.in" not fully initialized in "instance_choice_test"}}
-  %inst_in, %inst_out = firrtl.instance_choice inst @TargetModule alternatives @Platform {
+firrtl.module @instance_choice_test() {
+  // expected-error @below {{sink "inst.a" not fully initialized in "instance_choice_test"}}
+  %inst_a = firrtl.instance_choice inst @TargetModule alternatives @Platform {
     @FPGA -> @TargetModule
-  } (in in : !firrtl.uint<1>, out out : !firrtl.uint<1>)
+  } (in a : !firrtl.uint<1>)
 }
 
 }
