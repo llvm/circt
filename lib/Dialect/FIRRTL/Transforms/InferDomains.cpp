@@ -856,24 +856,13 @@ static LogicalResult processOp(const DomainInfo &info, TermAllocator &allocator,
   if (succeeded(unify(dstTerm, srcTerm)))
     return success();
 
-  VariableIDTable idTable;
   auto diag =
-      op->emitOpError("domain definition conflicts with inferred domain");
-
-  // Get the destination domain name for better error message
-  auto [dstName, _] = getFieldName(FieldRef(dst, 0), false);
-
-  auto &note1 = diag.attachNote();
-  note1 << "destination domain '" << dstName << "' was inferred to be: ";
-  render(info, note1, idTable, dstTerm);
-
-  auto &note2 = diag.attachNote(src.getLoc());
-  note2 << "but is being explicitly defined as: ";
-  render(info, note2, idTable, srcTerm);
-
-  // Add explanatory note
-  auto &note3 = diag.attachNote();
-  note3 << "this would create an illegal domain crossing";
+      op->emitOpError()
+      << "defines a domain value that was inferred to be a different domain '";
+  VariableIDTable idTable;
+  auto dstName = getFieldName(FieldRef(dst, 0), false).first;
+  render(info, *diag.getUnderlyingDiagnostic(), idTable, dstTerm);
+  diag << "'";
 
   return failure();
 }

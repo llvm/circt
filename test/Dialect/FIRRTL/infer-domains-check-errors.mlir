@@ -138,13 +138,10 @@ firrtl.circuit "DomainDefineConflict" {
     // Create a new domain, `C`.  This sets properties from `A`.  That doesn't
     // affect unification.
     %id = firrtl.domain.subfield %A[id] : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
-    // expected-note @below {{but is being explicitly defined as}}
     %C = firrtl.domain.create(%id) : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
 
     // This should fail because B is already unified with A via the earlier connect.
-    // expected-note @below {{destination domain 'B' was inferred to be: A}}
-    // expected-note @below {{this would create an illegal domain crossing}}
-    // expected-error @below {{domain definition conflicts with inferred domain}}
+    // expected-error @below {{defines a domain value that was inferred to be a different domain 'A'}}
     firrtl.domain.define %B, %C : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
   }
 }
