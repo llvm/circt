@@ -1507,6 +1507,17 @@ func.func @IntToStringConversion(%arg0: !moore.i45) {
   return
 }
 
+// CHECK-LABEL: func.func @ConvertRealOperations
+func.func @ConvertRealOperations(%arg0: !moore.f32, %arg1: !moore.f64) {
+  // CHECK: arith.extf %arg0 : f32 to f64
+  moore.convert_real %arg0 : f32 -> f64
+
+  // CHECK: arith.truncf %arg1 : f64 to f32
+  moore.convert_real %arg1 : f64 -> f32
+  
+  return
+}
+
 // CHECK-LABEL: func.func @StringOperations
 // CHECK-SAME: %arg0: i32
 // CHECK-SAME: %arg1: !sim.dstring

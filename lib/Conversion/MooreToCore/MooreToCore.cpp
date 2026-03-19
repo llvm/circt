@@ -1851,6 +1851,21 @@ struct RealToIntOpConversion : public OpConversionPattern<RealToIntOp> {
   }
 };
 
+struct ConvertRealOpConversion : public OpConversionPattern<ConvertRealOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ConvertRealOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    op.getInput().getType().getWidth() < op.getResult().getType().getWidth()
+        ? rewriter.replaceOpWithNewOp<arith::ExtFOp>(
+              op, typeConverter->convertType(op.getType()), adaptor.getInput())
+        : rewriter.replaceOpWithNewOp<arith::TruncFOp>(
+              op, typeConverter->convertType(op.getType()), adaptor.getInput());
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Statement Conversion
 //===----------------------------------------------------------------------===//
@@ -3003,6 +3018,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     UIntToRealOpConversion,
     IntToStringOpConversion,
     RealToIntOpConversion,
+    ConvertRealOpConversion,
 
     // Patterns of miscellaneous operations.
     ConstantOpConv,
