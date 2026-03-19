@@ -516,4 +516,21 @@ def IntegerShlOp : IntegerBinaryArithmeticOp<"integer.shl"> {
   }];
 }
 
+def StringConcatOp : OMOp<"string.concat", [Pure, SameOperandsAndResultType]> {
+  let summary = "Concatenate multiple string values";
+  let description = [{
+    Perform string concatenation of multiple OM string values.
+
+    Example:
+    ```mlir
+    %3 = om.string.concat %0, %1, %2 : !om.string
+    ```
+  }];
+
+  let arguments = (ins Variadic<StringType>:$strings);
+  let results = (outs StringType:$result);
+
+  let assemblyFormat = "$strings attr-dict `:` type($result)";
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPS_TD
