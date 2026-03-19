@@ -856,15 +856,14 @@ static LogicalResult processOp(const DomainInfo &info, TermAllocator &allocator,
   if (succeeded(unify(dstTerm, srcTerm)))
     return success();
 
+  auto diag =
+      op->emitOpError()
+      << "defines a domain value that was inferred to be a different domain '";
   VariableIDTable idTable;
-  auto diag = op->emitOpError("failed to propagate source to destination");
-  auto &note1 = diag.attachNote();
-  note1 << "destination has underlying value: ";
-  render(info, note1, idTable, dstTerm);
+  auto dstName = getFieldName(FieldRef(dst, 0), false).first;
+  render(info, *diag.getUnderlyingDiagnostic(), idTable, dstTerm);
+  diag << "'";
 
-  auto &note2 = diag.attachNote(src.getLoc());
-  note2 << "source has underlying value: ";
-  render(info, note2, idTable, srcTerm);
   return failure();
 }
 
@@ -880,6 +879,14 @@ static LogicalResult processOp(const DomainInfo &info, TermAllocator &allocator,
     return processOp(info, allocator, table, cast);
   if (auto def = dyn_cast<DomainDefineOp>(op))
     return processOp(info, allocator, table, def);
+  if (auto create = dyn_cast<DomainCreateOp>(op)) {
+    processDomainDefinition(allocator, table, create);
+    return success();
+  }
+  if (auto createAnon = dyn_cast<DomainCreateAnonOp>(op)) {
+    processDomainDefinition(allocator, table, createAnon);
+    return success();
+  }
 
   // For all other operations (including connections), propagate domains from
   // operands to results. This is a conservative approach - all operands and

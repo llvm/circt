@@ -117,3 +117,55 @@ firrtl.circuit "DuplicateDomainEquivalence" {
     firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
 }
+
+// Test that defining a domain to an output port _already unified with an input
+// domain_ will error.
+//
+// CHECK-LABEL: firrtl.circuit "DomainDefineConflict"
+firrtl.circuit "DomainDefineConflict" {
+  firrtl.domain @ClockDomain [
+    #firrtl.domain.field<"id", !firrtl.integer>
+  ]
+  firrtl.module @DomainDefineConflict(
+    in %A: !firrtl.domain<@ClockDomain(id: !firrtl.integer)>,
+    out %B: !firrtl.domain<@ClockDomain(id: !firrtl.integer)>,
+    in %in: !firrtl.clock domains [%A],
+    out %out: !firrtl.clock domains [%B]
+  ) {
+    // This connection unifies B with A.
+    firrtl.matchingconnect %out, %in : !firrtl.clock
+
+    // Create a new domain, `C`.  This sets properties from `A`.  That doesn't
+    // affect unification.
+    %id = firrtl.domain.subfield %A[id] : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
+    %C = firrtl.domain.create(%id) : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
+
+    // This should fail because B is already unified with A via the earlier connect.
+    // expected-error @below {{defines a domain value that was inferred to be a different domain 'A'}}
+    firrtl.domain.define %B, %C : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
+  }
+}
+
+// Test that an operation associated with a domain create op is an illegal
+// domain crossing when connected to a different domain.  This is making sure
+// that domain information is not only affiliated with ports.
+//
+// CHECK-LABEL: UnsafeDomainCastMismatch
+firrtl.circuit "UnsafeDomainCastMismatch" {
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"id", !firrtl.integer>]
+
+  firrtl.module @UnsafeDomainCastMismatch(
+    in %A: !firrtl.domain<@ClockDomain(id: !firrtl.integer)>,
+    // expected-note @below {{1st operand has domains}}
+    out %b: !firrtl.uint<1> domains [%A]
+  ) {
+    %id = firrtl.domain.subfield %A["id"] : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
+    %C = firrtl.domain.create(%id) : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
+
+    %a = firrtl.wire : !firrtl.uint<1>
+    // expected-note @below {{2nd operand has domains}}
+    %0 = firrtl.unsafe_domain_cast %a domains[%C] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain(id: !firrtl.integer)>]
+    // expected-error @below {{illegal domain crossing}}
+    firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
+  }
+}
