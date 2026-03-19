@@ -184,6 +184,18 @@ om.class @StringConstant() -> (string: !om.string) {
   om.class.fields %0 : !om.string
 }
 
+// CHECK-LABEL: @StringConcat
+om.class @StringConcat() {
+  %0 = om.constant "Hello, " : !om.string
+  %1 = om.constant "World" : !om.string
+  %2 = om.constant "!" : !om.string
+
+  // CHECK: om.string.concat %0, %1, %2 : !om.string
+  %3 = om.string.concat %0, %1, %2 : !om.string
+
+  om.class.fields
+}
+
 // CHECK-LABEL: @LinkedList
 // CHECK-SAME: -> (prev: !om.class.type<@LinkedList>)
 om.class @LinkedList(%prev: !om.class.type<@LinkedList>) -> (prev: !om.class.type<@LinkedList>) {
