@@ -144,22 +144,21 @@ private:
           return failure();
         }
 
-        // Make sure the op is actually an assertion
-        if (auto assertOp = dyn_cast<verif::AssertOp>(assertOps.front())) {
-          builder.setInsertionPoint(assertOps.front());
-          Location assertLoc = assertOp.getLoc();
-          Value en = assertOp.getEnable();
+        // Should be an assertion now
+        auto assertOp = cast<verif::AssertOp>(assertOps.front());
+        builder.setInsertionPoint(assertOps.front());
+        Location assertLoc = assertOp.getLoc();
+        Value en = assertOp.getEnable();
 
-          // Replace the enable signal with the assumption condition
-          verif::AssertOp::create(
-              builder, assertLoc, assertOp.getProperty(),
-              // Conjoin enable signal with condition if needed
-              en ? comb::AndOp::create(builder, assertLoc, en, cond) : cond,
-              /*label=*/{});
+        // Replace the enable signal with the assumption condition
+        verif::AssertOp::create(
+            builder, assertLoc, assertOp.getProperty(),
+            // Conjoin enable signal with condition if needed
+            en ? comb::AndOp::create(builder, assertLoc, en, cond) : cond,
+            /*label=*/{});
 
-          // Remove the old op
-          assertOp->erase();
-        }
+        // Remove the old op
+        assertOp->erase();
       } else {
         // If no matching assertion was found, make a trivial assertion
         // and set the enable signal with the assumption's condition, i.e.
