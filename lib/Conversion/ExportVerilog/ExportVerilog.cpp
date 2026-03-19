@@ -267,8 +267,9 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
 
 // NOLINTBEGIN(misc-no-recursion)
 /// Push this type's dimension into a vector.
-static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
-                        Location loc) {
+static void getTypeDims(
+    SmallVectorImpl<Attribute> &dims, Type type, Location loc,
+    llvm::function_ref<mlir::InFlightDiagnostic(Location)> errorHandler) {
   if (auto integer = hw::type_dyn_cast<IntegerType>(type)) {
     if (integer.getWidth() != 1)
       dims.push_back(getInt32Attr(type.getContext(), integer.getWidth()));
@@ -276,7 +277,7 @@ static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
   }
   if (auto array = hw::type_dyn_cast<ArrayType>(type)) {
     dims.push_back(getInt32Attr(type.getContext(), array.getNumElements()));
-    getTypeDims(dims, array.getElementType(), loc);
+    getTypeDims(dims, array.getElementType(), loc, errorHandler);
 
     return;
   }
@@ -286,26 +287,27 @@ static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
   }
 
   if (auto inout = hw::type_dyn_cast<InOutType>(type))
-    return getTypeDims(dims, inout.getElementType(), loc);
+    return getTypeDims(dims, inout.getElementType(), loc, errorHandler);
   if (auto uarray = hw::type_dyn_cast<hw::UnpackedArrayType>(type))
-    return getTypeDims(dims, uarray.getElementType(), loc);
+    return getTypeDims(dims, uarray.getElementType(), loc, errorHandler);
   if (auto uarray = hw::type_dyn_cast<sv::UnpackedOpenArrayType>(type))
-    return getTypeDims(dims, uarray.getElementType(), loc);
-
+    return getTypeDims(dims, uarray.getElementType(), loc, errorHandler);
   if (hw::type_isa<InterfaceType, StructType, EnumType, UnionType>(type))
     return;
 
-  mlir::emitError(loc, "value has an unsupported verilog type ") << type;
+  errorHandler(loc) << "value has an unsupported verilog type " << type;
 }
 // NOLINTEND(misc-no-recursion)
 
 /// True iff 'a' and 'b' have the same wire dims.
-static bool haveMatchingDims(Type a, Type b, Location loc) {
+static bool haveMatchingDims(
+    Type a, Type b, Location loc,
+    llvm::function_ref<mlir::InFlightDiagnostic(Location)> errorHandler) {
   SmallVector<Attribute, 4> aDims;
-  getTypeDims(aDims, a, loc);
+  getTypeDims(aDims, a, loc, errorHandler);
 
   SmallVector<Attribute, 4> bDims;
-  getTypeDims(bDims, b, loc);
+  getTypeDims(bDims, b, loc, errorHandler);
 
   return aDims == bDims;
 }
@@ -735,7 +737,8 @@ static bool isExpressionUnableToInline(Operation *op,
                                        const LoweringOptions &options) {
   if (auto cast = dyn_cast<BitcastOp>(op))
     if (!haveMatchingDims(cast.getInput().getType(), cast.getResult().getType(),
-                          op->getLoc())) {
+                          op->getLoc(),
+                          [&](Location loc) { return emitError(loc); })) {
       // Even if dimentions don't match, we can inline when its user doesn't
       // rely on the type.
       if (op->hasOneUse() &&
@@ -1111,6 +1114,11 @@ public:
   InFlightDiagnostic emitOpError(Operation *op, const Twine &message) {
     state.encounteredError = true;
     return op->emitOpError(message);
+  }
+
+  InFlightDiagnostic emitError(Location loc, const Twine &message = "") {
+    state.encounteredError = true;
+    return mlir::emitError(loc, message);
   }
 
   void emitLocationImpl(llvm::StringRef location) {
@@ -1636,7 +1644,7 @@ static void emitDim(Attribute width, raw_ostream &os, Location loc,
   // attribute so it gets printed in canonical form.
   auto typedAttr = dyn_cast<TypedAttr>(width);
   if (!typedAttr) {
-    mlir::emitError(loc, "untyped dimension attribute ") << width;
+    emitter.emitError(loc, "untyped dimension attribute ") << width;
     return;
   }
   auto negOne =
@@ -1646,8 +1654,8 @@ static void emitDim(Attribute width, raw_ostream &os, Location loc,
   os << '[';
   if (!downTo)
     os << "0:";
-  emitter.printParamValue(width, os, [loc]() {
-    return mlir::emitError(loc, "invalid parameter in type");
+  emitter.printParamValue(width, os, [loc, &emitter]() {
+    return emitter.emitError(loc, "invalid parameter in type");
   });
   if (downTo)
     os << ":0";
@@ -1665,7 +1673,8 @@ static void emitDims(ArrayRef<Attribute> dims, raw_ostream &os, Location loc,
 /// Emit a type's packed dimensions.
 void ModuleEmitter::emitTypeDims(Type type, Location loc, raw_ostream &os) {
   SmallVector<Attribute, 4> dims;
-  getTypeDims(dims, type, loc);
+  getTypeDims(dims, type, loc,
+              [&](Location loc) { return this->emitError(loc); });
   emitDims(dims, os, loc, *this);
 }
 
@@ -1702,7 +1711,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
                                 Type optionalAliasType = {},
                                 bool emitAsTwoStateType = false) {
   return TypeSwitch<Type, bool>(type)
-      .Case<IntegerType>([&](IntegerType integerType) {
+      .Case<IntegerType>([&](IntegerType integerType) -> bool {
         if (emitAsTwoStateType && dims.empty()) {
           auto typeName = getTwoStateIntegerAtomType(integerType.getWidth());
           if (!typeName.empty()) {
@@ -1840,18 +1849,18 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
       .Case<InterfaceType>([](InterfaceType ifaceType) { return false; })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
         os << "<<unexpected unpacked array>>";
-        mlir::emitError(loc, "Unexpected unpacked array in packed type ")
+        emitter.emitError(loc, "Unexpected unpacked array in packed type ")
             << arrayType;
         return true;
       })
       .Case<TypeAliasType>([&](TypeAliasType typeRef) {
         auto typedecl = typeRef.getTypeDecl(emitter.state.symbolCache);
         if (!typedecl) {
-          mlir::emitError(loc, "unresolvable type reference");
+          emitter.emitError(loc, "unresolvable type reference");
           return false;
         }
         if (typedecl.getType() != typeRef.getInnerType()) {
-          mlir::emitError(loc, "declared type did not match aliased type");
+          emitter.emitError(loc, "declared type did not match aliased type");
           return false;
         }
 
@@ -1861,7 +1870,8 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
       })
       .Default([&](Type type) {
         os << "<<invalid type '" << type << "'>>";
-        mlir::emitError(loc, "value has an unsupported verilog type ") << type;
+        emitter.emitError(loc, "value has an unsupported verilog type ")
+            << type;
         return true;
       });
 }
@@ -2735,7 +2745,9 @@ SubExprInfo ExprEmitter::visitTypeOp(BitcastOp op) {
   // their dimensions don't match. SystemVerilog uses the wire declaration to
   // know what type this value is being casted to.
   Type toType = op.getType();
-  if (!haveMatchingDims(toType, op.getInput().getType(), op.getLoc())) {
+  if (!haveMatchingDims(
+          toType, op.getInput().getType(), op.getLoc(),
+          [&](Location loc) { return emitter.emitError(loc, ""); })) {
     ps << "/*cast(bit";
     ps.invokeWithStringOS(
         [&](auto &os) { emitter.emitTypeDims(toType, op.getLoc(), os); });
@@ -7093,6 +7105,8 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit,
                               stringOrOp.verilogLocs);
     emitOperation(state, op);
     stringOrOp.setString(buffer);
+    if (state.encounteredError)
+      encounteredError = true;
   });
 
   // Finally emit each entry now that we know it is a string.
@@ -7117,6 +7131,10 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit,
                               entry.verilogLocs);
     emitOperation(state, op);
     state.addVerilogLocToOps(0, fileName);
+    if (state.encounteredError) {
+      encounteredError = true;
+      return;
+    }
   }
 }
 
