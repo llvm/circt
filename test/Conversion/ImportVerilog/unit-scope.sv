@@ -20,7 +20,14 @@ endfunction
 module use_unit;
   int b;
   initial begin
+    // CHECK: [[B:%.*]] = moore.variable : <i32>
+    // CHECK: [[GA:%.*]] = moore.get_global_variable @__unit__a
+    // CHECK: [[AV:%.*]] = moore.read [[GA]] : <i32>
+    // CHECK: moore.blocking_assign [[B]], [[AV]]
     b = a;
+    // CHECK: [[BV:%.*]] = moore.read [[B]] : <i32>
+    // CHECK: [[SUM:%.*]] = func.call @__unit__add1([[BV]])
+    // CHECK: moore.blocking_assign [[B]], [[SUM]]
     b = add1(b);
   end
 endmodule

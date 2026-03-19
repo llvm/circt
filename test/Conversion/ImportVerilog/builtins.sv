@@ -12,7 +12,7 @@ function void dummyD(string x); endfunction
 function void dummyE(byte x); endfunction
 
 // IEEE 1800-2017 § 20.2 "Simulation control system tasks"
-// CHECK-LABEL: func.func private @SimulationControlBuiltins(
+// CHECK-LABEL: func.func private @__unit__SimulationControlBuiltins(
 function void SimulationControlBuiltins(bit x);
   // CHECK: moore.builtin.finish_message false
   // CHECK: moore.builtin.stop
@@ -44,7 +44,7 @@ endfunction
 
 // IEEE 1800-2017 § 20.10 "Severity tasks"
 // IEEE 1800-2017 § 21.2 "Display system tasks"
-// CHECK-LABEL: func.func private @DisplayAndSeverityBuiltins(
+// CHECK-LABEL: func.func private @__unit__DisplayAndSeverityBuiltins(
 // CHECK-SAME: [[X:%.+]]: !moore.i32
 // CHECK-SAME: [[R:%.+]]: !moore.f64
 function void DisplayAndSeverityBuiltins(int x, real r);
@@ -249,7 +249,7 @@ function void DisplayAndSeverityBuiltins(int x, real r);
 endfunction
 
 // IEEE 1800-2017 § 20.8 "Math functions"
-// CHECK-LABEL: func.func private @MathBuiltins(
+// CHECK-LABEL: func.func private @__unit__MathBuiltins(
 // CHECK-SAME: [[X:%.+]]: !moore.i32
 // CHECK-SAME: [[Y:%.+]]: !moore.l42
 // CHECK-SAME: [[R:%.+]]: !moore.f64
@@ -299,30 +299,30 @@ function void MathBuiltins(int x, logic [41:0] y, real r);
 endfunction
 
 // IEEE 1800-2023 $ 18.3 "Random number system functions and methods"
-// CHECK-LABEL: func.func private @RandomBuiltins(
+// CHECK-LABEL: func.func private @__unit__RandomBuiltins(
 // CHECK-SAME: [[X:%.+]]: !moore.i32
 function RandomBuiltins(int x);
   // CHECK: [[URAND0:%.+]] = moore.builtin.urandom
-  // CHECK-NEXT: call @dummyA([[URAND0]]) : (!moore.i32) -> ()
+  // CHECK-NEXT: call @__unit__dummyA([[URAND0]]) : (!moore.i32) -> ()
   dummyA($urandom());
   // CHECK: [[URAND1:%.+]] = moore.builtin.urandom [[X]]
-  // CHECK-NEXT: call @dummyA([[URAND1]]) : (!moore.i32) -> ()
+  // CHECK-NEXT: call @__unit__dummyA([[URAND1]]) : (!moore.i32) -> ()
   dummyA($urandom(x));
   // CHECK: [[RAND0:%.+]] = moore.builtin.random
-  // CHECK-NEXT: call @dummyA([[RAND0]]) : (!moore.i32) -> ()
+  // CHECK-NEXT: call @__unit__dummyA([[RAND0]]) : (!moore.i32) -> ()
   dummyA($random());
   // CHECK: [[RAND1:%.+]] = moore.builtin.random [[X]]
-  // CHECK-NEXT: call @dummyA([[RAND1]]) : (!moore.i32) -> ()
+  // CHECK-NEXT: call @__unit__dummyA([[RAND1]]) : (!moore.i32) -> ()
   dummyA($random(x));
   // CHECK: [[URANDRANGE1:%.+]] = moore.builtin.urandom_range [[X]]
-  // CHECK-NEXT: call @dummyA([[URANDRANGE1]]) : (!moore.i32) -> ()
+  // CHECK-NEXT: call @__unit__dummyA([[URANDRANGE1]]) : (!moore.i32) -> ()
   dummyA($urandom_range(x));
   // CHECK: [[URANDRANGE2:%.+]] = moore.builtin.urandom_range [[X]] [[X]]
-  // CHECK-NEXT: call @dummyA([[URANDRANGE2]]) : (!moore.i32) -> ()
+  // CHECK-NEXT: call @__unit__dummyA([[URANDRANGE2]]) : (!moore.i32) -> ()
   dummyA($urandom_range(x, x));
 endfunction
 
-// CHECK-LABEL: func.func private @TimeBuiltins(
+// CHECK-LABEL: func.func private @__unit__TimeBuiltins(
 function TimeBuiltins();
   // CHECK: [[TIME:%.+]] = moore.builtin.time
   // CHECK-NEXT: [[TIMETOLOGIC:%.+]] = moore.time_to_logic [[TIME]]
@@ -334,7 +334,7 @@ function TimeBuiltins();
   dummyA($realtime());
 endfunction
 
-// CHECK-LABEL: func.func private @ConversionBuiltins(
+// CHECK-LABEL: func.func private @__unit__ConversionBuiltins(
 // CHECK-SAME: [[SINT:%.+]]: !moore.i32
 // CHECK-SAME: [[LINT:%.+]]: !moore.i64
 // CHECK-SAME: [[SR:%.+]]: !moore.f32
@@ -351,7 +351,7 @@ function void ConversionBuiltins(int shortint_in, longint longint_in,
   dummyA($shortrealtobits(shortreal_in));
 endfunction
 
-// CHECK-LABEL: func.func private @SeverityBuiltinEdgeCase(
+// CHECK-LABEL: func.func private @__unit__SeverityBuiltinEdgeCase(
 // CHECK-SAME: [[STR:%.+]]: !moore.string
 function void SeverityBuiltinEdgeCase(string testStr);
   // CHECK: [[CONST:%.+]] = moore.constant 1234 : i32
@@ -523,7 +523,7 @@ module SampleValueBuiltins #() (
 
 endmodule
 
-// CHECK-LABEL: func.func private @StringBuiltins(
+// CHECK-LABEL: func.func private @__unit__StringBuiltins(
 // CHECK-SAME: [[STR:%.+]]: !moore.string
 // CHECK-SAME: [[INT:%.+]]: !moore.i32
 function void StringBuiltins(string string_in, int int_in);

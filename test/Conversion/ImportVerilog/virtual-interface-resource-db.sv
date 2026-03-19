@@ -10,16 +10,29 @@ interface output_if
   logic [7 : 0] data;
 endinterface
 
+// CHECK: moore.global_variable @"resource_db::db"
 class resource_db
     #(type T);
   static T db[string];
 
+  // CHECK-LABEL: func.func private @set(
+  // CHECK: [[DB_REF:%.*]] = moore.get_global_variable @"resource_db::db"
+  // CHECK: [[ENTRY_REF:%.*]] = moore.assoc_array_extract_ref [[DB_REF]][%arg0]
+  // CHECK: moore.blocking_assign [[ENTRY_REF]], %arg1
   static function void set
       (string key,
        T value);
     db[key] = value;
   endfunction
 
+  // CHECK-LABEL: func.func private @get(
+  // CHECK: [[DB_REF2:%.*]] = moore.get_global_variable @"resource_db::db"
+  // CHECK: [[EXISTS:%.*]] = moore.assoc_array.exists %arg0 in [[DB_REF2]]
+  // CHECK: cf.cond_br
+  // CHECK: [[DB_REF3:%.*]] = moore.get_global_variable @"resource_db::db"
+  // CHECK: [[DB_VAL:%.*]] = moore.read [[DB_REF3]]
+  // CHECK: [[VALUE:%.*]] = moore.assoc_array_extract [[DB_VAL]][%arg0]
+  // CHECK: moore.blocking_assign %arg1, [[VALUE]]
   static function bit get
       (string key,
        output T value);
@@ -34,8 +47,6 @@ endclass
 class consumer;
   virtual output_if vif;
 
-  // CHECK: moore.assoc_array.exists
-  // CHECK: moore.assoc_array_extract
   function bit connect
       ();
     return resource_db #(virtual output_if)::get("out", vif);
