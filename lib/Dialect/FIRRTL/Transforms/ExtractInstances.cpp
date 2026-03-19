@@ -623,8 +623,8 @@ void ExtractInstancesPass::extractInstances() {
       auto oldParentInst = cast<InstanceOp>(*instRecord->getInstance());
       auto newParent = oldParentInst->getParentOfType<FModuleLike>();
       LLVM_DEBUG(llvm::dbgs() << "- Updating " << oldParentInst << "\n");
-      auto newParentInst =
-          oldParentInst.cloneWithInsertedPortsAndReplaceUses(newPorts);
+      auto newParentInst = cast<InstanceOp>(
+          oldParentInst.cloneWithInsertedPortsAndReplaceUses(newPorts));
       if (newParentInst.getInnerSymAttr())
         innerRefToInstances[getInnerRefTo(newParentInst)] = newParentInst;
 

@@ -296,6 +296,118 @@ def FInstanceLike : OpInterface<"FInstanceLike", [
   let description = [{
       Provide common instance information for FIRRTL instance-like operations.
   }];
+
+  let methods = [
+    //===------------------------------------------------------------------===//
+    // Port Information
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Get the number of ports",
+      "size_t", "getNumPorts", (ins), [{}],
+      /*defaultImplementation=*/[{
+        return $_op.getNumResults();
+      }]>,
+
+    InterfaceMethod<"Get the port direction for the specified result number",
+      "Direction", "getPortDirection", (ins "size_t":$resultNo), [{}],
+      /*defaultImplementation=*/[{
+        return direction::get($_op.getPortDirections()[resultNo]);
+      }]>,
+
+    InterfaceMethod<"Get the port name attribute for the specified result number",
+      "StringAttr", "getPortNameAttr", (ins "size_t":$resultNo), [{}],
+      /*defaultImplementation=*/[{
+        return llvm::cast<StringAttr>($_op.getPortNames()[resultNo]);
+      }]>,
+
+    InterfaceMethod<"Get the port name for the specified result number",
+      "StringRef", "getPortName", (ins "size_t":$resultNo), [{}],
+      /*defaultImplementation=*/[{
+        return $_op.getPortNameAttr(resultNo).getValue();
+      }]>,
+
+    InterfaceMethod<"Get the port location for the specified result number",
+      "Location", "getPortLocation", (ins "size_t":$resultNo), [{}],
+      /*defaultImplementation=*/[{
+        return $_op.getLoc();
+      }]>,
+
+    //===------------------------------------------------------------------===//
+    // Port Attributes
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Get the port directions attribute",
+      "mlir::DenseBoolArrayAttr", "getPortDirectionsAttr">,
+
+    InterfaceMethod<"Get the port directions",
+      "ArrayRef<bool>", "getPortDirections">,
+
+    InterfaceMethod<"Get the port names attribute",
+      "ArrayAttr", "getPortNamesAttr">,
+
+    InterfaceMethod<"Get the port names",
+      "ArrayRef<Attribute>", "getPortNames">,
+
+    //===------------------------------------------------------------------===//
+    // Inner Symbol
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Get inner symbol attribute",
+      "::circt::hw::InnerSymAttr", "getInnerSymAttr", (ins)>,
+
+    //===------------------------------------------------------------------===//
+    // Port Manipulation
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Clone this instance with inserted ports",
+      "FInstanceLike", "cloneWithInsertedPorts",
+      (ins "ArrayRef<std::pair<unsigned, PortInfo>>":$insertions)>,
+
+    InterfaceMethod<"Clone this instance with inserted ports, then replace uses",
+      "FInstanceLike", "cloneWithInsertedPortsAndReplaceUses",
+      (ins "ArrayRef<std::pair<unsigned, PortInfo>>":$insertions)>,
+
+    InterfaceMethod<"Clone this instance with erased ports",
+      "FInstanceLike", "cloneWithErasedPorts",
+      (ins "const llvm::BitVector &":$erasures)>,
+
+    InterfaceMethod<"Clone this instance with erased ports, then replace uses",
+      "FInstanceLike", "cloneWithErasedPortsAndReplaceUses",
+      (ins "const llvm::BitVector &":$erasures)>,
+
+    //===------------------------------------------------------------------===//
+    // Domain Information
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Get domain information attribute",
+      "ArrayAttr", "getDomainInfoAttr", (ins), [{}],
+      /*defaultImplementation=*/[{
+        return $_op.getDomainInfo();
+      }]>,
+
+    InterfaceMethod<"Set domain information attribute",
+      "void", "setDomainInfoAttr", (ins "ArrayAttr":$domainInfo), [{}],
+      /*defaultImplementation=*/[{
+        $_op.setDomainInfo(domainInfo);
+      }]>,
+
+    //===------------------------------------------------------------------===//
+    // Layer Information
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Get layers attribute",
+      "ArrayAttr", "getLayersAttr", (ins), [{}],
+      /*defaultImplementation=*/[{
+        return $_op.getLayers();
+      }]>,
+
+    InterfaceMethod<"Set layers attribute",
+      "void", "setLayersAttr", (ins "ArrayAttr":$layers), [{}],
+      /*defaultImplementation=*/[{
+        $_op.setLayers(layers);
+      }]>
+  ];
+
 }
 
 def ClassLike : OpInterface<"ClassLike", [FModuleLike]> {
