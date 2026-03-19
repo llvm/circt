@@ -15,7 +15,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def CombineAssertLikePass : Pass<"combine-assert-like", "hw::HWModuleOp"> {
+def CombineAssertLikePass : Pass<"combine-assert-like"> {
   let summary = "Combines all assertions and assumptions into single operations";
   let description = [{
     Combines all assertions and assumptions by conjoining their conditions into a
