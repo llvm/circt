@@ -56,6 +56,12 @@ namespace {
 /// Most of the logic here will be to handle splitting things into blocks
 struct CombineAssertLikePass
     : verif::impl::CombineAssertLikePassBase<CombineAssertLikePass> {
+
+  /// Only allow scheduling on verif::FormalOp and hw::HWModuleOp
+  bool canScheduleOn(RegisteredOperationName opInfo) const override {
+    return opInfo.getStringRef() == hw::HWModuleOp::getOperationName() ||
+           opInfo.getStringRef() == verif::FormalOp::getOperationName();
+  }
   void runOnOperation() override;
 
 private:
@@ -166,13 +172,13 @@ private:
 } // namespace
 
 void CombineAssertLikePass::runOnOperation() {
-  hw::HWModuleOp hwModule = getOperation();
-  OpBuilder builder(hwModule);
+  Operation *module = getOperation();
+  OpBuilder builder(module);
 
   // Walk over all assert-like ops and accumulate their conditions
   // then create a new comb.and op or two for assertions and
   // assumptions to conjoin their respective accumulated conditions.
-  hwModule.walk([&](Operation *op) {
+  module->walk([&](Operation *op) {
     // Only consider assertions and assumptions, not cover ops
     if (auto aop = dyn_cast<verif::AssertOp>(op))
       if (failed(accumulateCondition(aop, assertConditions, assertsToErase,
