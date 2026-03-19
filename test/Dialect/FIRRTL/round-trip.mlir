@@ -142,6 +142,16 @@ firrtl.module @PropertyArithmetic() {
   %5 = firrtl.integer.shl %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
 }
 
+// CHECK-LABEL: firrtl.module @PropertyStringOps
+firrtl.module @PropertyStringOps() {
+  %0 = firrtl.string "Hello, "
+  %1 = firrtl.string "World"
+  %2 = firrtl.string "!"
+
+  // CHECK: firrtl.string.concat %0, %1, %2 : !firrtl.string
+  %3 = firrtl.string.concat %0, %1, %2 : !firrtl.string
+}
+
 // CHECK-LABEL: firrtl.module @PropertyListOps
 firrtl.module @PropertyListOps() {
   %0 = firrtl.integer 0
