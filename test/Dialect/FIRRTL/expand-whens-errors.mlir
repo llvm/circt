@@ -258,3 +258,22 @@ firrtl.circuit "DomainTypeUndriven" {
   // expected-error @below {{port "A" not fully initialized in "DomainTypeUndriven"}}
   firrtl.module @DomainTypeUndriven(out %A: !firrtl.domain<@ClockDomain()>) {}
 }
+
+
+// -----
+
+firrtl.circuit "instance_choice_test" {
+firrtl.option @Platform {
+  firrtl.option_case @FPGA
+}
+
+firrtl.extmodule @TargetModule(in a : !firrtl.uint<1>)
+
+firrtl.module @instance_choice_test() {
+  // expected-error @below {{sink "inst.a" not fully initialized in "instance_choice_test"}}
+  %inst_a = firrtl.instance_choice inst @TargetModule alternatives @Platform {
+    @FPGA -> @TargetModule
+  } (in a : !firrtl.uint<1>)
+}
+
+}
