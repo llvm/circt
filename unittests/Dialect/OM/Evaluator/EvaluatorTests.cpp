@@ -1661,4 +1661,45 @@ om.class @Foo(
   ASSERT_TRUE(object->getField("b").value()->isUnknown());
 }
 
+TEST(EvaluatorTests, StringConcat) {
+  const char *mod = R"MLIR(
+module {
+  om.class @Test() -> (result: !om.string) {
+    %0 = om.constant "Hello, " : !om.string
+    %1 = om.constant "World!" : !om.string
+    %2 = om.string.concat %0, %1 : !om.string
+    om.class.fields %2 : !om.string
+  }
+}
+)MLIR";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
+    llvm::errs() << "Diagnostic: " << diag << "\n";
+  });
+
+  auto result = evaluator.instantiate(StringAttr::get(&context, "Test"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
+                        ->getField("result")
+                        .value();
+
+  ASSERT_EQ("Hello, World!",
+            llvm::cast<evaluator::AttributeValue>(fieldValue.get())
+                ->getAs<StringAttr>()
+                .getValue());
+}
+
 } // namespace
