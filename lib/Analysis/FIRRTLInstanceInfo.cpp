@@ -120,7 +120,7 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
 
   // Visit modules in reverse post-order (visit parents before children) to
   // merge parent attributes and per-instance attributes into children.
-  iGraph.walkInversePostOrder([&](auto &modIt) {
+  iGraph.walkInversePostOrder([&](igraph::InstanceGraphNode &modIt) {
     auto moduleOp = modIt.getModule();
     ModuleAttributes &attributes = moduleAttributes[moduleOp];
 
@@ -151,12 +151,11 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
 
       // Update underLayer.
       bool underLayer = false;
-      if (auto instanceOp = useIt->template getInstance<InstanceOp>())
+      if (auto instanceOp = useIt->getInstance<InstanceOp>())
         underLayer = InstanceInfo::isInstanceUnderLayer(instanceOp);
 
       // Update inInstanceChoice.
-      if (auto instanceChoiceOp =
-              useIt->template getInstance<InstanceChoiceOp>()) {
+      if (auto instanceChoiceOp = useIt->getInstance<InstanceChoiceOp>()) {
         attributes.inInstanceChoice.mergeIn(true);
         underLayer = isInstanceUnderLayer(instanceChoiceOp);
       } else {
