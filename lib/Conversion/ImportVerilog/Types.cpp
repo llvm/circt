@@ -247,15 +247,11 @@ FailureOr<moore::UnpackedStructType> Context::convertVirtualInterfaceType(
 
   SmallVector<moore::StructLikeMember> members;
   SmallVector<StringAttr, 8> fieldNames;
-  DenseSet<StringAttr> seenNames;
+  DenseMap<StringAttr, Type> fieldTypes;
 
   auto addField = [&](StringRef name, const slang::ast::Type &fieldAstType,
                       Location fieldLoc) -> LogicalResult {
-    if (name.empty())
-      return success();
     auto nameAttr = builder.getStringAttr(name);
-    if (!seenNames.insert(nameAttr).second)
-      return success();
 
     Type loweredType = convertType(fieldAstType, fieldLoc);
     if (!loweredType)
@@ -269,6 +265,18 @@ FailureOr<moore::UnpackedStructType> Context::convertVirtualInterfaceType(
     }
 
     auto refTy = moore::RefType::get(unpacked);
+
+    if (auto it = fieldTypes.find(nameAttr); it != fieldTypes.end()) {
+      if (it->second != refTy) {
+        mlir::emitError(fieldLoc) << "virtual interface member `" << name
+                                  << "` has conflicting types (" << it->second
+                                  << " vs " << refTy << ")";
+        return failure();
+      }
+      return success();
+    }
+
+    fieldTypes.try_emplace(nameAttr, refTy);
     members.push_back({nameAttr, refTy});
     fieldNames.push_back(nameAttr);
     return success();
@@ -277,18 +285,31 @@ FailureOr<moore::UnpackedStructType> Context::convertVirtualInterfaceType(
   if (modport) {
     for (auto &member : modport->members()) {
       const auto *mpp = member.as_if<slang::ast::ModportPortSymbol>();
-      if (!mpp)
-        continue;
+      if (!mpp) {
+        auto d = mlir::emitError(convertLocation(member.location))
+                 << "unsupported modport member: "
+                 << slang::ast::toString(member.kind);
+        if (!member.name.empty())
+          d << " `" << member.name << "`";
+        return failure();
+      }
       if (failed(addField(mpp->name, mpp->getType(),
                           convertLocation(mpp->location))))
         return failure();
     }
   } else {
     for (auto *symbol : ifaceBody.getPortList()) {
-      const auto *port =
-          symbol ? symbol->as_if<slang::ast::PortSymbol>() : nullptr;
-      if (!port)
+      if (!symbol)
         continue;
+      const auto *port = symbol->as_if<slang::ast::PortSymbol>();
+      if (!port) {
+        auto d = mlir::emitError(convertLocation(symbol->location))
+                 << "unsupported interface port symbol: "
+                 << slang::ast::toString(symbol->kind);
+        if (!symbol->name.empty())
+          d << " `" << symbol->name << "`";
+        return failure();
+      }
       if (failed(addField(port->name, port->getType(),
                           convertLocation(port->location))))
         return failure();
@@ -307,12 +328,25 @@ FailureOr<moore::UnpackedStructType> Context::convertVirtualInterfaceType(
           return failure();
         continue;
       }
-    }
-  }
+      // Skip non-data interface members that do not contribute to the virtual
+      // interface handle representation.
+      if (member.as_if<slang::ast::ModportSymbol>() ||
+          member.as_if<slang::ast::ParameterSymbol>() ||
+          member.as_if<slang::ast::TypeParameterSymbol>())
+        continue;
 
-  if (members.empty()) {
-    mlir::emitError(loc) << "virtual interface has no lowered members";
-    return failure();
+      // Bail out loudly on unhandled value symbols to avoid silently dropping
+      // interface members that the user may expect to access through a virtual
+      // interface.
+      if (const auto *value = member.as_if<slang::ast::ValueSymbol>()) {
+        auto d = mlir::emitError(convertLocation(value->location))
+                 << "unsupported interface member: "
+                 << slang::ast::toString(value->kind);
+        if (!value->name.empty())
+          d << " `" << value->name << "`";
+        return failure();
+      }
+    }
   }
 
   cache.type = moore::UnpackedStructType::get(getContext(), members);
@@ -365,15 +399,19 @@ FailureOr<Value> Context::materializeVirtualInterfaceValue(
     DenseMap<StringAttr, const slang::ast::ModportPortSymbol *> portsByName;
     for (auto &sym : modport->members()) {
       const auto *port = sym.as_if<slang::ast::ModportPortSymbol>();
-      if (!port)
-        continue;
+      if (!port) {
+        auto d = mlir::emitError(convertLocation(sym.location))
+                 << "unsupported modport member: "
+                 << slang::ast::toString(sym.kind);
+        if (!sym.name.empty())
+          d << " `" << sym.name << "`";
+        return failure();
+      }
       auto nameAttr = builder.getStringAttr(port->name);
       portsByName.try_emplace(nameAttr, port);
     }
 
     for (auto nameAttr : cache.fieldNames) {
-      if (!nameAttr)
-        continue;
       const auto *port = portsByName.lookup(nameAttr);
       if (!port) {
         mlir::emitError(loc)
@@ -458,8 +496,14 @@ LogicalResult Context::registerVirtualInterfaceMembers(
   if (const auto *modport = type.modport) {
     for (auto &sym : modport->members()) {
       const auto *port = sym.as_if<slang::ast::ModportPortSymbol>();
-      if (!port)
-        continue;
+      if (!port) {
+        auto d = mlir::emitError(convertLocation(sym.location))
+                 << "unsupported modport member: "
+                 << slang::ast::toString(sym.kind);
+        if (!sym.name.empty())
+          d << " `" << sym.name << "`";
+        return failure();
+      }
       registerMember(*port, port->name);
       if (port->internalSymbol)
         if (const auto *internal =
@@ -474,9 +518,18 @@ LogicalResult Context::registerVirtualInterfaceMembers(
   // Register interface ports by mapping their internal symbols (where
   // applicable) to the corresponding virtual interface field.
   for (const auto *symbol : ifaceBody.getPortList()) {
-    const auto *port =
-        symbol ? symbol->as_if<slang::ast::PortSymbol>() : nullptr;
-    if (!port || !port->internalSymbol)
+    if (!symbol)
+      continue;
+    const auto *port = symbol->as_if<slang::ast::PortSymbol>();
+    if (!port) {
+      auto d = mlir::emitError(convertLocation(symbol->location))
+               << "unsupported interface port symbol: "
+               << slang::ast::toString(symbol->kind);
+      if (!symbol->name.empty())
+        d << " `" << symbol->name << "`";
+      return failure();
+    }
+    if (!port->internalSymbol)
       continue;
     if (const auto *internal =
             port->internalSymbol->as_if<slang::ast::ValueSymbol>())

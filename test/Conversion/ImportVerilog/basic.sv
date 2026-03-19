@@ -197,12 +197,12 @@ module Basic;
   MyStruct s3 = ~s2;
 endmodule
 
-// CHECK-LABEL: func.func private @dummyA(
-// CHECK-LABEL: func.func private @dummyB(
-// CHECK-LABEL: func.func private @dummyC(
-// CHECK-LABEL: func.func private @dummyD(
-// CHECK-LABEL: func.func private @dummyE(
-// CHECK-LABEL: func.func private @dummyF(
+// CHECK-LABEL: func.func private @__unit__dummyA(
+// CHECK-LABEL: func.func private @__unit__dummyB(
+// CHECK-LABEL: func.func private @__unit__dummyC(
+// CHECK-LABEL: func.func private @__unit__dummyD(
+// CHECK-LABEL: func.func private @__unit__dummyE(
+// CHECK-LABEL: func.func private @__unit__dummyF(
 function void dummyA(); endfunction
 function void dummyB(); endfunction
 function void dummyC(); endfunction
@@ -238,17 +238,17 @@ module Parameters;
 
   initial begin
     // CHECK: [[TMP:%.+]] = moore.constant 1 : l32
-    // CHECK: func.call @dummyF([[TMP]])
+    // CHECK: func.call @__unit__dummyF([[TMP]])
     // CHECK: [[TMP:%.+]] = moore.constant 1 : l32
-    // CHECK: func.call @dummyF([[TMP]])
+    // CHECK: func.call @__unit__dummyF([[TMP]])
     // CHECK: [[TMP:%.+]] = moore.constant 2 : l32
-    // CHECK: func.call @dummyF([[TMP]])
+    // CHECK: func.call @__unit__dummyF([[TMP]])
     // CHECK: [[TMP:%.+]] = moore.constant 2 : l32
-    // CHECK: func.call @dummyF([[TMP]])
+    // CHECK: func.call @__unit__dummyF([[TMP]])
     // CHECK: [[TMP:%.+]] = moore.constant 3 : l32
-    // CHECK: func.call @dummyF([[TMP]])
+    // CHECK: func.call @__unit__dummyF([[TMP]])
     // CHECK: [[TMP:%.+]] = moore.constant 3 : l32
-    // CHECK: func.call @dummyF([[TMP]])
+    // CHECK: func.call @__unit__dummyF([[TMP]])
     dummyF(p1);
     dummyF(p2);
     dummyF(lp1);
@@ -258,14 +258,14 @@ module Parameters;
   end
 endmodule
 
-// CHECK-LABEL: func.func private @ConditionalStatements(
+// CHECK-LABEL: func.func private @__unit__ConditionalStatements(
 // CHECK-SAME: %arg0: !moore.i1
 // CHECK-SAME: %arg1: !moore.i1
 function void ConditionalStatements(bit x, bit y);
   // CHECK: [[COND:%.+]] = moore.to_builtin_int %arg0 : i1
   // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   // CHECK: cf.br ^[[BB2]]
   // CHECK: ^[[BB2]]:
   if (x) dummyA();
@@ -274,7 +274,7 @@ function void ConditionalStatements(bit x, bit y);
   // CHECK: [[COND2:%.+]] = moore.to_builtin_int [[COND1]] : i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   // CHECK: cf.br ^[[BB2]]
   // CHECK: ^[[BB2]]:
   if (x &&& y) dummyA();
@@ -282,10 +282,10 @@ function void ConditionalStatements(bit x, bit y);
   // CHECK: [[COND:%.+]] = moore.to_builtin_int %arg0 : i1
   // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   // CHECK: cf.br ^[[BB3:.+]]
   // CHECK: ^[[BB2]]:
-  // CHECK: call @dummyB()
+  // CHECK: call @__unit__dummyB()
   // CHECK: cf.br ^[[BB3]]
   // CHECK: ^[[BB3]]:
   if (x)
@@ -296,16 +296,16 @@ function void ConditionalStatements(bit x, bit y);
   // CHECK: [[COND:%.+]] = moore.to_builtin_int %arg0 : i1
   // CHECK: cf.cond_br [[COND]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   // CHECK: cf.br ^[[BB6:.+]]
   // CHECK: ^[[BB2]]:
   // CHECK: [[COND:%.+]] = moore.to_builtin_int %arg1 : i1
   // CHECK: cf.cond_br [[COND]], ^[[BB3:.+]], ^[[BB4:.+]]
   // CHECK: ^[[BB3]]:
-  // CHECK: call @dummyB()
+  // CHECK: call @__unit__dummyB()
   // CHECK: cf.br ^[[BB5:.+]]
   // CHECK: ^[[BB4]]:
-  // CHECK: call @dummyC()
+  // CHECK: call @__unit__dummyC()
   // CHECK: cf.br ^[[BB5]]
   // CHECK: ^[[BB5]]:
   // CHECK: cf.br ^[[BB6]]
@@ -325,7 +325,7 @@ function void ConditionalStatements(bit x, bit y);
   if (x) return;
 endfunction
 
-// CHECK-LABEL: func.func private @CaseStatements(
+// CHECK-LABEL: func.func private @__unit__CaseStatements(
 // CHECK-SAME: %arg0: !moore.i32
 // CHECK-SAME: %arg1: !moore.i32
 // CHECK-SAME: %arg2: !moore.i32
@@ -337,11 +337,11 @@ function void CaseStatements(int x, int a, int b, int c);
     // CHECK: [[COND2:%.+]] = moore.to_builtin_int [[COND1]] : i1
     // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
     // CHECK: ^[[BB1]]:
-    // CHECK: call @dummyA()
+    // CHECK: call @__unit__dummyA()
     // CHECK: cf.br ^[[BB3:.+]]
     a: dummyA();
     // CHECK: ^[[BB2]]:
-    // CHECK: call @dummyB()
+    // CHECK: call @__unit__dummyB()
     // CHECK: cf.br ^[[BB3]]
     default: dummyB();
     // CHECK: ^[[BB3]]:
@@ -356,10 +356,10 @@ function void CaseStatements(int x, int a, int b, int c);
   // CHECK: [[COND2:%.+]] = moore.to_builtin_int [[COND1]] : i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB_MATCH:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB_MATCH]]:
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   // CHECK: cf.br ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB2]]:
-  // CHECK: call @dummyB()
+  // CHECK: call @__unit__dummyB()
   // CHECK: cf.br ^[[BB_EXIT]]
   // CHECK: ^[[BB_EXIT]]:
   case (x)
@@ -371,7 +371,7 @@ function void CaseStatements(int x, int a, int b, int c);
   // CHECK: [[COND2:%.+]] = moore.to_builtin_int [[COND1]] : i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   // CHECK: cf.br ^[[BB3:.+]]
   // CHECK: ^[[BB2]]:
   // CHECK: cf.br ^[[BB3]]
@@ -384,7 +384,7 @@ function void CaseStatements(int x, int a, int b, int c);
   // CHECK: [[COND2:%.+]] = moore.to_builtin_int [[COND1]] : i1
   // CHECK: cf.cond_br [[COND2]], ^[[BB1:.+]], ^[[BB2:.+]]
   // CHECK: ^[[BB1]]:
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   // CHECK: cf.br ^[[BB3:.+]]
   // CHECK: ^[[BB2]]:
   // CHECK: cf.br ^[[BB3]]
@@ -394,7 +394,7 @@ function void CaseStatements(int x, int a, int b, int c);
   endcase
 endfunction
 
-// CHECK-LABEL: func.func private @ForLoopStatements(
+// CHECK-LABEL: func.func private @__unit__ForLoopStatements(
 // CHECK-SAME: %arg0: !moore.i32
 // CHECK-SAME: %arg1: !moore.i32
 // CHECK-SAME: %arg2: !moore.i1
@@ -409,10 +409,10 @@ function void ForLoopStatements(int a, int b, bit c);
   // CHECK: [[TMP3:%.+]] = moore.to_builtin_int [[TMP2]] : i1
   // CHECK: cf.cond_br [[TMP3]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_BODY]]:
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   // CHECK: cf.br ^[[BB_STEP:.+]]
   // CHECK: ^[[BB_STEP]]:
-  // CHECK: call @dummyB()
+  // CHECK: call @__unit__dummyB()
   // CHECK: cf.br ^[[BB_CHECK]]
   // CHECK: ^[[BB_EXIT]]:
   for (x = a; x < b; dummyB()) dummyA();
@@ -425,10 +425,10 @@ function void ForLoopStatements(int a, int b, bit c);
   // CHECK: [[TMP3:%.+]] = moore.to_builtin_int [[TMP2]] : i1
   // CHECK: cf.cond_br [[TMP3]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_BODY]]:
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   // CHECK: cf.br ^[[BB_STEP:.+]]
   // CHECK: ^[[BB_STEP]]:
-  // CHECK: call @dummyB()
+  // CHECK: call @__unit__dummyB()
   // CHECK: cf.br ^[[BB_CHECK]]
   // CHECK: ^[[BB_EXIT]]:
   for (int y = a; y < b; dummyB()) dummyA();
@@ -445,7 +445,7 @@ function void ForLoopStatements(int a, int b, bit c);
   // CHECK: ^[[BB_FALSE]]:
   // CHECK: cf.br ^[[BB_EXIT]]
   // CHECK: ^[[BB_STEP]]:
-  // CHECK: call @dummyB()
+  // CHECK: call @__unit__dummyB()
   // CHECK: cf.br ^[[BB_CHECK]]
   // CHECK: ^[[BB_EXIT]]:
   for (; c; dummyB())
@@ -455,7 +455,7 @@ function void ForLoopStatements(int a, int b, bit c);
       break;
 endfunction
 
-// CHECK-LABEL: func.func private @ForeverLoopStatements(
+// CHECK-LABEL: func.func private @__unit__ForeverLoopStatements(
 // CHECK-SAME: %arg0: !moore.i1
 // CHECK-SAME: %arg1: !moore.i1
 function void ForeverLoopStatements(bit x, bit y);
@@ -463,12 +463,12 @@ function void ForeverLoopStatements(bit x, bit y);
   // CHECK: ^[[BB_BODY]]:
   forever begin
     if (x) begin
-      // CHECK: call @dummyA()
+      // CHECK: call @__unit__dummyA()
       // CHECK: cf.br ^[[BB_EXIT:.+]]
       dummyA();
       break;
     end else begin
-      // CHECK: call @dummyB()
+      // CHECK: call @__unit__dummyB()
       // CHECK: cf.br ^[[BB_BODY]]
       dummyB();
       continue;
@@ -478,12 +478,12 @@ function void ForeverLoopStatements(bit x, bit y);
 
   // CHECK: cf.br ^[[BB_BODY:.+]]
   // CHECK: ^[[BB_BODY]]:
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   // CHECK: cf.br ^[[BB_BODY]]
   forever dummyA();
 endfunction
 
-// CHECK: func.func private @ForeachStatements(%[[ARG0:.*]]: !moore.i32, %[[ARG1:.*]]: !moore.i1) {
+// CHECK: func.func private @__unit__ForeachStatements(%[[ARG0:.*]]: !moore.i32, %[[ARG1:.*]]: !moore.i1) {
 function void ForeachStatements(int x, bit y);
 // CHECK: %[[ARRAY:.*]] = moore.variable : <uarray<3 x uarray<3 x uarray<3 x uarray<8 x l8>>>>>
   logic [7:0] array [3:1][4:2][5:3][6:-1];
@@ -512,13 +512,13 @@ function void ForeachStatements(int x, bit y);
 // CHECK: cf.cond_br %[[CONV3]], ^[[BB5:.*]], ^[[BB6:.*]]
     if (y) begin
 // CHECK: ^[[BB5]]:
-// CHECK: call @dummyA() : () -> ()
+// CHECK: call @__unit__dummyA() : () -> ()
 // CHECK: cf.br ^[[BB8]]
       dummyA();
       break;
     end else begin
 // CHECK: ^[[BB6]]:
-// CHECK: call @dummyB() : () -> ()
+// CHECK: call @__unit__dummyB() : () -> ()
 // CHECK: cf.br ^[[BB7:.*]]
       dummyB();
       continue;
@@ -543,7 +543,7 @@ function void ForeachStatements(int x, bit y);
 endfunction
 
 
-// CHECK-LABEL: func.func private @WhileLoopStatements(
+// CHECK-LABEL: func.func private @__unit__WhileLoopStatements(
 // CHECK-SAME: %arg0: !moore.i1
 // CHECK-SAME: %arg1: !moore.i1
 function void WhileLoopStatements(bit x, bit y);
@@ -552,14 +552,14 @@ function void WhileLoopStatements(bit x, bit y);
   // CHECK: [[TMP:%.+]] = moore.to_builtin_int %arg0 : i1
   // CHECK: cf.cond_br [[TMP]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
   // CHECK: ^[[BB_BODY]]:
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   // CHECK: cf.br ^[[BB_CHECK]]
   // CHECK: ^[[BB_EXIT]]:
   while (x) dummyA();
 
   // CHECK: cf.br ^[[BB_BODY:.+]]
   // CHECK: ^[[BB_BODY]]:
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   // CHECK: cf.br ^[[BB_CHECK:.+]]
   // CHECK: ^[[BB_CHECK]]:
   // CHECK: [[TMP:%.+]] = moore.to_builtin_int %arg0 : i1
@@ -574,12 +574,12 @@ function void WhileLoopStatements(bit x, bit y);
   // CHECK: ^[[BB_BODY]]:
   while (x) begin
     if (y) begin
-      // CHECK: call @dummyA()
+      // CHECK: call @__unit__dummyA()
       // CHECK: cf.br ^[[BB_EXIT]]
       dummyA();
       break;
     end else begin
-      // CHECK: call @dummyB()
+      // CHECK: call @__unit__dummyB()
       // CHECK: cf.br ^[[BB_CHECK]]
       dummyB();
       continue;
@@ -588,7 +588,7 @@ function void WhileLoopStatements(bit x, bit y);
   // CHECK: ^[[BB_EXIT]]:
 endfunction
 
-// CHECK-LABEL: func.func private @RepeatLoopStatements(
+// CHECK-LABEL: func.func private @__unit__RepeatLoopStatements(
 // CHECK-SAME: %arg0: !moore.i32
 // CHECK-SAME: %arg1: !moore.i1
 function void RepeatLoopStatements(int x, bit y);
@@ -600,12 +600,12 @@ function void RepeatLoopStatements(int x, bit y);
     // CHECK: cf.cond_br [[TMP2]], ^[[BB_BODY:.+]], ^[[BB_EXIT:.+]]
     // CHECK: ^[[BB_BODY]]:
     if (y) begin
-      // CHECK: call @dummyA()
+      // CHECK: call @__unit__dummyA()
       // CHECK: cf.br ^[[BB_EXIT]]
       dummyA();
       break;
     end else begin
-      // CHECK: call @dummyB()
+      // CHECK: call @__unit__dummyB()
       // CHECK: cf.br ^[[BB_STEP:.+]]
       dummyB();
       continue;
@@ -2005,7 +2005,7 @@ package Package;
   typedef logic [41:0] PackageType;
 endpackage
 
-// CHECK-LABEL: func.func private @simpleFunc1(
+// CHECK-LABEL: func.func private @__unit__simpleFunc1(
 // CHECK-SAME:    %arg0: !moore.i32
 // CHECK-SAME:    %arg1: !moore.i32
 // CHECK-SAME:  ) -> !moore.i32
@@ -2018,7 +2018,7 @@ function int simpleFunc1(int a, b);
   // CHECK: return [[TMP]]
 endfunction
 
-// CHECK-LABEL: func.func private @simpleFunc2(
+// CHECK-LABEL: func.func private @__unit__simpleFunc2(
 // CHECK-SAME:    %arg0: !moore.i32
 // CHECK-SAME:    %arg1: !moore.i32
 // CHECK-SAME:  ) -> !moore.i32
@@ -2040,13 +2040,13 @@ package FuncPackage;
   endfunction
 endpackage
 
-// CHECK-LABEL: func.func private @simpleFunc4(
+// CHECK-LABEL: func.func private @__unit__simpleFunc4(
 // CHECK-SAME:    %arg0: !moore.i32
 // CHECK-SAME:    %arg1: !moore.i32
 // CHECK-SAME:  )
 function void simpleFunc4(int a, b);
-  // CHECK: [[TMP1:%.+]] = call @simpleFunc1(%arg0, %arg1)
-  // CHECK: [[TMP2:%.+]] = call @simpleFunc2(%arg0, %arg1)
+  // CHECK: [[TMP1:%.+]] = call @__unit__simpleFunc1(%arg0, %arg1)
+  // CHECK: [[TMP2:%.+]] = call @__unit__simpleFunc2(%arg0, %arg1)
   // CHECK: {{%.+}} = call @"FuncPackage::simpleFunc3"([[TMP1]], [[TMP2]])
   FuncPackage::simpleFunc3(
     simpleFunc1(a, b),
@@ -2055,16 +2055,16 @@ function void simpleFunc4(int a, b);
   // CHECK: return
 endfunction
 
-// CHECK-LABEL: func.func private @simpleFunc5()
+// CHECK-LABEL: func.func private @__unit__simpleFunc5()
 function void simpleFunc5();
   // CHECK: [[TMP1:%.+]] = moore.constant 42 : i32
   // CHECK: [[TMP2:%.+]] = moore.constant 9001 : i32
-  // CHECK: call @simpleFunc4([[TMP1]], [[TMP2]])
+  // CHECK: call @__unit__simpleFunc4([[TMP1]], [[TMP2]])
   simpleFunc4(42, 9001);
   // CHECK: return
 endfunction
 
-// CHECK-LABEL: func.func private @funcArgs1(
+// CHECK-LABEL: func.func private @__unit__funcArgs1(
 // CHECK-SAME:    %arg0: !moore.i32
 // CHECK-SAME:    %arg1: !moore.ref<i32>
 // CHECK-SAME:    %arg2: !moore.ref<i32>
@@ -2090,7 +2090,7 @@ function automatic void funcArgs1(
   // CHECK: return
 endfunction
 
-// CHECK-LABEL: func.func private @funcArgs2()
+// CHECK-LABEL: func.func private @__unit__funcArgs2()
 function void funcArgs2();
   // CHECK: %x = moore.variable
   // CHECK: %y = moore.variable
@@ -2098,12 +2098,12 @@ function void funcArgs2();
   // CHECK: %w = moore.variable
   int x, y, z, w;
   // CHECK: [[TMP:%.+]] = moore.constant 42
-  // CHECK: call @funcArgs1([[TMP]], %x, %y, %z, %w)
+  // CHECK: call @__unit__funcArgs1([[TMP]], %x, %y, %z, %w)
   funcArgs1(42, x, y, z, w);
   // CHECK: return
 endfunction
 
-// CHECK-LABEL: func.func private @ConvertConditionalExprsToResultType(
+// CHECK-LABEL: func.func private @__unit__ConvertConditionalExprsToResultType(
 function void ConvertConditionalExprsToResultType(bit [15:0] x, struct packed { bit [15:0] a; } y, bit z);
   bit [15:0] r;
   // CHECK: moore.conditional %arg2 : i1 -> i16 {
@@ -2122,13 +2122,13 @@ function void ConvertConditionalExprsToResultType(bit [15:0] x, struct packed { 
   r = z ? y : x;
 endfunction
 
-// CHECK-LABEL: func.func private @ImplicitEventControl(
+// CHECK-LABEL: func.func private @__unit__ImplicitEventControl(
 // CHECK-SAME: [[X:%[^:]+]]: !moore.ref<i32>
 // CHECK-SAME: [[Y:%[^:]+]]: !moore.ref<i32>
 task automatic ImplicitEventControl(ref int x, ref int y);
   // CHECK: moore.wait_event {
   // CHECK: }
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   @* dummyA();
 
   // CHECK: moore.wait_event {
@@ -2136,7 +2136,7 @@ task automatic ImplicitEventControl(ref int x, ref int y);
   // CHECK:   moore.detect_event any [[TMP]]
   // CHECK: }
   // CHECK: [[TMP:%.+]] = moore.read [[X]]
-  // CHECK: call @dummyD([[TMP]])
+  // CHECK: call @__unit__dummyD([[TMP]])
   @* dummyD(x);
 
   // CHECK: moore.wait_event {
@@ -2148,24 +2148,24 @@ task automatic ImplicitEventControl(ref int x, ref int y);
   // CHECK: [[TMP1:%.+]] = moore.read [[X]]
   // CHECK: [[TMP2:%.+]] = moore.read [[Y]]
   // CHECK: [[TMP3:%.+]] = moore.add [[TMP1]], [[TMP2]]
-  // CHECK: call @dummyD([[TMP3]])
+  // CHECK: call @__unit__dummyD([[TMP3]])
   @* dummyD(x + y);
 endtask
 
-// CHECK-LABEL: func.func private @DelayControl(
+// CHECK-LABEL: func.func private @__unit__DelayControl(
 // CHECK-SAME: [[X:%[^:]+]]: !moore.time
 task automatic DelayControl(time x);
   // CHECK: [[TMP:%.+]] = moore.constant_time 1234000 fs
   // CHECK: moore.wait_delay [[TMP]]
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   #1.234ns dummyA();
 
   // CHECK: moore.wait_delay [[X]]
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   #x dummyA();
 endtask
 
-// CHECK-LABEL: func.func private @SignalEventControl(
+// CHECK-LABEL: func.func private @__unit__SignalEventControl(
 // CHECK-SAME: [[X:%[^:]+]]: !moore.ref<i32>
 // CHECK-SAME: [[Y:%[^:]+]]: !moore.ref<i32>
 // CHECK-SAME: [[T:%[^:]+]]: !moore.ref<i1>
@@ -2176,35 +2176,35 @@ task automatic SignalEventControl(ref int x, ref int y, ref bit t, ref bit u, re
   // CHECK:   [[TMP:%.+]] = moore.read [[X]]
   // CHECK:   moore.detect_event any [[TMP]]
   // CHECK: }
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   @x dummyA();
 
   // CHECK: moore.wait_event {
   // CHECK:   [[TMP:%.+]] = moore.read [[X]]
   // CHECK:   moore.detect_event any [[TMP]]
   // CHECK: }
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   @(x) dummyA();
 
   // CHECK: moore.wait_event {
   // CHECK:   [[TMP:%.+]] = moore.read [[T]]
   // CHECK:   moore.detect_event posedge [[TMP]]
   // CHECK: }
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   @(posedge t) dummyA();
 
   // CHECK: moore.wait_event {
   // CHECK:   [[TMP:%.+]] = moore.read [[T]]
   // CHECK:   moore.detect_event negedge [[TMP]]
   // CHECK: }
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   @(negedge t) dummyA();
 
   // CHECK: moore.wait_event {
   // CHECK:   [[TMP:%.+]] = moore.read [[T]]
   // CHECK:   moore.detect_event edge [[TMP]]
   // CHECK: }
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   @(edge t) dummyA();
 
   // CHECK: moore.wait_event {
@@ -2212,7 +2212,7 @@ task automatic SignalEventControl(ref int x, ref int y, ref bit t, ref bit u, re
   // CHECK:   [[TMP2:%.+]] = moore.read [[U]]
   // CHECK:   moore.detect_event posedge [[TMP1]] if [[TMP2]]
   // CHECK: }
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   @(posedge t iff u) dummyA();
 
   // CHECK: moore.wait_event {
@@ -2221,7 +2221,7 @@ task automatic SignalEventControl(ref int x, ref int y, ref bit t, ref bit u, re
   // CHECK:   [[TMP3:%.+]] = moore.logic_to_int [[TMP2]] : l1
   // CHECK:   moore.detect_event posedge [[TMP1]] if [[TMP3]]
   // CHECK: }
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   @(posedge t iff v) dummyA();
 
   // CHECK: moore.wait_event {
@@ -2230,7 +2230,7 @@ task automatic SignalEventControl(ref int x, ref int y, ref bit t, ref bit u, re
   // CHECK:   [[TMP3:%.+]] = moore.bool_cast [[TMP2]] : i32 -> i1
   // CHECK:   moore.detect_event posedge [[TMP1]] if [[TMP3]]
   // CHECK: }
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   @(posedge t iff y) dummyA();
 
   // CHECK: moore.wait_event {
@@ -2239,7 +2239,7 @@ task automatic SignalEventControl(ref int x, ref int y, ref bit t, ref bit u, re
   // CHECK:   [[TMP:%.+]] = moore.read [[Y]]
   // CHECK:   moore.detect_event any [[TMP]]
   // CHECK: }
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   @(x or y) dummyA();
 
   // CHECK: moore.wait_event {
@@ -2248,7 +2248,7 @@ task automatic SignalEventControl(ref int x, ref int y, ref bit t, ref bit u, re
   // CHECK:   [[TMP:%.+]] = moore.read [[Y]]
   // CHECK:   moore.detect_event any [[TMP]]
   // CHECK: }
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   @(x, y) dummyA();
 
   // CHECK: moore.wait_event {
@@ -2260,11 +2260,11 @@ task automatic SignalEventControl(ref int x, ref int y, ref bit t, ref bit u, re
   // CHECK:   [[TMP3:%.+]] = moore.logic_to_int [[TMP2]] : l1
   // CHECK:   moore.detect_event negedge [[TMP1]] if [[TMP3]]
   // CHECK: }
-  // CHECK: call @dummyA()
+  // CHECK: call @__unit__dummyA()
   @(posedge t iff u, negedge u iff v) dummyA();
 endtask
 
-// CHECK-LABEL: func.func private @ImplicitEventControlExamples(
+// CHECK-LABEL: func.func private @__unit__ImplicitEventControlExamples(
 task automatic ImplicitEventControlExamples();
   // Taken from IEEE 1800-2017 section 9.4.2.2 "Implicit event_expression list".
   bit a, b, c, d, f, y, tmp1, tmp2;
@@ -3057,28 +3057,28 @@ module PortCastB (input bit [0:0][31:0] a, output bit [0:0][31:0] b);
   assign b = a;
 endmodule
 
-// CHECK-LABEL: func.func private @SignCastsA(
+// CHECK-LABEL: func.func private @__unit__SignCastsA(
 // CHECK-SAME: %arg0: !moore.l16
 function void SignCastsA(logic [15:0] value);
   // CHECK: [[TMP:%.+]] = moore.zext %arg0 : l16 -> l32
-  // CHECK: call @SignCastsB([[TMP]])
+  // CHECK: call @__unit__SignCastsB([[TMP]])
   SignCastsB($unsigned(value));
   // CHECK: [[TMP:%.+]] = moore.sext %arg0 : l16 -> l32
-  // CHECK: call @SignCastsB([[TMP]])
+  // CHECK: call @__unit__SignCastsB([[TMP]])
   SignCastsB($signed(value));
 
   // CHECK: [[TMP:%.+]] = moore.zext %arg0 : l16 -> l32
-  // CHECK: call @SignCastsB([[TMP]])
+  // CHECK: call @__unit__SignCastsB([[TMP]])
   SignCastsB(unsigned'(value));
   // CHECK: [[TMP:%.+]] = moore.sext %arg0 : l16 -> l32
-  // CHECK: call @SignCastsB([[TMP]])
+  // CHECK: call @__unit__SignCastsB([[TMP]])
   SignCastsB(signed'(value));
 endfunction
 
 function void SignCastsB(logic [31:0] value);
 endfunction
 
-// CHECK-LABEL: func.func private @AssignFuncArgs(
+// CHECK-LABEL: func.func private @__unit__AssignFuncArgs(
 // CHECK-SAME: %arg0: !moore.i32
 function void AssignFuncArgs(int x);
   // CHECK: [[ARG:%.+]] = moore.variable %arg0 : <i32>
@@ -3087,7 +3087,7 @@ function void AssignFuncArgs(int x);
   x = 1;
 endfunction
 
-// CHECK-LABEL: func.func private @AssignFuncArgs2(
+// CHECK-LABEL: func.func private @__unit__AssignFuncArgs2(
 // CHECK-SAME: %arg0: !moore.i32, %arg1: !moore.i32
 function int AssignFuncArgs2(int x, int y);
   // CHECK: [[X:%.+]] = moore.variable %arg0 : <i32>
@@ -3136,7 +3136,7 @@ endmodule
 // assuming that the values are two-state. These statements are technically not
 // exhaustive in four-state logic, but a lot of real world Verilog code relies
 // on this hack.
-// CHECK-LABEL: @seeminglyExhaustiveCase
+// CHECK-LABEL: @__unit__seeminglyExhaustiveCase
 function void seeminglyExhaustiveCase(logic [1:0] a);
   // CHECK: [[Z:%.+]] = moore.variable
   logic [3:0] z;
@@ -3178,7 +3178,7 @@ endfunction
 // The (* full_case *) attribute informs the synthesis tool that all possible
 // cases are explicitly covered, even without a default clause, thereby
 // preventing latch inference.
-// CHECK-LABEL: @verifyFullCaseSupport
+// CHECK-LABEL: @__unit__verifyFullCaseSupport
 function void verifyFullCaseSupport(logic [1:0] a);
   // CHECK: [[Z:%.+]] = moore.variable
   logic [2:0] z;
@@ -3429,7 +3429,7 @@ module UnarySingleBitIncrement (
 
 endmodule // UnarySingleBitIncrement
 
-// CHECK-LABEL: func.func private @returnParameterArrayElement(
+// CHECK-LABEL: func.func private @__unit__returnParameterArrayElement(
 function automatic int unsigned returnParameterArrayElement (int idx);
   localparam int unsigned ParameterArray [2] = '{42, 9001};
   // CHECK: [[CONST0:%.+]] = moore.constant 42 : i32
@@ -3439,7 +3439,7 @@ function automatic int unsigned returnParameterArrayElement (int idx);
   return ParameterArray[idx];
 endfunction
 
-// CHECK-LABEL: func.func private @TimeFormat(
+// CHECK-LABEL: func.func private @__unit__TimeFormat(
 function void TimeFormat(time x);
   // CHECK: [[TMP1:%.+]] = moore.time_to_logic
   // CHECK: [[TMP2:%.+]] = moore.constant
@@ -3457,7 +3457,7 @@ function void TimeFormat(time x);
   $display("%00t", x);
 endfunction
 
-// CHECK-LABEL: func.func private @StructCreateConversion(
+// CHECK-LABEL: func.func private @__unit__StructCreateConversion(
 // CHECK-SAME: [[ARRAY:%.+]]: !moore.array<8 x l8>
 // CHECK-SAME: [[IMM:%.+]]: !moore.l64
 function void StructCreateConversion (logic [7:0][7:0] array, logic [63:0] immediate);
@@ -3474,7 +3474,7 @@ function void StructCreateConversion (logic [7:0][7:0] array, logic [63:0] immed
 
 endfunction
 
-// CHECK-LABEL: func.func private @ConcatSformatf(
+// CHECK-LABEL: func.func private @__unit__ConcatSformatf(
 // CHECK-SAME: [[STR1:%[^,]+]]: !moore.string
 // CHECK-SAME: [[STR2:%[^,]+]]: !moore.string
 // CHECK-SAME: [[STR3:%[^,]+]]: !moore.ref<string>
@@ -3507,7 +3507,7 @@ function automatic void ConcatSformatf(string testStr, string otherString, ref s
    $sformat(logicVector, "%s %s", testStr, otherString);
 endfunction
 
-// CHECK-LABEL: func.func private @Swrite(
+// CHECK-LABEL: func.func private @__unit__Swrite(
 // CHECK-SAME: [[STR1:%[^,]+]]: !moore.string
 // CHECK-SAME: [[STR2:%[^,]+]]: !moore.string
 // CHECK-SAME: [[STR3:%[^,]+]]: !moore.ref<string>
@@ -3557,7 +3557,7 @@ module ContinuousAssignment;
   assign #1ns c = ~b;
 endmodule
 
-// CHECK-LABEL: func.func private @BlockingAssignment(
+// CHECK-LABEL: func.func private @__unit__BlockingAssignment(
 // CHECK-SAME: [[A:%.+]]: !moore.ref<i42>
 // CHECK-SAME: [[B:%.+]]: !moore.i42
 // CHECK-SAME: [[C:%.+]]: !moore.i1
@@ -3584,7 +3584,7 @@ task BlockingAssignment(
   a = @(posedge c) ~b;
 endtask
 
-// CHECK-LABEL: func.func private @NonBlockingAssignment(
+// CHECK-LABEL: func.func private @__unit__NonBlockingAssignment(
 // CHECK-SAME: [[A:%.+]]: !moore.ref<i42>
 // CHECK-SAME: [[B:%.+]]: !moore.i42
 task NonBlockingAssignment(
@@ -3601,7 +3601,7 @@ task NonBlockingAssignment(
   a <= #1ns ~b;
 endtask
 
-// CHECK-LABEL: func.func private @RealConversion(
+// CHECK-LABEL: func.func private @__unit__RealConversion(
 // CHECK-SAME: [[SR:%[^,]+]]: !moore.f32
 // CHECK-SAME: [[LR:%[^,]+]]: !moore.f64
 // CHECK-SAME: [[INT:%[^,]+]]: !moore.i42
@@ -3637,7 +3637,7 @@ function automatic void RealConversion(shortreal sr, real r, bit[41:0] i, longin
    real realTest = real'(logicTest);
 endfunction
 
-// CHECK: func.func private @testRealLiteral() -> !moore.f64 {
+// CHECK: func.func private @__unit__testRealLiteral() -> !moore.f64 {
 function automatic real testRealLiteral();
    // CHECK: [[TMP:%.+]] = moore.constant_real 1.234500e+00 : f64
    localparam test = 1.2345;
@@ -3645,7 +3645,7 @@ function automatic real testRealLiteral();
    return test;
 endfunction
 
-// CHECK: func.func private @testShortrealLiteral() -> !moore.f32 {
+// CHECK: func.func private @__unit__testShortrealLiteral() -> !moore.f32 {
 function automatic shortreal testShortrealLiteral();
    // CHECK: [[TMP:%.+]] = moore.constant_real 1.234500e+00 : f32
    localparam test = shortreal'(1.2345);
@@ -3696,12 +3696,12 @@ module testLHSTaskCapture();
 
 endmodule
 
-// CHECK-LABEL: @testRecursive
+// CHECK-LABEL: @__unit__testRecursive
 // CHECK-SAME: %arg0: !moore.i32
 // CHECK-SAME: -> !moore.i32
 function int testRecursive(input int n);
     if (n <= 1) return 1;
-    // CHECK: [[REC:%.+]] = call @testRecursive({{.*}}) : (!moore.i32) -> !moore.i32
+    // CHECK: [[REC:%.+]] = call @__unit__testRecursive({{.*}}) : (!moore.i32) -> !moore.i32
     return n * testRecursive(n - 1);
 endfunction
 
@@ -3768,7 +3768,7 @@ module partselect_index_neg_le;
 
 endmodule
 
-// CHECK-LABEL: func.func private @testStrLiteralReturn()
+// CHECK-LABEL: func.func private @__unit__testStrLiteralReturn()
 // CHECK-SAME: -> !moore.string {
 function string testStrLiteralReturn;
     // CHECK-NEXT: [[INT:%.+]] = moore.constant_string "\22A string literal\22" : i127
@@ -3778,7 +3778,7 @@ function string testStrLiteralReturn;
     return testStrLiteral;
 endfunction // testStrLiteralReturn
 
-// CHECK-LABEL: func.func private @testStrLiteralAsIntReturn()
+// CHECK-LABEL: func.func private @__unit__testStrLiteralAsIntReturn()
 // CHECK-SAME: -> !moore.i1 {
 function bit testStrLiteralAsIntReturn;
     // CHECK-NEXT: [[CONST:%.+]] = moore.constant_string "\22A string literal\22" : i127 
@@ -3789,7 +3789,7 @@ function bit testStrLiteralAsIntReturn;
     return bit'(testStrLiteral);
 endfunction // testStrLiteralAsIntReturn
 
-// CHECK-LABEL: func.func private @testRealOps()
+// CHECK-LABEL: func.func private @__unit__testRealOps()
 function void testRealOps;
     // CHECK-NEXT: [[A:%.+]] = moore.variable : <f64>
     // CHECK-NEXT: [[B:%.+]] = moore.variable : <f64>
@@ -4019,9 +4019,9 @@ module RejectInnerCapture(input bit u, output bit v);
   endfunction
 endmodule
 
-// CHECK-LABEL: moore.global_variable @rootGlobal1 : !moore.i42
+// CHECK-LABEL: moore.global_variable @__unit__rootGlobal1 : !moore.i42
 bit [41:0] rootGlobal1;
-// CHECK-LABEL: moore.global_variable @rootGlobal2 : !moore.i42 init {
+// CHECK-LABEL: moore.global_variable @__unit__rootGlobal2 : !moore.i42 init {
 // CHECK-NEXT: [[TMP1:%.+]] = moore.get_global_variable @"PackageGlobal::packageGlobal2" : <i42>
 // CHECK-NEXT: [[TMP2:%.+]] = moore.read [[TMP1]] : <i42>
 // CHECK-NEXT: moore.yield [[TMP2]] : i42
@@ -4108,7 +4108,7 @@ module Events;
   // CHECK-NEXT:   [[TMP1:%.+]] = moore.read [[EVENT]]
   // CHECK-NEXT:   moore.detect_event any [[TMP1]]
   // CHECK-NEXT: }
-  // CHECK-NEXT: call @dummyA()
+  // CHECK-NEXT: call @__unit__dummyA()
   initial @(e) dummyA();
 endmodule
 
@@ -4712,13 +4712,13 @@ endmodule
 
 // Test that DPI-C imported functions are emitted as extern declarations
 
-// CHECK:  func.func private @void_dpi(!moore.i32)
+// CHECK:  func.func private @__unit__void_dpi(!moore.i32)
 // CHECK-NOT: return
 
-// CHECK:  func.func private @nonvoid_dpi(!moore.i32) -> !moore.i32
+// CHECK:  func.func private @__unit__nonvoid_dpi(!moore.i32) -> !moore.i32
 // CHECK-NOT: return
 
-// CHECK:  func.func private @dpi_with_output(!moore.i32, !moore.ref<i32>)
+// CHECK:  func.func private @__unit__dpi_with_output(!moore.i32, !moore.ref<i32>)
 // CHECK-NOT: return
 
 import "DPI-C" function void void_dpi(input int a);
@@ -4729,9 +4729,9 @@ import "DPI-C" function void dpi_with_output(input int a, output int b);
 module DpiCallTest(input int in_val, output int out_val);
   int result;
 
-  // CHECK: func.call @void_dpi
-  // CHECK: func.call @nonvoid_dpi
-  // CHECK: func.call @dpi_with_output
+  // CHECK: func.call @__unit__void_dpi
+  // CHECK: func.call @__unit__nonvoid_dpi
+  // CHECK: func.call @__unit__dpi_with_output
 
   always_comb begin
     void_dpi(in_val);
@@ -4747,8 +4747,8 @@ endmodule
 import "DPI-C" function chandle chandle_init(input int size);
 import "DPI-C" function void chandle_tick(input chandle ctx, input int a);
 
-// CHECK: func.func private @chandle_init(!moore.i32) -> !moore.chandle
-// CHECK: func.func private @chandle_tick(!moore.chandle, !moore.i32)
+// CHECK: func.func private @__unit__chandle_init(!moore.i32) -> !moore.chandle
+// CHECK: func.func private @__unit__chandle_tick(!moore.chandle, !moore.i32)
 
 // CHECK-LABEL: moore.module @ChandleTest
 module ChandleTest(input logic clock, input int in_val);
@@ -4766,16 +4766,16 @@ endmodule
 // Test that DPI-C open array types (byte[], int[]) are converted to
 // Moore open array types (!moore.open_uarray<T>).
 
-// CHECK: func.func private @process_data(!moore.open_uarray<i8>)
+// CHECK: func.func private @__unit__process_data(!moore.open_uarray<i8>)
 import "DPI-C" function void process_data(input byte data[]);
 
-// CHECK: func.func private @read_write(!moore.open_uarray<i8>, !moore.ref<open_uarray<i8>>)
+// CHECK: func.func private @__unit__read_write(!moore.open_uarray<i8>, !moore.ref<open_uarray<i8>>)
 import "DPI-C" function void read_write(input byte wd[], output byte rd[]);
 
-// CHECK: func.func private @int_array_fn(!moore.open_uarray<i32>)
+// CHECK: func.func private @__unit__int_array_fn(!moore.open_uarray<i32>)
 import "DPI-C" function void int_array_fn(input int data[]);
 
-// CHECK: func.func private @packed_bits_fn(!moore.open_array<i1>)
+// CHECK: func.func private @__unit__packed_bits_fn(!moore.open_array<i1>)
 import "DPI-C" function void packed_bits_fn(input bit [] data);
 
 // CHECK-LABEL: moore.module @OpenArrayCallTest
@@ -4785,10 +4785,10 @@ module OpenArrayCallTest(input logic clock);
   int idata[];
   bit [7:0] pdata;
 
-  // CHECK: func.call @process_data
-  // CHECK: func.call @read_write
-  // CHECK: func.call @int_array_fn
-  // CHECK: func.call @packed_bits_fn
+  // CHECK: func.call @__unit__process_data
+  // CHECK: func.call @__unit__read_write
+  // CHECK: func.call @__unit__int_array_fn
+  // CHECK: func.call @__unit__packed_bits_fn
   always @(posedge clock) begin
     process_data(mydata);
     read_write(mydata, result);
@@ -4867,8 +4867,8 @@ endinterface
 
 // CHECK-LABEL: moore.module private @HasModport(out bus_data : !moore.l8, out bus_valid : !moore.l1) {
 // CHECK:         %bus_data = moore.variable : <l8>
-// CHECK:         [[D:%.+]] = moore.read %bus_data : <l8>
 // CHECK:         %bus_valid = moore.variable : <l1>
+// CHECK:         [[D:%.+]] = moore.read %bus_data : <l8>
 // CHECK:         [[V:%.+]] = moore.read %bus_valid : <l1>
 // CHECK:         moore.output [[D]], [[V]] : !moore.l8, !moore.l1
 // CHECK:       }
@@ -4974,12 +4974,12 @@ endmodule
 // Test G: Two ports of the same interface type on one module.
 // CHECK-LABEL: moore.module private @TwoPortsSameType(out a_data : !moore.l8, out a_valid : !moore.l1, out b_data : !moore.l8, out b_valid : !moore.l1) {
 // CHECK:         %a_data = moore.variable : <l8>
-// CHECK:         [[AD:%.+]] = moore.read %a_data : <l8>
 // CHECK:         %a_valid = moore.variable : <l1>
-// CHECK:         [[AV:%.+]] = moore.read %a_valid : <l1>
 // CHECK:         %b_data = moore.variable : <l8>
-// CHECK:         [[BD:%.+]] = moore.read %b_data : <l8>
 // CHECK:         %b_valid = moore.variable : <l1>
+// CHECK:         [[AD:%.+]] = moore.read %a_data : <l8>
+// CHECK:         [[AV:%.+]] = moore.read %a_valid : <l1>
+// CHECK:         [[BD:%.+]] = moore.read %b_data : <l8>
 // CHECK:         [[BV:%.+]] = moore.read %b_valid : <l1>
 // CHECK:         moore.output [[AD]], [[AV]], [[BD]], [[BV]] : !moore.l8, !moore.l1, !moore.l8, !moore.l1
 // CHECK:       }
@@ -5094,4 +5094,3 @@ module DynamicArrayDeleteTest;
   end
 
 endmodule
-

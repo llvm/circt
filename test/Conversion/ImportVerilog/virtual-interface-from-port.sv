@@ -24,15 +24,25 @@ class consumer;
   endfunction
 endclass
 
-// CHECK-LABEL: moore.module{{.*}} @top
-// CHECK: moore.struct_create
+// CHECK-LABEL: moore.module private @top(in %out_clk : !moore.ref<l1>, in %out_data : !moore.ref<l8>)
 module top
     (output_if out);
   consumer c;
 
   initial begin
+    // CHECK: [[C:%.*]] = moore.variable : <class<@consumer>>
+    // CHECK: [[CNEW:%.*]] = moore.class.new
+    // CHECK: moore.blocking_assign [[C]], [[CNEW]]
     c = new;
+
+    // CHECK: [[VIF:%.*]] = moore.struct_create %out_clk, %out_data
+    // CHECK: [[CVAL:%.*]] = moore.read [[C]] : <class<@consumer>>
+    // CHECK: func.call @"consumer::set_vif"([[CVAL]], [[VIF]])
     c.set_vif(out);
+
+    // CHECK: [[B:%.*]] = moore.constant 17 : l8
+    // CHECK: [[CVAL2:%.*]] = moore.read [[C]] : <class<@consumer>>
+    // CHECK: func.call @"consumer::drive"([[CVAL2]], [[B]])
     c.drive(8'h11);
   end
 endmodule
