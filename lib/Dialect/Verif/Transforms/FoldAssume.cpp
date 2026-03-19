@@ -62,8 +62,8 @@ struct FoldAssumePass : verif::impl::FoldAssumePassBase<FoldAssumePass> {
 
   /// Only allow scheduling on verif::FormalOp and hw::HWModuleOp
   bool canScheduleOn(RegisteredOperationName opInfo) const override {
-    return opInfo.getIdentifier() == "hw::HWModuleOp" ||
-           opInfo.getIdentifier() == "verif::FormalOp";
+    return opInfo.getStringRef() == hw::HWModuleOp::getOperationName() ||
+           opInfo.getStringRef() == verif::FormalOp::getOperationName();
   }
 
   void runOnOperation() override;
