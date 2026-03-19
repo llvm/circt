@@ -1656,6 +1656,20 @@ circuit PropertyListOps :
     propassign c, list_concat(a, b)
 
 ;// -----
+FIRRTL version 5.1.0
+
+; CHECK-LABEL: firrtl.circuit "StringOps"
+circuit StringOps :
+  public module StringOps :
+    input a : String
+    input b : String
+    output c : String
+
+    ; CHECK: [[C:%.+]] = firrtl.string.concat %a, %b : !firrtl.string
+    ; CHECK: firrtl.propassign %c, [[C]]
+    propassign c, string_concat(a, b)
+
+;// -----
 FIRRTL version 3.1.0
 
 ; CHECK-LABEL: circuit "BundleOfProps"

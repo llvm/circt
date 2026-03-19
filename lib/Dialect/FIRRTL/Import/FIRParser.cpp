@@ -2008,6 +2008,7 @@ private:
   ParseResult parseListExp(Value &result);
   ParseResult parseListConcatExp(Value &result);
   ParseResult parseCatExp(Value &result);
+  ParseResult parseStringConcatExp(Value &result);
   ParseResult parseUnsafeDomainCast(Value &result);
   ParseResult parseUnknownProperty(Value &result);
 
@@ -2400,6 +2401,11 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
 
   case FIRToken::lp_cat:
     if (parseCatExp(result))
+      return failure();
+    break;
+
+  case FIRToken::lp_string_concat:
+    if (parseStringConcatExp(result))
       return failure();
     break;
 
@@ -2849,6 +2855,34 @@ ParseResult FIRStmtParser::parseCatExp(Value &result) {
 
   locationProcessor.setLoc(loc);
   result = CatPrimOp::create(builder, operands);
+  return success();
+}
+
+/// string_concat-exp ::= 'string_concat(' exp* ')'
+ParseResult FIRStmtParser::parseStringConcatExp(Value &result) {
+  consumeToken(FIRToken::lp_string_concat);
+
+  auto loc = getToken().getLoc();
+  SmallVector<Value, 3> operands;
+  if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
+        Value operand;
+        locationProcessor.setLoc(loc);
+        if (parseExp(operand,
+                     "expected expression in string_concat expression"))
+          return failure();
+        if (!type_isa<StringType>(operand.getType()))
+          return emitError(loc, "all operands must be String type");
+        operands.push_back(operand);
+        return success();
+      }))
+    return failure();
+
+  if (operands.empty())
+    return emitError(loc, "need at least one String to concatenate");
+
+  locationProcessor.setLoc(loc);
+  auto type = StringType::get(builder.getContext());
+  result = builder.create<StringConcatOp>(type, operands);
   return success();
 }
 
