@@ -37,6 +37,13 @@ public:
   /// - Marked with getDoNotPrint()
   static bool isInstanceUnderLayer(InstanceOp inst);
 
+  /// Return true if an instance choice op should be considered "under a layer"
+  /// for the purposes of metadata emission and other analyses. This includes
+  /// instances that are:
+  /// - Under a LayerBlockOp
+  /// - Under an sv::IfDefOp
+  static bool isInstanceUnderLayer(InstanceChoiceOp inst);
+
   /// A lattice value to record the value of a property.
   class LatticeValue {
 
