@@ -264,6 +264,7 @@ TOK_LPKEYWORD_PRIM(integer_shr, IntegerShrOp, 2, 0, FIRVersion(3, 1, 0),
                    "Integers")
 TOK_LPKEYWORD_PRIM(integer_shl, IntegerShlOp, 2, 0, FIRVersion(3, 1, 0),
                    "Integers")
+TOK_LPKEYWORD(string_concat)
 
 #undef TOK_MARKER
 #undef TOK_IDENTIFIER

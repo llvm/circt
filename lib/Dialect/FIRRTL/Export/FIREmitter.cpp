@@ -198,6 +198,7 @@ struct Emitter {
   HANDLE(AndRPrimOp, "andr");
   HANDLE(OrRPrimOp, "orr");
   HANDLE(XorRPrimOp, "xorr");
+  HANDLE(StringConcatOp, "string_concat");
 #undef HANDLE
 
   // Attributes
@@ -1467,7 +1468,7 @@ void Emitter::emitExpression(Value value) {
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
           UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
-          UnknownValueOp,
+          UnknownValueOp, StringConcatOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions
