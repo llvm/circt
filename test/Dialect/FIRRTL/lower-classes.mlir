@@ -409,6 +409,19 @@ firrtl.circuit "IntegerArithmetic" {
   }
 }
 
+// CHECK-LABEL: firrtl.circuit "StringCat"
+firrtl.circuit "StringCat" {
+  firrtl.module @StringCat() {}
+
+  // CHECK-LABEL: om.class @StringConcatClass
+  firrtl.class @StringConcatClass(in %a: !firrtl.string, in %b: !firrtl.string, out %c: !firrtl.string) {
+    // CHECK: %[[CONCAT:.+]] = om.string.concat %a, %b : !om.string
+    %0 = firrtl.string.concat %a, %b : !firrtl.string
+    // CHECK: om.class.fields %[[CONCAT]]
+    firrtl.propassign %c, %0 : !firrtl.string
+  }
+}
+
 // CHECK-LABEL: firrtl.circuit "AltBasePath"
 firrtl.circuit "AltBasePath" {
   // CHECK: hw.hierpath private [[FOO_NLA:@.+]] [@AltBasePath::[[FOO_SYM:@.+]]]

@@ -1743,6 +1743,18 @@ struct IntegerShlOpConversion
   }
 };
 
+struct StringConcatOpConversion
+    : public OpConversionPattern<firrtl::StringConcatOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::StringConcatOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::StringConcatOp>(op, adaptor.getOperands());
+    return success();
+  }
+};
+
 struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
 
   PathOpConversion(TypeConverter &typeConverter, MLIRContext *context,
@@ -2220,6 +2232,7 @@ static void populateRewritePatterns(
   patterns.add<IntegerMulOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerShrOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerShlOpConversion>(converter, patterns.getContext());
+  patterns.add<StringConcatOpConversion>(converter, patterns.getContext());
   patterns.add<UnrealizedConversionCastOpConversion>(converter,
                                                      patterns.getContext());
   patterns.add<UnknownValueOpConversion>(converter, patterns.getContext());
