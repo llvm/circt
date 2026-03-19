@@ -1,6 +1,8 @@
 // RUN: arcilator %s --run --jit-entry=main | FileCheck --match-full-lines %s
 // RUN: arcilator %s --run --jit-entry=main --jit-vcd-file=%t && cat %t | FileCheck %s --match-full-lines --check-prefix VCD
-// REQUIRES: arcilator-jit
+// FST is a binary file format, so just smoke test to see it runs.
+// RUN: arcilator %s --run --jit-entry=main --jit-fst-file=%t
+// REQUIRES: arcilator-jit, libfst
 
 // CHECK-LABEL: output = ca
 // CHECK-NEXT:  output = ca

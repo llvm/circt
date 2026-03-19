@@ -14,6 +14,9 @@
 
 #include "circt/Dialect/Arc/Runtime/TraceTaps.h"
 #include "circt/Dialect/Arc/Runtime/VCDTraceEncoder.h"
+#ifdef CIRCT_LIBFST_ENABLED
+#include "circt/Dialect/Arc/Runtime/FSTTraceEncoder.h"
+#endif
 
 #include <cassert>
 #include <iostream>
@@ -66,6 +69,12 @@ ModelInstance::ModelInstance(const ArcRuntimeModelInfo *modelInfo,
       traceEncoder = std::make_unique<VCDTraceEncoder>(
           modelInfo, mutableState, getTraceFilePath(".vcd"), verbose);
       break;
+#ifdef CIRCT_LIBFST_ENABLED
+    case TraceMode::FST:
+      traceEncoder = std::make_unique<FSTTraceEncoder>(
+          modelInfo, mutableState, getTraceFilePath(".fst"), verbose);
+      break;
+#endif
     }
   } else {
     traceEncoder = {};
@@ -175,6 +184,10 @@ void ModelInstance::parseArgs(const char *args) {
       verbose = true;
     } else if (option == "vcd") {
       traceMode = TraceMode::VCD;
+#ifdef CIRCT_LIBFST_ENABLED
+    } else if (option == "fst") {
+      traceMode = TraceMode::FST;
+#endif
     } else if (parseKeyValueArg(option, key, value) && !value.empty()) {
       if (key == "traceFile")
         traceFileArg = value;

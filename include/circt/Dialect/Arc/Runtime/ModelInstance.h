@@ -51,7 +51,11 @@ private:
   const uint64_t instanceID;
   const ArcRuntimeModelInfo *const modelInfo;
   const ArcState *const state;
+#ifdef CIRCT_LIBFST_ENABLED
+  enum class TraceMode { DUMMY, VCD, FST };
+#else
   enum class TraceMode { DUMMY, VCD };
+#endif
   TraceMode traceMode;
   std::optional<std::string> traceFileArg;
   std::unique_ptr<TraceEncoder> traceEncoder;
