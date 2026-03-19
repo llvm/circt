@@ -1451,6 +1451,23 @@ def IntegerShlOp : IntegerBinaryPrimOp<"integer.shl"> {
   }];
 }
 
+def StringConcatOp : FIRRTLOp<"string.concat", [Pure, SameOperandsAndResultType]> {
+  let summary = "Concatenate multiple string values";
+  let description = [{
+    Produces a value of string type by concatenating multiple string operands.
+
+    Example:
+    ```mlir
+    %3 = firrtl.string.concat %0, %1, %2 : !firrtl.string
+    ```
+  }];
+
+  let arguments = (ins Variadic<StringType>:$inputs);
+  let results = (outs StringType:$result);
+
+  let assemblyFormat = "$inputs attr-dict `:` type($result)";
+}
+
 def UnknownValueOp : FIRRTLOp<"unknown", [
   Pure,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
