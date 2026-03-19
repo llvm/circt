@@ -90,6 +90,11 @@ circt::om::Evaluator::getPartiallyEvaluatedValue(Type type, Location loc) {
 
         return success(result);
       })
+      .Case([&](circt::om::StringType type) {
+        evaluator::EvaluatorValuePtr result =
+            evaluator::AttributeValue::get(type, loc);
+        return success(result);
+      })
       .Default([&](auto type) { return failure(); });
 }
 
@@ -155,7 +160,8 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                           evaluator::PathValue::getEmptyPath(loc));
                   return success(result);
                 })
-                .Case<ListCreateOp, ListConcatOp, ObjectFieldOp>([&](auto op) {
+                .Case<ListCreateOp, ListConcatOp, StringConcatOp,
+                      ObjectFieldOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), loc);
                 })
                 .Case<ObjectOp>([&](auto op) {
@@ -377,6 +383,9 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
             })
             .Case([&](ListConcatOp op) {
               return evaluateListConcat(op, actualParams, loc);
+            })
+            .Case([&](StringConcatOp op) {
+              return evaluateStringConcat(op, actualParams, loc);
             })
             .Case([&](AnyCastOp op) {
               return evaluateValue(op.getInput(), actualParams, loc);
@@ -678,6 +687,63 @@ circt::om::Evaluator::evaluateListConcat(ListConcatOp op,
     list.value()->markUnknown();
 
   return list;
+}
+
+/// Evaluator dispatch function for String concatenation.
+FailureOr<evaluator::EvaluatorValuePtr>
+circt::om::Evaluator::evaluateStringConcat(StringConcatOp op,
+                                           ActualParameters actualParams,
+                                           Location loc) {
+  // Get the op's EvaluatorValue handle, in case it hasn't been evaluated yet.
+  auto handle = getOrCreateValue(op.getResult(), actualParams, loc);
+  if (failed(handle))
+    return handle;
+
+  // If it's fully evaluated, we can return it.
+  if (handle.value()->isFullyEvaluated())
+    return handle;
+
+  // Extract the string attributes, handling both AttributeValue and
+  // ReferenceValue cases.
+  auto extractAttr = [](evaluator::EvaluatorValue *value) -> StringAttr {
+    return llvm::TypeSwitch<evaluator::EvaluatorValue *, StringAttr>(value)
+        .Case([](evaluator::AttributeValue *val) {
+          return val->getAs<StringAttr>();
+        })
+        .Case([](evaluator::ReferenceValue *val) {
+          return cast<evaluator::AttributeValue>(val->getStrippedValue()->get())
+              ->getAs<StringAttr>();
+        });
+  };
+
+  // Evaluate all operands and concatenate them.
+  std::string result;
+  for (auto operand : op.getOperands()) {
+    auto operandResult = evaluateValue(operand, actualParams, loc);
+    if (failed(operandResult))
+      return operandResult;
+    if (!operandResult.value()->isFullyEvaluated())
+      return handle;
+
+    StringAttr str = extractAttr(operandResult.value().get());
+    assert(str && "expected StringAttr for StringConcatOp operand");
+    result += str.getValue().str();
+  }
+
+  // Create the concatenated string attribute.
+  auto resultStr = StringAttr::get(result, op.getResult().getType());
+
+  // Finalize the op result value.
+  auto *handleValue = cast<evaluator::AttributeValue>(handle.value().get());
+  auto resultStatus = handleValue->setAttr(resultStr);
+  if (failed(resultStatus))
+    return resultStatus;
+
+  auto finalizeStatus = handleValue->finalize();
+  if (failed(finalizeStatus))
+    return finalizeStatus;
+
+  return handle;
 }
 
 FailureOr<evaluator::EvaluatorValuePtr>
