@@ -42,11 +42,17 @@ class Instruction(SequenceDeclaration):
   which operands are source or destination registers.
   """
 
-  def __init__(self, sequence_func, return_val_func: Callable[[Type], Value],
-               arg_types_and_side_effects: List[Tuple[Type, SideEffect]]):
+  def __init__(self,
+               sequence_func,
+               return_val_func: Callable[[Type], Value],
+               arg_types_and_side_effects: List[Tuple[Type, SideEffect]],
+               mnemonic: Optional[str] = None,
+               extension: Optional[str] = None):
     super().__init__(sequence_func, [t for t, _ in arg_types_and_side_effects])
     self.return_val_func = return_val_func
     self.side_effects = [se for _, se in arg_types_and_side_effects]
+    self._mnemonic = mnemonic
+    self._extension = extension
 
   def num_read_effects(self) -> int:
     """
@@ -55,6 +61,22 @@ class Instruction(SequenceDeclaration):
 
     return self.side_effects.count(SideEffect.READ) + self.side_effects.count(
         SideEffect.READ_WRITE)
+
+  def get_mnemonic(self) -> Optional[str]:
+    """
+    Returns the ISA mnemonic for this instruction, if available.
+
+    :return: The ISA mnemonic string, or None if not set.
+    """
+    return self._mnemonic
+
+  def get_extension(self) -> Optional[str]:
+    """
+    Returns the ISA extension this instruction belongs to, if available.
+
+    :return: The ISA extension string, or None if not set.
+    """
+    return self._extension
 
   def __repr__(self):
     return f"Instruction<{self.name}, {self.arg_types}, {self.side_effects}>"
@@ -119,14 +141,19 @@ class Instruction(SequenceDeclaration):
 
 
 def instruction(return_val_func: Callable[[Type], Value],
-                args: List[Tuple[Type, SideEffect]], **kwargs):
+                args: List[Tuple[Type, SideEffect]],
+                mnemonic: Optional[str] = None,
+                extension: Optional[str] = None):
   """
   Decorator for defining instructions.
 
+  :param return_val_func: Function to allocate return values for destination registers.
   :param args: The types of the instruction's operands and the side-effects on them.
+  :param mnemonic: Optional ISA mnemonic for this instruction.
+  :param extension: Optional ISA extension this instruction belongs to.
   """
 
   def wrapper(func):
-    return Instruction(func, return_val_func, args)
+    return Instruction(func, return_val_func, args, mnemonic, extension)
 
   return wrapper

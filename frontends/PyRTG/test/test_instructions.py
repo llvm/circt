@@ -96,3 +96,21 @@ def test_instruction_as_seq(config):
   instr_set = Set.create(ADD1, ADD1)
   selected_instr = instr_set.get_random()
   selected_instr(reg, reg, imm)
+
+
+@instruction(return_val_func=mock_return_val_func,
+             args=[(IntegerRegisterType(), SideEffect.WRITE),
+                   (IntegerRegisterType(), SideEffect.READ)],
+             mnemonic="add",
+             extension="some_ext")
+def add_with_metadata(rd, rs):
+  rtgtest.ADDI(rd, rs, Immediate(12, 0))
+
+
+# CHECK-LABEL: rtg.test @test_instruction_metadata
+@test(InstructionTestConfig)
+def test_instruction_metadata(config):
+  assert add_with_metadata.get_mnemonic() == "add"
+  assert add_with_metadata.get_extension() == "some_ext"
+  assert ADD1.get_mnemonic() is None
+  assert ADD1.get_extension() is None
