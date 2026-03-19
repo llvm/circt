@@ -221,7 +221,10 @@ class ISAInstructionFormat {
   // Example: "$mnemonic ` ` $rd `, ` signed($imm) `(` $rs `)`"
   string isaAssemblyFormat = "";
 
-  /// ISA extension/namespace this instruction belongs to.
+  // Mnemonic of this instruction in ISA assembly.
+  string isaMnemonic = "";
+
+  // ISA extension/namespace this instruction belongs to.
   string extension = "";
 
   // XLENs this instruction is valid for.
