@@ -193,6 +193,26 @@ module Foo;
 endmodule
 
 // -----
+module Foo;
+  typedef enum { A, B, C } e;
+  e val;
+  initial begin
+    // expected-error @below {{unsupported system call `next`}}
+    val = val.next();
+  end
+endmodule
+
+// -----
+module Foo;
+  typedef enum { A, B, C } e;
+  e val;
+  initial begin
+    // expected-error @below {{unsupported system call `prev`}}
+    val = val.prev();
+  end
+endmodule
+
+// -----
 function Foo;
   logic [1:0] a;
   // expected-error @below {{unsupported system call `$fwrite`}}

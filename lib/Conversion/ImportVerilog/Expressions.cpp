@@ -3085,14 +3085,15 @@ Value Context::convertSystemCall(
   //===--------------------------------------------------------------------===//
 
   if (nameId == ksn::Num) {
-    // Slang already checks the arity and applicability of `num`.
-    assert(numArgs == 1 && "`num` takes 1 argument");
-    assert(args[0]->type->isAssociativeArray() &&
-           "`num` is only valid on associative arrays");
-    auto value = convertLvalueExpression(*args[0]);
-    if (!value)
-      return {};
-    return moore::AssocArraySizeOp::create(builder, loc, value);
+    if (args[0]->type->isAssociativeArray()) {
+      assert(numArgs == 1 && "`num` takes 1 argument");
+      auto value = convertLvalueExpression(*args[0]);
+      if (!value)
+        return {};
+      return moore::AssocArraySizeOp::create(builder, loc, value);
+    }
+    emitError(loc) << "unsupported system call `" << name << "`";
+    return {};
   }
 
   if (nameId == ksn::Exists) {
@@ -3108,26 +3109,28 @@ Value Context::convertSystemCall(
   }
 
   // Associative array traversal methods (all take 2 arguments: array ref, key
-  // ref)
+  // ref). These names are shared with enum built-in methods (next/prev/first/
+  // last), which take 1 or 2 arguments. Only handle the associative array case
+  // here; fall through to the unsupported diagnostic for other types.
   if (nameId == ksn::First || nameId == ksn::Last || nameId == ksn::Next ||
       nameId == ksn::Prev) {
-    // Slang already checks the arity and applicability of traversal methods.
-    assert(numArgs == 2 && "traversal methods take 2 arguments");
-    assert(args[0]->type->isAssociativeArray() &&
-           "traversal methods are only valid on associative arrays");
-    auto array = convertLvalueExpression(*args[0]);
-    auto key = convertLvalueExpression(*args[1]);
-    if (!array || !key)
-      return {};
-    if (nameId == ksn::First)
-      return moore::AssocArrayFirstOp::create(builder, loc, array, key);
-    if (nameId == ksn::Last)
-      return moore::AssocArrayLastOp::create(builder, loc, array, key);
-    if (nameId == ksn::Next)
-      return moore::AssocArrayNextOp::create(builder, loc, array, key);
-    if (nameId == ksn::Prev)
-      return moore::AssocArrayPrevOp::create(builder, loc, array, key);
-    assert(false && "all traversal cases handled above");
+    if (args[0]->type->isAssociativeArray()) {
+      assert(numArgs == 2 && "traversal methods take 2 arguments");
+      auto array = convertLvalueExpression(*args[0]);
+      auto key = convertLvalueExpression(*args[1]);
+      if (!array || !key)
+        return {};
+      if (nameId == ksn::First)
+        return moore::AssocArrayFirstOp::create(builder, loc, array, key);
+      if (nameId == ksn::Last)
+        return moore::AssocArrayLastOp::create(builder, loc, array, key);
+      if (nameId == ksn::Next)
+        return moore::AssocArrayNextOp::create(builder, loc, array, key);
+      if (nameId == ksn::Prev)
+        return moore::AssocArrayPrevOp::create(builder, loc, array, key);
+      llvm_unreachable("all traversal cases handled above");
+    }
+    emitError(loc) << "unsupported system call `" << name << "`";
     return {};
   }
 
