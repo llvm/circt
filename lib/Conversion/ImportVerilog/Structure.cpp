@@ -1389,7 +1389,8 @@ Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
 
     SmallString<64> name;
     const auto &parent = subroutine.getParentScope()->asSymbol();
-    if (parent.kind == slang::ast::SymbolKind::CompilationUnit) {
+    if (parent.kind == slang::ast::SymbolKind::CompilationUnit &&
+        !subroutine.flags.has(slang::ast::MethodFlags::DPIImport)) {
       // Use a deterministic prefix for compilation-unit ($unit) symbols to
       // avoid collisions with module / package namespaces.
       name += "__unit__";
