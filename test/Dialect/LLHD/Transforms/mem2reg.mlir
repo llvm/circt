@@ -1156,3 +1156,42 @@ hw.module @CaptureNonProbeValuesAcrossWait(in %a: i42, in %b: i42) {
     llhd.halt
   }
 }
+
+// Don't try to promote signals with types that have no fixed bit width (such as
+// f64) or that exceed MLIR's IntegerType width limit, since Mem2Reg needs to
+// create integer constants for default values of promoted slots.
+// CHECK-LABEL: @RealSignalNotPromoted
+hw.module @RealSignalNotPromoted(in %clk : i1, in %a : f64, in %b : f64) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK: %r = llhd.sig %b : f64
+  %r = llhd.sig %b : f64
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    llhd.wait (%clk : i1), ^bb2
+  ^bb2:
+    // CHECK: llhd.drv %r, %a after
+    llhd.drv %r, %a after %0 : f64
+    cf.br ^bb1
+  }
+}
+
+// CHECK-LABEL: @TooWideSignalNotPromoted
+hw.module @TooWideSignalNotPromoted(
+  in %clk : i1,
+  in %a : !hw.array<2097153xi8>,
+  in %b : !hw.array<2097153xi8>
+) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK: %r = llhd.sig %b : !hw.array<2097153xi8>
+  %r = llhd.sig %b : !hw.array<2097153xi8>
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    llhd.wait (%clk : i1), ^bb2
+  ^bb2:
+    // CHECK: llhd.drv %r, %a after
+    llhd.drv %r, %a after %0 : !hw.array<2097153xi8>
+    cf.br ^bb1
+  }
+}

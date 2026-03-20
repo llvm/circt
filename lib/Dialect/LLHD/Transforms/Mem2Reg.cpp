@@ -824,6 +824,14 @@ void Promoter::findPromotableSlots() {
           }))
         continue;
 
+      // Mem2Reg needs to be able to materialize integer constants for promoted
+      // slots, which requires the bit width to fit in an IntegerType. Skip
+      // signals that are too wide.
+      auto bitWidth = hw::getBitWidth(getStoredType(operand));
+      if (bitWidth < 0 ||
+          static_cast<unsigned>(bitWidth) > IntegerType::kMaxWidth)
+        continue;
+
       slots.push_back(operand);
     }
   });
