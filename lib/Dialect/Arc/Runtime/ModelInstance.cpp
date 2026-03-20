@@ -69,12 +69,17 @@ ModelInstance::ModelInstance(const ArcRuntimeModelInfo *modelInfo,
       traceEncoder = std::make_unique<VCDTraceEncoder>(
           modelInfo, mutableState, getTraceFilePath(".vcd"), verbose);
       break;
-#ifdef CIRCT_LIBFST_ENABLED
     case TraceMode::FST:
+#ifdef CIRCT_LIBFST_ENABLED
       traceEncoder = std::make_unique<FSTTraceEncoder>(
           modelInfo, mutableState, getTraceFilePath(".fst"), verbose);
-      break;
+#else
+      std::cerr << "[ArcRuntime] ERROR: FST tracing was requested but CIRCT "
+                   "was not built with FST support (CIRCT_LIBFST_ENABLED=OFF)."
+                << std::endl;
+      traceEncoder = {};
 #endif
+      break;
     }
   } else {
     traceEncoder = {};
@@ -184,10 +189,8 @@ void ModelInstance::parseArgs(const char *args) {
       verbose = true;
     } else if (option == "vcd") {
       traceMode = TraceMode::VCD;
-#ifdef CIRCT_LIBFST_ENABLED
     } else if (option == "fst") {
       traceMode = TraceMode::FST;
-#endif
     } else if (parseKeyValueArg(option, key, value) && !value.empty()) {
       if (key == "traceFile")
         traceFileArg = value;

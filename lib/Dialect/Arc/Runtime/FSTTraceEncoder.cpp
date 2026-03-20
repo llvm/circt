@@ -158,8 +158,7 @@ bool FSTTraceEncoder::initialize(const ArcState *state) {
   }
 
   fstWriterSetPackType(fstWriter, FST_WR_PT_LZ4);
-  // FIXME: This should have an actual real time scale.
-  // fstWriterSetTimescaleFromString(fstWriter, "1 fs");
+  fstWriterSetTimescaleFromString(fstWriter, "1 fs");
 
   if (debug)
     std::cout << "[ArcRuntime] Created FST trace file: " << outFilePath
@@ -228,8 +227,8 @@ void FSTTraceEncoder::encode(TraceBuffer &work) {
 
 void FSTTraceEncoder::windDownWorker() {}
 
-void VCDTraceEncoder::finalize(const ArcState *state) {
-  if (outFile.is_open()) {
+void FSTTraceEncoder::finalize(const ArcState *state) {
+  if (fstWriter) {
     // Finalize the trace file with the final simulation time
     assert(workerStep <= getTimeStep());
     uint64_t finalSimTime =
