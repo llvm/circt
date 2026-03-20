@@ -3973,4 +3973,42 @@ firrtl.module @ResetCast(out %a0: !firrtl.reset, out %a1: !firrtl.reset) {
   firrtl.matchingconnect %a1, %1 : !firrtl.reset
 }
 
+// CHECK-LABEL: firrtl.module @StringConcatCanonicalization
+firrtl.module @StringConcatCanonicalization(out %out1: !firrtl.string, out %out2: !firrtl.string, out %out3: !firrtl.string, out %out4: !firrtl.string, out %out5: !firrtl.string) {
+  %s1 = firrtl.string "Hello"
+  %s2 = firrtl.string "World"
+  %s3 = firrtl.string "!"
+  %empty = firrtl.string ""
+
+  // CHECK-DAG: [[EMPTY:%.+]] = firrtl.string ""
+  // CHECK-DAG: [[HELLO:%.+]] = firrtl.string "Hello"
+  // CHECK-DAG: [[HELLOWORLD:%.+]] = firrtl.string "HelloWorld!"
+
+  // Merge all constants
+  // CHECK: firrtl.propassign %out1, [[HELLOWORLD]]
+  %0 = firrtl.string.concat %s1, %s2, %s3 : !firrtl.string
+  firrtl.propassign %out1, %0 : !firrtl.string
+
+  // Drop empty string
+  // CHECK: firrtl.propassign %out2, [[HELLO]]
+  %1 = firrtl.string.concat %s1, %empty : !firrtl.string
+  firrtl.propassign %out2, %1 : !firrtl.string
+
+  // Single operand replaced with operand
+  // CHECK: firrtl.propassign %out3, [[HELLO]]
+  %2 = firrtl.string.concat %s1 : !firrtl.string
+  firrtl.propassign %out3, %2 : !firrtl.string
+
+  // Empty concat
+  // CHECK: firrtl.propassign %out4, [[EMPTY]]
+  %3 = firrtl.string.concat %empty, %empty : !firrtl.string
+  firrtl.propassign %out4, %3 : !firrtl.string
+
+  // Flatten nested concat
+  // CHECK: firrtl.propassign %out5, [[HELLOWORLD]]
+  %4 = firrtl.string.concat %s1, %s2 : !firrtl.string
+  %5 = firrtl.string.concat %4, %s3 : !firrtl.string
+  firrtl.propassign %out5, %5 : !firrtl.string
+}
+
 }

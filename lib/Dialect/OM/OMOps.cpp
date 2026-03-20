@@ -15,6 +15,7 @@
 #include "circt/Dialect/OM/OMUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/STLExtras.h"
 
 using namespace mlir;
 using namespace circt::om;
@@ -688,6 +689,197 @@ IntegerShlOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
   if (!rhs.isRepresentableByInt64())
     return emitOpError("shift amount must be representable in 64 bits");
   return success(lhs << rhs.getExtValue());
+}
+
+//===----------------------------------------------------------------------===//
+// StringConcatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult StringConcatOp::fold(FoldAdaptor adaptor) {
+  // Check if all operands are constant strings before accumulating.
+  if (!llvm::all_of(adaptor.getStrings(), [](Attribute operand) {
+        return isa_and_nonnull<StringAttr>(operand);
+      }))
+    return {};
+
+  // All operands are constant strings, concatenate them.
+  SmallString<64> result;
+  for (auto operand : adaptor.getStrings())
+    result += cast<StringAttr>(operand).getValue();
+
+  return StringAttr::get(result, getResult().getType());
+}
+
+namespace {
+/// Flatten nested string.concat operations into a single concat.
+/// string.concat(a, string.concat(b, c), d) -> string.concat(a, b, c, d)
+class FlattenOMStringConcat : public mlir::RewritePattern {
+public:
+  FlattenOMStringConcat(MLIRContext *context)
+      : RewritePattern(StringConcatOp::getOperationName(), 0, context) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto concat = cast<StringConcatOp>(op);
+
+    // Check if any operands are nested concats.
+    bool hasNestedConcat = llvm::any_of(concat.getStrings(), [](Value operand) {
+      return !!operand.getDefiningOp<StringConcatOp>();
+    });
+
+    if (!hasNestedConcat)
+      return failure();
+
+    // Flatten nested concats.
+    SmallVector<Value> flatOperands;
+    for (auto input : concat.getStrings()) {
+      if (auto nestedConcat = input.getDefiningOp<StringConcatOp>())
+        llvm::append_range(flatOperands, nestedConcat.getStrings());
+      else
+        flatOperands.push_back(input);
+    }
+
+    rewriter.modifyOpInPlace(concat,
+                             [&]() { concat->setOperands(flatOperands); });
+    return success();
+  }
+};
+
+/// Merge consecutive constant strings in a concat.
+/// string.concat("a", "b", x, "c", "d") -> string.concat("ab", x, "cd")
+class MergeAdjacentOMStringConstants : public mlir::RewritePattern {
+public:
+  MergeAdjacentOMStringConstants(MLIRContext *context)
+      : RewritePattern(StringConcatOp::getOperationName(), 0, context) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto concat = cast<StringConcatOp>(op);
+
+    SmallVector<Value> newOperands;
+    SmallString<64> accumulatedLit;
+    SmallVector<ConstantOp> accumulatedOps;
+    bool changed = false;
+
+    auto flushLiterals = [&]() {
+      if (accumulatedOps.empty())
+        return;
+
+      // If only one literal, reuse it.
+      if (accumulatedOps.size() == 1) {
+        newOperands.push_back(accumulatedOps[0]);
+      } else {
+        // Multiple literals - merge them.
+        auto newLit = rewriter.createOrFold<ConstantOp>(
+            concat.getLoc(),
+            StringAttr::get(accumulatedLit, concat.getResult().getType()));
+        newOperands.push_back(newLit);
+        changed = true;
+      }
+      accumulatedLit.clear();
+      accumulatedOps.clear();
+    };
+
+    for (auto operand : concat.getStrings()) {
+      if (auto litOp = operand.getDefiningOp<ConstantOp>()) {
+        if (auto strAttr = dyn_cast<StringAttr>(litOp.getValue())) {
+          accumulatedLit += strAttr.getValue();
+          accumulatedOps.push_back(litOp);
+          continue;
+        }
+      }
+
+      flushLiterals();
+      newOperands.push_back(operand);
+    }
+
+    // Flush any remaining literals.
+    flushLiterals();
+
+    if (!changed)
+      return failure();
+
+    rewriter.modifyOpInPlace(concat,
+                             [&]() { concat->setOperands(newOperands); });
+    return success();
+  }
+};
+
+/// Remove empty string operands from concat.
+/// string.concat(a, "", b) -> string.concat(a, b)
+class RemoveEmptyOMStrings : public mlir::RewritePattern {
+public:
+  RemoveEmptyOMStrings(MLIRContext *context)
+      : RewritePattern(StringConcatOp::getOperationName(), 0, context) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto concat = cast<StringConcatOp>(op);
+
+    SmallVector<Value> newOperands;
+    bool changed = false;
+
+    for (auto operand : concat.getStrings()) {
+      if (auto litOp = operand.getDefiningOp<ConstantOp>()) {
+        if (auto strAttr = dyn_cast<StringAttr>(litOp.getValue())) {
+          if (strAttr.getValue().empty()) {
+            changed = true;
+            continue;
+          }
+        }
+      }
+      newOperands.push_back(operand);
+    }
+
+    if (!changed)
+      return failure();
+
+    // If no operands remain, replace with empty string.
+    if (newOperands.empty())
+      return rewriter.replaceOpWithNewOp<ConstantOp>(
+                 concat, StringAttr::get("", concat.getResult().getType())),
+             success();
+
+    // If only one operand remains, replace with that operand.
+    if (newOperands.size() == 1)
+      return rewriter.replaceOp(concat, newOperands[0]), success();
+
+    rewriter.modifyOpInPlace(concat,
+                             [&]() { concat->setOperands(newOperands); });
+    return success();
+  }
+};
+
+/// Simplify single-operand concat to just the operand.
+/// string.concat(x) -> x
+class SimplifySingleOperandOMStringConcat : public mlir::RewritePattern {
+public:
+  SimplifySingleOperandOMStringConcat(MLIRContext *context)
+      : RewritePattern(StringConcatOp::getOperationName(), 0, context) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op,
+                  mlir::PatternRewriter &rewriter) const override {
+    auto concat = cast<StringConcatOp>(op);
+
+    if (concat.getStrings().size() != 1)
+      return failure();
+
+    rewriter.replaceOp(concat, concat.getStrings()[0]);
+    return success();
+  }
+};
+
+} // namespace
+
+void StringConcatOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                 MLIRContext *context) {
+  results.insert<FlattenOMStringConcat, MergeAdjacentOMStringConstants,
+                 RemoveEmptyOMStrings, SimplifySingleOperandOMStringConcat>(
+      context);
 }
 
 //===----------------------------------------------------------------------===//

@@ -531,6 +531,9 @@ def StringConcatOp : OMOp<"string.concat", [Pure, SameOperandsAndResultType]> {
   let results = (outs StringType:$result);
 
   let assemblyFormat = "$strings attr-dict `:` type($result)";
+
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 #endif // CIRCT_DIALECT_OM_OMOPS_TD

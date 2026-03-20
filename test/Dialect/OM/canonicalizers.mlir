@@ -22,3 +22,33 @@ func.func @ObjectsMustDCE() {
   om.object @Foo() : () -> !om.class.type<@Foo>
   return
 }
+
+om.class @StringConcatCanonicalization() -> (out1: !om.string, out2: !om.string, out3: !om.string, out4: !om.string, out5: !om.string) {
+  %s1 = om.constant "Hello" : !om.string
+  %s2 = om.constant "World" : !om.string
+  %s3 = om.constant "!" : !om.string
+  %empty = om.constant "" : !om.string
+
+  // CHECK-DAG: [[EMPTY:%.+]] = om.constant "" : !om.string
+  // CHECK-DAG: [[HELLO:%.+]] = om.constant "Hello" : !om.string
+  // CHECK-DAG: [[HELLOWORLD:%.+]] = om.constant "HelloWorld!" : !om.string
+
+  // Merge all constants
+  %0 = om.string.concat %s1, %s2, %s3 : !om.string
+
+  // Drop empty string
+  %1 = om.string.concat %s1, %empty : !om.string
+
+  // Single operand replaced with operand
+  %2 = om.string.concat %s1 : !om.string
+
+  // Empty concat
+  %3 = om.string.concat %empty, %empty : !om.string
+
+  // Flatten nested concat
+  %4 = om.string.concat %s1, %s2 : !om.string
+  %5 = om.string.concat %4, %s3 : !om.string
+
+  // CHECK: om.class.fields [[HELLOWORLD]], [[HELLO]], [[HELLO]], [[EMPTY]], [[HELLOWORLD]]
+  om.class.fields %0, %1, %2, %3, %5 : !om.string, !om.string, !om.string, !om.string, !om.string
+}
