@@ -1129,7 +1129,7 @@ struct PortPrunerHelpers {
         } else {
           // Replace uses of the old result with the new result
           instOp.getResult(oldResultIdx)
-              .replaceAllUsesWith(newInst.getResult(newResultIdx));
+              .replaceAllUsesWith(newInst->getResult(newResultIdx));
           ++newResultIdx;
         }
       }

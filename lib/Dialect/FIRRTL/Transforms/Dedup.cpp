@@ -772,8 +772,8 @@ struct Equivalence {
   }
 
   // NOLINTNEXTLINE(misc-no-recursion)
-  LogicalResult check(InFlightDiagnostic &diag, FInstanceLike a,
-                      FInstanceLike b) {
+  LogicalResult check(InFlightDiagnostic &diag, igraph::InstanceOpInterface a,
+                      igraph::InstanceOpInterface b) {
     // Get the list of module names from the list (for InstanceOp/ObjectOp,
     // there's only one)
     auto aNames = a.getReferencedModuleNamesAttr();
@@ -819,13 +819,15 @@ struct Equivalence {
       return failure();
     }
 
-    // If its an instance operaiton, perform some checking and possibly
+    // If it's a firrtl operation that implements InstanceOpInterface
+    // (InstanceOp/InstanceChoiceOp/ObjectOp) perform some checking and possibly
     // recurse.
-    if (auto aInst = dyn_cast<FInstanceLike>(a)) {
-      auto bInst = cast<FInstanceLike>(b);
-      if (failed(check(diag, aInst, bInst)))
-        return failure();
-    }
+    if (auto aInst = dyn_cast<igraph::InstanceOpInterface>(a))
+      if (auto bInst = dyn_cast<igraph::InstanceOpInterface>(b))
+        if (isa_and_nonnull<firrtl::FIRRTLDialect>(a->getDialect()) &&
+            isa_and_nonnull<firrtl::FIRRTLDialect>(b->getDialect()) &&
+            failed(check(diag, aInst, bInst)))
+          return failure();
 
     // Operation results.
     if (a->getNumResults() != b->getNumResults()) {

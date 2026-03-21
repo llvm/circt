@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceImplementation.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
@@ -2606,7 +2607,8 @@ static void replaceUsesRespectingErasedPorts(Operation *op1, Operation *op2,
   }
 }
 
-InstanceOp InstanceOp::cloneWithErasedPorts(const llvm::BitVector &erasures) {
+FInstanceLike
+InstanceOp::cloneWithErasedPorts(const llvm::BitVector &erasures) {
   assert(erasures.size() >= getNumResults() &&
          "erasures is not at least as large as getNumResults()");
 
@@ -2635,7 +2637,7 @@ InstanceOp InstanceOp::cloneWithErasedPorts(const llvm::BitVector &erasures) {
   return clone;
 }
 
-InstanceOp InstanceOp::cloneWithErasedPortsAndReplaceUses(
+FInstanceLike InstanceOp::cloneWithErasedPortsAndReplaceUses(
     const llvm::BitVector &erasures) {
   auto clone = cloneWithErasedPorts(erasures);
   replaceUsesRespectingErasedPorts(getOperation(), clone, erasures);
@@ -2661,7 +2663,7 @@ Attribute InstanceOp::getPortDomain(unsigned portIdx) {
   return getDomainInfo()[portIdx];
 }
 
-InstanceOp InstanceOp::cloneWithInsertedPorts(
+FInstanceLike InstanceOp::cloneWithInsertedPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
   auto *context = getContext();
   auto empty = ArrayAttr::get(context, {});
@@ -2746,7 +2748,7 @@ InstanceOp InstanceOp::cloneWithInsertedPorts(
   return clone;
 }
 
-InstanceOp InstanceOp::cloneWithInsertedPortsAndReplaceUses(
+FInstanceLike InstanceOp::cloneWithInsertedPortsAndReplaceUses(
     ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
   auto clone = cloneWithInsertedPorts(insertions);
   replaceUsesRespectingInsertedPorts(getOperation(), clone, insertions);
@@ -3232,7 +3234,7 @@ InstanceChoiceOp::getTargetChoices() {
   return choices;
 }
 
-InstanceChoiceOp InstanceChoiceOp::cloneWithInsertedPorts(
+FInstanceLike InstanceChoiceOp::cloneWithInsertedPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
   auto *context = getContext();
   auto empty = ArrayAttr::get(context, {});
@@ -3320,14 +3322,14 @@ InstanceChoiceOp InstanceChoiceOp::cloneWithInsertedPorts(
   return clone;
 }
 
-InstanceChoiceOp InstanceChoiceOp::cloneWithInsertedPortsAndReplaceUses(
+FInstanceLike InstanceChoiceOp::cloneWithInsertedPortsAndReplaceUses(
     ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
   auto clone = cloneWithInsertedPorts(insertions);
   replaceUsesRespectingInsertedPorts(getOperation(), clone, insertions);
   return clone;
 }
 
-InstanceChoiceOp
+FInstanceLike
 InstanceChoiceOp::cloneWithErasedPorts(const llvm::BitVector &erasures) {
   assert(erasures.size() >= getNumResults() &&
          "erasures is not at least as large as getNumResults()");
@@ -3359,7 +3361,7 @@ InstanceChoiceOp::cloneWithErasedPorts(const llvm::BitVector &erasures) {
   return clone;
 }
 
-InstanceChoiceOp InstanceChoiceOp::cloneWithErasedPortsAndReplaceUses(
+FInstanceLike InstanceChoiceOp::cloneWithErasedPortsAndReplaceUses(
     const llvm::BitVector &erasures) {
   auto clone = cloneWithErasedPorts(erasures);
   replaceUsesRespectingErasedPorts(getOperation(), clone, erasures);

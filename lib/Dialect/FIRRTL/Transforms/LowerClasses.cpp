@@ -1488,7 +1488,7 @@ updateInstanceInModule(InstanceOp firrtlInstance, InstanceGraph &instanceGraph,
     return success();
 
   // Create a new instance with the property ports removed.
-  InstanceOp newInstance =
+  auto newInstance =
       firrtlInstance.cloneWithErasedPortsAndReplaceUses(portsToErase);
 
   // Replace the instance in the instance graph. This is called from multiple

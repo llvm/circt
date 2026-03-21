@@ -1891,10 +1891,10 @@ void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
       auto newInstOp = instOp.cloneWithInsertedPortsAndReplaceUses(
           {{/*portIndex=*/0,
             {domain.resetName, domain.resetType, Direction::In}}});
-      instReset = newInstOp.getResult(0);
+      instReset = newInstOp->getResult(0);
       instanceGraph->replaceInstance(instOp, newInstOp);
       instOp->erase();
-      instOp = newInstOp;
+      instOp = cast<InstanceOp>(newInstOp);
     } else if (domain.existingPort.has_value()) {
       auto idx = *domain.existingPort;
       instReset = instOp.getResult(idx);
