@@ -63,6 +63,28 @@ TEST(SatSolverTest, IndexedMaxHeapAvoidsDuplicateInsertions) {
   EXPECT_TRUE(heap.empty());
 }
 
+TEST(SatSolverTest, IndexedMaxHeapClearRemovesEntriesAndAllowsReuse) {
+  llvm::SmallVector<HeapNode, 4> nodes = {{1.0}, {5.0}, {3.0}};
+  IndexedMaxHeap<HeapNode, HeapNodeScore> heap(nodes);
+
+  for (unsigned i = 0; i < nodes.size(); ++i)
+    heap.insert(i);
+
+  heap.clear();
+
+  EXPECT_TRUE(heap.empty());
+  for (unsigned i = 0; i < nodes.size(); ++i)
+    EXPECT_FALSE(heap.contains(i));
+
+  nodes[0].score = 7.0;
+  heap.insert(0);
+  heap.insert(2);
+
+  EXPECT_EQ(0u, heap.pop());
+  EXPECT_EQ(2u, heap.pop());
+  EXPECT_TRUE(heap.empty());
+}
+
 // ==----------------------------------------------------------------------===//
 // Z3 solver tests
 // ==----------------------------------------------------------------------===//
