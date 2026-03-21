@@ -682,14 +682,16 @@ struct ModuleVisitor : public BaseVisitor {
 
     // Handle delayed assignments.
     if (auto *timingCtrl = assignNode.getDelay()) {
-      auto *ctrl = timingCtrl->as_if<slang::ast::DelayControl>();
-      assert(ctrl && "slang guarantees this to be a simple delay");
-      auto delay = context.convertRvalueExpression(
-          ctrl->expr, moore::TimeType::get(builder.getContext()));
-      if (!delay)
-        return failure();
-      moore::DelayedContinuousAssignOp::create(builder, loc, lhs, rhs, delay);
-      return success();
+      if (auto *ctrl = timingCtrl->as_if<slang::ast::DelayControl>()) {
+        auto delay = context.convertRvalueExpression(
+            ctrl->expr, moore::TimeType::get(builder.getContext()));
+        if (!delay)
+          return failure();
+        moore::DelayedContinuousAssignOp::create(builder, loc, lhs, rhs, delay);
+        return success();
+      }
+      mlir::emitError(loc) << "unsupported delay with rise/fall/turn-off";
+      return failure();
     }
 
     // Otherwise this is a regular assignment.
