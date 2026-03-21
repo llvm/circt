@@ -618,6 +618,17 @@ function void RepeatLoopStatements(int x, bit y);
   // CHECK: ^[[BB_EXIT]]:
 endfunction
 
+// CHECK-LABEL: func.func private @RepeatLoopWithReal(
+// CHECK-SAME: %arg0: !moore.f64
+function void RepeatLoopWithReal(real x);
+  // CHECK: [[CONV:%.+]] = moore.real_to_int %arg0 : f64 -> i32
+  // CHECK: cf.br ^[[BB_CHECK:.+]]([[CONV]] : !moore.i32)
+  repeat (x) begin
+    // CHECK: ^[[BB_CHECK]]
+    dummyA();
+  end
+endfunction
+
 // CHECK-LABEL: moore.module @Statements
 module Statements(
   // CHECK-SAME: out out0 : !moore.l256

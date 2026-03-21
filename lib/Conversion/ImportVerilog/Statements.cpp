@@ -580,7 +580,8 @@ struct StmtVisitor {
 
   // Handle `repeat` loops.
   LogicalResult visit(const slang::ast::RepeatLoopStatement &stmt) {
-    auto count = context.convertRvalueExpression(stmt.count);
+    auto intType = moore::IntType::getInt(context.getContext(), 32);
+    auto count = context.convertRvalueExpression(stmt.count, intType);
     if (!count)
       return failure();
 
