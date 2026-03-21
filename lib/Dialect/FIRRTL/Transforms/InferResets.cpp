@@ -29,7 +29,6 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
-#include <mlir/IR/BuiltinAttributes.h>
 
 #define DEBUG_TYPE "infer-resets"
 
@@ -913,8 +912,8 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
 void InferResetsPass::traceResets(FInstanceLike inst) {
   LLVM_DEBUG(llvm::dbgs() << "Visiting instance " << inst.getInstanceName()
                           << "\n");
-  for (auto moduleName :
-       inst.getReferencedModuleNamesAttr().getAsRange<StringAttr>()) {
+  auto moduleNames = inst.getReferencedModuleNamesAttr();
+  for (auto moduleName : moduleNames.getAsRange<StringAttr>()) {
     auto *node = instanceGraph->lookup(moduleName);
     auto module = dyn_cast<FModuleOp>(*node->getModule());
     if (!module)
@@ -1154,13 +1153,6 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
   SmallSetVector<Operation *, 16> worklist;
   SmallDenseSet<Operation *> moduleWorklist;
   SmallDenseSet<std::pair<Operation *, Operation *>> extmoduleWorklist;
-  auto updateInstance = [&](Operation *inst, StringAttr moduleName) {
-    auto *node = instanceGraph->lookup(moduleName);
-    if (!node || !node->getModule())
-      return;
-    if (auto refModule = dyn_cast<FExtModuleOp>(*node->getModule()))
-      extmoduleWorklist.insert({refModule, inst});
-  };
   for (auto signal : net) {
     Value value = signal.field.getValue();
     if (!isa<BlockArgument>(value) &&
@@ -1178,9 +1170,12 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
       }
 
       TypeSwitch<Operation *>(value.getDefiningOp())
-          .Case<FInstanceLike>([&](auto op) {
-            for (auto moduleName : op.getReferencedModuleNamesAttr())
-              updateInstance(op, cast<StringAttr>(moduleName));
+          .Case<FInstanceLike>([&](FInstanceLike op) {
+            for (auto moduleName : op.getReferencedModuleNamesAttr()) {
+              auto *node = instanceGraph->lookup(cast<StringAttr>(moduleName));
+              if (auto refModule = dyn_cast<FExtModuleOp>(*node->getModule()))
+                extmoduleWorklist.insert({refModule, op.getOperation()});
+            }
           })
           .Case<UninferredResetCastOp>([&](auto op) {
             op.replaceAllUsesWith(op.getInput());
@@ -1253,9 +1248,8 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
   }
 
   // Update extmodule types based on their instantiation.
-  for (auto pair : extmoduleWorklist) {
-    auto module = cast<FExtModuleOp>(pair.first);
-    auto instOp = pair.second;
+  for (auto [mod, instOp] : extmoduleWorklist) {
+    auto module = cast<FExtModuleOp>(mod);
 
     SmallVector<Attribute> types;
     for (auto type : instOp->getResultTypes())
