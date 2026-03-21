@@ -1548,15 +1548,13 @@ OpFoldResult StringConcatOp::fold(FoldAdaptor adaptor) {
 namespace {
 /// Flatten nested string.concat operations into a single concat.
 /// string.concat(a, string.concat(b, c), d) -> string.concat(a, b, c, d)
-class FlattenStringConcat : public mlir::RewritePattern {
+class FlattenStringConcat : public mlir::OpRewritePattern<StringConcatOp> {
 public:
-  FlattenStringConcat(MLIRContext *context)
-      : RewritePattern(StringConcatOp::getOperationName(), 0, context) {}
+  using OpRewritePattern::OpRewritePattern;
 
   LogicalResult
-  matchAndRewrite(Operation *op,
+  matchAndRewrite(StringConcatOp concat,
                   mlir::PatternRewriter &rewriter) const override {
-    auto concat = cast<StringConcatOp>(op);
 
     // Check if any operands are nested concats.
     bool hasNestedConcat = llvm::any_of(concat.getInputs(), [](Value operand) {
@@ -1583,15 +1581,14 @@ public:
 
 /// Merge consecutive constant strings in a concat.
 /// string.concat("a", "b", x, "c", "d") -> string.concat("ab", x, "cd")
-class MergeAdjacentStringConstants : public mlir::RewritePattern {
+class MergeAdjacentStringConstants
+    : public mlir::OpRewritePattern<StringConcatOp> {
 public:
-  MergeAdjacentStringConstants(MLIRContext *context)
-      : RewritePattern(StringConcatOp::getOperationName(), 0, context) {}
+  using OpRewritePattern::OpRewritePattern;
 
   LogicalResult
-  matchAndRewrite(Operation *op,
+  matchAndRewrite(StringConcatOp concat,
                   mlir::PatternRewriter &rewriter) const override {
-    auto concat = cast<StringConcatOp>(op);
 
     SmallVector<Value> newOperands;
     SmallString<64> accumulatedLit;
@@ -1640,15 +1637,13 @@ public:
 
 /// Remove empty string operands from concat.
 /// string.concat(a, "", b) -> string.concat(a, b)
-class RemoveEmptyStrings : public mlir::RewritePattern {
+class RemoveEmptyStrings : public mlir::OpRewritePattern<StringConcatOp> {
 public:
-  RemoveEmptyStrings(MLIRContext *context)
-      : RewritePattern(StringConcatOp::getOperationName(), 0, context) {}
+  using OpRewritePattern::OpRewritePattern;
 
   LogicalResult
-  matchAndRewrite(Operation *op,
+  matchAndRewrite(StringConcatOp concat,
                   mlir::PatternRewriter &rewriter) const override {
-    auto concat = cast<StringConcatOp>(op);
 
     SmallVector<Value> newOperands;
     bool changed = false;
@@ -1684,15 +1679,14 @@ public:
 
 /// Simplify single-operand concat to just the operand.
 /// string.concat(x) -> x
-class SimplifySingleOperandStringConcat : public mlir::RewritePattern {
+class SimplifySingleOperandStringConcat
+    : public mlir::OpRewritePattern<StringConcatOp> {
 public:
-  SimplifySingleOperandStringConcat(MLIRContext *context)
-      : RewritePattern(StringConcatOp::getOperationName(), 0, context) {}
+  using OpRewritePattern::OpRewritePattern;
 
   LogicalResult
-  matchAndRewrite(Operation *op,
+  matchAndRewrite(StringConcatOp concat,
                   mlir::PatternRewriter &rewriter) const override {
-    auto concat = cast<StringConcatOp>(op);
 
     if (concat.getInputs().size() != 1)
       return failure();
