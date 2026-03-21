@@ -1015,9 +1015,11 @@ hw.module @CombCreateDynamicInject(in %u: i42, in %v: i10, in %q: i1) {
   }
 }
 
+func.func private @use_i8(%arg0: i8)
 func.func private @use_i42(%arg0: i42)
 func.func private @use_ref_i42(%arg0: !llhd.ref<i42>)
 func.func private @use_array_i42(%arg0: !hw.array<4xi42>)
+func.func private @use_union(%arg0: !hw.union<a: i8, b: i8>)
 
 // Regression test that verifies probe is inserted post use.
 // CHECK-LABEL: ProbePostDef
@@ -1193,5 +1195,45 @@ hw.module @TooWideSignalNotPromoted(
     // CHECK: llhd.drv %r, %a after
     llhd.drv %r, %a after %0 : !hw.array<2097153xi8>
     cf.br ^bb1
+  }
+}
+
+// Promote a signal of union type. The SigStructExtractOp is used for both
+// struct and union member access; Mem2Reg must use the appropriate HW ops
+// for unpacking (union_extract) and packing (union_create).
+// CHECK-LABEL: @UnionSignalPromoted
+hw.module @UnionSignalPromoted(in %u : !hw.union<a: i8, b: i8>, in %v : i8, in %q : i1) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c0 = hw.constant 0 : i8
+  %init = hw.bitcast %c0 : (i8) -> !hw.union<a: i8, b: i8>
+  %a = llhd.sig %init : !hw.union<a: i8, b: i8>
+  // CHECK: llhd.process
+  llhd.process {
+    // Drive the whole union, then project a field.
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %u after %0 : !hw.union<a: i8, b: i8>
+    // CHECK-NOT: llhd.sig.struct_extract
+    %1 = llhd.sig.struct_extract %a["a"] : <!hw.union<a: i8, b: i8>>
+    // Conditionally drive the field (tests unpack and pack with unions).
+    // CHECK-NOT: llhd.drv
+    // CHECK-NEXT: [[EXT:%.+]] = hw.union_extract %u["a"]
+    // CHECK-NEXT: [[MUX:%.+]] = comb.mux %q, %v, [[EXT]]
+    // CHECK-NEXT: [[INJ:%.+]] = hw.union_create "a", [[MUX]]
+    llhd.drv %1, %v after %0 if %q : i8
+    // Probe the field (the value should be forwarded through the union).
+    // CHECK-NOT: llhd.prb
+    // CHECK-NEXT: [[READFIELD:%.+]] = hw.union_extract [[INJ]]["a"]
+    %2 = llhd.prb %1 : i8
+    // CHECK-NEXT: call @use_i8([[READFIELD]])
+    func.call @use_i8(%2) : (i8) -> ()
+    // Probe the whole union (should see the union_create result).
+    // CHECK-NOT: llhd.prb
+    %3 = llhd.prb %a : !hw.union<a: i8, b: i8>
+    // CHECK-NEXT: call @use_union([[INJ]])
+    func.call @use_union(%3) : (!hw.union<a: i8, b: i8>) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[INJ]]
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
   }
 }

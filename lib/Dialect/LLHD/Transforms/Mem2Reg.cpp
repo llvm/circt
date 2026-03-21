@@ -593,6 +593,11 @@ static Value unpackProjections(OpBuilder &builder, Value value,
                       op.getLoc(), value, op.getIndex());
                 })
                 .Case<SigStructExtractOp>([&](auto op) {
+                  // SigStructExtractOp is used for both struct and union
+                  // member access; use the appropriate HW extract op.
+                  if (isa<hw::UnionType>(value.getType()))
+                    return builder.createOrFold<hw::UnionExtractOp>(
+                        op.getLoc(), value, op.getFieldAttr());
                   return builder.createOrFold<hw::StructExtractOp>(
                       op.getLoc(), value, op.getFieldAttr());
                 })
@@ -627,6 +632,12 @@ static Value packProjections(OpBuilder &builder, Value value,
                       op.getLoc(), projection.into, op.getIndex(), value);
                 })
                 .Case<SigStructExtractOp>([&](auto op) {
+                  // For unions, creating a new value from a single field
+                  // replaces the entire union (all fields share storage).
+                  if (auto unionTy =
+                          dyn_cast<hw::UnionType>(projection.into.getType()))
+                    return builder.createOrFold<hw::UnionCreateOp>(
+                        op.getLoc(), unionTy, op.getFieldAttr(), value);
                   return builder.createOrFold<hw::StructInjectOp>(
                       op.getLoc(), projection.into, op.getFieldAttr(), value);
                 })
