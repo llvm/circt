@@ -216,16 +216,18 @@ class Simulator:
       if isinstance(ret, int) and ret != 0:
         print("====== Compilation failure")
 
-        # If we have the default file loggers, print the compilation logs to
-        # console. Else, assume that the user has already captured them.
-        if self.UsesStderr:
-          if self._compile_stderr_log is not None:
-            self._compile_stderr_log.seek(0)
-            print(self._compile_stderr_log.read())
-        else:
-          if self._compile_stdout_log is not None:
-            self._compile_stdout_log.seek(0)
-            print(self._compile_stdout_log.read())
+        # Always print both stdout and stderr so that linker errors (which go
+        # to stdout for cmake/ninja) are not silently hidden.
+        if self._compile_stdout_log is not None:
+          self._compile_stdout_log.seek(0)
+          stdout_content = self._compile_stdout_log.read()
+          if stdout_content:
+            print(stdout_content)
+        if self._compile_stderr_log is not None:
+          self._compile_stderr_log.seek(0)
+          stderr_content = self._compile_stderr_log.read()
+          if stderr_content:
+            print(stderr_content)
 
         return ret
     return 0
