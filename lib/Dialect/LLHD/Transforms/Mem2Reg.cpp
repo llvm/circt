@@ -805,6 +805,9 @@ void Promoter::findPromotableSlots() {
         continue;
 
       // Ensure the slot is not used in any way we cannot reason about.
+      bool hasProjection = false;
+      bool hasBlockingDrive = false;
+      bool hasDeltaDrive = false;
       auto checkUser = [&](Operation *user) -> bool {
         // We don't support nested probes and drives.
         if (region.isProperAncestor(user->getParentRegion()))
@@ -817,17 +820,22 @@ void Promoter::findPromotableSlots() {
         // during promotion because the projection chain gets severed when
         // Mem2Reg rewrites signal references into SSA block arguments.
         if (isa<SigArrayGetOp, SigExtractOp, SigStructExtractOp>(user)) {
+          hasProjection = true;
           for (auto *projectionUser : user->getUsers()) {
             if (isa<SigArrayGetOp, SigExtractOp, SigStructExtractOp>(
                     projectionUser) &&
                 projectionUser->getBlock() != user->getBlock())
               return false;
+            hasBlockingDrive |= isBlockingDrive(projectionUser);
+            hasDeltaDrive |= isDeltaDrive(projectionUser);
             if (checkedUsers.insert(projectionUser).second)
               userWorklist.push_back(projectionUser);
           }
           projections.insert({user->getResult(0), operand});
           return true;
         }
+        hasBlockingDrive |= isBlockingDrive(user);
+        hasDeltaDrive |= isDeltaDrive(user);
         return isa<ProbeOp>(user) || isBlockingDrive(user) ||
                isDeltaDrive(user);
       };
@@ -841,6 +849,12 @@ void Promoter::findPromotableSlots() {
             userWorklist.clear();
             return allOk;
           }))
+        continue;
+
+      // Don't promote slots that have projections and a mix of blocking and
+      // delta drives. A blocking drive erases the delayed reaching definition,
+      // which leaves delta projection drives without a reaching definition.
+      if (hasProjection && hasBlockingDrive && hasDeltaDrive)
         continue;
 
       // Mem2Reg needs to be able to materialize integer constants for promoted
