@@ -521,6 +521,13 @@ void DriveHoister::finalizeDriveSets() {
 void DriveHoister::hoistDrives() {
   if (driveSets.empty())
     return;
+
+  // Remove slots that have no collected drive set. This can happen when a
+  // signal is driven only in blocks that don't end with a wait/halt terminator.
+  slots.remove_if([&](auto slot) { return !driveSets.count(slot); });
+  if (slots.empty())
+    return;
+
   LLVM_DEBUG(llvm::dbgs() << "Hoisting drives of " << driveSets.size()
                           << " slots\n");
 
