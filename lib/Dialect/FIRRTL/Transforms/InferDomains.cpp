@@ -908,10 +908,12 @@ static LogicalResult processModuleBody(const DomainInfo &info,
                                        DomainTable &table,
                                        const ModuleUpdateTable &updateTable,
                                        FModuleOp moduleOp) {
-  auto result = moduleOp.getBody().walk([&](Operation *op) -> WalkResult {
-    return processOp(info, allocator, table, updateTable, op);
-  });
-  return failure(result.wasInterrupted());
+  return failure(moduleOp.getBody()
+                     .walk([&](Operation *op) -> WalkResult {
+                       return processOp(info, allocator, table, updateTable,
+                                        op);
+                     })
+                     .wasInterrupted());
 }
 
 /// Populate the domain table by processing the moduleOp. If the moduleOp has
