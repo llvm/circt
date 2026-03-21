@@ -48,6 +48,7 @@ def Mem2RegPass : Pass<"llhd-mem2reg"> {
 
 def HoistSignalsPass : Pass<"llhd-hoist-signals"> {
   let summary = "Hoist probes and promote drives to process results";
+  let dependentDialects = ["mlir::arith::ArithDialect"];
 }
 
 def LowerProcessesPass : Pass<"llhd-lower-processes", "hw::HWModuleOp"> {

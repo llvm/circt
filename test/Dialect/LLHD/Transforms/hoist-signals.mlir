@@ -309,6 +309,40 @@ hw.module @DontHoistAcrossSideEffects(in %v0: i42, in %v1: i42, in %v2: i42) {
   }
 }
 
+// Drive a signal of type f64 (Verilog `real`) across a wait boundary. The
+// hoister must be able to materialize a default f64 constant for the yield.
+// CHECK-LABEL: @RealSignalDriveAcrossWait
+hw.module @RealSignalDriveAcrossWait(in %v : f64) {
+  %0 = llhd.constant_time <1ns, 0d, 0e>
+  %cst = arith.constant 0.0 : f64
+  %a = llhd.sig %cst : f64
+  // CHECK: llhd.process -> f64
+  // CHECK: llhd.drv %a
+  llhd.process {
+    llhd.drv %a, %v after %0 : f64
+    llhd.wait delay %0, ^bb1
+  ^bb1:
+    llhd.halt
+  }
+}
+
+// Signals with types that don't have a materializable default constant (like
+// `index`) should not be hoisted. The drives remain inside the process as-is.
+// CHECK-LABEL: @UnsupportedTypeNotHoisted
+hw.module @UnsupportedTypeNotHoisted(in %v : index) {
+  %0 = llhd.constant_time <1ns, 0d, 0e>
+  %c0 = arith.constant 0 : index
+  %a = llhd.sig %c0 : index
+  // CHECK: llhd.process
+  llhd.process {
+    // CHECK: llhd.drv %a, %v after
+    llhd.drv %a, %v after %0 : index
+    llhd.wait delay %0, ^bb1
+  ^bb1:
+    llhd.halt
+  }
+}
+
 func.func private @use_i42(%arg0: i42)
 func.func private @use_inout_i42(%arg0: !llhd.ref<i42>)
 func.func private @maybe_side_effecting()
