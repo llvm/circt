@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - ESIRuntime-*
-  schedule:
-    - cron: 0 12 * * 1
   workflow_dispatch:
 
 jobs:
@@ -142,7 +140,8 @@ jobs:
 
       - name: Upload wheels to pypi
         uses: pypa/gh-action-pypi-publish@release/v1
-        if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'workflow_dispatch')
         with:
           packages-dir: wheelhouse/
           verify-metadata: false
+          verbose: true
