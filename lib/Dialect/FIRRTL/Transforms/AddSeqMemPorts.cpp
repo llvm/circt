@@ -480,7 +480,7 @@ void AddSeqMemPortsPass::runOnOperation() {
       // For each instance of the dut, add the instance ports, but tie the port
       // to 0 instead of wiring them to the parent.
       for (auto *instRec : instanceGraph->lookup(effectiveDut)->uses()) {
-        FInstanceLike inst = cast<FInstanceLike>(*instRec->getInstance());
+        auto inst = cast<FInstanceLike>(*instRec->getInstance());
         auto &dutMemInfo = memInfoMap[*dut];
         // Find out how many memory ports we have to add.
         auto &subExtraPorts = dutMemInfo.extraPorts;
