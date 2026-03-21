@@ -77,7 +77,8 @@ ModelInstance::ModelInstance(const ArcRuntimeModelInfo *modelInfo,
       std::cerr << "[ArcRuntime] ERROR: FST tracing was requested but CIRCT "
                    "was not built with FST support (CIRCT_LIBFST_ENABLED=OFF)."
                 << std::endl;
-      traceEncoder = {};
+      traceEncoder =
+          std::make_unique<DummyTraceEncoder>(modelInfo, mutableState);
 #endif
       break;
     }
