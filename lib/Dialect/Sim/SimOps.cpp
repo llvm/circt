@@ -538,10 +538,10 @@ OpFoldResult StringConcatOp::fold(FoldAdaptor adaptor) {
 
   SmallString<128> result;
   for (auto &operand : operands) {
-    if (auto strAttr = cast<StringAttr>(operand))
-      result += strAttr.getValue();
-    else
+    auto strAttr = cast_if_present<StringAttr>(operand);
+    if (!strAttr)
       return {};
+    result += strAttr.getValue();
   }
 
   return StringAttr::get(getContext(), result);
