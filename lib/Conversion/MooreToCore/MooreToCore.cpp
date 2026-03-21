@@ -948,8 +948,11 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
     // Determine the initial value of the signal.
     Value init = adaptor.getInitial();
     if (!init) {
-      auto elementType = cast<llhd::RefType>(resultType).getNestedType();
-      init = createZeroValue(elementType, loc, rewriter);
+      auto refType = dyn_cast<llhd::RefType>(resultType);
+      if (!refType)
+        return rewriter.notifyMatchFailure(
+            op.getLoc(), "variable type did not convert to llhd::RefType");
+      init = createZeroValue(refType.getNestedType(), loc, rewriter);
       if (!init)
         return failure();
     }
