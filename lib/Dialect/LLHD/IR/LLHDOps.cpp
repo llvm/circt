@@ -534,9 +534,12 @@ DeletionKind
 SigStructExtractOp::rewire(const DestructurableMemorySlot &slot,
                            DenseMap<Attribute, MemorySlot> &subslots,
                            OpBuilder &builder, const DataLayout &dataLayout) {
-  auto index =
-      cast<hw::StructType>(cast<RefType>(getInput().getType()).getNestedType())
-          .getFieldIndex(getFieldAttr());
+  auto nestedType = cast<RefType>(getInput().getType()).getNestedType();
+  std::optional<unsigned> index;
+  if (auto structTy = dyn_cast<hw::StructType>(nestedType))
+    index = structTy.getFieldIndex(getFieldAttr());
+  else if (auto unionTy = dyn_cast<hw::UnionType>(nestedType))
+    index = unionTy.getFieldIndex(getFieldAttr());
   assert(index.has_value());
   auto indexAttr = IntegerAttr::get(IndexType::get(getContext()), *index);
   auto it = subslots.find(indexAttr);
