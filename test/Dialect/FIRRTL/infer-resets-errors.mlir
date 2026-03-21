@@ -296,3 +296,44 @@ firrtl.circuit "Top" {
   firrtl.module @Top(in %reset: !firrtl.asyncreset) attributes {portAnnotations = [[{class = "circt.FullResetAnnotation", resetType = "potato"}]]} {}
 }
 
+// -----
+// Should error when instance_choice has conflicting reset types between alternatives
+firrtl.circuit "InstanceChoiceConflict" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+
+  // Default target uses async reset
+  firrtl.module @DefaultTarget(in %reset: !firrtl.reset) {
+    %localReset = firrtl.wire : !firrtl.reset
+    firrtl.matchingconnect %localReset, %reset : !firrtl.reset
+  }
+
+  // FPGA target uses sync reset
+  firrtl.module @FPGATarget(in %reset: !firrtl.reset) {
+    %localReset = firrtl.wire : !firrtl.reset
+    firrtl.matchingconnect %localReset, %reset : !firrtl.reset
+  }
+
+  // expected-error @+2 {{reset network "asyncReset" simultaneously connected to async and sync resets}}
+  // expected-note @+1 {{majority of connections to this reset are async}}
+  firrtl.module @InstanceChoiceConflict(in %asyncReset: !firrtl.asyncreset, in %syncReset: !firrtl.uint<1>) {
+    %w0 = firrtl.wire : !firrtl.reset
+    %w1 = firrtl.wire : !firrtl.reset
+
+    // Connect async reset to w0
+    firrtl.connect %w0, %asyncReset : !firrtl.reset, !firrtl.asyncreset
+
+    // expected-note @+1 {{sync drive here:}}
+    firrtl.connect %w1, %syncReset : !firrtl.reset, !firrtl.uint<1>
+
+    // Instance choice with conflicting reset connections
+    %inst_reset = firrtl.instance_choice inst @DefaultTarget alternatives @Platform {
+      @FPGA -> @FPGATarget
+    } (in reset: !firrtl.reset)
+
+    // Connect both async and sync resets through the instance
+    firrtl.matchingconnect %inst_reset, %w0 : !firrtl.reset
+    firrtl.matchingconnect %inst_reset, %w1 : !firrtl.reset
+  }
+}
