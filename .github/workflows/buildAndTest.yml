@@ -318,3 +318,33 @@ jobs:
           fi
 
     # --- end of build-circt job.
+
+  # Dispatch a test run in circt/circt-tests once the entire build matrix has
+  # succeeded.
+  dispatch-circt-tests:
+    name: Dispatch circt-tests
+    needs: build-circt
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.CIRCT_TESTS_DISPATCH_TOKEN }}
+    steps:
+      - name: Dispatch circt-tests
+        if: env.GH_TOKEN != ''
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            KIND=main
+            SHA=main
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Skip fork PRs -- circt-tests can't check out fork branches.
+            if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+              echo "Fork PR detected, skipping dispatch."
+              exit 0
+            fi
+            KIND=pr
+            SHA="${{ github.event.pull_request.head.ref }}"
+          else
+            echo "Unhandled event type: ${{ github.event_name }}, skipping."
+            exit 0
+          fi
+          echo "Dispatching circt-tests with kind=$KIND, sha=$SHA"
+          gh workflow run test.yml --repo circt/circt-tests -f kind="$KIND" -f sha="$SHA"
