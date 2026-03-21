@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -28,6 +29,7 @@
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
+#include <mlir/IR/BuiltinAttributes.h>
 
 #define DEBUG_TYPE "infer-resets"
 
@@ -458,7 +460,7 @@ struct InferResetsPass
   // Reset type inference
 
   void traceResets(CircuitOp circuit);
-  void traceResets(InstanceOp inst);
+  void traceResets(igraph::InstanceOpInterface inst);
   void traceResets(Value dst, Value src, Location loc);
   void traceResets(Value value);
   void traceResets(Type dstType, Value dst, unsigned dstID, Type srcType,
@@ -491,6 +493,10 @@ struct InferResetsPass
   LogicalResult implementFullReset();
   LogicalResult implementFullReset(FModuleOp module, ResetDomain &domain);
   void implementFullReset(Operation *op, FModuleOp module, Value actualReset);
+
+  // Helper to implement full reset for instance-like operations
+  void implementFullResetImpl(FInstanceLike inst, StringAttr moduleName,
+                              Value actualReset);
 
   LogicalResult verifyNoAbstractReset();
 
@@ -701,7 +707,7 @@ static bool getDeclName(Value value, SmallString<32> &string) {
 
   auto *op = value.getDefiningOp();
   return TypeSwitch<Operation *, bool>(op)
-      .Case<InstanceOp, MemOp>([&](auto op) {
+      .Case<InstanceOp, InstanceChoiceOp, MemOp>([&](auto op) {
         string += op.getName();
         string += ".";
         string += op.getPortName(cast<OpResult>(value).getResultNumber());
@@ -798,7 +804,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
           .Case<FConnectLike>([&](auto op) {
             traceResets(op.getDest(), op.getSrc(), op.getLoc());
           })
-          .Case<InstanceOp>([&](auto op) { traceResets(op); })
+          .Case<InstanceOp, InstanceChoiceOp>([&](auto op) { traceResets(op); })
           .Case<RefSendOp>([&](auto op) {
             // Trace using base types.
             traceResets(op.getType().getType(), op.getResult(), 0,
@@ -902,23 +908,31 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
     }
 }
 
-/// Trace reset signals through an instance. This essentially associates the
-/// instance's port values with the target module's port values.
-void InferResetsPass::traceResets(InstanceOp inst) {
-  // Lookup the referenced module. Nothing to do if its an extmodule.
-  auto module = inst.getReferencedModule<FModuleOp>(*instanceGraph);
-  if (!module)
-    return;
-  LLVM_DEBUG(llvm::dbgs() << "Visiting instance " << inst.getName() << "\n");
+/// Trace reset signals through an instance or instance choice. This essentially
+/// associates the instance's port values with the target module's port values.
+void InferResetsPass::traceResets(igraph::InstanceOpInterface inst) {
+  LLVM_DEBUG(llvm::dbgs() << "Visiting instance " << inst.getInstanceName()
+                          << "\n");
+  assert((isa<InstanceOp, InstanceChoiceOp>(inst)) &&
+         "expected firrtl-instance op");
+  for (auto moduleName :
+       inst.getReferencedModuleNamesAttr().getAsRange<StringAttr>()) {
+    auto *node = instanceGraph->lookup(moduleName);
+    if (!node || !node->getModule())
+      return;
+    auto module = dyn_cast<FModuleOp>(*node->getModule());
+    if (!module)
+      return;
 
-  // Establish a connection between the instance ports and module ports.
-  for (const auto &it : llvm::enumerate(inst.getResults())) {
-    auto dir = module.getPortDirection(it.index());
-    Value dstPort = module.getArgument(it.index());
-    Value srcPort = it.value();
-    if (dir == Direction::Out)
-      std::swap(dstPort, srcPort);
-    traceResets(dstPort, srcPort, it.value().getLoc());
+    // Establish a connection between the instance ports and module ports.
+    for (const auto &it : llvm::enumerate(inst->getResults())) {
+      auto dir = module.getPortDirection(it.index());
+      Value dstPort = module.getArgument(it.index());
+      Value srcPort = it.value();
+      if (dir == Direction::Out)
+        std::swap(dstPort, srcPort);
+      traceResets(dstPort, srcPort, it.value().getLoc());
+    }
   }
 }
 
@@ -1145,35 +1159,51 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
   SmallSetVector<Operation *, 16> worklist;
   SmallDenseSet<Operation *> moduleWorklist;
   SmallDenseSet<std::pair<Operation *, Operation *>> extmoduleWorklist;
+  auto updateInstance = [&](Operation *inst, StringAttr moduleName) {
+    auto *node = instanceGraph->lookup(moduleName);
+    if (!node || !node->getModule())
+      return;
+    if (auto refModule = dyn_cast<FExtModuleOp>(*node->getModule()))
+      extmoduleWorklist.insert({refModule, inst});
+  };
   for (auto signal : net) {
     Value value = signal.field.getValue();
     if (!isa<BlockArgument>(value) &&
-        !isa_and_nonnull<WireOp, RegOp, RegResetOp, InstanceOp, InvalidValueOp,
-                         ConstCastOp, RefCastOp, UninferredResetCastOp,
-                         RWProbeOp, AsResetPrimOp>(value.getDefiningOp()))
+        !isa_and_nonnull<WireOp, RegOp, RegResetOp, InstanceOp,
+                         InstanceChoiceOp, InvalidValueOp, ConstCastOp,
+                         RefCastOp, UninferredResetCastOp, RWProbeOp,
+                         AsResetPrimOp>(value.getDefiningOp()))
       continue;
     if (updateReset(signal.field, resetType)) {
       for (auto user : value.getUsers())
         worklist.insert(user);
       if (auto blockArg = dyn_cast<BlockArgument>(value))
         moduleWorklist.insert(blockArg.getOwner()->getParentOp());
-      else if (auto instOp = value.getDefiningOp<InstanceOp>()) {
-        if (auto extmodule =
-                instOp.getReferencedModule<FExtModuleOp>(*instanceGraph))
-          extmoduleWorklist.insert({extmodule, instOp});
-      } else if (auto uncast = value.getDefiningOp<UninferredResetCastOp>()) {
-        uncast.replaceAllUsesWith(uncast.getInput());
-        uncast.erase();
-      } else if (auto asResetOp = value.getDefiningOp<AsResetPrimOp>()) {
-        // Remove `asReset` casts for sync resets, or replace them with an
-        // `asAsyncReset` cast for async resets.
-        Value result = asResetOp.getInput();
-        if (type_isa<AsyncResetType>(resetType)) {
-          ImplicitLocOpBuilder builder(asResetOp.getLoc(), asResetOp);
-          result = AsAsyncResetPrimOp::create(builder, asResetOp.getInput());
-        }
-        asResetOp.replaceAllUsesWith(result);
-        asResetOp.erase();
+      else {
+        TypeSwitch<Operation *>(value.getDefiningOp())
+            .Case<InstanceOp>([&](auto op) {
+              updateInstance(op, op.getReferencedModuleNameAttr());
+            })
+            .Case<InstanceChoiceOp>([&](auto op) {
+              for (auto moduleName : op.getModuleNames())
+                updateInstance(op,
+                               cast<FlatSymbolRefAttr>(moduleName).getAttr());
+            })
+            .Case<UninferredResetCastOp>([&](auto op) {
+              op.replaceAllUsesWith(op.getInput());
+              op.erase();
+            })
+            .Case<AsResetPrimOp>([&](auto op) {
+              // Remove `asReset` casts for sync resets, or replace them with an
+              // `asAsyncReset` cast for async resets.
+              Value result = op.getInput();
+              if (type_isa<AsyncResetType>(resetType)) {
+                ImplicitLocOpBuilder builder(op.getLoc(), op);
+                result = AsAsyncResetPrimOp::create(builder, op.getInput());
+              }
+              op.replaceAllUsesWith(result);
+              op.erase();
+            });
       }
     }
   }
@@ -1233,10 +1263,10 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
   // Update extmodule types based on their instantiation.
   for (auto pair : extmoduleWorklist) {
     auto module = cast<FExtModuleOp>(pair.first);
-    auto instOp = cast<InstanceOp>(pair.second);
+    auto instOp = pair.second;
 
     SmallVector<Attribute> types;
-    for (auto type : instOp.getResultTypes())
+    for (auto type : instOp->getResultTypes())
       types.push_back(TypeAttr::get(type));
 
     module.setPortTypesAttr(ArrayAttr::get(module->getContext(), types));
@@ -1725,13 +1755,17 @@ LogicalResult InferResetsPass::implementFullReset(FModuleOp module,
   // reset ports, converting registers) but still process instances to tie off
   // reset ports of children that have a real reset domain.
   if (!domain) {
-    SmallVector<InstanceOp> instances;
-    module.walk([&](InstanceOp instOp) { instances.push_back(instOp); });
+    SmallVector<Operation *> instances;
+    module.walk([&](Operation *instOp) {
+      if (!isa<InstanceOp, InstanceChoiceOp>(instOp))
+        return;
+      instances.push_back(instOp);
+    });
     LLVM_DEBUG({
       if (!instances.empty())
         llvm::dbgs() << "Tie off instances in " << module.getName() << "\n";
     });
-    for (auto instOp : instances)
+    for (auto *instOp : instances)
       implementFullReset(instOp, module, Value());
     return success();
   }
@@ -1773,7 +1807,7 @@ LogicalResult InferResetsPass::implementFullReset(FModuleOp module,
   // the new reset.
   SmallVector<Operation *> opsToUpdate;
   module.walk([&](Operation *op) {
-    if (isa<InstanceOp, RegOp, RegResetOp>(op))
+    if (isa<InstanceOp, InstanceChoiceOp, RegOp, RegResetOp>(op))
       opsToUpdate.push_back(op);
   });
 
@@ -1860,6 +1894,73 @@ LogicalResult InferResetsPass::implementFullReset(FModuleOp module,
   return success();
 }
 
+/// Helper to implement full reset for instance-like operations.
+/// This handles the common logic of adding reset ports and connecting them.
+void InferResetsPass::implementFullResetImpl(FInstanceLike inst,
+                                             StringAttr moduleName,
+                                             Value actualReset) {
+  // Lookup the reset domain of the default target module. If there is no
+  // reset domain associated with that module, as indicated by an empty list
+  // of domains, simply skip it.
+  auto *node = instanceGraph->lookup(moduleName);
+  auto refModule = dyn_cast<FModuleOp>(*node->getModule());
+  if (!refModule)
+    return;
+  auto *domainIt = domains.find(refModule);
+  if (domainIt == domains.end() || domainIt->second.empty())
+    return;
+  auto &domain = domainIt->second.back().first;
+  assert(domain && "null domains should not be listed");
+
+  ImplicitLocOpBuilder builder(inst.getLoc(), inst);
+
+  LLVM_DEBUG(llvm::dbgs() << (actualReset ? "- Update " : "- Tie-off ")
+                          << inst->getName() << " '" << inst.getInstanceName()
+                          << "'\n");
+
+  // If needed, add a reset port to the instance.
+  Value instReset;
+  if (!domain.localReset) {
+    LLVM_DEBUG(llvm::dbgs() << "  - Adding new result as reset\n");
+    auto newInstOp = inst.cloneWithInsertedPortsAndReplaceUses(
+        {{/*portIndex=*/0,
+          {domain.resetName, domain.resetType, Direction::In}}});
+    instReset = newInstOp->getResult(0);
+    instanceGraph->replaceInstance(inst, newInstOp);
+    inst->erase();
+    inst = newInstOp;
+  } else if (domain.existingPort.has_value()) {
+    auto idx = *domain.existingPort;
+    instReset = inst->getResult(idx);
+    LLVM_DEBUG(llvm::dbgs() << "  - Using result #" << idx << " as reset\n");
+  }
+
+  // If there's no reset port on the instance to connect, we're done. This
+  // can happen if the instantiated module has a reset domain, but that
+  // domain is e.g. rooted at an internal wire.
+  if (!instReset)
+    return;
+
+  builder.setInsertionPointAfter(inst);
+
+  // If the module that contains the instance is not in a reset domain, as
+  // indicated by actualReset being null, create a tie-off constant which
+  // effectively turns the no-reset registers that had full resets added back
+  // into no-reset registers.
+  if (!actualReset) {
+    LLVM_DEBUG(llvm::dbgs() << "  - Tying off reset to constant 0\n");
+    if (type_isa<AsyncResetType>(domain.resetType))
+      actualReset = SpecialConstantOp::create(builder, domain.resetType, false);
+    else
+      actualReset = ConstantOp::create(
+          builder, UIntType::get(builder.getContext(), 1), APInt(1, 0));
+  }
+
+  // Connect the instance's reset to the actual reset or tie-off.
+  assert(instReset && actualReset);
+  emitConnect(builder, instReset, actualReset);
+}
+
 /// Modify an operation in a module to implement an full reset for that
 /// module. If actualReset is null and op is an `InstanceOp`, creates a tie-off
 /// constant for added reset ports. If the op is not an instance, aborts.
@@ -1868,66 +1969,11 @@ void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
   ImplicitLocOpBuilder builder(op->getLoc(), op);
 
   // Handle instances.
-  if (auto instOp = dyn_cast<InstanceOp>(op)) {
-    // Lookup the reset domain of the instantiated module. If there is no
-    // reset domain associated with that module, as indicated by an empty list
-    // of domains, simply skip it.
-    auto refModule = instOp.getReferencedModule<FModuleOp>(*instanceGraph);
-    if (!refModule)
-      return;
-    auto domainIt = domains.find(refModule);
-    if (domainIt == domains.end() || domainIt->second.empty())
-      return;
-    auto &domain = domainIt->second.back().first;
-    assert(domain && "null domains should not be listed");
-    LLVM_DEBUG(llvm::dbgs()
-               << (actualReset ? "- Update instance '" : "- Tie-off instance '")
-               << instOp.getName() << "'\n");
-
-    // If needed, add a reset port to the instance.
-    Value instReset;
-    if (!domain.localReset) {
-      LLVM_DEBUG(llvm::dbgs() << "  - Adding new result as reset\n");
-      auto newInstOp = instOp.cloneWithInsertedPortsAndReplaceUses(
-          {{/*portIndex=*/0,
-            {domain.resetName, domain.resetType, Direction::In}}});
-      instReset = newInstOp->getResult(0);
-      instanceGraph->replaceInstance(instOp, newInstOp);
-      instOp->erase();
-      instOp = cast<InstanceOp>(newInstOp);
-    } else if (domain.existingPort.has_value()) {
-      auto idx = *domain.existingPort;
-      instReset = instOp.getResult(idx);
-      LLVM_DEBUG(llvm::dbgs() << "  - Using result #" << idx << " as reset\n");
-    }
-
-    // If there's no reset port on the instance to connect, we're done. This
-    // can happen if the instantiated module has a reset domain, but that
-    // domain is e.g. rooted at an internal wire.
-    if (!instReset)
-      return;
-
-    builder.setInsertionPointAfter(instOp);
-
-    // If the module that contains the instance is not in a reset domain, as
-    // indicated by actualReset being null, create a tie-off constant which
-    // effectively turns the no-reset registers that had full resets added back
-    // into no-reset registers.
-    if (!actualReset) {
-      LLVM_DEBUG(llvm::dbgs() << "  - Tying off reset to constant 0\n");
-      if (type_isa<AsyncResetType>(domain.resetType))
-        actualReset =
-            SpecialConstantOp::create(builder, domain.resetType, false);
-      else
-        actualReset = ConstantOp::create(
-            builder, UIntType::get(builder.getContext(), 1), APInt(1, 0));
-    }
-
-    // Connect the instance's reset to the actual reset or tie-off.
-    assert(instReset && actualReset);
-    emitConnect(builder, instReset, actualReset);
-    return;
-  }
+  if (auto instOp = dyn_cast<FInstanceLike>(op))
+    return implementFullResetImpl(
+        instOp,
+        cast<StringAttr>(instOp.getReferencedModuleNamesAttr()[0]),
+        actualReset);
 
   // All other ops require an actual reset. We only ever call this function with
   // null actualReset to create tie-offs on instance ops.
@@ -1935,51 +1981,51 @@ void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
 
   // Handle reset-less registers.
   if (auto regOp = dyn_cast<RegOp>(op)) {
-    LLVM_DEBUG(llvm::dbgs() << "- Adding full reset to " << regOp << "\n");
-    auto zero = createZeroValue(builder, regOp.getResult().getType());
-    auto newRegOp = RegResetOp::create(
-        builder, regOp.getResult().getType(), regOp.getClockVal(), actualReset,
-        zero, regOp.getNameAttr(), regOp.getNameKindAttr(),
-        regOp.getAnnotations(), regOp.getInnerSymAttr(),
-        regOp.getForceableAttr());
-    regOp.getResult().replaceAllUsesWith(newRegOp.getResult());
-    if (regOp.getForceable())
-      regOp.getRef().replaceAllUsesWith(newRegOp.getRef());
-    regOp->erase();
-    return;
+      LLVM_DEBUG(llvm::dbgs() << "- Adding full reset to " << regOp << "\n");
+      auto zero = createZeroValue(builder, regOp.getResult().getType());
+      auto newRegOp = RegResetOp::create(
+          builder, regOp.getResult().getType(), regOp.getClockVal(),
+          actualReset, zero, regOp.getNameAttr(), regOp.getNameKindAttr(),
+          regOp.getAnnotations(), regOp.getInnerSymAttr(),
+          regOp.getForceableAttr());
+      regOp.getResult().replaceAllUsesWith(newRegOp.getResult());
+      if (regOp.getForceable())
+        regOp.getRef().replaceAllUsesWith(newRegOp.getRef());
+      regOp->erase();
+      return;
   }
 
   // Handle registers with reset.
   if (auto regOp = dyn_cast<RegResetOp>(op)) {
-    // If the register already has an async reset or if the type of the added
-    // reset is sync, leave it alone.
-    if (type_isa<AsyncResetType>(regOp.getResetSignal().getType()) ||
-        type_isa<UIntType>(actualReset.getType())) {
-      LLVM_DEBUG(llvm::dbgs() << "- Skipping (has reset) " << regOp << "\n");
-      // The following performs the logic of `CheckResets` in the original
-      // Scala source code.
-      if (failed(regOp.verifyInvariants()))
-        signalPassFailure();
-      return;
-    }
-    LLVM_DEBUG(llvm::dbgs() << "- Updating reset of " << regOp << "\n");
+      // If the register already has an async reset or if the type of the added
+      // reset is sync, leave it alone.
+      if (type_isa<AsyncResetType>(regOp.getResetSignal().getType()) ||
+          type_isa<UIntType>(actualReset.getType())) {
+        LLVM_DEBUG(llvm::dbgs() << "- Skipping (has reset) " << regOp << "\n");
+        // The following performs the logic of `CheckResets` in the original
+        // Scala source code.
+        if (failed(regOp.verifyInvariants()))
+          signalPassFailure();
+        return;
+      }
+      LLVM_DEBUG(llvm::dbgs() << "- Updating reset of " << regOp << "\n");
 
-    auto reset = regOp.getResetSignal();
-    auto value = regOp.getResetValue();
+      auto reset = regOp.getResetSignal();
+      auto value = regOp.getResetValue();
 
-    // If we arrive here, the register has a sync reset and the added reset is
-    // async. In order to add an async reset, we have to move the sync reset
-    // into a mux in front of the register.
-    insertResetMux(builder, regOp.getResult(), reset, value);
-    builder.setInsertionPointAfterValue(regOp.getResult());
-    auto mux = MuxPrimOp::create(builder, reset, value, regOp.getResult());
-    emitConnect(builder, regOp.getResult(), mux);
+      // If we arrive here, the register has a sync reset and the added reset is
+      // async. In order to add an async reset, we have to move the sync reset
+      // into a mux in front of the register.
+      insertResetMux(builder, regOp.getResult(), reset, value);
+      builder.setInsertionPointAfterValue(regOp.getResult());
+      auto mux = MuxPrimOp::create(builder, reset, value, regOp.getResult());
+      emitConnect(builder, regOp.getResult(), mux);
 
-    // Replace the existing reset with the async reset.
-    builder.setInsertionPoint(regOp);
-    auto zero = createZeroValue(builder, regOp.getResult().getType());
-    regOp.getResetSignalMutable().assign(actualReset);
-    regOp.getResetValueMutable().assign(zero);
+      // Replace the existing reset with the async reset.
+      builder.setInsertionPoint(regOp);
+      auto zero = createZeroValue(builder, regOp.getResult().getType());
+      regOp.getResetSignalMutable().assign(actualReset);
+      regOp.getResetValueMutable().assign(zero);
   }
 }
 

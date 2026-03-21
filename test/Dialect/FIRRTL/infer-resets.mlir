@@ -1380,3 +1380,62 @@ firrtl.circuit "SyncNoDomainTieOff" {
     %1 = firrtl.reg %0 : !firrtl.clock, !firrtl.uint<42>
   }
 }
+
+// -----
+// Test that InstanceChoiceOp works with reset inference
+firrtl.circuit "InstanceChoiceTest" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+
+  // CHECK-LABEL: firrtl.module @DefaultTarget
+  // CHECK-SAME: in %reset: !firrtl.asyncreset
+  firrtl.module @DefaultTarget(in %reset: !firrtl.reset) {
+    // CHECK: %localReset = firrtl.wire : !firrtl.asyncreset
+    %localReset = firrtl.wire : !firrtl.reset
+    firrtl.matchingconnect %localReset, %reset : !firrtl.reset
+  }
+
+  // CHECK-LABEL: firrtl.module @FPGATarget
+  // CHECK-SAME: in %reset: !firrtl.asyncreset
+  firrtl.module @FPGATarget(in %reset: !firrtl.reset) {
+    // CHECK: %localReset = firrtl.wire : !firrtl.asyncreset
+    %localReset = firrtl.wire : !firrtl.reset
+    firrtl.matchingconnect %localReset, %reset : !firrtl.reset
+  }
+
+  // CHECK-LABEL: firrtl.module @InstanceChoiceTest
+  firrtl.module @InstanceChoiceTest(in %reset: !firrtl.asyncreset) {
+    // CHECK: %localReset = firrtl.wire : !firrtl.asyncreset
+    %localReset = firrtl.wire : !firrtl.reset
+    %t = firrtl.resetCast %reset : (!firrtl.asyncreset) -> !firrtl.reset
+    firrtl.matchingconnect %localReset, %t : !firrtl.reset
+    // CHECK: %inst_reset = firrtl.instance_choice inst @DefaultTarget alternatives @Platform
+    // CHECK-SAME: @FPGA -> @FPGATarget
+    // CHECK-SAME: (in reset: !firrtl.asyncreset)
+    %inst_reset = firrtl.instance_choice inst @DefaultTarget alternatives @Platform {
+      @FPGA -> @FPGATarget,
+    } (in reset: !firrtl.reset)
+    firrtl.matchingconnect %inst_reset, %localReset : !firrtl.reset
+  }
+
+  // CHECK-LABEL: firrtl.module @Child
+  // CHECK-SAME: in %reset: !firrtl.asyncreset
+  firrtl.module @Child(in %reset: !firrtl.reset) {
+    // CHECK: %localReset = firrtl.wire : !firrtl.asyncreset
+    %localReset = firrtl.wire : !firrtl.reset
+    firrtl.matchingconnect %localReset, %reset : !firrtl.reset
+  }
+
+  // CHECK-LABEL: firrtl.module @PropBetweenChoice
+  // CHECK-SAME: in %reset: !firrtl.asyncreset
+  firrtl.module @PropBetweenChoice(in %reset: !firrtl.reset) {
+    // Make sure FPGATarget -> Child propagates the reset type.
+    // CHECK: %inst_reset = firrtl.instance_choice inst @Child alternatives @Platform
+    // CHECK-SAME: (in reset: !firrtl.asyncreset)
+    %inst_reset = firrtl.instance_choice inst @Child alternatives @Platform {
+      @FPGA -> @FPGATarget,
+    } (in reset: !firrtl.reset)
+    firrtl.matchingconnect %inst_reset, %reset : !firrtl.reset
+  }
+}

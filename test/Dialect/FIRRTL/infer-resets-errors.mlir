@@ -295,4 +295,3 @@ firrtl.circuit "Top" {
   // expected-error @+1 {{'FullResetAnnotation' requires resetType == 'sync' | 'async', but got resetType == "potato"}}
   firrtl.module @Top(in %reset: !firrtl.asyncreset) attributes {portAnnotations = [[{class = "circt.FullResetAnnotation", resetType = "potato"}]]} {}
 }
-
