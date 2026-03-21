@@ -611,6 +611,62 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
   endif()
 endif()
 
+option(CIRCT_LIBFST_ENABLED "Enables libfst usage." OFF)
+
+llvm_canonicalize_cmake_booleans(CIRCT_LIBFST_ENABLED)
+
+if(CIRCT_LIBFST_ENABLED)
+  message(STATUS "libfst is enabled")
+
+  # Build libfst as part of CIRCT
+  include(FetchContent)
+  FetchContent_Declare(
+    libfst
+    GIT_REPOSITORY https://github.com/gtkwave/libfst.git
+    GIT_TAG 6a52070cd62ec65c29832bc95e7db493504aa7ac
+  )
+  set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
+
+  # Force libfst to be built as a static library
+  set(ORIGINAL_CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+  set(ORIGINAL_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+
+  set(BUILD_SHARED_LIBS OFF)
+  FetchContent_GetProperties(libfst)
+  if(NOT libfst_POPULATED)
+    FetchContent_Populate(libfst)
+  endif()
+
+  add_library(fst STATIC
+    ${libfst_SOURCE_DIR}/src/fastlz.c
+    ${libfst_SOURCE_DIR}/src/fstapi.c
+    ${libfst_SOURCE_DIR}/src/lz4.c
+  )
+  set_target_properties(fst PROPERTIES LINKER_LANGUAGE C)
+
+  # Expose the fstapi.h header under third_party/libfst/fstapi.h for consumers
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/include/third_party/libfst")
+  file(COPY "${libfst_SOURCE_DIR}/src/fstapi.h"
+        DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/include/third_party/libfst")
+
+  target_include_directories(fst PUBLIC
+    "$<BUILD_INTERFACE:${libfst_SOURCE_DIR}/src>"
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>"
+  )
+  target_compile_definitions(fst PRIVATE _GNU_SOURCE)
+
+  set(CMAKE_CXX_FLAGS ${ORIGINAL_CMAKE_CXX_FLAGS})
+  set(BUILD_SHARED_LIBS ${ORIGINAL_BUILD_SHARED_LIBS})
+
+  if(BUILD_SHARED_LIBS)
+    set_target_properties(fst PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  endif()
+
+
+  set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS fst)
+  install(TARGETS fst EXPORT CIRCTTargets)
+endif()
+
 #-------------------------------------------------------------------------------
 # Arcilator JIT
 #-------------------------------------------------------------------------------

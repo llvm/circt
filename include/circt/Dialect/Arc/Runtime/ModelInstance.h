@@ -51,7 +51,9 @@ private:
   const uint64_t instanceID;
   const ArcRuntimeModelInfo *const modelInfo;
   const ArcState *const state;
-  enum class TraceMode { DUMMY, VCD };
+  // FST is always in the enum so headers don't depend on build configuration.
+  // If FST is selected at runtime but not compiled in, an error is emitted.
+  enum class TraceMode { DUMMY, VCD, FST };
   TraceMode traceMode;
   std::optional<std::string> traceFileArg;
   std::unique_ptr<TraceEncoder> traceEncoder;

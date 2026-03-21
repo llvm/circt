@@ -1,6 +1,11 @@
 // RUN: arcilator %s --run --jit-entry=main | FileCheck --match-full-lines %s
-// RUN: arcilator %s --run --jit-entry=main --jit-vcd-file=%t && cat %t | FileCheck %s --match-full-lines --check-prefix VCD
 // REQUIRES: arcilator-jit
+
+// VCD test - runs always with arcilator-jit
+// RUN: arcilator %s --run --jit-entry=main --jit-vcd-file=%t && cat %t | FileCheck %s --match-full-lines --check-prefix VCD
+
+// FST test - only runs when libfst is available (binary format, smoke test only)
+// RUN: %if libfst %{ arcilator %s --run --jit-entry=main --jit-fst-file=%t %}
 
 // CHECK-LABEL: output = ca
 // CHECK-NEXT:  output = ca

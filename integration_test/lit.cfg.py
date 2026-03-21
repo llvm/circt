@@ -244,6 +244,9 @@ if config.slang_frontend_enabled:
 if config.arcilator_jit_enabled:
   config.available_features.add('arcilator-jit')
 
+if config.libfst_enabled:
+  config.available_features.add('libfst')
+
 config.substitutions.append(('%driver', f'{config.driver}'))
 config.substitutions.append(('%circt-tools-dir', f'{config.circt_tools_dir}'))
 llvm_config.add_tool_substitutions(tools, tool_dirs)
