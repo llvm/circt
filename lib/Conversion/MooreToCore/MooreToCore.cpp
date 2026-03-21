@@ -2459,15 +2459,15 @@ struct QueuePopBackOpConversion : public OpConversionPattern<QueuePopBackOp> {
   LogicalResult
   matchAndRewrite(QueuePopBackOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    Value popped;
     probeRefAndDriveWithResult(
         rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
           auto popBack =
               sim::QueuePopBackOp::create(rewriter, op->getLoc(), queue);
-
-          op.replaceAllUsesWith(popBack.getPopped());
+          popped = popBack.getPopped();
           return popBack.getOutQueue();
         });
-    rewriter.eraseOp(op);
+    rewriter.replaceOp(op, popped);
 
     return success();
   }
@@ -2479,15 +2479,15 @@ struct QueuePopFrontOpConversion : public OpConversionPattern<QueuePopFrontOp> {
   LogicalResult
   matchAndRewrite(QueuePopFrontOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    Value popped;
     probeRefAndDriveWithResult(
         rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
           auto popFront =
               sim::QueuePopFrontOp::create(rewriter, op->getLoc(), queue);
-
-          op.replaceAllUsesWith(popFront.getPopped());
+          popped = popFront.getPopped();
           return popFront.getOutQueue();
         });
-    rewriter.eraseOp(op);
+    rewriter.replaceOp(op, popped);
 
     return success();
   }

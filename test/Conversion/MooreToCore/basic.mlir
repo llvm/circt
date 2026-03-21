@@ -1770,3 +1770,23 @@ moore.module @Nets(out o1 : !moore.l1, out o2 : !moore.l2, out o3 : !moore.l1, o
 
   moore.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23 : !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2
 }
+
+// CHECK-LABEL: func.func @QueuePopBack
+func.func @QueuePopBack() -> !moore.i16 {
+  %q = moore.variable : <queue<i16, 0>>
+  // CHECK: [[QUEUE:%.+]], [[POPPED:%.+]] = sim.queue.pop_back from
+  // CHECK: llhd.drv %q, [[QUEUE]] after
+  %v = moore.pop_back from %q : <queue<i16, 0>>
+  // CHECK: return [[POPPED]] : i16
+  return %v : !moore.i16
+}
+
+// CHECK-LABEL: func.func @QueuePopFront
+func.func @QueuePopFront() -> !moore.i16 {
+  %q = moore.variable : <queue<i16, 0>>
+  // CHECK: [[QUEUE:%.+]], [[POPPED:%.+]] = sim.queue.pop_front from
+  // CHECK: llhd.drv %q, [[QUEUE]] after
+  %v = moore.pop_front from %q : <queue<i16, 0>>
+  // CHECK: return [[POPPED]] : i16
+  return %v : !moore.i16
+}
