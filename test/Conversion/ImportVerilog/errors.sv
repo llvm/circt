@@ -213,6 +213,14 @@ module Foo;
 endmodule
 
 // -----
+module Foo;
+  reg i;
+  wire o;
+  // expected-error @below {{unsupported delay with rise/fall/turn-off}}
+  assign #(1, 2) o = i;
+endmodule
+
+// -----
 function Foo;
   logic [1:0] a;
   // expected-error @below {{unsupported system call `$fwrite`}}
