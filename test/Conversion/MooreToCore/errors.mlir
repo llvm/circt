@@ -9,6 +9,14 @@ func.func @invalidType() {
 
 // -----
 
+func.func @dynamicArrayVariable() {
+  // expected-error @below {{failed to legalize operation 'moore.variable'}}
+  %var = moore.variable : <!moore.open_uarray<i32>>
+  return
+}
+
+// -----
+
 func.func @unsupportedOpenArrayCastReftoOpen(%arg0: !moore.ref<i1>) {
   // expected-error @below {{unsupported DPI open-array conversion from '!moore.ref<i1>' to '!moore.open_uarray<i8>'}}
   // expected-error @below {{failed to legalize operation 'moore.conversion'}}
