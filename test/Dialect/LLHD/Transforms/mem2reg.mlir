@@ -1264,3 +1264,26 @@ hw.module @NestedProjectionAcrossBlocks(in %v : i4) {
     llhd.halt
   }
 }
+
+// Don't promote a signal if a projection has multiple drives with different
+// delays. Mem2Reg splits blocking and delta drives into separate slot tracking,
+// but the reaching definition analysis doesn't handle this correctly for
+// projections, causing a "no definition reaches drive" assertion.
+// CHECK-LABEL: @MultiDelayProjectionDrive
+hw.module @MultiDelayProjectionDrive() {
+  %t_eps = llhd.constant_time <0ns, 0d, 1e>
+  %t_delta = llhd.constant_time <0ns, 1d, 0e>
+  %c0 = hw.constant 0 : i8
+  %true = hw.constant true
+  %init = hw.aggregate_constant [0 : i8, 0 : i8] : !hw.array<2xi8>
+  // CHECK: %sig = llhd.sig
+  %sig = llhd.sig %init : !hw.array<2xi8>
+  llhd.process {
+    %e = llhd.sig.array_get %sig[%true] : <!hw.array<2xi8>>
+    // CHECK: llhd.drv
+    llhd.drv %e, %c0 after %t_eps : i8
+    // CHECK: llhd.drv
+    llhd.drv %e, %c0 after %t_delta : i8
+    llhd.halt
+  }
+}
