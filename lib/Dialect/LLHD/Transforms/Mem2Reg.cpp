@@ -812,11 +812,19 @@ void Promoter::findPromotableSlots() {
         // Ignore uses outside of the region.
         if (user->getParentRegion() != &region)
           return true;
-        // Projection operations are okay.
+        // Projection operations are okay, as long as nested projections
+        // stay in the same block. Cross-block nested projections would break
+        // during promotion because the projection chain gets severed when
+        // Mem2Reg rewrites signal references into SSA block arguments.
         if (isa<SigArrayGetOp, SigExtractOp, SigStructExtractOp>(user)) {
-          for (auto *projectionUser : user->getUsers())
+          for (auto *projectionUser : user->getUsers()) {
+            if (isa<SigArrayGetOp, SigExtractOp, SigStructExtractOp>(
+                    projectionUser) &&
+                projectionUser->getBlock() != user->getBlock())
+              return false;
             if (checkedUsers.insert(projectionUser).second)
               userWorklist.push_back(projectionUser);
+          }
           projections.insert({user->getResult(0), operand});
           return true;
         }

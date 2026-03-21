@@ -1237,3 +1237,30 @@ hw.module @UnionSignalPromoted(in %u : !hw.union<a: i8, b: i8>, in %v : i8, in %
     llhd.halt
   }
 }
+
+// Don't promote a signal if a projection op (like sig.array_get) has a nested
+// projection user (like sig.extract) in a different block. Mem2Reg rewrites
+// signal references across block boundaries and would break the projection
+// chain, causing getProjections to encounter a BlockArgument.
+// CHECK-LABEL: @NestedProjectionAcrossBlocks
+hw.module @NestedProjectionAcrossBlocks(in %v : i4) {
+  %t = llhd.constant_time <0ns, 0d, 1e>
+  %d = llhd.constant_time <1ns, 0d, 0e>
+  %true = hw.constant true
+  %c0 = hw.constant 0 : i8
+  %c4 = hw.constant -4 : i3
+  %init = hw.aggregate_constant [0 : i8, 0 : i8] : !hw.array<2xi8>
+  // CHECK: %mem = llhd.sig
+  %mem = llhd.sig %init : !hw.array<2xi8>
+  llhd.process {
+    %e = llhd.sig.array_get %mem[%true] : <!hw.array<2xi8>>
+    llhd.drv %e, %c0 after %t : i8
+    llhd.wait delay %d, ^bb1
+  ^bb1:
+    // This sig.extract is a nested projection of %e, but in a different block.
+    // CHECK: llhd.sig.extract
+    %sub = llhd.sig.extract %e from %c4 : <i8> -> <i4>
+    llhd.drv %sub, %v after %t : i4
+    llhd.halt
+  }
+}
