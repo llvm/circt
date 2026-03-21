@@ -390,6 +390,8 @@ struct MajorityInverterToAIGConversion
           inverts);
     };
 
+    // Majority is the OR of the three pairwise products. Materialize that OR as
+    // a NOR followed by an inverter so it stays in AIG form.
     Value products[3] = {getProduct(0, 1), getProduct(0, 2), getProduct(1, 2)};
     bool allInverted[3] = {true, true, true};
     auto notOr = synth::aig::AndInverterOp::create(rewriter, op.getLoc(),
