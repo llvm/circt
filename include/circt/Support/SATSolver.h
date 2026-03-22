@@ -159,13 +159,21 @@ public:
 
   virtual ~IncrementalSATSolver() = default;
 
+  /// Add one literal to the clause currently under construction. A `0`
+  /// literal terminates the clause and submits it to the solver.
   virtual void add(int lit) = 0;
+  /// Add an assumption literal for the next `solve()` call only.
   virtual void assume(int lit) = 0;
+  /// Solve under the previously added clauses and current assumptions.
   virtual Result solve() = 0;
+  /// Return the satisfying assignment for variable `v` from the last SAT
+  /// result. The sign of the returned literal encodes the Boolean value.
   virtual int val(int v) const = 0;
 
   // These helpers are not part of the standard IPASIR interface.
+  /// Reserve storage for variables in the range `[1, maxVar]`.
   virtual void reserveVars(int maxVar) {}
+  /// Add a complete clause in one call.
   virtual void addClause(llvm::ArrayRef<int> lits) {
     for (int lit : lits)
       add(lit);

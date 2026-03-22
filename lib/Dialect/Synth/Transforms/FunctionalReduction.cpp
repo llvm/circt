@@ -121,28 +121,47 @@ void FunctionalReductionSATBuilder::addAndClauses(
 }
 
 void FunctionalReductionSATBuilder::encodeValue(Value value) {
-  if (!encodedValues.insert(value).second)
-    return;
+  SmallVector<std::pair<Value, bool>> worklist;
+  worklist.push_back({value, false});
 
-  Operation *op = value.getDefiningOp();
-  if (!op)
-    return;
+  while (!worklist.empty()) {
+    auto [current, readyToEncode] = worklist.pop_back_val();
+    if (encodedValues.contains(current))
+      continue;
 
-  int outVar = getOrCreateVar(value);
+    Operation *op = current.getDefiningOp();
+    if (!op) {
+      encodedValues.insert(current);
+      continue;
+    }
 
-  if (auto andOp = dyn_cast<aig::AndInverterOp>(op)) {
-    // Recursively encode the local AIG cone rooted at `value`, reusing the
-    // preallocated SAT variable for each visited SSA value.
+    auto andOp = dyn_cast<aig::AndInverterOp>(op);
+    if (!andOp) {
+      // Unsupported operations remain unconstrained, just like block
+      // arguments. Since we only prove equivalence from UNSAT, omitting these
+      // clauses may miss a proof but cannot create a false proof.
+      encodedValues.insert(current);
+      continue;
+    }
+
+    if (!readyToEncode) {
+      worklist.push_back({current, true});
+      for (auto input : andOp.getInputs())
+        if (!encodedValues.contains(input))
+          worklist.push_back({input, false});
+      continue;
+    }
+
+    encodedValues.insert(current);
+    int outVar = getOrCreateVar(current);
     SmallVector<int> inputLits;
     inputLits.reserve(andOp.getInputs().size());
     for (auto [input, inverted] :
          llvm::zip(andOp.getInputs(), andOp.getInverted())) {
-      encodeValue(input);
       int lit = getOrCreateVar(input);
       inputLits.push_back(inverted ? -lit : lit);
     }
     addAndClauses(outVar, inputLits);
-    return;
   }
 }
 
@@ -455,13 +474,11 @@ FunctionalReductionSolver::run() {
       llvm::dbgs() << "FunctionalReduction: Starting functional reduction with "
                    << numPatterns << " simulation patterns\n");
 
-  if (!testTransformation) {
-    if (!satSolver) {
-      module->emitError()
-          << "FunctionalReduction requires a SAT solver, but none is "
-             "available in this build";
-      return failure();
-    }
+  if (!testTransformation && !satSolver) {
+    module->emitError()
+        << "FunctionalReduction requires a SAT solver, but none is "
+           "available in this build";
+    return failure();
   }
 
   // Topologically sort the values
