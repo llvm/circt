@@ -223,6 +223,28 @@ module Foo;
 endmodule
 
 // -----
+// Cross-module hierarchical references can produce null port values that must
+// not crash during instance creation. This is an error in the hierarchical
+// reference resolution code that actually needs fixing. This test guards
+// against a regression to this being a crash.
+module HierRefTop(input i, output o);
+  HierRefA A();
+  // expected-error @below {{unsupported port}}
+  HierRefB B();
+  assign A.i = i;
+  assign o = B.o;
+endmodule
+module HierRefA;
+  wire i, y;
+  assign B.x = !i;
+  assign y = !B.y;
+endmodule
+module HierRefB;
+  wire x, y, o;
+  assign y = x, o = A.y;
+endmodule
+
+// -----
 module Foo;
   reg i;
   wire o;

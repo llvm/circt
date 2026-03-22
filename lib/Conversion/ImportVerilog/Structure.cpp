@@ -577,9 +577,12 @@ struct ModuleVisitor : public BaseVisitor {
 
     // Insert conversions for input ports.
     for (auto [value, type] :
-         llvm::zip(inputValues, moduleType.getInputTypes()))
+         llvm::zip(inputValues, moduleType.getInputTypes())) {
       // TODO: This should honor signedness in the conversion.
       value = context.materializeConversion(type, value, false, value.getLoc());
+      if (!value)
+        return mlir::emitError(loc) << "unsupported port";
+    }
 
     // Here we use the hierarchical value recorded in `Context::valueSymbols`.
     // Then we pass it as the input port with the ref<T> type of the instance.
@@ -587,6 +590,11 @@ struct ModuleVisitor : public BaseVisitor {
       if (auto hierValue = context.valueSymbols.lookup(hierPath.valueSym);
           hierPath.hierName && hierPath.direction == ArgumentDirection::In)
         inputValues.push_back(hierValue);
+
+    // Check that all input values are non-null before creating the instance.
+    for (auto value : inputValues)
+      if (!value)
+        return mlir::emitError(loc) << "unsupported port";
 
     // Create the instance op itself.
     auto inputNames = builder.getArrayAttr(moduleType.getInputNames());
