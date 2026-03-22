@@ -214,6 +214,16 @@ endmodule
 
 // -----
 module Foo;
+  int inp[];
+  int tmp[];
+  initial begin
+    // expected-error @below {{unsupported system call `$size`}}
+    tmp = new[$size(inp)];
+  end
+endmodule
+
+// -----
+module Foo;
   reg i;
   wire o;
   // expected-error @below {{unsupported delay with rise/fall/turn-off}}
