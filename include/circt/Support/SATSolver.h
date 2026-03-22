@@ -164,7 +164,13 @@ public:
   virtual Result solve() = 0;
   virtual int val(int v) const = 0;
 
+  // These helpers are not part of the standard IPASIR interface.
   virtual void reserveVars(int maxVar) {}
+  virtual void addClause(llvm::ArrayRef<int> lits) {
+    for (int lit : lits)
+      add(lit);
+    add(0);
+  }
 };
 
 /// Construct a Z3-backed incremental IPASIR-style SAT solver.

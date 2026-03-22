@@ -18,6 +18,7 @@
 #include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Dialect/Synth/Transforms/CutRewriter.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
+#include "circt/Support/SATSolver.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -27,6 +28,7 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -52,6 +54,98 @@ using namespace circt::synth;
 namespace {
 enum class EquivResult { Proved, Disproved, Unknown };
 
+class FunctionalReductionSATBuilder {
+public:
+  FunctionalReductionSATBuilder(IncrementalSATSolver &solver,
+                                llvm::DenseMap<Value, int> &satVars,
+                                llvm::DenseSet<Value> &encodedValues);
+
+  EquivResult verify(Value lhs, Value rhs);
+
+private:
+  int getOrCreateVar(Value value);
+  void addAndClauses(int outVar, llvm::ArrayRef<int> inputLits);
+  void encodeValue(Value value);
+
+  IncrementalSATSolver &solver;
+  llvm::DenseMap<Value, int> &satVars;
+  llvm::DenseSet<Value> &encodedValues;
+};
+
+EquivResult FunctionalReductionSATBuilder::verify(Value lhs, Value rhs) {
+  encodeValue(lhs);
+  encodeValue(rhs);
+
+  int lhsVar = getOrCreateVar(lhs);
+  int rhsVar = getOrCreateVar(rhs);
+
+  // Check the two halves of the XOR miter separately. If either assignment is
+  // satisfiable, the solver found a distinguishing input pattern.
+  solver.assume(lhsVar);
+  solver.assume(-rhsVar);
+  auto result = solver.solve();
+  if (result == IncrementalSATSolver::kSAT)
+    return EquivResult::Disproved;
+  if (result != IncrementalSATSolver::kUNSAT)
+    return EquivResult::Unknown;
+
+  solver.assume(-lhsVar);
+  solver.assume(rhsVar);
+  result = solver.solve();
+  if (result == IncrementalSATSolver::kSAT)
+    return EquivResult::Disproved;
+  if (result != IncrementalSATSolver::kUNSAT)
+    return EquivResult::Unknown;
+
+  return EquivResult::Proved;
+}
+
+int FunctionalReductionSATBuilder::getOrCreateVar(Value value) {
+  auto it = satVars.find(value);
+  assert(it != satVars.end() && "SAT variable must be preallocated");
+  return it->second;
+}
+
+void FunctionalReductionSATBuilder::addAndClauses(
+    int outVar, llvm::ArrayRef<int> inputLits) {
+  // Tseitin encoding for `outVar <=> and(inputLits)`. This keeps the CNF
+  // linear in the gate size while preserving satisfiability.
+  for (int lit : inputLits)
+    solver.addClause({-outVar, lit});
+
+  SmallVector<int> clause;
+  for (int lit : inputLits)
+    clause.push_back(-lit);
+  clause.push_back(outVar);
+  solver.addClause(clause);
+}
+
+void FunctionalReductionSATBuilder::encodeValue(Value value) {
+  if (!encodedValues.insert(value).second)
+    return;
+
+  Operation *op = value.getDefiningOp();
+  if (!op)
+    return;
+
+  int outVar = getOrCreateVar(value);
+
+  if (auto andOp = dyn_cast<aig::AndInverterOp>(op)) {
+    // Recursively encode the local AIG cone rooted at `value`, reusing the
+    // preallocated SAT variable for each visited SSA value.
+    SmallVector<int> inputLits;
+    inputLits.reserve(andOp.getInputs().size());
+    for (auto [input, inverted] :
+         llvm::zip(andOp.getInputs(), andOp.getInverted())) {
+      encodeValue(input);
+      int lit = getOrCreateVar(input);
+      inputLits.push_back(inverted ? -lit : lit);
+    }
+    addAndClauses(outVar, inputLits);
+    return;
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Core Functional Reduction Implementation
 //===----------------------------------------------------------------------===//
@@ -59,9 +153,11 @@ enum class EquivResult { Proved, Disproved, Unknown };
 class FunctionalReductionSolver {
 public:
   FunctionalReductionSolver(hw::HWModuleOp module, unsigned numPatterns,
-                            unsigned seed, bool testTransformation)
+                            unsigned seed, bool testTransformation,
+                            std::unique_ptr<IncrementalSATSolver> satSolver)
       : module(module), numPatterns(numPatterns), seed(seed),
-        testTransformation(testTransformation) {}
+        testTransformation(testTransformation),
+        satSolver(std::move(satSolver)) {}
 
   ~FunctionalReductionSolver() = default;
 
@@ -86,6 +182,7 @@ private:
 
   // Phase 3: SAT-based verification with per-class solver
   void verifyCandidates();
+  void initializeSATState();
 
   // Phase 4: Merge equivalent nodes
   void mergeEquivalentNodes();
@@ -120,8 +217,17 @@ private:
   // Proven equivalences: representative -> proven equivalent members.
   llvm::MapVector<Value, SmallVector<Value>> provenEquivalences;
 
+  std::unique_ptr<IncrementalSATSolver> satSolver;
+  std::unique_ptr<FunctionalReductionSATBuilder> satBuilder;
+  llvm::DenseMap<Value, int> satVars;
+  llvm::DenseSet<Value> encodedValues;
   Stats stats;
 };
+
+FunctionalReductionSATBuilder::FunctionalReductionSATBuilder(
+    IncrementalSATSolver &solver, llvm::DenseMap<Value, int> &satVars,
+    llvm::DenseSet<Value> &encodedValues)
+    : solver(solver), satVars(satVars), encodedValues(encodedValues) {}
 
 Attribute FunctionalReductionSolver::getTestEquivClass(Value value) {
   Operation *op = value.getDefiningOp();
@@ -142,10 +248,24 @@ EquivResult FunctionalReductionSolver::verifyEquivalence(Value lhs, Value rhs) {
       return EquivResult::Proved;
     return EquivResult::Unknown;
   }
+  assert(satBuilder && "SAT builder must be initialized before verification");
+  // SAT-based equivalence checking builds a miter for the two candidate nodes
+  // and proves that no input assignment can make them differ.
+  return satBuilder->verify(lhs, rhs);
+}
 
-  // TODO: Implement actual SAT-based verification here. For now, we return
-  // Unknown.
-  return EquivResult::Unknown;
+void FunctionalReductionSolver::initializeSATState() {
+  assert(satSolver && "SAT solver must be initialized before SAT state setup");
+
+  satVars.clear();
+  encodedValues.clear();
+  satVars.reserve(allValues.size());
+  for (auto [index, value] : llvm::enumerate(allValues))
+    satVars[value] = index + 1;
+  satSolver->reserveVars(allValues.size());
+
+  satBuilder = std::make_unique<FunctionalReductionSATBuilder>(
+      *satSolver, satVars, encodedValues);
 }
 
 //===----------------------------------------------------------------------===//
@@ -334,8 +454,17 @@ FunctionalReductionSolver::run() {
   LLVM_DEBUG(
       llvm::dbgs() << "FunctionalReduction: Starting functional reduction with "
                    << numPatterns << " simulation patterns\n");
-  // Topologically sort the values
 
+  if (!testTransformation) {
+    if (!satSolver) {
+      module->emitError()
+          << "FunctionalReduction requires a SAT solver, but none is "
+             "available in this build";
+      return failure();
+    }
+  }
+
+  // Topologically sort the values
   if (failed(circt::synth::topologicallySortLogicNetwork(module))) {
     module->emitError()
         << "FunctionalReduction: Failed to topologically sort logic network";
@@ -361,6 +490,8 @@ FunctionalReductionSolver::run() {
   }
 
   // Phase 3: SAT-based verification
+  if (!testTransformation)
+    initializeSATState();
   verifyCandidates();
 
   // Phase 4: Merge equivalent nodes
@@ -404,8 +535,13 @@ struct FunctionalReductionPass
       return signalPassFailure();
     }
 
+    std::unique_ptr<IncrementalSATSolver> satSolver;
+    if (!testTransformation)
+      satSolver = createZ3SATSolver();
+
     FunctionalReductionSolver fcSolver(module, numRandomPatterns, seed,
-                                       testTransformation);
+                                       testTransformation,
+                                       std::move(satSolver));
     auto stats = fcSolver.run();
     if (failed(stats))
       return signalPassFailure();
