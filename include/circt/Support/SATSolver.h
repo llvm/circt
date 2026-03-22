@@ -166,6 +166,11 @@ public:
   virtual void assume(int lit) = 0;
   /// Solve under the previously added clauses and current assumptions.
   virtual Result solve() = 0;
+  virtual Result solve(llvm::ArrayRef<int> assumptions) {
+    for (int lit : assumptions)
+      assume(lit);
+    return solve();
+  };
   /// Return the satisfying assignment for variable `v` from the last SAT
   /// result. The sign of the returned literal encodes the Boolean value.
   virtual int val(int v) const = 0;
