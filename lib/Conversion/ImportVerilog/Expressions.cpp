@@ -189,8 +189,10 @@ struct ExprVisitor {
       return {};
     }
 
-    Value initialSize = context.convertRvalueExpression(
+    auto initialSize = context.convertRvalueExpression(
         expr.sizeExpr(), context.convertType(*expr.sizeExpr().type));
+    if (!initialSize)
+      return {};
 
     return moore::OpenUArrayCreateOp::create(builder, loc, type, initialSize);
   }
