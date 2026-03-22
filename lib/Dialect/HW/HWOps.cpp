@@ -389,6 +389,10 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   if (wire.getInnerSymAttr())
     return failure();
 
+  // If the wire is self-referential (its input is itself), we can't remove it.
+  if (wire.getInput() == wire.getResult())
+    return failure();
+
   // If the wire has a name or an `sv.namehint` attribute, propagate it as an
   // `sv.namehint` to the expression.
   if (auto *inputOp = wire.getInput().getDefiningOp())
