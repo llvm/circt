@@ -101,8 +101,8 @@ struct SynthMajorityInverterOpConversion
       productOperands.reserve(indices.size());
       for (auto idx : indices)
         productOperands.push_back(inputs[idx]);
-      return rewriter.createOrFold<comb::AndOp>(
-          op.getLoc(), productOperands, true);
+      return rewriter.createOrFold<comb::AndOp>(op.getLoc(), productOperands,
+                                                true);
     };
 
     SmallVector<Value> operands;
@@ -116,7 +116,9 @@ struct SynthMajorityInverterOpConversion
       }
 
       const unsigned remaining = threshold - subset.size();
-      for (unsigned i = start, e = op.getNumOperands(); i <= e - remaining;
+      assert(start + remaining <= op.getNumOperands() &&
+             "Not enough operands left to reach threshold");
+      for (unsigned i = start, e = op.getNumOperands() - remaining; i <= e;
            ++i) {
         subset.push_back(i);
         self(self, i + 1);
