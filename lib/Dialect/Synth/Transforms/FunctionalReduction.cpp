@@ -108,8 +108,9 @@ int FunctionalReductionSATBuilder::getOrCreateVar(Value value) {
 
 void FunctionalReductionSATBuilder::addAndClauses(
     int outVar, llvm::ArrayRef<int> inputLits) {
-  // Tseitin encoding for `outVar <=> and(inputLits)`. This keeps the CNF
-  // linear in the gate size while preserving satisfiability.
+  // Tseitin encoding (https://en.wikipedia.org/wiki/Tseytin_transformation)
+  // for `outVar <=> and(inputLits)`. This keeps the CNF linear in the gate size
+  // while preserving satisfiability.
   for (int lit : inputLits)
     solver.addClause({-outVar, lit});
 
