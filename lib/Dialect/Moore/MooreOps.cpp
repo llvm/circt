@@ -500,7 +500,7 @@ LogicalResult AssignedVariableOp::canonicalize(AssignedVariableOp op,
   // Eliminate chained variables with the same name.
   // var(name, var(name, x)) -> var(name, x)
   if (auto otherOp = op.getInput().getDefiningOp<AssignedVariableOp>()) {
-    if (otherOp.getNameAttr() == op.getNameAttr()) {
+    if (otherOp != op && otherOp.getNameAttr() == op.getNameAttr()) {
       rewriter.replaceOp(op, otherOp);
       return success();
     }
