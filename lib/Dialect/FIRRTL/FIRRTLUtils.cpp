@@ -701,14 +701,24 @@ Value circt::firrtl::getValueByFieldID(ImplicitLocOpBuilder builder,
   // When the fieldID hits 0, we've found the target value.
   while (fieldID != 0) {
     FIRRTLTypeSwitch<Type, void>(value.getType())
-        .Case<BundleType, OpenBundleType>([&](auto bundle) {
+        .Case<BundleType>([&](auto bundle) {
           auto index = bundle.getIndexForFieldID(fieldID);
           value = SubfieldOp::create(builder, value, index);
           fieldID -= bundle.getFieldID(index);
         })
-        .Case<FVectorType, OpenVectorType>([&](auto vector) {
+        .Case<OpenBundleType>([&](auto bundle) {
+          auto index = bundle.getIndexForFieldID(fieldID);
+          value = OpenSubfieldOp::create(builder, value, index);
+          fieldID -= bundle.getFieldID(index);
+        })
+        .Case<FVectorType>([&](auto vector) {
           auto index = vector.getIndexForFieldID(fieldID);
           value = SubindexOp::create(builder, value, index);
+          fieldID -= vector.getFieldID(index);
+        })
+        .Case<OpenVectorType>([&](auto vector) {
+          auto index = vector.getIndexForFieldID(fieldID);
+          value = OpenSubindexOp::create(builder, value, index);
           fieldID -= vector.getFieldID(index);
         })
         .Case<RefType>([&](auto reftype) {
