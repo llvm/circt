@@ -20,6 +20,7 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -1523,6 +1524,141 @@ void CatPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.insert<patterns::CatBitsBits, patterns::CatDoubleConst,
                  patterns::CatCast, FlattenCat, CatOfConstant>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// StringConcatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult StringConcatOp::fold(FoldAdaptor adaptor) {
+  // Fold single-operand concat to just the operand.
+  if (getInputs().size() == 1)
+    return getInputs()[0];
+
+  // Check if all operands are constant strings before accumulating.
+  if (!llvm::all_of(adaptor.getInputs(), [](Attribute operand) {
+        return isa_and_nonnull<StringAttr>(operand);
+      }))
+    return {};
+
+  // All operands are constant strings, concatenate them.
+  SmallString<64> result;
+  for (auto operand : adaptor.getInputs())
+    result += cast<StringAttr>(operand).getValue();
+
+  return StringAttr::get(getContext(), result);
+}
+
+namespace {
+/// Flatten nested string.concat operations into a single concat.
+/// string.concat(a, string.concat(b, c), d) -> string.concat(a, b, c, d)
+class FlattenStringConcat : public mlir::OpRewritePattern<StringConcatOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult
+  matchAndRewrite(StringConcatOp concat,
+                  mlir::PatternRewriter &rewriter) const override {
+
+    // Check if any operands are nested concats with a single use.  Only inline
+    // single-use nested concats to avoid fighting with DCE.
+    bool hasNestedConcat = llvm::any_of(concat.getInputs(), [](Value operand) {
+      auto nestedConcat = operand.getDefiningOp<StringConcatOp>();
+      return nestedConcat && operand.hasOneUse();
+    });
+
+    if (!hasNestedConcat)
+      return failure();
+
+    // Flatten nested concats that have a single use.
+    SmallVector<Value> flatOperands;
+    for (auto input : concat.getInputs()) {
+      if (auto nestedConcat = input.getDefiningOp<StringConcatOp>();
+          nestedConcat && input.hasOneUse())
+        llvm::append_range(flatOperands, nestedConcat.getInputs());
+      else
+        flatOperands.push_back(input);
+    }
+
+    rewriter.modifyOpInPlace(concat,
+                             [&]() { concat->setOperands(flatOperands); });
+    return success();
+  }
+};
+
+/// Merge consecutive constant strings in a concat and remove empty strings.
+/// string.concat("a", "b", x, "", "c", "d") -> string.concat("ab", x, "cd")
+class MergeAdjacentStringConstants
+    : public mlir::OpRewritePattern<StringConcatOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult
+  matchAndRewrite(StringConcatOp concat,
+                  mlir::PatternRewriter &rewriter) const override {
+
+    SmallVector<Value> newOperands;
+    SmallString<64> accumulatedLit;
+    SmallVector<StringConstantOp> accumulatedOps;
+    bool changed = false;
+
+    auto flushLiterals = [&]() {
+      if (accumulatedOps.empty())
+        return;
+
+      // If only one literal, reuse it.
+      if (accumulatedOps.size() == 1) {
+        newOperands.push_back(accumulatedOps[0]);
+      } else {
+        // Multiple literals - merge them.
+        auto newLit = rewriter.createOrFold<StringConstantOp>(
+            concat.getLoc(), StringAttr::get(getContext(), accumulatedLit));
+        newOperands.push_back(newLit);
+        changed = true;
+      }
+      accumulatedLit.clear();
+      accumulatedOps.clear();
+    };
+
+    for (auto operand : concat.getInputs()) {
+      if (auto litOp = operand.getDefiningOp<StringConstantOp>()) {
+        // Skip empty strings.
+        if (litOp.getValue().empty()) {
+          changed = true;
+          continue;
+        }
+        accumulatedLit += litOp.getValue();
+        accumulatedOps.push_back(litOp);
+      } else {
+        flushLiterals();
+        newOperands.push_back(operand);
+      }
+    }
+
+    // Flush any remaining literals.
+    flushLiterals();
+
+    if (!changed)
+      return failure();
+
+    // If no operands remain, replace with empty string.
+    if (newOperands.empty())
+      return rewriter.replaceOpWithNewOp<StringConstantOp>(
+                 concat, StringAttr::get(getContext(), "")),
+             success();
+
+    // Single-operand case is handled by the folder.
+    rewriter.modifyOpInPlace(concat,
+                             [&]() { concat->setOperands(newOperands); });
+    return success();
+  }
+};
+
+} // namespace
+
+void StringConcatOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                 MLIRContext *context) {
+  results.insert<FlattenStringConcat, MergeAdjacentStringConstants>(context);
 }
 
 OpFoldResult BitCastOp::fold(FoldAdaptor adaptor) {
