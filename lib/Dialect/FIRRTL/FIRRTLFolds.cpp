@@ -1531,6 +1531,10 @@ void CatPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 //===----------------------------------------------------------------------===//
 
 OpFoldResult StringConcatOp::fold(FoldAdaptor adaptor) {
+  // Fold single-operand concat to just the operand.
+  if (getInputs().size() == 1)
+    return getInputs()[0];
+
   // Check if all operands are constant strings before accumulating.
   if (!llvm::all_of(adaptor.getInputs(), [](Attribute operand) {
         return isa_and_nonnull<StringAttr>(operand);
@@ -1677,32 +1681,12 @@ public:
   }
 };
 
-/// Simplify single-operand concat to just the operand.
-/// string.concat(x) -> x
-class SimplifySingleOperandStringConcat
-    : public mlir::OpRewritePattern<StringConcatOp> {
-public:
-  using OpRewritePattern::OpRewritePattern;
-
-  LogicalResult
-  matchAndRewrite(StringConcatOp concat,
-                  mlir::PatternRewriter &rewriter) const override {
-
-    if (concat.getInputs().size() != 1)
-      return failure();
-
-    rewriter.replaceOp(concat, concat.getInputs()[0]);
-    return success();
-  }
-};
-
 } // namespace
 
 void StringConcatOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                  MLIRContext *context) {
   results.insert<FlattenStringConcat, MergeAdjacentStringConstants,
-                 RemoveEmptyStrings, SimplifySingleOperandStringConcat>(
-      context);
+                 RemoveEmptyStrings>(context);
 }
 
 OpFoldResult BitCastOp::fold(FoldAdaptor adaptor) {
