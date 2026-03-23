@@ -4763,31 +4763,41 @@ endmodule
 
 // Test that DPI-C imported functions are emitted as extern declarations
 
-// CHECK:  func.func private @void_dpi(!moore.i32)
+// CHECK:  moore.func.dpi private @void_dpi(in %a : !moore.i32)
 // CHECK-NOT: return
 
-// CHECK:  func.func private @nonvoid_dpi(!moore.i32) -> !moore.i32
+// CHECK:  moore.func.dpi private @nonvoid_dpi(in %a : !moore.i32, return return : !moore.i32)
 // CHECK-NOT: return
 
-// CHECK:  func.func private @dpi_with_output(!moore.i32, !moore.ref<i32>)
+// CHECK:  moore.func.dpi private @dpi_with_output(in %a : !moore.i32, out b : !moore.i32)
+// CHECK-NOT: return
+
+// CHECK:  moore.func.dpi private @dpi_inout(in %a : !moore.i32, inout %b : !moore.i32, return return : !moore.i32)
 // CHECK-NOT: return
 
 import "DPI-C" function void void_dpi(input int a);
 import "DPI-C" function int nonvoid_dpi(input int a);
 import "DPI-C" function void dpi_with_output(input int a, output int b);
+import "DPI-C" function int dpi_inout(input int a, inout int b);
 
 // CHECK-LABEL: moore.module @DpiCallTest
 module DpiCallTest(input int in_val, output int out_val);
   int result;
+  int state;
 
-  // CHECK: func.call @void_dpi
-  // CHECK: func.call @nonvoid_dpi
-  // CHECK: func.call @dpi_with_output
+  // CHECK: moore.func.dpi.call @void_dpi
+  // CHECK: %[[NV:.*]] = moore.func.dpi.call @nonvoid_dpi(%{{.*}}) : (!moore.i32) -> !moore.i32
+  // CHECK: %[[OUT:.*]] = moore.func.dpi.call @dpi_with_output(%{{.*}}) : (!moore.i32) -> !moore.i32
+  // CHECK: moore.blocking_assign %{{.*}}, %[[OUT]] : i32
+  // CHECK: %[[INOUT:.*]]:2 = moore.func.dpi.call @dpi_inout(%{{.*}}, %{{.*}}) : (!moore.i32, !moore.i32) -> (!moore.i32, !moore.i32)
+  // CHECK: moore.blocking_assign %{{.*}}, %[[INOUT]]#0 : i32
+  // CHECK: moore.blocking_assign %{{.*}}, %[[INOUT]]#1 : i32
 
   always_comb begin
     void_dpi(in_val);
     result = nonvoid_dpi(in_val);
     dpi_with_output(in_val, result);
+    state = dpi_inout(in_val, result);
   end
 
   assign out_val = result;
@@ -4798,8 +4808,8 @@ endmodule
 import "DPI-C" function chandle chandle_init(input int size);
 import "DPI-C" function void chandle_tick(input chandle ctx, input int a);
 
-// CHECK: func.func private @chandle_init(!moore.i32) -> !moore.chandle
-// CHECK: func.func private @chandle_tick(!moore.chandle, !moore.i32)
+// CHECK: moore.func.dpi private @chandle_init(in %size : !moore.i32, return return : !moore.chandle)
+// CHECK: moore.func.dpi private @chandle_tick(in %ctx : !moore.chandle, in %a : !moore.i32)
 
 // CHECK-LABEL: moore.module @ChandleTest
 module ChandleTest(input logic clock, input int in_val);
@@ -4817,16 +4827,16 @@ endmodule
 // Test that DPI-C open array types (byte[], int[]) are converted to
 // Moore open array types (!moore.open_uarray<T>).
 
-// CHECK: func.func private @process_data(!moore.open_uarray<i8>)
+// CHECK: moore.func.dpi private @process_data(in %data : !moore.open_uarray<i8>)
 import "DPI-C" function void process_data(input byte data[]);
 
-// CHECK: func.func private @read_write(!moore.open_uarray<i8>, !moore.ref<open_uarray<i8>>)
+// CHECK: moore.func.dpi private @read_write(in %wd : !moore.open_uarray<i8>, out rd : !moore.open_uarray<i8>)
 import "DPI-C" function void read_write(input byte wd[], output byte rd[]);
 
-// CHECK: func.func private @int_array_fn(!moore.open_uarray<i32>)
+// CHECK: moore.func.dpi private @int_array_fn(in %data : !moore.open_uarray<i32>)
 import "DPI-C" function void int_array_fn(input int data[]);
 
-// CHECK: func.func private @packed_bits_fn(!moore.open_array<i1>)
+// CHECK: moore.func.dpi private @packed_bits_fn(in %data : !moore.open_array<i1>)
 import "DPI-C" function void packed_bits_fn(input bit [] data);
 
 // CHECK-LABEL: moore.module @OpenArrayCallTest
@@ -4836,10 +4846,12 @@ module OpenArrayCallTest(input logic clock);
   int idata[];
   bit [7:0] pdata;
 
-  // CHECK: func.call @process_data
-  // CHECK: func.call @read_write
-  // CHECK: func.call @int_array_fn
-  // CHECK: func.call @packed_bits_fn
+  // CHECK: moore.func.dpi.call @process_data
+  // CHECK: %[[RW_RES:.*]] = moore.func.dpi.call @read_write(%{{.*}}) : (!moore.open_uarray<i8>) -> !moore.open_uarray<i8>
+  // CHECK: moore.blocking_assign %result, %[[RW_RES]]
+  // CHECK: moore.func.dpi.call @int_array_fn
+  // CHECK: %[[PD:.*]] = moore.conversion %{{.*}} : !moore.i8 -> !moore.open_array<i1>
+  // CHECK: moore.func.dpi.call @packed_bits_fn(%[[PD]]) : (!moore.open_array<i1>) -> ()
   always @(posedge clock) begin
     process_data(mydata);
     read_write(mydata, result);

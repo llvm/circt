@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Moore/MooreTypes.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
@@ -1741,8 +1742,8 @@ struct RvalueExprVisitor : public ExprVisitor {
         (subroutine->flags & slang::ast::MethodFlags::Virtual) != 0;
 
     if (!isVirtual) {
-      auto calleeSym = lowering->op.getName();
-      if (lowering->isCoroutine())
+      auto calleeSym = lowering->op.getNameAttr().getValue();
+      if (isa<moore::CoroutineOp>(lowering->op.getOperation()))
         return moore::CallCoroutineOp::create(builder, loc, resultTypes,
                                               calleeSym, explicitArguments);
       return mlir::func::CallOp::create(builder, loc, resultTypes, calleeSym,
@@ -1766,6 +1767,97 @@ struct RvalueExprVisitor : public ExprVisitor {
     auto *lowering = context.declareFunction(*subroutine);
     if (!lowering)
       return {};
+
+    if (isa<moore::DPIFuncOp>(lowering->op.getOperation())) {
+      SmallVector<Value> operands;
+      SmallVector<Value> resultTargets;
+
+      for (auto [callArg, declArg] :
+           llvm::zip(expr.arguments(), subroutine->getArguments())) {
+        auto *actual = callArg;
+        if (const auto *assign =
+                actual->as_if<slang::ast::AssignmentExpression>())
+          actual = &assign->left();
+
+        auto argType = context.convertType(declArg->getType());
+        if (!argType)
+          return {};
+
+        switch (declArg->direction) {
+        case slang::ast::ArgumentDirection::In: {
+          auto value = context.convertRvalueExpression(*actual, argType);
+          if (!value)
+            return {};
+          operands.push_back(value);
+          break;
+        }
+        case slang::ast::ArgumentDirection::Out: {
+          auto lvalue = context.convertLvalueExpression(*actual);
+          if (!lvalue)
+            return {};
+          resultTargets.push_back(lvalue);
+          break;
+        }
+        case slang::ast::ArgumentDirection::InOut:
+        case slang::ast::ArgumentDirection::Ref: {
+          auto lvalue = context.convertLvalueExpression(*actual);
+          if (!lvalue)
+            return {};
+          auto value = context.convertRvalueExpression(*actual, argType);
+          if (!value)
+            return {};
+          operands.push_back(value);
+          resultTargets.push_back(lvalue);
+          break;
+        }
+        }
+      }
+
+      SmallVector<Type> resultTypes(
+          cast<FunctionType>(lowering->op.getFunctionType()).getResults());
+      auto callOp = moore::FuncDPICallOp::create(
+          builder, loc, resultTypes,
+          SymbolRefAttr::get(lowering->op.getNameAttr()), operands);
+
+      unsigned resultIndex = 0;
+      unsigned targetIndex = 0;
+      for (const auto *declArg : subroutine->getArguments()) {
+        auto argType = context.convertType(declArg->getType());
+        if (!argType)
+          return {};
+
+        switch (declArg->direction) {
+        case slang::ast::ArgumentDirection::Out:
+        case slang::ast::ArgumentDirection::InOut:
+        case slang::ast::ArgumentDirection::Ref: {
+          auto lvalue = resultTargets[targetIndex++];
+          auto refTy = dyn_cast<moore::RefType>(lvalue.getType());
+          if (!refTy) {
+            lowering->op->emitError(
+                "expected DPI output target to be moore::RefType");
+            return {};
+          }
+          auto converted = context.materializeConversion(
+              refTy.getNestedType(), callOp->getResult(resultIndex++),
+              declArg->getType().isSigned(), loc);
+          if (!converted)
+            return {};
+          moore::BlockingAssignOp::create(builder, loc, lvalue, converted);
+          break;
+        }
+        default:
+          break;
+        }
+      }
+
+      if (!subroutine->getReturnType().isVoid())
+        return callOp->getResult(resultIndex);
+
+      return mlir::UnrealizedConversionCastOp::create(
+                 builder, loc, moore::VoidType::get(context.getContext()),
+                 ValueRange{})
+          .getResult(0);
+    }
 
     // Convert the call arguments. Input arguments are converted to an rvalue.
     // All other arguments are converted to lvalues and passed into the function
@@ -1824,14 +1916,14 @@ struct RvalueExprVisitor : public ExprVisitor {
       auto [thisRef, tyHandle] = getMethodReceiverTypeHandle(expr);
       callOp = buildMethodCall(subroutine, lowering, tyHandle, thisRef,
                                arguments, resultTypes);
-    } else if (lowering->isCoroutine()) {
+    } else if (isa<moore::CoroutineOp>(lowering->op.getOperation())) {
       // Free task -> moore.call_coroutine
-      auto coroutine = cast<moore::CoroutineOp>(lowering->op);
+      auto coroutine = cast<moore::CoroutineOp>(lowering->op.getOperation());
       callOp =
           moore::CallCoroutineOp::create(builder, loc, coroutine, arguments);
     } else {
       // Free function -> func.call
-      auto funcOp = cast<mlir::func::FuncOp>(lowering->op);
+      auto funcOp = cast<mlir::func::FuncOp>(lowering->op.getOperation());
       callOp = mlir::func::CallOp::create(builder, loc, funcOp, arguments);
     }
 

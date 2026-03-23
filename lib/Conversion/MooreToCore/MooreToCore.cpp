@@ -2135,6 +2135,74 @@ struct CallOpConversion : public OpConversionPattern<func::CallOp> {
   }
 };
 
+struct FuncDPICallOpConversion
+    : public OpConversionPattern<moore::FuncDPICallOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(moore::FuncDPICallOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    SmallVector<Type> convResTypes;
+    if (typeConverter->convertTypes(op.getResultTypes(), convResTypes).failed())
+      return failure();
+    rewriter.replaceOpWithNewOp<sim::DPICallOp>(
+        op, convResTypes, op.getCalleeAttr(), /*clock=*/Value(),
+        /*enable=*/Value(), adaptor.getInputs());
+    return success();
+  }
+};
+
+struct DPIFuncOpConversion : public OpConversionPattern<moore::DPIFuncOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(moore::DPIFuncOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Map Moore DPIArgDirection to sim::DPIDirection.
+    auto toDPIDir = [](moore::DPIArgDirection dir) -> sim::DPIDirection {
+      switch (dir) {
+      case moore::DPIArgDirection::In:
+        return sim::DPIDirection::Input;
+      case moore::DPIArgDirection::Out:
+        return sim::DPIDirection::Output;
+      case moore::DPIArgDirection::InOut:
+        return sim::DPIDirection::InOut;
+      case moore::DPIArgDirection::Return:
+        return sim::DPIDirection::Return;
+      }
+      llvm_unreachable("unknown DPIArgDirection");
+    };
+
+    // Reconstruct sim::DPIFunctionType from Moore's argument arrays.
+    auto dirs = op.getDpiArgDirs();
+    auto names = op.getDpiArgNames();
+    SmallVector<Type> argTypes;
+    op.getDPIArgTypes(argTypes);
+
+    SmallVector<sim::DPIArgument> dpiArguments;
+    for (auto [dirAttr, nameAttr, mooreType] :
+         llvm::zip(dirs, names, argTypes)) {
+      auto dir = toDPIDir(cast<moore::DPIArgDirectionAttr>(dirAttr).getValue());
+      auto name = cast<StringAttr>(nameAttr);
+      Type coreType = typeConverter->convertType(mooreType);
+      if (!coreType)
+        return op.emitOpError("argument '")
+               << name << "' has unsupported type " << mooreType;
+      dpiArguments.push_back({name, coreType, dir});
+    }
+
+    auto coreDPIFuncType =
+        sim::DPIFunctionType::get(rewriter.getContext(), dpiArguments);
+    auto simFunc = sim::DPIFuncOp::create(
+        rewriter, op.getLoc(), op.getSymNameAttr(), coreDPIFuncType,
+        op.getArgumentLocsAttr(), op.getVerilogNameAttr());
+    SymbolTable::setSymbolVisibility(simFunc,
+                                     SymbolTable::getSymbolVisibility(op));
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 struct UnrealizedConversionCastConversion
     : public OpConversionPattern<UnrealizedConversionCastOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -3390,6 +3458,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     HWInstanceOpConversion,
     ReturnOpConversion,
     CallOpConversion,
+    DPIFuncOpConversion,
+    FuncDPICallOpConversion,
     UnrealizedConversionCastConversion,
     InPlaceOpConversion<debug::ArrayOp>,
     InPlaceOpConversion<debug::StructOp>,

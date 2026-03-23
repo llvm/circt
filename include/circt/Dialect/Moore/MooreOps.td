@@ -3359,6 +3359,130 @@ def VTableEntryOp : MooreOp<"vtable_entry", [
   }];
 }
 
+// DPI argument direction enum — models the first-class direction keywords
+// used in DPI-imported function declarations (in, out, inout, return).
+def DPIArgDir_In     : I32EnumAttrCase<"In",     0, "in">;
+def DPIArgDir_Out    : I32EnumAttrCase<"Out",    1, "out">;
+def DPIArgDir_InOut  : I32EnumAttrCase<"InOut",  2, "inout">;
+def DPIArgDir_Return : I32EnumAttrCase<"Return", 3, "return">;
+
+def DPIArgDirection : I32EnumAttr<"DPIArgDirection",
+    "DPI argument direction",
+    [DPIArgDir_In, DPIArgDir_Out, DPIArgDir_InOut, DPIArgDir_Return]> {
+  let cppNamespace = "circt::moore";
+}
+
+def DPIFuncOp : MooreOp<"func.dpi",
+  [IsolatedFromAbove, Symbol, OpAsmOpInterface,
+   DeclareOpInterfaceMethods<FunctionOpInterface,
+     ["cloneTypeWith"]>]> {
+  let summary = "A DPI-imported SystemVerilog function declaration";
+  let description = [{
+    `moore.func.dpi` models a DPI-imported function declaration in Moore IR.
+    Each argument has a direction (`in`, `out`, `inout`, `return`), name, and
+    type. MooreToCore reconstructs a `sim::DPIFunctionType` for lowering to
+    `sim.func.dpi`.
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttrOf<FunctionType>:$function_type,
+    ArrayAttr:$dpi_arg_dirs,
+    ArrayAttr:$dpi_arg_names,
+    OptionalAttr<LocationArrayAttr>:$argument_locs,
+    OptionalAttr<StrAttr>:$verilogName,
+    OptionalAttr<StrAttr>:$sym_visibility
+  );
+  let regions = (region AnyRegion:$body);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins
+      "StringAttr":$sym_name,
+      "ArrayRef<DPIArgInfo>":$dpiArgs,
+      "ArrayAttr":$argumentLocs,
+      "StringAttr":$verilogName
+    )>
+  ];
+
+  let extraClassDeclaration = [{
+    /// Whether a direction is a call operand (input-side).
+    static bool isCallOperandDir(DPIArgDirection dir) {
+      return dir == DPIArgDirection::In || dir == DPIArgDirection::InOut;
+    }
+
+    /// Reconstruct the absolute argument types from the FunctionType and
+    /// stored directions.
+    void getDPIArgTypes(SmallVectorImpl<Type> &argTypes);
+
+    ArrayRef<Type> getArgumentTypes() {
+      return cast<mlir::FunctionType>(getFunctionType()).getInputs();
+    }
+    ArrayRef<Type> getResultTypes() {
+      return cast<mlir::FunctionType>(getFunctionType()).getResults();
+    }
+
+    ::mlir::Region *getCallableRegion() { return nullptr; }
+
+    mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
+    mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
+    void setArgAttrsAttr(mlir::ArrayAttr args) {}
+    void setResAttrsAttr(mlir::ArrayAttr args) {}
+    mlir::Attribute removeArgAttrsAttr() { return nullptr; }
+    mlir::Attribute removeResAttrsAttr() { return nullptr; }
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// DPI Call
+//===----------------------------------------------------------------------===//
+
+def FuncDPICallOp : MooreOp<"func.dpi.call", [
+  CallOpInterface,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Call a DPI-imported function";
+  let description = [{
+    `moore.func.dpi.call` represents a call to a DPI-C imported function,
+    preserving the DPI intent from ImportVerilog so that downstream
+    MooreToCore lowering emits `sim.func.dpi.call` instead of a plain
+    `func.call`.
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$callee,
+                       Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>);
+
+  let assemblyFormat = [{
+    $callee `(` $inputs `)` attr-dict `:` functional-type($inputs, results)
+  }];
+
+  let extraClassDeclaration = [{
+    operand_range getArgOperands() {
+      return getInputs();
+    }
+    MutableOperandRange getArgOperandsMutable() {
+      return getInputsMutable();
+    }
+    mlir::CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<mlir::SymbolRefAttr>("callee");
+    }
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getCalleeAttrName(),
+                       llvm::cast<mlir::SymbolRefAttr>(callee));
+    }
+    mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
+    mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
+    void setArgAttrsAttr(mlir::ArrayAttr args) {}
+    void setResAttrsAttr(mlir::ArrayAttr args) {}
+    mlir::Attribute removeArgAttrsAttr() { return nullptr; }
+    mlir::Attribute removeResAttrsAttr() { return nullptr; }
+  }];
+
+}
+
 
 //===----------------------------------------------------------------------===//
 // String Builtins
