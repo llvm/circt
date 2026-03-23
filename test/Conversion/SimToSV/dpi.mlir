@@ -1,7 +1,7 @@
 // RUN: circt-opt --lower-sim-to-sv %s | FileCheck %s
 // RUN: circt-opt --lower-sim-to-sv --lower-seq-to-sv -export-verilog %s | FileCheck %s --check-prefix=VERILOG
 
-sim.func.dpi @dpi(out arg0: i1, in %arg1: i1, out arg2: i1)
+sim.func.dpi @dpi(output arg0: i1, input %arg1: i1, output arg2: i1)
 // CHECK:       sv.func private @dpi(out arg0 : i1, in %arg1 : i1, out arg2 : i1)
 // CHECK-NEXT:  sv.macro.decl @__CIRCT_DPI_IMPORT_DPI
 // CHECK-NEXT:  emit.fragment @dpi_dpi_import_fragument {
@@ -98,8 +98,13 @@ hw.module @dpi_call(in %clock : !seq.clock, in %enable : i1, in %in: i1,
   hw.output %0, %1, %2, %3, %4, %5, %6, %7: i1, i1, i1, i1, i1, i1, i1, i1
 }
 
-sim.func.dpi private @increment_counter(in %in_0 : i64, out out_0 : i32)
-sim.func.dpi private @create_counter(out out_0 : i64)
+sim.func.dpi private @increment_counter(input %in_0 : i64, output out_0 : i32)
+sim.func.dpi private @create_counter(output out_0 : i64)
+// CHECK: sv.func private @dpi_ret(in %arg0 : i1, out ret : i1 {sv.func.explicitly_returned})
+// VERILOG: import "DPI-C" context function bit dpi_ret(
+// VERILOG-NEXT:   input  bit arg0
+// VERILOG-NEXT: );
+sim.func.dpi private @dpi_ret(input %arg0 : i1, return ret : i1)
 // CHECK-LABEL: hw.module @Issue7191
 // Check lowering successes.
 hw.module @Issue7191(out result : i32) {
@@ -109,4 +114,11 @@ hw.module @Issue7191(out result : i32) {
   %0 = sim.func.dpi.call @create_counter() : () -> i64
   %1 = sim.func.dpi.call @increment_counter(%0) : (i64) -> i32
   hw.output %1 : i32
+}
+
+// CHECK-LABEL: hw.module @dpi_ret_call
+hw.module @dpi_ret_call(in %in : i1, out result : i1) {
+  // CHECK: sv.func.call.procedural @dpi_ret(%in) : (i1) -> i1
+  %0 = sim.func.dpi.call @dpi_ret(%in) : (i1) -> i1
+  hw.output %0 : i1
 }

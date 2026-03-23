@@ -269,14 +269,36 @@ struct LowerDPIFunc {
                     ArrayRef<StringAttr> dpiCallees) const;
 };
 
+static ArrayAttr buildSVPerArgumentAttrs(MLIRContext *context,
+                                         sim::DPIFuncOp func) {
+  Builder builder(context);
+  SmallVector<Attribute> convertedAttrs;
+  auto modType = func.getModuleType();
+  auto dpiPorts = modType.getPorts();
+  convertedAttrs.reserve(dpiPorts.size());
+  for (auto &port : dpiPorts) {
+    NamedAttrList newAttrs;
+    if (port.dir == sim::DPIDirection::Return)
+      newAttrs.append(
+          builder.getStringAttr(sv::FuncOp::getExplicitlyReturnedAttrName()),
+          builder.getUnitAttr());
+    convertedAttrs.push_back(newAttrs.getDictionary(context));
+  }
+  return ArrayAttr::get(context, convertedAttrs);
+}
+
 void LowerDPIFunc::lower(sim::DPIFuncOp func) {
   ImplicitLocOpBuilder builder(func.getLoc(), func);
   ArrayAttr inputLocsAttr, outputLocsAttr;
-  if (func.getArgumentLocs()) {
+
+  // Build ModuleType from DPI ports for sv::FuncOp.
+  auto moduleType = func.getModuleType().getHWModuleType();
+
+  if (func.getPortLocs()) {
     SmallVector<Attribute> inputLocs, outputLocs;
-    for (auto [port, loc] :
-         llvm::zip(func.getModuleType().getPorts(),
-                   func.getArgumentLocsAttr().getAsRange<LocationAttr>())) {
+    auto hwPorts = moduleType.getPorts();
+    for (auto [port, loc] : llvm::zip(
+             hwPorts, func.getPortLocsAttr().getAsRange<LocationAttr>())) {
       (port.dir == hw::ModulePort::Output ? outputLocs : inputLocs)
           .push_back(loc);
     }
@@ -284,10 +306,10 @@ void LowerDPIFunc::lower(sim::DPIFuncOp func) {
     outputLocsAttr = builder.getArrayAttr(outputLocs);
   }
 
-  auto svFuncDecl =
-      sv::FuncOp::create(builder, func.getSymNameAttr(), func.getModuleType(),
-                         func.getPerArgumentAttrsAttr(), inputLocsAttr,
-                         outputLocsAttr, func.getVerilogNameAttr());
+  auto svFuncDecl = sv::FuncOp::create(
+      builder, func.getSymNameAttr(), moduleType,
+      buildSVPerArgumentAttrs(builder.getContext(), func), inputLocsAttr,
+      outputLocsAttr, func.getVerilogNameAttr());
   // DPI function is a declaration so it must be a private function.
   svFuncDecl.setPrivate();
   auto name = builder.getStringAttr(nameSpace.newName(

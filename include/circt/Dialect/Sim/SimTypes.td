@@ -73,4 +73,45 @@ def QueueType : SimTypeDef<"Queue"> {
   ];
 }
 
+def DPIModuleType : SimTypeDef<"DPIModule"> {
+  let summary = "DPI module type with first-class port directions";
+  let description = [{
+    Represents the full port signature of a DPI-C function declaration.
+    Each port has a name, type, and direction (`input`, `output`, `inout`,
+    `return`, or `ref`). Unlike `hw.modty`, this type preserves DPI-specific
+    semantics such as explicit return values and by-reference ports.
+  }];
+
+  let mnemonic = "dpi_modty";
+  let parameters = (ins
+    ArrayRefParameter<"::circt::sim::DPIPort", "DPI port list">:$ports
+  );
+  let genStorageClass = 0;
+  let hasCustomAssemblyFormat = 1;
+
+  let extraClassDeclaration = [{
+    /// Get the number of ports.
+    size_t getNumPorts() const;
+
+    /// Get the input ports (input, inout, ref — call operands).
+    llvm::SmallVector<DPIPort> getInputPorts() const;
+
+    /// Get the result ports (output, inout, return — call results).
+    llvm::SmallVector<DPIPort> getResultPorts() const;
+
+    /// Get the return port, if any. Returns nullptr if none.
+    const DPIPort *getReturnPort() const;
+
+    /// Derive the MLIR FunctionType for the call shape.
+    mlir::FunctionType getFunctionType() const;
+
+    /// Construct an hw::ModuleType for lowering to SV.
+    ::circt::hw::ModuleType getHWModuleType() const;
+
+    /// Verify structural constraints (return-is-last, at-most-one-return).
+    /// On failure, emits diagnostics on the given op and returns failure.
+    mlir::LogicalResult verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError) const;
+  }];
+}
+
 #endif // CIRCT_DIALECT_SIM_SIMTYPES_TD

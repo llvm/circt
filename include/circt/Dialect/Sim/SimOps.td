@@ -24,6 +24,26 @@ include "mlir/IR/EnumAttr.td"
 class SimOp<string mnemonic, list<Trait> traits = []> :
     Op<SimDialect, mnemonic, traits>;
 
+//===----------------------------------------------------------------------===//
+// DPI Direction Enum
+//===----------------------------------------------------------------------===//
+
+def DPIDir_Input  : I32EnumAttrCase<"Input",  0, "input">;
+def DPIDir_Output : I32EnumAttrCase<"Output", 1, "output">;
+def DPIDir_InOut  : I32EnumAttrCase<"InOut",  2, "inout">;
+def DPIDir_Return : I32EnumAttrCase<"Return", 3, "return">;
+def DPIDir_Ref    : I32EnumAttrCase<"Ref",    4, "ref">;
+
+def DPIDirection : I32EnumAttr<"DPIDirection",
+    "DPI port direction",
+    [DPIDir_Input, DPIDir_Output, DPIDir_InOut, DPIDir_Return, DPIDir_Ref]> {
+  let cppNamespace = "circt::sim";
+}
+
+//===----------------------------------------------------------------------===//
+// Simulation Operations
+//===----------------------------------------------------------------------===//
+
 def PlusArgsTestOp : SimOp<"plusargs.test", [Pure]> {
   let summary = "SystemVerilog `$test$plusargs` call";
 
@@ -43,31 +63,49 @@ def PlusArgsValueOp : SimOp<"plusargs.value", [Pure]> {
 def DPIFuncOp : SimOp<"func.dpi",
      [IsolatedFromAbove, Symbol, OpAsmOpInterface,
       FunctionOpInterface]> {
-  let summary = "A System Verilog function";
+  let summary = "A DPI-C imported function declaration";
   let description = [{
-    `sim.func.dpi` models an external function in a core dialect.
+    `sim.func.dpi` models a DPI-C imported function with first-class port
+    direction keywords: `input`, `output`, `inout`, `return`, and `ref`.
+
+    Port directions map to call and ABI semantics as follows:
+    - `input`  — call operand, passed by value.
+    - `output` — call result, passed by pointer in the C ABI.
+    - `inout`  — call operand and result, passed by pointer in the C ABI.
+    - `return` — call result (last), the actual C return value.
+    - `ref`    — call operand (pass-through pointer, e.g. open-array ABI).
   }];
 
   let arguments = (ins
     SymbolNameAttr:$sym_name,
-    TypeAttrOf<ModuleType>:$module_type,
-    OptionalAttr<DictArrayAttr>:$per_argument_attrs,
-    OptionalAttr<LocationArrayAttr>:$argument_locs,
+    TypeAttrOf<FunctionType>:$function_type,
+    TypeAttrOf<DPIModuleType>:$module_type,
+    OptionalAttr<LocationArrayAttr>:$port_locs,
     OptionalAttr<StrAttr>:$verilogName
   );
   let regions = (region AnyRegion:$body);
 
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins
+      "StringAttr":$sym_name,
+      "ArrayRef<StringAttr>":$portNames,
+      "ArrayRef<Type>":$portTypes,
+      "ArrayRef<DPIDirection>":$portDirections,
+      "ArrayAttr":$portLocs,
+      "StringAttr":$verilogName
+    )>,
+    OpBuilder<(ins
+      "StringAttr":$sym_name,
+      "DPIModuleType":$moduleType,
+      "ArrayAttr":$portLocs,
+      "StringAttr":$verilogName
+    )>
+  ];
 
   let extraClassDeclaration = [{
-    mlir::FunctionType getFunctionType() {
-      return getModuleType().getFuncType();
-    }
-
-    void setFunctionTypeAttr(mlir::TypeAttr mlirType) {
-      setModuleType(cast<hw::ModuleType>(mlirType.getValue()));
-    }
-
     /// Returns the argument types of this function.
     ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
 
@@ -76,9 +114,7 @@ def DPIFuncOp : SimOp<"func.dpi",
 
     ::mlir::Region *getCallableRegion() { return nullptr; }
 
-    /// Stub implementations for ArgumentAttributesMethods. If desired,
-    /// implement these by defining arg_attrs and res_attrs as arguments to the
-    /// operation as OptionalAttr<DictArrayAttr>.
+    /// Stub implementations for ArgumentAttributesMethods.
     mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
     mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
     void setArgAttrsAttr(mlir::ArrayAttr args) {}

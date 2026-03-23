@@ -2,9 +2,9 @@
 
 // CHECK-LABEL: firrtl.circuit "DPI" {
 firrtl.circuit "DPI" {
-  // CHECK-NEXT: sim.func.dpi private @unclocked_result(in %in_0 : i8, in %in_1 : i8, out out_0 : i8) attributes {verilogName = "unclocked_result"}
-  // CHECK-NEXT: sim.func.dpi private @clocked_void(in %in_0 : i8, in %in_1 : i8) attributes {verilogName = "clocked_void"}
-  // CHECK-NEXT: sim.func.dpi private @clocked_result(in %foo : i8, in %bar : i8, out baz : i8) attributes {verilogName = "clocked_result"}
+  // CHECK-NEXT: sim.func.dpi private @unclocked_result(input %in_0 : i8, input %in_1 : i8, output out_0 : i8) attributes {verilogName = "unclocked_result"}
+  // CHECK-NEXT: sim.func.dpi private @clocked_void(input %in_0 : i8, input %in_1 : i8) attributes {verilogName = "clocked_void"}
+  // CHECK-NEXT: sim.func.dpi private @clocked_result(input %foo : i8, input %bar : i8, output baz : i8) attributes {verilogName = "clocked_result"}
   // CHECK-LABEL: firrtl.module @DPI
   firrtl.module @DPI(in %clock: !firrtl.clock, in %enable: !firrtl.uint<1>, in %in_0: !firrtl.uint<8>, in %in_1: !firrtl.uint<8>, out %out_0: !firrtl.uint<8>, out %out_1: !firrtl.uint<8>) attributes {convention = #firrtl<convention scalarized>} {
     // CHECK-NEXT: %0 = builtin.unrealized_conversion_cast %clock : !firrtl.clock to !seq.clock

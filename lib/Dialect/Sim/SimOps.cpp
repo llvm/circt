@@ -11,10 +11,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Sim/SimOps.h"
-#include "circt/Dialect/HW/ModuleImplementation.h"
+#include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/MapVector.h"
@@ -22,6 +24,213 @@
 using namespace mlir;
 using namespace circt;
 using namespace sim;
+
+//===----------------------------------------------------------------------===//
+// DPIFuncOp
+//===----------------------------------------------------------------------===//
+
+void DPIFuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                      StringAttr symName, ArrayRef<StringAttr> portNames,
+                      ArrayRef<Type> portTypes,
+                      ArrayRef<DPIDirection> portDirections, ArrayAttr portLocs,
+                      StringAttr verilogName) {
+  // Build DPIModuleType from port info.
+  SmallVector<DPIPort> ports;
+  ports.reserve(portNames.size());
+  for (auto [name, type, dir] : llvm::zip(portNames, portTypes, portDirections))
+    ports.push_back({name, type, dir});
+  auto modType = DPIModuleType::get(odsBuilder.getContext(), ports);
+  build(odsBuilder, odsState, symName, modType, portLocs, verilogName);
+}
+
+void DPIFuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                      StringAttr symName, DPIModuleType moduleType,
+                      ArrayAttr portLocs, StringAttr verilogName) {
+  odsState.addAttribute(getSymNameAttrName(odsState.name), symName);
+  odsState.addAttribute(getFunctionTypeAttrName(odsState.name),
+                        TypeAttr::get(moduleType.getFunctionType()));
+  odsState.addAttribute(getModuleTypeAttrName(odsState.name),
+                        TypeAttr::get(moduleType));
+  if (portLocs)
+    odsState.addAttribute(getPortLocsAttrName(odsState.name), portLocs);
+  if (verilogName)
+    odsState.addAttribute(getVerilogNameAttrName(odsState.name), verilogName);
+  odsState.addRegion();
+}
+
+ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto builder = parser.getBuilder();
+  auto ctx = builder.getContext();
+
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  SmallVector<DPIPort> ports;
+  SmallVector<Attribute> portLocs;
+  auto unknownLoc = builder.getUnknownLoc();
+  bool hasLocs = false;
+
+  auto parseOnePort = [&]() -> ParseResult {
+    StringRef dirKeyword;
+    auto keyLoc = parser.getCurrentLocation();
+    if (parser.parseKeyword(&dirKeyword))
+      return failure();
+    auto dir = parseDPIDirectionKeyword(dirKeyword);
+    if (!dir)
+      return parser.emitError(keyLoc, "expected DPI port direction keyword");
+
+    // For input/inout/ref ports, parse SSA name; for output/return, bare name.
+    bool hasSSA = isCallOperandDir(*dir);
+    std::string portName;
+    if (hasSSA) {
+      OpAsmParser::UnresolvedOperand ssaName;
+      if (parser.parseOperand(ssaName, /*allowResultNumber=*/false))
+        return failure();
+      portName = ssaName.name.substr(1).str();
+    } else {
+      if (parser.parseKeywordOrString(&portName))
+        return failure();
+    }
+
+    Type portType;
+    if (parser.parseColonType(portType))
+      return failure();
+    ports.push_back({StringAttr::get(ctx, portName), portType, *dir});
+
+    std::optional<Location> maybeLoc;
+    if (failed(parser.parseOptionalLocationSpecifier(maybeLoc)))
+      return failure();
+    if (maybeLoc) {
+      portLocs.push_back(*maybeLoc);
+      hasLocs = true;
+    } else {
+      portLocs.push_back(unknownLoc);
+    }
+    return success();
+  };
+
+  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                     parseOnePort, " in DPI port list"))
+    return failure();
+
+  auto modType = DPIModuleType::get(ctx, ports);
+
+  result.addAttribute(DPIFuncOp::getFunctionTypeAttrName(result.name),
+                      TypeAttr::get(modType.getFunctionType()));
+  result.addAttribute(DPIFuncOp::getModuleTypeAttrName(result.name),
+                      TypeAttr::get(modType));
+  if (hasLocs)
+    result.addAttribute(DPIFuncOp::getPortLocsAttrName(result.name),
+                        builder.getArrayAttr(portLocs));
+  result.addRegion();
+
+  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
+    return failure();
+  return success();
+}
+
+void DPIFuncOp::print(OpAsmPrinter &p) {
+  p << ' ';
+
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+  p.printSymbolName(getSymName());
+
+  auto modType = getModuleType();
+  auto dpiPorts = modType.getPorts();
+
+  p << '(';
+  llvm::interleaveComma(llvm::enumerate(dpiPorts), p, [&](auto it) {
+    auto &port = it.value();
+    auto i = it.index();
+
+    p << stringifyDPIDirectionKeyword(port.dir) << ' ';
+
+    if (isCallOperandDir(port.dir))
+      p << '%';
+    p.printKeywordOrString(port.name.getValue());
+    p << " : ";
+    p.printType(port.type);
+
+    if (getPortLocs()) {
+      auto loc = cast<Location>(getPortLocsAttr()[i]);
+      if (loc != UnknownLoc::get(getContext()))
+        p.printOptionalLocationSpecifier(loc);
+    }
+  });
+  p << ')';
+
+  mlir::function_interface_impl::printFunctionAttributes(
+      p, *this,
+      {visibilityAttrName, getFunctionTypeAttrName(), getModuleTypeAttrName(),
+       getPortLocsAttrName()});
+}
+
+LogicalResult DPIFuncOp::verify() {
+  auto modType = getModuleType();
+
+  // Structural constraints shared with all DPIModuleType users.
+  if (failed(modType.verify([&]() { return emitOpError(); })))
+    return failure();
+
+  // Sim-specific constraints.
+  for (auto &port : modType.getPorts()) {
+    if (port.dir == DPIDirection::Ref) {
+      if (!isa<LLVM::LLVMPointerType>(port.type))
+        return emitOpError("'ref' ports must use !llvm.ptr type");
+    }
+  }
+
+  // Verify function_type matches the module_type.
+  auto expectedFuncType = modType.getFunctionType();
+  if (getFunctionType() != expectedFuncType)
+    return emitOpError("function_type ")
+           << getFunctionType()
+           << " does not match the expected type derived from ports: "
+           << expectedFuncType;
+
+  return success();
+}
+
+LogicalResult
+sim::DPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto referencedOp =
+      symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr());
+  if (!referencedOp)
+    return emitError("cannot find function declaration '")
+           << getCallee() << "'";
+  if (auto dpiFunc = dyn_cast<sim::DPIFuncOp>(referencedOp)) {
+    auto expectedFuncType = dpiFunc.getFunctionType();
+    auto expectedInputs = expectedFuncType.getInputs();
+    auto expectedResults = expectedFuncType.getResults();
+    if (getInputs().size() != expectedInputs.size())
+      return emitError("expects ")
+             << expectedInputs.size() << " DPI operands, but got "
+             << getInputs().size();
+    if (getResults().size() != expectedResults.size())
+      return emitError("expects ")
+             << expectedResults.size() << " DPI results, but got "
+             << getResults().size();
+    for (auto [operand, expectedType] : llvm::zip(getInputs(), expectedInputs))
+      if (operand.getType() != expectedType)
+        return emitError("operand type mismatch: expected ")
+               << expectedType << ", but got " << operand.getType();
+    for (auto [result, expectedType] : llvm::zip(getResults(), expectedResults))
+      if (result.getType() != expectedType)
+        return emitError("result type mismatch: expected ")
+               << expectedType << ", but got " << result.getType();
+    return success();
+  }
+  if (isa<func::FuncOp>(referencedOp))
+    return success();
+  return emitError("callee must be 'sim.func.dpi' or 'func.func' but got '")
+         << referencedOp->getName() << "'";
+}
 
 static StringAttr formatIntegersByRadix(MLIRContext *ctx, unsigned radix,
                                         const Attribute &value,
@@ -103,92 +312,8 @@ static StringAttr formatFloatsBySpecifier(MLIRContext *ctx, Attribute value,
   return {};
 }
 
-ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
-  auto builder = parser.getBuilder();
-  // Parse visibility.
-  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
-
-  // Parse the name as a symbol.
-  StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
-                             result.attributes))
-    return failure();
-
-  SmallVector<hw::module_like_impl::PortParse> ports;
-  TypeAttr modType;
-  if (failed(
-          hw::module_like_impl::parseModuleSignature(parser, ports, modType)))
-    return failure();
-
-  result.addAttribute(DPIFuncOp::getModuleTypeAttrName(result.name), modType);
-
-  // Convert the specified array of dictionary attrs (which may have null
-  // entries) to an ArrayAttr of dictionaries.
-  auto unknownLoc = builder.getUnknownLoc();
-  SmallVector<Attribute> attrs, locs;
-  auto nonEmptyLocsFn = [unknownLoc](Attribute attr) {
-    return attr && cast<Location>(attr) != unknownLoc;
-  };
-
-  for (auto &port : ports) {
-    attrs.push_back(port.attrs ? port.attrs : builder.getDictionaryAttr({}));
-    locs.push_back(port.sourceLoc ? Location(*port.sourceLoc) : unknownLoc);
-  }
-
-  result.addAttribute(DPIFuncOp::getPerArgumentAttrsAttrName(result.name),
-                      builder.getArrayAttr(attrs));
-  result.addRegion();
-
-  if (llvm::any_of(locs, nonEmptyLocsFn))
-    result.addAttribute(DPIFuncOp::getArgumentLocsAttrName(result.name),
-                        builder.getArrayAttr(locs));
-
-  // Parse the attribute dict.
-  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
-    return failure();
-
-  return success();
-}
-
-LogicalResult
-sim::DPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto referencedOp =
-      symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr());
-  if (!referencedOp)
-    return emitError("cannot find function declaration '")
-           << getCallee() << "'";
-  if (isa<func::FuncOp, sim::DPIFuncOp>(referencedOp))
-    return success();
-  return emitError("callee must be 'sim.dpi.func' or 'func.func' but got '")
-         << referencedOp->getName() << "'";
-}
-
-void DPIFuncOp::print(OpAsmPrinter &p) {
-  DPIFuncOp op = *this;
-  // Print the operation and the function name.
-  auto funcName =
-      op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
-          .getValue();
-  p << ' ';
-
-  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
-  if (auto visibility = op->getAttrOfType<StringAttr>(visibilityAttrName))
-    p << visibility.getValue() << ' ';
-  p.printSymbolName(funcName);
-  hw::module_like_impl::printModuleSignatureNew(
-      p, op->getRegion(0), op.getModuleType(),
-      getPerArgumentAttrsAttr()
-          ? ArrayRef<Attribute>(getPerArgumentAttrsAttr().getValue())
-          : ArrayRef<Attribute>{},
-      getArgumentLocs() ? SmallVector<Location>(
-                              getArgumentLocs().value().getAsRange<Location>())
-                        : ArrayRef<Location>{});
-
-  mlir::function_interface_impl::printFunctionAttributes(
-      p, op,
-      {visibilityAttrName, getModuleTypeAttrName(),
-       getPerArgumentAttrsAttrName(), getArgumentLocsAttrName()});
-}
+// (DPIFuncOp parse/print/verify are now defined above, near the top of the
+// file)
 
 OpFoldResult FormatLiteralOp::fold(FoldAdaptor adaptor) {
   return getLiteralAttr();
