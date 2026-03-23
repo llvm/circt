@@ -15,7 +15,10 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/Value.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/LogicalResult.h"
 
@@ -38,6 +41,55 @@ OpFoldResult ChoiceOp::fold(FoldAdaptor adaptor) {
   if (adaptor.getInputs().size() == 1)
     return getOperand(0);
   return {};
+}
+
+LogicalResult ChoiceOp::canonicalize(ChoiceOp op, PatternRewriter &rewriter) {
+  llvm::SetVector<Value> worklist;
+  llvm::SmallPtrSet<Operation *, 4> visitedChoices;
+
+  visitedChoices.insert(op);
+  worklist.insert(op.getInputs().begin(), op.getInputs().end());
+
+  bool mergedOtherChoices = false;
+
+  // Look up and down at definitions and users.
+  for (unsigned i = 0; i < worklist.size(); ++i) {
+    Value val = worklist[i];
+    if (auto defOp = val.getDefiningOp<synth::ChoiceOp>()) {
+      if (visitedChoices.insert(defOp).second) {
+        mergedOtherChoices = true;
+        worklist.insert(defOp.getInputs().begin(), defOp.getInputs().end());
+      }
+    }
+
+    for (Operation *user : val.getUsers()) {
+      if (auto userChoice = llvm::dyn_cast<synth::ChoiceOp>(user)) {
+        if (visitedChoices.insert(userChoice).second) {
+          mergedOtherChoices = true;
+          worklist.insert(userChoice.getInputs().begin(),
+                          userChoice.getInputs().end());
+        }
+      }
+    }
+  }
+
+  llvm::SetVector<mlir::Value> finalOperands;
+  for (Value v : worklist) {
+    if (!visitedChoices.contains(v.getDefiningOp())) {
+      finalOperands.insert(v);
+    }
+  }
+
+  if (!mergedOtherChoices && finalOperands.size() == op.getInputs().size())
+    return llvm::failure();
+
+  auto newChoice = synth::ChoiceOp::create(rewriter, op->getLoc(), op.getType(),
+                                           finalOperands.getArrayRef());
+
+  for (Operation *visited : visitedChoices) {
+    rewriter.replaceOp(visited, newChoice.getResult());
+  }
+  return success();
 }
 
 LogicalResult MajorityInverterOp::verify() {
