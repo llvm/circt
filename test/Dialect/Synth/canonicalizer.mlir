@@ -140,3 +140,33 @@ hw.module @choice_single_operand(in %a: i4, out o: i4) {
   %0 = synth.choice %a : i4
   hw.output %0 : i4
 }
+
+// CHECK-LABEL: hw.module @choice_constant
+hw.module @choice_constant(in %a: i4, in %b: i4, out o: i4) {
+  %c7_i4 = hw.constant 7 : i4
+  // CHECK-NEXT: %c7_i4 = hw.constant 7 : i4
+  // CHECK-NEXT: hw.output %c7_i4 : i4
+  %0 = synth.choice %a, %b, %c7_i4 : i4
+  hw.output %0 : i4
+}
+
+// CHECK-LABEL: hw.module @choice_transitive_merge
+hw.module @choice_transitive_merge(in %x: i4, in %y: i4, in %z: i4, in %u: i4,
+                                   in %v: i4, out o: i4) {
+  %0 = synth.choice %x, %y, %z : i4
+  %1 = synth.choice %0, %u : i4
+  %2 = synth.choice %z, %v : i4
+  // CHECK-NEXT: %[[CHOICE:.+]] = synth.choice %x, %y, %z, %u, %v : i4
+  // CHECK-NEXT: hw.output %[[CHOICE]] : i4
+  %3 = synth.choice %1, %2 : i4
+  hw.output %3 : i4
+}
+
+// CHECK-LABEL: hw.module @choice_nested_dedup
+hw.module @choice_nested_dedup(in %a: i4, in %b: i4, in %c: i4, out o: i4) {
+  %0 = synth.choice %a, %b : i4
+  // CHECK-NEXT: %[[CHOICE:.+]] = synth.choice %a, %b, %c : i4
+  // CHECK-NEXT: hw.output %[[CHOICE]] : i4
+  %1 = synth.choice %0, %b, %c, %a : i4
+  hw.output %1 : i4
+}

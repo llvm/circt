@@ -16,6 +16,7 @@
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/SmallDenseSet.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/LogicalResult.h"
 
@@ -38,6 +39,49 @@ OpFoldResult ChoiceOp::fold(FoldAdaptor adaptor) {
   if (adaptor.getInputs().size() == 1)
     return getOperand(0);
   return {};
+}
+
+LogicalResult ChoiceOp::canonicalize(ChoiceOp op, PatternRewriter &rewriter) {
+  SmallDenseSet<Value> seen;
+  SmallVector<Value> inputs;
+  bool changed = false;
+
+  auto appendInput = [&](Value value, auto &appendInputRef) -> LogicalResult {
+    if (auto constOp = value.getDefiningOp<hw::ConstantOp>()) {
+      rewriter.replaceOp(op, constOp.getResult());
+      return success();
+    }
+
+    if (auto nestedChoice = value.getDefiningOp<ChoiceOp>()) {
+      changed = true;
+      for (auto nestedInput : nestedChoice.getInputs())
+        if (succeeded(appendInputRef(nestedInput, appendInputRef)))
+          return success();
+      return failure();
+    }
+
+    if (seen.insert(value).second) {
+      inputs.push_back(value);
+    } else {
+      changed = true;
+    }
+    return failure();
+  };
+
+  for (auto input : op.getInputs())
+    if (succeeded(appendInput(input, appendInput)))
+      return success();
+
+  if (inputs.size() == 1) {
+    rewriter.replaceOp(op, inputs.front());
+    return success();
+  }
+
+  if (!changed && inputs.size() == op.getNumOperands())
+    return failure();
+
+  replaceOpWithNewOpAndCopyNamehint<ChoiceOp>(rewriter, op, inputs);
+  return success();
 }
 
 LogicalResult MajorityInverterOp::verify() {
