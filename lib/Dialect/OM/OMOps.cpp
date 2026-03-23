@@ -725,18 +725,21 @@ public:
   matchAndRewrite(StringConcatOp concat,
                   mlir::PatternRewriter &rewriter) const override {
 
-    // Check if any operands are nested concats.
+    // Check if any operands are nested concats with a single use.  Only inline
+    // single-use nested concats to avoid fighting with DCE.
     bool hasNestedConcat = llvm::any_of(concat.getStrings(), [](Value operand) {
-      return !!operand.getDefiningOp<StringConcatOp>();
+      auto nestedConcat = operand.getDefiningOp<StringConcatOp>();
+      return nestedConcat && operand.hasOneUse();
     });
 
     if (!hasNestedConcat)
       return failure();
 
-    // Flatten nested concats.
+    // Flatten nested concats that have a single use.
     SmallVector<Value> flatOperands;
     for (auto input : concat.getStrings()) {
-      if (auto nestedConcat = input.getDefiningOp<StringConcatOp>())
+      if (auto nestedConcat = input.getDefiningOp<StringConcatOp>();
+          nestedConcat && input.hasOneUse())
         llvm::append_range(flatOperands, nestedConcat.getStrings());
       else
         flatOperands.push_back(input);

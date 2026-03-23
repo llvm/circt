@@ -4004,11 +4004,31 @@ firrtl.module @StringConcatCanonicalization(out %out1: !firrtl.string, out %out2
   %3 = firrtl.string.concat %empty, %empty : !firrtl.string
   firrtl.propassign %out4, %3 : !firrtl.string
 
-  // Flatten nested concat
+  // Flatten nested concat (single use)
   // CHECK: firrtl.propassign %out5, [[HELLOWORLD]]
   %4 = firrtl.string.concat %s1, %s2 : !firrtl.string
   %5 = firrtl.string.concat %4, %s3 : !firrtl.string
   firrtl.propassign %out5, %5 : !firrtl.string
+}
+
+// CHECK-LABEL: firrtl.module @StringConcatMultiUse
+firrtl.module @StringConcatMultiUse(in %str1: !firrtl.string, in %str2: !firrtl.string, out %out1: !firrtl.string, out %out2: !firrtl.string, out %out3: !firrtl.string) {
+  %s1 = firrtl.string "!"
+  %s2 = firrtl.string "?"
+
+  // CHECK-DAG: [[CONST:%.+]] = firrtl.string "!"
+  // Nested concat with multiple uses should NOT be flattened
+  // to avoid fighting with DCE.
+  // CHECK-DAG: [[NESTED:%.+]] = firrtl.string.concat %str1, %str2
+  // CHECK-DAG: [[CONCAT1:%.+]] = firrtl.string.concat [[NESTED]], [[CONST]]
+  // CHECK: firrtl.propassign %out1, [[CONCAT1]]
+  // CHECK: firrtl.propassign %out2, [[NESTED]]
+  // CHECK: firrtl.propassign %out3, [[NESTED]]
+  %nested = firrtl.string.concat %str1, %str2 : !firrtl.string
+  %concat1 = firrtl.string.concat %nested, %s1 : !firrtl.string
+  firrtl.propassign %out1, %concat1 : !firrtl.string
+  firrtl.propassign %out2, %nested : !firrtl.string
+  firrtl.propassign %out3, %nested : !firrtl.string
 }
 
 }

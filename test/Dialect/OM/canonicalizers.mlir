@@ -45,10 +45,24 @@ om.class @StringConcatCanonicalization() -> (out1: !om.string, out2: !om.string,
   // Empty concat
   %3 = om.string.concat %empty, %empty : !om.string
 
-  // Flatten nested concat
+  // Flatten nested concat (single use)
   %4 = om.string.concat %s1, %s2 : !om.string
   %5 = om.string.concat %4, %s3 : !om.string
 
   // CHECK: om.class.fields [[HELLOWORLD]], [[HELLO]], [[HELLO]], [[EMPTY]], [[HELLOWORLD]]
   om.class.fields %0, %1, %2, %3, %5 : !om.string, !om.string, !om.string, !om.string, !om.string
+}
+
+om.class @StringConcatMultiUse(%str1: !om.string, %str2: !om.string) -> (out1: !om.string, out2: !om.string, out3: !om.string) {
+  %s1 = om.constant "!" : !om.string
+
+  // CHECK-DAG: [[CONST:%.+]] = om.constant "!"
+  // Nested concat with multiple uses should NOT be flattened
+  // to avoid fighting with DCE.
+  // CHECK-DAG: [[NESTED:%.+]] = om.string.concat %str1, %str2
+  // CHECK-DAG: [[CONCAT1:%.+]] = om.string.concat [[NESTED]], [[CONST]]
+  // CHECK: om.class.fields [[CONCAT1]], [[NESTED]], [[NESTED]]
+  %nested = om.string.concat %str1, %str2 : !om.string
+  %concat1 = om.string.concat %nested, %s1 : !om.string
+  om.class.fields %concat1, %nested, %nested : !om.string, !om.string, !om.string
 }
