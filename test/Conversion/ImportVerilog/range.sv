@@ -1,6 +1,9 @@
 // RUN: circt-translate --import-verilog %s -mlir-print-debuginfo | FileCheck %s
 // REQUIRES: slang
 
+// Internal issue in Slang v3 about jump depending on uninitialised value.
+// UNSUPPORTED: valgrind
+
 // CHECK: moore.module @RangeTest
 module RangeTest;
   // CHECK: %a = moore.variable : <i32> loc(#[[VAR_LOC:loc[0-9]+]])
