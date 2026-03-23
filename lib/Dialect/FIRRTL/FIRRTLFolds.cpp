@@ -1583,8 +1583,8 @@ public:
   }
 };
 
-/// Merge consecutive constant strings in a concat.
-/// string.concat("a", "b", x, "c", "d") -> string.concat("ab", x, "cd")
+/// Merge consecutive constant strings in a concat and remove empty strings.
+/// string.concat("a", "b", x, "", "c", "d") -> string.concat("ab", x, "cd")
 class MergeAdjacentStringConstants
     : public mlir::OpRewritePattern<StringConcatOp> {
 public:
@@ -1619,6 +1619,11 @@ public:
 
     for (auto operand : concat.getInputs()) {
       if (auto litOp = operand.getDefiningOp<StringConstantOp>()) {
+        // Skip empty strings.
+        if (litOp.getValue().empty()) {
+          changed = true;
+          continue;
+        }
         accumulatedLit += litOp.getValue();
         accumulatedOps.push_back(litOp);
       } else {
@@ -1633,48 +1638,13 @@ public:
     if (!changed)
       return failure();
 
-    rewriter.modifyOpInPlace(concat,
-                             [&]() { concat->setOperands(newOperands); });
-    return success();
-  }
-};
-
-/// Remove empty string operands from concat.
-/// string.concat(a, "", b) -> string.concat(a, b)
-class RemoveEmptyStrings : public mlir::OpRewritePattern<StringConcatOp> {
-public:
-  using OpRewritePattern::OpRewritePattern;
-
-  LogicalResult
-  matchAndRewrite(StringConcatOp concat,
-                  mlir::PatternRewriter &rewriter) const override {
-
-    SmallVector<Value> newOperands;
-    bool changed = false;
-
-    for (auto operand : concat.getInputs()) {
-      if (auto litOp = operand.getDefiningOp<StringConstantOp>()) {
-        if (litOp.getValue().empty()) {
-          changed = true;
-          continue;
-        }
-      }
-      newOperands.push_back(operand);
-    }
-
-    if (!changed)
-      return failure();
-
     // If no operands remain, replace with empty string.
     if (newOperands.empty())
       return rewriter.replaceOpWithNewOp<StringConstantOp>(
                  concat, StringAttr::get(getContext(), "")),
              success();
 
-    // If only one operand remains, replace with that operand.
-    if (newOperands.size() == 1)
-      return rewriter.replaceOp(concat, newOperands[0]), success();
-
+    // Single-operand case is handled by the folder.
     rewriter.modifyOpInPlace(concat,
                              [&]() { concat->setOperands(newOperands); });
     return success();
@@ -1685,8 +1655,7 @@ public:
 
 void StringConcatOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                  MLIRContext *context) {
-  results.insert<FlattenStringConcat, MergeAdjacentStringConstants,
-                 RemoveEmptyStrings>(context);
+  results.insert<FlattenStringConcat, MergeAdjacentStringConstants>(context);
 }
 
 OpFoldResult BitCastOp::fold(FoldAdaptor adaptor) {
