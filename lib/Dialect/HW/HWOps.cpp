@@ -1091,6 +1091,12 @@ static LogicalResult verifyModuleCommon(HWModuleLike module) {
   assert(isa<HWModuleLike>(module) &&
          "verifier hook should only be called on modules");
 
+  if (auto portLocs = module->getAttrOfType<ArrayAttr>("port_locs"))
+    if (!portLocs.empty() && portLocs.size() != module.getNumPorts())
+      return module->emitOpError("requires ")
+             << module.getNumPorts() << " port locations but got "
+             << portLocs.size();
+
   SmallPtrSet<Attribute, 4> paramNames;
 
   // Check parameter default values are sensible.
