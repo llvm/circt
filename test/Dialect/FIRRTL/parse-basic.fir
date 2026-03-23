@@ -1092,6 +1092,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
    ; CHECK-NEXT: firrtl.ref.define %inst_rw2, %[[RWPROBE_RC2_IN_BOUNCE_2]]
     define inst_rw2 = rwprobe(rc2.in)
 
+   ; CHECK-NEXT: firrtl.wire sym [<@[[RCOA_RWPROBE_SYM:.+]],1,public>] interesting_name : !firrtl.openbundle<a: uint<1>, rw flip: rwprobe<uint<1>>>
+   ; CHECK: firrtl.instance rcoa
+   inst rcoa of RefsChildOpenAgg
+   ; CHECK: firrtl.ref.rwprobe <@Refs::@[[RCOA_RWPROBE_SYM]]>
+   wire inst_rcoa_a : RWProbe<UInt<1>>
+   define inst_rcoa_a = rwprobe(rcoa.in.a)
+
   ; CHECK-LABEL: module private @ForceRelease(
   module ForceRelease :
     input in : UInt<1>
