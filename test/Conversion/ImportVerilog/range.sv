@@ -16,6 +16,6 @@ module RangeTest;
   end
 endmodule
 
-// CHECK-DAG: #[[VAR_LOC]] = loc("{{.*}}":7:7)
-// CHECK-DAG: #[[CONST_LOC]] = loc("{{.*}}":12:9 to :10)
-// CHECK-DAG: #[[ASSIGN_LOC]] = loc("{{.*}}":12:5 to :10)
+// CHECK-DAG: #[[VAR_LOC]] = loc("{{.*}}":10:7)
+// CHECK-DAG: #[[CONST_LOC]] = loc("{{.*}}":15:9 to :10)
+// CHECK-DAG: #[[ASSIGN_LOC]] = loc("{{.*}}":15:5 to :10)
