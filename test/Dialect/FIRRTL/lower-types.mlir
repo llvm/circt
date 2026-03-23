@@ -1549,3 +1549,52 @@ firrtl.circuit "Domains" {
     )
   }
 }
+
+// Test InstanceChoiceOp lowering with bundle types
+// CHECK-LABEL: firrtl.circuit "InstanceChoiceTest"
+firrtl.circuit "InstanceChoiceTest" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+
+  // CHECK-LABEL: firrtl.module private @TargetModule
+  // CHECK-SAME: in %in_a: !firrtl.uint<8>
+  firrtl.module private @TargetModule(
+    in %in: !firrtl.bundle<a: uint<8>, b: uint<8>>,
+    out %out: !firrtl.bundle<x: uint<8>, y: uint<8>>
+  ) {
+    %0 = firrtl.subfield %in[a] : !firrtl.bundle<a: uint<8>, b: uint<8>>
+    %1 = firrtl.subfield %out[x] : !firrtl.bundle<x: uint<8>, y: uint<8>>
+    firrtl.matchingconnect %1, %0 : !firrtl.uint<8>
+  }
+
+
+  // CHECK-LABEL: firrtl.module @InstanceChoiceTest
+  firrtl.module @InstanceChoiceTest(
+    in %in_a: !firrtl.uint<8>,
+    in %in_b: !firrtl.uint<8>,
+    out %out_x: !firrtl.uint<8>,
+    out %out_y: !firrtl.uint<8>
+  ) {
+    // CHECK: %inst_in_a, %inst_in_b, %inst_out_x, %inst_out_y = firrtl.instance_choice inst @TargetModule alternatives @Platform
+    // CHECK-SAME: @FPGA -> @TargetModule
+    // CHECK-SAME: (in in_a: !firrtl.uint<8>, in in_b: !firrtl.uint<8>, out out_x: !firrtl.uint<8>, out out_y: !firrtl.uint<8>)
+    %inst_in, %inst_out = firrtl.instance_choice inst @TargetModule alternatives @Platform {
+      @FPGA -> @TargetModule
+    } (in in: !firrtl.bundle<a: uint<8>, b: uint<8>>, out out: !firrtl.bundle<x: uint<8>, y: uint<8>>)
+
+    // Connect the flattened ports
+    // CHECK: firrtl.matchingconnect %inst_in_a, %in_a : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %inst_in_b, %in_b : !firrtl.uint<8>
+    %0 = firrtl.subfield %inst_in[a] : !firrtl.bundle<a: uint<8>, b: uint<8>>
+    %1 = firrtl.subfield %inst_in[b] : !firrtl.bundle<a: uint<8>, b: uint<8>>
+    firrtl.matchingconnect %0, %in_a : !firrtl.uint<8>
+    firrtl.matchingconnect %1, %in_b : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %out_x, %inst_out_x : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %out_y, %inst_out_y : !firrtl.uint<8>
+    %2 = firrtl.subfield %inst_out[x] : !firrtl.bundle<x: uint<8>, y: uint<8>>
+    %3 = firrtl.subfield %inst_out[y] : !firrtl.bundle<x: uint<8>, y: uint<8>>
+    firrtl.matchingconnect %out_x, %2 : !firrtl.uint<8>
+    firrtl.matchingconnect %out_y, %3 : !firrtl.uint<8>
+  }
+}

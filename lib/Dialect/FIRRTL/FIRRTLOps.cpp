@@ -3368,6 +3368,12 @@ FInstanceLike InstanceChoiceOp::cloneWithErasedPortsAndReplaceUses(
   return clone;
 }
 
+Attribute InstanceChoiceOp::getPortDomain(unsigned portIdx) {
+  assert(portIdx < getNumResults() &&
+         "index should be smaller than result number");
+  return getDomainInfo()[portIdx];
+}
+
 //===----------------------------------------------------------------------===//
 // MemOp
 //===----------------------------------------------------------------------===//

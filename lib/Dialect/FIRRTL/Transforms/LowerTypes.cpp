@@ -431,6 +431,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitDecl(FExtModuleOp op);
   bool visitDecl(FModuleOp op);
   bool visitDecl(InstanceOp op);
+  bool visitDecl(InstanceChoiceOp op);
   bool visitDecl(MemOp op);
   bool visitDecl(NodeOp op);
   bool visitDecl(RegOp op);
@@ -497,6 +498,15 @@ private:
   PreserveAggregate::PreserveMode
   getPreservationModeForPorts(FModuleLike moduleLike);
   Value getSubWhatever(Value val, size_t index);
+
+  /// Helper function to lower instance-like operations (InstanceOp and
+  /// InstanceChoiceOp).
+  template <typename OpType>
+  bool lowerInstanceLike(OpType op, PreserveAggregate::PreserveMode mode,
+                         llvm::function_ref<Operation *(
+                             ArrayRef<Type>, ArrayRef<Direction>, ArrayAttr,
+                             ArrayAttr, ArrayAttr, hw::InnerSymAttr)>
+                             createNewInstance);
 
   size_t uniqueIdx = 0;
   std::string uniqueName() {
@@ -1560,7 +1570,15 @@ bool TypeLoweringVisitor::visitExpr(RefCastOp op) {
   return lowerProducer(op, clone);
 }
 
-bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
+/// Helper function to lower instance-like operations. This contains the common
+/// logic for both InstanceOp and InstanceChoiceOp.
+template <typename OpType>
+bool TypeLoweringVisitor::lowerInstanceLike(
+    OpType op, PreserveAggregate::PreserveMode mode,
+    llvm::function_ref<Operation *(ArrayRef<Type>, ArrayRef<Direction>,
+                                   ArrayAttr, ArrayAttr, ArrayAttr,
+                                   hw::InnerSymAttr)>
+        createNewInstance) {
   bool skip = true;
   SmallVector<Type, 8> resultTypes;
   SmallVector<int64_t, 8> endFields; // Compressed sparse row encoding
@@ -1569,8 +1587,6 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newDomains;
   SmallVector<Attribute> newPortAnno;
-  PreserveAggregate::PreserveMode mode = getPreservationModeForPorts(
-      cast<FModuleLike>(op.getReferencedOperation(symTbl)));
 
   // Create domain helper to track domain port indices.
   DomainLoweringHelper domainHelper(context, op.getResultTypes());
@@ -1619,13 +1635,10 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   for (auto &domain : newDomains)
     domainHelper.rewriteDomain(domain);
 
-  // FIXME: annotation update
-  auto newInstance = InstanceOp::create(
-      *builder, resultTypes, op.getModuleNameAttr(), op.getNameAttr(),
-      op.getNameKindAttr(), direction::packAttribute(context, newDirs),
-      builder->getArrayAttr(newNames), builder->getArrayAttr(newDomains),
-      op.getAnnotations(), builder->getArrayAttr(newPortAnno),
-      op.getLayersAttr(), op.getLowerToBindAttr(), op.getDoNotPrintAttr(),
+  // Create the new instance using the provided factory function.
+  auto newInstance = createNewInstance(
+      resultTypes, newDirs, builder->getArrayAttr(newNames),
+      builder->getArrayAttr(newDomains), builder->getArrayAttr(newPortAnno),
       sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
 
   newInstance->setDiscardableAttrs(op->getDiscardableAttrDictionary());
@@ -1637,7 +1650,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
     for (size_t fieldIndex = endFields[aggIndex],
                 eField = endFields[aggIndex + 1];
          fieldIndex < eField; ++fieldIndex)
-      lowered.push_back(newInstance.getResult(fieldIndex));
+      lowered.push_back(newInstance->getResult(fieldIndex));
     if (lowered.size() != 1 ||
         op.getType(aggIndex) != resultTypes[endFields[aggIndex]])
       processUsers(op.getResult(aggIndex), lowered);
@@ -1645,6 +1658,62 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       op.getResult(aggIndex).replaceAllUsesWith(lowered[0]);
   }
   return true;
+}
+
+bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
+  // Determine preservation mode from the referenced module.
+  PreserveAggregate::PreserveMode mode = getPreservationModeForPorts(
+      cast<FModuleLike>(op.getReferencedOperation(symTbl)));
+
+  // Lambda to create the new InstanceOp with lowered types.
+  auto createNewInstance = [&](ArrayRef<Type> resultTypes,
+                               ArrayRef<Direction> newDirs, ArrayAttr newNames,
+                               ArrayAttr newDomains, ArrayAttr newPortAnno,
+                               hw::InnerSymAttr sym) -> Operation * {
+    // FIXME: annotation update
+    return InstanceOp::create(
+        *builder, resultTypes, op.getModuleNameAttr(), op.getNameAttr(),
+        op.getNameKindAttr(), direction::packAttribute(context, newDirs),
+        newNames, newDomains, op.getAnnotations(), newPortAnno,
+        op.getLayersAttr(), op.getLowerToBindAttr(), op.getDoNotPrintAttr(),
+        sym);
+  };
+
+  return lowerInstanceLike(op, mode, createNewInstance);
+}
+
+bool TypeLoweringVisitor::visitDecl(InstanceChoiceOp op) {
+  // Get the default target module to determine preservation mode.
+  auto getMode = [&](Attribute module) {
+    auto attr = cast<FlatSymbolRefAttr>(module);
+    auto *moduleOp = symTbl.lookupNearestSymbolFrom(op, attr);
+    auto modLike = cast<FModuleLike>(moduleOp);
+    return getPreservationModeForPorts(modLike);
+  };
+  auto mode = getMode(op.getDefaultTargetAttr());
+  for (auto module : op.getModuleNamesAttr()) {
+    if (mode != getMode(module)) {
+      op->emitError() << "instance_choice has different preservation modes "
+                      << "for different modules";
+      encounteredError = true;
+      return false;
+    }
+  }
+
+  // Lambda to create the new InstanceChoiceOp with lowered types.
+  auto createNewInstance = [&](ArrayRef<Type> resultTypes,
+                               ArrayRef<Direction> newDirs, ArrayAttr newNames,
+                               ArrayAttr newDomains, ArrayAttr newPortAnno,
+                               hw::InnerSymAttr sym) -> Operation * {
+    return InstanceChoiceOp::create(
+        *builder, resultTypes, op.getModuleNames(), op.getCaseNames(),
+        op.getNameAttr(), op.getNameKindAttr(),
+        direction::packAttribute(context, newDirs), newNames, newDomains,
+        op.getAnnotations(), newPortAnno, op.getLayersAttr(), sym,
+        op.getInstanceMacroAttr());
+  };
+
+  return lowerInstanceLike(op, mode, createNewInstance);
 }
 
 bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
