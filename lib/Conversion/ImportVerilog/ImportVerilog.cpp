@@ -26,6 +26,7 @@
 #include "llvm/ADT/Hashing.h"
 #include "llvm/Support/SourceMgr.h"
 
+#include "slang/analysis/AnalysisManager.h"
 #include "slang/diagnostics/DiagnosticClient.h"
 #include "slang/driver/Driver.h"
 #include "slang/parsing/Preprocessor.h"
@@ -66,12 +67,33 @@ static Location convertLocation(MLIRContext *context,
   return UnknownLoc::get(context);
 }
 
+/// Convert a slang `SourceRange` to an MLIR `Location`.
+static Location convertLocation(MLIRContext *context,
+                                const slang::SourceManager &sourceManager,
+                                slang::SourceRange range) {
+  auto start = range.start();
+  auto end = range.end();
+  if (start && start.buffer() != slang::SourceLocation::NoLocation.buffer()) {
+    auto fileName = sourceManager.getFileName(start);
+    auto startLine = sourceManager.getLineNumber(start);
+    auto startColumn = sourceManager.getColumnNumber(start);
+    if (end && end.buffer() == start.buffer()) {
+      auto endLine = sourceManager.getLineNumber(end);
+      auto endColumn = sourceManager.getColumnNumber(end);
+      return FileLineColRange::get(context, fileName, startLine, startColumn,
+                                   endLine, endColumn);
+    }
+    return FileLineColLoc::get(context, fileName, startLine, startColumn);
+  }
+  return UnknownLoc::get(context);
+}
+
 Location Context::convertLocation(slang::SourceLocation loc) {
   return ::convertLocation(getContext(), sourceManager, loc);
 }
 
 Location Context::convertLocation(slang::SourceRange range) {
-  return convertLocation(range.start());
+  return ::convertLocation(getContext(), sourceManager, range);
 }
 
 namespace {
@@ -84,8 +106,10 @@ public:
   void report(const slang::ReportedDiagnostic &diag) override {
     // Generate the primary MLIR diagnostic.
     auto &diagEngine = context->getDiagEngine();
-    auto mlirDiag = diagEngine.emit(convertLocation(diag.location),
-                                    getSeverity(diag.severity));
+    Location loc = !diag.ranges.empty() ? convertLocation(diag.ranges[0])
+                                        : convertLocation(diag.location);
+
+    auto mlirDiag = diagEngine.emit(loc, getSeverity(diag.severity));
     mlirDiag << diag.formattedMessage;
 
     // Append the name of the option that can be used to control this
@@ -115,6 +139,11 @@ public:
   /// Convert a slang `SourceLocation` to an MLIR `Location`.
   Location convertLocation(slang::SourceLocation loc) const {
     return ::convertLocation(context, *sourceManager, loc);
+  }
+
+  /// Convert a slang `SourceRange` to an MLIR `Location`.
+  Location convertLocation(slang::SourceRange range) const {
+    return ::convertLocation(context, *sourceManager, range);
   }
 
   static DiagnosticSeverity getSeverity(slang::DiagnosticSeverity severity) {
@@ -274,6 +303,11 @@ LogicalResult ImportDriver::importVerilog(ModuleOp module) {
   // Elaborate the input.
   auto compileTimer = ts.nest("Verilog elaboration");
   auto compilation = driver.createCompilation();
+
+  // Semantic analysis
+  auto analysisTimer = ts.nest("Semantic analysis");
+  driver.runAnalysis(*compilation);
+
   for (auto &diag : compilation->getAllDiagnostics())
     driver.diagEngine.issue(diag);
   if (!parseSuccess || driver.diagEngine.getNumErrors() > 0)

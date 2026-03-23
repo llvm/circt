@@ -218,6 +218,18 @@ def Test14_SpecialCharsOp : TestOp<"load#word"> {
 // CHECK-NEXT:   test.SpecialCharsOp(rs)
 // CHECK-EMPTY:
 
+def Test15_MetadataOp : TestOp<"metadata">, ISAInstructionFormat {
+  let isaMnemonic = "some_mnemonic";
+  let extension = "some_ext";
+}
+// CHECK-NEXT: @instruction(return_val_func=mock_return_val_func,
+// CHECK-NEXT:              args=[],
+// CHECK-NEXT:              mnemonic="some_mnemonic",
+// CHECK-NEXT:              extension="some_ext")
+// CHECK-NEXT: def metadata():
+// CHECK-NEXT:   test.MetadataOp()
+// CHECK-EMPTY:
+
 #ifdef TEST_EXTENSION_FILTER
 // RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func --extension=nonexistent -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_EXTENSION_FILTER 2>&1 | FileCheck %s --check-prefix=NO-MATCH --allow-empty
 // NO-MATCH-NOT: @instruction

@@ -644,7 +644,8 @@ firrtl.circuit "Foo" {
                             out %double : !firrtl.double,
                             out %path : !firrtl.path,
                             out %list : !firrtl.list<list<string>>,
-                            out %unknownString : !firrtl.string) {
+                            out %unknownString : !firrtl.string,
+                            out %stringcat : !firrtl.string) {
     // CHECK: propassign string, String("hello")
     %0 = firrtl.string "hello"
     firrtl.propassign %string, %0 : !firrtl.string
@@ -676,6 +677,12 @@ firrtl.circuit "Foo" {
     // CHECK: propassign unknownString, Unknown(String)
     %2 = firrtl.unknown : !firrtl.string
     firrtl.propassign %unknownString, %2 : !firrtl.string
+
+    // CHECK: propassign stringcat, string_concat(String("hello"), String("world"))
+    %str0 = firrtl.string "hello"
+    %str1 = firrtl.string "world"
+    %strcat = firrtl.string.concat %str0, %str1 : !firrtl.string
+    firrtl.propassign %stringcat, %strcat : !firrtl.string
   }
 
   // Test optional group declaration and definition emission.

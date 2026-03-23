@@ -568,8 +568,8 @@ struct ModuleVisitor : public BaseVisitor {
         outputValues.push_back(val);
       } else {
         // For input ports, if the value is a ref (from VariableOp/NetOp),
-        // read it to get the rvalue.
-        if (isa<moore::RefType>(val.getType()))
+        // read it to get the rvalue, unless the port itself expects a ref.
+        if (isa<moore::RefType>(val.getType()) && !isa<moore::RefType>(fp.type))
           val = moore::ReadOp::create(builder, loc, val);
         inputValues.push_back(val);
       }
@@ -577,9 +577,12 @@ struct ModuleVisitor : public BaseVisitor {
 
     // Insert conversions for input ports.
     for (auto [value, type] :
-         llvm::zip(inputValues, moduleType.getInputTypes()))
+         llvm::zip(inputValues, moduleType.getInputTypes())) {
       // TODO: This should honor signedness in the conversion.
       value = context.materializeConversion(type, value, false, value.getLoc());
+      if (!value)
+        return mlir::emitError(loc) << "unsupported port";
+    }
 
     // Here we use the hierarchical value recorded in `Context::valueSymbols`.
     // Then we pass it as the input port with the ref<T> type of the instance.
@@ -587,6 +590,11 @@ struct ModuleVisitor : public BaseVisitor {
       if (auto hierValue = context.valueSymbols.lookup(hierPath.valueSym);
           hierPath.hierName && hierPath.direction == ArgumentDirection::In)
         inputValues.push_back(hierValue);
+
+    // Check that all input values are non-null before creating the instance.
+    for (auto value : inputValues)
+      if (!value)
+        return mlir::emitError(loc) << "unsupported port";
 
     // Create the instance op itself.
     auto inputNames = builder.getArrayAttr(moduleType.getInputNames());
@@ -682,14 +690,16 @@ struct ModuleVisitor : public BaseVisitor {
 
     // Handle delayed assignments.
     if (auto *timingCtrl = assignNode.getDelay()) {
-      auto *ctrl = timingCtrl->as_if<slang::ast::DelayControl>();
-      assert(ctrl && "slang guarantees this to be a simple delay");
-      auto delay = context.convertRvalueExpression(
-          ctrl->expr, moore::TimeType::get(builder.getContext()));
-      if (!delay)
-        return failure();
-      moore::DelayedContinuousAssignOp::create(builder, loc, lhs, rhs, delay);
-      return success();
+      if (auto *ctrl = timingCtrl->as_if<slang::ast::DelayControl>()) {
+        auto delay = context.convertRvalueExpression(
+            ctrl->expr, moore::TimeType::get(builder.getContext()));
+        if (!delay)
+          return failure();
+        moore::DelayedContinuousAssignOp::create(builder, loc, lhs, rhs, delay);
+        return success();
+      }
+      mlir::emitError(loc) << "unsupported delay with rise/fall/turn-off";
+      return failure();
     }
 
     // Otherwise this is a regular assignment.

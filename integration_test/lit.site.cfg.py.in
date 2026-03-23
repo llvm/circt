@@ -56,9 +56,11 @@ config.bindings_tcl_enabled = @CIRCT_BINDINGS_TCL_ENABLED@
 config.lec_enabled = "@CIRCT_LEC_ENABLED@"
 config.z3_path = "@Z3_PATH@"
 config.z3_library = "@Z3_LIBRARIES@"
+config.llvm_with_z3 = "@LLVM_WITH_Z3@"
 config.mlir_enable_execution_engine = "@MLIR_ENABLE_EXECUTION_ENGINE@"
 config.slang_frontend_enabled = "@CIRCT_SLANG_FRONTEND_ENABLED@"
 config.arcilator_jit_enabled = @ARCILATOR_JIT_ENABLED@
+config.libfst_enabled = @CIRCT_LIBFST_ENABLED@
 config.driver = "@CIRCT_SOURCE_DIR@/tools/circt-rtl-sim/driver.cpp"
 config.sby_path = "@SBY_PATH@"
 

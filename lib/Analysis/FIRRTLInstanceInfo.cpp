@@ -37,6 +37,11 @@ bool InstanceInfo::isInstanceUnderLayer(InstanceOp inst) {
          inst->getParentOfType<sv::IfDefOp>();
 }
 
+bool InstanceInfo::isInstanceUnderLayer(InstanceChoiceOp inst) {
+  return inst->getParentOfType<LayerBlockOp>() ||
+         inst->getParentOfType<sv::IfDefOp>();
+}
+
 bool InstanceInfo::LatticeValue::isUnknown() const { return kind == Unknown; }
 
 bool InstanceInfo::LatticeValue::isConstant() const { return kind == Constant; }
@@ -115,7 +120,7 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
 
   // Visit modules in reverse post-order (visit parents before children) to
   // merge parent attributes and per-instance attributes into children.
-  iGraph.walkInversePostOrder([&](auto &modIt) {
+  iGraph.walkInversePostOrder([&](igraph::InstanceGraphNode &modIt) {
     auto moduleOp = modIt.getModule();
     ModuleAttributes &attributes = moduleAttributes[moduleOp];
 
@@ -146,18 +151,16 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
 
       // Update underLayer.
       bool underLayer = false;
-      if (auto instanceOp = useIt->template getInstance<InstanceOp>())
+      if (auto instanceOp = useIt->getInstance<InstanceOp>())
         underLayer = InstanceInfo::isInstanceUnderLayer(instanceOp);
 
       // Update inInstanceChoice.
-      if (auto instanceChoiceOp =
-              useIt->template getInstance<InstanceChoiceOp>()) {
+      if (auto instanceChoiceOp = useIt->getInstance<InstanceChoiceOp>()) {
         attributes.inInstanceChoice.mergeIn(true);
-        if (instanceChoiceOp->template getParentOfType<LayerBlockOp>() ||
-            instanceChoiceOp->template getParentOfType<sv::IfDefOp>())
-          underLayer = true;
-      } else
+        underLayer = isInstanceUnderLayer(instanceChoiceOp);
+      } else {
         attributes.inInstanceChoice.mergeIn(parentAttrs.inInstanceChoice);
+      }
 
       if (!isGCCompanion) {
         if (underLayer)

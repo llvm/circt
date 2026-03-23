@@ -1488,7 +1488,7 @@ updateInstanceInModule(InstanceOp firrtlInstance, InstanceGraph &instanceGraph,
     return success();
 
   // Create a new instance with the property ports removed.
-  InstanceOp newInstance =
+  auto newInstance =
       firrtlInstance.cloneWithErasedPortsAndReplaceUses(portsToErase);
 
   // Replace the instance in the instance graph. This is called from multiple
@@ -1739,6 +1739,18 @@ struct IntegerShlOpConversion
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<om::IntegerShlOp>(op, adaptor.getLhs(),
                                                   adaptor.getRhs());
+    return success();
+  }
+};
+
+struct StringConcatOpConversion
+    : public OpConversionPattern<firrtl::StringConcatOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::StringConcatOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::StringConcatOp>(op, adaptor.getOperands());
     return success();
   }
 };
@@ -2220,6 +2232,7 @@ static void populateRewritePatterns(
   patterns.add<IntegerMulOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerShrOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerShlOpConversion>(converter, patterns.getContext());
+  patterns.add<StringConcatOpConversion>(converter, patterns.getContext());
   patterns.add<UnrealizedConversionCastOpConversion>(converter,
                                                      patterns.getContext());
   patterns.add<UnknownValueOpConversion>(converter, patterns.getContext());

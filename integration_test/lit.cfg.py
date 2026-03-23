@@ -222,6 +222,9 @@ if config.z3_library not in ("", "Z3_LIBRARIES-NOTFOUND"):
   tools.append(ToolSubst(f"%libz3", config.z3_library))
   config.available_features.add('libz3')
 
+if config.llvm_with_z3 == "1":
+  config.available_features.add('z3-integration')
+
 # Enable SymbiYosys if it has been detected.
 if config.sby_path != "":
   tool_dirs.append(config.sby_path)
@@ -243,6 +246,9 @@ if config.slang_frontend_enabled:
 # Add arcilator JIT if MLIR's execution engine is enabled.
 if config.arcilator_jit_enabled:
   config.available_features.add('arcilator-jit')
+
+if config.libfst_enabled:
+  config.available_features.add('libfst')
 
 config.substitutions.append(('%driver', f'{config.driver}'))
 config.substitutions.append(('%circt-tools-dir', f'{config.circt_tools_dir}'))

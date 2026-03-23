@@ -593,6 +593,11 @@ static Value unpackProjections(OpBuilder &builder, Value value,
                       op.getLoc(), value, op.getIndex());
                 })
                 .Case<SigStructExtractOp>([&](auto op) {
+                  // SigStructExtractOp is used for both struct and union
+                  // member access; use the appropriate HW extract op.
+                  if (isa<hw::UnionType>(value.getType()))
+                    return builder.createOrFold<hw::UnionExtractOp>(
+                        op.getLoc(), value, op.getFieldAttr());
                   return builder.createOrFold<hw::StructExtractOp>(
                       op.getLoc(), value, op.getFieldAttr());
                 })
@@ -627,6 +632,12 @@ static Value packProjections(OpBuilder &builder, Value value,
                       op.getLoc(), projection.into, op.getIndex(), value);
                 })
                 .Case<SigStructExtractOp>([&](auto op) {
+                  // For unions, creating a new value from a single field
+                  // replaces the entire union (all fields share storage).
+                  if (auto unionTy =
+                          dyn_cast<hw::UnionType>(projection.into.getType()))
+                    return builder.createOrFold<hw::UnionCreateOp>(
+                        op.getLoc(), unionTy, op.getFieldAttr(), value);
                   return builder.createOrFold<hw::StructInjectOp>(
                       op.getLoc(), projection.into, op.getFieldAttr(), value);
                 })
@@ -794,6 +805,9 @@ void Promoter::findPromotableSlots() {
         continue;
 
       // Ensure the slot is not used in any way we cannot reason about.
+      bool hasProjection = false;
+      bool hasBlockingDrive = false;
+      bool hasDeltaDrive = false;
       auto checkUser = [&](Operation *user) -> bool {
         // We don't support nested probes and drives.
         if (region.isProperAncestor(user->getParentRegion()))
@@ -801,14 +815,27 @@ void Promoter::findPromotableSlots() {
         // Ignore uses outside of the region.
         if (user->getParentRegion() != &region)
           return true;
-        // Projection operations are okay.
+        // Projection operations are okay, as long as nested projections
+        // stay in the same block. Cross-block nested projections would break
+        // during promotion because the projection chain gets severed when
+        // Mem2Reg rewrites signal references into SSA block arguments.
         if (isa<SigArrayGetOp, SigExtractOp, SigStructExtractOp>(user)) {
-          for (auto *projectionUser : user->getUsers())
+          hasProjection = true;
+          for (auto *projectionUser : user->getUsers()) {
+            if (isa<SigArrayGetOp, SigExtractOp, SigStructExtractOp>(
+                    projectionUser) &&
+                projectionUser->getBlock() != user->getBlock())
+              return false;
+            hasBlockingDrive |= isBlockingDrive(projectionUser);
+            hasDeltaDrive |= isDeltaDrive(projectionUser);
             if (checkedUsers.insert(projectionUser).second)
               userWorklist.push_back(projectionUser);
+          }
           projections.insert({user->getResult(0), operand});
           return true;
         }
+        hasBlockingDrive |= isBlockingDrive(user);
+        hasDeltaDrive |= isDeltaDrive(user);
         return isa<ProbeOp>(user) || isBlockingDrive(user) ||
                isDeltaDrive(user);
       };
@@ -822,6 +849,20 @@ void Promoter::findPromotableSlots() {
             userWorklist.clear();
             return allOk;
           }))
+        continue;
+
+      // Don't promote slots that have projections and a mix of blocking and
+      // delta drives. A blocking drive erases the delayed reaching definition,
+      // which leaves delta projection drives without a reaching definition.
+      if (hasProjection && hasBlockingDrive && hasDeltaDrive)
+        continue;
+
+      // Mem2Reg needs to be able to materialize integer constants for promoted
+      // slots, which requires the bit width to fit in an IntegerType. Skip
+      // signals that are too wide.
+      auto bitWidth = hw::getBitWidth(getStoredType(operand));
+      if (bitWidth < 0 ||
+          static_cast<unsigned>(bitWidth) > IntegerType::kMaxWidth)
         continue;
 
       slots.push_back(operand);

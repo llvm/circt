@@ -119,51 +119,8 @@ def InstanceOp : HardwareDeclOp<"instance", [
            CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>];
 
   let extraClassDeclaration = [{
-    /// Return the number of ports for this instance.
-    size_t getNumPorts() {
-      return getNumResults();
-    }
-
-    /// Return the port direction for the specified result number.
-    Direction getPortDirection(size_t resultNo) {
-      return direction::get(getPortDirections()[resultNo]);
-    }
-
-    /// Return the port name for the specified result number.
-    StringAttr getPortNameAttr(size_t resultNo) {
-      return cast<StringAttr>(getPortNames()[resultNo]);
-    }
-
-    StringRef getPortName(size_t resultNo) {
-      return getPortNameAttr(resultNo).getValue();
-    }
-
-    /// Returns the port location for the specified result number.
-    Location getPortLocation(size_t) {
-      return getLoc();
-    }
-
-    /// Hooks for port annotations.
-    ArrayAttr getPortAnnotation(unsigned portIdx);
-    void setAllPortAnnotations(ArrayRef<Attribute> annotations);
-
     /// Hooks for domain information.
     Attribute getPortDomain(unsigned portIdx);
-
-    /// Clone this instance with inserted ports.
-    InstanceOp cloneWithInsertedPorts(
-      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
-
-    /// Clone this instance with inserted ports, then replaces uses.
-    InstanceOp cloneWithInsertedPortsAndReplaceUses(
-      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
-
-    /// Clone this instance with erased ports.
-    InstanceOp cloneWithErasedPorts(const llvm::BitVector &erasures);
-
-    /// Clone this instance with erased ports, then replaces uses.
-    InstanceOp cloneWithErasedPortsAndReplaceUses(
-      const llvm::BitVector &erasures);
 
     //===------------------------------------------------------------------===//
     // Single-module methods
@@ -198,6 +155,14 @@ def InstanceOp : HardwareDeclOp<"instance", [
       Operation *moduleOp = node->getModule();
       return dyn_cast_or_null<T>(moduleOp);
     }
+
+    //===------------------------------------------------------------------===//
+    // Port Annotations
+    //===------------------------------------------------------------------===//
+
+    ArrayAttr getPortAnnotation(unsigned portIdx);
+
+    void setAllPortAnnotations(ArrayRef<Attribute> annotations);
   }];
 
   let hasVerifier = true;
@@ -243,30 +208,6 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
   let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
-    /// Return the number of ports for this instance.
-    size_t getNumPorts() {
-      return getNumResults();
-    }
-
-    /// Return the port direction for the specified result number.
-    Direction getPortDirection(size_t resultNo) {
-      return direction::get(getPortDirections()[resultNo]);
-    }
-
-    /// Return the port name for the specified result number.
-    StringAttr getPortNameAttr(size_t resultNo) {
-      return cast<StringAttr>(getPortNames()[resultNo]);
-    }
-
-    StringRef getPortName(size_t resultNo) {
-      return getPortNameAttr(resultNo).getValue();
-    }
-
-    /// Returns the port location for the specified result number.
-    Location getPortLocation(size_t resultNo) {
-      return getLoc();
-    }
-
     /// Return the default target attribute.
     FlatSymbolRefAttr getDefaultTargetAttr() {
       return llvm::cast<FlatSymbolRefAttr>(getModuleNamesAttr()[0]);
@@ -283,21 +224,6 @@ def InstanceChoiceOp : HardwareDeclOp<"instance_choice", [
     /// Return the list of case-module mappings.
     SmallVector<std::pair<SymbolRefAttr, FlatSymbolRefAttr>, 1>
     getTargetChoices();
-
-    /// Clone this instance with inserted ports.
-    InstanceChoiceOp cloneWithInsertedPorts(
-      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
-
-    /// Clone this instance with inserted ports, then replaces uses.
-    InstanceChoiceOp cloneWithInsertedPortsAndReplaceUses(
-      ArrayRef<std::pair<unsigned, PortInfo>> insertions);
-
-    /// Clone this instance with erased ports.
-    InstanceChoiceOp cloneWithErasedPorts(const llvm::BitVector &erasures);
-
-    /// Clone this instance with erased ports, then replaces uses.
-    InstanceChoiceOp cloneWithErasedPortsAndReplaceUses(
-      const llvm::BitVector &erasures);
   }];
 
   let builders = [
@@ -770,7 +696,6 @@ def ContractOp : FIRRTLOp<"contract", [
 def ObjectOp :  FIRRTLOp<"object", [
     ParentOneOf<["firrtl::FModuleOp, firrtl::ClassOp"]>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-    DeclareOpInterfaceMethods<FInstanceLike>,
     DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
       "getReferencedModuleSlow"
     ]>,

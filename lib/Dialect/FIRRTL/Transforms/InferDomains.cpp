@@ -151,8 +151,8 @@ struct ModuleUpdateInfo {
 using ModuleUpdateTable = DenseMap<StringAttr, ModuleUpdateInfo>;
 
 /// Apply the port changes of a moduleOp onto an instance-like op.
-template <typename T>
-static T fixInstancePorts(T op, const ModuleUpdateInfo &update) {
+static FInstanceLike fixInstancePorts(FInstanceLike op,
+                                      const ModuleUpdateInfo &update) {
   auto clone = op.cloneWithInsertedPortsAndReplaceUses(update.portInsertions);
   clone.setDomainInfoAttr(update.portDomainInfo);
   op->erase();
@@ -757,7 +757,7 @@ static LogicalResult processInstancePorts(const DomainInfo &info,
 
   DenseMap<unsigned, DomainTypeID> domainTypeIDTable;
   for (size_t i = 0; i < numPorts; ++i) {
-    auto port = dyn_cast<DomainValue>(op.getResult(i));
+    auto port = dyn_cast<DomainValue>(op->getResult(i));
     if (!port)
       continue;
 
@@ -768,7 +768,7 @@ static LogicalResult processInstancePorts(const DomainInfo &info,
   }
 
   for (size_t i = 0; i < numPorts; ++i) {
-    Value port = op.getResult(i);
+    Value port = op->getResult(i);
     auto type = type_dyn_cast<FIRRTLBaseType>(port.getType());
     if (!type)
       continue;
@@ -792,7 +792,7 @@ static LogicalResult processInstancePorts(const DomainInfo &info,
       if (!domainPortIndex)
         continue;
       auto domainPortValue =
-          cast<DomainValue>(op.getResult(domainPortIndex.getUInt()));
+          cast<DomainValue>(op->getResult(domainPortIndex.getUInt()));
       elements[domainTypeIndex] =
           getTermForDomain(allocator, table, domainPortValue);
     }
@@ -807,20 +807,10 @@ static LogicalResult processInstancePorts(const DomainInfo &info,
 static LogicalResult processOp(const DomainInfo &info, TermAllocator &allocator,
                                DomainTable &table,
                                const ModuleUpdateTable &updateTable,
-                               InstanceOp op) {
-  auto moduleOp = op.getReferencedModuleNameAttr();
-  auto lookup = updateTable.find(moduleOp);
-  if (lookup != updateTable.end())
-    op = fixInstancePorts(op, lookup->second);
-  return processInstancePorts(info, allocator, table, op);
-}
-
-static LogicalResult processOp(const DomainInfo &info, TermAllocator &allocator,
-                               DomainTable &table,
-                               const ModuleUpdateTable &updateTable,
-                               InstanceChoiceOp op) {
-  auto moduleOp = op.getDefaultTargetAttr().getAttr();
-  auto lookup = updateTable.find(moduleOp);
+                               FInstanceLike op) {
+  auto moduleName =
+      cast<StringAttr>(cast<ArrayAttr>(op.getReferencedModuleNamesAttr())[0]);
+  auto lookup = updateTable.find(moduleName);
   if (lookup != updateTable.end())
     op = fixInstancePorts(op, lookup->second);
   return processInstancePorts(info, allocator, table, op);
@@ -856,15 +846,14 @@ static LogicalResult processOp(const DomainInfo &info, TermAllocator &allocator,
   if (succeeded(unify(dstTerm, srcTerm)))
     return success();
 
+  auto diag =
+      op->emitOpError()
+      << "defines a domain value that was inferred to be a different domain '";
   VariableIDTable idTable;
-  auto diag = op->emitOpError("failed to propagate source to destination");
-  auto &note1 = diag.attachNote();
-  note1 << "destination has underlying value: ";
-  render(info, note1, idTable, dstTerm);
+  auto dstName = getFieldName(FieldRef(dst, 0), false).first;
+  render(info, *diag.getUnderlyingDiagnostic(), idTable, dstTerm);
+  diag << "'";
 
-  auto &note2 = diag.attachNote(src.getLoc());
-  note2 << "source has underlying value: ";
-  render(info, note2, idTable, srcTerm);
   return failure();
 }
 
@@ -872,14 +861,20 @@ static LogicalResult processOp(const DomainInfo &info, TermAllocator &allocator,
                                DomainTable &table,
                                const ModuleUpdateTable &updateTable,
                                Operation *op) {
-  if (auto instance = dyn_cast<InstanceOp>(op))
-    return processOp(info, allocator, table, updateTable, instance);
-  if (auto instance = dyn_cast<InstanceChoiceOp>(op))
+  if (auto instance = dyn_cast<FInstanceLike>(op))
     return processOp(info, allocator, table, updateTable, instance);
   if (auto cast = dyn_cast<UnsafeDomainCastOp>(op))
     return processOp(info, allocator, table, cast);
   if (auto def = dyn_cast<DomainDefineOp>(op))
     return processOp(info, allocator, table, def);
+  if (auto create = dyn_cast<DomainCreateOp>(op)) {
+    processDomainDefinition(allocator, table, create);
+    return success();
+  }
+  if (auto createAnon = dyn_cast<DomainCreateAnonOp>(op)) {
+    processDomainDefinition(allocator, table, createAnon);
+    return success();
+  }
 
   // For all other operations (including connections), propagate domains from
   // operands to results. This is a conservative approach - all operands and
@@ -913,10 +908,12 @@ static LogicalResult processModuleBody(const DomainInfo &info,
                                        DomainTable &table,
                                        const ModuleUpdateTable &updateTable,
                                        FModuleOp moduleOp) {
-  auto result = moduleOp.getBody().walk([&](Operation *op) -> WalkResult {
-    return processOp(info, allocator, table, updateTable, op);
-  });
-  return failure(result.wasInterrupted());
+  return failure(moduleOp.getBody()
+                     .walk([&](Operation *op) -> WalkResult {
+                       return processOp(info, allocator, table, updateTable,
+                                        op);
+                     })
+                     .wasInterrupted());
 }
 
 /// Populate the domain table by processing the moduleOp. If the moduleOp has
@@ -1241,15 +1238,14 @@ static LogicalResult updateModuleDomainInfo(const DomainInfo &info,
   return success();
 }
 
-template <typename T>
 static LogicalResult updateInstance(const DomainInfo &info,
                                     TermAllocator &allocator,
-                                    DomainTable &table, T op) {
+                                    DomainTable &table, FInstanceLike op) {
   OpBuilder builder(op.getContext());
   builder.setInsertionPointAfter(op);
   auto numPorts = op->getNumResults();
   for (size_t i = 0; i < numPorts; ++i) {
-    auto port = dyn_cast<DomainValue>(op.getResult(i));
+    auto port = dyn_cast<DomainValue>(op->getResult(i));
     auto direction = op.getPortDirection(i);
 
     // If the port is an input domain, we may need to drive the input with
@@ -1259,7 +1255,7 @@ static LogicalResult updateInstance(const DomainInfo &info,
       auto loc = port.getLoc();
       auto *term = getTermForDomain(allocator, table, port);
       if (auto *var = dyn_cast<VariableTerm>(term)) {
-        auto domainType = cast<DomainType>(op.getResult(i).getType());
+        auto domainType = cast<DomainType>(op->getResult(i).getType());
         auto domainTypeID = info.getDomainTypeID(domainType);
         auto domainDecl = info.getDomain(domainTypeID);
         auto name = domainDecl.getNameAttr();
@@ -1280,23 +1276,15 @@ static LogicalResult updateInstance(const DomainInfo &info,
   return success();
 }
 
-static LogicalResult updateOp(const DomainInfo &info, TermAllocator &allocator,
-                              DomainTable &table, Operation *op) {
-  if (auto instance = dyn_cast<InstanceOp>(op))
-    return updateInstance(info, allocator, table, instance);
-  if (auto instance = dyn_cast<InstanceChoiceOp>(op))
-    return updateInstance(info, allocator, table, instance);
-  return success();
-}
-
 /// After updating the port domain associations, walk the body of the moduleOp
 /// to fix up any child instance modules.
 static LogicalResult updateModuleBody(const DomainInfo &info,
                                       TermAllocator &allocator,
                                       DomainTable &table, FModuleOp moduleOp) {
-  auto result = moduleOp.getBodyBlock()->walk([&](Operation *op) -> WalkResult {
-    return updateOp(info, allocator, table, op);
-  });
+  auto result =
+      moduleOp.getBodyBlock()->walk([&](FInstanceLike op) -> WalkResult {
+        return updateInstance(info, allocator, table, op);
+      });
   return failure(result.wasInterrupted());
 }
 
@@ -1397,10 +1385,10 @@ static LogicalResult checkModuleDomainPortDrivers(const DomainInfo &info,
 }
 
 /// Check that the input domain ports are driven.
-template <typename T>
-static LogicalResult checkInstanceDomainPortDrivers(T op) {
-  for (size_t i = 0, e = op.getNumResults(); i < e; ++i) {
-    auto port = dyn_cast<DomainValue>(op.getResult(i));
+static LogicalResult checkInstanceDomainPortDrivers(FInstanceLike op) {
+  for (size_t i = 0, e = op->getNumResults(); i < e; ++i) {
+    auto port = dyn_cast<DomainValue>(op->getResult(i));
+
     auto type = port.getType();
     if (!isa<DomainType>(type) || op.getPortDirection(i) != Direction::In ||
         isDriven(port))
@@ -1416,18 +1404,11 @@ static LogicalResult checkInstanceDomainPortDrivers(T op) {
   return success();
 }
 
-static LogicalResult checkOp(Operation *op) {
-  if (auto inst = dyn_cast<InstanceOp>(op))
-    return checkInstanceDomainPortDrivers(inst);
-  if (auto inst = dyn_cast<InstanceChoiceOp>(op))
-    return checkInstanceDomainPortDrivers(inst);
-  return success();
-}
-
 /// Check that instances under this module have driven domain input ports.
 static LogicalResult checkModuleBody(FModuleOp moduleOp) {
-  auto result = moduleOp.getBody().walk(
-      [&](Operation *op) -> WalkResult { return checkOp(op); });
+  auto result = moduleOp.getBody().walk([](FInstanceLike op) -> WalkResult {
+    return checkInstanceDomainPortDrivers(op);
+  });
   return failure(result.wasInterrupted());
 }
 
@@ -1473,7 +1454,7 @@ static LogicalResult stripModule(FModuleLike op) {
                 op->erase();
               return WalkResult::advance();
             })
-            .Case<InstanceOp, InstanceChoiceOp>([](auto op) {
+            .Case<FInstanceLike>([](auto op) {
               auto n = op.getNumPorts();
               BitVector erasures(n);
               for (size_t i = 0; i < n; ++i)

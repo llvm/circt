@@ -178,6 +178,25 @@ struct ExprVisitor {
     return context.convertRvalueExpression(expr);
   }
 
+  Value visit(const slang::ast::NewArrayExpression &expr) {
+    Type type = context.convertType(*expr.type);
+
+    // TODO: Handle 'initExpr' if it exists
+
+    if (expr.initExpr()) {
+      mlir::emitError(loc)
+          << "unsupported expression: array `new` with initializer\n";
+      return {};
+    }
+
+    auto initialSize = context.convertRvalueExpression(
+        expr.sizeExpr(), context.convertType(*expr.sizeExpr().type));
+    if (!initialSize)
+      return {};
+
+    return moore::OpenUArrayCreateOp::create(builder, loc, type, initialSize);
+  }
+
   /// Handle single bit selections.
   Value visit(const slang::ast::ElementSelectExpression &expr) {
     auto type = context.convertType(*expr.type);
@@ -191,8 +210,8 @@ struct ExprVisitor {
       derefType = cast<moore::RefType>(derefType).getNestedType();
 
     if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
-             moore::QueueType, moore::AssocArrayType, moore::StringType>(
-            derefType)) {
+             moore::QueueType, moore::AssocArrayType, moore::StringType,
+             moore::OpenUnpackedArrayType>(derefType)) {
       mlir::emitError(loc) << "unsupported expression: element select into "
                            << expr.value().type->toString() << "\n";
       return {};
@@ -1761,25 +1780,26 @@ struct RvalueExprVisitor : public ExprVisitor {
   /// Handle system calls.
   Value visitCall(const slang::ast::CallExpression &expr,
                   const slang::ast::CallExpression::SystemCallInfo &info) {
+    using ksn = slang::parsing::KnownSystemName;
     const auto &subroutine = *info.subroutine;
+    auto nameId = subroutine.knownNameId;
 
     // $rose, $fell, $stable, $changed, and $past are only valid in
     // the context of properties and assertions. Those are treated in the
     // LTLDialect; treat them there instead.
-    bool isAssertionCall = llvm::StringSwitch<bool>(subroutine.name)
-                               .Cases({"$rose", "$fell", "$stable", "$changed",
-                                       "$past", "$sampled"},
-                                      true)
-                               .Default(false);
-
-    if (isAssertionCall)
+    switch (nameId) {
+    case ksn::Rose:
+    case ksn::Fell:
+    case ksn::Stable:
+    case ksn::Changed:
+    case ksn::Past:
+    case ksn::Sampled:
       return context.convertAssertionCallExpression(expr, info, loc);
+    default:
+      break;
+    }
 
     auto args = expr.arguments();
-
-    FailureOr<Value> result = Value{};
-    Value value;
-    Value value2;
 
     // $sformatf() and $sformat look like system tasks, but we handle string
     // formatting differently from expression evaluation, so handle them
@@ -1787,7 +1807,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     // According to IEEE 1800-2023 Section 21.3.3 "Formatting data to a
     // string" $sformatf works just like the string formatting but returns
     // a StringType.
-    if (!subroutine.name.compare("$sformatf")) {
+    if (nameId == ksn::SFormatF) {
       // Create the FormatString
       auto fmtValue = context.convertFormatString(
           expr.arguments(), loc, moore::IntFormat::Decimal, false);
@@ -1796,68 +1816,14 @@ struct RvalueExprVisitor : public ExprVisitor {
       return fmtValue.value();
     }
 
-    // Queue ops take their parameter as a reference
-    // So do AssocArray ops
-    bool isByRefOp = args.size() >= 1 &&
-                     ((args[0]->type->isQueue() && subroutine.name != "size") ||
-                      args[0]->type->isAssociativeArray());
-
-    // Associative Array Traversal Ops require value2 to be refs
-    bool secondArgIsByRef =
-        args.size() >= 1 &&
-        (args[0]->type->isAssociativeArray() && subroutine.name != "exists");
-
-    // Call the conversion function with the appropriate arity. These return one
-    // of the following:
-    //
-    // - `failure()` if the system call was recognized but some error occurred
-    // - `Value{}` if the system call was not recognized
-    // - non-null `Value` result otherwise
-    switch (args.size()) {
-    case (0):
-      result = context.convertSystemCallArity0(subroutine, loc);
-      break;
-
-    case (1):
-      value = isByRefOp ? context.convertLvalueExpression(*args[0])
-                        : context.convertRvalueExpression(*args[0]);
-      if (!value)
-        return {};
-      result = context.convertSystemCallArity1(subroutine, loc, value);
-      break;
-
-    case (2):
-      value = isByRefOp ? context.convertLvalueExpression(*args[0])
-                        : context.convertRvalueExpression(*args[0]);
-      value2 = secondArgIsByRef ? context.convertLvalueExpression(*args[1])
-                                : context.convertRvalueExpression(*args[1]);
-      if (!value || !value2)
-        return {};
-      result = context.convertSystemCallArity2(subroutine, loc, value, value2);
-      break;
-
-    default:
-      break;
-    }
-
-    // If we have recognized the system call but the conversion has encountered
-    // and already reported an error, simply return the usual null `Value` to
-    // indicate failure.
-    if (failed(result))
+    // Convert the system call using unified dispatch
+    auto result = context.convertSystemCall(subroutine, loc, args);
+    if (!result)
       return {};
 
-    // If we have recognized the system call and got a non-null `Value` result,
-    // return that.
-    if (*result) {
-      auto ty = context.convertType(*expr.type);
-      return context.materializeConversion(ty, *result, expr.type->isSigned(),
-                                           loc);
-    }
-
-    // Otherwise we didn't recognize the system call.
-    mlir::emitError(loc) << "unsupported system call `" << subroutine.name
-                         << "`";
-    return {};
+    auto ty = context.convertType(*expr.type);
+    return context.materializeConversion(ty, result, expr.type->isSigned(),
+                                         loc);
   }
 
   /// Handle string literals.
@@ -2848,280 +2814,331 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
   return value;
 }
 
-FailureOr<Value>
-Context::convertSystemCallArity0(const slang::ast::SystemSubroutine &subroutine,
-                                 Location loc) {
-
-  auto systemCallRes =
-      llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
-          .Case("$urandom",
-                [&]() -> Value {
-                  return moore::UrandomBIOp::create(builder, loc, nullptr);
-                })
-          .Case("$random",
-                [&]() -> Value {
-                  return moore::RandomBIOp::create(builder, loc, nullptr);
-                })
-          .Case(
-              "$time",
-              [&]() -> Value { return moore::TimeBIOp::create(builder, loc); })
-          .Case(
-              "$stime",
-              [&]() -> Value { return moore::TimeBIOp::create(builder, loc); })
-          .Case(
-              "$realtime",
-              [&]() -> Value { return moore::TimeBIOp::create(builder, loc); })
-          .Default([&]() -> Value { return {}; });
-  return systemCallRes();
+/// Helper function to convert real math builtin functions that take exactly
+/// one argument.
+template <typename OpTy>
+static Value
+convertRealMathBI(Context &context, Location loc, StringRef name,
+                  std::span<const slang::ast::Expression *const> args) {
+  // Slang already checks the arity of real math builtins.
+  assert(args.size() == 1 && "real math builtin expects 1 argument");
+  auto value = context.convertRvalueExpression(*args[0]);
+  if (!value)
+    return {};
+  return OpTy::create(context.builder, loc, value);
 }
 
-FailureOr<Value>
-Context::convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
-                                 Location loc, Value value) {
-  auto systemCallRes =
-      llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
-          // Signed and unsigned system functions.
-          .Case("$signed", [&]() { return value; })
-          .Case("$unsigned", [&]() { return value; })
+Value Context::convertSystemCall(
+    const slang::ast::SystemSubroutine &subroutine, Location loc,
+    std::span<const slang::ast::Expression *const> args) {
+  using ksn = slang::parsing::KnownSystemName;
+  StringRef name = subroutine.name;
+  auto nameId = subroutine.knownNameId;
+  size_t numArgs = args.size();
 
-          // Math functions in SystemVerilog.
-          .Case("$clog2",
-                [&]() -> FailureOr<Value> {
-                  value = convertToSimpleBitVector(value);
-                  if (!value)
-                    return failure();
-                  return (Value)moore::Clog2BIOp::create(builder, loc, value);
-                })
-          .Case("$ln",
-                [&]() -> Value {
-                  return moore::LnBIOp::create(builder, loc, value);
-                })
-          .Case("$log10",
-                [&]() -> Value {
-                  return moore::Log10BIOp::create(builder, loc, value);
-                })
-          .Case("$sin",
-                [&]() -> Value {
-                  return moore::SinBIOp::create(builder, loc, value);
-                })
-          .Case("$cos",
-                [&]() -> Value {
-                  return moore::CosBIOp::create(builder, loc, value);
-                })
-          .Case("$tan",
-                [&]() -> Value {
-                  return moore::TanBIOp::create(builder, loc, value);
-                })
-          .Case("$exp",
-                [&]() -> Value {
-                  return moore::ExpBIOp::create(builder, loc, value);
-                })
-          .Case("$sqrt",
-                [&]() -> Value {
-                  return moore::SqrtBIOp::create(builder, loc, value);
-                })
-          .Case("$floor",
-                [&]() -> Value {
-                  return moore::FloorBIOp::create(builder, loc, value);
-                })
-          .Case("$ceil",
-                [&]() -> Value {
-                  return moore::CeilBIOp::create(builder, loc, value);
-                })
-          .Case("$asin",
-                [&]() -> Value {
-                  return moore::AsinBIOp::create(builder, loc, value);
-                })
-          .Case("$acos",
-                [&]() -> Value {
-                  return moore::AcosBIOp::create(builder, loc, value);
-                })
-          .Case("$atan",
-                [&]() -> Value {
-                  return moore::AtanBIOp::create(builder, loc, value);
-                })
-          .Case("$sinh",
-                [&]() -> Value {
-                  return moore::SinhBIOp::create(builder, loc, value);
-                })
-          .Case("$cosh",
-                [&]() -> Value {
-                  return moore::CoshBIOp::create(builder, loc, value);
-                })
-          .Case("$tanh",
-                [&]() -> Value {
-                  return moore::TanhBIOp::create(builder, loc, value);
-                })
-          .Case("$asinh",
-                [&]() -> Value {
-                  return moore::AsinhBIOp::create(builder, loc, value);
-                })
-          .Case("$acosh",
-                [&]() -> Value {
-                  return moore::AcoshBIOp::create(builder, loc, value);
-                })
-          .Case("$atanh",
-                [&]() -> Value {
-                  return moore::AtanhBIOp::create(builder, loc, value);
-                })
-          .Case("$urandom",
-                [&]() -> Value {
-                  return moore::UrandomBIOp::create(builder, loc, value);
-                })
-          .Case("$random",
-                [&]() -> Value {
-                  return moore::RandomBIOp::create(builder, loc, value);
-                })
-          .Case("$urandom_range",
-                [&]() -> Value {
-                  return moore::UrandomrangeBIOp::create(builder, loc, value,
-                                                         nullptr);
-                })
-          .Case("$realtobits",
-                [&]() -> Value {
-                  return moore::RealtobitsBIOp::create(builder, loc, value);
-                })
-          .Case("$bitstoreal",
-                [&]() -> Value {
-                  return moore::BitstorealBIOp::create(builder, loc, value);
-                })
-          .Case("$shortrealtobits",
-                [&]() -> Value {
-                  return moore::ShortrealtobitsBIOp::create(builder, loc,
-                                                            value);
-                })
-          .Case("$bitstoshortreal",
-                [&]() -> Value {
-                  return moore::BitstoshortrealBIOp::create(builder, loc,
-                                                            value);
-                })
-          .Case("len",
-                [&]() -> Value {
-                  if (isa<moore::StringType>(value.getType()))
-                    return moore::StringLenOp::create(builder, loc, value);
-                  return {};
-                })
-          .Case("toupper",
-                [&]() -> Value {
-                  return moore::StringToUpperOp::create(builder, loc, value);
-                })
-          .Case("size",
-                [&]() -> Value {
-                  if (isa<moore::QueueType>(value.getType())) {
-                    return moore::QueueSizeBIOp::create(builder, loc, value);
-                  }
-                  if (isa<moore::RefType>(value.getType()) &&
-                      isa<moore::AssocArrayType>(
-                          cast<moore::RefType>(value.getType())
-                              .getNestedType())) {
-                    return moore::AssocArraySizeOp::create(builder, loc, value);
-                  }
-                  return {};
-                })
-          .Case("num",
-                [&]() -> Value {
-                  if (isa<moore::RefType>(value.getType()) &&
-                      isa<moore::AssocArrayType>(
-                          cast<moore::RefType>(value.getType())
-                              .getNestedType())) {
-                    return moore::AssocArraySizeOp::create(builder, loc, value);
-                  }
-                  return {};
-                })
-          .Case("tolower",
-                [&]() -> Value {
-                  return moore::StringToLowerOp::create(builder, loc, value);
-                })
-          .Case(
-              "pop_back",
-              [&]() -> Value {
-                if (isa<moore::RefType>(value.getType()) &&
-                    isa<moore::QueueType>(
-                        cast<moore::RefType>(value.getType()).getNestedType()))
-                  return moore::QueuePopBackOp::create(builder, loc, value);
+  //===--------------------------------------------------------------------===//
+  // Random Number System Functions
+  //===--------------------------------------------------------------------===//
 
-                return {};
-              })
-          .Case(
-              "pop_front",
-              [&]() -> Value {
-                if (isa<moore::RefType>(value.getType()) &&
-                    isa<moore::QueueType>(
-                        cast<moore::RefType>(value.getType()).getNestedType()))
-                  return moore::QueuePopFrontOp::create(builder, loc, value);
-                return {};
-              })
-          .Default([&]() -> Value { return {}; });
-  return systemCallRes();
-}
+  if (nameId == ksn::URandom) {
+    if (numArgs == 0)
+      return moore::UrandomBIOp::create(builder, loc, nullptr);
+    if (numArgs == 1) {
+      auto seed = convertRvalueExpression(*args[0]);
+      if (!seed)
+        return {};
+      return moore::UrandomBIOp::create(builder, loc, seed);
+    }
+    // Slang already checks the arity of `$urandom`.
+    assert(false && "`$urandom` takes 0 or 1 arguments");
+    return {};
+  }
 
-FailureOr<Value>
-Context::convertSystemCallArity2(const slang::ast::SystemSubroutine &subroutine,
-                                 Location loc, Value value1, Value value2) {
-  auto systemCallRes =
-      llvm::StringSwitch<std::function<FailureOr<Value>()>>(subroutine.name)
-          .Case("getc",
-                [&]() -> Value {
-                  return moore::StringGetOp::create(builder, loc, value1,
-                                                    value2);
-                })
-          .Case("$urandom_range",
-                [&]() -> Value {
-                  return moore::UrandomrangeBIOp::create(builder, loc, value1,
-                                                         value2);
-                })
-          .Case(
-              "exists",
-              [&]() -> Value {
-                if (isa<moore::RefType>(value1.getType()) &&
-                    isa<moore::AssocArrayType>(
-                        cast<moore::RefType>(value1.getType()).getNestedType()))
-                  return moore::AssocArrayExistsOp::create(builder, loc, value1,
-                                                           value2);
-                return {};
-              })
-          .Case(
-              "first",
-              [&]() -> Value {
-                if (isa<moore::RefType>(value1.getType()) &&
-                    isa<moore::AssocArrayType>(
-                        cast<moore::RefType>(value1.getType()).getNestedType()))
-                  return moore::AssocArrayFirstOp::create(builder, loc, value1,
-                                                          value2);
-                return {};
-              })
-          .Case(
-              "last",
-              [&]() -> Value {
-                if (isa<moore::RefType>(value1.getType()) &&
-                    isa<moore::AssocArrayType>(
-                        cast<moore::RefType>(value1.getType()).getNestedType()))
-                  return moore::AssocArrayLastOp::create(builder, loc, value1,
-                                                         value2);
-                return {};
-              })
-          .Case(
-              "next",
-              [&]() -> Value {
-                if (isa<moore::RefType>(value1.getType()) &&
-                    isa<moore::AssocArrayType>(
-                        cast<moore::RefType>(value1.getType()).getNestedType()))
-                  return moore::AssocArrayNextOp::create(builder, loc, value1,
-                                                         value2);
-                return {};
-              })
-          .Case(
-              "prev",
-              [&]() -> Value {
-                if (isa<moore::RefType>(value1.getType()) &&
-                    isa<moore::AssocArrayType>(
-                        cast<moore::RefType>(value1.getType()).getNestedType()))
-                  return moore::AssocArrayPrevOp::create(builder, loc, value1,
-                                                         value2);
-                return {};
-              })
-          .Default([&]() -> Value { return {}; });
-  return systemCallRes();
+  if (nameId == ksn::Random) {
+    if (numArgs == 0)
+      return moore::RandomBIOp::create(builder, loc, nullptr);
+    if (numArgs == 1) {
+      auto seed = convertRvalueExpression(*args[0]);
+      if (!seed)
+        return {};
+      return moore::RandomBIOp::create(builder, loc, seed);
+    }
+    // Slang already checks the arity of `$random`.
+    assert(false && "`$random` takes 0 or 1 arguments");
+    return {};
+  }
+
+  if (nameId == ksn::URandomRange) {
+    // Slang already checks the arity of `$urandom_range`.
+    assert(numArgs >= 1 && numArgs <= 2 &&
+           "`$urandom_range` takes 1 or 2 arguments");
+    auto maxval = convertRvalueExpression(*args[0]);
+    if (!maxval)
+      return {};
+    Value minval = nullptr;
+    if (numArgs == 2) {
+      minval = convertRvalueExpression(*args[1]);
+      if (!minval)
+        return {};
+    }
+    return moore::UrandomrangeBIOp::create(builder, loc, maxval, minval);
+  }
+
+  //===--------------------------------------------------------------------===//
+  // Time System Functions
+  //===--------------------------------------------------------------------===//
+
+  if (nameId == ksn::Time || nameId == ksn::STime || nameId == ksn::RealTime) {
+    // Slang already checks the arity of time functions.
+    assert(numArgs == 0 && "time functions take no arguments");
+    return moore::TimeBIOp::create(builder, loc);
+  }
+
+  //===--------------------------------------------------------------------===//
+  // Math System Functions
+  //===--------------------------------------------------------------------===//
+
+  if (nameId == ksn::Clog2) {
+    // Slang already checks the arity of `$clog2`.
+    assert(numArgs == 1 && "`$clog2` takes 1 argument");
+    auto value = convertRvalueExpression(*args[0]);
+    if (!value)
+      return {};
+    value = convertToSimpleBitVector(value);
+    if (!value)
+      return {};
+    return moore::Clog2BIOp::create(builder, loc, value);
+  }
+
+  // Real math functions (all take 1 real argument)
+  if (nameId == ksn::Ln)
+    return convertRealMathBI<moore::LnBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Log10)
+    return convertRealMathBI<moore::Log10BIOp>(*this, loc, name, args);
+  if (nameId == ksn::Exp)
+    return convertRealMathBI<moore::ExpBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Sqrt)
+    return convertRealMathBI<moore::SqrtBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Floor)
+    return convertRealMathBI<moore::FloorBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Ceil)
+    return convertRealMathBI<moore::CeilBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Sin)
+    return convertRealMathBI<moore::SinBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Cos)
+    return convertRealMathBI<moore::CosBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Tan)
+    return convertRealMathBI<moore::TanBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Asin)
+    return convertRealMathBI<moore::AsinBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Acos)
+    return convertRealMathBI<moore::AcosBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Atan)
+    return convertRealMathBI<moore::AtanBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Sinh)
+    return convertRealMathBI<moore::SinhBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Cosh)
+    return convertRealMathBI<moore::CoshBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Tanh)
+    return convertRealMathBI<moore::TanhBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Asinh)
+    return convertRealMathBI<moore::AsinhBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Acosh)
+    return convertRealMathBI<moore::AcoshBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Atanh)
+    return convertRealMathBI<moore::AtanhBIOp>(*this, loc, name, args);
+
+  //===--------------------------------------------------------------------===//
+  // Type Conversion System Functions
+  //===--------------------------------------------------------------------===//
+
+  if (nameId == ksn::Signed || nameId == ksn::Unsigned) {
+    // Slang already checks the arity of `$signed`/`$unsigned`.
+    assert(numArgs == 1 && "`$signed`/`$unsigned` take 1 argument");
+    // These are just passthroughs in the IR; signedness is carried on the Slang
+    // AST type which we use to convert the IR.
+    return convertRvalueExpression(*args[0]);
+  }
+
+  if (nameId == ksn::RealToBits)
+    return convertRealMathBI<moore::RealtobitsBIOp>(*this, loc, name, args);
+  if (nameId == ksn::BitsToReal)
+    return convertRealMathBI<moore::BitstorealBIOp>(*this, loc, name, args);
+  if (nameId == ksn::ShortrealToBits)
+    return convertRealMathBI<moore::ShortrealtobitsBIOp>(*this, loc, name,
+                                                         args);
+  if (nameId == ksn::BitsToShortreal)
+    return convertRealMathBI<moore::BitstoshortrealBIOp>(*this, loc, name,
+                                                         args);
+
+  //===--------------------------------------------------------------------===//
+  // String Methods
+  //===--------------------------------------------------------------------===//
+
+  if (nameId == ksn::Len) {
+    // Slang already checks the arity of string methods.
+    assert(numArgs == 1 && "`len` takes 1 argument");
+    auto stringType = moore::StringType::get(getContext());
+    auto value = convertRvalueExpression(*args[0], stringType);
+    if (!value)
+      return {};
+    return moore::StringLenOp::create(builder, loc, value);
+  }
+
+  if (nameId == ksn::ToUpper) {
+    // Slang already checks the arity of string methods.
+    assert(numArgs == 1 && "`toupper` takes 1 argument");
+    auto stringType = moore::StringType::get(getContext());
+    auto value = convertRvalueExpression(*args[0], stringType);
+    if (!value)
+      return {};
+    return moore::StringToUpperOp::create(builder, loc, value);
+  }
+
+  if (nameId == ksn::ToLower) {
+    // Slang already checks the arity of string methods.
+    assert(numArgs == 1 && "`tolower` takes 1 argument");
+    auto stringType = moore::StringType::get(getContext());
+    auto value = convertRvalueExpression(*args[0], stringType);
+    if (!value)
+      return {};
+    return moore::StringToLowerOp::create(builder, loc, value);
+  }
+
+  if (nameId == ksn::Getc) {
+    // Slang already checks the arity of string methods.
+    assert(numArgs == 2 && "`getc` takes 2 arguments");
+    auto stringType = moore::StringType::get(getContext());
+    auto str = convertRvalueExpression(*args[0], stringType);
+    auto index = convertRvalueExpression(*args[1]);
+    if (!str || !index)
+      return {};
+    return moore::StringGetOp::create(builder, loc, str, index);
+  }
+
+  //===--------------------------------------------------------------------===//
+  // Queue Methods
+  //===--------------------------------------------------------------------===//
+
+  if (nameId == ksn::ArraySize) {
+    // Slang already checks the arity of `size`.
+    assert(numArgs == 1 && "`size` takes 1 argument");
+    if (args[0]->type->isQueue()) {
+      auto value = convertRvalueExpression(*args[0]);
+      if (!value)
+        return {};
+      return moore::QueueSizeBIOp::create(builder, loc, value);
+    }
+    if (args[0]->type->getCanonicalType().kind ==
+        slang::ast::SymbolKind::DynamicArrayType) {
+      auto value = convertRvalueExpression(*args[0]);
+      if (!value)
+        return {};
+      return moore::OpenUArraySizeOp::create(builder, loc, value);
+    }
+    if (args[0]->type->isAssociativeArray()) {
+      auto value = convertLvalueExpression(*args[0]);
+      if (!value)
+        return {};
+      return moore::AssocArraySizeOp::create(builder, loc, value);
+    }
+    emitError(loc) << "unsupported member function `size` on type `"
+                   << args[0]->type->toString() << "`";
+    return {};
+  }
+
+  if (nameId == ksn::Delete) {
+    // Slang already checks the arity of `delete`.
+    assert(numArgs == 1 && "`delete` takes 1 argument");
+    if (args[0]->type->getCanonicalType().kind ==
+        slang::ast::SymbolKind::DynamicArrayType) {
+      auto value = convertRvalueExpression(*args[0]);
+      if (!value)
+        return {};
+      return moore::OpenUArrayDeleteOp::create(builder, loc, value);
+    }
+    emitError(loc) << "unsupported member function `delete` on type `"
+                   << args[0]->type->toString() << "`";
+    return {};
+  }
+
+  if (nameId == ksn::PopBack) {
+    // Slang already checks the arity and applicability of `pop_back`.
+    assert(numArgs == 1 && "`pop_back` takes 1 argument");
+    assert(args[0]->type->isQueue() && "`pop_back` is only valid on queues");
+    auto value = convertLvalueExpression(*args[0]);
+    if (!value)
+      return {};
+    return moore::QueuePopBackOp::create(builder, loc, value);
+  }
+
+  if (nameId == ksn::PopFront) {
+    // Slang already checks the arity and applicability of `pop_front`.
+    assert(numArgs == 1 && "`pop_front` takes 1 argument");
+    assert(args[0]->type->isQueue() && "`pop_front` is only valid on queues");
+    auto value = convertLvalueExpression(*args[0]);
+    if (!value)
+      return {};
+    return moore::QueuePopFrontOp::create(builder, loc, value);
+  }
+
+  //===--------------------------------------------------------------------===//
+  // Associative Array Methods
+  //===--------------------------------------------------------------------===//
+
+  if (nameId == ksn::Num) {
+    if (args[0]->type->isAssociativeArray()) {
+      assert(numArgs == 1 && "`num` takes 1 argument");
+      auto value = convertLvalueExpression(*args[0]);
+      if (!value)
+        return {};
+      return moore::AssocArraySizeOp::create(builder, loc, value);
+    }
+    emitError(loc) << "unsupported system call `" << name << "`";
+    return {};
+  }
+
+  if (nameId == ksn::Exists) {
+    // Slang already checks the arity and applicability of `exists`.
+    assert(numArgs == 2 && "`exists` takes 2 arguments");
+    assert(args[0]->type->isAssociativeArray() &&
+           "`exists` is only valid on associative arrays");
+    auto array = convertLvalueExpression(*args[0]);
+    auto key = convertRvalueExpression(*args[1]);
+    if (!array || !key)
+      return {};
+    return moore::AssocArrayExistsOp::create(builder, loc, array, key);
+  }
+
+  // Associative array traversal methods (all take 2 arguments: array ref, key
+  // ref). These names are shared with enum built-in methods (next/prev/first/
+  // last), which take 1 or 2 arguments. Only handle the associative array case
+  // here; fall through to the unsupported diagnostic for other types.
+  if (nameId == ksn::First || nameId == ksn::Last || nameId == ksn::Next ||
+      nameId == ksn::Prev) {
+    if (args[0]->type->isAssociativeArray()) {
+      assert(numArgs == 2 && "traversal methods take 2 arguments");
+      auto array = convertLvalueExpression(*args[0]);
+      auto key = convertLvalueExpression(*args[1]);
+      if (!array || !key)
+        return {};
+      if (nameId == ksn::First)
+        return moore::AssocArrayFirstOp::create(builder, loc, array, key);
+      if (nameId == ksn::Last)
+        return moore::AssocArrayLastOp::create(builder, loc, array, key);
+      if (nameId == ksn::Next)
+        return moore::AssocArrayNextOp::create(builder, loc, array, key);
+      if (nameId == ksn::Prev)
+        return moore::AssocArrayPrevOp::create(builder, loc, array, key);
+      llvm_unreachable("all traversal cases handled above");
+    }
+    emitError(loc) << "unsupported system call `" << name << "`";
+    return {};
+  }
+
+  // Unrecognized system call
+  emitError(loc) << "unsupported system call `" << name << "`";
+  return {};
 }
 
 // Resolve any (possibly nested) SymbolRefAttr to an op from the root.

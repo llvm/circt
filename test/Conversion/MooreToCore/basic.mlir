@@ -1507,6 +1507,17 @@ func.func @IntToStringConversion(%arg0: !moore.i45) {
   return
 }
 
+// CHECK-LABEL: func.func @ConvertRealOperations
+func.func @ConvertRealOperations(%arg0: !moore.f32, %arg1: !moore.f64) {
+  // CHECK: arith.extf %arg0 : f32 to f64
+  moore.convert_real %arg0 : f32 -> f64
+
+  // CHECK: arith.truncf %arg1 : f64 to f32
+  moore.convert_real %arg1 : f64 -> f32
+  
+  return
+}
+
 // CHECK-LABEL: func.func @StringOperations
 // CHECK-SAME: %arg0: i32
 // CHECK-SAME: %arg1: !sim.dstring
@@ -1758,4 +1769,24 @@ moore.module @Nets(out o1 : !moore.l1, out o2 : !moore.l2, out o3 : !moore.l1, o
   %23 = moore.read %n24 : <l2>
 
   moore.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23 : !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2
+}
+
+// CHECK-LABEL: func.func @QueuePopBack
+func.func @QueuePopBack() -> !moore.i16 {
+  %q = moore.variable : <queue<i16, 0>>
+  // CHECK: [[QUEUE:%.+]], [[POPPED:%.+]] = sim.queue.pop_back from
+  // CHECK: llhd.drv %q, [[QUEUE]] after
+  %v = moore.pop_back from %q : <queue<i16, 0>>
+  // CHECK: return [[POPPED]] : i16
+  return %v : !moore.i16
+}
+
+// CHECK-LABEL: func.func @QueuePopFront
+func.func @QueuePopFront() -> !moore.i16 {
+  %q = moore.variable : <queue<i16, 0>>
+  // CHECK: [[QUEUE:%.+]], [[POPPED:%.+]] = sim.queue.pop_front from
+  // CHECK: llhd.drv %q, [[QUEUE]] after
+  %v = moore.pop_front from %q : <queue<i16, 0>>
+  // CHECK: return [[POPPED]] : i16
+  return %v : !moore.i16
 }

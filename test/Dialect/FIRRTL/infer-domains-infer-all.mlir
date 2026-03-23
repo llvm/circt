@@ -274,7 +274,7 @@ firrtl.circuit "ConstantInMultipleDomains" {
     %x_A, %x_i = firrtl.instance x @Foo(in A: !firrtl.domain<@ClockDomain()>, in i: !firrtl.uint<1> domains [A])
     firrtl.domain.define %x_A, %A : !firrtl.domain<@ClockDomain()>
     firrtl.matchingconnect %x_i, %c0_ui1 : !firrtl.uint<1>
-    
+
     %y_A, %y_i = firrtl.instance y @Foo(in A: !firrtl.domain<@ClockDomain()>, in i: !firrtl.uint<1> domains [A])
     firrtl.domain.define %y_A, %B : !firrtl.domain<@ClockDomain()>
     firrtl.matchingconnect %y_i, %c0_ui1 : !firrtl.uint<1>
@@ -417,5 +417,71 @@ firrtl.circuit "PrimOpTest" {
   firrtl.module @PrimOpTest(in %i: !firrtl.uint<1>, in %j: !firrtl.uint<2>, out %o: !firrtl.uint<3>) {
     %x = firrtl.cat %i, %j : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<3>
     firrtl.matchingconnect %o, %x : !firrtl.uint<3>
+  }
+}
+
+// Test that a port correctly infers an association with an output domain where
+// the output domain is driven by a domain create inside the module.  No
+// additional domain ports should be inferred.
+//
+// CHECK-LABEL: firrtl.circuit "UnsafeDomainCastInference"
+firrtl.circuit "UnsafeDomainCastInference" {
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"id", !firrtl.integer>]
+
+  // CHECK: firrtl.module @UnsafeDomainCastInference
+  // CHECK-NOT:  !firrtl.domain
+  // CHECK-SAME: in %A: !firrtl.domain
+  // CHECK-NOT:  !firrtl.domain
+  // CHECK-SAME: out %B: !firrtl.domain
+  // CHECK-NOT:  !firrtl.domain
+  // CHECK-SAME: out %b: !firrtl.uint<1> domains [%B]
+  // CHECK-NOT:  !firrtl.domain
+  firrtl.module @UnsafeDomainCastInference(
+    in %A: !firrtl.domain<@ClockDomain(id: !firrtl.integer)>,
+    out %B: !firrtl.domain<@ClockDomain(id: !firrtl.integer)>,
+    in %a: !firrtl.uint<1> domains [%A],
+    out %b: !firrtl.uint<1>
+  ) {
+    // CHECK-NEXT: firrtl.domain.subfield
+    %id = firrtl.domain.subfield %A["id"] : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
+    %C = firrtl.domain.create(%id) : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
+    firrtl.domain.define %B, %C : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
+
+    %0 = firrtl.unsafe_domain_cast %a domains[%C] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain(id: !firrtl.integer)>]
+    firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
+  }
+}
+
+// Nothing is inferred here.  This is similar to the previous example, except
+// `%b` is put on domain `B`.  This is testing that C` does properly unify with
+// `B`.
+//
+// CHECK-LABEL: firrtl.circuit "UnsafeDomainCastMatching"
+firrtl.circuit "UnsafeDomainCastMatching" {
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"id", !firrtl.integer>]
+
+  // CHECK: firrtl.module @UnsafeDomainCastMatching
+  // CHECK-NOT:  !firrtl.domain
+  // CHECK-SAME: in %A: !firrtl.domain
+  // CHECK-NOT:  !firrtl.domain
+  // CHECK-SAME: out %B: !firrtl.domain
+  // CHECK-NOT:  !firrtl.domain
+  // CHECK-SAME: in %a: !firrtl.uint<1> domains [%A]
+  // CHECK-NOT:  !firrtl.domain
+  // CHECK-SAME: out %b: !firrtl.uint<1> domains [%B]
+  // CHECK-NOT:  !firrtl.domain
+  firrtl.module @UnsafeDomainCastMatching(
+    in %A: !firrtl.domain<@ClockDomain(id: !firrtl.integer)>,
+    out %B: !firrtl.domain<@ClockDomain(id: !firrtl.integer)>,
+    in %a: !firrtl.uint<1> domains [%A],
+    out %b: !firrtl.uint<1> domains [%B]
+  ) {
+    // CHECK: firrtl.domain.subfield
+    %id = firrtl.domain.subfield %A["id"] : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
+    %C = firrtl.domain.create(%id) : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
+    firrtl.domain.define %B, %C : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
+
+    %0 = firrtl.unsafe_domain_cast %a domains[%B] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain(id: !firrtl.integer)>]
+    firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
   }
 }

@@ -607,19 +607,19 @@ LogicalResult Visitor::visitDecl(InstanceOp op) {
         if (pmi.identity) {
           // (Just do the RAUW here instead of tracking the mapping for this
           // too.)
-          assert(oldResult.getType() == newInst.getType(newIndex));
-          oldResult.replaceAllUsesWith(newInst.getResult(newIndex));
+          assert(oldResult.getType() == newInst->getResult(newIndex).getType());
+          oldResult.replaceAllUsesWith(newInst->getResult(newIndex));
           return success();
         }
 
         // Create mappings for updating open aggregate users.
         auto newPortIndex = newIndex;
         if (pmi.hwType)
-          hwOnlyAggMap[oldResult] = newInst.getResult(newPortIndex++);
+          hwOnlyAggMap[oldResult] = newInst->getResult(newPortIndex++);
 
         for (auto &field : pmi.fields) {
           auto ref = FieldRef(oldResult, field.fieldID);
-          auto newVal = newInst.getResult(newPortIndex++);
+          auto newVal = newInst->getResult(newPortIndex++);
           assert(newVal.getType() == field.type);
           nonHWValues[ref] = newVal;
         }

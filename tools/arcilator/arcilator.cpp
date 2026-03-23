@@ -274,6 +274,14 @@ static llvm::cl::opt<std::string> jitVcdFile(
         "Create a VCD trace for JIT runs and output it to the specified file"),
     llvm::cl::init(""), llvm::cl::cat(mainCategory));
 
+#ifdef CIRCT_LIBFST_ENABLED
+static llvm::cl::opt<std::string> jitFstFile(
+    "jit-fst-file",
+    llvm::cl::desc(
+        "Create an FST trace for JIT runs and output it to the specified file"),
+    llvm::cl::init(""), llvm::cl::cat(mainCategory));
+#endif
+
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
 //===----------------------------------------------------------------------===//
@@ -335,11 +343,14 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   if (untilReached(UntilPreprocessing))
     return;
 
+  bool hasTrace = !jitVcdFile.empty();
+#ifdef CIRCT_LIBFST_ENABLED
+  hasTrace = hasTrace || !jitFstFile.empty();
+#endif
   ArcPreprocessingOptions preprocessingOpt;
-  preprocessingOpt.observePorts = observePorts || !jitVcdFile.empty();
-  preprocessingOpt.observeWires = observeWires || !jitVcdFile.empty();
-  preprocessingOpt.observeNamedValues =
-      observeNamedValues || !jitVcdFile.empty();
+  preprocessingOpt.observePorts = observePorts || hasTrace;
+  preprocessingOpt.observeWires = observeWires || hasTrace;
+  preprocessingOpt.observeNamedValues = observeNamedValues || hasTrace;
   preprocessingOpt.observeMemories = observeMemories;
   preprocessingOpt.asyncResetsAsSync = asyncResetsAsSync;
   populateArcPreprocessingPipeline(pm, preprocessingOpt);
@@ -349,7 +360,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
     return;
 
   ArcConversionOptions conversionOpt;
-  conversionOpt.observeRegisters = observeRegisters || !jitVcdFile.empty();
+  conversionOpt.observeRegisters = observeRegisters || hasTrace;
   conversionOpt.shouldDedup = shouldDedup;
   populateArcConversionPipeline(pm, conversionOpt);
 
@@ -378,7 +389,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
 
   ArcStateAllocationOptions allocationOpt;
   allocationOpt.splitFuncsThreshold = splitFuncsThreshold;
-  allocationOpt.insertTraceTaps = traceTaps || !jitVcdFile.empty();
+  allocationOpt.insertTraceTaps = traceTaps || hasTrace;
   populateArcStateAllocationPipeline(pm, allocationOpt);
 }
 
@@ -442,11 +453,21 @@ static LogicalResult processBuffer(
         runtimeArgs += ';';
         runtimeArgs += extraRuntimeArgs;
       }
+      opts.traceFileName = jitVcdFile;
+#ifdef CIRCT_LIBFST_ENABLED
+    } else if (!jitFstFile.empty()) {
+      runtimeArgs += "fst";
+      if (!extraRuntimeArgs.empty()) {
+        runtimeArgs += ';';
+        runtimeArgs += extraRuntimeArgs;
+      }
+      opts.traceFileName = jitFstFile;
+#endif
     } else {
       runtimeArgs = extraRuntimeArgs;
+      opts.traceFileName = "";
     }
     opts.extraRuntimeArgs = runtimeArgs;
-    opts.traceFileName = jitVcdFile;
     populateArcToLLVMPipeline(pmLlvm, opts);
   }
 

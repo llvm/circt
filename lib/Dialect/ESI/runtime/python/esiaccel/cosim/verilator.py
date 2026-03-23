@@ -168,6 +168,10 @@ class Verilator(Simulator):
       runtime_sources.append(include_dir / "verilated_dpi.cpp")
     if self.debug:
       runtime_sources.append(include_dir / "verilated_fst_c.cpp")
+    # Include constrained-randomization runtime when available (Verilator 5.x+).
+    random_cpp = include_dir / "verilated_random.cpp"
+    if random_cpp.exists():
+      runtime_sources.append(random_cpp)
 
     rt_src = "\n  ".join(str(s) for s in runtime_sources)
     driver = str(Verilator.DefaultDriver)

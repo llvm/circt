@@ -580,21 +580,58 @@ LogicalResult LowerModule::lowerModule() {
 
         // Get field values from the DomainCreateOp
         auto fieldValues = createDomain.getFieldValues();
-        size_t fieldIdx = 0;
 
-        for (auto [idx, port] : llvm::enumerate(classIn.getPorts())) {
-          if (port.direction == Direction::Out)
-            continue;
+        // Each domain field is lowered to an input port (fieldIdx * 2) and an
+        // output port (fieldIdx * 2 + 1). Assign field values to input ports.
+        for (auto [fieldIdx, fieldValue] : llvm::enumerate(fieldValues)) {
+          auto inputPortIdx = fieldIdx * 2;
           auto subfield = ObjectSubfieldOp::create(
-              builder, createDomain.getLoc(), object, idx);
+              builder, createDomain.getLoc(), object, inputPortIdx);
           PropAssignOp::create(builder, createDomain.getLoc(), subfield,
-                               fieldValues[fieldIdx++]);
+                               fieldValue);
         }
 
         createDomain.replaceAllUsesWith(UnrealizedConversionCastOp::create(
             builder, createDomain.getLoc(), {createDomain.getType()},
             {object.getResult()}));
         createDomain.erase();
+        return WalkResult::advance();
+      }
+
+      // Replace a domain subfield with an object subfield.
+      if (auto subfieldOp = dyn_cast<DomainSubfieldOp>(walkOp)) {
+        // The input should be a conversion cast wrapping an object or a class
+        // value (e.g., a port).
+        auto *inputOp = subfieldOp.getInput().getDefiningOp();
+        if (!inputOp) {
+          subfieldOp.emitOpError(
+              "has an input that is not defined by an operation");
+          return WalkResult::interrupt();
+        }
+
+        auto conversionCast = dyn_cast<UnrealizedConversionCastOp>(inputOp);
+        if (!conversionCast || conversionCast.getNumOperands() != 1) {
+          subfieldOp.emitOpError(
+              "has an input that is not a conversion cast with one operand");
+          return WalkResult::interrupt();
+        }
+
+        // Each domain field is lowered to an input port (fieldIdx * 2) and an
+        // output port (fieldIdx * 2 + 1). Get the output port for this field.
+        auto fieldIndex = subfieldOp.getFieldIndex();
+        auto outputPortIndex = fieldIndex * 2 + 1;
+
+        // Create an object subfield to extract the field value.
+        OpBuilder builder(subfieldOp);
+        auto objectSubfield = ObjectSubfieldOp::create(
+            builder, subfieldOp.getLoc(), conversionCast.getOperand(0),
+            outputPortIndex);
+
+        // Mark the conversion cast for deletion.
+        conversionsToErase.insert(conversionCast);
+
+        subfieldOp.replaceAllUsesWith(objectSubfield.getResult());
+        subfieldOp.erase();
         return WalkResult::advance();
       }
 
@@ -738,14 +775,15 @@ LogicalResult LowerModule::lowerInstances() {
       Value splicedValue;
       if (info.inputPort) {
         // Handle input port.  Just hook it up.
-        splicedValue = inserted.getResult(*info.inputPort);
+        splicedValue = inserted->getResult(*info.inputPort);
       } else {
         // Handle output port.  Splice in the output field that contains the
         // domain object.  This requires creating an object subfield.
         OpBuilder builder(inserted);
         builder.setInsertionPointAfter(inserted);
-        splicedValue = ObjectSubfieldOp::create(
-            builder, inserted.getLoc(), inserted.getResult(info.outputPort), 1);
+        splicedValue =
+            ObjectSubfieldOp::create(builder, inserted.getLoc(),
+                                     inserted->getResult(info.outputPort), 1);
       }
 
       splice(info.temp, splicedValue);

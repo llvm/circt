@@ -199,6 +199,8 @@ static void sanitizePythonFunctionName(std::string &name) {
 
 static void emitInstructionDecorator(ArrayRef<OperandType> operandTypes,
                                      ArrayRef<SideEffect> operandSideEffects,
+                                     std::optional<StringRef> mnemonic,
+                                     std::optional<StringRef> extension,
                                      raw_ostream &os) {
   os << "@instruction(return_val_func=" << returnValFunc << ",\n";
   os << "             args=[";
@@ -213,7 +215,15 @@ static void emitInstructionDecorator(ArrayRef<OperandType> operandTypes,
                           os << ")";
                         });
 
-  os << "])\n";
+  os << "]";
+
+  if (mnemonic && !mnemonic->empty())
+    os << ",\n             mnemonic=\"" << *mnemonic << "\"";
+
+  if (extension && !extension->empty())
+    os << ",\n             extension=\"" << *extension << "\"";
+
+  os << ")\n";
 }
 
 static std::string getFunctionName(const Operator &op) {
@@ -415,9 +425,13 @@ static void genPythonWrapperForOp(const Operator &op, raw_ostream &os) {
       unionOperandIndices.push_back(i);
   }
 
+  auto isaMnemonic = op.getDef().getValueAsOptionalString("isaMnemonic");
+  auto isaExtension = op.getDef().getValueAsOptionalString("extension");
+
   auto opMnemonic = getFunctionName(op);
   for (const auto &combination : combinations) {
-    emitInstructionDecorator(combination, operandSideEffect, os);
+    emitInstructionDecorator(combination, operandSideEffect, isaMnemonic,
+                             isaExtension, os);
     emitFunctionSignature(opMnemonic, combination, unionOperandIndices,
                           operandNames, os);
     emitFunctionBody(op, combination, operandNames, os);

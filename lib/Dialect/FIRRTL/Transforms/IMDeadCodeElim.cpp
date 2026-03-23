@@ -798,7 +798,7 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
         instance.cloneWithErasedPortsAndReplaceUses(deadPortIndexes);
 
     // Mark new results as alive.
-    for (auto newResult : newInstance.getResults())
+    for (auto newResult : newInstance->getResults())
       liveElements.insert(newResult);
 
     instanceGraph->replaceInstance(instance, newInstance);

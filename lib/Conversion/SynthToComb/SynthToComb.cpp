@@ -73,12 +73,8 @@ struct SynthMajorityInverterOpConversion
   LogicalResult
   matchAndRewrite(synth::mig::MajorityInverterOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Only handle 1 or 3-input majority inverter for now.
-    if (op.getNumOperands() > 3)
-      return failure();
-
     auto getOperand = [&](unsigned idx) {
-      auto input = op.getInputs()[idx];
+      auto input = adaptor.getInputs()[idx];
       if (!op.getInverted()[idx])
         return input;
       auto width = input.getType().getIntOrFloatBitWidth();
@@ -93,21 +89,43 @@ struct SynthMajorityInverterOpConversion
       return success();
     }
 
-    assert(op.getNumOperands() == 3 && "Expected 3 operands for majority op");
-    SmallVector<Value, 3> inputs;
-    for (size_t i = 0; i < 3; ++i)
+    SmallVector<Value> inputs;
+    inputs.reserve(op.getNumOperands());
+    for (size_t i = 0, e = op.getNumOperands(); i < e; ++i)
       inputs.push_back(getOperand(i));
 
-    // MAJ(x, y, z) = x & y | x & z | y & z
-    auto getProduct = [&](unsigned idx1, unsigned idx2) {
-      return rewriter.createOrFold<comb::AndOp>(
-          op.getLoc(), ValueRange{inputs[idx1], inputs[idx2]}, true);
+    // MAJ_n(x_0, ..., x_n) is the OR of all conjunctions over threshold-sized
+    // subsets, where threshold = floor(n / 2) + 1.
+    auto getProduct = [&](ArrayRef<unsigned> indices) {
+      SmallVector<Value> productOperands;
+      productOperands.reserve(indices.size());
+      for (auto idx : indices)
+        productOperands.push_back(inputs[idx]);
+      return rewriter.createOrFold<comb::AndOp>(op.getLoc(), productOperands,
+                                                true);
     };
 
-    SmallVector<Value, 3> operands;
-    operands.push_back(getProduct(0, 1));
-    operands.push_back(getProduct(0, 2));
-    operands.push_back(getProduct(1, 2));
+    SmallVector<Value> operands;
+    SmallVector<unsigned> subset;
+    const unsigned threshold = op.getNumOperands() / 2 + 1;
+
+    auto enumerateProducts = [&](auto &&self, unsigned start) -> void {
+      if (subset.size() == threshold) {
+        operands.push_back(getProduct(subset));
+        return;
+      }
+
+      const unsigned remaining = threshold - subset.size();
+      assert(start + remaining <= op.getNumOperands() &&
+             "Not enough operands left to reach threshold");
+      for (unsigned i = start, e = op.getNumOperands() - remaining; i <= e;
+           ++i) {
+        subset.push_back(i);
+        self(self, i + 1);
+        subset.pop_back();
+      }
+    };
+    enumerateProducts(enumerateProducts, 0);
 
     rewriter.replaceOp(
         op, rewriter.createOrFold<comb::OrOp>(op.getLoc(), operands, true));

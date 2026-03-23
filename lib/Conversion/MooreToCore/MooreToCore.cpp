@@ -890,6 +890,17 @@ struct ClassNewOpConversion : public OpConversionPattern<ClassNewOp> {
 
     auto structTy = cache.getStructInfo(sym)->classBody;
 
+    // Check that all struct members have data layout support. Types like
+    // !sim.dstring or !sim.queue don't have a known size, which would cause
+    // a fatal error in DataLayout::getTypeSize below.
+    for (auto memberTy : structTy.getBody()) {
+      if (!LLVM::isCompatibleType(memberTy) &&
+          !memberTy.hasTrait<DataLayoutTypeInterface::Trait>()) {
+        return op.emitError()
+               << "class struct has member types with no data layout";
+      }
+    }
+
     DataLayout dl(mod);
     // DataLayout::getTypeSize gives a byte count for LLVM types.
     uint64_t byteSize = dl.getTypeSize(structTy);
@@ -948,8 +959,11 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
     // Determine the initial value of the signal.
     Value init = adaptor.getInitial();
     if (!init) {
-      auto elementType = cast<llhd::RefType>(resultType).getNestedType();
-      init = createZeroValue(elementType, loc, rewriter);
+      auto refType = dyn_cast<llhd::RefType>(resultType);
+      if (!refType)
+        return rewriter.notifyMatchFailure(
+            op.getLoc(), "variable type did not convert to llhd::RefType");
+      init = createZeroValue(refType.getNestedType(), loc, rewriter);
       if (!init)
         return failure();
     }
@@ -1851,6 +1865,21 @@ struct RealToIntOpConversion : public OpConversionPattern<RealToIntOp> {
   }
 };
 
+struct ConvertRealOpConversion : public OpConversionPattern<ConvertRealOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ConvertRealOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    op.getInput().getType().getWidth() < op.getResult().getType().getWidth()
+        ? rewriter.replaceOpWithNewOp<arith::ExtFOp>(
+              op, typeConverter->convertType(op.getType()), adaptor.getInput())
+        : rewriter.replaceOpWithNewOp<arith::TruncFOp>(
+              op, typeConverter->convertType(op.getType()), adaptor.getInput());
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Statement Conversion
 //===----------------------------------------------------------------------===//
@@ -2430,15 +2459,15 @@ struct QueuePopBackOpConversion : public OpConversionPattern<QueuePopBackOp> {
   LogicalResult
   matchAndRewrite(QueuePopBackOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    Value popped;
     probeRefAndDriveWithResult(
         rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
           auto popBack =
               sim::QueuePopBackOp::create(rewriter, op->getLoc(), queue);
-
-          op.replaceAllUsesWith(popBack.getPopped());
+          popped = popBack.getPopped();
           return popBack.getOutQueue();
         });
-    rewriter.eraseOp(op);
+    rewriter.replaceOp(op, popped);
 
     return success();
   }
@@ -2450,15 +2479,15 @@ struct QueuePopFrontOpConversion : public OpConversionPattern<QueuePopFrontOp> {
   LogicalResult
   matchAndRewrite(QueuePopFrontOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    Value popped;
     probeRefAndDriveWithResult(
         rewriter, op.getLoc(), adaptor.getQueue(), [&](Value queue) {
           auto popFront =
               sim::QueuePopFrontOp::create(rewriter, op->getLoc(), queue);
-
-          op.replaceAllUsesWith(popFront.getPopped());
+          popped = popFront.getPopped();
           return popFront.getOutQueue();
         });
-    rewriter.eraseOp(op);
+    rewriter.replaceOp(op, popped);
 
     return success();
   }
@@ -3003,6 +3032,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     UIntToRealOpConversion,
     IntToStringOpConversion,
     RealToIntOpConversion,
+    ConvertRealOpConversion,
 
     // Patterns of miscellaneous operations.
     ConstantOpConv,

@@ -580,7 +580,8 @@ struct StmtVisitor {
 
   // Handle `repeat` loops.
   LogicalResult visit(const slang::ast::RepeatLoopStatement &stmt) {
-    auto count = context.convertRvalueExpression(stmt.count);
+    auto intType = moore::IntType::getInt(context.getContext(), 32);
+    auto count = context.convertRvalueExpression(stmt.count, intType);
     if (!count)
       return failure();
 
@@ -935,18 +936,20 @@ struct StmtVisitor {
   visitSystemCall(const slang::ast::ExpressionStatement &stmt,
                   const slang::ast::CallExpression &expr,
                   const slang::ast::CallExpression::SystemCallInfo &info) {
+    using ksn = slang::parsing::KnownSystemName;
     const auto &subroutine = *info.subroutine;
+    auto nameId = subroutine.knownNameId;
     auto args = expr.arguments();
 
     // Simulation Control Tasks
 
-    if (subroutine.name == "$stop") {
+    if (nameId == ksn::Stop) {
       createFinishMessage(args.size() >= 1 ? args[0] : nullptr);
       moore::StopBIOp::create(builder, loc);
       return true;
     }
 
-    if (subroutine.name == "$finish") {
+    if (nameId == ksn::Finish) {
       createFinishMessage(args.size() >= 1 ? args[0] : nullptr);
       moore::FinishBIOp::create(builder, loc, 0);
       moore::UnreachableOp::create(builder, loc);
@@ -954,7 +957,7 @@ struct StmtVisitor {
       return true;
     }
 
-    if (subroutine.name == "$exit") {
+    if (nameId == ksn::Exit) {
       // Calls to `$exit` from outside a `program` are ignored. Since we don't
       // yet support programs, there is nothing to do here.
       // TODO: Fix this once we support programs.
@@ -963,29 +966,47 @@ struct StmtVisitor {
 
     // Display and Write Tasks (`$display[boh]?` or `$write[boh]?`)
 
-    // Check for a `$display` or `$write` prefix.
-    bool isDisplay = false;     // display or write
-    bool appendNewline = false; // display
-    StringRef remainingName = subroutine.name;
-    if (remainingName.consume_front("$display")) {
+    using moore::IntFormat;
+    bool isDisplay = false;
+    bool appendNewline = false;
+    IntFormat defaultFormat = IntFormat::Decimal;
+    switch (nameId) {
+    case ksn::Display:
       isDisplay = true;
       appendNewline = true;
-    } else if (remainingName.consume_front("$write")) {
+      break;
+    case ksn::DisplayB:
       isDisplay = true;
-    }
-
-    // Check for optional `b`, `o`, or `h` suffix indicating default format.
-    using moore::IntFormat;
-    IntFormat defaultFormat = IntFormat::Decimal;
-    if (isDisplay && !remainingName.empty()) {
-      if (remainingName == "b")
-        defaultFormat = IntFormat::Binary;
-      else if (remainingName == "o")
-        defaultFormat = IntFormat::Octal;
-      else if (remainingName == "h")
-        defaultFormat = IntFormat::HexLower;
-      else
-        isDisplay = false;
+      appendNewline = true;
+      defaultFormat = IntFormat::Binary;
+      break;
+    case ksn::DisplayO:
+      isDisplay = true;
+      appendNewline = true;
+      defaultFormat = IntFormat::Octal;
+      break;
+    case ksn::DisplayH:
+      isDisplay = true;
+      appendNewline = true;
+      defaultFormat = IntFormat::HexLower;
+      break;
+    case ksn::Write:
+      isDisplay = true;
+      break;
+    case ksn::WriteB:
+      isDisplay = true;
+      defaultFormat = IntFormat::Binary;
+      break;
+    case ksn::WriteO:
+      isDisplay = true;
+      defaultFormat = IntFormat::Octal;
+      break;
+    case ksn::WriteH:
+      isDisplay = true;
+      defaultFormat = IntFormat::HexLower;
+      break;
+    default:
+      break;
     }
 
     if (isDisplay) {
@@ -1002,13 +1023,13 @@ struct StmtVisitor {
     // Severity Tasks
     using moore::Severity;
     std::optional<Severity> severity;
-    if (subroutine.name == "$info")
+    if (nameId == ksn::Info)
       severity = Severity::Info;
-    else if (subroutine.name == "$warning")
+    else if (nameId == ksn::Warning)
       severity = Severity::Warning;
-    else if (subroutine.name == "$error")
+    else if (nameId == ksn::Error)
       severity = Severity::Error;
-    else if (subroutine.name == "$fatal")
+    else if (nameId == ksn::Fatal)
       severity = Severity::Fatal;
 
     if (severity) {
@@ -1045,7 +1066,7 @@ struct StmtVisitor {
 
       // `delete` has two functions: If there is an index passed, then it
       // deletes that specific element, otherwise, it clears the entire queue.
-      if (subroutine.name == "delete") {
+      if (nameId == ksn::Delete) {
         if (args.size() == 1) {
           moore::QueueClearOp::create(builder, loc, queue);
           return true;
@@ -1055,17 +1076,17 @@ struct StmtVisitor {
           moore::QueueDeleteOp::create(builder, loc, queue, index);
           return true;
         }
-      } else if (subroutine.name == "insert" && args.size() == 3) {
+      } else if (nameId == ksn::Insert && args.size() == 3) {
         auto index = context.convertRvalueExpression(*args[1]);
         auto item = context.convertRvalueExpression(*args[2]);
 
         moore::QueueInsertOp::create(builder, loc, queue, index, item);
         return true;
-      } else if (subroutine.name == "push_back" && args.size() == 2) {
+      } else if (nameId == ksn::PushBack && args.size() == 2) {
         auto item = context.convertRvalueExpression(*args[1]);
         moore::QueuePushBackOp::create(builder, loc, queue, item);
         return true;
-      } else if (subroutine.name == "push_front" && args.size() == 2) {
+      } else if (nameId == ksn::PushFront && args.size() == 2) {
         auto item = context.convertRvalueExpression(*args[1]);
         moore::QueuePushFrontOp::create(builder, loc, queue, item);
         return true;
@@ -1081,7 +1102,7 @@ struct StmtVisitor {
       // `delete` has two functions: If there is an index passed, then it
       // deletes that specific element, otherwise, it clears the entire
       // associative array.
-      if (subroutine.name == "delete") {
+      if (nameId == ksn::Delete) {
         if (args.size() == 1) {
           moore::AssocArrayClearOp::create(builder, loc, assocArray);
           return true;

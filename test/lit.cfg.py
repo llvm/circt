@@ -95,4 +95,7 @@ if config.slang_frontend_enabled:
   tools.append('circt-verilog')
   tools.append('circt-verilog-lsp-server')
 
+if config.libfst_enabled:
+  config.available_features.add('libfst')
+
 llvm_config.add_tool_substitutions(tools, tool_dirs)

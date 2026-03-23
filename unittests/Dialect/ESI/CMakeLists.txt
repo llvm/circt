@@ -8,6 +8,5 @@ target_link_libraries(CIRCTESITests
   CIRCTESI
 )
 
-if(ESI_RUNTIME)
-  add_subdirectory(runtime)
-endif()
+# ESI runtime C++ unit tests are built inside the runtime CMake project
+# (lib/Dialect/ESI/runtime/tests/cpp) and run via pytest.
