@@ -188,6 +188,8 @@ public:
 
 /// Construct a Z3-backed incremental IPASIR-style SAT solver.
 std::unique_ptr<IncrementalSATSolver> createZ3SATSolver();
+/// Construct a CaDiCaL-backed incremental IPASIR-style SAT solver.
+std::unique_ptr<IncrementalSATSolver> createCadicalSATSolver();
 
 } // namespace circt
 

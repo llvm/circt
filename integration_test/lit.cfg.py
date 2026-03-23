@@ -211,12 +211,6 @@ if config.clang_tidy_path != "":
 if config.have_systemc != "":
   config.available_features.add('systemc')
 
-# Enable z3 if it has been detected.
-if config.z3_path != "":
-  tool_dirs.append(config.z3_path)
-  tools.append('z3')
-  config.available_features.add('z3')
-
 # Enable libz3 if it has been detected.
 if config.z3_library not in ("", "Z3_LIBRARIES-NOTFOUND"):
   tools.append(ToolSubst(f"%libz3", config.z3_library))
@@ -249,6 +243,9 @@ if config.arcilator_jit_enabled:
 
 if config.libfst_enabled:
   config.available_features.add('libfst')
+
+if config.cadical_enabled:
+  config.available_features.add('cadical')
 
 config.substitutions.append(('%driver', f'{config.driver}'))
 config.substitutions.append(('%circt-tools-dir', f'{config.circt_tools_dir}'))

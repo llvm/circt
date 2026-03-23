@@ -1,5 +1,5 @@
-// REQUIRES: z3-integration
-// RUN: circt-opt %s -pass-pipeline='builtin.module(hw.module(synth-functional-reduction{num-random-patterns=64 sat-solver=z3}))' | FileCheck %s
+// REQUIRES: cadical
+// RUN: circt-opt %s -pass-pipeline='builtin.module(hw.module(synth-functional-reduction{num-random-patterns=64 sat-solver=cadical}))' | FileCheck %s
 
 // SAT should prove that AND(AND(a, not b), AND(c, not d)) is equivalent to
 // AND(a, not b, c, not d), and the pass should materialize that with a choice.
