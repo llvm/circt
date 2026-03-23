@@ -3974,7 +3974,7 @@ firrtl.module @ResetCast(out %a0: !firrtl.reset, out %a1: !firrtl.reset) {
 }
 
 // CHECK-LABEL: firrtl.module @StringConcatCanonicalization
-firrtl.module @StringConcatCanonicalization(out %out1: !firrtl.string, out %out2: !firrtl.string, out %out3: !firrtl.string, out %out4: !firrtl.string, out %out5: !firrtl.string) {
+firrtl.module @StringConcatCanonicalization(in %str1: !firrtl.string, in %str2: !firrtl.string, out %out1: !firrtl.string, out %out2: !firrtl.string, out %out3: !firrtl.string, out %out4: !firrtl.string, out %out5: !firrtl.string, out %out6: !firrtl.string, out %out7: !firrtl.string) {
   %s1 = firrtl.string "Hello"
   %s2 = firrtl.string "World"
   %s3 = firrtl.string "!"
@@ -3983,6 +3983,7 @@ firrtl.module @StringConcatCanonicalization(out %out1: !firrtl.string, out %out2
   // CHECK-DAG: [[EMPTY:%.+]] = firrtl.string ""
   // CHECK-DAG: [[HELLO:%.+]] = firrtl.string "Hello"
   // CHECK-DAG: [[HELLOWORLD:%.+]] = firrtl.string "HelloWorld!"
+  // CHECK-DAG: [[CONST:%.+]] = firrtl.string "!"
 
   // Merge all constants
   // CHECK: firrtl.propassign %out1, [[HELLOWORLD]]
@@ -4009,26 +4010,17 @@ firrtl.module @StringConcatCanonicalization(out %out1: !firrtl.string, out %out2
   %4 = firrtl.string.concat %s1, %s2 : !firrtl.string
   %5 = firrtl.string.concat %4, %s3 : !firrtl.string
   firrtl.propassign %out5, %5 : !firrtl.string
-}
 
-// CHECK-LABEL: firrtl.module @StringConcatMultiUse
-firrtl.module @StringConcatMultiUse(in %str1: !firrtl.string, in %str2: !firrtl.string, out %out1: !firrtl.string, out %out2: !firrtl.string, out %out3: !firrtl.string) {
-  %s1 = firrtl.string "!"
-  %s2 = firrtl.string "?"
-
-  // CHECK-DAG: [[CONST:%.+]] = firrtl.string "!"
   // Nested concat with multiple uses should NOT be flattened
   // to avoid fighting with DCE.
   // CHECK-DAG: [[NESTED:%.+]] = firrtl.string.concat %str1, %str2
   // CHECK-DAG: [[CONCAT1:%.+]] = firrtl.string.concat [[NESTED]], [[CONST]]
-  // CHECK: firrtl.propassign %out1, [[CONCAT1]]
-  // CHECK: firrtl.propassign %out2, [[NESTED]]
-  // CHECK: firrtl.propassign %out3, [[NESTED]]
+  // CHECK: firrtl.propassign %out6, [[CONCAT1]]
+  // CHECK: firrtl.propassign %out7, [[NESTED]]
   %nested = firrtl.string.concat %str1, %str2 : !firrtl.string
-  %concat1 = firrtl.string.concat %nested, %s1 : !firrtl.string
-  firrtl.propassign %out1, %concat1 : !firrtl.string
-  firrtl.propassign %out2, %nested : !firrtl.string
-  firrtl.propassign %out3, %nested : !firrtl.string
+  %concat1 = firrtl.string.concat %nested, %s3 : !firrtl.string
+  firrtl.propassign %out6, %concat1 : !firrtl.string
+  firrtl.propassign %out7, %nested : !firrtl.string
 }
 
 }
