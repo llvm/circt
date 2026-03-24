@@ -1167,6 +1167,69 @@ private:
 };
 } // end anonymous namespace
 
+/// Append Verilog hierarchical scope names for any `sv.generate` /
+/// `sv.generate.case` regions containing \p defOp, in outermost-first order.
+/// Does not add a leading or trailing '.'.
+static void appendGenerateScopePrefix(const LoweringOptions &options,
+                                      Operation *defOp,
+                                      SmallVectorImpl<char> &out) {
+  if (!defOp)
+    return;
+  SmallVector<SmallString<32>, 4> segments;
+  Block *block = defOp->getBlock();
+  while (block) {
+    Region *region = block->getParent();
+    Operation *parentOp = region->getParentOp();
+    if (!parentOp)
+      break;
+    if (isa<HWModuleOp>(parentOp))
+      break;
+    if (auto genCase = dyn_cast<GenerateCaseOp>(parentOp)) {
+      auto caseNames = genCase.getCaseNames();
+      for (auto [idx, reg] : llvm::enumerate(genCase.getCaseRegions())) {
+        if (&reg != region)
+          continue;
+        llvm::StringMap<size_t> nextGenIds;
+        StringRef legal;
+        for (unsigned i = 0; i <= idx; ++i) {
+          legal = sv::legalizeName(cast<StringAttr>(caseNames[i]).getValue(),
+                                   nextGenIds, options.caseInsensitiveKeywords);
+        }
+        segments.push_back(SmallString<32>(legal));
+        break;
+      }
+    } else if (auto gen = dyn_cast<GenerateOp>(parentOp)) {
+      StringRef name = ExportVerilog::getSymOpName(gen);
+      segments.push_back(SmallString<32>(name));
+    }
+    block = parentOp->getBlock();
+  }
+  for (const SmallString<32> &seg : llvm::reverse(segments)) {
+    if (!out.empty())
+      out.push_back('.');
+    out.append(seg.begin(), seg.end());
+  }
+}
+
+/// Emit one `hw.hierpath` namepath element as Verilog, including generate/case
+/// scope names before instance (or other inner) symbols when needed.
+template <typename PPS>
+static void emitHierPathInnerRefSegment(VerilogEmitterState &state, PPS &ps,
+                                        HWSymbolCache::Item ref) {
+  if (ref.hasPort()) {
+    ps << PPExtString(getPortVerilogName(ref.getOp(), ref.getPort()));
+    return;
+  }
+  assert(ref.getOp() && "inner ref should resolve to an operation");
+  SmallString<128> buf;
+  appendGenerateScopePrefix(state.options, ref.getOp(), buf);
+  if (!buf.empty())
+    buf.push_back('.');
+  StringRef symName = ExportVerilog::getSymOpName(ref.getOp());
+  buf.append(symName.begin(), symName.end());
+  ps << StringRef(buf);
+}
+
 template <typename PPS>
 void EmitterBase::emitTextWithSubstitutions(
     PPS &ps, StringRef string, Operation *op,
@@ -1268,7 +1331,7 @@ void EmitterBase::emitTextWithSubstitutions(
                 auto innerRef = cast<InnerRefAttr>(sym);
                 auto ref = state.symbolCache.getInnerDefinition(
                     innerRef.getModule(), innerRef.getName());
-                ps << namify(innerRef, ref);
+                emitHierPathInnerRefSegment(state, ps, ref);
               }
             } else {
               symVerilogName = namify(sym, symOp);
@@ -2868,11 +2931,7 @@ SubExprInfo ExprEmitter::visitSV(XMRRefOp op) {
     auto innerRef = cast<InnerRefAttr>(sym);
     auto ref = state.symbolCache.getInnerDefinition(innerRef.getModule(),
                                                     innerRef.getName());
-    if (ref.hasPort()) {
-      ps << PPExtString(getPortVerilogName(ref.getOp(), ref.getPort()));
-      continue;
-    }
-    ps << PPExtString(getSymOpName(ref.getOp()));
+    emitHierPathInnerRefSegment(state, ps, ref);
   }
   auto leaf = op.getVerbatimSuffixAttr();
   if (leaf && leaf.size())
