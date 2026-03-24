@@ -1238,20 +1238,10 @@ static LogicalResult updateModuleDomainInfo(const DomainInfo &info,
   return success();
 }
 
-/// Helper that returns true if a value is defined before an operation in the
-/// same block, or is a block argument.
-static bool valueDefinedBeforeOp(Value value, Operation *op) {
-  Operation *valueOp = value.getDefiningOp();
-  if (!valueOp)
-    return true; // Block argument
-  return valueOp->getBlock() == op->getBlock() && valueOp->isBeforeInBlock(op);
-}
-
 static LogicalResult updateInstance(const DomainInfo &info,
                                     TermAllocator &allocator,
-                                    DomainTable &table, FInstanceLike op) {
-  OpBuilder builder(op.getContext());
-  builder.setInsertionPointAfter(op);
+                                    DomainTable &table, FInstanceLike op,
+                                    OpBuilder &builder) {
   auto numPorts = op->getNumResults();
   for (size_t i = 0; i < numPorts; ++i) {
     auto port = dyn_cast<DomainValue>(op->getResult(i));
@@ -1268,17 +1258,20 @@ static LogicalResult updateInstance(const DomainInfo &info,
         auto domainTypeID = info.getDomainTypeID(domainType);
         auto domainDecl = info.getDomain(domainTypeID);
         auto name = domainDecl.getNameAttr();
-        auto anon = DomainCreateAnonOp::create(builder, loc, domainType, name);
+        DomainValue anon;
+        {
+          OpBuilder::InsertionGuard guard(builder);
+          builder.setInsertionPointAfter(op);
+          anon = DomainCreateAnonOp::create(builder, loc, domainType, name);
+        }
         solve(var, allocator.allocVal(anon));
+        // Create domain.define at the end of the block to avoid use-before-def.
         DomainDefineOp::create(builder, loc, port, anon);
         continue;
       }
       if (auto *val = dyn_cast<ValueTerm>(term)) {
         auto value = val->value;
-        // Insert the domain.define after the value it references to avoid
-        // use-before-def errors.
-        if (!valueDefinedBeforeOp(value, op.getOperation()))
-          builder.setInsertionPointAfterValue(value);
+        // Create domain.define at the end of the block to avoid use-before-def.
         DomainDefineOp::create(builder, loc, port, value);
         continue;
       }
@@ -1294,9 +1287,14 @@ static LogicalResult updateInstance(const DomainInfo &info,
 static LogicalResult updateModuleBody(const DomainInfo &info,
                                       TermAllocator &allocator,
                                       DomainTable &table, FModuleOp moduleOp) {
+  // Set insertion point to end of block so all domain.define operations are
+  // created there, avoiding use-before-def issues.
+  OpBuilder builder(moduleOp.getContext());
+  builder.setInsertionPointToEnd(moduleOp.getBodyBlock());
+
   auto result =
       moduleOp.getBodyBlock()->walk([&](FInstanceLike op) -> WalkResult {
-        return updateInstance(info, allocator, table, op);
+        return updateInstance(info, allocator, table, op, builder);
       });
   return failure(result.wasInterrupted());
 }
