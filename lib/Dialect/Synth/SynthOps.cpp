@@ -43,40 +43,53 @@ OpFoldResult ChoiceOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+// Canonicalize a network of synth.choice operations by computing their
+// transitive closure and flattening them into a single choice operation.
+// This merges nested choices and deduplicates shared operands.
+// Pattern matched:
+//   %0 = synth.choice %x, %y, %z
+//   %1 = synth.choice %0, %u
+//   %2 = synth.choice %z, %v
+//     =>
+//   %merged = synth.choice %x, %y, %z, %u, %v
 LogicalResult ChoiceOp::canonicalize(ChoiceOp op, PatternRewriter &rewriter) {
   llvm::SetVector<Value> worklist;
   llvm::SmallPtrSet<Operation *, 4> visitedChoices;
 
-  visitedChoices.insert(op);
-  worklist.insert(op.getInputs().begin(), op.getInputs().end());
+  auto addToWorklist = [&](ChoiceOp choice) -> bool {
+    if (visitedChoices.insert(choice).second) {
+      worklist.insert(choice.getInputs().begin(), choice.getInputs().end());
+      return true;
+    }
+    return false;
+  };
+
+  addToWorklist(op);
 
   bool mergedOtherChoices = false;
 
   // Look up and down at definitions and users.
-  for (unsigned i = 0; i < worklist.size(); ++i) {
-    Value val = worklist[i];
+  for (auto val : worklist) {
     if (auto defOp = val.getDefiningOp<synth::ChoiceOp>()) {
-      if (visitedChoices.insert(defOp).second) {
+
+      if (defOp->getBlock() == op->getBlock() && addToWorklist(defOp))
         mergedOtherChoices = true;
-        worklist.insert(defOp.getInputs().begin(), defOp.getInputs().end());
-      }
     }
 
     for (Operation *user : val.getUsers()) {
       if (auto userChoice = llvm::dyn_cast<synth::ChoiceOp>(user)) {
-        if (visitedChoices.insert(userChoice).second) {
+        if (userChoice->getBlock() == op->getBlock() &&
+            addToWorklist(userChoice)) {
           mergedOtherChoices = true;
-          worklist.insert(userChoice.getInputs().begin(),
-                          userChoice.getInputs().end());
         }
       }
     }
   }
 
-  llvm::SetVector<mlir::Value> finalOperands;
+  llvm::SmallVector<mlir::Value> finalOperands;
   for (Value v : worklist) {
     if (!visitedChoices.contains(v.getDefiningOp())) {
-      finalOperands.insert(v);
+      finalOperands.push_back(v);
     }
   }
 
@@ -84,11 +97,15 @@ LogicalResult ChoiceOp::canonicalize(ChoiceOp op, PatternRewriter &rewriter) {
     return llvm::failure();
 
   auto newChoice = synth::ChoiceOp::create(rewriter, op->getLoc(), op.getType(),
-                                           finalOperands.getArrayRef());
+                                           finalOperands);
+
+  for (auto value : worklist)
+    rewriter.replaceAllUsesExcept(value, newChoice, newChoice);
 
   for (Operation *visited : visitedChoices) {
-    rewriter.replaceOp(visited, newChoice.getResult());
+    rewriter.eraseOp(visited);
   }
+
   return success();
 }
 
