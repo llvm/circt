@@ -501,8 +501,8 @@ private:
 
   /// Helper function to lower instance-like operations (InstanceOp and
   /// InstanceChoiceOp).
-  template <typename OpType>
-  bool lowerInstanceLike(OpType op, PreserveAggregate::PreserveMode mode,
+  bool lowerInstanceLike(FInstanceLike op, PreserveAggregate::PreserveMode mode,
+                         ArrayAttr oldPortAnno,
                          llvm::function_ref<Operation *(
                              ArrayRef<Type>, ArrayRef<Direction>, ArrayAttr,
                              ArrayAttr, ArrayAttr, hw::InnerSymAttr)>
@@ -1572,9 +1572,9 @@ bool TypeLoweringVisitor::visitExpr(RefCastOp op) {
 
 /// Helper function to lower instance-like operations. This contains the common
 /// logic for both InstanceOp and InstanceChoiceOp.
-template <typename OpType>
 bool TypeLoweringVisitor::lowerInstanceLike(
-    OpType op, PreserveAggregate::PreserveMode mode,
+    FInstanceLike op, PreserveAggregate::PreserveMode mode,
+    ArrayAttr oldPortAnno,
     llvm::function_ref<Operation *(ArrayRef<Type>, ArrayRef<Direction>,
                                    ArrayAttr, ArrayAttr, ArrayAttr,
                                    hw::InnerSymAttr)>
@@ -1582,18 +1582,16 @@ bool TypeLoweringVisitor::lowerInstanceLike(
   bool skip = true;
   SmallVector<Type, 8> resultTypes;
   SmallVector<int64_t, 8> endFields; // Compressed sparse row encoding
-  auto oldPortAnno = op.getPortAnnotations();
   SmallVector<Direction> newDirs;
-  SmallVector<Attribute> newNames;
-  SmallVector<Attribute> newDomains;
-  SmallVector<Attribute> newPortAnno;
+  SmallVector<Attribute> newNames, newDomains, newPortAnno;
 
   // Create domain helper to track domain port indices.
-  DomainLoweringHelper domainHelper(context, op.getResultTypes());
+  DomainLoweringHelper domainHelper(context, op->getResultTypes());
+  auto emptyAnno = builder->getArrayAttr({});
 
   endFields.push_back(0);
-  for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-    auto srcType = type_cast<FIRRTLType>(op.getType(i));
+  for (size_t i = 0, e = op->getNumResults(); i != e; ++i) {
+    auto srcType = type_cast<FIRRTLType>(op->getResult(i).getType());
 
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
@@ -1602,7 +1600,7 @@ bool TypeLoweringVisitor::lowerInstanceLike(
       newNames.push_back(op.getPortNameAttr(i));
       newDomains.push_back(op.getPortDomain(i));
       resultTypes.push_back(srcType);
-      newPortAnno.push_back(oldPortAnno[i]);
+      newPortAnno.push_back(oldPortAnno ? oldPortAnno[i] : emptyAnno);
     } else {
       skip = false;
       auto oldName = op.getPortName(i);
@@ -1613,9 +1611,12 @@ bool TypeLoweringVisitor::lowerInstanceLike(
         newNames.push_back(builder->getStringAttr(oldName + field.suffix));
         newDomains.push_back(op.getPortDomain(i));
         resultTypes.push_back(mapLoweredType(srcType, field.type));
-        auto annos = filterAnnotations(
-            context, dyn_cast_or_null<ArrayAttr>(oldPortAnno[i]), srcType,
-            field);
+        auto annos =
+            oldPortAnno
+                ? filterAnnotations(context,
+                                    dyn_cast_or_null<ArrayAttr>(oldPortAnno[i]),
+                                    srcType, field)
+                : emptyAnno;
         newPortAnno.push_back(annos);
       }
     }
@@ -1636,7 +1637,7 @@ bool TypeLoweringVisitor::lowerInstanceLike(
     domainHelper.rewriteDomain(domain);
 
   // Create the new instance using the provided factory function.
-  auto newInstance = createNewInstance(
+  auto *newInstance = createNewInstance(
       resultTypes, newDirs, builder->getArrayAttr(newNames),
       builder->getArrayAttr(newDomains), builder->getArrayAttr(newPortAnno),
       sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
@@ -1644,7 +1645,7 @@ bool TypeLoweringVisitor::lowerInstanceLike(
   newInstance->setDiscardableAttrs(op->getDiscardableAttrDictionary());
 
   SmallVector<Value> lowered;
-  for (size_t aggIndex = 0, eAgg = op.getNumResults(); aggIndex != eAgg;
+  for (size_t aggIndex = 0, eAgg = op->getNumResults(); aggIndex != eAgg;
        ++aggIndex) {
     lowered.clear();
     for (size_t fieldIndex = endFields[aggIndex],
@@ -1652,10 +1653,10 @@ bool TypeLoweringVisitor::lowerInstanceLike(
          fieldIndex < eField; ++fieldIndex)
       lowered.push_back(newInstance->getResult(fieldIndex));
     if (lowered.size() != 1 ||
-        op.getType(aggIndex) != resultTypes[endFields[aggIndex]])
-      processUsers(op.getResult(aggIndex), lowered);
+        op->getResult(aggIndex).getType() != resultTypes[endFields[aggIndex]])
+      processUsers(op->getResult(aggIndex), lowered);
     else
-      op.getResult(aggIndex).replaceAllUsesWith(lowered[0]);
+      op->getResult(aggIndex).replaceAllUsesWith(lowered[0]);
   }
   return true;
 }
@@ -1679,26 +1680,15 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
         sym);
   };
 
-  return lowerInstanceLike(op, mode, createNewInstance);
+  return lowerInstanceLike(op, mode, op.getPortAnnotations(),
+                           createNewInstance);
 }
 
 bool TypeLoweringVisitor::visitDecl(InstanceChoiceOp op) {
   // Get the default target module to determine preservation mode.
-  auto getMode = [&](Attribute module) {
-    auto attr = cast<FlatSymbolRefAttr>(module);
-    auto *moduleOp = symTbl.lookupNearestSymbolFrom(op, attr);
-    auto modLike = cast<FModuleLike>(moduleOp);
-    return getPreservationModeForPorts(modLike);
-  };
-  auto mode = getMode(op.getDefaultTargetAttr());
-  for (auto module : op.getModuleNamesAttr()) {
-    if (mode != getMode(module)) {
-      op->emitError() << "instance_choice has different preservation modes "
-                      << "for different modules";
-      encounteredError = true;
-      return false;
-    }
-  }
+  auto *moduleOp = symTbl.lookupNearestSymbolFrom(
+      op, cast<FlatSymbolRefAttr>(op.getDefaultTargetAttr()));
+  auto mode = getPreservationModeForPorts(cast<FModuleLike>(moduleOp));
 
   // Lambda to create the new InstanceChoiceOp with lowered types.
   auto createNewInstance = [&](ArrayRef<Type> resultTypes,
@@ -1713,7 +1703,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceChoiceOp op) {
         op.getInstanceMacroAttr());
   };
 
-  return lowerInstanceLike(op, mode, createNewInstance);
+  return lowerInstanceLike(op, mode, op.getPortAnnotations(),
+                           createNewInstance);
 }
 
 bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
