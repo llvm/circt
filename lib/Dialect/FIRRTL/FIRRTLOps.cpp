@@ -2657,12 +2657,6 @@ void InstanceOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
                    ArrayAttr::get(getContext(), annotations));
 }
 
-Attribute InstanceOp::getPortDomain(unsigned portIdx) {
-  assert(portIdx < getNumResults() &&
-         "index should be smaller than result number");
-  return getDomainInfo()[portIdx];
-}
-
 FInstanceLike InstanceOp::cloneWithInsertedPorts(
     ArrayRef<std::pair<unsigned, PortInfo>> insertions) {
   auto *context = getContext();
@@ -3171,6 +3165,7 @@ LogicalResult InstanceChoiceOp::verify() {
 LogicalResult
 InstanceChoiceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto caseNames = getCaseNamesAttr();
+  std::optional<Convention> convention;
   for (auto moduleName : getModuleNamesAttr()) {
     auto moduleNameRef = cast<FlatSymbolRefAttr>(moduleName);
     if (failed(instance_like_impl::verifyReferencedModule(*this, symbolTable,
@@ -3183,6 +3178,14 @@ InstanceChoiceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     if (isa<FIntModuleOp>(referencedModule))
       return emitOpError("intmodule must be instantiated with instance op, "
                          "not via 'firrtl.instance_choice'");
+
+    if (!convention) {
+      convention = referencedModule.getConvention();
+      continue;
+    }
+
+    if (*convention != referencedModule.getConvention())
+      return emitOpError("all modules must have the same convention");
   }
 
   auto root = cast<SymbolRefAttr>(caseNames[0]).getRootReference();
