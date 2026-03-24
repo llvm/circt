@@ -345,9 +345,6 @@ def FInstanceLike : OpInterface<"FInstanceLike", [
     InterfaceMethod<"Get the port names attribute",
       "ArrayAttr", "getPortNamesAttr">,
 
-    InterfaceMethod<"Get the port names",
-      "ArrayRef<Attribute>", "getPortNames">,
-
     //===------------------------------------------------------------------===//
     // Inner Symbol
     //===------------------------------------------------------------------===//
