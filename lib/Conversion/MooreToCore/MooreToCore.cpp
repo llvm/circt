@@ -2609,9 +2609,6 @@ struct QueueCmpOpConversion : public OpConversionPattern<QueueCmpOp> {
     case circt::moore::UArrayCmpPredicate::ne:
       queuePred = sim::QueueCmpPredicate::ne;
       break;
-    default:
-      llvm_unreachable(
-          "All unpacked array comparison predicates should be handled");
     }
 
     auto cmpPred = sim::QueueCmpPredicateAttr::get(getContext(), queuePred);
