@@ -217,8 +217,8 @@ struct GlobalOpConversion : public OpConversionPattern<memref::GlobalOp> {
       flattenedVals.push_back(attr);
 
     auto newTypeAttr = TypeAttr::get(newType);
-    auto newNameStr = getFlattenedMemRefName(state, op.getConstantAttrName(),
-                                             type);
+    auto newNameStr =
+        getFlattenedMemRefName(state, op.getConstantAttrName(), type);
     auto newName = rewriter.getStringAttr(newNameStr);
     state.nameMap[op.getSymNameAttr()] = newName;
 
