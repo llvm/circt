@@ -373,3 +373,14 @@ firrtl.circuit "DomainInfoIndexUpdate" {
     )
   }
 }
+
+// -----
+
+// Test that inner symbols within nested base aggregates are propagated.
+// CHECK-LABEL: circuit "NestedBaseInnerSym"
+firrtl.circuit "NestedBaseInnerSym" {
+  firrtl.module @NestedBaseInnerSym() {
+    // CHECK: [<@sym,0,public>, <@sym_b,1,public>, <@sym_c,2,public>]
+    %w = firrtl.wire sym [<@sym, 0, public>, <@sym_b, 2, public>, <@sym_c, 3, public>] : !firrtl.openbundle<a: probe<uint<1>>, b: bundle<c: uint<1>>, d: probe<uint<1>>>
+  }
+}
