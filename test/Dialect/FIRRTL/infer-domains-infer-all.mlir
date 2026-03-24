@@ -281,6 +281,25 @@ firrtl.circuit "ConstantInMultipleDomains" {
   }
 }
 
+// InvalidValue should be domain-agnostic like constants.
+// CHECK-LABEL: InvalidValueInMultipleDomains
+firrtl.circuit "InvalidValueInMultipleDomains" {
+  firrtl.domain @ClockDomain
+
+  firrtl.extmodule @Foo(in A: !firrtl.domain<@ClockDomain()>, in i: !firrtl.uint<1> domains [A])
+
+  firrtl.module @InvalidValueInMultipleDomains(in %A: !firrtl.domain<@ClockDomain()>, in %B: !firrtl.domain<@ClockDomain()>) {
+    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+    %x_A, %x_i = firrtl.instance x @Foo(in A: !firrtl.domain<@ClockDomain()>, in i: !firrtl.uint<1> domains [A])
+    firrtl.domain.define %x_A, %A : !firrtl.domain<@ClockDomain()>
+    firrtl.matchingconnect %x_i, %invalid_ui1 : !firrtl.uint<1>
+
+    %y_A, %y_i = firrtl.instance y @Foo(in A: !firrtl.domain<@ClockDomain()>, in i: !firrtl.uint<1> domains [A])
+    firrtl.domain.define %y_A, %B : !firrtl.domain<@ClockDomain()>
+    firrtl.matchingconnect %y_i, %invalid_ui1 : !firrtl.uint<1>
+  }
+}
+
 firrtl.circuit "Top" {
   firrtl.domain @ClockDomain
   firrtl.extmodule @Foo(
