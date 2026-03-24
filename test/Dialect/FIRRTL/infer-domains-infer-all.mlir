@@ -485,3 +485,21 @@ firrtl.circuit "UnsafeDomainCastMatching" {
     firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
   }
 }
+
+// Test that domain.define is inserted after the value it references when that
+// value is defined later in the block (use-before-def fix).
+// CHECK-LABEL: DomainDefineAfterValue
+firrtl.circuit "DomainDefineAfterValue" {
+  firrtl.domain @ClockDomain
+  firrtl.extmodule private @Producer(out D: !firrtl.domain<@ClockDomain()>, out clk: !firrtl.clock domains [D])
+  firrtl.extmodule private @Consumer(in D: !firrtl.domain<@ClockDomain()>, in clk: !firrtl.clock domains [D])
+
+  firrtl.module @DomainDefineAfterValue() {
+    %consumer_D, %consumer_clk = firrtl.instance consumer @Consumer(in D: !firrtl.domain<@ClockDomain()>, in clk: !firrtl.clock domains [D])
+    // CHECK: %producer_D, %producer_clk = firrtl.instance producer @Producer
+    %producer_D, %producer_clk = firrtl.instance producer @Producer(out D: !firrtl.domain<@ClockDomain()>, out clk: !firrtl.clock domains [D])
+    // CHECK-NOT: firrtl.instance
+    // CHECK: firrtl.domain.define %consumer_D, %producer_D
+    firrtl.matchingconnect %consumer_clk, %producer_clk : !firrtl.clock
+  }
+}

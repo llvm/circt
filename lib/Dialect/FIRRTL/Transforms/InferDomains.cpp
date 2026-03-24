@@ -1238,6 +1238,16 @@ static LogicalResult updateModuleDomainInfo(const DomainInfo &info,
   return success();
 }
 
+/// Helper that returns true if a value is defined before an operation in the
+/// same block, or is a block argument.
+static bool valueDefinedBeforeOp(Value value, Operation *op) {
+  Operation *valueOp = value.getDefiningOp();
+  if (!valueOp)
+    return true; // Block argument
+  return valueOp->getBlock() == op->getBlock() &&
+         valueOp->isBeforeInBlock(op);
+}
+
 static LogicalResult updateInstance(const DomainInfo &info,
                                     TermAllocator &allocator,
                                     DomainTable &table, FInstanceLike op) {
@@ -1266,6 +1276,10 @@ static LogicalResult updateInstance(const DomainInfo &info,
       }
       if (auto *val = dyn_cast<ValueTerm>(term)) {
         auto value = val->value;
+        // Insert the domain.define after the value it references to avoid
+        // use-before-def errors.
+        if (!valueDefinedBeforeOp(value, op.getOperation()))
+          builder.setInsertionPointAfterValue(value);
         DomainDefineOp::create(builder, loc, port, value);
         continue;
       }
