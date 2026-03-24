@@ -1244,8 +1244,7 @@ static bool valueDefinedBeforeOp(Value value, Operation *op) {
   Operation *valueOp = value.getDefiningOp();
   if (!valueOp)
     return true; // Block argument
-  return valueOp->getBlock() == op->getBlock() &&
-         valueOp->isBeforeInBlock(op);
+  return valueOp->getBlock() == op->getBlock() && valueOp->isBeforeInBlock(op);
 }
 
 static LogicalResult updateInstance(const DomainInfo &info,
