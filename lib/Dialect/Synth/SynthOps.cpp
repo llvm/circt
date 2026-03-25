@@ -17,7 +17,6 @@
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Value.h"
 #include "llvm/ADT/APInt.h"
-#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/LogicalResult.h"
@@ -54,10 +53,10 @@ OpFoldResult ChoiceOp::fold(FoldAdaptor adaptor) {
 //   %merged = synth.choice %x, %y, %z, %u, %v
 LogicalResult ChoiceOp::canonicalize(ChoiceOp op, PatternRewriter &rewriter) {
   llvm::SetVector<Value> worklist;
-  llvm::SmallPtrSet<Operation *, 4> visitedChoices;
+  llvm::SmallSetVector<Operation *, 4> visitedChoices;
 
   auto addToWorklist = [&](ChoiceOp choice) -> bool {
-    if (visitedChoices.insert(choice).second) {
+    if (visitedChoices.insert(choice)) {
       worklist.insert(choice.getInputs().begin(), choice.getInputs().end());
       return true;
     }
@@ -69,7 +68,8 @@ LogicalResult ChoiceOp::canonicalize(ChoiceOp op, PatternRewriter &rewriter) {
   bool mergedOtherChoices = false;
 
   // Look up and down at definitions and users.
-  for (auto val : worklist) {
+  for (unsigned i = 0; i < worklist.size(); ++i) {
+    Value val = worklist[i];
     if (auto defOp = val.getDefiningOp<synth::ChoiceOp>()) {
 
       if (defOp->getBlock() == op->getBlock() && addToWorklist(defOp))
@@ -98,13 +98,11 @@ LogicalResult ChoiceOp::canonicalize(ChoiceOp op, PatternRewriter &rewriter) {
 
   auto newChoice = synth::ChoiceOp::create(rewriter, op->getLoc(), op.getType(),
                                            finalOperands);
+  for (Operation *visited : visitedChoices.takeVector())
+    rewriter.replaceOp(visited, newChoice);
 
-  for (auto value : worklist)
-    rewriter.replaceAllUsesExcept(value, newChoice, newChoice);
-
-  for (Operation *visited : visitedChoices) {
-    rewriter.eraseOp(visited);
-  }
+  for (auto value : newChoice.getInputs())
+    rewriter.replaceAllUsesExcept(value, newChoice.getResult(), newChoice);
 
   return success();
 }
