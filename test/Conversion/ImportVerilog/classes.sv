@@ -690,7 +690,7 @@ endfunction
 // Check static member declarations are emitted as global variables
 // Also check that name resolution properly prefixes them
 
-// CHECK-LABEL: moore.global_variable @__unit__member : !moore.i32
+// CHECK-LABEL: moore.global_variable @member : !moore.i32
 static int member;
 
 // CHECK-LABEL: moore.class.classdecl @staticMemberClass {
@@ -824,11 +824,11 @@ endclass
 // CHECK:      }
 
 // CHECK:      moore.global_variable @"c::m_inst" : !moore.class<@c>
-// CHECK:      moore.global_variable @__unit__c_handle : !moore.class<@c>
+// CHECK:      moore.global_variable @c_handle : !moore.class<@c>
 
 // CHECK:      func.func private @get_inst() -> !moore.class<@c> {
 // CHECK:        [[V0:%.+]] = moore.variable : <class<@c>>
-// CHECK:        [[V1:%.+]] = moore.get_global_variable @__unit__c_handle : <class<@c>>
+// CHECK:        [[V1:%.+]] = moore.get_global_variable @c_handle : <class<@c>>
 // CHECK:        [[V2:%.+]] = moore.get_global_variable @"c::m_inst" : <class<@c>>
 // CHECK:        [[V3:%.+]] = moore.read [[V2]] : <class<@c>>
 // CHECK:        moore.blocking_assign [[V1]], [[V3]] : class<@c>

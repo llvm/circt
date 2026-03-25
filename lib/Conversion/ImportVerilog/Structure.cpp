@@ -2272,14 +2272,7 @@ Context::convertGlobalVariable(const slang::ast::VariableSymbol &var) {
     symName += "::";
     symName += var.name;
   } else {
-    const auto &parent = var.getParentScope()->asSymbol();
-    if (parent.kind == slang::ast::SymbolKind::CompilationUnit) {
-      // Use a deterministic prefix for compilation-unit ($unit) symbols to
-      // avoid collisions with module / package namespaces.
-      symName += "__unit__";
-    } else {
-      guessNamespacePrefix(parent, symName);
-    }
+    guessNamespacePrefix(var.getParentScope()->asSymbol(), symName);
     symName += var.name;
   }
 
@@ -2293,6 +2286,10 @@ Context::convertGlobalVariable(const slang::ast::VariableSymbol &var) {
                                                cast<moore::UnpackedType>(type));
   orderedRootOps.insert({var.location, varOp});
   globalVariables.insert({&var, varOp});
+
+  // Add the variable to the symbol table of the MLIR module, which uniquifies
+  // its name.
+  symbolTable.insert(varOp);
 
   // If the variable has an initializer expression, remember it for later such
   // that we can convert the initializers once we have seen all global

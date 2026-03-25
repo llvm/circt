@@ -4030,9 +4030,9 @@ module RejectInnerCapture(input bit u, output bit v);
   endfunction
 endmodule
 
-// CHECK-LABEL: moore.global_variable @__unit__rootGlobal1 : !moore.i42
+// CHECK-LABEL: moore.global_variable @rootGlobal1 : !moore.i42
 bit [41:0] rootGlobal1;
-// CHECK-LABEL: moore.global_variable @__unit__rootGlobal2 : !moore.i42 init {
+// CHECK-LABEL: moore.global_variable @rootGlobal2 : !moore.i42 init {
 // CHECK-NEXT: [[TMP1:%.+]] = moore.get_global_variable @"PackageGlobal::packageGlobal2" : <i42>
 // CHECK-NEXT: [[TMP2:%.+]] = moore.read [[TMP1]] : <i42>
 // CHECK-NEXT: moore.yield [[TMP2]] : i42

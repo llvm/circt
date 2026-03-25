@@ -13,7 +13,7 @@ function automatic int add1
   return x + 1;
 endfunction
 
-// CHECK: moore.global_variable @__unit__a : !moore.i32
+// CHECK: moore.global_variable @a : !moore.i32
 // CHECK: func.func private @add1
 
 // CHECK-LABEL: moore.module @use_unit
@@ -21,7 +21,7 @@ module use_unit;
   int b;
   initial begin
     // CHECK: [[B:%.*]] = moore.variable : <i32>
-    // CHECK: [[GA:%.*]] = moore.get_global_variable @__unit__a
+    // CHECK: [[GA:%.*]] = moore.get_global_variable @a
     // CHECK: [[AV:%.*]] = moore.read [[GA]] : <i32>
     // CHECK: moore.blocking_assign [[B]], [[AV]]
     b = a;
