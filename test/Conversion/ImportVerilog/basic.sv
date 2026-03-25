@@ -618,7 +618,7 @@ function void RepeatLoopStatements(int x, bit y);
   // CHECK: ^[[BB_EXIT]]:
 endfunction
 
-// CHECK-LABEL: func.func private @RepeatLoopWithReal(
+// CHECK-LABEL: func.func private @__unit__RepeatLoopWithReal(
 // CHECK-SAME: %arg0: !moore.f64
 function void RepeatLoopWithReal(real x);
   // CHECK: [[CONV:%.+]] = moore.real_to_int %arg0 : f64 -> i32
