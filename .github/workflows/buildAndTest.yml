@@ -334,17 +334,20 @@ jobs:
           if [ "${{ github.event_name }}" = "push" ]; then
             KIND=main
             SHA=main
+            REPO="${{ github.repository }}"
+            PR_NUMBER=""
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            # Skip fork PRs -- circt-tests can't check out fork branches.
-            if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
-              echo "Fork PR detected, skipping dispatch."
-              exit 0
-            fi
             KIND=pr
             SHA="${{ github.event.pull_request.head.ref }}"
+            REPO="${{ github.event.pull_request.head.repo.full_name }}"
+            PR_NUMBER="${{ github.event.pull_request.number }}"
           else
             echo "Unhandled event type: ${{ github.event_name }}, skipping."
             exit 0
           fi
-          echo "Dispatching circt-tests with kind=$KIND, sha=$SHA"
-          gh workflow run test.yml --repo circt/circt-tests -f kind="$KIND" -f sha="$SHA"
+          DISPATCH_ARGS="-f kind=$KIND -f sha=$SHA -f repo=$REPO"
+          if [ -n "$PR_NUMBER" ]; then
+            DISPATCH_ARGS="$DISPATCH_ARGS -f pr_number=$PR_NUMBER"
+          fi
+          echo "Dispatching circt-tests with args: $DISPATCH_ARGS"
+          gh workflow run test.yml --repo circt/circt-tests $DISPATCH_ARGS
