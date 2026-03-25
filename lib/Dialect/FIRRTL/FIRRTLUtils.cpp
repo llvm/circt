@@ -1167,6 +1167,9 @@ circt::firrtl::parseFormatString(mlir::OpBuilder &builder, mlir::Location loc,
       case 'x':
         if (!width.empty())
           validatedFormatString.append(width);
+        if (specOperands.size() <= opIdx)
+          return mlir::emitError(loc) << "not enough operands for format "
+                                         "string";
         operands.push_back(specOperands[opIdx++]);
         break;
       case '%':
