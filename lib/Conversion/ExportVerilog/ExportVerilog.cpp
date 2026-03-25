@@ -1170,11 +1170,8 @@ private:
 /// Append Verilog hierarchical scope names for any `sv.generate` /
 /// `sv.generate.case` regions containing \p defOp, in outermost-first order.
 /// Does not add a leading or trailing '.'.
-static void appendGenerateScopePrefix(const LoweringOptions &options,
-                                      Operation *defOp,
+static void appendGenerateScopePrefix(Operation *defOp,
                                       SmallVectorImpl<char> &out) {
-  if (!defOp)
-    return;
   SmallVector<SmallString<32>, 4> segments;
   Block *block = defOp->getBlock();
   while (block) {
@@ -1185,16 +1182,14 @@ static void appendGenerateScopePrefix(const LoweringOptions &options,
     if (isa<HWModuleOp>(parentOp))
       break;
     if (auto genCase = dyn_cast<GenerateCaseOp>(parentOp)) {
-      auto caseNames = genCase.getCaseNames();
+      auto verilogCaseNames = genCase.getVerilogCaseNamesAttr();
       for (auto [idx, reg] : llvm::enumerate(genCase.getCaseRegions())) {
         if (&reg != region)
           continue;
-        llvm::StringMap<size_t> nextGenIds;
-        StringRef legal;
-        for (unsigned i = 0; i <= idx; ++i) {
-          legal = sv::legalizeName(cast<StringAttr>(caseNames[i]).getValue(),
-                                   nextGenIds, options.caseInsensitiveKeywords);
-        }
+        assert(
+            verilogCaseNames && verilogCaseNames.size() > idx &&
+            "expected ExportVerilog name legalization to set verilogCaseNames");
+        StringRef legal = cast<StringAttr>(verilogCaseNames[idx]).getValue();
         segments.push_back(SmallString<32>(legal));
         break;
       }
@@ -1222,7 +1217,7 @@ static void emitHierPathInnerRefSegment(VerilogEmitterState &state, PPS &ps,
   }
   assert(ref.getOp() && "inner ref should resolve to an operation");
   SmallString<128> buf;
-  appendGenerateScopePrefix(state.options, ref.getOp(), buf);
+  appendGenerateScopePrefix(ref.getOp(), buf);
   if (!buf.empty())
     buf.push_back('.');
   StringRef symName = ExportVerilog::getSymOpName(ref.getOp());
@@ -4948,6 +4943,7 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
   // TODO: We'll probably need to store the legalized names somewhere for
   // `verbose` formatting. Set up the infra for storing names recursively. Just
   // store this locally for now.
+  auto verilogCaseNames = op.getVerilogCaseNamesAttr();
   llvm::StringMap<size_t> nextGenIds;
   ps.scopedBox(PP::bbox2, [&]() {
     // Emit each case.
@@ -4967,8 +4963,10 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
         });
 
       StringRef legalName =
-          legalizeName(cast<StringAttr>(caseNames[i]).getValue(), nextGenIds,
-                       options.caseInsensitiveKeywords);
+          verilogCaseNames
+              ? cast<StringAttr>(verilogCaseNames[i]).getValue()
+              : legalizeName(cast<StringAttr>(caseNames[i]).getValue(),
+                             nextGenIds, options.caseInsensitiveKeywords);
       ps << ": begin: " << PPExtString(legalName);
       setPendingNewline();
       emitStatementBlock(region.getBlocks().front());
