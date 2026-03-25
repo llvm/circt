@@ -72,14 +72,13 @@ LogicalResult ChoiceOp::canonicalize(ChoiceOp op, PatternRewriter &rewriter) {
     Value val = worklist[i];
     if (auto defOp = val.getDefiningOp<synth::ChoiceOp>()) {
 
-      if (defOp->getBlock() == op->getBlock() && addToWorklist(defOp))
+      if (addToWorklist(defOp))
         mergedOtherChoices = true;
     }
 
     for (Operation *user : val.getUsers()) {
       if (auto userChoice = llvm::dyn_cast<synth::ChoiceOp>(user)) {
-        if (userChoice->getBlock() == op->getBlock() &&
-            addToWorklist(userChoice)) {
+        if (addToWorklist(userChoice)) {
           mergedOtherChoices = true;
         }
       }
