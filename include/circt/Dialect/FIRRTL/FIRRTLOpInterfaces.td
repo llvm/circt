@@ -345,6 +345,12 @@ def FInstanceLike : OpInterface<"FInstanceLike", [
     InterfaceMethod<"Get the port names attribute",
       "ArrayAttr", "getPortNamesAttr">,
 
+    InterfaceMethod<"Get the port names",
+    "ArrayRef<Attribute>", "getPortNames", (ins), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getPortNamesAttr().getValue();
+    }]>,
+
     //===------------------------------------------------------------------===//
     // Inner Symbol
     //===------------------------------------------------------------------===//
