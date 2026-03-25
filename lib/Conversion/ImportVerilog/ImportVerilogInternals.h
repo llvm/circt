@@ -49,37 +49,12 @@ struct FlattenedIfacePort {
   const slang::ast::InterfacePortSymbol *origin;
   /// the interface body member (VariableSymbol , NetSymbol)
   const slang::ast::Symbol *bodySym;
-  /// The connected interface instance backing this port (if any). This enables
-  /// materializing virtual interface handles from interface ports.
-  const slang::ast::InstanceSymbol *ifaceInstance = nullptr;
 };
 
 /// Lowering information for an expanded interface instance. Maps each interface
 /// body member to its expanded SSA value (moore.variable or moore.net).
 struct InterfaceLowering {
   DenseMap<const slang::ast::Symbol *, Value> expandedMembers;
-  DenseMap<StringAttr, Value> expandedMembersByName;
-};
-
-/// Cached lowering information for representing SystemVerilog `virtual
-/// interface` handles as Moore types (a struct of references to interface
-/// members).
-struct VirtualInterfaceLowering {
-  moore::UnpackedStructType type;
-  SmallVector<StringAttr, 8> fieldNames;
-};
-
-/// A mapping entry for resolving Slang virtual interface member accesses.
-///
-/// Slang may resolve `vif.member` expressions (where `vif` has a
-/// `VirtualInterfaceType`) directly to a `NamedValueExpression` for `member`.
-/// This table records which virtual interface base symbol that member access is
-/// rooted in, so ImportVerilog can materialize the appropriate Moore IR.
-struct VirtualInterfaceMemberAccess {
-  const slang::ast::ValueSymbol *base = nullptr;
-  /// The name of the field in the lowered virtual interface handle struct that
-  /// should be accessed for this member.
-  StringAttr fieldName;
 };
 
 /// Module lowering information.
@@ -170,28 +145,6 @@ struct Context {
   LogicalResult buildClassProperties(const slang::ast::ClassType &classdecl);
   LogicalResult materializeClassMethods(const slang::ast::ClassType &classdecl);
   LogicalResult convertGlobalVariable(const slang::ast::VariableSymbol &var);
-
-  /// Convert a Slang virtual interface type into the Moore type used to
-  /// represent virtual interface handles. Populates internal caches so that
-  /// interface instance references can be materialized consistently.
-  FailureOr<moore::UnpackedStructType>
-  convertVirtualInterfaceType(const slang::ast::VirtualInterfaceType &type,
-                              Location loc);
-
-  /// Materialize a Moore value representing a concrete interface instance as a
-  /// virtual interface handle. This only succeeds for the Slang
-  /// `VirtualInterfaceType` wrappers that refer to a real interface instance
-  /// (`isRealIface`).
-  FailureOr<Value>
-  materializeVirtualInterfaceValue(const slang::ast::VirtualInterfaceType &type,
-                                   Location loc);
-
-  /// Register the interface members of a virtual interface base symbol for use
-  /// in later expression conversion.
-  LogicalResult
-  registerVirtualInterfaceMembers(const slang::ast::ValueSymbol &base,
-                                  const slang::ast::VirtualInterfaceType &type,
-                                  Location loc);
 
   /// Checks whether one class (actualTy) is derived from another class
   /// (baseTy). True if it's a subclass, false otherwise.
@@ -345,12 +298,6 @@ struct Context {
   /// Owning storage for InterfaceLowering objects
   /// because ScopedHashTable stores values by copy.
   SmallVector<std::unique_ptr<InterfaceLowering>> interfaceInstanceStorage;
-
-  /// Cached virtual interface layouts (type + field order).
-  DenseMap<const slang::ast::InstanceBodySymbol *, VirtualInterfaceLowering>
-      virtualIfaceLowerings;
-  DenseMap<const slang::ast::ModportSymbol *, VirtualInterfaceLowering>
-      virtualIfaceModportLowerings;
   /// A list of modules for which the header has been created, but the body has
   /// not been converted yet.
   std::queue<const slang::ast::InstanceBodySymbol *> moduleWorklist;
@@ -371,14 +318,6 @@ struct Context {
       llvm::ScopedHashTable<const slang::ast::ValueSymbol *, Value>;
   using ValueSymbolScope = ValueSymbols::ScopeTy;
   ValueSymbols valueSymbols;
-
-  /// A table mapping symbols for interface members accessed through a virtual
-  /// interface to the virtual interface base value symbol.
-  using VirtualInterfaceMembers =
-      llvm::ScopedHashTable<const slang::ast::ValueSymbol *,
-                            VirtualInterfaceMemberAccess>;
-  using VirtualInterfaceMemberScope = VirtualInterfaceMembers::ScopeTy;
-  VirtualInterfaceMembers virtualIfaceMembers;
 
   /// A table of defined global variables that may be referred to by name in
   /// expressions.
