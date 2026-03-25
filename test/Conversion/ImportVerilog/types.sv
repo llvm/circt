@@ -160,7 +160,7 @@ module CHandle;
    chandle test;
 endmodule
 
-// CHECK-LABEL: func.func private @takesCHandle(%arg0: !moore.chandle) {
+// CHECK-LABEL: func.func private @__unit__takesCHandle(%arg0: !moore.chandle) {
 function automatic void takesCHandle(chandle test);
 endfunction
 

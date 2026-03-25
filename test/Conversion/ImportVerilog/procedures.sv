@@ -8,25 +8,25 @@
 // CHECK-LABEL: moore.module @Foo()
 module Foo;
   // CHECK:      moore.procedure initial {
-  // CHECK-NEXT:   func.call @foo
+  // CHECK-NEXT:   func.call @__unit__foo
   // CHECK-NEXT:   moore.return
   // CHECK-NEXT: }
   initial foo();
 
   // CHECK:      moore.procedure final {
-  // CHECK-NEXT:   func.call @foo
+  // CHECK-NEXT:   func.call @__unit__foo
   // CHECK-NEXT:   moore.return
   // CHECK-NEXT: }
   final foo();
 
   // CHECK:      moore.procedure always_comb {
-  // CHECK-NEXT:   func.call @foo
+  // CHECK-NEXT:   func.call @__unit__foo
   // CHECK-NEXT:   moore.return
   // CHECK-NEXT: }
   always_comb foo();
 
   // CHECK:      moore.procedure always_latch {
-  // CHECK-NEXT:   func.call @foo
+  // CHECK-NEXT:   func.call @__unit__foo
   // CHECK-NEXT:   moore.return
   // CHECK-NEXT: }
   always_latch foo();
@@ -34,7 +34,7 @@ module Foo;
   // CHECK:      moore.procedure always_ff {
   // CHECK-NEXT:   moore.wait_event {
   // CHECK-NEXT:   }
-  // CHECK-NEXT:   func.call @foo
+  // CHECK-NEXT:   func.call @__unit__foo
   // CHECK-NEXT:   moore.return
   // CHECK-NEXT: }
   always_ff @* foo();
@@ -42,11 +42,11 @@ module Foo;
   // CHECK-STAR:      moore.procedure always {
   // CHECK-STAR-NEXT:   moore.wait_event {
   // CHECK-STAR-NEXT:   }
-  // CHECK-STAR-NEXT:   func.call @foo
+  // CHECK-STAR-NEXT:   func.call @__unit__foo
   // CHECK-STAR-NEXT:   moore.return
   // CHECK-STAR-NEXT: }
   // CHECK-COMB:      moore.procedure always_comb {
-  // CHECK-COMB-NEXT:   func.call @foo
+  // CHECK-COMB-NEXT:   func.call @__unit__foo
   // CHECK-COMB-NEXT:   moore.return
   // CHECK-COMB-NEXT: }
   always @* foo();

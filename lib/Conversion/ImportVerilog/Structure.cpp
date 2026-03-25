@@ -293,6 +293,13 @@ struct ModuleVisitor : public BaseVisitor {
     auto prefix = (Twine(blockNamePrefix) + instNode.name + "_").str();
     auto lowering = std::make_unique<InterfaceLowering>();
 
+    auto recordMember = [&](const slang::ast::Symbol &sym,
+                            Value value) -> void {
+      lowering->expandedMembers[&sym] = value;
+      auto nameAttr = builder.getStringAttr(sym.name);
+      lowering->expandedMembersByName[nameAttr] = value;
+    };
+
     for (const auto &member : instNode.body.members()) {
       // Error on nested interface instances.
       if (const auto *nestedInst = member.as_if<slang::ast::InstanceSymbol>()) {
@@ -312,7 +319,7 @@ struct ModuleVisitor : public BaseVisitor {
             moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
             builder.getStringAttr(Twine(prefix) + StringRef(var->name)),
             Value());
-        lowering->expandedMembers[var] = varOp;
+        recordMember(*var, varOp);
         continue;
       }
       // Expand nets
@@ -331,10 +338,33 @@ struct ModuleVisitor : public BaseVisitor {
             moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
             builder.getStringAttr(Twine(prefix) + StringRef(net->name)),
             netKind, Value());
-        lowering->expandedMembers[net] = netOp;
+        recordMember(*net, netOp);
         continue;
       }
       // Silently skip other members (modports, parameters , etc.)
+    }
+
+    // Record interface ports by mapping them to their connected expressions.
+    // This is required for virtual interface usage (e.g. `vif.clk`) and for
+    // modports that reference interface ports.
+    for (const auto *con : instNode.getPortConnections()) {
+      const auto *expr = con->getExpression();
+      const auto *port = con->port.as_if<slang::ast::PortSymbol>();
+      if (!port)
+        continue;
+      if (!expr) {
+        // Leave unconnected interface ports unresolved for now.
+        continue;
+      }
+
+      Value lvalue = context.convertLvalueExpression(*expr);
+      if (!lvalue)
+        return failure();
+
+      recordMember(*port, lvalue);
+      if (port->internalSymbol) {
+        recordMember(*port->internalSymbol, lvalue);
+      }
     }
 
     context.interfaceInstanceStorage.push_back(std::move(lowering));
@@ -643,6 +673,10 @@ struct ModuleVisitor : public BaseVisitor {
         moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
         builder.getStringAttr(Twine(blockNamePrefix) + varNode.name), initial);
     context.valueSymbols.insert(&varNode, varOp);
+    const auto &canonTy = varNode.getType().getCanonicalType();
+    if (const auto *vi = canonTy.as_if<slang::ast::VirtualInterfaceType>())
+      if (failed(context.registerVirtualInterfaceMembers(varNode, *vi, loc)))
+        return failure();
     return success();
   }
 
@@ -716,6 +750,8 @@ struct ModuleVisitor : public BaseVisitor {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToEnd(&procOp.getBody().emplaceBlock());
     Context::ValueSymbolScope scope(context.valueSymbols);
+    Context::VirtualInterfaceMemberScope vifMemberScope(
+        context.virtualIfaceMembers);
     if (failed(context.convertStatement(body)))
       return failure();
     if (builder.getBlock())
@@ -1024,6 +1060,8 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
                                    &ifacePort) {
       auto portLoc = convertLocation(ifacePort.location);
       auto [connSym, modportSym] = ifacePort.getConnection();
+      const auto *ifaceInst =
+          connSym ? connSym->as_if<slang::ast::InstanceSymbol>() : nullptr;
       auto portPrefix = (Twine(ifacePort.name) + "_").str();
 
       if (modportSym) {
@@ -1051,8 +1089,9 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
             arg = block->addArgument(type, portLoc);
             inputIdx++;
           }
-          lowering.ifacePorts.push_back(
-              {name, dir, type, portLoc, arg, &ifacePort, mpp->internalSymbol});
+          lowering.ifacePorts.push_back({name, dir, type, portLoc, arg,
+                                         &ifacePort, mpp->internalSymbol,
+                                         ifaceInst});
         }
       } else {
         // No modport: iterate interface body for all variables and nets.
@@ -1086,7 +1125,8 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
           auto arg = block->addArgument(refType, portLoc);
           inputIdx++;
           lowering.ifacePorts.push_back({name, hw::ModulePort::Input, refType,
-                                         portLoc, arg, &ifacePort, bodySym});
+                                         portLoc, arg, &ifacePort, bodySym,
+                                         instSym});
         }
       }
       return success();
@@ -1172,6 +1212,7 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
 
   ValueSymbolScope scope(valueSymbols);
   InterfaceInstanceScope ifaceScope(interfaceInstances);
+  VirtualInterfaceMemberScope vifMemberScope(virtualIfaceMembers);
 
   // Keep track of the local time scale. `getTimeScale` automatically looks
   // through parent scopes to find the time scale effective locally.
@@ -1186,6 +1227,64 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     if (hierPath.direction == slang::ast::ArgumentDirection::In && hierPath.idx)
       valueSymbols.insert(hierPath.valueSym,
                           lowering.op.getBody()->getArgument(*hierPath.idx));
+
+  // Register flattened interface port members before lowering the module body
+  // so expressions can refer to them. Also build per-port interface instance
+  // lowerings, which enables materializing virtual interface values from
+  // interface ports.
+  DenseMap<const slang::ast::InstanceSymbol *, InterfaceLowering *>
+      ifacePortLowerings;
+
+  auto getIfacePortLowering =
+      [&](const slang::ast::InstanceSymbol *ifaceInst) -> InterfaceLowering * {
+    if (!ifaceInst)
+      return nullptr;
+    if (auto *existing = interfaceInstances.lookup(ifaceInst))
+      return existing;
+    if (auto it = ifacePortLowerings.find(ifaceInst);
+        it != ifacePortLowerings.end())
+      return it->second;
+
+    auto lowering = std::make_unique<InterfaceLowering>();
+    InterfaceLowering *ptr = lowering.get();
+    interfaceInstanceStorage.push_back(std::move(lowering));
+    interfaceInstances.insert(ifaceInst, ptr);
+    ifacePortLowerings.try_emplace(ifaceInst, ptr);
+    return ptr;
+  };
+
+  for (auto &fp : lowering.ifacePorts) {
+    if (!fp.bodySym)
+      continue;
+    auto *valueSym = fp.bodySym->as_if<slang::ast::ValueSymbol>();
+    if (!valueSym)
+      continue;
+
+    if (fp.direction == hw::ModulePort::Output) {
+      // Output interface ports are not referenceable within the module body.
+      // Create internal variables for them and return their value through the
+      // module terminator.
+      auto varOp = moore::VariableOp::create(
+          builder, fp.loc,
+          moore::RefType::get(cast<moore::UnpackedType>(fp.type)), fp.name,
+          Value());
+      valueSymbols.insert(valueSym, varOp);
+    } else {
+      valueSymbols.insert(valueSym, fp.arg);
+    }
+
+    if (!fp.ifaceInstance)
+      continue;
+    if (Value val = valueSymbols.lookup(valueSym)) {
+      auto *ifaceLowering = getIfacePortLowering(fp.ifaceInstance);
+      if (!ifaceLowering)
+        continue;
+      ifaceLowering->expandedMembers[fp.bodySym] = val;
+      ifaceLowering
+          ->expandedMembersByName[builder.getStringAttr(fp.bodySym->name)] =
+          val;
+    }
+  }
 
   // Convert the body of the module.
   for (auto &member : module->members()) {
@@ -1228,35 +1327,19 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     moore::ContinuousAssignOp::create(builder, port.loc, value, portArg);
   }
 
-  // Handle flattened interface ports. For each flattened port, create an
-  // internal variable and wire it to the port. The variable is registered
-  // in valueSymbols so the module body can reference interface signals
+  // Collect output values for flattened interface ports. The internal
+  // references are set up before lowering the module body.
   for (auto &fp : lowering.ifacePorts) {
-    if (!fp.bodySym)
+    if (fp.direction != hw::ModulePort::Output)
       continue;
-    // Look up the body sym's value (populated by the module body visitor
-    // if the interface body symbol was visited, which it won't be since
-    // interface port don't have a body in the module).
-    // Instead, create a new variable for this flattened port signal.
-    auto *valueSym = fp.bodySym->as_if<slang::ast::ValueSymbol>();
+    auto *valueSym =
+        fp.bodySym ? fp.bodySym->as_if<slang::ast::ValueSymbol>() : nullptr;
     if (!valueSym)
       continue;
-
-    if (fp.direction == hw::ModulePort::Output) {
-      // For output ports: create a variable, register it, and read it
-      // for the output terminator
-      auto varOp = moore::VariableOp::create(
-          builder, fp.loc,
-          moore::RefType::get(cast<moore::UnpackedType>(fp.type)), fp.name,
-          Value());
-      valueSymbols.insert(valueSym, varOp);
-      auto readVal = moore::ReadOp::create(builder, fp.loc, varOp);
-      outputs.push_back(readVal);
-    } else {
-      // For input ports: register the block argument so the module body
-      // can reference the interface signal
-      valueSymbols.insert(valueSym, fp.arg);
-    }
+    Value ref = valueSymbols.lookup(valueSym);
+    if (!ref)
+      continue;
+    outputs.push_back(moore::ReadOp::create(builder, fp.loc, ref).getResult());
   }
 
   // Ensure the number of operands of this module's terminator and the number of
@@ -1305,7 +1388,15 @@ Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
   if (!subroutine.thisVar) {
 
     SmallString<64> name;
-    guessNamespacePrefix(subroutine.getParentScope()->asSymbol(), name);
+    const auto &parent = subroutine.getParentScope()->asSymbol();
+    if (parent.kind == slang::ast::SymbolKind::CompilationUnit &&
+        !subroutine.flags.has(slang::ast::MethodFlags::DPIImport)) {
+      // Use a deterministic prefix for compilation-unit ($unit) symbols to
+      // avoid collisions with module / package namespaces.
+      name += "__unit__";
+    } else {
+      guessNamespacePrefix(parent, name);
+    }
     name += subroutine.name;
 
     SmallVector<Type, 1> noThis = {};
@@ -1511,6 +1602,25 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
   const bool isMethod = (subroutine.thisVar != nullptr);
 
   ValueSymbolScope scope(valueSymbols);
+  VirtualInterfaceMemberScope vifMemberScope(virtualIfaceMembers);
+
+  if (isMethod) {
+    if (const auto *classTy =
+            subroutine.thisVar->getType().as_if<slang::ast::ClassType>()) {
+      for (auto &member : classTy->members()) {
+        const auto *prop = member.as_if<slang::ast::ClassPropertySymbol>();
+        if (!prop)
+          continue;
+        const auto &propCanon = prop->getType().getCanonicalType();
+        if (const auto *vi =
+                propCanon.as_if<slang::ast::VirtualInterfaceType>()) {
+          auto propLoc = convertLocation(prop->location);
+          if (failed(registerVirtualInterfaceMembers(*prop, *vi, propLoc)))
+            return failure();
+        }
+      }
+    }
+  }
 
   // Create a function body block and populate it with block arguments.
   SmallVector<moore::VariableOp> argVariables;
@@ -1548,6 +1658,11 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
       valueSymbols.insert(astArg, shadowArg);
       argVariables.push_back(shadowArg);
     }
+
+    const auto &argCanon = astArg->getType().getCanonicalType();
+    if (const auto *vi = argCanon.as_if<slang::ast::VirtualInterfaceType>())
+      if (failed(registerVirtualInterfaceMembers(*astArg, *vi, loc)))
+        return failure();
   }
 
   // Convert the body of the function.
@@ -2165,7 +2280,14 @@ Context::convertGlobalVariable(const slang::ast::VariableSymbol &var) {
     symName += "::";
     symName += var.name;
   } else {
-    guessNamespacePrefix(var.getParentScope()->asSymbol(), symName);
+    const auto &parent = var.getParentScope()->asSymbol();
+    if (parent.kind == slang::ast::SymbolKind::CompilationUnit) {
+      // Use a deterministic prefix for compilation-unit ($unit) symbols to
+      // avoid collisions with module / package namespaces.
+      symName += "__unit__";
+    } else {
+      guessNamespacePrefix(parent, symName);
+    }
     symName += var.name;
   }
 
