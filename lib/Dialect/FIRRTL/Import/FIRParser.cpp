@@ -3920,15 +3920,8 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
         // Otherwise, replace with bounce wire.
         auto type = instResult.getType();
 
-        // Either entire instance result is forceable + bounce wire, or reject.
-        // (even if rwprobe is of a portion of the port)
-        bool forceable = static_cast<bool>(
-            firrtl::detail::getForceableResultType(true, type));
-        if (!forceable)
-          return emitError(loc, "unable to force instance result of type ")
-                 << type;
-
         // Create bounce wire for the instance result.
+        // This may be an open aggregate, or other non-base type.
         auto annotations = getConstants().emptyArrayAttr;
         StringAttr sym = {};
         SmallString<64> name;
@@ -3939,7 +3932,7 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
         auto bounce =
             WireOp::create(builder, type, name, NameKindEnum::InterestingName,
                            annotations, sym);
-        auto bounceVal = bounce.getData();
+        auto bounceVal = bounce.getDataRaw();
 
         // Replace instance result with reads from bounce wire.
         instResult.replaceAllUsesWith(bounceVal);

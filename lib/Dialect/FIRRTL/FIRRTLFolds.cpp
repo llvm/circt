@@ -20,6 +20,7 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -1399,15 +1400,13 @@ void DShrPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 namespace {
 
 /// Canonicalize a cat tree into single cat operation.
-class FlattenCat : public mlir::RewritePattern {
+class FlattenCat : public mlir::OpRewritePattern<CatPrimOp> {
 public:
-  FlattenCat(MLIRContext *context)
-      : RewritePattern(CatPrimOp::getOperationName(), 0, context) {}
+  using OpRewritePattern::OpRewritePattern;
 
   LogicalResult
-  matchAndRewrite(Operation *op,
+  matchAndRewrite(CatPrimOp cat,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cat = cast<CatPrimOp>(op);
     if (!hasKnownWidthIntTypes(cat) ||
         cat.getType().getBitWidthOrSentinel() == 0)
       return failure();
@@ -1448,7 +1447,7 @@ public:
     assert(operands.size() >= 1 && "zero width cast must be rejected");
 
     if (operands.size() == 1) {
-      rewriter.replaceOp(op, castToUIntIfSigned(operands[0]));
+      rewriter.replaceOp(cat, castToUIntIfSigned(operands[0]));
       return success();
     }
 
@@ -1460,22 +1459,20 @@ public:
       for (auto &operand : operands)
         operand = castToUIntIfSigned(operand);
 
-    replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, op, cat.getType(),
+    replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, cat, cat.getType(),
                                              operands);
     return success();
   }
 };
 
 // Fold successive constants cat(x, y, 1, 10, z) -> cat(x, y, 110, z)
-class CatOfConstant : public mlir::RewritePattern {
+class CatOfConstant : public mlir::OpRewritePattern<CatPrimOp> {
 public:
-  CatOfConstant(MLIRContext *context)
-      : RewritePattern(CatPrimOp::getOperationName(), 0, context) {}
+  using OpRewritePattern::OpRewritePattern;
 
   LogicalResult
-  matchAndRewrite(Operation *op,
+  matchAndRewrite(CatPrimOp cat,
                   mlir::PatternRewriter &rewriter) const override {
-    auto cat = cast<CatPrimOp>(op);
     if (!hasKnownWidthIntTypes(cat))
       return failure();
 
@@ -1510,7 +1507,7 @@ public:
     if (operands.size() == cat->getNumOperands())
       return failure();
 
-    replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, op, cat.getType(),
+    replaceOpWithNewOpAndCopyName<CatPrimOp>(rewriter, cat, cat.getType(),
                                              operands);
 
     return success();
@@ -1523,6 +1520,141 @@ void CatPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.insert<patterns::CatBitsBits, patterns::CatDoubleConst,
                  patterns::CatCast, FlattenCat, CatOfConstant>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// StringConcatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult StringConcatOp::fold(FoldAdaptor adaptor) {
+  // Fold single-operand concat to just the operand.
+  if (getInputs().size() == 1)
+    return getInputs()[0];
+
+  // Check if all operands are constant strings before accumulating.
+  if (!llvm::all_of(adaptor.getInputs(), [](Attribute operand) {
+        return isa_and_nonnull<StringAttr>(operand);
+      }))
+    return {};
+
+  // All operands are constant strings, concatenate them.
+  SmallString<64> result;
+  for (auto operand : adaptor.getInputs())
+    result += cast<StringAttr>(operand).getValue();
+
+  return StringAttr::get(getContext(), result);
+}
+
+namespace {
+/// Flatten nested string.concat operations into a single concat.
+/// string.concat(a, string.concat(b, c), d) -> string.concat(a, b, c, d)
+class FlattenStringConcat : public mlir::OpRewritePattern<StringConcatOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult
+  matchAndRewrite(StringConcatOp concat,
+                  mlir::PatternRewriter &rewriter) const override {
+
+    // Check if any operands are nested concats with a single use.  Only inline
+    // single-use nested concats to avoid fighting with DCE.
+    bool hasNestedConcat = llvm::any_of(concat.getInputs(), [](Value operand) {
+      auto nestedConcat = operand.getDefiningOp<StringConcatOp>();
+      return nestedConcat && operand.hasOneUse();
+    });
+
+    if (!hasNestedConcat)
+      return failure();
+
+    // Flatten nested concats that have a single use.
+    SmallVector<Value> flatOperands;
+    for (auto input : concat.getInputs()) {
+      if (auto nestedConcat = input.getDefiningOp<StringConcatOp>();
+          nestedConcat && input.hasOneUse())
+        llvm::append_range(flatOperands, nestedConcat.getInputs());
+      else
+        flatOperands.push_back(input);
+    }
+
+    rewriter.modifyOpInPlace(concat,
+                             [&]() { concat->setOperands(flatOperands); });
+    return success();
+  }
+};
+
+/// Merge consecutive constant strings in a concat and remove empty strings.
+/// string.concat("a", "b", x, "", "c", "d") -> string.concat("ab", x, "cd")
+class MergeAdjacentStringConstants
+    : public mlir::OpRewritePattern<StringConcatOp> {
+public:
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult
+  matchAndRewrite(StringConcatOp concat,
+                  mlir::PatternRewriter &rewriter) const override {
+
+    SmallVector<Value> newOperands;
+    SmallString<64> accumulatedLit;
+    SmallVector<StringConstantOp> accumulatedOps;
+    bool changed = false;
+
+    auto flushLiterals = [&]() {
+      if (accumulatedOps.empty())
+        return;
+
+      // If only one literal, reuse it.
+      if (accumulatedOps.size() == 1) {
+        newOperands.push_back(accumulatedOps[0]);
+      } else {
+        // Multiple literals - merge them.
+        auto newLit = rewriter.createOrFold<StringConstantOp>(
+            concat.getLoc(), StringAttr::get(getContext(), accumulatedLit));
+        newOperands.push_back(newLit);
+        changed = true;
+      }
+      accumulatedLit.clear();
+      accumulatedOps.clear();
+    };
+
+    for (auto operand : concat.getInputs()) {
+      if (auto litOp = operand.getDefiningOp<StringConstantOp>()) {
+        // Skip empty strings.
+        if (litOp.getValue().empty()) {
+          changed = true;
+          continue;
+        }
+        accumulatedLit += litOp.getValue();
+        accumulatedOps.push_back(litOp);
+      } else {
+        flushLiterals();
+        newOperands.push_back(operand);
+      }
+    }
+
+    // Flush any remaining literals.
+    flushLiterals();
+
+    if (!changed)
+      return failure();
+
+    // If no operands remain, replace with empty string.
+    if (newOperands.empty())
+      return rewriter.replaceOpWithNewOp<StringConstantOp>(
+                 concat, StringAttr::get(getContext(), "")),
+             success();
+
+    // Single-operand case is handled by the folder.
+    rewriter.modifyOpInPlace(concat,
+                             [&]() { concat->setOperands(newOperands); });
+    return success();
+  }
+};
+
+} // namespace
+
+void StringConcatOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                 MLIRContext *context) {
+  results.insert<FlattenStringConcat, MergeAdjacentStringConstants>(context);
 }
 
 OpFoldResult BitCastOp::fold(FoldAdaptor adaptor) {
@@ -1556,14 +1688,12 @@ OpFoldResult BitsPrimOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
-struct BitsOfCat : public mlir::RewritePattern {
-  BitsOfCat(MLIRContext *context)
-      : RewritePattern(BitsPrimOp::getOperationName(), 0, context) {}
+struct BitsOfCat : public mlir::OpRewritePattern<BitsPrimOp> {
+  using OpRewritePattern::OpRewritePattern;
 
   LogicalResult
-  matchAndRewrite(Operation *op,
+  matchAndRewrite(BitsPrimOp bits,
                   mlir::PatternRewriter &rewriter) const override {
-    auto bits = cast<BitsPrimOp>(op);
     auto cat = bits.getInput().getDefiningOp<CatPrimOp>();
     if (!cat)
       return failure();
@@ -1579,8 +1709,8 @@ struct BitsOfCat : public mlir::RewritePattern {
       if (bitPos < operandWidth) {
         if (bitPos + resultWidth <= operandWidth) {
           auto newBits = rewriter.createOrFold<BitsPrimOp>(
-              op->getLoc(), operand, bitPos + resultWidth - 1, bitPos);
-          replaceOpAndCopyName(rewriter, op, newBits);
+              bits.getLoc(), operand, bitPos + resultWidth - 1, bitPos);
+          replaceOpAndCopyName(rewriter, bits, newBits);
           return success();
         }
         return failure();
@@ -1679,15 +1809,13 @@ namespace {
 // If the mux has a known output width, pad the operands up to this width.
 // Most folds on mux require that folded operands are of the same width as
 // the mux itself.
-class MuxPad : public mlir::RewritePattern {
+class MuxPad : public mlir::OpRewritePattern<MuxPrimOp> {
 public:
-  MuxPad(MLIRContext *context)
-      : RewritePattern(MuxPrimOp::getOperationName(), 0, context) {}
+  using OpRewritePattern::OpRewritePattern;
 
   LogicalResult
-  matchAndRewrite(Operation *op,
+  matchAndRewrite(MuxPrimOp mux,
                   mlir::PatternRewriter &rewriter) const override {
-    auto mux = cast<MuxPrimOp>(op);
     auto width = mux.getType().getBitWidthOrSentinel();
     if (width < 0)
       return failure();
@@ -1708,7 +1836,7 @@ public:
       return failure();
 
     replaceOpWithNewOpAndCopyName<MuxPrimOp>(
-        rewriter, op, mux.getType(), ValueRange{mux.getSel(), newHigh, newLow},
+        rewriter, mux, mux.getType(), ValueRange{mux.getSel(), newHigh, newLow},
         mux->getAttrs());
     return success();
   }
@@ -1716,10 +1844,9 @@ public:
 
 // Find muxes which have conditions dominated by other muxes with the same
 // condition.
-class MuxSharedCond : public mlir::RewritePattern {
+class MuxSharedCond : public mlir::OpRewritePattern<MuxPrimOp> {
 public:
-  MuxSharedCond(MLIRContext *context)
-      : RewritePattern(MuxPrimOp::getOperationName(), 0, context) {}
+  using OpRewritePattern::OpRewritePattern;
 
   static const int depthLimit = 5;
 
@@ -1785,9 +1912,8 @@ public:
   }
 
   LogicalResult
-  matchAndRewrite(Operation *op,
+  matchAndRewrite(MuxPrimOp mux,
                   mlir::PatternRewriter &rewriter) const override {
-    auto mux = cast<MuxPrimOp>(op);
     auto width = mux.getType().getBitWidthOrSentinel();
     if (width < 0)
       return failure();
@@ -2267,12 +2393,10 @@ LogicalResult WhenOp::canonicalize(WhenOp op, PatternRewriter &rewriter) {
 namespace {
 // Remove private nodes.  If they have an interesting names, move the name to
 // the source expression.
-struct FoldNodeName : public mlir::RewritePattern {
-  FoldNodeName(MLIRContext *context)
-      : RewritePattern(NodeOp::getOperationName(), 0, context) {}
-  LogicalResult matchAndRewrite(Operation *op,
+struct FoldNodeName : public mlir::OpRewritePattern<NodeOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(NodeOp node,
                                 PatternRewriter &rewriter) const override {
-    auto node = cast<NodeOp>(op);
     auto name = node.getNameAttr();
     if (!node.hasDroppableName() || node.getInnerSym() ||
         !AnnotationSet(node).empty() || node.isForceable())
@@ -2286,12 +2410,10 @@ struct FoldNodeName : public mlir::RewritePattern {
 };
 
 // Bypass nodes.
-struct NodeBypass : public mlir::RewritePattern {
-  NodeBypass(MLIRContext *context)
-      : RewritePattern(NodeOp::getOperationName(), 0, context) {}
-  LogicalResult matchAndRewrite(Operation *op,
+struct NodeBypass : public mlir::OpRewritePattern<NodeOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(NodeOp node,
                                 PatternRewriter &rewriter) const override {
-    auto node = cast<NodeOp>(op);
     if (node.getInnerSym() || !AnnotationSet(node).empty() ||
         node.use_empty() || node.isForceable())
       return failure();
@@ -2537,12 +2659,10 @@ OpFoldResult UninferredResetCastOp::fold(FoldAdaptor adaptor) {
 namespace {
 // A register with constant reset and all connection to either itself or the
 // same constant, must be replaced by the constant.
-struct FoldResetMux : public mlir::RewritePattern {
-  FoldResetMux(MLIRContext *context)
-      : RewritePattern(RegResetOp::getOperationName(), 0, context) {}
-  LogicalResult matchAndRewrite(Operation *op,
+struct FoldResetMux : public mlir::OpRewritePattern<RegResetOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(RegResetOp reg,
                                 PatternRewriter &rewriter) const override {
-    auto reg = cast<RegResetOp>(op);
     auto reset =
         dyn_cast_or_null<ConstantOp>(reg.getResetValue().getDefiningOp());
     if (!reset || hasDontTouch(reg.getOperation()) ||
@@ -2741,12 +2861,10 @@ static void erasePort(PatternRewriter &rewriter, Value port) {
 
 namespace {
 // If memory has known, but zero width, eliminate it.
-struct FoldZeroWidthMemory : public mlir::RewritePattern {
-  FoldZeroWidthMemory(MLIRContext *context)
-      : RewritePattern(MemOp::getOperationName(), 0, context) {}
-  LogicalResult matchAndRewrite(Operation *op,
+struct FoldZeroWidthMemory : public mlir::OpRewritePattern<MemOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(MemOp mem,
                                 PatternRewriter &rewriter) const override {
-    MemOp mem = cast<MemOp>(op);
     if (hasDontTouch(mem))
       return failure();
 
@@ -2762,7 +2880,7 @@ struct FoldZeroWidthMemory : public mlir::RewritePattern {
 
     // Annoyingly, there isn't a good replacement for the port as a whole,
     // since they have an outer flip type.
-    for (auto port : op->getResults()) {
+    for (auto port : mem.getResults()) {
       for (auto *user : llvm::make_early_inc_range(port.getUsers())) {
         SubfieldOp sfop = cast<SubfieldOp>(user);
         StringRef fieldName = sfop.getFieldName();
@@ -2778,18 +2896,16 @@ struct FoldZeroWidthMemory : public mlir::RewritePattern {
         }
       }
     }
-    rewriter.eraseOp(op);
+    rewriter.eraseOp(mem);
     return success();
   }
 };
 
 // If memory has no write ports and no file initialization, eliminate it.
-struct FoldReadOrWriteOnlyMemory : public mlir::RewritePattern {
-  FoldReadOrWriteOnlyMemory(MLIRContext *context)
-      : RewritePattern(MemOp::getOperationName(), 0, context) {}
-  LogicalResult matchAndRewrite(Operation *op,
+struct FoldReadOrWriteOnlyMemory : public mlir::OpRewritePattern<MemOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(MemOp mem,
                                 PatternRewriter &rewriter) const override {
-    MemOp mem = cast<MemOp>(op);
     if (hasDontTouch(mem))
       return failure();
     bool isRead = false, isWritten = false;
@@ -2822,18 +2938,16 @@ struct FoldReadOrWriteOnlyMemory : public mlir::RewritePattern {
     for (auto port : mem.getResults())
       erasePort(rewriter, port);
 
-    rewriter.eraseOp(op);
+    rewriter.eraseOp(mem);
     return success();
   }
 };
 
 // Eliminate the dead ports of memories.
-struct FoldUnusedPorts : public mlir::RewritePattern {
-  FoldUnusedPorts(MLIRContext *context)
-      : RewritePattern(MemOp::getOperationName(), 0, context) {}
-  LogicalResult matchAndRewrite(Operation *op,
+struct FoldUnusedPorts : public mlir::OpRewritePattern<MemOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(MemOp mem,
                                 PatternRewriter &rewriter) const override {
-    MemOp mem = cast<MemOp>(op);
     if (hasDontTouch(mem))
       return failure();
     // Identify the dead and changed ports.
@@ -2892,18 +3006,16 @@ struct FoldUnusedPorts : public mlir::RewritePattern {
         rewriter.replaceAllUsesWith(port, newOp.getResult(nextPort++));
     }
 
-    rewriter.eraseOp(op);
+    rewriter.eraseOp(mem);
     return success();
   }
 };
 
 // Rewrite write-only read-write ports to write ports.
-struct FoldReadWritePorts : public mlir::RewritePattern {
-  FoldReadWritePorts(MLIRContext *context)
-      : RewritePattern(MemOp::getOperationName(), 0, context) {}
-  LogicalResult matchAndRewrite(Operation *op,
+struct FoldReadWritePorts : public mlir::OpRewritePattern<MemOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(MemOp mem,
                                 PatternRewriter &rewriter) const override {
-    MemOp mem = cast<MemOp>(op);
     if (hasDontTouch(mem))
       return failure();
 
@@ -2984,19 +3096,17 @@ struct FoldReadWritePorts : public mlir::RewritePattern {
         rewriter.replaceAllUsesWith(result, newResult);
       }
     }
-    rewriter.eraseOp(op);
+    rewriter.eraseOp(mem);
     return success();
   }
 };
 
 // Eliminate the dead ports of memories.
-struct FoldUnusedBits : public mlir::RewritePattern {
-  FoldUnusedBits(MLIRContext *context)
-      : RewritePattern(MemOp::getOperationName(), 0, context) {}
+struct FoldUnusedBits : public mlir::OpRewritePattern<MemOp> {
+  using OpRewritePattern::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(Operation *op,
+  LogicalResult matchAndRewrite(MemOp mem,
                                 PatternRewriter &rewriter) const override {
-    MemOp mem = cast<MemOp>(op);
     if (hasDontTouch(mem))
       return failure();
 
@@ -3118,7 +3228,7 @@ struct FoldUnusedBits : public mlir::RewritePattern {
     }
 
     // Create the new op with the new port types.
-    auto newType = IntType::get(op->getContext(), type.isSigned(), newWidth);
+    auto newType = IntType::get(mem->getContext(), type.isSigned(), newWidth);
     SmallVector<Type> portTypes;
     for (auto [i, port] : llvm::enumerate(mem.getResults())) {
       portTypes.push_back(
@@ -3213,12 +3323,10 @@ struct FoldUnusedBits : public mlir::RewritePattern {
 };
 
 // Rewrite single-address memories to a firrtl register.
-struct FoldRegMems : public mlir::RewritePattern {
-  FoldRegMems(MLIRContext *context)
-      : RewritePattern(MemOp::getOperationName(), 0, context) {}
-  LogicalResult matchAndRewrite(Operation *op,
+struct FoldRegMems : public mlir::OpRewritePattern<MemOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(MemOp mem,
                                 PatternRewriter &rewriter) const override {
-    MemOp mem = cast<MemOp>(op);
     const FirMemory &info = mem.getSummary();
     if (hasDontTouch(mem) || info.depth != 1)
       return failure();

@@ -75,8 +75,8 @@ firrtl.circuit "UnableToInferDomainOfPortDrivenByConstant" {
   // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   // CHECK:   %foo_ClockDomain, %foo_i = firrtl.instance foo @Foo(in ClockDomain: !firrtl.domain<@ClockDomain()>, in i: !firrtl.uint<1> domains [ClockDomain])
   // CHECK:   %ClockDomain = firrtl.domain.anon : !firrtl.domain<@ClockDomain()>
-  // CHECK:   firrtl.domain.define %foo_ClockDomain, %ClockDomain : !firrtl.domain<@ClockDomain()>
   // CHECK:   firrtl.matchingconnect %foo_i, %c0_ui1 : !firrtl.uint<1>
+  // CHECK:   firrtl.domain.define %foo_ClockDomain, %ClockDomain : !firrtl.domain<@ClockDomain()>
   // CHECK: }
   firrtl.module @UnableToInferDomainOfPortDrivenByConstant() {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -91,8 +91,8 @@ firrtl.circuit "UnableToInferDomainOfPortDrivenByConstant" {
   // CHECK:   %0 = firrtl.add %c0_ui1, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
   // CHECK:   %bar_ClockDomain, %bar_i = firrtl.instance bar @Bar(in ClockDomain: !firrtl.domain<@ClockDomain()>, in i: !firrtl.uint<2> domains [ClockDomain])
   // CHECK:   %ClockDomain = firrtl.domain.anon : !firrtl.domain<@ClockDomain()>
-  // CHECK:   firrtl.domain.define %bar_ClockDomain, %ClockDomain : !firrtl.domain<@ClockDomain()>
   // CHECK:   firrtl.matchingconnect %bar_i, %0 : !firrtl.uint<2>
+  // CHECK:   firrtl.domain.define %bar_ClockDomain, %ClockDomain : !firrtl.domain<@ClockDomain()>
   // CHECK: }
   firrtl.module @UnableToInferDomainOfPortDrivenByConstantExpr() {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>

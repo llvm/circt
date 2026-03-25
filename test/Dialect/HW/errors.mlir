@@ -528,6 +528,11 @@ hw.module @elementTypeError() {
 #innerRef = #hw.innerNameRef<@innerRef>
 
 // -----
+
+// expected-error @+1 {{'hw.module.extern' op requires 0 port locations but got 1}}
+hw.module.extern @bad_port_locs() attributes {port_locs = [loc("port")]}
+
+// -----
 %0 = unrealized_conversion_cast to !hw.array<1000xi42>
 %1 = hw.constant 0 : i9
 // expected-error @below {{index bit width equals ceil(log2(length(input))), or 0 or 1 if input contains only one element}}

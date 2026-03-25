@@ -308,7 +308,7 @@ void HWIMDeadCodeElim::runOnOperation() {
       visitValue(*value);
     } else if (auto *instance = std::get_if<HWInstanceLike>(&v)) {
       visitInstanceLike(*instance);
-    } else if (auto *moduleLike = std::get_if<HWModuleLike>(&v)) {
+    } else if (std::get_if<HWModuleLike>(&v)) {
       continue;
     }
   }
