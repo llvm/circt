@@ -14,7 +14,7 @@ function automatic int add1
 endfunction
 
 // CHECK: moore.global_variable @__unit__a : !moore.i32
-// CHECK: func.func private @__unit__add1
+// CHECK: func.func private @add1
 
 // CHECK-LABEL: moore.module @use_unit
 module use_unit;
@@ -26,7 +26,7 @@ module use_unit;
     // CHECK: moore.blocking_assign [[B]], [[AV]]
     b = a;
     // CHECK: [[BV:%.*]] = moore.read [[B]] : <i32>
-    // CHECK: [[SUM:%.*]] = func.call @__unit__add1([[BV]])
+    // CHECK: [[SUM:%.*]] = func.call @add1([[BV]])
     // CHECK: moore.blocking_assign [[B]], [[SUM]]
     b = add1(b);
   end

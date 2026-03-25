@@ -601,7 +601,7 @@ endclass
 
 /// Check virtual dispatch
 
-// CHECK-LABEL: func.func private @__unit__testVirtualDispatch
+// CHECK-LABEL: func.func private @testVirtualDispatch
 // CHECK-SAME: (%arg0: !moore.class<@testClassVirtual>) {
 // CHECK-NEXT:    [[VMETH:%.+]] = moore.vtable.load_method %arg0 : @testFun of <@testClassVirtual> -> (!moore.class<@testClassVirtual>) -> ()
 // CHECK-NEXT:    call_indirect [[VMETH]](%arg0) : (!moore.class<@testClassVirtual>) -> ()
@@ -653,7 +653,7 @@ function int parameterAccessClass::testFunction();
    return this.testParam + testParam + parameterAccessClass::testParam;
 endfunction
 
-// CHECK-LABEL: func.func private @__unit__testFun() -> !moore.i32 {
+// CHECK-LABEL: func.func private @testFun() -> !moore.i32 {
 // CHECK: [[VC:%.+]] = moore.variable : <class<@parameterAccessClass>>
 // CHECK: [[READ:%.+]] = moore.read [[VC]] : <class<@parameterAccessClass>>
 // CHECK: [[CALL:%.+]] = call @"parameterAccessClass::testFunction"([[READ]]) : (!moore.class<@parameterAccessClass>) -> !moore.i32
