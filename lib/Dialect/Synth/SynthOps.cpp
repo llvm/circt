@@ -56,9 +56,7 @@ LogicalResult ChoiceOp::canonicalize(ChoiceOp op, PatternRewriter &rewriter) {
   llvm::SmallSetVector<Operation *, 4> visitedChoices;
 
   auto addToWorklist = [&](ChoiceOp choice) -> bool {
-if(choice->getBlock() == op->getBlock() && visitedChoices.insert(choice))
-{
-}
+    if (choice->getBlock() == op->getBlock() && visitedChoices.insert(choice)) {
       worklist.insert(choice.getInputs().begin(), choice.getInputs().end());
       return true;
     }
