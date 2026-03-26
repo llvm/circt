@@ -1172,7 +1172,7 @@ private:
 /// Does not add a leading or trailing '.'.
 static void appendGenerateScopePrefix(Operation *defOp,
                                       SmallVectorImpl<char> &out) {
-  SmallVector<SmallString<32>, 4> segments;
+  SmallVector<StringRef> segments;
   Block *block = defOp->getBlock();
   while (block) {
     Region *region = block->getParent();
