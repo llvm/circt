@@ -48,9 +48,6 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
       firrtl::createLowerIntrinsics());
 
-  if (auto mode = FirtoolOptions::toInferDomainsPassMode(opt.getDomainMode()))
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferDomains({*mode}));
-
   return success();
 }
 
@@ -131,6 +128,14 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
     modulePM.addPass(firrtl::createExpandWhens());
     modulePM.addPass(firrtl::createSFCCompat());
   }
+
+  // InferDomains runs after ExpandWhens because FIRRTL allows for last-connect
+  // semantics and users have historically relied on this behavior to set
+  // default connections that are then overridden later.  If this pass is run
+  // before ExpandWhens, then users can get errors if they rely on last-connect
+  // semantics.
+  if (auto mode = FirtoolOptions::toInferDomainsPassMode(opt.getDomainMode()))
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferDomains({*mode}));
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createCheckCombLoops());
 
