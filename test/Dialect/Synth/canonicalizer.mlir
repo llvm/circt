@@ -140,3 +140,16 @@ hw.module @choice_single_operand(in %a: i4, out o: i4) {
   %0 = synth.choice %a : i4
   hw.output %0 : i4
 }
+
+// CHECK-LABEL: func @test_transitive_merge
+func.func @test_transitive_merge(%x: i32, %y: i32, %z: i32, %u: i32, %v: i32) -> (i32, i32) {
+  %0 = synth.choice %x, %y, %z : i32
+  %1 = synth.choice %0, %u : i32
+  %2 = synth.choice %z, %v : i32
+  
+  // CHECK-NEXT: %[[MEGA_CHOICE:.*]] = synth.choice %arg3, %arg0, %arg1, %arg2, %arg4 : i32
+  // CHECK-NEXT: return %[[MEGA_CHOICE]], %[[MEGA_CHOICE]] : i32
+  return %1, %2 : i32, i32
+}
+
+

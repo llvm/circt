@@ -15,7 +15,9 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/Value.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/LogicalResult.h"
 
@@ -38,6 +40,70 @@ OpFoldResult ChoiceOp::fold(FoldAdaptor adaptor) {
   if (adaptor.getInputs().size() == 1)
     return getOperand(0);
   return {};
+}
+
+// Canonicalize a network of synth.choice operations by computing their
+// transitive closure and flattening them into a single choice operation.
+// This merges nested choices and deduplicates shared operands.
+// Pattern matched:
+//   %0 = synth.choice %x, %y, %z
+//   %1 = synth.choice %0, %u
+//   %2 = synth.choice %z, %v
+//     =>
+//   %merged = synth.choice %x, %y, %z, %u, %v
+LogicalResult ChoiceOp::canonicalize(ChoiceOp op, PatternRewriter &rewriter) {
+  llvm::SetVector<Value> worklist;
+  llvm::SmallSetVector<Operation *, 4> visitedChoices;
+
+  auto addToWorklist = [&](ChoiceOp choice) -> bool {
+    if (choice->getBlock() == op->getBlock() && visitedChoices.insert(choice)) {
+      worklist.insert(choice.getInputs().begin(), choice.getInputs().end());
+      return true;
+    }
+    return false;
+  };
+
+  addToWorklist(op);
+
+  bool mergedOtherChoices = false;
+
+  // Look up and down at definitions and users.
+  for (unsigned i = 0; i < worklist.size(); ++i) {
+    Value val = worklist[i];
+    if (auto defOp = val.getDefiningOp<synth::ChoiceOp>()) {
+
+      if (addToWorklist(defOp))
+        mergedOtherChoices = true;
+    }
+
+    for (Operation *user : val.getUsers()) {
+      if (auto userChoice = llvm::dyn_cast<synth::ChoiceOp>(user)) {
+        if (addToWorklist(userChoice)) {
+          mergedOtherChoices = true;
+        }
+      }
+    }
+  }
+
+  llvm::SmallVector<mlir::Value> finalOperands;
+  for (Value v : worklist) {
+    if (!visitedChoices.contains(v.getDefiningOp())) {
+      finalOperands.push_back(v);
+    }
+  }
+
+  if (!mergedOtherChoices && finalOperands.size() == op.getInputs().size())
+    return llvm::failure();
+
+  auto newChoice = synth::ChoiceOp::create(rewriter, op->getLoc(), op.getType(),
+                                           finalOperands);
+  for (Operation *visited : visitedChoices.takeVector())
+    rewriter.replaceOp(visited, newChoice);
+
+  for (auto value : newChoice.getInputs())
+    rewriter.replaceAllUsesExcept(value, newChoice.getResult(), newChoice);
+
+  return success();
 }
 
 LogicalResult MajorityInverterOp::verify() {
