@@ -1953,9 +1953,11 @@ firrtl.circuit "InstanceChoiceTest" {
   // CHECK-NOT: firrtl.option
   // CHECK-NOT: firrtl.option_case
   sv.macro.decl @targets$Opt$FPGA
+  sv.macro.decl @targets$Opt$ASIC
   sv.macro.decl @targets$Power$Low
   firrtl.option @Opt {
     firrtl.option_case @FPGA { case_macro = @targets$Opt$FPGA }
+    firrtl.option_case @ASIC { case_macro = @targets$Opt$ASIC }
   }
 
   firrtl.option @Power {
@@ -1981,18 +1983,26 @@ firrtl.circuit "InstanceChoiceTest" {
     // CHECK:      %[[WIRE:.+]] = sv.wire
     // CHECK:      %[[READ:.+]] = sv.read_inout %[[WIRE]]
     // CHECK:      sv.ifdef @targets$Opt$FPGA {
-    // CHECK-NEXT:   %{{.+}} = hw.instance "inst_FPGA" sym @{{.+}} @ModuleFPGA
+    // CHECK-NEXT:   sv.ifdef @targets$Opt$ASIC { 
+    // CHECK-NEXT:     sv.error "Multiple instance choice options defined for option Opt: targets$Opt$FPGA and targets$Opt$ASIC" 
+    // CHECK-NEXT:   }
+    // CHECK:        %{{.+}} = hw.instance "inst_FPGA" sym @{{.+}} @ModuleFPGA
     // CHECK-NEXT:   sv.assign %[[WIRE]]
     // CHECK-NEXT:   sv.macro.def @targets$Opt$InstanceChoiceUnit$inst
     // CHECK-SAME:   ([#hw.innerNameRef<@InstanceChoiceUnit::@{{.+}}>])
     // CHECK-NEXT: } else {
-    // CHECK-NEXT:   {{.+}} = hw.instance "inst_default" sym @{{.+}} @ModuleDefault
-    // CHECK-NEXT:   sv.assign %[[WIRE]]
-    // CHECK-NEXT:   sv.macro.def @targets$Opt$InstanceChoiceUnit$inst
-    // CHECK-SAME:   ([#hw.innerNameRef<@InstanceChoiceUnit::@{{.+}}>])
+    // CHECK-NEXT:   sv.ifdef @targets$Opt$ASIC {
+    // CHECK:          hw.instance "inst_ASIC"
+    // CHECK:        } else {
+    // CHECK-NEXT:     {{.+}} = hw.instance "inst_default" sym @{{.+}} @ModuleDefault
+    // CHECK-NEXT:     sv.assign %[[WIRE]]
+    // CHECK-NEXT:     sv.macro.def @targets$Opt$InstanceChoiceUnit$inst
+    // CHECK-SAME:     ([#hw.innerNameRef<@InstanceChoiceUnit::@{{.+}}>])
+    // CHECK-NEXT:   }
     // CHECK-NEXT: }
     // CHECK: hw.output %[[READ]]
-    %inst_in, %inst_out = firrtl.instance_choice inst {instance_macro = @targets$Opt$InstanceChoiceUnit$inst} @ModuleDefault alternatives @Opt { @FPGA -> @ModuleFPGA } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    %inst_in, %inst_out = firrtl.instance_choice inst {instance_macro = @targets$Opt$InstanceChoiceUnit$inst} @ModuleDefault alternatives @Opt 
+                          { @FPGA -> @ModuleFPGA, @ASIC -> @ModuleDefault } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.matchingconnect %inst_in, %in : !firrtl.uint<8>
     firrtl.matchingconnect %out, %inst_out : !firrtl.uint<8>
   }
