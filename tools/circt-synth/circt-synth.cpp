@@ -189,6 +189,10 @@ static cl::opt<bool>
 static cl::opt<bool> enableSOPBalancing("enable-sop-balancing",
                                         cl::desc("Enable SOP balancing"),
                                         cl::init(false), cl::cat(mainCategory));
+static cl::opt<bool> enableFunctionalReduction(
+    "enable-functional-reduction",
+    cl::desc("Enable FunctionalReduction during synth optimization"),
+    cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<int> maxCutSizePerRoot("max-cut-size-per-root",
                                       cl::desc("Maximum cut size per root"),
@@ -274,6 +278,8 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
     optimizationOptions.disableWordToBits.setValue(disableWordToBits);
     optimizationOptions.timingAware.setValue(!disableTimingAware);
     optimizationOptions.disableSOPBalancing.setValue(!enableSOPBalancing);
+    optimizationOptions.disableFunctionalReduction.setValue(
+        !enableFunctionalReduction);
 
     circt::synth::buildSynthOptimizationPipeline(pm, optimizationOptions);
     if (untilReached(UntilMapping))

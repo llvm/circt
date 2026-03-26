@@ -21,6 +21,7 @@
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Support/Passes.h"
+#include "circt/Support/SATSolver.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/Passes.h"
@@ -132,6 +133,9 @@ void circt::synth::buildSynthOptimizationPipeline(
     pm.addPass(createStructuralHash());
   }
 
+  if (!options.disableFunctionalReduction && hasIncrementalSATSolverBackend())
+    pm.addPass(createFunctionalReduction());
+
   if (!options.abcCommands.empty()) {
     synth::ABCRunnerOptions abcOptions;
     abcOptions.abcPath = options.abcPath;
@@ -140,7 +144,7 @@ void circt::synth::buildSynthOptimizationPipeline(
     abcOptions.continueOnFailure = options.ignoreAbcFailures;
     pm.addPass(synth::createABCRunner(abcOptions));
   }
-  // TODO: Add balancing, rewriting, FRAIG conversion, etc.
+  // TODO: Add more balancing and rewriting passes.
 }
 
 //===----------------------------------------------------------------------===//

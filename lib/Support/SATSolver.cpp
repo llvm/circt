@@ -237,4 +237,9 @@ std::unique_ptr<IncrementalSATSolver> createCadicalSATSolver() {
 #endif
 }
 
+bool hasIncrementalSATSolverBackend() {
+  return static_cast<bool>(createCadicalSATSolver()) ||
+         static_cast<bool>(createZ3SATSolver());
+}
+
 } // namespace circt

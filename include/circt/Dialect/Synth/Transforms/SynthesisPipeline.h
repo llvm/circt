@@ -77,6 +77,11 @@ struct SynthOptimizationPipelineOptions
       *this, "disable-sop-balancing",
       llvm::cl::desc("Disable SOPBalancing pass"), llvm::cl::init(true)};
 
+  PassOptions::Option<bool> disableFunctionalReduction{
+      *this, "disable-functional-reduction",
+      llvm::cl::desc("Disable FunctionalReduction pass"),
+      llvm::cl::init(false)};
+
   PassOptions::Option<bool> timingAware{
       *this, "timing-aware",
       llvm::cl::desc("Lower operators in a timing-aware fashion"),
