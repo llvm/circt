@@ -55,3 +55,17 @@ firrtl.circuit "LayerblockCrossBlock" {
     }
   }
 }
+
+// Test that when forwarding through connects and using the "pruneUnusedOps"
+// APIs, that this doesn't break if both the source and the destination are
+// pruned twice (once by visiting the source and once by the destination).
+// See: https://github.com/llvm/circt/issues/10049
+firrtl.circuit "PruneUnusedSourceAndDest" {
+  // CHECK-LABEL: firrtl.module @PruneUnusedSourceAndDest
+  firrtl.module @PruneUnusedSourceAndDest(in %clk: !firrtl.clock, in %rst: !firrtl.asyncreset) {
+    // CHECK-NEXT: }
+    %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
+    %reg = firrtl.regreset %clk, %rst, %c0_ui4 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.matchingconnect %reg, %c0_ui4 : !firrtl.uint<4>
+  }
+}
