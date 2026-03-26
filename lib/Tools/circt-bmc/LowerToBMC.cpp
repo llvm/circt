@@ -209,11 +209,13 @@ void LowerToBMCPass::runOnOperation() {
         LLVM::AddressOfOp::create(builder, loc, global)->getResult(0));
   };
 
-  auto successStrAddr =
-      createUniqueStringGlobal("Bound reached with no violations!\n");
-  auto failureStrAddr =
-      createUniqueStringGlobal("Assertion can be violated!\n");
-
+auto successStrAddr = createUniqueStringGlobal(
+      "Bound reached with no violations within " + std::to_string(bound) +
+      " clock cycle(s).\n");
+  auto failureStrAddr = createUniqueStringGlobal(
+      "Assertion can be violated within " + std::to_string(bound) +
+      " clock cycle(s)!\n");
+      
   if (failed(successStrAddr) || failed(failureStrAddr)) {
     moduleOp->emitOpError("could not create result message strings");
     return signalPassFailure();
