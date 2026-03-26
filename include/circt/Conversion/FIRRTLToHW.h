@@ -42,7 +42,8 @@ enum class VerificationFlavor {
 std::unique_ptr<mlir::Pass>
 createLowerFIRRTLToHWPass(bool enableAnnotationWarning = false,
                           firrtl::VerificationFlavor assertionFlavor =
-                              firrtl::VerificationFlavor::None);
+                              firrtl::VerificationFlavor::None,
+                          bool disallowInstanceChoiceDefault = false);
 
 } // namespace circt
 

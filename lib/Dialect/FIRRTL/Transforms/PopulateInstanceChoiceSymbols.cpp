@@ -38,7 +38,7 @@ namespace {
 void getOptionCaseMacroName(StringAttr optionName, StringAttr caseName,
                             SmallVectorImpl<char> &macroName) {
   llvm::raw_svector_ostream os(macroName);
-  os << "__option_" << optionName.getValue() << "_" << caseName.getValue();
+  os << "targets$" << optionName.getValue() << "$" << caseName.getValue();
 }
 
 class PopulateInstanceChoiceSymbolsPass
@@ -82,8 +82,8 @@ PopulateInstanceChoiceSymbolsPass::assignSymbol(InstanceChoiceOp op) {
   SmallString<128> instanceMacroName;
   {
     llvm::raw_svector_ostream os(instanceMacroName);
-    os << "__target_" << optionName.getValue() << "_"
-       << parentModule.getModuleName() << "_" << op.getInstanceName();
+    os << "targets$" << optionName.getValue() << "$"
+       << parentModule.getModuleName() << "$" << op.getInstanceName();
   }
 
   // Ensure global uniqueness using CircuitNamespace.

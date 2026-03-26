@@ -450,8 +450,10 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
             clEnumValN(circt::firrtl::VerificationFlavor::Immediate,
               "immediate", "Use immediate verif statements"),
             clEnumValN(circt::firrtl::VerificationFlavor::SVA, "sva", "Use SVA")
-          )}]
-           >
+          )}]>,
+    Option<"disallowInstanceChoiceDefault", "disallow-instance-choice-default",
+           "bool", "false",
+           "Generate an error instead of using the default module for instance choices">
   ];
 }
 

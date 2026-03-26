@@ -169,6 +169,10 @@ public:
 
   DomainMode getDomainMode() const { return domainMode; }
 
+  bool shouldDisallowInstanceChoiceDefault() const {
+    return disallowInstanceChoiceDefault;
+  }
+
   // Setters, used by the CAPI
   FirtoolOptions &setOutputFilename(StringRef name) {
     outputFilename = name;
@@ -453,6 +457,7 @@ private:
   bool fixupEICGWrapper;
   bool disableCSEinClasses;
   bool selectDefaultInstanceChoice;
+  bool disallowInstanceChoiceDefault;
   verif::SymbolicValueLowering symbolicValueLowering;
   bool disableWireElimination;
   bool lintStaticAsserts;
