@@ -7,9 +7,9 @@
 //===----------------------------------------------------------------------===//
 //
 // This pass implements FunctionalReduction (Functionally Reduced And-Inverter
-// Graph) optimization using a built-in minimal CDCL SAT solver. It identifies
-// and merges functionally equivalent nodes through simulation-based candidate
-// detection followed by SAT-based verification.
+// Graph) optimization. It identifies and merges functionally equivalent nodes
+// through simulation-based candidate detection followed by SAT-based
+// verification.
 //
 //===----------------------------------------------------------------------===//
 
@@ -54,6 +54,20 @@ using namespace circt::synth;
 
 namespace {
 enum class EquivResult { Proved, Disproved, Unknown };
+
+std::unique_ptr<IncrementalSATSolver>
+createFunctionalReductionSATSolver(llvm::StringRef backend) {
+  if (backend == "auto") {
+    if (auto solver = createCadicalSATSolver())
+      return solver;
+    return createZ3SATSolver();
+  }
+  if (backend == "cadical")
+    return createCadicalSATSolver();
+  if (backend == "z3")
+    return createZ3SATSolver();
+  return {};
+}
 
 class FunctionalReductionSATBuilder {
 public:
@@ -747,8 +761,15 @@ struct FunctionalReductionPass
     }
 
     std::unique_ptr<IncrementalSATSolver> satSolver;
-    if (!testTransformation)
-      satSolver = createZ3SATSolver();
+    if (!testTransformation) {
+      satSolver = createFunctionalReductionSATSolver(this->satSolver);
+      if (!satSolver) {
+        module.emitError() << "unsupported or unavailable SAT solver '"
+                           << this->satSolver
+                           << "' (expected auto, z3, or cadical)";
+        return signalPassFailure();
+      }
+    }
 
     FunctionalReductionSolver fcSolver(module, numRandomPatterns, seed,
                                        testTransformation,

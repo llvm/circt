@@ -303,7 +303,9 @@ def FunctionalReduction : Pass<"synth-functional-reduction", "hw::HWModuleOp"> {
            "Number of random simulation patterns (must be a positive multiple of 64; "
            "each pattern is one bit in a 64-bit word)">,
     Option<"seed", "seed", "unsigned", "0",
-           "Seed for random pattern generation">
+           "Seed for random pattern generation">,
+    Option<"satSolver", "sat-solver", "std::string", "\"auto\"",
+           "SAT solver backend to use: auto, z3, or cadical">
   ];
   let statistics = [
     Statistic<"numEquivClasses", "num-equiv-classes",

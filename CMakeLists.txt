@@ -667,6 +667,87 @@ if(CIRCT_LIBFST_ENABLED)
   install(TARGETS fst EXPORT CIRCTTargets)
 endif()
 
+
+option(CIRCT_CADICAL_ENABLED "Enables CaDiCaL usage." OFF)
+llvm_canonicalize_cmake_booleans(CIRCT_CADICAL_ENABLED)
+
+if(CIRCT_CADICAL_ENABLED)
+  message(STATUS "CaDiCaL is enabled")
+
+  # Build CaDiCaL as part of CIRCT.
+  include(FetchContent)
+  FetchContent_Declare(
+    cadical
+    GIT_REPOSITORY https://github.com/arminbiere/cadical.git
+    GIT_TAG 7b99c07f0bcab5824a5a3ce62c7066554017f641
+  )
+  set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
+
+  # Force CaDiCaL to be built as a static library.
+  set(ORIGINAL_CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+  set(ORIGINAL_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+
+  set(BUILD_SHARED_LIBS OFF)
+  FetchContent_GetProperties(cadical)
+  if(NOT cadical_POPULATED)
+    FetchContent_Populate(cadical)
+  endif()
+  file(STRINGS "${cadical_SOURCE_DIR}/VERSION" cadical_version LIMIT_COUNT 1)
+
+  file(GLOB cadical_cpp_sources CONFIGURE_DEPENDS
+    "${cadical_SOURCE_DIR}/src/*.cpp"
+  )
+  file(GLOB cadical_c_sources CONFIGURE_DEPENDS
+    "${cadical_SOURCE_DIR}/src/*.c"
+  )
+  file(GLOB cadical_contrib_sources CONFIGURE_DEPENDS
+    "${cadical_SOURCE_DIR}/contrib/*.cpp"
+  )
+  # Match upstream libcadical.a, which excludes the standalone solver and
+  # model-based tester frontends from the library.
+  list(REMOVE_ITEM cadical_cpp_sources
+    "${cadical_SOURCE_DIR}/src/cadical.cpp"
+    "${cadical_SOURCE_DIR}/src/mobical.cpp"
+  )
+
+  add_library(cadical STATIC
+    ${cadical_cpp_sources}
+    ${cadical_c_sources}
+    ${cadical_contrib_sources}
+  )
+
+  # CaDiCaL supports non-make builds with NBUILD, which avoids generating
+  # build.hpp and lets consumers include only cadical.hpp.
+  target_compile_definitions(cadical PRIVATE
+    NBUILD
+    VERSION="${cadical_version}"
+    DATE="reproducible build"
+  )
+  target_compile_features(cadical PUBLIC cxx_std_11)
+
+  # Expose cadical.hpp under third_party/cadical/cadical.hpp for consumers.
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/include/third_party/cadical")
+  file(COPY "${cadical_SOURCE_DIR}/src/cadical.hpp"
+        DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/include/third_party/cadical")
+
+  target_include_directories(cadical
+    PUBLIC
+      "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>"
+    PRIVATE
+      "${cadical_SOURCE_DIR}/src"
+  )
+
+  set(CMAKE_CXX_FLAGS ${ORIGINAL_CMAKE_CXX_FLAGS})
+  set(BUILD_SHARED_LIBS ${ORIGINAL_BUILD_SHARED_LIBS})
+
+  if(BUILD_SHARED_LIBS)
+    set_target_properties(cadical PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  endif()
+
+  set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS cadical)
+  install(TARGETS cadical EXPORT CIRCTTargets)
+endif()
+
 #-------------------------------------------------------------------------------
 # Arcilator JIT
 #-------------------------------------------------------------------------------

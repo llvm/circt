@@ -15,6 +15,10 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/SMTAPI.h"
 
+#ifdef CIRCT_CADICAL_ENABLED
+#include "third_party/cadical/cadical.hpp"
+#endif
+
 #include <cassert>
 #include <cstdlib>
 #include <string>
@@ -22,6 +26,55 @@
 namespace circt {
 
 namespace {
+
+//===----------------------------------------------------------------------===//
+// CaDiCaL Backend
+//===----------------------------------------------------------------------===//
+
+#ifdef CIRCT_CADICAL_ENABLED
+
+class CadicalSATSolver : public IncrementalSATSolver {
+public:
+  void add(int lit) override { solver.add(lit); }
+  void assume(int lit) override {
+    if (lit != 0)
+      solver.assume(lit);
+  }
+  Result solve() override {
+    switch (solver.solve()) {
+    case CaDiCaL::SATISFIABLE:
+      return kSAT;
+    case CaDiCaL::UNSATISFIABLE:
+      return kUNSAT;
+    default:
+      return kUNKNOWN;
+    }
+  }
+  int val(int v) const override {
+    if (v <= 0 || v > maxVariable)
+      return 0;
+    return solver.val(v);
+  }
+  void reserveVars(int maxVar) override {
+    if (maxVar <= maxVariable)
+      return;
+    solver.resize(maxVar);
+    maxVariable = maxVar;
+  }
+  void addClause(llvm::ArrayRef<int> lits) override {
+    if (lits.empty()) {
+      solver.add(0);
+      return;
+    }
+    solver.clause(lits.data(), lits.size());
+  }
+
+private:
+  mutable CaDiCaL::Solver solver;
+  int maxVariable = 0;
+};
+
+#endif // CIRCT_CADICAL_ENABLED
 
 //===----------------------------------------------------------------------===//
 // Z3 Backend
@@ -171,6 +224,14 @@ void Z3SATSolver::addClauseInternal(llvm::ArrayRef<int> lits) {
 std::unique_ptr<IncrementalSATSolver> createZ3SATSolver() {
 #if LLVM_WITH_Z3
   return std::make_unique<Z3SATSolver>();
+#else
+  return {};
+#endif
+}
+
+std::unique_ptr<IncrementalSATSolver> createCadicalSATSolver() {
+#ifdef CIRCT_CADICAL_ENABLED
+  return std::make_unique<CadicalSATSolver>();
 #else
   return {};
 #endif

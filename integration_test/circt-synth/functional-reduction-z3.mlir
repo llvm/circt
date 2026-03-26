@@ -1,5 +1,5 @@
 // REQUIRES: z3-integration, libz3
-// RUN: circt-opt %s -pass-pipeline='builtin.module(hw.module(synth-functional-reduction{num-random-patterns=64}))' -o %t.mlir
+// RUN: circt-opt %s -pass-pipeline='builtin.module(hw.module(synth-functional-reduction{num-random-patterns=64 sat-solver=z3}))' -o %t.mlir
 // RUN: cat %t.mlir | FileCheck %s
 
 // RUN: circt-lec %s %t.mlir --shared-libs=%libz3 --c1 functional_reduction_sat --c2 functional_reduction_sat | FileCheck %s --check-prefix=BASIC
