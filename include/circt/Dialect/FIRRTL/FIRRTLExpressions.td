@@ -1466,6 +1466,9 @@ def StringConcatOp : FIRRTLOp<"string.concat", [Pure, SameOperandsAndResultType]
   let results = (outs StringType:$result);
 
   let assemblyFormat = "$inputs attr-dict `:` type($result)";
+
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 def UnknownValueOp : FIRRTLOp<"unknown", [

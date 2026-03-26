@@ -3973,4 +3973,54 @@ firrtl.module @ResetCast(out %a0: !firrtl.reset, out %a1: !firrtl.reset) {
   firrtl.matchingconnect %a1, %1 : !firrtl.reset
 }
 
+// CHECK-LABEL: firrtl.module @StringConcatCanonicalization
+firrtl.module @StringConcatCanonicalization(in %str1: !firrtl.string, in %str2: !firrtl.string, out %out1: !firrtl.string, out %out2: !firrtl.string, out %out3: !firrtl.string, out %out4: !firrtl.string, out %out5: !firrtl.string, out %out6: !firrtl.string, out %out7: !firrtl.string) {
+  %s1 = firrtl.string "Hello"
+  %s2 = firrtl.string "World"
+  %s3 = firrtl.string "!"
+  %empty = firrtl.string ""
+
+  // CHECK-DAG: [[EMPTY:%.+]] = firrtl.string ""
+  // CHECK-DAG: [[HELLO:%.+]] = firrtl.string "Hello"
+  // CHECK-DAG: [[HELLOWORLD:%.+]] = firrtl.string "HelloWorld!"
+  // CHECK-DAG: [[CONST:%.+]] = firrtl.string "!"
+
+  // Merge all constants
+  // CHECK: firrtl.propassign %out1, [[HELLOWORLD]]
+  %0 = firrtl.string.concat %s1, %s2, %s3 : !firrtl.string
+  firrtl.propassign %out1, %0 : !firrtl.string
+
+  // Drop empty string
+  // CHECK: firrtl.propassign %out2, [[HELLO]]
+  %1 = firrtl.string.concat %s1, %empty : !firrtl.string
+  firrtl.propassign %out2, %1 : !firrtl.string
+
+  // Single operand replaced with operand
+  // CHECK: firrtl.propassign %out3, [[HELLO]]
+  %2 = firrtl.string.concat %s1 : !firrtl.string
+  firrtl.propassign %out3, %2 : !firrtl.string
+
+  // Empty concat
+  // CHECK: firrtl.propassign %out4, [[EMPTY]]
+  %3 = firrtl.string.concat %empty, %empty : !firrtl.string
+  firrtl.propassign %out4, %3 : !firrtl.string
+
+  // Flatten nested concat (single use)
+  // CHECK: firrtl.propassign %out5, [[HELLOWORLD]]
+  %4 = firrtl.string.concat %s1, %s2 : !firrtl.string
+  %5 = firrtl.string.concat %4, %s3 : !firrtl.string
+  firrtl.propassign %out5, %5 : !firrtl.string
+
+  // Nested concat with multiple uses should NOT be flattened
+  // to avoid fighting with DCE.
+  // CHECK-DAG: [[NESTED:%.+]] = firrtl.string.concat %str1, %str2
+  // CHECK-DAG: [[CONCAT1:%.+]] = firrtl.string.concat [[NESTED]], [[CONST]]
+  // CHECK: firrtl.propassign %out6, [[CONCAT1]]
+  // CHECK: firrtl.propassign %out7, [[NESTED]]
+  %nested = firrtl.string.concat %str1, %str2 : !firrtl.string
+  %concat1 = firrtl.string.concat %nested, %s3 : !firrtl.string
+  firrtl.propassign %out6, %concat1 : !firrtl.string
+  firrtl.propassign %out7, %nested : !firrtl.string
+}
+
 }

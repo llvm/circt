@@ -19,21 +19,23 @@ arc.model @foo io !hw.modty<> traceTaps [#arc.trace_tap<i32, 0, ["sig32"]>, #arc
 // CHECK-DAG: llvm.func private @_arc_trace_instrument_i64(%arg0: !llvm.ptr, %arg1: i64, %arg2: i64)
 
 // CHECK-LABEL: llvm.func @bar(%arg0: !llvm.ptr, %arg1: i130)
-// CHECK-NOT  : llvm.store
-// CHECK      : %[[OLDVAL:.+]] = llvm.load %[[STATE:.+]] : !llvm.ptr -> i130
-// CHECK-NEXT : %[[CMP:.+]] = llvm.icmp "ne" %arg1, %[[OLDVAL]] : i130
-// CHECK-NEXT : llvm.cond_br %[[CMP]], ^[[BB1:.+]], ^[[BB2:.+]]
-// CHECK-NEXT : ^[[BB1]]:
-// CHECK-DAG  : llvm.store %arg1, [[STATE]] : i130, !llvm.ptr
-// CHECK-DAG  : llvm.call @_arc_trace_instrument_i192
-// CHECK      : ^[[BB2]]:
+// CHECK-NOT:   llvm.store
+// CHECK:       %[[OLDVAL:.+]] = llvm.load %[[STATE:.+]] : !llvm.ptr -> i130
+// CHECK-NEXT:  %[[CMP:.+]] = llvm.icmp "ne" %arg1, %[[OLDVAL]] : i130
+// CHECK-NEXT:  llvm.cond_br %[[CMP]], ^[[BB1:.+]], ^[[BB2:.+]]
+// CHECK-NEXT:  ^[[BB1]]:
+// CHECK-DAG:   llvm.store %arg1, %[[STATE]] : i130, !llvm.ptr
+// CHECK-DAG:   llvm.call @_arc_trace_instrument_i192
+// CHECK:       ^[[BB2]]:
 
 // CHECK-LABEL: llvm.func @foo_eval(%arg0: !llvm.ptr)
-// CHECK-NOT  : llvm.store
-// CHECK      : %[[OLDVAL:.+]] = llvm.load %[[STATE:.+]] : !llvm.ptr -> i32
-// CHECK-NEXT : %[[CMP:.+]] = llvm.icmp "ne" %{{.+}}, %[[OLDVAL]] : i130
-// CHECK-NEXT : llvm.cond_br %[[CMP]], ^[[BB1:.+]], ^[[BB2:.+]]
-// CHECK-NEXT : ^[[BB1]]:
-// CHECK-DAG  : llvm.store %arg1, [[STATE]] : i32, !llvm.ptr
-// CHECK-DAG  : llvm.call @_arc_trace_instrument_i64
-// CHECK      : ^[[BB2]]:
+// CHECK-NOT:   llvm.store
+// CHECK:       %[[CONST123:.+]] = {{.+}}(123 : i32)
+// CHECK-NOT:   llvm.store
+// CHECK:       %[[OLDVAL:.+]] = llvm.load %[[STATE:.+]] : !llvm.ptr -> i32
+// CHECK-NEXT:  %[[CMP:.+]] = llvm.icmp "ne" %{{.+}}, %[[OLDVAL]] : i32
+// CHECK-NEXT:  llvm.cond_br %[[CMP]], ^[[BB1:.+]], ^[[BB2:.+]]
+// CHECK-NEXT:  ^[[BB1]]:
+// CHECK-DAG:   llvm.store %[[CONST123]], %[[STATE]] : i32, !llvm.ptr
+// CHECK-DAG:   llvm.call @_arc_trace_instrument_i64
+// CHECK:       ^[[BB2]]:

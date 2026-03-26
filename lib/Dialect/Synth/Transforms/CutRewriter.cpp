@@ -268,8 +268,8 @@ LogicalResult circt::synth::topologicallySortLogicNetwork(Operation *topOp) {
     // Topologically sort AIG ops, MIG ops, and dataflow ops. Other operations
     // can be scheduled.
     return !(isa<aig::AndInverterOp, mig::MajorityInverterOp>(op) ||
-             isa<comb::XorOp, comb::AndOp, comb::ExtractOp, comb::ReplicateOp,
-                 comb::ConcatOp>(op));
+             isa<comb::XorOp, comb::AndOp, comb::OrOp, comb::ExtractOp,
+                 comb::ReplicateOp, comb::ConcatOp>(op));
   };
 
   if (failed(topologicallySortGraphRegionBlocks(topOp, isOperationReady)))

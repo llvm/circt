@@ -34,6 +34,7 @@ class OpenUnpackedArrayType;
 class PackedType;
 class QueueType;
 class RealType;
+class RefType;
 class StringType;
 class StructType;
 class TimeType;
@@ -103,7 +104,7 @@ public:
   static bool classof(Type type) {
     return llvm::isa<PackedType, StringType, ChandleType, EventType, RealType,
                      UnpackedArrayType, OpenUnpackedArrayType, AssocArrayType,
-                     QueueType, UnpackedStructType, UnpackedUnionType,
+                     QueueType, UnpackedStructType, UnpackedUnionType, RefType,
                      ClassHandleType>(type);
   }
 

@@ -119,9 +119,6 @@ def InstanceOp : HardwareDeclOp<"instance", [
            CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>];
 
   let extraClassDeclaration = [{
-    /// Hooks for domain information.
-    Attribute getPortDomain(unsigned portIdx);
-
     //===------------------------------------------------------------------===//
     // Single-module methods
     //===------------------------------------------------------------------===//

@@ -3485,3 +3485,27 @@ firrtl.circuit "DomainCreateWrongFieldType" {
     // expected-error @-1 {{use of value '%period' expects different type than prior uses: '!firrtl.integer' vs '!firrtl.string'}}
   }
 }
+
+// -----
+
+firrtl.circuit "InstanceChoiceAggregate" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+  firrtl.module private @Target(
+    in %in: !firrtl.vector<uint<8>, 2>,
+    out %out: !firrtl.vector<uint<8>, 2>
+  ) attributes {convention = #firrtl<convention internal>} { }
+
+  firrtl.module public @PublicTarget(
+    in %in: !firrtl.vector<uint<8>, 2>,
+    out %out: !firrtl.vector<uint<8>, 2>
+  ) attributes {convention = #firrtl<convention scalarized>}{ }
+
+  firrtl.module @InstanceChoiceAggregate() {
+    // expected-error @below {{'firrtl.instance_choice' op all modules must have the same convention}}
+    %inst_in, %inst_out = firrtl.instance_choice inst sym @sym @Target alternatives @Platform {
+      @FPGA -> @PublicTarget
+    } (in in: !firrtl.vector<uint<8>, 2>, out out: !firrtl.vector<uint<8>, 2>)
+  }
+}

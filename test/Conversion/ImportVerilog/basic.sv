@@ -4878,8 +4878,8 @@ endinterface
 
 // CHECK-LABEL: moore.module private @HasModport(out bus_data : !moore.l8, out bus_valid : !moore.l1) {
 // CHECK:         %bus_data = moore.variable : <l8>
-// CHECK:         [[D:%.+]] = moore.read %bus_data : <l8>
 // CHECK:         %bus_valid = moore.variable : <l1>
+// CHECK:         [[D:%.+]] = moore.read %bus_data : <l8>
 // CHECK:         [[V:%.+]] = moore.read %bus_valid : <l1>
 // CHECK:         moore.output [[D]], [[V]] : !moore.l8, !moore.l1
 // CHECK:       }
@@ -4985,12 +4985,12 @@ endmodule
 // Test G: Two ports of the same interface type on one module.
 // CHECK-LABEL: moore.module private @TwoPortsSameType(out a_data : !moore.l8, out a_valid : !moore.l1, out b_data : !moore.l8, out b_valid : !moore.l1) {
 // CHECK:         %a_data = moore.variable : <l8>
-// CHECK:         [[AD:%.+]] = moore.read %a_data : <l8>
 // CHECK:         %a_valid = moore.variable : <l1>
-// CHECK:         [[AV:%.+]] = moore.read %a_valid : <l1>
 // CHECK:         %b_data = moore.variable : <l8>
-// CHECK:         [[BD:%.+]] = moore.read %b_data : <l8>
 // CHECK:         %b_valid = moore.variable : <l1>
+// CHECK:         [[AD:%.+]] = moore.read %a_data : <l8>
+// CHECK:         [[AV:%.+]] = moore.read %a_valid : <l1>
+// CHECK:         [[BD:%.+]] = moore.read %b_data : <l8>
 // CHECK:         [[BV:%.+]] = moore.read %b_valid : <l1>
 // CHECK:         moore.output [[AD]], [[AV]], [[BD]], [[BV]] : !moore.l8, !moore.l1, !moore.l8, !moore.l1
 // CHECK:       }
@@ -5105,4 +5105,3 @@ module DynamicArrayDeleteTest;
   end
 
 endmodule
-
