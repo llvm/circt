@@ -8,6 +8,12 @@ on:
     types: [assigned, opened, synchronize, reopened]
   workflow_dispatch:
 
+# FIXME: `concurrency` causes random cancellation (See https://github.com/orgs/community/discussions/188508)
+# # Cancel previous CI builds when a new push occurs to the same PR.
+# concurrency:
+#  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+#  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Do sanity check (clang-format and python-format) first.
   sanity-check:
@@ -160,11 +166,6 @@ jobs:
             mode: Release
             assert: OFF
             shared: OFF
-
-    # Cancel previous CI builds when a new push occurs to the same PR.
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}-${{ matrix.compiler.cc }}-${{ matrix.compiler.cxx }}-${{ matrix.compiler.mode }}-${{ matrix.compiler.assert }}-${{ matrix.compiler.shared }}
-      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
     steps:
       - name: Configure Environment
