@@ -438,11 +438,11 @@ void HWIMDeadCodeElim::runOnOperation() {
     if (isBlockExecutable(module.getBodyBlock())) {
       rewriteModuleSignature(module);
     } else {
-      // If the module is unreachable from the toplevel, just delete it.
-      // Note that post-order traversal on the instance graph never visit
-      // unreachable modules so it's safe to erase the module even though
-      // `modules` seems to be capturing module pointers.
-      module.erase();
+      // In some cases erasue here is not yet correct. E.g.
+      //   sv.verbatim "{{0}}" { symbols = [@baz] }
+      //   // Not reachable from the top level.
+      //   hw.module private @baz() {}
+      // module.erase();
     }
   }
 
@@ -587,7 +587,7 @@ void HWIMDeadCodeElim::rewriteModuleSignature(HWModuleOp module) {
     for (auto newResult : newInstance.getResults())
       liveElements.insert(newResult);
 
-    use->erase();
+    instanceGraph->replaceInstance(instance, newInstance);
     instance->erase();
   }
 
