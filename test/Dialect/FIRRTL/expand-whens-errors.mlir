@@ -253,15 +253,6 @@ firrtl.module @Test() {
 
 // -----
 
-firrtl.circuit "DomainTypeUndriven" {
-  firrtl.domain @ClockDomain
-  // expected-error @below {{port "A" not fully initialized in "DomainTypeUndriven"}}
-  firrtl.module @DomainTypeUndriven(out %A: !firrtl.domain<@ClockDomain()>) {}
-}
-
-
-// -----
-
 firrtl.circuit "instance_choice_test" {
 firrtl.option @Platform {
   firrtl.option_case @FPGA

@@ -6,9 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// InferDomains implements FIRRTL domain inference and checking. This pass is a
-// bottom-up transform acting on modules. For each moduleOp, we ensure there are
-// no domain crossings, and we make explicit the domain associations of ports.
+// InferDomains implements FIRRTL domain inference and checking.  This pass is
+// a bottom-up transform acting on modules.  For each moduleOp, we ensure there
+// are no domain crossings, and we make explicit the domain associations of
+// ports.
+//
+// This pass does not require that ExpandWhens has run, but it should have run.
+// If ExpandWhens has not been run, then duplicate connections will influence
+// domain inference and this can result in errors.
 //
 //===----------------------------------------------------------------------===//
 
