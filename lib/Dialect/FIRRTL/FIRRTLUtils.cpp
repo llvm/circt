@@ -126,7 +126,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 
   // If the types are the exact same we can just connect them.
   if (dstType == srcType && dstType.isPassive() &&
-      !dstType.hasUninferredWidth()) {
+      !dstType.hasUninferredWidth() && !dstType.containsAnalog()) {
     MatchingConnectOp::create(builder, dst, src);
     return;
   }
