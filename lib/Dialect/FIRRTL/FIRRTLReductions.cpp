@@ -1327,12 +1327,11 @@ struct ConnectForwarder : public Reduction {
   LogicalResult rewrite(Operation *op) override {
     auto dst = op->getOperand(0);
     auto src = op->getOperand(1);
-    dst.replaceAllUsesWith(src);
+    dst.replaceAllUsesExcept(src, op);
     op->erase();
-    if (auto *dstOp = dst.getDefiningOp())
-      reduce::pruneUnusedOps(dstOp, *this);
-    if (auto *srcOp = src.getDefiningOp())
-      reduce::pruneUnusedOps(srcOp, *this);
+    SmallVector<Operation *> worklist(
+        {dst.getDefiningOp(), src.getDefiningOp()});
+    reduce::pruneUnusedOps(worklist, *this);
     return success();
   }
 

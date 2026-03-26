@@ -18,6 +18,13 @@ struct Reduction;
 
 namespace reduce {
 
+/// Starting from an initial worklist of operations, traverse through it and its
+/// operands and erase operations that have no more uses.  This is useful when
+/// there are repeated calls to `pruneUnusedOp` that want to delete the same
+/// operations.
+void pruneUnusedOps(SmallVectorImpl<Operation *> &worklist,
+                    Reduction &reduction);
+
 /// Starting at the given `op`, traverse through it and its operands and erase
 /// operations that have no more uses.
 void pruneUnusedOps(Operation *initialOp, Reduction &reduction);

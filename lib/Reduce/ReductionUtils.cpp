@@ -29,21 +29,26 @@ const char *MetasyntacticNameGenerator::getNextName() {
 // Utilities
 //===----------------------------------------------------------------------===//
 
-void reduce::pruneUnusedOps(Operation *initialOp, Reduction &reduction) {
-  SmallVector<Operation *> worklist;
+void reduce::pruneUnusedOps(SmallVectorImpl<Operation *> &worklist,
+                            Reduction &reduction) {
   SmallSet<Operation *, 4> handled;
-  worklist.push_back(initialOp);
   while (!worklist.empty()) {
     auto *op = worklist.pop_back_val();
-    if (!op->use_empty() || op->hasAttr("inner_sym"))
+    if (!op || handled.contains(op) || !op->use_empty() ||
+        op->hasAttr("inner_sym"))
       continue;
+    handled.insert(op);
     for (auto arg : op->getOperands())
       if (auto *argOp = arg.getDefiningOp())
-        if (handled.insert(argOp).second)
-          worklist.push_back(argOp);
+        worklist.push_back(argOp);
     reduction.notifyOpErased(op);
     op->erase();
   }
+}
+
+void reduce::pruneUnusedOps(Operation *initialOp, Reduction &reduction) {
+  SmallVector<Operation *> worklist({initialOp});
+  pruneUnusedOps(worklist, reduction);
 }
 
 //===----------------------------------------------------------------------===//
