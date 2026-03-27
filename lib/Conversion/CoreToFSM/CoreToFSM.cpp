@@ -1153,6 +1153,15 @@ public:
     front.eraseArguments([&](BlockArgument arg) {
       return asyncResetBlockArguments.contains(arg);
     });
+
+    if (llvm::any_of(front.getArguments(), [](BlockArgument arg) {
+          return arg.getType() == seq::ClockType::get(arg.getContext()) &&
+                 arg.hasNUsesOrMore(1);
+        })) {
+      moduleOp.emitError("Clock uses outside register clocking are not "
+                         "currently supported.");
+      return failure();
+    }
     machine.getBody().front().eraseArguments([&](BlockArgument arg) {
       return arg.getType() == seq::ClockType::get(arg.getContext());
     });
