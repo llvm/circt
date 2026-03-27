@@ -679,6 +679,13 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
         APInt(type.getWidth(), (uint64_t)value, isSigned));
 }
 
+/// This builder constructs a 1-bit boolean constant in the specified domain.
+void ConstantOp::build(OpBuilder &builder, OperationState &result,
+                       Domain domain, bool value) {
+  auto type = IntType::get(builder.getContext(), 1, domain);
+  build(builder, result, type, value ? 1 : 0, /*isSigned=*/false);
+}
+
 OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
   assert(adaptor.getOperands().empty() && "constant has no operands");
   return getValueAttr();

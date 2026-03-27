@@ -629,6 +629,7 @@ def ConstantOp : MooreOp<"constant", [Pure, ConstantLike]> {
     OpBuilder<(ins "IntType":$type, "const APInt &":$value)>,
     OpBuilder<(
       ins "IntType":$type, "int64_t":$value, CArg<"bool", "true">:$isSigned)>,
+    OpBuilder<(ins "Domain":$domain, "bool":$value)>,
   ];
 }
 

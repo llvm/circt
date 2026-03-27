@@ -1119,6 +1119,40 @@ struct StmtVisitor {
       }
     }
 
+    // Monitor enable/disable tasks (`$monitoron`, `$monitoroff`)
+    if (nameId == ksn::MonitorOn || nameId == ksn::MonitorOff) {
+      context.ensureMonitorGlobals();
+      bool enable = (nameId == ksn::MonitorOn);
+      auto enabledRef = moore::GetGlobalVariableOp::create(
+          context.builder, loc, context.monitorEnabledGlobal);
+      auto value = moore::ConstantOp::create(context.builder, loc,
+                                             moore::Domain::TwoValued, enable);
+      moore::BlockingAssignOp::create(context.builder, loc, enabledRef, value);
+      return true;
+    }
+
+    // Monitor tasks (`$monitor[boh]?`)
+    if (nameId == ksn::Monitor || nameId == ksn::MonitorB ||
+        nameId == ksn::MonitorO || nameId == ksn::MonitorH) {
+      context.ensureMonitorGlobals();
+
+      // Allocate a unique ID for this monitor.
+      unsigned myId = context.nextMonitorId++;
+
+      // Emit code to activate this monitor by setting the active_id global.
+      auto i32Type = moore::IntType::getInt(context.getContext(), 32);
+      auto idConst =
+          moore::ConstantOp::create(context.builder, loc, i32Type, myId);
+      auto activeRef = moore::GetGlobalVariableOp::create(
+          context.builder, loc, context.monitorActiveIdGlobal);
+      moore::BlockingAssignOp::create(context.builder, loc, activeRef, idConst);
+
+      // Queue this monitor for processing at module level.
+      context.pendingMonitors.push_back({myId, loc, &expr});
+
+      return true;
+    }
+
     // Give up on any other system tasks. These will be tried again as an
     // expression later.
     return false;
@@ -1209,3 +1243,124 @@ LogicalResult Context::convertStatement(const slang::ast::Statement &stmt) {
   return stmt.visit(StmtVisitor(*this, loc));
 }
 // NOLINTEND(misc-no-recursion)
+
+//===----------------------------------------------------------------------===//
+// Monitor support
+//===----------------------------------------------------------------------===//
+
+void Context::ensureMonitorGlobals() {
+  // If globals already exist, nothing to do.
+  if (monitorActiveIdGlobal && monitorEnabledGlobal)
+    return;
+
+  // Save current builder position and insert at the start of the module.
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPointToStart(intoModuleOp.getBody());
+
+  auto loc = intoModuleOp.getLoc();
+  auto i32Type = moore::IntType::getInt(getContext(), 32);
+  auto i1Type = moore::IntType::getInt(getContext(), 1);
+
+  // Create "active_id" global variable. Index 0 indicates no monitor
+  // is active.
+  monitorActiveIdGlobal = moore::GlobalVariableOp::create(
+      builder, loc, "__monitor_active_id", i32Type);
+  {
+    OpBuilder::InsertionGuard initGuard(builder);
+    builder.setInsertionPointToStart(
+        &monitorActiveIdGlobal.getInitRegion().emplaceBlock());
+    auto zero = moore::ConstantOp::create(builder, loc, i32Type, 0);
+    moore::YieldOp::create(builder, loc, zero);
+  }
+  symbolTable.insert(monitorActiveIdGlobal);
+
+  // Create "enabled" global variable.
+  monitorEnabledGlobal = moore::GlobalVariableOp::create(
+      builder, loc, "__monitor_enabled", i1Type);
+  {
+    OpBuilder::InsertionGuard initGuard(builder);
+    builder.setInsertionPointToStart(
+        &monitorEnabledGlobal.getInitRegion().emplaceBlock());
+    auto trueVal =
+        moore::ConstantOp::create(builder, loc, moore::Domain::TwoValued, true);
+    moore::YieldOp::create(builder, loc, trueVal);
+  }
+  symbolTable.insert(monitorEnabledGlobal);
+}
+
+LogicalResult Context::flushPendingMonitors() {
+  using ksn = slang::parsing::KnownSystemName;
+  for (auto &pending : pendingMonitors) {
+    auto &call = *pending.call;
+    auto loc = pending.loc;
+
+    // Extract the SystemCallInfo from the call's subroutine variant.
+    auto &info =
+        std::get<slang::ast::CallExpression::SystemCallInfo>(call.subroutine);
+    auto nameId = info.subroutine->knownNameId;
+
+    // Determine the default format based on the system call name.
+    auto defaultFormat = moore::IntFormat::Decimal;
+    switch (nameId) {
+    case ksn::MonitorB:
+      defaultFormat = moore::IntFormat::Binary;
+      break;
+    case ksn::MonitorO:
+      defaultFormat = moore::IntFormat::Octal;
+      break;
+    case ksn::MonitorH:
+      defaultFormat = moore::IntFormat::HexLower;
+      break;
+    default:
+      break;
+    }
+
+    // Create an always_comb procedure for this monitor. This will implement the
+    // semantics of printing an updated message whenever one of the input
+    // signals changes.
+    auto alwaysProc = moore::ProcedureOp::create(
+        builder, loc, moore::ProcedureKind::AlwaysComb);
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(&alwaysProc.getBody().emplaceBlock());
+
+    // Convert the format string and arguments.
+    auto message = convertFormatString(call.arguments(), loc, defaultFormat,
+                                       /*appendNewline=*/true);
+    if (failed(message))
+      return failure();
+
+    // Check if this monitor is active and enabled.
+    auto i32Type = moore::IntType::getInt(getContext(), 32);
+    auto myId = moore::ConstantOp::create(builder, loc, i32Type, pending.id);
+    Value isActive =
+        moore::GetGlobalVariableOp::create(builder, loc, monitorActiveIdGlobal);
+    isActive = moore::ReadOp::create(builder, loc, isActive);
+    isActive = moore::EqOp::create(builder, loc, isActive, myId);
+
+    Value enabled =
+        moore::GetGlobalVariableOp::create(builder, loc, monitorEnabledGlobal);
+    enabled = moore::ReadOp::create(builder, loc, enabled);
+    enabled = moore::AndOp::create(builder, loc, isActive, enabled);
+    enabled = moore::ToBuiltinIntOp::create(builder, loc, enabled);
+
+    // Branch to a print or skip block based on whether the monitor is enabled
+    // or not.
+    auto &printBlock = alwaysProc.getBody().emplaceBlock();
+    auto &skipBlock = alwaysProc.getBody().emplaceBlock();
+    cf::CondBranchOp::create(builder, loc, enabled, &printBlock, &skipBlock);
+
+    // Display the formatted message if one was created, and the monitor is
+    // enabled.
+    builder.setInsertionPointToStart(&printBlock);
+    if (*message)
+      moore::DisplayBIOp::create(builder, loc, *message);
+    moore::ReturnOp::create(builder, loc);
+
+    // Otherwise just return.
+    builder.setInsertionPointToStart(&skipBlock);
+    moore::ReturnOp::create(builder, loc);
+  }
+
+  pendingMonitors.clear();
+  return success();
+}

@@ -1291,6 +1291,10 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     auto loc = convertLocation(member.location);
     if (failed(member.visit(ModuleVisitor(*this, loc))))
       return failure();
+    // Flush any pending monitors after each member. This places the monitor
+    // procedures immediately after the code that sets them up.
+    if (failed(flushPendingMonitors()))
+      return failure();
   }
 
   // Create additional ops to drive input port values onto the corresponding
