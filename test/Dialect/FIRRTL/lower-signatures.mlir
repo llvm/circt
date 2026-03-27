@@ -164,3 +164,19 @@ firrtl.circuit "InstanceChoice" {
       (in D: !firrtl.domain<@ClockDomain()>, in b: !firrtl.bundle<x: uint<1>, y: uint<2>> domains [D])
   }
 }
+
+// Analog types in a non-passive bundle must use attach, not matchingconnect.
+// CHECK-LABEL: firrtl.circuit "AnalogInMixedBundle"
+firrtl.circuit "AnalogInMixedBundle" {
+  // CHECK-LABEL: firrtl.module private @Foo
+  // CHECK: out %p_a: !firrtl.vector<analog<1>, 1>
+  // CHECK: firrtl.attach
+  firrtl.module private @Foo(out %p: !firrtl.bundle<a: vector<analog<1>, 1>, e flip: uint<1>>) attributes {convention = #firrtl<convention internal>} {
+  }
+
+  // CHECK-LABEL: firrtl.module @AnalogInMixedBundle
+  firrtl.module @AnalogInMixedBundle() {
+    // CHECK: firrtl.attach
+    %foo_p = firrtl.instance foo @Foo(out p: !firrtl.bundle<a: vector<analog<1>, 1>, e flip: uint<1>>)
+  }
+}
