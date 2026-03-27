@@ -5166,7 +5166,7 @@ ParseResult FIRStmtParser::parseNode() {
                                       startTok.getLoc());
 }
 
-/// wire ::= 'wire' id ':' type info?
+/// wire ::= 'wire' id ':' type ('domains' '[' domain_list ']')? info?
 ParseResult FIRStmtParser::parseWire() {
   auto startTok = consumeToken(FIRToken::kw_wire);
 
@@ -5179,7 +5179,45 @@ ParseResult FIRStmtParser::parseWire() {
   FIRRTLType type;
   if (parseId(id, "expected wire name") ||
       parseToken(FIRToken::colon, "expected ':' in wire") ||
-      parseType(type, "expected wire type") || parseOptionalInfo())
+      parseType(type, "expected wire type"))
+    return failure();
+
+  // Parse optional domain associations
+  SmallVector<Value> domains;
+  if (consumeIf(FIRToken::kw_domains)) {
+    if (requireFeature(missingSpecFIRVersion, "domains", startTok.getLoc()))
+      return failure();
+
+    if (parseToken(FIRToken::l_square, "expected '[' after 'domains'"))
+      return failure();
+
+    if (parseListUntil(FIRToken::r_square, [&]() -> ParseResult {
+          StringRef domainName;
+          auto domainLoc = getToken().getLoc();
+          if (parseId(domainName, "expected domain name"))
+            return failure();
+
+          // Look up the domain value in the module context
+          SymbolValueEntry lookup;
+          if (moduleContext.lookupSymbolEntry(lookup, domainName, domainLoc))
+            return failure();
+
+          // Resolve the symbol table entry to a Value
+          Value domainValue;
+          if (moduleContext.resolveSymbolEntry(domainValue, lookup, domainLoc))
+            return failure();
+
+          if (!isa<DomainType>(domainValue.getType()))
+            return emitError(domainLoc)
+                   << "'" << domainName << "' is not a domain";
+
+          domains.push_back(domainValue);
+          return success();
+        }))
+      return failure();
+  }
+
+  if (parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
@@ -5192,7 +5230,8 @@ ParseResult FIRStmtParser::parseWire() {
                       ? NameKindEnum::DroppableName
                       : NameKindEnum::InterestingName;
 
-  auto result = WireOp::create(builder, type, id, namekind, annotations, sym);
+  auto result = WireOp::create(builder, type, id, namekind, annotations, sym,
+                               /*forceable=*/false, domains);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
