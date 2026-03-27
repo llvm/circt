@@ -111,3 +111,14 @@ hw.module @regs_without_reset(in %clk : !seq.clock) {
     // expected-warning @below {{Assuming register with no reset starts with value 0}}
     %var = seq.compreg name "var" %state, %clk : i1
 }
+
+// -----
+
+// expected-warning @+2 {{reset signals detected and removed from FSM}}
+// expected-error @+1 {{Clock uses outside register clocking are not currently supported.}}
+hw.module @clock_use(in %clk : !seq.clock, in %rst : i1) {
+    %c0_i1 = hw.constant 0 : i1
+    %state = seq.compreg name "state" %state, %clk reset %rst, %c0_i1 : i1
+    %clk_as_i1 = seq.from_clock %clk
+    verif.assert %clk_as_i1 : i1
+}
