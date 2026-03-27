@@ -1568,6 +1568,10 @@ firrtl.circuit "InstanceChoiceTest" {
     firrtl.matchingconnect %1, %0 : !firrtl.uint<8>
   }
 
+  firrtl.extmodule private @Ext(
+    in in: !firrtl.bundle<a: uint<8>, b: uint<8>>,
+    out out: !firrtl.bundle<x: uint<8>, y: uint<8>>
+  )
 
   // CHECK-LABEL: firrtl.module @InstanceChoiceTest
   firrtl.module @InstanceChoiceTest(
@@ -1576,10 +1580,10 @@ firrtl.circuit "InstanceChoiceTest" {
     out %out_x: !firrtl.uint<8>,
     out %out_y: !firrtl.uint<8>
   ) {
-    // CHECK: %inst_in_a, %inst_in_b, %inst_out_x, %inst_out_y = firrtl.instance_choice inst @TargetModule alternatives @Platform
+    // CHECK: %inst_in_a, %inst_in_b, %inst_out_x, %inst_out_y = firrtl.instance_choice inst @Ext alternatives @Platform
     // CHECK-SAME: @FPGA -> @TargetModule
     // CHECK-SAME: (in in_a: !firrtl.uint<8>, in in_b: !firrtl.uint<8>, out out_x: !firrtl.uint<8>, out out_y: !firrtl.uint<8>)
-    %inst_in, %inst_out = firrtl.instance_choice inst @TargetModule alternatives @Platform {
+    %inst_in, %inst_out = firrtl.instance_choice inst @Ext alternatives @Platform {
       @FPGA -> @TargetModule
     } (in in: !firrtl.bundle<a: uint<8>, b: uint<8>>, out out: !firrtl.bundle<x: uint<8>, y: uint<8>>)
 

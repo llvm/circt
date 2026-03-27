@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
@@ -1253,4 +1254,10 @@ circt::firrtl::InstanceChoiceMacroTable::getMacro(StringAttr optionName,
   if (it == cache.end())
     return {};
   return it->second;
+}
+
+bool circt::firrtl::isScalarizeRequired(InstanceGraphNode *node) {
+  return llvm::any_of(node->uses(), [](InstanceRecord *use) {
+    return use->getInstance<InstanceChoiceOp>();
+  });
 }

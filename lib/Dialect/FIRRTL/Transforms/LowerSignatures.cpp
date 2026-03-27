@@ -508,6 +508,7 @@ struct LowerSignaturesPass
 // This is the main entrypoint for the lowering pass.
 void LowerSignaturesPass::runOnOperation() {
   CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
+  auto &instanceGraph = getAnalysis<InstanceGraph>();
 
   // Cached attr
   AttrCache cache(&getContext());
@@ -516,8 +517,10 @@ void LowerSignaturesPass::runOnOperation() {
   auto circuit = getOperation();
 
   for (auto mod : circuit.getOps<FModuleLike>()) {
-    if (lowerModuleSignature(mod, mod.getConvention(), cache,
-                             portMap[mod.getNameAttr()])
+    auto convention = mod.getConvention();
+    if (isScalarizeRequired(instanceGraph.lookup(mod)))
+      convention = Convention::Scalarized;
+    if (lowerModuleSignature(mod, convention, cache, portMap[mod.getNameAttr()])
             .failed())
       return signalPassFailure();
   }

@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLUTILS_H
 #define CIRCT_DIALECT_FIRRTL_FIRRTLUTILS_H
 
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/BuiltinOps.h"
 
@@ -89,6 +90,9 @@ private:
   // Option/Case -> Macro Symbol
   llvm::MapVector<std::pair<StringAttr, StringAttr>, FlatSymbolRefAttr> cache;
 };
+
+/// Return true if the module instance graph node requires scalarization.
+bool isScalarizeRequired(InstanceGraphNode *node);
 
 //===----------------------------------------------------------------------===//
 // Template utilities

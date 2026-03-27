@@ -1828,6 +1828,7 @@ void LowerTypesPass::runOnOperation() {
   CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
   std::vector<FModuleLike> ops;
+  auto &instanceGraph = getAnalysis<InstanceGraph>();
   // Symbol Table
   auto &symTbl = getAnalysis<SymbolTable>();
   // Cached attr
@@ -1836,7 +1837,10 @@ void LowerTypesPass::runOnOperation() {
   DenseMap<FModuleLike, Convention> conventionTable;
   auto circuit = getOperation();
   for (auto module : circuit.getOps<FModuleLike>()) {
-    conventionTable.insert({module, module.getConvention()});
+    auto convention = module.getConvention();
+    if (isScalarizeRequired(instanceGraph.lookup(module)))
+      convention = Convention::Scalarized;
+    conventionTable.insert({module, convention});
     ops.push_back(module);
   }
 
