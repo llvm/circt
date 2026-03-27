@@ -238,3 +238,34 @@ llhd.global_signal @GlobalSig2 : i42 init {
 
 // CHECK: llhd.get_global_signal @GlobalSig2 : <i42>
 llhd.get_global_signal @GlobalSig2 : <i42>
+
+// CHECK-LABEL: llhd.coroutine @myCoroutine(%arg0: !llhd.ref<i1>)
+llhd.coroutine @myCoroutine(%arg0: !llhd.ref<i1>) {
+  // CHECK-NEXT: llhd.return
+  llhd.return
+}
+
+// CHECK-LABEL: llhd.coroutine private @privateCoroutine()
+llhd.coroutine private @privateCoroutine() {
+  llhd.return
+}
+
+// Coroutines can contain wait, halt, and call_coroutine.
+// CHECK-LABEL: llhd.coroutine @coroutineWithWaitAndHalt
+llhd.coroutine @coroutineWithWaitAndHalt(%arg0: !llhd.ref<i1>, %arg1: i1) {
+  // CHECK: llhd.call_coroutine @myCoroutine(%arg0) : (!llhd.ref<i1>) -> ()
+  llhd.call_coroutine @myCoroutine(%arg0) : (!llhd.ref<i1>) -> ()
+  // CHECK: llhd.wait
+  llhd.wait (%arg1 : i1), ^bb1
+^bb1:
+  // CHECK: llhd.halt
+  llhd.halt
+}
+
+hw.module @coroutineCallFromProcess(in %clk: !llhd.ref<i1>) {
+  llhd.process {
+    // CHECK: llhd.call_coroutine @myCoroutine(%clk) : (!llhd.ref<i1>) -> ()
+    llhd.call_coroutine @myCoroutine(%clk) : (!llhd.ref<i1>) -> ()
+    llhd.halt
+  }
+}

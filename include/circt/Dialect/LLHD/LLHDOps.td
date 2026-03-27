@@ -14,7 +14,10 @@ include "circt/Dialect/LLHD/LLHDTypes.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
+include "mlir/IR/RegionKindInterface.td"
+include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/MemorySlotInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -628,10 +631,10 @@ def CombinationalOp : LLHDOp<"combinational", [
 
 def WaitOp : LLHDOp<"wait", [
   AttrSizedOperandSegments,
-  HasParent<"ProcessOp">,
+  ParentOneOf<["ProcessOp", "CoroutineOp"]>,
   Terminator,
 ]> {
-  let summary = "Suspend execution of a process";
+  let summary = "Suspend execution of a process or coroutine";
   let description = [{
     The `llhd.wait` terminator suspends execution of the parent process until
     any of the `observed` values change or a fixed `delay` has passed. Execution
@@ -664,10 +667,10 @@ def WaitOp : LLHDOp<"wait", [
 }
 
 def HaltOp : LLHDOp<"halt", [
-  ParentOneOf<["ProcessOp", "FinalOp"]>,
+  ParentOneOf<["ProcessOp", "FinalOp", "CoroutineOp"]>,
   Terminator,
 ]> {
-  let summary = "Terminate execution of a process";
+  let summary = "Terminate execution of a process or coroutine";
   let description = [{
     The `llhd.halt` terminator suspends execution of the parent process forever,
     effectively terminating it. The `yieldOperands` are yielded as the result
@@ -716,6 +719,174 @@ def YieldOp : LLHDOp<"yield", [
     attr-dict
   }];
   let hasVerifier = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// Coroutines
+//===----------------------------------------------------------------------===//
+
+def CoroutineOp : LLHDOp<"coroutine", [
+  IsolatedFromAbove,
+  FunctionOpInterface,
+  Symbol,
+  RegionKindInterface,
+  ProceduralRegion,
+  RecursiveMemoryEffects,
+]> {
+  let summary = "Define a coroutine";
+  let description = [{
+    The `llhd.coroutine` op defines a suspendable subroutine that can be called
+    from processes or other coroutines. It represents the lowered form of a
+    SystemVerilog task. Unlike regular functions, coroutines can suspend
+    execution using `llhd.wait` and terminate using `llhd.halt`, just like
+    processes. Calling a coroutine via `llhd.call_coroutine` suspends the caller
+    until the coroutine returns.
+
+    Example:
+    ```mlir
+    llhd.coroutine @waitForClk(%clk: !llhd.ref<i1>) {
+      %0 = llhd.prb %clk : !llhd.ref<i1>
+      llhd.wait (%clk : !llhd.ref<i1>), ^resume
+    ^resume:
+      llhd.return
+    }
+    ```
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttrOf<FunctionType>:$function_type,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    OptionalAttr<DictArrayAttr>:$arg_attrs,
+    OptionalAttr<DictArrayAttr>:$res_attrs
+  );
+  let results = (outs);
+  let regions = (region MinSizedRegion<1>:$body);
+
+  let hasCustomAssemblyFormat = 1;
+
+  let builders = [
+    OpBuilder<(ins "mlir::StringAttr":$sym_name,
+                   "mlir::TypeAttr":$function_type), [{
+      build($_builder, $_state, sym_name, function_type,
+            /*sym_visibility=*/mlir::StringAttr(),
+            /*arg_attrs=*/nullptr, /*res_attrs=*/nullptr);
+    }]>,
+    OpBuilder<(ins "mlir::StringRef":$sym_name,
+                   "mlir::FunctionType":$function_type), [{
+      build($_builder, $_state,
+            $_builder.getStringAttr(sym_name),
+            mlir::TypeAttr::get(function_type),
+            /*sym_visibility=*/mlir::StringAttr(),
+            /*arg_attrs=*/nullptr, /*res_attrs=*/nullptr);
+    }]>,
+  ];
+
+  let extraClassDeclaration = [{
+    static mlir::RegionKind getRegionKind(unsigned index) {
+      return mlir::RegionKind::SSACFG;
+    }
+
+    /// Returns the argument types of this coroutine.
+    mlir::ArrayRef<mlir::Type> getArgumentTypes() {
+      return getFunctionType().getInputs();
+    }
+
+    /// Returns the result types of this coroutine.
+    mlir::ArrayRef<mlir::Type> getResultTypes() {
+      return getFunctionType().getResults();
+    }
+
+    //===------------------------------------------------------------------===//
+    // CallableOpInterface
+    //===------------------------------------------------------------------===//
+
+    mlir::Region *getCallableRegion() { return &getBody(); }
+  }];
+}
+
+def CallCoroutineOp : LLHDOp<"call_coroutine", [
+  CallOpInterface,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+]> {
+  let summary = "Call a coroutine";
+  let description = [{
+    The `llhd.call_coroutine` op calls an `llhd.coroutine`. The calling process
+    or coroutine suspends until the callee returns. This is only valid inside a
+    process or another coroutine.
+
+    Example:
+    ```mlir
+    llhd.call_coroutine @waitForClk(%clk) : (!llhd.ref<i1>) -> ()
+    ```
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$callee, Variadic<AnyType>:$operands);
+  let results = (outs Variadic<AnyType>);
+
+  let assemblyFormat = [{
+    $callee `(` $operands `)` attr-dict `:` functional-type(operands, results)
+  }];
+
+  let builders = [
+    OpBuilder<(ins "CoroutineOp":$coroutine,
+                   CArg<"mlir::ValueRange", "{}">:$operands), [{
+      build($_builder, $_state, coroutine.getFunctionType().getResults(),
+            mlir::SymbolRefAttr::get(coroutine), operands);
+    }]>,
+  ];
+
+  let extraClassDeclaration = [{
+    operand_range getArgOperands() {
+      return getOperands();
+    }
+    MutableOperandRange getArgOperandsMutable() {
+      return getOperandsMutable();
+    }
+
+    mlir::CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<mlir::SymbolRefAttr>("callee");
+    }
+
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getCalleeAttrName(),
+                       llvm::cast<mlir::SymbolRefAttr>(callee));
+    }
+
+    /// CallOpInterface requires ArgAndResultAttrsOpInterface, which needs
+    /// methods to get/set per-argument and per-result attributes. Call sites
+    /// don't carry these attributes, so we stub them out as no-ops.
+    mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
+    mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
+    void setArgAttrsAttr(mlir::ArrayAttr args) {}
+    void setResAttrsAttr(mlir::ArrayAttr args) {}
+    mlir::Attribute removeArgAttrsAttr() { return nullptr; }
+    mlir::Attribute removeResAttrsAttr() { return nullptr; }
+  }];
+}
+
+def ReturnOp : LLHDOp<"return", [
+  HasParent<"CoroutineOp">,
+  Terminator,
+]> {
+  let summary = "Return from a coroutine";
+  let description = [{
+    The `llhd.return` op terminates execution of the enclosing
+    `llhd.coroutine` and returns control to the caller. It is the coroutine
+    equivalent of `llhd.halt` for processes.
+
+    Example:
+    ```mlir
+    llhd.coroutine @myTask() {
+      llhd.return
+    }
+    ```
+  }];
+  let arguments = (ins Variadic<AnyType>:$operands);
+  let assemblyFormat = [{
+    ($operands^ `:` type($operands))?
+    attr-dict
+  }];
 }
 
 #endif // CIRCT_DIALECT_LLHD_LLHDOPS_TD
