@@ -190,3 +190,32 @@ moore.union_create %0 {fieldName = "x"} : !moore.i16 -> union<{x: i32, y: i32}>
 %0 = moore.constant 42 : i32
 // expected-error @below {{op field 'z' not found in union type}}
 moore.union_create %0 {fieldName = "z"} : !moore.i32 -> union<{x: i32, y: i32}>
+
+// -----
+
+// CallCoroutineOp: callee does not exist
+moore.coroutine @caller() {
+  // expected-error @below {{'nonexistent' does not reference a valid 'moore.coroutine'}}
+  moore.call_coroutine @nonexistent() : () -> ()
+  moore.return
+}
+
+// -----
+
+// CallCoroutineOp: callee is a func.func, not a coroutine
+func.func @notACoroutine() { return }
+moore.coroutine @callerCoroutine() {
+  // expected-error @below {{'notACoroutine' does not reference a valid 'moore.coroutine'}}
+  moore.call_coroutine @notACoroutine() : () -> ()
+  moore.return
+}
+
+// -----
+
+// func.call cannot target a moore.coroutine
+moore.coroutine @someCoroutine() { moore.return }
+func.func @funcCallingCoroutine() {
+  // expected-error @below {{'someCoroutine' does not reference a valid function}}
+  func.call @someCoroutine() : () -> ()
+  return
+}

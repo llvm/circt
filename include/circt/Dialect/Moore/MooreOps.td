@@ -21,6 +21,7 @@ include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/MemorySlotInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
+include "mlir/Interfaces/FunctionInterfaces.td"
 
 // Base class for the operations in this dialect.
 class MooreOp<string mnemonic, list<Trait> traits = []> :
@@ -194,9 +195,9 @@ def ProcedureOp : MooreOp<"procedure", [
 }
 
 def ReturnOp : MooreOp<"return", [
-  Pure, Terminator, HasParent<"ProcedureOp">
+  Pure, Terminator, ParentOneOf<["ProcedureOp", "CoroutineOp"]>
 ]> {
-  let summary = "Return from a procedure";
+  let summary = "Return from a procedure or coroutine";
   let assemblyFormat = [{ attr-dict }];
 }
 
@@ -210,6 +211,154 @@ def UnreachableOp : MooreOp<"unreachable", [Terminator]> {
     probably crash the process with a useful error message.
   }];
   let assemblyFormat = "attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// Coroutines
+//===----------------------------------------------------------------------===//
+
+def CoroutineOp : MooreOp<"coroutine", [
+  IsolatedFromAbove,
+  FunctionOpInterface,
+  Symbol,
+  RegionKindInterface,
+  RecursiveMemoryEffects,
+]> {
+  let summary = "Define a coroutine";
+  let description = [{
+    The `moore.coroutine` op represents a SystemVerilog task. Tasks differ from
+    functions in that they can suspend execution via timing controls such as
+    `@(posedge clk)` or `#10`. This makes them coroutine-like: a call to a
+    coroutine suspends the calling process until the coroutine returns.
+
+    See IEEE 1800-2017 § 13.3 "Tasks".
+
+    Coroutines are `IsolatedFromAbove` and capture any external variables
+    explicitly as additional arguments, just like `func.func`. Any signals or
+    variables from the enclosing module are passed as reference arguments.
+
+    Example:
+    ```mlir
+    moore.coroutine private @waitForClk(%clk: !moore.ref<l1>) {
+      moore.wait_event {
+        %0 = moore.read %clk : <l1>
+        moore.detect_event posedge %0 : l1
+      }
+      moore.return
+    }
+    ```
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttrOf<FunctionType>:$function_type,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    OptionalAttr<DictArrayAttr>:$arg_attrs,
+    OptionalAttr<DictArrayAttr>:$res_attrs
+  );
+  let results = (outs);
+  let regions = (region MinSizedRegion<1>:$body);
+
+  let hasCustomAssemblyFormat = 1;
+
+  let builders = [
+    OpBuilder<(ins "mlir::StringAttr":$sym_name,
+                   "mlir::TypeAttr":$function_type), [{
+      build($_builder, $_state, sym_name, function_type,
+            /*sym_visibility=*/mlir::StringAttr(),
+            /*arg_attrs=*/nullptr, /*res_attrs=*/nullptr);
+    }]>,
+    OpBuilder<(ins "mlir::StringRef":$sym_name,
+                   "mlir::FunctionType":$function_type), [{
+      build($_builder, $_state,
+            $_builder.getStringAttr(sym_name),
+            mlir::TypeAttr::get(function_type),
+            /*sym_visibility=*/mlir::StringAttr(),
+            /*arg_attrs=*/nullptr, /*res_attrs=*/nullptr);
+    }]>,
+  ];
+
+  let extraClassDeclaration = [{
+    static mlir::RegionKind getRegionKind(unsigned index) {
+      return mlir::RegionKind::SSACFG;
+    }
+
+    /// Returns the argument types of this coroutine.
+    mlir::ArrayRef<mlir::Type> getArgumentTypes() {
+      return getFunctionType().getInputs();
+    }
+
+    /// Returns the result types of this coroutine.
+    mlir::ArrayRef<mlir::Type> getResultTypes() {
+      return getFunctionType().getResults();
+    }
+
+    //===------------------------------------------------------------------===//
+    // CallableOpInterface
+    //===------------------------------------------------------------------===//
+
+    mlir::Region *getCallableRegion() { return &getBody(); }
+  }];
+}
+
+def CallCoroutineOp : MooreOp<"call_coroutine", [
+  CallOpInterface,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+]> {
+  let summary = "Call a coroutine";
+  let description = [{
+    The `moore.call_coroutine` op calls a `moore.coroutine`, which represents a
+    SystemVerilog task call. The calling process suspends until the coroutine
+    returns. This is only valid inside a procedure or another coroutine.
+
+    Example:
+    ```mlir
+    moore.call_coroutine @waitForClk(%clk) : (!moore.ref<l1>) -> ()
+    ```
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$callee, Variadic<AnyType>:$operands);
+  let results = (outs Variadic<AnyType>);
+
+  let assemblyFormat = [{
+    $callee `(` $operands `)` attr-dict `:` functional-type(operands, results)
+  }];
+
+  let builders = [
+    OpBuilder<(ins "CoroutineOp":$coroutine,
+                   CArg<"mlir::ValueRange", "{}">:$operands), [{
+      build($_builder, $_state, coroutine.getFunctionType().getResults(),
+            mlir::SymbolRefAttr::get(coroutine), operands);
+    }]>,
+  ];
+
+  let extraClassDeclaration = [{
+    operand_range getArgOperands() {
+      return getOperands();
+    }
+    MutableOperandRange getArgOperandsMutable() {
+      return getOperandsMutable();
+    }
+
+    mlir::CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<mlir::SymbolRefAttr>("callee");
+    }
+
+    void setCalleeFromCallable(mlir::CallInterfaceCallable callee) {
+      (*this)->setAttr(getCalleeAttrName(),
+                       llvm::cast<mlir::SymbolRefAttr>(callee));
+    }
+
+    /// CallOpInterface requires ArgAndResultAttrsOpInterface, which needs
+    /// methods to get/set per-argument and per-result attributes. Call sites
+    /// don't carry these attributes, so we stub them out as no-ops.
+    mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
+    mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
+    void setArgAttrsAttr(mlir::ArrayAttr args) {}
+    void setResAttrsAttr(mlir::ArrayAttr args) {}
+    mlir::Attribute removeArgAttrsAttr() { return nullptr; }
+    mlir::Attribute removeResAttrsAttr() { return nullptr; }
+  }];
 }
 
 //===----------------------------------------------------------------------===//
