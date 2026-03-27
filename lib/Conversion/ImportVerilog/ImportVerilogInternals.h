@@ -420,6 +420,12 @@ struct Context {
   /// used to collect all variables assigned in a task scope.
   std::function<void(mlir::Operation *)> variableAssignCallback;
 
+  /// Whether we are currently converting expressions inside a timing control,
+  /// such as `@(posedge clk)`. This is used by the implicit event control
+  /// callback to avoid adding reads from explicit event controls to the
+  /// implicit sensitivity list.
+  bool isInsideTimingControl = false;
+
   /// The time scale currently in effect.
   slang::TimeScale timeScale;
 
