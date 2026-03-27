@@ -91,13 +91,18 @@ struct ModuleLowering {
       portsBySyntaxNode;
 };
 
-/// Function lowering information.
+/// Function lowering information. The `op` field holds either a `func::FuncOp`
+/// (for SystemVerilog functions) or a `moore::CoroutineOp` (for tasks),
+/// accessed through the `FunctionOpInterface`.
 struct FunctionLowering {
-  mlir::func::FuncOp op;
+  mlir::FunctionOpInterface op;
   llvm::SmallVector<Value, 4> captures;
   llvm::DenseMap<Value, unsigned> captureIndex;
   bool capturesFinalized = false;
   bool isConverting = false;
+
+  /// Whether this is a coroutine (task) or a regular function.
+  bool isCoroutine() { return isa<moore::CoroutineOp>(op.getOperation()); }
 };
 
 // Class lowering information.
