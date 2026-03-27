@@ -3485,3 +3485,37 @@ firrtl.circuit "DomainCreateWrongFieldType" {
     // expected-error @-1 {{use of value '%period' expects different type than prior uses: '!firrtl.integer' vs '!firrtl.string'}}
   }
 }
+
+// -----
+
+// Wire with duplicate domain associations (should fail verifier).
+firrtl.circuit "WireDuplicateDomain" {
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
+  firrtl.module @WireDuplicateDomain(
+    // expected-note @below {{first domain operand here}}
+    in %A: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{additional colliding domain operand here}}
+    in %B: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{first domain operand here}}
+    in %C: !firrtl.domain<@PowerDomain()>,
+    // expected-note @below {{additional colliding domain operand here}}
+    in %D: !firrtl.domain<@PowerDomain()>
+  ) {
+    // expected-error @below {{associated with multiple operands of 'ClockDomain' kind}}
+    // expected-error @below {{associated with multiple operands of 'PowerDomain' kind}}
+    %w = firrtl.wire domains[%A, %B, %C, %D] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain()>, !firrtl.domain<@PowerDomain()>]
+  }
+}
+
+// -----
+
+firrtl.circuit "WireDomainTypeWithAssociation" {
+  firrtl.domain @ClockDomain
+  firrtl.module @WireDomainTypeWithAssociation(
+    in %A: !firrtl.domain<@ClockDomain()>
+  ) {
+    // expected-error @below {{of domain type must not have domain associations}}
+    %w = firrtl.wire domains[%A] : !firrtl.domain<@ClockDomain()> domains[!firrtl.domain<@ClockDomain()>]
+  }
+}

@@ -593,6 +593,7 @@ def WireOp : HardwareDeclOp<"wire", [
                        Variadic<DomainType>:$domains);
   let results = (outs AnyType:$result, Optional<RefType>:$ref);
 
+  let hasVerifier = 1;
   let hasCanonicalizer = true;
   let skipDefaultBuilders = true;
 

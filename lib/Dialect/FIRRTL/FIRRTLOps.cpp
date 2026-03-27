@@ -3979,6 +3979,75 @@ RegResetOp::computeDataFlow() {
 
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
 
+LogicalResult WireOp::verify() {
+  // A wire of domain type must not have domain associations.
+  if (type_isa<DomainType>(getResult().getType()) && !getDomains().empty())
+    return emitOpError("of domain type must not have domain associations");
+
+  // Early exist if no domains.
+  auto domains = getDomains();
+  if (!domains.size())
+    return success();
+
+  // Check if any associated domains have the same kind.  If they do, emit an
+  // error on the op and a note on each of the values that have the same kind.
+  //
+  // Use a two-phase approach where when a new domain is found, record it in
+  // `domainInfo`.  Then, if a collision is found, report an error, add a note
+  // for the original value, and a note for the colliding value.  For each
+  // subsequent collision, add a note.
+  //
+  // Note: choose a different `N` for the `SmallMapVector` if we add more
+  // domains than clock and power.
+  using oldValueAndDiag = std::pair<Value, std::unique_ptr<InFlightDiagnostic>>;
+  llvm::SmallMapVector<SymbolRefAttr, oldValueAndDiag, 2> domainInfo;
+  bool hasErrors = false;
+  for (auto domain : domains) {
+    auto domainType = cast<DomainType>(domain.getType());
+    auto domainName = domainType.getName();
+
+    // Record a domain kind and the association value.
+    auto [it, inserted] =
+        domainInfo.try_emplace(domainName, std::make_pair(domain, nullptr));
+
+    // We haven't seen this domain kind before.  No error (yet).
+    if (inserted)
+      continue;
+
+    // We have seen this domain kind before.
+    auto &[value, diag] = it->second;
+
+    // We haven't generated an error yet.  Generate an error and a note for the
+    // first value.  Extend the lifetime of the diagnostic so that we can keep
+    // adding notes to it.
+    if (!diag) {
+      diag = std::make_unique<InFlightDiagnostic>(
+          emitOpError() << "associated with multiple operands of '"
+                        << domainName.getValue() << "' kind");
+      diag->attachNote(value.getLoc()) << "first domain operand here";
+      hasErrors = true;
+    }
+
+    // Add a note for the current colliding value.
+    diag->attachNote(domain.getLoc())
+        << "additional colliding domain operand here";
+  }
+
+  // No errors, we're done.
+  if (!hasErrors)
+    return success();
+
+  // Diagnostics are emitted when the diagnostic is destroyed.  Early delete the
+  // diagnostics in insertion order to prevent these being deleted in
+  // determinstic reverse order when the `SmallVector` that backs the
+  // `MapVector` is destroyed.  This improves the error quality by keeping
+  // things aligned with how a user would read the MLIR.
+  for (auto &[_, diag] : domainInfo.values())
+    diag.reset();
+
+  return failure();
+}
+
 LogicalResult WireOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (auto refType = type_dyn_cast<RefType>(getType(0)))
     return verifyProbeType(
