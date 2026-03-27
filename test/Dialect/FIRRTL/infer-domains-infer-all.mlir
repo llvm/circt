@@ -513,3 +513,81 @@ firrtl.circuit "DomainDefineAfterValue" {
     // CHECK-NEXT: firrtl.domain.define %consumer_D, %producer_D
   }
 }
+
+// Wire with explicit domain association.
+// CHECK-LABEL: firrtl.circuit "WireWithDomain"
+firrtl.circuit "WireWithDomain" {
+  firrtl.domain @ClockDomain
+  firrtl.module @WireWithDomain(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %a: !firrtl.uint<1> domains [%A],
+    // CHECK: out %b: !firrtl.uint<1> domains [%A]
+    out %b: !firrtl.uint<1>
+  ) {
+    // Wire with explicit domain A
+    %w = firrtl.wire domains[%A] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+
+    // Connection from domain A port to wire with domain A (should pass)
+    firrtl.matchingconnect %w, %a : !firrtl.uint<1>
+    // Infer that %b is also in domain A
+    firrtl.matchingconnect %b, %w : !firrtl.uint<1>
+  }
+}
+
+// Wire with multiple domain associations propagates both domains to output.
+// CHECK-LABEL: firrtl.circuit "WireMultipleDomains"
+firrtl.circuit "WireMultipleDomains" {
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
+  firrtl.module @WireMultipleDomains(
+    in %CL: !firrtl.domain<@ClockDomain()>,
+    in %PW: !firrtl.domain<@PowerDomain()>,
+    // CHECK: out %b: !firrtl.uint<8> domains [%CL, %PW]
+    out %b: !firrtl.uint<8>
+  ) {
+    // Wire associated with both clock and power domains
+    // CHECK: %state = firrtl.wire domains[%CL, %PW]
+    %state = firrtl.wire domains[%CL, %PW] : !firrtl.uint<8> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain()>]
+    firrtl.matchingconnect %b, %state : !firrtl.uint<8>
+  }
+}
+
+// Wire domain propagation through chain.
+// CHECK-LABEL: firrtl.circuit "WireDomainPropagation"
+firrtl.circuit "WireDomainPropagation" {
+  firrtl.domain @ClockDomain
+  firrtl.module @WireDomainPropagation(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %a: !firrtl.uint<1> domains [%A],
+    // CHECK: out %d: !firrtl.uint<1> domains [%A]
+    out %d: !firrtl.uint<1>
+  ) {
+    // Wire with explicit domain
+    %w1 = firrtl.wire domains[%A] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+    // Wire without explicit domain (inferred)
+    // CHECK: %w2 = firrtl.wire{{.*}}domains[%A]{{.*}}!firrtl.uint<1>
+    %w2 = firrtl.wire : !firrtl.uint<1>
+
+    firrtl.matchingconnect %w1, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %w2, %w1 : !firrtl.uint<1>
+    firrtl.matchingconnect %d, %w2 : !firrtl.uint<1>
+  }
+}
+
+// Wire domain inference from connections.
+// CHECK-LABEL: firrtl.circuit "WireInferFromConnect"
+firrtl.circuit "WireInferFromConnect" {
+  firrtl.domain @ClockDomain
+  firrtl.module @WireInferFromConnect(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %a: !firrtl.uint<1> domains [%A],
+    // CHECK: out %b: !firrtl.uint<1> domains [%A]
+    out %b: !firrtl.uint<1>
+  ) {
+    // CHECK: %w = firrtl.wire{{.*}}%A{{.*}}!firrtl.uint<1>
+    %w = firrtl.wire : !firrtl.uint<1>
+
+    firrtl.matchingconnect %w, %a : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %w : !firrtl.uint<1>
+  }
+}

@@ -91,4 +91,17 @@ firrtl.circuit "StripDomains" {
     %voltage = firrtl.domain.subfield %D[voltage] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer)>
     firrtl.propassign %x, %voltage : !firrtl.integer
   }
+
+  // CHECK-LABEL: firrtl.module @StripWireDomains(
+  // CHECK-SAME:    in %a: !firrtl.uint<1>) {
+  // CHECK-NEXT:    %w = firrtl.wire : !firrtl.uint<1>
+  // CHECK-NEXT:    firrtl.matchingconnect %w, %a : !firrtl.uint<1>
+  // CHECK-NEXT:  }
+  firrtl.module @StripWireDomains(
+    in %D: !firrtl.domain<@ClockDomain()>,
+    in %a: !firrtl.uint<1> domains [%D]
+  ) {
+    %w = firrtl.wire domains[%D] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+    firrtl.matchingconnect %w, %a : !firrtl.uint<1>
+  }
 }

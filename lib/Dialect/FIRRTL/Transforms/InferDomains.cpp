@@ -863,11 +863,37 @@ static LogicalResult processOp(const DomainInfo &info, TermAllocator &allocator,
 }
 
 static LogicalResult processOp(const DomainInfo &info, TermAllocator &allocator,
+                               DomainTable &table, WireOp op) {
+  // If the wire has explicit domain operands, seed the domain table with them
+  // as constraints. When this op is visited, connections have not yet been
+  // processed (wire declarations precede their uses), so the existing row
+  // contains only fresh variables that unify unconditionally. Any conflict
+  // between an explicit wire domain and a connection's inferred domain is
+  // caught later by the connection's own processOp.
+  if (op.getDomains().empty())
+    return success();
+
+  // Build a row with the explicitly-specified domain slots filled in and set
+  // it as the association for this wire result.
+  SmallVector<Term *> elements(info.getNumDomains());
+  for (auto domain : op.getDomains()) {
+    auto domainValue = cast<DomainValue>(domain);
+    auto typeID = info.getDomainTypeID(domainValue);
+    elements[typeID.index] = getTermForDomain(allocator, table, domainValue);
+  }
+  table.setDomainAssociation(op.getResult(), allocator.allocRow(elements));
+
+  return success();
+}
+
+static LogicalResult processOp(const DomainInfo &info, TermAllocator &allocator,
                                DomainTable &table,
                                const ModuleUpdateTable &updateTable,
                                Operation *op) {
   if (auto instance = dyn_cast<FInstanceLike>(op))
     return processOp(info, allocator, table, updateTable, instance);
+  if (auto wireOp = dyn_cast<WireOp>(op))
+    return processOp(info, allocator, table, wireOp);
   if (auto cast = dyn_cast<UnsafeDomainCastOp>(op))
     return processOp(info, allocator, table, cast);
   if (auto def = dyn_cast<DomainDefineOp>(op))
@@ -1287,8 +1313,39 @@ static LogicalResult updateInstance(const DomainInfo &info,
   return success();
 }
 
+/// Update a wire operation with inferred domain associations.
+static LogicalResult updateWire(const DomainInfo &info,
+                                TermAllocator &allocator, DomainTable &table,
+                                WireOp wireOp) {
+  auto result = wireOp.getResult();
+  if (!isa<FIRRTLBaseType>(result.getType()))
+    return success();
+
+  // Get the inferred domain associations for this wire.
+  auto *term = table.getOptDomainAssociation(result);
+  if (!term)
+    return success();
+
+  auto *row = dyn_cast<RowTerm>(find(term));
+  if (!row)
+    return success();
+
+  // Collect the domain values to add as operands.
+  SmallVector<Value> domainOperands;
+  for (auto *element : llvm::map_range(row->elements, find))
+    if (auto *val = dyn_cast_or_null<ValueTerm>(element))
+      domainOperands.push_back(val->value);
+
+  // Update the wire's domain operands in place. $domains is the only operand
+  // group on WireOp, so setOperands replaces exactly the domain list.
+  if (!domainOperands.empty() && wireOp.getDomains().empty())
+    wireOp->setOperands(domainOperands);
+
+  return success();
+}
+
 /// After updating the port domain associations, walk the body of the moduleOp
-/// to fix up any child instance modules.
+/// to fix up any child instance modules and update wires with inferred domains.
 static LogicalResult updateModuleBody(const DomainInfo &info,
                                       TermAllocator &allocator,
                                       DomainTable &table, FModuleOp moduleOp) {
@@ -1297,11 +1354,19 @@ static LogicalResult updateModuleBody(const DomainInfo &info,
   OpBuilder builder(moduleOp.getContext());
   builder.setInsertionPointToEnd(moduleOp.getBodyBlock());
 
-  auto result =
+  // Update instances
+  auto instanceResult =
       moduleOp.getBodyBlock()->walk([&](FInstanceLike op) -> WalkResult {
         return updateInstance(info, allocator, table, op, builder);
       });
-  return failure(result.wasInterrupted());
+  if (instanceResult.wasInterrupted())
+    return failure();
+
+  // Update wires with inferred domain associations
+  auto wireResult = moduleOp.getBodyBlock()->walk([&](WireOp op) -> WalkResult {
+    return updateWire(info, allocator, table, op);
+  });
+  return failure(wireResult.wasInterrupted());
 }
 
 /// Write the domain associations recorded in the domain table back to the IR.
@@ -1466,8 +1531,15 @@ static LogicalResult stripModule(FModuleLike op) {
               return WalkResult::advance();
             })
             .Case<WireOp>([](WireOp op) {
-              if (isa<DomainType>(op.getType(0)))
+              // Erase wires of DomainType
+              if (isa<DomainType>(op.getType(0))) {
                 op->erase();
+                return WalkResult::advance();
+              }
+              // Erase domain operands from regular wires
+              if (!op.getDomains().empty()) {
+                op->eraseOperands(0, op.getNumOperands());
+              }
               return WalkResult::advance();
             })
             .Case<FInstanceLike>([](auto op) {
