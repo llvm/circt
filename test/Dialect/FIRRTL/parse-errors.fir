@@ -1955,3 +1955,12 @@ circuit AsResetVersion:
     input in: UInt<1>
     ; expected-error @below {{reset casts are a FIRRTL 5.1.0+ feature}}
     node x = asReset(in)
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit OOBFormatString:
+  public module Oops:
+    input clk : Clock
+    ; expected-error @below {{not enough operands for format string}}
+    printf(clk, UInt<1>(0h1), "oops: %d")
