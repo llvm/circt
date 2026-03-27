@@ -650,3 +650,38 @@ firrtl.circuit "DomainSubfield" {
     %unused_c = firrtl.domain.subfield %A["c"] : !firrtl.domain<@ClockDomain(a: !firrtl.integer, b: !firrtl.integer, c: !firrtl.integer, d: !firrtl.integer)>
   }
 }
+
+// -----
+
+// Test that domain operands on a non-domain-type wire are erased during
+// lowering, leaving a clean wire.  The domain port lowering is orthogonal;
+// we just verify the wire line is free of domain operands.
+firrtl.circuit "WireWithPortDomain" {
+  firrtl.domain @ClockDomain
+  // CHECK-LABEL: firrtl.module @WireWithPortDomain
+  // CHECK-NOT:   firrtl.module
+  // CHECK:         %w = firrtl.wire : !firrtl.uint<1>
+  // CHECK-NEXT:    firrtl.matchingconnect %w, %a
+  firrtl.module @WireWithPortDomain(
+    in %D: !firrtl.domain<@ClockDomain()>,
+    in %a: !firrtl.uint<1> domains [%D]
+  ) {
+    %w = firrtl.wire domains[%D] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+    firrtl.matchingconnect %w, %a : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Test that domain operands from a domain.create op leave no stray conversion
+// casts after lowering.
+firrtl.circuit "WireWithCreateDomain" {
+  firrtl.domain @ClockDomain
+  // CHECK-LABEL: firrtl.module @WireWithCreateDomain()
+  // CHECK-NEXT:    %my_domain = firrtl.object @ClockDomain()
+  // CHECK-NEXT:    %w = firrtl.wire : !firrtl.uint<1>
+  firrtl.module @WireWithCreateDomain() {
+    %my_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
+    %w = firrtl.wire domains[%my_domain] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+  }
+}

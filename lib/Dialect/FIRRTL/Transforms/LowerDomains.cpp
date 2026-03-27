@@ -652,6 +652,8 @@ LogicalResult LowerModule::lowerModule() {
       //     firrtl.domain.define %a, %src     // <- to-be-deleted when visited
       //     firrtl.domain.define %dst, %src   // <- added
       //     firrtl.domain.define %dst, %a     // <- to-be-deleted when visited
+      //
+      // If the wire is not of domain type, then we just erase its associations.
       if (auto wireOp = dyn_cast<WireOp>(walkOp)) {
         if (type_isa<DomainType>(wireOp.getResult().getType())) {
           Value src;
@@ -688,6 +690,17 @@ LogicalResult LowerModule::lowerModule() {
           for (auto dst : llvm::reverse(dsts))
             DomainDefineOp::create(builder, builder.getUnknownLoc(), dst, src);
         }
+
+        // Erase the domain association from non-domain type wires.  Track the
+        // defining ops of domain operands so that any conversion casts that
+        // were only serving as domain associations are also cleaned up.
+        if (!wireOp.getDomains().empty()) {
+          for (auto domain : wireOp.getDomains())
+            if (auto *defOp = domain.getDefiningOp())
+              conversionsToErase.insert(defOp);
+          wireOp->eraseOperands(0, wireOp.getNumOperands());
+        }
+
         return WalkResult::advance();
       }
 
