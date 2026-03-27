@@ -2542,6 +2542,40 @@ struct ListCreateElementRemover : public OpReduction<ListCreateOp> {
   }
 };
 
+/// Reduction that removes the `convention` attribute from regular modules.
+struct ModuleConventionRemover : public OpReduction<FModuleOp> {
+  uint64_t match(FModuleOp module) override {
+    return module.getConvention() != Convention::Internal;
+  }
+
+  LogicalResult rewrite(FModuleOp module) override {
+    module.setConvention(Convention::Internal);
+    return success();
+  }
+
+  std::string getName() const override { return "module-convention-remover"; }
+  bool acceptSizeIncrease() const override { return true; }
+  bool isOneShot() const override { return true; }
+};
+
+/// Reduction that removes the `convention` attribute from external modules.
+struct ExtmoduleConventionRemover : public OpReduction<FExtModuleOp> {
+  uint64_t match(FExtModuleOp extmodule) override {
+    return extmodule.getConvention() != Convention::Internal;
+  }
+
+  LogicalResult rewrite(FExtModuleOp extmodule) override {
+    extmodule.setConvention(Convention::Internal);
+    return success();
+  }
+
+  std::string getName() const override {
+    return "extmodule-convention-remover";
+  }
+  bool acceptSizeIncrease() const override { return true; }
+  bool isOneShot() const override { return true; }
+};
+
 //===----------------------------------------------------------------------===//
 // Reduction Registration
 //===----------------------------------------------------------------------===//
@@ -2603,6 +2637,8 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   patterns.add<ConnectSourceOperandForwarder<2>, 1>();
   patterns.add<ModuleInternalNameSanitizer, 0>();
   patterns.add<ModuleNameSanitizer, 0>();
+  patterns.add<ModuleConventionRemover, 0>();
+  patterns.add<ExtmoduleConventionRemover, 0>();
 }
 
 void firrtl::registerReducePatternDialectInterface(
