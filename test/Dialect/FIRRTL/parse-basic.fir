@@ -2375,3 +2375,29 @@ circuit KeywordIdentifiers :
     wire Unknown : UInt<1>
     ; CHECK: firrtl.constant 0
     connect Unknown, UInt<1>(0)
+
+;// -----
+FIRRTL version 5.1.0
+; Test wire domain associations
+circuit WireDomains:
+  domain ClockDomain:
+  domain PowerDomain:
+    name : String
+    voltage : Integer
+
+  ; CHECK-LABEL: firrtl.module @WireDomains
+  public module WireDomains:
+    input A : Domain of ClockDomain
+    input B : Domain of PowerDomain
+
+    ; Wire with no domains
+    ; CHECK: %w_no_domain = firrtl.wire interesting_name : !firrtl.uint<1>
+    wire w_no_domain : UInt<1>
+
+    ; Wire with single domain
+    ; CHECK: %w_single = firrtl.wire interesting_name domains[%A] : !firrtl.uint<8> domains[!firrtl.domain<@ClockDomain()>]
+    wire w_single : UInt<8> domains [A]
+
+    ; Wire with multiple domains
+    ; CHECK: %w_multi = firrtl.wire interesting_name domains[%A, %B] : !firrtl.uint<16> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer)>]
+    wire w_multi : UInt<16> domains [A, B]

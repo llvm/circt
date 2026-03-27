@@ -819,6 +819,19 @@ void Emitter::emitStatement(WireOp op) {
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "wire " << PPExtString(legalName);
     emitTypeWithColon(op.getResult().getType());
+
+    // Emit domain associations if present
+    if (!op.getDomains().empty()) {
+      ps << PP::space << "domains" << PP::space << "[";
+      ps.scopedBox(PP::cbox0, [&]() {
+        llvm::interleaveComma(op.getDomains(), ps, [&](Value domain) {
+          auto name = lookupEmittedName(domain);
+          assert(name && "domain value must have a name");
+          ps << PPExtString(*name);
+        });
+      });
+      ps << "]";
+    }
   });
   emitLocationAndNewLine(op);
 }

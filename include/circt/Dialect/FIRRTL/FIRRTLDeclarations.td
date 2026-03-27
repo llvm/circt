@@ -612,16 +612,18 @@ def WireOp : HardwareDeclOp<"wire", [
                    "::circt::hw::InnerSymAttr":$innerSym,
                    "::mlir::UnitAttr":$forceable,
                    CArg<"::mlir::ValueRange", "{}">:$domains), [{
-      $_state.addOperands(domains);
       $_state.addAttribute(getNameAttrName($_state.name), name);
       $_state.addAttribute(getNameKindAttrName($_state.name), nameKind);
       $_state.addAttribute(getAnnotationsAttrName($_state.name), annotations);
       if (innerSym) {
         $_state.addAttribute(getInnerSymAttrName($_state.name), innerSym);
       }
-      $_state.addTypes(elementType);
       if (forceable) {
         $_state.addAttribute(getForceableAttrName($_state.name), forceable);
+      }
+      $_state.addOperands(domains);
+      $_state.addTypes(elementType);
+      if (forceable) {
         if (auto type = detail::getForceableResultType(true, elementType))
           $_state.addTypes(type);
       }
