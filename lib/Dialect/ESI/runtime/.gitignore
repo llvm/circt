@@ -3,3 +3,4 @@
 # Verilator / cosim test artifacts
 obj_dir/
 esi-pytest-*/
+env/

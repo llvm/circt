@@ -1,0 +1,47 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/cpp
+{
+	"name": "C++ / Python",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	// Features to add to the dev container. More info: https://containers.dev/features.
+	"features": {
+		"ghcr.io/devcontainers/features/git:1": {}
+	},
+	// Use 'forwardPorts' to make a list of ports inside the container available locally.
+	// "forwardPorts": [],
+	// Use 'postCreateCommand' to run commands after the container is created.
+	"postCreateCommand": "bash .devcontainer/ESIRuntime/postCreate.sh",
+	// Configure tool-specific properties.
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"python.defaultInterpreterPath": "${containerWorkspaceFolder}/env/bin/python",
+				"python.terminal.activateEnvironment": true,
+				"cmake.useCMakePresets": "always",
+				"cmake.sourceDirectory": "${workspaceFolder}/lib/Dialect/ESI/runtime",
+				"editor.formatOnSave": true
+			},
+			"extensions": [
+				"ms-vscode.cpptools",
+				"ms-vscode.cpp-devtools",
+				"ms-python.python",
+				"ms-python.vscode-pylance",
+				"ms-python.debugpy",
+				"ms-python.vscode-python-envs",
+				"github.vscode-github-actions",
+				"github.vscode-pull-request-github",
+				"xaver.clang-format",
+				"ms-vscode.cmake-tools",
+				"vadimcn.vscode-lldb",
+				"github.vscode-github-actions",
+				"eeyore.yapf",
+				"twxs.cmake",
+				"mutantdino.resourcemonitor"
+			]
+		}
+	}
+	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+	// "remoteUser": "root"
+}

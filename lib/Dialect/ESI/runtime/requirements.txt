@@ -1,0 +1,4 @@
+nanobind
+pytest
+numpy
+pycde --pre
