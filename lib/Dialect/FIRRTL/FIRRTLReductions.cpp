@@ -1735,6 +1735,30 @@ struct ObjectInliner : public OpReduction<ObjectOp> {
   std::unique_ptr<hw::InnerSymbolTableCollection> innerSymTables;
 };
 
+/// Reduction that converts `regreset` to `reg` by dropping reset and init
+/// value.
+struct ResetDisconnector : public OpReduction<RegResetOp> {
+  uint64_t match(RegResetOp op) override { return 1; }
+
+  LogicalResult rewrite(RegResetOp regResetOp) override {
+    ImplicitLocOpBuilder builder(regResetOp.getLoc(), regResetOp);
+    auto regOp = RegOp::create(
+        builder, regResetOp.getResult().getType(), regResetOp.getClockVal(),
+        regResetOp.getNameAttr(), regResetOp.getNameKindAttr(),
+        regResetOp.getAnnotationsAttr(), regResetOp.getInnerSymAttr(),
+        regResetOp.getForceableAttr());
+
+    regResetOp.getResult().replaceAllUsesWith(regOp.getResult());
+    if (regResetOp.getForceable())
+      regResetOp.getRef().replaceAllUsesWith(regOp.getRef());
+    regResetOp.erase();
+
+    return success();
+  }
+
+  std::string getName() const override { return "reset-disconnector"; }
+};
+
 /// Psuedo-reduction that sanitizes the names of things inside modules.  This is
 /// not an actual reduction, but often removes extraneous information that has
 /// no bearing on the actual reduction (and would likely be removed before
@@ -2592,6 +2616,7 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   patterns.add<FIRRTLOperandForwarder<1>, 10>();
   patterns.add<FIRRTLOperandForwarder<2>, 9>();
   patterns.add<ListCreateElementRemover, 8>();
+  patterns.add<ResetDisconnector, 8>();
   patterns.add<DetachSubaccesses, 7>();
   patterns.add<ModulePortPruner, 7>();
   patterns.add<ExtmodulePortPruner, 6>();
