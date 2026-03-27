@@ -3736,6 +3736,44 @@ module testRecursiveCaptureFunction();
   endfunction
 endmodule
 
+// Task that reads a module-scope signal in an event control expression. The
+// signal must be captured as an extra argument to the task function.
+// CHECK-LABEL: moore.module @CaptureInEventControl
+module CaptureInEventControl;
+  // CHECK: [[CLK:%.+]] = moore.variable : <l1>
+  logic clk;
+  // CHECK: [[DATA:%.+]] = moore.variable : <i32>
+  int data;
+
+  initial begin
+    // CHECK: call @waitForClk([[CLK]])
+    waitForClk();
+    // CHECK: call @readOnClk([[CLK]], [[DATA]])
+    readOnClk();
+  end
+
+  // CHECK: func.func private @waitForClk(%arg0: !moore.ref<l1>)
+  task automatic waitForClk;
+    // CHECK: moore.wait_event {
+    // CHECK:   [[TMP:%.+]] = moore.read %arg0
+    // CHECK:   moore.detect_event posedge [[TMP]]
+    // CHECK: }
+    @(posedge clk);
+  endtask
+
+  // CHECK: func.func private @readOnClk(%arg0: !moore.ref<l1>, %arg1: !moore.ref<i32>)
+  task automatic readOnClk;
+    int result;
+    // CHECK: moore.wait_event {
+    // CHECK:   [[TMP:%.+]] = moore.read %arg0
+    // CHECK:   moore.detect_event posedge [[TMP]]
+    // CHECK: }
+    @(posedge clk);
+    // CHECK: [[TMP:%.+]] = moore.read %arg1
+    result = data;
+  endtask
+endmodule
+
 // CHECK-LABEL: moore.module @RealLiteral() {
 module RealLiteral();
    // CHECK-NEXT:  [[REALCONSTANT:%.+]] = moore.constant_real 5.000000e-01 : f64
