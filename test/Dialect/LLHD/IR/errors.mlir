@@ -123,3 +123,30 @@ llhd.global_signal @Foo : i9001
 llhd.global_signal @Foo : i42 init {
   llvm.unreachable
 }
+
+// -----
+
+llhd.coroutine @caller() {
+  // expected-error @below {{'nonexistent' does not reference a valid 'llhd.coroutine'}}
+  llhd.call_coroutine @nonexistent() : () -> ()
+  llhd.return
+}
+
+// -----
+
+func.func @notACoroutine() { return }
+llhd.coroutine @callerCoroutine() {
+  // expected-error @below {{'notACoroutine' does not reference a valid 'llhd.coroutine'}}
+  llhd.call_coroutine @notACoroutine() : () -> ()
+  llhd.return
+}
+
+// -----
+
+// A func.func cannot call an llhd.coroutine via func.call.
+llhd.coroutine @someCoroutine() { llhd.return }
+func.func @funcCallingCoroutine() {
+  // expected-error @below {{'someCoroutine' does not reference a valid function}}
+  func.call @someCoroutine() : () -> ()
+  return
+}
