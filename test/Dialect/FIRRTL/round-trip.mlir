@@ -382,4 +382,19 @@ firrtl.module @DomainSubfield() {
   %extracted_voltage = firrtl.domain.subfield %domain[voltage] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
 }
 
+// CHECK-LABEL: firrtl.module @WireDomainOperands
+firrtl.module @WireDomainOperands(
+  in %A: !firrtl.domain<@ClockDomain()>,
+  in %B: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+) {
+  // CHECK: %w_no_domain = firrtl.wire : !firrtl.uint<1>
+  %w_no_domain = firrtl.wire : !firrtl.uint<1>
+
+  // CHECK: %w_single = firrtl.wire domains[%A] : !firrtl.uint<8> domains[!firrtl.domain<@ClockDomain()>]
+  %w_single = firrtl.wire domains[%A] : !firrtl.uint<8> domains[!firrtl.domain<@ClockDomain()>]
+
+  // CHECK: %w_multi = firrtl.wire domains[%A, %B] : !firrtl.uint<16> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>]
+  %w_multi = firrtl.wire domains[%A, %B] : !firrtl.uint<16> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>]
+}
+
 }
