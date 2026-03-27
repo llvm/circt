@@ -49,6 +49,7 @@
 // CHECK-DAG: module-name-sanitizer
 // CHECK-DAG: node-symbol-remover
 // CHECK-DAG: operation-pruner
+// CHECK-DAG: reset-disconnector
 // CHECK-DAG: root-port-pruner
 // CHECK-EMPTY:
 firrtl.circuit "Foo" {
