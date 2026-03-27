@@ -631,7 +631,7 @@ public:
       auto clk = reg.getClk();
       if (foundClock) {
         if (clk != foundClock) {
-          reg.emitError("All clocks must have the same clock signal.");
+          reg.emitError("All registers must have the same clock signal.");
           return WalkResult::interrupt();
         }
       } else {
