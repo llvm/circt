@@ -202,3 +202,19 @@ firrtl.circuit "MultipleErrors" {
     firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
 }
+
+// Wire domain conflicts with connection (illegal domain crossing).
+firrtl.circuit "WireDomainConflict" {
+  firrtl.domain @ClockDomain
+  firrtl.module @WireDomainConflict(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %B: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{2nd operand has domains: [ClockDomain: A]}}
+    in %a: !firrtl.uint<1> domains [%A]
+  ) {
+    // expected-note @below {{1st operand has domains: [ClockDomain: B]}}
+    %w = firrtl.wire domains[%B] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+    // expected-error @below {{illegal domain crossing in operation}}
+    firrtl.connect %w, %a : !firrtl.uint<1>
+  }
+}
