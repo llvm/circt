@@ -759,6 +759,11 @@ struct FunctionalReductionPass
           << "'num-random-patterns' must be a positive multiple of 64";
       return signalPassFailure();
     }
+    if (conflictLimit < -1) {
+      module.emitError()
+          << "'conflict-limit' must be greater than or equal to -1";
+      return signalPassFailure();
+    }
 
     std::unique_ptr<IncrementalSATSolver> satSolver;
     if (!testTransformation) {
@@ -769,6 +774,7 @@ struct FunctionalReductionPass
                            << "' (expected auto, z3, or cadical)";
         return signalPassFailure();
       }
+      satSolver->setConflictLimit(static_cast<int>(conflictLimit));
     }
 
     FunctionalReductionSolver fcSolver(module, numRandomPatterns, seed,

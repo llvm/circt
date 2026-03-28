@@ -13,6 +13,7 @@
 #include "circt/Support/SATSolver.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/SMTAPI.h"
 
 #ifdef CIRCT_CADICAL_ENABLED
@@ -33,14 +34,38 @@ namespace {
 
 #ifdef CIRCT_CADICAL_ENABLED
 
+const char *
+toCadicalConfigName(CadicalSATSolverOptions::CadicalSolverConfig config) {
+  switch (config) {
+  case CadicalSATSolverOptions::CadicalSolverConfig::Default:
+    return "default";
+  case CadicalSATSolverOptions::CadicalSolverConfig::Plain:
+    return "plain";
+  case CadicalSATSolverOptions::CadicalSolverConfig::Sat:
+    return "sat";
+  case CadicalSATSolverOptions::CadicalSolverConfig::Unsat:
+    return "unsat";
+  }
+  llvm_unreachable("unknown CaDiCaL configuration");
+}
+
 class CadicalSATSolver : public IncrementalSATSolver {
 public:
+  explicit CadicalSATSolver(const CadicalSATSolverOptions &options) {
+    if (options.config != CadicalSolverConfig::Default) {
+      bool configured = solver.configure(toCadicalConfigName(options.config));
+      assert(configured && "invalid CaDiCaL configuration");
+      (void)configured;
+    }
+  }
   void add(int lit) override { solver.add(lit); }
   void assume(int lit) override {
     if (lit != 0)
       solver.assume(lit);
   }
   Result solve() override {
+    if (conflictLimit >= 0)
+      solver.limit("conflicts", conflictLimit);
     switch (solver.solve()) {
     case CaDiCaL::SATISFIABLE:
       return kSAT;
@@ -55,6 +80,7 @@ public:
       return 0;
     return solver.val(v);
   }
+  void setConflictLimit(int limit) override { conflictLimit = limit; }
   void reserveVars(int maxVar) override {
     if (maxVar <= maxVariable)
       return;
@@ -72,6 +98,7 @@ public:
 private:
   mutable CaDiCaL::Solver solver;
   int maxVariable = 0;
+  int conflictLimit = -1;
 };
 
 #endif // CIRCT_CADICAL_ENABLED
@@ -229,9 +256,10 @@ std::unique_ptr<IncrementalSATSolver> createZ3SATSolver() {
 #endif
 }
 
-std::unique_ptr<IncrementalSATSolver> createCadicalSATSolver() {
+std::unique_ptr<IncrementalSATSolver>
+createCadicalSATSolver(const CadicalSATSolverOptions &options) {
 #ifdef CIRCT_CADICAL_ENABLED
-  return std::make_unique<CadicalSATSolver>();
+  return std::make_unique<CadicalSATSolver>(options);
 #else
   return {};
 #endif
