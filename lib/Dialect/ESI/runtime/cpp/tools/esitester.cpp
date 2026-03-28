@@ -296,8 +296,8 @@ int main(int argc, const char *argv[]) {
                    "Coordinates per header (default 240, max 65535)")
       ->check(CLI::Range(1u, 0xFFFFu));
 
-  CLI::App *channelTestSub =
-      cli.add_subcommand("channel", "Test ChannelService to_host and from_host");
+  CLI::App *channelTestSub = cli.add_subcommand(
+      "channel", "Test ChannelService to_host and from_host");
   uint32_t channelIters = 10;
   channelTestSub->add_option("-i,--iters", channelIters,
                              "Number of loopback iterations (default 10)");
@@ -1990,8 +1990,8 @@ static void channelTest(AcceleratorConnection *conn, Accelerator *accel,
                                std::to_string(got));
   }
   logger.info("esitester", "Channel test: producer passed (" +
-                                std::to_string(iterations) +
-                                " incrementing values)");
+                               std::to_string(iterations) +
+                               " incrementing values)");
 
   // --- Test from_host -> to_host loopback ---
   auto loopbackInIter = ports.find(AppID("loopback_in"));
@@ -2030,8 +2030,7 @@ static void channelTest(AcceleratorConnection *conn, Accelerator *accel,
                                std::to_string(i));
   }
 
-  logger.info("esitester",
-              "Channel test: loopback passed (" +
-                  std::to_string(iterations) + " iterations)");
+  logger.info("esitester", "Channel test: loopback passed (" +
+                               std::to_string(iterations) + " iterations)");
   std::cout << "Channel test passed" << std::endl;
 }
