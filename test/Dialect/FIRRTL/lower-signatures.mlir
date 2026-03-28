@@ -132,14 +132,13 @@ firrtl.circuit "InstanceChoice" {
   firrtl.module @TargetWithDomain(
     in %D: !firrtl.domain<@ClockDomain()>,
     in %b: !firrtl.bundle<x: uint<1>, y: uint<2>> domains [%D]
-  ) attributes {convention = #firrtl<convention scalarized>} {
+  ) {
   }
 
-  firrtl.module @FPGATargetWithDomain(
-    in %D: !firrtl.domain<@ClockDomain()>,
-    in %b: !firrtl.bundle<x: uint<1>, y: uint<2>> domains [%D]
-  ) attributes {convention = #firrtl<convention scalarized>} {
-  }
+  firrtl.extmodule @FPGATargetWithDomain(
+    in D: !firrtl.domain<@ClockDomain()>,
+    in b: !firrtl.bundle<x: uint<1>, y: uint<2>> domains [D]
+  )
 
   firrtl.module @ASICTargetWithDomain(
     in %D: !firrtl.domain<@ClockDomain()>,

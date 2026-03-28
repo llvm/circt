@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLUTILS_H
 #define CIRCT_DIALECT_FIRRTL_FIRRTLUTILS_H
 
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/BuiltinOps.h"
 

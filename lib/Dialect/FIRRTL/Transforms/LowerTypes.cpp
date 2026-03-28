@@ -41,6 +41,7 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-lower-types"
@@ -1828,6 +1829,7 @@ void LowerTypesPass::runOnOperation() {
   CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
   std::vector<FModuleLike> ops;
+  auto &instanceGraph = getAnalysis<InstanceGraph>();
   // Symbol Table
   auto &symTbl = getAnalysis<SymbolTable>();
   // Cached attr
@@ -1836,7 +1838,15 @@ void LowerTypesPass::runOnOperation() {
   DenseMap<FModuleLike, Convention> conventionTable;
   auto circuit = getOperation();
   for (auto module : circuit.getOps<FModuleLike>()) {
-    conventionTable.insert({module, module.getConvention()});
+    auto convention = module.getConvention();
+    // Instance choices select between modules with a shared port shape, so
+    // any module instantiated by one must use the scalarized convention.
+    if (llvm::any_of(instanceGraph.lookup(module)->uses(),
+                     [](InstanceRecord *use) {
+                       return use->getInstance<InstanceChoiceOp>();
+                     }))
+      convention = Convention::Scalarized;
+    conventionTable.insert({module, convention});
     ops.push_back(module);
   }
 
