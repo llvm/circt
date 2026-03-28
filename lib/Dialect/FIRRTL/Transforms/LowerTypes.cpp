@@ -1839,8 +1839,8 @@ void LowerTypesPass::runOnOperation() {
   auto circuit = getOperation();
   for (auto module : circuit.getOps<FModuleLike>()) {
     auto convention = module.getConvention();
-    // If the module is used by an instance choice, we simply scalarize it to
-    // simplify the logic.
+    // Instance choices select between modules with a shared port shape, so
+    // any module instantiated by one must use the scalarized convention.
     if (llvm::any_of(instanceGraph.lookup(module)->uses(),
                      [](InstanceRecord *use) {
                        return use->getInstance<InstanceChoiceOp>();
