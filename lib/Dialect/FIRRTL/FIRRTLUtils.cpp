@@ -1255,9 +1255,3 @@ circt::firrtl::InstanceChoiceMacroTable::getMacro(StringAttr optionName,
     return {};
   return it->second;
 }
-
-bool circt::firrtl::isInstantiatedByInstanceChoice(InstanceGraphNode *node) {
-  return llvm::any_of(node->uses(), [](InstanceRecord *use) {
-    return use->getInstance<InstanceChoiceOp>();
-  });
-}

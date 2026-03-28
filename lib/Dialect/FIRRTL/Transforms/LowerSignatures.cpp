@@ -22,6 +22,7 @@
 #include "circt/Support/InstanceGraphInterface.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-lower-signatures"
@@ -518,7 +519,12 @@ void LowerSignaturesPass::runOnOperation() {
 
   for (auto mod : circuit.getOps<FModuleLike>()) {
     auto convention = mod.getConvention();
-    if (isInstantiatedByInstanceChoice(instanceGraph.lookup(mod)))
+    // If the module is used by an instance choice, we simply scalarize it to
+    // simplify the logic.
+    if (llvm::any_of(instanceGraph.lookup(mod)->uses(),
+                     [](InstanceRecord *use) {
+                       return use->getInstance<InstanceChoiceOp>();
+                     }))
       convention = Convention::Scalarized;
     if (lowerModuleSignature(mod, convention, cache, portMap[mod.getNameAttr()])
             .failed())

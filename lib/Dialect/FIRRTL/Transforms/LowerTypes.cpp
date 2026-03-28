@@ -41,6 +41,7 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-lower-types"
@@ -1838,7 +1839,12 @@ void LowerTypesPass::runOnOperation() {
   auto circuit = getOperation();
   for (auto module : circuit.getOps<FModuleLike>()) {
     auto convention = module.getConvention();
-    if (isInstantiatedByInstanceChoice(instanceGraph.lookup(module)))
+    // If the module is used by an instance choice, we simply scalarize it to
+    // simplify the logic.
+    if (llvm::any_of(instanceGraph.lookup(module)->uses(),
+                     [](InstanceRecord *use) {
+                       return use->getInstance<InstanceChoiceOp>();
+                     }))
       convention = Convention::Scalarized;
     conventionTable.insert({module, convention});
     ops.push_back(module);
