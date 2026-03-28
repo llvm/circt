@@ -533,6 +533,10 @@ class BundlePort:
       return super().__new__(MMIORegion)
     if isinstance(cpp_port, cpp.Metric):
       return super().__new__(MetricPort)
+    if isinstance(cpp_port, cpp.ToHostChannel):
+      return super().__new__(ToHostPort)
+    if isinstance(cpp_port, cpp.FromHostChannel):
+      return super().__new__(FromHostPort)
     return super().__new__(cls)
 
   def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
@@ -684,3 +688,42 @@ class MetricPort(BundlePort):
   def read(self) -> Future:
     cpp_future = self.cpp_port.read()
     return MessageFuture(self.cpp_port.type, cpp_future)
+
+
+class ToHostPort(BundlePort):
+  """A channel which reads data from the accelerator (to_host)."""
+
+  def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
+    super().__init__(owner, cpp_port)
+    self.data_type = self.read_port("data").type
+    self.connected = False
+
+  def connect(self):
+    self.cpp_port.connect()
+    self.connected = True
+
+  def read(self) -> Future:
+    """Read a value from the channel. Returns a future."""
+    cpp_future = self.cpp_port.read()
+    return MessageFuture(self.data_type, cpp_future)
+
+
+class FromHostPort(BundlePort):
+  """A channel which writes data to the accelerator (from_host)."""
+
+  def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
+    super().__init__(owner, cpp_port)
+    self.data_type = self.write_port("data").type
+    self.connected = False
+
+  def connect(self):
+    self.cpp_port.connect()
+    self.connected = True
+
+  def write(self, data: Any) -> None:
+    """Write a value to the channel."""
+    valid, reason = self.data_type.is_valid(data)
+    if not valid:
+      raise ValueError(
+          f"'{data}' cannot be converted to '{self.data_type}': {reason}")
+    self.cpp_port.write(self.data_type.serialize(data))

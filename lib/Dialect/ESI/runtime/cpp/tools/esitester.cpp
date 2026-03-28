@@ -70,6 +70,8 @@ static void coordTranslateTest(AcceleratorConnection *, Accelerator *,
 static void serialCoordTranslateTest(AcceleratorConnection *, Accelerator *,
                                      uint32_t xTrans, uint32_t yTrans,
                                      uint32_t numCoords, size_t batchSizeLimit);
+static void channelTest(AcceleratorConnection *, Accelerator *,
+                        uint32_t iterations);
 
 // Default widths and default widths string for CLI help text.
 constexpr std::array<uint32_t, 5> defaultWidths = {32, 64, 128, 256, 512};
@@ -294,6 +296,12 @@ int main(int argc, const char *argv[]) {
                    "Coordinates per header (default 240, max 65535)")
       ->check(CLI::Range(1u, 0xFFFFu));
 
+  CLI::App *channelTestSub = cli.add_subcommand(
+      "channel", "Test ChannelService to_host and from_host");
+  uint32_t channelIters = 10;
+  channelTestSub->add_option("-i,--iters", channelIters,
+                             "Number of loopback iterations (default 10)");
+
   if (int rc = cli.esiParse(argc, argv))
     return rc;
   if (!cli.get_help_ptr()->empty())
@@ -337,6 +345,8 @@ int main(int argc, const char *argv[]) {
     } else if (*serialCoordTranslateSub) {
       serialCoordTranslateTest(acc, accel, coordXTrans, coordYTrans,
                                coordNumItems, serialBatchSize);
+    } else if (*channelTestSub) {
+      channelTest(acc, accel, channelIters);
     }
 
     acc->disconnect();
@@ -1936,4 +1946,91 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
 
   logger.info("esitester", "Serial coord translate test passed");
   std::cout << "Serial coord translate test passed" << std::endl;
+}
+
+static void channelTest(AcceleratorConnection *conn, Accelerator *accel,
+                        uint32_t iterations) {
+  Logger &logger = conn->getLogger();
+
+  auto channelChild = accel->getChildren().find(AppID("channel_test"));
+  if (channelChild == accel->getChildren().end())
+    throw std::runtime_error("Channel test: no 'channel_test' child");
+  auto &ports = channelChild->second->getPorts();
+
+  // --- Get the MMIO port to trigger the producer ---
+  auto cmdIter = ports.find(AppID("cmd"));
+  if (cmdIter == ports.end())
+    throw std::runtime_error("Channel test: no 'cmd' port");
+  auto *cmdMMIO = cmdIter->second.getAs<services::MMIO::MMIORegion>();
+  if (!cmdMMIO)
+    throw std::runtime_error("Channel test: 'cmd' is not MMIO");
+
+  // --- Get the producer to_host port ---
+  auto producerIter = ports.find(AppID("producer"));
+  if (producerIter == ports.end())
+    throw std::runtime_error("Channel test: no 'producer' port");
+  auto *producerPort =
+      producerIter->second.getAs<services::ChannelService::ToHost>();
+  if (!producerPort)
+    throw std::runtime_error(
+        "Channel test: 'producer' is not a ChannelService::ToHost");
+  producerPort->connect();
+
+  // --- Test to_host: MMIO-triggered incrementing values ---
+  // Write the number of values to send at offset 0x0.
+  cmdMMIO->write(0x0, iterations);
+
+  for (uint32_t i = 0; i < iterations; ++i) {
+    MessageData recvData = producerPort->read().get();
+    uint32_t got = *recvData.as<uint32_t>();
+    std::cout << "[channel] producer i=" << i << " got=" << got << std::endl;
+    if (got != i)
+      throw std::runtime_error("Channel producer: expected " +
+                               std::to_string(i) + ", got " +
+                               std::to_string(got));
+  }
+  logger.info("esitester", "Channel test: producer passed (" +
+                               std::to_string(iterations) +
+                               " incrementing values)");
+
+  // --- Test from_host -> to_host loopback ---
+  auto loopbackInIter = ports.find(AppID("loopback_in"));
+  if (loopbackInIter == ports.end())
+    throw std::runtime_error("Channel test: no 'loopback_in' port");
+  auto *fromHostPort =
+      loopbackInIter->second.getAs<services::ChannelService::FromHost>();
+  if (!fromHostPort)
+    throw std::runtime_error(
+        "Channel test: 'loopback_in' is not a ChannelService::FromHost");
+  fromHostPort->connect();
+
+  auto loopbackOutIter = ports.find(AppID("loopback_out"));
+  if (loopbackOutIter == ports.end())
+    throw std::runtime_error("Channel test: no 'loopback_out' port");
+  auto *loopbackOutPort =
+      loopbackOutIter->second.getAs<services::ChannelService::ToHost>();
+  if (!loopbackOutPort)
+    throw std::runtime_error(
+        "Channel test: 'loopback_out' is not a ChannelService::ToHost");
+  loopbackOutPort->connect();
+
+  std::mt19937_64 rng(0xDEADBEEF);
+  std::uniform_int_distribution<uint32_t> dist(0, UINT32_MAX);
+
+  for (uint32_t i = 0; i < iterations; ++i) {
+    uint32_t sendVal = dist(rng);
+    fromHostPort->write(MessageData::from(sendVal));
+    MessageData recvData = loopbackOutPort->read().get();
+    uint32_t recvVal = *recvData.as<uint32_t>();
+    std::cout << "[channel] loopback i=" << i << " sent=0x"
+              << esi::toHex(sendVal) << " recv=0x" << esi::toHex(recvVal)
+              << std::endl;
+    if (recvVal != sendVal)
+      throw std::runtime_error("Channel loopback mismatch at i=" +
+                               std::to_string(i));
+  }
+
+  logger.info("esitester", "Channel test: loopback passed (" +
+                               std::to_string(iterations) + " iterations)");
+  std::cout << "Channel test passed" << std::endl;
 }

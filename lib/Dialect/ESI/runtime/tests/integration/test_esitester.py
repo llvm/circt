@@ -4,7 +4,10 @@
 
 from __future__ import annotations
 
+import esiaccel
+from esiaccel.accelerator import AcceleratorConnection
 from esiaccel.cosim.pytest import cosim_test
+import esiaccel.types as types
 
 from .conftest import HW_DIR, check_lines, require_tool, run_cmd
 
@@ -71,6 +74,19 @@ class TestCosimEsitester:
         "Serial coord translate test passed",
     ])
 
+  def test_channel(self, host: str, port: int) -> None:
+    conn = f"{host}:{port}"
+    stdout = run_cmd(["esitester", "cosim", conn, "channel", "-i", "3"])
+    check_lines(stdout, [
+        "[channel] producer i=0 got=0",
+        "[channel] producer i=1 got=1",
+        "[channel] producer i=2 got=2",
+        "[channel] loopback i=0",
+        "[channel] loopback i=1",
+        "[channel] loopback i=2",
+        "Channel test passed",
+    ])
+
   def test_telemetry(self, host: str, port: int) -> None:
     conn = f"{host}:{port}"
     stdout = run_cmd(["esiquery", "cosim", conn, "telemetry"])
@@ -112,3 +128,44 @@ class TestCosimEsitesterDma:
         "fromhostdma[32].fromHostCycles: 0",
         "tohostdma[32].toHostCycles: 0",
     ])
+
+
+@cosim_test(HW_DIR / "esitester.py", args=("{tmp_dir}", "cosim"))
+def test_channel_python(conn: AcceleratorConnection) -> None:
+  """Test ChannelService ToHost and FromHost ports from Python."""
+  acc = conn.build_accelerator()
+  channel_test = acc.children[esiaccel.AppID("channel_test")]
+  ports = channel_test.ports
+
+  # Get the MMIO port and trigger the producer to send 5 values.
+  mmio = ports[esiaccel.AppID("cmd")]
+  assert isinstance(mmio, types.MMIORegion), \
+      f"Expected MMIORegion, got {type(mmio)}"
+
+  producer = ports[esiaccel.AppID("producer")]
+  assert isinstance(producer, types.ToHostPort), \
+      f"Expected ToHostPort, got {type(producer)}"
+  producer.connect()
+
+  num_values = 5
+  mmio.write(0x0, num_values)
+  for i in range(num_values):
+    result = producer.read().result()
+    assert result == i, f"Producer: expected {i}, got {result}"
+
+  # Test from_host -> to_host loopback.
+  loopback_in = ports[esiaccel.AppID("loopback_in")]
+  assert isinstance(loopback_in, types.FromHostPort), \
+      f"Expected FromHostPort, got {type(loopback_in)}"
+  loopback_in.connect()
+
+  loopback_out = ports[esiaccel.AppID("loopback_out")]
+  assert isinstance(loopback_out, types.ToHostPort), \
+      f"Expected ToHostPort, got {type(loopback_out)}"
+  loopback_out.connect()
+
+  for i in range(5):
+    loopback_in.write(42 + i)
+    result = loopback_out.read().result()
+    assert result == 42 + i, \
+        f"Loopback: expected {42 + i}, got {result}"

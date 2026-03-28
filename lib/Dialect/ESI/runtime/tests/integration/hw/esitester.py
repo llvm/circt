@@ -1188,12 +1188,75 @@ def FromHostDMATest(width: int):
   return FromHostDMATest
 
 
+class ChannelTest(Module):
+  """Test the ChannelService with a to_host producer and a from_host loopback.
+
+  The 'producer' to_host port sends incrementing UInt(32) values. The number
+  of values to send is specified via an MMIO write to offset 0x0. Reading MMIO
+  returns the remaining count.
+
+  The 'loopback_in'/'loopback_out' pair forwards from_host data back to_host."""
+
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def construct(ports):
+    clk = ports.clk
+    rst = ports.rst
+
+    # MMIO interface for triggering the producer.
+    cmd_chan_wire = Wire(Channel(esi.MMIOReadWriteCmdType))
+
+    # State: remaining count and current value.
+    remaining = Reg(UInt(32), clk=clk, rst=rst, rst_value=0)
+    cur_value = Reg(UInt(32), clk=clk, rst=rst, rst_value=0)
+
+    # Handle MMIO commands.
+    cmd_ready = Wire(Bits(1))
+    cmd, cmd_valid = cmd_chan_wire.unwrap(cmd_ready)
+    is_write = cmd.write & cmd_valid
+    # On write to offset 0x0, load the count and reset the current value.
+    load_count = is_write & (cmd.offset == UInt(32)(0))
+
+    # to_host: send incrementing values while remaining > 0.
+    has_data = remaining != UInt(32)(0)
+    data_chan, data_ready = Channel(UInt(32)).wrap(cur_value, has_data)
+    sent = data_ready & has_data
+
+    # Compute next state: load from MMIO takes priority, then decrement on send.
+    next_remaining = Mux(
+        load_count, Mux(sent, remaining, (remaining - UInt(32)(1)).as_uint(32)),
+        cmd.data.as_uint(32))
+    next_cur_value = Mux(
+        load_count, Mux(sent, cur_value, (cur_value + UInt(32)(1)).as_uint(32)),
+        UInt(32)(0))
+    remaining.assign(next_remaining)
+    cur_value.assign(next_cur_value)
+
+    # MMIO read response: return remaining count.
+    response_chan, response_ready = Channel(Bits(64)).wrap(
+        remaining.as_bits(64), cmd_valid)
+    cmd_ready.assign(response_ready)
+
+    mmio_rw = esi.MMIO.read_write(appid=AppID("cmd"))
+    mmio_rw_cmd_chan = mmio_rw.unpack(data=response_chan)["cmd"]
+    cmd_chan_wire.assign(mmio_rw_cmd_chan)
+
+    esi.ChannelService.to_host(AppID("producer"), data_chan)
+
+    # from_host -> to_host loopback.
+    loopback_in = esi.ChannelService.from_host(AppID("loopback_in"), UInt(32))
+    esi.ChannelService.to_host(AppID("loopback_out"), loopback_in)
+
+
 class EsiTester(Module):
   """Top-level ESI test harness module.
 
     Contains submodules:
       CallbackTest            (single instance) – host callback via MMIO write (offset 0x10).
       LoopbackInOutAdd        (single instance) – function service adding constant 11.
+      ChannelTest             (single instance) – ChannelService to_host and from_host loopback.
       MMIOAdd(add_amt)        instances for add_amt in {4, 9, 14} – MMIO read returns offset + add_amt.
       ReadMem(width)          for widths: 32, 64, 128, 256, 512, 534 – host memory read tests.
       WriteMem(width)         for widths: 32, 64, 128, 256, 512, 534 – host memory write tests.
@@ -1224,6 +1287,12 @@ class EsiTester(Module):
         rst=ports.rst,
         instance_name="loopback",
         appid=AppID("loopback"),
+    )
+    ChannelTest(
+        clk=ports.clk,
+        rst=ports.rst,
+        instance_name="channel_test",
+        appid=AppID("channel_test"),
     )
     StreamingAdder(1)(
         clk=ports.clk,

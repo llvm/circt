@@ -199,6 +199,74 @@ BundlePort *CustomService::getPort(AppIDPath id, const BundleType *type) const {
                         conn.getEngineMapFor(id).requestPorts(id, type));
 }
 
+ChannelService::ChannelService(AppIDPath idPath, AcceleratorConnection &conn,
+                               ServiceImplDetails details,
+                               HWClientDetails clients)
+    : Service(conn) {
+  if (auto f = details.find("service"); f != details.end())
+    // Strip off initial '@'.
+    symbol = std::any_cast<std::string>(f->second).substr(1);
+}
+
+std::string ChannelService::getServiceSymbol() const { return symbol; }
+
+BundlePort *ChannelService::getPort(AppIDPath id,
+                                    const BundleType *type) const {
+  auto dataChan = type->findChannel("data");
+  PortMap ports = conn.getEngineMapFor(id).requestPorts(id, type);
+  if (dataChan.second == BundleType::Direction::From)
+    return new ToHost(id.back(), type, ports);
+  return new FromHost(id.back(), type, ports);
+}
+
+ChannelService::ToHost *ChannelService::ToHost::get(AppID id,
+                                                    const BundleType *type,
+                                                    ReadChannelPort &data) {
+  return new ToHost(id, type, {{std::string("data"), data}});
+}
+
+void ChannelService::ToHost::connect() {
+  if (connected)
+    throw std::runtime_error("ToHost channel is already connected");
+  if (channels.size() != 1)
+    throw std::runtime_error("ChannelService ToHost must have exactly one "
+                             "channel");
+  dataPort = &getRawRead("data");
+  dataPort->connect();
+  connected = true;
+}
+
+std::future<MessageData> ChannelService::ToHost::read() {
+  if (!connected)
+    throw std::runtime_error(
+        "ToHost channel must be 'connect'ed before reading");
+  return dataPort->readAsync();
+}
+
+ChannelService::FromHost *
+ChannelService::FromHost::get(AppID id, const BundleType *type,
+                              WriteChannelPort &data) {
+  return new FromHost(id, type, {{std::string("data"), data}});
+}
+
+void ChannelService::FromHost::connect() {
+  if (connected)
+    throw std::runtime_error("FromHost channel is already connected");
+  if (channels.size() != 1)
+    throw std::runtime_error("ChannelService FromHost must have exactly one "
+                             "channel");
+  dataPort = &getRawWrite("data");
+  dataPort->connect();
+  connected = true;
+}
+
+void ChannelService::FromHost::write(const MessageData &data) {
+  if (!connected)
+    throw std::runtime_error(
+        "FromHost channel must be 'connect'ed before writing");
+  dataPort->write(data);
+}
+
 FuncService::FuncService(AppIDPath idPath, AcceleratorConnection &conn,
                          ServiceImplDetails details, HWClientDetails clients)
     : Service(conn) {
@@ -424,6 +492,8 @@ Service *ServiceRegistry::createService(AcceleratorConnection *acc,
     return new FuncService(id, *acc, details, clients);
   if (svcType == typeid(CallService))
     return new CallService(*acc, id, details);
+  if (svcType == typeid(ChannelService))
+    return new ChannelService(id, *acc, details, clients);
   if (svcType == typeid(TelemetryService))
     return new TelemetryService(id, *acc, details, clients);
   if (svcType == typeid(CustomService))
@@ -437,6 +507,8 @@ Service::Type ServiceRegistry::lookupServiceType(const std::string &svcName) {
     return typeid(FuncService);
   if (svcName == "esi.service.std.call")
     return typeid(CallService);
+  if (svcName == "esi.service.std.channel")
+    return typeid(ChannelService);
   if (svcName == MMIO::StdName)
     return typeid(MMIO);
   if (svcName == HostMem::StdName)
