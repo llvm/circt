@@ -516,6 +516,66 @@ struct ProcedureOpConversion : public OpConversionPattern<ProcedureOp> {
   }
 };
 
+//===----------------------------------------------------------------------===//
+// Coroutine Conversion
+//===----------------------------------------------------------------------===//
+
+struct CoroutineOpConversion : public OpConversionPattern<CoroutineOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(CoroutineOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto funcType = op.getFunctionType();
+    TypeConverter::SignatureConversion sigConversion(funcType.getNumInputs());
+    for (auto [i, type] : llvm::enumerate(funcType.getInputs())) {
+      auto converted = typeConverter->convertType(type);
+      if (!converted)
+        return failure();
+      sigConversion.addInputs(i, converted);
+    }
+    SmallVector<Type> resultTypes;
+    if (failed(typeConverter->convertTypes(funcType.getResults(), resultTypes)))
+      return failure();
+
+    auto newFuncType = FunctionType::get(
+        rewriter.getContext(), sigConversion.getConvertedTypes(), resultTypes);
+    auto newOp = llhd::CoroutineOp::create(rewriter, op.getLoc(),
+                                           op.getSymName(), newFuncType);
+    newOp.setSymVisibilityAttr(op.getSymVisibilityAttr());
+    rewriter.inlineRegionBefore(op.getBody(), newOp.getBody(),
+                                newOp.getBody().end());
+    if (failed(rewriter.convertRegionTypes(&newOp.getBody(), *typeConverter,
+                                           &sigConversion)))
+      return failure();
+
+    // Replace moore.return with llhd.return inside the coroutine body.
+    for (auto returnOp :
+         llvm::make_early_inc_range(newOp.getBody().getOps<ReturnOp>())) {
+      rewriter.setInsertionPoint(returnOp);
+      rewriter.replaceOpWithNewOp<llhd::ReturnOp>(returnOp, ValueRange{});
+    }
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct CallCoroutineOpConversion : public OpConversionPattern<CallCoroutineOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(CallCoroutineOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    SmallVector<Type> convResTypes;
+    if (failed(typeConverter->convertTypes(op.getResultTypes(), convResTypes)))
+      return failure();
+    rewriter.replaceOpWithNewOp<llhd::CallCoroutineOp>(
+        op, convResTypes, adaptor.getCallee(), adaptor.getOperands());
+    return success();
+  }
+};
+
 struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -3115,6 +3175,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     SVModuleOpConversion,
     InstanceOpConversion,
     ProcedureOpConversion,
+    CoroutineOpConversion,
+    CallCoroutineOpConversion,
     WaitEventOpConversion,
 
     // Patterns of shifting operations.

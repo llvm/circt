@@ -1790,3 +1790,21 @@ func.func @QueuePopFront() -> !moore.i16 {
   // CHECK: return [[POPPED]] : i16
   return %v : !moore.i16
 }
+
+// CHECK-LABEL: llhd.coroutine private @myTask
+// CHECK-SAME: (%arg0: !llhd.ref<i1>)
+moore.coroutine private @myTask(%arg0: !moore.ref<l1>) {
+  // CHECK: llhd.return
+  moore.return
+}
+
+// CHECK-LABEL: hw.module @CoroutineLowering
+moore.module @CoroutineLowering() {
+  %clk = moore.variable : <l1>
+  moore.procedure initial {
+    // CHECK: llhd.call_coroutine @myTask(%clk) : (!llhd.ref<i1>) -> ()
+    moore.call_coroutine @myTask(%clk) : (!moore.ref<l1>) -> ()
+    moore.return
+  }
+  moore.output
+}

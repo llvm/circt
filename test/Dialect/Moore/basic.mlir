@@ -562,3 +562,29 @@ func.func @StringOperations(%arg0 : !moore.string, %arg1 : !moore.string) {
 
   return
 }
+
+// CHECK-LABEL: moore.coroutine @myTask(%arg0: !moore.ref<l1>)
+moore.coroutine @myTask(%arg0: !moore.ref<l1>) {
+  // CHECK: moore.wait_event
+  moore.wait_event {
+    %0 = moore.read %arg0 : <l1>
+    moore.detect_event posedge %0 : l1
+  }
+  // CHECK: moore.return
+  moore.return
+}
+
+// CHECK-LABEL: moore.coroutine private @privateTask()
+moore.coroutine private @privateTask() {
+  moore.return
+}
+
+moore.module @CoroutineCallTest() {
+  %clk = moore.variable : <l1>
+  moore.procedure initial {
+    // CHECK: moore.call_coroutine @myTask(%clk) : (!moore.ref<l1>) -> ()
+    moore.call_coroutine @myTask(%clk) : (!moore.ref<l1>) -> ()
+    moore.return
+  }
+  moore.output
+}
