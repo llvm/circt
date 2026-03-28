@@ -394,6 +394,22 @@ NB_MODULE(esiCppAccel, m) {
       .def("read", &TelemetryService::Metric::read)
       .def("readInt", &TelemetryService::Metric::readInt);
 
+  nb::class_<ChannelService::ToHost, ServicePort>(m, "ToHostChannel")
+      .def("connect", &ChannelService::ToHost::connect)
+      .def("read", &ChannelService::ToHost::read);
+
+  nb::class_<ChannelService::FromHost, ServicePort>(m, "FromHostChannel")
+      .def("connect", &ChannelService::FromHost::connect)
+      .def(
+          "write",
+          [](ChannelService::FromHost &self, nb::bytearray data) {
+            std::vector<uint8_t> dataVec((const uint8_t *)data.c_str(),
+                                         (const uint8_t *)data.c_str() +
+                                             data.size());
+            self.write(MessageData(dataVec));
+          },
+          nb::arg("data"));
+
   // Store this variable (not commonly done) as the "children" method needs for
   // "Instance" to be defined first.
   auto hwmodule =
