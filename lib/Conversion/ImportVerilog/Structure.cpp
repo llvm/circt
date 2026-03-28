@@ -1489,11 +1489,22 @@ Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
   auto funcTy = getFunctionSignature(*this, subroutine, extraParams);
   if (!funcTy)
     return nullptr;
-  auto funcOp = mlir::func::FuncOp::create(builder, loc, qualifiedName, funcTy);
 
-  SymbolTable::setSymbolVisibility(funcOp, SymbolTable::Visibility::Private);
+  // Create a coroutine for tasks (which can suspend) or a function for
+  // functions (which cannot).
+  Operation *funcOp;
+  if (subroutine.subroutineKind == slang::ast::SubroutineKind::Task) {
+    auto op = moore::CoroutineOp::create(builder, loc, qualifiedName, funcTy);
+    SymbolTable::setSymbolVisibility(op, SymbolTable::Visibility::Private);
+    lowering->op = op;
+    funcOp = op;
+  } else {
+    auto op = mlir::func::FuncOp::create(builder, loc, qualifiedName, funcTy);
+    SymbolTable::setSymbolVisibility(op, SymbolTable::Visibility::Private);
+    lowering->op = op;
+    funcOp = op;
+  }
   orderedRootOps.insert(it, {subroutine.location, funcOp});
-  lowering->op = funcOp;
 
   // Add the function to the symbol table of the MLIR module, which uniquifies
   // its name.
@@ -1506,59 +1517,66 @@ Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
 /// Special case handling for recursive functions with captures;
 /// this function fixes the in-body call of the recursive function with
 /// the captured arguments.
-static LogicalResult rewriteCallSitesToPassCaptures(mlir::func::FuncOp callee,
-                                                    ArrayRef<Value> captures) {
+static LogicalResult
+rewriteCallSitesToPassCaptures(FunctionLowering &lowering) {
+  auto &captures = lowering.captures;
   if (captures.empty())
     return success();
 
+  auto *callee = lowering.op.getOperation();
   mlir::ModuleOp module = callee->getParentOfType<mlir::ModuleOp>();
   if (!module)
-    return callee.emitError("expected callee to be nested under ModuleOp");
+    return lowering.op.emitError("expected callee to be nested under ModuleOp");
 
   auto usesOpt = mlir::SymbolTable::getSymbolUses(callee, module);
   if (!usesOpt)
-    return callee.emitError("failed to compute symbol uses");
+    return lowering.op.emitError("failed to compute symbol uses");
 
-  // Snapshot the relevant users before we mutate IR.
-  SmallVector<mlir::func::CallOp, 8> callSites;
-  callSites.reserve(std::distance(usesOpt->begin(), usesOpt->end()));
+  // Snapshot the relevant call users before we mutate IR.
+  SmallVector<Operation *, 8> callSites;
   for (const mlir::SymbolTable::SymbolUse &use : *usesOpt) {
-    if (auto call = llvm::dyn_cast<mlir::func::CallOp>(use.getUser()))
-      callSites.push_back(call);
+    auto *user = use.getUser();
+    if (isa<mlir::func::CallOp>(user) || isa<moore::CallCoroutineOp>(user))
+      callSites.push_back(user);
   }
   if (callSites.empty())
     return success();
 
-  Block &entry = callee.getBody().front();
+  Block &entry = lowering.op.getFunctionBody().front();
   const unsigned numCaps = captures.size();
   const unsigned numEntryArgs = entry.getNumArguments();
   if (numEntryArgs < numCaps)
-    return callee.emitError("entry block has fewer args than captures");
+    return lowering.op.emitError("entry block has fewer args than captures");
   const unsigned capArgStart = numEntryArgs - numCaps;
 
-  // Current (finalized) function type.
-  auto fTy = callee.getFunctionType();
+  auto fTy = cast<FunctionType>(lowering.op.getFunctionType());
 
-  for (auto call : callSites) {
-    SmallVector<Value> newOperands(call.getArgOperands().begin(),
-                                   call.getArgOperands().end());
+  for (auto *callOp : callSites) {
+    // Get the existing operands from the call.
+    auto argOperands = callOp->getOperands();
+    SmallVector<Value> newOperands(argOperands.begin(), argOperands.end());
 
-    const bool inSameFunc = callee->isProperAncestor(call);
+    const bool inSameFunc = callee->isProperAncestor(callOp);
     if (inSameFunc) {
-      // Append the function’s *capture block arguments* in order.
       for (unsigned i = 0; i < numCaps; ++i)
         newOperands.push_back(entry.getArgument(capArgStart + i));
     } else {
-      // External call site: pass the captured SSA values.
       newOperands.append(captures.begin(), captures.end());
     }
 
-    OpBuilder b(call);
-    auto flatRef = mlir::FlatSymbolRefAttr::get(callee);
-    auto newCall = mlir::func::CallOp::create(
-        b, call.getLoc(), fTy.getResults(), flatRef, newOperands);
-    call->replaceAllUsesWith(newCall.getOperation());
-    call->erase();
+    OpBuilder b(callOp);
+    auto flatRef = mlir::FlatSymbolRefAttr::get(callee->getContext(),
+                                                lowering.op.getName());
+    Operation *newCall;
+    if (lowering.isCoroutine()) {
+      newCall = moore::CallCoroutineOp::create(
+          b, callOp->getLoc(), fTy.getResults(), flatRef, newOperands);
+    } else {
+      newCall = mlir::func::CallOp::create(
+          b, callOp->getLoc(), fTy.getResults(), flatRef, newOperands);
+    }
+    callOp->replaceAllUsesWith(newCall);
+    callOp->erase();
   }
 
   return success();
@@ -1616,13 +1634,14 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
 
   // Create a function body block and populate it with block arguments.
   SmallVector<moore::VariableOp> argVariables;
-  auto &block = lowering->op.getBody().emplaceBlock();
+  auto &block = lowering->op.getFunctionBody().emplaceBlock();
 
   // If this is a class method, the first input is %this :
   // !moore.class<@C>
   if (isMethod) {
     auto thisLoc = convertLocation(subroutine.location);
-    auto thisType = lowering->op.getFunctionType().getInput(0);
+    auto thisType =
+        cast<FunctionType>(lowering->op.getFunctionType()).getInput(0);
     auto thisArg = block.addArgument(thisType, thisLoc);
 
     // Bind `this` so NamedValue/MemberAccess can find it.
@@ -1630,7 +1649,7 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
   }
 
   // Add user-defined block arguments
-  auto inputs = lowering->op.getFunctionType().getInputs();
+  auto inputs = cast<FunctionType>(lowering->op.getFunctionType()).getInputs();
   auto astArgs = subroutine.getArguments();
   auto valInputs = llvm::ArrayRef<Type>(inputs).drop_front(isMethod ? 1 : 0);
 
@@ -1692,7 +1711,7 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
 
     // Don't capture anything that's a local reference
     mlir::Region *defReg = ref.getParentRegion();
-    if (defReg && lowering->op.getBody().isAncestor(defReg))
+    if (defReg && lowering->op.getFunctionBody().isAncestor(defReg))
       return;
 
     // If we've already recorded this capture, skip.
@@ -1725,7 +1744,7 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
 
     // Don't capture anything that's a local reference
     mlir::Region *defReg = dstRef.getParentRegion();
-    if (defReg && lowering->op.getBody().isAncestor(defReg))
+    if (defReg && lowering->op.getFunctionBody().isAncestor(defReg))
       return;
 
     // If we've already recorded this capture, skip.
@@ -1759,13 +1778,15 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
 
   // For the special case of recursive functions, fix the call sites within the
   // body
-  if (failed(rewriteCallSitesToPassCaptures(lowering->op, lowering->captures)))
+  if (failed(rewriteCallSitesToPassCaptures(*lowering)))
     return failure();
 
   // If there was no explicit return statement provided by the user, insert a
   // default one.
   if (builder.getBlock()) {
-    if (returnVar && !subroutine.getReturnType().isVoid()) {
+    if (lowering->isCoroutine()) {
+      moore::ReturnOp::create(builder, lowering->op.getLoc());
+    } else if (returnVar && !subroutine.getReturnType().isVoid()) {
       Value read =
           moore::ReadOp::create(builder, returnVar.getLoc(), returnVar);
       mlir::func::ReturnOp::create(builder, lowering->op.getLoc(), read);
@@ -1800,8 +1821,9 @@ Context::finalizeFunctionBodyCaptures(FunctionLowering &lowering) {
   MLIRContext *ctx = getContext();
 
   // Build new input type list: existing inputs + capture ref types.
-  SmallVector<Type> newInputs(lowering.op.getFunctionType().getInputs().begin(),
-                              lowering.op.getFunctionType().getInputs().end());
+  SmallVector<Type> newInputs(
+      cast<FunctionType>(lowering.op.getFunctionType()).getInputs().begin(),
+      cast<FunctionType>(lowering.op.getFunctionType()).getInputs().end());
 
   for (Value cap : lowering.captures) {
     // Expect captures to be refs.
@@ -1815,11 +1837,12 @@ Context::finalizeFunctionBodyCaptures(FunctionLowering &lowering) {
 
   // Results unchanged.
   auto newFuncTy = FunctionType::get(
-      ctx, newInputs, lowering.op.getFunctionType().getResults());
-  lowering.op.setFunctionType(newFuncTy);
+      ctx, newInputs,
+      cast<FunctionType>(lowering.op.getFunctionType()).getResults());
+  lowering.op.setType(newFuncTy);
 
   // Add the new block arguments to the entry block.
-  Block &entry = lowering.op.getBody().front();
+  Block &entry = lowering.op.getFunctionBody().front();
   SmallVector<Value> capArgs;
   capArgs.reserve(lowering.captures.size());
   for (Type t :
@@ -2096,7 +2119,7 @@ struct ClassMethodVisitor : ClassDeclVisitorBase {
       return success();
 
     // Grab the finalized function type from the lowered func.op.
-    FunctionType fnTy = lowering->op.getFunctionType();
+    FunctionType fnTy = cast<FunctionType>(lowering->op.getFunctionType());
     // Emit the method decl into the class body, preserving source order.
     moore::ClassMethodDeclOp::create(builder, loc, fn.name, fnTy,
                                      SymbolRefAttr::get(lowering->op));

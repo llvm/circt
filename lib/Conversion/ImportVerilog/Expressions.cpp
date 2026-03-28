@@ -1731,7 +1731,7 @@ struct RvalueExprVisitor : public ExprVisitor {
                   SmallVector<Type> &resultTypes) {
 
     // Get the expected receiver type from the lowered method
-    auto funcTy = lowering->op.getFunctionType();
+    auto funcTy = cast<FunctionType>(lowering->op.getFunctionType());
     auto expected0 = funcTy.getInput(0);
     auto expectedHdlTy = cast<moore::ClassHandleType>(expected0);
 
@@ -1750,8 +1750,10 @@ struct RvalueExprVisitor : public ExprVisitor {
         (subroutine->flags & slang::ast::MethodFlags::Virtual) != 0;
 
     if (!isVirtual) {
-      auto calleeSym = lowering->op.getSymName();
-      // Direct (non-virtual) call -> moore.class.call
+      auto calleeSym = lowering->op.getName();
+      if (lowering->isCoroutine())
+        return moore::CallCoroutineOp::create(builder, loc, resultTypes,
+                                              calleeSym, explicitArguments);
       return mlir::func::CallOp::create(builder, loc, resultTypes, calleeSym,
                                         explicitArguments);
     }
@@ -1859,8 +1861,8 @@ struct RvalueExprVisitor : public ExprVisitor {
 
     // Determine result types from the declared/converted func op.
     SmallVector<Type> resultTypes(
-        lowering->op.getFunctionType().getResults().begin(),
-        lowering->op.getFunctionType().getResults().end());
+        cast<FunctionType>(lowering->op.getFunctionType()).getResults().begin(),
+        cast<FunctionType>(lowering->op.getFunctionType()).getResults().end());
 
     mlir::CallOpInterface callOp;
     if (isMethod) {
@@ -1869,10 +1871,15 @@ struct RvalueExprVisitor : public ExprVisitor {
       auto [thisRef, tyHandle] = getMethodReceiverTypeHandle(expr);
       callOp = buildMethodCall(subroutine, lowering, tyHandle, thisRef,
                                arguments, resultTypes);
+    } else if (lowering->isCoroutine()) {
+      // Free task -> moore.call_coroutine
+      auto coroutine = cast<moore::CoroutineOp>(lowering->op);
+      callOp =
+          moore::CallCoroutineOp::create(builder, loc, coroutine, arguments);
     } else {
       // Free function -> func.call
-      callOp =
-          mlir::func::CallOp::create(builder, loc, lowering->op, arguments);
+      auto funcOp = cast<mlir::func::FuncOp>(lowering->op);
+      callOp = mlir::func::CallOp::create(builder, loc, funcOp, arguments);
     }
 
     auto result = resultTypes.size() > 0 ? callOp->getOpResult(0) : Value{};

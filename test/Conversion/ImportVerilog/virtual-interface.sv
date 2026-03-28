@@ -49,7 +49,7 @@ class consumer;
     vif.data = v;
   endfunction
 
-  // CHECK: func.func private @"consumer::wait_posedge_clk"(
+  // CHECK: moore.coroutine private @"consumer::wait_posedge_clk"(
   // CHECK: moore.wait_event
   // CHECK: moore.struct_extract
   // CHECK-SAME: "clk"
