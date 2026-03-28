@@ -443,6 +443,33 @@ struct Context {
   /// returns the index of the last element of the queue.
   Value currentQueue = {};
 
+  /// Ensure that the global variables for `$monitor` state exist. This creates
+  /// the `__monitor_active_id` and `__monitor_enabled` globals on first call.
+  void ensureMonitorGlobals();
+
+  /// Process any pending `$monitor` calls and generate the monitoring
+  /// procedures at module level.
+  LogicalResult flushPendingMonitors();
+
+  /// Global variable ops for `$monitor` state management. These are created on
+  /// demand by `ensureMonitorGlobals()`.
+  moore::GlobalVariableOp monitorActiveIdGlobal = nullptr;
+  moore::GlobalVariableOp monitorEnabledGlobal = nullptr;
+
+  /// The next monitor ID to allocate. ID 0 is reserved for "no monitor active".
+  unsigned nextMonitorId = 1;
+
+  /// Information about a pending `$monitor` call that needs to be converted
+  /// after the current module's body has been processed.
+  struct PendingMonitor {
+    unsigned id;
+    Location loc;
+    const slang::ast::CallExpression *call;
+  };
+
+  /// Pending `$monitor` calls that need to be converted at module level.
+  SmallVector<PendingMonitor> pendingMonitors;
+
 private:
   /// Helper function to extract the commonalities in lowering of functions and
   /// methods
