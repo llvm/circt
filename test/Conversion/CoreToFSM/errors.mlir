@@ -131,3 +131,12 @@ hw.module @multiclock(in %clk : !seq.clock, in %clk2 : !seq.clock, in %rst : i1)
     // expected-error @below {{All registers must have the same clock signal.}}
     %var = seq.compreg name "var" %state, %clk2 reset %rst, %c0_i1 : i1
 }
+
+// -----
+
+hw.module @multireset(in %clk : !seq.clock, in %rst : i1, in %rst2 : i1) {
+    %c0_i1 = hw.constant false
+    %state = seq.compreg name "state" %state, %clk reset %rst, %c0_i1 : i1
+    // expected-error @below {{All registers must have the same reset signal.}}
+    %var = seq.compreg name "var" %state, %clk reset %rst2, %c0_i1 : i1
+}
