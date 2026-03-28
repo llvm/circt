@@ -518,7 +518,7 @@ void LowerSignaturesPass::runOnOperation() {
 
   for (auto mod : circuit.getOps<FModuleLike>()) {
     auto convention = mod.getConvention();
-    if (isScalarizeRequired(instanceGraph.lookup(mod)))
+    if (isInstantiatedByInstanceChoice(instanceGraph.lookup(mod)))
       convention = Convention::Scalarized;
     if (lowerModuleSignature(mod, convention, cache, portMap[mod.getNameAttr()])
             .failed())

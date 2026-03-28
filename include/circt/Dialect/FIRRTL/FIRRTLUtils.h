@@ -91,8 +91,9 @@ private:
   llvm::MapVector<std::pair<StringAttr, StringAttr>, FlatSymbolRefAttr> cache;
 };
 
-/// Return true if the module instance graph node requires scalarization.
-bool isScalarizeRequired(InstanceGraphNode *node);
+/// Return true if the module instance graph node is instantiated by an
+/// `firrtl.instance_choice`.
+bool isInstantiatedByInstanceChoice(InstanceGraphNode *node);
 
 //===----------------------------------------------------------------------===//
 // Template utilities

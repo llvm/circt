@@ -1838,7 +1838,7 @@ void LowerTypesPass::runOnOperation() {
   auto circuit = getOperation();
   for (auto module : circuit.getOps<FModuleLike>()) {
     auto convention = module.getConvention();
-    if (isScalarizeRequired(instanceGraph.lookup(module)))
+    if (isInstantiatedByInstanceChoice(instanceGraph.lookup(module)))
       convention = Convention::Scalarized;
     conventionTable.insert({module, convention});
     ops.push_back(module);

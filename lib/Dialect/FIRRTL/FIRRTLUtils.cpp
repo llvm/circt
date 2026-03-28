@@ -1256,7 +1256,7 @@ circt::firrtl::InstanceChoiceMacroTable::getMacro(StringAttr optionName,
   return it->second;
 }
 
-bool circt::firrtl::isScalarizeRequired(InstanceGraphNode *node) {
+bool circt::firrtl::isInstantiatedByInstanceChoice(InstanceGraphNode *node) {
   return llvm::any_of(node->uses(), [](InstanceRecord *use) {
     return use->getInstance<InstanceChoiceOp>();
   });
