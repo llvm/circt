@@ -143,7 +143,9 @@ void FSTTraceEncoder::createHierarchy() {
     appendLegalizedName(sigName, nameStr.substr(charOffset));
     uint32_t handle = fstWriterCreateVar(
         fstWriter, FST_VT_VCD_WIRE, FST_VD_IMPLICIT,
-        signalTable[name.signalIndex].numBits, sigName.c_str(), 0);
+        signalTable[name.signalIndex].numBits, sigName.c_str(),
+        signalTable[name.signalIndex].handle);
+    assert(handle != 0);
     signalTable[name.signalIndex].handle = handle;
   }
 }
