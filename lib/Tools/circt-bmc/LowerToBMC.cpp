@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -85,6 +86,16 @@ void LowerToBMCPass::runOnOperation() {
   auto entryFunc = func::FuncOp::create(builder, loc, topModule,
                                         builder.getFunctionType({}, {}));
   builder.createBlock(&entryFunc.getBody());
+
+  // Save module name and port info before the module is erased
+  auto *hwOutput = hwModule.getBody().front().getTerminator();
+  SmallVector<std::pair<StringAttr, Value>> namedPorts;
+  for (auto &port : hwModule.getPortList()) {
+    Value portValue = port.isInput()
+                          ? hwModule.getBody().front().getArgument(port.argNum)
+                          : hwOutput->getOperand(port.argNum);
+    namedPorts.push_back({builder.getStringAttr(port.getName()), portValue});
+  }
 
   {
     OpBuilder::InsertionGuard guard(builder);
@@ -187,9 +198,24 @@ void LowerToBMCPass::runOnOperation() {
       verif::YieldOp::create(builder, loc, ValueRange{});
     }
   }
+  auto moduleName = hwModule.getNameAttr();
   bmcOp.getCircuit().takeBody(hwModule.getBody());
   hwModule->erase();
 
+  // signal names for counter-example generation.
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    auto &circuitBlock = bmcOp.getCircuit().front();
+    builder.setInsertionPoint(circuitBlock.getTerminator());
+    auto scope = debug::ScopeOp::create(
+        builder, loc, moduleName.getValue(),
+        // TODO: Hierarchy support would require walking parent InstanceOps,
+        // but LowerToBMC operates on a single top-level module with no
+        // instance context available at this point.
+        moduleName, nullptr);
+    for (auto &[name, value] : namedPorts)
+      debug::VariableOp::create(builder, loc, name, value, scope);
+  }
   // Define global string constants to print on success/failure
   auto createUniqueStringGlobal = [&](StringRef str) -> FailureOr<Value> {
     Location loc = moduleOp.getLoc();
