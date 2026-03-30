@@ -30,6 +30,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include <memory>
 #include <optional>
+#include <utility>
 
 namespace circt {
 namespace synth {
@@ -556,6 +557,30 @@ struct CutRewriterOptions {
 // Cut Enumeration Engine
 //===----------------------------------------------------------------------===//
 
+struct CutEnumeratorStats {
+  uint64_t numCutsCreated = 0;
+  uint64_t numCutSetsCreated = 0;
+  uint64_t numCutsRewritten = 0;
+};
+
+template <typename T>
+class TrackedSpecificBumpPtrAllocator {
+public:
+  explicit TrackedSpecificBumpPtrAllocator(uint64_t &allocationCount)
+      : allocationCount(allocationCount) {}
+
+  template <typename... Args>
+  T *create(Args &&...args) {
+    ++allocationCount;
+    return new (allocator.Allocate()) T(std::forward<Args>(args)...);
+  }
+
+  void DestroyAll() { allocator.DestroyAll(); }
+
+private:
+  llvm::SpecificBumpPtrAllocator<T> allocator;
+  uint64_t &allocationCount;
+};
 /// Cut enumeration engine for combinational logic networks.
 ///
 /// The CutEnumerator is responsible for generating cuts for each node in a
@@ -594,6 +619,9 @@ public:
   /// Clear all cut sets and reset the enumerator.
   void clear();
 
+  /// Record that one cut was successfully rewritten.
+  void noteCutRewritten() { ++stats.numCutsRewritten; }
+
   void dump() const;
 
   /// Get cut sets (indexed by LogicNetwork index).
@@ -615,8 +643,8 @@ private:
   llvm::DenseMap<uint32_t, CutSet *> cutSets;
 
   /// Typed bump allocators for fast allocation with destructors.
-  llvm::SpecificBumpPtrAllocator<Cut> cutAllocator;
-  llvm::SpecificBumpPtrAllocator<CutSet> cutSetAllocator;
+  TrackedSpecificBumpPtrAllocator<Cut> cutAllocator;
+  TrackedSpecificBumpPtrAllocator<CutSet> cutSetAllocator;
 
   /// Indices in processing order.
   llvm::SmallVector<uint32_t> processingOrder;
@@ -631,12 +659,18 @@ private:
   /// Flat logic network representation used during enumeration/rewrite.
   LogicNetwork logicNetwork;
 
+  /// Statistics for cut enumeration (number of cuts allocated, etc.).
+  CutEnumeratorStats stats;
+
 public:
   /// Get the logic network (read-only).
   const LogicNetwork &getLogicNetwork() const { return logicNetwork; }
 
   /// Get the logic network (mutable).
   LogicNetwork &getLogicNetwork() { return logicNetwork; }
+
+  /// Get enumeration statistics.
+  const CutEnumeratorStats &getStats() const { return stats; }
 };
 
 /// Base class for cut rewriting patterns used in combinational logic
@@ -784,6 +818,10 @@ public:
   /// 3. Select optimal patterns based on strategy
   /// 4. Rewrite the circuit with selected patterns
   LogicalResult run(Operation *topOp);
+
+  const CutEnumeratorStats &getStats() const {
+    return cutEnumerator.getStats();
+  }
 
 private:
   /// Enumerate cuts for all nodes in the given module.
