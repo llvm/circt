@@ -374,6 +374,21 @@ firrtl.circuit "ModuleWithPropertySubmodule" {
   }
 }
 
+// CHECK-LABEL: firrtl.circuit "ModuleWithObjectNoPorts"
+firrtl.circuit "ModuleWithObjectNoPorts" {
+  firrtl.class private @Metadata() {
+  }
+  // Ensure that a module with no property ports, but contains an object results
+  // in a class.
+  //
+  // CHECK: om.class @Baz_Class
+  firrtl.module private @Baz() {
+    // CHECK: om.object @Metadata
+    %meta = firrtl.object @Metadata()
+  }
+  firrtl.extmodule @ModuleWithObjectNoPorts()
+}
+
 // CHECK-LABEL: firrtl.circuit "DownwardReferences"
 firrtl.circuit "DownwardReferences" {
   firrtl.class @MyClass() {
