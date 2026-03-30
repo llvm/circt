@@ -833,10 +833,11 @@ CutRewritePatternSet::CutRewritePatternSet(
 //===----------------------------------------------------------------------===//
 
 CutEnumerator::CutEnumerator(const CutRewriterOptions &options)
-    : options(options) {}
+    : cutAllocator(stats.totalCutsAllocated),
+      cutSetAllocator(stats.totalCutSetsAllocated), options(options) {}
 
 CutSet *CutEnumerator::createNewCutSet(uint32_t index) {
-  CutSet *cutSet = new (cutSetAllocator.Allocate()) CutSet();
+  CutSet *cutSet = cutSetAllocator.create();
   auto [cutSetPtr, inserted] = cutSets.try_emplace(index, cutSet);
   assert(inserted && "Cut set already exists for this index");
   return cutSetPtr->second;
@@ -884,8 +885,8 @@ LogicalResult CutEnumerator::visitLogicOp(uint32_t nodeIndex) {
   }
 
   // Create the trivial cut for this node's output
-  Cut *primaryInputCut = new (cutAllocator.Allocate())
-      Cut(getAsTrivialCut(nodeIndex, logicNetwork));
+  Cut *primaryInputCut =
+      cutAllocator.create(getAsTrivialCut(nodeIndex, logicNetwork));
 
   auto *resultCutSet = createNewCutSet(nodeIndex);
   processingOrder.push_back(nodeIndex);
@@ -982,7 +983,7 @@ LogicalResult CutEnumerator::visitLogicOp(uint32_t nodeIndex) {
       }
 
       // Create the merged cut.
-      Cut *mergedCut = new (cutAllocator.Allocate()) Cut();
+      Cut *mergedCut = cutAllocator.create();
       mergedCut->setRootIndex(nodeIndex);
       mergedCut->inputs = std::move(mergedInputs);
 
@@ -1060,9 +1061,8 @@ const CutSet *CutEnumerator::getCutSet(uint32_t index) {
   auto it = cutSets.find(index);
   if (it == cutSets.end()) {
     // Create new cut set for an unprocessed value (primary input or other)
-    CutSet *cutSet = new (cutSetAllocator.Allocate()) CutSet();
-    Cut *trivialCut =
-        new (cutAllocator.Allocate()) Cut(getAsTrivialCut(index, logicNetwork));
+    CutSet *cutSet = cutSetAllocator.create();
+    Cut *trivialCut = cutAllocator.create(getAsTrivialCut(index, logicNetwork));
     cutSet->addCut(trivialCut);
     auto [newIt, inserted] = cutSets.insert({index, cutSet});
     assert(inserted && "Cut set already exists for this index");

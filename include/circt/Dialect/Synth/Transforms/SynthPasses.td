@@ -41,6 +41,12 @@ class CutRewriterPassBase<string name, string op> : Pass<name, op> {
            )}]>,
     Option<"test", "test", "bool", "false", "Attach timing to IR for testing">
   ];
+  let statistics = [
+    Statistic<"totalCutsAllocated", "cuts-allocated",
+              "Number of cuts allocated during cut enumeration">,
+    Statistic<"totalCutSetsAllocated", "cut-sets-allocated",
+              "Number of cut sets allocated during cut enumeration">,
+  ];
 }
 
 def TechMapper : CutRewriterPassBase<"synth-tech-mapper", "mlir::ModuleOp"> {
