@@ -250,8 +250,9 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
     options.maxCutInputSize = maxInputSize;
     options.maxCutSizePerRoot = maxCutsPerRoot;
     options.attachDebugTiming = test;
-    std::atomic<uint64_t> totalCutsAllocatedCount = 0;
-    std::atomic<uint64_t> totalCutSetsAllocatedCount = 0;
+    std::atomic<uint64_t> numCutsCreatedCount = 0;
+    std::atomic<uint64_t> numCutSetsCreatedCount = 0;
+    std::atomic<uint64_t> numCutsRewrittenCount = 0;
     auto result = mlir::failableParallelForEach(
         module.getContext(), nonLibraryModules, [&](hw::HWModuleOp hwModule) {
           LLVM_DEBUG(llvm::dbgs() << "Processing non-library module: "
@@ -260,16 +261,19 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
           if (failed(rewriter.run(hwModule)))
             return failure();
           const auto &stats = rewriter.getStats();
-          totalCutsAllocatedCount.fetch_add(stats.totalCutsAllocated,
-                                            std::memory_order_relaxed);
-          totalCutSetsAllocatedCount.fetch_add(stats.totalCutSetsAllocated,
-                                               std::memory_order_relaxed);
+          numCutsCreatedCount.fetch_add(stats.numCutsCreated,
+                                        std::memory_order_relaxed);
+          numCutSetsCreatedCount.fetch_add(stats.numCutSetsCreated,
+                                           std::memory_order_relaxed);
+          numCutsRewrittenCount.fetch_add(stats.numCutsRewritten,
+                                          std::memory_order_relaxed);
           return success();
         });
     if (failed(result))
       signalPassFailure();
-    totalCutsAllocated += totalCutsAllocatedCount;
-    totalCutSetsAllocated += totalCutSetsAllocatedCount;
+    numCutsCreated += numCutsCreatedCount;
+    numCutSetsCreated += numCutSetsCreatedCount;
+    numCutsRewritten += numCutsRewrittenCount;
   }
 };
 

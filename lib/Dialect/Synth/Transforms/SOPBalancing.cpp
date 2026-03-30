@@ -288,7 +288,8 @@ struct SOPBalancingPass
       return signalPassFailure();
 
     const auto &stats = rewriter.getStats();
-    totalCutsAllocated += stats.totalCutsAllocated;
-    totalCutSetsAllocated += stats.totalCutSetsAllocated;
+    numCutsCreated += stats.numCutsCreated;
+    numCutSetsCreated += stats.numCutSetsCreated;
+    numCutsRewritten += stats.numCutsRewritten;
   }
 };

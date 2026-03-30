@@ -558,8 +558,9 @@ struct CutRewriterOptions {
 //===----------------------------------------------------------------------===//
 
 struct CutEnumeratorStats {
-  uint64_t totalCutsAllocated = 0;
-  uint64_t totalCutSetsAllocated = 0;
+  uint64_t numCutsCreated = 0;
+  uint64_t numCutSetsCreated = 0;
+  uint64_t numCutsRewritten = 0;
 };
 
 template <typename T>
@@ -617,6 +618,9 @@ public:
 
   /// Clear all cut sets and reset the enumerator.
   void clear();
+
+  /// Record that one cut was successfully rewritten.
+  void noteCutRewritten() { ++stats.numCutsRewritten; }
 
   void dump() const;
 

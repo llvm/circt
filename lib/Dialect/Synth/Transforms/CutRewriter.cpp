@@ -833,8 +833,8 @@ CutRewritePatternSet::CutRewritePatternSet(
 //===----------------------------------------------------------------------===//
 
 CutEnumerator::CutEnumerator(const CutRewriterOptions &options)
-    : cutAllocator(stats.totalCutsAllocated),
-      cutSetAllocator(stats.totalCutSetsAllocated), options(options) {}
+    : cutAllocator(stats.numCutsCreated),
+      cutSetAllocator(stats.numCutSetsCreated), options(options) {}
 
 CutSet *CutEnumerator::createNewCutSet(uint32_t index) {
   CutSet *cutSet = cutSetAllocator.create();
@@ -1365,6 +1365,7 @@ LogicalResult CutRewriter::runBottomUpRewrite(Operation *top) {
       return failure();
 
     rewriter.replaceOp(rootOp, *result);
+    cutEnumerator.noteCutRewritten();
 
     if (options.attachDebugTiming) {
       auto array = rewriter.getI64ArrayAttr(matchedPattern->getArrivalTimes());
