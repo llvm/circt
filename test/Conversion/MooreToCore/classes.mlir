@@ -20,16 +20,15 @@ func.func @ClassType(%arg0: !moore.class<@PropertyCombo>) {
 
 /// Check that new lowers to malloc
 
-// malloc should be declared in the LLVM dialect.
 // CHECK-LABEL: func.func private @test_new2
 // CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(12 : i64) : i64
-// CHECK:   [[PTR:%.*]] = llvm.call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
 // CHECK:   return
 
 // CHECK-NOT: moore.class.new
 // CHECK-NOT: moore.class.classdecl
 
-// Allocate a new instance; should lower to llvm.call @malloc(i64).
+// Allocate a new instance; should lower to call @malloc(i64).
 func.func private @test_new2() {
   %h = moore.class.new : <@C>
   return
@@ -45,7 +44,7 @@ moore.class.classdecl @C {
 
 // CHECK-LABEL: func.func private @test_new3
 // CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(28 : i64) : i64
-// CHECK:   [[PTR:%.*]] = llvm.call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
 // CHECK:   return
 
 // CHECK-NOT: moore.class.new
@@ -65,7 +64,7 @@ moore.class.classdecl @D extends @C {
 
 // CHECK-LABEL: func.func private @test_new4
 // CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(24 : i64) : i64
-// CHECK:   [[PTR:%.*]] = llvm.call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
 // CHECK:   return
 
 // CHECK-NOT: moore.class.new

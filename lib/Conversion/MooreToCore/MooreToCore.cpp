@@ -96,23 +96,47 @@ private:
   DenseMap<Attribute, ClassStructInfo> classToStructMap;
 };
 
-/// Ensure we have `declare i8* @malloc(i64)` (opaque ptr prints as !llvm.ptr).
-static LLVM::LLVMFuncOp getOrCreateMalloc(ModuleOp mod, OpBuilder &b) {
-  if (auto f = mod.lookupSymbol<LLVM::LLVMFuncOp>("malloc"))
-    return f;
+/// Cache for external function declarations. Avoids redundant symbol table
+/// lookups and ensures each function is declared at most once.
+struct FunctionCache {
+  FunctionCache(SymbolTable &symbolTable) : symbolTable(symbolTable) {}
 
-  OpBuilder::InsertionGuard g(b);
-  b.setInsertionPointToStart(mod.getBody());
+  /// Look up a function by name. If it doesn't exist, invoke the callback to
+  /// create it. The builder is repositioned to the start of the module body
+  /// before the callback is invoked. The result is inserted into the symbol
+  /// table and cache.
+  func::FuncOp getOrCreate(OpBuilder &builder, StringRef name,
+                           function_ref<func::FuncOp()> createFn) {
+    auto &slot = map[name];
+    if (slot)
+      return slot;
+    if (auto fn = symbolTable.lookup<func::FuncOp>(name))
+      return slot = fn;
+    auto mod = cast<ModuleOp>(symbolTable.getOp());
+    OpBuilder::InsertionGuard g(builder);
+    builder.setInsertionPointToStart(mod.getBody());
+    slot = createFn();
+    symbolTable.insert(slot);
+    return slot;
+  }
 
-  auto i64Ty = IntegerType::get(mod.getContext(), 64);
-  auto ptrTy = LLVM::LLVMPointerType::get(mod.getContext()); // opaque pointer
-  auto fnTy = LLVM::LLVMFunctionType::get(ptrTy, {i64Ty}, false);
+  /// Convenience wrapper that creates a private external function declaration
+  /// with the given argument and result types.
+  func::FuncOp getOrCreate(OpBuilder &builder, StringRef name,
+                           TypeRange argTypes, TypeRange resultTypes) {
+    return getOrCreate(builder, name, [&] {
+      auto mod = cast<ModuleOp>(symbolTable.getOp());
+      auto fnTy = builder.getFunctionType(argTypes, resultTypes);
+      auto fn = func::FuncOp::create(builder, mod.getLoc(), name, fnTy);
+      fn.setPrivate();
+      return fn;
+    });
+  }
 
-  auto fn = LLVM::LLVMFuncOp::create(b, mod.getLoc(), "malloc", fnTy);
-  // Link this in from somewhere else.
-  fn.setLinkage(LLVM::Linkage::External);
-  return fn;
-}
+private:
+  SymbolTable &symbolTable;
+  llvm::StringMap<func::FuncOp> map;
+};
 
 /// Helper function to create an opaque LLVM Struct Type which corresponds
 /// to the sym
@@ -931,8 +955,9 @@ struct ClassUpcastOpConversion : public OpConversionPattern<ClassUpcastOp> {
 /// moore.class.new lowering: heap-allocate storage for the class object.
 struct ClassNewOpConversion : public OpConversionPattern<ClassNewOp> {
   ClassNewOpConversion(TypeConverter &tc, MLIRContext *ctx,
-                       ClassTypeCache &cache)
-      : OpConversionPattern<ClassNewOp>(tc, ctx), cache(cache) {}
+                       ClassTypeCache &cache, FunctionCache &funcCache)
+      : OpConversionPattern<ClassNewOp>(tc, ctx), cache(cache),
+        funcCache(funcCache) {}
 
   LogicalResult
   matchAndRewrite(ClassNewOp op, OpAdaptor adaptor,
@@ -969,20 +994,20 @@ struct ClassNewOpConversion : public OpConversionPattern<ClassNewOp> {
                                           rewriter.getI64IntegerAttr(byteSize));
 
     // Get or declare malloc and call it.
-    auto mallocFn = getOrCreateMalloc(mod, rewriter);
     auto ptrTy = LLVM::LLVMPointerType::get(ctx); // opaque pointer result
+    auto mallocFn = funcCache.getOrCreate(rewriter, "malloc", {i64Ty}, {ptrTy});
     auto call =
-        LLVM::CallOp::create(rewriter, loc, TypeRange{ptrTy},
-                             SymbolRefAttr::get(mallocFn), ValueRange{cSize});
+        func::CallOp::create(rewriter, loc, mallocFn, ValueRange{cSize});
 
     // Replace the new op with the malloc pointer (no cast needed with opaque
     // ptrs).
-    rewriter.replaceOp(op, call.getResult());
+    rewriter.replaceOp(op, call.getResult(0));
     return success();
   }
 
 private:
   ClassTypeCache &cache; // shared, owned by the pass
+  FunctionCache &funcCache;
 };
 
 struct ClassDeclOpConversion : public OpConversionPattern<ClassDeclOp> {
@@ -1605,6 +1630,13 @@ struct BoolCastOpConversion : public OpConversionPattern<BoolCastOp> {
           hw::ConstantOp::create(rewriter, op->getLoc(), resultType, 0);
       rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, comb::ICmpPredicate::ne,
                                                 adaptor.getInput(), zero);
+      return success();
+    }
+    if (isa_and_nonnull<FloatType>(resultType)) {
+      Value zero = arith::ConstantOp::create(
+          rewriter, op->getLoc(), rewriter.getFloatAttr(resultType, 0.0));
+      rewriter.replaceOpWithNewOp<arith::CmpFOp>(op, arith::CmpFPredicate::ONE,
+                                                 adaptor.getInput(), zero);
       return success();
     }
     return failure();
@@ -2768,6 +2800,54 @@ static LogicalResult convert(SeverityBIOp op, SeverityBIOp::Adaptor adaptor,
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// Random Builtin Conversion
+//===----------------------------------------------------------------------===//
+
+/// moore.builtin.urandom_range -> call @__circt_urandom_range(i32, i32, ptr)
+///
+/// The seed pointer is null when no seed is provided. When a seed ref is
+/// present, we probe the current value into an alloca before the call, and
+/// drive the (potentially mutated) value back after.
+static LogicalResult convert(UrandomRangeBIOp op,
+                             UrandomRangeBIOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter,
+                             FunctionCache &funcCache) {
+  auto loc = op.getLoc();
+  auto i32Ty = rewriter.getI32Type();
+  auto ptrTy = LLVM::LLVMPointerType::get(rewriter.getContext());
+  auto fn = funcCache.getOrCreate(rewriter, "__circt_urandom_range",
+                                  {i32Ty, i32Ty, ptrTy}, {i32Ty});
+
+  Value seedPtr;
+  if (auto seedRef = adaptor.getSeed()) {
+    // Allocate a temporary, probe the current seed value into it.
+    auto one = hw::ConstantOp::create(rewriter, loc, i32Ty, 1);
+    seedPtr = LLVM::AllocaOp::create(rewriter, loc, ptrTy, i32Ty, one);
+    auto seedVal = llhd::ProbeOp::create(rewriter, loc, seedRef);
+    LLVM::StoreOp::create(rewriter, loc, seedVal, seedPtr);
+  } else {
+    seedPtr = LLVM::ZeroOp::create(rewriter, loc, ptrTy);
+  }
+
+  auto call = func::CallOp::create(
+      rewriter, loc, fn,
+      ValueRange{adaptor.getMinval(), adaptor.getMaxval(), seedPtr});
+
+  // Drive the potentially mutated seed back with an epsilon time delta.
+  if (adaptor.getSeed()) {
+    auto newSeed = LLVM::LoadOp::create(rewriter, loc, i32Ty, seedPtr);
+    auto epsilon = llhd::ConstantTimeOp::create(
+        rewriter, loc,
+        llhd::TimeAttr::get(rewriter.getContext(), 0, "ns", 0, 1));
+    llhd::DriveOp::create(rewriter, loc, adaptor.getSeed(), newSeed, epsilon,
+                          Value{});
+  }
+
+  rewriter.replaceOp(op, call.getResult(0));
+  return success();
+}
+
 // moore.builtin.finish_message
 static LogicalResult convert(FinishMessageBIOp op,
                              FinishMessageBIOp::Adaptor adaptor,
@@ -3058,12 +3138,13 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
 
 static void populateOpConversion(ConversionPatternSet &patterns,
                                  TypeConverter &typeConverter,
-                                 ClassTypeCache &classCache) {
+                                 ClassTypeCache &classCache,
+                                 FunctionCache &funcCache) {
 
   patterns.add<ClassDeclOpConversion>(typeConverter, patterns.getContext(),
                                       classCache);
   patterns.add<ClassNewOpConversion>(typeConverter, patterns.getContext(),
-                                     classCache);
+                                     classCache, funcCache);
   patterns.add<ClassPropertyRefOpConversion>(typeConverter,
                                              patterns.getContext(), classCache);
 
@@ -3249,6 +3330,9 @@ static void populateOpConversion(ConversionPatternSet &patterns,
   patterns.add<FinishBIOp>(convert);
   patterns.add<FinishMessageBIOp>(convert);
 
+  // Random builtins
+  patterns.add<UrandomRangeBIOp>(convert, funcCache);
+
   // Timing control
   patterns.add<TimeBIOp>(convert);
   patterns.add<LogicToTimeOp>(convert);
@@ -3283,6 +3367,8 @@ void MooreToCorePass::runOnOperation() {
   MLIRContext &context = getContext();
   ModuleOp module = getOperation();
   ClassTypeCache classCache;
+  auto &symbolTable = getAnalysis<SymbolTable>();
+  FunctionCache funcCache(symbolTable);
 
   IRRewriter rewriter(module);
   (void)mlir::eraseUnreachableBlocks(rewriter, module->getRegions());
@@ -3294,7 +3380,7 @@ void MooreToCorePass::runOnOperation() {
   populateLegality(target, typeConverter);
 
   ConversionPatternSet patterns(&context, typeConverter);
-  populateOpConversion(patterns, typeConverter, classCache);
+  populateOpConversion(patterns, typeConverter, classCache, funcCache);
   mlir::cf::populateCFStructuralTypeConversionsAndLegality(typeConverter,
                                                            patterns, target);
 

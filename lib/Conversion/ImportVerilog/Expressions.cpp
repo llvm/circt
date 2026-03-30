@@ -2987,48 +2987,37 @@ Value Context::convertSystemCall(
   // Random Number System Functions
   //===--------------------------------------------------------------------===//
 
-  if (nameId == ksn::URandom) {
-    if (numArgs == 0)
-      return moore::UrandomBIOp::create(builder, loc, nullptr);
+  // $urandom, $random, and $urandom_range all map to a single
+  // moore.builtin.urandom_range primitive with (minval, maxval, seed).
+  if (nameId == ksn::URandom || nameId == ksn::Random) {
+    auto i32Ty = moore::IntType::getInt(builder.getContext(), 32);
+    auto minval = moore::ConstantOp::create(builder, loc, i32Ty, 0);
+    auto maxval =
+        moore::ConstantOp::create(builder, loc, i32Ty, APInt::getAllOnes(32));
+    Value seed;
     if (numArgs == 1) {
-      auto seed = convertRvalueExpression(*args[0]);
+      seed = convertLvalueExpression(*args[0]);
       if (!seed)
         return {};
-      return moore::UrandomBIOp::create(builder, loc, seed);
     }
-    // Slang already checks the arity of `$urandom`.
-    assert(false && "`$urandom` takes 0 or 1 arguments");
-    return {};
-  }
-
-  if (nameId == ksn::Random) {
-    if (numArgs == 0)
-      return moore::RandomBIOp::create(builder, loc, nullptr);
-    if (numArgs == 1) {
-      auto seed = convertRvalueExpression(*args[0]);
-      if (!seed)
-        return {};
-      return moore::RandomBIOp::create(builder, loc, seed);
-    }
-    // Slang already checks the arity of `$random`.
-    assert(false && "`$random` takes 0 or 1 arguments");
-    return {};
+    return moore::UrandomRangeBIOp::create(builder, loc, minval, maxval, seed);
   }
 
   if (nameId == ksn::URandomRange) {
-    // Slang already checks the arity of `$urandom_range`.
-    assert(numArgs >= 1 && numArgs <= 2 &&
-           "`$urandom_range` takes 1 or 2 arguments");
+    auto i32Ty = moore::IntType::getInt(builder.getContext(), 32);
     auto maxval = convertRvalueExpression(*args[0]);
     if (!maxval)
       return {};
-    Value minval = nullptr;
-    if (numArgs == 2) {
+    Value minval;
+    if (numArgs >= 2) {
       minval = convertRvalueExpression(*args[1]);
       if (!minval)
         return {};
+    } else {
+      minval = moore::ConstantOp::create(builder, loc, i32Ty, 0);
     }
-    return moore::UrandomrangeBIOp::create(builder, loc, maxval, minval);
+    return moore::UrandomRangeBIOp::create(builder, loc, minval, maxval,
+                                           Value{});
   }
 
   //===--------------------------------------------------------------------===//

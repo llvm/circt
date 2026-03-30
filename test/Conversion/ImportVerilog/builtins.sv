@@ -302,22 +302,43 @@ endfunction
 // CHECK-LABEL: func.func private @RandomBuiltins(
 // CHECK-SAME: [[X:%.+]]: !moore.i32
 function RandomBuiltins(int x);
-  // CHECK: [[URAND0:%.+]] = moore.builtin.urandom
+  // CHECK: [[XVAR:%.+]] = moore.variable [[X]] : <i32>
+  // All random system functions map to moore.builtin.urandom_range with
+  // (minval, maxval, optional seed ref).
+
+  // CHECK: [[ZERO1:%.+]] = moore.constant 0 : i32
+  // CHECK: [[MAX1:%.+]] = moore.constant -1 : i32
+  // CHECK: [[URAND0:%.+]] = moore.builtin.urandom_range [[ZERO1]], [[MAX1]]
   // CHECK-NEXT: call @dummyA([[URAND0]]) : (!moore.i32) -> ()
   dummyA($urandom());
-  // CHECK: [[URAND1:%.+]] = moore.builtin.urandom [[X]]
+
+  // CHECK: [[ZERO2:%.+]] = moore.constant 0 : i32
+  // CHECK: [[MAX2:%.+]] = moore.constant -1 : i32
+  // CHECK: [[URAND1:%.+]] = moore.builtin.urandom_range [[ZERO2]], [[MAX2]], [[XVAR]]
   // CHECK-NEXT: call @dummyA([[URAND1]]) : (!moore.i32) -> ()
   dummyA($urandom(x));
-  // CHECK: [[RAND0:%.+]] = moore.builtin.random
+
+  // CHECK: [[ZERO3:%.+]] = moore.constant 0 : i32
+  // CHECK: [[MAX3:%.+]] = moore.constant -1 : i32
+  // CHECK: [[RAND0:%.+]] = moore.builtin.urandom_range [[ZERO3]], [[MAX3]]
   // CHECK-NEXT: call @dummyA([[RAND0]]) : (!moore.i32) -> ()
   dummyA($random());
-  // CHECK: [[RAND1:%.+]] = moore.builtin.random [[X]]
+
+  // CHECK: [[ZERO4:%.+]] = moore.constant 0 : i32
+  // CHECK: [[MAX4:%.+]] = moore.constant -1 : i32
+  // CHECK: [[RAND1:%.+]] = moore.builtin.urandom_range [[ZERO4]], [[MAX4]], [[XVAR]]
   // CHECK-NEXT: call @dummyA([[RAND1]]) : (!moore.i32) -> ()
   dummyA($random(x));
-  // CHECK: [[URANDRANGE1:%.+]] = moore.builtin.urandom_range [[X]]
+
+  // CHECK: [[XVAL1:%.+]] = moore.read [[XVAR]]
+  // CHECK: [[ZERO5:%.+]] = moore.constant 0 : i32
+  // CHECK: [[URANDRANGE1:%.+]] = moore.builtin.urandom_range [[ZERO5]], [[XVAL1]]
   // CHECK-NEXT: call @dummyA([[URANDRANGE1]]) : (!moore.i32) -> ()
   dummyA($urandom_range(x));
-  // CHECK: [[URANDRANGE2:%.+]] = moore.builtin.urandom_range [[X]] [[X]]
+
+  // CHECK: [[XVAL2:%.+]] = moore.read [[XVAR]]
+  // CHECK: [[XVAL3:%.+]] = moore.read [[XVAR]]
+  // CHECK: [[URANDRANGE2:%.+]] = moore.builtin.urandom_range [[XVAL3]], [[XVAL2]]
   // CHECK-NEXT: call @dummyA([[URANDRANGE2]]) : (!moore.i32) -> ()
   dummyA($urandom_range(x, x));
 endfunction
