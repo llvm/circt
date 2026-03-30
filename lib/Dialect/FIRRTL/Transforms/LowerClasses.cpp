@@ -65,6 +65,12 @@ static bool shouldCreateClassImpl(igraph::InstanceGraphNode *node) {
   // Create a class for modules that instantiate classes or modules with
   // property ports.
   for (auto *instance : *node) {
+    // ObjectOp instantiates a class directly and always requires a class.
+    // Note: if combined with the check below, this has the same result (as
+    // objects always have one result, even if they have no ports).
+    if (instance->getInstance<firrtl::ObjectOp>())
+      return true;
+    // There is an instance with property ports.
     if (auto op = instance->getInstance<FInstanceLike>())
       for (auto result : op->getResults())
         if (type_isa<PropertyType>(result.getType()))
