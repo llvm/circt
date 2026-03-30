@@ -106,11 +106,7 @@ ResourceUsageAnalysis::getResourceUsage(StringAttr moduleName) {
   if (!node)
     return nullptr;
 
-  auto module = dyn_cast_or_null<igraph::ModuleOpInterface>(node->getModule());
-  if (!module)
-    return nullptr;
-
-  return getResourceUsage(module);
+  return getResourceUsage(node->getModule());
 }
 
 ResourceUsageAnalysis::ModuleResourceUsage *
@@ -148,10 +144,8 @@ ResourceUsageAnalysis::getResourceUsage(igraph::ModuleOpInterface module) {
   // Recursively process child module instances.
   for (auto *child : *node) {
     auto *targetNode = child->getTarget();
-    auto childModule =
-        dyn_cast_or_null<igraph::ModuleOpInterface>(targetNode->getModule());
-    if (!childModule)
-      continue;
+
+    auto childModule = targetNode->getModule();
 
     auto *instanceOp = child->getInstance().getOperation();
     // Skip instances with no results or marked as "doNotPrint".
@@ -250,7 +244,7 @@ LogicalResult PrintResourceUsageAnalysisPass::getTopModules(
 
     // Collect all ModuleOpInterface instances from top-level nodes.
     for (auto *node : *topLevelNodes) {
-      if (auto module = dyn_cast<igraph::ModuleOpInterface>(node->getModule()))
+      if (auto module = node->getModule())
         tops.push_back(module);
     }
 
@@ -264,11 +258,7 @@ LogicalResult PrintResourceUsageAnalysisPass::getTopModules(
       return mod.emitError()
              << "top module '" << topModuleName.getValue() << "' not found";
 
-    auto top = dyn_cast_or_null<igraph::ModuleOpInterface>(node->getModule());
-    if (!top)
-      return mod.emitError() << "module '" << topModuleName.getValue()
-                             << "' is not a ModuleOpInterface";
-    tops.push_back(top);
+    tops.push_back(node->getModule());
   }
 
   return success();
