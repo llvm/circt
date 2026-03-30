@@ -143,6 +143,7 @@ hw.module private @mig_test(in %a : i4, in %b : i4, in %c : i4, out x : i4) {
 // CHECK:      Resource Usage Analysis for module: lut_test
 // CHECK-NEXT: ========================================
 // CHECK-NEXT: Total:
+// CHECK-NEXT:   comb.truth_table:   2
 // CHECK-NEXT:   comb.truth_table_2: 1
 // CHECK-NEXT:   comb.truth_table_3: 1
 
