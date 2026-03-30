@@ -604,4 +604,10 @@ def QueueRefType : SpecificRefType<QueueType>;
 /// Assoc Array references
 def AssocArrayRefType : SpecificRefType<AssocArrayType>;
 
+/// Integer references
+def TwoValuedI32RefType : SpecificRefType<TwoValuedI32> {
+  let builderCall =
+    "RefType::get(IntType::getInt($_builder.getContext(), 32))";
+}
+
 #endif // CIRCT_DIALECT_MOORE_MOORETYPES
