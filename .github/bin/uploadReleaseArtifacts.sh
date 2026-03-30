@@ -180,6 +180,11 @@ configMacOsRunner=$(cat <<EOF
     "runner": "macos-15-intel",
     "cmake_c_compiler": "clang",
     "cmake_cxx_compiler": "clang++"
+  },
+  {
+    "runner": "macos-15",
+    "cmake_c_compiler": "clang",
+    "cmake_cxx_compiler": "clang++"
   }
 ]
 EOF
