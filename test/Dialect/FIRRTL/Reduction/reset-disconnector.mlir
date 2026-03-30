@@ -1,7 +1,7 @@
 // UNSUPPORTED: system-windows
 //   See https://github.com/llvm/circt/issues/4129
 // RUN: circt-reduce %s --test /usr/bin/env --test-arg true --keep-best=0 --include reset-disconnector | FileCheck %s --check-prefixes=CHECK,ALL
-// RUN: circt-reduce %s --test /usr/bin/grep --test-arg 'reg1.*firrtl\.regreset' --keep-best=0 --include reset-disconnector | FileCheck %s --check-prefixes=CHECK,KEEP_REG1
+// RUN: circt-reduce %s --test /usr/bin/env --test-arg grep --test-arg 'reg1.*firrtl\.regreset' --keep-best=0 --include reset-disconnector | FileCheck %s --check-prefixes=CHECK,KEEP_REG1
 
 // Test converting all regreset to reg, and independently keeping one
 // CHECK-LABEL: firrtl.circuit "Test"
