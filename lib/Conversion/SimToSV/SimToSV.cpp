@@ -69,6 +69,27 @@ struct SimConversionPattern : public OpConversionPattern<T> {
   SimConversionState &state;
 };
 
+hw::ModuleType DPIFunctionTypeToHWModuleType(const DPIFunctionType &dpiFuncType) {
+  SmallVector<hw::ModulePort> hwPorts;
+  for (auto &arg : dpiFuncType.getArguments()) {
+    hw::ModulePort::Direction hwDir;
+    switch (arg.dir) {
+    case DPIDirection::Input:
+    case DPIDirection::Ref:
+      hwDir = hw::ModulePort::Direction::Input;
+      break;
+    case DPIDirection::Output:
+    case DPIDirection::Return:
+      hwDir = hw::ModulePort::Direction::Output;
+      break;
+    case DPIDirection::InOut:
+      hwDir = hw::ModulePort::Direction::InOut;
+      break;
+    }
+    hwPorts.push_back({arg.name, arg.type, hwDir});
+  }
+  return hw::ModuleType::get(dpiFuncType.getContext(), hwPorts);
+}
 } // namespace
 
 // Lower `sim.plusargs.test` to a standard SV implementation.
@@ -292,7 +313,7 @@ void LowerDPIFunc::lower(sim::DPIFuncOp func) {
   ArrayAttr inputLocsAttr, outputLocsAttr;
 
   // Build ModuleType from DPI arguments for sv::FuncOp.
-  auto moduleType = func.getDpiFunctionType().getHWModuleType();
+  auto moduleType = DPIFunctionTypeToHWModuleType(func.getDpiFunctionType());
 
   if (func.getArgumentLocs()) {
     SmallVector<Attribute> inputLocs, outputLocs;

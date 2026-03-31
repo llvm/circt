@@ -128,28 +128,6 @@ FunctionType DPIFunctionType::getFunctionType() const {
   return FunctionType::get(getContext(), inputs, results);
 }
 
-hw::ModuleType DPIFunctionType::getHWModuleType() const {
-  SmallVector<hw::ModulePort> hwPorts;
-  for (auto &arg : getImpl()->arguments) {
-    hw::ModulePort::Direction hwDir;
-    switch (arg.dir) {
-    case DPIDirection::Input:
-    case DPIDirection::Ref:
-      hwDir = hw::ModulePort::Direction::Input;
-      break;
-    case DPIDirection::Output:
-    case DPIDirection::Return:
-      hwDir = hw::ModulePort::Direction::Output;
-      break;
-    case DPIDirection::InOut:
-      hwDir = hw::ModulePort::Direction::InOut;
-      break;
-    }
-    hwPorts.push_back({arg.name, arg.type, hwDir});
-  }
-  return hw::ModuleType::get(getContext(), hwPorts);
-}
-
 LogicalResult
 DPIFunctionType::verify(function_ref<InFlightDiagnostic()> emitError) const {
   auto dpiArgs = getArguments();

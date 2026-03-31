@@ -105,9 +105,6 @@ def DPIFunctionType : SimTypeDef<"DPIFunction"> {
     /// Derive the MLIR FunctionType for the call shape.
     mlir::FunctionType getFunctionType() const;
 
-    /// Construct an hw::ModuleType for lowering to SV.
-    ::circt::hw::ModuleType getHWModuleType() const;
-
     /// Verify structural constraints (return-is-last, at-most-one-return).
     /// On failure, emits diagnostics on the given op and returns failure.
     mlir::LogicalResult verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError) const;
