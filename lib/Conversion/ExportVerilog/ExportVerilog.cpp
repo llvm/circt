@@ -6467,10 +6467,13 @@ void ModuleEmitter::emitPortList(Operation *module,
       }
 
       // Emit the port direction and optional wire keyword.
+      auto thisPortDirection = portInfo.at(portIdx).dir;
+      size_t startOfNamePos = (hasOutputs ? 7 : 6) +
+                              (state.options.emitWireInPorts ? 5 : 0) +
+                              maxTypeWidth;
       // Modport-typed ports (e.g., MyBundle.sink) already encode their
       // direction in the interface modport definition, so we suppress the
       // direction and wire keywords for them.
-      auto thisPortDirection = portInfo.at(portIdx).dir;
       if (!isa<ModportType>(portType)) {
       switch (thisPortDirection) {
       case ModulePort::Direction::Output:
@@ -6496,10 +6499,6 @@ void ModuleEmitter::emitPortList(Operation *module,
         if (portTypeStrings[portIdx].size() < totalWidth)
           ps.nbsp(totalWidth - portTypeStrings[portIdx].size());
       }
-
-      size_t startOfNamePos =
-          (hasOutputs ? 7 : 6) +
-              (state.options.emitWireInPorts ? 5 : 0) + maxTypeWidth;
 
       // Emit the name.
       ps << PPExtString(portInfo.at(portIdx).getVerilogName());
