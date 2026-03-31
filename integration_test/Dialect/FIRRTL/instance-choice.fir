@@ -6,16 +6,16 @@
 ; RUN: firtool %s --split-verilog -o=%t
 
 ; -------------------------------------- Test 1: Multiple options error check
-; RUN: not verilator %driver %t/top.sv %t/ASICTarget.sv %t/FPGATarget.sv %t/DefaultTarget.sv --cc --sv --exe --build -o %t.multi.exe --top-module top -Dtargets$$Platform$$ASIC -Dtargets$$Platform$$FPGA 2>&1 | FileCheck %s --check-prefix=MULTI
+; RUN: not verilator %driver %t/top.sv %t/ASICTarget.sv %t/FPGATarget.sv %t/DefaultTarget.sv --cc --sv --exe --build -o %t.multi.exe --top-module top -Dtargets\$Platform\$ASIC -Dtargets$$Platform\$FPGA 2>&1 | FileCheck %s --check-prefix=MULTI
 ; MULTI: Multiple instance choice options defined for option 'Platform': 'targets$Platform$ASIC' and 'targets$Platform$FPGA'
 
 ; -------------------------------------- Test 2: ASIC target
-; RUN: verilator %driver %t/top.sv %t/ASICTarget.sv %t/FPGATarget.sv %t/DefaultTarget.sv --cc --sv --exe --build -o %t.asic.exe --top-module top -Dtargets$$Platform$$ASIC
+; RUN: verilator %driver %t/top.sv %t/ASICTarget.sv %t/FPGATarget.sv %t/DefaultTarget.sv --cc --sv --exe --build -o %t.asic.exe --top-module top -Dtargets\$Platform\$ASIC
 ; RUN: %t.asic.exe --cycles 1 2>&1 | FileCheck %s --check-prefix=ASIC
 ; ASIC: result:         10
 
 ; -------------------------------------- Test 3: FPGA target
-; RUN: verilator %driver %t/top.sv %t/ASICTarget.sv %t/FPGATarget.sv %t/DefaultTarget.sv --cc --sv --exe --build -o %t.fpga.exe --top-module top -Dtargets$$Platform$$FPGA
+; RUN: verilator %driver %t/top.sv %t/ASICTarget.sv %t/FPGATarget.sv %t/DefaultTarget.sv --cc --sv --exe --build -o %t.fpga.exe --top-module top -Dtargets\$Platform\$FPGA
 ; RUN: %t.fpga.exe --cycles 1 2>&1 | FileCheck %s --check-prefix=FPGA
 ; FPGA: result:         20
 
