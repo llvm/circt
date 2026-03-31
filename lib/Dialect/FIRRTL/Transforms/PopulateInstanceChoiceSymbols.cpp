@@ -127,13 +127,13 @@ void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
           FlatSymbolRefAttr::get(circuit.getContext(), caseMacroName);
 
       // Check if this ABI-defined macro name conflicts with existing symbols.
-      // The CircuitNamespace will add a suffix if there's a conflict.
       if (auto *existingSymbol = symbolTable.lookup(caseMacroName)) {
+        // If the existing symbol is a macro, we can reuse it.
         if (auto existingMacro = dyn_cast<sv::MacroDeclOp>(existingSymbol)) {
           caseOp.setCaseMacroAttr(caseMacro);
           continue;
         }
-        // Conflict abort.
+        // Otherwise, it's a conflict.
         caseOp.emitError() << "case macro name conflicts with existing symbol '"
                            << caseMacroName << "' (existing symbol is '"
                            << existingSymbol->getName() << "')";
