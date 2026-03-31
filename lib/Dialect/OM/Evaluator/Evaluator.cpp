@@ -800,13 +800,14 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateEmptyPath(
   return valueResult;
 }
 
+/// Create an unknown value of the specified type
 FailureOr<evaluator::EvaluatorValuePtr>
-circt::om::Evaluator::evaluateUnknownValue(UnknownValueOp op, Location loc) {
+circt::om::Evaluator::createUnknownValue(Type type, Location loc) {
   using namespace circt::om::evaluator;
 
   // Create an unknown value of the appropriate type by switching on the type
   auto result =
-      TypeSwitch<Type, FailureOr<EvaluatorValuePtr>>(op.getType())
+      TypeSwitch<Type, FailureOr<EvaluatorValuePtr>>(type)
           .Case([&](ListType type) -> FailureOr<EvaluatorValuePtr> {
             // Create an empty list
             return success(std::make_shared<ListValue>(type, loc));
@@ -842,6 +843,12 @@ circt::om::Evaluator::evaluateUnknownValue(UnknownValueOp op, Location loc) {
     result->get()->markUnknown();
 
   return result;
+}
+
+/// Evaluate an unknown value
+FailureOr<evaluator::EvaluatorValuePtr>
+circt::om::Evaluator::evaluateUnknownValue(UnknownValueOp op, Location loc) {
+  return createUnknownValue(op.getType(), loc);
 }
 
 //===----------------------------------------------------------------------===//
