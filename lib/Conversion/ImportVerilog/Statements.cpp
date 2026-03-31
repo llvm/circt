@@ -389,35 +389,47 @@ struct StmtVisitor {
       // specified by the user, and for the evaluation to stop as soon as the
       // first matching expression is encountered.
       for (const auto *expr : item.expressions) {
-        auto value = context.convertRvalueExpression(*expr);
-        if (!value)
-          return failure();
-        auto itemLoc = value.getLoc();
-
-        // Take note if the expression is a constant.
-        auto maybeConst = value;
-        while (isa_and_nonnull<moore::ConversionOp, moore::IntToLogicOp,
-                               moore::LogicToIntOp>(maybeConst.getDefiningOp()))
-          maybeConst = maybeConst.getDefiningOp()->getOperand(0);
-        if (auto defOp = maybeConst.getDefiningOp<moore::ConstantOp>())
-          itemConsts.push_back(defOp.getValueAttr());
-
-        // Generate the appropriate equality operator.
         Value cond;
-        switch (caseStmt.condition) {
-        case CaseStatementCondition::Normal:
-          cond = moore::CaseEqOp::create(builder, itemLoc, caseExpr, value);
-          break;
-        case CaseStatementCondition::WildcardXOrZ:
-          cond = moore::CaseXZEqOp::create(builder, itemLoc, caseExpr, value);
-          break;
-        case CaseStatementCondition::WildcardJustZ:
-          cond = moore::CaseZEqOp::create(builder, itemLoc, caseExpr, value);
-          break;
-        case CaseStatementCondition::Inside:
-          mlir::emitError(loc, "unsupported set membership case statement");
-          return failure();
+        auto itemLoc = loc;
+
+        if (caseStmt.condition == CaseStatementCondition::Inside) {
+          // ConvertInsideCheck will check insideLhs whether it is empty or not.
+          cond = context.convertInsideCheck(
+              context.convertToSimpleBitVector(caseExpr), itemLoc, *expr);
+          if (!cond)
+            return failure();
+        } else {
+          auto value = context.convertRvalueExpression(*expr);
+          if (!value)
+            return failure();
+          itemLoc = value.getLoc();
+
+          // Take note if the expression is a constant.
+          auto maybeConst = value;
+          while (
+              isa_and_nonnull<moore::ConversionOp, moore::IntToLogicOp,
+                              moore::LogicToIntOp>(maybeConst.getDefiningOp()))
+            maybeConst = maybeConst.getDefiningOp()->getOperand(0);
+          if (auto defOp = maybeConst.getDefiningOp<moore::ConstantOp>())
+            itemConsts.push_back(defOp.getValueAttr());
+
+          // Generate the appropriate equality operator.
+          switch (caseStmt.condition) {
+          case CaseStatementCondition::Normal:
+            cond = moore::CaseEqOp::create(builder, itemLoc, caseExpr, value);
+            break;
+          case CaseStatementCondition::WildcardXOrZ:
+            cond = moore::CaseXZEqOp::create(builder, itemLoc, caseExpr, value);
+            break;
+          case CaseStatementCondition::WildcardJustZ:
+            cond = moore::CaseZEqOp::create(builder, itemLoc, caseExpr, value);
+            break;
+          case CaseStatementCondition::Inside:
+            llvm_unreachable("Inside condition has been handled already");
+            break;
+          }
         }
+
         if (auto ty = dyn_cast<moore::IntType>(cond.getType());
             ty && ty.getDomain() == Domain::FourValued) {
           cond = moore::LogicToIntOp::create(builder, loc, cond);

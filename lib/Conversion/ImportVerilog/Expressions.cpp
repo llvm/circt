@@ -1574,58 +1574,16 @@ struct RvalueExprVisitor : public ExprVisitor {
         context.convertRvalueExpression(expr.left()));
     if (!lhs)
       return {};
+
     // All conditions for determining whether it is inside.
     SmallVector<Value> conditions;
 
     // Traverse open range list.
     for (const auto *listExpr : expr.rangeList()) {
-      Value cond;
-      // The open range list on the right-hand side of the inside operator is a
-      // comma-separated list of expressions or ranges.
-      if (const auto *openRange =
-              listExpr->as_if<slang::ast::ValueRangeExpression>()) {
-        // Handle ranges.
-        auto lowBound = context.convertToSimpleBitVector(
-            context.convertRvalueExpression(openRange->left()));
-        auto highBound = context.convertToSimpleBitVector(
-            context.convertRvalueExpression(openRange->right()));
-        if (!lowBound || !highBound)
-          return {};
-        Value leftValue, rightValue;
-        // Determine if the expression on the left-hand side is inclusively
-        // within the range.
-        if (openRange->left().type->isSigned() ||
-            expr.left().type->isSigned()) {
-          leftValue = moore::SgeOp::create(builder, loc, lhs, lowBound);
-        } else {
-          leftValue = moore::UgeOp::create(builder, loc, lhs, lowBound);
-        }
-        if (openRange->right().type->isSigned() ||
-            expr.left().type->isSigned()) {
-          rightValue = moore::SleOp::create(builder, loc, lhs, highBound);
-        } else {
-          rightValue = moore::UleOp::create(builder, loc, lhs, highBound);
-        }
-        cond = moore::AndOp::create(builder, loc, leftValue, rightValue);
-      } else {
-        // Handle expressions.
-        if (!listExpr->type->isIntegral()) {
-          if (listExpr->type->isUnpackedArray()) {
-            mlir::emitError(
-                loc, "unpacked arrays in 'inside' expressions not supported");
-            return {};
-          }
-          mlir::emitError(
-              loc, "only simple bit vectors supported in 'inside' expressions");
-          return {};
-        }
+      auto cond = context.convertInsideCheck(lhs, loc, *listExpr);
+      if (!cond)
+        return {};
 
-        auto value = context.convertToSimpleBitVector(
-            context.convertRvalueExpression(*listExpr));
-        if (!value)
-          return {};
-        cond = moore::WildcardEqOp::create(builder, loc, lhs, value);
-      }
       conditions.push_back(cond);
     }
 
@@ -3340,4 +3298,58 @@ Context::getAncestorClassWithProperty(const moore::ClassHandleType &actualTy,
   // No ancestor declares that property.
   mlir::emitError(loc) << "unknown property `" << fieldName << "`";
   return {};
+}
+
+//===--------------------------------------------------------------------===//
+// Value Range Expression Methods
+//===--------------------------------------------------------------------===//
+
+Value Context::convertInsideCheck(Value insideLhs, Location loc,
+                                  const slang::ast::Expression &expr) {
+  // The value range list on the right-hand side of the inside operator is a
+  // comma-separated list of expressions or ranges.
+  if (const auto *valueRange = expr.as_if<slang::ast::ValueRangeExpression>()) {
+    auto lowBound =
+        convertToSimpleBitVector(convertRvalueExpression(valueRange->left()));
+    auto highBound =
+        convertToSimpleBitVector(convertRvalueExpression(valueRange->right()));
+    if (!insideLhs || !lowBound || !highBound)
+      return {};
+
+    Value rangeLhs, rangeRhs;
+    // Determine if the insideLhs on the left-hand side is inclusively
+    // within the range.
+    if (valueRange->left().type->isSigned() ||
+        insideLhs.getType().isSignedInteger()) {
+      rangeLhs = moore::SgeOp::create(builder, loc, insideLhs, lowBound);
+    } else {
+      rangeLhs = moore::UgeOp::create(builder, loc, insideLhs, lowBound);
+    }
+
+    if (valueRange->right().type->isSigned() ||
+        insideLhs.getType().isSignedInteger()) {
+      rangeRhs = moore::SleOp::create(builder, loc, insideLhs, highBound);
+    } else {
+      rangeRhs = moore::UleOp::create(builder, loc, insideLhs, highBound);
+    }
+
+    return moore::AndOp::create(builder, loc, rangeLhs, rangeRhs);
+  }
+
+  // Handle expressions.
+  if (!expr.type->isIntegral()) {
+    if (expr.type->isUnpackedArray()) {
+      mlir::emitError(loc,
+                      "unpacked arrays in 'inside' expressions not supported");
+      return {};
+    }
+    mlir::emitError(
+        loc, "only simple bit vectors supported in 'inside' expressions");
+    return {};
+  }
+
+  auto value = convertToSimpleBitVector(convertRvalueExpression(expr));
+  if (!value)
+    return {};
+  return moore::WildcardEqOp::create(builder, loc, insideLhs, value);
 }
