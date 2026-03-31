@@ -69,7 +69,8 @@ struct SimConversionPattern : public OpConversionPattern<T> {
   SimConversionState &state;
 };
 
-hw::ModuleType DPIFunctionTypeToHWModuleType(const DPIFunctionType &dpiFuncType) {
+hw::ModuleType
+DPIFunctionTypeToHWModuleType(const DPIFunctionType &dpiFuncType) {
   SmallVector<hw::ModulePort> hwPorts;
   for (auto &arg : dpiFuncType.getArguments()) {
     hw::ModulePort::Direction hwDir;
