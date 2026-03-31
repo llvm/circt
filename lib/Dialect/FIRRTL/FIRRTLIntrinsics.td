@@ -247,6 +247,27 @@ def CirctLTLNonConsecutiveRepeat : FIRRTLIntrinsic {
   }];
 }
 
+def CirctLTLPast : FIRRTLIntrinsic {
+  let mnemonic = "circt.ltl.past";
+  let description = [{
+    Observes a boolean value from a specified number of cycles in the past.
+    Corresponds to the SystemVerilog `$past(a, n)` function.
+
+    | Parameter | Type | Description                      |
+    | --------- | ---- | -------------------------------- |
+    | delay     | int  | number of cycles to look back   |
+
+    | Argument      | Type    | Description                |
+    | ------------- | ------- | -------------------------- |
+    | in            | UInt<1> | input boolean              |
+    | clock (opt.)  | Clock   | optional clock for $past   |
+
+    | Result | Type    | Description              |
+    | ------ | ------- | ------------------------ |
+    | out    | UInt<1> | value from `delay` ago   |
+  }];
+}
+
 def CirctLTLClock : FIRRTLIntrinsic {
   let mnemonic = "circt.ltl.clock";
   let description = [{

@@ -1734,6 +1734,17 @@ def LTLImplicationIntrinsicOp : BinaryLTLIntrinsicOp<"implication">;
 def LTLUntilIntrinsicOp : BinaryLTLIntrinsicOp<"until">;
 def LTLEventuallyIntrinsicOp : UnaryLTLIntrinsicOp<"eventually">;
 
+// Past
+def LTLPastIntrinsicOp : LTLIntrinsicOp<"past"> {
+  let arguments = (ins NonConstUInt1Type:$input,
+                       I64Attr:$delay,
+                       Optional<ClockType>:$clock);
+  let assemblyFormat = [{
+    $input `,` $delay (`,` $clock^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
+
 // Clocking
 def LTLClockIntrinsicOp : LTLIntrinsicOp<"clock"> {
   let arguments = (ins NonConstUInt1Type:$input, ClockType:$clock);
