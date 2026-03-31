@@ -563,13 +563,15 @@ circt::om::Evaluator::evaluateObjectField(ObjectFieldOp op,
 
   auto objectFieldValue = getOrCreateValue(op, actualParams, loc).value();
 
-  // If the object is unknown, mark the field as unknown.
   if (result->isUnknown()) {
-    // If objectFieldValue is a ReferenceValue, set its value to the unknown
-    // object
+    // If objectFieldValue is a ReferenceValue, set its value to a unknown value
+    // of the proper type
     if (auto *ref =
             llvm::dyn_cast<evaluator::ReferenceValue>(objectFieldValue.get())) {
-      ref->setValue(result);
+      auto unknownField = createUnknownValue(op.getResult().getType(), loc);
+      if (failed(unknownField))
+        return unknownField;
+      ref->setValue(unknownField.value());
     }
     // markUnknown() also marks the value as fully evaluated
     objectFieldValue->markUnknown();
