@@ -125,8 +125,29 @@ static LogicalResult verifyVerbatimSymbols(Operation *op, ArrayAttr symbols,
   return success();
 }
 
+/// Helper function to verify flat symbol refs in symbols array for verbatim
+/// ops.
+static LogicalResult
+verifyVerbatimFlatSymbolRefs(Operation *op, ArrayAttr symbols,
+                             SymbolTableCollection &symbolTable) {
+  for (auto symbol : symbols) {
+    if (auto flatRef = dyn_cast<FlatSymbolRefAttr>(symbol)) {
+      auto *referencedOp = symbolTable.lookupNearestSymbolFrom(op, flatRef);
+      if (!referencedOp)
+        return op->emitOpError("references nonexistent symbol '")
+               << flatRef.getValue() << "'";
+    }
+  }
+  return success();
+}
+
 LogicalResult VerbatimOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   return verifyVerbatimSymbols(getOperation(), getSymbols(), ns);
+}
+
+LogicalResult VerbatimOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyVerbatimFlatSymbolRefs(getOperation(), getSymbols(),
+                                      symbolTable);
 }
 
 //===----------------------------------------------------------------------===//
@@ -159,6 +180,12 @@ LogicalResult VerbatimExprOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   return verifyVerbatimSymbols(getOperation(), getSymbols(), ns);
 }
 
+LogicalResult
+VerbatimExprOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyVerbatimFlatSymbolRefs(getOperation(), getSymbols(),
+                                      symbolTable);
+}
+
 void VerbatimExprSEOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
   getVerbatimExprAsmResultNames(getOperation(), std::move(setNameFn));
@@ -166,6 +193,12 @@ void VerbatimExprSEOp::getAsmResultNames(
 
 LogicalResult VerbatimExprSEOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   return verifyVerbatimSymbols(getOperation(), getSymbols(), ns);
+}
+
+LogicalResult
+VerbatimExprSEOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyVerbatimFlatSymbolRefs(getOperation(), getSymbols(),
+                                      symbolTable);
 }
 
 //===----------------------------------------------------------------------===//
