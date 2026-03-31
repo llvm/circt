@@ -103,6 +103,7 @@ PopulateInstanceChoiceSymbolsPass::assignSymbol(InstanceChoiceOp op) {
 void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
   auto circuit = getOperation();
   auto &instanceGraph = getAnalysis<InstanceGraph>();
+  auto &symbolTable = getAnalysis<SymbolTable>();
 
   OpBuilder builder(circuit.getContext());
   builder.setInsertionPointToStart(circuit.getBodyBlock());
@@ -122,10 +123,22 @@ void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
       auto caseName = caseOp.getSymNameAttr();
       SmallString<128> caseMacroName;
       getOptionCaseMacroName(optionName, caseName, caseMacroName);
+      auto caseMacro =
+          FlatSymbolRefAttr::get(circuit.getContext(), caseMacroName);
 
-      // Ensure global uniqueness using CircuitNamespace.
-      auto caseMacro = FlatSymbolRefAttr::get(
-          circuit.getContext(), getNamespace().newName(caseMacroName));
+      // Check if this ABI-defined macro name conflicts with existing symbols.
+      // The CircuitNamespace will add a suffix if there's a conflict.
+      if (auto *existingSymbol = symbolTable.lookup(caseMacroName)) {
+        if (auto existingMacro = dyn_cast<sv::MacroDeclOp>(existingSymbol)) {
+          caseOp.setCaseMacroAttr(caseMacro);
+          continue;
+        }
+        // Conflict abort.
+        caseOp.emitError() << "case macro name conflicts with existing symbol '"
+                           << caseMacroName << "' (existing symbol is '"
+                           << existingSymbol->getName() << "')";
+        return signalPassFailure();
+      }
 
       // Set the case_macro attribute on the OptionCaseOp.
       caseOp.setCaseMacroAttr(caseMacro);
