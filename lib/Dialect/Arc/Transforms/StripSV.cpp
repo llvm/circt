@@ -98,6 +98,22 @@ void StripSVPass::runOnOperation() {
   for (auto verb : mlirModule.getOps<sv::MacroDeclOp>())
     opsToDelete.push_back(verb);
 
+  mlirModule.walk([&](sv::MacroRefExprOp macroRef) {
+    StringRef macroName = macroRef.getMacroName();
+    bool isConditionMacro = macroName == "STOP_COND_" ||
+                            macroName == "PRINTF_COND_" ||
+                            macroName == "ASSERT_VERBOSE_COND_";
+
+    if (macroRef.getType().isInteger(1) && isConditionMacro) {
+      OpBuilder builder(macroRef);
+      auto trueConst = hw::ConstantOp::create(builder, macroRef.getLoc(),
+                                              builder.getI1Type(), 1);
+
+      macroRef.replaceAllUsesWith(trueConst->getResult(0));
+      opsToDelete.push_back(macroRef);
+    }
+  });
+
   for (auto module : mlirModule.getOps<hw::HWModuleOp>()) {
     for (Operation &op : *module.getBodyBlock()) {
       // Remove ifdefs and verbatim.
