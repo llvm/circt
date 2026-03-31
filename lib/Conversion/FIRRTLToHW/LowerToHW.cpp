@@ -2024,6 +2024,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(LTLImplicationIntrinsicOp op);
   LogicalResult visitExpr(LTLUntilIntrinsicOp op);
   LogicalResult visitExpr(LTLEventuallyIntrinsicOp op);
+  LogicalResult visitExpr(LTLPastIntrinsicOp op);
   LogicalResult visitExpr(LTLClockIntrinsicOp op);
 
   template <typename TargetOp, typename IntrinsicOp>
@@ -4612,6 +4613,14 @@ LogicalResult FIRRTLLowering::visitExpr(LTLUntilIntrinsicOp op) {
 LogicalResult FIRRTLLowering::visitExpr(LTLEventuallyIntrinsicOp op) {
   return setLoweringToLTL<ltl::EventuallyOp>(op,
                                              getLoweredValue(op.getInput()));
+}
+
+LogicalResult FIRRTLLowering::visitExpr(LTLPastIntrinsicOp op) {
+  Value clk;
+  if (op.getClock())
+    clk = getLoweredNonClockValue(op.getClock());
+  return setLoweringToLTL<ltl::PastOp>(op, getLoweredValue(op.getInput()),
+                                       op.getDelayAttr(), clk);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(LTLClockIntrinsicOp op) {
