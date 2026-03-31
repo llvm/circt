@@ -1983,8 +1983,8 @@ firrtl.circuit "InstanceChoiceTest" {
     // CHECK:      %[[WIRE:.+]] = sv.wire
     // CHECK:      %[[READ:.+]] = sv.read_inout %[[WIRE]]
     // CHECK:      sv.ifdef @targets$Opt$FPGA {
-    // CHECK-NEXT:   sv.ifdef @targets$Opt$ASIC { 
-    // CHECK-NEXT:     sv.error "Multiple instance choice options defined for option Opt: targets$Opt$FPGA and targets$Opt$ASIC" 
+    // CHECK-NEXT:   sv.ifdef @targets$Opt$ASIC {
+    // CHECK-NEXT:     sv.error "Multiple instance choice options defined for option 'Opt': 'targets$Opt$FPGA' and 'targets$Opt$ASIC'"
     // CHECK-NEXT:   }
     // CHECK:        %{{.+}} = hw.instance "inst_FPGA" sym @{{.+}} @ModuleFPGA
     // CHECK-NEXT:   sv.assign %[[WIRE]]
@@ -1994,10 +1994,7 @@ firrtl.circuit "InstanceChoiceTest" {
     // CHECK-NEXT:   sv.ifdef @targets$Opt$ASIC {
     // CHECK:          hw.instance "inst_ASIC"
     // CHECK:        } else {
-    // CHECK-NEXT:     {{.+}} = hw.instance "inst_default" sym @{{.+}} @ModuleDefault
-    // CHECK-NEXT:     sv.assign %[[WIRE]]
-    // CHECK-NEXT:     sv.macro.def @targets$Opt$InstanceChoiceUnit$inst
-    // CHECK-SAME:     ([#hw.innerNameRef<@InstanceChoiceUnit::@{{.+}}>])
+    // CHECK-NEXT:     sv.error "Required instance choice option 'Opt' not selected, must define one of: 'targets$Opt$FPGA', 'targets$Opt$ASIC'"
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     // CHECK: hw.output %[[READ]]

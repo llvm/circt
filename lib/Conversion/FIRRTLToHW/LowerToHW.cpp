@@ -224,14 +224,12 @@ struct CircuitLoweringState {
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
                        firrtl::VerificationFlavor verificationFlavor,
-                       bool disallowInstanceChoiceDefault,
                        InstanceGraph &instanceGraph, NLATable *nlaTable,
                        const InstanceChoiceMacroTable &macroTable)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
         enableAnnotationWarning(enableAnnotationWarning),
-        verificationFlavor(verificationFlavor),
-        disallowInstanceChoiceDefault(disallowInstanceChoiceDefault),
-        nlaTable(nlaTable), macroTable(macroTable) {
+        verificationFlavor(verificationFlavor), nlaTable(nlaTable),
+        macroTable(macroTable) {
     auto *context = circuitOp.getContext();
 
     // Get the testbench output directory.
@@ -411,8 +409,6 @@ private:
   std::mutex annotationPrintingMtx;
 
   const firrtl::VerificationFlavor verificationFlavor;
-
-  const bool disallowInstanceChoiceDefault;
 
   // Records any sv::BindOps that are found during the course of execution.
   // This is unsafe to access directly and should only be used through addBind.
@@ -604,8 +600,6 @@ struct FIRRTLModuleLowering
   void setEnableAnnotationWarning() { enableAnnotationWarning = true; }
 
   using LowerFIRRTLToHWBase<FIRRTLModuleLowering>::verificationFlavor;
-  using LowerFIRRTLToHWBase<
-      FIRRTLModuleLowering>::disallowInstanceChoiceDefault;
 
 private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
@@ -646,15 +640,13 @@ private:
 } // end anonymous namespace
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass>
-circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning,
-                                 firrtl::VerificationFlavor verificationFlavor,
-                                 bool disallowInstanceChoiceDefault) {
+std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToHWPass(
+    bool enableAnnotationWarning,
+    firrtl::VerificationFlavor verificationFlavor) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
   if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
   pass->verificationFlavor = verificationFlavor;
-  pass->disallowInstanceChoiceDefault = disallowInstanceChoiceDefault;
   return pass;
 }
 
@@ -680,10 +672,10 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
-  CircuitLoweringState state(
-      circuit, enableAnnotationWarning, verificationFlavor,
-      disallowInstanceChoiceDefault, getAnalysis<InstanceGraph>(),
-      &getAnalysis<NLATable>(), getAnalysis<InstanceChoiceMacroTable>());
+  CircuitLoweringState state(circuit, enableAnnotationWarning,
+                             verificationFlavor, getAnalysis<InstanceGraph>(),
+                             &getAnalysis<NLATable>(),
+                             getAnalysis<InstanceChoiceMacroTable>());
 
   SmallVector<Operation *, 32> opsToProcess;
 
@@ -4076,10 +4068,10 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
               [&]() {
                 SmallString<256> errorMessage;
                 llvm::raw_svector_ostream os(errorMessage);
-                os << "Multiple instance choice options defined for option "
-                   << optionName.getValue() << ": "
-                   << macroNames[index].getValue() << " and "
-                   << macroNames[i].getValue();
+                os << "Multiple instance choice options defined for option '"
+                   << optionName.getValue() << "': '"
+                   << macroNames[index].getValue() << "' and '"
+                   << macroNames[i].getValue() << "'";
                 sv::ErrorOp::create(builder, oldInstanceChoice.getLoc(),
                                     builder.getStringAttr(errorMessage));
               },
@@ -4098,27 +4090,16 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
                                    inst.getInnerSymAttr().getSymName())}));
       },
       [&]() {
-        if (circuitState.disallowInstanceChoiceDefault) {
-          // Generate an error instead of using the default module.
-          SmallString<256> errorMessage;
-          llvm::raw_svector_ostream os(errorMessage);
-          os << "No valid instance choice case for option "
-             << optionName.getValue() << ", set a macro one of [";
-          llvm::interleaveComma(macroNames, os, [&](StringAttr macro) {
-            os << macro.getValue();
-          });
-          os << "]";
-          sv::ErrorOp::create(builder, oldInstanceChoice.getLoc(),
-                              builder.getStringAttr(errorMessage));
-        } else {
-          auto inst = createInstanceAndAssign(defaultModule, "default");
-          // Define the instance macro for the default case.
-          sv::MacroDefOp::create(builder, inst.getLoc(), instanceMacro,
-                                 builder.getStringAttr("{{0}}"),
-                                 builder.getArrayAttr({hw::InnerRefAttr::get(
-                                     theModule.getNameAttr(),
-                                     inst.getInnerSymAttr().getSymName())}));
-        };
+        // Generate an error when no instance choice option is selected.
+        SmallString<256> errorMessage;
+        llvm::raw_svector_ostream os(errorMessage);
+        os << "Required instance choice option '" << optionName.getValue()
+           << "' not selected, must define one of: ";
+        llvm::interleaveComma(macroNames, os, [&](StringAttr macro) {
+          os << "'" << macro.getValue() << "'";
+        });
+        sv::ErrorOp::create(builder, oldInstanceChoice.getLoc(),
+                            builder.getStringAttr(errorMessage));
       });
 
   return success();

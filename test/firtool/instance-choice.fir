@@ -1,5 +1,4 @@
-; RUN: firtool %s | FileCheck %s --check-prefixes=CHECK,DEFAULT
-; RUN: firtool %s --disallow-instance-choice-default | FileCheck %s --check-prefixes=CHECK,NODEFAULT
+; RUN: firtool %s | FileCheck %s
 
 FIRRTL version 5.1.0
 circuit top:
@@ -26,11 +25,7 @@ circuit top:
     ; CHECK-NEXT:    );
     ; CHECK-NEXT:    `define targets$Platform$top$proc proc_FPGA
     ; CHECK-NEXT:  `else  // targets$Platform$FPGA
-    ; DEFAULT-NEXT:    DefaultTarget proc_default (
-    ; DEFAULT-NEXT:      .result_0 ([[RESULT]])
-    ; DEFAULT-NEXT:    );
-    ; DEFAULT-NEXT:    `define targets$Platform$top$proc proc_default
-    ; NODEFAULT-NEXT:   $error("No valid instance choice case for option Platform, set a macro one of [targets$Platform$FPGA]");
+    ; CHECK-NEXT:   $error("Required instance choice option 'Platform' not selected, must define one of: 'targets$Platform$FPGA'");
     ; CHECK-NEXT:  `endif // targets$Platform$FPGA
     instchoice proc of DefaultTarget, Platform:
       FPGA => FPGATarget

@@ -300,9 +300,8 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
       {/*lintStaticAsserts=*/opt.getLintStaticAsserts(),
        /*lintXmrsInDesign=*/opt.getLintXmrsInDesign()}));
 
-  pm.addPass(createLowerFIRRTLToHWPass(
-      opt.shouldEnableAnnotationWarning(), opt.getVerificationFlavor(),
-      opt.shouldDisallowInstanceChoiceDefault()));
+  pm.addPass(createLowerFIRRTLToHWPass(opt.shouldEnableAnnotationWarning(),
+                                       opt.getVerificationFlavor()));
 
   if (!opt.shouldDisableOptimization()) {
     auto &modulePM = pm.nest<hw::HWModuleOp>();
@@ -744,12 +743,6 @@ struct FirtoolCmdOptions {
           "Specialize instance choice to default, if no option selected"),
       llvm::cl::init(false)};
 
-  llvm::cl::opt<bool> disallowInstanceChoiceDefault{
-      "disallow-instance-choice-default",
-      llvm::cl::desc("Generate error instead of using default module for "
-                     "instance choices"),
-      llvm::cl::init(false)};
-
   llvm::cl::opt<verif::SymbolicValueLowering> symbolicValueLowering{
       "symbolic-values",
       llvm::cl::desc("Control how symbolic values are lowered"),
@@ -833,7 +826,6 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       exportModuleHierarchy(false), stripFirDebugInfo(true),
       stripDebugInfo(false), fixupEICGWrapper(false),
       disableCSEinClasses(false), selectDefaultInstanceChoice(false),
-      disallowInstanceChoiceDefault(false),
       symbolicValueLowering(verif::SymbolicValueLowering::ExtModule),
       disableWireElimination(false), lintStaticAsserts(true),
       lintXmrsInDesign(true), emitAllBindFiles(false),
@@ -881,7 +873,6 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   stripDebugInfo = clOptions->stripDebugInfo;
   fixupEICGWrapper = clOptions->fixupEICGWrapper;
   selectDefaultInstanceChoice = clOptions->selectDefaultInstanceChoice;
-  disallowInstanceChoiceDefault = clOptions->disallowInstanceChoiceDefault;
   symbolicValueLowering = clOptions->symbolicValueLowering;
   disableWireElimination = clOptions->disableWireElimination;
   lintStaticAsserts = clOptions->lintStaticAsserts;
