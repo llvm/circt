@@ -455,6 +455,9 @@ private:
   FailureOr<evaluator::EvaluatorValuePtr>
   evaluateUnknownValue(UnknownValueOp op, Location loc);
 
+  FailureOr<evaluator::EvaluatorValuePtr> createUnknownValue(Type type,
+                                                             Location loc);
+
   FailureOr<ActualParameters>
   createParametersFromOperands(ValueRange range, ActualParameters actualParams,
                                Location loc);

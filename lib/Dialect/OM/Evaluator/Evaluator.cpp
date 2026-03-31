@@ -563,13 +563,15 @@ circt::om::Evaluator::evaluateObjectField(ObjectFieldOp op,
 
   auto objectFieldValue = getOrCreateValue(op, actualParams, loc).value();
 
-  // If the object is unknown, mark the field as unknown.
   if (result->isUnknown()) {
-    // If objectFieldValue is a ReferenceValue, set its value to the unknown
-    // object
+    // If objectFieldValue is a ReferenceValue, set its value to a unknown value
+    // of the proper type
     if (auto *ref =
             llvm::dyn_cast<evaluator::ReferenceValue>(objectFieldValue.get())) {
-      ref->setValue(result);
+      auto unknownField = createUnknownValue(op.getResult().getType(), loc);
+      if (failed(unknownField))
+        return unknownField;
+      ref->setValue(unknownField.value());
     }
     // markUnknown() also marks the value as fully evaluated
     objectFieldValue->markUnknown();
@@ -800,13 +802,14 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateEmptyPath(
   return valueResult;
 }
 
+/// Create an unknown value of the specified type
 FailureOr<evaluator::EvaluatorValuePtr>
-circt::om::Evaluator::evaluateUnknownValue(UnknownValueOp op, Location loc) {
+circt::om::Evaluator::createUnknownValue(Type type, Location loc) {
   using namespace circt::om::evaluator;
 
   // Create an unknown value of the appropriate type by switching on the type
   auto result =
-      TypeSwitch<Type, FailureOr<EvaluatorValuePtr>>(op.getType())
+      TypeSwitch<Type, FailureOr<EvaluatorValuePtr>>(type)
           .Case([&](ListType type) -> FailureOr<EvaluatorValuePtr> {
             // Create an empty list
             return success(std::make_shared<ListValue>(type, loc));
@@ -842,6 +845,12 @@ circt::om::Evaluator::evaluateUnknownValue(UnknownValueOp op, Location loc) {
     result->get()->markUnknown();
 
   return result;
+}
+
+/// Evaluate an unknown value
+FailureOr<evaluator::EvaluatorValuePtr>
+circt::om::Evaluator::evaluateUnknownValue(UnknownValueOp op, Location loc) {
+  return createUnknownValue(op.getType(), loc);
 }
 
 //===----------------------------------------------------------------------===//
