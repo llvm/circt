@@ -6,7 +6,7 @@
 ; RUN: firtool %s --split-verilog -o=%t
 
 ; -------------------------------------- Test 1: Multiple options error check
-; RUN: not verilator %driver %t/top.sv %t/ASICTarget.sv %t/FPGATarget.sv %t/DefaultTarget.sv --cc --sv --exe --build -o %t.multi.exe --top-module top -Dtargets\$Platform\$ASIC -Dtargets$$Platform\$FPGA 2>&1 | FileCheck %s --check-prefix=MULTI
+; RUN: not verilator %driver %t/top.sv %t/ASICTarget.sv %t/FPGATarget.sv %t/DefaultTarget.sv --cc --sv --exe --build -o %t.multi.exe --top-module top -Dtargets\$Platform\$ASIC -Dtargets\$Platform\$FPGA 2>&1 | FileCheck %s --check-prefix=MULTI
 ; MULTI: Multiple instance choice options defined for option 'Platform': 'targets$Platform$ASIC' and 'targets$Platform$FPGA'
 
 ; -------------------------------------- Test 2: ASIC target
