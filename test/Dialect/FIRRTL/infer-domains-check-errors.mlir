@@ -76,9 +76,9 @@ firrtl.circuit "IllegalDomainCrossing" {
   firrtl.module @IllegalDomainCrossing(
     in %A: !firrtl.domain<@ClockDomain()>,
     in %B: !firrtl.domain<@ClockDomain()>,
-    // expected-note @below {{2nd operand has domains: [ClockDomain: A]}}
+    // expected-note @below {{2nd operand has domains: [A : ClockDomain]}}
     in %a: !firrtl.uint<1> domains [%A],
-    // expected-note @below {{1st operand has domains: [ClockDomain: B]}}
+    // expected-note @below {{1st operand has domains: [B : ClockDomain]}}
     out %b: !firrtl.uint<1> domains [%B]
   ) {
     // expected-error @below {{illegal domain crossing in operation}}
@@ -141,7 +141,7 @@ firrtl.circuit "DomainDefineConflict" {
     %C = firrtl.domain.create(%id) : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
 
     // This should fail because B is already unified with A via the earlier connect.
-    // expected-error @below {{defines a domain value that was inferred to be a different domain 'A'}}
+    // expected-error @below {{defines a domain value that was inferred to be a different domain 'A : ClockDomain'}}
     firrtl.domain.define %B, %C : !firrtl.domain<@ClockDomain(id: !firrtl.integer)>
   }
 }
