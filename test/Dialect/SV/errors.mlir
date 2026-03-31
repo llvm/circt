@@ -363,3 +363,11 @@ hw.module @InvalidVerbatimExprSE(out out: i32) {
   %0 = sv.verbatim.expr.se "MACRO" : () -> i32 {symbols=[@Foo]}
   hw.output %0 : i32
 }
+
+// -----
+
+hw.module @InvalidVerbatimExpr(out out: i32) {
+  // expected-error @+1 {{references nonexistent symbol 'Foo'}}
+  %0 = sv.verbatim.expr "MACRO" : () -> i32 {symbols=[@Foo]}
+  hw.output %0 : i32
+}
