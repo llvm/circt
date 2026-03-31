@@ -358,17 +358,8 @@ hw.module @InvalidVerbatimSymbol() {
 
 // -----
 
-hw.module @ValidVerbatimExprSE(out out: i32) {
-  // expected-error @+1 {{references nonexistent symbol 'Bar'}}
-  %0 = sv.verbatim.expr.se "MACRO" : () -> i32 {symbols=[@Bar]}
-  hw.output %0 : i32
-}
-
-// -----
-
-// Test VerbatimExprSEOp - invalid case
 hw.module @InvalidVerbatimExprSE(out out: i32) {
-  // expected-error @+1 {{references nonexistent symbol 'Bar'}}
-  %0 = sv.verbatim.expr.se "MACRO" : () -> i32 {symbols=[@Bar]}
+  // expected-error @+1 {{references nonexistent symbol 'Foo'}}
+  %0 = sv.verbatim.expr.se "MACRO" : () -> i32 {symbols=[@Foo]}
   hw.output %0 : i32
 }

@@ -130,7 +130,6 @@ static LogicalResult verifyVerbatimSymbols(Operation *op, ArrayAttr symbols,
 static LogicalResult
 verifyVerbatimFlatSymbolRefs(Operation *op, ArrayAttr symbols,
                              SymbolTableCollection &symbolTable) {
-  // Verify each flat symbol reference in the symbols array
   for (auto symbol : symbols) {
     if (auto flatRef = dyn_cast<FlatSymbolRefAttr>(symbol)) {
       auto *referencedOp = symbolTable.lookupNearestSymbolFrom(op, flatRef);
@@ -138,7 +137,6 @@ verifyVerbatimFlatSymbolRefs(Operation *op, ArrayAttr symbols,
         return op->emitOpError("references nonexistent symbol '")
                << flatRef.getValue() << "'";
     }
-    // InnerRefAttrs are verified by verifyInnerRefs, not here
   }
   return success();
 }
