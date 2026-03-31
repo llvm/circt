@@ -30,29 +30,29 @@ using namespace sim;
 //===----------------------------------------------------------------------===//
 
 void DPIFuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                      StringAttr symName, ArrayRef<StringAttr> portNames,
-                      ArrayRef<Type> portTypes,
-                      ArrayRef<DPIDirection> portDirections, ArrayAttr portLocs,
+                      StringAttr symName, ArrayRef<StringAttr> argNames,
+                      ArrayRef<Type> argTypes,
+                      ArrayRef<DPIDirection> argDirections, ArrayAttr argLocs,
                       StringAttr verilogName) {
-  // Build DPIModuleType from port info.
-  SmallVector<DPIPort> ports;
-  ports.reserve(portNames.size());
-  for (auto [name, type, dir] : llvm::zip(portNames, portTypes, portDirections))
-    ports.push_back({name, type, dir});
-  auto modType = DPIModuleType::get(odsBuilder.getContext(), ports);
-  build(odsBuilder, odsState, symName, modType, portLocs, verilogName);
+  // Build DPIFunctionType from argument info.
+  SmallVector<DPIArgument> args;
+  args.reserve(argNames.size());
+  for (auto [name, type, dir] : llvm::zip(argNames, argTypes, argDirections))
+    args.push_back({name, type, dir});
+  auto dpiType = DPIFunctionType::get(odsBuilder.getContext(), args);
+  build(odsBuilder, odsState, symName, dpiType, argLocs, verilogName);
 }
 
 void DPIFuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
-                      StringAttr symName, DPIModuleType moduleType,
-                      ArrayAttr portLocs, StringAttr verilogName) {
+                      StringAttr symName, DPIFunctionType dpiFunctionType,
+                      ArrayAttr argLocs, StringAttr verilogName) {
   odsState.addAttribute(getSymNameAttrName(odsState.name), symName);
   odsState.addAttribute(getFunctionTypeAttrName(odsState.name),
-                        TypeAttr::get(moduleType.getFunctionType()));
-  odsState.addAttribute(getModuleTypeAttrName(odsState.name),
-                        TypeAttr::get(moduleType));
-  if (portLocs)
-    odsState.addAttribute(getPortLocsAttrName(odsState.name), portLocs);
+                        TypeAttr::get(dpiFunctionType.getFunctionType()));
+  odsState.addAttribute(getDpiFunctionTypeAttrName(odsState.name),
+                        TypeAttr::get(dpiFunctionType));
+  if (argLocs)
+    odsState.addAttribute(getArgumentLocsAttrName(odsState.name), argLocs);
   if (verilogName)
     odsState.addAttribute(getVerilogNameAttrName(odsState.name), verilogName);
   odsState.addRegion();
@@ -69,63 +69,64 @@ ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
                              result.attributes))
     return failure();
 
-  SmallVector<DPIPort> ports;
-  SmallVector<Attribute> portLocs;
+  SmallVector<DPIArgument> args;
+  SmallVector<Attribute> argLocs;
   auto unknownLoc = builder.getUnknownLoc();
   bool hasLocs = false;
 
-  auto parseOnePort = [&]() -> ParseResult {
+  auto parseOneArg = [&]() -> ParseResult {
     StringRef dirKeyword;
     auto keyLoc = parser.getCurrentLocation();
     if (parser.parseKeyword(&dirKeyword))
       return failure();
     auto dir = parseDPIDirectionKeyword(dirKeyword);
     if (!dir)
-      return parser.emitError(keyLoc, "expected DPI port direction keyword");
+      return parser.emitError(keyLoc,
+                              "expected DPI argument direction keyword");
 
-    // For input/inout/ref ports, parse SSA name; for output/return, bare name.
+    // For input/inout/ref args, parse SSA name; for output/return, bare name.
     bool hasSSA = isCallOperandDir(*dir);
-    std::string portName;
+    std::string argName;
     if (hasSSA) {
       OpAsmParser::UnresolvedOperand ssaName;
       if (parser.parseOperand(ssaName, /*allowResultNumber=*/false))
         return failure();
-      portName = ssaName.name.substr(1).str();
+      argName = ssaName.name.substr(1).str();
     } else {
-      if (parser.parseKeywordOrString(&portName))
+      if (parser.parseKeywordOrString(&argName))
         return failure();
     }
 
-    Type portType;
-    if (parser.parseColonType(portType))
+    Type argType;
+    if (parser.parseColonType(argType))
       return failure();
-    ports.push_back({StringAttr::get(ctx, portName), portType, *dir});
+    args.push_back({StringAttr::get(ctx, argName), argType, *dir});
 
     std::optional<Location> maybeLoc;
     if (failed(parser.parseOptionalLocationSpecifier(maybeLoc)))
       return failure();
     if (maybeLoc) {
-      portLocs.push_back(*maybeLoc);
+      argLocs.push_back(*maybeLoc);
       hasLocs = true;
     } else {
-      portLocs.push_back(unknownLoc);
+      argLocs.push_back(unknownLoc);
     }
     return success();
   };
 
-  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
-                                     parseOnePort, " in DPI port list"))
+  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren, parseOneArg,
+                                     " in DPI argument list"))
     return failure();
 
-  auto modType = DPIModuleType::get(ctx, ports);
+  auto dpiType = DPIFunctionType::get(ctx, args);
 
   result.addAttribute(DPIFuncOp::getFunctionTypeAttrName(result.name),
-                      TypeAttr::get(modType.getFunctionType()));
-  result.addAttribute(DPIFuncOp::getModuleTypeAttrName(result.name),
-                      TypeAttr::get(modType));
+                      TypeAttr::get(dpiType.getFunctionType()));
+  result.addAttribute(DPIFuncOp::getDpiFunctionTypeAttrName(result.name),
+                      TypeAttr::get(dpiType));
   if (hasLocs)
-    result.addAttribute(DPIFuncOp::getPortLocsAttrName(result.name),
-                        builder.getArrayAttr(portLocs));
+    result.addAttribute(DPIFuncOp::getArgumentLocsAttrName(result.name),
+                        builder.getArrayAttr(argLocs));
   result.addRegion();
 
   if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
@@ -141,24 +142,24 @@ void DPIFuncOp::print(OpAsmPrinter &p) {
     p << visibility.getValue() << ' ';
   p.printSymbolName(getSymName());
 
-  auto modType = getModuleType();
-  auto dpiPorts = modType.getPorts();
+  auto dpiType = getDpiFunctionType();
+  auto dpiArgs = dpiType.getArguments();
 
   p << '(';
-  llvm::interleaveComma(llvm::enumerate(dpiPorts), p, [&](auto it) {
-    auto &port = it.value();
+  llvm::interleaveComma(llvm::enumerate(dpiArgs), p, [&](auto it) {
+    auto &arg = it.value();
     auto i = it.index();
 
-    p << stringifyDPIDirectionKeyword(port.dir) << ' ';
+    p << stringifyDPIDirectionKeyword(arg.dir) << ' ';
 
-    if (isCallOperandDir(port.dir))
+    if (isCallOperandDir(arg.dir))
       p << '%';
-    p.printKeywordOrString(port.name.getValue());
+    p.printKeywordOrString(arg.name.getValue());
     p << " : ";
-    p.printType(port.type);
+    p.printType(arg.type);
 
-    if (getPortLocs()) {
-      auto loc = cast<Location>(getPortLocsAttr()[i]);
+    if (getArgumentLocs()) {
+      auto loc = cast<Location>(getArgumentLocsAttr()[i]);
       if (loc != UnknownLoc::get(getContext()))
         p.printOptionalLocationSpecifier(loc);
     }
@@ -167,31 +168,31 @@ void DPIFuncOp::print(OpAsmPrinter &p) {
 
   mlir::function_interface_impl::printFunctionAttributes(
       p, *this,
-      {visibilityAttrName, getFunctionTypeAttrName(), getModuleTypeAttrName(),
-       getPortLocsAttrName()});
+      {visibilityAttrName, getFunctionTypeAttrName(),
+       getDpiFunctionTypeAttrName(), getArgumentLocsAttrName()});
 }
 
 LogicalResult DPIFuncOp::verify() {
-  auto modType = getModuleType();
+  auto dpiType = getDpiFunctionType();
 
-  // Structural constraints shared with all DPIModuleType users.
-  if (failed(modType.verify([&]() { return emitOpError(); })))
+  // Structural constraints shared with all DPIFunctionType users.
+  if (failed(dpiType.verify([&]() { return emitOpError(); })))
     return failure();
 
   // Sim-specific constraints.
-  for (auto &port : modType.getPorts()) {
-    if (port.dir == DPIDirection::Ref) {
-      if (!isa<LLVM::LLVMPointerType>(port.type))
-        return emitOpError("'ref' ports must use !llvm.ptr type");
+  for (auto &arg : dpiType.getArguments()) {
+    if (arg.dir == DPIDirection::Ref) {
+      if (!isa<LLVM::LLVMPointerType>(arg.type))
+        return emitOpError("'ref' arguments must use !llvm.ptr type");
     }
   }
 
-  // Verify function_type matches the module_type.
-  auto expectedFuncType = modType.getFunctionType();
+  // Verify function_type matches the dpi_function_type.
+  auto expectedFuncType = dpiType.getFunctionType();
   if (getFunctionType() != expectedFuncType)
     return emitOpError("function_type ")
            << getFunctionType()
-           << " does not match the expected type derived from ports: "
+           << " does not match the expected type derived from arguments: "
            << expectedFuncType;
 
   return success();

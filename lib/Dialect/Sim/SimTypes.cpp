@@ -66,71 +66,73 @@ void SimDialect::registerTypes() {
 }
 
 //===----------------------------------------------------------------------===//
-// DPIModuleType storage
+// DPIFunctionType storage
 //===----------------------------------------------------------------------===//
 
-sim::detail::DPIModuleTypeStorage::DPIModuleTypeStorage(
-    ArrayRef<DPIPort> dpiPorts)
-    : ports(dpiPorts) {
-  for (auto [idx, p] : llvm::enumerate(ports)) {
-    if (p.dir == DPIDirection::Input || p.dir == DPIDirection::InOut ||
-        p.dir == DPIDirection::Ref)
+sim::detail::DPIFunctionTypeStorage::DPIFunctionTypeStorage(
+    ArrayRef<DPIArgument> dpiArgs)
+    : arguments(dpiArgs) {
+  for (auto [idx, a] : llvm::enumerate(arguments)) {
+    if (a.dir == DPIDirection::Input || a.dir == DPIDirection::InOut ||
+        a.dir == DPIDirection::Ref)
       inputToAbs.push_back(idx);
-    if (p.dir == DPIDirection::Output || p.dir == DPIDirection::InOut ||
-        p.dir == DPIDirection::Return)
+    if (a.dir == DPIDirection::Output || a.dir == DPIDirection::InOut ||
+        a.dir == DPIDirection::Return)
       resultToAbs.push_back(idx);
   }
 }
 
 //===----------------------------------------------------------------------===//
-// DPIModuleType methods
+// DPIFunctionType methods
 //===----------------------------------------------------------------------===//
 
-ArrayRef<DPIPort> DPIModuleType::getPorts() const {
-  return getImpl()->getPorts();
+ArrayRef<DPIArgument> DPIFunctionType::getArguments() const {
+  return getImpl()->getArguments();
 }
 
-size_t DPIModuleType::getNumPorts() const { return getImpl()->ports.size(); }
+size_t DPIFunctionType::getNumArguments() const {
+  return getImpl()->arguments.size();
+}
 
-SmallVector<DPIPort> DPIModuleType::getInputPorts() const {
-  SmallVector<DPIPort> result;
+SmallVector<DPIArgument> DPIFunctionType::getInputArguments() const {
+  SmallVector<DPIArgument> result;
   for (auto idx : getImpl()->inputToAbs)
-    result.push_back(getImpl()->ports[idx]);
+    result.push_back(getImpl()->arguments[idx]);
   return result;
 }
 
-SmallVector<DPIPort> DPIModuleType::getResultPorts() const {
-  SmallVector<DPIPort> result;
+SmallVector<DPIArgument> DPIFunctionType::getResultArguments() const {
+  SmallVector<DPIArgument> result;
   for (auto idx : getImpl()->resultToAbs)
-    result.push_back(getImpl()->ports[idx]);
+    result.push_back(getImpl()->arguments[idx]);
   return result;
 }
 
-const DPIPort *DPIModuleType::getReturnPort() const {
-  auto &ports = getImpl()->ports;
-  if (!ports.empty() && ports.back().dir == DPIDirection::Return)
-    return &ports.back();
+const DPIArgument *DPIFunctionType::getReturnArgument() const {
+  auto &args = getImpl()->arguments;
+  if (!args.empty() && args.back().dir == DPIDirection::Return)
+    return &args.back();
   return nullptr;
 }
 
-FunctionType DPIModuleType::getFunctionType() const {
+FunctionType DPIFunctionType::getFunctionType() const {
   SmallVector<Type> inputs, results;
-  for (auto &port : getImpl()->ports) {
-    if (port.dir == DPIDirection::Input || port.dir == DPIDirection::InOut ||
-        port.dir == DPIDirection::Ref)
-      inputs.push_back(port.type);
-    if (port.dir == DPIDirection::Output || port.dir == DPIDirection::InOut ||
-        port.dir == DPIDirection::Return)
-      results.push_back(port.type);
+  for (auto &arg : getImpl()->arguments) {
+    if (arg.dir == DPIDirection::Input || arg.dir == DPIDirection::InOut ||
+        arg.dir == DPIDirection::Ref)
+      inputs.push_back(arg.type);
+    if (arg.dir == DPIDirection::Output || arg.dir == DPIDirection::InOut ||
+        arg.dir == DPIDirection::Return)
+      results.push_back(arg.type);
   }
   return FunctionType::get(getContext(), inputs, results);
 }
 
-hw::ModuleType DPIModuleType::getHWModuleType() const {
+hw::ModuleType DPIFunctionType::getHWModuleType() const {
   SmallVector<hw::ModulePort> hwPorts;
-  for (auto &port : getImpl()->ports) {
+  for (auto &arg : getImpl()->arguments) {
     hw::ModulePort::Direction hwDir;
-    switch (port.dir) {
+    switch (arg.dir) {
     case DPIDirection::Input:
     case DPIDirection::Ref:
       hwDir = hw::ModulePort::Direction::Input;
@@ -143,49 +145,49 @@ hw::ModuleType DPIModuleType::getHWModuleType() const {
       hwDir = hw::ModulePort::Direction::InOut;
       break;
     }
-    hwPorts.push_back({port.name, port.type, hwDir});
+    hwPorts.push_back({arg.name, arg.type, hwDir});
   }
   return hw::ModuleType::get(getContext(), hwPorts);
 }
 
 LogicalResult
-DPIModuleType::verify(function_ref<InFlightDiagnostic()> emitError) const {
-  auto dpiPorts = getPorts();
+DPIFunctionType::verify(function_ref<InFlightDiagnostic()> emitError) const {
+  auto dpiArgs = getArguments();
   unsigned returnCount = 0;
-  for (auto [i, port] : llvm::enumerate(dpiPorts)) {
-    if (port.dir == DPIDirection::Return) {
+  for (auto [i, arg] : llvm::enumerate(dpiArgs)) {
+    if (arg.dir == DPIDirection::Return) {
       ++returnCount;
-      if (i != dpiPorts.size() - 1)
-        return emitError() << "'return' port must be the last port";
+      if (i != dpiArgs.size() - 1)
+        return emitError() << "'return' argument must be the last argument";
     }
   }
   if (returnCount > 1)
-    return emitError() << "must have at most one 'return' port";
+    return emitError() << "must have at most one 'return' argument";
   return success();
 }
 
 //===----------------------------------------------------------------------===//
-// DPIModuleType parser/printer
+// DPIFunctionType parser/printer
 //===----------------------------------------------------------------------===//
 
-/// Parse: !sim.dpi_modty<input "a" : i32, output "b" : i32>
-Type DPIModuleType::parse(AsmParser &parser) {
-  SmallVector<DPIPort> ports;
+/// Parse: !sim.dpi_functy<input "a" : i32, output "b" : i32>
+Type DPIFunctionType::parse(AsmParser &parser) {
+  SmallVector<DPIArgument> args;
   if (parser.parseLess())
     return {};
 
-  // Handle empty port list.
+  // Handle empty argument list.
   if (succeeded(parser.parseOptionalGreater()))
-    return get(parser.getContext(), ports);
+    return get(parser.getContext(), args);
 
-  auto parseOnePort = [&]() -> ParseResult {
+  auto parseOneArg = [&]() -> ParseResult {
     StringRef dirKeyword;
     if (parser.parseKeyword(&dirKeyword))
       return failure();
     auto dir = parseDPIDirectionKeyword(dirKeyword);
     if (!dir) {
       parser.emitError(parser.getCurrentLocation(),
-                       "expected DPI port direction keyword");
+                       "expected DPI argument direction keyword");
       return failure();
     }
     std::string name;
@@ -194,23 +196,23 @@ Type DPIModuleType::parse(AsmParser &parser) {
     Type type;
     if (parser.parseColonType(type))
       return failure();
-    ports.push_back({StringAttr::get(parser.getContext(), name), type, *dir});
+    args.push_back({StringAttr::get(parser.getContext(), name), type, *dir});
     return success();
   };
 
-  if (parser.parseCommaSeparatedList(parseOnePort) || parser.parseGreater())
+  if (parser.parseCommaSeparatedList(parseOneArg) || parser.parseGreater())
     return {};
-  return get(parser.getContext(), ports);
+  return get(parser.getContext(), args);
 }
 
-/// Print: !sim.dpi_modty<input "a" : i32, output "b" : i32>
-void DPIModuleType::print(AsmPrinter &printer) const {
+/// Print: !sim.dpi_functy<input "a" : i32, output "b" : i32>
+void DPIFunctionType::print(AsmPrinter &printer) const {
   printer << '<';
-  llvm::interleaveComma(getPorts(), printer, [&](const DPIPort &port) {
-    printer << stringifyDPIDirectionKeyword(port.dir) << ' ';
-    printer << '"' << port.name.getValue() << '"';
+  llvm::interleaveComma(getArguments(), printer, [&](const DPIArgument &arg) {
+    printer << stringifyDPIDirectionKeyword(arg.dir) << ' ';
+    printer << '"' << arg.name.getValue() << '"';
     printer << " : ";
-    printer.printType(port.type);
+    printer.printType(arg.type);
   });
   printer << '>';
 }

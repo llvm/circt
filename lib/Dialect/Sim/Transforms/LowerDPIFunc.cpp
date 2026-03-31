@@ -73,34 +73,34 @@ LogicalResult LowerDPIFuncPass::lowerDPIFuncOp(sim::DPIFuncOp simFunc,
                                                LoweringState &loweringState,
                                                SymbolTable &symbolTable) {
   ImplicitLocOpBuilder builder(simFunc.getLoc(), simFunc);
-  auto modType = simFunc.getModuleType();
-  auto dpiPorts = modType.getPorts();
-  auto *returnPort = modType.getReturnPort();
-  Type explicitReturnType = returnPort ? returnPort->type : Type{};
+  auto dpiType = simFunc.getDpiFunctionType();
+  auto dpiArgs = dpiType.getArguments();
+  auto *returnArg = dpiType.getReturnArgument();
+  Type explicitReturnType = returnArg ? returnArg->type : Type{};
 
   llvm::SmallVector<Type> dpiFunctionArgumentTypes;
-  for (auto &port : dpiPorts) {
+  for (auto &arg : dpiArgs) {
     // TODO: Support additional non-integer types beyond the pointer-shaped
     // open-array ABI path.
-    if (!port.type.isInteger() && !(isa<LLVM::LLVMPointerType>(port.type) &&
-                                    (port.dir == sim::DPIDirection::Input ||
-                                     port.dir == sim::DPIDirection::Ref)))
+    if (!arg.type.isInteger() && !(isa<LLVM::LLVMPointerType>(arg.type) &&
+                                   (arg.dir == sim::DPIDirection::Input ||
+                                    arg.dir == sim::DPIDirection::Ref)))
       return simFunc->emitError()
              << "non-integer type argument is unsupported now";
 
-    switch (port.dir) {
+    switch (arg.dir) {
     case sim::DPIDirection::Input:
-      dpiFunctionArgumentTypes.push_back(port.type);
+      dpiFunctionArgumentTypes.push_back(arg.type);
       break;
     case sim::DPIDirection::Output:
     case sim::DPIDirection::InOut:
       dpiFunctionArgumentTypes.push_back(
-          LLVM::LLVMPointerType::get(port.type.getContext()));
+          LLVM::LLVMPointerType::get(arg.type.getContext()));
       break;
     case sim::DPIDirection::Return:
       break;
     case sim::DPIDirection::Ref:
-      dpiFunctionArgumentTypes.push_back(port.type);
+      dpiFunctionArgumentTypes.push_back(arg.type);
       break;
     }
   }
@@ -149,8 +149,8 @@ LogicalResult LowerDPIFuncPass::lowerDPIFuncOp(sim::DPIFuncOp simFunc,
   Value explicitReturnValue;
 
   size_t inputIndex = 0;
-  for (auto &port : dpiPorts) {
-    switch (port.dir) {
+  for (auto &arg : dpiArgs) {
+    switch (arg.dir) {
     case sim::DPIDirection::Input:
       functionInputs.push_back(funcOp.getArgument(inputIndex));
       ++inputIndex;
@@ -165,20 +165,20 @@ LogicalResult LowerDPIFuncPass::lowerDPIFuncOp(sim::DPIFuncOp simFunc,
       auto one =
           LLVM::ConstantOp::create(builder, builder.getI64IntegerAttr(1));
       auto alloca = LLVM::AllocaOp::create(
-          builder, builder.getType<LLVM::LLVMPointerType>(), port.type, one);
+          builder, builder.getType<LLVM::LLVMPointerType>(), arg.type, one);
       functionInputs.push_back(alloca);
-      wrapperOutputAllocas.push_back({port.type, alloca});
+      wrapperOutputAllocas.push_back({arg.type, alloca});
       break;
     }
     case sim::DPIDirection::InOut: {
       auto one =
           LLVM::ConstantOp::create(builder, builder.getI64IntegerAttr(1));
       auto alloca = LLVM::AllocaOp::create(
-          builder, builder.getType<LLVM::LLVMPointerType>(), port.type, one);
+          builder, builder.getType<LLVM::LLVMPointerType>(), arg.type, one);
       LLVM::StoreOp::create(builder, funcOp.getArgument(inputIndex), alloca);
       ++inputIndex;
       functionInputs.push_back(alloca);
-      wrapperOutputAllocas.push_back({port.type, alloca});
+      wrapperOutputAllocas.push_back({arg.type, alloca});
       break;
     }
     }

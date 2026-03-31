@@ -54,7 +54,7 @@ hw.module @dpi_call(in %clock : !seq.clock, in %in: i1) {
 
 // -----
 
-// expected-error @below {{'return' port must be the last port}}
+// expected-error @below {{'return' argument must be the last argument}}
 sim.func.dpi @dpi_bad_return(return ret: i1, output other: i1)
 
 // -----
@@ -75,7 +75,7 @@ hw.module @dpi_bad_call_types(in %clock : !seq.clock, in %in: i1) {
 
 // -----
 
-// expected-error @below {{'ref' ports must use !llvm.ptr type}}
+// expected-error @below {{'ref' arguments must use !llvm.ptr type}}
 sim.func.dpi @dpi_bad_ref_type(ref %arg : i32)
 
 // -----

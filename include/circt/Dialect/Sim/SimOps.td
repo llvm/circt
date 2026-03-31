@@ -65,10 +65,10 @@ def DPIFuncOp : SimOp<"func.dpi",
       FunctionOpInterface]> {
   let summary = "A DPI-C imported function declaration";
   let description = [{
-    `sim.func.dpi` models a DPI-C imported function with first-class port
+    `sim.func.dpi` models a DPI-C imported function with first-class argument
     direction keywords: `input`, `output`, `inout`, `return`, and `ref`.
 
-    Port directions map to call and ABI semantics as follows:
+    Argument directions map to call and ABI semantics as follows:
     - `input`  — call operand, passed by value.
     - `output` — call result, passed by pointer in the C ABI.
     - `inout`  — call operand and result, passed by pointer in the C ABI.
@@ -79,8 +79,8 @@ def DPIFuncOp : SimOp<"func.dpi",
   let arguments = (ins
     SymbolNameAttr:$sym_name,
     TypeAttrOf<FunctionType>:$function_type,
-    TypeAttrOf<DPIModuleType>:$module_type,
-    OptionalAttr<LocationArrayAttr>:$port_locs,
+    TypeAttrOf<DPIFunctionType>:$dpi_function_type,
+    OptionalAttr<LocationArrayAttr>:$argument_locs,
     OptionalAttr<StrAttr>:$verilogName
   );
   let regions = (region AnyRegion:$body);
@@ -91,16 +91,16 @@ def DPIFuncOp : SimOp<"func.dpi",
   let builders = [
     OpBuilder<(ins
       "StringAttr":$sym_name,
-      "ArrayRef<StringAttr>":$portNames,
-      "ArrayRef<Type>":$portTypes,
-      "ArrayRef<DPIDirection>":$portDirections,
-      "ArrayAttr":$portLocs,
+      "ArrayRef<StringAttr>":$argNames,
+      "ArrayRef<Type>":$argTypes,
+      "ArrayRef<DPIDirection>":$argDirections,
+      "ArrayAttr":$argLocs,
       "StringAttr":$verilogName
     )>,
     OpBuilder<(ins
       "StringAttr":$sym_name,
-      "DPIModuleType":$moduleType,
-      "ArrayAttr":$portLocs,
+      "DPIFunctionType":$dpiFunctionType,
+      "ArrayAttr":$argLocs,
       "StringAttr":$verilogName
     )>
   ];

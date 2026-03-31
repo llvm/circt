@@ -273,12 +273,12 @@ static ArrayAttr buildSVPerArgumentAttrs(MLIRContext *context,
                                          sim::DPIFuncOp func) {
   Builder builder(context);
   SmallVector<Attribute> convertedAttrs;
-  auto modType = func.getModuleType();
-  auto dpiPorts = modType.getPorts();
-  convertedAttrs.reserve(dpiPorts.size());
-  for (auto &port : dpiPorts) {
+  auto dpiType = func.getDpiFunctionType();
+  auto dpiArgs = dpiType.getArguments();
+  convertedAttrs.reserve(dpiArgs.size());
+  for (auto &arg : dpiArgs) {
     NamedAttrList newAttrs;
-    if (port.dir == sim::DPIDirection::Return)
+    if (arg.dir == sim::DPIDirection::Return)
       newAttrs.append(
           builder.getStringAttr(sv::FuncOp::getExplicitlyReturnedAttrName()),
           builder.getUnitAttr());
@@ -291,14 +291,14 @@ void LowerDPIFunc::lower(sim::DPIFuncOp func) {
   ImplicitLocOpBuilder builder(func.getLoc(), func);
   ArrayAttr inputLocsAttr, outputLocsAttr;
 
-  // Build ModuleType from DPI ports for sv::FuncOp.
-  auto moduleType = func.getModuleType().getHWModuleType();
+  // Build ModuleType from DPI arguments for sv::FuncOp.
+  auto moduleType = func.getDpiFunctionType().getHWModuleType();
 
-  if (func.getPortLocs()) {
+  if (func.getArgumentLocs()) {
     SmallVector<Attribute> inputLocs, outputLocs;
     auto hwPorts = moduleType.getPorts();
     for (auto [port, loc] : llvm::zip(
-             hwPorts, func.getPortLocsAttr().getAsRange<LocationAttr>())) {
+             hwPorts, func.getArgumentLocsAttr().getAsRange<LocationAttr>())) {
       (port.dir == hw::ModulePort::Output ? outputLocs : inputLocs)
           .push_back(loc);
     }

@@ -73,34 +73,34 @@ def QueueType : SimTypeDef<"Queue"> {
   ];
 }
 
-def DPIModuleType : SimTypeDef<"DPIModule"> {
-  let summary = "DPI module type with first-class port directions";
+def DPIFunctionType : SimTypeDef<"DPIFunction"> {
+  let summary = "DPI function type with first-class argument directions";
   let description = [{
-    Represents the full port signature of a DPI-C function declaration.
-    Each port has a name, type, and direction (`input`, `output`, `inout`,
+    Represents the full argument signature of a DPI-C function declaration.
+    Each argument has a name, type, and direction (`input`, `output`, `inout`,
     `return`, or `ref`). Unlike `hw.modty`, this type preserves DPI-specific
-    semantics such as explicit return values and by-reference ports.
+    semantics such as explicit return values and by-reference arguments.
   }];
 
-  let mnemonic = "dpi_modty";
+  let mnemonic = "dpi_functy";
   let parameters = (ins
-    ArrayRefParameter<"::circt::sim::DPIPort", "DPI port list">:$ports
+    ArrayRefParameter<"::circt::sim::DPIArgument", "DPI argument list">:$arguments
   );
   let genStorageClass = 0;
   let hasCustomAssemblyFormat = 1;
 
   let extraClassDeclaration = [{
-    /// Get the number of ports.
-    size_t getNumPorts() const;
+    /// Get the number of arguments.
+    size_t getNumArguments() const;
 
-    /// Get the input ports (input, inout, ref — call operands).
-    llvm::SmallVector<DPIPort> getInputPorts() const;
+    /// Get the input arguments (input, inout, ref — call operands).
+    llvm::SmallVector<DPIArgument> getInputArguments() const;
 
-    /// Get the result ports (output, inout, return — call results).
-    llvm::SmallVector<DPIPort> getResultPorts() const;
+    /// Get the result arguments (output, inout, return — call results).
+    llvm::SmallVector<DPIArgument> getResultArguments() const;
 
-    /// Get the return port, if any. Returns nullptr if none.
-    const DPIPort *getReturnPort() const;
+    /// Get the return argument, if any. Returns nullptr if none.
+    const DPIArgument *getReturnArgument() const;
 
     /// Derive the MLIR FunctionType for the call shape.
     mlir::FunctionType getFunctionType() const;

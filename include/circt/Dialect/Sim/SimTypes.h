@@ -30,49 +30,49 @@ llvm::StringRef stringifyDPIDirectionKeyword(DPIDirection dir);
 /// Parse a keyword string to a DPIDirection. Returns std::nullopt on failure.
 std::optional<DPIDirection> parseDPIDirectionKeyword(llvm::StringRef keyword);
 
-/// True if a port with this direction is a call operand (input/inout/ref).
+/// True if an argument with this direction is a call operand (input/inout/ref).
 bool isCallOperandDir(DPIDirection dir);
 
-/// A single port in a DPI module type.
-struct DPIPort {
+/// A single argument in a DPI function type.
+struct DPIArgument {
   mlir::StringAttr name;
   mlir::Type type;
   DPIDirection dir;
 };
 
-static inline bool operator==(const DPIPort &a, const DPIPort &b) {
+static inline bool operator==(const DPIArgument &a, const DPIArgument &b) {
   return a.dir == b.dir && a.name == b.name && a.type == b.type;
 }
-static inline llvm::hash_code hash_value(const DPIPort &port) {
-  return llvm::hash_combine(static_cast<uint32_t>(port.dir), port.name,
-                            port.type);
+static inline llvm::hash_code hash_value(const DPIArgument &arg) {
+  return llvm::hash_combine(static_cast<uint32_t>(arg.dir), arg.name, arg.type);
 }
 
 namespace detail {
-struct DPIModuleTypeStorage : public mlir::TypeStorage {
-  DPIModuleTypeStorage(llvm::ArrayRef<DPIPort> inPorts);
+struct DPIFunctionTypeStorage : public mlir::TypeStorage {
+  DPIFunctionTypeStorage(llvm::ArrayRef<DPIArgument> args);
 
-  using KeyTy = llvm::ArrayRef<DPIPort>;
+  using KeyTy = llvm::ArrayRef<DPIArgument>;
 
   bool operator==(const KeyTy &key) const {
-    return std::equal(key.begin(), key.end(), ports.begin(), ports.end());
+    return std::equal(key.begin(), key.end(), arguments.begin(),
+                      arguments.end());
   }
 
   static llvm::hash_code hashKey(const KeyTy &key) {
     return llvm::hash_combine_range(key.begin(), key.end());
   }
 
-  static DPIModuleTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
-                                         const KeyTy &key) {
-    return new (allocator.allocate<DPIModuleTypeStorage>())
-        DPIModuleTypeStorage(key);
+  static DPIFunctionTypeStorage *
+  construct(mlir::TypeStorageAllocator &allocator, const KeyTy &key) {
+    return new (allocator.allocate<DPIFunctionTypeStorage>())
+        DPIFunctionTypeStorage(key);
   }
 
-  KeyTy getAsKey() const { return ports; }
+  KeyTy getAsKey() const { return arguments; }
 
-  llvm::ArrayRef<DPIPort> getPorts() const { return ports; }
+  llvm::ArrayRef<DPIArgument> getArguments() const { return arguments; }
 
-  llvm::SmallVector<DPIPort> ports;
+  llvm::SmallVector<DPIArgument> arguments;
   llvm::SmallVector<size_t> inputToAbs;
   llvm::SmallVector<size_t> resultToAbs;
 };

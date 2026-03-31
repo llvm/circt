@@ -241,13 +241,13 @@ sim::DPIFuncOp LowerDPI::getOrCreateDPIFuncDecl(DPICallIntrinsicOp op) {
   StringAttr outputName = op.getOutputNameAttr();
   assert(outputTypes.size() <= 1);
 
-  SmallVector<sim::DPIPort> ports;
+  SmallVector<sim::DPIArgument> args;
 
   // Add input arguments.
   for (auto [idx, inType] : llvm::enumerate(inputTypes)) {
     auto name = inputNames ? cast<StringAttr>(inputNames[idx])
                            : builder.getStringAttr(Twine("in_") + Twine(idx));
-    ports.push_back(
+    args.push_back(
         {name, lowerDPIArgumentType(inType), sim::DPIDirection::Input});
   }
 
@@ -255,24 +255,24 @@ sim::DPIFuncOp LowerDPI::getOrCreateDPIFuncDecl(DPICallIntrinsicOp op) {
   for (auto [idx, outType] : llvm::enumerate(outputTypes)) {
     auto name = outputName ? outputName
                            : builder.getStringAttr(Twine("out_") + Twine(idx));
-    ports.push_back(
+    args.push_back(
         {name, lowerDPIArgumentType(outType), sim::DPIDirection::Output});
   }
 
-  auto dpiModType = sim::DPIModuleType::get(builder.getContext(), ports);
+  auto dpiType = sim::DPIFunctionType::get(builder.getContext(), args);
 
   auto it =
-      functionSignatureToDPIFuncOp.find({op.getFunctionNameAttr(), dpiModType});
+      functionSignatureToDPIFuncOp.find({op.getFunctionNameAttr(), dpiType});
   if (it != functionSignatureToDPIFuncOp.end())
     return it->second;
 
   auto funcSymbol = nameSpace.newName(op.getFunctionNameAttr().getValue());
   auto funcOp = sim::DPIFuncOp::create(
-      builder, op.getLoc(), builder.getStringAttr(funcSymbol), dpiModType,
+      builder, op.getLoc(), builder.getStringAttr(funcSymbol), dpiType,
       ArrayAttr(), op.getFunctionNameAttr());
   // External function must have a private linkage.
   funcOp.setPrivate();
-  functionSignatureToDPIFuncOp[{op.getFunctionNameAttr(), dpiModType}] = funcOp;
+  functionSignatureToDPIFuncOp[{op.getFunctionNameAttr(), dpiType}] = funcOp;
   return funcOp;
 }
 
