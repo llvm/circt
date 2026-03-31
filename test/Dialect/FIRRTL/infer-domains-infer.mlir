@@ -5,9 +5,9 @@ firrtl.circuit "InferOutputDomain" {
 
   firrtl.extmodule @Foo(out D: !firrtl.domain<@ClockDomain()>, out x: !firrtl.uint<1> domains [D])
 
-  // CHECK: firrtl.module private @Bar(out %ClockDomain: !firrtl.domain<@ClockDomain()>, out %x: !firrtl.uint<1> domains [%ClockDomain]) {
-  // CHECK:   %foo_D, %foo_x = firrtl.instance foo @Foo(out D: !firrtl.domain<@ClockDomain()>, out x: !firrtl.uint<1> domains [D])
-  // CHECK:   firrtl.domain.define %ClockDomain, %foo_D : !firrtl.domain<@ClockDomain()>
+  // CHECK: firrtl.module private @Bar(out %foo_D: !firrtl.domain<@ClockDomain()>, out %x: !firrtl.uint<1> domains [%foo_D]) {
+  // CHECK:   %foo_D_0, %foo_x = firrtl.instance foo @Foo(out D: !firrtl.domain<@ClockDomain()>, out x: !firrtl.uint<1> domains [D])
+  // CHECK:   firrtl.domain.define %foo_D, %foo_D_0 : !firrtl.domain<@ClockDomain()>
   // CHECK:   firrtl.matchingconnect %x, %foo_x : !firrtl.uint<1>
   // CHECK: }
   firrtl.module private @Bar(out %x : !firrtl.uint<1>) {
@@ -16,9 +16,9 @@ firrtl.circuit "InferOutputDomain" {
   }
 
   // CHECK: firrtl.module @InferOutputDomain(out %D: !firrtl.domain<@ClockDomain()>, out %x: !firrtl.uint<1> domains [%D]) {
-  // CHECK:   %bar_ClockDomain, %bar_x = firrtl.instance bar @Bar(out ClockDomain: !firrtl.domain<@ClockDomain()>, out x: !firrtl.uint<1> domains [ClockDomain])
+  // CHECK:   %bar_foo_D, %bar_x = firrtl.instance bar @Bar(out foo_D: !firrtl.domain<@ClockDomain()>, out x: !firrtl.uint<1> domains [foo_D])
   // CHECK:   firrtl.matchingconnect %x, %bar_x : !firrtl.uint<1>
-  // CHECK:   firrtl.domain.define %D, %bar_ClockDomain : !firrtl.domain<@ClockDomain()>
+  // CHECK:   firrtl.domain.define %D, %bar_foo_D : !firrtl.domain<@ClockDomain()>
   // CHECK: }
   firrtl.module @InferOutputDomain(out %D: !firrtl.domain<@ClockDomain()>, out %x: !firrtl.uint<1> domains [%D]) {
     %bar_x = firrtl.instance bar @Bar(out x : !firrtl.uint<1>)

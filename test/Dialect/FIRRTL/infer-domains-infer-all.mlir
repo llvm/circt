@@ -168,8 +168,8 @@ firrtl.circuit "ExportDomain" {
   )
 
   firrtl.module @ExportDomain(
-    // CHECK: out %ClockDomain: !firrtl.domain<@ClockDomain()>
-    // CHECK: out %o: !firrtl.uint<1> domains [%ClockDomain]
+    // CHECK: out %foo_A: !firrtl.domain<@ClockDomain()>
+    // CHECK: out %o: !firrtl.uint<1> domains [%foo_A]
     out %o: !firrtl.uint<1>
   ) {
     %foo_A, %foo_o = firrtl.instance foo @Foo(
@@ -177,7 +177,7 @@ firrtl.circuit "ExportDomain" {
       out o: !firrtl.uint<1> domains [A]
     )
     firrtl.matchingconnect %o, %foo_o : !firrtl.uint<1>
-    // CHECK: firrtl.domain.define %ClockDomain, %foo_A : !firrtl.domain<@ClockDomain()>
+    // CHECK: firrtl.domain.define %foo_A, %foo_A_0 : !firrtl.domain<@ClockDomain()>
   }
 }
 
@@ -228,10 +228,10 @@ firrtl.circuit "InstanceUpdate" {
 
   firrtl.module @Foo(in %i : !firrtl.uint<1>) {}
 
-  // CHECK: firrtl.module @InstanceUpdate(in %ClockDomain: !firrtl.domain<@ClockDomain()>, in %i: !firrtl.uint<1> domains [%ClockDomain]) {
-  // CHECK:   %foo_ClockDomain, %foo_i = firrtl.instance foo @Foo(in ClockDomain: !firrtl.domain<@ClockDomain()>, in i: !firrtl.uint<1> domains [ClockDomain])
+  // CHECK: firrtl.module @InstanceUpdate(in %foo_ClockDomain: !firrtl.domain<@ClockDomain()>, in %i: !firrtl.uint<1> domains [%foo_ClockDomain]) {
+  // CHECK:   %foo_ClockDomain_0, %foo_i = firrtl.instance foo @Foo(in ClockDomain: !firrtl.domain<@ClockDomain()>, in i: !firrtl.uint<1> domains [ClockDomain])
   // CHECK:   firrtl.connect %foo_i, %i : !firrtl.uint<1>
-  // CHECK:   firrtl.domain.define %foo_ClockDomain, %ClockDomain : !firrtl.domain<@ClockDomain()>
+  // CHECK:   firrtl.domain.define %foo_ClockDomain_0, %foo_ClockDomain : !firrtl.domain<@ClockDomain()>
   // CHECK: }
   firrtl.module @InstanceUpdate(in %i : !firrtl.uint<1>) {
     %foo_i = firrtl.instance foo @Foo(in i: !firrtl.uint<1>)
@@ -252,10 +252,10 @@ firrtl.circuit "InstanceChoiceUpdate" {
   firrtl.module @Bar(in %i : !firrtl.uint<1>) {}
   firrtl.module @Baz(in %i : !firrtl.uint<1>) {}
 
-  // CHECK: firrtl.module @InstanceChoiceUpdate(in %ClockDomain: !firrtl.domain<@ClockDomain()>, in %i: !firrtl.uint<1> domains [%ClockDomain]) {
-  // CHECK:   %inst_ClockDomain, %inst_i = firrtl.instance_choice inst @Foo alternatives @Option { @X -> @Bar, @Y -> @Baz } (in ClockDomain: !firrtl.domain<@ClockDomain()>, in i: !firrtl.uint<1> domains [ClockDomain])
+  // CHECK: firrtl.module @InstanceChoiceUpdate(in %inst_ClockDomain: !firrtl.domain<@ClockDomain()>, in %i: !firrtl.uint<1> domains [%inst_ClockDomain]) {
+  // CHECK:   %inst_ClockDomain_0, %inst_i = firrtl.instance_choice inst @Foo alternatives @Option { @X -> @Bar, @Y -> @Baz } (in ClockDomain: !firrtl.domain<@ClockDomain()>, in i: !firrtl.uint<1> domains [ClockDomain])
   // CHECK:   firrtl.connect %inst_i, %i : !firrtl.uint<1>
-  // CHECK:   firrtl.domain.define %inst_ClockDomain, %ClockDomain : !firrtl.domain<@ClockDomain()>
+  // CHECK:   firrtl.domain.define %inst_ClockDomain_0, %inst_ClockDomain : !firrtl.domain<@ClockDomain()>
   // CHECK: }
   firrtl.module @InstanceChoiceUpdate(in %i : !firrtl.uint<1>) {
     %inst_i = firrtl.instance_choice inst @Foo alternatives @Option { @X -> @Bar, @Y -> @Baz } (in i : !firrtl.uint<1>)
