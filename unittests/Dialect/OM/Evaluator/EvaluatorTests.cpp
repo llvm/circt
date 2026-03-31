@@ -1702,4 +1702,44 @@ module {
                 .getValue());
 }
 
+TEST(EvaluatorTests, UnknownObjectFieldTest) {
+  StringRef mod = R"MLIR(
+om.class.extern @Dut_Class(%basepath: !om.frozenbasepath) -> (omirOut: !om.list<!om.any>) {
+}
+
+om.class @TestHarness_Class(%basepath: !om.frozenbasepath) -> (result: !om.list<!om.any>) {
+  %0 = om.frozenbasepath_create %basepath "TestHarness/dut"
+  %1 = om.object @Dut_Class(%0) : (!om.frozenbasepath) -> !om.class.type<@Dut_Class>
+  %2 = om.object.field %1, [@omirOut] : (!om.class.type<@Dut_Class>) -> !om.list<!om.any>
+  %3 = om.list_create : !om.any
+  %4 = om.list_concat %3, %2 : !om.list<!om.any>
+  om.class.fields %4 : !om.list<!om.any>
+}
+)MLIR";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto basepath = std::make_shared<evaluator::BasePathValue>(&context);
+
+  auto result = evaluator.instantiate(
+      StringAttr::get(&context, "TestHarness_Class"), {basepath});
+
+  ASSERT_TRUE(succeeded(result));
+
+  // Verify the concatenated list is unknown
+  auto *obj = llvm::cast<evaluator::ObjectValue>(result->get());
+  auto field = obj->getField("result");
+  ASSERT_TRUE(succeeded(field));
+  EXPECT_TRUE(field->get()->isUnknown());
+}
+
 } // namespace
