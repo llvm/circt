@@ -546,7 +546,8 @@ def FFlushOp : SVOp<"fflush", [ProceduralOp]> {
 }
 
 def VerbatimOp : SVOp<"verbatim", [
-    DeclareOpInterfaceMethods<InnerRefUserOpInterface>
+    DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "Verbatim opaque text emitted inline.";
   let description = [{

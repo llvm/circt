@@ -347,3 +347,28 @@ hw.module @RandomModule() {
 sv.verbatim.module @TestVerbatimModule() attributes {
   source = @RandomModule
 }
+
+// -----
+
+hw.module @InvalidVerbatimSymbol() {
+  // expected-error @+1 {{references nonexistent symbol 'Foo'}}
+  sv.verbatim "// Comment {{0}}" {symbols=[@Foo]}
+  hw.output
+}
+
+// -----
+
+hw.module @ValidVerbatimExprSE(out out: i32) {
+  // expected-error @+1 {{references nonexistent symbol 'Bar'}}
+  %0 = sv.verbatim.expr.se "MACRO" : () -> i32 {symbols=[@Bar]}
+  hw.output %0 : i32
+}
+
+// -----
+
+// Test VerbatimExprSEOp - invalid case
+hw.module @InvalidVerbatimExprSE(out out: i32) {
+  // expected-error @+1 {{references nonexistent symbol 'Bar'}}
+  %0 = sv.verbatim.expr.se "MACRO" : () -> i32 {symbols=[@Bar]}
+  hw.output %0 : i32
+}
