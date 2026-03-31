@@ -374,10 +374,10 @@ firrtl.circuit "Foo" attributes {
     }
   ]
 } {
-  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.syncreset) {
     %bar = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %baz = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %baz = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.clock, !firrtl.syncreset, !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
@@ -961,7 +961,7 @@ firrtl.circuit "Foo"  attributes {
 } {
   // CHECK:      hw.hierpath private @nla [@Foo::@[[BAR_SYM:.+]], @Bar]
   // CHECK-NEXT: firrtl.module @Foo
-  firrtl.module @Foo(in %reset: !firrtl.uint<1>, in %clock: !firrtl.clock) {
+  firrtl.module @Foo(in %reset: !firrtl.syncreset, in %clock: !firrtl.clock) {
     // CHECK-NEXT: %_T_0 = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     %_T_0 = firrtl.wire  : !firrtl.uint<1>
     // CHECK-NEXT: %_T_1 = firrtl.node %_T_0 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
@@ -971,7 +971,7 @@ firrtl.circuit "Foo"  attributes {
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
     // CHECK: %_T_3 = firrtl.regreset
     // CHECK-SAME: {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
-    %_T_3 = firrtl.regreset %clock, %reset, %c0_ui4  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>
+    %_T_3 = firrtl.regreset %clock, %reset, %c0_ui4  : !firrtl.clock, !firrtl.syncreset, !firrtl.uint<4>, !firrtl.uint<4>
     // CHECK-NEXT: %_T_4 = chirrtl.seqmem
     // CHECK-SAME: {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     %_T_4 = chirrtl.seqmem Undefined  : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
@@ -980,7 +980,7 @@ firrtl.circuit "Foo"  attributes {
     // CHECK: chirrtl.memoryport Infer %_T_5 {annotations =
     // CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     %_T_6_data, %_T_6_port = chirrtl.memoryport Infer %_T_5  {name = "_T_6"} : (!chirrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !chirrtl.cmemoryport)
-    chirrtl.memoryport.access %_T_6_port[%reset], %clock : !chirrtl.cmemoryport, !firrtl.uint<1>, !firrtl.clock
+    chirrtl.memoryport.access %_T_6_port[%reset], %clock : !chirrtl.cmemoryport, !firrtl.syncreset, !firrtl.clock
     // CHECK: firrtl.mem
     // CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     %_T_8_w = firrtl.mem Undefined  {depth = 8 : i64, name = "_T_8", portNames = ["w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<4>, mask: uint<1>>

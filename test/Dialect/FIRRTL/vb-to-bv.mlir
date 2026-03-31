@@ -189,9 +189,9 @@ firrtl.circuit "Test" {
     // CHECK{LITERAL}: %0 = firrtl.aggregateconstant [[1, 3], [2, 4]] : !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>
      %rval = firrtl.aggregateconstant [[1, 2], [3, 4]] : !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2> 
     // CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %rsig = firrtl.constant 0 : !firrtl.uint<1>
+    %rsig = firrtl.specialconstant 0 : !firrtl.syncreset
     // CHECK: %r = firrtl.regreset %clock, %c0_ui1, %0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>, !firrtl.bundle<a: vector<uint<4>, 2>, b: vector<uint<8>, 2>>
-    %r = firrtl.regreset %clock, %rsig, %rval : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2>, !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2>
+    %r = firrtl.regreset %clock, %rsig, %rval : !firrtl.clock, !firrtl.syncreset, !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2>, !firrtl.vector<bundle<a: uint<4>, b: uint<8>>, 2>
   }
 
   // CHECK-LABEL: @TestRegResetMaterializedFromExplodedBundle

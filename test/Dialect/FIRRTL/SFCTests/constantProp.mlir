@@ -342,9 +342,9 @@ firrtl.circuit "ZeroWidthAdd"   {
 //"Registers with constant reset and connection to the same constant" should "be replaced with that constant"
 firrtl.circuit "regConstReset"   {
   // CHECK-LABEL: firrtl.module @regConstReset
-  firrtl.module @regConstReset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+  firrtl.module @regConstReset(in %clock: !firrtl.clock, in %reset: !firrtl.syncreset, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
     %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
-    %r = firrtl.regreset %clock, %reset, %c11_ui8  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+    %r = firrtl.regreset %clock, %reset, %c11_ui8  : !firrtl.clock, !firrtl.syncreset, !firrtl.uint<8>, !firrtl.uint<8>
     %0 = firrtl.mux(%cond, %c11_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
     firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
@@ -385,9 +385,9 @@ firrtl.circuit "uninitSelfReg"   {
 
 //"Registers with ONLY constant reset" should "be replaced with that constant" in {
   // CHECK-LABEL: firrtl.module @constResetReg(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
-  firrtl.module @constResetReg(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+  firrtl.module @constResetReg(in %clock: !firrtl.clock, in %reset: !firrtl.syncreset, out %z: !firrtl.uint<8>) {
     %c11_ui4 = firrtl.constant 11 : !firrtl.uint<8>
-    %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+    %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.clock, !firrtl.syncreset, !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.matchingconnect %r, %r : !firrtl.uint<8>
     firrtl.matchingconnect %z, %r : !firrtl.uint<8>
     // CHECK: %[[C11:.+]] = firrtl.constant 11 : !firrtl.uint<8>

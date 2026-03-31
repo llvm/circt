@@ -2817,9 +2817,9 @@ firrtl.module @constReg2(in %clock: !firrtl.clock,
 }
 
 // CHECK-LABEL: firrtl.module @constReg3
-firrtl.module @constReg3(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+firrtl.module @constReg3(in %clock: !firrtl.clock, in %reset: !firrtl.syncreset, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
   %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
-  %r = firrtl.regreset %clock, %reset, %c11_ui8  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+  %r = firrtl.regreset %clock, %reset, %c11_ui8  : !firrtl.clock, !firrtl.syncreset, !firrtl.uint<8>, !firrtl.uint<8>
   %0 = firrtl.mux(%cond, %c11_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
   firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
   // CHECK:  %[[C14:.+]] = firrtl.constant 11
@@ -2828,10 +2828,10 @@ firrtl.module @constReg3(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, i
 }
 
 // CHECK-LABEL: firrtl.module @constReg4
-firrtl.module @constReg4(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+firrtl.module @constReg4(in %clock: !firrtl.clock, in %reset: !firrtl.syncreset, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
   %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
   %c11_ui4 = firrtl.constant 11 : !firrtl.uint<8>
-  %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+  %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.clock, !firrtl.syncreset, !firrtl.uint<8>, !firrtl.uint<8>
   %0 = firrtl.mux(%cond, %c11_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
   firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
   // CHECK:  %[[C13:.+]] = firrtl.constant 11
@@ -2840,11 +2840,11 @@ firrtl.module @constReg4(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, i
 }
 
 // CHECK-LABEL: firrtl.module @constReg6
-firrtl.module @constReg6(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+firrtl.module @constReg6(in %clock: !firrtl.clock, in %reset: !firrtl.syncreset, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
   %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
   %c11_ui4 = firrtl.constant 11 : !firrtl.uint<8>
   %resCond = firrtl.and %reset, %cond : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-  %r = firrtl.regreset %clock, %resCond, %c11_ui4  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+  %r = firrtl.regreset %clock, %resCond, %c11_ui4  : !firrtl.clock, !firrtl.syncreset, !firrtl.uint<8>, !firrtl.uint<8>
   %0 = firrtl.mux(%cond, %c11_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
   firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
   // CHECK:  %[[C13:.+]] = firrtl.constant 11

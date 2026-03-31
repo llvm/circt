@@ -42,7 +42,7 @@ firrtl.module @Decls() {
   // CHECK-NEXT: firrtl.constant
   // CHECK-NEXT: firrtl.constant
   // CHECK-NEXT: firrtl.specialconstant
-  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %c0_ui1 = firrtl.specialconstant 0 : !firrtl.syncreset
   %c0_ui17 = firrtl.constant 0 : !firrtl.uint<17>
   %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
 
@@ -60,7 +60,7 @@ firrtl.module @Decls() {
 
   // CHECK-NEXT: firrtl.regreset
   // CHECK-NEXT: dbg.variable "someReg2", %someReg2
-  %someReg2 = firrtl.regreset %c0_clock, %c0_ui1, %c0_ui17 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<17>, !firrtl.uint<17>
+  %someReg2 = firrtl.regreset %c0_clock, %c0_ui1, %c0_ui17 : !firrtl.clock, !firrtl.syncreset, !firrtl.uint<17>, !firrtl.uint<17>
 
   // CHECK-NEXT: firrtl.matchingconnect
   firrtl.matchingconnect %someWire, %c0_ui17 : !firrtl.uint<17>

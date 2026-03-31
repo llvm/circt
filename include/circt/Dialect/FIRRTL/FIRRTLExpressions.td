@@ -761,8 +761,8 @@ let hasCanonicalizer=1 in {
 }
 def AsAsyncResetPrimOp
   : UnaryPrimOp<"asAsyncReset", OneBitCastableType, AsyncResetType>;
-def AsSyncResetPrimOp : UnaryPrimOp<"asSyncReset", UInt1Type, SyncResetType>;
-def AsInferredResetPrimOp : UnaryPrimOp<"asInferredReset", UInt1Type, InferredResetType>;
+def AsSyncResetPrimOp : UnaryPrimOp<"asSyncReset", OneBitCastableType, SyncResetType>;
+def AsInferredResetPrimOp : UnaryPrimOp<"asInferredReset", OneBitCastableType, InferredResetType>;
 def AsClockPrimOp : UnaryPrimOp<"asClock", OneBitCastableType, ClockType>;
 def NegPrimOp : UnaryPrimOp<"neg", IntType, SIntType>;
 let hasCanonicalizer = true in

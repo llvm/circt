@@ -1024,14 +1024,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module private @AsyncResetBasic(
-  firrtl.module private @AsyncResetBasic(in %clock: !firrtl.clock, in %arst: !firrtl.asyncreset, in %srst: !firrtl.uint<1>) {
+  firrtl.module private @AsyncResetBasic(in %clock: !firrtl.clock, in %arst: !firrtl.asyncreset, in %srst: !firrtl.syncreset) {
     %c9_ui42 = firrtl.constant 9 : !firrtl.uint<42>
     %c-9_si42 = firrtl.constant -9 : !firrtl.sint<42>
     // The following should not error because the reset values are constant.
     %r0 = firrtl.regreset %clock, %arst, %c9_ui42 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
-    %r1 = firrtl.regreset %clock, %srst, %c9_ui42 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
+    %r1 = firrtl.regreset %clock, %srst, %c9_ui42 : !firrtl.clock, !firrtl.syncreset, !firrtl.uint<42>, !firrtl.uint<42>
     %r2 = firrtl.regreset %clock, %arst, %c-9_si42 : !firrtl.clock, !firrtl.asyncreset, !firrtl.sint<42>, !firrtl.sint<42>
-    %r3 = firrtl.regreset %clock, %srst, %c-9_si42 : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<42>, !firrtl.sint<42>
+    %r3 = firrtl.regreset %clock, %srst, %c-9_si42 : !firrtl.clock, !firrtl.syncreset, !firrtl.sint<42>, !firrtl.sint<42>
   }
 
   // CHECK-LABEL: hw.module private @BitCast1

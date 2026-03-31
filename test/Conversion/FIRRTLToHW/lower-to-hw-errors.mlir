@@ -52,7 +52,7 @@ firrtl.circuit "BlockArgType" {
 firrtl.circuit "unprocessedAnnotations" {
  firrtl.module @bar(in %io_cpu_flush: !firrtl.uint<1>){
   }
-  firrtl.module @unprocessedAnnotations(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
+  firrtl.module @unprocessedAnnotations(in %clock: !firrtl.clock, in %reset: !firrtl.syncreset,
                                         in %cond: !firrtl.uint<1>, in %value: !firrtl.uint<2>,
                                         in %io_cpu_flush: !firrtl.uint<1>) {
     // expected-warning @+1 {{unprocessed annotation:'firrtl.transforms.RemainingAnnotation1'}}

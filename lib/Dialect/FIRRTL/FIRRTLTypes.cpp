@@ -1057,13 +1057,13 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
   if (destIsConst && !srcIsConst)
     return false;
 
-  // Inffered reset types can be driven by any reset type.
+  // Inferred reset types can be driven by any reset type.
   if (firrtl::type_isa<InferredResetType>(destType))
-    return srcType.isResetType();
+    return srcType.isResetType() || (type_isa<UIntType>(srcType) && type_cast<UIntType>(srcType).getWidth() == 1);
 
   // Any reset types can drive inferred reset types.
   if (firrtl::type_isa<InferredResetType>(srcType))
-    return destType.isResetType();
+    return destType.isResetType() || (type_isa<UIntType>(destType) && type_cast<UIntType>(destType).getWidth() == 1);
 
   // If we can implicitly truncate or extend the bitwidth, or either width is
   // currently uninferred, then compare the widthless version of these types.
