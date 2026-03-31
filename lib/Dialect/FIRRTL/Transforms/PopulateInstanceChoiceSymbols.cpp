@@ -131,6 +131,7 @@ void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
         // If the existing symbol is a macro, we can reuse it.
         if (auto existingMacro = dyn_cast<sv::MacroDeclOp>(existingSymbol)) {
           caseOp.setCaseMacroAttr(caseMacro);
+          changed = true;
           continue;
         }
         // Otherwise, it's a conflict.
@@ -145,7 +146,12 @@ void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
       changed = true;
 
       // Create macro declaration.
-      sv::MacroDeclOp::create(builder, circuit.getLoc(), caseMacro.getValue());
+      auto macroDecl = sv::MacroDeclOp::create(builder, circuit.getLoc(),
+                                               caseMacro.getValue());
+      auto symbolName = symbolTable.insert(macroDecl);
+      (void)symbolName;
+      assert(symbolName.getValue() == caseMacroName &&
+             "Symbol must have been inserted with the expected name");
 
       LLVM_DEBUG(llvm::dbgs() << "Assigned case macro '" << caseMacro.getValue()
                               << "' to option case '" << caseName
@@ -170,9 +176,11 @@ void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
       changed = true;
 
       // Create instance macro declaration only if we haven't created it yet.
-      if (createdInstanceMacros.insert(instanceMacro.getAttr()).second)
-        sv::MacroDeclOp::create(builder, circuit.getLoc(),
-                                instanceMacro.getAttr());
+      if (createdInstanceMacros.insert(instanceMacro.getAttr()).second) {
+        auto decl = sv::MacroDeclOp::create(builder, circuit.getLoc(),
+                                            instanceMacro.getAttr());
+        symbolTable.insert(decl);
+      }
     }
   });
 
@@ -180,5 +188,5 @@ void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
   if (!changed)
     return markAllAnalysesPreserved();
 
-  markAnalysesPreserved<InstanceGraph, InstanceInfo>();
+  markAnalysesPreserved<InstanceGraph, InstanceInfo, SymbolTable>();
 }
