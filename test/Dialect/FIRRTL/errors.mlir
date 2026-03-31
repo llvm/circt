@@ -3352,8 +3352,8 @@ firrtl.circuit "NonExistentMacroSymbol" {
 
   firrtl.module @Foo() {}
   firrtl.module @Choice() {
-    // expected-error @below {{'firrtl.instance_choice' op instance_macro @__target_Platform_Choice_inst does not exist}}
-    firrtl.instance_choice inst {instance_macro = @__target_Platform_Choice_inst} @Foo alternatives @Platform {
+    // expected-error @below {{'firrtl.instance_choice' op instance_macro @targets$Platform$Choice$inst does not exist}}
+    firrtl.instance_choice inst {instance_macro = @targets$Platform$Choice$inst} @Foo alternatives @Platform {
       @FPGA -> @Foo
     } ()
   }

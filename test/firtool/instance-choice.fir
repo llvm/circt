@@ -19,28 +19,15 @@ circuit top:
     input clk: Clock
     input rst: UInt<1>
     ; CHECK:       wire [31:0] [[RESULT:.+]];
-    ; CHECK-NEXT:  `ifdef [[OPTION_NAME:.+]]
+    ; CHECK-NEXT:  `ifdef targets$Platform$FPGA
     ; CHECK-NEXT:    FPGATarget proc_FPGA (
     ; CHECK-NEXT:      .result_0 ([[RESULT]])
     ; CHECK-NEXT:    );
-    ; CHECK-NEXT:  `else
-    ; CHECK-NEXT:    DefaultTarget proc_default (
-    ; CHECK-NEXT:      .result_0 ([[RESULT]])
-    ; CHECK-NEXT:    );
-    ; CHECK-NEXT:    `ifndef [[TARGET_NAME:.+]]
-    ; CHECK-NEXT:      `define [[TARGET_NAME]] proc_default
-    ; CHECK-NEXT:    `endif
-    ; CHECK-NEXT:  `endif
+    ; CHECK-NEXT:    `define targets$Platform$top$proc proc_FPGA
+    ; CHECK-NEXT:  `else  // targets$Platform$FPGA
+    ; CHECK-NEXT:   $error("Required instance choice option 'Platform' not selected, must define one of: 'targets$Platform$FPGA'");
+    ; CHECK-NEXT:  `endif // targets$Platform$FPGA
     instchoice proc of DefaultTarget, Platform:
       FPGA => FPGATarget
 
     printf(clk, UInt<1>(1), "result: %d\n", proc.result[0])
-; CHECK-LABEL: // ----- 8< ----- FILE "targets-top-Platform-FPGA.svh" ----- 8< -----
-; CHECK:       `ifndef [[OPTION_NAME]]
-; CHECK-NEXT:    `define [[OPTION_NAME]]
-; CHECK-NEXT:  `endif
-; CHECK-NEXT:  `ifdef [[TARGET_NAME]]
-; CHECK-NEXT:    `_ERROR_[[TARGET_NAME]]_must_not_be_set
-; CHECK-NEXT:  `else 
-; CHECK-NEXT:    `define [[TARGET_NAME]] proc_FPGA
-; CHECK-NEXT:  `endif

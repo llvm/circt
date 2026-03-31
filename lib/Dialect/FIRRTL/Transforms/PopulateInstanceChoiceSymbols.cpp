@@ -38,7 +38,7 @@ namespace {
 void getOptionCaseMacroName(StringAttr optionName, StringAttr caseName,
                             SmallVectorImpl<char> &macroName) {
   llvm::raw_svector_ostream os(macroName);
-  os << "__option_" << optionName.getValue() << "_" << caseName.getValue();
+  os << "targets$" << optionName.getValue() << "$" << caseName.getValue();
 }
 
 class PopulateInstanceChoiceSymbolsPass
@@ -82,8 +82,8 @@ PopulateInstanceChoiceSymbolsPass::assignSymbol(InstanceChoiceOp op) {
   SmallString<128> instanceMacroName;
   {
     llvm::raw_svector_ostream os(instanceMacroName);
-    os << "__target_" << optionName.getValue() << "_"
-       << parentModule.getModuleName() << "_" << op.getInstanceName();
+    os << "targets$" << optionName.getValue() << "$"
+       << parentModule.getModuleName() << "$" << op.getInstanceName();
   }
 
   // Ensure global uniqueness using CircuitNamespace.
@@ -103,6 +103,7 @@ PopulateInstanceChoiceSymbolsPass::assignSymbol(InstanceChoiceOp op) {
 void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
   auto circuit = getOperation();
   auto &instanceGraph = getAnalysis<InstanceGraph>();
+  auto &symbolTable = getAnalysis<SymbolTable>();
 
   OpBuilder builder(circuit.getContext());
   builder.setInsertionPointToStart(circuit.getBodyBlock());
@@ -122,17 +123,35 @@ void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
       auto caseName = caseOp.getSymNameAttr();
       SmallString<128> caseMacroName;
       getOptionCaseMacroName(optionName, caseName, caseMacroName);
+      auto caseMacro =
+          FlatSymbolRefAttr::get(circuit.getContext(), caseMacroName);
 
-      // Ensure global uniqueness using CircuitNamespace.
-      auto caseMacro = FlatSymbolRefAttr::get(
-          circuit.getContext(), getNamespace().newName(caseMacroName));
+      // Check if this ABI-defined macro name conflicts with existing symbols.
+      if (auto *existingSymbol = symbolTable.lookup(caseMacroName)) {
+        // If the existing symbol is a macro, we can reuse it.
+        if (auto existingMacro = dyn_cast<sv::MacroDeclOp>(existingSymbol)) {
+          caseOp.setCaseMacroAttr(caseMacro);
+          changed = true;
+          continue;
+        }
+        // Otherwise, it's a conflict.
+        caseOp.emitError() << "case macro name conflicts with existing symbol '"
+                           << caseMacroName << "' (existing symbol is '"
+                           << existingSymbol->getName() << "')";
+        return signalPassFailure();
+      }
 
       // Set the case_macro attribute on the OptionCaseOp.
       caseOp.setCaseMacroAttr(caseMacro);
       changed = true;
 
       // Create macro declaration.
-      sv::MacroDeclOp::create(builder, circuit.getLoc(), caseMacro.getValue());
+      auto macroDecl = sv::MacroDeclOp::create(builder, circuit.getLoc(),
+                                               caseMacro.getValue());
+      auto symbolName = symbolTable.insert(macroDecl);
+      (void)symbolName;
+      assert(symbolName.getValue() == caseMacroName &&
+             "Symbol must have been inserted with the expected name");
 
       LLVM_DEBUG(llvm::dbgs() << "Assigned case macro '" << caseMacro.getValue()
                               << "' to option case '" << caseName
@@ -157,9 +176,11 @@ void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
       changed = true;
 
       // Create instance macro declaration only if we haven't created it yet.
-      if (createdInstanceMacros.insert(instanceMacro.getAttr()).second)
-        sv::MacroDeclOp::create(builder, circuit.getLoc(),
-                                instanceMacro.getAttr());
+      if (createdInstanceMacros.insert(instanceMacro.getAttr()).second) {
+        auto decl = sv::MacroDeclOp::create(builder, circuit.getLoc(),
+                                            instanceMacro.getAttr());
+        symbolTable.insert(decl);
+      }
     }
   });
 
@@ -167,5 +188,5 @@ void PopulateInstanceChoiceSymbolsPass::runOnOperation() {
   if (!changed)
     return markAllAnalysesPreserved();
 
-  markAnalysesPreserved<InstanceGraph, InstanceInfo>();
+  markAnalysesPreserved<InstanceGraph, InstanceInfo, SymbolTable>();
 }
