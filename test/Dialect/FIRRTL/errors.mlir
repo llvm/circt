@@ -3519,3 +3519,26 @@ firrtl.circuit "WireDomainTypeWithAssociation" {
     %w = firrtl.wire domains[%A] : !firrtl.domain<@ClockDomain()> domains[!firrtl.domain<@ClockDomain()>]
   }
 }
+
+// -----
+
+// property_assert with statically-false condition reports error.
+firrtl.circuit "PropAssertFalseInClass" {
+  firrtl.module @PropAssertFalseInClass() {}
+  firrtl.class @C() {
+    %false = firrtl.bool false
+    // expected-error @below {{property assertion is statically false: invariant violated}}
+    firrtl.property_assert %false, "invariant violated" : !firrtl.bool
+  }
+}
+
+// -----
+
+// property_assert with statically-false condition in a module body reports error.
+firrtl.circuit "PropAssertFalseInModule" {
+  firrtl.module @PropAssertFalseInModule() {
+    %false = firrtl.bool false
+    // expected-error @below {{property assertion is statically false: module invariant violated}}
+    firrtl.property_assert %false, "module invariant violated" : !firrtl.bool
+  }
+}

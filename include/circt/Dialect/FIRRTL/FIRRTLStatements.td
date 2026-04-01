@@ -393,6 +393,8 @@ def PropertyAssertOp : FIRRTLOp<"property_assert",
   let assemblyFormat = [{
     $condition `,` $message attr-dict `:` type($condition)
   }];
+
+  let hasVerifier = 1;
 }
 
 def ForceOp : FIRRTLOp<"force", [SameTypeOperands]> {
