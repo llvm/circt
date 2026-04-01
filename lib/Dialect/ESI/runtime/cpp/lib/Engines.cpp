@@ -206,18 +206,18 @@ bool OneItemBuffersToHostReadPort::pollImpl() {
 
   // If it has, copy the data out. If the consumer (callback) reports that it
   // has accepted the data, re-use the buffer.
-  MessageData data(bufferData, bufferSize - 1);
+  auto data = MessageData::create(bufferData, bufferSize - 1);
   logger.trace(
-      [this, data](std::string &subsystem, std::string &msg,
+      [this, &data](std::string &subsystem, std::string &msg,
                    std::unique_ptr<std::map<std::string, std::any>> &details) {
         subsystem = "OneItemBuffersToHost";
         msg = "recieved message";
         details = std::make_unique<std::map<std::string, std::any>>();
         (*details)["channel"] = identifier();
-        (*details)["data_size"] = data.getSize();
-        (*details)["message_data"] = data.toHex();
+        (*details)["data_size"] = data->totalSize();
+        (*details)["message_data"] = data->toHex();
       });
-  if (callback(std::move(data))) {
+  if (callback(data)) {
     writeBufferPtr();
     logger.trace(
         [this](std::string &subsystem, std::string &msg,
@@ -285,8 +285,8 @@ public:
   std::string identifier() const { return idPath.toStr() + "." + channelName; }
 
 protected:
-  void writeImpl(const MessageData &) override;
-  bool tryWriteImpl(const MessageData &data) override;
+  void writeImpl(std::unique_ptr<MessageData>) override;
+  bool tryWriteImpl(std::unique_ptr<MessageData> &data) override;
 
   // Size of buffer based on type.
   size_t bufferSize;
@@ -394,13 +394,14 @@ void OneItemBuffersFromHostWritePort::connectImpl(
   *static_cast<uint8_t *>(completion_buffer->getPtr()) = 1;
 }
 
-void OneItemBuffersFromHostWritePort::writeImpl(const MessageData &data) {
+void OneItemBuffersFromHostWritePort::writeImpl(
+    std::unique_ptr<MessageData> data) {
   while (!tryWriteImpl(data))
-    // Wait for the device to read the last data we sent.
     std::this_thread::yield();
 }
 
-bool OneItemBuffersFromHostWritePort::tryWriteImpl(const MessageData &data) {
+bool OneItemBuffersFromHostWritePort::tryWriteImpl(
+    std::unique_ptr<MessageData> &data) {
   Logger &logger = engine->conn.getLogger();
 
   // Check to see if there's an outstanding write.
@@ -422,7 +423,10 @@ bool OneItemBuffersFromHostWritePort::tryWriteImpl(const MessageData &data) {
   // If the buffer is empty, use it.
   std::lock_guard<std::mutex> lock(bufferMutex);
   void *bufferData = data_buffer->getPtr();
-  std::memcpy(bufferData, data.getBytes(), data.getSize());
+  size_t dataSize = data->totalSize();
+  std::string dataHex = data->toHex();
+  auto flat = data->toFlat();
+  std::memcpy(bufferData, flat.data(), flat.size());
   data_buffer->flush();
   // Indicate that the buffer is now in use.
   *completion = 0;
@@ -436,14 +440,15 @@ bool OneItemBuffersFromHostWritePort::tryWriteImpl(const MessageData &data) {
       reinterpret_cast<uint64_t>(completion_buffer->getDevicePtr()));
 
   logger.trace(
-      [this, data](std::string &subsystem, std::string &msg,
-                   std::unique_ptr<std::map<std::string, std::any>> &details) {
+      [this, dataSize,
+       dataHex](std::string &subsystem, std::string &msg,
+                std::unique_ptr<std::map<std::string, std::any>> &details) {
         subsystem = "OneItemBuffersFromHost";
         msg = "initiated transfer of message";
         details = std::make_unique<std::map<std::string, std::any>>();
         (*details)["channel"] = identifier();
-        (*details)["data_size"] = data.getSize();
-        (*details)["message_data"] = data.toHex();
+        (*details)["data_size"] = dataSize;
+        (*details)["message_data"] = dataHex;
       });
   return true;
 }

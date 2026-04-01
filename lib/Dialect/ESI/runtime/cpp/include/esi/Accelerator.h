@@ -212,7 +212,7 @@ public:
   /// from any thread.
   void
   addListener(std::initializer_list<ReadChannelPort *> listenPorts,
-              std::function<void(ReadChannelPort *, MessageData)> callback);
+              std::function<void(ReadChannelPort *, std::unique_ptr<MessageData>)> callback);
 
   /// Poll this module.
   void addPoll(HWModule &module);

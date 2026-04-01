@@ -382,7 +382,8 @@ static void callbackTest(AcceleratorConnection *conn, Accelerator *accel,
 
   std::atomic<uint32_t> callbackCount = 0;
   callPort->connect(
-      [conn, &callbackCount](const MessageData &data) mutable -> MessageData {
+      [conn, &callbackCount](
+          const MessageData &data) mutable -> std::unique_ptr<MessageData> {
         callbackCount.fetch_add(1);
         conn->getLogger().debug(
             [&](std::string &subsystem, std::string &msg,
@@ -390,10 +391,10 @@ static void callbackTest(AcceleratorConnection *conn, Accelerator *accel,
               subsystem = "ESITESTER";
               msg = "Received callback";
               details = std::make_unique<std::map<std::string, std::any>>();
-              details->emplace("data", data);
+              details->emplace("data", data.toFlatCopy());
             });
-        std::cout << "callback: " << *data.as<uint64_t>() << std::endl;
-        return MessageData();
+        std::cout << "callback: " << data.as<uint64_t>() << std::endl;
+        return MessageData::create();
       },
       true);
 
@@ -635,18 +636,17 @@ static void dmaReadTest(AcceleratorConnection *conn, Accelerator *acc,
 
   size_t xferCount = 24;
   uint64_t last = 0;
-  MessageData data;
   toHostMMIO->write(0, xferCount);
   for (size_t i = 0; i < xferCount; ++i) {
-    outPort.read(data);
+    std::unique_ptr<MessageData> data = outPort.read();
     if (width == 64) {
-      uint64_t val = *data.as<uint64_t>();
+      uint64_t val = data->as<uint64_t>();
       if (val < last)
         throw std::runtime_error("dma read test failed. Out of order data");
       last = val;
     }
-    logger.debug("esitester",
-                 "Cycle count [" + std::to_string(i) + "] = 0x" + data.toHex());
+    logger.debug("esitester", "Cycle count [" + std::to_string(i) + "] = 0x" +
+                                  data->toHex());
   }
   outPort.disconnect();
   std::cout << "  DMA read test for " << width << " bits passed" << std::endl;
@@ -688,7 +688,8 @@ static void dmaWriteTest(AcceleratorConnection *conn, Accelerator *acc,
     bool successWrite;
     size_t attempts = 0;
     do {
-      successWrite = writePort.tryWrite(MessageData(data, width / 8));
+      auto msg = MessageData::create(data, width / 8);
+      successWrite = writePort.tryWrite(msg);
       if (!successWrite) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }
@@ -759,16 +760,15 @@ static void bandwidthReadTest(AcceleratorConnection *conn, Accelerator *acc,
   logger.info("esitester", "Starting read bandwidth test with " +
                                std::to_string(xferCount) + " x " +
                                std::to_string(width) + " bit transfers");
-  MessageData data;
   auto start = std::chrono::high_resolution_clock::now();
   toHostMMIO->write(0, xferCount);
   for (size_t i = 0; i < xferCount; ++i) {
-    outPort.read(data);
+    auto data = outPort.read();
     logger.debug(
         [i, &data](std::string &subsystem, std::string &msg,
                    std::unique_ptr<std::map<std::string, std::any>> &details) {
           subsystem = "esitester";
-          msg = "Cycle count [" + std::to_string(i) + "] = 0x" + data.toHex();
+          msg = "Cycle count [" + std::to_string(i) + "] = 0x" + data->toHex();
         });
   }
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -807,16 +807,18 @@ static void bandwidthWriteTest(AcceleratorConnection *conn, Accelerator *acc,
   std::vector<uint8_t> dataVec(width / 8);
   for (size_t i = 0; i < width / 8; ++i)
     dataVec[i] = i;
-  MessageData data(dataVec);
+  SingleDataSegmentMessageData dataTemplate(dataVec);
   auto start = std::chrono::high_resolution_clock::now();
   fromHostMMIO->write(0, xferCount);
   for (size_t i = 0; i < xferCount; ++i) {
-    outPort.write(data);
+    outPort.write(MessageData::create(dataVec));
     logger.debug(
-        [i, &data](std::string &subsystem, std::string &msg,
-                   std::unique_ptr<std::map<std::string, std::any>> &details) {
+        [i, &dataTemplate](
+            std::string &subsystem, std::string &msg,
+            std::unique_ptr<std::map<std::string, std::any>> &details) {
           subsystem = "esitester";
-          msg = "Cycle count [" + std::to_string(i) + "] = 0x" + data.toHex();
+          msg = "Cycle count [" + std::to_string(i) + "] = 0x" +
+                dataTemplate.toHex();
         });
   }
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -1049,9 +1051,9 @@ static void loopbackAddTest(AcceleratorConnection *conn, Accelerator *accel,
           static_cast<uint8_t>((argVal >> 8) & 0xFF),
           static_cast<uint8_t>((argVal >> 16) & 0xFF),
       };
-      MessageData argMsg(argBytes, 3);
-      MessageData resMsg = funcPort->call(argMsg).get();
-      uint16_t got = *resMsg.as<uint16_t>();
+      SingleDataSegmentMessageData argMsg(argBytes, 3);
+      auto resMsg = funcPort->call(argMsg).get();
+      uint16_t got = resMsg->as<uint16_t>();
       std::cout << "[loopback] i=" << i << " arg=0x" << esi::toHex(argVal)
                 << " got=0x" << esi::toHex(got) << " exp=0x"
                 << esi::toHex(expected) << std::endl;
@@ -1068,7 +1070,7 @@ static void loopbackAddTest(AcceleratorConnection *conn, Accelerator *accel,
                                  std::to_string(callsPerSec) + " calls/s)");
   } else {
     // Pipelined mode: launch all calls first, then collect.
-    std::vector<std::future<MessageData>> futures;
+    std::vector<std::future<std::unique_ptr<MessageData>>> futures;
     futures.reserve(iterations);
     std::vector<uint32_t> expectedVals;
     expectedVals.reserve(iterations);
@@ -1082,14 +1084,15 @@ static void loopbackAddTest(AcceleratorConnection *conn, Accelerator *accel,
           static_cast<uint8_t>((argVal >> 8) & 0xFF),
           static_cast<uint8_t>((argVal >> 16) & 0xFF),
       };
-      futures.emplace_back(funcPort->call(MessageData(argBytes, 3)));
+      SingleDataSegmentMessageData argMsg(argBytes, 3);
+      futures.emplace_back(funcPort->call(argMsg));
       expectedVals.emplace_back(expected);
     }
     auto issueEnd = std::chrono::high_resolution_clock::now();
 
     for (uint32_t i = 0; i < iterations; ++i) {
-      MessageData resMsg = futures[i].get();
-      uint16_t got = *resMsg.as<uint16_t>();
+      auto resMsg = futures[i].get();
+      uint16_t got = resMsg->as<uint16_t>();
       uint16_t exp = (uint16_t)expectedVals[i];
       std::cout << "[loopback-pipelined] i=" << i << " got=0x"
                 << esi::toHex(got) << " exp=0x" << esi::toHex(exp) << std::endl;
@@ -1359,8 +1362,8 @@ static void streamingAddTest(AcceleratorConnection *conn, Accelerator *accel,
     arg.addAmt = addAmt;
     arg.input = inputData[i];
     arg.last = (i == inputData.size() - 1) ? 1 : 0;
-    argPort.write(
-        MessageData(reinterpret_cast<const uint8_t *>(&arg), sizeof(arg)));
+    argPort.write(MessageData::create(reinterpret_cast<const uint8_t *>(&arg),
+                                      sizeof(arg)));
     logger.debug("esitester", "Sent {add_amt=" + std::to_string(arg.addAmt) +
                                   ", input=" + std::to_string(arg.input) +
                                   ", last=" + (arg.last ? "true" : "false") +
@@ -1371,14 +1374,13 @@ static void streamingAddTest(AcceleratorConnection *conn, Accelerator *accel,
   std::vector<uint32_t> results;
   bool lastSeen = false;
   while (!lastSeen) {
-    MessageData resMsg;
-    resultPort.read(resMsg);
-    if (resMsg.getSize() < sizeof(StreamingAddResult))
+    auto resMsg = resultPort.read();
+    if (resMsg->totalSize() < sizeof(StreamingAddResult))
       throw std::runtime_error(
           "Streaming add test: unexpected result message size");
 
     const auto *res =
-        reinterpret_cast<const StreamingAddResult *>(resMsg.getBytes());
+        reinterpret_cast<const StreamingAddResult *>(resMsg->segment(0).data());
     lastSeen = res->last != 0;
     results.push_back(res->data);
     logger.debug("esitester", "Received result=" + std::to_string(res->data) +
@@ -1542,24 +1544,25 @@ static void streamingAddTranslatedTest(AcceleratorConnection *conn,
                    ", add_amt=" + std::to_string(arg->addAmt));
 
   // Send the complete message - translation will split it into frames.
-  argPort.write(MessageData(reinterpret_cast<const uint8_t *>(arg), argSize));
+  argPort.write(
+      MessageData::create(reinterpret_cast<const uint8_t *>(arg), argSize));
   // argBuffer automatically freed when it goes out of scope
 
   // Read the translated result.
-  MessageData resMsg;
-  resultPort.read(resMsg);
+  std::unique_ptr<MessageData> resMsg = resultPort.read();
 
   logger.debug("esitester", "Received translated result: " +
-                                std::to_string(resMsg.getSize()) + " bytes");
+                                std::to_string(resMsg->totalSize()) + " bytes");
 
-  if (resMsg.getSize() < sizeof(StreamingAddTranslatedResult))
+  if (resMsg->totalSize() < sizeof(StreamingAddTranslatedResult))
     throw std::runtime_error(
         "Streaming add test (translated): result too small");
 
+  std::vector<uint8_t> resData = resMsg->toFlat();
   const auto *result =
-      reinterpret_cast<const StreamingAddTranslatedResult *>(resMsg.getBytes());
+      reinterpret_cast<const StreamingAddTranslatedResult *>(resData.data());
 
-  if (resMsg.getSize() <
+  if (resData.size() <
       StreamingAddTranslatedResult::allocSize(result->dataLength))
     throw std::runtime_error(
         "Streaming add test (translated): result data truncated");
@@ -1737,22 +1740,22 @@ static void coordTranslateTest(AcceleratorConnection *conn, Accelerator *accel,
           ", y_trans=" + std::to_string(arg->yTranslation));
 
   // Call the function - translation happens automatically.
-  MessageData resMsg =
-      funcPort
-          ->call(MessageData(reinterpret_cast<const uint8_t *>(arg), argSize))
-          .get();
+  SingleDataSegmentMessageData coordArgMsg(
+      reinterpret_cast<const uint8_t *>(arg), argSize);
+  auto resMsg = funcPort->call(coordArgMsg).get();
   // argBuffer automatically freed when it goes out of scope
 
   logger.debug("esitester", "Received coord translate result: " +
-                                std::to_string(resMsg.getSize()) + " bytes");
+                                std::to_string(resMsg->totalSize()) + " bytes");
 
-  if (resMsg.getSize() < sizeof(CoordTranslateResult))
+  if (resMsg->totalSize() < sizeof(CoordTranslateResult))
     throw std::runtime_error("Coord translate test: result too small");
 
+  std::vector<uint8_t> resData = resMsg->toFlat();
   const auto *result =
-      reinterpret_cast<const CoordTranslateResult *>(resMsg.getBytes());
+      reinterpret_cast<const CoordTranslateResult *>(resData.data());
 
-  if (resMsg.getSize() < CoordTranslateResult::allocSize(result->coordsLength))
+  if (resData.size() < CoordTranslateResult::allocSize(result->coordsLength))
     throw std::runtime_error("Coord translate test: result data truncated");
 
   // Verify results.
@@ -1869,8 +1872,8 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
     headerFrame.header.coordsCount = (uint16_t)batchSize;
     headerFrame.header.xTranslation = sent == 0 ? xTrans : 0;
     headerFrame.header.yTranslation = sent == 0 ? yTrans : 0;
-    argPort.write(MessageData(reinterpret_cast<const uint8_t *>(&headerFrame),
-                              sizeof(headerFrame)));
+    argPort.write(MessageData::create(
+        reinterpret_cast<const uint8_t *>(&headerFrame), sizeof(headerFrame)));
 
     // Send Data
     for (size_t i = 0; i < batchSize; ++i) {
@@ -1878,15 +1881,15 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
       dataFrame.data._pad_head = 0;
       dataFrame.data.x = inputCoords[sent + i].x;
       dataFrame.data.y = inputCoords[sent + i].y;
-      argPort.write(MessageData(reinterpret_cast<const uint8_t *>(&dataFrame),
-                                sizeof(dataFrame)));
+      argPort.write(MessageData::create(
+          reinterpret_cast<const uint8_t *>(&dataFrame), sizeof(dataFrame)));
     }
     sent += batchSize;
   }
   // Send final header with count=0 to signal end of input
   SerialCoordHeader footerData{0, 0, 0};
   auto footer = MessageData::from(footerData);
-  argPort.write(footer);
+  argPort.write(std::move(footer));
 
   // Read results. The hardware echoes headers (with count) followed by
   // translated data frames, then autonomously sends a footer header with
@@ -1894,24 +1897,23 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
   std::vector<Coord> results;
   while (true) {
     // Read Header
-    MessageData msg;
-    resultPort.read(msg);
-    if (msg.getSize() != sizeof(SerialCoordOutputFrame))
+    auto msg = resultPort.read();
+    if (msg->totalSize() != sizeof(SerialCoordOutputFrame))
       throw std::runtime_error("Unexpected result message size");
 
-    const auto *frame =
-        reinterpret_cast<const SerialCoordOutputFrame *>(msg.getBytes());
+    const auto *frame = reinterpret_cast<const SerialCoordOutputFrame *>(
+        msg->segment(0).data());
     uint16_t batchCount = frame->header.coordsCount;
     if (batchCount == 0)
       break;
 
     // Read Data
     for (uint16_t i = 0; i < batchCount; ++i) {
-      resultPort.read(msg);
-      if (msg.getSize() != sizeof(SerialCoordOutputFrame))
+      msg = resultPort.read();
+      if (msg->totalSize() != sizeof(SerialCoordOutputFrame))
         throw std::runtime_error("Unexpected result message size");
-      const auto *dFrame =
-          reinterpret_cast<const SerialCoordOutputFrame *>(msg.getBytes());
+      const auto *dFrame = reinterpret_cast<const SerialCoordOutputFrame *>(
+          msg->segment(0).data());
       results.push_back({dFrame->data.y, dFrame->data.x});
     }
   }
@@ -1981,8 +1983,8 @@ static void channelTest(AcceleratorConnection *conn, Accelerator *accel,
   cmdMMIO->write(0x0, iterations);
 
   for (uint32_t i = 0; i < iterations; ++i) {
-    MessageData recvData = producerPort->read().get();
-    uint32_t got = *recvData.as<uint32_t>();
+    auto recvData = producerPort->read().get();
+    uint32_t got = recvData->as<uint32_t>();
     std::cout << "[channel] producer i=" << i << " got=" << got << std::endl;
     if (got != i)
       throw std::runtime_error("Channel producer: expected " +
@@ -2019,9 +2021,10 @@ static void channelTest(AcceleratorConnection *conn, Accelerator *accel,
 
   for (uint32_t i = 0; i < iterations; ++i) {
     uint32_t sendVal = dist(rng);
-    fromHostPort->write(MessageData::from(sendVal));
-    MessageData recvData = loopbackOutPort->read().get();
-    uint32_t recvVal = *recvData.as<uint32_t>();
+    auto sendMsg = MessageData::from(sendVal);
+    fromHostPort->write(std::move(sendMsg));
+    auto recvData = loopbackOutPort->read().get();
+    uint32_t recvVal = recvData->as<uint32_t>();
     std::cout << "[channel] loopback i=" << i << " sent=0x"
               << esi::toHex(sendVal) << " recv=0x" << esi::toHex(recvVal)
               << std::endl;

@@ -66,11 +66,11 @@ public:
   std::vector<ChannelDesc> listChannels() const;
 
   /// Send a message to a server-bound channel.
-  void writeToServer(const std::string &channelName, const MessageData &data);
+  void writeToServer(const std::string &channelName, MessageData &data);
 
   /// Callback type for receiving messages from a client-bound channel.
   /// Return true if the message was consumed, false to retry.
-  using ReadCallback = std::function<bool(const MessageData &)>;
+  using ReadCallback = std::function<bool(std::unique_ptr<MessageData> &)>;
 
   /// Abstract handle for a read channel connection.
   /// Destructor disconnects from the channel.

@@ -210,12 +210,14 @@ public:
       : WriteChannelPort(type), impl(impl), id(id), portName(portName) {}
 
 protected:
-  void writeImpl(const MessageData &data) override {
-    impl.write(id, portName, data.getBytes(), data.getSize());
+  void writeImpl(std::unique_ptr<MessageData> data) override {
+    auto flat = data->toFlat();
+    impl.write(id, portName, flat.data(), flat.size());
   }
 
-  bool tryWriteImpl(const MessageData &data) override {
-    impl.write(id, portName, data.getBytes(), data.getSize(), "try");
+  bool tryWriteImpl(std::unique_ptr<MessageData> &data) override {
+    auto flat = data->toFlat();
+    impl.write(id, portName, flat.data(), flat.size(), "try");
     return true;
   }
 
@@ -233,7 +235,7 @@ public:
   ~ReadTraceChannelPort() { disconnect(); }
 
 private:
-  MessageData genMessage() {
+  std::unique_ptr<MessageData> genMessage() {
     std::ptrdiff_t numBits = getType()->getBitWidth();
     if (numBits < 0)
       // TODO: support other types.
@@ -244,10 +246,13 @@ private:
     std::vector<uint8_t> bytes(size);
     for (std::ptrdiff_t i = 0; i < size; ++i)
       bytes[i] = rand() % 256;
-    return MessageData(bytes);
+    return MessageData::create(std::move(bytes));
   }
 
-  bool pollImpl() override { return callback(genMessage()); }
+  bool pollImpl() override {
+    auto msg = genMessage();
+    return callback(msg);
+  }
 };
 } // namespace
 

@@ -87,8 +87,9 @@ public:
 
     // Read the delivered message and push it onto the queue.
     const std::string &messageString = incomingMessage.data();
-    MessageData data(reinterpret_cast<const uint8_t *>(messageString.data()),
-                     messageString.size());
+    auto data = MessageData::create(
+        reinterpret_cast<const uint8_t *>(messageString.data()),
+        messageString.size());
 
     // Process the callback. Check disconnecting to avoid blocking forever.
     while (!callback(data)) {
@@ -226,11 +227,13 @@ public:
     return result;
   }
 
-  void writeToServer(const std::string &channelName, const MessageData &data) {
+  void writeToServer(const std::string &channelName, MessageData &data) {
     ClientContext context;
     ::esi::cosim::AddressedMessage grpcMsg;
     grpcMsg.set_channel_name(channelName);
-    grpcMsg.mutable_message()->set_data(data.getBytes(), data.getSize());
+    auto flat = data.toFlat();
+    grpcMsg.mutable_message()->set_data(
+        reinterpret_cast<const char *>(flat.data()), flat.size());
     ::esi::cosim::VoidMessage response;
     grpc::Status sendStatus = stub->SendToServer(&context, grpcMsg, &response);
     if (!sendStatus.ok())
@@ -298,7 +301,7 @@ std::vector<RpcClient::ChannelDesc> RpcClient::listChannels() const {
 }
 
 void RpcClient::writeToServer(const std::string &channelName,
-                              const MessageData &data) {
+                              MessageData &data) {
   impl->writeToServer(channelName, data);
 }
 

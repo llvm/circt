@@ -150,7 +150,5 @@ std::string esi::toString(const std::any &value) {
     return std::string(std::any_cast<const char *>(value));
   if (value.type() == typeid(char))
     return std::string(1, std::any_cast<char>(value));
-  if (value.type() == typeid(MessageData))
-    return std::any_cast<MessageData>(value).toHex();
   return "<unknown>";
 }

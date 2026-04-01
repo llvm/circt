@@ -35,8 +35,8 @@ TEST(ESITypesTest, VoidTypeSerialization) {
   EXPECT_THROW(voidType.ensureValid(invalidValue), std::runtime_error);
 
   // Test serialization
-  MessageData serialized(voidType.serialize(voidValue).getSpan());
-  EXPECT_EQ(serialized.getSize(), 1UL)
+  SingleDataSegmentMessageData serialized(voidType.serialize(voidValue).getSpan());
+  EXPECT_EQ(serialized.totalSize(), 1UL)
       << "VoidType serialization should produce exactly 1 byte";
   EXPECT_EQ(serialized.getData()[0], 0)
       << "VoidType serialization should produce a zero byte";
@@ -65,8 +65,8 @@ TEST(ESITypesTest, BitsTypeSerialization) {
   EXPECT_THROW(bitsType.ensureValid(invalidBits), std::runtime_error);
 
   // Test serialization
-  MessageData serialized(bitsType.serialize(validBits).takeStorage());
-  EXPECT_EQ(serialized.getSize(), 1UL)
+  SingleDataSegmentMessageData serialized(bitsType.serialize(validBits).takeStorage());
+  EXPECT_EQ(serialized.totalSize(), 1UL)
       << "BitsType(8) serialization should produce exactly 1 byte";
   EXPECT_EQ(serialized.getData()[0], 0xAB)
       << "BitsType serialization should preserve the input byte value";
@@ -98,8 +98,8 @@ TEST(ESITypesTest, UIntTypeSerialization) {
   EXPECT_THROW(uintType.ensureValid(invalidUInt), std::runtime_error);
 
   // Test serialization (little-endian)
-  MessageData serialized(uintType.serialize(validUInt).takeStorage());
-  EXPECT_EQ(serialized.getSize(), 2UL)
+  SingleDataSegmentMessageData serialized(uintType.serialize(validUInt).takeStorage());
+  EXPECT_EQ(serialized.totalSize(), 2UL)
       << "UIntType(16) serialization should produce exactly 2 bytes";
   EXPECT_EQ(serialized.getData()[0], 0x34)
       << "UIntType serialization low byte should be 0x34 (little-endian)";
@@ -141,8 +141,8 @@ TEST(ESITypesTest, SIntTypeSerialization) {
   EXPECT_NO_THROW(sintType.ensureValid(validNegSInt));
 
   // Test serialization of positive value
-  MessageData serialized(sintType.serialize(validSInt).takeStorage());
-  EXPECT_EQ(serialized.getSize(), 2UL)
+  SingleDataSegmentMessageData serialized(sintType.serialize(validSInt).takeStorage());
+  EXPECT_EQ(serialized.totalSize(), 2UL)
       << "SIntType(16) serialization should produce exactly 2 bytes";
   EXPECT_EQ(serialized.getData()[0], 0x34)
       << "SIntType serialization low byte should be 0x34 (little-endian)";
@@ -160,8 +160,8 @@ TEST(ESITypesTest, SIntTypeSerialization) {
       << "SIntType deserialization should consume all data";
 
   // Test negative value serialization/deserialization
-  MessageData negSerialized(sintType.serialize(validNegSInt).takeStorage());
-  EXPECT_EQ(negSerialized.getSize(), 2UL)
+  SingleDataSegmentMessageData negSerialized(sintType.serialize(validNegSInt).takeStorage());
+  EXPECT_EQ(negSerialized.totalSize(), 2UL)
       << "SIntType(16) negative value should serialize to 2 bytes";
   // -1000 in 16-bit two's complement: 0xFC18
   EXPECT_EQ(negSerialized.getData()[0], 0x18)
@@ -196,9 +196,9 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
 
   // Test -1 (all bits set in 8-bit: 0xFF)
   int64_t minusOne = -1;
-  MessageData serializedMinusOne(
+  SingleDataSegmentMessageData serializedMinusOne(
       sint8.serialize(std::any(minusOne)).takeStorage());
-  EXPECT_EQ(serializedMinusOne.getSize(), 1UL)
+  EXPECT_EQ(serializedMinusOne.totalSize(), 1UL)
       << "SIntType(8) serialization of -1 should produce 1 byte";
   EXPECT_EQ(serializedMinusOne.getData()[0], 0xFF)
       << "SIntType(8) serialization of -1 should be 0xFF (all bits set)";
@@ -212,9 +212,9 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
 
   // Test maximum negative value for 8-bit (-128 = 0x80)
   int64_t maxNeg8 = -128;
-  MessageData serializedMaxNeg(
+  SingleDataSegmentMessageData serializedMaxNeg(
       sint8.serialize(std::any(maxNeg8)).takeStorage());
-  EXPECT_EQ(serializedMaxNeg.getSize(), 1UL)
+  EXPECT_EQ(serializedMaxNeg.totalSize(), 1UL)
       << "SIntType(8) serialization of -128 should produce 1 byte";
   EXPECT_EQ(serializedMaxNeg.getData()[0], 0x80)
       << "SIntType(8) serialization of -128 should be 0x80";
@@ -228,9 +228,9 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
 
   // Test maximum positive value for 8-bit (127 = 0x7F)
   int64_t maxPos8 = 127;
-  MessageData serializedMaxPos(
+  SingleDataSegmentMessageData serializedMaxPos(
       sint8.serialize(std::any(maxPos8)).takeStorage());
-  EXPECT_EQ(serializedMaxPos.getSize(), 1UL)
+  EXPECT_EQ(serializedMaxPos.totalSize(), 1UL)
       << "SIntType(8) serialization of 127 should produce 1 byte";
   EXPECT_EQ(serializedMaxPos.getData()[0], 0x7F)
       << "SIntType(8) serialization of 127 should be 0x7F";
@@ -247,9 +247,9 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
 
   // Test -1 in 4-bit (0x0F in the lower nibble, should sign extend to all 1s)
   int64_t minus1w4bit = -1;
-  MessageData serialized4bit(
+  SingleDataSegmentMessageData serialized4bit(
       sint4.serialize(std::any(minus1w4bit)).takeStorage());
-  EXPECT_EQ(serialized4bit.getSize(), 1UL)
+  EXPECT_EQ(serialized4bit.totalSize(), 1UL)
       << "SIntType(4) serialization should produce 1 byte";
   EXPECT_EQ(serialized4bit.getData()[0] & 0x0F, 0x0F)
       << "SIntType(4) serialization of -1 should have lower 4 bits set to "
@@ -263,7 +263,7 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
 
   // Test maximum negative for 4-bit (-8 = 0x8 in 4 bits)
   int64_t maxNeg4 = -8;
-  MessageData serializedMaxNeg4(
+  SingleDataSegmentMessageData serializedMaxNeg4(
       sint4.serialize(std::any(maxNeg4)).takeStorage());
   BitVector serializedMaxNeg4Bits(serializedMaxNeg4.getData());
   auto deserializedMaxNeg4 = sint4.deserialize(serializedMaxNeg4Bits);
@@ -274,7 +274,7 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
 
   // Test maximum positive for 4-bit (7 = 0x7 in 4 bits)
   int64_t maxPos4 = 7;
-  MessageData serializedMaxPos4(
+  SingleDataSegmentMessageData serializedMaxPos4(
       sint4.serialize(std::any(maxPos4)).takeStorage());
   BitVector serializedMaxPos4Bits(serializedMaxPos4.getData());
   auto deserializedMaxPos4 = sint4.deserialize(serializedMaxPos4Bits);
@@ -288,9 +288,9 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
 
   // Test -1 in 12-bit (should be 0xFFF in lower 12 bits)
   int64_t minus1w12bit = -1;
-  MessageData serialized12bit(
+  SingleDataSegmentMessageData serialized12bit(
       sint12.serialize(std::any(minus1w12bit)).takeStorage());
-  EXPECT_EQ(serialized12bit.getSize(), 2UL)
+  EXPECT_EQ(serialized12bit.totalSize(), 2UL)
       << "SIntType(12) serialization should produce 2 bytes (12 bits = 2 "
          "bytes)";
   EXPECT_EQ(serialized12bit.getData()[0], 0xFF)
@@ -307,7 +307,7 @@ TEST(ESITypesTest, SIntTypeSignExtension) {
 
   // Test a value that requires sign extension: -100 in 12-bit
   int64_t neg100w12bit = -100;
-  MessageData serializedNeg100(
+  SingleDataSegmentMessageData serializedNeg100(
       sint12.serialize(std::any(neg100w12bit)).takeStorage());
   BitVector serializedNeg100Bits(serializedNeg100.getData());
   auto deserializedNeg100 = sint12.deserialize(serializedNeg100Bits);
@@ -328,7 +328,7 @@ TEST(ESITypesTest, SIntTypeSignExtensionBoundaries) {
     int64_t minVal = (width == 64) ? INT64_MIN : (-(1LL << (width - 1)));
 
     // Test maximum positive value
-    MessageData serializedMax(
+    SingleDataSegmentMessageData serializedMax(
         sintType.serialize(std::any(maxVal)).takeStorage());
     BitVector serializedMaxBits(serializedMax.getData());
     auto deserializedMax = sintType.deserialize(serializedMaxBits);
@@ -356,7 +356,7 @@ TEST(ESITypesTest, SIntTypeSignExtensionBoundaries) {
     }
 
     // Test maximum negative value
-    MessageData serializedMin(
+    SingleDataSegmentMessageData serializedMin(
         sintType.serialize(std::any(minVal)).takeStorage());
     BitVector serializedMinBits(serializedMin.getData());
     auto deserializedMin = sintType.deserialize(serializedMinBits);
@@ -383,7 +383,7 @@ TEST(ESITypesTest, SIntTypeSignExtensionBoundaries) {
     }
 
     // Test -1 (all bits set case)
-    MessageData serializedMinusOne(
+    SingleDataSegmentMessageData serializedMinusOne(
         sintType.serialize(std::any(static_cast<int64_t>(-1))).takeStorage());
     BitVector serializedMinusOneBits(serializedMinusOne.getData());
     auto deserializedMinusOne = sintType.deserialize(serializedMinusOneBits);
@@ -436,8 +436,8 @@ TEST(ESITypesTest, WideUIntTypeSerialization) {
   EXPECT_NO_THROW(uint128.ensureValid(uint128Value));
 
   // Test serialization
-  MessageData serialized(uint128.serialize(uint128Value).takeStorage());
-  EXPECT_EQ(serialized.getSize(), 16UL)
+  SingleDataSegmentMessageData serialized(uint128.serialize(uint128Value).takeStorage());
+  EXPECT_EQ(serialized.totalSize(), 16UL)
       << "UIntType(128) serialization should produce exactly 16 bytes";
 
   // Verify byte values in little-endian order
@@ -471,8 +471,8 @@ TEST(ESITypesTest, WideUIntTypeSerialization) {
 
   EXPECT_NO_THROW(uint80.ensureValid(uint80Value));
 
-  MessageData serialized80(uint80.serialize(uint80Value).takeStorage());
-  EXPECT_EQ(serialized80.getSize(), 10UL)
+  SingleDataSegmentMessageData serialized80(uint80.serialize(uint80Value).takeStorage());
+  EXPECT_EQ(serialized80.totalSize(), 10UL)
       << "UIntType(80) serialization should produce exactly 10 bytes";
 
   BitVector serialized80Bits(serialized80.getData());
@@ -502,8 +502,8 @@ TEST(ESITypesTest, WideSIntTypeSerialization) {
   EXPECT_NO_THROW(sint128.ensureValid(sint128Value));
 
   // Test serialization
-  MessageData serialized(sint128.serialize(sint128Value).takeStorage());
-  EXPECT_EQ(serialized.getSize(), 16UL)
+  SingleDataSegmentMessageData serialized(sint128.serialize(sint128Value).takeStorage());
+  EXPECT_EQ(serialized.totalSize(), 16UL)
       << "SIntType(128) serialization should produce exactly 16 bytes";
 
   // Test deserialization
@@ -521,8 +521,8 @@ TEST(ESITypesTest, WideSIntTypeSerialization) {
 
   EXPECT_NO_THROW(sint128.ensureValid(sint128NegOne));
 
-  MessageData serializedNegOne(sint128.serialize(sint128NegOne).takeStorage());
-  EXPECT_EQ(serializedNegOne.getSize(), 16UL)
+  SingleDataSegmentMessageData serializedNegOne(sint128.serialize(sint128NegOne).takeStorage());
+  EXPECT_EQ(serializedNegOne.totalSize(), 16UL)
       << "SIntType(128) serialization of -1 should produce 16 bytes";
 
   // Verify all bytes are 0xFF
@@ -553,8 +553,8 @@ TEST(ESITypesTest, WideSIntTypeSerialization) {
 
   EXPECT_NO_THROW(sint192.ensureValid(sint192Value));
 
-  MessageData serialized192(sint192.serialize(sint192Value).takeStorage());
-  EXPECT_EQ(serialized192.getSize(), 24UL)
+  SingleDataSegmentMessageData serialized192(sint192.serialize(sint192Value).takeStorage());
+  EXPECT_EQ(serialized192.totalSize(), 24UL)
       << "SIntType(192) serialization should produce exactly 24 bytes";
 
   BitVector serialized192Bits(serialized192.getData());
@@ -578,8 +578,8 @@ TEST(ESITypesTest, WideSIntTypeSerialization) {
 
   EXPECT_NO_THROW(sint72.ensureValid(sint72Value));
 
-  MessageData serialized72(sint72.serialize(sint72Value).takeStorage());
-  EXPECT_EQ(serialized72.getSize(), 9UL)
+  SingleDataSegmentMessageData serialized72(sint72.serialize(sint72Value).takeStorage());
+  EXPECT_EQ(serialized72.totalSize(), 9UL)
       << "SIntType(72) serialization should produce exactly 9 bytes";
 
   BitVector serialized72Bits(serialized72.getData());
@@ -623,8 +623,8 @@ TEST(ESITypesTest, StructTypeSerialization) {
                std::runtime_error);
 
   // Test serialization
-  MessageData serialized(structType.serialize(validStruct).takeStorage());
-  EXPECT_EQ(serialized.getSize(), 2UL)
+  SingleDataSegmentMessageData serialized(structType.serialize(validStruct).takeStorage());
+  EXPECT_EQ(serialized.totalSize(), 2UL)
       << "StructType with uint8 + sint8 fields should serialize to 2 bytes";
 
   // Test deserialization
@@ -667,9 +667,9 @@ TEST(ESITypesTest, StructTypeSerialization) {
 
   std::any validOddStruct = std::any(oddStructValue);
   EXPECT_NO_THROW(oddStruct.ensureValid(validOddStruct));
-  MessageData oddSerialized(oddStruct.serialize(validOddStruct).takeStorage());
+  SingleDataSegmentMessageData oddSerialized(oddStruct.serialize(validOddStruct).takeStorage());
   // Expect 2 bytes (round up from 14 bits)
-  EXPECT_EQ(oddSerialized.size(), 2UL);
+  EXPECT_EQ(oddSerialized.totalSize(), 2UL);
 
   BitVector oddSerializedBits(oddSerialized.getData());
   auto oddDeserialized = oddStruct.deserialize(oddSerializedBits);
@@ -721,8 +721,8 @@ TEST(ESITypesTest, ArrayTypeSerialization) {
   EXPECT_THROW(arrayType.ensureValid(invalidArray), std::runtime_error);
 
   // Test serialization
-  MessageData serialized(arrayType.serialize(validArray).takeStorage());
-  EXPECT_EQ(serialized.getSize(), 3UL)
+  SingleDataSegmentMessageData serialized(arrayType.serialize(validArray).takeStorage());
+  EXPECT_EQ(serialized.totalSize(), 3UL)
       << "ArrayType of 3 uint8 elements should serialize to 3 bytes";
   EXPECT_EQ(serialized.getData()[0], 30)
       << "First array element should serialize to 30 but got "

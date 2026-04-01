@@ -361,7 +361,7 @@ struct AcceleratorServiceThread::Impl {
   /// method can be called from any thread.
   void
   addListener(std::initializer_list<ReadChannelPort *> listenPorts,
-              std::function<void(ReadChannelPort *, MessageData)> callback);
+              std::function<void(ReadChannelPort *, std::unique_ptr<MessageData>)> callback);
 
   void addTask(std::function<void(void)> task) {
     std::lock_guard<std::mutex> g(m);
@@ -378,8 +378,8 @@ private:
 
   // Map of read ports to callbacks.
   std::map<ReadChannelPort *,
-           std::pair<std::function<void(ReadChannelPort *, MessageData)>,
-                     std::future<MessageData>>>
+           std::pair<std::function<void(ReadChannelPort *, std::unique_ptr<MessageData>)>,
+                     std::future<std::unique_ptr<MessageData>>>>
       listeners;
 
   /// Tasks which should be called on every loop iteration.
@@ -390,11 +390,10 @@ void AcceleratorServiceThread::Impl::loop() {
   // These two variables should logically be in the loop, but this avoids
   // reconstructing them on each iteration.
   std::vector<std::tuple<ReadChannelPort *,
-                         std::function<void(ReadChannelPort *, MessageData)>,
-                         MessageData>>
+                         std::function<void(ReadChannelPort *, std::unique_ptr<MessageData>)>,
+                         std::unique_ptr<MessageData>>>
       portUnlockWorkList;
   std::vector<std::function<void(void)>> taskListCopy;
-  MessageData data;
 
   while (!shutdown) {
     // Ideally we'd have some wake notification here, but this sufficies for
@@ -409,7 +408,7 @@ void AcceleratorServiceThread::Impl::loop() {
       std::lock_guard<std::mutex> g(m);
       for (auto &[channel, cbfPair] : listeners) {
         assert(channel && "Null channel in listener list");
-        std::future<MessageData> &f = cbfPair.second;
+        std::future<std::unique_ptr<MessageData>> &f = cbfPair.second;
         if (f.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
           portUnlockWorkList.emplace_back(channel, cbfPair.first, f.get());
           f = channel->readAsync();
@@ -418,7 +417,7 @@ void AcceleratorServiceThread::Impl::loop() {
     }
 
     // Call the callbacks outside the lock.
-    for (auto [channel, cb, data] : portUnlockWorkList)
+    for (auto &[channel, cb, data] : portUnlockWorkList)
       cb(channel, std::move(data));
 
     // Clear the worklist for the next iteration.
@@ -437,7 +436,7 @@ void AcceleratorServiceThread::Impl::loop() {
 
 void AcceleratorServiceThread::Impl::addListener(
     std::initializer_list<ReadChannelPort *> listenPorts,
-    std::function<void(ReadChannelPort *, MessageData)> callback) {
+    std::function<void(ReadChannelPort *, std::unique_ptr<MessageData>)> callback) {
   std::lock_guard<std::mutex> g(m);
   for (auto port : listenPorts) {
     if (listeners.count(port))
@@ -464,7 +463,7 @@ void AcceleratorServiceThread::stop() {
 // polling loop. Keep the functionality for now.
 void AcceleratorServiceThread::addListener(
     std::initializer_list<ReadChannelPort *> listenPorts,
-    std::function<void(ReadChannelPort *, MessageData)> callback) {
+    std::function<void(ReadChannelPort *, std::unique_ptr<MessageData>)> callback) {
   assert(impl && "Service thread not running");
   impl->addListener(listenPorts, callback);
 }

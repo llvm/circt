@@ -236,7 +236,7 @@ void ChannelService::ToHost::connect() {
   connected = true;
 }
 
-std::future<MessageData> ChannelService::ToHost::read() {
+std::future<std::unique_ptr<MessageData>> ChannelService::ToHost::read() {
   if (!connected)
     throw std::runtime_error(
         "ToHost channel must be 'connect'ed before reading");
@@ -260,11 +260,11 @@ void ChannelService::FromHost::connect() {
   connected = true;
 }
 
-void ChannelService::FromHost::write(const MessageData &data) {
+void ChannelService::FromHost::write(std::unique_ptr<MessageData> data) {
   if (!connected)
     throw std::runtime_error(
         "FromHost channel must be 'connect'ed before writing");
-  dataPort->write(data);
+  dataPort->write(std::move(data));
 }
 
 FuncService::FuncService(AppIDPath idPath, AcceleratorConnection &conn,
@@ -303,12 +303,13 @@ void FuncService::Function::connect() {
   connected = true;
 }
 
-std::future<MessageData>
-FuncService::Function::call(const MessageData &argData) {
+std::future<std::unique_ptr<MessageData>>
+FuncService::Function::call(MessageData &argData) {
   if (!connected)
     throw std::runtime_error("Function must be 'connect'ed before calling");
   std::scoped_lock<std::mutex> lock(callMutex);
-  arg->write(argData);
+  arg->write(std::make_unique<SingleDataSegmentMessageData>(
+      argData.toFlat()));
   return result->readAsync();
 }
 
@@ -340,7 +341,8 @@ CallService::Callback *CallService::Callback::get(AcceleratorConnection &acc,
 }
 
 void CallService::Callback::connect(
-    std::function<MessageData(const MessageData &)> callback, bool quick) {
+    std::function<std::unique_ptr<MessageData>(MessageData &)> callback,
+    bool quick) {
   if (channels.size() != 2)
     throw std::runtime_error("CallService must have exactly two channels");
   result = &getRawWrite("result");
@@ -348,17 +350,20 @@ void CallService::Callback::connect(
   arg = &getRawRead("arg");
   if (quick) {
     // If it's quick, we can just call the callback directly.
-    arg->connect([this, callback](MessageData argMsg) -> bool {
-      MessageData resultMsg = callback(std::move(argMsg));
-      this->result->write(std::move(resultMsg));
-      return true;
-    });
+    arg->connect(
+        [this, callback](std::unique_ptr<MessageData> &argMsg) -> bool {
+          auto resultMsg = callback(*argMsg);
+          this->result->write(std::move(resultMsg));
+          return true;
+        });
   } else {
     // If it's not quick, we need to use the service thread.
     arg->connect();
     acc.getServiceThread()->addListener(
-        {arg}, [this, callback](ReadChannelPort *, MessageData argMsg) -> void {
-          MessageData resultMsg = callback(std::move(argMsg));
+        {arg},
+        [this,
+         callback](ReadChannelPort *, std::unique_ptr<MessageData> argMsg) -> void {
+          auto resultMsg = callback(*argMsg);
           this->result->write(std::move(resultMsg));
         });
   }
@@ -461,7 +466,7 @@ void TelemetryService::Metric::connect() {
   assert(mmio && "TelemetryService: MMIO region not found");
 }
 
-std::future<MessageData> TelemetryService::Metric::read() {
+std::future<std::unique_ptr<MessageData>> TelemetryService::Metric::read() {
   return std::async(std::launch::async, [this]() {
     uint64_t data = readInt();
     return MessageData::from(data);

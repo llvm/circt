@@ -60,8 +60,8 @@ public:
   // Deserialize from a MessageData buffer. Maps the MessageData onto a
   // MutableBitVector, and proceeds with regular MutableBitVector
   // deserialization.
-  std::any deserialize(const MessageData &data) const {
-    auto bv = MutableBitVector(std::vector<uint8_t>(data.getData()));
+  std::any deserialize(MessageData &data) const {
+    auto bv = MutableBitVector(data.toFlat());
     return deserialize(bv);
   }
 

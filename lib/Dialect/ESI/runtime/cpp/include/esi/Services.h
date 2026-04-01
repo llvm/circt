@@ -296,7 +296,7 @@ public:
     static ToHost *get(AppID id, const BundleType *type,
                        ReadChannelPort &dataPort);
     void connect();
-    std::future<MessageData> read();
+    std::future<std::unique_ptr<MessageData>> read();
 
     virtual std::optional<std::string>
     toString(bool oneLine = false) const override {
@@ -320,7 +320,7 @@ public:
     static FromHost *get(AppID id, const BundleType *type,
                          WriteChannelPort &dataPort);
     void connect();
-    void write(const MessageData &data);
+    void write(std::unique_ptr<MessageData> data);
 
     virtual std::optional<std::string>
     toString(bool oneLine = false) const override {
@@ -359,7 +359,7 @@ public:
                          ReadChannelPort &result);
 
     void connect();
-    std::future<MessageData> call(const MessageData &arg);
+    std::future<std::unique_ptr<MessageData>> call(MessageData &arg);
 
     const esi::Type *getArgType() const {
       return dynamic_cast<const ChannelType *>(type->findChannel("arg").first)
@@ -416,8 +416,10 @@ public:
     /// invokes the callback. The 'quick' flag indicates that the callback is
     /// sufficiently fast that it could be called in the same thread as the
     /// port callback.
-    void connect(std::function<MessageData(const MessageData &)> callback,
-                 bool quick = false);
+    void connect(
+        std::function<std::unique_ptr<MessageData>(MessageData &)>
+            callback,
+        bool quick = false);
 
     const esi::Type *getArgType() const {
       return dynamic_cast<const ChannelType *>(type->findChannel("arg").first)
@@ -474,7 +476,7 @@ public:
 
   public:
     void connect();
-    std::future<MessageData> read();
+    std::future<std::unique_ptr<MessageData>> read();
     uint64_t readInt();
 
     virtual std::optional<std::string>

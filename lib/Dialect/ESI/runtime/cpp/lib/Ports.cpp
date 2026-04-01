@@ -66,8 +66,9 @@ void ReadChannelPort::resetTranslationState() {
   listDataBuffer.clear();
 }
 
-void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
-                              const ConnectOptions &options) {
+void ReadChannelPort::connect(
+    std::function<bool(std::unique_ptr<MessageData> &)> callback,
+    const ConnectOptions &options) {
   if (mode != Mode::Disconnected)
     throw std::runtime_error("Channel already connected");
 
@@ -75,11 +76,14 @@ void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
 
   if (options.translateMessage && translationInfo) {
     translationInfo->precomputeFrameInfo();
-    this->callback = [this, cb = std::move(callback)](MessageData data) {
-      if (translateIncoming(data))
-        return cb(MessageData(std::move(translationBuffer)));
-      return true;
-    };
+    this->callback =
+        [this, cb = std::move(callback)](std::unique_ptr<MessageData> &data) {
+          if (translateIncoming(*data)) {
+            auto translated = MessageData::create(std::move(translationBuffer));
+            return cb(translated);
+          }
+          return true;
+        };
   } else {
     this->callback = callback;
   }
@@ -95,11 +99,11 @@ void ReadChannelPort::connect(const ConnectOptions &options) {
   bool translate = options.translateMessage && translationInfo;
   if (translate)
     translationInfo->precomputeFrameInfo();
-  this->callback = [this, translate](MessageData data) {
+  this->callback = [this, translate](std::unique_ptr<MessageData> &data) {
     if (translate) {
-      if (!translateIncoming(data))
+      if (!translateIncoming(*data))
         return true;
-      data = MessageData(std::move(translationBuffer));
+      data = MessageData::create(std::move(translationBuffer));
     }
 
     std::scoped_lock<std::mutex> lock(pollingM);
@@ -108,7 +112,8 @@ void ReadChannelPort::connect(const ConnectOptions &options) {
 
     if (!promiseQueue.empty()) {
       // If there are promises waiting, fulfill the first one.
-      std::promise<MessageData> p = std::move(promiseQueue.front());
+      std::promise<std::unique_ptr<MessageData>> p =
+          std::move(promiseQueue.front());
       promiseQueue.pop();
       p.set_value(std::move(data));
     } else {
@@ -123,7 +128,7 @@ void ReadChannelPort::connect(const ConnectOptions &options) {
   mode = Mode::Polling;
 }
 
-std::future<MessageData> ReadChannelPort::readAsync() {
+std::future<std::unique_ptr<MessageData>> ReadChannelPort::readAsync() {
   if (mode == Mode::Callback)
     throw std::runtime_error(
         "Cannot read from a callback channel. `connect()` without a callback "
@@ -135,8 +140,8 @@ std::future<MessageData> ReadChannelPort::readAsync() {
 
   if (!dataQueue.empty()) {
     // If there's data available, fulfill the promise immediately.
-    std::promise<MessageData> p;
-    std::future<MessageData> f = p.get_future();
+    std::promise<std::unique_ptr<MessageData>> p;
+    std::future<std::unique_ptr<MessageData>> f = p.get_future();
     p.set_value(std::move(dataQueue.front()));
     dataQueue.pop();
     return f;
@@ -365,9 +370,12 @@ bool ReadChannelPort::translateIncoming(MessageData &data) {
   assert(translationInfo &&
          "Translation type must be set for window translation.");
 
-  // Get the frame data directly.
-  const uint8_t *frameData = data.getBytes();
-  size_t frameDataSize = data.size();
+  // Get the frame data (destructive flatten).
+  // TODO: this potentially make a copy of the data. We could optimize by
+  // allowing zero-copy translation but that's for later.
+  auto flatData = data.toFlat();
+  const uint8_t *frameData = flatData.data();
+  size_t frameDataSize = flatData.size();
 
   // Get the frame metadata for the current expected frame.
   const auto &frameInfo = translationInfo->frames[nextFrameIndex];
@@ -458,12 +466,16 @@ bool ReadChannelPort::translateIncoming(MessageData &data) {
   return false;
 }
 
-void WriteChannelPort::translateOutgoing(const MessageData &data) {
+void WriteChannelPort::translateOutgoing(MessageData &data) {
   assert(translationInfo &&
          "Translation type must be set for window translation.");
 
-  const uint8_t *srcData = data.getBytes();
-  size_t srcDataSize = data.size();
+  // Flatten to get contiguous bytes for translation.
+  // TODO: this potentially makes a copy of the data. We could optimize by
+  // allowing zero-copy translation but that's for later.
+  auto flatData = data.toFlat();
+  const uint8_t *srcData = flatData.data();
+  size_t srcDataSize = flatData.size();
 
   if (srcDataSize < translationInfo->intoTypeBytes)
     throw std::runtime_error("Source data too small: expected at least " +

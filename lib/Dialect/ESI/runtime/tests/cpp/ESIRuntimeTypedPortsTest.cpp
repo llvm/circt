@@ -214,12 +214,14 @@ public:
   void disconnect() override { connected = false; }
   bool isConnected() const override { return connected; }
 
-  MessageData lastWritten;
+  SingleDataSegmentMessageData lastWritten;
 
 protected:
-  void writeImpl(const MessageData &data) override { lastWritten = data; }
-  bool tryWriteImpl(const MessageData &data) override {
-    lastWritten = data;
+  void writeImpl(std::unique_ptr<MessageData> data) override {
+    lastWritten = SingleDataSegmentMessageData(data->toFlat());
+  }
+  bool tryWriteImpl(std::unique_ptr<MessageData> &data) override {
+    writeImpl(std::move(data));
     return true;
   }
 
@@ -252,7 +254,7 @@ TEST(TypedPortsTest, TypedWritePortRoundTrip) {
   typed.write(val);
 
   // Wire size for si15 is 2 bytes ((15+7)/8).
-  ASSERT_EQ(mock.lastWritten.getSize(), 2u);
+  ASSERT_EQ(mock.lastWritten.totalSize(), 2u);
 }
 
 TEST(TypedPortsTest, SignExtensionNonByteAligned) {
@@ -264,7 +266,7 @@ TEST(TypedPortsTest, SignExtensionNonByteAligned) {
     EXPECT_EQ(wi.bytes, 1u);
     EXPECT_EQ(wi.bitWidth, 4u);
     uint8_t wire = 0x0F; // -1 in si4
-    MessageData msg(&wire, 1);
+    SingleDataSegmentMessageData msg(&wire, 1);
     int32_t val = fromMessageData<int32_t>(msg, wi);
     EXPECT_EQ(val, -1);
   }
@@ -273,7 +275,7 @@ TEST(TypedPortsTest, SignExtensionNonByteAligned) {
     SIntType si4("si4", 4);
     WireInfo wi = getWireInfo(&si4);
     uint8_t wire = 0x07;
-    MessageData msg(&wire, 1);
+    SingleDataSegmentMessageData msg(&wire, 1);
     int32_t val = fromMessageData<int32_t>(msg, wi);
     EXPECT_EQ(val, 7);
   }
@@ -284,7 +286,7 @@ TEST(TypedPortsTest, SignExtensionNonByteAligned) {
     WireInfo wi = getWireInfo(&si22);
     EXPECT_EQ(wi.bytes, 3u);
     uint8_t wire[3] = {0xFF, 0xFF, 0x3F};
-    MessageData msg(wire, 3);
+    SingleDataSegmentMessageData msg(wire, 3);
     int32_t val = fromMessageData<int32_t>(msg, wi);
     EXPECT_EQ(val, -1);
   }
@@ -293,7 +295,7 @@ TEST(TypedPortsTest, SignExtensionNonByteAligned) {
     SIntType si22("si22", 22);
     WireInfo wi = getWireInfo(&si22);
     uint8_t wire[3] = {0xFF, 0xFF, 0x1F}; // bit 21 = 0
-    MessageData msg(wire, 3);
+    SingleDataSegmentMessageData msg(wire, 3);
     int32_t val = fromMessageData<int32_t>(msg, wi);
     EXPECT_EQ(val, 0x1FFFFF); // 2097151
   }
@@ -306,7 +308,7 @@ TEST(TypedPortsTest, TypedWritePortVoid) {
   EXPECT_NO_THROW(typed.connect());
 
   typed.write();
-  ASSERT_EQ(mock.lastWritten.getSize(), 1u);
+  ASSERT_EQ(mock.lastWritten.totalSize(), 1u);
   EXPECT_EQ(mock.lastWritten.getData()[0], 0);
 }
 
@@ -319,20 +321,23 @@ class MockReadPort : public ReadChannelPort {
 public:
   MockReadPort(const Type *type) : ReadChannelPort(type) {}
 
-  void connect(std::function<bool(MessageData)>,
+  void connect(std::function<bool(std::unique_ptr<MessageData> &)>,
                const ConnectOptions & = {}) override {
     mode = Mode::Callback;
   }
   void connect(const ConnectOptions & = {}) override { mode = Mode::Polling; }
 
-  void read(MessageData &outData) override { outData = nextResponse; }
-  std::future<MessageData> readAsync() override {
-    std::promise<MessageData> p;
-    p.set_value(nextResponse);
+  std::unique_ptr<MessageData> read() override {
+    return std::make_unique<SingleDataSegmentMessageData>(nextResponse);
+  }
+  std::future<std::unique_ptr<MessageData>> readAsync() override {
+    std::promise<std::unique_ptr<MessageData>> p;
+    p.set_value(
+        std::make_unique<SingleDataSegmentMessageData>(nextResponse));
     return p.get_future();
   }
 
-  MessageData nextResponse;
+  SingleDataSegmentMessageData nextResponse;
 };
 
 //===----------------------------------------------------------------------===//
@@ -412,7 +417,12 @@ TEST(TypedPortsTest, TypedFunctionCallRoundTrip) {
 
   // Set up mock read to return a known uint16_t value.
   uint16_t expected = 42;
-  mockRead.nextResponse = MessageData::from(expected);
+  auto fromResult = MessageData::from(expected);
+  // Copy from the unique_ptr into the mock's concrete storage.
+  auto *singleSeg =
+      dynamic_cast<SingleDataSegmentMessageData *>(fromResult.get());
+  mockRead.nextResponse = SingleDataSegmentMessageData(
+      singleSeg->getBytes(), singleSeg->getData().size());
 
   auto *func = services::FuncService::Function::get(AppID("test"), &bundleType,
                                                     mockWrite, mockRead);
@@ -425,7 +435,7 @@ TEST(TypedPortsTest, TypedFunctionCallRoundTrip) {
   EXPECT_EQ(result, 42);
 
   // Verify the written arg matches — si24 wire size is 3 bytes.
-  ASSERT_EQ(mockWrite.lastWritten.getSize(), 3u);
+  ASSERT_EQ(mockWrite.lastWritten.totalSize(), 3u);
   delete func;
 }
 

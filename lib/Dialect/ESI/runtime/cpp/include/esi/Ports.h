@@ -219,16 +219,19 @@ public:
 
   /// A very basic blocking write API. Will likely change for performance
   /// reasons.
-  void write(const MessageData &data) {
+  void write(std::unique_ptr<MessageData> data) {
     if (translateMessages) {
       assert(translationBuffer.empty() &&
              "Cannot call write() with pending translated messages");
-      translateOutgoing(data);
+      translateOutgoing(*data);
+      // TODO: this method of translation creates copies. Optimize this in cases
+      // where possible.
       for (auto &msg : translationBuffer)
-        writeImpl(msg);
+        writeImpl(
+            std::make_unique<SingleDataSegmentMessageData>(std::move(msg)));
       translationBuffer.clear();
     } else {
-      writeImpl(data);
+      writeImpl(std::move(data));
     }
   }
 
@@ -238,14 +241,14 @@ public:
   /// can be used to check that the entire buffer has been written. It is
   /// invalid for backends to always return false (i.e. backends must eventually
   /// ensure that writes may succeed).
-  bool tryWrite(const MessageData &data) {
+  bool tryWrite(std::unique_ptr<MessageData> &data) {
     if (translateMessages) {
       // Do not accept a new message if there are pending messages to flush.
       if (!flush())
         return false;
       assert(translationBuffer.empty() &&
              "Translation buffer should be empty after successful flush");
-      translateOutgoing(data);
+      translateOutgoing(*data);
       flush();
       return true;
     } else {
@@ -258,7 +261,10 @@ public:
   /// true and perform no action, as there is no buffered data to flush.
   bool flush() {
     while (translationBufferIdx < translationBuffer.size()) {
-      if (!tryWriteImpl(translationBuffer[translationBufferIdx]))
+      std::unique_ptr<MessageData> msg =
+          std::make_unique<SingleDataSegmentMessageData>(
+              std::move(translationBuffer[translationBufferIdx]));
+      if (!tryWriteImpl(msg))
         return false;
       ++translationBufferIdx;
     }
@@ -269,22 +275,24 @@ public:
 
 protected:
   /// Implementation for write(). Subclasses must implement this.
-  virtual void writeImpl(const MessageData &) = 0;
+  virtual void writeImpl(std::unique_ptr<MessageData>) = 0;
 
   /// Implementation for tryWrite(). Subclasses must implement this.
-  virtual bool tryWriteImpl(const MessageData &data) = 0;
+  /// On success, takes ownership of data (leaves it null). On failure,
+  /// must leave data intact so the caller can retry.
+  virtual bool tryWriteImpl(std::unique_ptr<MessageData> &data) = 0;
 
   /// Whether to translate outgoing data if the port type is a window type. Set
   /// by the connect() method.
   bool translateMessages = false;
   /// If tryWrite cannot write all the messages of a windowed type at once, it
   /// stores them here and writes them out one by one on subsequent calls.
-  std::vector<MessageData> translationBuffer;
+  std::vector<SingleDataSegmentMessageData> translationBuffer;
   /// Index of the next message to write in translationBuffer.
   size_t translationBufferIdx = 0;
   /// Translate outgoing data if the port type is a window type. Append the new
   /// message 'chunks' to translationBuffer.
-  void translateOutgoing(const MessageData &data);
+  void translateOutgoing(MessageData &data);
 
 private:
   volatile bool connected = false;
@@ -301,10 +309,10 @@ public:
   }
 
 protected:
-  void writeImpl(const MessageData &) override {
+  void writeImpl(std::unique_ptr<MessageData>) override {
     throw std::runtime_error(errmsg);
   }
-  bool tryWriteImpl(const MessageData &) override {
+  bool tryWriteImpl(std::unique_ptr<MessageData> &) override {
     throw std::runtime_error(errmsg);
   }
 
@@ -336,8 +344,9 @@ public:
   // wait, and be notified.
   //===--------------------------------------------------------------------===//
 
-  virtual void connect(std::function<bool(MessageData)> callback,
-                       const ConnectOptions &options = {});
+  virtual void
+  connect(std::function<bool(std::unique_ptr<MessageData> &)> callback,
+          const ConnectOptions &options = {});
 
   //===--------------------------------------------------------------------===//
   // Polling mode methods: To use futures or blocking reads, connect without any
@@ -351,14 +360,14 @@ public:
   virtual void connect(const ConnectOptions &options = {}) override;
 
   /// Asynchronous read.
-  virtual std::future<MessageData> readAsync();
+  virtual std::future<std::unique_ptr<MessageData>> readAsync();
 
-  /// Specify a buffer to read into. Blocking. Basic API, will likely change
-  /// for performance and functionality reasons.
-  virtual void read(MessageData &outData) {
-    std::future<MessageData> f = readAsync();
+  /// Blocking read. Basic API, will likely change for performance and
+  /// functionality reasons.
+  virtual std::unique_ptr<MessageData> read() {
+    auto f = readAsync();
     f.wait();
-    outData = std::move(f.get());
+    return f.get();
   }
 
   /// Set maximum number of messages to store in the dataQueue. 0 means no
@@ -375,7 +384,9 @@ protected:
   volatile Mode mode;
 
   /// Backends call this callback when new data is available.
-  std::function<bool(MessageData)> callback;
+  /// Returns true if data was consumed (unique_ptr left null).
+  /// Returns false if data was not consumed (unique_ptr left intact for retry).
+  std::function<bool(std::unique_ptr<MessageData> &)> callback;
 
   /// Window translation support.
   std::vector<uint8_t> translationBuffer;
@@ -399,11 +410,11 @@ protected:
   std::mutex pollingM;
   /// Store incoming data here if there are no outstanding promises to be
   /// fulfilled.
-  std::queue<MessageData> dataQueue;
+  std::queue<std::unique_ptr<MessageData>> dataQueue;
   /// Maximum number of messages to store in dataQueue. 0 means no limit.
   uint64_t maxDataQueueMsgs;
   /// Promises to be fulfilled when data is available.
-  std::queue<std::promise<MessageData>> promiseQueue;
+  std::queue<std::promise<std::unique_ptr<MessageData>>> promiseQueue;
 };
 
 /// Instantiated when a backend does not know how to create a read channel.
@@ -412,14 +423,14 @@ public:
   UnknownReadChannelPort(const Type *type, std::string errmsg)
       : ReadChannelPort(type), errmsg(errmsg) {}
 
-  void connect(std::function<bool(MessageData)> callback,
+  void connect(std::function<bool(std::unique_ptr<MessageData> &)> callback,
                const ConnectOptions &options = ConnectOptions()) override {
     throw std::runtime_error(errmsg);
   }
   void connect(const ConnectOptions &options = ConnectOptions()) override {
     throw std::runtime_error(errmsg);
   }
-  std::future<MessageData> readAsync() override {
+  std::future<std::unique_ptr<MessageData>> readAsync() override {
     throw std::runtime_error(errmsg);
   }
 

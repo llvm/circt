@@ -116,8 +116,9 @@ public:
   RpcServerReadPort(Type *type) : ReadChannelPort(type) {}
 
   /// Internal call. Push a message FROM the RPC client to the read port.
-  void push(MessageData &data) {
-    while (!callback(data))
+  void push(const uint8_t *data, size_t size) {
+    std::unique_ptr<MessageData> msg = MessageData::create(data, size);
+    while (!callback(msg))
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 };
@@ -131,12 +132,14 @@ class RpcServerWritePort : public WriteChannelPort {
 public:
   RpcServerWritePort(Type *type) : WriteChannelPort(type) {}
 
-  utils::TSQueue<MessageData> writeQueue;
+  utils::TSQueue<SingleDataSegmentMessageData> writeQueue;
 
 protected:
-  void writeImpl(const MessageData &data) override { writeQueue.push(data); }
-  bool tryWriteImpl(const MessageData &data) override {
-    writeQueue.push(data);
+  void writeImpl(std::unique_ptr<MessageData> data) override {
+    writeQueue.push(SingleDataSegmentMessageData(data->toFlat()));
+  }
+  bool tryWriteImpl(std::unique_ptr<MessageData> &data) override {
+    writeImpl(std::move(data));
     return true;
   }
 };
@@ -318,26 +321,27 @@ void RpcServerWriteReactor::threadLoop() {
     // if the message was sent successfully in this thread. It's only when the
     // `OnWriteDone` method is called by gRPC that we know. Use locking and
     // condition variables to orchestrate this confirmation.
-    writePort->writeQueue.pop([this](const MessageData &data) -> bool {
-      if (shutdown)
-        return false;
+    writePort->writeQueue.pop(
+        [this](const SingleDataSegmentMessageData &data) -> bool {
+          if (shutdown)
+            return false;
 
-      esi::cosim::Message msg;
-      msg.set_data(reinterpret_cast<const char *>(data.getBytes()),
-                   data.getSize());
+          esi::cosim::Message msg;
+          msg.set_data(reinterpret_cast<const char *>(data.getBytes()),
+                       data.getData().size());
 
-      // Get a lock, reset the flag, start sending the message, and wait for the
-      // write to complete or fail. Be mindful of the shutdown flag.
-      std::unique_lock<std::mutex> lock(sentMutex);
-      sentSuccessfully = SendStatus::UnknownStatus;
-      StartWrite(&msg);
-      sentSuccessfullyCV.wait(lock, [&]() {
-        return shutdown || sentSuccessfully != SendStatus::UnknownStatus;
-      });
-      bool ret = sentSuccessfully == SendStatus::Success;
-      lock.unlock();
-      return ret;
-    });
+          // Get a lock, reset the flag, start sending the message, and wait for
+          // the write to complete or fail. Be mindful of the shutdown flag.
+          std::unique_lock<std::mutex> lock(sentMutex);
+          sentSuccessfully = SendStatus::UnknownStatus;
+          StartWrite(&msg);
+          sentSuccessfullyCV.wait(lock, [&]() {
+            return shutdown || sentSuccessfully != SendStatus::UnknownStatus;
+          });
+          bool ret = sentSuccessfully == SendStatus::Success;
+          lock.unlock();
+          return ret;
+        });
   }
 
   // Call Finish to signal gRPC that we're done. gRPC will then call OnDone().
@@ -373,14 +377,13 @@ Impl::SendToServer(CallbackServerContext *context,
   }
 
   std::string msgDataString = request->message().data();
-  MessageData data(reinterpret_cast<const uint8_t *>(msgDataString.data()),
-                   msgDataString.size());
   try {
     ctxt.getLogger().debug(
         "cosim",
         std::format("Channel '{}': Received message; pushing data to read port",
                     request->channel_name()));
-    it->second->push(data);
+    it->second->push(reinterpret_cast<const uint8_t *>(msgDataString.data()),
+                     msgDataString.size());
   } catch (const std::exception &e) {
     ctxt.getLogger().error(
         "cosim",

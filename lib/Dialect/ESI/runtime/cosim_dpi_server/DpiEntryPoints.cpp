@@ -55,17 +55,19 @@ static void log(char *epId, bool toClient, const MessageData &msg) {
     return;
 
   fprintf(logFile, "[ep: %50s to: %4s]", epId, toClient ? "host" : "sim");
-  size_t msgSize = msg.getSize();
-  auto bytes = msg.getBytes();
-  for (size_t i = 0; i < msgSize; ++i) {
-    auto b = bytes[i];
-    // Separate 32-bit words.
-    if (i % 4 == 0 && i > 0)
-      fprintf(logFile, " ");
-    // Separate 64-bit words
-    if (i % 8 == 0 && i > 0)
-      fprintf(logFile, "  ");
-    fprintf(logFile, " %02x", b);
+  size_t byteIdx = 0;
+  for (size_t s = 0, ns = msg.numSegments(); s < ns; ++s) {
+    auto &seg = msg.segment(s);
+    for (size_t i = 0; i < seg.size(); ++i, ++byteIdx) {
+      auto b = seg.data()[i];
+      // Separate 32-bit words.
+      if (byteIdx % 4 == 0 && byteIdx > 0)
+        fprintf(logFile, " ");
+      // Separate 64-bit words
+      if (byteIdx % 8 == 0 && byteIdx > 0)
+        fprintf(logFile, "  ");
+      fprintf(logFile, " %02x", b);
+    }
   }
   fprintf(logFile, "\n");
   fflush(logFile);
@@ -125,7 +127,8 @@ static int validateSvOpenArray(const svOpenArrayHandle data,
 // Lookups for registered ports. As a future optimization, change the DPI API to
 // return a handle when registering wherein said handle is a pointer to a port.
 std::map<std::string, ReadChannelPort &> readPorts;
-std::map<ReadChannelPort *, std::future<MessageData>> readFutures;
+std::map<ReadChannelPort *, std::future<std::unique_ptr<MessageData>>>
+    readFutures;
 std::map<std::string, WriteChannelPort &> writePorts;
 
 // Register simulated device endpoints.
@@ -187,16 +190,16 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
   }
 
   ReadChannelPort &port = portIt->second;
-  std::future<MessageData> &f = readFutures.at(&port);
+  auto &f = readFutures.at(&port);
   // Poll for a message.
   if (f.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
     // No message.
     *dataSize = 0;
     return 0;
   }
-  MessageData msg = f.get();
+  std::unique_ptr<MessageData> msg = f.get();
   f = port.readAsync();
-  log(endpointId, false, msg);
+  log(endpointId, false, *msg);
 
   // Do the validation only if there's a message available. Since the
   // simulator is going to poll up to every tick and there's not going to be
@@ -219,25 +222,23 @@ DPI int sv2cCosimserverEpTryGet(char *endpointId,
     return -3;
   }
   // Verify it'll fit.
-  size_t msgSize = msg.getSize();
+  size_t msgSize = msg->totalSize();
   if (msgSize > *dataSize) {
     getLogger().error("cosim", "Message size too big to fit in HW buffer");
     return -5;
   }
 
   // Copy the message data.
-  size_t i;
-  auto bytes = msg.getBytes();
-  for (i = 0; i < msgSize; ++i) {
-    auto b = bytes[i];
-    *(char *)svGetArrElemPtr1(data, i) = b;
+  auto flat = msg->toFlat();
+  for (size_t i = 0; i < flat.size(); ++i) {
+    *(char *)svGetArrElemPtr1(data, i) = flat[i];
   }
   // Zero out the rest of the buffer.
-  for (; i < *dataSize; ++i) {
+  for (size_t i = flat.size(); i < *dataSize; ++i) {
     *(char *)svGetArrElemPtr1(data, i) = 0;
   }
   // Set the output data size.
-  *dataSize = msg.getSize();
+  *dataSize = flat.size();
   return 0;
 }
 
@@ -274,7 +275,7 @@ DPI int sv2cCosimserverEpTryPut(char *endpointId,
   for (int i = 0; i < dataSize; ++i) {
     dataVec[i] = *(char *)svGetArrElemPtr1(data, i);
   }
-  auto blob = std::make_unique<esi::MessageData>(dataVec);
+  auto blob = MessageData::create(std::move(dataVec));
 
   // Queue the blob.
   auto portIt = writePorts.find(endpointId);
@@ -284,7 +285,7 @@ DPI int sv2cCosimserverEpTryPut(char *endpointId,
   }
   log(endpointId, true, *blob);
   WriteChannelPort &port = portIt->second;
-  port.write(*blob);
+  port.write(std::move(blob));
   return 0;
 }
 

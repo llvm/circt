@@ -76,15 +76,17 @@ inline WireInfo getWireInfo(const Type *portType) {
 /// Pack a C++ integral value into a MessageData with the given wire byte count.
 /// If wi.bytes is 0, falls back to sizeof(T).
 template <typename T>
-MessageData toMessageData(const T &data, WireInfo wi) {
+std::unique_ptr<SingleDataSegmentMessageData> toMessageData(const T &data,
+                                                            WireInfo wi) {
   if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
     if (wi.bytes > 0 && wi.bytes != sizeof(T)) {
       std::vector<uint8_t> buf(wi.bytes, 0);
       std::memcpy(buf.data(), &data, std::min(wi.bytes, sizeof(T)));
-      return MessageData(std::move(buf));
+      return std::make_unique<SingleDataSegmentMessageData>(std::move(buf));
     }
   }
-  return MessageData(reinterpret_cast<const uint8_t *>(&data), sizeof(T));
+  return std::make_unique<SingleDataSegmentMessageData>(
+      reinterpret_cast<const uint8_t *>(&data), sizeof(T));
 }
 
 /// Unpack a MessageData into a C++ integral value with the given wire info.
@@ -92,19 +94,20 @@ MessageData toMessageData(const T &data, WireInfo wi) {
 /// a zero-initialized value and sign-extends for signed types using the
 /// actual bit width to locate the sign bit.
 template <typename T>
-T fromMessageData(const MessageData &msg, WireInfo wi) {
+T fromMessageData(MessageData &msg, WireInfo wi) {
   if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
-    if (wi.bytes > 0 && msg.getSize() == wi.bytes &&
+    if (wi.bytes > 0 && msg.totalSize() == wi.bytes &&
         wi.bitWidth < sizeof(T) * 8) {
       // Copy wire bytes into a zero-initialized value.
       T val = 0;
-      std::memcpy(&val, msg.getBytes(), std::min(wi.bytes, sizeof(T)));
+      auto flat = msg.toFlat();
+      std::memcpy(&val, flat.data(), std::min(wi.bytes, sizeof(T)));
       // Sign-extend for signed types if the sign bit is set.
       if constexpr (std::is_signed_v<T>) {
         size_t signBit = wi.bitWidth - 1;
         size_t signByte = signBit / 8;
         uint8_t signMask = uint8_t(1) << (signBit % 8);
-        if (signByte < wi.bytes && (msg.getBytes()[signByte] & signMask)) {
+        if (signByte < wi.bytes && (flat[signByte] & signMask)) {
           // Set all bits above the sign bit to 1.
           if (wi.bitWidth < sizeof(T) * 8)
             val |= static_cast<T>(~T(0)) << wi.bitWidth;
@@ -113,7 +116,7 @@ T fromMessageData(const MessageData &msg, WireInfo wi) {
       return val;
     }
   }
-  return *msg.as<T>();
+  return msg.as<T>();
 }
 
 //===----------------------------------------------------------------------===//
@@ -244,7 +247,8 @@ public:
   bool tryWrite(const T &data) {
     if constexpr (CheckValue)
       checkValueRange(data);
-    return inner->tryWrite(toMessageData(data, wireInfo_));
+    auto msg = toMessageData(data, wireInfo_);
+    return inner->tryWrite(msg);
   }
 
   bool flush() { return inner->flush(); }
@@ -302,12 +306,13 @@ public:
 
   void write() {
     uint8_t zero = 0;
-    inner->write(MessageData(&zero, 1));
+    inner->write(MessageData::create(&zero, 1));
   }
 
   bool tryWrite() {
     uint8_t zero = 0;
-    return inner->tryWrite(MessageData(&zero, 1));
+    auto msg = MessageData::create(&zero, 1);
+    return inner->tryWrite(msg);
   }
 
   bool flush() { return inner->flush(); }
@@ -348,16 +353,14 @@ public:
     wireInfo_ = getWireInfo(inner->getType());
     WireInfo wb = wireInfo_;
     inner->connect(
-        [cb = std::move(callback), wb](MessageData data) -> bool {
-          return cb(fromMessageData<T>(data, wb));
-        },
+        [cb = std::move(callback), wb](std::unique_ptr<MessageData> &data)
+            -> bool { return cb(fromMessageData<T>(*data, wb)); },
         opts);
   }
 
   T read() {
-    MessageData outData;
-    inner->read(outData);
-    return fromMessageData<T>(outData, wireInfo_);
+    auto outData = inner->read();
+    return fromMessageData<T>(*outData, wireInfo_);
   }
 
   std::future<T> readAsync() {
@@ -365,8 +368,8 @@ public:
     auto innerFuture = inner->readAsync();
     return std::async(std::launch::deferred,
                       [f = std::move(innerFuture), wb]() mutable -> T {
-                        MessageData data = f.get();
-                        return fromMessageData<T>(data, wb);
+                        auto data = f.get();
+                        return fromMessageData<T>(*data, wb);
                       });
   }
 
@@ -401,14 +404,12 @@ public:
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
     verifyTypeCompatibility<void>(inner->getType());
-    inner->connect(
-        [cb = std::move(callback)](MessageData) -> bool { return cb(); }, opts);
+    inner->connect([cb = std::move(callback)](
+                       std::unique_ptr<MessageData> &) -> bool { return cb(); },
+                   opts);
   }
 
-  void read() {
-    MessageData outData;
-    inner->read(outData);
-  }
+  void read() { inner->read(); }
 
   std::future<void> readAsync() {
     auto innerFuture = inner->readAsync();
@@ -455,11 +456,12 @@ public:
 
   std::future<ResultT> call(const ArgT &arg) {
     WireInfo rwb = resWireInfo_;
-    auto f = inner->call(toMessageData(arg, argWireInfo_));
+    auto argMsg = toMessageData(arg, argWireInfo_);
+    auto f = inner->call(*argMsg);
     return std::async(std::launch::deferred,
                       [fut = std::move(f), rwb]() mutable -> ResultT {
-                        MessageData data = fut.get();
-                        return fromMessageData<ResultT>(data, rwb);
+                        auto data = fut.get();
+                        return fromMessageData<ResultT>(*data, rwb);
                       });
   }
 
@@ -491,11 +493,12 @@ public:
   std::future<ResultT> call() {
     uint8_t zero = 0;
     const Type *resType = inner->getResultType();
-    auto f = inner->call(MessageData(&zero, 1));
+    SingleDataSegmentMessageData argMsg(&zero, 1);
+    auto f = inner->call(argMsg);
     return std::async(std::launch::deferred,
                       [fut = std::move(f), resType]() mutable -> ResultT {
-                        MessageData data = fut.get();
-                        return fromMessageData<ResultT>(data, resType);
+                        auto data = fut.get();
+                        return fromMessageData<ResultT>(*data, resType);
                       });
   }
 
@@ -555,7 +558,8 @@ public:
 
   std::future<void> call() {
     uint8_t zero = 0;
-    auto f = inner->call(MessageData(&zero, 1));
+    SingleDataSegmentMessageData argMsg(&zero, 1);
+    auto f = inner->call(argMsg);
     return std::async(std::launch::deferred,
                       [fut = std::move(f)]() mutable -> void { fut.get(); });
   }
@@ -591,9 +595,10 @@ public:
     inner->connect(
         [cb = std::move(callback), argType = inner->getArgType(),
          resType = inner->getResultType()](
-            const MessageData &argData) -> MessageData {
+            MessageData &argData) -> std::unique_ptr<MessageData> {
           ResultT result = cb(fromMessageData<ArgT>(argData, argType));
-          return toMessageData(result, resType);
+          auto msg = toMessageData(result, resType);
+          return std::make_unique<SingleDataSegmentMessageData>(std::move(msg));
         },
         quick);
   }
@@ -620,9 +625,11 @@ public:
     verifyTypeCompatibility<ResultT>(inner->getResultType());
     WireInfo rwb = getWireInfo(inner->getResultType());
     inner->connect(
-        [cb = std::move(callback), rwb](const MessageData &) -> MessageData {
+        [cb = std::move(callback),
+         rwb](MessageData &) -> std::unique_ptr<MessageData> {
           ResultT result = cb();
-          return toMessageData(result, rwb);
+          auto msg = toMessageData(result, rwb);
+          return std::make_unique<SingleDataSegmentMessageData>(std::move(msg));
         },
         quick);
   }
@@ -649,10 +656,10 @@ public:
     verifyTypeCompatibility<void>(inner->getResultType());
     inner->connect(
         [cb = std::move(callback), argType = inner->getArgType()](
-            const MessageData &argData) -> MessageData {
+            MessageData &argData) -> std::unique_ptr<MessageData> {
           cb(fromMessageData<ArgT>(argData, argType));
           uint8_t zero = 0;
-          return MessageData(&zero, 1);
+          return MessageData::create(&zero, 1);
         },
         quick);
   }
@@ -678,10 +685,11 @@ public:
     verifyTypeCompatibility<void>(inner->getArgType());
     verifyTypeCompatibility<void>(inner->getResultType());
     inner->connect(
-        [cb = std::move(callback)](const MessageData &) -> MessageData {
+        [cb = std::move(callback)](
+            MessageData &) -> std::unique_ptr<MessageData> {
           cb();
           uint8_t zero = 0;
-          return MessageData(&zero, 1);
+          return MessageData::create(&zero, 1);
         },
         quick);
   }

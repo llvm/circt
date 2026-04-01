@@ -114,14 +114,17 @@ static void runArrayFunc(Accelerator *accel) {
   func->connect();
 
   int8_t argArray[1] = {static_cast<int8_t>(-3)};
-  MessageData resMsg =
-      func->call(MessageData(reinterpret_cast<const uint8_t *>(argArray),
-                             sizeof(argArray)))
-          .get();
+  SingleDataSegmentMessageData arrayArgMsg(
+      reinterpret_cast<const uint8_t *>(argArray), sizeof(argArray));
+  auto resMsg = func->call(arrayArgMsg).get();
 
-  const auto *res = resMsg.as<esi_system::ResultArray>();
-  int8_t a = (*res)[0];
-  int8_t b = (*res)[1];
+  // ResultArray is a C array type which can't be returned by value,
+  // so access the raw segment data directly.
+  assert(resMsg->numSegments() == 1 && resMsg->totalSize() >= 2);
+  const int8_t *res =
+      reinterpret_cast<const int8_t *>(resMsg->segment(0).data());
+  int8_t a = res[0];
+  int8_t b = res[1];
   int8_t expect0 = argArray[0];
   int8_t expect1 = static_cast<int8_t>(argArray[0] + 1);
 

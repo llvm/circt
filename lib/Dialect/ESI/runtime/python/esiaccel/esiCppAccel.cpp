@@ -283,24 +283,28 @@ NB_MODULE(esiCppAccel, m) {
   nb::class_<services::TelemetryService, services::Service>(m,
                                                             "TelemetryService");
 
-  nb::class_<std::future<MessageData>>(m, "MessageDataFuture")
-      .def("valid", [](std::future<MessageData> &f) { return f.valid(); })
+  nb::class_<std::future<std::unique_ptr<MessageData>>>(m, "MessageDataFuture")
+      .def("valid",
+           [](std::future<std::unique_ptr<MessageData>> &f) {
+             return f.valid();
+           })
       .def("wait",
-           [](std::future<MessageData> &f) {
+           [](std::future<std::unique_ptr<MessageData>> &f) {
              // Yield the GIL while waiting for the future to complete, in case
              // of python callbacks occurring from other threads while waiting.
              nb::gil_scoped_release release{};
              f.wait();
            })
-      .def("get", [](std::future<MessageData> &f) {
-        std::optional<MessageData> data;
+      .def("get", [](std::future<std::unique_ptr<MessageData>> &f) {
+        std::unique_ptr<MessageData> data;
         {
           // Yield the GIL while waiting for the future to complete, in case of
           // python callbacks occurring from other threads while waiting.
           nb::gil_scoped_release release{};
-          data.emplace(f.get());
+          data = f.get();
         }
-        return nb::bytearray((const char *)data->getBytes(), data->getSize());
+        std::vector<uint8_t> flat = data->toFlat();
+        return nb::bytearray((const char *)flat.data(), flat.size());
       });
 
   nb::class_<ChannelPort::ConnectOptions>(m, "ConnectOptions")
@@ -319,24 +323,20 @@ NB_MODULE(esiCppAccel, m) {
   nb::class_<WriteChannelPort, ChannelPort>(m, "WriteChannelPort")
       .def("write",
            [](WriteChannelPort &p, nb::bytearray data) {
-             std::vector<uint8_t> dataVec((const uint8_t *)data.c_str(),
-                                          (const uint8_t *)data.c_str() +
-                                              data.size());
-             p.write(dataVec);
+             p.write(MessageData::create((const uint8_t *)data.c_str(),
+                                         data.size()));
            })
       .def("tryWrite", [](WriteChannelPort &p, nb::bytearray data) {
-        std::vector<uint8_t> dataVec((const uint8_t *)data.c_str(),
-                                     (const uint8_t *)data.c_str() +
-                                         data.size());
-        return p.tryWrite(dataVec);
+        std::unique_ptr<MessageData> msg =
+            MessageData::create((const uint8_t *)data.c_str(), data.size());
+        return p.tryWrite(msg);
       });
   nb::class_<ReadChannelPort, ChannelPort>(m, "ReadChannelPort")
       .def(
           "read",
           [](ReadChannelPort &p) -> nb::bytearray {
-            MessageData data;
-            p.read(data);
-            return nb::bytearray((const char *)data.getBytes(), data.getSize());
+            std::vector<uint8_t> flat = p.read()->toFlat();
+            return nb::bytearray((const char *)flat.data(), flat.size());
           },
           "Read data from the channel. Blocking.")
       .def("read_async", &ReadChannelPort::readAsync);
@@ -358,11 +358,9 @@ NB_MODULE(esiCppAccel, m) {
   nb::class_<FuncService::Function, ServicePort>(m, "Function")
       .def("call",
            [](FuncService::Function &self,
-              nb::bytearray msg) -> std::future<MessageData> {
-             std::vector<uint8_t> dataVec((const uint8_t *)msg.c_str(),
-                                          (const uint8_t *)msg.c_str() +
-                                              msg.size());
-             MessageData data(dataVec);
+              nb::bytearray msg) -> std::future<std::unique_ptr<MessageData>> {
+             SingleDataSegmentMessageData data((const uint8_t *)msg.c_str(),
+                                               msg.size());
              return self.call(data);
            })
       .def("connect", &FuncService::Function::connect);
@@ -370,23 +368,18 @@ NB_MODULE(esiCppAccel, m) {
   nb::class_<CallService::Callback, ServicePort>(m, "Callback")
       .def("connect", [](CallService::Callback &self,
                          std::function<nb::object(nb::object)> pyCallback) {
-        // TODO: Under certain conditions this will cause python to crash. I
-        // don't remember how to replicate these crashes, but IIRC they are
-        // deterministic.
-        self.connect([pyCallback](const MessageData &req) -> MessageData {
-          nb::gil_scoped_acquire acquire{};
-          std::vector<uint8_t> arg(req.getBytes(),
-                                   req.getBytes() + req.getSize());
-          nb::bytes argObj((const char *)arg.data(), arg.size());
-          auto ret = pyCallback(argObj);
-          if (ret.is_none())
-            return MessageData();
-          nb::bytearray retBytes = nb::cast<nb::bytearray>(ret);
-          std::vector<uint8_t> dataVec((const uint8_t *)retBytes.c_str(),
-                                       (const uint8_t *)retBytes.c_str() +
-                                           retBytes.size());
-          return MessageData(dataVec);
-        });
+        self.connect(
+            [pyCallback](MessageData &req) -> std::unique_ptr<MessageData> {
+              nb::gil_scoped_acquire acquire{};
+              auto reqFlat = req.toFlat();
+              nb::bytes argObj((const char *)reqFlat.data(), reqFlat.size());
+              auto ret = pyCallback(argObj);
+              if (ret.is_none())
+                return MessageData::create();
+              nb::bytearray retBytes = nb::cast<nb::bytearray>(ret);
+              return MessageData::create((const uint8_t *)retBytes.c_str(),
+                                         retBytes.size());
+            });
       });
 
   nb::class_<TelemetryService::Metric, ServicePort>(m, "Metric")
@@ -403,10 +396,8 @@ NB_MODULE(esiCppAccel, m) {
       .def(
           "write",
           [](ChannelService::FromHost &self, nb::bytearray data) {
-            std::vector<uint8_t> dataVec((const uint8_t *)data.c_str(),
-                                         (const uint8_t *)data.c_str() +
-                                             data.size());
-            self.write(MessageData(dataVec));
+            self.write(MessageData::create((const uint8_t *)data.c_str(),
+                                           data.size()));
           },
           nb::arg("data"));
 

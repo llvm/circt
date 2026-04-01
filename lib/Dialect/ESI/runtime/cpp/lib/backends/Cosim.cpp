@@ -52,7 +52,7 @@ public:
   }
 
 protected:
-  void writeImpl(const MessageData &data) override {
+  void writeImpl(std::unique_ptr<MessageData> data) override {
     // Add trace logging before sending the message.
     conn.getLogger().trace(
         [this,
@@ -62,15 +62,15 @@ protected:
           msg = "Writing message to channel '" + name + "'";
           details = std::make_unique<std::map<std::string, std::any>>();
           (*details)["channel"] = name;
-          (*details)["data_size"] = data.getSize();
-          (*details)["message_data"] = data.toHex();
+          (*details)["data_size"] = data->totalSize();
+          (*details)["message_data"] = data->toHex();
         });
 
-    client.writeToServer(name, data);
+    client.writeToServer(name, *data);
   }
 
-  bool tryWriteImpl(const MessageData &data) override {
-    writeImpl(data);
+  bool tryWriteImpl(std::unique_ptr<MessageData> &data) override {
+    writeImpl(std::move(data));
     return true;
   }
 
@@ -103,8 +103,8 @@ public:
                                "' is not a to client channel");
 
     // Connect to the channel and set up callback.
-    connection =
-        client.connectClientReceiver(name, [this](const MessageData &data) {
+    connection = client.connectClientReceiver(
+        name, [this](std::unique_ptr<MessageData> &data) {
           // Add trace logging for the received message.
           conn.getLogger().trace(
               [this, &data](
@@ -114,10 +114,11 @@ public:
                 msg = "Received message from channel '" + name + "'";
                 details = std::make_unique<std::map<std::string, std::any>>();
                 (*details)["channel"] = name;
-                (*details)["data_size"] = data.getSize();
-                (*details)["message_data"] = data.toHex();
+                (*details)["data_size"] = data->totalSize();
+                (*details)["message_data"] = data->toHex();
               });
 
+          // Forward ownership directly to the port callback.
           bool consumed = callback(data);
 
           if (consumed) {
@@ -297,11 +298,11 @@ private:
   std::unique_ptr<FuncService::Function> func;
 
   CycleInfo getCycleInfo() const {
-    MessageData arg({1}); // 1-bit trigger message
-    std::future<MessageData> result = func->call(arg);
+    SingleDataSegmentMessageData arg({1}); // 1-bit trigger message
+    std::future<std::unique_ptr<MessageData>> result = func->call(arg);
     result.wait();
-    MessageData respMsg = result.get();
-    return *respMsg.as<CycleInfo>();
+    std::unique_ptr<MessageData> respMsg = result.get();
+    return respMsg->as<CycleInfo>();
   }
 };
 } // namespace
@@ -350,9 +351,9 @@ public:
   uint64_t read(uint32_t addr) const override {
     MMIOCmd cmd{.data = 0, .offset = addr, .write = false};
     auto arg = MessageData::from(cmd);
-    std::future<MessageData> result = cmdMMIO->call(arg);
+    std::future<std::unique_ptr<MessageData>> result = cmdMMIO->call(*arg);
     result.wait();
-    uint64_t ret = *result.get().as<uint64_t>();
+    uint64_t ret = result.get()->as<uint64_t>();
     conn.getLogger().trace(
         [addr, ret](std::string &subsystem, std::string &msg,
                     std::unique_ptr<std::map<std::string, std::any>> &details) {
@@ -372,7 +373,7 @@ public:
         });
     MMIOCmd cmd{.data = data, .offset = addr, .write = true};
     auto arg = MessageData::from(cmd);
-    std::future<MessageData> result = cmdMMIO->call(arg);
+    std::future<std::unique_ptr<MessageData>> result = cmdMMIO->call(*arg);
     result.wait();
   }
 
@@ -451,8 +452,9 @@ public:
     readReqPort = std::make_unique<ReadCosimChannelPort>(
         conn, *rpcClient, readArg, readReqType,
         "__cosim_hostmem_read_req.data");
-    readReqPort->connect(
-        [this](const MessageData &req) { return serviceRead(req); });
+    readReqPort->connect([this](std::unique_ptr<MessageData> &req) {
+      return serviceRead(*req);
+    });
 
     // Setup the write side callback.
     RpcClient::ChannelDesc writeArg, writeResp;
@@ -481,26 +483,29 @@ public:
     write.reset(CallService::Callback::get(acc, AppID("__cosim_hostmem_write"),
                                            bundleType, *writeRespPort,
                                            *writeReqPort));
-    write->connect([this](const MessageData &req) { return serviceWrite(req); },
-                   true);
+    write->connect(
+        [this](const MessageData &req) -> std::unique_ptr<MessageData> {
+          return serviceWrite(req);
+        },
+        true);
   }
 
   // Service the read request as a callback. Simply reads the data from the
   // location specified. TODO: check that the memory has been mapped.
   bool serviceRead(const MessageData &reqBytes) {
-    const HostMemReadReq *req = reqBytes.as<HostMemReadReq>();
+    auto req = reqBytes.as<HostMemReadReq>();
     acc.getLogger().trace(
         [&](std::string &subsystem, std::string &msg,
             std::unique_ptr<std::map<std::string, std::any>> &details) {
           subsystem = "hostmem";
-          msg = "Read request: addr=0x" + toHex(req->address) +
-                " len=" + std::to_string(req->length) +
-                " tag=" + std::to_string(req->tag);
+          msg = "Read request: addr=0x" + toHex(req.address) +
+                " len=" + std::to_string(req.length) +
+                " tag=" + std::to_string(req.tag);
         });
     // Send one response per 8 bytes.
-    uint64_t *dataPtr = reinterpret_cast<uint64_t *>(req->address);
-    for (uint32_t i = 0, e = (req->length + 7) / 8; i < e; ++i) {
-      HostMemReadResp resp{.data = dataPtr[i], .tag = req->tag};
+    uint64_t *dataPtr = reinterpret_cast<uint64_t *>(req.address);
+    for (uint32_t i = 0, e = (req.length + 7) / 8; i < e; ++i) {
+      HostMemReadResp resp{.data = dataPtr[i], .tag = req.tag};
       acc.getLogger().trace(
           [&](std::string &subsystem, std::string &msg,
               std::unique_ptr<std::map<std::string, std::any>> &details) {
@@ -515,21 +520,21 @@ public:
 
   // Service a write request as a callback. Simply write the data to the
   // location specified. TODO: check that the memory has been mapped.
-  MessageData serviceWrite(const MessageData &reqBytes) {
-    const HostMemWriteReq *req = reqBytes.as<HostMemWriteReq>();
+  std::unique_ptr<MessageData> serviceWrite(const MessageData &reqBytes) {
+    auto req = reqBytes.as<HostMemWriteReq>();
     acc.getLogger().trace(
         [&](std::string &subsystem, std::string &msg,
             std::unique_ptr<std::map<std::string, std::any>> &details) {
           subsystem = "hostmem";
-          msg = "Write request: addr=0x" + toHex(req->address) + " data=0x" +
-                toHex(req->data) +
-                " valid_bytes=" + std::to_string(req->valid_bytes) +
-                " tag=" + std::to_string(req->tag);
+          msg = "Write request: addr=0x" + toHex(req.address) + " data=0x" +
+                toHex(req.data) +
+                " valid_bytes=" + std::to_string(req.valid_bytes) +
+                " tag=" + std::to_string(req.tag);
         });
-    uint8_t *dataPtr = reinterpret_cast<uint8_t *>(req->address);
-    for (uint8_t i = 0; i < req->valid_bytes; ++i)
-      dataPtr[i] = (req->data >> (i * 8)) & 0xFF;
-    HostMemWriteResp resp = req->tag;
+    uint8_t *dataPtr = reinterpret_cast<uint8_t *>(req.address);
+    for (uint8_t i = 0; i < req.valid_bytes; ++i)
+      dataPtr[i] = (req.data >> (i * 8)) & 0xFF;
+    HostMemWriteResp resp = req.tag;
     return MessageData::from(resp);
   }
 
