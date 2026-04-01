@@ -307,13 +307,15 @@ def FunctionalReduction : Pass<"synth-functional-reduction", "hw::HWModuleOp"> {
            "Enable test transformation mode. In this mode, candidates are "
            "verified only when both values in a pair carry matching "
            "`synth.test.functional_reduction_equivalence_class` attributes.">,
-    Option<"numRandomPatterns", "num-random-patterns", "unsigned", "4096",
+    Option<"numRandomPatterns", "num-random-patterns", "unsigned", "1024",
            "Number of random simulation patterns (must be a positive multiple of 64; "
            "each pattern is one bit in a 64-bit word)">,
     Option<"seed", "seed", "unsigned", "0",
            "Seed for random pattern generation">,
     Option<"satSolver", "sat-solver", "std::string", "\"auto\"",
-           "SAT solver backend to use: auto, z3, or cadical">
+           "SAT solver backend to use: auto, z3, or cadical">,
+    Option<"conflictLimit", "conflict-limit", "int64_t", "100",
+           "Per-SAT-call conflict budget. -1 disables the limit.">
   ];
   let statistics = [
     Statistic<"numEquivClasses", "num-equiv-classes",
