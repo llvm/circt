@@ -6492,11 +6492,6 @@ void ModuleEmitter::emitPortList(Operation *module,
       if (portTypeStrings[portIdx].size() < maxTypeWidth)
         ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
       } else {
-        size_t dirWidth =
-            (hasOutputs ? 7 : 6) + (state.options.emitWireInPorts ? 5 : 0);
-        size_t totalWidth = dirWidth + maxTypeWidth;
-        ps << portTypeStrings[portIdx];
-        if (portTypeStrings[portIdx].size() < totalWidth)
         ps << portTypeStrings[portIdx];
         if (portTypeStrings[portIdx].size() < startOfNamePos)
           ps.nbsp(startOfNamePos - portTypeStrings[portIdx].size());
