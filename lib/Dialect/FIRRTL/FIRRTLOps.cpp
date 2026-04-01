@@ -4410,6 +4410,17 @@ LogicalResult PropAssignOp::verify() {
   return success();
 }
 
+LogicalResult PropertyAssertOp::verify() {
+  // Static evaluation: if the condition is a known constant false, the
+  // assertion is trivially violated and we can report an error immediately.
+  if (auto *defOp = getCondition().getDefiningOp())
+    if (auto boolConst = dyn_cast<BoolConstantOp>(defOp))
+      if (!boolConst.getValue())
+        return emitOpError("property assertion is statically false: ")
+               << getMessage();
+  return success();
+}
+
 static FlatSymbolRefAttr getDomainTypeName(Value value) {
   auto domainType = dyn_cast<DomainType>(value.getType());
   if (!domainType)
