@@ -987,6 +987,56 @@ struct SimPrintFormattedProcOpLowering
   StringCache &stringCache;
 };
 
+struct SimClockedTerminateOpLowering
+    : public OpConversionPattern<sim::ClockedTerminateOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(sim::ClockedTerminateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+
+    Value cond = adaptor.getCondition();
+
+    auto funcOp = op->getParentOfType<LLVM::LLVMFuncOp>();
+    if (!funcOp || funcOp.getNumArguments() == 0) {
+      return rewriter.notifyMatchFailure(
+          op, "Could not find parent LLVM function or state pointer");
+    }
+
+    Value statePtr = funcOp.getArgument(0);
+
+    auto *currentBlock = rewriter.getInsertionBlock();
+    auto *continueBlock =
+        rewriter.splitBlock(currentBlock, rewriter.getInsertionPoint());
+    auto *setFlagBlock = rewriter.createBlock(continueBlock->getParent());
+
+    rewriter.setInsertionPointToEnd(currentBlock);
+    LLVM::CondBrOp::create(rewriter, loc, cond, setFlagBlock, continueBlock);
+
+    rewriter.setInsertionPointToEnd(setFlagBlock);
+
+    auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
+    auto i8Type = rewriter.getI8Type();
+
+    Value flagptr = LLVM::GEPOp::create(rewriter, loc, ptrType, i8Type,
+                                        statePtr, ArrayRef<LLVM::GEPArg>{8});
+
+    // Write 1 for success and 2 for failure, so that the runtime can
+    // distinguish between normal termination and termination due to an error.
+    int8_t statusVal = op.getSuccess() ? 1 : 2;
+    Value flagVal = LLVM::ConstantOp::create(
+        rewriter, loc, i8Type, rewriter.getI8IntegerAttr(statusVal));
+    LLVM::StoreOp::create(rewriter, loc, flagVal, flagptr);
+
+    LLVM::BrOp::create(rewriter, loc, continueBlock);
+
+    rewriter.setInsertionPointToStart(continueBlock);
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 } // namespace
 
 static LogicalResult convert(arc::ExecuteOp op, arc::ExecuteOp::Adaptor adaptor,
@@ -1328,6 +1378,9 @@ void LowerArcToLLVMPass::runOnOperation() {
                     sim::FormatBinOp, sim::FormatOctOp, sim::FormatCharOp,
                     sim::FormatStringConcatOp>();
 
+  // Mark sim::ClockedTerminateOp as illegal
+  target.addIllegalOp<sim::ClockedTerminateOp>();
+
   // Setup the arc dialect type conversion.
   LLVMTypeConverter converter(&getContext());
   converter.addConversion([&](seq::ClockType type) {
@@ -1428,6 +1481,8 @@ void LowerArcToLLVMPass::runOnOperation() {
   patterns.add<SimInstantiateOpLowering, SimSetInputOpLowering,
                SimGetPortOpLowering, SimStepOpLowering>(
       converter, &getContext(), modelMap);
+
+  patterns.add<SimClockedTerminateOpLowering>(converter, &getContext());
 
   // Apply the conversion.
   ConversionConfig config;

@@ -14,9 +14,13 @@
 
 #define DEBUG_TYPE "arc-allocate-state"
 
-// Offset for model state allocations. The first bytes of model storage are
+// Offset for model state allocations. The first 8 bytes of model storage are
 // reserved for the model header (currently just the i64 simulation time).
-static constexpr unsigned kStateOffset = 8;
+// The next 8 bytes are reserved for the termination flag used by
+// `SimTerminateOp`. The actual model state starts at offset 16.
+static constexpr unsigned kTimeOffset = 0;
+static constexpr unsigned kTerminateFlagOffset = 8;
+static constexpr unsigned kStateOffset = 16;
 
 namespace circt {
 namespace arc {
