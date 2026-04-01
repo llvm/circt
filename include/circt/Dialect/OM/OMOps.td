@@ -536,4 +536,28 @@ def StringConcatOp : OMOp<"string.concat", [Pure, SameOperandsAndResultType]> {
   let hasCanonicalizer = 1;
 }
 
+def PropertyAssertOp : OMOp<"property_assert"> {
+  let summary = "Assert that a boolean property holds at evaluation time";
+  let description = [{
+    Asserts that `$condition` (a 1-bit integer) is non-zero when evaluated by
+    the OM evaluator. If the evaluator resolves the condition to zero,
+    evaluation fails with `$message`.
+
+    Example:
+    ```mlir
+    om.property_assert %cond, "invariant must hold" : i1
+    ```
+  }];
+
+  let arguments = (ins
+    I1:$condition,
+    StrAttr:$message
+  );
+  let results = (outs);
+
+  let assemblyFormat = [{
+    $condition `,` $message attr-dict `:` type($condition)
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPS_TD
