@@ -9,6 +9,7 @@ function(add_circt_unittest test_dirname)
   add_unittest(CIRCTUnitTests ${test_dirname} ${ARGN})
 endfunction()
 
+add_subdirectory(Conversion)
 add_subdirectory(Dialect)
 add_subdirectory(Support)
 add_subdirectory(Tools)
