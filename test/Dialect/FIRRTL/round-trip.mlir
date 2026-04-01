@@ -397,4 +397,18 @@ firrtl.module @WireDomainOperands(
   %w_multi = firrtl.wire domains[%A, %B] : !firrtl.uint<16> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>]
 }
 
+// In a class body.
+// CHECK-LABEL: firrtl.class @AssertInClass
+firrtl.class @AssertInClass(in %cond : !firrtl.bool) {
+  // CHECK: firrtl.property_assert %cond, "must be true" : !firrtl.bool
+  firrtl.property_assert %cond, "must be true" : !firrtl.bool
+}
+
+// In a module body.
+// CHECK-LABEL: firrtl.module @AssertInModule
+firrtl.module @AssertInModule(in %cond : !firrtl.bool) {
+  // CHECK: firrtl.property_assert %cond, "module invariant" : !firrtl.bool
+  firrtl.property_assert %cond, "module invariant" : !firrtl.bool
+}
+
 }

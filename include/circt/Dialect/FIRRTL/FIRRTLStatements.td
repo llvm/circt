@@ -370,6 +370,31 @@ def PropAssignOp : FIRRTLOp<"propassign", [FConnectLike, SameTypeOperands,
   }];
 }
 
+def PropertyAssertOp : FIRRTLOp<"property_assert",
+    [ParentOneOf<["FModuleOp", "ClassOp"]>]> {
+  let summary = "Assert that a boolean property holds";
+  let description = [{
+    Asserts that the boolean property `$condition` is true. If the condition
+    is statically known to be false, a compile-time error is raised. Otherwise
+    the assertion is lowered to the OM evaluator for runtime checking.
+
+    Example:
+    ```mlir
+    firrtl.property_assert %cond, "invariant must hold" : !firrtl.bool
+    ```
+  }];
+
+  let arguments = (ins
+    BoolType:$condition,
+    StrAttr:$message
+  );
+  let results = (outs);
+
+  let assemblyFormat = [{
+    $condition `,` $message attr-dict `:` type($condition)
+  }];
+}
+
 def ForceOp : FIRRTLOp<"force", [SameTypeOperands]> {
   let summary = "Force procedural statement";
   let description = "Maps to the corresponding `sv.force` operation.";
