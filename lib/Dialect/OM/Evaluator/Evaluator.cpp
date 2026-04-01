@@ -277,6 +277,11 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
     fields[cast<StringAttr>(name)] = result.value();
   }
 
+  // Evaluate property assertions.
+  for (auto assertOp : cls.getOps<PropertyAssertOp>())
+    if (failed(evaluatePropertyAssert(assertOp, actualParams)))
+      return failure();
+
   // If the there is an instance, we must update the object value.
   if (instanceKey.first) {
     auto result =
@@ -510,6 +515,59 @@ circt::om::Evaluator::evaluateIntegerBinaryArithmetic(
     return finalizeStatus;
 
   return handle;
+}
+
+/// Evaluator dispatch function for property assertions.
+LogicalResult
+circt::om::Evaluator::evaluatePropertyAssert(PropertyAssertOp op,
+                                             ActualParameters actualParams) {
+  auto loc = op.getLoc();
+
+  // Evaluate the condition, returning early if it isn't ready yet.
+  auto condResult = evaluateValue(op.getCondition(), actualParams, loc);
+  if (failed(condResult))
+    return failure();
+  if (!condResult.value()->isFullyEvaluated())
+    return success();
+
+  // If the condition is unknown, skip silently (best-effort).
+  if (condResult.value()->isUnknown())
+    return success();
+
+  // Extract the attribute from the condition value, handling the case where
+  // the condition resolves through a ReferenceValue (e.g. an ObjectFieldOp or
+  // a parameter that participates in cycle resolution).
+  auto extractAttr = [](evaluator::EvaluatorValue *value) -> mlir::Attribute {
+    return llvm::TypeSwitch<evaluator::EvaluatorValue *, mlir::Attribute>(value)
+        .Case([](evaluator::AttributeValue *val) { return val->getAttr(); })
+        .Case([](evaluator::ReferenceValue *val) -> mlir::Attribute {
+          auto stripped = val->getStrippedValue();
+          if (failed(stripped))
+            return {};
+          if (auto *attr =
+                  dyn_cast<evaluator::AttributeValue>(stripped.value().get()))
+            return attr->getAttr();
+          return {};
+        })
+        .Default([](auto *) -> mlir::Attribute { return {}; });
+  };
+
+  auto condAttr = extractAttr(condResult.value().get());
+  if (!condAttr)
+    return success();
+
+  bool isFalse = false;
+  if (auto boolAttr = dyn_cast<BoolAttr>(condAttr))
+    isFalse = !boolAttr.getValue();
+  else if (auto intAttr = dyn_cast<mlir::IntegerAttr>(condAttr))
+    isFalse = intAttr.getValue().isZero();
+  else
+    return op.emitError("expected BoolAttr or mlir::IntegerAttr");
+
+  if (isFalse)
+    return op.emitError("OM property assertion failed: ") << op.getMessage();
+
+  return success();
 }
 
 /// Evaluator dispatch function for Object instances.

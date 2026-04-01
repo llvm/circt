@@ -1742,4 +1742,142 @@ om.class @TestHarness_Class(%basepath: !om.frozenbasepath) -> (result: !om.list<
   EXPECT_TRUE(field->get()->isUnknown());
 }
 
+TEST(EvaluatorTests, PropertyAssertTests) {
+  StringRef mod = R"MLIR(
+// Test 1: A true assert passes.
+om.class @True() -> () {
+  %true = om.constant true
+  om.property_assert %true, "okay!" : i1
+  om.class.fields
+}
+
+// Test 2: A false assert fails.
+om.class @False() -> () {
+  %false = om.constant false
+  om.property_assert %false, "fail!" : i1
+  om.class.fields
+}
+
+// Test 3: A true parameter passes.
+// Test 4: A false parameter fails.
+om.class @Parameter(%bool: i1) -> () {
+  om.property_assert %bool, "input must be true true" : i1
+  om.class.fields
+}
+om.class @Parameter_True() -> () {
+  %true = om.constant true
+  om.object @Parameter(%true) : (i1) -> !om.class.type<@Parameter>
+  om.class.fields
+}
+om.class @Parameter_False() -> () {
+  %false = om.constant false
+  om.object @Parameter(%false) : (i1) -> !om.class.type<@Parameter>
+  om.class.fields
+}
+
+// Test 5: Order invariance of a true assert.
+om.class @Parameter_True_Partial() -> () {
+  om.object @Parameter(%true) : (i1) -> !om.class.type<@Parameter>
+  %true = om.constant true
+  om.class.fields
+}
+
+// Test 6: Order invariance of a false assert.
+om.class @Parameter_False_Partial() -> () {
+  om.object @Parameter(%false) : (i1) -> !om.class.type<@Parameter>
+  %false = om.constant false
+  om.class.fields
+}
+
+// Test 7: True -> Output Port -> Input Port -> Assert passes
+om.class @Parameter_True_Cycle(%in: i1) -> (out: i1) {
+  om.object @Parameter(%in) : (i1) -> !om.class.type<@Parameter>
+  %true = om.constant true
+  om.class.fields %true : i1
+}
+om.class @Parameter_True_Cycle_Top() -> () {
+  %obj = om.object @Parameter_True_Cycle(%in) : (i1) -> !om.class.type<@Parameter_True_Cycle>
+  %in = om.object.field %obj, [@out] : (!om.class.type<@Parameter_True_Cycle>) -> i1
+  om.class.fields
+}
+
+// Test 8: False -> Output Port -> Input Port -> Assert fails
+om.class @Parameter_False_Cycle(%in: i1) -> (out: i1) {
+  om.object @Parameter(%in) : (i1) -> !om.class.type<@Parameter>
+  %false = om.constant false
+  om.class.fields %false : i1
+}
+om.class @Parameter_False_Cycle_Top() -> () {
+  %obj = om.object @Parameter_False_Cycle(%in) : (i1) -> !om.class.type<@Parameter_False_Cycle>
+  %in = om.object.field %obj, [@out] : (!om.class.type<@Parameter_False_Cycle>) -> i1
+  om.class.fields
+}
+
+// Test 9: True subfield passes.
+om.class @ReturnTrue() -> (out: i1) {
+  %true = om.constant true
+  om.class.fields %true : i1
+}
+om.class @SubfieldTrue() -> () {
+  %obj = om.object @ReturnTrue() : () -> !om.class.type<@ReturnTrue>
+  %true = om.object.field %obj, [@out] : (!om.class.type<@ReturnTrue>) -> i1
+  om.property_assert %true, "input must be true true" : i1
+  om.class.fields
+}
+
+// Test 10: False subfield fails.
+om.class @ReturnFalse() -> (out: i1) {
+  %false = om.constant false
+  om.class.fields %false : i1
+}
+om.class @SubfieldFalse() -> () {
+  %obj = om.object @ReturnFalse() : () -> !om.class.type<@ReturnFalse>
+  %false = om.object.field %obj, [@out] : (!om.class.type<@ReturnFalse>) -> i1
+  om.property_assert %false, "input must be true true" : i1
+  om.class.fields
+}
+)MLIR";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  ASSERT_TRUE(
+      succeeded(evaluator.instantiate(StringAttr::get(&context, "True"), {})));
+
+  ASSERT_TRUE(
+      failed(evaluator.instantiate(StringAttr::get(&context, "False"), {})));
+
+  ASSERT_TRUE(succeeded(
+      evaluator.instantiate(StringAttr::get(&context, "Parameter_True"), {})));
+
+  ASSERT_TRUE(failed(
+      evaluator.instantiate(StringAttr::get(&context, "Parameter_False"), {})));
+
+  ASSERT_TRUE(succeeded(evaluator.instantiate(
+      StringAttr::get(&context, "Parameter_True_Partial"), {})));
+
+  ASSERT_TRUE(failed(evaluator.instantiate(
+      StringAttr::get(&context, "Parameter_False_Partial"), {})));
+
+  ASSERT_TRUE(succeeded(evaluator.instantiate(
+      StringAttr::get(&context, "Parameter_True_Cycle_Top"), {})));
+
+  ASSERT_TRUE(failed(evaluator.instantiate(
+      StringAttr::get(&context, "Parameter_False_Cycle_Top"), {})));
+
+  ASSERT_TRUE(succeeded(
+      evaluator.instantiate(StringAttr::get(&context, "SubfieldTrue"), {})));
+
+  ASSERT_TRUE(failed(
+      evaluator.instantiate(StringAttr::get(&context, "SubfieldFalse"), {})));
+}
+
 } // namespace

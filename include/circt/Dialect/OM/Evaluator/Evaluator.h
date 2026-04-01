@@ -455,6 +455,9 @@ private:
   FailureOr<evaluator::EvaluatorValuePtr>
   evaluateUnknownValue(UnknownValueOp op, Location loc);
 
+  LogicalResult evaluatePropertyAssert(PropertyAssertOp op,
+                                       ActualParameters actualParams);
+
   FailureOr<evaluator::EvaluatorValuePtr> createUnknownValue(Type type,
                                                              Location loc);
 
