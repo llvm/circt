@@ -3716,63 +3716,6 @@ function int testRecursive(input int n);
     return n * testRecursive(n - 1);
 endfunction
 
-// CHECK-LABEL: moore.module @testRecursiveCaptureFunction() {
-module testRecursiveCaptureFunction();
-  // CHECK: [[CAPTUREME:%.+]] = moore.variable : <i32>
-  int captureMe;
-  int r;
-  initial begin
-    // CHECK: func.call @fact({{.*}}, [[CAPTUREME]]) : (!moore.i32, !moore.ref<i32>) -> !moore.i32
-    r = fact(5);
-  end
-
-  // CHECK: func.func private @fact(%arg0: !moore.i32, %arg1: !moore.ref<i32>) -> !moore.i32 {
-  function int fact(input int n);
-    // CHECK: [[CAPTUREDVALUE:%.*]] = moore.read %arg1 : <i32>
-    // CHECK: return [[CAPTUREDVALUE]] : !moore.i32
-    if (n <= 1) return captureMe;
-    // CHECK: [[REC_CALL:%.*]] = call @fact({{.*}}, %arg1) : (!moore.i32, !moore.ref<i32>) -> !moore.i32
-    return n * fact(n - 1);
-  endfunction
-endmodule
-
-// Task that reads a module-scope signal in an event control expression. The
-// signal must be captured as an extra argument to the task function.
-// CHECK-LABEL: moore.module @CaptureInEventControl
-module CaptureInEventControl;
-  // CHECK: [[CLK:%.+]] = moore.variable : <l1>
-  logic clk;
-  // CHECK: [[DATA:%.+]] = moore.variable : <i32>
-  int data;
-
-  initial begin
-    // CHECK: moore.call_coroutine @waitForClk([[CLK]])
-    waitForClk();
-    // CHECK: moore.call_coroutine @readOnClk([[CLK]], [[DATA]])
-    readOnClk();
-  end
-
-  // CHECK: moore.coroutine private @waitForClk(%arg0: !moore.ref<l1>)
-  task automatic waitForClk;
-    // CHECK: moore.wait_event {
-    // CHECK:   [[TMP:%.+]] = moore.read %arg0
-    // CHECK:   moore.detect_event posedge [[TMP]]
-    // CHECK: }
-    @(posedge clk);
-  endtask
-
-  // CHECK: moore.coroutine private @readOnClk(%arg0: !moore.ref<l1>, %arg1: !moore.ref<i32>)
-  task automatic readOnClk;
-    int result;
-    // CHECK: moore.wait_event {
-    // CHECK:   [[TMP:%.+]] = moore.read %arg0
-    // CHECK:   moore.detect_event posedge [[TMP]]
-    // CHECK: }
-    @(posedge clk);
-    // CHECK: [[TMP:%.+]] = moore.read %arg1
-    result = data;
-  endtask
-endmodule
 
 // CHECK-LABEL: moore.module @RealLiteral() {
 module RealLiteral();

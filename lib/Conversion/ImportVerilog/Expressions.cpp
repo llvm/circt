@@ -1810,53 +1810,18 @@ struct RvalueExprVisitor : public ExprVisitor {
       arguments.push_back(value);
     }
 
-    if (!lowering->isConverting && !lowering->captures.empty()) {
-      auto materializeCaptureAtCall = [&](Value cap) -> Value {
-        // Captures are expected to be moore::RefType.
-        auto refTy = dyn_cast<moore::RefType>(cap.getType());
-        if (!refTy) {
-          lowering->op.emitError(
-              "expected captured value to be moore::RefType");
-          return {};
-        }
-
-        // Expected case: the capture stems from a variable of any parent
-        // scope. We need to walk up, since definition might be a couple regions
-        // up.
-        Region *capRegion = [&]() -> Region * {
-          if (auto ba = dyn_cast<BlockArgument>(cap))
-            return ba.getOwner()->getParent();
-          if (auto *def = cap.getDefiningOp())
-            return def->getParentRegion();
-          return nullptr;
-        }();
-
-        Region *callRegion =
-            builder.getBlock() ? builder.getBlock()->getParent() : nullptr;
-
-        for (Region *r = callRegion; r; r = r->getParentRegion()) {
-          if (r == capRegion) {
-            // Safe to use the SSA value directly here.
-            return cap;
-          }
-        }
-
-        // Otherwise we can’t legally rematerialize this capture here.
-        lowering->op.emitError()
-            << "cannot materialize captured ref at call site; non-symbol "
-            << "source: "
-            << (cap.getDefiningOp()
-                    ? cap.getDefiningOp()->getName().getStringRef()
-                    : "<block-arg>");
+    // Pass captured variables as extra arguments. Each captured AST symbol is
+    // resolved to an MLIR value through the scoped symbol table, which
+    // naturally handles transitive captures (the caller’s own capture block
+    // argument will be found for variables captured from an outer scope).
+    for (auto *sym : lowering->capturedSymbols) {
+      Value val = context.valueSymbols.lookup(sym);
+      if (!val) {
+        mlir::emitError(loc) << "failed to resolve captured variable `"
+                             << sym->name << "` at call site";
         return {};
-      };
-
-      for (Value cap : lowering->captures) {
-        Value mat = materializeCaptureAtCall(cap);
-        if (!mat)
-          return {};
-        arguments.push_back(mat);
       }
+      arguments.push_back(val);
     }
 
     // Determine result types from the declared/converted func op.
