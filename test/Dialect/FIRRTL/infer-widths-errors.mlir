@@ -182,3 +182,18 @@ firrtl.circuit "MuxSelTooWide" {
     firrtl.connect %0, %c2_ui2 : !firrtl.uint, !firrtl.uint<2>
   }
 }
+
+// -----
+
+// Connections that would require truncation after width inference should
+// produce a dedicated error rather than implicitly inserting truncation.
+firrtl.circuit "TruncateConnect" {
+  firrtl.module @TruncateConnect() {
+    %w = firrtl.wire  : !firrtl.uint
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.connect %w, %c1_ui1 : !firrtl.uint, !firrtl.uint<1>
+    %w1 = firrtl.wire  : !firrtl.uint<0>
+    // expected-error @+1 {{connect would require truncation after width inference: destination '!firrtl.uint<0>' is not as wide as the source '!firrtl.uint<1>'}}
+    firrtl.connect %w1, %w : !firrtl.uint<0>, !firrtl.uint
+  }
+}
