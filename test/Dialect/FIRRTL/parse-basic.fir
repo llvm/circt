@@ -1512,6 +1512,15 @@ circuit BasicProps :
     propassign true, Bool(true)
     propassign false, Bool(false)
 
+  ; CHECK-LABEL: module private @PropAssert
+  module PropAssert :
+    input cond : Bool
+    ; CHECK: %[[TRUE:.+]] = firrtl.bool true
+    ; CHECK-NEXT: firrtl.property_assert %[[TRUE]], "always true" : !firrtl.bool
+    propassert Bool(true), "always true"
+    ; CHECK-NEXT: firrtl.property_assert %cond, "holds" : !firrtl.bool
+    propassert cond, "holds"
+
   ; CHECK-LABEL: module private @Double
   module Double :
      ; CHECK-SAME: out %x: !firrtl.double

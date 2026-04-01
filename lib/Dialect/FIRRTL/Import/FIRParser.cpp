@@ -2095,6 +2095,7 @@ private:
   ParseResult parseRefReleaseInitial();
   ParseResult parseRefRead(Value &result);
   ParseResult parseProbe(Value &result);
+  ParseResult parsePropAssert();
   ParseResult parsePropAssign();
   ParseResult parseRWProbe(Value &result);
   ParseResult parseLeadingExpStmt(Value lhs);
@@ -3020,6 +3021,7 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 ///      ::= when
 ///      ::= leading-exp-stmt
 ///      ::= define
+///      ::= propassert
 ///      ::= propassign
 ///
 /// stmt ::= instance
@@ -3057,6 +3059,10 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseMemPort(MemDirAttr::ReadWrite);
   case FIRToken::kw_connect:
     return parseConnect();
+  case FIRToken::kw_propassert:
+    if (requireFeature(missingSpecFIRVersion, "property assertions"))
+      return failure();
+    return parsePropAssert();
   case FIRToken::kw_propassign:
     if (requireFeature({3, 1, 0}, "properties"))
       return failure();
@@ -4524,6 +4530,32 @@ ParseResult FIRStmtParser::parseConnect() {
 
   locationProcessor.setLoc(loc);
   emitConnect(builder, lhs, rhs);
+  return success();
+}
+
+/// propassert ::= 'propassert' expr ',' string_literal
+ParseResult FIRStmtParser::parsePropAssert() {
+  auto startTok = consumeToken(FIRToken::kw_propassert);
+  auto loc = startTok.getLoc();
+
+  Value condition;
+  StringRef message;
+  if (parseExp(condition, "expected condition in 'propassert'") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseGetSpelling(message) ||
+      parseToken(FIRToken::string, "expected message string in 'propassert'"))
+    return failure();
+
+  if (!isa<BoolType>(condition.getType()))
+    return emitError(loc, "propassert condition must be of boolean type");
+
+  if (parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(loc);
+  auto messageUnescaped = FIRToken::getStringValue(message);
+  PropertyAssertOp::create(builder, condition,
+                           builder.getStringAttr(messageUnescaped));
   return success();
 }
 
