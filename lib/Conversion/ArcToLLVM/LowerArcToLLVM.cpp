@@ -10,6 +10,7 @@
 #include "circt/Conversion/CombToArith.h"
 #include "circt/Conversion/CombToLLVM.h"
 #include "circt/Conversion/HWToLLVM.h"
+#include "circt/Dialect/Arc/ArcConstants.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ModelInfo.h"
 #include "circt/Dialect/Arc/Runtime/Common.h"
@@ -37,6 +38,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -987,51 +989,27 @@ struct SimPrintFormattedProcOpLowering
   StringCache &stringCache;
 };
 
-struct SimClockedTerminateOpLowering
-    : public OpConversionPattern<sim::ClockedTerminateOp> {
+struct TerminateOpLowering : public OpConversionPattern<arc::TerminateOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(sim::ClockedTerminateOp op, OpAdaptor adaptor,
+  matchAndRewrite(arc::TerminateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
 
-    Value cond = adaptor.getCondition();
-
-    auto funcOp = op->getParentOfType<LLVM::LLVMFuncOp>();
-    if (!funcOp || funcOp.getNumArguments() == 0) {
-      return rewriter.notifyMatchFailure(
-          op, "Could not find parent LLVM function or state pointer");
-    }
-
-    Value statePtr = funcOp.getArgument(0);
-
-    auto *currentBlock = rewriter.getInsertionBlock();
-    auto *continueBlock =
-        rewriter.splitBlock(currentBlock, rewriter.getInsertionPoint());
-    auto *setFlagBlock = rewriter.createBlock(continueBlock->getParent());
-
-    rewriter.setInsertionPointToEnd(currentBlock);
-    LLVM::CondBrOp::create(rewriter, loc, cond, setFlagBlock, continueBlock);
-
-    rewriter.setInsertionPointToEnd(setFlagBlock);
-
-    auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
     auto i8Type = rewriter.getI8Type();
+    auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
 
-    Value flagptr = LLVM::GEPOp::create(rewriter, loc, ptrType, i8Type,
-                                        statePtr, ArrayRef<LLVM::GEPArg>{8});
+    Value flagPtr = LLVM::GEPOp::create(
+        rewriter, loc, ptrType, i8Type, adaptor.getStorage(),
+        ArrayRef<LLVM::GEPArg>{arc::kTerminateFlagOffset});
 
-    // Write 1 for success and 2 for failure, so that the runtime can
-    // distinguish between normal termination and termination due to an error.
-    int8_t statusVal = op.getSuccess() ? 1 : 2;
-    Value flagVal = LLVM::ConstantOp::create(
-        rewriter, loc, i8Type, rewriter.getI8IntegerAttr(statusVal));
-    LLVM::StoreOp::create(rewriter, loc, flagVal, flagptr);
+    uint8_t statusCode = op.getSuccess() ? 1 : 2;
+    Value codeVal = LLVM::ConstantOp::create(
+        rewriter, loc, i8Type, rewriter.getI8IntegerAttr(statusCode));
 
-    LLVM::BrOp::create(rewriter, loc, continueBlock);
+    LLVM::StoreOp::create(rewriter, loc, codeVal, flagPtr);
 
-    rewriter.setInsertionPointToStart(continueBlock);
     rewriter.eraseOp(op);
     return success();
   }
@@ -1378,9 +1356,6 @@ void LowerArcToLLVMPass::runOnOperation() {
                     sim::FormatBinOp, sim::FormatOctOp, sim::FormatCharOp,
                     sim::FormatStringConcatOp>();
 
-  // Mark sim::ClockedTerminateOp as illegal
-  target.addIllegalOp<sim::ClockedTerminateOp>();
-
   // Setup the arc dialect type conversion.
   LLVMTypeConverter converter(&getContext());
   converter.addConversion([&](seq::ClockType type) {
@@ -1456,6 +1431,7 @@ void LowerArcToLLVMPass::runOnOperation() {
     StateReadOpLowering,
     StateWriteOpLowering,
     StorageGetOpLowering,
+    TerminateOpLowering,
     TimeToIntOpLowering,
     ZeroCountOpLowering
   >(converter, &getContext());
@@ -1481,8 +1457,6 @@ void LowerArcToLLVMPass::runOnOperation() {
   patterns.add<SimInstantiateOpLowering, SimSetInputOpLowering,
                SimGetPortOpLowering, SimStepOpLowering>(
       converter, &getContext(), modelMap);
-
-  patterns.add<SimClockedTerminateOpLowering>(converter, &getContext());
 
   // Apply the conversion.
   ConversionConfig config;

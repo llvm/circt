@@ -717,3 +717,55 @@ hw.module @LLHDTimeOps(in %clock: !seq.clock, out t: i64) {
 
   hw.output %1 : i64
 }
+
+// CHECK-LABEL: arc.model @TestSimToArcTerminateSuccess
+// CHECK-SAME: io !hw.modty<input clock : !seq.clock, input cond : i1>
+hw.module @TestSimToArcTerminateSuccess(in %clock: !seq.clock, in %cond: i1) {
+  // CHECK: %[[IN_CLK:.*]] = arc.root_input "clock"
+  // CHECK: %[[IN_COND:.*]] = arc.root_input "cond"
+  // CHECK: %[[LAST_CLK_PTR:.*]] = arc.alloc_state %arg0
+  
+  // CHECK: %[[CLK_VAL:.*]] = arc.state_read %[[IN_CLK]] : <!seq.clock>
+  // CHECK: %[[CURR_CLK:.*]] = seq.from_clock %[[CLK_VAL]]
+
+  // CHECK: %[[LAST_CLK_VAL:.*]] = arc.state_read %[[LAST_CLK_PTR]] : <i1>
+  // CHECK: arc.state_write %[[LAST_CLK_PTR]] = %[[CURR_CLK]] : <i1>
+
+  // CHECK: %[[EDGE_XOR:.*]] = comb.xor %[[LAST_CLK_VAL]], %[[CURR_CLK]] : i1
+  // CHECK: %[[POSEDGE:.*]] = comb.and %[[EDGE_XOR]], %[[CURR_CLK]] : i1
+
+  // CHECK: scf.if %[[POSEDGE]] {
+  // CHECK:   %[[COND_VAL:.*]] = arc.state_read %[[IN_COND]] : <i1>
+  // CHECK:   scf.if %[[COND_VAL]] {
+  // CHECK:     arc.terminate %arg0, true : !arc.storage
+  // CHECK:   }
+  // CHECK: }
+  
+  sim.clocked_terminate %clock, %cond, success, verbose
+}
+
+// CHECK-LABEL: arc.model @TestSimToArcTerminateFailure
+// CHECK-SAME: io !hw.modty<input clock : !seq.clock, input cond : i1>
+hw.module @TestSimToArcTerminateFailure(in %clock: !seq.clock, in %cond: i1) {
+  // CHECK: %[[IN_CLK:.*]] = arc.root_input "clock"
+  // CHECK: %[[IN_COND:.*]] = arc.root_input "cond"
+  // CHECK: %[[LAST_CLK_PTR:.*]] = arc.alloc_state %arg0
+  
+  // CHECK: %[[CLK_VAL:.*]] = arc.state_read %[[IN_CLK]] : <!seq.clock>
+  // CHECK: %[[CURR_CLK:.*]] = seq.from_clock %[[CLK_VAL]]
+
+  // CHECK: %[[LAST_CLK_VAL:.*]] = arc.state_read %[[LAST_CLK_PTR]] : <i1>
+  // CHECK: arc.state_write %[[LAST_CLK_PTR]] = %[[CURR_CLK]] : <i1>
+
+  // CHECK: %[[EDGE_XOR:.*]] = comb.xor %[[LAST_CLK_VAL]], %[[CURR_CLK]] : i1
+  // CHECK: %[[POSEDGE:.*]] = comb.and %[[EDGE_XOR]], %[[CURR_CLK]] : i1
+
+  // CHECK: scf.if %[[POSEDGE]] {
+  // CHECK:   %[[COND_VAL:.*]] = arc.state_read %[[IN_COND]] : <i1>
+  // CHECK:   scf.if %[[COND_VAL]] {
+  // CHECK:     arc.terminate %arg0, false : !arc.storage
+  // CHECK:   }
+  // CHECK: }
+  
+  sim.clocked_terminate %clock, %cond, failure, verbose
+}
