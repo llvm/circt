@@ -310,3 +310,48 @@ with Context() as ctx:
   print(f"out4 (constant bool): {obj.out4}")
   # CHECK: out5 (unknown bool): Unknown(i1)
   print(f"out5 (unknown bool): {obj.out5}")
+
+# Test om.property_assert evaluation.
+
+with Context() as ctx, Location.unknown():
+  circt.register_dialects(ctx)
+
+  module = Module.parse("""
+  module {
+    om.class @AssertTrue() -> () {
+      %true = om.constant true
+      om.property_assert %true, "should not fail" : i1
+      om.class.fields
+    }
+    om.class @AssertFalse() -> () {
+      %false = om.constant false
+      om.property_assert %false, "condition is false" : i1
+      om.class.fields
+    }
+    om.class @AssertUnknown(%cond: i1) -> () {
+      om.property_assert %cond, "unknown condition" : i1
+      om.class.fields
+    }
+  }
+  """)
+
+  evaluator = om.Evaluator(module)
+  i1_type = Type.parse("i1")
+
+  # Passing assertion should succeed silently.
+  obj = evaluator.instantiate("AssertTrue")
+  # CHECK: AssertTrue: passed
+  print("AssertTrue: passed")
+
+  # Failing assertion should raise ValueError.
+  try:
+    obj = evaluator.instantiate("AssertFalse")
+  except ValueError as e:
+    # CHECK: OM property assertion failed: condition is false
+    # CHECK: unable to instantiate object, see previous error(s)
+    print(e)
+
+  # Unknown condition should not raise an error (best-effort).
+  obj = evaluator.instantiate("AssertUnknown", om.Unknown(i1_type))
+  # CHECK: AssertUnknown(unknown): passed
+  print("AssertUnknown(unknown): passed")

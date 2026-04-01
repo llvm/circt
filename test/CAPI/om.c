@@ -222,6 +222,49 @@ void testEvaluator(MlirContext ctx) {
       omEvaluatorValueGetPrimitive(omEvaluatorListGetElement(bar, 1)));
 }
 
+void testPropertyAssert(MlirContext ctx) {
+  // Test om.property_assert evaluation via the C API.
+  const char *testIR =
+      "module {"
+      "  om.class @AssertTrue() -> () {"
+      "    %true = om.constant true"
+      "    om.property_assert %true, \"should not fail\" : i1"
+      "    om.class.fields"
+      "  }"
+      "  om.class @AssertFalse() -> () {"
+      "    %false = om.constant false"
+      "    om.property_assert %false, \"condition is false\" : i1"
+      "    om.class.fields"
+      "  }"
+      "}";
+
+  MlirModule testModule =
+      mlirModuleCreateParse(ctx, mlirStringRefCreateFromCString(testIR));
+
+  OMEvaluator evaluator = omEvaluatorNew(testModule);
+
+  MlirAttribute trueClass =
+      mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("AssertTrue"));
+  MlirAttribute falseClass =
+      mlirStringAttrGet(ctx, mlirStringRefCreateFromCString("AssertFalse"));
+
+  // Passing assertion: instantiation should succeed.
+  OMEvaluatorValue passObj = omEvaluatorInstantiate(evaluator, trueClass, 0, 0);
+  // CHECK: property_assert pass: object is not null: 1
+  fprintf(stderr, "property_assert pass: object is not null: %d\n",
+          !omEvaluatorObjectIsNull(passObj));
+
+  // Failing assertion: instantiation should fail.
+  OMEvaluatorValue failObj =
+      omEvaluatorInstantiate(evaluator, falseClass, 0, 0);
+  // CHECK: error: OM property assertion failed: condition is false
+  // CHECK: property_assert fail: object is null: 1
+  fprintf(stderr, "property_assert fail: object is null: %d\n",
+          omEvaluatorObjectIsNull(failObj));
+
+  mlirModuleDestroy(testModule);
+}
+
 int main(void) {
   MlirContext ctx = mlirContextCreate();
   mlirDialectHandleRegisterDialect(mlirGetDialectHandle__om__(), ctx);
@@ -234,5 +277,6 @@ int main(void) {
   testTypes(ctx);
   testListAttr(ctx);
   testEvaluator(ctx);
+  testPropertyAssert(ctx);
   return 0;
 }
