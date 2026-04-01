@@ -11,26 +11,22 @@
 using namespace circt;
 using namespace ImportVerilog;
 
+/// Traverse the instance body.
 namespace {
-struct HierPathValueExprVisitor
-    : public slang::ast::ASTVisitor<HierPathValueExprVisitor,
-                                    /*VisitStatements=*/false,
+struct InstBodyVisitor
+    : public slang::ast::ASTVisitor<InstBodyVisitor,
+                                    /*VisitStatements=*/true,
                                     /*VisitExpressions=*/true> {
-  Context &context;
-  Location loc;
-  OpBuilder &builder;
 
-  // Such as `sub.a`, the `sub` is the outermost module for the hierarchical
-  // variable `a`.
-  const slang::ast::Symbol &outermostModule;
+  InstBodyVisitor(Context &context, const slang::ast::Symbol &outermostModule)
+      : context(context), outermostModule(outermostModule) {}
 
-  HierPathValueExprVisitor(Context &context, Location loc,
-                           const slang::ast::Symbol &outermostModule)
-      : context(context), loc(loc), builder(context.builder),
-        outermostModule(outermostModule) {}
+  void handle(const slang::ast::InstanceSymbol &instNode) {
+    context.traverseInstanceBody(instNode.body);
+  }
 
-  // Handle hierarchical values
   void handle(const slang::ast::HierarchicalValueExpression &expr) {
+    auto builder = context.builder;
     auto *currentInstBody =
         expr.symbol.getParentScope()->getContainingInstance();
     auto *outermostInstBody =
@@ -95,34 +91,6 @@ struct HierPathValueExprVisitor
     hierName = builder.getStringAttr(currentInstBody->parentInstance->name +
                                      llvm::Twine(".") + hierName.getValue());
     collectHierarchicalPaths(outermostInstBody, false);
-  }
-};
-} // namespace
-
-void Context::collectHierarchicalValues(
-    const slang::ast::Expression &expr,
-    const slang::ast::Symbol &outermostModule) {
-  auto loc = convertLocation(expr.sourceRange);
-  HierPathValueExprVisitor visitor(*this, loc, outermostModule);
-  expr.visit(visitor);
-}
-
-/// Traverse the instance body.
-namespace {
-struct InstBodyVisitor
-    : public slang::ast::ASTVisitor<InstBodyVisitor,
-                                    /*VisitStatements=*/true,
-                                    /*VisitExpressions=*/true> {
-
-  InstBodyVisitor(Context &context, const slang::ast::Symbol &outermostModule)
-      : context(context), outermostModule(outermostModule) {}
-
-  void handle(const slang::ast::InstanceSymbol &instNode) {
-    context.traverseInstanceBody(instNode.body);
-  }
-
-  void handle(const slang::ast::Expression &expr) {
-    context.collectHierarchicalValues(expr, outermostModule);
   }
 
   Context &context;
