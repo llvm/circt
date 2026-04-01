@@ -92,6 +92,7 @@ struct Emitter {
   void emitStatement(FFlushOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(MatchingConnectOp op);
+  void emitStatement(PropertyAssertOp op);
   void emitStatement(PropAssignOp op);
   void emitStatement(InstanceOp op);
   void emitStatement(InstanceChoiceOp op);
@@ -802,13 +803,13 @@ void Emitter::emitStatementsInBlock(Block &block) {
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
               PrintFOp, FPrintFOp, FFlushOp, AssertOp, AssumeOp, CoverOp,
-              ConnectOp, MatchingConnectOp, PropAssignOp, InstanceOp,
-              InstanceChoiceOp, AttachOp, MemOp, InvalidValueOp, SeqMemOp,
-              CombMemOp, MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp,
-              DomainDefineOp, RefDefineOp, RefForceOp, RefForceInitialOp,
-              RefReleaseOp, RefReleaseInitialOp, LayerBlockOp,
-              GenericIntrinsicOp, DomainCreateAnonOp, DomainCreateOp>(
-            [&](auto op) { emitStatement(op); })
+              ConnectOp, MatchingConnectOp, PropertyAssertOp, PropAssignOp,
+              InstanceOp, InstanceChoiceOp, AttachOp, MemOp, InvalidValueOp,
+              SeqMemOp, CombMemOp, MemoryPortOp, MemoryDebugPortOp,
+              MemoryPortAccessOp, DomainDefineOp, RefDefineOp, RefForceOp,
+              RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
+              LayerBlockOp, GenericIntrinsicOp, DomainCreateAnonOp,
+              DomainCreateOp>([&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           startStatement();
           ps << "// operation " << PPExtString(op->getName().getStringRef());
@@ -1171,6 +1172,17 @@ void Emitter::emitStatement(MatchingConnectOp op) {
           emitLHS, [&]() { emitExpression(op.getSrc()); }, PPExtString("<="));
     }
   }
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(PropertyAssertOp op) {
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "propassert" << PP::space;
+    emitExpression(op.getCondition());
+    ps << "," << PP::space;
+    ps.writeQuotedEscaped(op.getMessage());
+  });
   emitLocationAndNewLine(op);
 }
 
