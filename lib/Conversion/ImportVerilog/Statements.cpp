@@ -740,6 +740,24 @@ struct StmtVisitor {
 
   // Handle return statements.
   LogicalResult visit(const slang::ast::ReturnStatement &stmt) {
+    Operation *parentOp =
+        builder.getInsertionBlock() ? builder.getInsertionBlock()->getParentOp()
+                                    : nullptr;
+    if (!parentOp)
+      return mlir::emitError(loc) << "return statement is not within an op";
+
+    if (isa<moore::CoroutineOp, moore::ProcedureOp>(parentOp)) {
+      if (stmt.expr)
+        return mlir::emitError(loc)
+               << "unsupported `return <expr>` in a procedure or task";
+      moore::ReturnOp::create(builder, loc);
+      setTerminated();
+      return success();
+    }
+
+    if (!isa<mlir::func::FuncOp>(parentOp))
+      return mlir::emitError(loc) << "unsupported return statement context";
+
     if (stmt.expr) {
       auto expr = context.convertRvalueExpression(*stmt.expr);
       if (!expr)
