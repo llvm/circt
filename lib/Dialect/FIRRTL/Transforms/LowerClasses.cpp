@@ -1639,6 +1639,19 @@ struct BoolConstantOpConversion : public OpConversionPattern<BoolConstantOp> {
   }
 };
 
+struct PropertyAssertOpConversion
+    : public OpConversionPattern<firrtl::PropertyAssertOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::PropertyAssertOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::PropertyAssertOp>(
+        op, adaptor.getCondition(), op.getMessageAttr());
+    return success();
+  }
+};
+
 struct DoubleConstantOpConversion
     : public OpConversionPattern<DoubleConstantOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -2233,6 +2246,7 @@ static void populateRewritePatterns(
   patterns.add<ListCreateOpConversion>(converter, patterns.getContext());
   patterns.add<ListConcatOpConversion>(converter, patterns.getContext());
   patterns.add<BoolConstantOpConversion>(converter, patterns.getContext());
+  patterns.add<PropertyAssertOpConversion>(converter, patterns.getContext());
   patterns.add<DoubleConstantOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerAddOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerMulOpConversion>(converter, patterns.getContext());
