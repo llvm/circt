@@ -6497,7 +6497,9 @@ void ModuleEmitter::emitPortList(Operation *module,
         size_t totalWidth = dirWidth + maxTypeWidth;
         ps << portTypeStrings[portIdx];
         if (portTypeStrings[portIdx].size() < totalWidth)
-          ps.nbsp(totalWidth - portTypeStrings[portIdx].size());
+        ps << portTypeStrings[portIdx];
+        if (portTypeStrings[portIdx].size() < startOfNamePos)
+          ps.nbsp(startOfNamePos - portTypeStrings[portIdx].size());
       }
 
       // Emit the name.
