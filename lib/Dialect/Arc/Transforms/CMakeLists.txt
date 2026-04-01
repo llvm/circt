@@ -21,6 +21,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   MergeTaps.cpp
   MuxToControlFlow.cpp
   PrintCostModel.cpp
+  ResolveXMRRef.cpp
   SimplifyVariadicOps.cpp
   SplitFuncs.cpp
   SplitLoops.cpp

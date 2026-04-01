@@ -366,4 +366,23 @@ def StripSV : Pass<"arc-strip-sv", "mlir::ModuleOp"> {
   ];
 }
 
+def ResolveXMRRef : Pass<"arc-resolve-xmr", "mlir::ModuleOp"> {
+  let summary = "Resolve sv.xmr.ref into direct signal references";
+  let description = [{
+    This pass traverses hw.hierpath metadata to replace sv.xmr.ref operations
+    with direct SSA value references, preserving observability before flattening.
+  }];
+
+  let options = [
+    Option<"lowerBlackBoxInternalToZero", "lower-blackbox-internal-to-zero",
+           "bool", "false",
+           "Lower unresolved references to internal blackbox symbols to constant zero.">
+  ];
+
+  let dependentDialects = [
+    "circt::sv::SVDialect",
+    "circt::hw::HWDialect"
+  ];
+}
+
 #endif // CIRCT_DIALECT_ARC_ARCPASSES_TD

@@ -33,6 +33,7 @@ using namespace arc;
 
 void circt::populateArcPreprocessingPipeline(
     OpPassManager &pm, const ArcPreprocessingOptions &options) {
+  pm.addPass(arc::createResolveXMRRef());
   pm.addPass(om::createStripOMPass());
   pm.addPass(emit::createStripEmitPass());
   pm.addPass(createLowerFirMemPass());
