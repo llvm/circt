@@ -72,17 +72,26 @@ using mlir::TypeSwitch;       // NOLINT(misc-unused-using-decls)
 // Forward declarations of LLVM classes to be imported in to the circt
 // namespace.
 namespace llvm {
+template <typename KeyT, typename ValueT, typename MapType, typename VectorType>
+class MapVector;
 template <typename KeyT, typename ValueT, unsigned InlineBuckets,
           typename KeyInfoT, typename BucketT>
 class SmallDenseMap;
+template <typename KeyT, typename ValueT, unsigned N>
+struct SmallMapVector;
 template <typename T, unsigned N, typename C>
 class SmallSet;
+template <typename T, unsigned N>
+class SmallSetVector;
 } // namespace llvm
 
 // Import things we want into our namespace.
 namespace circt {
-using llvm::SmallDenseMap; // NOLINT(misc-unused-using-decls)
-using llvm::SmallSet;      // NOLINT(misc-unused-using-decls)
+using llvm::MapVector;      // NOLINT(misc-unused-using-decls)
+using llvm::SmallDenseMap;  // NOLINT(misc-unused-using-decls)
+using llvm::SmallMapVector; // NOLINT(misc-unused-using-decls)
+using llvm::SmallSet;       // NOLINT(misc-unused-using-decls)
+using llvm::SmallSetVector; // NOLINT(misc-unused-using-decls)
 } // namespace circt
 
 // Forward declarations of classes to be imported in to the circt namespace.
