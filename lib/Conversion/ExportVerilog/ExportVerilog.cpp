@@ -2321,8 +2321,7 @@ private:
 
   /// Emit braced list of values surrounded by `{` and `}`.
   void emitBracedList(ValueRange ops) {
-    return emitBracedList(
-        ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
+    return emitBracedList(ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
   }
 
   /// Print an APInt constant.
@@ -6475,22 +6474,23 @@ void ModuleEmitter::emitPortList(Operation *module,
       // direction in the interface modport definition, so we suppress the
       // direction and wire keywords for them.
       if (!isa<ModportType>(portType)) {
-      switch (thisPortDirection) {
-      case ModulePort::Direction::Output:
-        ps << "output ";
-        break;
-      case ModulePort::Direction::Input:
-        ps << (hasOutputs ? "input  " : "input ");
-        break;
-      case ModulePort::Direction::InOut:
-        ps << (hasOutputs ? "inout  " : "inout ");
-        break;
-      }
-        if (state.options.emitWireInPorts) ps << "wire ";
-      if (!portTypeStrings[portIdx].empty())
-        ps << portTypeStrings[portIdx];
-      if (portTypeStrings[portIdx].size() < maxTypeWidth)
-        ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
+        switch (thisPortDirection) {
+        case ModulePort::Direction::Output:
+          ps << "output ";
+          break;
+        case ModulePort::Direction::Input:
+          ps << (hasOutputs ? "input  " : "input ");
+          break;
+        case ModulePort::Direction::InOut:
+          ps << (hasOutputs ? "inout  " : "inout ");
+          break;
+        }
+        if (state.options.emitWireInPorts)
+          ps << "wire ";
+        if (!portTypeStrings[portIdx].empty())
+          ps << portTypeStrings[portIdx];
+        if (portTypeStrings[portIdx].size() < maxTypeWidth)
+          ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
       } else {
         ps << portTypeStrings[portIdx];
         if (portTypeStrings[portIdx].size() < startOfNamePos)
