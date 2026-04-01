@@ -228,8 +228,8 @@ endmodule
 // reference resolution code that actually needs fixing. This test guards
 // against a regression to this being a crash.
 module HierRefTop(input i, output o);
-  HierRefA A();
   // expected-error @below {{unsupported port}}
+  HierRefA A();
   HierRefB B();
   assign A.i = i;
   assign o = B.o;

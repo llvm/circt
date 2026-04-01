@@ -877,8 +877,7 @@ LogicalResult Context::convertCompilation() {
   // First only to visit the whole AST to collect the hierarchical names without
   // any operation creating.
   for (auto *inst : root.topInstances)
-    if (failed(traverseInstanceBody(inst->body)))
-      return failure();
+    traverseInstanceBody(inst->body);
 
   // Visit all top-level declarations in all compilation units. This does not
   // include instantiable constructs like modules, interfaces, and programs,
