@@ -702,4 +702,18 @@ firrtl.circuit "UnknownValue" {
     firrtl.propassign %c, %2 : !firrtl.class<@SimpleClass(out value: !firrtl.integer)>
     // CHECK: om.class.fields %[[UNKNOWN_INT]], %[[UNKNOWN_STR]], %[[UNKNOWN_OBJ]] : !om.integer, !om.string, !om.class.type<@SimpleClass>
   }
+
+  // property_assert in a class body lowers to om.property_assert.
+  // CHECK-LABEL: om.class @PropAssertClass
+  firrtl.class private @PropAssertClass(in %cond: !firrtl.bool) {
+    // CHECK: om.property_assert %cond, "must hold" : i1
+    firrtl.property_assert %cond, "must hold" : !firrtl.bool
+  }
+
+  // property_assert in a module body: the op is moved into the generated class.
+  // CHECK-LABEL: om.class @PropAssertModule_Class
+  firrtl.module @PropAssertModule(in %cond: !firrtl.bool) {
+    // CHECK: om.property_assert %cond, "module invariant" : i1
+    firrtl.property_assert %cond, "module invariant" : !firrtl.bool
+  }
 }
