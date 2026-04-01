@@ -233,8 +233,6 @@ struct Context {
       const slang::ast::CallExpression::SystemCallInfo &info, Location loc);
 
   // Traverse the whole AST to collect hierarchical names.
-  void collectHierarchicalValues(const slang::ast::Expression &expr,
-                                 const slang::ast::Symbol &outermostModule);
   void traverseInstanceBody(const slang::ast::Symbol &symbol);
 
   // Convert timing controls into a corresponding set of ops that delay
