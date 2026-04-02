@@ -214,6 +214,8 @@ jobs:
       - name: Build and Test CIRCT
         run: |
           mkdir build
+          # HACK: print regular statistics to diagnose CI issues
+          nohup bash -c "while true; do echo && echo '===---' && free -h && df -h build && pstree -p $$ && echo '===---' && echo; sleep 15; done" &
           cd build
           cmake .. \
             -GNinja \
