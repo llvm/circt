@@ -28,6 +28,21 @@ hw.module @dpi_call(in %clock : !seq.clock, in %enable : i1, in %in: i1) {
   %8 = sim.func.dpi.call @dpi_inout(%in, %in) : (i1, i1) -> i1
 }
 
+// Round-trip tests for !sim.dpi_functy type syntax.
+// CHECK-LABEL: func.func @dpi_functy_roundtrip
+func.func @dpi_functy_roundtrip(
+  // CHECK-SAME: %arg0: !sim.dpi_functy<in "a" : i32, out "b" : i32>
+  %arg0: !sim.dpi_functy<in "a" : i32, out "b" : i32>,
+  // CHECK-SAME: %arg1: !sim.dpi_functy<in "x" : i8, inout "y" : i16, return "r" : i32>
+  %arg1: !sim.dpi_functy<in "x" : i8, inout "y" : i16, return "r" : i32>,
+  // CHECK-SAME: %arg2: !sim.dpi_functy<ref "p" : !llvm.ptr>
+  %arg2: !sim.dpi_functy<ref "p" : !llvm.ptr>,
+  // CHECK-SAME: %arg3: !sim.dpi_functy<>
+  %arg3: !sim.dpi_functy<>
+) {
+  return
+}
+
 // CHECK-LABEL: hw.module @GraphSimulationControl
 hw.module @GraphSimulationControl(in %clock: !seq.clock, in %en: i1) {
   // CHECK: sim.clocked_terminate %clock, %en, success, verbose
