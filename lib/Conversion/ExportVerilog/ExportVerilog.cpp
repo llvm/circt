@@ -29,6 +29,7 @@
 #include "circt/Dialect/OM/OMOps.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/SV/SVTypes.h"
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Dialect/Verif/VerifVisitors.h"
 #include "circt/Support/LLVM.h"
@@ -1847,6 +1848,12 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
       })
 
       .Case<InterfaceType>([](InterfaceType ifaceType) { return false; })
+      .Case<ModportType>([&](ModportType modportType) {
+        auto modportAttr = modportType.getModport();
+        os << modportAttr.getRootReference().getValue() << "."
+           << modportAttr.getNestedReferences().front().getValue();
+        return true;
+      })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
         os << "<<unexpected unpacked array>>";
         emitter.emitError(loc, "Unexpected unpacked array in packed type ")
@@ -6459,31 +6466,37 @@ void ModuleEmitter::emitPortList(Operation *module,
         ps << (isZeroWidth ? "// " : "   ");
       }
 
-      // Emit the port direction.
+      // Emit the port direction and optional wire keyword.
       auto thisPortDirection = portInfo.at(portIdx).dir;
-      switch (thisPortDirection) {
-      case ModulePort::Direction::Output:
-        ps << "output ";
-        break;
-      case ModulePort::Direction::Input:
-        ps << (hasOutputs ? "input  " : "input ");
-        break;
-      case ModulePort::Direction::InOut:
-        ps << (hasOutputs ? "inout  " : "inout ");
-        break;
-      }
-      bool emitWireInPorts = state.options.emitWireInPorts;
-      if (emitWireInPorts)
-        ps << "wire ";
-
-      // Emit the type.
-      if (!portTypeStrings[portIdx].empty())
+      size_t startOfNamePos = (hasOutputs ? 7 : 6) +
+                              (state.options.emitWireInPorts ? 5 : 0) +
+                              maxTypeWidth;
+      // Modport-typed ports (e.g., MyBundle.sink) already encode their
+      // direction in the interface modport definition, so we suppress the
+      // direction and wire keywords for them.
+      if (!isa<ModportType>(portType)) {
+        switch (thisPortDirection) {
+        case ModulePort::Direction::Output:
+          ps << "output ";
+          break;
+        case ModulePort::Direction::Input:
+          ps << (hasOutputs ? "input  " : "input ");
+          break;
+        case ModulePort::Direction::InOut:
+          ps << (hasOutputs ? "inout  " : "inout ");
+          break;
+        }
+        if (state.options.emitWireInPorts)
+          ps << "wire ";
+        if (!portTypeStrings[portIdx].empty())
+          ps << portTypeStrings[portIdx];
+        if (portTypeStrings[portIdx].size() < maxTypeWidth)
+          ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
+      } else {
         ps << portTypeStrings[portIdx];
-      if (portTypeStrings[portIdx].size() < maxTypeWidth)
-        ps.nbsp(maxTypeWidth - portTypeStrings[portIdx].size());
-
-      size_t startOfNamePos =
-          (hasOutputs ? 7 : 6) + (emitWireInPorts ? 5 : 0) + maxTypeWidth;
+        if (portTypeStrings[portIdx].size() < startOfNamePos)
+          ps.nbsp(startOfNamePos - portTypeStrings[portIdx].size());
+      }
 
       // Emit the name.
       ps << PPExtString(portInfo.at(portIdx).getVerilogName());
