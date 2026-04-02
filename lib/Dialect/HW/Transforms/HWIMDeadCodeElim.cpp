@@ -432,19 +432,13 @@ void HWIMDeadCodeElim::runOnOperation() {
     return;
   }
 
-  // Rewrite module signatures or delete unreachable modules.
+  // Rewrite module signatures. Non-executable modules are still rewritten
+  // (dead ports stripped, dead instances removed) but are never erased, to
+  // avoid invalidating symbol references (e.g. sv.verbatim "{{0}}" {symbols =
+  // [@mod]}).
   for (auto module :
-       llvm::make_early_inc_range(getOperation().getOps<HWModuleOp>())) {
-    if (isBlockExecutable(module.getBodyBlock())) {
-      rewriteModuleSignature(module);
-    } else {
-      // In some cases erasue here is not yet correct. E.g.
-      //   sv.verbatim "{{0}}" { symbols = [@baz] }
-      //   // Not reachable from the top level.
-      //   hw.module private @baz() {}
-      // module.erase();
-    }
-  }
+       llvm::make_early_inc_range(getOperation().getOps<HWModuleOp>()))
+    rewriteModuleSignature(module);
 
   for (auto module :
        llvm::make_early_inc_range(getOperation().getOps<HWModuleOp>()))
@@ -461,8 +455,8 @@ void HWIMDeadCodeElim::runOnOperation() {
 }
 
 void HWIMDeadCodeElim::rewriteModuleSignature(HWModuleOp module) {
-  assert(isBlockExecutable(module.getBodyBlock()) &&
-         "unreachable modules must be already deleted");
+  // assert(isBlockExecutable(module.getBodyBlock()) &&
+  //        "unreachable modules must be already deleted");
 
   igraph::InstanceGraphNode *instanceGraphNode = instanceGraph->lookup(module);
   LLVM_DEBUG(llvm::dbgs() << "Prune ports of module: " << module.getName()
@@ -595,8 +589,8 @@ void HWIMDeadCodeElim::rewriteModuleSignature(HWModuleOp module) {
 }
 
 void HWIMDeadCodeElim::rewriteModuleBody(HWModuleOp module) {
-  assert(isBlockExecutable(module.getBodyBlock()) &&
-         "unreachable modules must be already deleted");
+  // assert(isBlockExecutable(module.getBodyBlock()) &&
+  //        "unreachable modules must be already deleted");
 
   // Walk the IR bottom-up when deleting operations.
   module.walk<mlir::WalkOrder::PostOrder, mlir::ReverseIterator>(
@@ -617,6 +611,11 @@ void HWIMDeadCodeElim::rewriteModuleBody(HWModuleOp module) {
 }
 
 void HWIMDeadCodeElim::eraseEmptyModule(HWModuleOp module) {
+  // Non-executable modules are preserved as empty shells to avoid invalidating
+  // symbol references that may point to them by name.
+  if (!isBlockExecutable(module.getBodyBlock()))
+    return;
+
   // If the module is not empty, just skip.
   if (!module.getBodyBlock()->without_terminator().empty())
     return;
@@ -669,6 +668,6 @@ void HWIMDeadCodeElim::eraseEmptyModule(HWModuleOp module) {
     return;
 
   instanceGraph->erase(instanceGraphNode);
-  module.erase();
+  // module.erase();
   ++numErasedModules;
 }

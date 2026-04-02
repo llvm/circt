@@ -802,3 +802,43 @@ module {
     hw.output %b1 : i1
   }
 }
+
+// -----
+
+// ===== Non-executable module with non-empty body =====
+// - @DeadWithBody is non-executable
+// - rewriteModuleSignature runs for all modules, clearing
+//   dead ports and body
+// - Module is kept as an empty shell
+
+module {
+
+  // LIVENESS-LABEL: hw.module private @DeadWithBody
+  // LIVENESS-SAME: "op-liveness" = "DEAD"
+  // LIVENESS-SAME: "val-liveness" = ["DEAD"]
+  // ELIMINATE-LABEL:   hw.module private @DeadWithBody() {
+  // ELIMINATE:           hw.output
+  // ELIMINATE:         }
+  hw.module private @DeadWithBody(in %x : i1, out y : i1) {
+    // LIVENESS: hw.constant false
+    // LIVENESS-SAME: "op-liveness" = "DEAD"
+    // LIVENESS-SAME: "val-liveness" = ["DEAD"]
+    %c = hw.constant false
+    // LIVENESS: hw.output
+    // LIVENESS-SAME: "val-liveness" = ["DEAD"]
+    hw.output %c : i1
+  }
+
+  // LIVENESS-LABEL: hw.module public @Root
+  // LIVENESS-SAME: "op-liveness" = "LIVE"
+  // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module public @Root(in
+  // ELIMINATE-SAME:      %[[X:.*]] : i1, out y : i1) {
+  // ELIMINATE:           hw.output %[[X]] : i1
+  // ELIMINATE:         }
+  hw.module public @Root(in %x : i1, out y : i1) {
+    // LIVENESS: hw.output
+    // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+    hw.output %x : i1
+  }
+}
