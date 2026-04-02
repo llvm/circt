@@ -47,8 +47,6 @@ void DPIFuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
                       StringAttr symName, DPIFunctionType dpiFunctionType,
                       ArrayAttr argLocs, StringAttr verilogName) {
   odsState.addAttribute(getSymNameAttrName(odsState.name), symName);
-  odsState.addAttribute(getFunctionTypeAttrName(odsState.name),
-                        TypeAttr::get(dpiFunctionType.getFunctionType()));
   odsState.addAttribute(getDpiFunctionTypeAttrName(odsState.name),
                         TypeAttr::get(dpiFunctionType));
   if (argLocs)
@@ -56,6 +54,23 @@ void DPIFuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   if (verilogName)
     odsState.addAttribute(getVerilogNameAttrName(odsState.name), verilogName);
   odsState.addRegion();
+}
+
+::mlir::Type DPIFuncOp::getFunctionType() {
+  return getDpiFunctionType().getFunctionType();
+}
+
+void DPIFuncOp::setFunctionTypeAttr(::mlir::TypeAttr type) {
+  // function_type is always derived from dpi_function_type.
+  auto dpiType = llvm::dyn_cast<DPIFunctionType>(type.getValue());
+  assert(dpiType && "DPIFuncOp function type can only be set via "
+                    "DPIFunctionType, not a plain FunctionType");
+  setDpiFunctionType(dpiType);
+}
+
+::mlir::Type DPIFuncOp::cloneTypeWith(::mlir::TypeRange inputs,
+                                      ::mlir::TypeRange results) {
+  return FunctionType::get(getContext(), inputs, results);
 }
 
 ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -120,8 +135,6 @@ ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
 
   auto dpiType = DPIFunctionType::get(ctx, args);
 
-  result.addAttribute(DPIFuncOp::getFunctionTypeAttrName(result.name),
-                      TypeAttr::get(dpiType.getFunctionType()));
   result.addAttribute(DPIFuncOp::getDpiFunctionTypeAttrName(result.name),
                       TypeAttr::get(dpiType));
   if (hasLocs)
@@ -168,8 +181,8 @@ void DPIFuncOp::print(OpAsmPrinter &p) {
 
   mlir::function_interface_impl::printFunctionAttributes(
       p, *this,
-      {visibilityAttrName, getFunctionTypeAttrName(),
-       getDpiFunctionTypeAttrName(), getArgumentLocsAttrName()});
+      {visibilityAttrName, getDpiFunctionTypeAttrName(),
+       getArgumentLocsAttrName()});
 }
 
 LogicalResult DPIFuncOp::verify() {
@@ -187,14 +200,6 @@ LogicalResult DPIFuncOp::verify() {
     }
   }
 
-  // Verify function_type matches the dpi_function_type.
-  auto expectedFuncType = dpiType.getFunctionType();
-  if (getFunctionType() != expectedFuncType)
-    return emitOpError("function_type ")
-           << getFunctionType()
-           << " does not match the expected type derived from arguments: "
-           << expectedFuncType;
-
   return success();
 }
 
@@ -206,7 +211,7 @@ sim::DPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitError("cannot find function declaration '")
            << getCallee() << "'";
   if (auto dpiFunc = dyn_cast<sim::DPIFuncOp>(referencedOp)) {
-    auto expectedFuncType = dpiFunc.getFunctionType();
+    auto expectedFuncType = cast<FunctionType>(dpiFunc.getFunctionType());
     auto expectedInputs = expectedFuncType.getInputs();
     auto expectedResults = expectedFuncType.getResults();
     if (getInputs().size() != expectedInputs.size())

@@ -34,6 +34,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/LogicalResult.h"
 
 #define DEBUG_TYPE "sim-lower-dpi-func"
 
@@ -134,7 +135,7 @@ LogicalResult LowerDPIFuncPass::lowerDPIFuncOp(sim::DPIFuncOp simFunc,
   }
 
   // Create a wrapper module that calls a DPI function.
-  auto wrapperFuncType = simFunc.getFunctionType();
+  auto wrapperFuncType = cast<FunctionType>(simFunc.getFunctionType());
   auto funcOp = func::FuncOp::create(
       builder,
       loweringState.nameSpace.newName(simFunc.getSymName() + "_wrapper"),
@@ -211,11 +212,17 @@ LogicalResult LowerDPIFuncPass::lowerDPI() {
     if (failed(lowerDPIFuncOp(simFunc, state, symbolTable)))
       return failure();
 
-  op.walk([&](sim::DPICallOp op) {
-    auto it = state.dpiFuncDeclMapping.find(op.getCalleeAttr().getAttr());
-    if (it != state.dpiFuncDeclMapping.end())
-      op.setCallee(it->second.getSymNameAttr());
+  auto result = op.walk([&](sim::DPICallOp callOp) -> WalkResult {
+    auto it = state.dpiFuncDeclMapping.find(callOp.getCalleeAttr().getAttr());
+    if (it == state.dpiFuncDeclMapping.end()) {
+      callOp.emitOpError() << "references unknown DPI function";
+      return WalkResult::interrupt();
+    }
+    callOp.setCallee(it->second.getSymNameAttr());
+    return WalkResult::advance();
   });
+  if (result.wasInterrupted())
+    return failure();
   return success();
 }
 

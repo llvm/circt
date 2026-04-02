@@ -62,7 +62,8 @@ def PlusArgsValueOp : SimOp<"plusargs.value", [Pure]> {
 
 def DPIFuncOp : SimOp<"func.dpi",
      [IsolatedFromAbove, Symbol, OpAsmOpInterface,
-      FunctionOpInterface]> {
+      DeclareOpInterfaceMethods<FunctionOpInterface,
+        ["getFunctionType", "setFunctionTypeAttr", "cloneTypeWith"]>]> {
   let summary = "A DPI-C imported function declaration";
   let description = [{
     `sim.func.dpi` models a DPI-C imported function with first-class argument
@@ -78,7 +79,6 @@ def DPIFuncOp : SimOp<"func.dpi",
 
   let arguments = (ins
     SymbolNameAttr:$sym_name,
-    TypeAttrOf<FunctionType>:$function_type,
     TypeAttrOf<DPIFunctionType>:$dpi_function_type,
     OptionalAttr<LocationArrayAttr>:$argument_locs,
     OptionalAttr<StrAttr>:$verilogName
@@ -107,12 +107,26 @@ def DPIFuncOp : SimOp<"func.dpi",
 
   let extraClassDeclaration = [{
     /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+    ArrayRef<Type> getArgumentTypes() {
+      return ::llvm::cast<::mlir::FunctionType>(getFunctionType()).getInputs();
+    }
 
     /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+    ArrayRef<Type> getResultTypes() {
+      return ::llvm::cast<::mlir::FunctionType>(getFunctionType()).getResults();
+    }
 
     ::mlir::Region *getCallableRegion() { return nullptr; }
+
+    /// Provide a getFunctionTypeAttrName for FunctionOpInterface trait
+    /// (buildWithEntryBlock).  DPIFuncOp does not store function_type as a
+    /// separate attribute; it is derived from dpi_function_type.
+    static ::mlir::StringAttr getFunctionTypeAttrName(::mlir::OperationName name) {
+      return getDpiFunctionTypeAttrName(name);
+    }
+    ::mlir::StringAttr getFunctionTypeAttrName() {
+      return getDpiFunctionTypeAttrName();
+    }
 
     /// Stub implementations for ArgumentAttributesMethods.
     mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }

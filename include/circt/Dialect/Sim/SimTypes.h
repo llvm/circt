@@ -63,18 +63,19 @@ struct DPIFunctionTypeStorage : public mlir::TypeStorage {
   }
 
   static DPIFunctionTypeStorage *
-  construct(mlir::TypeStorageAllocator &allocator, const KeyTy &key) {
-    return new (allocator.allocate<DPIFunctionTypeStorage>())
-        DPIFunctionTypeStorage(key);
-  }
+  construct(mlir::TypeStorageAllocator &allocator, const KeyTy &key);
 
   KeyTy getAsKey() const { return arguments; }
 
   llvm::ArrayRef<DPIArgument> getArguments() const { return arguments; }
 
+  /// Return the cached MLIR FunctionType for the call shape.
+  mlir::FunctionType getCachedFunctionType() const { return cachedFuncType; }
+
   llvm::SmallVector<DPIArgument> arguments;
   llvm::SmallVector<size_t> inputToAbs;
   llvm::SmallVector<size_t> resultToAbs;
+  mlir::FunctionType cachedFuncType;
 };
 } // namespace detail
 

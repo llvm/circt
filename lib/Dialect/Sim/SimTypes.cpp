@@ -82,6 +82,31 @@ sim::detail::DPIFunctionTypeStorage::DPIFunctionTypeStorage(
   }
 }
 
+sim::detail::DPIFunctionTypeStorage *
+sim::detail::DPIFunctionTypeStorage::construct(TypeStorageAllocator &allocator,
+                                               const KeyTy &key) {
+  auto *storage = new (allocator.allocate<DPIFunctionTypeStorage>())
+      DPIFunctionTypeStorage(key);
+  // Compute and cache the MLIR FunctionType.
+  SmallVector<Type> inputs, results;
+  for (auto &arg : storage->arguments) {
+    if (arg.dir == DPIDirection::Input || arg.dir == DPIDirection::InOut ||
+        arg.dir == DPIDirection::Ref)
+      inputs.push_back(arg.type);
+    if (arg.dir == DPIDirection::Output || arg.dir == DPIDirection::InOut ||
+        arg.dir == DPIDirection::Return)
+      results.push_back(arg.type);
+  }
+  MLIRContext *ctx = nullptr;
+  if (!storage->arguments.empty()) {
+    ctx = storage->arguments[0].type.getContext();
+    assert(ctx && "DPIArgument types must have a valid MLIRContext");
+  }
+  if (ctx)
+    storage->cachedFuncType = FunctionType::get(ctx, inputs, results);
+  return storage;
+}
+
 //===----------------------------------------------------------------------===//
 // DPIFunctionType methods
 //===----------------------------------------------------------------------===//
@@ -116,16 +141,11 @@ const DPIArgument *DPIFunctionType::getReturnArgument() const {
 }
 
 FunctionType DPIFunctionType::getFunctionType() const {
-  SmallVector<Type> inputs, results;
-  for (auto &arg : getImpl()->arguments) {
-    if (arg.dir == DPIDirection::Input || arg.dir == DPIDirection::InOut ||
-        arg.dir == DPIDirection::Ref)
-      inputs.push_back(arg.type);
-    if (arg.dir == DPIDirection::Output || arg.dir == DPIDirection::InOut ||
-        arg.dir == DPIDirection::Return)
-      results.push_back(arg.type);
-  }
-  return FunctionType::get(getContext(), inputs, results);
+  auto cached = getImpl()->getCachedFunctionType();
+  if (cached)
+    return cached;
+  // Empty argument list — context unavailable during storage construction.
+  return FunctionType::get(getContext(), {}, {});
 }
 
 LogicalResult
