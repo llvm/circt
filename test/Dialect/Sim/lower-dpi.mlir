@@ -1,6 +1,6 @@
 // RUN: circt-opt --sim-lower-dpi-func %s | FileCheck %s
 
-sim.func.dpi @foo(output arg0: i32, input %arg1: i32, return ret: i32)
+sim.func.dpi @foo(out arg0: i32, in %arg1: i32, return ret: i32)
 // CHECK-LABEL:  func.func private @foo(!llvm.ptr, i32) -> i32
 // CHECK-LABEL:  func.func @foo_wrapper(%arg0: i32) -> (i32, i32) {
 // CHECK-NEXT:    %0 = llvm.mlir.constant(1 : i64) : i64
@@ -19,7 +19,7 @@ sim.func.dpi @foo(output arg0: i32, input %arg1: i32, return ret: i32)
 // CHECK-NEXT:   }
 // CHECK-LABEL:  func.func @bar_c_name
 
-sim.func.dpi @bar(output arg0: i32, input %arg1: i32, return ret: i32) attributes {verilogName="bar_c_name"}
+sim.func.dpi @bar(out arg0: i32, in %arg1: i32, return ret: i32) attributes {verilogName="bar_c_name"}
 func.func @bar_c_name(%arg0: !llvm.ptr, %arg1: i32) -> i32 {
   %0 = arith.constant 0 : i32
   func.return %0 : i32
@@ -28,9 +28,9 @@ func.func @bar_c_name(%arg0: !llvm.ptr, %arg1: i32) -> i32 {
 // CHECK-LABEL:  func.func private @baz_c_name(!llvm.ptr, i32) -> i32
 // CHECK-LABEL:  func.func @baz_wrapper(%arg0: i32) -> (i32, i32)
 // CHECK:     call @baz_c_name(%1, %arg0) : (!llvm.ptr, i32) -> i32
-sim.func.dpi @baz(output arg0: i32, input %arg1: i32, return ret: i32) attributes {verilogName="baz_c_name"}
+sim.func.dpi @baz(out arg0: i32, in %arg1: i32, return ret: i32) attributes {verilogName="baz_c_name"}
 
-sim.func.dpi @qux(input %arg0: i32, inout %state: i32)
+sim.func.dpi @qux(in %arg0: i32, inout %state: i32)
 // CHECK-LABEL:  func.func private @qux(i32, !llvm.ptr)
 // CHECK-LABEL:  func.func @qux_wrapper(%arg0: i32, %arg1: i32) -> i32 {
 // CHECK:         llvm.store %arg1, %{{.*}} : i32, !llvm.ptr
@@ -38,7 +38,7 @@ sim.func.dpi @qux(input %arg0: i32, inout %state: i32)
 // CHECK:         %{{.*}} = llvm.load %{{.*}} : !llvm.ptr -> i32
 // CHECK:         return %{{.*}} : i32
 
-sim.func.dpi @open_array_rw(input %wd: !llvm.ptr, ref %rd: !llvm.ptr)
+sim.func.dpi @open_array_rw(in %wd: !llvm.ptr, ref %rd: !llvm.ptr)
 // CHECK-LABEL:  func.func private @open_array_rw(!llvm.ptr, !llvm.ptr)
 // CHECK-LABEL:  func.func @open_array_rw_wrapper(%arg0: !llvm.ptr, %arg1: !llvm.ptr) {
 // CHECK:         call @open_array_rw(%arg0, %arg1) : (!llvm.ptr, !llvm.ptr) -> ()

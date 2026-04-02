@@ -39,7 +39,7 @@ hw.module private @Adder(in %a: i42, in %b: i42, out c: i42) {
   hw.output %0 : i42
 }
 
-sim.func.dpi @generateAdderInputs(input %idx: i19, output a: i42, output b: i42) attributes {verilogName = "generateAdderInputs.impl"}
+sim.func.dpi @generateAdderInputs(in %idx: i19, out a: i42, out b: i42) attributes {verilogName = "generateAdderInputs.impl"}
 func.func private @generateAdderInputs.impl(%arg0: i19, %arg1: !llvm.ptr, %arg2: !llvm.ptr) {
   %c4224496855063_i42 = arith.constant 4224496855063 : i42
   %c1_i42 = arith.constant 1 : i42
@@ -53,8 +53,8 @@ func.func private @generateAdderInputs.impl(%arg0: i19, %arg1: !llvm.ptr, %arg2:
 }
 
 sim.func.dpi @printStart() attributes {verilogName = "printStart.impl"}
-sim.func.dpi @printDone(input %success: i1) attributes {verilogName = "printDone.impl"}
-sim.func.dpi @printFailure(input %a: i42, input %b: i42, input %c_act: i42, input %c_exp: i42) attributes {verilogName = "printFailure.impl"}
+sim.func.dpi @printDone(in %success: i1) attributes {verilogName = "printDone.impl"}
+sim.func.dpi @printFailure(in %a: i42, in %b: i42, in %c_act: i42, in %c_exp: i42) attributes {verilogName = "printFailure.impl"}
 
 func.func private @printStart.impl() {
   %0 = llvm.mlir.addressof @str.start : !llvm.ptr

@@ -8,10 +8,10 @@ hw.module @plusargs_value() {
   %1, %2 = sim.plusargs.value "bar" : i5
 }
 
-// CHECK-LABEL: sim.func.dpi @dpi(output arg0 : i1, input %arg1 : i1, return ret : i1)
-sim.func.dpi @dpi(output arg0: i1, input %arg1: i1, return ret: i1)
-// CHECK-LABEL: sim.func.dpi @dpi_inout(input %arg0 : i1, inout %arg1 : i1)
-sim.func.dpi @dpi_inout(input %arg0: i1, inout %arg1: i1)
+// CHECK-LABEL: sim.func.dpi @dpi(out arg0 : i1, in %arg1 : i1, return ret : i1)
+sim.func.dpi @dpi(out arg0: i1, in %arg1: i1, return ret: i1)
+// CHECK-LABEL: sim.func.dpi @dpi_inout(in %arg0 : i1, inout %arg1 : i1)
+sim.func.dpi @dpi_inout(in %arg0: i1, inout %arg1: i1)
 func.func private @func(%arg1: i1) -> (i1, i1)
 
 // CHECK-LABEL: hw.module @dpi_call

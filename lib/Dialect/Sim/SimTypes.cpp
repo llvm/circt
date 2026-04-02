@@ -27,9 +27,9 @@ using namespace mlir;
 StringRef sim::stringifyDPIDirectionKeyword(DPIDirection dir) {
   switch (dir) {
   case DPIDirection::Input:
-    return "input";
+    return "in";
   case DPIDirection::Output:
-    return "output";
+    return "out";
   case DPIDirection::InOut:
     return "inout";
   case DPIDirection::Return:
@@ -42,8 +42,8 @@ StringRef sim::stringifyDPIDirectionKeyword(DPIDirection dir) {
 
 std::optional<DPIDirection> sim::parseDPIDirectionKeyword(StringRef keyword) {
   return llvm::StringSwitch<std::optional<DPIDirection>>(keyword)
-      .Case("input", DPIDirection::Input)
-      .Case("output", DPIDirection::Output)
+      .Case("in", DPIDirection::Input)
+      .Case("out", DPIDirection::Output)
       .Case("inout", DPIDirection::InOut)
       .Case("return", DPIDirection::Return)
       .Case("ref", DPIDirection::Ref)

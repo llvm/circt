@@ -11,7 +11,7 @@ DPI-C functions carry richer semantics than a simple input/output split.
 The `sim.func.dpi` declaration needs to faithfully represent:
 
 1. The explicit function return value (the C return, not an output argument).
-2. `output` arguments (passed by pointer in the C ABI).
+2. `out` arguments (passed by pointer in the C ABI).
 3. `inout` arguments (read-write, passed by pointer in the C ABI).
 4. `ref` arguments (open-array / by-reference handles).
 
@@ -26,8 +26,8 @@ Port semantics are encoded as a first-class `DPIDirection` enum:
 
 | Direction | Call operand? | Call result? | C ABI        |
 |-----------|--------------|-------------|--------------|
-| `input`   | yes          | no          | by value     |
-| `output`  | no           | yes         | by pointer   |
+| `in`      | yes          | no          | by value     |
+| `out`     | no           | yes         | by pointer   |
 | `inout`   | yes          | yes         | by pointer   |
 | `return`  | no           | yes (last)  | C return     |
 | `ref`     | yes          | no          | pass-through |
@@ -45,26 +45,26 @@ type, direction). This type:
 Generic form:
 
 ```mlir
-!sim.dpi_modty<input "a" : i32, output "b" : i32, return "ret" : i8>
+!sim.dpi_modty<in "a" : i32, out "b" : i32, return "ret" : i8>
 ```
 
 ### Declaration Syntax
 
 ```mlir
-sim.func.dpi @func(input %a : i32, output b : i32, return ret : i8)
+sim.func.dpi @func(in %a : i32, out b : i32, return ret : i8)
 ```
 
-- `input`, `inout`, and `ref` ports use SSA-style names (`%name`) because
+- `in`, `inout`, and `ref` ports use SSA-style names (`%name`) because
   they are call operands.
-- `output` and `return` ports use bare names because they are not call
+- `out` and `return` ports use bare names because they are not call
   operands.
 
 ### Call Semantics
 
 Operands and results are derived from the declaration's port directions:
 
-- **Operands**: `input`, `inout`, and `ref` ports (in declaration order).
-- **Results**: `output`, `inout`, and `return` ports (in declaration order).
+- **Operands**: `in`, `inout`, and `ref` ports (in declaration order).
+- **Results**: `out`, `inout`, and `return` ports (in declaration order).
 
 ```mlir
 %b, %ret = sim.func.dpi.call @func(%a) : (i32) -> (i32, i8)
@@ -79,7 +79,7 @@ import "DPI-C" function void dpi(input int a, output int b, output int c);
 ```
 
 ```mlir
-sim.func.dpi @dpi(input %a : i32, output b : i32, output c : i32)
+sim.func.dpi @dpi(in %a : i32, out b : i32, out c : i32)
 %b, %c = sim.func.dpi.call @dpi(%a) : (i32) -> (i32, i32)
 ```
 
@@ -90,7 +90,7 @@ import "DPI-C" function int func(input int size, output int new_size);
 ```
 
 ```mlir
-sim.func.dpi @func(input %size : i32, output new_size : i32, return ret : i32)
+sim.func.dpi @func(in %size : i32, out new_size : i32, return ret : i32)
 %new_size, %ret = sim.func.dpi.call @func(%size) : (i32) -> (i32, i32)
 ```
 
@@ -101,7 +101,7 @@ import "DPI-C" function int func(input int size, inout int state);
 ```
 
 ```mlir
-sim.func.dpi @func(input %size : i32, inout %state : i32, return ret : i32)
+sim.func.dpi @func(in %size : i32, inout %state : i32, return ret : i32)
 %state_after, %ret = sim.func.dpi.call @func(%size, %state) : (i32, i32) -> (i32, i32)
 ```
 
@@ -114,7 +114,7 @@ import "DPI-C" function int func(input int size, output int new_size,
 
 ```mlir
 sim.func.dpi @func(
-  input %size : i32, output new_size : i32,
+  in %size : i32, out new_size : i32,
   inout %state : i32, return ret : i32)
 %new_size, %state_after, %ret =
   sim.func.dpi.call @func(%size, %state) : (i32, i32) -> (i32, i32, i32)
@@ -127,7 +127,7 @@ import "DPI-C" function void write_mem(input int addr, ref int data[]);
 ```
 
 ```mlir
-sim.func.dpi @write_mem(input %addr : i32, ref %data : !llvm.ptr)
+sim.func.dpi @write_mem(in %addr : i32, ref %data : !llvm.ptr)
 sim.func.dpi.call @write_mem(%addr, %data) : (i32, !llvm.ptr) -> ()
 ```
 

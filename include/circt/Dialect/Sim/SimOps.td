@@ -28,8 +28,8 @@ class SimOp<string mnemonic, list<Trait> traits = []> :
 // DPI Direction Enum
 //===----------------------------------------------------------------------===//
 
-def DPIDir_Input  : I32EnumAttrCase<"Input",  0, "input">;
-def DPIDir_Output : I32EnumAttrCase<"Output", 1, "output">;
+def DPIDir_Input  : I32EnumAttrCase<"Input",  0, "in">;
+def DPIDir_Output : I32EnumAttrCase<"Output", 1, "out">;
 def DPIDir_InOut  : I32EnumAttrCase<"InOut",  2, "inout">;
 def DPIDir_Return : I32EnumAttrCase<"Return", 3, "return">;
 def DPIDir_Ref    : I32EnumAttrCase<"Ref",    4, "ref">;
@@ -67,11 +67,11 @@ def DPIFuncOp : SimOp<"func.dpi",
   let summary = "A DPI-C imported function declaration";
   let description = [{
     `sim.func.dpi` models a DPI-C imported function with first-class argument
-    direction keywords: `input`, `output`, `inout`, `return`, and `ref`.
+    direction keywords: `in`, `out`, `inout`, `return`, and `ref`.
 
     Argument directions map to call and ABI semantics as follows:
-    - `input`  — call operand, passed by value.
-    - `output` — call result, passed by pointer in the C ABI.
+    - `in`     — call operand, passed by value.
+    - `out`    — call result, passed by pointer in the C ABI.
     - `inout`  — call operand and result, passed by pointer in the C ABI.
     - `return` — call result (last), the actual C return value.
     - `ref`    — call operand (pass-through pointer, e.g. open-array ABI).

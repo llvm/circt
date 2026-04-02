@@ -55,11 +55,11 @@ hw.module @dpi_call(in %clock : !seq.clock, in %in: i1) {
 // -----
 
 // expected-error @below {{'return' argument must be the last argument}}
-sim.func.dpi @dpi_bad_return(return ret: i1, output other: i1)
+sim.func.dpi @dpi_bad_return(return ret: i1, out other: i1)
 
 // -----
 
-sim.func.dpi @dpi_sig(input %a: i1, return ret: i1)
+sim.func.dpi @dpi_sig(in %a: i1, return ret: i1)
 hw.module @dpi_bad_call_arity(in %clock : !seq.clock, in %in: i1) {
   // expected-error @below {{expects 1 DPI results, but got 2}}
   %0, %1 = sim.func.dpi.call @dpi_sig(%in) : (i1) -> (i1, i1)
@@ -67,7 +67,7 @@ hw.module @dpi_bad_call_arity(in %clock : !seq.clock, in %in: i1) {
 
 // -----
 
-sim.func.dpi @dpi_inout(input %a: i1, inout %state: i8)
+sim.func.dpi @dpi_inout(in %a: i1, inout %state: i8)
 hw.module @dpi_bad_call_types(in %clock : !seq.clock, in %in: i1) {
   // expected-error @below {{operand type mismatch: expected 'i8', but got 'i1'}}
   %0 = sim.func.dpi.call @dpi_inout(%in, %in) : (i1, i1) -> i8

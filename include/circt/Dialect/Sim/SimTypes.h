@@ -24,7 +24,7 @@ namespace sim {
 // Forward-declare the tablegen enum (defined in SimEnums.h.inc).
 enum class DPIDirection : uint32_t;
 
-/// Return the keyword string for a DPIDirection (e.g. "input", "return").
+/// Return the keyword string for a DPIDirection (e.g. "in", "return").
 llvm::StringRef stringifyDPIDirectionKeyword(DPIDirection dir);
 
 /// Parse a keyword string to a DPIDirection. Returns std::nullopt on failure.
