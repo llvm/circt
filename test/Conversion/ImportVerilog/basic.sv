@@ -1377,6 +1377,65 @@ module Expressions;
     // CHECK: moore.or [[TMP3]], [[TMP11]] : i1
     c = a inside { a, b, [a:b] };
 
+    // CHECK: [[READ_M:%.+]] = moore.read %m : <l4>
+    // CHECK: [[ZEXT_M:%.+]] = moore.zext [[READ_M]] : l4 -> l32
+    // CHECK: [[CONST_0_I32:%.+]] = moore.constant 0 : i32
+    // CHECK: [[CONST_0_L32:%.+]] = moore.constant 0 : l32
+    // CHECK: [[EQ_0:%.+]] = moore.wildcard_eq [[ZEXT_M]], [[CONST_0_L32]] : l32 -> l1
+    // CHECK: [[EQ_0_I1:%.+]] = moore.logic_to_int [[EQ_0]] : l1
+    // CHECK: [[EQ_0_BUILTIN:%.+]] = moore.to_builtin_int [[EQ_0_I1]] : i1
+    // CHECK: cf.cond_br [[EQ_0_BUILTIN]], ^bb2, ^bb1
+    // CHECK: ^bb1:  // pred: ^bb0
+    // CHECK: [[CONST_1_I32:%.+]] = moore.constant 1 : i32
+    // CHECK: [[CONST_1_L32:%.+]] = moore.constant 1 : l32
+    // CHECK: [[EQ_1:%.+]] = moore.wildcard_eq [[ZEXT_M]], [[CONST_1_L32]] : l32 -> l1
+    // CHECK: [[EQ_1_I1:%.+]] = moore.logic_to_int [[EQ_1]] : l1
+    // CHECK: [[EQ_1_BUILTIN:%.+]] = moore.to_builtin_int [[EQ_1_I1]] : i1
+    // CHECK: cf.cond_br [[EQ_1_BUILTIN]], ^bb2, ^bb3
+    // CHECK: ^bb2:  // 2 preds: ^bb0, ^bb1
+    // CHECK: [[ASSIGN_1:%.+]] = moore.constant 1 : i32
+    // CHECK: moore.blocking_assign %b, [[ASSIGN_1]] : i32
+    // CHECK: cf.br ^bb8
+    // CHECK: ^bb3:  // pred: ^bb1
+    // CHECK: [[RANGE_LO_I4:%.+]] = moore.constant 0 : i4
+    // CHECK: [[RANGE_LO_I32:%.+]] = moore.constant 0 : i32
+    // CHECK: [[RANGE_LO_L32:%.+]] = moore.constant 0 : l32
+    // CHECK: [[RANGE_HI_I4:%.+]] = moore.constant -1 : i4
+    // CHECK: [[RANGE_HI_I32:%.+]] = moore.constant 15 : i32
+    // CHECK: [[RANGE_HI_L32:%.+]] = moore.constant 15 : l32
+    // CHECK: [[GE_LO:%.+]] = moore.uge [[ZEXT_M]], [[RANGE_LO_L32]] : l32 -> l1
+    // CHECK: [[LE_HI:%.+]] = moore.ule [[ZEXT_M]], [[RANGE_HI_L32]] : l32 -> l1
+    // CHECK: [[IN_RANGE:%.+]] = moore.and [[GE_LO]], [[LE_HI]] : l1
+    // CHECK: [[IN_RANGE_I1:%.+]] = moore.logic_to_int [[IN_RANGE]] : l1
+    // CHECK: [[IN_RANGE_BUILTIN:%.+]] = moore.to_builtin_int [[IN_RANGE_I1]] : i1
+    // CHECK: cf.cond_br [[IN_RANGE_BUILTIN]], ^bb4, ^bb5
+    // CHECK: ^bb4:  // pred: ^bb3
+    // CHECK: [[ASSIGN_2:%.+]] = moore.constant 2 : i32
+    // CHECK: moore.blocking_assign %b, [[ASSIGN_2]] : i32
+    // CHECK: cf.br ^bb8
+    // CHECK: ^bb5:  // pred: ^bb3
+    // CHECK: [[CONST_1ZXZ_L4:%.+]] = moore.constant b1ZXZ : l4
+    // CHECK: [[CONST_1ZXZ_L32:%.+]] = moore.constant b1ZXZ : l32
+    // CHECK: [[EQ_1ZXZ:%.+]] = moore.wildcard_eq [[ZEXT_M]], [[CONST_1ZXZ_L32]] : l32 -> l1
+    // CHECK: [[EQ_1ZXZ_I1:%.+]] = moore.logic_to_int [[EQ_1ZXZ]] : l1
+    // CHECK: [[EQ_1ZXZ_BUILTIN:%.+]] = moore.to_builtin_int [[EQ_1ZXZ_I1]] : i1
+    // CHECK: cf.cond_br [[EQ_1ZXZ_BUILTIN]], ^bb6, ^bb7
+    // CHECK: ^bb6:  // pred: ^bb5
+    // CHECK: [[ASSIGN_3:%.+]] = moore.constant 3 : i32
+    // CHECK: moore.blocking_assign %b, [[ASSIGN_3]] : i32
+    // CHECK: cf.br ^bb8
+    // CHECK: ^bb7:  // pred: ^bb5
+    // CHECK: [[ASSIGN_4:%.+]] = moore.constant 4 : i32
+    // CHECK: moore.blocking_assign %b, [[ASSIGN_4]] : i32
+    // CHECK: cf.br ^bb8
+    // CHECK: ^bb8:  // 4 preds: ^bb2, ^bb4, ^bb6, ^bb7
+    case(m) inside
+        0, 1 : b = 1;
+        [4'h0:4'hF] : b = 2;
+        4'b1?xz : b = 3;
+        default : b = 4;
+    endcase
+
     //===------------------------------------------------------------------===//
     // Conditional operator
 

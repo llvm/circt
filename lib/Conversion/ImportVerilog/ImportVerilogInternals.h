@@ -325,6 +325,10 @@ struct Context {
   /// Evaluate the constant value of an expression.
   slang::ConstantValue evaluateConstant(const slang::ast::Expression &expr);
 
+  /// Convert the inside/set-membership expression.
+  Value convertInsideCheck(Value insideLhs, Location loc,
+                           const slang::ast::Expression &expr);
+
   const ImportVerilogOptions &options;
   slang::ast::Compilation &compilation;
   mlir::ModuleOp intoModuleOp;
