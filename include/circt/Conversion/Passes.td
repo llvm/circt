@@ -793,7 +793,8 @@ def LowerSMTToZ3LLVM : Pass<"lower-smt-to-z3-llvm", "mlir::ModuleOp"> {
   let summary = "Lower the SMT dialect to LLVM IR calling the Z3 API";
   let dependentDialects = [
     "mlir::smt::SMTDialect", "mlir::LLVM::LLVMDialect", "mlir::scf::SCFDialect",
-    "mlir::cf::ControlFlowDialect", "mlir::func::FuncDialect"
+    "mlir::cf::ControlFlowDialect", "mlir::func::FuncDialect",
+    "circt::debug::DebugDialect"
   ];
   let options = [
     Option<"debug", "debug", "bool", "false",
