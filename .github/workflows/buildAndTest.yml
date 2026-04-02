@@ -175,6 +175,7 @@ jobs:
 
       - name: Set git safe
         run: |
+          free -h
           git config --global --add safe.directory $PWD
 
       # --------
