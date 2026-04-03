@@ -455,8 +455,6 @@ void HWIMDeadCodeElim::runOnOperation() {
 }
 
 void HWIMDeadCodeElim::rewriteModuleSignature(HWModuleOp module) {
-  // assert(isBlockExecutable(module.getBodyBlock()) &&
-  //        "unreachable modules must be already deleted");
 
   igraph::InstanceGraphNode *instanceGraphNode = instanceGraph->lookup(module);
   LLVM_DEBUG(llvm::dbgs() << "Prune ports of module: " << module.getName()
@@ -589,8 +587,6 @@ void HWIMDeadCodeElim::rewriteModuleSignature(HWModuleOp module) {
 }
 
 void HWIMDeadCodeElim::rewriteModuleBody(HWModuleOp module) {
-  // assert(isBlockExecutable(module.getBodyBlock()) &&
-  //        "unreachable modules must be already deleted");
 
   // Walk the IR bottom-up when deleting operations.
   module.walk<mlir::WalkOrder::PostOrder, mlir::ReverseIterator>(
@@ -668,6 +664,5 @@ void HWIMDeadCodeElim::eraseEmptyModule(HWModuleOp module) {
     return;
 
   instanceGraph->erase(instanceGraphNode);
-  // module.erase();
   ++numErasedModules;
 }
