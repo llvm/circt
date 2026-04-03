@@ -73,4 +73,42 @@ def QueueType : SimTypeDef<"Queue"> {
   ];
 }
 
+def DPIFunctionType : SimTypeDef<"DPIFunction"> {
+  let summary = "DPI function type with first-class argument directions";
+  let description = [{
+    Represents the full argument signature of a DPI-C function declaration.
+    Each argument has a name, type, and direction (`input`, `output`, `inout`,
+    `return`, or `ref`). Unlike `hw.modty`, this type preserves DPI-specific
+    semantics such as explicit return values and by-reference arguments.
+  }];
+
+  let mnemonic = "dpi_functy";
+  let parameters = (ins
+    ArrayRefParameter<"::circt::sim::DPIArgument", "DPI argument list">:$arguments
+  );
+  let genStorageClass = 0;
+  let hasCustomAssemblyFormat = 1;
+
+  let extraClassDeclaration = [{
+    /// Get the number of arguments.
+    size_t getNumArguments() const;
+
+    /// Get the input arguments (input, inout, ref — call operands).
+    llvm::SmallVector<DPIArgument> getInputArguments() const;
+
+    /// Get the result arguments (output, inout, return — call results).
+    llvm::SmallVector<DPIArgument> getResultArguments() const;
+
+    /// Get the return argument, if any. Returns nullptr if none.
+    const DPIArgument *getReturnArgument() const;
+
+    /// Derive the MLIR FunctionType for the call shape.
+    mlir::FunctionType getFunctionType() const;
+
+    /// Verify structural constraints (return-is-last, at-most-one-return).
+    /// On failure, emits diagnostics on the given op and returns failure.
+    mlir::LogicalResult verify(llvm::function_ref<mlir::InFlightDiagnostic()> emitError) const;
+  }];
+}
+
 #endif // CIRCT_DIALECT_SIM_SIMTYPES_TD

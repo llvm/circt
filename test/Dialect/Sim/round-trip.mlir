@@ -8,8 +8,10 @@ hw.module @plusargs_value() {
   %1, %2 = sim.plusargs.value "bar" : i5
 }
 
-// CHECK-LABEL: sim.func.dpi @dpi(out arg0 : i1, in %arg1 : i1, out arg2 : i1)
-sim.func.dpi @dpi(out arg0: i1, in %arg1: i1, out arg2: i1)
+// CHECK-LABEL: sim.func.dpi @dpi(out arg0 : i1, in %arg1 : i1, return ret : i1)
+sim.func.dpi @dpi(out arg0: i1, in %arg1: i1, return ret: i1)
+// CHECK-LABEL: sim.func.dpi @dpi_inout(in %arg0 : i1, inout %arg1 : i1)
+sim.func.dpi @dpi_inout(in %arg0: i1, inout %arg1: i1)
 func.func private @func(%arg1: i1) -> (i1, i1)
 
 // CHECK-LABEL: hw.module @dpi_call
@@ -22,6 +24,23 @@ hw.module @dpi_call(in %clock : !seq.clock, in %enable : i1, in %in: i1) {
   %4, %5 = sim.func.dpi.call @func(%in) enable %enable : (i1) -> (i1, i1)
   // CHECK: sim.func.dpi.call @func(%in) : (i1) -> (i1, i1)
   %6, %7 = sim.func.dpi.call @func(%in) : (i1) -> (i1, i1)
+  // CHECK: sim.func.dpi.call @dpi_inout(%in, %in) : (i1, i1) -> i1
+  %8 = sim.func.dpi.call @dpi_inout(%in, %in) : (i1, i1) -> i1
+}
+
+// Round-trip tests for !sim.dpi_functy type syntax.
+// CHECK-LABEL: func.func @dpi_functy_roundtrip
+func.func @dpi_functy_roundtrip(
+  // CHECK-SAME: %arg0: !sim.dpi_functy<in "a" : i32, out "b" : i32>
+  %arg0: !sim.dpi_functy<in "a" : i32, out "b" : i32>,
+  // CHECK-SAME: %arg1: !sim.dpi_functy<in "x" : i8, inout "y" : i16, return "r" : i32>
+  %arg1: !sim.dpi_functy<in "x" : i8, inout "y" : i16, return "r" : i32>,
+  // CHECK-SAME: %arg2: !sim.dpi_functy<ref "p" : !llvm.ptr>
+  %arg2: !sim.dpi_functy<ref "p" : !llvm.ptr>,
+  // CHECK-SAME: %arg3: !sim.dpi_functy<>
+  %arg3: !sim.dpi_functy<>
+) {
+  return
 }
 
 // CHECK-LABEL: hw.module @GraphSimulationControl

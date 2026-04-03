@@ -69,6 +69,28 @@ struct SimConversionPattern : public OpConversionPattern<T> {
   SimConversionState &state;
 };
 
+hw::ModuleType
+DPIFunctionTypeToHWModuleType(const DPIFunctionType &dpiFuncType) {
+  SmallVector<hw::ModulePort> hwPorts;
+  for (auto &arg : dpiFuncType.getArguments()) {
+    hw::ModulePort::Direction hwDir;
+    switch (arg.dir) {
+    case DPIDirection::Input:
+    case DPIDirection::Ref:
+      hwDir = hw::ModulePort::Direction::Input;
+      break;
+    case DPIDirection::Output:
+    case DPIDirection::Return:
+      hwDir = hw::ModulePort::Direction::Output;
+      break;
+    case DPIDirection::InOut:
+      hwDir = hw::ModulePort::Direction::InOut;
+      break;
+    }
+    hwPorts.push_back({arg.name, arg.type, hwDir});
+  }
+  return hw::ModuleType::get(dpiFuncType.getContext(), hwPorts);
+}
 } // namespace
 
 // Lower `sim.plusargs.test` to a standard SV implementation.
@@ -269,14 +291,36 @@ struct LowerDPIFunc {
                     ArrayRef<StringAttr> dpiCallees) const;
 };
 
+static ArrayAttr buildSVPerArgumentAttrs(MLIRContext *context,
+                                         sim::DPIFuncOp func) {
+  Builder builder(context);
+  SmallVector<Attribute> convertedAttrs;
+  auto dpiType = func.getDpiFunctionType();
+  auto dpiArgs = dpiType.getArguments();
+  convertedAttrs.reserve(dpiArgs.size());
+  for (auto &arg : dpiArgs) {
+    NamedAttrList newAttrs;
+    if (arg.dir == sim::DPIDirection::Return)
+      newAttrs.append(
+          builder.getStringAttr(sv::FuncOp::getExplicitlyReturnedAttrName()),
+          builder.getUnitAttr());
+    convertedAttrs.push_back(newAttrs.getDictionary(context));
+  }
+  return ArrayAttr::get(context, convertedAttrs);
+}
+
 void LowerDPIFunc::lower(sim::DPIFuncOp func) {
   ImplicitLocOpBuilder builder(func.getLoc(), func);
   ArrayAttr inputLocsAttr, outputLocsAttr;
+
+  // Build ModuleType from DPI arguments for sv::FuncOp.
+  auto moduleType = DPIFunctionTypeToHWModuleType(func.getDpiFunctionType());
+
   if (func.getArgumentLocs()) {
     SmallVector<Attribute> inputLocs, outputLocs;
-    for (auto [port, loc] :
-         llvm::zip(func.getModuleType().getPorts(),
-                   func.getArgumentLocsAttr().getAsRange<LocationAttr>())) {
+    auto hwPorts = moduleType.getPorts();
+    for (auto [port, loc] : llvm::zip(
+             hwPorts, func.getArgumentLocsAttr().getAsRange<LocationAttr>())) {
       (port.dir == hw::ModulePort::Output ? outputLocs : inputLocs)
           .push_back(loc);
     }
@@ -284,10 +328,10 @@ void LowerDPIFunc::lower(sim::DPIFuncOp func) {
     outputLocsAttr = builder.getArrayAttr(outputLocs);
   }
 
-  auto svFuncDecl =
-      sv::FuncOp::create(builder, func.getSymNameAttr(), func.getModuleType(),
-                         func.getPerArgumentAttrsAttr(), inputLocsAttr,
-                         outputLocsAttr, func.getVerilogNameAttr());
+  auto svFuncDecl = sv::FuncOp::create(
+      builder, func.getSymNameAttr(), moduleType,
+      buildSVPerArgumentAttrs(builder.getContext(), func), inputLocsAttr,
+      outputLocsAttr, func.getVerilogNameAttr());
   // DPI function is a declaration so it must be a private function.
   svFuncDecl.setPrivate();
   auto name = builder.getStringAttr(nameSpace.newName(
