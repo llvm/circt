@@ -1745,29 +1745,21 @@ LogicalResult Context::convertNInputPrimitive(
   auto primName = prim.primitiveType.name;
 
   auto portConns = prim.getPortConnections();
-  if (portConns.size() < 2)
-    return mlir::emitError(loc) << "n-input primitive `" << primName
-                                << "` requires at least 2 ports";
+  assert(portConns.size() >= 2 &&
+         "n-input primitives should have at least 2 ports");
 
   // Get SSA values corresponding to operands (and unwrap where necessary)
-  const slang::ast::Expression *outputConn = portConns[0];
-  if (const auto *assign =
-          outputConn->as_if<slang::ast::AssignmentExpression>())
-    outputConn = &assign->left();
+  auto &outputConn =
+      portConns[0]->as<slang::ast::AssignmentExpression>().left();
 
-  auto outputVal = this->convertLvalueExpression(*outputConn);
+  auto outputVal = this->convertLvalueExpression(outputConn);
   if (!outputVal)
     return failure();
 
   SmallVector<Value> inputVals;
   inputVals.reserve(portConns.size() - 1);
   for (const auto *inputConn : portConns.subspan(1, portConns.size() - 1)) {
-    const slang::ast::Expression *inputExpr = inputConn;
-    if (const auto *assign =
-            inputExpr->as_if<slang::ast::AssignmentExpression>()) {
-      inputExpr = &assign->left();
-    }
-    auto inputVal = this->convertRvalueExpression(*inputExpr);
+    auto inputVal = this->convertRvalueExpression(*inputConn);
     if (!inputVal)
       return failure();
     inputVals.push_back(inputVal);
@@ -1806,11 +1798,11 @@ LogicalResult Context::convertNInputPrimitive(
   // TODO: annotate with debug ops to preserve primitive name
 
   auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
-  auto resultRef = materializeConversion(dstType, result, false, loc);
-  if (!resultRef)
+  result = materializeConversion(dstType, result, false, loc);
+  if (!result)
     return failure();
 
-  moore::ContinuousAssignOp::create(builder, loc, outputVal, resultRef);
+  moore::ContinuousAssignOp::create(builder, loc, outputVal, result);
   return success();
 }
 
