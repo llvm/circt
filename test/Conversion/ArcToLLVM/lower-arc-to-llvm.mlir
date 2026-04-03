@@ -349,3 +349,26 @@ func.func @Time(%arg0: !arc.storage<42>) -> (i64, !llhd.time, i64) {
   // CHECK-NEXT: llvm.return [[TMP4]]
   return %0, %1, %2 : i64, !llhd.time, i64
 }
+
+
+// CHECK-LABEL: llvm.func @test_success_eval
+// CHECK-SAME: (%[[STATE:.*]]: !llvm.ptr, %[[COND:.*]]: i1)
+func.func @test_success_eval(%state: !arc.storage, %cond: i1) {
+  // CHECK-NEXT: %[[GEP:.*]] = llvm.getelementptr %[[STATE]][8] : (!llvm.ptr) -> !llvm.ptr, i8
+  // CHECK-NEXT: %[[VAL:.*]] = llvm.mlir.constant(1 : i8) : i8
+  // CHECK-NEXT: llvm.store %[[VAL]], %[[GEP]] : i8, !llvm.ptr
+  // CHECK-NEXT: llvm.return
+  arc.terminate %state, true : !arc.storage
+  return
+}
+
+// CHECK-LABEL: llvm.func @test_failure_eval
+// CHECK-SAME: (%[[STATE:.*]]: !llvm.ptr, %[[COND:.*]]: i1)
+func.func @test_failure_eval(%state: !arc.storage, %cond: i1) {
+  // CHECK-NEXT: %[[GEP_FAIL:.*]] = llvm.getelementptr %[[STATE]][8] : (!llvm.ptr) -> !llvm.ptr, i8
+  // CHECK-NEXT: %[[VAL_FAIL:.*]] = llvm.mlir.constant(2 : i8) : i8
+  // CHECK-NEXT: llvm.store %[[VAL_FAIL]], %[[GEP_FAIL]] : i8, !llvm.ptr
+  // CHECK-NEXT: llvm.return
+  arc.terminate %state, false : !arc.storage
+  return
+}

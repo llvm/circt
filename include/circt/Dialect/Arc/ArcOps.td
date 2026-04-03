@@ -626,6 +626,27 @@ def CurrentTimeOp : ArcOp<"current_time", [
   }];
 }
 
+def TerminateOp : ArcOp<"terminate", [
+  MemoryEffects<[MemWrite]>
+]> {
+  let summary = "Request simulation termination";
+  let description = [{
+    Sets a termination flag in the model's storage.
+    It unconditionally writes 1 for success or 2 for failure.
+    This allows the simulation to exit gracefully after the current 
+    evaluation cycle.
+  }];
+
+  let arguments = (ins 
+    StorageType:$storage, 
+    BoolAttr:$success
+  );
+
+  let assemblyFormat = [{
+    $storage `,` $success attr-dict `:` qualified(type($storage))
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Procedural Ops
 //===----------------------------------------------------------------------===//

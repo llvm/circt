@@ -10,6 +10,7 @@
 #include "circt/Conversion/CombToArith.h"
 #include "circt/Conversion/CombToLLVM.h"
 #include "circt/Conversion/HWToLLVM.h"
+#include "circt/Dialect/Arc/ArcConstants.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ModelInfo.h"
 #include "circt/Dialect/Arc/Runtime/Common.h"
@@ -37,6 +38,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -987,6 +989,32 @@ struct SimPrintFormattedProcOpLowering
   StringCache &stringCache;
 };
 
+struct TerminateOpLowering : public OpConversionPattern<arc::TerminateOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(arc::TerminateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+
+    auto i8Type = rewriter.getI8Type();
+    auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
+
+    Value flagPtr = LLVM::GEPOp::create(
+        rewriter, loc, ptrType, i8Type, adaptor.getStorage(),
+        ArrayRef<LLVM::GEPArg>{arc::kTerminateFlagOffset});
+
+    uint8_t statusCode = op.getSuccess() ? 1 : 2;
+    Value codeVal = LLVM::ConstantOp::create(
+        rewriter, loc, i8Type, rewriter.getI8IntegerAttr(statusCode));
+
+    LLVM::StoreOp::create(rewriter, loc, codeVal, flagPtr);
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 } // namespace
 
 static LogicalResult convert(arc::ExecuteOp op, arc::ExecuteOp::Adaptor adaptor,
@@ -1403,6 +1431,7 @@ void LowerArcToLLVMPass::runOnOperation() {
     StateReadOpLowering,
     StateWriteOpLowering,
     StorageGetOpLowering,
+    TerminateOpLowering,
     TimeToIntOpLowering,
     ZeroCountOpLowering
   >(converter, &getContext());

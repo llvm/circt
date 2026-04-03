@@ -103,6 +103,7 @@ struct OpLowering {
   LogicalResult lower(seq::InitialOp op);
   LogicalResult lower(llhd::FinalOp op);
   LogicalResult lower(llhd::CurrentTimeOp op);
+  LogicalResult lower(sim::ClockedTerminateOp op);
 
   scf::IfOp createIfClockOp(Value clock);
 
@@ -223,7 +224,8 @@ LogicalResult ModuleLowering::run() {
 
   // Lower the ops.
   for (auto &op : moduleOp.getOps()) {
-    if (mlir::isMemoryEffectFree(&op) && !isa<hw::OutputOp>(op))
+    if (mlir::isMemoryEffectFree(&op) &&
+        !isa<hw::OutputOp, sim::ClockedTerminateOp>(op))
       continue;
     if (isa<MemoryReadPortOp, MemoryWritePortOp>(op))
       continue; // handled as part of `MemoryOp`
@@ -417,8 +419,8 @@ LogicalResult OpLowering::lower() {
   return TypeSwitch<Operation *, LogicalResult>(op)
       // Operations with special lowering.
       .Case<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp, hw::OutputOp,
-            seq::InitialOp, llhd::FinalOp, llhd::CurrentTimeOp>(
-          [&](auto op) { return lower(op); })
+            seq::InitialOp, llhd::FinalOp, llhd::CurrentTimeOp,
+            sim::ClockedTerminateOp>([&](auto op) { return lower(op); })
 
       // Operations that should be skipped entirely and never land on the
       // worklist to be lowered.
@@ -1041,6 +1043,37 @@ LogicalResult OpLowering::lower(llhd::CurrentTimeOp op) {
   }
 
   module.loweredValues[{op.getResult(), phase}] = time;
+  return success();
+}
+
+LogicalResult OpLowering::lower(sim::ClockedTerminateOp op) {
+  if (phase != Phase::New)
+    return success();
+
+  if (initial)
+    return success();
+
+  auto ifClockOp = createIfClockOp(op.getClock());
+  if (!ifClockOp)
+    return failure();
+
+  OpBuilder::InsertionGuard guard(module.builder);
+  module.builder.setInsertionPoint(ifClockOp.thenYield());
+
+  auto loc = op.getLoc();
+  Value cond = lowerValue(op.getCondition(), phase);
+  if (!cond)
+    return op.emitOpError("Failed to lower condition");
+
+  auto ifOp = createOrReuseIf(module.builder, cond, false);
+  if (!ifOp)
+    return op.emitOpError("Failed to create condition block");
+
+  module.builder.setInsertionPoint(ifOp.thenYield());
+
+  arc::TerminateOp::create(module.builder, loc, module.storageArg,
+                           op.getSuccessAttr());
+
   return success();
 }
 
