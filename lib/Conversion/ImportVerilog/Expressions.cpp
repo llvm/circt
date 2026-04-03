@@ -15,6 +15,7 @@
 #include "slang/ast/types/AllTypes.h"
 #include "slang/syntax/AllSyntax.h"
 #include "llvm/ADT/ScopeExit.h"
+#include "llvm/Support/SaveAndRestore.h"
 
 using namespace circt;
 using namespace ImportVerilog;
@@ -1733,9 +1734,6 @@ struct RvalueExprVisitor : public ExprVisitor {
     auto *lowering = context.declareFunction(*subroutine);
     if (!lowering)
       return {};
-    auto convertedFunction = context.convertFunction(*subroutine);
-    if (failed(convertedFunction))
-      return {};
 
     // Convert the call arguments. Input arguments are converted to an rvalue.
     // All other arguments are converted to lvalues and passed into the function
@@ -2188,24 +2186,15 @@ struct RvalueExprVisitor : public ExprVisitor {
       if (const auto *subroutine =
               std::get_if<const slang::ast::SubroutineSymbol *>(
                   &callConstructor->subroutine)) {
-        // Bit paranoid, but virtually free checks that new is a class method
-        // and the subroutine has already been converted.
         if (!(*subroutine)->thisVar) {
-          mlir::emitError(loc) << "Expected subroutine called by new to use an "
-                                  "implicit this reference";
+          mlir::emitError(loc)
+              << "unsupported constructor call without `this` argument";
           return {};
         }
-        if (failed(context.convertFunction(**subroutine)))
-          return {};
         // Pass the newObj as the implicit this argument of the ctor.
-        auto savedThis = context.currentThisRef;
-        context.currentThisRef = newObj;
-        llvm::scope_exit restoreThis(
-            [&] { context.currentThisRef = savedThis; });
-        // Emit a call to ctor
+        llvm::SaveAndRestore saveThis(context.currentThisRef, newObj);
         if (!visitCall(*callConstructor, *subroutine))
           return {};
-        // Return new handle
         return newObj;
       }
     return {};

@@ -103,13 +103,6 @@ struct FunctionLowering {
   /// during declaration.
   SmallVector<const slang::ast::ValueSymbol *, 4> capturedSymbols;
 
-  /// Whether the function body has been fully converted.
-  bool bodyConverted = false;
-
-  /// Whether we are currently converting this function's body. Used to prevent
-  /// infinite recursion for recursive functions.
-  bool isConverting = false;
-
   /// Whether this is a coroutine (task) or a regular function.
   bool isCoroutine() { return isa<moore::CoroutineOp>(op.getOperation()); }
 };
@@ -178,7 +171,7 @@ struct Context {
   LogicalResult convertPackage(const slang::ast::PackageSymbol &package);
   FunctionLowering *
   declareFunction(const slang::ast::SubroutineSymbol &subroutine);
-  LogicalResult convertFunction(const slang::ast::SubroutineSymbol &subroutine);
+  LogicalResult defineFunction(const slang::ast::SubroutineSymbol &subroutine);
   LogicalResult
   convertPrimitiveInstance(const slang::ast::PrimitiveInstanceSymbol &prim);
   ClassLowering *declareClass(const slang::ast::ClassType &cls);
@@ -373,6 +366,10 @@ struct Context {
   /// A list of modules for which the header has been created, but the body has
   /// not been converted yet.
   std::queue<const slang::ast::InstanceBodySymbol *> moduleWorklist;
+
+  /// A list of functions for which the declaration has been created, but the
+  /// body has not been defined yet.
+  std::queue<const slang::ast::SubroutineSymbol *> functionWorklist;
 
   /// Functions that have already been converted.
   DenseMap<const slang::ast::SubroutineSymbol *,

@@ -147,7 +147,9 @@ struct RootVisitor : public BaseVisitor {
 
   // Handle functions and tasks.
   LogicalResult visit(const slang::ast::SubroutineSymbol &subroutine) {
-    return context.convertFunction(subroutine);
+    if (!context.declareFunction(subroutine))
+      return failure();
+    return success();
   }
 
   // Handle global variables.
@@ -176,7 +178,9 @@ struct PackageVisitor : public BaseVisitor {
 
   // Handle functions and tasks.
   LogicalResult visit(const slang::ast::SubroutineSymbol &subroutine) {
-    return context.convertFunction(subroutine);
+    if (!context.declareFunction(subroutine))
+      return failure();
+    return success();
   }
 
   // Handle global variables.
@@ -846,7 +850,9 @@ struct ModuleVisitor : public BaseVisitor {
 
   // Handle functions and tasks.
   LogicalResult visit(const slang::ast::SubroutineSymbol &subroutine) {
-    return context.convertFunction(subroutine);
+    if (!context.declareFunction(subroutine))
+      return failure();
+    return success();
   }
 
   // Handle primitive instances.
@@ -926,6 +932,17 @@ LogicalResult Context::convertCompilation() {
 
   for (auto *inst : classMethodWorklist) {
     if (failed(materializeClassMethods(*inst)))
+      return failure();
+  }
+
+  // Define all function bodies. Functions are declared (and pushed onto the
+  // worklist) during module body conversion and class method materialization.
+  // Defining a function body may discover additional functions through call
+  // expressions, which are declared and added to the worklist on the fly.
+  while (!functionWorklist.empty()) {
+    auto *fn = functionWorklist.front();
+    functionWorklist.pop();
+    if (failed(defineFunction(*fn)))
       return failure();
   }
 
@@ -1541,35 +1558,31 @@ Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
   symbolTable.insert(funcOp);
   functions[&subroutine] = std::move(lowering);
 
+  // Schedule the body to be defined later.
+  functionWorklist.push(&subroutine);
+
   return functions[&subroutine].get();
 }
 
-/// Convert a function.
+/// Define a function’s body. The function must already have been declared via
+/// `declareFunction`. This is called from the function worklist after all
+/// declarations have been created, ensuring that all function prototypes are
+/// available for calls within the body.
 LogicalResult
-Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
+Context::defineFunction(const slang::ast::SubroutineSymbol &subroutine) {
+  auto *lowering = functions.at(&subroutine).get();
+
   // Keep track of the local time scale. `getTimeScale` automatically looks
   // through parent scopes to find the time scale effective locally.
   auto prevTimeScale = timeScale;
   timeScale = subroutine.getTimeScale().value_or(slang::TimeScale());
   llvm::scope_exit timeScaleGuard([&] { timeScale = prevTimeScale; });
 
-  // First get or create the function declaration.
-  auto *lowering = declareFunction(subroutine);
-  if (!lowering)
-    return failure();
-
-  // If function already has been converted, or is already being converted
-  // (recursive/re-entrant calls) stop here.
-  if (lowering->bodyConverted || lowering->isConverting)
-    return success();
-
   // DPI-C imported functions are extern declarations with no Verilog body.
   // Leave the func.func without a body region so it survives as an external
   // symbol and calls to it are not eliminated.
-  if (subroutine.flags.has(slang::ast::MethodFlags::DPIImport)) {
-    lowering->bodyConverted = true;
+  if (subroutine.flags.has(slang::ast::MethodFlags::DPIImport))
     return success();
-  }
 
   const bool isMethod = (subroutine.thisVar != nullptr);
 
@@ -1677,9 +1690,6 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
   currentThisRef = valueSymbols.lookup(subroutine.thisVar);
   llvm::scope_exit restoreThis([&] { currentThisRef = savedThis; });
 
-  lowering->isConverting = true;
-  llvm::scope_exit convertingGuard([&] { lowering->isConverting = false; });
-
   if (failed(convertStatement(subroutine.getBody())))
     return failure();
 
@@ -1711,7 +1721,6 @@ Context::convertFunction(const slang::ast::SubroutineSymbol &subroutine) {
     }
   }
 
-  lowering->bodyConverted = true;
   return success();
 }
 
@@ -2060,17 +2069,11 @@ struct ClassMethodVisitor : ClassDeclVisitorBase {
     if (!lowering)
       return failure();
 
-    if (failed(context.convertFunction(fn)))
-      return failure();
-
-    if (!lowering->bodyConverted)
-      return failure();
-
     // We only emit methoddecls for virtual methods.
     if (!isVirtual)
       return success();
 
-    // Grab the finalized function type from the lowered func.op.
+    // Grab the function type from the declaration.
     FunctionType fnTy = cast<FunctionType>(lowering->op.getFunctionType());
     // Emit the method decl into the class body, preserving source order.
     moore::ClassMethodDeclOp::create(builder, loc, fn.name, fnTy,
@@ -2192,11 +2195,13 @@ Context::materializeClassMethods(const slang::ast::ClassType &classdecl) {
   llvm::scope_exit timeScaleGuard([&] { timeScale = prevTimeScale; });
 
   // The class must have been declared already via buildClassProperties.
-  auto it = classes.find(&classdecl);
-  if (it == classes.end() || !it->second)
+  auto *lowering = classes[&classdecl].get();
+  if (!lowering)
     return failure();
 
-  // Materialize base class methods first.
+  // Materialize base class methods first. This may insert new entries into the
+  // `classes` map (e.g. for nested classes), so we must not hold an iterator
+  // or reference into the map across this call.
   if (classdecl.getBaseClass()) {
     if (const auto *baseClassDecl =
             classdecl.getBaseClass()->as_if<slang::ast::ClassType>()) {
@@ -2205,7 +2210,7 @@ Context::materializeClassMethods(const slang::ast::ClassType &classdecl) {
     }
   }
 
-  return ClassMethodVisitor(*this, *it->second).run(classdecl);
+  return ClassMethodVisitor(*this, *lowering).run(classdecl);
 }
 
 /// Convert a variable to a `moore.global_variable` operation.
