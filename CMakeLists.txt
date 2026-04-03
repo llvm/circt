@@ -632,10 +632,7 @@ if(CIRCT_LIBFST_ENABLED)
   set(ORIGINAL_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
 
   set(BUILD_SHARED_LIBS OFF)
-  FetchContent_GetProperties(libfst)
-  if(NOT libfst_POPULATED)
-    FetchContent_Populate(libfst)
-  endif()
+  FetchContent_MakeAvailable(libfst)
 
   add_library(fst STATIC
     ${libfst_SOURCE_DIR}/src/fastlz.c

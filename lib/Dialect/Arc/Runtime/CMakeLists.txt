@@ -51,4 +51,5 @@ add_circt_library(CIRCTArcJITRuntime
 target_compile_definitions(obj.CIRCTArcJITRuntime PUBLIC ARC_RUNTIME_JIT_BIND)
 if(CIRCT_LIBFST_ENABLED)
   target_compile_definitions(obj.CIRCTArcJITRuntime PUBLIC CIRCT_LIBFST_ENABLED=1)
+  target_link_libraries(CIRCTArcJITRuntime PRIVATE fst)
 endif()
