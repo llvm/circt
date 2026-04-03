@@ -101,6 +101,7 @@ void TraceEncoder::workLoop() {
 
     // Process the taken buffer
     assert(work->size > 0);
+    assert(work->size <= work->capacity);
     encode(*work);
     work->clear();
 
@@ -165,6 +166,8 @@ uint64_t *TraceEncoder::dispatch(uint32_t oldBufferSize) {
   activeBuffer.assertSentinel();
   if (oldBufferSize == 0)
     impl::fatalError("Trace dispatch called on an empty buffer");
+  if (oldBufferSize > activeBuffer.capacity)
+    impl::fatalError("Trace buffer size exceeds capacity");
   if (worker.has_value()) {
     activeBuffer.size = oldBufferSize;
     enqueueBuffer(std::move(activeBuffer));

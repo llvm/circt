@@ -3,6 +3,7 @@
 #define ARC_RUNTIME_JITBIND_FNDECL
 #include "circt/Dialect/Arc/Runtime/ArcRuntime.h"
 #include "circt/Dialect/Arc/Runtime/JITBind.h"
+#include "circt/Dialect/Arc/Runtime/TraceTaps.h"
 
 struct TestImpl {
   uint64_t foo = 0x123456;
@@ -95,4 +96,105 @@ TEST(ArcRuntimeTest, InstanceLifecycleIR) {
   for (auto i = 0; i < 128; ++i)
     api.fnOnEval(modelState);
   api.fnDeleteInstance(modelState);
+}
+
+// Runtime should accept a valid trace buffer
+TEST(ArcRuntimeTest, SwapTraceBuffer) {
+  auto &api = circt::arc::runtime::getArcRuntimeAPICallbacks();
+
+  ArcRuntimeModelInfo bogusModel;
+  ArcModelTraceInfo traceInfo;
+  ArcTraceTap traceTap;
+
+  bogusModel.apiVersion = ARC_RUNTIME_API_VERSION;
+  bogusModel.modelName = "bogus";
+  bogusModel.numStateBytes = 2048;
+  bogusModel.traceInfo = &traceInfo;
+
+  traceInfo.numTraceTaps = 1;
+  traceInfo.traceTaps = &traceTap;
+  traceInfo.traceTapNames = "fooTap";
+  traceTap.stateOffset = 16;
+  traceInfo.traceBufferCapacity = 8;
+
+  traceTap.nameOffset = 0;
+  traceTap.typeBits = 32;
+
+  uint8_t *modelState = api.fnAllocInstance(&bogusModel, nullptr);
+  ASSERT_NE(modelState, nullptr);
+  ArcState *state = arcRuntimeGetStateFromModelState(modelState, 0);
+  EXPECT_NE(state->traceBuffer, nullptr);
+
+  memset(state->traceBuffer, 0, traceInfo.traceBufferCapacity * 8);
+  state->traceBufferSize = 2;
+  state->traceBuffer = api.fnSwapTraceBuffer(state->modelState);
+  EXPECT_NE(state->traceBuffer, nullptr);
+
+  api.fnDeleteInstance(modelState);
+}
+
+// Runtime should error on overwritten trace buffer sentinel
+TEST(ArcRuntimeTest, TraceBufferOverflow) {
+  auto &api = circt::arc::runtime::getArcRuntimeAPICallbacks();
+
+  ArcRuntimeModelInfo bogusModel;
+  ArcModelTraceInfo traceInfo;
+  ArcTraceTap traceTap;
+
+  bogusModel.apiVersion = ARC_RUNTIME_API_VERSION;
+  bogusModel.modelName = "bogus";
+  bogusModel.numStateBytes = 2048;
+  bogusModel.traceInfo = &traceInfo;
+
+  traceInfo.numTraceTaps = 1;
+  traceInfo.traceTaps = &traceTap;
+  traceInfo.traceTapNames = "fooTap";
+  traceTap.stateOffset = 16;
+  traceInfo.traceBufferCapacity = 8;
+
+  traceTap.nameOffset = 0;
+  traceTap.typeBits = 32;
+
+  uint8_t *modelState = api.fnAllocInstance(&bogusModel, nullptr);
+  ASSERT_NE(modelState, nullptr);
+  ArcState *state = arcRuntimeGetStateFromModelState(modelState, 0);
+  ASSERT_NE(state->traceBuffer, nullptr);
+
+  // Write one byte over limit
+  memset(state->traceBuffer, 0, traceInfo.traceBufferCapacity * 8 + 1);
+  state->traceBufferSize = 2;
+  EXPECT_DEATH(api.fnSwapTraceBuffer(state->modelState), "");
+}
+
+// Runtime should error on trace buffer size beyond capacity
+TEST(ArcRuntimeTest, TraceBufferExceededCapacity) {
+  auto &api = circt::arc::runtime::getArcRuntimeAPICallbacks();
+
+  ArcRuntimeModelInfo bogusModel;
+  ArcModelTraceInfo traceInfo;
+  ArcTraceTap traceTap;
+
+  bogusModel.apiVersion = ARC_RUNTIME_API_VERSION;
+  bogusModel.modelName = "bogus";
+  bogusModel.numStateBytes = 2048;
+  bogusModel.traceInfo = &traceInfo;
+
+  traceInfo.numTraceTaps = 1;
+  traceInfo.traceTaps = &traceTap;
+  traceInfo.traceTapNames = "fooTap";
+  traceTap.stateOffset = 16;
+  traceInfo.traceBufferCapacity = 8;
+
+  traceTap.nameOffset = 0;
+  traceTap.typeBits = 32;
+
+  uint8_t *modelState = api.fnAllocInstance(&bogusModel, nullptr);
+  ASSERT_NE(modelState, nullptr);
+  ArcState *state = arcRuntimeGetStateFromModelState(modelState, 0);
+  ASSERT_NE(state->traceBuffer, nullptr);
+
+  memset(state->traceBuffer, 0, traceInfo.traceBufferCapacity * 8);
+  // Invalid size
+  state->traceBufferSize = traceInfo.traceBufferCapacity + 1;
+  EXPECT_DEATH(api.fnSwapTraceBuffer(state->modelState), "");
 }
