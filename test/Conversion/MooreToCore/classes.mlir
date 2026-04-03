@@ -1,5 +1,15 @@
 // RUN: circt-opt %s --convert-moore-to-core --verify-diagnostics | FileCheck %s
 
+// CHECK-DAG: llvm.mlir.global internal constant @"C::typeinfo"() {addr_space = 0 : i32} : !llvm.struct<(ptr)> {
+// CHECK-DAG: llvm.mlir.zero : !llvm.ptr
+// CHECK-DAG: llvm.insertvalue
+// CHECK-DAG: llvm.mlir.global internal constant @"D::typeinfo"() {addr_space = 0 : i32} : !llvm.struct<(ptr)> {
+// CHECK-DAG: llvm.mlir.addressof @"C::typeinfo" : !llvm.ptr
+// CHECK-DAG: llvm.insertvalue
+// CHECK-DAG: llvm.mlir.global internal constant @"VirtualC::typeinfo"() {addr_space = 0 : i32} : !llvm.struct<(ptr)> {
+// CHECK-DAG: llvm.mlir.zero : !llvm.ptr
+// CHECK-DAG: llvm.insertvalue
+
 /// Check that a classdecl gets noop'd and handles are lowered to !llvm.ptr
 
 // CHECK-LABEL:   func.func @ClassType(%arg0: !llvm.ptr) {
@@ -23,6 +33,10 @@ func.func @ClassType(%arg0: !moore.class<@PropertyCombo>) {
 // CHECK-LABEL: func.func private @test_new2
 // CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(32 : i64) : i64
 // CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   [[TYPEINFO:%.*]] = llvm.mlir.addressof @"C::typeinfo" : !llvm.ptr
+// CHECK:   [[HEADERIDX:%.*]] = llvm.mlir.constant(0 : i32) : i32
+// CHECK:   [[GEP:%.*]] = llvm.getelementptr [[PTR]][[[HEADERIDX]], 0] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"C", (struct<(ptr, ptr)>, i32, i32, i32)>
+// CHECK:   llvm.store [[TYPEINFO]], [[GEP]] : !llvm.ptr, !llvm.ptr
 // CHECK:   return
 
 // CHECK-NOT: moore.class.new
@@ -45,6 +59,10 @@ moore.class.classdecl @C {
 // CHECK-LABEL: func.func private @test_new3
 // CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(64 : i64) : i64
 // CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   [[TYPEINFO:%.*]] = llvm.mlir.addressof @"D::typeinfo" : !llvm.ptr
+// CHECK:   [[HEADERIDX:%.*]] = llvm.mlir.constant(0 : i32) : i32
+// CHECK:   [[GEP:%.*]] = llvm.getelementptr [[PTR]][[[HEADERIDX]], 0] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"D", (struct<(ptr, ptr)>, struct<"C", (struct<(ptr, ptr)>, i32, i32, i32)>, i32, i64, i16)>
+// CHECK:   llvm.store [[TYPEINFO]], [[GEP]] : !llvm.ptr, !llvm.ptr
 // CHECK:   return
 
 // CHECK-NOT: moore.class.new
@@ -127,6 +145,10 @@ moore.class.classdecl @G extends @C {
 // CHECK-LABEL: func.func private @test_new7
 // CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(24 : i64) : i64
 // CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   [[TYPEINFO:%.*]] = llvm.mlir.addressof @"VirtualC::typeinfo" : !llvm.ptr
+// CHECK:   [[HEADERIDX:%.*]] = llvm.mlir.constant(0 : i32) : i32
+// CHECK:   [[GEP:%.*]] = llvm.getelementptr [[PTR]][[[HEADERIDX]], 0] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"VirtualC", (struct<(ptr, ptr)>, i32)>
+// CHECK:   llvm.store [[TYPEINFO]], [[GEP]] : !llvm.ptr, !llvm.ptr
 // CHECK:   return
 
 func.func private @test_new7() {
