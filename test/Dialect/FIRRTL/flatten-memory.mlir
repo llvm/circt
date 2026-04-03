@@ -109,11 +109,11 @@ firrtl.module @MemoryRWSplit(in %clock: !firrtl.clock, in %rwEn: !firrtl.uint<1>
   // CHECK:  %[[v18:.+]] = firrtl.cat %[[v17]], %[[v17]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
   // CHECK:  %[[v19:.+]] = firrtl.cat %[[v17]], %[[v18]] : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<3>
   // CHECK:  %[[v24:.+]] = firrtl.cat %[[v17]], %[[v23:.+]] : (!firrtl.uint<1>, !firrtl.uint<7>) -> !firrtl.uint<8>
-  // CHECK:  %[[v25:.+]] = firrtl.bits %16 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-  // CHECK:  %[[v26:.+]] = firrtl.cat %[[v25]], %[[v24]] : (!firrtl.uint<1>, !firrtl.uint<8>) -> !firrtl.uint<9>
-  // CHECK:  %[[v27:.+]] = firrtl.cat %[[v25]], %[[v26]] : (!firrtl.uint<1>, !firrtl.uint<9>) -> !firrtl.uint<10>
-  // CHECK:  %[[v28:.+]] = firrtl.cat %[[v25]], %[[v27]] : (!firrtl.uint<1>, !firrtl.uint<10>) -> !firrtl.uint<11>
-  // CHECK:  %[[v34:.+]] = firrtl.cat %[[v25]], %[[v33:.+]] : (!firrtl.uint<1>, !firrtl.uint<16>) -> !firrtl.uint<17>
+  // CHECK:  %[[v25:.+]] = firrtl.cat %[[v17]], %[[v24]] : (!firrtl.uint<1>, !firrtl.uint<8>) -> !firrtl.uint<9>
+  // CHECK:  %[[v26:.+]] = firrtl.bits %16 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+  // CHECK:  %[[v27:.+]] = firrtl.cat %[[v26]], %[[v25]] : (!firrtl.uint<1>, !firrtl.uint<9>) -> !firrtl.uint<10>
+  // CHECK:  %[[v28:.+]] = firrtl.cat %[[v26]], %[[v27]] : (!firrtl.uint<1>, !firrtl.uint<10>) -> !firrtl.uint<11>
+  // CHECK:  %[[v34:.+]] = firrtl.cat %[[v26]], %[[v33:.+]] : (!firrtl.uint<1>, !firrtl.uint<16>) -> !firrtl.uint<17>
   // CHECK:  firrtl.matchingconnect %[[v15]], %[[v34]] :
   // Ensure 0 bit fields are handled properly.
   %ram_MPORT = firrtl.mem Undefined  {depth = 4 : i64, name = "ram", portNames = ["MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: bundle<entry: bundle<a: uint<0>, b: uint<1>, c: uint<2>>>, mask: bundle<entry: bundle<a: uint<1>, b: uint<1>, c: uint<1>>>>
@@ -139,7 +139,7 @@ firrtl.module @MemoryRWSplit(in %clock: !firrtl.clock, in %rwEn: !firrtl.uint<1>
     // CHECK:  %[[v11:.+]] = firrtl.bitcast %9 : (!firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.uint<2>
     // CHECK:  %[[v12:.+]] = firrtl.bits %11 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
     // CHECK:  %[[v13:.+]] = firrtl.bits %11 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-    // CHECK:  firrtl.matchingconnect %[[v10]], %[[v13]] : !firrtl.uint<1>
+    // CHECK:  firrtl.matchingconnect %[[v10]], %[[v12]] : !firrtl.uint<1>
     // CHECK:  %[[v14:.+]] = firrtl.subfield %ram_MPORT_1[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<a: uint<0>, b: uint<20>>, mask: bundle<a: uint<1>, b: uint<1>>>
     // CHECK:  firrtl.matchingconnect %[[v14]], %invalid_0 : !firrtl.bundle<a: uint<0>, b: uint<20>>
     // CHECK:  %[[v15:.+]] = firrtl.subfield %ram_MPORT_1[mask] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<a: uint<0>, b: uint<20>>, mask: bundle<a: uint<1>, b: uint<1>>>
@@ -175,6 +175,33 @@ firrtl.module @MemoryRWSplit(in %clock: !firrtl.clock, in %rwEn: !firrtl.uint<1>
     // Case 4: Aggregate contains a single Enum and an empty bundle.
     %enumAndEmpy = firrtl.mem Undefined  {depth = 1 : i64, name = "ram", portNames = ["MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<a: enum<None, Some: sint<12>>, b: bundle<>>, mask: bundle<a: uint<1>, b: bundle<>>>
     // CHECK:    = firrtl.mem Undefined  {depth = 1 : i64, name = "ram", portNames = ["MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<13>, mask: uint<1>>
+  }
+
+  firrtl.module @MaskRepeatOrder(in %clock: !firrtl.clock, in %wAddr: !firrtl.uint<2>, in %wEn: !firrtl.uint<1>, in %wMask: !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>, in %wData: !firrtl.bundle<a: uint<3>, b: vector<uint<1>, 2>>) {
+    %memory_w = firrtl.mem Undefined  {depth = 4 : i64, name = "memory_w", portNames = ["w"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: bundle<a: uint<3>, b: vector<uint<1>, 2>>, mask: bundle<a: uint<1>, b: vector<uint<1>, 2>>>
+    %0 = firrtl.subfield %memory_w[clk] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: bundle<a: uint<3>, b: vector<uint<1>, 2>>, mask: bundle<a: uint<1>, b: vector<uint<1>, 2>>>
+    %1 = firrtl.subfield %memory_w[en] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: bundle<a: uint<3>, b: vector<uint<1>, 2>>, mask: bundle<a: uint<1>, b: vector<uint<1>, 2>>>
+    %2 = firrtl.subfield %memory_w[addr] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: bundle<a: uint<3>, b: vector<uint<1>, 2>>, mask: bundle<a: uint<1>, b: vector<uint<1>, 2>>>
+    %3 = firrtl.subfield %memory_w[mask] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: bundle<a: uint<3>, b: vector<uint<1>, 2>>, mask: bundle<a: uint<1>, b: vector<uint<1>, 2>>>
+    %4 = firrtl.subfield %memory_w[data] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: bundle<a: uint<3>, b: vector<uint<1>, 2>>, mask: bundle<a: uint<1>, b: vector<uint<1>, 2>>>
+    firrtl.connect %0, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %1, %wEn : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %2, %wAddr : !firrtl.uint<2>, !firrtl.uint<2>
+    firrtl.connect %3, %wMask : !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>, !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>
+    firrtl.connect %4, %wData : !firrtl.bundle<a: uint<3>, b: vector<uint<1>, 2>>, !firrtl.bundle<a: uint<3>, b: vector<uint<1>, 2>>
+    // CHECK-LABEL: firrtl.module @MaskRepeatOrder
+    // CHECK: %[[MEM1:.+]] = firrtl.mem Undefined {{.*}} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<5>>
+    // CHECK: %[[W:.+]] = firrtl.subfield %[[MEM0:.+]][mask]
+    // CHECK: %[[MF:.+]] = firrtl.subfield %[[MEM1]][mask] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<5>>
+    // CHECK: %[[BC:.+]] = firrtl.bitcast %[[W]] : (!firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>) -> !firrtl.uint<3>
+    // CHECK: %[[B0:.+]] = firrtl.bits %[[BC]] 0 to 0 : (!firrtl.uint<3>) -> !firrtl.uint<1>
+    // CHECK: %[[B1:.+]] = firrtl.bits %[[BC]] 1 to 1 : (!firrtl.uint<3>) -> !firrtl.uint<1>
+    // CHECK: %[[C0:.+]] = firrtl.cat %[[B1]], %[[B0]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    // CHECK: %[[A:.+]] = firrtl.bits %[[BC]] 2 to 2 : (!firrtl.uint<3>) -> !firrtl.uint<1>
+    // CHECK: %[[C1:.+]] = firrtl.cat %[[A]], %[[C0]] : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<3>
+    // CHECK: %[[C2:.+]] = firrtl.cat %[[A]], %[[C1]] : (!firrtl.uint<1>, !firrtl.uint<3>) -> !firrtl.uint<4>
+    // CHECK: %[[C3:.+]] = firrtl.cat %[[A]], %[[C2]] : (!firrtl.uint<1>, !firrtl.uint<4>) -> !firrtl.uint<5>
+    // CHECK: firrtl.matchingconnect %[[MF]], %[[C3]] : !firrtl.uint<5>
   }
 
 }
