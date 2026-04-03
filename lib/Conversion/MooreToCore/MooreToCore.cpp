@@ -54,6 +54,11 @@ namespace {
 struct ClassTypeCache {
   struct ClassStructInfo {
     LLVM::LLVMStructType classBody;
+    LLVM::LLVMStructType headerTy;
+
+    unsigned headerFieldIndex = 0;
+    unsigned typeInfoFieldIndex = 0;
+    unsigned vtableFieldIndex = 1;
 
     // field name -> GEP path inside ident (excluding the leading pointer index)
     DenseMap<StringRef, SmallVector<unsigned, 2>> propertyPath;
@@ -145,6 +150,13 @@ static LLVM::LLVMStructType getOrCreateOpaqueStruct(MLIRContext *ctx,
   return LLVM::LLVMStructType::getIdentified(ctx, className.getRootReference());
 }
 
+/// Create the canonical object header for lowered Moore class objects.
+static LLVM::LLVMStructType getClassObjectHeaderType(MLIRContext *ctx) {
+  return LLVM::LLVMStructType::getLiteral(
+      ctx, SmallVector<Type>{LLVM::LLVMPointerType::get(ctx),
+                             LLVM::LLVMPointerType::get(ctx)});
+}
+
 static LogicalResult resolveClassStructBody(ClassDeclOp op,
                                             TypeConverter const &typeConverter,
                                             ClassTypeCache &cache) {
@@ -158,9 +170,11 @@ static LogicalResult resolveClassStructBody(ClassDeclOp op,
   // Otherwise we need to resolve.
   ClassTypeCache::ClassStructInfo structBody;
   SmallVector<Type> structBodyMembers;
+  structBody.headerTy = getClassObjectHeaderType(op.getContext());
+  structBodyMembers.push_back(structBody.headerTy);
 
   // Base-first (prefix) layout for single inheritance.
-  unsigned derivedStartIdx = 0;
+  unsigned derivedStartIdx = 1;
 
   if (auto baseClass = op.getBaseAttr()) {
 
@@ -174,12 +188,13 @@ static LogicalResult resolveClassStructBody(ClassDeclOp op,
     // Process base class' struct layout first
     auto baseClassStruct = cache.getStructInfo(baseClass);
     structBodyMembers.push_back(baseClassStruct->classBody);
-    derivedStartIdx = 1;
+    derivedStartIdx = 2;
 
-    // Inherit base field paths with a leading 0.
+    // Inherit base field paths with a leading 1 to index into the base
+    // subobject after the object header.
     for (auto &kv : baseClassStruct->propertyPath) {
       SmallVector<unsigned, 2> path;
-      path.push_back(0); // into base subobject
+      path.push_back(1); // into base subobject
       path.append(kv.second.begin(), kv.second.end());
       structBody.setFieldPath(kv.first, path);
     }
