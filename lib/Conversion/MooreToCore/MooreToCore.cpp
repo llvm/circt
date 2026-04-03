@@ -18,6 +18,8 @@
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/ConversionPatternSet.h"
 #include "circt/Transforms/Passes.h"
+#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
+#include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
@@ -54,6 +56,13 @@ namespace {
 struct ClassTypeCache {
   struct TypeInfoInfo {
     LLVM::GlobalOp global;
+  };
+
+  struct VTableInfo {
+    LLVM::GlobalOp global;
+    LLVM::LLVMStructType tableTy;
+    DenseMap<StringRef, unsigned> methodSlot;
+    SmallVector<SymbolRefAttr> slotTargets;
   };
 
   struct ClassStructInfo {
@@ -110,12 +119,23 @@ struct ClassTypeCache {
     classToTypeInfoMap[classSym] = info;
   }
 
+  std::optional<VTableInfo> getVTableInfo(SymbolRefAttr classSym) const {
+    if (auto it = classToVTableMap.find(classSym); it != classToVTableMap.end())
+      return it->second;
+    return std::nullopt;
+  }
+
+  void setVTableInfo(SymbolRefAttr classSym, const VTableInfo &info) {
+    classToVTableMap[classSym] = info;
+  }
+
 private:
   // Keyed by the SymbolRefAttr of the class.
   // Kept private so all accesses are done with helpers which preserve
   // invariants
   DenseMap<Attribute, ClassStructInfo> classToStructMap;
   DenseMap<Attribute, TypeInfoInfo> classToTypeInfoMap;
+  DenseMap<Attribute, VTableInfo> classToVTableMap;
 };
 
 /// Cache for external function declarations. Avoids redundant symbol table
@@ -232,6 +252,121 @@ getOrCreateTypeInfo(ModuleOp mod, SymbolRefAttr classSym,
 
   ClassTypeCache::TypeInfoInfo info{global};
   cache.setTypeInfo(classSym, info);
+  return info;
+}
+
+static std::string getVTableName(SymbolRefAttr className) {
+  return className.getRootReference().str() + "::vtable";
+}
+
+static void
+collectVTableEntries(VTableOp op,
+                     llvm::SmallDenseMap<StringRef, unsigned> &slots,
+                     SmallVector<StringRef> &slotOrder,
+                     SmallVector<SymbolRefAttr> &slotTargets) {
+  for (Operation &child : op.getBody().front()) {
+    if (auto nested = dyn_cast<VTableOp>(child)) {
+      collectVTableEntries(nested, slots, slotOrder, slotTargets);
+      continue;
+    }
+
+    auto entry = cast<VTableEntryOp>(child);
+    auto name = entry.getName();
+    if (auto it = slots.find(name); it != slots.end()) {
+      slotTargets[it->second] = entry.getTargetAttr();
+      continue;
+    }
+
+    unsigned idx = slotOrder.size();
+    slots.insert({name, idx});
+    slotOrder.push_back(name);
+    slotTargets.push_back(entry.getTargetAttr());
+  }
+}
+
+static FailureOr<ClassTypeCache::VTableInfo> getOrCreateVTableInfo(
+    ModuleOp mod, SymbolRefAttr classSym, ConversionPatternRewriter &rewriter,
+    const LLVMTypeConverter &typeConverter, SymbolTableCollection &symbolTables,
+    ClassTypeCache &cache) {
+  if (auto info = cache.getVTableInfo(classSym))
+    return *info;
+
+  auto vtableSym =
+      SymbolRefAttr::get(classSym.getRootReference(),
+                         FlatSymbolRefAttr::get(mod.getContext(), "vtable"));
+  VTableOp vtableOp;
+  for (auto candidate : mod.getOps<VTableOp>()) {
+    if (candidate.getSymNameAttr() == vtableSym) {
+      vtableOp = candidate;
+      break;
+    }
+  }
+  if (!vtableOp)
+    return failure();
+
+  llvm::SmallDenseMap<StringRef, unsigned> slots;
+  SmallVector<StringRef> slotOrder;
+  SmallVector<SymbolRefAttr> slotTargets;
+  collectVTableEntries(vtableOp, slots, slotOrder, slotTargets);
+
+  auto ptrTy = LLVM::LLVMPointerType::get(mod.getContext());
+  SmallVector<Type> slotTypes(slotTargets.size(), ptrTy);
+  auto tableTy = LLVM::LLVMStructType::getLiteral(mod.getContext(), slotTypes);
+
+  auto globalName = getVTableName(classSym);
+  auto global = mod.lookupSymbol<LLVM::GlobalOp>(globalName);
+  if (!global) {
+    OpBuilder builder = OpBuilder::atBlockBegin(mod.getBody());
+    global = LLVM::GlobalOp::create(
+        builder, mod.getLoc(), tableTy,
+        /*isConstant=*/true, LLVM::Linkage::Internal, globalName, Attribute());
+    global->setAttr("moore.vtable.method_names",
+                    builder.getStrArrayAttr(slotOrder));
+    global->setAttr("moore.vtable.slot_targets",
+                    builder.getArrayAttr(llvm::to_vector(llvm::map_range(
+                        slotTargets, [&](SymbolRefAttr target) -> Attribute {
+                          return target;
+                        }))));
+
+    Block *block = new Block();
+    global.getInitializerRegion().push_back(block);
+    builder.setInsertionPointToStart(block);
+
+    auto agg =
+        LLVM::UndefOp::create(builder, mod.getLoc(), tableTy).getResult();
+    for (auto [idx, target] : llvm::enumerate(slotTargets)) {
+      auto llvmFunc =
+          mod.lookupSymbol<LLVM::LLVMFuncOp>(target.getRootReference());
+      if (!llvmFunc) {
+        auto funcOp = mod.lookupSymbol<func::FuncOp>(target.getRootReference());
+        if (!funcOp)
+          return failure();
+
+        OpBuilder::InsertionGuard guard(rewriter);
+        rewriter.setInsertionPoint(funcOp);
+        auto converted = convertFuncOpToLLVMFuncOp(
+            funcOp, rewriter, typeConverter, &symbolTables);
+        if (failed(converted))
+          return failure();
+        llvmFunc = *converted;
+        rewriter.eraseOp(funcOp);
+      }
+
+      auto funcAddr = LLVM::AddressOfOp::create(builder, mod.getLoc(), llvmFunc)
+                          .getResult();
+      agg = LLVM::InsertValueOp::create(
+                builder, mod.getLoc(), agg, funcAddr,
+                ArrayRef<int64_t>{static_cast<int64_t>(idx)})
+                .getResult();
+    }
+    LLVM::ReturnOp::create(builder, mod.getLoc(), agg);
+  }
+
+  ClassTypeCache::VTableInfo info{global, tableTy,
+                                  DenseMap<StringRef, unsigned>(), slotTargets};
+  for (auto [idx, name] : llvm::enumerate(slotOrder))
+    info.methodSlot[name] = idx;
+  cache.setVTableInfo(classSym, info);
   return info;
 }
 static LogicalResult resolveClassStructBody(ClassDeclOp op,
@@ -1141,6 +1276,31 @@ struct ClassDeclOpConversion : public OpConversionPattern<ClassDeclOp> {
 
 private:
   ClassTypeCache &cache; // shared, owned by the pass
+};
+
+struct VTableOpConversion : public OpConversionPattern<VTableOp> {
+  VTableOpConversion(TypeConverter &tc, MLIRContext *ctx, ClassTypeCache &cache,
+                     SymbolTableCollection &symbolTables,
+                     LLVMTypeConverter &llvmTypeConverter)
+      : OpConversionPattern<VTableOp>(tc, ctx), cache(cache),
+        symbolTables(symbolTables), llvmTypeConverter(llvmTypeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(VTableOp op, OpAdaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto classSym = SymbolRefAttr::get(op.getSymNameAttr().getRootReference());
+    if (failed(getOrCreateVTableInfo(op->getParentOfType<ModuleOp>(), classSym,
+                                     rewriter, llvmTypeConverter, symbolTables,
+                                     cache)))
+      return op.emitOpError() << "Failed to create LLVM vtable global";
+    rewriter.eraseOp(op);
+    return success();
+  }
+
+private:
+  ClassTypeCache &cache;
+  SymbolTableCollection &symbolTables;
+  LLVMTypeConverter &llvmTypeConverter;
 };
 
 struct VariableOpConversion : public OpConversionPattern<VariableOp> {
@@ -3016,11 +3176,19 @@ static void populateLegality(ConversionTarget &target,
 
   target.addLegalOp<debug::ScopeOp>();
 
-  target.addDynamicallyLegalOp<scf::YieldOp, func::CallOp, func::ReturnOp,
-                               UnrealizedConversionCastOp, hw::OutputOp,
-                               hw::InstanceOp, debug::ArrayOp, debug::StructOp,
-                               debug::VariableOp>(
+  target.addDynamicallyLegalOp<scf::YieldOp, UnrealizedConversionCastOp,
+                               hw::OutputOp, hw::InstanceOp, debug::ArrayOp,
+                               debug::StructOp, debug::VariableOp>(
       [&](Operation *op) { return converter.isLegal(op); });
+
+  auto isLegalOutsideLLVMFunc = [&](Operation *op) {
+    if (op->getParentOfType<LLVM::LLVMFuncOp>())
+      return false;
+    return converter.isLegal(op);
+  };
+  target.addDynamicallyLegalOp<func::CallOp, func::CallIndirectOp,
+                               func::ConstantOp, func::ReturnOp>(
+      isLegalOutsideLLVMFunc);
 
   target.addDynamicallyLegalOp<scf::IfOp, scf::ForOp, scf::ExecuteRegionOp,
                                scf::WhileOp, scf::ForallOp>([&](Operation *op) {
@@ -3251,11 +3419,15 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
 
 static void populateOpConversion(ConversionPatternSet &patterns,
                                  TypeConverter &typeConverter,
+                                 LLVMTypeConverter &llvmTypeConverter,
                                  ClassTypeCache &classCache,
-                                 FunctionCache &funcCache) {
+                                 FunctionCache &funcCache,
+                                 SymbolTableCollection &symbolTables) {
 
   patterns.add<ClassDeclOpConversion>(typeConverter, patterns.getContext(),
                                       classCache);
+  patterns.add<VTableOpConversion>(typeConverter, patterns.getContext(),
+                                   classCache, symbolTables, llvmTypeConverter);
   patterns.add<ClassNewOpConversion>(typeConverter, patterns.getContext(),
                                      classCache, funcCache);
   patterns.add<ClassPropertyRefOpConversion>(typeConverter,
@@ -3453,6 +3625,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
 
   mlir::populateAnyFunctionOpInterfaceTypeConversionPattern(patterns,
                                                             typeConverter);
+  mlir::populateFuncToLLVMConversionPatterns(llvmTypeConverter, patterns,
+                                             &symbolTables);
   hw::populateHWModuleLikeTypeConversionPattern(
       hw::HWModuleOp::getOperationName(), patterns, typeConverter);
   populateSCFToControlFlowConversionPatterns(patterns);
@@ -3480,20 +3654,25 @@ void MooreToCorePass::runOnOperation() {
   MLIRContext &context = getContext();
   ModuleOp module = getOperation();
   ClassTypeCache classCache;
-  auto &symbolTable = getAnalysis<SymbolTable>();
-  FunctionCache funcCache(symbolTable);
+  auto &symbolTableAnalysis = getAnalysis<SymbolTable>();
+  FunctionCache funcCache(symbolTableAnalysis);
+  SymbolTableCollection symbolTables;
 
   IRRewriter rewriter(module);
   (void)mlir::eraseUnreachableBlocks(rewriter, module->getRegions());
 
   TypeConverter typeConverter;
   populateTypeConversion(typeConverter);
+  LowerToLLVMOptions options(&context);
+  LLVMTypeConverter llvmTypeConverter(&context, options);
+  populateTypeConversion(llvmTypeConverter);
 
   ConversionTarget target(context);
   populateLegality(target, typeConverter);
 
   ConversionPatternSet patterns(&context, typeConverter);
-  populateOpConversion(patterns, typeConverter, classCache, funcCache);
+  populateOpConversion(patterns, typeConverter, llvmTypeConverter, classCache,
+                       funcCache, symbolTables);
   mlir::cf::populateCFStructuralTypeConversionsAndLegality(typeConverter,
                                                            patterns, target);
 
