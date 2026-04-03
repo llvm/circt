@@ -179,6 +179,8 @@ struct Context {
   FunctionLowering *
   declareFunction(const slang::ast::SubroutineSymbol &subroutine);
   LogicalResult convertFunction(const slang::ast::SubroutineSymbol &subroutine);
+  LogicalResult
+  convertPrimitiveInstance(const slang::ast::PrimitiveInstanceSymbol &prim);
   ClassLowering *declareClass(const slang::ast::ClassType &cls);
   LogicalResult buildClassProperties(const slang::ast::ClassType &classdecl);
   LogicalResult materializeClassMethods(const slang::ast::ClassType &classdecl);
@@ -260,6 +262,9 @@ struct Context {
   // Convert a slang timing control for LTL
   Value convertLTLTimingControl(const slang::ast::TimingControl &ctrl,
                                 const Value &seqOrPro);
+
+  LogicalResult
+  convertNInputPrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
 
   /// Helper function to convert a value to its "truthy" boolean value.
   Value convertToBool(Value value);

@@ -332,3 +332,27 @@ module Foo;
   // expected-error @below {{'always' procedure does not advance time and so will create a simulation deadlock}}
   always a = ~a;
 endmodule
+
+// -----
+
+module drive_strength_prim;
+    logic A, B, Q;
+    // expected-error @below {{primitive instances with explicit drive strengths are not supported.}}
+    and (pull0, strong1) a (Q, A, B);
+endmodule
+
+// -----
+
+module delay_prim;
+    logic A, B, Q;
+    // expected-error @below {{primitive instances with delays are not yet supported.}}
+    and #(5) a (Q, A, B);
+endmodule
+
+// -----
+
+module not_prim;
+    logic A, Q;
+    // expected-error @below {{unsupported instance of primitive `not`}}
+    not u1 (Q, A);
+endmodule
