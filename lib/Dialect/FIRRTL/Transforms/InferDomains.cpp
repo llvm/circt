@@ -1441,31 +1441,39 @@ static LogicalResult updateInstance(PassGlobals &globals,
 
 /// Update a wire operation with inferred domain associations.
 static LogicalResult updateWire(PassGlobals &globals, TermAllocator &allocator,
-                                DomainTable &table, WireOp wireOp) {
+                                DomainTable &table, WireOp wireOp,
+                                OpBuilder &builder) {
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPoint(wireOp);
+
   auto result = wireOp.getResult();
   if (!isa<FIRRTLBaseType>(result.getType()))
     return success();
 
-  // Get the inferred domain associations for this wire.
-  auto *term = table.getOptDomainAssociation(result);
-  if (!term)
-    return success();
+  auto *row =
+      getDomainAssociationAsRow(globals, allocator, table, wireOp.getResult());
 
-  auto *row = dyn_cast<RowTerm>(find(term));
-  if (!row)
-    return success();
-
-  // Collect the domain values to add as operands.
   SmallVector<Value> domainOperands;
-  for (auto *element : llvm::map_range(row->elements, find))
-    if (auto *val = dyn_cast_or_null<ValueTerm>(element))
+  for (auto [i, element] :
+       llvm::enumerate(llvm::map_range(row->elements, find))) {
+    if (auto *val = dyn_cast<ValueTerm>(element)) {
       domainOperands.push_back(val->value);
-
-  // Update the wire's domain operands in place. $domains is the only operand
-  // group on WireOp, so setOperands replaces exactly the domain list.
-  if (!domainOperands.empty() && wireOp.getDomains().empty())
-    wireOp->setOperands(domainOperands);
-
+      continue;
+    }
+    if (auto *var = dyn_cast<VariableTerm>(element)) {
+      auto domainDecl = globals.domainInfo.getDomain(DomainTypeID{i});
+      auto domainType = DomainType::getFromDomainOp(domainDecl);
+      auto domainName = domainDecl.getNameAttr();
+      auto anonDomain = DomainCreateAnonOp::create(builder, wireOp.getLoc(),
+                                                   domainType, domainName);
+      domainOperands.push_back(anonDomain);
+      auto *val = allocator.allocVal(anonDomain);
+      solve(globals, var, val);
+      continue;
+    }
+    assert(0 && "unhandled domain type");
+  }
+  wireOp.getDomainsMutable().assign(domainOperands);
   return success();
 }
 
@@ -1478,20 +1486,14 @@ static LogicalResult updateModuleBody(PassGlobals &globals,
   // created there, avoiding use-before-def issues.
   OpBuilder builder(moduleOp.getContext());
   builder.setInsertionPointToEnd(moduleOp.getBodyBlock());
-
-  // Update instances
-  auto instanceResult =
-      moduleOp.getBodyBlock()->walk([&](FInstanceLike op) -> WalkResult {
-        return updateInstance(globals, allocator, table, op, builder);
-      });
-  if (instanceResult.wasInterrupted())
-    return failure();
-
-  // Update wires with inferred domain associations
-  auto wireResult = moduleOp.getBodyBlock()->walk([&](WireOp op) -> WalkResult {
-    return updateWire(globals, allocator, table, op);
+  auto result = moduleOp.getBodyBlock()->walk([&](Operation *op) -> WalkResult {
+    if (auto wire = dyn_cast<WireOp>(op))
+      return updateWire(globals, allocator, table, wire, builder);
+    if (auto instance = dyn_cast<FInstanceLike>(op))
+      return updateInstance(globals, allocator, table, instance, builder);
+    return success();
   });
-  return failure(wireResult.wasInterrupted());
+  return failure(result.wasInterrupted());
 }
 
 /// Write the domain associations recorded in the domain table back to the IR.
