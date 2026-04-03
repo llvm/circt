@@ -42,10 +42,6 @@ set(libs
   MLIRTargetLLVMIRExport
 )
 
-if(CIRCT_LIBFST_ENABLED)
-  list(APPEND ARCILATOR_JIT_DEPS fst)
-endif()
-
 add_circt_tool(arcilator arcilator.cpp DEPENDS ${libs} ${ARCILATOR_JIT_DEPS})
 if(CIRCT_LIBFST_ENABLED)
   target_compile_definitions(arcilator PRIVATE CIRCT_LIBFST_ENABLED=1)
