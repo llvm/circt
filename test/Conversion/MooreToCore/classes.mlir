@@ -21,7 +21,7 @@ func.func @ClassType(%arg0: !moore.class<@PropertyCombo>) {
 /// Check that new lowers to malloc
 
 // CHECK-LABEL: func.func private @test_new2
-// CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(12 : i64) : i64
+// CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(32 : i64) : i64
 // CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
 // CHECK:   return
 
@@ -43,7 +43,7 @@ moore.class.classdecl @C {
 /// Check that new lowers to malloc with inheritance without shadowing
 
 // CHECK-LABEL: func.func private @test_new3
-// CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(28 : i64) : i64
+// CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(64 : i64) : i64
 // CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
 // CHECK:   return
 
@@ -63,7 +63,7 @@ moore.class.classdecl @D extends @C {
 /// Check that new lowers to malloc with inheritance & shadowing
 
 // CHECK-LABEL: func.func private @test_new4
-// CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(24 : i64) : i64
+// CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(64 : i64) : i64
 // CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
 // CHECK:   return
 
@@ -104,8 +104,8 @@ moore.class.classdecl @F extends @C {
 
 // CHECK-LABEL: func.func private @test_new6
 // CHECK-SAME: (%arg0: !llvm.ptr) -> !llhd.ref<i32> {
-// CHECK:   [[CONSTIDX:%.+]] = llvm.mlir.constant(1 : i32) : i32
-// CHECK:   [[GEP:%.+]] = llvm.getelementptr %arg0[[[CONSTIDX]]] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"G", (struct<"C", (i32, i32, i32)>, i32, i32, i32)>
+// CHECK:   [[CONSTIDX:%.+]] = llvm.mlir.constant(2 : i32) : i32
+// CHECK:   [[GEP:%.+]] = llvm.getelementptr %arg0[[[CONSTIDX]]] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"G", (struct<(ptr, ptr)>, struct<"C", (struct<(ptr, ptr)>, i32, i32, i32)>, i32, i32, i32)>
 // CHECK:   [[CONV:%.+]] = builtin.unrealized_conversion_cast [[GEP]] : !llvm.ptr to !llhd.ref<i32>
 // CHECK:   return [[CONV]] : !llhd.ref<i32>
 
@@ -120,4 +120,20 @@ moore.class.classdecl @G extends @C {
   moore.class.propertydecl @d : !moore.i32
   moore.class.propertydecl @e : !moore.l32
   moore.class.propertydecl @f : !moore.l32
+}
+
+/// Check that virtual classes use the same object header layout.
+
+// CHECK-LABEL: func.func private @test_new7
+// CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(24 : i64) : i64
+// CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   return
+
+func.func private @test_new7() {
+  %h = moore.class.new : <@VirtualC>
+  return
+}
+moore.class.classdecl @VirtualC {
+  moore.class.propertydecl @a : !moore.i32
+  moore.class.methoddecl @f : (!moore.class<@VirtualC>) -> ()
 }
